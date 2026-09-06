@@ -6962,7 +6962,7 @@ function creaDiff(righe = [], opzioni = {}) {
   for (const r of righe) diff.append(el20(documentObj, "div", `talos-diff__line talos-diff__line--${r.tipo || "ctx"}`, r.testo));
   return diff;
 }
-function creaApprovazione({ badge: badge4 = "Chiede di scrivere", bersaglio = "", aggiunte = null, rimozioni = null, perche = "", diff = null, nota = "Scade a fine sessione", onUnaVolta, onSessione, onNega } = {}, opzioni = {}) {
+function creaApprovazione({ badge: badge4 = "Chiede di scrivere", bersaglio = "", aggiunte = null, rimozioni = null, perche = "", codice = "", motivo = "", diff = null, nota = "Scade a fine sessione", onUnaVolta, onSessione, onNega } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const scheda = el20(documentObj, "div", "talos-approval");
   scheda.setAttribute("data-c", "ApprovalCard");
@@ -6975,6 +6975,18 @@ function creaApprovazione({ badge: badge4 = "Chiede di scrivere", bersaglio = ""
   scheda.append(testa);
   const perchéEl = el20(documentObj, "p", "talos-approval__why assistant-copy", perche);
   scheda.append(perchéEl);
+  let codiceEl = null;
+  if (codice) {
+    codiceEl = el20(documentObj, "pre", "talos-approval__codice", String(codice));
+    codiceEl.tabIndex = 0;
+    codiceEl.setAttribute("aria-label", "Il comando esatto che l’agente vuole eseguire");
+    scheda.append(codiceEl);
+  }
+  let motivoEl = null;
+  if (motivo) {
+    motivoEl = el20(documentObj, "p", "talos-approval__motivo", motivo);
+    scheda.append(motivoEl);
+  }
   if (Array.isArray(diff) && diff.length > 0) scheda.append(creaDiff(diff, opzioni));
   const piede = el20(documentObj, "div", "talos-approval__foot sheet-actions");
   const bottone3 = (classi, testo3, onClick) => {
@@ -6988,7 +7000,19 @@ function creaApprovazione({ badge: badge4 = "Chiede di scrivere", bersaglio = ""
   const nega = bottone3("talos-button talos-button--ghost talos-button--danger", "Nega", onNega);
   piede.append(unaVolta, sessione, nega, el20(documentObj, "span", "talos-grow"), el20(documentObj, "span", "talos-approval__foot-note", nota));
   scheda.append(piede);
-  return { scheda, perche: perchéEl, piede, pulsanti: { unaVolta, sessione, nega } };
+  return { scheda, perche: perchéEl, codice: codiceEl, motivo: motivoEl, piede, pulsanti: { unaVolta, sessione, nega } };
+}
+function segnaEsitoApprovazione(scheda, { approvato = false, altrove = false } = {}, opzioni = {}) {
+  if (!scheda) return null;
+  const documentObj = opzioni.document || scheda.ownerDocument || globalThis.document;
+  scheda.querySelector(".talos-approval__foot")?.remove();
+  scheda.querySelector(".sheet-actions")?.remove();
+  const esistente = scheda.querySelector(".talos-approval__esito");
+  if (esistente) esistente.remove();
+  const riga = el20(documentObj, "p", `talos-approval__esito talos-approval__esito--${approvato ? "si" : "no"}`, `${approvato ? "Approvato" : "Negato"}${altrove ? " da un’altra finestra" : ""}`);
+  riga.setAttribute("role", "status");
+  scheda.append(riga);
+  return riga;
 }
 function creaArtefatto({ titolo: titolo2 = "Artefatto", formato = "", src = "", onApri } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
@@ -8140,13 +8164,18 @@ var init_app = __esm({
       }
       const motionAnimations = /* @__PURE__ */ new Set();
       let spazioCodaConversazioneUltimo = -1;
+      function scrollerConversazione(nodo4 = $2("#conversation")) {
+        if (!nodo4) return null;
+        return nodo4.closest?.(".talos-conversation") || nodo4;
+      }
       function aggiornaSpazioCodaConversazione(conversation) {
         if (!conversation) return;
-        const haMessaggi = !!conversation.querySelector(".message");
-        const spazio = haMessaggi ? Math.ceil(conversation.clientHeight / 2) : 0;
+        const scroller = scrollerConversazione(conversation);
+        const haMessaggi = !!conversation.querySelector(".message, .talos-turn");
+        const spazio = haMessaggi ? Math.ceil((scroller?.clientHeight || conversation.clientHeight) / 2) : 0;
         if (spazio === spazioCodaConversazioneUltimo) return;
         spazioCodaConversazioneUltimo = spazio;
-        conversation.style.setProperty("--stream-follow-space", `${spazio}px`);
+        (scroller || conversation).style.setProperty("--stream-follow-space", `${spazio}px`);
       }
       function scrollStreamingOutput(element) {
         if (!element || !element.isConnected) return;
@@ -8164,24 +8193,26 @@ var init_app = __esm({
             return;
           }
           aggiornaSpazioCodaConversazione(conversation);
-          const containerRect = conversation.getBoundingClientRect();
+          const scroller = scrollerConversazione(conversation) || conversation;
+          const containerRect = scroller.getBoundingClientRect();
           const targetRect = target.getBoundingClientRect();
-          const fondoContenuto = conversation.scrollTop + (targetRect.bottom - containerRect.top);
-          const maxScroll = Math.max(0, conversation.scrollHeight - conversation.clientHeight);
-          const nuovoTop = Math.max(0, Math.min(maxScroll, fondoContenuto - conversation.clientHeight / 2));
+          const fondoContenuto = scroller.scrollTop + (targetRect.bottom - containerRect.top);
+          const maxScroll = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+          const nuovoTop = Math.max(0, Math.min(maxScroll, fondoContenuto - scroller.clientHeight / 2));
           streamingLastTargetTop = nuovoTop;
-          conversation.scrollTop = nuovoTop;
-          logStreaming("scroll", { nuovoTop: Math.round(nuovoTop), scrollHeight: conversation.scrollHeight, clientHeight: conversation.clientHeight });
+          scroller.scrollTop = nuovoTop;
+          logStreaming("scroll", { nuovoTop: Math.round(nuovoTop), scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight });
         });
       }
       function collegaSeguiFondoConversazione() {
         const conversation = $2("#conversation");
         if (!conversation) return;
-        conversation.addEventListener("scroll", () => {
+        const scroller = scrollerConversazione(conversation) || conversation;
+        scroller.addEventListener("scroll", () => {
           if (streamingLastTargetTop === null) return;
-          streamingAutoFollow = Math.abs(conversation.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX;
+          streamingAutoFollow = Math.abs(scroller.scrollTop - streamingLastTargetTop) <= CONVERSATION_FOLLOW_EPSILON_PX;
         }, { passive: true });
-        if (typeof ResizeObserver === "function") new ResizeObserver(() => aggiornaSpazioCodaConversazione(conversation)).observe(conversation);
+        if (typeof ResizeObserver === "function") new ResizeObserver(() => aggiornaSpazioCodaConversazione(conversation)).observe(scroller);
       }
       collegaSeguiFondoConversazione();
       const RITMO_STREAMING = {
@@ -12960,7 +12991,7 @@ var init_app = __esm({
         return { cosa: "TALOS sta lavorando", dettaglio: "" };
       }
       function fondoConversazioneInVista() {
-        const c = $2("#conversation");
+        const c = scrollerConversazione();
         if (!c) return true;
         return c.scrollHeight - c.scrollTop - c.clientHeight <= 24;
       }
@@ -13775,18 +13806,34 @@ var init_app = __esm({
         scorriAllaBollaAppesa(article);
       }
       function descriviAzioneApprovazione(azione) {
-        if (azione?.tipo === "scrivi" && azione.fileDiControllo) return `Vuole scrivere un file di controllo di TALOS (regole dell'agente, non un file del progetto): ${azione.percorso}`;
-        if (azione?.tipo === "scrivi") return `Vuole scrivere il file: ${azione.percorso}`;
-        if (azione?.tipo === "shell") return `Vuole eseguire il comando: ${azione.comando}`;
+        if (azione?.tipo === "scrivi" && azione.fileDiControllo) return "Vuole scrivere un file di controllo di TALOS: una regola dell’agente (hook, MCP, istruzioni, memoria), non un file del progetto.";
+        if (azione?.tipo === "scrivi") return "Vuole scrivere questo file:";
+        if (azione?.tipo === "shell") return "Vuole eseguire questo comando nel terminale:";
         if (azione?.tipo === "document_create") return `Vuole creare un documento (formato ${azione.formato || "?"})`;
-        if (azione?.tipo === "prova") return `Vuole eseguire la suite di test: ${azione.comando}`;
+        if (azione?.tipo === "prova") return "Vuole eseguire la suite di test:";
         if (azione?.tipo === "research_start") return azione.question ? `Vuole avviare una ricerca approfondita: ${azione.question}` : "Vuole avviare una ricerca approfondita.";
         return "Vuole eseguire un'azione che modifica qualcosa.";
+      }
+      function codiceAzioneApprovazione(azione) {
+        if (azione?.tipo === "shell" || azione?.tipo === "prova") return azione.comando || "";
+        if (azione?.tipo === "scrivi") return azione.percorso || "";
+        if (azione?.tipo === "naviga") return azione.url || "";
+        return "";
+      }
+      function motivoRichiestaApprovazione(azione) {
+        const perAttrezzo = state.permessiPerAttrezzo || {};
+        const regola = azione?.tipo ? perAttrezzo[azione.tipo] : null;
+        const politica = etichettaPermesso(state.permissions);
+        if (regola === "chiedi") return `Chiede perché «${nomeUmanoAttrezzo2(azione.tipo)}» ha il cancello «Chiedi conferma», anche con la sessione su «${politica}».`;
+        if (state.permissions === "On request") return `Chiede perché la sessione è su «${politica}»: ogni azione che cambia qualcosa passa da te.`;
+        const altri = Object.entries(perAttrezzo).filter(([, v]) => v === "chiedi").map(([k]) => nomeUmanoAttrezzo2(k));
+        if (altri.length) return `Chiede perché questa sessione ha un canale di approvazione aperto per ${altri.join(" e ")}: finché c'è, il kernel chiede anche per gli altri attrezzi.`;
+        return `Chiede perché questa azione tocca qualcosa fuori dalla sola lettura, e la sessione è su «${politica}».`;
       }
       function appendApprovalCard(requestId, azione) {
         const bersaglio = azione?.percorso || azione?.comando || azione?.question || azione?.title || "";
         const badge4 = azione?.tipo === "scrivi" ? "Chiede di scrivere" : azione?.tipo === "shell" || azione?.tipo === "prova" ? "Chiede di eseguire" : azione?.tipo === "research_start" ? "Chiede di cercare" : "Chiede il permesso";
-        const scheda = creaApprovazione({ badge: badge4, bersaglio, perche: descriviAzioneApprovazione(azione), nota: "Vale solo per questa richiesta" });
+        const scheda = creaApprovazione({ badge: badge4, bersaglio, perche: descriviAzioneApprovazione(azione), codice: codiceAzioneApprovazione(azione), motivo: motivoRichiestaApprovazione(azione), nota: "Vale solo per questa richiesta" });
         const article = scheda.scheda;
         article.classList.add("real-approval-card");
         article.dataset.requestId = requestId;
@@ -16384,13 +16431,7 @@ ${testo3}` : testo3;
             const card = state.realSession.approvazioniPendenti.get(evento.requestId);
             if (card) {
               const daQuiStessa = card._rispostaDataQui?.() === true;
-              const azioniRiga = card.querySelector(".sheet-actions");
-              if (azioniRiga) azioniRiga.remove();
-              const copy = card.querySelector(".assistant-copy");
-              if (copy) {
-                const esito = evento.approvato ? "Approvato" : "Negato";
-                copy.textContent += daQuiStessa ? ` — ${esito}.` : ` — ${esito} (da un altro client).`;
-              }
+              segnaEsitoApprovazione(card, { approvato: Boolean(evento.approvato), altrove: !daQuiStessa });
               state.realSession.approvazioniPendenti.delete(evento.requestId);
             }
             aggiornaElencoSessioniReali();
@@ -16816,7 +16857,8 @@ ${testo3}` : testo3;
         if (!conversation) return;
         const inFondo = () => {
           aggiornaSpazioCodaConversazione(conversation);
-          conversation.scrollTop = conversation.scrollHeight;
+          const sc = scrollerConversazione(conversation);
+          if (sc) sc.scrollTop = sc.scrollHeight;
         };
         const scopri = () => {
           if (generation !== state.realSession.generation) return;
@@ -16855,7 +16897,11 @@ ${testo3}` : testo3;
           closePanels();
           const conversation = $2("#conversation");
           aggiornaSpazioCodaConversazione(conversation);
-          if (conversation) conversation.scrollTop = conversation.scrollHeight;
+          if (conversation) {
+            aggiornaSpazioCodaConversazione(conversation);
+            const sc = scrollerConversazione(conversation);
+            if (sc) sc.scrollTop = sc.scrollHeight;
+          }
           return;
         }
         const generation = nuovaGenerazioneSessione();
