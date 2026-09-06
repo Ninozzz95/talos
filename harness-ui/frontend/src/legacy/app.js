@@ -27,6 +27,7 @@ import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei fil
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
+import { LINGUE as LINGUE_MENU, risolviLingua, applicaLingua, etichettaLinguaRisolta } from '../components/lingua.js'; // 06/9 B8: la lingua dei menu
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -3464,6 +3465,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
   function inizializzaSettingsNavigation() {
     montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection });
+    sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(leggiImpostazioniDesktop().appearance)); // 06/9 B8
     $$('[data-settings-tab]').filter(tab => !tab.closest('#schermoImpostazioni')).forEach((tab) => {
       tab.addEventListener('click', () => setSettingsSection(tab.dataset.settingsTab));
       tab.addEventListener('keydown', (event) => {
@@ -7497,16 +7499,25 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function temaTerminaleReale() {
     const stile = getComputedStyle(document.documentElement);
     const leggi = (nome, rip) => stile.getPropertyValue(nome).trim() || rip;
+    const chiaro = document.documentElement.getAttribute('data-theme') === 'light';
     return {
       background: leggi('--talos-window-bg', leggi('--bg-deep', '#17181b')),
       foreground: leggi('--talos-assistant-text', leggi('--text-2', '#d6d2ca')),
       cursor: leggi('--talos-accent', leggi('--accent', '#c08b3c')),
       cursorAccent: leggi('--talos-window-bg', leggi('--bg-deep', '#17181b')),
       selectionBackground: leggi('--talos-accent-soft', leggi('--accent-soft', 'rgba(192,139,60,.3)')),
-      black: '#1c1d20', red: '#e2685f', green: '#8fbf7f', yellow: '#c9a35e',
-      blue: '#7aa2d6', magenta: '#c08bd0', cyan: '#7fc1c9', white: leggi('--talos-assistant-text', '#d6d2ca'),
-      brightBlack: '#54565c', brightRed: '#ef8981', brightGreen: '#a9d99b', brightYellow: leggi('--talos-accent-hover', '#d7a554'),
-      brightBlue: '#96b8e6', brightMagenta: '#d6a6e2', brightCyan: '#9ad6dd', brightWhite: '#f1efe9',
+      // 06/9 B8 (taccuino tema chiaro, foglio-1): la scala ANSI intonata allo scuro era illeggibile sul fondo chiaro — due scale, scelte dal tema risolto
+      ...(chiaro ? {
+        black: '#2a2b2e', red: '#a03d3d', green: '#31724d', yellow: '#8b5c16',
+        blue: '#376a9e', magenta: '#7d4d8a', cyan: '#2f7a86', white: leggi('--talos-assistant-text', '#303136'),
+        brightBlack: '#686a70', brightRed: '#b84a4a', brightGreen: '#3f8a5e', brightYellow: leggi('--talos-accent-hover', '#82551a'),
+        brightBlue: '#4a7fb3', brightMagenta: '#9463a3', brightCyan: '#3c8f9c', brightWhite: '#232427',
+      } : {
+        black: '#1c1d20', red: '#e2685f', green: '#8fbf7f', yellow: '#c9a35e',
+        blue: '#7aa2d6', magenta: '#c08bd0', cyan: '#7fc1c9', white: leggi('--talos-assistant-text', '#d6d2ca'),
+        brightBlack: '#54565c', brightRed: '#ef8981', brightGreen: '#a9d99b', brightYellow: leggi('--talos-accent-hover', '#d7a554'),
+        brightBlue: '#96b8e6', brightMagenta: '#d6a6e2', brightCyan: '#9ad6dd', brightWhite: '#f1efe9',
+      }),
     };
   }
 
@@ -8621,6 +8632,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   const MOTION_EASING_IDS = ['precise', 'soft', 'elastic-light', 'linear', 'cinematic'];
   const DESKTOP_APPEARANCE_DEFAULTS = {
     themePreset: 'calm', colorMode: 'system', sceneOverride: 'follow-theme',
+    uiDensity: 'comoda', uiLanguage: 'sistema', // 06/9 B8: densità delle liste (mockup `data-densita`) e lingua dei menu (H21)
     uiFontScale: 'default', chatFontScale: 'xcompact', composerShape: 'standard',
     composerPlus: 'drawer', messageStyle: 'sections', streamingAnimation: 'fade',
     windowPresentation: 'drawer', immersiveHeader: false, chatFullWidth: false, reducedMotion: false,
@@ -8671,6 +8683,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     safe.themePreset = enumValue(record.themePreset, TALOS_THEME_IDS, safe.themePreset);
     safe.colorMode = enumValue(record.colorMode, COLOR_MODE_IDS, safe.colorMode);
     safe.sceneOverride = enumValue(record.sceneOverride, TALOS_SCENE_IDS, safe.sceneOverride);
+    safe.uiDensity = enumValue(record.uiDensity, ['comoda', 'compatta'], safe.uiDensity);
+    safe.uiLanguage = enumValue(record.uiLanguage, [...LINGUE_MENU], safe.uiLanguage);
     safe.uiFontScale = enumValue(record.uiFontScale, Object.keys(UI_FONT_SCALE_FACTORS), safe.uiFontScale);
     safe.chatFontScale = enumValue(record.chatFontScale, Object.keys(CHAT_FONT_SCALE_SIZES), safe.chatFontScale);
     safe.composerShape = enumValue(record.composerShape, ['classic', 'standard', 'compact'], safe.composerShape);
@@ -8810,6 +8824,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const light = mode === 'light';
     if (light) root.setAttribute('data-theme', 'light'); else root.removeAttribute('data-theme');
     root.style.setProperty('color-scheme', light ? 'light' : 'dark');
+    for (const record of state.terminal?.schede?.values?.() || []) if (record.term) record.term.options.theme = temaTerminaleReale(); // 06/9 B8: le shell aperte seguono il tema
     const colors = { bg: getComputedStyle(root).getPropertyValue('--talos-background').trim() || (light ? '#f5f3ee' : '#1e1f22') };
     const meta = document.querySelector('meta[name="theme-color"]');
     meta?.setAttribute('content', colors.bg);
@@ -8935,6 +8950,12 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     host.dataset.talosWindowPresentation = safe.windowPresentation;
     host.classList.toggle('immersive-header', safe.immersiveHeader);
     host.classList.toggle('chat-full-width', safe.chatFullWidth);
+    /* 06/9 B8 — densità: il mockup la esprime con `data-densita="compatta"` sulla radice (token delle righe); lingua: `lang` + i soli elementi marcati. */
+    const root = document.documentElement;
+    if (safe.uiDensity === 'compatta') root.setAttribute('data-densita', 'compatta'); else root.removeAttribute('data-densita');
+    const linguaRisolta = risolviLingua(safe.uiLanguage, navigator.languages || [navigator.language]);
+    applicaLingua(ROOT(), linguaRisolta);
+    sincronizzaSelettoriDensitaLingua(safe);
     aggiornaMotionDesktop(safe);
     const ui = $('#uiFontScaleSelect');
     const chat = $('#chatFontScaleSelect');
@@ -8944,6 +8965,15 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const immersive = $('#immersiveHeaderToggle'); if (immersive) immersive.checked = safe.immersiveHeader;
     const fullWidth = $('#chatFullWidthToggle'); if (fullWidth) fullWidth.checked = safe.chatFullWidth;
     aggiornaBackgroundDesktop();
+  }
+  /** I due selettori nascono con la schermata Impostazioni (dopo il primo `applicaAspettoDesktop`): si allineano qui, e di nuovo dopo il montaggio. */
+  function sincronizzaSelettoriDensitaLingua(safe) {
+    const selDensita = $('#setting-uiDensitySelect'); if (selDensita) selDensita.value = safe.uiDensity;
+    const selLingua = $('#setting-uiLanguageSelect');
+    if (!selLingua) return;
+    selLingua.value = safe.uiLanguage;
+    const opzioneSistema = selLingua.querySelector('option[value="sistema"]');
+    if (opzioneSistema) opzioneSistema.textContent = etichettaLinguaRisolta('sistema', risolviLingua('sistema', navigator.languages || [navigator.language])); // H21: la preferenza mostra la lingua che ne risulta
   }
   function inizializzaAspettoDesktop() {
     appearanceMediaQuery = window.matchMedia?.('(prefers-color-scheme: light)') || null;
@@ -13383,6 +13413,10 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
         if (window.innerWidth <= 1040) closePanels();
       } else if (button.dataset.mode === 'terminal') {
         setView('terminal');
+      } else if (button.dataset.mode === 'diff') {
+        setView('diff');
+      } else if (button.dataset.mode === 'browser') {
+        setView('browser'); // 06/9 B8 (taccuino tema chiaro): la scheda «Browser» della testata finiva nel ramo «altro» → Board
       } else {
         setView('dashboard', { mode: 'dashboard' });
       }
@@ -13778,6 +13812,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     motionWindowsToggle: 'motionWindows', motionSurfacesToggle: 'motionSurfaces', motionNavigationToggle: 'motionNavigation',
     motionComposerToggle: 'motionComposer', motionMessagesToggle: 'motionMessages', motionFeedbackToggle: 'motionFeedback',
     immersiveHeaderToggle: 'immersiveHeader', chatFullWidthToggle: 'chatFullWidth',
+    'setting-uiDensitySelect': 'uiDensity', 'setting-uiLanguageSelect': 'uiLanguage', // 06/9 B8: righe nate nel mockup, senza un controllo legacy dietro
   };
   for (const [id, key] of Object.entries(appearanceControlMap)) {
     const input = $(`#${id}`);

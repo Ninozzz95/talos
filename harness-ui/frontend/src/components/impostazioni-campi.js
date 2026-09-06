@@ -89,6 +89,46 @@ export const CAMPI_IMPOSTAZIONI = [
     ]
   },
   {
+    "id": "uiDensitySelect",
+    "chiave": "uiDensity",
+    "tipo": "select",
+    "titolo": "Densità delle liste",
+    "sezione": "appearance",
+    "gruppo": "design",
+    "opzioni": [
+      [
+        "comoda",
+        "Comoda"
+      ],
+      [
+        "compatta",
+        "Compatta"
+      ]
+    ]
+  },
+  {
+    "id": "uiLanguageSelect",
+    "chiave": "uiLanguage",
+    "tipo": "select",
+    "titolo": "Lingua dei menu",
+    "sezione": "appearance",
+    "gruppo": "design",
+    "opzioni": [
+      [
+        "sistema",
+        "Segui il sistema"
+      ],
+      [
+        "it",
+        "Italiano"
+      ],
+      [
+        "en",
+        "English"
+      ]
+    ]
+  },
+  {
     "id": "sceneOverrideSelect",
     "chiave": "sceneOverride",
     "tipo": "select",
