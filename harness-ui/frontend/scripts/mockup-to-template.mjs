@@ -49,6 +49,8 @@ export async function generaTemplate() {
     .replace(/<style[^>]*>[\s\S]*?<\/style>\s*/u, '')
     .replace(/<script type="application\/json"[^>]*>[\s\S]*?<\/script>\s*/u, '')
     .replace(/<script>\s*\(function\(\)\{[\s\S]*?\}\)\(\);\s*<\/script>\s*/u, '')
+    // 06/9 cutover: OGNI script in linea del mockup (es. la regia demo della Capability, B4.2) resta fuori — la CSP `script-src 'self'` lo bloccherebbe comunque, e a schermo dava un errore di console a ogni avvio
+    .replace(/<script>(?![^<]*src=)[\s\S]*?<\/script>\s*/gu, '')
     .replace(/<title>[\s\S]*?<\/title>/u, '');
   // La barra di regia e' del mockup: dal suo <div> fino al guscio.
   corpo = taglia(corpo, '<div class="talos-regia"', '<div class="talos-shell"');

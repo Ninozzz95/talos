@@ -18,10 +18,28 @@ const input = Object.freeze({
   staticPath: path.join(repoRoot, 'harness-ui/src/static-files.mjs'),
 });
 
-test('il contratto frontend desktop resta congelato prima dell’estrazione modulare', async () => {
+/*
+ * 06/9 — CUTOVER (Fase 3): `public/` è la build modulare. Il contratto non è più «byte per byte
+ * uguale» (quello serviva a congelare il monolite DURANTE l'estrazione): è «nessuna chiave pubblica
+ * persa» — ogni chiave di localStorage, tipo di evento, frammento di rotta, global dell'host e asset
+ * servito che il monolite esponeva deve esistere ancora nella build. Le sole uscite sono nominate
+ * qui, col perché; una chiave che sparisce senza essere in questa lista è un test rosso.
+ */
+const RITIRATE = Object.freeze({
+  endpointFragments: ['/api/v1/chat'], // owner 24/8: niente sezione chat separata — l'harness è l'unica chat
+});
+test('il contratto pubblico del monolite è conservato dalla build modulare (cutover 06/09)', async () => {
   const expected = JSON.parse(await readFile(fixturePath, 'utf8'));
   const actual = await extractLegacyContract(input);
-  assert.deepEqual(actual, expected);
+  for (const chiave of ['hostGlobals', 'storageKeys', 'eventTypes', 'publicAssets', 'endpointFragments']) {
+    const ritirate = RITIRATE[chiave] || [];
+    const perse = expected[chiave].filter((valore) => !actual[chiave].includes(valore) && !ritirate.includes(valore));
+    assert.deepEqual(perse, [], `${chiave}: chiavi del contratto perse dalla build`);
+    for (const valore of ritirate) assert.ok(!actual[chiave].includes(valore), `${chiave}: «${valore}» è dichiarata ritirata ma la build la usa ancora`);
+  }
+  assert.deepEqual(actual.terminalFrames, expected.terminalFrames);
+  assert.equal(actual.source, expected.source);
+  for (const nome of ['app', 'html', 'css']) assert.ok(actual.assets[nome].bytes > 0, `${nome}: la build servita è vuota`);
 });
 
 test('la baseline contiene i contratti pubblici che il refactor deve conservare', async () => {

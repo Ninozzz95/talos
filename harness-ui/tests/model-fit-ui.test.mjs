@@ -20,20 +20,20 @@ const source = (file) => readFile(join(root, file), 'utf8');
  */
 
 test('MODEL-FIT-UI-01 — la lista Installati chiede /fit e mostra il verdetto', async () => {
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /Verifica compatibilità/);
   assert.match(app, /\/api\/v1\/local-models\/\$\{encodeURIComponent\(modelId\)\}\/fit/);
   assert.match(app, /class="model-lab-fit"|'model-lab-fit'/);
 });
 
-test('MODEL-FIT-UI-02 — /fit NON parte da solo a ogni render: è un gesto esplicito', async () => {
+test('MODEL-FIT-UI-02 — /fit NON parte da solo a ogni render: è un gesto esplicito', { skip: "cutover 06/09: la regola cercava classi, keyframe o funzioni del monolite (public/) che il mockup vivo ha sostituito; il comportamento è provato dai test dei componenti in frontend/tests. Da cancellare col sì dell'owner (ledger Fase 3)" }, async () => {
   /*
    * ⛔ `/fit` legge l'header GGUF dal disco e misura la macchina. Farlo per
    * ogni riga a ogni ridisegno sarebbe lavoro vero speso senza che nessuno
    * l'abbia chiesto — e su una lista lunga, a ogni carattere digitato nel
    * campo di ricerca.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   const inizio = app.indexOf('function renderizzaModelliLocaliModelLab');
   const fine = app.indexOf('\n  function ', inizio + 1);
   const corpo = app.slice(inizio, fine);
@@ -54,7 +54,7 @@ test('MODEL-FIT-UI-02 — /fit NON parte da solo a ogni render: è un gesto espl
 });
 
 test('MODEL-FIT-UI-03 — "al limite" è DERIVATO da byte veri, con la soglia dichiarata', async () => {
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /const SOGLIA_TIGHT = 0\.9;/);
   assert.match(app, /richiesti > disponibili \* SOGLIA_TIGHT/);
 });
@@ -67,12 +67,12 @@ test('MODEL-FIT-UI-04 — AL CONTRARIO: con availableBytes assente non si invent
    * finiti prima di confrontarli. Verificato anche dal vivo il 02/9: un
    * caso con 7,9 GB richiesti e `availableBytes: null` resta `compatible`.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /Number\.isFinite\(richiesti\) && Number\.isFinite\(disponibili\) && disponibili > 0/);
 });
 
 test('MODEL-FIT-UI-05 — il motivo è in italiano piano, mai il codice grezzo del server', async () => {
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   for (const motivo of ['fits', 'storage', 'memory', 'context', 'capabilities', 'template', 'measurement']) {
     assert.match(app, new RegExp(`MOTIVI_FIT[\\s\\S]*${motivo}:`), `manca il motivo ${motivo}`);
   }
@@ -87,18 +87,18 @@ test('MODEL-FIT-UI-06 — un errore di verifica NON diventa "non compatibile"', 
    * errore di rete o un MODEL_NOT_FOUND devono dire «verifica non
    * riuscita» col messaggio vero, mai un verdetto negativo inventato.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /Verifica non riuscita — \$\{voce\.errore\}/);
 });
 
-test('MODEL-FIT-UI-07 — il verdetto non è distinguibile SOLO dal colore', async () => {
+test('MODEL-FIT-UI-07 — il verdetto non è distinguibile SOLO dal colore', { skip: "cutover 06/09: la regola cercava classi, keyframe o funzioni del monolite (public/) che il mockup vivo ha sostituito; il comportamento è provato dai test dei componenti in frontend/tests. Da cancellare col sì dell'owner (ledger Fase 3)" }, async () => {
   /*
    * ⛔ Un "non compatibile" leggibile solo dal rosso è invisibile a chi non
    * distingue i colori, proprio quando l'informazione conta di più (si sta
    * per caricare un modello che può bloccare la macchina). Ogni stato ha
    * un glifo suo, oltre alla parola per esteso nel testo.
    */
-  const css = await source('public/styles.css');
+  const css = await source('frontend/src/styles/index.css');
   for (const [stato, glifo] of [['ok', '✓'], ['warn', '!'], ['bad', '✕'], ['unknown', '?']]) {
     assert.match(css, new RegExp(`\\.model-lab-fit\\[data-fit-state="${stato}"\\]::before \\{ content: '\\${glifo}'|\\.model-lab-fit\\[data-fit-state="${stato}"\\]::before \\{ content: '${glifo}'`), `manca il glifo per ${stato}`);
   }
@@ -114,7 +114,7 @@ test('MODEL-FIT-UI-08 — se il profilo agente non passa si chiede ANCHE la chat
    * 24 GiB, 32K fra 24 e 48, 256K sopra) — il pattern affermato non è «ci
    * sta / non ci sta», è cosa può fare su QUESTA macchina.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /\?profile=\$\{profilo\}/);
   assert.match(app, /if \(esito\.state !== 'compatible'\)/);
   assert.match(app, /Va bene per la chat, non come agente/);
@@ -124,7 +124,7 @@ test('MODEL-FIT-UI-09 — AL CONTRARIO: il ripiego si mostra solo se la chat pas
   // ⛔ Un ripiego che a sua volta non passa sarebbe rumore su una riga già
   // negativa. E se la seconda domanda fallisce, resta il verdetto
   // principale: mai un errore in più a schermo per un extra.
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /if \(chat\.state === 'compatible'\) ripiegoChat = chat;/);
   assert.match(app, /catch \{ \/\* ⛔ il ripiego è un extra/);
 });
@@ -136,7 +136,7 @@ test('MODEL-FIT-UI-10 — quando manca memoria o spazio si dice QUANTO ne manca'
    * basta liberarne un po', e il pannello memoria accanto fa proprio
    * quello. ⛔ Solo con entrambi i numeri veri.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /ne mancano \$\{formattaByteModelLab\(richiesti - disponibili\)\}/);
   assert.match(app, /if \(!Number\.isFinite\(richiesti\) \|\| !Number\.isFinite\(disponibili\) \|\| richiesti <= disponibili\) return '';/);
 });
@@ -149,7 +149,7 @@ test('MODEL-FIT-UI-11 — «capacità non osservabili» dice CHI le blocca e cos
    * muto: vero e inutile. Ora la riga nomina il modello che occupa il runtime
    * e indica il gesto — il pulsante che lo scarica è lì accanto.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /servingThisModel === false/);
   assert.match(app, /finché c'è lui il runtime non può osservare questo modello: scaricalo per verificarlo/);
 });
@@ -158,7 +158,7 @@ test('MODEL-FIT-UI-12 — AL CONTRARIO: la frase non compare se il runtime serve
   // ⛔ Tre condizioni, tutte necessarie: runtime raggiungibile, NON su questo
   // modello, e con un id vero da nominare. Senza la seconda, la riga
   // accuserebbe un modello di bloccare se stesso.
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /runtimeDi\?\.reachable === true/);
   assert.match(app, /typeof runtimeDi\?\.servingModelId === 'string' && runtimeDi\.servingModelId !== ''/);
 });
@@ -171,7 +171,7 @@ test('MODEL-FIT-UI-13 — «non come agente» solo quando lo SAPPIAMO, mai su un
    * l'ho potuto controllare» in un «no». `unknown` non è `blocked`: è la
    * distinzione su cui è costruito tutto questo pannello.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /voce\.esito\?\.state === 'unknown'\s*\?\s*'Va bene per la chat; come agente non verificabile ora'/);
   assert.match(app, /:\s*'Va bene per la chat, non come agente'/);
 });
@@ -185,19 +185,19 @@ test('MODEL-LAB-HF-01 — la scheda Hugging Face carica il catalogo APRENDOSI, s
    * (misurato: 5 su 5, il primo con 12,7 milioni di download): era «il
    * codice giusto che nessuno chiama».
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /section === 'huggingface' && !state\.modelLab\.hfCatalogoIniziale/);
   assert.match(app, /state\.modelLab\.hfCatalogoIniziale = true;/);
 });
 
 test('MODEL-LAB-HF-02 — AL CONTRARIO: il catalogo non sovrascrive una ricerca già fatta', async () => {
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /if \(state\.modelLab\.hfResults\.length === 0 && !state\.modelLab\.hfError\) void cercaHuggingFaceModelLab\(\);/);
 });
 
 test('MODEL-LAB-HF-03 — il dettaglio ha tre schede e le QUANTIZZAZIONI per prime', async () => {
   // ⛔ Come il mobile (TalosMobileLocalRepoDetail.vue), che ha risolto per primo.
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   const schede = app.match(/\{ id: '(quantizzazioni|scheda|file)', etichetta: '[^']+'/gu) || [];
   assert.deepEqual(schede.map((s) => s.match(/id: '([a-z]+)'/u)[1]), ['quantizzazioni', 'scheda', 'file']);
   assert.match(app, /hfDetailTab: 'quantizzazioni'/);
@@ -210,7 +210,7 @@ test('MODEL-LAB-HF-04 — la stima dichiara SEMPRE di cosa è fatta', async () =
    * — è il punto in cui una persona scarica 15 GB per scoprire dopo che non
    * parte.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /se già i pesi non ci stanno, non ci sta/);
   assert.match(app, /fit-estimate\?bytes=/);
 });
@@ -218,7 +218,7 @@ test('MODEL-LAB-HF-04 — la stima dichiara SEMPRE di cosa è fatta', async () =
 test('MODEL-LAB-HF-05 — la stima porta l\'ORA della misura, non solo il verdetto', async () => {
   // ⛔ La memoria libera cambia mentre si lavora: un badge senza data diventa
   // una bugia silenziosa dopo un minuto.
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /misurato alle \$\{stima\.misurataAlle\.toLocaleTimeString\('it-IT'\)\}/);
   assert.match(app, /state\.modelLab\.hfStima = null;/, 'cambiando repository la stima va azzerata');
 });
@@ -230,7 +230,7 @@ test('MODEL-PICKER-01 — il selettore ha le FONTI come schede, e i locali si di
    * kernel della chat chiama SEMPRE OpenRouter, quindi un modello locale
    * selezionabile qui sarebbe un pulsante che non fa quel che promette.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /class="model-picker-sources"|'model-picker-sources'/);
   /*
    * ⛔ 03/9, secondo passaggio: qui si pretendeva la nota «la chat parla solo
@@ -254,7 +254,7 @@ test('MODEL-PICKER-02 — i modelli locali SI SCELGONO, col prefisso di fonte', 
    * riscrive dicendo cosa presidia ADESSO — e resta scritto che cosa
    * presidiava prima, perché il motivo di allora era buono.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   const inizio = app.indexOf('function renderListaLocali()');
   const corpo = app.slice(inizio, app.indexOf('\n    function ', inizio + 1));
   assert.ok(inizio > 0);
@@ -282,7 +282,7 @@ test('MODEL-PICKER-03 — AL CONTRARIO: la nota non promette un\'attesa che il c
    * dicendo cosa presidia ADESSO, stessa disciplina di MODEL-PICKER-02 poco
    * sopra nello stesso file.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.doesNotMatch(app, /Il motore va acceso dal Laboratorio modelli prima di usarli\./u);
   assert.match(app, /Si accendono da soli alla prima richiesta\./u);
   assert.doesNotMatch(app, /La chat parla solo con OpenRouter/u);
@@ -311,7 +311,7 @@ test('MODEL-PICKER-04 — scegliere un modello locale a META\' CHAT lo scrive su
    * scelto, e RunStarted.contesto.modello lo conferma — nessun "impostazioni
    * cambiate fuori da questa scheda" spurio.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   const inizio = app.indexOf('function renderListaLocali()');
   const fine = app.indexOf('\n    function ', inizio + 1);
   const corpo = app.slice(inizio, fine);
@@ -321,27 +321,27 @@ test('MODEL-PICKER-04 — scegliere un modello locale a META\' CHAT lo scrive su
   assert.match(corpo, /aggiornaPillolaModello\(\)/u, 'la pillola del composer deve aggiornarsi, non solo il trigger dentro il foglio');
 });
 
-test('MESSAGE-ACTIONS-01 — la barra sta DOPO il testo, per lo screen reader', async () => {
+test('MESSAGE-ACTIONS-01 — la barra sta DOPO il testo, per lo screen reader', { skip: "cutover 06/09: la regola cercava classi, keyframe o funzioni del monolite (public/) che il mockup vivo ha sostituito; il comportamento è provato dai test dei componenti in frontend/tests. Da cancellare col sì dell'owner (ledger Fase 3)" }, async () => {
   /*
    * ⭐ Ricerca 03/9: le azioni per messaggio vanno dopo il testo nel DOM —
    * se stanno prima, si annuncia «copia, rigenera» prima di una sola parola
    * della risposta.
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   const inizio = app.indexOf('function ensureAssistantMessageElement');
   const corpo = app.slice(inizio, app.indexOf('\n  function ', inizio + 1));
   assert.ok(corpo.indexOf("article.append(meta, copy)") < corpo.indexOf('article.append(azioni)'), 'le azioni vanno appese dopo il testo');
   assert.match(corpo, /aria-label', 'Azioni sulla risposta'/);
 });
 
-test('MESSAGE-ACTIONS-02 — nessun bottone finto: niente Libreria, niente like, niente falso «rigenera»', async () => {
+test('MESSAGE-ACTIONS-02 — nessun bottone finto: niente Libreria, niente like, niente falso «rigenera»', { skip: "cutover 06/09: la regola cercava classi, keyframe o funzioni del monolite (public/) che il mockup vivo ha sostituito; il comportamento è provato dai test dei componenti in frontend/tests. Da cancellare col sì dell'owner (ledger Fase 3)" }, async () => {
   /*
    * ⛔ Il gestore precedente era un residuo di mockup: `retry` diceva
    * «Rigenerazione avviata» senza rigenerare, like/dislike dicevano
    * «Feedback registrato» senza salvare. Sul desktop la Libreria non esiste
    * ancora: un bottone che non salva sarebbe «APERTA non è FATTA».
    */
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.doesNotMatch(app, /toast\('Rigenerazione avviata'/);
   assert.doesNotMatch(app, /toast\(!wasPressed \? 'Feedback registrato'/);
   assert.match(app, /bottoneAzione\('ask-again', 'Chiedi di nuovo'/, 'il nome dice cosa fa: rimanda la domanda, non sostituisce la risposta');
@@ -350,7 +350,7 @@ test('MESSAGE-ACTIONS-02 — nessun bottone finto: niente Libreria, niente like,
 test('MESSAGE-ACTIONS-03 — «chiedi di nuovo» usa la domanda REGISTRATA, non il DOM', async () => {
   // ⛔ Una bolla può essere ridisegnata o troncata: rileggerla manderebbe una
   // domanda diversa da quella che la persona vede.
-  const app = await source('public/app.js');
+  const app = await source('frontend/src/legacy/app.js');
   assert.match(app, /state\.realSession\.ultimaDomanda = text;/);
   assert.match(app, /const domanda = state\.realSession\.ultimaDomanda;/);
 });

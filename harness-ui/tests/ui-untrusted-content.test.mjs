@@ -7,7 +7,7 @@ import test from 'node:test';
 const root = dirname(fileURLToPath(import.meta.url));
 
 test('model card renderer builds nodes and routes images through the local proxy', async () => {
-  const source = await readFile(join(root, '..', 'public', 'app.js'), 'utf8');
+  const source = await readFile(join(root, '..', 'frontend', 'src', 'legacy', 'app.js'), 'utf8');
   const start = source.indexOf('function renderizzaModelCardReadme');
   const end = source.indexOf('function renderizzaHfDetailModelLab', start);
   assert.ok(start >= 0 && end > start);
