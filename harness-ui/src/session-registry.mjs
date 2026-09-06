@@ -50,7 +50,7 @@ import {
   WorkspaceFileError,
 } from './workspace-files.mjs';
 import { guardaWorkspace as guardaWorkspaceReale } from './workspace-watcher.mjs';
-import { analizzaEvidenzaDelega, creaSubagentOrchestrator, esitoDelegaDaEventi } from './subagent-orchestrator.mjs';
+import { analizzaEvidenzaDelega, creaSubagentOrchestrator, esisteCartella, esitoDelegaDaEventi } from './subagent-orchestrator.mjs';
 import {
   caricaHooks as caricaHooksReale,
   eseguiHook as eseguiHookReale,
@@ -867,6 +867,9 @@ export function metricheDaEventi(eventi, { istanti = null, adesso = null } = {})
 
 export function createSessionRegistry({
   avviaSessioneFn = avviaSessioneReale,
+  // 06/9: la delega rifiuta una cartella che non esiste (il percorso in forma WSL che il modello
+  // inventava per aggirare il vecchio divieto). Iniettabile: le prove costruiscono cartelle finte.
+  cartellaEsisteFn = esisteCartella,
   preparaEsecuzioneFn,
   taskCatalogProvider = null,
   preparaEsecuzioneLiberaFn = preparaEsecuzioneLiberaReale,
@@ -1150,7 +1153,7 @@ export function createSessionRegistry({
   let sessioniCorrotte = [];
   let sessioniScartate = []; // ⭐ 04/9, W0-01 — [{ sessionId, motivo, dettaglio? }]
   // ⭐⭐⭐ FASE C (28/8) — istanziato qui: `avviaESegui` è una function declaration (issata), riferibile prima della sua definizione testuale più sotto.
-  const subagentOrchestrator = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: avviaESegui });
+  const subagentOrchestrator = creaSubagentOrchestrator({ sessioni, avviaESeguiFn: avviaESegui, cartellaEsisteFn });
   /*
    * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research. Stesso principio
    * di subagentOrchestrator appena sopra: `avviaESegui` issata, `sessioni`
