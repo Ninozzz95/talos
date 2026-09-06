@@ -500,6 +500,22 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 /* 06/9 B14 — l'Invio durante un giro non decide da solo: due pulsanti espliciti, sotto il composer.
    Stessa grammatica della coda (bordo tratteggiato = «in sospeso, deciso da te»), accento sull'azione
    che indirizza subito perche' e' quella che cambia il giro in corso. */
+/* 06/9 B9 — ogni allegato dichiara quanto contesto costa: è la domanda che uno si fa prima di
+   premere invio. Riga sottile sopra il composer, i nomi in fila e il totale a destra in monospazio,
+   perché è un numero e si legge come tale. */
+.talos-allegati{display:flex; align-items:center; gap:10px; padding:6px 14px; margin-bottom:8px; border-radius:11px; border:1px solid var(--talos-border-subtle); background:var(--talos-card-subtle); font-size:12.5px}
+.talos-allegati__lista{display:flex; flex-wrap:wrap; gap:6px; margin:0; padding:0; list-style:none; min-width:0}
+.talos-allegati__voce{display:inline-flex; align-items:center; gap:6px; padding:3px 8px; border-radius:8px; border:1px solid var(--talos-border); background:var(--talos-panel); max-width:22rem}
+.talos-allegati__nome{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-allegati__costo{color:var(--talos-muted); font-family:var(--talos-font-mono); font-size:11.5px}
+.talos-allegati__togli{border:0; background:transparent; color:var(--talos-muted); cursor:pointer; padding:0 2px; line-height:1}
+.talos-allegati__togli:hover{color:var(--talos-text)}
+/* mentre trascini un file sopra il composer: il bersaglio si dichiara, senza saltellare */
+.talos-chat-foot.is-drop .talos-composer{border-color:var(--talos-accent-border); box-shadow:0 0 0 3px var(--talos-accent-soft)}
+.talos-menu{position:fixed; z-index:60; min-width:16rem; padding:6px; border-radius:12px; border:1px solid var(--talos-border-strong); background:var(--talos-panel); box-shadow:var(--talos-shadow-card); display:flex; flex-direction:column; gap:2px}
+.talos-menu__voce{display:flex; align-items:flex-start; gap:10px; width:100%; padding:8px 10px; border:0; border-radius:9px; background:transparent; color:var(--talos-text); font:inherit; text-align:left; cursor:pointer}
+.talos-menu__voce:hover, .talos-menu__voce:focus-visible{background:var(--talos-card-subtle); outline:none}
+.talos-menu__voce small{display:block; color:var(--talos-muted); font-size:11.5px}
 .talos-bivio{display:flex; align-items:center; gap:10px; margin-top:8px; padding:8px 14px; border-radius:11px; border:1px dashed var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:13px}
 .talos-bivio__testo{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-composer{border:1px solid var(--talos-border-strong); border-radius:18px; background:var(--talos-panel); padding:14px 14px 12px; box-shadow:var(--talos-shadow-card)}
@@ -1335,6 +1351,12 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
           <span class="talos-queue__text" data-coda-testo>«Poi aggiorna il ledger con i numeri veri» — parte alla fine di questo giro</span>
           <button type="button" class="talos-button talos-button--ghost talos-button--sm" data-coda-togli>Togli</button>
         </div>
+        <div class="talos-allegati" data-c="Attachments" role="group" aria-label="Allegati del messaggio" hidden>
+          <span class="talos-badge talos-badge--sm" data-allegati-conteggio>1 allegato</span>
+          <ul class="talos-allegati__lista" data-allegati-lista></ul>
+          <span class="talos-grow"></span>
+          <span class="talos-mono talos-muted" data-allegati-costo>~1,3k token</span>
+        </div>
         <form class="talos-composer" data-c="Composer" id="composerForm">
           <button type="button" class="talos-resizer talos-resizer--composer" id="composerResizeHandle" aria-label="Ridimensiona il composer (doppio clic per la misura normale)" title="Trascina per ridimensionare · doppio clic per la misura normale"></button>
           <textarea class="talos-composer__input" id="composerInput" rows="1" placeholder="Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda" aria-label="Messaggio"></textarea>
@@ -2056,6 +2078,8 @@ export function registraSessione(sessione) {
 <!-- 06/9 B16 — Esc ferma il giro, ma non di soppiatto: la conferma è la decisione dell'owner (contro il mio consiglio).
      Il tasto sicuro («Continua») è quello che prende il fuoco; Esc qui dentro chiude questo velo e basta,
      perché Escape smonta sempre PRIMA lo strato più alto (WAI-ARIA APG, dialog pattern). -->
+<!-- 06/9 B4: il «+» serve SOLO ad allegare. Il Capability hub esce dal composer e resta il suo luogo. -->
+<div class="talos-menu" id="menuAllega" data-c="Menu" role="menu" aria-label="Aggiungi al messaggio" hidden></div>
 <div class="overlay-layer overlay-layer--modal" id="veloFermaGiro" data-c="OverlayLayer" hidden><div class="talos-dialog talos-dialog--medium" data-c="Dialog" role="alertdialog" aria-modal="true" aria-labelledby="titoloveloFermaGiro" aria-describedby="fermaGiroMessaggio"><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-width" data-c="Resizer" data-dialog-resize="width" aria-label="Ridimensiona larghezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-height" data-c="Resizer" data-dialog-resize="height" aria-label="Ridimensiona altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-both" data-c="Resizer" data-dialog-resize="both" aria-label="Ridimensiona larghezza e altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><div class="talos-dialog__header"><div class="talos-grow"><span class="talos-eyebrow">Giro in corso</span><h2 class="talos-dialog__title" id="titoloveloFermaGiro">Fermo il giro?</h2></div><button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloFermaGiro" aria-label="Chiudi Fermo il giro"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div><div class="talos-dialog__body"><div class="talos-stack"><div class="talos-cluster"><strong class="talos-grow" id="fermaGiroNome">Sessione in corso</strong><span class="talos-badge talos-badge--warning" data-c="Badge" id="fermaGiroStato">In corso</span></div><p id="fermaGiroMessaggio">Si ferma al prossimo punto sicuro: il lavoro già fatto resta, i file già scritti restano. Puoi riprendere la stessa sessione dopo.</p><div class="talos-callout talos-callout--warn" data-c="Callout" id="fermaGiroErrore" role="alert" hidden>Lo stop non è riuscito. Il giro sta ancora andando.</div></div></div><div class="talos-dialog__footer"><span class="talos-grow"></span><button class="talos-button talos-button--secondary" id="fermaGiroAnnulla" data-chiudi="veloFermaGiro">Continua</button><button class="talos-button talos-button--secondary talos-button--danger" id="fermaGiroConferma">Ferma il giro</button></div></div></div>
 <div class="overlay-layer overlay-layer--modal" id="veloScorciatoie" data-c="OverlayLayer" hidden><div class="talos-dialog talos-dialog--medium" data-c="Dialog" role="dialog" aria-modal="true" aria-labelledby="titoloScorciatoie"><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-width" data-c="Resizer" data-dialog-resize="width" aria-label="Ridimensiona larghezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-height" data-c="Resizer" data-dialog-resize="height" aria-label="Ridimensiona altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-both" data-c="Resizer" data-dialog-resize="both" aria-label="Ridimensiona larghezza e altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button>
   <div class="talos-dialog__header"><div class="talos-grow"><span class="talos-eyebrow">Tastiera</span><h2 class="talos-dialog__title" id="titoloScorciatoie">Scorciatoie</h2></div><button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloScorciatoie" aria-label="Chiudi Scorciatoie"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div>

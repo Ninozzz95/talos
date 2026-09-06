@@ -37,7 +37,8 @@ import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaN
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, etichettaPermesso, nomeModelloUmano } from '../components/chat-foot.js';
-import { spiegaErrore } from '../components/errori.js'; // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
+import { spiegaErrore } from '../components/errori.js';
+import { VIE_ALLEGATO, costoAllegato, costoTotale, nomeBreveAllegato } from '../components/allegati.js'; // 06/9 B4/B6/B7/B9: il «+» allega, e ogni allegato dichiara il suo costo // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
@@ -13095,6 +13096,146 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     }).catch(() => { /* best effort, vedi sopra: resta il titolo di sempre */ });
   }
 
+  /*
+   * ⭐⭐⭐ 06/9 — decisioni B4/B6/B7/B9. Il «+» del composer apriva il Capability hub («Strumenti,
+   * skill e connettori»): un luogo intero dentro un pulsante che promette «Aggiungi contesto».
+   * B4 lo dice chiaro: il «+» serve SOLO ad allegare, e il hub resta il suo luogo. Qui vivono le
+   * quattro vie (B6), l'incolla e il trascina (B7), e la riga che dichiara quanto contesto costa
+   * ogni allegato (B9) — il conto lo fa `components/allegati.js`, con le regole di ogni famiglia.
+   * ⛔ Gli allegati NON partono da soli: entrano nel messaggio quando lo mandi, come un pacchetto,
+   * e viaggiano come PERCORSI, non come byte (i byte di un'immagine bruciano la finestra in fretta).
+   */
+  const allegatiComposer = [];
+  function elencoAllegati() { return $('#schermoChat .talos-allegati'); }
+  function disegnaAllegati() {
+    const riga = elencoAllegati();
+    if (!riga) return;
+    riga.hidden = allegatiComposer.length === 0;
+    const conteggio = $('[data-allegati-conteggio]', riga);
+    if (conteggio) conteggio.textContent = `${allegatiComposer.length} allegat${allegatiComposer.length === 1 ? 'o' : 'i'}`;
+    const lista = $('[data-allegati-lista]', riga);
+    if (lista) {
+      lista.replaceChildren();
+      allegatiComposer.forEach((a, indice) => {
+        const li = document.createElement('li');
+        li.className = 'talos-allegati__voce';
+        const nome = document.createElement('span');
+        nome.className = 'talos-allegati__nome';
+        nome.textContent = a.nome || nomeBreveAllegato(a.percorso || '');
+        nome.title = a.percorso || a.nome || '';
+        const costo = document.createElement('span');
+        costo.className = 'talos-allegati__costo';
+        costo.textContent = a.costoIgnoto ? 'costo ignoto' : costoAllegato(a, state.model).etichetta;
+        if (a.costoIgnoto) costo.title = 'Non sono riuscito a leggere le misure dell’immagine: il costo vero lo vedrai nel consumo del giro.';
+        const togli = document.createElement('button');
+        togli.type = 'button';
+        togli.className = 'talos-allegati__togli';
+        togli.textContent = '×';
+        togli.setAttribute('aria-label', `Togli ${nome.textContent}`);
+        togli.addEventListener('click', () => { allegatiComposer.splice(indice, 1); disegnaAllegati(); });
+        li.append(nome, costo, togli);
+        lista.append(li);
+      });
+    }
+    const totale = $('[data-allegati-costo]', riga);
+    if (totale) totale.textContent = costoTotale(allegatiComposer, state.model).etichetta;
+  }
+  function aggiungiAllegato(allegato) {
+    if (!allegato) return;
+    if (allegatiComposer.length >= 10) { toast('Troppi allegati', 'Dieci per messaggio è già tanto contesto: togline uno prima di aggiungerne un altro.'); return; }
+    allegatiComposer.push(allegato);
+    disegnaAllegati();
+    syncRunComposerState();
+  }
+  /** Il testo che accompagna il messaggio: i percorsi, non i byte (vedi la doc di allegati.js). */
+  function testoConAllegati(testo) {
+    if (allegatiComposer.length === 0) return testo;
+    const righe = allegatiComposer.map((a) => (a.tipo === 'immagine'
+      ? `- immagine allegata: ${a.nome}${a.larghezza ? ` (${a.larghezza}×${a.altezza})` : ''}`
+      : `- file allegato: ${a.percorso || a.nome}`));
+    return `${testo}\n\nAllegati di questo messaggio:\n${righe.join('\n')}`;
+  }
+  function svuotaAllegati() { allegatiComposer.length = 0; disegnaAllegati(); }
+
+  function apriMenuAllega(ancora) {
+    const menu = $('#menuAllega');
+    if (!menu) return;
+    menu.replaceChildren();
+    for (const via of VIE_ALLEGATO) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'talos-menu__voce';
+      b.setAttribute('role', 'menuitem');
+      const forte = document.createElement('strong');
+      forte.textContent = via.etichetta;
+      const piccolo = document.createElement('small');
+      piccolo.textContent = via.aiuto;
+      const testo = document.createElement('span');
+      testo.append(forte, piccolo);
+      b.append(testo);
+      b.addEventListener('click', () => { chiudiMenuAllega(); scegliAllegato(via.id); });
+      menu.append(b);
+    }
+    menu.hidden = false;
+    const r = ancora?.getBoundingClientRect();
+    if (r) {
+      menu.style.left = `${Math.max(8, r.left)}px`;
+      menu.style.top = `${Math.max(8, r.top - menu.offsetHeight - 8)}px`;
+    }
+    menu.querySelector('button')?.focus();
+  }
+  function chiudiMenuAllega() { const m = $('#menuAllega'); if (m) m.hidden = true; }
+
+  function scegliAllegato(via) {
+    if (via === 'workspace') { openSheet('files', { ancoraAlComposer: true }); return; }
+    if (via === 'schermata') { toast('Ultima schermata', 'Incolla lo screenshot nel composer con Ctrl+V: TALOS lo allega e ti dice quanto contesto costa.'); return; }
+    const input = document.createElement('input');
+    input.type = 'file';
+    if (via === 'immagine') input.accept = 'image/*';
+    input.addEventListener('change', async () => {
+      for (const file of [...(input.files || [])]) await allegaFile(file);
+    });
+    input.click();
+  }
+
+  /** Un file scelto, incollato o trascinato: stessa strada per tutti e tre (B7). */
+  async function allegaFile(file) {
+    if (!file) return;
+    const immagine = /^image\//.test(file.type || '');
+    if (immagine) {
+      const misure = await misuraImmagine(file).catch(() => ({ larghezza: 0, altezza: 0 }));
+      // se le misure non si leggono il costo non si inventa: si dichiara ignoto (mai «gratis» per sbaglio)
+      aggiungiAllegato({ tipo: 'immagine', nome: file.name || 'immagine incollata', ...misure, costoIgnoto: !(misure.larghezza > 0) });
+      return;
+    }
+    let caratteri = file.size;
+    try { caratteri = (await file.text()).length; } catch { /* un binario resta alla sua taglia in byte */ }
+    aggiungiAllegato({ tipo: 'testo', nome: nomeBreveAllegato(file.name), percorso: file.name, caratteri });
+  }
+  /*
+   * ⛔ 06/9, misurato con la sonda: con `new Image()` le misure tornavano a zero e l'allegato
+   * dichiarava «nessun costo» — cioè la cosa peggiore, un numero mancante travestito da gratis.
+   * `createImageBitmap` legge il file direttamente e non dipende da un ciclo di caricamento del DOM;
+   * resta l'`Image` come ripiego per chi non ce l'ha.
+   */
+  async function misuraImmagine(file) {
+    if (typeof createImageBitmap === 'function') {
+      try {
+        const bitmap = await createImageBitmap(file);
+        const misure = { larghezza: bitmap.width, altezza: bitmap.height };
+        bitmap.close?.();
+        if (misure.larghezza > 0) return misure;
+      } catch { /* si prova con l'altra via */ }
+    }
+    return new Promise((risolvi, rifiuta) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { risolvi({ larghezza: img.naturalWidth, altezza: img.naturalHeight }); URL.revokeObjectURL(url); };
+      img.onerror = () => { URL.revokeObjectURL(url); rifiuta(new Error('immagine illeggibile')); };
+      img.src = url;
+    });
+  }
+
   function submitPrompt(text) {
     const value = String(text || '').trim();
     if (!value) return false;
@@ -13790,7 +13931,31 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   $$('[data-control-action]').forEach((button) => button.addEventListener('click', () => {
     if (button.dataset.controlAction === 'doctor') eseguiDoctor();
   }));
-  $('#capabilityBtn').addEventListener('click', () => openSheet('capabilities', { ancoraAlComposer: true }));
+  // 06/9 B4: il «+» serve SOLO ad allegare. Il Capability hub resta raggiungibile dal suo luogo.
+  $('#capabilityBtn').addEventListener('click', (evento) => {
+    evento.stopPropagation();
+    const menu = $('#menuAllega');
+    if (menu && !menu.hidden) { chiudiMenuAllega(); return; }
+    apriMenuAllega($('#capabilityBtn'));
+  });
+  ROOT().addEventListener('click', (evento) => { if (!evento.target.closest?.('#menuAllega, #capabilityBtn')) chiudiMenuAllega(); });
+  // B7: incolla E trascina, entrambi, sullo stesso composer
+  composerInput.addEventListener('paste', (evento) => {
+    const file = [...(evento.clipboardData?.files || [])];
+    if (file.length === 0) return;
+    evento.preventDefault();
+    for (const f of file) void allegaFile(f);
+  });
+  const piedeChat = $('#schermoChat .talos-chat-foot');
+  if (piedeChat) {
+    piedeChat.addEventListener('dragover', (evento) => { evento.preventDefault(); piedeChat.classList.add('is-drop'); });
+    piedeChat.addEventListener('dragleave', (evento) => { if (evento.target === piedeChat) piedeChat.classList.remove('is-drop'); });
+    piedeChat.addEventListener('drop', (evento) => {
+      evento.preventDefault();
+      piedeChat.classList.remove('is-drop');
+      for (const f of [...(evento.dataTransfer?.files || [])]) void allegaFile(f);
+    });
+  }
   $('#manageCapabilitiesBtn').addEventListener('click', () => openSheet('capabilities'));
   $('#closeSheet').addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
 
@@ -14098,8 +14263,10 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
   composerForm.addEventListener('submit', (event) => {
     event.preventDefault();
-    const text = composerInput.value.trim();
+    // 06/9 B9: gli allegati viaggiano col messaggio, come percorsi, e la riga si svuota solo se parte
+    const text = testoConAllegati(composerInput.value.trim());
     if (!submitPrompt(text)) return;
+    svuotaAllegati();
     composerInput.value = '';
     autoGrowTextarea();
     syncRunComposerState();
