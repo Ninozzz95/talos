@@ -23,21 +23,21 @@
 | O-12 | «maniglietta sull'angolo del composer» | Composer | ✅ | `.talos-resizer--composer` |
 | O-13 | «col permesso *chiedi* non è comparsa nessuna richiesta» | Permessi | ✅ | `session-registry.mjs`, T03: 2 approvazioni |
 | O-14 | la coda non si vedeva *(trovato in T04)* | Composer | ✅ | T04 |
-| O-15 | «perché *chiede di eseguire* se siamo in full access?» | Carta di approvazione | 🔧 | la carta dice il motivo |
-| O-16 | «i comandi devono essere formattati in codice, così è brutto» | Carta di approvazione | 🔧 | blocco codice dedicato |
-| O-17 | «JavaScriptCopia» attaccato | Blocchi di codice in chat | 🔧 | CSS dell'intestazione riscritto |
+| O-15 | «perché *chiede di eseguire* se siamo in full access?» | Carta di approvazione | ✅ | la carta nomina il motivo; pillola «Accesso completo · 2 eccezioni» misurata in T04 |
+| O-16 | «i comandi devono essere formattati in codice, così è brutto» | Carta di approvazione | ✅ | blocco codice monospazio con scorrimento; esito su una riga sua |
+| O-17 | «JavaScriptCopia» attaccato | Blocchi di codice in chat | ✅ | misurato: intestazione alta 41px, «JavaScript» e «Copia» a 8px di distanza |
 | O-18 | «la schermata huggingface è orrenda, ridisegnala» | Model Lab | 🔜 delegato | metà «luoghi», worktree `AVM-harness-luoghi` |
-| O-19 | «mentre il modello scrive lo scrolling deve seguirlo» | Conversazione | 🔧 | scroller corretto |
-| O-20 | «cliccando una sessione va a fine conversazione» | Elenco sessioni | 🔧 | scroller corretto |
+| O-19 | «mentre il modello scrive lo scrolling deve seguirlo» | Conversazione | 🔧 | scroller corretto; ⛔ non ancora visto durante un giro vero |
+| O-20 | «cliccando una sessione va a fine conversazione» | Elenco sessioni | 🔧 | scroller corretto; ⛔ non ancora provato aprendo una sessione lunga |
 | O-21 | «scrollata al massimo deve stare a metà pagina» | Conversazione | ✅ | misurato dal vivo: fondo dell'ultimo messaggio al **48%** dell'altezza visibile, spazio in coda 342px su 684px |
-| O-22 | «flusso SSE senza contenuto ne tool_calls» | Errori in chat | 🔜 | errore tecnico grezzo a schermo |
-| O-23 | «HTTP 400 … exceeds the available context size» | Errori / modelli locali | 🔜 | JSON crudo, e il fatto vero non è detto |
-| O-24 | identificatore grezzo del modello locale a schermo | Intestazione, pillola | 🔜 | decisione H22 |
-| O-25 | «le bolle di domanda devono essere colore accent, oro nel tema Calm» | Conversazione | 🔧 | fondo accento velato + bordo d'accento |
-| O-26 | *(trovato da me nello screenshot di O-21)* le tabelle markdown non vengono rese: a schermo restano `\| Funzione \| Input atteso \|` e `\|---\|---\|` | Conversazione, markdown | 🔧 in corso | il renderer non conosce le tabelle |
-| O-27 | «non far partire l'animazione di scroll se la conversazione è già scrollata alla fine» | Conversazione | 🔧 | si anima solo quando c'è una distanza da percorrere |
-| O-28 | «nel browser il contenuto si vede così» — «Letture della sessione» mostra l'HTML grezzo della pagina | Vista Browser | 🔴 aperto | il testo acquisito è il sorgente, non il testo |
-| O-29 | «la bolla di domanda non deve avere larghezza al massimo: bolla di chat con la codina, da destra» | Conversazione | 🔧 | larghezza sul contenuto, ancorata a destra, angolo-codina |
+| O-22 | «flusso SSE senza contenuto ne tool_calls» | Errori in chat | 🔧 | tradotto da components/errori.js; ⛔ non ancora visto in una sessione vera |
+| O-23 | «HTTP 400 … exceeds the available context size» | Errori / modelli locali | 🔧 | tradotto coi numeri veri (17.993 su 16.384) e tre rimedi; ⛔ idem |
+| O-24 | identificatore grezzo del modello locale a schermo | Intestazione, pillola | ✅ | misurato dal vivo: pillola «gpt oss · 20b», id completo nel suggerimento |
+| O-25 | «le bolle di domanda devono essere colore accent, oro nel tema Calm» | Conversazione | ✅ | accento velato col suo bordo, verificato: rgba(192,139,60,.14) |
+| O-26 | *(trovato da me nello screenshot di O-21)* le tabelle markdown non vengono rese: a schermo restano `\| Funzione \| ✅ | misurato: 1 tabella resa (4 colonne, 2 righe), zero pipe rimaste a schermo |---\|---\|` | Conversazione, markdown | 🔧 in corso | il renderer non conosce le tabelle |
+| O-27 | «non far partire l'animazione di scroll se la conversazione è già scrollata alla fine» | Conversazione | ✅ | niente animazione entro 24px dal fondo; nessuna se il fondo è in vista |
+| O-28 | «nel browser il contenuto si vede così» — «Letture della sessione» mostra l'HTML grezzo della pagina | Vista Browser | 🔧 | modo «Pagina» predefinito + «Testo dell’agente» ripulito col sorgente sotto; ⛔ non ancora provato su una lettura vera |
+| O-29 | «la bolla di domanda non deve avere larghezza al massimo: bolla di chat con la codina, da destra» | Conversazione | ✅ | misurato: bolla al 67% della colonna, a destra, angolo-codina in basso a destra |
 | O-30 | «non riesco ad aprire la sidebar di destra dopo averla collassata» | Colonna destra | ✅ | due gestori sullo stesso clic si annullavano; verificato su 4 viste, dalla Review alla Chat, e dopo un ricaricamento |
 
 ---
