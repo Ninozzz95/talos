@@ -116,6 +116,21 @@ export function kilo(n) {
  * prompt_tokens, completion_tokens, cached_tokens, giri, tokens_per_second.
  * Ciò che manca non si scrive.
  */
+/*
+ * ⛔ 06/9, owner con lo screenshot e la freccia sulla barra in fondo: «al posto di Tema Calm metti
+ * l'output medio di token al secondo se uso un modello locale; se NON sto usando un modello locale
+ * togli completamente la scritta». Giusto due volte: il tema lo vedi, non serve che te lo dica una
+ * barra; e su un modello locale la velocità è l'unica cosa che cambia davvero da giro a giro,
+ * perché lì la stai pagando in tempo e non in denaro.
+ * ⛔ Se il numero non c'è (giro appena partito, runtime che non lo dichiara) non si scrive niente:
+ * mai uno zero al posto di un dato che non abbiamo.
+ */
+export function testoVelocitaLocale(modelloId, velocita) {
+  const id = String(modelloId || '');
+  if (!/^local:/i.test(id)) return '';
+  return String(velocita || '').trim();
+}
+
 export function testiUsage(usage, { tettoGiri = null } = {}) {
   if (!usage || typeof usage !== 'object') return { tokenGiri: '', cache: '', giri: null, velocita: '' };
   const prompt = Number(usage.prompt_tokens ?? 0) || 0;
@@ -267,7 +282,8 @@ export function aggiornaPiedeChat(piede, dati = {}) {
     if (n && dati.costo) n.textContent = dati.costo;
   }
   // barra di stato
-  scrivi(piede.querySelector('[data-statusbar="tema"]'), dati.tema);
+  // 06/9: al posto del tema, la velocità — ma solo con un modello locale, e solo se il numero c'è
+  scrivi(piede.querySelector('[data-statusbar="tema"]'), testoVelocitaLocale(dati.modelloId, u.velocita));
   scrivi(piede.querySelector('[data-runtime-usage]'), u.tokenGiri);
   scrivi(piede.querySelector('[data-runtime-cache]'), u.cache);
   scrivi(piede.querySelector('[data-runtime-latenza]'), testoLatenza(dati.latenzaMs) || u.velocita);

@@ -2547,6 +2547,41 @@ body.reduce-motion *::after {
 .talos-toolbar--inset {
   margin: 18px 0 10px;
 }
+.talos-toolbar--hf {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.talos-toolbar--hf .talos-field {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 220px;
+}
+.talos-toolbar--hf .talos-toolbar__autore {
+  flex: 0 0 200px;
+  width: 200px;
+}
+.talos-toolbar--hf .talos-toolbar__tag {
+  flex: 0 0 180px;
+  width: 180px;
+}
+.talos-toolbar--hf .talos-select {
+  flex: 0 0 150px;
+}
+@media (max-width: 1100px) {
+  .talos-toolbar--hf {
+    flex-wrap: wrap;
+  }
+  .talos-toolbar--hf .talos-field {
+    flex: 1 1 100%;
+  }
+  .talos-toolbar--hf .talos-toolbar__autore,
+  .talos-toolbar--hf .talos-toolbar__tag,
+  .talos-toolbar--hf .talos-select {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+  }
+}
 .talos-list {
   overflow: hidden;
 }
@@ -2628,6 +2663,17 @@ body.reduce-motion *::after {
   align-items: center;
   gap: 8px;
   flex: none;
+}
+.talos-list-row__misure {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+  color: var(--talos-muted);
+  font-variant-numeric: tabular-nums;
+}
+.talos-list-row__misura {
+  white-space: nowrap;
 }
 .talos-split {
   display: grid;
@@ -3312,6 +3358,94 @@ body.reduce-motion *::after {
   color: var(--talos-accent-hover);
   font-size: 12.5px;
   font-weight: 600;
+}
+#hfFileChoices .talos-choice__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+#hfFileChoices .talos-choice__glossa {
+  display: block;
+  font-size: 11.5px;
+  margin-bottom: 4px;
+}
+#hfFileChoices .talos-choice[aria-checked=true] .talos-choice__glossa {
+  color: var(--talos-assistant-text);
+}
+.talos-hf-misura {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 2px 0 10px;
+  flex-wrap: wrap;
+}
+.talos-hf-misura__quando {
+  font-size: 11.5px;
+}
+.talos-hf-nessuno {
+  margin-top: 10px;
+}
+.talos-notification-panel__sistema {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--talos-border-subtle);
+}
+.talos-notification-panel__sistema p {
+  margin-top: 6px;
+  font-size: 11.5px;
+}
+.talos-contesto {
+  display: flex;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--talos-panel-soft);
+  border: 1px solid var(--talos-border-subtle);
+  margin: 12px 0 8px;
+}
+.talos-contesto__fetta {
+  display: block;
+  height: 100%;
+}
+.talos-contesto__fetta--attrezzi {
+  background: var(--talos-accent);
+}
+.talos-contesto__fetta--istruzioni {
+  background: var(--talos-accent-border);
+}
+.talos-contesto__fetta--memoria {
+  background: var(--talos-muted);
+}
+.talos-contesto-voce {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--talos-border-subtle);
+  font-size: 13px;
+}
+.talos-contesto-voce:first-child {
+  border-top: 0;
+}
+.talos-contesto-voce__punto {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex: none;
+}
+.talos-contesto-voce__k {
+  flex: 1;
+  min-width: 0;
+}
+.talos-contesto-voce__v {
+  font-variant-numeric: tabular-nums;
+  color: var(--talos-muted);
+}
+#hfFileChoices {
+  max-height: min(46vh, 420px);
+  overflow-y: auto;
+  padding-right: 4px;
 }
 .talos-picker {
   display: grid;
@@ -4455,6 +4589,16 @@ body.reduce-motion *::after {
 .talos-model-lab > .talos-tabs {
   margin-bottom: var(--talos-space-lg);
   border-bottom: 1px solid var(--talos-border-subtle);
+}
+.talos-model-lab > .talos-tabs .talos-tabs__list {
+  display: flex;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.talos-model-lab > .talos-tabs .talos-tabs__tab {
+  white-space: nowrap;
+  flex: none;
 }
 .talos-model-lab .talos-tabs__list {
   display: flex;

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { statoGiri, etichettaPermesso, etichettaPermessoConEccezioni, tonoPermesso, nomeModelloUmano, fondoInVista } from '../../src/components/chat-foot.js';
+import { statoGiri, etichettaPermesso, etichettaPermessoConEccezioni, tonoPermesso, nomeModelloUmano, fondoInVista, testoVelocitaLocale } from '../../src/components/chat-foot.js';
 
 // 06/09 — B12 (il contatore dei giri) e B11 (la pillola del permesso dice il vero, eccezioni comprese).
 
@@ -66,4 +66,17 @@ test('PIEDE-FONDO: «sono in fondo» guarda la fine del CONTENUTO, non del conte
   // AL CONTRARIO: senza numeri non si finge di sapere — si assume «in fondo», che tace invece di gridare
   assert.equal(fondoInVista({}), true);
   assert.equal(fondoInVista({ scrollHeight: NaN }), true);
+});
+
+test('PIEDE-VELOCITA: la barra dice i token al secondo solo col modello locale, altrimenti tace', () => {
+  // owner 06/9: col locale la velocità è l'unica cosa che cambia da giro a giro — lì paghi in tempo
+  assert.equal(testoVelocitaLocale('local:unsloth-gpt-oss-20b-GGUF', '42 token/s'), '42 token/s');
+  // con un modello di rete la scritta sparisce del tutto: il tema lo vedi, non serve dirlo
+  assert.equal(testoVelocitaLocale('z-ai/glm-5.3-flash', '42 token/s'), '');
+  assert.equal(testoVelocitaLocale('claude-opus-5', '99 token/s'), '');
+  // AL CONTRARIO: locale ma senza il numero (giro appena partito, runtime che non lo dichiara) → niente, mai uno zero
+  assert.equal(testoVelocitaLocale('local:qualcosa', ''), '');
+  assert.equal(testoVelocitaLocale('local:qualcosa', null), '');
+  assert.equal(testoVelocitaLocale('', '42 token/s'), '');
+  assert.equal(testoVelocitaLocale(null, null), '');
 });
