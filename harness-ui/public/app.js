@@ -18984,6 +18984,7 @@ ${testo3}` : testo3;
         function aggiornaConfermaWorkspaceChooser() {
           const selectedPath = $2("[data-workspace-selected-path]", selectedCard);
           if (selectedPath) selectedPath.textContent = local.selected?.path || "Nessuna cartella scelta";
+          if (local.selected?.path) void chiediRitrattoCartella(local.selected.path);
           const allowlisted = Boolean(local.selected?.projectId);
           const ready = !local.busy && Boolean(local.selected) && (allowlisted || local.permission === "Full access");
           submit.disabled = !ready;
@@ -19156,7 +19157,6 @@ ${testo3}` : testo3;
             const data = await apiGet(`/api/v1/workspace-browser${suffix}`);
             if (generation !== local.requestGeneration || !form.isConnected) return false;
             local.current = data;
-            void chiediRitrattoCartella(data.path);
             local.collapsed = false;
             pathInput.value = data.path;
             upButton.disabled = !data.parent;

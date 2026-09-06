@@ -12681,6 +12681,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     function aggiornaConfermaWorkspaceChooser() {
       const selectedPath = $('[data-workspace-selected-path]', selectedCard);
       if (selectedPath) selectedPath.textContent = local.selected?.path || 'Nessuna cartella scelta';
+      /*
+       * ⛔⛔ 06/9, MISURATO dal vivo: la carta diceva «Cartella scelta: …\AVM-harness-desktop» e
+       * subito sotto «più di 20.000 file · 35.512 cartelle» con l'avviso «Questa è una cartella
+       * radice» — cioè il ritratto di `C:\`, non del progetto che stavi per dare all'agente.
+       * La cura precedente aveva legato la richiesta a `data.path` (la cartella NAVIGATA) per
+       * togliere una corsa fra risposte, e così ha risposto alla domanda sbagliata: il ritratto sta
+       * sotto «Cartella scelta», quindi descrive `local.selected`. Un avviso che parla di un'altra
+       * cartella è peggio di nessun avviso — dice il falso proprio dove stai per decidere.
+       * ⛔ La corsa resta coperta: `ritrattoChiestoPer` scarta ogni risposta che non riguarda più
+       *   la scelta corrente, e non richiede due volte la stessa cartella.
+       */
+      if (local.selected?.path) void chiediRitrattoCartella(local.selected.path);
 
       const allowlisted = Boolean(local.selected?.projectId);
       const ready = !local.busy && Boolean(local.selected) && (allowlisted || local.permission === 'Full access');
@@ -12855,13 +12867,6 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const data = await apiGet(`/api/v1/workspace-browser${suffix}`);
         if (generation !== local.requestGeneration || !form.isConnected) return false;
         local.current = data;
-        /*
-         * ⛔ misurato: chiedendo il ritratto dentro `aggiornaConfermaWorkspaceChooser` partiva anche
-         * quando `local.current` era ancora la cartella PRECEDENTE, e le due risposte si
-         * rincorrevano — a schermo restavano i numeri della radice. Si chiede QUI, dove la cartella
-         * aperta è un fatto, una volta sola per cartella.
-         */
-        void chiediRitrattoCartella(data.path);
         local.collapsed = false;
         pathInput.value = data.path;
         upButton.disabled = !data.parent;

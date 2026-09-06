@@ -585,8 +585,12 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-note__quando{margin-left:auto; color:var(--talos-muted); font-family:var(--talos-font-mono); font-size:11.5px; white-space:nowrap}
 .talos-note__corpo{margin:6px 0 0; max-width:78ch; color:var(--talos-assistant-text); font-size:13px; line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere}
 .talos-note__azioni{display:flex; gap:8px; margin:8px 0 0}
-.workspace-chooser-ritratto{display:block; margin-top:4px; color:var(--talos-muted); font-size:11.5px; line-height:1.5; text-transform:none; letter-spacing:normal}
-.workspace-chooser-avviso{display:block; margin-top:6px; padding:6px 9px; border-radius:9px; border:1px solid var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:11.5px; line-height:1.5; text-transform:none; letter-spacing:normal}
+/* ⛔ 06/9 — misurato: `text-transform` restava `uppercase` malgrado la riga qui sotto. Vinceva
+   `.workspace-chooser-selection small` (foglio-monolite.css), giusta per l'etichetta «Cartella
+   scelta» — che eyebrow è — ma questi due sono FRASI, e in maiuscolo non si leggono. Si sale di
+   specificità invece di gridare `!important`: (0,2,0) batte (0,1,1). */
+.workspace-chooser-selection .workspace-chooser-ritratto{display:block; margin-top:4px; color:var(--talos-muted); font-size:11.5px; line-height:1.5; text-transform:none; letter-spacing:normal}
+.workspace-chooser-selection .workspace-chooser-avviso{display:block; margin-top:6px; padding:6px 9px; border-radius:9px; border:1px solid var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:11.5px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .talos-menu__nota{margin:6px 4px 2px; padding-top:6px; border-top:1px solid var(--talos-border-subtle); color:var(--talos-muted); font-size:11.5px; line-height:1.45}
 .talos-menu__voce small{display:block; color:var(--talos-muted); font-size:11.5px}
 .talos-bivio{display:flex; align-items:center; gap:10px; margin-top:8px; padding:8px 14px; border-radius:11px; border:1px dashed var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:13px}
