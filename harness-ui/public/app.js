@@ -17414,6 +17414,7 @@ ${testo3}` : testo3;
           }
           case "ToolCallStart": {
             nascondiAttesaRisposta();
+            if (evento.toolCallName === "delega_sottotask") void caricaFigliSessione();
             const batch = apriBatchSeServe();
             const bubble = appendToolNote(riassuntoAttrezzoInCorso(evento.toolCallName, null), { contenitore: batch.contenitore, attrezzo: evento.toolCallName });
             impostaEsitoRiga(bubble.article, "running");
@@ -17456,6 +17457,7 @@ ${testo3}` : testo3;
           }
           case "ToolCallResult": {
             const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+            if (info?.nome === "delega_sottotask") void caricaFigliSessione();
             if (info?.nome === "naviga") {
               let url = "(url)";
               try {

@@ -10674,6 +10674,16 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       }
       case 'ToolCallStart': {
         nascondiAttesaRisposta(); // il primo attrezzo chiamato: sappiamo già cosa sta facendo, la ruota non serve più
+        /*
+         * ⛔⛔ 06/9 — owner: «ho provato a spawnare un sottoagente ma non si vede nulla in tab
+         * Agenti». La scheda si riempiva bene (verificato: quattro deleghe con esito e conteggi),
+         * ma solo a giro FINITO o riaprendo la sessione: le deleghe si leggono da `/children`, e
+         * nessuno le rileggeva mentre il giro andava. Chi guarda la scheda mentre l'agente lavora
+         * vedeva «Nessun sotto-agente» proprio nel momento in cui gliene serviva la prova.
+         * ⇒ Alla chiamata dell'attrezzo si rileggono. Una fetch per delega, non un sondaggio a
+         * tempo: costa quando succede qualcosa, zero quando non succede niente.
+         */
+        if (evento.toolCallName === 'delega_sottotask') void caricaFigliSessione();
         // ⭐⭐⭐ 30/8 — raggruppamento (owner, "come fa Claude"): la riga nasce DENTRO il batch corrente, non più direttamente in conversazione. Vedi apriBatchSeServe.
         const batch = apriBatchSeServe();
         const bubble = appendToolNote(riassuntoAttrezzoInCorso(evento.toolCallName, null), { contenitore: batch.contenitore, attrezzo: evento.toolCallName });
@@ -10722,6 +10732,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       }
       case 'ToolCallResult': {
         const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+        // 06/9: la delega e' finita — l'esito del figlio cambia, la scheda «Agenti» lo deve dire subito
+        if (info?.nome === 'delega_sottotask') void caricaFigliSessione();
         /*
          * ⛔ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): il tool
          * `shell` dell'AGENTE non viene più specchiato nella vista
