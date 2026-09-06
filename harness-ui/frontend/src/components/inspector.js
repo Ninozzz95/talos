@@ -74,6 +74,45 @@ export function righeFinestra(usage = null, finestra = null, ripartizione = null
   return { titoloDestra: finestra ? kilo(finestra) : 'finestra non dichiarata', righe };
 }
 
+/*
+ * ⛔⛔⛔ 06/9, CB-03 — «Indice dei giri» mostrava il RAGIONAMENTO del modello, in
+ * inglese, anche col ragionamento SPENTO: misurato su una sessione vera con
+ * `z-ai/glm-5.3-flash` (sonda `.gravi/sonde/03-indice-giri.mjs`), l'indice diceva
+ * «3 · The user asks in Italian:» dove la risposta era «17 × 23 = 391».
+ *
+ * CAUSA: il titolo si cercava con `.assistant-copy p, .assistant-copy`, ma
+ * `assistant-copy` è una CLASSE-GANCIO che portano anche il corpo del ragionamento
+ * (`appendToolNote` la aggiunge a ogni dettaglio), le note di sistema e il «perché»
+ * di una carta di approvazione. Il ragionamento è il primo blocco del turno: vinceva
+ * sempre.
+ *
+ * RICERCA 06/09/2026, prima di scrivere:
+ *  · AG-UI, «Reasoning» (docs.ag-ui.com/concepts/reasoning) — il ragionamento è un
+ *    messaggio con `role: "reasoning"`, tenuto distinto dalla risposta finale «to
+ *    avoid polluting conversation history»: qui la distinzione esiste nel DOM
+ *    (`real-reasoning-note`) e non veniva usata;
+ *  · MDN, «aria-hidden» — un elemento marcato così è tolto dall'albero di
+ *    accessibilità; col ragionamento spento la app lo marca proprio così, quindi
+ *    ripescarne il testo per farne un'etichetta lo rimetteva a schermo da un'altra
+ *    porta.
+ *
+ * ⇒ La risposta si nomina per quello che è: il corpo del messaggio di TALOS.
+ */
+export const SELETTORE_RISPOSTA_TURNO = '.talos-message__copy .assistant-copy';
+
+/**
+ * Le prime parole della RISPOSTA di un turno, per farne il titolo di un giro.
+ * @param {{querySelector:Function}|null} turno l'elemento `.talos-turn` del turno
+ * @param {number} [parole] quante parole tenere
+ * @returns {string} '' quando il turno non ha (ancora) una risposta
+ */
+export function titoloRispostaDaTurno(turno, parole = 5) {
+  const nodo = turno && typeof turno.querySelector === 'function' ? turno.querySelector(SELETTORE_RISPOSTA_TURNO) : null;
+  const testo = typeof nodo?.textContent === 'string' ? nodo.textContent.trim() : '';
+  if (!testo) return '';
+  return testo.split(/\s+/).slice(0, parole).join(' ');
+}
+
 /** Le righe di «Indice dei giri». `giri` = [{ numero, titolo, token?, attrezzi?, inCorso? }]. */
 export function righeGiri(giri = []) {
   return giri.map((g) => [`${g.numero} · ${g.titolo || 'Giro'}`, g.inCorso ? 'in corso' : Number.isFinite(g.token) ? kilo(g.token) : (Number.isFinite(g.attrezzi) ? `${g.attrezzi} ${g.attrezzi === 1 ? 'attrezzo' : 'attrezzi'}` : '—'), g.inCorso ? 'accent' : '']);
