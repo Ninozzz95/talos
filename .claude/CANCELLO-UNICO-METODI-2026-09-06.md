@@ -118,3 +118,33 @@ così l'occhio si spende dove serve.
 - InstaTunnel, «Automated Contract Testing: How to Detect API Drift» · Total Shift Left, «API Schema
   Validation Drift Detection» — la sorgente di verità e il confronto automatico
 - axe-core / Pa11y — WCAG per ogni locale, e la pseudo-localizzazione come prova a basso costo
+
+## ⛔ Una strada chiusa, provata due volte: le rotte non si possono incrociare
+
+Aggiunto il 06/09 dopo averci sbattuto, perché nessuno ci riprovi credendo di avere un'idea nuova.
+
+**Primo tentativo — leggere le rotte dal codice del server.** Ha prodotto **8 segnalazioni su 8
+false**: `/api/v1/artifacts/:id` e `/api/v1/search-source/key` esistono eccome, solo dichiarate con
+espressioni regolari (gruppi opzionali, alternative) che nessun estrattore ragionevole legge.
+
+**Secondo tentativo — chiedere al server vivo.** Sembrava a prova di errore: una richiesta vera dice
+404 o non lo dice. Misurato:
+
+| richiesta | rotta che ESISTE (`/api/v1/artifacts`) | rotta INVENTATA |
+|---|---|---|
+| GET | 404 | 404 |
+| POST | 405 | 405 |
+| OPTIONS | 204 | 204 |
+
+⇒ **Il server risponde identicamente.** Non c'è modo di distinguere una rotta esistente da una
+inesistente dall'esterno, e lo strumento è stato cancellato invece di essere tenuto «per quando
+funzionerà».
+
+**Cosa resta possibile**, e cosa no: l'elenco dei percorsi NOMINATI dal frontend si estrae bene
+(bastano poche esclusioni: i puntini di un commento, le graffe di un elenco, gli asterischi di un
+pattern). Quello che non si può fare è dire se esistono. La superficie scollegata si trova
+dall'altro lato — una vista che promette un contenuto e non chiama NIENTE — che non ha bisogno di
+sapere cosa il server espone.
+
+⭐ E c'è un difetto del prodotto, trovato per caso qui: il server risponde **405 a qualunque POST**,
+anche su una rotta che non esiste. Dovrebbe dire 404. Registrato, non curato.
