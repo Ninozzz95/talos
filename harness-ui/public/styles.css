@@ -1915,32 +1915,6 @@ body.reduce-motion *::after {
   max-height: var(--composer-textarea-max-h, 40vh);
   overflow-y: auto;
 }
-.talos-resizer--composer {
-  top: 2px;
-  left: 2px;
-  bottom: auto;
-  width: 18px;
-  height: 18px;
-  border: 1px solid var(--talos-border-strong);
-  border-right: 0;
-  border-bottom: 0;
-  border-radius: 10px 0 0 0;
-  cursor: nwse-resize;
-  color: var(--talos-muted);
-  opacity: .55;
-}
-.talos-resizer--composer::after {
-  display: none;
-}
-.talos-resizer--composer:hover,
-.talos-resizer--composer:focus-visible {
-  opacity: 1;
-  border-color: var(--talos-accent);
-}
-.talos-resizer--composer:focus-visible {
-  outline: 2px solid var(--talos-ring);
-  outline-offset: 2px;
-}
 .talos-composer.composer-resizing {
   user-select: none;
 }
@@ -3103,6 +3077,48 @@ body.reduce-motion *::after {
 }
 .talos-resizer:focus-visible {
   outline: none;
+}
+.talos-resizer--composer {
+  top: 2px;
+  left: 2px;
+  bottom: auto;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--talos-border-strong);
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 10px 0 0 0;
+  cursor: nwse-resize;
+  color: var(--talos-muted);
+  opacity: .75;
+  transition: opacity var(--talos-motion-duration-control) var(--talos-motion-ease), color var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.talos-resizer--composer::after {
+  display: block;
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 11px;
+  height: 11px;
+  background:
+    linear-gradient(
+      135deg,
+      currentColor 0 1.5px,
+      transparent 1.5px 4px,
+      currentColor 4px 5.5px,
+      transparent 5.5px 100%);
+  background-repeat: no-repeat;
+}
+.talos-resizer--composer:hover,
+.talos-resizer--composer:focus-visible {
+  opacity: 1;
+  color: var(--talos-accent);
+  border-color: var(--talos-accent);
+}
+.talos-resizer--composer:focus-visible {
+  outline: 2px solid var(--talos-ring);
+  outline-offset: 2px;
 }
 .talos-resizer:focus-visible::after {
   background: var(--talos-ring);
