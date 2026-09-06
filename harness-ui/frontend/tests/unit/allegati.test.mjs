@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { VIE_ALLEGATO, stimaTokenTesto, stimaTokenImmagine, famigliaModello, etichettaCosto, costoAllegato, costoTotale, nomeBreveAllegato } from '../../src/components/allegati.js';
+import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, frasiTetti, stimaTokenTesto, stimaTokenImmagine, famigliaModello, etichettaCosto, costoAllegato, costoTotale, nomeBreveAllegato } from '../../src/components/allegati.js';
 
 // 06/09 — B4/B6/B7/B9: il «+» allega e basta, e ogni allegato dichiara quanto contesto costa.
 
@@ -70,4 +70,18 @@ test('ALLEGATI-NOME: si accorcia il nome, mai l’estensione', () => {
   assert.equal(nomeBreveAllegato('/a/b/un-nome-molto-molto-lungo-davvero.mjs'), 'un-nome-molto-molto-lun….mjs');
   assert.ok(nomeBreveAllegato('/a/b/un-nome-molto-molto-lungo-davvero.mjs').endsWith('.mjs'));
   assert.equal(nomeBreveAllegato(''), '');
+});
+
+test('ALLEGATI-TETTI: i tetti sono dati, e la frase che li dichiara li legge da lì (B8)', () => {
+  assert.equal(TETTI_ALLEGATI.quanti, 10);
+  assert.ok(TETTI_ALLEGATI.caratteriPerAllegato >= 100_000);
+  const frase = frasiTetti();
+  assert.match(frase, /Fino a 10 allegati/);
+  assert.match(frase, /200k caratteri/);
+  // un file oltre il tetto si segnala, ma non si rifiuta
+  assert.equal(allegatoPesante({ tipo: 'testo', caratteri: 250_000 }), true);
+  assert.equal(allegatoPesante({ tipo: 'testo', caratteri: 1000 }), false);
+  // AL CONTRARIO: un'immagine non si misura in caratteri, e il vuoto non è pesante
+  assert.equal(allegatoPesante({ tipo: 'immagine', larghezza: 4000, altezza: 4000 }), false);
+  assert.equal(allegatoPesante(null), false);
 });

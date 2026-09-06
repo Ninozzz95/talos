@@ -38,7 +38,7 @@ import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la bar
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, etichettaPermesso, nomeModelloUmano } from '../components/chat-foot.js';
 import { spiegaErrore } from '../components/errori.js';
-import { VIE_ALLEGATO, costoAllegato, costoTotale, nomeBreveAllegato } from '../components/allegati.js'; // 06/9 B4/B6/B7/B9: il «+» allega, e ogni allegato dichiara il suo costo // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
+import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js'; // 06/9 B4/B6/B7/B9: il «+» allega, e ogni allegato dichiara il suo costo // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
@@ -13142,7 +13142,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
   function aggiungiAllegato(allegato) {
     if (!allegato) return;
-    if (allegatiComposer.length >= 10) { toast('Troppi allegati', 'Dieci per messaggio è già tanto contesto: togline uno prima di aggiungerne un altro.'); return; }
+    if (allegatiComposer.length >= TETTI_ALLEGATI.quanti) { toast('Troppi allegati', `${TETTI_ALLEGATI.quanti} per messaggio è già tanto contesto: togline uno prima di aggiungerne un altro.`); return; }
+    if (allegatoPesante(allegato)) toast('Allegato molto grande', `${allegato.nome} pesa quanto mezza conversazione. Puoi allegarlo lo stesso: il costo stimato è scritto accanto al nome.`);
     allegatiComposer.push(allegato);
     disegnaAllegati();
     syncRunComposerState();
@@ -13176,6 +13177,11 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       b.addEventListener('click', () => { chiudiMenuAllega(); scegliAllegato(via.id); });
       menu.append(b);
     }
+    // B8: i tetti si leggono qui, prima di sbatterci
+    const nota = document.createElement('p');
+    nota.className = 'talos-menu__nota';
+    nota.textContent = frasiTetti();
+    menu.append(nota);
     menu.hidden = false;
     const r = ancora?.getBoundingClientRect();
     if (r) {

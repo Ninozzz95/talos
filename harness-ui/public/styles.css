@@ -2178,6 +2178,14 @@ body.reduce-motion *::after {
   background: var(--talos-card-subtle);
   outline: none;
 }
+.talos-menu__nota {
+  margin: 6px 4px 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--talos-border-subtle);
+  color: var(--talos-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
 .talos-menu__voce small {
   display: block;
   color: var(--talos-muted);

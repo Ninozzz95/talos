@@ -7819,6 +7819,13 @@ var init_errori = __esm({
 });
 
 // src/components/allegati.js
+function frasiTetti() {
+  return `Fino a ${TETTI_ALLEGATI.quanti} allegati per messaggio · oltre ${Math.round(TETTI_ALLEGATI.caratteriPerAllegato / 1e3)}k caratteri un file da solo pesa quanto mezza conversazione`;
+}
+function allegatoPesante(allegato) {
+  if (!allegato || allegato.tipo === "immagine") return false;
+  return Number(allegato.caratteri) > TETTI_ALLEGATI.caratteriPerAllegato;
+}
 function stimaTokenTesto(caratteri) {
   const n = Number(caratteri);
   if (!Number.isFinite(n) || n <= 0) return 0;
@@ -7868,7 +7875,7 @@ function nomeBreveAllegato(percorso, massimo = 28) {
   const testa = nome.slice(0, Math.max(1, massimo - estensione.length - 1));
   return `${testa}…${estensione}`;
 }
-var VIE_ALLEGATO, TETTO_IMMAGINE;
+var VIE_ALLEGATO, TETTI_ALLEGATI, TETTO_IMMAGINE;
 var init_allegati = __esm({
   "src/components/allegati.js"() {
     VIE_ALLEGATO = Object.freeze([
@@ -7877,6 +7884,11 @@ var init_allegati = __esm({
       { id: "immagine", etichetta: "Immagine", aiuto: "Una foto o uno schema da guardare", icona: "i-image" },
       { id: "schermata", etichetta: "Ultima schermata", aiuto: "L’ultimo screenshot che hai scattato", icona: "i-camera" }
     ]);
+    TETTI_ALLEGATI = Object.freeze({
+      quanti: 10,
+      caratteriPerAllegato: 2e5
+      // ~50k token: oltre, un file da solo mangia mezza finestra
+    });
     TETTO_IMMAGINE = 1568;
   }
 });
@@ -18868,10 +18880,11 @@ ${testo3}` : testo3;
       }
       function aggiungiAllegato(allegato) {
         if (!allegato) return;
-        if (allegatiComposer.length >= 10) {
-          toast("Troppi allegati", "Dieci per messaggio è già tanto contesto: togline uno prima di aggiungerne un altro.");
+        if (allegatiComposer.length >= TETTI_ALLEGATI.quanti) {
+          toast("Troppi allegati", `${TETTI_ALLEGATI.quanti} per messaggio è già tanto contesto: togline uno prima di aggiungerne un altro.`);
           return;
         }
+        if (allegatoPesante(allegato)) toast("Allegato molto grande", `${allegato.nome} pesa quanto mezza conversazione. Puoi allegarlo lo stesso: il costo stimato è scritto accanto al nome.`);
         allegatiComposer.push(allegato);
         disegnaAllegati();
         syncRunComposerState();
@@ -18910,6 +18923,10 @@ ${righe.join("\n")}`;
           });
           menu.append(b);
         }
+        const nota = document.createElement("p");
+        nota.className = "talos-menu__nota";
+        nota.textContent = frasiTetti();
+        menu.append(nota);
         menu.hidden = false;
         const r = ancora?.getBoundingClientRect();
         if (r) {
