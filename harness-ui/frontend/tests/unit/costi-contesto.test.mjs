@@ -107,3 +107,20 @@ test('CONTESTO-PROMESSA: quello che la sezione promette e non misura lo DICHIARA
   assert.deepEqual(tutte.mancanti, []);
   assert.equal(tutte.occupato, 450);
 });
+
+test('C10-DESCRIZIONI: 43 attrezzi, tutte in italiano, senza markdown a schermo', async () => {
+  const m = await import('../../src/components/nomi-attrezzi.js');
+  const ids = Object.keys(m.DESCRIZIONI_ATTREZZI);
+  assert.equal(ids.length, 43);
+  for (const id of ids) {
+    const d = m.descrizioneAttrezzo(id);
+    assert.ok(d && d.length > 10, `descrizione troppo corta per ${id}`);
+    // ⛔ finiscono in textContent: il markdown si vedrebbe LETTERALE (visto in una foto del 06/09)
+    assert.ok(!/\*\*|\[[^\]]*\]\(/.test(d), `markdown a schermo in ${id}: ${d}`);
+    assert.ok(d.trim().endsWith('.'), `manca il punto finale in ${id}`);
+  }
+  // ⛔ verso contrario: un id che non esiste NON riceve una frase inventata
+  assert.equal(m.descrizioneAttrezzo('non_esiste'), null);
+  assert.equal(m.descrizioneAttrezzo('__proto__'), null);
+  assert.deepEqual(m.attrezziSenzaDescrizione(['elenca', 'non_esiste']), ['non_esiste']);
+});
