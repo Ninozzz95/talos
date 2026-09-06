@@ -8,11 +8,19 @@
  * Cio' che richiede l'app VIVA (ascoltatori via CDP, stati a schermo, testo renderizzato) sta
  * nell'altro.
  *
- * ⛔ Sulle classi senza regola: il conteggio grezzo NON e' il conteggio dei difetti. Verificato a
- * campione il 06/9 — su tre, due erano difetti veri (`.conversation-hero` e `.ft-status-dot`: nessuno
- * stile ne' dalla classe ne' dall'id) e uno era una ridondanza innocua (`.ft-tree`, servito da
- * `[role=tree]`). La distinzione la fa l'orchestratore, che sull'app viva puo' CHIEDERE se
- * l'elemento ha davvero uno stile applicato invece di indovinarlo da un file.
+ * ⛔⛔ SULLE CLASSI SENZA REGOLA: il conteggio NON e' un conteggio di difetti, ed e' importante non
+ * leggerlo cosi'. Misurato sull'app viva il 06/9, e la misura ha smentito la mia prima lettura:
+ *   · `.ft-node` (39 elementi) e `.ft-tree` sembravano nudi guardando i file, ma dal vivo hanno
+ *     `list-style-type: none` da una regola generica: NESSUN difetto visivo;
+ *   · `.conversation-hero`, `.hero-logo` e `.ft-status-dot`, che avevo chiamato «difetti veri»
+ *     leggendo il CSS, sul vivo non erano nemmeno PRESENTI nella pagina: vivono in stati che non
+ *     avevo aperto, e su di loro non si puo' dire niente senza aprirli.
+ * ⇒ Una classe senza regola e' un SOSPETTO, non un verdetto. Il verdetto lo da' la misura
+ *   sull'ELEMENTO vivo — ha davvero l'aspetto sbagliato? — e per quella serve l'orchestratore.
+ *   Questo file elenca dove guardare; non dice cosa e' rotto.
+ * ⛔ La lezione vale oltre questo file: la stessa fretta che mi ha fatto scrivere «difetti veri» in
+ *   un commit poi rettificato e' quella che riempie un rapporto di falsi positivi e lo fa smettere
+ *   di essere letto.
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -35,5 +43,5 @@ console.log('\n== SIMBOLI CHIAMATI E MAI DISEGNATI:', s.length);
 for (const v of s.slice(0, 12)) console.log('  ', JSON.stringify(v).slice(0, 160));
 
 const c = classiSenzaRegola({ html, css, sorgenti });
-console.log('\n== CLASSI USATE SENZA NESSUNA REGOLA:', c.length);
+console.log('\n== CLASSI USATE SENZA NESSUNA REGOLA:', c.length, '(SOSPETTI da guardare, non difetti confermati)');
 for (const v of c.slice(0, 25)) console.log('  ', JSON.stringify(v).slice(0, 150));
