@@ -38,7 +38,7 @@ import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
-import { aggiornaPiedeChat, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
+import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { spiegaErrore, spiegaRifiutoAttrezzo } from '../components/errori.js';
 import { montaNote } from '../components/note.js'; // 06/9 C24: la pagina delle Note // 06/9 O-22/O-23/O-36: gli errori e i rifiuti detti a una persona
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
@@ -6683,7 +6683,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function cosaStaFacendo() {
     const batch = state.realSession.batchAttivo;
     const riga = batch?.contenitore?.querySelector('[data-tool-state="running"]');
-    if (riga) return { cosa: riga.querySelector('.talos-tool-row__name')?.textContent || 'Attrezzo in corso', dettaglio: riga.querySelector('.talos-tool-row__detail')?.textContent || '' };
+    if (riga) {
+      const nome = riga.querySelector('.talos-tool-row__name')?.textContent || 'Attrezzo in corso';
+      // 06/9: il dettaglio ripeteva il nome e la striscia diceva due volte la stessa cosa
+      return { cosa: nome, dettaglio: dettaglioUtile(nome, riga.querySelector('.talos-tool-row__detail')?.textContent || '') };
+    }
     const attesa = state.realSession.attesaBubble?.querySelector('.run-activity-label')?.textContent;
     if (attesa) return { cosa: attesa, dettaglio: '' };
     if (state.realSession.messageElements.size > 0) return { cosa: 'TALOS sta scrivendo', dettaglio: '' };

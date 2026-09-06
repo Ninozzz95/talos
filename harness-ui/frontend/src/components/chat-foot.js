@@ -109,6 +109,24 @@ export function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0
   return distanza <= Math.max(0, Number(coda) || 0) + soglia;
 }
 
+/*
+ * ⛔ 06/9, visto nello screenshot della striscia mentre girava: diceva
+ *   «Legge la parte finale di config.mjs… · Legge la parte finale di co…»
+ * cioè la stessa frase due volte, la seconda troncata. Il dettaglio della riga attrezzo ripeteva il
+ * suo nome, e la striscia li incollava senza guardarli. Un dettaglio che ripete il titolo non
+ * aggiunge niente: ruba spazio e fa sembrare rotta una cosa che funziona.
+ * ⇒ Il dettaglio si mostra solo se dice qualcosa di NUOVO. I puntini di sospensione non contano:
+ *   «Legge la parte finale di co…» è la stessa frase di «Legge la parte finale di config.mjs».
+ */
+export function dettaglioUtile(cosa, dettaglio) {
+  const pulisci = (t) => String(t ?? '').replace(/[…\.]+$/u, '').trim().toLowerCase();
+  const a = pulisci(cosa);
+  const b = pulisci(dettaglio);
+  if (!b || !a) return String(dettaglio ?? '').trim();
+  if (a === b || a.startsWith(b) || b.startsWith(a)) return '';
+  return String(dettaglio).trim();
+}
+
 /** Il tono del chip del permesso: attenzione quando scrive o ha tutto. */
 export function tonoPermesso(permesso) {
   if (permesso === 'Full access') return 'danger';

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { statoGiri, etichettaPermesso, etichettaPermessoConEccezioni, tonoPermesso, nomeModelloUmano, fondoInVista, testoVelocitaLocale } from '../../src/components/chat-foot.js';
+import { dettaglioUtile, statoGiri, etichettaPermesso, etichettaPermessoConEccezioni, tonoPermesso, nomeModelloUmano, fondoInVista, testoVelocitaLocale } from '../../src/components/chat-foot.js';
 
 // 06/09 — B12 (il contatore dei giri) e B11 (la pillola del permesso dice il vero, eccezioni comprese).
 
@@ -88,4 +88,16 @@ test('PIEDE-VELOCITA: la barra dice i token al secondo solo col modello locale, 
   assert.equal(testoVelocitaLocale('local:qualcosa', null), '');
   assert.equal(testoVelocitaLocale('', '42 token/s'), '');
   assert.equal(testoVelocitaLocale(null, null), '');
+});
+
+test('⛔ la striscia non dice due volte la stessa cosa', () => {
+  // Il caso visto a schermo: il dettaglio era il nome, troncato.
+  assert.equal(dettaglioUtile('Legge la parte finale di config.mjs…', 'Legge la parte finale di co…'), '');
+  assert.equal(dettaglioUtile('Esegue un comando', 'Esegue un comando'), '');
+  // AL CONTRARIO — un dettaglio che aggiunge davvero resta
+  assert.equal(dettaglioUtile('Esegue un comando', 'npm run build'), 'npm run build');
+  assert.equal(dettaglioUtile('Legge un file', 'config.mjs · 420 righe'), 'config.mjs · 420 righe');
+  // niente dettaglio, niente da dire
+  assert.equal(dettaglioUtile('Qualcosa', ''), '');
+  assert.equal(dettaglioUtile('', 'solo il dettaglio'), 'solo il dettaglio');
 });

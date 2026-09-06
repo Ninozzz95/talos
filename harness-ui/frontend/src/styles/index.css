@@ -118,6 +118,38 @@
 
 /* ---------- 2. BASE ---------- */
 *{box-sizing:border-box}
+
+/* ==================== LE SCROLLBAR SONO NOSTRE (O-39) ====================
+   ⛔ 06/9, owner: «rendere tutte le scrollbar completamente custom e più compatte (meno larghe)».
+   Misurato prima di scrivere: 30 elementi scorrono e ZERO avevano una barra nostra — tre
+   dichiarazioni di `scrollbar-width:thin` su un solo selettore, e un `::-webkit-scrollbar` che
+   serviva a nasconderla. Tutto il resto mostrava la barra di Windows: ~15px di grigio identici in
+   tema chiaro e scuro, che non conoscono il tema Calm.
+
+   Ricerca 06/09/2026 (Chrome for Developers «Scrollbar styling», MDN `::-webkit-scrollbar`,
+   ishadeed «Custom Scrollbars In CSS»):
+   · le proprietà STANDARD (`scrollbar-width`, `scrollbar-color`) sono portabili ma non danno
+     raggio, stato al passaggio né margini — servono come rete, non come disegno;
+   · `::-webkit-scrollbar` dà quel controllo ed è di casa su Chromium, che è dove TALOS Desktop
+     gira: qui non è un ripiego, è la via principale.
+   ⛔ Il vincolo temuto (una barra con larghezza dichiarata si SOVRAPPONE al contenuto invece di
+   riservargli spazio) è stato misurato sull'app viva PRIMA di toccare niente: `offsetWidth -
+   clientWidth` era GIÀ 0 sul contenitore della conversazione. La sovrapposizione c'è già oggi e
+   non la introduce questa regola; per questo il pollice ha un bordo trasparente che lo stacca dal
+   bordo, invece di sedersi sul testo.
+
+   Un blocco solo, sui token del tema, su `*`: una superficie nuova nasce già con la barra giusta,
+   senza doversene ricordare. 8px contro i ~15 di sistema — sotto i 6px il pollice diventa un
+   bersaglio scomodo da afferrare col mouse. */
+*{scrollbar-width:thin; scrollbar-color:var(--talos-border-strong) transparent}
+*::-webkit-scrollbar{width:8px; height:8px}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background:var(--talos-border-strong); border:2px solid transparent; border-radius:999px; background-clip:padding-box}
+*::-webkit-scrollbar-thumb:hover{background:var(--talos-muted); background-clip:padding-box}
+*::-webkit-scrollbar-corner{background:transparent}
+/* niente frecce: sono due bersagli che nessuno usa e rubano 32px alla corsa del pollice */
+*::-webkit-scrollbar-button{display:none}
+
 html,body{height:100%}
 body{margin:0; background:var(--talos-background); color:var(--talos-text); font-family:var(--talos-font-ui); font-size:14px; line-height:1.5; display:flex; flex-direction:column; overflow:hidden; -webkit-font-smoothing:antialiased}
 h1,h2,h3{margin:0; font-weight:600; letter-spacing:-.01em; text-wrap:balance}

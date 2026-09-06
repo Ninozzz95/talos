@@ -8130,6 +8130,14 @@ function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda 
   if (!Number.isFinite(distanza)) return true;
   return distanza <= Math.max(0, Number(coda) || 0) + soglia;
 }
+function dettaglioUtile(cosa, dettaglio) {
+  const pulisci = (t2) => String(t2 ?? "").replace(/[…\.]+$/u, "").trim().toLowerCase();
+  const a = pulisci(cosa);
+  const b = pulisci(dettaglio);
+  if (!b || !a) return String(dettaglio ?? "").trim();
+  if (a === b || a.startsWith(b) || b.startsWith(a)) return "";
+  return String(dettaglio).trim();
+}
 function tonoPermesso(permesso) {
   if (permesso === "Full access") return "danger";
   if (permesso === "Workspace write") return "warning";
@@ -14370,7 +14378,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       function cosaStaFacendo() {
         const batch = state.realSession.batchAttivo;
         const riga = batch?.contenitore?.querySelector('[data-tool-state="running"]');
-        if (riga) return { cosa: riga.querySelector(".talos-tool-row__name")?.textContent || "Attrezzo in corso", dettaglio: riga.querySelector(".talos-tool-row__detail")?.textContent || "" };
+        if (riga) {
+          const nome = riga.querySelector(".talos-tool-row__name")?.textContent || "Attrezzo in corso";
+          return { cosa: nome, dettaglio: dettaglioUtile(nome, riga.querySelector(".talos-tool-row__detail")?.textContent || "") };
+        }
         const attesa = state.realSession.attesaBubble?.querySelector(".run-activity-label")?.textContent;
         if (attesa) return { cosa: attesa, dettaglio: "" };
         if (state.realSession.messageElements.size > 0) return { cosa: "TALOS sta scrivendo", dettaglio: "" };
