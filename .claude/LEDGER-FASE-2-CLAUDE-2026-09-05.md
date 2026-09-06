@@ -1152,3 +1152,20 @@ Owner (screenshot del 4174): «sistema lo spazio enorme nella parte inferiore de
 Pilota `scratchpad/banco-umano/sessione.mjs <n>`: tutto dalla UI del 4174 come una persona (intro per la 1, «+ Nuova» per le altre), progetti usa-e-getta `banco-umano/progetto-<n>` (Node, `src/matematica.mjs` + suite), foto ogni 10 s DURANTE il giro, esito letto dal disco (`npm test`) e dall'API (`usage`, `ultimoEsito`). Esiti in `banco-umano/esiti.jsonl`.
 
 - ⛔ **Difetto trovato subito (intro, passo Modello):** con fornitore OpenRouter la tendina `#introModello` elenca SOLO i sei router `openrouter/*` (Auto Router, Free Models Router, Fusion, Pareto Code…): nessun modello di un altro vendor (GLM, DeepSeek, Qwen) è scegliebile dal primo avvio. Causa probabile: filtro `modello.provider === fornitore` sul campo `provider` dell'elenco (`aion-labs`, `z-ai`…) invece che sulla fonte. Da curare in `intro.js`/`app.js` (`azioni.modelliPer…`), NON fatto ora. Aggirato da utente: router scelto, poi modello cambiato dal chip del composer (Ctrl⇧M).
+
+## 06/09 — Il tampone CSS si rompeva a metà file: Chrome smetteva di leggere (trovato dalla caccia ai bug)
+
+Owner: «la modale nuova sessione è ancora senza css». Vero, e la causa era **mia**, del tampone di stamattina.
+
+- **Misura, non lettura.** Il file servito conteneva tutte le regole (`workspace-chooser` 111, `z-index: 199` 1), ma nel browser il foglio ne portava solo **784** e al dialogo ne arrivavano **3**. Sonda `scratchpad/perche-senza-css.mjs`: enumera `document.styleSheets` e chiede a ogni regola `elemento.matches(selettore)`.
+- **Causa.** `estrai-css-foglio.py` divideva le liste di selettori con `split(',')`: `.assistant-copy :where(p, li, blockquote)` diventava due rami (`… :where(p` e `li)`), cioè CSS rotto — e Chrome **smette di leggere il foglio da lì in poi**, senza un errore in console. Tutto ciò che veniva dopo (foglio «Nuova sessione», chooser, palette dei comandi, menu del tasto destro) spariva.
+- **Cura.** `dividi_virgole()` che rispetta le parentesi, più una **sentinella** in fondo al file (`.talos-tampone-fine`): se non arriva al browser, il foglio si è rotto prima. Si controlla dal vivo, non a occhio.
+- **Riverifica sul 4174.** Foglio: **1192 regole**, ultima parsata = la sentinella. «Nuova sessione» 1240×868 centrata (`position: fixed`, raggio 16); palette Ctrl+K 720×490 centrata (raggio 14); menu del tasto destro 200×194 al punto del clic (raggio 10). Unit 130/130.
+
+## 06/09 — Testata: via il percorso assoluto, viste al centro vero
+
+Owner (due messaggi): «la testata in alto non deve avere la scritta C:\Users\…\progetto-1» e «il segment Chat/Terminale/Review/Browser deve stare sempre al centro».
+
+- A schermo va il **nome della cartella** (`nomeCartella()` in `components/topbar.js`), il percorso intero resta nel suggerimento. Un testo che non è un percorso (la Review scrive «3 file modificati · +112 −2») non viene toccato.
+- Dove ci sono le viste, la testata è una **griglia a tre colonne** (`minmax(0,1fr) auto minmax(0,1fr)`): titolo che si accorcia per primo, viste al centro, azioni a destra. Misurato dal vivo: centro testata 688 px, centro delle viste 688 px, **scarto 0**.
+- Fonti 06/09/2026: MDN «Basic concepts of grid layout», MDN «text-overflow», Apple HIG «Segmented controls».

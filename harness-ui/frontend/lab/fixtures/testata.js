@@ -5,7 +5,7 @@
  */
 export const TESTATA = Object.freeze({
   titolo: 'W1-02 registro processi',
-  percorso: '~/Desktop/projects/AVM-harness-desktop',
+  percorso: 'C:/Users/nome/Desktop/projects/AVM-harness-desktop',
   schedeTerminale: 2,
   fileReview: 3,
 });

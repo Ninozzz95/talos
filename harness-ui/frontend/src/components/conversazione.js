@@ -80,9 +80,53 @@ export function aggiungiGiroAllaSpine(spine, { n, tick = 1, tono = null } = {}) 
   if (!spine) return;
   const documentObj = spine.ownerDocument;
   spine.append(el(documentObj, 'span', 'talos-turn-spine__n', n));
-  const segno = el(documentObj, 'span', `talos-turn-spine__tick${tono ? ` talos-turn-spine__tick--${tono}` : ''}`);
+  /*
+   * ⭐ 06/9, owner: «che navighi un po' come fa ChatGPT, conversation history bar». Il tick non è più un
+   * segno muto: è un bottone che porta al suo giro. Resta identico a vedersi (stessa classe, stessa misura),
+   * quindi nessuna regressione nella parità col mockup; cambia solo che si può premere, anche da tastiera.
+   */
+  const segno = el(documentObj, 'button', `talos-turn-spine__tick${tono ? ` talos-turn-spine__tick--${tono}` : ''}`);
+  segno.type = 'button';
   segno.dataset.tick = String(Math.min(5, Math.max(1, Math.trunc(tick) || 1)));
+  segno.dataset.giro = String(n ?? '');
+  segno.setAttribute('aria-label', 'Vai al giro'); // il numero sta gia' accanto: l'etichetta resta uguale a quella del mockup
+  segno.title = `Giro ${n ?? ''}`.trim();
   spine.append(segno);
+}
+
+/**
+ * Collega la navigazione della spina: un clic su un tick porta al suo giro, e il tick del giro che si sta
+ * guardando resta acceso mentre si scorre — la stessa cosa che fa la barra della cronologia di ChatGPT.
+ * Idempotente: si può chiamare a ogni disegno.
+ * @param {Element} conversazione il contenitore che scorre (`#conversation`)
+ * @returns {() => void} per staccare l'osservatore
+ */
+export function collegaNavigazioneSpina(conversazione) {
+  if (!conversazione || conversazione.dataset.spinaCollegata === 'si') return () => {};
+  conversazione.dataset.spinaCollegata = 'si';
+  const documentObj = conversazione.ownerDocument;
+  const finestra = documentObj.defaultView || globalThis;
+  conversazione.addEventListener('click', (evento) => {
+    const tick = evento.target.closest?.('.talos-turn-spine__tick');
+    if (!tick) return;
+    const turno = tick.closest('.talos-turn');
+    if (!turno) return;
+    const ridotto = finestra.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    turno.scrollIntoView({ behavior: ridotto ? 'auto' : 'smooth', block: 'start' });
+  });
+  if (typeof finestra.IntersectionObserver !== 'function') return () => {};
+  const osservatore = new finestra.IntersectionObserver((voci) => {
+    for (const voce of voci) {
+      const spina = voce.target.querySelector('.talos-turn-spine');
+      if (!spina) continue;
+      for (const t of spina.querySelectorAll('.talos-turn-spine__tick')) t.classList.toggle('talos-turn-spine__tick--visibile', voce.isIntersecting);
+    }
+  }, { root: conversazione, threshold: 0.35 });
+  const guarda = () => { for (const turno of conversazione.querySelectorAll('.talos-turn')) osservatore.observe(turno); };
+  guarda();
+  const mutazioni = new finestra.MutationObserver(guarda);
+  mutazioni.observe(conversazione, { childList: true, subtree: true });
+  return () => { osservatore.disconnect(); mutazioni.disconnect(); delete conversazione.dataset.spinaCollegata; };
 }
 
 /** Cambia il tono dell'ULTIMO tick di una spine (es. «current» → null a giro finito, «danger» su errore). */
@@ -433,9 +477,11 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
   const elapsed = el(documentObj, 'span', 'talos-mono talos-muted run-activity-elapsed', '0s');
   elapsed.setAttribute('aria-hidden', 'true');
   riga.append(svg, label, elapsed);
-  const scheletro = el(documentObj, 'div', 'talos-stack');
-  scheletro.setAttribute('aria-hidden', 'true');
-  for (const w of ['w90', 'w70', 'w40']) scheletro.append(el(documentObj, 'span', `talos-skeleton talos-skeleton--${w}`));
-  blocco.append(riga, scheletro);
+  /*
+   * ⛔ 06/9, owner: «skeleton loader non ci deve essere». Le tre barre grigie promettevano una forma
+   * (tre righe di testo) che la risposta vera non ha, e con «riduci le animazioni» acceso non luccicavano
+   * nemmeno: erano tre rettangoli fermi. Resta la riga onesta: segnavia, cosa sta facendo, da quanto.
+   */
+  blocco.append(riga);
   return { blocco, label, elapsed };
 }

@@ -17,9 +17,10 @@
  * Il markup resta quello del template (il monolite lo trova per id: #sessionTitle,
  * #resumeSessionBtn…): questo modulo lo AGGIORNA dai dati, non lo ricrea.
  *   · titolo = il nome della sessione (state.session, la stessa parola della sidebar);
- *   · percorso = la cartella della sessione (`cartellaAssoluta`): si scrive intero,
- *     perché la app non conosce la home dell'utente e un «~» inventato sarebbe un
- *     percorso falso; senza cartella il tratto NON si scrive;
+ *   · percorso = la cartella della sessione (`cartellaAssoluta`). ⛔ 06/09, owner: «la testata in alto
+ *     non deve avere la scritta C:\Users\…\progetto-1» — a schermo va il NOME della cartella, il
+ *     percorso intero resta nel suggerimento (`title`), che è dove serve quando serve. La app non
+ *     conosce la home dell'utente, quindi non si inventa nessun «~»; senza cartella il tratto NON si scrive;
  *   · i conteggi delle schede = le schede del terminale aperte e i file toccati
  *     della review; a zero il badge non c'è (il mockup lo mostra solo quando > 0).
  *
@@ -29,6 +30,20 @@
  * già nel DOM: attivazione automatica, come fa la regia del mockup (portata in
  * app.js con selezionaTab). Nessun aria-label che duplichi il testo visibile.
  */
+
+/**
+ * Il nome della cartella da mostrare in testata: l'ultimo tratto del percorso.
+ * ⛔ 06/09 — la testata mostrava `C:\Users\…\scratchpad\banco-umano\progetto-1` per intero: una riga di
+ * testo lunga quanto mezza finestra che spingeva le viste fuori dal centro. Il percorso intero non si perde:
+ * va nel suggerimento. Un testo che NON è un percorso (la Review ci scrive «3 file modificati · +112 −2»)
+ * resta com'è: si taglia solo se ci sono separatori di cartella.
+ */
+export function nomeCartella(percorso) {
+  const testo = String(percorso || '').trim();
+  if (!testo || !/[\\/]/.test(testo)) return testo;
+  const parti = testo.replace(/[\\/]+$/, '').split(/[\\/]+/).filter(Boolean);
+  return parti.length ? parti[parti.length - 1] : testo;
+}
 
 /** Scrive (o toglie) il badge di conteggio di una scheda della testata. */
 export function impostaConteggioScheda(tab, conteggio) {
@@ -62,7 +77,7 @@ export function aggiornaTopbar(topbar, dati = {}) {
   const percorso = topbar.querySelector('.talos-topbar__path');
   if (percorso && 'percorso' in dati) { // chi non passa il percorso non lo tocca (la Review ci scrive il sommario dei file)
     const testo = typeof dati.percorso === 'string' && dati.percorso.trim() ? dati.percorso.trim() : '';
-    percorso.textContent = testo;
+    percorso.textContent = nomeCartella(testo);
     percorso.title = testo;
     percorso.hidden = testo === '';
   }
