@@ -29,6 +29,27 @@ export const VIE_ALLEGATO = Object.freeze([
   { id: 'schermata', etichetta: 'Ultima schermata', aiuto: 'L’ultimo screenshot che hai scattato', icona: 'i-camera' },
 ]);
 
+/*
+ * Decisione B8: «i tetti (quanti file, quanto grandi) scritti nel foglio, non scoperti sbattendoci».
+ * Stanno qui perché sono dati, non frasi: il menu li scrive, la riga li fa rispettare, e la prova
+ * unitaria li legge da un posto solo.
+ */
+export const TETTI_ALLEGATI = Object.freeze({
+  quanti: 10,
+  caratteriPerAllegato: 200_000, // ~50k token: oltre, un file da solo mangia mezza finestra
+});
+
+/** La frase che dichiara i tetti, quella che si legge PRIMA di sbatterci. */
+export function frasiTetti() {
+  return `Fino a ${TETTI_ALLEGATI.quanti} allegati per messaggio · oltre ${Math.round(TETTI_ALLEGATI.caratteriPerAllegato / 1000)}k caratteri un file da solo pesa quanto mezza conversazione`;
+}
+
+/** Vero quando un allegato supera il tetto per file: non si rifiuta, si avvisa. */
+export function allegatoPesante(allegato) {
+  if (!allegato || allegato.tipo === 'immagine') return false;
+  return Number(allegato.caratteri) > TETTI_ALLEGATI.caratteriPerAllegato;
+}
+
 const TETTO_IMMAGINE = 1568; // Claude: oltre questo il conto non sale più
 
 /** ~4 caratteri per token: la regola d'uso sulle lingue latine. */
