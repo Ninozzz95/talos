@@ -18,12 +18,14 @@
  * permette) — registrato nel ledger.
  */
 
+import { t, tn } from './lingua.js';
+
 export const TESTI = Object.freeze({
   intestazione: 'Letture della sessione',
-  riepilogoLetture: (n) => `Testo acquisito dall’agente · ${n} ${n === 1 ? 'pagina' : 'pagine'}`,
-  riepilogoMisto: (letture, vive) => `${letture} ${letture === 1 ? 'lettura' : 'letture'} dell’agente · ${vive} ${vive === 1 ? 'pagina aperta' : 'pagine aperte'} da te`,
+  riepilogoLetture: (n) => tn('Testo acquisito dall’agente · {n} pagina', 'Testo acquisito dall’agente · {n} pagine', n),
+  riepilogoMisto: (letture, vive) => `${tn('{n} lettura dell’agente', '{n} letture dell’agente', letture)} · ${tn('{n} pagina aperta da te', '{n} pagine aperte da te', vive)}`,
   riepilogoVuoto: 'Nessuna pagina ancora',
-  posizioneLettura: (i, n) => `Lettura ${i} di ${n}`,
+  posizioneLettura: (i, n) => t('Lettura {i} di {n}', { i, n }),
   posizioneViva: 'Pagina aperta da te · viva dentro TALOS',
   posizioneBloccata: 'Pagina aperta da te · non mostrabile qui',
   posizioneCaricamento: 'Apertura in corso…',
@@ -52,7 +54,7 @@ export function titoloDaLettura(pagina) {
   if (pagina?.titolo) return pagina.titolo;
   const riga = String(pagina?.testo || '').split('\n').map((r) => r.trim()).find((r) => r.length > 0);
   if (riga) return riga.length > 80 ? `${riga.slice(0, 79)}…` : riga;
-  return hostDaUrl(pagina?.url) || 'Pagina';
+  return hostDaUrl(pagina?.url) || t('Pagina');
 }
 
 /** «localhost:5173» → «http://localhost:5173/»; «example.org/x» → https; una frase non è un indirizzo. */
@@ -74,7 +76,7 @@ const giornoRoma = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', d
 /** «Agente · 05/09, 10:42 (Roma) · 365 caratteri» — la provenienza di una lettura, nel formato del mockup. */
 export function formattaProvenienza(pagina) {
   const quando = pagina?.quando ? new Date(pagina.quando) : null;
-  const chi = pagina?.origine === 'tu' ? TESTI.provenienzaTu : TESTI.provenienzaAgente;
+  const chi = t(pagina?.origine === 'tu' ? TESTI.provenienzaTu : TESTI.provenienzaAgente);
   const parti = [chi];
   if (quando && !Number.isNaN(quando.getTime())) parti.push(`${giornoRoma.format(quando)}, ${oraRoma.format(quando)} (Roma)`);
   if (pagina?.tipo !== 'viva') parti.push(`${String(pagina?.testo || '').length} caratteri`);
@@ -85,7 +87,7 @@ export function formattaProvenienza(pagina) {
 export function etichettaCronologia(pagina, indice) {
   const quando = pagina?.quando ? new Date(pagina.quando) : null;
   const ora = quando && !Number.isNaN(quando.getTime()) ? oraRoma.format(quando) : '—';
-  return `${String(indice + 1).padStart(2, '0')} · ${pagina?.origine === 'tu' ? TESTI.provenienzaTu : TESTI.provenienzaAgente} · ${ora}`;
+  return `${String(indice + 1).padStart(2, '0')} · ${t(pagina?.origine === 'tu' ? TESTI.provenienzaTu : TESTI.provenienzaAgente)} · ${ora}`;
 }
 
 /** Chi resta attiva quando si chiude la scheda in posizione `indice` (stessa regola del Terminale, Hermes `closeTerminal`). */
@@ -135,7 +137,7 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
   el.annulla?.addEventListener('click', () => { const s = attiva(); if (s) azioni.chiudi?.(s.id); });
   if (el.url) {
     el.url.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); const u = urlApribile(el.url.value); if (u) { azioni.apri?.(u); el.url.blur(); } else { el.url.setAttribute('aria-invalid', 'true'); mostraAvviso('Non è un indirizzo: scrivi un sito (es. localhost:5173 o example.org).'); } }
+      if (e.key === 'Enter') { e.preventDefault(); const u = urlApribile(el.url.value); if (u) { azioni.apri?.(u); el.url.blur(); } else { el.url.setAttribute('aria-invalid', 'true'); mostraAvviso(t('Non è un indirizzo: scrivi un sito (es. localhost:5173 o example.org).')); } }
       if (e.key === 'Escape') { e.preventDefault(); el.url.value = attiva()?.url || ''; el.url.removeAttribute('aria-invalid'); el.url.blur(); }
     });
     el.url.addEventListener('focus', () => el.url.select());
@@ -173,7 +175,7 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
       const sel = s.id === stato.attiva;
       b.setAttribute('aria-selected', String(sel)); b.tabIndex = sel ? 0 : -1;
       b.textContent = titoloDaLettura(s);
-      b.title = `${titoloDaLettura(s)} — ${s.url}`;
+      b.title = t('{titolo} — {url}', { titolo: titoloDaLettura(s), url: s.url });
       el.schede.append(b);
     });
   }
@@ -218,7 +220,7 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
     const s = attiva();
     const letture = stato.schede.filter((x) => x.tipo !== 'viva').length;
     const vive = stato.schede.length - letture;
-    if (el.riepilogo) el.riepilogo.textContent = stato.schede.length === 0 ? TESTI.riepilogoVuoto : (vive === 0 ? TESTI.riepilogoLetture(letture) : TESTI.riepilogoMisto(letture, vive));
+    if (el.riepilogo) el.riepilogo.textContent = stato.schede.length === 0 ? t(TESTI.riepilogoVuoto) : (vive === 0 ? TESTI.riepilogoLetture(letture) : TESTI.riepilogoMisto(letture, vive));
     renderizzaSchede();
     const i = indiceAttiva();
     if (el.indietro) el.indietro.disabled = i <= 0;
@@ -227,13 +229,13 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
     if (el.fuori) el.fuori.disabled = !s || !/^https?:\/\//i.test(s.url);
     for (const b of [el.rileggi, el.annota, el.nota, el.copia]) if (b) b.disabled = !s;
     if (el.copia) el.copia.disabled = !s || s.tipo === 'viva';
-    if (el.rileggi) el.rileggi.title = s?.tipo === 'viva' ? 'Ricarica la pagina nella cornice' : 'Prepara nel composer la richiesta di rileggere questa pagina';
+    if (el.rileggi) el.rileggi.title = t(s?.tipo === 'viva' ? 'Ricarica la pagina nella cornice' : 'Prepara nel composer la richiesta di rileggere questa pagina');
     if (el.posizione) {
-      el.posizione.textContent = !s ? '' : s.tipo === 'viva' ? (s.stato === 'caricamento' ? TESTI.posizioneCaricamento : s.stato === 'bloccata' ? TESTI.posizioneBloccata : TESTI.posizioneViva) : TESTI.posizioneLettura(stato.schede.filter((x) => x.tipo !== 'viva').indexOf(s) + 1, letture);
+      el.posizione.textContent = !s ? '' : s.tipo === 'viva' ? t(s.stato === 'caricamento' ? TESTI.posizioneCaricamento : s.stato === 'bloccata' ? TESTI.posizioneBloccata : TESTI.posizioneViva) : TESTI.posizioneLettura(stato.schede.filter((x) => x.tipo !== 'viva').indexOf(s) + 1, letture);
     }
     // stati
     const richiesta = stato.richiesta;
-    if (el.bloccato) { el.bloccato.hidden = !richiesta; if (richiesta && el.bloccatoTesto) el.bloccatoTesto.textContent = `L’agente chiede di leggere ${richiesta.url}. La scelta vale per questa richiesta.`; }
+    if (el.bloccato) { el.bloccato.hidden = !richiesta; if (richiesta && el.bloccatoTesto) el.bloccatoTesto.textContent = t('L’agente chiede di leggere {url}. La scelta vale per questa richiesta.', { url: richiesta.url }); }
     if (el.caricamento) el.caricamento.hidden = !(s && s.tipo === 'viva' && s.stato === 'caricamento');
     if (el.vuoto) el.vuoto.hidden = stato.schede.length > 0;
     // l'articolo resta per le note anche su una pagina viva: si nascondono solo testata e testo acquisito
@@ -245,16 +247,16 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
       if (el.provenienza) el.provenienza.textContent = formattaProvenienza(s);
       if (el.testo) el.testo.textContent = s.testo || '';
     }
-    mostraAvviso(s?.tipo === 'viva' && s.stato === 'bloccata' ? `${s.motivo || 'Il sito non consente di essere mostrato dentro TALOS'}. ${TESTI.chiediAllAgente}: usa «Rileggi».` : '');
+    mostraAvviso(s?.tipo === 'viva' && s.stato === 'bloccata' ? t('{motivo}. {invito}: usa «Rileggi».', { motivo: s.motivo || t('Il sito non consente di essere mostrato dentro TALOS'), invito: t(TESTI.chiediAllAgente) }) : '');
     renderizzaCornice(s);
     // nota
     const nota = s ? stato.note[s.url] : '';
-    if (el.notaSalvata) { el.notaSalvata.hidden = !nota; el.notaSalvata.textContent = nota ? `Nota: ${nota}` : ''; }
+    if (el.notaSalvata) { el.notaSalvata.hidden = !nota; el.notaSalvata.textContent = nota ? t('Nota: {nota}', { nota }) : ''; }
     if (!s || (el.editorNota && !el.editorNota.hidden && el.editorNota.dataset.browserId !== s.id)) { if (el.editorNota) el.editorNota.hidden = true; el.nota?.setAttribute('aria-expanded', 'false'); }
     if (el.editorNota && s) el.editorNota.dataset.browserId = s.id;
     renderizzaCronologia();
     const nav = el.cronologia?.closest('nav'); if (nav) nav.hidden = letture === 0; // niente «Cronologia · scegli una lettura» senza letture
-    if (el.limiti) el.limiti.textContent = vive > 0 ? TESTI.limitiVive : TESTI.limitiLetture;
+    if (el.limiti) el.limiti.textContent = t(vive > 0 ? TESTI.limitiVive : TESTI.limitiLetture);
   }
 
   return {

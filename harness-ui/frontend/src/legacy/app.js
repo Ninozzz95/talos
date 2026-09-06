@@ -27,7 +27,8 @@ import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei fil
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
-import { LINGUE as LINGUE_MENU, risolviLingua, applicaLingua, etichettaLinguaRisolta } from '../components/lingua.js'; // 06/9 B8: la lingua dei menu
+import { LINGUE as LINGUE_MENU, risolviLingua, applicaLingua, etichettaLinguaRisolta, t as tr, EVENTO_LINGUA } from '../components/lingua.js'; // 06/9 B8 + P-i18n: la lingua dei menu e delle superfici
+import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
 import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSIMO_SCHEDE as MASSIMO_SCHEDE_BROWSER } from '../components/browser.js'; // 06/9 K-I: il Browser a schede
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
@@ -7587,19 +7588,19 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const cartella = attiva?.cartella || (attiva?.origine === 'standalone' ? '' : state.realSession.cartellaAssoluta) || '';
     const segmento = cartella ? ultimoSegmentoIntro(cartella) : '';
     const nomeCartella = segmento ? (/[\/]$/.test(segmento) ? segmento : `${segmento}/`) : '';
-    const colori = t.enforcementColore && t.enforcementColore !== 'webgl' ? ` Colori limitati (${t.enforcementColore}).` : '';
+    const colori = t.enforcementColore && t.enforcementColore !== 'webgl' ? ` ${tr('Colori limitati ({motivo}).', { motivo: t.enforcementColore })}` : '';
     ui.aggiorna({
       schede,
       attiva: t.attiva,
       puoAprire: conSessione && t.ordine.length < SCHEDE_MASSIME_TERMINALE,
-      motivoNoNuova: conSessione ? TESTI_TERMINALE.troppeSchede : TESTI_TERMINALE.nuovaSchedaSenzaSessione,
+      motivoNoNuova: conSessione ? tr(TESTI_TERMINALE.troppeSchede, { n: SCHEDE_MASSIME_TERMINALE }) : tr(TESTI_TERMINALE.nuovaSchedaSenzaSessione),
       badges: [
-        { chiave: 'isolamento', testo: 'Stessa macchina, senza isolamento', titolo: 'La shell gira sul tuo computer, nella cartella della sessione: nessuna sandbox.' },
-        ...(nomeCartella ? [{ chiave: 'cartella', testo: nomeCartella, titolo: `${cartella} · shell sul tuo computer, senza isolamento` }] : []),
+        { chiave: 'isolamento', testo: tr('Stessa macchina, senza isolamento'), titolo: tr('La shell gira sul tuo computer, nella cartella della sessione: nessuna sandbox.') },
+        ...(nomeCartella ? [{ chiave: 'cartella', testo: nomeCartella, titolo: `${cartella} · ${tr('shell sul tuo computer, senza isolamento')}` }] : []),
       ],
       piede: attiva
-        ? { chi: TESTI_TERMINALE.apertaDaTe, dettaglio: cartella || (attiva.origine === 'standalone' ? 'cartella predefinita del server' : ''), stato: `${ETICHETTA_STATO_TERMINALE[attiva.stato] ?? attiva.stato}${attiva.ripreso ? ' · shell ripresa' : ''}`, nota: `${TESTI_TERMINALE.nota}${colori}` }
-        : { chi: TESTI_TERMINALE.nessunaScheda, dettaglio: cartella, stato: '', nota: conSessione ? 'Premi Nuovo per aprire una shell in questa cartella.' : TESTI_TERMINALE.nuovaSchedaSenzaSessione },
+        ? { chi: tr(TESTI_TERMINALE.apertaDaTe), dettaglio: cartella || (attiva.origine === 'standalone' ? tr('cartella predefinita del server') : ''), stato: `${tr(ETICHETTA_STATO_TERMINALE[attiva.stato] ?? attiva.stato)}${attiva.ripreso ? ` · ${tr('shell ripresa')}` : ''}`, nota: `${tr(TESTI_TERMINALE.nota)}${colori}` }
+        : { chi: tr(TESTI_TERMINALE.nessunaScheda), dettaglio: cartella, stato: '', nota: conSessione ? tr('Premi Nuovo per aprire una shell in questa cartella.') : tr(TESTI_TERMINALE.nuovaSchedaSenzaSessione) },
     });
     aggiornaTestataSessione(); // K-G: il badge «Terminale N» nella testata
   }
@@ -7772,8 +7773,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   async function nuovaSchedaTerminale() {
     const t = statoTerminale();
     const sessioneId = state.realSession.id;
-    if (!sessioneId) { toast('Serve una sessione', TESTI_TERMINALE.nuovaSchedaSenzaSessione); return; }
-    if (t.ordine.length >= SCHEDE_MASSIME_TERMINALE) { toast('Troppe schede', TESTI_TERMINALE.troppeSchede); return; }
+    if (!sessioneId) { toast(tr('Serve una sessione'), tr(TESTI_TERMINALE.nuovaSchedaSenzaSessione)); return; }
+    if (t.ordine.length >= SCHEDE_MASSIME_TERMINALE) { toast(tr('Troppe schede'), tr(TESTI_TERMINALE.troppeSchede, { n: SCHEDE_MASSIME_TERMINALE })); return; }
     try {
       let voce = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessioneId)}/terminals`, {});
       // col registro vuoto la prima POST restituisce la prima scheda (terminalId === sessionId), che qui esiste già
@@ -7782,7 +7783,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       registraSchedaTerminale(voce);
       attivaSchedaTerminale(voce.terminalId);
     } catch (error) {
-      toast('Scheda non aperta', error.message);
+      toast(tr('Scheda non aperta'), error.message);
     }
   }
 
@@ -7842,6 +7843,15 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
 
   /** Ctrl+` mostra/nasconde il Terminale, Ctrl+Shift+` apre una scheda nuova (stesse combinazioni di Hermes `view.showTerminal` / `view.newTerminal`). */
+  /** P-i18n (06/09): al cambio di lingua le superfici disegnate dal codice si ridisegnano; il template lo fa `applicaLingua`. */
+  function collegaRidisegnoLingua() {
+    document.documentElement.addEventListener(EVENTO_LINGUA, () => {
+      renderizzaSchedeTerminale();
+      renderizzaBrowser();
+      ritraduciImpostazioni($('#schermoImpostazioni'));
+      sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(leggiImpostazioniDesktop().appearance));
+    });
+  }
   function collegaScorciatoieTerminale() {
     ROOT().addEventListener('keydown', (event) => {
       if (!event.ctrlKey || event.altKey || event.code !== 'Backquote') return;
@@ -14254,6 +14264,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') $$('.overlay-layer').forEach((v) => chiudiVeloMockup(v.id)); });
   collegaRidimensionamentoDialoghi(ROOT()); // 06/9 B7: le tre maniglie di ogni velo (trascina, frecce, doppio clic)
   collegaScorciatoieTerminale(); // 06/9 B1: Ctrl+` e Ctrl+Shift+`, e la barra delle schede onesta da subito
+  collegaRidisegnoLingua(); // P-i18n 06/9
   renderizzaBrowser(); // 06/9 K-I: via le letture dimostrative del mockup da subito
   setInspectorTab($('.inspector-tabs button.active'));
   renderReviewFile('composer');
