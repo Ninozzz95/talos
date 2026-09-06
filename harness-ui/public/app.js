@@ -1753,8 +1753,8 @@ function tn(uno2, molti, n, parametri) {
   const forma = regolePlurale.select(Number(n)) === "one" ? uno2 : molti;
   return t(forma, { n, ...parametri || {} });
 }
-function primoTesto(el24) {
-  for (const nodo4 of el24.childNodes) if (nodo4.nodeType === 3 && nodo4.data.trim()) return nodo4;
+function primoTesto(el25) {
+  for (const nodo4 of el25.childNodes) if (nodo4.nodeType === 3 && nodo4.data.trim()) return nodo4;
   return null;
 }
 function applicaLingua(root, lingua) {
@@ -1764,20 +1764,20 @@ function applicaLingua(root, lingua) {
   const cambiata = impostaLingua(lingua) !== void 0 && lingua !== radice.dataset?.linguaApplicata;
   if (radice.dataset) radice.dataset.linguaApplicata = lingua;
   let toccati = 0;
-  for (const el24 of root.querySelectorAll("[data-t]")) {
-    const valore = d[el24.getAttribute("data-t")];
+  for (const el25 of root.querySelectorAll("[data-t]")) {
+    const valore = d[el25.getAttribute("data-t")];
     if (!valore) continue;
-    const testo3 = primoTesto(el24);
+    const testo3 = primoTesto(el25);
     if (testo3) {
       const codaSpazio = /\s$/.test(testo3.data) ? " " : "";
       testo3.data = valore + codaSpazio;
-    } else el24.textContent = valore;
+    } else el25.textContent = valore;
     toccati += 1;
   }
-  for (const el24 of root.querySelectorAll("[data-ph]")) {
-    const valore = d[el24.getAttribute("data-ph")];
+  for (const el25 of root.querySelectorAll("[data-ph]")) {
+    const valore = d[el25.getAttribute("data-ph")];
     if (!valore) continue;
-    el24.placeholder = valore;
+    el25.placeholder = valore;
     toccati += 1;
   }
   if (cambiata && typeof radice.dispatchEvent === "function" && typeof CustomEvent === "function") radice.dispatchEvent(new CustomEvent(EVENTO_LINGUA, { detail: { lingua } }));
@@ -1828,10 +1828,10 @@ function filtraImpostazioni(campi, query) {
   });
 }
 function nodo2(tag, classe, testo3) {
-  const el24 = document.createElement(tag);
-  if (classe) el24.className = classe;
-  if (testo3 != null) el24.textContent = testo3;
-  return el24;
+  const el25 = document.createElement(tag);
+  if (classe) el25.className = classe;
+  if (testo3 != null) el25.textContent = testo3;
+  return el25;
 }
 function creaSettingRow(campo2, valore, { controllo, output, prefisso = "setting-" } = {}) {
   const riga = nodo2("div", "talos-setting");
@@ -3867,10 +3867,10 @@ function creaToast(dati) {
   scheda.append(vivo, barra);
   return { scheda, chiudi, azione, testo: testo3, tono, durata: t2.durata };
 }
-function creaPilaToast(regione, { animaUscita = (el24, fine) => fine(), entra = () => {
+function creaPilaToast(regione, { animaUscita = (el25, fine) => fine(), entra = () => {
 }, fuocoDiRitorno = () => null } = {}) {
   let progressivo = 0;
-  const vivi = () => [...regione.querySelectorAll(".talos-toast:not([hidden])")].filter((el24) => !el24.dataset.demo);
+  const vivi = () => [...regione.querySelectorAll(".talos-toast:not([hidden])")].filter((el25) => !el25.dataset.demo);
   const rimuovi = (scheda) => {
     if (!scheda?.isConnected || scheda.dataset.uscita) return;
     scheda.dataset.uscita = "1";
@@ -6931,7 +6931,7 @@ function prossimaDopoChiusura(lista, indice2) {
   return resto[indice2] ?? resto[indice2 - 1] ?? null;
 }
 function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
-  const el24 = {
+  const el25 = {
     riepilogo: $(schermo, "#browserRiepilogo"),
     schede: $(schermo, "#browserSchede"),
     indietro: $(schermo, '[data-browser-demo="back"], [data-browser-action="back"]'),
@@ -6968,7 +6968,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     // 06/9 O-28: Pagina / Testo dell'agente
   };
   let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === "testo" ? "testo" : "pagina" };
-  const frameAttivo = () => el24.live?.querySelector("iframe") || null;
+  const frameAttivo = () => el25.live?.querySelector("iframe") || null;
   const dialogaConOverlay = (messaggio) => {
     try {
       frameAttivo()?.contentWindow?.postMessage({ fonte: "talos-genitore", ...messaggio }, "*");
@@ -6996,33 +6996,33 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   });
   const attiva = () => stato.schede.find((s) => s.id === stato.attiva) || null;
   const indiceAttiva = () => stato.schede.findIndex((s) => s.id === stato.attiva);
-  el24.indietro?.addEventListener("click", () => {
+  el25.indietro?.addEventListener("click", () => {
     const i = indiceAttiva();
     if (i > 0) azioni.seleziona?.(stato.schede[i - 1].id);
   });
-  el24.avanti?.addEventListener("click", () => {
+  el25.avanti?.addEventListener("click", () => {
     const i = indiceAttiva();
     if (i >= 0 && i < stato.schede.length - 1) azioni.seleziona?.(stato.schede[i + 1].id);
   });
-  el24.fuori?.addEventListener("click", () => {
+  el25.fuori?.addEventListener("click", () => {
     const s = attiva();
     if (s) azioni.apriFuori?.(s);
   });
-  el24.rileggi?.addEventListener("click", () => {
+  el25.rileggi?.addEventListener("click", () => {
     const s = attiva();
     if (s) azioni.rileggi?.(s);
   });
-  el24.annota?.addEventListener("click", () => {
+  el25.annota?.addEventListener("click", () => {
     const s = attiva();
     if (!s) return;
     if (s.tipo === "viva" && s.proxata) azioni.annota?.(s, !stato.annotaAttivo);
     else azioni.annota?.(s);
   });
-  el24.copia?.addEventListener("click", () => {
+  el25.copia?.addEventListener("click", () => {
     const s = attiva();
     if (s) azioni.copia?.(s);
   });
-  for (const b of el24.modi || []) {
+  for (const b of el25.modi || []) {
     b.addEventListener("click", () => {
       const scelto = b.dataset.browserModo === "testo" ? "testo" : "pagina";
       if (stato.modo === scelto) return;
@@ -7031,64 +7031,64 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       renderizza();
     });
   }
-  el24.nota?.addEventListener("click", (e) => {
+  el25.nota?.addEventListener("click", (e) => {
     e.stopPropagation();
-    const aperto = !el24.editorNota.hidden;
-    el24.editorNota.hidden = aperto;
-    el24.nota.setAttribute("aria-expanded", String(!aperto));
+    const aperto = !el25.editorNota.hidden;
+    el25.editorNota.hidden = aperto;
+    el25.nota.setAttribute("aria-expanded", String(!aperto));
     if (!aperto) {
       const s = attiva();
-      el24.notaInput.value = s && stato.note[s.url] || "";
-      el24.notaInput.focus();
+      el25.notaInput.value = s && stato.note[s.url] || "";
+      el25.notaInput.focus();
     }
   });
-  el24.conservaNota?.addEventListener("click", () => {
+  el25.conservaNota?.addEventListener("click", () => {
     const s = attiva();
     if (!s) return;
-    azioni.salvaNota?.(s, el24.notaInput.value.trim());
-    el24.editorNota.hidden = true;
-    el24.nota?.setAttribute("aria-expanded", "false");
-    el24.nota?.focus();
+    azioni.salvaNota?.(s, el25.notaInput.value.trim());
+    el25.editorNota.hidden = true;
+    el25.nota?.setAttribute("aria-expanded", "false");
+    el25.nota?.focus();
   });
-  el24.chiudiNota?.addEventListener("click", () => {
-    el24.editorNota.hidden = true;
-    el24.nota?.setAttribute("aria-expanded", "false");
-    el24.nota?.focus();
+  el25.chiudiNota?.addEventListener("click", () => {
+    el25.editorNota.hidden = true;
+    el25.nota?.setAttribute("aria-expanded", "false");
+    el25.nota?.focus();
   });
-  el24.consenti?.addEventListener("click", () => {
+  el25.consenti?.addEventListener("click", () => {
     if (stato.richiesta) azioni.decidi?.(stato.richiesta.requestId, true);
   });
-  el24.nega?.addEventListener("click", () => {
+  el25.nega?.addEventListener("click", () => {
     if (stato.richiesta) azioni.decidi?.(stato.richiesta.requestId, false);
   });
-  el24.annulla?.addEventListener("click", () => {
+  el25.annulla?.addEventListener("click", () => {
     const s = attiva();
     if (s) azioni.chiudi?.(s.id);
   });
-  if (el24.url) {
-    el24.url.addEventListener("keydown", (e) => {
+  if (el25.url) {
+    el25.url.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        const u = urlApribile(el24.url.value);
+        const u = urlApribile(el25.url.value);
         if (u) {
           azioni.apri?.(u);
-          el24.url.blur();
+          el25.url.blur();
         } else {
-          el24.url.setAttribute("aria-invalid", "true");
+          el25.url.setAttribute("aria-invalid", "true");
           mostraAvviso(t("Non è un indirizzo: scrivi un sito (es. localhost:5173 o example.org)."));
         }
       }
       if (e.key === "Escape") {
         e.preventDefault();
-        el24.url.value = attiva()?.url || "";
-        el24.url.removeAttribute("aria-invalid");
-        el24.url.blur();
+        el25.url.value = attiva()?.url || "";
+        el25.url.removeAttribute("aria-invalid");
+        el25.url.blur();
       }
     });
-    el24.url.addEventListener("focus", () => el24.url.select());
-    el24.url.addEventListener("input", () => el24.url.removeAttribute("aria-invalid"));
+    el25.url.addEventListener("focus", () => el25.url.select());
+    el25.url.addEventListener("input", () => el25.url.removeAttribute("aria-invalid"));
   }
-  el24.schede?.addEventListener("click", (e) => {
+  el25.schede?.addEventListener("click", (e) => {
     const tab = e.target.closest?.("[data-browser-tab]");
     if (!tab) return;
     const id = tab.dataset.browserId;
@@ -7096,14 +7096,14 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     if (sullaX || e.ctrlKey || e.metaKey) azioni.chiudi?.(id);
     else azioni.seleziona?.(id);
   });
-  el24.schede?.addEventListener("auxclick", (e) => {
+  el25.schede?.addEventListener("auxclick", (e) => {
     const tab = e.target.closest?.("[data-browser-tab]");
     if (tab && e.button === 1) {
       e.preventDefault();
       azioni.chiudi?.(tab.dataset.browserId);
     }
   });
-  el24.schede?.addEventListener("keydown", (e) => {
+  el25.schede?.addEventListener("keydown", (e) => {
     const tab = e.target.closest?.("[data-browser-tab]");
     if (!tab) return;
     const ids = stato.schede.map((s) => s.id);
@@ -7121,23 +7121,23 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     e.preventDefault();
     if (prossima) {
       azioni.seleziona?.(prossima);
-      el24.schede.querySelector(`[data-browser-id="${CSS.escape(prossima)}"]`)?.focus();
+      el25.schede.querySelector(`[data-browser-id="${CSS.escape(prossima)}"]`)?.focus();
     }
   });
-  el24.cronologia?.addEventListener("click", (e) => {
+  el25.cronologia?.addEventListener("click", (e) => {
     const voce = e.target.closest?.("[data-pagina-browser]");
     if (voce) azioni.seleziona?.(voce.dataset.browserId);
   });
   function mostraAvviso(testo3) {
-    if (!el24.avviso) return;
-    el24.avviso.textContent = testo3 || "";
-    el24.avviso.hidden = !testo3;
+    if (!el25.avviso) return;
+    el25.avviso.textContent = testo3 || "";
+    el25.avviso.hidden = !testo3;
   }
   function renderizzaSchede() {
-    if (!el24.schede) return;
-    const cornice = el24.schede.closest(".talos-tabs");
+    if (!el25.schede) return;
+    const cornice = el25.schede.closest(".talos-tabs");
     if (cornice) cornice.hidden = stato.schede.length === 0;
-    el24.schede.replaceChildren();
+    el25.schede.replaceChildren();
     stato.schede.forEach((s, i) => {
       const b = document.createElement("button");
       b.className = "talos-tabs__tab";
@@ -7150,12 +7150,12 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       b.tabIndex = sel ? 0 : -1;
       b.textContent = titoloDaLettura(s);
       b.title = t("{titolo} — {url}", { titolo: titoloDaLettura(s), url: s.url });
-      el24.schede.append(b);
+      el25.schede.append(b);
     });
   }
   function renderizzaCronologia() {
-    if (!el24.cronologia) return;
-    el24.cronologia.replaceChildren();
+    if (!el25.cronologia) return;
+    el25.cronologia.replaceChildren();
     const letture = stato.schede.filter((s) => s.tipo !== "viva");
     letture.forEach((s, i) => {
       const b = document.createElement("button");
@@ -7173,11 +7173,11 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       basso.className = "talos-muted talos-browser__meta";
       basso.textContent = hostDaUrl(s.url);
       b.append(alto, forte, basso);
-      el24.cronologia.append(b);
+      el25.cronologia.append(b);
     });
   }
   function scriviTestoAcquisito(grezzo) {
-    const contenitore = el24.testo;
+    const contenitore = el25.testo;
     if (!contenitore) return;
     contenitore.replaceChildren();
     if (!sembraHtml(grezzo)) {
@@ -7199,18 +7199,18 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     contenitore.append(pulito, dettaglio);
   }
   function renderizzaCornice(s) {
-    if (!el24.live) return;
+    if (!el25.live) return;
     const vuoleViva = s && s.tipo === "viva" && s.stato !== "bloccata";
     const vuoleLettura = s && s.tipo !== "viva" && stato.modo === "pagina" && Boolean(s.url) && /^https?:/i.test(s.url);
     const vuole = vuoleViva || vuoleLettura;
-    el24.live.hidden = !vuole;
+    el25.live.hidden = !vuole;
     if (!vuole) {
-      el24.live.replaceChildren();
+      el25.live.replaceChildren();
       return;
     }
-    let frame = el24.live.querySelector("iframe");
+    let frame = el25.live.querySelector("iframe");
     if (!frame || frame.dataset.browserId !== s.id) {
-      el24.live.replaceChildren();
+      el25.live.replaceChildren();
       frame = document.createElement("iframe");
       frame.dataset.browserId = s.id;
       frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups");
@@ -7232,73 +7232,73 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
           renderizza();
         }, 4e3);
       }
-      el24.live.append(frame);
+      el25.live.append(frame);
     }
   }
   function renderizza() {
     const s = attiva();
     const letture = stato.schede.filter((x) => x.tipo !== "viva").length;
     const vive = stato.schede.length - letture;
-    if (el24.riepilogo) el24.riepilogo.textContent = stato.schede.length === 0 ? t(TESTI3.riepilogoVuoto) : vive === 0 ? TESTI3.riepilogoLetture(letture) : TESTI3.riepilogoMisto(letture, vive);
+    if (el25.riepilogo) el25.riepilogo.textContent = stato.schede.length === 0 ? t(TESTI3.riepilogoVuoto) : vive === 0 ? TESTI3.riepilogoLetture(letture) : TESTI3.riepilogoMisto(letture, vive);
     renderizzaSchede();
     const i = indiceAttiva();
-    if (el24.indietro) el24.indietro.disabled = i <= 0;
-    if (el24.avanti) el24.avanti.disabled = i < 0 || i >= stato.schede.length - 1;
-    if (el24.url && document.activeElement !== el24.url) el24.url.value = s?.url || "";
-    if (el24.fuori) el24.fuori.disabled = !s || !/^https?:\/\//i.test(s.url);
-    for (const b of [el24.rileggi, el24.annota, el24.nota, el24.copia]) if (b) b.disabled = !s;
-    if (el24.copia) el24.copia.disabled = !s || s.tipo === "viva";
-    if (el24.rileggi) el24.rileggi.title = t(s?.tipo === "viva" ? "Ricarica la pagina nella cornice" : "Prepara nel composer la richiesta di rileggere questa pagina");
-    if (el24.posizione) {
-      el24.posizione.textContent = !s ? "" : s.tipo === "viva" ? t(s.stato === "caricamento" ? TESTI3.posizioneCaricamento : s.stato === "bloccata" ? TESTI3.posizioneBloccata : TESTI3.posizioneViva) : TESTI3.posizioneLettura(stato.schede.filter((x) => x.tipo !== "viva").indexOf(s) + 1, letture);
+    if (el25.indietro) el25.indietro.disabled = i <= 0;
+    if (el25.avanti) el25.avanti.disabled = i < 0 || i >= stato.schede.length - 1;
+    if (el25.url && document.activeElement !== el25.url) el25.url.value = s?.url || "";
+    if (el25.fuori) el25.fuori.disabled = !s || !/^https?:\/\//i.test(s.url);
+    for (const b of [el25.rileggi, el25.annota, el25.nota, el25.copia]) if (b) b.disabled = !s;
+    if (el25.copia) el25.copia.disabled = !s || s.tipo === "viva";
+    if (el25.rileggi) el25.rileggi.title = t(s?.tipo === "viva" ? "Ricarica la pagina nella cornice" : "Prepara nel composer la richiesta di rileggere questa pagina");
+    if (el25.posizione) {
+      el25.posizione.textContent = !s ? "" : s.tipo === "viva" ? t(s.stato === "caricamento" ? TESTI3.posizioneCaricamento : s.stato === "bloccata" ? TESTI3.posizioneBloccata : TESTI3.posizioneViva) : TESTI3.posizioneLettura(stato.schede.filter((x) => x.tipo !== "viva").indexOf(s) + 1, letture);
     }
     const richiesta = stato.richiesta;
-    if (el24.bloccato) {
-      el24.bloccato.hidden = !richiesta;
-      if (richiesta && el24.bloccatoTesto) el24.bloccatoTesto.textContent = t("L’agente chiede di leggere {url}. La scelta vale per questa richiesta.", { url: richiesta.url });
+    if (el25.bloccato) {
+      el25.bloccato.hidden = !richiesta;
+      if (richiesta && el25.bloccatoTesto) el25.bloccatoTesto.textContent = t("L’agente chiede di leggere {url}. La scelta vale per questa richiesta.", { url: richiesta.url });
     }
-    if (el24.caricamento) el24.caricamento.hidden = !(s && s.tipo === "viva" && s.stato === "caricamento");
-    if (el24.vuoto) el24.vuoto.hidden = stato.schede.length > 0;
-    if (el24.articolo) el24.articolo.hidden = !s;
-    const testata = el24.titolo?.closest("header");
+    if (el25.caricamento) el25.caricamento.hidden = !(s && s.tipo === "viva" && s.stato === "caricamento");
+    if (el25.vuoto) el25.vuoto.hidden = stato.schede.length > 0;
+    if (el25.articolo) el25.articolo.hidden = !s;
+    const testata = el25.titolo?.closest("header");
     if (testata) testata.hidden = !s || s.tipo === "viva";
     const lettura = Boolean(s) && s.tipo !== "viva";
-    for (const b of el24.modi || []) {
+    for (const b of el25.modi || []) {
       b.hidden = !lettura;
       const suo = b.dataset.browserModo === stato.modo;
       b.setAttribute("aria-pressed", String(suo));
       b.classList.toggle("talos-button--secondary", suo);
       b.classList.toggle("talos-button--ghost", !suo);
     }
-    if (el24.testo) el24.testo.hidden = !lettura || stato.modo === "pagina";
+    if (el25.testo) el25.testo.hidden = !lettura || stato.modo === "pagina";
     if (lettura) {
-      if (el24.titolo) el24.titolo.textContent = titoloDaLettura(s);
-      if (el24.provenienza) el24.provenienza.textContent = formattaProvenienza(s);
-      if (el24.testo && stato.modo !== "pagina") scriviTestoAcquisito(s.testo || "");
+      if (el25.titolo) el25.titolo.textContent = titoloDaLettura(s);
+      if (el25.provenienza) el25.provenienza.textContent = formattaProvenienza(s);
+      if (el25.testo && stato.modo !== "pagina") scriviTestoAcquisito(s.testo || "");
     }
     mostraAvviso(s?.tipo === "viva" && s.stato === "bloccata" ? t("{motivo}. {invito}: usa «Rileggi».", { motivo: s.motivo || t("Il sito non consente di essere mostrato dentro TALOS"), invito: t(TESTI3.chiediAllAgente) }) : "");
     renderizzaCornice(s);
     const nota = s ? stato.note[s.url] : "";
-    if (el24.notaSalvata) {
-      el24.notaSalvata.hidden = !nota;
-      el24.notaSalvata.textContent = nota ? t("Nota: {nota}", { nota }) : "";
+    if (el25.notaSalvata) {
+      el25.notaSalvata.hidden = !nota;
+      el25.notaSalvata.textContent = nota ? t("Nota: {nota}", { nota }) : "";
     }
-    if (!s || el24.editorNota && !el24.editorNota.hidden && el24.editorNota.dataset.browserId !== s.id) {
-      if (el24.editorNota) el24.editorNota.hidden = true;
-      el24.nota?.setAttribute("aria-expanded", "false");
+    if (!s || el25.editorNota && !el25.editorNota.hidden && el25.editorNota.dataset.browserId !== s.id) {
+      if (el25.editorNota) el25.editorNota.hidden = true;
+      el25.nota?.setAttribute("aria-expanded", "false");
     }
-    if (el24.editorNota && s) el24.editorNota.dataset.browserId = s.id;
+    if (el25.editorNota && s) el25.editorNota.dataset.browserId = s.id;
     renderizzaCronologia();
-    const nav = el24.cronologia?.closest("nav");
+    const nav = el25.cronologia?.closest("nav");
     if (nav) nav.hidden = letture === 0;
-    if (el24.limiti) el24.limiti.textContent = t(vive > 0 ? TESTI3.limitiVive : TESTI3.limitiLetture);
+    if (el25.limiti) el25.limiti.textContent = t(vive > 0 ? TESTI3.limitiVive : TESTI3.limitiLetture);
     const annotabile = Boolean(s && s.tipo === "viva" && s.proxata && s.stato !== "bloccata");
-    if (el24.annotazioni) {
+    if (el25.annotazioni) {
       const lista = annotabile ? stato.annotazioni[s.id] || [] : [];
       if (!annotabile) {
-        el24.annotazioni.hidden = true;
+        el25.annotazioni.hidden = true;
       } else {
-        renderizzaAnnotazioni(el24.annotazioni, {
+        renderizzaAnnotazioni(el25.annotazioni, {
           annotazioni: lista,
           attivo: stato.annotaAttivo,
           onAttiva: (on) => azioni.annota?.(s, on),
@@ -7313,12 +7313,12 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
           },
           onInvia: () => azioni.inviaAnnotazioni?.(s)
         });
-        el24.annotazioni.hidden = false;
+        el25.annotazioni.hidden = false;
       }
     }
-    if (el24.annota) {
-      el24.annota.setAttribute("aria-pressed", String(annotabile && stato.annotaAttivo));
-      el24.annota.title = annotabile ? t("Segna gli elementi della pagina da cambiare: i commenti finiscono nel composer") : t("Prepara una bozza nella chat senza inviarla");
+    if (el25.annota) {
+      el25.annota.setAttribute("aria-pressed", String(annotabile && stato.annotaAttivo));
+      el25.annota.title = annotabile ? t("Segna gli elementi della pagina da cambiare: i commenti finiscono nel composer") : t("Prepara una bozza nella chat senza inviarla");
     }
     dialogaConOverlay({ tipo: "annota", attivo: annotabile && stato.annotaAttivo });
   }
@@ -7330,7 +7330,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       renderizza();
     },
     fuocoSullaScheda() {
-      el24.schede?.querySelector('[aria-selected="true"]')?.focus();
+      el25.schede?.querySelector('[aria-selected="true"]')?.focus();
     },
     get stato() {
       return stato;
@@ -8178,11 +8178,11 @@ function testoLatenza(ms) {
   if (!Number.isFinite(ms) || ms <= 0) return "";
   return ms >= 1e3 ? `primo token ${(ms / 1e3).toFixed(1).replace(".", ",")} s` : `primo token ${Math.round(ms)} ms`;
 }
-function scrivi(el24, testo3) {
-  if (!el24) return;
+function scrivi(el25, testo3) {
+  if (!el25) return;
   const t2 = testo3 || "";
-  if (el24.textContent !== t2) el24.textContent = t2;
-  el24.hidden = t2 === "";
+  if (el25.textContent !== t2) el25.textContent = t2;
+  el25.hidden = t2 === "";
 }
 function statoGiri(giri, tettoGiri) {
   if (!Number.isFinite(Number(giri))) return null;
@@ -8277,6 +8277,150 @@ var init_chat_foot = __esm({
       "Workspace write": "Scrittura nel workspace",
       "Full access": "Accesso completo"
     });
+  }
+});
+
+// src/components/progetti.js
+function progettoDiSessione(sessione) {
+  const task = String(sessione?.taskId || "");
+  if (!task.startsWith("libero:")) return null;
+  const id = task.slice("libero:".length).trim();
+  return id || null;
+}
+function quandoUltima(sessioni) {
+  let ultima = 0;
+  for (const s of sessioni) {
+    const t2 = new Date(s?.avviataAlle).getTime();
+    if (Number.isFinite(t2) && t2 > ultima) ultima = t2;
+  }
+  return ultima;
+}
+function progettiConSessioni(progetti, sessioni) {
+  const elenco2 = Array.isArray(progetti) ? progetti : [];
+  const tutte = Array.isArray(sessioni) ? sessioni : [];
+  const per = new Map(elenco2.map((p) => [String(p.id), []]));
+  for (const s of tutte) {
+    const id = progettoDiSessione(s);
+    if (id && per.has(id)) per.get(id).push(s);
+  }
+  return elenco2.map((p) => {
+    const sue = per.get(String(p.id)) || [];
+    let giri = 0;
+    let token = 0;
+    for (const s of sue) {
+      const u = usageDellaSessione(s);
+      if (Number.isFinite(u?.giri)) giri += u.giri;
+      const dentro = Number(u?.prompt_tokens) || 0;
+      const fuori = Number(u?.completion_tokens) || 0;
+      token += dentro + fuori;
+    }
+    return {
+      id: String(p.id),
+      nome: p.nome || String(p.id),
+      sessioni: [...sue].sort((a, b) => String(b.avviataAlle).localeCompare(String(a.avviataAlle))),
+      quante: sue.length,
+      ultimaAlle: quandoUltima(sue),
+      giri,
+      token
+    };
+  }).sort((a, b) => b.ultimaAlle - a.ultimaAlle || a.nome.localeCompare(b.nome));
+}
+function ultimeSessioni(progetto, quante = QUANTE_RECENTI) {
+  return (progetto?.sessioni || []).slice(0, Math.max(0, quante));
+}
+function sommarioProgetti(quanti) {
+  const n = Number(quanti) || 0;
+  if (n === 0) return "nessun progetto";
+  return n === 1 ? "1 progetto" : `${n} progetti`;
+}
+function frasiProgetto(progetto) {
+  if (!progetto) return "";
+  if (!progetto.quante) return "nessuna sessione ancora";
+  const pezzi = [progetto.quante === 1 ? "1 sessione" : `${progetto.quante} sessioni`];
+  if (progetto.giri > 0) pezzi.push(progetto.giri === 1 ? "1 giro" : `${progetto.giri} giri`);
+  if (progetto.token > 0) {
+    pezzi.push(progetto.token >= 1e3 ? `${(progetto.token / 1e3).toFixed(1).replace(".", ",")}k token` : `${progetto.token} token`);
+  }
+  return pezzi.join(" · ");
+}
+function montaProgetti(schermo, progetti, { onApriSessione = null, quanteRecenti = QUANTE_RECENTI } = {}) {
+  if (!schermo) return 0;
+  const d = schermo.ownerDocument || globalThis.document;
+  const lista = schermo.querySelector("#elencoProgetti");
+  const vuoto = schermo.querySelector("#progettiVuoti");
+  const stato = schermo.querySelector("[data-progetti-stato]");
+  const sommario = schermo.querySelector("[data-progetti-sommario]");
+  const elenco2 = Array.isArray(progetti) ? progetti : [];
+  if (stato) stato.textContent = sommario0(elenco2);
+  if (sommario) sommario.textContent = sommarioProgetti(elenco2.length);
+  if (!lista) return elenco2.length;
+  lista.replaceChildren();
+  for (const p of elenco2) {
+    const li = d.createElement("li");
+    li.className = "talos-progetto";
+    li.dataset.progetto = p.id;
+    const testa = d.createElement("div");
+    testa.className = "talos-progetto__testa";
+    testa.append(
+      el23(d, "span", "talos-progetto__nome", p.nome),
+      el23(d, "span", "talos-progetto__fatti", frasiProgetto(p))
+    );
+    li.append(testa);
+    const recenti = ultimeSessioni(p, quanteRecenti);
+    if (recenti.length) {
+      const ul = d.createElement("ul");
+      ul.className = "talos-progetto__sessioni";
+      for (const s of recenti) {
+        const riga = d.createElement("li");
+        const bottone3 = d.createElement("button");
+        bottone3.type = "button";
+        bottone3.className = "talos-progetto__sessione";
+        bottone3.dataset.apriSessione = s.sessionId || "";
+        bottone3.append(
+          el23(d, "span", "talos-progetto__sessione-nome", s.nome || s.taskId || "Sessione senza nome"),
+          el23(d, "span", "talos-progetto__sessione-quando", oraCorta(s.avviataAlle))
+        );
+        if (typeof onApriSessione === "function") bottone3.addEventListener("click", () => onApriSessione(s));
+        riga.append(bottone3);
+        ul.append(riga);
+      }
+      li.append(ul);
+      if (p.quante > recenti.length) {
+        li.append(el23(d, "p", "talos-progetto__altre", `e altre ${p.quante - recenti.length} più vecchie`));
+      }
+    }
+    lista.append(li);
+  }
+  if (vuoto) vuoto.hidden = elenco2.length > 0;
+  return elenco2.length;
+}
+function sommario0(elenco2) {
+  const conSessioni = elenco2.filter((p) => p.quante > 0).length;
+  if (!elenco2.length) return sommarioProgetti(0);
+  if (conSessioni === elenco2.length) return sommarioProgetti(elenco2.length);
+  return `${sommarioProgetti(elenco2.length)} · ${conSessioni} con sessioni`;
+}
+function el23(d, tag, classe, testo3) {
+  const nodo4 = d.createElement(tag);
+  if (classe) nodo4.className = classe;
+  if (testo3 !== void 0 && testo3 !== null) nodo4.textContent = String(testo3);
+  return nodo4;
+}
+function oraCorta(iso, adesso = /* @__PURE__ */ new Date()) {
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return "";
+  const giorno = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const differenza = Math.round((giorno(adesso) - giorno(data)) / 864e5);
+  if (differenza <= 0) return `${String(data.getHours()).padStart(2, "0")}:${String(data.getMinutes()).padStart(2, "0")}`;
+  if (differenza === 1) return "ieri";
+  if (differenza < 7) return `${differenza} g`;
+  return `${String(data.getDate()).padStart(2, "0")}/${String(data.getMonth() + 1).padStart(2, "0")}`;
+}
+var QUANTE_RECENTI;
+var init_progetti = __esm({
+  "src/components/progetti.js"() {
+    init_consumo_sessione();
+    QUANTE_RECENTI = 3;
   }
 });
 
@@ -8781,7 +8925,7 @@ var init_allegati = __esm({
 });
 
 // src/components/stato-vuoto.js
-function el23(documentObj, tag, className, testo3) {
+function el24(documentObj, tag, className, testo3) {
   const nodo4 = documentObj.createElement(tag);
   if (className) nodo4.className = className;
   if (testo3 !== void 0 && testo3 !== null) nodo4.textContent = String(testo3);
@@ -8813,42 +8957,42 @@ function suggerimentiDallaCartella({ voci = [], packageJson = null, totaleTest =
 }
 function creaStatoVuoto(dati = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const colonna = el23(documentObj, "div", "talos-conversation__column talos-empty");
-  const marchio = el23(documentObj, "span", "talos-brand__mark talos-empty__mark");
+  const colonna = el24(documentObj, "div", "talos-conversation__column talos-empty");
+  const marchio = el24(documentObj, "span", "talos-brand__mark talos-empty__mark");
   marchio.setAttribute("aria-hidden", "true");
   marchio.append(simbolo2(documentObj, "glyph", "glifo"));
-  const titolo2 = el23(documentObj, "h2", "talos-empty__title");
-  titolo2.append(documentObj.createTextNode("Cosa costruiamo in "), el23(documentObj, "span", "talos-empty__project", dati.progetto || "questa cartella"), documentObj.createTextNode("?"));
-  const lead = el23(documentObj, "p", "talos-empty__lead", dati.lead || "TALOS legge, scrive ed esegue nella cartella che gli apri. Ogni azione lascia una ricevuta firmata, e niente esce da questa macchina se non lo chiedi tu.");
+  const titolo2 = el24(documentObj, "h2", "talos-empty__title");
+  titolo2.append(documentObj.createTextNode("Cosa costruiamo in "), el24(documentObj, "span", "talos-empty__project", dati.progetto || "questa cartella"), documentObj.createTextNode("?"));
+  const lead = el24(documentObj, "p", "talos-empty__lead", dati.lead || "TALOS legge, scrive ed esegue nella cartella che gli apri. Ogni azione lascia una ricevuta firmata, e niente esce da questa macchina se non lo chiedi tu.");
   colonna.append(marchio, titolo2, lead);
   const suggerimenti = Array.isArray(dati.suggerimenti) ? dati.suggerimenti : [];
   if (suggerimenti.length > 0) {
-    const lista = el23(documentObj, "div", "talos-card talos-list");
+    const lista = el24(documentObj, "div", "talos-card talos-list");
     lista.setAttribute("data-c", "SuggestionList");
     for (const s of suggerimenti) {
-      const riga = el23(documentObj, "button", "talos-list-row");
+      const riga = el24(documentObj, "button", "talos-list-row");
       riga.type = "button";
       riga.setAttribute("data-c", "ListRow");
-      const icona7 = el23(documentObj, "span", "talos-list-row__icon");
+      const icona7 = el24(documentObj, "span", "talos-list-row__icon");
       icona7.append(simbolo2(documentObj, "i", s.icona || "i-bolt"));
-      const testo3 = el23(documentObj, "span", "talos-list-row__text");
-      testo3.append(el23(documentObj, "span", "talos-list-row__title", s.titolo), el23(documentObj, "span", "talos-list-row__sub", s.sub || ""));
-      riga.append(icona7, testo3, el23(documentObj, "span", "talos-kbd", "↵"));
+      const testo3 = el24(documentObj, "span", "talos-list-row__text");
+      testo3.append(el24(documentObj, "span", "talos-list-row__title", s.titolo), el24(documentObj, "span", "talos-list-row__sub", s.sub || ""));
+      riga.append(icona7, testo3, el24(documentObj, "span", "talos-kbd", "↵"));
       if (typeof opzioni.onSuggerimento === "function") riga.addEventListener("click", () => opzioni.onSuggerimento(s));
       lista.append(riga);
     }
     colonna.append(lista);
   }
-  const piede = el23(documentObj, "div", "talos-cluster talos-empty__foot");
+  const piede = el24(documentObj, "div", "talos-cluster talos-empty__foot");
   if (dati.ultimaSessione) {
-    const riapri = el23(documentObj, "button", "talos-button talos-button--secondary talos-button--sm");
+    const riapri = el24(documentObj, "button", "talos-button talos-button--secondary talos-button--sm");
     riapri.type = "button";
     riapri.append(simbolo2(documentObj, "i i--sm", "i-clock"), documentObj.createTextNode("Riapri l'ultima sessione"));
     riapri.title = dati.ultimaSessione.nome || "";
     if (typeof opzioni.onRiapri === "function") riapri.addEventListener("click", opzioni.onRiapri);
     piede.append(riapri);
   }
-  piede.append(el23(documentObj, "span", "talos-muted talos-empty__hint", dati.hint || (suggerimenti.length > 0 ? "Gli esempi nascono da cosa c'è nella cartella." : "Scrivi qui sotto cosa deve fare TALOS per iniziare.")));
+  piede.append(el24(documentObj, "span", "talos-muted talos-empty__hint", dati.hint || (suggerimenti.length > 0 ? "Gli esempi nascono da cosa c'è nella cartella." : "Scrivi qui sotto cosa deve fare TALOS per iniziare.")));
   colonna.append(piede);
   return colonna;
 }
@@ -8987,6 +9131,7 @@ var init_app = __esm({
     init_cronologia();
     init_scorciatoie();
     init_chat_foot();
+    init_progetti();
     init_tooltip();
     init_permessi();
     init_errori();
@@ -9857,7 +10002,7 @@ var init_app = __esm({
         views.forEach((pane) => {
           pane.hidden = pane !== target;
         });
-        const SCHERMO_PER_VISTA = { chat: "chat", vuota: "vuota", terminal: "terminale", diff: "review", capability: "capability", dashboard: "board", memoria: "memoria", attivita: "attivita", note: "note", settings: "impostazioni", doctor: "doctor", libreria: "libreria", ricerca: "ricerca", officina: "officina", automations: "automazioni", browser: "browser" };
+        const SCHERMO_PER_VISTA = { chat: "chat", vuota: "vuota", terminal: "terminale", diff: "review", capability: "capability", dashboard: "board", memoria: "memoria", attivita: "attivita", note: "note", progetti: "progetti", settings: "impostazioni", doctor: "doctor", libreria: "libreria", ricerca: "ricerca", officina: "officina", automations: "automazioni", browser: "browser" };
         const schermo = SCHERMO_PER_VISTA[view] || view;
         document.documentElement.setAttribute("data-vista", ["chat", "vuota", "terminale", "review", "browser"].includes(schermo) ? "sessione" : "pagina");
         document.documentElement.setAttribute("data-schermo", schermo);
@@ -9875,11 +10020,33 @@ var init_app = __esm({
         if (view === "attivita") caricaPannelloAttivita({ pagina: true });
         if (view === "memoria") caricaPannelloMemoria({ pagina: true });
         if (view === "note") void caricaPaginaNote();
+        if (view === "progetti") void caricaPaginaProgetti();
         if (view === "automations") renderAutomationsReali();
         if (view === "browser") renderizzaBrowser();
         if (view === "terminal") apriVistaTerminaleReale();
       }
       let noteCaricate = [];
+      async function caricaPaginaProgetti() {
+        const schermo = $2("#schermoProgetti");
+        if (!schermo) return;
+        const stato = $2("[data-progetti-stato]", schermo);
+        if (stato) stato.textContent = "Leggo i progetti…";
+        try {
+          const [elenco2, sessioni] = await Promise.all([
+            apiGet("/api/v1/projects"),
+            apiGet("/api/v1/sessions").catch(() => ({ items: [] }))
+            // senza le sessioni i progetti si vedono lo stesso
+          ]);
+          montaProgetti(schermo, progettiConSessioni(elenco2?.items || [], sessioni?.items || []), {
+            onApriSessione: (s) => {
+              if (s?.sessionId) passaASessione(s.sessionId, s.sessionId, s.nome);
+            }
+          });
+        } catch (errore) {
+          montaProgetti(schermo, []);
+          if (stato) stato.textContent = `I progetti non si leggono: ${messaggioErroreUtente(errore, "riprova fra un momento")}`;
+        }
+      }
       async function caricaPaginaNote() {
         const schermo = $2("#schermoNote");
         if (!schermo) return;
@@ -10141,8 +10308,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return true;
       }
       const mostraToast = creaPilaToast(toastRegion, {
-        animaUscita: (el24, fine) => animateExit(el24, {}, fine),
-        entra: (el24) => markMotionEnter(el24),
+        animaUscita: (el25, fine) => animateExit(el25, {}, fine),
+        entra: (el25) => markMotionEnter(el25),
         fuocoDiRitorno: () => $2("#campanella") || $2("#composerInput")
       });
       function toast(title, message = "", opzioni = {}) {
@@ -11944,15 +12111,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       let statoFonteRicerca = null;
       let ricercaWebInCorso = false;
       function messaggioFonteRicerca(mount, testo3, errore = false) {
-        let el24 = mount.querySelector(errore ? "[data-search-error]" : "[data-search-feedback]");
-        if (!el24) {
-          el24 = textElement("p", "talos-muted", "");
-          el24.dataset[errore ? "searchError" : "searchFeedback"] = "";
-          el24.setAttribute("role", errore ? "alert" : "status");
-          mount.append(el24);
+        let el25 = mount.querySelector(errore ? "[data-search-error]" : "[data-search-feedback]");
+        if (!el25) {
+          el25 = textElement("p", "talos-muted", "");
+          el25.dataset[errore ? "searchError" : "searchFeedback"] = "";
+          el25.setAttribute("role", errore ? "alert" : "status");
+          mount.append(el25);
         }
-        el24.textContent = testo3;
-        el24.hidden = !testo3;
+        el25.textContent = testo3;
+        el25.hidden = !testo3;
       }
       async function caricaPannelloRicercaWeb() {
         const mount = $2("#searchSourceMount");
@@ -11981,9 +12148,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         ricercaWebInCorso = true;
         const origine = document.activeElement;
         const focus = mount.contains(origine) ? { source: origine.dataset.searchSource, action: origine.dataset.searchAction, id: origine.id } : null;
-        const disabilitati = [...mount.querySelectorAll("button,input")].map((el24) => [el24, el24.disabled]);
+        const disabilitati = [...mount.querySelectorAll("button,input")].map((el25) => [el25, el25.disabled]);
         mount.setAttribute("aria-busy", "true");
-        for (const [el24] of disabilitati) el24.disabled = true;
+        for (const [el25] of disabilitati) el25.disabled = true;
         messaggioFonteRicerca(mount, "", true);
         messaggioFonteRicerca(mount, prova ? "Ricerca in corso…" : "Aggiornamento in corso…");
         const precedente = mount.querySelector("[data-search-result]");
@@ -12016,7 +12183,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             riprova.addEventListener("click", caricaPannelloRicercaWeb);
             mount.append(riprova);
           }
-          for (const [el24, prima] of disabilitati) if (el24.isConnected) el24.disabled = prima;
+          for (const [el25, prima] of disabilitati) if (el25.isConnected) el25.disabled = prima;
           if (focus && (document.activeElement === document.body || document.activeElement === origine) && origine.isConnected && mount.getClientRects().length) {
             origine.focus({ preventScroll: true });
             mount.querySelector("[data-search-error]")?.scrollIntoView({ block: "nearest", behavior: "instant" });
@@ -13430,10 +13597,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const labelsRow = document.createElement("div");
         labelsRow.className = "effort-picker-labels";
         const labelEls = LIVELLI_RAGIONAMENTO.map((l, i) => {
-          const el24 = textElement("span", "effort-picker-tick", l.etichetta);
-          el24.style.left = `${i / (LIVELLI_RAGIONAMENTO.length - 1) * 100}%`;
-          labelsRow.appendChild(el24);
-          return el24;
+          const el25 = textElement("span", "effort-picker-tick", l.etichetta);
+          el25.style.left = `${i / (LIVELLI_RAGIONAMENTO.length - 1) * 100}%`;
+          labelsRow.appendChild(el25);
+          return el25;
         });
         wrap.append(head, range, labelsRow);
         let indice2 = LIVELLI_RAGIONAMENTO.findIndex((l) => l.valore === valoreIniziale);
@@ -13442,7 +13609,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         function aggiorna() {
           range.value = String(indice2);
           selected.textContent = toccato ? LIVELLI_RAGIONAMENTO[indice2].etichetta : "Automatico";
-          labelEls.forEach((el24, i) => el24.classList.toggle("effort-picker-tick-selected", i === indice2));
+          labelEls.forEach((el25, i) => el25.classList.toggle("effort-picker-tick-selected", i === indice2));
         }
         aggiorna();
         range.addEventListener("input", () => {
@@ -16470,8 +16637,8 @@ ${f}`;
         const nuovi = voci.filter((f) => f.nuovo).length;
         const modificati = voci.length - nuovi;
         const impostaTesto = (id, testo3) => {
-          const el24 = $2(`#${id}`);
-          if (el24) el24.textContent = testo3;
+          const el25 = $2(`#${id}`);
+          if (el25) el25.textContent = testo3;
         };
         impostaTesto("reviewSummaryNuovi", String(nuovi));
         impostaTesto("reviewSummaryModificati", String(modificati));
@@ -17719,10 +17886,10 @@ ${testo3}` : testo3;
       }
       async function aggiornaSchedaCapability() {
         const scrivi2 = (chiave, testo3, titolo2 = "") => {
-          const el24 = $2(`[data-capability-row="${chiave}"]`);
-          if (!el24) return;
-          el24.textContent = testo3;
-          el24.title = titolo2;
+          const el25 = $2(`[data-capability-row="${chiave}"]`);
+          if (!el25) return;
+          el25.textContent = testo3;
+          el25.title = titolo2;
         };
         aggiornaRigaBrowserCapability();
         const sessione = state.realSession.id;
@@ -17757,16 +17924,16 @@ ${testo3}` : testo3;
         }
       }
       function aggiornaRigaBrowserCapability() {
-        const el24 = $2('[data-capability-row="browser"]');
-        if (!el24) return;
+        const el25 = $2('[data-capability-row="browser"]');
+        if (!el25) return;
         const pagine = state.realSession.browserPagine?.length ?? 0;
         if (!state.realSession.id) {
-          el24.textContent = "Non osservato";
-          el24.title = "Nessuna sessione aperta: le pagine lette appartengono a una sessione.";
+          el25.textContent = "Non osservato";
+          el25.title = "Nessuna sessione aperta: le pagine lette appartengono a una sessione.";
           return;
         }
-        el24.textContent = pagine === 0 ? "nessuna pagina letta" : `${pagine} pagin${pagine === 1 ? "a letta" : "e lette"}`;
-        el24.title = "TALOS legge il testo delle pagine con l'attrezzo naviga; compaiono nella vista Browser.";
+        el25.textContent = pagine === 0 ? "nessuna pagina letta" : `${pagine} pagin${pagine === 1 ? "a letta" : "e lette"}`;
+        el25.title = "TALOS legge il testo delle pagine con l'attrezzo naviga; compaiono nella vista Browser.";
       }
       function handleRealEvent(evento, generation) {
         if (generation !== state.realSession.generation) return;
@@ -18761,8 +18928,8 @@ ${testo3}` : testo3;
           button2.classList.add("real-session-item");
           pezzi.push(button2);
         }
-        const righe = pezzi.filter((el24) => el24.classList.contains("talos-session-item"));
-        const fermata = righe.find((el24) => el24.getAttribute("aria-current") === "true") || righe[0];
+        const righe = pezzi.filter((el25) => el25.classList.contains("talos-session-item"));
+        const fermata = righe.find((el25) => el25.getAttribute("aria-current") === "true") || righe[0];
         for (const riga of righe) riga.tabIndex = riga === fermata ? 0 : -1;
         if (!contenitore.dataset.tastiera) {
           contenitore.dataset.tastiera = "si";
@@ -21458,7 +21625,7 @@ ${blocchi.join("\n\n")}` : testa;
       setQueueMode(false);
       setRunState(true);
       syncRunComposerState();
-      const VISTA_PER_VAIA2 = { chat: "chat", vuota: "vuota", terminale: "terminal", review: "diff", capability: "capability", board: "dashboard", memoria: "memoria", attivita: "attivita", note: "note", impostazioni: "settings", doctor: "doctor", libreria: "libreria", ricerca: "ricerca", officina: "officina", automazioni: "automations", browser: "browser" };
+      const VISTA_PER_VAIA2 = { chat: "chat", vuota: "vuota", terminale: "terminal", review: "diff", capability: "capability", board: "dashboard", memoria: "memoria", attivita: "attivita", note: "note", progetti: "progetti", impostazioni: "settings", doctor: "doctor", libreria: "libreria", ricerca: "ricerca", officina: "officina", automazioni: "automations", browser: "browser" };
       ROOT().addEventListener("click", (event) => {
         const vaia = event.target.closest?.("[data-vaia]");
         if (vaia && VISTA_PER_VAIA2[vaia.dataset.vaia]) {
@@ -21947,6 +22114,8 @@ var VISTA_PER_SCHERMATA = Object.freeze({
   attivita: "schermoAttivita",
   note: "schermoNote",
   // 06/9 C24: senza questa riga #schermoNote non riceveva `data-view` e setView('note') usciva subito
+  progetti: "schermoProgetti",
+  // 06/9: la stessa riga che era mancata alle Note — trovato dal cancello, non ripetuto
   settings: "schermoImpostazioni",
   doctor: "schermoDoctor",
   libreria: "schermoLibreria",
@@ -21966,6 +22135,7 @@ var VISTA_PER_VAIA = Object.freeze({
   memoria: "memoria",
   attivita: "attivita",
   note: "note",
+  progetti: "progetti",
   impostazioni: "settings",
   doctor: "doctor",
   libreria: "libreria",
@@ -21974,15 +22144,15 @@ var VISTA_PER_VAIA = Object.freeze({
   automazioni: "automations"
 });
 function uno(root, selettore) {
-  const el24 = root.querySelector(selettore);
-  if (!el24) throw new Error(`ponte: manca nel mockup «${selettore}»`);
-  return el24;
+  const el25 = root.querySelector(selettore);
+  if (!el25) throw new Error(`ponte: manca nel mockup «${selettore}»`);
+  return el25;
 }
-function battezza(el24, { id, classi = [], dati = {} }) {
-  if (id) el24.id = id;
-  for (const c of classi) el24.classList.add(c);
-  for (const [k, v] of Object.entries(dati)) el24.setAttribute(`data-${k}`, v);
-  return el24;
+function battezza(el25, { id, classi = [], dati = {} }) {
+  if (id) el25.id = id;
+  for (const c of classi) el25.classList.add(c);
+  for (const [k, v] of Object.entries(dati)) el25.setAttribute(`data-${k}`, v);
+  return el25;
 }
 function montaPonteLegacy(documentObj = document) {
   const radice = documentObj.querySelector(".talos-shell");

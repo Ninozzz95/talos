@@ -2263,6 +2263,85 @@ body.reduce-motion *::after {
   color: var(--talos-muted);
   font-size: 11.5px;
 }
+.talos-progetto-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.talos-progetto {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+.talos-progetto + .talos-progetto {
+  border-top-color: var(--talos-border-subtle);
+}
+.talos-progetto:hover {
+  background: var(--talos-card-subtle);
+  border-color: var(--talos-border-subtle);
+}
+.talos-progetto__testa {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.talos-progetto__nome {
+  font-weight: 600;
+  color: var(--talos-text);
+}
+.talos-progetto__fatti {
+  margin-left: auto;
+  color: var(--talos-muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.talos-progetto__sessioni {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 8px 0 0;
+  padding: 0 0 0 10px;
+  list-style: none;
+  border-left: 1px solid var(--talos-border-subtle);
+}
+.talos-progetto__sessione {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.talos-progetto__sessione:hover {
+  background: var(--talos-card);
+}
+.talos-progetto__sessione-nome {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.talos-progetto__sessione-quando {
+  margin-left: auto;
+  color: var(--talos-muted);
+  font-family: var(--talos-font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.talos-progetto__altre {
+  margin: 6px 0 0 10px;
+  color: var(--talos-muted);
+  font-size: 11.5px;
+}
 .talos-note-lista {
   display: flex;
   flex-direction: column;

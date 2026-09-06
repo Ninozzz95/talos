@@ -568,6 +568,22 @@ Una segnalazione di stallo non termina il processo.</pre>
          La decisione C24 vuole Note e Attività SEPARATI: questa è la casa delle note.
          Forma presa da Granola (letta 06/09/2026): la nota resta un documento di chi la legge —
          l'agente la scrive, tu la cerchi, la copi e te la porti via. -->
+    <!-- ---------- PROGETTI ----------
+         6/9 - trovata dal CANCELLO, non da un paio d'occhi: la voce «Progetti» aveva un contatore
+         che diceva 6 e NESSUN data-vaia. Il clic non portava da nessuna parte, come le «Note».
+         La rotta /api/v1/projects esisteva gia e rispondeva coi dati veri.
+         Forma presa dal CODICE di Hermes (apps/desktop/.../sidebar/projects, letto 06/09/2026):
+         ordine per RECENCY e non alfabetico, tre sessioni recenti in anteprima sotto ognuno.
+         Il nostro +1: anche cosa e costato, giri e token per progetto. -->
+    <section class="talos-screen" id="schermoProgetti" data-c="ProjectsScreen" hidden>
+      <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Progetti</h1></div><span class="talos-topbar__path" data-progetti-sommario>nessun progetto</span></div>
+      <div class="talos-page" data-c="Page">
+        <div class="talos-page__head"><span class="talos-eyebrow">Progetti</span><h2>Le cartelle su cui TALOS lavora</h2><p>Ogni progetto raccoglie le sue sessioni. In cima quello su cui hai lavorato per ultimo, non il primo in ordine alfabetico.</p><p class="talos-page__note" data-progetti-stato role="status">nessun progetto</p></div>
+        <div class="talos-card"><ul class="talos-progetto-lista" id="elencoProgetti" role="list"></ul></div>
+        <div class="talos-empty" id="progettiVuoti" data-c="EmptyState" hidden><svg class="i" aria-hidden="true"><use href="#i-grid"/></svg><h3>Nessun progetto</h3><p class="talos-muted">Un progetto nasce quando apri una sessione su una cartella. Compariranno qui.</p></div>
+      </div>
+    </section>
+
     <section class="talos-screen" id="schermoNote" data-c="NotesScreen" hidden>
       <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Note</h1></div><span class="talos-topbar__path" data-note-sommario>2 note</span></div>
       <div class="talos-page" data-c="Page">
@@ -854,7 +870,7 @@ export function registraSessione(sessione) {
       <div class="talos-picker" data-c="FolderPicker">
         <nav class="talos-card talos-settings__nav talos-picker__nav" aria-label="Da dove scegliere">
           <button class="talos-nav-item" aria-current="page"><svg class="i"><use href="#i-clock"/></svg><span class="talos-nav-item__label">Recenti</span></button>
-          <button class="talos-nav-item"><svg class="i"><use href="#i-grid"/></svg><span class="talos-nav-item__label">Progetti</span><span class="talos-nav-item__count">6</span></button>
+          <button class="talos-nav-item" data-c="NavItem" data-vaia="progetti" data-conteggio="progetti"><svg class="i"><use href="#i-grid"/></svg><span class="talos-nav-item__label">Progetti</span><span class="talos-nav-item__count">6</span></button>
           <button class="talos-nav-item"><svg class="i"><use href="#i-folder"/></svg><span class="talos-nav-item__label">Desktop</span></button>
           <button class="talos-nav-item"><svg class="i"><use href="#i-folder"/></svg><span class="talos-nav-item__label">Documenti</span></button>
           <button class="talos-nav-item"><svg class="i"><use href="#i-search"/></svg><span class="talos-nav-item__label">Sfoglia…</span></button>
