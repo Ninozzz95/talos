@@ -28,6 +28,7 @@ import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../compo
 import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
 import { LINGUE as LINGUE_MENU, risolviLingua, applicaLingua, etichettaLinguaRisolta } from '../components/lingua.js'; // 06/9 B8: la lingua dei menu
+import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSIMO_SCHEDE as MASSIMO_SCHEDE_BROWSER } from '../components/browser.js'; // 06/9 K-I: il Browser a schede
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
@@ -272,6 +273,11 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       /** ⭐⭐⭐ 02/09 — cronologia REALE delle pagine lette da `naviga` in questa sessione: [{ url, testo, quando }] e l'indice mostrato (indietro/avanti). */
       browserPagine: [],
       browserIndice: -1,
+      /** 06/9 K-I — le pagine aperte DALLA PERSONA dentro TALOS (cornice viva), le letture chiuse come schede, la scheda attiva, la richiesta di lettura in attesa di una decisione. */
+      browserVive: [],
+      browserChiuse: new Set(),
+      browserAttiva: null,
+      browserRichiesta: null,
       /** ⭐⭐⭐ 27/8, R1 — messageId(ragionamento) -> {summaryText, detail, grezzo}, la bolla collassabile che ospita il ragionamento in streaming (riusa la stessa forma di appendToolNote, non un componente nuovo). Il testo grezzo si accumula qui per lo stesso motivo di testoGrezzoMessaggi: renderizzaMarkdownSemplice lavora sul totale, non sul delta. */
       ragionamentoBubble: new Map(),
       /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
@@ -1198,6 +1204,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (view === 'attivita') caricaPannelloAttivita({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Attività
     if (view === 'memoria') caricaPannelloMemoria({ pagina: true }); // 05/9 Fase 2: attiva la sola pagina Memoria
     if (view === 'automations') renderAutomationsReali();
+    if (view === 'browser') renderizzaBrowser(); // 06/9 K-I
     if (view === 'terminal') apriVistaTerminaleReale(); // ⭐ 28/8 — Terminale REALE: montaggio/connessione PIGRI, solo alla prima apertura del tab (LEDGER-TERMINALE-REALE.md)
   }
 
@@ -7351,8 +7358,10 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const article = scheda.scheda;
     article.classList.add('real-approval-card');
     article.dataset.requestId = requestId;
+    if (azione?.tipo === 'naviga') { state.realSession.browserRichiesta = { requestId, url: azione?.url || bersaglio || '' }; renderizzaBrowser(); } // 06/9 K-I
     const negaBtn = scheda.pulsanti.nega;
     const approvaBtn = scheda.pulsanti.unaVolta;
+    negaBtn.dataset.nega = ''; approvaBtn.dataset.approvaUnaVolta = ''; // 06/9 K-I: il Browser risponde alla stessa richiesta con gli stessi pulsanti
     const sessioneBtn = scheda.pulsanti.sessione;
     let rispostaDataDaQuestaScheda = false;
     const rispondi = async (approvato, perSessione = false) => {
@@ -7360,6 +7369,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       approvaBtn.disabled = true;
       sessioneBtn.disabled = true;
       rispostaDataDaQuestaScheda = true;
+      if (state.realSession.browserRichiesta?.requestId === requestId) { state.realSession.browserRichiesta = null; renderizzaBrowser(); } // 06/9 K-I
       if (approvato && perSessione && azione?.tipo) {
         try { await sincronizzaImpostazioniSessione({ permessiPerAttrezzo: { ...(state.permessiPerAttrezzo || {}), [azione.tipo]: 'sempre' } }); } catch { /* il permesso resta «chiedi»: la risposta alla richiesta parte comunque */ }
       }
@@ -7398,9 +7408,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function resettaSuperficiRealiDedicate() {
     scollegaTerminaleReale();
     if (state.view === 'terminal') apriVistaTerminaleReale();
-    const browserShell = $('[data-view="browser"] .browser-shell');
-    if (browserShell) {
-      mostraPaginaBrowser(state.realSession.browserIndice); // 02/09 — stessa funzione della cronologia: con browserPagine vuoto rende lo stato vuoto onesto
+    renderizzaBrowser(); // 06/9 K-I — la schermata del mockup, riempita: con browserPagine vuoto rende lo stato vuoto onesto
+    if (false) {
     }
     /*
      * ⛔⛔⛔ 30/8, owner dal vivo: "nella sidebar di destra ci sono ancora
@@ -7868,44 +7877,88 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     mostraPaginaBrowser(pagine.length - 1);
   }
 
-  /** ⭐⭐⭐ 02/09 — mostra la pagina letta all'indice dato e allinea i controlli (indietro/avanti/apri/annota/copia). Senza pagine: stato vuoto onesto. */
-  function mostraPaginaBrowser(indice) {
-    const shell = $('[data-view="browser"] .browser-shell');
-    if (!shell) return;
-    const pagine = state.realSession.browserPagine;
-    const pagina = pagine[indice] || null;
-    state.realSession.browserIndice = pagina ? indice : -1;
-    if (pagina) shell.dataset.reale = '1'; else delete shell.dataset.reale;
-    const barraUrl = $('[data-view="browser"] .browser-url');
-    if (barraUrl) {
-      barraUrl.replaceChildren();
-      const pulse = document.createElement('span');
-      pulse.className = 'status-pulse';
-      barraUrl.append(pulse, document.createTextNode(pagina ? pagina.url : '—'));
-      barraUrl.title = pagina ? `Letta alle ${formattaOraSessione(pagina.quando)} · ${pagina.testo.length} caratteri` : '';
-    }
-    const anteprima = $('[data-view="browser"] .device-preview');
-    if (anteprima) {
-      anteprima.replaceChildren();
-      if (pagina) {
-        const blocco = document.createElement('pre');
-        blocco.className = 'browser-real-output';
-        blocco.textContent = pagina.testo;
-        anteprima.append(blocco);
-      } else {
-        anteprima.append(textElement('p', 'board-empty', 'Nessuna pagina letta in questa sessione. Quando TALOS legge una pagina web, il testo ricevuto compare qui.'));
-      }
-    }
-    const contatore = pagine.length > 1 && pagina ? ` (${indice + 1} di ${pagine.length})` : '';
-    const abilita = (azione, ok) => { const b = $(`[data-browser-action="${azione}"]`); if (b) b.disabled = !ok; };
-    abilita('back', Boolean(pagina) && indice > 0);
-    abilita('forward', Boolean(pagina) && indice < pagine.length - 1);
-    abilita('open', Boolean(pagina) && /^https?:\/\//i.test(pagina.url));
-    abilita('annotate', Boolean(pagina));
-    abilita('copy', Boolean(pagina));
-    const back = $('[data-browser-action="back"]');
-    if (back) back.setAttribute('aria-label', `Pagina letta precedente${contatore}`);
+  /*
+   * ⭐⭐⭐ 06/9 K-I — il Browser A SCHEDE (`components/browser.js`). Le letture dell'agente
+   * (`browserPagine`, dall'attrezzo `naviga`) e le pagine aperte dalla persona (`browserVive`)
+   * sono schede; la cornice viva si apre solo se il server dice che il sito lo consente
+   * (`GET /api/v1/browser/incorniciabile`, che legge X-Frame-Options e frame-ancestors).
+   * Le note locali restano in questo browser, per sessione e indirizzo.
+   */
+  const CHIAVE_NOTE_BROWSER = 'talos-harness-browser-note-v1';
+  let browserUi = null;
+  function noteBrowser() { try { const tutte = JSON.parse(localStorage.getItem(CHIAVE_NOTE_BROWSER) || '{}') || {}; return tutte[state.realSession.id || '-'] || {}; } catch { return {}; } }
+  function salvaNotaBrowser(url, testo) {
+    let tutte = {}; try { tutte = JSON.parse(localStorage.getItem(CHIAVE_NOTE_BROWSER) || '{}') || {}; } catch { tutte = {}; }
+    const chiave = state.realSession.id || '-';
+    tutte[chiave] = { ...(tutte[chiave] || {}) };
+    if (testo) tutte[chiave][url] = testo; else delete tutte[chiave][url];
+    try { localStorage.setItem(CHIAVE_NOTE_BROWSER, JSON.stringify(tutte)); } catch { /* quota o finestra privata: la nota vive solo in memoria */ }
+  }
+  function schedeBrowser() {
+    const rs = state.realSession;
+    const letture = rs.browserPagine.map((p, i) => ({ ...p, id: `lettura-${i}`, tipo: 'lettura', origine: 'agente' })).filter((p) => !rs.browserChiuse.has(p.id));
+    return [...letture, ...rs.browserVive];
+  }
+  function uiBrowser() {
+    if (browserUi) return browserUi;
+    const schermo = $('#schermoBrowser'); if (!schermo) return null;
+    browserUi = creaBrowser(schermo, { azioni: {
+      seleziona: (id) => { state.realSession.browserAttiva = id; renderizzaBrowser(); },
+      chiudi: (id) => chiudiSchedaBrowser(id),
+      apri: (url) => { void apriPaginaVivaBrowser(url); },
+      caricata: (id) => { const v = state.realSession.browserVive.find((x) => x.id === id); if (v && v.stato === 'caricamento') { v.stato = 'pronta'; renderizzaBrowser(); } },
+      rileggi: (s) => { if (s.tipo === 'viva') { void apriPaginaVivaBrowser(s.url, s.id); } else preparaCommentoNelComposer(`Rileggi la pagina ${s.url} e dimmi cosa è cambiato.`); },
+      annota: (s) => preparaCommentoNelComposer(`Riguardo alla pagina ${s.url}: `),
+      copia: (s) => { if (s.testo) copyText(s.testo, 'Testo della pagina copiato'); },
+      apriFuori: (s) => { if (/^https?:\/\//i.test(s.url)) window.open(s.url, '_blank', 'noopener'); },
+      salvaNota: (s, testo) => { salvaNotaBrowser(s.url, testo); renderizzaBrowser(); toast(testo ? 'Nota conservata' : 'Nota tolta', 'Resta in questo browser, per questa sessione.'); },
+      decidi: (requestId, si) => { const b = $(`.real-approval-card[data-request-id="${CSS.escape(requestId)}"] ${si ? '[data-approva-una-volta]' : '[data-nega]'}`); if (b) b.click(); },
+    } });
+    return browserUi;
+  }
+  function renderizzaBrowser() {
+    const ui = uiBrowser(); if (!ui) return;
+    const rs = state.realSession;
+    const schede = schedeBrowser();
+    if (!schede.some((x) => x.id === rs.browserAttiva)) rs.browserAttiva = schede.length ? schede[schede.length - 1].id : null;
+    const m = /^lettura-(\d+)$/.exec(rs.browserAttiva || '');
+    rs.browserIndice = m ? Number(m[1]) : -1;
+    ui.aggiorna({ schede, attiva: rs.browserAttiva, note: noteBrowser(), richiesta: rs.browserRichiesta });
     aggiornaRigaBrowserCapability(); // O-01 — la scheda Capability conta le pagine vere, non un «Non osservato» fisso
+  }
+  /** Compatibilità coi chiamanti di prima (appendBrowserEntry, il reset di sessione): mostra la lettura all'indice dato. */
+  function mostraPaginaBrowser(indice) {
+    const rs = state.realSession;
+    rs.browserAttiva = rs.browserPagine[indice] ? `lettura-${indice}` : rs.browserAttiva;
+    renderizzaBrowser();
+  }
+  function chiudiSchedaBrowser(id) {
+    const rs = state.realSession;
+    const lista = schedeBrowser().map((x) => x.id);
+    const prossima = prossimaDopoChiusuraBrowser(lista, lista.indexOf(id));
+    if (id.startsWith('lettura-')) rs.browserChiuse.add(id); else rs.browserVive = rs.browserVive.filter((x) => x.id !== id);
+    if (rs.browserAttiva === id) rs.browserAttiva = prossima;
+    renderizzaBrowser();
+    browserUi?.fuocoSullaScheda();
+  }
+  async function apriPaginaVivaBrowser(url, idEsistente = null) {
+    const rs = state.realSession;
+    if (!idEsistente && schedeBrowser().length >= MASSIMO_SCHEDE_BROWSER) { toast('Troppe schede', `Chiudine una: il massimo è ${MASSIMO_SCHEDE_BROWSER}.`); return; }
+    const gia = idEsistente ? rs.browserVive.find((x) => x.id === idEsistente) : null;
+    const voce = gia || { id: `viva-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, tipo: 'viva', origine: 'tu', url, titolo: null, quando: new Date().toISOString(), stato: 'caricamento', motivo: null };
+    if (gia) { gia.url = url; gia.stato = 'caricamento'; gia.motivo = null; gia.quando = new Date().toISOString(); } else rs.browserVive.push(voce);
+    rs.browserAttiva = voce.id;
+    renderizzaBrowser();
+    try {
+      const esito = await apiGet(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(url)}`);
+      if (!rs.browserVive.includes(voce)) return; // chiusa nel frattempo
+      voce.url = esito?.url || url;
+      voce.titolo = esito?.titolo || null;
+      if (esito?.incorniciabile) { if (voce.stato === 'caricamento') voce.stato = 'pronta'; } else { voce.stato = 'bloccata'; voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS'; }
+    } catch (error) {
+      voce.stato = 'bloccata'; voce.motivo = error.message || 'Il server non ha potuto controllare la pagina';
+    }
+    renderizzaBrowser();
   }
 
   /**
@@ -11084,6 +11137,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     };
     aggiornaTopbar($('#schermoChat .talos-topbar'), dati);
     aggiornaTopbar($('#schermoTerminale .talos-topbar'), dati);
+    aggiornaTopbar($('#schermoBrowser .talos-topbar'), dati); // 06/9 K-I: anche la testata del Browser è quella della sessione, non «W1-02 registro processi»
     // la Review ha nella testata il sommario dei file, non il percorso: solo titolo e schede
     aggiornaTopbar($('#schermoReview .talos-topbar'), { titolo: dati.titolo, schedeTerminale: dati.schedeTerminale, fileReview: dati.fileReview });
   }
@@ -13511,19 +13565,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * inviate da sole); Copia testo mette negli appunti ciò che il modello ha
    * letto.
    */
-  $$('[data-browser-action]').forEach((button) => button.addEventListener('click', () => {
-    const pagine = state.realSession.browserPagine;
-    const indice = state.realSession.browserIndice;
-    const pagina = pagine[indice] || null;
-    switch (button.dataset.browserAction) {
-      case 'back': if (indice > 0) mostraPaginaBrowser(indice - 1); break;
-      case 'forward': if (indice < pagine.length - 1) mostraPaginaBrowser(indice + 1); break;
-      case 'open': if (pagina && /^https?:\/\//i.test(pagina.url)) window.open(pagina.url, '_blank', 'noopener'); break;
-      case 'annotate': if (pagina) preparaCommentoNelComposer(`Riguardo alla pagina ${pagina.url}: `); break;
-      case 'copy': if (pagina) copyText(pagina.testo, 'Testo della pagina copiato'); break;
-      default: break;
-    }
-  }));
+  // 06/9 K-I — i pulsanti del Browser sono del componente (`components/browser.js`), non più di questo gestore
 
   const demoActionCopy = {
     widget: ['Widget demo', 'L’aggiunta sarà disponibile quando questa Board avrà un backend.'],
@@ -14212,6 +14254,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') $$('.overlay-layer').forEach((v) => chiudiVeloMockup(v.id)); });
   collegaRidimensionamentoDialoghi(ROOT()); // 06/9 B7: le tre maniglie di ogni velo (trascina, frecce, doppio clic)
   collegaScorciatoieTerminale(); // 06/9 B1: Ctrl+` e Ctrl+Shift+`, e la barra delle schede onesta da subito
+  renderizzaBrowser(); // 06/9 K-I: via le letture dimostrative del mockup da subito
   setInspectorTab($('.inspector-tabs button.active'));
   renderReviewFile('composer');
   autoGrowTextarea();

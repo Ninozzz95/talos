@@ -46,6 +46,8 @@ import { RISULTATI_HF, DETTAGLIO_HF, STIMA_HF } from './fixtures/hf-catalogo.js'
 import { DOWNLOAD, STIME_DOWNLOAD } from './fixtures/download-coda.js';
 import { INSPECTOR } from './fixtures/inspector.js';
 import { SCHEDE_TERMINALE, CORNICE_TERMINALE } from './fixtures/terminale.js';
+import { LETTURE_BROWSER, STATO_BROWSER } from './fixtures/browser.js';
+import { creaBrowser } from '../src/components/browser.js';
 import { creaSchedeTerminale } from '../src/components/terminale.js';
 import { aggiornaInspector } from '../src/components/inspector.js';
 import { aggiornaCodaDownload } from '../src/components/download-coda.js';
@@ -136,6 +138,10 @@ const LABORATORI = {
   },
   Inspector_processi() {
     aggiornaInspector(document.querySelector('#inspectorSessione'), INSPECTOR);
+  },
+  Browser() { // 06/9 K-I: le due letture del mockup, la seconda attiva
+    const schede = LETTURE_BROWSER.map((l, i) => ({ ...l, id: `lettura-${i}`, tipo: 'lettura', origine: 'agente' }));
+    creaBrowser(document.querySelector('#schermoBrowser')).aggiorna({ schede, attiva: schede[STATO_BROWSER.attiva].id, note: {}, richiesta: null });
   },
   Terminale() { // 06/9 B1: le schede e il piede; il corpo resta quello del mockup
     creaSchedeTerminale(document.querySelector('#schermoTerminale .talos-terminal')).aggiorna({ schede: SCHEDE_TERMINALE, ...CORNICE_TERMINALE });
