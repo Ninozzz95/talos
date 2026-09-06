@@ -13992,7 +13992,18 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    */
   ROOT().addEventListener('click', (evento) => {
     const b = evento.target.closest?.('.talos-topbar__actions [data-azione]');
-    if (!b || b.id) return; // l'originale della chat: gia' servito dal suo ascoltatore
+    /*
+     * ⛔ 06/9, owner: «non riesco ad aprire la sidebar di destra dopo averla collassata».
+     * Strumentato (non supposto): il clic arrivava, il delegato partiva, e la colonna non si muoveva
+     * di un pixel. Causa: il ponte del mockup battezza il PRIMO `[data-azione="dettagli"]` — quello
+     * della chat — con `desktop-context-toggle` e `data-open-panel="inspector"`, che ha già il suo
+     * ascoltatore diretto. Due gestori sullo stesso clic chiamavano `toggleDesktopInspector()` due
+     * volte: la classe si aggiungeva e si toglieva nello stesso clic. Gli altri tre pulsanti (una
+     * copia per vista) non sono battezzati, quindi da Terminale/Review/Browser funzionava — e infatti
+     * si riusciva a chiudere la colonna e non a riaprirla dalla chat.
+     * La regola del delegato è una sola: serve le COPIE, mai ciò che è già cablato.
+     */
+    if (!b || b.id || b.dataset.openPanel) return;
     if (b.dataset.azione === 'comandi') openCommandPalette();
     else if (b.dataset.azione === 'comprimi') compactSession();
     else if (b.dataset.azione === 'dettagli' && window.innerWidth > 1040) toggleDesktopInspector();

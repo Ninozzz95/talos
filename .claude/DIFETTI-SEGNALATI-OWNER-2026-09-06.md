@@ -38,6 +38,7 @@
 | O-27 | «non far partire l'animazione di scroll se la conversazione è già scrollata alla fine» | Conversazione | 🔧 | si anima solo quando c'è una distanza da percorrere |
 | O-28 | «nel browser il contenuto si vede così» — «Letture della sessione» mostra l'HTML grezzo della pagina | Vista Browser | 🔴 aperto | il testo acquisito è il sorgente, non il testo |
 | O-29 | «la bolla di domanda non deve avere larghezza al massimo: bolla di chat con la codina, da destra» | Conversazione | 🔧 | larghezza sul contenuto, ancorata a destra, angolo-codina |
+| O-30 | «non riesco ad aprire la sidebar di destra dopo averla collassata» | Colonna destra | ✅ | due gestori sullo stesso clic si annullavano; verificato su 4 viste, dalla Review alla Chat, e dopo un ricaricamento |
 
 ---
 
@@ -198,3 +199,24 @@ per forma da una risposta.
 destra squadrato che fa da codina (niente triangolo appiccicato: si stacca quando la bolla va a capo),
 riga dell'autore allineata a destra. Il colore è l'accento velato di O-25: la forma la riconosci prima
 del colore.
+
+### O-30 · La colonna di destra che non si riapriva
+
+**Strumentato, non supposto.** Il clic arrivava a `document` (capture e bubble, mai `preventDefault`),
+il delegato partiva, la condizione era vera — e la colonna non si muoveva di un pixel. Aggiungendo a
+mano la classe `inspector-collapsed` la colonna spariva: quindi il CSS era sano e il difetto stava
+nella regia.
+
+**Causa.** Il ponte del mockup battezza il **primo** `[data-azione="dettagli"]` — quello della chat —
+con `desktop-context-toggle` e `data-open-panel="inspector"`, che ha già il suo ascoltatore diretto.
+Due gestori sullo stesso clic chiamavano `toggleDesktopInspector()` **due volte**: la classe si
+aggiungeva e si toglieva nello stesso clic. Le altre tre copie (una per vista) non sono battezzate e
+avevano un solo gestore — ecco perché si riusciva a chiudere la colonna da Terminale/Review/Browser
+e non a riaprirla dalla Chat.
+
+**Cura.** Il delegato serve le **copie**, mai ciò che è già cablato: salta anche i pulsanti con
+`data-open-panel`, non solo quelli con un id.
+
+**Verificato tre volte** (owner: «double e triple check ad ogni implementazione»): chiude e riapre da
+tutte e quattro le viste; chiuso dalla Review si riapre dalla Chat (il caso esatto segnalato); e dopo
+un ricaricamento il collasso è ricordato e il pulsante lo riapre lo stesso.
