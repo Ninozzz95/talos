@@ -18,7 +18,7 @@
 | O-07 | «la barra resta ancorata quando scrollo» | Cronologia | ✅ | `position:absolute` sullo schermo |
 | O-08 | «lampeggio soft cliccando una voce» · «padding coerente» | Chat | ✅ | `talos-lampeggio` |
 | O-09 | «via il percorso dalla testata, segment sempre al centro» | Testata | ✅ | `nomeCartella()`, griglia a tre colonne |
-| O-10 | «spawno un sottoagente e non si vede in tab Agenti» | Colonna destra | 🔴 **RIAPERTO** | la prova T09 lo smentisce: la scheda scrive «Nessun sotto-agente» mentre `/children` ne dà tre. L'avevo dichiarato chiuso guardando il codice, non lo schermo |
+| O-10 | «spawno un sottoagente e non si vede in tab Agenti» | Colonna destra | ✅ | misurato: la scheda mostra le 4 deleghe con esito, ora e conteggi; il buco vero era che si aggiornava solo a giro FINITO — ora si rilegge quando la delega parte e quando finisce |
 | O-11 | «la barra sopra il composer è ridondante» | Striscia di stato | ✅ | tace col fondo in vista (T02) |
 | O-12 | «maniglietta sull'angolo del composer» | Composer | ✅ | `.talos-resizer--composer` |
 | O-13 | «col permesso *chiedi* non è comparsa nessuna richiesta» | Permessi | ✅ | `session-registry.mjs`, T03: 2 approvazioni |
