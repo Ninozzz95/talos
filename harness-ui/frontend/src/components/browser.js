@@ -20,6 +20,7 @@
 
 import { t, tn } from './lingua.js';
 import { renderizzaAnnotazioni, MASSIMO_ANNOTAZIONI } from './annotazioni.js';
+import { sembraHtml, testoLeggibile, riassuntoPulizia } from './testo-pagina.js'; // 06/9 O-28: il sorgente di una pagina non si legge
 
 export const TESTI = Object.freeze({
   intestazione: 'Letture della sessione',
@@ -109,7 +110,13 @@ const $ = (radice, sel) => radice.querySelector(sel);
  * @param {HTMLElement} schermo `#schermoBrowser`
  * @param {{azioni:object}} opzioni azioni: seleziona(id) · chiudi(id) · apri(url) · rileggi(scheda) · annota(scheda) · copia(scheda) · apriFuori(scheda) · salvaNota(scheda, testo) · decidi(requestId, si)
  */
-export function creaBrowser(schermo, { azioni = {} } = {}) {
+/*
+ * `modoIniziale` esiste per il LABORATORIO: il mockup illustra lo stato «Testo dell'agente» (il testo
+ * acquisito è il disegno che si può confrontare a pixel), mentre nel prodotto il modo predefinito è
+ * «Pagina» — una pagina renderizzata non si confronta con un mockup statico. Un solo parametro, e la
+ * differenza è dichiarata qui invece di essere nascosta in una condizione.
+ */
+export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = {}) {
   const el = {
     riepilogo: $(schermo, '#browserRiepilogo'), schede: $(schermo, '#browserSchede'),
     indietro: $(schermo, '[data-browser-demo="back"], [data-browser-action="back"]'), avanti: $(schermo, '[data-browser-demo="forward"], [data-browser-action="forward"]'),
@@ -125,8 +132,9 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
     conservaNota: $(schermo, '[data-action="conservaNotaBrowser"]'), chiudiNota: $(schermo, '[data-action="chiudiNotaBrowser"]'),
     bloccatoTesto: $(schermo, '#browserBloccato p.talos-muted'),
     annotazioni: $(schermo, '#browserAnnotazioni'),
+    modi: [...schermo.querySelectorAll('[data-browser-modo]')], // 06/9 O-28: Pagina / Testo dell'agente
   };
-  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false };
+  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === 'testo' ? 'testo' : 'pagina' };
   const frameAttivo = () => el.live?.querySelector('iframe') || null;
   const dialogaConOverlay = (messaggio) => { try { frameAttivo()?.contentWindow?.postMessage({ fonte: 'talos-genitore', ...messaggio }, '*'); } catch { /* cornice non pronta */ } };
   window.addEventListener('message', (e) => {
@@ -148,6 +156,16 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
   el.rileggi?.addEventListener('click', () => { const s = attiva(); if (s) azioni.rileggi?.(s); });
   el.annota?.addEventListener('click', () => { const s = attiva(); if (!s) return; if (s.tipo === 'viva' && s.proxata) azioni.annota?.(s, !stato.annotaAttivo); else azioni.annota?.(s); });
   el.copia?.addEventListener('click', () => { const s = attiva(); if (s) azioni.copia?.(s); });
+  // 06/9 O-28: i due modi di guardare una lettura. Cambiare modo non ricarica niente: la cornice resta.
+  for (const b of el.modi || []) {
+    b.addEventListener('click', () => {
+      const scelto = b.dataset.browserModo === 'testo' ? 'testo' : 'pagina';
+      if (stato.modo === scelto) return;
+      stato.modo = scelto;
+      if (scelto === 'testo') mostraAvviso('');
+      renderizza();
+    });
+  }
   el.nota?.addEventListener('click', (e) => { e.stopPropagation(); const aperto = !el.editorNota.hidden; el.editorNota.hidden = aperto; el.nota.setAttribute('aria-expanded', String(!aperto)); if (!aperto) { const s = attiva(); el.notaInput.value = (s && stato.note[s.url]) || ''; el.notaInput.focus(); } });
   el.conservaNota?.addEventListener('click', () => { const s = attiva(); if (!s) return; azioni.salvaNota?.(s, el.notaInput.value.trim()); el.editorNota.hidden = true; el.nota?.setAttribute('aria-expanded', 'false'); el.nota?.focus(); });
   el.chiudiNota?.addEventListener('click', () => { el.editorNota.hidden = true; el.nota?.setAttribute('aria-expanded', 'false'); el.nota?.focus(); });
@@ -216,9 +234,48 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
     });
   }
 
+  /*
+   * Il testo che ha letto l'agente. Se è il sorgente di una pagina si mostra ripulito (via codice,
+   * stile, testa e navigazione) e il sorgente resta sotto, richiuso: è la verità che ha ricevuto il
+   * modello, e non si nasconde. Se non è HTML si mostra com'è: non si tocca ciò che è già a posto.
+   */
+  function scriviTestoAcquisito(grezzo) {
+    const contenitore = el.testo;
+    if (!contenitore) return;
+    contenitore.replaceChildren();
+    if (!sembraHtml(grezzo)) { contenitore.textContent = grezzo; return; }
+    const pulito = document.createElement('div');
+    pulito.className = 'talos-browser__testo-pulito';
+    pulito.textContent = testoLeggibile(grezzo);
+    const dettaglio = document.createElement('details');
+    dettaglio.className = 'talos-browser__sorgente';
+    const riassunto = document.createElement('summary');
+    const misure = riassuntoPulizia(grezzo);
+    riassunto.textContent = misure
+      ? t('Sorgente ricevuto dall’agente ({n} caratteri)', { n: misure.caratteriPrima.toLocaleString('it-IT') })
+      : t('Sorgente ricevuto dall’agente');
+    const pre = document.createElement('pre');
+    pre.className = 'talos-browser__text';
+    pre.textContent = grezzo;
+    dettaglio.append(riassunto, pre);
+    contenitore.append(pulito, dettaglio);
+  }
+
   function renderizzaCornice(s) {
     if (!el.live) return;
-    const vuole = s && s.tipo === 'viva' && s.stato !== 'bloccata';
+    /*
+     * ⛔ 06/9, owner: «la pagina del browser va renderizzata in HTML vero, se no che cazzo di browser
+     * è?». Aveva ragione: una lettura dell'agente mostrava soltanto il testo acquisito — cioè, per una
+     * pagina vera, il SORGENTE con i meta e la navigazione. Ora la lettura si apre come pagina, dal suo
+     * indirizzo vero; il testo che ha letto il modello resta il secondo modo, perché e' quello che lui
+     * ha davvero visto e serve a capire cosa ha capito.
+     * ⛔ Se il sito rifiuta di stare in una cornice (X-Frame-Options / CSP frame-ancestors) non
+     * arriva nessun `load`: dopo l'attesa si passa da soli al testo, dicendo perché. Mai una cornice
+     * bianca senza spiegazione.
+     */
+    const vuoleViva = s && s.tipo === 'viva' && s.stato !== 'bloccata';
+    const vuoleLettura = s && s.tipo !== 'viva' && stato.modo === 'pagina' && Boolean(s.url) && /^https?:/i.test(s.url);
+    const vuole = vuoleViva || vuoleLettura;
     el.live.hidden = !vuole;
     if (!vuole) { el.live.replaceChildren(); return; }
     let frame = el.live.querySelector('iframe');
@@ -232,6 +289,17 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
       frame.addEventListener('load', () => azioni.caricata?.(s.id));
       frame.src = s.proxata ? `${PROXY_BROWSER}${encodeURIComponent(s.url)}` : s.url; // un dev server locale passa dal proxy: stessa origine, annotabile
       frame.dataset.proxata = String(Boolean(s.proxata));
+      if (s.tipo !== 'viva') {
+        frame.dataset.caricata = 'no';
+        frame.addEventListener('load', () => { frame.dataset.caricata = 'si'; mostraAvviso(''); }, { once: true });
+        // il sito che vieta la cornice non manda nessun `load`: dopo l'attesa si torna al testo, spiegando
+        setTimeout(() => {
+          if (!frame.isConnected || frame.dataset.caricata === 'si') return;
+          stato.modo = 'testo';
+          mostraAvviso(t('Questo sito non si lascia mostrare dentro TALOS. Qui sotto c’è il testo che ha letto l’agente.'));
+          renderizza();
+        }, 4000);
+      }
       el.live.append(frame);
     }
   }
@@ -261,11 +329,20 @@ export function creaBrowser(schermo, { azioni = {} } = {}) {
     // l'articolo resta per le note anche su una pagina viva: si nascondono solo testata e testo acquisito
     if (el.articolo) el.articolo.hidden = !s;
     const testata = el.titolo?.closest('header'); if (testata) testata.hidden = !s || s.tipo === 'viva';
-    if (el.testo) el.testo.hidden = !s || s.tipo === 'viva';
-    if (s && s.tipo !== 'viva') {
+    const lettura = Boolean(s) && s.tipo !== 'viva';
+    // i due modi valgono solo per una lettura dell'agente: una pagina viva e' gia' una pagina
+    for (const b of el.modi || []) {
+      b.hidden = !lettura;
+      const suo = b.dataset.browserModo === stato.modo;
+      b.setAttribute('aria-pressed', String(suo));
+      b.classList.toggle('talos-button--secondary', suo);
+      b.classList.toggle('talos-button--ghost', !suo);
+    }
+    if (el.testo) el.testo.hidden = !lettura || stato.modo === 'pagina';
+    if (lettura) {
       if (el.titolo) el.titolo.textContent = titoloDaLettura(s);
       if (el.provenienza) el.provenienza.textContent = formattaProvenienza(s);
-      if (el.testo) el.testo.textContent = s.testo || '';
+      if (el.testo && stato.modo !== 'pagina') scriviTestoAcquisito(s.testo || '');
     }
     mostraAvviso(s?.tipo === 'viva' && s.stato === 'bloccata' ? t('{motivo}. {invito}: usa «Rileggi».', { motivo: s.motivo || t('Il sito non consente di essere mostrato dentro TALOS'), invito: t(TESTI.chiediAllAgente) }) : '');
     renderizzaCornice(s);

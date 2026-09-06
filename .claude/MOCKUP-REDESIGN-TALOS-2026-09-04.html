@@ -483,6 +483,15 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .assistant-copy .code-block pre{overflow-x:auto}
 /* mentre il blocco arriva ancora dal modello: il bordo lo dice, senza animazioni che distraggono */
 .assistant-copy .code-block-in-arrivo{border-color:var(--talos-accent-border)}
+/* 06/9, owner: «la pagina del browser va renderizzata in HTML vero: se no che browser è?».
+   La lettura dell'agente ora si apre come PAGINA; il testo che ha letto il modello resta un modo a
+   parte, perché e' quello che ha davvero visto lui. Due pulsanti, non un menù: sono due, e la scelta
+   si vede a colpo d'occhio. */
+.talos-browser__modi{display:flex; gap:6px; padding:0 0 10px}
+.talos-browser__modi [aria-pressed="true"]{border-color:var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-accent-text)}
+.talos-browser__testo-pulito{white-space:pre-wrap; overflow-wrap:anywhere}
+.talos-browser__sorgente{margin:12px 0 0}
+.talos-browser__sorgente > summary{cursor:pointer; font-size:12px; color:var(--talos-muted)}
 .talos-approval__codice{margin:8px 0 0; padding:10px 12px; border-radius:10px; border:1px solid var(--talos-border); background:var(--talos-code-bg, var(--talos-surface-sunken, rgba(0,0,0,.18))); color:var(--talos-text); font-family:var(--talos-font-mono); font-size:12.5px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow-x:auto; overflow-y:auto; max-height:14em}
 .talos-approval__motivo{margin:8px 0 0; font-size:12.5px; color:var(--talos-muted)}
 .talos-approval__esito{margin:8px 0 0; font-size:12.5px; font-weight:600}
@@ -1484,6 +1493,10 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
     </div>
     <div id="browserVuoto" class="talos-empty talos-browser__pad" hidden><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg><h3>Nessuna pagina letta</h3><p class="talos-muted">Le letture dell’agente appariranno qui, con indirizzo e testo acquisito.</p></div>
     <article id="browserPagina" aria-labelledby="browserTitolo">
+      <div class="talos-browser__modi" role="group" aria-label="Come guardare questa pagina">
+        <button type="button" class="talos-button talos-button--ghost talos-button--sm" data-browser-modo="pagina" aria-pressed="false">Pagina</button>
+        <button type="button" class="talos-button talos-button--secondary talos-button--sm" data-browser-modo="testo" aria-pressed="true">Testo dell’agente</button>
+      </div>
       <header class="talos-browser__head"><h2 id="browserTitolo">Registro dei processi</h2><p class="talos-muted talos-browser__meta" id="browserProvenienza">Agente · 05/09, 10:42 (Roma) · 365 caratteri</p></header>
       <pre id="browserTesto" class="talos-browser__text" tabindex="0" aria-label="Testo acquisito della pagina">Registro dei processi
 

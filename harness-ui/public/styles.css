@@ -2025,6 +2025,28 @@ body.reduce-motion *::after {
 .assistant-copy .code-block-in-arrivo {
   border-color: var(--talos-accent-border);
 }
+.talos-browser__modi {
+  display: flex;
+  gap: 6px;
+  padding: 0 0 10px;
+}
+.talos-browser__modi [aria-pressed=true] {
+  border-color: var(--talos-accent-border);
+  background: var(--talos-accent-soft);
+  color: var(--talos-accent-text);
+}
+.talos-browser__testo-pulito {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.talos-browser__sorgente {
+  margin: 12px 0 0;
+}
+.talos-browser__sorgente > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--talos-muted);
+}
 .talos-approval__codice {
   margin: 8px 0 0;
   padding: 10px 12px;
