@@ -84,3 +84,45 @@ export function riconosci(evento, { apple = suApple() } = {}) {
   if (tasto === '`') return 'terminale';
   return null;
 }
+
+/**
+ * Monta il pannello delle scorciatoie (`#veloScorciatoie`) dal registro: una riga per scorciatoia, con
+ * il nome, l'area e la combinazione già scritta per la piattaforma; la ricerca in cima filtra.
+ * Decisioni D10-D12 (owner 04/09: pannello con ricerca, raggruppate per area, aperto da `Ctrl+/`).
+ * Idempotente.
+ */
+export function montaScorciatoie(velo, { apple = suApple(), righe = SCORCIATOIE } = {}) {
+  if (!velo) return 0;
+  const d = velo.ownerDocument;
+  const elenco = velo.querySelector('#elencoScorciatoie');
+  const vuoto = velo.querySelector('#scorciatoieVuote');
+  const cerca = velo.querySelector('#cercaScorciatoia');
+  if (!elenco) return 0;
+  const disegna = (filtro = '') => {
+    const q = String(filtro).trim().toLocaleLowerCase('it');
+    const viste = righe.filter((r) => !q || `${r.nome} ${r.area} ${r.combo}`.toLocaleLowerCase('it').includes(q));
+    elenco.replaceChildren(...viste.map((r) => {
+      const riga = d.createElement('button');
+      riga.type = 'button';
+      riga.className = 'talos-list-row';
+      riga.setAttribute('role', 'listitem');
+      riga.dataset.scorciatoia = r.id;
+      const testo = d.createElement('span'); testo.className = 'talos-list-row__text';
+      const titolo = d.createElement('span'); titolo.className = 'talos-list-row__title'; titolo.textContent = r.nome;
+      const sub = d.createElement('span'); sub.className = 'talos-list-row__sub'; sub.textContent = r.area;
+      testo.append(titolo, sub);
+      const aside = d.createElement('span'); aside.className = 'talos-list-row__aside';
+      const tasto = d.createElement('kbd'); tasto.className = 'talos-kbd'; tasto.textContent = etichettaTasto(r.combo, { apple });
+      aside.append(tasto);
+      riga.append(testo, aside);
+      return riga;
+    }));
+    if (vuoto) vuoto.hidden = viste.length > 0;
+    return viste.length;
+  };
+  if (cerca && !cerca.dataset.collegato) {
+    cerca.dataset.collegato = 'si';
+    cerca.addEventListener('input', () => disegna(cerca.value));
+  }
+  return disegna(cerca?.value || '');
+}

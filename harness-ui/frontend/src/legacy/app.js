@@ -35,7 +35,7 @@ import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2:
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
-import { normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
+import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, etichettaPermesso } from '../components/chat-foot.js'; // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
@@ -5237,7 +5237,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const badge = $('#notificationsBadge');
     if (badge) { badge.textContent = String(notifiche.length); badge.hidden = notifiche.length === 0; }
     const bottone = $('#notificationsBtn');
-    if (bottone) bottone.setAttribute('aria-label', nomeCampanella(notifiche.length)); // 06/9 T-17: dice QUANTE cose aspettano te, come nel mockup
+    // 06/9: anche il `title`, non solo l'etichetta per il lettore di schermo — restava fermo su «1 cosa
+    // aspetta te» del mockup mentre l'aria-label diceva il vero (trovato nella mappa delle superfici).
+    if (bottone) { const nome = nomeCampanella(notifiche.length); bottone.setAttribute('aria-label', nome); bottone.title = nome; }
   }
   function segnaNotificaVista(sessione) {
     const viste = leggiNotificheViste() || {};
@@ -13997,7 +13999,12 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     else if (quale === 'nuova') { event.preventDefault(); createNewSession(); }
     else if (quale === 'modello') { event.preventDefault(); openSheet('model', { ancoraAlComposer: true }); }
     else if (quale === 'impostazioni') { event.preventDefault(); setView('settings'); }
-    else if (quale === 'scorciatoie') { event.preventDefault(); openCommandPalette(); }
+    else if (quale === 'scorciatoie') {
+      // D10-D12: il pannello vero, non la palette. Si monta dal registro a ogni apertura.
+      event.preventDefault();
+      montaScorciatoie($('#veloScorciatoie'));
+      apriVeloMockup('veloScorciatoie');
+    }
     if (event.key === 'Escape' && (commandDialog.open || sheetDialog.open)) dismissTransientLayers();
     else if (event.key === 'Escape' && (sessionsPanel.classList.contains('open') || inspectorPanel.classList.contains('open'))) closePanels();
   });

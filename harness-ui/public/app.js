@@ -5262,6 +5262,7 @@ var init_dialoghi = __esm({
     CHIAVE_MISURE = "talos-harness-modal-sizes-v1";
     PASSO_TASTIERA = 16;
     CHIAVI_MISURA = Object.freeze({
+      veloScorciatoie: "sheet:shortcuts",
       veloNuova: "sheet:new-session",
       veloComandi: "command:palette",
       veloModello: "sheet:model",
@@ -7313,6 +7314,49 @@ function riconosci(evento, { apple = suApple() } = {}) {
   if (tasto === "/") return "scorciatoie";
   if (tasto === "`") return "terminale";
   return null;
+}
+function montaScorciatoie(velo, { apple = suApple(), righe = SCORCIATOIE } = {}) {
+  if (!velo) return 0;
+  const d = velo.ownerDocument;
+  const elenco2 = velo.querySelector("#elencoScorciatoie");
+  const vuoto = velo.querySelector("#scorciatoieVuote");
+  const cerca = velo.querySelector("#cercaScorciatoia");
+  if (!elenco2) return 0;
+  const disegna = (filtro = "") => {
+    const q = String(filtro).trim().toLocaleLowerCase("it");
+    const viste = righe.filter((r) => !q || `${r.nome} ${r.area} ${r.combo}`.toLocaleLowerCase("it").includes(q));
+    elenco2.replaceChildren(...viste.map((r) => {
+      const riga = d.createElement("button");
+      riga.type = "button";
+      riga.className = "talos-list-row";
+      riga.setAttribute("role", "listitem");
+      riga.dataset.scorciatoia = r.id;
+      const testo3 = d.createElement("span");
+      testo3.className = "talos-list-row__text";
+      const titolo2 = d.createElement("span");
+      titolo2.className = "talos-list-row__title";
+      titolo2.textContent = r.nome;
+      const sub = d.createElement("span");
+      sub.className = "talos-list-row__sub";
+      sub.textContent = r.area;
+      testo3.append(titolo2, sub);
+      const aside = d.createElement("span");
+      aside.className = "talos-list-row__aside";
+      const tasto = d.createElement("kbd");
+      tasto.className = "talos-kbd";
+      tasto.textContent = etichettaTasto(r.combo, { apple });
+      aside.append(tasto);
+      riga.append(testo3, aside);
+      return riga;
+    }));
+    if (vuoto) vuoto.hidden = viste.length > 0;
+    return viste.length;
+  };
+  if (cerca && !cerca.dataset.collegato) {
+    cerca.dataset.collegato = "si";
+    cerca.addEventListener("input", () => disegna(cerca.value));
+  }
+  return disegna(cerca?.value || "");
 }
 var SCORCIATOIE;
 var init_scorciatoie = __esm({
@@ -12036,7 +12080,11 @@ var init_app = __esm({
           badge4.hidden = notifiche.length === 0;
         }
         const bottone3 = $2("#notificationsBtn");
-        if (bottone3) bottone3.setAttribute("aria-label", nomeCampanella(notifiche.length));
+        if (bottone3) {
+          const nome = nomeCampanella(notifiche.length);
+          bottone3.setAttribute("aria-label", nome);
+          bottone3.title = nome;
+        }
       }
       function segnaNotificaVista(sessione) {
         const viste = leggiNotificheViste() || {};
@@ -19093,7 +19141,8 @@ ${testo3}` : testo3;
           setView("settings");
         } else if (quale === "scorciatoie") {
           event.preventDefault();
-          openCommandPalette();
+          montaScorciatoie($2("#veloScorciatoie"));
+          apriVeloMockup("veloScorciatoie");
         }
         if (event.key === "Escape" && (commandDialog.open || sheetDialog.open)) dismissTransientLayers();
         else if (event.key === "Escape" && (sessionsPanel.classList.contains("open") || inspectorPanel.classList.contains("open"))) closePanels();
