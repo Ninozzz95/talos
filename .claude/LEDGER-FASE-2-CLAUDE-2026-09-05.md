@@ -1227,3 +1227,11 @@ fallite tutte e quattro. Da segnalare all'owner, non da curare qui.
 - **Notifiche**: il pannello funzionava già (340×126, stato vuoto onesto). Il difetto vero era il `title` della campanella, fermo su «Notifiche: 1 cosa aspetta te» del mockup mentre l'etichetta per il lettore di schermo diceva il vero: ora si aggiornano insieme.
 
 Cancelli: unit 131/131, componenti 111/111, statico 195/195.
+
+## 06/09 — La maniglia del composer si vede
+
+Owner: «metti la maniglietta sull'angolo in alto a sinistra del composer per far capire che anche quello si può allargare».
+
+C'era già un angolo, ma restava invisibile per due motivi: opacità 0,55 e — soprattutto — la regola base `.talos-resizer` stava **dopo** quella del composer nel foglio, quindi vinceva per ordine e riportava larghezza 10 px e cursore `col-resize`. Misurato: la maniglia era 10×20 con il cursore sbagliato.
+
+Ora: blocco spostato dopo la regola base, 20×20, cursore `nwse-resize`, opacità 0,75 a riposo, due trattini in diagonale dentro l'angolo (il segno che ovunque significa «questo si trascina») e accensione col colore d'accento al passaggio o col fuoco. Trascinandola il composer passa da 40 a 130 px di altezza: misurato.
