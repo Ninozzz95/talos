@@ -18,7 +18,7 @@
 | O-07 | «la barra resta ancorata quando scrollo» | Cronologia | ✅ | `position:absolute` sullo schermo |
 | O-08 | «lampeggio soft cliccando una voce» · «padding coerente» | Chat | ✅ | `talos-lampeggio` |
 | O-09 | «via il percorso dalla testata, segment sempre al centro» | Testata | ✅ | `nomeCartella()`, griglia a tre colonne |
-| O-10 | «spawno un sottoagente e non si vede in tab Agenti» | Colonna destra | ✅ | `disegnaAgenti()` su `/children` |
+| O-10 | «spawno un sottoagente e non si vede in tab Agenti» | Colonna destra | 🔴 **RIAPERTO** | la prova T09 lo smentisce: la scheda scrive «Nessun sotto-agente» mentre `/children` ne dà tre. L'avevo dichiarato chiuso guardando il codice, non lo schermo |
 | O-11 | «la barra sopra il composer è ridondante» | Striscia di stato | ✅ | tace col fondo in vista (T02) |
 | O-12 | «maniglietta sull'angolo del composer» | Composer | ✅ | `.talos-resizer--composer` |
 | O-13 | «col permesso *chiedi* non è comparsa nessuna richiesta» | Permessi | ✅ | `session-registry.mjs`, T03: 2 approvazioni |
@@ -241,3 +241,20 @@ Sonda `sonda-nota-errore` sulla sessione vera **0363607d** dell'owner (modello l
   la nota lo dichiarava onestamente come «non ancora tradotto», ed è stato il segnale per mapparlo.
 - Difetto trovato guardando lo screenshot e corretto nello stesso giro: il triangolino del dettaglio
   si leggeva «b8» — un escape CSS senza terminatore veniva letto come `` più il testo «b8».
+
+## ⛔ O-10 riaperto — una chiusura mia che non reggeva
+
+La prova `T09-colonna-destra` (agente delle prove, 06/09) ha guardato lo schermo dove io avevo
+guardato il codice: la scheda **Agenti** scrive «Nessun sotto-agente» mentre `GET /children` ne
+restituisce tre, e il foglio «Albero sessione» della stessa app li elenca come «Delega · fallito».
+Avevo cablato `disegnaAgenti()` e dichiarato la riga chiusa senza aprire quella scheda con una
+delega vera davanti.
+
+⇒ Torna aperto, e questa volta si chiude con una foto della scheda piena, non con una riga di codice.
+
+**E il contorno è peggiore del difetto**, sempre dalla stessa prova: un giro con **una** delega ha
+prodotto quattro sessioni figlie, otto giri e 76,8k token, tutte fallite; i figli sono partiti con
+`glm-4.7-flash` mentre la sessione aveva scelto `glm-5.3-flash`, senza una riga a schermo che lo
+dicesse. La causa sta nel kernel (`talosHarness.mjs`, la delega sulla stessa cartella del padre viene
+rifiutata e il modello riscrive il percorso in forma WSL per farla passare): **fuori dalla mia lane**,
+e va detto all'owner invece di aggirato.
