@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { statoGiri, etichettaPermesso, etichettaPermessoConEccezioni, tonoPermesso, nomeModelloUmano } from '../../src/components/chat-foot.js';
+import { statoGiri, etichettaPermesso, etichettaPermessoConEccezioni, tonoPermesso, nomeModelloUmano, fondoInVista } from '../../src/components/chat-foot.js';
 
 // 06/09 — B12 (il contatore dei giri) e B11 (la pillola del permesso dice il vero, eccezioni comprese).
 
@@ -53,4 +53,17 @@ test('PIEDE-MODELLO: un identificatore locale diventa un nome, non una targa (H2
   assert.equal(nomeModelloUmano('local:strano'), 'strano');
   assert.equal(nomeModelloUmano(''), '');
   assert.equal(nomeModelloUmano(null), '');
+});
+
+test('PIEDE-FONDO: «sono in fondo» guarda la fine del CONTENUTO, non del contenitore', () => {
+  // il caso misurato: contenitore 684, contenuto + 342 di coda vuota, e la persona sta guardando la fine
+  assert.equal(fondoInVista({ scrollHeight: 2000, scrollTop: 974, clientHeight: 684, coda: 342 }), true);
+  // e appena sale davvero, la striscia deve tornare
+  assert.equal(fondoInVista({ scrollHeight: 2000, scrollTop: 500, clientHeight: 684, coda: 342 }), false);
+  // senza spazio in coda vale il conto di sempre
+  assert.equal(fondoInVista({ scrollHeight: 1000, scrollTop: 980, clientHeight: 20, coda: 0 }), true);
+  assert.equal(fondoInVista({ scrollHeight: 1000, scrollTop: 100, clientHeight: 20, coda: 0 }), false);
+  // AL CONTRARIO: senza numeri non si finge di sapere — si assume «in fondo», che tace invece di gridare
+  assert.equal(fondoInVista({}), true);
+  assert.equal(fondoInVista({ scrollHeight: NaN }), true);
 });

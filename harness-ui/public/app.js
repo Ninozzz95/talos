@@ -7581,6 +7581,11 @@ function nomeModelloUmano(id) {
   if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, "_"));
   return parti.filter(Boolean).join(" · ");
 }
+function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda = 0, soglia = 24 } = {}) {
+  const distanza = Number(scrollHeight) - Number(scrollTop) - Number(clientHeight);
+  if (!Number.isFinite(distanza)) return true;
+  return distanza <= Math.max(0, Number(coda) || 0) + soglia;
+}
 function tonoPermesso(permesso) {
   if (permesso === "Full access") return "danger";
   if (permesso === "Workspace write") return "warning";
@@ -7634,6 +7639,15 @@ function aggiornaPiedeChat(piede, dati = {}) {
   const striscia = piede.querySelector(".talos-status-strip");
   if (striscia) {
     striscia.hidden = !dati.attivo || dati.inFondo === true;
+    if (!striscia.dataset.portaInFondo) {
+      striscia.dataset.portaInFondo = "1";
+      striscia.style.cursor = "pointer";
+      striscia.setAttribute("title", "Torna dove sta scrivendo");
+      striscia.addEventListener("click", (evento) => {
+        if (evento.target.closest("button")) return;
+        striscia.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
+      });
+    }
     const cosa = striscia.querySelector("[data-run-what]");
     if (cosa) {
       cosa.replaceChildren();
@@ -13419,8 +13433,14 @@ var init_app = __esm({
       function fondoConversazioneInVista() {
         const c = scrollerConversazione();
         if (!c) return true;
-        return c.scrollHeight - c.scrollTop - c.clientHeight <= 24;
+        const colonna = $2("#conversation");
+        const coda = colonna ? parseFloat(getComputedStyle(colonna).paddingBottom) || 0 : 0;
+        return fondoInVista({ scrollHeight: c.scrollHeight, scrollTop: c.scrollTop, clientHeight: c.clientHeight, coda });
       }
+      ROOT().addEventListener("talos-vai-in-fondo", () => {
+        const sc = scrollerConversazione();
+        if (sc) scorriInFondoConversazione(sc);
+      });
       function aggiornaPiedeChatDaStato() {
         const piede = $2("#schermoChat .talos-chat-foot");
         if (!piede) return;
@@ -17285,10 +17305,18 @@ ${testo3}` : testo3;
       function mantieniFondoDuranteRipristino(generation) {
         const conversation = $2("#conversation");
         if (!conversation) return;
+        let nostro = false;
+        let smesso = false;
         const inFondo = () => {
+          if (smesso) return;
           aggiornaSpazioCodaConversazione(conversation);
           const sc = scrollerConversazione(conversation);
-          if (sc) sc.scrollTop = sc.scrollHeight;
+          if (!sc) return;
+          nostro = true;
+          sc.scrollTop = sc.scrollHeight;
+          window.setTimeout(() => {
+            nostro = false;
+          }, 0);
         };
         const scopri = () => {
           if (generation !== state.realSession.generation) return;
@@ -17298,6 +17326,21 @@ ${testo3}` : testo3;
         };
         const osservatore = new MutationObserver(inFondo);
         osservatore.observe(conversation, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class", "style"] });
+        const scroller = scrollerConversazione(conversation);
+        const smetti = () => {
+          if (smesso) return;
+          smesso = true;
+          osservatore.disconnect();
+          window.clearInterval(fermaSeFinito);
+          conversation.classList.remove("is-restoring");
+          scroller?.removeEventListener("scroll", suScroll);
+        };
+        function suScroll() {
+          if (nostro || smesso || !scroller) return;
+          const distanza = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+          if (distanza > 40) smetti();
+        }
+        scroller?.addEventListener("scroll", suScroll, { passive: true });
         const fermaSeFinito = window.setInterval(() => {
           if (generation !== state.realSession.generation || state.realSession.eventoTerminaleVisto) {
             osservatore.disconnect();
@@ -17309,11 +17352,10 @@ ${testo3}` : testo3;
             }
           }
         }, 200);
-        window.setTimeout(scopri, 8e3);
         window.setTimeout(() => {
-          osservatore.disconnect();
-          window.clearInterval(fermaSeFinito);
-        }, 3e4);
+          if (!smesso) scopri();
+        }, 8e3);
+        window.setTimeout(smetti, 3e4);
       }
       function passaASessione(sessionId, taskId, nome, modello, impostazioniSessione = null) {
         if (state.sessionSelection.active) {
