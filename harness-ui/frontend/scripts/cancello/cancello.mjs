@@ -81,11 +81,19 @@ const KERNEL_PREDEFINITO = path.resolve(REPO, '../AVM-harness/mobile/scripts/har
  *    non è la stessa cosa che raggiungerla, e confondere le due sarebbe la bugia del cancello.
  */
 const SCHERMATE = Object.freeze([
+  /*
+   * ⛔ L'ORDINE non è estetico. Le quattro viste di sessione si aprono dalle schede della testata,
+   *    e quelle schede vivono DENTRO le schermate di sessione: mostrando «Nessuna sessione» per via
+   *    DOM si nasconde la testata della chat, e il giro dopo la scheda «Terminale» non è più
+   *    visibile — cioè si finisce a mostrare per via DOM una schermata che l'interfaccia sa aprire
+   *    benissimo, e il rapporto lo scrive. Misurato al primo giro completo: «Terminale» risultava
+   *    irraggiungibile solo perché veniva subito dopo «Nessuna sessione».
+   */
   { id: 'schermoChat', nome: 'Chat', vaia: 'chat', sessione: true },
-  { id: 'schermoVuota', nome: 'Nessuna sessione', vaia: null, sessione: true, schermo: 'vuota' },
   { id: 'schermoTerminale', nome: 'Terminale', vaia: 'terminale', sessione: true },
   { id: 'schermoReview', nome: 'Review', vaia: 'review', sessione: true },
   { id: 'schermoBrowser', nome: 'Browser', vaia: 'browser', sessione: true },
+  { id: 'schermoVuota', nome: 'Nessuna sessione', vaia: null, sessione: true, schermo: 'vuota' },
   { id: 'schermoCapability', nome: 'Capability', vaia: 'capability' },
   { id: 'schermoBoard', nome: 'Board', vaia: 'board' },
   { id: 'schermoLibreria', nome: 'Libreria', vaia: 'libreria' },
@@ -202,10 +210,21 @@ const DELEGHE = Object.freeze([
 
 /*
  * ── Le superfici, per la classe 5 ────────────────────────────────────────────────────────────
- * `promette` = cosa la schermata dichiara di mostrare. `chiamate` si RIEMPIE COL TRAFFICO VERO
- * osservato mentre la schermata è aperta (la prova definitiva secondo il limite dichiarato dal
- * modulo: «Rotta mai chiamata è un sospetto statico; la prova è il traffico»), unito a ciò che è
- * dichiarato qui sotto per le superfici che si riempiono al PRIMO avvio e non più.
+ * `promette` = cosa la schermata dichiara di mostrare. `chiamate` NON è scritto qui: si riempie col
+ * TRAFFICO VERO osservato mentre la schermata è aperta — la prova definitiva secondo il limite che
+ * il modulo stesso dichiara («Rotta mai chiamata è un sospetto statico; la prova è il traffico»).
+ *
+ * ⛔ La prima stesura DICHIARAVA a mano le rotte di ogni schermata, e due delle dichiarazioni erano
+ *    FALSE: «Review chiama /sessions/:id/git/status» — nel bundle servito la stringa `git/` non
+ *    compare nemmeno una volta. Una dichiarazione sbagliata assolve una superficie davvero
+ *    scollegata, cioè spegne proprio il controllo che il modulo esiste per fare. Tolte tutte: qui
+ *    si dichiara solo ciò che si misura o ciò di cui si conosce il TUBO (`eventi`).
+ *
+ * ⛔ `vuoleSessione` non è un'esenzione: è la condizione del banco. Senza una sessione aperta —
+ *    e lo store è vergine per costruzione — una vista di sessione non chiama niente PERCHÉ NON HA
+ *    UN ID, non perché è scollegata. Accusarla sarebbe accusare le condizioni della prova. Quando
+ *    non c'è una sessione, quelle superfici passano senza `chiamate`: il modulo le mette fra le
+ *    «dichiarazione-incompleta» a gravità bassa, che è la verità — «su questa non so».
  * ⛔ Chi non dichiara né `statica` né `promette` esce dal giudizio con gravità bassa e il perché
  *    scritto: meglio una riga che dice «su questa non so» che un silenzio che sembra un via libera.
  */
@@ -219,19 +238,19 @@ const SUPERFICI = Object.freeze([
   { id: 'chat', schermata: 'schermoChat', nome: 'Chat', promette: 'la conversazione della sessione aperta', eventi: ['sessions/:id/events'], perche: 'i messaggi arrivano dallo stream SSE, non da una rotta chiesta all\'apertura' },
   { id: 'vuota', schermata: 'schermoVuota', nome: 'Nessuna sessione', statica: true, perche: 'è lo stato vuoto: non promette dati, li chiede la creazione di una sessione' },
   { id: 'terminale', schermata: 'schermoTerminale', nome: 'Terminale', promette: 'le schede di shell della sessione', eventi: ['terminal/ws'], perche: 'il terminale vive su una WebSocket, non su una rotta HTTP interrogata all\'apertura' },
-  { id: 'review', schermata: 'schermoReview', nome: 'Review', promette: 'le modifiche del progetto', chiamateDichiarate: ['GET /api/v1/sessions/:id/git/status'] },
-  { id: 'browser', schermata: 'schermoBrowser', nome: 'Browser', promette: 'le pagine lette dall\'attrezzo naviga', chiamateDichiarate: ['GET /api/v1/browser/leggi'] },
+  { id: 'review', schermata: 'schermoReview', nome: 'Review', promette: 'le modifiche del progetto', vuoleSessione: true },
+  { id: 'browser', schermata: 'schermoBrowser', nome: 'Browser', promette: 'le pagine lette dall\'attrezzo naviga', vuoleSessione: true },
   { id: 'capability', schermata: 'schermoCapability', nome: 'Capability', promette: 'gli attrezzi, le abilità e i permessi' },
   { id: 'board', schermata: 'schermoBoard', nome: 'Board', promette: 'le sessioni e i loro esiti' },
-  { id: 'libreria', schermata: 'schermoLibreria', nome: 'Libreria', promette: 'i documenti del progetto', chiamateDichiarate: ['GET /api/v1/sessions/:id/library'] },
-  { id: 'memoria', schermata: 'schermoMemoria', nome: 'Memoria', promette: 'le memorie scritte dall\'agente', chiamateDichiarate: ['GET /api/v1/sessions/:id/memory'] },
-  { id: 'attivita', schermata: 'schermoAttivita', nome: 'Attività', promette: 'le attività dell\'owner', chiamateDichiarate: ['GET /api/v1/sessions/:id/tasks'] },
-  { id: 'note', schermata: 'schermoNote', nome: 'Note', promette: 'le note scritte dall\'agente', chiamateDichiarate: ['GET /api/v1/sessions/:id/notes'], sinonimi: ['notes'] },
-  { id: 'ricerca', schermata: 'schermoRicerca', nome: 'Ricerca approfondita', promette: 'le ricerche del progetto', chiamateDichiarate: ['GET /api/v1/sessions/:id/research'] },
-  { id: 'officina', schermata: 'schermoOfficina', nome: 'Officina attrezzi', promette: 'gli attrezzi forgiati', chiamateDichiarate: ['GET /api/v1/sessions/:id/tool-forge'] },
+  { id: 'libreria', schermata: 'schermoLibreria', nome: 'Libreria', promette: 'i documenti del progetto', vuoleSessione: true },
+  { id: 'memoria', schermata: 'schermoMemoria', nome: 'Memoria', promette: 'le memorie scritte dall\'agente', vuoleSessione: true },
+  { id: 'attivita', schermata: 'schermoAttivita', nome: 'Attività', promette: 'le attività dell\'owner', vuoleSessione: true },
+  { id: 'note', schermata: 'schermoNote', nome: 'Note', promette: 'le note scritte dall\'agente', vuoleSessione: true, sinonimi: ['notes'] },
+  { id: 'ricerca', schermata: 'schermoRicerca', nome: 'Ricerca approfondita', promette: 'le ricerche del progetto', vuoleSessione: true },
+  { id: 'officina', schermata: 'schermoOfficina', nome: 'Officina attrezzi', promette: 'gli attrezzi forgiati', vuoleSessione: true },
   { id: 'automazioni', schermata: 'schermoAutomazioni', nome: 'Automazioni', promette: 'le automazioni programmate' },
   { id: 'impostazioni', schermata: 'schermoImpostazioni', nome: 'Impostazioni', promette: 'fornitori, runtime e modelli' },
-  { id: 'doctor', schermata: 'schermoDoctor', nome: 'Doctor', promette: 'la diagnosi dell\'installazione', chiamateDichiarate: ['GET /api/v1/doctor'] },
+  { id: 'doctor', schermata: 'schermoDoctor', nome: 'Doctor', promette: 'la diagnosi dell\'installazione' },
   { id: 'modellab', schermata: 'schermoModelLab', nome: 'Model Lab', promette: 'i modelli sul computer e il catalogo' },
 ]);
 
@@ -252,6 +271,9 @@ const LIMITI = Object.freeze([
   'Guarda solo ciò che è VISIBILE nel momento in cui guarda: un controllo che compare dopo una risposta del modello, una barra che mente per due secondi dopo un invio, un elenco che si popola più tardi, non entrano in nessuna misura. Non c\'è nessuna nozione di tempo.',
   'Le rotte del server sono estratte a REGEX da `src/http-app.mjs` (`url.pathname === …` e i letterali `/^\\/api…$/`): una rotta scritta in una forma nuova non comparirebbe, e la sua assenza somiglia in tutto a «non c\'è». Il numero delle rotte trovate è scritto nel rapporto proprio per poterlo smentire.',
   'Le sessioni: lo store è VERGINE per costruzione (è la prova che il server è il proprio), quindi le regole della classe 3 che parlano di sessioni non esaminano nessuna coppia e risultano MUTE. Sono elencate: «nessuna bugia» con dieci regole mute non è una buona notizia.',
+  'Il giro apre le 17 SCHERMATE, non i 22 veli (le finestre modali): un controllo che vive solo dentro un dialogo non entra nelle classi 2, 3 e 4. I difetti dei dialoghi del 06/9 (i simboli mai disegnati, «.sheet-option» senza regola di base) li prende comunque la classe 1, che legge il markup intero — dialoghi compresi.',
+  'Un controllo senza ascoltatore che vive dentro un contenitore il quale ne ha uno non dichiarato risulta «non giudicabile», non «morto»: è la conservatività voluta del modulo, verificata al contrario (un bottone nudo iniettato nella pagina finisce fra gli ignoti, mentre un `data-vaia` con un valore inventato viene accusato subito). La colonna «non giudicabili» della copertura è dove si legge quanto costa.',
+  'La verifica al contrario di questo file è stata fatta a mano il 06/09/2026 iniettando nella pagina viva un `data-vaia="cronache"` (accusato: valore-non-riconosciuto, alta), un bottone nudo (finito fra gli ignoti) e un paragrafo con JSON, «REFUSED.» e `web_search` (tre reperti della classe 4). Senza quella prova, «zero difetti» non varrebbe niente.',
 ]);
 
 // ───────────────────────────── utilità ────────────────────────────────────────────────────────
@@ -374,9 +396,75 @@ function testiServiti() {
  * ⛔ È una estrazione statica e lo dice: una forma nuova non comparirebbe. Il rapporto stampa
  *    quante ne ha trovate proprio perché quel numero si possa smentire a colpo d'occhio.
  */
+/**
+ * Da un corpo di espressione regolare ai percorsi CONCRETI che serve.
+ * ⛔ Buttare via un pattern che non si sa leggere sembra prudente ed è il contrario: una rotta
+ *    mancante dall'elenco fa risultare ORFANA ogni chiamata che la usa — cioè produce accuse gravi
+ *    su codice sano. È successo al primo giro: `(pause|resume|cancel)` scartato, e le quattro
+ *    chiamate ai download di Hugging Face accusate di puntare al nulla. Qui i gruppi si ESPANDONO.
+ */
+function espandiPercorsi(corpo, profondita = 0) {
+  if (profondita > 8) return [corpo];
+  const apre = corpo.indexOf('(');
+  if (apre === -1) return [corpo];
+  let livello = 1;
+  let chiude = apre + 1;
+  while (chiude < corpo.length && livello > 0) {
+    if (corpo[chiude] === '\\') { chiude += 2; continue; }
+    if (corpo[chiude] === '(') livello += 1;
+    else if (corpo[chiude] === ')') livello -= 1;
+    chiude += 1;
+  }
+  if (livello > 0) return [corpo];
+  let dentro = corpo.slice(apre + 1, chiude - 1);
+  if (dentro.startsWith('?:')) dentro = dentro.slice(2);
+  const opzionale = corpo[chiude] === '?';
+  const prima = corpo.slice(0, apre);
+  const dopo = corpo.slice(opzionale ? chiude + 1 : chiude);
+  // i rami di primo livello del gruppo: `pause|resume|cancel`, oppure il gruppo intero
+  const rami = [];
+  let pezzo = '';
+  let profonditaRamo = 0;
+  for (let i = 0; i < dentro.length; i += 1) {
+    const c = dentro[i];
+    if (c === '\\') { pezzo += dentro.slice(i, i + 2); i += 1; continue; }
+    if (c === '(') profonditaRamo += 1;
+    if (c === ')') profonditaRamo -= 1;
+    if (c === '|' && profonditaRamo === 0) { rami.push(pezzo); pezzo = ''; continue; }
+    pezzo += c;
+  }
+  rami.push(pezzo);
+  if (opzionale) rami.push('');
+  const fuori = new Set();
+  for (const r of rami) for (const p of espandiPercorsi(prima + r + dopo, profondita + 1)) fuori.add(p);
+  return [...fuori];
+}
+
+/** Un percorso concreto da un pattern espanso, o `null` se resta della sintassi che non è un percorso. */
+function ripulisciPercorso(grezzo) {
+  /*
+   * ⛔ Le classi di caratteri si riducono a un SEGNAPOSTO **prima** di dividere sulle barre: dentro
+   *    `[^/]+` c'è una barra, e dividendo per prima cosa quel solo segmento diventava DUE
+   *    (`:id/:id`) — cioè ogni rotta con un id risultava più lunga di quella vera, e nessuna
+   *    chiamata la incontrava più. Misurato: 12 rotte sbagliate su 114.
+   */
+  const SEGNAPOSTO = ''; // un carattere che in un URL non può stare, scritto come fuga per non lasciarne uno invisibile nel sorgente
+  const percorso = grezzo
+    .replace(/\[(?:\\.|[^\]])*\](?:[+*?]|\{\d+(?:,\d*)?\})?/g, SEGNAPOSTO)
+    .replace(/\\(.)/g, '$1') // \/ \. \- tornano se stessi
+    .replace(/\/+/g, '/')
+    .replace(/\/$/, '');
+  if (!percorso.startsWith('/api/')) return null;
+  /*
+   * Un segmento che porta ancora un segnaposto o un metacarattere (`.*`, `doctor-[a-f0-9]{12}`) è
+   * un PARAMETRO, non spazzatura: diventa `:id`, che è esattamente ciò che significa. Cancellarlo
+   * produrrebbe un percorso più corto — cioè una rotta che non esiste.
+   */
+  return percorso.split('/').map((s) => (s.includes(SEGNAPOSTO) || /[{}+*?^$|()]/.test(s) ? ':id' : s)).join('/');
+}
+
 function rotteEsposte() {
-  const file = path.join(HARNESS, 'src/http-app.mjs');
-  const testo = readFileSync(file, 'utf8');
+  const testo = readFileSync(path.join(HARNESS, 'src/http-app.mjs'), 'utf8');
   const trovate = new Map();
   const RE_REGEX = /\/\^((?:\\\/|[^/\n])[^\n]*?)\$\//g;
   const RE_ESATTA = /url\.pathname\s*===\s*'([^']+)'/g;
@@ -385,22 +473,22 @@ function rotteEsposte() {
   for (let i = 0; i < righe.length; i += 1) {
     const riga = righe[i];
     const metodo = [...riga.matchAll(RE_METODO)].map((m) => m[1])[0] || '*';
-    const aggiungi = (percorso) => {
-      if (!percorso.startsWith('/api/')) return;
-      // ⛔ Un residuo di sintassi (gruppi opzionali, classi di caratteri) non è un percorso: si
-      //    TACE invece di inventarne uno storto. Un percorso finto produrrebbe un «mai chiamata»
-      //    che nessuno può chiudere, ed è così che un rapporto smette di essere letto.
-      if (/[()?[\]{}|+*\\]/.test(percorso)) return;
+    const aggiungi = (grezzo) => {
+      const percorso = ripulisciPercorso(grezzo);
+      if (!percorso) return;
       trovate.set(`${metodo} ${percorso}`, { metodo, percorso, file: 'src/http-app.mjs', riga: i + 1 });
     };
     for (const m of riga.matchAll(RE_ESATTA)) aggiungi(m[1]);
-    for (const m of riga.matchAll(RE_REGEX)) {
-      aggiungi(m[1]
-        .replace(/\\\//g, '/')
-        .replace(/\(\[\^\/\]\+\)/g, ':id')
-        .replace(/\(\.\*\)/g, '*'));
-    }
+    for (const m of riga.matchAll(RE_REGEX)) for (const p of espandiPercorsi(m[1])) aggiungi(p);
   }
+  /*
+   * ⛔ Le rotte che NON stanno in `http-app.mjs`, dichiarate a mano perché il loro server è un
+   *    altro. Senza questa riga il terminale — che apre `/api/v1/terminal/ws` — veniva accusato di
+   *    «chiamare una rotta che il server non espone», con gravità ALTA, su codice sano: la rotta
+   *    esiste, la serve `src/terminal-ws.mjs` sull'upgrade della connessione, e chi legge solo il
+   *    router HTTP non può vederla.
+   */
+  trovate.set('* /api/v1/terminal/ws', { metodo: '*', percorso: '/api/v1/terminal/ws', file: 'src/terminal-ws.mjs', riga: 0 });
   return [...trovate.values()];
 }
 
@@ -568,11 +656,20 @@ const RACCOLTA_NELLA_PAGINA = `(() => {
       token: tokenScritto[2] === 'k' ? null : numero(tokenScritto[1]),
     }
     : null;
-  const contatori = [...document.querySelectorAll('.talos-nav-item')]
+  /*
+   * ⛔ SOLO quelli della colonna. Le stesse classi «.talos-nav-item» vestono anche il navigatore
+   *    delle sezioni di Impostazioni, dove «Progetti 6» è il numero di una sezione e non la promessa
+   *    di un luogo da aprire: al primo giro completo è stato l'unico falso positivo della classe 3,
+   *    accusato di «non portare da nessuna parte» mentre non aveva mai promesso di portare.
+   * ⛔ «luogo» è undefined, non stringa vuota, quando non c'è: il modulo sceglie la chiave con ??, e una
+   *    stringa vuota passerebbe il vaglio del ?? facendo cercare i dati sotto una chiave che
+   *    nessuno scrive — la regola accuserebbe ogni contatore per un disallineamento mio.
+   */
+  const contatori = [...document.querySelectorAll('.talos-sidebar .talos-nav-item')]
     .filter((v) => v.querySelector('.talos-nav-item__count'))
     .map((v) => ({
       nome: (v.querySelector('.talos-nav-item__label')?.textContent || '').trim(),
-      luogo: v.dataset.conteggio || v.dataset.vaia || '',
+      luogo: v.dataset.conteggio || v.dataset.vaia || undefined,
       vaia: v.dataset.vaia || '',
       quanti: numero(v.querySelector('.talos-nav-item__count')?.textContent),
       /*
@@ -664,14 +761,44 @@ function costruisciInventario(nodi, perNodo, ascoltatoriDocumento) {
 
 /** Mostra una schermata premendo il comando vero; dove non ce n'è uno, lo dice invece di fingere. */
 async function apriSchermata(pagina, schermata) {
+  const premi = (v) => pagina.evaluate((sel) => {
+    const els = [...document.querySelectorAll(`[data-vaia="${sel}"]`)].filter((e) => (e.checkVisibility ? e.checkVisibility() : !e.hidden));
+    if (!els.length) return false;
+    els[0].click();
+    return true;
+  }, v);
+
   if (schermata.vaia) {
-    const premuto = await pagina.evaluate((v) => {
-      const els = [...document.querySelectorAll(`[data-vaia="${v}"]`)].filter((e) => (e.checkVisibility ? e.checkVisibility() : !e.hidden));
-      if (!els.length) return false;
-      els[0].click();
-      return true;
-    }, schermata.vaia);
-    if (premuto) return `clic su [data-vaia="${schermata.vaia}"]`;
+    if (await premi(schermata.vaia)) return `clic su [data-vaia="${schermata.vaia}"]`;
+    /*
+     * ⛔ Un secondo tentativo, e non è indulgenza: le schede della testata esistono solo mentre una
+     *    vista di sessione è aperta. Se il giro precedente ha lasciato lo schermo altrove, il
+     *    comando c'è ma è nascosto — e rinunciare qui scriverebbe nel rapporto «nessun comando la
+     *    apre» su una schermata che si apre benissimo. Si torna alla chat e si riprova UNA volta.
+     */
+    await pagina.evaluate(() => {
+      for (const el of document.querySelectorAll('[id^="schermo"]')) el.hidden = el.id !== 'schermoChat';
+      document.documentElement.setAttribute('data-vista', 'sessione');
+      document.documentElement.setAttribute('data-schermo', 'chat');
+    });
+    if (await premi(schermata.vaia)) return `clic su [data-vaia="${schermata.vaia}"] (dopo il ritorno alla chat)`;
+  }
+  if (schermata.id === 'schermoModelLab') {
+    /*
+     * La via che una persona percorrerebbe: il velo del modello → scheda «Locali» → «Gestisci nel
+     * Model Lab». Si TENTA sempre, anche sapendo che oggi quel pulsante non ha un ascoltatore: il
+     * giorno in cui lo avrà, il rapporto smetterà da solo di dire «mostrata per via DOM».
+     */
+    const arrivato = await pagina.evaluate(() => {
+      document.querySelector('[data-apre-velo="veloModello"]')?.click();
+      document.querySelector('[data-fonte-modello="locali"]')?.click();
+      document.querySelector('#apriLaboratorioDaModello')?.click();
+      const lab = document.getElementById('schermoModelLab');
+      const arrivato = Boolean(lab && !lab.hidden);
+      if (!arrivato) document.querySelector('[data-chiudi="veloModello"]')?.click();
+      return arrivato;
+    });
+    if (arrivato) return 'velo Modello → «Gestisci nel Model Lab»';
   }
   if (schermata.id === 'schermoDoctor') {
     const fatto = await pagina.evaluate(() => {
@@ -1003,14 +1130,23 @@ async function principale() {
      *    riempiono al primo avvio e non più. È il limite che il modulo stesso dichiara —
      *    «rotta mai chiamata è un sospetto statico, la prova è il traffico».
      */
+    const sessioneAperta = ((await chiedi(server.base, '/api/v1/sessions').catch(() => ({ items: [] })))?.items ?? []).length > 0;
     const superfici = SUPERFICI.map((s) => {
       if (s.statica || s.eventi) return s;
-      const osservate = [...(esito.trafficoPerSuperficie.get(s.schermata) || [])];
-      const dichiarate = s.chiamateDichiarate || [];
-      return { ...s, chiamate: [...new Set([...osservate, ...dichiarate])] };
+      // Senza sessione aperta una vista di sessione non chiama niente perché non ha un id: qui il
+      // banco non è in condizione di giudicare, e lo dice invece di accusare.
+      if (s.vuoleSessione && !sessioneAperta) return { ...s, chiamate: undefined };
+      /*
+       * ⛔ Una schermata che nessun comando dell'interfaccia apre è stata MOSTRATA scrivendo gli
+       *    attributi a mano: `setView` non è passata, quindi nessun caricatore è partito e il
+       *    traffico è vuoto per costruzione. Giudicarla «scollegata» accuserebbe il mio modo di
+       *    aprirla, non la app. Misurato: Model Lab risultava scollegata solo per questo.
+       */
+      if (String(esito.modiDiApertura.get(s.schermata) || '').startsWith('MOSTRATA')) return { ...s, chiamate: undefined };
+      return { ...s, chiamate: [...(esito.trafficoPerSuperficie.get(s.schermata) || [])] };
     });
     const contatori = (esito.quadroStati?.schermo?.contatori ?? []).map((c) => ({
-      id: c.luogo || c.nome, etichetta: c.nome, vaia: c.vaia,
+      id: c.luogo ?? c.nome, etichetta: c.nome, vaia: c.vaia,
     }));
     const sup = analizzaSuperfici({ rotte, chiamate, superfici, contatori, eccezioni: ECCEZIONI_ROTTE });
     const repertiSup = [
@@ -1034,8 +1170,10 @@ async function principale() {
        */
       datiApi.luoghi = {};
       for (const c of schermo.contatori) {
-        const chiave = c.luogo || c.nome;
-        datiApi.luoghi[chiave] = { esiste: Boolean(c.vaia && vistePerVaia[c.vaia] && c.vistaMontata) };
+        // ⛔ `??` e non `||`, esattamente come `coppieDi`: due modi diversi di scegliere la chiave
+        //    farebbero cercare i dati dove nessuno li ha messi, e ogni contatore risulterebbe senza
+        //    luogo. Il difetto sarebbe mio, l'accusa sua.
+        datiApi.luoghi[c.luogo ?? c.nome] = { esiste: Boolean(c.vaia && vistePerVaia[c.vaia] && c.vistaMontata) };
       }
       if (esito.cartellaScelta) {
         const percorso = esito.cartellaScelta.percorsoScelto;
