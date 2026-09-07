@@ -702,3 +702,29 @@ toast d'errore. Foto: `scratchpad/prove/foto/C06-caso-owner/`.
 
 ⛔ **Chi ha la pagina aperta da prima deve ricaricarla** (Ctrl+F5): il codice vecchio resta in
 memoria finché il browser non lo rilegge.
+
+### O-59 · la risposta a schermo NON è quella del giro — segnalato il 07/09 · APERTO
+
+**Cosa vede l'owner** (screenshot delle 14:54): chiede «puoi cercare sul web i metodi di post
+training di glm 5.3?». TALOS fa otto azioni giuste — `z.ai/blog/glm-5.3`, `glm5.app/blog/glm-5-3-post-training`,
+`baseten.co/blog/glm-5-3`, `the-agent-report.com/2026/08/glm-5-3-…` — e sotto, come risposta,
+compare: «**Parla del dominio example.org** (Example Domain), riservato da IANA per essere usato a
+fini illustrativi…». È la risposta di un **giro precedente** (quello sul 404 di `raw.githubusercontent`),
+ricomparsa sotto una domanda che non c'entra.
+
+**Perché è grave**: non è un difetto di stile. La chat attribuisce a una domanda una risposta che
+non le appartiene — chi legge non ha modo di accorgersene, e l'indice dei giri a destra mostra
+infatti sia «18 · Parla del dominio example.org» sia «17 · 8 altre azioni».
+
+**Dove guardare** (non ancora misurato): `ensureAssistantMessageElement(messageId)` e la mappa
+`state.realSession.messageElements` — se due giri riusano lo stesso `messageId`, il testo nuovo
+finisce nel nodo vecchio o viceversa. Da riprodurre con due giri di fila nella stessa sessione, il
+secondo con attrezzi.
+
+### O-60 · il suggerimento del composer riporta la query grezza, virgolette comprese — 07/09 · APERTO
+
+Nello stesso screenshot il campo vuoto suggerisce: `Trova di più su ""GLM-5.3" "SAO" "IndexShare"
+"slime""` — la stringa di ricerca dell'attrezzo, incollata con le sue virgolette annidate. Il
+suggerimento deve dire una cosa leggibile (o non dirla): oggi mostra un dettaglio interno.
+Da guardare in `mostraSuggerimentoComposer` e in chi lo alimenta (`ultimoBersaglioAttrezzo`).
+⛔ Vicino a **CB-07** della coda: quel campo sopravvive anche al cambio di sessione.

@@ -21641,14 +21641,38 @@ ${blocchi.join("\n\n")}` : testa;
         impostaStatoBottoneAscolto(bottone3, true);
         window.speechSynthesis.speak(utterance);
       }
+      function radiceComandi() {
+        const velo = $2("#veloComandi");
+        if (velo && $2("#risultatiComandi", velo)) return { velo, elenco: $2("#risultatiComandi", velo), campo: $2("#cercaComando", velo), vuoto: $2("#comandiVuoti", velo) };
+        return { velo: null, elenco: $2("#commandResults"), campo: commandSearch, vuoto: commandEmpty };
+      }
       function visibleCommandButtons() {
-        return $$("#commandResults button[data-command]").filter((button2) => !button2.hidden);
+        const { elenco: elenco2 } = radiceComandi();
+        return elenco2 ? $$("button[data-command]", elenco2).filter((button2) => !button2.hidden) : [];
       }
       function setActiveCommand(button2) {
-        $$("#commandResults button[data-command]").forEach((item) => item.classList.toggle("command-active", item === button2));
+        const { elenco: elenco2, campo: campo2 } = radiceComandi();
+        if (!elenco2) return;
+        $$("button[data-command]", elenco2).forEach((item) => {
+          const attivo = item === button2;
+          item.classList.toggle("command-active", attivo);
+          if (item.getAttribute("role") === "option") item.setAttribute("aria-selected", String(attivo));
+        });
+        if (campo2?.getAttribute("role") === "combobox") {
+          if (button2?.id) campo2.setAttribute("aria-activedescendant", button2.id);
+          else campo2.removeAttribute("aria-activedescendant");
+        }
         button2?.scrollIntoView({ block: "nearest" });
       }
       function openCommandPalette() {
+        const { velo, campo: campo2 } = radiceComandi();
+        if (velo) {
+          apriVeloMockup("veloComandi");
+          if (campo2) campo2.value = "";
+          filterCommands("");
+          window.setTimeout(() => campo2?.focus(), 20);
+          return;
+        }
         prepareResizableDialog(commandDialog, "command:palette");
         showEmbeddedDialog(commandDialog);
         commandSearch.value = "";
@@ -21657,11 +21681,17 @@ ${blocchi.join("\n\n")}` : testa;
       }
       function filterCommands(query) {
         const q = query.trim().toLowerCase();
-        $$("#commandResults button[data-command]").forEach((button2) => {
-          button2.hidden = Boolean(q && !button2.textContent.toLowerCase().includes(q));
-        });
+        const { elenco: elenco2, vuoto } = radiceComandi();
+        if (!elenco2) return;
+        for (const button2 of $$("button[data-command]", elenco2)) {
+          const testo3 = `${button2.textContent} ${button2.dataset.commandAlias || ""}`.toLowerCase();
+          button2.hidden = Boolean(q && !testo3.includes(q));
+        }
+        for (const gruppo of $$("[data-gruppo-comandi]", elenco2)) {
+          gruppo.hidden = $$("button[data-command]", gruppo).every((b) => b.hidden);
+        }
         const visible = visibleCommandButtons();
-        if (commandEmpty) commandEmpty.hidden = visible.length > 0;
+        if (vuoto) vuoto.hidden = visible.length > 0;
         setActiveCommand(visible[0] || null);
       }
       function moveActiveCommand(delta) {
@@ -21672,7 +21702,8 @@ ${blocchi.join("\n\n")}` : testa;
         setActiveCommand(next);
       }
       function executeCommand(command) {
-        closeEmbeddedDialog(commandDialog);
+        if ($2("#veloComandi") && !$2("#veloComandi").hidden) chiudiVeloMockup("veloComandi");
+        else closeEmbeddedDialog(commandDialog);
         switch (command) {
           case "new":
             createNewSession();
@@ -21935,26 +21966,41 @@ ${blocchi.join("\n\n")}` : testa;
       $2("#commandPaletteBtn").addEventListener("click", openCommandPalette);
       $2("#closeCommand")?.addEventListener("click", () => closeEmbeddedDialog(commandDialog));
       harnessDialogBackdrop.addEventListener("click", dismissTransientLayers);
-      commandSearch.addEventListener("input", () => filterCommands(commandSearch.value));
-      commandSearch.addEventListener("keydown", (event) => {
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          moveActiveCommand(1);
-        } else if (event.key === "ArrowUp") {
-          event.preventDefault();
-          moveActiveCommand(-1);
-        } else if (event.key === "Enter") {
-          const active = $2("#commandResults .command-active[data-command]");
-          if (active) {
+      function collegaCampoComandi(campo2) {
+        if (!campo2 || campo2.dataset.comandiCollegati) return;
+        campo2.dataset.comandiCollegati = "si";
+        campo2.addEventListener("input", () => filterCommands(campo2.value));
+        campo2.addEventListener("keydown", (event) => {
+          if (event.key === "ArrowDown") {
             event.preventDefault();
-            executeCommand(active.dataset.command);
+            moveActiveCommand(1);
+          } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            moveActiveCommand(-1);
+          } else if (event.key === "Enter") {
+            const { elenco: elenco2 } = radiceComandi();
+            const active = elenco2 && $2(".command-active[data-command]", elenco2);
+            if (active) {
+              event.preventDefault();
+              executeCommand(active.dataset.command);
+            }
           }
-        }
-      });
-      $$("#commandResults button[data-command]").forEach((button2) => {
-        button2.addEventListener("mouseenter", () => setActiveCommand(button2));
-        button2.addEventListener("click", () => executeCommand(button2.dataset.command));
-      });
+        });
+      }
+      collegaCampoComandi(commandSearch);
+      collegaCampoComandi($2("#cercaComando"));
+      for (const elenco2 of [$2("#commandResults"), $2("#risultatiComandi")]) {
+        if (!elenco2 || elenco2.dataset.comandiCollegati) continue;
+        elenco2.dataset.comandiCollegati = "si";
+        elenco2.addEventListener("mouseover", (event) => {
+          const button2 = event.target?.closest?.("button[data-command]");
+          if (button2) setActiveCommand(button2);
+        });
+        elenco2.addEventListener("click", (event) => {
+          const button2 = event.target?.closest?.("button[data-command]");
+          if (button2) executeCommand(button2.dataset.command);
+        });
+      }
       composerInput.addEventListener("input", () => {
         autoGrowTextarea();
         syncRunComposerState();

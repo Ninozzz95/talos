@@ -1,96 +1,88 @@
-# Quanto manca alla prima release desktop di TALOS — stato al 07/09/2026
+# Quanto manca alla prima release desktop di TALOS — stato al 07/09/2026, sera
 
-> Chiesto dall'owner il 06/09 («alla fine mi dici quanto manca ad una prima release desktop, con
-> tutte le eventuali modifiche al repo GitHub e readme etc»). Ogni riga qui sotto è un fatto letto
-> nel repo o misurato, non una stima a occhio. Le taglie sono conteggi (file, righe, test), non ore:
-> le ore non si danno senza misura (regola del 03/09).
+> Chiesto dall'owner il 06/09 e ri-chiesto il 07/09 («dimmi tutto quello che manca prima di avere
+> una prima release stabile, ricorda bene»). Ogni riga è un fatto **misurato oggi**, non una stima:
+> dove c'è un numero, sotto c'è un comando che l'ha prodotto. Le ore non si danno senza misura.
 
-## Cosa c'è, e regge
+## Cosa c'è, e regge (misurato il 07/09, sera)
 
-- La app nuova è **servita** (`public/` = build modulare dal cutover del 06/09), il monolite è un
-  backup fuori dal repo. Tutte le 16 schermate del mockup sono vive: chat, terminale a schede con
-  shell vere, review, browser a schede con cornice viva e annotazione degli elementi (oltre Hermes),
-  capability, board, libreria, memoria, attività, ricerca, officina, automazioni, doctor,
-  impostazioni (40 righe), Model Lab, intro del primo avvio.
-- Cancelli verdi al 07/09: server **1626/1626**, frontend unit **125/125**, statico **195/195**,
-  componenti **111/111** (parità struttura/parole/pixel col mockup a tre viewport), contratto
-  pubblico conservato (11 global, 7 chiavi, 23 eventi, 10 asset, 19 rotte meno una ritirata).
-- Lingua: menu, Impostazioni, attrezzi, terminale, browser in inglese, a caldo, ricordata.
-- Sicurezza: server solo su loopback, cookie di sessione, CSP stretta, proxy del Browser solo per
-  dev server locali, ricevute firmate lato server, permessi per attrezzo con approvazione in chat.
+- App nuova servita da `public/` (build modulare). Tutte le schermate del mockup sono vive.
+- Cancelli: **unit 356/356 · server 1657/1657 · componenti 111/111 · lab 195/195 · statico: 0
+  simboli morti, 0 graffe orfane**.
+- **Giri veri col modello fatti oggi** (GLM 5.3 Flash, istanza di prova 4211 col kernel dell'owner):
+  avvio da cartella libera, streaming, attrezzi, **stop in 4 ms**, ripresa di una sessione
+  interrotta dopo la morte del server, fork, permessi per attrezzo scritti e riletti dal server.
+- I controlli marcati «fase 3» (non implementati) sono **40 nel template e 0 visibili** su chat,
+  review, terminale e browser: nessuna promessa vuota a schermo (misurato con il browser).
 
-## Cosa BLOCCA una release (in quest'ordine)
+## Cosa BLOCCA la release — quattro cose, in quest'ordine
 
-1. **Il kernel non è nel repo.** Il server parte, ma i giri reali passano da
-   `TALOS_OWNER_RUNTIME_MODULE`, che punta a `AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs`
-   — un file di un ALTRO repo (`mobile/scripts/harness-talos/` qui non esiste). Chi clona questo repo
-   ha un server in sola lettura. Decisione dell'owner (`DECISIONE-KERNEL-DUE-COPIE-2026-09-02.md`,
-   kernel fuori dalla mia lane): portare il kernel qui, o pubblicarlo a parte e documentare la
-   variabile. Il README non nomina nemmeno la variabile.
-2. **Nessuna prova end-to-end col modello sulla UI nuova.** In questa sessione nessun giro a
-   pagamento è stato lanciato (regola: decide l'owner). Il 4174 riavviato sul kernel dell'owner dà
-   all'avvio «Il runtime agente non espone il catalogo task richiesto» (`runtime-owner-adapter.mjs:601`):
-   il doctor lo dichiara non bloccante, ma è un disallineamento kernel↔adapter da chiarire PRIMA di
-   dire «funziona». Serve una sessione vera (modello flash a chiave, pochi centesimi) che attraversi
-   chat in streaming, un attrezzo con approvazione, una scrittura di file con Review, il terminale e
-   il browser.
-3. **Il ramo.** `lane/harness-desktop` è **1.583 commit avanti** a `main`, e `main` ha **50 commit**
-   che la lane non ha (ultimo il 30/07). GitHub rilascia da `main`: serve un merge (o si dichiara la
-   lane come ramo di release). Conflitti: ignoti finché non si prova un merge a secco — è la prima
-   cosa da misurare.
-4. **CI e release non sanno che il desktop esiste.** `.github/workflows/ci.yml` (job «gates»)
-   esegue typecheck, vitest, build e grafo d'avvio della app MOBILE; `release.yml` costruisce e firma
-   solo l'APK sui tag `v*`. Per il desktop mancano: un job che lanci `node --test harness-ui/tests`
-   e i tre cancelli del frontend (headless, Chrome già installato sui runner), e un artefatto di
-   release (uno zip di `harness-ui/` senza `node_modules`, con `npm ci` all'installazione, o il
-   lanciatore `avvia-talos.cmd` impacchettato). `scripts/rilascia.ps1` e `pubblica.ps1` sono il
-   percorso MOBILE: vanno adattati o affiancati.
-5. **Controlli morti nella Review.** Nel template ci sono «Accetta questo file» e «Scarta tutto»
-   senza nessun gestore (righe K-B del contratto: checkpoint per giro lato kernel). Prima di una
-   release si nascondono o si dichiarano, mai lasciati inerti (regola «mai un pannello
-   silenziosamente inerte»). Stessa verifica per «Apri nell'editor» (K-C) e il gruppo «Fissate»
-   (K-A, oggi nascosto dal bridge).
+### 1. Il kernel non è nel repo · **decisione tua**
+I giri reali passano da `TALOS_OWNER_RUNTIME_MODULE`, che punta a
+`AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs`: un file di un ALTRO repo. Chi clona
+questo repo ottiene un server in **sola lettura**. Il README non nomina nemmeno la variabile
+(verificato: **0 occorrenze** in `harness-ui/README.md` e in `README.md`).
+Le vie: portare il kernel qui, oppure pubblicarlo a parte e documentare la variabile.
 
-## Modifiche al repo GitHub e alla documentazione
+### 2. Il merge su `main` · **misurato oggi, e non è il mostro che sembrava**
+`lane/harness-desktop` è **1.674 commit avanti**, `main` ne ha **50** che la lane non ha (ultimo il
+30/07). Il merge a secco (`git merge-tree --write-tree main HEAD`) dà **3 file in conflitto**:
+`.gitattributes`, `.gitignore`, `AGENTS.md`. Sono file di configurazione, non codice.
 
-- `harness-ui/README.md` (7,7 KB): lo screenshot è quello del TABLET mobile
-  (`../mobile/docs/immagini/tablet-9-coding-agent.png`); servono screenshot della UI desktop nuova,
-  in inglese, approvati uno per uno (regola dell'owner). La tabella «Configuration» deve aggiungere
-  `TALOS_OWNER_RUNTIME_MODULE` (obbligatoria per i giri), `TALOS_HARNESS_UI_PUBLIC_DIR`,
-  `TALOS_HARNESS_UI_SESSIONS_DIR`, `TALOS_INTRO`. «Local API» deve elencare le rotte nate dopo:
-  schede terminale (W1-01), git (W1-05), `browser/incorniciabile`, `browser/proxy`. «Intentional
-  limits» deve dire: proxy solo locale, niente ritaglio d'immagine nelle annotazioni, letture web
-  solo tramite l'agente. Il paragrafo sull'installer («The final installer must own a stable
-  executable») descrive un futuro: va marcato come tale o tolto.
-- `README.md` (radice): la sezione Desktop («Node.js 24 and Google Chrome») è giusta; aggiungere la
-  riga sul kernel e il link alle note di release desktop.
-- **Versione e changelog.** `VERSION` dice `v1.0.0`; `CHANGELOG.md` è del mobile (ultima `v0.1.22`,
-  un solo cenno al desktop, riga 544). Decidere il nome del tag desktop (es. `desktop-v0.1.0`) così
-  `release.yml` non tenta un APK; scrivere la sezione desktop del changelog dalle voci di questa
-  lane (terminale, browser, lingua, intro, dialoghi, Model Lab, cutover).
-- **Pulizia del pacchetto.** `public/vendor/floating-ui` e `public/vendor/tanstack` sono resti del
-  frontend parallelo di Opus: nessun file li carica, e `THIRD_PARTY_NOTICES.md` non li cita — via
-  dalla copia degli asset (con il test `PHASE1-ASSET-ALLOWLIST-01` aggiornato). `harness-ui/labs/
-  electron-shell` è un laboratorio tracciato: si dichiara nel README o si toglie dal pacchetto.
-- **`.claude/` è nel repo per decisione del 20/08** (1.261 file: ledger, mockup, prompt, memoria).
-  Per una release pubblica è materiale interno con percorsi locali: decide l'owner se resta.
-- `docs/` (architettura, benchmark, deployment, PUBLISHING) va riletto per il desktop: oggi parla
-  quasi solo del mobile.
+### 3. CI e artefatto: il desktop non esiste per la pipeline
+`ci.yml` e `release.yml` hanno **0 occorrenze** di `harness-ui`: la CI prova la app mobile, la
+release firma l'APK sui tag `v*`. Servono un job che lanci `node --test harness-ui/tests` più i tre
+cancelli del frontend, e un artefatto (zip di `harness-ui/` senza `node_modules`, o il lanciatore).
 
-## Debito visibile ma non bloccante
+### 4. Nessuna prova su MACCHINA PULITA
+I giri di oggi girano sulla macchina dove tutto è già configurato. Manca il giro da clone:
+`git clone` → `npm ci` → avvio → prima sessione, senza le variabili già in memoria. È lì che si
+vede se il kernel mancante, un percorso assoluto o una dipendenza non dichiarata fermano tutto.
 
-- Lingua, seconda fascia: 129 chiamate `toast(` nel monolite e il testo statico delle pagine
-  (titoli, spiegazioni, stati vuoti) restano in italiano quando i menu sono in inglese.
-- Righe del contratto K-D…K-H (ricevute nella Review, suggerimenti dello stato vuoto, «approvato da
-  un altro client», chip del costo): oggi non compaiono, quindi non ingannano; restano proposte.
-- Avviso di console preesistente all'avvio (iframe `srcdoc` dell'anteprima demo degli artefatti,
-  stile in linea rifiutato dalla CSP); `tests/browser/baseline-shell.spec.mjs` fuori dai cancelli,
-  da rivedere sulla build nuova; `!important` nel pannello runtime di Astra; front matter grezzo nel
-  README dei modelli Hugging Face.
+## Repo, documentazione, pacchetto
+
+- `harness-ui/README.md`: screenshot ancora del TABLET mobile; mancano `TALOS_OWNER_RUNTIME_MODULE`,
+  `TALOS_HARNESS_UI_PUBLIC_DIR`, `TALOS_HARNESS_UI_SESSIONS_DIR`, `TALOS_INTRO` nella tabella
+  «Configuration»; «Local API» non elenca le rotte nate dopo (schede terminale, git,
+  `browser/incorniciabile`, `browser/proxy`).
+- `VERSION` dice `v1.0.0` (è del mobile); `CHANGELOG.md` è del mobile. Serve un tag desktop
+  (es. `desktop-v0.1.0`) o `release.yml` tenterà un APK.
+- Pacchetto: `public/vendor/floating-ui` e `public/vendor/tanstack` non sono caricati da nessuno
+  (resti del frontend parallelo). `prism` e `xterm` servono.
+- `.claude/` (1.261 file) è nel repo per decisione del 20/08: per una release pubblica è materiale
+  interno con percorsi locali. Decidi tu.
+
+## Debito funzionale ancora aperto — verificato riga per riga oggi
+
+**Fogli legacy** (finestre `<dialog>` del monolite invece dei veli del tema): ne restano **tre** con
+chiamanti veri — `capabilities` (3), `control` (2), `model` (1). Gli altri quattro (`board`,
+`environment`, `modelLab`, `realSession`) non li apre più nessuno: si cancellano.
+Chiusi oggi: `permissions` e `sessionTree`.
+
+**Difetti dell'owner ancora aperti**: O-42 (Browser: riquadro rotto quando il sito vieta la
+cornice) · O-44 (loghi veri dal mobile) · O-45 (i tre pallini: CSS corretto, **mai misurato durante
+un giro vivo**) · O-46 (chat vuota senza logo e senza «TALOS» in Orbitron).
+
+**Dalla coda unica** (121 righe distinte aperte al 06/09; queste riverificate oggi nel codice):
+- **CB-10** — `icon()` scrive `<use href="#id">` senza validare: **11 nomi non esistono** nello
+  sprite. APERTO (`app.js:1133`).
+- **CB-11** — la palette italiana completa (`#veloComandi`) non ha **nessun** riferimento in JS:
+  si apre ancora quella del monolite, con tre voci in inglese. APERTO.
+- **BH-06** — `style-src 'self'` senza hash per lo `<style>` che xterm inietta: errori CSP a ogni
+  apertura del terminale. APERTO (`http-app.mjs:331`).
+- **T15-D1/D2** — «La consultazione del rapporto… non è ancora disponibile qui» ×2 ancora nel
+  template: sono la ragione d'essere delle due sezioni. APERTO.
+- **BH-04** — «English» traduce i menu, non i titoli né gli stati vuoti. APERTO.
+- **7 funzioni dichiarate e mai chiamate** (`apriIntroPrimoAvvio`, `costruisciConversationHero`,
+  `creaRigaSessioneBoard`, `filtraCatalogoModelLab`, `monogrammaProvider`,
+  `renderizzaDettaglioModelLab`, `segmentoProvider`).
+- Chiuso oggi rispetto alla coda: **CB-18-bis** (l'esito di un'approvazione ora ha il suo colore:
+  3 regole `approval__esito--`), **BH-13** (sei cappelli in inglese), **BH-14** (politiche in
+  inglese), **CB-14** (l'interruttore non stilato), **T03-D2** (avviso porte laterali nel velo).
 
 ## In una frase
 
-La app è pronta; la RELEASE no: manca il kernel nel repo (decisione tua), una prova vera col modello
-(pochi centesimi, decisione tua), il merge di 1.583 commit su `main` (da misurare a secco), un job di
-CI e un artefatto per il desktop, i controlli morti della Review, e README/changelog/versione
-riscritti per il desktop con screenshot inglesi approvati.
+L'applicazione funziona e i suoi cancelli sono verdi; la RELEASE è ferma su quattro cose: il
+**kernel fuori dal repo** (decisione tua), il **merge su `main`** (ora misurato: 3 conflitti di
+configurazione), una **CI e un artefatto** che sappiano del desktop, e una **prova da clone su
+macchina pulita**. Il resto è debito visibile ma non bloccante, e la lista qui sopra lo nomina tutto.

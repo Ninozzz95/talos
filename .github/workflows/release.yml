@@ -26,7 +26,10 @@ name: release
 
 on:
   push:
-    tags: ['v*']
+    # ⛔⛔ 07/9 — DUE PRODOTTI, DUE PREFISSI. Prima c'era solo `v*`, che è il tag del MOBILE: un tag
+    # per il desktop avrebbe svegliato il job dell'APK, che avrebbe provato a firmare un artefatto
+    # che quel tag non descrive. I due prefissi si dichiarano qui e ogni job guarda il proprio.
+    tags: ['v*', 'desktop-v*']
 
 # ⛔ `attestations: write` è ciò che permette la firma di provenienza; `contents:
 # write` serve a creare la release. Nient'altro: un token che può più di quanto
@@ -44,6 +47,8 @@ permissions:
 
 jobs:
   apk:
+    # ⛔ solo i tag del mobile: `desktop-v0.1.0` non è una release Android.
+    if: startsWith(github.ref_name, 'v')
     runs-on: ubuntu-latest
     steps:
       # ⛔ `submodules: recursive` — senza, `third_party/llama.cpp` arriva come
@@ -370,3 +375,104 @@ jobs:
             Two devices: a OnePlus 13 and a OnePlus Pad 3. Two devices are a
             small sample, and Android ROMs diverge a good deal on
             accessibility, background execution and lock screen behaviour.
+
+  # ⛔⛔⛔ 07/9 — IL DESKTOP NON AVEVA UN ARTEFATTO. `release.yml` costruiva e firmava solo l'APK:
+  # per il prodotto desktop non esisteva niente da scaricare, e «rilasciare» voleva dire mandare a
+  # qualcuno un percorso sul disco di chi l'aveva scritto.
+  #
+  # Cosa contiene lo zip: il server, il frontend GIÀ COSTRUITO (`public/`), il kernel e il suo
+  # `dist/`, il lanciatore, il README e le licenze — MAI `node_modules` (si installa con `npm ci`,
+  # che è anche l'unico modo di compilare `node-pty` sulla macchina giusta) né `.sessions-store`
+  # (sono le conversazioni di chi ha costruito il pacchetto: non si spediscono).
+  desktop:
+    if: startsWith(github.ref_name, 'desktop-v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: harness-ui/package-lock.json
+
+      - name: dipendenze
+        run: |
+          npm ci --ignore-scripts --prefix harness-ui
+          npm ci --prefix harness-ui/frontend
+
+      # ⛔ Il pacchetto porta il frontend COSTRUITO: chi lo scarica non deve avere una toolchain.
+      - name: costruisci il frontend e consegnalo
+        run: |
+          npm --prefix harness-ui/frontend run build
+          cp -r harness-ui/frontend/dist/. harness-ui/public/
+
+      # ⛔ I cancelli PRIMA di impacchettare: un artefatto firmato di codice mai provato è peggio di
+      #    nessun artefatto, perché porta la firma a garanzia di qualcosa che nessuno ha guardato.
+      - name: cancelli
+        run: |
+          node --test harness-ui/tests/*.test.mjs
+          npm --prefix harness-ui run test:kernel
+          npm --prefix harness-ui/frontend run test:unit
+
+      - name: il pacchetto
+        run: |
+          set -euo pipefail
+          nome="talos-harness-desktop-${GITHUB_REF_NAME}"
+          mkdir -p "dist-desktop/$nome"
+          # ⛔⛔ 07/9, MISURATO: la prima versione di questo passo copiava harness-ui/ ESCLUDENDO
+          #    ciò che non serviva, e produceva **311 MB** — dentro finivano i sorgenti del
+          #    frontend, i suoi artefatti di misura, il mockup originale e i laboratori. Un
+          #    elenco di esclusioni dimentica sempre qualcosa; un elenco di INCLUSIONI dichiara
+          #    il prodotto. Con questo il pacchetto è **5,2 MB** (misurato in locale sugli
+          #    stessi file): server, sorgenti del server, kernel, UI costruita, lanciatore,
+          #    licenze.
+          mkdir -p "dist-desktop/$nome/scripts"
+          cp harness-ui/server.mjs harness-ui/package.json harness-ui/package-lock.json harness-ui/README.md "dist-desktop/$nome/"
+          cp -r harness-ui/src "dist-desktop/$nome/"
+          cp -r harness-ui/public "dist-desktop/$nome/"
+          cp harness-ui/scripts/*.mjs "dist-desktop/$nome/scripts/" 2>/dev/null || true
+          cp LICENSE THIRD_PARTY_NOTICES.md "dist-desktop/$nome/" 2>/dev/null || true
+          du -sh "dist-desktop/$nome"
+          cd dist-desktop && zip -qr "$nome.zip" "$nome"
+          ls -la "$nome.zip"
+          unzip -l "$nome.zip" | tail -3
+
+      # ⛔ La prova che il pacchetto SERVE A QUALCOSA: si scompatta in una cartella pulita, si
+      #    installa, si avvia, e deve rispondere. Senza questa, «il pacchetto è stato creato» dice
+      #    solo che uno zip esiste — ed è esattamente l'errore già pagato il 22/8 con la copia
+      #    pubblica svuotata due volte, dove il controllo guardava l'archivio e non il risultato.
+      - name: il pacchetto si avvia davvero
+        run: |
+          set -euo pipefail
+          nome="talos-harness-desktop-${GITHUB_REF_NAME}"
+          cd "$(mktemp -d)"
+          unzip -q "$GITHUB_WORKSPACE/dist-desktop/$nome.zip"
+          cd "$nome"
+          npm ci --ignore-scripts
+          TALOS_HARNESS_UI_PORT=4199 node server.mjs &
+          for i in $(seq 1 40); do
+            sleep 1
+            if curl -fsS http://127.0.0.1:4199/api/v1/health > /dev/null; then
+              echo "il pacchetto risponde"
+              curl -fsS http://127.0.0.1:4199/ | head -c 200 > /dev/null
+              exit 0
+            fi
+          done
+          echo "::error::il pacchetto non ha risposto entro 40 secondi"
+          exit 1
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: talos-harness-desktop
+          path: dist-desktop/*.zip
+          retention-days: 30
+
+      - uses: actions/attest-build-provenance@92c3ea16d9b4ab2c7b8e9d5c3b8ac96f19b0d9c1 # v2
+        with:
+          subject-path: dist-desktop/*.zip
+
+      - name: la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist-desktop/*.zip --title "TALOS Harness Desktop $GITHUB_REF_NAME" --generate-notes

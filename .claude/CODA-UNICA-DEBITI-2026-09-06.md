@@ -410,3 +410,25 @@ una cura sola.
 `veloModello`**, cioè dentro una finestra che nessuno può aprire. Il collegamento funziona (provato
 cliccando l'elemento) ma non è raggiungibile da una persona finché quella finestra resta chiusa.
 Va rifatto sul selettore vero, o cade dentro la decisione qui sopra.
+
+---
+
+## 6 · Aggiunte e smarcature del 07/09 (owner: «non andare a memoria, segnala e smarca man mano»)
+
+| id | cosa | stato |
+|---|---|---|
+| **O-59** | la risposta a schermo non è quella del giro (screenshot 14:54: otto ricerche su GLM-5.3 e sotto la risposta su `example.org`) | **APERTO — nuovo**, dettagli nel registro difetti |
+| **O-60** | il suggerimento del composer riporta la query grezza con le virgolette annidate | **APERTO — nuovo** |
+| **CB-10** | «11 icone che non esistono» | **CADUTA il 07/9**: misurato — 48 simboli nello sprite, 41 nomi usati, **0 usati-e-non-disegnati**. Resta solo la validazione di `icon()`, che non protegge da un nome futuro |
+| **CB-11** | la palette italiana non si apriva | **IN CORSO 07/9**: `openCommandPalette` apre `#veloComandi`, ricerca/frecce/Invio collegati a entrambi i campi. Da riverificare dal vivo |
+| **CB-18-bis** | l'esito di un'approvazione senza colore | **CHIUSA**: 3 regole `approval__esito--` nel foglio servito |
+| **BH-13** | sei cappelli dei fogli in inglese | **CHIUSA** il 07/9 |
+| **BH-14** | politiche in inglese a schermo | **CHIUSA** il 07/9 (`components/politiche.js`, valore del kernel invariato) |
+| **CB-14** | l'unico interruttore non stilato | **CHIUSA** il 07/9 (vestiti tutti i controlli nativi) |
+| **T03-D2** | chiudere «scrivi» non chiude il terminale | **CHIUSA** il 07/9: l'avviso vive nel velo Permessi ed è AGIBILE sul posto |
+| **BH-05** | l'albero apriva due UI che si contraddicevano | **CHIUSA** il 07/9: una porta sola, `sessionTree` → `veloAlbero` coi dati veri |
+| **CB-11** | la palette italiana non si apriva | **CHIUSA** il 07/9, provata dal vivo: si apre `#veloComandi`, filtra (anche per alias: «fork» trova «Crea un ramo»), frecce e Invio funzionano, «nessun risultato» compare, e il comando cambia vista |
+| blocco release **1** | il kernel non era nel repo | **CHIUSA** il 07/9 (owner: «confermo, può stare sul repo pubblico»): `harness-ui/src/kernel/`, default nel config, 538 test suoi nei cancelli, `npm run kernel:controlla` per la divergenza. Provato: giro vero **senza** `TALOS_OWNER_RUNTIME_MODULE` |
+| blocco release **3** | CI e artefatto non conoscevano il desktop | **CHIUSA** il 07/9: job `desktop` in `ci.yml` (4 cancelli + kernel), job `desktop` in `release.yml` sui tag `desktop-v*`, pacchetto **5,2 MB** provato dal vivo — `npm ci` in cartella pulita, avvio senza variabili, un giro vero concluso |
+| blocco release **4** | nessuna prova da macchina pulita | **PARZIALE**: il pacchetto scompattato si installa, si avvia e fa un giro vero su QUESTA macchina (Node e chiave già presenti). Resta da provare su una macchina che non ha mai visto TALOS |
+| blocco release **5** | controlli morti della Review | **CHIUSA**: 40 marcati «fase 3», **0 visibili** su chat/review/terminale/browser (misurato col browser) |
