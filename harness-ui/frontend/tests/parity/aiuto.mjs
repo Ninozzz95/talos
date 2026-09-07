@@ -11,7 +11,7 @@ import { PNG } from 'pngjs';
  * animazioni spente, e un diff scritto su disco SOLO quando serve a qualcuno.
  */
 export const radice = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-export const MOCKUP = pathToFileURL(path.resolve(radice, '../../.claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html')).href;
+export const MOCKUP = pathToFileURL(path.resolve(radice, 'mockup/talos-mockup.html')).href;
 export const ARTEFATTI = path.resolve(radice, 'artifacts/parita');
 const FONT_DIR = pathToFileURL(path.resolve(radice, 'dist/fonts')).href;
 export const FONT_LOCALI = [

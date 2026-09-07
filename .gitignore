@@ -318,3 +318,13 @@ harness-ui/.talos-4174*.log
 # Prove della caccia ai difetti GRAVI del 06/09 — sonde, log e foto, fuori dal repo
 .gravi/
 harness-ui/.talos-4198*.log
+
+# ⛔⛔⛔ 07/09/2026, owner: «.claude via senza ombra di dubbio». Qui dentro c'è il materiale di
+# LAVORO — ledger, briefing, memoria delle sessioni, audit, prompt, taccuini: percorsi locali,
+# nomi di persone, ricerche interne. Non è il prodotto, e in un repo pubblico non ha niente da fare.
+# ⛔ I file NON sono stati cancellati: `git rm -r --cached` li toglie dal repo e li lascia sul disco,
+#    dove servono a chi lavora. Chi clona non li vede.
+# ⛔ Il MOCKUP era l'unica cosa qui dentro di cui il PRODOTTO ha bisogno (la build del frontend e i
+#    cancelli di parità lo leggono): spostato in `harness-ui/frontend/mockup/talos-mockup.html`,
+#    dove appartiene, con i suoi cinque riferimenti aggiornati.
+.claude/

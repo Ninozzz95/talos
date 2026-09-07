@@ -56,7 +56,7 @@ for (const v of c.slice(0, 25)) console.log('  ', JSON.stringify(v).slice(0, 150
  */
 const fogli = { 'src/styles/index.css': leggi('src/styles/index.css'), 'src/styles/foglio-monolite.css': leggi('src/styles/foglio-monolite.css') };
 try {
-  const mockup = readFileSync(RADICE + '../../.claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html', 'utf8');
+  const mockup = readFileSync(RADICE + 'mockup/talos-mockup.html', 'utf8');
   for (const f of fogliInterni(mockup)) fogli[`MOCKUP (<style> da riga ${f.rigaIniziale})`] = f.css;
 } catch { /* il mockup può non esserci: il controllo sui fogli consegnati vale lo stesso */ }
 const graffe = [];
