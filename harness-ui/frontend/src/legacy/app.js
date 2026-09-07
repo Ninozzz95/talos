@@ -9815,6 +9815,50 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return apiPost(`/api/v1/browser/vivo/chiudi?sessione=${encodeURIComponent(identitaBrowser())}`, {}).catch(() => {});
   }
 
+  /*
+   * Uno spillo su una pagina VIVA: l'elemento lo descrive il server (il DOM sta nel Chromium
+   * pilotato, non qui), e il pacchetto entra nella stessa lista dei commenti che già esiste — quella
+   * che poi finisce nel composer, mai inviata da sola.
+   * ⛔ Ciò che torna dalla pagina è contenuto NON AFFIDABILE: è un dato dentro un commento, mai
+   *   un'istruzione per il modello.
+   */
+  async function spillaSullaPaginaViva(voce, punto) {
+    try {
+      const fatto = await apiPost(`/api/v1/browser/vivo/descrivi?sessione=${encodeURIComponent(identitaBrowser())}`, punto);
+      if (!fatto?.trovato) { toast('Niente da annotare', 'Sotto quel punto non c’è nessun elemento.'); return; }
+      const rs = state.realSession;
+      const lista = rs.browserAnnotazioni[voce.id] || (rs.browserAnnotazioni[voce.id] = []);
+      lista.push({ nota: '', fatto });
+      if (Array.isArray(fatto.errori)) rs.browserErroriPagina[voce.id] = fatto.errori;
+      renderizzaBrowser();
+      $('#browserAnnotazioni .talos-annotazione:last-child textarea')?.focus();
+    } catch (errore) {
+      toast('Commento non riuscito', messaggioErroreUtente(errore, 'Non riesco a leggere quell’elemento.'));
+    }
+  }
+
+  /*
+   * ⛔ 07/9, dalla prova DEL CURIOSO: ricaricando la pagina di TALOS col browser aperto, la scheda
+   *   restava viva sul server e il Chromium acceso per nessuno — fino alla scadenza per inattività,
+   *   dieci minuti dopo. Chi ricarica non si aspetta di lasciare un browser acceso.
+   * Ricerca 07/09/2026 (MDN «Navigator.sendBeacon», CSS-Tricks «Send an HTTP Request on Page Exit»,
+   * Speed Kit «Unload beacon reliability»): un `fetch` dentro `beforeunload` viene ABBANDONATO senza
+   * dirlo, e `unload`/`beforeunload` impediscono anche la cache avanti-indietro del browser. Le due
+   * cose che reggono davvero sono `visibilitychange` con `visibilityState === 'hidden'` e `pagehide`
+   * — insieme arrivano al 91% dei casi — e la richiesta va mandata con `sendBeacon`, che il browser
+   * accoda e porta a termine anche quando la pagina non c'è più.
+   */
+  const chiudiIlBrowserVivoAllUscita = () => {
+    if (!vistaViva) return; // niente da chiudere: nessun Chromium acceso per questa pagina
+    const dove = `/api/v1/browser/vivo/chiudi?sessione=${encodeURIComponent(identitaBrowser())}`;
+    try {
+      if (navigator.sendBeacon) navigator.sendBeacon(dove, new Blob([], { type: 'application/json' }));
+      else void fetch(dove, { method: 'POST', keepalive: true });
+    } catch { /* la pagina sta morendo: qui non si può fare altro, e la scadenza per inattività resta la rete */ }
+  };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') chiudiIlBrowserVivoAllUscita(); });
+  window.addEventListener('pagehide', chiudiIlBrowserVivoAllUscita);
+
   async function apriNelBrowserVivo(voce) {
     const contenitore = $('#browserVistaViva');
     const sessione = identitaBrowser();
@@ -9824,6 +9868,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
     vistaViva = creaVistaViva(contenitore, {
       onGesto: (gesto) => {
+        /*
+         * ⛔ 07/9, dalla prova DA UMANO: col modo «Annota» acceso un clic non è un clic per il sito —
+         *   è uno SPILLO. Prima il gesto partiva lo stesso: si cliccava sul sito credendo di annotarlo,
+         *   e nel pannello dei commenti non compariva niente.
+         */
+        if (state.realSession.browserAnnotaAttivo && gesto?.tipo === 'su' && gesto.dentro !== false) {
+          void spillaSullaPaginaViva(voce, { x: Number(gesto.x) || 0, y: Number(gesto.y) || 0 });
+          return;
+        }
         /*
          * ⛔ 07/9 — qui il gesto della VISTA si traduce in quello del SERVER. Senza traduzione i due
          *   moduli parlano lingue diverse (`pulsante` contro `tasto`, `deltaX` contro `dx`, tipi che
@@ -9845,7 +9898,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       voce.viaVista = 'vivo';
       voce.annotabile = Boolean(esito?.annotabile);
       voce.stato = esito?.ok ? 'pronta' : 'bloccata';
-      if (!esito?.ok) { voce.motivo = esito?.errore || 'La pagina non si è caricata'; vistaViva.stato('errore'); renderizzaBrowser(); return true; }
+      if (!esito?.ok) {
+        /*
+         * ⛔ 07/9, guardando lo screenshot di un dominio inesistente: restavano a schermo QUATTRO
+         *   cose per lo stesso fatto — un riquadro grigio vuoto (la tela mai dipinta, 300×150), la
+         *   scritta «Il browser non risponde» DUE volte, e un rimedio falso («chiedi all'agente di
+         *   leggerla»: se il nome non esiste non può leggerla nemmeno lui).
+         * ⇒ Se la pagina non si è caricata la vista si smonta: resta UNA riga, quella vera.
+         */
+        voce.stato = 'bloccata';
+        voce.motivo = esito?.errore || 'La pagina non si è caricata';
+        await smontaVistaViva();
+        renderizzaBrowser();
+        return true;
+      }
     } catch (errore) {
       voce.stato = 'bloccata';
       voce.motivo = messaggioErroreUtente(errore, 'Non riesco ad aprire questa pagina in un browser pilotato.');
@@ -9877,6 +9943,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   async function apriPaginaVivaBrowser(url, idEsistente = null) {
     const rs = state.realSession;
+    /*
+     * ⛔ 07/9, dalla prova DEL CURIOSO (C27): dieci Invio di fila sullo stesso indirizzo lasciavano
+     *   ELEVEN schede identiche nella striscia. Nessun browser si comporta così: se stai già su
+     *   quella pagina la ricarichi, non ne apri una copia. E chi preme due volte per impazienza —
+     *   cioè chiunque — si ritrovava il doppio di tutto.
+     * ⇒ Stesso indirizzo, stessa scheda: si riusa quella che c'è già.
+     */
+    const stessoIndirizzo = (a, b) => { try { return new URL(a).href === new URL(b).href; } catch { return a === b; } };
+    const giaAperta = idEsistente ? null : rs.browserVive.find((x) => stessoIndirizzo(x.url, url));
+    if (giaAperta) idEsistente = giaAperta.id;
     if (!idEsistente && schedeBrowser().length >= MASSIMO_SCHEDE_BROWSER) { toast('Troppe schede', `Chiudine una: il massimo è ${MASSIMO_SCHEDE_BROWSER}.`); return; }
     const gia = idEsistente ? rs.browserVive.find((x) => x.id === idEsistente) : null;
     const voce = gia || { id: `viva-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, tipo: 'viva', origine: 'tu', url, titolo: null, quando: new Date().toISOString(), stato: 'caricamento', motivo: null, proxata: localeAnnotabile(url) };
@@ -9918,6 +9994,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          *   scheda torna «bloccata» col motivo VERO: la promessa non si finge mai.
          */
         voce.percheVia = esito?.percheVia || null;
+        /*
+         * ⛔ 07/9, dalla prova DEL CURIOSO: dopo aver aperto otto pagine (oltre il tetto del server)
+         *   github tornava a mostrarsi in una CORNICE, cioè nel rettangolo grigio di sempre, e senza
+         *   una riga che lo dicesse. Un ripiego muto è peggio dell'errore: chi guarda crede che la
+         *   app sia rotta. Se il browser pilotato non parte, la scheda resta «bloccata» col motivo
+         *   VERO — quello che il server ha appena detto in italiano.
+         */
         const conVista = esito?.via === 'cornice' ? false : await apriNelBrowserVivo(voce);
         if (!conVista) { voce.stato = 'bloccata'; voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS'; }
       }

@@ -62,3 +62,14 @@ test('latoPreferito: non si apre dove non c’è spazio', () => {
   // schiacciato fra i due bordi: si va di lato, dalla parte con più spazio
   assert.equal(latoPreferito({ top: 20, bottom: 880, left: 40, right: 100 }, finestra), 'inline-end');
 });
+
+/*
+ * ⛔ 07/09/2026, visto negli screenshot della prova del curioso: il fumetto di una scheda del Browser
+ *   si apriva sopra e copriva la barra delle viste (Chat / Terminale / Review / Browser). La scelta
+ *   automatica preferisce «sopra» quando c'è spazio — e lo spazio c'era, ma occupato.
+ */
+test('IL LATO SI PUÒ CHIEDERE: chi ha qualcosa sopra di sé lo dice, e il fumetto ubbidisce', () => {
+  // la funzione pura resta com'è: la scelta automatica non cambia per nessun altro
+  assert.equal(latoPreferito({ top: 200, bottom: 240 }, { width: 1600, height: 1000 }), 'block-start');
+  assert.equal(latoPreferito({ top: 10, bottom: 40 }, { width: 1600, height: 1000 }), 'block-end');
+});

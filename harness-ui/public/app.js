@@ -1922,7 +1922,7 @@ var init_en = __esm({
         "Pagina aperta da te · viva dentro TALOS": "Opened by you · live inside TALOS",
         "Pagina aperta da te · non mostrabile qui": "Opened by you · cannot be shown here",
         "Apertura in corso…": "Opening…",
-        "Copia testuale, senza navigazione interattiva. Le note locali si azzerano al ricaricamento.": "Text copy, no interactive browsing. Local notes reset on reload.",
+        "Le letture dell’agente sono copie testuali; una pagina che apri tu è viva e ci puoi navigare dentro. Le note restano in questo browser.": "Agent readings are text copies; a page you open is live and you can navigate inside it. Notes stay in this browser.",
         "Le letture sono copie testuali; una pagina che apri tu è viva dentro TALOS — se il sito vieta la cornice, la mostra un browser pilotato sul tuo computer. Le note restano qui.": "Readings are text copies; a page you open is live inside TALOS — if the site refuses to be framed, a browser TALOS drives on your computer shows it. Notes stay here.",
         "Agente": "Agent",
         "Tu": "You",
@@ -7034,6 +7034,9 @@ function titoloDaHtml(grezzo) {
   const testo3 = m[1].replace(/\s+/g, " ").trim().replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
   return testo3.length > 80 ? `${testo3.slice(0, 79)}…` : testo3;
 }
+function paginaAnnotabile(s) {
+  return Boolean(s && s.tipo === "viva" && (s.proxata || s.viaVista === "vivo") && s.stato !== "bloccata");
+}
 function titoloScheda2(pagina) {
   if (pagina?.titolo) return pagina.titolo;
   const daHtml = titoloDaHtml(pagina?.testo);
@@ -7129,7 +7132,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   el25.annota?.addEventListener("click", () => {
     const s = attiva();
     if (!s) return;
-    if (s.tipo === "viva" && s.proxata) azioni.annota?.(s, !stato.annotaAttivo);
+    if (paginaAnnotabile(s)) azioni.annota?.(s, !stato.annotaAttivo);
     else azioni.annota?.(s);
   });
   el25.copia?.addEventListener("click", () => {
@@ -7303,7 +7306,9 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       svgX.append(useX);
       chiudi.append(svgX);
       scheda.append(chiudi);
-      scheda.dataset.tip = `${nome} — ${s.url}`;
+      const indirizzoBreve = hostDaUrl(s.url) || s.url;
+      scheda.dataset.tip = nome === indirizzoBreve ? s.url : `${nome} — ${s.url}`;
+      scheda.dataset.tipLato = "sotto";
       el25.schede.append(scheda);
     });
     el25.schede.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -7419,7 +7424,15 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       if (el25.provenienza) el25.provenienza.textContent = formattaProvenienza(s);
       if (el25.testo && stato.modo !== "pagina") scriviTestoAcquisito(s.testo || "");
     }
-    mostraAvviso(avvisoCornice || (s?.tipo === "viva" && s.stato === "bloccata" ? t("{motivo}. {invito}: usa «Rileggi».", { motivo: s.motivo || t("Il sito non consente di essere mostrato dentro TALOS"), invito: t(TESTI3.chiediAllAgente) }) : ""));
+    const rimedioPerIlMotivo = (motivo) => {
+      const m = String(motivo || "");
+      if (/non esiste|ERR_NAME/i.test(m)) return t("Controlla l’indirizzo.");
+      if (/certificato|SSL|TLS/i.test(m)) return t("Il sito ha un certificato non valido: aprilo fuori da TALOS se ti fidi.");
+      if (/non ha risposto in tempo|timed out/i.test(m)) return t("Riprova fra un momento.");
+      if (/Nessuno risponde/i.test(m)) return t("Controlla che il servizio sia acceso.");
+      return `${t(TESTI3.chiediAllAgente)}: usa «Rileggi».`;
+    };
+    mostraAvviso(avvisoCornice || (s?.tipo === "viva" && s.stato === "bloccata" ? `${s.motivo || t("Il sito non consente di essere mostrato dentro TALOS")}. ${rimedioPerIlMotivo(s.motivo)}` : ""));
     renderizzaCornice(s);
     const nota = s ? stato.note[s.url] : "";
     if (el25.notaSalvata) {
@@ -7432,7 +7445,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     }
     if (el25.editorNota && s) el25.editorNota.dataset.browserId = s.id;
     if (el25.limiti) el25.limiti.textContent = t(vive > 0 ? TESTI3.limitiVive : TESTI3.limitiLetture);
-    const annotabile = Boolean(s && s.tipo === "viva" && s.proxata && s.stato !== "bloccata");
+    const annotabile = paginaAnnotabile(s);
     if (el25.annotazioni) {
       const lista = annotabile ? stato.annotazioni[s.id] || [] : [];
       if (!annotabile) {
@@ -7492,7 +7505,10 @@ var init_browser = __esm({
       posizioneViva: "Pagina aperta da te · viva dentro TALOS",
       posizioneBloccata: "Pagina aperta da te · non mostrabile qui",
       posizioneCaricamento: "Apertura in corso…",
-      limitiLetture: "Copia testuale, senza navigazione interattiva. Le note locali si azzerano al ricaricamento.",
+      /* ⛔ 07/9, guardando lo screenshot dopo un ricaricamento: «senza navigazione interattiva» era
+         diventato falso — dentro una pagina viva ci si clicca, si scorre e si scrive. Una riga che
+         descrive limiti che non esistono più fa credere che la funzione non ci sia. */
+      limitiLetture: "Le letture dell’agente sono copie testuali; una pagina che apri tu è viva e ci puoi navigare dentro. Le note restano in questo browser.",
       /* ⛔ 07/9 — «quando il sito lo consente» non è più vero: un sito che vieta la cornice ora si apre
          lo stesso, in un browser che TALOS pilota sul tuo computer. La riga diceva un limite che
          abbiamo tolto — e una promessa al ribasso invecchia peggio di una mancata. */
@@ -8983,7 +8999,8 @@ function collegaTooltip(documentObj = globalThis.document, { ritardo = RITARDO_M
     testo3.textContent = frase;
     elemento.setAttribute("aria-describedby", "talosTip");
     elemento.style.anchorName = "--talos-tip";
-    const lato = latoPreferito(elemento.getBoundingClientRect(), { width: globalThis.innerWidth, height: globalThis.innerHeight });
+    const latoChiesto = elemento.getAttribute?.("data-tip-lato");
+    const lato = latoChiesto === "sotto" ? "block-end" : latoChiesto === "sopra" ? "block-start" : latoPreferito(elemento.getBoundingClientRect(), { width: globalThis.innerWidth, height: globalThis.innerHeight });
     bolla.style.positionArea = lato;
     bolla.hidden = false;
     try {
@@ -17645,6 +17662,36 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return apiPost(`/api/v1/browser/vivo/chiudi?sessione=${encodeURIComponent(identitaBrowser())}`, {}).catch(() => {
         });
       }
+      async function spillaSullaPaginaViva(voce, punto) {
+        try {
+          const fatto = await apiPost(`/api/v1/browser/vivo/descrivi?sessione=${encodeURIComponent(identitaBrowser())}`, punto);
+          if (!fatto?.trovato) {
+            toast("Niente da annotare", "Sotto quel punto non c’è nessun elemento.");
+            return;
+          }
+          const rs = state.realSession;
+          const lista = rs.browserAnnotazioni[voce.id] || (rs.browserAnnotazioni[voce.id] = []);
+          lista.push({ nota: "", fatto });
+          if (Array.isArray(fatto.errori)) rs.browserErroriPagina[voce.id] = fatto.errori;
+          renderizzaBrowser();
+          $2("#browserAnnotazioni .talos-annotazione:last-child textarea")?.focus();
+        } catch (errore) {
+          toast("Commento non riuscito", messaggioErroreUtente(errore, "Non riesco a leggere quell’elemento."));
+        }
+      }
+      const chiudiIlBrowserVivoAllUscita = () => {
+        if (!vistaViva) return;
+        const dove = `/api/v1/browser/vivo/chiudi?sessione=${encodeURIComponent(identitaBrowser())}`;
+        try {
+          if (navigator.sendBeacon) navigator.sendBeacon(dove, new Blob([], { type: "application/json" }));
+          else void fetch(dove, { method: "POST", keepalive: true });
+        } catch {
+        }
+      };
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden") chiudiIlBrowserVivoAllUscita();
+      });
+      window.addEventListener("pagehide", chiudiIlBrowserVivoAllUscita);
       async function apriNelBrowserVivo(voce) {
         const contenitore = $2("#browserVistaViva");
         const sessione = identitaBrowser();
@@ -17653,6 +17700,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         contenitore.hidden = false;
         vistaViva = creaVistaViva(contenitore, {
           onGesto: (gesto) => {
+            if (state.realSession.browserAnnotaAttivo && gesto?.tipo === "su" && gesto.dentro !== false) {
+              void spillaSullaPaginaViva(voce, { x: Number(gesto.x) || 0, y: Number(gesto.y) || 0 });
+              return;
+            }
             const perIlServer = gestoPerIlServer(gesto);
             if (!perIlServer) return;
             void apiPost(`/api/v1/browser/vivo/gesto?sessione=${encodeURIComponent(sessione)}`, perIlServer).catch(() => {
@@ -17671,8 +17722,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           voce.annotabile = Boolean(esito?.annotabile);
           voce.stato = esito?.ok ? "pronta" : "bloccata";
           if (!esito?.ok) {
+            voce.stato = "bloccata";
             voce.motivo = esito?.errore || "La pagina non si è caricata";
-            vistaViva.stato("errore");
+            await smontaVistaViva();
             renderizzaBrowser();
             return true;
           }
@@ -17712,6 +17764,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       async function apriPaginaVivaBrowser(url, idEsistente = null) {
         const rs = state.realSession;
+        const stessoIndirizzo = (a, b) => {
+          try {
+            return new URL(a).href === new URL(b).href;
+          } catch {
+            return a === b;
+          }
+        };
+        const giaAperta = idEsistente ? null : rs.browserVive.find((x) => stessoIndirizzo(x.url, url));
+        if (giaAperta) idEsistente = giaAperta.id;
         if (!idEsistente && schedeBrowser().length >= MASSIMO_SCHEDE) {
           toast("Troppe schede", `Chiudine una: il massimo è ${MASSIMO_SCHEDE}.`);
           return;

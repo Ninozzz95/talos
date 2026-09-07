@@ -37,6 +37,7 @@
 import { execFileSync } from 'node:child_process';
 import { readdirSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { giudicaLeFoto, testiDelleIspezioni } from './ogni-foto-guardata.mjs';
 
 /** I percorsi che, se toccati, pretendono una prova dal vivo. */
 export const SUPERFICI_VISIBILI = [
@@ -126,6 +127,24 @@ export function ultimaFoto(radice, cartelle = CARTELLE_FOTO, deps = {}) {
   return quando;
 }
 
+/**
+ * Dove si scrive di aver guardato: i taccuini delle prove e il registro delle ispezioni.
+ * ⛔ Il registro sta nello scratchpad, accanto alle foto: chi scatta e chi guarda lasciano la
+ *   traccia nello stesso posto, o una delle due si perde.
+ */
+export function percorsiIspezioni(radice) {
+  const fuori = [join(radice, '.claude', 'ISPEZIONI-FOTO.md')];
+  for (const cartella of cartelleScratchpad()) {
+    fuori.push(join(cartella, '..', 'ispezioni.md'));      // scratchpad/prove/ispezioni.md
+    fuori.push(join(cartella, '..', '..', 'ispezioni.md')); // scratchpad/ispezioni.md
+  }
+  try {
+    const taccuini = join(radice, '.claude', 'taccuini');
+    if (existsSync(taccuini)) for (const f of readdirSync(taccuini)) if (f.endsWith('.md')) fuori.push(join(taccuini, f));
+  } catch { /* nessun taccuino: pazienza */ }
+  return fuori;
+}
+
 export function citaUnaFonte(messaggio) {
   const testo = String(messaggio || '');
   return SEGNI_DI_RICERCA.some((s) => s.test(testo));
@@ -139,13 +158,30 @@ export function haCoAuthoring(messaggio) {
  * Il giudizio, senza toccare niente: chi chiama decide se bloccare.
  * @returns {{ok:boolean, motivi:string[], dettagli:object}}
  */
-export function giudica({ radice, fileToccati, messaggio, quandoFoto, quandoCodice, cartelleFoto = CARTELLE_FOTO }) {
+/* ⛔ `occhio` è iniettabile come i due tempi: senza, una prova del cancello finirebbe a guardare le
+   foto VERE sul disco di chi la lancia, e direbbe cose diverse su macchine diverse. */
+export function giudica({ radice, fileToccati, messaggio, quandoFoto, quandoCodice, cartelleFoto = CARTELLE_FOTO, occhio: occhioDato }) {
   const motivi = [];
   const visibili = fileToccati.filter((f) => tocca(f));
   const foto = quandoFoto ?? ultimaFoto(radice, [...cartelleFoto, ...cartelleScratchpad()]);
   const codice = quandoCodice ?? ultimaModifica(radice, visibili);
 
   if (visibili.length > 0) {
+    /*
+     * ⛔ 07/9, owner: «ispezionare ogni singola prova immagine DEVE ESSERE TRASFORMATO IN UN
+     *   CANCELLO». Una foto scattata e mai guardata non è una verifica: è un file. Il cancello non
+     *   può misurare l'occhio, ma può misurare la TRACCIA — ogni foto di questa verifica dev'essere
+     *   nominata in un'ispezione scritta che dica qualcosa.
+     */
+    const cartelle = [...cartelleFoto.map((c) => (c.startsWith('/') || /^[A-Za-z]:/.test(c) ? c : join(radice, c))), ...cartelleScratchpad()];
+    const occhio = occhioDato ?? giudicaLeFoto({
+      cartelle, dopo: codice, testi: testiDelleIspezioni(percorsiIspezioni(radice)),
+    });
+    if (!occhio.ok) {
+      motivi.push(`Hai scattato ${occhio.totali} foto e ne hai guardate ${occhio.guardate}: `
+        + `${occhio.mancanti.slice(0, 6).join(', ')}${occhio.mancanti.length > 6 ? ' e altre' : ''} non sono nominate in nessuna ispezione. `
+        + 'Una foto scattata e mai aperta non è una verifica.');
+    }
     if (foto === 0) {
       motivi.push('Questo commit tocca la UI e non esiste NESSUNA foto di una prova: guarda il 4174 prima di chiudere.');
     } else if (foto < codice) {

@@ -31,7 +31,10 @@ export const TESTI = Object.freeze({
   posizioneViva: 'Pagina aperta da te · viva dentro TALOS',
   posizioneBloccata: 'Pagina aperta da te · non mostrabile qui',
   posizioneCaricamento: 'Apertura in corso…',
-  limitiLetture: 'Copia testuale, senza navigazione interattiva. Le note locali si azzerano al ricaricamento.',
+  /* ⛔ 07/9, guardando lo screenshot dopo un ricaricamento: «senza navigazione interattiva» era
+     diventato falso — dentro una pagina viva ci si clicca, si scorre e si scrive. Una riga che
+     descrive limiti che non esistono più fa credere che la funzione non ci sia. */
+  limitiLetture: 'Le letture dell’agente sono copie testuali; una pagina che apri tu è viva e ci puoi navigare dentro. Le note restano in questo browser.',
   /* ⛔ 07/9 — «quando il sito lo consente» non è più vero: un sito che vieta la cornice ora si apre
      lo stesso, in un browser che TALOS pilota sul tuo computer. La riga diceva un limite che
      abbiamo tolto — e una promessa al ribasso invecchia peggio di una mancata. */
@@ -122,6 +125,15 @@ export function titoloDaHtml(grezzo) {
 }
 
 /** Il nome di una scheda: il titolo vero se c'è, poi il `<title>` della pagina, poi host e percorso. */
+/**
+ * Una pagina si annota quando è NOSTRA: un dev server passato dal proxy (stessa origine) o una
+ * pagina viva dentro il browser che TALOS pilota (il DOM lo leggiamo via CDP). Una lettura o una
+ * cornice altrui no: di quelle non possiamo toccare il documento.
+ */
+export function paginaAnnotabile(s) {
+  return Boolean(s && s.tipo === 'viva' && (s.proxata || s.viaVista === 'vivo') && s.stato !== 'bloccata');
+}
+
 export function titoloScheda(pagina) {
   if (pagina?.titolo) return pagina.titolo;
   const daHtml = titoloDaHtml(pagina?.testo);
@@ -185,7 +197,17 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
   el.avanti?.addEventListener('click', () => { const i = indiceAttiva(); if (i >= 0 && i < stato.schede.length - 1) azioni.seleziona?.(stato.schede[i + 1].id); });
   el.fuori?.addEventListener('click', () => { const s = attiva(); if (s) azioni.apriFuori?.(s); });
   el.rileggi?.addEventListener('click', () => { const s = attiva(); if (s) azioni.rileggi?.(s); });
-  el.annota?.addEventListener('click', () => { const s = attiva(); if (!s) return; if (s.tipo === 'viva' && s.proxata) azioni.annota?.(s, !stato.annotaAttivo); else azioni.annota?.(s); });
+  /*
+   * ⛔ 07/9, trovato dalla prova DA UMANO (C26): premendo «Annota» su una pagina VIVA non compariva
+   *   nessuno spillo — il pulsante preparava una frase nel composer. Gli spilli erano previsti solo
+   *   per una pagina PROXATA (un dev server locale), perché quando questo codice è nato la vista
+   *   viva non esisteva. Una pagina che TALOS pilota si annota come qualunque altra: è anzi il caso
+   *   più utile, perché è lì che si guarda un sito vero.
+   */
+  el.annota?.addEventListener('click', () => {
+    const s = attiva(); if (!s) return;
+    if (paginaAnnotabile(s)) azioni.annota?.(s, !stato.annotaAttivo); else azioni.annota?.(s);
+  });
   el.copia?.addEventListener('click', () => { const s = attiva(); if (s) azioni.copia?.(s); });
   // 06/9 O-28: i due modi di guardare una lettura. Cambiare modo non ricarica niente: la cornice resta.
   for (const b of el.modi || []) {
@@ -298,7 +320,11 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       useX.setAttribute('href', '#i-x'); svgX.append(useX); chiudi.append(svgX);
       scheda.append(chiudi);
 
-      scheda.dataset.tip = `${nome} — ${s.url}`; // il fumetto è il nostro, mai il `title` del sistema
+      /* ⛔ 07/9, guardando lo screenshot: quando il nome della scheda è l'host, il fumetto diceva
+         «www.iana.org/domains — https://www.iana.org/domains»: due volte la stessa cosa. */
+      const indirizzoBreve = hostDaUrl(s.url) || s.url;
+      scheda.dataset.tip = nome === indirizzoBreve ? s.url : `${nome} — ${s.url}`;
+      scheda.dataset.tipLato = 'sotto'; // il fumetto va SOTTO: sopra copre la barra delle viste
       el.schede.append(scheda);
     });
     // la scheda attiva resta in vista quando la striscia scorre
@@ -449,7 +475,20 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       if (el.provenienza) el.provenienza.textContent = formattaProvenienza(s);
       if (el.testo && stato.modo !== 'pagina') scriviTestoAcquisito(s.testo || '');
     }
-    mostraAvviso(avvisoCornice || (s?.tipo === 'viva' && s.stato === 'bloccata' ? t('{motivo}. {invito}: usa «Rileggi».', { motivo: s.motivo || t('Il sito non consente di essere mostrato dentro TALOS'), invito: t(TESTI.chiediAllAgente) }) : ''));
+    /*
+     * ⛔ 07/9, guardando lo screenshot di un dominio inesistente: il rimedio era «Chiedi all'agente
+     *   di leggerla: usa Rileggi» — falso. Se il nome del sito non esiste, non può leggerla nemmeno
+     *   l'agente: il consiglio manda a sbattere una seconda volta. Il rimedio dipende dal MOTIVO.
+     */
+    const rimedioPerIlMotivo = (motivo) => {
+      const m = String(motivo || '');
+      if (/non esiste|ERR_NAME/i.test(m)) return t('Controlla l’indirizzo.');
+      if (/certificato|SSL|TLS/i.test(m)) return t('Il sito ha un certificato non valido: aprilo fuori da TALOS se ti fidi.');
+      if (/non ha risposto in tempo|timed out/i.test(m)) return t('Riprova fra un momento.');
+      if (/Nessuno risponde/i.test(m)) return t('Controlla che il servizio sia acceso.');
+      return `${t(TESTI.chiediAllAgente)}: usa «Rileggi».`;
+    };
+    mostraAvviso(avvisoCornice || (s?.tipo === 'viva' && s.stato === 'bloccata' ? `${s.motivo || t('Il sito non consente di essere mostrato dentro TALOS')}. ${rimedioPerIlMotivo(s.motivo)}` : ''));
     renderizzaCornice(s);
     // nota
     const nota = s ? stato.note[s.url] : '';
@@ -458,7 +497,11 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     if (el.editorNota && s) el.editorNota.dataset.browserId = s.id;
     if (el.limiti) el.limiti.textContent = t(vive > 0 ? TESTI.limitiVive : TESTI.limitiLetture);
     // il pannello dei commenti: solo su una pagina viva proxata
-    const annotabile = Boolean(s && s.tipo === 'viva' && s.proxata && s.stato !== 'bloccata');
+    /* ⛔ 07/9 — la stessa condizione stava scritta in DUE posti con due valori diversi: qui «solo
+       proxata» e sul pulsante «proxata o viva». Risultato: il pulsante accendeva il modo e il
+       pannello lo dichiarava spento, senza che nessuno dei due mentisse per conto proprio.
+       Una condizione, un posto: chi la cambia non può dimenticarne metà. */
+    const annotabile = paginaAnnotabile(s);
     if (el.annotazioni) {
       const lista = annotabile ? (stato.annotazioni[s.id] || []) : [];
       if (!annotabile) { el.annotazioni.hidden = true; } else {
