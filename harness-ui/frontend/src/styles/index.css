@@ -1274,9 +1274,35 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-browser__request>*+*{margin-top:var(--talos-space-sm)}
 .talos-browser__head h2{font-size:var(--talos-font-size-lg)}
 .talos-browser__text{white-space:pre-wrap;overflow-wrap:anywhere;margin:0;padding:var(--talos-space-md);font-family:var(--talos-font-mono);font-size:var(--talos-font-size-xs);color:var(--talos-assistant-text)}
-.talos-browser__history-list{display:flex;gap:var(--talos-space-sm);flex-wrap:wrap;margin-top:var(--talos-space-sm)}
-.talos-browser__entry{flex:1;display:flex;flex-direction:column;gap:var(--talos-space-xs);text-align:left;padding:var(--talos-space-control);border:var(--talos-focus-width) solid var(--talos-border);border-radius:var(--talos-radius-card);background:var(--talos-card);overflow-wrap:anywhere}
-.talos-browser__entry[aria-current="page"]{border-color:var(--talos-accent-border);background:var(--talos-accent-soft)}
+/* ⛔ 07/9 — via `.talos-browser__history-list` e `.talos-browser__entry`: erano la cronologia di
+   SOTTO, cioè le stesse pagine già elencate sopra. Al loro posto la barra di schede vera. */
+
+/* La striscia delle schede: si comporta come quella di un browser. Le schede si dividono lo spazio
+   e si restringono fino a `--talos-scheda-min`; sotto quella soglia la striscia SCORRE invece di
+   ridurre tutto a un'icona (è la scelta di Chrome, «scrollable-tabstrip»). */
+.talos-tabstrip{display:flex; align-items:stretch; gap:2px; min-width:0; max-width:100%}
+.talos-tabstrip__lista{--talos-scheda-min:132px; display:flex; align-items:stretch; gap:2px; min-width:0; overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; scroll-snap-type:x proximity; padding-bottom:2px}
+.talos-tabstrip__scheda{flex:1 1 0; min-width:var(--talos-scheda-min); max-width:220px; display:flex; align-items:center; gap:8px; padding:0 6px 0 10px; height:34px; border:1px solid var(--talos-border); border-radius:var(--talos-radius-control) var(--talos-radius-control) 0 0; background:var(--talos-panel-soft); color:var(--talos-muted); cursor:pointer; scroll-snap-align:end; user-select:none}
+.talos-tabstrip__scheda:hover{background:var(--talos-panel); color:var(--talos-text)}
+.talos-tabstrip__scheda[aria-selected="true"]{background:var(--talos-card); color:var(--talos-text); border-color:var(--talos-accent-border); box-shadow:inset 0 2px 0 0 var(--talos-accent)}
+/* ⛔ `--talos-focus` NON esiste in nessun tema (misurato: 0 definizioni, e l'unico a usarlo ero io):
+   un var() senza fallback su una variabile assente rende la dichiarazione invalida al tempo del
+   calcolo e l'anello del fuoco sparisce, in silenzio. Il nome vero è `--talos-ring`. */
+.talos-tabstrip__scheda:focus-visible{outline:var(--talos-focus-width) solid var(--talos-ring); outline-offset:1px}
+.talos-tabstrip__icona{flex:none; width:14px; height:14px; color:var(--talos-muted)}
+.talos-tabstrip__scheda[aria-selected="true"] .talos-tabstrip__icona{color:var(--talos-accent)}
+.talos-tabstrip__titolo{flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12.5px}
+/* lo stato non è solo colore: chi non risponde 2xx porta il suo numero scritto (Eleken, «Tabs UX») */
+.talos-tabstrip__stato{flex:none; font-family:var(--talos-font-mono); font-size:10.5px; padding:1px 5px; border-radius:var(--talos-radius-pill); background:var(--talos-danger-soft); color:var(--talos-danger)}
+.talos-tabstrip__chiudi{flex:none; display:grid; place-items:center; width:20px; height:20px; padding:0; border:0; border-radius:var(--talos-radius-control); background:transparent; color:var(--talos-muted); cursor:pointer; opacity:0}
+.talos-tabstrip__scheda:hover .talos-tabstrip__chiudi,.talos-tabstrip__scheda[aria-selected="true"] .talos-tabstrip__chiudi,.talos-tabstrip__chiudi:focus-visible{opacity:1}
+.talos-tabstrip__chiudi:hover{background:var(--talos-panel-soft); color:var(--talos-text)}
+.talos-tabstrip__chiudi .i{width:12px; height:12px}
+.talos-tabstrip__nuova{flex:none; display:grid; place-items:center; width:32px; height:34px; border:1px solid var(--talos-border); border-radius:var(--talos-radius-control) var(--talos-radius-control) 0 0; background:var(--talos-panel-soft); color:var(--talos-muted); cursor:pointer}
+.talos-tabstrip__nuova:hover{background:var(--talos-panel); color:var(--talos-text)}
+/* una scheda che l'agente sta ancora leggendo: il puntino, non un'animazione che distrae */
+.talos-tabstrip__scheda[data-stato="caricamento"] .talos-tabstrip__icona{color:var(--talos-accent)}
+@container (max-width:720px){ .talos-tabstrip__lista{--talos-scheda-min:104px} }
 .talos-browser__note{white-space:pre-wrap;overflow-wrap:anywhere}
 .talos-browser__back{transform:rotate(90deg)}
 .talos-browser__next{transform:rotate(-90deg)}
@@ -1306,7 +1332,9 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    of grid layout» (minmax(0,1fr) auto minmax(0,1fr)); Apple HIG, «Segmented controls» (segmenti di misura
    coerente in una barra); MDN «text-overflow» per il taglio del titolo. */
 .talos-topbar:has([data-vistetab]){display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:12px}
-.talos-topbar:has([data-vistetab]) .talos-topbar__title{grid-column:1; max-width:100%; min-width:0; overflow:hidden}
+/* ⛔ 07/9, owner: «fai in modo che il titolo della chat sia troncato prima». Prima il titolo poteva
+   prendersi tutta la prima colonna (misurato: 463px a 1920) e spingeva il percorso contro le schede. */
+.talos-topbar:has([data-vistetab]) .talos-topbar__title{grid-column:1; max-width:min(420px,100%); min-width:0; overflow:hidden}
 .talos-topbar:has([data-vistetab]) .talos-tabs{grid-column:2; justify-self:center}
 .talos-topbar:has([data-vistetab]) .talos-topbar__actions{grid-column:3; justify-self:end}
 .talos-topbar__title .talos-topbar__path{flex:0 1 auto; min-width:0; max-width:100%}

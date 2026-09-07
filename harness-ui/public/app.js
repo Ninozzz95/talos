@@ -7023,10 +7023,22 @@ function formattaProvenienza(pagina) {
   if (pagina?.tipo !== "viva") parti.push(`${String(pagina?.testo || "").length} caratteri`);
   return parti.join(" · ");
 }
-function etichettaCronologia(pagina, indice2) {
-  const quando = pagina?.quando ? new Date(pagina.quando) : null;
-  const ora = quando && !Number.isNaN(quando.getTime()) ? oraRoma.format(quando) : "—";
-  return `${String(indice2 + 1).padStart(2, "0")} · ${t(pagina?.origine === "tu" ? TESTI3.provenienzaTu : TESTI3.provenienzaAgente)} · ${ora}`;
+function statoHttpDiLettura(pagina) {
+  const prima = String(pagina?.testo || "").split("\n", 1)[0];
+  const m = RIGO_STATO.exec(prima);
+  return m ? Number(m[1]) : null;
+}
+function titoloDaHtml(grezzo) {
+  const m = /<title[^>]*>([\s\S]{0,300}?)<\/title>/i.exec(String(grezzo || ""));
+  if (!m) return "";
+  const testo3 = m[1].replace(/\s+/g, " ").trim().replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  return testo3.length > 80 ? `${testo3.slice(0, 79)}…` : testo3;
+}
+function titoloScheda2(pagina) {
+  if (pagina?.titolo) return pagina.titolo;
+  const daHtml = titoloDaHtml(pagina?.testo);
+  if (daHtml) return daHtml;
+  return hostDaUrl(pagina?.url) || titoloDaLettura(pagina);
 }
 function prossimaDopoChiusura(lista, indice2) {
   const resto = lista.filter((_, i) => i !== indice2);
@@ -7057,7 +7069,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     notaInput: $(schermo, "#browserNotaInput"),
     notaSalvata: $(schermo, "#browserNotaSalvata"),
     live: $(schermo, "#browserLive"),
-    cronologia: $(schermo, ".talos-browser__history-list"),
+    nuovaScheda: $(schermo, "#browserNuovaScheda"),
     limiti: $(schermo, "#browserLimiti"),
     consenti: $(schermo, '[data-action="consentiBrowser"]'),
     nega: $(schermo, '[data-action="negaBrowser"]'),
@@ -7191,12 +7203,23 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     el25.url.addEventListener("input", () => el25.url.removeAttribute("aria-invalid"));
   }
   el25.schede?.addEventListener("click", (e) => {
+    const x = e.target.closest?.("[data-browser-chiudi]");
+    if (x) {
+      e.preventDefault();
+      azioni.chiudi?.(x.dataset.browserChiudi);
+      return;
+    }
     const tab = e.target.closest?.("[data-browser-tab]");
     if (!tab) return;
     const id = tab.dataset.browserId;
-    const sullaX = e.clientX > 0 && e.clientX >= tab.getBoundingClientRect().right - 24;
-    if (sullaX || e.ctrlKey || e.metaKey) azioni.chiudi?.(id);
+    if (e.ctrlKey || e.metaKey) azioni.chiudi?.(id);
     else azioni.seleziona?.(id);
+  });
+  el25.nuovaScheda?.addEventListener("click", () => {
+    if (!el25.url) return;
+    el25.url.value = "";
+    el25.url.focus();
+    el25.url.removeAttribute("aria-invalid");
   });
   el25.schede?.addEventListener("auxclick", (e) => {
     const tab = e.target.closest?.("[data-browser-tab]");
@@ -7226,10 +7249,6 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       el25.schede.querySelector(`[data-browser-id="${CSS.escape(prossima)}"]`)?.focus();
     }
   });
-  el25.cronologia?.addEventListener("click", (e) => {
-    const voce = e.target.closest?.("[data-pagina-browser]");
-    if (voce) azioni.seleziona?.(voce.dataset.browserId);
-  });
   function mostraAvviso(testo3) {
     if (!el25.avviso) return;
     el25.avviso.textContent = testo3 || "";
@@ -7237,46 +7256,57 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   }
   function renderizzaSchede() {
     if (!el25.schede) return;
-    const cornice = el25.schede.closest(".talos-tabs");
+    const cornice = el25.schede.closest(".talos-tabstrip");
     if (cornice) cornice.hidden = stato.schede.length === 0;
     el25.schede.replaceChildren();
+    const doc = el25.schede.ownerDocument;
     stato.schede.forEach((s, i) => {
-      const b = document.createElement("button");
-      b.className = "talos-tabs__tab";
-      b.type = "button";
-      b.setAttribute("role", "tab");
-      b.dataset.browserTab = String(i);
-      b.dataset.browserId = s.id;
+      const scheda = doc.createElement("div");
+      scheda.className = "talos-tabstrip__scheda";
+      scheda.setAttribute("role", "tab");
+      scheda.dataset.browserTab = String(i);
+      scheda.dataset.browserId = s.id;
       const sel = s.id === stato.attiva;
-      b.setAttribute("aria-selected", String(sel));
-      b.tabIndex = sel ? 0 : -1;
-      b.textContent = titoloDaLettura(s);
-      b.title = t("{titolo} — {url}", { titolo: titoloDaLettura(s), url: s.url });
-      el25.schede.append(b);
+      scheda.setAttribute("aria-selected", String(sel));
+      scheda.tabIndex = sel ? 0 : -1;
+      if (s.tipo === "viva") scheda.dataset.stato = s.stato || "pronta";
+      const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("class", "i talos-tabstrip__icona");
+      svg.setAttribute("aria-hidden", "true");
+      const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+      use.setAttribute("href", s.tipo === "viva" ? "#i-globe" : "#i-doc");
+      svg.append(use);
+      scheda.append(svg);
+      const nome = titoloScheda2(s);
+      const titolo2 = doc.createElement("span");
+      titolo2.className = "talos-tabstrip__titolo";
+      titolo2.textContent = nome;
+      scheda.append(titolo2);
+      const http = statoHttpDiLettura(s);
+      if (http !== null && (http < 200 || http >= 300)) {
+        const pillola = doc.createElement("span");
+        pillola.className = "talos-tabstrip__stato";
+        pillola.textContent = String(http);
+        scheda.append(pillola);
+      }
+      const chiudi = doc.createElement("button");
+      chiudi.type = "button";
+      chiudi.className = "talos-tabstrip__chiudi";
+      chiudi.tabIndex = -1;
+      chiudi.dataset.browserChiudi = s.id;
+      chiudi.setAttribute("aria-label", t("Chiudi {titolo}", { titolo: nome }));
+      const svgX = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svgX.setAttribute("class", "i");
+      svgX.setAttribute("aria-hidden", "true");
+      const useX = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+      useX.setAttribute("href", "#i-x");
+      svgX.append(useX);
+      chiudi.append(svgX);
+      scheda.append(chiudi);
+      scheda.dataset.tip = `${nome} — ${s.url}`;
+      el25.schede.append(scheda);
     });
-  }
-  function renderizzaCronologia() {
-    if (!el25.cronologia) return;
-    el25.cronologia.replaceChildren();
-    const letture = stato.schede.filter((s) => s.tipo !== "viva");
-    letture.forEach((s, i) => {
-      const b = document.createElement("button");
-      b.className = "talos-browser__entry";
-      b.type = "button";
-      b.dataset.paginaBrowser = String(i);
-      b.dataset.browserId = s.id;
-      if (s.id === stato.attiva) b.setAttribute("aria-current", "page");
-      const alto = document.createElement("span");
-      alto.className = "talos-muted talos-browser__meta";
-      alto.textContent = etichettaCronologia(s, i);
-      const forte = document.createElement("strong");
-      forte.textContent = titoloDaLettura(s);
-      const basso = document.createElement("span");
-      basso.className = "talos-muted talos-browser__meta";
-      basso.textContent = hostDaUrl(s.url);
-      b.append(alto, forte, basso);
-      el25.cronologia.append(b);
-    });
+    el25.schede.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
   function scriviTestoAcquisito(grezzo) {
     const contenitore = el25.testo;
@@ -7303,7 +7333,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   function renderizzaCornice(s) {
     if (!el25.live) return;
     const vuoleViva = s && s.tipo === "viva" && s.stato !== "bloccata";
-    const vuoleLettura = s && s.tipo !== "viva" && stato.modo === "pagina" && Boolean(s.url) && /^https?:/i.test(s.url);
+    const vuoleLettura = s && s.tipo !== "viva" && stato.modo === "pagina" && Boolean(s.url) && /^https?:/i.test(s.url) && s.incorniciabile !== false;
     const vuole = vuoleViva || vuoleLettura;
     el25.live.hidden = !vuole;
     if (!vuole) {
@@ -7337,8 +7367,19 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       el25.live.append(frame);
     }
   }
+  function corniceDellaLettura(s) {
+    if (!s || s.tipo === "viva" || !s.url || !/^https?:/i.test(s.url)) return "";
+    if (s.incorniciabile === void 0) {
+      azioni.chiediCornice?.(s);
+      return "";
+    }
+    if (s.incorniciabile !== false) return "";
+    if (stato.modo === "pagina") stato.modo = "testo";
+    return `${t(s.motivoCornice || "Questo sito non si lascia mostrare dentro TALOS")}. ${t("Qui sotto c’è il testo che ha letto l’agente.")}`;
+  }
   function renderizza() {
     const s = attiva();
+    const avvisoCornice = corniceDellaLettura(s);
     const letture = stato.schede.filter((x) => x.tipo !== "viva").length;
     const vive = stato.schede.length - letture;
     if (el25.riepilogo) el25.riepilogo.textContent = stato.schede.length === 0 ? t(TESTI3.riepilogoVuoto) : vive === 0 ? TESTI3.riepilogoLetture(letture) : TESTI3.riepilogoMisto(letture, vive);
@@ -7378,7 +7419,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       if (el25.provenienza) el25.provenienza.textContent = formattaProvenienza(s);
       if (el25.testo && stato.modo !== "pagina") scriviTestoAcquisito(s.testo || "");
     }
-    mostraAvviso(s?.tipo === "viva" && s.stato === "bloccata" ? t("{motivo}. {invito}: usa «Rileggi».", { motivo: s.motivo || t("Il sito non consente di essere mostrato dentro TALOS"), invito: t(TESTI3.chiediAllAgente) }) : "");
+    mostraAvviso(avvisoCornice || (s?.tipo === "viva" && s.stato === "bloccata" ? t("{motivo}. {invito}: usa «Rileggi».", { motivo: s.motivo || t("Il sito non consente di essere mostrato dentro TALOS"), invito: t(TESTI3.chiediAllAgente) }) : ""));
     renderizzaCornice(s);
     const nota = s ? stato.note[s.url] : "";
     if (el25.notaSalvata) {
@@ -7390,9 +7431,6 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       el25.nota?.setAttribute("aria-expanded", "false");
     }
     if (el25.editorNota && s) el25.editorNota.dataset.browserId = s.id;
-    renderizzaCronologia();
-    const nav = el25.cronologia?.closest("nav");
-    if (nav) nav.hidden = letture === 0;
     if (el25.limiti) el25.limiti.textContent = t(vive > 0 ? TESTI3.limitiVive : TESTI3.limitiLetture);
     const annotabile = Boolean(s && s.tipo === "viva" && s.proxata && s.stato !== "bloccata");
     if (el25.annotazioni) {
@@ -7439,7 +7477,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     }
   };
 }
-var TESTI3, MASSIMO_SCHEDE, PROXY_BROWSER, oraRoma, giornoRoma, $;
+var TESTI3, MASSIMO_SCHEDE, PROXY_BROWSER, oraRoma, giornoRoma, RIGO_STATO, $;
 var init_browser = __esm({
   "src/components/browser.js"() {
     init_lingua();
@@ -7466,6 +7504,7 @@ var init_browser = __esm({
     PROXY_BROWSER = "/api/v1/browser/proxy?url=";
     oraRoma = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" });
     giornoRoma = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit" });
+    RIGO_STATO = /^\s*HTTP\s+(\d{3})\s*[·|-]\s*(\S+)\s*$/i;
     $ = (radice, sel) => radice.querySelector(sel);
   }
 });
@@ -7941,17 +7980,6 @@ function vociDaConversazione(conversazione) {
   }
   return voci.slice(0, VOCI_MASSIME);
 }
-function testoFumetto(voce) {
-  if (!voce) return "";
-  const capo = [];
-  if (Number.isFinite(voce.numero)) capo.push(`Giro ${voce.numero}`);
-  if (voce.tono === "danger") capo.push("errore");
-  else if (voce.tono === "warning") capo.push("avviso");
-  else if (voce.tono === "current") capo.push("in corso");
-  if (voce.attrezzi > 1) capo.push(`${voce.attrezzi} attrezzi`);
-  return capo.length ? `${capo.join(" · ")}
-${voce.testo}` : voce.testo;
-}
 function riempiFumetto(fumetto, voce) {
   if (!fumetto) return;
   fumetto.replaceChildren();
@@ -8000,7 +8028,7 @@ function aggiornaCronologia(nav, conversazione, { fuoco = null } = {}) {
     b.dataset.indice = String(i);
     b.dataset.tono = v.tono || (v.diUtente ? "utente" : "");
     b.setAttribute("aria-label", Number.isFinite(v.numero) ? `Vai al giro ${v.numero}` : `Vai al messaggio ${i + 1}`);
-    b.title = testoFumetto(v);
+    b.removeAttribute("title");
     b.classList.toggle("talos-cronologia__voce--attiva", i === attivo);
     b.querySelector(".talos-cronologia__linea").style.setProperty("--lente", `${larghezzaLente(i, attivo)}px`);
   });
@@ -10045,7 +10073,7 @@ var init_app = __esm({
         if (!requested || !Object.hasOwn(QA_VIEWPORTS, requested)) return;
         document.documentElement.dataset.qaState = requested;
         document.documentElement.dataset.qaViewport = QA_VIEWPORTS[requested];
-        if (requested === "capabilities") window.setTimeout(() => openSheet("capabilities"), 0);
+        if (requested === "capabilities") window.setTimeout(() => apriCapabilityDaFoglio(), 0);
         else setView("dashboard", { mode: "dashboard" });
       }
       function syncNavigationState() {
@@ -15363,6 +15391,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         riga.append(etichetta, interruttore);
         mount.replaceChildren(picker.elemento, effortPicker.elemento, riga);
       }
+      function apriCapabilityDaFoglio() {
+        dismissTransientLayers();
+        setView("capability");
+        return true;
+      }
       function wireSheetActions(type) {
         collegaAzioniPermessi(sheetBody, {
           dopoLaScelta: () => closeEmbeddedDialog(sheetDialog),
@@ -17100,6 +17133,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
               v.stato = "pronta";
               renderizzaBrowser();
             }
+          },
+          /*
+           * ⛔ 07/9, O-42 — owner: su github.com la scheda «Pagina» mostrava il rettangolo dell'immagine
+           *   rotta. Le pagine VIVE chiedevano già al server se il sito si lascia incorniciare; le letture
+           *   dell'agente no, e partivano a testa bassa. Stessa domanda, stessa rotta, una volta per pagina.
+           */
+          chiediCornice: (s) => {
+            const pagina = state.realSession.browserPagine.find((p) => p.url === s.url);
+            if (!pagina || pagina.incorniciabile !== void 0) return;
+            pagina.incorniciabile = null;
+            apiGet(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(s.url)}`).then((esito) => {
+              pagina.incorniciabile = Boolean(esito?.incorniciabile);
+              pagina.motivoCornice = esito?.motivo || null;
+              if (esito?.titolo && !pagina.titolo) pagina.titolo = esito.titolo;
+            }).catch(() => {
+              pagina.incorniciabile = false;
+              pagina.motivoCornice = "Non ho potuto controllare se questa pagina si lascia mostrare qui dentro.";
+            }).finally(() => renderizzaBrowser());
           },
           rileggi: (s) => {
             if (s.tipo === "viva") {
@@ -20458,8 +20509,7 @@ ${testo3}` : testo3;
             doctor.textContent = "Apri Doctor";
             doctor.addEventListener("click", () => {
               closeEmbeddedDialog(sheetDialog);
-              openSheet("control");
-              window.setTimeout(() => eseguiDoctor(), 0);
+              eseguiDoctor();
             });
             actions.append(retry, doctor);
             treeState.appendChild(actions);
@@ -21832,10 +21882,13 @@ ${blocchi.join("\n\n")}` : testa;
             openSheet("sessionTree");
             break;
           case "skills":
-            openSheet("capabilities");
+            apriCapabilityDaFoglio();
             break;
+          // ⛔ 07/9 — il foglio «Agents, hook e diagnostica» era un indice di 363 caratteri con due
+          //    voci: una portava a Doctor, l'altra a un elenco di hook che la pagina Capability
+          //    (scheda «Hook») già legge dall'inventario vero del progetto. Restava solo l'indice.
           case "control":
-            openSheet("control");
+            eseguiDoctor();
             break;
           case "rename":
             openSheet("rename");
@@ -21921,7 +21974,7 @@ ${blocchi.join("\n\n")}` : testa;
           for (const f of [...evento.dataTransfer?.files || []]) void allegaFile(f);
         });
       }
-      $2("#manageCapabilitiesBtn").addEventListener("click", () => openSheet("capabilities"));
+      $2("#manageCapabilitiesBtn").addEventListener("click", () => apriCapabilityDaFoglio());
       $2("#closeSheet").addEventListener("click", () => closeEmbeddedDialog(sheetDialog));
       $$(".inspector-tabs button").forEach((button2) => {
         button2.addEventListener("click", () => setInspectorTab(button2));

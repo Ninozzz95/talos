@@ -1159,7 +1159,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (!requested || !Object.hasOwn(QA_VIEWPORTS, requested)) return;
     document.documentElement.dataset.qaState = requested;
     document.documentElement.dataset.qaViewport = QA_VIEWPORTS[requested];
-    if (requested === 'capabilities') window.setTimeout(() => openSheet('capabilities'), 0);
+    if (requested === 'capabilities') window.setTimeout(() => apriCapabilityDaFoglio(), 0);
     else setView('dashboard', { mode: 'dashboard' });
   }
 
@@ -4088,6 +4088,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * bottone sparisce subito — non serve richiudere/riaprire il foglio.
    */
   async function caricaPannelloHooks() {
+    /*
+     * ⛔ 07/9 — avevo portato questa funzione anche sulla pagina Capability, credendo che la sua
+     *   scheda «Hook» mostrasse le due righe del mockup. MISURATO sul 4174: no. La pagina ha già il
+     *   suo motore (`estensioni.js`, `data-ext-list`/`data-ext-esito`/`data-ext-detail`) che legge
+     *   l'inventario vero del progetto e scrive «0 di 0 voci» con «Nessuna voce dichiarata».
+     *   Montare qui una seconda lista dava DUE stati vuoti affiancati (visto nello screenshot) e mi
+     *   aveva fatto cancellare il pannello di dettaglio dal markup. Ritirata: questa resta del foglio.
+     */
     const mount = $('#hooksListMount', sheetBody);
     if (!mount) return; // il foglio "control" non è (più) quello aperto
     if (!state.realSession.id) {
@@ -7384,6 +7392,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     mount.replaceChildren(picker.elemento, effortPicker.elemento, riga);
   }
 
+  /**
+   * «Strumenti, skill e connettori» non è un foglio: è la pagina Capability.
+   * ⛔ 07/9 — il foglio elencava attrezzi, skill, MCP, plugin, libreria, note, attività, memoria,
+   *   ricerche e attrezzi forgiati: dieci sezioni che oggi hanno tutte una schermata propria, più
+   *   ricca. Tenerlo voleva dire mantenere due elenchi della stessa cosa — e il giorno che uno dei
+   *   due resta indietro, chi guarda non sa quale crederci.
+   * ⇒ Chi chiedeva il foglio va dove la cosa vive davvero. Il foglio non si apre più.
+   */
+  function apriCapabilityDaFoglio() {
+    dismissTransientLayers();
+    setView('capability');
+    return true;
+  }
+
   function wireSheetActions(type) {
     collegaAzioniPermessi(sheetBody, {
       dopoLaScelta: () => closeEmbeddedDialog(sheetDialog),
@@ -9643,6 +9665,27 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       chiudi: (id) => chiudiSchedaBrowser(id),
       apri: (url) => { void apriPaginaVivaBrowser(url); },
       caricata: (id) => { const v = state.realSession.browserVive.find((x) => x.id === id); if (v && v.stato === 'caricamento') { v.stato = 'pronta'; renderizzaBrowser(); } },
+      /*
+       * ⛔ 07/9, O-42 — owner: su github.com la scheda «Pagina» mostrava il rettangolo dell'immagine
+       *   rotta. Le pagine VIVE chiedevano già al server se il sito si lascia incorniciare; le letture
+       *   dell'agente no, e partivano a testa bassa. Stessa domanda, stessa rotta, una volta per pagina.
+       */
+      chiediCornice: (s) => {
+        const pagina = state.realSession.browserPagine.find((p) => p.url === s.url);
+        if (!pagina || pagina.incorniciabile !== undefined) return;
+        pagina.incorniciabile = null; // in volo: non si chiede due volte
+        apiGet(`/api/v1/browser/incorniciabile?url=${encodeURIComponent(s.url)}`)
+          .then((esito) => {
+            pagina.incorniciabile = Boolean(esito?.incorniciabile);
+            pagina.motivoCornice = esito?.motivo || null;
+            // ⛔ 07/9 — la stessa risposta porta già il `<title>` della pagina (`browser-frame.mjs` lo
+            //   legge quando è HTML) e nessuno lo usava: le schede scrivevano l'host. Un browser scrive
+            //   il titolo. Se non c'è, `titoloScheda` ricade sul <title> nel testo e poi sull'host.
+            if (esito?.titolo && !pagina.titolo) pagina.titolo = esito.titolo;
+          })
+          .catch(() => { pagina.incorniciabile = false; pagina.motivoCornice = 'Non ho potuto controllare se questa pagina si lascia mostrare qui dentro.'; })
+          .finally(() => renderizzaBrowser());
+      },
       rileggi: (s) => { if (s.tipo === 'viva') { void apriPaginaVivaBrowser(s.url, s.id); } else preparaCommentoNelComposer(`Rileggi la pagina ${s.url} e dimmi cosa è cambiato.`); },
       annota: (s, attivo) => {
         if (typeof attivo === 'boolean') { state.realSession.browserAnnotaAttivo = attivo; renderizzaBrowser(); return; }
@@ -14033,7 +14076,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         doctor.type = 'button';
         doctor.className = 'text-btn';
         doctor.textContent = 'Apri Doctor';
-        doctor.addEventListener('click', () => { closeEmbeddedDialog(sheetDialog); openSheet('control'); window.setTimeout(() => eseguiDoctor(), 0); });
+        // ⛔ 07/9 — apriva ancora il foglio legacy «control» (due voci) e poi Doctor DENTRO di esso:
+        //   dal 07/9 Doctor è una schermata sua, e questo era l'ultimo chiamante rimasto del foglio.
+        doctor.addEventListener('click', () => { closeEmbeddedDialog(sheetDialog); eseguiDoctor(); });
         actions.append(retry, doctor);
         treeState.appendChild(actions);
         aggiornaConfermaWorkspaceChooser();
@@ -15711,8 +15756,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       case 'fork': forkSession(); break;
       case 'compact': compactSession(); break;
       case 'tree': openSheet('sessionTree'); break;
-      case 'skills': openSheet('capabilities'); break;
-      case 'control': openSheet('control'); break;
+      case 'skills': apriCapabilityDaFoglio(); break;
+      // ⛔ 07/9 — il foglio «Agents, hook e diagnostica» era un indice di 363 caratteri con due
+      //    voci: una portava a Doctor, l'altra a un elenco di hook che la pagina Capability
+      //    (scheda «Hook») già legge dall'inventario vero del progetto. Restava solo l'indice.
+      case 'control': eseguiDoctor(); break;
       case 'rename': openSheet('rename'); break;
       case 'export': exportSession(); break;
       case 'share': shareSession(); break;
@@ -15785,7 +15833,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       for (const f of [...(evento.dataTransfer?.files || [])]) void allegaFile(f);
     });
   }
-  $('#manageCapabilitiesBtn').addEventListener('click', () => openSheet('capabilities'));
+  $('#manageCapabilitiesBtn').addEventListener('click', () => apriCapabilityDaFoglio());
   $('#closeSheet').addEventListener('click', () => closeEmbeddedDialog(sheetDialog));
 
   $$('.inspector-tabs button').forEach((button) => {

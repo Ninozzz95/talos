@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hostDaUrl, titoloDaLettura, urlApribile, formattaProvenienza, etichettaCronologia, prossimaDopoChiusura } from '../../src/components/browser.js';
+import { hostDaUrl, titoloDaLettura, urlApribile, formattaProvenienza, prossimaDopoChiusura, statoHttpDiLettura, titoloDaHtml, titoloScheda } from '../../src/components/browser.js';
 
 // K-I (06/09) — il Browser a schede: indirizzi, titoli, provenienza nel formato del mockup.
 
@@ -29,10 +29,9 @@ test('BROWSER-URL: localhost e 127.0.0.1 in http, il resto in https; una frase n
   assert.equal(urlApribile(''), null);
 });
 
-test('BROWSER-PROVENIENZA: «Agente · 05/09, 10:42 (Roma) · 365 caratteri» e la riga della cronologia', () => {
+test('BROWSER-PROVENIENZA: «Agente · 05/09, 10:42 (Roma) · 365 caratteri»', () => {
   const pagina = { url: 'https://example.org/documentazione', testo: 'x'.repeat(365), quando: '2026-09-05T08:42:00.000Z' };
   assert.equal(formattaProvenienza(pagina), 'Agente · 05/09, 10:42 (Roma) · 365 caratteri');
-  assert.equal(etichettaCronologia(pagina, 1), '02 · Agente · 10:42');
   assert.equal(formattaProvenienza({ url: 'http://localhost:5173/', tipo: 'viva', origine: 'tu', quando: '2026-09-05T08:42:00.000Z' }), 'Tu · 05/09, 10:42 (Roma)');
 });
 
@@ -40,4 +39,39 @@ test('BROWSER-CHIUSURA: chi resta attiva', () => {
   assert.equal(prossimaDopoChiusura(['a', 'b', 'c'], 1), 'c');
   assert.equal(prossimaDopoChiusura(['a', 'b', 'c'], 2), 'b');
   assert.equal(prossimaDopoChiusura(['a'], 0), null);
+});
+
+/*
+ * ⛔ 07/09/2026, owner (screenshot): la striscia in alto ripeteva «HTTP 200 · https://…» su ogni
+ *   linguetta, e sotto c'era la STESSA lista in forma di cronologia. Le schede ora si comportano
+ *   come quelle di un browser: nome vero della pagina, e lo stato scritto solo quando non è 2xx.
+ */
+const LETTURA_GITHUB = {
+  url: 'https://github.com/Ninozzz95/talos',
+  testo: 'HTTP 200 · https://github.com/Ninozzz95/talos\n<html><head><title>Ninozzz95/talos: A local-first agent</title></head>',
+};
+const LETTURA_API = {
+  url: 'https://api.github.com/repos/x/y',
+  testo: 'HTTP 415 · https://api.github.com/repos/x/y\n{"message":"Unsupported"}',
+};
+
+test('SCHEDA-NOME: il `<title>` della pagina batte il rigo «HTTP 200 · url»', () => {
+  assert.equal(titoloScheda(LETTURA_GITHUB), 'Ninozzz95/talos: A local-first agent');
+  assert.equal(statoHttpDiLettura(LETTURA_GITHUB), 200);
+});
+
+test('SCHEDA-NOME, al contrario: senza `<title>` resta l’host, mai il rigo di stato', () => {
+  assert.equal(titoloScheda(LETTURA_API), 'api.github.com/repos/x/y');
+  assert.equal(statoHttpDiLettura(LETTURA_API), 415, 'il 415 va mostrato: è l’unico caso che merita la pillola');
+  assert.equal(titoloDaHtml('niente html qui'), '');
+  assert.equal(statoHttpDiLettura({ testo: 'una pagina qualunque' }), null);
+});
+
+test('SCHEDA-NOME: entità e spazi del `<title>` si leggono come li legge una persona', () => {
+  assert.equal(titoloDaHtml('<title>\n  Cose &amp; cose  \n</title>'), 'Cose & cose');
+  assert.equal(titoloDaHtml(`<title>${'x'.repeat(200)}</title>`).length, 80);
+});
+
+test('SCHEDA-NOME: il titolo dichiarato dal server vince su tutto', () => {
+  assert.equal(titoloScheda({ titolo: 'Quello vero', url: 'https://x.dev', testo: '<title>altro</title>' }), 'Quello vero');
 });
