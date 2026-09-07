@@ -1,5 +1,6 @@
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
-import { verificaIncorniciabile } from './browser-frame.mjs'; // K-I 06/9: la cornice del Browser si decide dalle intestazioni della pagina
+import { verificaIncorniciabile } from './browser-frame.mjs';
+import { decidiVia } from './browser-proxy-universale.mjs'; // 07/9: la scelta della corsia sta in un posto solo // K-I 06/9: la cornice del Browser si decide dalle intestazioni della pagina
 import { proxyPagina } from './browser-proxy.mjs';
 import { leggiPaginaPerLaVista } from './agent-service.mjs';
 import { ritrattoCartella } from './workspace-info.mjs'; // 06/9 F9/F10/F19-F21: cosa c'e' dentro la cartella, PRIMA di darla a un agente // 06/9: gli occhi del modello sulla pagina dove navighi TU // 06/9: il proxy locale per annotare gli elementi
@@ -2939,7 +2940,24 @@ export function createHttpApp({
           const indirizzo = url.searchParams.get('url');
           if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) { const error = new Error('Indirizzo mancante'); error.code = 'QUERY_INVALID'; throw error; }
           const origineNostra = `http://${req.headers.host || '127.0.0.1'}`;
-          data = await verificaIncorniciabile(indirizzo, { fetchFn, origineNostra });
+          const esitoCornice = await verificaIncorniciabile(indirizzo, { fetchFn, origineNostra });
+          /*
+           * ⭐ 07/9 — la risposta non dice solo SE la pagina si lascia incorniciare: dice anche PER
+           * QUALE VIA va mostrata, e perché. La scelta la fa `decidiVia` (provata nel suo modulo, con
+           * la metà al contrario), non una catena di `if` scritta due volte — una qui e una nella
+           * pagina, che è il modo in cui due comportamenti divergono senza che nessuno se ne accorga.
+           * ⛔ `proxyDisponibile: false`: il proxy universale su origine separata NON è ancora acceso
+           *   (serve un secondo listener e la riscrittura dei link interni, non fatta). Dichiararlo
+           *   disponibile qui sarebbe una promessa che la pagina non può mantenere.
+           */
+          const scelta = decidiVia({
+            incorniciabile: esitoCornice.incorniciabile,
+            motivo: esitoCornice.motivo,
+            url: esitoCornice.url,
+            proxyDisponibile: false,
+            vivoDisponibile: Boolean(browserVivo),
+          });
+          data = { ...esitoCornice, via: scelta.via, percheVia: scelta.perche };
         } else if (gitStatusMatch || gitBranchMatch) {
           requireNoQuery(url);
           const trovato = gitStatusMatch ?? gitBranchMatch;

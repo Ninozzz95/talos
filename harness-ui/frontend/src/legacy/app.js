@@ -9851,9 +9851,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       voce.url = esito?.url || url;
       voce.titolo = esito?.titolo || null;
       // un dev server locale passa dal proxy: la cornice è nostra anche se il sito vietasse l'incorniciatura
+      /*
+       * ⛔ 07/9 — la VIA la sceglie il server (`decidiVia`, provata nel suo modulo con la metà al
+       *   contrario) e la manda insieme all'esito: qui non si ridecide, si esegue. Due catene di
+       *   `if` che decidono la stessa cosa — una nel server e una nella pagina — sono il modo in cui
+       *   due comportamenti divergono senza che nessuno se ne accorga.
+       * ⛔ Un dev server locale resta sulla corsia del proxy che già abbiamo: quello universale
+       *   rifiuta gli indirizzi privati per non diventare una porta verso la rete interna.
+       */
       if (esito?.incorniciabile || voce.proxata) {
         if (voce.stato === 'caricamento') voce.stato = 'pronta';
         voce.viaVista = voce.proxata ? 'proxy' : 'cornice';
+        voce.percheVia = esito?.percheVia || null;
       } else {
         /*
          * ⭐⭐⭐ 07/9 — QUI FINISCE IL RETTANGOLO GRIGIO. Fino a oggi un sito che vieta la cornice
@@ -9863,7 +9872,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * ⛔ Se anche quella fallisce (nessun browser sul computer, o il protocollo non risponde) la
          *   scheda torna «bloccata» col motivo VERO: la promessa non si finge mai.
          */
-        const conVista = await apriNelBrowserVivo(voce);
+        voce.percheVia = esito?.percheVia || null;
+        const conVista = esito?.via === 'cornice' ? false : await apriNelBrowserVivo(voce);
         if (!conVista) { voce.stato = 'bloccata'; voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS'; }
       }
       void dallaPaginaAgliOcchiDelModello(voce); // 06/9: quello che guardi tu, lo deve vedere anche lui
