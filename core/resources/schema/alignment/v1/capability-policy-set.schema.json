@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talo.sh/schemas/capability-policy-set.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "revision", "policies", "grants"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "revision": { "type": "integer", "minimum": 0 },
+    "policies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capability", "actions", "decision", "source", "risk"],
+        "properties": {
+          "capability": { "type": "string", "minLength": 1 },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["read", "write", "outbound"] }
+          },
+          "decision": { "enum": ["allow", "ask", "deny"] },
+          "source": { "enum": ["default", "user", "managed"] },
+          "risk": { "enum": ["low", "medium", "high", "critical"] },
+          "updated_at": { "type": ["string", "null"], "format": "date-time" },
+          "last_used_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      }
+    },
+    "grants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "capability", "actions", "scope", "status", "granted_at"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "capability": { "type": "string", "minLength": 1 },
+          "tool_id": { "type": ["string", "null"] },
+          "actions": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["read", "write", "outbound"] }
+          },
+          "scope": { "enum": ["once", "session", "device", "account"] },
+          "scope_id": { "type": ["string", "null"] },
+          "status": { "enum": ["active", "consumed", "expired", "revoked"] },
+          "granted_at": { "type": "string", "format": "date-time" },
+          "expires_at": { "type": ["string", "null"], "format": "date-time" },
+          "risk_acknowledged": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talo.sh/schemas/tool-definition.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "name",
+    "title",
+    "description",
+    "input_schema",
+    "capabilities",
+    "actions",
+    "risk",
+    "effects",
+    "lifecycle",
+    "execution",
+    "enabled",
+    "planning_enabled"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "name": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "description": { "type": "string", "minLength": 1, "maxLength": 4000 },
+    "input_schema": {
+      "type": "object",
+      "required": ["type"],
+      "properties": { "type": { "const": "object" } }
+    },
+    "output_schema": { "type": ["object", "null"] },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["read", "write", "outbound"] }
+    },
+    "confirmation": { "enum": ["policy", "always"] },
+    "risk": { "enum": ["low", "medium", "high", "critical"] },
+    "effects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mutates_state", "parallel_safe", "requires_approval", "produces_evidence"],
+      "properties": {
+        "mutates_state": { "type": "boolean" },
+        "parallel_safe": { "type": "boolean" },
+        "requires_approval": { "type": "boolean" },
+        "produces_evidence": { "type": "boolean" }
+      }
+    },
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "revision"],
+      "properties": {
+        "kind": { "enum": ["bundled", "managed_registry"] },
+        "revision": { "type": "string", "minLength": 1 },
+        "integrity_sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["locations", "implementation_key"],
+      "properties": {
+        "locations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["local_mobile", "trusted_node", "remote_provider"] }
+        },
+        "implementation_key": { "type": "string", "minLength": 1 }
+      }
+    },
+    "connector_id": { "type": ["string", "null"] },
+    "enabled": { "type": "boolean" },
+    "planning_enabled": { "type": "boolean" },
+    "annotations": { "type": "object" },
+    "metadata": { "type": "object" }
+  }
+}

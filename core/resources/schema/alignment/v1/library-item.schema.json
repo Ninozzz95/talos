@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talo.sh/schemas/library-item.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "source", "kind", "origin", "title", "content", "trust_boundary", "provenance", "relationships", "capabilities", "occurred_at", "metadata"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "enum": ["file", "generated_document", "run_artifact", "browser_artifact", "search_result"] },
+        "id": { "type": "string", "minLength": 1 },
+        "url": { "type": ["string", "null"], "format": "uri" }
+      }
+    },
+    "kind": { "enum": ["file", "image", "link"] },
+    "origin": { "enum": ["uploaded", "generated", "browser", "search"] },
+    "title": { "type": "string", "minLength": 1 },
+    "content": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "mime_type", "size_bytes", "sha256", "content_ref"],
+      "properties": {
+        "status": { "enum": ["pending", "available", "analysis_failed", "failed", "revoked"] },
+        "mime_type": { "type": ["string", "null"] },
+        "size_bytes": { "type": ["integer", "null"], "minimum": 0 },
+        "sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+        "content_ref": { "type": ["string", "null"] },
+        "text_preview": { "type": ["string", "null"], "maxLength": 4096 },
+        "failure_code": { "type": ["string", "null"] }
+      }
+    },
+    "trust_boundary": { "enum": ["user_content", "generated_content", "external_content"] },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "entity_id", "generated_at", "activity", "agent", "derived_from", "content_credentials"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "entity_id": { "type": "string", "minLength": 1 },
+        "generated_at": { "type": "string", "format": "date-time" },
+        "activity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "enum": ["upload", "tool_generation", "browser_capture", "search_capture", "download"] },
+            "tool_name": { "type": ["string", "null"] },
+            "session_id": { "type": ["string", "null"] },
+            "prompt_message_id": { "type": ["string", "null"] }
+          }
+        },
+        "agent": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind"],
+          "properties": {
+            "kind": { "enum": ["user", "model", "tool", "external"] },
+            "provider": { "type": ["string", "null"] },
+            "model": { "type": ["string", "null"] },
+            "version": { "type": ["string", "null"] }
+          }
+        },
+        "derived_from": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "library_item_id": { "type": ["string", "null"] },
+              "url": { "type": ["string", "null"], "format": "uri" },
+              "sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" }
+            }
+          }
+        },
+        "content_credentials": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["format", "present", "verification"],
+          "properties": {
+            "format": { "enum": ["c2pa", "none"] },
+            "present": { "type": "boolean" },
+            "verification": { "enum": ["not_checked", "valid", "invalid", "unsupported"] },
+            "issuer": { "type": ["string", "null"] }
+          }
+        }
+      }
+    },
+    "relationships": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chat_count", "backlinks"],
+      "properties": {
+        "chat_count": { "type": "integer", "minimum": 0 },
+        "backlinks": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["can_attach", "can_preview", "can_download"],
+      "properties": {
+        "can_attach": { "type": "boolean" },
+        "can_preview": { "type": "boolean" },
+        "can_download": { "type": "boolean" }
+      }
+    },
+    "occurred_at": { "type": "string", "format": "date-time" },
+    "metadata": { "type": "object" }
+  }
+}

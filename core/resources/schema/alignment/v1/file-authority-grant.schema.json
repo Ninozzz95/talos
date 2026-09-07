@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talo.sh/schemas/file-authority-grant.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "owner_id", "scope", "label", "permissions", "status", "resource_bindings", "created_at", "updated_at"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "owner_id": { "type": "string", "minLength": 1 },
+    "scope": { "enum": ["file", "folder", "session", "global"] },
+    "scope_id": { "type": ["string", "null"] },
+    "label": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "permissions": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["model.read", "browser.upload"] }
+    },
+    "status": { "enum": ["active", "expired", "revoked"] },
+    "resource_bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["library_item_id", "sha256"],
+        "properties": {
+          "library_item_id": { "type": "string", "minLength": 1 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "risk_acknowledged_at": { "type": ["string", "null"], "format": "date-time" },
+    "expires_at": { "type": ["string", "null"], "format": "date-time" },
+    "revoked_at": { "type": ["string", "null"], "format": "date-time" },
+    "last_used_at": { "type": ["string", "null"], "format": "date-time" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}

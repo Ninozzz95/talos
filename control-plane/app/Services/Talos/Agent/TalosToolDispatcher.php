@@ -59,6 +59,7 @@ final class TalosToolDispatcher
         if (! in_array($plan->state, [ProceduralPlan::DAG_COMPILED, ProceduralPlan::AWAITING_APPROVAL], true)) {
             throw new InvalidArgumentException('Only executable procedural plans can be dispatched.');
         }
+        $this->assertDispatchablePlan($plan);
 
         $turn = $this->ownedLiveTurn($ownerUserId, (string) $turn->id, $turnLeaseToken);
         $this->assertBrowserOwnership($turn, $browserSession);
@@ -414,6 +415,17 @@ final class TalosToolDispatcher
         };
 
         return new TalosToolDispatchReport($status, $results, $waiting, $blocked);
+    }
+
+    private function assertDispatchablePlan(ProceduralPlan $plan): void
+    {
+        $registry = TalosProceduralToolRegistry::specs();
+        foreach ($plan->nodes as $node) {
+            $spec = $registry[$node->call->name] ?? null;
+            if (! $spec instanceof \Kadmos\Tool\ProceduralToolSpec || $spec->nodeType !== $node->type) {
+                throw new InvalidArgumentException('Procedural plan contains a tool outside the bundled TALOS registry.');
+            }
+        }
     }
 
     /** @param array<string, mixed> $audit */

@@ -55,6 +55,36 @@ enum TalosCapability: string
         };
     }
 
+    /** @return list<TalosCapabilityAction> */
+    public function actions(): array
+    {
+        return match ($this) {
+            self::ARTIFACTS_GENERATE,
+            self::FILES_WRITE,
+            self::FILESYSTEM_WRITE => [TalosCapabilityAction::WRITE],
+
+            self::FILES_TRANSFER_TO_PROVIDER,
+            self::WEB_SEARCH,
+            self::WEB_FETCH,
+            self::BROWSER_READ,
+            self::EMAIL_READ,
+            self::CALENDAR_READ => [TalosCapabilityAction::READ, TalosCapabilityAction::OUTBOUND],
+
+            self::BROWSER_WRITE,
+            self::EMAIL_SEND,
+            self::CALENDAR_WRITE => [TalosCapabilityAction::WRITE, TalosCapabilityAction::OUTBOUND],
+
+            self::BROWSER_UPLOAD => [
+                TalosCapabilityAction::READ,
+                TalosCapabilityAction::WRITE,
+                TalosCapabilityAction::OUTBOUND,
+            ],
+
+            self::FILESYSTEM_READ => [TalosCapabilityAction::READ],
+            self::INTEGRATIONS_EXTERNAL => [TalosCapabilityAction::OUTBOUND],
+        };
+    }
+
     public function group(): string
     {
         return match ($this) {
@@ -133,6 +163,10 @@ enum TalosCapability: string
             'label' => $this->label(),
             'description' => $this->description(),
             'risk' => $this->risk()->value,
+            'actions' => array_map(
+                static fn (TalosCapabilityAction $action): string => $action->value,
+                $this->actions(),
+            ),
             'master_enable_eligible' => $this->masterEnableEligible(),
         ];
     }

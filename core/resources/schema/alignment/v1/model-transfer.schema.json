@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talo.sh/schemas/model-transfer.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "model_id", "operation", "mode", "execution_location", "state", "have_bytes", "total_bytes", "verification"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "minLength": 1 },
+    "model_id": { "type": "string", "minLength": 1 },
+    "operation": { "enum": ["inspect", "download", "serve"] },
+    "mode": { "enum": ["preview", "execute"] },
+    "execution_location": { "enum": ["local_mobile", "trusted_node"] },
+    "target_id": { "type": "string", "minLength": 1 },
+    "state": { "enum": ["planned", "queued", "running", "verifying", "completed", "failed", "cancelled", "abandoned"] },
+    "have_bytes": { "type": "integer", "minimum": 0 },
+    "total_bytes": { "type": "integer", "minimum": 0 },
+    "verification": { "enum": ["pending", "verified", "failed", "not_applicable"] },
+    "fault_code": { "type": ["string", "null"] },
+    "updated_at": { "type": "string", "format": "date-time" }
+  }
+}
