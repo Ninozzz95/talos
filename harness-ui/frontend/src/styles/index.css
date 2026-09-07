@@ -716,6 +716,15 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 /* i token del tema, quelli VERI: si chiamano `success`, non `ok` — e ci sono gia in entrambi i temi */
 .talos-approval__esito--si{border-color:var(--talos-success-border); background:var(--talos-success-soft); color:var(--talos-success)}
 .talos-approval__esito--no{border-color:var(--talos-danger-border); background:var(--talos-danger-soft); color:var(--talos-danger)}
+/* ⛔ 07/9 O-41 — gli allegati SOTTO la bolla e fuori da essa: la bolla e riservata alle parole
+   della persona. Chip piccoli, allineati come la bolla (a destra, perche il messaggio e suo),
+   con genere, fonte e peso. shadcn/ui, «Components for Chat Interfaces» (giugno 2026): gli
+   Attachment sono componenti separati dai Bubble, mostrati FUORI dalla bolla. */
+.talos-allegati-chip{display:flex; flex-wrap:wrap; gap:6px; justify-content:flex-end; margin:6px 0 0}
+.talos-allegati-chip__uno{display:inline-flex; align-items:baseline; gap:6px; max-width:100%; padding:3px 9px; border:1px solid var(--talos-border); border-radius:999px; background:var(--talos-card-subtle); color:var(--talos-muted); font-size:11px; line-height:1.5}
+.talos-allegati-chip__genere{color:var(--talos-accent-text); text-transform:none; letter-spacing:normal}
+.talos-allegati-chip__nome{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--talos-text)}
+.talos-allegati-chip__costo{font-family:var(--talos-font-mono); font-size:10.5px; opacity:.85}
 .sheet-avviso{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0 0; padding:9px 11px; border-radius:10px; border:1px solid var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:12px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .workspace-chooser-selection .workspace-chooser-avviso{display:block; margin-top:6px; padding:6px 9px; border-radius:9px; border:1px solid var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:11.5px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .talos-menu__nota{margin:6px 4px 2px; padding-top:6px; border-top:1px solid var(--talos-border-subtle); color:var(--talos-muted); font-size:11.5px; line-height:1.45}
@@ -736,7 +745,12 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-composer__bar .talos-send{margin-left:auto}
 .talos-composer__bar .talos-composer__mic ~ .talos-send{margin-left:0}
 .talos-composer__mic[aria-pressed="true"]{color:var(--talos-accent-hover); border-color:var(--talos-accent-border)}
-.talos-composer__input{appearance:none;-webkit-appearance:none;display:block;width:100%;border:0;outline:0;resize:none;background:transparent;font:inherit;color:inherit;overflow:hidden;min-height:40px; font-size:15px; color:var(--talos-muted); font-style:italic; padding:2px 4px 10px; outline:none}
+/* ⛔ 07/9, owner: «il testo scritto nel composer (solo quello realmente scritto, non il
+   placeholder) deve avere l'accent color». Era `--talos-muted`: cio che scrivi appariva
+   spento ESATTAMENTE come il segnaposto, e i due non si distinguevano. Si usa la variante
+   chiara dell'accento (`--talos-accent-text`), leggibile su fondo scuro; il segnaposto resta
+   spento nella riga sotto, che e quello che li separa. */
+.talos-composer__input{appearance:none;-webkit-appearance:none;display:block;width:100%;border:0;outline:0;resize:none;background:transparent;font:inherit;color:inherit;overflow:hidden;min-height:40px; font-size:15px; color:var(--talos-accent-text); font-style:normal; padding:2px 4px 10px; outline:none}
 .talos-composer__bar{display:flex; align-items:center; gap:6px; flex-wrap:nowrap; min-width:0}
 .talos-composer__bar .talos-badge--lg{flex:0 1 auto; min-width:0; max-width:220px; overflow:hidden; white-space:nowrap; padding:0 10px}
 .talos-composer__bar .talos-badge--lg > :not(.i){overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -1092,7 +1106,8 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
   .talos-line-loader-sweep{stroke-dashoffset:0; stroke-opacity:.35}
 }
 
-.talos-composer__input::placeholder{color:var(--talos-muted);opacity:1}
+/* il corsivo era sul TESTO SCRITTO: e uno stile da segnaposto, e qui che appartiene */
+.talos-composer__input::placeholder{color:var(--talos-muted);opacity:1;font-style:italic}
 
 /* Browser: composizione delle primitive del mockup, nessun token nuovo. */
 .talos-browser__bar,.talos-browser__tools{display:flex;align-items:center;gap:var(--talos-space-sm);padding:var(--talos-space-control);flex-wrap:wrap}

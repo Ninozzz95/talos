@@ -47,7 +47,7 @@ import { montaNote } from '../components/note.js'; // 06/9 C24: la pagina delle 
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
 import { sommaUsage, usageDellaSessione } from '../components/consumo-sessione.js'; // 06/9 CB-04: il consumo della SESSIONE, non dell'ultimo invio
-import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js'; // 06/9 B4/B6/B7/B9: il «+» allega, e ogni allegato dichiara il suo costo // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
+import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, chipDegliAllegati, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js'; // 06/9 B4/B6/B7/B9: il «+» allega, e ogni allegato dichiara il suo costo // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
@@ -6888,6 +6888,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function runRealeAttivo() {
+    /*
+     * ⛔⛔ 07/9, O-48 — owner con due screenshot: «il pulsante di un'altra sessione è su stop quando
+     * una sessione separata è in reasoning». Aprendo una sessione **interrotta** il composer
+     * offriva «Interrompi risposta» per un giro che nessuno stava eseguendo.
+     * La causa è l'ordine, e la prima cura (segnare il flag all'apertura) non bastava: rigiocando
+     * la storia della sessione arriva un `RunStarted` che rimette `eventoTerminaleVisto` a false, e
+     * il `RunFinished` non arriverà MAI — il processo che lo avrebbe mandato è morto.
+     * ⇒ Il fatto dichiarato dal SERVER vince su ciò che lo stream non ha detto. È la stessa
+     *   lezione della sidebar e del velo Elimina: una sessione chiusa lo è anche quando nessuno ha
+     *   mandato l'evento che lo dichiara.
+     */
+    if (state.realSession.chiusaDalServer) return false;
     return Boolean(state.realSession.id && !state.realSession.eventoTerminaleVisto);
   }
 
@@ -7495,6 +7507,34 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * "Follow-up" invece di "Task reale · <id>" — non è il compito che ha
    * aperto la sessione, è quello che la continua.
    */
+  /**
+   * I chip degli allegati, SOTTO la bolla e fuori da essa (O-41). Ogni chip dice genere, fonte e
+   * quanto pesa; il percorso intero sta nel titolo, per chi lo vuole senza doverselo leggere tutto.
+   * ⛔ Niente `innerHTML`: il nome di un file e l'indirizzo di una pagina vengono da fuori.
+   */
+  function disegnaChipAllegati(articolo, allegati) {
+    const chip = chipDegliAllegati(allegati, state.model);
+    if (!chip.length) return null; // ⛔ nessun allegato, nessuna riga: mai un contenitore vuoto
+    const riga = document.createElement('div');
+    riga.className = 'talos-allegati-chip';
+    riga.setAttribute('role', 'list');
+    riga.setAttribute('aria-label', chip.length === 1 ? '1 allegato del messaggio' : `${chip.length} allegati del messaggio`);
+    for (const c of chip) {
+      const uno = document.createElement('span');
+      uno.className = 'talos-allegati-chip__uno';
+      uno.setAttribute('role', 'listitem');
+      if (c.titolo) uno.title = c.titolo;
+      uno.append(
+        textElement('span', 'talos-allegati-chip__genere', c.genere),
+        textElement('span', 'talos-allegati-chip__nome', c.nome),
+      );
+      if (c.costo) uno.append(textElement('span', 'talos-allegati-chip__costo', c.costo));
+      riga.append(uno);
+    }
+    articolo.append(riga);
+    return riga;
+  }
+
   function appendUserFollowUp(text, contesto = null) {
     /*
      * ⛔ 03/9 — si ricorda QUI, dove il testo passa per davvero, e non
@@ -7503,8 +7543,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * quella che la persona vede.
      */
     if (typeof text === 'string' && text.trim() !== '') state.realSession.ultimaDomanda = text;
+    /*
+     * ⛔⛔ O-41 (07/9) — nella bolla va SOLO ciò che la persona ha scritto. Il testo completo (con
+     * dentro il contenuto degli allegati) è già partito verso il modello: qui si mostra il suo,
+     * e gli allegati diventano chip SOTTO la bolla. Si consuma una volta sola.
+     */
+    const daMostrare = state.realSession.bollaDaMostrare;
+    state.realSession.bollaDaMostrare = null;
+    const testoBolla = daMostrare && typeof daMostrare.testo === 'string' ? daMostrare.testo : text;
     // 05/9 Fase 2: Conversazione — il follow-up e' un messaggio della persona nel blocco del mockup
-    const article = nellaChat(creaMessaggioUtente({ testo: text, ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(), meta: `Follow-up${etichettaPermessiGiro(contesto)}` }), 'utente');
+    const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(), meta: `Follow-up${etichettaPermessiGiro(contesto)}` }), 'utente');
+    if (daMostrare?.allegati?.length) disegnaChipAllegati(article, daMostrare.allegati);
     markMotionEnter(article);
     scorriAllaBollaAppesa(article);
   }
@@ -12182,6 +12231,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
     const generation = nuovaGenerazioneSessione();
     state.realSession.deferHistoricalRendering = impostazioniSessione?.conclusa === true;
+    /*
+     * ⛔⛔ 07/9, O-48 — owner con due screenshot: «il pulsante di un'altra sessione è su stop quando
+     * una sessione separata è in reasoning». Il pulsante non guardava l'altra sessione: guardava
+     * questa, e si sbagliava. `runRealeAttivo()` chiede «ho visto l'evento terminale?», e per una
+     * sessione **interrotta** quell'evento non è mai arrivato e non arriverà MAI — il processo che
+     * la eseguiva è morto. Risultato: apri una sessione interrotta e il composer ti offre di
+     * fermare un giro che non esiste.
+     * ⇒ È lo stesso difetto che stamattina diceva «in corso» nella sidebar, un piano più sotto:
+     *   una sessione chiusa lo è anche quando nessuno ha mandato l'evento che lo dichiara. Se il
+     *   server dice conclusa o interrotta, il giro è finito — senza aspettare niente.
+     */
+    state.realSession.chiusaDalServer = impostazioniSessione?.conclusa === true || impostazioniSessione?.interrotta === true;
+    if (state.realSession.chiusaDalServer) state.realSession.eventoTerminaleVisto = true;
+    // ⛔ il flag da solo non basta: il pulsante si ridisegna solo quando qualcuno glielo chiede
+    syncRunComposerState();
     /* ⛔ 02/09, owner: "quando clicchi su una riga sessione la chat deve trovarsi già in fondo senza animazioni" — la cronologia si costruisce INVISIBILE (ma impaginata: lo scroll la porta in fondo a ogni frammento), e si scopre solo quando è tutta lì, già in fondo (mantieniFondoDuranteRipristino). */
     $('#conversation')?.classList.toggle('is-restoring', state.realSession.deferHistoricalRendering);
     state.realSession.taskId = taskId;
@@ -14121,9 +14185,27 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     });
   }
 
-  function submitPrompt(text) {
+  function submitPrompt(text, { mostra = null, allegati = [] } = {}) {
     const value = String(text || '').trim();
     if (!value) return false;
+    /*
+     * ⛔ O-48: `chiusaDalServer` si azzera QUI, dove parte un invio vero, e non sul `RunStarted`.
+     *    Rigiocando la storia di una sessione interrotta arriva un `RunStarted` vecchio, e
+     *    azzerarlo lì rimetteva il pulsante su «Interrompi» per un giro finito da un pezzo — la
+     *    prima cura falliva esattamente così, e l'ha detto la sonda, non il codice riletto.
+     */
+    state.realSession.chiusaDalServer = false;
+    /*
+     * ⛔ O-41 (07/9) — il testo che va al MODELLO e quello che va nella BOLLA sono due cose diverse
+     * appena c'è un allegato. Passarli lungo tutta la catena vorrebbe dire cambiare tre firme
+     * (`resumeSession`, `accodaMessaggioReale`, …) per un dato che serve solo alla fine: si lascia
+     * qui, e chi disegna la bolla lo consuma — stesso schema di `followUpBubbleInAttesa`.
+     * ⛔ Si consuma UNA volta: una bolla ridisegnata più tardi non deve ripescare gli allegati di
+     *   un messaggio precedente.
+     */
+    if (mostra !== null && mostra !== value) {
+      state.realSession.bollaDaMostrare = { testo: mostra, allegati: Array.isArray(allegati) ? allegati : [] };
+    }
     if (value.startsWith('!')) {
       const hidden = value.startsWith('!!');
       const comando = value.replace(/^!!?/, '').trim();
@@ -15151,8 +15233,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   composerForm.addEventListener('submit', (event) => {
     event.preventDefault();
     // 06/9 B9: gli allegati viaggiano col messaggio, come percorsi, e la riga si svuota solo se parte
-    const text = testoConAllegati(composerInput.value.trim());
-    if (!submitPrompt(text)) return;
+    const scritto = composerInput.value.trim();
+    const text = testoConAllegati(scritto);
+    /*
+     * ⛔⛔ 07/9, O-41 — owner con lo screenshot: «gli allegati non devono apparire nella bolla ma
+     * fuori o nascosti: la bolla è riservata ai messaggi dell'utente». Nella sua bolla c'erano
+     * quattro parole affogate in quattro righe di URL che non aveva scritto lui.
+     * ⇒ Da qui in poi le due cose viaggiano SEPARATE: al modello il testo intero (gli serve), alla
+     *   bolla solo ciò che la persona ha scritto, e gli allegati diventano chip sotto la bolla.
+     */
+    if (!submitPrompt(text, { mostra: scritto, allegati: [...allegatiComposer] })) return;
     svuotaAllegati();
     composerInput.value = '';
     autoGrowTextarea();

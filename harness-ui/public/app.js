@@ -8906,6 +8906,32 @@ function nomeBreveAllegato(percorso, massimo = 28) {
   const testa = nome.slice(0, Math.max(1, massimo - estensione.length - 1));
   return `${testa}…${estensione}`;
 }
+function generePerLoSchermo(allegato) {
+  if (!allegato) return "allegato";
+  if (allegato.daBrowser) return "pagina aperta";
+  if (allegato.tipo === "immagine") return "immagine";
+  if (allegato.tipo === "schermata") return "schermata";
+  return "file";
+}
+function chipAllegato(allegato, modello = "") {
+  if (!allegato) return null;
+  const genere = generePerLoSchermo(allegato);
+  let nome;
+  if (allegato.daBrowser) {
+    try {
+      nome = new URL(allegato.percorso || allegato.nome || "").host || allegato.nome || "";
+    } catch {
+      nome = nomeBreveAllegato(allegato.percorso || allegato.nome, 32);
+    }
+  } else {
+    nome = nomeBreveAllegato(allegato.percorso || allegato.nome, 32);
+  }
+  const { etichetta } = costoAllegato(allegato, modello);
+  return { genere, nome, costo: etichetta, titolo: allegato.percorso || allegato.nome || "" };
+}
+function chipDegliAllegati(allegati, modello = "") {
+  return (Array.isArray(allegati) ? allegati : []).map((a) => chipAllegato(a, modello)).filter(Boolean);
+}
 var VIE_ALLEGATO, TETTI_ALLEGATI, TETTO_IMMAGINE;
 var init_allegati = __esm({
   "src/components/allegati.js"() {
@@ -14865,6 +14891,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
       }
       function runRealeAttivo() {
+        if (state.realSession.chiusaDalServer) return false;
         return Boolean(state.realSession.id && !state.realSession.eventoTerminaleVisto);
       }
       function contattoPerso() {
@@ -15229,9 +15256,35 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         scorriAllaBollaAppesa(article);
         state.realSession.taskBubbleMostrata = true;
       }
+      function disegnaChipAllegati(articolo, allegati) {
+        const chip = chipDegliAllegati(allegati, state.model);
+        if (!chip.length) return null;
+        const riga = document.createElement("div");
+        riga.className = "talos-allegati-chip";
+        riga.setAttribute("role", "list");
+        riga.setAttribute("aria-label", chip.length === 1 ? "1 allegato del messaggio" : `${chip.length} allegati del messaggio`);
+        for (const c of chip) {
+          const uno2 = document.createElement("span");
+          uno2.className = "talos-allegati-chip__uno";
+          uno2.setAttribute("role", "listitem");
+          if (c.titolo) uno2.title = c.titolo;
+          uno2.append(
+            textElement("span", "talos-allegati-chip__genere", c.genere),
+            textElement("span", "talos-allegati-chip__nome", c.nome)
+          );
+          if (c.costo) uno2.append(textElement("span", "talos-allegati-chip__costo", c.costo));
+          riga.append(uno2);
+        }
+        articolo.append(riga);
+        return riga;
+      }
       function appendUserFollowUp(text, contesto2 = null) {
         if (typeof text === "string" && text.trim() !== "") state.realSession.ultimaDomanda = text;
-        const article = nellaChat(creaMessaggioUtente({ testo: text, ora: state.realSession.deferHistoricalRendering ? "" : oraMessaggio(), meta: `Follow-up${etichettaPermessiGiro(contesto2)}` }), "utente");
+        const daMostrare = state.realSession.bollaDaMostrare;
+        state.realSession.bollaDaMostrare = null;
+        const testoBolla = daMostrare && typeof daMostrare.testo === "string" ? daMostrare.testo : text;
+        const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? "" : oraMessaggio(), meta: `Follow-up${etichettaPermessiGiro(contesto2)}` }), "utente");
+        if (daMostrare?.allegati?.length) disegnaChipAllegati(article, daMostrare.allegati);
         markMotionEnter(article);
         scorriAllaBollaAppesa(article);
       }
@@ -18903,6 +18956,9 @@ ${testo3}` : testo3;
         }
         const generation = nuovaGenerazioneSessione();
         state.realSession.deferHistoricalRendering = impostazioniSessione?.conclusa === true;
+        state.realSession.chiusaDalServer = impostazioniSessione?.conclusa === true || impostazioniSessione?.interrotta === true;
+        if (state.realSession.chiusaDalServer) state.realSession.eventoTerminaleVisto = true;
+        syncRunComposerState();
         $2("#conversation")?.classList.toggle("is-restoring", state.realSession.deferHistoricalRendering);
         state.realSession.taskId = taskId;
         state.realSession.treeWorkspaceKey = `session:${sessionId}`;
@@ -20616,9 +20672,13 @@ ${blocchi.join("\n\n")}` : testa;
           img.src = url;
         });
       }
-      function submitPrompt(text) {
+      function submitPrompt(text, { mostra = null, allegati = [] } = {}) {
         const value = String(text || "").trim();
         if (!value) return false;
+        state.realSession.chiusaDalServer = false;
+        if (mostra !== null && mostra !== value) {
+          state.realSession.bollaDaMostrare = { testo: mostra, allegati: Array.isArray(allegati) ? allegati : [] };
+        }
         if (value.startsWith("!")) {
           const hidden = value.startsWith("!!");
           const comando = value.replace(/^!!?/, "").trim();
@@ -21360,8 +21420,9 @@ ${blocchi.join("\n\n")}` : testa;
       }
       composerForm.addEventListener("submit", (event) => {
         event.preventDefault();
-        const text = testoConAllegati(composerInput.value.trim());
-        if (!submitPrompt(text)) return;
+        const scritto = composerInput.value.trim();
+        const text = testoConAllegati(scritto);
+        if (!submitPrompt(text, { mostra: scritto, allegati: [...allegatiComposer] })) return;
         svuotaAllegati();
         composerInput.value = "";
         autoGrowTextarea();
