@@ -1304,6 +1304,15 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    `min-width:0` è obbligatorio dentro un flex, o il testo lungo (un indirizzo intero) allarga la
    riga invece di accorciarsi — è la stessa trappola già vista sulla testata della sessione. */
 .talos-browser__modi{display:flex; align-items:center; gap:8px; min-width:0}
+/* ⛔ 07/9 — `.talos-browser__bar,.talos-browser__tools` hanno `flex-wrap:wrap` (serve alla barra
+   dell'indirizzo, che a schermo stretto va a capo davvero). Qui no: con il wrap la testata finiva
+   SOTTO «Lettura 7 di 7» invece che accanto — visto nello screenshot. La riga non va a capo e il
+   titolo si accorcia, che è esattamente ciò che l'owner ha chiesto. */
+.talos-browser__tools{min-width:0; flex-wrap:nowrap}
+.talos-browser__tools .talos-browser__testata{margin-left:4px}
+/* ⛔ 07/9 — senza questo «Lettura 7 di 7» si spezzava in due righe («ttura» / «di 7»): in una riga
+   che non va a capo, l'elemento che non può accorciarsi è lui, e a stringersi dev'essere il titolo. */
+.talos-browser__tools #browserPosizione{flex:none; white-space:nowrap}
 .talos-browser__testata{flex:1 1 auto; min-width:0; display:flex; align-items:baseline; gap:8px; overflow:hidden}
 .talos-browser__testata-titolo{font-size:12.5px; font-weight:600; color:var(--talos-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:min(52%,420px)}
 .talos-browser__testata-meta{font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}

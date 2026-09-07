@@ -4533,6 +4533,17 @@ body.reduce-motion *::after {
   gap: 8px;
   min-width: 0;
 }
+.talos-browser__tools {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+.talos-browser__tools .talos-browser__testata {
+  margin-left: 4px;
+}
+.talos-browser__tools #browserPosizione {
+  flex: none;
+  white-space: nowrap;
+}
 .talos-browser__testata {
   flex: 1 1 auto;
   min-width: 0;

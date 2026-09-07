@@ -476,7 +476,12 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
       <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="open" aria-label="Apri fuori da TALOS" title="Apri fuori da TALOS"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg></button>
     </div>
     <div class="talos-browser__tools">
-      <span class="talos-muted talos-browser__meta" id="browserPosizione" role="status">Lettura 2 di 2</span><span class="talos-grow"></span>
+      <!-- ⛔ 07/9, owner (seconda indicazione, con la selezione in blu): la testata della lettura va
+           ACCANTO a «Lettura 7 di 7», non sulla riga dei modi. Qui la riga c'era già e aveva spazio
+           vuoto in mezzo: titolo e provenienza lo riempiono, piccoli e troncati, e la riga dei modi
+           torna a essere due soli pulsanti. -->
+      <span class="talos-muted talos-browser__meta" id="browserPosizione" role="status">Lettura 2 di 2</span>
+      <span class="talos-browser__testata"><span class="talos-browser__testata-titolo" id="browserTitolo">Registro dei processi</span><span class="talos-muted talos-browser__testata-meta" id="browserProvenienza">Agente · 05/09, 10:42 (Roma) · 365 caratteri</span></span><span class="talos-grow"></span>
       <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="reload">Rileggi</button>
       <button class="talos-button talos-button--secondary talos-button--sm" data-browser-demo="annotate" title="Prepara una bozza nella chat senza inviarla">Annota</button>
       <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="note" aria-expanded="false" aria-controls="browserEditorNota">Nota locale</button>
@@ -503,10 +508,6 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
       <div class="talos-browser__modi" role="group" aria-label="Come guardare questa pagina">
         <button type="button" class="talos-button talos-button--ghost talos-button--sm" data-browser-modo="pagina" aria-pressed="false">Pagina</button>
         <button type="button" class="talos-button talos-button--secondary talos-button--sm" data-browser-modo="testo" aria-pressed="true">Testo dell’agente</button>
-        <span class="talos-browser__testata">
-          <span class="talos-browser__testata-titolo" id="browserTitolo">Registro dei processi</span>
-          <span class="talos-muted talos-browser__testata-meta" id="browserProvenienza">Agente · 05/09, 10:42 (Roma) · 365 caratteri</span>
-        </span>
       </div>
       <pre id="browserTesto" class="talos-browser__text" tabindex="0" aria-label="Testo acquisito della pagina">Registro dei processi
 
