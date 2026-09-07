@@ -17682,8 +17682,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           if (esito?.incorniciabile || voce.proxata) {
             if (voce.stato === "caricamento") voce.stato = "pronta";
             voce.viaVista = voce.proxata ? "proxy" : "cornice";
+            voce.percheVia = esito?.percheVia || null;
           } else {
-            const conVista = await apriNelBrowserVivo(voce);
+            voce.percheVia = esito?.percheVia || null;
+            const conVista = esito?.via === "cornice" ? false : await apriNelBrowserVivo(voce);
             if (!conVista) {
               voce.stato = "bloccata";
               voce.motivo = esito?.motivo || "Il sito non consente di essere mostrato dentro TALOS";
