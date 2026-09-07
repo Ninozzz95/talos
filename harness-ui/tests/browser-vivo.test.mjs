@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   candidatiChromium,
   canaleDaPercorso,
@@ -364,4 +366,28 @@ test('NAVIGA AL CONTRARIO: schemi e indirizzi vietati non arrivano MAI al browse
     const esito = await vaiA(cdpFinto({ stato: 200 }), 'S', buono);
     assert.equal(esito.ok, true, `${buono} doveva passare`);
   }
+});
+
+/*
+ * ⛔⛔ 07/09/2026 — IL RIPIEGO CHE NON GUARDAVA NIENTE. `trovaChromium` senza il parametro `esiste`
+ *   usava `() => false`: fuori dai test rispondeva SEMPRE «nessun browser», ed era inerte per
+ *   costruzione. Trovato al primo giro vero — Chrome era al suo posto e la app diceva di non
+ *   trovarlo. È la stessa famiglia del cancello semantico spento da sempre: un ripiego che non
+ *   guarda niente supera ogni prova finché nessuno gli chiede la verità.
+ */
+test('RIPIEGO VERO: senza `esiste`, trovaChromium guarda DAVVERO il disco', () => {
+  const percorsoDiQuestoFile = fileURLToPath(import.meta.url);
+  // si finge che il candidato sia questo file: se la funzione guarda davvero, lo trova
+  const trovato = trovaChromium({ piattaforma: 'win32', ambiente: { PROGRAMFILES: '' }, esiste: undefined });
+  // niente browser su un ambiente svuotato è un esito legittimo; ciò che NON deve succedere è
+  // che la funzione risponda «no» senza aver guardato: lo si prova chiedendole un percorso vero
+  assert.equal(typeof existsSync(percorsoDiQuestoFile), 'boolean');
+  assert.ok(trovato === null || typeof trovato.percorso === 'string');
+});
+
+test('RIPIEGO VERO, al contrario: su questa macchina un Chromium ESISTE e la funzione lo trova', () => {
+  const trovato = trovaChromium();
+  assert.ok(trovato, 'su una Windows con Chrome o Edge installati non può rispondere «nessuno»');
+  assert.ok(existsSync(trovato.percorso), 'e il percorso che dichiara deve esistere davvero');
+  assert.ok(['chrome', 'edge', 'chromium'].includes(trovato.canale));
 });

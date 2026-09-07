@@ -37,6 +37,8 @@ import { closeRuntimeResources } from './src/http-lifecycle.mjs';
 import { createWorkspaceLaunchStore } from './src/workspace-launch-store.mjs';
 import { cartelleConsigliate } from './src/frequent-dirs.mjs';
 import { createWorkspaceBrowser } from './src/workspace-browser.mjs';
+import { WebSocket } from 'ws'; // 07/9: il canale di controllo verso il Chromium pilotato (CDP parla WebSocket)
+import { creaGestoreBrowserVivo } from './src/browser-sessione-viva.mjs'; // 07/9: il Chromium di sistema pilotato dal server
 import { createLocalRuntimeProbe } from './src/local-runtime-probe.mjs';
 import { readGgufHeader } from './src/gguf-header.mjs';
 import { join, parse } from 'node:path';
@@ -517,6 +519,22 @@ async function startServer() {
     cartellaStandaloneLegacy: config.cartelleProgetto[0]?.percorso ?? process.cwd(),
   });
 
+  /*
+   * ⭐⭐⭐ 07/9 — IL BROWSER VIVO. Owner: «visualizzare ogni fottuta pagina web». Un `iframe` non può
+   * mostrare i siti che vietano la cornice; questo gestore apre un Chromium GIÀ INSTALLATO (Chrome
+   * o Edge) con un profilo NOSTRO e lo pilota via CDP, e la pagina di TALOS ne riceve lo schermo.
+   * ⛔ Il browser non parte all'avvio del server: nasce alla prima pagina chiesta e muore da sé dopo
+   *   dieci minuti che nessuno lo tocca — un Chromium acceso per nulla è RAM di chi ci lavora.
+   * ⛔ `connettiFn` è iniettata qui e non dentro il modulo: così i test non aprono mai un socket.
+   */
+  const browserVivo = creaGestoreBrowserVivo({
+    connettiFn: (wsUrl) => new Promise((risolvi, rifiuta) => {
+      const socket = new WebSocket(wsUrl, { perMessageDeflate: false, maxPayload: 256 * 1024 * 1024 });
+      socket.once('open', () => risolvi(socket));
+      socket.once('error', rifiuta);
+    }),
+  });
+
   const app = createHttpApp({
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
@@ -585,6 +603,7 @@ async function startServer() {
     providerProbe,
     workspaceLaunchStore,
     workspaceBrowser,
+    browserVivo,
   });
   const server = createServer(app);
 

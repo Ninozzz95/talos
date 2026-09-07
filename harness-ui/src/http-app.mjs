@@ -512,6 +512,17 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/browser/incorniciabile', metodi: ['GET'] },
   { schema: '/api/v1/browser/proxy', metodi: ['GET'] },
   { schema: '/api/v1/browser/leggi', metodi: ['GET'] },
+  /* ⭐ 07/9 — il browser vivo: apri/gesto/descrivi cambiano qualcosa (POST), schermo e stato leggono
+     (GET), e la chiusura è una DELETE sulla radice della famiglia. */
+  /* ⛔ chiudere è una POST, non una DELETE: in questo server DELETE non esiste — `metodiAmmessiPerRotta`
+     conosce GET/HEAD/POST e basta, e introdurre un metodo nuovo per una rotta sola avrebbe voluto dire
+     toccare il cancello che protegge TUTTE le altre. Misurato chiedendolo al codice, non dedotto. */
+  { schema: '/api/v1/browser/vivo/chiudi', metodi: ['POST'] },
+  { schema: '/api/v1/browser/vivo/apri', metodi: ['POST'] },
+  { schema: '/api/v1/browser/vivo/gesto', metodi: ['POST'] },
+  { schema: '/api/v1/browser/vivo/descrivi', metodi: ['POST'] },
+  { schema: '/api/v1/browser/vivo/schermo', metodi: ['GET'] },
+  { schema: '/api/v1/browser/vivo/stato', metodi: ['GET'] },
   { schema: '/api/v1/search-source', metodi: ['GET'] },
   { schema: '/api/v1/sessions', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/automations', metodi: ['GET', 'POST'] },
@@ -1103,6 +1114,13 @@ export function createHttpApp({
    * una voce partendo da una stringa arrivata dal client.
    */
   terminalRegistry = null,
+  /*
+   * ⭐⭐⭐ 07/9 — il BROWSER VIVO (`src/browser-sessione-viva.mjs`): un Chromium di sistema pilotato
+   * dal server, per le pagine che l'iframe non può mostrare. Facoltativo come ogni altro store:
+   * senza, le rotte rispondono BROWSER_VIVO_NON_CONFIGURATO invece di fingere una vista che non c'è.
+   * ⛔ Il primo giro dal vivo si fa su una porta di prova, mai sul 4174 dell'owner.
+   */
+  browserVivo = null,
   /** K-I 06/9 — il fetch in uscita per la verifica della cornice del Browser (iniettabile nei test). */
   fetchFn = globalThis.fetch,
   /*
@@ -2525,6 +2543,75 @@ export function createHttpApp({
       }
       return;
     }
+
+      /*
+       * ⭐⭐⭐ 07/9 — LE ROTTE DEL BROWSER VIVO. Owner: «visualizzare ogni fottuta pagina web».
+       * La cornice non basta: chi vieta l'iframe resta un rettangolo grigio, e Chrome ci carica
+       * dentro la propria pagina d'errore sparando un `load` regolare — così nemmeno il ripiego
+       * scatta. Qui la pagina la apre un Chromium di sistema pilotato dal SERVER, e alla pagina di
+       * TALOS ne arriva lo schermo; i gesti fanno la strada opposta.
+       * ⛔ Ogni rotta è NOMINATA per esteso, non riconosciuta da una regex con un segmento libero:
+       *   il guardiano dell'inventario (tests/http-inventario-rotte.test.mjs) sa leggere gli schemi
+       *   nominati, e una regex con `([a-z]+)` gli avrebbe nascosto quante e quali rotte esistono.
+       *   Verboso qui, ma nessuna porta resta fuori dall'elenco che decide 404 contro 405.
+       */
+      const VIVE = ['/api/v1/browser/vivo/apri', '/api/v1/browser/vivo/gesto', '/api/v1/browser/vivo/descrivi',
+        '/api/v1/browser/vivo/chiudi', '/api/v1/browser/vivo/schermo', '/api/v1/browser/vivo/stato'];
+      if (VIVE.includes(url.pathname)) {
+        /* Fuori dal ramo GET non c'è né `data` né il try che normalizza gli errori: qui ce li mette
+           questo blocco, così una rotta nuova non eredita per sbaglio il comportamento di un'altra. */
+        let data;
+        try {
+          if (!browserVivo) { const error = new Error('Browser vivo non configurato'); error.code = 'BROWSER_VIVO_NON_CONFIGURATO'; throw error; }
+          const sessionId = url.searchParams.get('sessione') || '';
+          if (!sessionId) { const error = new Error('Serve la sessione'); error.code = 'QUERY_INVALID'; throw error; }
+
+          if (method === 'GET' && url.pathname === '/api/v1/browser/vivo/stato') {
+            data = browserVivo.stato();
+          } else if (method === 'GET' && url.pathname === '/api/v1/browser/vivo/schermo') {
+            /*
+             * Lo schermo trasmesso, un fotogramma per evento SSE. ⛔ Da qui in poi gli header sono
+             * già partiti: un problema chiude il flusso, mai un secondo sendJson.
+             */
+            const flusso = createSseSession({
+              response: res, headers: SECURITY_HEADERS, heartbeatMs: INTERVALLO_BATTITO_SSE_MS,
+              setIntervalFn: impostaIntervalloFn, clearIntervalFn: cancellaIntervalloFn,
+            });
+            flusso.start();
+            let ferma = null;
+            try {
+              ferma = await browserVivo.segui(sessionId, (frame) => {
+                if (flusso.closed) return;
+                flusso.send({ dati: frame.dati, metadati: frame.metadati, numero: frame.numeroFrame });
+              });
+            } catch (errore) {
+              flusso.send({ errore: errore?.message || 'Non riesco a trasmettere questa pagina', codice: errore?.code || 'BROWSER_VIVO_ERRORE' });
+              flusso.close();
+              return;
+            }
+            // chi chiude la pagina ferma anche la trasmissione: un Chromium che dipinge per nessuno è RAM buttata
+            res.once('close', () => { void ferma?.(); });
+            return;
+          } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/apri') {
+            const corpo = await leggiCorpoJson(req);
+            const indirizzo = typeof corpo?.url === 'string' ? corpo.url : '';
+            if (!indirizzo || indirizzo.length > 2048) { const error = new Error('Indirizzo mancante'); error.code = 'QUERY_INVALID'; throw error; }
+            data = await browserVivo.apri(sessionId, indirizzo, { larghezza: Number(corpo?.larghezza) || 1280, altezza: Number(corpo?.altezza) || 800 });
+          } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/gesto') {
+            data = await browserVivo.gesto(sessionId, await leggiCorpoJson(req) || {});
+          } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/descrivi') {
+            const corpo = await leggiCorpoJson(req);
+            data = await browserVivo.descrivi(sessionId, { x: Number(corpo?.x) || 0, y: Number(corpo?.y) || 0 });
+          } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/chiudi') {
+            data = await browserVivo.chiudi(sessionId);
+          } else { const error = new Error('Metodo non consentito'); error.code = 'METHOD_NOT_ALLOWED'; throw error; }
+          sendJson(res, 200, successEnvelope(data, clock), method);
+        } catch (error) {
+          const normalized = normalizeError(error);
+          sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+        }
+        return;
+      }
 
     /*
      * ⛔⛔⛔ 07/9 — QUI STAVA IL DIFETTO: un metodo diverso da GET/HEAD tornava 405 su
