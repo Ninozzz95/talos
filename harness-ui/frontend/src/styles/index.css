@@ -1295,6 +1295,22 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 /* La striscia delle schede: si comporta come quella di un browser. Le schede si dividono lo spazio
    e si restringono fino a `--talos-scheda-min`; sotto quella soglia la striscia SCORRE invece di
    ridurre tutto a un'icona (è la scelta di Chrome, «scrollable-tabstrip»). */
+/* ⭐⭐⭐ 07/9 — LA VISTA VIVA: lo schermo di un Chromium pilotato dal server, dipinto qui dentro.
+   Owner: «visualizzare ogni fottuta pagina web». I nomi delle variabili li porta il tema: il
+   componente li aveva scritti col fallback generico (`--surface-3`, `--accent`), che da noi NON
+   ESISTONO — un var() su una variabile assente rende la dichiarazione invalida e il fondo sparisce.
+   Qui si usano i token veri, ed è per questo che il CSS vive nel mockup e non nel modulo. */
+.talos-vistaviva{position:relative; display:flex; flex-direction:column; min-height:0; border-radius:var(--talos-radius-card); overflow:hidden; background:var(--talos-panel-soft)}
+.talos-vistaviva__schermo{display:block; margin:auto; width:auto; height:auto; max-width:100%; max-height:100%; background:var(--talos-panel-soft); touch-action:none}
+.talos-vistaviva__schermo:focus{outline:none}
+.talos-vistaviva__schermo:focus-visible{outline:var(--talos-focus-width) solid var(--talos-ring); outline-offset:-2px}
+.talos-vistaviva--fuoco{box-shadow:inset 0 0 0 2px var(--talos-accent-border)}
+.talos-vistaviva__velo{position:absolute; inset:0; display:grid; place-items:center; padding:16px; text-align:center; color:var(--talos-muted); background:color-mix(in srgb, var(--talos-panel) 82%, transparent); transition:opacity 180ms ease}
+.talos-vistaviva__velo[hidden]{display:none}
+.talos-vistaviva__stato{margin:0; padding:6px 10px; font-size:12px; color:var(--talos-muted)}
+.talos-vistaviva__stato[data-stato="errore"]{color:var(--talos-danger)}
+@media (prefers-reduced-motion: reduce){ .talos-vistaviva__velo{transition:none} }
+.talos-vistaviva--senza-moto .talos-vistaviva__velo{transition:none}
 .talos-tabstrip{display:flex; align-items:stretch; gap:2px; min-width:0; max-width:100%}
 .talos-tabstrip__lista{--talos-scheda-min:132px; display:flex; align-items:stretch; gap:2px; min-width:0; overflow-x:auto; overflow-y:hidden; scrollbar-width:thin; scroll-snap-type:x proximity; padding-bottom:2px}
 .talos-tabstrip__scheda{flex:1 1 0; min-width:var(--talos-scheda-min); max-width:220px; display:flex; align-items:center; gap:8px; padding:0 6px 0 10px; height:34px; border:1px solid var(--talos-border); border-radius:var(--talos-radius-control) var(--talos-radius-control) 0 0; background:var(--talos-panel-soft); color:var(--talos-muted); cursor:pointer; scroll-snap-align:end; user-select:none}

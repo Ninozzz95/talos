@@ -41,6 +41,7 @@ import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
+import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo schermo del browser pilotato dal server
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { montaProgetti, progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina
@@ -9756,6 +9757,86 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     renderizzaBrowser();
     browserUi?.fuocoSullaScheda();
   }
+  /*
+   * ⭐⭐⭐ 07/9 — LA VISTA VIVA nella scheda Browser. Owner: «visualizzare ogni fottuta pagina web».
+   * Tre corsie, e la scelta è automatica — chi guarda non deve sapere perché:
+   *   1. CORNICE   il sito si lascia incorniciare: è la via più economica, resta la prima;
+   *   2. PROXY     un dev server locale: la pagina diventa della nostra origine, annotabile;
+   *   3. VIVO      tutto il resto — un Chromium di sistema pilotato dal SERVER, di cui riceviamo
+   *                lo schermo. Nessun `X-Frame-Options` lo ferma: il sito non è incorniciato.
+   * ⛔ Il browser non parte all'apertura della vista: nasce quando serve, cioè quando la cornice
+   *   avrebbe lasciato un rettangolo grigio, e muore da sé dopo dieci minuti che nessuno lo tocca.
+   */
+  let vistaViva = null;   // il componente montato
+  let flussoVivo = null;  // l'EventSource dei fotogrammi
+  /*
+   * ⛔ 07/9 — l'identificativo serve al SERVER solo per tenere separate le schede (una per
+   *   sessione, ognuna col suo contesto di cookie). Legarlo alla sessione del MODELLO era
+   *   sbagliato: il Browser si apre e si naviga anche prima di avviare un giro, e con
+   *   `state.realSession.id` vuoto la vista non nasceva affatto — la pagina restava «bloccata»
+   *   con la riga di scuse, cioè esattamente il difetto che stiamo togliendo. Trovato dalla prova
+   *   dal vivo, non da una rilettura.
+   */
+  const IDENTITA_BROWSER_SENZA_SESSIONE = 'browser-di-questa-pagina';
+  const identitaBrowser = () => state.realSession.id || IDENTITA_BROWSER_SENZA_SESSIONE;
+
+  function smontaVistaViva() {
+    if (flussoVivo) { try { flussoVivo.close(); } catch { /* già chiuso */ } flussoVivo = null; }
+    if (vistaViva) { try { vistaViva.distruggi(); } catch { /* già andata */ } vistaViva = null; }
+    const contenitore = $('#browserVistaViva');
+    if (contenitore) { contenitore.hidden = true; contenitore.replaceChildren(); }
+    void apiPost(`/api/v1/browser/vivo/chiudi?sessione=${encodeURIComponent(identitaBrowser())}`, {}).catch(() => {});
+  }
+
+  async function apriNelBrowserVivo(voce) {
+    const contenitore = $('#browserVistaViva');
+    const sessione = identitaBrowser();
+    if (!contenitore || !voce?.url) return false;
+    smontaVistaViva();
+    contenitore.hidden = false;
+
+    vistaViva = creaVistaViva(contenitore, {
+      onGesto: (gesto) => {
+        void apiPost(`/api/v1/browser/vivo/gesto?sessione=${encodeURIComponent(sessione)}`, gesto).catch(() => {});
+      },
+      onErrore: (messaggio) => { voce.motivo = messaggio; renderizzaBrowser(); },
+    });
+    vistaViva.stato('apro');
+
+    try {
+      const esito = await apiPost(`/api/v1/browser/vivo/apri?sessione=${encodeURIComponent(sessione)}`, { url: voce.url });
+      voce.url = esito?.url || voce.url;
+      voce.viaVista = 'vivo';
+      voce.annotabile = Boolean(esito?.annotabile);
+      voce.stato = esito?.ok ? 'pronta' : 'bloccata';
+      if (!esito?.ok) { voce.motivo = esito?.errore || 'La pagina non si è caricata'; vistaViva.stato('errore'); renderizzaBrowser(); return true; }
+    } catch (errore) {
+      voce.stato = 'bloccata';
+      voce.motivo = messaggioErroreUtente(errore, 'Non riesco ad aprire questa pagina in un browser pilotato.');
+      vistaViva.stato('errore');
+      renderizzaBrowser();
+      return true;
+    }
+
+    vistaViva.stato('carico');
+    /*
+     * I fotogrammi arrivano come eventi SSE. ⛔ `EventSource` e non un WebSocket: la trasmissione
+     * va in una direzione sola (i gesti tornano indietro con delle POST), e un EventSource si
+     * riaggancia da solo quando la rete singhiozza — con il WebSocket la riconnessione la
+     * scriveremmo noi, per niente.
+     */
+    flussoVivo = new EventSource(`/api/v1/browser/vivo/schermo?sessione=${encodeURIComponent(sessione)}`);
+    flussoVivo.onmessage = (evento) => {
+      let messaggio = null;
+      try { messaggio = JSON.parse(evento.data); } catch { return; }
+      if (messaggio?.errore) { vistaViva?.stato('errore'); voce.motivo = messaggio.errore; renderizzaBrowser(); return; }
+      if (messaggio?.dati) vistaViva?.frame({ dati: messaggio.dati, metadati: messaggio.metadati });
+    };
+    flussoVivo.onerror = () => { vistaViva?.stato('fermo'); };
+    renderizzaBrowser();
+    return true;
+  }
+
   async function apriPaginaVivaBrowser(url, idEsistente = null) {
     const rs = state.realSession;
     if (!idEsistente && schedeBrowser().length >= MASSIMO_SCHEDE_BROWSER) { toast('Troppe schede', `Chiudine una: il massimo è ${MASSIMO_SCHEDE_BROWSER}.`); return; }
@@ -9770,7 +9851,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       voce.url = esito?.url || url;
       voce.titolo = esito?.titolo || null;
       // un dev server locale passa dal proxy: la cornice è nostra anche se il sito vietasse l'incorniciatura
-      if (esito?.incorniciabile || voce.proxata) { if (voce.stato === 'caricamento') voce.stato = 'pronta'; } else { voce.stato = 'bloccata'; voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS'; }
+      if (esito?.incorniciabile || voce.proxata) {
+        if (voce.stato === 'caricamento') voce.stato = 'pronta';
+        voce.viaVista = voce.proxata ? 'proxy' : 'cornice';
+      } else {
+        /*
+         * ⭐⭐⭐ 07/9 — QUI FINISCE IL RETTANGOLO GRIGIO. Fino a oggi un sito che vieta la cornice
+         * diventava una scheda «bloccata» con una riga di scuse. Adesso si passa alla terza corsia:
+         * un Chromium di sistema pilotato dal server, di cui riceviamo lo schermo — e il sito non
+         * può impedirlo, perché non è incorniciato affatto.
+         * ⛔ Se anche quella fallisce (nessun browser sul computer, o il protocollo non risponde) la
+         *   scheda torna «bloccata» col motivo VERO: la promessa non si finge mai.
+         */
+        const conVista = await apriNelBrowserVivo(voce);
+        if (!conVista) { voce.stato = 'bloccata'; voce.motivo = esito?.motivo || 'Il sito non consente di essere mostrato dentro TALOS'; }
+      }
       void dallaPaginaAgliOcchiDelModello(voce); // 06/9: quello che guardi tu, lo deve vedere anche lui
     } catch (error) {
       voce.stato = 'bloccata'; voce.motivo = error.message || 'Il server non ha potuto controllare la pagina';
