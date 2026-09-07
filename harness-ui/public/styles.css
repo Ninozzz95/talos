@@ -3147,11 +3147,14 @@ body.reduce-motion *::after {
 .talos-kv__k {
   color: var(--talos-muted);
   font-size: 12.5px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .talos-kv__v {
+  flex: none;
+  white-space: nowrap;
   font-family: var(--talos-font-mono);
   font-size: 12px;
   font-weight: 500;
@@ -4774,6 +4777,31 @@ body.reduce-motion *::after {
     --talos-scheda-min:104px;
   }
 }
+@property --talos-sfuma-sx { syntax:"<length>"; inherits:false; initial-value:0px }
+@property --talos-sfuma-dx { syntax:"<length>"; inherits:false; initial-value:0px }
+@supports (animation-timeline:scroll(self inline)) {
+  @keyframes talos-sfuma-schede {
+    from {
+      --talos-sfuma-sx:0px;
+      --talos-sfuma-dx:22px;
+    }
+    to {
+      --talos-sfuma-sx:22px;
+      --talos-sfuma-dx:0px;
+    }
+  }
+  .talos-tabstrip__lista {
+    animation: talos-sfuma-schede linear both;
+    animation-timeline: scroll(self inline);
+    mask-image:
+      linear-gradient(
+        90deg,
+        transparent 0,
+        #000 var(--talos-sfuma-sx),
+        #000 calc(100% - var(--talos-sfuma-dx)),
+        transparent 100%);
+  }
+}
 .talos-browser__note {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -4832,10 +4860,36 @@ body.reduce-motion *::after {
 .talos-tabs__tab[data-browser-tab][aria-selected=true]::after {
   opacity: 1;
 }
+.talos-page.talos-browser {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 14px;
+}
+.talos-browser > .talos-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 0 0 auto;
+}
+.talos-browser > .talos-card:has(> #browserLive:not([hidden])),
+.talos-browser > .talos-card:has(> #browserVistaViva:not([hidden])) {
+  flex: 1 0 auto;
+}
+.talos-browser > #browserLimiti {
+  margin-top: var(--talos-space-sm);
+}
 .talos-browser__live {
-  height: min(70vh, 760px);
-  min-height: 360px;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 320px;
   padding: var(--talos-space-sm);
+}
+.talos-browser > .talos-card > .talos-vistaviva {
+  flex: 1 1 auto;
+  min-height: 320px;
+}
+.talos-browser #browserPagina {
+  min-height: 0;
 }
 .talos-browser__live iframe {
   width: 100%;
