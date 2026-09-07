@@ -404,8 +404,33 @@ function parseCartellaStore(raw, moduleUrl) {
   return fileURLToPath(new URL('.sessions-store/', moduleUrl));
 }
 
-function parseOwnerRuntimeModule(raw) {
-  if (raw === undefined || raw === '') return undefined;
+/*
+ * ⛔⛔⛔ 07/9 — IL KERNEL ORA VIVE NEL REPO, e questa funzione è il motivo per cui prima non
+ * bastava averlo. Senza `TALOS_OWNER_RUNTIME_MODULE` questa tornava `undefined`: il server partiva,
+ * `/api/v1/health` rispondeva 200, e **ogni giro reale falliva** con `OWNER_RUNTIME_NOT_CONFIGURED`.
+ * Chi clonava il repo otteneva un prodotto che sembrava sano e non poteva fare niente — e il README
+ * non nominava nemmeno la variabile.
+ * ⇒ Il kernel canonico è `src/kernel/talosHarness.mjs`, dentro questo repo: si usa quello per
+ *   default. La variabile resta, e serve a puntare ALTROVE — è così che l'owner sviluppa il kernel
+ *   nel suo worktree senza toccare il repo.
+ * ⛔ Il default non si inventa: se quel file non c'è (pacchetto tagliato, copia parziale) si torna
+ *   a `undefined`, cioè al comportamento di prima, invece di far fallire l'avvio del server.
+ * ⛔ E il kernel vive sotto `src/` per una ragione misurata, non estetica: cerca il compilatore
+ *   TypeScript in `../../node_modules/typescript/lib` (il suo cancello semantico legge `lib.*.d.ts`).
+ *   Da `src/kernel/` quel percorso è `harness-ui/node_modules`, dove `npm ci` lo installa davvero:
+ *   spostandolo altrove i due test del cancello semantico falliscono — provato, 536/538.
+ */
+function kernelNelRepo(moduleUrl) {
+  try {
+    const percorso = fileURLToPath(new URL('src/kernel/talosHarness.mjs', moduleUrl));
+    return statSync(percorso).isFile() ? percorso : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function parseOwnerRuntimeModule(raw, moduleUrl) {
+  if (raw === undefined || raw === '') return kernelNelRepo(moduleUrl);
   if (typeof raw !== 'string' || raw.trim() === '' || !isAbsolute(raw.trim())) {
     fail('TALOS_OWNER_RUNTIME_MODULE deve essere un file assoluto');
   }
@@ -494,7 +519,7 @@ export function loadConfig(
     hfToken: typeof env.HF_TOKEN === 'string' && env.HF_TOKEN.trim() ? env.HF_TOKEN.trim() : undefined,
     cartellaStore: parseCartellaStore(env.TALOS_HARNESS_UI_SESSIONS_DIR, moduleUrl),
     llamaServerPath: parseLlamaServerPath(env.TALOS_LLAMA_SERVER_PATH, moduleUrl),
-    ownerRuntimeModule: parseOwnerRuntimeModule(env.TALOS_OWNER_RUNTIME_MODULE),
+    ownerRuntimeModule: parseOwnerRuntimeModule(env.TALOS_OWNER_RUNTIME_MODULE, moduleUrl),
     ricercaWeb: parseRicercaWeb(env),
     labs: parseLabs(env.TALOS_LABS, moduleUrl), // ⭐ 04/9, W0-04
     token: parseToken(env.TALOS_HARNESS_UI_TOKEN), // ⭐ 04/9, W1-10

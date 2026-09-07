@@ -58,6 +58,29 @@ dependencies, each explained in its header comment.
 | `TALOS_HARNESS_UI_HOST` | no | Defaults to `127.0.0.1`; loopback only. |
 | `TALOS_HARNESS_UI_PORT` | no | Defaults to `4174`; range `1024..65535`. |
 | `TALOS_HARNESS_UI_PROJECT_DIRS` | no | Additional project folders for the session picker, separated by `;`. When absent, the server exposes its own desktop project workspace by default; `Full access` still allows an explicitly chosen folder. |
+| `TALOS_OWNER_RUNTIME_MODULE` | no | Absolute path to the agent kernel. **Defaults to the kernel shipped in this repo** (`src/kernel/talosHarness.mjs`), so a fresh clone runs real turns with no configuration. Point it elsewhere only to develop the kernel outside this repo. |
+| `TALOS_HARNESS_UI_SESSIONS_DIR` | no | Where sessions are stored. Defaults to `.sessions-store/` next to the server. Use a separate folder when you run a second instance, or the two share history. |
+| `TALOS_HARNESS_UI_PUBLIC_DIR` | no | Folder served as the UI. Defaults to `public/`, the built app. |
+| `TALOS_INTRO` | no | `0` skips the first-run introduction. |
+
+### The agent kernel
+
+Real turns run through a kernel that lives in this repo at
+`src/kernel/talosHarness.mjs` (one file, `node:*` only, plus its compiled
+`dist/kernelPerIlBanco.js`). Its own suite runs with `npm run test:kernel`
+(538 tests) and is part of `npm run verify:all`.
+
+Two things are worth knowing:
+
+- the kernel's **semantic gate** — the check that refuses to write code calling
+  a function that does not exist — reads TypeScript's `lib.*.d.ts` from
+  `node_modules/typescript/lib`. That is why `typescript` is a devDependency
+  here and why the kernel lives under `src/`: from anywhere else those two
+  tests fail (measured: 536/538);
+- the kernel is also developed outside this repo. `npm run kernel:controlla`
+  compares the copy in the repo with that source and **says** when they differ;
+  it never copies anything on its own. On a machine that only has this repo the
+  source is unreachable and the check simply says so, exit 0.
 
 The rest of the variables (receipt signing, images) are documented in the
 header comment of `src/config.mjs`, not duplicated here to avoid a second copy

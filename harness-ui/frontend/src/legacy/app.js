@@ -15558,16 +15558,58 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     window.speechSynthesis.speak(utterance);
   }
 
+  /*
+   * ⛔⛔ 07/9 — LA PALETTE ITALIANA ESISTEVA E NESSUNO LA APRIVA. Nel template c'è `#veloComandi`:
+   * 15 comandi con descrizione e scorciatoia, i gruppi, il campo di ricerca, il piede — tutto in
+   * italiano e con gli STESSI `data-command` del monolite. L'unico riferimento in tutto il JS era
+   * la mappa delle misure dei dialoghi. Quella che si apriva era la palette del monolite, con tre
+   * voci ancora in inglese («Session board», «Skills, MCP, plugin e gateway», «Agents, hooks e
+   * doctor»): la traduzione era già stata fatta, e la persona non la vedeva.
+   * ⇒ Stessa disciplina dei veli: la logica NON si duplica, si punta a una radice diversa. Se il
+   *   velo c'è si usa quello; se non c'è (una pagina vecchia) resta il foglio, senza un ramo morto.
+   *
+   * Ricerca 07/09/2026 — W3C WAI-ARIA APG «Combobox» e MDN `combobox` role: il fuoco DOM resta sul
+   * campo, e l'opzione attiva si dichiara con `aria-activedescendant` che punta al suo `id`; la
+   * lista è `role="listbox"`, le voci `role="option"` con `aria-selected`. Il markup del velo è già
+   * scritto così (`#cercaComando` è `role="combobox"` con `aria-controls="risultatiComandi"`): qui
+   * si aggiunge la parte che mancava, cioè tenere `aria-activedescendant` allineato al movimento.
+   */
+  function radiceComandi() {
+    const velo = $('#veloComandi');
+    if (velo && $('#risultatiComandi', velo)) return { velo, elenco: $('#risultatiComandi', velo), campo: $('#cercaComando', velo), vuoto: $('#comandiVuoti', velo) };
+    return { velo: null, elenco: $('#commandResults'), campo: commandSearch, vuoto: commandEmpty };
+  }
+
   function visibleCommandButtons() {
-    return $$('#commandResults button[data-command]').filter((button) => !button.hidden);
+    const { elenco } = radiceComandi();
+    return elenco ? $$('button[data-command]', elenco).filter((button) => !button.hidden) : [];
   }
 
   function setActiveCommand(button) {
-    $$('#commandResults button[data-command]').forEach((item) => item.classList.toggle('command-active', item === button));
+    const { elenco, campo } = radiceComandi();
+    if (!elenco) return;
+    $$('button[data-command]', elenco).forEach((item) => {
+      const attivo = item === button;
+      item.classList.toggle('command-active', attivo);
+      // ⛔ il velo dichiara le voci come `option`: lo stato si dice anche a chi non vede il colore
+      if (item.getAttribute('role') === 'option') item.setAttribute('aria-selected', String(attivo));
+    });
+    if (campo?.getAttribute('role') === 'combobox') {
+      if (button?.id) campo.setAttribute('aria-activedescendant', button.id);
+      else campo.removeAttribute('aria-activedescendant');
+    }
     button?.scrollIntoView({ block: 'nearest' });
   }
 
   function openCommandPalette() {
+    const { velo, campo } = radiceComandi();
+    if (velo) {
+      apriVeloMockup('veloComandi');
+      if (campo) campo.value = '';
+      filterCommands('');
+      window.setTimeout(() => campo?.focus(), 20);
+      return;
+    }
     prepareResizableDialog(commandDialog, 'command:palette');
     showEmbeddedDialog(commandDialog);
     commandSearch.value = '';
@@ -15577,11 +15619,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function filterCommands(query) {
     const q = query.trim().toLowerCase();
-    $$('#commandResults button[data-command]').forEach((button) => {
-      button.hidden = Boolean(q && !button.textContent.toLowerCase().includes(q));
-    });
+    const { elenco, vuoto } = radiceComandi();
+    if (!elenco) return;
+    for (const button of $$('button[data-command]', elenco)) {
+      // ⛔ anche gli ALIAS del velo entrano nella ricerca: «impostazioni» trova «Apri Doctor» se
+      //    quella voce lo dichiara. Cercare solo il testo visibile fa mancare i sinonimi.
+      const testo = `${button.textContent} ${button.dataset.commandAlias || ''}`.toLowerCase();
+      button.hidden = Boolean(q && !testo.includes(q));
+    }
+    // i gruppi senza nemmeno una voce visibile spariscono, o restano intestazioni sopra il vuoto
+    for (const gruppo of $$('[data-gruppo-comandi]', elenco)) {
+      gruppo.hidden = $$('button[data-command]', gruppo).every((b) => b.hidden);
+    }
     const visible = visibleCommandButtons();
-    if (commandEmpty) commandEmpty.hidden = visible.length > 0;
+    if (vuoto) vuoto.hidden = visible.length > 0;
     setActiveCommand(visible[0] || null);
   }
 
@@ -15594,7 +15645,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function executeCommand(command) {
-    closeEmbeddedDialog(commandDialog);
+    // ⛔ si chiude quella che è aperta: il velo se c'è, il foglio altrimenti (mai tutt'e due)
+    if ($('#veloComandi') && !$('#veloComandi').hidden) chiudiVeloMockup('veloComandi');
+    else closeEmbeddedDialog(commandDialog);
     switch (command) {
       case 'new': createNewSession(); break;
       case 'review': setView('diff'); break;
@@ -15910,19 +15963,47 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   $('#commandPaletteBtn').addEventListener('click', openCommandPalette);
   $('#closeCommand')?.addEventListener('click', () => closeEmbeddedDialog(commandDialog));
   harnessDialogBackdrop.addEventListener('click', dismissTransientLayers);
-  commandSearch.addEventListener('input', () => filterCommands(commandSearch.value));
-  commandSearch.addEventListener('keydown', (event) => {
-    if (event.key === 'ArrowDown') { event.preventDefault(); moveActiveCommand(1); }
-    else if (event.key === 'ArrowUp') { event.preventDefault(); moveActiveCommand(-1); }
-    else if (event.key === 'Enter') {
-      const active = $('#commandResults .command-active[data-command]');
-      if (active) { event.preventDefault(); executeCommand(active.dataset.command); }
-    }
-  });
-  $$('#commandResults button[data-command]').forEach((button) => {
-    button.addEventListener('mouseenter', () => setActiveCommand(button));
-    button.addEventListener('click', () => executeCommand(button.dataset.command));
-  });
+  /*
+   * ⛔ 07/9 — gli ascoltatori erano legati SOLO al campo del monolite (`#commandSearch`): aprendo il
+   *   velo italiano la palette compariva e non faceva niente — non filtrava, le frecce non
+   *   muovevano, Invio non apriva. Provato dal vivo, ed è così che si è visto.
+   * ⇒ Gli stessi tre gesti si collegano a ENTRAMBI i campi, con una funzione sola. La ricerca
+   *   dell'elemento attivo passa da `radiceComandi()`, così non c'è un `#commandResults` scritto a
+   *   mano che punta alla palette sbagliata.
+   */
+  function collegaCampoComandi(campo) {
+    if (!campo || campo.dataset.comandiCollegati) return;
+    campo.dataset.comandiCollegati = 'si';
+    campo.addEventListener('input', () => filterCommands(campo.value));
+    campo.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown') { event.preventDefault(); moveActiveCommand(1); }
+      else if (event.key === 'ArrowUp') { event.preventDefault(); moveActiveCommand(-1); }
+      else if (event.key === 'Enter') {
+        const { elenco } = radiceComandi();
+        const active = elenco && $('.command-active[data-command]', elenco);
+        if (active) { event.preventDefault(); executeCommand(active.dataset.command); }
+      }
+    });
+  }
+  collegaCampoComandi(commandSearch);
+  collegaCampoComandi($('#cercaComando'));
+
+  /*
+   * ⛔ Le voci si ascoltano sulla RADICE, non una per una: nel velo sono 15 e nel foglio altre 15,
+   *   e un ascoltatore per bottone si moltiplica a ogni ridisegno.
+   */
+  for (const elenco of [$('#commandResults'), $('#risultatiComandi')]) {
+    if (!elenco || elenco.dataset.comandiCollegati) continue;
+    elenco.dataset.comandiCollegati = 'si';
+    elenco.addEventListener('mouseover', (event) => {
+      const button = event.target?.closest?.('button[data-command]');
+      if (button) setActiveCommand(button);
+    });
+    elenco.addEventListener('click', (event) => {
+      const button = event.target?.closest?.('button[data-command]');
+      if (button) executeCommand(button.dataset.command);
+    });
+  }
 
   composerInput.addEventListener('input', () => {
     autoGrowTextarea();
