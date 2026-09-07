@@ -310,6 +310,13 @@ button {
   fill: currentColor;
   stroke: none;
 }
+use[href="#glifo"],
+.talos-brand__mark .glyph,
+.talos-empty__mark .glyph,
+.talos-avatar .glyph {
+  fill: none;
+  stroke: currentColor;
+}
 .talos-eyebrow {
   font-size: 11px;
   font-weight: 500;
@@ -1601,9 +1608,33 @@ select:focus-visible,
   height: 44px;
   margin-bottom: 18px;
 }
+.talos-empty__mark {
+  width: max-content;
+  height: auto;
+  justify-self: start;
+}
 .talos-empty__mark .glyph {
-  width: 32px;
-  height: 32px;
+  width: clamp(52px, 5vw, 84px);
+  height: clamp(52px, 5vw, 84px);
+}
+.talos-orbitron-brand {
+  font-family:
+    Orbitron,
+    var(--talos-font-display),
+    var(--talos-font-ui),
+    ui-sans-serif,
+    system-ui,
+    sans-serif;
+  letter-spacing: 0;
+  line-height: 1;
+}
+.talos-empty__marchio {
+  display: block;
+  margin-top: 12px;
+  font-size: clamp(24px, 2.2vw, 34px);
+  font-weight: 600;
+  letter-spacing: .10em;
+  color: var(--talos-text);
 }
 .talos-empty__title {
   font-size: 26px;

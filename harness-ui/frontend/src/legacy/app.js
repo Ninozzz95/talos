@@ -40,6 +40,7 @@ import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2:
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
+import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { montaProgetti, progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina
@@ -8778,7 +8779,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       case 'cerca': return [a.nome, a.testo].filter(Boolean).map((v) => `"${v}"`).join(' · ');
       case 'shell': return a.descrizione ? tronca(a.descrizione, 60) : (a.comando ? tronca(a.comando, 60) : '');
       case 'naviga': return a.url || '';
-      case 'web_search': return a.query ? `"${tronca(a.query, 60)}"` : '';
+      // ⛔ 07/9, O-60 — le virgolette c'erano già nella query (le frasi esatte sono un operatore):
+      //   riavvolgerla ne dava due. `fraseCercata` la rende una frase da leggere, non da eseguire.
+      case 'web_search': return fraseCercata(a.query, 60);
       case 'delega_sottotask': return a.task ? tronca(a.task, 60) : '';
       default: return ''; // elenca/prova/altri: nessun bersaglio singolo pulito, meglio niente che un suggerimento goffo
     }

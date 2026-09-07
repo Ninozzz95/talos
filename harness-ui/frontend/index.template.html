@@ -11,7 +11,14 @@
   </head>
   <body>
 <svg width="0" height="0" class="talos-sprite" aria-hidden="true">
-  <symbol id="glifo" viewBox="0 0 32 32"><path d="M8 23 16 7l8 16h-4l-1.7-3.7h-5L11.6 23H8Zm7.2-7h1.6L16 14.2 15.2 16Z"/></symbol>
+  <!-- ⛔ 07/9, O-44 — owner: «i loghi sono ancora mockup e non usano quelli veri; vedi mobile,
+       lui lo fa alla perfezione». Qui c'era una «A» stilizzata disegnata a mano su una griglia 32×32.
+       Il marchio VERO di TALOS è `control-plane/resources/images/logo-short.svg` (viewBox 500×500):
+       l'esagono con i tre nodi in colonna e i due bracci a 45°. È lo stesso che il mobile ha
+       vendorizzato dal desktop (`mobile/src/style.css`, «Vendored verbatim from the desktop»).
+       ⛔ Disegnato a TRATTO, non a riempimento: `.glyph{fill:currentColor}` lo cancellerebbe, quindi
+       il simbolo dichiara da sé `fill:none` e `stroke:currentColor`. -->
+  <symbol id="glifo" viewBox="0 0 500 500" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path stroke-width="12" d="M 218 123.5 L 121.9 179 A 21 21 0 0 0 111.5 197 L 111.5 333 A 21 21 0 0 0 121.9 351 L 239.6 419 A 21 21 0 0 0 260.4 419 L 378.1 351 A 21 21 0 0 0 388.5 333 L 388.5 197 A 21 21 0 0 0 378.1 179 L 282 123.5"/><g stroke-width="9"><circle cx="250" cy="105" r="22"/><circle cx="250" cy="225" r="18"/><circle cx="250" cy="338" r="14"/><path d="M 250 140 L 250 195"/><path d="M 250 255 L 250 315"/><g transform="translate(250, 225) rotate(45)"><path d="M 0 32 L 0 95"/><circle cx="0" cy="118" r="14"/></g><g transform="translate(250, 225) rotate(-45)"><path d="M 0 32 L 0 95"/><circle cx="0" cy="118" r="14"/></g></g></symbol>
     <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m5 18 5-5 3 3 2-2 4 4"/></symbol>
   <!-- ⛔ 06/9 — SETTE simboli erano CHIAMATI dal codice e non esistevano nello sprite: `icon()` non
        valida, quindi ogni uso disegnava un buco. Trovati incrociando le 36 definizioni con i 41 usi
@@ -337,7 +344,13 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
         <div class="talos-tabs"><div class="talos-tabs__list" role="tablist"><button class="talos-tabs__tab" role="tab" aria-selected="true">Chat</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Terminale</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Review</button></div></div>
       </div>
       <div class="talos-conversation talos-conversation--empty" data-c="EmptyState"><div class="talos-conversation__column talos-empty">
+        <!-- ⛔ 07/9, O-46 — owner: «nella nuova sessione vuota non c'è il logo reale e la scritta TALOS
+             in Orbitron sopra il messaggio di benvenuto». C'era il solo marchio, senza nome. La forma
+             è quella che il mobile ha vendorizzato dal desktop (`.talos-orbitron-brand`): Orbitron se
+             la macchina ce l'ha, altrimenti il nostro font display — nessun @font-face e nessuna
+             chiamata a un servizio di font, perché questa app funziona senza rete. -->
         <span class="talos-brand__mark talos-empty__mark" aria-hidden="true"><svg class="glyph"><use href="#glifo"/></svg></span>
+        <span class="talos-empty__marchio talos-orbitron-brand">TALOS</span>
         <h2 class="talos-empty__title">Cosa costruiamo in <span class="talos-empty__project">AVM-harness-desktop</span>?</h2>
         <p class="talos-empty__lead">TALOS legge, scrive ed esegue nella cartella che gli apri. Ogni azione lascia una ricevuta firmata, e niente esce da questa macchina se non lo chiedi tu.</p>
         <div class="talos-card talos-list" data-c="SuggestionList">
