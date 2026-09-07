@@ -304,6 +304,50 @@ final class TalosBrowserHmiApprovalServiceTest extends TestCase
         app(TalosBrowserHmiApprovalService::class)->issue($payload);
     }
 
+    public function test_ref_approval_binds_snapshot_ref_and_preflighted_audit_point_without_changing_pointer_rows(): void
+    {
+        $user = User::factory()->create();
+        [$session, $artifact] = $this->browserState($user);
+        $service = app(TalosBrowserHmiApprovalService::class);
+        $refBinding = $this->refPayload($session, $artifact);
+
+        $approval = $service->issue($refBinding);
+
+        $this->assertSame('talos_browser_hmi_ref_v2', $approval->payload_version);
+        $this->assertSame('hmi_ref_'.str_repeat('d', 64), $approval->payload['snapshot_id']);
+        $this->assertSame('e7', $approval->payload['ref']);
+        $this->assertSame(0.375, $approval->normalized_x);
+        $this->assertSame(0.625, $approval->normalized_y);
+        $this->assertArrayNotHasKey('normalized_x', $approval->payload);
+        $this->assertArrayNotHasKey('normalized_y', $approval->payload);
+
+        $service->approve((string) $approval->id, (int) $user->id, ['request_hash' => (string) $approval->request_hash]);
+        $executionPayload = [...$refBinding['payload'], 'sensitive_effect_authorized' => true];
+        $leaseToken = $service->claimForExecution(
+            (string) $approval->id,
+            (int) $user->id,
+            ['request_hash' => (string) $approval->request_hash],
+            $executionPayload,
+        );
+        $this->assertIsString($leaseToken);
+        $this->assertSame('e7', $approval->fresh()->execution_payload['ref']);
+        $this->assertSame('hmi_ref_'.str_repeat('d', 64), $approval->fresh()->execution_payload['snapshot_id']);
+
+        $pointer = $service->issue($this->payload($session, $artifact));
+        $this->assertSame('talos_browser_hmi_pointer_v2', $pointer->payload_version);
+        $this->assertSame(0.25, $pointer->normalized_x);
+        $this->assertSame(0.5, $pointer->normalized_y);
+
+        $mutated = $refBinding;
+        $mutated['payload']['ref'] = 'e8';
+        try {
+            $service->issue($mutated);
+            $this->fail('A semantic ref command id was rebound to a different ref.');
+        } catch (InvalidArgumentException) {
+            $this->addToAssertionCount(1);
+        }
+    }
+
     /** @return array{TalosBrowserSession, TalosBrowserArtifact} */
     private function browserState(User $user): array
     {
@@ -356,6 +400,38 @@ final class TalosBrowserHmiApprovalServiceTest extends TestCase
                 'expected_frame_sha256' => (string) $artifact->sha256,
                 'normalized_x' => 0.25,
                 'normalized_y' => 0.5,
+                'button' => 'left',
+                'click_count' => 1,
+                'expected_fingerprint' => 'sha256:'.str_repeat('b', 64),
+                'effect_classification' => 'sensitive',
+                'sensitive_effect_authorized' => false,
+            ],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function refPayload(TalosBrowserSession $session, TalosBrowserArtifact $artifact): array
+    {
+        return [
+            'owner_id' => (int) $session->user_id,
+            'browser_session_id' => (string) $session->id,
+            'artifact_id' => (string) $artifact->id,
+            'artifact_sha256' => (string) $artifact->sha256,
+            'state_version' => 7,
+            'normalized_x' => 0.375,
+            'normalized_y' => 0.625,
+            'button' => 'left',
+            'click_count' => 1,
+            'target_fingerprint' => 'sha256:'.str_repeat('b', 64),
+            'category' => 'external_commit',
+            'payload' => [
+                'schema_version' => 'talos_browser_hmi_ref_v2',
+                'interaction_id' => 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+                'command_id' => 'hmi-ref-'.str_repeat('e', 32),
+                'state_version' => 7,
+                'expected_frame_sha256' => (string) $artifact->sha256,
+                'snapshot_id' => 'hmi_ref_'.str_repeat('d', 64),
+                'ref' => 'e7',
                 'button' => 'left',
                 'click_count' => 1,
                 'expected_fingerprint' => 'sha256:'.str_repeat('b', 64),

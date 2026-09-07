@@ -17,10 +17,51 @@ type HistoricalRegressionCorpus = {
     scenarios: HistoricalRegression[]
 }
 
+type TalosBrowserTaskFixture = {
+    id: string
+    talos_session_id: string
+    origin_message_id: string | null
+    browser_session_id: string | null
+    runtime_id: string | null
+    active_tab_id: string | null
+    goal: string
+    status: 'running' | 'recovering' | 'failed'
+    autonomy_profile: string
+    budget: Record<string, unknown>
+    state_version: number
+    requested_at: string | null
+    started_at: string | null
+    completed_at: string | null
+    failed_at: string | null
+    cancelled_at: string | null
+    reconciled_at: string | null
+    created_at: string | null
+    updated_at: string | null
+}
+
 const corpusPath = fileURLToPath(new URL('../fixtures/browser/historical-regressions.json', import.meta.url))
 const corpus = JSON.parse(readFileSync(corpusPath, 'utf8')) as HistoricalRegressionCorpus
 const e2eLoginEmail = process.env.TALOS_E2E_EMAIL ?? 'test@example.com'
 const e2eLoginPassword = process.env.TALOS_E2E_PASSWORD ?? 'password'
+
+async function settleRequiredFirstRunIntro(page: Page) {
+    const introRequired = await page.evaluate(async () => {
+        const response = await fetch('/api/talos/settings')
+        if (!response.ok) return false
+
+        const payload = await response.json() as {
+            data?: { preferences?: { onboarding?: { intro_version?: unknown } } }
+        }
+        const version = payload.data?.preferences?.onboarding?.intro_version
+        return typeof version !== 'number' || version < 1
+    })
+    if (!introRequired) return
+
+    const intro = page.getByTestId('talos-intro-modal')
+    await expect(intro).toBeVisible()
+    await intro.getByRole('button', { name: 'Skip introduction' }).click()
+    await expect(intro).toHaveCount(0)
+}
 
 async function openAuthenticatedWorkspace(page: Page) {
     await page.goto('/', { waitUntil: 'domcontentloaded' })
@@ -38,6 +79,7 @@ async function openAuthenticatedWorkspace(page: Page) {
 
     await expect(page.locator('#talos-workspace-root[data-authenticated="true"]')).toHaveCount(1)
     await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
+    await settleRequiredFirstRunIntro(page)
 }
 
 test('Browser historical regression corpus has stable complete identifiers and explicit ownership', () => {
@@ -157,6 +199,132 @@ test('BREG-003 durable task state survives reload and user cancellation', async 
     await expect(page.getByTestId('talos-browser-task-cancel')).toHaveCount(0)
 })
 
+test('STAGE2A-011 recovery survives reload and selects an existing fresh session without duplication', async ({ page }) => {
+    const talosSessionId = 'browser-stage2a-recovery'
+    const browserSessionId = `browser-session-${talosSessionId}`
+    let task: TalosBrowserTaskFixture = {
+        id: 'browser-task-stage2a-recovery',
+        talos_session_id: talosSessionId,
+        origin_message_id: 'message-stage2a-recovery',
+        browser_session_id: browserSessionId,
+        runtime_id: 'runtime-stage2a-recovery',
+        active_tab_id: 'tab-stage2a-recovery',
+        goal: 'Recover Browser evidence without redispatch.',
+        status: 'running',
+        autonomy_profile: 'assist',
+        budget: { actions: 12 },
+        state_version: 3,
+        requested_at: '2026-07-22T08:00:00Z',
+        started_at: '2026-07-22T08:00:01Z',
+        completed_at: null,
+        failed_at: null,
+        cancelled_at: null,
+        reconciled_at: null,
+        created_at: '2026-07-22T08:00:00Z',
+        updated_at: '2026-07-22T08:00:01Z',
+    }
+    const recoveryBodies: Array<Record<string, unknown>> = []
+    const browserSessionCreates: string[] = []
+    page.on('request', (request) => {
+        if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/talos/browser/sessions') {
+            browserSessionCreates.push(request.postData() ?? '')
+        }
+    })
+
+    await installTalosApiMocks(page, {
+        initialSessions: [{
+            id: talosSessionId,
+            title: 'Browser Stage-2a recovery',
+            metadata: { surface: 'chat', chat_state: { browse_enabled: false } },
+            messages: [{ role: 'user', content: 'Recover this Browser task.', run_id: 'run-stage2a-recovery' }],
+        }],
+        browser: { createStatuses: ['recovery_required', 'ready'] },
+    })
+    await page.route('**/api/talos/browser/tasks**', async (route) => {
+        const request = route.request()
+        const url = new URL(request.url())
+        const json = (body: unknown, status = 200) => route.fulfill({
+            status,
+            contentType: 'application/json',
+            body: JSON.stringify(body),
+        })
+
+        if (request.method() === 'GET' && url.pathname === '/api/talos/browser/tasks') {
+            return json({ data: [task] })
+        }
+        if (request.method() === 'POST' && url.pathname === `/api/talos/browser/tasks/${task.id}/recover`) {
+            const body = request.postDataJSON() as Record<string, unknown>
+            recoveryBodies.push(body)
+            task = {
+                ...task,
+                status: 'recovering',
+                state_version: 4,
+                reconciled_at: '2026-07-22T08:00:02Z',
+                updated_at: '2026-07-22T08:00:02Z',
+            }
+            return json({ data: {
+                decision: {
+                    strategy: 'reconcile',
+                    reason_code: 'browser_recovery_evidence_reconcile',
+                    remediation: 'Capture missing evidence without redispatch.',
+                    task_id: task.id,
+                    resulting_task_id: null,
+                },
+                task,
+                resulting_task: null,
+            } })
+        }
+
+        return json({ message: `Unhandled Browser task request: ${request.method()} ${url.pathname}` }, 405)
+    })
+    await openAuthenticatedWorkspace(page)
+
+    await page.getByRole('button', { name: 'Browse', exact: true }).click()
+    await expect(page.getByTestId('talos-browse-mode')).toContainText('Recovery required')
+    await expect.poll(() => browserSessionCreates.length).toBe(1)
+
+    await page.getByRole('button', { name: 'Browse status: Recovery required' }).click()
+    await page.getByRole('menuitem', { name: 'Recover browser task' }).click()
+    await expect.poll(() => recoveryBodies.length).toBe(1)
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
+    await expect(page.getByTestId('talos-browse-mode')).toContainText('Recovery required')
+    await page.getByRole('button', { name: 'Browse status: Recovery required' }).click()
+    await page.getByRole('menuitem', { name: 'Recover browser task' }).click()
+    await expect.poll(() => recoveryBodies.length).toBe(2)
+
+    expect(recoveryBodies[0]?.command_id).toMatch(/^talos_ui_recovery_[a-f0-9]{64}$/)
+    expect(recoveryBodies[1]?.command_id).toBe(recoveryBodies[0]?.command_id)
+    expect(browserSessionCreates).toHaveLength(1)
+
+    await page.evaluate(async ({ chatId }) => {
+        const response = await fetch('/api/talos/browser/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Talos-Session-Id': chatId },
+            body: JSON.stringify({ talos_session_id: chatId }),
+        })
+        if (!response.ok) throw new Error(`Replacement Browser session failed: ${response.status}`)
+    }, { chatId: talosSessionId })
+    task = {
+        ...task,
+        status: 'failed',
+        state_version: 5,
+        failed_at: '2026-07-22T08:00:03Z',
+        updated_at: '2026-07-22T08:00:03Z',
+    }
+    expect(browserSessionCreates).toHaveLength(2)
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
+    await expect(page.getByTestId('talos-browse-mode')).toContainText('Recovery required')
+    await page.getByRole('button', { name: 'Browse status: Recovery required' }).click()
+    await page.getByRole('menuitem', { name: 'Start fresh browser session' }).click()
+
+    await expect(page.getByTestId('talos-browse-mode')).toContainText(/Ready|Active/)
+    expect(browserSessionCreates).toHaveLength(2)
+})
+
 test('BREG-004 reload restores a screenshot action while evidence is still committing', async ({ page }) => {
     await openAuthenticatedWorkspace(page)
 
@@ -184,6 +352,9 @@ test('BREG-004 reload restores a screenshot action while evidence is still commi
 
     const firstPreviewUrl = await screenshot.getAttribute('src')
     expect(firstPreviewUrl).toMatch(/^\/api\/talos\/browser\/artifacts\/[^/]+\/preview\?talos_session_id=/)
+    const previewArtifactMatch = firstPreviewUrl?.match(/\/artifacts\/([^/]+)\/preview/)
+    expect(previewArtifactMatch).not.toBeNull()
+    const previewArtifactId = decodeURIComponent(previewArtifactMatch?.[1] ?? '')
 
     const journal = await page.evaluate(async () => {
         const sessions = await fetch('/api/talos/sessions').then((response) => response.json())
@@ -200,8 +371,12 @@ test('BREG-004 reload restores a screenshot action while evidence is still commi
             .then((response) => response.json())
 
         return { events: events.data }
-    }) as { events: Array<{ payload?: { operation?: string } }> }
-    expect(journal.events.filter((event) => event.payload?.operation === 'screenshot')).toHaveLength(1)
+    }) as { events: Array<{ type: string, payload?: { operation?: string, artifact_id?: string } }> }
+    expect(journal.events.filter((event) => (
+        event.type === 'command.succeeded'
+        && event.payload?.operation === 'screenshot'
+        && event.payload.artifact_id === previewArtifactId
+    ))).toHaveLength(1)
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })

@@ -24,6 +24,8 @@ export type UpdateTalosSettingsPayload = {
     preferences?: Record<string, unknown>
 }
 
+export type TalosSettingsLoadState = 'idle' | 'loading' | 'loaded' | 'error'
+
 function isWorkspaceSettings(value: unknown): value is TalosWorkspaceSettings {
     return Boolean(value)
         && typeof value === 'object'
@@ -83,17 +85,21 @@ export function useTalosSettings() {
     const savingSettings = ref(false)
     const settingsError = ref<string | null>(null)
     const settingsSavedMessage = ref('')
+    const settingsLoadState = ref<TalosSettingsLoadState>('idle')
 
     async function loadSettings() {
         loadingSettings.value = true
+        settingsLoadState.value = 'loading'
         settingsError.value = null
 
         try {
             const response = await talosFetch<ApiEnvelope<TalosWorkspaceSettings>>('/api/talos/settings')
             settings.value = response.data
+            settingsLoadState.value = 'loaded'
             return response.data
         } catch (error) {
             settingsError.value = error instanceof Error ? error.message : 'TALOS could not load workspace settings.'
+            settingsLoadState.value = 'error'
             throw error
         } finally {
             loadingSettings.value = false
@@ -142,6 +148,7 @@ export function useTalosSettings() {
         savingSettings,
         settingsError,
         settingsSavedMessage,
+        settingsLoadState,
         loadSettings,
         updateSettings,
     }

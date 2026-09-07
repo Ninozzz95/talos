@@ -10,9 +10,12 @@ use Closure;
 use DOMDocument;
 use GuzzleHttp\Psr7\Uri;
 use GuzzleHttp\Psr7\UriResolver;
+use GuzzleHttp\Psr7\Utils;
+use GuzzleHttp\TransferStats;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use JsonException;
+use Psr\Http\Message\StreamInterface;
 
 final class TalosWebFetchService
 {
@@ -60,6 +63,15 @@ final class TalosWebFetchService
             $pin = $this->approvedPin($currentUrl);
             $remainingSeconds = $this->remainingSeconds($deadline);
             try {
+                $bodyResource = Utils::tryFopen('php://temp', 'w+b');
+                $bodyBuffer = Utils::streamFor($bodyResource);
+            } catch (\Throwable) {
+                throw new TalosWebFetchException('TALOS_WEB_FETCH_CONTENT_INVALID', 'Web fetch content is invalid.');
+            }
+            $bodyLimitExceeded = false;
+            $responseReceived = false;
+
+            try {
                 $request = Http::connectTimeout(min(5.0, $remainingSeconds))
                     ->timeout($remainingSeconds)
                     ->withHeaders([
@@ -67,7 +79,28 @@ final class TalosWebFetchService
                         'Accept-Encoding' => 'gzip, deflate',
                         'User-Agent' => 'TALOS-WebFetch/1.0',
                     ])
-                    ->withOptions(['decode_content' => true, 'stream' => true]);
+                    ->withOptions([
+                        'decode_content' => true,
+                        'sink' => $bodyResource,
+                        'on_stats' => static function (TransferStats $stats) use (&$responseReceived): TransferStats {
+                            $responseReceived = $stats->hasResponse();
+
+                            return $stats;
+                        },
+                        'progress' => static function (
+                            int $downloadTotal,
+                            int $downloadedBytes,
+                            int $uploadTotal,
+                            int $uploadedBytes,
+                        ) use ($bodyResource, $maxBytes, &$bodyLimitExceeded): void {
+                            $bodySize = fstat($bodyResource)['size'] ?? 0;
+                            if ($downloadedBytes > $maxBytes || $bodySize > $maxBytes) {
+                                $bodyLimitExceeded = true;
+
+                                throw new \RuntimeException('Bounded web fetch exceeded its byte budget.');
+                            }
+                        },
+                    ]);
                 $request = $this->pinning->apply($request, $pin);
             } catch (TalosWebFetchException $exception) {
                 throw $exception;
@@ -79,7 +112,17 @@ final class TalosWebFetchService
             try {
                 $response = $request->get($currentUrl);
             } catch (\Throwable) {
+                if ($bodyLimitExceeded || ($bodyBuffer->getSize() ?? 0) > $maxBytes) {
+                    throw new TalosWebFetchException('TALOS_WEB_FETCH_CONTENT_TOO_LARGE', 'Web fetch content exceeded the byte budget.');
+                }
+                if ($responseReceived) {
+                    throw new TalosWebFetchException('TALOS_WEB_FETCH_CONTENT_INVALID', 'Web fetch content is invalid.');
+                }
+
                 throw new TalosWebFetchException('TALOS_WEB_FETCH_UNAVAILABLE', 'Web fetch endpoint is unavailable.');
+            }
+            if ($bodyLimitExceeded || ($bodyBuffer->getSize() ?? 0) > $maxBytes) {
+                throw new TalosWebFetchException('TALOS_WEB_FETCH_CONTENT_TOO_LARGE', 'Web fetch content exceeded the byte budget.');
             }
 
             $this->remainingSeconds($deadline);
@@ -150,7 +193,7 @@ final class TalosWebFetchService
             }
 
             try {
-                $body = $this->boundedBody($response, $maxBytes, $deadline);
+                $body = $this->boundedBody($response, $maxBytes, $deadline, $bodyBuffer);
             } catch (TalosWebFetchException $exception) {
                 throw $exception;
             } catch (\Throwable) {
@@ -297,10 +340,10 @@ final class TalosWebFetchService
         }
     }
 
-    private function boundedBody(Response $response, int $maxBytes, float $deadline): string
+    private function boundedBody(Response $response, int $maxBytes, float $deadline, ?StreamInterface $bodyStream = null): string
     {
         try {
-            $stream = $response->toPsrResponse()->getBody();
+            $stream = $bodyStream ?? $response->toPsrResponse()->getBody();
             $body = '';
             while (true) {
                 $this->remainingSeconds($deadline);

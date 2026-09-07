@@ -5,8 +5,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FIXTURE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/talos-doctor-ownership.XXXXXX")"
 trap 'rm -rf "$FIXTURE_ROOT"' EXIT
 
-mkdir -p "$FIXTURE_ROOT/.tools/bin" "$FIXTURE_ROOT/fakebin"
+mkdir -p \
+  "$FIXTURE_ROOT/.tools/bin" \
+  "$FIXTURE_ROOT/fakebin" \
+  "$FIXTURE_ROOT/scripts/container-runtime"
 cp "$ROOT_DIR/talos" "$FIXTURE_ROOT/talos"
+cp \
+  "$ROOT_DIR/scripts/container-runtime/runtime.sh" \
+  "$FIXTURE_ROOT/scripts/container-runtime/runtime.sh"
 
 cat > "$FIXTURE_ROOT/fakebin/docker" <<'SH'
 #!/usr/bin/env bash
@@ -36,7 +42,11 @@ chmod +x \
 export PATH="$FIXTURE_ROOT/fakebin:/usr/bin:/bin"
 
 healthy_output="$FIXTURE_ROOT/healthy.log"
-TALOS_FAKE_OWNERSHIP_STATUS=0 "$FIXTURE_ROOT/talos" --plain doctor >"$healthy_output" 2>&1
+if ! TALOS_FAKE_OWNERSHIP_STATUS=0 "$FIXTURE_ROOT/talos" --plain doctor >"$healthy_output" 2>&1; then
+  echo "talos doctor failed despite a healthy browser-worker ownership fixture" >&2
+  cat "$healthy_output" >&2
+  exit 1
+fi
 grep -q "browser worker slot FAIL protocol mismatch" "$healthy_output"
 
 blocked_output="$FIXTURE_ROOT/blocked.log"

@@ -3,7 +3,9 @@ import { chromium, type Browser, type BrowserContext, type Download, type FileCh
 import { BrowserError } from "./BrowserErrors.js";
 import { installBrowserRequestPolicy } from "./BrowserUrlPolicy.js";
 import { BrowserEgressProxy } from "./BrowserEgressProxy.js";
+import { BrowserTestFixturePermit } from "./BrowserTestFixturePermit.js";
 import type { BrowserSnapshotResult } from "./BrowserSnapshot.js";
+import type { BrowserHmiRefSnapshot } from "./BrowserHmiRefSnapshot.js";
 import { BrowserHmiCommandLedger } from "./BrowserHmiCommandLedger.js";
 import type { Capabilities, CreateSessionInput, NavigateInput } from "./schemas.js";
 import type { BrowserRuntimeDescriptor } from "./BrowserWorkerProtocol.js";
@@ -39,6 +41,7 @@ export interface BrowserSession extends SessionSummary {
   context: BrowserContext;
   stateVersion: number;
   latestSnapshot?: { stateVersion: number; value: BrowserSnapshotResult };
+  latestHmiRefSnapshot?: BrowserHmiRefSnapshot;
   singlePageViolation: boolean;
   hmiIdentityKey: string;
   singlePageGuard?: (page: Page) => void;
@@ -69,8 +72,9 @@ export interface BrowserSessionManagerOptions {
   cleanupIntervalMs?: number;
   scheduleCleanup?: (callback: () => Promise<void>, intervalMs: number) => unknown;
   cancelCleanup?: (handle: unknown) => void;
-  proxyFactory?: () => BrowserEgressProxyLike;
+  proxyFactory?: (fixturePermit: BrowserTestFixturePermit) => BrowserEgressProxyLike;
   browserLauncher?: (options: BrowserLaunchOptions) => Promise<Browser>;
+  fixturePermit?: BrowserTestFixturePermit;
 }
 
 export interface BrowserSessionDisposedEvent {
@@ -104,8 +108,9 @@ export class BrowserSessionManager {
   private readonly now: () => number;
   private readonly cancelCleanup: (handle: unknown) => void;
   private cleanupHandle?: unknown;
-  private readonly proxyFactory: () => BrowserEgressProxyLike;
+  private readonly proxyFactory: (fixturePermit: BrowserTestFixturePermit) => BrowserEgressProxyLike;
   private readonly browserLauncher: (options: BrowserLaunchOptions) => Promise<Browser>;
+  private readonly fixturePermit: BrowserTestFixturePermit;
   private readonly sessionDisposedListeners = new Set<BrowserSessionDisposedListener>();
   private egressProxy?: BrowserEgressProxyLike;
 
@@ -113,7 +118,8 @@ export class BrowserSessionManager {
     this.browserFactory = options.browserFactory ?? BrowserSessionManager.defaultBrowserFactory;
     this.now = options.now ?? Date.now;
     this.cancelCleanup = options.cancelCleanup ?? ((handle) => clearInterval(handle as NodeJS.Timeout));
-    this.proxyFactory = options.proxyFactory ?? (() => new BrowserEgressProxy());
+    this.fixturePermit = options.fixturePermit ?? BrowserTestFixturePermit.disabled();
+    this.proxyFactory = options.proxyFactory ?? ((fixturePermit) => new BrowserEgressProxy({ fixturePermit }));
     this.browserLauncher = options.browserLauncher ?? ((launchOptions) => chromium.launch(launchOptions));
     const scheduleCleanup = options.scheduleCleanup ?? ((callback, intervalMs) => setInterval(() => void callback(), intervalMs));
     this.cleanupHandle = scheduleCleanup(() => this.pruneExpired(), options.cleanupIntervalMs ?? 1_000);
@@ -177,7 +183,7 @@ export class BrowserSessionManager {
       const context = await browser.newContext({ viewport: input.viewport, deviceScaleFactor: 1, acceptDownloads: false, serviceWorkers: "block" });
       try {
         this.assertAccepting();
-        await installBrowserRequestPolicy(context);
+        await installBrowserRequestPolicy(context, this.fixturePermit);
         this.assertAccepting();
         const page = await context.newPage();
         this.assertAccepting();
@@ -246,6 +252,7 @@ export class BrowserSessionManager {
     this.assertOperationalSession(session);
     session.status = "active";
     session.stateVersion += 1;
+    session.latestHmiRefSnapshot = undefined;
     return this.summary(session);
   }
 
@@ -311,11 +318,35 @@ export class BrowserSessionManager {
     return this.sessions.get(sessionId)?.latestSnapshot;
   }
 
+  recordHmiRefSnapshot(sessionId: string, value: BrowserHmiRefSnapshot): BrowserSession {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new BrowserError("Browser session not found.", "TALOS_BROWSER_SESSION_NOT_FOUND", 404);
+    this.assertOperationalSession(session);
+    if (value.stateVersion !== session.stateVersion) {
+      throw new BrowserError("Browser state is stale.", "TALOS_BROWSER_STALE_STATE", 409, {
+        expected_state_version: value.stateVersion,
+        state_version: session.stateVersion,
+      });
+    }
+    session.latestHmiRefSnapshot = value;
+    return session;
+  }
+
+  hmiRefSnapshot(sessionId: string): BrowserHmiRefSnapshot | undefined {
+    return this.sessions.get(sessionId)?.latestHmiRefSnapshot;
+  }
+
   async recordFrame(sessionId: string, bytes: Buffer, stateVersion?: number): Promise<string> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new BrowserError("Browser session not found.", "TALOS_BROWSER_SESSION_NOT_FOUND", 404);
     const frameStateVersion = stateVersion ?? session.stateVersion;
     return session.frameEvidence.record(bytes, frameStateVersion, session.viewport);
+  }
+
+  hasFrameEvidence(sessionId: string, expectedSha256: string, stateVersion: number): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) throw new BrowserError("Browser session not found.", "TALOS_BROWSER_SESSION_NOT_FOUND", 404);
+    return session.frameEvidence.has(expectedSha256, stateVersion, session.viewport);
   }
 
   async compareFrameTargetRegion(
@@ -376,6 +407,7 @@ export class BrowserSessionManager {
     if (!session) throw new BrowserError("Browser session not found.", "TALOS_BROWSER_SESSION_NOT_FOUND", 404);
     this.assertOperationalSession(session);
     session.stateVersion += 1;
+    session.latestHmiRefSnapshot = undefined;
     return session;
   }
 
@@ -542,7 +574,7 @@ export class BrowserSessionManager {
       this.assertAccepting();
       return browser;
     }
-    const proxy = this.proxyFactory();
+    const proxy = this.proxyFactory(this.fixturePermit);
     this.egressProxy = proxy;
     const initialization = (async () => {
       try {
@@ -593,6 +625,7 @@ export class BrowserSessionManager {
       page: _page,
       context: _context,
       latestSnapshot: _latestSnapshot,
+      latestHmiRefSnapshot: _latestHmiRefSnapshot,
       singlePageViolation: _singlePageViolation,
       hmiIdentityKey: _hmiIdentityKey,
       singlePageGuard: _singlePageGuard,
@@ -645,6 +678,7 @@ export class BrowserSessionManager {
     session.frameEvidence.clear();
     const previousSnapshot = session.latestSnapshot?.value;
     session.latestSnapshot = undefined;
+    session.latestHmiRefSnapshot = undefined;
     void this.disposeSnapshot(previousSnapshot);
     session.recovery = {
       code: "TALOS_BROWSER_HMI_RECOVERY_REQUIRED",

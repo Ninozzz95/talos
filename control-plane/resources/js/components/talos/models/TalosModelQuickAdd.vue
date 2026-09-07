@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, reactive, ref, watch } from 'vue'
-import { AlertCircle, CheckCircle2, ChevronDown, Loader2, PlugZap, Plus, ShieldCheck } from '@lucide/vue'
+import { AlertCircle, CheckCircle2, ChevronDown, Loader2, Plus, RadioTower, ShieldCheck } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import TalosProviderIcon from './TalosProviderIcon.vue'
+import TalosProviderModelCombobox from './TalosProviderModelCombobox.vue'
 import TalosModelAdvancedOptions from './TalosModelAdvancedOptions.vue'
 import {
     talosProviderById,
@@ -13,10 +14,11 @@ import {
 } from '../../../lib/talosProviders'
 import {
     useTalosModelProfiles,
+    TalosModelCatalogError,
     type CreateTalosModelProfilePayload,
-    type TalosModelDraftProbeResult,
+    type DiscoverDraftModelCatalogPayload,
 } from '../../../composables/useTalosModelProfiles'
-import type { TalosModelProfile } from '../../../lib/talosTypes'
+import type { TalosModelCatalogFault, TalosModelProfile, TalosProviderModelCatalog } from '../../../lib/talosTypes'
 
 const emit = defineEmits<{
     created: [profile: TalosModelProfile]
@@ -24,17 +26,18 @@ const emit = defineEmits<{
 
 const {
     createAndProbeModelProfile,
-    probeDraftModelProfile,
+    discoverDraftModelCatalog,
 } = useTalosModelProfiles()
 
 const selectedProviderId = ref<TalosProviderId>('openai')
 const advancedOpen = ref(false)
-const testingDraft = ref(false)
+const discovering = ref(false)
 const addingProfile = ref(false)
 const actionError = ref<string | null>(null)
 const actionMessage = ref<string | null>(null)
-const draftProbe = ref<TalosModelDraftProbeResult | null>(null)
-const lastProbeFingerprint = ref('')
+const catalog = ref<TalosProviderModelCatalog | null>(null)
+const discoveryFault = ref<TalosModelCatalogFault | null>(null)
+const attemptedDiscovery = ref(false)
 
 const form = reactive({
     secret: '',
@@ -49,31 +52,27 @@ const selectedProvider = computed(() => talosProviderById(selectedProviderId.val
 const remoteSecretReady = computed(() => !selectedProvider.value.requiresSecret || form.secret.trim().length > 0)
 const effectiveModel = computed(() => form.model.trim() || selectedProvider.value.defaultModel)
 const effectiveBaseUrl = computed(() => form.baseUrl.trim() || selectedProvider.value.defaultBaseUrl)
-const canRunProviderAction = computed(() => remoteSecretReady.value && !testingDraft.value && !addingProfile.value)
-const draftFingerprint = computed(() => JSON.stringify({
+const catalogModels = computed(() => catalog.value?.models ?? [])
+const canDiscover = computed(() => remoteSecretReady.value && !discovering.value && !addingProfile.value)
+const canAddProfile = computed(() => remoteSecretReady.value
+    && form.model.trim().length > 0
+    && !discovering.value
+    && !addingProfile.value)
+const discoveryWarnings = computed(() => catalog.value?.warnings ?? [])
+// The credential identity that a discovered catalog belongs to. When it
+// changes, the stale catalog and any selection must be discarded.
+const credentialFingerprint = computed(() => JSON.stringify({
     provider: selectedProviderId.value,
     secret: selectedProvider.value.requiresSecret ? form.secret.trim() : '',
-    model: effectiveModel.value,
     baseUrl: effectiveBaseUrl.value,
-    timeoutSeconds: Math.min(300, Math.max(5, Number(form.timeoutSeconds) || selectedProvider.value.defaultTimeoutSeconds)),
-    capabilities: form.capabilities,
 }))
-const canAddProfile = computed(() => canRunProviderAction.value)
-const draftProbeReason = computed(() => {
-    const result = draftProbe.value?.result
-    if (!result) {
-        return ''
-    }
 
-    for (const key of ['message', 'error', 'provider_response_excerpt']) {
-        const value = result[key]
-        if (typeof value === 'string' && value.trim()) {
-            return value
-        }
-    }
-
-    return ''
-})
+function resetDiscovery() {
+    catalog.value = null
+    discoveryFault.value = null
+    attemptedDiscovery.value = false
+    form.model = ''
+}
 
 watch(selectedProviderId, (providerId) => {
     const provider = talosProviderById(providerId)
@@ -86,15 +85,14 @@ watch(selectedProviderId, (providerId) => {
     advancedOpen.value = provider.baseUrlVisibleByDefault
     actionError.value = null
     actionMessage.value = null
-    draftProbe.value = null
-    lastProbeFingerprint.value = ''
+    resetDiscovery()
 }, { immediate: true })
 
-watch(draftFingerprint, () => {
+watch(credentialFingerprint, () => {
     actionMessage.value = null
-    if (draftProbe.value && lastProbeFingerprint.value !== draftFingerprint.value) {
-        draftProbe.value = null
-        lastProbeFingerprint.value = ''
+    // A changed provider/key/base URL invalidates the discovered catalog.
+    if (attemptedDiscovery.value || catalog.value || form.model) {
+        resetDiscovery()
     }
 })
 
@@ -115,44 +113,43 @@ function payload(provider: TalosProviderDefinition): CreateTalosModelProfilePayl
     return request
 }
 
-function probeStatusText(probe: TalosModelDraftProbeResult) {
-    if (probe.status === 'healthy') {
-        return 'Draft probe healthy'
+async function discoverModels() {
+    if (!canDiscover.value) {
+        return
     }
 
-    if (probe.status === 'degraded') {
-        return 'Draft probe degraded'
-    }
-
-    return 'Draft probe failed'
-}
-
-async function runDraftProbe() {
-    if (!canRunProviderAction.value) {
-        return null
-    }
-
-    testingDraft.value = true
+    discovering.value = true
     actionError.value = null
     actionMessage.value = null
+    discoveryFault.value = null
+
+    const provider = selectedProvider.value
+    const request: DiscoverDraftModelCatalogPayload = { provider: provider.id }
+    if (provider.requiresSecret) {
+        request.secret = form.secret.trim()
+    }
+    if (form.baseUrl.trim()) {
+        request.base_url = form.baseUrl.trim()
+    }
 
     try {
-        const result = await probeDraftModelProfile(payload(selectedProvider.value))
-        draftProbe.value = result
-        lastProbeFingerprint.value = draftFingerprint.value
-        actionMessage.value = probeStatusText(result)
-        if (result.status !== 'healthy') {
-            actionError.value = draftProbeReason.value || 'Draft probe did not pass. Fix the provider response before saving.'
-        }
-
-        return result
+        const discovered = await discoverDraftModelCatalog(request)
+        catalog.value = discovered
+        attemptedDiscovery.value = true
+        actionMessage.value = discovered.complete
+            ? `Discovered ${discovered.models.length} models. Select one to save.`
+            : `Discovered ${discovered.models.length} models (partial catalog). Select one to save.`
     } catch (error) {
-        draftProbe.value = null
-        actionError.value = error instanceof Error ? error.message : 'TALOS could not test this provider setup.'
-
-        return null
+        catalog.value = null
+        form.model = ''
+        attemptedDiscovery.value = true
+        if (error instanceof TalosModelCatalogError) {
+            discoveryFault.value = error.fault
+        } else {
+            actionError.value = error instanceof Error ? error.message : 'TALOS could not discover provider models.'
+        }
     } finally {
-        testingDraft.value = false
+        discovering.value = false
     }
 }
 
@@ -171,8 +168,7 @@ async function testAndAdd() {
 
         emit('created', profile)
         form.secret = ''
-        draftProbe.value = null
-        lastProbeFingerprint.value = ''
+        resetDiscovery()
         await nextTick()
         actionMessage.value = profile.status === 'healthy' && profile.probe_result?.ok === true
             ? 'Profile saved and verified. It is ready in chat.'
@@ -242,6 +238,7 @@ async function testAndAdd() {
                         v-model="form.secret"
                         type="password"
                         autocomplete="new-password"
+                        data-testid="talos-provider-secret"
                         class="h-10 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                         placeholder="Stored by Laravel, never returned"
                     >
@@ -262,16 +259,17 @@ async function testAndAdd() {
             </div>
 
             <div class="flex flex-wrap items-end gap-2 lg:justify-end">
-                <Button type="button" variant="secondary" size="sm" :disabled="!canRunProviderAction" @click="runDraftProbe">
-                    <Loader2 v-if="testingDraft" class="h-4 w-4 animate-spin" />
-                    <PlugZap v-else class="h-4 w-4" />
-                    Test
+                <Button type="button" variant="secondary" size="sm" data-testid="talos-model-discover" :disabled="!canDiscover" @click="discoverModels">
+                    <Loader2 v-if="discovering" class="h-4 w-4 animate-spin" />
+                    <RadioTower v-else class="h-4 w-4" />
+                    Discover models
                 </Button>
                 <Button
                     type="button"
                     size="sm"
+                    data-testid="talos-model-add"
                     :disabled="!canAddProfile"
-                    :title="canAddProfile ? 'Save this provider profile server-side' : 'Add the required provider credential before saving'"
+                    :title="canAddProfile ? 'Save this provider profile server-side' : 'Discover and select a provider model before saving'"
                     @click="testAndAdd"
                 >
                     <Loader2 v-if="addingProfile" class="h-4 w-4 animate-spin" />
@@ -285,10 +283,26 @@ async function testAndAdd() {
             </div>
         </div>
 
-        <p v-if="draftProbe" class="text-xs text-[var(--talos-muted)]">
-            Last draft probe: <span class="font-semibold text-[var(--talos-text)]">{{ probeStatusText(draftProbe) }}</span>
-            <span v-if="draftProbeReason" class="block">{{ draftProbeReason }}</span>
-        </p>
+        <div v-if="attemptedDiscovery" class="space-y-2">
+            <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Provider model</span>
+            <TalosProviderModelCombobox
+                :models="catalogModels"
+                :model-value="form.model"
+                :loading="discovering"
+                :allow-manual-id="true"
+                @update:model-value="form.model = $event"
+                @refresh="discoverModels"
+            />
+            <div v-if="discoveryFault" data-testid="talos-discovery-fault" class="rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] px-3 py-2 text-xs leading-5 text-[var(--talos-text)]">
+                {{ discoveryFault.message }}
+                <span v-if="discoveryFault.retryable" class="block text-[var(--talos-muted)]">
+                    You can retry this discovery{{ discoveryFault.retry_after_seconds ? ` after ${discoveryFault.retry_after_seconds}s` : '' }}.
+                </span>
+            </div>
+            <ul v-if="discoveryWarnings.length" class="space-y-1 text-[11px] leading-5 text-[var(--talos-muted)]">
+                <li v-for="warning in discoveryWarnings" :key="warning">{{ warning }}</li>
+            </ul>
+        </div>
 
         <TalosModelAdvancedOptions
             v-if="advancedOpen"

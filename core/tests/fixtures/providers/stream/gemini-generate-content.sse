@@ -1,0 +1,10 @@
+data: {"responseId":"gemini_stream_1","modelVersion":"gemini-2.5-pro","candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"I checked the evidence. ","thought":true,"thoughtSignature":"private-signature"}]}}]}
+
+data: {"responseId":"gemini_stream_1","modelVersion":"gemini-2.5-pro","candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"Ciao 👋. "}]}}]}
+
+data: {"responseId":"gemini_stream_1","modelVersion":"gemini-2.5-pro","candidates":[{"index":0,"content":{"role":"model","parts":[{"text":"I will inspect the page. "}]}}]}
+
+data: {"responseId":"gemini_stream_1","modelVersion":"gemini-2.5-pro","candidates":[{"index":0,"content":{"role":"model","parts":[{"functionCall":{"id":"gemini_call_1","name":"browser_navigate","args":{"url":"https://example.com"}}}]}}]}
+
+data: {"responseId":"gemini_stream_1","modelVersion":"gemini-2.5-pro","candidates":[{"index":0,"content":{"role":"model","parts":[]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":38,"candidatesTokenCount":14,"totalTokenCount":52,"cachedContentTokenCount":5}}
+

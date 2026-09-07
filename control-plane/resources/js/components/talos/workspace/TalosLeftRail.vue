@@ -103,6 +103,7 @@ const props = defineProps<{
     advancedExpanded?: boolean
     mobileOpen?: boolean
     itemOrder?: string[]
+    developmentMode?: boolean
 }>()
 
 const effectiveCollapsed = computed(() => props.mobileOpen ? false : Boolean(props.collapsed))
@@ -598,7 +599,7 @@ function startNewChat() {
                     <component :is="item.icon" class="h-4 w-4 shrink-0" />
                     <span v-if="!effectiveCollapsed" class="flex min-w-0 flex-1 items-center justify-between gap-2">
                         <span class="talos-type-label block truncate">{{ item.label }}</span>
-                        <Chip :code="item.code" aria-hidden="true" class="shrink-0" />
+                        <Chip v-if="developmentMode" :code="item.code" aria-hidden="true" class="shrink-0" />
                         <span class="sr-only">{{ item.description }}</span>
                     </span>
                 </button>

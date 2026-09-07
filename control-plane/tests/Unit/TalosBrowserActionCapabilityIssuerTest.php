@@ -103,6 +103,66 @@ final class TalosBrowserActionCapabilityIssuerTest extends TestCase
         $this->assertStringNotContainsString('execution-lease-secret', serialize($authorization));
     }
 
+    public function test_hmi_ref_capability_requires_user_approval_attestation(): void
+    {
+        [$privateKey] = $this->keypair('prime256v1');
+        $issuer = new TalosBrowserActionCapabilityIssuer(
+            base64_encode($privateKey),
+            'browser-action-ref-key',
+            30,
+            static fn (): DateTimeImmutable => new DateTimeImmutable('@1750000010'),
+        );
+        $request = [
+            'schema_version' => 'talos_browser_hmi_ref_v2',
+            'interaction_id' => '123e4567-e89b-42d3-a456-426614174000',
+            'command_id' => 'hmi-ref-1',
+            'state_version' => 4,
+            'expected_frame_sha256' => 'sha256:'.str_repeat('a', 64),
+            'snapshot_id' => 'hmi_ref_'.str_repeat('b', 64),
+            'ref' => 'e7',
+            'button' => 'left',
+            'click_count' => 1,
+            'expected_fingerprint' => 'sha256:'.str_repeat('c', 64),
+            'effect_classification' => 'sensitive',
+            'sensitive_effect_authorized' => true,
+        ];
+
+        $compact = $issuer->issue(
+            'talos-user:1',
+            'brw_123',
+            'hmi_ref_execute',
+            4,
+            $request,
+            BrowserActionAuthorization::userApproval(
+                'hmi-ref-1',
+                'approval-ref-1',
+                'sha256:'.str_repeat('d', 64),
+                'execution-lease-ref-1',
+            ),
+        );
+        $claims = $this->decodePayload($compact);
+        $privateClaim = $claims[TalosBrowserActionCapabilityIssuer::PRIVATE_CLAIM] ?? null;
+
+        $this->assertIsArray($privateClaim);
+        $this->assertSame('hmi_ref_execute', $privateClaim['operation']);
+        $this->assertSame($request, $privateClaim['request']);
+        $this->assertSame('user_approval', $privateClaim['authorization']['kind']);
+
+        try {
+            $issuer->issue(
+                'talos-user:1',
+                'brw_123',
+                'hmi_ref_execute',
+                4,
+                $request,
+                BrowserActionAuthorization::policy('hmi-ref-1'),
+            );
+            $this->fail('A policy attestation authorized a human HMI ref action.');
+        } catch (BrowserWorkerException $error) {
+            $this->assertSame('TALOS_BROWSER_ACTION_CAPABILITY_INVALID', $error->errorCode);
+        }
+    }
+
     public function test_normalizes_fractional_clock_values_to_integer_numeric_dates(): void
     {
         [$privateKey] = $this->keypair('prime256v1');

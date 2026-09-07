@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TALOS deterministic catalog</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+</head>
+<body data-cookie-state="pending" data-mutation-version="0">
+    <main class="fixture-shell">
+        <header class="fixture-header">
+            <p class="eyebrow">TALOS controlled browser fixture</p>
+            <h1>Deterministic catalog</h1>
+            <p id="catalog-summary">Three locally generated records are visible. No external network data is used.</p>
+        </header>
+
+        <section aria-labelledby="records-title" class="records">
+            <h2 id="records-title">Visible records</h2>
+            <article><h3>Atlas</h3><p>Status: verified</p></article>
+            <article><h3>Beacon</h3><p>Status: pending review</p></article>
+            <article><h3>Cirrus</h3><p>Status: verified</p></article>
+        </section>
+
+        <section aria-labelledby="controls-title" class="controls">
+            <h2 id="controls-title">Controlled interactions</h2>
+            <div class="control-row">
+                <button id="cookie-opener" type="button">Open cookie preferences</button>
+                <button id="stale-target" data-generation="1" type="button">Refresh target</button>
+                <a href="/destination">Open destination</a>
+            </div>
+            <label for="synthetic-file">Synthetic file</label>
+            <input id="synthetic-file" type="file" accept="text/plain">
+            <p data-testid="upload-status">No file selected</p>
+        </section>
+
+        <aside class="fixture-state" aria-label="Fixture state">
+            <p id="cookie-status" role="status" aria-live="polite">Cookie preferences pending</p>
+            <p data-testid="background-mutation">Background revision 0</p>
+            <p data-testid="stale-status">Target generation 1</p>
+        </aside>
+    </main>
+
+    <dialog id="cookie-dialog" aria-labelledby="cookie-title">
+        <form method="dialog" class="dialog-content">
+            <h2 id="cookie-title">Cookie preferences</h2>
+            <p>This local fixture stores no cookie; the dialog exists to verify browser interaction semantics.</p>
+            <div class="dialog-actions">
+                <button id="cookie-accept" value="accepted" type="submit">Accept cookies</button>
+                <button id="cookie-cancel" value="cancelled" type="submit">Keep pending</button>
+            </div>
+        </form>
+    </dialog>
+</body>
+</html>

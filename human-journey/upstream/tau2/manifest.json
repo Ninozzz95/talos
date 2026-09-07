@@ -1,0 +1,16 @@
+{
+  "contract": "talos.upstream.tau2.v1",
+  "schema_version": 1,
+  "project": "sierra-research/tau2-bench",
+  "commit": "58e5e1ace69302e6982d27014569c03e0ffccdd2",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "data/tau2/user_simulator/simulation_guidelines.md",
+      "vendored_path": "upstream/tau2/user_simulator/simulation_guidelines.md",
+      "bytes": 1449,
+      "sha256": "740a29dfa64d7bc08eea3bf7493575b914a63f744acbaf7f199ee07eddaf72d3"
+    }
+  ]
+}
+

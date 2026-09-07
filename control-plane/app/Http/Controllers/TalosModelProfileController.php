@@ -6,8 +6,11 @@ namespace App\Http\Controllers;
 
 use App\Models\TalosAuditEvent;
 use App\Models\TalosModelProfile;
+use App\Services\Models\Catalog\TalosProviderModelCatalogException;
+use App\Services\Models\ProviderEffortCapabilityTable;
 use App\Services\Models\TalosModelProviderCatalog;
 use App\Services\Models\TalosModelProbeService;
+use App\Services\Models\TalosProviderModelCatalogService;
 use App\Services\Security\PublicHttpUrlPolicy;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -63,6 +66,11 @@ final class TalosModelProfileController extends Controller
         $this->assertSecretPolicy((string) $validated['provider'], $validated['secret'] ?? null, false);
         $requestedCapabilities = $validated['capabilities'] ?? null;
 
+        $effortCapability = \App\Services\Models\ProviderEffortCapabilityTable::resolve(
+            (string) $validated['provider'],
+            (string) ($validated['model'] ?? ''),
+        );
+
         $profile = TalosModelProfile::query()->create([
             'user_id' => $userId,
             'provider' => $validated['provider'],
@@ -74,6 +82,8 @@ final class TalosModelProfileController extends Controller
             'status' => 'untested',
             'capabilities' => null,
             'probe_result' => null,
+            'effort_levels' => $effortCapability['effort_levels'],
+            'supports_thinking' => $effortCapability['supports_thinking'],
         ]);
 
         TalosAuditEvent::record('model_profile.created', 'model_profile', $profile->id, [
@@ -104,6 +114,39 @@ final class TalosModelProfileController extends Controller
         return response()->json(['data' => $probeService->probeDraft($validated)]);
     }
 
+    public function discoverDraft(Request $request, TalosProviderModelCatalogService $catalogService): JsonResponse
+    {
+        $validated = $request->validate([
+            'provider' => ['required', 'string', Rule::in(TalosModelProviderCatalog::ids())],
+            'secret' => ['sometimes', 'nullable', 'string', 'min:1', 'max:4096'],
+            'base_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+        ]);
+
+        $validated = TalosModelProviderCatalog::applyCreateDefaults($validated);
+        $this->assertSafeBaseUrl((string) $validated['provider'], $validated['base_url'] ?? null);
+
+        try {
+            $envelope = $catalogService->discoverDraft($validated);
+        } catch (TalosProviderModelCatalogException $exception) {
+            return response()->json(['error' => $exception->toApiArray()], $exception->httpStatus());
+        }
+
+        return response()->json(['data' => $envelope]);
+    }
+
+    public function catalog(Request $request, TalosModelProfile $profile, TalosProviderModelCatalogService $catalogService): JsonResponse
+    {
+        $this->abortUnlessOwnedByCurrentUser($request, $profile);
+
+        try {
+            $envelope = $catalogService->discoverForProfile($profile);
+        } catch (TalosProviderModelCatalogException $exception) {
+            return response()->json(['error' => $exception->toApiArray()], $exception->httpStatus());
+        }
+
+        return response()->json(['data' => $envelope]);
+    }
+
     public function show(Request $request, TalosModelProfile $profile): JsonResponse
     {
         $this->abortUnlessOwnedByCurrentUser($request, $profile);
@@ -125,6 +168,7 @@ final class TalosModelProfileController extends Controller
             'status' => ['sometimes', 'string', Rule::in(['untested', 'healthy', 'degraded', 'failed', 'disabled'])],
             'capabilities' => ['sometimes', 'nullable', 'array'],
             'probe_result' => ['sometimes', 'nullable', 'array'],
+            'show_in_composer' => ['sometimes', 'boolean'],
         ]);
 
         $provider = (string) ($validated['provider'] ?? $profile->provider);
@@ -163,6 +207,15 @@ final class TalosModelProfileController extends Controller
         } elseif (is_string($requestedStatus) && $requestedStatus !== 'healthy') {
             // Healthy status requires a server probe; other operational status changes are valid updates.
             $validated['status'] = $requestedStatus;
+        }
+
+        if (array_key_exists('provider', $validated) || array_key_exists('model', $validated)) {
+            $effortCapability = \App\Services\Models\ProviderEffortCapabilityTable::resolve(
+                $provider,
+                (string) ($validated['model'] ?? $profile->model),
+            );
+            $validated['effort_levels'] = $effortCapability['effort_levels'];
+            $validated['supports_thinking'] = $effortCapability['supports_thinking'];
         }
 
         $profile->update($validated);
@@ -209,11 +262,17 @@ final class TalosModelProfileController extends Controller
         $this->abortUnlessOwnedByCurrentUser($request, $profile);
 
         $probe = $probeService->probe($profile);
+        $effortCapability = ProviderEffortCapabilityTable::resolve(
+            (string) $profile->provider,
+            (string) $profile->model,
+        );
 
         $profile->update([
             'status' => $probe['status'],
             'capabilities' => $probe['capabilities'],
             'probe_result' => $probe['result'],
+            'effort_levels' => $effortCapability['effort_levels'],
+            'supports_thinking' => $effortCapability['supports_thinking'],
         ]);
 
         return response()->json(['data' => $profile->refresh()->toApiArray()]);

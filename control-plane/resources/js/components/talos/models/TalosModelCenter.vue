@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
-import { AlertCircle, CheckCircle2, KeyRound, Loader2, PlugZap, RefreshCw, Save, Trash2 } from '@lucide/vue'
+import { AlertCircle, CheckCircle2, KeyRound, Loader2, PlugZap, RadioTower, RefreshCw, Save, ShieldCheck, Trash2 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Badge from '../../ui/Badge.vue'
 import Surface from '../../ui/Surface.vue'
 import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosModelQuickAdd from './TalosModelQuickAdd.vue'
+import TalosProviderModelCombobox from './TalosProviderModelCombobox.vue'
 import TalosProviderIcon from './TalosProviderIcon.vue'
+import TalosThemedSelect from '../ui/TalosThemedSelect.vue'
 import {
     useTalosModelProfiles,
+    TalosModelCatalogError,
     type UpdateTalosModelProfilePayload,
 } from '../../../composables/useTalosModelProfiles'
-import type { TalosModelProfile } from '../../../lib/talosTypes'
+import type { TalosModelCatalogFault, TalosModelProfile, TalosProviderModelCatalog } from '../../../lib/talosTypes'
 import { talosProviderById, talosProviderCatalog } from '../../../lib/talosProviders'
 import { resolveTalosCollectionState } from '../../../lib/talosCollectionState'
 
@@ -55,7 +58,8 @@ const {
     loadingModelProfiles,
     modelProfileError,
     loadModelProfiles,
-    updateModelProfile,
+    updateAndProbeModelProfile,
+    discoverModelCatalog,
     deleteModelProfile,
     probeModelProfile,
 } = useTalosModelProfiles()
@@ -78,7 +82,14 @@ const deleteDialog = ref<HTMLElement | null>(null)
 const actionError = ref<string | null>(null)
 const actionMessage = ref<string | null>(null)
 const modelProfilesRequested = ref(false)
+const verifyFailedProfileId = ref<string | null>(null)
+const catalog = ref<TalosProviderModelCatalog | null>(null)
+const loadingCatalog = ref(false)
+const catalogFault = ref<TalosModelCatalogFault | null>(null)
 let deleteReturnFocusTarget: HTMLElement | null = null
+
+const catalogModels = computed(() => catalog.value?.models ?? [])
+const catalogWarnings = computed(() => catalog.value?.warnings ?? [])
 
 const selectedProfile = computed(() => {
     return modelProfiles.value.find((profile) => profile.id === selectedProfileId.value) ?? null
@@ -116,6 +127,7 @@ function normalizeOptionalUrl(value: string) {
 }
 
 function populateEditForm(profile: TalosModelProfile) {
+    const identityChanged = selectedProfileId.value !== profile.id
     selectedProfileId.value = profile.id
     editForm.provider = profile.provider
     editForm.display_name = profile.display_name
@@ -123,6 +135,11 @@ function populateEditForm(profile: TalosModelProfile) {
     editForm.base_url = profile.base_url ?? ''
     editForm.timeout_seconds = profile.timeout_seconds
     editForm.secret = ''
+    if (identityChanged) {
+        catalog.value = null
+        catalogFault.value = null
+        verifyFailedProfileId.value = null
+    }
 }
 
 function statusTone(status: TalosModelProfile['status']): BadgeTone {
@@ -355,14 +372,74 @@ async function submitUpdate() {
         payload.secret = editForm.secret.trim()
     }
 
+    verifyFailedProfileId.value = null
+
     try {
-        const updatedProfile = await updateModelProfile(profile.id, payload)
-        populateEditForm(updatedProfile)
-        actionMessage.value = 'Model profile saved. Secret input cleared.'
+        const finalProfile = await updateAndProbeModelProfile(profile.id, payload)
+        populateEditForm(finalProfile)
+        if (finalProfile.status === 'healthy' && finalProfile.probe_result?.ok === true) {
+            actionMessage.value = 'Saved and verified. Secret input cleared and ready in chat.'
+        } else {
+            verifyFailedProfileId.value = finalProfile.id
+            actionError.value = 'Saved, but the persisted probe did not pass. Retry verification before using this profile in chat.'
+        }
     } catch (error) {
-        actionError.value = error instanceof Error ? error.message : 'TALOS could not update this model profile.'
+        actionError.value = error instanceof Error ? error.message : 'TALOS could not save and verify this model profile.'
     } finally {
         savingProfileId.value = null
+    }
+}
+
+async function retryVerify() {
+    const profile = selectedProfile.value
+
+    if (!profile || profileIsBusy(profile.id)) {
+        return
+    }
+
+    probingProfileId.value = profile.id
+    actionError.value = null
+    actionMessage.value = null
+
+    try {
+        const probed = await probeModelProfile(profile.id)
+        populateEditForm(probed)
+        if (probed.status === 'healthy' && probed.probe_result?.ok === true) {
+            verifyFailedProfileId.value = null
+            actionMessage.value = 'Verification passed. This profile is ready in chat.'
+        } else {
+            verifyFailedProfileId.value = probed.id
+            actionError.value = 'Verification still did not pass. Check the credential and provider model.'
+        }
+    } catch (error) {
+        actionError.value = error instanceof Error ? error.message : 'TALOS could not verify this model profile.'
+    } finally {
+        probingProfileId.value = null
+    }
+}
+
+async function loadCatalog() {
+    const profile = selectedProfile.value
+
+    if (!profile || loadingCatalog.value) {
+        return
+    }
+
+    loadingCatalog.value = true
+    catalogFault.value = null
+    actionError.value = null
+
+    try {
+        catalog.value = await discoverModelCatalog(profile.id)
+    } catch (error) {
+        catalog.value = null
+        if (error instanceof TalosModelCatalogError) {
+            catalogFault.value = error.fault
+        } else {
+            actionError.value = error instanceof Error ? error.message : 'TALOS could not load this provider model catalog.'
+        }
+    } finally {
+        loadingCatalog.value = false
     }
 }
 
@@ -589,18 +666,16 @@ onMounted(() => {
                 </div>
 
                 <div class="grid gap-2">
-                    <label class="space-y-1">
+                    <div class="space-y-1">
                         <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Provider</span>
-                        <select
-                            v-model="editForm.provider"
-                            class="h-9 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
+                        <TalosThemedSelect
+                            :model-value="editForm.provider"
+                            :items="providerOptions"
                             :disabled="selectedProfileIsBusy"
-                        >
-                            <option v-for="provider in providerOptions" :key="provider.value" :value="provider.value">
-                                {{ provider.label }}
-                            </option>
-                        </select>
-                    </label>
+                            aria-label="Provider"
+                            @update:model-value="editForm.provider = $event"
+                        />
+                    </div>
                 </div>
 
                 <label class="block space-y-1">
@@ -618,10 +693,37 @@ onMounted(() => {
                     <input
                         v-model="editForm.model"
                         type="text"
+                        data-testid="talos-edit-model"
                         class="h-9 w-full rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 text-sm text-[var(--talos-text)] outline-none focus:border-[var(--talos-accent)]"
                         :disabled="selectedProfileIsBusy"
                     >
                 </label>
+
+                <div class="space-y-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] p-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Provider catalog</span>
+                        <Button type="button" variant="secondary" size="sm" data-testid="talos-model-load-catalog" :disabled="selectedProfileIsBusy || loadingCatalog" @click="loadCatalog">
+                            <Loader2 v-if="loadingCatalog" class="h-4 w-4 animate-spin" />
+                            <RadioTower v-else class="h-4 w-4" />
+                            Load provider models
+                        </Button>
+                    </div>
+                    <TalosProviderModelCombobox
+                        v-if="catalog"
+                        :models="catalogModels"
+                        :model-value="editForm.model"
+                        :loading="loadingCatalog"
+                        :allow-manual-id="true"
+                        @update:model-value="editForm.model = $event"
+                        @refresh="loadCatalog"
+                    />
+                    <div v-if="catalogFault" data-testid="talos-catalog-fault" class="rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] px-3 py-2 text-xs leading-5 text-[var(--talos-text)]">
+                        {{ catalogFault.message }}
+                    </div>
+                    <ul v-if="catalogWarnings.length" class="space-y-1 text-[11px] leading-5 text-[var(--talos-muted)]">
+                        <li v-for="warning in catalogWarnings" :key="warning">{{ warning }}</li>
+                    </ul>
+                </div>
 
                 <label class="block space-y-1">
                     <span class="text-[11px] font-semibold uppercase text-[var(--talos-muted)]">Base URL</span>
@@ -662,10 +764,25 @@ onMounted(() => {
                     Local providers are allowed only without bearer tokens. TALOS will clear any stored secret for this profile.
                 </p>
 
-                <Button type="submit" size="sm" class="w-full" :disabled="!canUpdateProfile">
+                <Button type="submit" size="sm" class="w-full" data-testid="talos-model-save-verify" :disabled="!canUpdateProfile">
                     <Loader2 v-if="savingProfileId === selectedProfile.id" class="h-4 w-4 animate-spin" />
-                    <Save v-else class="h-4 w-4" />
-                    Save profile
+                    <ShieldCheck v-else class="h-4 w-4" />
+                    Save &amp; verify
+                </Button>
+
+                <Button
+                    v-if="verifyFailedProfileId === selectedProfile.id"
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    class="w-full"
+                    data-testid="talos-model-retry-verify"
+                    :disabled="selectedProfileIsBusy"
+                    @click="retryVerify"
+                >
+                    <Loader2 v-if="probingProfileId === selectedProfile.id" class="h-4 w-4 animate-spin" />
+                    <PlugZap v-else class="h-4 w-4" />
+                    Retry verification
                 </Button>
             </form>
 

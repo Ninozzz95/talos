@@ -8,6 +8,7 @@ use App\Support\TalosThemeMotionV6;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use JsonException;
+use Kadmos\Provider\PromptCachePlan;
 use stdClass;
 
 final class TalosWorkspaceSetting extends Model
@@ -43,6 +44,34 @@ final class TalosWorkspaceSetting extends Model
         'collapsed' => true,
     ];
 
+    private const ONBOARDING_KEYS = [
+        'intro_version' => true,
+        'intro_outcome' => true,
+    ];
+
+    private const ONBOARDING_OUTCOME_VALUES = [
+        'completed' => true,
+        'skipped' => true,
+    ];
+
+    private const PROMPT_CACHE_KEYS = [
+        'mode' => true,
+        'ttl' => true,
+    ];
+
+    private const PROMPT_CACHE_MODE_VALUES = [
+        PromptCachePlan::MODE_PROVIDER_DEFAULT => true,
+        PromptCachePlan::MODE_AUTOMATIC => true,
+        PromptCachePlan::MODE_EXPLICIT => true,
+        PromptCachePlan::MODE_DISABLED => true,
+    ];
+
+    private const PROMPT_CACHE_TTL_VALUES = [
+        PromptCachePlan::TTL_5_MINUTES => true,
+        PromptCachePlan::TTL_30_MINUTES => true,
+        PromptCachePlan::TTL_1_HOUR => true,
+    ];
+
     private const THEME_COLOR_KEYS = [
         'background' => true,
         'panel' => true,
@@ -75,6 +104,7 @@ final class TalosWorkspaceSetting extends Model
         'violet' => true,
         'claudius' => true,
         'basicus' => true,
+        'calm' => true,
     ];
 
     private const LEGACY_THEME_VALUES = [
@@ -133,6 +163,7 @@ final class TalosWorkspaceSetting extends Model
         'ui_animation_customization' => true,
         'theme_area_tokens' => true,
         'chat_layout' => true,
+        'ui_scale' => true,
     ];
 
     private const THEME_LIBRARY_MAX_RECORDS = 50;
@@ -281,9 +312,32 @@ final class TalosWorkspaceSetting extends Model
         'expanded' => true,
     ];
 
+    private const LEGACY_CHAT_BUBBLE_SCALE_MAP = [
+        'compact' => 0.875,
+        'balanced' => 1.0,
+        'expanded' => 1.15,
+    ];
+
+    private const UI_SCALE_MIN = 0.8;
+
+    private const UI_SCALE_MAX = 1.3;
+
+    private const UI_SCALE_STEP = 0.05;
+
+    private const MESSAGE_SCALE_MIN = 0.75;
+
+    private const MESSAGE_SCALE_MAX = 1.4;
+
+    private const MESSAGE_SCALE_STEP = 0.05;
+
     private const CHAT_COMPOSER_MODE_VALUES = [
         'full' => true,
         'minimal' => true,
+    ];
+
+    private const CHAT_MESSAGE_STYLE_VALUES = [
+        'sections' => true,
+        'bubbles' => true,
     ];
 
     private const CHAT_MOBILE_WINDOW_PRESENTATION_VALUES = [
@@ -307,6 +361,58 @@ final class TalosWorkspaceSetting extends Model
     public static function idForUser(int $userId): string
     {
         return 'user-'.$userId;
+    }
+
+    /**
+     * Defaults for the first persisted settings record only.
+     *
+     * @return array<string, mixed>
+     */
+    public static function freshPreferences(): array
+    {
+        $motion = TalosThemeMotionV6::defaults();
+        $motion['mode'] = 'off';
+        $motion['background_enabled'] = false;
+        $motion['interface_enabled'] = true;
+
+        return [
+            'theme' => 'calm',
+            'theme_motion_v6' => $motion,
+            'ui_scale' => 1.0,
+            'prompt_cache' => [
+                'mode' => PromptCachePlan::MODE_AUTOMATIC,
+                'ttl' => null,
+            ],
+            'chat_layout' => [
+                'message_scale' => 1.0,
+                'composer_mode' => 'full',
+                'message_style' => 'sections',
+                'advanced_rail_expanded' => false,
+                'mobile_window_presentation' => 'drawer',
+            ],
+        ];
+    }
+
+    /**
+     * Canonicalizes compatibility-only values at the real write boundary.
+     *
+     * @return array<string, mixed>
+     */
+    public static function canonicalizePreferencesForWrite(mixed $preferences): array
+    {
+        $safe = self::sanitizePreferences($preferences);
+        $layout = $safe['chat_layout'] ?? null;
+        if (is_array($layout) && isset($layout['message_scale']) && is_float($layout['message_scale'])) {
+            $layout['message_scale'] = self::snapScale(
+                $layout['message_scale'],
+                self::MESSAGE_SCALE_MIN,
+                self::MESSAGE_SCALE_MAX,
+                self::MESSAGE_SCALE_STEP,
+            );
+            $safe['chat_layout'] = $layout;
+        }
+
+        return $safe;
     }
 
     public static function sensitiveCensorEnabled(mixed $preferences): bool
@@ -488,6 +594,20 @@ final class TalosWorkspaceSetting extends Model
                 continue;
             }
 
+            if ($key === 'ui_scale') {
+                $scale = self::sanitizeScale(
+                    $value,
+                    self::UI_SCALE_MIN,
+                    self::UI_SCALE_MAX,
+                    self::UI_SCALE_STEP,
+                );
+                if ($scale !== null) {
+                    $safe[$key] = $scale;
+                }
+
+                continue;
+            }
+
             if ($key === 'browser_hmi_mode') {
                 if (is_string($value) && isset(self::BROWSER_HMI_MODE_VALUES[$value])) {
                     $safe[$key] = $value;
@@ -505,6 +625,24 @@ final class TalosWorkspaceSetting extends Model
                 continue;
             }
 
+            if ($key === 'onboarding') {
+                $onboarding = self::sanitizeOnboardingValue($value, false);
+                if ($onboarding !== null) {
+                    $safe[$key] = $onboarding;
+                }
+
+                continue;
+            }
+
+            if ($key === 'prompt_cache') {
+                $promptCache = self::sanitizePromptCacheValue($value);
+                if ($promptCache !== null) {
+                    $safe[$key] = $promptCache;
+                }
+
+                continue;
+            }
+
             if (is_string($key) && self::isThemePreferenceKeyCandidate($key)) {
                 continue;
             }
@@ -512,7 +650,10 @@ final class TalosWorkspaceSetting extends Model
             $safe[$key] = is_array($value) ? self::sanitizePreferences($value) : $value;
         }
 
-        return self::applyRawSidebarRailShape($safe, $rawPreferencesJson);
+        return self::applyRawOnboardingShape(
+            self::applyRawSidebarRailShape($safe, $rawPreferencesJson),
+            $rawPreferencesJson,
+        );
     }
 
     /**
@@ -554,6 +695,158 @@ final class TalosWorkspaceSetting extends Model
     public static function validateRawSidebarRailForWrite(mixed $rail): array
     {
         return self::validateSidebarRailValueForWrite($rail, true);
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public static function validateOnboardingPreferencesForWrite(mixed $preferences): array
+    {
+        if (! is_array($preferences) || ! array_key_exists('onboarding', $preferences)) {
+            return [];
+        }
+
+        return self::validateOnboardingValueForWrite($preferences['onboarding'], false);
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public static function validatePromptCachePreferencesForWrite(mixed $preferences): array
+    {
+        if (! is_array($preferences) || ! array_key_exists('prompt_cache', $preferences)) {
+            return [];
+        }
+
+        return self::validatePromptCacheValueForWrite($preferences['prompt_cache'], false);
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public static function validateRawPromptCacheForWrite(mixed $promptCache): array
+    {
+        return self::validatePromptCacheValueForWrite($promptCache, true);
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public static function validateRawOnboardingForWrite(mixed $onboarding): array
+    {
+        return self::validateOnboardingValueForWrite($onboarding, true);
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    private static function validateOnboardingValueForWrite(mixed $onboarding, bool $rawJson): array
+    {
+        $path = 'preferences.onboarding';
+        if ($rawJson) {
+            if (! $onboarding instanceof stdClass || $onboarding::class !== stdClass::class) {
+                return [$path => ['Onboarding preferences must be an object.']];
+            }
+
+            $onboarding = get_object_vars($onboarding);
+        } elseif (! is_array($onboarding) || array_is_list($onboarding)) {
+            return [$path => ['Onboarding preferences must be an object.']];
+        }
+
+        $errors = [];
+        foreach ($onboarding as $key => $_value) {
+            if (! is_string($key) || ! isset(self::ONBOARDING_KEYS[$key])) {
+                $errorPath = is_string($key) ? "{$path}.{$key}" : $path;
+                $errors[$errorPath] = ['Unknown onboarding preference key.'];
+            }
+        }
+
+        foreach (self::ONBOARDING_KEYS as $key => $_allowed) {
+            if (! array_key_exists($key, $onboarding)) {
+                $errors["{$path}.{$key}"] = ['Onboarding preference is required.'];
+            }
+        }
+
+        if (array_key_exists('intro_version', $onboarding)
+            && (! is_int($onboarding['intro_version'])
+                || $onboarding['intro_version'] < 1
+                || $onboarding['intro_version'] > 65535)
+        ) {
+            $errors["{$path}.intro_version"] = ['Intro version must be an integer from 1 through 65535.'];
+        }
+
+        if (array_key_exists('intro_outcome', $onboarding)
+            && (! is_string($onboarding['intro_outcome'])
+                || ! isset(self::ONBOARDING_OUTCOME_VALUES[$onboarding['intro_outcome']]))
+        ) {
+            $errors["{$path}.intro_outcome"] = ['Intro outcome must be completed or skipped.'];
+        }
+
+        return $errors;
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    private static function validatePromptCacheValueForWrite(mixed $promptCache, bool $rawJson): array
+    {
+        $path = 'preferences.prompt_cache';
+        if ($rawJson) {
+            if (! $promptCache instanceof stdClass || $promptCache::class !== stdClass::class) {
+                return [$path => ['Prompt cache preferences must be an object.']];
+            }
+
+            $promptCache = get_object_vars($promptCache);
+        } elseif (! is_array($promptCache) || array_is_list($promptCache)) {
+            return [$path => ['Prompt cache preferences must be an object.']];
+        }
+
+        $errors = [];
+        foreach ($promptCache as $key => $_value) {
+            if (! is_string($key) || ! isset(self::PROMPT_CACHE_KEYS[$key])) {
+                $errorPath = is_string($key) ? "{$path}.{$key}" : $path;
+                $errors[$errorPath] = ['Unknown prompt cache preference key.'];
+            }
+        }
+
+        if (array_key_exists('mode', $promptCache)
+            && (! is_string($promptCache['mode'])
+                || ! isset(self::PROMPT_CACHE_MODE_VALUES[$promptCache['mode']]))) {
+            $errors["{$path}.mode"] = [
+                'Prompt cache mode must be provider_default, automatic, explicit, or disabled.',
+            ];
+        }
+
+        if (array_key_exists('ttl', $promptCache)
+            && $promptCache['ttl'] !== null
+            && (! is_string($promptCache['ttl'])
+                || ! isset(self::PROMPT_CACHE_TTL_VALUES[$promptCache['ttl']]))) {
+            $errors["{$path}.ttl"] = ['Prompt cache TTL must be null, 5m, 30m, or 1h.'];
+        }
+
+        return $errors;
+    }
+
+    /** @return array{mode?: string, ttl?: ?string}|null */
+    private static function sanitizePromptCacheValue(mixed $promptCache): ?array
+    {
+        if (! is_array($promptCache) || array_is_list($promptCache)) {
+            return null;
+        }
+
+        $safe = [];
+        if (is_string($promptCache['mode'] ?? null)
+            && isset(self::PROMPT_CACHE_MODE_VALUES[$promptCache['mode']])) {
+            $safe['mode'] = $promptCache['mode'];
+        }
+        if (array_key_exists('ttl', $promptCache)
+            && ($promptCache['ttl'] === null
+                || (is_string($promptCache['ttl'])
+                    && isset(self::PROMPT_CACHE_TTL_VALUES[$promptCache['ttl']])))) {
+            $safe['ttl'] = $promptCache['ttl'];
+        }
+
+        return $safe;
     }
 
     /**
@@ -727,6 +1020,20 @@ final class TalosWorkspaceSetting extends Model
 
         if ($key === 'ui_animation_profile') {
             self::validateThemeEnum($value, self::UI_ANIMATION_PROFILE_VALUES, $path, 'UI animation profile is invalid.', $errors);
+
+            return;
+        }
+
+        if ($key === 'ui_scale') {
+            self::validateScaleForWrite(
+                $value,
+                self::UI_SCALE_MIN,
+                self::UI_SCALE_MAX,
+                self::UI_SCALE_STEP,
+                $path,
+                'Interface scale must be a number from 0.8 through 1.3 in 0.05 steps.',
+                $errors,
+            );
 
             return;
         }
@@ -1062,8 +1369,20 @@ final class TalosWorkspaceSetting extends Model
             $layoutPath = "{$path}.{$key}";
             if ($key === 'bubble_scale') {
                 self::validateThemeEnum($layoutValue, self::CHAT_BUBBLE_SCALE_VALUES, $layoutPath, 'Chat bubble scale is invalid.', $errors);
+            } elseif ($key === 'message_scale') {
+                self::validateScaleForWrite(
+                    $layoutValue,
+                    self::MESSAGE_SCALE_MIN,
+                    self::MESSAGE_SCALE_MAX,
+                    self::MESSAGE_SCALE_STEP,
+                    $layoutPath,
+                    'Message scale must be a number from 0.75 through 1.4 in 0.05 steps.',
+                    $errors,
+                );
             } elseif ($key === 'composer_mode') {
                 self::validateThemeEnum($layoutValue, self::CHAT_COMPOSER_MODE_VALUES, $layoutPath, 'Chat composer mode is invalid.', $errors);
+            } elseif ($key === 'message_style') {
+                self::validateThemeEnum($layoutValue, self::CHAT_MESSAGE_STYLE_VALUES, $layoutPath, 'Chat message style must be sections or bubbles.', $errors);
             } elseif ($key === 'advanced_rail_expanded') {
                 if (! is_bool($layoutValue)) {
                     self::addThemeWriteError($errors, $layoutPath, 'Advanced rail setting must be a boolean.');
@@ -1264,6 +1583,39 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
+     * @param  array<string, mixed>  $safe
+     * @return array<string, mixed>
+     */
+    private static function applyRawOnboardingShape(array $safe, mixed $rawPreferencesJson): array
+    {
+        if (! is_string($rawPreferencesJson) || $rawPreferencesJson === '') {
+            return $safe;
+        }
+
+        try {
+            $rawPreferences = json_decode($rawPreferencesJson, false, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            return $safe;
+        }
+
+        if (! $rawPreferences instanceof stdClass
+            || $rawPreferences::class !== stdClass::class
+            || ! property_exists($rawPreferences, 'onboarding')
+        ) {
+            return $safe;
+        }
+
+        $onboarding = self::sanitizeOnboardingValue($rawPreferences->onboarding, true);
+        if ($onboarding === null) {
+            unset($safe['onboarding']);
+        } else {
+            $safe['onboarding'] = $onboarding;
+        }
+
+        return $safe;
+    }
+
+    /**
      * @return array{order?: array<int, string>, collapsed_groups?: array<int, string>, collapsed?: bool}|null
      */
     private static function sanitizeSidebarRailValue(mixed $value, bool $rawJson): ?array
@@ -1326,6 +1678,40 @@ final class TalosWorkspaceSetting extends Model
         }
 
         return $safe === [] ? null : $safe;
+    }
+
+    /**
+     * @return array{intro_version: int, intro_outcome: string}|null
+     */
+    private static function sanitizeOnboardingValue(mixed $value, bool $rawJson): ?array
+    {
+        if ($rawJson) {
+            if (! $value instanceof stdClass || $value::class !== stdClass::class) {
+                return null;
+            }
+
+            $value = get_object_vars($value);
+        } elseif (! is_array($value) || array_is_list($value)) {
+            return null;
+        }
+
+        if (count($value) !== count(self::ONBOARDING_KEYS)
+            || array_diff_key($value, self::ONBOARDING_KEYS) !== []
+            || ! array_key_exists('intro_version', $value)
+            || ! array_key_exists('intro_outcome', $value)
+            || ! is_int($value['intro_version'])
+            || $value['intro_version'] < 1
+            || $value['intro_version'] > 65535
+            || ! is_string($value['intro_outcome'])
+            || ! isset(self::ONBOARDING_OUTCOME_VALUES[$value['intro_outcome']])
+        ) {
+            return null;
+        }
+
+        return [
+            'intro_version' => $value['intro_version'],
+            'intro_outcome' => $value['intro_outcome'],
+        ];
     }
 
     /**
@@ -1512,7 +1898,7 @@ final class TalosWorkspaceSetting extends Model
     }
 
     /**
-     * @return array<string, bool|string>
+     * @return array<string, bool|float|string>
      */
     private static function sanitizeChatLayout(mixed $value): array
     {
@@ -1521,14 +1907,30 @@ final class TalosWorkspaceSetting extends Model
         }
 
         $safe = [];
-        $bubbleScale = $value['bubble_scale'] ?? null;
-        if (is_string($bubbleScale) && isset(self::CHAT_BUBBLE_SCALE_VALUES[$bubbleScale])) {
-            $safe['bubble_scale'] = $bubbleScale;
+        $messageScale = self::sanitizeScale(
+            $value['message_scale'] ?? null,
+            self::MESSAGE_SCALE_MIN,
+            self::MESSAGE_SCALE_MAX,
+            self::MESSAGE_SCALE_STEP,
+            true,
+        );
+        if ($messageScale !== null) {
+            $safe['message_scale'] = $messageScale;
+        } else {
+            $bubbleScale = $value['bubble_scale'] ?? null;
+            if (is_string($bubbleScale) && isset(self::CHAT_BUBBLE_SCALE_VALUES[$bubbleScale])) {
+                $safe['message_scale'] = self::LEGACY_CHAT_BUBBLE_SCALE_MAP[$bubbleScale];
+            }
         }
 
         $composerMode = $value['composer_mode'] ?? null;
         if (is_string($composerMode) && isset(self::CHAT_COMPOSER_MODE_VALUES[$composerMode])) {
             $safe['composer_mode'] = $composerMode;
+        }
+
+        $messageStyle = $value['message_style'] ?? null;
+        if (is_string($messageStyle) && isset(self::CHAT_MESSAGE_STYLE_VALUES[$messageStyle])) {
+            $safe['message_style'] = $messageStyle;
         }
 
         if (isset($value['advanced_rail_expanded']) && is_bool($value['advanced_rail_expanded'])) {
@@ -1541,6 +1943,58 @@ final class TalosWorkspaceSetting extends Model
         }
 
         return $safe;
+    }
+
+    private static function sanitizeScale(
+        mixed $value,
+        float $min,
+        float $max,
+        float $step,
+        bool $allowLegacyCompact = false,
+    ): ?float {
+        if ((! is_int($value) && ! is_float($value)) || ! is_finite((float) $value)) {
+            return null;
+        }
+
+        $number = (float) $value;
+        if ($number < $min || $number > $max) {
+            return null;
+        }
+
+        if ($allowLegacyCompact && abs($number - self::LEGACY_CHAT_BUBBLE_SCALE_MAP['compact']) < 0.000_001) {
+            return $number;
+        }
+
+        $steps = ($number - $min) / $step;
+
+        return abs($steps - round($steps)) < 0.000_001
+            ? round($number, 3)
+            : null;
+    }
+
+    /**
+     * @param  array<string, array<int, string>>  $errors
+     */
+    private static function validateScaleForWrite(
+        mixed $value,
+        float $min,
+        float $max,
+        float $step,
+        string $path,
+        string $message,
+        array &$errors,
+    ): void {
+        if (self::sanitizeScale($value, $min, $max, $step) === null) {
+            self::addThemeWriteError($errors, $path, $message);
+        }
+    }
+
+    private static function snapScale(float $value, float $min, float $max, float $step): float
+    {
+        $bounded = min($max, max($min, $value));
+        $snapped = $min + (round(($bounded - $min) / $step) * $step);
+
+        return round($snapped, 3);
     }
 
     private static function normalizeKeyboardShortcut(string $binding): ?string

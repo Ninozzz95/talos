@@ -8,7 +8,7 @@ const e2eSetupEmail = 'talos-e2e@example.test'
 const e2eSetupPassword = 'talos-e2e-password-123'
 const e2eLoginEmail = process.env.TALOS_E2E_EMAIL ?? 'test@example.com'
 const e2eLoginPassword = process.env.TALOS_E2E_PASSWORD ?? 'password'
-const talosThemePresetCount = 13
+const talosThemePresetCount = 14
 const talosMotionV6Defaults = {
     schema_version: 1,
     mode: 'off',
@@ -417,12 +417,61 @@ async function selectDashboardTab(page: Page, name: string) {
 
 async function chooseModelProfile(page: Page, profileId = 'profile-e2e') {
     await page.getByRole('button', { name: 'Choose model profile' }).click()
-    await page.getByLabel('Server-side model profile').selectOption(profileId)
+    await page.locator(`[data-testid="talos-model-picker-option"][data-model-profile-id="${profileId}"]`).filter({ visible: true }).first().click()
 }
 
 async function chooseContextSet(page: Page, contextSetId = 'context-set-e2e') {
     await page.getByRole('button', { name: 'Choose grounding context' }).click()
     await page.getByLabel('Grounding context set').selectOption(contextSetId)
+}
+
+// Selects a value on a themed TalosThemedSelect (reka) — open the trigger by its
+// accessible name, then click the option carrying the target value.
+async function selectThemedOption(page: Page, label: string, value: string) {
+    await page.getByLabel(label, { exact: true }).click()
+    await page.locator(`[data-testid="talos-themed-select-item"][data-value="${value}"]`).click()
+}
+
+async function setScaleValue(scope: Page | Locator, label: string, value: number) {
+    const input = scope.getByLabel(`${label} value`, { exact: true })
+    await input.fill(String(value))
+    await input.press('Tab')
+    await expect(input).toHaveValue(String(value))
+}
+
+async function expectSurfaceWithinViewport(page: Page, surface: Locator, label: string) {
+    await expect(surface).toBeVisible()
+    const geometry = await surface.evaluate((element) => {
+        const rect = element.getBoundingClientRect()
+
+        return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            width: rect.width,
+            height: rect.height,
+            viewportWidth: window.innerWidth,
+            viewportHeight: window.innerHeight,
+        }
+    })
+
+    expect(geometry.width, `${label}: ${JSON.stringify(geometry)}`).toBeGreaterThan(0)
+    expect(geometry.height, `${label}: ${JSON.stringify(geometry)}`).toBeGreaterThan(0)
+    expect(geometry.left, `${label}: ${JSON.stringify(geometry)}`).toBeGreaterThanOrEqual(-1)
+    expect(geometry.right, `${label}: ${JSON.stringify(geometry)}`).toBeLessThanOrEqual(geometry.viewportWidth + 1)
+    expect(geometry.top, `${label}: ${JSON.stringify(geometry)}`).toBeGreaterThanOrEqual(-1)
+    expect(geometry.bottom, `${label}: ${JSON.stringify(geometry)}`).toBeLessThanOrEqual(geometry.viewportHeight + 1)
+}
+
+async function closeSettingsSurface(page: Page) {
+    const backToChat = page.getByRole('button', { name: 'Back to chat', exact: true })
+    if (await backToChat.isVisible().catch(() => false)) {
+        await backToChat.click()
+    } else {
+        await page.getByRole('button', { name: 'Close Settings', exact: true }).click()
+    }
+    await expect(page.locator('[data-window-id="settings"]')).toHaveCount(0)
 }
 
 async function clickMessageAction(scope: Page | Locator, name: string) {
@@ -1456,9 +1505,14 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await selectDashboardTab(page, 'Knowledge')
     const libraryWindow = page.locator('[data-window-id="library"]')
     const librarySectionTabs = libraryWindow.getByTestId('talos-window-section-tabs-library')
-    await expect(libraryWindow.getByTestId('talos-window-section-library-context').getByText('Context Vault', { exact: true })).toBeVisible()
-    await librarySectionTabs.getByRole('tab', { name: 'Documents', exact: true }).click()
-    await expect(librarySectionTabs.getByRole('tab', { name: 'Documents', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(librarySectionTabs.getByRole('tab', { name: 'Unified', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(libraryWindow.getByTestId('talos-window-section-library-unified').getByText('Unified Library', { exact: true })).toBeVisible()
+    await librarySectionTabs.getByRole('tab', { name: 'Sources', exact: true }).click()
+    const librarySourcePanel = libraryWindow.getByTestId('talos-window-section-library-sources')
+    const librarySourceTabs = librarySourcePanel.getByRole('tablist', { name: 'Library source sections' })
+    await expect(librarySourceTabs).toHaveAttribute('aria-owns', /talos-window-section-tab-library-documents/)
+    await librarySourcePanel.getByRole('tab', { name: 'Documents', exact: true }).click()
+    await expect(librarySourcePanel.getByRole('tab', { name: 'Documents', exact: true })).toHaveAttribute('aria-selected', 'true')
 
     await openCommandPaletteButton(page)
     await expect(page.getByRole('listbox', { name: 'TALOS commands' })).toBeVisible()
@@ -1488,7 +1542,8 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     await page.getByLabel('Search TALOS commands').fill('attach file')
     await expect(page.getByRole('option', { name: /Attach file/ })).toHaveAttribute('aria-disabled', 'false')
     await page.getByRole('option', { name: /Attach file/ }).click()
-    await expect(librarySectionTabs.getByRole('tab', { name: 'Context Vault', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(librarySectionTabs.getByRole('tab', { name: 'Sources', exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(librarySourcePanel.getByRole('tab', { name: 'Context Vault', exact: true })).toHaveAttribute('aria-selected', 'true')
     await expect(libraryWindow.getByTestId('talos-window-section-library-context').getByText('Context Vault', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Upload source file')).toHaveCount(1)
 
@@ -1565,145 +1620,217 @@ test('dashboard loads cockpit panels and opens the command palette', async ({ pa
     })
 })
 
-test('model center offers provider-first quick add with optional draft test', async ({ page }, testInfo) => {
+test('MODEL-P0 Gemini discovery quick add creates, probes and reaches chat without a reload', async ({ page }) => {
+    const catalogModels = Array.from({ length: 500 }, (_unused, index) => ({
+        id: `gemini-2.5-model-${index}`,
+        display_name: `Gemini 2.5 Model ${index}`,
+    }))
+    catalogModels[420] = { id: 'gemini-2.5-pro', display_name: 'Gemini 2.5 Pro' }
+
+    await page.unroute('**/api/**')
+    await installTalosApiMocks(page, {
+        modelCatalog: { provider: 'gemini', draftModels: catalogModels, draftPageCount: 3, draftComplete: true },
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
     await openWorkspace(page)
     await selectDashboardTab(page, 'Agents')
 
-    await expect(page.getByText('Provider-first model setup', { exact: true })).toBeVisible()
     const quickAdd = page.getByTestId('talos-model-quick-add')
+    await quickAdd.getByRole('button', { name: 'Choose Google Gemini provider' }).click()
+    await quickAdd.getByTestId('talos-provider-secret').fill('gemini-e2e-key')
 
-    for (const provider of ['OpenAI', 'DeepSeek', 'Anthropic', 'Google Gemini', 'OpenRouter', 'Ollama Local']) {
-        await expect(quickAdd.getByRole('button', { name: `Choose ${provider} provider` })).toBeVisible()
-    }
+    let pageLoads = 0
+    page.on('load', () => { pageLoads += 1 })
 
-    await quickAdd.getByRole('button', { name: 'Choose OpenRouter provider' }).click()
-    await expect(quickAdd.getByLabel('Provider API key')).toBeVisible()
-    await expect(quickAdd.getByLabel('Model name')).toBeHidden()
-    await expect(quickAdd.getByLabel('Base URL')).toBeHidden()
-
-    await quickAdd.getByLabel('Provider API key').fill('sk-openrouter-e2e-secret')
-    await expect(quickAdd.getByRole('button', { name: 'Add profile' })).toBeEnabled()
-    await quickAdd.getByRole('button', { name: 'Advanced options' }).click()
-    await expect(quickAdd.getByLabel('Timeout seconds')).toBeVisible()
-    await quickAdd.getByLabel('Timeout seconds').fill('45')
-    const draftProbeRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/model-profiles/probe-draft') || request.method() !== 'POST') {
+    const discoverRequest = page.waitForRequest((request) => {
+        if (!request.url().endsWith('/api/talos/model-profiles/discover-draft') || request.method() !== 'POST') {
             return false
         }
-
         const body = request.postDataJSON() as Record<string, unknown>
-
-        return body.provider === 'openrouter'
-            && body.secret === 'sk-openrouter-e2e-secret'
-            && body.model === 'openai/gpt-4.1-mini'
-            && body.base_url === 'https://openrouter.ai/api/v1'
-            && body.timeout_seconds === 45
+        return body.provider === 'gemini' && body.secret === 'gemini-e2e-key'
     })
+    await quickAdd.getByTestId('talos-model-discover').click()
+    await discoverRequest
 
-    await quickAdd.getByRole('button', { name: 'Test', exact: true }).click()
-    await draftProbeRequest
-    await expect(quickAdd.getByText('Draft probe healthy').first()).toBeVisible()
+    // A distant model in a 500-row catalog is reachable by keyboard search.
+    // Focusing the always-present search input opens the typeahead list.
+    const searchBox = page.getByRole('combobox', { name: 'Search models' })
+    await searchBox.click()
+    await searchBox.fill('gemini-2.5-pro')
+    const proOption = page.locator('[data-testid="talos-model-option"][data-model-id="gemini-2.5-pro"]')
+    await expect(proOption).toBeVisible()
+    await proOption.click()
+
+    const addButton = quickAdd.getByTestId('talos-model-add')
+    await expect(addButton).toBeEnabled()
 
     const createRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/model-profiles') || request.method() !== 'POST') {
             return false
         }
-
         const body = request.postDataJSON() as Record<string, unknown>
-
-        return body.provider === 'openrouter'
-            && body.secret === 'sk-openrouter-e2e-secret'
-            && body.model === 'openai/gpt-4.1-mini'
-            && body.base_url === 'https://openrouter.ai/api/v1'
-            && body.timeout_seconds === 45
+        return body.provider === 'gemini' && body.model === 'gemini-2.5-pro' && body.secret === 'gemini-e2e-key'
     })
-    const persistedProbeRequest = page.waitForRequest((request) => (
-        request.url().endsWith('/api/talos/model-profiles/profile-openrouter-quick-add/probe')
+    const probeRequest = page.waitForRequest((request) => (
+        request.url().endsWith('/api/talos/model-profiles/profile-gemini-quick-add/probe')
         && request.method() === 'POST'
     ))
-    await quickAdd.getByRole('button', { name: 'Add profile' }).click()
+    await addButton.click()
     await createRequest
-    await persistedProbeRequest
+    await probeRequest
     await expect(quickAdd.getByText('Profile saved and verified. It is ready in chat.')).toBeVisible()
+    await expect(page.getByText('gemini-e2e-key')).toBeHidden()
 
-    const openRouterProfile = page.getByRole('button').filter({ hasText: 'OpenRouter quick profile' })
-    await expect(openRouterProfile).toBeVisible()
-    await expect(openRouterProfile.getByText('Secret stored server-side.')).toBeVisible()
-    await expect(page.getByText('sk-openrouter-e2e-secret')).toBeHidden()
-    await expect(page.getByText('encrypted_secret')).toBeHidden()
-
-    await quickAdd.getByRole('button', { name: 'Choose Ollama Local provider' }).click()
-    await expect(quickAdd.getByLabel('Local endpoint')).toBeVisible()
-    await expect(quickAdd.getByLabel('Provider API key')).toBeHidden()
-    await expect(page.getByText('Local providers are allowed only without bearer tokens.')).toBeVisible()
-
-    await testInfo.attach(`model-center-quick-add-${testInfo.project.name}.png`, {
-        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
-        contentType: 'image/png',
-    })
-
-    await page.getByRole('button', { name: 'Close Model Lab' }).click()
+    // The composer selects the new profile immediately, with no window reopening.
+    await page.getByRole('button', { name: 'Close Model Lab' }).click().catch(() => undefined)
     await page.getByRole('button', { name: 'Choose model profile' }).click()
-    await expect(page.getByLabel('Server-side model profile').locator('option', { hasText: 'OpenRouter quick profile' })).toHaveCount(1)
-    await page.getByLabel('Server-side model profile').selectOption('profile-openrouter-quick-add')
-    await page.getByLabel('Message TALOS').fill('Verify the newly added profile without opening setup again.')
+    await page.locator('[data-testid="talos-model-picker-option"][data-model-profile-id="profile-gemini-quick-add"]').filter({ visible: true }).first().click()
+    await page.getByLabel('Message TALOS').fill('Use the freshly discovered Gemini profile without reopening setup.')
     await page.getByRole('button', { name: 'Send', exact: true }).click()
     await expect(page.locator('.talos-chat-message[data-message-role="assistant"]').last()).toContainText('E2E response from AVM')
     await expect(page.locator('[data-window-id="settings"]')).toHaveCount(0)
     await expect(page.locator('[data-window-id="model_lab"]')).toHaveCount(0)
+    expect(pageLoads).toBe(0)
 })
 
-test('model center can save a provider profile after a failed optional draft probe', async ({ page }) => {
-    await page.route('**/api/talos/model-profiles/probe-draft', async (route) => {
-        await route.fulfill({
-            status: 200,
-            contentType: 'application/json',
-            body: JSON.stringify({
-                data: {
-                    status: 'failed',
-                    result: {
-                        ok: false,
-                        code: 'PROVIDER_HTTP_ERROR',
-                        message: 'Provider rejected the test request.',
-                    },
-                },
-            }),
-        })
+test('MODEL-P0 OpenRouter rotation through Save and verify refreshes the persisted catalog without a reload', async ({ page }) => {
+    await page.unroute('**/api/**')
+    await installTalosApiMocks(page, {
+        modelCatalog: {
+            provider: 'openrouter',
+            profileComplete: true,
+            profileModels: [
+                { id: 'openai/gpt-4.1', display_name: 'GPT-4.1' },
+                { id: 'anthropic/claude-sonnet-4-6', display_name: 'Claude Sonnet 4.6' },
+            ],
+        },
     })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Agents')
 
+    await page.getByRole('button').filter({ hasText: 'E2E server-side profile' }).first().click()
+    await selectThemedOption(page, 'Provider', 'openrouter')
+    await page.getByLabel('Rotate secret').fill('sk-openrouter-rotated')
+
+    let pageLoads = 0
+    page.on('load', () => { pageLoads += 1 })
+
+    const catalogRequest = page.waitForRequest((request) => (
+        /\/api\/talos\/model-profiles\/[^/]+\/models$/.test(request.url()) && request.method() === 'GET'
+    ))
+    await page.getByTestId('talos-model-load-catalog').click()
+    await catalogRequest
+
+    await page.getByRole('combobox', { name: 'Search models' }).click()
+    await page.locator('[data-testid="talos-model-option"][data-model-id="anthropic/claude-sonnet-4-6"]').click()
+    await expect(page.getByTestId('talos-edit-model')).toHaveValue('anthropic/claude-sonnet-4-6')
+
+    const patchRequest = page.waitForRequest((request) => {
+        if (!/\/api\/talos\/model-profiles\/[^/]+$/.test(request.url()) || request.method() !== 'PATCH') {
+            return false
+        }
+        const body = request.postDataJSON() as Record<string, unknown>
+        return body.provider === 'openrouter'
+            && body.model === 'anthropic/claude-sonnet-4-6'
+            && body.secret === 'sk-openrouter-rotated'
+    })
+    const probeRequest = page.waitForRequest((request) => request.url().endsWith('/probe') && request.method() === 'POST')
+
+    await page.getByTestId('talos-model-save-verify').click()
+    await patchRequest
+    await probeRequest
+    await expect(page.getByText('Saved and verified. Secret input cleared and ready in chat.')).toBeVisible()
+    await expect(page.getByText('sk-openrouter-rotated')).toBeHidden()
+    expect(pageLoads).toBe(0)
+})
+
+test('MODEL-P0 discovery auth fault surfaces typed recovery and an advanced manual model ID', async ({ page }) => {
+    await page.unroute('**/api/**')
+    await installTalosApiMocks(page, {
+        modelCatalog: {
+            provider: 'gemini',
+            draftFault: {
+                status: 401,
+                code: 'MODEL_CATALOG_AUTH_FAILED',
+                message: 'Provider rejected the credential.',
+                retryable: false,
+            },
+        },
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
     await openWorkspace(page)
     await selectDashboardTab(page, 'Agents')
 
     const quickAdd = page.getByTestId('talos-model-quick-add')
-    await quickAdd.getByRole('button', { name: 'Choose OpenRouter provider' }).click()
-    await quickAdd.getByLabel('Provider API key').fill('sk-openrouter-e2e-secret')
-    await expect(quickAdd.getByRole('button', { name: 'Add profile' })).toBeEnabled()
+    await quickAdd.getByRole('button', { name: 'Choose Google Gemini provider' }).click()
+    await quickAdd.getByTestId('talos-provider-secret').fill('bad-key')
+    await quickAdd.getByTestId('talos-model-discover').click()
 
-    await quickAdd.getByRole('button', { name: 'Test', exact: true }).click()
-    await expect(quickAdd.getByText('Draft probe failed').first()).toBeVisible()
-    await expect(quickAdd.getByText('Provider rejected the test request.').first()).toBeVisible()
-    await expect(quickAdd.getByRole('button', { name: 'Add profile' })).toBeEnabled()
+    await expect(quickAdd.getByTestId('talos-discovery-fault')).toContainText('Provider rejected the credential.')
+    // An AUTH_FAILED provider fault must not send the operator to the login gate.
+    await expect(page.locator('#talos-workspace-root')).toBeVisible()
+    await expect(page.locator('#talos-login-form')).toHaveCount(0)
+    await expect(page.locator('[data-testid="talos-model-option"]')).toHaveCount(0)
+
+    // The advanced manual model ID is the deliberate catalog-outage escape hatch.
+    await quickAdd.getByTestId('talos-model-manual-toggle').click()
+    await quickAdd.getByTestId('talos-model-manual-input').fill('gemini-2.5-flash')
+    await quickAdd.getByTestId('talos-model-manual-apply').click()
+    await expect(quickAdd.getByTestId('talos-model-add')).toBeEnabled()
 
     const createRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/model-profiles') || request.method() !== 'POST') {
             return false
         }
-
         const body = request.postDataJSON() as Record<string, unknown>
-
-        return body.provider === 'openrouter'
-            && body.secret === 'sk-openrouter-e2e-secret'
-            && body.status === undefined
+        return body.provider === 'gemini' && body.model === 'gemini-2.5-flash'
     })
-    const persistedProbeRequest = page.waitForRequest((request) => (
-        request.url().endsWith('/api/talos/model-profiles/profile-openrouter-quick-add/probe')
-        && request.method() === 'POST'
-    ))
-
-    await quickAdd.getByRole('button', { name: 'Add profile' }).click()
+    await quickAdd.getByTestId('talos-model-add').click()
     await createRequest
-    await persistedProbeRequest
-    await expect(page.getByRole('button').filter({ hasText: 'OpenRouter quick profile' })).toBeVisible()
+    await expect(page.getByRole('button').filter({ hasText: 'Google Gemini quick profile' })).toBeVisible()
+})
+
+test('MODEL-P0 discovery reports rate-limited and empty catalog states with typed recovery', async ({ page }) => {
+    await page.unroute('**/api/**')
+    await installTalosApiMocks(page, {
+        modelCatalog: {
+            provider: 'openrouter',
+            draftFault: {
+                status: 429,
+                code: 'MODEL_CATALOG_RATE_LIMITED',
+                message: 'Provider rate limit reached.',
+                retryable: true,
+                retry_after_seconds: 30,
+            },
+        },
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Agents')
+
+    const rateLimited = page.getByTestId('talos-model-quick-add')
+    await rateLimited.getByRole('button', { name: 'Choose OpenRouter provider' }).click()
+    await rateLimited.getByTestId('talos-provider-secret').fill('sk-openrouter')
+    await rateLimited.getByTestId('talos-model-discover').click()
+    await expect(rateLimited.getByTestId('talos-discovery-fault')).toContainText('Provider rate limit reached.')
+    await expect(rateLimited.getByTestId('talos-discovery-fault')).toContainText('after 30s')
+
+    // Empty catalog: discovery succeeds but returns no models.
+    await page.unroute('**/api/**')
+    await installTalosApiMocks(page, {
+        modelCatalog: { provider: 'openrouter', draftModels: [], draftComplete: true },
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await openWorkspace(page)
+    await selectDashboardTab(page, 'Agents')
+
+    const empty = page.getByTestId('talos-model-quick-add')
+    await empty.getByRole('button', { name: 'Choose OpenRouter provider' }).click()
+    await empty.getByTestId('talos-provider-secret').fill('sk-openrouter')
+    await empty.getByTestId('talos-model-discover').click()
+    await page.getByRole('combobox', { name: 'Search models' }).click()
+    await expect(page.getByText('No provider model matches this search.')).toBeVisible()
 })
 
 test('cookbook model lab shows hardware scan fit score and preview-only commands', async ({ page }, testInfo) => {
@@ -1842,9 +1969,9 @@ test('settings window loads safe preferences and persists theme through the sett
     await expect(page.getByText('Workspace customization', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Background effect')).toHaveCount(0)
     await expect(page.getByLabel('Effect intensity')).toHaveCount(0)
-    await page.getByLabel('Font', { exact: true }).selectOption('serif')
-    await page.getByLabel('Density').selectOption('spacious')
-    await page.getByLabel('Corner radius').selectOption('soft')
+    await selectThemedOption(page, 'Font', 'serif')
+    await selectThemedOption(page, 'Density', 'spacious')
+    await selectThemedOption(page, 'Corner radius', 'soft')
     const customizationPatchRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
             return false
@@ -1944,7 +2071,7 @@ test('theme engine V6 manages custom themes, live preview, motion, area tokens a
     await page.getByRole('button', { name: 'Discard changes' }).click()
     await expect(page.locator('.talos-shell')).not.toHaveAttribute('style', /#7c3aed/)
 
-    await page.getByLabel('Font', { exact: true }).selectOption('mono')
+    await selectThemedOption(page, 'Font', 'mono')
     const saveNamedThemeRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
             return false
@@ -2026,12 +2153,13 @@ test('theme engine V6 manages custom themes, live preview, motion, area tokens a
     expect(importedPreferences).not.toHaveProperty('ui_animation_profile')
     expect(importedPreferences).not.toHaveProperty('ui_animation_customization')
     expect(importedPreferences.chat_layout).toMatchObject({
-        bubble_scale: 'expanded',
+        message_scale: 1.15,
         composer_mode: 'minimal',
         advanced_rail_expanded: true,
     })
+    expect(importedPreferences.chat_layout).not.toHaveProperty('bubble_scale')
     await expect(page.getByText('Imported Mint', { exact: true })).toBeVisible()
-    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Expanded')
+    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('115%')
     await expectComposerMode(page, 'minimal')
 
     await page.getByRole('tab', { name: 'Motion' }).click()
@@ -2073,7 +2201,7 @@ test('theme engine V6 manages custom themes, live preview, motion, area tokens a
     await page.getByRole('tab', { name: 'Advanced' }).evaluate((element) => {
         (element as HTMLElement).click()
     })
-    await page.getByLabel('Area', { exact: true }).selectOption('composer')
+    await selectThemedOption(page, 'Area', 'composer')
     let areaPatchCount = 0
     page.on('request', (request) => {
         if (request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH') areaPatchCount += 1
@@ -2145,25 +2273,28 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await expect(page.getByTestId('talos-theme-preview-input')).toBeVisible()
     await expect(page.getByTestId('talos-theme-preview-status')).toContainText('Run succeeded')
     await expect(page.getByTestId('talos-theme-preview-evidence')).toContainText('Evidence attached')
-    await expect(page.getByTestId('talos-theme-preview-layout')).toContainText('balanced messages, full composer')
+    await expect(page.getByTestId('talos-theme-preview-layout')).toContainText('100% messages, full composer')
 
-    await page.getByLabel('Theme chat message size').selectOption('compact')
-    await page.getByLabel('Theme chat composer mode').selectOption('minimal')
+    const themeWindow = page.locator('[data-window-id="theme"]')
+    await setScaleValue(themeWindow, 'Message scale', 0.75)
+    await selectThemedOption(page, 'Theme chat composer mode', 'minimal')
     const conflictingLayoutRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
         const body = request.postDataJSON() as Record<string, unknown>
         if (!hasSettingsExpectedRevision(body)) return false
         const preferences = body.preferences as Record<string, unknown> | undefined
         const layout = preferences?.chat_layout as Record<string, unknown> | undefined
-        return layout?.bubble_scale === 'compact' && layout?.composer_mode === 'minimal'
+        return layout?.message_scale === 0.75
+            && !Object.prototype.hasOwnProperty.call(layout ?? {}, 'bubble_scale')
+            && layout?.composer_mode === 'minimal'
     })
     await page.getByRole('button', { name: 'Save customization', exact: true }).click()
     await conflictingLayoutRequest
-    await expect(page.getByTestId('talos-message-scale-status')).toContainText('Compact')
+    await expect(page.getByTestId('talos-message-scale-status')).toContainText('75%')
     await expectComposerMode(page, 'minimal')
 
-    await page.getByLabel('Theme chat message size').selectOption('expanded')
-    await page.getByLabel('Theme chat composer mode').selectOption('full')
+    await setScaleValue(themeWindow, 'Message scale', 1.4)
+    await selectThemedOption(page, 'Theme chat composer mode', 'full')
     await page.getByLabel('Theme name').fill('Lifecycle Theme')
     const createRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
@@ -2175,18 +2306,19 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
         return Array.isArray(library)
             && library.some((theme) => theme.name === 'Lifecycle Theme')
             && JSON.stringify(library.at(-1)?.motion_v6) === JSON.stringify(talosMotionV6Defaults)
-            && layout?.bubble_scale === 'expanded'
+            && layout?.message_scale === 1.4
+            && !Object.prototype.hasOwnProperty.call(layout ?? {}, 'bubble_scale')
             && layout?.composer_mode === 'full'
     })
     await page.getByRole('button', { name: 'Create theme', exact: true }).click()
     await createRequest
     await expect(page.getByText('Lifecycle Theme', { exact: true })).toBeVisible()
-    await expect(page.getByTestId('talos-message-scale-status')).toContainText('Expanded')
+    await expect(page.getByTestId('talos-message-scale-status')).toContainText('140%')
     await expectComposerMode(page, 'full')
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-    await expect(page.getByTestId('talos-message-scale-status')).toContainText('Expanded')
+    await expect(page.getByTestId('talos-message-scale-status')).toContainText('140%')
     await expectComposerMode(page, 'full')
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Library' }).click()
@@ -2254,9 +2386,10 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     const appliedThemeRequest = await applyRequest
     const appliedThemePreferences = settingsPatchBody(appliedThemeRequest).preferences as Record<string, unknown>
     expect(appliedThemePreferences.chat_layout).toMatchObject({
-        bubble_scale: 'expanded',
+        message_scale: 1.4,
         composer_mode: 'full',
     })
+    expect(appliedThemePreferences.chat_layout).not.toHaveProperty('bubble_scale')
 
     await page.getByRole('button', { name: 'Export active theme', exact: true }).click()
     const exportedJson = await page.getByTestId('talos-theme-export-json').inputValue()
@@ -2267,11 +2400,12 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
             name: 'Lifecycle Renamed',
             motion_v6: { schema_version: 1 },
             chat_layout: {
-                bubble_scale: 'expanded',
+                message_scale: 1.4,
                 composer_mode: 'full',
             },
         },
     })
+    expect((exportedTheme.theme as Record<string, unknown>).chat_layout).not.toHaveProperty('bubble_scale')
     expect((exportedTheme.theme as Record<string, unknown>).motion_v6).toEqual(talosMotionV6Defaults)
     const exportedThemePayload = exportedTheme.theme as Record<string, unknown>
     expect(exportedThemePayload).not.toHaveProperty('motion')
@@ -2314,7 +2448,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     await page.getByRole('dialog', { name: /Delete Lifecycle Renamed/ }).getByRole('button', { name: 'Delete theme', exact: true }).click()
     await activeDeleteRequest
     await expect(page.getByText('Lifecycle Renamed', { exact: true })).toHaveCount(0)
-    await expect(page.getByTestId('talos-message-scale-status')).toContainText('Balanced')
+    await expect(page.getByTestId('talos-message-scale-status')).toContainText('100%')
     await expectComposerMode(page, 'full')
 
     const beforeInvalidImport = themePatchCount
@@ -2367,24 +2501,25 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
         },
     }
     await page.getByLabel('Import theme JSON').fill(JSON.stringify(importedTheme))
-    const importRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-        const body = request.postDataJSON() as Record<string, unknown>
-        if (!hasSettingsExpectedRevision(body)) return false
-        const preferences = body.preferences as Record<string, unknown> | undefined
-        const layout = preferences?.chat_layout as Record<string, unknown> | undefined
-        const library = preferences?.theme_library as Array<Record<string, unknown>> | undefined
-        return preferences?.theme === 'terminal'
-            && preferences?.active_custom_theme_id === 'imported-lifecycle-theme'
-            && layout?.bubble_scale === 'compact'
-            && layout?.composer_mode === 'minimal'
-            && Array.isArray(library)
-            && library.some((theme) => theme.id === 'imported-lifecycle-theme')
-    })
+    const importRequest = page.waitForRequest((request) => (
+        request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH'
+    ))
     await page.getByRole('button', { name: 'Import theme', exact: true }).click()
-    await importRequest
+    const importPreferences = settingsPatchBody(await importRequest).preferences as Record<string, unknown>
+    const importedLayout = importPreferences.chat_layout as Record<string, unknown>
+    const importedLibrary = importPreferences.theme_library as Array<Record<string, unknown>>
+    expect(importPreferences.theme).toBe('terminal')
+    expect(importPreferences.active_custom_theme_id).toBe('imported-lifecycle-theme')
+    expect(importedLayout).toMatchObject({
+        message_scale: 0.9,
+        composer_mode: 'minimal',
+    })
+    expect(importedLayout).not.toHaveProperty('bubble_scale')
+    expect(importedLibrary).toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: 'imported-lifecycle-theme' }),
+    ]))
     await expect(page.getByText('Imported Lifecycle', { exact: true })).toBeVisible()
-    await expect(page.getByTestId('talos-message-scale-status')).toContainText('Compact')
+    await expect(page.getByTestId('talos-message-scale-status')).toContainText('90%')
     await expectComposerMode(page, 'minimal')
 
     const beforeDuplicateImport = themePatchCount
@@ -2399,7 +2534,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-    await expect(page.getByTestId('talos-message-scale-status')).toContainText('Compact')
+    await expect(page.getByTestId('talos-message-scale-status')).toContainText('90%')
     await expectComposerMode(page, 'minimal')
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
@@ -2415,7 +2550,8 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
             && JSON.stringify(preferences?.theme_area_tokens) === '{}'
             && preferences?.theme_mode === 'system'
             && hasExactMotionV6(preferences)
-            && chat?.bubble_scale === 'balanced'
+            && chat?.message_scale === 1
+            && !Object.prototype.hasOwnProperty.call(chat ?? {}, 'bubble_scale')
             && chat?.composer_mode === 'full'
     })
     await page.getByRole('button', { name: 'Reset to preset', exact: true }).click()
@@ -2424,7 +2560,7 @@ test('theme engine V6 completes the named theme lifecycle and reset contract', a
     expect(resetPreferences).not.toHaveProperty('theme_motion')
     expect(resetPreferences).not.toHaveProperty('ui_animation_profile')
     expect(resetPreferences).not.toHaveProperty('ui_animation_customization')
-    await expect(page.getByTestId('talos-message-scale-status')).toContainText('Balanced')
+    await expect(page.getByTestId('talos-message-scale-status')).toContainText('100%')
     await expectComposerMode(page, 'full')
     await expect(page.getByRole('tab', { name: 'Library' })).toBeVisible()
     const settingsAfterReset = await page.evaluate(async () => {
@@ -2561,7 +2697,7 @@ test('Claudius font-only customization preserves palette and active background m
 
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
-    await page.getByLabel('Font', { exact: true }).selectOption('manrope')
+    await selectThemedOption(page, 'Font', 'manrope')
     await expect.poll(() => page.locator('.talos-shell').evaluate((element) => (
         window.getComputedStyle(element).getPropertyValue('--talos-font-ui').trim()
     ))).toContain('Manrope')
@@ -2629,8 +2765,8 @@ test('theme engine v6 persists interface motion, previews the product surface, a
     } as const
 
     await page.getByRole('button', { name: 'Motion mode Complex', exact: true }).click()
-    await page.getByLabel('Interface motion profile').selectOption('custom')
-    await page.getByLabel('Interface easing').selectOption('cinematic')
+    await selectThemedOption(page, 'Interface motion profile', 'custom')
+    await selectThemedOption(page, 'Interface easing', 'cinematic')
     await page.getByRole('slider', { name: 'Interface duration' }).fill('125')
     await page.getByRole('slider', { name: 'Interface intensity' }).fill('86')
     await page.getByRole('slider', { name: 'Interface stagger' }).fill('65')
@@ -2653,8 +2789,8 @@ test('theme engine v6 persists interface motion, previews the product surface, a
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'complex')
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Motion' }).click()
-    await expect(page.getByLabel('Interface motion profile')).toHaveValue('custom')
-    await expect(page.getByLabel('Interface easing')).toHaveValue('cinematic')
+    await expect(page.getByLabel('Interface motion profile')).toContainText('Custom')
+    await expect(page.getByLabel('Interface easing')).toContainText('Cinematic')
     await expect(page.getByRole('slider', { name: 'Interface duration' })).toHaveValue('125')
     await expect(page.getByRole('slider', { name: 'Interface intensity' })).toHaveValue('86')
     await expect(page.getByRole('slider', { name: 'Interface stagger' })).toHaveValue('65')
@@ -2927,7 +3063,7 @@ test('theme switches disable motion separately from the procedural background', 
     await expect(page.locator('.talos-shell')).toHaveAttribute('data-ui-motion-disabled', 'true')
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Motion' }).click()
-    await expect(page.getByLabel('Interface motion profile')).toHaveValue('off')
+    await expect(page.getByLabel('Interface motion profile')).toContainText('Off')
     await expect(page.getByRole('switch', { name: 'Interface motion' })).not.toBeChecked()
 })
 
@@ -2951,7 +3087,7 @@ test('settings preset changes refresh procedural background immediately', async 
 
     await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
-    await page.getByLabel('Theme preset').selectOption('terminal')
+    await selectThemedOption(page, 'Theme preset', 'terminal')
     const settingsPresetRequest = page.waitForRequest((request) => {
         if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') {
             return false
@@ -3068,7 +3204,7 @@ test('theme color mode forces light and dark variants across presets and chat bu
         return hasSettingsExpectedRevision(body)
             && preferences?.theme_mode === 'light'
     })
-    await page.getByLabel('Theme color mode').selectOption('light')
+    await selectThemedOption(page, 'Theme color mode', 'light')
     await lightModeRequest
 
     const terminalRequest = page.waitForRequest((request) => {
@@ -3115,7 +3251,7 @@ test('theme color mode forces light and dark variants across presets and chat bu
         return hasSettingsExpectedRevision(body)
             && preferences?.theme_mode === 'dark'
     })
-    await page.getByLabel('Theme color mode').selectOption('dark')
+    await selectThemedOption(page, 'Theme color mode', 'dark')
     await darkModeRequest
 
     const paperRequest = page.waitForRequest((request) => {
@@ -3203,7 +3339,7 @@ test('V6 theme visual matrix covers every preset in forced light and dark', asyn
             const preferences = body.preferences as Record<string, unknown> | undefined
             return preferences?.theme_mode === mode
         })
-        await page.getByLabel('Theme color mode').selectOption(mode)
+        await selectThemedOption(page, 'Theme color mode', mode)
         settingsPatchBody(await modeRequest)
 
         for (const [id, label] of presets) {
@@ -3276,27 +3412,25 @@ test('theme engine shows workspace policy lock as read only', async ({ page }) =
     await expect(page.getByRole('button', { name: 'Increase message size' })).toBeDisabled()
     await expectComposerMode(page, 'full')
 
-    const advancedRequest = page.waitForRequest((request) => {
-        if (!request.url().endsWith('/api/talos/settings') || request.method() !== 'PATCH') return false
-        const body = request.postDataJSON() as Record<string, unknown>
-        if (!hasSettingsExpectedRevision(body)) return false
-        const preferences = body.preferences as Record<string, unknown> | undefined
-        const layout = preferences?.chat_layout as Record<string, unknown> | undefined
-        return layout?.advanced_rail_expanded === true
-            && !Object.prototype.hasOwnProperty.call(layout, 'bubble_scale')
-            && !Object.prototype.hasOwnProperty.call(layout, 'composer_mode')
-    })
+    const advancedRequest = page.waitForRequest((request) => (
+        request.url().endsWith('/api/talos/settings') && request.method() === 'PATCH'
+    ))
     const workbenchToggle = page.getByRole('button', { name: 'Workbench', exact: true })
     await ensureRailReachable(page, workbenchToggle)
     await workbenchToggle.click()
-    await advancedRequest
+    const advancedPreferences = settingsPatchBody(await advancedRequest).preferences as Record<string, unknown>
+    const advancedLayout = advancedPreferences.chat_layout as Record<string, unknown>
+    expect(advancedLayout.advanced_rail_expanded).toBe(true)
+    expect(advancedLayout).not.toHaveProperty('bubble_scale')
+    expect(advancedLayout.message_scale).toBe(1)
+    expect(advancedLayout.composer_mode).toBe('full')
 
     await clickRailStation(page, 'Theme')
     await expect(page.getByText('Theme changes are locked by workspace policy.')).toBeVisible()
     await page.getByRole('tab', { name: 'Customize' }).click()
     await expect(page.getByRole('button', { name: 'Save customization' })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Save as theme' })).toBeDisabled()
-    await expect(page.getByLabel('Theme chat message size')).toBeDisabled()
+    await expect(page.locator('[data-window-id="theme"]').getByLabel('Message scale value', { exact: true })).toBeDisabled()
     await expect(page.getByLabel('Theme chat composer mode')).toBeDisabled()
     await page.getByRole('tab', { name: 'Motion' }).click()
     await expect(page.getByTestId('talos-motion-v6-editor')).toBeVisible()
@@ -3309,7 +3443,9 @@ test('theme engine shows workspace policy lock as read only', async ({ page }) =
 
     await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
-    await expect(page.getByLabel('Chat message size', { exact: true })).toBeDisabled()
+    const settingsWindow = page.locator('[data-window-id="settings"]')
+    await expect(settingsWindow.getByLabel('Interface scale value', { exact: true })).toBeDisabled()
+    await expect(settingsWindow.getByLabel('Message scale value', { exact: true })).toBeDisabled()
     await expect(page.getByLabel('Chat composer mode', { exact: true })).toBeDisabled()
     await expect(page.getByRole('switch', { name: 'Expand Advanced by default' })).toBeEnabled()
 })
@@ -3570,9 +3706,9 @@ test('floating windows organize multi-section modules with first-level section t
         {
             button: 'Library',
             windowId: 'library',
-            tabs: ['Context Vault', 'Documents'],
-            secondTab: 'Documents',
-            secondPanelTestId: 'talos-window-section-library-documents',
+            tabs: ['Unified', 'Sources'],
+            secondTab: 'Sources',
+            secondPanelTestId: 'talos-window-section-library-sources',
         },
         {
             button: 'Memory',
@@ -4137,6 +4273,205 @@ test('prompt enhancer exposes pending and controlled provider failure states wit
     await expect(page.getByLabel('Message TALOS')).toHaveValue(prompt)
     await expect(page.getByText('Prompt enhancement preview', { exact: true })).toBeHidden()
     expect(chatRequests).toHaveLength(0)
+})
+
+test('dictation driver records browser audio from the mic immediately right of prompt enhancer', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-dictation-driver', 'Requires the dedicated Chromium fake microphone driver.')
+    await page.setViewportSize({ width: 1920, height: 1080 })
+
+    let capturedAudioBytes = 0
+    let capturedContentType = ''
+    let releaseTranscription!: () => void
+    const transcriptionGate = new Promise<void>((resolve) => { releaseTranscription = resolve })
+    const chatRequests: string[] = []
+    page.on('request', (request) => {
+        if (request.url().endsWith('/api/talos/chat') && request.method() === 'POST') chatRequests.push(request.url())
+    })
+
+    await page.route('**/api/talos/stt/transcribe', async (route) => {
+        const request = route.request()
+        const body = request.postDataBuffer()
+        capturedAudioBytes = body?.byteLength ?? 0
+        capturedContentType = request.headers()['content-type'] ?? ''
+        await transcriptionGate
+
+        await route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({
+                text: 'dettatura registrata dal driver',
+                language: 'it',
+                duration_ms: 750,
+            }),
+        })
+    })
+
+    await page.evaluate(() => window.localStorage.setItem('talos.dictation_mode', 'cloud'))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const enhancer = page.getByTestId('talos-composer-enhance')
+    const mic = page.getByTestId('talos-composer-dictate')
+    await expect(enhancer).toBeVisible()
+    await expect(mic).toBeVisible()
+    const composer = page.getByLabel('Message TALOS')
+    await composer.fill('Keyboard focus check.')
+    await expect(enhancer).toBeEnabled()
+
+    const [enhancerBox, micBox] = await Promise.all([enhancer.boundingBox(), mic.boundingBox()])
+    expect(enhancerBox).not.toBeNull()
+    expect(micBox).not.toBeNull()
+    expect(Math.abs((micBox?.y ?? 0) - (enhancerBox?.y ?? 0))).toBeLessThanOrEqual(2)
+    expect(micBox?.x ?? 0).toBeGreaterThanOrEqual((enhancerBox?.x ?? 0) + (enhancerBox?.width ?? 0))
+    expect((micBox?.x ?? 0) - ((enhancerBox?.x ?? 0) + (enhancerBox?.width ?? 0))).toBeLessThanOrEqual(8)
+
+    await enhancer.focus()
+    await expect(enhancer).toBeFocused()
+    await page.keyboard.press('Tab')
+    await expect(mic).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(mic).toHaveAttribute('data-dictation-status', 'recording')
+    const dictationStatus = page.getByTestId('talos-dictation-status')
+    const dictationAnnouncement = dictationStatus.getByTestId('talos-dictation-announcement')
+    await expect(dictationAnnouncement).toHaveAttribute('role', 'status')
+    await expect(dictationAnnouncement).toHaveText('Recording on this device')
+    await expect(dictationStatus).toContainText('Recording on this device')
+    await expect(dictationStatus).toContainText('00:01', { timeout: 3_000 })
+    await expect(dictationAnnouncement).toHaveText('Recording on this device')
+    const finishDictation = dictationStatus.getByRole('button', { name: 'Finish dictation' })
+    const cancelDictation = dictationStatus.getByRole('button', { name: 'Cancel dictation' })
+    await expect(finishDictation).toBeVisible()
+    await expect(cancelDictation).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+    const desktopRecordingPath = testInfo.outputPath('dictation-driver-desktop-recording-1920x1080.png')
+    await page.screenshot({ path: desktopRecordingPath, fullPage: true, animations: 'disabled' })
+    await testInfo.attach('dictation-driver-desktop-recording-1920x1080.png', {
+        path: desktopRecordingPath,
+        contentType: 'image/png',
+    })
+    await finishDictation.focus()
+    await page.keyboard.press('Tab')
+    await expect(cancelDictation).toBeFocused()
+    await page.keyboard.press('Shift+Tab')
+    await expect(finishDictation).toBeFocused()
+    await page.keyboard.press('Space')
+    await expect(dictationStatus).toContainText('Transcribing with cloud speech service')
+    releaseTranscription()
+
+    await expect(composer).toHaveValue('Keyboard focus check. dettatura registrata dal driver')
+    await expect(mic).toHaveAttribute('data-dictation-status', 'idle')
+    await expect(dictationStatus).toBeHidden()
+    expect(capturedContentType).toContain('multipart/form-data; boundary=')
+    expect(capturedAudioBytes).toBeGreaterThan(1_024)
+    expect(chatRequests).toHaveLength(0)
+
+    await testInfo.attach('dictation-driver-evidence.json', {
+        body: Buffer.from(JSON.stringify({ capturedAudioBytes, capturedContentType }, null, 2)),
+        contentType: 'application/json',
+    })
+    await testInfo.attach('dictation-driver-composer.png', {
+        body: await page.getByTestId('talos-composer-capability-row').screenshot(),
+        contentType: 'image/png',
+    })
+})
+
+test('dictation driver cancellation discards audio and preserves the existing prompt', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-dictation-driver', 'Requires the dedicated Chromium fake microphone driver.')
+    await page.setViewportSize({ width: 390, height: 844 })
+
+    let transcriptionRequests = 0
+    page.on('request', (request) => {
+        if (request.url().endsWith('/api/talos/stt/transcribe') && request.method() === 'POST') transcriptionRequests += 1
+    })
+
+    await page.evaluate(() => window.localStorage.setItem('talos.dictation_mode', 'cloud'))
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const prompt = 'Keep this typed prompt.'
+    const mic = page.getByTestId('talos-composer-dictate')
+    await page.getByLabel('Message TALOS').fill(prompt)
+    await mic.click()
+    await expect(mic).toHaveAttribute('data-dictation-status', 'recording')
+
+    const dictationStatus = page.getByTestId('talos-dictation-status')
+    const finishDictation = dictationStatus.getByRole('button', { name: 'Finish dictation' })
+    const cancelDictation = dictationStatus.getByRole('button', { name: 'Cancel dictation' })
+    await expect(finishDictation).toBeVisible()
+    await expect(cancelDictation).toBeVisible()
+    const [finishBox, cancelBox] = await Promise.all([finishDictation.boundingBox(), cancelDictation.boundingBox()])
+    expect(finishBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+    expect(cancelBox?.height ?? 0).toBeGreaterThanOrEqual(44)
+    await expectNoHorizontalOverflow(page)
+    const mobileRecordingPath = testInfo.outputPath('dictation-driver-mobile-recording-390x844.png')
+    await page.screenshot({ path: mobileRecordingPath, fullPage: true, animations: 'disabled' })
+    await testInfo.attach('dictation-driver-mobile-recording-390x844.png', {
+        path: mobileRecordingPath,
+        contentType: 'image/png',
+    })
+    await finishDictation.focus()
+    await page.keyboard.press('Tab')
+    await expect(cancelDictation).toBeFocused()
+    await page.keyboard.press('Enter')
+
+    await expect(mic).toHaveAttribute('data-dictation-status', 'idle')
+    await expect(dictationStatus).toBeHidden()
+    await expect(page.getByLabel('Message TALOS')).toHaveValue(prompt)
+    await page.waitForTimeout(250)
+    expect(transcriptionRequests).toBe(0)
+
+    await testInfo.attach('dictation-driver-cancelled.png', {
+        body: await page.getByTestId('talos-composer-capability-row').screenshot(),
+        contentType: 'image/png',
+    })
+})
+
+test('dictation permission denial is visible and retryable through the native browser boundary', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium-dictation-denied', 'Requires Chromium automatic native permission denial.')
+
+    await openWorkspace(page)
+    await page.evaluate(() => {
+        const mediaDevices = navigator.mediaDevices
+        const nativeGetUserMedia = mediaDevices.getUserMedia.bind(mediaDevices)
+        let nativeCalls = 0
+        mediaDevices.getUserMedia = (constraints) => {
+            nativeCalls += 1
+            return nativeGetUserMedia(constraints)
+        }
+        Object.defineProperty(window, '__talosNativeGetUserMediaCallCount', {
+            configurable: true,
+            value: () => nativeCalls,
+        })
+    })
+
+    const mic = page.getByTestId('talos-composer-dictate')
+    await expect(mic).toBeVisible()
+    await mic.click()
+
+    const permissionAlert = page.getByTestId('talos-dictation-status')
+    await expect(permissionAlert.getByRole('alert')).toBeVisible()
+    await expect(permissionAlert).toContainText('Check your browser site controls')
+    await expect(permissionAlert.getByRole('button', { name: 'Retry dictation' })).toBeVisible()
+    await expect(mic).toHaveAttribute('data-dictation-status', 'error')
+    await expect.poll(() => page.evaluate(() => (
+        window as typeof window & { __talosNativeGetUserMediaCallCount: () => number }
+    ).__talosNativeGetUserMediaCallCount())).toBe(1)
+
+    const retryDictation = permissionAlert.getByRole('button', { name: 'Retry dictation' })
+    await retryDictation.focus()
+    await page.keyboard.press('Enter')
+    await expect(mic).toHaveAttribute('data-dictation-status', 'error')
+    await expect(permissionAlert).toBeVisible()
+    await expect.poll(() => page.evaluate(() => (
+        window as typeof window & { __talosNativeGetUserMediaCallCount: () => number }
+    ).__talosNativeGetUserMediaCallCount())).toBe(2)
+
+    const permissionDeniedPath = testInfo.outputPath('dictation-permission-denied.png')
+    await page.screenshot({ path: permissionDeniedPath, fullPage: true, animations: 'disabled' })
+    await testInfo.attach('dictation-permission-denied.png', {
+        path: permissionDeniedPath,
+        contentType: 'image/png',
+    })
 })
 
 test('temporary chat mode creates an explicit temporary session before sending', async ({ page }, testInfo) => {
@@ -5199,7 +5534,7 @@ test('model profile deletion uses the theme dialog and keeps the API deletion be
     await expect(modelCenter.getByText('E2E server-side profile', { exact: true })).toHaveCount(0)
 })
 
-test('chat layout controls persist bubble scale, settings-owned composer density, and Advanced disclosure', async ({ page }) => {
+test('chat layout controls persist numeric message scale, settings-owned composer density, and Advanced disclosure', async ({ page }) => {
     await openWorkspace(page)
     const settingsRequests: Record<string, unknown>[] = []
     page.on('request', (request) => {
@@ -5209,12 +5544,12 @@ test('chat layout controls persist bubble scale, settings-owned composer density
     })
 
     await page.getByRole('button', { name: 'Increase message size' }).click()
-    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Expanded')
+    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('105%')
     await expandAdvancedRail(page)
     await expect(page.getByRole('button', { name: 'Tasks', exact: true })).toBeVisible()
     await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
-    await page.getByLabel('Chat composer mode', { exact: true }).selectOption('minimal')
+    await selectThemedOption(page, 'Chat composer mode', 'minimal')
     await page.getByRole('button', { name: 'Save settings' }).click()
     await expectComposerMode(page, 'minimal')
 
@@ -5222,7 +5557,9 @@ test('chat layout controls persist bubble scale, settings-owned composer density
         if (!hasSettingsExpectedRevision(request)) return false
         const layout = (request.preferences as Record<string, unknown> | undefined)?.chat_layout as Record<string, unknown> | undefined
 
-        return layout?.bubble_scale === 'expanded' && layout?.composer_mode === 'minimal'
+        return layout?.message_scale === 1.05
+            && !Object.prototype.hasOwnProperty.call(layout ?? {}, 'bubble_scale')
+            && layout?.composer_mode === 'minimal'
     })).toBe(true)
     await expect.poll(() => settingsRequests.some((request) => {
         if (!hasSettingsExpectedRevision(request)) return false
@@ -5232,7 +5569,7 @@ test('chat layout controls persist bubble scale, settings-owned composer density
     })).toBe(true)
 })
 
-test('composer exposes every real capability on desktop and mobile', async ({ page, isMobile }) => {
+test('composer exposes every real capability on desktop and mobile', async ({ page }) => {
     await openWorkspace(page)
 
     for (const accessibleName of [
@@ -5251,12 +5588,9 @@ test('composer exposes every real capability on desktop and mobile', async ({ pa
         'talos-composer-context-label',
         'talos-composer-browse-label',
     ]) {
-        const label = page.getByTestId(testId)
-        if (isMobile) {
-            await expect(label).toBeHidden()
-        } else {
-            await expect(label).toBeVisible()
-        }
+        // Icon-only is now the default composer mode, so the text labels stay
+        // hidden on every breakpoint until the operator opts into the full composer.
+        await expect(page.getByTestId(testId)).toBeHidden()
     }
 
     await expect(page.getByRole('button', { name: 'Use minimal composer' })).toHaveCount(0)
@@ -5290,8 +5624,9 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
 
     await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
-    await page.getByLabel('Chat message size').selectOption('compact')
-    await page.getByLabel('Chat composer mode').selectOption('minimal')
+    await setScaleValue(page.locator('[data-window-id="settings"]'), 'Message scale', 0.75)
+    await selectThemedOption(page, 'Chat composer mode', 'minimal')
+    await selectThemedOption(page, 'Message style', 'bubbles')
     await page.getByRole('switch', { name: 'Expand Advanced by default' }).click()
     await page.getByRole('button', { name: 'Save settings' }).click()
 
@@ -5299,29 +5634,268 @@ test('Appearance and Theme Engine share the persisted chat layout contract', asy
         if (!hasSettingsExpectedRevision(request)) return false
         const preferences = request.preferences as Record<string, unknown> | undefined
         const layout = preferences?.chat_layout as Record<string, unknown> | undefined
-        return layout?.bubble_scale === 'compact'
+        return layout?.message_scale === 0.75
+            && !Object.prototype.hasOwnProperty.call(layout ?? {}, 'bubble_scale')
             && layout?.composer_mode === 'minimal'
+            && layout?.message_style === 'bubbles'
             && layout?.advanced_rail_expanded === true
     })).toBe(true)
-    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Compact')
+    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('75%')
     await expectComposerMode(page, 'minimal')
 
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
-    await page.getByLabel('Theme chat message size').selectOption('expanded')
-    await page.getByLabel('Theme chat composer mode').selectOption('full')
+    await setScaleValue(page.locator('[data-window-id="theme"]'), 'Message scale', 1.4)
+    await selectThemedOption(page, 'Theme chat composer mode', 'full')
     await page.getByRole('button', { name: 'Save customization' }).click()
 
     await expect.poll(() => settingsRequests.some((request) => {
         if (!hasSettingsExpectedRevision(request)) return false
         const preferences = request.preferences as Record<string, unknown> | undefined
         const layout = preferences?.chat_layout as Record<string, unknown> | undefined
-        return layout?.bubble_scale === 'expanded'
+        return layout?.message_scale === 1.4
+            && !Object.prototype.hasOwnProperty.call(layout ?? {}, 'bubble_scale')
             && layout?.composer_mode === 'full'
             && layout?.advanced_rail_expanded === true
     })).toBe(true)
-    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Expanded')
+    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('140%')
     await expectComposerMode(page, 'full')
+})
+
+test('numeric scales retain an existing theme across extrema and reload without clipping', async ({ page }, testInfo) => {
+    const settingsLedger = await installTalosApiMocks(page, {
+        initialSettings: {
+            preferences: {
+                theme: 'claudius',
+                ui_scale: 1,
+                chat_layout: {
+                    message_scale: 1,
+                    composer_mode: 'full',
+                    message_style: 'sections',
+                    advanced_rail_expanded: false,
+                    mobile_window_presentation: 'drawer',
+                },
+            },
+        },
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const workspace = page.getByTestId('talos-workspace')
+    await expect(workspace).toHaveAttribute('data-theme-preset', 'claudius')
+
+    await clickRailStation(page, 'Settings')
+    await page.getByRole('tab', { name: 'Appearance' }).click()
+    const settingsSurface = page.locator('[data-window-id="settings"]')
+    const uiScaleInput = settingsSurface.getByLabel('Interface scale value', { exact: true })
+    const messageScaleInput = settingsSurface.getByLabel('Message scale value', { exact: true })
+
+    await expect(uiScaleInput).toHaveAttribute('min', '0.8')
+    await expect(uiScaleInput).toHaveAttribute('max', '1.3')
+    await expect(uiScaleInput).toHaveAttribute('step', '0.05')
+    await expect(messageScaleInput).toHaveAttribute('min', '0.75')
+    await expect(messageScaleInput).toHaveAttribute('max', '1.4')
+    await expect(messageScaleInput).toHaveAttribute('step', '0.05')
+
+    await setScaleValue(settingsSurface, 'Interface scale', 1.3)
+    await setScaleValue(settingsSurface, 'Message scale', 1.4)
+    const maximumAck = settingsLedger.waitForAck({ key: 'ui_scale' })
+    await settingsSurface.getByRole('button', { name: 'Save settings', exact: true }).click()
+    const maximumEntry = await maximumAck
+    const maximumPatch = maximumEntry.request.payload
+    const maximumPreferences = maximumPatch.preferences as Record<string, unknown>
+    const maximumLayout = maximumPreferences.chat_layout as Record<string, unknown>
+
+    expect(maximumPreferences.ui_scale).toBe(1.3)
+    expect(maximumLayout.message_scale).toBe(1.4)
+    expect(maximumLayout).not.toHaveProperty('bubble_scale')
+    await expect.poll(() => workspace.evaluate((element) => ({
+        theme: element.getAttribute('data-theme-preset'),
+        uiScale: (element as HTMLElement).style.getPropertyValue('--talos-ui-scale'),
+        messageScale: (element as HTMLElement).style.getPropertyValue('--talos-message-scale'),
+    }))).toEqual({
+        theme: 'claudius',
+        uiScale: '1.3',
+        messageScale: '1.4',
+    })
+    await expectNoHorizontalOverflow(page)
+    await expectSurfaceWithinViewport(page, settingsSurface, 'Settings at maximum scale')
+    await testInfo.attach(`p1-scale-maximum-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+
+    await closeSettingsSurface(page)
+    await expectSurfaceWithinViewport(page, page.locator('.talos-chat-composer-shell'), 'Composer at maximum scale')
+    await expectNoHorizontalOverflow(page)
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    await expect(workspace).toHaveAttribute('data-theme-preset', 'claudius')
+    await expect.poll(() => workspace.evaluate((element) => ({
+        uiScale: (element as HTMLElement).style.getPropertyValue('--talos-ui-scale'),
+        messageScale: (element as HTMLElement).style.getPropertyValue('--talos-message-scale'),
+    }))).toEqual({
+        uiScale: '1.3',
+        messageScale: '1.4',
+    })
+
+    await clickRailStation(page, 'Settings')
+    await page.getByRole('tab', { name: 'Appearance' }).click()
+    await expect(uiScaleInput).toHaveValue('1.3')
+    await expect(messageScaleInput).toHaveValue('1.4')
+    await setScaleValue(settingsSurface, 'Interface scale', 0.8)
+    await setScaleValue(settingsSurface, 'Message scale', 0.75)
+    const minimumAck = settingsLedger.waitForAck({
+        key: 'ui_scale',
+        revision: maximumEntry.revision + 1,
+    })
+    await settingsSurface.getByRole('button', { name: 'Save settings', exact: true }).click()
+    const minimumPatch = (await minimumAck).request.payload
+    const minimumPreferences = minimumPatch.preferences as Record<string, unknown>
+    const minimumLayout = minimumPreferences.chat_layout as Record<string, unknown>
+
+    expect(minimumPreferences.ui_scale).toBe(0.8)
+    expect(minimumLayout.message_scale).toBe(0.75)
+    expect(minimumLayout).not.toHaveProperty('bubble_scale')
+    await expect.poll(() => workspace.evaluate((element) => ({
+        theme: element.getAttribute('data-theme-preset'),
+        uiScale: (element as HTMLElement).style.getPropertyValue('--talos-ui-scale'),
+        messageScale: (element as HTMLElement).style.getPropertyValue('--talos-message-scale'),
+    }))).toEqual({
+        theme: 'claudius',
+        uiScale: '0.8',
+        messageScale: '0.75',
+    })
+    await expectNoHorizontalOverflow(page)
+    await expectSurfaceWithinViewport(page, settingsSurface, 'Settings at minimum scale')
+    await testInfo.attach(`p1-scale-minimum-${testInfo.project.name}.png`, {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+
+    await closeSettingsSurface(page)
+    await expectSurfaceWithinViewport(page, page.locator('.talos-chat-composer-shell'), 'Composer at minimum scale')
+    await expectNoHorizontalOverflow(page)
+})
+
+test('desktop message-style sections persist visually at the full chat-container width', async ({ page, isMobile }, testInfo) => {
+    test.skip(Boolean(isMobile), 'desktop width regression is covered at an exact 1920x1080 viewport')
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await installTalosApiMocks(page, {
+        initialSessions: [{
+            id: 'session-message-style-width-e2e',
+            title: 'Desktop message width',
+            messages: [
+                {
+                    role: 'user',
+                    content: 'Verify that desktop assistant sections use the complete chat container.',
+                    metadata: { source: 'e2e-source' },
+                },
+                {
+                    role: 'assistant',
+                    content: 'This answer is intentionally concise so its surface width comes from layout, not intrinsic content.',
+                    metadata: { source: 'talos_chat_proxy' },
+                },
+            ],
+        }],
+        initialSettings: {
+            preferences: {
+                chat_layout: {
+                    message_scale: 1,
+                    composer_mode: 'minimal',
+                    message_style: 'sections',
+                    advanced_rail_expanded: false,
+                    mobile_window_presentation: 'drawer',
+                },
+                appearance_visibility: {
+                    chat_area: { full_width_chat: true },
+                },
+            },
+        },
+    })
+    await page.goto('/', { waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+
+    const openSession = page.getByRole('button', { name: 'Open chat Desktop message width', exact: true })
+    await openSession.click()
+    const assistant = page.locator('[data-message-role="assistant"] > .talos-message-bubble[data-message-kind="assistant"]').filter({
+        hasText: 'This answer is intentionally concise',
+    }).first()
+    await expect(assistant).toBeVisible()
+
+    const geometry = async () => assistant.evaluate((element) => {
+        const surface = element.getBoundingClientRect()
+        const parent = element.parentElement?.getBoundingClientRect()
+        const computed = window.getComputedStyle(element)
+
+        return {
+            surfaceWidth: surface.width,
+            parentWidth: parent?.width ?? 0,
+            rightGap: parent ? parent.right - surface.right : Number.POSITIVE_INFINITY,
+            maxWidth: computed.maxWidth,
+            messageStyle: element.getAttribute('data-message-style'),
+            viewport: { width: window.innerWidth, height: window.innerHeight },
+        }
+    })
+
+    const initialSectionsGeometry = await geometry()
+    await testInfo.attach('message-style-sections-initial-1920x1080.png', {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+    expect(initialSectionsGeometry.parentWidth, JSON.stringify(initialSectionsGeometry)).toBeGreaterThan(900)
+    expect(initialSectionsGeometry.rightGap, JSON.stringify(initialSectionsGeometry)).toBeLessThanOrEqual(1)
+    expect(initialSectionsGeometry.maxWidth).toBe('none')
+
+    await clickRailStation(page, 'Settings')
+    await page.getByRole('tab', { name: 'Appearance' }).click()
+    await selectThemedOption(page, 'Message style', 'bubbles')
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await expect(page.getByText('Settings saved through /api/talos/settings.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Unknown chat layout key.', { exact: false })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Close Settings', exact: true }).click()
+
+    await expect(assistant).toHaveAttribute('data-message-style', 'bubbles')
+    const bubblesGeometry = await geometry()
+    expect(bubblesGeometry.surfaceWidth, JSON.stringify(bubblesGeometry)).toBeLessThan(bubblesGeometry.parentWidth - 100)
+    await testInfo.attach('message-style-bubbles-1920x1080.png', {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+
+    await clickRailStation(page, 'Settings')
+    await page.getByRole('tab', { name: 'Appearance' }).click()
+    await selectThemedOption(page, 'Message style', 'sections')
+    await page.getByRole('button', { name: 'Save settings' }).click()
+    await expect(page.getByText('Settings saved through /api/talos/settings.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Unknown chat layout key.', { exact: false })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Close Settings', exact: true }).click()
+
+    await expect(assistant).toHaveAttribute('data-message-style', 'sections')
+    const sectionsGeometry = await geometry()
+    expect(sectionsGeometry.rightGap, JSON.stringify(sectionsGeometry)).toBeLessThanOrEqual(1)
+    expect(sectionsGeometry.maxWidth).toBe('none')
+    await testInfo.attach('message-style-sections-1920x1080.png', {
+        body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+        contentType: 'image/png',
+    })
+    await testInfo.attach('message-style-geometry-1920x1080.json', {
+        body: Buffer.from(JSON.stringify({ initialSectionsGeometry, bubblesGeometry, sectionsGeometry }, null, 2)),
+        contentType: 'application/json',
+    })
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await waitForWorkspaceReady(page)
+    const reloadedOpenSession = page.getByRole('button', { name: 'Open chat Desktop message width', exact: true })
+    if (await reloadedOpenSession.isVisible().catch(() => false)) {
+        await reloadedOpenSession.click()
+    }
+    await expect(assistant).toHaveAttribute('data-message-style', 'sections')
+    const reloadedGeometry = await geometry()
+    expect(reloadedGeometry.rightGap, JSON.stringify(reloadedGeometry)).toBeLessThanOrEqual(1)
+    expect(reloadedGeometry.maxWidth).toBe('none')
+    await expect(page.getByText('Unknown chat layout key.', { exact: false })).toHaveCount(0)
 })
 
 test('Settings opens Doctor directly on the Backup section', async ({ page, isMobile }) => {
@@ -5341,8 +5915,8 @@ test('named theme chat layout overrides current layout and reset returns to pres
     await openWorkspace(page)
     await clickRailStation(page, 'Theme')
     await page.getByRole('tab', { name: 'Customize' }).click()
-    await page.getByLabel('Theme chat message size').selectOption('expanded')
-    await page.getByLabel('Theme chat composer mode').selectOption('minimal')
+    await setScaleValue(page.locator('[data-window-id="theme"]'), 'Message scale', 1.4)
+    await selectThemedOption(page, 'Theme chat composer mode', 'minimal')
     await page.getByLabel('Theme name').fill('E2E layout theme')
 
     const createRequest = page.waitForRequest((request) => {
@@ -5352,7 +5926,9 @@ test('named theme chat layout overrides current layout and reset returns to pres
         const preferences = body.preferences as Record<string, unknown> | undefined
         const library = preferences?.theme_library as Array<Record<string, unknown>> | undefined
         const layout = library?.at(-1)?.chat_layout as Record<string, unknown> | undefined
-        return layout?.bubble_scale === 'expanded' && layout?.composer_mode === 'minimal'
+        return layout?.message_scale === 1.4
+            && !Object.prototype.hasOwnProperty.call(layout ?? {}, 'bubble_scale')
+            && layout?.composer_mode === 'minimal'
     })
     await page.getByRole('button', { name: 'Create theme' }).click()
     await createRequest
@@ -5360,14 +5936,14 @@ test('named theme chat layout overrides current layout and reset returns to pres
 
     await clickRailStation(page, 'Settings')
     await page.getByRole('tab', { name: 'Appearance' }).click()
-    await page.getByLabel('Chat message size', { exact: true }).selectOption('compact')
-    await page.getByLabel('Chat composer mode', { exact: true }).selectOption('full')
+    await setScaleValue(page.locator('[data-window-id="settings"]'), 'Message scale', 0.75)
+    await selectThemedOption(page, 'Chat composer mode', 'full')
     await page.getByRole('button', { name: 'Save settings' }).click()
-    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Compact')
+    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('75%')
 
     await page.reload({ waitUntil: 'domcontentloaded' })
     await waitForWorkspaceReady(page)
-    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Compact')
+    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('75%')
     await expectComposerMode(page, 'full')
 
     await clickRailStation(page, 'Theme')
@@ -5379,14 +5955,15 @@ test('named theme chat layout overrides current layout and reset returns to pres
     const appliedPreferences = settingsPatchBody(await applyRequest).preferences as Record<string, unknown>
     expect(appliedPreferences.active_custom_theme_id).not.toBeNull()
     expect(appliedPreferences.chat_layout).toMatchObject({
-        bubble_scale: 'expanded',
+        message_scale: 1.4,
         composer_mode: 'minimal',
     })
-    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Expanded')
+    expect(appliedPreferences.chat_layout).not.toHaveProperty('bubble_scale')
+    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('140%')
     await expectComposerMode(page, 'minimal')
 
     await page.getByRole('tab', { name: 'Customize' }).click()
     await page.getByRole('button', { name: 'Reset to preset' }).click()
-    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('Balanced')
+    await expect(page.locator('[data-testid="talos-message-scale-status"]')).toContainText('100%')
     await expectComposerMode(page, 'full')
 })

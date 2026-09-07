@@ -22,6 +22,7 @@ use App\Services\Talos\Browser\BrowserToolResult;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\TalosBrowserArtifactStore;
 use App\Services\Talos\Browser\TalosBrowserFileUploadService;
+use App\Services\Talos\Browser\TalosBrowserSnapshotEvidence;
 use App\Services\Talos\Browser\TalosBrowserTaskRuntime;
 use App\Services\Talos\FileAuthority\TalosFileAuthorityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -352,6 +353,29 @@ final class TalosBrowserFileUploadTest extends TestCase
         self::assertSame('browser_file_upload', $result->structuredContent['tool']);
         self::assertSame(['screenshot', 'snapshot'], array_column($result->evidence, 'kind'));
         self::assertCount(2, $context['run']->artifacts()->whereIn('artifact_type', ['browser_screenshot', 'browser_snapshot'])->get());
+        $snapshotArtifact = TalosBrowserArtifact::query()
+            ->where('browser_session_id', $context['browser']->id)
+            ->where('type', 'snapshot')
+            ->where('source_command_id', $context['call']->provider_call_id)
+            ->firstOrFail();
+        $snapshotPayload = json_decode(
+            Storage::disk($snapshotArtifact->storage_disk)->get($snapshotArtifact->storage_path),
+            true,
+            32,
+            JSON_THROW_ON_ERROR,
+        );
+        self::assertIsArray($snapshotPayload);
+        $snapshotEvidence = collect($snapshotArtifact->metadata['worker_evidence'] ?? [])->firstWhere('kind', 'snapshot');
+        self::assertIsArray($snapshotEvidence);
+        self::assertSame(
+            TalosBrowserSnapshotEvidence::sha256(
+                snapshotId: (string) ($snapshotPayload['snapshotId'] ?? ''),
+                format: (string) ($snapshotPayload['format'] ?? ''),
+                textDigest: (string) ($snapshotPayload['textDigest'] ?? ''),
+                nodes: is_array($snapshotPayload['nodes'] ?? null) ? $snapshotPayload['nodes'] : [],
+            ),
+            $snapshotEvidence['sha256'] ?? null,
+        );
         self::assertStringNotContainsString('vault/private/proof.txt', json_encode($result->toWireArray(), JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
     }
 
@@ -551,9 +575,13 @@ final class TalosBrowserFileUploadTest extends TestCase
             'text_digest' => 'Selected proof.txt',
             'nodes' => [['ref' => 'r4', 'role' => 'button', 'name' => 'proof.txt', 'visible' => true]],
         ];
-        $snapshotJson = json_encode($snapshot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
         $screenshotHash = 'sha256:'.hash('sha256', $png);
-        $snapshotHash = 'sha256:'.hash('sha256', $snapshotJson);
+        $snapshotHash = TalosBrowserSnapshotEvidence::sha256(
+            snapshotId: $snapshot['snapshot_id'],
+            format: $snapshot['format'],
+            textDigest: $snapshot['text_digest'],
+            nodes: $snapshot['nodes'],
+        );
         $evidence = [
             ['artifact_id' => 'shot-upload-1', 'kind' => 'screenshot', 'sha256' => $screenshotHash, 'trusted_boundary' => 'untrusted_browser_content'],
             ['artifact_id' => 'snap-upload-1', 'kind' => 'snapshot', 'sha256' => $snapshotHash, 'trusted_boundary' => 'untrusted_browser_content'],

@@ -2,12 +2,14 @@ import { lookup } from "node:dns/promises";
 import { createConnection, createServer, type Server, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { BrowserError } from "./BrowserErrors.js";
+import { BrowserTestFixturePermit } from "./BrowserTestFixturePermit.js";
 import { isPrivateOrReservedIp, isReservedHostname, normalizeHostname } from "./BrowserUrlPolicy.js";
 
 export interface BrowserEgressProxyOptions {
   resolve?: (hostname: string) => Promise<string[]>;
   connect?: (address: string, port: number) => Promise<Duplex>;
   headerTimeoutMs?: number;
+  fixturePermit?: BrowserTestFixturePermit;
 }
 
 const HTTP_PORT = 80;
@@ -20,6 +22,7 @@ export class BrowserEgressProxy {
   private readonly resolveHost: (hostname: string) => Promise<string[]>;
   private readonly connectSocket: (address: string, port: number) => Promise<Duplex>;
   private readonly headerTimeoutMs: number;
+  private readonly fixturePermit: BrowserTestFixturePermit;
   private readonly sockets = new Set<Duplex>();
   private server?: Server;
   private port?: number;
@@ -39,6 +42,7 @@ export class BrowserEgressProxy {
       socket.once("error", reject);
     }));
     this.headerTimeoutMs = boundedHeaderTimeout(options.headerTimeoutMs);
+    this.fixturePermit = options.fixturePermit ?? BrowserTestFixturePermit.disabled();
   }
 
   get serverUrl(): string {
@@ -71,7 +75,8 @@ export class BrowserEgressProxy {
     return this.closePromise;
   }
 
-  async resolveVettedAddress(hostname: string): Promise<string> {
+  async resolveVettedAddress(hostname: string, port?: number): Promise<string> {
+    if (port !== undefined && this.fixturePermit.allows(hostname, port)) return "127.0.0.1";
     const normalizedHostname = normalizeHostname(hostname);
     if (normalizedHostname === "") {
       throw new BrowserError("Proxy target hostname is invalid.", "TALOS_BROWSER_PROXY_PRIVATE_TARGET", 403);
@@ -92,8 +97,8 @@ export class BrowserEgressProxy {
   }
 
   async connectVettedAddress(hostname: string, port: number): Promise<Duplex> {
-    assertEgressPort(port);
-    return this.connectSocket(await this.resolveVettedAddress(hostname), port);
+    if (!this.fixturePermit.allows(hostname, port)) assertEgressPort(port);
+    return this.connectSocket(await this.resolveVettedAddress(hostname, port), port);
   }
 
   private async handleSocket(socket: Socket): Promise<void> {
@@ -178,7 +183,11 @@ export class BrowserEgressProxy {
       const url = new URL(target);
       if (url.username || url.password || !url.hostname) throw badRequest();
       const port = Number(url.port || HTTP_PORT);
-      assertEgressPort(port, HTTP_PORT);
+      const exactHttpFixture = this.fixturePermit.allowsUrl(target);
+      if (this.fixturePermit.allows(url.hostname, port) && !exactHttpFixture) {
+        throw new BrowserError("Proxy fixture target authority is invalid.", "TALOS_BROWSER_PROXY_PRIVATE_TARGET", 403);
+      }
+      assertEgressPort(port, HTTP_PORT, exactHttpFixture);
       const upstream = await this.connectVettedAddress(url.hostname, port);
       if (!this.trackSocket(upstream) || this.shuttingDown || socket.destroyed) {
         upstream.destroy();
@@ -230,11 +239,15 @@ function parsePort(value: string): number {
   return port;
 }
 
-function assertEgressPort(port: number, expected?: number): void {
-  if (port !== HTTP_PORT && port !== HTTPS_PORT) {
+function assertEgressPort(
+  port: number,
+  expected?: number,
+  exactHttpFixture = false,
+): void {
+  if (port !== HTTP_PORT && port !== HTTPS_PORT && !exactHttpFixture) {
     throw new BrowserError("Proxy egress port is not allowed.", "TALOS_BROWSER_PROXY_PORT_DENIED", 403);
   }
-  if (expected !== undefined && port !== expected) {
+  if (expected !== undefined && port !== expected && !exactHttpFixture) {
     throw new BrowserError("Proxy egress port is not allowed for this protocol.", "TALOS_BROWSER_PROXY_PORT_DENIED", 403);
   }
 }

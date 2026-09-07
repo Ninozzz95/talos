@@ -24,4 +24,4 @@ export type ThemeCustomizationForm = {
 
 export type AreaTokenForm = Record<TalosThemeAreaTokenKey, string>
 
-export type ThemeLayoutPreview = Pick<TalosChatLayoutPreferences, 'bubble_scale' | 'composer_mode'>
+export type ThemeLayoutPreview = Pick<TalosChatLayoutPreferences, 'message_scale' | 'composer_mode'>

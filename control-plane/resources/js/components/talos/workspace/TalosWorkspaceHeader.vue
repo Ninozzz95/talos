@@ -3,7 +3,6 @@ import { Command, Download, Menu, UserRound } from '@lucide/vue'
 import Badge from '../../ui/Badge.vue'
 import Button from '../../ui/Button.vue'
 import Tooltip from '../../ui/Tooltip.vue'
-import type { TalosChatBubbleScale } from '../../../lib/talosTypes'
 import TalosMessageScaleControls from './TalosMessageScaleControls.vue'
 
 const props = defineProps<{
@@ -16,8 +15,7 @@ const props = defineProps<{
     loginUrl: string
     logoutUrl: string
     csrfToken: string
-    bubbleScale: TalosChatBubbleScale
-    bubbleScaleLabel: string
+    messageScale: number
     chatLayoutLocked: boolean
     navigationOpen?: boolean
 }>()
@@ -50,8 +48,7 @@ const emit = defineEmits<{
         </div>
         <div class="flex shrink-0 items-center gap-1 sm:gap-2">
             <TalosMessageScaleControls
-                :bubble-scale="bubbleScale"
-                :label="bubbleScaleLabel"
+                :message-scale="messageScale"
                 :locked="chatLayoutLocked"
                 @decrease="emit('decreaseMessageScale')"
                 @increase="emit('increaseMessageScale')"

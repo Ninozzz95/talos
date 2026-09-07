@@ -23,5 +23,6 @@ defineProps<{ context: TalosWindowModuleContext }>()
         @change-theme="context.changeTheme"
         @open-module="context.openModule"
         @saved="context.settingsSaved"
+        @replay-intro="context.replayIntro"
     />
 </template>

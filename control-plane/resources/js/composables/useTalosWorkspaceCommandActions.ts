@@ -1,4 +1,5 @@
 import { nextTick, ref, type Readonly, type Ref } from 'vue'
+import { useTalosToast } from './useTalosToast'
 import { TALOS_WORKSPACE_COMMAND_TARGETS, TALOS_WORKSPACE_WINDOW_IDS, type TalosWorkspaceCommandRoute } from '../lib/talosWorkspaceCommandRoutes'
 import type { TalosCommand } from '../lib/talosTypes'
 import type { TalosWindowId } from '../lib/talosWindowRegistry'
@@ -28,7 +29,7 @@ function isWindowId(value: string): value is TalosWindowId {
 
 export function useTalosWorkspaceCommandActions(deps: TalosWorkspaceCommandActionDependencies) {
     const commandPaletteOpen = ref(false)
-    const commandFeedback = ref('')
+    const talosToast = useTalosToast()
     const modelPopoverOpen = ref(false)
     const contextPopoverOpen = ref(false)
     const runtimeRequestedTab = ref<NonNullable<TalosWorkspaceCommandRoute['runtimeTab']>>('timeline')
@@ -39,7 +40,7 @@ export function useTalosWorkspaceCommandActions(deps: TalosWorkspaceCommandActio
     const requestedWindowSectionRevision = ref(0)
 
     function setFeedback(message: string) {
-        commandFeedback.value = message
+        talosToast.info(message, { id: 'command-feedback' })
     }
 
     function openSettings(tab: 'models' | 'account' = 'models', event?: WindowEvent) {
@@ -84,7 +85,7 @@ export function useTalosWorkspaceCommandActions(deps: TalosWorkspaceCommandActio
             runtimeRequestedTabRevision.value += 1
         }
         if (route.windowSection) {
-            requestedWindowSections.value = { ...requestedWindowSections.value, [route.windowId]: route.windowSection }
+            requestedWindowSections.value = { [route.windowId]: route.windowSection }
             requestedWindowSectionRevision.value += 1
         }
         deps.openWindowFromSource(route.windowId, undefined, 'command')
@@ -162,7 +163,6 @@ export function useTalosWorkspaceCommandActions(deps: TalosWorkspaceCommandActio
 
     return {
         commandPaletteOpen,
-        commandFeedback,
         setFeedback,
         modelPopoverOpen,
         contextPopoverOpen,

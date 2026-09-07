@@ -34,11 +34,17 @@ final class TalosBrowserSessionClientContractTest extends TestCase
         $this->assertTrue(method_exists(BrowserSessionClient::class, 'handshake'));
         $this->assertTrue(method_exists(BrowserSessionClient::class, 'preflightPointer'));
         $this->assertTrue(method_exists(BrowserSessionClient::class, 'executePointer'));
+        $this->assertTrue(method_exists(BrowserSessionClient::class, 'refTargets'));
+        $this->assertTrue(method_exists(BrowserSessionClient::class, 'preflightRef'));
+        $this->assertTrue(method_exists(BrowserSessionClient::class, 'executeRef'));
         $this->assertTrue(method_exists(BrowserSessionClient::class, 'stageFile'));
         $this->assertTrue(method_exists(BrowserSessionClient::class, 'discardStagedFile'));
         $this->assertTrue(method_exists(BrowserSessionClient::class, 'cancel'));
         $this->assertSame(BrowserSessionClient::class, (new \ReflectionMethod(BrowserSessionClient::class, 'preflightPointer'))->getDeclaringClass()->getName());
         $this->assertSame(BrowserSessionClient::class, (new \ReflectionMethod(BrowserSessionClient::class, 'executePointer'))->getDeclaringClass()->getName());
+        $this->assertSame(BrowserSessionClient::class, (new \ReflectionMethod(BrowserSessionClient::class, 'refTargets'))->getDeclaringClass()->getName());
+        $this->assertSame(BrowserSessionClient::class, (new \ReflectionMethod(BrowserSessionClient::class, 'preflightRef'))->getDeclaringClass()->getName());
+        $this->assertSame(BrowserSessionClient::class, (new \ReflectionMethod(BrowserSessionClient::class, 'executeRef'))->getDeclaringClass()->getName());
     }
 
     public function test_http_client_negotiates_the_worker_handshake_before_session_creation(): void
@@ -869,6 +875,261 @@ final class TalosBrowserSessionClientContractTest extends TestCase
             && preg_match('/^Bearer [^.]+\.[^.]+\.[^.]+$/D', $request->header('Authorization')[0] ?? '') === 1);
     }
 
+    public function test_http_client_uses_versioned_hmi_ref_routes_and_exact_action_capability(): void
+    {
+        $frameSha256 = 'sha256:'.str_repeat('c', 64);
+        $snapshotId = 'hmi_ref_'.str_repeat('d', 64);
+        Http::fake(function ($request) use ($frameSha256, $snapshotId) {
+            $path = (string) parse_url($request->url(), PHP_URL_PATH);
+            if (str_ends_with($path, '/hmi/ref/targets')) {
+                return Http::response(['data' => [
+                    'schema_version' => 'talos_browser_hmi_ref_targets_v2',
+                    'session_id' => 'worker-1',
+                    'state_version' => 4,
+                    'frame_sha256' => $frameSha256,
+                    'snapshot_id' => $snapshotId,
+                    'targets' => [[
+                        'ref' => 'e1',
+                        'role' => 'button',
+                        'name' => 'Close',
+                        'destination' => null,
+                    ]],
+                ]]);
+            }
+            if (str_ends_with($path, '/hmi/ref/preflight')) {
+                return Http::response(['data' => [
+                    'schema_version' => 'talos_browser_hmi_ref_preflight_v2',
+                    'interaction_id' => self::HMI_INTERACTION_ID,
+                    'session_id' => 'worker-1',
+                    'state_version' => 4,
+                    'frame_sha256' => $frameSha256,
+                    'snapshot_id' => $snapshotId,
+                    'ref' => 'e1',
+                    'origin' => 'https://example.com',
+                    'point' => ['normalized_x' => 0.25, 'normalized_y' => 0.5, 'x' => 320, 'y' => 400],
+                    'target' => [
+                        'tag' => 'button', 'role' => 'button', 'name' => 'Close',
+                        'input_type' => null, 'href' => null, 'form_method' => null,
+                        'is_editable' => false, 'is_submit' => false, 'is_download' => false,
+                        'opens_new_context' => false, 'visible' => true, 'disabled' => false,
+                        'effect_attestation' => 'browser_default', 'required_effect_classification' => 'ordinary',
+                        'fingerprint' => 'sha256:'.str_repeat('a', 64),
+                    ],
+                ]]);
+            }
+
+            return Http::response(['data' => [
+                'schema_version' => 'talos_browser_hmi_result_v2',
+                'capture_id' => 'cap_00000000-0000-4000-8000-000000000001',
+                'interaction_id' => self::HMI_INTERACTION_ID,
+                'command_id' => 'hmi-ref-contract-1',
+                'session_id' => 'worker-1',
+                'source_state_version' => 4,
+                'state_version' => 5,
+                'frame_sha256' => $frameSha256,
+                'url' => 'https://example.com',
+                'title' => 'Example',
+                'effect_classification' => 'ordinary',
+                'sensitive_effect_authorized' => false,
+                'target' => [
+                    'tag' => 'button', 'role' => 'button', 'name' => 'Close',
+                    'input_type' => null, 'href' => null, 'form_method' => null,
+                    'is_editable' => false, 'is_submit' => false, 'is_download' => false,
+                    'opens_new_context' => false, 'visible' => true, 'disabled' => false,
+                    'effect_attestation' => 'browser_default', 'required_effect_classification' => 'ordinary',
+                    'fingerprint' => 'sha256:'.str_repeat('a', 64),
+                ],
+                'screenshot' => [
+                    'mime_type' => 'image/png', 'width' => 1280, 'height' => 800,
+                    'sha256' => 'sha256:'.hash('sha256', 'png'), 'base64' => base64_encode('png'),
+                ],
+                'snapshot' => [
+                    'snapshot_id' => 'snap-contract-1', 'format' => 'accessibility_refs_v1',
+                    'text_digest' => '', 'sha256' => 'sha256:'.str_repeat('e', 64), 'nodes' => [],
+                ],
+                'captured_at' => now()->toJSON(),
+            ]]);
+        });
+        $client = new HttpBrowserSessionClient(
+            'http://browser-worker.test',
+            'worker-token',
+            15,
+            $this->actionCapabilityIssuer(),
+        );
+
+        $targets = $client->refTargets('owner-1', 'worker-1', 4, $frameSha256);
+        $preflightPayload = [
+            'schema_version' => 'talos_browser_hmi_ref_v2',
+            'interaction_id' => self::HMI_INTERACTION_ID,
+            'state_version' => 4,
+            'expected_frame_sha256' => $frameSha256,
+            'snapshot_id' => $snapshotId,
+            'ref' => 'e1',
+            'button' => 'left',
+            'click_count' => 1,
+        ];
+        $preflight = $client->preflightRef('owner-1', 'worker-1', $preflightPayload);
+        $executePayload = [
+            ...$preflightPayload,
+            'command_id' => 'hmi-ref-contract-1',
+            'expected_fingerprint' => $preflight['target']['fingerprint'],
+            'effect_classification' => 'ordinary',
+            'sensitive_effect_authorized' => false,
+        ];
+        $result = $client->executeRef(
+            'owner-1',
+            'worker-1',
+            $executePayload,
+            15000,
+            BrowserActionAuthorization::userApproval(
+                'hmi-ref-contract-1',
+                'approval-1',
+                'sha256:'.str_repeat('f', 64),
+                'execution-lease-1',
+            ),
+        );
+
+        $this->assertSame([['ref' => 'e1', 'role' => 'button', 'name' => 'Close', 'destination' => null]], $targets['targets']);
+        $this->assertSame($snapshotId, $preflight['snapshot_id']);
+        $this->assertSame(5, $result['state_version']);
+        Http::assertSentCount(3);
+        Http::assertSent(function ($request) use ($frameSha256): bool {
+            parse_str((string) parse_url($request->url(), PHP_URL_QUERY), $query);
+
+            return $request->method() === 'GET'
+                && (string) parse_url($request->url(), PHP_URL_PATH) === '/sessions/worker-1/hmi/ref/targets'
+                && $query === ['state_version' => '4', 'expected_frame_sha256' => $frameSha256]
+                && $request->hasHeader('X-Talos-Owner-Ref', 'owner-1');
+        });
+        Http::assertSent(fn ($request): bool => str_ends_with((string) parse_url($request->url(), PHP_URL_PATH), '/hmi/ref/preflight')
+            && $request['snapshot_id'] === $snapshotId
+            && $request['ref'] === 'e1'
+            && ! $request->hasHeader('Authorization'));
+        Http::assertSent(fn ($request): bool => str_ends_with((string) parse_url($request->url(), PHP_URL_PATH), '/hmi/ref/execute')
+            && $request['snapshot_id'] === $snapshotId
+            && $request['ref'] === 'e1'
+            && preg_match('/^Bearer [^.]+\.[^.]+\.[^.]+$/D', $request->header('Authorization')[0] ?? '') === 1);
+    }
+
+    public function test_http_client_rejects_malformed_or_shape_changed_ref_targets_preflight_and_results(): void
+    {
+        $frameSha256 = 'sha256:'.str_repeat('c', 64);
+        $snapshotId = 'hmi_ref_'.str_repeat('d', 64);
+        $preflightPayload = [
+            'schema_version' => 'talos_browser_hmi_ref_v2',
+            'interaction_id' => self::HMI_INTERACTION_ID,
+            'state_version' => 4,
+            'expected_frame_sha256' => $frameSha256,
+            'snapshot_id' => $snapshotId,
+            'ref' => 'e1',
+            'button' => 'left',
+            'click_count' => 1,
+        ];
+        $target = [
+            'tag' => 'button', 'role' => 'button', 'name' => 'Close',
+            'input_type' => null, 'href' => null, 'form_method' => null,
+            'is_editable' => false, 'is_submit' => false, 'is_download' => false,
+            'opens_new_context' => false, 'visible' => true, 'disabled' => false,
+            'effect_attestation' => 'browser_default', 'required_effect_classification' => 'ordinary',
+            'fingerprint' => 'sha256:'.str_repeat('a', 64),
+        ];
+        $attempts = [
+            'targets_shape_changed' => function () use ($frameSha256, $snapshotId): void {
+                Http::fake(fn () => Http::response(['data' => [
+                    'schema_version' => 'talos_browser_hmi_ref_targets_v2',
+                    'session_id' => 'worker-1',
+                    'state_version' => 4,
+                    'frame_sha256' => $frameSha256,
+                    'snapshot_id' => $snapshotId,
+                    'targets' => [[
+                        'ref' => 'e1', 'role' => 'button', 'name' => 'Close',
+                        'destination' => null, 'raw_text' => 'must not cross the adapter',
+                    ]],
+                ]]));
+                (new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token'))
+                    ->refTargets('owner-1', 'worker-1', 4, $frameSha256);
+            },
+            'preflight_binding_changed' => function () use ($frameSha256, $preflightPayload, $target): void {
+                Http::fake(fn () => Http::response(['data' => [
+                    'schema_version' => 'talos_browser_hmi_ref_preflight_v2',
+                    'interaction_id' => self::HMI_INTERACTION_ID,
+                    'session_id' => 'worker-1',
+                    'state_version' => 4,
+                    'frame_sha256' => $frameSha256,
+                    'snapshot_id' => 'hmi_ref_'.str_repeat('f', 64),
+                    'ref' => 'e2',
+                    'origin' => 'https://example.com',
+                    'point' => ['normalized_x' => 0.25, 'normalized_y' => 0.5, 'x' => 320, 'y' => 400],
+                    'target' => $target,
+                ]]));
+                (new HttpBrowserSessionClient('http://browser-worker.test', 'worker-token'))
+                    ->preflightRef('owner-1', 'worker-1', $preflightPayload);
+            },
+            'result_target_shape_changed' => function () use ($frameSha256, $preflightPayload, $target): void {
+                Http::fake(fn () => Http::response(['data' => [
+                    'schema_version' => 'talos_browser_hmi_result_v2',
+                    'capture_id' => 'cap_00000000-0000-4000-8000-000000000001',
+                    'interaction_id' => self::HMI_INTERACTION_ID,
+                    'command_id' => 'hmi-ref-contract-malformed',
+                    'session_id' => 'worker-1',
+                    'source_state_version' => 4,
+                    'state_version' => 5,
+                    'frame_sha256' => $frameSha256,
+                    'url' => 'https://example.com',
+                    'title' => 'Example',
+                    'effect_classification' => 'ordinary',
+                    'sensitive_effect_authorized' => false,
+                    'target' => [...$target, 'raw_text' => 'must not cross the adapter'],
+                    'screenshot' => [
+                        'mime_type' => 'image/png', 'width' => 1280, 'height' => 800,
+                        'sha256' => 'sha256:'.hash('sha256', 'png'), 'base64' => base64_encode('png'),
+                    ],
+                    'snapshot' => [
+                        'snapshot_id' => 'snap-contract-1', 'format' => 'accessibility_refs_v1',
+                        'text_digest' => '', 'sha256' => 'sha256:'.str_repeat('e', 64), 'nodes' => [],
+                    ],
+                    'captured_at' => now()->toJSON(),
+                ]]));
+                $executePayload = [
+                    ...$preflightPayload,
+                    'command_id' => 'hmi-ref-contract-malformed',
+                    'expected_fingerprint' => 'sha256:'.str_repeat('a', 64),
+                    'effect_classification' => 'ordinary',
+                    'sensitive_effect_authorized' => false,
+                ];
+                (new HttpBrowserSessionClient(
+                    'http://browser-worker.test',
+                    'worker-token',
+                    15,
+                    $this->actionCapabilityIssuer(),
+                ))->executeRef(
+                    'owner-1',
+                    'worker-1',
+                    $executePayload,
+                    15000,
+                    BrowserActionAuthorization::userApproval(
+                        'hmi-ref-contract-malformed',
+                        'approval-1',
+                        'sha256:'.str_repeat('f', 64),
+                        'execution-lease-1',
+                    ),
+                );
+            },
+        ];
+
+        $accepted = [];
+        foreach ($attempts as $name => $attempt) {
+            try {
+                $attempt();
+                $accepted[] = $name;
+            } catch (BrowserWorkerException $error) {
+                $this->assertSame('TALOS_BROWSER_WORKER_FAILURE', $error->errorCode);
+            }
+        }
+
+        $this->assertSame([], $accepted, 'Shape-changed ref responses crossed the worker adapter: '.implode(', ', $accepted));
+    }
+
     public function test_http_client_create_enables_hmi_actions_without_enabling_model_actions(): void
     {
         Http::fake([
@@ -1052,6 +1313,13 @@ final class TalosBrowserSessionClientContractTest extends TestCase
         $this->assertSame('inspect', $client->requests[2]['method']);
         $this->assertSame('close', $client->requests[3]['method']);
         $this->assertSame(700, $client->requests[3]['timeoutMilliseconds']);
+    }
+
+    public function test_fake_inspection_fallback_reports_the_pinned_device_scale_factor(): void
+    {
+        $summary = (new FakeBrowserSessionClient)->inspect('owner-1', 'worker-without-create');
+
+        $this->assertSame(1, $summary['deviceScaleFactor'] ?? null);
     }
 
     public function test_fake_hmi_v2_result_uses_the_canonical_snapshot_digest_and_stable_target(): void

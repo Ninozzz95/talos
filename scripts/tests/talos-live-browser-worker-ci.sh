@@ -28,7 +28,20 @@ resolve_php_bin() {
   command -v php
 }
 
+resolve_npm_bin() {
+  if [ -n "${TALOS_NPM_BIN:-}" ]; then
+    printf '%s\n' "$TALOS_NPM_BIN"
+    return
+  fi
+  if [ -f "$ROOT_DIR/.tools/bin/npm.cmd" ]; then
+    printf '%s\n' "$ROOT_DIR/.tools/bin/npm.cmd"
+    return
+  fi
+  command -v npm
+}
+
 PHP_BIN="$(resolve_php_bin)"
+NPM_BIN="$(resolve_npm_bin)"
 
 generate_strong_token() {
   if command -v openssl >/dev/null 2>&1; then
@@ -242,7 +255,7 @@ echo "Live browser worker ready at $WORKER_URL"
 
 (
   cd "$ROOT_DIR/browser-worker"
-  npm test -- \
+  "$NPM_BIN" test -- \
     --run tests/browserMcpTransport.test.ts \
     -t "round-trips the allowlisted real Playwright MCP tools through official Streamable HTTP"
 )
@@ -269,7 +282,7 @@ run_restart_phase after
 
 (
   cd "$ROOT_DIR/control-plane"
-  npm run build
+  "$NPM_BIN" run build
   env \
     TALOS_BROWSER_ACTION_PRIVATE_KEY_B64="$TALOS_LIVE_BROWSER_ACTION_PRIVATE_KEY_B64" \
     TALOS_BROWSER_ACTION_KEY_ID="$TALOS_LIVE_BROWSER_ACTION_KEY_ID" \
@@ -278,6 +291,22 @@ run_restart_phase after
     tests/e2e/talosBrowserRecovery.e2e.spec.ts \
     --project=chromium \
     --grep "renders the exact verified frame|BREG-004"
+
+  env \
+    TALOS_BROWSER_ACTION_PRIVATE_KEY_B64="$TALOS_LIVE_BROWSER_ACTION_PRIVATE_KEY_B64" \
+    TALOS_BROWSER_ACTION_KEY_ID="$TALOS_LIVE_BROWSER_ACTION_KEY_ID" \
+    TALOS_E2E_LIVE_BROWSER_TARGET="${TALOS_E2E_STAGE2A_SCROLL_TARGET:-https://www.w3.org/TR/uievents/}" \
+    ./node_modules/.bin/playwright test \
+    tests/e2e/talosBrowserHmi.e2e.spec.ts \
+    --grep "STAGE2A-010"
+
+  env \
+    TALOS_BROWSER_ACTION_PRIVATE_KEY_B64="$TALOS_LIVE_BROWSER_ACTION_PRIVATE_KEY_B64" \
+    TALOS_BROWSER_ACTION_KEY_ID="$TALOS_LIVE_BROWSER_ACTION_KEY_ID" \
+    TALOS_E2E_LIVE_BROWSER_TARGET="${TALOS_E2E_STAGE2B_REF_TARGET:-https://example.com/}" \
+    ./node_modules/.bin/playwright test \
+    tests/e2e/talosBrowserHmi.e2e.spec.ts \
+    --grep "STAGE2B-019"
 )
 
 echo "Official MCP Streamable HTTP round-trip passed against the live browser worker"
@@ -285,3 +314,5 @@ echo "LiveBrowserWorkerHmiIntegrationTest passed HMI replay and cancellation aga
 echo "Controlled worker restart fenced the prior action session before redispatch"
 echo "TALOS browser HMI Playwright gate rendered the exact worker artifact"
 echo "BREG-004 recovered one verified screenshot through reload against the live worker"
+echo "STAGE2A-010 scrolled real worker evidence on desktop and mobile"
+echo "STAGE2B-019 selected, promoted, and restored real semantic refs on desktop and mobile"

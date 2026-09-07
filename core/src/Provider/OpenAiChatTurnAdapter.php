@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kadmos\Provider;
 
+use Closure;
 use InvalidArgumentException;
 use JsonException;
 use Kadmos\Tool\ProviderTurnRequest;
@@ -16,7 +17,7 @@ use Kadmos\Tool\ToolDefinition;
 use Kadmos\Tool\ToolResult;
 use Throwable;
 
-final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
+final class OpenAiChatTurnAdapter implements StreamingProviderTurnAdapter
 {
     public const ADAPTER_VERSION = 'openai_chat_v1';
 
@@ -80,6 +81,28 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
 
     public function start(ProviderTurnRequest $request): ProviderTurnResponse
     {
+        [$payload, $hasResources] = $this->startPayload($request);
+
+        return $this->withoutResourceContinuation($this->perform($payload), $hasResources);
+    }
+
+    public function streamStart(ProviderTurnRequest $request, Closure $isCancelled): ProviderStream
+    {
+        [$payload, $hasResources] = $this->startPayload($request);
+
+        return $this->performStream(
+            $payload,
+            $isCancelled,
+            fn (array $response): ProviderTurnResponse => $this->withoutResourceContinuation(
+                $this->normalize($response, $payload),
+                $hasResources,
+            ),
+        );
+    }
+
+    /** @return array{array<string, mixed>, bool} */
+    private function startPayload(ProviderTurnRequest $request): array
+    {
         if (strtolower($request->provider) !== strtolower($this->provider)) {
             throw new InvalidArgumentException('Provider turn request does not match the configured adapter.');
         }
@@ -101,12 +124,32 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
         if ($request->temperature !== null) {
             $payload['temperature'] = $request->temperature;
         }
+        if ($request->responseMimeType !== null) {
+            if (! in_array($this->provider, ['deepseek', 'openai'], true)) {
+                throw new InvalidArgumentException('This OpenAI-compatible provider does not support the requested response MIME type.');
+            }
+            $payload['response_format'] = ['type' => 'json_object'];
+        }
+        foreach (ReasoningEffortMap::paramsFor(
+            ReasoningEffortMap::TARGET_OPENAI_CHAT,
+            $request->reasoningEffort,
+            $request->reasoningVisible ?? false,
+            $request->maxTokens,
+        ) as $reasoningKey => $reasoningValue) {
+            $payload[$reasoningKey] = $reasoningValue;
+        }
+        if ($this->provider === 'deepseek' && $request->reasoningVisible !== null) {
+            $payload['thinking'] = [
+                'type' => $request->reasoningVisible ? 'enabled' : 'disabled',
+            ];
+        }
         if ($request->tools !== []) {
             $payload['tools'] = array_map($this->providerTool(...), $request->tools);
             $payload['tool_choice'] = 'auto';
         }
+        $payload = $this->withPromptCachePlan($payload, $request->promptCachePlan, $request->model);
 
-        return $this->withoutResourceContinuation($this->perform($payload), $request->resources !== []);
+        return [$payload, $request->resources !== []];
     }
 
     /** @return list<array<string, mixed>> */
@@ -153,6 +196,29 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
 
     public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
     {
+        return $this->perform($this->continuationPayload($state, $toolResults));
+    }
+
+    public function streamContinue(
+        ProviderTurnState $state,
+        array $toolResults,
+        Closure $isCancelled,
+    ): ProviderStream {
+        $payload = $this->continuationPayload($state, $toolResults);
+
+        return $this->performStream(
+            $payload,
+            $isCancelled,
+            fn (array $response): ProviderTurnResponse => $this->normalize($response, $payload),
+        );
+    }
+
+    /**
+     * @param list<ToolResult> $toolResults
+     * @return array<string, mixed>
+     */
+    private function continuationPayload(ProviderTurnState $state, array $toolResults): array
+    {
         if (strtolower($state->provider) !== strtolower($this->provider)) {
             throw new InvalidArgumentException('Provider turn state does not match the configured adapter.');
         }
@@ -181,7 +247,7 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
             $messages[] = [
                 'role' => 'tool',
                 'tool_call_id' => $callId,
-                'content' => json_encode($result->toRedactedArray(), JSON_THROW_ON_ERROR),
+                'content' => json_encode($this->providerToolResultPayload($result), JSON_THROW_ON_ERROR),
             ];
         }
 
@@ -189,13 +255,42 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
             'model' => ToolContractGuard::nonEmptyString($native['model'] ?? null, 'OpenAI continuation model', 256),
             'messages' => $messages,
         ];
-        foreach (['max_tokens', 'temperature', 'tools', 'tool_choice'] as $field) {
+        foreach ([
+            'max_tokens',
+            'temperature',
+            'response_format',
+            'reasoning_effort',
+            'thinking',
+            'tools',
+            'tool_choice',
+            'prompt_cache_key',
+            'prompt_cache_options',
+        ] as $field) {
             if (array_key_exists($field, $native)) {
                 $payload[$field] = $native[$field];
             }
         }
 
-        return $this->perform($payload);
+        return $payload;
+    }
+
+    /** @return array<string, mixed> */
+    private function providerToolResultPayload(ToolResult $result): array
+    {
+        $redacted = $result->toRedactedArray();
+        $payload = [
+            'isError' => $result->isError,
+        ];
+
+        if ($result->structuredContent !== null) {
+            $payload['structuredContent'] = $redacted['structuredContent'];
+        } else {
+            $payload['content'] = $redacted['content'];
+        }
+
+        $payload['evidence'] = $redacted['evidence'];
+
+        return $payload;
     }
 
     /** @param array<string, mixed> $payload */
@@ -239,6 +334,36 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
         }
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     * @param Closure(array<string, mixed>): ProviderTurnResponse $finalizer
+     */
+    private function performStream(array $payload, Closure $isCancelled, Closure $finalizer): ProviderStream
+    {
+        if (! $this->transport instanceof StreamingProviderTransport) {
+            throw new InvalidArgumentException('Configured OpenAI-compatible transport does not support streaming.');
+        }
+        $streamPayload = [...$payload, 'stream' => true];
+        if (in_array($this->provider, ['openai', 'deepseek', 'groq', 'ollama'], true)) {
+            $streamPayload['stream_options'] = ['include_usage' => true];
+        }
+        $headers = ['Content-Type: application/json', 'Accept: text/event-stream'];
+        if ($this->provider !== 'ollama') {
+            $headers[] = 'Authorization: Bearer '.$this->apiKey;
+        }
+
+        return new ProviderStream(
+            $this->transport->stream(
+                $this->endpoint,
+                $streamPayload,
+                $headers,
+                $this->timeoutMs,
+                $isCancelled,
+            ),
+            new OpenAiChatStreamDecoder($finalizer),
+        );
+    }
+
     /** @param array<string, mixed> $response @param array<string, mixed> $requestPayload */
     private function normalize(array $response, array $requestPayload): ProviderTurnResponse
     {
@@ -258,6 +383,9 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
         $message = ToolContractGuard::objectArray($choice['message'] ?? null, 'OpenAI provider assistant message');
         $content = is_string($message['content'] ?? null) ? trim($message['content']) : '';
         $refusal = is_string($message['refusal'] ?? null) ? trim($message['refusal']) : '';
+        $visibleReasoning = is_string($message['reasoning_content'] ?? null)
+            ? trim($message['reasoning_content'])
+            : '';
 
         if ($refusal !== '') {
             return ProviderTurnResponse::refusal($refusal, $responseId, $stopReason, $usage);
@@ -271,6 +399,7 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
                 $responseId,
                 $stopReason,
                 $usage,
+                $visibleReasoning !== '' ? $visibleReasoning : null,
             );
         }
 
@@ -320,7 +449,17 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
                 'messages' => $requestPayload['messages'],
                 'assistant_message' => $assistantMessage,
             ];
-            foreach (['max_tokens', 'temperature', 'tools', 'tool_choice'] as $field) {
+            foreach ([
+                'max_tokens',
+                'temperature',
+                'response_format',
+                'reasoning_effort',
+                'thinking',
+                'tools',
+                'tool_choice',
+                'prompt_cache_key',
+                'prompt_cache_options',
+            ] as $field) {
                 if (array_key_exists($field, $requestPayload)) {
                     $nativeState[$field] = $requestPayload[$field];
                 }
@@ -352,7 +491,132 @@ final class OpenAiChatTurnAdapter implements ProviderTurnAdapter
             ), $responseId, $stopReason, $usage);
         }
 
-        return ProviderTurnResponse::final($content, $responseId, $stopReason, $usage);
+        return ProviderTurnResponse::final(
+            $content,
+            $responseId,
+            $stopReason,
+            $usage,
+            $visibleReasoning !== '' ? $visibleReasoning : null,
+        );
+    }
+
+    /** @param array<string, mixed> $payload @return array<string, mixed> */
+    private function withPromptCachePlan(array $payload, ?PromptCachePlan $plan, string $model): array
+    {
+        if ($plan === null || $plan->mode === PromptCachePlan::MODE_PROVIDER_DEFAULT) {
+            return $payload;
+        }
+        if ($this->provider !== 'openai') {
+            throw new InvalidArgumentException('This OpenAI-compatible provider only supports provider-default prompt caching.');
+        }
+
+        $model = $this->normalizedModel($model);
+        if ($this->isGpt56Model($model)) {
+            return $this->withGpt56PromptCachePlan($payload, $plan);
+        }
+        if (! $this->isDocumentedAutomaticOpenAiModel($model)
+            || $plan->mode !== PromptCachePlan::MODE_AUTOMATIC
+            || $plan->breakpoints !== []
+            || $plan->ttl !== null) {
+            throw new InvalidArgumentException('The selected OpenAI model does not support this prompt-cache policy.');
+        }
+
+        $payload['prompt_cache_key'] = $plan->keyHash;
+
+        return $payload;
+    }
+
+    /** @param array<string, mixed> $payload @return array<string, mixed> */
+    private function withGpt56PromptCachePlan(array $payload, PromptCachePlan $plan): array
+    {
+        if ($plan->mode === PromptCachePlan::MODE_DISABLED) {
+            $payload['prompt_cache_options'] = ['mode' => 'explicit'];
+
+            return $payload;
+        }
+        if (! in_array($plan->mode, [PromptCachePlan::MODE_AUTOMATIC, PromptCachePlan::MODE_EXPLICIT], true)
+            || ($plan->ttl !== null && $plan->ttl !== PromptCachePlan::TTL_30_MINUTES)
+            || ($plan->mode === PromptCachePlan::MODE_AUTOMATIC && count($plan->breakpoints) > 3)) {
+            throw new InvalidArgumentException('GPT-5.6 prompt-cache policy is invalid.');
+        }
+
+        $payload['prompt_cache_key'] = $plan->keyHash;
+        $payload['prompt_cache_options'] = [
+            'mode' => $plan->mode === PromptCachePlan::MODE_AUTOMATIC ? 'implicit' : 'explicit',
+        ];
+        if ($plan->ttl !== null) {
+            $payload['prompt_cache_options']['ttl'] = $plan->ttl;
+        }
+
+        foreach ($plan->breakpoints as $breakpoint) {
+            if ($breakpoint === PromptCachePlan::BREAKPOINT_TOOLS) {
+                throw new InvalidArgumentException('OpenAI Chat cache breakpoints cannot target tool definitions.');
+            }
+            if ($breakpoint === PromptCachePlan::BREAKPOINT_SYSTEM) {
+                $payload['messages'][0]['content'] = $this->cacheableContent(
+                    $payload['messages'][0]['content'] ?? null,
+                    'OpenAI Chat system cache breakpoint',
+                    'text',
+                );
+                continue;
+            }
+
+            $messageIndex = (int) substr($breakpoint, strlen('message:'));
+            $wireIndex = $messageIndex + 1;
+            if (! array_key_exists($wireIndex, $payload['messages'])) {
+                throw new InvalidArgumentException('OpenAI Chat cache breakpoint references an unknown message.');
+            }
+            $payload['messages'][$wireIndex]['content'] = $this->cacheableContent(
+                $payload['messages'][$wireIndex]['content'] ?? null,
+                'OpenAI Chat message cache breakpoint',
+                'text',
+            );
+        }
+
+        return $payload;
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function cacheableContent(mixed $content, string $label, string $textType): array
+    {
+        if (is_string($content)) {
+            $blocks = [['type' => $textType, 'text' => $content]];
+        } else {
+            $blocks = ToolContractGuard::listArray($content, $label);
+        }
+        if ($blocks === []) {
+            throw new InvalidArgumentException("{$label} requires at least one content block.");
+        }
+
+        $last = array_key_last($blocks);
+        $block = ToolContractGuard::objectArray($blocks[$last], $label.' content block');
+        if (! in_array($block['type'] ?? null, ['text', 'image_url', 'input_audio', 'file', 'refusal'], true)) {
+            throw new InvalidArgumentException("{$label} targets an unsupported content block.");
+        }
+        $block['prompt_cache_breakpoint'] = ['mode' => 'explicit'];
+        $blocks[$last] = $block;
+
+        return $blocks;
+    }
+
+    private function normalizedModel(string $model): string
+    {
+        $model = strtolower(trim($model));
+        $model = str_replace(['.', '_'], '-', $model);
+
+        return preg_replace('/-+/', '-', $model) ?? $model;
+    }
+
+    private function isGpt56Model(string $model): bool
+    {
+        return preg_match('/^gpt-5-6(?:$|-)/', $model) === 1;
+    }
+
+    private function isDocumentedAutomaticOpenAiModel(string $model): bool
+    {
+        return preg_match('/^(?:gpt-4o|gpt-4-1|o1|o3|o4)(?:$|-)/', $model) === 1
+            || $model === 'gpt-5'
+            || preg_match('/^gpt-5-[0-5](?:$|-)/', $model) === 1;
     }
 
     /** @return array<string, mixed> */

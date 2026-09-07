@@ -464,7 +464,12 @@ final readonly class TalosBrowserTaskRuntime
         TalosRun $run,
         BrowserTaskStatus $next,
     ): ?TalosBrowserTask {
-        if (! in_array($next, [BrowserTaskStatus::Completed, BrowserTaskStatus::Failed, BrowserTaskStatus::Recovering], true)) {
+        if (! in_array($next, [
+            BrowserTaskStatus::Completed,
+            BrowserTaskStatus::Failed,
+            BrowserTaskStatus::Recovering,
+            BrowserTaskStatus::Cancelled,
+        ], true)) {
             throw new \InvalidArgumentException('Browser task settlement status is unsupported.');
         }
         $message = TalosMessage::query()
@@ -503,6 +508,7 @@ final readonly class TalosBrowserTaskRuntime
             BrowserTaskStatus::Completed => ['completed_at' => $timestamp],
             BrowserTaskStatus::Failed => ['failed_at' => $timestamp],
             BrowserTaskStatus::Recovering => ['reconciled_at' => $timestamp],
+            BrowserTaskStatus::Cancelled => ['cancelled_at' => $timestamp],
             default => [],
         };
 

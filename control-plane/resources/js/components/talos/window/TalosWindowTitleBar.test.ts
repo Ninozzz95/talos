@@ -40,12 +40,16 @@ function mountTitleBar(options: Record<string, unknown> = {}) {
 }
 
 describe('TalosWindowTitleBar', () => {
-    it('renders the v7 station code chip in chrome type next to the title', () => {
-        const { container } = mountTitleBar({ stationCode: 'RUN' })
+    it('renders the v7 station code chip next to the title only in development mode', () => {
+        const { container } = mountTitleBar({ stationCode: 'RUN', developmentMode: true })
         const chip = container.querySelector<HTMLElement>('.talos-chip .talos-chip-code')
         expect(chip?.textContent).toBe('RUN')
 
-        const bare = mountTitleBar({ stationCode: undefined })
+        // Production hides the acronym even when a station code is present.
+        const prod = mountTitleBar({ stationCode: 'RUN', developmentMode: false })
+        expect(prod.container.querySelector('.talos-chip-code')).toBeNull()
+
+        const bare = mountTitleBar({ stationCode: undefined, developmentMode: true })
         expect(bare.container.querySelector('.talos-chip-code')).toBeNull()
     })
 

@@ -1,0 +1,28 @@
+{
+  "provider_response": {
+    "responseId": "gemini-response-reasoning-final-1",
+    "candidates": [
+      {
+        "content": {
+          "role": "model",
+          "parts": [
+            {
+              "thought": true,
+              "text": "I compared the available evidence before answering.",
+              "thoughtSignature": "opaque-gemini-thought-signature"
+            },
+            {
+              "text": "The page is ready."
+            }
+          ]
+        },
+        "finishReason": "STOP"
+      }
+    ],
+    "usageMetadata": {
+      "promptTokenCount": 20,
+      "candidatesTokenCount": 12,
+      "totalTokenCount": 32
+    }
+  }
+}

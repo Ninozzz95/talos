@@ -1,6 +1,13 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { useTalosBrowse } from './useTalosBrowse'
-import type { TalosBrowserActivity, TalosBrowserCurrentPage, TalosBrowserPointerFrame } from '../lib/talosTypes'
+import type {
+    TalosBrowserActivity,
+    TalosBrowserCurrentPage,
+    TalosBrowserPointerFrame,
+    TalosBrowserRefInteraction,
+    TalosBrowserRecoveryAction,
+    TalosBrowserScrollFrame,
+} from '../lib/talosTypes'
 
 type TalosBrowsePersistence = {
     shouldRestore?: (talosSessionId: string) => boolean
@@ -68,6 +75,12 @@ export function useTalosWorkspaceBrowse(
             activities.set(activity.id, activity)
         }
         return [...activities.values()]
+    })
+    const browserRecoveryAction = computed<TalosBrowserRecoveryAction>(() => {
+        const status = browse.browserMode.value.status
+        if (status === 'recovery_required' && browse.recoverableBrowserTask.value) return 'recover_task'
+        if (['recovery_required', 'stopped', 'failed'].includes(status)) return 'start_fresh'
+        return 'restart'
     })
 
     watch(activeTalosSessionId, (nextSessionId) => {
@@ -154,6 +167,27 @@ export function useTalosWorkspaceBrowse(
             uiError.value = error instanceof Error ? error.message : 'TALOS could not restart Browse.'
         }
     }
+    async function recover() {
+        let scope: { talosSessionId: string; revision: number } | null = null
+        try {
+            scope = await currentOperationScope()
+            const action = browserRecoveryAction.value
+            if (action === 'recover_task') {
+                await browse.recoverActiveBrowserTask()
+            } else if (action === 'start_fresh') {
+                chatActivities.value = []
+                await browse.startFreshSession()
+            } else {
+                return
+            }
+            if (!operationScopeIsCurrent(scope)) return
+            enabled.value = true
+            await rememberEnabled(scope.talosSessionId, true)
+        } catch (error) {
+            if (scope && !operationScopeIsCurrent(scope)) return
+            uiError.value = error instanceof Error ? error.message : 'TALOS could not recover Browse.'
+        }
+    }
     async function stop() {
         let scope: { talosSessionId: string; revision: number } | null = null
         try {
@@ -210,20 +244,44 @@ export function useTalosWorkspaceBrowse(
             uiError.value = error instanceof Error ? error.message : 'TALOS could not open the requested browser URL.'
         }
     }
-    function recordActivities(value: unknown) {
+    const stateRelevantOperations = new Set(['navigate', 'snapshot', 'screenshot', 'read'])
+    const committedHmiOperations = new Set(['click', 'upload'])
+
+    function activityIsStateRelevant(activity: TalosBrowserActivity) {
+        if (stateRelevantOperations.has(activity.operation)) return true
+        return committedHmiOperations.has(activity.operation) && activity.status === 'succeeded'
+    }
+
+    async function recordActivities(value: unknown): Promise<void> {
         if (!Array.isArray(value)) return
         const activeBrowserSessionId = browse.activeSession.value?.id ?? null
         if (!activeBrowserSessionId) return
         const activities = new Map(chatActivities.value.map((activity) => [activity.id, activity]))
+        const accepted: TalosBrowserActivity[] = []
         for (const activity of value) {
             if (activity
                 && typeof activity === 'object'
                 && typeof (activity as Record<string, unknown>).id === 'string'
                 && (activity as Record<string, unknown>).browser_session_id === activeBrowserSessionId) {
-                activities.set((activity as TalosBrowserActivity).id, activity as TalosBrowserActivity)
+                const candidate = activity as TalosBrowserActivity
+                if (!activities.has(candidate.id)) accepted.push(candidate)
+                activities.set(candidate.id, candidate)
             }
         }
         chatActivities.value = [...activities.values()]
+        if (!accepted.some(activityIsStateRelevant)) return
+
+        const scope = { talosSessionId: activeTalosSessionId.value, revision: workspaceScopeRevision }
+        const scopeStillCurrent = () => activeTalosSessionId.value === scope.talosSessionId
+            && workspaceScopeRevision === scope.revision
+        try {
+            await browse.selectSession(activeBrowserSessionId)
+        } catch (error) {
+            if (!scopeStillCurrent()) return
+            throw new Error(error instanceof Error
+                ? `Browser evidence was saved, but TALOS could not refresh the Browser session. ${error.message}`
+                : 'Browser evidence was saved, but TALOS could not refresh the Browser session.')
+        }
     }
     async function restoreForActiveSession(force = false) {
         let scope: { talosSessionId: string; revision: number } | null = null
@@ -259,6 +317,14 @@ export function useTalosWorkspaceBrowse(
 
     async function interactWithBrowserFrame(frame: TalosBrowserPointerFrame) {
         return browse.interactWithScreenshot(frame)
+    }
+
+    async function scrollBrowserFrame(frame: TalosBrowserScrollFrame) {
+        return browse.scrollScreenshot(frame)
+    }
+
+    async function interactWithBrowserRef(interaction: TalosBrowserRefInteraction) {
+        return browse.interactWithRef(interaction)
     }
 
     async function confirmBrowserFrameInteraction(decision: 'approve' | 'reject') {
@@ -315,8 +381,12 @@ export function useTalosWorkspaceBrowse(
         visibleBrowserActivities: visibleActivities,
         latestBrowserScreenshot: browse.latestScreenshot,
         latestBrowserSnapshot: browse.latestSnapshot,
+        browserRefFrame: browse.latestRefFrame,
+        browserRefTargetsLoading: browse.refTargetsLoading,
+        browserRefTargetsError: browse.refTargetsError,
         browserTasks: browse.browserTasks,
         activeBrowserTask: browse.activeBrowserTask,
+        browserRecoveryAction,
         browserTaskBusy: browse.browserTaskBusy,
         browserTaskError: browse.browserTaskError,
         browserTaskCommandTargetId: browse.browserTaskCommandTargetId,
@@ -328,6 +398,7 @@ export function useTalosWorkspaceBrowse(
         handleDisableBrowse: disable,
         handleStopBrowse: stop,
         handleRestartBrowse: restart,
+        handleRecoverBrowse: recover,
         handleCaptureScreenshot: screenshot,
         handleCaptureSnapshot: snapshot,
         openBrowse: open,
@@ -335,6 +406,8 @@ export function useTalosWorkspaceBrowse(
         restoreBrowseForActiveSession: restoreForActiveSession,
         initializeBrowse: initialize,
         interactWithBrowserFrame,
+        interactWithBrowserRef,
+        scrollBrowserFrame,
         confirmBrowserFrameInteraction,
         cancelBrowserTask,
         cancelActiveBrowserTask,

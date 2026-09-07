@@ -152,21 +152,43 @@ final class TalosModelProbeService
 
         $json = $response->json();
         $hasJson = is_array($json);
-        $ok = $response->successful() && $hasJson;
+        $successfulJsonResponse = $response->successful() && $hasJson;
+        $requiresToolProtocol = $provider === 'deepseek';
+        $toolProtocolVerified = $requiresToolProtocol
+            && $successfulJsonResponse
+            && $this->deepSeekToolProtocolVerified($json);
+        $ok = $successfulJsonResponse && (! $requiresToolProtocol || $toolProtocolVerified);
         $redirectBlocked = $this->isRedirectStatus($response->status());
 
         return [
             'status' => $redirectBlocked ? 'failed' : ($ok ? 'healthy' : 'degraded'),
-            'capabilities' => $this->observedCapabilities($ok, ! $trustedLocalProvider, $trustedLocalProvider),
+            'capabilities' => $this->observedCapabilities(
+                $successfulJsonResponse,
+                $toolProtocolVerified,
+                $ok,
+                ! $trustedLocalProvider,
+                $trustedLocalProvider,
+            ),
             'result' => [
                 'ok' => $ok,
-                'code' => $this->probeResultCode($response->status(), $hasJson),
-                'message' => $this->probeResultMessage($response->status(), $hasJson),
+                'code' => $this->probeResultCode(
+                    $response->status(),
+                    $hasJson,
+                    $requiresToolProtocol,
+                    $toolProtocolVerified,
+                ),
+                'message' => $this->probeResultMessage(
+                    $response->status(),
+                    $hasJson,
+                    $requiresToolProtocol,
+                    $toolProtocolVerified,
+                ),
                 'provider' => $provider,
                 'url' => $this->safeUrlForResult($url),
                 'base_url_policy' => $policyDecision,
                 'http_status' => $response->status(),
                 'json' => $hasJson,
+                ...($requiresToolProtocol ? ['tool_protocol_verified' => $toolProtocolVerified] : []),
                 'json_keys' => $hasJson ? array_values(array_map('strval', array_keys($json))) : [],
                 'body_preview' => $hasJson ? null : $this->responseExcerpt($response->body(), [$secret]),
                 'provider_response_excerpt' => $this->responseExcerpt($hasJson ? json_encode($json, JSON_UNESCAPED_SLASHES) ?: '' : $response->body(), [$secret]),
@@ -201,6 +223,42 @@ final class TalosModelProbeService
      */
     private function probePayload(string $provider, string $model): array
     {
+        if ($provider === 'deepseek') {
+            return [
+                'model' => $model,
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => 'Call talos_health_check exactly once with status "ok".',
+                    ],
+                ],
+                'max_tokens' => 64,
+                'thinking' => ['type' => 'disabled'],
+                'tools' => [[
+                    'type' => 'function',
+                    'function' => [
+                        'name' => 'talos_health_check',
+                        'description' => 'Return the fixed health-check status for TALOS protocol verification.',
+                        'parameters' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'status' => [
+                                    'type' => 'string',
+                                    'enum' => ['ok'],
+                                ],
+                            ],
+                            'required' => ['status'],
+                            'additionalProperties' => false,
+                        ],
+                    ],
+                ]],
+                'tool_choice' => [
+                    'type' => 'function',
+                    'function' => ['name' => 'talos_health_check'],
+                ],
+            ];
+        }
+
         if ($provider === 'anthropic') {
             return [
                 'model' => $model,
@@ -220,14 +278,21 @@ final class TalosModelProbeService
         ];
     }
 
-    private function probeResultCode(int $status, bool $hasJson): string
+    private function probeResultCode(
+        int $status,
+        bool $hasJson,
+        bool $requiresToolProtocol,
+        bool $toolProtocolVerified,
+    ): string
     {
         if ($this->isRedirectStatus($status)) {
             return 'PROVIDER_REDIRECT_BLOCKED';
         }
 
         if ($status >= 200 && $status < 300 && $hasJson) {
-            return 'PROVIDER_OK';
+            return $requiresToolProtocol && ! $toolProtocolVerified
+                ? 'PROVIDER_TOOL_PROTOCOL_ERROR'
+                : 'PROVIDER_OK';
         }
 
         if ($status >= 200 && $status < 300) {
@@ -237,14 +302,21 @@ final class TalosModelProbeService
         return 'PROVIDER_HTTP_ERROR';
     }
 
-    private function probeResultMessage(int $status, bool $hasJson): string
+    private function probeResultMessage(
+        int $status,
+        bool $hasJson,
+        bool $requiresToolProtocol,
+        bool $toolProtocolVerified,
+    ): string
     {
         if ($this->isRedirectStatus($status)) {
             return 'Provider redirect was blocked; credentials were not forwarded.';
         }
 
         if ($status >= 200 && $status < 300 && $hasJson) {
-            return 'Provider probe succeeded.';
+            return $requiresToolProtocol && ! $toolProtocolVerified
+                ? 'Provider returned JSON but did not satisfy the forced tool-call contract.'
+                : 'Provider probe succeeded.';
         }
 
         if ($status >= 200 && $status < 300) {
@@ -262,15 +334,21 @@ final class TalosModelProbeService
     /**
      * @return array<string, bool>
      */
-    private function observedCapabilities(bool $successfulJsonResponse, bool $publicEndpointAllowed, bool $trustedLocalProvider): array
+    private function observedCapabilities(
+        bool $successfulJsonResponse,
+        bool $toolProtocolVerified,
+        bool $verifiedProviderResponse,
+        bool $publicEndpointAllowed,
+        bool $trustedLocalProvider,
+    ): array
     {
         return [
             'json' => $successfulJsonResponse,
-            'tools' => false,
+            'tools' => $toolProtocolVerified,
             'vision' => false,
             'embeddings' => false,
-            'local' => $successfulJsonResponse && $trustedLocalProvider,
-            'remote' => $successfulJsonResponse && $publicEndpointAllowed,
+            'local' => $verifiedProviderResponse && $trustedLocalProvider,
+            'remote' => $verifiedProviderResponse && $publicEndpointAllowed,
         ];
     }
 
@@ -279,7 +357,67 @@ final class TalosModelProbeService
      */
     private function unverifiedCapabilities(): array
     {
-        return $this->observedCapabilities(false, false, false);
+        return $this->observedCapabilities(false, false, false, false, false);
+    }
+
+    private function deepSeekToolProtocolVerified(mixed $json): bool
+    {
+        if (! is_array($json)) {
+            return false;
+        }
+
+        $choices = $json['choices'] ?? null;
+        if (! is_array($choices) || ! array_is_list($choices)) {
+            return false;
+        }
+
+        $choice = $choices[0] ?? null;
+        if (! is_array($choice) || ($choice !== [] && array_is_list($choice))) {
+            return false;
+        }
+        $message = is_array($choice) ? ($choice['message'] ?? null) : null;
+        if (! is_array($message) || ($message !== [] && array_is_list($message))) {
+            return false;
+        }
+        $toolCalls = is_array($message) ? ($message['tool_calls'] ?? null) : null;
+        if (! is_array($toolCalls) || ! array_is_list($toolCalls) || count($toolCalls) !== 1) {
+            return false;
+        }
+
+        $toolCall = $toolCalls[0] ?? null;
+        if (! is_array($toolCall) || ($toolCall !== [] && array_is_list($toolCall))) {
+            return false;
+        }
+        $function = is_array($toolCall) ? ($toolCall['function'] ?? null) : null;
+        if (! is_array($function) || ($function !== [] && array_is_list($function))) {
+            return false;
+        }
+        $providerCallId = $toolCall['id'] ?? null;
+        $arguments = is_array($function) ? ($function['arguments'] ?? null) : null;
+        if (! is_string($providerCallId)
+            || trim($providerCallId) === ''
+            || strlen($providerCallId) > 256
+            || ($toolCall['type'] ?? null) !== 'function'
+            || ($function['name'] ?? null) !== 'talos_health_check'
+            || ! is_string($arguments)
+            || trim($arguments) === ''
+            || strlen($arguments) > 262_144) {
+            return false;
+        }
+
+        try {
+            $decoded = json_decode($arguments, false, 8, JSON_THROW_ON_ERROR);
+        } catch (Throwable) {
+            return false;
+        }
+
+        if (! $decoded instanceof \stdClass) {
+            return false;
+        }
+
+        $properties = get_object_vars($decoded);
+
+        return array_keys($properties) === ['status'] && $properties['status'] === 'ok';
     }
 
     /**

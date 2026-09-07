@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__.'/../vendor/autoload.php';
 
 use Kadmos\Provider\GeminiTurnAdapter;
+use Kadmos\Provider\PromptCachePlan;
 use Kadmos\Provider\ProviderRequestException;
 use Kadmos\Tool\ProviderInputResource;
 use Kadmos\Tool\ProviderTurnRequest;
@@ -31,7 +32,10 @@ function geminiFixture(string $name): array
     return is_array($decoded) ? $decoded : throw new RuntimeException("Invalid Gemini fixture: {$name}");
 }
 
-function geminiRequest(bool $emptyProperties = false): ProviderTurnRequest
+function geminiRequest(
+    bool $emptyProperties = false,
+    ?PromptCachePlan $promptCachePlan = null,
+): ProviderTurnRequest
 {
     $definition = json_decode(
         (string) file_get_contents(__DIR__.'/fixtures/tool-contracts/valid-definition.json'),
@@ -55,6 +59,7 @@ function geminiRequest(bool $emptyProperties = false): ProviderTurnRequest
         tools: [ToolDefinition::fromStrictArray($definition)],
         maxTokens: 2048,
         temperature: 0.0,
+        promptCachePlan: $promptCachePlan,
     );
 }
 
@@ -106,6 +111,17 @@ function testGeminiAdapterNormalizesFinalMixedAndMultipleParts(): void
     $requests = [];
     $multiple = geminiAdapter($responses, $requests)->start(geminiRequest());
     assertGeminiAdapter(array_map(static fn ($call): string => $call->providerCallId, $multiple->toolCalls) === ['gemini-call-1', 'gemini-call-2'], 'Gemini functionCall parts must preserve provider order.');
+}
+
+function testGeminiAdapterSeparatesThoughtPartsAndDropsSignatures(): void
+{
+    $responses = [geminiFixture('final-visible-reasoning')['provider_response']];
+    $requests = [];
+    $response = geminiAdapter($responses, $requests)->start(geminiRequest());
+
+    assertGeminiAdapter($response->text === 'The page is ready.', 'Gemini thought parts must not be duplicated into answer text.');
+    assertGeminiAdapter($response->visibleReasoning === 'I compared the available evidence before answering.', 'Gemini thought=true text must become visible reasoning.');
+    assertGeminiAdapter(! str_contains((string) $response->visibleReasoning, 'opaque-gemini-thought-signature'), 'Gemini thought signatures must remain private.');
 }
 
 function testGeminiAdapterContinuesWithFunctionResponseAndThoughtSignature(): void
@@ -213,13 +229,52 @@ function testGeminiAdapterSerializesNativeImageAndPdfResourcesAndRejectsUnsuppor
     throw new RuntimeException('Unsupported Gemini image MIME must fail closed.');
 }
 
+function testGeminiAdapterKeepsImplicitCachingObservationOnly(): void
+{
+    $providerDefault = new PromptCachePlan(
+        mode: PromptCachePlan::MODE_PROVIDER_DEFAULT,
+        keyHash: str_repeat('4', 64),
+        breakpoints: [],
+        ttl: null,
+        minimumInputTokens: 2048,
+    );
+    $responses = [geminiFixture('final-text')['provider_response']];
+    $requests = [];
+    geminiAdapter($responses, $requests)->start(geminiRequest(promptCachePlan: $providerDefault));
+    assertGeminiAdapter(
+        ! str_contains(json_encode($requests[0]['payload'], JSON_THROW_ON_ERROR), 'cache'),
+        'Gemini provider-default implicit caching must not invent request fields.',
+    );
+
+    $explicit = new PromptCachePlan(
+        mode: PromptCachePlan::MODE_EXPLICIT,
+        keyHash: str_repeat('5', 64),
+        breakpoints: [PromptCachePlan::BREAKPOINT_SYSTEM],
+        ttl: PromptCachePlan::TTL_1_HOUR,
+        minimumInputTokens: 2048,
+    );
+    $responses = [geminiFixture('final-text')['provider_response']];
+    $requests = [];
+    try {
+        geminiAdapter($responses, $requests)->start(geminiRequest(promptCachePlan: $explicit));
+    } catch (InvalidArgumentException) {
+        assertGeminiAdapter($requests === [], 'Unsupported Gemini explicit caching must fail before transport.');
+
+        return;
+    }
+
+    throw new RuntimeException('Gemini explicit prompt caching must remain outside this implicit adapter path.');
+}
+
 $tests = [
     'testGeminiAdapterNormalizesFinalMixedAndMultipleParts',
+    'testGeminiAdapterSeparatesThoughtPartsAndDropsSignatures',
     'testGeminiAdapterSerializesEmptySchemaPropertiesAsAnObject',
     'testGeminiAdapterContinuesWithFunctionResponseAndThoughtSignature',
     'testGeminiAdapterFailsClosedForMalformedRefusedIncompleteAndProviderErrors',
     'testGeminiCapabilitiesDoNotClaimProviderManagedOrVerifiedModelState',
     'testGeminiAdapterSerializesNativeImageAndPdfResourcesAndRejectsUnsupportedMime',
+    'testGeminiAdapterKeepsImplicitCachingObservationOnly',
 ];
 
 foreach ($tests as $test) {

@@ -1,0 +1,55 @@
+{
+  "name": "@talos/artifact-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=24.18.0 <25"
+  },
+  "packageManager": "npm@11.16.0",
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": ">=24.18.0 <25",
+      "onFail": "error"
+    },
+    "packageManager": {
+      "name": "npm",
+      "version": "11.16.0",
+      "onFail": "error"
+    }
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "fsevents": false,
+    "tesseract.js": false
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/cli.ts",
+    "probe:runtime": "npm run build && node scripts/probe-runtime.mjs",
+    "start": "node dist/cli.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify:provenance": "node scripts/verify-provenance.mjs"
+  },
+  "dependencies": {
+    "@pdf-lib/fontkit": "1.1.1",
+    "docx": "9.7.1",
+    "fastify": "5.10.0",
+    "file-type": "22.0.1",
+    "officeparser": "7.5.0",
+    "pdf-lib": "1.17.1",
+    "pptxgenjs": "4.0.1",
+    "sharp": "0.35.3",
+    "xlsx": "file:vendor/xlsx-0.20.3.tgz",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "tsx": "4.23.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

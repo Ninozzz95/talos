@@ -16,7 +16,10 @@ const viteServer = {
 
 export default defineConfig({
     testDir: './tests/e2e',
-    testIgnore: 'talosMotionV6CrossBrowser.e2e.spec.ts',
+    testIgnore: [
+        'talosMotionV6CrossBrowser.e2e.spec.ts',
+        '**/real/**',
+    ],
     timeout: 60_000,
     expect: {
         timeout: 8_000,

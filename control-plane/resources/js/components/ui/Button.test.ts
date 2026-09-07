@@ -102,4 +102,10 @@ describe('Button', () => {
 
         expect(button.getAttribute('aria-pressed')).toBe('true')
     })
+
+    it('exposes its semantic size without leaking implementation utility classes to scale logic', () => {
+        const { button } = mountButton({ size: 'sm' })
+
+        expect(button.dataset.size).toBe('sm')
+    })
 })

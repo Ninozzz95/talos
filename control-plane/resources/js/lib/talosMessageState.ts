@@ -19,6 +19,7 @@ export type TalosPersistedRunActivity = {
     status: TalosRunActivityStatus
     provider: string | null
     model: string | null
+    routingProfileId: string | null
 }
 
 const runStatuses = new Set<TalosRunActivityStatus>(['queued', 'running', 'succeeded', 'failed', 'denied'])
@@ -75,5 +76,8 @@ export function talosPersistedRunActivity(message: TalosMessage): TalosPersisted
         status: status as TalosRunActivityStatus,
         provider: stringValue(run.provider),
         model: stringValue(run.model),
+        // Present when the turn resolved its model through a routing ("Auto")
+        // profile; drives the user-facing Auto receipt (FE-only).
+        routingProfileId: stringValue(run.model_routing_profile_id) ?? stringValue(run.routing_profile_id),
     }
 }

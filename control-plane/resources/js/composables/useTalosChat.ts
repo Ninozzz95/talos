@@ -1,6 +1,21 @@
 import { TalosApiError, talosFetch } from '../lib/api'
 import type { TalosBrowserActivity, TalosMessage, TalosRun } from '../lib/talosTypes'
 import type { CreateTalosMessagePayload } from './useTalosSessions'
+import {
+    createTalosStreamingChatState,
+    type TalosStreamingChatResult,
+    type TalosStreamingChatState,
+} from './talosStreamingChatState'
+import {
+    computed,
+    getCurrentScope,
+    onScopeDispose,
+    reactive,
+    readonly,
+    ref,
+    watchEffect,
+    type Ref,
+} from 'vue'
 
 export type TalosChatError = {
     layer: string
@@ -45,9 +60,74 @@ type SendPersistentChatOptions = {
         enabled: boolean
         browserSessionId: string | null
     }
+    effort?: string | null
+    thinking?: boolean | null
     chatEndpoint?: string
     userMessageMetadata?: Record<string, unknown>
     persistMessage: PersistMessage
+}
+
+type TalosStreamingChatController = {
+    state: Readonly<TalosStreamingChatState>
+    canCancel: Readonly<Ref<boolean>>
+    start: (request: {
+        sessionId: string
+        userMessageId: string
+        payload: Record<string, unknown>
+        endpoint?: string
+    }) => Promise<TalosStreamingChatResult>
+    cancel: () => Promise<boolean>
+    clear: () => void
+}
+
+type UseTalosChatOptions = {
+    streaming?: TalosStreamingChatController
+    streamingEnabled?: () => boolean
+}
+
+function createLazyTalosStreamingChatController(): TalosStreamingChatController {
+    const state = reactive<TalosStreamingChatState>(createTalosStreamingChatState())
+    const canCancel = ref(false)
+    let controller: TalosStreamingChatController | null = null
+    let loading: Promise<TalosStreamingChatController> | null = null
+    let stopSync: (() => void) | null = null
+
+    if (getCurrentScope()) {
+        onScopeDispose(() => stopSync?.())
+    }
+
+    async function load() {
+        if (controller) return controller
+        if (!loading) {
+            loading = import('./useTalosStreamingChat')
+                .then(({ useTalosStreamingChat }) => {
+                    const loaded = useTalosStreamingChat()
+                    controller = loaded
+                    stopSync = watchEffect(() => {
+                        Object.assign(state, loaded.state)
+                        canCancel.value = loaded.canCancel.value
+                    }, { flush: 'sync' })
+                    return loaded
+                })
+                .catch((error) => {
+                    loading = null
+                    throw error
+                })
+        }
+        return loading
+    }
+
+    return {
+        state: readonly(state),
+        canCancel: computed(() => canCancel.value),
+        start: async (request) => (await load()).start(request),
+        cancel: async () => controller?.cancel() ?? false,
+        clear: () => {
+            controller?.clear()
+            Object.assign(state, createTalosStreamingChatState())
+            canCancel.value = false
+        },
+    }
 }
 
 function summarizeJmp(mutations: unknown) {
@@ -231,7 +311,10 @@ function chatErrorContent(chatError: TalosChatError) {
         : `${chatError.message}\n\n${codeLine}`
 }
 
-export function useTalosChat() {
+export function useTalosChat(options: UseTalosChatOptions = {}) {
+    const streaming = options.streaming ?? createLazyTalosStreamingChatController()
+    const streamingEnabled = options.streamingEnabled ?? (() => false)
+
     async function persistUserMessage(
         sessionId: string,
         content: string,
@@ -363,11 +446,59 @@ export function useTalosChat() {
                     browser_session_id: options.browserMode.browserSessionId,
                 }
             }
+            // FV2-06.0 frozen wire contract §4.1: effort (level or "off"|null) and
+            // thinking (bool|null). Always sent so both chat engines honor them.
+            payload.effort = options.effort ?? null
+            payload.thinking = options.thinking ?? null
 
-            const response = await talosFetch<TalosChatProxyResponse>(options.chatEndpoint ?? '/api/talos/chat', {
-                method: 'POST',
-                body: JSON.stringify(payload),
-            })
+            const shouldStream = streamingEnabled()
+                && (options.chatEndpoint === undefined || options.chatEndpoint === '/api/talos/chat')
+                && Boolean(options.modelProfileId || options.modelRoutingProfileId)
+            let response: TalosChatProxyResponse
+
+            if (shouldStream) {
+                const streamResult = await streaming.start({
+                    sessionId: options.sessionId,
+                    userMessageId: userMessage.id,
+                    payload,
+                })
+                if (streamResult.kind === 'json') {
+                    const buffered = record(streamResult.response)
+                    if (!buffered) {
+                        throw new TypeError('TALOS returned an invalid buffered compatibility response.')
+                    }
+                    response = buffered as TalosChatProxyResponse
+                } else if (streamResult.awaitingApproval) {
+                    const approvalResponse = await talosFetch<{ pending_approvals?: unknown }>(
+                        `/api/talos/sessions/${encodeURIComponent(options.sessionId)}/pending-tool-approvals`,
+                    )
+                    response = {
+                        text: '',
+                        assistant_message: null,
+                        agent_turn: { status: 'awaiting_approval' },
+                        pending_approvals: approvalResponse.pending_approvals ?? [],
+                    }
+                } else if (streamResult.cancelled) {
+                    response = {
+                        text: '',
+                        assistant_message: null,
+                        agent_turn: { status: 'cancelled' },
+                        pending_approvals: [],
+                    }
+                } else {
+                    response = {
+                        text: streamResult.assistantMessage?.content ?? '',
+                        assistant_message: streamResult.assistantMessage,
+                        pending_approvals: [],
+                    }
+                }
+            } else {
+                streaming.clear()
+                response = await talosFetch<TalosChatProxyResponse>(options.chatEndpoint ?? '/api/talos/chat', {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                })
+            }
 
             if (response.error) {
                 const chatError = chatErrorFromResponse(response)
@@ -412,8 +543,9 @@ export function useTalosChat() {
                     fault_type: chatError?.code ?? 'chat_proxy_failure',
                     fault_layer: chatError?.layer ?? 'control_plane',
                     chat_error: chatError,
+                    ...(streaming.state.diagnostic ? { stream_diagnostic: streaming.state.diagnostic } : {}),
                 },
-                chatError ? runIdFromException(error) : null,
+                chatError ? runIdFromException(error) : streaming.state.runId,
             )
 
             return {
@@ -430,5 +562,9 @@ export function useTalosChat() {
         persistAssistantMessage,
         persistSystemMessage,
         sendPersistentChat,
+        streamingState: streaming.state,
+        streamingCanCancel: streaming.canCancel,
+        cancelStreaming: streaming.cancel,
+        clearStreaming: streaming.clear,
     }
 }

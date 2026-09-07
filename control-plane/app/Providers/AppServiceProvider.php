@@ -2,6 +2,14 @@
 
 namespace App\Providers;
 
+use App\Models\TalosBrowserArtifact;
+use App\Models\TalosDocument;
+use App\Models\TalosFile;
+use App\Models\TalosMessage;
+use App\Models\TalosRun;
+use App\Models\TalosRunArtifact;
+use App\Observers\TalosLibraryChatReferenceObserver;
+use App\Observers\TalosLibrarySourceObserver;
 use App\Services\FileIngestion\FileBenchmarkScenarioFactory;
 use App\Services\FileIngestion\Malware\ClamAvInstreamClient;
 use App\Services\FileIngestion\Malware\TalosMalwareScanner;
@@ -18,6 +26,8 @@ use App\Services\Talos\Browser\BrowserWorkerConfiguration;
 use App\Services\Talos\Browser\FakeBrowserSessionClient;
 use App\Services\Talos\Browser\HttpBrowserSessionClient;
 use App\Services\Talos\Browser\TalosBrowserActionCapabilityIssuer;
+use App\Services\Talos\Browser\TalosBrowserPolicy;
+use App\Services\Talos\Browser\TalosBrowserTestFixturePermit;
 use App\Services\Talos\Web\UnavailableWebSearchProvider;
 use App\Services\Talos\Web\WebSearchProvider;
 use App\Services\Talos\Web\WebSearchProviderFactory;
@@ -56,6 +66,17 @@ class AppServiceProvider extends ServiceProvider
             return new TalosBrowserActionCapabilityIssuer(
                 (string) config('services.talos.browser.action_private_key_b64', ''),
                 (string) config('services.talos.browser.action_key_id', ''),
+            );
+        });
+
+        $this->app->singleton(TalosBrowserPolicy::class, static function (Application $app): TalosBrowserPolicy {
+            $configuredOrigin = config('services.talos.browser.test_fixture_origin');
+
+            return new TalosBrowserPolicy(
+                fixturePermit: TalosBrowserTestFixturePermit::fromEnvironment(
+                    is_string($configuredOrigin) ? $configuredOrigin : null,
+                    $app->environment('testing'),
+                ),
             );
         });
 
@@ -107,6 +128,13 @@ class AppServiceProvider extends ServiceProvider
         UrlGenerator $urlGenerator,
     ): void
     {
+        TalosFile::observe(TalosLibrarySourceObserver::class);
+        TalosDocument::observe(TalosLibrarySourceObserver::class);
+        TalosRunArtifact::observe(TalosLibrarySourceObserver::class);
+        TalosBrowserArtifact::observe(TalosLibrarySourceObserver::class);
+        TalosMessage::observe(TalosLibraryChatReferenceObserver::class);
+        TalosRun::observe(TalosLibraryChatReferenceObserver::class);
+
         if (! $this->app->environment('local')) {
             $canonicalOrigin = rtrim((string) config('app.url'), '/');
             if ($canonicalOrigin === '') {

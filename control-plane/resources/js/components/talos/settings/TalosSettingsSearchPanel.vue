@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import Input from '../../ui/Input.vue'
-import Select from '../../ui/Select.vue'
+import TalosThemedSelect from '../ui/TalosThemedSelect.vue'
 
 type SearchPreferences = {
     provider: string
@@ -24,6 +24,16 @@ const emit = defineEmits<{
     updateSearch: [preferences: Partial<Omit<SearchPreferences, 'deep_research'>>]
     updateDeepResearch: [preferences: Partial<SearchPreferences['deep_research']>]
 }>()
+
+const SEARCH_PROVIDER_OPTIONS = [
+    { value: 'searxng', label: 'SearXNG self-hosted' },
+    { value: 'duckduckgo', label: 'DuckDuckGo fallback' },
+    { value: 'disabled', label: 'Disabled' },
+]
+const SEARCH_FALLBACK_OPTIONS = [
+    { value: 'duckduckgo', label: 'DuckDuckGo' },
+    { value: 'none', label: 'None' },
+]
 </script>
 
 <template>
@@ -33,11 +43,7 @@ const emit = defineEmits<{
     <div class="grid gap-3 md:grid-cols-2">
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Provider</span>
-            <Select :model-value="search.provider" class="mt-2" aria-label="Search provider" :disabled="!editable" @update:model-value="(value) => emit('updateSearch', { provider: String(value) })">
-                <option value="searxng">SearXNG self-hosted</option>
-                <option value="duckduckgo">DuckDuckGo fallback</option>
-                <option value="disabled">Disabled</option>
-            </Select>
+            <TalosThemedSelect :model-value="search.provider" class="mt-2" :items="SEARCH_PROVIDER_OPTIONS" aria-label="Search provider" :disabled="!editable" @update:model-value="(value) => emit('updateSearch', { provider: value })" />
         </label>
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Results per query</span>
@@ -49,10 +55,7 @@ const emit = defineEmits<{
         </label>
         <label class="block">
             <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Fallback provider</span>
-            <Select :model-value="search.fallback" class="mt-2" aria-label="Search fallback provider" :disabled="!editable" @update:model-value="(value) => emit('updateSearch', { fallback: String(value) })">
-                <option value="duckduckgo">DuckDuckGo</option>
-                <option value="none">None</option>
-            </Select>
+            <TalosThemedSelect :model-value="search.fallback" class="mt-2" :items="SEARCH_FALLBACK_OPTIONS" aria-label="Search fallback provider" :disabled="!editable" @update:model-value="(value) => emit('updateSearch', { fallback: value })" />
         </label>
     </div>
     <div class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">

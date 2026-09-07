@@ -64,8 +64,39 @@ function boundedUtf8(value: string, maxBytes: number): string {
 export async function captureSnapshot(page: Page): Promise<BrowserSnapshotResult> {
   const bindingKey = `__talos_snapshot_${randomUUID().replaceAll("-", "")}`;
   const snapshot = await page.evaluate(async (limits) => {
-    const root = document.body;
-    if (!root) return { nodes: [], textDigest: "", documentToken: `${document.location.href}|${performance.timeOrigin}`, domDigest: "sha256:empty" };
+    const body = document.body;
+    if (!body) return { nodes: [], textDigest: "", documentToken: `${document.location.href}|${performance.timeOrigin}`, domDigest: "sha256:empty" };
+    const modalCandidates = [...body.querySelectorAll('[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"], dialog[open]')]
+      .filter((element) => {
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        if (style.display === "none"
+          || style.visibility === "hidden"
+          || element.getAttribute("aria-hidden") === "true"
+          || rect.width <= 0
+          || rect.height <= 0
+          || rect.right <= 0
+          || rect.bottom <= 0
+          || rect.left >= globalThis.innerWidth
+          || rect.top >= globalThis.innerHeight) {
+          return false;
+        }
+        if (element.tagName.toLowerCase() !== "dialog" || element.getAttribute("aria-modal") === "true") {
+          return true;
+        }
+        try {
+          return element.matches(":modal");
+        } catch {
+          return false;
+        }
+      });
+    let focusedModal: Element | undefined;
+    if (document.activeElement) {
+      for (const candidate of modalCandidates) {
+        if (candidate.contains(document.activeElement)) focusedModal = candidate;
+      }
+    }
+    const root = focusedModal ?? modalCandidates[modalCandidates.length - 1] ?? body;
     const encoder = new TextEncoder();
     const bindings = new Map<string, Element>();
     Object.defineProperty(globalThis, limits.bindingKey, { configurable: true, value: bindings });

@@ -15,9 +15,9 @@ final class TalosBrowserFollowUpResolver
 
     private readonly TalosBrowserUrlIntentResolver $urlIntents;
 
-    public function __construct(?TalosBrowserUrlIntentResolver $urlIntents = null)
+    public function __construct(TalosBrowserUrlIntentResolver $urlIntents)
     {
-        $this->urlIntents = $urlIntents ?? new TalosBrowserUrlIntentResolver;
+        $this->urlIntents = $urlIntents;
     }
 
     public function resolve(

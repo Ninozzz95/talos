@@ -23,6 +23,7 @@ final class TalosThemeContrast
         'violet' => ['background' => '#0d0a19', 'accent' => '#b794f6', 'secondary' => '#6ee7b7', 'line' => '#2f2848', 'light' => false],
         'claudius' => ['background' => '#faf9f5', 'accent' => '#d97757', 'secondary' => '#6a9bcc', 'line' => '#e8e6dc', 'light' => true],
         'basicus' => ['background' => '#fafafa', 'accent' => '#1976d2', 'secondary' => '#9c27b0', 'line' => '#e0e0e0', 'light' => true],
+        'calm' => ['background' => '#1e1f22', 'accent' => '#c08b3c', 'secondary' => '#8e9095', 'line' => '#36373b', 'light' => false],
     ];
 
     /** @var array<string, array{background: string, surface: string, text: string, muted: string}> */
@@ -256,7 +257,9 @@ final class TalosThemeContrast
         if ($mode === 'light') {
             $background = $preset['light']
                 ? $background
-                : self::mix($accent, 5, self::rgb('#f8fafc'));
+                : ($theme === 'calm'
+                    ? self::rgb('#f1f2f4')
+                    : self::mix($accent, 5, self::rgb('#f8fafc')));
             $panel = self::mix($background, 92, self::rgb('#ffffff'));
             $text = self::rgb('#111827');
 

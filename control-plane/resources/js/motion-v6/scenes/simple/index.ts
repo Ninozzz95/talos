@@ -11,6 +11,7 @@ import { violetSimpleScene } from './violet'
 import { claudiusSimpleScene } from './claudius'
 import { basicusSimpleScene } from './basicus'
 import { telemetrySimpleScene } from './telemetry'
+import { calmSimpleScene } from './calm'
 import { createSimpleSceneFactory, type SimpleRendererOptions, type SimpleRendererPlatform } from '../../renderers/simpleRenderer'
 import type { SimpleSceneRegistration } from '../../sceneRegistry'
 import type { StaticSceneRegistration } from '../../sceneRegistry'
@@ -30,6 +31,7 @@ export const TALOS_SIMPLE_SCENE_DEFINITIONS = Object.freeze([
     claudiusSimpleScene,
     basicusSimpleScene,
     telemetrySimpleScene,
+    calmSimpleScene,
 ] as const)
 
 export function createTalosSimpleSceneRegistrations(

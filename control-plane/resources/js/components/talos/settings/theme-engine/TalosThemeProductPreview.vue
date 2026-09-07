@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { talosThemeCustomizationStyle, type TalosThemePreset } from '../../../../lib/talosThemes'
+import { talosScalePercentLabel } from '../../../../lib/talosUiScale'
 import type { TalosChatLayoutPreferences } from '../../../../lib/talosTypes'
 import type { ThemeCustomizationForm } from './themeEngineTypes'
 
@@ -41,7 +42,7 @@ const previewStyle = computed(() => ({
     '--talos-preview-font': fontFamily.value,
 }))
 
-const layoutLabel = computed(() => `${props.chatLayout.bubble_scale} messages, ${props.chatLayout.composer_mode} composer`)
+const layoutLabel = computed(() => `${talosScalePercentLabel(props.chatLayout.message_scale)} messages, ${props.chatLayout.composer_mode} composer`)
 </script>
 
 <template>

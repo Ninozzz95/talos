@@ -108,7 +108,12 @@ function completeOpenTransition(next: boolean) {
     if (!next && isDrawer.value) void nextTick(completeClose)
 }
 
-function completePresenceLeave() {
+function completeLeaveTransition(event: Event) {
+    // Only the surface's own leave transition completes the close. A raw
+    // presence after-leave (which jsdom/reduced-motion can fire before any
+    // real transition) must never emit close early; a bubbled child transition
+    // (target !== the surface) must not either.
+    if (!closeRequested.value || event.target !== event.currentTarget) return
     completeClose()
 }
 
@@ -179,7 +184,7 @@ onBeforeUnmount(() => {
             :data-talos-upstream="surface.upstream"
             @open-auto-focus="focusPrimaryControl"
             @close-auto-focus="restoreLauncherFocus"
-            @after-leave="completePresenceLeave"
+            @transitionend="completeLeaveTransition"
         >
             <div id="talos-mobile-tooltip-root" class="pointer-events-none absolute inset-0 z-[120]"></div>
             <header class="flex shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-[var(--talos-header)] px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">

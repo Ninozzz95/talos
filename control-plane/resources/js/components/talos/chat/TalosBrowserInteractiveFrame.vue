@@ -7,6 +7,8 @@ export type TalosBrowserInteractiveFrameHandle = {
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
+    ArrowDown,
+    ArrowUp,
     ChevronLeft,
     ChevronRight,
     Hand,
@@ -44,11 +46,16 @@ import {
 } from '../../ui/drawer'
 import { talosFetch } from '../../../lib/api'
 import { clampBrowserImagePan, mapBrowserImagePointer } from '../../../lib/talosBrowserImageGeometry'
+import { browserScrollStep, normalizeBrowserWheelDelta } from '../../../lib/talosBrowserWheel'
 import type {
     TalosBrowserActivity,
     TalosBrowserArtifact,
     TalosBrowserHmiChallenge,
     TalosBrowserPointerFrame,
+    TalosBrowserRefFrame,
+    TalosBrowserRefInteraction,
+    TalosBrowserRefTarget,
+    TalosBrowserScrollFrame,
     TalosBrowserSession,
     TalosMobileWindowPresentation,
 } from '../../../lib/talosTypes'
@@ -65,6 +72,9 @@ const props = withDefaults(defineProps<{
     interactionLocked?: boolean
     interactionError?: string | null
     pendingInteractionApproval?: TalosBrowserHmiChallenge | null
+    refFrame?: TalosBrowserRefFrame | null
+    refTargetsLoading?: boolean
+    refTargetsError?: string | null
     mobile?: boolean
     mobileWindowPresentation?: TalosMobileWindowPresentation
 }>(), {
@@ -74,12 +84,17 @@ const props = withDefaults(defineProps<{
     interactionLocked: false,
     interactionError: null,
     pendingInteractionApproval: null,
+    refFrame: null,
+    refTargetsLoading: false,
+    refTargetsError: null,
     mobile: false,
     mobileWindowPresentation: 'drawer',
 })
 
 const emit = defineEmits<{
     interact: [frame: TalosBrowserPointerFrame]
+    interactRef: [interaction: TalosBrowserRefInteraction]
+    scroll: [frame: TalosBrowserScrollFrame]
     confirm: [decision: 'approve' | 'reject']
 }>()
 
@@ -106,6 +121,8 @@ const approvalNow = ref(Date.now())
 const launcherEl = ref<HTMLElement | null>(null)
 const focusRestored = ref(false)
 let pendingSingleClick: ReturnType<typeof setTimeout> | null = null
+let pendingWheel: ReturnType<typeof setTimeout> | null = null
+let pendingWheelDelta = 0
 let approvalClock: ReturnType<typeof setInterval> | null = null
 let artifactLoadRevision = 0
 
@@ -159,6 +176,46 @@ const sourceSize = computed(() => ({
     width: metadataDimension('width') || naturalSize.value.width || props.activeBrowserSession?.viewport?.width || 0,
     height: metadataDimension('height') || naturalSize.value.height || props.activeBrowserSession?.viewport?.height || 0,
 }))
+const selectedIsCurrentArtifact = computed(() => {
+    const artifact = selectedArtifact.value
+    const session = props.activeBrowserSession
+    const hash = artifact?.sha256?.replace(/^sha256:/, '') ?? ''
+
+    return Boolean(artifact
+        && session
+        && session.id === artifact.browser_session_id
+        && session.last_screenshot_artifact_id === artifact.id
+        && session.state_version === artifact.state_version
+        && ['ready', 'active'].includes(session.status)
+        && session.capabilities.includes('interact')
+        && /^[a-f0-9]{64}$/.test(hash))
+})
+const currentDecodedRefFrame = computed(() => {
+    const frame = props.refFrame
+    const artifact = selectedArtifact.value
+    const session = props.activeBrowserSession
+    if (!frame
+        || !artifact
+        || !session
+        || !selectedIsCurrentArtifact.value
+        || !imageReady.value
+        || naturalSize.value.width !== metadataDimension('width')
+        || naturalSize.value.height !== metadataDimension('height')
+        || frame.browser_session_id !== session.id
+        || frame.state_version !== session.state_version
+        || frame.screenshot.id !== artifact.id
+        || frame.screenshot.state_version !== artifact.state_version
+        || frame.snapshot_id.trim() === ''
+        || frame.frame_sha256 !== `sha256:${artifact.sha256?.replace(/^sha256:/, '') ?? ''}`) return null
+
+    return frame
+})
+const refControlsDisabled = computed(() => Boolean(
+    !currentDecodedRefFrame.value
+    || props.interactionPending
+    || props.interactionLocked
+    || pointerDispatchLocked.value,
+))
 const isCurrentInteractiveFrame = computed(() => {
     const artifact = selectedArtifact.value
     const session = props.activeBrowserSession
@@ -246,6 +303,7 @@ async function loadArtifact(artifactId: string, force = false) {
 
 async function selectArtifact(artifactId: string) {
     if (!props.talosSessionId || !galleryArtifactIds.value.includes(artifactId)) return
+    clearPendingWheel()
     artifactLoadRevision += 1
     artifactLoading.value = false
     selectedArtifactId.value = artifactId
@@ -342,6 +400,91 @@ function clearPendingSingleClick() {
     pendingSingleClick = null
 }
 
+function clearPendingWheel() {
+    if (pendingWheel !== null) clearTimeout(pendingWheel)
+    pendingWheel = null
+    pendingWheelDelta = 0
+}
+
+function dispatchScroll(deltaY: number) {
+    if (pointerDispatchLocked.value
+        || !isCurrentInteractiveFrame.value
+        || props.interactionPending
+        || props.interactionLocked
+        || !selectedArtifact.value
+        || !props.activeBrowserSession
+        || !Number.isFinite(deltaY)
+        || deltaY === 0) return
+
+    clearPendingSingleClick()
+    pointerDispatchLocked.value = true
+    pendingMarker.value = null
+    emit('scroll', {
+        browserSessionId: props.activeBrowserSession.id,
+        artifact: selectedArtifact.value,
+        deltaY,
+    })
+}
+
+function onStageWheel(event: WheelEvent) {
+    if (pointerDispatchLocked.value
+        || !isCurrentInteractiveFrame.value
+        || props.interactionPending
+        || props.interactionLocked) return
+    const deltaY = normalizeBrowserWheelDelta(event, sourceSize.value.height)
+    if (deltaY === 0) return
+
+    event.preventDefault()
+    pendingWheelDelta = normalizeBrowserWheelDelta({
+        deltaY: pendingWheelDelta + deltaY,
+        deltaMode: 0,
+    }, sourceSize.value.height)
+    if (pendingWheel !== null) clearTimeout(pendingWheel)
+    pendingWheel = setTimeout(() => {
+        const coalescedDelta = pendingWheelDelta
+        pendingWheel = null
+        pendingWheelDelta = 0
+        dispatchScroll(coalescedDelta)
+    }, 80)
+}
+
+function scrollByControl(direction: 'up' | 'down') {
+    clearPendingWheel()
+    dispatchScroll(browserScrollStep(sourceSize.value.height, direction))
+}
+
+function destinationHost(destination: string | null) {
+    if (!destination) return null
+    try {
+        return new URL(destination).host || null
+    } catch {
+        return null
+    }
+}
+
+function dispatchRef(target: TalosBrowserRefTarget) {
+    const frame = currentDecodedRefFrame.value
+    const artifact = selectedArtifact.value
+    const session = props.activeBrowserSession
+    if (!frame
+        || !artifact
+        || !session
+        || refControlsDisabled.value
+        || !frame.targets.some((candidate) => candidate.ref === target.ref)) return
+
+    clearPendingSingleClick()
+    clearPendingWheel()
+    pointerDispatchLocked.value = true
+    pendingMarker.value = null
+    emit('interactRef', {
+        browserSessionId: session.id,
+        artifact,
+        snapshotId: frame.snapshot_id,
+        ref: target.ref,
+        clickCount: 1,
+    })
+}
+
 function dispatchPointer(
     mapped: NonNullable<ReturnType<typeof mapBrowserImagePointer>>,
     clickCount: 1 | 2,
@@ -354,6 +497,7 @@ function dispatchPointer(
         || !selectedArtifact.value
         || !props.activeBrowserSession) return
 
+    clearPendingWheel()
     pointerDispatchLocked.value = true
     const bounds = stageEl.value.getBoundingClientRect()
     pendingMarker.value = {
@@ -498,6 +642,7 @@ function stopApprovalClock() {
 watch(() => props.talosSessionId, () => {
     artifactLoadRevision += 1
     clearPendingSingleClick()
+    clearPendingWheel()
     viewerOpen.value = false
     selectedArtifactId.value = null
     artifacts.value = {}
@@ -521,6 +666,7 @@ watch(() => [
 })
 
 watch(() => props.interactionPending, (pending) => {
+    if (pending) clearPendingWheel()
     if (!pending && !props.pendingInteractionApproval && !props.interactionLocked) {
         pointerDispatchLocked.value = false
         pendingMarker.value = null
@@ -548,6 +694,7 @@ watch(() => props.interactionError, (error) => {
 watch(() => props.interactionLocked, (locked) => {
     if (locked) {
         clearPendingSingleClick()
+        clearPendingWheel()
         pointerDispatchLocked.value = true
         pendingMarker.value = null
     } else if (!props.interactionPending && !props.pendingInteractionApproval) {
@@ -558,6 +705,7 @@ watch(() => props.interactionLocked, (locked) => {
 watch(viewerOpen, (open) => {
     if (open) return
     clearPendingSingleClick()
+    clearPendingWheel()
     pointerDispatchLocked.value = false
     pendingMarker.value = null
     restoreLauncherFocus()
@@ -565,6 +713,7 @@ watch(viewerOpen, (open) => {
 
 onBeforeUnmount(() => {
     clearPendingSingleClick()
+    clearPendingWheel()
     stopApprovalClock()
     restoreLauncherFocus()
 })
@@ -625,6 +774,9 @@ defineExpose<TalosBrowserInteractiveFrameHandle>({ openArtifact })
                         </Button>
                     </div>
                     <div class="flex items-center gap-1">
+                        <Button variant="ghost" size="icon-sm" :disabled="!isCurrentInteractiveFrame || pointerDispatchLocked" aria-label="Scroll browser page up" @click="scrollByControl('up')"><ArrowUp aria-hidden="true" /></Button>
+                        <Button variant="ghost" size="icon-sm" :disabled="!isCurrentInteractiveFrame || pointerDispatchLocked" aria-label="Scroll browser page down" @click="scrollByControl('down')"><ArrowDown aria-hidden="true" /></Button>
+                        <span class="mx-1 h-4 w-px bg-[var(--talos-border)]" aria-hidden="true" />
                         <Button variant="ghost" size="icon-sm" :disabled="zoom <= 1" aria-label="Zoom out" @click="setZoom(zoom - 0.25)"><ZoomOut aria-hidden="true" /></Button>
                         <span class="min-w-12 text-center text-xs tabular-nums text-[var(--talos-muted)]">{{ Math.round(zoom * 100) }}%</span>
                         <Button variant="ghost" size="icon-sm" :disabled="zoom >= 4" aria-label="Zoom in" @click="setZoom(zoom + 0.25)"><ZoomIn aria-hidden="true" /></Button>
@@ -632,48 +784,95 @@ defineExpose<TalosBrowserInteractiveFrameHandle>({ openArtifact })
                     </div>
                 </div>
 
-                <div
-                    ref="stageEl"
-                    data-testid="browser-evidence-stage"
-                    class="relative min-h-0 flex-1 overflow-hidden bg-black/90"
-                    :class="[
-                        zoom > 1 ? (dragging ? 'cursor-grabbing' : 'cursor-grab') : isCurrentInteractiveFrame ? 'cursor-crosshair' : 'cursor-default',
-                        interactionPending || interactionLocked ? 'pointer-events-none' : '',
-                    ]"
-                    :aria-busy="artifactLoading || Boolean(selectedArtifactId && !imageReady && !artifactError) || interactionPending"
-                    @click="onStageClick"
-                    @pointerdown.stop="onPointerDown"
-                    @pointermove="onPointerMove"
-                    @pointerup="onPointerUp"
-                    @pointercancel="onPointerUp"
-                    @touchstart.stop
-                >
-                    <img
-                        v-if="selectedArtifactId && selectedArtifact"
-                        :key="`${selectedArtifactId}-${previewRevision}`"
-                        :src="selectedPreviewUrl"
-                        :data-browser-artifact-id="selectedArtifactId"
-                        :data-testid="`browser-evidence-image-${selectedArtifactId}`"
-                        alt="Selected browser screenshot"
-                        class="pointer-events-none h-full w-full select-none object-contain will-change-transform"
-                        :style="{ transform: `translate(${panX}px, ${panY}px) scale(${zoom})` }"
-                        draggable="false"
-                        @load="onImageLoad"
-                        @error="onImageError"
+                <div class="flex min-h-0 flex-1 flex-col xl:flex-row">
+                    <div
+                        ref="stageEl"
+                        data-testid="browser-evidence-stage"
+                        class="relative min-h-[240px] min-w-0 flex-1 overflow-hidden bg-black/90"
+                        :class="[
+                            zoom > 1 ? (dragging ? 'cursor-grabbing' : 'cursor-grab') : isCurrentInteractiveFrame ? 'cursor-crosshair' : 'cursor-default',
+                            interactionPending || interactionLocked ? 'pointer-events-none' : '',
+                        ]"
+                        :aria-busy="artifactLoading || Boolean(selectedArtifactId && !imageReady && !artifactError) || interactionPending"
+                        @click="onStageClick"
+                        @wheel="onStageWheel"
+                        @pointerdown.stop="onPointerDown"
+                        @pointermove="onPointerMove"
+                        @pointerup="onPointerUp"
+                        @pointercancel="onPointerUp"
+                        @touchstart.stop
                     >
-                    <div v-if="artifactLoading || (selectedArtifactId && !imageReady && !artifactError)" role="status" aria-live="polite" class="absolute inset-0 z-20 flex items-center justify-center text-sm text-white/80">
-                        <Loader2 class="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> Loading capture
+                        <img
+                            v-if="selectedArtifactId && selectedArtifact"
+                            :key="`${selectedArtifactId}-${previewRevision}`"
+                            :src="selectedPreviewUrl"
+                            :data-browser-artifact-id="selectedArtifactId"
+                            :data-testid="`browser-evidence-image-${selectedArtifactId}`"
+                            alt="Selected browser screenshot"
+                            class="pointer-events-none h-full w-full select-none object-contain will-change-transform"
+                            :style="{ transform: `translate(${panX}px, ${panY}px) scale(${zoom})` }"
+                            draggable="false"
+                            @load="onImageLoad"
+                            @error="onImageError"
+                        >
+                        <div v-if="artifactLoading || (selectedArtifactId && !imageReady && !artifactError)" role="status" aria-live="polite" class="absolute inset-0 z-20 flex items-center justify-center text-sm text-white/80">
+                            <Loader2 class="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> Loading capture
+                        </div>
+                        <div v-if="artifactError" role="alert" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 p-6 text-center text-sm text-[var(--talos-warning)]">
+                            <span class="flex items-center"><TriangleAlert class="mr-2 h-4 w-4 shrink-0" aria-hidden="true" /> {{ artifactError }}</span>
+                            <Button data-testid="browser-evidence-retry" variant="outline" size="sm" @click.stop="retrySelectedArtifact">Retry capture</Button>
+                        </div>
+                        <span
+                            v-if="pendingMarker"
+                            class="pointer-events-none absolute z-10 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[var(--talos-accent)] shadow-[0_0_0_6px_rgb(255_255_255/0.18)]"
+                            :style="{ left: `${pendingMarker.x}px`, top: `${pendingMarker.y}px` }"
+                            aria-hidden="true"
+                        />
                     </div>
-                    <div v-if="artifactError" role="alert" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 p-6 text-center text-sm text-[var(--talos-warning)]">
-                        <span class="flex items-center"><TriangleAlert class="mr-2 h-4 w-4 shrink-0" aria-hidden="true" /> {{ artifactError }}</span>
-                        <Button data-testid="browser-evidence-retry" variant="outline" size="sm" @click.stop="retrySelectedArtifact">Retry capture</Button>
-                    </div>
-                    <span
-                        v-if="pendingMarker"
-                        class="pointer-events-none absolute z-10 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[var(--talos-accent)] shadow-[0_0_0_6px_rgb(255_255_255/0.18)]"
-                        :style="{ left: `${pendingMarker.x}px`, top: `${pendingMarker.y}px` }"
-                        aria-hidden="true"
-                    />
+
+                    <aside
+                        v-if="selectedIsCurrentArtifact"
+                        data-testid="browser-page-controls"
+                        :role="refTargetsLoading || refTargetsError ? 'status' : undefined"
+                        aria-live="polite"
+                        aria-label="Page controls"
+                        class="max-h-48 w-full shrink-0 overflow-y-auto border-t border-[var(--talos-border)] bg-[var(--talos-panel)] p-3 text-left xl:max-h-none xl:w-72 xl:border-l xl:border-t-0"
+                    >
+                        <div class="mb-2 flex items-center gap-2">
+                            <MousePointer2 class="h-3.5 w-3.5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                            <h3 class="text-[11px] font-semibold uppercase tracking-wide text-[var(--talos-text)]">Page controls</h3>
+                            <span v-if="currentDecodedRefFrame" class="ml-auto text-[10px] tabular-nums text-[var(--talos-muted)]">{{ currentDecodedRefFrame.targets.length }}</span>
+                        </div>
+                        <div v-if="refTargetsLoading" class="flex items-center gap-2 py-2 text-xs text-[var(--talos-muted)]">
+                            <Loader2 class="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                            Finding current controls
+                        </div>
+                        <p v-else-if="refTargetsError" class="break-words text-xs leading-5 text-[var(--talos-muted)]">
+                            {{ refTargetsError }}
+                        </p>
+                        <ul v-else-if="currentDecodedRefFrame?.targets.length" class="space-y-1.5" aria-label="Current page controls">
+                            <li v-for="target in currentDecodedRefFrame.targets" :key="target.ref">
+                                <button
+                                    type="button"
+                                    :data-browser-ref="target.ref"
+                                    :data-testid="`browser-page-control-${target.ref}`"
+                                    class="flex min-h-11 w-full items-start gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-background)] px-2.5 py-2 text-left transition-colors hover:border-[var(--talos-border-strong)] hover:bg-[var(--talos-panel-soft)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)] disabled:cursor-not-allowed disabled:opacity-50"
+                                    :disabled="refControlsDisabled"
+                                    :aria-label="`Activate ${target.role} ${target.name}`"
+                                    @click="dispatchRef(target)"
+                                >
+                                    <span class="mt-0.5 min-w-12 shrink-0 truncate font-mono text-[10px] uppercase text-[var(--talos-accent)]">{{ target.role }}</span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block break-words text-xs font-medium leading-4 text-[var(--talos-text)] [overflow-wrap:anywhere]">{{ target.name }}</span>
+                                        <span v-if="destinationHost(target.destination)" class="mt-0.5 block truncate text-[10px] text-[var(--talos-muted)]">{{ destinationHost(target.destination) }}</span>
+                                    </span>
+                                </button>
+                            </li>
+                        </ul>
+                        <p v-else class="text-xs leading-5 text-[var(--talos-muted)]">
+                            {{ imageReady ? 'No supported controls in the current view.' : 'Decode the current capture to reveal its controls.' }}
+                        </p>
+                    </aside>
                 </div>
 
                 <div class="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[var(--talos-border)] bg-[var(--talos-panel)] px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-xs">
@@ -683,7 +882,7 @@ defineExpose<TalosBrowserInteractiveFrameHandle>({ openArtifact })
                         <span v-if="interactionPending">Interaction in progress</span>
                         <span v-else-if="interactionLocked">Recovery required before further interaction</span>
                         <span v-else-if="selectedArtifactId && !imageReady && !artifactError">Capture is still loading</span>
-                        <span v-else-if="isCurrentInteractiveFrame">Click the current frame to interact</span>
+                        <span v-else-if="isCurrentInteractiveFrame">Click or scroll the current frame to interact</span>
                         <span v-else>Historical frame, inspection only</span>
                     </div>
                     <span v-if="interactionError" role="alert" class="max-w-full break-words text-[var(--talos-warning)]">{{ interactionError }}</span>

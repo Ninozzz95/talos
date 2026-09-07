@@ -25,6 +25,7 @@ final readonly class ProviderTurnResponse
         public ?string $stopReason,
         public ?TokenUsage $usage,
         public ?ProviderFailure $failure,
+        public ?string $visibleReasoning,
     ) {
         ToolContractGuard::listArray($toolCalls, 'Provider turn response tool calls');
         foreach ($toolCalls as $call) {
@@ -47,31 +48,34 @@ final readonly class ProviderTurnResponse
         if (! in_array($kind, [self::FINAL, self::TOOL_CALLS, self::REFUSAL, self::INCOMPLETE, self::FAILURE], true)) {
             throw new InvalidArgumentException('Provider turn response kind is unsupported.');
         }
+        if ($visibleReasoning !== null && (trim($visibleReasoning) === '' || strlen($visibleReasoning) > 20_000)) {
+            throw new InvalidArgumentException('Provider-visible reasoning must be a non-empty bounded string.');
+        }
     }
 
-    public static function final(string $text, ?string $responseId, ?string $stopReason, TokenUsage $usage): self
+    public static function final(string $text, ?string $responseId, ?string $stopReason, TokenUsage $usage, ?string $visibleReasoning = null): self
     {
-        return new self(self::FINAL, $text, [], null, $responseId, $stopReason, $usage, null);
+        return new self(self::FINAL, $text, [], null, $responseId, $stopReason, $usage, null, $visibleReasoning);
     }
 
     /** @param list<ToolCall> $toolCalls */
-    public static function toolCalls(?string $preamble, array $toolCalls, ProviderTurnState $state, ?string $responseId, ?string $stopReason, TokenUsage $usage): self
+    public static function toolCalls(?string $preamble, array $toolCalls, ProviderTurnState $state, ?string $responseId, ?string $stopReason, TokenUsage $usage, ?string $visibleReasoning = null): self
     {
-        return new self(self::TOOL_CALLS, $preamble, $toolCalls, $state, $responseId, $stopReason, $usage, null);
+        return new self(self::TOOL_CALLS, $preamble, $toolCalls, $state, $responseId, $stopReason, $usage, null, $visibleReasoning);
     }
 
-    public static function refusal(string $text, ?string $responseId, ?string $stopReason, TokenUsage $usage): self
+    public static function refusal(string $text, ?string $responseId, ?string $stopReason, TokenUsage $usage, ?string $visibleReasoning = null): self
     {
-        return new self(self::REFUSAL, $text, [], null, $responseId, $stopReason, $usage, null);
+        return new self(self::REFUSAL, $text, [], null, $responseId, $stopReason, $usage, null, $visibleReasoning);
     }
 
-    public static function incomplete(string $text, ?string $responseId, ?string $stopReason, TokenUsage $usage): self
+    public static function incomplete(string $text, ?string $responseId, ?string $stopReason, TokenUsage $usage, ?string $visibleReasoning = null): self
     {
-        return new self(self::INCOMPLETE, $text, [], null, $responseId, $stopReason, $usage, null);
+        return new self(self::INCOMPLETE, $text, [], null, $responseId, $stopReason, $usage, null, $visibleReasoning);
     }
 
-    public static function failure(ProviderFailure $failure, ?string $responseId = null, ?string $stopReason = null, ?TokenUsage $usage = null): self
+    public static function failure(ProviderFailure $failure, ?string $responseId = null, ?string $stopReason = null, ?TokenUsage $usage = null, ?string $visibleReasoning = null): self
     {
-        return new self(self::FAILURE, null, [], null, $responseId, $stopReason, $usage, $failure);
+        return new self(self::FAILURE, null, [], null, $responseId, $stopReason, $usage, $failure, $visibleReasoning);
     }
 }

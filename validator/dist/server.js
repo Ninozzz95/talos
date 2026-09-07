@@ -24,6 +24,21 @@ function broadcast(message) {
 function isSafeScenarioName(value) {
     return /^[a-zA-Z0-9_-]+$/.test(value);
 }
+function boundValidatorEnvironment(address) {
+    if (address === null || typeof address === 'string')
+        return {};
+    let host = address.address;
+    if (host === '0.0.0.0')
+        host = '127.0.0.1';
+    if (host === '::')
+        host = '::1';
+    const authority = host.includes(':') ? `[${host}]:${address.port}` : `${host}:${address.port}`;
+    const origin = `http://${authority}`;
+    return {
+        KADMOS_VALIDATOR_URL: process.env.KADMOS_VALIDATOR_URL || `${origin}/validate`,
+        KADMOS_VALIDATOR_HEALTH_URL: process.env.KADMOS_VALIDATOR_HEALTH_URL || `${origin}/health`,
+    };
+}
 function redactSensitiveText(message, knownSecrets = [], maxLength = 800) {
     let redacted = message;
     for (const secret of knownSecrets) {
@@ -164,7 +179,7 @@ export function buildServer() {
     });
     // Chat relay to PHP
     server.post('/chat', async (request) => {
-        const { message, api_key, provider, model, base_url, tool_context, browser_mode } = request.body;
+        const { message, api_key, provider, model, base_url, tool_context, browser_mode, effort, thinking } = request.body;
         if (!message)
             return { error: 'message required' };
         // Use absolute path to PHP binary — env var override if set
@@ -175,6 +190,7 @@ export function buildServer() {
             const php = spawn(phpBin, [chatScript], {
                 env: {
                     ...process.env,
+                    ...boundValidatorEnvironment(server.server.address()),
                     DEEPSEEK_API_KEY: api_key || process.env.DEEPSEEK_API_KEY || '',
                     KADMOS_PROVIDER: provider || process.env.KADMOS_PROVIDER || '',
                     KADMOS_MODEL: model || process.env.KADMOS_MODEL || '',
@@ -214,7 +230,7 @@ export function buildServer() {
                 }
                 resolve({ error: 'Core chat process returned no output.', code: 'CORE_CHAT_EMPTY_OUTPUT' });
             });
-            php.stdin.write(JSON.stringify({ message, api_key, provider, model, base_url, tool_context, browser_mode }) + '\n');
+            php.stdin.write(JSON.stringify({ message, api_key, provider, model, base_url, tool_context, browser_mode, effort, thinking }) + '\n');
             php.stdin.end();
         });
     });

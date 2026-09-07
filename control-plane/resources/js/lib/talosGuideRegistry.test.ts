@@ -37,6 +37,7 @@ const EXPECTED_GUIDE_IDS = [
     'brain.skill_audit',
     'model_lab.cookbook',
     'model_lab.models',
+    'model_lab.catalog',
     'tasks.tasks',
     'tasks.email',
     'doctor.doctor',

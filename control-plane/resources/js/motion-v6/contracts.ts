@@ -29,6 +29,7 @@ export const TALOS_MOTION_SCENE_IDS = Object.freeze([
     'claudius',
     'basicus',
     'telemetry',
+    'calm',
 ] as const)
 
 export const TALOS_MOTION_FPS_CAPS = Object.freeze([20, 24, 30, 45, 60] as const)

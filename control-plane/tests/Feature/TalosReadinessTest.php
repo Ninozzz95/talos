@@ -19,6 +19,17 @@ final class TalosReadinessTest extends TestCase
     {
         parent::setUp();
         $this->app->instance(TalosFilePipelineHealth::class, new HealthyTalosFilePipelineHealth);
+        config([
+            'services.talos.artifact.worker_url' => 'http://artifact-worker.test:3200',
+            'services.talos.artifact.worker_token' => 'test-artifact-worker-token-at-least-32-bytes',
+        ]);
+        Http::fake([
+            'http://artifact-worker.test:3200/ready' => Http::response(
+                $this->artifactReadinessPayload(),
+                200,
+                ['Content-Type' => 'application/json'],
+            ),
+        ]);
     }
 
     public function test_readyz_is_public_and_reports_healthy_when_dependencies_are_ready(): void
@@ -53,11 +64,14 @@ final class TalosReadinessTest extends TestCase
             ->assertJsonPath('checks.tika.status', 'healthy')
             ->assertJsonPath('checks.validator.status', 'healthy')
             ->assertJsonPath('checks.browser_worker.status', 'healthy')
+            ->assertJsonPath('checks.artifact_worker.status', 'healthy')
             ->assertJsonPath('checks.app_key.status', 'healthy')
             ->assertJsonPath('checks.migrations.status', 'healthy');
 
         Http::assertSent(fn ($request): bool => $request->url() === 'http://browser-worker.test/ready'
             && $request->hasHeader('X-Talos-Worker-Token', 'test-browser-token'));
+        Http::assertSent(fn ($request): bool => $request->url() === 'http://artifact-worker.test:3200/ready'
+            && $request->hasHeader('Authorization', 'Bearer test-artifact-worker-token-at-least-32-bytes'));
     }
 
     public function test_readyz_fails_closed_when_validator_health_url_is_missing(): void
@@ -159,6 +173,32 @@ final class TalosReadinessTest extends TestCase
             ->assertJsonPath('ready', false)
             ->assertJsonPath('checks.browser_worker.status', 'failed')
             ->assertJsonPath('checks.browser_worker.detail', 'browser worker HMI protocol is incompatible.');
+    }
+
+    public function test_readyz_fails_closed_when_artifact_worker_protocol_is_incompatible(): void
+    {
+        $this->configureHealthyExternalDependencies();
+        config([
+            'services.talos.artifact.worker_url' => 'http://artifact-worker-incompatible.test:3200',
+        ]);
+        $payload = $this->artifactReadinessPayload();
+        $payload['protocol_version'] = 2;
+        Http::fake([
+            'http://artifact-worker-incompatible.test:3200/ready' => Http::response(
+                $payload,
+                200,
+                ['Content-Type' => 'application/json'],
+            ),
+        ]);
+
+        $this->getJson('/readyz')
+            ->assertStatus(503)
+            ->assertJsonPath('ready', false)
+            ->assertJsonPath('checks.artifact_worker.status', 'failed')
+            ->assertJsonPath(
+                'checks.artifact_worker.detail',
+                'artifact worker readiness failed: Artifact worker readiness is incompatible with protocol version 1.',
+            );
     }
 
     public function test_readyz_fails_closed_when_file_pipeline_sidecars_are_unhealthy(): void
@@ -289,13 +329,76 @@ final class TalosReadinessTest extends TestCase
 
         $this->assertIsString($launcher);
         $this->assertStringContainsString(
-            'Building and starting TALOS, queue, validator, browser worker, ClamAV, and Tika',
+            'Building and starting TALOS, queue, validator, browser worker, artifact worker, ClamAV, and Tika',
             $launcher,
         );
         $this->assertStringContainsString(
-            'compose logs --tail=120 talos validator browser-worker clamav tika',
+            'compose logs --tail=120 talos validator browser-worker artifact-worker clamav tika',
             $launcher,
         );
+    }
+
+    public function test_production_artifact_worker_is_private_hardened_and_readiness_gated(): void
+    {
+        $compose = file_get_contents(base_path('../docker-compose.yml'));
+
+        $this->assertIsString($compose);
+        $worker = $this->composeService($compose, 'artifact-worker');
+        $talos = $this->composeService($compose, 'talos');
+        $queue = $this->composeService($compose, 'talos-queue');
+        $normalized = str_replace("\r\n", "\n", $compose);
+
+        $this->assertStringContainsString('dockerfile: artifact-worker/Dockerfile', $worker);
+        $this->assertStringContainsString('expose:', $worker);
+        $this->assertStringContainsString('- "3200"', $worker);
+        $this->assertStringNotContainsString('ports:', $worker);
+        $this->assertStringContainsString('ARTIFACT_WORKER_TOKEN:', $worker);
+        $this->assertStringContainsString('read_only: true', $worker);
+        $this->assertStringContainsString('cap_drop:', $worker);
+        $this->assertStringContainsString('- ALL', $worker);
+        $this->assertStringContainsString('no-new-privileges:true', $worker);
+        $this->assertStringContainsString('- artifact-app', $worker);
+        $this->assertStringNotContainsString('- default', $worker);
+        $this->assertStringNotContainsString('OPENAI_API_KEY', $worker);
+        $this->assertStringNotContainsString('volumes:', $worker);
+        $this->assertStringContainsString('TALOS_ARTIFACT_WORKER_URL=http://artifact-worker:3200', $talos);
+        $this->assertStringContainsString('TALOS_ARTIFACT_WORKER_TOKEN=', $talos);
+        $this->assertStringContainsString("artifact-worker:\n        condition: service_healthy", $talos);
+        $this->assertStringContainsString('TALOS_ARTIFACT_WORKER_URL=http://artifact-worker:3200', $queue);
+        $this->assertStringContainsString('TALOS_ARTIFACT_WORKER_TOKEN=', $queue);
+        $this->assertStringContainsString("artifact-worker:\n        condition: service_healthy", $queue);
+        $this->assertStringContainsString("artifact-app:\n    internal: true", $normalized);
+    }
+
+    public function test_launcher_bootstraps_artifact_worker_for_container_and_native_modes(): void
+    {
+        $launcher = file_get_contents(base_path('../talos'));
+        $rootEnvironment = file_get_contents(base_path('../.env.example'));
+        $controlPlaneEnvironment = file_get_contents(base_path('.env.example'));
+
+        $this->assertIsString($launcher);
+        $this->assertIsString($rootEnvironment);
+        $this->assertIsString($controlPlaneEnvironment);
+        $this->assertStringContainsString(
+            'set_env_value .env TALOS_ARTIFACT_WORKER_TOKEN "$(random_hex_32)"',
+            $launcher,
+        );
+        $this->assertStringContainsString(
+            'validator browser-worker artifact-worker control-plane',
+            $launcher,
+        );
+        $this->assertStringContainsString(
+            'Building and starting TALOS, queue, validator, browser worker, artifact worker, ClamAV, and Tika',
+            $launcher,
+        );
+        $this->assertStringContainsString(
+            'compose logs --tail=120 talos validator browser-worker artifact-worker clamav tika',
+            $launcher,
+        );
+        $this->assertStringContainsString('TALOS_ARTIFACT_WORKER_URL=http://artifact-worker:3200', $rootEnvironment);
+        $this->assertStringContainsString('TALOS_ARTIFACT_WORKER_TOKEN=', $rootEnvironment);
+        $this->assertStringContainsString('TALOS_ARTIFACT_WORKER_URL=http://127.0.0.1:3200', $controlPlaneEnvironment);
+        $this->assertStringContainsString('TALOS_ARTIFACT_WORKER_TOKEN=', $controlPlaneEnvironment);
     }
 
     public function test_ocr_profile_pins_images_revisions_gpu_and_private_runtime_network(): void
@@ -465,6 +568,26 @@ final class TalosReadinessTest extends TestCase
                 ],
             ]),
         ]);
+    }
+
+    /** @return array<string, mixed> */
+    private function artifactReadinessPayload(): array
+    {
+        return [
+            'contract' => 'talos.artifact.readiness.v1',
+            'status' => 'ready',
+            'worker_version' => '0.1.0',
+            'protocol_version' => 1,
+            'formats' => ['docx', 'pdf', 'pptx', 'xlsx', 'thumbnail'],
+            'limits' => [
+                'max_output_bytes' => 25_000_000,
+                'max_duration_ms' => 120_000,
+                'max_sections' => 200,
+                'max_rows' => 5_000,
+                'max_slides' => 100,
+                'max_input_pixels' => 16_000_000,
+            ],
+        ];
     }
 
     private function composeService(string $compose, string $service): string

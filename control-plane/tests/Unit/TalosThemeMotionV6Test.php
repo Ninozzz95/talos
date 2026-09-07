@@ -87,7 +87,7 @@ final class TalosThemeMotionV6Test extends TestCase
     {
         return [
             'mode' => ['mode', ['off', 'static', 'simple', 'complex', 'adaptive']],
-            'scene override' => ['scene_override', ['forge', 'paper', 'terminal', 'aurora', 'glacier', 'ember', 'atlas', 'noir', 'signal', 'violet', 'claudius', 'basicus']],
+            'scene override' => ['scene_override', ['forge', 'paper', 'terminal', 'aurora', 'glacier', 'ember', 'atlas', 'noir', 'signal', 'violet', 'claudius', 'basicus', 'telemetry', 'calm']],
             'quality' => ['quality', ['low', 'balanced', 'high', 'adaptive']],
             'interface profile' => ['interface.profile', ['preset', 'minimal', 'expressive', 'custom', 'off']],
             'interface easing' => ['interface.easing', ['precise', 'soft', 'elastic-light', 'linear', 'cinematic']],

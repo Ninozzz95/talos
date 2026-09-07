@@ -8,6 +8,9 @@ import TalosBrowserInteractiveFrame, {
 import type {
     TalosBrowserArtifact,
     TalosBrowserPointerFrame,
+    TalosBrowserRefFrame,
+    TalosBrowserRefInteraction,
+    TalosBrowserScrollFrame,
     TalosBrowserSession,
     TalosMobileWindowPresentation,
 } from '../../../lib/talosTypes'
@@ -47,6 +50,19 @@ const session: TalosBrowserSession = {
     updated_at: '2026-07-16T10:00:00Z',
 }
 
+const refFrame: TalosBrowserRefFrame = {
+    schema_version: 'talos_browser_hmi_ref_targets_v2',
+    browser_session_id: 'browser-1',
+    state_version: 7,
+    frame_sha256: `sha256:${'a'.repeat(64)}`,
+    snapshot_id: `hmi_ref_${'d'.repeat(64)}`,
+    screenshot: artifact,
+    targets: [
+        { ref: 'e1', role: 'button', name: 'Reject optional cookies', destination: null },
+        { ref: 'e2', role: 'link', name: 'Privacy settings', destination: 'https://example.com/privacy' },
+    ],
+}
+
 let app: ReturnType<typeof createApp> | null = null
 
 function jsonResponse(data: unknown) {
@@ -67,6 +83,9 @@ async function mountFrame(options: {
     presentation?: TalosMobileWindowPresentation
     activeSession?: TalosBrowserSession | null
     artifactIds?: string[]
+    refFrame?: TalosBrowserRefFrame | null
+    refTargetsLoading?: boolean
+    refTargetsError?: string | null
 } = {}) {
     const portal = document.createElement('div')
     portal.id = 'talos-portal-root'
@@ -74,6 +93,8 @@ async function mountFrame(options: {
     document.body.append(portal, mountPoint)
     const frame = ref<TalosBrowserInteractiveFrameHandle | null>(null)
     const interactions: TalosBrowserPointerFrame[] = []
+    const refInteractions: TalosBrowserRefInteraction[] = []
+    const scrolls: TalosBrowserScrollFrame[] = []
 
     app = createApp({
         setup() {
@@ -88,9 +109,14 @@ async function mountFrame(options: {
                     artifactIds: options.artifactIds ?? ['artifact-1'],
                     talosSessionId: 'chat-1',
                     activeBrowserSession: options.activeSession === undefined ? session : options.activeSession,
+                    refFrame: options.refFrame ?? null,
+                    refTargetsLoading: options.refTargetsLoading ?? false,
+                    refTargetsError: options.refTargetsError ?? null,
                     mobile: options.mobile ?? false,
                     mobileWindowPresentation: options.presentation ?? 'drawer',
                     onInteract: (pointer: TalosBrowserPointerFrame) => interactions.push(pointer),
+                    onInteractRef: (interaction: TalosBrowserRefInteraction) => refInteractions.push(interaction),
+                    onScroll: (scroll: TalosBrowserScrollFrame) => scrolls.push(scroll),
                 }),
             ])
         },
@@ -104,7 +130,7 @@ async function mountFrame(options: {
     launcher?.click()
     await settle()
 
-    return { portal, mountPoint, launcher, interactions, frame }
+    return { portal, mountPoint, launcher, interactions, refInteractions, scrolls, frame }
 }
 
 async function decodeSelectedImage(portal: HTMLElement) {
@@ -121,6 +147,7 @@ afterEach(() => {
     app = null
     document.body.replaceChildren()
     vi.restoreAllMocks()
+    vi.useRealTimers()
 })
 
 describe('TalosBrowserInteractiveFrame', () => {
@@ -209,5 +236,116 @@ describe('TalosBrowserInteractiveFrame', () => {
         stage?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 400, clientY: 300 }))
         await new Promise((resolve) => setTimeout(resolve, 260))
         expect(interactions).toHaveLength(0)
+    })
+
+    it('STAGE2A-002 coalesces wheel input and exposes accessible scroll buttons only for the current decoded frame', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ data: artifact }))
+        const { portal, scrolls } = await mountFrame()
+        await decodeSelectedImage(portal)
+        vi.useFakeTimers()
+
+        const stage = portal.querySelector<HTMLElement>('[data-testid="browser-evidence-stage"]')
+        const first = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 2, deltaMode: 1 })
+        const second = new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 1, deltaMode: 1 })
+        stage?.dispatchEvent(first)
+        stage?.dispatchEvent(second)
+
+        expect(first.defaultPrevented).toBe(true)
+        expect(second.defaultPrevented).toBe(true)
+        expect(scrolls).toHaveLength(0)
+        await vi.advanceTimersByTimeAsync(100)
+        expect(scrolls).toEqual([{
+            browserSessionId: 'browser-1',
+            artifact,
+            deltaY: 120,
+        }])
+
+        const up = portal.querySelector<HTMLButtonElement>('[aria-label="Scroll browser page up"]')
+        const down = portal.querySelector<HTMLButtonElement>('[aria-label="Scroll browser page down"]')
+        expect(up).not.toBeNull()
+        expect(down).not.toBeNull()
+        expect(up?.disabled).toBe(true)
+        expect(down?.disabled).toBe(true)
+    })
+
+    it('STAGE2A-002 keeps historical frame scroll controls disabled', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ data: artifact }))
+        const staleSession = { ...session, state_version: 8, last_screenshot_artifact_id: 'artifact-2' }
+        const { portal, scrolls } = await mountFrame({ activeSession: staleSession })
+        await decodeSelectedImage(portal)
+
+        portal.querySelector<HTMLButtonElement>('[aria-label="Scroll browser page down"]')?.click()
+        expect(scrolls).toHaveLength(0)
+        expect(portal.querySelector<HTMLButtonElement>('[aria-label="Scroll browser page down"]')?.disabled).toBe(true)
+    })
+
+    it('STAGE2B-016 renders keyboard-reachable page controls only for the current decoded frame', async () => {
+        vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+            const url = String(input)
+            return jsonResponse({ data: url.endsWith('/artifact-2') ? refreshedArtifact : artifact })
+        })
+        const { portal, frame, refInteractions } = await mountFrame({
+            artifactIds: ['artifact-1', 'artifact-2'],
+            refFrame,
+        })
+        await decodeSelectedImage(portal)
+
+        const rail = portal.querySelector<HTMLElement>('[data-testid="browser-page-controls"]')
+        const controls = [...portal.querySelectorAll<HTMLButtonElement>('[data-browser-ref]')]
+        expect(rail?.textContent).toContain('Page controls')
+        expect(controls).toHaveLength(2)
+        expect(controls.every((control) => control.tagName === 'BUTTON')).toBe(true)
+        expect(controls[0]?.textContent).toContain('Reject optional cookies')
+        expect(controls[1]?.textContent).toContain('example.com')
+        controls[0]?.focus()
+        expect(document.activeElement).toBe(controls[0])
+        controls[0]?.click()
+        expect(refInteractions).toEqual([{
+            browserSessionId: 'browser-1',
+            artifact,
+            snapshotId: refFrame.snapshot_id,
+            ref: 'e1',
+            clickCount: 1,
+        }])
+        expect(portal.textContent).not.toContain('raw_snapshot')
+        expect(portal.textContent).not.toContain('text_digest')
+
+        await frame.value?.openArtifact('artifact-2')
+        await settle()
+        const historical = portal.querySelector<HTMLImageElement>('[data-testid="browser-evidence-image-artifact-2"]')
+        Object.defineProperty(historical, 'naturalWidth', { configurable: true, value: 800 })
+        Object.defineProperty(historical, 'naturalHeight', { configurable: true, value: 600 })
+        historical?.dispatchEvent(new Event('load'))
+        await nextTick()
+        expect(portal.querySelectorAll('[data-browser-ref]')).toHaveLength(0)
+    })
+
+    it('STAGE2B-017 keeps coordinate interaction enabled beside a compact semantic-unavailable state', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ data: artifact }))
+        const { portal, interactions } = await mountFrame({
+            refTargetsError: 'Semantic page controls are temporarily unavailable. You can still interact directly with the screenshot.',
+        })
+        await decodeSelectedImage(portal)
+        vi.useFakeTimers()
+
+        const rail = portal.querySelector<HTMLElement>('[data-testid="browser-page-controls"]')
+        const stage = portal.querySelector<HTMLElement>('[data-testid="browser-evidence-stage"]')
+        expect(rail?.getAttribute('role')).toBe('status')
+        expect(rail?.textContent).toContain('Semantic page controls are temporarily unavailable')
+        expect(portal.querySelectorAll('[data-browser-ref]')).toHaveLength(0)
+        expect(stage?.className).not.toContain('pointer-events-none')
+        Object.defineProperty(stage, 'getBoundingClientRect', {
+            configurable: true,
+            value: () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, x: 0, y: 0, toJSON: () => ({}) }),
+        })
+        stage?.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 400, clientY: 300, detail: 1 }))
+        await vi.advanceTimersByTimeAsync(221)
+        expect(interactions).toEqual([{
+            browserSessionId: 'browser-1',
+            artifact,
+            normalizedX: 0.5,
+            normalizedY: 0.5,
+            clickCount: 1,
+        }])
     })
 })

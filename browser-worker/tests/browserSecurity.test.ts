@@ -7,6 +7,7 @@ import { BrowserSessionManager, type BrowserLaunchOptions } from "../src/Browser
 import { assertAllowedBrowserUrl, browserEvidenceUrl, isPrivateOrReservedIp, normalizeHostname } from "../src/BrowserUrlPolicy.js";
 import { buildServer } from "../src/server.js";
 import { BrowserActionCapabilityVerifier } from "../src/BrowserActionCapability.js";
+import { BrowserTestFixturePermit } from "../src/BrowserTestFixturePermit.js";
 import { createTestActionCapabilityKeypair } from "./support/browserActionCapability.js";
 
 const actionKeys = createTestActionCapabilityKeypair("security-action-test-key");
@@ -90,6 +91,21 @@ describe("browser egress policy", () => {
       socket.on("connect", () => socket.write(request));
     });
   }
+
+  it("keeps the test fixture origin blocked outside the exact test runtime", async () => {
+    const permit = BrowserTestFixturePermit.fromEnvironment({
+      TALOS_BROWSER_TEST_FIXTURE_ORIGIN: "http://127.0.0.1:43125",
+    }, "production");
+    const proxy = new BrowserEgressProxy({ fixturePermit: permit });
+
+    expect(permit.enabled).toBe(false);
+    await expect(assertAllowedBrowserUrl("http://127.0.0.1:43125/", permit)).rejects.toMatchObject({
+      code: "TALOS_BROWSER_INVALID_NAVIGATION_URL",
+    });
+    await expect(proxy.resolveVettedAddress("127.0.0.1", 43125)).rejects.toMatchObject({
+      code: "TALOS_BROWSER_PROXY_PRIVATE_TARGET",
+    });
+  });
 
   it.each([
     "CONNECT example.test HTTP/1.1\r\nHost: example.test\r\n\r\n",

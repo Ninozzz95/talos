@@ -13,9 +13,11 @@ import '@fontsource/sora/latin-500.css'
 import '@fontsource/sora/latin-600.css'
 import '@fontsource/source-serif-4/latin-400.css'
 import '@fontsource/source-serif-4/latin-600.css'
+import 'vue-sonner/style.css'
 import { createApp } from 'vue'
 import TalosWorkspace from './components/talos/workspace/TalosWorkspace.vue'
 import { failTalosBootLoader, scheduleTalosBootCompletion } from './lib/talosBootLoader'
+import { parseTalosPublicLinks } from './lib/talosPublicLinks'
 import './lib/api'
 import './lib/commandRegistry'
 import './lib/statusCopy'
@@ -34,6 +36,11 @@ if (workspaceRoot) {
             csrfToken: workspaceRoot.dataset.csrfToken ?? '',
             devBrowserEvidence: workspaceRoot.dataset.devBrowserEvidence === 'true',
             developmentMode: workspaceRoot.dataset.developmentMode === 'true',
+            publicLinks: parseTalosPublicLinks({
+                avmDeepDive: workspaceRoot.dataset.talosAvmDeepDiveUrl,
+                patreon: workspaceRoot.dataset.talosPatreonUrl,
+                kofi: workspaceRoot.dataset.talosKofiUrl,
+            }),
         }).mount(workspaceRoot)
 
         scheduleTalosBootCompletion(workspaceRoot)

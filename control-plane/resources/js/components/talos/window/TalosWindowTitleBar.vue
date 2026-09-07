@@ -7,6 +7,7 @@ const props = defineProps<{
     id: string
     title: string
     stationCode?: string
+    developmentMode?: boolean
     description?: string
     docked?: boolean
     fullscreen?: boolean
@@ -64,7 +65,7 @@ function handleTitleKeydown(event: KeyboardEvent) {
         >
             <h2 class="flex min-w-0 items-center gap-2 truncate text-sm font-semibold text-[var(--talos-text)]">
                 <span class="truncate">{{ title }}</span>
-                <Chip v-if="stationCode" :code="stationCode" aria-hidden="true" />
+                <Chip v-if="stationCode && developmentMode" :code="stationCode" aria-hidden="true" />
             </h2>
             <p v-if="description" class="truncate text-[11px] text-[var(--talos-muted)]">{{ description }}</p>
         </div>
