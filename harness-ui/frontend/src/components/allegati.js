@@ -124,3 +124,53 @@ export function nomeBreveAllegato(percorso, massimo = 28) {
   const testa = nome.slice(0, Math.max(1, massimo - estensione.length - 1));
   return `${testa}…${estensione}`;
 }
+
+/*
+ * ⛔⛔ 07/9, owner con lo screenshot: «gli allegati di questo messaggio non devono apparire nella
+ * bolla ma fuori o nascosti — la bolla è riservata ai messaggi dell'utente». Aveva ragione due
+ * volte. Nella sua bolla c'erano quattro parole («mm h ti ricorda qualcosa?») affogate in quattro
+ * righe di URL e un «404: Not Found» che lui non aveva scritto: il messaggio vero diventava
+ * illeggibile, e spariva la distinzione fra ciò che ha detto una persona e ciò che il sistema ha
+ * aggiunto. Rileggendo una conversazione per capire cosa era stato chiesto, non si distingue più.
+ *
+ * Ricerca 07/09/2026 — shadcn/ui, «Components for Chat Interfaces» (giugno 2026): gli Attachment
+ * sono componenti SEPARATI dai Bubble, «file attachments can be shown with the user profile and
+ * timestamp OUTSIDE the chat bubble». La bolla rende la superficie del messaggio; gli allegati sono
+ * oggetti a fianco, coi loro metadati e le loro azioni.
+ *
+ * ⛔ Ciò che si manda al MODELLO non cambia: il contenuto continua a viaggiare nel messaggio, che è
+ *   quello che serve al giro. Cambia solo cosa si legge a schermo.
+ */
+
+/** Il tipo di allegato, detto come lo direbbe una persona. */
+export function generePerLoSchermo(allegato) {
+  if (!allegato) return 'allegato';
+  if (allegato.daBrowser) return 'pagina aperta';
+  if (allegato.tipo === 'immagine') return 'immagine';
+  if (allegato.tipo === 'schermata') return 'schermata';
+  return 'file';
+}
+
+/**
+ * La riga corta di un allegato per il chip sotto la bolla: genere, nome, e quanto pesa.
+ * ⛔ Per una pagina il «nome» è il suo dominio, non l'URL intero: un chip che porta 90 caratteri di
+ *    URL rifà, in piccolo, il difetto che stiamo curando.
+ */
+export function chipAllegato(allegato, modello = '') {
+  if (!allegato) return null;
+  const genere = generePerLoSchermo(allegato);
+  let nome;
+  if (allegato.daBrowser) {
+    try { nome = new URL(allegato.percorso || allegato.nome || '').host || allegato.nome || ''; }
+    catch { nome = nomeBreveAllegato(allegato.percorso || allegato.nome, 32); }
+  } else {
+    nome = nomeBreveAllegato(allegato.percorso || allegato.nome, 32);
+  }
+  const { etichetta } = costoAllegato(allegato, modello);
+  return { genere, nome, costo: etichetta, titolo: allegato.percorso || allegato.nome || '' };
+}
+
+/** I chip di un messaggio, nell'ordine in cui sono stati allegati. */
+export function chipDegliAllegati(allegati, modello = '') {
+  return (Array.isArray(allegati) ? allegati : []).map((a) => chipAllegato(a, modello)).filter(Boolean);
+}

@@ -49,6 +49,15 @@
 | O-38 | «al posto di Tema Calm metti l'output medio di token al secondo se uso un modello locale; se non è locale togli la scritta» | Barra di stato | ✅ | `testoVelocitaLocale`, con la prova nei due versi |
 | O-39 | «rendere tutte le scrollbar completamente custom e più compatte (meno larghe)» | Tutta l'app, 30 scroller | ✅ | un blocco solo su `*` sui token; dal vivo a 3 viewport × 2 temi: **0 scroller con la barra di sistema**, colore che segue il tema |
 | O-40 | «fare in modo che tutti i tooltip siano custom e stilizzati secondo il tema» | Tutta l'app, 220 tooltip | ✅ | `tooltip.js` + `popover=hint` + ancoraggio CSS; dal vivo: si apre col mouse E col fuoco, hoverable, Esc lo chiude, `title` migrati al volo |
+| O-41 | «gli allegati di questo messaggio non devono apparire nella bolla ma fuori o nascosti: la bolla è riservata ai messaggi dell'utente» | Conversazione | 🔧 in corso | il testo dell'allegato finiva DENTRO la bolla utente, mescolato a ciò che la persona ha scritto |
+| O-42 | il Browser mostra un riquadro rotto al posto della pagina (screenshot su github.com) | Browser | 🔴 aperto | GitHub vieta la cornice: l'iframe non carica e il ripiego al testo non scatta in tempo |
+| O-43 | «il testo scritto nel composer (solo quello realmente scritto, non il placeholder) deve avere l'accent color» | Composer | 🔴 aperto | segnalato 07/09 |
+| O-44 | «i loghi sono ancora mockup e non usano quelli veri — vedi mobile, lui lo fa alla perfezione» | Marchio, tutta l'app | 🔴 aperto | il mobile è il riferimento: si guarda come fa lui |
+| O-45 | «quando carica una risposta, il logo dei 3 pallini attraversati dalla linea non è animato» | Attesa della risposta | 🔴 aperto | segnalato 07/09 |
+| O-46 | «nella nuova sessione vuota (senza messaggio) non c'è il logo reale e la scritta TALOS in Orbitron sopra il messaggio di benvenuto» | Chat vuota | 🔴 aperto | ⭐ la causa è già nota: `costruisciConversationHero` è una delle 7 funzioni MAI CHIAMATE |
+| O-47 | «quando voglio fermare una chat in corso devo poter fermarla immediatamente» | Fermare un giro | 🔴 aperto | ricerca su Codex, Claude e Hermes chiesta dall'owner |
+| O-48 | «il pulsante di un'altra sessione è su stop quando una sessione separata è in reasoning» | Composer, stato del giro | 🔴 aperto | **di correttezza**: lo stato «in corso» è globale invece che della sessione aperta |
+| O-49 | «Risposta non riuscita · Query non valida» ripetuto in basso a destra | Errori | 🔴 aperto | visto in due screenshot diversi il 07/09; una chiamata manda una query che il server rifiuta |
 
 ---
 
@@ -439,3 +448,50 @@ nativo **tolto** dove il nostro subentra, altrimenti compaiono tutti e due.
 
 ⛔ **Ordine consigliato**: O-39 prima (è un blocco di CSS e una prova, mezza giornata), O-40 dopo
 (tocca 220 punti e vuole il componente, la migrazione e le prove di accessibilità).
+
+### O-41 · Gli allegati dentro la bolla dell'utente — segnalato il 07/09
+
+**Cosa vede l'owner** (screenshot): la sua bolla contiene «mm h ti ricorda qualcosa? **Allegati di
+questo messaggio: - Pagina aperta: raw.githubusercontent.com/... --- 404: Not Found**». Cioè: cinque
+righe di roba che lui non ha scritto, dentro la bolla che dovrebbe contenere solo le sue parole.
+
+**Perché è sbagliato, e non è una questione di gusto.** La bolla dell'utente è l'unico posto della
+schermata dove sta ciò che ha detto **una persona**. Mescolarci dentro il contenuto degli allegati
+fa due danni: rende illeggibile il messaggio vero (qui: quattro parole affogate in quattro righe di
+URL), e cancella la distinzione fra «l'ho detto io» e «il sistema l'ha aggiunto». Quando poi si
+rilegge una conversazione per capire cosa era stato chiesto, non si distingue più.
+
+**Cosa fanno gli altri** (letto il 07/09/2026 — shadcn/ui, «Components for Chat Interfaces», giugno
+2026): gli **Attachment sono componenti separati dai Bubble**. «File attachments can be shown with
+the user profile and timestamp **outside the chat bubble**»; la bolla rende la superficie del
+messaggio, gli allegati sono oggetti a fianco con i loro metadati e le loro azioni.
+
+**La proposta.** Gli allegati escono dalla bolla e diventano una **riga di chip sotto di essa**: uno
+per allegato, col tipo e la fonte in breve («Pagina aperta · raw.githubusercontent.com»), il peso in
+token, e apribili con un clic per vedere il contenuto intero. ⛔ Ciò che si manda al modello **non
+cambia**: il contenuto continua a viaggiare nel messaggio, perché è quello che serve al giro. Cambia
+solo cosa si legge a schermo — e la bolla torna a contenere le parole della persona, e basta.
+
+### O-42 · Il Browser mostra un riquadro rotto al posto della pagina — segnalato il 07/09
+
+**Cosa vede l'owner** (screenshot): la scheda «Pagina» su `github.com/Ninozzz95/talos` mostra un
+rettangolo grigio con l'icona dell'immagine rotta. Sopra, la lettura dice `HTTP 200 · 4116
+caratteri`: il testo c'è, è la **cornice** a non mostrarlo.
+
+**Perché.** Per una lettura, il Browser incornicia la pagina vera
+(`browser.js`: `frame.src = s.url`). **GitHub vieta di essere incorniciato** (`X-Frame-Options`), e
+un sito che rifiuta non manda nessun evento `load`: resta un riquadro vuoto. Il ripiego esiste —
+dopo un'attesa si torna al testo con un avviso — ma nello screenshot non era scattato.
+
+Ricerca 07/09/2026 (openclaw #71979, «CSP blob: URL blocked»; content-security-policy.com,
+«img-src»): la stessa famiglia — una risorsa rifiutata dalla policy non dà errore visibile, lascia
+un segnaposto rotto, e in Firefox non compare nemmeno nella scheda Rete.
+
+**La proposta, in due mosse.**
+1. **Non aspettare il fallimento: prevederlo.** Prima di incorniciare si chiede al nostro server se
+   quella pagina è incornicabile (la rotta `/api/v1/browser/incorniciabile` **esiste già**): se
+   l'intestazione lo vieta, si va dritti al testo, e la scheda «Pagina» lo dichiara invece di
+   provarci. Zero riquadri rotti, e nessuna attesa.
+2. **Se proprio si prova, il ripiego deve essere immediato e leggibile**: al posto del rettangolo
+   grigio, una riga che dice «GitHub non si lascia mostrare dentro TALOS — qui sotto c'è il testo
+   che ha letto l'agente», con il testo già visibile sotto, non dopo un timeout.
