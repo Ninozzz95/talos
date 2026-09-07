@@ -2,8 +2,8 @@
  * image-generator.mjs — FASE H del piano `elegant-spinning-dongarra.md`
  * (29/8): chiama la Image API di OpenRouter (lanciata fine giugno
  * 2026), la STESSA chiave già in `config.mjs` — zero provider nuovo,
- * il one-up dichiarato su Hermes/Codex (loro un attrezzo immagine
- * verso un provider SEPARATO dal modello di chat).
+ * il one-up dichiarato: niente attrezzo immagine verso un provider
+ * separato dal modello di chat.
  *
  * Codici d'errore `TALOS_IMAGE_*` — stessa famiglia di nomi già in
  * uso nell'omologo mobile (`mobile/src/lib/images/imageTools.ts`:

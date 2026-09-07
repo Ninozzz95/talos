@@ -1,11 +1,11 @@
 /*
  * cronologia.js — la barra di navigazione della conversazione, all'estrema sinistra.
  *
- * Owner 06/09, tre volte: «la barra deve essere estremamente simile a quella di ChatGPT applicazione
- * desktop… alla estrema sinistra, compatta in altezza; quando ci passi si espande la riga, mostra la
+ * Owner 06/09, tre volte: «la barra deve essere estremamente simile a quella delle app di chat più
+ * curate… alla estrema sinistra, compatta in altezza; quando ci passi si espande la riga, mostra la
  * relativa conversazione in un fumetto, e se ci clicchi ti manda lì».
  *
- * Misurata DAL VIVO nell'app ChatGPT desktop (pacchetto OpenAI.Codex 26.901.6511.0, avviata con
+ * Misurata DAL VIVO su un'app di riferimento del settore (avviata con
  * `--remote-debugging-port`, lettura del solo `nav`), 06/09/2026:
  *   · `<nav>` assoluta, `left: 16px`, centrata in verticale, `z-index 20`, larghezza 36 px;
  *   · dentro, uno scorrevole `max-height: min(70vh, 40rem)` con la barra nascosta e una maschera
@@ -17,9 +17,9 @@
  *   · al passaggio del mouse la lente **si sposta** sulla voce sotto il cursore (misurato:
  *     14·20·**26**·20·14·10·6 → 10·14·20·**26**·20·14·6).
  *
- * Il nostro +1 sul loro: il **fumetto** con le prime parole di quel messaggio (loro non lo mostrano
- * nella versione misurata) e il rispetto di `prefers-reduced-motion` nello scorrimento.
- * Fonti 06/09/2026: ispezione diretta dell'app; assistant-ui «Conversation map»; LibreChat #13853
+ * Il nostro +1 su quella misura: il **fumetto** con le prime parole di quel messaggio (non lo
+ * mostrano nella versione misurata) e il rispetto di `prefers-reduced-motion` nello scorrimento.
+ * Fonti 06/09/2026: ispezione diretta dell'app di riferimento; assistant-ui «Conversation map»; LibreChat #13853
  * «Message minimap navigation»; Vivid Layer «Chat minimap» (lente, sfumatura ai bordi, anteprima).
  */
 
@@ -45,7 +45,7 @@ export function anteprima(testo, massimo = 140) {
 /*
  * Owner 06/09: «fondi il componente dei giri nella navigation history: il meglio dei due mondi», e «i
  * numeri dei giri devono SPARIRE» dalla conversazione. Quindi: la spina di ogni turno resta nel DOM come
- * DATO (numero del giro, tono dell'esito, quanti attrezzi — la cosa che ChatGPT non ha) ma non si vede
+ * DATO (numero del giro, tono dell'esito, quanti attrezzi — la cosa che l'app di riferimento non ha) ma non si vede
  * piu'; qui la si legge e diventa una voce della barra. Una voce = un GIRO, non un messaggio: e' la
  * nostra informazione in piu', e sull'uso quotidiano coincide (un messaggio, un giro).
  */
@@ -63,8 +63,8 @@ export function vociDaConversazione(conversazione) {
     /*
      * ⛔ Mai `turno.textContent`: dentro ci sono la spina (numeri dei giri, oggi nascosta) e il blocco del
      * ragionamento, e il fumetto diventava «234TALOSautoRagionamento…». Si prende il corpo del messaggio,
-     * e per un turno di TALOS si mostra la richiesta che l'ha aperto — come fa ChatGPT, che elenca i
-     * messaggi TUOI.
+     * e per un turno di TALOS si mostra la richiesta che l'ha aperto — stessa scelta: elencare
+     * solo i messaggi TUOI.
      */
     if (diUtente) {
       const suo = turno.querySelector('.talos-message--user .talos-message__body')?.textContent;

@@ -1,13 +1,13 @@
 /*
- * Le annotazioni del Browser (oltre Hermes, 06/09): gli spilli che la persona mette sugli elementi
+ * Le annotazioni del Browser (06/09): gli spilli che la persona mette sugli elementi
  * di una pagina viva (proxata) e il pacchetto che arriva all'agente nel composer — mai inviato da
- * solo (Hermes `lib/preview-annotate/flush.ts`: «saving / flushing never submits a turn»).
+ * solo: un salvataggio non deve mai far partire un turno da solo, sono due gesti diversi.
  *
- * Cosa porta ogni annotazione, oltre a Hermes (selettore, testo, ritaglio): l'HTML dell'elemento,
+ * Cosa porta ogni annotazione, oltre al minimo indispensabile (selettore, testo, ritaglio): l'HTML dell'elemento,
  * gli stili calcolati che contano, la posizione, la catena degli antenati, gli indizi sul sorgente
  * quando esistono (Vue: file del componente; React ≤18: `_debugSource`; nome del componente;
  * framework), e gli errori di console della pagina. Le annotazioni si raggruppano per contenitore
- * (Hermes `group.ts`: si confrontano i percorsi degli ANTENATI, non i selettori interi).
+ * (si confrontano i percorsi degli ANTENATI, non i selettori interi).
  */
 
 export const MASSIMO_ANNOTAZIONI = 24;

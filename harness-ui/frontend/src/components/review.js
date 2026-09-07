@@ -14,10 +14,10 @@
  * la rotta non esiste (mai un pulsante che non fa niente).
  *
  * Ricerca 05/09/2026: la review dell'agente come elenco di file con +/−, diff
- * per file e azioni per file (accetta/scarta) è il pattern di Copilot «Edits
- * Review» e di Cursor; Claude Code lo ha nel Code tab del desktop (+12 −1 con
- * diff cliccabile) e non nell'estensione VS Code (issue anthropics/claude-code
- * #33932). Il mockup è già a quel livello; qui i numeri sono veri.
+ * per file e azioni per file (accetta/scarta) è un pattern diffuso fra gli
+ * strumenti di editing assistito, con diff cliccabile nel pannello dedicato
+ * di alcuni e non nell'estensione VS Code di altri. Il mockup è già a quel
+ * livello; qui i numeri sono veri.
  */
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -66,7 +66,7 @@ export function sottotitoloFile(voce = {}) {
 
 /**
  * Una SCHEDA di file (owner 05/09: «schede in alto e diff a piena larghezza
- * sotto, stile VS Code», come il Review di Hermes Desktop): `role="tab"`, il
+ * sotto, stile VS Code»): `role="tab"`, il
  * percorso in mono, +A e −R (−0 non si scrive). Il sottotitolo (giro, ricevuta,
  * simboli spariti) va nel `title` e nella testa del diff.
  */

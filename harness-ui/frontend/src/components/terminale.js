@@ -13,12 +13,12 @@
  *   </div>
  *   <div class="talos-terminal__foot"><span>Lanciato dall'agente al giro 7</span><span>·</span><span class="talos-mono">41 s</span><span>·</span><span>in corso</span><span class="talos-grow"></span><span>Ogni comando dichiara chi l'ha lanciato e dove.</span></div>
  *
- * Parità con le schede di Hermes Desktop (`right-sidebar/terminal/terminals.ts` + `rail.tsx`,
- * letti il 06/09/2026): clic seleziona, clic centrale o Ctrl/⌘+clic chiude, menu contestuale
+ * Ricerca fatta prima di scrivere (letta il 06/09/2026): clic seleziona, clic centrale o
+ * Ctrl/⌘+clic chiude, menu contestuale
  * «Chiudi · Chiudi le altre · Chiudi tutte», rinomina (il nome della shell resta finché la persona
  * non ne sceglie uno), alla chiusura il fuoco passa alla vicina che prende il posto
  * (`next[index] ?? next[index-1]`), Ctrl+` mostra il terminale e Ctrl+Shift+` ne apre uno nuovo.
- * In più rispetto a Hermes: tastiera dentro la lista (WAI-ARIA tabs: frecce, Home/End, Canc chiude,
+ * In più rispetto a quello stato dell'arte: tastiera dentro la lista (WAI-ARIA tabs: frecce, Home/End, Canc chiude,
  * F2 rinomina), e ogni scheda dichiara dove sta e chi l'ha aperta (piede).
  */
 
@@ -70,8 +70,8 @@ export function nomeShell(enforcement, comando = '') {
 
 /**
  * Il titolo di una scheda: quello scelto dalla persona, altrimenti «tu · <shell>», numerato quando
- * più schede senza nome condividono la stessa shell (Hermes: `auto` adotta il nome della shell
- * finché non si rinomina).
+ * più schede senza nome condividono la stessa shell (lo stesso approccio adotta il nome della
+ * shell finché non si rinomina).
  */
 export function titoloScheda(voce, tutte = [voce]) {
   if (voce.titolo) return voce.titolo;
@@ -82,13 +82,13 @@ export function titoloScheda(voce, tutte = [voce]) {
   return `${t('tu')} · ${shell}${omonime.length > 1 && posizione > 0 ? ` ${posizione + 1}` : ''}`;
 }
 
-/** Chi prende il fuoco quando si chiude la scheda in posizione `indice` (Hermes `closeTerminal`). */
+/** Chi prende il fuoco quando si chiude la scheda in posizione `indice` (stessa regola nota). */
 export function prossimaAttivaDopoChiusura(lista, indice) {
   const resto = lista.filter((_, i) => i !== indice);
   return (resto[indice] ?? resto[indice - 1]) ?? null;
 }
 
-/** La scheda dopo/prima di quella attiva, ciclica (Hermes `cycleTerminal`). */
+/** La scheda dopo/prima di quella attiva, ciclica. */
 export function cicla(lista, attiva, direzione) {
   if (lista.length < 2) return attiva ?? lista[0] ?? null;
   const corrente = Math.max(0, lista.indexOf(attiva));

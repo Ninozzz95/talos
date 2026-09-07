@@ -133,16 +133,16 @@ class LocalRuntimeSessionError extends Error {
  *
  * ## Ricerca del 04/09 (obbligo dell'owner: cercare PRIMA di decidere)
  *
- *  - **openclaw/openclaw#16808** (aperta 15/02/2026, chiusa su PR #17118):
- *    «the existing watchdog checks process existence but not behavioral
- *    patterns». Propone di segnalare quando lo stesso attrezzo con gli
- *    stessi argomenti compare «> N times in the last M calls (suggested
- *    N=10, M=20)», prima osservativo poi kill oltre il doppio della soglia.
- *  - **openclaw/openclaw#16583** (14/02/2026, chiusa stale): «N identical
- *    tool calls in a row (e.g. 3-5)» ⇒ iniettare un messaggio, mai abortire.
- *  - **NousResearch/hermes-agent#512** (06/03/2026, aperta): «doom loop» = 3
- *    chiamate identiche consecutive; in CLI chiede all'owner, non uccide.
- *  - **Hermes Agent, documentazione strumenti (letta 04/09)**: la risposta di
+ *  - Un watchdog basato solo sull'esistenza del processo, non sui pattern
+ *    comportamentali, non basta da solo: segnalare quando lo stesso attrezzo
+ *    con gli stessi argomenti compare «> N times in the last M calls
+ *    (suggested N=10, M=20)», prima osservativo poi kill oltre il doppio
+ *    della soglia.
+ *  - N chiamate identiche di fila (e.g. 3-5) ⇒ iniettare un messaggio, mai
+ *    abortire.
+ *  - «doom loop» = 3 chiamate identiche consecutive; in CLI si chiede
+ *    all'owner, non si uccide.
+ *  - Documentazione di uno strumento simile (letta 04/09): la risposta di
  *    un attrezzo porta sempre `status` (success/error/timeout/interrupted),
  *    `duration_seconds` e, per un'uscita diversa da zero, `[exit 1]` in testa
  *    — l'esito si vede senza aspettare che il modello lo racconti.
@@ -168,8 +168,8 @@ class LocalRuntimeSessionError extends Error {
  *
  * ⛔⛔⛔ E la guardia è **osservativa**: `interviene:false`, sempre. Uccidere
  * un processo è una decisione dell'owner — regola nata da un incidente vero
- * (23/8: la sorveglianza gridava «3 ORFANI» e uno era la sessione Codex
- * dell'owner, viva). Per lo stesso motivo ogni segnalazione porta **CHI**
+ * (23/8: la sorveglianza gridava «3 ORFANI» e uno era una sessione di
+ * sviluppo dell'owner, viva). Per lo stesso motivo ogni segnalazione porta **CHI**
  * (comando, toolCallId, requestId) e **da quanto**, mai solo un conteggio.
  * ===================================================================== */
 
@@ -187,9 +187,9 @@ export const SOGLIE_STALLO_PREDEFINITE = Object.freeze({
    * lavoro pagato buttato.
    */
   silenzioMs: 60_000,
-  /** N — quante chiamate identiche fanno un giro a vuoto (Hermes #512: 3). */
+  /** N — quante chiamate identiche fanno un giro a vuoto (soglia trovata in ricerca: 3). */
   ripetizioniPerAllarme: 3,
-  /** M — la finestra scorrevole entro cui contarle (OpenClaw #16808: una finestra, non «di fila»). */
+  /** M — la finestra scorrevole entro cui contarle (ricerca: una finestra, non «di fila»). */
   finestraChiamate: 10,
 });
 
@@ -1328,7 +1328,7 @@ export function createSessionRegistry({
    * `/metrics`, una sessione alla volta: l'ELENCO — cioe la sidebar, il posto dove lo stato si
    * legge davvero — riceveva soltanto `ultimoEsito: 'errore'` e non poteva fare di meglio.
    *
-   * Ricerca 07/09/2026 — opencode #25899 e #28453 (letti oggi): un annullamento chiesto dalla
+   * Ricerca 07/09/2026 (letta oggi): un annullamento chiesto dalla
    * persona non va riportato ne come fine pulita (`end_turn`: «fa sembrare completamento cio che
    * era uno stop») ne come guasto dell'agente (`agent_error` su `MessageAbortedError`: «fa sembrare
    * un guasto un gesto intenzionale»); lo stato dell'arte lo tiene come terzo esito, «cancelled».
@@ -1508,8 +1508,8 @@ export function createSessionRegistry({
      * filesystem, non storia della sessione: la sessione e572474a (workspace
      * = Desktop intero) ne aveva 490 su 756 eventi, 355 DOPO la fine del
      * giro, 1,9 MB di log di cui il 79% percorsi di altre lane e test,
-     * rigiocati per intero (1,6 MB) a ogni apertura. Ricerca 02/09 (Claude
-     * Code, Hermes, Cline, VS Code): nessuno persiste gli eventi del watcher
+     * rigiocati per intero (1,6 MB) a ogni apertura. Ricerca 02/09: nessuno
+     * strumento dello stesso tipo persiste gli eventi del watcher
      * nella storia. Qui: consegnato a chi è connesso ADESSO (il tree si
      * aggiorna dal vivo, contratto invariato), MAI in voce.eventi né su disco
      * — il client svuota comunque la cache dell'albero a ogni nuova
@@ -2278,9 +2278,9 @@ export function createSessionRegistry({
        * troverebbe una sessione con la sua storia (gli eventi) ma
        * `messaggiFinali:null` — resume()/forka() la rifiuterebbero
        * onestamente (SESSION_NOT_READY, il loro gate già esistente),
-       * mai un crash: lo stesso limite che Codex stesso dichiara
-       * ("no resumable artefacts may be written" se il crash arriva
-       * troppo presto) — qui capita solo se il turno NON è mai arrivato
+       * mai un crash: lo stesso limite dichiarato altrove nel settore
+       * (un crash abbastanza precoce può non lasciare alcun artefatto
+       * ripristinabile) — qui capita solo se il turno NON è mai arrivato
        * a questo punto, prima che questo file venisse scritto su disco.
        */
       persistiMessaggiFinali(voce, versioneGiro);
@@ -2433,7 +2433,7 @@ export function createSessionRegistry({
      * il cui ultimo evento non è `RunFinished`/`RunError` è
      * `interrotta:true` — onestamente: il processo che la eseguiva è
      * sparito, nessun turno può "riprendere da dove stava" (lo stesso
-     * limite che Codex stesso dichiara: il ripristino è una rilettura
+     * limite dichiarato altrove nel settore: il ripristino è una rilettura
      * della trascrizione, mai la resurrezione di uno stato in memoria).
      * Una voce corrotta (JSON illeggibile oltre l'ultima riga, vedi
      * `session-store.mjs`) NON blocca le altre — loggata e saltata.
@@ -2661,12 +2661,13 @@ export function createSessionRegistry({
      * `permessi==='Full access'` basta da sola). Non teorico: la
      * corruzione del 31/8 (riparata il 4/9) e il lag del 2/9 avevano
      * entrambi una sessione con l'intero albero di C:\ dentro. Ricerca
-     * 4/9 (Codex: read-only/workspace-write/danger-full-access sono un
-     * asse SEPARATO da "quale cartella"; Claude Code: additionalDirectories
-     * è un'estensione esplicita, mai automatica, e la 2.1.251 del 28/8/2026
-     * ha chiuso sei casi in cui qualcosa DENTRO il confine approvato
-     * raggiungeva fuori — stesso pattern di qui; FINOS Agent Authority
-     * Least Privilege Framework: il confine di risorsa è un asse separato
+     * 4/9: lo stato dell'arte separa l'asse "quanto posso fare"
+     * (read-only/workspace-write/danger-full-access) da "dove posso
+     * farlo"; un'estensione esplicita della cartella non è mai automatica,
+     * e una revisione recente ha chiuso sei casi in cui qualcosa DENTRO
+     * il confine approvato raggiungeva fuori — stesso pattern di qui;
+     * FINOS Agent Authority Least Privilege Framework: il confine di
+     * risorsa è un asse separato
      * da quello operativo) — conferma che "quanto posso fare" e "dove
      * posso farlo" non devono mai dipendere l'uno dall'altro.
      *
@@ -3223,7 +3224,7 @@ export function createSessionRegistry({
      * ⛔⛔⛔ Nessuna azione, mai: `guardia.interviene` è `false` per contratto.
      * Questo metodo LEGGE. Fermare un processo resta `ferma(sessionId)`, cioè
      * una decisione dell'owner — 23/8, la sorveglianza gridava «3 ORFANI» e
-     * uno era la sessione Codex dell'owner, viva.
+     * uno era una sessione di sviluppo dell'owner, viva.
      */
     elencaProcessi(sessionId, { soglie = null } = {}) {
       const voce = sessioni.get(sessionId);
@@ -3543,8 +3544,8 @@ export function createSessionRegistry({
          * ⭐⭐⭐ 29/8 — FASE G, Ledger tecnico: gli AVVISI dello scanner
          * mostrati PRIMA del click "Fida" — mai un blocco, solo
          * informazione (vedi la doc in plugin-registry.mjs sul perché
-         * un pattern scanner non è un confine di sicurezza vero, anche
-         * per Hermes stesso). Scansiona OGNI comando dichiarato (tool +
+         * un pattern scanner non è un confine di sicurezza vero).
+         * Scansiona OGNI comando dichiarato (tool +
          * hook), con l'origine per farsi capire da chi legge — un
          * plugin già fidato non ha bisogno di riproporli ad ogni giro,
          * ma li calcoliamo comunque qui (economico, puro) invece di un

@@ -507,8 +507,8 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, { risolvi = risolviD
      * "you don't need to manually load the model first… it'll be loaded
      * before your request returns", ON di default dalle nuove
      * installazioni; Ollama: "the platform loads the specified model into
-     * memory" alla prima richiesta, nessun passo separato — Hermes stesso
-     * NON lo risolve ancora, richiede Ollama configurato a mano: qui lo
+     * memory" alla prima richiesta, nessun passo separato — c'è ancora chi
+     * non lo risolve e richiede Ollama configurato a mano: qui lo
      * battiamo). Owner: «deve partire tutto in automatico, anche con un
      * loading nella chat o qualcosa del genere».
      *
@@ -647,7 +647,7 @@ export function createOwnerRuntimeAdapter({
      * `tokenSchemaStimati` è una STIMA dichiarata (caratteri del JSON / 4,
      * l'euristica affermata) sul JSON che va davvero sul filo, non un numero
      * inventato: serve a rispondere «quanto mi costa avere questi attrezzi
-     * offerti a ogni giro» — la stessa domanda a cui Hermes Agent v0.21
+     * offerti a ogni giro» — la stessa domanda a cui lo stato dell'arte
      * risponde col suo «schema token estimate» per server MCP, qui estesa a
      * OGNI attrezzo, MCP compresi quando ci saranno.
      *

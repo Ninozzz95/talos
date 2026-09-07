@@ -9,12 +9,12 @@
  *     italiana (stile gettext/Lingui, lingui.dev «Explicit vs generated IDs», letto il
  *     06/09/2026); senza traduzione resta l'italiano, mai un vuoto. `tn(uno, molti, n)` sceglie la
  *     forma col plurale della lingua risolta (`Intl.PluralRules`, locize «i18n pluralization 2026»).
- * Il dizionario inglese sta in `src/i18n/en.js`, per categorie come Hermes Desktop (`i18n/en.ts`).
+ * Il dizionario inglese sta in `src/i18n/en.js`, organizzato per categorie.
  *
  * Ricerca 06/09/2026: la scelta esplicita della persona vince sempre sul rilevamento automatico;
  * senza scelta si negozia da `navigator.languages`; `lang` sull'elemento radice dichiara la lingua
- * risolta (phrase.com, MDN Navigator.language, W3C i18n). Hermes ha lo stesso «Segui il sistema»
- * ma non lo ricorda al riavvio (issue #26665): qui la preferenza vive nello store dell'aspetto.
+ * risolta (phrase.com, MDN Navigator.language, W3C i18n). Un difetto noto in strumenti simili:
+ * «Segui il sistema» che non viene ricordato al riavvio — qui la preferenza vive nello store dell'aspetto.
  */
 import EN from '../i18n/en.js';
 

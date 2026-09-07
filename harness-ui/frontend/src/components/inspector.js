@@ -17,7 +17,7 @@
  * `shell` con il comando, ToolCallResult, tempi misurati alla ricezione).
  *
  * Ricerca 06/09/2026: il costo del contesto si mostra come numero verificabile
- * (Codex /status in JetBrains: token usati contro la finestra; Context Lens:
+ * (un pattern noto: token usati contro la finestra; Context Lens:
  * ripartizione per categoria — system, tool definitions, conversation). Qui la
  * ripartizione per categoria si mostra SOLO se il kernel la dichiara; altrimenti
  * restano Conversazione e Libera, che sono misure vere.

@@ -3,7 +3,7 @@
  * riempito dalle notifiche vere del monolite (`state.notifiche`: sessioni che
  * aspettano un'approvazione, hanno finito o si sono interrotte).
  *
- * 06/09, confronto con Hermes (T-17): il campanello apriva un menu legacy
+ * 06/09, T-17: il campanello apriva un menu legacy
  * `.notifications-menu` che nessun CSS disegnava più — esisteva nel DOM e non
  * si vedeva. Qui il markup è quello del mockup: toolbar con titolo e chiusura,
  * riga muta col conteggio, una `ListRow` per notifica, «Segna tutte come viste».

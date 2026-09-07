@@ -10,11 +10,11 @@
  * Il componente RIEMPIE lo scheletro del mockup (stessi nodi, stesse classi), non lo ricrea:
  * la parità struttura/parole si misura sullo stesso DOM.
  *
- * Parità con Hermes Desktop (`right-rail/preview-browser-bar.tsx`, `terminals.ts`, letti il
- * 06/09/2026): indietro/avanti, ricarica, indirizzo modificabile con Invio/Esc, copia
+ * Ricerca fatta prima di scrivere (letta il 06/09/2026): indietro/avanti, ricarica, indirizzo
+ * modificabile con Invio/Esc, copia
  * dell'indirizzo, «Annota» che prepara un commento nel composer senza inviarlo, schede per
  * pagina con chiusura. Non pareggiato: l'annotazione di un ELEMENTO dentro la pagina viva
- * (Hermes inietta un overlay nella webview Electron; una cornice di un'altra origine non lo
+ * (una webview Electron può iniettare un overlay; una cornice di un'altra origine non lo
  * permette) — registrato nel ledger.
  */
 
@@ -98,7 +98,7 @@ export function etichettaCronologia(pagina, indice) {
   return `${String(indice + 1).padStart(2, '0')} · ${t(pagina?.origine === 'tu' ? TESTI.provenienzaTu : TESTI.provenienzaAgente)} · ${ora}`;
 }
 
-/** Chi resta attiva quando si chiude la scheda in posizione `indice` (stessa regola del Terminale, Hermes `closeTerminal`). */
+/** Chi resta attiva quando si chiude la scheda in posizione `indice` (stessa regola del Terminale). */
 export function prossimaDopoChiusura(lista, indice) {
   const resto = lista.filter((_, i) => i !== indice);
   return (resto[indice] ?? resto[indice - 1]) ?? null;

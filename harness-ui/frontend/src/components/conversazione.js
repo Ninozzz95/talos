@@ -20,8 +20,8 @@
  * Ricerca 05/09/2026: separare il filo della conversazione (obiettivi e
  * risposte) dall'attività autonoma dell'agente, con gli attrezzi raggruppati
  * in un pannello richiudibile e stati aggiornabili nel tempo (AG-UI «Messages»,
- * docs.ag-ui.com/concepts/messages; LangChain «From Token Streams to Agent
- * Streams»; fuselabcreative.com «UI Design for AI Agents 2026»). È la forma
+ * docs.ag-ui.com/concepts/messages; una guida tecnica sullo streaming di
+ * agenti; fuselabcreative.com «UI Design for AI Agents 2026»). È la forma
  * del mockup: testo di TALOS in chiaro, ActivityBundle per gli attrezzi,
  * SystemNote per gli eventi di ciclo, ApprovalCard per il consenso.
  */
@@ -81,7 +81,7 @@ export function aggiungiGiroAllaSpine(spine, { n, tick = 1, tono = null } = {}) 
   const documentObj = spine.ownerDocument;
   spine.append(el(documentObj, 'span', 'talos-turn-spine__n', n));
   /*
-   * ⭐ 06/9, owner: «che navighi un po' come fa ChatGPT, conversation history bar». Il tick non è più un
+   * ⭐ 06/9, owner: «che navighi un po' come una barra di cronologia della conversazione». Il tick non è più un
    * segno muto: è un bottone che porta al suo giro. Resta identico a vedersi (stessa classe, stessa misura),
    * quindi nessuna regressione nella parità col mockup; cambia solo che si può premere, anche da tastiera.
    */
@@ -96,7 +96,7 @@ export function aggiungiGiroAllaSpine(spine, { n, tick = 1, tono = null } = {}) 
 
 /**
  * Collega la navigazione della spina: un clic su un tick porta al suo giro, e il tick del giro che si sta
- * guardando resta acceso mentre si scorre — la stessa cosa che fa la barra della cronologia di ChatGPT.
+ * guardando resta acceso mentre si scorre — la stessa cosa che fa una barra di cronologia della conversazione.
  * Idempotente: si può chiamare a ogni disegno.
  * @param {Element} conversazione il contenitore che scorre (`#conversation`)
  * @returns {() => void} per staccare l'osservatore
@@ -182,7 +182,7 @@ export function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
     const b = el(documentObj, 'button', 'talos-button talos-button--ghost talos-icon-button talos-button--sm');
     b.type = 'button';
     b.title = titolo;
-    b.setAttribute('aria-label', titolo); // 05/09 confronto Hermes: il solo `title` è un nome di ultima risorsa (W3C APG names-and-descriptions, ARIA14)
+    b.setAttribute('aria-label', titolo); // 05/09: il solo `title` è un nome di ultima risorsa (W3C APG names-and-descriptions, ARIA14)
     b.dataset.messageAction = nome;
     b.append(simbolo(documentObj, 'i i--sm', icona));
     return b;

@@ -386,13 +386,11 @@ function parseLlamaServerPath(raw, moduleUrl) {
  * dava 21 rossi a un giro e 19 al successivo. Un conteggio così non è un
  * cancello (vedi LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md).
  *
- * ⭐ Ricerca 02/9 — tutti e tre i concorrenti rendono la cartella di stato
+ * ⭐ Ricerca 02/9 — lo stato dell'arte rende la cartella di stato
  * sovrascrivibile da ambiente, esattamente per non toccare i dati veri
- * dell'utente durante i test: **Codex** `CODEX_HOME` ("isolates the eval
- * from any personal Codex configuration on the machine"), **Hermes**
- * `HERMES_HOME` (fixture caricate da una home isolata; ogni profilo ha
- * session database proprio), **Claude Code** `CLAUDE_CONFIG_DIR`
- * ("keeping your real config untouched"). Questa variabile è la nostra.
+ * dell'utente durante i test (una home isolata per i profili di prova,
+ * un percorso di configurazione separato da quello reale, un database di
+ * sessione proprio per ogni profilo). Questa variabile è la nostra.
  *
  * ⛔ Nessun `fail()` se manca e nessuna creazione qui: assente = il
  * comportamento di sempre, la cartella accanto a `server.mjs`. Un
@@ -501,7 +499,7 @@ export function loadConfig(
     portaEsplicita: typeof env.TALOS_HARNESS_UI_PORT === 'string' && env.TALOS_HARNESS_UI_PORT !== '',
     publicDir,
     modello: parseModello(env.TALOS_HARNESS_UI_MODEL),
-    // Come Claude/Codex/Hermes: in assenza di elenco esplicito la prima
+    // Come lo stato dell'arte: in assenza di elenco esplicito la prima
     // workspace è la radice del progetto desktop che contiene il server.
     cartelleProgetto: parseCartelleProgetto(
       env.TALOS_HARNESS_UI_PROJECT_DIRS,
@@ -570,8 +568,8 @@ function parseFirmaRicevute(env) {
 
 /*
  * ⭐⭐⭐ 29/8 — FASE H, `generate_image`. A differenza di `parseRicercaWeb`
- * sotto: ZERO nuova credenziale (il ONE-UP dichiarato su Hermes/Codex,
- * vedi il piano madre) — `image-generator.mjs` riusa `chiaveApi` sopra,
+ * sotto: ZERO nuova credenziale (il ONE-UP dichiarato, vedi il piano
+ * madre) — `image-generator.mjs` riusa `chiaveApi` sopra,
  * mai una seconda chiave. Il DEFAULT è un modello DEDICATO reale e
  * verificato dal vivo il 29/8 (`GET /api/v1/images/models`, non
  * presunto): funziona sempre, senza che l'owner debba configurare

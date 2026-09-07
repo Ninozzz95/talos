@@ -18,7 +18,7 @@
  * si dice in chiaro che la cifra in denaro la dà il fornitore.
  *
  * Ricerca 06/09/2026 sulla forma da dare ai numeri:
- *  · Hermes Agent, «Local Models» e il suo model catalog — mostra il consumo
+ *  · lo stato dell'arte mostra il consumo
  *    accanto al modello che lo ha prodotto, non un totale unico;
  *  · la regola H24-H26 delle decisioni: ogni numero ha la sua unità, le stime
  *    dicono di essere stime, i tempi sono relativi fino a 24 ore.

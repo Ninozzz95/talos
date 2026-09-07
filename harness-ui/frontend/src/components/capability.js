@@ -1,4 +1,4 @@
-/** ToolList nel mockup. WAI Listbox + inventari Hermes/Claude/Codex, 05/09/2026. */
+/** ToolList nel mockup. WAI Listbox + ricerca sui cataloghi degli strumenti, 05/09/2026. */
 import {nomeUmanoAttrezzo,corrispondeARicerca,descrizioneAttrezzo} from './nomi-attrezzi.js';
 import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
 const PERMESSI={'':'Come la sessione',sempre:'Consenti sempre',chiedi:'Chiedi sempre',nega:'Nega'};

@@ -1,6 +1,6 @@
 /*
  * La guida condivisa del confronto: apre TALOS (istanza di prova, MAI il 4174)
- * e si aggancia a Hermes Desktop, e per ogni passo di un gruppo esegue la
+ * e si aggancia all'app di riferimento, e per ogni passo di un gruppo esegue la
  * STESSA azione sulle due app, fotografa, misura, e scrive l'esito.
  *
  * Due canali per ogni passo (regola del 04/09, lavori 2026 sui GUI agent):
@@ -43,7 +43,7 @@ export async function apriTalos({ headless = true } = {}) {
   return { nome: 'talos', browser, pagina, errori, chiudi: () => browser.close() };
 }
 
-/** Hermes Desktop: si aggancia alla finestra dell'app già aperta (o la apre). */
+/** Si aggancia alla finestra dell'app di riferimento già aperta (o la apre). */
 export async function apriHermes() {
   const avvio = await avviaHermes();
   const browser = await chromium.connectOverCDP(`http://127.0.0.1:${PORTA_CDP_HERMES}`);
@@ -54,7 +54,7 @@ export async function apriHermes() {
   const errori = [];
   pagina.on('pageerror', (e) => errori.push(String(e.message).slice(0, 200)));
   await pagina.waitForTimeout(1000);
-  // la finestra di Hermes resta aperta fra un giro e l'altro: si parte da uno stato pulito (dialoghi chiusi, home)
+  // la finestra resta aperta fra un giro e l'altro: si parte da uno stato pulito (dialoghi chiusi, home)
   for (let i = 0; i < 3; i += 1) { await pagina.keyboard.press('Escape'); await pagina.waitForTimeout(150); }
   return { nome: 'hermes', browser, pagina, errori, avvio, chiudi: () => browser.close() /* stacca, non chiude l'app */ };
 }
@@ -86,7 +86,7 @@ export async function tabFinoA(pagina, predicato, tetto = 60) {
   return null;
 }
 
-/** Affianca due PNG (TALOS a sinistra, Hermes a destra) con un bordo. */
+/** Affianca due PNG (TALOS a sinistra, il riferimento a destra) con un bordo. */
 export function affianca(pngA, pngB) {
   const a = PNG.sync.read(pngA); const b = PNG.sync.read(pngB);
   const bordo = 8; const h = Math.max(a.height, b.height);

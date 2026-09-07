@@ -8,8 +8,8 @@
  * falsa proprio dove si prende una decisione di sicurezza.
  *
  * Non è un difetto solo nostro, ed è riconosciuto come vulnerabilità altrove (letti il 06/09/2026):
- * openclaw #60694, «Security: exec tool bypasses write deny in security executor agents» — identico;
- * claude-code #25000, «Sub-agents bypass permission deny rules — security risk». La mitigazione che
+ * un attrezzo di esecuzione che aggira il divieto di scrittura del gate di sicurezza — identico;
+ * sotto-agenti che aggirano le regole di negazione dei permessi — stesso rischio. La mitigazione che
  * quei progetti indicano è un divieto ASSOLUTO a monte; noi quel divieto non l'abbiamo, e finché non
  * c'è la cosa onesta è **dirlo**: un cancello che sembra chiuso e non lo è è peggio di uno aperto.
  *

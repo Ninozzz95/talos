@@ -1,7 +1,7 @@
 /*
  * Gruppo 2 · Navigazione — sidebar, testata, palette, notifiche, colonne.
- * Selettori TALOS letti dal vivo il 06/09 (talos-selettori-nav.mjs); Hermes dal vivo il 05/09
- * (hermes-esplora.mjs: «Hide sidebar», «Search sessions», «New session Ctrl N», «Keyboard
+ * Selettori TALOS letti dal vivo il 06/09 (talos-selettori-nav.mjs); l'app di riferimento dal
+ * vivo il 05/09 («Hide sidebar», «Search sessions», «New session Ctrl N», «Keyboard
  * shortcuts», «Open settings», «Show right sidebar», «Session actions»).
  */
 import { attesa } from '../guida.mjs';

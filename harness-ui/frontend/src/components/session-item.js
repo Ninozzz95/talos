@@ -44,7 +44,7 @@ const ETICHETTE = Object.freeze({
    * ⛔⛔ 07/9, misurato: premi «ferma», il giro si chiude come chiedevi, e la riga diceva
    * **«errore»** — perche il giro finisce con un `RunError` di codice `fermato` e l'elenco
    * conosceva solo l'esito, non il motivo. Fermare non e sbagliare, e nemmeno concludere.
-   * Ricerca 07/09/2026 — opencode #25899/#28453: un annullamento chiesto dalla persona non e ne
+   * Ricerca 07/09/2026: un annullamento chiesto dalla persona non e ne
    * `end_turn` (fa sembrare completamento uno stop) ne `agent_error` (fa sembrare guasto un gesto
    * voluto): e un terzo esito. Qui si chiama «fermata».
    */
@@ -71,8 +71,9 @@ export function statoSessione(sessione) {
    * sessione che NESSUNO sta eseguendo restava «in corso» per sempre, col pallino vivo.
    * ⛔ `interrotta` si azzera quando un giro riparte (session-registry, `voce.interrotta = false`):
    *    metterla per prima non può quindi spegnere una sessione davvero viva.
-   * Stesso difetto in opencode #17680 e #19023 (letti 06/09/2026): «Web UI shows permanent Thinking
-   * spinner after stream interruption or server restart» — e la conclusione è la stessa, l'interfaccia
+   * Stesso difetto trovato altrove (letto 06/09/2026): l'interfaccia web mostra uno spinner di
+   * pensiero permanente dopo un'interruzione dello stream o un riavvio del server — e la
+   * conclusione è la stessa, l'interfaccia
    * deve dichiarare il giro interrotto perché il worker non riprende dopo la morte del processo.
    */
   else if (sessione.interrotta) classe = 'interrotto';
@@ -92,7 +93,7 @@ export function statoSessione(sessione) {
    * ⛔ 06/9, misurato sullo screenshot: «interrotta · scrivi per riprenderla» TRONCAVA la riga e si
    * mangiava il nome del modello — il consiglio rubava l'informazione. In 180 px l'etichetta resta
    * corta come le sorelle («conclusa», «in corso»); il come-si-riparte vive nel titolo della riga,
-   * dove non costa niente a nessuno (claude-code #69456, letto 06/09/2026: offrire la ripresa,
+   * dove non costa niente a nessuno (ricerca del 06/09/2026: offrire la ripresa,
    * non gridarla).
    */
   let aiuto = null;

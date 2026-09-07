@@ -1,8 +1,8 @@
 /**
- * browser-proxy.mjs — Browser oltre Hermes (06/09). Il proxy locale che rende una pagina di un
+ * browser-proxy.mjs — Il proxy locale (06/09) che rende una pagina di un
  * dev server LOCALE «della nostra origine», così dentro la cornice si può iniettare l'overlay di
- * annotazione e leggere il DOM (same-origin policy). Hermes lo fa con una webview Electron
- * (`lib/preview-annotate/in-page.ts`); in un guscio browser la strada è il proxy, come VS Code
+ * annotazione e leggere il DOM (same-origin policy). Una webview Electron eviterebbe il problema;
+ * in un guscio browser la strada è il proxy, come VS Code
  * Live Preview.
  *
  * ⛔ SOLO bersagli locali (localhost, 127.0.0.1, ::1): una pagina passata dal proxy gira nella

@@ -5,15 +5,15 @@
  * dall'utente con le sue dita umane"* — non il log a righe dei comandi
  * dell'agente (quello resta, invariato, nel tool-call della chat).
  *
- * Ricerca fatta prima di scrivere: Hermes, su Windows (dove non esiste
- * un primitivo PTY POSIX nativo), monta Git Bash dentro una PTY vera —
- * "same strategy Claude Code uses"
- * (hermes-agent.nousresearch.com/docs/user-guide/windows-native).
+ * Ricerca fatta prima di scrivere: su Windows (dove non esiste
+ * un primitivo PTY POSIX nativo), lo stato dell'arte monta Git Bash dentro
+ * una PTY vera — la stessa strategia adottata da altri strumenti dello
+ * stesso tipo.
  * Verificato empiricamente su QUESTA macchina (non presunto): `node-pty`
  * include il prebuild `win32-x64` DENTRO il pacchetto npm (zero
  * compilazione), Git Bash è installato
  * (`C:\Program Files\Git\bin\bash.exe`, lo stesso binario che questa
- * sessione Claude Code usa per il proprio tool Bash), e una sonda reale
+ * sessione usa per il proprio tool Bash), e una sonda reale
  * (`pty.spawn` + un comando scritto come keystroke) ha prodotto un
  * prompt MINGW64 vero con sequenze ANSI vere.
  *
@@ -55,7 +55,7 @@ export const MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA = 10;
 
 /**
  * Sceglie la shell reale da lanciare. Su Windows: Git Bash se esiste
- * (stessa strada di Hermes/Claude Code) — altrimenti `cmd.exe`, ma
+ * — altrimenti `cmd.exe`, ma
  * DICHIARATO (`enforcement:'cmd-fallback'`), mai un fallback silenzioso
  * spacciato per bash (stesso principio "onestà sull'enforcement" già
  * in uso per l'attrezzo `shell` dell'agente). Su POSIX: `$SHELL` o
@@ -138,7 +138,7 @@ export function creaRegistroTerminali(deps = {}) {
       id,
       handle,
       enforcement: scelta.enforcement,
-      comando: scelta.comando, // 06/9 B1: il nome della shell arriva alla scheda (Hermes `reportTerminalShell`)
+      comando: scelta.comando, // 06/9 B1: il nome della shell arriva alla scheda
       backlog: [],
       byteBacklog: 0,
       ultimaDisconnessioneMs: null,
@@ -225,9 +225,8 @@ export function creaRegistroTerminali(deps = {}) {
    * misura, e l'interfaccia finiva per dire «riconnesso» senza poter sapere se
    * la shell della persona fosse sopravvissuta. Lo stato dell'arte separa
    * l'identità della CONNESSIONE da quella della SESSIONE e fa dichiarare al
-   * server se ha davvero ripreso (in Ably è il flag `resumed`, ricerca del
-   * 05/09/2026: faqs.ably.com/connection-state-recovery ·
-   * websocket.org/guides/reconnection/).
+   * server se ha davvero ripreso (un pattern noto come "connection state
+   * recovery", ricerca del 05/09/2026: websocket.org/guides/reconnection/).
    *
    * ⛔ La risposta viene dallo STESSO controllo che fa `apri` («la voce esiste
    * e non è chiusa»), letto un attimo prima: non è una seconda verità che può

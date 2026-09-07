@@ -2,7 +2,7 @@
  * custom-task.mjs — un compito LIBERO su una cartella dell'allowlist
  * (`TALOS_HARNESS_UI_PROJECT_DIRS`, vedi `config.mjs`), non uno dei task
  * fissi del corpus benchmark. Owner, 27/8: "per adesso un allowlist per
- * testare... come se fosse Claude Code o Pi agent o Hermes o DeepSeek".
+ * testare... come se fosse un vero coding agent di produzione".
  *
  * ⛔⛔ Diverso da `task-catalog.mjs` apposta: quello fa SEMPRE una copia
  * usa-e-getta (`preparaCopia`), perché il suo scopo è misurare un harness

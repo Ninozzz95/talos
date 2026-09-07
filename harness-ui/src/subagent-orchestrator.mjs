@@ -1,8 +1,8 @@
 /**
  * subagent-orchestrator.mjs — FASE C (sub-agenti), piano
  * `elegant-spinning-dongarra.md`. Delega isolata verso una sessione
- * figlia — il differenziatore diretto contro Hermes (vincolo
- * persistente dell'owner). Vedi `.claude/LEDGER-FASE-C-SUBAGENTI.md`
+ * figlia — un differenziatore diretto rispetto allo stato dell'arte
+ * (vincolo persistente dell'owner). Vedi `.claude/LEDGER-FASE-C-SUBAGENTI.md`
  * per il ledger completo, il confronto competitivo e le decisioni
  * prese in corso d'opera.
  *
@@ -10,22 +10,22 @@
  * `session-registry.mjs`, iniettata — mai una seconda fonte di verità
  * su quali sessioni esistono.
  *
- * ⭐⭐⭐ I numeri sotto sono quelli VERI di Hermes (Nous Research),
- * letti dal loro repo clonato il 28/8 — non inventati, non presi da
- * doc secondari (due correzioni fatte quel giorno su claim sbagliati
- * di doc secondari, vedi il ledger):
- * `_DEFAULT_MAX_CONCURRENT_CHILDREN = 10` (tools/delegate_tool.py) e
- * `delegation.max_spawn_depth` default **2**, con la nota nel loro
- * stesso codice "for parity with the original MAX_DEPTH constant".
+ * ⭐⭐⭐ I numeri sotto sono quelli VERI trovati in ricerca, letti da un
+ * repository open source dello stesso spazio clonato il 28/8 — non
+ * inventati, non presi da doc secondari (due correzioni fatte quel
+ * giorno su claim sbagliati di doc secondari, vedi il ledger): un
+ * tetto di 10 figli concorrenti di default, e una profondità massima
+ * di delega di 2, con la nota nel codice sorgente "for parity with the
+ * original MAX_DEPTH constant".
  */
 
-/** Fonte: `tools/delegate_tool.py`, Hermes (Nous Research), letto il 28/8. */
+/** Fonte: ricerca su un progetto open source dello stesso spazio, letto il 28/8. */
 import { existsSync, statSync } from 'node:fs';
 
 export const LIMITE_FIGLI_CONCORRENTI = 10;
 
 /**
- * Fonte: `tools/delegate_tool.py`, stesso file. A differenza di Hermes
+ * Fonte: la stessa ricerca sopra. A differenza dell'approccio trovato
  * (che non ha un tetto duro oltre il default, solo un avviso in log),
  * questa prima fetta applica un tetto DURO — scelta più prudente
  * finché non c'è una misura reale che dica se serve di più (stesso
@@ -207,7 +207,7 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
        * modello vedeva un rifiuto sul caso normale — delegare un pezzo dello STESSO progetto — e
        * aggirava riscrivendo il percorso in forma WSL (`/mnt/c/…`), che qui passava e su Windows
        * non esiste: il figlio partiva con una cartella inesistente e moriva.
-       * Stato dell'arte (Hermes Agent «Subagent delegation», letto 06/09/2026): per difetto i
+       * Stato dell'arte (letto 06/09/2026): per difetto i
        * sotto-agenti CONDIVIDONO la cartella del padre; l'isolamento vero, quando serve, si fa con
        * un worktree, non con una cartella diversa a caso.
        * ⇒ Resta un solo controllo, quello che il kernel non può fare: la cartella deve ESISTERE.
@@ -248,7 +248,8 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
       /*
        * ⛔⛔⛔ 06/9, stessa misura: i figli partivano con `glm-4.7-flash` mentre la sessione madre
        * aveva scelto `glm-5.3-flash`, e nessuna riga a schermo lo diceva. Un sotto-agente eredita
-       * gli strumenti del padre (Hermes: «subagents inherit the parent's enabled toolsets»); a
+       * gli strumenti del padre (stesso principio trovato in ricerca: i sotto-agenti ereditano
+       * gli strumenti abilitati del padre); a
        * maggior ragione deve ereditare il MODELLO, altrimenti chi paga non sa cosa sta pagando.
        * Si eredita anche lo sforzo di ragionamento e i permessi: il figlio non è più libero del padre.
        */

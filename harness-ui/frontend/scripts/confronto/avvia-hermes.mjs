@@ -1,13 +1,13 @@
 /*
- * Avvia Hermes Desktop (la copia compilata) con il debug remoto su una porta
+ * Avvia l'app di riferimento (la copia compilata) con il debug remoto su una porta
  * fissa, staccato dalla shell, e aspetta che risponda. Se è già su, non fa niente.
  *
  * Ricerca 05/09/2026: un'app Electron si guida da fuori con Chrome DevTools
  * Protocol; Playwright vi si aggancia con `chromium.connectOverCDP` (docs
  * Playwright «Connecting to an existing browser», BrowserStack guide 2026;
  * microsoft/playwright#39008: con Electron 30+ NON si passa
- * `--remote-debugging-port=0` da riga di comando — Hermes espone invece la
- * variabile `HERMES_DESKTOP_CDP_PORT`, letta nel suo `electron-main.mjs`).
+ * `--remote-debugging-port=0` da riga di comando — l'app di riferimento
+ * espone invece la variabile `HERMES_DESKTOP_CDP_PORT`, letta nel suo `electron-main.mjs`).
  *
  * Uso: node scripts/confronto/avvia-hermes.mjs [--porta=9705] [--radice=<hermes-root>]
  * Variabili: TALOS_CONFRONTO_HERMES_ROOT (cartella con node_modules/electron e apps/desktop).
@@ -27,7 +27,7 @@ const LOG_DIR = join(process.cwd(), 'artifacts/confronto');
 
 const attesa = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** I pid degli electron.exe che vengono dalla NOSTRA copia di Hermes (percorso), letti con PowerShell. */
+/** I pid degli electron.exe che vengono dalla NOSTRA copia dell'app di riferimento (percorso), letti con PowerShell. */
 export function elencaElectronDiHermes() {
   if (process.platform !== 'win32') return [];
   try {
@@ -46,7 +46,7 @@ export async function avviaHermes({ porta = PORTA_CDP_HERMES, attesaMassimaMs = 
   const gia = await hermesRisponde(porta);
   if (gia) return { giaAperto: true, versione: gia['Browser'] };
   /*
-   * ⛔ 05/09: Hermes usa `app.requestSingleInstanceLock()` — una seconda istanza chiama
+   * ⛔ 05/09: l'app di riferimento usa `app.requestSingleInstanceLock()` — una seconda istanza chiama
    * `app.quit()` e esce con codice 0 senza una riga di log (electron/electron#35681, #7842,
    * letti il 05/09/2026). Se una copia è già aperta SENZA debug remoto, ogni avvio nuovo muore
    * in silenzio e si aspetta una porta che non arriverà. Ho perso mezz'ora perché `tasklist /FI`

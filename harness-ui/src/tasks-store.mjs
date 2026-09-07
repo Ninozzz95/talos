@@ -27,7 +27,7 @@
  *
  * ⛔ Un file JSON per attività (non un unico array) — stessa classe di
  * bug (riscrittura invece di accodamento) già evitata altrove in
- * questo progetto (session-store.mjs, bug Hermes #8029).
+ * questo progetto (session-store.mjs).
  */
 import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';

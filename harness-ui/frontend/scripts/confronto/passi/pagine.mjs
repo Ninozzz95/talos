@@ -1,6 +1,6 @@
 /*
  * Gruppo 4 · Pagine — i Luoghi di TALOS (Capability, Board, Libreria, Memoria, Attività,
- * Impostazioni) contro le pagine di Hermes (Capabilities, Artifacts, Messaging, Settings).
+ * Impostazioni) contro le pagine equivalenti dell'app di riferimento (Capabilities, Artifacts, Messaging, Settings).
  * Per ogni pagina: 1 gesto per aprirla, quanti controlli premibili, quanti senza nome,
  * quante righe di dati, errori di pagina, e la foto affiancata. Le pagine sono di Astra:
  * gli scarti diventano righe per lui, non correzioni mie.

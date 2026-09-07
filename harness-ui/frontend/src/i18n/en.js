@@ -4,7 +4,7 @@
  * Forma: la CHIAVE è la frase italiana così com'è scritta nel codice (stile gettext/Lingui,
  * lingui.dev «Explicit vs generated IDs», letto il 06/09/2026): niente identificatori inventati,
  * il codice resta leggibile in italiano, e una frase senza traduzione resta in italiano invece di
- * sparire. Le categorie sono quelle di Hermes Desktop (`i18n/en.ts`: common, settings,
+ * sparire. Le categorie ricalcano un approccio noto (common, settings,
  * notifications, toolTitles…), per misurare la copertura una categoria alla volta.
  * I segnaposto `{n}`, `{i}`, `{url}` si sostituiscono con `t(frase, { n })`; il plurale lo decide
  * `Intl.PluralRules` sulla lingua risolta (`tn`).
@@ -54,7 +54,7 @@ export default Object.freeze({
     'Segui il sistema ({lingua})': 'Follow the system ({lingua})', 'italiano': 'Italian',
   },
 
-  /* i nomi umani degli attrezzi (Hermes: toolTitles) */
+  /* i nomi umani degli attrezzi */
   attrezzi: {
     'annullamento di una ricerca': 'cancelling a research', 'apertura di una pagina web': 'opening a web page',
     'avvio di una ricerca approfondita': 'starting a deep research', 'chiusura di un’attività': 'closing a task',

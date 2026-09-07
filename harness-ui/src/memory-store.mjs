@@ -43,7 +43,7 @@
  * ⛔ Stessa CONVENZIONE DI CHIAMATA di notes-store.mjs/tasks-store.mjs
  * (`funzione({cartella, ...}, deps={})`). Un file JSON per memoria
  * (stessa classe di bug — riscrittura invece di accodamento — già
- * evitata altrove, session-store.mjs, bug Hermes #8029).
+ * evitata altrove, session-store.mjs).
  */
 import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';

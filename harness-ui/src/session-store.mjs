@@ -11,19 +11,20 @@
  * un piano precedente citava non esiste in questo file — verificato
  * con una ricerca diretta, zero riscontri).
  *
- * Cosa fanno DAVVERO i concorrenti (Codex, il più ricercato):
- * transcript JSONL append-only come fonte di verità per il replay
+ * Cosa fa davvero lo stato dell'arte in questo spazio: transcript JSONL
+ * append-only come fonte di verità per il replay
  * ("rollout files"), un indice separato (SQLite, solo per liste
- * veloci — non necessario alla scala di questo prodotto). ⭐⭐⭐ Anche
- * Codex, onestamente: "if a transport failure occurs early enough...
+ * veloci — non necessario alla scala di questo prodotto). ⭐⭐⭐ Onestamente
+ * ammesso altrove: "if a transport failure occurs early enough...
  * no resumable artefacts may be written" — un ripristino a metà turno
- * non è mai garantito, nemmeno lì. Il ripristino VERO che offrono è
+ * non è mai garantito, nemmeno lì. Il ripristino VERO che si offre in
+ * questi casi è
  * "rilettura della trascrizione", non "il modello riprende da dove
  * stava" — lo stesso confine onesto che questo modulo dichiara.
  *
- * ⛔ Trovato durante la ricerca, non ipotetico: Hermes Agent ha un bug
- * APERTO (#8029, "non-atomic transcript rewrite causes data loss on
- * crash") — riscrivere l'intero file invece di solo accodare è la
+ * ⛔ Trovato durante la ricerca, non ipotetico: riscrivere l'intero file
+ * invece di solo accodare è una classe di bug nota (perdita di dati su
+ * crash per una riscrittura non atomica della trascrizione) — la
  * classe di errore che questo modulo evita per costruzione: MAI un
  * `writeFile` che sostituisce il file intero, solo `appendFile`. Una
  * riga JSONL è atomica sui filesystem POSIX: un crash a metà riga
@@ -56,7 +57,7 @@ function percorsoDi(cartellaStore, sessionId) {
 
 /**
  * Accoda UNA riga — mai una riscrittura del file intero (la classe di
- * bug di Hermes #8029). `record` è già serializzabile (un evento AG-UI,
+ * bug vista in ricerca, vedi la testa del file). `record` è già serializzabile (un evento AG-UI,
  * o l'intestazione, o il record `messaggiFinali`) — questo modulo non
  * sa cosa contiene, solo che va in coda.
  */

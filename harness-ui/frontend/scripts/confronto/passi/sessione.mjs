@@ -2,8 +2,8 @@
  * Gruppo 3 · Sessione — Review, colonna di destra, albero dei rami.
  * TALOS: istanza con lo store del kernel vero (sessioni con file scritti), es.
  *   TALOS_CONFRONTO_URL=http://127.0.0.1:4182/ node scripts/confronto/confronto.mjs --gruppo=sessione
- * Hermes: la Review è un pannello della colonna destra (Ctrl+G), git-based («No diffs» se il
- * repo della sessione è pulito) — letto dal vivo il 06/09 (esplora-review.mjs).
+ * L'app di riferimento: la Review è un pannello della colonna destra (Ctrl+G), git-based
+ * («No diffs» se il repo della sessione è pulito) — letto dal vivo il 06/09.
  * Terminale e Browser NON si misurano ancora: B1 e K-I sono di Astra, in coda.
  */
 import { attesa } from '../guida.mjs';

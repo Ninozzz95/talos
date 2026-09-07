@@ -29,7 +29,7 @@
  * scrittura non trascina giù le altre, e una cancellazione è un `rm`
  * diretto invece di riscrivere un array intero — la stessa classe di bug
  * (riscrittura invece di accodamento) già evitata altrove in questo
- * progetto (vedi session-store.mjs sul bug Hermes #8029).
+ * progetto (vedi session-store.mjs).
  */
 import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';

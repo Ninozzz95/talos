@@ -23,7 +23,7 @@
  * aditus.io/aria/aria-label, web-accessibility-checker.com «ARIA labels best
  * practices»); il badge come `aria-hidden` + nome nell'aria-label è la forma
  * per i pulsanti SOLO icona (opensource.ebay.com/evo-web icon-button), non per
- * una voce con etichetta. Hermes (web dashboard, docs «memory») mostra i
+ * una voce con etichetta. Un'altra scelta nota mostra i
  * conteggi di memoria come uso percentuale; qui i numeri sono dimensioni di
  * liste, come nel mockup approvato.
  *

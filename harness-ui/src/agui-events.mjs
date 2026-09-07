@@ -48,8 +48,8 @@ export function runError({ message, code }) {
 
 /**
  * Lifecycle AVM-owned del reindirizzamento di un giro attivo. AG-UI non
- * definisce ancora un contratto equivalente a Codex `turn/steer`: questi
- * eventi restano quindi estensioni dichiarate, come ApprovalRequested e
+ * definisce ancora un contratto equivalente per il reindirizzamento di
+ * un turno attivo: questi eventi restano quindi estensioni dichiarate, come ApprovalRequested e
  * QueuedMessageDelivered. `redirectId` correla richiesta ed esito senza
  * affidarsi alla posizione nel buffer; `testo` compare solo negli eventi
  * che rappresentano un input utente effettivo.
