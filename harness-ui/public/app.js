@@ -13948,8 +13948,43 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       const TIPI_FOGLIO_INTERAMENTE_ONESTI = /* @__PURE__ */ new Set(["model", "permissions", "capabilities", "control", "fileViewer", "renameFile", "deleteFile", "createFile", "export", "sessionTree", "deleteSession"]);
       const VELO_PER_FOGLIO = {
-        rename: "veloRinomina"
+        rename: "veloRinomina",
+        deleteSession: "veloEliminaSessione",
+        export: "veloEsporta"
       };
+      async function esportaSessioneCorrente(formato) {
+        if (!state.realSession.id) return { ok: false, motivo: "Nessuna sessione aperta da esportare." };
+        try {
+          const esportato = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/export`);
+          const markdown = formato === "markdown";
+          const testo3 = markdown ? costruisciTrascrizioneMarkdown(esportato) : JSON.stringify(esportato, null, 2);
+          if (!testo3 || !testo3.trim()) throw new Error("Esportazione vuota: nessun contenuto da scrivere.");
+          scaricaTesto(testo3, `talos-sessione-${state.realSession.id}.${markdown ? "md" : "json"}`, markdown ? "text/markdown" : "application/json");
+          toast("Sessione esportata", markdown ? "Trascrizione Markdown pronta." : "JSON pronto.");
+          return { ok: true };
+        } catch (error) {
+          toast("Esportazione non riuscita", messaggioErroreUtente(error));
+          return { ok: false, motivo: messaggioErroreUtente(error, "riprova fra un momento") };
+        }
+      }
+      async function eliminaSessioneBersaglio() {
+        const bersaglio = state.sessioneTarget;
+        if (!bersaglio) return { ok: false, motivo: "Nessuna sessione scelta." };
+        try {
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(bersaglio.sessionId)}/delete`, {});
+        } catch (error) {
+          toast("Eliminazione non riuscita", messaggioErroreUtente(error));
+          return { ok: false, motivo: messaggioErroreUtente(error, "la trascrizione è ancora al suo posto") };
+        }
+        toast("Sessione eliminata", bersaglio.nome);
+        if (state.realSession.id === bersaglio.sessionId) {
+          window.location.reload();
+          return { ok: true };
+        }
+        await aggiornaElencoSessioniReali();
+        if (state.board.initialized) await refreshSessionsBoard();
+        return { ok: true };
+      }
       async function rinominaSessioneCorrente(nuovoNome) {
         const idBersaglio = state.sessioneTarget?.sessionId || state.realSession.id;
         const { nome: nomeUnico, cambiato: doppioneEvitato } = nomeUnicoSessione(nuovoNome, idBersaglio);
@@ -14017,6 +14052,61 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
               }
               chiudiVeloMockup("veloRinomina");
             });
+          }
+        }
+        if (tipo === "export") {
+          const nome = $2("#esportaNome", velo);
+          if (nome) nome.textContent = state.sessioneTarget?.nome || state.session || "questa sessione";
+          for (const bottone3 of $$("[data-export-choice]", velo)) {
+            if (bottone3.dataset.collegato) continue;
+            bottone3.dataset.collegato = "si";
+            bottone3.addEventListener("click", async () => {
+              const tutti = $$("[data-export-choice]", velo);
+              tutti.forEach((b) => {
+                b.disabled = true;
+              });
+              const esito = await esportaSessioneCorrente(bottone3.dataset.exportChoice);
+              tutti.forEach((b) => {
+                b.disabled = false;
+              });
+              if (esito.ok) chiudiVeloMockup("veloEsporta");
+            });
+          }
+        }
+        if (tipo === "deleteSession") {
+          const bersaglio = state.sessioneTarget;
+          const nome = $2("#eliminaSessioneNome", velo);
+          const stato = $2("#eliminaSessioneStato", velo);
+          const blocco = $2("#eliminaSessioneBlocco", velo);
+          const errore = $2("#eliminaSessioneErrore", velo);
+          const conferma = $2("#eliminaSessioneConferma", velo);
+          if (nome) nome.textContent = bersaglio?.nome || "questa sessione";
+          if (errore) errore.hidden = true;
+          const stat = bersaglio ? statoSessione(bersaglio) : null;
+          if (stato) {
+            stato.textContent = stat?.testo || "stato non registrato";
+            stato.className = `talos-badge${stat?.tono ? ` talos-badge--${stat.tono}` : ""}`;
+          }
+          const inCorso = Boolean(bersaglio) && !bersaglio.conclusa && bersaglio.interrotta !== true;
+          if (blocco) blocco.hidden = !inCorso;
+          if (conferma) {
+            conferma.disabled = inCorso;
+            if (!conferma.dataset.collegato) {
+              conferma.dataset.collegato = "si";
+              conferma.addEventListener("click", async () => {
+                conferma.disabled = true;
+                const esito = await eliminaSessioneBersaglio();
+                if (!esito.ok) {
+                  if (errore) {
+                    errore.textContent = `Eliminazione non riuscita: ${esito.motivo}`;
+                    errore.hidden = false;
+                  }
+                  conferma.disabled = false;
+                  return;
+                }
+                chiudiVeloMockup("veloEliminaSessione");
+              });
+            }
           }
         }
       }
