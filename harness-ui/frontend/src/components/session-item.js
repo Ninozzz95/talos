@@ -149,6 +149,28 @@ function el(documentObj, tag, className, testo) {
  * @param {(event:Event)=>void} [opzioni.onApri]
  * @param {(event:MouseEvent)=>void} [opzioni.onMenu]
  */
+/**
+ * Il nome da mettere a schermo quando la sessione non ne ha uno scelto dall'owner.
+ * ⛔ 07/9, visto nel velo Albero e nella sidebar: le sessioni senza nome si chiamavano
+ *   «libero:full-access · fork» — l'identificatore interno, che la regola sui nomi tecnici vieta a
+ *   schermo e che non dice niente a chi rilegge domani. `libero:<cartella>` è la forma che il
+ *   client genera per un compito libero: la parte dopo i due punti è la cartella, e quella si legge.
+ * ⛔ Non inventa: se il taskId non è di una forma conosciuta lo mostra com'è, così un nome nuovo
+ *   si vede subito invece di sparire dentro una parola generica.
+ */
+export function nomeLeggibileSessione(taskId) {
+  const grezzo = String(taskId || '').trim();
+  if (!grezzo) return 'Sessione senza nome';
+  if (grezzo.startsWith('libero:')) {
+    const dove = grezzo.slice('libero:'.length).trim();
+    if (!dove || dove === 'default') return 'Compito libero';
+    if (dove === 'full-access' || dove === 'workspace-launch') return 'Compito libero · cartella scelta a mano';
+    return `Compito libero · ${dove}`;
+  }
+  if (grezzo.startsWith('delega:')) return `Delega · ${grezzo.slice('delega:'.length).trim() || 'sotto-compito'}`;
+  return grezzo;
+}
+
 export function creaSessionItem(sessione, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const riga = el(documentObj, 'button', 'talos-session-item');
@@ -159,7 +181,7 @@ export function creaSessionItem(sessione, opzioni = {}) {
 
   const etichetta = opzioni.pendente
     ? `Nuova · ${sessione.nomeCartella || ''}`
-    : `${sessione.nome || sessione.taskId || ''}${sessione.forkDa ? ' · fork' : ''}`;
+    : `${sessione.nome || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? ' · ramo' : ''}`;
   const stato = opzioni.pendente ? { classe: 'pendente', testo: ETICHETTE.pendente, tono: null } : statoSessione(sessione);
   riga.dataset.sessionState = stato.classe;
   if (stato.aiuto) riga.title = stato.aiuto; // il consiglio dove non ruba spazio alla riga

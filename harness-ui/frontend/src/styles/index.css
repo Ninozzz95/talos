@@ -92,7 +92,12 @@
   --talos-measure-measured:var(--talos-text); --talos-measure-estimated:var(--talos-muted);
   /* struttura (A9, D24) */
   --talos-sidebar-w:276px; --talos-inspector-w:340px; --talos-topbar-h:60px;
-  --talos-measure-w:78ch;
+  /* ⛔ 07/9, owner: «metti la larghezza massima della chat di 768px di default». Era `78ch`, cioe
+     una misura LEGATA AL FONT: cambiando la dimensione del testo della chat cambiava anche la
+     colonna, e a «extra piccolo» si stringeva sotto i 600 px. 768 px e un numero, e resta quello.
+     ⛔ La modalita a tutta larghezza NON passa di qui: `:root.chat-full-width` mette
+     `max-width:none` sulla colonna e `calc(100% - 56px)` sul piede, e continua a farlo. */
+  --talos-measure-w:768px;
   --talos-row-session:66px; --talos-row:44px; --talos-row-pad:12px; --talos-gap:10px;
 }
 :root[data-densita="compatta"]{ --talos-row-session:52px; --talos-row:36px; --talos-row-pad:8px; --talos-gap:6px; }
@@ -513,7 +518,24 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
    Il valore lo misura la regia (metà dell'altezza visibile, `--stream-follow-space`); qui vale 0
    finché non c'è una conversazione vera, così la schermata vuota resta centrata com'è. */
 .talos-conversation__column{max-width:calc(92px + var(--talos-measure-w)); margin:0 auto; width:100%; padding-bottom:var(--stream-follow-space, 0px)}
-.talos-chat-foot > *{max-width:min(var(--talos-measure-w), calc(100% - 56px)); margin-left:auto; margin-right:auto}
+/* ⛔⛔ 07/9, owner: «il chat composer non è centrato bene rispetto alla chat». Misurato a 1920: i
+   messaggi da 498 a 1266, il composer da 544 a 1312 — 46 px più a destra, e a 1440 la differenza
+   era di 23. Non era un caso: la conversazione e il piede vivevano in due colonne DIVERSE.
+   · la conversazione ha padding 44 e dentro `.talos-conversation__column` larga `92px + misura`;
+   · dentro, `.talos-turn` è una griglia `0 minmax(0,1fr) 46px`: il testo occupa la colonna di
+     mezzo, e i 46 px di destra sono la spina dei giri;
+   · il piede aveva padding 18 e centrava il composer su TUTTA la sua larghezza.
+   ⇒ Il piede si mette nella stessa colonna: stesso padding della conversazione, stessa larghezza
+   massima, e il contenuto allineato al bordo SINISTRO come il testo, largo quanto il testo — cioè
+   la colonna meno la spina. Così i due bordi coincidono a qualunque larghezza, e non c'è un numero
+   magico da tenere aggiornato a mano: le misure vengono dalle stesse variabili. */
+.talos-chat-foot > *{--talos-colonna-chat:min(calc(92px + var(--talos-measure-w)), 100%); --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - 46px)); --talos-larghezza-piede:min(var(--composer-max-w, var(--talos-testo-chat)), 100%); width:var(--talos-larghezza-piede); max-width:none; margin-left:max(-44px, calc((100% - var(--talos-colonna-chat)) / 2 + (var(--talos-testo-chat) - var(--talos-larghezza-piede)) / 2)); margin-right:auto}
+/* ⛔ 07/9, owner, precisazione: «il chat composer deve rimanere estensibile oltre la larghezza della
+   chat, ma i lati devono essere equidistanti da un bordo rispetto all'altro della chat». Cioè: la
+   larghezza resta quella che gli dà il ridimensionamento (`--composer-max-w`), e il CENTRO è quello
+   della colonna del testo — così quando è più largo sporge dello stesso tanto di qua e di là.
+   Il margine sinistro è quindi «dove inizia la colonna» più «metà della differenza fra il testo e
+   il composer»: quando le due misure coincidono torna esattamente l'allineamento al testo. */
 .talos-conversation--empty{display:grid; place-items:center; padding:28px}
 .talos-empty{max-width:var(--talos-measure-w); width:100%}
 .talos-empty__mark{width:44px; height:44px; margin-bottom:18px}
@@ -626,7 +648,12 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
  * contenitore: così non scende mai sotto la misura normale e cresce ovunque ci sia spazio vero.
  */
 :root.chat-full-width .talos-conversation__column{max-width:none}
-:root.chat-full-width .talos-chat-foot > *{max-width:calc(100% - 56px)}
+:root.chat-full-width .talos-chat-foot > *{--talos-colonna-chat:100%; width:calc(100% - 46px); max-width:none; margin-left:0}
+/* ⛔ 07/9, misurato a 1920 px: «a tutta larghezza» allargava la colonna e il composer (1216 e
+   1212) ma i MESSAGGI restavano a 768 — il tetto di `.talos-message` non veniva sciolto, e la
+   modalita manteneva solo meta della sua promessa. Si vedeva poco finche la misura era `78ch`
+   (piu stretta); portandola a 768 px il vuoto ai lati diventa evidente. */
+:root.chat-full-width .talos-message,:root.chat-full-width .talos-empty{max-width:none}
 :root.immersive-header .talos-topbar{border-bottom-color:transparent}
 body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{animation:none!important; transition:none!important}
 .talos-touched{margin-top:10px; overflow:hidden}
@@ -636,7 +663,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-touched__name{flex:1; min-width:0; font-family:var(--talos-font-mono); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
 /* ---------- 9. PIEDE DELLA CHAT: striscia (B31), coda (B15), compositore ---------- */
-.talos-chat-foot{flex:none; padding:0 18px 12px}
+.talos-chat-foot{flex:none; padding:0 44px 12px}   /* ⛔ 44 come la conversazione: e cosi che le due colonne coincidono */
 .talos-status-strip{display:flex; align-items:center; gap:12px; padding:9px 14px; margin-bottom:8px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel)}
 .talos-status-strip__pulse{width:8px; height:8px; border-radius:50%; background:var(--talos-accent-hover); flex:none; animation:talos-pulse 1.6s var(--talos-motion-ease) infinite}
 @keyframes talos-pulse{0%,100%{opacity:.35; transform:scale(.9)} 50%{opacity:1; transform:scale(1)}}
@@ -856,7 +883,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-composer{position:relative; min-height:var(--composer-canonical-h, auto); display:flex; flex-direction:column}
 .talos-composer .talos-composer__input{flex:1 1 auto}
 .talos-composer .talos-composer__bar{flex:none; margin-top:10px}
-.talos-chat-foot > .talos-composer{max-width:min(var(--composer-max-w, var(--talos-measure-w)), calc(100% - 56px))}
+/* ⛔ la larghezza del composer la decide la regola sopra, con `--composer-max-w`: una misura, un posto solo. */
 .talos-composer__input{max-height:var(--composer-textarea-max-h, 40vh); overflow-y:auto}
 .talos-composer.composer-resizing{user-select:none}
 .talos-chip__label{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}

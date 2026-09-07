@@ -200,6 +200,168 @@ var init_politiche = __esm({
   }
 });
 
+// src/components/consumo-sessione.js
+function sommaUsage(a, b) {
+  if (!a || typeof a !== "object") return b && typeof b === "object" ? { ...b } : null;
+  if (!b || typeof b !== "object") return { ...a };
+  const somma = (chiave) => {
+    const x = numero(a[chiave]);
+    const y = numero(b[chiave]);
+    if (x === null && y === null) return null;
+    return (x ?? 0) + (y ?? 0);
+  };
+  const risultato = { ...a, ...b };
+  for (const chiave of ["prompt_tokens", "completion_tokens", "cached_tokens", "giri"]) {
+    const valore = somma(chiave);
+    if (valore === null) delete risultato[chiave];
+    else risultato[chiave] = valore;
+  }
+  if (numero(b.tokens_per_second) === null && numero(a.tokens_per_second) !== null) risultato.tokens_per_second = a.tokens_per_second;
+  return risultato;
+}
+function usageDellaSessione(sessione) {
+  if (!sessione || typeof sessione !== "object") return null;
+  if (sessione.usageSessione && typeof sessione.usageSessione === "object") return sessione.usageSessione;
+  return sessione.usage && typeof sessione.usage === "object" ? sessione.usage : null;
+}
+function esecuzioniDellaSessione(sessione) {
+  const u = sessione?.usageSessione;
+  return u && Number.isFinite(Number(u.esecuzioni)) ? Number(u.esecuzioni) : null;
+}
+var numero;
+var init_consumo_sessione = __esm({
+  "src/components/consumo-sessione.js"() {
+    numero = (valore) => Number.isFinite(Number(valore)) ? Number(valore) : null;
+  }
+});
+
+// src/components/session-item.js
+function statoSessione(sessione) {
+  let classe;
+  if (sessione.inAttesaApprovazione) classe = "attesa";
+  else if (sessione.interrotta) classe = "interrotto";
+  else if (!sessione.conclusa) classe = "vivo";
+  else if (sessione.ultimoEsito === "errore" && sessione.motivoChiusura === "fermata") classe = "fermata";
+  else if (sessione.ultimoEsito === "errore") classe = "errore";
+  else if (sessione.ultimoEsito === "successo") classe = "successo";
+  else classe = "ignoto";
+  const testo3 = classe === "errore" && sessione.motivoChiusura === "giri-finiti" ? "giri finiti" : ETICHETTE[classe];
+  let aiuto = null;
+  if (classe === "interrotto") aiuto = "Interrotta dalla morte del processo: nessuno la sta eseguendo. Scrivi un messaggio per riprenderla.";
+  else if (classe === "fermata") aiuto = "L’hai fermata tu: il giro si e chiuso al primo punto sicuro. Scrivi un messaggio per continuare da qui.";
+  return { classe, testo: testo3, tono: TONI[classe] ?? null, aiuto };
+}
+function oraCompatta(iso, adesso = /* @__PURE__ */ new Date()) {
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return "";
+  const giorno = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const differenza = Math.round((giorno(adesso) - giorno(data)) / 864e5);
+  if (differenza <= 0) return data.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
+  if (differenza === 1) return "ieri";
+  if (differenza < 7) return `${differenza} g`;
+  return data.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" });
+}
+function nomeModello(modello) {
+  if (typeof modello !== "string" || modello.trim() === "") return null;
+  return modello.split("/").pop();
+}
+function el2(documentObj, tag, className, testo3) {
+  const nodo4 = documentObj.createElement(tag);
+  if (className) nodo4.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo4.textContent = String(testo3);
+  return nodo4;
+}
+function nomeLeggibileSessione(taskId) {
+  const grezzo = String(taskId || "").trim();
+  if (!grezzo) return "Sessione senza nome";
+  if (grezzo.startsWith("libero:")) {
+    const dove = grezzo.slice("libero:".length).trim();
+    if (!dove || dove === "default") return "Compito libero";
+    if (dove === "full-access" || dove === "workspace-launch") return "Compito libero · cartella scelta a mano";
+    return `Compito libero · ${dove}`;
+  }
+  if (grezzo.startsWith("delega:")) return `Delega · ${grezzo.slice("delega:".length).trim() || "sotto-compito"}`;
+  return grezzo;
+}
+function creaSessionItem(sessione, opzioni = {}) {
+  const documentObj = opzioni.document || globalThis.document;
+  const riga = el2(documentObj, "button", "talos-session-item");
+  riga.type = "button";
+  riga.setAttribute("data-c", "SessionItem");
+  if (opzioni.corrente) riga.setAttribute("aria-current", "true");
+  if (sessione.sessionId) riga.dataset.realSessionId = sessione.sessionId;
+  const etichetta = opzioni.pendente ? `Nuova · ${sessione.nomeCartella || ""}` : `${sessione.nome || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? " · ramo" : ""}`;
+  const stato = opzioni.pendente ? { classe: "pendente", testo: ETICHETTE.pendente, tono: null } : statoSessione(sessione);
+  riga.dataset.sessionState = stato.classe;
+  if (stato.aiuto) riga.title = stato.aiuto;
+  const testo3 = el2(documentObj, "span");
+  const titolo2 = el2(documentObj, "span", "talos-session-item__title", etichetta);
+  const sotto = el2(documentObj, "span", "talos-session-item__sub");
+  const pallino = el2(documentObj, "span", `talos-dot talos-dot--sm${stato.tono ? ` talos-dot--${stato.tono}` : ""}`);
+  const modello = opzioni.pendente ? null : nomeModello(sessione.modello);
+  sotto.append(pallino, el2(documentObj, "span", "talos-session-item__state", modello ? `${stato.testo} · ${modello}` : stato.testo));
+  testo3.append(titolo2, sotto);
+  const aside = el2(documentObj, "span", "talos-session-item__aside");
+  if (!opzioni.pendente) {
+    aside.append(el2(documentObj, "span", null, oraCompatta(sessione.avviataAlle, opzioni.adesso)));
+    const giri = usageDellaSessione(sessione)?.giri;
+    if (Number.isFinite(giri) && giri > 0) aside.append(el2(documentObj, "span", null, `${giri} gir${giri === 1 ? "o" : "i"}`));
+  }
+  if (opzioni.selezione?.attiva) {
+    const casella = el2(documentObj, "input", "talos-checkbox");
+    casella.type = "checkbox";
+    casella.checked = Boolean(opzioni.selezione.selezionata);
+    casella.dataset.sessionSelect = sessione.sessionId || "";
+    casella.setAttribute("aria-label", `Seleziona ${etichetta}`);
+    casella.addEventListener("click", (event) => event.stopPropagation());
+    casella.addEventListener("change", () => opzioni.selezione.onToggle?.(casella.checked));
+    riga.append(casella);
+    riga.classList.add("is-selection-mode");
+    if (casella.checked) riga.classList.add("is-selected");
+  }
+  riga.append(testo3, aside);
+  if (typeof opzioni.onApri === "function") riga.addEventListener("click", opzioni.onApri);
+  if (typeof opzioni.onMenu === "function") {
+    riga.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      opzioni.onMenu(event);
+    });
+  }
+  return riga;
+}
+var TONI, ETICHETTE;
+var init_session_item = __esm({
+  "src/components/session-item.js"() {
+    init_consumo_sessione();
+    TONI = Object.freeze({
+      attesa: "warning",
+      vivo: "live",
+      errore: "danger",
+      successo: "success"
+      // interrotta / ignoto / pendente: pallino senza tono, come «interrotta» nel mockup.
+    });
+    ETICHETTE = Object.freeze({
+      attesa: "aspetta te",
+      vivo: "in corso",
+      interrotto: "interrotta",
+      errore: "errore",
+      /*
+       * ⛔⛔ 07/9, misurato: premi «ferma», il giro si chiude come chiedevi, e la riga diceva
+       * **«errore»** — perche il giro finisce con un `RunError` di codice `fermato` e l'elenco
+       * conosceva solo l'esito, non il motivo. Fermare non e sbagliare, e nemmeno concludere.
+       * Ricerca 07/09/2026 — opencode #25899/#28453: un annullamento chiesto dalla persona non e ne
+       * `end_turn` (fa sembrare completamento uno stop) ne `agent_error` (fa sembrare guasto un gesto
+       * voluto): e un terzo esito. Qui si chiama «fermata».
+       */
+      fermata: "fermata",
+      successo: "conclusa",
+      ignoto: "conclusa · esito non registrato",
+      pendente: "in attesa del primo messaggio"
+    });
+  }
+});
+
 // src/components/runtime-modelli.js
 function datiRuntimeModello(r = {}) {
   const raggiunto = r.state === "observed", models = Array.isArray(r.models) ? r.models : [];
@@ -208,39 +370,39 @@ function datiRuntimeModello(r = {}) {
   const stato = raggiunto ? locale ? r.runtimeState === "ready" ? "Raggiunto" : fasi[r.runtimeState] || "Stato non rilevato" : "Raggiunto" : "Non raggiunto";
   return { nome: nomi[r.runtimeId] || r.runtimeId || "Motore sconosciuto", stato, tono: stato === "Raggiunto" && !errore ? "success" : "warning", modelli: !raggiunto ? "Disponibilità non verificata" : r.modelsError ? "Lettura dei modelli non riuscita" : models.length ? models.length + (models.length === 1 ? " modello disponibile" : " modelli disponibili") : "Nessun modello disponibile", nomi: raggiunto && !r.modelsError ? models.map((m) => m.name || m.id).filter(Boolean) : [], caricamento: raggiunto && r.runtimeId === "llama.cpp" ? r.runtimeState === "ready" ? "Modello caricato da TALOS" : ["stopped", "unavailable"].includes(r.runtimeState) ? "Nessun modello caricato da TALOS" : "Non rilevato" : "Non rilevato", indirizzo: r.baseUrl || "Non esposto dal server", data: typeof r.observedAt === "string" && !Number.isNaN(Date.parse(r.observedAt)) ? new Date(r.observedAt).toLocaleString("it-IT", { timeZone: "Europe/Rome" }) : "Non rilevata", errore };
 }
-function el2(tag, cls, txt) {
+function el3(tag, cls, txt) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
   if (txt != null) n.textContent = txt;
   return n;
 }
 function creaRuntimeModello(runtime) {
-  const d = datiRuntimeModello(runtime), card = el2("article", "talos-card talos-card--pad talos-runtime-card");
+  const d = datiRuntimeModello(runtime), card = el3("article", "talos-card talos-card--pad talos-runtime-card");
   card.dataset.c = "RuntimeCard";
   card.dataset.runtimeId = runtime.runtimeId || "";
   card.dataset.runtimeState = runtime.state || "unknown";
-  const head = el2("div", "talos-cluster"), name = el2("h3", "talos-lab__heading", d.nome);
+  const head = el3("div", "talos-cluster"), name = el3("h3", "talos-lab__heading", d.nome);
   name.dataset.runtimeName = "";
-  const badge5 = el2("span", "talos-badge talos-badge--sm talos-badge--" + d.tono, d.stato);
+  const badge5 = el3("span", "talos-badge talos-badge--sm talos-badge--" + d.tono, d.stato);
   badge5.dataset.c = "Badge";
   head.append(name, badge5);
   card.append(head);
-  const status = el2("p", "talos-muted", d.modelli);
+  const status = el3("p", "talos-muted", d.modelli);
   status.dataset.runtimeModels = "";
   card.append(status);
   if (d.nomi.length) {
-    const list = el2("ul", "talos-runtime-card__models");
-    for (const name2 of d.nomi) list.append(el2("li", "", name2));
+    const list = el3("ul", "talos-runtime-card__models");
+    for (const name2 of d.nomi) list.append(el3("li", "", name2));
     card.append(list);
   }
   for (const [label, value, key] of [["Caricamento", d.caricamento, "loaded"], ["Indirizzo", d.indirizzo, "address"], ["Verifica", d.data, "date"]]) {
-    const row = el2("div", "talos-kv"), v = el2("span", "talos-kv__v", value);
+    const row = el3("div", "talos-kv"), v = el3("span", "talos-kv__v", value);
     v.dataset.runtimeValue = key;
-    row.append(el2("span", "talos-kv__k", label), v);
+    row.append(el3("span", "talos-kv__k", label), v);
     card.append(row);
   }
   if (d.errore) {
-    const error = el2("p", "talos-muted talos-runtime-card__error", "Dettaglio: " + d.errore);
+    const error = el3("p", "talos-muted talos-runtime-card__error", "Dettaglio: " + d.errore);
     card.append(error);
   }
   return card;
@@ -250,7 +412,7 @@ function aggiornaElencoRuntime(list, runtimes = [], { caricamento = false, error
   list.className = "talos-runtime-list";
   list.setAttribute("aria-busy", String(caricamento));
   if (caricamento || errore || !runtimes.length) {
-    const empty = el2("p", "talos-muted", caricamento ? "Verifica dei motori in corso…" : errore ? "Lettura non riuscita: " + (errore.message || errore) + ". Riprova con Aggiorna runtime." : "Nessun motore configurato sul server.");
+    const empty = el3("p", "talos-muted", caricamento ? "Verifica dei motori in corso…" : errore ? "Lettura non riuscita: " + (errore.message || errore) + ". Riprova con Aggiorna runtime." : "Nessun motore configurato sul server.");
     empty.dataset.c = "EmptyState";
     if (errore) empty.setAttribute("role", "alert");
     list.replaceChildren(empty);
@@ -293,7 +455,7 @@ var init_runtime_modelli = __esm({
 
 // src/components/misura-memoria.js
 function normalizzaCapacita(c) {
-  if (!c || c.schema !== "talos.model-lab.capacity/1" || !c.memory || !c.storage || !numero(c.memory.totalBytes) || c.memory.totalBytes === 0 || !numero(c.memory.freeBytes) || c.memory.freeBytes > c.memory.totalBytes || !["availableBytes", "reserveBytes", "allocatableBytes"].every((k) => numero(c.storage[k])) || typeof c.measuredAt !== "string" || Number.isNaN(Date.parse(c.measuredAt))) throw Error("La misura della capacità non è valida.");
+  if (!c || c.schema !== "talos.model-lab.capacity/1" || !c.memory || !c.storage || !numero2(c.memory.totalBytes) || c.memory.totalBytes === 0 || !numero2(c.memory.freeBytes) || c.memory.freeBytes > c.memory.totalBytes || !["availableBytes", "reserveBytes", "allocatableBytes"].every((k) => numero2(c.storage[k])) || typeof c.measuredAt !== "string" || Number.isNaN(Date.parse(c.measuredAt))) throw Error("La misura della capacità non è valida.");
   return c;
 }
 function datiMemoria(capacita, runtimes = [], { erroreRuntime = "" } = {}) {
@@ -349,10 +511,10 @@ function montaMisuraMemoria(originale, canonico) {
   colonna.replaceChildren(canonico);
   aggiornaMisuraMemoria(canonico, { runtimeVerificato: false });
 }
-var numero, byte, CAMPI;
+var numero2, byte, CAMPI;
 var init_misura_memoria = __esm({
   "src/components/misura-memoria.js"() {
-    numero = (n) => Number.isFinite(n) && n >= 0;
+    numero2 = (n) => Number.isFinite(n) && n >= 0;
     byte = (n) => new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 }).format(n / 1024 ** 3) + " GiB";
     CAMPI = [["totale", "RAM totale", "machineMemoryMetric"], ["libera", "RAM libera", "machineFreeMemoryMetric"], ["discoDisponibile", "Disponibile sul disco", "machineStorageMetric"], ["discoRiserva", "Riserva sul disco", null], ["discoAllocabile", "Allocabile sul disco", "machineAllocatableMetric"]];
   }
@@ -443,32 +605,32 @@ function filtraModelli(modelli, query = "", provider = "all") {
   const q = String(query).trim().toLocaleLowerCase("it");
   return modelli.filter((m) => (provider === "all" || m.provider === provider) && (!q || [m.nome, m.id, m.provider].some((v) => String(v || "").toLocaleLowerCase("it").includes(q))));
 }
-function el3(tag, cls, txt) {
+function el4(tag, cls, txt) {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
   if (txt != null) n.textContent = String(txt);
   return n;
 }
 function kv(k, v, id) {
-  const row = el3("div", "talos-kv"), val = el3("span", "talos-kv__v", v);
+  const row = el4("div", "talos-kv"), val = el4("span", "talos-kv__v", v);
   if (id) val.id = id;
-  row.append(el3("span", "talos-kv__k", k), val);
+  row.append(el4("span", "talos-kv__k", k), val);
   return row;
 }
 function contesto(n) {
   return Number.isFinite(n) && n > 0 ? new Intl.NumberFormat("it-IT").format(n) + " token" : "Non dichiarato";
 }
 function creaRigaCatalogo(m, { selezionato = false, seleziona } = {}) {
-  const b = el3("button", "talos-list-row");
+  const b = el4("button", "talos-list-row");
   b.type = "button";
   b.dataset.c = "ListRow";
   b.dataset.catalog = m.id;
   b.dataset.provider = m.provider;
   b.setAttribute("aria-pressed", String(selezionato));
-  const icon = el3("span", "talos-list-row__icon");
+  const icon = el4("span", "talos-list-row__icon");
   icon.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-globe"></use></svg>';
-  const text = el3("span", "talos-list-row__text");
-  text.append(el3("span", "talos-list-row__title", m.nome), el3("span", "talos-list-row__sub", m.provider + " · " + contesto(m.contextLength)));
+  const text = el4("span", "talos-list-row__text");
+  text.append(el4("span", "talos-list-row__title", m.nome), el4("span", "talos-list-row__sub", m.provider + " · " + contesto(m.contextLength)));
   b.append(icon, text);
   b.addEventListener("click", () => seleziona?.(m));
   return b;
@@ -476,34 +638,34 @@ function creaRigaCatalogo(m, { selezionato = false, seleziona } = {}) {
 function aggiornaDettaglioCatalogo(mount, m, { fornitori } = {}) {
   mount.replaceChildren();
   if (!m) {
-    mount.append(el3("p", "talos-muted", "Seleziona un modello per vedere capacità, contesto e prezzi."));
+    mount.append(el4("p", "talos-muted", "Seleziona un modello per vedere capacità, contesto e prezzi."));
     return;
   }
-  const nome = el3("h3", "", m.nome);
+  const nome = el4("h3", "", m.nome);
   nome.id = "catalogoNome";
-  const id = el3("code", "talos-mono", m.id);
+  const id = el4("code", "talos-mono", m.id);
   id.id = "catalogoId";
-  const desc = el3("p", "talos-detail__desc", m.description || "Il fornitore non ha fornito una descrizione.");
+  const desc = el4("p", "talos-detail__desc", m.description || "Il fornitore non ha fornito una descrizione.");
   desc.id = "catalogoDescrizione";
   mount.append(nome, id, desc, kv("Fornitore", m.provider, "catalogoProvider"), kv("Ingresso", elenco(m.inputModalities), "catalogoIngresso"), kv("Risposta", elenco(m.outputModalities), "catalogoUscita"), kv("Parametri supportati", elenco(m.supportedParameters), "catalogoParametri"), kv("Contesto", contesto(m.contextLength), "catalogoContesto"));
-  const alias = el3("p", "talos-muted", "Alias: può cambiare versione nel tempo.");
+  const alias = el4("p", "talos-muted", "Alias: può cambiare versione nel tempo.");
   alias.id = "catalogoAlias";
   alias.hidden = !m.alias;
-  mount.append(alias, el3("hr", "talos-lab__rule"), el3("h3", "", "Costo per milione di token"), kv("In ingresso", prezzoPerMilione(m.prezzoPrompt), "catalogoPrezzoInput"), kv("In uscita", prezzoPerMilione(m.prezzoCompletion), "catalogoPrezzoOutput"), el3("p", "talos-muted", "Prezzi dichiarati da OpenRouter. Non sono una stima del costo della sessione."));
-  const raw = el3("details", "talos-lab__space");
-  raw.append(el3("summary", "", "Valori originali per token (USD)"));
+  mount.append(alias, el4("hr", "talos-lab__rule"), el4("h3", "", "Costo per milione di token"), kv("In ingresso", prezzoPerMilione(m.prezzoPrompt), "catalogoPrezzoInput"), kv("In uscita", prezzoPerMilione(m.prezzoCompletion), "catalogoPrezzoOutput"), el4("p", "talos-muted", "Prezzi dichiarati da OpenRouter. Non sono una stima del costo della sessione."));
+  const raw = el4("details", "talos-lab__space");
+  raw.append(el4("summary", "", "Valori originali per token (USD)"));
   raw.append(kv("Ingresso", m.prezzoPrompt ?? "Non dichiarato", "catalogoPrezzoInputRaw"), kv("Uscita", m.prezzoCompletion ?? "Non dichiarato", "catalogoPrezzoOutputRaw"));
   mount.append(raw);
-  const stato = el3("p", "talos-muted", "L’elenco dei modelli non verifica le credenziali del tuo account.");
+  const stato = el4("p", "talos-muted", "L’elenco dei modelli non verifica le credenziali del tuo account.");
   stato.id = "catalogoStato";
   mount.append(stato);
-  const use = el3("button", "talos-button talos-button--primary talos-button--block", "Usa nella sessione");
+  const use = el4("button", "talos-button talos-button--primary talos-button--block", "Usa nella sessione");
   use.id = "catalogoAzione";
   use.type = "button";
   use.dataset.richiede = "fase3";
   use.hidden = true;
   mount.append(use);
-  const access = el3("button", "talos-button talos-button--ghost talos-button--sm", "Fornitori e accessi");
+  const access = el4("button", "talos-button talos-button--ghost talos-button--sm", "Fornitori e accessi");
   access.type = "button";
   access.dataset.c = "Button";
   access.dataset.apreVelo = "veloFornitori";
@@ -527,7 +689,7 @@ function aggiornaCatalogoModelli(panel, dati, { query = "", provider = "all", se
   refresh.disabled = caricamento;
   panel.setAttribute("aria-busy", String(caricamento));
   if (errore) {
-    const p = el3("p", "talos-card talos-card--pad", errore);
+    const p = el4("p", "talos-card talos-card--pad", errore);
     p.setAttribute("role", "alert");
     list.append(p);
     count.textContent = "Catalogo non disponibile";
@@ -536,9 +698,9 @@ function aggiornaCatalogoModelli(panel, dati, { query = "", provider = "all", se
   }
   count.textContent = caricamento ? "Aggiornamento del catalogo…" : dati ? filtered.length + " di " + dati.modelli.length + " modelli · OpenRouter · " + (dati.daCache ? "copia salvata · " : "") + new Date(dati.aggiornatoAlle).toLocaleString("it-IT", { timeZone: "Europe/Rome" }) : "Catalogo non caricato";
   if (!dati) {
-    list.append(el3("p", "talos-card--pad talos-muted", caricamento ? "Caricamento…" : "Apri questa sezione per caricare il catalogo."));
+    list.append(el4("p", "talos-card--pad talos-muted", caricamento ? "Caricamento…" : "Apri questa sezione per caricare il catalogo."));
   } else if (!filtered.length) {
-    const p = el3("p", "talos-card--pad talos-muted", dati.modelli.length ? "Nessun modello corrisponde ai filtri." : "Il catalogo osservato è vuoto.");
+    const p = el4("p", "talos-card--pad talos-muted", dati.modelli.length ? "Nessun modello corrisponde ai filtri." : "Il catalogo osservato è vuoto.");
     list.append(p);
   } else for (const m of filtered.slice(0, limite)) list.append(creaRigaCatalogo(m, { selezionato: m.id === selected?.id, seleziona }));
   more.hidden = filtered.length <= limite;
@@ -2213,22 +2375,22 @@ function filtraEstensioni(tipo, voci, query = "") {
   return voci.filter((v) => !q || JSON.stringify(datiEstensione(tipo, v)).toLocaleLowerCase("it").includes(q));
 }
 function creaExtensionRow(tipo, v, { document: doc = globalThis.document, selezionata = false, onSeleziona } = {}) {
-  const d = datiEstensione(tipo, v), r = el4(doc, "button", "talos-list-row");
+  const d = datiEstensione(tipo, v), r = el5(doc, "button", "talos-list-row");
   r.type = "button";
   r.dataset.extId = d.id;
   r.setAttribute("role", "option");
   r.setAttribute("aria-selected", String(selezionata));
   r.tabIndex = selezionata ? 0 : -1;
-  const i = el4(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), u = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const i = el5(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), u = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg.setAttribute("class", "i");
   svg.setAttribute("aria-hidden", "true");
   u.setAttribute("href", tipo === "mcp" ? "#i-globe" : "#i-bolt");
   svg.append(u);
   i.append(svg);
-  const t2 = el4(doc, "span", "talos-list-row__text");
-  t2.append(el4(doc, "span", "talos-list-row__title", d.titolo), el4(doc, "span", "talos-list-row__sub", d.descrizione));
-  const a = el4(doc, "span", "talos-list-row__aside");
-  a.append(el4(doc, "span", "talos-badge" + (d.fidabile ? " talos-badge--warning" : ""), d.stato));
+  const t2 = el5(doc, "span", "talos-list-row__text");
+  t2.append(el5(doc, "span", "talos-list-row__title", d.titolo), el5(doc, "span", "talos-list-row__sub", d.descrizione));
+  const a = el5(doc, "span", "talos-list-row__aside");
+  a.append(el5(doc, "span", "talos-badge" + (d.fidabile ? " talos-badge--warning" : ""), d.stato));
   r.append(i, t2, a);
   r.addEventListener("click", () => onSeleziona?.(d.id));
   return r;
@@ -2287,7 +2449,7 @@ function render(panel, p) {
     });
     return r;
   }));
-  if (!voci.length) lista.append(el4(doc, "p", "talos-list-row talos-muted", o.errore ? "Inventario non disponibile." : o.caricamento ? "Caricamento…" : p.voci.length ? "Nessuna voce corrisponde alla ricerca." : "Nessuna voce dichiarata nel progetto."));
+  if (!voci.length) lista.append(el5(doc, "p", "talos-list-row talos-muted", o.errore ? "Inventario non disponibile." : o.caricamento ? "Caricamento…" : p.voci.length ? "Nessuna voce corrisponde alla ricerca." : "Nessuna voce dichiarata nel progetto."));
   if (focus) [...lista.children].find((n) => n.dataset.extId === focus)?.focus({ preventScroll: true });
   const v = voci.find((v2) => v2.id === p.scelto), detail = panel.querySelector("[data-ext-detail]");
   detail.hidden = !v;
@@ -2298,14 +2460,14 @@ function render(panel, p) {
   detail.querySelector("[data-ext-stato]").textContent = d.stato;
   detail.querySelector("[data-ext-origine]").textContent = d.origine;
   detail.querySelector("[data-ext-meta]").replaceChildren(...d.righe.map(([k, v2]) => {
-    const r = el4(doc, "div", "talos-kv");
-    r.append(el4(doc, "span", "talos-kv__k", k), el4(doc, "span", "talos-kv__v", v2));
+    const r = el5(doc, "div", "talos-kv");
+    r.append(el5(doc, "span", "talos-kv__k", k), el5(doc, "span", "talos-kv__v", v2));
     return r;
   }));
   const avvisi = detail.querySelector("[data-ext-warnings]");
   avvisi.hidden = !d.avvisi.length;
-  avvisi.replaceChildren(...d.avvisi.map((a) => el4(doc, "p", "talos-detail__desc", a.origine + ": " + a.avviso)));
-  if (d.avvisi.length) avvisi.append(el4(doc, "p", "talos-muted", "La scansione segnala possibili rischi; non garantisce sicurezza."));
+  avvisi.replaceChildren(...d.avvisi.map((a) => el5(doc, "p", "talos-detail__desc", a.origine + ": " + a.avviso)));
+  if (d.avvisi.length) avvisi.append(el5(doc, "p", "talos-muted", "La scansione segnala possibili rischi; non garantisce sicurezza."));
   const b = detail.querySelector("[data-ext-trust]");
   b.hidden = !d.fidabile;
   b.disabled = Boolean(o.caricamento || o.salvataggio) || !o.ambito;
@@ -2350,12 +2512,12 @@ function collegaSchedeCapability(schermo, onSezione) {
     });
   }
 }
-var EVENTI, ORIGINI, el4, eventi, PANELS, SCHEDE;
+var EVENTI, ORIGINI, el5, eventi, PANELS, SCHEDE;
 var init_estensioni = __esm({
   "src/components/estensioni.js"() {
     EVENTI = { pre_tool_call: "Prima di usare un attrezzo", post_tool_call: "Dopo aver usato un attrezzo", session_start: "All’avvio della sessione", session_end: "Alla fine della sessione" };
     ORIGINI = { skills: ".harness-ui-skills/", mcp: ".harness-ui-mcp.json", plugins: ".harness-ui-plugins/", hooks: ".harness-ui-hooks.json" };
-    el4 = (doc, tag, classe, testo3) => {
+    el5 = (doc, tag, classe, testo3) => {
       const n = doc.createElement(tag);
       if (classe) n.className = classe;
       if (testo3 !== void 0) n.textContent = testo3;
@@ -2494,7 +2656,7 @@ function filtraAttrezzi(attrezzi, { query = "", filtro = "tutti" } = {}) {
   const q = String(query).trim().toLocaleLowerCase("it");
   return attrezzi.filter((a) => (filtro === "tutti" || (filtro === "permessi" ? a.permessoConfigurabile === true : filtro === "dipendenze" ? a.dipendenza && a.dipendenza.stato !== "pronta" : false)) && (!q || corrispondeARicerca(a.nome, q) || String(a.descrizione || "").toLocaleLowerCase("it").includes(q)));
 }
-function el5(doc, tag, classe, testo3) {
+function el6(doc, tag, classe, testo3) {
   const n = doc.createElement(tag);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
@@ -2507,7 +2669,7 @@ function stima(a) {
   return Number.isFinite(a.tokenSchemaStimati) && a.tokenSchemaStimati >= 0 ? a.tokenSchemaStimati.toLocaleString("it-IT") + " token" : "Stima non disponibile";
 }
 function icona(doc, a) {
-  const c = el5(doc, "span", "talos-list-row__icon"), s = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), u = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const c = el6(doc, "span", "talos-list-row__icon"), s = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), u = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   s.setAttribute("class", "i");
   s.setAttribute("aria-hidden", "true");
   u.setAttribute("href", "#" + ({ shell: "i-terminal", cerca: "i-search", leggi: "i-eye", scrivi: "i-code", web_search: "i-globe", document_create: "i-files" }[a.nome] || "i-code"));
@@ -2516,7 +2678,7 @@ function icona(doc, a) {
   return c;
 }
 function creaToolListRow(a, { document: doc = globalThis.document, selezionata = false, selezionabile = true, onSeleziona, uso = null } = {}) {
-  const r = el5(doc, selezionabile ? "button" : "div", "talos-list-row");
+  const r = el6(doc, selezionabile ? "button" : "div", "talos-list-row");
   r.dataset.toolName = a.nome;
   if (selezionabile) {
     r.type = "button";
@@ -2526,12 +2688,12 @@ function creaToolListRow(a, { document: doc = globalThis.document, selezionata =
     r.tabIndex = selezionata ? 0 : -1;
     r.addEventListener("click", () => onSeleziona?.(a.nome));
   } else r.setAttribute("role", "group");
-  const t2 = el5(doc, "span", "talos-list-row__text");
-  t2.append(el5(doc, "span", "talos-list-row__title", titolo(a)), el5(doc, "span", "talos-list-row__sub", descrizioneAttrezzo(a.nome) || a.descrizione || "Descrizione non disponibile"));
-  if (a.dipendenza) t2.append(el5(doc, "span", "talos-list-row__sub", a.dipendenza.dettaglio || "Dipendenza non osservata"));
-  const aside = el5(doc, "span", "talos-list-row__aside");
-  aside.append(el5(doc, "span", Number.isFinite(a.tokenSchemaStimati) && a.tokenSchemaStimati >= 0 ? "talos-mono talos-measure--estimate" : "talos-muted", stima(a)), el5(doc, "span", "talos-badge" + (a.permesso === "chiedi" ? " talos-badge--warning" : ""), permessoAttrezzo(a)));
-  if (uso?.chiamate > 0) aside.append(el5(doc, "span", "talos-muted", uso.chiamate + " chiamate" + (uso.ripetute > 0 ? " · " + uso.ripetute + " ripetute" : "")));
+  const t2 = el6(doc, "span", "talos-list-row__text");
+  t2.append(el6(doc, "span", "talos-list-row__title", titolo(a)), el6(doc, "span", "talos-list-row__sub", descrizioneAttrezzo(a.nome) || a.descrizione || "Descrizione non disponibile"));
+  if (a.dipendenza) t2.append(el6(doc, "span", "talos-list-row__sub", a.dipendenza.dettaglio || "Dipendenza non osservata"));
+  const aside = el6(doc, "span", "talos-list-row__aside");
+  aside.append(el6(doc, "span", Number.isFinite(a.tokenSchemaStimati) && a.tokenSchemaStimati >= 0 ? "talos-mono talos-measure--estimate" : "talos-muted", stima(a)), el6(doc, "span", "talos-badge" + (a.permesso === "chiedi" ? " talos-badge--warning" : ""), permessoAttrezzo(a)));
+  if (uso?.chiamate > 0) aside.append(el6(doc, "span", "talos-muted", uso.chiamate + " chiamate" + (uso.ripetute > 0 ? " · " + uso.ripetute + " ripetute" : "")));
   r.append(icona(doc, a), t2, aside);
   return r;
 }
@@ -2624,7 +2786,7 @@ function render2(schermo, p) {
     });
     return r;
   }));
-  if (!visibili.length) lista.append(el5(doc, "p", "talos-list-row talos-muted", o.errore ? "Catalogo non disponibile." : o.caricamento ? "Caricamento…" : attrezzi.length ? "Nessun attrezzo corrisponde ai filtri." : "Nessun attrezzo offerto in questa configurazione."));
+  if (!visibili.length) lista.append(el6(doc, "p", "talos-list-row talos-muted", o.errore ? "Catalogo non disponibile." : o.caricamento ? "Caricamento…" : attrezzi.length ? "Nessun attrezzo corrisponde ai filtri." : "Nessun attrezzo offerto in questa configurazione."));
   if (focus) [...lista.querySelectorAll("[data-tool-name]")].find((n) => n.dataset.toolName === focus)?.focus({ preventScroll: true });
   const a = visibili.find((a2) => a2.nome === p.scelto), d = schermo.querySelector("[data-cap-dettaglio]");
   d.hidden = !a;
@@ -2681,25 +2843,25 @@ function riepilogoAutomazioni(elenco2) {
   const attive = elenco2.filter((a) => a.attiva === true).length;
   return elenco2.length + " automazion" + (elenco2.length === 1 ? "e" : "i") + " · " + attive + (attive === 1 ? " attiva" : " attive");
 }
-function el6(doc, tag, classe, testo3) {
+function el7(doc, tag, classe, testo3) {
   const n = doc.createElement(tag);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
   return n;
 }
 function kv2(doc, k, v) {
-  const n = el6(doc, "div", "talos-kv");
-  n.append(el6(doc, "span", "talos-kv__k", k), el6(doc, "span", "talos-kv__v", v));
+  const n = el7(doc, "div", "talos-kv");
+  n.append(el7(doc, "span", "talos-kv__k", k), el7(doc, "span", "talos-kv__v", v));
   return n;
 }
 function creaAutomationRow(a, { document: doc = globalThis.document, adesso = /* @__PURE__ */ new Date(), salvataggio = false, salvataggioId = null, aperta = false, onDettagli, onToggle, onElimina } = {}) {
-  const t2 = testiAutomazione(a, adesso), stato = statoAutomazione(a.attiva), riga = el6(doc, "article", "talos-card talos-automation");
+  const t2 = testiAutomazione(a, adesso), stato = statoAutomazione(a.attiva), riga = el7(doc, "article", "talos-card talos-automation");
   riga.dataset.c = "AutomationRow";
   riga.dataset.automazioneId = a.id;
   riga.setAttribute("role", "listitem");
-  const testa = el6(doc, "div", "talos-automation__head");
-  testa.append(el6(doc, "span", "talos-dot" + (stato.tono ? " talos-dot--" + stato.tono : "")), el6(doc, "span", "talos-automation__name talos-grow", t2.nome), el6(doc, "span", "talos-badge talos-badge--sm", t2.intervallo), el6(doc, "span", "talos-badge" + (stato.tono ? " talos-badge--" + stato.tono : "") + " talos-badge--sm", stato.testo));
-  const toggle = el6(doc, "button", stato.prossimo === null ? "talos-button talos-button--secondary talos-button--sm" : "talos-switch");
+  const testa = el7(doc, "div", "talos-automation__head");
+  testa.append(el7(doc, "span", "talos-dot" + (stato.tono ? " talos-dot--" + stato.tono : "")), el7(doc, "span", "talos-automation__name talos-grow", t2.nome), el7(doc, "span", "talos-badge talos-badge--sm", t2.intervallo), el7(doc, "span", "talos-badge" + (stato.tono ? " talos-badge--" + stato.tono : "") + " talos-badge--sm", stato.testo));
+  const toggle = el7(doc, "button", stato.prossimo === null ? "talos-button talos-button--secondary talos-button--sm" : "talos-switch");
   toggle.type = "button";
   toggle.dataset.autoToggle = "";
   toggle.disabled = salvataggio || stato.prossimo === null;
@@ -2707,18 +2869,18 @@ function creaAutomationRow(a, { document: doc = globalThis.document, adesso = /*
     toggle.setAttribute("role", "switch");
     toggle.setAttribute("aria-checked", String(a.attiva));
     toggle.setAttribute("aria-label", "Automazione " + t2.nome);
-    toggle.append(el6(doc, "span", "talos-switch__thumb"));
+    toggle.append(el7(doc, "span", "talos-switch__thumb"));
   } else toggle.textContent = "Stato da verificare";
   toggle.addEventListener("click", () => onToggle?.(a, stato.prossimo));
   testa.append(toggle);
-  const righe = el6(doc, "div", "talos-automation__runs");
+  const righe = el7(doc, "div", "talos-automation__runs");
   righe.append(kv2(doc, "Prossimo avvio", t2.prossima), kv2(doc, "Avvii nel giorno UTC / limite", t2.conteggio));
-  const piede = el6(doc, "div", "talos-automation__head");
-  const dettagli = el6(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Dettagli");
+  const piede = el7(doc, "div", "talos-automation__head");
+  const dettagli = el7(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Dettagli");
   dettagli.type = "button";
   dettagli.dataset.autoDetails = "";
   dettagli.setAttribute("aria-expanded", String(aperta));
-  const pannello = el6(doc, "div", "talos-automation__runs");
+  const pannello = el7(doc, "div", "talos-automation__runs");
   pannello.dataset.autoDettaglio = "";
   pannello.hidden = !aperta;
   pannello.append(kv2(doc, "Ultimo avvio registrato", t2.ultima), kv2(doc, "Creata", t2.creata), kv2(doc, "Attività", t2.task));
@@ -2727,13 +2889,13 @@ function creaAutomationRow(a, { document: doc = globalThis.document, adesso = /*
     dettagli.setAttribute("aria-expanded", String(!pannello.hidden));
     onDettagli?.(a, !pannello.hidden);
   });
-  piede.append(dettagli, el6(doc, "span", "talos-grow"));
+  piede.append(dettagli, el7(doc, "span", "talos-grow"));
   if (salvataggio && salvataggioId === a.id) {
-    const attesa = el6(doc, "span", "talos-muted", "Salvataggio…");
+    const attesa = el7(doc, "span", "talos-muted", "Salvataggio…");
     attesa.setAttribute("role", "status");
     piede.append(attesa);
   }
-  const elimina = el6(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Elimina");
+  const elimina = el7(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Elimina");
   elimina.type = "button";
   elimina.dataset.autoElimina = "";
   elimina.setAttribute("aria-label", "Elimina " + t2.nome);
@@ -2800,7 +2962,7 @@ function render3(schermo, pagina) {
     if (v) pagina.aperte.add(s.id);
     else pagina.aperte.delete(s.id);
   }, onToggle: (s, v) => azione(s, "toggle", opzioni.onToggle, v), onElimina: (s) => azione(s, "elimina", opzioni.onElimina) })));
-  if (!visibili.length) lista.append(el6(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento automazioni…" : elenco2.length ? "Nessuna automazione corrisponde ai filtri." : "Nessuna automazione creata.")));
+  if (!visibili.length) lista.append(el7(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento automazioni…" : elenco2.length ? "Nessuna automazione corrisponde ai filtri." : "Nessuna automazione creata.")));
   if (pagina.focus && !opzioni.caricamento && !opzioni.salvataggio) {
     if (focusLista) {
       const riga = [...lista.querySelectorAll("[data-automazione-id]")].find((r) => r.dataset.automazioneId === pagina.focus.id);
@@ -2836,14 +2998,14 @@ function filtraOfficina(strumenti, { query = "", stato = "tutti" } = {}) {
   const q = String(query).trim().toLocaleLowerCase("it");
   return strumenti.filter((s) => (stato === "tutti" || (stato === "abilitati" ? s.abilitato === true : s.abilitato === false)) && (!q || [s.id, testiToolForgiato(s).titolo, testiToolForgiato(s).descrizione, ...Array.isArray(s.capacita) ? s.capacita : [], ...capacitaToolForgiato(s.capacita)].join(" ").toLocaleLowerCase("it").includes(q)));
 }
-function el7(doc, tag, classe, testo3) {
+function el8(doc, tag, classe, testo3) {
   const n = doc.createElement(tag);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
   return n;
 }
 function icona2(doc) {
-  const contenitore = el7(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const contenitore = el8(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg.setAttribute("class", "i");
   svg.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-code");
@@ -2852,7 +3014,7 @@ function icona2(doc) {
   return contenitore;
 }
 function creaForgeRow(strumento, { document: doc = globalThis.document, selezionabile = true, selezionata = false, onSeleziona, onAbilita, salvataggio = false, salvataggioId = null } = {}) {
-  const t2 = testiToolForgiato(strumento), stato = statoToolForgiato(strumento.abilitato), riga = el7(doc, selezionabile ? "button" : "div", "talos-list-row");
+  const t2 = testiToolForgiato(strumento), stato = statoToolForgiato(strumento.abilitato), riga = el8(doc, selezionabile ? "button" : "div", "talos-list-row");
   riga.dataset.forgeId = strumento.id;
   if (selezionabile) {
     riga.type = "button";
@@ -2862,12 +3024,12 @@ function creaForgeRow(strumento, { document: doc = globalThis.document, selezion
     riga.tabIndex = selezionata ? 0 : -1;
     riga.addEventListener("click", () => onSeleziona?.(strumento.id));
   } else riga.setAttribute("role", "group");
-  const testo3 = el7(doc, "span", "talos-list-row__text");
-  testo3.append(el7(doc, "span", "talos-list-row__title", t2.titolo), el7(doc, "span", "talos-list-row__sub", t2.descrizione), el7(doc, "span", "talos-list-row__sub", capacitaToolForgiato(strumento.capacita).join(" · ")));
-  const aside = el7(doc, "span", "talos-list-row__aside");
-  aside.append(el7(doc, "span", "talos-badge" + (stato.tono ? " talos-badge--" + stato.tono : "") + " talos-badge--sm", stato.testo));
+  const testo3 = el8(doc, "span", "talos-list-row__text");
+  testo3.append(el8(doc, "span", "talos-list-row__title", t2.titolo), el8(doc, "span", "talos-list-row__sub", t2.descrizione), el8(doc, "span", "talos-list-row__sub", capacitaToolForgiato(strumento.capacita).join(" · ")));
+  const aside = el8(doc, "span", "talos-list-row__aside");
+  aside.append(el8(doc, "span", "talos-badge" + (stato.tono ? " talos-badge--" + stato.tono : "") + " talos-badge--sm", stato.testo));
   if (!selezionabile) {
-    const bottone3 = el7(doc, "button", "talos-button talos-button--secondary talos-button--sm", salvataggio && salvataggioId === strumento.id ? "Salvataggio…" : stato.azione);
+    const bottone3 = el8(doc, "button", "talos-button talos-button--secondary talos-button--sm", salvataggio && salvataggioId === strumento.id ? "Salvataggio…" : stato.azione);
     bottone3.type = "button";
     bottone3.disabled = salvataggio || stato.prossimo === null;
     bottone3.setAttribute("aria-label", stato.azione + " " + t2.titolo);
@@ -2947,7 +3109,7 @@ function renderOfficina(schermo, pagina) {
     });
     return riga;
   }));
-  if (!visibili.length) lista.append(el7(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento Officina…" : strumenti.length ? "Nessun attrezzo corrisponde ai filtri." : "Nessun attrezzo creato dal modello.")));
+  if (!visibili.length) lista.append(el8(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento Officina…" : strumenti.length ? "Nessun attrezzo corrisponde ai filtri." : "Nessun attrezzo creato dal modello.")));
   if (focusId) [...lista.querySelectorAll("[data-forge-id]")].find((r) => r.dataset.forgeId === focusId)?.focus({ preventScroll: true });
   const scelto = visibili.find((s) => s.id === pagina.scelto), dettaglio = schermo.querySelector("[data-forge-dettaglio]");
   dettaglio.hidden = !scelto;
@@ -2992,7 +3154,7 @@ function filtraRicerche(ricerche, { query = "", stato = "tutte" } = {}) {
   const q = String(query).trim().toLocaleLowerCase("it");
   return ricerche.filter((r) => (stato === "tutte" || r?.stato === stato) && (!q || [testiRicerca(r).titolo, statoRicerca(r?.stato).testo].join(" ").toLocaleLowerCase("it").includes(q)));
 }
-function el8(doc, tag, classe, testo3) {
+function el9(doc, tag, classe, testo3) {
   const n = doc.createElement(tag);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
@@ -3000,26 +3162,26 @@ function el8(doc, tag, classe, testo3) {
 }
 function creaReportRow(ricerca, { document: doc = globalThis.document, aperta = false, onEspandi } = {}) {
   const t2 = testiRicerca(ricerca), stato = statoRicerca(ricerca?.stato);
-  const riga = el8(doc, "div", "talos-list-row");
+  const riga = el9(doc, "div", "talos-list-row");
   riga.dataset.c = "ReportRow";
   riga.dataset.researchId = ricerca?.id || "";
   riga.setAttribute("role", "listitem");
-  const icona7 = el8(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona7 = el9(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg.setAttribute("class", "i");
   svg.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-globe");
   svg.append(use);
   icona7.append(svg);
-  const testo3 = el8(doc, "span", "talos-list-row__text"), titolo2 = el8(doc, "span", "talos-list-row__title", t2.titolo), sotto = el8(doc, "span", "talos-list-row__sub");
+  const testo3 = el9(doc, "span", "talos-list-row__text"), titolo2 = el9(doc, "span", "talos-list-row__title", t2.titolo), sotto = el9(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.titolo;
   testo3.append(titolo2, sotto);
-  const aside = el8(doc, "span", "talos-list-row__aside");
-  aside.append(el8(doc, "span", "talos-badge" + (stato.tono ? " talos-badge--" + stato.tono : ""), stato.testo));
-  const apri = el8(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Apri rapporto");
+  const aside = el9(doc, "span", "talos-list-row__aside");
+  aside.append(el9(doc, "span", "talos-badge" + (stato.tono ? " talos-badge--" + stato.tono : ""), stato.testo));
+  const apri = el9(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Apri rapporto");
   apri.type = "button";
   apri.hidden = true;
   apri.dataset.richiede = "fase3";
-  const dettagli = el8(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  const dettagli = el9(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   dettagli.type = "button";
   function mostra() {
     riga.dataset.aperta = String(aperta);
@@ -3085,7 +3247,7 @@ function renderRicerca(schermo, pagina) {
     if (aperta) pagina.aperte.add(r.id);
     else pagina.aperte.delete(r.id);
   } })));
-  if (!visibili.length) lista.append(el8(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento ricerche…" : ricerche.length ? "Nessuna ricerca corrisponde ai filtri." : "Nessuna ricerca avviata in questo progetto.")));
+  if (!visibili.length) lista.append(el9(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento ricerche…" : ricerche.length ? "Nessuna ricerca corrisponde ai filtri." : "Nessuna ricerca avviata in questo progetto.")));
   if (attivo) [...lista.querySelectorAll("[data-research-id]")].find((n) => n.dataset.researchId === attivo)?.querySelector("button:not([hidden])")?.focus({ preventScroll: true });
 }
 var STATI, PAGINE4;
@@ -3112,7 +3274,7 @@ function filtraLibreria(voci, { query = "", origine = "tutte" } = {}) {
   const q = String(query).trim().toLocaleLowerCase("it");
   return voci.filter((v) => (origine === "tutte" || v?.origine === origine) && (!q || [testiVoceLibreria(v).nome, tipoVoceLibreria(v?.fileType).testo, origineVoceLibreria(v?.origine)].join(" ").toLocaleLowerCase("it").includes(q)));
 }
-function el9(doc, tag, classe, testo3) {
+function el10(doc, tag, classe, testo3) {
   const n = doc.createElement(tag);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
@@ -3120,26 +3282,26 @@ function el9(doc, tag, classe, testo3) {
 }
 function creaLibraryRow(voce, { document: doc = globalThis.document, aperta = false, onEspandi } = {}) {
   const t2 = testiVoceLibreria(voce), tipo = tipoVoceLibreria(voce?.fileType), origine = origineVoceLibreria(voce?.origine);
-  const riga = el9(doc, "div", "talos-list-row");
+  const riga = el10(doc, "div", "talos-list-row");
   riga.dataset.c = "LibraryRow";
   riga.dataset.libraryId = voce?.id || "";
   riga.setAttribute("role", "listitem");
-  const icona7 = el9(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona7 = el10(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg.setAttribute("class", "i");
   svg.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + tipo.icona);
   svg.append(use);
   icona7.append(svg);
-  const testo3 = el9(doc, "span", "talos-list-row__text"), titolo2 = el9(doc, "span", "talos-list-row__title", t2.nome), sotto = el9(doc, "span", "talos-list-row__sub");
+  const testo3 = el10(doc, "span", "talos-list-row__text"), titolo2 = el10(doc, "span", "talos-list-row__title", t2.nome), sotto = el10(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.nome;
   testo3.append(titolo2, sotto);
-  const aside = el9(doc, "span", "talos-list-row__aside");
-  aside.append(el9(doc, "span", "talos-badge" + (voce?.origine === "generated" ? " talos-badge--accent" : ""), origine));
-  const apri = el9(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Apri");
+  const aside = el10(doc, "span", "talos-list-row__aside");
+  aside.append(el10(doc, "span", "talos-badge" + (voce?.origine === "generated" ? " talos-badge--accent" : ""), origine));
+  const apri = el10(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Apri");
   apri.type = "button";
   apri.hidden = true;
   apri.dataset.richiede = "fase3";
-  const dettagli = el9(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  const dettagli = el10(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   dettagli.type = "button";
   function mostra() {
     riga.dataset.aperta = String(aperta);
@@ -3205,7 +3367,7 @@ function renderLibreria(schermo, pagina) {
     if (aperta) pagina.aperte.add(v.id);
     else pagina.aperte.delete(v.id);
   } })));
-  if (!visibili.length) lista.append(el9(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento Libreria…" : voci.length ? "Nessun file corrisponde ai filtri." : "Nessun file in Libreria per questo progetto.")));
+  if (!visibili.length) lista.append(el10(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento Libreria…" : voci.length ? "Nessun file corrisponde ai filtri." : "Nessun file in Libreria per questo progetto.")));
   if (attivo) [...lista.querySelectorAll("[data-library-id]")].find((n) => n.dataset.libraryId === attivo)?.querySelector("button:not([hidden])")?.focus({ preventScroll: true });
 }
 var TIPI, ORIGINI2, PAGINE5;
@@ -3240,7 +3402,7 @@ function filtraAttivita(attivita, { query = "", stato = "tutte" } = {}) {
   const q = String(query).trim().toLocaleLowerCase("it");
   return attivita.filter((a) => (stato === "tutte" || a?.stato === stato) && (!q || [testiAttivita(a).titolo, testiAttivita(a).descrizione, statoAttivita(a?.stato).testo, prioritaAttivita(a?.priorita)].join(" ").toLocaleLowerCase("it").includes(q)));
 }
-function el10(doc, tag, classe, testo3) {
+function el11(doc, tag, classe, testo3) {
   const n = doc.createElement(tag);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
@@ -3248,29 +3410,29 @@ function el10(doc, tag, classe, testo3) {
 }
 function creaTaskRow(a, { document: doc = globalThis.document, aperta = false, onEspandi } = {}) {
   const t2 = testiAttivita(a), s = statoAttivita(a?.stato);
-  const riga = el10(doc, "div", "talos-list-row" + (a?.stato === "done" ? " talos-list-row--done" : ""));
+  const riga = el11(doc, "div", "talos-list-row" + (a?.stato === "done" ? " talos-list-row--done" : ""));
   riga.dataset.c = "TaskRow";
   riga.dataset.taskId = a?.id || "";
   riga.setAttribute("role", "listitem");
-  const segna = el10(doc, "button", "talos-checkbox");
+  const segna = el11(doc, "button", "talos-checkbox");
   segna.type = "button";
   segna.hidden = true;
   segna.dataset.richiede = "fase3";
   segna.setAttribute("role", "checkbox");
   segna.setAttribute("aria-checked", String(a?.stato === "done"));
   segna.setAttribute("aria-label", "Segna come fatta");
-  const icona7 = el10(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona7 = el11(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg.setAttribute("class", "i");
   svg.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + s.icona);
   svg.append(use);
   icona7.append(svg);
-  const testo3 = el10(doc, "span", "talos-list-row__text"), titolo2 = el10(doc, "span", "talos-list-row__title", t2.titolo), sotto = el10(doc, "span", "talos-list-row__sub");
+  const testo3 = el11(doc, "span", "talos-list-row__text"), titolo2 = el11(doc, "span", "talos-list-row__title", t2.titolo), sotto = el11(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.titolo;
   testo3.append(titolo2, sotto);
-  const aside = el10(doc, "span", "talos-list-row__aside");
-  aside.append(el10(doc, "span", "talos-badge" + (s.tono ? " talos-badge--" + s.tono : ""), s.testo));
-  const leggi = el10(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  const aside = el11(doc, "span", "talos-list-row__aside");
+  aside.append(el11(doc, "span", "talos-badge" + (s.tono ? " talos-badge--" + s.tono : ""), s.testo));
+  const leggi = el11(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   leggi.type = "button";
   function mostra() {
     riga.dataset.aperta = String(aperta);
@@ -3336,7 +3498,7 @@ function renderAttivita(schermo, pagina) {
     if (aperta) pagina.aperte.add(a.id);
     else pagina.aperte.delete(a.id);
   } })));
-  if (!visibili.length) lista.append(el10(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento attività…" : attivita.length ? "Nessuna attività corrisponde ai filtri." : "Nessuna attività salvata. Le attività sono globali, disponibili alle tue conversazioni.")));
+  if (!visibili.length) lista.append(el11(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento attività…" : attivita.length ? "Nessuna attività corrisponde ai filtri." : "Nessuna attività salvata. Le attività sono globali, disponibili alle tue conversazioni.")));
   if (attivo) [...lista.querySelectorAll("[data-task-id]")].find((n) => n.dataset.taskId === attivo)?.querySelector("button:not([hidden])")?.focus({ preventScroll: true });
 }
 var STATI2, PRIORITA, PAGINE6;
@@ -3367,7 +3529,7 @@ function filtraMemorie(memorie, { query = "", genere = "tutti" } = {}) {
   const q = String(query).trim().toLocaleLowerCase("it");
   return memorie.filter((m) => (genere === "tutti" || m?.genere === genere) && (!q || [testiMemoria(m).titolo, testiMemoria(m).contenuto, genereMemoria(m?.genere).testo].join(" ").toLocaleLowerCase("it").includes(q)));
 }
-function el11(doc, tag, classe, testo3) {
+function el12(doc, tag, classe, testo3) {
   const n = doc.createElement(tag);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
@@ -3375,24 +3537,24 @@ function el11(doc, tag, classe, testo3) {
 }
 function creaMemoryRow(memoria, { document: doc = globalThis.document, aperta = false, onEspandi } = {}) {
   const t2 = testiMemoria(memoria), g = genereMemoria(memoria?.genere);
-  const riga = el11(doc, "div", "talos-list-row");
+  const riga = el12(doc, "div", "talos-list-row");
   riga.dataset.c = "MemoryRow";
   riga.setAttribute("role", "listitem");
   riga.dataset.memoryId = memoria?.id || "";
-  const icona7 = el11(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona7 = el12(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg.setAttribute("class", "i");
   svg.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + g.icona);
   svg.append(use);
   icona7.append(svg);
-  const testo3 = el11(doc, "span", "talos-list-row__text"), titolo2 = el11(doc, "span", "talos-list-row__title", t2.titolo), sotto = el11(doc, "span", "talos-list-row__sub");
+  const testo3 = el12(doc, "span", "talos-list-row__text"), titolo2 = el12(doc, "span", "talos-list-row__title", t2.titolo), sotto = el12(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.titolo;
   testo3.append(titolo2, sotto);
-  const aside = el11(doc, "span", "talos-list-row__aside");
-  aside.append(el11(doc, "span", "talos-badge" + (g.tono ? " talos-badge--" + g.tono : ""), g.testo));
-  const leggi = el11(doc, "button", "talos-button talos-button--ghost talos-button--sm");
+  const aside = el12(doc, "span", "talos-list-row__aside");
+  aside.append(el12(doc, "span", "talos-badge" + (g.tono ? " talos-badge--" + g.tono : ""), g.testo));
+  const leggi = el12(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   leggi.type = "button";
-  const correggi = el11(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Correggi");
+  const correggi = el12(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Correggi");
   correggi.type = "button";
   correggi.hidden = true;
   correggi.dataset.richiede = "fase3";
@@ -3461,7 +3623,7 @@ function renderMemoria(schermo, pagina) {
     if (a) pagina.aperte.add(m.id);
     else pagina.aperte.delete(m.id);
   } })));
-  if (!visibili.length) lista.append(el11(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento ricordi…" : memorie.length ? "Nessun ricordo corrisponde ai filtri." : "Nessun ricordo salvato. I ricordi sono globali, disponibili alle tue conversazioni.")));
+  if (!visibili.length) lista.append(el12(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento ricordi…" : memorie.length ? "Nessun ricordo corrisponde ai filtri." : "Nessun ricordo salvato. I ricordi sono globali, disponibili alle tue conversazioni.")));
   if (attivo) [...lista.querySelectorAll("[data-memory-id]")].find((n) => n.dataset.memoryId === attivo)?.querySelector("button:not([hidden])")?.focus({ preventScroll: true });
 }
 var GENERI, PAGINE7;
@@ -3475,156 +3637,6 @@ var init_memoria = __esm({
       ["policy_note", { testo: "Regola", icona: "bolt", tono: "info" }]
     ]);
     PAGINE7 = /* @__PURE__ */ new WeakMap();
-  }
-});
-
-// src/components/consumo-sessione.js
-function sommaUsage(a, b) {
-  if (!a || typeof a !== "object") return b && typeof b === "object" ? { ...b } : null;
-  if (!b || typeof b !== "object") return { ...a };
-  const somma = (chiave) => {
-    const x = numero2(a[chiave]);
-    const y = numero2(b[chiave]);
-    if (x === null && y === null) return null;
-    return (x ?? 0) + (y ?? 0);
-  };
-  const risultato = { ...a, ...b };
-  for (const chiave of ["prompt_tokens", "completion_tokens", "cached_tokens", "giri"]) {
-    const valore = somma(chiave);
-    if (valore === null) delete risultato[chiave];
-    else risultato[chiave] = valore;
-  }
-  if (numero2(b.tokens_per_second) === null && numero2(a.tokens_per_second) !== null) risultato.tokens_per_second = a.tokens_per_second;
-  return risultato;
-}
-function usageDellaSessione(sessione) {
-  if (!sessione || typeof sessione !== "object") return null;
-  if (sessione.usageSessione && typeof sessione.usageSessione === "object") return sessione.usageSessione;
-  return sessione.usage && typeof sessione.usage === "object" ? sessione.usage : null;
-}
-function esecuzioniDellaSessione(sessione) {
-  const u = sessione?.usageSessione;
-  return u && Number.isFinite(Number(u.esecuzioni)) ? Number(u.esecuzioni) : null;
-}
-var numero2;
-var init_consumo_sessione = __esm({
-  "src/components/consumo-sessione.js"() {
-    numero2 = (valore) => Number.isFinite(Number(valore)) ? Number(valore) : null;
-  }
-});
-
-// src/components/session-item.js
-function statoSessione(sessione) {
-  let classe;
-  if (sessione.inAttesaApprovazione) classe = "attesa";
-  else if (sessione.interrotta) classe = "interrotto";
-  else if (!sessione.conclusa) classe = "vivo";
-  else if (sessione.ultimoEsito === "errore" && sessione.motivoChiusura === "fermata") classe = "fermata";
-  else if (sessione.ultimoEsito === "errore") classe = "errore";
-  else if (sessione.ultimoEsito === "successo") classe = "successo";
-  else classe = "ignoto";
-  const testo3 = classe === "errore" && sessione.motivoChiusura === "giri-finiti" ? "giri finiti" : ETICHETTE[classe];
-  let aiuto = null;
-  if (classe === "interrotto") aiuto = "Interrotta dalla morte del processo: nessuno la sta eseguendo. Scrivi un messaggio per riprenderla.";
-  else if (classe === "fermata") aiuto = "L’hai fermata tu: il giro si e chiuso al primo punto sicuro. Scrivi un messaggio per continuare da qui.";
-  return { classe, testo: testo3, tono: TONI[classe] ?? null, aiuto };
-}
-function oraCompatta(iso, adesso = /* @__PURE__ */ new Date()) {
-  const data = new Date(iso);
-  if (Number.isNaN(data.getTime())) return "";
-  const giorno = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const differenza = Math.round((giorno(adesso) - giorno(data)) / 864e5);
-  if (differenza <= 0) return data.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
-  if (differenza === 1) return "ieri";
-  if (differenza < 7) return `${differenza} g`;
-  return data.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" });
-}
-function nomeModello(modello) {
-  if (typeof modello !== "string" || modello.trim() === "") return null;
-  return modello.split("/").pop();
-}
-function el12(documentObj, tag, className, testo3) {
-  const nodo4 = documentObj.createElement(tag);
-  if (className) nodo4.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo4.textContent = String(testo3);
-  return nodo4;
-}
-function creaSessionItem(sessione, opzioni = {}) {
-  const documentObj = opzioni.document || globalThis.document;
-  const riga = el12(documentObj, "button", "talos-session-item");
-  riga.type = "button";
-  riga.setAttribute("data-c", "SessionItem");
-  if (opzioni.corrente) riga.setAttribute("aria-current", "true");
-  if (sessione.sessionId) riga.dataset.realSessionId = sessione.sessionId;
-  const etichetta = opzioni.pendente ? `Nuova · ${sessione.nomeCartella || ""}` : `${sessione.nome || sessione.taskId || ""}${sessione.forkDa ? " · fork" : ""}`;
-  const stato = opzioni.pendente ? { classe: "pendente", testo: ETICHETTE.pendente, tono: null } : statoSessione(sessione);
-  riga.dataset.sessionState = stato.classe;
-  if (stato.aiuto) riga.title = stato.aiuto;
-  const testo3 = el12(documentObj, "span");
-  const titolo2 = el12(documentObj, "span", "talos-session-item__title", etichetta);
-  const sotto = el12(documentObj, "span", "talos-session-item__sub");
-  const pallino = el12(documentObj, "span", `talos-dot talos-dot--sm${stato.tono ? ` talos-dot--${stato.tono}` : ""}`);
-  const modello = opzioni.pendente ? null : nomeModello(sessione.modello);
-  sotto.append(pallino, el12(documentObj, "span", "talos-session-item__state", modello ? `${stato.testo} · ${modello}` : stato.testo));
-  testo3.append(titolo2, sotto);
-  const aside = el12(documentObj, "span", "talos-session-item__aside");
-  if (!opzioni.pendente) {
-    aside.append(el12(documentObj, "span", null, oraCompatta(sessione.avviataAlle, opzioni.adesso)));
-    const giri = usageDellaSessione(sessione)?.giri;
-    if (Number.isFinite(giri) && giri > 0) aside.append(el12(documentObj, "span", null, `${giri} gir${giri === 1 ? "o" : "i"}`));
-  }
-  if (opzioni.selezione?.attiva) {
-    const casella = el12(documentObj, "input", "talos-checkbox");
-    casella.type = "checkbox";
-    casella.checked = Boolean(opzioni.selezione.selezionata);
-    casella.dataset.sessionSelect = sessione.sessionId || "";
-    casella.setAttribute("aria-label", `Seleziona ${etichetta}`);
-    casella.addEventListener("click", (event) => event.stopPropagation());
-    casella.addEventListener("change", () => opzioni.selezione.onToggle?.(casella.checked));
-    riga.append(casella);
-    riga.classList.add("is-selection-mode");
-    if (casella.checked) riga.classList.add("is-selected");
-  }
-  riga.append(testo3, aside);
-  if (typeof opzioni.onApri === "function") riga.addEventListener("click", opzioni.onApri);
-  if (typeof opzioni.onMenu === "function") {
-    riga.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      opzioni.onMenu(event);
-    });
-  }
-  return riga;
-}
-var TONI, ETICHETTE;
-var init_session_item = __esm({
-  "src/components/session-item.js"() {
-    init_consumo_sessione();
-    TONI = Object.freeze({
-      attesa: "warning",
-      vivo: "live",
-      errore: "danger",
-      successo: "success"
-      // interrotta / ignoto / pendente: pallino senza tono, come «interrotta» nel mockup.
-    });
-    ETICHETTE = Object.freeze({
-      attesa: "aspetta te",
-      vivo: "in corso",
-      interrotto: "interrotta",
-      errore: "errore",
-      /*
-       * ⛔⛔ 07/9, misurato: premi «ferma», il giro si chiude come chiedevi, e la riga diceva
-       * **«errore»** — perche il giro finisce con un `RunError` di codice `fermato` e l'elenco
-       * conosceva solo l'esito, non il motivo. Fermare non e sbagliare, e nemmeno concludere.
-       * Ricerca 07/09/2026 — opencode #25899/#28453: un annullamento chiesto dalla persona non e ne
-       * `end_turn` (fa sembrare completamento uno stop) ne `agent_error` (fa sembrare guasto un gesto
-       * voluto): e un terzo esito. Qui si chiama «fermata».
-       */
-      fermata: "fermata",
-      successo: "conclusa",
-      ignoto: "conclusa · esito non registrato",
-      pendente: "in attesa del primo messaggio"
-    });
   }
 });
 
@@ -9164,6 +9176,7 @@ var init_app = __esm({
   "src/legacy/app.js"() {
     init_provider_card();
     init_politiche();
+    init_session_item();
     init_runtime_modelli();
     init_misura_memoria();
     init_cornice_model_lab();
@@ -14033,7 +14046,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         references: "veloRiferimenti",
         // ⭐ 07/9, terza tornata: il foglio PERMESSI — il piu visitato dei sei rimasti, e quello dove
         //    si decide la sicurezza. Vedi `disegnaPermessiIn`/`collegaAzioniPermessi`.
-        permissions: "veloPermessi"
+        permissions: "veloPermessi",
+        // ⭐ 07/9 — l'albero: rami veri (fork) e deleghe vere, vedi `disegnaAlberoIn`.
+        sessionTree: "veloAlbero"
       };
       async function esportaSessioneCorrente(formato) {
         if (!state.realSession.id) return { ok: false, motivo: "Nessuna sessione aperta da esportare." };
@@ -14148,6 +14163,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return { ok: true, nome: nomeUnico };
       }
       function preparaVeloDaFoglio(tipo, velo) {
+        if (tipo === "sessionTree") {
+          void disegnaAlberoIn(velo);
+          return;
+        }
         if (tipo === "permissions") {
           disegnaPermessiIn(velo);
           collegaAzioniPermessi(velo, {
@@ -15142,6 +15161,122 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           });
         }
       }
+      function nodoAlbero({ titolo: titolo2, sotto, token, giri, stato = "done", qui = false, onApri = null, azione = null }) {
+        const nodo4 = document.createElement("div");
+        nodo4.className = `talos-tree__node${qui ? " talos-tree__node--current" : ""}${onApri ? " talos-tree__node--branch" : ""}`;
+        nodo4.setAttribute("role", "treeitem");
+        nodo4.setAttribute("aria-selected", String(qui));
+        nodo4.setAttribute("aria-level", onApri ? "2" : "1");
+        const rail = document.createElement("span");
+        rail.className = "talos-tree__rail";
+        const dot = document.createElement("span");
+        dot.className = `talos-tree__dot${stato === "live" ? " talos-tree__dot--live" : stato === "done" ? " talos-tree__dot--done" : ""}`;
+        const testo3 = document.createElement("span");
+        testo3.className = "talos-tree__text";
+        testo3.append(textElement("span", "talos-tree__title", titolo2), textElement("span", "talos-tree__sub", sotto));
+        const aside = document.createElement("span");
+        aside.className = "talos-tree__aside";
+        if (token) aside.append(textElement("span", "talos-mono talos-measure", token));
+        if (Number.isFinite(giri) && giri > 0) aside.append(textElement("span", "talos-mono talos-muted", `${giri} gir${giri === 1 ? "o" : "i"}`));
+        if (qui) aside.append(textElement("span", "talos-badge talos-badge--accent talos-badge--sm", "Qui"));
+        else if (onApri) {
+          const bottone3 = textElement("button", "talos-button talos-button--ghost talos-button--sm", azione || "Apri");
+          bottone3.type = "button";
+          bottone3.addEventListener("click", onApri);
+          aside.append(bottone3);
+        }
+        nodo4.append(rail, dot, testo3, aside);
+        return nodo4;
+      }
+      function soloToken(usage) {
+        if (!usage) return "";
+        const testo3 = formattaUsageBreve(usage);
+        return testo3.includes(" · ") ? testo3.split(" · ")[0] : testo3;
+      }
+      async function disegnaAlberoIn(radice) {
+        const nodi = $2("#veloAlberoNodi", radice);
+        if (!nodi) return;
+        const riassunto = $2("#veloAlberoRiassunto", radice);
+        const titolo2 = $2("#titoloAlbero", radice);
+        if (!state.realSession.id) {
+          nodi.replaceChildren(textElement("p", "board-empty", "Nessuna sessione aperta: apri o avvia una sessione per vederne i rami."));
+          if (riassunto) riassunto.textContent = "";
+          return;
+        }
+        if (titolo2) titolo2.textContent = `Rami e deleghe di ${tronca2(state.session || "questa sessione", 46)}`;
+        const elenco2 = [...state.sessionSelection.available.values()];
+        const mia = elenco2.find((v) => v.sessionId === state.realSession.id) || null;
+        const usoSessione = state.realSession.usageSessione || state.realSession.usage;
+        const pezzi = [];
+        const padre = mia?.forkDa ? elenco2.find((v) => v.sessionId === mia.forkDa) : null;
+        if (mia?.forkDa) {
+          pezzi.push(nodoAlbero({
+            titolo: padre ? tronca2(padre.nome || nomeLeggibileSessione(padre.taskId), 52) : "La sessione da cui è nato questo ramo",
+            sotto: padre ? "da qui è nato questo ramo" : "non è più nell’elenco, ma il ramo resta leggibile",
+            token: soloToken(padre?.usageSessione),
+            giri: padre?.usage?.giri,
+            onApri: padre ? () => {
+              passaASessione(padre.sessionId, padre.taskId, padre.nome, padre.modello);
+              chiudiVeloMockup("veloAlbero");
+            } : null
+          }));
+        }
+        pezzi.push(nodoAlbero({
+          titolo: tronca2(state.session || "questa sessione", 52),
+          sotto: mia?.interrotta ? "sessione corrente · interrotta" : mia?.conclusa ? "sessione corrente · conclusa" : "sessione corrente · in corso",
+          token: soloToken(usoSessione),
+          giri: usoSessione?.giri,
+          stato: mia && !mia.conclusa && !mia.interrotta ? "live" : "done",
+          qui: true
+        }));
+        const rami = elenco2.filter((v) => v.forkDa === state.realSession.id);
+        for (const ramo of rami) {
+          pezzi.push(nodoAlbero({
+            titolo: tronca2(ramo.nome || nomeLeggibileSessione(ramo.taskId), 52),
+            sotto: ramo.interrotta ? "ramo · interrotto" : ramo.conclusa ? "ramo · concluso" : "ramo · in corso",
+            token: soloToken(ramo.usageSessione),
+            giri: ramo.usage?.giri,
+            stato: !ramo.conclusa && !ramo.interrotta ? "live" : "done",
+            onApri: () => {
+              passaASessione(ramo.sessionId, ramo.taskId, ramo.nome, ramo.modello);
+              chiudiVeloMockup("veloAlbero");
+            },
+            azione: "Riapri"
+          }));
+        }
+        nodi.replaceChildren(...pezzi);
+        if (riassunto) {
+          if (rami.length) riassunto.textContent = `${rami.length} ram${rami.length === 1 ? "o" : "i"} da questa sessione`;
+          else if (mia?.forkDa) riassunto.textContent = "Questa sessione È un ramo · nessun ramo suo";
+          else riassunto.textContent = "Nessun ramo: si crea con «Fork questa sessione»";
+        }
+        let figli = [];
+        try {
+          figli = (await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/children`))?.figli || [];
+        } catch {
+          figli = [];
+        }
+        if (nodi !== $2("#veloAlberoNodi", radice)) return;
+        for (const figlio of figli) {
+          nodi.append(nodoAlbero({
+            titolo: tronca2(figlio.task || "(compito non registrato)", 52),
+            sotto: figlio.interrotta ? "delega · interrotta" : figlio.conclusa ? `delega · ${figlio.esitoDelega || "conclusa"}` : "delega · in corso",
+            token: soloToken(figlio.usageSessione),
+            giri: figlio.usage?.giri,
+            stato: !figlio.conclusa && !figlio.interrotta ? "live" : "done",
+            onApri: () => {
+              passaASessione(figlio.sessionId, figlio.sessionId, figlio.task);
+              chiudiVeloMockup("veloAlbero");
+            }
+          }));
+        }
+        const nota = $2("#veloAlberoNota .talos-scope__text", radice);
+        if (nota && !rami.length && !figli.length && mia?.forkDa) {
+          nota.textContent = "Da questo ramo non ne è nato nessun altro, e non ci sono deleghe. La sessione madre resta intatta: aprirla non tocca ciò che hai fatto qui.";
+        } else if (nota && !rami.length && !figli.length) {
+          nota.textContent = "Nessun ramo e nessuna delega. Un ramo nasce da «Fork questa sessione»; le deleghe le avvia TALOS da sé quando un sotto-compito è separabile.";
+        }
+      }
       function wireSheetActions(type) {
         collegaAzioniPermessi(sheetBody, {
           dopoLaScelta: () => closeEmbeddedDialog(sheetDialog),
@@ -15701,7 +15836,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       function appendRealTaskStart(task, contesto2 = null) {
         const conversation = $2("#conversation");
         const testoBolla = task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : "Comando diretto");
-        const etichettaMeta = (task.id ? `Task reale · ${task.id}` : task.consegna || task.consegnaCorta ? `Compito libero${task.progetto ? ` · ${task.progetto}` : ""}` : "Comando diretto") + etichettaPermessiGiro(contesto2);
+        const etichettaMeta = (task.id ? nomeLeggibileSessione(task.id) : task.consegna || task.consegnaCorta ? `Compito libero${task.progetto ? ` · ${task.progetto}` : ""}` : "Comando diretto") + etichettaPermessiGiro(contesto2);
         const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? "" : oraMessaggio(), meta: etichettaMeta }), "utente");
         void conversation;
         markMotionEnter(article);
@@ -19043,7 +19178,7 @@ ${testo3}` : testo3;
         const generation = nuovaGenerazioneSessione();
         state.realSession.taskId = task.id;
         state.realSession.treeWorkspaceKey = `task:${task.id}`;
-        state.session = `Task reale · ${task.id}`;
+        state.session = nomeLeggibileSessione(task.id);
         sessionTitle.textContent = state.session;
         aggiornaTestataSessione();
         $$("[data-current-session-title]").forEach((label) => {
@@ -19145,7 +19280,8 @@ ${testo3}` : testo3;
           const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(idOrigine)}/fork`, {});
           const generation = nuovaGenerazioneSessione();
           state.realSession.taskId = taskIdOrigine;
-          state.session = `Task reale · ${taskIdOrigine} (fork)`;
+          const nomeOrigine = String(origine.nome || state.session || "").replace(/\s*\(ramo\)\s*$/, "").trim();
+          state.session = nomeOrigine ? `${nomeOrigine} (ramo)` : "Ramo della sessione";
           sessionTitle.textContent = state.session;
           aggiornaTestataSessione();
           $$("[data-current-session-title]").forEach((label) => {
@@ -19427,7 +19563,7 @@ ${testo3}` : testo3;
         $2("#conversation")?.classList.toggle("is-restoring", state.realSession.deferHistoricalRendering);
         state.realSession.taskId = taskId;
         state.realSession.treeWorkspaceKey = `session:${sessionId}`;
-        state.session = nome || `Task reale · ${taskId}`;
+        state.session = nome || nomeLeggibileSessione(taskId);
         applicaImpostazioniSessione(contrattoSessione);
         sessionTitle.textContent = state.session;
         aggiornaTestataSessione();

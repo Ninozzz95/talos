@@ -953,35 +953,25 @@ export function registraSessione(sessione) {
 <div class="overlay-layer overlay-layer--modal" id="veloAlbero" data-c="OverlayLayer" hidden>
   <div class="talos-dialog talos-dialog--medium" data-c="Dialog" role="dialog" aria-modal="true" aria-labelledby="titoloAlbero"><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-width" data-c="Resizer" data-dialog-resize="width" aria-label="Ridimensiona larghezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-height" data-c="Resizer" data-dialog-resize="height" aria-label="Ridimensiona altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-both" data-c="Resizer" data-dialog-resize="both" aria-label="Ridimensiona larghezza e altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button>
     <div class="talos-dialog__header">
-      <div class="talos-grow"><span class="talos-eyebrow">Albero della sessione</span><h2 class="talos-dialog__title" id="titoloAlbero">I rami di W1-02 registro processi</h2></div>
+      <div class="talos-grow"><span class="talos-eyebrow">Albero della sessione</span><h2 class="talos-dialog__title" id="titoloAlbero">Rami e deleghe di questa sessione</h2></div>
       <button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloAlbero" title="Chiudi"><svg class="i"><use href="#i-x"/></svg></button>
     </div>
     <div class="talos-dialog__body">
-      <p class="talos-dialog__lead">Modificare un tuo messaggio crea un ramo invece di sovrascrivere: le due strade restano confrontabili, e ogni nodo dice quanto è costato.</p>
-      <div class="talos-tree" data-c="BranchTree" role="tree" aria-label="Rami della sessione">
-        <div class="talos-tree__node" role="treeitem" aria-selected="false" aria-level="1">
-          <span class="talos-tree__rail"></span>
-          <span class="talos-tree__dot talos-tree__dot--done"></span>
-          <span class="talos-tree__text"><span class="talos-tree__title">Giri 1-4 · tronco comune</span><span class="talos-tree__sub">la richiesta, la lettura del registro, le due condizioni</span></span>
-          <span class="talos-tree__aside"><span class="talos-mono talos-measure">6,5k</span><span class="talos-mono talos-muted">4 giri</span></span>
-        </div>
-        <div class="talos-tree__node talos-tree__node--branch" role="treeitem" aria-selected="false" aria-level="2">
-          <span class="talos-tree__rail"></span>
-          <span class="talos-tree__dot"></span>
-          <span class="talos-tree__text"><span class="talos-tree__title">Ramo A · soglie scritte a mano</span><span class="talos-tree__sub">abbandonato al giro 6 · «i numeri nella logica non si spiegano»</span></span>
-          <span class="talos-tree__aside"><span class="talos-mono talos-measure">3,2k</span><span class="talos-mono talos-muted">2 giri</span><button class="talos-button talos-button--ghost talos-button--sm">Riapri</button></span>
-        </div>
-        <div class="talos-tree__node talos-tree__node--branch talos-tree__node--current" role="treeitem" aria-selected="true" aria-level="2">
-          <span class="talos-tree__rail"></span>
-          <span class="talos-tree__dot talos-tree__dot--live"></span>
-          <span class="talos-tree__text"><span class="talos-tree__title">Ramo B · soglie come parametri</span><span class="talos-tree__sub">sessione corrente · giri 5-7 · scrittura, ricevuta, suite in corso</span></span>
-          <span class="talos-tree__aside"><span class="talos-mono talos-measure">31,5k</span><span class="talos-mono talos-muted">3 giri</span><span class="talos-badge talos-badge--accent talos-badge--sm">Qui</span></span>
-        </div>
-      </div>
-      <div class="talos-card talos-scope"><span class="talos-scope__text">Il ramo A resta leggibile e riapribile: nessun giro pagato viene cancellato da una modifica.</span></div>
+      <p class="talos-dialog__lead">Ogni ramo e ogni delega è una sessione vera: resta leggibile, riapribile, e dice quanto è costata.</p>
+      <!-- ⛔ 07/9 — qui c'erano tre nodi SCRITTI A MANO («Ramo A», «Ramo B», «tronco comune») e un
+           pulsante «Confronta A e B» che non confrontava niente. I nodi ora arrivano dai dati veri
+           (`disegnaAlberoIn`): questa sessione, i suoi fork — l'elenco li dichiara con `forkDa` — e
+           le deleghe da `GET /api/v1/sessions/:id/children`. Dove non c'è niente si dice, non si
+           disegna un albero finto.
+           Ricerca 07/09/2026: claude-code #32631 «Conversation Branching — fork, merge, tree
+           navigation», LangChain «Branching chat» (ogni ramo riparte dal checkpoint del genitore, e
+           l'albero è persistito), Ably «Conversation tree branching» (msgId/parentId/forkOf: un
+           grafo, non una lista). Il nostro fork è già una sessione: l'albero lo dichiara. -->
+      <div class="talos-tree" data-c="BranchTree" role="tree" aria-label="Rami della sessione" id="veloAlberoNodi"></div>
+      <div class="talos-card talos-scope" id="veloAlberoNota"><span class="talos-scope__text">Un ramo non cancella niente: i giri già pagati restano dove sono.</span></div>
     </div>
     <div class="talos-dialog__footer">
-      <button class="talos-button talos-button--secondary">Confronta A e B</button>
+      <span class="talos-muted" id="veloAlberoRiassunto"></span>
       <span class="talos-grow"></span>
       <button class="talos-button talos-button--primary" data-chiudi="veloAlbero">Chiudi</button>
     </div>
