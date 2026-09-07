@@ -868,8 +868,13 @@ export async function avviaSessione({
    * prima è fallito, e ogni fallimento porta la RAGIONE vera, non un
    * "errore tecnico" generico.
    *
-   * ⛔ Diverso dal mobile in UNA cosa: qui non c'è una "Libreria" (il
-   * desktop non ne ha una) — il file finisce nel WORKSPACE vero, stesso
+   * ⛔⛔ 07/9, O-37 — owner: «con i modelli a chiave API gli artefatti vengono creati ma non
+   * salvati nella Libreria». RIPRODOTTO con un giro vero (GLM 5.3 Flash, istanza di prova 4311):
+   * il `.docx` finiva nel workspace, e in Libreria non arrivava niente. La causa era QUI, e non era
+   * un guasto: era un commento rimasto indietro. Diceva «qui non c'è una Libreria (il desktop non ne
+   * ha una)» — vero fino al 28/8, falso dal 29/8, quando è nata la FASE N. `onArtefatto` (gli
+   * artefatti HTML) la copia c'era già; `onDocumento` no, e il modello usa proprio questo.
+   * ⇒ Il file finisce nel WORKSPACE vero, stesso
    * trattamento di `scrivi`: un evento StateDelta con `op:'add'` (mai
    * 'replace' — creaFileWorkspaceFn rifiuta un nome già esistente,
    * quindi ogni successo qui È per costruzione un file nuovo) fa scattare
@@ -912,6 +917,28 @@ export async function avviaSessione({
     const testuale = TALOS_SOURCE_TEXT_FORMATS.includes(documento.format) || ['md', 'csv', 'html'].includes(documento.format);
     const valore = testuale ? new TextDecoder('utf-8').decode(documento.bytes) : `[binary ${documento.format} file, ${documento.bytes.byteLength} bytes]`;
     onEvento(eventoPerScrittura({ percorso: salvato.percorso, contenuto: valore, esisteva: false }));
+
+    /*
+     * La copia durevole in Libreria, come per gli artefatti HTML. ⛔ Non blocca e non fa fallire il
+     * giro: se la Libreria non è scrivibile il documento resta comunque nel workspace, dove il
+     * modello l'ha messo — meglio un documento senza copia che un giro rotto per una scrittura. Il
+     * motivo si vede nel log del server, mai in silenzio.
+     * ⛔ I binari viaggiano in base64 (`salvaVoce` lo prevede): un `docx` dentro un campo di testo
+     *   non è UTF-8 valido e si corromperebbe.
+     */
+    try {
+      await salvaVoceLibreriaFn({
+        cartella,
+        nome: documento.fileName,
+        mediaType: documento.mediaType,
+        origine: 'generated',
+        ...(testuale
+          ? { testo: new TextDecoder('utf-8').decode(documento.bytes) }
+          : { base64: Buffer.from(documento.bytes).toString('base64') }),
+      });
+    } catch (errore) {
+      console.error('[documenti] copia in Libreria non riuscita:', errore instanceof Error ? errore.message : errore);
+    }
 
     const dimensione = Math.max(1, Math.round(documento.bytes.byteLength / 1024));
     return {
