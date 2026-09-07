@@ -741,8 +741,10 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 /* Nascosto agli occhi, non ai lettori di schermo: la ricetta classica (clip su un rettangolo di
    un pixel) invece di `display:none`, che toglierebbe l'elemento anche a chi ascolta. */
 .talos-visivamente-nascosto{position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0}
-.talos-browser__modi{display:flex; gap:6px; padding:0 0 10px}
-.talos-browser__modi [aria-pressed="true"]{border-color:var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-accent-text)}
+/* ⛔ 07/9: lo switch «Pagina / Testo dell'agente» non esiste più (owner). Le sue due regole
+   sarebbero rimaste a pesare sul foglio senza un elemento da vestire: lo stato «premuto» segue il
+   pulsante dov'è andato, nella riga delle azioni accanto a «Rileggi». */
+.talos-browser__tools [data-browser-modo][aria-pressed="true"]{border-color:var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-accent-text)}
 .talos-browser__testo-pulito{white-space:pre-wrap; overflow-wrap:anywhere}
 .talos-browser__sorgente{margin:12px 0 0}
 .talos-browser__sorgente > summary{cursor:pointer; font-size:12px; color:var(--talos-muted)}
@@ -1318,7 +1320,6 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 /* ⛔ 07/9 — la testata della lettura vive nella riga dei modi: piccola, su una riga, troncata.
    `min-width:0` è obbligatorio dentro un flex, o il testo lungo (un indirizzo intero) allarga la
    riga invece di accorciarsi — è la stessa trappola già vista sulla testata della sessione. */
-.talos-browser__modi{display:flex; align-items:center; gap:8px; min-width:0}
 /* ⛔ 07/9 — `.talos-browser__bar,.talos-browser__tools` hanno `flex-wrap:wrap` (serve alla barra
    dell'indirizzo, che a schermo stretto va a capo davvero). Qui no: con il wrap la testata finiva
    SOTTO «Lettura 7 di 7» invece che accanto — visto nello screenshot. La riga non va a capo e il
@@ -1331,6 +1332,20 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-browser__testata{flex:1 1 auto; min-width:0; display:flex; align-items:baseline; gap:8px; overflow:hidden}
 .talos-browser__testata-titolo{font-size:12.5px; font-weight:600; color:var(--talos-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:min(52%,420px)}
 .talos-browser__testata-meta{font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+/* ⛔ 07/9, visto nella foto a 1024: con «Testo dell'agente» arrivato in questa riga, titolo e
+   provenienza si riducevano a «GLM-5….» e «Agent…» — cinque caratteri non sono un titolo, sono
+   rumore. Sotto una certa larghezza la testata prende una riga tutta sua e torna leggibile; le
+   azioni restano dove sono. Si misura il PANNELLO, non la finestra: la colonna destra può essere
+   aperta o chiusa e a decidere è lo spazio vero di questa riga. */
+/* ⛔ il container va sulla CARD, non sulla pagina: sulla pagina catturava anche la query della
+   striscia delle schede (`@container (max-width:720px)`, che si lega al contenitore più vicino) e
+   a 1024 le schede si stringevano a «GL…». La striscia è SORELLA della card, non figlia: così la
+   sua query torna a misurare quello che misurava prima. Difetto creato da me e visto nella foto. */
+@container (max-width:900px){
+  .talos-browser__tools{flex-wrap:wrap}
+  .talos-browser__tools .talos-browser__testata{order:9; flex-basis:100%; margin-left:0}
+  .talos-browser__testata-titolo{max-width:none}
+}
 .talos-vistaviva{position:relative; display:flex; flex-direction:column; min-height:0; border-radius:var(--talos-radius-card); overflow:hidden; background:var(--talos-panel-soft)}
 .talos-vistaviva__schermo{display:block; margin:auto; width:auto; height:auto; max-width:100%; max-height:100%; background:var(--talos-panel-soft); touch-action:none}
 .talos-vistaviva__schermo:focus{outline:none}
@@ -1405,7 +1420,11 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    ⛔ Il vincolo che fa fallire questa soluzione è min-height:auto sui flex item — va messo a 0 su
    OGNI anello della catena, non solo sull'ultimo (ricerca 07/09/2026: Stephen Bunch «scrollable
    container with dynamic height using Flexbox», Serhii Diachenko «Full Height Layout on CSS»). */
+/* ⛔ 07/9, owner: «fai in modo che la visuale browser sia attaccata alla barra delle schede,
+   proprio deve essere al bordo, non ci deve essere nessuno spazio». Come in un browser vero, dove
+   la scheda attiva si fonde col contenuto invece di galleggiarci sopra. */
 .talos-page.talos-browser{display:flex;flex-direction:column;padding-bottom:14px}
+.talos-browser>.talos-toolbar{margin-bottom:0}
 /* ⛔ La card si allunga SOLO se dentro c'è una finestra da allungare. Senza questa condizione la
    scheda «Testo dell'agente» — dove la finestra è nascosta — lasciava ~450px di card vuota:
    difetto che ho creato io con la prima stesura e che si è visto solo guardando la foto. */
@@ -1413,7 +1432,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    ha una finestra dentro. Con lo shrink di default, a 1280×620 la scheda «Testo dell'agente»
    faceva uscire il testo dalla card e lo scriveva SOPRA la riga dei limiti: due scritte una
    sull'altra, illeggibili. La regola qui sotto aggiunge solo la crescita, non lo shrink. */
-.talos-browser>.talos-card{display:flex;flex-direction:column;min-height:0;flex:0 0 auto}
+.talos-browser>.talos-card{display:flex;flex-direction:column;min-height:0;flex:0 0 auto;margin-top:0;border-top-left-radius:0;border-top-right-radius:0;container-type:inline-size}
 /* ⛔ flex:1 0 auto, NON 1 1 auto: cresce quando c'è spazio, ma non si accorcia MAI sotto il
    proprio contenuto. Con lo shrink acceso, a 1280×620 la card si comprimeva sotto la finestra e la
    pagina usciva dal pannello sovrapponendosi alla riga dei limiti e alle schede — visto guardando

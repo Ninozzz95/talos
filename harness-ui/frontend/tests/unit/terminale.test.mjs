@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { titoloScheda, nomeShell, prossimaAttivaDopoChiusura, cicla, nomeSchedaValido, SCHEDE_MASSIME } from '../../src/components/terminale.js';
+import { titoloScheda, nomeShell, prossimaAttivaDopoChiusura, cicla, nomeSchedaValido, SCHEDE_MASSIME, accorciaPercorso } from '../../src/components/terminale.js';
 
 // 06/09 B1 — le schede del Terminale: nomi, fuoco alla chiusura, ciclo, tetto.
 
@@ -36,4 +36,34 @@ test('TERMINALE-NOME-VALIDO e tetto: vuoto no, 41 caratteri no; il tetto è quel
   assert.equal(nomeSchedaValido('x'.repeat(41)), false);
   assert.equal(nomeSchedaValido('build'), true);
   assert.equal(SCHEDE_MASSIME, 8);
+});
+
+/*
+ * ⛔ 07/9, visto in una foto: nel piede del Terminale il percorso era tagliato in CODA, e spariva
+ *   proprio il nome della cartella dove i comandi girano. Si taglia nel mezzo, come fa un editor.
+ */
+test('IL PERCORSO SI TAGLIA NEL MEZZO: restano la radice e la cartella vera', () => {
+  // ⛔ i separatori si scrivono con `String.raw`: scritti a mano, un `\U` o un `\a` diventa un
+  //    escape JS e la fixture arriva alla funzione SENZA separatori — la prova misurerebbe altro.
+  const lungo = String.raw`C:\Users\Antonino\AppData\Local\Temp\claude\C--Users-Antonino-Desktop\af5c3844\scratchpad\progetto-5`;
+  const corto = accorciaPercorso(lungo);
+  assert.ok(corto.length <= 46, `troppo lungo: ${corto.length}`);
+  // ⛔ niente String.raw che finisce con un separatore: un backslash prima del backtick sfugge il
+  //    backtick stesso e il file non compila più. Qui i separatori si scrivono raddoppiati.
+  assert.ok(corto.startsWith('C:\\Users\\'), `la radice dice di che disco e di chi è: ${corto}`);
+  assert.ok(corto.endsWith('\\progetto-5'), `la coda è la cartella dove i comandi girano: ${corto}`);
+  assert.match(corto, /…/, 'e si vede che in mezzo manca qualcosa');
+  /* ⛔ e il taglio cade su un CONFINE: ogni cartella che resta dopo l'ellissi è un nome intero del
+     percorso di partenza, non un moncone come «hpad». Non si guarda il carattere dopo l'ellissi —
+     lì c'è giustamente l'inizio di un nome — ma i nomi stessi. */
+  const segmenti = corto.split('…')[1].split(/[\\/]/).filter(Boolean);
+  const veri = new Set(lungo.split(/[\\/]/));
+  for (const s of segmenti) assert.ok(veri.has(s), `«${s}» non è una cartella vera: ${corto}`);
+});
+
+test('AL CONTRARIO — un percorso che ci sta non si tocca', () => {
+  const corto = String.raw`C:\lavoro\talos`;
+  assert.equal(accorciaPercorso(corto), corto);
+  assert.equal(accorciaPercorso(''), '');
+  assert.equal(accorciaPercorso(null), '');
 });

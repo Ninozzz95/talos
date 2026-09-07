@@ -9364,7 +9364,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         ...(nomeCartella ? [{ chiave: 'cartella', testo: nomeCartella, titolo: `${cartella} · ${tr('shell sul tuo computer, senza isolamento')}` }] : []),
       ],
       piede: attiva
-        ? { chi: tr(TESTI_TERMINALE.apertaDaTe), dettaglio: cartella || (attiva.origine === 'standalone' ? tr('cartella predefinita del server') : ''), stato: `${tr(ETICHETTA_STATO_TERMINALE[attiva.stato] ?? attiva.stato)}${attiva.ripreso ? ` · ${tr('shell ripresa')}` : ''}`, nota: `${tr(TESTI_TERMINALE.nota)}${colori}` }
+        ? { chi: tr(TESTI_TERMINALE.apertaDaTe), dettaglio: cartella || (attiva.origine === 'standalone' ? tr('cartella predefinita del server') : ''), stato: `${tr(ETICHETTA_STATO_TERMINALE[attiva.stato] ?? attiva.stato)}${attiva.ripreso ? ` · ${tr('shell ripresa')}` : ''}`, /* ⛔ 07/9, visto in una foto: la frase generica («Ogni scheda dichiara chi l'ha aperta e
+             dove») restava accanto al percorso e gli rubava lo spazio, proprio mentre il percorso
+             era tagliato e perdeva il nome della cartella. Dove c'è un dato vero, lo spazio è suo:
+             la spiegazione resta solo quando non c'è un percorso da mostrare. `colori` invece è un
+             fatto, non una spiegazione, e resta sempre. */
+          nota: `${cartella ? '' : tr(TESTI_TERMINALE.nota)}${colori}`.trim() }
         : { chi: tr(TESTI_TERMINALE.nessunaScheda), dettaglio: cartella, stato: '', nota: conSessione ? tr('Premi Nuovo per aprire una shell in questa cartella.') : tr(TESTI_TERMINALE.nuovaSchedaSenzaSessione) },
     });
     aggiornaTestataSessione(); // K-G: il badge «Terminale N» nella testata
