@@ -15971,9 +15971,13 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       function appendRealTaskStart(task, contesto2 = null) {
         const conversation = $2("#conversation");
-        const testoBolla = task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : "Comando diretto");
+        const daMostrare = state.realSession.bollaDaMostrare;
+        state.realSession.bollaDaMostrare = null;
+        const testoBolla = daMostrare && typeof daMostrare.testo === "string" && daMostrare.testo.trim() !== "" ? daMostrare.testo : task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : "Comando diretto");
         const etichettaMeta = (task.id ? nomeLeggibileSessione(task.id) : task.consegna || task.consegnaCorta ? `Compito libero${task.progetto ? ` · ${task.progetto}` : ""}` : "Comando diretto") + etichettaPermessiGiro(contesto2);
         const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? "" : oraMessaggio(), meta: etichettaMeta }), "utente");
+        if (daMostrare?.allegati?.length) disegnaChipAllegati(article, daMostrare.allegati);
+        ;
         void conversation;
         markMotionEnter(article);
         scorriAllaBollaAppesa(article);

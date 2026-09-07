@@ -8227,14 +8227,26 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * secondo) — solo un F5/resume, che riparte da zero e replica
      * l'evento VERO, lo rivelava. Tre forme distinte, tre etichette oneste.
      */
-    const testoBolla = task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : 'Comando diretto');
+    /*
+     * ⛔ 07/9, O-41 — il buco che restava: la cura degli allegati fuori dalla bolla valeva per i
+     *   follow-up (`appendUserFollowUp`) ma NON per il primo messaggio della sessione, che disegna
+     *   `task.consegna` — cioè il testo intero, allegati compresi, perché è quello che è partito
+     *   verso il modello. La prima bolla di una sessione è esattamente quella dello screenshot
+     *   dell'owner. Stesso schema: si consuma `bollaDaMostrare`, e gli allegati diventano chip.
+     */
+    const daMostrare = state.realSession.bollaDaMostrare;
+    state.realSession.bollaDaMostrare = null;
+    const testoBolla = (daMostrare && typeof daMostrare.testo === 'string' && daMostrare.testo.trim() !== '')
+      ? daMostrare.testo
+      : (task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : 'Comando diretto'));
     const etichettaMeta = (task.id
       ? nomeLeggibileSessione(task.id)
       : (task.consegna || task.consegnaCorta)
         ? `Compito libero${task.progetto ? ` · ${task.progetto}` : ''}`
         : 'Comando diretto') + etichettaPermessiGiro(contesto);
     // 05/9 Fase 2: Conversazione — il messaggio della persona nel blocco del mockup (ora · etichetta del giro)
-    const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(), meta: etichettaMeta }), 'utente');
+    const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(), meta: etichettaMeta }), 'utente')
+    if (daMostrare?.allegati?.length) disegnaChipAllegati(article, daMostrare.allegati);;
     void conversation;
     markMotionEnter(article);
     /* ⛔ 28/8, owner: "auto centramento dello scroll dei messaggi appena se ne invia uno nuovo (meta schermo)" — questa era l'UNICA delle sei chiamate scrollIntoView di questo file con block:'center' invece di 'end': ogni messaggio inviato veniva centrato a metà schermo invece di scorrere in fondo come ogni altro elemento appeso alla conversazione. */
