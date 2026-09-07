@@ -21,6 +21,7 @@
 /storage/*.key
 /storage/playwright-report
 /storage/playwright-live
+/storage/human-journey
 /storage/pail
 /test-results
 /vendor

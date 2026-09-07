@@ -419,14 +419,12 @@ final class TalosBrowserSemanticClickService
             $this->markRecovery($session, $structured['state_version']);
             throw new TalosBrowserCommandException('TALOS_BROWSER_CLICK_RECOVERY_REQUIRED', 'Browser click snapshot evidence is invalid; recovery is required.', status: 409, origin: 'browser_worker');
         }
-        $workerSnapshot = [
-            'snapshot_id' => $snapshot['snapshot_id'],
-            'format' => 'accessibility_refs_v1',
-            'text_digest' => $snapshot['text_digest'],
-            'nodes' => $snapshot['nodes'],
-        ];
-        $workerSnapshotJson = json_encode($workerSnapshot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
-        if ($snapshot['sha256'] !== 'sha256:'.hash('sha256', $workerSnapshotJson)) {
+        if ($snapshot['sha256'] !== TalosBrowserSnapshotEvidence::sha256(
+            snapshotId: $snapshot['snapshot_id'],
+            format: 'accessibility_refs_v1',
+            textDigest: $snapshot['text_digest'],
+            nodes: $snapshot['nodes'],
+        )) {
             $this->markRecovery($session, $structured['state_version']);
             throw new TalosBrowserCommandException('TALOS_BROWSER_CLICK_RECOVERY_REQUIRED', 'Browser click snapshot digest is invalid; recovery is required.', status: 409, origin: 'browser_worker');
         }

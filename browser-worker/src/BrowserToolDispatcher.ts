@@ -1,9 +1,14 @@
 import { BrowserError } from "./BrowserErrors.js";
 import { assertAllowedBrowserUrl, browserEvidenceUrl } from "./BrowserUrlPolicy.js";
-import { captureSnapshot } from "./BrowserSnapshot.js";
+import { captureSnapshot, type BrowserSnapshotResult } from "./BrowserSnapshot.js";
+import {
+  browserToolSnapshotEvidenceJson,
+  browserToolSnapshotEvidenceSha256,
+} from "./BrowserSnapshotEvidence.js";
 import { captureCanonicalBrowserFrame } from "./BrowserFrameCapture.js";
 import { BrowserSessionManager, type BrowserSession } from "./BrowserSessionManager.js";
 import { BrowserFileStagingStore, type StagedBrowserFile } from "./BrowserFileStagingStore.js";
+import { BrowserTestFixturePermit } from "./BrowserTestFixturePermit.js";
 import {
   BrowserToolCallSchema,
   BrowserToolResultSchema,
@@ -33,11 +38,15 @@ export interface BrowserToolRequestContext {
 const SEMANTIC_CLICK_ROLES = new Set([
   "button", "link", "checkbox", "radio", "tab", "menuitem", "option", "combobox", "switch",
 ]);
+const CLICK_ACTIONABILITY_TIMEOUT_MS = 1_500;
+const CLICK_EVIDENCE_STABILITY_TIMEOUT_MS = 5_000;
+const CLICK_EVIDENCE_STABILITY_POLL_MS = 50;
 
 export class BrowserToolDispatcher {
   constructor(
     private readonly sessions: BrowserSessionManager,
     private readonly fileStaging: BrowserFileStagingStore = new BrowserFileStagingStore(),
+    private readonly fixturePermit: BrowserTestFixturePermit = BrowserTestFixturePermit.disabled(),
   ) {}
 
   async call(sessionId: string, rawCall: unknown, context: BrowserToolRequestContext = {}): Promise<CanonicalToolResult> {
@@ -136,7 +145,7 @@ export class BrowserToolDispatcher {
     const parsed = NavigateToolArgumentsSchema.safeParse(call.arguments);
     if (!parsed.success) return this.errorResult(call.tool_use_id, "TALOS_BROWSER_INVALID_TOOL_ARGUMENTS", "Invalid browser_navigate arguments.");
     this.sessions.assertState(session.sessionId, parsed.data.state_version);
-    await assertAllowedBrowserUrl(parsed.data.url);
+    await assertAllowedBrowserUrl(parsed.data.url, this.fixturePermit);
     await this.sessions.navigate(session.sessionId, {
       url: parsed.data.url,
       waitUntil: parsed.data.waitUntil ?? "domcontentloaded",
@@ -170,7 +179,14 @@ export class BrowserToolDispatcher {
       text_digest: captured.textDigest,
       nodes: captured.nodes,
     };
-    return this.success(call.tool_use_id, call.name, structured, "Browser snapshot captured.", "snapshot", captured);
+    return this.success(
+      call.tool_use_id,
+      call.name,
+      structured,
+      "Browser snapshot captured.",
+      "snapshot",
+      browserToolSnapshotEvidenceJson(captured),
+    );
   }
 
   private async read(session: BrowserSession, call: BrowserToolCall): Promise<CanonicalToolResult> {
@@ -193,7 +209,14 @@ export class BrowserToolDispatcher {
       snapshot_id: stored.value.snapshotId,
       matches,
     };
-    return this.success(call.tool_use_id, call.name, structured, JSON.stringify({ matches }), "snapshot", stored.value);
+    return this.success(
+      call.tool_use_id,
+      call.name,
+      structured,
+      JSON.stringify({ matches }),
+      "snapshot",
+      browserToolSnapshotEvidenceJson(stored.value),
+    );
   }
 
   private async screenshot(session: BrowserSession, call: BrowserToolCall): Promise<CanonicalToolResult> {
@@ -284,6 +307,18 @@ export class BrowserToolDispatcher {
       const inputType = tag === "input" ? input.type.toLocaleLowerCase() : "";
       const explicitTarget = (element as HTMLAnchorElement).target || element.getAttribute("target") || "";
       const normalizedTarget = explicitTarget.trim().toLowerCase();
+      const viewportWidth = element.ownerDocument.defaultView?.innerWidth ?? element.ownerDocument.documentElement.clientWidth;
+      const viewportHeight = element.ownerDocument.defaultView?.innerHeight ?? element.ownerDocument.documentElement.clientHeight;
+      const visibleLeft = Math.max(0, rect.left);
+      const visibleTop = Math.max(0, rect.top);
+      const visibleRight = Math.min(viewportWidth, rect.right);
+      const visibleBottom = Math.min(viewportHeight, rect.bottom);
+      const actionPosition = visibleRight > visibleLeft && visibleBottom > visibleTop
+        ? {
+            x: Math.floor((visibleLeft + visibleRight) / 2) - rect.left,
+            y: Math.floor((visibleTop + visibleBottom) / 2) - rect.top,
+          }
+        : null;
       const encoder = new TextEncoder();
       const secretControlSelector = 'input, textarea, select, option, [contenteditable="true"], [role="textbox"]';
       const semantic = {
@@ -386,6 +421,7 @@ export class BrowserToolDispatcher {
         newContext: normalizedTarget !== "" && !["_self", "_top", "_parent"].includes(normalizedTarget),
         role: currentRole,
         name: currentName,
+        actionPosition,
       };
     }).catch(() => null);
 
@@ -399,6 +435,27 @@ export class BrowserToolDispatcher {
     if (targetState.fileChooser) return this.errorResult(call.tool_use_id, "TALOS_BROWSER_FILE_CHOOSER_DENIED", "File chooser controls are not enabled for browser clicks.", { state_version: session.stateVersion });
     if (targetState.download) return this.errorResult(call.tool_use_id, "TALOS_BROWSER_DOWNLOAD_DENIED", "Downloads are not enabled for browser clicks.", { state_version: session.stateVersion });
     if (targetState.newContext) return this.errorResult(call.tool_use_id, "TALOS_BROWSER_NEW_CONTEXT_DENIED", "Opening a new browser context is not enabled for browser clicks.", { state_version: session.stateVersion });
+
+    const clickOptions = {
+      button: "left" as const,
+      clickCount: 1,
+      timeout: CLICK_ACTIONABILITY_TIMEOUT_MS,
+      ...(targetState.actionPosition === null ? {} : { position: targetState.actionPosition }),
+    };
+    try {
+      await binding.click({ ...clickOptions, trial: true });
+    } catch {
+      throw new BrowserError(
+        "The browser target is currently blocked or no longer actionable. Capture a fresh snapshot before retrying.",
+        "TALOS_BROWSER_TARGET_BLOCKED",
+        409,
+        {
+          state_version: session.stateVersion,
+          reason_code: "playwright_actionability_failed",
+          retry_action: "capture_fresh_snapshot",
+        },
+      );
+    }
 
     const baselinePages = new Set(session.context.pages());
     let openedPage = false;
@@ -417,22 +474,13 @@ export class BrowserToolDispatcher {
       this.sessions.armHmiDispatchFence(session.sessionId, dispatchStateVersion);
       dispatchThresholdReached = true;
       onDispatch();
-      await binding.click({ button: "left", clickCount: 1 });
+      await binding.click(clickOptions);
       const current = session.recovery ? session : this.sessions.advanceState(session.sessionId);
       stateAdvanced = !session.recovery;
       if (current.recovery || openedPage || downloadObserved || fileChooserObserved) {
         throw new Error(openedPage ? "new_context_opened" : downloadObserved ? "download_started" : "file_chooser_opened");
       }
-      await current.page.waitForLoadState("networkidle", { timeout: 1_000 });
-      const screenshot = await captureCanonicalBrowserFrame(current.page);
-      const snapshot = await captureSnapshot(current.page);
-      const verificationScreenshot = await captureCanonicalBrowserFrame(current.page);
-      const verificationSnapshot = await captureSnapshot(current.page);
-      if (sha256(screenshot) !== sha256(verificationScreenshot)
-        || snapshot.documentToken !== await documentToken(current.page)) {
-        throw new Error("evidence_frame_changed");
-      }
-      if (snapshot.domDigest !== verificationSnapshot.domDigest) throw new Error("evidence_dom_changed");
+      const { screenshot, snapshot } = await captureStableClickEvidence(current.page);
       await this.sessions.recordSnapshot(current.sessionId, snapshot);
       await this.sessions.recordFrame(current.sessionId, screenshot, current.stateVersion);
       const snapshotValue = {
@@ -441,6 +489,8 @@ export class BrowserToolDispatcher {
         text_digest: snapshot.textDigest,
         nodes: snapshot.nodes,
       };
+      const snapshotEvidenceJson = browserToolSnapshotEvidenceJson(snapshot);
+      const snapshotEvidenceSha256 = browserToolSnapshotEvidenceSha256(snapshot);
       const screenshotValue = {
         mime_type: "image/png" as const,
         width: current.viewport.width,
@@ -456,12 +506,12 @@ export class BrowserToolDispatcher {
           state_version: current.stateVersion,
           target: { ref: node.ref, role: node.role, name: node.name },
           screenshot: screenshotValue,
-          snapshot: { ...snapshotValue, sha256: sha256(JSON.stringify(snapshotValue)) },
+          snapshot: { ...snapshotValue, sha256: snapshotEvidenceSha256 },
         },
         "Browser click completed.",
         [
           { kind: "screenshot", source: screenshot, image: { type: "image", data: screenshot.toString("base64"), mimeType: "image/png" } },
-          { kind: "snapshot", source: JSON.stringify(snapshotValue) },
+          { kind: "snapshot", source: snapshotEvidenceJson },
         ],
       );
       if (result.isError) throw new Error("post_click_output_validation");
@@ -613,6 +663,8 @@ export class BrowserToolDispatcher {
         text_digest: snapshot.textDigest,
         nodes: snapshot.nodes,
       };
+      const snapshotEvidenceJson = browserToolSnapshotEvidenceJson(snapshot);
+      const snapshotEvidenceSha256 = browserToolSnapshotEvidenceSha256(snapshot);
       const result = this.successWithEvidence(
         call.tool_use_id,
         call.name,
@@ -634,12 +686,12 @@ export class BrowserToolDispatcher {
             height: current.viewport.height,
             sha256: sha256(screenshot),
           },
-          snapshot: { ...snapshotValue, sha256: sha256(JSON.stringify(snapshotValue)) },
+          snapshot: { ...snapshotValue, sha256: snapshotEvidenceSha256 },
         },
         "Approved files were uploaded to the selected Browser control.",
         [
           { kind: "screenshot", source: screenshot, image: { type: "image", data: screenshot.toString("base64"), mimeType: "image/png" } },
-          { kind: "snapshot", source: JSON.stringify(snapshotValue) },
+          { kind: "snapshot", source: snapshotEvidenceJson },
         ],
       );
       if (result.isError) throw new Error("post_upload_output_validation");
@@ -719,6 +771,63 @@ export class BrowserToolDispatcher {
 
 async function documentToken(page: BrowserSession["page"]): Promise<string> {
   return page.evaluate(() => `${document.location.href}|${performance.timeOrigin}`);
+}
+
+async function captureStableClickEvidence(
+  page: BrowserSession["page"],
+): Promise<{ screenshot: Buffer; snapshot: BrowserSnapshotResult }> {
+  const deadline = Date.now() + CLICK_EVIDENCE_STABILITY_TIMEOUT_MS;
+  let previousScreenshot = await captureCanonicalBrowserFrame(page);
+  let previousSnapshot: BrowserSnapshotResult | undefined;
+
+  try {
+    previousSnapshot = await captureSnapshot(page);
+    let lastReason = "evidence_frame_changed";
+
+    while (true) {
+      let nextSnapshot: BrowserSnapshotResult | undefined;
+      try {
+        const nextScreenshot = await captureCanonicalBrowserFrame(page);
+        nextSnapshot = await captureSnapshot(page);
+        const liveDocumentToken = await documentToken(page);
+        const frameStable = sha256(previousScreenshot) === sha256(nextScreenshot);
+        const documentStable = previousSnapshot.documentToken === nextSnapshot.documentToken
+          && nextSnapshot.documentToken === liveDocumentToken;
+        const domStable = previousSnapshot.domDigest === nextSnapshot.domDigest;
+
+        if (frameStable && documentStable && domStable) {
+          await disposeSnapshotBindings(previousSnapshot);
+          previousSnapshot = undefined;
+          const stableEvidence = { screenshot: nextScreenshot, snapshot: nextSnapshot };
+          nextSnapshot = undefined;
+          return stableEvidence;
+        }
+
+        lastReason = frameStable && documentStable
+          ? "evidence_dom_changed"
+          : "evidence_frame_changed";
+        await disposeSnapshotBindings(previousSnapshot);
+        previousSnapshot = nextSnapshot;
+        nextSnapshot = undefined;
+        previousScreenshot = nextScreenshot;
+      } finally {
+        await disposeSnapshotBindings(nextSnapshot);
+      }
+
+      if (Date.now() >= deadline) throw new Error(lastReason);
+      await page.waitForTimeout(Math.min(
+        CLICK_EVIDENCE_STABILITY_POLL_MS,
+        Math.max(0, deadline - Date.now()),
+      ));
+    }
+  } finally {
+    await disposeSnapshotBindings(previousSnapshot);
+  }
+}
+
+async function disposeSnapshotBindings(snapshot: BrowserSnapshotResult | undefined): Promise<void> {
+  if (!snapshot?.refBindings) return;
+  await Promise.all([...snapshot.refBindings.values()].map((binding) => binding.dispose().catch(() => undefined)));
 }
 
 function isConsequentialTool(name: string): boolean {

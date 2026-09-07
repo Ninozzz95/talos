@@ -2,7 +2,7 @@
 import Badge from '../../../ui/Badge.vue'
 import Button from '../../../ui/Button.vue'
 import Input from '../../../ui/Input.vue'
-import Select from '../../../ui/Select.vue'
+import TalosThemedSelect from '../../ui/TalosThemedSelect.vue'
 import TalosGuideInfoButton from '../../guide/TalosGuideInfoButton.vue'
 import {
     TALOS_THEME_DENSITY_OPTIONS,
@@ -10,8 +10,10 @@ import {
     TALOS_THEME_RADIUS_OPTIONS,
     type TalosThemePreset,
 } from '../../../../lib/talosThemes'
-import { TALOS_CHAT_BUBBLE_SCALE_OPTIONS, TALOS_CHAT_COMPOSER_MODE_OPTIONS } from '../../../../lib/talosChatLayout'
+import { TALOS_CHAT_COMPOSER_MODE_OPTIONS } from '../../../../lib/talosChatLayout'
+import { TALOS_MESSAGE_SCALE_CONSTRAINT } from '../../../../lib/talosUiScale'
 import type { TalosChatLayoutPreferences } from '../../../../lib/talosTypes'
+import TalosScaleControl from '../TalosScaleControl.vue'
 import TalosThemeProductPreview from './TalosThemeProductPreview.vue'
 import type { ThemeCustomizationForm } from './themeEngineTypes'
 
@@ -141,42 +143,33 @@ function updateChatLayout(key: keyof TalosChatLayoutPreferences, value: unknown)
         <div class="grid gap-3 sm:grid-cols-2">
             <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
                 <span>Font</span>
-                <Select
+                <TalosThemedSelect
                     :model-value="customization.font"
+                    :items="TALOS_THEME_FONT_OPTIONS"
                     aria-label="Font"
                     :disabled="disabled"
                     @update:model-value="updateCustomization('font', $event)"
-                >
-                    <option v-for="font in TALOS_THEME_FONT_OPTIONS" :key="font.value" :value="font.value">
-                        {{ font.label }}
-                    </option>
-                </Select>
+                />
             </label>
             <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
                 <span>Density</span>
-                <Select
+                <TalosThemedSelect
                     :model-value="customization.density"
+                    :items="TALOS_THEME_DENSITY_OPTIONS"
                     aria-label="Density"
                     :disabled="disabled"
                     @update:model-value="updateCustomization('density', $event)"
-                >
-                    <option v-for="density in TALOS_THEME_DENSITY_OPTIONS" :key="density.value" :value="density.value">
-                        {{ density.label }}
-                    </option>
-                </Select>
+                />
             </label>
             <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
                 <span>Corner radius</span>
-                <Select
+                <TalosThemedSelect
                     :model-value="customization.radius"
+                    :items="TALOS_THEME_RADIUS_OPTIONS"
                     aria-label="Corner radius"
                     :disabled="disabled"
                     @update:model-value="updateCustomization('radius', $event)"
-                >
-                    <option v-for="radius in TALOS_THEME_RADIUS_OPTIONS" :key="radius.value" :value="radius.value">
-                        {{ radius.label }}
-                    </option>
-                </Select>
+                />
             </label>
         </div>
 
@@ -220,17 +213,21 @@ function updateChatLayout(key: keyof TalosChatLayoutPreferences, value: unknown)
                 <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Uses the same persisted preference as Appearance settings.</p>
             </div>
             <div class="grid gap-3 sm:grid-cols-2">
-                <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
-                    <span>Message size</span>
-                    <Select :model-value="chatLayout.bubble_scale" aria-label="Theme chat message size" :disabled="disabled" @update:model-value="updateChatLayout('bubble_scale', $event)">
-                        <option v-for="option in TALOS_CHAT_BUBBLE_SCALE_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
-                    </Select>
-                </label>
+                <TalosScaleControl
+                    control-id="theme-chat-message-scale"
+                    label="Message scale"
+                    description="Stored with this theme as a numeric chat geometry preference."
+                    :model-value="chatLayout.message_scale"
+                    :min="TALOS_MESSAGE_SCALE_CONSTRAINT.min"
+                    :max="TALOS_MESSAGE_SCALE_CONSTRAINT.max"
+                    :step="TALOS_MESSAGE_SCALE_CONSTRAINT.step"
+                    :default-value="TALOS_MESSAGE_SCALE_CONSTRAINT.default"
+                    :disabled="disabled"
+                    @update:model-value="updateChatLayout('message_scale', $event)"
+                />
                 <label class="space-y-1 text-xs font-medium text-[var(--talos-muted)]">
                     <span>Composer mode</span>
-                    <Select :model-value="chatLayout.composer_mode" aria-label="Theme chat composer mode" :disabled="disabled" @update:model-value="updateChatLayout('composer_mode', $event)">
-                        <option v-for="option in TALOS_CHAT_COMPOSER_MODE_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
-                    </Select>
+                    <TalosThemedSelect :model-value="chatLayout.composer_mode" :items="TALOS_CHAT_COMPOSER_MODE_OPTIONS" aria-label="Theme chat composer mode" :disabled="disabled" @update:model-value="updateChatLayout('composer_mode', $event)" />
                 </label>
             </div>
         </div>

@@ -6,6 +6,27 @@ import { TALOS_DEFAULT_CHAT_LAYOUT } from '../../../lib/talosChatLayout'
 import { TALOS_APPEARANCE_DEFAULTS, TALOS_APPEARANCE_GROUPS } from '../../../lib/talosAppearancePreferences'
 import TalosSettingsAppearancePanel from './TalosSettingsAppearancePanel.vue'
 
+// reka Select (themed dropdown) needs these APIs jsdom omits.
+if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => undefined
+}
+if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = () => false
+    Element.prototype.setPointerCapture = () => undefined
+    Element.prototype.releasePointerCapture = () => undefined
+}
+
+async function settle() {
+    await nextTick()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await nextTick()
+}
+
+function firePointer(element: Element, type: 'pointerdown' | 'pointerup') {
+    const Ctor = typeof PointerEvent === 'function' ? PointerEvent : MouseEvent
+    element.dispatchEvent(new Ctor(type, { bubbles: true, cancelable: true, button: 0 }))
+}
+
 const mounted: Array<ReturnType<typeof createApp>> = []
 
 afterEach(() => {
@@ -13,7 +34,10 @@ afterEach(() => {
     document.body.replaceChildren()
 })
 
-function mountAppearance(withVisibilityGroups = false) {
+function mountAppearance(
+    withVisibilityGroups = false,
+    options: { themePolicyLocked?: boolean; uiScale?: number; messageScale?: number } = {},
+) {
     const shell = document.createElement('div')
     shell.className = 'talos-shell'
     const portalRoot = document.createElement('div')
@@ -24,19 +48,27 @@ function mountAppearance(withVisibilityGroups = false) {
 
     let themeEngineOpenCount = 0
     const mobilePresentationUpdates: string[] = []
+    const uiScaleUpdates: number[] = []
+    const messageScaleUpdates: number[] = []
     const app = createApp(defineComponent({
         setup() {
             return () => h(TalosSettingsAppearancePanel, {
                 theme: 'forge',
                 themeMode: 'dark',
-                chatLayout: TALOS_DEFAULT_CHAT_LAYOUT,
-                themePolicyLocked: false,
+                uiScale: options.uiScale ?? 1,
+                chatLayout: {
+                    ...TALOS_DEFAULT_CHAT_LAYOUT,
+                    message_scale: options.messageScale ?? 1,
+                },
+                themePolicyLocked: options.themePolicyLocked ?? false,
                 appearanceVisibility: structuredClone(TALOS_APPEARANCE_DEFAULTS),
                 appearanceGroups: withVisibilityGroups ? TALOS_APPEARANCE_GROUPS : [],
                 onOpenThemeEngine: () => {
                     themeEngineOpenCount += 1
                 },
                 onUpdateMobileWindowPresentation: (value: string) => mobilePresentationUpdates.push(value),
+                onUpdateUiScale: (value: number) => uiScaleUpdates.push(value),
+                onUpdateMessageScale: (value: number) => messageScaleUpdates.push(value),
             })
         },
     }))
@@ -44,7 +76,14 @@ function mountAppearance(withVisibilityGroups = false) {
     mounted.push(app)
     app.mount(container)
 
-    return { container, portalRoot, themeEngineOpenCount: () => themeEngineOpenCount, mobilePresentationUpdates }
+    return {
+        container,
+        portalRoot,
+        themeEngineOpenCount: () => themeEngineOpenCount,
+        mobilePresentationUpdates,
+        uiScaleUpdates,
+        messageScaleUpdates,
+    }
 }
 
 describe('TalosSettingsAppearancePanel tabs', () => {
@@ -113,16 +152,58 @@ describe('TalosSettingsAppearancePanel tabs', () => {
 
     it('offers the persisted Drawer/fullscreen choice in Appearance design settings', async () => {
         const { container, mobilePresentationUpdates } = mountAppearance()
-        const presentation = container.querySelector<HTMLSelectElement>('[aria-label="Mobile tool window presentation"]')
+        const trigger = container.querySelector<HTMLElement>('[aria-label="Mobile tool window presentation"]')
+        expect(trigger?.tagName).toBe('BUTTON')
 
-        expect(presentation?.value).toBe('drawer')
-        expect(Array.from(presentation?.options ?? []).map((option) => option.value)).toEqual(['drawer', 'fullscreen'])
+        if (trigger) firePointer(trigger, 'pointerdown')
+        await settle()
 
-        if (presentation) {
-            presentation.value = 'fullscreen'
-            presentation.dispatchEvent(new Event('change', { bubbles: true }))
-            await nextTick()
-        }
+        const values = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="talos-themed-select-item"]'))
+            .map((option) => option.getAttribute('data-value'))
+        expect(values).toEqual(['drawer', 'fullscreen'])
+
+        const fullscreen = document.querySelector<HTMLElement>('[data-value="fullscreen"]')
+        fullscreen?.focus()
+        fullscreen?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+        await settle()
+
         expect(mobilePresentationUpdates).toEqual(['fullscreen'])
+    })
+
+    it('renders independent numeric Interface and Message scale controls instead of the legacy size select', async () => {
+        const { container, uiScaleUpdates, messageScaleUpdates } = mountAppearance(false, {
+            uiScale: 1.15,
+            messageScale: 1.25,
+        })
+
+        expect(container.querySelector('[aria-label="Chat message size"]')).toBeNull()
+        const uiRange = container.querySelector<HTMLInputElement>('input[type="range"][aria-label="Interface scale"]')
+        const messageRange = container.querySelector<HTMLInputElement>('input[type="range"][aria-label="Message scale"]')
+        expect(uiRange?.value).toBe('1.15')
+        expect(messageRange?.value).toBe('1.25')
+        expect(container.textContent).toContain('115%')
+        expect(container.textContent).toContain('125%')
+
+        if (uiRange) {
+            uiRange.value = '1.2'
+            uiRange.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        if (messageRange) {
+            messageRange.value = '1.3'
+            messageRange.dispatchEvent(new Event('input', { bubbles: true }))
+        }
+        await nextTick()
+
+        expect(uiScaleUpdates).toEqual([1.2])
+        expect(messageScaleUpdates).toEqual([1.3])
+    })
+
+    it('locks both scale controls when workspace appearance policy is locked', () => {
+        const { container } = mountAppearance(false, { themePolicyLocked: true })
+
+        expect(container.querySelector<HTMLInputElement>('[aria-label="Interface scale"]')?.disabled).toBe(true)
+        expect(container.querySelector<HTMLInputElement>('[aria-label="Message scale"]')?.disabled).toBe(true)
+        expect(container.querySelector<HTMLButtonElement>('[aria-label="Reset Interface scale"]')?.disabled).toBe(true)
+        expect(container.querySelector<HTMLButtonElement>('[aria-label="Reset Message scale"]')?.disabled).toBe(true)
     })
 })

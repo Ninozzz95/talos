@@ -14,6 +14,7 @@ import {
     inspectStrictTalosThemeImport,
     resetTalosThemePreferences,
 } from '../components/talos/settings/theme-engine/themeEngineState'
+import { canonicalizeTalosMessageScale } from '../lib/talosUiScale'
 import type { TalosWorkspaceSettings } from './useTalosSettings'
 import type { TalosThemeEditorPersistence } from './useTalosThemeEditorPersistence'
 import type { TalosThemeEditorState } from './useTalosThemeEditorState'
@@ -314,7 +315,16 @@ export function useTalosNamedThemeLibrary(options: TalosNamedThemeLibraryOptions
             setError(importResult.error ?? 'TALOS rejected this theme import.')
             return
         }
-        const theme = importResult.theme
+        const parsedTheme = importResult.theme
+        const theme = parsedTheme.chat_layout
+            ? {
+                ...parsedTheme,
+                chat_layout: {
+                    ...sanitizeTalosChatLayout(parsedTheme.chat_layout),
+                    message_scale: canonicalizeTalosMessageScale(parsedTheme.chat_layout.message_scale),
+                },
+            }
+            : parsedTheme
         if (themeLibrary.value.some((item) => item.id === theme.id)) {
             setError('A theme with this ID already exists. Rename or delete it before importing.')
             return

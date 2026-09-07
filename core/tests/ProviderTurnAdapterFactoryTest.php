@@ -9,6 +9,7 @@ use Kadmos\Provider\GeminiTurnAdapter;
 use Kadmos\Provider\OpenAiChatTurnAdapter;
 use Kadmos\Provider\OpenAiResponsesTurnAdapter;
 use Kadmos\Provider\ProviderTurnAdapterFactory;
+use Kadmos\Provider\StreamingProviderTurnAdapter;
 
 function assertAdapterFactory(bool $condition, string $message): void
 {
@@ -21,11 +22,17 @@ function testProviderTurnAdapterFactoryRoutesExplicitProtocolsWithoutFallback():
 {
     $factory = new ProviderTurnAdapterFactory();
 
-    assertAdapterFactory($factory->create('deepseek', 'chat_completions', 'https://api.deepseek.com/v1/chat/completions', 'secret') instanceof OpenAiChatTurnAdapter, 'DeepSeek must use the OpenAI-compatible chat adapter.');
-    assertAdapterFactory($factory->create('openai', 'responses', 'https://api.openai.com/v1/responses', 'secret') instanceof OpenAiResponsesTurnAdapter, 'OpenAI Responses must use its native adapter.');
-    assertAdapterFactory($factory->create('anthropic', 'messages', 'https://api.anthropic.com/v1/messages', 'secret') instanceof AnthropicMessagesTurnAdapter, 'Anthropic must use the Messages adapter.');
-    assertAdapterFactory($factory->create('gemini', 'generate_content', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', 'secret') instanceof GeminiTurnAdapter, 'Gemini must use the generateContent adapter.');
-    assertAdapterFactory($factory->create('ollama', 'chat_completions', 'http://127.0.0.1:11434/v1/chat/completions', '') instanceof OpenAiChatTurnAdapter, 'Ollama must use the credential-free loopback chat adapter.');
+    $adapters = [
+        [$factory->create('deepseek', 'chat_completions', 'https://api.deepseek.com/v1/chat/completions', 'secret'), OpenAiChatTurnAdapter::class, 'DeepSeek must use the OpenAI-compatible chat adapter.'],
+        [$factory->create('openai', 'responses', 'https://api.openai.com/v1/responses', 'secret'), OpenAiResponsesTurnAdapter::class, 'OpenAI Responses must use its native adapter.'],
+        [$factory->create('anthropic', 'messages', 'https://api.anthropic.com/v1/messages', 'secret'), AnthropicMessagesTurnAdapter::class, 'Anthropic must use the Messages adapter.'],
+        [$factory->create('gemini', 'generate_content', 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent', 'secret'), GeminiTurnAdapter::class, 'Gemini must use the generateContent adapter.'],
+        [$factory->create('ollama', 'chat_completions', 'http://127.0.0.1:11434/v1/chat/completions', ''), OpenAiChatTurnAdapter::class, 'Ollama must use the credential-free loopback chat adapter.'],
+    ];
+    foreach ($adapters as [$adapter, $expectedClass, $message]) {
+        assertAdapterFactory($adapter instanceof $expectedClass, $message);
+        assertAdapterFactory($adapter instanceof StreamingProviderTurnAdapter, "{$expectedClass} must expose canonical streaming through the production factory.");
+    }
 
     $hostileRejected = false;
     try {

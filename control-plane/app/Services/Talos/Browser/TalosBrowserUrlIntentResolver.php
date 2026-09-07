@@ -12,8 +12,8 @@ final class TalosBrowserUrlIntentResolver
     private const MAX_URL_BYTES = 2048;
 
     public function __construct(
+        private readonly TalosBrowserPolicy $policy,
         private readonly ?TalosPublicSuffixList $publicSuffixList = null,
-        private readonly ?TalosBrowserPolicy $policy = null,
     ) {}
 
     public function resolve(string $text, bool $requireResolution = true): TalosBrowserUrlIntentCollection
@@ -36,7 +36,7 @@ final class TalosBrowserUrlIntentResolver
             try {
                 $url = CanonicalHttpUrl::fromString($raw);
                 $suffix = ($this->publicSuffixList ?? new TalosPublicSuffixList)->resolve($url->asciiHost);
-                $decision = ($this->policy ?? new TalosBrowserPolicy)->inspect(
+                $decision = $this->policy->inspect(
                     $url->asciiUrl,
                     $requireResolution,
                 );

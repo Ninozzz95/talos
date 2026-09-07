@@ -70,6 +70,7 @@ preserve_env() {
 prepare_env() {
   (umask 077 && cp .env.example .env)
   sed -i "s/^TALOS_BROWSER_WORKER_TOKEN=.*/TALOS_BROWSER_WORKER_TOKEN=${TALOS_BROWSER_WORKER_TOKEN}/" .env
+  sed -i "s/^TALOS_ARTIFACT_WORKER_TOKEN=.*/TALOS_ARTIFACT_WORKER_TOKEN=${TALOS_ARTIFACT_WORKER_TOKEN}/" .env
   sed -i "s/^TALOS_BROWSER_HMI_MIN_MODE=.*/TALOS_BROWSER_HMI_MIN_MODE=confirm_every_interaction/" .env
   sed -i "s/^TALOS_WEB_SEARCH_PROVIDER=.*/TALOS_WEB_SEARCH_PROVIDER=searxng/" .env
   sed -i "s/^TALOS_ADMIN_NAME=.*/TALOS_ADMIN_NAME=TALOS Docker Smoke/" .env
@@ -129,6 +130,7 @@ export COMPOSE_PROJECT_NAME="talos-integration-$$"
 export COMPOSE_PROFILES=search
 export TALOS_NO_BOOT=1
 export TALOS_BROWSER_WORKER_TOKEN="$(generate_strong_token)"
+export TALOS_ARTIFACT_WORKER_TOKEN="$(generate_strong_token)"
 export TALOS_ADMIN_PASSWORD="TalosSmoke-${TALOS_BROWSER_WORKER_TOKEN:0:32}"
 prepare_env
 
@@ -143,6 +145,8 @@ docker compose --profile search exec -T searxng python3 -c \
   'import json,urllib.request; payload=json.load(urllib.request.urlopen("http://127.0.0.1:8080/search?q=talos&format=json", timeout=5)); assert isinstance(payload, dict) and isinstance(payload.get("results"), list)'
 docker compose exec -T browser-worker node -e \
   'fetch("http://127.0.0.1:3100/ready",{headers:{"x-talos-worker-token":process.env.TALOS_BROWSER_WORKER_TOKEN}}).then(async response=>{const payload=await response.json();if(!response.ok||payload?.data?.status!=="ready"||payload?.data?.runtime!=="chromium"||payload?.data?.protocols?.worker!=="talos.browser.worker.v2"||payload?.data?.protocols?.hmi!=="talos_browser_hmi_runtime_v2.1.0")process.exit(1)}).catch(error=>{console.error(error);process.exit(1)})'
+docker compose exec -T artifact-worker /nodejs/bin/node -e \
+  'fetch("http://127.0.0.1:3200/ready",{headers:{authorization:"Bearer "+process.env.ARTIFACT_WORKER_TOKEN}}).then(async response=>{const payload=await response.json();if(!response.ok||payload?.contract!=="talos.artifact.readiness.v1"||payload?.status!=="ready"||payload?.protocol_version!==1)process.exit(1)}).catch(error=>{console.error(error);process.exit(1)})'
 
 assert_container_env_present talos TALOS_BROWSER_ACTION_PRIVATE_KEY_B64
 assert_container_env_absent talos TALOS_BROWSER_ACTION_PUBLIC_KEY_B64
@@ -153,6 +157,18 @@ assert_container_env_absent browser-worker TALOS_BROWSER_ACTION_PRIVATE_KEY_B64
 assert_container_env_absent validator TALOS_BROWSER_ACTION_PRIVATE_KEY_B64
 assert_container_env_absent validator TALOS_BROWSER_ACTION_PUBLIC_KEY_B64
 assert_container_env_absent validator TALOS_BROWSER_WORKER_TOKEN
+assert_container_env_present talos TALOS_ARTIFACT_WORKER_TOKEN
+assert_container_env_present talos-queue TALOS_ARTIFACT_WORKER_TOKEN
+assert_container_env_absent validator TALOS_ARTIFACT_WORKER_TOKEN
+assert_container_env_absent browser-worker TALOS_ARTIFACT_WORKER_TOKEN
+docker compose exec -T artifact-worker /nodejs/bin/node -e \
+  'if(!process.env.ARTIFACT_WORKER_TOKEN||process.env.TALOS_ARTIFACT_WORKER_TOKEN||process.env.OPENAI_API_KEY||process.env.DEEPSEEK_API_KEY||process.env.ANTHROPIC_API_KEY)process.exit(1)'
+if [ -n "$(docker compose port artifact-worker 3200 2>/dev/null || true)" ]; then
+  echo "artifact-worker must not publish a host port." >&2
+  exit 1
+fi
+docker compose exec -T artifact-worker /nodejs/bin/node -e \
+  'fetch("https://example.com",{signal:AbortSignal.timeout(3000)}).then(()=>process.exit(1)).catch(()=>process.exit(0))'
 
 docker compose exec -T browser-worker node -e \
   'fetch("http://127.0.0.1:3100/protocols/talos.browser.worker.v2/handshake",{headers:{"x-talos-worker-token":process.env.TALOS_BROWSER_WORKER_TOKEN}}).then(async response=>{const payload=(await response.json())?.data;const action=payload?.authentication?.action_capability;if(!response.ok||payload?.schema_version!=="talos.browser.worker-handshake.v2"||payload?.protocol_version!=="talos.browser.worker.v2"||payload?.authentication?.mode!=="service_token_and_signed_action_capability"||payload?.authentication?.owner_binding!==true||action?.algorithm!=="ES256")process.exit(1);if(action?.schema_version!=="talos.browser.action-capability.v1"||action?.type!=="talos-browser-action+jwt"||action?.issuer!=="urn:talos:control-plane"||action?.audience!=="urn:talos:browser-worker"||action?.key_id!==process.env.TALOS_BROWSER_ACTION_KEY_ID||action?.max_ttl_seconds!==30)process.exit(1)}).catch(error=>{console.error(error);process.exit(1)})'

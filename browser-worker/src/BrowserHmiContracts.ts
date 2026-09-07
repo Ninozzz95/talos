@@ -6,6 +6,8 @@ const normalizedCoordinateSchema = z.number().finite().min(0).max(1);
 const sha256Schema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const commandIdSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
 const interactionIdSchema = z.string().uuid();
+const hmiRefSchema = z.string().regex(/^e[1-9][0-9]{0,9}$/);
+const hmiRefSnapshotIdSchema = z.string().regex(/^hmi_ref_[a-f0-9]{64}$/);
 const boundedUtf8Schema = (maxBytes: number) => z.string().max(maxBytes).refine((value) => Buffer.byteLength(value, "utf8") <= maxBytes, `String exceeds the ${maxBytes}-byte UTF-8 limit.`);
 const canonicalEvidenceUrlSchema = boundedUtf8Schema(2_048).refine(
   (value) => browserEvidenceUrl(value) === value,
@@ -39,6 +41,47 @@ const pointerRequestBase = z.object({
 export const BrowserHmiPreflightRequestSchema = pointerRequestBase;
 
 export const BrowserHmiExecuteRequestSchema = pointerRequestBase.extend({
+  command_id: commandIdSchema,
+  expected_fingerprint: sha256Schema,
+  effect_classification: z.enum(["ordinary", "sensitive"]),
+  sensitive_effect_authorized: z.boolean(),
+}).strict();
+
+export const BrowserHmiRefTargetsRequestSchema = z.object({
+  state_version: z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+  expected_frame_sha256: sha256Schema,
+}).strict();
+
+const browserHmiRefTargetSchema = z.object({
+  ref: hmiRefSchema,
+  role: boundedUtf8Schema(64).min(1),
+  name: boundedUtf8Schema(256).min(1),
+  destination: canonicalEvidenceUrlSchema.nullable(),
+}).strict();
+
+export const BrowserHmiRefTargetsResponseSchema = z.object({
+  schema_version: z.literal("talos_browser_hmi_ref_targets_v2"),
+  session_id: boundedUtf8Schema(128).min(1),
+  state_version: safeStateVersionSchema,
+  frame_sha256: sha256Schema,
+  snapshot_id: hmiRefSnapshotIdSchema,
+  targets: z.array(browserHmiRefTargetSchema).max(250),
+}).strict();
+
+const refRequestBase = z.object({
+  schema_version: z.literal("talos_browser_hmi_ref_v2"),
+  interaction_id: interactionIdSchema,
+  state_version: safeStateVersionSchema,
+  expected_frame_sha256: sha256Schema,
+  snapshot_id: hmiRefSnapshotIdSchema,
+  ref: hmiRefSchema,
+  button: z.literal("left"),
+  click_count: z.number().int().min(1).max(2),
+}).strict();
+
+export const BrowserHmiRefPreflightRequestSchema = refRequestBase;
+
+export const BrowserHmiRefExecuteRequestSchema = refRequestBase.extend({
   command_id: commandIdSchema,
   expected_fingerprint: sha256Schema,
   effect_classification: z.enum(["ordinary", "sensitive"]),
@@ -87,6 +130,19 @@ export const BrowserHmiPreflightResponseSchema = z.object({
   session_id: boundedUtf8Schema(128).min(1),
   state_version: safeStateVersionSchema,
   frame_sha256: sha256Schema,
+  origin: boundedUtf8Schema(2_048),
+  point: pointSchema,
+  target: BrowserHmiTargetDescriptorSchema,
+}).strict();
+
+export const BrowserHmiRefPreflightResponseSchema = z.object({
+  schema_version: z.literal("talos_browser_hmi_ref_preflight_v2"),
+  interaction_id: interactionIdSchema,
+  session_id: boundedUtf8Schema(128).min(1),
+  state_version: safeStateVersionSchema,
+  frame_sha256: sha256Schema,
+  snapshot_id: hmiRefSnapshotIdSchema,
+  ref: hmiRefSchema,
   origin: boundedUtf8Schema(2_048),
   point: pointSchema,
   target: BrowserHmiTargetDescriptorSchema,
@@ -149,12 +205,54 @@ export const BrowserHmiResultResponseSchema = z.object({
   }
 });
 
+export const BrowserHmiScrollRequestSchema = z.object({
+  schema_version: z.literal("talos_browser_hmi_scroll_v2"),
+  interaction_id: interactionIdSchema,
+  state_version: safeStateVersionSchema,
+  expected_frame_sha256: sha256Schema,
+  delta_y: z.number().finite().min(-10_000).max(10_000),
+}).strict();
+
+export const BrowserHmiScrollResponseSchema = z.object({
+  schema_version: z.literal("talos_browser_hmi_scroll_v2"),
+  interaction_id: interactionIdSchema,
+  session_id: boundedUtf8Schema(128).min(1),
+  source_state_version: safeStateVersionSchema,
+  state_version: safeStateVersionSchema,
+  frame_sha256: sha256Schema,
+  url: canonicalEvidenceUrlSchema,
+  title: boundedUtf8Schema(512),
+  screenshot: z.object({
+    mime_type: z.literal("image/png"),
+    width: z.number().int().positive().max(3_840),
+    height: z.number().int().positive().max(2_160),
+    sha256: sha256Schema,
+    base64: z.string().min(1),
+  }).strict(),
+  snapshot: z.object({
+    snapshot_id: z.string().regex(/^snap_[A-Za-z0-9-]+$/),
+    format: z.literal("accessibility_refs_v1"),
+    text_digest: boundedUtf8Schema(4_000),
+    sha256: sha256Schema,
+    nodes: z.array(snapshotNodeSchema).max(500),
+  }).strict(),
+  captured_at: z.string().datetime(),
+}).strict();
+
+export type BrowserHmiScrollRequest = z.infer<typeof BrowserHmiScrollRequestSchema>;
+export type BrowserHmiScrollResponse = z.infer<typeof BrowserHmiScrollResponseSchema>;
+
 function canonicalHttpHref(url: URL): string {
   return url.pathname === "/" ? url.origin : `${url.origin}${url.pathname}`;
 }
 
 export type BrowserHmiPreflightRequest = z.infer<typeof BrowserHmiPreflightRequestSchema>;
 export type BrowserHmiExecuteRequest = z.infer<typeof BrowserHmiExecuteRequestSchema>;
+export type BrowserHmiRefTargetsRequest = z.infer<typeof BrowserHmiRefTargetsRequestSchema>;
+export type BrowserHmiRefTargetsResponse = z.infer<typeof BrowserHmiRefTargetsResponseSchema>;
+export type BrowserHmiRefPreflightRequest = z.infer<typeof BrowserHmiRefPreflightRequestSchema>;
+export type BrowserHmiRefExecuteRequest = z.infer<typeof BrowserHmiRefExecuteRequestSchema>;
+export type BrowserHmiRefPreflightResponse = z.infer<typeof BrowserHmiRefPreflightResponseSchema>;
 export type BrowserHmiTargetDescriptor = z.infer<typeof BrowserHmiTargetDescriptorSchema>;
 export type BrowserHmiPreflightResponse = z.infer<typeof BrowserHmiPreflightResponseSchema>;
 export type BrowserHmiResultResponse = z.infer<typeof BrowserHmiResultResponseSchema>;

@@ -44,6 +44,7 @@ final class TalosToolRepairPolicyTest extends TestCase
 
         foreach ([
             'TALOS_BROWSER_STALE_STATE',
+            'TALOS_BROWSER_TARGET_BLOCKED',
             'TALOS_WEB_SEARCH_TRANSIENT_FAILURE',
             'TALOS_BROWSER_WORKER_TRANSIENT',
         ] as $code) {

@@ -37,6 +37,7 @@ final class TalosThemeMotionV6
         'violet',
         'claudius',
         'basicus',
+        'calm',
     ];
 
     private const FPS_CAPS = [20, 24, 30, 45, 60];

@@ -1,0 +1,16 @@
+data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"reasoning_content":"I checked the evidence. "},"finish_reason":null}]}
+
+data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"content":"Ciao 👋. I will inspect the page. "},"finish_reason":null}]}
+
+data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_browser_1","type":"function","function":{"name":"browser_navigate","arguments":"{\"url\":\"https://"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"function":{"arguments":"example.com\"}"}}]},"finish_reason":null}]}
+
+data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}
+
+data: {"id":"chatcmpl_stream_1","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":41,"completion_tokens":12,"total_tokens":53,"prompt_tokens_details":{"cached_tokens":7,"cache_write_tokens":2}}}
+
+data: [DONE]
+

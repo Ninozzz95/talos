@@ -1,6 +1,14 @@
 import { computed, ref, type Ref } from 'vue'
 import { sanitizeTalosChatLayout } from '../lib/talosChatLayout'
-import type { TalosChatBubbleScale, TalosComposerMode, TalosMobileWindowPresentation } from '../lib/talosTypes'
+import {
+    TALOS_UI_SCALE_CONSTRAINT,
+    canonicalizeTalosMessageScale,
+    canonicalizeTalosUiScale,
+    isTalosUiScale,
+    stepTalosMessageScale,
+    talosScalePercentLabel,
+} from '../lib/talosUiScale'
+import type { TalosComposerMode, TalosMessageStyle, TalosMobileWindowPresentation } from '../lib/talosTypes'
 import type { TalosWorkspaceSettings, UpdateTalosSettingsPayload } from './useTalosSettings'
 
 type UpdateSettings = (payload: UpdateTalosSettingsPayload) => Promise<TalosWorkspaceSettings>
@@ -10,86 +18,136 @@ export function useTalosChatLayoutPreferences(
     updateSettings: UpdateSettings,
     uiError: Ref<string | null>,
 ) {
-    const bubbleScale = ref<TalosChatBubbleScale>('balanced')
+    const uiScale = ref(TALOS_UI_SCALE_CONSTRAINT.default)
+    const messageScale = ref(1)
     const composerMode = ref<TalosComposerMode>('full')
+    const messageStyle = ref<TalosMessageStyle>('sections')
     const advancedRailExpanded = ref(false)
     const mobileWindowPresentation = ref<TalosMobileWindowPresentation>('drawer')
     const policyLocked = computed(() => workspaceSettings.value?.preferences?.theme_policy_locked === true)
-    const bubbleScaleLabel = computed(() => bubbleScale.value[0].toUpperCase() + bubbleScale.value.slice(1))
+    const messageScaleLabel = computed(() => talosScalePercentLabel(messageScale.value))
 
-    function apply(value: unknown) {
+    function apply(value: unknown, uiScaleValue?: unknown) {
         const layout = sanitizeTalosChatLayout(value)
-        bubbleScale.value = layout.bubble_scale
+        uiScale.value = isTalosUiScale(uiScaleValue) ? uiScaleValue : TALOS_UI_SCALE_CONSTRAINT.default
+        messageScale.value = layout.message_scale
         composerMode.value = layout.composer_mode
+        messageStyle.value = layout.message_style
         advancedRailExpanded.value = layout.advanced_rail_expanded
         mobileWindowPresentation.value = layout.mobile_window_presentation
     }
 
-    function persist(includeVisualPreferences = true) {
+    async function persist(includeVisualPreferences = true) {
         if (includeVisualPreferences && policyLocked.value) {
-            apply(workspaceSettings.value?.preferences?.chat_layout)
+            apply(
+                workspaceSettings.value?.preferences?.chat_layout,
+                workspaceSettings.value?.preferences?.ui_scale,
+            )
             uiError.value = 'Chat appearance is locked by workspace policy.'
             return
         }
 
-        updateSettings({
-            preferences: {
-                ...(workspaceSettings.value?.preferences ?? {}),
-                chat_layout: {
-                    ...(includeVisualPreferences ? {
-                        bubble_scale: bubbleScale.value,
-                        composer_mode: composerMode.value,
-                        mobile_window_presentation: mobileWindowPresentation.value,
-                    } : {}),
-                    advanced_rail_expanded: advancedRailExpanded.value,
+        const preferences = workspaceSettings.value?.preferences ?? {}
+        const layout = includeVisualPreferences
+            ? {
+                message_scale: canonicalizeTalosMessageScale(messageScale.value),
+                composer_mode: composerMode.value,
+                message_style: messageStyle.value,
+                advanced_rail_expanded: advancedRailExpanded.value,
+                mobile_window_presentation: mobileWindowPresentation.value,
+            }
+            : {
+                ...sanitizeTalosChatLayout(preferences.chat_layout),
+                advanced_rail_expanded: advancedRailExpanded.value,
+            }
+
+        try {
+            await updateSettings({
+                preferences: {
+                    ...preferences,
+                    ui_scale: includeVisualPreferences
+                        ? canonicalizeTalosUiScale(uiScale.value)
+                        : (isTalosUiScale(preferences.ui_scale) ? preferences.ui_scale : canonicalizeTalosUiScale(uiScale.value)),
+                    chat_layout: {
+                        ...layout,
+                    },
                 },
-            },
-        }).catch((error) => {
+            })
+        } catch (error) {
             uiError.value = error instanceof Error ? error.message : 'TALOS could not persist chat layout preferences.'
-        })
+        }
     }
 
-    function setBubbleScale(next: TalosChatBubbleScale) {
-        if (policyLocked.value) return
-        bubbleScale.value = next
-        persist()
+    async function setUiScale(next: number) {
+        if (policyLocked.value) {
+            await persist()
+            return
+        }
+        uiScale.value = canonicalizeTalosUiScale(next)
+        await persist()
     }
 
-    function decrementBubbleScale() {
-        setBubbleScale(bubbleScale.value === 'expanded' ? 'balanced' : 'compact')
+    async function setMessageScale(next: number) {
+        if (policyLocked.value) {
+            await persist()
+            return
+        }
+        messageScale.value = canonicalizeTalosMessageScale(next)
+        await persist()
     }
 
-    function incrementBubbleScale() {
-        setBubbleScale(bubbleScale.value === 'compact' ? 'balanced' : 'expanded')
+    async function decrementMessageScale() {
+        await setMessageScale(stepTalosMessageScale(messageScale.value, -1))
     }
 
-    function resetBubbleScale() {
-        setBubbleScale('balanced')
+    async function incrementMessageScale() {
+        await setMessageScale(stepTalosMessageScale(messageScale.value, 1))
     }
 
-    function toggleComposerMode() {
-        if (policyLocked.value) return
+    async function resetMessageScale() {
+        await setMessageScale(1)
+    }
+
+    async function toggleComposerMode() {
+        if (policyLocked.value) {
+            await persist()
+            return
+        }
         composerMode.value = composerMode.value === 'full' ? 'minimal' : 'full'
-        persist()
+        await persist()
     }
 
-    function toggleAdvancedRail() {
+    async function setMessageStyle(next: TalosMessageStyle) {
+        if (policyLocked.value) {
+            await persist()
+            return
+        }
+        messageStyle.value = next
+        await persist()
+    }
+
+    async function toggleAdvancedRail() {
         advancedRailExpanded.value = !advancedRailExpanded.value
-        persist(false)
+        await persist(false)
     }
 
     return {
-        bubbleScale,
-        bubbleScaleLabel,
+        uiScale,
+        messageScale,
+        messageScaleLabel,
         composerMode,
+        messageStyle,
         advancedRailExpanded,
         mobileWindowPresentation,
         policyLocked,
         apply,
-        decrementBubbleScale,
-        incrementBubbleScale,
-        resetBubbleScale,
+        setUiScale,
+        setMessageScale,
+        decrementMessageScale,
+        incrementMessageScale,
+        resetMessageScale,
         toggleComposerMode,
+        setMessageStyle,
         toggleAdvancedRail,
     }
 }

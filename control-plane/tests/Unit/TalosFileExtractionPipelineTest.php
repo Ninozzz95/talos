@@ -101,18 +101,23 @@ final class TalosFileExtractionPipelineTest extends TestCase
         }
     }
 
-    public function test_required_ocr_fails_explicitly_when_capability_is_disabled(): void
+    public function test_disabled_ocr_preserves_supported_image_as_untrusted_vision_only_input(): void
     {
         $path = $this->temporaryFile('image bytes');
         $sha256 = hash_file('sha256', $path);
         $this->assertIsString($sha256);
 
-        try {
-            $this->pipeline(new DisabledTalosOcrClient)->extract($path, 'image/png', $sha256, 'owner-4');
-            $this->fail('Expected disabled OCR fault.');
-        } catch (TalosExtractionException $exception) {
-            $this->assertSame('TALOS_OCR_REQUIRED', $exception->errorCode);
-        }
+        $result = $this->pipeline(new DisabledTalosOcrClient)
+            ->extract($path, 'image/png', $sha256, 'owner-4');
+
+        $this->assertSame('', $result->text);
+        $this->assertSame('vision_passthrough', $result->extractor);
+        $this->assertSame('v1', $result->extractorVersion);
+        $this->assertFalse($result->requiresOcr);
+        $this->assertSame('image/png', $result->metadata['content_type']);
+        $this->assertSame($sha256, $result->metadata['source_sha256']);
+        $this->assertSame('untrusted', $result->metadata['trust_level']);
+        $this->assertTrue($result->metadata['vision_only']);
     }
 
     public function test_empty_office_document_never_uses_ocr_as_an_extraction_bypass(): void
@@ -174,4 +179,3 @@ final class TalosFileExtractionPipelineTest extends TestCase
         return $path;
     }
 }
-

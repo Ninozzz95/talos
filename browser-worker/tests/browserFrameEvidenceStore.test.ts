@@ -15,6 +15,16 @@ async function frame(changes: Array<{ x: number; y: number; rgba: [number, numbe
 }
 
 describe("BrowserFrameEvidenceStore", () => {
+  it("STAGE2B-003 reports exact frame presence only for the recorded state and viewport", async () => {
+    const store = new BrowserFrameEvidenceStore();
+    const sourceHash = await store.record(await frame(), 7, dimensions);
+
+    expect(store.has(sourceHash, 7, dimensions)).toBe(true);
+    expect(store.has(sourceHash, 8, dimensions)).toBe(false);
+    expect(store.has(sourceHash, 7, { width: 99, height: 80 })).toBe(false);
+    expect(store.has(`sha256:${"f".repeat(64)}`, 7, dimensions)).toBe(false);
+  });
+
   it("matches exact target pixels while ignoring unrelated viewport changes", async () => {
     const store = new BrowserFrameEvidenceStore();
     const source = await frame();

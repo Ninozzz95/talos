@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use Closure;
 use App\Models\TalosBrowserAction;
 use App\Models\TalosBrowserSession;
 use App\Models\TalosBrowserTask;
@@ -14,6 +15,7 @@ use App\Models\TalosRunArtifact;
 use App\Models\TalosSession;
 use App\Models\TalosToolCall;
 use App\Models\TalosToolTurn;
+use App\Models\TalosWorkspaceSetting;
 use App\Models\User;
 use App\Services\Runs\TalosRunEventRecorder;
 use App\Services\Talos\Agent\TalosAgentBudgetService;
@@ -25,6 +27,7 @@ use App\Services\Talos\Agent\TalosProceduralGuardCheckpointStore;
 use App\Services\Talos\Agent\TalosProviderAdapterResolver;
 use App\Services\Talos\Agent\TalosProviderGateway;
 use App\Services\Talos\Agent\TalosProviderOutcomeCodec;
+use App\Services\Talos\Agent\TalosPromptCachePlanner;
 use App\Services\Talos\Agent\TalosProviderRecoveryRequiredException;
 use App\Services\Talos\Agent\TalosProviderToolArgumentValidator;
 use App\Services\Talos\Agent\TalosToolDispatcher;
@@ -40,7 +43,13 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Kadmos\Provider\ProviderCapabilities;
 use Kadmos\Provider\ProviderFailure;
+use Kadmos\Provider\PromptCachePlan;
+use Kadmos\Provider\ProviderStream;
+use Kadmos\Provider\ProviderStreamCancelledException;
+use Kadmos\Provider\ProviderStreamDecoder;
+use Kadmos\Provider\ProviderStreamEvent;
 use Kadmos\Provider\ProviderTurnAdapter;
+use Kadmos\Provider\StreamingProviderTurnAdapter;
 use Kadmos\Tool\ProceduralLoopGuard;
 use Kadmos\Tool\ProceduralNode;
 use Kadmos\Tool\ProceduralToolCompiler;
@@ -55,6 +64,63 @@ use Tests\TestCase;
 final class TalosAgentTurnServiceTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_prompt_cache_plan_reaches_provider_and_usage_is_audited_without_prompt_text(): void
+    {
+        [$user, $session, $run, $profile] = $this->context('openai', 'gpt-5.6');
+        TalosWorkspaceSetting::query()->create([
+            'id' => TalosWorkspaceSetting::idForUser($user->id),
+            'user_id' => $user->id,
+            'preferences' => [
+                'prompt_cache' => ['mode' => 'explicit', 'ttl' => '30m'],
+            ],
+        ]);
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Private cache test prompt.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $adapter = new AgentTurnTestAdapter(
+            finalImmediately: true,
+            responseUsage: new TokenUsage(
+                inputTokens: 100,
+                outputTokens: 5,
+                totalTokens: 105,
+                cachedTokens: 80,
+                cacheReadTokens: 80,
+                cacheWriteTokens: 10,
+                cacheMissTokens: 10,
+            ),
+        );
+
+        $outcome = $this->service($adapter)->execute($user->id, $run, $profile);
+
+        $this->assertSame('completed', $outcome->status);
+        $this->assertInstanceOf(PromptCachePlan::class, $adapter->receivedPromptCachePlan);
+        $this->assertSame(PromptCachePlan::MODE_EXPLICIT, $adapter->receivedPromptCachePlan->mode);
+        $this->assertSame([PromptCachePlan::BREAKPOINT_SYSTEM, 'message:0'], $adapter->receivedPromptCachePlan->breakpoints);
+        $this->assertSame('30m', $adapter->receivedPromptCachePlan->ttl);
+
+        $usage = TalosToolTurn::query()->where('run_id', $run->id)->firstOrFail()->budget_usage;
+        $this->assertSame(80, $usage['cached_tokens'] ?? null);
+        $this->assertSame(80, $usage['cache_read_tokens'] ?? null);
+        $this->assertSame(10, $usage['cache_write_tokens'] ?? null);
+        $this->assertSame(10, $usage['cache_miss_tokens'] ?? null);
+        $this->assertNull($usage['cache_write_5m_tokens'] ?? null);
+        $this->assertNull($usage['cache_write_1h_tokens'] ?? null);
+
+        $event = $run->events()->where('event_type', 'provider.turn.started')->firstOrFail();
+        $this->assertSame(
+            $adapter->receivedPromptCachePlan->toAuditArray(),
+            $event->payload['prompt_cache_plan'] ?? null,
+        );
+        $this->assertStringNotContainsString(
+            'Private cache test prompt.',
+            json_encode($event->payload, JSON_THROW_ON_ERROR),
+        );
+    }
 
     public function test_final_turn_uses_complete_durable_history_and_is_idempotent(): void
     {
@@ -78,8 +144,297 @@ final class TalosAgentTurnServiceTest extends TestCase
             ['role' => 'user', 'content' => 'Continue with context.'],
         ], $adapter->receivedMessages);
         $this->assertSame(1, TalosMessage::query()->where('run_id', $run->id)->where('role', 'assistant')->count());
+        $this->assertSame(
+            'talos.chat.stream.v1:'.$run->id.':assistant',
+            TalosMessage::query()
+                ->where('run_id', $run->id)
+                ->where('role', 'assistant')
+                ->value('request_key'),
+        );
         $this->assertSame('succeeded', $run->refresh()->status);
         $this->assertSame(1, TalosToolTurn::query()->where('run_id', $run->id)->count());
+    }
+
+    public function test_final_turn_persists_provider_visible_reasoning_as_safe_message_metadata(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Explain the answer.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $adapter = new AgentTurnTestAdapter(
+            finalImmediately: true,
+            visibleReasoning: 'I compared the available evidence before answering.',
+        );
+
+        $outcome = $this->service($adapter)->execute($user->id, $run, $profile);
+        $message = TalosMessage::query()->where('run_id', $run->id)->where('role', 'assistant')->firstOrFail();
+
+        $this->assertSame('completed', $outcome->status);
+        $this->assertSame([
+            'source' => 'provider',
+            'text' => 'I compared the available evidence before answering.',
+            'duration_ms' => null,
+            'provider' => 'openai',
+        ], $message->metadata['visible_reasoning'] ?? null);
+        $this->assertStringNotContainsString(
+            'continuation',
+            json_encode($message->metadata, JSON_THROW_ON_ERROR),
+        );
+    }
+
+    public function test_streamed_final_turn_observes_real_provider_events_and_preserves_durable_finalization(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Continue with context.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $adapter = new AgentStreamingTurnTestAdapter;
+        $observed = [];
+
+        $outcome = $this->service($adapter)->execute(
+            (int) $user->id,
+            $run,
+            $profile,
+            onProviderEvent: static function (ProviderStreamEvent $event) use (&$observed): void {
+                $observed[] = $event->toArray();
+            },
+            isCancelled: static fn (): bool => false,
+        );
+
+        $this->assertSame('completed', $outcome->status);
+        $this->assertSame('Agent streamed answer.', $outcome->text);
+        $this->assertSame(1, $adapter->streamStartCalls);
+        $this->assertSame(0, $adapter->bufferedStartCalls);
+        $this->assertSame([
+            ProviderStreamEvent::TEXT_DELTA,
+            ProviderStreamEvent::TEXT_DELTA,
+            ProviderStreamEvent::COMPLETED,
+        ], array_column($observed, 'kind'));
+        $this->assertSame(
+            'Agent streamed answer.',
+            TalosMessage::query()
+                ->where('run_id', $run->id)
+                ->where('role', 'assistant')
+                ->value('content'),
+        );
+        $this->assertSame('succeeded', $run->refresh()->status);
+        $usage = TalosToolTurn::query()->where('run_id', $run->id)->firstOrFail()->budget_usage;
+        $this->assertIsArray($usage);
+        $this->assertSame(2, $usage['cached_tokens'] ?? null);
+    }
+
+    public function test_explicit_stream_cancellation_is_terminal_without_persisting_an_assistant_message(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Stop when I cancel.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $adapter = new AgentCancellingStreamingTurnTestAdapter;
+        $observed = [];
+
+        $outcome = $this->service($adapter)->execute(
+            (int) $user->id,
+            $run,
+            $profile,
+            onProviderEvent: static function (ProviderStreamEvent $event) use (&$observed): void {
+                $observed[] = $event->toArray();
+            },
+            isCancelled: static fn (): bool => true,
+        );
+
+        $this->assertSame('cancelled', $outcome->status);
+        $this->assertSame([
+            ProviderStreamEvent::TEXT_DELTA,
+            ProviderStreamEvent::CANCELLED,
+        ], array_column($observed, 'kind'));
+        $this->assertSame('cancelled', $run->refresh()->status);
+        $this->assertSame(
+            'cancelled',
+            TalosToolTurn::query()->where('run_id', $run->id)->value('status'),
+        );
+        $this->assertFalse(
+            TalosMessage::query()->where('run_id', $run->id)->where('role', 'assistant')->exists(),
+        );
+        $this->assertDatabaseHas('talos_run_events', [
+            'run_id' => $run->id,
+            'event_type' => 'agent.turn.cancelled',
+        ]);
+        $this->assertDatabaseMissing('talos_run_events', [
+            'run_id' => $run->id,
+            'event_type' => 'agent.turn.failed',
+        ]);
+    }
+
+    public function test_streamed_tool_round_emits_safe_lifecycle_and_streams_the_continuation(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Search the web for AVM.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $adapter = new AgentStreamingToolTurnTestAdapter;
+        $backend = new AgentTurnTestBackend;
+        $this->app->instance(TalosToolExecutionBackend::class, $backend);
+        $providerEvents = [];
+        $lifecycleEvents = [];
+
+        $outcome = $this->service($adapter)->execute(
+            (int) $user->id,
+            $run,
+            $profile,
+            onProviderEvent: static function (ProviderStreamEvent $event) use (&$providerEvents): void {
+                $providerEvents[] = $event->toArray();
+            },
+            onLifecycleEvent: static function (string $kind, array $payload) use (&$lifecycleEvents): void {
+                $lifecycleEvents[] = ['kind' => $kind, 'payload' => $payload];
+            },
+            isCancelled: static fn (): bool => false,
+        );
+
+        $this->assertSame('completed', $outcome->status);
+        $this->assertSame('Grounded streamed answer.', $outcome->text);
+        $this->assertSame(1, $adapter->streamStartCalls);
+        $this->assertSame(1, $adapter->streamContinueCalls);
+        $this->assertSame(0, $adapter->bufferedCalls);
+        $this->assertSame(['web_search'], $backend->executedTools);
+        $this->assertSame([
+            'tool.started',
+            'tool.progress',
+            'tool.completed',
+        ], array_column($lifecycleEvents, 'kind'));
+        $this->assertSame([
+            'provider_call_id' => 'provider-stream-search-1',
+            'tool_name' => 'web_search',
+            'status' => 'succeeded',
+        ], $lifecycleEvents[2]['payload']);
+        $this->assertStringNotContainsString(
+            'AVM private query',
+            json_encode($lifecycleEvents, JSON_THROW_ON_ERROR),
+        );
+        $this->assertSame([
+            ProviderStreamEvent::COMPLETED,
+            ProviderStreamEvent::TEXT_DELTA,
+            ProviderStreamEvent::TEXT_DELTA,
+            ProviderStreamEvent::COMPLETED,
+        ], array_column($providerEvents, 'kind'));
+    }
+
+    public function test_agent_system_prompt_forbids_derived_urls_and_preserves_exact_machine_output_requests(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Restituisci soltanto un array JSON con gli URL osservati.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $adapter = new AgentTurnTestAdapter(finalImmediately: true);
+
+        $outcome = $this->service($adapter)->execute($user->id, $run, $profile);
+
+        $this->assertSame('completed', $outcome->status);
+        $this->assertStringContainsString(
+            'Never infer, reconstruct, predict, or guess a URL.',
+            $adapter->receivedSystemPrompt,
+        );
+        $this->assertStringContainsString(
+            'A ref, role, or name without an explicit href is not URL evidence.',
+            $adapter->receivedSystemPrompt,
+        );
+        $this->assertStringContainsString(
+            'return exactly that shape with no prose or code fences',
+            $adapter->receivedSystemPrompt,
+        );
+    }
+
+    public function test_deepseek_exact_json_array_uses_native_json_mode_and_persists_only_the_validated_envelope_value(): void
+    {
+        [$user, $session, $run, $profile] = $this->context('deepseek', 'deepseek-chat');
+        $prompt = 'Restituisci esclusivamente un array JSON con marca e modello.';
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => $prompt,
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $run->forceFill([
+            'prompt' => $prompt,
+            'prompt_hash' => hash('sha256', $prompt),
+        ])->save();
+        $adapter = new AgentTurnTestAdapter(
+            finalImmediately: true,
+            provider: 'deepseek',
+            finalText: '{"talos_output":[{"marca":"Opel","modello":"Corsa"}]}',
+        );
+
+        $outcome = $this->service($adapter)->execute($user->id, $run->refresh(), $profile);
+
+        $expected = '[{"marca":"Opel","modello":"Corsa"}]';
+        $this->assertSame('completed', $outcome->status, (string) $outcome->failureCode);
+        $this->assertSame($expected, $outcome->text);
+        $this->assertSame('application/json', $adapter->receivedResponseMimeType);
+        $this->assertStringContainsString(
+            '{"talos_output":[]}',
+            $adapter->receivedSystemPrompt,
+        );
+        $this->assertSame(
+            $expected,
+            TalosMessage::query()
+                ->where('run_id', $run->id)
+                ->where('role', 'assistant')
+                ->value('content'),
+        );
+    }
+
+    public function test_deepseek_exact_json_array_fails_closed_when_the_provider_ignores_the_envelope(): void
+    {
+        [$user, $session, $run, $profile] = $this->context('deepseek', 'deepseek-chat');
+        $prompt = 'Restituisci soltanto un array JSON con marca e modello.';
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => $prompt,
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $run->forceFill([
+            'prompt' => $prompt,
+            'prompt_hash' => hash('sha256', $prompt),
+        ])->save();
+        $adapter = new AgentTurnTestAdapter(
+            finalImmediately: true,
+            provider: 'deepseek',
+            finalText: '[{"marca":"Opel","modello":"Corsa"}]',
+        );
+
+        $outcome = $this->service($adapter)->execute($user->id, $run->refresh(), $profile);
+
+        $this->assertSame('failed', $outcome->status);
+        $this->assertSame('TALOS_MACHINE_OUTPUT_INVALID', $outcome->failureCode);
+        $this->assertSame(
+            0,
+            TalosMessage::query()
+                ->where('run_id', $run->id)
+                ->where('role', 'assistant')
+                ->count(),
+        );
     }
 
     public function test_request_local_current_user_context_replaces_only_the_provider_copy_of_that_turn(): void
@@ -626,8 +981,115 @@ final class TalosAgentTurnServiceTest extends TestCase
 
         $this->assertSame('failed', $outcome->status);
         $this->assertSame('PROVIDER_HTTP_ERROR', $outcome->failureCode);
+        $this->assertSame(503, $outcome->providerFailure?->httpStatus);
+        $this->assertTrue($outcome->providerFailure?->retryable);
         $this->assertSame(0, $adapter->startCalls);
         $this->assertSame(0, $run->events()->where('event_type', 'agent.turn.failed')->count());
+    }
+
+    public function test_resume_preserves_visible_reasoning_from_the_provider_checkpoint(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        $adapter = new AgentTurnTestAdapter(finalImmediately: true);
+        $response = ProviderTurnResponse::final(
+            'Recovered final answer.',
+            'response-recovered',
+            'stop',
+            new TokenUsage(10, 5, 15),
+            'I compared the durable evidence before answering.',
+        );
+        $encodedOutcome = TalosProviderOutcomeCodec::encode($response);
+        TalosToolTurn::query()->create([
+            'user_id' => $user->id,
+            'session_id' => $session->id,
+            'run_id' => $run->id,
+            'model_profile_id' => $profile->id,
+            'status' => 'running',
+            'provider' => $profile->provider,
+            'model' => $profile->model,
+            'adapter_version' => $adapter->capabilities()->adapterVersion,
+            'pending_tool_call_ids' => [],
+            'provider_outcome' => $encodedOutcome,
+            'provider_outcome_sha256' => 'sha256:'.hash('sha256', $encodedOutcome),
+            'provider_operation_status' => 'completed',
+            'budget_policy' => ['max_calls' => 16],
+            'budget_usage' => [],
+            'started_at' => now(),
+        ]);
+
+        $outcome = $this->service($adapter)->execute($user->id, $run, $profile);
+        $message = TalosMessage::query()->where('run_id', $run->id)->where('role', 'assistant')->firstOrFail();
+
+        $this->assertSame('completed', $outcome->status);
+        $this->assertSame('Recovered final answer.', $outcome->text);
+        $this->assertSame('I compared the durable evidence before answering.', $message->metadata['visible_reasoning']['text'] ?? null);
+        $this->assertSame(0, $adapter->startCalls);
+    }
+
+    public function test_provider_outcome_codec_round_trips_only_bounded_visible_reasoning(): void
+    {
+        $encoded = TalosProviderOutcomeCodec::encode(ProviderTurnResponse::final(
+            'Final answer.',
+            'response-codec',
+            'stop',
+            new TokenUsage(3, 2, 5),
+            'Visible summary.',
+        ));
+
+        $this->assertSame('Visible summary.', TalosProviderOutcomeCodec::decode($encoded)['visible_reasoning'] ?? null);
+
+        $malformed = \App\Services\Talos\Agent\TalosDagCheckpointCodec::encode([
+            'kind' => ProviderTurnResponse::FINAL,
+            'text' => 'Final answer.',
+            'tool_calls' => [],
+            'response_id' => 'response-codec',
+            'stop_reason' => 'stop',
+            'usage' => null,
+            'failure' => null,
+            'visible_reasoning' => ['private' => true],
+        ]);
+
+        $this->expectException(\InvalidArgumentException::class);
+        TalosProviderOutcomeCodec::decode($malformed);
+    }
+
+    public function test_provider_failure_metadata_survives_initial_failure_and_checkpoint_resume(): void
+    {
+        [$user, $session, $run, $profile] = $this->context();
+        TalosMessage::query()->create([
+            'session_id' => $session->id,
+            'role' => 'user',
+            'content' => 'Run a provider protocol turn.',
+            'run_id' => $run->id,
+            'metadata' => [],
+        ]);
+        $adapter = new ProviderFailureAgentTurnTestAdapter(new ProviderFailure(
+            'PROVIDER_PROTOCOL_ERROR',
+            'The provider response failed protocol validation.',
+            false,
+            null,
+            ['contract' => 'openai_chat_v1'],
+        ));
+        $service = $this->service($adapter);
+
+        $first = $service->execute($user->id, $run, $profile);
+        $second = $service->execute($user->id, $run->refresh(), $profile->refresh());
+
+        $this->assertSame('failed', $first->status);
+        $this->assertSame('PROVIDER_PROTOCOL_ERROR', $first->failureCode);
+        $this->assertSame('PROVIDER_PROTOCOL_ERROR', $first->providerFailure?->code);
+        $this->assertFalse($first->providerFailure?->retryable);
+        $this->assertNull($first->providerFailure?->httpStatus);
+        $this->assertSame('PROVIDER_PROTOCOL_ERROR', $second->providerFailure?->code);
+        $this->assertFalse($second->providerFailure?->retryable);
+        $this->assertSame(1, $adapter->startCalls);
+        $event = $run->events()->where('event_type', 'agent.turn.failed')->firstOrFail();
+        $this->assertSame(
+            'PROVIDER_PROTOCOL_ERROR',
+            $event->payload['provider_failure']['code'] ?? null,
+        );
+        $this->assertFalse($event->payload['provider_failure']['retryable'] ?? true);
+        $this->assertNull($event->payload['provider_failure']['http_status'] ?? null);
     }
 
     public function test_invalid_provider_arguments_are_returned_for_repair_before_any_physical_execution(): void
@@ -1150,11 +1612,12 @@ final class TalosAgentTurnServiceTest extends TestCase
             $this->app->make(TalosBrowserArtifactReader::class),
             $this->app->make(TalosBrowserFollowUpResolver::class),
             $this->app->make(TalosBrowserTaskRuntime::class),
+            $this->app->make(TalosPromptCachePlanner::class),
         );
     }
 
     /** @return array{User, TalosSession, TalosRun, TalosModelProfile} */
-    private function context(): array
+    private function context(string $provider = 'openai', string $model = 'gpt-test'): array
     {
         $user = User::factory()->create();
         $session = TalosSession::query()->create([
@@ -1165,11 +1628,13 @@ final class TalosAgentTurnServiceTest extends TestCase
         ]);
         $profile = TalosModelProfile::query()->create([
             'user_id' => $user->id,
-            'provider' => 'openai',
-            'model' => 'gpt-test',
+            'provider' => $provider,
+            'model' => $model,
             'display_name' => 'Agent test',
             'encrypted_secret' => Crypt::encryptString('provider-secret'),
-            'base_url' => 'https://api.openai.com/v1',
+            'base_url' => $provider === 'deepseek'
+                ? 'https://api.deepseek.com/v1'
+                : 'https://api.openai.com/v1',
             'status' => 'healthy',
         ]);
         $run = TalosRun::query()->create([
@@ -1180,8 +1645,8 @@ final class TalosAgentTurnServiceTest extends TestCase
             'status' => 'running',
             'prompt_hash' => hash('sha256', 'agent turn'),
             'prompt' => 'Continue with context.',
-            'provider' => 'openai',
-            'model' => 'gpt-test',
+            'provider' => $provider,
+            'model' => $model,
             'metadata' => [],
             'started_at' => now(),
         ]);
@@ -1234,17 +1699,25 @@ final class AgentTurnTestAdapter implements ProviderTurnAdapter
 
     public string $receivedSystemPrompt = '';
 
+    public ?string $receivedResponseMimeType = null;
+
+    public ?PromptCachePlan $receivedPromptCachePlan = null;
+
     public function __construct(
         private readonly bool $finalImmediately,
         private readonly bool $throwOnStart = false,
         private readonly ?\Closure $onStart = null,
         private readonly string $toolName = 'web_search',
         private readonly array $toolArguments = ['query' => 'AVM'],
+        private readonly string $provider = 'openai',
+        private readonly string $finalText = 'Completed with durable context.',
+        private readonly ?string $visibleReasoning = null,
+        private readonly ?TokenUsage $responseUsage = null,
     ) {}
 
     public function capabilities(): ProviderCapabilities
     {
-        return new ProviderCapabilities('openai', 'agent_test_v1', true, true, true, true, true, false, 'test');
+        return new ProviderCapabilities($this->provider, 'agent_test_v1', true, true, true, true, true, false, 'test');
     }
 
     public function start(ProviderTurnRequest $request): ProviderTurnResponse
@@ -1252,12 +1725,20 @@ final class AgentTurnTestAdapter implements ProviderTurnAdapter
         $this->startCalls++;
         $this->receivedMessages = $request->messages;
         $this->receivedSystemPrompt = $request->systemPrompt;
+        $this->receivedResponseMimeType = $request->responseMimeType;
+        $this->receivedPromptCachePlan = $request->promptCachePlan;
         ($this->onStart)?->__invoke();
         if ($this->throwOnStart) {
             throw new \RuntimeException('Provider response outcome is unknown.');
         }
         if ($this->finalImmediately) {
-            return ProviderTurnResponse::final('Completed with durable context.', 'response-final', 'stop', new TokenUsage(10, 5, 15));
+            return ProviderTurnResponse::final(
+                $this->finalText,
+                'response-final',
+                'stop',
+                $this->responseUsage ?? new TokenUsage(10, 5, 15),
+                $this->visibleReasoning,
+            );
         }
 
         $call = new ToolCall('provider-search-1', $this->toolName, $this->toolArguments, null, []);
@@ -1265,10 +1746,10 @@ final class AgentTurnTestAdapter implements ProviderTurnAdapter
         return ProviderTurnResponse::toolCalls(
             null,
             [$call],
-            new ProviderTurnState('openai', 'agent_test_v1', 'response-tools', 'test_state', ['marker' => 'continuation'], ['provider-search-1']),
+            new ProviderTurnState($this->provider, 'agent_test_v1', 'response-tools', 'test_state', ['marker' => 'continuation'], ['provider-search-1']),
             'response-tools',
             'tool_calls',
-            new TokenUsage(10, 5, 15),
+            $this->responseUsage ?? new TokenUsage(10, 5, 15),
         );
     }
 
@@ -1280,6 +1761,238 @@ final class AgentTurnTestAdapter implements ProviderTurnAdapter
         }
 
         return ProviderTurnResponse::final('Grounded final answer.', 'response-grounded', 'stop', new TokenUsage(12, 6, 18));
+    }
+}
+
+final class AgentStreamingTurnTestAdapter implements StreamingProviderTurnAdapter
+{
+    public int $streamStartCalls = 0;
+
+    public int $bufferedStartCalls = 0;
+
+    public function capabilities(): ProviderCapabilities
+    {
+        return new ProviderCapabilities('openai', 'agent_test_v1', true, false, false, false, true, false, 'test');
+    }
+
+    public function start(ProviderTurnRequest $request): ProviderTurnResponse
+    {
+        $this->bufferedStartCalls++;
+
+        return ProviderTurnResponse::final('Buffered answer.');
+    }
+
+    public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
+    {
+        return ProviderTurnResponse::final('Buffered continuation.');
+    }
+
+    public function streamStart(ProviderTurnRequest $request, Closure $isCancelled): ProviderStream
+    {
+        $this->streamStartCalls++;
+
+        return new ProviderStream(
+            ['Agent streamed ', 'answer.'],
+            new AgentStreamingTestDecoder,
+        );
+    }
+
+    public function streamContinue(
+        ProviderTurnState $state,
+        array $toolResults,
+        Closure $isCancelled,
+    ): ProviderStream {
+        return new ProviderStream(
+            ['Agent continued.'],
+            new AgentStreamingTestDecoder,
+        );
+    }
+}
+
+final class AgentStreamingTestDecoder implements ProviderStreamDecoder
+{
+    private int $sequence = 0;
+
+    private string $text = '';
+
+    public function push(string $chunk): array
+    {
+        $this->text .= $chunk;
+
+        return [new ProviderStreamEvent(
+            ProviderStreamEvent::TEXT_DELTA,
+            ++$this->sequence,
+            ['text' => $chunk],
+        )];
+    }
+
+    public function finish(): ProviderTurnResponse
+    {
+        return ProviderTurnResponse::final(
+            $this->text,
+            'agent-stream-response',
+            'stop',
+            new TokenUsage(5, 3, 8, 2),
+        );
+    }
+}
+
+final class AgentCancellingStreamingTurnTestAdapter implements StreamingProviderTurnAdapter
+{
+    public function capabilities(): ProviderCapabilities
+    {
+        return new ProviderCapabilities('openai', 'agent_test_v1', true, false, false, false, true, false, 'test');
+    }
+
+    public function start(ProviderTurnRequest $request): ProviderTurnResponse
+    {
+        return ProviderTurnResponse::final('Buffered answer.');
+    }
+
+    public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
+    {
+        return ProviderTurnResponse::final('Buffered continuation.');
+    }
+
+    public function streamStart(ProviderTurnRequest $request, Closure $isCancelled): ProviderStream
+    {
+        return new ProviderStream(
+            $this->chunks($isCancelled),
+            new AgentStreamingTestDecoder,
+        );
+    }
+
+    public function streamContinue(
+        ProviderTurnState $state,
+        array $toolResults,
+        Closure $isCancelled,
+    ): ProviderStream {
+        return new ProviderStream(
+            $this->chunks($isCancelled),
+            new AgentStreamingTestDecoder,
+        );
+    }
+
+    /** @return \Generator<int, string> */
+    private function chunks(Closure $isCancelled): \Generator
+    {
+        yield 'Partial answer.';
+
+        if ($isCancelled()) {
+            throw new ProviderStreamCancelledException('user_requested');
+        }
+
+        yield ' This must not be emitted.';
+    }
+}
+
+final class AgentStreamingToolTurnTestAdapter implements StreamingProviderTurnAdapter
+{
+    public int $streamStartCalls = 0;
+
+    public int $streamContinueCalls = 0;
+
+    public int $bufferedCalls = 0;
+
+    public function capabilities(): ProviderCapabilities
+    {
+        return new ProviderCapabilities('openai', 'agent_test_v1', true, true, true, true, true, false, 'test');
+    }
+
+    public function start(ProviderTurnRequest $request): ProviderTurnResponse
+    {
+        $this->bufferedCalls++;
+
+        return ProviderTurnResponse::final('Buffered answer.');
+    }
+
+    public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
+    {
+        $this->bufferedCalls++;
+
+        return ProviderTurnResponse::final('Buffered continuation.');
+    }
+
+    public function streamStart(ProviderTurnRequest $request, Closure $isCancelled): ProviderStream
+    {
+        $this->streamStartCalls++;
+
+        return new ProviderStream(
+            ['tool-round'],
+            new AgentStreamingToolCallDecoder,
+        );
+    }
+
+    public function streamContinue(
+        ProviderTurnState $state,
+        array $toolResults,
+        Closure $isCancelled,
+    ): ProviderStream {
+        $this->streamContinueCalls++;
+
+        return new ProviderStream(
+            ['Grounded streamed ', 'answer.'],
+            new AgentStreamingTestDecoder,
+        );
+    }
+}
+
+final class AgentStreamingToolCallDecoder implements ProviderStreamDecoder
+{
+    public function push(string $chunk): array
+    {
+        return [];
+    }
+
+    public function finish(): ProviderTurnResponse
+    {
+        $call = new ToolCall(
+            'provider-stream-search-1',
+            'web_search',
+            ['query' => 'AVM private query'],
+            null,
+            [],
+        );
+
+        return ProviderTurnResponse::toolCalls(
+            null,
+            [$call],
+            new ProviderTurnState(
+                'openai',
+                'agent_test_v1',
+                'response-stream-tools',
+                'test_state',
+                ['marker' => 'stream-continuation'],
+                ['provider-stream-search-1'],
+            ),
+            'response-stream-tools',
+            'tool_calls',
+            new TokenUsage(10, 5, 15),
+        );
+    }
+}
+
+final class ProviderFailureAgentTurnTestAdapter implements ProviderTurnAdapter
+{
+    public int $startCalls = 0;
+
+    public function __construct(private readonly ProviderFailure $failure) {}
+
+    public function capabilities(): ProviderCapabilities
+    {
+        return new ProviderCapabilities('openai', 'provider_failure_test_v1', true, false, false, false, false, false, 'test');
+    }
+
+    public function start(ProviderTurnRequest $request): ProviderTurnResponse
+    {
+        $this->startCalls++;
+
+        return ProviderTurnResponse::failure($this->failure);
+    }
+
+    public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
+    {
+        throw new \RuntimeException('A terminal provider failure must not continue.');
     }
 }
 

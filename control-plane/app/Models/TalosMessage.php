@@ -22,6 +22,7 @@ final class TalosMessage extends Model
         'content',
         'model_profile_id',
         'run_id',
+        'request_key',
         'metadata',
     ];
 

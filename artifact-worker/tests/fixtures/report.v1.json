@@ -1,0 +1,81 @@
+{
+  "contract": "talos.semantic_document.v1",
+  "title": "TALOS Quarterly Evidence Report",
+  "locale": "it-IT",
+  "author": "TALOS",
+  "sections": [
+    {
+      "type": "heading",
+      "level": 1,
+      "text": "Executive summary"
+    },
+    {
+      "type": "paragraph",
+      "text": "The verified workflow completed with Unicode evidence: citta, cafe, 日本語."
+    },
+    {
+      "type": "bullets",
+      "ordered": false,
+      "items": [
+        "Inputs were validated",
+        "Artifacts retain provenance"
+      ]
+    },
+    {
+      "type": "table",
+      "columns": [
+        {
+          "key": "metric",
+          "label": "Metric"
+        },
+        {
+          "key": "value",
+          "label": "Value"
+        }
+      ],
+      "rows": [
+        {
+          "metric": "Successful runs",
+          "value": 42
+        },
+        {
+          "metric": "Delta",
+          "value": -3
+        },
+        {
+          "metric": "Formula-like input",
+          "value": "=2+2"
+        }
+      ]
+    }
+  ],
+  "slides": [
+    {
+      "title": "Verified execution",
+      "body": "A bounded semantic document generated this presentation with Unicode evidence: 日本語.",
+      "bullets": [
+        "No arbitrary HTML",
+        "No executable content"
+      ]
+    }
+  ],
+  "sheets": [
+    {
+      "name": "Evidence",
+      "columns": [
+        "Metric",
+        "Value"
+      ],
+      "rows": [
+        [
+          "Successful runs",
+          42
+        ],
+        [
+          "Formula-like input",
+          "=2+2"
+        ]
+      ]
+    }
+  ]
+}

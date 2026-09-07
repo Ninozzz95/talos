@@ -22,6 +22,9 @@
         data-csrf-token="{{ csrf_token() }}"
         data-dev-browser-evidence="{{ ($devBrowserEvidence ?? false) ? 'true' : 'false' }}"
         data-development-mode="{{ ($developmentMode ?? false) ? 'true' : 'false' }}"
+        data-talos-avm-deep-dive-url="{{ $talosPublicLinks['avm_deep_dive'] ?? '' }}"
+        data-talos-patreon-url="{{ $talosPublicLinks['patreon'] ?? '' }}"
+        data-talos-kofi-url="{{ $talosPublicLinks['kofi'] ?? '' }}"
         aria-busy="true"
     ></div>
 </body>

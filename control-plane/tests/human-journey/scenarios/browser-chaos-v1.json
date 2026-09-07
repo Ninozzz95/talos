@@ -1,0 +1,120 @@
+{
+  "contract": "talos.human_journey.scenario",
+  "schema_version": 1,
+  "id": "BROWSER-CHAOS-001",
+  "title": "Browser recovery conversation",
+  "goal": "Recover the visible browser conversation from reload, stale-frame and worker-restart perturbations without duplicate side effects or false success.",
+  "user_facts": [
+    "The user can retry only through visible TALOS controls and natural messages.",
+    "The user cannot inspect private worker or database state."
+  ],
+  "persona": {
+    "id": "skeptical_it",
+    "language": "it-IT",
+    "traits": ["skeptical", "ambiguous"]
+  },
+  "initial_state": {
+    "route": "/chat",
+    "authenticated": true,
+    "browse_enabled": true,
+    "conversation": [
+      {
+        "role": "user",
+        "content": "Apri il sito controllato e dimmi cosa vedi."
+      }
+    ],
+    "fixture_ids": []
+  },
+  "allowed_actions": [
+    "send_message",
+    "click_visible_control",
+    "reload_page",
+    "wait_for_visible_state",
+    "end_trial"
+  ],
+  "checkpoints": [
+    {
+      "id": "initial-evidence",
+      "description": "Initial verified browser evidence is visible.",
+      "required_visible_outcomes": ["A current browser frame is visible in the conversation."],
+      "acceptable_alternatives": [],
+      "timeout_ms": 30000
+    },
+    {
+      "id": "recovered-evidence",
+      "description": "A new verified frame is visible after recovery.",
+      "required_visible_outcomes": ["Recovery produces one current post-action frame."],
+      "acceptable_alternatives": ["A bounded actionable recovery message is visible and retry remains available."],
+      "timeout_ms": 60000
+    }
+  ],
+  "forbidden_outcomes": [
+    {
+      "id": "no-duplicate-action",
+      "description": "No visible browser action is dispatched twice."
+    },
+    {
+      "id": "no-false-success",
+      "description": "TALOS never reports success without committed current evidence."
+    }
+  ],
+  "budgets": {
+    "max_turns": 20,
+    "max_tool_calls": 20,
+    "max_duration_ms": 300000,
+    "max_provider_tokens": 16000,
+    "max_cost_usd": 3
+  },
+  "perturbations": [
+    {
+      "id": "reload-during-processing",
+      "kind": "reload",
+      "at_checkpoint": "initial-evidence",
+      "recovery_expectation": "The pending operation reconciles without duplicate dispatch."
+    },
+    {
+      "id": "stale-frame-before-click",
+      "kind": "stale_frame",
+      "at_checkpoint": "initial-evidence",
+      "recovery_expectation": "The stale action is rejected and a fresh frame becomes visible."
+    },
+    {
+      "id": "worker-restart-before-retry",
+      "kind": "worker_restart",
+      "at_checkpoint": "recovered-evidence",
+      "recovery_expectation": "The prior session is fenced before one bounded retry."
+    }
+  ],
+  "graders": [
+    {
+      "id": "post-action-evidence",
+      "kind": "post_action_evidence",
+      "expected_outcome": "Every successful action has committed post-action evidence.",
+      "required": true
+    },
+    {
+      "id": "no-duplicate-side-effect",
+      "kind": "no_duplicate_side_effect",
+      "expected_outcome": "One human intent produces at most one browser side effect.",
+      "required": true
+    },
+    {
+      "id": "terminal-state",
+      "kind": "terminal_state",
+      "expected_outcome": "The trial ends passed, recoverably blocked or failed with an actionable classification.",
+      "required": true
+    },
+    {
+      "id": "cleanup",
+      "kind": "cleanup",
+      "expected_outcome": "Owned processes and temporary state are removed without touching user data.",
+      "required": true
+    }
+  ],
+  "semantic_rubric": null,
+  "cleanup": {
+    "strategy": "isolated_run",
+    "preserve_failure_evidence": true,
+    "max_retention_days": 7
+  }
+}

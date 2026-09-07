@@ -6,7 +6,7 @@ import type { TalosSession } from '../lib/talosTypes'
 export type TalosWorkspaceBootstrapSettings = {
     default_model_profile_id?: string | null
     default_context_set_id?: string | null
-    preferences?: { theme?: unknown; chat_layout?: unknown }
+    preferences?: { theme?: unknown; ui_scale?: unknown; chat_layout?: unknown }
 }
 
 export type TalosWorkspaceBootstrapDependencies = {
@@ -23,7 +23,7 @@ export type TalosWorkspaceBootstrapDependencies = {
     saveWorkspacePreferences: () => void
     loadWorkspacePreferences: () => void
     loadWorkspaceSettings: () => Promise<TalosWorkspaceBootstrapSettings>
-    applyChatLayoutPreference: (value: unknown) => void
+    applyChatLayoutPreference: (value: unknown, uiScaleValue?: unknown) => void
     openWindowFromSource: (id: 'runtime' | 'compare' | typeof TALOS_WORKSPACE_WINDOW_IDS[number], event?: undefined, source?: 'command') => void
     loadSessions: () => Promise<TalosSession[]>
     selectSession: (session: TalosSession) => Promise<void>
@@ -89,7 +89,10 @@ export function useTalosWorkspaceBootstrap(deps: TalosWorkspaceBootstrapDependen
             deps.theme.value = nextTheme
             localStorage.setItem('talos_theme', nextTheme)
         }
-        deps.applyChatLayoutPreference(settings.preferences?.chat_layout)
+        deps.applyChatLayoutPreference(
+            settings.preferences?.chat_layout,
+            settings.preferences?.ui_scale,
+        )
     }
 
     function applyQueryModules() {

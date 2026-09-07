@@ -197,10 +197,17 @@ async function readPreviewCanvas(page: Page) {
 
 test.describe.configure({ mode: 'serial' })
 
-test('fresh workspace shows background off and interface motion on without persisting a patch', async ({ page, isMobile }) => {
-    const ledger = await bootstrap(page)
+test('fresh Calm workspace keeps background off until explicit opt-in while interface motion stays on', async ({ page, isMobile }) => {
+    const ledger = await bootstrap(page, {
+        initialSettings: {
+            preferences: {
+                theme: 'calm',
+            },
+        },
+    })
     await openThemeMotion(page, isMobile)
 
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-theme-preset', 'calm')
     await expect(page.getByRole('button', { name: 'Motion mode Off' })).toHaveAttribute('aria-pressed', 'true')
     await expect(page.getByRole('switch', { name: 'Procedural background' })).not.toBeChecked()
     await expect(page.getByTestId('talos-background-motion-state')).toHaveText('Off')
@@ -213,6 +220,24 @@ test('fresh workspace shows background off and interface motion on without persi
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await expect(page.getByTestId('talos-interface-motion-state')).toHaveText('Suppressed')
     expect(ledger.patches).toHaveLength(0)
+
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await page.getByRole('button', { name: 'Motion mode Simple' }).click()
+    await expect(page.getByRole('button', { name: 'Motion mode Simple' })).toHaveAttribute('aria-pressed', 'true')
+    const backgroundSwitch = page.getByRole('switch', { name: 'Procedural background' })
+    await expect(backgroundSwitch).toBeChecked()
+    const optInAck = ledger.waitForAck({ key: 'theme_motion_v6', revision: 1 })
+    await page.getByRole('button', { name: 'Save motion' }).click()
+    await optInAck
+
+    const stage = page.getByTestId('talos-motion-background').locator('[data-talos-motion-stage]')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-theme-preset', 'calm')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-requested', 'simple')
+    await expect(page.locator('.talos-shell')).toHaveAttribute('data-motion-v6-effective', 'simple')
+    await expect(stage).toHaveAttribute('data-scene-id', 'calm')
+    await expect(stage).toHaveAttribute('data-active-kind', 'simple')
+    await expect(stage).toHaveAttribute('data-status', 'active')
+    expect(ledger.patches).toHaveLength(1)
 })
 
 for (const viewport of [

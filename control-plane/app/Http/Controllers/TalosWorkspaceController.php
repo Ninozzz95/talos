@@ -45,13 +45,23 @@ final class TalosWorkspaceController extends Controller
         $setting = TalosWorkspaceSetting::query()
             ->where('user_id', (int) Auth::id())
             ->first();
-        $preferences = TalosWorkspaceSetting::sanitizePreferences($setting?->preferences ?? []);
+        $preferences = $setting === null
+            ? TalosWorkspaceSetting::freshPreferences()
+            : TalosWorkspaceSetting::sanitizePreferences(
+                $setting->preferences ?? [],
+                $setting->getRawOriginal('preferences'),
+            );
 
         return response()->view('workspace', [
             'surface' => $surface,
             'bootAccent' => TalosThemeContrast::resolveAccent($preferences),
             'devBrowserEvidence' => $this->browserEvidenceEnvironment->rawEvidenceEnabled(),
             'developmentMode' => app()->environment(['local', 'testing']),
+            'talosPublicLinks' => [
+                'avm_deep_dive' => config('services.talos.public_links.avm_deep_dive'),
+                'patreon' => config('services.talos.public_links.patreon'),
+                'kofi' => config('services.talos.public_links.kofi'),
+            ],
         ])->withHeaders([
             'Cache-Control' => 'private, no-store, max-age=0, must-revalidate',
             'Pragma' => 'no-cache',

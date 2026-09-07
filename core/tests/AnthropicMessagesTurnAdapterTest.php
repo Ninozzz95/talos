@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__.'/../vendor/autoload.php';
 
 use Kadmos\Provider\AnthropicMessagesTurnAdapter;
+use Kadmos\Provider\PromptCachePlan;
 use Kadmos\Provider\ProviderRequestException;
 use Kadmos\Tool\ProviderInputResource;
 use Kadmos\Tool\ProviderTurnRequest;
@@ -31,7 +32,11 @@ function anthropicFixture(string $name): array
     return is_array($decoded) ? $decoded : throw new RuntimeException("Invalid Anthropic fixture: {$name}");
 }
 
-function anthropicRequest(bool $emptyProperties = false): ProviderTurnRequest
+function anthropicRequest(
+    bool $emptyProperties = false,
+    ?PromptCachePlan $promptCachePlan = null,
+    string $model = 'claude-sonnet-4-20250514',
+): ProviderTurnRequest
 {
     $definition = json_decode(
         (string) file_get_contents(__DIR__.'/fixtures/tool-contracts/valid-definition.json'),
@@ -45,7 +50,7 @@ function anthropicRequest(bool $emptyProperties = false): ProviderTurnRequest
 
     return new ProviderTurnRequest(
         provider: 'anthropic',
-        model: 'claude-sonnet-4-20250514',
+        model: $model,
         systemPrompt: 'Ground current web claims in tool evidence.',
         messages: [
             ['role' => 'user', 'content' => 'Earlier question.'],
@@ -55,6 +60,7 @@ function anthropicRequest(bool $emptyProperties = false): ProviderTurnRequest
         tools: [ToolDefinition::fromStrictArray($definition)],
         maxTokens: 2048,
         temperature: 0.0,
+        promptCachePlan: $promptCachePlan,
     );
 }
 
@@ -105,6 +111,17 @@ function testAnthropicAdapterNormalizesFinalMixedAndMultipleBlocks(): void
     $requests = [];
     $multiple = anthropicAdapter($responses, $requests)->start(anthropicRequest());
     assertAnthropicAdapter(array_map(static fn ($call): string => $call->providerCallId, $multiple->toolCalls) === ['toolu_browser_1', 'toolu_browser_2'], 'Anthropic tool_use block order must be preserved.');
+}
+
+function testAnthropicAdapterProjectsThinkingWithoutPrivateContinuationState(): void
+{
+    $responses = [anthropicFixture('final-visible-reasoning')['provider_response']];
+    $requests = [];
+    $response = anthropicAdapter($responses, $requests)->start(anthropicRequest());
+
+    assertAnthropicAdapter($response->text === 'The page is ready.', 'Anthropic thinking must not be duplicated into answer text.');
+    assertAnthropicAdapter($response->visibleReasoning === 'I compared the available evidence before answering.', 'Anthropic thinking text must become visible reasoning.');
+    assertAnthropicAdapter(! str_contains((string) $response->visibleReasoning, 'opaque-anthropic'), 'Anthropic signatures and redacted thinking must remain private.');
 }
 
 function testAnthropicAdapterContinuesWithImmediateToolResultBlocks(): void
@@ -214,13 +231,98 @@ function testAnthropicAdapterSerializesNativeImageAndPdfResourcesAndRejectsOther
     throw new RuntimeException('Anthropic non-PDF documents must fail closed.');
 }
 
+function testAnthropicAdapterMapsAutomaticAndExplicitCacheControlsAcrossContinuation(): void
+{
+    $plan = new PromptCachePlan(
+        mode: PromptCachePlan::MODE_AUTOMATIC,
+        keyHash: str_repeat('1', 64),
+        breakpoints: [
+            PromptCachePlan::BREAKPOINT_TOOLS,
+            PromptCachePlan::BREAKPOINT_SYSTEM,
+            'message:0',
+        ],
+        ttl: PromptCachePlan::TTL_1_HOUR,
+        minimumInputTokens: 1024,
+    );
+    $responses = [
+        anthropicFixture('mixed-preamble-tool-call')['provider_response'],
+        anthropicFixture('tool-error-continuation')['provider_response'],
+    ];
+    $requests = [];
+    $adapter = anthropicAdapter($responses, $requests);
+    $first = $adapter->start(anthropicRequest(
+        promptCachePlan: $plan,
+        model: 'claude-sonnet-5',
+    ));
+    $adapter->continue(
+        $first->state,
+        [ToolResult::error('toolu_browser_1', 'BROWSER_TIMEOUT', 'Retry later.')],
+    );
+
+    foreach ($requests as $index => $request) {
+        assertAnthropicAdapter(
+            ($request['payload']['cache_control'] ?? null) === [
+                'type' => 'ephemeral',
+                'ttl' => '1h',
+            ],
+            "Anthropic request {$index} must preserve automatic one-hour caching.",
+        );
+        assertAnthropicAdapter(
+            ($request['payload']['tools'][0]['cache_control'] ?? null) === [
+                'type' => 'ephemeral',
+                'ttl' => '1h',
+            ],
+            "Anthropic request {$index} must preserve the tool breakpoint.",
+        );
+    }
+    assertAnthropicAdapter(
+        ($requests[0]['payload']['system'][0]['cache_control']['ttl'] ?? null) === '1h',
+        'Anthropic must map the system breakpoint onto a native text block.',
+    );
+    assertAnthropicAdapter(
+        ($requests[0]['payload']['messages'][0]['content'][0]['cache_control']['ttl'] ?? null) === '1h',
+        'Anthropic must map canonical message indexes onto native content blocks.',
+    );
+    assertAnthropicAdapter(
+        ($requests[1]['payload']['system'][0]['cache_control']['ttl'] ?? null) === '1h',
+        'Anthropic continuation must preserve the system breakpoint.',
+    );
+}
+
+function testAnthropicAdapterOmitsCacheControlForProviderDefaultAndDisabledModes(): void
+{
+    foreach ([PromptCachePlan::MODE_PROVIDER_DEFAULT, PromptCachePlan::MODE_DISABLED] as $mode) {
+        $plan = new PromptCachePlan(
+            mode: $mode,
+            keyHash: str_repeat($mode === PromptCachePlan::MODE_DISABLED ? '2' : '3', 64),
+            breakpoints: [],
+            ttl: null,
+            minimumInputTokens: null,
+        );
+        $responses = [anthropicFixture('final-text')['provider_response']];
+        $requests = [];
+        anthropicAdapter($responses, $requests)->start(anthropicRequest(
+            promptCachePlan: $plan,
+            model: 'claude-opus-4-8',
+        ));
+        $wire = json_encode($requests[0]['payload'], JSON_THROW_ON_ERROR);
+        assertAnthropicAdapter(
+            ! str_contains($wire, 'cache_control'),
+            "Anthropic {$mode} mode must not create a cache write or read hint.",
+        );
+    }
+}
+
 $tests = [
     'testAnthropicAdapterNormalizesFinalMixedAndMultipleBlocks',
+    'testAnthropicAdapterProjectsThinkingWithoutPrivateContinuationState',
     'testAnthropicAdapterSerializesEmptySchemaPropertiesAsAnObject',
     'testAnthropicAdapterContinuesWithImmediateToolResultBlocks',
     'testAnthropicAdapterFailsClosedForMalformedRefusedIncompleteAndProviderErrors',
     'testAnthropicCapabilitiesDoNotClaimProviderManagedOrVerifiedModelState',
     'testAnthropicAdapterSerializesNativeImageAndPdfResourcesAndRejectsOtherDocuments',
+    'testAnthropicAdapterMapsAutomaticAndExplicitCacheControlsAcrossContinuation',
+    'testAnthropicAdapterOmitsCacheControlForProviderDefaultAndDisabledModes',
 ];
 
 foreach ($tests as $test) {

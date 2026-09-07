@@ -1,10 +1,47 @@
 import { computed, ref } from 'vue'
 import { talosFetch } from '../lib/api'
-import type { TalosModelProfile } from '../lib/talosTypes'
+import type { TalosModelCatalogFault, TalosModelProfile, TalosProviderModelCatalog } from '../lib/talosTypes'
 import { talosProviderById } from '../lib/talosProviders'
 
 type ApiEnvelope<T> = {
     data: T
+}
+
+export class TalosModelCatalogError extends Error {
+    fault: TalosModelCatalogFault
+
+    constructor(fault: TalosModelCatalogFault) {
+        super(fault.message || 'TALOS could not load the provider model catalog.')
+        this.name = 'TalosModelCatalogError'
+        this.fault = fault
+    }
+}
+
+export type DiscoverDraftModelCatalogPayload = {
+    provider: TalosModelProfile['provider']
+    base_url?: string | null
+    secret?: string | null
+}
+
+function catalogFaultFromError(error: unknown, provider: string): TalosModelCatalogFault | null {
+    const details = (error as { details?: unknown } | null)?.details
+    const raw = details && typeof details === 'object' ? (details as { error?: unknown }).error : null
+
+    if (!raw || typeof raw !== 'object' || typeof (raw as { code?: unknown }).code !== 'string') {
+        return null
+    }
+
+    const fault = raw as Record<string, unknown>
+
+    return {
+        code: String(fault.code),
+        message: typeof fault.message === 'string' && fault.message.trim()
+            ? fault.message
+            : 'TALOS could not load the provider model catalog.',
+        retryable: fault.retryable === true,
+        retry_after_seconds: typeof fault.retry_after_seconds === 'number' ? fault.retry_after_seconds : null,
+        provider: typeof fault.provider === 'string' ? fault.provider : provider,
+    }
 }
 
 const sharedModelProfiles = ref<TalosModelProfile[]>([])
@@ -130,6 +167,23 @@ export function useTalosModelProfiles() {
         }
     }
 
+    async function setModelProfileComposerVisibility(profileId: string, showInComposer: boolean) {
+        modelProfileError.value = null
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosModelProfile>>(`/api/talos/model-profiles/${profileId}`, {
+                method: 'PATCH',
+                body: JSON.stringify({ show_in_composer: showInComposer }),
+                validationMessage: 'TALOS could not update composer visibility for this model profile.',
+            })
+
+            return storeModelProfile(response.data)
+        } catch (error) {
+            modelProfileError.value = error instanceof Error ? error.message : 'TALOS could not update composer visibility.'
+            throw error
+        }
+    }
+
     async function deleteModelProfile(profileId: string) {
         modelProfileError.value = null
 
@@ -141,6 +195,55 @@ export function useTalosModelProfiles() {
             modelProfiles.value = modelProfiles.value.filter((profile) => profile.id !== profileId)
         } catch (error) {
             modelProfileError.value = error instanceof Error ? error.message : 'TALOS could not delete this model profile.'
+            throw error
+        }
+    }
+
+    async function updateAndProbeModelProfile(profileId: string, payload: UpdateTalosModelProfilePayload) {
+        const updated = await updateModelProfile(profileId, payload)
+
+        return probeModelProfile(updated.id)
+    }
+
+    async function discoverDraftModelCatalog(payload: DiscoverDraftModelCatalogPayload) {
+        modelProfileError.value = null
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosProviderModelCatalog>>('/api/talos/model-profiles/discover-draft', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+                redirectOnAuthFailure: false,
+                validationMessage: 'TALOS could not discover models for this provider.',
+            })
+
+            return response.data
+        } catch (error) {
+            const fault = catalogFaultFromError(error, payload.provider)
+            if (fault) {
+                throw new TalosModelCatalogError(fault)
+            }
+            modelProfileError.value = error instanceof Error ? error.message : 'TALOS could not discover models for this provider.'
+            throw error
+        }
+    }
+
+    async function discoverModelCatalog(profileId: string) {
+        modelProfileError.value = null
+        const provider = findModelProfile(profileId)?.provider ?? 'openai'
+
+        try {
+            const response = await talosFetch<ApiEnvelope<TalosProviderModelCatalog>>(`/api/talos/model-profiles/${profileId}/models`, {
+                method: 'GET',
+                redirectOnAuthFailure: false,
+            })
+
+            return response.data
+        } catch (error) {
+            const fault = catalogFaultFromError(error, provider)
+            if (fault) {
+                throw new TalosModelCatalogError(fault)
+            }
+            modelProfileError.value = error instanceof Error ? error.message : 'TALOS could not load this provider model catalog.'
             throw error
         }
     }
@@ -178,9 +281,13 @@ export function useTalosModelProfiles() {
         createModelProfile,
         createAndProbeModelProfile,
         updateModelProfile,
+        updateAndProbeModelProfile,
+        setModelProfileComposerVisibility,
         deleteModelProfile,
         probeModelProfile,
         probeDraftModelProfile,
+        discoverDraftModelCatalog,
+        discoverModelCatalog,
         findModelProfile,
     }
 }

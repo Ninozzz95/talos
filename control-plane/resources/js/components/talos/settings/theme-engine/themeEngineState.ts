@@ -1,10 +1,14 @@
 import {
-    TALOS_CHAT_BUBBLE_SCALE_OPTIONS,
     TALOS_CHAT_COMPOSER_MODE_OPTIONS,
+    TALOS_CHAT_MESSAGE_STYLE_OPTIONS,
     TALOS_DEFAULT_CHAT_LAYOUT,
     TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS,
     sanitizeTalosChatLayout,
 } from '../../../../lib/talosChatLayout'
+import {
+    isTalosMessageScale,
+    TALOS_LEGACY_MESSAGE_SCALE,
+} from '../../../../lib/talosUiScale'
 import {
     validateTalosThemeAreaContrast,
     validateTalosThemeStateContrast,
@@ -57,7 +61,8 @@ const THEME_CUSTOMIZATION_KEYS = [
     'effect_intensity', 'scrollbar_track', 'scrollbar_thumb', 'scrollbar_thumb_hover', 'scrollbar_width',
 ] as const
 const UI_ANIMATION_KEYS = ['open_close', 'surface_transition', 'feedback', 'hover', 'duration_scale', 'intensity', 'easing', 'stagger'] as const
-const CHAT_LAYOUT_KEYS = ['bubble_scale', 'composer_mode', 'advanced_rail_expanded', 'mobile_window_presentation'] as const
+const CHAT_LAYOUT_KEYS = ['message_scale', 'composer_mode', 'message_style', 'advanced_rail_expanded', 'mobile_window_presentation'] as const
+const LEGACY_CHAT_LAYOUT_KEYS = [...CHAT_LAYOUT_KEYS, 'bubble_scale'] as const
 const COLOR_CUSTOMIZATION_KEYS = new Set(['background', 'panel', 'text', 'accent', 'secondary', 'border', 'scrollbar_track', 'scrollbar_thumb', 'scrollbar_thumb_hover'])
 const values = <T extends { value: string }>(options: readonly T[]) => new Set(options.map((option) => option.value))
 const FONT_VALUES = values(TALOS_THEME_FONT_OPTIONS)
@@ -74,8 +79,9 @@ const UI_SURFACE_VALUES = values(TALOS_UI_ANIMATION_SURFACE_OPTIONS)
 const UI_FEEDBACK_VALUES = values(TALOS_UI_ANIMATION_FEEDBACK_OPTIONS)
 const UI_HOVER_VALUES = values(TALOS_UI_ANIMATION_HOVER_OPTIONS)
 const UI_EASING_VALUES = values(TALOS_UI_ANIMATION_EASING_OPTIONS)
-const BUBBLE_VALUES = values(TALOS_CHAT_BUBBLE_SCALE_OPTIONS)
+const LEGACY_BUBBLE_VALUES = new Set(Object.keys(TALOS_LEGACY_MESSAGE_SCALE))
 const COMPOSER_VALUES = values(TALOS_CHAT_COMPOSER_MODE_OPTIONS)
+const MESSAGE_STYLE_VALUES = values(TALOS_CHAT_MESSAGE_STYLE_OPTIONS)
 const MOBILE_WINDOW_PRESENTATION_VALUES = values(TALOS_MOBILE_WINDOW_PRESENTATION_OPTIONS)
 
 function strictInteger(value: unknown, min: number, max: number) {
@@ -131,12 +137,22 @@ function strictUiAnimationCustomization(value: unknown) {
     return true
 }
 
-function strictChatLayout(value: unknown) {
+function strictChatLayout(value: unknown, allowLegacyBubbleScale: boolean) {
     if (value === undefined) return true
-    if (!isRecord(value) || !hasOnlyKeys(value, CHAT_LAYOUT_KEYS)) return false
+    if (!isRecord(value)
+        || !hasOnlyKeys(value, allowLegacyBubbleScale ? LEGACY_CHAT_LAYOUT_KEYS : CHAT_LAYOUT_KEYS)) return false
 
-    return (value.bubble_scale === undefined || (typeof value.bubble_scale === 'string' && BUBBLE_VALUES.has(value.bubble_scale)))
+    const hasMessageScale = Object.hasOwn(value, 'message_scale')
+    const hasLegacyBubbleScale = Object.hasOwn(value, 'bubble_scale')
+    if (hasMessageScale && hasLegacyBubbleScale) return false
+    if (hasMessageScale && !isTalosMessageScale(value.message_scale)) return false
+    if (hasLegacyBubbleScale && (!allowLegacyBubbleScale
+        || typeof value.bubble_scale !== 'string'
+        || !LEGACY_BUBBLE_VALUES.has(value.bubble_scale))) return false
+
+    return true
         && (value.composer_mode === undefined || (typeof value.composer_mode === 'string' && COMPOSER_VALUES.has(value.composer_mode)))
+        && (value.message_style === undefined || (typeof value.message_style === 'string' && MESSAGE_STYLE_VALUES.has(value.message_style)))
         && (value.advanced_rail_expanded === undefined || typeof value.advanced_rail_expanded === 'boolean')
         && (value.mobile_window_presentation === undefined
             || (typeof value.mobile_window_presentation === 'string'
@@ -173,7 +189,7 @@ function strictTimestamp(value: unknown) {
         && offsetMinute <= 59
 }
 
-function strictThemePayload(value: Record<string, unknown>) {
+function strictThemePayload(value: Record<string, unknown>, allowLegacyBubbleScale: boolean) {
     return typeof value.id === 'string'
         && /^[a-z0-9][a-z0-9_-]{0,79}$/.test(value.id)
         && typeof value.name === 'string'
@@ -187,7 +203,7 @@ function strictThemePayload(value: Record<string, unknown>) {
         && (value.motion_v6 === undefined || parseTalosMotionV6Preferences(value.motion_v6).success)
         && (value.ui_animation_profile === undefined || (typeof value.ui_animation_profile === 'string' && UI_PROFILE_VALUES.has(value.ui_animation_profile)))
         && strictUiAnimationCustomization(value.ui_animation_customization)
-        && strictChatLayout(value.chat_layout)
+        && strictChatLayout(value.chat_layout, allowLegacyBubbleScale)
         && strictTimestamp(value.created_at)
         && strictTimestamp(value.updated_at)
 }
@@ -318,7 +334,7 @@ export function inspectStrictTalosThemeImport(value: unknown): StrictTalosThemeI
         return rejectedImport()
     }
 
-    if (!strictThemePayload(value.theme)) {
+    if (!strictThemePayload(value.theme, schema === 'talos_theme_export_v1')) {
         return rejectedImport()
     }
 

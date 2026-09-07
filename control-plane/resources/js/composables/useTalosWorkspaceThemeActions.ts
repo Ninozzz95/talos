@@ -9,7 +9,7 @@ export function useTalosWorkspaceThemeActions(options: {
     uiError: Ref<string | null>
     updateWorkspaceSettings: (payload: UpdateTalosSettingsPayload) => Promise<TalosWorkspaceSettings>
     loadPersistedWorkspaceSettings: () => Promise<void>
-    applyChatLayoutPreference: (value: unknown) => void
+    applyChatLayoutPreference: (value: unknown, uiScaleValue?: unknown) => void
     saveWorkspacePreferences: () => void
 }) {
     function persistThemePreference(nextTheme: TalosThemeId) {
@@ -44,7 +44,10 @@ export function useTalosWorkspaceThemeActions(options: {
                 ...nextSettings,
                 preferences: nextSettings.preferences,
             }
-            options.applyChatLayoutPreference(nextSettings.preferences.chat_layout)
+            options.applyChatLayoutPreference(
+                nextSettings.preferences.chat_layout,
+                nextSettings.preferences.ui_scale,
+            )
             return
         }
 

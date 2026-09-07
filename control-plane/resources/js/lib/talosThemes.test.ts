@@ -7,7 +7,9 @@ import {
     validateTalosNormalTextPairs,
 } from './talosContrast'
 import {
+    TALOS_DEFAULT_THEME,
     TALOS_THEME_PRESETS,
+    normalizeTalosTheme,
     parseTalosThemeExport,
     sanitizeTalosThemeCustomization,
     talosThemeNormalTextContrast,
@@ -65,7 +67,7 @@ function contrast(first: string, second: string) {
 }
 
 describe('TALOS theme token contract', () => {
-    it('keeps the authoritative 13 preset registry', () => {
+    it('keeps the authoritative 14 preset registry while retaining the legacy fallback', () => {
         expect(TALOS_THEME_PRESETS.map((preset) => preset.id)).toEqual([
             'forge',
             'paper',
@@ -79,8 +81,36 @@ describe('TALOS theme token contract', () => {
             'violet',
             'claudius',
             'basicus',
-    'telemetry',
+            'telemetry',
+            'calm',
         ])
+        expect(TALOS_DEFAULT_THEME).toBe('telemetry')
+        expect(normalizeTalosTheme('__missing__')).toBe('telemetry')
+    })
+
+    it('ports the approved Calm identity without warming its neutral light surfaces', () => {
+        const calm = TALOS_THEME_PRESETS.find((preset) => preset.id === 'calm')
+
+        expect(calm).toMatchObject({
+            label: 'Calm',
+            description: 'Quiet grey surfaces, typography-led hierarchy, gold kept as a sparing signature.',
+            defaultDensity: 'comfortable',
+            defaultRadius: 'soft',
+            defaultMotion: 'subtle',
+            isLight: false,
+            fontUi: 'Instrument Sans',
+            fontMono: 'JetBrains Mono',
+            preview: {
+                background: '#1e1f22',
+                accent: '#c08b3c',
+                secondary: '#8e9095',
+                line: '#36373b',
+            },
+            poster: '/talos/backgrounds/calm-poster.webp',
+            defaultEffect: 'none',
+        })
+        expect(talosThemeModeVariantStyle('calm', 'light')['--talos-background']).toBe('#f1f2f4')
+        expect(talosThemeModeVariantStyle('calm', 'dark')['--talos-background']).toBe('#1e1f22')
     })
 
     it.each(['light', 'dark'] as const)('provides complete readable accent tokens in %s mode', (mode) => {

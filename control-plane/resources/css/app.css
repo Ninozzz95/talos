@@ -59,6 +59,7 @@ button {
     --talos-radius-card: 8px;
     --talos-radius-control: 6px;
     --talos-density: 1;
+    --talos-ui-scale: 1;
     --talos-accent: #c98b32;
     --talos-accent-border: #a87224;
     --talos-accent-hover: #d99f49;
@@ -1643,24 +1644,66 @@ button {
 /* v7 R0 */
 
 .talos-shell {
-    --talos-space-1: calc(4px * var(--talos-density, 1));
-    --talos-space-2: calc(8px * var(--talos-density, 1));
-    --talos-space-3: calc(12px * var(--talos-density, 1));
-    --talos-space-4: calc(16px * var(--talos-density, 1));
-    --talos-space-5: calc(20px * var(--talos-density, 1));
-    --talos-space-6: calc(24px * var(--talos-density, 1));
-    --talos-space-7: calc(32px * var(--talos-density, 1));
-    --talos-space-8: calc(40px * var(--talos-density, 1));
+    --talos-space-1: calc(4px * var(--talos-density, 1) * var(--talos-ui-scale, 1));
+    --talos-space-2: calc(8px * var(--talos-density, 1) * var(--talos-ui-scale, 1));
+    --talos-space-3: calc(12px * var(--talos-density, 1) * var(--talos-ui-scale, 1));
+    --talos-space-4: calc(16px * var(--talos-density, 1) * var(--talos-ui-scale, 1));
+    --talos-space-5: calc(20px * var(--talos-density, 1) * var(--talos-ui-scale, 1));
+    --talos-space-6: calc(24px * var(--talos-density, 1) * var(--talos-ui-scale, 1));
+    --talos-space-7: calc(32px * var(--talos-density, 1) * var(--talos-ui-scale, 1));
+    --talos-space-8: calc(40px * var(--talos-density, 1) * var(--talos-ui-scale, 1));
     --talos-font-chrome: var(--talos-font-mono);
     --talos-font-prose: var(--talos-font-ui);
-    --talos-text-title: 16px;
-    --talos-text-body: 14px;
-    --talos-text-label: 12.5px;
-    --talos-text-caption: 11.5px;
+    --talos-text-title: calc(16px * var(--talos-ui-scale, 1));
+    --talos-text-body: calc(14px * var(--talos-ui-scale, 1));
+    --talos-text-label: calc(12.5px * var(--talos-ui-scale, 1));
+    --talos-text-caption: calc(11.5px * var(--talos-ui-scale, 1));
+    --talos-ui-header-height: calc(56px * var(--talos-ui-scale, 1));
+    --talos-ui-control-height: calc(40px * var(--talos-ui-scale, 1));
+    --talos-ui-control-height-sm: calc(32px * var(--talos-ui-scale, 1));
+    --talos-ui-control-height-icon: calc(36px * var(--talos-ui-scale, 1));
+    --talos-ui-control-height-lg: calc(44px * var(--talos-ui-scale, 1));
+    --talos-ui-control-gap: calc(8px * var(--talos-ui-scale, 1));
+    --talos-ui-control-padding-inline: calc(16px * var(--talos-ui-scale, 1));
     --talos-surface-0: var(--talos-background);
     --talos-surface-1: var(--talos-card);
     --talos-surface-2: var(--talos-panel);
     --talos-font-readable: 'OpenDyslexic', var(--talos-font-ui), ui-sans-serif, sans-serif;
+}
+
+.talos-workspace-header {
+    min-height: var(--talos-ui-header-height);
+}
+
+.talos-ui-button {
+    gap: var(--talos-ui-control-gap);
+    font-size: var(--talos-text-body);
+}
+
+@media (min-width: 1024px) {
+    .talos-ui-button[data-size="sm"] {
+        height: var(--talos-ui-control-height-sm);
+        min-height: var(--talos-ui-control-height-sm);
+        padding-inline: calc(var(--talos-ui-control-padding-inline) * 0.75);
+    }
+
+    .talos-ui-button[data-size="default"] {
+        height: var(--talos-ui-control-height);
+        min-height: var(--talos-ui-control-height);
+        padding-inline: var(--talos-ui-control-padding-inline);
+    }
+
+    .talos-ui-button[data-size="icon"] {
+        width: var(--talos-ui-control-height-icon);
+        height: var(--talos-ui-control-height-icon);
+        min-height: var(--talos-ui-control-height-icon);
+    }
+
+    .talos-ui-button[data-size="lg"] {
+        height: var(--talos-ui-control-height-lg);
+        min-height: var(--talos-ui-control-height-lg);
+        padding-inline: calc(var(--talos-ui-control-padding-inline) * 1.25);
+    }
 }
 
 .talos-type-title {
@@ -1834,6 +1877,37 @@ button {
 }
 
 /* end v7 R0 */
+
+/* v7 F0 native Sonner cutover */
+[data-sonner-toaster] {
+    pointer-events: auto;
+    --normal-bg: var(--talos-card);
+    --normal-text: var(--talos-text);
+    --normal-border: var(--talos-border);
+    --gray1: var(--talos-card);
+    --gray12: var(--talos-text);
+}
+
+[data-sonner-toaster] [data-sonner-toast] {
+    pointer-events: auto;
+    background: var(--talos-card);
+    color: var(--talos-text);
+    border-color: var(--talos-border);
+}
+
+.talos-sonner-motion-disabled [data-sonner-toast],
+.talos-sonner-motion-disabled [data-sonner-toast] * {
+    transition: none !important;
+    animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-sonner-toast],
+    [data-sonner-toast] * {
+        transition: none !important;
+        animation: none !important;
+    }
+}
 
 /* v7 R2 */
 

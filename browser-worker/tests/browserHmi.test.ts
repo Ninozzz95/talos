@@ -94,6 +94,21 @@ async function currentFrameSha256(sessionId: string): Promise<string> {
   return `sha256:${createHash("sha256").update(frame).digest("hex")}`;
 }
 
+async function refTargets(sessionId: string) {
+  const screenshot = await app.inject({
+    method: "POST",
+    url: `/sessions/${sessionId}/screenshot`,
+    headers: ownerHeaders,
+  });
+  expect(screenshot.statusCode).toBe(200);
+  const expectedFrameSha256 = `sha256:${screenshot.json().data.sha256}`;
+  return app.inject({
+    method: "GET",
+    url: `/sessions/${sessionId}/hmi/ref/targets?state_version=1&expected_frame_sha256=${encodeURIComponent(expectedFrameSha256)}`,
+    headers: ownerHeaders,
+  });
+}
+
 function executionPayload(
   inspected: { data: { frame_sha256: string; target: { fingerprint: string } } },
   payload = pointerPayload(0.2, 0.28),
@@ -145,7 +160,518 @@ async function executePointer(
   });
 }
 
+function refPayload(
+  frame: { frame_sha256: string; snapshot_id: string },
+  ref: string,
+  interactionId = "123e4567-e89b-42d3-a456-426614174005",
+) {
+  return {
+    schema_version: "talos_browser_hmi_ref_v2",
+    interaction_id: interactionId,
+    state_version: 1,
+    expected_frame_sha256: frame.frame_sha256,
+    snapshot_id: frame.snapshot_id,
+    ref,
+    button: "left",
+    click_count: 1,
+  };
+}
+
+async function preflightRef(sessionId: string, payload: ReturnType<typeof refPayload>) {
+  return app.inject({
+    method: "POST",
+    url: `/sessions/${sessionId}/hmi/ref/preflight`,
+    headers: ownerHeaders,
+    payload,
+  });
+}
+
+async function executeRef(
+  sessionId: string,
+  inspected: { data: { target: { fingerprint: string } } },
+  payload: ReturnType<typeof refPayload>,
+  effectClassification: "ordinary" | "sensitive",
+  commandId: string,
+) {
+  const execution = {
+    ...payload,
+    command_id: commandId,
+    expected_fingerprint: inspected.data.target.fingerprint,
+    effect_classification: effectClassification,
+    sensitive_effect_authorized: effectClassification === "sensitive",
+  };
+  return app.inject({
+    method: "POST",
+    url: `/sessions/${sessionId}/hmi/ref/execute`,
+    headers: {
+      ...ownerHeaders,
+      authorization: `Bearer ${await signTestActionCapability(actionKeys, {
+        ownerRef: ownerHeaders["x-talos-owner-ref"],
+        workerSessionId: sessionId,
+        actionId: commandId,
+        operation: "hmi_ref_execute",
+        preconditionStateVersion: payload.state_version,
+        request: execution,
+      }, {
+        attestation: {
+          kind: "user_approval",
+          approval_id: `approval-${commandId}`,
+          approval_request_sha256: `sha256:${"a".repeat(64)}`,
+          execution_lease_sha256: `sha256:${"b".repeat(64)}`,
+        },
+      })}`,
+    },
+    payload: execution,
+  });
+}
+
 describe("TALOS Browser HMI pointer boundary", () => {
+  it("STAGE2B-004 returns a safe semantic target frame bound to current screenshot evidence", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+
+      const response = await refTargets(sessionId);
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().data).toMatchObject({
+        schema_version: "talos_browser_hmi_ref_targets_v2",
+        session_id: sessionId,
+        state_version: 1,
+        frame_sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+        snapshot_id: expect.stringMatching(/^hmi_ref_[a-f0-9]{64}$/),
+        targets: expect.arrayContaining([
+          {
+            ref: expect.stringMatching(/^e[1-9][0-9]*$/),
+            role: "button",
+            name: "Reject optional cookies",
+            destination: null,
+          },
+          {
+            ref: expect.stringMatching(/^e[1-9][0-9]*$/),
+            role: "link",
+            name: "Sensitive query link",
+            destination: "https://example.com/reset",
+          },
+        ]),
+      });
+      expect(response.body).not.toContain("TALOS HMI Fixture");
+      expect(response.body).not.toContain("browser-secret");
+      expect(response.body).not.toContain("accessibility_refs_v1");
+      expect(response.body).not.toContain("Disabled nested action");
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
+  it("STAGE2B-BREG-002 rejects semantic targets when the live page no longer matches the cached screenshot at the same state", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const screenshot = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/screenshot`,
+        headers: ownerHeaders,
+      });
+      expect(screenshot.statusCode).toBe(200);
+      const expectedFrameSha256 = `sha256:${screenshot.json().data.sha256}`;
+      const session = await sessions.get(sessionId);
+      await session.page.evaluate(() => {
+        document.body.replaceChildren();
+        const replacement = document.createElement("button");
+        replacement.type = "button";
+        replacement.textContent = "Timer-injected action";
+        replacement.style.cssText = "position:fixed;inset:80px auto auto 80px;width:220px;height:64px";
+        document.body.append(replacement);
+      });
+
+      const response = await app.inject({
+        method: "GET",
+        url: `/sessions/${sessionId}/hmi/ref/targets?state_version=1&expected_frame_sha256=${encodeURIComponent(expectedFrameSha256)}`,
+        headers: ownerHeaders,
+      });
+
+      expect(response.statusCode, response.body).toBe(409);
+      expect(response.json()).toMatchObject({ code: "TALOS_BROWSER_FRAME_STALE" });
+      expect(sessions.hmiRefSnapshot(sessionId)).toBeUndefined();
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
+  it("STAGE2B-005 executes an ordinary aria-ref through locator actionability and commits one evidence result", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const session = await sessions.get(sessionId);
+      await session.page.evaluate(() => {
+        const button = document.createElement("button");
+        button.id = "semantic-ordinary";
+        button.type = "button";
+        button.textContent = "Semantic ordinary action";
+        button.style = "position:fixed;left:600px;top:500px;width:160px;height:48px;z-index:9999";
+        document.body.append(button);
+      });
+      const targetResponse = await refTargets(sessionId);
+      const targetFrame = targetResponse.json().data;
+      const target = targetFrame.targets.find((candidate: { name: string }) => candidate.name === "Semantic ordinary action");
+      expect(target).toBeDefined();
+      const payload = refPayload(targetFrame, target.ref);
+
+      const inspected = await preflightRef(sessionId, payload);
+
+      expect(inspected.statusCode, inspected.body).toBe(200);
+      expect(inspected.json().data).toMatchObject({
+        schema_version: "talos_browser_hmi_ref_preflight_v2",
+        session_id: sessionId,
+        state_version: 1,
+        frame_sha256: targetFrame.frame_sha256,
+        snapshot_id: targetFrame.snapshot_id,
+        ref: target.ref,
+        target: {
+          name: "Semantic ordinary action",
+          effect_attestation: "browser_default",
+          required_effect_classification: "ordinary",
+        },
+      });
+      expect(inspected.json().data.target.fingerprint).toMatch(/^sha256:[a-f0-9]{64}$/);
+
+      const commandId = "hmi_ref_cmd_ordinary";
+      const executed = await executeRef(sessionId, inspected.json(), payload, "ordinary", commandId);
+
+      expect(executed.statusCode, executed.body).toBe(200);
+      expect(executed.json().data).toMatchObject({
+        command_id: commandId,
+        source_state_version: 1,
+        state_version: 2,
+        effect_classification: "ordinary",
+        sensitive_effect_authorized: false,
+        target: { name: "Semantic ordinary action" },
+        screenshot: { mime_type: "image/png" },
+        snapshot: { format: "accessibility_refs_v1" },
+      });
+      expect(session.stateVersion).toBe(2);
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
+  it("STAGE2B-BREG-004 keeps a partially visible semantic card bound to its painted viewport point without auto-scroll", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const session = await sessions.get(sessionId);
+      await session.page.evaluate(() => {
+        (window as unknown as { __stage2bPartialClicks: number }).__stage2bPartialClicks = 0;
+        document.body.style.minHeight = "1400px";
+        const card = document.createElement("article");
+        card.id = "semantic-partial-card";
+        card.setAttribute("role", "link");
+        card.setAttribute("tabindex", "0");
+        card.setAttribute("aria-label", "Open partially visible vehicle");
+        card.style.cssText = "position:absolute;left:120px;top:300px;width:520px;height:700px;z-index:100;background:white";
+        card.addEventListener("click", () => {
+          (window as unknown as { __stage2bPartialClicks: number }).__stage2bPartialClicks += 1;
+        });
+        document.body.append(card);
+        window.scrollTo(0, 0);
+      });
+      const targetFrame = (await refTargets(sessionId)).json().data;
+      const target = targetFrame.targets.find(
+        (candidate: { name: string }) => candidate.name === "Open partially visible vehicle",
+      );
+      expect(target).toBeDefined();
+      const payload = refPayload(
+        targetFrame,
+        target.ref,
+        "123e4567-e89b-42d3-a456-426614174019",
+      );
+
+      const inspected = await preflightRef(sessionId, payload);
+
+      expect(inspected.statusCode, inspected.body).toBe(200);
+      expect(await session.page.evaluate(() => window.scrollY)).toBe(0);
+      expect(inspected.json().data.point).toMatchObject({
+        x: expect.any(Number),
+        y: expect.any(Number),
+      });
+      expect(inspected.json().data.point.y).toBeLessThan(viewport.height);
+
+      const executed = await executeRef(
+        sessionId,
+        inspected.json(),
+        payload,
+        "sensitive",
+        "hmi_ref_cmd_partial_card",
+      );
+
+      expect(executed.statusCode, executed.body).toBe(200);
+      expect(await session.page.evaluate(() => window.scrollY)).toBe(0);
+      expect(await session.page.evaluate(
+        () => (window as unknown as { __stage2bPartialClicks: number }).__stage2bPartialClicks,
+      )).toBe(1);
+      expect(session.stateVersion).toBe(2);
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
+  it("STAGE2B-BREG-005 commits a trusted sensitive SPA ref when pointerup removes the target before mouseup and click", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const session = await sessions.get(sessionId);
+      await session.page.evaluate(() => {
+        (window as unknown as { __stage2bSpaActivations: number }).__stage2bSpaActivations = 0;
+        const card = document.createElement("article");
+        card.id = "semantic-spa-card";
+        card.setAttribute("role", "link");
+        card.setAttribute("tabindex", "0");
+        card.setAttribute("aria-label", "Open SPA vehicle detail");
+        card.style.cssText = "position:fixed;left:120px;top:520px;width:520px;height:400px;z-index:100;background:white";
+        card.addEventListener("pointerup", () => {
+          (window as unknown as { __stage2bSpaActivations: number }).__stage2bSpaActivations += 1;
+          history.pushState({}, "", "#vehicle-detail");
+          card.remove();
+          const heading = document.createElement("h1");
+          heading.textContent = "Vehicle detail";
+          document.body.append(heading);
+        });
+        document.body.append(card);
+      });
+      const targetFrame = (await refTargets(sessionId)).json().data;
+      const target = targetFrame.targets.find(
+        (candidate: { name: string }) => candidate.name === "Open SPA vehicle detail",
+      );
+      expect(target).toBeDefined();
+      const payload = refPayload(
+        targetFrame,
+        target.ref,
+        "123e4567-e89b-42d3-a456-426614174020",
+      );
+      const inspected = await preflightRef(sessionId, payload);
+      expect(inspected.statusCode, inspected.body).toBe(200);
+      expect(inspected.json().data.target.required_effect_classification).toBe("sensitive");
+
+      const executed = await executeRef(
+        sessionId,
+        inspected.json(),
+        payload,
+        "sensitive",
+        "hmi_ref_cmd_spa_pointerup_navigation",
+      );
+
+      expect(executed.statusCode, executed.body).toBe(200);
+      expect(executed.json().data).toMatchObject({
+        state_version: 2,
+        effect_classification: "sensitive",
+        screenshot: { mime_type: "image/png" },
+        snapshot: { format: "accessibility_refs_v1" },
+      });
+      expect(await session.page.evaluate(
+        () => (window as unknown as { __stage2bSpaActivations: number }).__stage2bSpaActivations,
+      )).toBe(1);
+      expect(session.page.url()).toContain("#vehicle-detail");
+      expect(session.status).toBe("active");
+      expect(session.stateVersion).toBe(2);
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
+  it("STAGE2B-006 executes a listener-backed ref only as sensitive and replays one command exactly once", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const session = await sessions.get(sessionId);
+      const targetFrame = (await refTargets(sessionId)).json().data;
+      const target = targetFrame.targets.find((candidate: { name: string }) => candidate.name === "Reject optional cookies");
+      expect(target).toBeDefined();
+      const payload = refPayload(targetFrame, target.ref, "123e4567-e89b-42d3-a456-426614174006");
+      const inspected = await preflightRef(sessionId, payload);
+      expect(inspected.statusCode, inspected.body).toBe(200);
+      expect(inspected.json().data.target).toMatchObject({
+        effect_attestation: "unattestable",
+        required_effect_classification: "sensitive",
+      });
+
+      const commandId = "hmi_ref_cmd_sensitive_once";
+      const first = await executeRef(sessionId, inspected.json(), payload, "sensitive", commandId);
+      const replay = await executeRef(sessionId, inspected.json(), payload, "sensitive", commandId);
+
+      expect(first.statusCode, first.body).toBe(200);
+      expect(replay.statusCode, replay.body).toBe(200);
+      expect(replay.json().data.capture_id).toBe(first.json().data.capture_id);
+      expect(await session.page.locator("#cookie-banner").count()).toBe(0);
+      expect(session.stateVersion).toBe(2);
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
+  it("STAGE2B-007 rejects stale snapshot/ref, replacement, disabled, off-viewport, and obscured targets before dispatch", async () => {
+    const cases = ["stale_snapshot", "detached", "same_name_replacement", "disabled", "off_viewport", "obscured"] as const;
+    for (const scenario of cases) {
+      const sessionId = await createSession();
+      try {
+        await navigate(sessionId);
+        const session = await sessions.get(sessionId);
+        await session.page.evaluate(() => {
+          (window as unknown as { __stage2bClicks: number }).__stage2bClicks = 0;
+          const button = document.createElement("button");
+          button.id = "semantic-stale-target";
+          button.type = "button";
+          button.textContent = "Stable semantic target";
+          button.style = "position:fixed;left:600px;top:500px;width:160px;height:48px;z-index:100";
+          button.addEventListener("click", () => {
+            (window as unknown as { __stage2bClicks: number }).__stage2bClicks += 1;
+          });
+          document.body.append(button);
+        });
+        const targetFrame = (await refTargets(sessionId)).json().data;
+        const target = targetFrame.targets.find((candidate: { name: string }) => candidate.name === "Stable semantic target");
+        expect(target, scenario).toBeDefined();
+        let payload = refPayload(targetFrame, target.ref, "123e4567-e89b-42d3-a456-426614174007");
+
+        if (scenario === "stale_snapshot") {
+          payload = { ...payload, snapshot_id: `hmi_ref_${"f".repeat(64)}` };
+        } else {
+          await session.page.evaluate((mutation) => {
+            const button = document.querySelector<HTMLButtonElement>("#semantic-stale-target");
+            if (!button) throw new Error("fixture target missing");
+            if (mutation === "detached") button.remove();
+            if (mutation === "same_name_replacement") {
+              const replacement = button.cloneNode(true) as HTMLButtonElement;
+              replacement.addEventListener("click", () => {
+                (window as unknown as { __stage2bClicks: number }).__stage2bClicks += 1;
+              });
+              button.replaceWith(replacement);
+            }
+            if (mutation === "disabled") button.disabled = true;
+            if (mutation === "off_viewport") button.style.top = "700px";
+            if (mutation === "obscured") {
+              const overlay = document.createElement("div");
+              overlay.id = "semantic-overlay";
+              overlay.style = "position:fixed;left:590px;top:490px;width:180px;height:68px;z-index:9999;background:white";
+              document.body.append(overlay);
+            }
+          }, scenario);
+        }
+
+        const response = await preflightRef(sessionId, payload);
+
+        expect(response.statusCode, `${scenario}: ${response.body}`).toBe(409);
+        expect(response.json()).toMatchObject({ code: "TALOS_BROWSER_TARGET_STALE" });
+        expect(await session.page.evaluate(() => (window as unknown as { __stage2bClicks: number }).__stage2bClicks)).toBe(0);
+        expect(session.stateVersion).toBe(1);
+      } finally {
+        await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+      }
+    }
+  }, 30_000);
+
+  it("STAGE2B-007 denies upload, download, and new-context ref targets before dispatch", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const session = await sessions.get(sessionId);
+      await session.page.evaluate(() => {
+        const upload = document.createElement("input");
+        upload.type = "file";
+        upload.setAttribute("aria-label", "Upload file");
+        upload.style = "position:fixed;left:580px;top:360px;width:180px;height:32px";
+        const download = document.createElement("a");
+        download.href = "data:text/plain,blocked";
+        download.download = "blocked.txt";
+        download.textContent = "Download file";
+        download.style = "position:fixed;left:580px;top:410px;width:180px;height:32px";
+        const popup = document.createElement("a");
+        popup.href = "https://example.com/popup";
+        popup.target = "_blank";
+        popup.textContent = "Open new window";
+        popup.style = "position:fixed;left:580px;top:460px;width:180px;height:32px";
+        document.body.append(upload, download, popup);
+      });
+      const targetFrame = (await refTargets(sessionId)).json().data;
+      const expectations = [
+        ["Upload file", "TALOS_BROWSER_HMI_UPLOAD_DENIED"],
+        ["Download file", "TALOS_BROWSER_HMI_DOWNLOAD_DENIED"],
+        ["Open new window", "TALOS_BROWSER_HMI_NEW_CONTEXT_DENIED"],
+      ] as const;
+
+      for (const [name, code] of expectations) {
+        const target = targetFrame.targets.find((candidate: { name: string }) => candidate.name === name);
+        expect(target, name).toBeDefined();
+        const payload = refPayload(targetFrame, target.ref, "123e4567-e89b-42d3-a456-426614174017");
+        const inspected = await preflightRef(sessionId, payload);
+        expect(inspected.statusCode, `${name}: ${inspected.body}`).toBe(200);
+
+        const response = await executeRef(
+          sessionId,
+          inspected.json(),
+          payload,
+          "sensitive",
+          `hmi_ref_denied_${name.toLowerCase().replaceAll(" ", "_")}`,
+        );
+
+        expect(response.statusCode, `${name}: ${response.body}`).toBe(403);
+        expect(response.json()).toMatchObject({ code });
+        expect(session.stateVersion).toBe(1);
+      }
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  }, 30_000);
+
+  it("STAGE2B-008 fences a post-dispatch ref failure as ambiguous and never dispatches it twice", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const session = await sessions.get(sessionId);
+      await session.page.evaluate(() => {
+        (window as unknown as { __stage2bAmbiguousClicks: number }).__stage2bAmbiguousClicks = 0;
+        const button = document.createElement("button");
+        button.id = "semantic-ambiguous";
+        button.type = "button";
+        button.textContent = "Ambiguous semantic action";
+        button.style = "position:fixed;left:600px;top:500px;width:160px;height:48px;z-index:9999";
+        button.addEventListener("click", () => {
+          (window as unknown as { __stage2bAmbiguousClicks: number }).__stage2bAmbiguousClicks += 1;
+        });
+        document.body.append(button);
+      });
+      const targetFrame = (await refTargets(sessionId)).json().data;
+      const target = targetFrame.targets.find((candidate: { name: string }) => candidate.name === "Ambiguous semantic action");
+      expect(target).toBeDefined();
+      const payload = refPayload(targetFrame, target.ref, "123e4567-e89b-42d3-a456-426614174008");
+      const inspected = await preflightRef(sessionId, payload);
+      expect(inspected.statusCode, inspected.body).toBe(200);
+      expect(inspected.json().data.target.required_effect_classification).toBe("sensitive");
+
+      const originalScreenshot = session.page.screenshot.bind(session.page);
+      Object.defineProperty(session.page, "screenshot", {
+        configurable: true,
+        value: async () => Buffer.alloc(4 * 1024 * 1024 + 1),
+      });
+      const commandId = "hmi_ref_cmd_ambiguous_once";
+      const first = await executeRef(sessionId, inspected.json(), payload, "sensitive", commandId);
+      const replay = await executeRef(sessionId, inspected.json(), payload, "sensitive", commandId);
+      Object.defineProperty(session.page, "screenshot", { configurable: true, value: originalScreenshot });
+
+      expect(first.statusCode, first.body).toBe(409);
+      expect(first.json()).toMatchObject({
+        code: "TALOS_BROWSER_HMI_RECOVERY_REQUIRED",
+        details: { command_id: commandId, idempotency_status: "ambiguous", state_version: 2 },
+      });
+      expect(replay.statusCode, replay.body).toBe(409);
+      expect(replay.json()).toEqual(first.json());
+      expect(await session.page.evaluate(() => (window as unknown as { __stage2bAmbiguousClicks: number }).__stage2bAmbiguousClicks)).toBe(1);
+      expect(session.stateVersion).toBe(2);
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  }, 30_000);
+
   it("requires the dedicated HMI capability without enabling model actions", async () => {
     const sessionId = await createSession(false);
     try {
@@ -238,8 +764,8 @@ describe("TALOS Browser HMI pointer boundary", () => {
           is_submit: false,
           is_download: false,
           opens_new_context: false,
-          effect_attestation: "browser_default",
-          required_effect_classification: "ordinary",
+          effect_attestation: "unattestable",
+          required_effect_classification: "sensitive",
           visible: true,
           disabled: false,
         },
@@ -258,7 +784,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
 
       const response = await preflight(sessionId, pointerPayload(0.200625, 0.280834));
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode, response.body).toBe(200);
       expect(response.json().data).toMatchObject({
         point: {
           normalized_x: 0.200625,
@@ -295,6 +821,68 @@ describe("TALOS Browser HMI pointer boundary", () => {
     }
   });
 
+  it("STAGE2A-016 direction-only worker scroll targets the deterministic viewport center", async () => {
+    const sessionId = await createSession();
+    try {
+      await navigate(sessionId);
+      const session = await sessions.get(sessionId);
+      await session.page.evaluate(() => {
+        document.body.replaceChildren();
+        document.body.style.minHeight = "2400px";
+
+        const nested = document.createElement("aside");
+        nested.id = "nested-scroller";
+        nested.style.cssText = [
+          "position:fixed",
+          "inset:0 auto 0 0",
+          "width:300px",
+          "overflow:auto",
+          "background:white",
+        ].join(";");
+        const nestedContent = document.createElement("div");
+        nestedContent.style.height = "2200px";
+        nestedContent.textContent = "Independent table of contents";
+        nested.append(nestedContent);
+
+        const main = document.createElement("main");
+        main.style.cssText = "margin-left:320px;min-height:2400px;background:linear-gradient(white,black)";
+        main.textContent = "Main document";
+        document.body.append(nested, main);
+        window.scrollTo(0, 0);
+        nested.scrollTop = 0;
+      });
+      await session.page.mouse.move(120, 120);
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/hmi/scroll`,
+        headers: ownerHeaders,
+        payload: {
+          schema_version: "talos_browser_hmi_scroll_v2",
+          interaction_id: "123e4567-e89b-42d3-a456-426614174016",
+          state_version: 1,
+          expected_frame_sha256: await currentFrameSha256(sessionId),
+          delta_y: 520,
+        },
+      });
+      const scrollPosition = await session.page.evaluate(() => ({
+        document: window.scrollY,
+        nested: document.querySelector<HTMLElement>("#nested-scroller")?.scrollTop ?? -1,
+      }));
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().data).toMatchObject({
+        schema_version: "talos_browser_hmi_scroll_v2",
+        source_state_version: 1,
+        state_version: 2,
+      });
+      expect(scrollPosition.document).toBeGreaterThan(0);
+      expect(scrollPosition.nested).toBe(0);
+    } finally {
+      await app.inject({ method: "DELETE", url: `/sessions/${sessionId}`, headers: ownerHeaders });
+    }
+  });
+
   it("executes an attestable ordinary target without sensitive authorization and binds the result", async () => {
     const sessionId = await createSession();
     try {
@@ -324,7 +912,7 @@ describe("TALOS Browser HMI pointer boundary", () => {
           commandId,
         ), ownerHeaders);
 
-      expect(response.statusCode).toBe(200);
+      expect(response.statusCode, response.body).toBe(200);
       const result = response.json().data;
       expect(result).toMatchObject({
         command_id: commandId,

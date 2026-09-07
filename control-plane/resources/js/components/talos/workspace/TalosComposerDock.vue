@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Loader2 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Select from '../../ui/Select.vue'
@@ -7,13 +7,20 @@ import TalosPromptEnhancerPopover from '../chat/TalosPromptEnhancerPopover.vue'
 import TalosSlimComposer from '../chat/TalosSlimComposer.vue'
 import type { TalosChatViewportController } from '../../../composables/useTalosChatViewport'
 import type { TalosPromptEnhancementResult } from '../../../composables/useTalosPromptEnhancement'
-import { talosModelProfileIsCallable } from '../../../lib/talosProviders'
-import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosCommand, TalosComposerMode, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
+import type { TalosDictationStatus, TalosResolvedDictationMode } from '../../../composables/useTalosDictation'
+import type { TalosDictationMode } from '../../../lib/talosDictationModes'
+import type { TalosBrowserCurrentPage, TalosBrowserMode, TalosBrowserRecoveryAction, TalosCommand, TalosComposerMode, TalosContextSet, TalosModelProfile, TalosModelRoutingProfile } from '../../../lib/talosTypes'
+import { talosUrlHost } from '../../../lib/talosUrlDetect'
+
+// Lives behind the model popover's v-if, so it is loaded on demand and kept
+// out of the initial app chunk (the composer sits in the static entry closure).
+const TalosComposerModelPicker = defineAsyncComponent(() => import('./TalosComposerModelPicker.vue'))
 
 const props = withDefaults(defineProps<{
     prompt: string
     browserContext?: { host: string; title: string } | null
     browserMode: TalosBrowserMode
+    browserRecoveryAction?: TalosBrowserRecoveryAction
     browseSetupFault?: string | null
     attachments?: Array<{ id: string; file_id: string | null; grant_id: string | null; name: string; status: string; failure_reason: string | null }>
     vaultFiles?: Array<{ id: string; original_name: string; status: string }>
@@ -26,6 +33,7 @@ const props = withDefaults(defineProps<{
     commands: TalosCommand[]
     canSend: boolean
     sending: boolean
+    streamingActive?: boolean
     statusText: string
     modelLabel: string
     modelProvider?: string | null
@@ -42,6 +50,10 @@ const props = withDefaults(defineProps<{
     selectedModelRoutingProfileId: string
     selectedContextSetId: string
     selectedContextSet: TalosContextSet | null
+    selectedEffort?: string
+    thinking?: boolean
+    effortLevels?: string[]
+    supportsThinking?: boolean
     loadingModelProfiles: boolean
     loadingModelRoutingProfiles: boolean
     loadingContextSets: boolean
@@ -49,13 +61,34 @@ const props = withDefaults(defineProps<{
     enhancingPrompt: boolean
     promptEnhancementError: string | null
     visibility: Record<string, boolean>
+    dictationStatus?: TalosDictationStatus
+    dictationError?: string | null
+    dictationMode?: TalosDictationMode
+    dictationRecordingStartedAt?: number | null
+    dictationResolvedMode?: TalosResolvedDictationMode | null
+    dictationSupported?: boolean
+    autoBrowseUrl?: string | null
 }>(), {
     devBrowserEvidence: false,
+    browserRecoveryAction: 'restart',
+    selectedEffort: 'high',
+    thinking: false,
+    effortLevels: () => [],
+    supportsThinking: false,
+    dictationStatus: 'idle',
+    dictationError: null,
+    dictationMode: 'local',
+    dictationRecordingStartedAt: null,
+    dictationResolvedMode: null,
+    dictationSupported: false,
+    autoBrowseUrl: null,
+    streamingActive: false,
 })
 
 const emit = defineEmits<{
     updatePrompt: [prompt: string]
     send: []
+    cancelStream: []
     openModel: []
     openContext: []
     openSettings: []
@@ -65,6 +98,8 @@ const emit = defineEmits<{
     browseOpen: [url: string | null]
     selectModelProfile: [profileId: string]
     selectModelRoutingProfile: [profileId: string]
+    selectEffort: [level: string]
+    selectThinking: [enabled: boolean]
     selectContextSet: [contextSetId: string]
     refreshModelAndContext: []
     openModelLab: []
@@ -77,6 +112,7 @@ const emit = defineEmits<{
     disableBrowse: []
     stopBrowse: []
     restartBrowse: []
+    recoverBrowse: []
     captureScreenshot: []
     captureSnapshot: []
     closePopovers: []
@@ -84,13 +120,27 @@ const emit = defineEmits<{
     attachVaultFile: [fileId: string]
     removeAttachment: [id: string]
     openVaultPicker: []
+    toggleDictation: []
+    finishDictation: []
+    cancelDictation: []
+    retryDictation: []
+    acceptAutoBrowse: []
+    dismissAutoBrowse: []
 }>()
 
 const composerPrompt = computed({
     get: () => props.prompt,
     set: (value: string) => emit('updatePrompt', value),
 })
+const autoBrowseHost = computed(() => (props.autoBrowseUrl ? talosUrlHost(props.autoBrowseUrl) : ''))
 const composerRoot = ref<HTMLElement | null>(null)
+const slimComposer = ref<InstanceType<typeof TalosSlimComposer> | null>(null)
+
+function focusPrompt() {
+    slimComposer.value?.focusPrompt()
+}
+
+defineExpose({ focusPrompt })
 
 function enhancementOverlayOpen() {
     return Boolean(props.promptEnhancementResult || props.enhancingPrompt || props.promptEnhancementError)
@@ -155,6 +205,13 @@ onBeforeUnmount(() => {
                 <span class="min-w-0 truncate"><strong>Browse evidence</strong> <span class="text-[var(--talos-muted)]">{{ browserContext.host }} - {{ browserContext.title }}</span></span>
                 <Button size="sm" variant="ghost" aria-label="Detach browser evidence" @click="emit('detachBrowserContext')">Detach</Button>
             </div>
+            <div v-if="autoBrowseUrl" data-testid="talos-auto-browse-prompt" class="pointer-events-auto mx-auto mb-2 flex w-full max-w-[820px] items-center justify-between gap-3 rounded-md border border-[var(--talos-accent-border)] bg-[var(--talos-accent-soft)] px-3 py-2 text-xs text-[var(--talos-text)]">
+                <span class="min-w-0 truncate"><strong>Browse this link?</strong> <span class="text-[var(--talos-muted)]">{{ autoBrowseHost }}</span></span>
+                <span class="flex shrink-0 items-center gap-1">
+                    <Button size="sm" @click="emit('acceptAutoBrowse')">Enable Browse</Button>
+                    <Button size="sm" variant="ghost" aria-label="Dismiss browse suggestion" @click="emit('dismissAutoBrowse')">Dismiss</Button>
+                </span>
+            </div>
             <Transition name="talos-popover" @leave="completePopoverLeave">
                 <div
                     v-if="modelPopoverOpen"
@@ -164,46 +221,18 @@ onBeforeUnmount(() => {
                     aria-label="Model selection"
                     class="talos-composer-popover talos-model-popover pointer-events-auto absolute bottom-full left-1/2 mb-3 w-full max-w-[min(420px,calc(100vw-2rem))] -translate-x-1/2 rounded-md talos-elev-2 p-3"
                 >
-                <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Model profile</div>
-                <label class="sr-only" for="talos-workspace-model-profile">Server-side model profile</label>
-                <Select
-                    id="talos-workspace-model-profile"
-                    :model-value="selectedModelProfileId"
+                <div class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Model for this conversation</div>
+                <TalosComposerModelPicker
                     class="mt-2"
-                    :disabled="loadingModelProfiles || !modelProfiles.length"
-                    aria-label="Server-side model profile"
-                    @update:model-value="(value) => emit('selectModelProfile', String(value))"
-                >
-                    <option value="">{{ loadingModelProfiles ? 'Loading profiles' : 'Choose profile' }}</option>
-                    <option
-                        v-for="profile in modelProfiles"
-                        :key="profile.id"
-                        :value="profile.id"
-                        :disabled="!talosModelProfileIsCallable(profile)"
-                    >
-                        {{ profile.display_name }} - {{ profile.model }} - {{ profile.status }}
-                    </option>
-                </Select>
-                <div class="mt-3 text-xs font-semibold uppercase text-[var(--talos-muted)]">Routing profile</div>
-                <label class="sr-only" for="talos-workspace-model-routing-profile">Model routing profile</label>
-                <Select
-                    id="talos-workspace-model-routing-profile"
-                    :model-value="selectedModelRoutingProfileId"
-                    class="mt-2"
-                    :disabled="loadingModelRoutingProfiles || !modelRoutingProfiles.length"
-                    aria-label="Model routing profile"
-                    @update:model-value="(value) => emit('selectModelRoutingProfile', String(value))"
-                >
-                    <option value="">{{ loadingModelRoutingProfiles ? 'Loading routes' : 'No routing profile' }}</option>
-                    <option
-                        v-for="profile in modelRoutingProfiles"
-                        :key="profile.id"
-                        :value="profile.id"
-                        :disabled="profile.status !== 'enabled' || profile.lanes.length === 0"
-                    >
-                        {{ profile.name }} - {{ profile.lanes.length }} lanes - {{ profile.status }}
-                    </option>
-                </Select>
+                    :model-profiles="modelProfiles"
+                    :model-routing-profiles="modelRoutingProfiles"
+                    :selected-model-profile-id="selectedModelProfileId"
+                    :selected-model-routing-profile-id="selectedModelRoutingProfileId"
+                    :loading-model-profiles="loadingModelProfiles"
+                    :loading-model-routing-profiles="loadingModelRoutingProfiles"
+                    @select-model-profile="(value) => emit('selectModelProfile', value)"
+                    @select-model-routing-profile="(value) => emit('selectModelRoutingProfile', value)"
+                />
                 <div class="mt-3 flex justify-between gap-2">
                     <Button size="sm" variant="ghost" @click="emit('refreshModelAndContext')">Refresh</Button>
                     <Button size="sm" @click="emit('openModelLab')">Model Lab</Button>
@@ -287,16 +316,23 @@ onBeforeUnmount(() => {
             </Transition>
 
             <TalosSlimComposer
+                ref="slimComposer"
                 v-model:prompt="composerPrompt"
                 :commands="commands"
                 :can-send="canSend"
                 :sending="sending"
+                :streaming-active="streamingActive"
                 :status-text="statusText"
                 :model-label="modelLabel"
                 :model-provider="modelProvider"
+                :selected-effort="selectedEffort"
+                :thinking="thinking"
+                :effort-levels="effortLevels"
+                :supports-thinking="supportsThinking"
                 :context-label="contextLabel"
                 :temporary-mode="temporaryMode"
                 :browser-mode="browserMode"
+                :browser-recovery-action="browserRecoveryAction"
                 :browse-setup-fault="browseSetupFault"
                 :last-user-prompt="lastUserPrompt"
                 :attachments="attachments"
@@ -305,11 +341,20 @@ onBeforeUnmount(() => {
                 :browser-current-page="browserCurrentPage"
                 :dev-browser-evidence="devBrowserEvidence"
                 :composer-mode="composerMode"
+                :dictation-status="dictationStatus"
+                :dictation-error="dictationError"
+                :dictation-mode="dictationMode"
+                :dictation-recording-started-at="dictationRecordingStartedAt"
+                :dictation-resolved-mode="dictationResolvedMode"
+                :dictation-supported="dictationSupported"
                 :send-disabled-reason="sendDisabledReason"
                 :enhancer-disabled-reason="enhancerDisabledReason"
                 :visibility="visibility"
                 @send="emit('send')"
+                @cancel-stream="emit('cancelStream')"
                 @open-model="emit('openModel')"
+                @select-effort="emit('selectEffort', $event)"
+                @select-thinking="emit('selectThinking', $event)"
                 @open-context="emit('openContext')"
                 @open-settings="emit('openSettings')"
                 @toggle-temporary="emit('toggleTemporary')"
@@ -320,12 +365,17 @@ onBeforeUnmount(() => {
                 @disable-browse="emit('disableBrowse')"
                 @stop-browse="emit('stopBrowse')"
                 @restart-browse="emit('restartBrowse')"
+                @recover-browse="emit('recoverBrowse')"
                 @capture-screenshot="emit('captureScreenshot')"
                 @capture-snapshot="emit('captureSnapshot')"
                 @attach-files="emit('attachFiles', $event)"
                 @attach-vault-file="emit('attachVaultFile', $event)"
                 @remove-attachment="emit('removeAttachment', $event)"
                 @open-vault-picker="emit('openVaultPicker')"
+                @toggle-dictation="emit('toggleDictation')"
+                @finish-dictation="emit('finishDictation')"
+                @cancel-dictation="emit('cancelDictation')"
+                @retry-dictation="emit('retryDictation')"
             />
         </div>
     </div>

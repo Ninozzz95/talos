@@ -5,12 +5,17 @@ import { isAbsolute, relative, resolve } from "node:path";
 import ipaddr from "ipaddr.js";
 import type { BrowserContext, Route } from "playwright";
 import { BrowserError } from "./BrowserErrors.js";
+import { BrowserTestFixturePermit } from "./BrowserTestFixturePermit.js";
 
 const FIXTURE_ROOT = resolve(process.cwd(), "tests", "fixtures");
 const SAFE_EMPTY_BROWSER_URL = "about:blank";
 const MAX_EVIDENCE_URL_BYTES = 2_048;
+const DISABLED_TEST_FIXTURE_PERMIT = BrowserTestFixturePermit.disabled();
 
-export async function assertAllowedBrowserUrl(value: string): Promise<void> {
+export async function assertAllowedBrowserUrl(
+  value: string,
+  fixturePermit: BrowserTestFixturePermit = DISABLED_TEST_FIXTURE_PERMIT,
+): Promise<void> {
   let url: URL;
   try {
     url = new URL(value);
@@ -23,9 +28,11 @@ export async function assertAllowedBrowserUrl(value: string): Promise<void> {
     throw invalidUrl();
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") throw invalidUrl();
+  if (url.username !== "" || url.password !== "") throw invalidUrl();
 
   const hostname = normalizeHostname(url.hostname);
   if (hostname === "") throw invalidUrl();
+  if (fixturePermit.allowsUrl(value)) return;
   if (isReservedHostname(hostname)) throw invalidUrl();
   let addresses: Array<{ address: string }>;
   try {
@@ -36,10 +43,13 @@ export async function assertAllowedBrowserUrl(value: string): Promise<void> {
   if (addresses.length === 0 || addresses.some(({ address }) => isPrivateOrReservedIp(address))) throw invalidUrl();
 }
 
-export async function installBrowserRequestPolicy(context: BrowserContext): Promise<void> {
+export async function installBrowserRequestPolicy(
+  context: BrowserContext,
+  fixturePermit: BrowserTestFixturePermit = DISABLED_TEST_FIXTURE_PERMIT,
+): Promise<void> {
   await context.route("**/*", async (route: Route) => {
     try {
-      await assertAllowedBrowserUrl(route.request().url());
+      await assertAllowedBrowserUrl(route.request().url(), fixturePermit);
       await route.continue();
     } catch {
       await route.abort("blockedbyclient");

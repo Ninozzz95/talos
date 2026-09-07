@@ -8,6 +8,9 @@ import type {
     TalosBrowserActivity as TalosBrowserActivityItem,
     TalosBrowserHmiChallenge,
     TalosBrowserPointerFrame,
+    TalosBrowserRefFrame,
+    TalosBrowserRefInteraction,
+    TalosBrowserScrollFrame,
     TalosBrowserSession,
     TalosBrowserSnapshotPreview,
     TalosBrowserTask,
@@ -28,6 +31,9 @@ const props = withDefaults(defineProps<{
     interactionLocked?: boolean
     interactionError?: string | null
     pendingInteractionApproval?: TalosBrowserHmiChallenge | null
+    refFrame?: TalosBrowserRefFrame | null
+    refTargetsLoading?: boolean
+    refTargetsError?: string | null
     devBrowserEvidence?: boolean
     excludedScreenshotArtifactIds?: string[]
     pendingToolApprovals?: TalosPendingToolApproval[]
@@ -45,6 +51,9 @@ const props = withDefaults(defineProps<{
     interactionLocked: false,
     interactionError: null,
     pendingInteractionApproval: null,
+    refFrame: null,
+    refTargetsLoading: false,
+    refTargetsError: null,
     devBrowserEvidence: false,
     excludedScreenshotArtifactIds: () => [],
     pendingToolApprovals: () => [],
@@ -60,6 +69,8 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
     interact: [frame: TalosBrowserPointerFrame]
+    interactRef: [interaction: TalosBrowserRefInteraction]
+    scroll: [frame: TalosBrowserScrollFrame]
     confirm: [decision: 'approve' | 'reject']
     decideToolApproval: [approval: TalosPendingToolApproval, decision: 'approve' | 'reject']
     cancelTask: [taskId: string]
@@ -114,6 +125,9 @@ const taskIsProgressing = computed(() => Boolean(props.browserTask && ['created'
 const showActivity = computed(() => Boolean(props.browserTask)
     || Boolean(props.browserTaskError)
     || props.pendingToolApprovals.length > 0
+    || Boolean(props.refFrame)
+    || props.refTargetsLoading
+    || Boolean(props.refTargetsError)
     || hasScreenshotEvidence.value
     || hasRawEvidence.value
     || showSanitizedStatus.value)
@@ -191,10 +205,15 @@ const showActivity = computed(() => Boolean(props.browserTask)
             :interaction-locked="interactionLocked"
             :interaction-error="interactionError"
             :pending-interaction-approval="pendingInteractionApproval"
+            :ref-frame="refFrame"
+            :ref-targets-loading="refTargetsLoading"
+            :ref-targets-error="refTargetsError"
             :excluded-artifact-ids="excludedScreenshotArtifactIds"
             :mobile="mobile"
             :mobile-window-presentation="mobileWindowPresentation"
             @interact="emit('interact', $event)"
+            @interact-ref="emit('interactRef', $event)"
+            @scroll="emit('scroll', $event)"
             @confirm="emit('confirm', $event)"
         />
 

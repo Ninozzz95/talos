@@ -47,6 +47,14 @@ const INTERFACE_KEYS = [
     'categories',
 ] as const
 
+describe('TALOS Motion V6 scene identity', () => {
+    it('keeps an exact unique 14-scene allowlist including Calm', () => {
+        expect(TALOS_MOTION_SCENE_IDS).toHaveLength(14)
+        expect(new Set(TALOS_MOTION_SCENE_IDS)).toHaveLength(14)
+        expect(TALOS_MOTION_SCENE_IDS.at(-1)).toBe('calm')
+    })
+})
+
 const CATEGORY_KEYS = [
     'windows',
     'surfaces',

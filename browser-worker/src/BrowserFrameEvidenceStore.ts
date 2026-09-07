@@ -61,6 +61,18 @@ export class BrowserFrameEvidenceStore {
     return this.frames.size;
   }
 
+  has(
+    expectedSha256: string,
+    stateVersion: number,
+    dimensions: BrowserFrameDimensions,
+  ): boolean {
+    const source = this.frames.get(expectedSha256);
+    return source !== undefined
+      && source.stateVersion === stateVersion
+      && source.dimensions.width === dimensions.width
+      && source.dimensions.height === dimensions.height;
+  }
+
   async record(
     bytes: Buffer,
     stateVersion: number,

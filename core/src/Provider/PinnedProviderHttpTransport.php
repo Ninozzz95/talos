@@ -9,8 +9,11 @@ use Kadmos\Security\ExecutionPolicy;
 use Kadmos\Security\PolicyDecision;
 use RuntimeException;
 
-final class PinnedProviderHttpTransport implements ProviderTransport
+final class PinnedProviderHttpTransport implements ProviderTransport, StreamingProviderTransport
 {
+    private const MAX_STREAM_QUEUE_BYTES = 2_097_152;
+    private const MAX_ERROR_BODY_BYTES = 65_536;
+
     private readonly string $provider;
     private readonly ExecutionPolicy $executionPolicy;
     private readonly ?\Closure $curlTransport;
@@ -126,26 +129,309 @@ final class PinnedProviderHttpTransport implements ProviderTransport
         return $decoded;
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     * @param list<string> $headers
+     * @return iterable<string>
+     */
+    public function stream(
+        string $endpoint,
+        array $payload,
+        array $headers,
+        int $timeoutMs,
+        \Closure $isCancelled,
+    ): iterable {
+        if ($this->isCancelled($isCancelled)) {
+            throw new ProviderStreamCancelledException('user_requested');
+        }
+
+        $decision = $this->endpointDecision(
+            $endpoint,
+            $timeoutMs,
+            requireResolution: true,
+            allowGeminiSseQuery: true,
+        );
+        $resolveEntries = $this->curlResolveEntries($endpoint, $decision);
+        if ($resolveEntries === []) {
+            throw new RuntimeException('Provider connection could not be pinned to an approved IP address.');
+        }
+
+        $queue = [];
+        $queueBytes = 0;
+        $cancelled = false;
+        $overflow = false;
+        $write = function (mixed $handle, string $chunk) use (
+            &$queue,
+            &$queueBytes,
+            &$cancelled,
+            &$overflow,
+            $isCancelled,
+        ): int {
+            if ($this->isCancelled($isCancelled)) {
+                $cancelled = true;
+
+                return 0;
+            }
+            $length = strlen($chunk);
+            if ($queueBytes + $length > self::MAX_STREAM_QUEUE_BYTES) {
+                $overflow = true;
+
+                return 0;
+            }
+            $queue[] = $chunk;
+            $queueBytes += $length;
+
+            return $length;
+        };
+        $progress = function (
+            mixed $handle,
+            float $downloadSize,
+            float $downloaded,
+            float $uploadSize,
+            float $uploaded,
+        ) use (&$cancelled, $isCancelled): int {
+            if ($this->isCancelled($isCancelled)) {
+                $cancelled = true;
+
+                return 1;
+            }
+
+            return 0;
+        };
+
+        $options = [
+            CURLOPT_RETURNTRANSFER => false,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($payload, JSON_THROW_ON_ERROR),
+            CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_TIMEOUT_MS => $decision->timeoutMs,
+            CURLOPT_FOLLOWLOCATION => false,
+            CURLOPT_MAXREDIRS => 0,
+            CURLOPT_RESOLVE => $resolveEntries,
+            CURLOPT_NOPROGRESS => false,
+            CURLOPT_XFERINFOFUNCTION => $progress,
+            CURLOPT_WRITEFUNCTION => $write,
+        ];
+        $insecureSsl = getenv('KADMOS_INSECURE_SSL') === '1';
+        if ($insecureSsl) {
+            fwrite(STDERR, "WARNING: SSL verification disabled by KADMOS_INSECURE_SSL=1. Do not use in enterprise mode.\n");
+            $options[CURLOPT_SSL_VERIFYPEER] = false;
+            $options[CURLOPT_SSL_VERIFYHOST] = 0;
+        } else {
+            $options[CURLOPT_SSL_VERIFYPEER] = true;
+            $options[CURLOPT_SSL_VERIFYHOST] = 2;
+        }
+
+        if ($this->curlTransport !== null) {
+            $result = ($this->curlTransport)($endpoint, $options);
+            if (! is_array($result)) {
+                throw new RuntimeException('Provider cURL transport returned an invalid result.');
+            }
+            if ($cancelled) {
+                throw new ProviderStreamCancelledException('user_requested');
+            }
+            if ($overflow) {
+                throw new RuntimeException('Provider stream callback queue exceeded its byte limit.');
+            }
+            $response = $result['raw_response'] ?? false;
+            $error = is_string($result['curl_error'] ?? null) ? $result['curl_error'] : '';
+            $httpCode = is_int($result['http_code'] ?? null) ? $result['http_code'] : 0;
+            $primaryIp = is_string($result['primary_ip'] ?? null) && $result['primary_ip'] !== ''
+                ? $result['primary_ip']
+                : null;
+            if ($response === false) {
+                throw new RuntimeException('Provider API unreachable: '.$error);
+            }
+            if (! $this->connectedToApprovedIp($primaryIp, $decision)) {
+                throw new RuntimeException('Provider connection did not use an approved IP address.');
+            }
+            if ($httpCode < 200 || $httpCode >= 300) {
+                throw new ProviderRequestException(
+                    $httpCode,
+                    substr(implode('', $queue), 0, self::MAX_ERROR_BODY_BYTES),
+                );
+            }
+            foreach ($queue as $providerChunk) {
+                yield $providerChunk;
+            }
+
+            return;
+        }
+
+        yield from $this->streamWithNativeCurl(
+            $endpoint,
+            $options,
+            $decision,
+            $isCancelled,
+            $queue,
+            $queueBytes,
+            $cancelled,
+            $overflow,
+        );
+    }
+
     public function assertEndpointAllowed(string $endpoint, int $timeoutMs): void
     {
         $this->endpointDecision($endpoint, $timeoutMs, requireResolution: false);
     }
 
-    private function endpointDecision(string $endpoint, int $timeoutMs, bool $requireResolution): PolicyDecision
+    private function endpointDecision(
+        string $endpoint,
+        int $timeoutMs,
+        bool $requireResolution,
+        bool $allowGeminiSseQuery = false,
+    ): PolicyDecision
     {
+        $rejectQueryAndFragment = true;
+        if ($allowGeminiSseQuery
+            && $this->provider === 'gemini'
+            && $this->isExactGeminiSseEndpoint($endpoint)) {
+            $rejectQueryAndFragment = false;
+        }
         $decision = $this->provider === 'ollama'
             ? $this->ollamaDecision($endpoint, $timeoutMs)
             : $this->executionPolicy->inspectUrl(
                 $endpoint,
                 $timeoutMs,
                 requireResolution: $requireResolution,
-                rejectQueryAndFragment: true,
+                rejectQueryAndFragment: $rejectQueryAndFragment,
             );
         if (! $decision->allowed) {
             throw new RuntimeException('Provider endpoint blocked by execution policy: '.$decision->reason);
         }
 
         return $decision;
+    }
+
+    /**
+     * @param array<int, mixed> $options
+     * @param list<string> $queue
+     * @return iterable<string>
+     */
+    private function streamWithNativeCurl(
+        string $endpoint,
+        array $options,
+        PolicyDecision $decision,
+        \Closure $isCancelled,
+        array &$queue,
+        int &$queueBytes,
+        bool &$cancelled,
+        bool &$overflow,
+    ): iterable {
+        $handle = curl_init($endpoint);
+        if ($handle === false) {
+            throw new RuntimeException('Provider transport could not be initialized.');
+        }
+        curl_setopt_array($handle, $options);
+        $multi = curl_multi_init();
+        curl_multi_add_handle($multi, $handle);
+        $running = null;
+        $resultCode = CURLE_OK;
+        $errorBody = '';
+
+        try {
+            do {
+                if ($this->isCancelled($isCancelled)) {
+                    $cancelled = true;
+                    throw new ProviderStreamCancelledException('user_requested');
+                }
+                do {
+                    $multiStatus = curl_multi_exec($multi, $running);
+                } while ($multiStatus === CURLM_CALL_MULTI_PERFORM);
+                if ($multiStatus !== CURLM_OK) {
+                    throw new RuntimeException('Provider streaming transport failed to advance.');
+                }
+
+                $httpCode = (int) curl_getinfo($handle, CURLINFO_HTTP_CODE);
+                $connectedIp = curl_getinfo($handle, CURLINFO_PRIMARY_IP);
+                $primaryIp = is_string($connectedIp) && $connectedIp !== '' ? $connectedIp : null;
+                if ($queue !== [] && $httpCode !== 0) {
+                    if (! $this->connectedToApprovedIp($primaryIp, $decision)) {
+                        throw new RuntimeException('Provider connection did not use an approved IP address.');
+                    }
+                    if ($httpCode >= 200 && $httpCode < 300) {
+                        $ready = $queue;
+                        $queue = [];
+                        $queueBytes = 0;
+                        foreach ($ready as $providerChunk) {
+                            yield $providerChunk;
+                        }
+                    } else {
+                        $errorBody .= implode('', $queue);
+                        $errorBody = substr($errorBody, 0, self::MAX_ERROR_BODY_BYTES);
+                        $queue = [];
+                        $queueBytes = 0;
+                    }
+                }
+                while (($info = curl_multi_info_read($multi)) !== false) {
+                    if (($info['handle'] ?? null) === $handle && is_int($info['result'] ?? null)) {
+                        $resultCode = $info['result'];
+                    }
+                }
+                if ($running > 0) {
+                    $selected = curl_multi_select($multi, 0.1);
+                    if ($selected === -1) {
+                        usleep(10_000);
+                    }
+                }
+            } while ($running > 0);
+
+            if ($cancelled) {
+                throw new ProviderStreamCancelledException('user_requested');
+            }
+            if ($overflow) {
+                throw new RuntimeException('Provider stream callback queue exceeded its byte limit.');
+            }
+
+            $httpCode = (int) curl_getinfo($handle, CURLINFO_HTTP_CODE);
+            $connectedIp = curl_getinfo($handle, CURLINFO_PRIMARY_IP);
+            $primaryIp = is_string($connectedIp) && $connectedIp !== '' ? $connectedIp : null;
+            if (! $this->connectedToApprovedIp($primaryIp, $decision)) {
+                throw new RuntimeException('Provider connection did not use an approved IP address.');
+            }
+            if ($queue !== []) {
+                if ($httpCode >= 200 && $httpCode < 300) {
+                    foreach ($queue as $providerChunk) {
+                        yield $providerChunk;
+                    }
+                } else {
+                    $errorBody .= implode('', $queue);
+                    $errorBody = substr($errorBody, 0, self::MAX_ERROR_BODY_BYTES);
+                }
+                $queue = [];
+                $queueBytes = 0;
+            }
+            if ($httpCode < 200 || $httpCode >= 300) {
+                throw new ProviderRequestException($httpCode, $errorBody);
+            }
+            if ($resultCode !== CURLE_OK) {
+                throw new RuntimeException('Provider streaming API unreachable: '.curl_error($handle));
+            }
+        } finally {
+            curl_multi_remove_handle($multi, $handle);
+            curl_multi_close($multi);
+            curl_close($handle);
+        }
+    }
+
+    private function isCancelled(\Closure $isCancelled): bool
+    {
+        $cancelled = $isCancelled();
+        if (! is_bool($cancelled)) {
+            throw new RuntimeException('Provider stream cancellation callback must return a boolean.');
+        }
+
+        return $cancelled;
+    }
+
+    private function isExactGeminiSseEndpoint(string $endpoint): bool
+    {
+        $parts = parse_url($endpoint);
+
+        return is_array($parts)
+            && ! isset($parts['fragment'])
+            && ($parts['query'] ?? null) === 'alt=sse'
+            && str_ends_with((string) ($parts['path'] ?? ''), ':streamGenerateContent');
     }
 
     private function ollamaDecision(string $endpoint, int $timeoutMs): PolicyDecision
@@ -186,15 +472,14 @@ final class PinnedProviderHttpTransport implements ProviderTransport
             return [];
         }
 
-        return array_map(
-            static fn (string $ip): string => sprintf(
-                '%s:%d:%s',
-                $host,
-                (int) $port,
-                str_contains($ip, ':') ? '['.$ip.']' : $ip,
-            ),
+        $addresses = array_map(
+            static fn (string $ip): string => str_contains($ip, ':') ? '['.$ip.']' : $ip,
             $resolvedIps,
         );
+
+        return $addresses === []
+            ? []
+            : [sprintf('%s:%d:%s', $host, (int) $port, implode(',', $addresses))];
     }
 
     private function connectedToApprovedIp(?string $primaryIp, PolicyDecision $decision): bool

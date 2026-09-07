@@ -79,6 +79,34 @@ describe('TalosSlimComposer', () => {
         expect(send).not.toHaveBeenCalled()
     })
 
+    it('replaces Send with a real Stop command while a cancellable stream is active', () => {
+        const send = vi.fn()
+        const cancelStream = vi.fn()
+        const container = mountComposer('full', false, {
+            sending: true,
+            streamingActive: true,
+            onSend: send,
+            onCancelStream: cancelStream,
+        })
+        const stop = container.querySelector<HTMLButtonElement>('[aria-label="Stop response"]')
+        const composer = container.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
+
+        expect(stop).not.toBeNull()
+        expect(stop?.disabled).toBe(false)
+        expect(container.querySelector('[aria-label="Send"]')).toBeNull()
+        expect(composer?.disabled).toBe(true)
+
+        stop?.click()
+        composer?.dispatchEvent(new KeyboardEvent('keydown', {
+            key: 'Enter',
+            bubbles: true,
+            cancelable: true,
+        }))
+
+        expect(cancelStream).toHaveBeenCalledOnce()
+        expect(send).not.toHaveBeenCalled()
+    })
+
     it('grows a long prompt up to a viewport-safe composer limit', () => {
         const container = mountComposer('full')
         const composer = container.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
@@ -228,7 +256,8 @@ describe('TalosSlimComposer', () => {
         expect(captureSnapshot).toHaveBeenCalledOnce()
     })
 
-    it('labels recovery-required Browse state and exposes a Retry browser action', async () => {
+    it('labels recovery-required Browse state and exposes the exact recover-task action', async () => {
+        const recoverBrowse = vi.fn()
         const restartBrowse = vi.fn()
         const container = mountComposer('full', true, {
             browserMode: {
@@ -237,6 +266,8 @@ describe('TalosSlimComposer', () => {
                 status: 'recovery_required',
                 capabilities: ['snapshot', 'screenshot'],
             },
+            browserRecoveryAction: 'recover_task',
+            onRecoverBrowse: recoverBrowse,
             onRestartBrowse: restartBrowse,
         })
 
@@ -247,11 +278,35 @@ describe('TalosSlimComposer', () => {
         status?.click()
         await nextTick()
 
-        const retry = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
-            .find((button) => button.textContent?.includes('Retry browser'))
-        expect(retry).toBeDefined()
-        retry?.click()
-        expect(restartBrowse).toHaveBeenCalledOnce()
+        const recover = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+            .find((button) => button.textContent?.includes('Recover browser task'))
+        expect(recover).toBeDefined()
+        recover?.click()
+        expect(recoverBrowse).toHaveBeenCalledOnce()
+        expect(restartBrowse).not.toHaveBeenCalled()
+    })
+
+    it('labels terminal or session-only recovery as starting a fresh browser session', async () => {
+        const recoverBrowse = vi.fn()
+        const container = mountComposer('full', true, {
+            browserMode: {
+                enabled: true,
+                session_id: 'browser-1',
+                status: 'stopped',
+                capabilities: [],
+            },
+            browserRecoveryAction: 'start_fresh',
+            onRecoverBrowse: recoverBrowse,
+        })
+
+        container.querySelector<HTMLButtonElement>('[aria-label="Browse status: Stopped"]')?.click()
+        await nextTick()
+
+        const fresh = [...container.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+            .find((button) => button.textContent?.includes('Start fresh browser session'))
+        expect(fresh).toBeDefined()
+        fresh?.click()
+        expect(recoverBrowse).toHaveBeenCalledOnce()
     })
 
     it('arrowup on an empty composer recalls the last user prompt editable', () => {
@@ -292,5 +347,96 @@ describe('TalosSlimComposer', () => {
         const emptyArea = withoutHistory.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
         emptyArea?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }))
         expect(emptyUpdates).toEqual([])
+    })
+
+    it('focusPrompt focuses the enabled message textarea', async () => {
+        let exposed: { focusPrompt?: () => void } | null = null
+        const container = mountComposer('full', false, {
+            ref: (instance: unknown) => { exposed = instance as { focusPrompt?: () => void } },
+        })
+        await nextTick()
+
+        expect(typeof exposed?.focusPrompt).toBe('function')
+        exposed?.focusPrompt?.()
+        const field = container.querySelector<HTMLTextAreaElement>('[aria-label="Message TALOS"]')
+        expect(field).toBeTruthy()
+        expect(document.activeElement).toBe(field)
+    })
+
+    it('disabled or sending state produces no invalid focus claim', async () => {
+        let exposed: { focusPrompt?: () => void } | null = null
+        mountComposer('full', false, {
+            sending: true,
+            ref: (instance: unknown) => { exposed = instance as { focusPrompt?: () => void } },
+        })
+        await nextTick()
+
+        exposed?.focusPrompt?.()
+        expect(document.activeElement?.getAttribute?.('aria-label')).not.toBe('Message TALOS')
+    })
+
+    it('builds the effort ladder from the model effort_levels and selects a level', async () => {
+        const selectEffort = vi.fn()
+        const container = mountComposer('full', false, {
+            selectedEffort: 'high',
+            effortLevels: ['high', 'low', 'medium'],
+            supportsThinking: false,
+            onSelectEffort: selectEffort,
+        })
+
+        const chip = container.querySelector<HTMLButtonElement>('[data-testid="talos-composer-effort-chip"]')
+        expect(chip).not.toBeNull()
+        expect(container.querySelector('[data-testid="talos-composer-effort-label"]')?.textContent).toContain('Effort · High')
+
+        chip?.click()
+        await nextTick()
+
+        const levels = [...container.querySelectorAll<HTMLButtonElement>('[data-testid="talos-effort-level"]')]
+            .map((button) => button.getAttribute('data-effort-level'))
+        // Ordered from effort_levels (never hardcoded) with an implicit Off first.
+        expect(levels).toEqual(['off', 'low', 'medium', 'high'])
+        expect(container.querySelector('[data-testid="talos-effort-level"][data-effort-level="high"]')?.getAttribute('aria-pressed')).toBe('true')
+
+        container.querySelector<HTMLButtonElement>('[data-effort-level="low"]')?.click()
+        await nextTick()
+        expect(selectEffort).toHaveBeenCalledWith('low')
+        // Popover closes after a choice.
+        expect(container.querySelector('[data-testid="talos-effort-popover"]')).toBeNull()
+    })
+
+    it('shows the extended-thinking toggle only when the model supports it', async () => {
+        const selectThinking = vi.fn()
+        const container = mountComposer('full', false, {
+            selectedEffort: 'high',
+            effortLevels: ['low', 'high'],
+            supportsThinking: true,
+            thinking: false,
+            onSelectThinking: selectThinking,
+        })
+
+        container.querySelector<HTMLButtonElement>('[data-testid="talos-composer-effort-chip"]')?.click()
+        await nextTick()
+
+        const toggle = container.querySelector<HTMLButtonElement>('[data-testid="talos-thinking-toggle"]')
+        expect(toggle).not.toBeNull()
+        expect(toggle?.getAttribute('aria-checked')).toBe('false')
+        toggle?.click()
+        expect(selectThinking).toHaveBeenCalledWith(true)
+    })
+
+    it('omits the thinking toggle and exposes only Off for a non-reasoning model', async () => {
+        const container = mountComposer('full', false, {
+            selectedEffort: 'off',
+            effortLevels: [],
+            supportsThinking: false,
+        })
+
+        container.querySelector<HTMLButtonElement>('[data-testid="talos-composer-effort-chip"]')?.click()
+        await nextTick()
+
+        const levels = [...container.querySelectorAll<HTMLButtonElement>('[data-testid="talos-effort-level"]')]
+            .map((button) => button.getAttribute('data-effort-level'))
+        expect(levels).toEqual(['off'])
+        expect(container.querySelector('[data-testid="talos-thinking-toggle"]')).toBeNull()
     })
 })

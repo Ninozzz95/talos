@@ -26,7 +26,26 @@ final class TalosFileExtractionPipeline
     ): TalosExtractionResult {
         $normalizedMime = strtolower(trim($mimeType));
         if (in_array($normalizedMime, self::IMAGE_MIME_TYPES, true)) {
-            return $this->extractWithOcr($absolutePath, $normalizedMime, $sourceSha256, $ownerRef);
+            if ($this->ocr->enabled()) {
+                return $this->extractWithOcr($absolutePath, $normalizedMime, $sourceSha256, $ownerRef);
+            }
+
+            // OCR disabled: accept the image as a vision-only attachment. It has
+            // already been malware-scanned (ClamAV); we simply derive no text and
+            // let vision-capable models see the image directly, instead of
+            // failing the whole upload with TALOS_OCR_REQUIRED.
+            return new TalosExtractionResult(
+                text: '',
+                metadata: [
+                    'content_type' => $normalizedMime,
+                    'source_sha256' => $sourceSha256,
+                    'trust_level' => 'untrusted',
+                    'vision_only' => true,
+                ],
+                extractor: 'vision_passthrough',
+                extractorVersion: 'v1',
+                requiresOcr: false,
+            );
         }
         if ($normalizedMime !== 'application/pdf') {
             return $this->extractors->forMime($normalizedMime)->extract($absolutePath, $normalizedMime);

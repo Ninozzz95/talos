@@ -1,0 +1,5 @@
+{
+  "contract": "talos.human_journey.regression_corpus",
+  "schema_version": 1,
+  "regressions": []
+}

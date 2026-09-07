@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { BrowserActionCapabilityVerifier } from "../src/BrowserActionCapability.js";
+import { canonicalJson } from "../src/BrowserCanonicalJson.js";
 import { BrowserFileStagingStore } from "../src/BrowserFileStagingStore.js";
 import { BrowserSessionManager } from "../src/BrowserSessionManager.js";
 import { buildServer } from "../src/server.js";
@@ -30,6 +31,10 @@ afterAll(async () => app.close());
 
 function digest(bytes: Buffer): string {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+function canonicalDigest(value: unknown): string {
+  return `sha256:${createHash("sha256").update(canonicalJson(value), "utf8").digest("hex")}`;
 }
 
 function stageIdentity(value: number): string {
@@ -356,7 +361,7 @@ describe("canonical Browser file upload", () => {
     }
   }, 30_000);
 
-  it("stages owned bytes and assigns them to the signed user-approved Playwright input", async () => {
+  it("STAGE2B-BREG-017 stages owned bytes and preserves canonical snapshot evidence after approved upload", async () => {
     const tools = await app.inject({ method: "GET", url: "/tools", headers: ownerHeaders });
     expect(tools.json().data.tools.map((tool: { name: string }) => tool.name)).toContain("browser_file_upload");
 
@@ -465,6 +470,27 @@ describe("canonical Browser file upload", () => {
       expect(result.structuredContent.url).toBe("about:blank");
       expect(JSON.stringify(result)).not.toContain(bytes.toString("base64"));
       expect(JSON.stringify(result)).not.toMatch(/file:\/\/\/|[A-Za-z]:[\\/]|\/(?:home|tmp|Users)\//i);
+      const uploadedSnapshot = result.structuredContent.snapshot;
+      const uploadedSnapshotHash = canonicalDigest({
+        schema_version: "talos_browser_tool_snapshot_evidence_v1",
+        snapshot_id: uploadedSnapshot.snapshot_id,
+        format: uploadedSnapshot.format,
+        text_digest: uploadedSnapshot.text_digest,
+        nodes: uploadedSnapshot.nodes,
+      });
+      expect(uploadedSnapshot.sha256).toBe(uploadedSnapshotHash);
+      expect(result.evidence.find((item: { kind: string }) => item.kind === "snapshot")?.sha256).toBe(uploadedSnapshotHash);
+
+      const readAfterUpload = (await call("upload-read-after", "browser_read", {
+        ref: uploadedSnapshot.nodes[0].ref,
+        snapshot_id: uploadedSnapshot.snapshot_id,
+        state_version: 2,
+      })).json();
+      expect(readAfterUpload).toMatchObject({
+        isError: false,
+        structuredContent: { snapshot_id: uploadedSnapshot.snapshot_id },
+      });
+      expect(readAfterUpload.evidence.find((item: { kind: string }) => item.kind === "snapshot")?.sha256).toBe(uploadedSnapshotHash);
 
       const currentTarget = result.structuredContent.snapshot.nodes.find((node: { name: string }) => node.name === "Upload document");
       const reused = await call("upload-reused", "browser_file_upload", {

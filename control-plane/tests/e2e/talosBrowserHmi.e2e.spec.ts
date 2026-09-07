@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
+import { createHash } from 'node:crypto'
 import { PNG } from 'pngjs'
 import { installTalosApiMocks } from './helpers/talosApiMocks'
 import { browserFramePoint, livePointerCoordinate } from '../../resources/js/lib/talosBrowserHmiCoordinates'
@@ -256,6 +257,7 @@ async function samplePreviewPixels(page: Page, image: Locator) {
     return {
         width: png.width,
         height: png.height,
+        rgbaSha256: createHash('sha256').update(png.data).digest('hex'),
         pixels: points.map(([x, y]) => {
             const offset = ((y * png.width) + x) * 4
             return [...png.data.subarray(offset, offset + 4)]
@@ -390,6 +392,197 @@ test('BREG-006 authenticated desktop sends a fractional lightbox click through L
     await expect.poll(() => updatedImage.evaluate((element) => (element as HTMLImageElement).naturalHeight)).toBe(800)
     await expectRenderedPreviewMatchesArtifact(page, updatedImage)
     expect(await page.locator('a[target="_blank"]').count()).toBe(0)
+})
+
+test('STAGE2A-010 real worker scroll advances durable evidence on desktop and mobile', async ({ page, isMobile }, testInfo) => {
+    test.skip(!realBrowserIntegration, 'Requires the real browser-worker integration gate')
+    test.skip(!process.env.TALOS_E2E_LIVE_BROWSER_TARGET, 'Requires a real scrollable Browser target')
+    if (!isMobile) await page.setViewportSize({ width: 1920, height: 1080 })
+
+    const { artifactId: initialArtifactId, image: initialImage } = await openScreenshotDialog(page)
+    const initialPixels = await samplePreviewPixels(page, initialImage)
+    const scrollRequest = page.waitForRequest((request) => (
+        request.method() === 'POST'
+        && /\/api\/talos\/browser\/sessions\/[^/]+\/interactions\/scroll$/.test(new URL(request.url()).pathname)
+    ))
+    const scrollResponse = page.waitForResponse((response) => (
+        response.request().method() === 'POST'
+        && /\/api\/talos\/browser\/sessions\/[^/]+\/interactions\/scroll$/.test(new URL(response.url()).pathname)
+    ))
+
+    if (isMobile) {
+        await page.getByRole('button', { name: 'Scroll browser page down' }).click()
+    } else {
+        await page.getByTestId('browser-evidence-stage').hover()
+        await page.mouse.wheel(0, 640)
+    }
+
+    const request = await scrollRequest
+    const response = await scrollResponse
+    const responseBody = await response.text()
+    expect(response.status(), responseBody).toBe(200)
+    const body = request.postDataJSON() as Record<string, unknown>
+    expect(body).toMatchObject({
+        artifact_id: initialArtifactId,
+        artifact_sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+        state_version: expect.any(Number),
+        delta_y: expect.any(Number),
+    })
+    expect(Math.abs(Number(body.delta_y))).toBeGreaterThan(0)
+    expect(Math.abs(Number(body.delta_y))).toBeLessThanOrEqual(10_000)
+
+    const payload = JSON.parse(responseBody) as {
+        data: { session: { state_version: number }, screenshot: { id: string }, snapshot: { id: string } }
+    }
+    expect(payload.data.session.state_version).toBe(Number(body.state_version) + 1)
+    expect(payload.data.screenshot.id).not.toBe(initialArtifactId)
+    expect(payload.data.snapshot.id).not.toBe('')
+
+    const updatedImage = page.getByTestId(`browser-evidence-image-${payload.data.screenshot.id}`)
+    await expect(updatedImage).toBeVisible()
+    await expect.poll(() => updatedImage.evaluate((element) => (element as HTMLImageElement).naturalWidth)).toBe(1280)
+    await expect.poll(() => updatedImage.evaluate((element) => (element as HTMLImageElement).naturalHeight)).toBe(800)
+    await expectRenderedPreviewMatchesArtifact(page, updatedImage)
+    const updatedPixels = await samplePreviewPixels(page, updatedImage)
+    expect(updatedPixels.rgbaSha256).not.toBe(initialPixels.rgbaSha256)
+    await expect(page.getByText('2 / 2', { exact: true })).toBeVisible()
+
+    const overflow = await page.evaluate(() => ({
+        document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        body: document.body.scrollWidth - document.body.clientWidth,
+    }))
+    expect(overflow.document).toBeLessThanOrEqual(1)
+    expect(overflow.body).toBeLessThanOrEqual(1)
+    await page.screenshot({
+        path: testInfo.outputPath(isMobile ? 'stage2a-scroll-mobile.png' : 'stage2a-scroll-desktop-1920x1080.png'),
+        fullPage: true,
+    })
+})
+
+test('STAGE2B-019 real worker semantic ref advances current evidence and survives reload on desktop and mobile', async ({ page, isMobile }, testInfo) => {
+    test.skip(!realBrowserIntegration, 'Requires the real browser-worker integration gate')
+    test.skip(!process.env.TALOS_E2E_LIVE_BROWSER_TARGET, 'Requires a real Browser target with semantic controls')
+    if (!isMobile) await page.setViewportSize({ width: 1920, height: 1080 })
+
+    const refRequests: Array<Record<string, unknown>> = []
+    page.on('request', (request) => {
+        if (request.method() === 'POST'
+            && /\/api\/talos\/browser\/sessions\/[^/]+\/interactions\/ref$/.test(new URL(request.url()).pathname)) {
+            refRequests.push(request.postDataJSON() as Record<string, unknown>)
+        }
+    })
+
+    const { artifactId: initialArtifactId, dialog } = await openScreenshotDialog(page)
+    const rail = page.getByTestId('browser-page-controls')
+    const firstControl = rail.locator('button[data-browser-ref]').first()
+    await expect(rail).toBeVisible()
+    await expect(firstControl).toBeVisible()
+    await expect(firstControl).toBeEnabled()
+    const ref = await firstControl.getAttribute('data-browser-ref')
+    expect(ref).toMatch(/^e[1-9][0-9]*$/)
+    await firstControl.focus()
+    await expect(firstControl).toBeFocused()
+
+    const initialStageBox = await page.getByTestId('browser-evidence-stage').boundingBox()
+    const initialRailBox = await rail.boundingBox()
+    expect(initialStageBox).not.toBeNull()
+    expect(initialRailBox).not.toBeNull()
+    if (isMobile) {
+        expect(initialRailBox!.y).toBeGreaterThanOrEqual(initialStageBox!.y + initialStageBox!.height - 1)
+    } else {
+        expect(initialRailBox!.x).toBeGreaterThanOrEqual(initialStageBox!.x + initialStageBox!.width - 1)
+    }
+    await page.screenshot({
+        path: testInfo.outputPath(isMobile ? 'stage2b-targets-pixel-7.png' : 'stage2b-targets-desktop-1920x1080.png'),
+        fullPage: true,
+    })
+
+    const refRequest = page.waitForRequest((request) => (
+        request.method() === 'POST'
+        && /\/api\/talos\/browser\/sessions\/[^/]+\/interactions\/ref$/.test(new URL(request.url()).pathname)
+    ))
+    const refResponse = page.waitForResponse((response) => (
+        response.request().method() === 'POST'
+        && /\/api\/talos\/browser\/sessions\/[^/]+\/interactions\/ref$/.test(new URL(response.url()).pathname)
+    ))
+    await page.keyboard.press('Enter')
+    const request = await refRequest
+    let response = await refResponse
+    let responseBody = await response.text()
+    if (response.status() === 428) {
+        expect(JSON.parse(responseBody)).toMatchObject({ code: 'TALOS_BROWSER_HMI_CONFIRMATION_REQUIRED' })
+        const confirmation = page.waitForResponse((candidate) => (
+            candidate.request().method() === 'POST'
+            && /\/interactions\/[^/]+\/confirm$/.test(new URL(candidate.url()).pathname)
+        ))
+        await page.getByTestId('browser-hmi-confirm').click()
+        response = await confirmation
+        responseBody = await response.text()
+    }
+    expect(response.status(), responseBody).toBe(201)
+
+    const body = request.postDataJSON() as Record<string, unknown>
+    expect(body).toMatchObject({
+        schema_version: 'talos_browser_hmi_ref_v2',
+        interaction_id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+        artifact_id: initialArtifactId,
+        artifact_sha256: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+        state_version: expect.any(Number),
+        snapshot_id: expect.stringMatching(/^hmi_ref_[a-f0-9]{64}$/),
+        ref,
+        button: 'left',
+        click_count: 1,
+    })
+    expect(body).not.toHaveProperty('normalized_x')
+    expect(body).not.toHaveProperty('normalized_y')
+    expect(refRequests).toHaveLength(1)
+
+    const payload = JSON.parse(responseBody) as {
+        data: { session: { state_version: number }, screenshot: { id: string }, snapshot: { id: string } }
+    }
+    expect(payload.data.session.state_version).toBe(Number(body.state_version) + 1)
+    expect(payload.data.screenshot.id).not.toBe(initialArtifactId)
+    expect(payload.data.snapshot.id).not.toBe('')
+
+    const updatedImage = page.getByTestId(`browser-evidence-image-${payload.data.screenshot.id}`)
+    await expect(updatedImage).toBeVisible()
+    await expect.poll(() => updatedImage.evaluate((element) => (element as HTMLImageElement).naturalWidth)).toBe(1280)
+    await expect.poll(() => updatedImage.evaluate((element) => (element as HTMLImageElement).naturalHeight)).toBe(800)
+    await expectRenderedPreviewMatchesArtifact(page, updatedImage)
+    await expect(page.getByTestId('browser-page-controls')).toBeVisible()
+    await expect(page.getByTestId('browser-page-controls').locator('button[data-browser-ref]').first()).toBeVisible()
+    await expect(page.getByText('2 / 2', { exact: true })).toBeVisible()
+    expect(refRequests).toHaveLength(1)
+
+    const exposedText = await dialog.innerText()
+    expect(exposedText).not.toContain('raw_snapshot')
+    expect(exposedText).not.toContain('text_digest')
+    const overflow = await page.evaluate(() => ({
+        document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        body: document.body.scrollWidth - document.body.clientWidth,
+    }))
+    expect(overflow.document).toBeLessThanOrEqual(1)
+    expect(overflow.body).toBeLessThanOrEqual(1)
+    await page.screenshot({
+        path: testInfo.outputPath(isMobile ? 'stage2b-promoted-pixel-7.png' : 'stage2b-promoted-desktop-1920x1080.png'),
+        fullPage: true,
+    })
+
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await expect(page.getByLabel('Message TALOS')).toBeVisible({ timeout: 45_000 })
+    await expect(page.getByTestId('talos-browse-mode')).toHaveAttribute('data-enabled', 'true')
+    const restoredTrigger = page.getByTestId(`browser-evidence-open-${payload.data.screenshot.id}`).last()
+    await expect(restoredTrigger).toBeVisible()
+    await restoredTrigger.click()
+    const restoredImage = page.getByTestId(`browser-evidence-image-${payload.data.screenshot.id}`)
+    await expect(restoredImage).toBeVisible()
+    await expect.poll(() => restoredImage.evaluate((element) => (element as HTMLImageElement).naturalWidth)).toBe(1280)
+    const restoredRail = page.getByTestId('browser-page-controls')
+    await expect(restoredRail.locator('button[data-browser-ref]').first()).toBeVisible()
+    const restoredStage = page.getByTestId('browser-evidence-stage')
+    await expect(restoredStage).toBeVisible()
+    expect((await restoredStage.getAttribute('class')) ?? '').not.toContain('pointer-events-none')
+    expect(refRequests).toHaveLength(1)
 })
 
 test('desktop zoom and pan keep a click on the visible image center at normalized coordinates', async ({ page, isMobile }) => {

@@ -5,6 +5,9 @@
 .superpowers/
 
 **/vendor/
+!artifact-worker/vendor/
+artifact-worker/vendor/*
+!artifact-worker/vendor/xlsx-0.20.3.tgz
 **/node_modules/
 
 .env

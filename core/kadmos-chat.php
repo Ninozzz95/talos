@@ -146,6 +146,9 @@ while (true) {
     $provider = strtolower((string)($input['provider'] ?? getenv('KADMOS_PROVIDER') ?: 'deepseek'));
     $model = trim((string)($input['model'] ?? getenv('KADMOS_MODEL') ?: ''));
     $baseUrl = trim((string)($input['base_url'] ?? getenv('KADMOS_BASE_URL') ?: ''));
+    $reasoningEffort = isset($input['effort']) && is_string($input['effort']) && trim($input['effort']) !== ''
+        ? trim($input['effort'])
+        : null;
     $toolContext = isset($input['tool_context']) && is_array($input['tool_context'])
         ? $input['tool_context']
         : [];
@@ -228,6 +231,7 @@ while (true) {
         $llm->withTools($browserPlanningEnabled
             ? BrowserToolDefinition::forOperations($browserMode['allowed_operations'] ?? [])
             : []);
+        $llm->withReasoningEffort($reasoningEffort);
         $rawResponse = $browserPlanningEnabled
             ? $llm->generateWithToolFallback($prompt)
             : $llm->generate($prompt);

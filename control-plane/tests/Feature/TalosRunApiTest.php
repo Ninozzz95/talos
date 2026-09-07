@@ -149,6 +149,47 @@ final class TalosRunApiTest extends TestCase
             ->assertJsonPath('data.0.payload.nested.refresh_token', '[redacted]');
     }
 
+    public function test_run_events_support_a_validated_exclusive_after_sequence_cursor(): void
+    {
+        $run = TalosRun::query()->create([
+            'user_id' => $this->user->id,
+            'mode' => 'avm_on',
+            'status' => 'running',
+            'prompt_hash' => hash('sha256', 'stream cursor'),
+        ]);
+        foreach (range(1, 3) as $sequence) {
+            $run->events()->create([
+                'sequence' => $sequence,
+                'event_type' => 'text.delta',
+                'severity' => 'info',
+                'payload' => ['index' => $sequence],
+                'occurred_at' => now(),
+            ]);
+        }
+
+        $this->getJson("/api/talos/runs/{$run->id}/events")
+            ->assertOk()
+            ->assertJsonCount(3, 'data')
+            ->assertJsonPath('data.0.sequence', 1);
+
+        $this->getJson("/api/talos/runs/{$run->id}/events?after_sequence=1")
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.sequence', 2)
+            ->assertJsonPath('data.1.sequence', 3);
+
+        $this->getJson("/api/talos/runs/{$run->id}/events?after_sequence=3")
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->getJson("/api/talos/runs/{$run->id}/events?after_sequence=-1")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['after_sequence']);
+        $this->getJson("/api/talos/runs/{$run->id}/events?after_sequence=one")
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['after_sequence']);
+    }
+
     public function test_run_artifact_metadata_can_be_stored(): void
     {
         $run = TalosRun::query()->create([

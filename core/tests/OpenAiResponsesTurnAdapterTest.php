@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__.'/../vendor/autoload.php';
 
 use Kadmos\Provider\OpenAiResponsesTurnAdapter;
+use Kadmos\Provider\PromptCachePlan;
 use Kadmos\Provider\ProviderRequestException;
 use Kadmos\Tool\ProviderInputResource;
 use Kadmos\Tool\ProviderTurnRequest;
@@ -31,7 +32,11 @@ function responsesFixture(string $name): array
     return is_array($decoded) ? $decoded : throw new RuntimeException("Invalid Responses fixture: {$name}");
 }
 
-function responsesRequest(bool $emptyProperties = false): ProviderTurnRequest
+function responsesRequest(
+    bool $emptyProperties = false,
+    ?PromptCachePlan $promptCachePlan = null,
+    string $model = 'gpt-4.1-mini',
+): ProviderTurnRequest
 {
     $definition = json_decode(
         (string) file_get_contents(__DIR__.'/fixtures/tool-contracts/valid-definition.json'),
@@ -45,7 +50,7 @@ function responsesRequest(bool $emptyProperties = false): ProviderTurnRequest
 
     return new ProviderTurnRequest(
         provider: 'openai',
-        model: 'gpt-4.1-mini',
+        model: $model,
         systemPrompt: 'Ground current web claims in tool evidence.',
         messages: [
             ['role' => 'user', 'content' => 'Earlier question.'],
@@ -55,6 +60,7 @@ function responsesRequest(bool $emptyProperties = false): ProviderTurnRequest
         tools: [ToolDefinition::fromStrictArray($definition)],
         maxTokens: 2048,
         temperature: 0.0,
+        promptCachePlan: $promptCachePlan,
     );
 }
 
@@ -105,6 +111,17 @@ function testResponsesAdapterNormalizesFinalMixedAndMultipleOutputs(): void
     $requests = [];
     $multiple = responsesAdapter($responses, $requests)->start(responsesRequest());
     assertResponsesAdapter(array_map(static fn ($call): string => $call->providerCallId, $multiple->toolCalls) === ['call_browser_1', 'call_browser_2'], 'Responses multiple calls must preserve output order.');
+}
+
+function testResponsesAdapterProjectsOnlyVisibleReasoningSummaries(): void
+{
+    $responses = [responsesFixture('final-visible-reasoning')['provider_response']];
+    $requests = [];
+    $response = responsesAdapter($responses, $requests)->start(responsesRequest());
+
+    assertResponsesAdapter($response->text === 'The page is ready.', 'Responses reasoning summaries must not be duplicated into answer text.');
+    assertResponsesAdapter($response->visibleReasoning === 'I compared the available evidence before answering.', 'Responses summary_text must become visible reasoning.');
+    assertResponsesAdapter(! str_contains((string) $response->visibleReasoning, 'opaque-private-openai-state'), 'Encrypted Responses state must remain private.');
 }
 
 function testResponsesAdapterUsesFunctionCallOutputContinuation(): void
@@ -268,8 +285,82 @@ function testResponsesAdapterSerializesNativeImageAndDocumentResources(): void
     throw new RuntimeException('Unsupported Responses image MIME must fail closed.');
 }
 
+function testResponsesAdapterMapsGpt56MessageCacheBreakpointsAcrossContinuation(): void
+{
+    $plan = new PromptCachePlan(
+        mode: PromptCachePlan::MODE_AUTOMATIC,
+        keyHash: str_repeat('e', 64),
+        breakpoints: ['message:0'],
+        ttl: PromptCachePlan::TTL_30_MINUTES,
+        minimumInputTokens: 1024,
+    );
+    $responses = [
+        responsesFixture('mixed-preamble-tool-call')['provider_response'],
+        responsesFixture('tool-error-continuation')['provider_response'],
+    ];
+    $requests = [];
+    $adapter = responsesAdapter($responses, $requests);
+    $first = $adapter->start(responsesRequest(promptCachePlan: $plan, model: 'gpt-5.6-terra'));
+    $adapter->continue(
+        $first->state,
+        [ToolResult::error('call_browser_1', 'BROWSER_TIMEOUT', 'Retry later.')],
+    );
+
+    foreach ($requests as $index => $request) {
+        assertResponsesAdapter(
+            ($request['payload']['prompt_cache_key'] ?? null) === str_repeat('e', 64),
+            "Responses request {$index} must preserve the stable prompt cache key.",
+        );
+        assertResponsesAdapter(
+            ($request['payload']['prompt_cache_options'] ?? null) === [
+                'mode' => 'implicit',
+                'ttl' => '30m',
+            ],
+            "Responses request {$index} must preserve the cache policy.",
+        );
+    }
+    assertResponsesAdapter(
+        ($requests[0]['payload']['input'][0]['content'][0]['prompt_cache_breakpoint']['mode'] ?? null) === 'explicit',
+        'Responses must map canonical message indexes to input_text breakpoint blocks.',
+    );
+}
+
+function testResponsesAdapterMapsSystemBreakpointWithoutDuplicatingInstructions(): void
+{
+    $plan = new PromptCachePlan(
+        mode: PromptCachePlan::MODE_EXPLICIT,
+        keyHash: str_repeat('f', 64),
+        breakpoints: [PromptCachePlan::BREAKPOINT_SYSTEM],
+        ttl: PromptCachePlan::TTL_30_MINUTES,
+        minimumInputTokens: 1024,
+    );
+    $responses = [responsesFixture('final-text')['provider_response']];
+    $requests = [];
+    responsesAdapter($responses, $requests)->start(responsesRequest(
+        promptCachePlan: $plan,
+        model: 'gpt-5.6',
+    ));
+
+    assertResponsesAdapter(
+        ! array_key_exists('instructions', $requests[0]['payload']),
+        'A cacheable Responses system prefix must not duplicate the same instructions out of band.',
+    );
+    assertResponsesAdapter(
+        ($requests[0]['payload']['input'][0]['role'] ?? null) === 'developer'
+            && ($requests[0]['payload']['input'][0]['content'][0]['type'] ?? null) === 'input_text'
+            && ($requests[0]['payload']['input'][0]['content'][0]['text'] ?? null) === 'Ground current web claims in tool evidence.'
+            && ($requests[0]['payload']['input'][0]['content'][0]['prompt_cache_breakpoint']['mode'] ?? null) === 'explicit',
+        'Responses must place the system prefix in one cacheable developer input block.',
+    );
+    assertResponsesAdapter(
+        ($requests[0]['payload']['input'][1]['content'] ?? null) === 'Earlier question.',
+        'Responses system breakpoint mapping must preserve durable message order.',
+    );
+}
+
 $tests = [
     'testResponsesAdapterNormalizesFinalMixedAndMultipleOutputs',
+    'testResponsesAdapterProjectsOnlyVisibleReasoningSummaries',
     'testResponsesAdapterSerializesEmptySchemaPropertiesAsAnObject',
     'testResponsesAdapterUsesFunctionCallOutputContinuation',
     'testResponsesAdapterFailsClosedForMalformedRefusedIncompleteAndProviderErrors',
@@ -278,6 +369,8 @@ $tests = [
     'testResponsesAdapterSerializesNativeImageAndDocumentResources',
     'testOpenAiResponsesAdapterRejectsUnsupportedDocumentMimeBeforeTransport',
     'testOpenAiResponsesAdapterRejectsGifWithoutStaticFrameProof',
+    'testResponsesAdapterMapsGpt56MessageCacheBreakpointsAcrossContinuation',
+    'testResponsesAdapterMapsSystemBreakpointWithoutDuplicatingInstructions',
 ];
 
 foreach ($tests as $test) {

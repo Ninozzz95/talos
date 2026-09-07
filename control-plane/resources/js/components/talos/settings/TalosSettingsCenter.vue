@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
 import {
     Bell,
     Bot,
@@ -19,8 +19,9 @@ import {
 } from '@lucide/vue'
 import Button from '../../ui/Button.vue'
 import Card from '../../ui/Card.vue'
+import Chip from '../../ui/Chip.vue'
 import Input from '../../ui/Input.vue'
-import Select from '../../ui/Select.vue'
+import TalosThemedSelect from '../ui/TalosThemedSelect.vue'
 import Switch from '../../ui/Switch.vue'
 import Tabs from '../../ui/Tabs.vue'
 import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
@@ -35,11 +36,17 @@ import type {
     TalosChatLayoutPreferences,
     TalosContextSet,
     TalosModelProfile,
+    TalosPromptCacheMode,
+    TalosPromptCachePreferences,
 } from '../../../lib/talosTypes'
 import {
     TALOS_DEFAULT_CHAT_LAYOUT,
     sanitizeTalosChatLayout,
 } from '../../../lib/talosChatLayout'
+import {
+    isTalosUiScale,
+    TALOS_UI_SCALE_CONSTRAINT,
+} from '../../../lib/talosUiScale'
 import { useTalosSettings } from '../../../composables/useTalosSettings'
 import {
     normalizeTalosTheme,
@@ -63,6 +70,34 @@ import {
     normalizeTalosBrowserHmiMode,
     type TalosBrowserHmiMode,
 } from '../../../lib/talosBrowserHmiPolicy'
+import { TALOS_CAPABILITIES_KEY } from '../../../composables/useTalosCapabilities'
+import {
+    TALOS_CAPABILITY_LABELS,
+    type TalosCapabilityId,
+    type TalosCapabilityRecord,
+    type TalosCapabilityState,
+} from '../../../lib/talosCapabilities'
+
+const AI_MODEL_MODE_OPTIONS = [
+    { value: 'same_as_chat', label: 'Same as chat' },
+    { value: 'default_profile', label: 'Use default profile' },
+]
+const REMINDER_CHANNEL_OPTIONS = [
+    { value: 'browser', label: 'Browser notification' },
+    { value: 'task', label: 'Task queue' },
+    { value: 'disabled', label: 'Disabled' },
+]
+const PROMPT_CACHE_MODES: readonly TalosPromptCacheMode[] = [
+    'provider_default',
+    'automatic',
+    'explicit',
+    'disabled',
+]
+const PROMPT_CACHE_TTLS: ReadonlyArray<Exclude<TalosPromptCachePreferences['ttl'], null>> = [
+    '5m',
+    '30m',
+    '1h',
+]
 
 type SettingsTab =
     | 'models'
@@ -81,6 +116,7 @@ type SettingsTab =
 type SettingsPreferences = {
     theme: TalosThemeId
     theme_mode: TalosThemeMode
+    ui_scale: number
     chat_layout: TalosChatLayoutPreferences
     ai_defaults: {
         utility_model_mode: string
@@ -100,6 +136,7 @@ type SettingsPreferences = {
         }
     }
     browser_hmi_mode: TalosBrowserHmiMode
+    prompt_cache: TalosPromptCachePreferences
     reminders: {
         channel: string
         ai_synthesis: boolean
@@ -139,6 +176,7 @@ const emit = defineEmits<{
     changeTheme: [theme: TalosThemeId, persist?: boolean]
     openModule: [id: string, section?: string]
     saved: []
+    replayIntro: []
 }>()
 
 const tabs: Array<{ id: SettingsTab; label: string; icon: unknown; group?: string }> = [
@@ -166,11 +204,27 @@ const agentToolOptions: Array<{ key: keyof Omit<SettingsPreferences['agent_tools
 ]
 const reminderExecutionAvailable = false
 
+const SETTINGS_CAPABILITIES: Readonly<Partial<Record<SettingsTab, readonly TalosCapabilityId[]>>> = Object.freeze({
+    models: ['models.profiles', 'models.local_runtime', 'models.multi_model_orchestration'],
+    browser: ['browser.hmi'],
+    integrations: ['integrations.google_workspace', 'memory.supermemory'],
+    agent_tools: ['chat.streaming', 'reasoning.visible', 'speech.local_tts'],
+    system: ['settings.workspace', 'runs.replay', 'benchmarks.avm'],
+})
+const CAPABILITY_STATE_LABELS: Readonly<Record<TalosCapabilityState, string>> = Object.freeze({
+    available: 'Available',
+    degraded: 'Degraded',
+    blocked: 'Blocked',
+    planned: 'Roadmap',
+})
+
 const activeTab = ref<SettingsTab>('models')
+const capabilities = inject(TALOS_CAPABILITIES_KEY, null)
 
 const preferences = reactive<SettingsPreferences>({
     theme: 'forge',
     theme_mode: 'system',
+    ui_scale: TALOS_UI_SCALE_CONSTRAINT.default,
     chat_layout: { ...TALOS_DEFAULT_CHAT_LAYOUT },
     ai_defaults: {
         utility_model_mode: 'same_as_chat',
@@ -190,6 +244,10 @@ const preferences = reactive<SettingsPreferences>({
         },
     },
     browser_hmi_mode: 'confirm_sensitive',
+    prompt_cache: {
+        mode: 'automatic',
+        ttl: null,
+    },
     reminders: {
         channel: 'browser',
         ai_synthesis: false,
@@ -224,6 +282,16 @@ const activeModelProfile = computed(() => props.modelProfiles.find((profile) => 
 const activeContextSet = computed(() => props.contextSets.find((contextSet) => contextSet.id === props.selectedContextSetId) ?? null)
 const operatorLabel = computed(() => props.authUserName?.trim() || 'Operator')
 const themePolicyLocked = computed(() => settings.value?.preferences?.theme_policy_locked === true)
+const activeCapabilities = computed<TalosCapabilityRecord[]>(() => (
+    (SETTINGS_CAPABILITIES[activeTab.value] ?? []).map((id) => (
+        capabilities?.capability(id) ?? {
+            id,
+            state: 'blocked',
+            reason: 'Capability status has not been verified for this workspace.',
+            evidence: ['client:capability-manifest-unavailable'],
+        }
+    ))
+))
 
 function record(value: unknown): Record<string, unknown> {
     return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -250,6 +318,15 @@ function booleanValue(value: unknown, fallback: boolean) {
     return typeof value === 'boolean' ? value : fallback
 }
 
+function isPromptCacheMode(value: unknown): value is TalosPromptCacheMode {
+    return typeof value === 'string' && PROMPT_CACHE_MODES.includes(value as TalosPromptCacheMode)
+}
+
+function isPromptCacheTtl(value: unknown): value is Exclude<TalosPromptCachePreferences['ttl'], null> {
+    return typeof value === 'string'
+        && PROMPT_CACHE_TTLS.includes(value as Exclude<TalosPromptCachePreferences['ttl'], null>)
+}
+
 function isSettingsTab(value: unknown): value is SettingsTab {
     return tabs.some((tab) => tab.id === value)
 }
@@ -257,6 +334,9 @@ function isSettingsTab(value: unknown): value is SettingsTab {
 function applyPreferences(nextPreferences: Record<string, unknown>) {
     preferences.theme = normalizeTalosTheme(nextPreferences.theme)
     preferences.theme_mode = resolveTalosThemeMode(nextPreferences.theme_mode)
+    preferences.ui_scale = isTalosUiScale(nextPreferences.ui_scale)
+        ? nextPreferences.ui_scale
+        : TALOS_UI_SCALE_CONSTRAINT.default
     preferences.chat_layout = sanitizeTalosChatLayout(nextPreferences.chat_layout)
 
     const aiDefaults = record(nextPreferences.ai_defaults)
@@ -276,6 +356,12 @@ function applyPreferences(nextPreferences: Record<string, unknown>) {
     preferences.search.deep_research.extract_parallel = numberValue(deepResearch.extract_parallel, preferences.search.deep_research.extract_parallel)
     preferences.search.deep_research.timeout = numberValue(deepResearch.timeout, preferences.search.deep_research.timeout)
     preferences.browser_hmi_mode = normalizeTalosBrowserHmiMode(nextPreferences.browser_hmi_mode)
+
+    const promptCache = record(nextPreferences.prompt_cache)
+    preferences.prompt_cache.mode = isPromptCacheMode(promptCache.mode) ? promptCache.mode : 'automatic'
+    preferences.prompt_cache.ttl = promptCache.ttl === null || isPromptCacheTtl(promptCache.ttl)
+        ? promptCache.ttl
+        : null
 
     const reminders = record(nextPreferences.reminders)
     preferences.reminders.channel = stringValue(reminders.channel, preferences.reminders.channel)
@@ -304,6 +390,7 @@ function preferencesPayload() {
         ...(settings.value?.preferences ?? {}),
         theme: preferences.theme,
         theme_mode: preferences.theme_mode,
+        ui_scale: preferences.ui_scale,
         workspace_default_theme: preferences.theme,
         ...(themeChanged ? { theme_customization: {} } : {}),
         chat_layout: {
@@ -325,6 +412,9 @@ function preferencesPayload() {
             },
         },
         browser_hmi_mode: preferences.browser_hmi_mode,
+        prompt_cache: {
+            ...preferences.prompt_cache,
+        },
         reminders: {
             ...preferences.reminders,
         },
@@ -367,6 +457,10 @@ function updateSearchPreferences(nextPreferences: Partial<Omit<SettingsPreferenc
 
 function updateDeepResearchPreferences(nextPreferences: Partial<SettingsPreferences['search']['deep_research']>) {
     Object.assign(preferences.search.deep_research, nextPreferences)
+}
+
+function updatePromptCache(nextPreferences: TalosPromptCachePreferences) {
+    Object.assign(preferences.prompt_cache, nextPreferences)
 }
 
 function updateAppearancePreference(group: TalosAppearanceGroup, key: string, enabled: boolean) {
@@ -499,6 +593,29 @@ watch(
                     Loading settings
                 </div>
 
+                <div
+                    v-if="activeCapabilities.length"
+                    class="mt-4 divide-y divide-[var(--talos-border)] border-y border-[var(--talos-border)]"
+                    aria-label="Capability status"
+                >
+                    <div
+                        v-for="capability in activeCapabilities"
+                        :key="capability.id"
+                        :data-capability-id="capability.id"
+                        class="flex items-start justify-between gap-3 py-2"
+                    >
+                        <div class="min-w-0">
+                            <div class="text-sm font-medium text-[var(--talos-text)]">
+                                {{ TALOS_CAPABILITY_LABELS[capability.id] }}
+                            </div>
+                            <p v-if="capability.reason" class="mt-0.5 text-xs leading-5 text-[var(--talos-muted)]">
+                                {{ capability.reason }}
+                            </p>
+                        </div>
+                        <Chip :code="CAPABILITY_STATE_LABELS[capability.state]" class="shrink-0" />
+                    </div>
+                </div>
+
                 <div class="mt-4 space-y-3">
                     <template v-if="activeTab === 'models'">
                         <TalosSettingsModelsPanel
@@ -508,9 +625,11 @@ watch(
                             :selected-context-set-id="selectedContextSetId"
                             :active-model-profile="activeModelProfile"
                             :active-context-set="activeContextSet"
+                            :prompt-cache="preferences.prompt_cache"
                             :loading-settings="loadingSettings"
                             @select-model="emit('selectModel', $event)"
                             @select-context="emit('selectContext', $event)"
+                            @update-prompt-cache="updatePromptCache"
                             @open-module="openModule"
                         />
                     </template>
@@ -519,17 +638,11 @@ watch(
                         <div class="grid gap-3 md:grid-cols-2">
                             <label class="block">
                                 <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Utility model mode</span>
-                                <Select v-model="preferences.ai_defaults.utility_model_mode" class="mt-2" aria-label="Utility model mode">
-                                    <option value="same_as_chat">Same as chat</option>
-                                    <option value="default_profile">Use default profile</option>
-                                </Select>
+                                <TalosThemedSelect v-model="preferences.ai_defaults.utility_model_mode" class="mt-2" :items="AI_MODEL_MODE_OPTIONS" aria-label="Utility model mode" />
                             </label>
                             <label class="block">
                                 <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Research model mode</span>
-                                <Select v-model="preferences.ai_defaults.research_model_mode" class="mt-2" aria-label="Research model mode">
-                                    <option value="same_as_chat">Same as chat</option>
-                                    <option value="default_profile">Use default profile</option>
-                                </Select>
+                                <TalosThemedSelect v-model="preferences.ai_defaults.research_model_mode" class="mt-2" :items="AI_MODEL_MODE_OPTIONS" aria-label="Research model mode" />
                             </label>
                         </div>
                         <label class="flex cursor-pointer items-start justify-between gap-3 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
@@ -578,11 +691,7 @@ watch(
                         <div class="grid gap-3 md:grid-cols-2">
                             <label class="block">
                                 <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Channel</span>
-                                <Select v-model="preferences.reminders.channel" class="mt-2" aria-label="Reminder channel" :disabled="!reminderExecutionAvailable">
-                                    <option value="browser">Browser notification</option>
-                                    <option value="task">Task queue</option>
-                                    <option value="disabled">Disabled</option>
-                                </Select>
+                                <TalosThemedSelect v-model="preferences.reminders.channel" class="mt-2" :items="REMINDER_CHANNEL_OPTIONS" aria-label="Reminder channel" :disabled="!reminderExecutionAvailable" />
                             </label>
                             <label class="block">
                                 <span class="text-xs font-semibold uppercase text-[var(--talos-muted)]">Public app URL</span>
@@ -602,6 +711,7 @@ watch(
                         <TalosSettingsAppearancePanel
                             :theme="preferences.theme"
                             :theme-mode="preferences.theme_mode"
+                            :ui-scale="preferences.ui_scale"
                             :chat-layout="preferences.chat_layout"
                             :theme-policy-locked="themePolicyLocked"
                             :appearance-visibility="preferences.appearance_visibility"
@@ -609,8 +719,10 @@ watch(
                             @update-theme="preferences.theme = $event"
                             @update-theme-mode="preferences.theme_mode = $event"
                             @open-theme-engine="openModule('theme', 'motion')"
-                            @update-chat-bubble-scale="preferences.chat_layout.bubble_scale = $event"
+                            @update-ui-scale="preferences.ui_scale = $event"
+                            @update-message-scale="preferences.chat_layout.message_scale = $event"
                             @update-chat-composer-mode="preferences.chat_layout.composer_mode = $event"
+                            @update-chat-message-style="preferences.chat_layout.message_style = $event"
                             @update-mobile-window-presentation="preferences.chat_layout.mobile_window_presentation = $event"
                             @update-advanced-rail-expanded="preferences.chat_layout.advanced_rail_expanded = $event"
                             @update-appearance="updateAppearancePreference"
@@ -635,6 +747,11 @@ watch(
                                 <input type="hidden" name="_token" :value="csrfToken">
                                 <Button type="submit" size="sm" variant="destructive">Sign out</Button>
                             </form>
+                        </div>
+                        <div data-testid="talos-settings-intro-replay" class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] p-3">
+                            <div class="text-sm font-semibold text-[var(--talos-text)]">Introduction</div>
+                            <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Watch the TALOS introduction again at any time.</p>
+                            <Button class="mt-3" type="button" size="sm" variant="secondary" @click="emit('replayIntro')">Replay introduction</Button>
                         </div>
                     </template>
 

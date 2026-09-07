@@ -59,6 +59,23 @@ describe('TALOS window registry', () => {
         }
     })
 
+    it('opens Library on the unified projection while keeping sources explicit', () => {
+        expect(TALOS_WINDOW_REGISTRY.library.defaultSection).toBe('unified')
+        expect(TALOS_WINDOW_REGISTRY.library.sections).toEqual([
+            {
+                id: 'unified',
+                label: 'Unified',
+                description: 'Files, media, links and generated outputs across every chat.',
+            },
+            {
+                id: 'sources',
+                label: 'Sources',
+                description: 'Manage Context Vault files, context sets and generated documents.',
+            },
+        ])
+        expect(TALOS_WINDOW_REGISTRY.search.sections.map((section) => section.id)).toEqual(['context', 'documents'])
+    })
+
     it('uses one dynamic module boundary per registered window', () => {
         const source = readFileSync(new URL('./talosWindowRegistry.ts', import.meta.url), 'utf8')
         for (const id of EXPECTED_IDS) {

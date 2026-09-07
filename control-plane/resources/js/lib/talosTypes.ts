@@ -22,13 +22,19 @@ export type RunStatus =
 export type TalosMessageRole = 'user' | 'assistant' | 'system' | 'tool'
 export type TalosSessionSurface = 'chat' | 'browse'
 export type TalosChatBubbleScale = 'compact' | 'balanced' | 'expanded'
+export type TalosMessageScale = number
 export type TalosComposerMode = 'full' | 'minimal'
+export type TalosMessageStyle = 'sections' | 'bubbles'
 export type TalosMobileWindowPresentation = 'drawer' | 'fullscreen'
 export type TalosChatLayoutPreferences = {
-    bubble_scale: TalosChatBubbleScale
+    message_scale: TalosMessageScale
     composer_mode: TalosComposerMode
+    message_style: TalosMessageStyle
     advanced_rail_expanded: boolean
     mobile_window_presentation: TalosMobileWindowPresentation
+}
+export type TalosChatLayoutInput = Partial<TalosChatLayoutPreferences> & {
+    bubble_scale?: TalosChatBubbleScale
 }
 export type TalosBrowserModeStatus = 'disconnected' | 'starting' | 'ready' | 'active' | 'awaiting_approval' | 'recovery_required' | 'stopped' | 'failed'
 export type TalosBrowserMode = {
@@ -47,6 +53,8 @@ export type TalosBrowserTaskStatus =
     | 'completed'
     | 'failed'
     | 'cancelled'
+export type TalosBrowserRecoveryStrategy = 'resume' | 'reconcile' | 'fork' | 'wait_for_user' | 'fail'
+export type TalosBrowserRecoveryAction = 'recover_task' | 'start_fresh' | 'restart'
 export type TalosBrowserTask = {
     id: string
     talos_session_id: string
@@ -208,6 +216,42 @@ export type TalosSessionExportPayload = {
 
 export type TalosModelProfileStatus = 'untested' | 'healthy' | 'degraded' | 'failed' | 'disabled'
 
+// Canonical reasoning-effort ladder (locked, FV2-06.0 spec §3):
+// off < minimal < low < medium < high < xhigh < max.
+// `off` is a request-layer concept (send no reasoning param), not a catalog level.
+export type TalosEffortLevel = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+export const TALOS_EFFORT_ORDER: readonly TalosEffortLevel[] = [
+    'off',
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+] as const
+
+export type TalosPromptCacheMode = 'provider_default' | 'automatic' | 'explicit' | 'disabled'
+
+export type TalosPromptCachePreferences = {
+    mode: TalosPromptCacheMode
+    ttl: '5m' | '30m' | '1h' | null
+}
+
+export type TalosPromptCacheCapability = {
+    contract: 'talos.prompt_cache.capability.v1'
+    supported: boolean
+    minimum_input_tokens: number | null
+    modes: TalosPromptCacheMode[]
+    ttls: Array<Exclude<TalosPromptCachePreferences['ttl'], null>>
+    breakpoints: string[]
+    usage_metrics: {
+        read: boolean
+        write: boolean
+        miss: boolean
+    }
+}
+
 export type TalosModelProfile = {
     id: string
     user_id?: number | null
@@ -220,8 +264,71 @@ export type TalosModelProfile = {
     capabilities?: Record<string, unknown> | null
     probe_result?: Record<string, unknown> | null
     has_secret: boolean
+    effort_levels: string[]
+    supports_thinking: boolean
+    show_in_composer: boolean
+    prompt_cache_capability?: TalosPromptCacheCapability
     created_at: string
     updated_at: string
+}
+
+export type TalosModelCatalogChatCompatibility = 'supported' | 'unsupported' | 'unknown'
+export type TalosModelCatalogLifecycle = 'stable' | 'preview' | 'experimental' | 'deprecated' | 'unknown'
+
+export type TalosProviderModelCatalogCapabilities = {
+    text: boolean | null
+    vision: boolean | null
+    tools: boolean | null
+    reasoning: boolean | null
+    embeddings: boolean | null
+    image_output: boolean | null
+    audio_output: boolean | null
+}
+
+export type TalosProviderModelCatalogItem = {
+    id: string
+    display_name: string
+    provider: TalosModelProfile['provider']
+    owned_by: string | null
+    chat_compatibility: TalosModelCatalogChatCompatibility
+    capabilities: TalosProviderModelCatalogCapabilities
+    context_window: number | null
+    max_output_tokens: number | null
+    lifecycle: TalosModelCatalogLifecycle
+    canonical_slug: string | null
+    local_digest: string | null
+    metadata: Record<string, unknown>
+}
+
+export type TalosProviderModelCatalog = {
+    profile_id: string | null
+    provider: TalosModelProfile['provider']
+    models: TalosProviderModelCatalogItem[]
+    complete: boolean
+    page_count: number
+    fetched_at: string
+    warnings: string[]
+}
+
+export type TalosModelCatalogFaultCode =
+    | 'MODEL_CATALOG_SECRET_MISSING'
+    | 'MODEL_CATALOG_AUTH_FAILED'
+    | 'MODEL_CATALOG_RATE_LIMITED'
+    | 'MODEL_CATALOG_POLICY_BLOCKED'
+    | 'MODEL_CATALOG_CONNECTION_FAILED'
+    | 'MODEL_CATALOG_CONNECTED_IP_MISMATCH'
+    | 'MODEL_CATALOG_REDIRECT_BLOCKED'
+    | 'MODEL_CATALOG_RESPONSE_TOO_LARGE'
+    | 'MODEL_CATALOG_RESPONSE_INVALID'
+    | 'MODEL_CATALOG_PAGINATION_INVALID'
+    | 'MODEL_CATALOG_LIMIT_EXCEEDED'
+
+export type TalosModelCatalogFault = {
+    code: TalosModelCatalogFaultCode | string
+    message: string
+    retryable: boolean
+    retry_after_seconds: number | null
+    provider: TalosModelProfile['provider'] | string
 }
 
 export type TalosModelRoutingLane = {
@@ -975,16 +1082,64 @@ export type TalosBrowserPointerFrame = {
     clickCount: 1 | 2
 }
 
-export type TalosBrowserHmiExecution = {
+export type TalosBrowserRefTarget = {
+    ref: string
+    role: string
+    name: string
+    destination: string | null
+}
+
+export type TalosBrowserRefFrame = {
+    schema_version: 'talos_browser_hmi_ref_targets_v2'
+    browser_session_id: string
+    state_version: number
+    frame_sha256: string
+    snapshot_id: string
+    screenshot: TalosBrowserArtifact
+    targets: TalosBrowserRefTarget[]
+}
+
+export type TalosBrowserRefInteraction = {
+    browserSessionId: string
+    artifact: TalosBrowserArtifact
+    snapshotId: string
+    ref: string
+    clickCount: 1 | 2
+}
+
+export type TalosBrowserScrollFrame = {
+    browserSessionId: string
+    artifact: TalosBrowserArtifact
+    deltaY: number
+}
+
+export type TalosBrowserFrameExecution = {
+    session: TalosBrowserSession
+    screenshot: TalosBrowserArtifact
+    snapshot: TalosBrowserArtifact
+}
+
+export type TalosBrowserHmiExecution = TalosBrowserFrameExecution & {
     interaction: {
         status: 'executed'
         command_id: string
         approval_id?: string
         target?: Record<string, unknown>
     }
-    session: TalosBrowserSession
-    screenshot: TalosBrowserArtifact
-    snapshot: TalosBrowserArtifact
+}
+
+export type TalosBrowserRecoveryDecision = {
+    strategy: TalosBrowserRecoveryStrategy
+    reason_code: string
+    remediation: string
+    task_id: string
+    resulting_task_id: string | null
+}
+
+export type TalosBrowserRecoveryExecution = {
+    decision: TalosBrowserRecoveryDecision
+    task: TalosBrowserTask
+    resulting_task: TalosBrowserTask | null
 }
 
 export type TalosBrowserEvent = {

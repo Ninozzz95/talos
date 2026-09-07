@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>TALOS obscured semantic ref fixture</title>
+    <style>
+      html, body { width: 100%; height: 100%; margin: 0; }
+      body { font-family: sans-serif; }
+      #semantic-target {
+        position: fixed;
+        left: 280px;
+        top: 220px;
+        width: 240px;
+        height: 56px;
+      }
+      #semantic-cover {
+        position: fixed;
+        left: 270px;
+        top: 210px;
+        z-index: 100;
+        width: 260px;
+        height: 76px;
+        background: rgb(35 39 47 / 82%);
+        pointer-events: none;
+        opacity: 0;
+      }
+      #semantic-cover.armed {
+        pointer-events: auto;
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Semantic actionability fixture</h1>
+      <button id="semantic-target" type="button">Obscured semantic target</button>
+      <div id="semantic-cover" aria-hidden="true"></div>
+    </main>
+    <script>
+      window.setTimeout(() => {
+        document.querySelector('#semantic-cover').classList.add('armed');
+      }, 4000);
+    </script>
+  </body>
+</html>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Kadmos\Provider;
 
+use Closure;
 use InvalidArgumentException;
 use Kadmos\Tool\ProviderTurnRequest;
 use Kadmos\Tool\ProviderTurnResponse;
@@ -15,7 +16,7 @@ use Kadmos\Tool\ToolDefinition;
 use Kadmos\Tool\ToolResult;
 use Throwable;
 
-final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
+final class AnthropicMessagesTurnAdapter implements StreamingProviderTurnAdapter
 {
     public const ADAPTER_VERSION = 'anthropic_messages_v1';
 
@@ -65,6 +66,28 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
 
     public function start(ProviderTurnRequest $request): ProviderTurnResponse
     {
+        [$payload, $hasResources] = $this->startPayload($request);
+
+        return $this->withoutResourceContinuation($this->perform($payload), $hasResources);
+    }
+
+    public function streamStart(ProviderTurnRequest $request, Closure $isCancelled): ProviderStream
+    {
+        [$payload, $hasResources] = $this->startPayload($request);
+
+        return $this->performStream(
+            $payload,
+            $isCancelled,
+            fn (array $response): ProviderTurnResponse => $this->withoutResourceContinuation(
+                $this->normalize($response, $payload),
+                $hasResources,
+            ),
+        );
+    }
+
+    /** @return array{array<string, mixed>, bool} */
+    private function startPayload(ProviderTurnRequest $request): array
+    {
         if (strtolower($request->provider) !== 'anthropic') {
             throw new InvalidArgumentException('Anthropic request requires the anthropic provider.');
         }
@@ -77,14 +100,28 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
             'messages' => $messages,
             'max_tokens' => $request->maxTokens ?? 4096,
         ];
-        if ($request->temperature !== null) {
+        $reasoning = ReasoningEffortMap::paramsFor(
+            ReasoningEffortMap::TARGET_ANTHROPIC,
+            $request->reasoningEffort,
+            $request->reasoningVisible ?? false,
+            $request->maxTokens,
+        );
+        if ($reasoning !== []) {
+            // Extended thinking requires temperature to be unset — Anthropic rejects a
+            // custom temperature together with a thinking block, so the reasoning budget
+            // takes its place.
+            foreach ($reasoning as $reasoningKey => $reasoningValue) {
+                $payload[$reasoningKey] = $reasoningValue;
+            }
+        } elseif ($request->temperature !== null) {
             $payload['temperature'] = $request->temperature;
         }
         if ($request->tools !== []) {
             $payload['tools'] = array_map($this->providerTool(...), $request->tools);
         }
+        $payload = $this->withPromptCachePlan($payload, $request->promptCachePlan, $request->model);
 
-        return $this->withoutResourceContinuation($this->perform($payload), $request->resources !== []);
+        return [$payload, $request->resources !== []];
     }
 
     /** @return list<array<string, mixed>> */
@@ -141,6 +178,29 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
 
     public function continue(ProviderTurnState $state, array $toolResults): ProviderTurnResponse
     {
+        return $this->perform($this->continuationPayload($state, $toolResults));
+    }
+
+    public function streamContinue(
+        ProviderTurnState $state,
+        array $toolResults,
+        Closure $isCancelled,
+    ): ProviderStream {
+        $payload = $this->continuationPayload($state, $toolResults);
+
+        return $this->performStream(
+            $payload,
+            $isCancelled,
+            fn (array $response): ProviderTurnResponse => $this->normalize($response, $payload),
+        );
+    }
+
+    /**
+     * @param list<ToolResult> $toolResults
+     * @return array<string, mixed>
+     */
+    private function continuationPayload(ProviderTurnState $state, array $toolResults): array
+    {
         if ($state->provider !== 'anthropic') {
             throw new InvalidArgumentException('Anthropic state belongs to another provider.');
         }
@@ -166,17 +226,17 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
 
         $payload = [
             'model' => ToolContractGuard::nonEmptyString($native['model'] ?? null, 'Anthropic continuation model', 256),
-            'system' => ToolContractGuard::nonEmptyString($native['system'] ?? null, 'Anthropic continuation system prompt', 65536),
+            'system' => $this->continuationSystem($native['system'] ?? null),
             'messages' => $messages,
             'max_tokens' => is_int($native['max_tokens'] ?? null) ? $native['max_tokens'] : 4096,
         ];
-        foreach (['temperature', 'tools'] as $field) {
+        foreach (['temperature', 'thinking', 'tools', 'cache_control'] as $field) {
             if (array_key_exists($field, $native)) {
                 $payload[$field] = $native[$field];
             }
         }
 
-        return $this->perform($payload);
+        return $payload;
     }
 
     /** @param array<string, mixed> $payload */
@@ -212,6 +272,34 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
         }
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     * @param Closure(array<string, mixed>): ProviderTurnResponse $finalizer
+     */
+    private function performStream(array $payload, Closure $isCancelled, Closure $finalizer): ProviderStream
+    {
+        if (! $this->transport instanceof StreamingProviderTransport) {
+            throw new InvalidArgumentException('Configured Anthropic transport does not support streaming.');
+        }
+        $streamPayload = [...$payload, 'stream' => true];
+
+        return new ProviderStream(
+            $this->transport->stream(
+                $this->endpoint,
+                $streamPayload,
+                [
+                    'Content-Type: application/json',
+                    'Accept: text/event-stream',
+                    'x-api-key: '.$this->apiKey,
+                    'anthropic-version: '.$this->anthropicVersion,
+                ],
+                $this->timeoutMs,
+                $isCancelled,
+            ),
+            new AnthropicMessagesStreamDecoder($finalizer),
+        );
+    }
+
     /** @param array<string, mixed> $response @param array<string, mixed> $requestPayload */
     private function normalize(array $response, array $requestPayload): ProviderTurnResponse
     {
@@ -220,11 +308,16 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
         $usage = TokenUsage::fromAnthropic(is_array($response['usage'] ?? null) ? $response['usage'] : []);
         $content = ToolContractGuard::listArray($response['content'] ?? null, 'Anthropic response content');
         $texts = [];
+        $thinking = [];
         $toolCalls = [];
         foreach ($content as $index => $block) {
             $block = ToolContractGuard::objectArray($block, sprintf('Anthropic content block %d', $index));
             if (($block['type'] ?? null) === 'text') {
                 $texts[] = ToolContractGuard::nonEmptyString($block['text'] ?? null, sprintf('Anthropic text block %d', $index), 262144);
+                continue;
+            }
+            if (($block['type'] ?? null) === 'thinking') {
+                $thinking[] = ToolContractGuard::nonEmptyString($block['thinking'] ?? null, sprintf('Anthropic thinking block %d', $index), 262144);
                 continue;
             }
             if (($block['type'] ?? null) !== 'tool_use') {
@@ -245,6 +338,7 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
             ]);
         }
         $text = trim(implode("\n", $texts));
+        $visibleReasoning = trim(implode("\n", $thinking));
         if ($stopReason === 'refusal') {
             return ProviderTurnResponse::refusal($text !== '' ? $text : 'The provider refused this request.', $responseId, $stopReason, $usage);
         }
@@ -266,7 +360,7 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
                 'assistant_content' => $content,
                 'max_tokens' => $requestPayload['max_tokens'],
             ];
-            foreach (['temperature', 'tools'] as $field) {
+            foreach (['temperature', 'thinking', 'tools', 'cache_control'] as $field) {
                 if (array_key_exists($field, $requestPayload)) {
                     $native[$field] = $requestPayload[$field];
                 }
@@ -290,7 +384,179 @@ final class AnthropicMessagesTurnAdapter implements ProviderTurnAdapter
             ), $responseId, $stopReason, $usage);
         }
 
-        return ProviderTurnResponse::final($text, $responseId, $stopReason, $usage);
+        return ProviderTurnResponse::final(
+            $text,
+            $responseId,
+            $stopReason,
+            $usage,
+            $visibleReasoning !== '' ? $visibleReasoning : null,
+        );
+    }
+
+    /** @param array<string, mixed> $payload @return array<string, mixed> */
+    private function withPromptCachePlan(array $payload, ?PromptCachePlan $plan, string $model): array
+    {
+        if ($plan === null
+            || $plan->mode === PromptCachePlan::MODE_PROVIDER_DEFAULT
+            || $plan->mode === PromptCachePlan::MODE_DISABLED) {
+            return $payload;
+        }
+        if (! $this->supportsManagedPromptCache($model)
+            || ! in_array($plan->mode, [PromptCachePlan::MODE_AUTOMATIC, PromptCachePlan::MODE_EXPLICIT], true)
+            || ($plan->ttl !== null
+                && ! in_array($plan->ttl, [PromptCachePlan::TTL_5_MINUTES, PromptCachePlan::TTL_1_HOUR], true))
+            || ($plan->mode === PromptCachePlan::MODE_AUTOMATIC && count($plan->breakpoints) > 3)) {
+            throw new InvalidArgumentException('The selected Anthropic model does not support this prompt-cache policy.');
+        }
+
+        $cacheControl = $this->cacheControl($plan->ttl);
+        if ($plan->mode === PromptCachePlan::MODE_AUTOMATIC) {
+            $payload['cache_control'] = $cacheControl;
+        }
+
+        foreach ($plan->breakpoints as $breakpoint) {
+            if ($breakpoint === PromptCachePlan::BREAKPOINT_TOOLS) {
+                if (! isset($payload['tools']) || $payload['tools'] === []) {
+                    throw new InvalidArgumentException('Anthropic tool cache breakpoint requires at least one tool.');
+                }
+                $last = array_key_last($payload['tools']);
+                $payload['tools'][$last]['cache_control'] = $cacheControl;
+                continue;
+            }
+            if ($breakpoint === PromptCachePlan::BREAKPOINT_SYSTEM) {
+                $payload['system'] = $this->cacheableContent(
+                    $payload['system'] ?? null,
+                    $cacheControl,
+                    'Anthropic system cache breakpoint',
+                );
+                continue;
+            }
+
+            $messageIndex = (int) substr($breakpoint, strlen('message:'));
+            if (! array_key_exists($messageIndex, $payload['messages'])) {
+                throw new InvalidArgumentException('Anthropic cache breakpoint references an unknown message.');
+            }
+            $payload['messages'][$messageIndex]['content'] = $this->cacheableContent(
+                $payload['messages'][$messageIndex]['content'] ?? null,
+                $cacheControl,
+                'Anthropic message cache breakpoint',
+            );
+        }
+
+        return $payload;
+    }
+
+    /** @return array{type: string, ttl?: string} */
+    private function cacheControl(?string $ttl): array
+    {
+        if ($ttl === null || $ttl === PromptCachePlan::TTL_5_MINUTES) {
+            return ['type' => 'ephemeral'];
+        }
+        if ($ttl === PromptCachePlan::TTL_1_HOUR) {
+            return ['type' => 'ephemeral', 'ttl' => '1h'];
+        }
+
+        throw new InvalidArgumentException('Anthropic cache TTL is unsupported.');
+    }
+
+    /**
+     * @param array{type: string, ttl?: string} $cacheControl
+     * @return list<array<string, mixed>>
+     */
+    private function cacheableContent(mixed $content, array $cacheControl, string $label): array
+    {
+        if (is_string($content)) {
+            $blocks = [['type' => 'text', 'text' => $content]];
+        } else {
+            $blocks = ToolContractGuard::listArray($content, $label);
+        }
+        if ($blocks === []) {
+            throw new InvalidArgumentException("{$label} requires at least one content block.");
+        }
+
+        $last = array_key_last($blocks);
+        $block = ToolContractGuard::objectArray($blocks[$last], $label.' content block');
+        if (($block['type'] ?? null) === 'thinking') {
+            throw new InvalidArgumentException("{$label} cannot target an Anthropic thinking block.");
+        }
+        $block['cache_control'] = $cacheControl;
+        $blocks[$last] = $block;
+
+        return $blocks;
+    }
+
+    /** @return string|list<array<string, mixed>> */
+    private function continuationSystem(mixed $system): string|array
+    {
+        if (is_string($system)) {
+            return ToolContractGuard::nonEmptyString($system, 'Anthropic continuation system prompt', 65536);
+        }
+
+        $blocks = ToolContractGuard::listArray($system, 'Anthropic continuation system blocks');
+        if ($blocks === []) {
+            throw new InvalidArgumentException('Anthropic continuation system blocks must not be empty.');
+        }
+        foreach ($blocks as $index => $value) {
+            $block = ToolContractGuard::objectArray($value, sprintf('Anthropic continuation system block %d', $index));
+            ToolContractGuard::exactKeys(
+                $block,
+                ['type', 'text'],
+                ['cache_control'],
+                sprintf('Anthropic continuation system block %d', $index),
+            );
+            if (($block['type'] ?? null) !== 'text') {
+                throw new InvalidArgumentException('Anthropic continuation system blocks must be text.');
+            }
+            ToolContractGuard::nonEmptyString(
+                $block['text'],
+                sprintf('Anthropic continuation system block %d text', $index),
+                65536,
+            );
+            if (array_key_exists('cache_control', $block)) {
+                $this->validateCacheControl($block['cache_control'], sprintf('Anthropic continuation system block %d cache control', $index));
+            }
+        }
+
+        return $blocks;
+    }
+
+    private function validateCacheControl(mixed $value, string $label): void
+    {
+        $cacheControl = ToolContractGuard::objectArray($value, $label);
+        ToolContractGuard::exactKeys($cacheControl, ['type'], ['ttl'], $label);
+        if (($cacheControl['type'] ?? null) !== 'ephemeral'
+            || (array_key_exists('ttl', $cacheControl) && $cacheControl['ttl'] !== '1h')) {
+            throw new InvalidArgumentException("{$label} is unsupported.");
+        }
+    }
+
+    private function supportsManagedPromptCache(string $model): bool
+    {
+        $model = strtolower(trim($model));
+        $model = str_replace(['.', '_'], '-', $model);
+        $model = preg_replace('/-+/', '-', $model) ?? $model;
+
+        foreach ([
+            'claude-opus-5',
+            'claude-fable-5',
+            'claude-mythos-5',
+            'claude-mythos-preview',
+            'claude-opus-4-8',
+            'claude-opus-4-7',
+            'claude-opus-4-6',
+            'claude-opus-4-5',
+            'claude-haiku-4-5',
+            'claude-sonnet-5',
+            'claude-sonnet-4-6',
+            'claude-sonnet-4-5',
+            'claude-opus-4-1',
+        ] as $supported) {
+            if (str_starts_with($model, $supported)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @param list<ToolResult> $toolResults @return array<string, ToolResult> */

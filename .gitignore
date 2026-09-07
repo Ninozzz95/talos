@@ -87,6 +87,13 @@ harness-ui/.local-runtime/
 # generated machine-local data, never source-controlled.
 harness-ui/.local-models/
 
+# ⭐ 07/9, dal merge con `main`: le righe di artifact-worker arrivano di la, e non
+#    contraddicono le nostre — parlano di cartelle che questa lane non tocca.
+artifact-worker/dist/
+!artifact-worker/vendor/
+artifact-worker/vendor/*
+!artifact-worker/vendor/xlsx-0.20.3.tgz
+
 core/vendor/
 validator/node_modules/
 control-plane/vendor/
@@ -105,6 +112,7 @@ __pycache__/
 .DS_Store
 Thumbs.db
 docs/superpowers/
+docs/planning/
 docs/architecture/progress/
 docs/architecture/*checklist*.md
 docs/architecture/*plan*.md

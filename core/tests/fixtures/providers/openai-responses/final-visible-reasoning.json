@@ -1,0 +1,36 @@
+{
+  "provider_response": {
+    "id": "resp-reasoning-final-1",
+    "status": "completed",
+    "output": [
+      {
+        "type": "reasoning",
+        "id": "rs_final_1",
+        "summary": [
+          {
+            "type": "summary_text",
+            "text": "I compared the available evidence before answering."
+          }
+        ],
+        "encrypted_content": "opaque-private-openai-state"
+      },
+      {
+        "type": "message",
+        "id": "msg-final-1",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "The page is ready.",
+            "annotations": []
+          }
+        ]
+      }
+    ],
+    "usage": {
+      "input_tokens": 20,
+      "output_tokens": 12,
+      "total_tokens": 32
+    }
+  }
+}

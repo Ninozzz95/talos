@@ -74,6 +74,12 @@ export PATH="$FIXTURE_ROOT/fakebin:/usr/bin:/bin"
 "$FIXTURE_ROOT/talos" --plain up >/dev/null
 
 grep -Eq '^TALOS_BROWSER_WORKER_TOKEN=[a-f0-9]{64}$' "$FIXTURE_ROOT/.env"
+grep -Eq '^TALOS_ARTIFACT_WORKER_TOKEN=[a-f0-9]{64}$' "$FIXTURE_ROOT/.env"
+if [ "$(grep '^TALOS_BROWSER_WORKER_TOKEN=' "$FIXTURE_ROOT/.env")" = \
+  "$(grep '^TALOS_ARTIFACT_WORKER_TOKEN=' "$FIXTURE_ROOT/.env" | sed 's/^TALOS_ARTIFACT/TALOS_BROWSER/')" ]; then
+  echo "Browser and artifact workers received the same credential" >&2
+  exit 1
+fi
 grep -Eq '^TALOS_BROWSER_ACTION_PRIVATE_KEY_B64=[A-Za-z0-9+/]+={0,2}$' "$FIXTURE_ROOT/.env"
 grep -Eq '^TALOS_BROWSER_ACTION_PUBLIC_KEY_B64=[A-Za-z0-9+/]+={0,2}$' "$FIXTURE_ROOT/.env"
 grep -Eq '^TALOS_BROWSER_ACTION_KEY_ID=[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$' "$FIXTURE_ROOT/.env"

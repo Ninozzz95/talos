@@ -74,6 +74,48 @@ final class TalosRouteContractTest extends TestCase
         }
     }
 
+    public function test_workspace_bootstrap_escapes_configured_talos_public_links(): void
+    {
+        $this->withoutVite();
+        $user = User::factory()->create();
+        $deepDive = 'https://docs.example.test/avm?next="><script>alert(1)</script>&mode=full';
+        $patreon = 'https://www.patreon.com/talos?ref=workspace&surface=intro';
+        $kofi = 'https://ko-fi.com/talos_support';
+        config([
+            'services.talos.public_links.avm_deep_dive' => $deepDive,
+            'services.talos.public_links.patreon' => $patreon,
+            'services.talos.public_links.kofi' => $kofi,
+        ]);
+
+        $response = $this->actingAs($user)->get('/')->assertOk();
+
+        $response
+            ->assertSee('data-talos-avm-deep-dive-url="'.e($deepDive).'"', false)
+            ->assertSee('data-talos-patreon-url="'.e($patreon).'"', false)
+            ->assertSee('data-talos-kofi-url="'.e($kofi).'"', false)
+            ->assertDontSee('<script>alert(1)</script>', false);
+    }
+
+    public function test_workspace_bootstrap_invents_no_talos_public_links_when_configuration_is_absent(): void
+    {
+        $this->withoutVite();
+        $user = User::factory()->create();
+        config([
+            'services.talos.public_links.avm_deep_dive' => null,
+            'services.talos.public_links.patreon' => null,
+            'services.talos.public_links.kofi' => null,
+        ]);
+
+        $this->actingAs($user)
+            ->get('/')
+            ->assertOk()
+            ->assertSee('data-talos-avm-deep-dive-url=""', false)
+            ->assertSee('data-talos-patreon-url=""', false)
+            ->assertSee('data-talos-kofi-url=""', false)
+            ->assertDontSee('patreon.com', false)
+            ->assertDontSee('ko-fi.com', false);
+    }
+
     public function test_browse_deep_link_boots_the_unified_workspace_with_browse_enabled(): void
     {
         $this->withoutVite();

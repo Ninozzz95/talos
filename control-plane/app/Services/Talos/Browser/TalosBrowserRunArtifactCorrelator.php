@@ -250,6 +250,15 @@ final readonly class TalosBrowserRunArtifactCorrelator
         $stateDelta = in_array($expectedKind, ['navigate', 'click', 'upload'], true) ? 1 : 0;
         $expectedSourceStateVersion = (int) $action->expected_state_version;
         $expectedStateVersion = (int) $action->expected_state_version + $stateDelta;
+        $sourceStateVersion = $artifact->source_state_version;
+        $artifactStateVersion = $artifact->state_version;
+        $sourceStateMatches = is_int($sourceStateVersion)
+            && is_int($artifactStateVersion)
+            && $sourceStateVersion >= 0
+            && $artifactStateVersion === $expectedStateVersion
+            && ($expectedKind === 'read'
+                ? in_array($artifactStateVersion - $sourceStateVersion, [0, 1], true)
+                : $sourceStateVersion === $expectedSourceStateVersion);
         $sourceCommandMatches = is_string($artifact->source_command_id)
             && trim($artifact->source_command_id) !== ''
             && ($expectedKind === 'read'
@@ -264,12 +273,9 @@ final readonly class TalosBrowserRunArtifactCorrelator
             || $expectedKind === null
             || ! hash_equals($expectedKind, (string) $action->kind)
             || ! $sourceCommandMatches
-            || ! is_int($artifact->source_state_version)
-            || $artifact->source_state_version !== $expectedSourceStateVersion
+            || ! $sourceStateMatches
             || ! is_string($artifact->sha256)
-            || preg_match('/^[a-f0-9]{64}$/D', $artifact->sha256) !== 1
-            || ! is_int($artifact->state_version)
-            || $artifact->state_version !== $expectedStateVersion) {
+            || preg_match('/^[a-f0-9]{64}$/D', $artifact->sha256) !== 1) {
             throw new TalosBrowserEvidenceException(
                 'TALOS_BROWSER_EVIDENCE_SOURCE_INVALID',
                 'Browser artifact type, MIME, digest or state is not canonical for its persisted tool call.',
