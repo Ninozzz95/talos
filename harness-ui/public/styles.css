@@ -628,25 +628,117 @@ button {
   background: var(--talos-accent);
   transform: translateX(calc(var(--talos-control-height) * .75));
 }
-.talos-checkbox {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+input.talos-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+  flex: none;
+}
+input.talos-switch::after {
+  content: "";
+  width: calc(var(--talos-control-height) - 12px);
+  height: calc(var(--talos-control-height) - 12px);
+  border-radius: var(--talos-radius-pill);
+  background: var(--talos-muted);
+  transform: translateX(0);
+  transition: transform var(--talos-motion-duration-control) var(--talos-motion-ease), background-color var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+input.talos-switch:checked {
+  border-color: var(--talos-accent-border);
+  background: var(--talos-accent-soft);
+}
+input.talos-switch:checked::after {
+  background: var(--talos-accent);
+  transform: translateX(calc(var(--talos-control-height) * .75));
+}
+.talos-switch:focus-visible {
+  outline: 2px solid var(--talos-accent);
+  outline-offset: 2px;
+}
+.talos-checkbox,
+input[type=checkbox]:not(.talos-switch) {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
   border: 1px solid var(--talos-border);
   background: var(--talos-panel-soft);
   display: grid;
   place-items: center;
   color: var(--talos-text-on-accent);
   flex: none;
+  cursor: pointer;
+  transition: background-color var(--talos-motion-duration-control) var(--talos-motion-ease), border-color var(--talos-motion-duration-control) var(--talos-motion-ease);
 }
 .talos-checkbox[aria-checked=true] {
   background: var(--talos-accent);
   border-color: var(--talos-accent);
 }
 .talos-checkbox--lg {
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+.talos-checkbox .i {
+  width: 13px;
+  height: 13px;
+}
+.talos-checkbox--lg .i {
+  width: 16px;
+  height: 16px;
+}
+input.talos-checkbox,
+input[type=checkbox]:not(.talos-switch) {
+  appearance: none;
+  -webkit-appearance: none;
+  margin: 0;
+}
+input.talos-checkbox::before,
+input[type=checkbox]:not(.talos-switch)::before {
+  content: "";
+  width: 11px;
+  height: 11px;
+  background: var(--talos-text-on-accent);
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0, 43% 62%);
+  transform: scale(0);
+  transform-origin: center;
+  transition: transform var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+input.talos-checkbox--lg::before {
+  width: 15px;
+  height: 15px;
+}
+input.talos-checkbox:checked,
+input[type=checkbox]:not(.talos-switch):checked {
+  background: var(--talos-accent);
+  border-color: var(--talos-accent);
+}
+input.talos-checkbox:checked::before,
+input[type=checkbox]:not(.talos-switch):checked::before {
+  transform: scale(1);
+}
+input.talos-checkbox:disabled,
+input[type=checkbox]:not(.talos-switch):disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.talos-checkbox:focus-visible,
+input[type=checkbox]:not(.talos-switch):focus-visible {
+  outline: 2px solid var(--talos-accent);
+  outline-offset: 2px;
+}
+@media (forced-colors: active) {
+  input.talos-checkbox:checked,
+  .talos-checkbox[aria-checked=true] {
+    background: SelectedItem;
+    border-color: SelectedItem;
+  }
+  input.talos-checkbox::before {
+    background: SelectedItemText;
+  }
+  input.talos-switch:checked::after,
+  .talos-switch[aria-checked=true] .talos-switch__thumb {
+    background: SelectedItem;
+  }
 }
 .talos-field {
   position: relative;
@@ -682,6 +774,7 @@ button {
   height: 36px;
   padding-left: 34px;
 }
+select,
 .talos-select {
   height: 36px;
   padding: 0 32px 0 12px;
@@ -707,6 +800,77 @@ button {
 }
 .talos-select--sm {
   height: 32px;
+}
+select:focus-visible,
+.talos-select:focus-visible {
+  outline: 2px solid var(--talos-accent);
+  outline-offset: 2px;
+}
+@supports (appearance: base-select) {
+  select,
+  .talos-select {
+    appearance: base-select;
+    background-image: none;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  select::picker-icon,
+  .talos-select::picker-icon {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-right: 1.6px solid var(--talos-muted);
+    border-bottom: 1.6px solid var(--talos-muted);
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform var(--talos-motion-duration-control) var(--talos-motion-ease);
+  }
+  select:open::picker-icon,
+  .talos-select:open::picker-icon {
+    transform: translateY(1px) rotate(-135deg);
+  }
+  select::picker(select),
+  .talos-select::picker(select) {
+    appearance: base-select;
+    margin-top: 6px;
+    padding: 6px;
+    border: 1px solid var(--talos-border);
+    border-radius: 11px;
+    background: var(--talos-panel);
+    box-shadow: var(--talos-shadow-card);
+    color: var(--talos-text);
+  }
+  select option,
+  .talos-select option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px 7px 28px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--talos-text);
+    background: transparent;
+    position: relative;
+  }
+  select option:hover,
+  select option:focus,
+  .talos-select option:hover,
+  .talos-select option:focus {
+    background: var(--talos-panel-soft);
+  }
+  select option:checked,
+  .talos-select option:checked {
+    background: var(--talos-accent-soft);
+    color: var(--talos-accent-text);
+  }
+  select option::checkmark,
+  .talos-select option::checkmark {
+    position: absolute;
+    left: 9px;
+    color: var(--talos-accent);
+  }
 }
 .talos-card {
   border: 1px solid var(--talos-border);
@@ -1033,6 +1197,19 @@ button {
   padding: calc(var(--talos-row-pad) - 2px) 10px calc(var(--talos-row-pad) - 2px) 12px;
   color: var(--talos-assistant-text);
   transition: background-color var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.talos-session-item.is-selection-mode {
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+}
+.talos-session-item.is-selection-mode > .talos-checkbox {
+  order: -1;
+  margin: 0;
+  align-self: center;
+  justify-self: center;
+}
+.talos-session-item.is-selected {
+  border-color: var(--talos-accent-border);
+  background: var(--talos-accent-soft);
 }
 .talos-session-item:hover {
   background: var(--talos-card-subtle);
@@ -2562,25 +2739,33 @@ body.reduce-motion *::after {
   container-type: inline-size;
   container-name: barra;
 }
-@container barra (max-width: 190px) {
-  .talos-solo-largo {
-    display: none;
-  }
-  .talos-sidebar__actions .talos-button--primary {
-    justify-content: center;
-    padding-inline: 10px;
-  }
-  .talos-sidebar__actions .talos-field {
-    min-width: 0;
-  }
+.talos-sidebar__selezione {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 10px;
+  margin: 8px 0 0;
+  padding: 9px 11px;
+  border: 1px solid var(--talos-accent-border);
+  border-radius: 10px;
+  background: var(--talos-accent-soft);
 }
-@container barra (max-width: 150px) {
-  .talos-sidebar__actions {
-    flex-wrap: wrap;
-  }
-  .talos-sidebar__actions .talos-field__input {
-    padding-inline: 6px;
-  }
+.talos-sidebar__selezione #sessionSelectionCount {
+  grid-column: 1 / -1;
+  font-size: 11.5px;
+  color: var(--talos-text);
+}
+.talos-sidebar__selezione .talos-button {
+  justify-self: stretch;
+  white-space: nowrap;
+}
+.talos-sidebar__selezione #sessionSelectionDelete {
+  color: var(--talos-danger);
+  justify-self: end;
+}
+#sessionSelectionToggle.is-attivo {
+  border-color: var(--talos-accent);
+  background: var(--talos-accent-soft);
+  color: var(--talos-accent-text);
 }
 .sheet-avviso {
   display: flex;
@@ -2787,7 +2972,8 @@ body.reduce-motion *::after {
 .talos-send:hover {
   transform: translateY(-1px);
 }
-.talos-send--stop {
+.talos-send--stop,
+.talos-send.is-stop {
   background: var(--talos-danger);
   color: var(--talos-text);
 }
@@ -3358,25 +3544,7 @@ body.reduce-motion *::after {
   flex-shrink: 0;
 }
 #schermoImpostazioni input.talos-switch {
-  appearance: none;
   flex-shrink: 0;
-  margin: 0;
-}
-#schermoImpostazioni input.talos-switch::before {
-  content: "";
-  width: calc(var(--talos-control-height) - 12px);
-  height: calc(var(--talos-control-height) - 12px);
-  border-radius: var(--talos-radius-pill);
-  background: var(--talos-muted);
-  transition: transform var(--talos-motion-duration-control) var(--talos-motion-ease);
-}
-#schermoImpostazioni input.talos-switch:checked {
-  border-color: var(--talos-accent-border);
-  background: var(--talos-accent-soft);
-}
-#schermoImpostazioni input.talos-switch:checked::before {
-  background: var(--talos-accent);
-  transform: translateX(calc(var(--talos-control-height) * .75));
 }
 #schermoImpostazioni .talos-setting > .talos-setting__control {
   width: 220px;
@@ -4696,9 +4864,56 @@ body.reduce-motion *::after {
     display: none;
   }
 }
-.talos-range {
+.talos-range,
+input[type=range] {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
-  accent-color: var(--talos-accent);
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+.talos-range::-webkit-slider-runnable-track,
+input[type=range]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: var(--talos-radius-pill);
+  background: var(--talos-panel-soft);
+  border: 1px solid var(--talos-border);
+}
+.talos-range::-webkit-slider-thumb,
+input[type=range]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: var(--talos-accent);
+  border: 2px solid var(--talos-panel);
+}
+.talos-range::-moz-range-track,
+input[type=range]::-moz-range-track {
+  height: 6px;
+  border-radius: var(--talos-radius-pill);
+  background: var(--talos-panel-soft);
+  border: 1px solid var(--talos-border);
+}
+.talos-range::-moz-range-thumb,
+input[type=range]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--talos-accent);
+  border: 2px solid var(--talos-panel);
+}
+.talos-range:focus-visible,
+input[type=range]:focus-visible {
+  outline: 2px solid var(--talos-accent);
+  outline-offset: 3px;
+}
+.talos-range:disabled {
+  opacity: .5;
+  cursor: not-allowed;
 }
 .talos-range__labels {
   display: flex;
@@ -4782,9 +4997,6 @@ body.reduce-motion *::after {
 }
 #veloModello .talos-dialog[data-user-sized] .talos-dialog__body {
   display: block;
-}
-#veloModello input[type=checkbox] {
-  accent-color: var(--talos-accent);
 }
 .talos-intro-folders {
   max-height: calc(var(--talos-row)*5);

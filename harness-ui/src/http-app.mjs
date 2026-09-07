@@ -376,8 +376,20 @@ function successEnvelope(data, clock) {
   return { ok: true, data, meta };
 }
 
+/*
+ * ⛔⛔⛔ 07/9 — IL MOTIVO VERO NON ARRIVAVA MAI AL REGISTRO. Qui si costruiva
+ * `toPublicProblem({ code })`: un oggetto col SOLO codice, senza `message`. Il registro
+ * diagnostico salvava quindi un dettaglio VUOTO, e la scheda Doctor — che la risposta invita ad
+ * aprire («Apri Doctor, copia il riferimento e riprova») — non poteva dire nulla piu di quello che
+ * si leggeva gia a schermo. Un riferimento che non porta a niente manda la persona a cercare una
+ * risposta che non esiste: e cosi che «Query non valida» e diventato un muro.
+ * ⇒ L'errore VERO viaggia in `context.errore` e il suo messaggio viene registrato — ripulito da
+ *   `safeDiagnosticDetail` (chiavi, percorsi, nomi di variabili d'ambiente) prima di essere scritto.
+ *   Fuori, nella risposta HTTP, non cambia niente: la persona continua a vedere il testo pubblico.
+ */
 function errorEnvelope(code, clock, context = {}) {
-const problem = toPublicProblem({ code }, context);
+const { errore = null, ...restoContesto } = context;
+const problem = toPublicProblem(errore && (errore.code === code || !errore.code) ? errore : { code }, restoContesto);
 return {
 ok: false,
 error: { code, message: MESSAGE_BY_CODE[code] ?? problem.title, ...problem },
@@ -1211,7 +1223,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1239,7 +1251,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1276,7 +1288,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1331,7 +1343,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1345,7 +1357,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1385,7 +1397,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1399,7 +1411,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true, sessionId }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1432,7 +1444,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(esito, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1460,7 +1472,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(esito, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1507,7 +1519,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(esito, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1523,7 +1535,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1553,7 +1565,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1572,7 +1584,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1599,7 +1611,7 @@ export function createHttpApp({
         }
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1632,7 +1644,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1657,7 +1669,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1688,7 +1700,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1700,7 +1712,7 @@ export function createHttpApp({
         if (!localModelTransfer || typeof localModelTransfer.start !== 'function') { const error = new Error('Download Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const data = await localModelTransfer.start(body);
         sendJson(res, 200, successEnvelope(data, clock), method);
-      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method); }
+      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
       return;
     }
     if (method === 'POST' && /^\/api\/v1\/huggingface\/downloads\/([^/]+)\/(pause|resume|cancel)$/.test(url.pathname)) {
@@ -1709,7 +1721,7 @@ export function createHttpApp({
         if (!localModelTransfer || typeof localModelTransfer[match[2]] !== 'function') { const error = new Error('Download Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const changed = await localModelTransfer[match[2]](id); if (!changed) { const error = new Error('Download non trovato o non modificabile'); error.code = 'NOT_FOUND'; throw error; }
         sendJson(res, 200, successEnvelope(localModelTransfer.status(id), clock), method);
-      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method); }
+      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
       return;
     }
 
@@ -1734,7 +1746,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1755,7 +1767,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(voce, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1780,7 +1792,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope(voce, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1806,7 +1818,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1835,7 +1847,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1870,7 +1882,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1906,7 +1918,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ nuovoPercorso: esito.nuovoPercorso }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1935,7 +1947,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ eliminato: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1964,7 +1976,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ rivelato: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -1998,7 +2010,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ nuovoPercorso: esito.nuovoPercorso }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2027,7 +2039,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ nuovoPercorso: esito.nuovoPercorso }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2056,7 +2068,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ percorso: esito.percorso }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2083,7 +2095,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ stopped: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2111,7 +2123,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true, redirectId: esito.redirectId }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2138,7 +2150,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2174,7 +2186,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2202,7 +2214,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ updated: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2229,7 +2241,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ compattato: esito.compattato }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2258,7 +2270,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2294,7 +2306,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2333,7 +2345,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2379,7 +2391,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2408,7 +2420,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2443,7 +2455,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2482,7 +2494,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true, posizione: esito.posizione }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2509,7 +2521,7 @@ export function createHttpApp({
         sendJson(res, 200, successEnvelope({ ok: true, rimosso: esito.rimosso }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
       return;
     }
@@ -2714,7 +2726,14 @@ export function createHttpApp({
         const reference = url.pathname.split('/').at(-1);
         const detail = getDiagnosticProblem(reference);
         if (!detail) { const error = new Error('Riferimento Doctor non trovato'); error.code = 'NOT_FOUND'; throw error; }
-        data = { reference, code: detail.code, operation: detail.operation, requestId: detail.requestId };
+        /*
+         * ⛔⛔ 07/9 — la scheda prometteva «Apri Doctor, copia il riferimento» e poi non diceva
+         * NIENTE piu di quello che gia si leggeva a schermo: solo il codice. Il motivo vero era
+         * registrato (`safeDiagnosticDetail` lo tiene, gia ripulito da chiavi, percorsi e nomi di
+         * variabili d'ambiente) e nessuno lo restituiva. Un riferimento che non porta a niente e
+         * peggio di nessun riferimento: manda la persona a cercare una risposta che non c'e.
+         */
+        data = { reference, code: detail.code, operation: detail.operation, requestId: detail.requestId, detail: detail.detail || '' };
       } else if (url.pathname === '/api/v1/sessions') {
         requireNoQuery(url);
         /* ⛔ Elenco vuoto, non un errore, se sessionRegistry non è configurato — stesso principio già seguito per le altre rotte di sessione. */
@@ -3381,7 +3400,7 @@ export function createHttpApp({
       sendJson(res, 200, successEnvelope(data, clock), method);
     } catch (error) {
       const normalized = normalizeError(error);
-      sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock), method);
+      sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
     }
   }
 

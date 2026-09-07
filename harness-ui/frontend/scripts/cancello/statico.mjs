@@ -26,6 +26,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { simboliMancanti, classiSenzaRegola } from './riferimenti-morti.mjs';
 import { funzioniMaiChiamate } from './funzioni-morte.mjs';
+import { graffeOrfane, blocchiNonChiusi, fogliInterni } from './graffe-orfane.mjs';
 
 // ⛔ i percorsi partono dalla radice del frontend, non da dove sta lo script: cosi' si lancia da
 //    qualunque cartella senza che «funziona solo se sei nel posto giusto» diventi una trappola.
@@ -46,6 +47,27 @@ for (const v of s.slice(0, 12)) console.log('  ', JSON.stringify(v).slice(0, 160
 const c = classiSenzaRegola({ html, css, sorgenti });
 console.log('\n== CLASSI USATE SENZA NESSUNA REGOLA:', c.length, '(SOSPETTI da guardare, non difetti confermati)');
 for (const v of c.slice(0, 25)) console.log('  ', JSON.stringify(v).slice(0, 150));
+
+/*
+ * ⛔⛔ 07/9 — il controllo che avrebbe risparmiato mezz'ora: una `}` orfana nel mockup buttava via
+ * la regola SUCCESSIVA (la barra della selezione), e a schermo non c'era niente da vedere. Qui si
+ * guardano i due fogli consegnati E la fonte del disegno, perché il difetto nasce nel mockup e
+ * arriva al foglio senza che nessuno lo tocchi.
+ */
+const fogli = { 'src/styles/index.css': leggi('src/styles/index.css'), 'src/styles/foglio-monolite.css': leggi('src/styles/foglio-monolite.css') };
+try {
+  const mockup = readFileSync(RADICE + '../../.claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html', 'utf8');
+  for (const f of fogliInterni(mockup)) fogli[`MOCKUP (<style> da riga ${f.rigaIniziale})`] = f.css;
+} catch { /* il mockup può non esserci: il controllo sui fogli consegnati vale lo stesso */ }
+const graffe = [];
+for (const [nome, css1] of Object.entries(fogli)) {
+  for (const g of graffeOrfane(css1)) graffe.push({ file: nome, ...g });
+  const aperti = blocchiNonChiusi(css1);
+  if (aperti > 0) graffe.push({ file: nome, riga: 0, intorno: `${aperti} blocchi restano APERTI a fine foglio` });
+}
+console.log();
+console.log('== GRAFFE ORFANE / BLOCCHI NON CHIUSI:', graffe.length, graffe.length ? '⛔ la regola dopo viene BUTTATA in silenzio' : '');
+for (const g of graffe) console.log('   ', `${g.file}:${g.riga}`, g.intorno);
 
 const morte = funzioniMaiChiamate(sorgenti['legacy/app.js']);
 console.log();

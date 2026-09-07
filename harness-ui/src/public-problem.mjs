@@ -15,6 +15,18 @@ const MESSAGES = Object.freeze({
    * è semplicemente vecchia — si ricarica la sessione e si guarda cosa chiede adesso.
    */
   APPROVAL_NOT_PENDING: { title: 'Richiesta di permesso scaduta', explanation: 'La sessione è andata avanti: quella domanda non aspetta più una risposta.', action: 'Ricarica la sessione e rispondi alla richiesta che vedi adesso, se ce n’è una.' },
+  /*
+   * ⛔⛔ 07/9, owner bloccato: «la sessione e ancora bloccata, non riesco a inviare messaggi e
+   * spunta errore toast». `SESSION_NOT_READY` NON era in questa mappa, quindi cadeva su
+   * INTERNAL_ERROR e a schermo arrivava «Si e verificato un problema imprevisto» — mentre il
+   * registro aveva gia scritto la frase giusta e AZIONABILE: «Questa sessione e stata interrotta
+   * da un riavvio del server e non puo essere ripresa: avvia una sessione nuova».
+   * ⇒ Il codice piu utile della mappa e quello che dice COSA FARE. Qui la spiegazione generica
+   *   resta come rete, ma il motivo VERO del registro passa in `explanation` (vedi `problemFor`):
+   *   una porta chiusa senza indicazione di dove sia quella aperta e il modo migliore per bloccare
+   *   una persona su una schermata.
+   */
+  SESSION_NOT_READY: { title: 'Sessione non pronta', explanation: 'Questa sessione non puo accettare l’azione richiesta nello stato in cui si trova.', action: 'Se e stata interrotta da un riavvio, avvia una sessione nuova: la conversazione resta leggibile qui.' },
   INTERNAL_ERROR: { title: 'Operazione non riuscita', explanation: 'Si è verificato un problema imprevisto durante l’operazione.', action: 'Apri Doctor, copia il riferimento e riprova.' },
 });
 
@@ -39,12 +51,36 @@ function safeDiagnosticDetail(error) {
     .slice(0, 240);
 }
 
+/*
+ * ⛔⛔ 07/9 — I codici il cui `message` e GIA scritto per una persona, e non per un log.
+ * Il registro, per una sessione che non puo ripartire, dice: «Questa sessione e stata interrotta da
+ * un riavvio del server e non puo essere ripresa: avvia una sessione nuova» — una frase che dice
+ * cosa e successo E cosa fare. Quella frase veniva BUTTATA e sostituita con «Si e verificato un
+ * problema imprevisto», e l'owner e rimasto bloccato su una schermata senza sapere dove fosse
+ * l'uscita.
+ * ⛔ La sostituzione generica esiste per una ragione buona — un messaggio d'errore grezzo puo
+ *   portare percorsi, id, dettagli interni — e resta il comportamento predefinito. Qui si dichiara
+ *   la sola eccezione: i codici dove chi ha scritto il messaggio lo ha scritto PER lo schermo.
+ *   Aggiungerne uno vuol dire prendersi la responsabilita che quel testo sia leggibile e privo di
+ *   dettagli interni: si guarda ogni `erroreAvvio` di quel codice prima di metterlo qui.
+ */
+const MESSAGGIO_GIA_PER_LA_PERSONA = new Set(['SESSION_NOT_READY']);
+
+/** Un testo del registro e pubblicabile solo se e corto e non porta percorsi o identificatori. */
+function messaggioPubblicabile(testo) {
+  const t = String(testo || '').trim();
+  if (t.length < 12 || t.length > 240) return '';
+  if (/[\/]{1}[\w.-]+[\/]|[0-9a-f]{8}-[0-9a-f]{4}/i.test(t)) return ''; // percorsi o id: restano nel log
+  return t;
+}
+
 export function toPublicProblem(error, { requestId = '', operation = '' } = {}) {
   const code = safeCode(error);
   const copy = MESSAGES[code] ?? MESSAGES.INTERNAL_ERROR;
   const doctorReference = referenceFor(code, requestId, operation);
   diagnostics.set(doctorReference, Object.freeze({ code, operation: String(operation || 'operation'), requestId: String(requestId || ''), detail: safeDiagnosticDetail(error) }));
-  return { title: copy.title, explanation: copy.explanation, action: copy.action, doctorReference };
+  const vero = MESSAGGIO_GIA_PER_LA_PERSONA.has(code) ? messaggioPubblicabile(error?.message) : '';
+  return { title: copy.title, explanation: vero || copy.explanation, action: copy.action, doctorReference };
 }
 
 export function logDiagnosticProblem(error, { requestId = '', operation = '', logger = console } = {}) {

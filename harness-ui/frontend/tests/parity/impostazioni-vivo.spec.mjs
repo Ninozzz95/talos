@@ -43,7 +43,7 @@ test('SET-RACCORDO-ATTRIBUTI: le mie preferenze raggiungono il disegno della cha
 
 test('SET-NOMI-PERMESSI: leggo lo stesso permesso della chat, in italiano',async({page},info)=>{
  await page.route('**/api/v1/sessions',r=>r.fulfill({json:{ok:true,data:{items:[]}}}));
- for(const [valore,nome] of [['Read only','Sola lettura'],['On request','Su richiesta'],['Workspace write','Scrittura nel workspace'],['Full access','Accesso completo']]){
+ for(const [valore,nome] of [['Read only','Solo lettura'],['On request','Chiede prima'],['Workspace write','Scrive nel progetto'],['Full access','Accesso pieno']]){
   await page.addInitScript(p=>{if(window.top!==window)return;localStorage.setItem('talos.harness.desktop.settings.v1',JSON.stringify({chat:{permissions:p}}));},valore);await pronta(page,APP);await page.getByRole('tab',{name:'Strumenti agente e permessi',exact:true}).click();const riga=page.locator('#settingsToolsFacts .talos-kv').filter({hasText:'Policy attiva'});await expect(riga.locator('dd')).toHaveText(nome);await expect(riga.locator('dd')).not.toHaveText(valore);if(valore==='Full access')await foto(page,'r05-permessi',info);
  }
 });

@@ -162,6 +162,44 @@ var init_provider_card = __esm({
   }
 });
 
+// src/components/politiche.js
+var POLITICHE, PER_VALORE;
+var init_politiche = __esm({
+  "src/components/politiche.js"() {
+    POLITICHE = Object.freeze([
+      Object.freeze({
+        valore: "Read only",
+        nome: "Solo lettura",
+        descrizione: "Legge il progetto e lancia comandi che non cambiano niente. Ogni scrittura viene rifiutata.",
+        nota: "Minimo rischio",
+        rischio: "basso"
+      }),
+      Object.freeze({
+        valore: "Workspace write",
+        nome: "Scrive nel progetto",
+        descrizione: "Scrive solo dentro la cartella della sessione. Comandi e test passano dal cancello.",
+        nota: "Consigliato",
+        rischio: "medio"
+      }),
+      Object.freeze({
+        valore: "On request",
+        nome: "Chiede prima",
+        descrizione: "Ti chiede conferma prima di ogni azione che lascia traccia: scritture, comandi, rete.",
+        nota: "Controllato",
+        rischio: "medio"
+      }),
+      Object.freeze({
+        valore: "Full access",
+        nome: "Accesso pieno",
+        descrizione: "File e rete senza i cancelli ordinari. Solo se sai già cosa sta per fare.",
+        nota: "Alto rischio",
+        rischio: "massimo"
+      })
+    ]);
+    PER_VALORE = new Map(POLITICHE.map((p) => [p.valore, p]));
+  }
+});
+
 // src/components/runtime-modelli.js
 function datiRuntimeModello(r = {}) {
   const raggiunto = r.state === "observed", models = Array.isArray(r.models) ? r.models : [];
@@ -8271,12 +8309,8 @@ function aggiornaPiedeChat(piede, dati = {}) {
 var NOME_PERMESSO;
 var init_chat_foot = __esm({
   "src/components/chat-foot.js"() {
-    NOME_PERMESSO = Object.freeze({
-      "Read only": "Sola lettura",
-      "On request": "Su richiesta",
-      "Workspace write": "Scrittura nel workspace",
-      "Full access": "Accesso completo"
-    });
+    init_politiche();
+    NOME_PERMESSO = Object.freeze(Object.fromEntries(POLITICHE.map((p) => [p.valore, p.nome])));
   }
 });
 
@@ -9117,6 +9151,7 @@ var app_exports = {};
 var init_app = __esm({
   "src/legacy/app.js"() {
     init_provider_card();
+    init_politiche();
     init_runtime_modelli();
     init_misura_memoria();
     init_cornice_model_lab();
@@ -14533,6 +14568,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             reasoningLabel.textContent = "Mostra ragionamento";
             const reasoningToggle = document.createElement("input");
             reasoningToggle.type = "checkbox";
+            reasoningToggle.className = "talos-switch";
+            reasoningToggle.setAttribute("role", "switch");
             reasoningToggle.id = "showReasoningToggle";
             reasoningToggle.checked = state.showReasoning;
             reasoningToggle.setAttribute("aria-label", "Mostra ragionamento");
@@ -14566,23 +14603,25 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           html: () => '<div class="sheet-section" id="modelPickerMount"></div>'
         },
         permissions: {
-          eyebrow: "Safety lens",
+          eyebrow: "Sicurezza",
           title: "Permessi di esecuzione",
           html: () => `
         <div class="sheet-section">
-          <span class="sheet-label">Policy sessione</span>
-          ${[
-            ["Read only", "Legge progetto e comandi non mutanti.", "Minimo rischio"],
-            ["Workspace write", "Scrive solo nel workspace/worktree corrente.", "Consigliato"],
-            ["On request", "Chiede prima delle azioni sensibili.", "Controllato"],
-            ["Full access", "Filesystem e rete senza gate ordinari.", "Alto rischio"]
-          ].map(([name, desc, note]) => `
-            <button class="sheet-option ${name === state.permissions ? "active" : ""}" data-permission-choice="${name}">
-              <span class="sheet-icon">${icon("i-shield")}</span><span><strong>${name}</strong><small>${desc}</small></span><span>${note}</span>
+          <span class="sheet-label">Autonomia della sessione</span>
+          ${/*
+           * ⛔ 07/9 — qui a schermo c'erano i valori GREZZI del kernel («Read only»,
+           * «Workspace write», «On request», «Full access») con le descrizioni in inglese, proprio
+           * nella finestra dove si decide la sicurezza. Il nome umano viene ora dall'unica mappa
+           * (`components/politiche.js`); il valore che viaggia verso il kernel resta intatto
+           * nell'attributo `data-permission-choice`, byte per byte.
+           */
+          ""}${POLITICHE.map((p) => `
+            <button class="sheet-option ${p.valore === state.permissions ? "active" : ""}" data-permission-choice="${p.valore}">
+              <span class="sheet-icon">${icon("i-shield")}</span><span><strong>${p.nome}</strong><small>${p.descrizione}</small></span><span>${p.nota}</span>
             </button>`).join("")}
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Permesso per attrezzo · precede la policy sessione sopra</span>
+          <span class="sheet-label">Permesso per attrezzo · vince su quello della sessione qui sopra</span>
           ${[
             ["scrivi", "Scrive un file — passa dal cancello semantico"],
             ["prova", "Esegue la suite di test del progetto"],
@@ -14609,7 +14648,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         <p class="muted-copy">Un «chiedi» su un attrezzo accende il canale di approvazione per tutta la sessione: finché resta acceso, TALOS chiede conferma anche per le altre azioni che lasciano traccia. È il limite del kernel di oggi, dichiarato invece che nascosto.</p>`
         },
         environment: {
-          eyebrow: "Environment proof",
+          eyebrow: "Ambiente",
           title: "Workspace e worktree",
           html: () => `
         <div class="sheet-section">
@@ -14638,7 +14677,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         </div>`
         },
         capabilities: {
-          eyebrow: "Capability hub",
+          eyebrow: "Capacità",
           title: "Strumenti, skill e connettori",
           /*
            * ⛔⛔⛔ 27/8 — Questo foglio elencava 11 voci (Skills, MCP, Plugin
@@ -14731,7 +14770,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         </div>`
         },
         control: {
-          eyebrow: "Control plane",
+          eyebrow: "Governo della sessione",
           title: "Agents, hook e diagnostica",
           /*
            * ⛔⛔ 27/8, trovato nell'inventario "legare ogni componente
@@ -14772,17 +14811,17 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
            */
           html: () => `
         <div class="sheet-section">
-          <span class="sheet-label">Agent runtime</span>
+          <span class="sheet-label">Motore dell’agente</span>
           <button class="sheet-option" data-control-action="doctor"><span class="sheet-icon">${icon("i-check")}</span><span><strong>Doctor</strong><small>Runtime, provider, shell, git e browser</small></span><span data-doctor-status>Verifica…</span></button>
           <button class="sheet-option" data-control-action="settings"><span class="sheet-icon">${icon("i-settings")}</span><span><strong>Impostazioni Codice</strong><small>Aspetto, interazione e preferenze</small></span><span>Apri</span></button>
         </div>
         <div class="sheet-section">
-          <span class="sheet-label">Hooks</span>
+          <span class="sheet-label">Agganci</span>
           <div id="hooksListMount"></div>
         </div>`
         },
         sessionTree: {
-          eyebrow: "Conversation graph",
+          eyebrow: "Albero della conversazione",
           title: "Albero sessione",
           html: () => `
         <div class="sheet-section session-tree-sheet">
@@ -14815,7 +14854,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         </form>`
         },
         references: {
-          eyebrow: "Context reference",
+          eyebrow: "Riferimenti nel contesto",
           title: "Aggiungi file con @",
           html: () => `
         <div class="sheet-section">
@@ -19151,20 +19190,26 @@ ${testo3}` : testo3;
         salvaPreferenzeChatDesktop();
       }
       function aggiornaToolbarSelezioneSessioni() {
-        if (!sessionSelectionToolbar) return;
         const totale2 = state.sessionSelection.available.size;
         const selezionate = state.sessionSelection.selected.size;
-        sessionSelectionToolbar.hidden = totale2 === 0;
-        sessionSelectionToggle.hidden = totale2 === 0;
-        sessionSelectionToggle.setAttribute("aria-pressed", String(state.sessionSelection.active));
-        sessionSelectionToggle.textContent = state.sessionSelection.active ? "Fine selezione" : "Seleziona sessioni";
+        if (sessionSelectionToggle) {
+          sessionSelectionToggle.hidden = totale2 === 0;
+          sessionSelectionToggle.setAttribute("aria-pressed", String(state.sessionSelection.active));
+          const nome = state.sessionSelection.active ? "Fine selezione" : "Seleziona sessioni";
+          sessionSelectionToggle.setAttribute("aria-label", nome);
+          sessionSelectionToggle.title = nome;
+          sessionSelectionToggle.classList.toggle("is-attivo", state.sessionSelection.active);
+        }
+        if (!sessionSelectionToolbar) return;
+        sessionSelectionToolbar.hidden = !state.sessionSelection.active || totale2 === 0;
         sessionSelectionSelectAll.hidden = !state.sessionSelection.active;
         sessionSelectionSelectAll.disabled = totale2 === 0;
         const tutto = totale2 > 0 && selezionate === totale2;
         sessionSelectionSelectAll.textContent = tutto ? "Deseleziona tutto" : "Seleziona tutto";
         sessionSelectionDelete.hidden = !state.sessionSelection.active;
         sessionSelectionDelete.disabled = selezionate === 0 || state.sessionSelection.deleting;
-        sessionSelectionCount.textContent = selezionate === 0 ? "Nessuna selezionata" : `${selezionate} selezionat${selezionate === 1 ? "a" : "e"}`;
+        sessionSelectionCount.hidden = selezionate === 0;
+        sessionSelectionCount.textContent = selezionate === 0 ? "" : `${selezionate} selezionat${selezionate === 1 ? "a" : "e"}`;
       }
       function aggiornaStatoRigheSelezione() {
         for (const input of $$("[data-session-select]")) {
@@ -19777,6 +19822,8 @@ ${testo3}` : testo3;
         reasoningToggle.innerHTML = "<span><strong>Mostra ragionamento</strong><small>Visualizza il processo solo quando ti serve.</small></span>";
         const reasoningInput = document.createElement("input");
         reasoningInput.type = "checkbox";
+        reasoningInput.className = "talos-switch";
+        reasoningInput.setAttribute("role", "switch");
         reasoningInput.checked = local.showReasoning;
         reasoningInput.setAttribute("aria-label", "Mostra ragionamento");
         reasoningInput.addEventListener("change", () => {
@@ -19796,12 +19843,7 @@ ${testo3}` : testo3;
         permissionSection.appendChild(textElement("span", "sheet-label", "Accesso al workspace"));
         const permissionGrid = document.createElement("div");
         permissionGrid.className = "workspace-chooser-permissions";
-        const permissionCopy = {
-          "Read only": "Solo lettura",
-          "Workspace write": "Scrive qui",
-          "On request": "Chiede prima",
-          "Full access": "Accesso completo"
-        };
+        const permissionCopy = Object.fromEntries(POLITICHE.map((p) => [p.valore, p.nome]));
         const permissionButtons = [];
         for (const permission of ["Read only", "Workspace write", "On request", "Full access"]) {
           const button2 = document.createElement("button");
@@ -20310,12 +20352,7 @@ ${testo3}` : testo3;
         { id: "autonomia", etichetta: "Autonomia" },
         { id: "cartella", etichetta: "Cartella" }
       ]);
-      const INTRO_POLICY = Object.freeze([
-        ["Read only", "Solo lettura", "Legge il progetto e lancia comandi che non cambiano niente. Ogni scrittura viene rifiutata.", "Minimo rischio"],
-        ["Workspace write", "Scrive nel progetto", "Scrive solo dentro la cartella della sessione. Shell e test passano dal cancello.", "Consigliato"],
-        ["On request", "Chiede prima", "Ti chiede conferma prima di ogni azione che lascia traccia: scritture, comandi, rete.", "Controllato"],
-        ["Full access", "Accesso pieno", "Filesystem e rete senza i cancelli ordinari. Solo se sai già cosa sta per fare.", "Alto rischio"]
-      ]);
+      const INTRO_POLICY = Object.freeze(POLITICHE.map((p) => Object.freeze([p.valore, p.nome, p.descrizione, p.nota])));
       function leggiIntroLocale() {
         try {
           const raw = JSON.parse(window.localStorage.getItem(INTRO_STORAGE_KEY) || "null");

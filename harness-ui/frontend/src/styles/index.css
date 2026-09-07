@@ -268,14 +268,55 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-tabs--compact .talos-tabs__list{padding:3px}
 .talos-tabs--compact .talos-tabs__tab{min-height:26px; padding:0 10px; font-size:12px; border-radius:7px}
 
+/* ⛔⛔ 07/9 — owner, tre richieste in fila: «ricorda lo stile delle caselle e falle un po piu
+   piccole», «tutti i component devono essere stilizzati custom anche il dialog non legacy ma custom
+   nostro legato tutto ai temi». Il difetto era vero e si vedeva nello screenshot della sidebar: la
+   casella della riga di sessione e un `<input type="checkbox">` VERO, e `.talos-checkbox` rispondeva
+   solo a `[aria-checked="true"]` — un attributo che un input non ha mai. Lo stato «spuntata» lo
+   disegnava quindi CHROME, col suo blu di sistema, dentro un tema che non e il nostro.
+   Stessa forma per gli switch delle Impostazioni: `<input class="talos-switch" role="switch">`
+   prendeva la pillola, ma il pomello e un `<span>` figlio che un input non puo avere, e lo stato
+   vive su `:checked`, non su aria. ⇒ Ogni controllo qui sotto vale in DUE forme: il bottone del
+   mockup (`aria-checked`) e l'input vero (`:checked`). Nessuna delle due lascia un pixel al sistema.
+   ⛔ Le misure: la casella scende da 28 a 20 px (e la «grande» da 36 a 28) — nella riga di sessione,
+   alta 66, 28 px pesavano quanto il titolo.
+   Ricerca 07/09/2026 — Modern CSS «Pure CSS Custom Checkbox Style» (moderncss.dev) e Evinced
+   «Creating accessible styled checkboxes»: `appearance:none` toglie il disegno ma TIENE la semantica
+   (fuoco, barra spaziatrice, ruolo annunciato) e apre gli pseudo-elementi dell'input; non si nasconde
+   mai con `display:none`; il fuoco vuole `:focus-visible` con un `outline-offset` che scavalchi
+   l'angolo tondo; e in alto contrasto (`forced-colors`) lo stato si dice col FONDO, perche le ombre
+   vengono buttate via. */
 .talos-switch{width:calc(var(--talos-control-height) * 1.75); height:var(--talos-control-height); display:inline-flex; align-items:center; padding:var(--talos-space-xs); border:var(--talos-focus-width) solid var(--talos-border-strong); border-radius:var(--talos-radius-pill); background:var(--talos-panel-soft); cursor:pointer; transition:background-color var(--talos-motion-duration-control) var(--talos-motion-ease),border-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
 .talos-switch__thumb{width:calc(var(--talos-control-height) - 12px); height:calc(var(--talos-control-height) - 12px); border-radius:var(--talos-radius-pill); background:var(--talos-muted); transform:translateX(0); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease),background-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
 .talos-switch[aria-checked="true"]{border-color:var(--talos-accent-border); background:var(--talos-accent-soft)}
 .talos-switch[aria-checked="true"] .talos-switch__thumb{background:var(--talos-accent); transform:translateX(calc(var(--talos-control-height) * .75))}
+input.talos-switch{appearance:none; -webkit-appearance:none; margin:0; flex:none}
+input.talos-switch::after{content:""; width:calc(var(--talos-control-height) - 12px); height:calc(var(--talos-control-height) - 12px); border-radius:var(--talos-radius-pill); background:var(--talos-muted); transform:translateX(0); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease),background-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
+input.talos-switch:checked{border-color:var(--talos-accent-border); background:var(--talos-accent-soft)}
+input.talos-switch:checked::after{background:var(--talos-accent); transform:translateX(calc(var(--talos-control-height) * .75))}
+.talos-switch:focus-visible{outline:2px solid var(--talos-accent); outline-offset:2px}
 
-.talos-checkbox{width:28px; height:28px; border-radius:8px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); display:grid; place-items:center; color:var(--talos-text-on-accent); flex:none}
+/* ⛔ 07/9 — «tutti i component custom»: valgono anche per le tredici caselle NUDE del monolite
+   (`frammenti.html`), che senza classe prendevano il quadratino blu di Windows. */
+.talos-checkbox,input[type="checkbox"]:not(.talos-switch){width:20px; height:20px; border-radius:6px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); display:grid; place-items:center; color:var(--talos-text-on-accent); flex:none; cursor:pointer; transition:background-color var(--talos-motion-duration-control) var(--talos-motion-ease),border-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
 .talos-checkbox[aria-checked="true"]{background:var(--talos-accent); border-color:var(--talos-accent)}
-.talos-checkbox--lg{width:36px; height:36px; border-radius:9px}
+.talos-checkbox--lg{width:28px; height:28px; border-radius:8px}
+.talos-checkbox .i{width:13px; height:13px}
+.talos-checkbox--lg .i{width:16px; height:16px}
+input.talos-checkbox,input[type="checkbox"]:not(.talos-switch){appearance:none; -webkit-appearance:none; margin:0}
+/* La spunta e disegnata, non un carattere: cosi eredita il colore del tema e non cambia col font.
+   Il triangolo di `clip-path` e la forma di Modern CSS, ridotta alla nostra casella da 20 px. */
+input.talos-checkbox::before,input[type="checkbox"]:not(.talos-switch)::before{content:""; width:11px; height:11px; background:var(--talos-text-on-accent); clip-path:polygon(14% 44%,0 65%,50% 100%,100% 16%,80% 0,43% 62%); transform:scale(0); transform-origin:center; transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
+input.talos-checkbox--lg::before{width:15px; height:15px}
+input.talos-checkbox:checked,input[type="checkbox"]:not(.talos-switch):checked{background:var(--talos-accent); border-color:var(--talos-accent)}
+input.talos-checkbox:checked::before,input[type="checkbox"]:not(.talos-switch):checked::before{transform:scale(1)}
+input.talos-checkbox:disabled,input[type="checkbox"]:not(.talos-switch):disabled{opacity:.5; cursor:not-allowed}
+.talos-checkbox:focus-visible,input[type="checkbox"]:not(.talos-switch):focus-visible{outline:2px solid var(--talos-accent); outline-offset:2px}
+@media (forced-colors: active){
+  input.talos-checkbox:checked,.talos-checkbox[aria-checked="true"]{background:SelectedItem; border-color:SelectedItem}
+  input.talos-checkbox::before{background:SelectedItemText}
+  input.talos-switch:checked::after,.talos-switch[aria-checked="true"] .talos-switch__thumb{background:SelectedItem}
+}
 
 .talos-field{position:relative}
 .talos-field__input{height:40px; width:100%; padding:0 12px 0 38px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-size:13.5px}
@@ -283,8 +324,34 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-field__input:focus{outline:none; border-color:var(--talos-accent-border); box-shadow:0 0 0 3px var(--talos-accent-soft)}
 .talos-field__icon{position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--talos-muted); width:16px; height:16px}
 .talos-field--sm .talos-field__input{height:36px; padding-left:34px}
-.talos-select{height:36px; padding:0 32px 0 12px; border-radius:9px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-size:13px; appearance:none; -webkit-appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--talos-muted) 50%),linear-gradient(135deg,var(--talos-muted) 50%,transparent 50%); background-position:calc(100% - 16px) 15px,calc(100% - 11px) 15px; background-size:5px 5px; background-repeat:no-repeat}
+/* ⛔ 07/9 — la regola vale per OGNI `select`, non solo per quelli che ricordano la classe. Nel
+   foglio Permessi del monolite i menu erano grigio chiaro col testo scuro, cioe' il disegno di
+   Windows dentro il tema Calm (foto `C02-fogli/permissions.png`). Vestire l'ELEMENTO invece della
+   classe chiude anche i quattordici del monolite e quelli che nasceranno domani. */
+select,.talos-select{height:36px; padding:0 32px 0 12px; border-radius:9px; border:1px solid var(--talos-border); background:var(--talos-panel-soft); color:var(--talos-text); font-size:13px; appearance:none; -webkit-appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--talos-muted) 50%),linear-gradient(135deg,var(--talos-muted) 50%,transparent 50%); background-position:calc(100% - 16px) 15px,calc(100% - 11px) 15px; background-size:5px 5px; background-repeat:no-repeat}
 .talos-select--sm{height:32px}
+select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-accent); outline-offset:2px}
+/* ⭐ 07/9 — il bottone del select era già nostro (appearance:none + freccia disegnata), ma il MENU
+   che si apre lo disegnava ancora il sistema operativo: fondo bianco, font di sistema, angoli vivi
+   dentro un tema scuro. Con `appearance:base-select` il menu diventa un elemento come gli altri e
+   prende i token del tema; il ripiego resta quello di prima dove il motore non ce l'ha.
+   Ricerca 07/09/2026 — Chrome for Developers, «The <select> element can now be customized with CSS»
+   (Chrome 135+, Safari 27) e modern-css.com «Customizable selects without a JavaScript library»:
+   si adotta dentro `@supports`, e la freccia disegnata col gradiente va spenta o se ne vedono due. */
+@supports (appearance: base-select){
+  select,.talos-select{appearance:base-select; background-image:none; padding:0 12px; display:inline-flex; align-items:center; justify-content:space-between; gap:8px}
+  /* il segno del menu e un CHEVRON come tutti gli altri della app, non il triangolo pieno del motore */
+  select::picker-icon,.talos-select::picker-icon{content:""; width:8px; height:8px; border-right:1.6px solid var(--talos-muted); border-bottom:1.6px solid var(--talos-muted); transform:translateY(-2px) rotate(45deg); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
+  select:open::picker-icon,.talos-select:open::picker-icon{transform:translateY(1px) rotate(-135deg)}
+  select::picker(select),.talos-select::picker(select){appearance:base-select; margin-top:6px; padding:6px; border:1px solid var(--talos-border); border-radius:11px; background:var(--talos-panel); box-shadow:var(--talos-shadow-card); color:var(--talos-text)}
+  select option,.talos-select option{display:flex; align-items:center; gap:8px; padding:7px 10px 7px 28px; border-radius:8px; font-size:13px; color:var(--talos-text); background:transparent; position:relative}
+  select option:hover,select option:focus,.talos-select option:hover,.talos-select option:focus{background:var(--talos-panel-soft)}
+  select option:checked,.talos-select option:checked{background:var(--talos-accent-soft); color:var(--talos-accent-text)}
+  /* ⛔ lo spazio della spunta si riserva col PADDING, non nascondendo il segno: il motore genera
+     `::checkmark` SOLO sulla voce scelta, quindi «visibility:hidden» sulle altre non riserva niente
+     e le voci si spostano di 15 px quando la scelta cambia (visto nella foto `08-menu-select.png`). */
+  select option::checkmark,.talos-select option::checkmark{position:absolute; left:9px; color:var(--talos-accent)}
+}
 
 .talos-card{border:1px solid var(--talos-border); border-radius:var(--talos-radius-card); background:linear-gradient(180deg,var(--talos-card-subtle),var(--talos-card-faint))}
 .talos-card--pad{padding:var(--talos-space-control) 14px}
@@ -344,6 +411,18 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .talos-nav-item__count{font-family:var(--talos-font-mono); font-size:11.5px; color:var(--talos-muted)}
 .talos-sidebar__sessions{flex:1 1 auto; min-height:0; overflow-y:auto; padding:0 10px 8px}
 .talos-session-item{width:100%; min-height:var(--talos-row-session); border:1px solid transparent; border-radius:11px; text-align:left; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; padding:calc(var(--talos-row-pad) - 2px) 10px calc(var(--talos-row-pad) - 2px) 12px; color:var(--talos-assistant-text); transition:background-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
+/* ⛔⛔⛔ 07/9 — TROVATO GUARDANDO LO SCREENSHOT, e nessun conteggio nel DOM poteva dirlo: con la
+   selezione accesa la riga misurava 508px dentro una sidebar da 276, l'ora e i giri finivano fuori
+   dal bordo («eri», «iri») e la casella copriva il titolo. La griglia aveva due colonne e la
+   casella, terzo figlio, andava a capo.
+   ⭐ La regola giusta ESISTEVA GIA nel foglio del monolite — `28px minmax(0,1fr) auto` — ma scopata
+   dentro `dialog.sheet-dialog`/`.ft-actions-menu` per il cutover: nella sidebar non arrivava. E la
+   mia prima cura stava PRIMA della regola base, che la sovrascriveva. Qui sta DOPO, che e anche il
+   posto giusto: una variante vive accanto a cio che varia.
+   ⛔ 28px non e un numero scelto: e la misura che il monolite usava per questa stessa casella. */
+.talos-session-item.is-selection-mode{grid-template-columns:20px minmax(0,1fr) auto}
+.talos-session-item.is-selection-mode > .talos-checkbox{order:-1; margin:0; align-self:center; justify-self:center}
+.talos-session-item.is-selected{border-color:var(--talos-accent-border); background:var(--talos-accent-soft)}
 .talos-session-item:hover{background:var(--talos-card-subtle)}
 .talos-session-item[aria-current="true"]{background:linear-gradient(90deg,var(--talos-accent-soft),color-mix(in srgb,var(--talos-accent) 8%,transparent)); border-color:var(--talos-accent-border); box-shadow:inset 2px 0 var(--talos-accent); color:var(--talos-text)}
 .talos-session-item > span:first-child{min-width:0}
@@ -737,16 +816,35 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    il bottone porta `aria-label` e `title`, cosi chi non vede continua a sapere cos'e, e chi vede
    ha il suggerimento. Nascondere l'etichetta senza nome sarebbe un bottone muto. */
 .talos-sidebar{container-type:inline-size; container-name:barra}
-@container barra (max-width: 190px){
-  .talos-solo-largo{display:none}
-  .talos-sidebar__actions .talos-button--primary{justify-content:center; padding-inline:10px}
-  .talos-sidebar__actions .talos-field{min-width:0}
-}
-/* piu stretta ancora: resta solo cio che si puo premere */
-@container barra (max-width: 150px){
-  .talos-sidebar__actions{flex-wrap:wrap}
-  .talos-sidebar__actions .talos-field__input{padding-inline:6px}
-}
+/* ⛔ 07/9, owner: «rimuovi del tutto il testo nuova dal pulsante nuova, SENZA considerare la
+   larghezza della sidebar». La container query e stata tolta: il pulsante e un'icona e basta, con
+   `aria-label` e `title` che ne portano il nome. Meno stati = meno cose che possono sbagliare.
+   ⛔ E la lezione che l'ha preceduta: la soglia che avevo messo (190px) non poteva scattare MAI,
+   perche il ridimensionamento si ferma a 220. La mia sonda la dichiarava funzionante perche
+   forzava 180 e 140 via codice — uno stato irraggiungibile. Una misura su un caso impossibile non
+   prova niente. */
+
+/* 07/9 — il pulsante «Seleziona sessioni» acceso: senza testo, lo stato si vede dal colore, e si
+   legge dal nome (aria-label/title, che cambiano insieme). */
+/* ⛔ 07/9, owner: «fai il pulsante + della stessa larghezza del pulsante seleziona». Il «+» era
+   `talos-button--primary` (largo, con il padding di un bottone con testo) e il «seleziona» un
+   `talos-icon-button` (quadrato): affiancati, due misure diverse per due gesti pari. Ora sono
+   la stessa cosa: quadrati, stessa misura, e la differenza la fa il COLORE, non l'ingombro. */
+/* ⛔ 07/9 — il «+» aveva 54px contro i 36 del vicino, e la mia prima cura era una REGOLA CSS che
+   provava a riscrivere width e padding. Sbagliata: chiesto al browser, la differenza era una
+   CLASSE del sistema — `talos-icon-button`, che il pulsante «Seleziona» aveva e «Nuova» no. La
+   risposta era gia nel foglio; ho aggiunto la classe e cancellato la regola. Quando un sistema di
+   design ha gia il pezzo, si usa quello: una regola che lo scavalca e debito che qualcuno paghera. */
+/* ⛔ 07/9 — visto nello screenshot: con `flex-wrap` «Elimina» andava a capo DA SOLO e galleggiava
+   in rosso fuori dal riquadro, che non si vedeva. In 276px tre cose non stanno su una riga: invece
+   di sperarci, la struttura lo dichiara — il conteggio sopra (e uno STATO, si legge), le due azioni
+   sotto affiancate (sono GESTI, si premono). La griglia non lascia scelta al caso.
+   ⛔ «Elimina» resta l'unica cosa rossa della barra, e non di piu: e l'unica che non si annulla. */
+.talos-sidebar__selezione{display:grid; grid-template-columns:1fr auto; gap:8px 10px; margin:8px 0 0; padding:9px 11px; border:1px solid var(--talos-accent-border); border-radius:10px; background:var(--talos-accent-soft)}
+.talos-sidebar__selezione #sessionSelectionCount{grid-column:1 / -1; font-size:11.5px; color:var(--talos-text)}
+.talos-sidebar__selezione .talos-button{justify-self:stretch; white-space:nowrap}
+.talos-sidebar__selezione #sessionSelectionDelete{color:var(--talos-danger); justify-self:end}
+#sessionSelectionToggle.is-attivo{border-color:var(--talos-accent); background:var(--talos-accent-soft); color:var(--talos-accent-text)}
 .sheet-avviso{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0 0; padding:9px 11px; border-radius:10px; border:1px solid var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:12px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .workspace-chooser-selection .workspace-chooser-avviso{display:block; margin-top:6px; padding:6px 9px; border-radius:9px; border:1px solid var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:11.5px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .talos-menu__nota{margin:6px 4px 2px; padding-top:6px; border-top:1px solid var(--talos-border-subtle); color:var(--talos-muted); font-size:11.5px; line-height:1.45}
@@ -784,7 +882,12 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-composer__attach:hover{border-color:var(--talos-accent-border); color:var(--talos-accent-hover)}
 .talos-send{width:42px; height:42px; border-radius:50%; background:var(--talos-accent); color:var(--talos-text-on-accent); display:grid; place-items:center; margin-left:auto; box-shadow:inset 0 1px rgba(255,255,255,.14),0 5px 14px var(--talos-accent-soft); transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
 .talos-send:hover{transform:translateY(-1px)}
-.talos-send--stop{background:var(--talos-danger); color:var(--talos-text)}
+/* ⛔⛔ 07/9, misurato: il pulsante del composer nasceva `talos-send--stop` — ROSSO, il colore del
+   pericolo — e il monolite gli cambiava solo icona e nome, mai la classe. A riposo diceva «Invia»
+   con l'aria di «ferma tutto»: chiesto al browser, `rgb(216,125,114)` su un pulsante il cui
+   `aria-label` era «Invia». Ora il rosso arriva SOLO col giro in corso, e vale per tutt'e due i
+   vocabolari: `--stop` è quello del mockup, `is-stop` quello che il monolite accende davvero. */
+.talos-send--stop,.talos-send.is-stop{background:var(--talos-danger); color:var(--talos-text)}
 .talos-statusbar{display:flex; justify-content:center; gap:14px; padding:8px 0 0; font-family:var(--talos-font-mono); font-size:10.5px; color:color-mix(in srgb,var(--talos-muted) 76%,var(--talos-background))}
 .talos-statusbar{align-items:center;flex-wrap:nowrap;white-space:nowrap;min-width:0}.talos-statusbar>*{flex:0 0 auto}.talos-statusbar__connessione{color:var(--talos-text)}.talos-statusbar__connessione::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;margin-inline-end:6px;vertical-align:middle;background:var(--talos-warning)}.talos-statusbar__connessione[data-stato="caduto"]::before{background:var(--talos-danger)}.talos-statusbar__connessione[data-stato="ricollegato"]::before{background:var(--talos-success)}.talos-statusbar [data-runtime-riprova]{font-family:var(--talos-font-mono);font-size:10.5px;font-weight:600;padding:0 8px;min-height:0;height:18px;line-height:18px;border-radius:9px}
 
@@ -913,10 +1016,12 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 #schermoImpostazioni .talos-nav-item__label{white-space:normal}
 #schermoImpostazioni .talos-setting>div:first-child{min-width:0}
 #schermoImpostazioni .talos-setting>.talos-select{width:220px;max-width:50%;flex-shrink:0}
-#schermoImpostazioni input.talos-switch{appearance:none;flex-shrink:0;margin:0}
-#schermoImpostazioni input.talos-switch::before{content:"";width:calc(var(--talos-control-height) - 12px);height:calc(var(--talos-control-height) - 12px);border-radius:var(--talos-radius-pill);background:var(--talos-muted);transition:transform var(--talos-motion-duration-control) var(--talos-motion-ease)}
-#schermoImpostazioni input.talos-switch:checked{border-color:var(--talos-accent-border);background:var(--talos-accent-soft)}
-#schermoImpostazioni input.talos-switch:checked::before{background:var(--talos-accent);transform:translateX(calc(var(--talos-control-height) * .75))}
+/* ⛔ 07/9 — qui viveva una copia LOCALE dell'interruttore (`#schermoImpostazioni input.talos-switch`
+   col pomello su `::before`): curava una schermata sola, e appena il sistema di design ha imparato a
+   vestire l'input vero i pomelli sono diventati DUE, uno dentro e uno mezzo fuori dalla pillola — si
+   vede nella foto `09-interruttori.png`. Cancellata: la pillola sta in `.talos-switch`, e vale
+   ovunque. Resta solo cio che riguarda la DISPOSIZIONE dentro la riga delle preferenze. */
+#schermoImpostazioni input.talos-switch{flex-shrink:0}
 #schermoImpostazioni .talos-setting>.talos-setting__control{width:220px;max-width:50%;flex-shrink:0;display:flex;align-items:center;gap:12px}
 #schermoImpostazioni input[type=range]{width:100%;min-width:0;accent-color:var(--talos-accent)}
 #schermoImpostazioni .talos-measure{min-width:46px;text-align:right}
@@ -1226,7 +1331,16 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
  .talos-shell.details-open .talos-resizer--inspector{display:none}
 }
 
-.talos-range{width:100%;accent-color:var(--talos-accent)}
+/* ⛔ 07/9 — `accent-color` tinge il cursore del SISTEMA: resta la sua forma, la sua altezza e il suo
+   pomello, che in Windows è una pillola azzurra. Qui la pista e il pomello sono disegnati da noi coi
+   token del tema, in entrambi i motori (WebKit e Gecko vogliono pseudo-elementi diversi). */
+.talos-range,input[type="range"]{appearance:none; -webkit-appearance:none; width:100%; height:18px; background:transparent; cursor:pointer}
+.talos-range::-webkit-slider-runnable-track,input[type="range"]::-webkit-slider-runnable-track{height:6px; border-radius:var(--talos-radius-pill); background:var(--talos-panel-soft); border:1px solid var(--talos-border)}
+.talos-range::-webkit-slider-thumb,input[type="range"]::-webkit-slider-thumb{appearance:none; -webkit-appearance:none; width:16px; height:16px; margin-top:-6px; border-radius:50%; background:var(--talos-accent); border:2px solid var(--talos-panel)}
+.talos-range::-moz-range-track,input[type="range"]::-moz-range-track{height:6px; border-radius:var(--talos-radius-pill); background:var(--talos-panel-soft); border:1px solid var(--talos-border)}
+.talos-range::-moz-range-thumb,input[type="range"]::-moz-range-thumb{width:16px; height:16px; border-radius:50%; background:var(--talos-accent); border:2px solid var(--talos-panel)}
+.talos-range:focus-visible,input[type="range"]:focus-visible{outline:2px solid var(--talos-accent); outline-offset:3px}
+.talos-range:disabled{opacity:.5; cursor:not-allowed}
 .talos-range__labels{display:flex;justify-content:space-between;font-size:var(--talos-font-size-xs);color:var(--talos-muted)}
 .talos-model-options{max-height:calc(var(--talos-row) * 5);overflow-y:auto}
 [data-modello-gruppo]:not([open]) summary .i{transform:rotate(-90deg)}
@@ -1246,7 +1360,6 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-resizer--dialog-both:hover,.talos-resizer--dialog-both:focus-visible{border-color:var(--talos-accent)}
 .talos-dialog[data-user-sized] .talos-dialog__body{overflow:auto}
 #veloModello .talos-dialog[data-user-sized] .talos-dialog__body{display:block}
-#veloModello input[type=checkbox]{accent-color:var(--talos-accent)}
 
 .talos-intro-folders{max-height:calc(var(--talos-row)*5);overflow:auto}
 #passoIntroCartella .talos-stack{gap:var(--talos-space-sm)}

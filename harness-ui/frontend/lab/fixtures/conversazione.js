@@ -51,7 +51,7 @@ export const CONVERSAZIONE = Object.freeze([
       rimozioni: 2,
       perche: 'Vuole scrivere questo file. Serve per aggiungere le soglie della guardia che hai chiesto: 60 secondi di silenzio e tre ripetizioni identiche.',
       codice: 'src/session-registry.mjs',
-      motivo: 'Chiede perché «scrittura di un file» ha il cancello «Chiedi conferma», anche con la sessione su «Accesso completo».',
+      motivo: 'Chiede perché «scrittura di un file» ha il cancello «Chiedi conferma», anche con la sessione su «Accesso pieno».',
       diff: [
         { tipo: 'del', testo: '− const SOGLIE = { silenzioMs: 30_000 };' },
         { tipo: 'add', testo: '+ export const SOGLIE_STALLO_PREDEFINITE = Object.freeze({' },

@@ -22,13 +22,15 @@
  * unica e a doppio verso, come nell'originale (`setupComposerResize`).
  */
 
-/** Il nome umano dei permessi (H22: mai il nome tecnico a schermo). */
-export const NOME_PERMESSO = Object.freeze({
-  'Read only': 'Sola lettura',
-  'On request': 'Su richiesta',
-  'Workspace write': 'Scrittura nel workspace',
-  'Full access': 'Accesso completo',
-});
+/*
+ * Il nome umano dei permessi (H22: mai il nome tecnico a schermo).
+ * ⛔ 07/9 — era la QUARTA mappa della stessa cosa, e diceva «Sola lettura»/«Su richiesta»/
+ * «Scrittura nel workspace»/«Accesso completo» dove il foglio Permessi, la modale «Nuova sessione»
+ * e l'intro dicevano tre serie ancora diverse: quattro nomi per quattro politiche, cioe' sedici
+ * modi di chiamare quattro cose. Ora è una VISTA dell'unica mappa (`politiche.js`).
+ */
+import { POLITICHE } from './politiche.js';
+export const NOME_PERMESSO = Object.freeze(Object.fromEntries(POLITICHE.map((p) => [p.valore, p.nome])));
 
 export function etichettaPermesso(permesso) {
   return NOME_PERMESSO[permesso] || (typeof permesso === 'string' && permesso.trim() ? permesso : 'Permesso non scelto');
