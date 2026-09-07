@@ -212,8 +212,12 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
   // 06/9 O-28: i due modi di guardare una lettura. Cambiare modo non ricarica niente: la cornice resta.
   for (const b of el.modi || []) {
     b.addEventListener('click', () => {
-      const scelto = b.dataset.browserModo === 'testo' ? 'testo' : 'pagina';
-      if (stato.modo === scelto) return;
+      /* ⛔ 07/9, owner: lo switch a due pulsanti non c'è più — ne resta UNO, accanto a «Rileggi»,
+         e un pulsante solo non sceglie: ALTERNA. Col vecchio codice, premuto due volte, il secondo
+         clic non faceva niente e la pagina non tornava: si restava bloccati sul testo. */
+      const suo = b.dataset.browserModo === 'testo' ? 'testo' : 'pagina';
+      const opposto = suo === 'testo' ? 'pagina' : 'testo';
+      const scelto = stato.modo === suo ? opposto : suo;
       stato.modo = scelto;
       if (scelto === 'testo') mostraAvviso('');
       renderizza();

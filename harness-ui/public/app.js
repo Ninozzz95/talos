@@ -6462,6 +6462,23 @@ var init_intro = __esm({
 });
 
 // src/components/terminale.js
+function accorciaPercorso(percorso, massimo = 46) {
+  const testo3 = String(percorso ?? "");
+  if (testo3.length <= massimo) return testo3;
+  const pezzi = testo3.split(/(?<=[\\/])/);
+  const radice = pezzi[0] + (pezzi[1] ?? "");
+  let coda = "";
+  for (let i = pezzi.length - 1; i > 1; i -= 1) {
+    const prova = pezzi[i] + coda;
+    if (radice.length + 1 + prova.length > massimo) break;
+    coda = prova;
+  }
+  if (!coda) {
+    const quanti = Math.max(6, massimo - radice.length - 1);
+    coda = testo3.slice(-quanti);
+  }
+  return `${radice}…${coda}`;
+}
 function nomeShell(enforcement, comando = "") {
   if (enforcement === "git-bash") return "Git Bash";
   if (enforcement === "cmd-fallback") return "cmd.exe";
@@ -6713,14 +6730,15 @@ function creaSchedeTerminale(pane, { azioni = {}, root = document.body } = {}) {
         };
         foot.append(span(p.chi));
         if (p.dettaglio) {
-          const d = span(p.dettaglio, "talos-mono");
+          const d = span(accorciaPercorso(p.dettaglio), "talos-mono");
           d.title = p.dettaglio;
           foot.append(span("·"), d);
         }
         if (p.stato) foot.append(span("·"), span(p.stato));
         const g = document.createElement("span");
         g.className = "talos-grow";
-        foot.append(g, span(p.nota ?? t(TESTI2.nota)));
+        const coda = p.nota ?? (p.dettaglio ? "" : t(TESTI2.nota));
+        foot.append(g, ...coda ? [span(coda)] : []);
       }
     }
   }
@@ -7141,8 +7159,9 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   });
   for (const b of el25.modi || []) {
     b.addEventListener("click", () => {
-      const scelto = b.dataset.browserModo === "testo" ? "testo" : "pagina";
-      if (stato.modo === scelto) return;
+      const suo = b.dataset.browserModo === "testo" ? "testo" : "pagina";
+      const opposto = suo === "testo" ? "pagina" : "testo";
+      const scelto = stato.modo === suo ? opposto : suo;
       stato.modo = scelto;
       if (scelto === "testo") mostraAvviso("");
       renderizza();
@@ -17156,7 +17175,17 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             { chiave: "isolamento", testo: t("Stessa macchina, senza isolamento"), titolo: t("La shell gira sul tuo computer, nella cartella della sessione: nessuna sandbox.") },
             ...nomeCartella2 ? [{ chiave: "cartella", testo: nomeCartella2, titolo: `${cartella} · ${t("shell sul tuo computer, senza isolamento")}` }] : []
           ],
-          piede: attiva ? { chi: t(TESTI2.apertaDaTe), dettaglio: cartella || (attiva.origine === "standalone" ? t("cartella predefinita del server") : ""), stato: `${t(ETICHETTA_STATO[attiva.stato] ?? attiva.stato)}${attiva.ripreso ? ` · ${t("shell ripresa")}` : ""}`, nota: `${t(TESTI2.nota)}${colori}` } : { chi: t(TESTI2.nessunaScheda), dettaglio: cartella, stato: "", nota: conSessione ? t("Premi Nuovo per aprire una shell in questa cartella.") : t(TESTI2.nuovaSchedaSenzaSessione) }
+          piede: attiva ? {
+            chi: t(TESTI2.apertaDaTe),
+            dettaglio: cartella || (attiva.origine === "standalone" ? t("cartella predefinita del server") : ""),
+            stato: `${t(ETICHETTA_STATO[attiva.stato] ?? attiva.stato)}${attiva.ripreso ? ` · ${t("shell ripresa")}` : ""}`,
+            /* ⛔ 07/9, visto in una foto: la frase generica («Ogni scheda dichiara chi l'ha aperta e
+            dove») restava accanto al percorso e gli rubava lo spazio, proprio mentre il percorso
+            era tagliato e perdeva il nome della cartella. Dove c'è un dato vero, lo spazio è suo:
+            la spiegazione resta solo quando non c'è un percorso da mostrare. `colori` invece è un
+            fatto, non una spiegazione, e resta sempre. */
+            nota: `${cartella ? "" : t(TESTI2.nota)}${colori}`.trim()
+          } : { chi: t(TESTI2.nessunaScheda), dettaglio: cartella, stato: "", nota: conSessione ? t("Premi Nuovo per aprire una shell in questa cartella.") : t(TESTI2.nuovaSchedaSenzaSessione) }
         });
         aggiornaTestataSessione();
       }

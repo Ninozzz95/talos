@@ -489,6 +489,11 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
       <span class="talos-muted talos-browser__meta" id="browserPosizione" role="status">Lettura 2 di 2</span>
       <span class="talos-browser__testata"><span class="talos-browser__testata-titolo" id="browserTitolo">Registro dei processi</span><span class="talos-muted talos-browser__testata-meta" id="browserProvenienza">Agente · 05/09, 10:42 (Roma) · 365 caratteri</span></span><span class="talos-grow"></span>
       <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="reload">Rileggi</button>
+      <!-- ⛔ 07/9, owner: «togli lo switch pagina, e testo dell'agente lo metti accanto a rileggi».
+           Era una coppia di schede sempre a schermo che rubava una riga; adesso la pagina è LA vista e
+           questo è un interruttore: mostra cosa ha ricevuto davvero il modello — spesso una fetta della
+           pagina (misurato su una lettura vera: 4.157 caratteri su ~39.000) — e si rispegne da solo. -->
+      <button class="talos-button talos-button--ghost talos-button--sm" data-browser-modo="testo" aria-pressed="false" data-tip-lato="sotto" title="Mostra il testo che ha ricevuto l'agente, che può essere una parte della pagina">Testo dell’agente</button>
       <button class="talos-button talos-button--secondary talos-button--sm" data-browser-demo="annotate" title="Prepara una bozza nella chat senza inviarla">Annota</button>
       <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="note" aria-expanded="false" aria-controls="browserEditorNota">Nota locale</button>
       <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="copy">Copia testo</button>
@@ -511,10 +516,6 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
            browser più grande». Il titolo occupava due righe alte sopra la pagina (un h2 da 20px con
            l’indirizzo intero, più la riga della provenienza): quello spazio ora è della pagina.
            Titolo e provenienza stanno sulla STESSA riga dei due modi, in piccolo, e si troncano. -->
-      <div class="talos-browser__modi" role="group" aria-label="Come guardare questa pagina">
-        <button type="button" class="talos-button talos-button--ghost talos-button--sm" data-browser-modo="pagina" aria-pressed="false">Pagina</button>
-        <button type="button" class="talos-button talos-button--secondary talos-button--sm" data-browser-modo="testo" aria-pressed="true">Testo dell’agente</button>
-      </div>
       <pre id="browserTesto" class="talos-browser__text" tabindex="0" aria-label="Testo acquisito della pagina">Registro dei processi
 
 Il registro raccoglie i processi avviati durante una sessione e mostra l’ultimo evento ricevuto.

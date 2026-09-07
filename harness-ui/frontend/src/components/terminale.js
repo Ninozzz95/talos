@@ -41,6 +41,39 @@ export const TESTI = Object.freeze({
   apertaDaTe: 'Aperta da te',
 });
 
+/*
+ * ⛔ 07/9, visto in una foto del Terminale: nel piede il percorso della cartella era tagliato in
+ *   CODA — «C:\Users\Antonino\AppData\Local\Temp\claude\C--Users-An…» — cioè spariva proprio la
+ *   parte che serve, il nome della cartella dove i comandi girano davvero. E accanto restava una
+ *   frase generica («Ogni scheda dichiara chi l'ha aperta e dove») che si legge una volta e poi
+ *   occupa spazio per sempre, proprio mentre il dato utile non ci stava.
+ *
+ * ⛔ La via ovvia — `direction:rtl` per troncare in testa — è SBAGLIATA qui: con la punteggiatura
+ *   sposta i segni all'inizio della riga (ricerca 07/09/2026: David Walsh «CSS Ellipsis Beginning
+ *   of String», WebKit #164999), e un percorso Windows è tutto `\` e `:`. Si taglia nel MEZZO,
+ *   come fa un editor: restano la radice e la coda, che sono le due parti che dicono qualcosa.
+ */
+export function accorciaPercorso(percorso, massimo = 46) {
+  const testo = String(percorso ?? '');
+  if (testo.length <= massimo) return testo;
+  /* ⛔ Il taglio cade su un CONFINE di cartella, non in mezzo a una parola: «…hpad\banco-umano»
+     (visto in una foto) non è un percorso, è un rebus. Si tengono le ultime cartelle intere che
+     entrano nello spazio, e la radice davanti. */
+  const pezzi = testo.split(/(?<=[\\/])/);              // i separatori restano attaccati al pezzo
+  const radice = pezzi[0] + (pezzi[1] ?? '');           // «C:\» + «Users\» — dice disco e persona
+  let coda = '';
+  for (let i = pezzi.length - 1; i > 1; i -= 1) {
+    const prova = pezzi[i] + coda;
+    if (radice.length + 1 + prova.length > massimo) break;
+    coda = prova;
+  }
+  if (!coda) { // nemmeno una cartella intera ci sta: si torna al taglio secco, meglio che niente
+    const quanti = Math.max(6, massimo - radice.length - 1);
+    coda = testo.slice(-quanti);
+  }
+  return `${radice}…${coda}`;
+}
+
 /** Lo stato di una scheda → il pallino del mockup. */
 export const PALLINO = Object.freeze({
   live: 'talos-dot--live',
@@ -273,10 +306,13 @@ export function creaSchedeTerminale(pane, { azioni = {}, root = document.body } 
       if (p) {
         const span = (testo, classe) => { const s = document.createElement('span'); if (classe) s.className = classe; s.textContent = testo; return s; };
         foot.append(span(p.chi));
-        if (p.dettaglio) { const d = span(p.dettaglio, 'talos-mono'); d.title = p.dettaglio; foot.append(span('·'), d); }
+        if (p.dettaglio) { const d = span(accorciaPercorso(p.dettaglio), 'talos-mono'); d.title = p.dettaglio; foot.append(span('·'), d); }
         if (p.stato) foot.append(span('·'), span(p.stato));
         const g = document.createElement('span'); g.className = 'talos-grow';
-        foot.append(g, span(p.nota ?? t(TESTI.nota)));
+        // ⛔ La frase generica solo quando NON c'è un percorso da mostrare: dove c'è un dato vero,
+        //    lo spazio è suo. Una spiegazione che ruba posto al fatto che spiega è di troppo.
+        const coda = p.nota ?? (p.dettaglio ? '' : t(TESTI.nota));
+        foot.append(g, ...(coda ? [span(coda)] : []));
       }
     }
   }
