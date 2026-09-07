@@ -13976,7 +13976,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       const VELO_PER_FOGLIO = {
         rename: "veloRinomina",
         deleteSession: "veloEliminaSessione",
-        export: "veloEsporta"
+        export: "veloEsporta",
+        // ⭐ 07/9, seconda tornata: la famiglia dei FILE. Quattro righe in più qui, quattro fogli
+        //    vecchi in meno da spegnere quando la migrazione finisce.
+        fileViewer: "veloFile",
+        renameFile: "veloRinominaFile",
+        deleteFile: "veloEliminaFile",
+        createFile: "veloCreaFile",
+        references: "veloRiferimenti"
       };
       async function esportaSessioneCorrente(formato) {
         if (!state.realSession.id) return { ok: false, motivo: "Nessuna sessione aperta da esportare." };
@@ -14010,6 +14017,56 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         await aggiornaElencoSessioniReali();
         if (state.board.initialized) await refreshSessionsBoard();
         return { ok: true };
+      }
+      async function rinominaFileBersaglio(nuovoNome) {
+        const bersaglio = state.alberoFileTarget;
+        if (!bersaglio) return { ok: false, motivo: "Nessun file scelto." };
+        if (!nuovoNome) return { ok: false, motivo: "Il nome non può essere vuoto." };
+        try {
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/rename`, { percorso: bersaglio.percorso, nuovoNome });
+        } catch (error) {
+          toast("Rinomina non riuscita", messaggioErroreUtente(error));
+          return { ok: false, motivo: messaggioErroreUtente(error, "il file è rimasto al suo posto") };
+        }
+        toast("File rinominato", `${bersaglio.nome} → ${nuovoNome}`);
+        await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
+        return { ok: true };
+      }
+      async function eliminaFileBersaglio() {
+        const bersaglio = state.alberoFileTarget;
+        if (!bersaglio) return { ok: false, motivo: "Nessun file scelto." };
+        try {
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/delete`, { percorso: bersaglio.percorso });
+        } catch (error) {
+          toast("Eliminazione non riuscita", messaggioErroreUtente(error));
+          return { ok: false, motivo: messaggioErroreUtente(error, "il file è ancora sul disco") };
+        }
+        toast("File eliminato", bersaglio.nome);
+        await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
+        return { ok: true };
+      }
+      async function creaVoceBersaglio(nome) {
+        const bersaglio = state.alberoFileTarget;
+        if (!bersaglio) return { ok: false, motivo: "Nessuna cartella scelta." };
+        if (!nome) return { ok: false, motivo: "Il nome non può essere vuoto." };
+        let esito;
+        try {
+          esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/create`, { percorsoBase: bersaglio.percorso, nome, tipo: bersaglio.tipo });
+        } catch (error) {
+          toast("Creazione non riuscita", messaggioErroreUtente(error));
+          return { ok: false, motivo: messaggioErroreUtente(error, "non è stato creato niente") };
+        }
+        toast(bersaglio.tipo === "cartella" ? "Cartella creata" : "File creato", esito.percorso);
+        await invalidaLivelloGenitoreAlbero(esito.percorso);
+        return { ok: true, percorso: esito.percorso };
+      }
+      async function leggiFileBersaglio(percorsoCompleto) {
+        try {
+          const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/file?percorso=${encodeURIComponent(percorsoCompleto)}`);
+          return { ok: true, contenuto: String(dati.contenuto ?? "") };
+        } catch (error) {
+          return { ok: false, motivo: messaggioErroreUtente(error, "lettura non riuscita") };
+        }
       }
       async function rinominaSessioneCorrente(nuovoNome) {
         const idBersaglio = state.sessioneTarget?.sessionId || state.realSession.id;
@@ -14135,13 +14192,283 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             }
           }
         }
+        if (tipo === "renameFile") {
+          const bersaglio = state.alberoFileTarget;
+          const modulo = $2("#rinominaFileForm", velo);
+          const campo2 = $2("#rinominaFileNome", velo);
+          const percorso = $2("#rinominaFilePercorso", velo);
+          const errore = $2("#rinominaFileErrore", velo);
+          if (!modulo || !campo2) return;
+          if (percorso) percorso.textContent = bersaglio?.percorso || "nessun file scelto";
+          campo2.value = bersaglio?.nome || "";
+          if (errore) {
+            errore.hidden = true;
+            errore.textContent = "";
+          }
+          window.setTimeout(() => {
+            campo2.focus();
+            campo2.select();
+          }, 30);
+          if (!modulo.dataset.collegato) {
+            modulo.dataset.collegato = "si";
+            modulo.addEventListener("submit", async (evento) => {
+              evento.preventDefault();
+              if (modulo.dataset.inCorso === "si") return;
+              modulo.dataset.inCorso = "si";
+              const esito = await rinominaFileBersaglio(campo2.value.trim());
+              delete modulo.dataset.inCorso;
+              if (!esito.ok) {
+                if (errore) {
+                  errore.textContent = esito.motivo;
+                  errore.hidden = false;
+                }
+                campo2.focus();
+                return;
+              }
+              chiudiVeloMockup("veloRinominaFile");
+            });
+          }
+        }
+        if (tipo === "deleteFile") {
+          const bersaglio = state.alberoFileTarget;
+          const titolo2 = $2("#titoloveloEliminaFile", velo);
+          const percorso = $2("#eliminaFilePercorso", velo);
+          const messaggio = $2("#eliminaFileMessaggio", velo);
+          const errore = $2("#eliminaFileErrore", velo);
+          const conferma = $2("#eliminaFileConferma", velo);
+          const annulla = $2("#eliminaFileAnnulla", velo);
+          const cartella = bersaglio?.cartella === true;
+          if (percorso) percorso.textContent = bersaglio?.percorso || "nessun file scelto";
+          if (errore) errore.hidden = true;
+          if (titolo2) titolo2.textContent = cartella ? "Elimina cartella" : "Elimina file";
+          if (messaggio) messaggio.textContent = cartella ? "La cartella viene eliminata dal disco con tutto quello che contiene. Non si annulla da TALOS." : "Il file viene eliminato dal disco. Non si annulla da TALOS.";
+          if (conferma) {
+            conferma.textContent = cartella ? "Elimina cartella" : "Elimina file";
+            conferma.disabled = !bersaglio;
+            if (!conferma.dataset.collegato) {
+              conferma.dataset.collegato = "si";
+              conferma.addEventListener("click", async () => {
+                conferma.disabled = true;
+                const esito = await eliminaFileBersaglio();
+                if (!esito.ok) {
+                  if (errore) {
+                    errore.textContent = `Eliminazione non riuscita: ${esito.motivo}`;
+                    errore.hidden = false;
+                  }
+                  conferma.disabled = false;
+                  return;
+                }
+                chiudiVeloMockup("veloEliminaFile");
+              });
+            }
+          }
+          window.setTimeout(() => {
+            annulla?.focus();
+          }, 30);
+        }
+        if (tipo === "createFile") {
+          const bersaglio = state.alberoFileTarget;
+          const cartella = bersaglio?.tipo === "cartella";
+          const modulo = $2("#creaFileForm", velo);
+          const campo2 = $2("#creaFileNome", velo);
+          const base = $2("#creaFileBase", velo);
+          const etichetta = $2("#creaFileEtichetta", velo);
+          const aiuto = $2("#creaFileAiuto", velo);
+          const titolo2 = $2("#titoloveloCreaFile", velo);
+          const salva = $2("#creaFileSalva", velo);
+          const errore = $2("#creaFileErrore", velo);
+          if (!modulo || !campo2) return;
+          if (titolo2) titolo2.textContent = cartella ? "Nuova cartella" : "Nuovo file";
+          if (etichetta) etichetta.textContent = cartella ? "Nome della cartella" : "Nome del file";
+          if (salva) salva.textContent = cartella ? "Crea cartella" : "Crea file";
+          if (aiuto) aiuto.textContent = cartella ? "Fino a 255 caratteri. Scrivi un nome, senza percorso. La cartella sarà vuota." : "Fino a 255 caratteri. Scrivi un nome, senza percorso. Il file sarà vuoto.";
+          if (base) base.textContent = bersaglio?.percorso || "la radice del progetto";
+          campo2.value = "";
+          if (errore) {
+            errore.hidden = true;
+            errore.textContent = "";
+          }
+          window.setTimeout(() => {
+            campo2.focus();
+          }, 30);
+          if (!modulo.dataset.collegato) {
+            modulo.dataset.collegato = "si";
+            modulo.addEventListener("submit", async (evento) => {
+              evento.preventDefault();
+              if (modulo.dataset.inCorso === "si") return;
+              modulo.dataset.inCorso = "si";
+              const esito = await creaVoceBersaglio(campo2.value.trim());
+              delete modulo.dataset.inCorso;
+              if (!esito.ok) {
+                if (errore) {
+                  errore.textContent = esito.motivo;
+                  errore.hidden = false;
+                }
+                campo2.focus();
+                return;
+              }
+              chiudiVeloMockup("veloCreaFile");
+            });
+          }
+        }
+        if (tipo === "references") {
+          const campo2 = $2("#cercaRiferimenti", velo);
+          const elenco2 = $2("#elencoRiferimenti", velo);
+          const vuoto = $2("#riferimentiVuoto", velo);
+          const ambito = $2("#riferimentiAmbito", velo);
+          const apriAlbero = $2("#riferimentiAlbero", velo);
+          if (!campo2 || !elenco2) return;
+          const suggerimenti = suggerimentiRiferimentiReali();
+          let scelto = 0;
+          const righeVive = () => $$(".talos-list-row", elenco2).filter((r) => !r.hidden);
+          const evidenzia = () => {
+            const righe = righeVive();
+            if (righe.length === 0) {
+              campo2.removeAttribute("aria-activedescendant");
+              return;
+            }
+            scelto = Math.max(0, Math.min(scelto, righe.length - 1));
+            righe.forEach((riga, indice2) => {
+              riga.setAttribute("aria-selected", String(indice2 === scelto));
+              if (indice2 === scelto) {
+                campo2.setAttribute("aria-activedescendant", riga.id);
+                riga.scrollIntoView?.({ block: "nearest" });
+              }
+            });
+          };
+          const aggiungi = (percorso) => {
+            if (!percorso) return;
+            allegaFileAllaChat(percorso);
+            chiudiVeloMockup("veloRiferimenti");
+          };
+          elenco2.replaceChildren();
+          suggerimenti.forEach(({ percorso, origine }, indice2) => {
+            const riga = document.createElement("button");
+            riga.type = "button";
+            riga.id = `riferimento-${indice2}`;
+            riga.className = "talos-list-row";
+            riga.dataset.c = "ListRow";
+            riga.setAttribute("role", "option");
+            riga.setAttribute("aria-selected", String(indice2 === 0));
+            riga.tabIndex = -1;
+            riga.dataset.riferimento = percorso;
+            const icona7 = document.createElement("span");
+            icona7.className = "talos-list-row__icon";
+            icona7.append(iconaSvgAlbero("i-doc"));
+            const testo3 = document.createElement("span");
+            testo3.className = "talos-list-row__text";
+            testo3.append(textElement("span", "talos-list-row__title", percorso), textElement("span", "talos-list-row__sub", origine));
+            riga.append(icona7, testo3, textElement("span", "talos-list-row__aside talos-mono", "@"));
+            riga.addEventListener("click", () => aggiungi(percorso));
+            elenco2.append(riga);
+          });
+          const senzaNiente = suggerimenti.length === 0;
+          elenco2.hidden = senzaNiente;
+          if (vuoto) {
+            vuoto.hidden = !senzaNiente;
+            if (senzaNiente) {
+              vuoto.textContent = state.realSession.id ? "Nessun file ancora: apri una cartella nell’albero e i suoi file compaiono qui." : "Nessuna sessione aperta: qui compaiono i file del suo workspace.";
+            }
+          }
+          if (ambito) ambito.hidden = senzaNiente;
+          campo2.value = "";
+          scelto = 0;
+          evidenzia();
+          if (!velo.dataset.collegato) {
+            velo.dataset.collegato = "si";
+            campo2.addEventListener("input", () => {
+              const cerca = campo2.value.trim().toLowerCase();
+              let trovati = 0;
+              for (const riga of $$(".talos-list-row", elenco2)) {
+                const combacia = cerca === "" || String(riga.dataset.riferimento || "").toLowerCase().includes(cerca);
+                riga.hidden = !combacia;
+                if (combacia) trovati += 1;
+              }
+              const nessunRisultato = trovati === 0 && $$(".talos-list-row", elenco2).length > 0;
+              if (vuoto) {
+                vuoto.hidden = !nessunRisultato;
+                if (nessunRisultato) vuoto.textContent = "Nessun file corrisponde. Cambia ricerca o apri una cartella nell’albero.";
+              }
+              scelto = 0;
+              evidenzia();
+            });
+            campo2.addEventListener("keydown", (evento) => {
+              if (evento.key === "ArrowDown" || evento.key === "ArrowUp") {
+                evento.preventDefault();
+                scelto += evento.key === "ArrowDown" ? 1 : -1;
+                const quante = righeVive().length;
+                if (quante > 0) scelto = (scelto + quante) % quante;
+                evidenzia();
+                return;
+              }
+              if (evento.key === "Enter") {
+                evento.preventDefault();
+                aggiungi(righeVive()[scelto]?.dataset.riferimento);
+              }
+            });
+            apriAlbero?.addEventListener("click", () => {
+              chiudiVeloMockup("veloRiferimenti");
+              const scheda = $2("#inspector-tab-files");
+              if (scheda) setInspectorTab(scheda);
+            });
+          }
+        }
+        if (tipo === "fileViewer") {
+          const titolo2 = $2("#titoloveloFile", velo);
+          const percorso = $2("#fileAnteprimaPercorso", velo);
+          const blocco = $2("#fileAnteprimaBlocco", velo);
+          const codice = $2("#fileAnteprimaCodice code", velo) || $2("#fileAnteprimaCodice", velo);
+          const errore = $2("#fileAnteprimaErrore", velo);
+          const riprova = $2("#fileAnteprimaRiprova", velo);
+          const stato = $2("#fileAnteprimaStato", velo);
+          const copia = $2("#fileAnteprimaCopia", velo);
+          const allega = $2("#fileAnteprimaAllega", velo);
+          if (titolo2) titolo2.textContent = state.alberoFileTarget?.nome || "Anteprima file";
+          if (percorso) percorso.textContent = state.alberoFileTarget?.percorso || "";
+          const carica = async () => {
+            const attuale = state.alberoFileTarget;
+            if (!attuale) return;
+            if (codice) codice.textContent = "";
+            if (errore) errore.hidden = true;
+            if (blocco) blocco.hidden = false;
+            if (copia) copia.disabled = true;
+            if (stato) stato.textContent = "Leggo il file…";
+            const esito = await leggiFileBersaglio(attuale.percorso);
+            if (velo.hidden) return;
+            if (!esito.ok) {
+              if (blocco) blocco.hidden = true;
+              if (errore) errore.hidden = false;
+              if (stato) stato.textContent = `Non leggibile: ${esito.motivo}`;
+              return;
+            }
+            if (codice) codice.textContent = esito.contenuto;
+            if (copia) copia.disabled = false;
+            if (stato) stato.textContent = esito.contenuto.trim() === "" ? "Il file è vuoto." : "Puoi copiare il testo o allegare il riferimento alla chat.";
+          };
+          if (!velo.dataset.collegato) {
+            velo.dataset.collegato = "si";
+            riprova?.addEventListener("click", () => {
+              void carica();
+            });
+            copia?.addEventListener("click", () => {
+              void copyText(codice?.textContent || "", "Testo del file copiato");
+            });
+            allega?.addEventListener("click", () => {
+              const attuale = state.alberoFileTarget;
+              if (!attuale) return;
+              allegaFileAllaChat(attuale.percorso);
+              chiudiVeloMockup("veloFile");
+            });
+          }
+          void carica();
+        }
       }
       function openSheet(type, { ancoraAlComposer = false } = {}) {
         const idVelo = VELO_PER_FOGLIO[type];
         if (idVelo && $2(`#${idVelo}`)) {
           preparaVeloDaFoglio(type, $2(`#${idVelo}`));
           apriVeloMockup(idVelo);
-          return;
+          return true;
         }
         const content = sheetTemplates[type];
         if (!content) return;
@@ -14493,7 +14820,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           html: () => `
         <div class="sheet-section">
           <span class="sheet-label">Suggerimenti workspace</span>
-          ${suggerimentiRiferimentiReali().map((file) => `<button class="sheet-option reference-option" data-reference-file="${attributoSicuro(file)}"><span class="sheet-icon">${icon("i-files")}</span><span><strong>${attributoSicuro(file)}</strong><small>Aggiungi al contesto del messaggio</small></span><span>@</span></button>`).join("") || `<p class="board-empty">${state.realSession.id ? "Apri una cartella nell’albero Files: i file caricati compaiono qui come suggerimenti." : "Avvia una sessione: qui compaiono i file del suo workspace."}</p>`}
+          ${suggerimentiRiferimentiReali().map(({ percorso, origine }) => `<button class="sheet-option reference-option" data-reference-file="${attributoSicuro(percorso)}"><span class="sheet-icon">${icon("i-files")}</span><span><strong>${attributoSicuro(percorso)}</strong><small>${attributoSicuro(origine)}</small></span><span>@</span></button>`).join("") || `<p class="board-empty">${state.realSession.id ? "Apri una cartella nell’albero Files: i file caricati compaiono qui come suggerimenti." : "Avvia una sessione: qui compaiono i file del suo workspace."}</p>`}
         </div>`
         },
         /*
@@ -14599,16 +14926,16 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       function suggerimentiRiferimentiReali(massimo = 12) {
         const visti = /* @__PURE__ */ new Set();
         const elenco2 = [];
-        const aggiungi = (percorso) => {
+        const aggiungi = (percorso, origine) => {
           if (percorso && !visti.has(percorso) && elenco2.length < massimo) {
             visti.add(percorso);
-            elenco2.push(percorso);
+            elenco2.push({ percorso, origine });
           }
         };
-        for (const file of state.realSession.reviewFiles.values()) aggiungi(file.path);
+        for (const file of state.realSession.reviewFiles.values()) aggiungi(file.path, "Modificato in questa sessione");
         for (const [percorso, voci] of state.realSession.treeCache.entries()) {
           for (const voce of voci || []) {
-            if (!voce.cartella) aggiungi(percorso ? `${percorso}/${voce.nome}` : voce.nome);
+            if (!voce.cartella) aggiungi(percorso ? `${percorso}/${voce.nome}` : voce.nome, "Caricato dall’albero");
           }
         }
         return elenco2;
@@ -17727,14 +18054,14 @@ ${testo3}` : testo3;
           { etichetta: "Copia", icona: "i-link", azione: () => avviaCopiaFile(percorsoCompleto) },
           { etichetta: "Imposta come radice", icona: "i-folder", azione: () => impostaComeRadice(percorsoCompleto, nome) },
           { etichetta: "Rivela in Esplora File", icona: "i-folder-open", azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
-          { etichetta: "Elimina", icona: "i-trash", azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true }
+          { etichetta: "Elimina", icona: "i-trash", azione: () => avviaEliminaFile(percorsoCompleto, nome, cartella), pericoloso: true }
         ] : [
           { etichetta: "Apri", icona: "i-eye", azione: () => apriFileAlbero(percorsoCompleto, nome) },
           { etichetta: "Allega alla chat", icona: "i-link", azione: () => allegaFileAllaChat(percorsoCompleto) },
           { etichetta: "Rinomina", icona: "i-edit", azione: () => avviaRinominaFile(percorsoCompleto, nome) },
           { etichetta: "Copia", icona: "i-link", azione: () => avviaCopiaFile(percorsoCompleto) },
           { etichetta: "Rivela in Esplora File", icona: "i-folder-open", azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
-          { etichetta: "Elimina", icona: "i-trash", azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true }
+          { etichetta: "Elimina", icona: "i-trash", azione: () => avviaEliminaFile(percorsoCompleto, nome, cartella), pericoloso: true }
         ];
         for (const voce of voci) {
           const btn = document.createElement("button");
@@ -17787,20 +18114,19 @@ ${testo3}` : testo3;
       async function apriFileAlbero(percorsoCompleto, nome) {
         await rivelaERivelaRigaAlbero(percorsoCompleto);
         state.alberoFileTarget = { percorso: percorsoCompleto, nome };
-        openSheet("fileViewer");
+        if (openSheet("fileViewer")) return;
         sheetTitle.textContent = nome;
         const mount = $2("#fileViewerMount", sheetBody);
-        try {
-          const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/file?percorso=${encodeURIComponent(percorsoCompleto)}`);
-          if (!mount.isConnected) return;
-          const pre = document.createElement("pre");
-          pre.className = "tool-result-block";
-          pre.appendChild(textElement("code", "", dati.contenuto));
-          mount.replaceChildren(pre);
-        } catch (error) {
-          if (!mount.isConnected) return;
-          mount.replaceChildren(textElement("p", "board-empty", `Non leggibile: ${error.message}`));
+        const esito = await leggiFileBersaglio(percorsoCompleto);
+        if (!mount.isConnected) return;
+        if (!esito.ok) {
+          mount.replaceChildren(textElement("p", "board-empty", `Non leggibile: ${esito.motivo}`));
+          return;
         }
+        const pre = document.createElement("pre");
+        pre.className = "tool-result-block";
+        pre.appendChild(textElement("code", "", esito.contenuto));
+        mount.replaceChildren(pre);
       }
       async function rivelaERivelaRigaAlbero(percorsoCompleto) {
         const trovaNodo = (percorso) => [...document.querySelectorAll("#inspector-files .ft-node")].find((nodo4) => nodo4.dataset.percorso === percorso);
@@ -17834,8 +18160,8 @@ ${testo3}` : testo3;
         state.alberoFileTarget = { percorso: percorsoCompleto, nome };
         openSheet("renameFile");
       }
-      function avviaEliminaFile(percorsoCompleto, nome) {
-        state.alberoFileTarget = { percorso: percorsoCompleto, nome };
+      function avviaEliminaFile(percorsoCompleto, nome, cartella = false) {
+        state.alberoFileTarget = { percorso: percorsoCompleto, nome, cartella };
         openSheet("deleteFile");
       }
       async function avviaCopiaFile(percorsoCompleto) {
@@ -17849,7 +18175,7 @@ ${testo3}` : testo3;
       }
       function avviaCreaVoce(percorsoBase, tipo) {
         state.alberoFileTarget = { percorso: percorsoBase, tipo };
-        openSheet("createFile");
+        if (openSheet("createFile")) return;
         sheetTitle.textContent = tipo === "cartella" ? "Nuova cartella" : "Nuovo file";
       }
       function avviaComeNuovaRadice(percorsoAssoluto, nome) {
@@ -20690,11 +21016,11 @@ ${blocchi.join("\n\n")}` : testa;
           runDirectShell(comando, hidden);
           return true;
         }
-        if (state.realSession.id && !state.realSession.eventoTerminaleVisto) {
+        if (state.realSession.id && runRealeAttivo()) {
           accodaMessaggioReale(value);
           return true;
         }
-        if (state.realSession.id && state.realSession.eventoTerminaleVisto) {
+        if (state.realSession.id) {
           resumeSession(value);
           return true;
         }
@@ -21901,7 +22227,7 @@ ${blocchi.join("\n\n")}` : testa;
         preparaMisuraDialogo(v);
         const corpo = v.querySelector(".talos-dialog__body");
         const scelto = corpo && corpo.querySelector('[role="radio"][aria-checked="true"]');
-        const primo = scelto || corpo && corpo.querySelector("input, button, select") || v.querySelector("input, button, select");
+        const primo = scelto || corpo && corpo.querySelector("input, button, select") || v.querySelector(".talos-dialog__footer button, .talos-dialog__footer input, .talos-dialog__footer select") || v.querySelector("input, button, select");
         primo?.focus();
       }
       function chiudiVeloMockup(id) {

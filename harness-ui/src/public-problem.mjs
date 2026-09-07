@@ -8,6 +8,13 @@ const MESSAGES = Object.freeze({
   RUNTIME_UNREACHABLE: { title: 'Servizio locale non raggiungibile', explanation: 'Il servizio locale non ha risposto.', action: 'Controlla che sia avviato in Doctor e riprova.' },
   PATH_NOT_ALLOWED: { title: 'Percorso non consentito', explanation: 'Il percorso scelto è fuori dall’area autorizzata.', action: 'Scegli una cartella dentro il progetto aperto.' },
   PROCESS_POLICY_REJECTED: { title: 'Operazione bloccata per sicurezza', explanation: 'Il comando richiesto non rientra nelle autorizzazioni correnti.', action: 'Controlla il permesso della sessione e riprova solo se riconosci il comando.' },
+  /*
+   * ⛔ 07/9, O-49 — senza una voce qui la busta portava la copia di INTERNAL_ERROR:
+   * «Si è verificato un problema imprevisto» e «Apri Doctor». Falso due volte: non è
+   * imprevisto, ed è l’unica cosa che Doctor non può spiegare. La scheda del permesso
+   * è semplicemente vecchia — si ricarica la sessione e si guarda cosa chiede adesso.
+   */
+  APPROVAL_NOT_PENDING: { title: 'Richiesta di permesso scaduta', explanation: 'La sessione è andata avanti: quella domanda non aspetta più una risposta.', action: 'Ricarica la sessione e rispondi alla richiesta che vedi adesso, se ce n’è una.' },
   INTERNAL_ERROR: { title: 'Operazione non riuscita', explanation: 'Si è verificato un problema imprevisto durante l’operazione.', action: 'Apri Doctor, copia il riferimento e riprova.' },
 });
 

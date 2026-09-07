@@ -2558,6 +2558,30 @@ body.reduce-motion *::after {
   font-size: 10.5px;
   opacity: .85;
 }
+.talos-sidebar {
+  container-type: inline-size;
+  container-name: barra;
+}
+@container barra (max-width: 190px) {
+  .talos-solo-largo {
+    display: none;
+  }
+  .talos-sidebar__actions .talos-button--primary {
+    justify-content: center;
+    padding-inline: 10px;
+  }
+  .talos-sidebar__actions .talos-field {
+    min-width: 0;
+  }
+}
+@container barra (max-width: 150px) {
+  .talos-sidebar__actions {
+    flex-wrap: wrap;
+  }
+  .talos-sidebar__actions .talos-field__input {
+    padding-inline: 6px;
+  }
+}
 .sheet-avviso {
   display: flex;
   align-items: center;

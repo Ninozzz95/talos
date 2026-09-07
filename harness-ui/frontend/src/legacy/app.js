@@ -5859,6 +5859,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     rename: 'veloRinomina',
     deleteSession: 'veloEliminaSessione',
     export: 'veloEsporta',
+    // ⭐ 07/9, seconda tornata: la famiglia dei FILE. Quattro righe in più qui, quattro fogli
+    //    vecchi in meno da spegnere quando la migrazione finisce.
+    fileViewer: 'veloFile',
+    renameFile: 'veloRinominaFile',
+    deleteFile: 'veloEliminaFile',
+    createFile: 'veloCreaFile',
+    references: 'veloRiferimenti',
   };
 
   /**
@@ -5903,6 +5910,106 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     await aggiornaElencoSessioniReali();
     if (state.board.initialized) await refreshSessionsBoard();
     return { ok: true };
+  }
+
+  /*
+   * ⭐⭐⭐ 07/9 — LA FAMIGLIA DEI FILE, quattro veli in un colpo solo (anteprima, rinomina,
+   * elimina, crea). Sono la stessa famiglia: stesso bersaglio (`state.alberoFileTarget`), stesse
+   * rotte `/tree/*`, stessa strada per arrivarci (il tasto destro sull'albero). Farli insieme è
+   * l'unico modo di non lasciarli divergere.
+   *
+   * Ricerca 07/09/2026 (Microsoft Learn «Strangler Fig pattern», Azure Architecture Center; Steve
+   * Kinney, «Enterprise UI» — strangler-fig-introduction; AWS Prescriptive Guidance «Strangler fig
+   * pattern»): Strangler Fig al confine, Branch by Abstraction dentro il codice — «old and new
+   * implementations coexist behind one abstraction so the system stays releasable while the change
+   * is in progress». L'abstraction qui è ESATTAMENTE questa serie di funzioni: foglio vecchio e
+   * velo nuovo chiamano la stessa, e non c'è una terza copia. ⛔ Vincolo che dal codice non si
+   * vedeva: l'astrazione non è un'architettura permanente — quando `VELO_PER_FOGLIO` è vuota il
+   * foglio vecchio si toglie e queste restano funzioni normali, con un chiamante solo.
+   *
+   * Ricerca 07/09/2026 (Hermes Agent, NousResearch — docs «Context Files»,
+   * hermes-agent.nousresearch.com/docs/user-guide/features/context-files): il concorrente non
+   * espone affatto un CRUD di file dall'interfaccia, i file entrano nel contesto e basta. Qui non
+   * c'è una parità da rincorrere: il +1 misurabile è quello che i veli portano in più del foglio
+   * vecchio — percorso dichiarato PRIMA di premere, riga d'errore che RESTA a schermo invece di un
+   * toast che passa, «Riprova» sull'anteprima non leggibile.
+   *
+   * ⛔ Nessuna di queste lancia: torna `{ok, motivo}`. Il foglio vecchio non aveva un posto dove
+   *   scrivere il perché di un rifiuto, i veli sì — e chi chiama deve poter decidere dove metterlo.
+   */
+
+  /**
+   * Rinomina il file o la cartella bersaglio dell'albero. Estratta il 07/9 dal gestore del foglio
+   * vecchio (`renameFileForm`), parola per parola.
+   * @returns {Promise<{ok:boolean, motivo?:string}>}
+   */
+  async function rinominaFileBersaglio(nuovoNome) {
+    const bersaglio = state.alberoFileTarget;
+    if (!bersaglio) return { ok: false, motivo: 'Nessun file scelto.' };
+    if (!nuovoNome) return { ok: false, motivo: 'Il nome non può essere vuoto.' };
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/rename`, { percorso: bersaglio.percorso, nuovoNome });
+    } catch (error) {
+      toast('Rinomina non riuscita', messaggioErroreUtente(error));
+      return { ok: false, motivo: messaggioErroreUtente(error, 'il file è rimasto al suo posto') };
+    }
+    toast('File rinominato', `${bersaglio.nome} → ${nuovoNome}`);
+    await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
+    return { ok: true };
+  }
+
+  /**
+   * Elimina il file o la cartella bersaglio dell'albero. Estratta il 07/9 da `deleteFileConfirm`.
+   * @returns {Promise<{ok:boolean, motivo?:string}>}
+   */
+  async function eliminaFileBersaglio() {
+    const bersaglio = state.alberoFileTarget;
+    if (!bersaglio) return { ok: false, motivo: 'Nessun file scelto.' };
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/delete`, { percorso: bersaglio.percorso });
+    } catch (error) {
+      toast('Eliminazione non riuscita', messaggioErroreUtente(error));
+      return { ok: false, motivo: messaggioErroreUtente(error, 'il file è ancora sul disco') };
+    }
+    toast('File eliminato', bersaglio.nome);
+    await invalidaLivelloGenitoreAlbero(bersaglio.percorso);
+    return { ok: true };
+  }
+
+  /**
+   * Crea un file o una cartella dentro `state.alberoFileTarget.percorso`. Estratta il 07/9 da
+   * `createFileForm`.
+   * @returns {Promise<{ok:boolean, motivo?:string, percorso?:string}>}
+   */
+  async function creaVoceBersaglio(nome) {
+    const bersaglio = state.alberoFileTarget;
+    if (!bersaglio) return { ok: false, motivo: 'Nessuna cartella scelta.' };
+    if (!nome) return { ok: false, motivo: 'Il nome non può essere vuoto.' };
+    let esito;
+    try {
+      esito = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/create`, { percorsoBase: bersaglio.percorso, nome, tipo: bersaglio.tipo });
+    } catch (error) {
+      toast('Creazione non riuscita', messaggioErroreUtente(error));
+      return { ok: false, motivo: messaggioErroreUtente(error, 'non è stato creato niente') };
+    }
+    toast(bersaglio.tipo === 'cartella' ? 'Cartella creata' : 'File creato', esito.percorso);
+    await invalidaLivelloGenitoreAlbero(esito.percorso);
+    return { ok: true, percorso: esito.percorso };
+  }
+
+  /**
+   * Legge il file bersaglio per l'anteprima. Estratta il 07/9 da `apriFileAlbero`: la lettura è la
+   * stessa per il foglio vecchio (che ci monta un `<pre>`) e per il velo (che ha il suo blocco di
+   * codice, la riga d'errore e il pulsante «Riprova»).
+   * @returns {Promise<{ok:boolean, contenuto?:string, motivo?:string}>}
+   */
+  async function leggiFileBersaglio(percorsoCompleto) {
+    try {
+      const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/file?percorso=${encodeURIComponent(percorsoCompleto)}`);
+      return { ok: true, contenuto: String(dati.contenuto ?? '') };
+    } catch (error) {
+      return { ok: false, motivo: messaggioErroreUtente(error, 'lettura non riuscita') };
+    }
   }
 
   /**
@@ -6034,6 +6141,320 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         }
       }
     }
+
+    /*
+     * ⭐⭐⭐ 07/9 — LA FAMIGLIA DEI FILE: quattro veli che il prodotto non poteva aprire.
+     * Ognuno riempie i campi che il foglio vecchio non aveva e collega i controlli alle funzioni
+     * estratte qui sopra — mai una seconda copia della logica.
+     *
+     * ⛔ I gestori si collegano UNA VOLTA (`dataset.collegato`), quindi non possono chiudere sul
+     *   bersaglio della prima apertura: leggono `state.alberoFileTarget` nel momento del clic. Un
+     *   listener che ricorda il file di ieri è il modo più silenzioso di scrivere sul file
+     *   sbagliato.
+     */
+
+    if (tipo === 'renameFile') {
+      const bersaglio = state.alberoFileTarget;
+      const modulo = $('#rinominaFileForm', velo);
+      const campo = $('#rinominaFileNome', velo);
+      const percorso = $('#rinominaFilePercorso', velo);
+      const errore = $('#rinominaFileErrore', velo);
+      if (!modulo || !campo) return;
+      // ⭐ Il velo dichiara il percorso PRIMA di premere: il foglio vecchio mostrava solo il campo,
+      //    e da un nome soltanto non si capisce quale dei tre omonimi si sta rinominando.
+      if (percorso) percorso.textContent = bersaglio?.percorso || 'nessun file scelto';
+      campo.value = bersaglio?.nome || '';
+      if (errore) { errore.hidden = true; errore.textContent = ''; }
+      window.setTimeout(() => { campo.focus(); campo.select(); }, 30);
+      if (!modulo.dataset.collegato) {
+        modulo.dataset.collegato = 'si';
+        modulo.addEventListener('submit', async (evento) => {
+          evento.preventDefault();
+          if (modulo.dataset.inCorso === 'si') return; // Invio due volte di fila: una richiesta sola
+          modulo.dataset.inCorso = 'si';
+          const esito = await rinominaFileBersaglio(campo.value.trim());
+          delete modulo.dataset.inCorso;
+          if (!esito.ok) {
+            if (errore) { errore.textContent = esito.motivo; errore.hidden = false; }
+            campo.focus();
+            return;
+          }
+          chiudiVeloMockup('veloRinominaFile');
+        });
+      }
+    }
+
+    if (tipo === 'deleteFile') {
+      const bersaglio = state.alberoFileTarget;
+      const titolo = $('#titoloveloEliminaFile', velo);
+      const percorso = $('#eliminaFilePercorso', velo);
+      const messaggio = $('#eliminaFileMessaggio', velo);
+      const errore = $('#eliminaFileErrore', velo);
+      const conferma = $('#eliminaFileConferma', velo);
+      const annulla = $('#eliminaFileAnnulla', velo);
+      const cartella = bersaglio?.cartella === true;
+      if (percorso) percorso.textContent = bersaglio?.percorso || 'nessun file scelto';
+      if (errore) errore.hidden = true;
+      /*
+       * ⭐ Il velo dice CHE COSA sparisce. Il foglio vecchio diceva la stessa frase per un file e
+       *   per una cartella, e una cartella si porta via tutto quello che contiene: chi conferma
+       *   deve leggerlo prima, non scoprirlo dopo.
+       */
+      if (titolo) titolo.textContent = cartella ? 'Elimina cartella' : 'Elimina file';
+      if (messaggio) messaggio.textContent = cartella
+        ? 'La cartella viene eliminata dal disco con tutto quello che contiene. Non si annulla da TALOS.'
+        : 'Il file viene eliminato dal disco. Non si annulla da TALOS.';
+      if (conferma) {
+        conferma.textContent = cartella ? 'Elimina cartella' : 'Elimina file';
+        conferma.disabled = !bersaglio;
+        if (!conferma.dataset.collegato) {
+          conferma.dataset.collegato = 'si';
+          conferma.addEventListener('click', async () => {
+            conferma.disabled = true;
+            const esito = await eliminaFileBersaglio();
+            if (!esito.ok) {
+              if (errore) { errore.textContent = `Eliminazione non riuscita: ${esito.motivo}`; errore.hidden = false; }
+              conferma.disabled = false;
+              return;
+            }
+            chiudiVeloMockup('veloEliminaFile');
+          });
+        }
+      }
+      /*
+       * Ricerca 07/09/2026 (W3C WAI-ARIA Authoring Practices, «Alert Dialog Example»): in un
+       * dialogo distruttivo il fuoco va all'azione MENO distruttiva — «helps prevent users from
+       * accidentally confirming the destructive action, which cannot be undone». Serve qui e non
+       * altrove: `apriVeloMockup` cerca il primo controllo del corpo, e il corpo di questo velo non
+       * ne ha nessuno (i due pulsanti stanno nel piede), quindi il fuoco finirebbe su una maniglia
+       * di ridimensionamento. Il timer scavalca quella scelta, che arriva dopo.
+       */
+      window.setTimeout(() => { annulla?.focus(); }, 30);
+    }
+
+    if (tipo === 'createFile') {
+      const bersaglio = state.alberoFileTarget;
+      const cartella = bersaglio?.tipo === 'cartella';
+      const modulo = $('#creaFileForm', velo);
+      const campo = $('#creaFileNome', velo);
+      const base = $('#creaFileBase', velo);
+      const etichetta = $('#creaFileEtichetta', velo);
+      const aiuto = $('#creaFileAiuto', velo);
+      const titolo = $('#titoloveloCreaFile', velo);
+      const salva = $('#creaFileSalva', velo);
+      const errore = $('#creaFileErrore', velo);
+      if (!modulo || !campo) return;
+      if (titolo) titolo.textContent = cartella ? 'Nuova cartella' : 'Nuovo file';
+      if (etichetta) etichetta.textContent = cartella ? 'Nome della cartella' : 'Nome del file';
+      if (salva) salva.textContent = cartella ? 'Crea cartella' : 'Crea file';
+      if (aiuto) aiuto.textContent = cartella
+        ? 'Fino a 255 caratteri. Scrivi un nome, senza percorso. La cartella sarà vuota.'
+        : 'Fino a 255 caratteri. Scrivi un nome, senza percorso. Il file sarà vuoto.';
+      // ⛔ Il percorso vuoto È la radice del progetto: lasciare la riga vuota sembrerebbe un dato
+      //    mancante, e «ciò che non c'è non si scrive» vale anche al contrario — qui il dato c'è.
+      if (base) base.textContent = bersaglio?.percorso || 'la radice del progetto';
+      campo.value = '';
+      if (errore) { errore.hidden = true; errore.textContent = ''; }
+      window.setTimeout(() => { campo.focus(); }, 30);
+      if (!modulo.dataset.collegato) {
+        modulo.dataset.collegato = 'si';
+        modulo.addEventListener('submit', async (evento) => {
+          evento.preventDefault();
+          if (modulo.dataset.inCorso === 'si') return;
+          modulo.dataset.inCorso = 'si';
+          const esito = await creaVoceBersaglio(campo.value.trim());
+          delete modulo.dataset.inCorso;
+          if (!esito.ok) {
+            if (errore) { errore.textContent = esito.motivo; errore.hidden = false; }
+            campo.focus();
+            return;
+          }
+          chiudiVeloMockup('veloCreaFile');
+        });
+      }
+    }
+
+    /*
+     * ⭐⭐⭐ 07/9 — «Aggiungi un file al messaggio» (`veloRiferimenti`), la quinta finestra morta.
+     * Il foglio vecchio era un elenco e basta; questo velo ha una ricerca, una riga vuota onesta,
+     * la navigazione da tastiera dichiarata nel piede («↑ ↓ scegli · Invio aggiunge») e un pulsante
+     * per aprire l'albero — cose che il foglio prometteva a nessuno perché non c'erano.
+     *
+     * ⛔ Le tre righe del mockup (`src/session-registry.mjs`, `tests/…`, `README.md`) sono INVENTATE:
+     *   si buttano sempre, anche quando non c'è niente da mettere al loro posto. Un elenco finto che
+     *   sembra vero è peggio di un elenco vuoto che lo dichiara.
+     *
+     * Ricerca 07/09/2026 (W3C WAI-ARIA Authoring Practices, «Combobox»/«Listbox»): con un campo
+     * `role="combobox"` che comanda una lista, la voce corrente si dichiara con
+     * `aria-activedescendant` sul campo e `aria-selected` sulla riga, e il fuoco NON si sposta sulle
+     * righe. Il markup del mockup era già scritto così: qui si tiene fede a quel contratto invece di
+     * spostare il fuoco, che avrebbe rotto la scrittura nel campo.
+     */
+    if (tipo === 'references') {
+      const campo = $('#cercaRiferimenti', velo);
+      const elenco = $('#elencoRiferimenti', velo);
+      const vuoto = $('#riferimentiVuoto', velo);
+      const ambito = $('#riferimentiAmbito', velo);
+      const apriAlbero = $('#riferimentiAlbero', velo);
+      if (!campo || !elenco) return;
+      const suggerimenti = suggerimentiRiferimentiReali();
+      let scelto = 0;
+
+      const righeVive = () => $$('.talos-list-row', elenco).filter((r) => !r.hidden);
+      const evidenzia = () => {
+        const righe = righeVive();
+        if (righe.length === 0) { campo.removeAttribute('aria-activedescendant'); return; }
+        scelto = Math.max(0, Math.min(scelto, righe.length - 1));
+        righe.forEach((riga, indice) => {
+          riga.setAttribute('aria-selected', String(indice === scelto));
+          if (indice === scelto) {
+            campo.setAttribute('aria-activedescendant', riga.id);
+            riga.scrollIntoView?.({ block: 'nearest' });
+          }
+        });
+      };
+      const aggiungi = (percorso) => {
+        if (!percorso) return;
+        allegaFileAllaChat(percorso); // la STESSA funzione del menu dell'albero, non una seconda copia
+        chiudiVeloMockup('veloRiferimenti');
+      };
+
+      elenco.replaceChildren();
+      suggerimenti.forEach(({ percorso, origine }, indice) => {
+        const riga = document.createElement('button');
+        riga.type = 'button';
+        riga.id = `riferimento-${indice}`;
+        riga.className = 'talos-list-row';
+        riga.dataset.c = 'ListRow';
+        riga.setAttribute('role', 'option');
+        riga.setAttribute('aria-selected', String(indice === 0));
+        riga.tabIndex = -1;
+        riga.dataset.riferimento = percorso;
+        const icona = document.createElement('span');
+        icona.className = 'talos-list-row__icon';
+        icona.append(iconaSvgAlbero('i-doc'));
+        const testo = document.createElement('span');
+        testo.className = 'talos-list-row__text';
+        testo.append(textElement('span', 'talos-list-row__title', percorso), textElement('span', 'talos-list-row__sub', origine));
+        riga.append(icona, testo, textElement('span', 'talos-list-row__aside talos-mono', '@'));
+        riga.addEventListener('click', () => aggiungi(percorso));
+        elenco.append(riga);
+      });
+
+      /*
+       * ⛔ «Ciò che non c'è non si scrive»: senza suggerimenti si dice PERCHÉ mancano, e sono due
+       *   ragioni diverse — non c'è una sessione, oppure c'è ma nessuna cartella è stata aperta.
+       *   Un elenco vuoto senza spiegazione somiglia a un guasto.
+       */
+      const senzaNiente = suggerimenti.length === 0;
+      elenco.hidden = senzaNiente;
+      if (vuoto) {
+        vuoto.hidden = !senzaNiente;
+        if (senzaNiente) {
+          vuoto.textContent = state.realSession.id
+            ? 'Nessun file ancora: apri una cartella nell’albero e i suoi file compaiono qui.'
+            : 'Nessuna sessione aperta: qui compaiono i file del suo workspace.';
+        }
+      }
+      if (ambito) ambito.hidden = senzaNiente;
+      campo.value = '';
+      scelto = 0;
+      evidenzia();
+
+      if (!velo.dataset.collegato) {
+        velo.dataset.collegato = 'si';
+        campo.addEventListener('input', () => {
+          const cerca = campo.value.trim().toLowerCase();
+          let trovati = 0;
+          for (const riga of $$('.talos-list-row', elenco)) {
+            const combacia = cerca === '' || String(riga.dataset.riferimento || '').toLowerCase().includes(cerca);
+            riga.hidden = !combacia;
+            if (combacia) trovati += 1;
+          }
+          const nessunRisultato = trovati === 0 && $$('.talos-list-row', elenco).length > 0;
+          if (vuoto) {
+            vuoto.hidden = !nessunRisultato;
+            if (nessunRisultato) vuoto.textContent = 'Nessun file corrisponde. Cambia ricerca o apri una cartella nell’albero.';
+          }
+          scelto = 0;
+          evidenzia();
+        });
+        campo.addEventListener('keydown', (evento) => {
+          if (evento.key === 'ArrowDown' || evento.key === 'ArrowUp') {
+            evento.preventDefault();
+            scelto += evento.key === 'ArrowDown' ? 1 : -1;
+            const quante = righeVive().length;
+            if (quante > 0) scelto = (scelto + quante) % quante; // gira, come in ogni palette
+            evidenzia();
+            return;
+          }
+          if (evento.key === 'Enter') {
+            evento.preventDefault();
+            aggiungi(righeVive()[scelto]?.dataset.riferimento);
+          }
+        });
+        apriAlbero?.addEventListener('click', () => {
+          chiudiVeloMockup('veloRiferimenti');
+          const scheda = $('#inspector-tab-files');
+          if (scheda) setInspectorTab(scheda);
+        });
+      }
+    }
+
+    if (tipo === 'fileViewer') {
+      const titolo = $('#titoloveloFile', velo);
+      const percorso = $('#fileAnteprimaPercorso', velo);
+      const blocco = $('#fileAnteprimaBlocco', velo);
+      const codice = $('#fileAnteprimaCodice code', velo) || $('#fileAnteprimaCodice', velo);
+      const errore = $('#fileAnteprimaErrore', velo);
+      const riprova = $('#fileAnteprimaRiprova', velo);
+      const stato = $('#fileAnteprimaStato', velo);
+      const copia = $('#fileAnteprimaCopia', velo);
+      const allega = $('#fileAnteprimaAllega', velo);
+      if (titolo) titolo.textContent = state.alberoFileTarget?.nome || 'Anteprima file';
+      if (percorso) percorso.textContent = state.alberoFileTarget?.percorso || '';
+      /*
+       * ⛔ Il markup del mockup porta DENTRO il blocco di codice un file di esempio inventato
+       *   (`session-registry.mjs`). Se la lettura fallisse e nessuno lo svuotasse, a schermo
+       *   resterebbe il contenuto di un file che non abbiamo mai letto: si azzera PRIMA di chiedere,
+       *   non dopo aver risposto.
+       */
+      const carica = async () => {
+        const attuale = state.alberoFileTarget;
+        if (!attuale) return;
+        if (codice) codice.textContent = '';
+        if (errore) errore.hidden = true;
+        if (blocco) blocco.hidden = false;
+        if (copia) copia.disabled = true;
+        if (stato) stato.textContent = 'Leggo il file…';
+        const esito = await leggiFileBersaglio(attuale.percorso);
+        if (velo.hidden) return; // chiuso mentre la lettura era in volo: non si scrive più niente
+        if (!esito.ok) {
+          if (blocco) blocco.hidden = true;
+          if (errore) errore.hidden = false;
+          if (stato) stato.textContent = `Non leggibile: ${esito.motivo}`;
+          return;
+        }
+        if (codice) codice.textContent = esito.contenuto;
+        if (copia) copia.disabled = false;
+        // ⛔ Un file vuoto è un esito, non un guasto: lo si dice invece di lasciare un riquadro muto.
+        if (stato) stato.textContent = esito.contenuto.trim() === ''
+          ? 'Il file è vuoto.'
+          : 'Puoi copiare il testo o allegare il riferimento alla chat.';
+      };
+      if (!velo.dataset.collegato) {
+        velo.dataset.collegato = 'si';
+        riprova?.addEventListener('click', () => { void carica(); });
+        copia?.addEventListener('click', () => { void copyText(codice?.textContent || '', 'Testo del file copiato'); });
+        allega?.addEventListener('click', () => {
+          const attuale = state.alberoFileTarget;
+          if (!attuale) return;
+          allegaFileAllaChat(attuale.percorso);
+          chiudiVeloMockup('veloFile');
+        });
+      }
+      void carica();
+    }
   }
 
   function openSheet(type, { ancoraAlComposer = false } = {}) {
@@ -6041,7 +6462,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (idVelo && $(`#${idVelo}`)) {
       preparaVeloDaFoglio(type, $(`#${idVelo}`));
       apriVeloMockup(idVelo);
-      return;
+      // ⭐ 07/9 — torna `true` quando il velo ha preso il posto del foglio: chi apriva il foglio e
+      //    poi ne toccava il markup (titolo, punto di montaggio) deve fermarsi qui, o scriverebbe
+      //    dentro un foglio che nessuno ha aperto.
+      return true;
     }
     const content = sheetTemplates[type];
     if (!content) return;
@@ -6431,7 +6855,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       html: () => `
         <div class="sheet-section">
           <span class="sheet-label">Suggerimenti workspace</span>
-          ${suggerimentiRiferimentiReali().map((file) => `<button class="sheet-option reference-option" data-reference-file="${attributoSicuro(file)}"><span class="sheet-icon">${icon('i-files')}</span><span><strong>${attributoSicuro(file)}</strong><small>Aggiungi al contesto del messaggio</small></span><span>@</span></button>`).join('') || `<p class="board-empty">${state.realSession.id ? 'Apri una cartella nell’albero Files: i file caricati compaiono qui come suggerimenti.' : 'Avvia una sessione: qui compaiono i file del suo workspace.'}</p>`}
+          ${suggerimentiRiferimentiReali().map(({ percorso, origine }) => `<button class="sheet-option reference-option" data-reference-file="${attributoSicuro(percorso)}"><span class="sheet-icon">${icon('i-files')}</span><span><strong>${attributoSicuro(percorso)}</strong><small>${attributoSicuro(origine)}</small></span><span>@</span></button>`).join('') || `<p class="board-empty">${state.realSession.id ? 'Apri una cartella nell’albero Files: i file caricati compaiono qui come suggerimenti.' : 'Avvia una sessione: qui compaiono i file del suo workspace.'}</p>`}
         </div>`,
     },
     /*
@@ -6540,13 +6964,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * poi i file dei livelli dell'albero già caricati (treeCache) — nessuna
    * fetch nuova, nessun nome inventato; senza sessione, un messaggio onesto.
    */
+  /**
+   * I file che si possono citare con `@`, in ordine: prima quelli toccati dal giro, poi quelli già
+   * caricati dall'albero.
+   *
+   * ⭐ 07/9 — ogni voce porta anche la sua ORIGINE. Il velo `veloRiferimenti` la mostra sotto il
+   * percorso («Modificato in questa sessione» / «Caricato dall'albero»), il foglio vecchio no: una
+   * funzione sola con l'informazione completa, e ogni pelle usa quello che le serve. Il contrario
+   * — due funzioni, una per pelle — è come sono nate le finestre che divergono.
+   */
   function suggerimentiRiferimentiReali(massimo = 12) {
     const visti = new Set();
     const elenco = [];
-    const aggiungi = (percorso) => { if (percorso && !visti.has(percorso) && elenco.length < massimo) { visti.add(percorso); elenco.push(percorso); } };
-    for (const file of state.realSession.reviewFiles.values()) aggiungi(file.path);
+    const aggiungi = (percorso, origine) => { if (percorso && !visti.has(percorso) && elenco.length < massimo) { visti.add(percorso); elenco.push({ percorso, origine }); } };
+    for (const file of state.realSession.reviewFiles.values()) aggiungi(file.path, 'Modificato in questa sessione');
     for (const [percorso, voci] of state.realSession.treeCache.entries()) {
-      for (const voce of voci || []) { if (!voce.cartella) aggiungi(percorso ? `${percorso}/${voce.nome}` : voce.nome); }
+      for (const voce of voci || []) { if (!voce.cartella) aggiungi(percorso ? `${percorso}/${voce.nome}` : voce.nome, 'Caricato dall’albero'); }
     }
     return elenco;
   }
@@ -10408,14 +10841,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       { etichetta: 'Copia', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
       { etichetta: 'Imposta come radice', icona: 'i-folder', azione: () => impostaComeRadice(percorsoCompleto, nome) },
       { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
-      { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true },
+      { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome, cartella), pericoloso: true },
     ] : [
       { etichetta: 'Apri', icona: 'i-eye', azione: () => apriFileAlbero(percorsoCompleto, nome) },
       { etichetta: 'Allega alla chat', icona: 'i-link', azione: () => allegaFileAllaChat(percorsoCompleto) },
       { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
       { etichetta: 'Copia', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
       { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
-      { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome), pericoloso: true },
+      { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome, cartella), pericoloso: true },
     ];
     for (const voce of voci) {
       const btn = document.createElement('button');
@@ -10471,20 +10904,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   async function apriFileAlbero(percorsoCompleto, nome) {
     await rivelaERivelaRigaAlbero(percorsoCompleto);
     state.alberoFileTarget = { percorso: percorsoCompleto, nome };
-    openSheet('fileViewer');
+    // ⭐ 07/9 — col velo collegato la lettura la fa `preparaVeloDaFoglio` (che ha anche «Riprova»,
+    //    «Copia il testo» e «Allega alla chat»): qui ci si ferma, o si scriverebbe nel foglio
+    //    vecchio che nessuno ha aperto.
+    if (openSheet('fileViewer')) return;
     sheetTitle.textContent = nome; // sheetTemplates.title è una stringa statica ovunque altrove: il nome vero si scrive qui
     const mount = $('#fileViewerMount', sheetBody);
-    try {
-      const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/file?percorso=${encodeURIComponent(percorsoCompleto)}`);
-      if (!mount.isConnected) return; // il foglio è già stato chiuso mentre la fetch era in volo
-      const pre = document.createElement('pre');
-      pre.className = 'tool-result-block';
-      pre.appendChild(textElement('code', '', dati.contenuto));
-      mount.replaceChildren(pre);
-    } catch (error) {
-      if (!mount.isConnected) return;
-      mount.replaceChildren(textElement('p', 'board-empty', `Non leggibile: ${error.message}`));
+    const esito = await leggiFileBersaglio(percorsoCompleto);
+    if (!mount.isConnected) return; // il foglio è già stato chiuso mentre la fetch era in volo
+    if (!esito.ok) {
+      mount.replaceChildren(textElement('p', 'board-empty', `Non leggibile: ${esito.motivo}`));
+      return;
     }
+    const pre = document.createElement('pre');
+    pre.className = 'tool-result-block';
+    pre.appendChild(textElement('code', '', esito.contenuto));
+    mount.replaceChildren(pre);
   }
 
   async function rivelaERivelaRigaAlbero(percorsoCompleto) {
@@ -10523,8 +10958,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     openSheet('renameFile');
   }
 
-  function avviaEliminaFile(percorsoCompleto, nome) {
-    state.alberoFileTarget = { percorso: percorsoCompleto, nome };
+  /**
+   * ⭐ 07/9 — `cartella` arriva fin qui perché il velo Elimina lo DICE: una cartella si porta via
+   * tutto quello che contiene, e la frase del foglio vecchio era la stessa per i due casi. Il menu
+   * contestuale lo sa già (`apriMenuAzioniFile` costruisce due elenchi diversi): si passa, invece
+   * di indovinarlo dall'estensione del nome.
+   */
+  function avviaEliminaFile(percorsoCompleto, nome, cartella = false) {
+    state.alberoFileTarget = { percorso: percorsoCompleto, nome, cartella };
     openSheet('deleteFile');
   }
 
@@ -10548,7 +10989,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** ⭐⭐⭐ 28/8, owner: "comandi crud in generale" — "Nuovo file"/"Nuova cartella", dentro percorsoBase ('' = radice). */
   function avviaCreaVoce(percorsoBase, tipo) {
     state.alberoFileTarget = { percorso: percorsoBase, tipo };
-    openSheet('createFile');
+    // ⭐ 07/9 — il velo scrive da sé titolo, etichetta, testo del pulsante e cartella di partenza.
+    if (openSheet('createFile')) return;
     sheetTitle.textContent = tipo === 'cartella' ? 'Nuova cartella' : 'Nuovo file';
   }
 
@@ -14231,11 +14673,23 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * ANCHE una sessione conclusa veniva rifiutata: il composer diventava
      * inutilizzabile dopo la primissima risposta, ogni volta.
      */
-    if (state.realSession.id && !state.realSession.eventoTerminaleVisto) {
+    /*
+     * ⛔⛔ 07/9, O-50 — owner con lo screenshot: scrive su una sessione INTERROTTA e riceve
+     * «Messaggio non accodato · Sessione non pronta per questa azione», col testo che resta nel
+     * composer. Avevo scritto che O-48 l'avrebbe chiuso: la misura mi ha smentito, ed ecco perche.
+     * Il PULSANTE e l'INVIO leggevano lo stesso fatto in due modi diversi: `runRealeAttivo()`
+     * guardava `chiusaDalServer` (curato per O-48), qui si guardava `eventoTerminaleVisto` grezzo,
+     * che il replay della storia rimette a false. Risultato: il pulsante diceva «Invia» e l'invio
+     * andava alla CODA, che per una sessione interrotta il server rifiuta — con ragione, perche un
+     * messaggio in coda li non verrebbe mai consegnato.
+     * ⇒ Una sola domanda, un solo posto: `runRealeAttivo()`. Se il giro non e vivo si RIPRENDE la
+     *   sessione, che e la strada giusta e funziona.
+     */
+    if (state.realSession.id && runRealeAttivo()) {
       accodaMessaggioReale(value);
       return true;
     }
-    if (state.realSession.id && state.realSession.eventoTerminaleVisto) {
+    if (state.realSession.id) {
       resumeSession(value);
       return true;
     }
@@ -15780,7 +16234,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     preparaMisuraDialogo(v); // 06/9 B7: la misura ricordata di QUESTO dialogo, se c'è
     const corpo = v.querySelector('.talos-dialog__body');
     const scelto = corpo && corpo.querySelector('[role="radio"][aria-checked="true"]');
-    const primo = scelto || (corpo && corpo.querySelector('input, button, select')) || v.querySelector('input, button, select');
+    /*
+     * ⛔ 07/9, trovato guardando lo screenshot del velo Elimina file (non da un test): quando il
+     * corpo di un dialogo non ha nessun controllo — è il caso di ogni conferma, che ha i pulsanti
+     * nel PIEDE — il ripiego finiva sulla prima maniglia di RIDIMENSIONAMENTO, e il suo tooltip
+     * («Trascina o usa le frecce…») restava a schermo sopra il pannello di destra. Una conferma
+     * che si apre col fuoco su una maniglia non ha un punto di partenza sensato.
+     * Ricerca 07/09/2026 (W3C WAI-ARIA Authoring Practices, «Alert Dialog Example»): il fuoco va
+     * all'azione MENO distruttiva, che nei nostri dialoghi è il primo pulsante del piede.
+     */
+    const primo = scelto
+      || (corpo && corpo.querySelector('input, button, select'))
+      || v.querySelector('.talos-dialog__footer button, .talos-dialog__footer input, .talos-dialog__footer select')
+      || v.querySelector('input, button, select');
     primo?.focus();
   }
   function chiudiVeloMockup(id) {

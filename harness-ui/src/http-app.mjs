@@ -52,6 +52,8 @@ const API_ERROR_CODES = new Set([
   'PLUGIN_INVALID',
   /* ⭐ 30/8, QA visiva (Task 14) — DELETE su una sessione ancora viva (né conclusa né interrotta): un controller attivo potrebbe star lavorando davvero. */
   'SESSION_STILL_RUNNING',
+  /* ⭐ 07/9, O-49 — la risposta a una richiesta di consenso che nel frattempo non è più in attesa. */
+  'APPROVAL_NOT_PENDING',
   'WORKSPACE_LAUNCH_UNAUTHORIZED',
   'WORKSPACE_LAUNCH_NOT_AVAILABLE',
   'WORKSPACE_NOT_AVAILABLE',
@@ -166,6 +168,20 @@ const STATUS_BY_CODE = Object.freeze({
   PLUGIN_INVALID: 422,
   /** ⭐ 30/8 — stesso status di SESSION_NOT_READY: la richiesta è legittima ma lo stato attuale (ancora in corso) la blocca. */
   SESSION_STILL_RUNNING: 409,
+  /**
+   * ⛔⛔⛔ 07/9, O-49 — era QUERY_INVALID (400), e l’owner leggeva a schermo
+   * «Risposta non riuscita · Query non valida» premendo Approva su una scheda del permesso.
+   * La query non c’entrava niente: la richiesta era formata benissimo, solo che quella
+   * approvazione non era più in attesa (stop, reindirizzamento, o la scheda ridisegnata
+   * dopo un riavvio del server, che perde `approvazionePendente` perché vive in memoria).
+   * ⭐ Ricerca 07/09/2026 fatta PRIMA di scrivere (MDN «409 Conflict»: «a request conflict
+   * with the current state of the target resource»; openai/codex #29627, dove la lezione è
+   * che una richiesta di consenso decaduta va DETTA come decaduta e mai fatta passare per un
+   * rifiuto o per un errore del chiamante): stesso 409 già scelto qui sopra per
+   * SESSION_STILL_RUNNING e RUNTIME_ALREADY_RUNNING — non è colpa di chi chiama, è lo stato
+   * che è cambiato sotto.
+   */
+  APPROVAL_NOT_PENDING: 409,
   WORKSPACE_LAUNCH_UNAUTHORIZED: 403,
   WORKSPACE_LAUNCH_NOT_AVAILABLE: 410,
   WORKSPACE_NOT_AVAILABLE: 422,
@@ -272,6 +288,8 @@ const MESSAGE_BY_CODE = Object.freeze({
   MCP_INVALID: 'Configurazione server MCP non valida',
   PLUGIN_INVALID: 'Configurazione plugin non valida',
   SESSION_STILL_RUNNING: 'Sessione ancora in corso — fermala prima di eliminarla',
+  /* ⛔ 07/9, O-49: questo testo finisce dentro il fumetto rosso in basso a destra — deve dire cos’è successo, non «Query non valida». */
+  APPROVAL_NOT_PENDING: 'Questa richiesta di permesso non è più in attesa: la sessione è andata avanti',
   WORKSPACE_LAUNCH_UNAUTHORIZED: 'Il comando locale non è autorizzato. Riavvia TALOS e riprova.',
   WORKSPACE_LAUNCH_NOT_AVAILABLE: 'Questo collegamento non è più disponibile. Usa di nuovo “Apri cartella con TALOS”.',
   WORKSPACE_NOT_AVAILABLE: 'La cartella non è disponibile. Controlla che esista e che TALOS possa lavorarci, poi riprova.',
@@ -426,6 +444,156 @@ function parseTreeQuery(url) {
 function normalizeError(error) {
   const code = API_ERROR_CODES.has(error?.code) ? error.code : 'INTERNAL_ERROR';
   return { code, statusCode: STATUS_BY_CODE[code] };
+}
+
+/*
+ * ⛔⛔⛔ 07/9 — L'INVENTARIO DELLE ROTTE API. Serve a UNA cosa sola: distinguere
+ * «questo indirizzo non esiste» (404) da «esiste, ma non con questo metodo» (405).
+ * NON dirige il traffico — la catena di if/else qui sotto resta l'unica che sceglie chi
+ * risponde: una tabella che dirigesse sarebbe una seconda verità, e due verità divergono.
+ *
+ * Il difetto da cui nasce, misurato il 07/09/2026 sul server vivo con una curl:
+ * `POST /api/v1/artifacts` e `POST /api/v1/questa-non-esiste` rispondevano ENTRAMBE 405,
+ * perché il blanket-405 qui sotto scattava prima che qualcuno avesse guardato se
+ * l'indirizzo esistesse. Dall'esterno una rotta vera e una inventata erano
+ * indistinguibili, e un controllo automatico sulle rotte esposte è rimasto impossibile
+ * da scrivere proprio per questo.
+ *
+ * Ricerca 07/09/2026, fatta PRIMA di scrivere (RFC 9110 §15.5.6 letta via http.dev/405 e
+ * MDN «405 Method Not Allowed»; expressjs/express #2055 e #1499): «404 means the door
+ * isn't there; 405 means the door is there but locked to that knock». E il vincolo che
+ * dal nostro codice non si vedeva: sul 405 «the origin server MUST generate an Allow
+ * header field containing a list of the target resource's currently supported methods».
+ * Il nostro mandava sempre `Allow: GET, HEAD` — falso su `/api/v1/sessions`, che accetta
+ * POST. Da qui l'elenco PER ROTTA e non una stringa fissa. Express, per confronto, su un
+ * metodo non gestito cade su 404 e non manda mai `Allow`: il pareggio-e-supera è
+ * rispondere 405 con l'elenco vero.
+ *
+ * ⛔ Le espressioni sono copiate ALLA LETTERA da chi risponde qui sotto, e un test
+ * (`tests/http-inventario-rotte.test.mjs`) rilegge questo file e pretende che ogni rotta
+ * nominata nella catena sia anche qui: una rotta nuova senza la sua riga fa diventare
+ * rosso quel test, invece di tornare a mentire in silenzio mesi dopo.
+ * ⛔ HEAD non compare mai in `metodi`: lo aggiunge `metodiAmmessiPerRotta` a ogni rotta
+ * che accetta GET, perché a servirlo è `send()`, non una riga della catena.
+ */
+const ROTTE_API = Object.freeze([
+  { schema: '/api/v1/health', metodi: ['GET'] },
+  { schema: '/api/v1/tasks', metodi: ['GET'] },
+  { schema: '/api/v1/projects', metodi: ['GET'] },
+  { schema: '/api/v1/workspace-browser', metodi: ['GET'] },
+  { schema: '/api/v1/frequent-dirs', metodi: ['GET'] },
+  { schema: '/api/v1/runtime', metodi: ['GET'] },
+  { schema: '/api/v1/runtime/bootstrap', metodi: ['GET'] },
+  { schema: '/api/v1/local-models', metodi: ['GET'] },
+  { schema: '/api/v1/local-models/fit-estimate', metodi: ['GET'] },
+  { schema: '/api/v1/huggingface/search', metodi: ['GET'] },
+  { schema: '/api/v1/huggingface/repo', metodi: ['GET'] },
+  { schema: '/api/v1/huggingface/image', metodi: ['GET'] },
+  { schema: '/api/v1/huggingface/downloads', metodi: ['GET'] },
+  { schema: '/api/v1/providers', metodi: ['GET'] },
+  { schema: '/api/v1/models', metodi: ['GET'] },
+  { schema: '/api/v1/model-lab/capacity', metodi: ['GET'] },
+  { schema: '/api/v1/tools', metodi: ['GET'] },
+  { schema: '/api/v1/setup/stato', metodi: ['GET'] },
+  { schema: '/api/v1/doctor', metodi: ['GET'] },
+  { schema: '/api/v1/workspace-info', metodi: ['GET'] },
+  { schema: '/api/v1/browser/incorniciabile', metodi: ['GET'] },
+  { schema: '/api/v1/browser/proxy', metodi: ['GET'] },
+  { schema: '/api/v1/browser/leggi', metodi: ['GET'] },
+  { schema: '/api/v1/search-source', metodi: ['GET'] },
+  { schema: '/api/v1/sessions', metodi: ['GET', 'POST'] },
+  { schema: '/api/v1/automations', metodi: ['GET', 'POST'] },
+  { schema: '/api/v1/workspace-launches', metodi: ['POST'] },
+  { schema: '/api/v1/workspace-browser/folders', metodi: ['POST'] },
+  { schema: '/api/v1/runtime/load', metodi: ['POST'] },
+  { schema: '/api/v1/runtime/unload', metodi: ['POST'] },
+  { schema: '/api/v1/local-models/import', metodi: ['POST'] },
+  { schema: '/api/v1/huggingface/download', metodi: ['POST'] },
+  { schema: '/api/v1/sessions/custom', metodi: ['POST'] },
+  { schema: /^\/api\/v1\/workspace-launches\/([^/]+)$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/local-models\/([^/]+)\/fit$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/doctor\/doctor-[a-f0-9]{12}$/u, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/projects\/([^/]+)\/tree$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/artifacts\/([^/]+)$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/providers\/([^/]+)\/runtime$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/events$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/export$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/file$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/hooks$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tools$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/mcp$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/processes$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/metrics$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/status$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/branch$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/skills$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/library$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/plugins$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/notes$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/research$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/children$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/terminals$/, metodi: ['GET', 'POST'] },
+  { schema: /^\/api\/v1\/search-source(?:\/(key|key\/remove|test))?$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/providers\/([^/]+)\/test$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/providers\/([^/]+)\/key(?:\/(remove))?$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/providers\/([^/]+)\/runtime(?:\/(reset))?$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/automations\/([^/]+)\/toggle$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/automations\/([^/]+)\/elimina$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/local-models\/([^/]+)\/(rename|copy-path|delete)$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/local-models\/([^/]+)\/qualify$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/huggingface\/downloads\/([^/]+)\/(pause|resume|cancel)$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/cancel$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/terminals\/([^/]+)\/close$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/(stage|unstage|commit)$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/rename$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/delete$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/rename$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/delete$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/reveal$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/move$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/copy$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/create$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/stop$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/redirect$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/fork$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/resume$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/settings$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/compact$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/shell$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/approve$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue\/annulla$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/hooks\/([^/]+)\/trust$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge\/([^/]+)\/enable$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/mcp\/([^/]+)\/trust$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/plugins\/([^/]+)\/trust$/, metodi: ['POST'] },
+]);
+
+/**
+ * `null` = a questo indirizzo non risponde NESSUNA rotta ⇒ chi bussa merita un 404, non un
+ * 405. Altrimenti l'elenco dei metodi ammessi, nell'ordine in cui va scritto in `Allow`.
+ *
+ * ⛔ Una rotta il cui servizio non è stato collegato (per esempio `sessionRegistry` assente
+ * nei test) resta dichiarata qui: la catena non la serve e la richiesta cade sul 405 come
+ * prima. È il comportamento che i test del 30/8 presidiano — «senza registro, /fork torna
+ * al blanket-405» — e cambiarlo di straforo qui sarebbe un secondo difetto travestito da
+ * cura.
+ */
+export function metodiAmmessiPerRotta(pathname) {
+  const metodi = new Set();
+  for (const rotta of ROTTE_API) {
+    const combacia = typeof rotta.schema === 'string' ? pathname === rotta.schema : rotta.schema.test(pathname);
+    if (combacia) for (const metodo of rotta.metodi) metodi.add(metodo);
+  }
+  if (metodi.size === 0) return null;
+  const ordinati = [];
+  if (metodi.has('GET')) ordinati.push('GET', 'HEAD');
+  if (metodi.has('POST')) ordinati.push('POST');
+  return ordinati;
 }
 
 /**
@@ -2346,8 +2514,26 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⛔⛔⛔ 07/9 — QUI STAVA IL DIFETTO: un metodo diverso da GET/HEAD tornava 405 su
+     * QUALUNQUE indirizzo, esistente o inventato. Misurato sul server vivo il 07/09/2026:
+     * `POST /api/v1/artifacts` (che non esiste: esiste solo `/api/v1/artifacts/:id`) e
+     * `POST /api/v1/questa-non-esiste` rispondevano tutt'e due 405 — dall'esterno una rotta
+     * vera e una inventata erano la stessa cosa.
+     * Ora la domanda si fa nell'ordine giusto: prima «c'è una porta a questo indirizzo?»
+     * (ROTTE_API, in cima al file), poi «è aperta a questo metodo?». E il 405 porta l'Allow
+     * VERO della rotta, come RFC 9110 §15.5.6 pretende — non più `GET, HEAD` anche dove si
+     * accetta POST.
+     * ⛔ Fuori da `/api/` non cambia niente: i file statici restano leggibili e basta, che è
+     * il contratto scritto sopra la prima rotta POST di questo file.
+     */
     if (!['GET', 'HEAD'].includes(method)) {
-      sendJson(res, 405, errorEnvelope('METHOD_NOT_ALLOWED', clock), method, { Allow: 'GET, HEAD' });
+      const ammessi = url.pathname.startsWith('/api/') ? metodiAmmessiPerRotta(url.pathname) : ['GET', 'HEAD'];
+      if (ammessi === null) {
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      sendJson(res, 405, errorEnvelope('METHOD_NOT_ALLOWED', clock), method, { Allow: ammessi.join(', ') });
       return;
     }
 
@@ -2817,7 +3003,13 @@ export function createHttpApp({
            * e chi legge questa rotta deve poterli distinguere (stesso principio
            * "gli stati sono tre" di hooksMatch/mcpMatch qui sopra).
            */
-          data = { registrato: esito.registrato, processi: esito.processi, motivo: esito.motivo, guardia: esito.guardia };
+          /*
+           * ⛔⛔ 07/9 — il registro sapeva se la sessione era stata INTERROTTA da un riavvio e
+           * questa rotta lo buttava via scegliendo i campi a mano: dal filo usciva una
+           * sessione indistinguibile da una viva. Un difetto dello stesso tipo era già stato
+           * trovato e curato in `elencaFigli` (06/9). Il campo si dichiara, non si deduce.
+           */
+          data = { registrato: esito.registrato, processi: esito.processi, motivo: esito.motivo, guardia: esito.guardia, interrotta: esito.interrotta === true };
         } else if (metricsMatch) {
           requireNoQuery(url);
           let sessionId;
@@ -2842,7 +3034,13 @@ export function createHttpApp({
            * ⛔ Ogni valore assente porta il proprio `motivoAssente` DETTO a parole:
            * chi legge questa rotta non deve mai indovinare perché manca.
            */
-          data = { registrato: esito.registrato, motivo: esito.motivo, giri: esito.giri, cache: esito.cache, primoToken: esito.primoToken, chiusura: esito.chiusura };
+          /*
+           * ⛔⛔ 07/9 — il registro sapeva se la sessione era stata INTERROTTA da un riavvio e
+           * questa rotta lo buttava via scegliendo i campi a mano: dal filo usciva una
+           * sessione indistinguibile da una viva. Un difetto dello stesso tipo era già stato
+           * trovato e curato in `elencaFigli` (06/9). Il campo si dichiara, non si deduce.
+           */
+          data = { registrato: esito.registrato, motivo: esito.motivo, giri: esito.giri, cache: esito.cache, primoToken: esito.primoToken, chiusura: esito.chiusura, interrotta: esito.interrotta === true };
         } else if (skillsMatch) {
           requireNoQuery(url);
           let sessionId;
@@ -3150,6 +3348,21 @@ export function createHttpApp({
           });
           return;
         } else if (url.pathname.startsWith('/api/')) {
+          /*
+           * ⛔⛔ 07/9 — la stessa domanda del blanket qui sopra, dalla parte della GET: se a
+           * questo indirizzo una rotta c'è ma vuole un altro metodo (tutte le POST: /stop,
+           * /rename, /qualify...), la risposta giusta è 405 con l'Allow vero, non 404.
+           * Misurato prima della cura: GET /api/v1/local-models/x/rename e GET su un nome
+           * inventato rispondevano identici, e la prima esiste.
+           * ⛔ Solo se GET NON è fra i metodi ammessi: una rotta GET che è arrivata fin qui
+           * (id inesistente, o servizio non collegato) deve continuare a dire 404 — è il caso
+           * che il test dei terminali presidia, «la GET senza registro non combacia la rotta».
+           */
+          const ammessi = metodiAmmessiPerRotta(url.pathname);
+          if (ammessi !== null && !ammessi.includes('GET')) {
+            sendJson(res, 405, errorEnvelope('METHOD_NOT_ALLOWED', clock), method, { Allow: ammessi.join(', ') });
+            return;
+          }
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         } else {

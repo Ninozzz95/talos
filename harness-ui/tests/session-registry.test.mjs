@@ -1223,7 +1223,12 @@ test('⭐⭐ rispondiApprovazione(false) sblocca la Promise con false — un rif
   assert.equal(await promessaApprovazione, false);
 });
 
-test('⛔⛔⛔ AL CONTRARIO — rispondiApprovazione con un requestId SBAGLIATO/vecchio non risolve NULLA: QUERY_INVALID, la Promise resta sospesa', async () => {
+/*
+ * ⛔ 07/9, O-49 — questi due dicevano QUERY_INVALID, ed era la bugia che l'owner leggeva a
+ * schermo come «Risposta non riuscita · Query non valida»: il corpo era giusto, a essere
+ * cambiato era lo stato. Ora chiedono APPROVAL_NOT_PENDING (409).
+ */
+test('⛔⛔⛔ AL CONTRARIO — rispondiApprovazione con un requestId SBAGLIATO/vecchio non risolve NULLA: APPROVAL_NOT_PENDING, la Promise resta sospesa', async () => {
   const finta = sessioneConApprovazione();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
@@ -1232,17 +1237,18 @@ test('⛔⛔⛔ AL CONTRARIO — rispondiApprovazione con un requestId SBAGLIATO
 
   const risultato = registro.rispondiApprovazione(sessionId, 'un-id-che-non-esiste', true);
 
-  assert.equal(risultato.code, 'QUERY_INVALID');
+  assert.equal(risultato.code, 'APPROVAL_NOT_PENDING');
+  assert.equal(risultato.erroreAvvio, 'Questa richiesta di permesso non è più in attesa');
 });
 
-test('⛔ AL CONTRARIO — rispondiApprovazione senza NESSUNA richiesta pendente: QUERY_INVALID, non un crash', () => {
+test('⛔ AL CONTRARIO — rispondiApprovazione senza NESSUNA richiesta pendente: APPROVAL_NOT_PENDING, non un crash', () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registro.avvia('task-vero');
 
   const risultato = registro.rispondiApprovazione(sessionId, 'qualunque-id', true);
 
-  assert.equal(risultato.code, 'QUERY_INVALID');
+  assert.equal(risultato.code, 'APPROVAL_NOT_PENDING');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
@@ -5712,4 +5718,56 @@ test('⛔⛔ AL CONTRARIO — elencaMetriche su un id inesistente torna NOT_FOUN
   const esito = registro.elencaMetriche('mai-esistita');
   assert.equal(esito.code, 'NOT_FOUND');
   assert.ok(!('cache' in esito));
+});
+
+/*
+ * ⛔⛔⛔ 07/9 — TRE PAYLOAD CHE PARLAVANO DI UNA SESSIONE SENZA DIRE SE ERA INTERROTTA.
+ * `elenca()` lo dichiara dal 30/8 e `elencaFigli()` dal 06/9; `elencaProcessi()`,
+ * `elencaMetriche()` ed `esporta()` no — e sono proprio quelli che descrivono cosa sta
+ * facendo adesso. Senza quel campo l'interfaccia non poteva dire il vero: la guardia di
+ * stallo grida «silenzio» su un processo MORTO, e il motivo di chiusura mancante veniva
+ * spiegato con «il giro è ancora in corso», che è falso dopo un riavvio.
+ * Le prove vanno nei due versi: su una sessione VIVA i tre payload devono continuare a
+ * dire `interrotta:false` e la vecchia spiegazione, altrimenti la cura mentirebbe al
+ * contrario.
+ */
+test('⛔⛔⛔ processes/metrics/export DICHIARANO interrotta:true su una sessione ripresa da un riavvio', async () => {
+  const cartellaStore = cartellaStoreVera();
+  try {
+    const finta = sessioneControllabile();
+    const primo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    const { sessionId } = primo.avvia('task-vero');
+    await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.tipo === 'intestazione'));
+
+    const secondo = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaStore });
+    await secondo.ripristina();
+    assert.equal(secondo.elenca()[0].interrotta, true, 'premessa: il ripristino la marca interrotta');
+
+    assert.equal(secondo.elencaProcessi(sessionId).interrotta, true);
+    const metriche = secondo.elencaMetriche(sessionId);
+    assert.equal(metriche.interrotta, true);
+    if (metriche.chiusura && metriche.chiusura.motivo === null) {
+      assert.match(metriche.chiusura.motivoAssente, /interrotto da un riavvio/);
+      assert.doesNotMatch(metriche.chiusura.motivoAssente, /ancora in corso/);
+    }
+    assert.equal(secondo.esporta(sessionId).interrotta, true);
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ AL CONTRARIO — su una sessione VIVA gli stessi tre payload dicono interrotta:false, e il motivo resta «ancora in corso»', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  const { sessionId } = registro.avvia('task-vero');
+
+  assert.equal(registro.elencaProcessi(sessionId).interrotta, false);
+  const metriche = registro.elencaMetriche(sessionId);
+  assert.equal(metriche.interrotta, false);
+  if (metriche.chiusura && metriche.chiusura.motivo === null) {
+    assert.match(metriche.chiusura.motivoAssente, /ancora in corso/);
+  }
+  assert.equal(registro.esporta(sessionId).interrotta, false);
+
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
