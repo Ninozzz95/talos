@@ -495,3 +495,27 @@ un segnaposto rotto, e in Firefox non compare nemmeno nella scheda Rete.
 2. **Se proprio si prova, il ripiego deve essere immediato e leggibile**: al posto del rettangolo
    grigio, una riga che dice «GitHub non si lascia mostrare dentro TALOS — qui sotto c'è il testo
    che ha letto l'agente», con il testo già visibile sotto, non dopo un timeout.
+
+### O-45 · I tre pallini attraversati dalla linea non si animano — diagnosi del 07/09
+
+**Quello che ho trovato guardando il codice** (e che smentisce la mia prima ipotesi):
+- il markup **c'è già**: `components/conversazione.js:530` costruisce l'SVG con binario, sweep e i
+  tre nodi, con le stesse classi del mobile;
+- il CSS **ha le animazioni**: `talosLineSweep` e `talosLineNodeFill` esistono in `index.css`;
+- le regole che le SPENGONO (`animation: none`, nodi già pieni, sweep già completo) sono
+  **correttamente dentro** `@media (prefers-reduced-motion: reduce)` — non spengono sempre.
+
+⇒ Quindi il CSS non è rotto, e la causa è altrove. Le due ipotesi da misurare, in ordine:
+1. **Windows ha «riduci animazioni» acceso** sulla macchina dell'owner: il browser rispetterebbe
+   `prefers-reduced-motion` e le animazioni sarebbero spente **per scelta del sistema**. Si verifica
+   in un minuto (Impostazioni → Accessibilità → Effetti visivi), e se è così la cura non è forzare
+   l'animazione — è che il caricatore resti leggibile anche da fermo, cosa che già fa.
+2. Il caricatore **non viene montato** durante l'attesa vera, e l'owner vede un altro elemento.
+
+⛔ **NON MISURATO dal vivo**: il caricatore esiste solo mentre una risposta sta arrivando, e a
+pagina ferma non è nel DOM (verificato: `presente: false` in entrambi i modi). Serve un giro vero.
+
+**E una differenza col mobile, misurata**: il desktop usa **2,2 s** con ritardi 0 / 0,5 / 1 s; il
+mobile (`TalosLineLoader.vue` + `style.css`) usa **1,6 s** con ritardi 0 / 0,36 / 0,73 s. Il nostro
+è più lento di mezzo secondo a giro. Se l'owner dice che il mobile «lo fa alla perfezione», i tempi
+da prendere sono quelli.
