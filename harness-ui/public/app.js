@@ -7403,7 +7403,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     if (el25.caricamento) el25.caricamento.hidden = !(s && s.tipo === "viva" && s.stato === "caricamento");
     if (el25.vuoto) el25.vuoto.hidden = stato.schede.length > 0;
     if (el25.articolo) el25.articolo.hidden = !s;
-    const testata = el25.titolo?.closest("header");
+    const testata = el25.titolo?.closest(".talos-browser__testata");
     if (testata) testata.hidden = !s || s.tipo === "viva";
     const lettura = Boolean(s) && s.tipo !== "viva";
     for (const b of el25.modi || []) {
