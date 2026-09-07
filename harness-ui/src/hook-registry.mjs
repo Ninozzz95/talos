@@ -1,12 +1,11 @@
 /**
  * hook-registry.mjs — FASE A del piano `elegant-spinning-dongarra.md`
  * ("Harness Desktop al 100%"), owner 28/8. Ricerca fatta prima di
- * scrivere: Hermes ha hook "universali e attivi di default" su ogni
- * tool (https://hermes-agent.nousresearch.com/docs/user-guide/features/hooks);
- * Codex CLI (installato qui, v0.149.1) ha un sistema di *trust*
- * persistito — un hook nuovo o modificato non gira finché non è
- * esplicitamente fidato (`--dangerously-bypass-hook-trust` esiste solo
- * per bypassarlo). Questo file implementa entrambi i pattern, adattati.
+ * scrivere: lo stato dell'arte offre due pattern diversi — hook
+ * "universali e attivi di default" su ogni tool, oppure un sistema di
+ * *trust* persistito, dove un hook nuovo o modificato non gira finché non
+ * è esplicitamente fidato (un flag esplicito esiste solo per bypassarlo).
+ * Questo file implementa entrambi i pattern, adattati.
  *
  * ⛔⛔ Due cartelle DIVERSE, per un motivo preciso:
  * - `hooks.json` vive DENTRO il workspace del progetto (`cartella`

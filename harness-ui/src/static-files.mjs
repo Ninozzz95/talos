@@ -31,7 +31,7 @@ const STATIC_ASSETS = Object.freeze({
    * apre un varco di traversal, sceglie solo quale asset fisso servire.
    */
   '/talos/brand/logo-short.svg': { file: 'talos/brand/logo-short.svg', contentType: 'image/svg+xml' },
-  '/talos/browser-annota.js': { file: 'talos/browser-annota.js', contentType: 'text/javascript; charset=utf-8' }, // Browser oltre Hermes 06/9: l'overlay iniettato dal proxy
+  '/talos/browser-annota.js': { file: 'talos/browser-annota.js', contentType: 'text/javascript; charset=utf-8' }, // 06/9: l'overlay iniettato dal proxy
   ...Object.fromEntries(FONT_FILES.map((name) => [
     `/fonts/${name}`,
     { file: `fonts/${name}`, contentType: 'font/woff2' },

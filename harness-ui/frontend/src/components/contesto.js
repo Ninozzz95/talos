@@ -15,9 +15,9 @@
  * tokenizzatori diversi danno due numeri diversi sullo stesso testo.
  *
  * Ricerca 06/09/2026 — perché questa misura merita una superficie:
- *  · Hermes Agent «Local Models» dichiara la finestra di contesto con cui un
- *    modello parte e fin dove può crescere («at least a 64K context window»):
- *    il contesto è un budget che si mostra, non un dettaglio interno;
+ *  · lo stato dell'arte dichiara la finestra di contesto con cui un
+ *    modello parte e fin dove può crescere: il contesto è un budget
+ *    che si mostra, non un dettaglio interno;
  *  · la nostra lezione «L'APERTURA A GRADI» (11.483 → 505 token) dice che il
  *    costo degli attrezzi è la voce che cresce di nascosto: senza una riga che
  *    lo mostri, nessuno si accorge di quando raddoppia.

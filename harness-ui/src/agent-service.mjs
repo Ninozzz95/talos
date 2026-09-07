@@ -239,7 +239,7 @@ export async function avviaSessione({
    * credenziale propria da mancare — riusa `chiave`, la stessa già
    * richiesta per far girare il modello di chat (senza quella la
    * sessione non parte affatto, vedi session-registry.avvia()). Questo
-   * È il one-up dichiarato su Hermes/Codex: zero secondo sistema di
+   * È il one-up dichiarato: zero secondo sistema di
    * configurazione provider.
    */
   immagine,

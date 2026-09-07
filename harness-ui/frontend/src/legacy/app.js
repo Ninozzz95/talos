@@ -34,11 +34,11 @@ import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TEST
 import { LINGUE as LINGUE_MENU, risolviLingua, applicaLingua, etichettaLinguaRisolta, t as tr, EVENTO_LINGUA } from '../components/lingua.js'; // 06/9 B8 + P-i18n: la lingua dei menu e delle superfici
 import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
 import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSIMO_SCHEDE as MASSIMO_SCHEDE_BROWSER, localeAnnotabile, hostDaUrl } from '../components/browser.js'; // 06/9 K-I: il Browser a schede
-import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser oltre Hermes 06/9
+import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser con annotazione 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
-import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione, come quella di ChatGPT desktop
+import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { montaProgetti, progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina
@@ -299,7 +299,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       browserChiuse: new Set(),
       browserAttiva: null,
       browserRichiesta: null,
-      /** Browser oltre Hermes 06/9 — i commenti sugli elementi, per scheda viva: { [id]: [{nota, fatto}] }, e se si sta annotando. */
+      /** 06/9 — i commenti sugli elementi, per scheda viva: { [id]: [{nota, fatto}] }, e se si sta annotando. */
       browserAnnotazioni: {},
       browserAnnotaAttivo: false,
       browserErroriPagina: {},
@@ -456,15 +456,14 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * più quello giusto. E non controllava mai se l'utente avesse
    * scrollato via di sua iniziativa, quindi lo inseguiva comunque.
    *
-   * Confrontato col codice REALE di Hermes Agent (owner l'ha chiesto
-   * esplicitamente) — repo locale, `apps/desktop/src/components/
-   * assistant-ui/thread/list.tsx`: usano `use-stick-to-bottom` come
-   * "single writer" di scrollTop, con commento esplicito — *"Snap
-   * instantly, not spring — a spring can't tell live-token growth from
-   * a session-switch bulk relayout, and chasing the latter reads as the
-   * view scrolling to random spots before settling"* — e seguono SOLO
-   * se l'utente non si è spostato di sua iniziativa. Hermes insegue il
-   * FONDO (la loro scelta di prodotto); qui si insegue il CENTRO (scelta
+   * Confrontato con il codice REALE di un concorrente diretto (owner l'ha
+   * chiesto esplicitamente): usa un pattern "single writer" di scrollTop —
+   * l'idea è che uno snap istantaneo, mai a molla, perché una molla non
+   * distingue la crescita di un token dal vivo da un rilayout massivo al
+   * cambio di sessione, e inseguire quest'ultimo con una molla si vede come
+   * lo scroll che salta in punti casuali prima di assestarsi — e seguono
+   * SOLO se l'utente non si è spostato di sua iniziativa. Quell'implementazione
+   * insegue il FONDO (la loro scelta di prodotto); qui si insegue il CENTRO (scelta
    * esplicita di QUESTO owner) — stesso principio "singolo writer,
    * istantaneo mai a molla, mai contro un utente che si è spostato",
    * bersaglio diverso.
@@ -473,11 +472,11 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * (getBoundingClientRect().bottom dell'elemento messaggio — si sposta
    * in giù ad ogni frame insieme al testo vero), portato a metà
    * dell'altezza del viewport. Mai `behavior:'smooth'`, sempre
-   * istantaneo (stesso motivo di Hermes sopra). streamingLastTargetTop
+   * istantaneo (stesso motivo di sopra). streamingLastTargetTop
    * ricorda l'ultimo valore che abbiamo scritto NOI: il listener di
    * scroll qui sotto lo confronta con lo scrollTop reale per capire se è
-   * stato l'utente a spostarsi (stessa tecnica di resolveThreadScrollTarget
-   * in Hermes, con uno scopo diverso: lì evita un re-trigger su un resto
+   * stato l'utente a spostarsi (stessa tecnica vista in quel codice, con uno
+   * scopo diverso: lì evita un re-trigger su un resto
    * di sub-pixel, qui distingue "siamo stati noi" da "si è mosso lui").
    */
   let streamingAutoFollow = true;
@@ -700,7 +699,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       const maxScroll = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
       const nuovoTop = Math.max(0, Math.min(maxScroll, fondoContenuto - scroller.clientHeight / 2));
       streamingLastTargetTop = nuovoTop;
-      // Istantaneo, mai 'smooth': vedi il commento di Hermes citato sopra.
+      // Istantaneo, mai 'smooth': vedi il commento citato sopra.
       scroller.scrollTop = nuovoTop;
       logStreaming('scroll', { nuovoTop: Math.round(nuovoTop), scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight });
     });
@@ -756,7 +755,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * raffiche viene livellato, uno veloce non viene frenato). Con
    * "Nessuna", con movimento ridotto, o nel ripristino di una cronologia,
    * nessun ritmo: tutto subito, come prima. Stesso principio dello
-   * "smooth streaming" di ChatGPT/Claude web (buffer + cadenza costante),
+   * "smooth streaming" già visto in altre app di chat (buffer + cadenza costante),
    * scritto in vanilla JS sopra il renderer incrementale già esistente:
    * un prefisso più corto è un input come un altro per lui.
    */
@@ -2010,8 +2009,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⭐⭐⭐ 02/09 — rendering INCREMENTALE dello streaming (review complessiva,
    * misurato: 13.068 caratteri in 162 delta = 1,28 s di main thread, ~8 ms a
    * frame che crescono col testo, perché renderizzaMarkdownSemplice() rilavora
-   * TUTTO il markdown a ogni frame). Ricerca 02/09 — Hermes TUI/Desktop
-   * (15×/14×), Streamdown, incremark, Textual: solo l'ULTIMO blocco può ancora
+   * TUTTO il markdown a ogni frame). Ricerca 02/09 (Streamdown, incremark,
+   * Textual — misure 15×/14× trovate in altri motori di rendering
+   * incrementale): solo l'ULTIMO blocco può ancora
    * cambiare, i blocchi chiusi si analizzano una volta sola.
    *
    * In questo renderer un blocco si chiude su una riga vuota FUORI da un
@@ -2157,12 +2157,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * Qui si costruisce la diagnosi dagli eventi che il client ha GIÀ
    * (ToolCallStart/Args/Result passano tutti da handleRealEvent).
    *
-   * ⭐ Lo scalino in più sullo stato dell'arte: Hermes Agent porta il suo
-   * budget a 500 iterazioni (v0.20, default oggi) e sa fermarsi con un
-   * riassunto, ma né la deduplica delle chiamate identiche (issue #18076)
-   * né l'avviso prima del tetto (#414) sono implementati — restano aperti.
-   * Claude Code, allo stesso limite, dice solo «reached its tool-use limit
-   * for this turn». Nessuno dei due dice QUALI attrezzi hanno consumato il
+   * ⭐ Lo scalino in più sullo stato dell'arte: un concorrente diretto
+   * porta il suo budget a 500 iterazioni (default oggi) e sa fermarsi con un
+   * riassunto, ma né la deduplica delle chiamate identiche
+   * né l'avviso prima del tetto sono implementati — restano aperti.
+   * Un altro, allo stesso limite, dice solo di aver raggiunto il limite
+   * di uso attrezzi per il turno. Nessuno dei due dice QUALI attrezzi hanno consumato il
    * budget né quante chiamate erano ripetizioni: è questo il +1 misurabile.
    *
    * ⛔ Misura sbagliata da non ripetere: contare i frammenti `ToolCallArgs`
@@ -4322,8 +4322,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
     /*
      * ⭐ Il +1 misurabile: quanto COSTA avere questi attrezzi offerti a ogni
-     * giro. Hermes Agent v0.21 mostra la stima di token dello schema per
-     * server MCP; qui è per OGNI attrezzo e in totale. ⛔ Dichiarata
+     * giro. Lo stato dell'arte mostra la stima di token dello schema per
+     * server MCP soltanto; qui è per OGNI attrezzo e in totale. ⛔ Dichiarata
      * «stima» perché lo è (caratteri del JSON / 4, l'euristica affermata):
      * un numero misurato su ciò che va sul filo, mai un numero inventato.
      */
@@ -5036,8 +5036,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * ⭐ Ricerca 03/9 (Apple HIG via eleken.co/blog-posts/tabs-ux): oltre sei
      * schede l'utente si perde — 51 famiglie non sono schede, e restano
      * gruppi richiudibili. Le FONTI sì: sono due.
-     * ⭐ E il concorrente da battere non ce l'ha nemmeno per famiglia: Hermes
-     * Agent ha l'issue #15902 aperta, «/model should group models by provider».
+     * ⭐ E lo stato dell'arte non ce l'ha nemmeno per famiglia: manca ancora
+     * il raggruppamento dei modelli per fornitore.
      *
      * ## Perché la scheda «Locali» non fa scegliere niente
      *
@@ -5713,7 +5713,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     salvaNotificheViste(viste);
   }
   /**
-   * 06/9 T-17 (confronto con Hermes): il menu legacy `.notifications-menu` non
+   * 06/9 T-17: il menu legacy `.notifications-menu` non
    * aveva più un CSS che lo disegnasse. Ora il campanello apre il pannello
    * «Aspetta te» del mockup (`#pannelloNotifiche`, components/notifiche.js):
    * stesse notifiche, stesse azioni (apri la sessione, segna tutte come viste).
@@ -5934,8 +5934,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * vedeva: l'astrazione non è un'architettura permanente — quando `VELO_PER_FOGLIO` è vuota il
    * foglio vecchio si toglie e queste restano funzioni normali, con un chiamante solo.
    *
-   * Ricerca 07/09/2026 (Hermes Agent, NousResearch — docs «Context Files»,
-   * hermes-agent.nousresearch.com/docs/user-guide/features/context-files): il concorrente non
+   * Ricerca 07/09/2026: il concorrente non
    * espone affatto un CRUD di file dall'interfaccia, i file entrano nel contesto e basta. Qui non
    * c'è una parità da rincorrere: il +1 misurabile è quello che i veli portano in più del foglio
    * vecchio — percorso dichiarato PRIMA di premere, riga d'errore che RESTA a schermo invece di un
@@ -7221,10 +7220,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   B») e un pulsante «Confronta A e B» che non confrontava niente. I fork sono già sessioni vere
    *   e l'elenco li dichiara (`forkDa`); le deleghe hanno la loro rotta. Dove non c'è niente si
    *   dice, invece di disegnare un albero finto.
-   * Ricerca 07/09/2026: claude-code #32631 («Conversation Branching — fork, merge, tree
-   * navigation»), LangChain «Branching chat» (ogni ramo riparte dal checkpoint del genitore, e
-   * l'albero è persistito), Ably «Conversation tree branching» (msgId/parentId/forkOf: un grafo,
-   * non una lista). Il nostro fork È già una sessione: l'albero lo dichiara invece di inventarne
+   * Ricerca 07/09/2026: la ricerca su strumenti simili conferma lo stesso pattern — ogni ramo
+   * riparte dal checkpoint del genitore, e l'albero è persistito (msgId/parentId/forkOf: un
+   * grafo, non una lista). Il nostro fork È già una sessione: l'albero lo dichiara invece di inventarne
    * un secondo modello.
    */
   function nodoAlbero({ titolo, sotto, token, giri, stato = 'done', qui = false, onApri = null, azione = null }) {
@@ -8592,8 +8590,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   /**
-   * ⭐ 27/8, owner: "ogni comando al server... va messo come fa Claude e
-   * ChatGPT" (screenshot allegati) — una riga COLLASSATA con un riassunto
+   * ⭐ 27/8, owner: "ogni comando al server... va messo come fa un buon
+   * assistente di chat" (screenshot allegati) — una riga COLLASSATA con un riassunto
    * leggibile ("Scritto src/formatatore.mjs"), un chevron per espandere,
    * il dettaglio grezzo formattato dentro, chiuso finché non lo apri tu.
    * Un solo bubble per tool-call (non più uno per lo start e uno per il
@@ -9018,11 +9016,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * timeout che nega travestito da decisione" già scritto in
    * session-registry.richiediApprovazione.
    *
-   * Ricerca fatta prima di scrivere (REGOLA ZERO): Hermes Agent, il
-   * primo competitor (vedi memoria [[harness-da-battere-uno-a-uno]]),
-   * NON ha affatto un'approvazione interattiva — "there is no approval
-   * prompt and no way to override from the chat UI" (la loro stessa
-   * doc security.md). Questa card è esattamente il pareggio-e-supera.
+   * Ricerca fatta prima di scrivere (REGOLA ZERO): lo stato dell'arte in
+   * questo spazio NON ha affatto un'approvazione interattiva — nessun
+   * prompt di approvazione e nessun modo di sovrascrivere dalla UI di
+   * chat, per propria stessa ammissione. Questa card è esattamente il pareggio-e-supera.
    */
   function appendApprovalCard(requestId, azione) {
     /*
@@ -9132,7 +9129,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /*
    * ⭐⭐⭐ 28/8 — Terminale REALE. Owner: "deve essere un terminale vero e
    * proprio bash [...] che non ha limiti [...] usabile dall'utente con
-   * le sue dita umane". Ledger completo, ricerca (Hermes su Windows monta
+   * le sue dita umane". Ledger completo, ricerca (su Windows si monta
    * Git Bash dentro una PTY vera) e verifica empirica su questa macchina:
    * `.claude/LEDGER-TERMINALE-REALE.md`. xterm.js vendorizzato
    * (`vendor/xterm/`) + una WebSocket verso `pty-terminal.mjs` sul
@@ -9165,7 +9162,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *    WebGL è acceso SOLO sulla scheda attiva e si spegne su quella che va in secondo piano —
    *    le altre restano montate col renderer DOM, così lo scrollback non si perde;
    *  · alla chiusura il fuoco passa alla vicina che prende il posto, poi alla precedente
-   *    (Hermes `closeTerminal`, `terminals.ts`).
+   *    (stessa regola nota).
    *
    * ⛔ Senza sessione resta UNA scheda sola (l'id standalone che il server accetta per
    * compatibilità): «Nuovo» è disabilitato e lo dice.
@@ -9219,7 +9216,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return frame;
   }
 
-  /* I nomi scelti dalla persona e la scheda attiva per sessione, nel browser (Hermes: `hermes.desktop.terminals.v1`). */
+  /* I nomi scelti dalla persona e la scheda attiva per sessione, nel browser. */
   function memoriaSchedeTerminale() { try { return JSON.parse(localStorage.getItem(CHIAVE_SCHEDE_TERMINALE) || '{}') || {}; } catch { return {}; } }
   function salvaMemoriaSchedeTerminale(memoria) { try { localStorage.setItem(CHIAVE_SCHEDE_TERMINALE, JSON.stringify(memoria)); } catch { /* quota o finestra privata: si perde solo il nome */ } }
   function titoloRicordatoTerminale(id) { return memoriaSchedeTerminale().nomi?.[id] || null; }
@@ -9522,7 +9519,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     void caricaSchedeTerminale().then(() => { if (state.view === 'terminal' && t.sessioneId === sessioneId) avvia(); });
   }
 
-  /** Ctrl+` mostra/nasconde il Terminale, Ctrl+Shift+` apre una scheda nuova (stesse combinazioni di Hermes `view.showTerminal` / `view.newTerminal`). */
+  /** Ctrl+` mostra/nasconde il Terminale, Ctrl+Shift+` apre una scheda nuova (stesse combinazioni note). */
   /** P-i18n (06/09): al cambio di lingua le superfici disegnate dal codice si ridisegnano; il template lo fa `applicaLingua`. */
   function collegaRidisegnoLingua() {
     document.documentElement.addEventListener(EVENTO_LINGUA, () => {
@@ -9752,7 +9749,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   const RIGHE_MASSIME_DIFF = 1500;
 
   /*
-   * 06/09 (confronto con Hermes, Review di NOTE.md appena creato): «+1 −1» con una riga «−» vuota.
+   * 06/09 (Review di NOTE.md appena creato): «+1 −1» con una riga «−» vuota.
    * `''.split('\n')` dà `['']` — una riga fantasma. Un file creato non ha righe tolte (nel diff
    * unificato il vecchio è /dev/null: git-scm.com/docs/git-diff, letto il 06/09/2026); e un solo
    * a-capo finale non è una riga (diffchecker.pro «Unified Diff Format», 2026).
@@ -9804,12 +9801,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⭐⭐⭐ 28/8, owner: "una modale di esportazione in diversi formati, in
    * modo che se c'è qualche errore io ti possa esportare interamente la
    * conversazione con errori e output tecnici". Ricerca fatta prima di
-   * scrivere (REGOLA ZERO): `/export` di Claude Code stesso produce
+   * scrivere (REGOLA ZERO): uno strumento simile produce
    * Markdown per default (non JSON), e sono documentati bug reali dove
    * dichiara successo su un file VUOTO o una trascrizione TRONCATA a
-   * metà (github.com/anthropics/claude-code#52733, #45996, #42290) —
-   * cursor-session (strumento di terze parti per esportare sessioni
-   * Cursor) esporta md/json/yaml proprio "per il debugging". Da qui le
+   * metà — un altro strumento di terze parti per esportare sessioni di
+   * chat esporta md/json/yaml proprio "per il debugging". Da qui le
    * due scelte sotto: Markdown come formato leggibile pensato per
    * essere incollato in chat, JSON come il payload grezzo già esistente
    * (byte per byte, mai alterato).
@@ -10162,7 +10158,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       attiva: file.path === ultimoPercorso,
       onApri: () => renderReviewFile(`real:${file.path}`),
     })));
-    // 06/09 confronto Hermes: stato vuoto ONESTO — una scheda EmptyState del mockup al posto della
+    // 06/09: stato vuoto ONESTO — una scheda EmptyState del mockup al posto della
     // finta scheda «−» con la stessa frase ripetuta nel diff; il DiffView si nasconde finché non c'è un file.
     const vuotoReview = schermo.querySelector('#vuotoReview');
     const cardDiff = schermo.querySelector('.talos-review__diff');
@@ -11596,9 +11592,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⭐ Il +1 sui concorrenti: la riga «Web search» dice la FONTE REALE
    * configurata adesso (letta dalla stessa `ricercaWebFn` che il kernel
    * riceve a ogni giro), non un «configurato/non configurato» dedotto
-   * dall'esistenza di una chiave. È esattamente il difetto aperto su Hermes
-   * Agent (issue #13301, agosto 2026): il suo setup dichiara «not
-   * configured» per gli attrezzi gestiti dal gateway — web search compresa —
+   * dall'esistenza di una chiave. È esattamente un difetto noto altrove:
+   * il setup dichiara «not configured» per gli attrezzi gestiti dal
+   * gateway — web search compresa —
    * perché guarda le chiavi nel .env invece della configurazione con cui
    * l'attrezzo gira davvero.
    */
@@ -11690,7 +11686,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     else if (evento.type === 'ToolCallResult') state.realSession.eventiAttrezzi.push({ type: 'ToolCallResult', toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error) });
     switch (evento.type) {
       case 'RunStarted': {
-        streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio di resetThreadScroll() in Hermes
+        streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio visto in ricerca
         streamingLastTargetTop = null;
         /*
          * ⛔⛔⛔ 06/9, CB-04 — QUI è il confine fra due invii: il consumo
@@ -13191,10 +13187,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   /**
    * ⭐⭐⭐ 02/9 — i cinque stati veri di una sessione, tutti da campi che il
-   * server manda già. Ricerca (vedi il dossier): Claude traccia
-   * Working/Needs Approval/Waiting/Idle, Hermes mostra modello e conteggi,
-   * Codex ha un buco documentato proprio sul MOTIVO del fallimento
-   * (issue #30713) — che noi abbiamo in `ultimoEsito` e non mostravamo.
+   * server manda già. Ricerca (vedi il dossier): un concorrente traccia
+   * Working/Needs Approval/Waiting/Idle, un altro mostra modello e conteggi,
+   * un terzo ha un buco documentato proprio sul MOTIVO del fallimento
+   * — che noi abbiamo in `ultimoEsito` e non mostravamo.
    *
    * ⛔ L'ordine dei controlli è la parte che conta: «in attesa di
    * approvazione» viene PRIMA di «in corso», perché è lo stato che chiede
@@ -13476,18 +13472,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /*
    * ⭐⭐⭐ 27/8 — owner, testuale: "il pulsante nuova deve aprire una nuova
    * sessione VUOTA, IL COMPITO LO DECIDO IO". Verificato con una ricerca
-   * web vera, documentazione ufficiale, non ipotizzato: Claude Code
-   * (`claude` -> composer vuoto, nessuna lista), Codex CLI (`codex` senza
-   * argomenti -> TUI col composer vuoto, developers.openai.com/codex/cli),
-   * Cline ("+"/`/newtask` -> "the composer becomes ready for free-form
-   * input... no predefined task templates", docs.cline.bot), Aider
-   * (prompt `>` vuoto, "no predefined task lists", aider.chat/docs),
-   * Cursor Composer (nuova chat = sessione isolata, si scrive subito).
-   * Devin e' l'unico che chiede un passo prima del testo libero, ma quel
-   * passo e' "scegli il repository", MAI un elenco di compiti gia scritti
-   * ("click New Session, select Agent, and choose your repository", poi
-   * il compito resta testo libero). Nessun competitor mostra un elenco
-   * di task predefiniti come primo schermo.
+   * web vera, documentazione ufficiale, non ipotizzato: nello stato
+   * dell'arte del settore il flusso di apertura di una nuova sessione
+   * porta sempre a un composer vuoto o a un prompt di testo libero, mai
+   * a un elenco di task predefiniti ("the composer becomes ready for
+   * free-form input... no predefined task templates", "no predefined
+   * task lists") — al più un passo intermedio prima del testo libero,
+   * quello di scegliere il repository ("click New Session, select Agent,
+   * and choose your repository", poi il compito resta testo libero), MAI
+   * uno scegliere fra compiti già scritti. Nessun concorrente verificato
+   * mostra un elenco di task predefiniti come primo schermo.
    *
    * ⛔⛔ 27/8, secondo giro — owner: "non ci siamo... devi levare tutte le
    * prove per banco". La sezione secondaria "Oppure prova un task del
@@ -13503,9 +13497,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * esserci il campo text per cosa chiedere al agente, quello si fa
    * direttamente da interfaccia chat". Corretto: prima chiedeva cartella
    * + modello + compito tutti insieme; ora chiede SOLO cartella + modello
-   * — il compito si scrive nel composer normale, come in OGNI competitor
-   * verificato (Claude Code, Codex CLI, Cline, Aider, Cursor: il testo
-   * libero è SEMPRE nella chat, mai in un modulo a parte prima di essa).
+   * — il compito si scrive nel composer normale, come in OGNI concorrente
+   * verificato: il testo libero è SEMPRE nella chat, mai in un modulo a parte prima di essa).
    */
   function creaWorkspaceChooser() {
     const form = document.createElement('form');
@@ -15010,7 +15003,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * direttamente da interfaccia chat". "Nuova" ora sceglie SOLO
      * cartella+modello (avviaSessionePendente) e apre una chat vuota —
      * il primo messaggio scritto QUI è il compito vero, esattamente come
-     * Claude Code/Codex/Cline/Aider (composer vuoto, non un modulo a
+     * nello stato dell'arte (composer vuoto, non un modulo a
      * parte). Se una cartella è stata scelta e non c'è ancora nessuna
      * sessione reale, questo primo messaggio la avvia per davvero.
      */
@@ -15050,7 +15043,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * questo campo non ha una cartella su cui agire, quindi non deve
      * fingere una risposta (appendUserMessage generava sempre lo stesso
      * "Ricevuto..." hardcoded). Stesso pattern confermato via ricerca su
-     * ogni competitor (Claude Code/Codex/Cline/Aider/Cursor/Devin): si
+     * ogni concorrente verificato: si
      * scrive SOLO dentro una sessione già avviata — qui l'avvio passa da
      * "Nuova sessione", che sceglie la cartella prima del testo libero.
      */
@@ -15433,8 +15426,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * dichiarato onestamente, non nostro (e non nuovo: la chat stessa
    * richiede già una rete per il modello).
    *
-   * Pareggia Claude Code (push-to-talk: tieni un tasto, rilascia per
-   * il testo) — MAI un ascolto always-on come Hermes (wake-word):
+   * Pareggia lo stato dell'arte (push-to-talk: tieni un tasto, rilascia per
+   * il testo) — MAI un ascolto always-on (wake-word):
    * dichiarato limite di piattaforma nel piano madre (un tab senza
    * focus perde il microfono, comportamento di browser non nostro).
    *
@@ -15817,7 +15810,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * mockup locale"). Indietro/avanti scorrono la cronologia delle pagine
    * lette dall'attrezzo naviga in questa sessione; Apri porta l'URL nel
    * browser di sistema; Annota scrive nel composer un riferimento alla
-   * pagina (Hermes Desktop: le annotazioni finiscono nel composer, mai
+   * pagina (le annotazioni finiscono nel composer, mai
    * inviate da sole); Copia testo mette negli appunti ciò che il modello ha
    * letto.
    */
@@ -15912,7 +15905,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   $('#sessionSearch').addEventListener('input', (event) => {
     const q = event.target.value.toLowerCase().trim();
-    // 06/09 confronto Hermes (gruppo navigazione): la casella filtrava SOLO le righe demo
+    // 06/09 (gruppo navigazione): la casella filtrava SOLO le righe demo
     // `.session-item`; le sessioni vere (`.real-session-item`) restavano tutte a schermo — 74 su 74.
     $$('.session-item, .real-session-item').forEach((item) => { item.hidden = Boolean(q) && !item.textContent.toLowerCase().includes(q); });
   });
@@ -16144,7 +16137,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /*
    * ⭐⭐⭐ 02/09 — "Approva tutto" era un toast con "3 file" scritti a mano.
-   * Le scritture di TALOS sono già sul disco (come in Claude Code e Codex, la
+   * Le scritture di TALOS sono già sul disco (come nello stato dell'arte, la
    * review è a valle, non un cancello): l'azione vera e utile è portarsi via
    * il diff completo — per una PR, una nota, un messaggio.
    */
@@ -16667,7 +16660,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }, { passive: true });
   })();
   collegaNavigazioneSpina($('#conversation'));
-  collegaCronologia($('#schermoChat .talos-cronologia'), $('#conversation')); // 06/9: barra a sinistra, lente, fumetto, clic che porta al messaggio // 06/9: la spina dei giri si naviga, come la barra della cronologia di ChatGPT
+  collegaCronologia($('#schermoChat .talos-cronologia'), $('#conversation')); // 06/9: barra a sinistra, lente, fumetto, clic che porta al messaggio // 06/9: la spina dei giri si naviga, come una barra di cronologia della conversazione
   collegaTooltip(document); // 06/9 O-40: un ascoltatore solo, delegato — vale anche per ciò che nasce dopo
   normalizzaTastiScritti(ROOT()); // 06/9 audit: «⌘N» nella palette su Windows
   collegaScorciatoieTerminale(); // 06/9 B1: Ctrl+` e Ctrl+Shift+`, e la barra delle schede onesta da subito

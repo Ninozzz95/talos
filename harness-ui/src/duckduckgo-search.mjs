@@ -4,8 +4,8 @@
  * fallo»).
  *
  * DuckDuckGo non ha un'API pubblica: si legge la pagina HTML dell'endpoint
- * senza JavaScript (`html.duckduckgo.com/html/`), come fanno Hermes (`ddgs`)
- * e OpenClaw («unofficial HTML-based integration», docs 09/2026). Non è un
+ * senza JavaScript (`html.duckduckgo.com/html/`), un approccio non ufficiale
+ * già usato altrove nel settore («unofficial HTML-based integration», docs 09/2026). Non è un
  * accordo con DuckDuckGo: è una pagina pubblica, e sotto uso automatico può
  * rispondere con un blocco o un CAPTCHA. ⇒ Fonte «senza chiave» dichiarata
  * come tale nelle Impostazioni, mai spacciata per un'API; quando DuckDuckGo

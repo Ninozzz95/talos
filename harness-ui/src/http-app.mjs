@@ -2,7 +2,7 @@ import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { verificaIncorniciabile } from './browser-frame.mjs'; // K-I 06/9: la cornice del Browser si decide dalle intestazioni della pagina
 import { proxyPagina } from './browser-proxy.mjs';
 import { leggiPaginaPerLaVista } from './agent-service.mjs';
-import { ritrattoCartella } from './workspace-info.mjs'; // 06/9 F9/F10/F19-F21: cosa c'e' dentro la cartella, PRIMA di darla a un agente // 06/9: gli occhi del modello sulla pagina dove navighi TU // Browser oltre Hermes 06/9: il proxy locale per annotare gli elementi
+import { ritrattoCartella } from './workspace-info.mjs'; // 06/9 F9/F10/F19-F21: cosa c'e' dentro la cartella, PRIMA di darla a un agente // 06/9: gli occhi del modello sulla pagina dove navighi TU // 06/9: il proxy locale per annotare gli elementi
 import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
@@ -65,7 +65,7 @@ const API_ERROR_CODES = new Set([
   'AUTH_REQUIRED',
   /* ⭐⭐⭐ 05/9, W1-01 — schede terminale per sessione (src/terminal-registry.mjs). Il tetto NON è burocrazia: su Windows ogni PTY porta con sé un processo conhost (node-pty#471). */
   'TERMINAL_LIMIT_REACHED', 'TERMINAL_STORE_UNAVAILABLE',
-  'BROWSER_PROXY_SOLO_LOCALE', 'BROWSER_PROXY_NON_HTML', 'BROWSER_PROXY_TROPPO_GRANDE', 'BROWSER_PROXY_IRRAGGIUNGIBILE', // Browser oltre Hermes 06/9
+  'BROWSER_PROXY_SOLO_LOCALE', 'BROWSER_PROXY_NON_HTML', 'BROWSER_PROXY_TROPPO_GRANDE', 'BROWSER_PROXY_IRRAGGIUNGIBILE', // Browser con annotazione 06/9
   /*
    * ⭐⭐⭐ 05/9, W1-05 — lo stato Git di una sessione (src/git-service.mjs),
    * la sorgente «Non committato» della Review a due sorgenti (W1-06).
@@ -122,7 +122,7 @@ const STATUS_BY_CODE = Object.freeze({
   RUNTIME_ALREADY_RUNNING: 409,
   /** ⭐ 05/9, W1-01 — stessa famiglia: la richiesta è legittima, è lo STATO attuale (otto schede già aperte) a impedirla. Chiudine una e riprova. */
   TERMINAL_LIMIT_REACHED: 409,
-  BROWSER_PROXY_SOLO_LOCALE: 403, // Browser oltre Hermes 06/9: il proxy con annotazione solo per un dev server locale
+  BROWSER_PROXY_SOLO_LOCALE: 403, // 06/9: il proxy con annotazione solo per un dev server locale
   BROWSER_PROXY_NON_HTML: 415,
   BROWSER_PROXY_TROPPO_GRANDE: 413,
   BROWSER_PROXY_IRRAGGIUNGIBILE: 502,
@@ -352,7 +352,7 @@ function send(res, statusCode, contentType, body, method, extraHeaders = {}) {
 }
 
 /*
- * Browser oltre Hermes (06/9) — il documento PROXATO di un dev server locale. ⛔ Niente CSP di
+ * Il documento PROXATO di un dev server locale (06/9). ⛔ Niente CSP di
  * TALOS qui (bloccherebbe script, stili e immagini del dev server, che restano sulla loro origine
  * via <base>): resta `frame-ancestors 'self'` — solo TALOS può incorniciarlo — e `no-store`.
  */
@@ -2314,8 +2314,8 @@ export function createHttpApp({
     /*
      * ⭐⭐⭐ 28/8 — FASE A (hook), piano `elegant-spinning-dongarra.md`.
      * L'UNICA strada che rende un hook eseguibile — stesso principio
-     * "fail-closed" di Codex CLI (`--dangerously-bypass-hook-trust`
-     * esiste solo per bypassarlo esplicitamente): senza una chiamata
+     * "fail-closed" già visto altrove (un flag esplicito esiste solo
+     * per bypassarlo esplicitamente): senza una chiamata
      * qui, `verificaTrust` in hook-registry.mjs torna sempre `false`.
      * Nessun corpo richiesto: l'owner fida ESATTAMENTE l'hook che la UI
      * gli ha mostrato per `hookId`, l'hash vero si rilegge da disco qui
@@ -2804,7 +2804,7 @@ export function createHttpApp({
         const artifactMatch = /^\/api\/v1\/artifacts\/([^/]+)$/.exec(url.pathname);
         // K-I 06/9 — la cornice del Browser: `?url=` e si risponde con le intestazioni lette, mai con la pagina
         const browserFrameMatch = url.pathname === '/api/v1/browser/incorniciabile';
-        // Browser oltre Hermes 06/9 — la pagina di un dev server LOCALE resa della nostra origine, con l'overlay iniettato
+        // 06/9 — la pagina di un dev server LOCALE resa della nostra origine, con l'overlay iniettato
         const browserProxyMatch = url.pathname === '/api/v1/browser/proxy';
 
         if (browserProxyMatch) {

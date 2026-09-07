@@ -34,23 +34,22 @@
  *   Q4_0 come «legacy». È l'unico ordinamento di qualità dichiarato ALLA FONTE:
  *   la scala qui sotto è quella, non una mia classifica.
  *
- * · Hermes Agent, «Local Models»
- *   (https://hermes-agent.nousresearch.com/docs/user-guide/local-models,
+ * · Un concorrente diretto in questo spazio (local-models docs, letta
  *   06/09/2026) — è l'avversario dichiarato, ed è avanti su due cose:
  *     1. ogni riga porta un verdetto di memoria a tre stati — «Fits your GPU» ·
  *        «Uses system RAM» · «Too big for this machine». I nostri quattro
  *        (compatible · tight · blocked · unknown) ci mappano sopra: parità.
- *     2. «below 4-bit the quality loss is too severe, so Hermes never offers
- *        builds smaller than that». ⇒ PAVIMENTO adottato: sotto i 4 bit per
+ *     2. sotto i 4 bit la perdita di qualità è troppo severa per essere
+ *        offerta di default. ⇒ PAVIMENTO adottato: sotto i 4 bit per
  *        peso non si CONSIGLIA mai.
- *   ⛔ Ma Hermes **sceglie al posto tuo e non mostra il conto**: «handles the
- *   fitting work for you», un clic e via. Il nostro +1 sta lì: consigliamo *e*
+ *   ⛔ Ma quell'approccio **sceglie al posto tuo e non mostra il conto**: gestisce
+ *   tutto il lavoro di adattamento con un clic e via. Il nostro +1 sta lì: consigliamo *e*
  *   mostriamo il verdetto misurato di OGNI variante su QUESTA macchina, con
  *   l'ora della misura, e la scelta resta della persona. E le varianti sotto i
  *   4 bit le ELENCHIAMO marcate invece di nasconderle: nascondere ciò che il
  *   repository contiene è mentire su cosa c'è dentro.
- *   ⛔ Debito noto e NON coperto qui: Hermes dimensiona anche il contesto
- *   («at least a 64K context window»), noi stimiamo i soli pesi. La nota che lo
+ *   ⛔ Debito noto e NON coperto qui: quell'approccio dimensiona anche il contesto
+ *   (almeno una finestra di 64K token), noi stimiamo i soli pesi. La nota che lo
  *   dichiara resta a schermo; il resto è del runtime, non di questa scheda.
  *
  * · LM Studio (lmstudio.ai, guide 2026): la prima esecuzione propone «la
@@ -89,7 +88,7 @@ export const BIT_PER_PESO = {
 };
 /** Ordine interno alla famiglia: XL > L > M > S. Non è un dato di HuggingFace. */
 const SUFFISSO = { XL: 0.4, L: 0.3, M: 0.2, S: 0.1 };
-/** Il pavimento di Hermes: sotto i 4 bit per peso non si consiglia mai. */
+/** Il pavimento adottato: sotto i 4 bit per peso non si consiglia mai. */
 export const PAVIMENTO_CONSIGLIO = 4;
 
 /**
@@ -223,8 +222,8 @@ export function ordinaVarianti(gruppi = []) {
  * La regola, dalle fonti citate nel cappello:
  *  · mai un set incompleto o senza impronta sha256 — non si scarica comunque;
  *  · mai i pesi pieni (F16/BF16/F32): sono per chi converte — SOFFITTO;
- *  · mai sotto i 4 bit per peso: «below 4-bit the quality loss is too severe»
- *    (Hermes Agent, Local Models) — PAVIMENTO;
+ *  · mai sotto i 4 bit per peso: sotto quella soglia la perdita di qualità
+ *    è troppo severa — PAVIMENTO;
  *  · fra quelle rimaste si prende **la più fedele che ci sta davvero**:
  *    prima le `compatible`, e solo se non ce n'è nessuna le `tight`.
  *

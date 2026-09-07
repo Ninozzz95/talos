@@ -18,8 +18,7 @@ import { existsSync as esisteSync, realpathSync as realpathSyncNativa } from 'no
 import { basename as nomeBase, dirname as cartellaDi, relative as relativoA, resolve as risolvi, sep as separatore } from 'node:path';
 
 /**
- * ⭐⭐⭐ 04/9 — W1-13, I FILE DI CONTROLLO DI TALOS (review 03/09: Hermes
- * v0.21.0 PR #30397, Claude Code 2.1.232). Sono i file che decidono COSA
+ * ⭐⭐⭐ 04/9 — W1-13, I FILE DI CONTROLLO DI TALOS (review 03/09). Sono i file che decidono COSA
  * l'agente può fare: hook, MCP, plugin, registro di fiducia, runtime del
  * provider, istruzioni (`CLAUDE.md`/`AGENTS.md`/`.claude/`), skill, memoria.
  * Una scrittura del modello su uno di questi non è una modifica al

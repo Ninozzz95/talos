@@ -5,14 +5,13 @@
  * stessa convenzione di hook/MCP/skill.
  *
  * ⛔⛔⛔ Ricerca fatta PRIMA di scrivere (vedi il piano madre, FASE G):
- * Codex (`codex plugin marketplace`/`codex plugin add`, verificato
- * empiricamente) è marketplace-centrico — scelta deliberatamente NON
- * seguita qui, per coerenza con hook/MCP/skill (tutte per-workspace,
- * mai un registro esterno). Hermes fa una scansione statica
- * pre-attivazione, ma il suo stesso `SECURITY.md` (repo clonato e
- * letto il 28/8, citato nel piano) dichiara che un pattern scanner
- * "does not constitute containment" — è un avviso, non un confine.
- * Questo file segue la stessa distinzione: `scansionaPatternSospetti`
+ * un approccio marketplace-centrico (verificato empiricamente altrove)
+ * è una scelta deliberatamente NON seguita qui, per coerenza con
+ * hook/MCP/skill (tutte per-workspace, mai un registro esterno). Un
+ * altro approccio noto fa una scansione statica pre-attivazione, ma la
+ * sua stessa documentazione di sicurezza ammette che uno scanner di
+ * pattern non costituisce un vero confine — è un avviso, non un
+ * blocco. Questo file segue la stessa distinzione: `scansionaPatternSospetti`
  * produce AVVISI, mai un blocco automatico — il confine vero resta il
  * trust hash-vincolato, identico a hook-registry.mjs/mcp-registry.mjs.
  *

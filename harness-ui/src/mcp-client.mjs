@@ -13,7 +13,7 @@
  * verificato alla fonte. Corretto qui, non lì: il piano resta la
  * cronaca di quando è stato scritto, questo file è quello che conta.
  *
- * Filtro di sicurezza per-server, come Hermes (già ricercato,
+ * Filtro di sicurezza per-server (già ricercato,
  * `elegant-spinning-dongarra.md` §2.2): un server MCP collegato non
  * espone MAI i suoi tool al modello senza una allowlist esplicita —
  * vedi `filtraToolMcp`.
@@ -72,8 +72,8 @@ export async function elencaToolMcp({ client }) {
 
 /**
  * ⛔⛔⛔ IL FILTRO DI SICUREZZA — mai un tool MCP remoto esposto al
- * modello senza revisione esplicita. Hermes lo fa per-server prima di
- * esporre i tool remoti (ricerca già fatta); stesso principio qui, più
+ * modello senza revisione esplicita. Lo stato dell'arte lo fa per-server
+ * prima di esporre i tool remoti (ricerca già fatta); stesso principio qui, più
  * semplice: un'allowlist di nomi. Un nome non nell'allowlist non
  * compare mai nell'elenco filtrato — non un "nascosto ma chiamabile",
  * proprio assente.

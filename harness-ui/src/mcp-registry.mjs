@@ -22,8 +22,8 @@
  * accetta qualunque array, anche vuoto, perché non è compito suo
  * imporre una policy). Qui SÌ: un server dichiarato senza allowlist è
  * un file MALFORMATO, rifiutato prima ancora di poter connettersi —
- * "mai un tool MCP remoto esposto senza filtro" (piano madre, §2.2,
- * confronto competitivo con Hermes) è applicato al punto più a monte
+ * "mai un tool MCP remoto esposto senza filtro" (piano madre, §2.2)
+ * è applicato al punto più a monte
  * possibile, non lasciato alla disciplina di chi integra dopo.
  *
  * Il PROTOCOLLO (connettersi, elencare, chiamare) resta interamente

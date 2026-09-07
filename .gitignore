@@ -336,3 +336,10 @@ harness-ui/.talos-4198*.log
 #    cancelli di parità lo leggono): spostato in `harness-ui/frontend/mockup/talos-mockup.html`,
 #    dove appartiene, con i suoi cinque riferimenti aggiornati.
 .claude/
+
+# ⛔⛔ 07/09/2026, owner: «nella repo non ci deve essere assolutamente traccia di alcun agente AI».
+# Questi due file descrivono COME lavorano gli agenti su questo repo (istruzioni, spartizione delle
+# lane, regole di condotta): sono materiale di lavoro interno, esattamente come `.claude/`.
+# ⛔ Restano sul disco per chi lavora; escono dal repo.
+CLAUDE.md
+AGENTS.md

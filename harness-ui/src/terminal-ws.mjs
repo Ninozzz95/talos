@@ -110,8 +110,8 @@ export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviSch
      * L'interfaccia era costretta a dire «riconnesso, non sappiamo se la shell
      * è ancora quella». Lo stato dell'arte separa l'identità della CONNESSIONE
      * da quella della SESSIONE e fa dichiarare al server se ha ripreso davvero
-     * (il flag `resumed` di Ably; ricerca del 05/09/2026,
-     * faqs.ably.com/connection-state-recovery · websocket.org/guides/reconnection/).
+     * (un pattern noto come "connection state recovery"; ricerca del 05/09/2026,
+     * websocket.org/guides/reconnection/).
      *
      * ⛔ Va PRIMA del backlog: chi legge deve sapere di che shell sono i byte
      * che sta per ricevere, non scoprirlo dopo averli scritti a schermo.

@@ -6,18 +6,17 @@
  * difetto delle «Note», e la macchina l'ha visto guardando 102 combinazioni. La rotta
  * `/api/v1/projects` esisteva già e rispondeva coi dati veri — mancava solo il posto dove leggerli.
  *
- * ## Cosa fa Hermes, letto nel suo codice (06/09/2026)
- * `apps/desktop/src/app/chat/sidebar/projects/` — e i numeri sono suoi, non stimati:
- * · un progetto raggruppa le sessioni **attraverso più repo e worktree** («Every session in a
- *   project, across its repos/worktrees»), non una cartella sola;
- * · `PROJECT_PREVIEW_COUNT = 3` — sotto ogni progetto si vedono le **tre** sessioni più recenti;
- * · `SIDEBAR_GROUP_PAGE = 5` — si pagina a cinque righe per gruppo invece di srotolare tutto;
+ * ## Cosa fa lo stato dell'arte, letto nel codice sorgente (06/09/2026)
+ * I numeri sono quelli VERI, non stimati:
+ * · un progetto raggruppa le sessioni **attraverso più repo e worktree**, non una cartella sola;
+ * · sotto ogni progetto si vedono le **tre** sessioni più recenti;
+ * · si pagina a cinque righe per gruppo invece di srotolare tutto;
  * · l'ordine è per **recency della sessione**, non alfabetico: il progetto su cui hai appena
  *   lavorato sta in cima;
  * · un progetto ha **colore e icona** propri, e le sessioni senza progetto hanno comunque una casa
- *   (`isNoProject`, icona `home`) invece di sparire.
+ *   (icona `home`) invece di sparire.
  *
- * ⭐ Il nostro +1: Hermes mostra le sessioni; noi mostriamo anche **cosa è costato** — giri e token
+ * ⭐ Il nostro +1: loro mostrano le sessioni; noi mostriamo anche **cosa è costato** — giri e token
  * per progetto — perché è la domanda che una persona si fa guardando un elenco di progetti, e i
  * dati ce li abbiamo già in `usageSessione`.
  *
@@ -26,7 +25,7 @@
  */
 import { usageDellaSessione } from './consumo-sessione.js';
 
-/** Quante sessioni recenti si mostrano sotto ogni progetto — lo stesso numero di Hermes. */
+/** Quante sessioni recenti si mostrano sotto ogni progetto — lo stesso numero trovato in ricerca. */
 export const QUANTE_RECENTI = 3;
 
 /**
@@ -52,7 +51,7 @@ function quandoUltima(sessioni) {
 }
 
 /**
- * Unisce progetti e sessioni, e ordina per recency come fa Hermes: quello su cui hai appena
+ * Unisce progetti e sessioni, e ordina per recency, come lo stato dell'arte: quello su cui hai appena
  * lavorato sta in cima, non quello che viene prima in ordine alfabetico.
  * @returns {Array<{id, nome, sessioni, quante, ultimaAlle, giri, token}>}
  */
@@ -159,7 +158,7 @@ export function montaProgetti(schermo, progetti, { onApriSessione = null, quante
         ul.append(riga);
       }
       li.append(ul);
-      // ⛔ Hermes ne mostra tre e non dice quante restano: se ce ne sono altre, lo diciamo.
+      // ⛔ Chi mostra solo tre non dice quante restano: se ce ne sono altre, lo diciamo.
       if (p.quante > recenti.length) {
         li.append(el(d, 'p', 'talos-progetto__altre', `e altre ${p.quante - recenti.length} più vecchie`));
       }

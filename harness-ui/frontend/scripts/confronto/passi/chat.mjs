@@ -1,9 +1,9 @@
 /*
- * Gruppo 1 · Chat — gli stessi gesti su TALOS e su Hermes Desktop.
+ * Gruppo 1 · Chat — gli stessi gesti su TALOS e sull'app di riferimento.
  * Nessun invio al modello: si misura la UI (gesti, tastiera, struttura, pixel),
  * i giri a pagamento sono una campagna a parte, dichiarata prima.
  *
- * Selettori di Hermes letti dal vivo il 05/09/2026 (hermes-esplora2.mjs):
+ * Selettori letti dal vivo il 05/09/2026:
  * composer = `div[role="textbox"]` («Message»), righe sessione = `button[data-slot="row-button"]`,
  * messaggio utente = `.group/user-message`, azioni composer = «Add context», «Model · …»,
  * «Voice dictation», «Read replies aloud», «Wake word», «Start voice conversation».

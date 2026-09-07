@@ -1,13 +1,13 @@
 /*
- * browser-annota.js — l'overlay di annotazione DENTRO la pagina proxata (Browser oltre Hermes,
- * 06/09). Iniettato per primo nel <head> dal proxy locale di TALOS: cattura gli errori di console
+ * browser-annota.js — l'overlay di annotazione DENTRO la pagina proxata (06/09).
+ * Iniettato per primo nel <head> dal proxy locale di TALOS: cattura gli errori di console
  * prima degli script della pagina, poi, quando il genitore lo accende, evidenzia l'elemento sotto
  * il mouse e al clic manda al genitore un FATTO verificabile sull'elemento: selettore stabile,
  * tag, testo, HTML, stili calcolati che contano, posizione, catena degli antenati, indizi sul
  * sorgente (Vue: `__vueParentComponent.type.__file`, `data-v-inspector`; React ≤18: `_debugSource`,
  * nome del componente), e gli errori di console della pagina.
  *
- * Hermes (`lib/preview-annotate/in-page.ts`) manda selettore, testo e un ritaglio dell'immagine;
+ * Un approccio noto manda solo selettore, testo e un ritaglio dell'immagine;
  * qui l'agente riceve la struttura: è il «+1» di questo blocco.
  *
  * Nessuna dipendenza, nessuno stile esterno: tutto in linea perché la pagina ospite può avere

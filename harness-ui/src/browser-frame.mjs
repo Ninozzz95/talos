@@ -8,7 +8,7 @@
  * vietano la cornice da un'altra origine, `ALLOW-FROM` è deprecato e i browser
  * lo ignorano; MDN «CSP frame-ancestors» — se presente PREVALE su X-Frame-Options,
  * e una lista che non contiene la nostra origine (né `*`) vieta la cornice.
- * Hermes Desktop evita il problema con una webview Electron; qui il guscio è un
+ * Una webview Electron eviterebbe il problema; qui il guscio è un
  * browser, e la regola dei siti si rispetta, non si aggira.
  *
  * ⛔ Solo `http:`/`https:`, mai credenziali nell'URL, un tempo massimo, e il corpo

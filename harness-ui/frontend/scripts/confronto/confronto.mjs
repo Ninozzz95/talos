@@ -1,7 +1,7 @@
 /*
- * TALOS contro Hermes Desktop, componente per componente — il corridore.
+ * TALOS contro l'app di riferimento, componente per componente — il corridore.
  *
- * Uso (da harness-ui/frontend, con il 4175 acceso e Hermes aperto o apribile):
+ * Uso (da harness-ui/frontend, con il 4175 acceso e l'app di riferimento aperta o apribile):
  *   node scripts/confronto/confronto.mjs --gruppo=chat [--finestra]
  *
  * Scrive artifacts/confronto/<gruppo>/<blocco>/{talos,hermes,affiancato}.png e
