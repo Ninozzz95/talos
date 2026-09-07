@@ -95,6 +95,20 @@ test('gli errori HTTP espongono una spiegazione naturale e un riferimento Doctor
   assert.doesNotMatch(JSON.stringify(body), /node_modules|TALOS_HARNESS_UI_PROJECT_DIRS|stack/i);
 });
 
+test('il riferimento Doctor porta al MOTIVO VERO, ripulito (07/9 — prima tornava solo il codice)', async (t) => {
+  const { base } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/runtime/load`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runtimeId: 'missing', modelId: 'missing' }) });
+  const corpo = await risposta.json();
+  const riferimento = corpo.error.doctorReference;
+  const scheda = await (await fetch(`${base}/api/v1/doctor/${riferimento}`)).json();
+  assert.equal(scheda.ok, true);
+  assert.equal(scheda.data.code, 'QUERY_INVALID');
+  // ⛔ il punto: un dettaglio NON VUOTO, o la scheda non dice niente piu di cio che si legge gia
+  assert.ok(scheda.data.detail.length > 0, 'la scheda Doctor deve portare il motivo vero');
+  // ... e ripulito: mai chiavi, percorsi o nomi di variabili d'ambiente
+  assert.doesNotMatch(scheda.data.detail, /[A-Za-z]:\\|node_modules|TALOS_[A-Z_]+|sk-/);
+});
+
 test('api rejects POST PUT PATCH DELETE with 405 and no CORS when Origin is absent', async (t) => {
   const { base } = await listen(t);
   for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {

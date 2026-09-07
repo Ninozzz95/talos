@@ -19,8 +19,8 @@ test('PIEDE-GIRI: il contatore tace sotto metà del tetto, poi è quieto, poi si
 });
 
 test('PIEDE-PERMESSO: nome umano, mai il nome tecnico (H22)', () => {
-  assert.equal(etichettaPermesso('Full access'), 'Accesso completo');
-  assert.equal(etichettaPermesso('On request'), 'Su richiesta');
+  assert.equal(etichettaPermesso('Full access'), 'Accesso pieno');
+  assert.equal(etichettaPermesso('On request'), 'Chiede prima');
   assert.equal(etichettaPermesso(''), 'Permesso non scelto');
   assert.equal(etichettaPermesso(undefined), 'Permesso non scelto');
   assert.equal(tonoPermesso('Full access'), 'danger');
@@ -29,13 +29,13 @@ test('PIEDE-PERMESSO: nome umano, mai il nome tecnico (H22)', () => {
 });
 
 test('PIEDE-ECCEZIONI: la pillola dichiara i cancelli per attrezzo, che il permesso non promette', () => {
-  // il caso misurato: «Accesso completo» scelto, e due attrezzi su «chiedi» ereditati dal server
-  assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: 'chiedi', shell: 'chiedi' }), 'Accesso completo · 2 eccezioni');
-  assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: 'nega' }), 'Accesso completo · 1 eccezione');
+  // il caso misurato: «Accesso pieno» scelto, e due attrezzi su «chiedi» ereditati dal server
+  assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: 'chiedi', shell: 'chiedi' }), 'Accesso pieno · 2 eccezioni');
+  assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: 'nega' }), 'Accesso pieno · 1 eccezione');
   // AL CONTRARIO: senza eccezioni la pillola resta quella di sempre, e un valore vuoto non conta
-  assert.equal(etichettaPermessoConEccezioni('Full access', {}), 'Accesso completo');
-  assert.equal(etichettaPermessoConEccezioni('Full access', null), 'Accesso completo');
-  assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: '', shell: null }), 'Accesso completo');
+  assert.equal(etichettaPermessoConEccezioni('Full access', {}), 'Accesso pieno');
+  assert.equal(etichettaPermessoConEccezioni('Full access', null), 'Accesso pieno');
+  assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: '', shell: null }), 'Accesso pieno');
 });
 
 test('PIEDE-MODELLO: un identificatore locale diventa un nome, non una targa (H22)', () => {

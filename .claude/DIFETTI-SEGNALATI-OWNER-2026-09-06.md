@@ -549,3 +549,121 @@ esiste già: `components/errori.js`.
 ⛔ E un terzo difetto nello stesso screenshot: **l'indice dei giri, nel pannello destro, dice «in
 corso»** su una sessione interrotta. È O-48 un piano più sotto — la cura di O-48 tocca il composer,
 non quel pannello, e va portata anche lì.
+
+### O-51 · «ricorda lo stile delle caselle e falle un po' più piccole» — 07/09 · CURATO
+
+**Cosa vedeva l'owner** (screenshot della sidebar in selezione): le caselle delle sessioni erano
+**blu**, col segno di spunta bianco di Windows, dentro un tema che non ha una sola cosa blu; e in
+una riga alta 66 px pesavano quanto il titolo.
+
+**Causa, chiesta al browser e non dedotta.** La casella è un `<input type="checkbox">` vero
+(`components/session-item.js:173`), e `.talos-checkbox` rispondeva **solo** a `[aria-checked="true"]`
+— un attributo che un input non ha mai. Il sistema di design vestiva quindi soltanto il *bottone*
+del mockup; l'input restava al disegno del sistema operativo.
+
+**Cura.** `.talos-checkbox` vale ora nelle due forme (bottone con `aria-checked` e input con
+`:checked`): `appearance:none`, spunta disegnata con `clip-path`, fuoco su `:focus-visible` con
+offset, e stato dichiarato col **fondo** in alto contrasto (`forced-colors`). Misura 28 → **20 px**
+(la grande 36 → 28), colonna della riga adeguata. Verificato dal vivo sul 4174: `w:20 h:20
+raggio:6px appearance:none`, e nella foto la spunta è oro su fondo d'accento.
+
+### O-52 · «tutti i component devono essere stilizzati custom, anche il dialog» — 07/09 · in corso
+
+**Chi disegnava cosa, censito.** Nel prodotto restavano **quattro famiglie** di controlli disegnati
+dal sistema operativo, non dal tema: 15 caselle (di cui 13 nel monolite), 12 cursori a scorrimento
+(`accent-color` tinge il cursore di Windows, non lo sostituisce), 31 menu a tendina — il *bottone*
+era nostro dal principio, ma il **menu che si apre** era bianco col font di sistema — e gli
+interruttori delle Impostazioni, che avevano la pillola giusta e nessun pomello (l'input non può
+avere figli).
+
+**Cura, in un posto solo.** Le regole vestono ora l'**elemento**, non solo la classe:
+`select`, `input[type="range"]`, `input[type="checkbox"]:not(.talos-switch)` e
+`input.talos-switch`. Così cadono anche i quattordici menu e gli undici cursori del monolite, che
+nessuna classe raggiungeva. Il menu a tendina passa da `appearance: base-select` (Chrome 135+,
+Safari 27) dentro `@supports`, con `::picker(select)` sui token del tema, chevron nostro al posto
+del triangolo pieno e lo spazio della spunta riservato col padding.
+Fonti 07/09/2026: Chrome for Developers, «The `<select>` element can now be customized with CSS»;
+modern-css.com, «Customizable selects without a JavaScript library»; Modern CSS, «Pure CSS Custom
+Checkbox Style»; Evinced, «Creating accessible styled checkboxes».
+
+⛔ **Resta aperto**: i **fogli** del monolite (`dialog.sheet-dialog`, in `src/legacy/frammenti.html`)
+sono ancora finestre legacy — Permessi, Albero sessione, Strumenti/skill, Agents e diagnostica,
+File, Modello. Con i controlli vestiti sembrano del tema, ma la struttura non è quella dei veli.
+La strada è quella già in uso (`VELO_PER_FOGLIO` + `preparaVeloDaFoglio`), e tre veli esistono già
+nel mockup: `veloPermessi`, `veloAlbero`, `veloModello`.
+
+### O-53 · «"nessuna selezionata" deve sparire se non è selezionato nulla» — 07/09 · CURATO
+
+Erano due difetti in uno: la barra della selezione restava a schermo anche con la **selezione
+spenta** (bastava che ci fossero sessioni), e dentro viveva una frase che parlava solo di sé.
+Ora la barra dura quanto la selezione e il conteggio compare quando c'è qualcosa da contare.
+Provato coi clic veri: 0 → nessuna frase · 1 → «1 selezionata» · tutte → «2 selezionate» ·
+di nuovo 0 → la frase sparisce · selezione spenta → la barra sparisce.
+
+### O-54 · la regola che non c'era: una GRAFFA ORFANA la buttava via — 07/09 · CURATO
+
+Trovato misurando, non leggendo. La barra della selezione aveva la sua regola nel foglio e sullo
+schermo non aveva né bordo né fondo né griglia: il browser diceva `display: block`, `padding: 0px`.
+Sei righe più su era rimasta una `}` **orfana**, resto della container query cancellata il giorno
+prima. Per la specifica CSS un `}` fuori posto viene inghiottito nel **preludio** della regola
+successiva, che diventa `} .talos-sidebar__selezione` — selettore non valido, regola **scartata**,
+nessun errore da nessuna parte.
+⇒ Ora lo conta una macchina, a ogni giro: `scripts/cancello/graffe-orfane.mjs`, agganciato al
+cancello statico e provato anche al verso contrario (un foglio sano non accusa niente).
+
+### O-55 · il riferimento Doctor non portava a niente — 07/09 · CURATO
+
+Il difetto dietro «Query non valida» (O-49), e più grave di quello. Ogni errore dice «Apri Doctor,
+copia il riferimento e riprova»; la scheda Doctor rispondeva **solo col codice**, cioè con quello
+che si leggeva già a schermo. Il motivo vero non era nascosto per prudenza: **non veniva mai
+registrato**. `errorEnvelope(code, clock)` costruiva `toPublicProblem({ code })` — un oggetto col
+solo codice, senza `message` — e il registro diagnostico salvava un dettaglio vuoto.
+
+**Cura**, in due punti: l'errore vero viaggia nel contesto (`{ errore: error }`, 46 punti di
+`catch`) e il suo messaggio viene registrato — già ripulito da `safeDiagnosticDetail` (chiavi,
+percorsi, nomi di variabili d'ambiente); la rotta `/api/v1/doctor/<rif>` restituisce quel
+dettaglio. Fuori non cambia niente: la persona continua a vedere il testo pubblico.
+
+⭐ **Provato subito, e ha pagato**: la prima richiesta rifiutata dopo la cura diceva «Corpo JSON non
+valido», la seconda «cartellaLibera deve essere un percorso assoluto» — due difetti dei miei script
+diagnosticati in un colpo, dove prima c'erano dieci minuti di tentativi al buio.
+
+### O-47 · «devo poter fermarla immediatamente» — 07/09 · MISURATO: 4 ms
+
+Misurato dal vivo su istanza di prova (4211, store separato) con una sessione vera GLM 5.3 Flash:
+dalla `POST /stop` all'evento terminale sono passati **4 ms** (`StateDelta` e poi `RunFinished`).
+La catena dell'annullamento è intera: `ferma()` → `voce.controller.abort()` → `segnaleStop` →
+`userSignal` dentro il fetch verso OpenRouter, che viene chiuso, non aspettato.
+
+⛔ **Quello che invece è lento non è lo stop**: il primo pezzo di risposta è arrivato dopo **96
+secondi**. Finché non arriva niente non c'è niente da fermare, e chi guarda vede una chat immobile
+con un pulsante che non sembra fare effetto. È un difetto di ATTESA, non di interruzione: la
+striscia deve dire cosa sta succedendo (il modello sta ragionando, da quanto), e lo stop deve poter
+essere premuto anche prima del primo pezzo.
+
+### O-50 · riprendere una sessione interrotta — 07/09 · CHIUSO con prova dal vivo
+
+Riprodotto lo scenario vero: sessione avviata, **server ucciso a giro in corso** (è così che una
+sessione diventa «interrotta»), server riavviato, sessione `{conclusa:false, interrotta:true}`.
+Poi il follow-up, scritto nel composer come lo scriverebbe una persona: la UI ha preso la strada
+della **ripresa** («Ripresa della sessione · avviata 45 s fa · riprendere costa circa 8,1k token»),
+TALOS ha risposto, la sessione è tornata `conclusa · 3 giri`. **Nessun errore, nessun toast rosso.**
+Foto: `scratchpad/prove/foto/C03-followup/`.
+
+### O-56 · il pulsante «Invia» era ROSSO — 07/09 · CURATO
+
+Trovato guardando la foto della prova qui sopra e poi chiedendo al browser: il pulsante del
+composer aveva addosso `talos-send--stop` **sempre** — `rgb(216,125,114)`, il colore del pericolo —
+mentre il suo `aria-label` diceva «Invia». Il monolite cambiava icona e nome ma non la classe,
+perché usa un altro vocabolario (`is-stop`). Ora il pulsante nasce «Invia» e il rosso arriva solo
+col giro in corso; il CSS riconosce entrambi i nomi.
+
+### O-57 · quattro nomi per quattro politiche — 07/09 · CURATO
+
+La stessa politica si chiamava in quattro modi a seconda della schermata: il foglio Permessi
+mostrava i valori grezzi del kernel in inglese («Read only»), la modale «Nuova sessione» diceva
+«Scrive qui», l'intro «Scrive nel progetto», la pillola del composer «Scrittura nel workspace».
+⇒ Una mappa sola (`components/politiche.js`, con test), e le quattro superfici sono sue viste. Il
+valore che viaggia verso il kernel non è cambiato di un byte — è il contratto, non un'etichetta.
+Ricerca 07/09/2026: Claude Code v2.1.200 ha rinominato «default» in «Manual» su tutte le
+interfacce **tenendo invariato** il valore di configurazione per hook e SDK: stessa separazione.
