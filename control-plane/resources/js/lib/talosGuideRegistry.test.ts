@@ -30,8 +30,8 @@ const EXPECTED_GUIDE_IDS = [
     'runtime.artifacts',
     'search.context',
     'search.documents',
-    'library.context',
-    'library.documents',
+    'library.unified',
+    'library.sources',
     'brain.memory',
     'brain.skills',
     'brain.skill_audit',
@@ -83,6 +83,19 @@ describe('TALOS canonical guide registry', () => {
             expect(entry.details.trim()).not.toBe('')
             expect(entry.available).toBe(true)
         }
+    })
+
+    it('C2-REG-016 follows the canonical unified and sources Library sections', () => {
+        expect(resolveTalosGuideEntry('library.unified')).toMatchObject({
+            id: 'library.unified',
+            title: 'Unified',
+            available: true,
+        })
+        expect(resolveTalosGuideEntry('library.sources')).toMatchObject({
+            id: 'library.sources',
+            title: 'Sources',
+            available: true,
+        })
     })
 
     it('covers every section declared by the window registry', () => {

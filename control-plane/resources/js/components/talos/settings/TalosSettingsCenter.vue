@@ -14,6 +14,7 @@ import {
     Search,
     Settings,
     Shield,
+    ShieldCheck,
     User,
     Wrench,
 } from '@lucide/vue'
@@ -27,6 +28,7 @@ import Tabs from '../../ui/Tabs.vue'
 import TalosGuideInfoButton from '../guide/TalosGuideInfoButton.vue'
 import TalosSettingsAppearancePanel from './TalosSettingsAppearancePanel.vue'
 import TalosSettingsBrowserPanel from './TalosSettingsBrowserPanel.vue'
+import TalosCapabilityPolicyPanel from './TalosCapabilityPolicyPanel.vue'
 import TalosSettingsIntegrationsPanel from './TalosSettingsIntegrationsPanel.vue'
 import TalosSettingsModelsPanel from './TalosSettingsModelsPanel.vue'
 import TalosSettingsSearchPanel from './TalosSettingsSearchPanel.vue'
@@ -110,6 +112,7 @@ type SettingsTab =
     | 'appearance'
     | 'shortcuts'
     | 'account'
+    | 'policies'
     | 'agent_tools'
     | 'system'
 
@@ -190,6 +193,7 @@ const tabs: Array<{ id: SettingsTab; label: string; icon: unknown; group?: strin
     { id: 'appearance', label: 'Appearance', icon: Palette },
     { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
     { id: 'account', label: 'Account', icon: User },
+    { id: 'policies', label: 'Capabilities', icon: ShieldCheck, group: 'Admin' },
     { id: 'agent_tools', label: 'Agent Tools', icon: Shield, group: 'Admin' },
     { id: 'system', label: 'System', icon: Settings, group: 'Admin' },
 ]
@@ -573,7 +577,7 @@ watch(
                             <TalosGuideInfoButton :guide-id="`settings.${selectedTab.id}`" compact side="bottom" />
                         </div>
                     </div>
-                    <Button size="sm" :disabled="savingSettings" @click="saveWorkspaceDefaults">
+                    <Button v-if="activeTab !== 'policies'" size="sm" :disabled="savingSettings" @click="saveWorkspaceDefaults">
                         <Loader2 v-if="savingSettings" class="h-4 w-4 animate-spin" />
                         <Save v-else class="h-4 w-4" />
                         Save settings
@@ -753,6 +757,10 @@ watch(
                             <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">Watch the TALOS introduction again at any time.</p>
                             <Button class="mt-3" type="button" size="sm" variant="secondary" @click="emit('replayIntro')">Replay introduction</Button>
                         </div>
+                    </template>
+
+                    <template v-else-if="activeTab === 'policies'">
+                        <TalosCapabilityPolicyPanel :active-talos-session-id="activeTalosSessionId ?? null" />
                     </template>
 
                     <template v-else-if="activeTab === 'agent_tools'">

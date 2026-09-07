@@ -19,10 +19,16 @@ final class TalosCapabilityPolicy extends Model
     protected $fillable = [
         'policy_set_id',
         'capability',
+        'actions',
         'decision',
+        'source',
         'talos_session_id',
         'expires_at',
         'last_used_at',
+        'legacy_decision',
+        'legacy_talos_session_id',
+        'legacy_expires_at',
+        'canonicalized_at',
     ];
 
     /** @return BelongsTo<TalosCapabilityPolicySet, $this> */
@@ -41,8 +47,11 @@ final class TalosCapabilityPolicy extends Model
     protected function casts(): array
     {
         return [
+            'actions' => 'array',
             'expires_at' => 'immutable_datetime',
             'last_used_at' => 'immutable_datetime',
+            'legacy_expires_at' => 'immutable_datetime',
+            'canonicalized_at' => 'immutable_datetime',
         ];
     }
 }

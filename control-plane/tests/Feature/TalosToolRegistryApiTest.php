@@ -62,7 +62,183 @@ final class TalosToolRegistryApiTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.name', 'HTTP_REQUEST')
             ->assertJsonPath('data.input_schema.required.0', 'url')
+            ->assertJsonPath('data.contract.schema_version', 1)
+            ->assertJsonPath('data.contract.lifecycle.kind', 'managed_registry')
+            ->assertJsonPath('data.contract.execution.locations.0', 'trusted_node')
+            ->assertJsonPath('data.availability.available', true)
             ->assertJsonPath('data.connector.id', $connectorId);
+    }
+
+    public function test_bundled_tools_are_opt_in_and_share_the_versioned_api_contract(): void
+    {
+        $this->getJson('/api/talos/tools')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+
+        $this->getJson('/api/talos/tools?include_bundled=1')
+            ->assertOk()
+            ->assertJsonPath('data.0.contract.schema_version', 1)
+            ->assertJsonPath('data.0.contract.lifecycle.kind', 'bundled')
+            ->assertJsonPath('data.0.availability.available', true)
+            ->assertJsonFragment(['implementation_key' => 'browser_navigate']);
+    }
+
+    public function test_planning_context_includes_every_bundled_canonical_tool_without_managed_rows(): void
+    {
+        $response = $this->getJson('/api/talos/tools/planning-context')
+            ->assertOk();
+
+        $tools = collect($response->json('data.tools'));
+        $expectedNames = [
+            'TOOL_BROWSER_NAVIGATE',
+            'TOOL_BROWSER_SNAPSHOT',
+            'TOOL_BROWSER_READ',
+            'TOOL_BROWSER_SCREENSHOT',
+            'TOOL_BROWSER_CLICK',
+            'TOOL_BROWSER_FILE_UPLOAD',
+            'TOOL_WEB_SEARCH',
+            'TOOL_WEB_FETCH',
+        ];
+
+        $this->assertCount(count($expectedNames), $tools);
+        $this->assertEqualsCanonicalizing($expectedNames, $tools->pluck('name')->all());
+
+        $webSearch = $tools->firstWhere('name', 'TOOL_WEB_SEARCH');
+        $this->assertIsArray($webSearch);
+        $this->assertSame(1, $webSearch['contract']['schema_version']);
+        $this->assertSame('bundled', $webSearch['contract']['lifecycle']['kind']);
+        $this->assertSame(['trusted_node'], $webSearch['contract']['execution']['locations']);
+        $this->assertNull($webSearch['connector']);
+    }
+
+    public function test_bundled_names_are_reserved_for_writes_and_legacy_collisions_cannot_shadow_planning(): void
+    {
+        $connectorId = $this->createConnector();
+
+        $this->registryPost('/api/talos/tools', $this->toolPayload($connectorId, 'TOOL_WEB_SEARCH'))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['name']);
+
+        \Illuminate\Support\Facades\DB::table('talos_tools')->insert([
+            'id' => (string) \Illuminate\Support\Str::orderedUuid(),
+            'connector_id' => $connectorId,
+            'name' => 'TOOL_WEB_SEARCH',
+            'display_name' => 'Shadow web search',
+            'description' => 'Legacy managed row that collides with a bundled canonical node.',
+            'input_schema' => json_encode(['type' => 'object'], JSON_THROW_ON_ERROR),
+            'output_schema' => null,
+            'risk_level' => 'low',
+            'capability' => 'shadow.web.search',
+            'capabilities' => json_encode(['shadow.web.search'], JSON_THROW_ON_ERROR),
+            'actions' => json_encode(['read'], JSON_THROW_ON_ERROR),
+            'confirmation' => 'policy',
+            'effects' => json_encode([
+                'mutates_state' => false,
+                'parallel_safe' => true,
+                'requires_approval' => false,
+                'produces_evidence' => true,
+            ], JSON_THROW_ON_ERROR),
+            'lifecycle_kind' => 'managed_registry',
+            'lifecycle_integrity_sha256' => null,
+            'execution_locations' => json_encode(['trusted_node'], JSON_THROW_ON_ERROR),
+            'implementation_key' => 'registry.tool_web_search',
+            'schema_version' => 1,
+            'contract_revision' => 1,
+            'policy' => null,
+            'is_enabled' => true,
+            'planning_enabled' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $planning = $this->getJson('/api/talos/tools/planning-context')
+            ->assertOk()
+            ->assertJsonFragment([
+                'name' => 'TOOL_WEB_SEARCH',
+                'reason' => 'bundled_name_reserved',
+            ]);
+
+        $matching = collect($planning->json('data.tools'))
+            ->where('name', 'TOOL_WEB_SEARCH')
+            ->values();
+        $this->assertCount(1, $matching);
+        $this->assertSame('bundled', $matching->first()['contract']['lifecycle']['kind']);
+        $this->assertSame('web.search', $matching->first()['capability']);
+    }
+
+    public function test_canonical_contradictions_and_executable_implementation_keys_are_rejected_before_write(): void
+    {
+        $connectorId = $this->createConnector();
+
+        $this->registryPost('/api/talos/tools', [
+            ...$this->toolPayload($connectorId, 'UNSAFE_TOOL'),
+            'risk_level' => 'critical',
+            'effects' => [
+                'mutates_state' => true,
+                'parallel_safe' => true,
+                'requires_approval' => false,
+                'produces_evidence' => false,
+            ],
+            'execution' => [
+                'locations' => ['trusted_node'],
+                'implementation_key' => 'https://example.invalid/tool.js',
+            ],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['contract']);
+
+        $this->assertDatabaseMissing('talos_tools', ['name' => 'UNSAFE_TOOL']);
+    }
+
+    public function test_contract_valid_mobile_only_tool_remains_visible_but_is_not_planned(): void
+    {
+        $connectorId = $this->createConnector();
+        $toolId = (string) \Illuminate\Support\Str::orderedUuid();
+        \Illuminate\Support\Facades\DB::table('talos_tools')->insert([
+            'id' => $toolId,
+            'connector_id' => $connectorId,
+            'name' => 'MOBILE_ONLY_TOOL',
+            'display_name' => 'Mobile only tool',
+            'description' => 'A bundled tool available only inside mobile.',
+            'input_schema' => json_encode(['type' => 'object'], JSON_THROW_ON_ERROR),
+            'output_schema' => null,
+            'risk_level' => 'low',
+            'capability' => 'mobile.read',
+            'capabilities' => json_encode(['mobile.read'], JSON_THROW_ON_ERROR),
+            'actions' => json_encode(['read'], JSON_THROW_ON_ERROR),
+            'confirmation' => 'policy',
+            'effects' => json_encode([
+                'mutates_state' => false,
+                'parallel_safe' => true,
+                'requires_approval' => false,
+                'produces_evidence' => true,
+            ], JSON_THROW_ON_ERROR),
+            'lifecycle_kind' => 'bundled',
+            'lifecycle_integrity_sha256' => null,
+            'execution_locations' => json_encode(['local_mobile'], JSON_THROW_ON_ERROR),
+            'implementation_key' => 'mobile.only',
+            'schema_version' => 1,
+            'contract_revision' => 1,
+            'policy' => null,
+            'is_enabled' => true,
+            'planning_enabled' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->getJson('/api/talos/tools?include_disabled=1')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $toolId])
+            ->assertJsonPath('data.0.availability.available', false)
+            ->assertJsonPath('data.0.availability.reason', 'desktop_location_unsupported');
+
+        $planning = $this->getJson('/api/talos/tools/planning-context')
+            ->assertOk()
+            ->assertJsonFragment([
+                'name' => 'MOBILE_ONLY_TOOL',
+                'reason' => 'desktop_location_unsupported',
+            ]);
+        $this->assertNotContains('MOBILE_ONLY_TOOL', array_column($planning->json('data.tools'), 'name'));
     }
 
     public function test_duplicate_tool_name_is_rejected(): void
@@ -110,10 +286,11 @@ final class TalosToolRegistryApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(2, 'data');
 
-        $this->getJson('/api/talos/tools/planning-context')
+        $planning = $this->getJson('/api/talos/tools/planning-context')
             ->assertOk()
-            ->assertJsonPath('data.tools.0.name', 'HTTP_REQUEST')
-            ->assertJsonMissing(['DATABASE_QUERY']);
+            ->assertJsonPath('data.tools.0.name', 'HTTP_REQUEST');
+        $this->assertNotContains('DATABASE_QUERY', array_column($planning->json('data.tools'), 'name'));
+        $planning->assertJsonFragment(['name' => 'DATABASE_QUERY', 'reason' => 'connector_disabled']);
     }
 
     public function test_disabled_tools_are_not_sent_to_validator_planning_context(): void
@@ -142,7 +319,7 @@ final class TalosToolRegistryApiTest extends TestCase
             && isset($request['tool_context'])
             && is_array($request['tool_context'])
             && ($request['tool_context']['tools'][0]['name'] ?? null) === 'HTTP_REQUEST'
-            && ! str_contains(json_encode($request['tool_context'], JSON_THROW_ON_ERROR), 'FILE_WRITE'));
+            && ! in_array('FILE_WRITE', array_column($request['tool_context']['tools'], 'name'), true));
     }
 
     private function createConnector(string $key = 'core_http', bool $enabled = true): string

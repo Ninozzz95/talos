@@ -10,7 +10,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 final class TalosCapabilityPolicySet extends Model
 {
-    public const SCHEMA_VERSION = 1;
+    public const CONTRACT_SCHEMA_VERSION = 1;
+
+    public const PERSISTENCE_SCHEMA_VERSION = 2;
+
+    /** @deprecated Use CONTRACT_SCHEMA_VERSION or PERSISTENCE_SCHEMA_VERSION explicitly. */
+    public const SCHEMA_VERSION = self::CONTRACT_SCHEMA_VERSION;
 
     public $incrementing = false;
 
@@ -38,6 +43,12 @@ final class TalosCapabilityPolicySet extends Model
     public function policies(): HasMany
     {
         return $this->hasMany(TalosCapabilityPolicy::class, 'policy_set_id');
+    }
+
+    /** @return HasMany<TalosCapabilityGrant, $this> */
+    public function grants(): HasMany
+    {
+        return $this->hasMany(TalosCapabilityGrant::class, 'policy_set_id');
     }
 
     /** @return array<string, string> */

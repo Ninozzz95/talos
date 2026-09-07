@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Services\Tools\TalosToolContractMapper;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Kadmos\Alignment\Contract\ToolDefinitionV1;
 
 final class TalosTool extends Model
 {
@@ -18,13 +20,25 @@ final class TalosTool extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'id',
         'connector_id',
         'name',
         'display_name',
         'description',
         'input_schema',
+        'output_schema',
         'risk_level',
         'capability',
+        'capabilities',
+        'actions',
+        'confirmation',
+        'effects',
+        'lifecycle_kind',
+        'lifecycle_integrity_sha256',
+        'execution_locations',
+        'implementation_key',
+        'schema_version',
+        'contract_revision',
         'policy',
         'is_enabled',
         'planning_enabled',
@@ -37,6 +51,13 @@ final class TalosTool extends Model
     {
         return [
             'input_schema' => 'array',
+            'output_schema' => 'array',
+            'capabilities' => 'array',
+            'actions' => 'array',
+            'effects' => 'array',
+            'execution_locations' => 'array',
+            'schema_version' => 'integer',
+            'contract_revision' => 'integer',
             'policy' => 'array',
             'is_enabled' => 'boolean',
             'planning_enabled' => 'boolean',
@@ -73,7 +94,22 @@ final class TalosTool extends Model
      */
     public function toApiArray(bool $includeConnector = true): array
     {
-        $payload = [
+        $connector = $includeConnector && $this->relationLoaded('connector') && $this->connector instanceof TalosConnector
+            ? $this->connector->toApiArray()
+            : null;
+
+        return TalosToolContractMapper::apiEnvelope($this->toContractV1(), $this->toLegacyApiArray(), $connector);
+    }
+
+    public function toContractV1(): ToolDefinitionV1
+    {
+        return TalosToolContractMapper::fromModel($this);
+    }
+
+    /** @return array<string, mixed> */
+    public function toLegacyApiArray(): array
+    {
+        return [
             'id' => $this->id,
             'connector_id' => $this->connector_id,
             'name' => $this->name,
@@ -88,11 +124,5 @@ final class TalosTool extends Model
             'created_at' => $this->created_at?->toJSON(),
             'updated_at' => $this->updated_at?->toJSON(),
         ];
-
-        if ($includeConnector && $this->relationLoaded('connector') && $this->connector instanceof TalosConnector) {
-            $payload['connector'] = $this->connector->toApiArray();
-        }
-
-        return $payload;
     }
 }

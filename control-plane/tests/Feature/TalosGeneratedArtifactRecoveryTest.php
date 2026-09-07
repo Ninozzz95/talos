@@ -56,8 +56,8 @@ final class TalosGeneratedArtifactRecoveryTest extends TestCase
         $this->scanner = new CleanTalosMalwareScanner;
         $this->app->instance(TalosMalwareScanner::class, $this->scanner);
         $policies = app(TalosCapabilityPolicyService::class);
-        $policies->update($this->user, 'artifacts.generate', TalosCapabilityDecision::ALLOW_UNTIL_REVOKED->value, 0);
-        $policies->update($this->user, 'files.write', TalosCapabilityDecision::ALLOW_UNTIL_REVOKED->value, 1);
+        $policies->update($this->user, 'artifacts.generate', TalosCapabilityDecision::ALLOW->value, 0);
+        $policies->update($this->user, 'files.write', TalosCapabilityDecision::ALLOW->value, 1);
     }
 
     protected function tearDown(): void

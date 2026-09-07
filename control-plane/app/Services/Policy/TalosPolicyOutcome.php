@@ -10,11 +10,15 @@ final readonly class TalosPolicyOutcome
         public TalosCapability $capability,
         public TalosCapabilityRisk $risk,
         public TalosCapabilityDecision $decision,
+        /** @var list<string> */
+        public array $actions,
         public bool $allowed,
         public bool $requiresApproval,
         public string $reason,
         public int $revision,
-        public ?string $sessionId = null,
+        public ?string $grantId = null,
+        public ?string $grantScope = null,
+        public ?string $toolId = null,
         public ?string $expiresAt = null,
     ) {}
 
@@ -25,11 +29,14 @@ final readonly class TalosPolicyOutcome
             'capability' => $this->capability->value,
             'risk' => $this->risk->value,
             'decision' => $this->decision->value,
+            'actions' => $this->actions,
             'allowed' => $this->allowed,
             'requires_approval' => $this->requiresApproval,
             'reason' => $this->reason,
             'revision' => $this->revision,
-            'session_id' => $this->sessionId,
+            'grant_id' => $this->grantId,
+            'grant_scope' => $this->grantScope,
+            'tool_id' => $this->toolId,
             'expires_at' => $this->expiresAt,
         ];
     }

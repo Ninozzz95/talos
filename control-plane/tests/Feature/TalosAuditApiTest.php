@@ -178,10 +178,20 @@ final class TalosAuditApiTest extends TestCase
             ])
             ->assertForbidden();
 
-        $event = TalosAuditEvent::query()->where('event_type', 'registry_write.denied')->firstOrFail();
+        $this->withHeader('X-Talos-Registry-Token', 'wrong-secret')
+            ->postJson('/api/talos/tools', [])
+            ->assertForbidden();
 
-        $this->assertSame('connector', $event->subject_type);
-        $this->assertSame(true, $event->payload['credential_present'] ?? null);
-        $this->assertSame('[redacted]', $event->payload['provided_token'] ?? null);
+        $events = TalosAuditEvent::query()
+            ->where('event_type', 'registry_write.denied')
+            ->orderBy('subject_type')
+            ->get();
+
+        $this->assertSame(['connector', 'tool'], $events->pluck('subject_type')->all());
+        foreach ($events as $event) {
+            $this->assertSame(true, $event->payload['credential_present'] ?? null);
+            $this->assertArrayNotHasKey('provided_token', $event->payload);
+            $this->assertStringNotContainsString('wrong-secret', json_encode($event->payload, JSON_THROW_ON_ERROR));
+        }
     }
 }

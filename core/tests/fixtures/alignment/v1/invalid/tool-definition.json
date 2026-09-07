@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "id": "unsafe",
+  "name": "unsafe-tool",
+  "title": "Unsafe",
+  "description": "Invalid fixture.",
+  "input_schema": { "type": "string" },
+  "capabilities": ["filesystem.write"],
+  "actions": ["write"],
+  "risk": "critical",
+  "effects": {
+    "mutates_state": true,
+    "parallel_safe": true,
+    "requires_approval": false,
+    "produces_evidence": false
+  },
+  "lifecycle": { "kind": "downloaded_code", "revision": "latest" },
+  "execution": {
+    "locations": ["local_mobile"],
+    "implementation_key": "https://example.invalid/tool.js"
+  },
+  "enabled": true,
+  "planning_enabled": true
+}

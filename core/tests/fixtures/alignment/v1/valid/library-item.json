@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "id": "library-item-1",
+  "source": {
+    "type": "run_artifact",
+    "id": "artifact-1",
+    "url": null
+  },
+  "kind": "file",
+  "origin": "generated",
+  "title": "Research report.pdf",
+  "content": {
+    "status": "available",
+    "mime_type": "application/pdf",
+    "size_bytes": 24012,
+    "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "content_ref": "library-content:library-item-1",
+    "text_preview": "Executive summary",
+    "failure_code": null
+  },
+  "trust_boundary": "generated_content",
+  "provenance": {
+    "schema_version": 1,
+    "entity_id": "library-item-1",
+    "generated_at": "2026-08-04T14:00:00Z",
+    "activity": {
+      "kind": "tool_generation",
+      "tool_name": "document_create",
+      "session_id": "session-1",
+      "prompt_message_id": "message-1"
+    },
+    "agent": {
+      "kind": "model",
+      "provider": "deepseek",
+      "model": "deepseek-chat",
+      "version": null
+    },
+    "derived_from": [],
+    "content_credentials": {
+      "format": "none",
+      "present": false,
+      "verification": "not_checked",
+      "issuer": null
+    }
+  },
+  "relationships": {
+    "chat_count": 1,
+    "backlinks": []
+  },
+  "capabilities": {
+    "can_attach": true,
+    "can_preview": true,
+    "can_download": true
+  },
+  "occurred_at": "2026-08-04T14:00:00Z",
+  "metadata": {}
+}

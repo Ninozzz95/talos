@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Kadmos\Tool;
 
 use InvalidArgumentException;
+use Kadmos\Alignment\Contract\ToolDefinitionV1;
 
 final readonly class ToolDefinition implements \JsonSerializable
 {
@@ -120,6 +121,46 @@ final readonly class ToolDefinition implements \JsonSerializable
     public function jsonSerialize(): array
     {
         return $this->toWireArray();
+    }
+
+    /**
+     * @param non-empty-list<'local_mobile'|'trusted_node'|'remote_provider'> $locations
+     */
+    public function toAlignmentContractV1(
+        ProceduralToolSpec $spec,
+        string $id,
+        string $revision,
+        array $locations,
+    ): ToolDefinitionV1 {
+        return ToolDefinitionV1::fromArray([
+            'schema_version' => ToolDefinitionV1::SCHEMA_VERSION,
+            'id' => $id,
+            'name' => $spec->nodeType,
+            'title' => $this->title ?? $this->name,
+            'description' => $this->description ?? ($this->title ?? $this->name),
+            'input_schema' => $this->inputSchema,
+            'output_schema' => $this->outputSchema,
+            'capabilities' => [$spec->capability],
+            'actions' => $spec->actions,
+            'confirmation' => $spec->confirmation,
+            'risk' => $spec->risk,
+            'effects' => $spec->effects(),
+            'lifecycle' => [
+                'kind' => 'bundled',
+                'revision' => $revision,
+            ],
+            'execution' => [
+                'locations' => $locations,
+                'implementation_key' => $spec->toolName,
+            ],
+            'connector_id' => null,
+            'enabled' => true,
+            'planning_enabled' => true,
+            'annotations' => $this->annotations,
+            'metadata' => [
+                'mcp_name' => $this->name,
+            ],
+        ]);
     }
 
     /** @return array<string, mixed> */

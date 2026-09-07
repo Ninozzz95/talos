@@ -380,7 +380,7 @@ final class TalosGeneratedArtifactApiTest extends TestCase
         app(TalosCapabilityPolicyService::class)->update(
             $this->user,
             $capability,
-            TalosCapabilityDecision::ALLOW_UNTIL_REVOKED->value,
+            TalosCapabilityDecision::ALLOW->value,
             $revision,
         );
     }

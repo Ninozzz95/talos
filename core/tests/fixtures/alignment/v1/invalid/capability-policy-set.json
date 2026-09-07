@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "revision": 1,
+  "master_enabled": true,
+  "policies": [
+    {
+      "capability": "browser.read",
+      "actions": ["read"],
+      "decision": "allow_for_session",
+      "source": "user",
+      "risk": "medium"
+    }
+  ],
+  "grants": []
+}
