@@ -42,7 +42,7 @@
  * `avvia` ed `esiste` stanno nel contratto proprio perché si possano fingere.
  */
 import { spawn, execFile } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { urlAmmesso } from './browser-frame.mjs';
 
@@ -154,7 +154,16 @@ export function candidatiChromium(piattaforma = process.platform, ambiente = pro
  * @returns {{percorso:string, canale:'chrome'|'edge'|'chromium'}|null}
  */
 export function trovaChromium({ piattaforma = process.platform, ambiente = process.env, esiste } = {}) {
-  const guarda = typeof esiste === 'function' ? esiste : (() => false);
+  /*
+   * ⛔⛔ 07/9 — qui il ripiego era `() => false`: senza il parametro `esiste` la funzione
+   *   rispondeva SEMPRE «nessun browser», cioè era INERTE PER COSTRUZIONE fuori dai test. Trovato
+   *   dal vivo al primo giro vero: Chrome era al suo posto
+   *   (`C:\Program Files\Google\Chrome\Application\chrome.exe`) e la app diceva di non trovarlo.
+   *   È la stessa famiglia del cancello semantico spento da sempre: un ripiego che non guarda
+   *   niente supera ogni prova finché nessuno gli chiede la verità.
+   * ⇒ Il ripiego è la domanda VERA al disco; l'iniezione resta, e serve ai test.
+   */
+  const guarda = typeof esiste === 'function' ? esiste : ((dove) => existsSync(dove));
   for (const percorso of candidatiChromium(piattaforma, ambiente)) {
     let c = false;
     try { c = Boolean(guarda(percorso)); } catch { c = false; }
