@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
  * DAL MOCKUP AL TEMPLATE — il passo di build che rende vera la regola
  * «il mockup è la app, byte per byte».
  *
- * Legge `.claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html` (la fonte di verità,
+ * Legge `frontend/mockup/talos-mockup.html` (la fonte di verità,
  * che cambia solo per mano dell'owner o con il suo sì) e produce:
  *   · `index.template.html` — il markup del mockup senza le parti che sono del
  *     mockup e non del prodotto (la barra di regia, l'inventario dei componenti,
@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
  * Ora vive nel repo, fa una cosa sola, e non tocca mai il JavaScript.
  */
 const radice = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MOCKUP = path.resolve(radice, '../../.claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html');
+const MOCKUP = path.resolve(radice, 'mockup/talos-mockup.html');
 const FONT_LOCALI = [
   ['Instrument Sans', 400, 'instrument-sans-latin-400-normal'],
   ['Instrument Sans', 500, 'instrument-sans-latin-500-normal'],

@@ -30,7 +30,7 @@ import { PNG } from 'pngjs';
  */
 const qui = path.dirname(fileURLToPath(import.meta.url));
 const radice = path.resolve(qui, '../..');
-const MOCKUP = pathToFileURL(path.resolve(radice, '../../.claude/MOCKUP-REDESIGN-TALOS-2026-09-04.html')).href;
+const MOCKUP = pathToFileURL(path.resolve(radice, 'mockup/talos-mockup.html')).href;
 const APP = process.env.TALOS_PARITA_APP || pathToFileURL(path.resolve(radice, 'dist/index.html')).href;
 const APP_CON_JS = Boolean(process.env.TALOS_PARITA_APP);
 const ARTEFATTI = path.resolve(radice, 'artifacts/parita');
