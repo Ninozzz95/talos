@@ -734,6 +734,9 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    La lettura dell'agente ora si apre come PAGINA; il testo che ha letto il modello resta un modo a
    parte, perché e' quello che ha davvero visto lui. Due pulsanti, non un menù: sono due, e la scelta
    si vede a colpo d'occhio. */
+/* Nascosto agli occhi, non ai lettori di schermo: la ricetta classica (clip su un rettangolo di
+   un pixel) invece di `display:none`, che toglierebbe l'elemento anche a chi ascolta. */
+.talos-visivamente-nascosto{position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0}
 .talos-browser__modi{display:flex; gap:6px; padding:0 0 10px}
 .talos-browser__modi [aria-pressed="true"]{border-color:var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-accent-text)}
 .talos-browser__testo-pulito{white-space:pre-wrap; overflow-wrap:anywhere}

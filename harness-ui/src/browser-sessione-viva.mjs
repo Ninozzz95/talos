@@ -119,7 +119,36 @@ export function creaGestoreBrowserVivo({
     const cdp = clientFn(socket);
     // vincolo 2: la verità su chi è vivo la dice il browser, non la nostra mappa
     const staccaMorte = cdp.su('Target.detachedFromTarget', (evento) => { if (evento?.targetId) dimentica(evento.targetId); });
-    finestra = { browser, cdp, socket, canale: trovato.canale, staccaMorte };
+    /*
+     * ⛔ 07/9, trovato dalla prova C25: cliccando un link DENTRO la pagina, TALOS continuava a
+     *   credere di stare all'indirizzo di prima — la barra mostrava il vecchio, e chi rileggeva la
+     *   pagina rileggeva quella sbagliata. Una pagina viva naviga per conto suo (un clic, un
+     *   redirect, un `history.pushState`): l'indirizzo lo dice il browser, non la nostra memoria.
+     */
+    const segnaIndirizzo = (sessione, url) => {
+      if (!url) return;
+      for (const scheda of schede.values()) {
+        if (scheda.cdpSessionId === sessione) { scheda.url = url; tocca(scheda); }
+      }
+    };
+    const daContesto = (contesto) => (typeof contesto === 'string' ? contesto : contesto?.sessionId);
+    const staccaNavigazione = cdp.su('Page.frameNavigated', (evento, contesto) => {
+      const frame = evento?.frame;
+      if (!frame || frame.parentId) return; // solo il frame principale: un iframe dentro la pagina non è «la pagina»
+      segnaIndirizzo(daContesto(contesto), frame.url);
+    });
+    /*
+     * ⛔⛔ 07/9 — misurato sul 4174 cliccando «Issues» dentro github: la pagina cambiava DAVVERO
+     *   (l'annotazione leggeva «Issues Search Issues…») e l'indirizzo di TALOS restava quello di
+     *   prima. Causa: i siti moderni navigano SENZA ricaricare il documento (`history.pushState`,
+     *   Turbo, i router delle SPA), e `Page.frameNavigated` non scatta — è il limite che il modulo
+     *   del motore aveva dichiarato e lasciato aperto. `Page.navigatedWithinDocument` è l'evento che
+     *   racconta proprio quel caso: senza, la barra mente su metà del web.
+     */
+    const staccaDentroDocumento = cdp.su('Page.navigatedWithinDocument', (evento, contesto) => {
+      segnaIndirizzo(daContesto(contesto), evento?.url);
+    });
+    finestra = { browser, cdp, socket, canale: trovato.canale, staccaMorte, staccaNavigazione, staccaDentroDocumento };
     return finestra;
   }
 
@@ -128,6 +157,8 @@ export function creaGestoreBrowserVivo({
     const f = finestra;
     finestra = null;
     try { f.staccaMorte?.(); } catch { /* l'ascoltatore può essere già andato */ }
+    try { f.staccaNavigazione?.(); } catch { /* idem */ }
+    try { f.staccaDentroDocumento?.(); } catch { /* idem */ }
     try { f.cdp.chiudi(); } catch { /* il socket può essere già andato */ }
     try { await f.browser.chiudi(); } catch { /* idem per il processo */ }
   }
@@ -192,9 +223,16 @@ export function creaGestoreBrowserVivo({
     async segui(sessionId, onFrame, opzioni = {}) {
       const scheda = schedaDi(sessionId);
       if (scheda.ferma) await scheda.ferma();
+      /*
+       * ⛔ 07/9 — il fotogramma porta anche l'INDIRIZZO corrente. Misurato sul 4174: cliccando
+       *   «Issues» dentro github la pagina navigava davvero, il server lo sapeva (`frameNavigated` e
+       *   `navigatedWithinDocument`) e la barra dell'indirizzo di TALOS mostrava ancora la pagina di
+       *   prima — visto nello screenshot. Chi guarda deve poter fidarsi di quella barra: dire dove
+       *   sei è metà del mestiere di un browser.
+       */
       const trasmissione = await avviaTrasmissione(finestra.cdp, scheda.cdpSessionId, opzioni, (frame) => {
         tocca(scheda); // chi guarda sta usando la pagina: non è inattiva
-        onFrame(frame);
+        onFrame({ ...frame, url: scheda.url });
       });
       scheda.ferma = async () => {
         scheda.ferma = null;

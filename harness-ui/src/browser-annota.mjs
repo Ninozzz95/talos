@@ -203,6 +203,13 @@ const COLLA = `
   function sottoIlPunto(x, y) {
     var pila = document.elementsFromPoint ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
     for (var i = 0; i < pila.length; i += 1) { var e = pila[i]; if (e && e.nodeType === 1 && !nostro(e) && e !== document.documentElement) return e; }
+    /* 07/9 - misurato su example.org: fuori dal contenuto elementsFromPoint torna SOLO ["HTML"], che
+       il filtro qui sopra scarta di proposito (annotare l'intera pagina non serve a nessuno). Il
+       risultato era un pacchetto vuoto identico a un guasto: chi guardava - io per primo - credeva
+       che l'annotazione fosse rotta, e invece aveva cliccato sullo sfondo. Il corpo della pagina e'
+       un elemento vero: si torna quello.
+       ATTENZIONE: questo commento vive DENTRO una stringa template, quindi niente apici inversi. */
+    if (pila.length && document.body) return document.body;
     return null;
   }
   /* Shadow DOM APERTO: si scende per prendere i FATTI veri (html, testo, stili), ma il SELETTORE

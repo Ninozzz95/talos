@@ -42,6 +42,7 @@ import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaN
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
 import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo schermo del browser pilotato dal server
+import { gestoPerIlServer } from '../components/browser-gesti.js'; // 07/9: la vista e il server parlano due lingue: qui si traducono
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
 import { montaProgetti, progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina
@@ -9752,6 +9753,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const rs = state.realSession;
     const lista = schedeBrowser().map((x) => x.id);
     const prossima = prossimaDopoChiusuraBrowser(lista, lista.indexOf(id));
+    /*
+     * ⛔ 07/9, trovato dalla prova C25 sul 4174: chiudendo la scheda che aveva la vista viva, la
+     *   scheda spariva dalla striscia e il CHROMIUM restava acceso — un browser intero in RAM per una
+     *   pagina che nessuno guarda più. La scheda di TALOS e la scheda del browser pilotato sono due
+     *   cose diverse, e finora solo la prima si chiudeva.
+     */
+    const chiusa = schedeBrowser().find((x) => x.id === id);
+    if (chiusa?.viaVista === 'vivo') smontaVistaViva();
     if (id.startsWith('lettura-')) rs.browserChiuse.add(id); else rs.browserVive = rs.browserVive.filter((x) => x.id !== id);
     if (rs.browserAttiva === id) rs.browserAttiva = prossima;
     renderizzaBrowser();
@@ -9777,27 +9786,54 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   con la riga di scuse, cioè esattamente il difetto che stiamo togliendo. Trovato dalla prova
    *   dal vivo, non da una rilettura.
    */
-  const IDENTITA_BROWSER_SENZA_SESSIONE = 'browser-di-questa-pagina';
-  const identitaBrowser = () => state.realSession.id || IDENTITA_BROWSER_SENZA_SESSIONE;
+  /*
+   * ⛔⛔ 07/9, seconda correzione dopo la prova C25 sul 4174: l'identità era `state.realSession.id`
+   *   quando una sessione c'era. Sembrava giusto (una scheda per sessione, cookie separati) ed è
+   *   sbagliato per due motivi misurati:
+   *   · cambiando sessione la pagina aperta spariva — la scheda restava appesa alla sessione di prima
+   *     e il server rispondeva «questa sessione non ha una pagina aperta»;
+   *   · il Browser è una vista DI QUESTA PAGINA di TALOS, non della conversazione: chi lo apre si
+   *     aspetta di ritrovarlo dov'era, come in qualunque browser.
+   *   L'isolamento dei cookie resta dov'è giusto: il contesto separato lo crea il server per ogni
+   *   scheda (`Target.createBrowserContext`), e non ha bisogno di sapere quale conversazione guardi.
+   */
+  const IDENTITA_BROWSER = 'browser-di-questa-pagina';
+  const identitaBrowser = () => IDENTITA_BROWSER;
 
+  /*
+   * ⛔⛔ 07/9, corsa trovata dalla prova C25 sul 4174: la chiusura partiva con `void` — senza
+   *   aspettarla — e chi riapriva subito dopo (una rinavigazione, un secondo indirizzo) vedeva la
+   *   propria scheda uccisa dalla chiusura di quella di prima, arrivata in ritardo. A schermo:
+   *   la tela spariva e la vista restava vuota, senza un errore da nessuna parte.
+   * ⇒ Chi smonta restituisce la sua promessa, e chi apre la aspetta.
+   */
   function smontaVistaViva() {
     if (flussoVivo) { try { flussoVivo.close(); } catch { /* già chiuso */ } flussoVivo = null; }
     if (vistaViva) { try { vistaViva.distruggi(); } catch { /* già andata */ } vistaViva = null; }
     const contenitore = $('#browserVistaViva');
     if (contenitore) { contenitore.hidden = true; contenitore.replaceChildren(); }
-    void apiPost(`/api/v1/browser/vivo/chiudi?sessione=${encodeURIComponent(identitaBrowser())}`, {}).catch(() => {});
+    return apiPost(`/api/v1/browser/vivo/chiudi?sessione=${encodeURIComponent(identitaBrowser())}`, {}).catch(() => {});
   }
 
   async function apriNelBrowserVivo(voce) {
     const contenitore = $('#browserVistaViva');
     const sessione = identitaBrowser();
     if (!contenitore || !voce?.url) return false;
-    smontaVistaViva();
+    await smontaVistaViva(); // ⛔ si ASPETTA: senza, la chiusura arriva dopo e uccide la scheda nuova
     contenitore.hidden = false;
 
     vistaViva = creaVistaViva(contenitore, {
       onGesto: (gesto) => {
-        void apiPost(`/api/v1/browser/vivo/gesto?sessione=${encodeURIComponent(sessione)}`, gesto).catch(() => {});
+        /*
+         * ⛔ 07/9 — qui il gesto della VISTA si traduce in quello del SERVER. Senza traduzione i due
+         *   moduli parlano lingue diverse (`pulsante` contro `tasto`, `deltaX` contro `dx`, tipi che
+         *   dall'altra parte non esistono) e ogni gesto muore in silenzio: il server risponde «gesto
+         *   non riconosciuto» e a schermo non succede niente. Trovato dalla prova C25 sul 4174, con
+         *   tre righe rosse — rotella, clic e tasti — dopo che avevo dichiarato la vista funzionante.
+         */
+        const perIlServer = gestoPerIlServer(gesto);
+        if (!perIlServer) return;
+        void apiPost(`/api/v1/browser/vivo/gesto?sessione=${encodeURIComponent(sessione)}`, perIlServer).catch(() => {});
       },
       onErrore: (messaggio) => { voce.motivo = messaggio; renderizzaBrowser(); },
     });
@@ -9830,6 +9866,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       let messaggio = null;
       try { messaggio = JSON.parse(evento.data); } catch { return; }
       if (messaggio?.errore) { vistaViva?.stato('errore'); voce.motivo = messaggio.errore; renderizzaBrowser(); return; }
+      /* la pagina può navigare da sola (un clic, un redirect, un router): la barra la segue */
+      if (messaggio?.url && messaggio.url !== voce.url) { voce.url = messaggio.url; renderizzaBrowser(); }
       if (messaggio?.dati) vistaViva?.frame({ dati: messaggio.dati, metadati: messaggio.metadati });
     };
     flussoVivo.onerror = () => { vistaViva?.stato('fermo'); };
@@ -9863,6 +9901,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (voce.stato === 'caricamento') voce.stato = 'pronta';
         voce.viaVista = voce.proxata ? 'proxy' : 'cornice';
         voce.percheVia = esito?.percheVia || null;
+        /*
+         * ⛔ 07/9, trovato dalla prova C25 sul 4174: aprendo un sito INCORNICIABILE dopo uno vivo,
+         *   restavano a schermo tutt'e due — la cornice nuova e la tela del browser pilotato di prima.
+         *   Chi va sulla corsia della cornice non ha più bisogno del Chromium: si smonta, e con l'ultima
+         *   scheda si spegne anche il browser (è RAM di chi lavora).
+         */
+        smontaVistaViva();
       } else {
         /*
          * ⭐⭐⭐ 07/9 — QUI FINISCE IL RETTANGOLO GRIGIO. Fino a oggi un sito che vieta la cornice
