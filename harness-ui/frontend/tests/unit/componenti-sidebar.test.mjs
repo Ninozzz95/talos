@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { nomeModello, oraCompatta, statoSessione } from '../../src/components/session-item.js';
+import { nomeModello, oraCompatta, statoSessione, nomeLeggibileSessione } from '../../src/components/session-item.js';
 import { LUOGHI, LUOGHI_ALTRI } from '../../src/components/nav-item.js';
 import { fornitoreDelModello, nomeDaPercorso, testiPiede } from '../../src/components/workspace-footer.js';
 
@@ -105,4 +105,22 @@ test('un errore VERO resta «errore» — la cura non nasconde i guasti', () => 
 
 test('senza motivo di chiusura non si inventa niente: resta «errore»', () => {
   assert.equal(statoSessione({ conclusa: true, interrotta: false, ultimoEsito: 'errore' }).classe, 'errore');
+});
+
+/*
+ * ⛔ 07/9 — «libero:full-access · fork» era un identificatore interno a schermo, in sidebar e
+ * nell'albero. Provato anche al verso contrario: un nome scelto dall'owner vince sempre, e un
+ * taskId di forma sconosciuta si mostra com'è invece di sparire in una parola generica.
+ */
+test('un taskId tecnico diventa un nome leggibile', () => {
+  assert.equal(nomeLeggibileSessione('libero:progetto-3'), 'Compito libero · progetto-3');
+  assert.equal(nomeLeggibileSessione('libero:full-access'), 'Compito libero · cartella scelta a mano');
+  assert.equal(nomeLeggibileSessione('libero:default'), 'Compito libero');
+  assert.equal(nomeLeggibileSessione('delega:analisi'), 'Delega · analisi');
+});
+
+test('senza taskId non si inventa un nome, e una forma sconosciuta resta com è', () => {
+  assert.equal(nomeLeggibileSessione(''), 'Sessione senza nome');
+  assert.equal(nomeLeggibileSessione(null), 'Sessione senza nome');
+  assert.equal(nomeLeggibileSessione('corpus/refactor-42'), 'corpus/refactor-42');
 });

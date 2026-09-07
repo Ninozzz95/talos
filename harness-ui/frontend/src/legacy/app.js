@@ -1,5 +1,6 @@
 import {aggiornaProviderList,montaProviderPanel} from '../components/provider-card.js';
 import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica } from '../components/politiche.js';
+import { nomeLeggibileSessione } from '../components/session-item.js';
 import {aggiornaElencoRuntime,montaPannelloRuntime} from '../components/runtime-modelli.js';
 import {normalizzaCapacita,aggiornaMisuraMemoria,montaMisuraMemoria} from '../components/misura-memoria.js';
 import {montaCorniceModelLab,aggiornaStatoCorniceModelLab} from '../components/cornice-model-lab.js';
@@ -5870,6 +5871,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     // ⭐ 07/9, terza tornata: il foglio PERMESSI — il piu visitato dei sei rimasti, e quello dove
     //    si decide la sicurezza. Vedi `disegnaPermessiIn`/`collegaAzioniPermessi`.
     permissions: 'veloPermessi',
+    // ⭐ 07/9 — l'albero: rami veri (fork) e deleghe vere, vedi `disegnaAlberoIn`.
+    sessionTree: 'veloAlbero',
   };
 
   /**
@@ -6058,6 +6061,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function preparaVeloDaFoglio(tipo, velo) {
+    if (tipo === 'sessionTree') { void disegnaAlberoIn(velo); return; }
     if (tipo === 'permissions') {
       /*
        * ⛔ 07/9 — il velo prende il posto del foglio: stessa logica, pelle nuova. Disegna prima
@@ -7211,6 +7215,128 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
   }
 
+  /**
+   * L'albero della sessione dai DATI VERI: questa sessione, i suoi rami (fork) e le deleghe.
+   * ⛔ 07/9 — il velo del mockup aveva tre nodi scritti a mano («tronco comune», «Ramo A», «Ramo
+   *   B») e un pulsante «Confronta A e B» che non confrontava niente. I fork sono già sessioni vere
+   *   e l'elenco li dichiara (`forkDa`); le deleghe hanno la loro rotta. Dove non c'è niente si
+   *   dice, invece di disegnare un albero finto.
+   * Ricerca 07/09/2026: claude-code #32631 («Conversation Branching — fork, merge, tree
+   * navigation»), LangChain «Branching chat» (ogni ramo riparte dal checkpoint del genitore, e
+   * l'albero è persistito), Ably «Conversation tree branching» (msgId/parentId/forkOf: un grafo,
+   * non una lista). Il nostro fork È già una sessione: l'albero lo dichiara invece di inventarne
+   * un secondo modello.
+   */
+  function nodoAlbero({ titolo, sotto, token, giri, stato = 'done', qui = false, onApri = null, azione = null }) {
+    const nodo = document.createElement('div');
+    nodo.className = `talos-tree__node${qui ? ' talos-tree__node--current' : ''}${onApri ? ' talos-tree__node--branch' : ''}`;
+    nodo.setAttribute('role', 'treeitem');
+    nodo.setAttribute('aria-selected', String(qui));
+    nodo.setAttribute('aria-level', onApri ? '2' : '1');
+    const rail = document.createElement('span'); rail.className = 'talos-tree__rail';
+    const dot = document.createElement('span');
+    dot.className = `talos-tree__dot${stato === 'live' ? ' talos-tree__dot--live' : stato === 'done' ? ' talos-tree__dot--done' : ''}`;
+    const testo = document.createElement('span'); testo.className = 'talos-tree__text';
+    testo.append(textElement('span', 'talos-tree__title', titolo), textElement('span', 'talos-tree__sub', sotto));
+    const aside = document.createElement('span'); aside.className = 'talos-tree__aside';
+    if (token) aside.append(textElement('span', 'talos-mono talos-measure', token));
+    if (Number.isFinite(giri) && giri > 0) aside.append(textElement('span', 'talos-mono talos-muted', `${giri} gir${giri === 1 ? 'o' : 'i'}`));
+    if (qui) aside.append(textElement('span', 'talos-badge talos-badge--accent talos-badge--sm', 'Qui'));
+    else if (onApri) {
+      const bottone = textElement('button', 'talos-button talos-button--ghost talos-button--sm', azione || 'Apri');
+      bottone.type = 'button';
+      bottone.addEventListener('click', onApri);
+      aside.append(bottone);
+    }
+    nodo.append(rail, dot, testo, aside);
+    return nodo;
+  }
+
+  /** I token di una sessione in forma corta, senza il resto della frase. */
+  function soloToken(usage) {
+    if (!usage) return '';
+    const testo = formattaUsageBreve(usage);
+    return testo.includes(' · ') ? testo.split(' · ')[0] : testo;
+  }
+
+  async function disegnaAlberoIn(radice) {
+    const nodi = $('#veloAlberoNodi', radice);
+    if (!nodi) return;
+    const riassunto = $('#veloAlberoRiassunto', radice);
+    const titolo = $('#titoloAlbero', radice);
+    if (!state.realSession.id) {
+      nodi.replaceChildren(textElement('p', 'board-empty', 'Nessuna sessione aperta: apri o avvia una sessione per vederne i rami.'));
+      if (riassunto) riassunto.textContent = '';
+      return;
+    }
+    if (titolo) titolo.textContent = `Rami e deleghe di ${tronca(state.session || 'questa sessione', 46)}`;
+    const elenco = [...state.sessionSelection.available.values()];
+    const mia = elenco.find((v) => v.sessionId === state.realSession.id) || null;
+    const usoSessione = state.realSession.usageSessione || state.realSession.usage;
+    const pezzi = [];
+    // il nodo da cui questa sessione è nata, se è essa stessa un ramo
+    const padre = mia?.forkDa ? elenco.find((v) => v.sessionId === mia.forkDa) : null;
+    if (mia?.forkDa) {
+      pezzi.push(nodoAlbero({
+        titolo: padre ? tronca(padre.nome || nomeLeggibileSessione(padre.taskId), 52) : 'La sessione da cui è nato questo ramo',
+        sotto: padre ? 'da qui è nato questo ramo' : 'non è più nell’elenco, ma il ramo resta leggibile',
+        token: soloToken(padre?.usageSessione),
+        giri: padre?.usage?.giri,
+        onApri: padre ? () => { passaASessione(padre.sessionId, padre.taskId, padre.nome, padre.modello); chiudiVeloMockup('veloAlbero'); } : null,
+      }));
+    }
+    pezzi.push(nodoAlbero({
+      titolo: tronca(state.session || 'questa sessione', 52),
+      sotto: mia?.interrotta ? 'sessione corrente · interrotta' : mia?.conclusa ? 'sessione corrente · conclusa' : 'sessione corrente · in corso',
+      token: soloToken(usoSessione),
+      giri: usoSessione?.giri,
+      stato: mia && !mia.conclusa && !mia.interrotta ? 'live' : 'done',
+      qui: true,
+    }));
+    const rami = elenco.filter((v) => v.forkDa === state.realSession.id);
+    for (const ramo of rami) {
+      pezzi.push(nodoAlbero({
+        titolo: tronca(ramo.nome || nomeLeggibileSessione(ramo.taskId), 52),
+        sotto: ramo.interrotta ? 'ramo · interrotto' : ramo.conclusa ? 'ramo · concluso' : 'ramo · in corso',
+        token: soloToken(ramo.usageSessione),
+        giri: ramo.usage?.giri,
+        stato: !ramo.conclusa && !ramo.interrotta ? 'live' : 'done',
+        onApri: () => { passaASessione(ramo.sessionId, ramo.taskId, ramo.nome, ramo.modello); chiudiVeloMockup('veloAlbero'); },
+        azione: 'Riapri',
+      }));
+    }
+    nodi.replaceChildren(...pezzi);
+    if (riassunto) {
+      // ⛔ 07/9, misurato: dentro un ramo il piede diceva ancora «Nessun ramo» — vero alla lettera
+      //    (questo ramo non ha figli) e disorientante, perché il ramo era proprio quello aperto.
+      if (rami.length) riassunto.textContent = `${rami.length} ram${rami.length === 1 ? 'o' : 'i'} da questa sessione`;
+      else if (mia?.forkDa) riassunto.textContent = 'Questa sessione È un ramo · nessun ramo suo';
+      else riassunto.textContent = 'Nessun ramo: si crea con «Fork questa sessione»';
+    }
+    // le deleghe hanno una rotta a parte: finché non risponde non si dichiara un numero
+    let figli = [];
+    try {
+      figli = (await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/children`))?.figli || [];
+    } catch { figli = []; }
+    if (nodi !== $('#veloAlberoNodi', radice)) return;   // il velo è cambiato mentre la richiesta era in volo
+    for (const figlio of figli) {
+      nodi.append(nodoAlbero({
+        titolo: tronca(figlio.task || '(compito non registrato)', 52),
+        sotto: figlio.interrotta ? 'delega · interrotta' : figlio.conclusa ? `delega · ${figlio.esitoDelega || 'conclusa'}` : 'delega · in corso',
+        token: soloToken(figlio.usageSessione),
+        giri: figlio.usage?.giri,
+        stato: !figlio.conclusa && !figlio.interrotta ? 'live' : 'done',
+        onApri: () => { passaASessione(figlio.sessionId, figlio.sessionId, figlio.task); chiudiVeloMockup('veloAlbero'); },
+      }));
+    }
+    const nota = $('#veloAlberoNota .talos-scope__text', radice);
+    if (nota && !rami.length && !figli.length && mia?.forkDa) {
+      nota.textContent = 'Da questo ramo non ne è nato nessun altro, e non ci sono deleghe. La sessione madre resta intatta: aprirla non tocca ciò che hai fatto qui.';
+    } else if (nota && !rami.length && !figli.length) {
+      nota.textContent = 'Nessun ramo e nessuna delega. Un ramo nasce da «Fork questa sessione»; le deleghe le avvia TALOS da sé quando un sotto-compito è separabile.';
+    }
+  }
+
   function wireSheetActions(type) {
     collegaAzioniPermessi(sheetBody, {
       dopoLaScelta: () => closeEmbeddedDialog(sheetDialog),
@@ -8033,7 +8159,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     const testoBolla = task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : 'Comando diretto');
     const etichettaMeta = (task.id
-      ? `Task reale · ${task.id}`
+      ? nomeLeggibileSessione(task.id)
       : (task.consegna || task.consegnaCorta)
         ? `Compito libero${task.progetto ? ` · ${task.progetto}` : ''}`
         : 'Comando diretto') + etichettaPermessiGiro(contesto);
@@ -12266,7 +12392,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const generation = nuovaGenerazioneSessione();
     state.realSession.taskId = task.id;
     state.realSession.treeWorkspaceKey = `task:${task.id}`;
-    state.session = `Task reale · ${task.id}`;
+    state.session = nomeLeggibileSessione(task.id);
     sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
@@ -12401,7 +12527,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(idOrigine)}/fork`, {});
       const generation = nuovaGenerazioneSessione();
       state.realSession.taskId = taskIdOrigine;
-      state.session = `Task reale · ${taskIdOrigine} (fork)`;
+      /*
+       * ⛔ 07/9, visto nel velo Albero: il ramo si chiamava «Task reale · libero:full-access (fork)»
+       *   — l'identificatore interno a schermo, contro la regola dei nomi tecnici. Un ramo porta il
+       *   nome di ciò da cui è nato: è l'unica cosa che dice qualcosa a chi lo rilegge domani.
+       */
+      const nomeOrigine = String(origine.nome || state.session || '').replace(/\s*\(ramo\)\s*$/, '').trim();
+      state.session = nomeOrigine ? `${nomeOrigine} (ramo)` : 'Ramo della sessione';
       sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
@@ -12850,7 +12982,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     $('#conversation')?.classList.toggle('is-restoring', state.realSession.deferHistoricalRendering);
     state.realSession.taskId = taskId;
     state.realSession.treeWorkspaceKey = `session:${sessionId}`;
-    state.session = nome || `Task reale · ${taskId}`; // ⭐ un nome scelto dall'owner vince sul taskId
+    state.session = nome || nomeLeggibileSessione(taskId); // ⭐ un nome scelto dall'owner vince sul taskId
     applicaImpostazioniSessione(contrattoSessione);
     sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */

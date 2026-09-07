@@ -59,7 +59,12 @@
   --talos-measure-measured:var(--talos-text); --talos-measure-estimated:var(--talos-muted);
   /* struttura (A9, D24) */
   --talos-sidebar-w:276px; --talos-inspector-w:340px; --talos-topbar-h:60px;
-  --talos-measure-w:78ch;
+  /* ⛔ 07/9, owner: «metti la larghezza massima della chat di 768px di default». Era `78ch`, cioe
+     una misura LEGATA AL FONT: cambiando la dimensione del testo della chat cambiava anche la
+     colonna, e a «extra piccolo» si stringeva sotto i 600 px. 768 px e un numero, e resta quello.
+     ⛔ La modalita a tutta larghezza NON passa di qui: `:root.chat-full-width` mette
+     `max-width:none` sulla colonna e `calc(100% - 56px)` sul piede, e continua a farlo. */
+  --talos-measure-w:768px;
   --talos-row-session:66px; --talos-row:44px; --talos-row-pad:12px; --talos-gap:10px;
 }
 :root[data-densita="compatta"]{ --talos-row-session:52px; --talos-row:36px; --talos-row-pad:8px; --talos-gap:6px; }
@@ -480,7 +485,24 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
    Il valore lo misura la regia (metà dell'altezza visibile, `--stream-follow-space`); qui vale 0
    finché non c'è una conversazione vera, così la schermata vuota resta centrata com'è. */
 .talos-conversation__column{max-width:calc(92px + var(--talos-measure-w)); margin:0 auto; width:100%; padding-bottom:var(--stream-follow-space, 0px)}
-.talos-chat-foot > *{max-width:min(var(--talos-measure-w), calc(100% - 56px)); margin-left:auto; margin-right:auto}
+/* ⛔⛔ 07/9, owner: «il chat composer non è centrato bene rispetto alla chat». Misurato a 1920: i
+   messaggi da 498 a 1266, il composer da 544 a 1312 — 46 px più a destra, e a 1440 la differenza
+   era di 23. Non era un caso: la conversazione e il piede vivevano in due colonne DIVERSE.
+   · la conversazione ha padding 44 e dentro `.talos-conversation__column` larga `92px + misura`;
+   · dentro, `.talos-turn` è una griglia `0 minmax(0,1fr) 46px`: il testo occupa la colonna di
+     mezzo, e i 46 px di destra sono la spina dei giri;
+   · il piede aveva padding 18 e centrava il composer su TUTTA la sua larghezza.
+   ⇒ Il piede si mette nella stessa colonna: stesso padding della conversazione, stessa larghezza
+   massima, e il contenuto allineato al bordo SINISTRO come il testo, largo quanto il testo — cioè
+   la colonna meno la spina. Così i due bordi coincidono a qualunque larghezza, e non c'è un numero
+   magico da tenere aggiornato a mano: le misure vengono dalle stesse variabili. */
+.talos-chat-foot > *{--talos-colonna-chat:min(calc(92px + var(--talos-measure-w)), 100%); --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - 46px)); --talos-larghezza-piede:min(var(--composer-max-w, var(--talos-testo-chat)), 100%); width:var(--talos-larghezza-piede); max-width:none; margin-left:max(-44px, calc((100% - var(--talos-colonna-chat)) / 2 + (var(--talos-testo-chat) - var(--talos-larghezza-piede)) / 2)); margin-right:auto}
+/* ⛔ 07/9, owner, precisazione: «il chat composer deve rimanere estensibile oltre la larghezza della
+   chat, ma i lati devono essere equidistanti da un bordo rispetto all'altro della chat». Cioè: la
+   larghezza resta quella che gli dà il ridimensionamento (`--composer-max-w`), e il CENTRO è quello
+   della colonna del testo — così quando è più largo sporge dello stesso tanto di qua e di là.
+   Il margine sinistro è quindi «dove inizia la colonna» più «metà della differenza fra il testo e
+   il composer»: quando le due misure coincidono torna esattamente l'allineamento al testo. */
 .talos-conversation--empty{display:grid; place-items:center; padding:28px}
 .talos-empty{max-width:var(--talos-measure-w); width:100%}
 .talos-empty__mark{width:44px; height:44px; margin-bottom:18px}
@@ -593,7 +615,12 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
  * contenitore: così non scende mai sotto la misura normale e cresce ovunque ci sia spazio vero.
  */
 :root.chat-full-width .talos-conversation__column{max-width:none}
-:root.chat-full-width .talos-chat-foot > *{max-width:calc(100% - 56px)}
+:root.chat-full-width .talos-chat-foot > *{--talos-colonna-chat:100%; width:calc(100% - 46px); max-width:none; margin-left:0}
+/* ⛔ 07/9, misurato a 1920 px: «a tutta larghezza» allargava la colonna e il composer (1216 e
+   1212) ma i MESSAGGI restavano a 768 — il tetto di `.talos-message` non veniva sciolto, e la
+   modalita manteneva solo meta della sua promessa. Si vedeva poco finche la misura era `78ch`
+   (piu stretta); portandola a 768 px il vuoto ai lati diventa evidente. */
+:root.chat-full-width .talos-message,:root.chat-full-width .talos-empty{max-width:none}
 :root.immersive-header .talos-topbar{border-bottom-color:transparent}
 body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{animation:none!important; transition:none!important}
 .talos-touched{margin-top:10px; overflow:hidden}
@@ -603,7 +630,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-touched__name{flex:1; min-width:0; font-family:var(--talos-font-mono); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
 /* ---------- 9. PIEDE DELLA CHAT: striscia (B31), coda (B15), compositore ---------- */
-.talos-chat-foot{flex:none; padding:0 18px 12px}
+.talos-chat-foot{flex:none; padding:0 44px 12px}   /* ⛔ 44 come la conversazione: e cosi che le due colonne coincidono */
 .talos-status-strip{display:flex; align-items:center; gap:12px; padding:9px 14px; margin-bottom:8px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel)}
 .talos-status-strip__pulse{width:8px; height:8px; border-radius:50%; background:var(--talos-accent-hover); flex:none; animation:talos-pulse 1.6s var(--talos-motion-ease) infinite}
 @keyframes talos-pulse{0%,100%{opacity:.35; transform:scale(.9)} 50%{opacity:1; transform:scale(1)}}
@@ -823,7 +850,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-composer{position:relative; min-height:var(--composer-canonical-h, auto); display:flex; flex-direction:column}
 .talos-composer .talos-composer__input{flex:1 1 auto}
 .talos-composer .talos-composer__bar{flex:none; margin-top:10px}
-.talos-chat-foot > .talos-composer{max-width:min(var(--composer-max-w, var(--talos-measure-w)), calc(100% - 56px))}
+/* ⛔ la larghezza del composer la decide la regola sopra, con `--composer-max-w`: una misura, un posto solo. */
 .talos-composer__input{max-height:var(--composer-textarea-max-h, 40vh); overflow-y:auto}
 .talos-composer.composer-resizing{user-select:none}
 .talos-chip__label{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -2483,35 +2510,25 @@ export function registraSessione(sessione) {
 <div class="overlay-layer overlay-layer--modal" id="veloAlbero" data-c="OverlayLayer" hidden>
   <div class="talos-dialog talos-dialog--medium" data-c="Dialog" role="dialog" aria-modal="true" aria-labelledby="titoloAlbero"><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-width" data-c="Resizer" data-dialog-resize="width" aria-label="Ridimensiona larghezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-height" data-c="Resizer" data-dialog-resize="height" aria-label="Ridimensiona altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-both" data-c="Resizer" data-dialog-resize="both" aria-label="Ridimensiona larghezza e altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button>
     <div class="talos-dialog__header">
-      <div class="talos-grow"><span class="talos-eyebrow">Albero della sessione</span><h2 class="talos-dialog__title" id="titoloAlbero">I rami di W1-02 registro processi</h2></div>
+      <div class="talos-grow"><span class="talos-eyebrow">Albero della sessione</span><h2 class="talos-dialog__title" id="titoloAlbero">Rami e deleghe di questa sessione</h2></div>
       <button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloAlbero" title="Chiudi"><svg class="i"><use href="#i-x"/></svg></button>
     </div>
     <div class="talos-dialog__body">
-      <p class="talos-dialog__lead">Modificare un tuo messaggio crea un ramo invece di sovrascrivere: le due strade restano confrontabili, e ogni nodo dice quanto è costato.</p>
-      <div class="talos-tree" data-c="BranchTree" role="tree" aria-label="Rami della sessione">
-        <div class="talos-tree__node" role="treeitem" aria-selected="false" aria-level="1">
-          <span class="talos-tree__rail"></span>
-          <span class="talos-tree__dot talos-tree__dot--done"></span>
-          <span class="talos-tree__text"><span class="talos-tree__title">Giri 1-4 · tronco comune</span><span class="talos-tree__sub">la richiesta, la lettura del registro, le due condizioni</span></span>
-          <span class="talos-tree__aside"><span class="talos-mono talos-measure">6,5k</span><span class="talos-mono talos-muted">4 giri</span></span>
-        </div>
-        <div class="talos-tree__node talos-tree__node--branch" role="treeitem" aria-selected="false" aria-level="2">
-          <span class="talos-tree__rail"></span>
-          <span class="talos-tree__dot"></span>
-          <span class="talos-tree__text"><span class="talos-tree__title">Ramo A · soglie scritte a mano</span><span class="talos-tree__sub">abbandonato al giro 6 · «i numeri nella logica non si spiegano»</span></span>
-          <span class="talos-tree__aside"><span class="talos-mono talos-measure">3,2k</span><span class="talos-mono talos-muted">2 giri</span><button class="talos-button talos-button--ghost talos-button--sm">Riapri</button></span>
-        </div>
-        <div class="talos-tree__node talos-tree__node--branch talos-tree__node--current" role="treeitem" aria-selected="true" aria-level="2">
-          <span class="talos-tree__rail"></span>
-          <span class="talos-tree__dot talos-tree__dot--live"></span>
-          <span class="talos-tree__text"><span class="talos-tree__title">Ramo B · soglie come parametri</span><span class="talos-tree__sub">sessione corrente · giri 5-7 · scrittura, ricevuta, suite in corso</span></span>
-          <span class="talos-tree__aside"><span class="talos-mono talos-measure">31,5k</span><span class="talos-mono talos-muted">3 giri</span><span class="talos-badge talos-badge--accent talos-badge--sm">Qui</span></span>
-        </div>
-      </div>
-      <div class="talos-card talos-scope"><span class="talos-scope__text">Il ramo A resta leggibile e riapribile: nessun giro pagato viene cancellato da una modifica.</span></div>
+      <p class="talos-dialog__lead">Ogni ramo e ogni delega è una sessione vera: resta leggibile, riapribile, e dice quanto è costata.</p>
+      <!-- ⛔ 07/9 — qui c'erano tre nodi SCRITTI A MANO («Ramo A», «Ramo B», «tronco comune») e un
+           pulsante «Confronta A e B» che non confrontava niente. I nodi ora arrivano dai dati veri
+           (`disegnaAlberoIn`): questa sessione, i suoi fork — l'elenco li dichiara con `forkDa` — e
+           le deleghe da `GET /api/v1/sessions/:id/children`. Dove non c'è niente si dice, non si
+           disegna un albero finto.
+           Ricerca 07/09/2026: claude-code #32631 «Conversation Branching — fork, merge, tree
+           navigation», LangChain «Branching chat» (ogni ramo riparte dal checkpoint del genitore, e
+           l'albero è persistito), Ably «Conversation tree branching» (msgId/parentId/forkOf: un
+           grafo, non una lista). Il nostro fork è già una sessione: l'albero lo dichiara. -->
+      <div class="talos-tree" data-c="BranchTree" role="tree" aria-label="Rami della sessione" id="veloAlberoNodi"></div>
+      <div class="talos-card talos-scope" id="veloAlberoNota"><span class="talos-scope__text">Un ramo non cancella niente: i giri già pagati restano dove sono.</span></div>
     </div>
     <div class="talos-dialog__footer">
-      <button class="talos-button talos-button--secondary">Confronta A e B</button>
+      <span class="talos-muted" id="veloAlberoRiassunto"></span>
       <span class="talos-grow"></span>
       <button class="talos-button talos-button--primary" data-chiudi="veloAlbero">Chiudi</button>
     </div>
