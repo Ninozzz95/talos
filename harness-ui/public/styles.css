@@ -396,6 +396,12 @@ use[href="#glifo"],
   cursor: not-allowed;
   opacity: .58;
 }
+.talos-button--primary:disabled {
+  background: var(--talos-panel-soft);
+  border-color: var(--talos-border);
+  color: var(--talos-muted);
+  opacity: .75;
+}
 .talos-button--primary {
   min-height: var(--talos-primary-height);
   background: var(--talos-accent);
@@ -4511,6 +4517,9 @@ body.reduce-motion *::after {
 }
 .talos-browser__space {
   margin-top: var(--talos-space-md);
+}
+#schermoBrowser .talos-page {
+  padding-bottom: var(--talos-space-lg);
 }
 .talos-browser__head,
 .talos-browser__pad,

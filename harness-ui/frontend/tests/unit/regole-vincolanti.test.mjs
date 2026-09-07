@@ -16,7 +16,10 @@ import { giudica, tocca, citaUnaFonte, haCoAuthoring, SUPERFICI_VISIBILI } from 
  */
 
 const ORA = 1_700_000_000_000;
-const BASE = { radice: '/progetto', messaggio: 'fix(x): una cosa — misurato dal vivo il 07/09/2026', fileToccati: [] };
+/* ⛔ l'occhio si inietta: una prova che guardasse le foto VERE del disco direbbe cose diverse su
+   macchine diverse. Qui si dichiara «tutte guardate», e c'è una prova apposta per il caso contrario. */
+const OCCHIO_A_POSTO = { ok: true, mancanti: [], guardate: 2, totali: 2 };
+const BASE = { radice: '/progetto', messaggio: 'fix(x): una cosa — misurato dal vivo il 07/09/2026', fileToccati: [], occhio: OCCHIO_A_POSTO };
 
 test('UI toccata SENZA foto: il cancello dice NO', () => {
   const esito = giudica({ ...BASE, fileToccati: ['harness-ui/frontend/src/components/x.js'], quandoFoto: 0, quandoCodice: ORA });
@@ -82,4 +85,14 @@ test('LE SUPERFICI: si riconosce ciò che si vede, e non si blocca ciò che non 
   assert.equal(tocca('harness-ui/public/styles.css'), true);
   assert.equal(tocca('harness-ui/src/http-app.mjs'), false, 'il server non si guarda con gli occhi: si prova con i test');
   assert.ok(SUPERFICI_VISIBILI.length >= 3);
+});
+
+test('L’OCCHIO: foto scattate e non guardate bloccano il commit, e il cancello dice quali', () => {
+  const esito = giudica({
+    ...BASE, fileToccati: ['harness-ui/frontend/src/x.js'], quandoFoto: ORA + 1000, quandoCodice: ORA,
+    occhio: { ok: false, mancanti: ['03-clic.png', '05-cornice.png'], guardate: 6, totali: 8 },
+  });
+  assert.equal(esito.ok, false);
+  assert.match(esito.motivi.join(' '), /8 foto e ne hai guardate 6/);
+  assert.match(esito.motivi.join(' '), /03-clic\.png/);
 });

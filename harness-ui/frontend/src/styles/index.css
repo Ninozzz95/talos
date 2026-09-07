@@ -235,6 +235,10 @@ use[href="#glifo"],.talos-brand__mark .glyph,.talos-empty__mark .glyph,.talos-av
 .talos-button:hover:not(:disabled){transform:translateY(-1px)}
 .talos-button:active:not(:disabled){transform:translateY(0)}
 .talos-button:disabled{color:var(--talos-muted); cursor:not-allowed; opacity:.58}
+/* ⛔ 07/9, guardando gli screenshot: un pulsante PRIMARIO disabilitato restava oro pieno con il
+   testo scuro sopra — «Porta i commenti nella chat» sembrava il pulsante da premere e non si
+   leggeva. L'opacità da sola non basta su un fondo saturo: chi è spento si spegne davvero. */
+.talos-button--primary:disabled{background:var(--talos-panel-soft); border-color:var(--talos-border); color:var(--talos-muted); opacity:.75}
 .talos-button--primary{min-height:var(--talos-primary-height); background:var(--talos-accent); color:var(--talos-text-on-accent); box-shadow:inset 0 1px rgba(255,255,255,.14)}
 .talos-button--primary:hover:not(:disabled){background:var(--talos-accent-hover)}
 .talos-button--secondary{border-color:var(--talos-border); background:var(--talos-panel-soft)}
@@ -1287,6 +1291,10 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-browser__meta{font-size:var(--talos-font-size-xs)}
 .talos-browser__heading{font-size:var(--talos-font-size-md)}
 .talos-browser__space{margin-top:var(--talos-space-md)}
+/* ⛔ 07/9, guardando gli screenshot: l'ultima riga della vista Browser finiva a DUE pixel dal
+   bordo della finestra — non sforava, ma sembrava tagliata, ed è la stessa cosa per chi guarda.
+   Un po' di respiro in fondo, come ce l'hanno le altre schermate. */
+#schermoBrowser .talos-page{padding-bottom:var(--talos-space-lg)}
 .talos-browser__head,.talos-browser__pad,.talos-browser__request,.talos-browser__notice,.talos-browser__note{padding:var(--talos-space-md)}
 .talos-browser__request,.talos-browser__note{background:var(--talos-panel-soft)}
 .talos-browser__request>*+*{margin-top:var(--talos-space-sm)}

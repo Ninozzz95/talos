@@ -118,7 +118,18 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
     // il legame che un lettore di schermo può seguire: senza questo avremmo tolto e non dato
     elemento.setAttribute('aria-describedby', 'talosTip');
     elemento.style.anchorName = '--talos-tip';
-    const lato = latoPreferito(elemento.getBoundingClientRect(), { width: globalThis.innerWidth, height: globalThis.innerHeight });
+    /*
+     * ⛔ 07/9, visto negli screenshot della prova del curioso: il fumetto di una scheda del Browser
+     *   si apriva SOPRA e copriva la barra delle viste (Chat / Terminale / Review / Browser), che sta
+     *   a 60px dal bordo. `latoPreferito` sceglie «sopra» ogni volta che c'è spazio, e lo spazio c'era:
+     *   solo che lì sopra non c'è il vuoto, c'è la navigazione della sessione.
+     * ⇒ Chi ha qualcosa sopra di sé può dirlo con `data-tip-lato`, e il fumetto lo rispetta. La
+     *   scelta automatica resta per tutti gli altri, che sono la maggioranza.
+     */
+    const latoChiesto = elemento.getAttribute?.('data-tip-lato');
+    const lato = latoChiesto === 'sotto' ? 'block-end'
+      : latoChiesto === 'sopra' ? 'block-start'
+        : latoPreferito(elemento.getBoundingClientRect(), { width: globalThis.innerWidth, height: globalThis.innerHeight });
     bolla.style.positionArea = lato;
     bolla.hidden = false;
     try { bolla.showPopover?.(); } catch { /* il fallback è `hidden`, già tolto */ }
