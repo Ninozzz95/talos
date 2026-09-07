@@ -430,7 +430,10 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     if (el.vuoto) el.vuoto.hidden = stato.schede.length > 0;
     // l'articolo resta per le note anche su una pagina viva: si nascondono solo testata e testo acquisito
     if (el.articolo) el.articolo.hidden = !s;
-    const testata = el.titolo?.closest('header'); if (testata) testata.hidden = !s || s.tipo === 'viva';
+    /* ⛔ 07/9 — la testata non è più un `header` sopra la pagina: è il pezzo piccolo dentro la riga
+       dei modi (owner: «più piccolo, così la finestra del browser è più grande»). Si nasconde lo stesso
+       su una pagina viva, dove il titolo lo dice già la scheda. */
+    const testata = el.titolo?.closest('.talos-browser__testata'); if (testata) testata.hidden = !s || s.tipo === 'viva';
     const lettura = Boolean(s) && s.tipo !== 'viva';
     // i due modi valgono solo per una lettura dell'agente: una pagina viva e' gia' una pagina
     for (const b of el.modi || []) {
