@@ -213,6 +213,9 @@ button{background:none; border:0; cursor:pointer; padding:0}
 .i--sm{width:14px; height:14px}
 .i--xs{width:13px; height:13px}
 .glyph{fill:currentColor; stroke:none}
+/* ⛔ 07/9 — il marchio è l'unico simbolo disegnato a TRATTO: la regola qui sopra lo riempirebbe
+   di colore facendone una macchia. Il simbolo porta i propri attributi, e qui non li si scavalca. */
+use[href="#glifo"],.talos-brand__mark .glyph,.talos-empty__mark .glyph,.talos-avatar .glyph{fill:none; stroke:currentColor}
 
 /* vocabolario tipografico */
 .talos-eyebrow{font-size:11px; font-weight:500; letter-spacing:.14em; text-transform:uppercase; color:var(--talos-muted)}
@@ -539,7 +542,19 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-conversation--empty{display:grid; place-items:center; padding:28px}
 .talos-empty{max-width:var(--talos-measure-w); width:100%}
 .talos-empty__mark{width:44px; height:44px; margin-bottom:18px}
-.talos-empty__mark .glyph{width:32px; height:32px}
+/* ⛔ 07/9 — il marchio della schermata nuova CRESCE col viewport, come nel mobile (owner 11/8:
+   «e un logo troppo piccolo su tablet»). Con 32px fissi stava accanto a una scritta da 26 e a un
+   titolo da 28: sembrava una miniatura. `clamp` invece di una media query perche il salto non serve. */
+/* ⛔ con `width:auto` il contenitore prendeva tutta la colonna e `place-items:center` del marchio
+   spingeva il glifo IN MEZZO, mentre nome, titolo e testo restavano a sinistra: visto nello
+   screenshot. Largo quanto il suo contenuto, e resta in colonna con tutto il resto. */
+.talos-empty__mark{width:max-content; height:auto; justify-self:start}
+.talos-empty__mark .glyph{width:clamp(52px,5vw,84px); height:clamp(52px,5vw,84px)}
+/* ⛔ 07/9, O-46 — il nome sotto il marchio: la stessa catena di fallback del mobile, che a sua volta
+   la prende dal desktop (`control-plane/resources/css/app.css`). Orbitron non è nel pacchetto e non si
+   scarica: se c'è sulla macchina si vede, se no il nome resta leggibile col font della app. */
+.talos-orbitron-brand{font-family:Orbitron,var(--talos-font-display),var(--talos-font-ui),ui-sans-serif,system-ui,sans-serif; letter-spacing:0; line-height:1}
+.talos-empty__marchio{display:block; margin-top:12px; font-size:clamp(24px,2.2vw,34px); font-weight:600; letter-spacing:.10em; color:var(--talos-text)}
 .talos-empty__title{font-size:26px; letter-spacing:-.02em}
 .talos-empty__project{color:var(--talos-accent-hover)}
 .talos-empty__lead{color:var(--talos-muted); margin:10px 0 20px; max-width:58ch; font-size:14.5px}

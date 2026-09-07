@@ -8128,6 +8128,22 @@ var init_cronologia = __esm({
   }
 });
 
+// src/components/frase-cercata.js
+function fraseCercata(query, massimo = 60) {
+  const grezza = String(query || "").trim();
+  if (!grezza) return "";
+  const frasi = [...grezza.matchAll(/"([^"]{1,200})"/g)].map((m) => m[1].trim()).filter(Boolean);
+  const resto = grezza.replace(/"[^"]*"/g, " ").replace(/\b(?:site|filetype|intitle|inurl|allintitle|allinurl|related|cache|define|link|source|before|after|ext):\S+/gi, " ").replace(/(^|\s)[-+]\S+/g, " ").replace(/\b(?:OR|AND)\b/g, " ").replace(/[|()*~]/g, " ").replace(/\s+/g, " ").trim();
+  const termini = [...frasi, ...resto ? resto.split(" ") : []].filter(Boolean);
+  if (!termini.length) return "";
+  const uniti = termini.length === 1 ? termini[0] : `${termini.slice(0, -1).join(", ")} e ${termini[termini.length - 1]}`;
+  return uniti.length > massimo ? `${uniti.slice(0, massimo - 1)}…` : uniti;
+}
+var init_frase_cercata = __esm({
+  "src/components/frase-cercata.js"() {
+  }
+});
+
 // src/components/scorciatoie.js
 function suApple(nav = globalThis.navigator) {
   const p = String(nav?.userAgentData?.platform || nav?.platform || "").toLowerCase();
@@ -9284,6 +9300,7 @@ var init_app = __esm({
     init_session_item();
     init_conversazione();
     init_cronologia();
+    init_frase_cercata();
     init_scorciatoie();
     init_chat_foot();
     init_progetti();
@@ -16281,8 +16298,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             return a.descrizione ? tronca2(a.descrizione, 60) : a.comando ? tronca2(a.comando, 60) : "";
           case "naviga":
             return a.url || "";
+          // ⛔ 07/9, O-60 — le virgolette c'erano già nella query (le frasi esatte sono un operatore):
+          //   riavvolgerla ne dava due. `fraseCercata` la rende una frase da leggere, non da eseguire.
           case "web_search":
-            return a.query ? `"${tronca2(a.query, 60)}"` : "";
+            return fraseCercata(a.query, 60);
           case "delega_sottotask":
             return a.task ? tronca2(a.task, 60) : "";
           default:
