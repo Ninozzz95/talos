@@ -5,7 +5,7 @@
  * (`talos-choice`, radiogroup: una voce per variante GGUF con dimensione e stima),
  * il callout per i repository con accesso richiesto, la stima e «Scarica sul computer».
  *
- * 06/09, B6.9 (coda di Astra, fatta da Claude). I dati sono quelli del monolite:
+ * 06/09, B6.9. I dati sono quelli del monolite:
  * `/api/v1/huggingface/search` (repo, downloads, likes, gated, author, license,
  * pipelineTag), il dettaglio (files[{path,sizeBytes,sha256}], revision, readme,
  * images) e la stima per variante di `/api/v1/local-models/fit-estimate`

@@ -25,8 +25,8 @@ const TETTO_CARTELLE_LETTE = 400;
 const CARTELLE_SALTATE = new Set(['node_modules', '.git', 'dist', 'build', '.cache', 'target', 'vendor']);
 
 /**
- * ⭐ 04/9 — W1-13 (Claude Code 2.1.232: un repository git dentro il workspace
- * ha una fiducia PROPRIA — i suoi `CLAUDE.md`/hook non sono quelli del
+ * ⭐ 04/9 — W1-13 (ricerca: un repository git dentro il workspace
+ * ha una fiducia PROPRIA — i suoi file di controllo/hook non sono quelli del
  * workspace). Elenca le sottocartelle (profondità ≤ 2, tetto di letture)
  * che contengono una `.git/` propria. Mai un'eccezione: una cartella
  * illeggibile è saltata, e l'avvio della sessione non si ferma per questo.

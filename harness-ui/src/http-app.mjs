@@ -1727,7 +1727,7 @@ export function createHttpApp({
 
     /*
      * ⭐⭐⭐ 27/8 — un compito LIBERO su una cartella dell'allowlist, owner:
-     * "per adesso un allowlist per testare... come se fosse Claude Code".
+     * "per adesso un allowlist per testare... come se fosse un vero coding agent".
      * Stesso stile dell'endpoint sopra, corpo diverso: {cartellaId,
      * consegna, comandoProva?, modello?} invece di {taskId, modello?}.
      */

@@ -2709,7 +2709,7 @@ export function createSessionRegistry({
 
     /**
      * ⭐⭐⭐ 27/8, owner: "per adesso un allowlist per testare... come se
-     * fosse Claude Code". Stesso schema di `avvia()`, ma su una cartella
+     * fosse un vero coding agent". Stesso schema di `avvia()`, ma su una cartella
      * dell'allowlist (`config.cartelleProgetto`) invece di un id del
      * corpus benchmark — scrive DIRETTAMENTE sul progetto vero, nessuna
      * copia usa-e-getta (vedi la doc di `custom-task.mjs` sul perché).

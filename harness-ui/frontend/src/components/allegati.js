@@ -11,7 +11,7 @@
  * mangia il contesto?». Meglio un numero dichiarato approssimato che nessun numero.
  *
  * Ricerca 06/09/2026, prima di scrivere:
- * - Claude conta un'immagine circa `larghezza × altezza / 750` token, con un tetto intorno a 1.568;
+ * - un'immagine vale circa `larghezza × altezza / 750` token, con un tetto intorno a 1.568;
  * - GPT-4o usa i riquadri: 85 token di base più 170 per ogni riquadro da 512 px;
  * - Gemini usa riquadri da 768 px a 258 token l'uno;
  * - per il testo la regola d'uso comune è ~4 caratteri per token sulle lingue latine;
@@ -50,7 +50,7 @@ export function allegatoPesante(allegato) {
   return Number(allegato.caratteri) > TETTI_ALLEGATI.caratteriPerAllegato;
 }
 
-const TETTO_IMMAGINE = 1568; // Claude: oltre questo il conto non sale più
+const TETTO_IMMAGINE = 1568; // oltre questo il conto non sale più
 
 /** ~4 caratteri per token: la regola d'uso sulle lingue latine. */
 export function stimaTokenTesto(caratteri) {

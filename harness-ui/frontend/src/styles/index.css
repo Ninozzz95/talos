@@ -462,9 +462,9 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-topbar__actions{display:flex; gap:6px}
 
 /* ---------- 8. CONVERSAZIONE + SPINA DEI GIRI ---------- */
-/* Barra di navigazione della conversazione — owner 06/09: «estremamente simile a quella di ChatGPT
+/* Barra di navigazione della conversazione — owner 06/09: «estremamente simile a quella dei prodotti di chat
    desktop: all'estrema sinistra, compatta in altezza; al passaggio la riga si espande, mostra la
-   conversazione in un fumetto, e cliccando ti manda li'». Misure prese DAL VIVO nell'app ChatGPT
+   conversazione in un fumetto, e cliccando ti manda li'». Misure prese DAL VIVO su un prodotto vero
    desktop il 06/09/2026: nav assoluta a 16 px dal bordo, centrata in verticale, larga 36 px; dentro
    uno scorrevole alto al massimo min(70vh,40rem) con la barra nascosta e la sfumatura ai bordi; una
    voce per messaggio dell'utente, 36x10 px; la linea larga 26-20-14-10-6 secondo la distanza dalla
@@ -507,10 +507,10 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 /* La conversazione sta al CENTRO dell'area (owner 04/09), non appoggiata a sinistra:
    colonna a larghezza massima, e il piede della chat allineato alla stessa colonna. */
 /* Owner 06/09: «la barra con i segmentini verdi portata all'estrema sinistra, non attaccata alla chat»,
-   «e che navighi un po' come fa ChatGPT, conversation history bar». La colonna della conversazione prende
+   «e che navighi un po' come una barra di cronologia della conversazione». La colonna della conversazione prende
    tutta la larghezza: la spina si appoggia al bordo SINISTRO dell'area, il messaggio resta centrato sulla
    stessa misura di prima (nessuna regressione di lettura). I tick sono bottoni: cliccarli porta al giro,
-   come la barra della cronologia di ChatGPT. Fonti 06/09/2026: WAI-ARIA APG «Landmarks/Navigation» per la
+   come una barra di cronologia. Fonti 06/09/2026: WAI-ARIA APG «Landmarks/Navigation» per la
    nav con etichetta, MDN «scrollIntoView» (comportamento smooth che rispetta prefers-reduced-motion). */
 /* 06/9, owner: «la conversazione scrollata al massimo deve essere centrata a metà pagina».
    Sotto l'ultimo messaggio ci vuole mezzo schermo di spazio, altrimenti «fine conversazione»
@@ -684,7 +684,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    trattini in fila). Righe separate da una linea sottile e nessun bordo esterno: in una conversazione
    la griglia piena pesa e ruba l'occhio al testo. L'intestazione tiene il tono spento delle etichette,
    i numeri restano allineati con le cifre tabulari, e la tabella scorre dentro il suo contenitore
-   invece di allargare la colonna della chat (Codex PR #24636, letta 06/09/2026: una tabella stretta
+   invece di allargare la colonna della chat (misurato il 06/09/2026: una tabella stretta
    va gestita, non lasciata sfondare). */
 /* 06/9 — la nota di un errore spiegato: cosa è successo (tono normale), perché (spento), cosa puoi
    fare (elenco), e il testo del server chiuso in un dettaglio. Nessun rosso addosso al testo: il badge
@@ -1290,7 +1290,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-tabs__tab[data-browser-tab]:hover::after,.talos-tabs__tab[data-browser-tab]:focus-visible::after,.talos-tabs__tab[data-browser-tab][aria-selected="true"]::after{opacity:1}
 .talos-browser__live{height:min(70vh,760px);min-height:360px;padding:var(--talos-space-sm)}
 .talos-browser__live iframe{width:100%;height:100%;border:0;border-radius:var(--talos-radius-card);background:#fff}
-/* Browser oltre Hermes 06/09 — i commenti sugli elementi della pagina viva */
+/* Browser, 06/09 — i commenti sugli elementi della pagina viva */
 .talos-browser__annotazioni{padding:var(--talos-space-md);border-top:1px solid var(--talos-border-subtle)}
 .talos-browser__annotazioni-testa{gap:var(--talos-space-sm)}
 .talos-browser__annotazioni-lista{list-style:none;margin:var(--talos-space-sm) 0 0;padding:0;display:grid;gap:var(--talos-space-sm)}
@@ -1314,7 +1314,11 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-topbar [data-vistetab]{flex-wrap:nowrap}
 #veloComandi .talos-dialog__body{display:flex;flex-direction:column;overflow:hidden}
 #veloComandi .talos-dialog__field{flex:none}
-#risultatiComandi{overflow-y:auto;min-height:0}
+/* ⛔ 07/9, trovato dal controllo `veli-sani` appena scritto: la palette tagliava gli ultimi
+   comandi — 48 px fuori dal corpo, irraggiungibili. La regola diceva già «scorri», ma senza
+   `flex` in una colonna flex l'elenco prende la sua altezza naturale e sborda invece di
+   restringersi: `overflow-y:auto` non serve a niente su un elemento che non si stringe. */
+#risultatiComandi{flex:1 1 auto;overflow-y:auto;min-height:0}
 #veloIntro [data-intro-passo][aria-current="step"],#veloIntro [data-intro-policy][aria-checked="true"]{background:var(--talos-accent-soft);color:var(--talos-accent-text);box-shadow:inset var(--talos-focus-width) 0 var(--talos-accent)}
 .talos-lab__tabs{margin-bottom:var(--talos-space-md)}
 #labTabs{flex-wrap:wrap}
@@ -1362,9 +1366,18 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    pomello, che in Windows è una pillola azzurra. Qui la pista e il pomello sono disegnati da noi coi
    token del tema, in entrambi i motori (WebKit e Gecko vogliono pseudo-elementi diversi). */
 .talos-range,input[type="range"]{appearance:none; -webkit-appearance:none; width:100%; height:18px; background:transparent; cursor:pointer}
-.talos-range::-webkit-slider-runnable-track,input[type="range"]::-webkit-slider-runnable-track{height:6px; border-radius:var(--talos-radius-pill); background:var(--talos-panel-soft); border:1px solid var(--talos-border)}
+/* ⛔⛔ 07/9, owner: «manca la scia dorata dello slider — su "Alto" dovrebbe coprire spento, basso
+   e medio. Prima c'era, adesso no». Colpa mia, di poche ore prima: togliendo `accent-color` per
+   non farlo disegnare a Windows, se n'è andata anche la parte percorsa, che il browser dipingeva
+   da sé. E non si rimette in solo CSS: Firefox ha `::-moz-range-progress`, Chrome e Safari NON
+   hanno un equivalente (MDN; nerdy.dev «Custom range input progress fill»; CSS Portal, letti il
+   07/09/2026). La via che vale ovunque è un gradiente sulla pista, fermato alla percentuale che
+   `components/range-scia.js` scrive mentre il cursore si muove. */
+.talos-range::-webkit-slider-runnable-track,input[type="range"]::-webkit-slider-runnable-track{height:6px; border-radius:var(--talos-radius-pill); border:1px solid var(--talos-border); background:linear-gradient(to right, var(--talos-accent) 0, var(--talos-accent) var(--talos-range-riempimento, 0%), var(--talos-panel-soft) var(--talos-range-riempimento, 0%), var(--talos-panel-soft) 100%)}
 .talos-range::-webkit-slider-thumb,input[type="range"]::-webkit-slider-thumb{appearance:none; -webkit-appearance:none; width:16px; height:16px; margin-top:-6px; border-radius:50%; background:var(--talos-accent); border:2px solid var(--talos-panel)}
 .talos-range::-moz-range-track,input[type="range"]::-moz-range-track{height:6px; border-radius:var(--talos-radius-pill); background:var(--talos-panel-soft); border:1px solid var(--talos-border)}
+/* ⭐ su Firefox la parte percorsa è un elemento suo: si veste, non si ridisegna. */
+.talos-range::-moz-range-progress,input[type="range"]::-moz-range-progress{height:6px; border-radius:var(--talos-radius-pill); background:var(--talos-accent)}
 .talos-range::-moz-range-thumb,input[type="range"]::-moz-range-thumb{width:16px; height:16px; border-radius:50%; background:var(--talos-accent); border:2px solid var(--talos-panel)}
 .talos-range:focus-visible,input[type="range"]:focus-visible{outline:2px solid var(--talos-accent); outline-offset:3px}
 .talos-range:disabled{opacity:.5; cursor:not-allowed}
@@ -1372,10 +1385,15 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-model-options{max-height:calc(var(--talos-row) * 5);overflow-y:auto}
 [data-modello-gruppo]:not([open]) summary .i{transform:rotate(-90deg)}
 
-#veloModello .talos-dialog__body{display:flex;overflow:hidden}
-#veloModello [data-c="ModelPicker"]{flex:1;min-height:0}
-#veloModello [data-c="ModelPicker"]> *{flex-shrink:0}
-#veloModello .talos-model-options{flex:1 1 auto;min-height:var(--talos-row)}
+/* ⛔⛔ 07/9, owner: «la scia dell'effort picker attenzione, e uno slider». Misurato: il cursore del
+   ragionamento finiva 42 px OLTRE il bordo del corpo, tagliato via. Qui c'erano quattro regole
+   scritte per il markup vecchio del velo (schede, `.talos-model-options`) che imponevano
+   `display:flex; overflow:hidden` al corpo: con il catalogo vero montato dentro, tutto ciò che non
+   entrava spariva invece di scorrere.
+   ⇒ Il corpo torna a scorrere come ogni altro velo (`.talos-dialog__body`: `overflow-y:auto`), e
+   l'elenco dei modelli continua ad avere il suo tetto di 42vh dal componente. Una regola in meno,
+   non una in più. */
+#veloModello .talos-dialog__body{display:block}
 
 .talos-dialog{position:relative}
 .talos-dialog>.talos-resizer--dialog{z-index:var(--talos-z-menu)}

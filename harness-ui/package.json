@@ -8,7 +8,8 @@
     "verify:all": "node --test tests/*.test.mjs labs/electron-shell/*.test.mjs && node --test src/kernel/talosHarness.test.mjs && node scripts/kernel-controlla.mjs && npm --prefix frontend run verify",
     "aggiorna": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/aggiorna-4174.ps1",
     "kernel:controlla": "node scripts/kernel-controlla.mjs",
-    "test:kernel": "node --test src/kernel/talosHarness.test.mjs"
+    "test:kernel": "node --test src/kernel/talosHarness.test.mjs",
+    "veli:sani": "node frontend/scripts/cancello/veli-sani.mjs"
   },
   "description": "Backend locale di Harness UI (server.mjs + src/*.mjs). Le dipendenze sono limitate al backend e motivate nei rispettivi adapter; il watcher workspace usa direttamente node:fs su Windows.",
   "dependencies": {

@@ -5227,8 +5227,8 @@ const SCENARI = {
   },
 
   /**
-   * ⭐⭐⭐ 30/8 — VERIFICA raggruppamento tool-call (owner: "come fa
-   * Claude, con diff totale accanto... in ogni modifica il diff
+   * ⭐⭐⭐ 30/8 — VERIFICA raggruppamento tool-call (owner: "come fanno
+   * alcuni assistenti, con diff totale accanto... in ogni modifica il diff
    * specifico per ogni file"). Un prompt che chiede esplorazione +
    * scrittura + test in un solo giro, senza testo intermedio atteso —
    * dovrebbe produrre UN batch collassato con diff totale.

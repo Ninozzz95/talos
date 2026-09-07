@@ -1,6 +1,7 @@
 import {aggiornaProviderList,montaProviderPanel} from '../components/provider-card.js';
 import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica } from '../components/politiche.js';
 import { nomeLeggibileSessione } from '../components/session-item.js';
+import { collegaScia, aggiornaTutteLeScie } from '../components/range-scia.js';
 import {aggiornaElencoRuntime,montaPannelloRuntime} from '../components/runtime-modelli.js';
 import {normalizzaCapacita,aggiornaMisuraMemoria,montaMisuraMemoria} from '../components/misura-memoria.js';
 import {montaCorniceModelLab,aggiornaStatoCorniceModelLab} from '../components/cornice-model-lab.js';
@@ -262,8 +263,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
        */
       ultimoBersaglioAttrezzo: null,
       /**
-       * ⭐⭐⭐ 30/8, owner: "raggruppati in un collapse come fa Claude, con
-       * diff totale accanto" (riferimento: Claude Code stesso, screenshot
+       * ⭐⭐⭐ 30/8, owner: "raggruppati in un collapse come fanno alcuni
+       * assistenti, con diff totale accanto" (riferimento: screenshot
        * allegati — vedi LEDGER-RAGGRUPPAMENTO-TOOL-CALL-DIFF-2026-08-30.md).
        * `null` = nessun batch di tool-call aperto ora; un oggetto quando
        * una sequenza ININTERROTTA di tool-call è in corso — chiuso (mai
@@ -2771,7 +2772,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   // P1 Model Lab: lista installati con ricerca e azioni reali.
   /**
-   * 06/9 B6.8 (piano di Astra, fatto da Claude): la scheda «Installati» è il pannello del
+   * 06/9 B6.8: la scheda «Installati» è il pannello del
    * mockup (`components/modelli-installati.js`). Il modello caricato lo dice il motore locale
    * (llama.cpp «ready» + il modello scelto); RAM da `state.modelLab.capacity`; il verdetto
    * «Entra» da `state.modelLab.fit` (si chiede con «Verifica compatibilità», mai da solo).
@@ -5873,6 +5874,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     permissions: 'veloPermessi',
     // ⭐ 07/9 — l'albero: rami veri (fork) e deleghe vere, vedi `disegnaAlberoIn`.
     sessionTree: 'veloAlbero',
+    // ⭐ 07/9 — la scelta del modello: il velo monta lo stesso `creaModelPicker` del foglio.
+    model: 'veloModello',
   };
 
   /**
@@ -6061,6 +6064,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function preparaVeloDaFoglio(tipo, velo) {
     if (tipo === 'sessionTree') { void disegnaAlberoIn(velo); return; }
+    if (tipo === 'model') { montaSceltaModelloIn(velo); return; }
     if (tipo === 'permissions') {
       /*
        * ⛔ 07/9 — il velo prende il posto del foglio: stessa logica, pelle nuova. Disegna prima
@@ -7335,6 +7339,51 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
   }
 
+  /**
+   * La scelta del modello dentro una radice qualunque: il velo o il foglio vecchio.
+   * ⛔ 07/9 — il velo del mockup aveva un catalogo scritto a mano (tre modelli inventati) e due
+   *   schede che non filtravano. Il catalogo vero è `creaModelPicker`, lo stesso componente di
+   *   «Nuova sessione»: qui si MONTA quello, non se ne scrive un secondo che divergerà.
+   * ⛔ Si rimonta a ogni apertura, e il montaggio si svuota prima: due aperture di fila non devono
+   *   lasciare due picker uno sopra l'altro.
+   */
+  function montaSceltaModelloIn(radice) {
+    const mount = $('#veloModelloMontaggio', radice) || $('#modelPickerMount', radice);
+    if (!mount) return;
+    const picker = creaModelPicker({
+      valoreIniziale: state.model || '',
+      apriSubito: true,
+      sincronizzaSessione: true,
+      alSelezionato: () => { if (radice?.id === 'veloModello') chiudiVeloMockup('veloModello'); else closeEmbeddedDialog(sheetDialog); },
+    });
+    const effortPicker = creaEffortPicker({
+      valoreIniziale: state.effort,
+      alCambiato: (valore) => {
+        state.effort = valore;
+        sincronizzaImpostazioniSessione({ reasoning: valore ? { effort: valore } : null });
+      },
+    });
+    const riga = document.createElement('label');
+    riga.className = 'talos-setting';
+    const etichetta = document.createElement('span');
+    etichetta.className = 'talos-setting__label';
+    etichetta.textContent = 'Mostra ragionamento';
+    const interruttore = document.createElement('input');
+    interruttore.type = 'checkbox';
+    interruttore.className = 'talos-switch';
+    interruttore.setAttribute('role', 'switch');
+    interruttore.id = 'showReasoningToggle';
+    interruttore.checked = state.showReasoning;
+    interruttore.setAttribute('aria-label', 'Mostra ragionamento');
+    interruttore.addEventListener('change', () => {
+      state.showReasoning = interruttore.checked;
+      salvaPreferenzeChatDesktop();
+      aggiornaVisibilitaRagionamento();
+    });
+    riga.append(etichetta, interruttore);
+    mount.replaceChildren(picker.elemento, effortPicker.elemento, riga);
+  }
+
   function wireSheetActions(type) {
     collegaAzioniPermessi(sheetBody, {
       dopoLaScelta: () => closeEmbeddedDialog(sheetDialog),
@@ -7394,7 +7443,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * a differenza degli altri handler sopra che sono tutti sincroni) per
      * non permettere un doppio click che parte due volte. ⛔ Mai un
      * successo dichiarato su un file vuoto — la ricerca su /export di
-     * Claude Code (vedi il commento su costruisciTrascrizioneMarkdown) ha
+     * uno strumento simile (vedi il commento su costruisciTrascrizioneMarkdown) ha
      * trovato esattamente quel bug in un tool affermato: qui si controlla
      * `testo.trim()` PRIMA del download, non dopo.
      */
@@ -8340,7 +8389,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * c'è un gap in cui non c'è niente". Ricerca web (regola zero):
    * redis.io/blog/streaming-llm-responses, tianpan.co/.../streaming-ttft-
    * latency-perception — quando il tempo-al-primo-token non si può
-   * eliminare (qui il collo è il PROVIDER, già misurato da Fable:
+   * eliminare (qui il collo è il PROVIDER, già misurato:
    * "raffiche ogni 100-500ms, pause fino a 10s"), la cura è percepita, non
    * di velocità vera: "a status line sets a processing frame that makes
    * a [wait] feel like forward progress rather than silence". L'etichetta
@@ -8469,10 +8518,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   /**
    * ⭐⭐⭐ 30/8, owner: "vorrei che i comandi venissero raggruppati in un
-   * collapse come fa Claude, con diff totale accanto, se ci clicco deve
+   * collapse come fanno alcuni assistenti, con diff totale accanto, se ci clicco deve
    * avere la lista completa (comportamento attuale) ma in ogni modifica
    * ci deve essere il diff specifico per ogni file" — riferimento:
-   * Claude Code stesso (screenshot allegati, non Harness Desktop — vedi
+   * uno strumento simile (screenshot allegati, non Harness Desktop — vedi
    * LEDGER-RAGGRUPPAMENTO-TOOL-CALL-DIFF-2026-08-30.md per la spec UX
    * dedotta riga per riga). Un batch = una sequenza ININTERROTTA di
    * tool-call consecutive nello stesso turno: apriBatchSeServe() lo
@@ -8653,7 +8702,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /*
    * ⭐⭐⭐ 28/8 — owner: "l'harness desktop diventa l'unica chat, con tutti i
    * tool come la generazione di artefatti". Ricerca fatta prima di
-   * scrivere (bloom.security, "Inside Claude Artifacts", 28/8): l'origine
+   * scrivere (bloom.security, 28/8): l'origine
    * isolata + CSP restrittiva sono la difesa reale, non una promessa nel
    * testo del tool.
    *
@@ -8666,8 +8715,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * (postMessage dall'interno), tre varianti, zero falsi positivi. La
    * cura: `frame.src` punta a `/api/v1/artifacts/:id`, una risposta HTTP
    * VERA con la SUA propria CSP (vedi artifact-store.mjs) — nessuna
-   * eredità dalla pagina che la incorpora, stessa architettura di
-   * Claude Artifacts (origine/risposta separata).
+   * eredità dalla pagina che la incorpora, stessa architettura vista in
+   * ricerca (origine/risposta separata).
    *
    * `sandbox="allow-scripts"` SENZA `allow-same-origin`/
    * `allow-top-navigation`/`allow-popups`/`allow-forms` resta invariato:
@@ -8692,7 +8741,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   /**
-   * ⭐⭐⭐ 3/9 — item 10, owner: "un po' come fa Claude di dare al modello
+   * ⭐⭐⭐ 3/9 — item 10, owner: "un po' come fanno alcuni assistenti di dare al modello
    * una risposta come suggerimento… nel composer spunta come placeholder…
    * premo tab e diventa testo". Il BERSAGLIO nudo (nome file, comando…),
    * non una frase — il verbo lo mette la frase-suggerimento più sotto, e
@@ -8764,8 +8813,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       case 'elenca': return 'Elenco dei file del progetto';
       case 'prova': return 'Esecuzione dei test…';
       /*
-       * ⭐⭐⭐ 29/8 — owner, riferimento diretto al proprio Bash tool di
-       * Claude Code: `descrizione` (nuova, opzionale — vedi lo schema
+       * ⭐⭐⭐ 29/8 — owner, riferimento diretto al comportamento noto di
+       * un Bash tool simile: `descrizione` (nuova, opzionale — vedi lo schema
        * in talosHarness.mjs) è la riga preferita quando il modello la
        * manda — "Show changed files" invece di "git diff --stat". Il
        * comando grezzo resta la SECONDA scelta (PARITÀ: un modello
@@ -9819,7 +9868,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * vero), e ogni tipo di evento NON riconosciuto esplicitamente finisce
    * comunque nell'output come JSON grezzo (mai un evento silenziosamente
    * scartato — esattamente il tipo di perdita silenziosa che la ricerca
-   * sopra ha trovato nell'export di Claude Code stesso).
+   * sopra ha trovato nell'export di uno strumento simile).
    */
   function costruisciTrascrizioneMarkdown(esportato) {
     const righe = [];
@@ -11557,7 +11606,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * RunStarted.contesto — niente qui lo calcola di nuovo. Onesto come
      * `worktree` sopra: "—" quando l'elenco è vuoto, MAI un elenco
      * inventato. La dicitura dichiara esplicitamente la fiducia separata
-     * (Claude Code 2.1.232: un repo annidato non eredita CLAUDE.md/hook
+     * (ricerca: un repo annidato non eredita i file di controllo/hook
      * del workspace) — non solo "ce ne sono N".
      */
     if (repoAnnidati) {
@@ -11821,7 +11870,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        * (piano, sezione "RICOGNIZIONE COMPETITIVA"): riusa appendToolNote,
        * la STESSA bolla collassabile già in uso per le tool-call — non un
        * componente nuovo, lo stesso idioma. Visibile per DEFAULT (a
-       * differenza di Claude Code, che lo nasconde dietro Ctrl+O — la
+       * differenza di uno strumento simile, che lo nasconde dietro una scorciatoia — la
        * ricerca del piano cita proprio questo come il difetto da non
        * ripetere), ma collassato: chi non è interessato scorre oltre senza
        * doverlo chiudere lui stesso.
@@ -11869,7 +11918,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * tempo: costa quando succede qualcosa, zero quando non succede niente.
          */
         if (evento.toolCallName === 'delega_sottotask') void caricaFigliSessione();
-        // ⭐⭐⭐ 30/8 — raggruppamento (owner, "come fa Claude"): la riga nasce DENTRO il batch corrente, non più direttamente in conversazione. Vedi apriBatchSeServe.
+        // ⭐⭐⭐ 30/8 — raggruppamento: la riga nasce DENTRO il batch corrente, non più direttamente in conversazione. Vedi apriBatchSeServe.
         const batch = apriBatchSeServe();
         const bubble = appendToolNote(riassuntoAttrezzoInCorso(evento.toolCallName, null), { contenitore: batch.contenitore, attrezzo: evento.toolCallName });
         impostaEsitoRiga(bubble.article, 'running'); // 05/9 Fase 2: pallino «in corso»
@@ -11883,7 +11932,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * ⭐ nome + riferimenti DOM (summaryText/detail) tenuti per
          * toolCallId: ToolCallArgs e ToolCallResult aggiornano LO STESSO
          * bubble invece di crearne uno nuovo — un solo collassabile per
-         * tool-call, come Claude Code (screenshot owner, 27/8). Il campo
+         * tool-call (screenshot owner, 27/8). Il campo
          * `nome` serve ANCHE a riconoscere shell/naviga per specchiarli
          * nella vista Terminale/Browser, invariato.
          */
@@ -12559,7 +12608,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
     /*
-     * ⭐ 04/9, W1-12 (Claude Code 2.1.251) — PRIMA di chiamare la rotta si
+     * ⭐ 04/9, W1-12 (ricerca) — PRIMA di chiamare la rotta si
      * dice cosa si sta riprendendo: quanto è vecchia la sessione e quanto
      * contesto il modello rileggerà. Solo dati che l'elenco ha davvero
      * (`avviataAlle`, ultimo `usage`); l'età è dall'AVVIO, non dall'ultimo
@@ -12591,7 +12640,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        * EventSource riproducesse la cronologia e arrivasse al giro vero —
        * un vuoto reale (misurato: 0 bolle su 50 campioni in 1,5s) fino al
        * primo `TextMessageContent`/segnale utile, che con provider lenti
-       * (gemini-3.7-flash, gap fino a ~10s per misura di Fable) è
+       * (gemini-3.7-flash, gap fino a ~10s misurato) è
        * lunghissimo. `RunStarted` non richiama `mostraAttesaRisposta()`:
        * niente altro la rimette. Si ri-arma qui, subito dopo il wipe.
        */
@@ -13028,7 +13077,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * percorso = la cartella della sessione, intero (la app non conosce la home:
    * un «~» sarebbe inventato), assente senza cartella; Review = i file toccati
    * (`reviewFiles`); Terminale = le schede aperte — le schede (W1-01) non hanno
-   * ancora una UI (B1, Astra): finché non c'è, il badge non si scrive.
+   * ancora una UI (B1): finché non c'è, il badge non si scrive.
    */
   /** «3 file modificati · +112 −2» per la testata della Review, o stringa vuota se non c'e' niente. */
   function riassuntoReviewTestata() {
@@ -13078,7 +13127,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   /**
-   * ⭐ 04/9, W1-12 (Claude Code 2.1.232 fa lo stesso) — due sessioni VIVE
+   * ⭐ 04/9, W1-12 (ricerca: stesso comportamento visto altrove) — due sessioni VIVE
    * non portano lo stesso nome: chi rinomina, o il titolo automatico dal
    * primo messaggio, riceve il suffisso `-2`, `-3`… e lo si dice. Le
    * sessioni concluse non contano: un nome può tornare.
@@ -13106,7 +13155,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return `${Math.round(secondi / 86400)} g`;
   }
 
-  /** ⭐ 04/9, W1-12 (Claude Code 2.1.251) — quanto costa riprendere: l'ultimo `usage` della sessione è il contesto che il modello rilegge al prossimo giro. Etichettato «stima», mai «costo». */
+  /** ⭐ 04/9, W1-12 (ricerca) — quanto costa riprendere: l'ultimo `usage` della sessione è il contesto che il modello rilegge al prossimo giro. Etichettato «stima», mai «costo». */
   function stimaTokenRipresa(usage) {
     if (!usage) return 'consumo non registrato';
     const totale = (Number(usage.prompt_tokens ?? 0) || 0) + (Number(usage.completion_tokens ?? 0) || 0);
@@ -15978,6 +16027,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
     });
   }
+  /*
+   * ⛔ 07/9 — la scia del cursore (la parte percorsa): un ascoltatore solo sulla radice, perché i
+   *   cursori nascono e muoiono coi veli. Vedi `components/range-scia.js` per il perché non basta
+   *   il CSS: Chrome e Safari non hanno lo pseudo-elemento che ce l'ha Firefox.
+   */
+  collegaScia(ROOT());
   collegaCampoComandi(commandSearch);
   collegaCampoComandi($('#cercaComando'));
 
@@ -16159,7 +16214,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /*
    * ⭐⭐⭐ 02/09 — azioni REALI sul file in review (prima: due toast).
-   * Commenta: come Claude Code Desktop (commenti sul diff che tornano al
+   * Commenta: come in strumenti simili (commenti sul diff che tornano al
    * modello) — il riferimento al file, e all'ultima riga del diff sotto il
    * puntatore se c'è, finisce nel composer, la persona completa e invia.
    * Apri file: lo stesso visualizzatore dell'albero Files (apriFileAlbero).
@@ -16617,6 +16672,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     ultimoFuocoVelo = ROOT().activeElement;
     v.hidden = false;
     preparaMisuraDialogo(v); // 06/9 B7: la misura ricordata di QUESTO dialogo, se c'è
+    aggiornaTutteLeScie(v);   // ⛔ 07/9: un cursore appena montato ha la scia a zero finché non lo tocchi
     const corpo = v.querySelector('.talos-dialog__body');
     const scelto = corpo && corpo.querySelector('[role="radio"][aria-checked="true"]');
     /*

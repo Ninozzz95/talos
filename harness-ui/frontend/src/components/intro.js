@@ -4,7 +4,7 @@
  * workspace (albero compatto, ricerca, nuova cartella, percorso a mano), fornitori e
  * chiave dal portachiavi, modelli dal catalogo, politica dei permessi, riepilogo.
  *
- * 06/09, B7b (coda di Astra, fatta da Claude); owner 05/09: «nella modale intro ci deve
+ * 06/09, B7b; owner 05/09: «nella modale intro ci deve
  * essere anche il file tree in versione compatta». La regia è quella del mockup (passi,
  * validazioni, tastiera sull'albero, sinonimi di conclusione «saltata»/«completata»), i
  * dati arrivano da `api` (fetch del monolite) e le decisioni tornano al monolite via

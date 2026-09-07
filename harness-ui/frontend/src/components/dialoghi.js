@@ -1,6 +1,6 @@
 /*
  * Dialoghi ridimensionabili e RICORDATI — la regia del mockup (`[data-dialog-resize]`)
- * portata nella app. 06/09, B7 (coda di Astra, fatta da Claude); owner 05/09: «le modali
+ * portata nella app. 06/09, B7; owner 05/09: «le modali
  * devono essere ridimensionate e ricordate».
  *
  * Ogni velo del mockup ha tre maniglie (larghezza · altezza · entrambe). Trascinare le
