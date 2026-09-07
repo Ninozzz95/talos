@@ -5867,6 +5867,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     deleteFile: 'veloEliminaFile',
     createFile: 'veloCreaFile',
     references: 'veloRiferimenti',
+    // ⭐ 07/9, terza tornata: il foglio PERMESSI — il piu visitato dei sei rimasti, e quello dove
+    //    si decide la sicurezza. Vedi `disegnaPermessiIn`/`collegaAzioniPermessi`.
+    permissions: 'veloPermessi',
   };
 
   /**
@@ -6055,6 +6058,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function preparaVeloDaFoglio(tipo, velo) {
+    if (tipo === 'permissions') {
+      /*
+       * ⛔ 07/9 — il velo prende il posto del foglio: stessa logica, pelle nuova. Disegna prima
+       * (cosi lo stato a schermo e quello vero) e aggancia dopo, una volta sola per radice.
+       */
+      disegnaPermessiIn(velo);
+      collegaAzioniPermessi(velo, {
+        dopoLaScelta: () => chiudiVeloMockup('veloPermessi'),
+        ridisegna: () => disegnaPermessiIn(velo),
+      });
+      return;
+    }
     if (tipo === 'rename') {
       const campo = $('#rinominaSessioneNome', velo);
       const modulo = $('#rinominaSessioneForm', velo);
@@ -7064,49 +7079,142 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     toast('Policy aggiornata', messaggioToast);
   }
 
-  function wireSheetActions(type) {
-    $$('[data-permission-choice]', sheetBody).forEach((button) => {
+  /*
+   * ⛔⛔ 07/9 — CUTOVER DEL FOGLIO PERMESSI. Il foglio del monolite era una finestra `<dialog>`
+   * legacy: owner, «tutti i component devono essere stilizzati custom anche il dialog non legacy ma
+   * custom nostro legato tutto ai temi». Il velo del mockup esisteva da sempre e non era mai stato
+   * collegato — e non era nemmeno allineato al prodotto (mostrava «Comandi liberi», una politica che
+   * non esiste, e un elenco di attrezzi finto).
+   * ⇒ Il metodo e quello gia usato per gli altri sei veli: la LOGICA si estrae in funzioni che
+   *   lavorano su una RADICE qualunque, e velo e foglio la chiamano entrambi. Finche la mappa
+   *   `VELO_PER_FOGLIO` non e vuota il foglio vecchio resta li, ma non ha piu logica propria.
+   */
+  const ATTREZZI_COL_CANCELLO = Object.freeze([
+    ['scrivi', 'Scrive un file — passa dal cancello semantico', 'i-code'],
+    ['prova', 'Esegue la suite di test del progetto', 'i-check'],
+    ['shell', 'Comando di shell nella cartella progetto', 'i-terminal'],
+    ['document_create', 'Genera un documento (PDF, foglio, slide, report)', 'i-files'],
+    // ⛔ O-01 (04/9): il quinto c'e in `ATTREZZI_CON_PERMESSO_PER_ATTREZZO` (config.mjs) dal 29/8 e
+    //    il foglio ne mostrava quattro: sul quinto la promessa era vuota.
+    ['generate_image', 'Genera un’immagine — passa dal cancello per-attrezzo come gli altri quattro', 'i-image'],
+  ]);
+  const SCELTE_PERMESSO_ATTREZZO = Object.freeze([
+    ['', 'Come la sessione'],
+    ['sempre', 'Sempre consentito'],
+    ['chiedi', 'Chiedi conferma'],
+    ['nega', 'Nega sempre'],
+  ]);
+
+  /**
+   * Disegna lo stato dei permessi dentro una radice qualunque (il velo o il foglio vecchio).
+   * ⛔ Non aggancia niente: chi disegna e chi ascolta restano separati, cosi ridisegnare dopo una
+   *   scelta non moltiplica gli ascoltatori.
+   */
+  function disegnaPermessiIn(radice) {
+    if (!radice) return;
+    for (const bottone of $$('[data-permission-choice]', radice)) {
+      const suo = bottone.dataset.permissionChoice === state.permissions;
+      bottone.setAttribute('aria-checked', String(suo));
+      bottone.classList.toggle('is-attiva', suo);
+    }
+    const elenco = $('#veloPermessiAttrezzi', radice);
+    if (elenco) {
+      elenco.textContent = '';
+      for (const [attrezzo, descrizione, icona] of ATTREZZI_COL_CANCELLO) {
+        const riga = document.createElement('div');
+        riga.className = 'talos-list-row';
+        const scelto = state.permessiPerAttrezzo[attrezzo] || '';
+        riga.innerHTML = `<span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#${icona}"/></svg></span>`
+          + `<span class="talos-list-row__text"><span class="talos-list-row__title">${nomeUmanoAttrezzo(attrezzo)}</span>`
+          + `<span class="talos-list-row__sub">${descrizione}</span></span>`
+          + `<span class="talos-list-row__aside"><select class="talos-select talos-select--sm" data-tool-permission-select="${attrezzo}" aria-label="Permesso per ${nomeUmanoAttrezzo(attrezzo)}">`
+          + SCELTE_PERMESSO_ATTREZZO.map(([valore, nome]) => `<option value="${valore}"${valore === scelto ? ' selected' : ''}>${nome}</option>`).join('')
+          + '</select></span>';
+        elenco.append(riga);
+      }
+    }
+    const avviso = $('#veloPermessiAvviso', radice);
+    if (avviso) {
+      // ⛔ T03-D2: chiudere «scrivi» non chiude il terminale, e l'avviso si puo AGIRE sul posto.
+      const { aperte, avviso: testo } = porteLateraliAperte(state.permessiPerAttrezzo, state.permissions);
+      avviso.hidden = !testo;
+      avviso.textContent = '';
+      if (testo) {
+        avviso.append(document.createTextNode(`${testo} `));
+        const bottone = document.createElement('button');
+        bottone.type = 'button';
+        bottone.className = 'talos-button talos-button--sm';
+        bottone.dataset.chiudiPorteLaterali = aperte.join(',');
+        bottone.textContent = `Chiudi anche ${aperte.length === 1 ? 'quella' : 'quelle'}`;
+        avviso.append(bottone);
+      }
+    }
+  }
+
+  /**
+   * Aggancia le azioni dei permessi a una radice qualunque: il velo o il foglio vecchio.
+   * @param {Element} radice dove cercare i controlli
+   * @param {{dopoLaScelta?:Function, ridisegna?:Function}} opzioni cosa fare dopo un cambiamento
+   * ⛔ Una radice si aggancia UNA VOLTA (`dataset.permessiCollegati`): ridisegnare le righe non
+   *   deve moltiplicare gli ascoltatori, e il ridisegno qui capita a ogni scelta.
+   */
+  function collegaAzioniPermessi(radice, { dopoLaScelta = () => {}, ridisegna = () => {} } = {}) {
+    if (!radice) return;
+    $$('[data-permission-choice]', radice).forEach((button) => {
+      if (button.dataset.permessiCollegati) return;
+      button.dataset.permessiCollegati = 'si';
       button.addEventListener('click', () => {
         impostaPermesso(button.dataset.permissionChoice);
         // ⭐ 04/9, R-02 — scegliere qui è decidere: stesso gesto dell'intro, stesso flag (mai marcato «scelto» un valore che nessuno ha toccato).
         state.autonomiaScelta = true;
         salvaPreferenzeChatDesktop();
-        closeEmbeddedDialog(sheetDialog);
+        dopoLaScelta();
       });
     });
     /*
-     * ⭐⭐⭐ FASE B (28/8) — a differenza della policy sessione sopra (un
-     * bottone chiude il foglio), un `<select>` per riga NON lo chiude:
-     * l'owner può regolare più attrezzi in una sola apertura. `''` toglie
-     * l'override (torna al comportamento della sessione, mai una chiave
+     * ⭐⭐⭐ FASE B (28/8) — a differenza della politica della sessione (un bottone chiude la
+     * finestra), un `<select>` per riga NON la chiude: l'owner può regolare più attrezzi in una
+     * sola apertura. `''` toglie l'override (torna al comportamento della sessione, mai una chiave
      * vuota mandata al server — config.mjs la rifiuterebbe comunque).
+     * ⛔ L'ascoltatore sta sulla RADICE, non sui `<select>`: le righe si ridisegnano a ogni scelta,
+     *   e un ascoltatore per riga morirebbe col suo nodo.
      */
-    $$('[data-tool-permission-select]', sheetBody).forEach((select) => {
-      select.addEventListener('change', () => {
+    if (!radice.dataset.permessiCollegati) {
+      radice.dataset.permessiCollegati = 'si';
+      radice.addEventListener('change', (evento) => {
+        const select = evento.target?.closest?.('[data-tool-permission-select]');
+        if (!select) return;
         const tool = select.dataset.toolPermissionSelect;
         if (select.value) state.permessiPerAttrezzo[tool] = select.value;
         else delete state.permessiPerAttrezzo[tool];
         sincronizzaImpostazioniSessione({ permessiPerAttrezzo: Object.keys(state.permessiPerAttrezzo).length ? { ...state.permessiPerAttrezzo } : null });
-        toast('Permesso per-attrezzo aggiornato', select.value ? `${tool}: ${select.options[select.selectedIndex].textContent}` : `${tool}: torna alla policy sessione`);
-        openSheet('permissions'); // l'avviso delle porte laterali si ricalcola sulla scelta appena fatta
+        toast('Permesso per-attrezzo aggiornato', select.value ? `${nomeUmanoAttrezzo(tool)}: ${select.options[select.selectedIndex].textContent}` : `${nomeUmanoAttrezzo(tool)}: torna al permesso della sessione`);
+        ridisegna();
       });
-    });
-    /*
-     * ⛔ T03-D2 — l'avviso non basta che informi: deve poter essere AGITO sul posto. Chi ha appena
-     * scoperto che il terminale scrive lo stesso non deve andare a cercare la riga giusta in un
-     * elenco di cinque: un colpo e sono chiuse tutte, con lo stesso cancello che ha scelto per
-     * «scrivi» (se ha detto «nega», nega; se ha detto «chiedi», chiedi — non si decide per lui).
-     */
-    $$('[data-chiudi-porte-laterali]', sheetBody).forEach((bottone) => {
-      bottone.addEventListener('click', () => {
+      /*
+       * ⛔ T03-D2 — l'avviso non basta che informi: deve poter essere AGITO sul posto. Chi ha
+       * appena scoperto che il terminale scrive lo stesso non deve andare a cercare la riga giusta
+       * in un elenco di cinque: un colpo e sono chiuse tutte, con lo stesso cancello che ha scelto
+       * per «scrivi» (se ha detto «nega», nega; se ha detto «chiedi», chiedi — non si decide per lui).
+       */
+      radice.addEventListener('click', (evento) => {
+        const bottone = evento.target?.closest?.('[data-chiudi-porte-laterali]');
+        if (!bottone) return;
         const quali = String(bottone.dataset.chiudiPorteLaterali || '').split(',').filter(Boolean);
         if (!quali.length) return;
         const comeScrivi = state.permessiPerAttrezzo.scrivi === 'nega' ? 'nega' : 'chiedi';
         for (const attrezzo of quali) state.permessiPerAttrezzo[attrezzo] = comeScrivi;
         sincronizzaImpostazioniSessione({ permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
         toast('Chiuse anche le altre vie', `${quali.map(nomeUmanoAttrezzo).join(', ')}: ${comeScrivi === 'nega' ? 'nega sempre' : 'chiedi conferma'}`);
-        openSheet('permissions');
+        ridisegna();
       });
+    }
+  }
+
+  function wireSheetActions(type) {
+    collegaAzioniPermessi(sheetBody, {
+      dopoLaScelta: () => closeEmbeddedDialog(sheetDialog),
+      ridisegna: () => openSheet('permissions'),
     });
     /*
      * ⭐⭐⭐ O-01 (04/9) — era l'unica azione DICHIARATAMENTE finta rimasta

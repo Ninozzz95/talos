@@ -222,7 +222,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
 
             <div class="talos-system-note" data-c="SystemNote">
               <span class="talos-badge talos-badge--info talos-badge--sm">Nota</span>
-              <div><div class="talos-system-note__title">Permesso cambiato a metà lavoro</div><p>Da «sola lettura» a «scrittura nel workspace», deciso da te alle 18:06. I giri precedenti restano registrati col permesso di allora.</p></div>
+              <div><div class="talos-system-note__title">Permesso cambiato a metà lavoro</div><p>Da «solo lettura» a «scrive nel progetto», deciso da te alle 18:06. I giri precedenti restano registrati col permesso di allora.</p></div>
             </div>
             <div class="talos-message__actions" role="group" aria-label="Azioni sulla risposta"><button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" title="Copia la risposta" aria-label="Copia la risposta"><svg class="i i--sm"><use href="#i-copy"/></svg></button><button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" title="Ascolta la risposta" aria-label="Ascolta la risposta" aria-pressed="false"><svg class="i i--sm"><use href="#i-play"/></svg></button><button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" title="Chiedi di nuovo" aria-label="Chiedi di nuovo"><svg class="i i--sm"><use href="#i-history"/></svg></button></div>
           </div>
@@ -918,22 +918,30 @@ export function registraSessione(sessione) {
       <button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloPermessi" title="Chiudi"><svg class="i"><use href="#i-x"/></svg></button>
     </div>
     <div class="talos-dialog__body">
-      <div class="talos-choice-grid" data-c="ChoiceCards" role="radiogroup" aria-label="Livello di permesso">
-        <button class="talos-choice" role="radio" aria-checked="false"><span class="talos-choice__title">Solo lettura</span><span class="talos-badge talos-badge--success talos-badge--sm">rischio basso</span><p>Può leggere ed eseguire comandi che non cambiano niente.</p></button>
-        <button class="talos-choice" role="radio" aria-checked="true"><span class="talos-choice__title">Scrive nel progetto</span><span class="talos-badge talos-badge--warning talos-badge--sm">rischio medio</span><p>Scrive solo dentro la cartella aperta. <span class="talos-choice__hint">Consigliato</span></p></button>
-        <button class="talos-choice" role="radio" aria-checked="false"><span class="talos-choice__title">Chiede prima</span><span class="talos-badge talos-badge--warning talos-badge--sm">rischio alto</span><p>Esegue qualunque comando nella cartella, senza chiedere ogni volta.</p></button>
-        <button class="talos-choice" role="radio" aria-checked="false"><span class="talos-choice__title">Accesso pieno</span><span class="talos-badge talos-badge--danger talos-badge--sm">rischio molto alto</span><p>Scrive ovunque sul disco. Richiede la spunta «ho capito cosa comporta».</p></button>
+      <div class="talos-choice-grid" data-c="ChoiceCards" role="radiogroup" aria-label="Livello di permesso" id="veloPermessiScelte">
+        <!-- ⛔ 07/9 — il valore del kernel vive NELL'ATTRIBUTO (`data-permission-choice`), il nome umano
+             a schermo: e lo stesso contratto del foglio vecchio, cosi il velo puo prenderne il posto
+             senza che il server si accorga di niente. I testi arrivano da `components/politiche.js`. -->
+        <button class="talos-choice" role="radio" aria-checked="false" data-permission-choice="Read only"><span class="talos-choice__title">Solo lettura</span><span class="talos-badge talos-badge--success talos-badge--sm">rischio basso</span><p>Legge il progetto e lancia comandi che non cambiano niente. Ogni scrittura viene rifiutata.</p></button>
+        <button class="talos-choice" role="radio" aria-checked="true" data-permission-choice="Workspace write"><span class="talos-choice__title">Scrive nel progetto</span><span class="talos-badge talos-badge--warning talos-badge--sm">rischio medio</span><p>Scrive solo dentro la cartella della sessione. Comandi e test passano dal cancello. <span class="talos-choice__hint">Consigliato</span></p></button>
+        <button class="talos-choice" role="radio" aria-checked="false" data-permission-choice="On request"><span class="talos-choice__title">Chiede prima</span><span class="talos-badge talos-badge--warning talos-badge--sm">rischio medio</span><p>Ti chiede conferma prima di ogni azione che lascia traccia: scritture, comandi, rete.</p></button>
+        <button class="talos-choice" role="radio" aria-checked="false" data-permission-choice="Full access"><span class="talos-choice__title">Accesso pieno</span><span class="talos-badge talos-badge--danger talos-badge--sm">rischio molto alto</span><p>File e rete senza i cancelli ordinari. Solo se sai gia cosa sta per fare.</p></button>
       </div>
-      <div class="talos-toolbar talos-toolbar--inset"><span class="talos-eyebrow">Per attrezzo</span><div class="talos-tabs talos-tabs--pills"><div class="talos-tabs__list" role="tablist" aria-label="Filtro attrezzi"><button class="talos-tabs__tab" role="tab" aria-selected="true">Tutti e 43</button><button class="talos-tabs__tab" role="tab" aria-selected="false">Hanno un cancello</button></div></div><span class="talos-grow"></span><span class="talos-muted talos-approval__foot-note">Il permesso dell'attrezzo vince sulla politica della sessione</span></div>
-      <div class="talos-card talos-list" data-c="ToolPermissionList">
-        <div class="talos-list-row"><span class="talos-list-row__icon"><svg class="i"><use href="#i-terminal"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Comando nel terminale</span><span class="talos-list-row__sub">esegue un comando nella cartella della sessione</span></span><span class="talos-list-row__aside"><select class="talos-select talos-select--sm" aria-label="Permesso per il terminale"><option>Chiede sempre</option><option>Come la sessione</option><option>Mai in questa sessione</option></select></span></div>
-        <div class="talos-list-row"><span class="talos-list-row__icon"><svg class="i"><use href="#i-code"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Scrittura di un file</span><span class="talos-list-row__sub">crea o modifica un file, sempre con ricevuta</span></span><span class="talos-list-row__aside"><select class="talos-select talos-select--sm" aria-label="Permesso per la scrittura"><option>Chiede sempre</option><option>Come la sessione</option><option>Mai in questa sessione</option></select></span></div>
-        <div class="talos-list-row"><span class="talos-list-row__icon"><svg class="i"><use href="#i-search"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">Ricerca nei file</span><span class="talos-list-row__sub">cerca un testo dentro la cartella, senza aprirla tutta</span></span><span class="talos-list-row__aside"><select class="talos-select talos-select--sm" aria-label="Permesso per la ricerca"><option>Come la sessione</option><option>Chiede sempre</option><option>Mai in questa sessione</option></select></span></div>
+      <div class="talos-toolbar talos-toolbar--inset"><span class="talos-eyebrow">Per attrezzo</span><!-- ⛔ 07/9 — qui c'erano due schede, «Tutti e 43» e «Hanno un cancello», e non filtravano niente:
+             l'elenco mostra i CINQUE attrezzi che hanno un cancello proprio, mai 43. Una promessa vuota
+             nella finestra dove si decide la sicurezza. Al loro posto il fatto vero. --><span class="talos-muted">Cinque attrezzi hanno un cancello proprio · gli altri seguono la politica qui sopra</span><span class="talos-grow"></span><span class="talos-muted talos-approval__foot-note">Il permesso dell'attrezzo vince sulla politica della sessione</span></div>
+      <div class="talos-card talos-list" data-c="ToolPermissionList" id="veloPermessiAttrezzi">
+        <!-- ⛔ 07/9 — le righe qui dentro le disegna `disegnaPermessiIn` dai cinque attrezzi che hanno
+             DAVVERO un cancello per-attrezzo (`ATTREZZI_CON_PERMESSO_PER_ATTREZZO` in config.mjs): un
+             elenco scritto a mano nel mockup mentirebbe il giorno in cui il kernel ne aggiunge uno. -->
+      </div>
+      <p class="sheet-avviso" id="veloPermessiAvviso" role="status" hidden></p>
+      <p class="talos-muted" id="veloPermessiNota">Un «chiedi» su un attrezzo accende il canale di approvazione per tutta la sessione: finché resta acceso, TALOS chiede conferma anche per le altre azioni che lasciano traccia. È il limite del kernel di oggi, dichiarato invece che nascosto.</p>
       </div>
       <div class="talos-card talos-scope" data-c="ScopeNote"><span class="talos-scope__text">I file di controllo (<span class="talos-mono">.claude/</span>, <span class="talos-mono">package.json</span>, gli hook) chiedono <b>sempre</b> una conferma singola, anche con «per questa sessione».</span><button class="talos-button talos-button--secondary talos-button--sm">Vedi l'elenco</button></div>
     </div>
     <div class="talos-dialog__footer">
-      <button class="talos-button talos-button--secondary">Riporta a «scrittura nel workspace»</button>
+      <button class="talos-button talos-button--secondary">Riporta a «Scrive nel progetto»</button>
       <span class="talos-grow"></span>
       <button class="talos-button talos-button--primary" data-chiudi="veloPermessi">Fatto</button>
     </div>

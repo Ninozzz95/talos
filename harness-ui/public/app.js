@@ -14030,7 +14030,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         renameFile: "veloRinominaFile",
         deleteFile: "veloEliminaFile",
         createFile: "veloCreaFile",
-        references: "veloRiferimenti"
+        references: "veloRiferimenti",
+        // ⭐ 07/9, terza tornata: il foglio PERMESSI — il piu visitato dei sei rimasti, e quello dove
+        //    si decide la sicurezza. Vedi `disegnaPermessiIn`/`collegaAzioniPermessi`.
+        permissions: "veloPermessi"
       };
       async function esportaSessioneCorrente(formato) {
         if (!state.realSession.id) return { ok: false, motivo: "Nessuna sessione aperta da esportare." };
@@ -14145,6 +14148,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return { ok: true, nome: nomeUnico };
       }
       function preparaVeloDaFoglio(tipo, velo) {
+        if (tipo === "permissions") {
+          disegnaPermessiIn(velo);
+          collegaAzioniPermessi(velo, {
+            dopoLaScelta: () => chiudiVeloMockup("veloPermessi"),
+            ridisegna: () => disegnaPermessiIn(velo)
+          });
+          return;
+        }
         if (tipo === "rename") {
           const campo2 = $2("#rinominaSessioneNome", velo);
           const modulo = $2("#rinominaSessioneForm", velo);
@@ -15043,35 +15054,98 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         sincronizzaImpostazioniSessione({ permessi: nuovoPermesso });
         toast("Policy aggiornata", messaggioToast);
       }
-      function wireSheetActions(type) {
-        $$("[data-permission-choice]", sheetBody).forEach((button2) => {
+      const ATTREZZI_COL_CANCELLO = Object.freeze([
+        ["scrivi", "Scrive un file — passa dal cancello semantico", "i-code"],
+        ["prova", "Esegue la suite di test del progetto", "i-check"],
+        ["shell", "Comando di shell nella cartella progetto", "i-terminal"],
+        ["document_create", "Genera un documento (PDF, foglio, slide, report)", "i-files"],
+        // ⛔ O-01 (04/9): il quinto c'e in `ATTREZZI_CON_PERMESSO_PER_ATTREZZO` (config.mjs) dal 29/8 e
+        //    il foglio ne mostrava quattro: sul quinto la promessa era vuota.
+        ["generate_image", "Genera un’immagine — passa dal cancello per-attrezzo come gli altri quattro", "i-image"]
+      ]);
+      const SCELTE_PERMESSO_ATTREZZO = Object.freeze([
+        ["", "Come la sessione"],
+        ["sempre", "Sempre consentito"],
+        ["chiedi", "Chiedi conferma"],
+        ["nega", "Nega sempre"]
+      ]);
+      function disegnaPermessiIn(radice) {
+        if (!radice) return;
+        for (const bottone3 of $$("[data-permission-choice]", radice)) {
+          const suo = bottone3.dataset.permissionChoice === state.permissions;
+          bottone3.setAttribute("aria-checked", String(suo));
+          bottone3.classList.toggle("is-attiva", suo);
+        }
+        const elenco2 = $2("#veloPermessiAttrezzi", radice);
+        if (elenco2) {
+          elenco2.textContent = "";
+          for (const [attrezzo, descrizione, icona7] of ATTREZZI_COL_CANCELLO) {
+            const riga = document.createElement("div");
+            riga.className = "talos-list-row";
+            const scelto = state.permessiPerAttrezzo[attrezzo] || "";
+            riga.innerHTML = `<span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#${icona7}"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">${nomeUmanoAttrezzo2(attrezzo)}</span><span class="talos-list-row__sub">${descrizione}</span></span><span class="talos-list-row__aside"><select class="talos-select talos-select--sm" data-tool-permission-select="${attrezzo}" aria-label="Permesso per ${nomeUmanoAttrezzo2(attrezzo)}">` + SCELTE_PERMESSO_ATTREZZO.map(([valore, nome]) => `<option value="${valore}"${valore === scelto ? " selected" : ""}>${nome}</option>`).join("") + "</select></span>";
+            elenco2.append(riga);
+          }
+        }
+        const avviso = $2("#veloPermessiAvviso", radice);
+        if (avviso) {
+          const { aperte, avviso: testo3 } = porteLateraliAperte(state.permessiPerAttrezzo, state.permissions);
+          avviso.hidden = !testo3;
+          avviso.textContent = "";
+          if (testo3) {
+            avviso.append(document.createTextNode(`${testo3} `));
+            const bottone3 = document.createElement("button");
+            bottone3.type = "button";
+            bottone3.className = "talos-button talos-button--sm";
+            bottone3.dataset.chiudiPorteLaterali = aperte.join(",");
+            bottone3.textContent = `Chiudi anche ${aperte.length === 1 ? "quella" : "quelle"}`;
+            avviso.append(bottone3);
+          }
+        }
+      }
+      function collegaAzioniPermessi(radice, { dopoLaScelta = () => {
+      }, ridisegna = () => {
+      } } = {}) {
+        if (!radice) return;
+        $$("[data-permission-choice]", radice).forEach((button2) => {
+          if (button2.dataset.permessiCollegati) return;
+          button2.dataset.permessiCollegati = "si";
           button2.addEventListener("click", () => {
             impostaPermesso(button2.dataset.permissionChoice);
             state.autonomiaScelta = true;
             salvaPreferenzeChatDesktop();
-            closeEmbeddedDialog(sheetDialog);
+            dopoLaScelta();
           });
         });
-        $$("[data-tool-permission-select]", sheetBody).forEach((select) => {
-          select.addEventListener("change", () => {
+        if (!radice.dataset.permessiCollegati) {
+          radice.dataset.permessiCollegati = "si";
+          radice.addEventListener("change", (evento) => {
+            const select = evento.target?.closest?.("[data-tool-permission-select]");
+            if (!select) return;
             const tool = select.dataset.toolPermissionSelect;
             if (select.value) state.permessiPerAttrezzo[tool] = select.value;
             else delete state.permessiPerAttrezzo[tool];
             sincronizzaImpostazioniSessione({ permessiPerAttrezzo: Object.keys(state.permessiPerAttrezzo).length ? { ...state.permessiPerAttrezzo } : null });
-            toast("Permesso per-attrezzo aggiornato", select.value ? `${tool}: ${select.options[select.selectedIndex].textContent}` : `${tool}: torna alla policy sessione`);
-            openSheet("permissions");
+            toast("Permesso per-attrezzo aggiornato", select.value ? `${nomeUmanoAttrezzo2(tool)}: ${select.options[select.selectedIndex].textContent}` : `${nomeUmanoAttrezzo2(tool)}: torna al permesso della sessione`);
+            ridisegna();
           });
-        });
-        $$("[data-chiudi-porte-laterali]", sheetBody).forEach((bottone3) => {
-          bottone3.addEventListener("click", () => {
+          radice.addEventListener("click", (evento) => {
+            const bottone3 = evento.target?.closest?.("[data-chiudi-porte-laterali]");
+            if (!bottone3) return;
             const quali = String(bottone3.dataset.chiudiPorteLaterali || "").split(",").filter(Boolean);
             if (!quali.length) return;
             const comeScrivi = state.permessiPerAttrezzo.scrivi === "nega" ? "nega" : "chiedi";
             for (const attrezzo of quali) state.permessiPerAttrezzo[attrezzo] = comeScrivi;
             sincronizzaImpostazioniSessione({ permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
             toast("Chiuse anche le altre vie", `${quali.map(nomeUmanoAttrezzo2).join(", ")}: ${comeScrivi === "nega" ? "nega sempre" : "chiedi conferma"}`);
-            openSheet("permissions");
+            ridisegna();
           });
+        }
+      }
+      function wireSheetActions(type) {
+        collegaAzioniPermessi(sheetBody, {
+          dopoLaScelta: () => closeEmbeddedDialog(sheetDialog),
+          ridisegna: () => openSheet("permissions")
         });
         $$("[data-capability-action]", sheetBody).forEach((button2) => {
           button2.addEventListener("click", () => {
