@@ -674,6 +674,15 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    non si capiva che si potesse premere. */
 .sheet-avviso button{flex:0 0 auto; min-height:28px; padding:4px 11px; border:1px solid var(--talos-accent-border); border-radius:999px; background:transparent; color:var(--talos-accent-text); font:inherit; font-size:11.5px; font-weight:600; cursor:pointer}
 .sheet-avviso button:hover{background:var(--talos-accent-soft); border-color:var(--talos-accent)}
+/* ⛔ 07/9 — «Approvato» e «Negato» erano RESI IDENTICI: `segnaEsitoApprovazione` scrive
+   `talos-approval__esito--si` e `--no` (conversazione.js) e nel foglio non esisteva NESSUNA regola
+   per quei due nomi. Due esiti opposti, lo stesso grigio: chi rilegge la conversazione non sa cosa
+   ha deciso. Il colore non e decorazione qui, e l'unica cosa che distingue un si da un no. */
+.talos-approval__esito{display:flex; align-items:center; gap:7px; margin:10px 0 0; padding:7px 10px; border-radius:9px; border:1px solid var(--talos-border); background:var(--talos-card-subtle); color:var(--talos-muted); font-size:12px; font-weight:600}
+.talos-approval__esito::before{content:''; width:7px; height:7px; border-radius:50%; background:currentColor; flex:0 0 auto}
+/* i token del tema, quelli VERI: si chiamano `success`, non `ok` — e ci sono gia in entrambi i temi */
+.talos-approval__esito--si{border-color:var(--talos-success-border); background:var(--talos-success-soft); color:var(--talos-success)}
+.talos-approval__esito--no{border-color:var(--talos-danger-border); background:var(--talos-danger-soft); color:var(--talos-danger)}
 .sheet-avviso{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0 0; padding:9px 11px; border-radius:10px; border:1px solid var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:12px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .workspace-chooser-selection .workspace-chooser-avviso{display:block; margin-top:6px; padding:6px 9px; border-radius:9px; border:1px solid var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:11.5px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .talos-menu__nota{margin:6px 4px 2px; padding-top:6px; border-top:1px solid var(--talos-border-subtle); color:var(--talos-muted); font-size:11.5px; line-height:1.45}
