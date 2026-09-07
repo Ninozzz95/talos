@@ -35,7 +35,7 @@ export const CONVERSAZIONE = Object.freeze([
         codice: 'TALOS-SHELL-404',
       },
     },
-    nota: { tipo: 'info', badge: 'Nota', titolo: 'Permesso cambiato a metà lavoro', testo: 'Da «sola lettura» a «scrittura nel workspace», deciso da te alle 18:06. I giri precedenti restano registrati col permesso di allora.' },
+    nota: { tipo: 'info', badge: 'Nota', titolo: 'Permesso cambiato a metà lavoro', testo: 'Da «solo lettura» a «scrive nel progetto», deciso da te alle 18:06. I giri precedenti restano registrati col permesso di allora.' },
     azioni: true,
   },
   {
