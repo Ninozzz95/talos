@@ -1923,7 +1923,7 @@ var init_en = __esm({
         "Pagina aperta da te · non mostrabile qui": "Opened by you · cannot be shown here",
         "Apertura in corso…": "Opening…",
         "Copia testuale, senza navigazione interattiva. Le note locali si azzerano al ricaricamento.": "Text copy, no interactive browsing. Local notes reset on reload.",
-        "Le letture sono copie testuali; una pagina aperta da te è viva dentro TALOS quando il sito lo consente. Le note restano in questo browser.": "Readings are text copies; a page you open is live inside TALOS when the site allows it. Notes stay in this browser.",
+        "Le letture sono copie testuali; una pagina che apri tu è viva dentro TALOS — se il sito vieta la cornice, la mostra un browser pilotato sul tuo computer. Le note restano qui.": "Readings are text copies; a page you open is live inside TALOS — if the site refuses to be framed, a browser TALOS drives on your computer shows it. Notes stay here.",
         "Agente": "Agent",
         "Tu": "You",
         "Pagina viva": "Live page",
@@ -7332,7 +7332,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   }
   function renderizzaCornice(s) {
     if (!el25.live) return;
-    const vuoleViva = s && s.tipo === "viva" && s.stato !== "bloccata";
+    const vuoleViva = s && s.tipo === "viva" && s.stato !== "bloccata" && s.viaVista !== "vivo";
     const vuoleLettura = s && s.tipo !== "viva" && stato.modo === "pagina" && Boolean(s.url) && /^https?:/i.test(s.url) && s.incorniciabile !== false;
     const vuole = vuoleViva || vuoleLettura;
     el25.live.hidden = !vuole;
@@ -7493,7 +7493,10 @@ var init_browser = __esm({
       posizioneBloccata: "Pagina aperta da te · non mostrabile qui",
       posizioneCaricamento: "Apertura in corso…",
       limitiLetture: "Copia testuale, senza navigazione interattiva. Le note locali si azzerano al ricaricamento.",
-      limitiVive: "Le letture sono copie testuali; una pagina aperta da te è viva dentro TALOS quando il sito lo consente. Le note restano in questo browser.",
+      /* ⛔ 07/9 — «quando il sito lo consente» non è più vero: un sito che vieta la cornice ora si apre
+         lo stesso, in un browser che TALOS pilota sul tuo computer. La riga diceva un limite che
+         abbiamo tolto — e una promessa al ribasso invecchia peggio di una mancata. */
+      limitiVive: "Le letture sono copie testuali; una pagina che apri tu è viva dentro TALOS — se il sito vieta la cornice, la mostra un browser pilotato sul tuo computer. Le note restano qui.",
       provenienzaAgente: "Agente",
       provenienzaTu: "Tu",
       cornicePronta: "Pagina viva",
@@ -8141,6 +8144,310 @@ function fraseCercata(query, massimo = 60) {
 }
 var init_frase_cercata = __esm({
   "src/components/frase-cercata.js"() {
+  }
+});
+
+// src/components/browser-vivo.js
+function testoStato(nome) {
+  switch (nome) {
+    case "apro":
+      return t("Apro il browser…");
+    case "carico":
+      return t("Carico la pagina…");
+    case "pronto":
+      return t("Pagina viva");
+    case "fermo":
+      return t("Trasmissione ferma");
+    case "errore":
+      return t("Il browser non risponde");
+    default:
+      return t("Stato sconosciuto");
+  }
+}
+function tastoInoltrabile(evento) {
+  const tasto = evento?.key;
+  if (typeof tasto !== "string" || tasto === "") return false;
+  if (tasto === "Escape" || tasto === "Tab") return false;
+  if (evento.ctrlKey === true || evento.metaKey === true) return false;
+  return true;
+}
+function modificatori(evento) {
+  return {
+    alt: evento?.altKey === true,
+    ctrl: evento?.ctrlKey === true,
+    meta: evento?.metaKey === true,
+    shift: evento?.shiftKey === true
+  };
+}
+function testoDaTasto(evento) {
+  const tasto = evento?.key;
+  if (typeof tasto !== "string") return "";
+  return [...tasto].length === 1 ? tasto : "";
+}
+function gestoDaEvento(evento, { rettangolo, metadatiUltimoFrame } = {}) {
+  const tipo = TIPI_GESTO[evento?.type];
+  if (!tipo) return null;
+  const tasti = modificatori(evento);
+  if (tipo === "tastoGiu" || tipo === "tastoSu") {
+    if (!tastoInoltrabile(evento)) return null;
+    return { tipo, tasto: evento.key, codice: typeof evento.code === "string" ? evento.code : "", testo: testoDaTasto(evento), tasti };
+  }
+  const larghezzaVista = Number(rettangolo?.width) || 0;
+  const dip = Number(metadatiUltimoFrame?.deviceWidth) || 0;
+  if (larghezzaVista <= 0 || dip <= 0) return null;
+  const zoom = larghezzaVista / dip;
+  const scalaPagina = Number(metadatiUltimoFrame.pageScaleFactor) > 0 ? Number(metadatiUltimoFrame.pageScaleFactor) : 1;
+  const alto = Number(metadatiUltimoFrame.offsetTop) || 0;
+  const scorrimentoX = Number(metadatiUltimoFrame.scrollOffsetX) || 0;
+  const scorrimentoY = Number(metadatiUltimoFrame.scrollOffsetY) || 0;
+  const altezzaDip = Number(metadatiUltimoFrame.deviceHeight) || 0;
+  const xVista = (Number(evento.clientX) || 0) - (Number(rettangolo.left) || 0);
+  const yVista = (Number(evento.clientY) || 0) - (Number(rettangolo.top) || 0);
+  const xSchermo = xVista / zoom;
+  const ySchermo = yVista / zoom - alto;
+  const gesto = {
+    tipo,
+    xVista: Math.round(xSchermo),
+    yVista: Math.round(ySchermo),
+    x: Math.round(xSchermo / scalaPagina + scorrimentoX),
+    y: Math.round(ySchermo / scalaPagina + scorrimentoY),
+    dentro: xSchermo >= 0 && ySchermo >= 0 && xSchermo <= dip && (altezzaDip <= 0 || ySchermo <= altezzaDip),
+    pulsante: PULSANTI[Number(evento.button) || 0] || "sinistro",
+    clic: Number(evento.detail) > 0 ? Number(evento.detail) : 1,
+    tasti
+  };
+  if (tipo === "rotella") {
+    gesto.deltaX = Number(evento.deltaX) || 0;
+    gesto.deltaY = Number(evento.deltaY) || 0;
+  }
+  return gesto;
+}
+function bytesDaBase64(base64, finestra) {
+  const grezzo = finestra.atob(base64);
+  const bytes = new Uint8Array(grezzo.length);
+  for (let i = 0; i < grezzo.length; i += 1) bytes[i] = grezzo.charCodeAt(i);
+  return bytes;
+}
+function creaDecodificatore(finestra, documento) {
+  const haBitmap = typeof finestra?.createImageBitmap === "function" && typeof finestra?.atob === "function" && typeof finestra?.Blob === "function";
+  if (haBitmap) {
+    return {
+      viaBitmap: true,
+      async decodifica(base64) {
+        const blob = new finestra.Blob([bytesDaBase64(base64, finestra)], { type: "image/jpeg" });
+        return finestra.createImageBitmap(blob);
+      }
+    };
+  }
+  return {
+    viaBitmap: false,
+    decodifica(base64) {
+      return new Promise((risolvi, rifiuta) => {
+        const immagine = documento.createElement("img");
+        immagine.decoding = "async";
+        immagine.onload = () => risolvi(immagine);
+        immagine.onerror = () => rifiuta(new Error("fotogramma non decodificabile"));
+        immagine.src = `data:image/jpeg;base64,${base64}`;
+      });
+    }
+  };
+}
+function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.document, finestra = globalThis } = {}) {
+  if (!contenitore) throw new Error("creaVistaViva: manca il contenitore");
+  const doc = documento;
+  const chiediFotogramma = typeof finestra?.requestAnimationFrame === "function" ? (mano) => finestra.requestAnimationFrame(mano) : (mano) => setTimeout(mano, 16);
+  const annullaFotogramma = typeof finestra?.cancelAnimationFrame === "function" ? (id) => finestra.cancelAnimationFrame(id) : (id) => clearTimeout(id);
+  const senzaMoto = finestra?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+  const { decodifica: decodifica2, viaBitmap } = creaDecodificatore(finestra, doc);
+  const radice = doc.createElement("div");
+  radice.className = senzaMoto ? `${CLASSE} ${CLASSE}--senza-moto` : CLASSE;
+  radice.dataset.stato = "apro";
+  const tela = doc.createElement("canvas");
+  tela.className = `${CLASSE}__schermo`;
+  tela.setAttribute("tabindex", "0");
+  tela.setAttribute("role", "application");
+  tela.setAttribute("aria-label", t("Pagina viva"));
+  const velo = doc.createElement("div");
+  velo.className = `${CLASSE}__velo`;
+  const etichetta = doc.createElement("p");
+  etichetta.className = `${CLASSE}__stato`;
+  etichetta.setAttribute("role", "status");
+  radice.append(tela, velo, etichetta);
+  contenitore.replaceChildren(radice);
+  const ascolti = [];
+  const ascolta = (nodo4, tipo, mano, opzioni) => {
+    nodo4.addEventListener(tipo, mano, opzioni);
+    ascolti.push([nodo4, tipo, mano, opzioni]);
+  };
+  let corrente = "apro";
+  let attesa = null;
+  let prenotato = null;
+  let inCoda = false;
+  let distrutto = false;
+  let metadatiDipinti = null;
+  let ricevuti = 0;
+  let dipinti = 0;
+  let scartati = 0;
+  function segnala(motivo, dettaglio) {
+    try {
+      onErrore?.({ motivo, dettaglio: dettaglio ? String(dettaglio.message || dettaglio) : "" });
+    } catch {
+    }
+  }
+  function applicaStato(nome, dettaglio = "") {
+    if (!STATI4.includes(nome)) return corrente;
+    const vero = nome === "pronto" && dipinti === 0 ? "carico" : nome;
+    corrente = vero;
+    const testo3 = dettaglio ? `${testoStato(vero)} — ${dettaglio}` : testoStato(vero);
+    radice.dataset.stato = vero;
+    etichetta.dataset.stato = vero;
+    etichetta.textContent = testo3;
+    velo.textContent = vero === "pronto" ? "" : testo3;
+    velo.hidden = vero === "pronto";
+    tela.setAttribute("aria-label", `${t("Pagina viva")} — ${testo3}`);
+    return corrente;
+  }
+  function disegna(immagine, metadati) {
+    const larghezza = Number(immagine?.naturalWidth) || Number(immagine?.width) || 0;
+    const altezza = Number(immagine?.naturalHeight) || Number(immagine?.height) || 0;
+    if (larghezza <= 0 || altezza <= 0) {
+      segnala("fotogramma-senza-misura");
+      return false;
+    }
+    const dip = Number(metadati?.deviceWidth) > 0 ? Number(metadati.deviceWidth) : larghezza;
+    const rapporto = dip > 0 ? larghezza / dip : 1;
+    const alto = Math.round(Math.max(0, Number(metadati?.offsetTop) || 0) * rapporto);
+    if (tela.width !== larghezza) tela.width = larghezza;
+    if (tela.height !== altezza + alto) tela.height = altezza + alto;
+    const contesto2 = tela.getContext("2d");
+    if (!contesto2) {
+      segnala("canvas-senza-contesto");
+      return false;
+    }
+    contesto2.drawImage(immagine, 0, alto);
+    dipinti += 1;
+    metadatiDipinti = { ...metadati || {}, larghezzaImmagine: larghezza, altezzaImmagine: altezza };
+    if (corrente !== "pronto") applicaStato("pronto");
+    return true;
+  }
+  async function dipingi() {
+    inCoda = false;
+    prenotato = null;
+    const fotogramma = attesa;
+    attesa = null;
+    if (!fotogramma || distrutto) return;
+    let immagine = null;
+    try {
+      immagine = await decodifica2(fotogramma.dati);
+    } catch (errore) {
+      applicaStato("errore", t("fotogramma illeggibile"));
+      segnala("decodifica", errore);
+      return;
+    }
+    if (distrutto) {
+      immagine?.close?.();
+      return;
+    }
+    disegna(immagine, fotogramma.metadati);
+    immagine?.close?.();
+  }
+  function frame(fotogramma) {
+    if (distrutto) return false;
+    const dati = fotogramma?.dati;
+    if (typeof dati !== "string" || dati.length === 0) {
+      segnala("fotogramma-vuoto");
+      return false;
+    }
+    ricevuti += 1;
+    if (attesa) scartati += 1;
+    attesa = { dati, metadati: fotogramma.metadati || null };
+    if (!inCoda) {
+      inCoda = true;
+      prenotato = chiediFotogramma(dipingi);
+    }
+    return true;
+  }
+  function stato(nome, dettaglio) {
+    if (nome === void 0) return corrente;
+    return applicaStato(nome, dettaglio);
+  }
+  function misura() {
+    const rettangolo = tela.getBoundingClientRect?.() || null;
+    const dip = Number(metadatiDipinti?.deviceWidth) || 0;
+    return {
+      rettangolo,
+      metadatiUltimoFrame: metadatiDipinti,
+      scala: rettangolo && dip > 0 ? (Number(rettangolo.width) || 0) / dip : 0,
+      stato: corrente,
+      ricevuti,
+      dipinti,
+      scartati,
+      viaBitmap,
+      senzaMoto
+    };
+  }
+  function suPuntatore(evento) {
+    if (evento.type === "pointerdown") tela.focus?.();
+    const gesto = gestoDaEvento(evento, misura());
+    if (!gesto) return;
+    if (evento.type === "wheel") evento.preventDefault?.();
+    onGesto?.(gesto);
+  }
+  function suTasto(evento) {
+    if (evento.key === "Escape") {
+      evento.stopPropagation?.();
+      tela.blur?.();
+      return;
+    }
+    const gesto = gestoDaEvento(evento, misura());
+    if (!gesto) return;
+    evento.preventDefault?.();
+    onGesto?.(gesto);
+  }
+  function suFuoco() {
+    radice.classList?.add(`${CLASSE}--fuoco`);
+  }
+  function suPerditaFuoco() {
+    radice.classList?.remove(`${CLASSE}--fuoco`);
+  }
+  for (const tipo of ["pointerdown", "pointerup", "pointermove"]) ascolta(tela, tipo, suPuntatore);
+  ascolta(tela, "wheel", suPuntatore, { passive: false });
+  ascolta(tela, "keydown", suTasto);
+  ascolta(tela, "keyup", suTasto);
+  ascolta(tela, "focus", suFuoco);
+  ascolta(tela, "blur", suPerditaFuoco);
+  applicaStato("apro");
+  function distruggi() {
+    if (distrutto) return;
+    distrutto = true;
+    if (inCoda && prenotato !== null) annullaFotogramma(prenotato);
+    inCoda = false;
+    prenotato = null;
+    attesa = null;
+    for (const [nodo4, tipo, mano, opzioni] of ascolti) nodo4.removeEventListener?.(tipo, mano, opzioni);
+    ascolti.length = 0;
+    contenitore.replaceChildren?.();
+  }
+  return { frame, stato, misura, distruggi, radice, tela };
+}
+var STATI4, CLASSE, TIPI_GESTO, PULSANTI;
+var init_browser_vivo = __esm({
+  "src/components/browser-vivo.js"() {
+    init_lingua();
+    STATI4 = Object.freeze(["apro", "carico", "fermo", "errore", "pronto"]);
+    CLASSE = "talos-vistaviva";
+    TIPI_GESTO = Object.freeze({
+      pointerdown: "giu",
+      mousedown: "giu",
+      pointerup: "su",
+      mouseup: "su",
+      pointermove: "muovi",
+      mousemove: "muovi",
+      wheel: "rotella",
+      keydown: "tastoGiu",
+      keyup: "tastoSu"
+    });
+    PULSANTI = Object.freeze(["sinistro", "centrale", "destro"]);
   }
 });
 
@@ -9301,6 +9608,7 @@ var init_app = __esm({
     init_conversazione();
     init_cronologia();
     init_frase_cercata();
+    init_browser_vivo();
     init_scorciatoie();
     init_chat_foot();
     init_progetti();
@@ -17262,6 +17570,92 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         renderizzaBrowser();
         browserUi?.fuocoSullaScheda();
       }
+      let vistaViva = null;
+      let flussoVivo = null;
+      const IDENTITA_BROWSER_SENZA_SESSIONE = "browser-di-questa-pagina";
+      const identitaBrowser = () => state.realSession.id || IDENTITA_BROWSER_SENZA_SESSIONE;
+      function smontaVistaViva() {
+        if (flussoVivo) {
+          try {
+            flussoVivo.close();
+          } catch {
+          }
+          flussoVivo = null;
+        }
+        if (vistaViva) {
+          try {
+            vistaViva.distruggi();
+          } catch {
+          }
+          vistaViva = null;
+        }
+        const contenitore = $2("#browserVistaViva");
+        if (contenitore) {
+          contenitore.hidden = true;
+          contenitore.replaceChildren();
+        }
+        void apiPost(`/api/v1/browser/vivo/chiudi?sessione=${encodeURIComponent(identitaBrowser())}`, {}).catch(() => {
+        });
+      }
+      async function apriNelBrowserVivo(voce) {
+        const contenitore = $2("#browserVistaViva");
+        const sessione = identitaBrowser();
+        if (!contenitore || !voce?.url) return false;
+        smontaVistaViva();
+        contenitore.hidden = false;
+        vistaViva = creaVistaViva(contenitore, {
+          onGesto: (gesto) => {
+            void apiPost(`/api/v1/browser/vivo/gesto?sessione=${encodeURIComponent(sessione)}`, gesto).catch(() => {
+            });
+          },
+          onErrore: (messaggio) => {
+            voce.motivo = messaggio;
+            renderizzaBrowser();
+          }
+        });
+        vistaViva.stato("apro");
+        try {
+          const esito = await apiPost(`/api/v1/browser/vivo/apri?sessione=${encodeURIComponent(sessione)}`, { url: voce.url });
+          voce.url = esito?.url || voce.url;
+          voce.viaVista = "vivo";
+          voce.annotabile = Boolean(esito?.annotabile);
+          voce.stato = esito?.ok ? "pronta" : "bloccata";
+          if (!esito?.ok) {
+            voce.motivo = esito?.errore || "La pagina non si è caricata";
+            vistaViva.stato("errore");
+            renderizzaBrowser();
+            return true;
+          }
+        } catch (errore) {
+          voce.stato = "bloccata";
+          voce.motivo = messaggioErroreUtente(errore, "Non riesco ad aprire questa pagina in un browser pilotato.");
+          vistaViva.stato("errore");
+          renderizzaBrowser();
+          return true;
+        }
+        vistaViva.stato("carico");
+        flussoVivo = new EventSource(`/api/v1/browser/vivo/schermo?sessione=${encodeURIComponent(sessione)}`);
+        flussoVivo.onmessage = (evento) => {
+          let messaggio = null;
+          try {
+            messaggio = JSON.parse(evento.data);
+          } catch {
+            return;
+          }
+          if (messaggio?.errore) {
+            vistaViva?.stato("errore");
+            voce.motivo = messaggio.errore;
+            renderizzaBrowser();
+            return;
+          }
+          if (messaggio?.dati) vistaViva?.frame({ dati: messaggio.dati, metadati: messaggio.metadati });
+        };
+        flussoVivo.onerror = () => {
+          vistaViva?.stato("fermo");
+        };
+        renderizzaBrowser();
+        return true;
+      }
       async function apriPaginaVivaBrowser(url, idEsistente = null) {
         const rs = state.realSession;
         if (!idEsistente && schedeBrowser().length >= MASSIMO_SCHEDE) {
@@ -17287,9 +17681,13 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           voce.titolo = esito?.titolo || null;
           if (esito?.incorniciabile || voce.proxata) {
             if (voce.stato === "caricamento") voce.stato = "pronta";
+            voce.viaVista = voce.proxata ? "proxy" : "cornice";
           } else {
-            voce.stato = "bloccata";
-            voce.motivo = esito?.motivo || "Il sito non consente di essere mostrato dentro TALOS";
+            const conVista = await apriNelBrowserVivo(voce);
+            if (!conVista) {
+              voce.stato = "bloccata";
+              voce.motivo = esito?.motivo || "Il sito non consente di essere mostrato dentro TALOS";
+            }
           }
           void dallaPaginaAgliOcchiDelModello(voce);
         } catch (error) {

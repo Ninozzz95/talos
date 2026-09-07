@@ -32,7 +32,10 @@ export const TESTI = Object.freeze({
   posizioneBloccata: 'Pagina aperta da te · non mostrabile qui',
   posizioneCaricamento: 'Apertura in corso…',
   limitiLetture: 'Copia testuale, senza navigazione interattiva. Le note locali si azzerano al ricaricamento.',
-  limitiVive: 'Le letture sono copie testuali; una pagina aperta da te è viva dentro TALOS quando il sito lo consente. Le note restano in questo browser.',
+  /* ⛔ 07/9 — «quando il sito lo consente» non è più vero: un sito che vieta la cornice ora si apre
+     lo stesso, in un browser che TALOS pilota sul tuo computer. La riga diceva un limite che
+     abbiamo tolto — e una promessa al ribasso invecchia peggio di una mancata. */
+  limitiVive: 'Le letture sono copie testuali; una pagina che apri tu è viva dentro TALOS — se il sito vieta la cornice, la mostra un browser pilotato sul tuo computer. Le note restano qui.',
   provenienzaAgente: 'Agente',
   provenienzaTu: 'Tu',
   cornicePronta: 'Pagina viva',
@@ -342,7 +345,13 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
      * arriva nessun `load`: dopo l'attesa si passa da soli al testo, dicendo perché. Mai una cornice
      * bianca senza spiegazione.
      */
-    const vuoleViva = s && s.tipo === 'viva' && s.stato !== 'bloccata';
+    /*
+     * ⛔ 07/9 — una pagina che vive nel BROWSER PILOTATO non si incornicia: il suo schermo arriva
+     *   come fotogrammi, e la cornice qui accanto disegnerebbe sopra il rettangolo grigio di sempre.
+     *   Visto nello screenshot: GitHub si vedeva davvero, ma sotto l'iframe rotto che gli stava
+     *   sopra. Chi ha `viaVista === 'vivo'` ha già il suo schermo altrove.
+     */
+    const vuoleViva = s && s.tipo === 'viva' && s.stato !== 'bloccata' && s.viaVista !== 'vivo';
     // la lettura si incornicia solo se il server ha detto che quel sito si lascia incorniciare (vedi `corniceDellaLettura`)
     const vuoleLettura = s && s.tipo !== 'viva' && stato.modo === 'pagina' && Boolean(s.url) && /^https?:/i.test(s.url) && s.incorniciabile !== false;
     const vuole = vuoleViva || vuoleLettura;

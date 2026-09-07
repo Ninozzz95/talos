@@ -100,7 +100,8 @@ export default Object.freeze({
     'Lettura {i} di {n}': 'Reading {i} of {n}', 'Pagina aperta da te · viva dentro TALOS': 'Opened by you · live inside TALOS',
     'Pagina aperta da te · non mostrabile qui': 'Opened by you · cannot be shown here', 'Apertura in corso…': 'Opening…',
     'Copia testuale, senza navigazione interattiva. Le note locali si azzerano al ricaricamento.': 'Text copy, no interactive browsing. Local notes reset on reload.',
-    'Le letture sono copie testuali; una pagina aperta da te è viva dentro TALOS quando il sito lo consente. Le note restano in questo browser.': 'Readings are text copies; a page you open is live inside TALOS when the site allows it. Notes stay in this browser.',
+    'Le letture sono copie testuali; una pagina che apri tu è viva dentro TALOS — se il sito vieta la cornice, la mostra un browser pilotato sul tuo computer. Le note restano qui.':
+    'Readings are text copies; a page you open is live inside TALOS — if the site refuses to be framed, a browser TALOS drives on your computer shows it. Notes stay here.',
     'Agente': 'Agent', 'Tu': 'You', 'Pagina viva': 'Live page', 'Chiedi all’agente di leggerla': 'Ask the agent to read it', 'Nessuna pagina letta': 'No page read yet',
     'Non è un indirizzo: scrivi un sito (es. localhost:5173 o example.org).': 'That is not an address: type a site (e.g. localhost:5173 or example.org).',
     'L’agente chiede di leggere {url}. La scelta vale per questa richiesta.': 'The agent asks to read {url}. The choice applies to this request only.',
