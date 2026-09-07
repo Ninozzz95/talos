@@ -370,3 +370,43 @@ la **dettatura vocale** (B29) · il **tema chiaro guardato con l'occhio**.
 ⛔ **E prima di tutto**: rieseguire `AUDIT-DECISIONI` sulla app di oggi. Quattro delle sue ❌
 (C5, C9, G22, G29) erano **già false quando è stato scritto**, e altre diciotto sono state curate
 dopo: i suoi numeri non si possono citare finché non gira di nuovo.
+
+---
+
+## ⛔ 07/09 — UNA SOLA CAUSA dietro una fetta dei «riferimenti morti»: dodici finestre irraggiungibili
+
+Trovato scendendo i sospetti del cancello, partendo da `data-ridimensiona`.
+
+**Il template ha 22 veli (finestre modali). Dodici non si possono aprire**: nessun
+`data-apre-velo="..."` nel markup, e nessun sorgente ne nomina l'id.
+
+| irraggiungibile | e nel prodotto la stessa cosa si fa così |
+|---|---|
+| `veloNuova` | la modale vera è `#newSessionBtn` → `.workspace-chooser` |
+| `veloPermessi` | il foglio vero è `openSheet('permissions')` |
+| `veloModello` | il selettore vero è `.model-picker-trigger` |
+| `veloEsporta` · `veloRinomina` · `veloEliminaSessione` | azioni di sessione, con `openSheet` |
+| `veloFile` · `veloCreaFile` · `veloEliminaFile` · `veloRinominaFile` | menu dei file, altro meccanismo |
+| `veloAmbiente` · `veloRiferimenti` | idem |
+
+⇒ **Non è un difetto funzionale**: quelle funzioni esistono tutte, fatte col vecchio meccanismo del
+monolite. È **debito del cutover**: il mockup portava la sua versione di ogni finestra, il prodotto
+ne ha collegate 10 su 22, e le altre 12 sono rimaste nel markup.
+
+**Quanto pesa: ~43 KB su 310, il 14% del template**, servito a ogni apertura della app.
+
+⭐ E spiega **una sola causa** dietro tanti reperti del cancello: dei 15 attributi «scritti e mai
+letti» (`data-modello-dialogo`, `data-fonte-modello`, `data-file-action`, `data-coda-togli`…), la
+gran parte vive dentro questi dodici veli. Non sono 15 difetti sparsi: è **un difetto solo**, e ha
+una cura sola.
+
+⛔ **La cura è una decisione dell'owner**, non mia, perché sono due strade opposte:
+1. **togliere** i dodici veli dal mockup — il template cala del 14%, e il mockup smette di
+   promettere finestre che il prodotto non usa;
+2. **collegarli** al posto dei fogli vecchi — è il cutover finito davvero, ma è molto più lavoro e
+   tocca funzioni che oggi girano.
+
+⛔ Nota su una mia cura di poche ore fa: «Gestisci nel Model Lab» l'ho collegato **dentro
+`veloModello`**, cioè dentro una finestra che nessuno può aprire. Il collegamento funziona (provato
+cliccando l'elemento) ma non è raggiungibile da una persona finché quella finestra resta chiusa.
+Va rifatto sul selettore vero, o cade dentro la decisione qui sopra.
