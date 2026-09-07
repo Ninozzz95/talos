@@ -921,8 +921,12 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-inspector__hint + .talos-button{margin-top:10px}
 .talos-kv{display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:30px; border-top:1px solid var(--talos-border-subtle)}
 .talos-kv:first-of-type{border-top:0}
-.talos-kv__k{color:var(--talos-muted); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.talos-kv__v{font-family:var(--talos-font-mono); font-size:12px; font-weight:500}
+/* ⛔ 07/9, visto nella foto dell'Indice dei giri: le voci lunghe mandavano «0 attrezzi» a capo su
+   due righe, rompendo l'allineamento della colonna. L'ellissi era gia' dichiarata qui e non si
+   applicava: in un flex un item con overflow:hidden ma senza min-width:0 non scende sotto il suo
+   contenuto minimo, quindi invece di troncarsi spingeva il valore. Il valore non va mai a capo. */
+.talos-kv__k{color:var(--talos-muted); font-size:12.5px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-kv__v{flex:none; white-space:nowrap; font-family:var(--talos-font-mono); font-size:12px; font-weight:500}
 .talos-kv__v--accent{color:var(--talos-accent-hover)}
 .talos-process{padding:10px 12px}
 .talos-process + .talos-process{margin-top:8px}
@@ -1328,6 +1332,27 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 /* una scheda che l'agente sta ancora leggendo: il puntino, non un'animazione che distrae */
 .talos-tabstrip__scheda[data-stato="caricamento"] .talos-tabstrip__icona{color:var(--talos-accent)}
 @container (max-width:720px){ .talos-tabstrip__lista{--talos-scheda-min:104px} }
+/* ⛔ 07/9, visto nelle foto a 1600, 1024 e 1280: con piu' schede di quante ne entrano, la prima
+   restava tagliata di netto dal bordo («thub.co…», mangiato il «gi») e niente diceva che a
+   sinistra ci fosse altro — il taglio sembrava un titolo storpiato, non uno scorrimento.
+   I bordi sfumano dal lato dove c'e' ancora strada. Ricerca 07/09/2026: CSS-Tricks «Modern Scroll
+   Shadows Using Scroll-Driven Animations», MDN «CSS scroll-driven animations» (Chrome 115+,
+   Safari 18+, Firefox 132+). ⭐ Con una striscia che NON scorre la timeline e' inattiva e le due
+   lunghezze restano al loro initial-value 0px: nessuna sfumatura dove non serve. */
+@property --talos-sfuma-sx{syntax:'<length>'; inherits:false; initial-value:0px}
+@property --talos-sfuma-dx{syntax:'<length>'; inherits:false; initial-value:0px}
+@supports (animation-timeline:scroll(self inline)){
+  @keyframes talos-sfuma-schede{
+    from{--talos-sfuma-sx:0px; --talos-sfuma-dx:22px}
+    to{--talos-sfuma-sx:22px; --talos-sfuma-dx:0px}
+  }
+  .talos-tabstrip__lista{
+    animation:talos-sfuma-schede linear both;
+    animation-timeline:scroll(self inline);
+    mask-image:linear-gradient(90deg, transparent 0, #000 var(--talos-sfuma-sx),
+      #000 calc(100% - var(--talos-sfuma-dx)), transparent 100%);
+  }
+}
 .talos-browser__note{white-space:pre-wrap;overflow-wrap:anywhere}
 .talos-browser__back{transform:rotate(90deg)}
 .talos-browser__next{transform:rotate(-90deg)}
@@ -1339,7 +1364,34 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-tabs__tab[data-browser-tab]{position:relative;max-width:220px;padding-right:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .talos-tabs__tab[data-browser-tab]::after{content:'×';position:absolute;right:6px;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:4px;line-height:16px;text-align:center;font-size:13px;color:var(--talos-muted);opacity:0;transition:opacity 120ms ease}
 .talos-tabs__tab[data-browser-tab]:hover::after,.talos-tabs__tab[data-browser-tab]:focus-visible::after,.talos-tabs__tab[data-browser-tab][aria-selected="true"]::after{opacity:1}
-.talos-browser__live{height:min(70vh,760px);min-height:360px;padding:var(--talos-space-sm)}
+/* ⛔ 07/9, owner sullo screenshot: «l'altezza dello spazio della finestra browser deve essere alta
+   quanto tutto il resto della pagina, quello spazio fra la fine della pagina e la parte inferiore
+   non si deve vedere». Qui c'era height:min(70vh,760px): due tetti, e il secondo mordeva —
+   misurato sul 4174, 700px di finestra su 940 disponibili, e sopra una finestra da ~1086px si
+   fermava a 760 e non cresceva più. La finestra non ha un'altezza sua: prende quella che avanza.
+   ⛔ Il vincolo che fa fallire questa soluzione è min-height:auto sui flex item — va messo a 0 su
+   OGNI anello della catena, non solo sull'ultimo (ricerca 07/09/2026: Stephen Bunch «scrollable
+   container with dynamic height using Flexbox», Serhii Diachenko «Full Height Layout on CSS»). */
+.talos-page.talos-browser{display:flex;flex-direction:column;padding-bottom:14px}
+/* ⛔ La card si allunga SOLO se dentro c'è una finestra da allungare. Senza questa condizione la
+   scheda «Testo dell'agente» — dove la finestra è nascosta — lasciava ~450px di card vuota:
+   difetto che ho creato io con la prima stesura e che si è visto solo guardando la foto. */
+/* ⛔ flex:0 0 auto — la card non si comprime MAI sotto il proprio contenuto, nemmeno quando non
+   ha una finestra dentro. Con lo shrink di default, a 1280×620 la scheda «Testo dell'agente»
+   faceva uscire il testo dalla card e lo scriveva SOPRA la riga dei limiti: due scritte una
+   sull'altra, illeggibili. La regola qui sotto aggiunge solo la crescita, non lo shrink. */
+.talos-browser>.talos-card{display:flex;flex-direction:column;min-height:0;flex:0 0 auto}
+/* ⛔ flex:1 0 auto, NON 1 1 auto: cresce quando c'è spazio, ma non si accorcia MAI sotto il
+   proprio contenuto. Con lo shrink acceso, a 1280×620 la card si comprimeva sotto la finestra e la
+   pagina usciva dal pannello sovrapponendosi alla riga dei limiti e alle schede — visto guardando
+   la foto, non da un numero. Senza shrink, quando lo spazio manca è la pagina che scorre. */
+.talos-browser>.talos-card:has(>#browserLive:not([hidden])),
+.talos-browser>.talos-card:has(>#browserVistaViva:not([hidden])){flex:1 0 auto}
+.talos-browser>#browserLimiti{margin-top:var(--talos-space-sm)}
+.talos-browser__live{flex:1 1 auto;height:auto;min-height:320px;padding:var(--talos-space-sm)}
+.talos-browser>.talos-card>.talos-vistaviva{flex:1 1 auto;min-height:320px}
+/* la lettura testuale scorre dentro di sé invece di spingere fuori la finestra */
+.talos-browser #browserPagina{min-height:0}
 .talos-browser__live iframe{width:100%;height:100%;border:0;border-radius:var(--talos-radius-card);background:#fff}
 /* Browser, 06/09 — i commenti sugli elementi della pagina viva */
 .talos-browser__annotazioni{padding:var(--talos-space-md);border-top:1px solid var(--talos-border-subtle)}
