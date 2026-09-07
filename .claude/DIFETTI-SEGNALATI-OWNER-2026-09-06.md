@@ -58,6 +58,7 @@
 | O-47 | «quando voglio fermare una chat in corso devo poter fermarla immediatamente» | Fermare un giro | 🔴 aperto | ricerca su Codex, Claude e Hermes chiesta dall'owner |
 | O-48 | «il pulsante di un'altra sessione è su stop quando una sessione separata è in reasoning» | Composer, stato del giro | 🔴 aperto | **di correttezza**: lo stato «in corso» è globale invece che della sessione aperta |
 | O-49 | «Risposta non riuscita · Query non valida» ripetuto in basso a destra | Errori | 🔴 aperto | visto in due screenshot diversi il 07/09; una chiamata manda una query che il server rifiuta |
+| O-50 | «Messaggio non accodato · Sessione non pronta per questa azione» su una sessione interrotta, col testo che resta nel composer | Composer, coda | 🔧 forse già chiuso da O-48 | il messaggio del kernel è molto migliore di quello mostrato, e va portato a schermo |
 
 ---
 
@@ -519,3 +520,32 @@ pagina ferma non è nel DOM (verificato: `presente: false` in entrambi i modi). 
 mobile (`TalosLineLoader.vue` + `style.css`) usa **1,6 s** con ritardi 0 / 0,36 / 0,73 s. Il nostro
 è più lento di mezzo secondo a giro. Se l'owner dice che il mobile «lo fa alla perfezione», i tempi
 da prendere sono quelli.
+
+### O-50 · «Sessione non pronta per questa azione» — segnalato il 07/09
+
+**Cosa vede l'owner** (screenshot): scrive un follow-up su una sessione **interrotta**; compare
+«Messaggio non accodato · Sessione non pronta per questa azione», e il testo resta nel composer.
+Nel pannello destro l'indice dei giri dice ancora «in corso» mentre la sidebar dà la sessione per
+interrotta.
+
+**La catena, letta nel codice.** `submitPrompt` manda alla CODA (`accodaMessaggioReale`) quando
+`!eventoTerminaleVisto`; il server rifiuta perché una sessione interrotta non può accodare — e ha
+ragione: «un messaggio in coda qui non verrebbe mai consegnato» (`session-registry:2600`). Nel
+`catch` (`app.js:12284`) il testo torna nel composer, che è giusto: non si perde.
+
+⭐ **Ma questo caso dovrebbe essere già chiuso da O-48**, curato poche ore prima: con
+`chiusaDalServer` una sessione interrotta ha `eventoTerminaleVisto = true`, quindi `submitPrompt`
+non passa più dalla coda ma dalla **ripresa** — che è la strada giusta e funziona. Lo screenshot
+potrebbe essere di prima della consegna, o di una pagina non ricaricata.
+⛔ **Da misurare**: scrivere un follow-up su una sessione interrotta e vedere se riparte.
+
+**Quello che resta da curare comunque, e non dipende da O-48:** il messaggio mostrato è
+«Sessione non pronta per questa azione» — una frase che non dice né cosa è successo né cosa fare.
+Il kernel, per lo stesso caso, ha già la frase giusta: «Questa sessione è stata interrotta: scrivi
+un nuovo messaggio per riprenderla in sicurezza». Quella va a schermo, non la sua traduzione
+generica. È la stessa famiglia di O-22/O-23 (errori grezzi tradotti) e la mappa dove aggiungerla
+esiste già: `components/errori.js`.
+
+⛔ E un terzo difetto nello stesso screenshot: **l'indice dei giri, nel pannello destro, dice «in
+corso»** su una sessione interrotta. È O-48 un piano più sotto — la cura di O-48 tocca il composer,
+non quel pannello, e va portata anche lì.
