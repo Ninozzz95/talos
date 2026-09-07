@@ -2889,6 +2889,42 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
         assert.equal(existsSync(join(cartella, 'nuovo.txt')), true)
     })
 
+    /*
+     * ⛔⛔⛔ O-35, owner 06/9: «se clicco "Per questa sessione" continua a chiedermi permesso anche
+     *   con full access completamente acceso». La colpa era una clausola che diceva «se esiste un
+     *   canale di approvazione, chiedi comunque»: bastava UN attrezzo su «chiedi» perché tutti gli
+     *   altri chiedessero, e «Accesso completo» diventava una parola vuota. Chi decide è il LIVELLO,
+     *   non l'esistenza del canale — e questa prova lo tiene fermo.
+     */
+    it('⭐⭐⭐ O-35 — «Per questa sessione»: con accesso pieno e l\'attrezzo su «sempre» NON si chiede più', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(CHIAMA_SCRIVI, CONCLUSO_SUBITO)
+        let quanteVolteHaChiesto = 0
+        const esito = await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
+            livelloAccesso: 'accesso-pieno',
+            // il canale ESISTE (un altro attrezzo è su «chiedi»), ed è proprio questo che prima rovinava tutto
+            chiediApprovazioneFn: async () => { quanteVolteHaChiesto += 1; return true },
+            permessiPerAttrezzo: { scrivi: 'sempre', shell: 'chiedi' },
+        })
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.equal(existsSync(join(cartella, 'nuovo.txt')), true, 'il file va scritto')
+        assert.equal(quanteVolteHaChiesto, 0, 'con «sempre» su questo attrezzo il permesso non si chiede: era il difetto di O-35')
+    })
+
+    it('⭐⭐ O-35 AL CONTRARIO — lo stesso attrezzo su «chiedi» il permesso lo chiede eccome', async () => {
+        const cartella = cartellaVuota(it)
+        const rete = reteDiRisposte(CHIAMA_SCRIVI, CONCLUSO_SUBITO)
+        let quanteVolteHaChiesto = 0
+        await talosLavora({
+            cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch,
+            livelloAccesso: 'accesso-pieno',
+            chiediApprovazioneFn: async () => { quanteVolteHaChiesto += 1; return true },
+            permessiPerAttrezzo: { scrivi: 'chiedi' },
+        })
+        assert.equal(quanteVolteHaChiesto, 1, 'senza questa metà, la prova sopra passerebbe anche con i permessi spenti del tutto')
+    })
+
     it('⭐⭐ PARITÀ — livelloAccesso:\'accesso-pieno\' si comporta ESATTAMENTE come nessun livelloAccesso', async () => {
         const cartella = cartellaVuota(it)
         const reteA = reteDiRisposte(CHIAMA_SCRIVI, CONCLUSO_SUBITO)
