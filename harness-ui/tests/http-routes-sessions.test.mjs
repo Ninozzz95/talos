@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import { API_SCHEMA, createHttpApp } from '../src/http-app.mjs';
@@ -139,7 +142,8 @@ function registroFinto() {
     rispondiApprovazione(sessionId, requestId, approvato) {
       this.ultimaRispostaApprovazione = { sessionId, requestId, approvato };
       if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
-      if (requestId !== 'richiesta-vera') return { erroreAvvio: 'Nessuna approvazione in attesa con questo id', code: 'QUERY_INVALID' };
+      // ⛔ 07/9, O-49: il finto registro rispecchia quello vero — una richiesta decaduta non è una query sbagliata.
+      if (requestId !== 'richiesta-vera') return { erroreAvvio: 'Questa richiesta di permesso non è più in attesa', code: 'APPROVAL_NOT_PENDING' };
       return { ok: true };
     },
     /*
@@ -662,15 +666,25 @@ test('⭐⭐⭐ POST /api/v1/sessions/:id/approve con {requestId, approvato} rag
   assert.deepEqual(sessionRegistry.ultimaRispostaApprovazione, { sessionId, requestId: 'richiesta-vera', approvato: true });
 });
 
-test('⛔⛔ AL CONTRARIO — POST .../approve con un requestId sbagliato: QUERY_INVALID, mai un {ok:true} bugiardo', async (t) => {
+/*
+ * ⛔⛔⛔ 07/9, O-49 — questo test diceva 400/QUERY_INVALID, ed era esattamente la bugia che
+ * l'owner leggeva a schermo: «Risposta non riuscita · Query non valida» premendo Approva su
+ * una scheda del permesso ormai vecchia. Il corpo era giusto; a essere cambiato era lo stato.
+ * Ora la prova pretende il 409 e il codice che lo dice.
+ */
+test('⛔⛔ AL CONTRARIO — POST .../approve con un requestId non più in attesa: 409 APPROVAL_NOT_PENDING, mai un {ok:true} bugiardo', async (t) => {
   const { base, sessionRegistry } = await listen(t);
   const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
   const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/approve`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ requestId: 'un-id-vecchio', approvato: true }),
   });
-  assert.equal(risposta.status, 400);
-  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  assert.equal(risposta.status, 409);
+  const busta = await risposta.json();
+  assert.equal(busta.error.code, 'APPROVAL_NOT_PENDING');
+  // ⛔ È questa stringa che finisce nel fumetto rosso: se torna «Query non valida», O-49 è tornato.
+  assert.equal(busta.error.message, 'Questa richiesta di permesso non è più in attesa: la sessione è andata avanti');
+  assert.equal(busta.error.title, 'Richiesta di permesso scaduta');
 });
 
 test('⛔ AL CONTRARIO — POST .../approve su una sessione inesistente: 404 NOT_FOUND', async (t) => {
@@ -1757,7 +1771,8 @@ test('quando sessionRegistry non è configurato, le rotte nuove tornano 404/405 
  * pronto proverebbe solo che l'involucro JSON funziona.
  * ===================================================================== */
 
-function registroVeroConEventi(t, { emetti = null, clock = null } = {}) {
+/* ⭐ 07/9 — `cartellaStore` aggiunto qui per il test di `interrotta` in fondo al file: serve un registro che scriva davvero su disco, perché solo un SECONDO registro che lo rilegge produce una sessione interrotta vera. */
+function registroVeroConEventi(t, { emetti = null, clock = null, cartellaStore = null } = {}) {
   let onEvento = null;
   const avviaSessioneFn = async (input) => {
     onEvento = input.onEvento;
@@ -1771,7 +1786,16 @@ function registroVeroConEventi(t, { emetti = null, clock = null } = {}) {
   return createSessionRegistry({
     avviaSessioneFn, preparaEsecuzioneFn, guardaWorkspaceFn: () => () => {}, modello: 'm', chiave: 'k',
     ...(clock ? { clock } : {}),
+    ...(cartellaStore ? { cartellaStore } : {}),
   });
+}
+
+/** Il registro su disco esiste e porta gia' la sua intestazione: da li' in poi un altro registro puo' ripristinarlo. */
+function esisteIntestazione(cartellaStore, sessionId) {
+  try {
+    const file = readdirSync(cartellaStore).find((nome) => nome.includes(sessionId));
+    return Boolean(file) && readFileSync(join(cartellaStore, file), 'utf8').includes('intestazione');
+  } catch { return false; }
 }
 
 test('⭐⭐⭐ W1-02 — GET /api/v1/sessions/:id/processes torna il ledger dei processi VERI e la guardia di stallo (registro VERO)', async (t) => {
@@ -1965,4 +1989,40 @@ test('⛔ GET .../metrics rifiuta una query string, come le rotte vicine (requir
   const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/metrics?giro=1`);
   assert.equal(risposta.status, 400);
   assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+});
+
+/*
+ * ⛔⛔ 07/9 — LA ROTTA SCEGLIEVA I CAMPI A MANO e buttava via `interrotta`. Il registro lo
+ * sapeva (`interrotta: !conclusa` al ripristino) e dal filo usciva una sessione
+ * indistinguibile da una viva: la guardia di stallo grida «silenzio» su un processo MORTO,
+ * e il motivo di chiusura mancante veniva spiegato con «il giro è ancora in corso».
+ * Stesso difetto già trovato e curato in `elencaFigli` (06/9).
+ * ⛔ Con un registro VERO ripristinato da disco, come gli altri test di questa rotta: un
+ * fake che restituisce un oggetto già pronto proverebbe solo che l'involucro JSON funziona.
+ * Provata nei DUE versi — viva e interrotta — nello stesso test.
+ */
+test('⛔⛔ GET .../processes e .../metrics DICHIARANO interrotta, invece di lasciarla indovinare', async (t) => {
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-interrotta-'));
+  try {
+    const primo = registroVeroConEventi(t, { cartellaStore, emetti: (onEvento) => { onEvento({ type: 'RunStarted', threadId: 't', runId: 'r1', input: { consegna: 'c' } }); } });
+    const { sessionId } = primo.avvia('sconto-a-scaglioni');
+    for (let attesa = 0; attesa < 200 && !esisteIntestazione(cartellaStore, sessionId); attesa += 1) await new Promise((r) => setTimeout(r, 10));
+
+    const viva = await listen(t, { sessionRegistry: primo });
+    for (const rotta of ['processes', 'metrics']) {
+      const corpo = await (await fetch(`${viva.base}/api/v1/sessions/${sessionId}/${rotta}`)).json();
+      assert.equal(corpo.data.interrotta, false, `${rotta} su una sessione VIVA`);
+    }
+
+    const secondo = registroVeroConEventi(t, { cartellaStore });
+    await secondo.ripristina();
+    assert.equal(secondo.elenca()[0].interrotta, true, 'premessa: il ripristino la marca interrotta');
+    const morta = await listen(t, { sessionRegistry: secondo });
+    for (const rotta of ['processes', 'metrics']) {
+      const corpo = await (await fetch(`${morta.base}/api/v1/sessions/${sessionId}/${rotta}`)).json();
+      assert.equal(corpo.data.interrotta, true, `${rotta} su una sessione INTERROTTA da un riavvio`);
+    }
+  } finally {
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
 });

@@ -724,6 +724,8 @@ const MOTIVO_PRIMO_TOKEN_SENZA_GIRO = 'nessun RunStarted in questa storia: senza
 const MOTIVO_PRIMO_TOKEN_MAI_ARRIVATO = 'il giro è partito ma non è ancora arrivato un solo pezzo di risposta dal modello';
 const MOTIVO_PRIMO_VISIBILE_MAI_ARRIVATO = 'il giro non ha ancora prodotto testo visibile: finora solo ragionamento o chiamate ad attrezzi';
 const MOTIVO_CHIUSURA_APERTA = 'il giro è ancora in corso: non ha ancora un motivo di chiusura, e dirne uno adesso sarebbe una previsione';
+/* ⛔ 07/9 — l'altra metà della verità: un giro senza motivo di chiusura perché il processo è morto in un riavvio, non perché sta ancora lavorando. */
+const MOTIVO_CHIUSURA_INTERROTTA = 'il giro non ha un motivo di chiusura perché è stato interrotto da un riavvio del server: il processo che lo eseguiva non esiste più';
 
 /**
  * Gli eventi che valgono come «primo pezzo di risposta» del modello.
@@ -3200,7 +3202,15 @@ export function createSessionRegistry({
       const adesso = clock().getTime();
       const ledger = processiDaEventi(voce.eventi, { istanti, adesso });
       const guardia = guardiaDiStallo(voce.eventi, { istanti, adesso, soglie: { ...soglieStallo, ...(soglie ?? {}) } });
-      return { ok: true, registrato: ledger.registrato, processi: ledger.processi, motivo: ledger.motivo, guardia };
+      /*
+       * ⛔⛔ 07/9 — la guardia di stallo grida «silenzio» anche su una sessione RIPRESA da un
+       * riavvio: lì il silenzio non è uno stallo, è un processo MORTO, e la differenza cambia
+       * cosa deve fare chi legge (fermare qualcosa che sta lavorando, o accettare che non
+       * lavora più nessuno). Il registro lo sa — `interrotta: !conclusa` al ripristino — e
+       * finché non lo diceva qui l'interfaccia non aveva NIENTE con cui dire il vero. Stesso
+       * difetto già trovato e curato in `elencaFigli` (subagent-orchestrator, 06/9).
+       */
+      return { ok: true, registrato: ledger.registrato, processi: ledger.processi, motivo: ledger.motivo, guardia, interrotta: voce.interrotta === true };
     },
 
     /**
@@ -3227,7 +3237,19 @@ export function createSessionRegistry({
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       const metriche = metricheDaEventi(voce.eventi, { istanti: voce.istantiEvento ?? null, adesso: clock().getTime() });
-      return { ok: true, ...metriche };
+      /*
+       * ⛔⛔ 07/9 — su una sessione ripresa da un riavvio il motivo di chiusura manca, e
+       * `metricheDaEventi` (che vede gli eventi e non lo stato del registro) spiegava
+       * l'assenza con «il giro è ancora in corso». Non è vero: il processo che lo eseguiva
+       * non c'è più, e un giro morto non è un giro che sta ancora lavorando. La correzione
+       * sta QUI, dove lo stato si conosce, e non dentro la funzione pura, che resta la
+       * stessa per tutti gli altri chiamanti.
+       */
+      const interrotta = voce.interrotta === true;
+      const chiusura = interrotta && metriche.chiusura && metriche.chiusura.motivo === null
+        ? { ...metriche.chiusura, motivoAssente: MOTIVO_CHIUSURA_INTERROTTA }
+        : metriche.chiusura;
+      return { ok: true, ...metriche, chiusura, interrotta };
     },
 
     async elencaServerMcp(sessionId) {
@@ -3574,8 +3596,20 @@ export function createSessionRegistry({
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       const pendente = voce.approvazionePendente;
+      /*
+       * ⛔⛔⛔ 07/9, O-49 — qui usciva `QUERY_INVALID`, e la app scriveva a schermo
+       * «Risposta non riuscita · Query non valida» a chi aveva solo premuto Approva su una
+       * scheda del permesso. Era una bugia sul colpevole: il corpo della richiesta è
+       * perfetto, è lo STATO che è cambiato sotto — `negaApprovazionePendente` l’ha chiusa
+       * (stop o reindirizzamento), oppure la scheda è stata ridisegnata dopo un riavvio del
+       * server, che di `approvazionePendente` non conserva niente perché vive in memoria.
+       * Riprodotto con una curl sul server vivo il 07/09/2026 prima di toccare il codice.
+       * ⭐ Ricerca 07/09/2026: MDN «409 Conflict» (conflitto con lo stato attuale della
+       * risorsa) e openai/codex #29627 — una richiesta di consenso decaduta va detta
+       * decaduta, mai fatta passare per un rifiuto o per un errore di chi chiama.
+       */
       if (!pendente || pendente.requestId !== requestId) {
-        return { erroreAvvio: 'Nessuna approvazione in attesa con questo id', code: 'QUERY_INVALID' };
+        return { erroreAvvio: 'Questa richiesta di permesso non è più in attesa', code: 'APPROVAL_NOT_PENDING' };
       }
       voce.approvazionePendente = null;
       pendente.resolve(Boolean(approvato));
@@ -3972,6 +4006,12 @@ export function createSessionRegistry({
         nome: voce.nome ?? null,
         avviataAlle: voce.avviataAlle,
         conclusa: voce.conclusa,
+        /*
+         * ⛔ 07/9 — l'esportazione diceva `conclusa:false` su una sessione ripresa dopo un
+         * riavvio, e chi legge il file (o la Board, che lo usa per i costi) non poteva
+         * distinguerla da una VIVA. Lo stesso campo che l'elenco dichiara dal 30/8.
+         */
+        interrotta: voce.interrotta ?? false,
         forkDa: voce.forkDa,
         modello: voce.modello ?? null,
         eventi: voce.eventi,

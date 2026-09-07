@@ -725,6 +725,28 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-allegati-chip__genere{color:var(--talos-accent-text); text-transform:none; letter-spacing:normal}
 .talos-allegati-chip__nome{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--talos-text)}
 .talos-allegati-chip__costo{font-family:var(--talos-font-mono); font-size:10.5px; opacity:.85}
+/* ⛔ 07/9, owner: «il pulsante Nuova nella sidebar deve essere senza testo se la sidebar scende
+   sotto una larghezza minima, la stessa cosa per il pulsante che esisteva nella versione
+   precedente». La sidebar si ridimensiona a mano (la maniglia curata oggi): stretta, il testo
+   spinge fuori l'icona e il campo di ricerca si schiaccia.
+   Ricerca 07/09/2026 (design.dev «CSS Container Queries»; UDT, guida 2026): si interroga il
+   CONTENITORE, non la finestra — «drag the sidebar wider, labels appear; narrow it, labels
+   disappear and icons center». Una media query qui sbaglierebbe: la finestra e larga anche quando
+   la sidebar e stretta.
+   ⛔ Il vincolo che rende la cosa onesta: sparendo il testo, il NOME ACCESSIBILE deve restare —
+   il bottone porta `aria-label` e `title`, cosi chi non vede continua a sapere cos'e, e chi vede
+   ha il suggerimento. Nascondere l'etichetta senza nome sarebbe un bottone muto. */
+.talos-sidebar{container-type:inline-size; container-name:barra}
+@container barra (max-width: 190px){
+  .talos-solo-largo{display:none}
+  .talos-sidebar__actions .talos-button--primary{justify-content:center; padding-inline:10px}
+  .talos-sidebar__actions .talos-field{min-width:0}
+}
+/* piu stretta ancora: resta solo cio che si puo premere */
+@container barra (max-width: 150px){
+  .talos-sidebar__actions{flex-wrap:wrap}
+  .talos-sidebar__actions .talos-field__input{padding-inline:6px}
+}
 .sheet-avviso{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0 0; padding:9px 11px; border-radius:10px; border:1px solid var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:12px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .workspace-chooser-selection .workspace-chooser-avviso{display:block; margin-top:6px; padding:6px 9px; border-radius:9px; border:1px solid var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-text); font-size:11.5px; line-height:1.5; text-transform:none; letter-spacing:normal}
 .talos-menu__nota{margin:6px 4px 2px; padding-top:6px; border-top:1px solid var(--talos-border-subtle); color:var(--talos-muted); font-size:11.5px; line-height:1.45}
