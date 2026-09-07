@@ -5,7 +5,8 @@
   "scripts": {
     "build:ui": "node scripts/build-ui.mjs",
     "verify:ui": "node scripts/verify-ui-manifest.mjs",
-    "verify:all": "node --test tests/*.test.mjs labs/electron-shell/*.test.mjs && npm --prefix frontend run verify"
+    "verify:all": "node --test tests/*.test.mjs labs/electron-shell/*.test.mjs && npm --prefix frontend run verify",
+    "aggiorna": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/aggiorna-4174.ps1"
   },
   "description": "Backend locale di Harness UI (server.mjs + src/*.mjs). Le dipendenze sono limitate al backend e motivate nei rispettivi adapter; il watcher workspace usa direttamente node:fs su Windows.",
   "dependencies": {
