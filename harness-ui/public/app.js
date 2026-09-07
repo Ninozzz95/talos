@@ -8451,6 +8451,51 @@ var init_browser_vivo = __esm({
   }
 });
 
+// src/components/browser-gesti.js
+function gestoPerIlServer(gesto) {
+  if (!gesto || typeof gesto !== "object") return null;
+  const tipo = gesto.tipo;
+  if (GESTI_IGNORATI.includes(tipo)) return null;
+  if (tipo === "su") {
+    if (gesto.dentro === false) return null;
+    return {
+      tipo: "clic",
+      x: Number(gesto.x) || 0,
+      y: Number(gesto.y) || 0,
+      tasto: gesto.pulsante || "sinistro",
+      doppio: Number(gesto.clic) >= 2,
+      modificatori: gesto.tasti || 0
+    };
+  }
+  if (tipo === "rotella") {
+    return {
+      tipo: "rotella",
+      x: Number(gesto.x) || 0,
+      y: Number(gesto.y) || 0,
+      dx: Number(gesto.deltaX) || 0,
+      dy: Number(gesto.deltaY) || 0,
+      modificatori: gesto.tasti || 0
+    };
+  }
+  if (tipo === "tastoGiu") {
+    const chiave = gesto.tasto;
+    if (!chiave) return null;
+    return {
+      tipo: "tasto",
+      chiave,
+      testo: typeof gesto.testo === "string" ? gesto.testo : "",
+      modificatori: gesto.tasti || 0
+    };
+  }
+  return null;
+}
+var GESTI_IGNORATI;
+var init_browser_gesti = __esm({
+  "src/components/browser-gesti.js"() {
+    GESTI_IGNORATI = Object.freeze(["giu", "muovi", "tastoSu"]);
+  }
+});
+
 // src/components/scorciatoie.js
 function suApple(nav = globalThis.navigator) {
   const p = String(nav?.userAgentData?.platform || nav?.platform || "").toLowerCase();
@@ -9609,6 +9654,7 @@ var init_app = __esm({
     init_cronologia();
     init_frase_cercata();
     init_browser_vivo();
+    init_browser_gesti();
     init_scorciatoie();
     init_chat_foot();
     init_progetti();
@@ -17564,6 +17610,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const rs = state.realSession;
         const lista = schedeBrowser().map((x) => x.id);
         const prossima = prossimaDopoChiusura(lista, lista.indexOf(id));
+        const chiusa = schedeBrowser().find((x) => x.id === id);
+        if (chiusa?.viaVista === "vivo") smontaVistaViva();
         if (id.startsWith("lettura-")) rs.browserChiuse.add(id);
         else rs.browserVive = rs.browserVive.filter((x) => x.id !== id);
         if (rs.browserAttiva === id) rs.browserAttiva = prossima;
@@ -17572,8 +17620,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       let vistaViva = null;
       let flussoVivo = null;
-      const IDENTITA_BROWSER_SENZA_SESSIONE = "browser-di-questa-pagina";
-      const identitaBrowser = () => state.realSession.id || IDENTITA_BROWSER_SENZA_SESSIONE;
+      const IDENTITA_BROWSER = "browser-di-questa-pagina";
+      const identitaBrowser = () => IDENTITA_BROWSER;
       function smontaVistaViva() {
         if (flussoVivo) {
           try {
@@ -17594,18 +17642,20 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           contenitore.hidden = true;
           contenitore.replaceChildren();
         }
-        void apiPost(`/api/v1/browser/vivo/chiudi?sessione=${encodeURIComponent(identitaBrowser())}`, {}).catch(() => {
+        return apiPost(`/api/v1/browser/vivo/chiudi?sessione=${encodeURIComponent(identitaBrowser())}`, {}).catch(() => {
         });
       }
       async function apriNelBrowserVivo(voce) {
         const contenitore = $2("#browserVistaViva");
         const sessione = identitaBrowser();
         if (!contenitore || !voce?.url) return false;
-        smontaVistaViva();
+        await smontaVistaViva();
         contenitore.hidden = false;
         vistaViva = creaVistaViva(contenitore, {
           onGesto: (gesto) => {
-            void apiPost(`/api/v1/browser/vivo/gesto?sessione=${encodeURIComponent(sessione)}`, gesto).catch(() => {
+            const perIlServer = gestoPerIlServer(gesto);
+            if (!perIlServer) return;
+            void apiPost(`/api/v1/browser/vivo/gesto?sessione=${encodeURIComponent(sessione)}`, perIlServer).catch(() => {
             });
           },
           onErrore: (messaggio) => {
@@ -17648,6 +17698,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             renderizzaBrowser();
             return;
           }
+          if (messaggio?.url && messaggio.url !== voce.url) {
+            voce.url = messaggio.url;
+            renderizzaBrowser();
+          }
           if (messaggio?.dati) vistaViva?.frame({ dati: messaggio.dati, metadati: messaggio.metadati });
         };
         flussoVivo.onerror = () => {
@@ -17683,6 +17737,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             if (voce.stato === "caricamento") voce.stato = "pronta";
             voce.viaVista = voce.proxata ? "proxy" : "cornice";
             voce.percheVia = esito?.percheVia || null;
+            smontaVistaViva();
           } else {
             voce.percheVia = esito?.percheVia || null;
             const conVista = esito?.via === "cornice" ? false : await apriNelBrowserVivo(voce);

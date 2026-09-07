@@ -1,0 +1,5 @@
+#!/bin/sh
+# ⛔ Prima del commit si controlla ciò che si può già sapere: le PROVE dal vivo.
+# Il messaggio qui non esiste ancora (`.git/COMMIT_EDITMSG` è quello di prima o è vuoto): lo guarda
+# `commit-msg`, che lo riceve davvero. Chiedere qui il messaggio significherebbe accusare a caso.
+exec node harness-ui/scripts/cancello/prima-del-commit.mjs --solo-prove

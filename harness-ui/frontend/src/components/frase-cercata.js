@@ -35,3 +35,4 @@ export function fraseCercata(query, massimo = 60) {
     : `${termini.slice(0, -1).join(', ')} e ${termini[termini.length - 1]}`;
   return uniti.length > massimo ? `${uniti.slice(0, massimo - 1)}…` : uniti;
 }
+// prova del cancello

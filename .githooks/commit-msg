@@ -1,0 +1,3 @@
+#!/bin/sh
+# ⛔ Lo stesso cancello, ma col MESSAGGIO vero in mano: `pre-commit` non lo conosce ancora.
+exec node harness-ui/scripts/cancello/prima-del-commit.mjs "$1"

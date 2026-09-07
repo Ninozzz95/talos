@@ -26,6 +26,18 @@ const QA_STATES = new Set([
   'capabilities',
 ]);
 const API_ERROR_CODES = new Set([
+  /* ⛔ 07/9, trovato dalla prova C25 sul 4174: senza queste righe OGNI errore del browser vivo
+     usciva come «Errore interno» — il motivo vero («questa sessione non ha una pagina aperta»,
+     «non trovo un Chromium») restava nel server e a schermo arrivava un muro. `normalizeError`
+     conosce SOLO i codici di questa lista: uno che non c'è diventa INTERNAL_ERROR. */
+  'BROWSER_VIVO_NON_CONFIGURATO',
+  'BROWSER_VIVO_ASSENTE',
+  'BROWSER_VIVO_SCHEDA_ASSENTE',
+  'BROWSER_VIVO_TROPPE_SCHEDE',
+  'BROWSER_VIVO_GESTO_IGNOTO',
+  'BROWSER_VIVO_SENZA_SESSIONE',
+  'BROWSER_VIVO_CONNESSIONE_FALLITA',
+  'BROWSER_VIVO_SENZA_CONNESSIONE',
   'CONFIG_INVALID',
   'QUERY_INVALID',
   'REPORT_UNAVAILABLE',
@@ -100,6 +112,14 @@ const API_ERROR_CODES = new Set([
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
+  BROWSER_VIVO_NON_CONFIGURATO: 503,
+  BROWSER_VIVO_ASSENTE: 503,
+  BROWSER_VIVO_SCHEDA_ASSENTE: 409,
+  BROWSER_VIVO_TROPPE_SCHEDE: 429,
+  BROWSER_VIVO_GESTO_IGNOTO: 400,
+  BROWSER_VIVO_SENZA_SESSIONE: 400,
+  BROWSER_VIVO_CONNESSIONE_FALLITA: 502,
+  BROWSER_VIVO_SENZA_CONNESSIONE: 500,
   CONFIG_INVALID: 500,
   QUERY_INVALID: 400,
   REPORT_UNAVAILABLE: 404,
@@ -289,6 +309,14 @@ const MESSAGE_BY_CODE = Object.freeze({
   MCP_INVALID: 'Configurazione server MCP non valida',
   PLUGIN_INVALID: 'Configurazione plugin non valida',
   SESSION_STILL_RUNNING: 'Sessione ancora in corso — fermala prima di eliminarla',
+  BROWSER_VIVO_NON_CONFIGURATO: 'Il browser pilotato non è configurato su questo TALOS',
+  BROWSER_VIVO_ASSENTE: 'Non trovo un browser Chromium su questo computer: TALOS ne usa uno già installato, Chrome o Edge',
+  BROWSER_VIVO_SCHEDA_ASSENTE: 'Questa sessione non ha una pagina aperta nel browser pilotato',
+  BROWSER_VIVO_TROPPE_SCHEDE: 'Troppe pagine aperte insieme nel browser pilotato',
+  BROWSER_VIVO_GESTO_IGNOTO: 'Questo gesto non è riconosciuto',
+  BROWSER_VIVO_SENZA_SESSIONE: 'Serve la sessione a cui appartiene la pagina',
+  BROWSER_VIVO_CONNESSIONE_FALLITA: 'Il browser è partito ma non risponde al protocollo di controllo',
+  BROWSER_VIVO_SENZA_CONNESSIONE: 'Manca il modo di collegarsi al browser pilotato',
   /* ⛔ 07/9, O-49: questo testo finisce dentro il fumetto rosso in basso a destra — deve dire cos’è successo, non «Query non valida». */
   APPROVAL_NOT_PENDING: 'Questa richiesta di permesso non è più in attesa: la sessione è andata avanti',
   WORKSPACE_LAUNCH_UNAUTHORIZED: 'Il comando locale non è autorizzato. Riavvia TALOS e riprova.',
@@ -2583,7 +2611,7 @@ export function createHttpApp({
             try {
               ferma = await browserVivo.segui(sessionId, (frame) => {
                 if (flusso.closed) return;
-                flusso.send({ dati: frame.dati, metadati: frame.metadati, numero: frame.numeroFrame });
+                flusso.send({ dati: frame.dati, metadati: frame.metadati, numero: frame.numeroFrame, url: frame.url });
               });
             } catch (errore) {
               flusso.send({ errore: errore?.message || 'Non riesco a trasmettere questa pagina', codice: errore?.code || 'BROWSER_VIVO_ERRORE' });
