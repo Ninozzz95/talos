@@ -1321,6 +1321,36 @@ export function createSessionRegistry({
     return null;
   }
 
+  /*
+   * ⛔⛔ 07/9, misurato dal vivo: premi «ferma», il giro si chiude come chiedevi, e la riga
+   * della sidebar dice **«errore»**. Fermare non e sbagliare. Il registro il motivo ce l'ha gia
+   * (`chiusuraDaEventi`: «fermata», «giri-finiti», «errore»), ma viveva solo nella rotta
+   * `/metrics`, una sessione alla volta: l'ELENCO — cioe la sidebar, il posto dove lo stato si
+   * legge davvero — riceveva soltanto `ultimoEsito: 'errore'` e non poteva fare di meglio.
+   *
+   * Ricerca 07/09/2026 — opencode #25899 e #28453 (letti oggi): un annullamento chiesto dalla
+   * persona non va riportato ne come fine pulita (`end_turn`: «fa sembrare completamento cio che
+   * era uno stop») ne come guasto dell'agente (`agent_error` su `MessageAbortedError`: «fa sembrare
+   * un guasto un gesto intenzionale»); lo stato dell'arte lo tiene come terzo esito, «cancelled».
+   *
+   * Qui il terzo esito ha gia un nome nostro: si porta fuori, non se ne inventa uno.
+   */
+  function motivoChiusuraDaEventi(eventi) {
+    const ordinati = Array.isArray(eventi) ? eventi : [];
+    for (let i = ordinati.length - 1; i >= 0; i -= 1) {
+      const evento = ordinati[i];
+      if (evento?.type === 'RunError') {
+        const codice = typeof evento.code === 'string' ? evento.code : null;
+        if (codice === 'giri-esauriti') return 'giri-finiti';
+        if (codice === 'fermato') return 'fermata';
+        return 'errore';
+      }
+      if (evento?.type === 'RunFinished') return 'fine-lavoro';
+      if (evento?.type === 'RunStarted') return null;
+    }
+    return null;
+  }
+
   function usageDaEventi(eventi) {
     for (let indice = eventi.length - 1; indice >= 0; indice -= 1) {
       const evento = eventi[indice];
@@ -3931,6 +3961,9 @@ export function createSessionRegistry({
           inAttesaApprovazione: Boolean(voce.approvazionePendente),
           // ⭐ 02/09 — la Board diceva "Conclusa" anche a una sessione morta su RunError: l'ultimo evento del ciclo agente decide.
           ultimoEsito: ultimoEsitoDaEventi(voce.eventi),
+          // ⛔ 07/9 — il TERZO esito: «fermata» non e ne un errore ne una fine pulita (vedi
+          //    `motivoChiusuraDaEventi`). `null` finche il giro e in corso: mai un motivo inventato.
+          motivoChiusura: motivoChiusuraDaEventi(voce.eventi),
           // ⭐⭐⭐ 30/8 — piano "Board — da campagne TALOS-BANCO a cruscotto
           // sessioni": il costo/consumo per la nuova Board, MAI un numero
           // inventato. Nessuna scrittura nuova sul disco (vedi usageDaEventi

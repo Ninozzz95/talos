@@ -40,6 +40,15 @@ const ETICHETTE = Object.freeze({
   vivo: 'in corso',
   interrotto: 'interrotta',
   errore: 'errore',
+  /*
+   * ⛔⛔ 07/9, misurato: premi «ferma», il giro si chiude come chiedevi, e la riga diceva
+   * **«errore»** — perche il giro finisce con un `RunError` di codice `fermato` e l'elenco
+   * conosceva solo l'esito, non il motivo. Fermare non e sbagliare, e nemmeno concludere.
+   * Ricerca 07/09/2026 — opencode #25899/#28453: un annullamento chiesto dalla persona non e ne
+   * `end_turn` (fa sembrare completamento uno stop) ne `agent_error` (fa sembrare guasto un gesto
+   * voluto): e un terzo esito. Qui si chiama «fermata».
+   */
+  fermata: 'fermata',
   successo: 'conclusa',
   ignoto: 'conclusa · esito non registrato',
   pendente: 'in attesa del primo messaggio',
@@ -68,6 +77,8 @@ export function statoSessione(sessione) {
    */
   else if (sessione.interrotta) classe = 'interrotto';
   else if (!sessione.conclusa) classe = 'vivo';
+  // ⛔ il motivo VINCE sull'esito: «fermata» e «giri finiti» sono chiusure previste, non guasti.
+  else if (sessione.ultimoEsito === 'errore' && sessione.motivoChiusura === 'fermata') classe = 'fermata';
   else if (sessione.ultimoEsito === 'errore') classe = 'errore';
   else if (sessione.ultimoEsito === 'successo') classe = 'successo';
   else classe = 'ignoto';
@@ -84,7 +95,9 @@ export function statoSessione(sessione) {
    * dove non costa niente a nessuno (claude-code #69456, letto 06/09/2026: offrire la ripresa,
    * non gridarla).
    */
-  const aiuto = classe === 'interrotto' ? 'Interrotta dalla morte del processo: nessuno la sta eseguendo. Scrivi un messaggio per riprenderla.' : null;
+  let aiuto = null;
+  if (classe === 'interrotto') aiuto = 'Interrotta dalla morte del processo: nessuno la sta eseguendo. Scrivi un messaggio per riprenderla.';
+  else if (classe === 'fermata') aiuto = 'L’hai fermata tu: il giro si e chiuso al primo punto sicuro. Scrivi un messaggio per continuare da qui.';
   return { classe, testo, tono: TONI[classe] ?? null, aiuto };
 }
 

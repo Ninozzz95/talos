@@ -3519,11 +3519,14 @@ function statoSessione(sessione) {
   if (sessione.inAttesaApprovazione) classe = "attesa";
   else if (sessione.interrotta) classe = "interrotto";
   else if (!sessione.conclusa) classe = "vivo";
+  else if (sessione.ultimoEsito === "errore" && sessione.motivoChiusura === "fermata") classe = "fermata";
   else if (sessione.ultimoEsito === "errore") classe = "errore";
   else if (sessione.ultimoEsito === "successo") classe = "successo";
   else classe = "ignoto";
   const testo3 = classe === "errore" && sessione.motivoChiusura === "giri-finiti" ? "giri finiti" : ETICHETTE[classe];
-  const aiuto = classe === "interrotto" ? "Interrotta dalla morte del processo: nessuno la sta eseguendo. Scrivi un messaggio per riprenderla." : null;
+  let aiuto = null;
+  if (classe === "interrotto") aiuto = "Interrotta dalla morte del processo: nessuno la sta eseguendo. Scrivi un messaggio per riprenderla.";
+  else if (classe === "fermata") aiuto = "L’hai fermata tu: il giro si e chiuso al primo punto sicuro. Scrivi un messaggio per continuare da qui.";
   return { classe, testo: testo3, tono: TONI[classe] ?? null, aiuto };
 }
 function oraCompatta(iso, adesso = /* @__PURE__ */ new Date()) {
@@ -3609,6 +3612,15 @@ var init_session_item = __esm({
       vivo: "in corso",
       interrotto: "interrotta",
       errore: "errore",
+      /*
+       * ⛔⛔ 07/9, misurato: premi «ferma», il giro si chiude come chiedevi, e la riga diceva
+       * **«errore»** — perche il giro finisce con un `RunError` di codice `fermato` e l'elenco
+       * conosceva solo l'esito, non il motivo. Fermare non e sbagliare, e nemmeno concludere.
+       * Ricerca 07/09/2026 — opencode #25899/#28453: un annullamento chiesto dalla persona non e ne
+       * `end_turn` (fa sembrare completamento uno stop) ne `agent_error` (fa sembrare guasto un gesto
+       * voluto): e un terzo esito. Qui si chiama «fermata».
+       */
+      fermata: "fermata",
       successo: "conclusa",
       ignoto: "conclusa · esito non registrato",
       pendente: "in attesa del primo messaggio"
@@ -19116,6 +19128,14 @@ ${testo3}` : testo3;
           renderizzaBannerCoda();
           toast("Messaggio in coda", `Arriverà quando l'agente conclude il turno corrente (posizione ${dati.posizione}).`);
         } catch (error) {
+          const nonInCorso = /non è in corso|non pronta|SESSION_NOT_READY|interrott/i.test(String(error?.message || "")) || error?.code === "SESSION_NOT_READY";
+          if (nonInCorso && sessionId === state.realSession.id) {
+            state.realSession.chiusaDalServer = true;
+            state.realSession.eventoTerminaleVisto = true;
+            syncRunComposerState();
+            resumeSession(testo3);
+            return;
+          }
           composerInput.value = testo3;
           autoGrowTextarea();
           toast("Messaggio non accodato", error.message);
@@ -19494,6 +19514,14 @@ ${testo3}` : testo3;
           if (demoBadge) demoBadge.hidden = true;
         }
         elenco2 = Array.isArray(elenco2) ? elenco2.map((sessione) => ({ ...sessione, modello: normalizzaModelloSessione(sessione) })) : [];
+        if (state.realSession.id && !state.realSession.chiusaDalServer) {
+          const corrente = elenco2.find((sessione) => sessione.sessionId === state.realSession.id);
+          if (corrente && (corrente.conclusa === true || corrente.interrotta === true)) {
+            state.realSession.chiusaDalServer = true;
+            state.realSession.eventoTerminaleVisto = true;
+            syncRunComposerState();
+          }
+        }
         state.sessionSelection.available = new Map(elenco2.map((sessione) => [sessione.sessionId, sessione]));
         void aggiornaContatoriLuoghi(elenco2.length);
         for (const id of [...state.sessionSelection.selected]) {
