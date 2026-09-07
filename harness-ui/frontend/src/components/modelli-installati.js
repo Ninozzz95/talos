@@ -3,7 +3,7 @@
  * mockup (`#panel-installati`): riga per modello (`ListRow`), dettaglio
  * (`DetailPanel`), ricerca e filtro di stato, riga della memoria, verdetto «Entra».
  *
- * 06/09, B6.8 (piano lasciato da Astra, eseguito da Claude): i dati sono quelli
+ * 06/09, B6.8: i dati sono quelli
  * del monolite — manifest di `/api/v1/local-models` (+ `name`), il motore locale
  * (cosa è caricato, RAM) e `state.modelLab.fit` (Map id → { esito } con
  * `memory.requiredBytes/availableBytes` come li scrive `local-runtime-probe.mjs`).

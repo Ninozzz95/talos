@@ -350,7 +350,7 @@ var init_session_item = __esm({
        * ⛔⛔ 07/9, misurato: premi «ferma», il giro si chiude come chiedevi, e la riga diceva
        * **«errore»** — perche il giro finisce con un `RunError` di codice `fermato` e l'elenco
        * conosceva solo l'esito, non il motivo. Fermare non e sbagliare, e nemmeno concludere.
-       * Ricerca 07/09/2026 — opencode #25899/#28453: un annullamento chiesto dalla persona non e ne
+       * Ricerca 07/09/2026: un annullamento chiesto dalla persona non e ne
        * `end_turn` (fa sembrare completamento uno stop) ne `agent_error` (fa sembrare guasto un gesto
        * voluto): e un terzo esito. Qui si chiama «fermata».
        */
@@ -359,6 +359,46 @@ var init_session_item = __esm({
       ignoto: "conclusa · esito non registrato",
       pendente: "in attesa del primo messaggio"
     });
+  }
+});
+
+// src/components/range-scia.js
+function percentualeRange(valore, min = 0, max = 100) {
+  const v = Number(valore);
+  const a = Number(min);
+  const b = Number(max);
+  if (!Number.isFinite(v) || !Number.isFinite(a) || !Number.isFinite(b) || b === a) return 0;
+  const quota = (v - a) / (b - a) * 100;
+  return Math.max(0, Math.min(100, Math.round(quota * 10) / 10));
+}
+function aggiornaScia(input) {
+  if (!input || input.type !== "range") return 0;
+  const p = percentualeRange(input.value, input.min || 0, input.max || 100);
+  input.style.setProperty(VARIABILE_SCIA, `${p}%`);
+  return p;
+}
+function aggiornaTutteLeScie(radice = globalThis.document) {
+  if (!radice?.querySelectorAll) return 0;
+  const cursori = radice.querySelectorAll('input[type="range"]');
+  for (const c of cursori) aggiornaScia(c);
+  return cursori.length;
+}
+function collegaScia(radice = globalThis.document) {
+  if (!radice?.addEventListener || radice.__talosSciaCollegata) return false;
+  radice.__talosSciaCollegata = true;
+  const suEvento = (evento) => {
+    const input = evento.target;
+    if (input?.type === "range") aggiornaScia(input);
+  };
+  radice.addEventListener("input", suEvento, true);
+  radice.addEventListener("change", suEvento, true);
+  aggiornaTutteLeScie(radice.ownerDocument || radice);
+  return true;
+}
+var VARIABILE_SCIA;
+var init_range_scia = __esm({
+  "src/components/range-scia.js"() {
+    VARIABILE_SCIA = "--talos-range-riempimento";
   }
 });
 
@@ -1789,7 +1829,7 @@ var init_en = __esm({
         "Segui il sistema ({lingua})": "Follow the system ({lingua})",
         "italiano": "Italian"
       },
-      /* i nomi umani degli attrezzi (Hermes: toolTitles) */
+      /* i nomi umani degli attrezzi */
       attrezzi: {
         "annullamento di una ricerca": "cancelling a research",
         "apertura di una pagina web": "opening a web page",
@@ -9177,6 +9217,7 @@ var init_app = __esm({
     init_provider_card();
     init_politiche();
     init_session_item();
+    init_range_scia();
     init_runtime_modelli();
     init_misura_memoria();
     init_cornice_model_lab();
@@ -9425,8 +9466,8 @@ var init_app = __esm({
            */
           ultimoBersaglioAttrezzo: null,
           /**
-           * ⭐⭐⭐ 30/8, owner: "raggruppati in un collapse come fa Claude, con
-           * diff totale accanto" (riferimento: Claude Code stesso, screenshot
+           * ⭐⭐⭐ 30/8, owner: "raggruppati in un collapse come fanno alcuni
+           * assistenti, con diff totale accanto" (riferimento: screenshot
            * allegati — vedi LEDGER-RAGGRUPPAMENTO-TOOL-CALL-DIFF-2026-08-30.md).
            * `null` = nessun batch di tool-call aperto ora; un oggetto quando
            * una sequenza ININTERROTTA di tool-call è in corso — chiuso (mai
@@ -9462,7 +9503,7 @@ var init_app = __esm({
           browserChiuse: /* @__PURE__ */ new Set(),
           browserAttiva: null,
           browserRichiesta: null,
-          /** Browser oltre Hermes 06/9 — i commenti sugli elementi, per scheda viva: { [id]: [{nota, fatto}] }, e se si sta annotando. */
+          /** 06/9 — i commenti sugli elementi, per scheda viva: { [id]: [{nota, fatto}] }, e se si sta annotando. */
           browserAnnotazioni: {},
           browserAnnotaAttivo: false,
           browserErroriPagina: {},
@@ -14048,7 +14089,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         //    si decide la sicurezza. Vedi `disegnaPermessiIn`/`collegaAzioniPermessi`.
         permissions: "veloPermessi",
         // ⭐ 07/9 — l'albero: rami veri (fork) e deleghe vere, vedi `disegnaAlberoIn`.
-        sessionTree: "veloAlbero"
+        sessionTree: "veloAlbero",
+        // ⭐ 07/9 — la scelta del modello: il velo monta lo stesso `creaModelPicker` del foglio.
+        model: "veloModello"
       };
       async function esportaSessioneCorrente(formato) {
         if (!state.realSession.id) return { ok: false, motivo: "Nessuna sessione aperta da esportare." };
@@ -14165,6 +14208,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       function preparaVeloDaFoglio(tipo, velo) {
         if (tipo === "sessionTree") {
           void disegnaAlberoIn(velo);
+          return;
+        }
+        if (tipo === "model") {
+          montaSceltaModelloIn(velo);
           return;
         }
         if (tipo === "permissions") {
@@ -15277,6 +15324,45 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           nota.textContent = "Nessun ramo e nessuna delega. Un ramo nasce da «Fork questa sessione»; le deleghe le avvia TALOS da sé quando un sotto-compito è separabile.";
         }
       }
+      function montaSceltaModelloIn(radice) {
+        const mount = $2("#veloModelloMontaggio", radice) || $2("#modelPickerMount", radice);
+        if (!mount) return;
+        const picker = creaModelPicker({
+          valoreIniziale: state.model || "",
+          apriSubito: true,
+          sincronizzaSessione: true,
+          alSelezionato: () => {
+            if (radice?.id === "veloModello") chiudiVeloMockup("veloModello");
+            else closeEmbeddedDialog(sheetDialog);
+          }
+        });
+        const effortPicker = creaEffortPicker({
+          valoreIniziale: state.effort,
+          alCambiato: (valore) => {
+            state.effort = valore;
+            sincronizzaImpostazioniSessione({ reasoning: valore ? { effort: valore } : null });
+          }
+        });
+        const riga = document.createElement("label");
+        riga.className = "talos-setting";
+        const etichetta = document.createElement("span");
+        etichetta.className = "talos-setting__label";
+        etichetta.textContent = "Mostra ragionamento";
+        const interruttore = document.createElement("input");
+        interruttore.type = "checkbox";
+        interruttore.className = "talos-switch";
+        interruttore.setAttribute("role", "switch");
+        interruttore.id = "showReasoningToggle";
+        interruttore.checked = state.showReasoning;
+        interruttore.setAttribute("aria-label", "Mostra ragionamento");
+        interruttore.addEventListener("change", () => {
+          state.showReasoning = interruttore.checked;
+          salvaPreferenzeChatDesktop();
+          aggiornaVisibilitaRagionamento();
+        });
+        riga.append(etichetta, interruttore);
+        mount.replaceChildren(picker.elemento, effortPicker.elemento, riga);
+      }
       function wireSheetActions(type) {
         collegaAzioniPermessi(sheetBody, {
           dopoLaScelta: () => closeEmbeddedDialog(sheetDialog),
@@ -16240,8 +16326,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           case "prova":
             return "Esecuzione dei test…";
           /*
-           * ⭐⭐⭐ 29/8 — owner, riferimento diretto al proprio Bash tool di
-           * Claude Code: `descrizione` (nuova, opzionale — vedi lo schema
+           * ⭐⭐⭐ 29/8 — owner, riferimento diretto al comportamento noto di
+           * un Bash tool simile: `descrizione` (nuova, opzionale — vedi lo schema
            * in talosHarness.mjs) è la riga preferita quando il modello la
            * manda — "Show changed files" invece di "git diff --stat". Il
            * comando grezzo resta la SECONDA scelta (PARITÀ: un modello
@@ -18819,7 +18905,7 @@ ${testo3}` : testo3;
            * (piano, sezione "RICOGNIZIONE COMPETITIVA"): riusa appendToolNote,
            * la STESSA bolla collassabile già in uso per le tool-call — non un
            * componente nuovo, lo stesso idioma. Visibile per DEFAULT (a
-           * differenza di Claude Code, che lo nasconde dietro Ctrl+O — la
+           * differenza di uno strumento simile, che lo nasconde dietro una scorciatoia — la
            * ricerca del piano cita proprio questo come il difetto da non
            * ripetere), ma collassato: chi non è interessato scorre oltre senza
            * doverlo chiudere lui stesso.
@@ -21987,6 +22073,7 @@ ${blocchi.join("\n\n")}` : testa;
           }
         });
       }
+      collegaScia(ROOT());
       collegaCampoComandi(commandSearch);
       collegaCampoComandi($2("#cercaComando"));
       for (const elenco2 of [$2("#commandResults"), $2("#risultatiComandi")]) {
@@ -22546,6 +22633,7 @@ ${blocchi.join("\n\n")}` : testa;
         ultimoFuocoVelo = ROOT().activeElement;
         v.hidden = false;
         preparaMisuraDialogo(v);
+        aggiornaTutteLeScie(v);
         const corpo = v.querySelector(".talos-dialog__body");
         const scelto = corpo && corpo.querySelector('[role="radio"][aria-checked="true"]');
         const primo = scelto || corpo && corpo.querySelector("input, button, select") || v.querySelector(".talos-dialog__footer button, .talos-dialog__footer input, .talos-dialog__footer select") || v.querySelector("input, button, select");

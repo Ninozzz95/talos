@@ -58,8 +58,8 @@
     },
     {
       "path": "talos/browser-annota.js",
-      "bytes": 11688,
-      "sha256": "3400686413d6ad4bcb9a6970a9ba93cca71a50ddf72e5cc789ae3bd188a098cf"
+      "bytes": 11646,
+      "sha256": "fbc7d4ea66a0abf30b0b3a296122114df562fb7bf7fbe8448b0c2e8b48dce52a"
     },
     {
       "path": "vendor/floating-ui/LICENSE-core",

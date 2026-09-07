@@ -23,10 +23,9 @@
  *     fornitore per un id `fornitore/modello`; se il modello non lo dice, il
  *     secondo pezzo non si scrive.
  *
- * Ricerca 05/09/2026: in VS Code e Cursor il piede della barra laterale porta
+ * Ricerca 05/09/2026: in VS Code il piede della barra laterale porta
  * l'account/il workspace e l'ingranaggio delle impostazioni (code.visualstudio.com
- * docs/configure/custom-layout; forum.cursor.com «VSCode traditional side panel»):
- * stessa disposizione del mockup — identità a sinistra, impostazioni a destra.
+ * docs/configure/custom-layout): stessa disposizione del mockup — identità a sinistra, impostazioni a destra.
  */
 
 /** I preset del tema, con il nome come lo scrive il mockup. */

@@ -14,7 +14,7 @@
  * cross-frame via `postMessage` (zero eseguiti, in tre varianti diverse,
  * anche senza alcun sandbox). Una risposta HTTP VERA, con la SUA propria
  * intestazione, non eredita niente dalla pagina che la incorpora — è la
- * stessa architettura di Claude Artifacts (bloom.security, 28/8):
+ * stessa architettura di un pattern noto (bloom.security, 28/8):
  * un'origine/risposta separata, non un frammento incollato nella pagina
  * principale.
  *

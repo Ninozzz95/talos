@@ -144,7 +144,7 @@ export function createLocalModelStore({ rootDir, fsImpl = {}, now = () => new Da
   }
 
   /**
-   * 06/09 (richiesta INST-DELETE-FILE lasciata da Astra): «Elimina» toglieva solo i manifest e
+   * 06/09 (richiesta INST-DELETE-FILE): «Elimina» toglieva solo i manifest e
    * lasciava i pesi sul disco. Ora cancella anche la cartella del modello, ma SOLO se sta dentro
    * `rootDir` (il manifest lo garantisce già; qui si riverifica prima di un `rm` ricorsivo:
    * risolvi, poi `relative()` che non inizi con `..` e non sia assoluto — openreplay «Preventing

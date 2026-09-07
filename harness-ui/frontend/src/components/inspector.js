@@ -4,7 +4,7 @@
  * Indice dei giri), File (file toccati), Agenti (stato vuoto onesto), Processi
  * (i comandi eseguiti nella sessione).
  *
- * 06/09, B2 (coda di Astra, fatta da Claude). ⛔ Fino a oggi la colonna mostrava
+ * 06/09, B2. ⛔ Fino a oggi la colonna mostrava
  * i valori DIMOSTRATIVI del mockup («W1-02 registro processi», un ramo, tre file,
  * quattro processi che non esistevano): qui ogni riga viene dai dati del monolite,
  * e quando un dato non c'è si scrive «—» o la riga sparisce — mai un numero finto.

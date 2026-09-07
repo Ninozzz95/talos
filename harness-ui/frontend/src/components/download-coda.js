@@ -5,7 +5,7 @@
  * Pausa/Riprendi/Annulla, scheda d'errore con Riprova e Dettagli, riga «Completato» con
  * «Vedi modello».
  *
- * 06/09, B6.10 (coda di Astra, fatta da Claude). I dati sono gli stati di
+ * 06/09, B6.10. I dati sono gli stati di
  * `/api/v1/huggingface/downloads` (`hf-direct-transfer.mjs status()`: id, state
  * queued · running · verifying · paused · failed · ready · cancelled, progress, bytes,
  * totalBytes, reason, startedAt) più il manifest del download (repo, files). Velocità e

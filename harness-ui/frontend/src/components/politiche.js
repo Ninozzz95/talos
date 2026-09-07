@@ -9,8 +9,8 @@
  * ⇒ Regola dell'owner (04/9): mai nomi tecnici a schermo, la mappa in UN posto solo, e MAI toccare
  *   il valore che viaggia verso il kernel — quello resta `Read only` e compagni, byte per byte.
  *
- * Ricerca 07/09/2026 — Claude Code, «Choose a permission mode» (code.claude.com/docs/en/permission-modes)
- * e le note della v2.1.200 (3 luglio 2026): il concorrente ha RINOMINATO il modo «default» in
+ * Ricerca 07/09/2026: lo stato dell'arte separa l'etichetta a schermo dal valore di
+ * configurazione — un concorrente ha RINOMINATO il modo «default» in
  * «Manual» su CLI, VS Code, JetBrains e desktop **tenendo il valore di configurazione invariato**
  * per hook e SDK, con il vecchio nome accettato come alias. È esattamente questa separazione:
  * l'etichetta è dell'interfaccia, il valore è del contratto.
