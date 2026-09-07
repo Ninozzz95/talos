@@ -167,7 +167,14 @@ export function aggiornaCronologia(nav, conversazione, { fuoco = null } = {}) {
     b.dataset.indice = String(i);
     b.dataset.tono = v.tono || (v.diUtente ? 'utente' : '');
     b.setAttribute('aria-label', Number.isFinite(v.numero) ? `Vai al giro ${v.numero}` : `Vai al messaggio ${i + 1}`);
-    b.title = testoFumetto(v);
+    /*
+     * ⛔ 07/9, owner (screenshot): al passaggio del mouse comparivano DUE riquadri sovrapposti con
+     *   lo stesso testo — il nostro fumetto e il tooltip NATIVO che Chrome disegna da `title`, che
+     *   appare dopo ~1 s e non conosce né il tema né la posizione del nostro. Riprodotto sul 4174
+     *   (foto `cronologia-hover.png`). Il `title` non serviva a nessuno: chi legge con la tastiera o
+     *   con lo screen reader ha `aria-label` qui sotto, e chi passa il mouse ha il fumetto.
+     */
+    b.removeAttribute('title');
     b.classList.toggle('talos-cronologia__voce--attiva', i === attivo);
     b.querySelector('.talos-cronologia__linea').style.setProperty('--lente', `${larghezzaLente(i, attivo)}px`);
   });

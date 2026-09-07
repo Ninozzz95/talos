@@ -91,11 +91,39 @@ export function formattaProvenienza(pagina) {
   return parti.join(' · ');
 }
 
-/** «02 · Agente · 10:42» — la riga alta di una card della cronologia. */
-export function etichettaCronologia(pagina, indice) {
-  const quando = pagina?.quando ? new Date(pagina.quando) : null;
-  const ora = quando && !Number.isNaN(quando.getTime()) ? oraRoma.format(quando) : '—';
-  return `${String(indice + 1).padStart(2, '0')} · ${t(pagina?.origine === 'tu' ? TESTI.provenienzaTu : TESTI.provenienzaAgente)} · ${ora}`;
+/*
+ * ⛔ 07/9, owner: «quella sopra deve diventare un sistema di schede, esattamente come fa un browser».
+ * Un browser non scrive l'indirizzo sulla linguetta: scrive il TITOLO della pagina, e tiene lo stato
+ * a parte. Le letture dell'agente cominciano col rigo «HTTP 200 · https://…», e quel rigo finiva tale
+ * e quale sulla scheda: sette linguette che dicevano tutte «HTTP 200 · https://…», illeggibili
+ * (screenshot dell'owner). Qui il rigo si smonta: il numero diventa una pillola — e solo se non è
+ * 2xx, perché «tutto bene» non merita un'etichetta — e il nome viene dal `<title>` della pagina, che
+ * nel testo acquisito c'è già e nessuno leggeva.
+ */
+const RIGO_STATO = /^\s*HTTP\s+(\d{3})\s*[·|-]\s*(\S+)\s*$/i;
+
+/** Il numero di stato di una lettura, se il testo acquisito lo dichiara. @returns {number|null} */
+export function statoHttpDiLettura(pagina) {
+  const prima = String(pagina?.testo || '').split('\n', 1)[0];
+  const m = RIGO_STATO.exec(prima);
+  return m ? Number(m[1]) : null;
+}
+
+/** Il `<title>` di una pagina HTML, ripulito e accorciato. @returns {string} vuoto se non c'è. */
+export function titoloDaHtml(grezzo) {
+  const m = /<title[^>]*>([\s\S]{0,300}?)<\/title>/i.exec(String(grezzo || ''));
+  if (!m) return '';
+  const testo = m[1].replace(/\s+/g, ' ').trim()
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  return testo.length > 80 ? `${testo.slice(0, 79)}…` : testo;
+}
+
+/** Il nome di una scheda: il titolo vero se c'è, poi il `<title>` della pagina, poi host e percorso. */
+export function titoloScheda(pagina) {
+  if (pagina?.titolo) return pagina.titolo;
+  const daHtml = titoloDaHtml(pagina?.testo);
+  if (daHtml) return daHtml;
+  return hostDaUrl(pagina?.url) || titoloDaLettura(pagina);
 }
 
 /** Chi resta attiva quando si chiude la scheda in posizione `indice` (stessa regola del Terminale). */
@@ -127,7 +155,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     avviso: $(schermo, '#browserAvviso'), bloccato: $(schermo, '#browserBloccato'), caricamento: $(schermo, '#browserCaricamento'), vuoto: $(schermo, '#browserVuoto'),
     articolo: $(schermo, '#browserPagina'), titolo: $(schermo, '#browserTitolo'), provenienza: $(schermo, '#browserProvenienza'), testo: $(schermo, '#browserTesto'),
     editorNota: $(schermo, '#browserEditorNota'), notaInput: $(schermo, '#browserNotaInput'), notaSalvata: $(schermo, '#browserNotaSalvata'),
-    live: $(schermo, '#browserLive'), cronologia: $(schermo, '.talos-browser__history-list'), limiti: $(schermo, '#browserLimiti'),
+    live: $(schermo, '#browserLive'), nuovaScheda: $(schermo, '#browserNuovaScheda'), limiti: $(schermo, '#browserLimiti'),
     consenti: $(schermo, '[data-action="consentiBrowser"]'), nega: $(schermo, '[data-action="negaBrowser"]'), annulla: $(schermo, '[data-action="annullaBrowser"]'),
     conservaNota: $(schermo, '[data-action="conservaNotaBrowser"]'), chiudiNota: $(schermo, '[data-action="chiudiNotaBrowser"]'),
     bloccatoTesto: $(schermo, '#browserBloccato p.talos-muted'),
@@ -181,10 +209,24 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     el.url.addEventListener('input', () => el.url.removeAttribute('aria-invalid'));
   }
   el.schede?.addEventListener('click', (e) => {
+    // ⛔ 07/9 — prima la «X» era una MISURA: «sei negli ultimi 24 px della linguetta». Con una ✕
+    //   vera il bersaglio è un elemento, e chi usa la tastiera o tocca lo schermo la trova come tutti.
+    const x = e.target.closest?.('[data-browser-chiudi]');
+    if (x) { e.preventDefault(); azioni.chiudi?.(x.dataset.browserChiudi); return; }
     const tab = e.target.closest?.('[data-browser-tab]'); if (!tab) return;
     const id = tab.dataset.browserId;
-    const sullaX = e.clientX > 0 && e.clientX >= tab.getBoundingClientRect().right - 24;
-    if (sullaX || e.ctrlKey || e.metaKey) azioni.chiudi?.(id); else azioni.seleziona?.(id);
+    if (e.ctrlKey || e.metaKey) azioni.chiudi?.(id); else azioni.seleziona?.(id);
+  });
+  /*
+   * Il «+»: in un browser apre una scheda vuota col cursore nell'indirizzo. Qui non si crea una
+   * scheda finta — si porta il fuoco nel campo e si svuota, così il primo tasto che premi scrive
+   * l'indirizzo. La scheda nasce quando la pagina esiste, non prima.
+   */
+  el.nuovaScheda?.addEventListener('click', () => {
+    if (!el.url) return;
+    el.url.value = '';
+    el.url.focus();
+    el.url.removeAttribute('aria-invalid');
   });
   el.schede?.addEventListener('auxclick', (e) => { const tab = e.target.closest?.('[data-browser-tab]'); if (tab && e.button === 1) { e.preventDefault(); azioni.chiudi?.(tab.dataset.browserId); } });
   el.schede?.addEventListener('keydown', (e) => {
@@ -197,42 +239,69 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     else return;
     e.preventDefault(); if (prossima) { azioni.seleziona?.(prossima); el.schede.querySelector(`[data-browser-id="${CSS.escape(prossima)}"]`)?.focus(); }
   });
-  el.cronologia?.addEventListener('click', (e) => { const voce = e.target.closest?.('[data-pagina-browser]'); if (voce) azioni.seleziona?.(voce.dataset.browserId); });
 
   function mostraAvviso(testo) { if (!el.avviso) return; el.avviso.textContent = testo || ''; el.avviso.hidden = !testo; }
 
+  /*
+   * La striscia delle schede, come in un browser: icona, titolo vero, la ✕ propria, e il «+» in coda
+   * (nel markup, fuori dalla lista: dentro un `role="tablist"` non ci va altro che schede).
+   * ⛔ 07/9 — prima era un `.talos-tabs__tab` con dentro l'etichetta della lettura, cioè «HTTP 200 ·
+   *   https://…» ripetuto su ogni linguetta. Ricerca 07/09/2026 (Mobbin «Tab Bar UI», Eleken «Tabs UX
+   *   best practices», Chrome «scrollable-tabstrip»): la scheda porta un nome riconoscibile, lo stato
+   *   non si affida al solo colore, e quando non ci stanno più la striscia SCORRE invece di ridurre
+   *   tutto a icone.
+   */
   function renderizzaSchede() {
     if (!el.schede) return;
-    const cornice = el.schede.closest('.talos-tabs'); if (cornice) cornice.hidden = stato.schede.length === 0; // senza schede la lista vuota disegnava una pillola (taccuino, browser-1.png)
+    const cornice = el.schede.closest('.talos-tabstrip');
+    if (cornice) cornice.hidden = stato.schede.length === 0; // senza schede la lista vuota disegnava una pillola (taccuino, browser-1.png)
     el.schede.replaceChildren();
+    const doc = el.schede.ownerDocument;
     stato.schede.forEach((s, i) => {
-      const b = document.createElement('button');
-      b.className = 'talos-tabs__tab'; b.type = 'button'; b.setAttribute('role', 'tab');
-      b.dataset.browserTab = String(i); b.dataset.browserId = s.id;
+      const scheda = doc.createElement('div');
+      scheda.className = 'talos-tabstrip__scheda';
+      scheda.setAttribute('role', 'tab');
+      scheda.dataset.browserTab = String(i); scheda.dataset.browserId = s.id;
       const sel = s.id === stato.attiva;
-      b.setAttribute('aria-selected', String(sel)); b.tabIndex = sel ? 0 : -1;
-      b.textContent = titoloDaLettura(s);
-      b.title = t('{titolo} — {url}', { titolo: titoloDaLettura(s), url: s.url });
-      el.schede.append(b);
+      scheda.setAttribute('aria-selected', String(sel)); scheda.tabIndex = sel ? 0 : -1;
+      if (s.tipo === 'viva') scheda.dataset.stato = s.stato || 'pronta';
+
+      const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'i talos-tabstrip__icona'); svg.setAttribute('aria-hidden', 'true');
+      const use = doc.createElementNS('http://www.w3.org/2000/svg', 'use');
+      use.setAttribute('href', s.tipo === 'viva' ? '#i-globe' : '#i-doc'); // tua o letta dall'agente: si vede
+      svg.append(use); scheda.append(svg);
+
+      const nome = titoloScheda(s);
+      const titolo = doc.createElement('span');
+      titolo.className = 'talos-tabstrip__titolo'; titolo.textContent = nome;
+      scheda.append(titolo);
+
+      // lo stato si scrive solo quando c'è qualcosa da dire: 200 su sette schede non è informazione
+      const http = statoHttpDiLettura(s);
+      if (http !== null && (http < 200 || http >= 300)) {
+        const pillola = doc.createElement('span');
+        pillola.className = 'talos-tabstrip__stato'; pillola.textContent = String(http);
+        scheda.append(pillola);
+      }
+
+      const chiudi = doc.createElement('button');
+      chiudi.type = 'button'; chiudi.className = 'talos-tabstrip__chiudi'; chiudi.tabIndex = -1;
+      chiudi.dataset.browserChiudi = s.id;
+      chiudi.setAttribute('aria-label', t('Chiudi {titolo}', { titolo: nome }));
+      const svgX = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svgX.setAttribute('class', 'i'); svgX.setAttribute('aria-hidden', 'true');
+      const useX = doc.createElementNS('http://www.w3.org/2000/svg', 'use');
+      useX.setAttribute('href', '#i-x'); svgX.append(useX); chiudi.append(svgX);
+      scheda.append(chiudi);
+
+      scheda.dataset.tip = `${nome} — ${s.url}`; // il fumetto è il nostro, mai il `title` del sistema
+      el.schede.append(scheda);
     });
+    // la scheda attiva resta in vista quando la striscia scorre
+    el.schede.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
-  function renderizzaCronologia() {
-    if (!el.cronologia) return;
-    el.cronologia.replaceChildren();
-    const letture = stato.schede.filter((s) => s.tipo !== 'viva');
-    letture.forEach((s, i) => {
-      const b = document.createElement('button');
-      b.className = 'talos-browser__entry'; b.type = 'button';
-      b.dataset.paginaBrowser = String(i); b.dataset.browserId = s.id;
-      if (s.id === stato.attiva) b.setAttribute('aria-current', 'page');
-      const alto = document.createElement('span'); alto.className = 'talos-muted talos-browser__meta'; alto.textContent = etichettaCronologia(s, i);
-      const forte = document.createElement('strong'); forte.textContent = titoloDaLettura(s);
-      const basso = document.createElement('span'); basso.className = 'talos-muted talos-browser__meta'; basso.textContent = hostDaUrl(s.url);
-      b.append(alto, forte, basso);
-      el.cronologia.append(b);
-    });
-  }
 
   /*
    * Il testo che ha letto l'agente. Se è il sorgente di una pagina si mostra ripulito (via codice,
@@ -274,7 +343,8 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
      * bianca senza spiegazione.
      */
     const vuoleViva = s && s.tipo === 'viva' && s.stato !== 'bloccata';
-    const vuoleLettura = s && s.tipo !== 'viva' && stato.modo === 'pagina' && Boolean(s.url) && /^https?:/i.test(s.url);
+    // la lettura si incornicia solo se il server ha detto che quel sito si lascia incorniciare (vedi `corniceDellaLettura`)
+    const vuoleLettura = s && s.tipo !== 'viva' && stato.modo === 'pagina' && Boolean(s.url) && /^https?:/i.test(s.url) && s.incorniciabile !== false;
     const vuole = vuoleViva || vuoleLettura;
     el.live.hidden = !vuole;
     if (!vuole) { el.live.replaceChildren(); return; }
@@ -292,7 +362,9 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       if (s.tipo !== 'viva') {
         frame.dataset.caricata = 'no';
         frame.addEventListener('load', () => { frame.dataset.caricata = 'si'; mostraAvviso(''); }, { once: true });
-        // il sito che vieta la cornice non manda nessun `load`: dopo l'attesa si torna al testo, spiegando
+        // Rete di sicurezza: la domanda al server qui sopra copre il caso normale, ma una pagina può
+        // fallire per altro (rete, redirect infinito). ⛔ Non è una guardia sull'X-Frame-Options: lì
+        // Chrome manda `load` sulla propria pagina d'errore e questa attesa non scatta mai (07/9).
         setTimeout(() => {
           if (!frame.isConnected || frame.dataset.caricata === 'si') return;
           stato.modo = 'testo';
@@ -304,8 +376,29 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     }
   }
 
+  /*
+   * ⛔ 07/9, O-42 — owner (screenshot su github.com): al posto della pagina il rettangolo grigio
+   *   dell'immagine rotta, mentre la lettura sopra diceva «HTTP 200 · 4116 caratteri»: il testo c'era,
+   *   era la CORNICE a non mostrarlo. Il ripiego dopo quattro secondi non scattava, e misurando si
+   *   vede perché: quando X-Frame-Options rifiuta, Chrome carica dentro la cornice la sua pagina di
+   *   errore e spara un `load` regolare — la guardia lo legge come «caricata» e resta lì.
+   * ⇒ Non si aspetta il fallimento: si prevede. Il server sa già leggere le intestazioni
+   *   (`GET /api/v1/browser/incorniciabile`, in uso dal 06/9 per le pagine che apri tu): la stessa
+   *   domanda si fa anche per una lettura dell'agente, PRIMA di incorniciare. Chi vieta la cornice va
+   *   dritto al testo con una riga che dice perché.
+   * @returns {string} l'avviso da mostrare, vuoto se non c'è niente da dire
+   */
+  function corniceDellaLettura(s) {
+    if (!s || s.tipo === 'viva' || !s.url || !/^https?:/i.test(s.url)) return '';
+    if (s.incorniciabile === undefined) { azioni.chiediCornice?.(s); return ''; }
+    if (s.incorniciabile !== false) return '';
+    if (stato.modo === 'pagina') stato.modo = 'testo';
+    return `${t(s.motivoCornice || 'Questo sito non si lascia mostrare dentro TALOS')}. ${t('Qui sotto c’è il testo che ha letto l’agente.')}`;
+  }
+
   function renderizza() {
     const s = attiva();
+    const avvisoCornice = corniceDellaLettura(s);
     const letture = stato.schede.filter((x) => x.tipo !== 'viva').length;
     const vive = stato.schede.length - letture;
     if (el.riepilogo) el.riepilogo.textContent = stato.schede.length === 0 ? t(TESTI.riepilogoVuoto) : (vive === 0 ? TESTI.riepilogoLetture(letture) : TESTI.riepilogoMisto(letture, vive));
@@ -344,15 +437,13 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       if (el.provenienza) el.provenienza.textContent = formattaProvenienza(s);
       if (el.testo && stato.modo !== 'pagina') scriviTestoAcquisito(s.testo || '');
     }
-    mostraAvviso(s?.tipo === 'viva' && s.stato === 'bloccata' ? t('{motivo}. {invito}: usa «Rileggi».', { motivo: s.motivo || t('Il sito non consente di essere mostrato dentro TALOS'), invito: t(TESTI.chiediAllAgente) }) : '');
+    mostraAvviso(avvisoCornice || (s?.tipo === 'viva' && s.stato === 'bloccata' ? t('{motivo}. {invito}: usa «Rileggi».', { motivo: s.motivo || t('Il sito non consente di essere mostrato dentro TALOS'), invito: t(TESTI.chiediAllAgente) }) : ''));
     renderizzaCornice(s);
     // nota
     const nota = s ? stato.note[s.url] : '';
     if (el.notaSalvata) { el.notaSalvata.hidden = !nota; el.notaSalvata.textContent = nota ? t('Nota: {nota}', { nota }) : ''; }
     if (!s || (el.editorNota && !el.editorNota.hidden && el.editorNota.dataset.browserId !== s.id)) { if (el.editorNota) el.editorNota.hidden = true; el.nota?.setAttribute('aria-expanded', 'false'); }
     if (el.editorNota && s) el.editorNota.dataset.browserId = s.id;
-    renderizzaCronologia();
-    const nav = el.cronologia?.closest('nav'); if (nav) nav.hidden = letture === 0; // niente «Cronologia · scegli una lettura» senza letture
     if (el.limiti) el.limiti.textContent = t(vive > 0 ? TESTI.limitiVive : TESTI.limitiLetture);
     // il pannello dei commenti: solo su una pagina viva proxata
     const annotabile = Boolean(s && s.tipo === 'viva' && s.proxata && s.stato !== 'bloccata');
