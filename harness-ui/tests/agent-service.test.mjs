@@ -2573,3 +2573,72 @@ test("⛔⛔ AL CONTRARIO — se la Libreria non è scrivibile l'artefatto resta
   assert.ok(eventi.some((e) => e.type === 'ArtifactCreated'), "e l'artefatto compare comunque in chat");
   assert.ok(esito, 'il giro non fallisce');
 });
+
+/*
+ * ⛔⛔ 07/09/2026, O-37 — owner: «con i modelli a chiave API gli artefatti vengono creati ma non
+ *   salvati nella Libreria». RIPRODOTTO con un giro vero (GLM 5.3 Flash, istanza di prova 4311, store
+ *   separato): il modello ha usato `document_create`, il `.docx` è finito nel workspace (7,7 KB sul
+ *   disco) e in `.harness-ui-library/` non è comparso NIENTE — la cartella non è stata nemmeno creata.
+ *   La causa non era un guasto: era un commento rimasto indietro. `onDocumento` diceva «qui non c'è
+ *   una Libreria (il desktop non ne ha una)» — vero fino al 28/8, falso dal 29/8 (FASE N). Gli
+ *   artefatti HTML la copia ce l'avevano; i documenti no, e il modello usa proprio quelli.
+ */
+test('⭐⭐⭐ O-37: un documento creato finisce ANCHE in Libreria, e i binari ci vanno in base64', async () => {
+  const inLibreria = [];
+  const bytesDocx = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe]); // firma ZIP: un .docx vero comincia così, e non è UTF-8
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, documenti: [{ argomenti: { format: 'docx', title: 'Riepilogo', body: 'x' } }] },
+  });
+
+  const risultato = await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'docx', fileName: 'Riepilogo.docx', mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', bytes: bytesDocx }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: 'riaperto' }),
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+    salvaVoceLibreriaFn: async (voce) => { inLibreria.push(voce); return 'lib-1'; },
+  });
+
+  assert.equal(risultato.ok, true);
+  assert.equal(inLibreria.length, 1, 'il documento deve arrivare in Libreria: è lavoro prodotto per la persona');
+  const voce = inLibreria[0];
+  assert.equal(voce.nome, 'Riepilogo.docx');
+  assert.equal(voce.origine, 'generated');
+  assert.equal(voce.mediaType, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  assert.equal(voce.testo, undefined, 'un binario non passa mai per il campo di testo: si corromperebbe');
+  assert.equal(voce.base64, Buffer.from(bytesDocx).toString('base64'));
+});
+
+test('O-37: un formato TESTUALE va in Libreria come testo, non come base64', async () => {
+  const inLibreria = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, documenti: [{ argomenti: { format: 'md', title: 'Note', body: 'x' } }] },
+  });
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'md', fileName: 'Note.md', mediaType: 'text/markdown', bytes: new TextEncoder().encode('# Note\nriga') }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+    salvaVoceLibreriaFn: async (voce) => { inLibreria.push(voce); return 'lib-2'; },
+  });
+  assert.equal(inLibreria[0].testo, '# Note\nriga');
+  assert.equal(inLibreria[0].base64, undefined);
+});
+
+test('O-37, al contrario: se la Libreria non è scrivibile il GIRO NON si rompe', async () => {
+  /*
+   * ⛔ Un artefatto senza copia è un fastidio; un giro rotto per una scrittura è un danno. La stessa
+   *   scelta già presa per gli artefatti HTML: si registra nel log del server, mai in silenzio, e il
+   *   documento resta dov'è — nel workspace, dove il modello l'ha messo.
+   */
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, documenti: [{ argomenti: { format: 'md', title: 'Note', body: 'x' } }] },
+  });
+  const risultato = await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'md', fileName: 'Note.md', mediaType: 'text/markdown', bytes: new TextEncoder().encode('x') }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+    salvaVoceLibreriaFn: async () => { throw new Error('disco pieno'); },
+  });
+  assert.equal(risultato.ok, true, 'il giro deve concludersi lo stesso');
+});
