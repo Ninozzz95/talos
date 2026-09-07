@@ -15333,8 +15333,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function setupPanelResize() {
-    $$('.panel-resize-handle').forEach((handle) => {
-      const which = handle.dataset.resize;
+    /*
+     * ⛔⛔ 07/9 — trovato dal CANCELLO: le due colonne NON si ridimensionavano, e non per un bug
+     * sottile. Questo codice cercava `.panel-resize-handle` con `data-resize`, che nel mockup non
+     * esistono: **zero occorrenze** di entrambi nel template. Le maniglie vere sono
+     * `.talos-resizer` con `data-ridimensiona`, e il valore della sidebar si chiama «sidebar» dove
+     * qui si chiama «sessions». Tre disallineamenti in una riga sola, nati col passaggio al
+     * mockup: `$$()` tornava una lista vuota, `forEach` non girava mai, e nessun errore da nessuna
+     * parte — il silenzio perfetto di un aggancio che non aggancia.
+     * ⛔ L'owner l'aveva chiesto per nome («modali e colonne ridimensionabili»): era dichiarato
+     *   fatto e non lo era, ed è esattamente il tipo di difetto che nessun test vedeva.
+     */
+    $$('.panel-resize-handle, .talos-resizer[data-ridimensiona]').forEach((handle) => {
+      const grezzo = handle.dataset.resize || handle.dataset.ridimensiona;
+      // il mockup chiama «sidebar» la colonna che qui si chiama «sessions»: si traduce in un posto solo
+      const which = grezzo === 'sidebar' ? 'sessions' : grezzo;
       if (!PANEL_RESIZE_LIMITS[which]) return;
       const panel = which === 'sessions' ? sessionsPanel : inspectorPanel;
 
