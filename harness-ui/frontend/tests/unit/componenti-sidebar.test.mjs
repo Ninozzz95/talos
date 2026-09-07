@@ -83,3 +83,26 @@ test('LUOGHI: le voci del mockup, nell\'ordine, con una sola voce senza schermat
   assert.deepEqual(LUOGHI.map((l) => l.vaia), ['capability', 'board', 'libreria', 'memoria', 'attivita']);
   assert.deepEqual(LUOGHI_ALTRI.filter((l) => !l.vaia).map((l) => l.conteggio), ['note']);
 });
+
+/*
+ * ⛔ 07/9, misurato dal vivo: una sessione FERMATA dall'owner mostrava «errore» nella sidebar,
+ * perché il giro si chiude con `RunError` di codice `fermato` e l'elenco conosceva solo l'esito.
+ * Provato anche AL VERSO CONTRARIO: un errore vero deve continuare a dire «errore».
+ */
+test('una sessione fermata dall owner dice «fermata», non «errore»', () => {
+  const fermata = statoSessione({ conclusa: true, interrotta: false, ultimoEsito: 'errore', motivoChiusura: 'fermata' });
+  assert.equal(fermata.classe, 'fermata');
+  assert.equal(fermata.testo, 'fermata');
+  assert.match(fermata.aiuto, /fermata tu/);
+});
+
+test('un errore VERO resta «errore» — la cura non nasconde i guasti', () => {
+  const guasto = statoSessione({ conclusa: true, interrotta: false, ultimoEsito: 'errore', motivoChiusura: 'errore' });
+  assert.equal(guasto.classe, 'errore');
+  assert.equal(guasto.testo, 'errore');
+  assert.equal(guasto.tono, 'danger');
+});
+
+test('senza motivo di chiusura non si inventa niente: resta «errore»', () => {
+  assert.equal(statoSessione({ conclusa: true, interrotta: false, ultimoEsito: 'errore' }).classe, 'errore');
+});

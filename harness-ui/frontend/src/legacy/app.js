@@ -12423,6 +12423,28 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       renderizzaBannerCoda();
       toast('Messaggio in coda', `Arriverà quando l'agente conclude il turno corrente (posizione ${dati.posizione}).`);
     } catch (error) {
+      /*
+       * ⛔⛔⛔ 07/9 — LA RETE DI SICUREZZA. Il server rifiuta la coda quando la sessione non e
+       * in corso, e ha ragione: un messaggio accodato li non verrebbe consegnato mai. Ma per la
+       * persona che ha appena scritto, quel rifiuto era un muro — «Messaggio non accodato ·
+       * Sessione non pronta per questa azione» — e il testo tornava nel composer senza una via
+       * d'uscita. Due volte l'owner e rimasto bloccato cosi, la seconda dopo che il difetto era
+       * gia stato «curato» a monte: perche una cura a monte vale finche lo stato del client e
+       * giusto, e qui il punto e proprio che puo non esserlo.
+       * ⇒ Se il motivo del rifiuto e che la sessione non e in corso, la strada giusta esiste ed e
+       *   la RIPRESA: si prende, invece di restituire un errore. Lo stato si corregge nello stesso
+       *   momento, cosi il pulsante smette di offrire un «ferma» che non ferma niente.
+       * ⛔ Ogni altro errore resta un errore: questa scorciatoia vale SOLO per il caso nominato.
+       */
+      const nonInCorso = /non è in corso|non pronta|SESSION_NOT_READY|interrott/i.test(String(error?.message || ''))
+        || error?.code === 'SESSION_NOT_READY';
+      if (nonInCorso && sessionId === state.realSession.id) {
+        state.realSession.chiusaDalServer = true;
+        state.realSession.eventoTerminaleVisto = true;
+        syncRunComposerState();
+        resumeSession(testo);
+        return;
+      }
       composerInput.value = testo;
       autoGrowTextarea();
       toast('Messaggio non accodato', error.message);
@@ -12968,6 +12990,29 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (demoBadge) demoBadge.hidden = true;
     }
     elenco = Array.isArray(elenco) ? elenco.map((sessione) => ({ ...sessione, modello: normalizzaModelloSessione(sessione) })) : [];
+    /*
+     * ⛔⛔⛔ 07/9, owner con lo screenshot: «Su 4174 ancora quel problema della sessione. Non
+     * riesco a riprendere». Nella sua pagina il pulsante era ROSSO («Interrompi al prossimo punto
+     * sicuro»), l'indice dei giri diceva «in corso», e la sidebar diceva «interrotta»: tre stati per
+     * la stessa sessione, e quello sbagliato era il nostro. Da lì il messaggio andava alla CODA
+     * invece che alla RIPRESA, e il server lo rifiutava — «Sessione non pronta per questa azione».
+     *
+     * Perche la cura di O-48 non bastava: guardava lo stato del server SOLO all'apertura di una
+     * sessione (`apriSessioneReale`). Ma qui la sessione era gia aperta da ieri, e nel frattempo il
+     * server e stato riavviato: nessuno riapre niente, l'evento terminale non arriva MAI, e la
+     * pagina resta convinta di un giro che non esiste piu.
+     * ⇒ Lo stato di una sessione lo dice il SERVER, e lo dice a ogni giro dell'elenco — che gia
+     *   passa di qui ogni pochi secondi. Se la sessione aperta risulta conclusa o interrotta, il
+     *   giro e finito: si dichiara, e il composer si ridisegna da solo.
+     */
+    if (state.realSession.id && !state.realSession.chiusaDalServer) {
+      const corrente = elenco.find((sessione) => sessione.sessionId === state.realSession.id);
+      if (corrente && (corrente.conclusa === true || corrente.interrotta === true)) {
+        state.realSession.chiusaDalServer = true;
+        state.realSession.eventoTerminaleVisto = true;
+        syncRunComposerState();
+      }
+    }
     state.sessionSelection.available = new Map(elenco.map((sessione) => [sessione.sessionId, sessione]));
     void aggiornaContatoriLuoghi(elenco.length); // 05/9 Fase 2: NavItem
     for (const id of [...state.sessionSelection.selected]) {

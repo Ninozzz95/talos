@@ -667,3 +667,38 @@ mostrava i valori grezzi del kernel in inglese («Read only»), la modale «Nuov
 valore che viaggia verso il kernel non è cambiato di un byte — è il contratto, non un'etichetta.
 Ricerca 07/09/2026: Claude Code v2.1.200 ha rinominato «default» in «Manual» su tutte le
 interfacce **tenendo invariato** il valore di configurazione per hook e SDK: stessa separazione.
+
+### O-58 · «non riesco a riprendere» — la pagina credeva a un giro che non c'era più — 07/09 · CHIUSO
+
+**Cosa vedeva l'owner** (screenshot delle 13:24): pulsante del composer **rosso** con «Interrompi al
+prossimo punto sicuro», indice dei giri «in corso», sidebar «interrotta», e al primo invio
+«Messaggio non accodato · Sessione non pronta per questa azione». Tre stati per la stessa sessione,
+e quello sbagliato era il nostro.
+
+**Perché la cura di O-48 non bastava.** Guardava lo stato del server **solo all'apertura** di una
+sessione (`apriSessioneReale`). Nel caso vero la sessione era già aperta da ieri e nel frattempo il
+server è stato riavviato — anche da me, decine di volte oggi, per consegnare: nessuno riapre niente,
+l'evento terminale non arriva mai, e la pagina resta convinta di un giro che non esiste. Da lì il
+messaggio prendeva la strada della **coda**, e il server la rifiutava con ragione (un messaggio
+accodato lì non verrebbe consegnato mai).
+
+**Cura, in tre punti — perché una sola non basta a impedire il muro:**
+1. **Il polling corregge lo stato**: `aggiornaElencoSessioniReali` gira ogni pochi secondi e ha già
+   in mano `conclusa`/`interrotta` della sessione aperta. Se il server la dà chiusa, il giro è
+   finito: si dichiara, e il composer si ridisegna da solo.
+2. **La rete di sicurezza all'invio**: se l'accodamento viene rifiutato perché la sessione non è in
+   corso, si prende la strada giusta — la **ripresa** — invece di restituire un errore. Ogni altro
+   errore resta un errore.
+3. **Lo stato «fermata»**: una sessione fermata dall'owner diceva **«errore»** nella sidebar, perché
+   il giro si chiude con `RunError` di codice `fermato`. Il motivo ora viaggia nell'elenco
+   (`motivoChiusura`) e vince sull'esito. Fonti 07/09/2026: opencode #25899 e #28453 — un
+   annullamento chiesto dalla persona non è né `end_turn` («fa sembrare completamento uno stop») né
+   `agent_error` («fa sembrare un guasto un gesto voluto»): è un terzo esito.
+
+**Misurato dal vivo**, riproducendo il caso alla lettera su istanza di prova: giro in corso →
+server ucciso e riavviato → **entro 3 secondi** il pulsante torna «Invia» e la riga dice
+«interrotta» → si scrive → il giro riparte, TALOS risponde, sessione «conclusa · 5 giri». Nessun
+toast d'errore. Foto: `scratchpad/prove/foto/C06-caso-owner/`.
+
+⛔ **Chi ha la pagina aperta da prima deve ricaricarla** (Ctrl+F5): il codice vecchio resta in
+memoria finché il browser non lo rilegge.
