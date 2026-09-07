@@ -2491,6 +2491,37 @@ body.reduce-motion *::after {
   background: var(--talos-accent-soft);
   border-color: var(--talos-accent);
 }
+.talos-approval__esito {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--talos-border);
+  background: var(--talos-card-subtle);
+  color: var(--talos-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.talos-approval__esito::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+.talos-approval__esito--si {
+  border-color: var(--talos-success-border);
+  background: var(--talos-success-soft);
+  color: var(--talos-success);
+}
+.talos-approval__esito--no {
+  border-color: var(--talos-danger-border);
+  background: var(--talos-danger-soft);
+  color: var(--talos-danger);
+}
 .sheet-avviso {
   display: flex;
   align-items: center;

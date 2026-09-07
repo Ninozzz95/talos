@@ -5831,7 +5831,113 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * (`#capabilityBtn`): la stessa modale aperta dal Context rail o dalla
    * palette resta centrata, perché lì non c'è nessun «+» a cui ancorarsi.
    */
+  /*
+   * ⭐⭐⭐ 07/9 — IL CUTOVER FINITO DAVVERO. Owner, alla domanda se togliere o collegare i veli
+   * morti: «secondo te Roma è stata costruita in un giorno?» — cioè la via lunga.
+   *
+   * Il cancello aveva trovato che **dodici finestre su ventidue non si potevano aprire**: nessun
+   * `data-apre-velo`, nessun sorgente che ne nominasse l'id. Il mockup portava la sua versione di
+   * ogni finestra, il prodotto ne aveva collegate dieci, e le altre restavano markup che nessuno
+   * raggiungeva — ~43 KB, il 14% del template, serviti a ogni apertura.
+   *
+   * ⛔ La via pigra sarebbe riscrivere dodici logiche dentro i veli. Quella giusta è più corta E
+   *   più sicura: la logica dei fogli vecchi funziona ed è provata — le si cambia solo la PELLE.
+   *   Qui `openSheet` guarda se esiste il velo corrispondente e apre quello; i controlli dentro i
+   *   veli portano gli stessi id che il codice usa da sempre, così ogni gestore già scritto
+   *   continua a valere senza toccarlo.
+   *
+   * Ricerca 07/09/2026 (Microsoft Learn «Strangler Fig»; Milan Jovanović; Steve Kinney, «Enterprise
+   * UI»): è Strangler Fig con Branch by Abstraction — «maintain the legacy business logic while
+   * swapping out the UI markup». E due vincoli che vengono da lì:
+   * ⛔ **questa mappa deve SVUOTARSI**: «if they become permanent, you haven't completed a
+   *   strangler migration — you've built a permanent border between two systems». Ogni riga qui è
+   *   un debito dichiarato, non un'architettura;
+   * ⛔ un foglio vecchio si spegne **solo quando il suo velo è provato dal vivo**, uno alla volta,
+   *   mai spegnendo tutto insieme e sperando.
+   */
+  const VELO_PER_FOGLIO = {
+    rename: 'veloRinomina',
+  };
+
+  /**
+   * Prepara il velo con i dati che il foglio vecchio metteva nel suo markup, e collega i suoi
+   * controlli. ⛔ La logica NON si duplica: chiama le stesse funzioni di prodotto già provate —
+   * duplicarla vorrebbe dire due comportamenti che divergono al primo cambiamento, che è
+   * esattamente come sono nate le dodici finestre morte.
+   */
+  /**
+   * Rinomina la sessione bersaglio. ⛔ Estratta dal gestore del foglio vecchio il 07/9, parola per
+   * parola: il velo nuovo e il foglio vecchio devono fare LA STESSA COSA, e l'unico modo di
+   * garantirlo è che sia la stessa funzione. Due copie divergono al primo cambiamento.
+   * @returns {Promise<{ok:boolean, motivo?:string, nome?:string}>} — mai un throw: chi chiama
+   *   deve poter mostrare il perché nel suo posto (il velo ha una riga d'errore, il foglio no).
+   */
+  async function rinominaSessioneCorrente(nuovoNome) {
+    const idBersaglio = state.sessioneTarget?.sessionId || state.realSession.id;
+    // ⭐ 04/9, W1-12 — due sessioni vive non portano lo stesso nome: suffisso -2, -3… e lo si dice.
+    const { nome: nomeUnico, cambiato: doppioneEvitato } = nomeUnicoSessione(nuovoNome, idBersaglio);
+    if (idBersaglio) {
+      try {
+        await apiPost(`/api/v1/sessions/${encodeURIComponent(idBersaglio)}/rename`, { nome: nomeUnico });
+      } catch (error) {
+        toast('Rinomina non riuscita', messaggioErroreUtente(error));
+        return { ok: false, motivo: messaggioErroreUtente(error, 'riprova fra un momento') };
+      }
+    }
+    if (!state.sessioneTarget || idBersaglio === state.realSession.id) {
+      state.session = nomeUnico;
+      sessionTitle.textContent = state.session; aggiornaTestataSessione();
+      $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+      const attiva = $('.talos-session-item[aria-current="true"] .talos-session-item__title');
+      if (attiva) attiva.textContent = state.session;
+    }
+    state.sessioneTarget = null;
+    toast('Sessione rinominata', doppioneEvitato ? `${nomeUnico} · rinominata per evitare un doppione con una sessione viva` : nomeUnico);
+    if (idBersaglio && idBersaglio !== state.realSession.id) {
+      await aggiornaElencoSessioniReali();
+      if (state.board.initialized) await refreshSessionsBoard();
+    }
+    return { ok: true, nome: nomeUnico };
+  }
+
+  function preparaVeloDaFoglio(tipo, velo) {
+    if (tipo === 'rename') {
+      const campo = $('#rinominaSessioneNome', velo);
+      const modulo = $('#rinominaSessioneForm', velo);
+      const errore = $('#rinominaSessioneErrore', velo);
+      if (!campo || !modulo) return;
+      campo.value = state.sessioneTarget?.nome || state.session || '';
+      if (errore) { errore.hidden = true; errore.textContent = ''; }
+      window.setTimeout(() => { campo.focus(); campo.select(); }, 30);
+      if (!modulo.dataset.collegato) {
+        modulo.dataset.collegato = 'si';
+        modulo.addEventListener('submit', async (evento) => {
+          evento.preventDefault();
+          const nuovo = campo.value.trim();
+          if (!nuovo) {
+            // ⛔ il velo ha un posto per dirlo: si usa, invece di far lampeggiare il campo e basta
+            if (errore) { errore.textContent = 'Il nome non può essere vuoto.'; errore.hidden = false; }
+            campo.focus();
+            return;
+          }
+          const esito = await rinominaSessioneCorrente(nuovo);
+          if (!esito.ok) {
+            if (errore) { errore.textContent = esito.motivo; errore.hidden = false; }
+            return;
+          }
+          chiudiVeloMockup('veloRinomina');
+        });
+      }
+    }
+  }
+
   function openSheet(type, { ancoraAlComposer = false } = {}) {
+    const idVelo = VELO_PER_FOGLIO[type];
+    if (idVelo && $(`#${idVelo}`)) {
+      preparaVeloDaFoglio(type, $(`#${idVelo}`));
+      apriVeloMockup(idVelo);
+      return;
+    }
     const content = sheetTemplates[type];
     if (!content) return;
     sheetDialog.classList.remove('sheet-dialog--new-session');

@@ -13947,7 +13947,86 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }, 0);
       }
       const TIPI_FOGLIO_INTERAMENTE_ONESTI = /* @__PURE__ */ new Set(["model", "permissions", "capabilities", "control", "fileViewer", "renameFile", "deleteFile", "createFile", "export", "sessionTree", "deleteSession"]);
+      const VELO_PER_FOGLIO = {
+        rename: "veloRinomina"
+      };
+      async function rinominaSessioneCorrente(nuovoNome) {
+        const idBersaglio = state.sessioneTarget?.sessionId || state.realSession.id;
+        const { nome: nomeUnico, cambiato: doppioneEvitato } = nomeUnicoSessione(nuovoNome, idBersaglio);
+        if (idBersaglio) {
+          try {
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(idBersaglio)}/rename`, { nome: nomeUnico });
+          } catch (error) {
+            toast("Rinomina non riuscita", messaggioErroreUtente(error));
+            return { ok: false, motivo: messaggioErroreUtente(error, "riprova fra un momento") };
+          }
+        }
+        if (!state.sessioneTarget || idBersaglio === state.realSession.id) {
+          state.session = nomeUnico;
+          sessionTitle.textContent = state.session;
+          aggiornaTestataSessione();
+          $$("[data-current-session-title]").forEach((label) => {
+            label.textContent = state.session;
+          });
+          const attiva = $2('.talos-session-item[aria-current="true"] .talos-session-item__title');
+          if (attiva) attiva.textContent = state.session;
+        }
+        state.sessioneTarget = null;
+        toast("Sessione rinominata", doppioneEvitato ? `${nomeUnico} · rinominata per evitare un doppione con una sessione viva` : nomeUnico);
+        if (idBersaglio && idBersaglio !== state.realSession.id) {
+          await aggiornaElencoSessioniReali();
+          if (state.board.initialized) await refreshSessionsBoard();
+        }
+        return { ok: true, nome: nomeUnico };
+      }
+      function preparaVeloDaFoglio(tipo, velo) {
+        if (tipo === "rename") {
+          const campo2 = $2("#rinominaSessioneNome", velo);
+          const modulo = $2("#rinominaSessioneForm", velo);
+          const errore = $2("#rinominaSessioneErrore", velo);
+          if (!campo2 || !modulo) return;
+          campo2.value = state.sessioneTarget?.nome || state.session || "";
+          if (errore) {
+            errore.hidden = true;
+            errore.textContent = "";
+          }
+          window.setTimeout(() => {
+            campo2.focus();
+            campo2.select();
+          }, 30);
+          if (!modulo.dataset.collegato) {
+            modulo.dataset.collegato = "si";
+            modulo.addEventListener("submit", async (evento) => {
+              evento.preventDefault();
+              const nuovo = campo2.value.trim();
+              if (!nuovo) {
+                if (errore) {
+                  errore.textContent = "Il nome non può essere vuoto.";
+                  errore.hidden = false;
+                }
+                campo2.focus();
+                return;
+              }
+              const esito = await rinominaSessioneCorrente(nuovo);
+              if (!esito.ok) {
+                if (errore) {
+                  errore.textContent = esito.motivo;
+                  errore.hidden = false;
+                }
+                return;
+              }
+              chiudiVeloMockup("veloRinomina");
+            });
+          }
+        }
+      }
       function openSheet(type, { ancoraAlComposer = false } = {}) {
+        const idVelo = VELO_PER_FOGLIO[type];
+        if (idVelo && $2(`#${idVelo}`)) {
+          preparaVeloDaFoglio(type, $2(`#${idVelo}`));
+          apriVeloMockup(idVelo);
+          return;
+        }
         const content = sheetTemplates[type];
         if (!content) return;
         sheetDialog.classList.remove("sheet-dialog--new-session");
