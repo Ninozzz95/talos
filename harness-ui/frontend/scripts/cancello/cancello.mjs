@@ -45,7 +45,7 @@
 
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync, mkdirSync, appendFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -380,13 +380,31 @@ async function avviaServerProprio() {
 
 // ───────────────────────── 2 · la raccolta statica (dal disco) ─────────────────────────────────
 
-/** I tre testi che la classe 1 incrocia: il markup servito, il foglio servito, il codice servito. */
+/**
+ * I tre testi che la classe 1 incrocia: il markup, il foglio, il codice.
+ *
+ * ⛔ 07/9 — la prima versione li leggeva da `public/`, ed era sbagliato in un modo che si vedeva
+ * solo nel rapporto: ogni riga diceva `public/app.js:10117`, cioè un file **generato** dalla build.
+ * Chi legge il rapporto va a quel numero, trova un file che non deve toccare, e se lo modifica il
+ * prossimo `npm run build` glielo cancella. Un difetto va indicato **dove si corregge**.
+ * ⇒ Si leggono i SORGENTI. Il contenuto è lo stesso — `public/` nasce da questi — ma i numeri di
+ *   riga sono quelli su cui si mettono le mani davvero.
+ */
 function testiServiti() {
-  const dentro = (nome) => path.join(HARNESS, 'public', nome);
+  const dentroFrontend = (nome) => path.join(HARNESS, 'frontend', nome);
+  const sorgenti = { 'src/legacy/app.js': readFileSync(dentroFrontend('src/legacy/app.js'), 'utf8') };
+  for (const cartella of ['src/components', 'src/bridge']) {
+    for (const file of readdirSync(path.join(HARNESS, 'frontend', cartella))) {
+      if (file.endsWith('.js')) sorgenti[`${cartella}/${file}`] = readFileSync(dentroFrontend(`${cartella}/${file}`), 'utf8');
+    }
+  }
   return {
-    html: { 'public/index.html': readFileSync(dentro('index.html'), 'utf8') },
-    css: { 'public/styles.css': readFileSync(dentro('styles.css'), 'utf8') },
-    sorgenti: { 'public/app.js': readFileSync(dentro('app.js'), 'utf8') },
+    html: { 'index.template.html': readFileSync(dentroFrontend('index.template.html'), 'utf8') },
+    css: {
+      'src/styles/index.css': readFileSync(dentroFrontend('src/styles/index.css'), 'utf8'),
+      'src/styles/foglio-monolite.css': readFileSync(dentroFrontend('src/styles/foglio-monolite.css'), 'utf8'),
+    },
+    sorgenti,
   };
 }
 
@@ -1099,11 +1117,18 @@ async function principale() {
      *    stanno solo nell'altra diventerebbero «valori non riconosciuti»: accuse inventate.
      */
     const vistePerVaia = {};
-    for (const mappa of testi.sorgenti['public/app.js'].matchAll(/VISTA_PER_VAIA\d*\s*=\s*(?:Object\.freeze\()?\{([^}]*)\}/g)) {
+    /*
+     * ⛔ 07/9: la chiave era `public/app.js`, il bundle. Ora i testi arrivano dai SORGENTI, e le
+     * mappe delle viste vivono in DUE file — la regia e il ponte: si uniscono prima di guardarle.
+     * È il limite noto dell'analisi statica (DevToolLab, «Best Static Code Analysis Tools», letto
+     * il 07/09/2026: «linters do not follow data across files»), ed è esattamente il difetto delle
+     * «Note»: la chiave mancava in una sola delle tre mappe, e guardarne una sola lo nasconde.
+     */
+    for (const mappa of [testi.sorgenti['src/legacy/app.js'], testi.sorgenti['src/bridge/legacy-dom.js'] || ''].join('\n').matchAll(/VISTA_PER_VAIA\d*\s*=\s*(?:Object\.freeze\()?\{([^}]*)\}/g)) {
       for (const m of mappa[1].matchAll(/([a-zA-Z]+)\s*:\s*["']([^"']+)["']/g)) vistePerVaia[m[1]] = m[2];
     }
     if (!Object.keys(vistePerVaia).length) muori('non ho saputo leggere VISTA_PER_VAIA dal bundle servito: senza i valori veri la classe 2 accuserebbe a caso');
-    const veliVivi = [...testi.html['public/index.html'].matchAll(/id="(velo[A-Za-z]+)"/g)].map((m) => m[1]);
+    const veliVivi = [...testi.html['index.template.html'].matchAll(/id="(velo[A-Za-z]+)"/g)].map((m) => m[1]);
     parla(`viste per data-vaia: ${Object.keys(vistePerVaia).length} · veli vivi: ${veliVivi.length}`);
 
     parla('apro il browser…');
@@ -1113,7 +1138,19 @@ async function principale() {
     const rif = analizzaRiferimentiMorti(testi);
     const repertiRif = [
       ...rif.simboliMancanti.map((r) => ({ classe: 'riferimenti morti', gravita: 'alta', dove: `${r.dove} → ${r.cosa}`, cosa: r.perche })),
-      ...rif.classiSenzaRegola.map((r) => ({ classe: 'riferimenti morti', gravita: 'alta', dove: `${r.dove} → ${r.cosa}`, cosa: r.perche })),
+      /*
+       * ⛔ 07/9 — erano in «alta», e il rapporto diceva 176 difetti gravi che difetti non erano.
+       * Misurato sull'app viva: `.ft-node` (39 elementi) e `.ft-tree` sembravano nudi leggendo i
+       * file e hanno `list-style-type:none` da una regola generica — nessun difetto visivo. Altri
+       * (`.conversation-hero`) non erano nemmeno presenti nella pagina: la loro funzione non è mai
+       * chiamata, che è un difetto DIVERSO e lo prende un altro controllo.
+       * ⇒ Una classe senza regola è un SOSPETTO: dice dove guardare, non cosa è rotto. In «media»,
+       *   così il cancello non fallisce su 176 righe che nessuno deve correre a riparare — e chi
+       *   legge il rapporto crede ai numeri in «alta», che è l'unica cosa che lo tiene vivo.
+       * ⛔ Non è un addolcimento: `.sheet-option` era in questa lista ed era un difetto vero. Il
+       *   punto è che da qui non si distingue, e dichiararlo è più onesto che indovinare.
+       */
+      ...rif.classiSenzaRegola.map((r) => ({ classe: 'riferimenti morti', gravita: 'media', dove: `${r.dove} → ${r.cosa}`, cosa: `SOSPETTO (da guardare, non confermato): ${r.perche}` })),
       ...rif.datiSenzaGestore.map((r) => ({ classe: 'riferimenti morti', gravita: 'media', dove: `${r.dove} → ${r.cosa}`, cosa: r.perche })),
       /*
        * ⛔ Gravità BASSA, e con un motivo: un foglio scritto come libreria di componenti ha per

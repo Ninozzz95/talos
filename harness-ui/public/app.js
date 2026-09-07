@@ -21561,8 +21561,9 @@ ${blocchi.join("\n\n")}` : testa;
         }
       }
       function setupPanelResize() {
-        $$(".panel-resize-handle").forEach((handle) => {
-          const which = handle.dataset.resize;
+        $$(".panel-resize-handle, .talos-resizer[data-ridimensiona]").forEach((handle) => {
+          const grezzo = handle.dataset.resize || handle.dataset.ridimensiona;
+          const which = grezzo === "sidebar" ? "sessions" : grezzo;
           if (!PANEL_RESIZE_LIMITS[which]) return;
           const panel = which === "sessions" ? sessionsPanel : inspectorPanel;
           handle.addEventListener("pointerdown", (event) => {
