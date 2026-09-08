@@ -15,7 +15,7 @@
  *   outside of it — a deterministic control layer that applies policies regardless of how the model
  *   behaves» (stessa fonte), e nei fatti sono gli hook che escono con codice 2 e bloccano
  *   («hooks enforce rules deterministically — they run regardless of what the LLM decides»,
- *   ranthebuilder.cloud e la documentazione degli hook di Claude Code, 2026).
+ *   ranthebuilder.cloud e la documentazione degli hook dei CLI di coding, 2026).
  *
  * ⇒ Perciò questo file NON è un promemoria: è un programma che dice NO. Legge lo stato del lavoro e
  *   risponde con dei fatti misurabili, e chi lo chiama (l'hook, la CI, il commit) blocca.

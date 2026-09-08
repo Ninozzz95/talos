@@ -385,7 +385,7 @@ test('⛔⛔ AL CONTRARIO — una chiave privata non-Ed25519 (o non decodificabi
 /*
  * ⭐⭐⭐ 29/8 — FASE H, `generate_image`. A differenza di `ricercaWeb`
  * sopra: sempre DEFINITO (mai `undefined`) — zero credenziale nuova da
- * configurare, il one-up dichiarato su Hermes/Codex (riusa chiaveApi).
+ * configurare, il one-up dichiarato sui CLI concorrenti (riusa chiaveApi).
  */
 test('⭐ config.immagine ha un default onesto e reale — un modello dedicato VERO, mai un placeholder — senza nessuna variabile impostata', () => {
   const config = loadConfig({}, import.meta.url);
@@ -409,9 +409,10 @@ test('⛔ AL CONTRARIO — TALOS_HARNESS_UI_IMMAGINE_NATIVA con un valore divers
  * ⭐⭐⭐ 02/9 — `cartellaStore` configurabile. Prima era CABLATO in
  * `server.mjs`: conseguenza misurata, la suite Playwright girava sulle
  * sessioni VERE dell'owner e lo stesso codice dava 21 rossi a un giro e
- * 19 al successivo. Ricerca: Codex `CODEX_HOME`, Hermes `HERMES_HOME`,
- * Claude Code `CLAUDE_CONFIG_DIR` — tutti e tre rendono la cartella di
- * stato sovrascrivibile proprio per non toccare i dati veri nei test.
+ * 19 al successivo. Ricerca: tre CLI concorrenti espongono ciascuno la
+ * propria variabile (`CODEX_HOME`, `HERMES_HOME`, `CLAUDE_CONFIG_DIR`) —
+ * tutti e tre rendono la cartella di stato sovrascrivibile proprio per
+ * non toccare i dati veri nei test.
  */
 test('CONFIG-STORE-01 — senza variabile la cartella sessioni resta quella di sempre, accanto a server.mjs', () => {
   const config = loadConfig({}, new URL('../server.mjs', import.meta.url));
