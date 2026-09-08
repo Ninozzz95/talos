@@ -256,6 +256,36 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
       const risultatoAvvio = avviaESeguiFn({
         taskId: `delega:${sessionPadreId}`,
         cartella: dove,
+        /*
+         * ⛔⛔⛔ 08/09/2026 — SENZA QUESTA RIGA LA FIGLIA LAVORA IN `C:\`, LA RADICE DEL DISCO.
+         *
+         * Misurato sulla run vera dell'owner (tre sessioni in `.sessions-store/`): l'intestazione
+         * della figlia porta la cartella giusta, e il `contesto` di `RunStarted` porta `C:\`. La
+         * cartella corretta viene passata qui, scritta su disco, e allargata un istante dopo da
+         * `cartellaEffettivaPerPermessi` (session-registry), che senza `cartellaGiaScelta` traduce
+         * «Full access» in `parsePath(cartella).root`. La figlia eredita Full access dalla madre —
+         * ed è giusto che lo erediti — quindi finiva nella radice.
+         *
+         * ⇒ Il difetto non è l'eredità dei permessi: è che una FIGLIA NON HA NIENTE DA CUI
+         *   ALLARGARSI. La sua cartella è per definizione esattamente quella della madre, già
+         *   scelta da una persona. È il caso (d) della famiglia documentata sopra
+         *   `cartellaEffettivaPerPermessi` (a: allowlist — l'unico che deve allargare; b:
+         *   avviaLibero, curato 03/9; c: avvia() dei task di catalogo, curato 04/9): la delega non
+         *   era mai stata considerata.
+         *
+         * Il danno misurato prima della cura, su 37 chiamate delle due figlie: `scrivi` →
+         * `EPERM mkdir 'C:\'`; `document_create` → sei tentativi tutti EPERM; `leggi package.json`
+         * → `ENOENT 'C:\package.json'`. Zero file scritti nel workspace, e la delega ha consegnato
+         * un artefatto al posto del documento chiesto senza che nessuno protestasse.
+         *
+         * Ricerca 08/09/2026 — dev.to «Giving an AI agent permission to spawn sub-agents (without
+         * losing control)»: il wrapper della delega «resolves the workspace **against the parent's
+         * root**», e l'eredità dev'essere «explicit and **downgraded by default**: parent can
+         * delegate only permissions it actually has» — «if every subagent inherits the parent
+         * token, it recreates sudo with better branding». Qui la cartella è la prima delega da
+         * restringere.
+         */
+        cartellaGiaScelta: true,
         task: { consegna: task },
         padreId: sessionPadreId,
         profonditaDelega: profonditaVoluta,

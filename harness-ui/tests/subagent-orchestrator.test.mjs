@@ -325,3 +325,53 @@ test('⛔ AL CONTRARIO — esitoDelegaDaRisultato: risultato null/undefined non 
   assert.equal(r.esito, 'fallito');
   assert.match(r.motivo, /sconosciuto/);
 });
+
+/*
+ * ⛔⛔⛔ 08/09/2026 — LA FIGLIA NON DEVE FINIRE NELLA RADICE DEL DISCO.
+ *
+ * Misurato sulla run vera dell'owner: le due sessioni delegate giravano in `C:\`. La cartella
+ * corretta veniva passata di qui, e `cartellaEffettivaPerPermessi` (session-registry) la allargava
+ * a `parsePath(cartella).root` perché la delega non dichiarava `cartellaGiaScelta`. La figlia
+ * eredita «Full access» dalla madre — ed è giusto — ma NON HA NIENTE DA CUI ALLARGARSI: la sua
+ * cartella è per definizione quella della madre, già scelta da una persona.
+ *
+ * Danno misurato prima della cura, su 37 chiamate: `EPERM mkdir 'C:\'`, `ENOENT 'C:\package.json'`,
+ * sei `document_create` falliti di fila, zero file scritti nel workspace.
+ *
+ * Ricerca 08/09/2026 (dev.to, «Giving an AI agent permission to spawn sub-agents without losing
+ * control»): il workspace di una delega si risolve «against the parent's root», e l'eredità va
+ * «downgraded by default» — «if every subagent inherits the parent token, it recreates sudo with
+ * better branding».
+ *
+ * ⛔ Questa prova FALLISCE sul codice di prima: è il suo unico motivo di esistere.
+ */
+test('DELEGA: la figlia dichiara cartellaGiaScelta, o il registro la allarga alla radice del disco', () => {
+  const sessioni = new Map([['padre-1', vocePadre()]]);
+  let visto = null;
+  const orch = creaSubagentOrchestrator({
+    sessioni,
+    cartellaEsisteFn: () => true,
+    avviaESeguiFn: (argomenti) => { visto = argomenti; return { sessionId: 'figlia-1' }; },
+  });
+  void orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'scrivi due righe' }); // la promessa si chiude a figlia conclusa: qui serve solo l'avvio
+
+  assert.ok(visto, 'la delega non ha nemmeno provato ad avviare la figlia');
+  assert.equal(visto.cartellaGiaScelta, true,
+    'senza questa bandiera «Full access» viene tradotto nella radice del disco, e la figlia lavora in C:\\');
+  assert.equal(visto.cartella, vocePadre().cartella,
+    'la figlia lavora dove lavora la madre: non una cartella diversa, non una piu larga');
+});
+
+test('AL CONTRARIO — la cartella non viene inventata: resta quella della madre, carattere per carattere', () => {
+  const madre = vocePadre();
+  const sessioni = new Map([['padre-1', madre]]);
+  let visto = null;
+  const orch = creaSubagentOrchestrator({
+    sessioni,
+    cartellaEsisteFn: () => true,
+    avviaESeguiFn: (argomenti) => { visto = argomenti; return { sessionId: 'figlia-2' }; },
+  });
+  void orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'leggi un file' });
+  assert.equal(visto?.cartella, madre.cartella);
+  assert.notEqual(visto?.cartella, 'C:\\', 'la radice del disco non e mai una cartella di lavoro legittima per una figlia');
+});
