@@ -4529,7 +4529,7 @@ body.reduce-motion *::after {
   margin-top: var(--talos-space-md);
 }
 #schermoBrowser .talos-page {
-  padding-bottom: var(--talos-space-lg);
+  padding-bottom: 0;
 }
 .talos-browser__head,
 .talos-browser__pad,
@@ -4891,7 +4891,7 @@ body.reduce-motion *::after {
 .talos-page.talos-browser {
   display: flex;
   flex-direction: column;
-  padding-bottom: 14px;
+  padding-bottom: 0;
 }
 .talos-browser > .talos-toolbar {
   margin-bottom: 0;

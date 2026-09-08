@@ -1271,7 +1271,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 /* ⛔ 07/9, guardando gli screenshot: l'ultima riga della vista Browser finiva a DUE pixel dal
    bordo della finestra — non sforava, ma sembrava tagliata, ed è la stessa cosa per chi guarda.
    Un po' di respiro in fondo, come ce l'hanno le altre schermate. */
-#schermoBrowser .talos-page{padding-bottom:var(--talos-space-lg)}
+#schermoBrowser .talos-page{padding-bottom:0}
 .talos-browser__head,.talos-browser__pad,.talos-browser__request,.talos-browser__notice,.talos-browser__note{padding:var(--talos-space-md)}
 .talos-browser__request,.talos-browser__note{background:var(--talos-panel-soft)}
 .talos-browser__request>*+*{margin-top:var(--talos-space-sm)}
@@ -1412,7 +1412,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 /* ⛔ 07/9, owner: «fai in modo che la visuale browser sia attaccata alla barra delle schede,
    proprio deve essere al bordo, non ci deve essere nessuno spazio». Come in un browser vero, dove
    la scheda attiva si fonde col contenuto invece di galleggiarci sopra. */
-.talos-page.talos-browser{display:flex;flex-direction:column;padding-bottom:14px}
+.talos-page.talos-browser{display:flex;flex-direction:column;padding-bottom:0}
 .talos-browser>.talos-toolbar{margin-bottom:0}
 /* ⛔ La card si allunga SOLO se dentro c'è una finestra da allungare. Senza questa condizione la
    scheda «Testo dell'agente» — dove la finestra è nascosta — lasciava ~450px di card vuota:
