@@ -253,6 +253,17 @@ export function statoGiri(giri, tettoGiri) {
 export function aggiornaPiedeChat(piede, dati = {}) {
   if (!piede) return;
   const documentObj = piede.ownerDocument;
+  // Disponibile anche a giro finito: chi legge lo storico deve poter tornare giù.
+  const tornaInFondo = piede.querySelector('#chatTornaInFondo');
+  if (tornaInFondo) {
+    tornaInFondo.hidden = dati.inFondo !== false;
+    if (!tornaInFondo.dataset.portaInFondo) {
+      tornaInFondo.dataset.portaInFondo = '1';
+      tornaInFondo.addEventListener('click', () => {
+        tornaInFondo.dispatchEvent(new CustomEvent('talos-vai-in-fondo', { bubbles: true }));
+      });
+    }
+  }
   // striscia di stato
   const striscia = piede.querySelector('.talos-status-strip');
   if (striscia) {

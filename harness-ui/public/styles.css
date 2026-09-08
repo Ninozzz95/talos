@@ -2190,6 +2190,23 @@ body.reduce-motion *::after {
   flex: none;
   padding: 0 44px 12px;
 }
+.talos-chat-return {
+  position: relative;
+  height: 0;
+}
+.talos-chat-return__button {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: var(--talos-shadow-card);
+  z-index: 3;
+}
 .talos-status-strip {
   display: flex;
   align-items: center;

@@ -8810,6 +8810,16 @@ function statoGiri(giri, tettoGiri) {
 function aggiornaPiedeChat(piede, dati = {}) {
   if (!piede) return;
   const documentObj = piede.ownerDocument;
+  const tornaInFondo = piede.querySelector("#chatTornaInFondo");
+  if (tornaInFondo) {
+    tornaInFondo.hidden = dati.inFondo !== false;
+    if (!tornaInFondo.dataset.portaInFondo) {
+      tornaInFondo.dataset.portaInFondo = "1";
+      tornaInFondo.addEventListener("click", () => {
+        tornaInFondo.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
+      });
+    }
+  }
   const striscia = piede.querySelector(".talos-status-strip");
   if (striscia) {
     const contattoPerso = dati.attivo === true && dati.contatto === "perso";
@@ -10033,6 +10043,7 @@ var init_app = __esm({
           followUpBubbleInAttesa: false,
           /** ⭐⭐⭐ 27/8, owner: "non esiste nessun loading quando il modello elabora... fa sembrare che si sia piantato" — l'elemento DOM della bolla di attesa (porta di TalosLineLoader.vue, mobile), o null quando non ce n'è una a schermo. Vedi mostraAttesaRisposta()/nascondiAttesaRisposta(). */
           attesaBubble: null,
+          faseAttesa: 0,
           /** Timer e istante monotono della riga di attivita. Restano separati dal
            * DOM per fermarli anche quando il nodo e gia stato rimosso. */
           attesaTimer: null,
@@ -10404,7 +10415,7 @@ var init_app = __esm({
         const arretrato = testoGrezzo.length - statoRender.mostrato;
         renderizzaMarkdownIncrementale(copia, statoRender, testoGrezzo.slice(0, statoRender.mostrato));
         if (modalita === "fade") avvolgiParoleRecenti(copia, statoRender.paroleRecenti, t0);
-        if (statoRender.mostrato > 0) {
+        if (statoRender.mostrato > 0 && element.dataset.faseAttesa === String(state.realSession.faseAttesa)) {
           if (state.realSession.attesaBubble) segnaTappaLatenza("primoPixel");
           nascondiAttesaRisposta();
         }
@@ -16586,6 +16597,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         { dopoSecondi: 12, testo: "Ci sta mettendo più del solito — resta in attesa…" }
       ];
       function mostraAttesaRisposta(stato = "attesa") {
+        state.realSession.faseAttesa += 1;
         const etichette = {
           attesa: ETICHETTE_ATTESA_PER_TEMPO[0].testo,
           reasoning: "Ragionamento in corso…",
@@ -19644,6 +19656,7 @@ ${testo3}` : testo3;
                 appendUserFollowUp(evento.input.consegna, evento.contesto);
               }
             }
+            if (!state.realSession.chiusaDalServer) mostraAttesaRisposta();
             if (evento.contesto) {
               aggiornaPannelloAmbiente(evento.contesto);
               state.realSession.contesto = evento.contesto;
@@ -19656,6 +19669,8 @@ ${testo3}` : testo3;
             segnaTappaLatenza("primoDelta");
             chiudiBatchTool();
             const element = ensureAssistantMessageElement(evento.messageId);
+            const faseAttesa = String(state.realSession.faseAttesa);
+            if (element.dataset.faseAttesa !== faseAttesa) element.dataset.faseAttesa = faseAttesa;
             if (!element.classList.contains("is-streaming")) element.classList.add("is-streaming");
             const testoGrezzo = (state.realSession.testoGrezzoMessaggi.get(evento.messageId) || "") + evento.delta;
             state.realSession.testoGrezzoMessaggi.set(evento.messageId, testoGrezzo);
@@ -19692,7 +19707,7 @@ ${testo3}` : testo3;
            * doverlo chiudere lui stesso.
            */
           case "ReasoningMessageStart": {
-            mostraAttesaRisposta("reasoning");
+            if (!state.realSession.chiusaDalServer) mostraAttesaRisposta("reasoning");
             if (state.showReasoning) chiudiBatchTool();
             const bubble = appendToolNote("Ragionamento", { classeExtra: "real-reasoning-note", glifo: "💭" });
             bubble.article.hidden = !state.showReasoning;
@@ -19716,7 +19731,7 @@ ${testo3}` : testo3;
               renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
             }
             state.realSession.ragionamentoBubble.delete(evento.messageId);
-            mostraAttesaRisposta("preparing");
+            if (!state.realSession.chiusaDalServer) mostraAttesaRisposta("preparing");
             break;
           }
           case "ToolCallStart": {
