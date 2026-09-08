@@ -206,7 +206,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     annotazioni: $(schermo, '#browserAnnotazioni'),
     modi: [...schermo.querySelectorAll('[data-browser-modo]')], // 06/9 O-28: Pagina / Testo dell'agente
   };
-  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === 'testo' ? 'testo' : 'pagina', modoChiesto: null };
+  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === 'testo' ? 'testo' : 'pagina', modoChiesto: null, modiScelti: {}, riaperte: new Set() };
   const frameAttivo = () => el.live?.querySelector('iframe') || null;
   const dialogaConOverlay = (messaggio) => { try { frameAttivo()?.contentWindow?.postMessage({ fonte: 'talos-genitore', ...messaggio }, '*'); } catch { /* cornice non pronta */ } };
   window.addEventListener('message', (e) => {
@@ -261,11 +261,17 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       const lettura = attiva();
       if (scelto === 'pagina' && lettura && lettura.tipo !== 'viva' && lettura.incorniciabile === false && lettura.url) {
         stato.modoChiesto = 'pagina'; // la scelta della persona vale piu' del ripiego automatico
+        if (lettura.id) stato.modiScelti[lettura.id] = 'pagina';
         azioni.apri?.(lettura.url, lettura.id);
         return;
       }
       if (scelto === stato.modo) return;
       stato.modoChiesto = scelto;
+      /* ⛔ 08/09/2026, owner: «se il pulsante pagina viene cliccato e cambio scheda mi va a
+         visualizzazione sorgente, non deve succedere, deve ricordare la mia scelta». Io avevo
+         scritto l'opposto di proposito — azzeravo la scelta al cambio scheda — e sbagliavo: e' una
+         PREFERENZA, e si ricorda. Per scheda, cosi' due pagine diverse restano indipendenti. */
+      if (lettura && lettura.id) stato.modiScelti[lettura.id] = scelto;
       stato.modo = scelto;
       if (scelto === 'testo') mostraAvviso('');
       renderizza();
@@ -487,6 +493,20 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
 
   function renderizza() {
     const s = attiva();
+    /*
+     * ⛔ 08/09/2026 — ricordare la scelta e non mostrarla non serve a niente: tornando su una
+     *   scheda che aveva chiesto «Pagina», il modo era giusto ma a schermo non c'era ne' la
+     *   cornice ne' la tela (misurato: telaVisibile false, testoVisibile false — uno schermo
+     *   vuoto). Se la scelta e' «pagina» e quella pagina vuole il browser pilotato, si riapre.
+     * ⛔ Una volta sola per scheda: `azioni.apri` fa ri-renderizzare, e senza questo freno sarebbe
+     *   un anello che si richiama da solo.
+     */
+    if (s && s.tipo !== 'viva' && s.id && stato.modiScelti[s.id] === 'pagina'
+        && s.incorniciabile === false && s.url && !stato.riaperte.has(s.id)) {
+      stato.riaperte.add(s.id);
+      azioni.apri?.(s.url, s.id);
+      return;
+    }
     const avvisoCornice = corniceDellaLettura(s);
     const letture = stato.schede.filter((x) => x.tipo !== 'viva').length;
     const vive = stato.schede.length - letture;
@@ -599,10 +619,14 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
   return {
     /** @param {{schede?:Array, attiva?:string|null, note?:object, richiesta?:object|null}} nuovo */
     aggiorna(nuovo) {
-      /* ⛔ La scelta «voglio la pagina» vale per LA pagina su cui e' stata fatta: cambiando scheda
-         si torna al comportamento automatico, o una scelta si trascinerebbe su una lettura diversa
-         lasciandola con una cornice vuota che nessuno ha chiesto. */
-      if (nuovo && 'attiva' in nuovo && nuovo.attiva !== stato.attiva) stato.modoChiesto = null;
+      /* ⛔ Cambiando scheda si RIPRENDE la scelta fatta su quella scheda, non si butta: ognuna
+         ricorda la sua, e chi non ne ha una torna al comportamento automatico. */
+      if (nuovo && 'attiva' in nuovo && nuovo.attiva !== stato.attiva) {
+        stato.riaperte.delete(nuovo.attiva); // tornandoci si puo' riaprire di nuovo
+        const suo = stato.modiScelti[nuovo.attiva] || null;
+        stato.modoChiesto = suo;
+        if (suo) stato.modo = suo;
+      }
       stato = { ...stato, ...nuovo }; if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false; renderizza();
     },
     fuocoSullaScheda() { el.schede?.querySelector('[aria-selected="true"]')?.focus(); },

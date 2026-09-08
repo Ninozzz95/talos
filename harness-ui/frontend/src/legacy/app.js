@@ -9746,6 +9746,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const m = /^lettura-(\d+)$/.exec(rs.browserAttiva || '');
     rs.browserIndice = m ? Number(m[1]) : -1;
     ui.aggiorna({ schede, attiva: rs.browserAttiva, note: noteBrowser(), richiesta: rs.browserRichiesta, annotazioni: rs.browserAnnotazioni, annotaAttivo: rs.browserAnnotaAttivo });
+    /* ⛔ La vista viva si mostra SOLO sulla sua scheda. Senza questa riga restava incollata addosso
+       a tutte le altre (owner, 08/9). Non si smonta: si nasconde, così tornando indietro la pagina
+       è ancora quella, viva, senza ricaricare niente. */
+    const telaViva = $('#browserVistaViva');
+    if (telaViva) telaViva.hidden = !(vistaViva && vistaVivaDi && rs.browserAttiva === vistaVivaDi);
     aggiornaRigaBrowserCapability(); // O-01 — la scheda Capability conta le pagine vere, non un «Non osservato» fisso
   }
   /** Compatibilità coi chiamanti di prima (appendBrowserEntry, il reset di sessione): mostra la lettura all'indice dato. */
@@ -9782,6 +9787,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   avrebbe lasciato un rettangolo grigio, e muore da sé dopo dieci minuti che nessuno lo tocca.
    */
   let vistaViva = null;   // il componente montato
+  /* ⛔ 08/09/2026, owner: «quando cambio scheda rimane incollata la scheda browser reale di prima».
+     La vista viva era montata una volta e non guardava più quale scheda fosse attiva: cambiando
+     scheda restava a schermo SOTTO il contenuto nuovo — due pagine insieme. Appartiene a una
+     scheda sola, e fuori di lì si nasconde (senza chiudere il Chromium: tornando indietro la
+     pagina dev'essere ancora lì, viva). */
+  let vistaVivaDi = null; // l'id della scheda a cui appartiene la vista viva montata
   let flussoVivo = null;  // l'EventSource dei fotogrammi
   /*
    * ⛔ 07/9 — l'identificativo serve al SERVER solo per tenere separate le schede (una per
@@ -9813,6 +9824,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⇒ Chi smonta restituisce la sua promessa, e chi apre la aspetta.
    */
   function smontaVistaViva() {
+    vistaVivaDi = null;
     if (flussoVivo) { try { flussoVivo.close(); } catch { /* già chiuso */ } flussoVivo = null; }
     if (vistaViva) { try { vistaViva.distruggi(); } catch { /* già andata */ } vistaViva = null; }
     const contenitore = $('#browserVistaViva');
@@ -9870,6 +9882,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!contenitore || !voce?.url) return false;
     await smontaVistaViva(); // ⛔ si ASPETTA: senza, la chiusura arriva dopo e uccide la scheda nuova
     contenitore.hidden = false;
+    vistaVivaDi = voce.id; // da qui la tela appartiene a QUESTA scheda, e a nessun altra
 
     vistaViva = creaVistaViva(contenitore, {
       onGesto: (gesto) => {
