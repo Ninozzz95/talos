@@ -1133,8 +1133,93 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     scroller.scrollTo({ top: scroller.scrollHeight, behavior: ridotto ? 'auto' : 'smooth' });
   }
 
+  /* ─────────────────────────── I SIMBOLI DELLE ICONE (CB-10) ───────────────────────────
+   * ⛔ Il difetto: `icon(id)` costruiva `<use href="#id">` senza chiedersi se quel simbolo
+   *    esistesse. E un riferimento morto non si lamenta con nessuno — la SVG 2 dice
+   *    «A 'use' that has an unresolved or invalid URL reference is not rendered. For the purpose
+   *    of bounding box calculations, it is equivalent to an empty container element», e l'albero
+   *    d'ombra nasce solo «when the user agent successfully resolves a 'use' element»
+   *    (W3C SVG 2, struct.html#UseElement, letto 08/09/2026). Nessuna eccezione, nessuna riga in
+   *    console, nessun test rosso: solo un vuoto grande quanto l'icona.
+   *    È così che il 06/9 dodici simboli sono rimasti chiamati e mai disegnati per giorni, uno
+   *    dei quali (`i-folder-open`) nella modale «Nuova sessione», sotto gli occhi a ogni avvio.
+   * ⛔ Perché il cancello statico non basta: `tests/unit/sprite.test.mjs` incrocia i nomi SCRITTI
+   *    nel sorgente con lo sprite, e per quelli va benissimo — i ternari con due literal compresi.
+   *    Ma in TRE punti (contati, non stimati) il nome arriva da una tabella di dati e nessuna
+   *    lettura del sorgente può risolverlo: `icon(ico)` nell'elenco delle capability e
+   *    `iconaSvgAlbero(voce.icona)` nei due menu contestuali. Quei tre li copre solo un controllo
+   *    che gira mentre l'icona viene costruita: questo. E domani il quarto nascerà già coperto.
+   * ⇒ Da qui non esce MAI un riferimento morto: o il simbolo chiesto, o la sua traduzione, o il
+   *   ripiego visibile, o niente. E il nome che non si risolve viene detto ad alta voce.
+   */
+  const SIMBOLO_RIPIEGO = 'i-ignoto';
+
+  /*
+   * I nomi che il monolite chiama e che nello sprite del mockup si chiamano in un altro modo.
+   * ⛔ Stava dentro `iconaSvgAlbero` e la consultava quella funzione sola: `icon()` passava i nomi
+   *    grezzi, cioè la metà delle icone della app non aveva rete. Una tabella di traduzione che
+   *    copre un chiamante su due non traduce: nasconde dove NON traduce.
+   * La consultazione resta subordinata: si traduce solo se il nome chiesto non c'è davvero, così
+   * il giorno in cui lo sprite disegna il nome vero la traduzione si fa da parte da sola.
+   */
+  const ALIAS_SIMBOLI = { 'i-chevron': 'i-chev', 'i-chevron-right': 'i-chev', 'i-file': 'i-doc' };
+
+  /* Quante volte ogni nome non risolto è stato chiesto. Esposto nel runtime: è la misura che
+   * permette a una sonda dal vivo di dire «zero buchi» avendolo davvero guardato. */
+  const registroIconeMorte = new Map();
+
+  function simboloDisegnato(nome) {
+    /*
+     * ⛔ Si chiede al DOM, non a un elenco scritto qui: lo sprite è GENERATO dal mockup, e una
+     *    copia dell'elenco nel codice divergerebbe al primo simbolo aggiunto — in silenzio, che è
+     *    esattamente il modo di rompersi da cui stiamo uscendo.
+     * ⛔ `getElementById` da solo non basterebbe: un id qualunque della pagina non è un simbolo
+     *    disegnabile, e un `<use>` che punta a un non-simbolo torna a essere un buco muto.
+     */
+    const elemento = document.getElementById(nome);
+    return elemento != null && String(elemento.tagName).toLowerCase() === 'symbol';
+  }
+
+  function risolviSimboloIcona(nome) {
+    const chiesto = String(nome ?? '');
+    /*
+     * ⛔ Il nome finisce dentro un `innerHTML`: se non è un identificatore non è un simbolo, è
+     *    testo che può uscire dall'attributo e portarsi dietro del markup. Si respinge PRIMA di
+     *    interrogare il DOM, non dopo.
+     */
+    if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(chiesto)) return { nome: null, stato: 'malformato', chiesto };
+    /*
+     * ⛔ Sprite non ancora nella pagina (banco di prova senza foglio, montaggio anticipato):
+     *    «non lo so» non è «è rotto». Coprire tutto di ripieghi qui vorrebbe dire cancellare le
+     *    icone buone per un dubbio nostro, e insegnare a diffidare del ripiego.
+     */
+    if (typeof document === 'undefined' || !document.querySelector || !document.querySelector('symbol')) {
+      return { nome: chiesto, stato: 'nonValidabile', chiesto };
+    }
+    if (simboloDisegnato(chiesto)) return { nome: chiesto, stato: 'disegnato', chiesto };
+    const tradotto = ALIAS_SIMBOLI[chiesto];
+    if (tradotto && simboloDisegnato(tradotto)) return { nome: tradotto, stato: 'tradotto', chiesto };
+    // Anche il ripiego si verifica: un ripiego che non esiste sarebbe il difetto di partenza col nome nuovo.
+    return { nome: simboloDisegnato(SIMBOLO_RIPIEGO) ? SIMBOLO_RIPIEGO : null, stato: 'assente', chiesto };
+  }
+
+  function registraIconaMorta(esito) {
+    if (esito.stato !== 'assente' && esito.stato !== 'malformato') return;
+    const viste = registroIconeMorte.get(esito.chiesto) || 0;
+    registroIconeMorte.set(esito.chiesto, viste + 1);
+    /*
+     * Rumoroso la PRIMA volta e poi mai più: ciò che mancava era una riga che nominasse il buco,
+     * ma una riga a ogni ridisegno seppellirebbe la console e tornerebbe a essere silenzio.
+     */
+    if (viste === 0) console.error(`[TALOS] icona «${esito.chiesto}»: nessun simbolo con questo nome nello sprite, a schermo resta un vuoto. Disegnalo in mockup/talos-mockup.html e rigenera il template.`);
+  }
+
   function icon(id) {
-    return `<svg aria-hidden="true"><use href="#${id}"/></svg>`;
+    const esito = risolviSimboloIcona(id);
+    registraIconaMorta(esito);
+    // Nessun nome utilizzabile: si restituisce un guscio vuoto, mai un `<use>` che punta al nulla.
+    if (!esito.nome) return '<svg aria-hidden="true"></svg>';
+    return `<svg aria-hidden="true"><use href="#${esito.nome}"/></svg>`;
   }
 
   function demoLabelsEnabled() {
@@ -5156,8 +5241,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           iconWrap.className = 'sheet-icon';
           iconWrap.innerHTML = icon('i-brain');
           const textWrap = document.createElement('span');
-          textWrap.append(textElement('strong', '', modello.name || modello.id));
+          /*
+           * ⛔ CB-16-bis, owner 08/9 con lo screenshot: qui si stampava `modello.name || modello.id`,
+           * cioè la chiave del runtime — 102 caratteri per il Nemotron Cascade, che il manifest dei
+           * modelli locali non accompagna con nessun `name`. Una targa non è un nome, e a schermo
+           * spingeva la riga fuori dal pannello.
+           * ⛔ La traduzione esisteva già dal 06/9 (`nomeModelloUmano`, components/chat-foot.js) ed era
+           * chiamata in UN SOLO posto: questo elenco era l'unico che mostra modelli locali senza usarla.
+           * Scriverne una seconda qui sarebbe stato il debito che questo progetto ha già pagato più
+           * volte — due funzioni per lo stesso lavoro che divergono al primo formato nuovo.
+           * L'identificatore intero non si perde: sta nel suggerimento del puntatore, dove chi ne ha
+           * bisogno (un percorso, una segnalazione) lo ritrova per intero.
+           */
+          textWrap.append(textElement('strong', '', nomeModelloUmano(valore) || modello.name || modello.id));
           textWrap.append(textElement('small', '', `su questo computer · ${formattaByteModelLab(Number(modello.bytes || 0))}${modello.state === 'ready' ? '' : ` · ${modello.state}`}`));
+          opt.title = modello.id;
           opt.append(iconWrap, textWrap);
           /*
            * ⛔⛔⛔ 03/9 — trovato dal vivo verificando l'avvio automatico a
@@ -7890,7 +7988,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     const senzaContatto = attivo && contattoPerso();
     sendButton.setAttribute('aria-label', senzaContatto ? 'Il server non risponde' : attivo ? 'Interrompi risposta' : 'Invia');
-    sendButton.title = senzaContatto ? 'Il server non risponde: la richiesta di fermare non arriverebbe.' : attivo ? 'Interrompi al prossimo punto sicuro' : 'Invia';
+    sendButton.title = senzaContatto ? 'Il server non risponde: la richiesta di fermare non arriverebbe.' : attivo ? 'Interrompi adesso' : 'Invia';
     if (use) use.setAttribute('href', attivo ? '#i-stop' : '#i-send');
     redirectRunButton.hidden = !(attivo && haTesto);
     redirectRunButton.disabled = redirectOccupato;
@@ -11243,11 +11341,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const svg = document.createElementNS(svgNs, 'svg');
     svg.setAttribute('class', 'i'); // 06/9 B2: l'icona del mockup ha una misura; senza classe l'SVG riempiva la colonna
     svg.setAttribute('aria-hidden', 'true');
+    /*
+     * ⛔ Qui viveva una tabella ALIAS privata, e questa era l'unica funzione che la consultava:
+     *    `icon()`, che disegna l'altra metà delle icone, passava i nomi grezzi. Ora la decisione
+     *    su QUALE simbolo puntare la prende un posto solo (`risolviSimboloIcona`), così le due
+     *    porte non possono più rispondere in modo diverso sullo stesso nome.
+     */
+    const esito = risolviSimboloIcona(nomeSimbolo);
+    registraIconaMorta(esito);
+    if (!esito.nome) return svg; // guscio vuoto: meglio niente che un `<use>` verso un simbolo che non c'è
     const uso = document.createElementNS(svgNs, 'use');
-    // i simboli del monolite che il foglio del mockup non ha, tradotti nei suoi (altrimenti l'icona è vuota)
-    const ALIAS = { 'i-chevron-right': 'i-chev', 'i-file': 'i-doc', 'i-chevron': 'i-chev' };
-    const nome = document.getElementById(nomeSimbolo) ? nomeSimbolo : (ALIAS[nomeSimbolo] || nomeSimbolo);
-    uso.setAttribute('href', `#${nome}`);
+    uso.setAttribute('href', `#${esito.nome}`);
     svg.append(uso);
     return svg;
   }
@@ -12859,7 +12963,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     sendButton.setAttribute('aria-busy', 'true');
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/stop`, redirectId ? { redirectId } : {});
-      toast('Stop richiesto', 'La sessione si ferma al prossimo punto sicuro.');
+      toast('Fermata', 'La sessione si è fermata.');
     } catch (error) {
       toast('Stop non riuscito', error.message);
     } finally {
@@ -16779,6 +16883,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     apriFileAlbero,
     scollegaTerminaleReale,
     statoTerminale,
+    /* ⭐ 08/9 CB-10 — il risolutore dei simboli e il registro dei nomi non risolti: esposti perché
+     * un riferimento SVG morto non produce nessun segnale (SVG 2: «not rendered … equivalent to an
+     * empty container element»), quindi l'unico modo di dire «zero buchi» avendolo guardato è
+     * chiederlo alla app viva. Internals reali, non un secondo contratto. */
+    risolviSimboloIcona,
+    registroIconeMorte,
     get backgroundAnimationRunning() { return backgroundAnimationRunning; },
     realSessionState: state.realSession,
   };

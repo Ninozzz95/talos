@@ -1466,6 +1466,24 @@ select:focus-visible,
   width: 26px;
   height: 2px;
 }
+.talos-cronologia__linea--26 {
+  --lente:26px;
+}
+.talos-cronologia__linea--20 {
+  --lente:20px;
+}
+.talos-cronologia__linea--14 {
+  --lente:14px;
+}
+.talos-contesto__fetta--p14 {
+  width: 14%;
+}
+.talos-contesto__fetta--p4 {
+  width: 4%;
+}
+.talos-contesto__fetta--p2 {
+  width: 2%;
+}
 .talos-cronologia__linea {
   display: block;
   width: var(--lente,6px);
@@ -2687,6 +2705,21 @@ body.reduce-motion *::after {
   flex: 0 0 auto;
   display: inline-flex;
   color: var(--talos-muted);
+}
+.model-picker-option > span:nth-child(2) {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 0;
+  color: inherit;
+  font-size: inherit;
+  text-align: left;
+}
+.model-picker-option > span:nth-child(2) > strong,
+.model-picker-option > span:nth-child(2) > small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sheet-toggle-row {
   display: flex;
