@@ -41,7 +41,21 @@ Verifica SQLite indipendente del delegato: LCM conserva 76/76 originali identici
 
 Memoria: Ryzen 7 7800X3D, RX 9070 XT, driver 32.0.31041.1004, Windows 11 Pro build 26200; inventario in `hardware-inventory.json`. Campionamento massimo osservato, non picco assoluto. AQ-M03 corregge una possibile attribuzione del campione alla replica successiva; i batch precedenti mantengono il limite documentato.
 
-## Costi di integrazione osservabili
+## Aggiornamento 19:33 circa: 42/96 casi del componente conclusi
+
+Il batch Nemotron/Hermes/LCM `16:35` è stato interrotto a 22/24, senza summary: i risultati completi restano validi con i limiti dello snapshot, quello parziale non viene valutato. Hermes: tre riprese rifiutate 30.230 > 16.384; gli altri nove casi falliscono alla prima sintesi con finish_reason=length. Il codice finale SUMMARY_NO_REDUCTION era la guardia esterna: la causa reale è il troncamento, verificato nei raw.
+
+LCM, memoria v2: tre repliche, cinque compattazioni effettive ciascuna, tutti i conteggi esatti. Richiamo dei cinque fatti: **0/5, 3/5, 0/5 esatti**, **0/5, 4/5, 0/5 semantici**. La seconda replica traduce giovedì ma perde anche il nome Livia. Tutte le 18 risposte ausiliarie sono stop/non vuote. SQLite conserva 368 messaggi per replica, inclusi 76/76 originali esatti. Questa è una misura del richiamo nel contesto attivo; il tool loop comune non espone il recupero LCM, quindi non certifica perdita dell'archivio o fallimento dei suoi tool di ricerca.
+
+LCM, ripresa: una risposta genericamente compatibile e due risposte con obiettivi di correzione inventati. La cronologia reale contiene 397 copie dello stesso elenco di sette file e nessun incarico di correggere parser o test. LCM, strumenti: tre letture reali del file, codice sole-47 corretto in tutte; tre violazioni del formato breve richiesto. Nessuna equivalenza fra queste violazioni e un tool non funzionante.
+
+La continuità LCM è stata completata nel batch `2026-09-08T17-26-00.757Z`: **1/3 esatto, 2/3 semanticamente completo**; nella replica 1 il nome viene sostituito con Aurora. Replica 2 conserva i fatti ma cambia trattino e lingua. Sono riavvii del checkpoint del banco, mai dell'app Hermes. La replica 1 precedente resta diagnostica e non viene contata due volte. Originale recuperato invariato, tre casi registrati su tre.
+
+Il processo operativo avviato con WMI ha completato questa tranche; l'exit 2 dei due casi falliti ha fermato prudentemente la coda. Dopo verifica del summary integro, i sei casi memoria Nemotron TALOS/Pi sono stati avviati separatamente, PID 18712. GPT-OSS non ancora avviato. Server 4174 PID 21016, health 200 e pagina visibile; modello da ricaricare al termine, nessuna inferenza concorrente della app.
+
+Provenienza estesa: quattro copie esterne con hash verificati e inventario Python salvato nel nuovo batch. L'equivalenza del compattatore TALOS con il kernel corrente è verificata; l'equivalenza del loop completo non viene dichiarata. Tre agenti hanno controllato separatamente raw/richiamo, guasti/archivi e riproducibilità/misure. Nessun agente ha modificato prodotto o piani.
+
+## Costi di integrazione osservabili — confronto ancora provvisorio
 
 | Candidato | Confine provato | Lavoro residuo nel prodotto |
 |---|---|---|

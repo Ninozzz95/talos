@@ -26,7 +26,7 @@ Filtri: `--models=nemotron|gptoss|all`, `--arms=talos,pi,hermes,lcm`, `--scenari
 ## Confini e profilo
 
 - Pi 0.85.1: API pubblica `generateSummaryWithUsage`, reserveTokens 5120 → maxTokens 4096 secondo regola upstream 0.8; retry del banco disabilitati. Conversione di tool call/result con id conservati; sistema storico rappresentato come dato da sintetizzare.
-- TALOS: `compattaConversazione` del modulo owner `AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs`, hash registrato. Il successivo tool loop del banco non è quello del prodotto.
+- TALOS: `compattaConversazione` del modulo owner `AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs`, hash registrato. Il blocco costanti/trigger/sintesi è identico al kernel canonico `harness-ui/src/kernel/talosHarness.mjs` (SHA256 `d5e31771f320509eca6aa14152dddfea8b25dc7e2752dbc72a6a038a17c88677`); tre invocazioni controllate successo/vuoto/errore hanno richieste e risultati identici. Il successivo tool loop del banco non è quello del prodotto, che usa trasporto, retry e stop differenti.
 - Hermes: `ContextCompressor`, commit `2237be355906fbe6065ce1815711eee52b2d646e`, home isolata, abort_on_summary_failure=true.
 - LCM: `LCMEngine`, commit `8d1b1e6d3d63f5fc7b209e8d7ec1dc9b814f2e54`, SQLite isolato; tail 6 messaggi/max 2048 token, leaf chunk 4096, riserva 4096. Modello di sintesi locale esplicito, nessun fallback configurato.
 - Trasporto comune non streaming: temperatura 0, seed 193, output 4096, finestra 16384. Il ponte registra la richiesta upstream prima di applicare il profilo. I prompt intrinseci degli engine restano diversi.
@@ -54,5 +54,9 @@ Sotto `scratchpad/prove/autocompact-qualification-20260908`: pin e hash in `sour
 Ogni directory `runs/<data>` contiene `checks.json`, `hardware.json`, `requests.jsonl`, `runtime.log`, originali e checkpoint dei casi, sintesi native, `results.jsonl`, `summary.json`. I log contengono cronologia privata: rimangono locali, esclusi dai commit e dai servizi cloud. Nessuna API key owner è passata agli engine.
 
 Dal protocollo v2, `scripts/` conserva gli script del run e `checks.json` include SHA256 degli script e del binario. Gli eventi `memory-sample` misurano il solo processo llama figlio del banco e i contatori GPU dello stesso PID. Il massimo è osservato ogni 5 secondi più il tempo della sonda; un contatore assente resta null. I batch antecedenti non acquisiscono queste misure retroattivamente.
+
+Dal batch `2026-09-08T17-26-00.757Z`, `external-scripts/` conserva supervisor, process-policy e componente TALOS con il bundle nel percorso relativo `dist/`; `checks.json` include versione/hash interprete Python e inventario delle 81 distribuzioni installate. Quattro hash delle copie verificati contro il manifest. Non è un ambiente offline autosufficiente: installer/wheel e dipendenze dinamiche del kernel completo non sono incorporati.
+
+Un exit code 2 può indicare esiti negativi completati, interruzione o originale cambiato: leggere sempre `summary.json`, non confondere un candidato fallito con un processo guasto. Le tranche interrotte restano prive di summary; i risultati conclusi possono essere selezionati esplicitamente nel rapporto, mentre le repliche incomplete non hanno un punteggio.
 
 SIGINT/SIGTERM fermano i nuovi passi dopo l'operazione già avviata. Si chiudono soltanto processi creati dal banco. Il rollback conserva modelli su disco, impostazioni e sessioni owner.

@@ -123,6 +123,12 @@ Confronto host: stesso modello locale e stessa finestra su TALOS e competitor co
 
 ### Aggiornamento esecutivo 08/09 — qualificazione approvata
 
+Stato delle prove aggiornato alle 19:33 circa: **26 test del banco verdi**, 42/96 casi del confronto componenti conclusi; i numeri delle tranche precedenti sotto sono storici. Sei casi memoria Nemotron v2 in corso, GPT-OSS ancora da eseguire. Dati, limiti e selezione dei batch nella consegna dedicata. La ricerca non equivale a una promozione del candidato.
+
+Tre verifiche delegate in sola lettura hanno separato errori reali e limiti del banco: LCM conserva integralmente gli originali, ma nel contesto attivo ricorda 0/5, 4/5, 0/5 fatti semantici dopo cinque compattazioni Nemotron; il suo recupero dal DB non è esposto nel loop comune e resta da provare. Hermes tronca le sintesi alla riserva pattuita; l'host completo rifiuta l'avvio custom a 16k. Sono proprietà della configurazione provata, non un verdetto universale sulle app. Il minimo upstream e la policy di compattazione sono verificati sui pin: [Hermes](https://github.com/NousResearch/hermes-agent/blob/2237be355906fbe6065ce1815711eee52b2d646e/agent/agent_init.py), [LCM](https://github.com/stephenschoettler/hermes-lcm/blob/8d1b1e6d3d63f5fc7b209e8d7ec1dc9b814f2e54/compaction.py), consultati 08/09.
+
+Risposta alla proposta owner di un engine proprio: i guasti verificati motivano un controllo TALOS su budget, archivio, validazione e pubblicazione dei checkpoint. Non dimostrano ancora un vantaggio nel riscrivere tutti gli algoritmi di sintesi. Questa è una distinzione dei problemi osservati; la scelta fra engine proprio e componenti upstream adattati rimane dell'owner dopo la matrice completa, senza integrazione anticipata.
+
 Il piano di qualificazione è stato approvato dall'owner; esecuzione in `harness-ui/benchmarks/autocompact`, ledger dedicato `LEDGER-QUALIFICAZIONE-AUTOCOMPACT-2026-09-08.md`. Nessuna scelta definitiva dell'engine o integrazione prodotto.
 
 Pi 0.85.1 è ora installato nel solo banco e la sua API pubblica è esercitata. Prove controllate: la risposta vuota viene restituita dall'API, quella terminata per limite viene rifiutata; il chiamante deve verificare l'annullamento anche dopo il ritorno della sintesi. I controlli del banco impediscono pubblicazione in questi casi. Le precedenti indicazioni «import non verificato» sono quindi superate limitatamente a questa prova.
