@@ -7033,6 +7033,19 @@ function urlApribile(testo3) {
     return null;
   }
 }
+function quantoHaLetto(testo3) {
+  const s = String(testo3 || "");
+  const ricevuti = s.length;
+  let tolti = 0;
+  for (const m of s.matchAll(/\[(\d+) caratteri tolti nel mezzo/g)) tolti += Number(m[1]) || 0;
+  return { ricevuti, tolti, totale: ricevuti + tolti, tagliato: tolti > 0 };
+}
+function breve(n) {
+  const v = Number(n) || 0;
+  if (v < 1e3) return String(v);
+  const k = v / 1e3;
+  return `${k < 10 ? k.toFixed(1).replace(".", ",") : Math.round(k)}k`;
+}
 function formattaProvenienza(pagina) {
   const quando = pagina?.quando ? new Date(pagina.quando) : null;
   const chi = t(pagina?.origine === "tu" ? TESTI3.provenienzaTu : TESTI3.provenienzaAgente);
@@ -7161,7 +7174,9 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     b.addEventListener("click", () => {
       const suo = b.dataset.browserModo === "testo" ? "testo" : "pagina";
       const opposto = suo === "testo" ? "pagina" : "testo";
-      const scelto = stato.modo === suo ? opposto : suo;
+      const solo = (el25.modi || []).length < 2;
+      const scelto = stato.modo === suo ? solo ? opposto : suo : suo;
+      if (scelto === stato.modo) return;
       stato.modo = scelto;
       if (scelto === "testo") mostraAvviso("");
       renderizza();
@@ -7436,6 +7451,20 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       b.setAttribute("aria-pressed", String(suo));
       b.classList.toggle("talos-button--secondary", suo);
       b.classList.toggle("talos-button--ghost", !suo);
+      if (b.dataset.browserModo !== "testo") continue;
+      const conto = b.querySelector("[data-browser-quanto]") || (() => {
+        const e = document.createElement("span");
+        e.dataset.browserQuanto = "";
+        e.className = "talos-browser__quanto";
+        b.append(e);
+        return e;
+      })();
+      const letto = lettura ? quantoHaLetto(s.testo) : { tagliato: false };
+      conto.hidden = !letto.tagliato;
+      if (letto.tagliato) {
+        conto.textContent = `${breve(letto.ricevuti)} ${t("di")} ${breve(letto.totale)}`;
+        b.title = t("La pagina è stata tagliata: l’agente ne ha ricevuta solo una parte. Aprila per vedere quale.");
+      }
     }
     if (el25.testo) el25.testo.hidden = !lettura || stato.modo === "pagina";
     if (lettura) {
@@ -17745,7 +17774,36 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         });
         vistaViva.stato("apro");
         try {
-          const esito = await apiPost(`/api/v1/browser/vivo/apri?sessione=${encodeURIComponent(sessione)}`, { url: voce.url });
+          const misuraDelRiquadro = () => {
+            const dove = document.querySelector("#browserVistaViva") || document.querySelector("#browserLive");
+            const r = dove ? dove.getBoundingClientRect() : null;
+            return r && r.width > 40 && r.height > 40 ? { larghezza: Math.round(r.width), altezza: Math.round(r.height) } : {};
+          };
+          const esito = await apiPost(`/api/v1/browser/vivo/apri?sessione=${encodeURIComponent(sessione)}`, { url: voce.url, ...misuraDelRiquadro() });
+          const riquadroDaSeguire = document.querySelector("#browserVistaViva") || document.querySelector("#browserLive");
+          if (riquadroDaSeguire && !riquadroDaSeguire.dataset.misuraCollegata) {
+            riquadroDaSeguire.dataset.misuraCollegata = "si";
+            let attesa = null;
+            let ultima = "";
+            const manda = () => {
+              clearTimeout(attesa);
+              attesa = setTimeout(() => {
+                const misura = misuraDelRiquadro();
+                if (!misura.larghezza) return;
+                const firma = `${misura.larghezza}x${misura.altezza}`;
+                if (firma === ultima) return;
+                ultima = firma;
+                apiPost(`/api/v1/browser/vivo/misura?sessione=${encodeURIComponent(sessione)}`, misura).catch(() => {
+                });
+              }, 180);
+            };
+            try {
+              new ResizeObserver(manda).observe(riquadroDaSeguire);
+            } catch {
+              window.addEventListener("resize", manda);
+            }
+            manda();
+          }
           voce.url = esito?.url || voce.url;
           voce.viaVista = "vivo";
           voce.annotabile = Boolean(esito?.annotabile);

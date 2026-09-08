@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   avviaTrasmissione, fermaTrasmissione, coordinateVerso, mandaClic, mandaTasto, mandaRotella,
   ridimensiona, opzioniTrasmissione, numeroDelFotogramma, bitModificatori, sessioneAltrui,
-  QUALITA_MASSIMA, LARGHEZZA_MASSIMA, FOTOGRAMMI_IN_VOLO,
+  QUALITA_MASSIMA, LARGHEZZA_MASSIMA, ALTEZZA_MASSIMA, FOTOGRAMMI_AL_SECONDO_MASSIMI, FOTOGRAMMI_IN_VOLO,
 } from '../src/browser-stream.mjs';
 
 // M2 (07/09) — lo schermo del Chromium di sistema dentro TALOS, e i gesti che tornano indietro.
@@ -53,8 +53,11 @@ test('STREAM-AVVIO: Page.enable e l\'ascolto vengono PRIMA di startScreencast, e
   assert.equal(ascoltatoriAllAvvio, 1, 'un fotogramma fra enable e startScreencast si perderebbe: l\'ascolto va registrato prima');
   const avvio = cdp.di('Page.startScreencast')[0];
   assert.equal(avvio.sessione, 'SESSIONE-1');
-  assert.deepEqual(avvio.parametri, { format: 'jpeg', quality: QUALITA_MASSIMA, maxWidth: LARGHEZZA_MASSIMA, maxHeight: 800, everyNthFrame: 1, maxFramesInFlight: FOTOGRAMMI_IN_VOLO });
-  assert.equal(trasmissione.opzioni.fotogrammiAlSecondo, 30);
+  assert.deepEqual(avvio.parametri, { format: 'jpeg', quality: QUALITA_MASSIMA, maxWidth: LARGHEZZA_MASSIMA, maxHeight: ALTEZZA_MASSIMA, everyNthFrame: 1, maxFramesInFlight: FOTOGRAMMI_IN_VOLO });
+  /* ⛔ 08/9: il tetto era 30 e il default 15. Misurato sul trasporto vero (C35-bis): ~100
+     fotogrammi al secondo su 127.0.0.1, identici con la finestra davanti, coperta e headless.
+     Il tetto sale a 90 e il default a 60 — quanto uno schermo mostra davvero. */
+  assert.equal(trasmissione.opzioni.fotogrammiAlSecondo, FOTOGRAMMI_AL_SECONDO_MASSIMI);
   // AL CONTRARIO: valori sensati non vengono toccati
   assert.deepEqual(opzioniTrasmissione({ qualita: 55, larghezzaMax: 1024, altezzaMax: 640, ogniNFrame: 2, fotogrammiAlSecondo: 10 }), { qualita: 55, larghezzaMax: 1024, altezzaMax: 640, ogniNFrame: 2, fotogrammiAlSecondo: 10, intervalloMinimoMs: 100 });
 });
@@ -265,7 +268,7 @@ test('STREAM-RIDIMENSIONA: la misura si impone dentro i tetti, e zero per zero l
 
   const enorme = cdpFinto();
   await ridimensiona(enorme, 'S', { larghezza: 999_999, altezza: 999_999, scala: 99 });
-  assert.deepEqual(enorme.di('Emulation.setDeviceMetricsOverride')[0].parametri, { width: 1920, height: 1200, deviceScaleFactor: 3, mobile: false });
+  assert.deepEqual(enorme.di('Emulation.setDeviceMetricsOverride')[0].parametri, { width: LARGHEZZA_MASSIMA, height: ALTEZZA_MASSIMA, deviceScaleFactor: 3, mobile: false });
 
   // AL CONTRARIO: zero non deve finire nel protocollo come «larghezza 0», si dice quello che si intende
   const azzera = cdpFinto();

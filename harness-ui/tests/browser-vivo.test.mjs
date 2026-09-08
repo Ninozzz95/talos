@@ -110,8 +110,17 @@ test('ARGOMENTI: porta 0 e profilo nostro; e NON ci sono i flag che aprirebbero 
   assert.ok(args.includes('--no-first-run') && args.includes('--no-default-browser-check'));
   assert.ok(args.includes('--disable-backgrounding-occluded-windows'), 'senza, una finestra coperta falsa ogni misura');
   assert.equal(args.at(-1), 'about:blank', 'si parte da una pagina vuota, non dalla «nuova scheda» che fa rete');
+  /* ⛔ 08/09/2026, owner: «non si devono aprire schede chrome in bg». Fino a oggi `--headless` era
+     in questa lista di proibiti, perche' la premessa scritta nel modulo diceva «la finestra serve
+     viva». Era una premessa mai misurata. MISURATA (C35): stessa pagina animata, 6 secondi,
+     599 fotogrammi con la finestra davanti, 599 con la finestra coperta, 599 in headless.
+     ⇒ La guardia non si cancella: si GIRA. Adesso pretende il contrario, e resta una guardia. */
+  assert.ok(args.includes('--headless=new'), 'nessuna finestra sullo schermo di chi lavora');
+  assert.ok(args.some((a) => a.startsWith('--user-agent=')), 'in headless lo user agent dice «HeadlessChrome» e certi siti servono un\'altra pagina');
+  assert.equal(args.some((a) => /HeadlessChrome/i.test(a)), false, 'la parola non deve restare nemmeno nello user agent che passiamo');
+
   // AL CONTRARIO — la parte che conta: questi NON ci devono essere
-  const proibiti = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security', '--remote-allow-origins=*', '--headless'];
+  const proibiti = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-web-security', '--remote-allow-origins=*'];
   for (const flag of proibiti) {
     assert.equal(args.some((a) => a.startsWith(flag)), false, `${flag} non deve mai finire nella riga di comando`);
   }

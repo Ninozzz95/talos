@@ -87,6 +87,35 @@ export function urlApribile(testo) {
 const oraRoma = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
 const giornoRoma = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit' });
 
+/*
+ * ⛔ 08/9: quando la lettura è stata TAGLIATA, il numero che conta non è quanto l'agente ha
+ *   ricevuto — è quanto NON ha ricevuto. Nella riga della lettura quel dato si troncava per primo
+ *   («…(Roma) …», misurato a 1600), cioè spariva proprio quando la pagina era grande, che è
+ *   l'unico caso in cui serve.
+ *
+ * Ricerca 08/09/2026 («Tool-Result Truncation: The Silent Bug That Makes Agents Lie», dev.to;
+ * apxml «Strategies for Text Truncation»): una troncatura silenziosa porta l'agente a riassumere
+ * con sicurezza cose che non ha mai visto ⇒ il rapporto va mostrato, non il solo ricevuto.
+ *
+ * Il kernel segna il taglio così: «… [N caratteri tolti nel mezzo: <motivo>] …».
+ * @returns {{ricevuti:number, tolti:number, totale:number, tagliato:boolean}}
+ */
+export function quantoHaLetto(testo) {
+  const s = String(testo || '');
+  const ricevuti = s.length;
+  let tolti = 0;
+  for (const m of s.matchAll(/\[(\d+) caratteri tolti nel mezzo/g)) tolti += Number(m[1]) || 0;
+  return { ricevuti, tolti, totale: ricevuti + tolti, tagliato: tolti > 0 };
+}
+
+/** «4,2k» — un numero grande si legge a colpo d'occhio, non si conta cifra per cifra. */
+export function breve(n) {
+  const v = Number(n) || 0;
+  if (v < 1000) return String(v);
+  const k = v / 1000;
+  return `${k < 10 ? k.toFixed(1).replace('.', ',') : Math.round(k)}k`;
+}
+
 /** «Agente · 05/09, 10:42 (Roma) · 365 caratteri» — la provenienza di una lettura, nel formato del mockup. */
 export function formattaProvenienza(pagina) {
   const quando = pagina?.quando ? new Date(pagina.quando) : null;
@@ -212,12 +241,15 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
   // 06/9 O-28: i due modi di guardare una lettura. Cambiare modo non ricarica niente: la cornice resta.
   for (const b of el.modi || []) {
     b.addEventListener('click', () => {
-      /* ⛔ 07/9, owner: lo switch a due pulsanti non c'è più — ne resta UNO, accanto a «Rileggi»,
-         e un pulsante solo non sceglie: ALTERNA. Col vecchio codice, premuto due volte, il secondo
-         clic non faceva niente e la pagina non tornava: si restava bloccati sul testo. */
+      /* ⛔ 07/9 lo switch era diventato UN pulsante solo, che doveva ALTERNARE; 08/9 l'owner ha
+         rimesso «Pagina» accanto a «Testo dell'agente». Con due pulsanti torna una scelta, non un
+         interruttore: premere quello già acceso non deve spegnerlo, o si finirebbe sull'altro modo
+         senza averlo chiesto. L'alternanza resta viva solo se un giorno il compagno sparisce. */
       const suo = b.dataset.browserModo === 'testo' ? 'testo' : 'pagina';
       const opposto = suo === 'testo' ? 'pagina' : 'testo';
-      const scelto = stato.modo === suo ? opposto : suo;
+      const solo = (el.modi || []).length < 2;
+      const scelto = stato.modo === suo ? (solo ? opposto : suo) : suo;
+      if (scelto === stato.modo) return;
       stato.modo = scelto;
       if (scelto === 'testo') mostraAvviso('');
       renderizza();
@@ -472,6 +504,25 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       b.setAttribute('aria-pressed', String(suo));
       b.classList.toggle('talos-button--secondary', suo);
       b.classList.toggle('talos-button--ghost', !suo);
+      /* ⛔ 08/9 — il rapporto sta SUL pulsante, non nella provenienza, perché lì si troncava per
+         primo proprio quando la pagina era grande: «l'agente ha visto 4,2k di 39k» è il fatto che
+         decide se fidarsi della sua risposta. Quando ha letto tutto, nessun numero: non c'è niente
+         da avvertire, e un'etichetta sempre accesa smette di essere un avviso. */
+      // il rapporto riguarda il testo ricevuto: sul pulsante «Pagina» non vuol dire niente
+      if (b.dataset.browserModo !== 'testo') continue;
+      const conto = b.querySelector('[data-browser-quanto]') || (() => {
+        const e = document.createElement('span');
+        e.dataset.browserQuanto = '';
+        e.className = 'talos-browser__quanto';
+        b.append(e);
+        return e;
+      })();
+      const letto = lettura ? quantoHaLetto(s.testo) : { tagliato: false };
+      conto.hidden = !letto.tagliato;
+      if (letto.tagliato) {
+        conto.textContent = `${breve(letto.ricevuti)} ${t('di')} ${breve(letto.totale)}`;
+        b.title = t('La pagina è stata tagliata: l’agente ne ha ricevuta solo una parte. Aprila per vedere quale.');
+      }
     }
     if (el.testo) el.testo.hidden = !lettura || stato.modo === 'pagina';
     if (lettura) {

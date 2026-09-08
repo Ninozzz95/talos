@@ -254,6 +254,23 @@ export function creaGestoreBrowserVivo({
       throw errorePagina('BROWSER_VIVO_GESTO_IGNOTO', `Gesto non riconosciuto: ${gesto?.tipo}`);
     },
 
+    /*
+     * ⛔ 08/09/2026, owner: «non si estende a tutto schermo». La misura della finestra pilotata era
+     *   fissa a 1280x800 e non c'entrava niente col riquadro che la persona ha davanti: la pagina
+     *   arrivava con la forma sbagliata e restavano bande vuote ai lati. Qui la vista dice quanto
+     *   e' grande DAVVERO, all'apertura e a ogni ridimensionamento, e la pagina prende quella forma.
+     *
+     * ⛔ Non ricarica niente: `Emulation.setDeviceMetricsOverride` cambia il viewport della pagina
+     *   gia' aperta. Ricaricare per un ridimensionamento perderebbe lo scorrimento, i moduli
+     *   compilati a meta' e — su una pagina che l'agente sta leggendo — il lavoro fatto.
+     */
+    async misura(sessionId, { larghezza, altezza } = {}) {
+      const scheda = schedaDi(sessionId);
+      tocca(scheda);
+      const esito = await ridimensiona(finestra.cdp, scheda.cdpSessionId, { larghezza, altezza });
+      return { larghezza: esito?.larghezza ?? null, altezza: esito?.altezza ?? null, url: scheda.url };
+    },
+
     /** Il pacchetto di un elemento sotto un punto: selettore, HTML, stili, antenati, errori. */
     async descrivi(sessionId, punto) {
       const scheda = schedaDi(sessionId);

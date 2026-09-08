@@ -744,6 +744,10 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 /* ⛔ 07/9: lo switch «Pagina / Testo dell'agente» non esiste più (owner). Le sue due regole
    sarebbero rimaste a pesare sul foglio senza un elemento da vestire: lo stato «premuto» segue il
    pulsante dov'è andato, nella riga delle azioni accanto a «Rileggi». */
+/* Il rapporto «quanto ha letto» sul pulsante: un numero, non un'etichetta. Si vede solo quando la
+   pagina e' stata tagliata — un avviso sempre acceso non e' piu' un avviso. */
+.talos-browser__quanto{margin-left:6px; padding:0 5px; border-radius:var(--talos-radius-pill); font-family:var(--talos-font-mono); font-size:10.5px; background:var(--talos-warning-soft); color:var(--talos-warning)}
+.talos-browser__quanto[hidden]{display:none}
 .talos-browser__tools [data-browser-modo][aria-pressed="true"]{border-color:var(--talos-accent-border); background:var(--talos-accent-soft); color:var(--talos-accent-text)}
 .talos-browser__testo-pulito{white-space:pre-wrap; overflow-wrap:anywhere}
 .talos-browser__sorgente{margin:12px 0 0}
@@ -1341,13 +1345,27 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    striscia delle schede (`@container (max-width:720px)`, che si lega al contenitore più vicino) e
    a 1024 le schede si stringevano a «GL…». La striscia è SORELLA della card, non figlia: così la
    sua query torna a misurare quello che misurava prima. Difetto creato da me e visto nella foto. */
-@container (max-width:900px){
+@container (max-width:980px){
   .talos-browser__tools{flex-wrap:wrap}
-  .talos-browser__tools .talos-browser__testata{order:9; flex-basis:100%; margin-left:0}
+  /* ⛔ l'a capo va CHIESTO, non sperato: con la sola flex-basis la coppia «Lettura N di N» +
+     testata o si schiacciava sulla riga delle azioni (1600) o si spezzava in due righe (1024).
+     Una riga vuota alta zero, messa fra le azioni e la coppia, le manda a capo INSIEME. */
+  .talos-browser__tools::after{content:""; order:7; flex-basis:100%; height:0}
+  .talos-browser__tools .talos-browser__testata{order:9; flex:1 1 0; margin-left:0}
+  /* ⛔ visto a 1024: con sei azioni in riga, «Copia testo» finiva a capo DA SOLA. «Lettura 7 di 7»
+     e la testata dicono la stessa cosa (che pagina stai guardando): stretti, stanno insieme sulla
+     seconda riga e le azioni restano un gruppo solo. */
+  .talos-browser__tools #browserPosizione{order:8}
   .talos-browser__testata-titolo{max-width:none}
 }
 .talos-vistaviva{position:relative; display:flex; flex-direction:column; min-height:0; border-radius:var(--talos-radius-card); overflow:hidden; background:var(--talos-panel-soft)}
-.talos-vistaviva__schermo{display:block; margin:auto; width:auto; height:auto; max-width:100%; max-height:100%; background:var(--talos-panel-soft); touch-action:none}
+/* ⛔ 08/9 — la tela NON deve mai dettare la dimensione del riquadro. Con `width:auto` la tela
+   usciva grande quanto il fotogramma, il riquadro cresceva per contenerla, la vista misurava il
+   riquadro cresciuto e chiedeva un fotogramma ancora piu' grande: una retroazione, misurata sul
+   4174 (riquadro passato da 830 a 1630 di altezza in un giro solo). Adesso la tela riempie il
+   contenitore e basta: `object-fit:contain` tiene le proporzioni del fotogramma senza deformare,
+   e a decidere quanto e' grande resta il pannello. */
+.talos-vistaviva__schermo{display:block; width:100%; height:100%; min-height:0; object-fit:contain; background:var(--talos-panel-soft); touch-action:none}
 .talos-vistaviva__schermo:focus{outline:none}
 .talos-vistaviva__schermo:focus-visible{outline:var(--talos-focus-width) solid var(--talos-ring); outline-offset:-2px}
 .talos-vistaviva--fuoco{box-shadow:inset 0 0 0 2px var(--talos-accent-border)}
@@ -1437,11 +1455,17 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    proprio contenuto. Con lo shrink acceso, a 1280×620 la card si comprimeva sotto la finestra e la
    pagina usciva dal pannello sovrapponendosi alla riga dei limiti e alle schede — visto guardando
    la foto, non da un numero. Senza shrink, quando lo spazio manca è la pagina che scorre. */
-.talos-browser>.talos-card:has(>#browserLive:not([hidden])),
-.talos-browser>.talos-card:has(>#browserVistaViva:not([hidden])){flex:1 0 auto}
+.talos-browser>.talos-card:has(>#browserLive:not([hidden])){flex:1 0 auto}
+/* ⛔ 08/9 — la PAGINA VIVA e' l'opposto della cornice: la sua tela ha pixel propri (926×1600) e con
+   `flex:1 0 auto` la card cresceva fino a contenerli, il riquadro diventava alto 1630, la vista
+   misurava quel riquadro e chiedeva un fotogramma ancora piu' alto. Una retroazione, misurata.
+   ⇒ Dove c'e' la tela la card prende lo SPAZIO (`1 1 auto`, `min-height:0`) e taglia quello che
+   avanza: cosi' e' il pannello a dire quanto e' grande la pagina, e non viceversa. */
+.talos-browser>.talos-card:has(>#browserVistaViva:not([hidden])){flex:1 1 auto; min-height:0; overflow:hidden}
+.talos-browser>.talos-card>.talos-vistaviva:not([hidden]){min-height:0}
 .talos-browser>#browserLimiti{margin-top:var(--talos-space-sm)}
 .talos-browser__live{flex:1 1 auto;height:auto;min-height:320px;padding:var(--talos-space-sm)}
-.talos-browser>.talos-card>.talos-vistaviva{flex:1 1 auto;min-height:320px}
+.talos-browser>.talos-card>.talos-vistaviva{flex:1 1 auto;min-height:220px}
 /* la lettura testuale scorre dentro di sé invece di spingere fuori la finestra */
 .talos-browser #browserPagina{min-height:0}
 .talos-browser__live iframe{width:100%;height:100%;border:0;border-radius:var(--talos-radius-card);background:#fff}
