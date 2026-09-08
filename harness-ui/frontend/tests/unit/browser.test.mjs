@@ -75,3 +75,29 @@ test('SCHEDA-NOME: entità e spazi del `<title>` si leggono come li legge una pe
 test('SCHEDA-NOME: il titolo dichiarato dal server vince su tutto', () => {
   assert.equal(titoloScheda({ titolo: 'Quello vero', url: 'https://x.dev', testo: '<title>altro</title>' }), 'Quello vero');
 });
+
+/*
+ * ⛔ 08/09/2026 — le due regole del nome di una scheda sono DIVERSE, e vanno provate come tali.
+ *   Fino a oggi `titoloScheda` faceva `hostDaUrl(url) || titoloDaLettura(pagina)`: su un URL valido
+ *   l'host vince sempre, quindi `titoloDaLettura` non veniva MAI raggiunta — codice morto, e le
+ *   schede di un testo acquisito si chiamavano tutte come il sito invece che come il loro contenuto.
+ *   Trovato dal cancello di parità appena è tornato a girare (era rotto dal commit `d706c8fe`).
+ *   ⛔ La prova sopra («senza `<title>` resta l'host») resta valida e non si tocca: parla di una
+ *     pagina SCARICATA, che porta il rigo «HTTP … · url». È l'altro caso.
+ */
+test('SCHEDA-NOME: un testo ACQUISITO dall’agente si chiama con la sua prima riga, non col sito', () => {
+  const lettura = { url: 'https://example.org/documentazione', testo: 'Registro dei processi\n\nIl registro raccoglie i processi avviati.' };
+  assert.equal(titoloScheda(lettura), 'Registro dei processi');
+  assert.equal(statoHttpDiLettura(lettura), null, 'un testo acquisito non ha rigo di stato: è ciò che distingue i due casi');
+});
+
+test('SCHEDA-NOME, al contrario: due letture dello stesso sito NON si chiamano più uguali', () => {
+  const uno = { url: 'https://example.org', testo: 'Pagina iniziale del progetto\n\nBenvenuto.' };
+  const due = { url: 'https://example.org/documentazione', testo: 'Registro dei processi\n\nAltro.' };
+  assert.notEqual(titoloScheda(uno), titoloScheda(due),
+    'due schede indistinguibili costringono ad aprirle per sapere quale è quale');
+});
+
+test('SCHEDA-NOME: un testo VUOTO non inventa un nome — ripiega sull’host', () => {
+  assert.equal(titoloScheda({ url: 'https://example.org/x', testo: '' }), 'example.org/x');
+});
