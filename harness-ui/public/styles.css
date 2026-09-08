@@ -2198,7 +2198,7 @@ body.reduce-motion *::after {
   position: absolute;
   bottom: 12px;
   left: 50%;
-  transform: translateX(-50%);
+  translate: -50% 0;
   width: 36px;
   height: 36px;
   min-width: 36px;
@@ -2206,6 +2206,11 @@ body.reduce-motion *::after {
   border-radius: 50%;
   box-shadow: var(--talos-shadow-card);
   z-index: 3;
+}
+.talos-chat-return__button:is(:hover, :active):not(:disabled) {
+  transform: none;
+  background: var(--talos-panel-soft);
+  border-color: var(--talos-border);
 }
 .talos-status-strip {
   display: flex;
