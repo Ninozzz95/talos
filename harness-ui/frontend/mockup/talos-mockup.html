@@ -1323,6 +1323,10 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
      e la testata dicono la stessa cosa (che pagina stai guardando): stretti, stanno insieme sulla
      seconda riga e le azioni restano un gruppo solo. */
   .talos-browser__tools #browserPosizione{order:8}
+  /* su una pagina viva titolo e provenienza sono nascosti: la posizione non ha con chi dividere la
+     riga, e resterebbe sola a mangiare 40px. Allora torna in linea con le azioni. */
+  .talos-browser__tools:not(:has(.talos-browser__testata:not([hidden]))) #browserPosizione{order:0}
+  .talos-browser__tools:not(:has(.talos-browser__testata:not([hidden])))::after{content:none}
   .talos-browser__testata-titolo{max-width:none}
 }
 .talos-vistaviva{position:relative; display:flex; flex-direction:column; min-height:0; border-radius:var(--talos-radius-card); overflow:hidden; background:var(--talos-panel-soft)}
@@ -1430,7 +1434,9 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    avanza: cosi' e' il pannello a dire quanto e' grande la pagina, e non viceversa. */
 .talos-browser>.talos-card:has(>#browserVistaViva:not([hidden])){flex:1 1 auto; min-height:0; overflow:hidden}
 .talos-browser>.talos-card>.talos-vistaviva:not([hidden]){min-height:0}
-.talos-browser>#browserLimiti{margin-top:var(--talos-space-sm)}
+.talos-browser>.talos-card{position:relative}
+.talos-browser__annotazioni{position:absolute; left:0; right:0; bottom:0; z-index:3; max-height:52%; overflow:auto; padding:10px 12px; border-top:1px solid var(--talos-border); background:var(--talos-panel); box-shadow:0 -8px 24px rgba(0,0,0,.28)}
+.talos-vistaviva__stato{display:none}
 .talos-browser__live{flex:1 1 auto;height:auto;min-height:320px;padding:var(--talos-space-sm)}
 .talos-browser>.talos-card>.talos-vistaviva{flex:1 1 auto;min-height:220px}
 /* la lettura testuale scorre dentro di sé invece di spingere fuori la finestra */
@@ -2204,7 +2210,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
     <div class="talos-browser__bar">
       <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="back" aria-label="Pagina letta precedente" title="Pagina letta precedente"><svg class="i talos-browser__back" aria-hidden="true"><use href="#i-chev"/></svg></button>
       <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="forward" disabled aria-label="Pagina letta successiva" title="Pagina letta successiva"><svg class="i talos-browser__next" aria-hidden="true"><use href="#i-chev"/></svg></button>
-      <div class="talos-field"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-globe"/></svg><label class="talos-browser__sr" for="urlBrowser">Indirizzo della pagina acquisita</label><input class="talos-field__input" id="urlBrowser" value="https://example.org/documentazione" placeholder="Apri un indirizzo dentro TALOS…" inputmode="url" spellcheck="false" aria-describedby="browserLimiti"></div>
+      <div class="talos-field"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-globe"/></svg><label class="talos-browser__sr" for="urlBrowser">Indirizzo della pagina acquisita</label><input class="talos-field__input" id="urlBrowser" value="https://example.org/documentazione" placeholder="Apri un indirizzo dentro TALOS…" inputmode="url" spellcheck="false"></div>
       <button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" data-browser-demo="open" aria-label="Apri fuori da TALOS" title="Apri fuori da TALOS"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg></button>
     </div>
     <div class="talos-browser__tools">
@@ -2271,7 +2277,6 @@ Una segnalazione di stallo non termina il processo.</pre>
   <!-- ⛔ 07/9, owner: qui c'era la «Cronologia · scegli una lettura», le STESSE pagine già elencate
        nella striscia in alto: due liste della stessa cosa, una sopra e una sotto. Tolta: le pagine
        si scelgono dalle schede, come in un browser. -->
-  <p id="browserLimiti" class="talos-muted talos-browser__meta talos-browser__space">Copia testuale, senza navigazione interattiva. Le note locali si azzerano al ricaricamento.</p>
 </div></section>
 
 <section id="schermoModelLab" class="talos-screen" data-c="ModelLabScreen" hidden><div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Model Lab</h1></div><span class="talos-grow"></span><button class="talos-button talos-button--secondary talos-button--sm" data-c="Button" data-apre-velo="veloFornitori">Fornitori e accessi</button></div><div class="talos-page " data-c="Page"><div class="talos-tabs talos-tabs--underline talos-lab__tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" aria-label="Schede Model Lab" id="labTabs"><button id="tab-installati" class="talos-tabs__tab" role="tab" aria-selected="true" aria-controls="panel-installati" tabindex="0" data-panel="panel-installati">Installati</button><button id="tab-catalogo" class="talos-tabs__tab" role="tab" aria-selected="false" aria-controls="panel-catalogo" tabindex="-1" data-panel="panel-catalogo">Catalogo</button><button id="tab-hf" class="talos-tabs__tab" role="tab" aria-selected="false" aria-controls="panel-hf" tabindex="-1" data-panel="panel-hf">Hugging Face</button><button id="tab-download" class="talos-tabs__tab" role="tab" aria-selected="false" aria-controls="panel-download" tabindex="-1" data-panel="panel-download">Download ↓ 1</button><button id="tab-runtime" class="talos-tabs__tab" role="tab" aria-selected="false" aria-controls="panel-runtime" tabindex="-1" data-panel="panel-runtime">Runtime</button><button id="tab-prova" class="talos-tabs__tab" role="tab" aria-selected="false" aria-controls="panel-prova" tabindex="-1" data-panel="panel-prova">Prova</button></div></div><p class="talos-page__note" role="status" id="labMessaggio"></p><section role="tabpanel" id="panel-installati" aria-labelledby="tab-installati" ><div class="talos-page__head "><div><h2>Modelli sul computer</h2><p>Carica un modello per usarlo. Il file resta sul disco quando liberi la memoria.</p></div></div>

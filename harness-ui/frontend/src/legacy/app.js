@@ -9919,7 +9919,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          giusta, altezza di un riquadro che non esisteva più. Serve guardare il RIQUADRO, non la
          finestra: un ResizeObserver vede anche i cambi che la finestra non racconta (la colonna
          destra che si apre, il pannello che cresce, il montaggio stesso). */
-      const riquadroDaSeguire = document.querySelector('#browserVistaViva') || document.querySelector('#browserLive');
+      /* ⛔ 08/9, seconda passata: l'osservatore era agganciato a `#browserVistaViva`, che viene
+         RICREATO a ogni apertura — restava a guardare un nodo staccato dal documento, e la misura
+         partiva una volta sola col riquadro ancora piccolo. Misurato: tela 926×235 dentro un
+         riquadro alto 571. Si osserva la CARD, che non cambia mai; la misura si prende dalla vista
+         viva quando c'è. Chi osserva deve sopravvivere a ciò che guarda. */
+      const riquadroDaSeguire = document.querySelector('#schermoBrowser .talos-page > .talos-card')
+        || document.querySelector('#browserVistaViva') || document.querySelector('#browserLive');
       if (riquadroDaSeguire && !riquadroDaSeguire.dataset.misuraCollegata) {
         riquadroDaSeguire.dataset.misuraCollegata = 'si';
         let attesa = null;
@@ -9935,7 +9941,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             apiPost(`/api/v1/browser/vivo/misura?sessione=${encodeURIComponent(sessione)}`, misura).catch(() => {});
           }, 180);
         };
-        try { new ResizeObserver(manda).observe(riquadroDaSeguire); } catch { window.addEventListener('resize', manda); }
+        /* ⛔ 08/9, terza passata sullo stesso difetto. Osservare SOLO la card non basta: la card
+           resta piena mentre la vista viva si RESTRINGE, perche' sotto compare il pannello dei
+           commenti. Nessun cambio sulla card ⇒ nessun evento ⇒ la pagina resta della misura di
+           prima, con una banda nera sotto (misurato: tela 926×448 in un riquadro alto ~560).
+           ⇒ Si osservano tutt'e due, e la vista viva si ri-aggancia quando rinasce: e' un nodo che
+           viene ricreato a ogni apertura, e un osservatore su un nodo staccato non dice niente. */
+        let osservatore = null;
+        try { osservatore = new ResizeObserver(manda); } catch { window.addEventListener('resize', manda); }
+        const osservati = new WeakSet();
+        const agganciaTutti = () => {
+          if (!osservatore) return;
+          for (const nodo of [riquadroDaSeguire, document.querySelector('#browserVistaViva'), document.querySelector('#browserLive')]) {
+            if (nodo && nodo.isConnected && !osservati.has(nodo)) { osservati.add(nodo); osservatore.observe(nodo); }
+          }
+        };
+        agganciaTutti();
+        // la vista viva nasce dopo: si ri-guarda quando l'albero del pannello cambia
+        try { new MutationObserver(agganciaTutti).observe(riquadroDaSeguire, { childList: true, subtree: true }); } catch { /* senza, resta l'aggancio iniziale */ }
         manda();
       }
       voce.url = esito?.url || voce.url;

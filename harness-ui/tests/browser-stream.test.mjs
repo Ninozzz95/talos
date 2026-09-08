@@ -265,6 +265,10 @@ test('STREAM-RIDIMENSIONA: la misura si impone dentro i tetti, e zero per zero l
   const esito = await ridimensiona(cdp, 'S', { larghezza: 1024, altezza: 768, scala: 2 });
   assert.deepEqual(cdp.di('Emulation.setDeviceMetricsOverride')[0].parametri, { width: 1024, height: 768, deviceScaleFactor: 2, mobile: false });
   assert.equal(esito.azzerato, false);
+  /* ⛔ 08/9, visto in una foto: cambiare il viewport non basta. Una pagina FERMA non ridisegna, e
+     lo schermo resta con la forma vecchia (926x448 dentro un riquadro piu alto, banda nera sotto).
+     Il flusso va svegliato, o il ridimensionamento si vede solo appena si scorre. */
+  assert.equal(cdp.di('Page.startScreencast').length, 1, 'dopo il ridimensionamento il flusso si risveglia, o la forma nuova non arriva');
 
   const enorme = cdpFinto();
   await ridimensiona(enorme, 'S', { larghezza: 999_999, altezza: 999_999, scala: 99 });
