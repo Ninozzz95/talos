@@ -64,11 +64,11 @@ Queste suite non provano automaticamente i percorsi con un modello remoto dal co
 
 | ID | Evidenza osservata | Stato e prova ancora necessaria |
 |---|---|---|
-| RIP-V01 — Review, schede coperte dalle azioni | Nelle sei immagini Review della suite i pulsanti della testata coprono le schede. Riprodotto sul 4174, Review vuota a 1280×720: Browser parzialmente coperto. Foto `4174-review-vuota.jpg`. | **APERTO, visto dal vivo, non corretto.** Prima della cura: ricerca specifica, test geometrico nominato che fallisca sulla sovrapposizione e verifica al contrario; poi foto nelle tre larghezze. Parità verde non equivale a layout corretto. |
+| RIP-V01 — Review, schede coperte dalle azioni | Nelle sei immagini Review della suite i pulsanti della testata coprono le schede. Riprodotto sul 4174, Review vuota a 1280×720: Browser parzialmente coperto. Foto `4174-review-vuota.jpg`. | **CORRETTO 08/09, consegnato sul 4174.** Scelta icona adattiva approvata dall’owner; RED geometrico, GREEN e prova inversa, tre foto dal vivo. Vedi `LEDGER-REVIEW-RIP-V01-2026-09-08.md`. |
 | RIP-V02 — SettingRow, selezioni senza testo nella fixture | Le immagini app hanno Densità e Lingua vuote, il mockup mostra Comoda e Segui il sistema. Sul 4174 i valori sono invece corretti: Comoda e Segui il sistema (italiano), foto `4174-impostazioni-aspetto.jpg`. | **Difetto della fixture osservato; regressione del prodotto NON dimostrata.** Occorre caratterizzare i valori selezionati nel laboratorio prima di modificare impostazioni reali. |
 | RIP-V03 — azioni oltre la porzione dipinta | A 1024 alcuni dettagli del Model Lab/Officina e a 1280 parte del Board escono dal ritaglio del componente. Alcuni chip nel ChatFooter sono molto abbreviati. | **⛔ NON VERIFICATO:** accessibilità delle azioni tramite scorrimento/tastiera nel flusso reale. Il solo ritaglio non dimostra che l'azione sia irraggiungibile. Non è una diagnosi di bug. |
 
-Le diagnosi non vengono confuse con i fix. RIP-V01 deve ottenere un test automatico permanente prima della chiusura; in questa fase nessun test nuovo o correzione è stato scritto.
+Le diagnosi non vengono confuse con i fix. La fase iniziale era documentale; la successiva consegna RIP-V01 aggiunge il test automatico permanente e corregge la Review. RIP-V02 e RIP-V03 restano nei rispettivi stati dichiarati.
 
 ## Stato del ticket ripreso
 
@@ -79,7 +79,7 @@ Le diagnosi non vengono confuse con i fix. RIP-V01 deve ottenere un test automat
 - L'ispezione locale conferma che il record ToolCallResult in `frontend/src/legacy/app.js` non conserva l'output per l'inspector; `components/inspector.js` usa un ripiego 0/1 se manca il codice d'uscita. Sono punti da trattare con dati e contratti verificati, non numeri dedotti.
 - **⛔ NON VERIFICATO:** frequenza degli eventi, costo di rendering, consumo dei figli e correttezza della finestra dichiarata in una run nuova. Nessuna misura inventata.
 - **⛔ NON VERIFICATO:** le righe residue del giro umano sul modello e il pacchetto su una macchina pulita. Nessuna esecuzione scrivente effettuata sul 4174.
-- L'audit delle 193 decisioni resta rinviato a prima della release, come richiesto.
+- La nuova verifica integrale dell'app contro le 193 righe dell'audit resta prevista prima della release. La lettura integrale delle decisioni è stata invece completata ora, su nuova richiesta dell'owner: vedi il registro seguente.
 
 ## Nuove proposte registrate e fonti
 
@@ -105,6 +105,37 @@ Nessuna scelta di upstream o pin per nuove integrazioni è stata presa: sono pro
 - Avviso già dato per il prossimo passo: correzione Review su high, Fast spento. Nessun subagente avviato in questa fase documentale.
 
 Riferimenti OpenAI verificati l'08/09/2026: https://learn.chatgpt.com/docs/models e https://learn.chatgpt.com/docs/agent-configuration/speed. Effort e Fast sono impostazioni distinte; per Astra Fast la tariffa in crediti documentata è 2,5 volte Standard dove disponibile. La distribuzione dei compiti sopra è una decisione operativa dell'owner, non una misura comparativa dei modelli.
+
+## Lettura integrale delle decisioni — richiesta owner 08/09/2026
+
+Letti per intero, in sequenza e senza limitarsi ai riepiloghi:
+
+1. `.claude/DOMANDE-REDESIGN-TALOS-2026-09-04.md`: tutte le 240 domande, A1–A30, B1–B30, C1–C30, D1–D30, E1–E30, F1–F30, G1–G30, H1–H30.
+2. `.claude/DECISIONI-REDESIGN-TALOS-2026-09-04.md`: tutte le risposte definitive delle otto categorie, incluse B31–B32, le righe aggregate, i chiarimenti e le tre ricerche E17/G3–G4/H21.
+3. `.claude/AUDIT-DECISIONI-2026-09-06.md`: tutte le righe decisionali, prove, ritiri delle diagnosi e note finali. Il documento dichiara 193 righe; gli esiti sono storici al 06/09 e non sono certificati di nuovo sul codice attuale.
+
+Le risposte definitive prevalgono sui consigli del questionario. Gli identificatori non sono sempre equivalenti fra domande e risposte (in particolare A e B): riferire requisito e documento, non il solo numero. Le istruzioni successive dell'owner e il ticket aggiornato governano le evoluzioni già autorizzate. Nessun consiglio scartato viene riproposto come decisione approvata.
+
+Vincoli che guidano le prossime consegne:
+
+- RIP-V01 / Review: G1–G2, G23–G26 e H27–H30 impongono nomi delle viste visibili, Review separata, navigazione da tastiera e focus visibile. Conservare inoltre la testata su una riga, come richiesto successivamente dall'owner/orchestratore. Il fix della sovrapposizione non ridisegna la diff approvata.
+- Pannello destro: B22–B23, G11–G21 richiedono file toccati, indice dei giri, Contesto/File/Sotto-agenti/Processi, ambiente compatto, albero raggiungibile, durata/esito/stallo. La proposta successiva «Adesso» del ticket va integrata conservando queste funzioni. G30 e H24–H26 vietano consumi ereditati, numeri privi di unità e stime non dichiarate.
+- OAuth in coda: D19–D20 richiedono salute e ultima verifica dei provider, chiavi mai in chiaro. Fattibilità e autorizzazioni dei fornitori si verificano nelle fonti attuali; la presenza nei competitor non costituisce prova sufficiente.
+- Compattazione in coda: D7 mantiene il modello del composer come default, ausiliario configurabile per mestiere; D26 esige la ripartizione reale della finestra. B30 collega i giri illimitati a freni costo/tempo dichiarati, cache e chiamate multiple; non basta aumentare un tetto.
+- Documenti e Bash in coda: B6–B9, B21–B22 e B32 governano allegati, costo stimato e aperture dei file; E9–E12, E23–E29 governano motivazione, anteprima, comando intero/cartella, segreti, rete e filesystem separati e permessi con scadenza dichiarata.
+- Globali: E11 esclude il conto alla rovescia ma richiede una nota alla scadenza; D29 colloca il Doctor nelle impostazioni; F28 richiede gestione delle sessioni pendenti anche nello store, non solo occultamento; H21 conserva lingua preferita distinta da quella risolta; H22 richiede nomi umani da una mappa unica. Le affermazioni storiche di superiorità e la frase privacy H20 vanno confrontate con dati e comportamento reali prima di usarle come promesse di prodotto.
+
+Questa è una lettura dei requisiti, non una nuova certificazione di conformità né una riapertura di tutte le implementazioni. Nessun file AGENTS modificato. Nessun intervento richiesto all'owner: prosegue RIP-V01, poi il pannello e la coda già registrata.
+
+## Decisioni riservate all'owner — precisazione 08/09/2026
+
+Istruzione esplicita: «non prendere mai decisioni fondamentali da solo [...] ad ogni dubbio o domanda o decisione interpellerai me».
+
+- Non scegliere autonomamente direzione di prodotto, architettura fondamentale, compromessi funzionali o di sicurezza, modifiche ai requisiti approvati o alternative ancora aperte.
+- In presenza di un dubbio, domanda, conflitto fra requisiti o scelta da decidere, interpellare l'owner prima del lavoro dipendente dalla risposta. Esporre il punto concreto e le conseguenze, senza trattare il silenzio come consenso.
+- Proseguire le ispezioni e le attività indipendenti già autorizzate. L'autonomia esecutiva non autorizza a ridefinire il prodotto.
+- La diagnosi RIP-V01 continua entro la testata a una riga e il disegno Review già approvati. Eventuali alternative che cambiano disposizione o disponibilità delle azioni vanno presentate all'owner prima di implementarle.
+- Questa precisazione si applica anche a pannello destro e proposte PO-01–PO-07. Nessuna modifica ai file AGENTS.
 
 ## Consegna
 
