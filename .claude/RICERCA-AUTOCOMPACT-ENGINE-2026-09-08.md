@@ -1,6 +1,16 @@
 # Autocompact: ricerca tecnica e proposta per TALOS
 
-Ricognizione del 08/09/2026. Stato aggiornato: qualificazione isolata approvata dall'owner e in esecuzione; nessuna modifica al motore prodotto o alla conversazione originale. L'architettura definitiva resta da decidere dopo le prove. Le versioni di settembre e lo studio di agosto distinguono aggiornamenti recenti da riferimenti precedenti ancora pertinenti. Data di consultazione non significa data di pubblicazione.
+Ricognizione del 08/09/2026. Stato aggiornato: matrice isolata definitiva v2 del componente conclusa, 96 casi selezionati e 132 grezzi custoditi; nessun candidato promosso e nessuna modifica al motore prodotto o alla conversazione originale. Tre prove strumenti sono state ripetute per uniformare la domanda, conservando le precedenti. L'architettura definitiva resta da decidere con l'owner. Le versioni di settembre e lo studio di agosto distinguono aggiornamenti recenti da riferimenti precedenti ancora pertinenti. Data di consultazione non significa data di pubblicazione.
+
+## Esito conclusivo delle prove
+
+Rapporto completo: `RISULTATI-QUALIFICAZIONE-AUTOCOMPACT-2026-09-08.md`. Indice versionato della custodia: `CUSTODIA-BENCHMARK-AUTOCOMPACT-2026-09-08.md`. I raw restano privati. Tutti i pin principali sono stati riconfermati sul web 08/09 prima della consegna documentale.
+
+Nessuno dei quattro componenti, nel profilo comune 16384/4096, soddisfa insieme ripresa oltre limite, richiamo esatto, strumenti e continuità. Il crash Nemotron è registrato separatamente dai difetti del componente; una sola ripetizione su runtime fresco completa i due casi coinvolti. Non significa stabilità a lungo termine.
+
+La API Pi è stata esercitata con il riassunto precedente reinserito come testo, senza il parametro `previousSummary`: il percorso incrementale nativo resta da qualificare. Il richiamo LCM è misurato senza esporre al loop comune i suoi tool di recupero: l'archivio integro non è un richiamo riuscito, e un richiamo fallito non è perdita dell'archivio. Il primo messaggio utente con tutti i fatti rimane verbatim in TALOS: nessuna superiorità generale attribuita al suo punteggio. Confronto delle app complete e AVM ON/OFF non dimostrati.
+
+Raccomandazione all'owner: proprietà TALOS di budget, originali, checkpoint, policy e recupero; scelta di componenti upstream mantenuti tramite adapter dopo cancelli mirati. Non è una decisione applicata né una prova che riscrivere gli algoritmi di sintesi sia migliore. Backend, modale e architettura definitiva rimangono successivi.
 
 ## Evidenze esecutive aggiunte il 08/09
 

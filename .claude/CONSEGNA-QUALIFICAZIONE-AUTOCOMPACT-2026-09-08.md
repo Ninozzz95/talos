@@ -1,6 +1,22 @@
-# Qualificazione Autocompact — fase esecutiva in corso
+# Qualificazione Autocompact — consegna del banco concluso
 
 08/09/2026. Banco isolato implementato in `harness-ui/benchmarks/autocompact`. Nessuna API pubblica, modale o funzione prodotto modificata.
+
+## Consegna finale
+
+Matrice definitiva v2 del componente conclusa: **96 casi selezionati**, 132 grezzi conservati, 36 esclusioni motivate. **Nessun engine promosso.** Confronto completo delle applicazioni non qualificato: l'host Hermes rifiuta il profilo 16k e i test del checkpoint del banco non provano il riavvio nativo. Rapporto da leggere: `RISULTATI-QUALIFICAZIONE-AUTOCOMPACT-2026-09-08.md`; indice privato `scratchpad/prove/autocompact-qualification-20260908/selected-cases-v2.json`.
+
+GPT-OSS: 48/48 casi registrati, 9 pass esatti, 38 fallimenti, 1 risposta da revisione poi giudicata non supportata. Nemotron: 48/48 selezionati; i due casi coinvolti nel crash sono stati ripetuti una volta, stesso profilo, cinque compattazioni concluse in entrambi; gli insuccessi originali restano nei grezzi. La revisione semantica distingue perdita di fatti da lingua e formato.
+
+Archivio di custodia definitivo verificato: `.claude/evidenze-private/autocompact-2026-09-08-v2.zip`, 2.860 artefatti più manifest, SHA256 `a8672a47738203fe7a23813442121f888a1fa91ce0f76cdca4f4ce6b25fe446f`. Dettagli in `CUSTODIA-BENCHMARK-AUTOCOMPACT-2026-09-08.md`. La v1 resta conservata; la v2 include tre prove strumenti riallineate alla domanda comune e dichiara le copie LCM delle fixture native incluse. Nessuna pubblicazione o copia remota.
+
+Nemotron ripristinato sulla **4174**, finestra 16384, HTTP200 ready definitivo alle 18:28:53 UTC; Panoramica runtime conferma modello caricato dopo reload al primo ripristino. La scheda Installati ha una discrepanza di stato/compatibilità registrata separatamente; non è stata modificata. Screenshot ispezionati a 1080p/1440p/viewport 4K; il file della terza cattura è 3840×2089, quindi parziale. 26/26 test del banco verdi; controllo indipendente dei riferimenti dell'indice e dell'archivio. Nessun nuovo giro nella conversazione owner.
+
+**Cosa deve fare l'owner:** decidere con Astra l'architettura successiva sulla base del rapporto. **Cosa faccio io dopo:** ledger e cancelli dell'integrazione scelta. **Cosa rimane:** engine prodotto, backend, modale, autocompattazione, recupero nativo e collaudo dalla chat; documentazione pubblica in una fase separata.
+
+## Registro storico delle consegne intermedie
+
+Le sezioni seguenti conservano ciò che era noto durante la campagna. Le indicazioni «in corso», «da avviare» e i PID storici sono superati dalla consegna finale sopra; i batch e i limiti metodologici restano parte della provenienza.
 
 ## Verificato
 
