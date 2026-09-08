@@ -93,15 +93,22 @@ Ricognizione preliminare consultata l'08/09/2026:
 
 Nessuna scelta di upstream o pin per nuove integrazioni è stata presa: sono proposte in coda, non un piano implementativo. Le versioni delle librerie documentali già presenti sono annotate nella coda. La ricerca completa su OAuth Anthropic, tecniche di compattazione recenti, documenti/download e computer use resta da fare.
 
-## Chiarimento richiesto per la fase implementativa
+## Chiarimento risolto e istruzioni operative dell'owner
 
-Il ticket §2.12 prescrive deleghe a **Opus 5 high**. Il modello non è selezionabile fra gli strumenti disponibili in questa sessione. È stata inviata una domanda all'owner: procedere con il principale Astra oppure usare subagenti Astra per verifiche circoscritte. **Risposta non ancora ricevuta** alla chiusura di questa fase; nessuna sostituzione fatta di iniziativa.
+**Aggiornamento 08/09/2026, risposta esplicita dell'owner:** scelta autonoma di modello ed effort dei subagenti secondo il compito, senza privilegiare il risparmio a scapito della qualità. Questa istruzione sostituisce il vincolo del ticket §2.12 su Opus 5 high.
 
-L'istruzione attuale di progetto limita comunque i subagenti a prove semplici e revisioni meccaniche; piano, implementazione e review complessa restano al principale. Non è stata richiesta un'autorizzazione generica a fare il lavoro: il chiarimento riguarda il vincolo concreto sul modello della delega.
+- Avvisare l'owner **prima** di iniziare una parte del lavoro che richiede effort xhigh o modalità Fast; spiegare in breve il motivo. Non cambiare silenziosamente le impostazioni della task principale. L'avviso precede il lavoro interessato.
+- Impostazione abituale concordata: Astra high, Fast disattivato. Xhigh consigliato per architettura complessa, OAuth, sandboxing, engine di compattazione, computer use e diagnosi difficili. Fast soltanto quando il vantaggio di latenza giustifica il consumo, dopo l'avviso.
+- Autorizzati fino a **cinque subagenti paralleli** per lavori lunghi o complessi, entro i limiti effettivi del runtime. La sessione attuale offre quattro slot totali: principale più tre subagenti contemporanei. Per ulteriori incarichi usare gruppi successivi.
+- Distribuire un carico comparabile e delimitare obiettivo, file, responsabilità e risultato atteso di ciascun incarico prima dell'avvio. Niente scritture concorrenti sugli stessi file, inclusi ledger e generati. Il principale integra i risultati.
+- Piano, architettura e review complessa restano al principale; le verifiche circoscritte possono essere delegate secondo le istruzioni di progetto. Nessuna modifica ad AGENTS.md.
+- Avviso già dato per il prossimo passo: correzione Review su high, Fast spento. Nessun subagente avviato in questa fase documentale.
+
+Riferimenti OpenAI verificati l'08/09/2026: https://learn.chatgpt.com/docs/models e https://learn.chatgpt.com/docs/agent-configuration/speed. Effort e Fast sono impostazioni distinte; per Astra Fast la tariffa in crediti documentata è 2,5 volte Standard dove disponibile. La distribuzione dei compiti sopra è una decisione operativa dell'owner, non una misura comparativa dei modelli.
 
 ## Consegna
 
-- **Cosa devi fare tu:** rispondere al chiarimento sul modello delle deleghe; nessuna azione per conservare la coda.
+- **Cosa devi fare tu:** nessuna azione adesso; riceverai un avviso prima dei passaggi che richiedono xhigh o Fast.
 - **Cosa faccio io dopo:** affrontare RIP-V01 e il pannello destro secondo il ticket, con ricerca e ledger esecutivo prima del codice.
 - **Cosa rimane:** implementazione del pannello, prove reali isolate, macchina pulita, debiti residui e ricerca/proposte PO-01–PO-07.
 
