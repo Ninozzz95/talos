@@ -208,3 +208,93 @@ test('TRE PROVE — 3/3 · STESSO WORKSPACE: la cartella arriva alla figlia inta
  * sicura sui compiti che LEGGONO e su quelli che scrivono file DIVERSI — esattamente il consiglio
  * che danno loro: «batch delegation works best when tasks are genuinely independent».
  */
+
+/*
+ * ⛔⛔⛔ IL TERZO CASO DELLA STESSA FAMIGLIA, trovato leggendo i chiamanti di `avviaESegui` dopo
+ *   la cura della delega (08/09). I chiamanti sono cinque:
+ *     · 2316 reindirizzamento e 2935 `resume` → passano `voceEsistente`, quindi NON ricostruiscono
+ *       la voce e non ripassano da `cartellaEffettivaPerPermessi`: al sicuro, verificato.
+ *     · 2700 `avvia` (catalogo) e 2760 `avviaLibero` → passano già la bandiera: al sicuro.
+ *     · 2808 `forka` → crea una VOCE NUOVA e **non passa la bandiera**. Difetto.
+ *
+ * Conseguenza reale: si forka una sessione avviata su una cartella scelta a mano (che passa
+ * obbligatoriamente da «Full access», vedi il cancello in `avviaLibero`) e il fork si ritrova a
+ * lavorare in `C:\`. Stesso danno della delega: `EPERM mkdir 'C:\'`, zero file scritti.
+ *
+ * ⭐ È la TERZA volta che `forka` dimentica qualcosa per lo stesso motivo — la sua stessa doc lo
+ *   racconta due volte: i permessi (28/8, trovati da un test) e `permessiPerAttrezzo` (28/8,
+ *   applicato proattivamente). Un fork crea una voce nuova, quindi **tutto** ciò che la voce
+ *   deriva va ripassato per nome. La cartella era la terza cosa, e nessuno l'aveva vista.
+ *
+ * ⭐ Ricerca 08/09/2026: lo stato dell'arte tratta la cartella di un fork come una cosa che NON
+ *   deve andare alla deriva — Claude Code, issue #60272 «Fork session… to decouple new sessions
+ *   from the working directory of prior sessions»; e le note su GitKraken: un fork «keeps its own
+ *   captured path or falls back cleanly to the project root rather than drifting». Qui la deriva
+ *   c'era, e non verso la radice del progetto: verso la radice del DISCO.
+ *   ⛔ Differenza consapevole con lo stato dell'arte, dichiarata: là «session-scoped permissions do
+ *   not transfer to branches and must be re-approved»; da noi `forka` li eredita di proposito
+ *   (documentato nella sua doc dal 28/8). Non la cambio qui: è una decisione dell'owner.
+ */
+test('⛔ FORK: il fork di una sessione con cartella scelta a mano NON finisce nella radice del disco', async () => {
+  const cartellaMadre = cartellaVera('talos-fork-');
+  try {
+    const finto = modelloFinto();
+    const { registro } = registroConMadre(cartellaMadre, finto);
+    finto.avvii[0].concludi({ ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'ciao' }] } });
+    // il registro cattura `messaggiFinali` dentro il `.then()`: senza questo giro di microtask
+    // `forka` risponderebbe SESSION_NOT_READY e la prova mentirebbe sul motivo
+    await new Promise((r) => setImmediate(r));
+
+    const sessioni = registro.elenca().sessioni ?? registro.elenca();
+    const origine = Array.isArray(sessioni) ? sessioni[0] : null;
+    const fork = registro.forka(origine?.sessionId ?? origine?.id);
+    assert.ok(fork?.sessionId, `il fork non è partito: ${fork?.erroreAvvio ?? ''}`);
+
+    const voceFork = finto.avvii[1];
+    assert.ok(voceFork, 'il fork non ha avviato nessuna sessione');
+    assert.equal(voceFork.cartella, cartellaMadre,
+      'il fork lavora nella radice del disco invece che nella cartella scelta: stesso difetto della delega');
+  } finally {
+    rmSync(cartellaMadre, { recursive: true, force: true });
+  }
+});
+
+test('⛔ FORK, AL CONTRARIO: l\'allargamento LEGITTIMO dell\'allowlist sopravvive al fork', async () => {
+  /*
+   * ⭐ La cura sopra poteva uccidere il caso (a) — l'unico che DEVE allargare: una sessione avviata
+   *   su una cartella dell'allowlist con «Full access» lavora nella radice, per scelta dell'owner
+   *   («parto stretto, mi allargo», 03/9). Il suo fork deve continuare a lavorare nella radice, non
+   *   tornare nella cartella stretta. Senza questa prova, la cura sarebbe una regressione
+   *   invisibile — è successo altre volte in questo progetto: stringere una guardia crea un falso
+   *   negativo.
+   */
+  const progetto = cartellaVera('talos-allowlist-');
+  try {
+    const finto = modelloFinto();
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finto.avviaSessioneFn,
+      guardaWorkspaceFn: () => () => {},
+      preparaEsecuzioneLiberaFn: (cartelle, { cartellaId, consegna }) => {
+        const voce = cartelle.find((c) => c.id === cartellaId);
+        return { cartella: voce.percorso, comandoProva: 'npm test', task: { consegna, consegnaCorta: consegna } };
+      },
+      cartelleProgetto: [{ id: '0', percorso: progetto, nome: 'progetto' }],
+      modello: 'z-ai/glm-5.3-flash', chiave: 'chiave-finta',
+    });
+    const avvio = registro.avviaLibero({ cartellaId: '0', consegna: 'lavora', permessi: 'Full access' });
+    assert.ok(avvio.sessionId, `la sessione non è partita: ${avvio.erroreAvvio ?? ''}`);
+
+    const radice = parsePath(progetto).root;
+    assert.equal(finto.avvii[0].cartella, radice,
+      'il caso (a) deve allargare: se non allarga più, la cura ha rotto l\'allowlist');
+
+    finto.avvii[0].concludi({ ok: true, esito: { messaggiFinali: [{ role: 'user', content: 'ciao' }] } });
+    await new Promise((r) => setImmediate(r));
+    const fork = registro.forka(avvio.sessionId);
+    assert.ok(fork?.sessionId, `il fork non è partito: ${fork?.erroreAvvio ?? ''}`);
+    assert.equal(finto.avvii[1].cartella, radice,
+      'il fork di una sessione allargata deve restare allargato: la cura non deve stringerlo');
+  } finally {
+    rmSync(progetto, { recursive: true, force: true });
+  }
+});
