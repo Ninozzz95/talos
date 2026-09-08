@@ -82,6 +82,11 @@ export const ALTEZZA_MASSIMA = 1600;
  *   una richiesta che chieda l'impossibile. */
 export const FOTOGRAMMI_AL_SECONDO_PREDEFINITI = 60;
 export const FOTOGRAMMI_AL_SECONDO_MASSIMI = 90;
+/* ⛔ 08/09/2026, owner: «alza al 60 fps il minimo del browser headless reale». Non e solo il valore
+   di partenza: e il PAVIMENTO. Nessuna chiamata puo chiedere una trasmissione piu lenta di quanto
+   uno schermo mostra — un ripiego a 15 o a 30 tornerebbe a essere la fluidita che ha fatto dire
+   «il frame rate e bassissimo», e stavolta arriverebbe da un parametro invece che da un tetto. */
+export const FOTOGRAMMI_AL_SECONDO_MINIMI = 60;
 /** Quanti fotogrammi Chrome può mandare prima di pretendere una conferma. Il default del protocollo è 3; 2 tiene la latenza più bassa a parità di banda. */
 export const FOTOGRAMMI_IN_VOLO = 2;
 
@@ -134,7 +139,7 @@ export function opzioniTrasmissione(opzioni = {}) {
   const larghezzaMax = Math.round(dentro(numeroFinito(o.larghezzaMax, LARGHEZZA_PREDEFINITA), 64, LARGHEZZA_MASSIMA));
   const altezzaMax = Math.round(dentro(numeroFinito(o.altezzaMax, ALTEZZA_PREDEFINITA), 64, ALTEZZA_MASSIMA));
   const ogniNFrame = Math.round(dentro(numeroFinito(o.ogniNFrame, 1), 1, 10));
-  const fotogrammiAlSecondo = dentro(numeroFinito(o.fotogrammiAlSecondo, FOTOGRAMMI_AL_SECONDO_PREDEFINITI), 1, FOTOGRAMMI_AL_SECONDO_MASSIMI);
+  const fotogrammiAlSecondo = dentro(numeroFinito(o.fotogrammiAlSecondo, FOTOGRAMMI_AL_SECONDO_PREDEFINITI), FOTOGRAMMI_AL_SECONDO_MINIMI, FOTOGRAMMI_AL_SECONDO_MASSIMI);
   return { qualita, larghezzaMax, altezzaMax, ogniNFrame, fotogrammiAlSecondo, intervalloMinimoMs: 1000 / fotogrammiAlSecondo };
 }
 

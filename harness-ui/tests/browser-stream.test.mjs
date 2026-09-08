@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   avviaTrasmissione, fermaTrasmissione, coordinateVerso, mandaClic, mandaTasto, mandaRotella,
   ridimensiona, opzioniTrasmissione, numeroDelFotogramma, bitModificatori, sessioneAltrui,
-  QUALITA_MASSIMA, LARGHEZZA_MASSIMA, ALTEZZA_MASSIMA, FOTOGRAMMI_AL_SECONDO_MASSIMI, FOTOGRAMMI_IN_VOLO,
+  QUALITA_MASSIMA, LARGHEZZA_MASSIMA, ALTEZZA_MASSIMA, FOTOGRAMMI_AL_SECONDO_MASSIMI, FOTOGRAMMI_AL_SECONDO_MINIMI, FOTOGRAMMI_IN_VOLO,
 } from '../src/browser-stream.mjs';
 
 // M2 (07/09) — lo schermo del Chromium di sistema dentro TALOS, e i gesti che tornano indietro.
@@ -59,7 +59,12 @@ test('STREAM-AVVIO: Page.enable e l\'ascolto vengono PRIMA di startScreencast, e
      Il tetto sale a 90 e il default a 60 — quanto uno schermo mostra davvero. */
   assert.equal(trasmissione.opzioni.fotogrammiAlSecondo, FOTOGRAMMI_AL_SECONDO_MASSIMI);
   // AL CONTRARIO: valori sensati non vengono toccati
-  assert.deepEqual(opzioniTrasmissione({ qualita: 55, larghezzaMax: 1024, altezzaMax: 640, ogniNFrame: 2, fotogrammiAlSecondo: 10 }), { qualita: 55, larghezzaMax: 1024, altezzaMax: 640, ogniNFrame: 2, fotogrammiAlSecondo: 10, intervalloMinimoMs: 100 });
+  assert.deepEqual(opzioniTrasmissione({ qualita: 55, larghezzaMax: 1024, altezzaMax: 640, ogniNFrame: 2, fotogrammiAlSecondo: 75 }), { qualita: 55, larghezzaMax: 1024, altezzaMax: 640, ogniNFrame: 2, fotogrammiAlSecondo: 75, intervalloMinimoMs: 1000 / 75 });
+  /* ⛔ 08/9, owner: «alza al 60 fps il minimo del browser headless reale». 60 non e' piu' solo il
+     valore di partenza: e' il PAVIMENTO, e una richiesta piu' lenta viene tirata su. Senza questa
+     riga, un domani una chiamata potrebbe rimettere la lentezza che oggi abbiamo tolto. */
+  assert.equal(opzioniTrasmissione({ fotogrammiAlSecondo: 10 }).fotogrammiAlSecondo, FOTOGRAMMI_AL_SECONDO_MINIMI);
+  assert.equal(opzioniTrasmissione({ fotogrammiAlSecondo: 1 }).fotogrammiAlSecondo, FOTOGRAMMI_AL_SECONDO_MINIMI);
 });
 
 test('STREAM-ACK: ogni fotogramma è confermato — anche quello su cui il consumatore LANCIA', async () => {
@@ -116,12 +121,13 @@ test('STREAM-TETTO: oltre i fotogrammi al secondo l\'immagine si butta, la confe
   let quando = 0;
   const consegnati = [];
   const trasmissione = await avviaTrasmissione(cdp, 'S', { fotogrammiAlSecondo: 10, orologio: () => quando }, (f) => consegnati.push(f.numeroFrame));
-  // dieci al secondo = uno ogni 100 ms; questi arrivano ogni 20 ms
-  for (let n = 1; n <= 6; n += 1) { await cdp.emetti('Page.screencastFrame', fotogramma(n), 'S'); quando += 20; }
+  /* ⛔ 08/9: chiedere 10 al secondo non si puo' piu' (il pavimento e' 60), quindi il limitatore
+     lavora a 60 = uno ogni ~16,7 ms. Questi arrivano ogni 5 ms: ne passa uno ogni quattro. */
+  for (let n = 1; n <= 6; n += 1) { await cdp.emetti('Page.screencastFrame', fotogramma(n), 'S'); quando += 5; }
   quando += 200;
   await cdp.emetti('Page.screencastFrame', fotogramma(7), 'S');
 
-  assert.deepEqual(consegnati, [1, 6, 7], 'il primo passa, poi si aspetta la finestra dei 100 ms');
+  assert.deepEqual(consegnati, [1, 5, 7], 'il primo passa, poi si aspetta la finestra dei ~16,7 ms del pavimento a 60');
   assert.equal(trasmissione.conteggi.saltati, 4);
   assert.deepEqual(cdp.di('Page.screencastFrameAck').map((i) => i.parametri.sessionId), [1, 2, 3, 4, 5, 6, 7], 'anche i saltati vanno confermati, o Chrome smette di mandare');
 });
