@@ -167,6 +167,23 @@ export function titoloScheda(pagina) {
   if (pagina?.titolo) return pagina.titolo;
   const daHtml = titoloDaHtml(pagina?.testo);
   if (daHtml) return daHtml;
+  /*
+   * ⛔ 08/09 — qui c'era `hostDaUrl(...) || titoloDaLettura(pagina)`, e l'host vince SEMPRE su un
+   *   URL valido: `titoloDaLettura` non veniva mai raggiunta, era codice morto. Effetto a schermo:
+   *   le schede di una LETTURA si chiamavano «example.org» e «example.org/documentazione» invece che
+   *   col loro contenuto — due schede quasi identiche, e per riconoscerle bisognava aprirle.
+   *   Il mockup le disegna col titolo («Pagina iniziale del progetto», «Registro dei processi»):
+   *   trovato dal cancello di parità appena è tornato a girare, non da una lettura del codice.
+   *
+   * ⛔ Ma la prima cura era TROPPO LARGA, e un test l'ha respinta: per una pagina SCARICATA la prima
+   *   riga è il rigo di stato («HTTP 415 · https://…»), e l'owner il 07/09 ha chiesto esattamente il
+   *   contrario — «nome vero della pagina, e lo stato scritto solo quando non è 2xx». Mostrare quel
+   *   rigo come nome della scheda era il difetto che quel giorno ha curato.
+   * ⇒ Le due cose sono DIVERSE e vanno distinte, non mediate: una pagina scaricata porta il rigo di
+   *   stato e allora vale l'host; un testo acquisito dall'agente non ce l'ha, e allora vale la sua
+   *   prima riga. Il discriminante c'è già ed è misurabile: `statoHttpDiLettura`.
+   */
+  if (statoHttpDiLettura(pagina) === null) return titoloDaLettura(pagina);
   return hostDaUrl(pagina?.url) || titoloDaLettura(pagina);
 }
 
@@ -183,10 +200,16 @@ const $ = (radice, sel) => radice.querySelector(sel);
  * @param {{azioni:object}} opzioni azioni: seleziona(id) · chiudi(id) · apri(url) · rileggi(scheda) · annota(scheda) · copia(scheda) · apriFuori(scheda) · salvaNota(scheda, testo) · decidi(requestId, si)
  */
 /*
- * `modoIniziale` esiste per il LABORATORIO: il mockup illustra lo stato «Testo dell'agente» (il testo
- * acquisito è il disegno che si può confrontare a pixel), mentre nel prodotto il modo predefinito è
- * «Pagina» — una pagina renderizzata non si confronta con un mockup statico. Un solo parametro, e la
- * differenza è dichiarata qui invece di essere nascosta in una condizione.
+ * `modoIniziale` esiste per il LABORATORIO, e fino all'08/09 valeva `'testo'`: il mockup illustrava
+ * lo stato «Testo dell'agente», perché una pagina renderizzata non si confronta a pixel con un
+ * disegno statico.
+ * ⛔ 08/09 quella premessa è CADUTA: l'owner ha chiesto «rimetti il pulsante pagina accanto a testo
+ *   dell'agente» e il mockup adesso illustra «Pagina» premuto. Il laboratorio continuava a passare
+ *   `'testo'`, quindi app e mockup mostravano premuti due pulsanti DIVERSI — ed è esattamente il
+ *   rosso che il cancello di parità ha trovato appena è tornato a girare (era rotto dal commit
+ *   `d706c8fe`, che ha cancellato il config a cui puntava senza togliere il riferimento).
+ *   ⇒ `lab/main.js` passa `'pagina'`. Il parametro resta: la differenza fra prodotto e laboratorio
+ *     si dichiara qui, non si nasconde in una condizione.
  */
 export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = {}) {
   const el = {
