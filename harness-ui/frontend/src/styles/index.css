@@ -1356,6 +1356,10 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
      e la testata dicono la stessa cosa (che pagina stai guardando): stretti, stanno insieme sulla
      seconda riga e le azioni restano un gruppo solo. */
   .talos-browser__tools #browserPosizione{order:8}
+  /* su una pagina viva titolo e provenienza sono nascosti: la posizione non ha con chi dividere la
+     riga, e resterebbe sola a mangiare 40px. Allora torna in linea con le azioni. */
+  .talos-browser__tools:not(:has(.talos-browser__testata:not([hidden]))) #browserPosizione{order:0}
+  .talos-browser__tools:not(:has(.talos-browser__testata:not([hidden])))::after{content:none}
   .talos-browser__testata-titolo{max-width:none}
 }
 .talos-vistaviva{position:relative; display:flex; flex-direction:column; min-height:0; border-radius:var(--talos-radius-card); overflow:hidden; background:var(--talos-panel-soft)}
@@ -1463,7 +1467,9 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    avanza: cosi' e' il pannello a dire quanto e' grande la pagina, e non viceversa. */
 .talos-browser>.talos-card:has(>#browserVistaViva:not([hidden])){flex:1 1 auto; min-height:0; overflow:hidden}
 .talos-browser>.talos-card>.talos-vistaviva:not([hidden]){min-height:0}
-.talos-browser>#browserLimiti{margin-top:var(--talos-space-sm)}
+.talos-browser>.talos-card{position:relative}
+.talos-browser__annotazioni{position:absolute; left:0; right:0; bottom:0; z-index:3; max-height:52%; overflow:auto; padding:10px 12px; border-top:1px solid var(--talos-border); background:var(--talos-panel); box-shadow:0 -8px 24px rgba(0,0,0,.28)}
+.talos-vistaviva__stato{display:none}
 .talos-browser__live{flex:1 1 auto;height:auto;min-height:320px;padding:var(--talos-space-sm)}
 .talos-browser>.talos-card>.talos-vistaviva{flex:1 1 auto;min-height:220px}
 /* la lettura testuale scorre dentro di sé invece di spingere fuori la finestra */

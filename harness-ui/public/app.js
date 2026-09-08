@@ -7115,7 +7115,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     modi: [...schermo.querySelectorAll("[data-browser-modo]")]
     // 06/9 O-28: Pagina / Testo dell'agente
   };
-  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === "testo" ? "testo" : "pagina" };
+  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === "testo" ? "testo" : "pagina", modoChiesto: null };
   const frameAttivo = () => el25.live?.querySelector("iframe") || null;
   const dialogaConOverlay = (messaggio) => {
     try {
@@ -7176,7 +7176,14 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       const opposto = suo === "testo" ? "pagina" : "testo";
       const solo = (el25.modi || []).length < 2;
       const scelto = stato.modo === suo ? solo ? opposto : suo : suo;
+      const lettura = attiva();
+      if (scelto === "pagina" && lettura && lettura.tipo !== "viva" && lettura.incorniciabile === false && lettura.url) {
+        stato.modoChiesto = "pagina";
+        azioni.apri?.(lettura.url, lettura.id);
+        return;
+      }
       if (scelto === stato.modo) return;
+      stato.modoChiesto = scelto;
       stato.modo = scelto;
       if (scelto === "testo") mostraAvviso("");
       renderizza();
@@ -7413,7 +7420,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       return "";
     }
     if (s.incorniciabile !== false) return "";
-    if (stato.modo === "pagina") stato.modo = "testo";
+    if (stato.modo === "pagina" && stato.modoChiesto !== "pagina") stato.modo = "testo";
     return `${t(s.motivoCornice || "Questo sito non si lascia mostrare dentro TALOS")}. ${t("Qui sotto c’è il testo che ha letto l’agente.")}`;
   }
   function renderizza() {
@@ -7514,7 +7521,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
           },
           onInvia: () => azioni.inviaAnnotazioni?.(s)
         });
-        el25.annotazioni.hidden = false;
+        el25.annotazioni.hidden = lista.length === 0 && !stato.annotaAttivo;
       }
     }
     if (el25.annota) {
@@ -7526,6 +7533,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   return {
     /** @param {{schede?:Array, attiva?:string|null, note?:object, richiesta?:object|null}} nuovo */
     aggiorna(nuovo) {
+      if (nuovo && "attiva" in nuovo && nuovo.attiva !== stato.attiva) stato.modoChiesto = null;
       stato = { ...stato, ...nuovo };
       if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false;
       renderizza();
@@ -17780,7 +17788,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             return r && r.width > 40 && r.height > 40 ? { larghezza: Math.round(r.width), altezza: Math.round(r.height) } : {};
           };
           const esito = await apiPost(`/api/v1/browser/vivo/apri?sessione=${encodeURIComponent(sessione)}`, { url: voce.url, ...misuraDelRiquadro() });
-          const riquadroDaSeguire = document.querySelector("#browserVistaViva") || document.querySelector("#browserLive");
+          const riquadroDaSeguire = document.querySelector("#schermoBrowser .talos-page > .talos-card") || document.querySelector("#browserVistaViva") || document.querySelector("#browserLive");
           if (riquadroDaSeguire && !riquadroDaSeguire.dataset.misuraCollegata) {
             riquadroDaSeguire.dataset.misuraCollegata = "si";
             let attesa = null;
@@ -17797,10 +17805,26 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
                 });
               }, 180);
             };
+            let osservatore = null;
             try {
-              new ResizeObserver(manda).observe(riquadroDaSeguire);
+              osservatore = new ResizeObserver(manda);
             } catch {
               window.addEventListener("resize", manda);
+            }
+            const osservati = /* @__PURE__ */ new WeakSet();
+            const agganciaTutti = () => {
+              if (!osservatore) return;
+              for (const nodo4 of [riquadroDaSeguire, document.querySelector("#browserVistaViva"), document.querySelector("#browserLive")]) {
+                if (nodo4 && nodo4.isConnected && !osservati.has(nodo4)) {
+                  osservati.add(nodo4);
+                  osservatore.observe(nodo4);
+                }
+              }
+            };
+            agganciaTutti();
+            try {
+              new MutationObserver(agganciaTutti).observe(riquadroDaSeguire, { childList: true, subtree: true });
+            } catch {
             }
             manda();
           }

@@ -206,7 +206,7 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     annotazioni: $(schermo, '#browserAnnotazioni'),
     modi: [...schermo.querySelectorAll('[data-browser-modo]')], // 06/9 O-28: Pagina / Testo dell'agente
   };
-  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === 'testo' ? 'testo' : 'pagina' };
+  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === 'testo' ? 'testo' : 'pagina', modoChiesto: null };
   const frameAttivo = () => el.live?.querySelector('iframe') || null;
   const dialogaConOverlay = (messaggio) => { try { frameAttivo()?.contentWindow?.postMessage({ fonte: 'talos-genitore', ...messaggio }, '*'); } catch { /* cornice non pronta */ } };
   window.addEventListener('message', (e) => {
@@ -249,7 +249,23 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       const opposto = suo === 'testo' ? 'pagina' : 'testo';
       const solo = (el.modi || []).length < 2;
       const scelto = stato.modo === suo ? (solo ? opposto : suo) : suo;
+      /*
+       * ⛔ 08/09/2026, owner: «quando clicco pagina la pagina non si ricarica». Riprodotto: su un
+       *   sito che vieta la cornice, `corniceDellaLettura` rimetteva il modo a 'testo' a OGNI
+       *   render, quindi il clic durava un istante e veniva annullato — un pulsante che non fa
+       *   niente e non dice niente, che e' peggio di un pulsante assente.
+       *
+       * ⇒ Chiedere «Pagina» su una pagina che la cornice non puo' mostrare non e' una richiesta
+       *   impossibile: e' esattamente il caso per cui esiste il browser pilotato. Si apre lei.
+       */
+      const lettura = attiva();
+      if (scelto === 'pagina' && lettura && lettura.tipo !== 'viva' && lettura.incorniciabile === false && lettura.url) {
+        stato.modoChiesto = 'pagina'; // la scelta della persona vale piu' del ripiego automatico
+        azioni.apri?.(lettura.url, lettura.id);
+        return;
+      }
       if (scelto === stato.modo) return;
+      stato.modoChiesto = scelto;
       stato.modo = scelto;
       if (scelto === 'testo') mostraAvviso('');
       renderizza();
@@ -463,7 +479,9 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     if (!s || s.tipo === 'viva' || !s.url || !/^https?:/i.test(s.url)) return '';
     if (s.incorniciabile === undefined) { azioni.chiediCornice?.(s); return ''; }
     if (s.incorniciabile !== false) return '';
-    if (stato.modo === 'pagina') stato.modo = 'testo';
+    /* ⛔ Il ripiego al testo vale per l'APERTURA, non contro chi ha appena chiesto la pagina: senza
+       questa condizione il clic su «Pagina» veniva annullato dal render successivo, per sempre. */
+    if (stato.modo === 'pagina' && stato.modoChiesto !== 'pagina') stato.modo = 'testo';
     return `${t(s.motivoCornice || 'Questo sito non si lascia mostrare dentro TALOS')}. ${t('Qui sotto c’è il testo che ha letto l’agente.')}`;
   }
 
@@ -550,6 +568,8 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     if (el.notaSalvata) { el.notaSalvata.hidden = !nota; el.notaSalvata.textContent = nota ? t('Nota: {nota}', { nota }) : ''; }
     if (!s || (el.editorNota && !el.editorNota.hidden && el.editorNota.dataset.browserId !== s.id)) { if (el.editorNota) el.editorNota.hidden = true; el.nota?.setAttribute('aria-expanded', 'false'); }
     if (el.editorNota && s) el.editorNota.dataset.browserId = s.id;
+    /* ⛔ 08/9, owner: «non ci deve essere nulla di sotto il riquadro del browser». La riga dei
+       limiti non c'e' piu' nel markup; il codice regge un DOM che non la contiene. */
     if (el.limiti) el.limiti.textContent = t(vive > 0 ? TESTI.limitiVive : TESTI.limitiLetture);
     // il pannello dei commenti: solo su una pagina viva proxata
     /* ⛔ 07/9 — la stessa condizione stava scritta in DUE posti con due valori diversi: qui «solo
@@ -565,7 +585,11 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
           onAttiva: (on) => azioni.annota?.(s, on), onNota: (i, testo) => azioni.notaAnnotazione?.(s, i, testo), onTogli: (i) => { dialogaConOverlay({ tipo: 'togli', numero: i + 1 }); azioni.togliAnnotazione?.(s, i); },
           onSvuota: () => { dialogaConOverlay({ tipo: 'svuota' }); azioni.svuotaAnnotazioni?.(s); }, onInvia: () => azioni.inviaAnnotazioni?.(s),
         });
-        el.annotazioni.hidden = false;
+        /* ⛔ 08/9, owner: «non ci deve essere nulla di sotto il riquadro, non voglio nulla che
+           disturbi». Il pannello dei commenti stava sempre a schermo, anche vuoto, e si prendeva
+           una fetta di pagina per dire «Nessun commento». Ora compare solo quando c'e' qualcosa da
+           mostrare o si sta annotando: quando serve, non prima. */
+        el.annotazioni.hidden = lista.length === 0 && !stato.annotaAttivo;
       }
     }
     if (el.annota) { el.annota.setAttribute('aria-pressed', String(annotabile && stato.annotaAttivo)); el.annota.title = annotabile ? t('Segna gli elementi della pagina da cambiare: i commenti finiscono nel composer') : t('Prepara una bozza nella chat senza inviarla'); }
@@ -574,7 +598,13 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
 
   return {
     /** @param {{schede?:Array, attiva?:string|null, note?:object, richiesta?:object|null}} nuovo */
-    aggiorna(nuovo) { stato = { ...stato, ...nuovo }; if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false; renderizza(); },
+    aggiorna(nuovo) {
+      /* ⛔ La scelta «voglio la pagina» vale per LA pagina su cui e' stata fatta: cambiando scheda
+         si torna al comportamento automatico, o una scelta si trascinerebbe su una lettura diversa
+         lasciandola con una cornice vuota che nessuno ha chiesto. */
+      if (nuovo && 'attiva' in nuovo && nuovo.attiva !== stato.attiva) stato.modoChiesto = null;
+      stato = { ...stato, ...nuovo }; if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false; renderizza();
+    },
     fuocoSullaScheda() { el.schede?.querySelector('[aria-selected="true"]')?.focus(); },
     get stato() { return stato; },
   };

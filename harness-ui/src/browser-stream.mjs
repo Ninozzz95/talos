@@ -417,5 +417,24 @@ export async function ridimensiona(cdp, sessionId, { larghezza, altezza, scala =
     mobile: false,
   };
   await cdp.invia('Emulation.setDeviceMetricsOverride', misura, sessionId);
+  /*
+   * ⛔ 08/09/2026 — cambiare il viewport non basta a far arrivare un fotogramma nuovo: una pagina
+   *   FERMA non ridisegna, e lo schermo resta quello di prima, con la forma vecchia. Visto in una
+   *   foto: dopo il ridimensionamento la pagina restava 926×448 dentro un riquadro più alto, con
+   *   una banda nera sotto che spariva solo appena si scorreva.
+   * ⇒ Si ri-chiede lo screencast con gli stessi parametri: `Page.startScreencast` e' idempotente e
+   *   il primo fotogramma dopo la chiamata e' completo, quindi arriva subito la forma nuova.
+   *   L'ascolto e' gia' registrato altrove: qui non si tocca, si sveglia soltanto.
+   */
+  try {
+    await cdp.invia('Page.startScreencast', {
+      format: 'jpeg',
+      quality: QUALITA_PREDEFINITA,
+      maxWidth: LARGHEZZA_MASSIMA,
+      maxHeight: ALTEZZA_MASSIMA,
+      everyNthFrame: 1,
+      maxFramesInFlight: FOTOGRAMMI_IN_VOLO,
+    }, sessionId);
+  } catch { /* la scheda puo' essere chiusa fra le due chiamate: il ridimensionamento resta valido */ }
   return { azzerato: false, larghezza: misura.width, altezza: misura.height, scala: misura.deviceScaleFactor };
 }
