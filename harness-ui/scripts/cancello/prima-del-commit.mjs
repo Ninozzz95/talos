@@ -14,7 +14,7 @@
  *
  * Cosa fa: legge i file nell'indice e il messaggio, chiede a `regole-vincolanti.mjs` un giudizio, e
  * se il giudizio è NO esce con 1 — il commit non parte. Nessuna riga di memoria da ricordare,
- * nessuna buona volontà richiesta: è la stessa idea degli hook di Claude Code, che «enforce rules
+ * nessuna buona volontà richiesta: è la stessa idea degli hook dei CLI di coding, che «enforce rules
  * deterministically — they run regardless of what the LLM decides» (ricerca 07/09/2026).
  */
 import { execFileSync } from 'node:child_process';

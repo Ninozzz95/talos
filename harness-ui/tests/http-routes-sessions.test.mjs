@@ -481,7 +481,7 @@ test('⛔⛔ AL CONTRARIO — POST /api/v1/sessions con modelloPlanner malformat
 /*
  * ⭐⭐⭐ 28/8 — LA PILLOLA PERMESSI, sui DUE endpoint di avvio. Ricerca
  * (REGOLA ZERO, e HERMES AGENT è il primo competitor — vedi memoria
- * [[harness-da-battere-uno-a-uno]]): Codex CLI separa sandbox_mode/
+ * [[harness-da-battere-uno-a-uno]]): un CLI concorrente separa sandbox_mode/
  * approval_policy in due assi, la sicurezza 2026 boccia le denylist —
  * qui si prova che la FORMA del corpo (non solo la logica interna,
  * già provata in session-registry.test.mjs) applica davvero quelle
@@ -712,7 +712,7 @@ test('⛔⛔ AL CONTRARIO — POST .../approve con un corpo malformato (approvat
  * ⭐⭐⭐ 28/8 — POST .../hooks/:hookId/trust, FASE A (hook). L'UNICA
  * strada che rende un hook eseguibile — vedi il commento in
  * http-app.mjs sopra questa rotta per il perché (fail-closed, stesso
- * principio di Codex CLI).
+ * principio dei CLI concorrenti).
  */
 test('⭐⭐⭐ POST /api/v1/sessions/:id/hooks/:hookId/trust raggiunge sessionRegistry.fidaHook con id decodificati', async (t) => {
   const { base, sessionRegistry } = await listen(t);

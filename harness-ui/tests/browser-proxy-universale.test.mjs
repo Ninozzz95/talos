@@ -60,7 +60,7 @@ test('VIA-04 — dietro accesso si sceglie il BROWSER VERO anche col proxy acces
   const daMotivo = decidiVia({ incorniciabile: false, motivo: 'La pagina risponde 401', url: 'https://api.esempio.it/dati', proxyDisponibile: true, vivoDisponibile: true });
   assert.equal(daMotivo.via, 'vivo');
   // AL CONTRARIO: una pagina pubblica con le stesse disponibilità va al proxy, non al browser vero
-  assert.equal(decidiVia({ incorniciabile: false, url: 'https://github.com/anthropics/claude-code', proxyDisponibile: true, vivoDisponibile: true }).via, 'proxy');
+  assert.equal(decidiVia({ incorniciabile: false, url: 'https://github.com/esempio/progetto', proxyDisponibile: true, vivoDisponibile: true }).via, 'proxy');
   // e senza browser vero il proxy la mostra lo stesso, dicendo che sarà la vista di chi non ha fatto l'accesso
   const ripiego = decidiVia({ incorniciabile: false, url: 'https://github.com/login', proxyDisponibile: true, vivoDisponibile: false });
   assert.equal(ripiego.via, 'proxy');

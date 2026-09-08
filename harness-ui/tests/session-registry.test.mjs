@@ -4706,8 +4706,8 @@ test('FILE-TREE-PREVIEW-02 — rifiuta un projectId fuori allowlist senza legger
  * ⛔⛔⛔ 02/09 — review complessiva: la sessione e572474a (workspace = Desktop
  * intero) aveva 490 WorkspaceChanged su 756 eventi, 355 DOPO la fine del
  * giro, 1,9 MB di log di cui il 79% percorsi di altre lane — rigiocati per
- * intero (1,6 MB) a ogni apertura. Ricerca 02/09: Claude Code, Hermes, Cline
- * e VS Code trattano gli eventi del filesystem come EFFIMERI — nessuno li
+ * intero (1,6 MB) a ogni apertura. Ricerca 02/09: gli editor e i CLI di
+ * coding trattano gli eventi del filesystem come EFFIMERI — nessuno li
  * scrive nella storia della sessione. Qui: vivo sì, persistito no, rigiocato
  * no. Il client svuota comunque la cache dell'albero a ogni nuova
  * generazione, quindi un WorkspaceChanged storico non aveva mai niente da dire.
@@ -4890,7 +4890,7 @@ test('W0-02 — ogni intestazione NUOVA porta schema: SCHEMA_SESSIONE (= 1)', as
 });
 
 /*
- * ⭐⭐⭐ 04/9 — REVIEW di W1-13 (Opus 5, orchestratore): il cancello sui file
+ * ⭐⭐⭐ 04/9 — REVIEW di W1-13: il cancello sui file
  * di controllo chiedeva un'approvazione ANCHE quando NESSUNO può rispondere.
  * `richiediApprovazione` non ha timeout: senza un ascoltatore iscritto la
  * Promise non si risolve MAI e la tool-call resta appesa per sempre — una

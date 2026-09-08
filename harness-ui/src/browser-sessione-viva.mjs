@@ -5,8 +5,8 @@
  *   dobbiamo fare meglio degli altri». Il tag `iframe` non può farlo: un sito che vieta la cornice
  *   lascia un rettangolo grigio, e Chrome ci carica dentro la propria pagina d'errore sparando un
  *   `load` regolare, così nemmeno il ripiego scatta. Tutti i concorrenti diretti usano un browser
- *   VERO — Hermes un `webview` di Electron, Claude Code il Chrome dell'utente via estensione,
- *   Codex un in-app browser — e i servizi che lo fanno da server (Browserbase, Steel, Cloudflare
+ *   VERO — Hermes un `webview` di Electron, altri il Chrome dell'utente via estensione oppure
+ *   un browser in-app — e i servizi che lo fanno da server (Browserbase, Steel, Cloudflare
  *   Browser Run) ne trasmettono lo schermo via CDP invece di incorniciarlo.
  *
  * ⭐ Il nostro vantaggio, e non è estetico: il browser lo apre il SERVER, cioè lo stesso posto dove

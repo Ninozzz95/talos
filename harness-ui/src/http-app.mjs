@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'; // 08/9, BH-06: il nonce CSP del documento, nuovo a ogni risposta
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { verificaIncorniciabile } from './browser-frame.mjs';
 import { decidiVia } from './browser-proxy-universale.mjs'; // 07/9: la scelta della corsia sta in un posto solo // K-I 06/9: la cornice del Browser si decide dalle intestazioni della pagina
@@ -240,6 +241,13 @@ const STATUS_BY_CODE = Object.freeze({
   HF_IMAGE_MIME_REJECTED: 422,
   HF_IMAGE_TOO_LARGE: 413,
   HF_IMAGE_CONFIG_INVALID: 500,
+  /*
+   * ⛔ 08/9, BH-07 — mancava, e la mancanza NON si vedeva come una riga assente: usciva come
+   * 500 «Errore interno» da `normalizeError` (vedi la doc lì). Un manifest di download
+   * malformato è la richiesta a essere sbagliata, non il server: 422, come già
+   * LOCAL_IMPORT_INVALID qui sotto, che è lo stesso guasto sull'import dal disco.
+   */
+  HF_TRANSFER_INVALID: 422,
   LOCAL_IMPORT_INVALID: 422,
   LOCAL_IMPORT_TOO_LARGE: 413,
   LOCAL_IMPORT_SIZE_MISMATCH: 422,
@@ -363,6 +371,71 @@ const SECURITY_HEADERS = Object.freeze({
   'X-Frame-Options': 'DENY',
 });
 
+/*
+ * ⛔⛔⛔ 08/9, BH-06 — LA CSP SPEGNEVA IL TERMINALE. `style-src 'self'`, senza nonce né hash,
+ * faceva cadere OGNI `<style>` che xterm.js crea a runtime: ~12 violazioni rosse in console a
+ * ogni apertura del Terminale, e i colori ANSI del renderer DOM persi — è esattamente il muro
+ * che `public/vendor/xterm/README.md` racconta di aver aggirato ripiegando su WebGL, mai
+ * rimosso. ⛔ La via vietata era `'unsafe-inline'`: aprirebbe a QUALUNQUE stile iniettato.
+ *
+ * Ricerca fatta PRIMA di scrivere, 08/09/2026:
+ *  · MDN «CSP: style-src» — un hash è confrontato col TESTO ESATTO del foglio, spazi e
+ *    maiuscole comprese; e uno stile impostato per proprietà (`el.style.width = ...`) NON è
+ *    bloccato dalla CSP, quindi il rumore in console viene solo dagli elementi `<style>`.
+ *  · xtermjs/xterm.js#4445 «Latest version requires unsafe-inline due to inline styles»,
+ *    tuttora APERTO: xterm non offre nessuna opzione `nonce`. Verificato anche qui, sul
+ *    bundle vendorizzato: ZERO occorrenze della parola `nonce` nei 477 KB di
+ *    `public/vendor/xterm/xterm.js` (@xterm/xterm 6.0.0).
+ *  · MDN «HTMLElement.nonce» — per via del *nonce hiding* il valore va scritto e letto dalla
+ *    PROPRIETÀ IDL (`el.nonce`), non dall'attributo, che i browser recenti svuotano.
+ *  · Invicti «Static Nonce Identified in CSP» e la guida CSP di Next.js — un nonce deve essere
+ *    nuovo a OGNI risposta, e la pagina che lo porta non può essere messa in cache.
+ *
+ * ⇒ Delle due strade regge SOLO il nonce. L'hash non basta: leggendo il bundle, i quattro
+ *   `<style>` di xterm hanno un testo che CAMBIA a runtime — i colori del tema
+ *   (`onChangeColors`), l'altezza di cella e il selettore del terminale
+ *   (`_dimensionsStyleElement`), font e colori del renderer (`_injectCss`). Un hash fissato
+ *   oggi smetterebbe di valere al primo ridimensionamento o cambio di tema.
+ * ⇒ E poiché xterm il nonce non se lo mette da solo, non basta metterlo nell'intestazione: il
+ *   documento riceve anche la riga che lo timbra sui `<style>` appena creati. Senza quella, il
+ *   nonce non toccherebbe mai gli elementi che stiamo cercando di far passare — sarebbe una
+ *   cura che si legge bene e non cura niente.
+ * ⛔ Il `Cache-Control: no-store` qui sopra è la condizione che rende lecito il nonce: un
+ *   documento con nonce finito in cache lo regalerebbe a chiunque lo rilegga.
+ */
+const BYTE_NONCE_CSP = 16; // 128 bit, la lunghezza minima raccomandata per un nonce CSP
+
+function creaNonceCsp() {
+  return randomBytes(BYTE_NONCE_CSP).toString('base64');
+}
+
+/*
+ * ⛔ Le sostituzioni passano da una FUNZIONE e non da una stringa: in `String.replace` una
+ * stringa di rimpiazzo interpreta `$` (già pagato altrove in questo repo), e un nonce base64
+ * arriva da bytes casuali.
+ */
+function intestazioniDocumentoConNonce(nonce) {
+  const csp = SECURITY_HEADERS['Content-Security-Policy']
+    .replace("script-src 'self'", () => `script-src 'self' 'nonce-${nonce}'`)
+    .replace("style-src 'self'", () => `style-src 'self' 'nonce-${nonce}'`);
+  return { 'Content-Security-Policy': csp };
+}
+
+/*
+ * ⛔ Il timbro deve essere installato PRIMA di xterm (che sta in fondo al body) e prima di
+ * qualunque altro codice che crei fogli di stile, quindi entra in fondo al `<head>`. Se il
+ * documento non avesse un `</head>` non si inventa un posto: si lascia l'HTML com'è e il
+ * nonce resta solo nell'intestazione — meglio una cura che non scatta di una pagina rotta.
+ */
+function iniettaNonceNelDocumento(html, nonce) {
+  const chiusuraHead = html.search(/<\/head>/iu);
+  if (chiusuraHead < 0) return html;
+  const timbro = `<script nonce="${nonce}">(function(){var n=${JSON.stringify(nonce)};var c=Document.prototype.createElement;`
+    + 'Document.prototype.createElement=function(t){var e=c.apply(this,arguments);'
+    + 'try{if(typeof t==="string"&&t.toLowerCase()==="style")e.nonce=n;}catch(_){}return e;};})();</script>';
+  return `${html.slice(0, chiusuraHead)}${timbro}${html.slice(chiusuraHead)}`;
+}
+
 function generatedAt(clock) {
   const value = clock();
   return (value instanceof Date ? value : new Date(value)).toISOString();
@@ -482,9 +555,27 @@ function parseTreeQuery(url) {
   return query.percorso ?? '';
 }
 
+/*
+ * ⛔⛔⛔ 08/9, trovato scavando BH-07 — UN CODICE SENZA STATO FACEVA SCHIANTARE LA RISPOSTA.
+ * `API_ERROR_CODES` e `STATUS_BY_CODE` sono due elenchi separati, e QUINDICI codici stanno nel
+ * primo e non nel secondo: tutta la famiglia HF_HUB_, HF_REDIRECT_, HF_RESOLVE_INVALID,
+ * HF_REPOSITORY_GATED, HF_RATE_LIMITED, HF_TRANSFER_INVALID, HF_DOWNLOAD_FAILED,
+ * HF_PATH_REJECTED, CHECKSUM_MISMATCH, MODEL_FILE_UNREADABLE, CANCELLED_BY_OWNER,
+ * PAUSED_BY_OWNER.
+ * Per loro questa funzione restituiva `statusCode: undefined`, `res.writeHead(undefined)`
+ * lanciava, e chi rispondeva era la rete di sicurezza in fondo a `httpApp`: 500 INTERNAL_ERROR,
+ * col codice VERO perso per strada. Cioè l'unico caso in cui il motivo dell'errore serviva
+ * davvero era anche l'unico in cui spariva.
+ * ⛔ Il ripiego a 500 NON è la cura completa: i quindici codici vogliono ognuno il suo stato
+ * (HF_TRANSFER_INVALID è un 422, HF_RATE_LIMITED un 429, HF_REPOSITORY_GATED un 403...). Qui si
+ * chiude solo la voragine — un codice noto non deve mai poter far cadere la risposta — e si
+ * mappa HF_TRANSFER_INVALID, che è la strada di BH-07. Gli altri quattordici restano
+ * REGISTRATI e non curati: toccano rotte che non ho provato, e cambiarne lo stato senza una
+ * prova per ciascuna sarebbe una modifica al buio.
+ */
 function normalizeError(error) {
   const code = API_ERROR_CODES.has(error?.code) ? error.code : 'INTERNAL_ERROR';
-  return { code, statusCode: STATUS_BY_CODE[code] };
+  return { code, statusCode: STATUS_BY_CODE[code] ?? 500 };
 }
 
 /*
@@ -775,6 +866,44 @@ function requireTaskIdBody(body) {
  * (il permesso è davvero "Full access"? il percorso esiste davvero?)
  * resta nel registro/custom-task.mjs, stesso principio di sempre.
  */
+/*
+ * ⛔⛔⛔ 08/9, BH-07 — UN CORPO VUOTO USCIVA 500 «Errore interno». `POST
+ * /api/v1/huggingface/download` passava il corpo al servizio senza guardarlo: con `{}` il
+ * manifest veniva rifiutato dentro `hf-direct-transfer.validateManifest` con il codice
+ * `HF_TRANSFER_INVALID`, che però non ha mai avuto una riga in `STATUS_BY_CODE` — quindi
+ * `normalizeError` restituiva `statusCode: undefined`, `res.writeHead(undefined)` lanciava, e
+ * la rete di sicurezza in fondo a `httpApp` rispondeva 500 INTERNAL_ERROR. Il chiamante
+ * riceveva «il server ha un problema» per una richiesta che era SUA, e il motivo vero
+ * (quale campo manca) non usciva da nessuna parte. Due difetti in fila, curati entrambi: qui
+ * la forma del corpo, e in `normalizeError` il codice senza stato.
+ *
+ * ⛔ Qui si controlla SOLO LA FORMA, come fanno le altre nove POST di questo file: la
+ * validazione fine (i byte dei file sommano al totale, il percorso non esce dalla radice,
+ * il repository esiste) resta in `hf-direct-transfer.mjs`, unica verità sul manifest — due
+ * copie della stessa regola divergono, e questa non deve essere più severa dell'altra o
+ * rifiuterebbe richieste legittime senza che nessuno capisca perché.
+ */
+const REVISIONE_HF = /^[a-f0-9]{40,64}$/iu;
+const IMPRONTA_SHA256 = /^[a-f0-9]{64}$/iu;
+function requireHuggingFaceDownloadBody(body) {
+  const nonVuota = (valore) => typeof valore === 'string' && valore.trim() !== '';
+  const interoPositivo = (valore) => Number.isSafeInteger(valore) && valore > 0;
+  const fileValido = (file) => file !== null && typeof file === 'object' && !Array.isArray(file)
+    && nonVuota(file.path) && interoPositivo(file.bytes)
+    && typeof file.sha256 === 'string' && IMPRONTA_SHA256.test(file.sha256);
+  const valido = body !== null && typeof body === 'object' && !Array.isArray(body)
+    && nonVuota(body.id) && nonVuota(body.repo)
+    && typeof body.revision === 'string' && REVISIONE_HF.test(body.revision)
+    && Array.isArray(body.files) && body.files.length > 0 && body.files.every(fileValido)
+    && interoPositivo(body.bytes)
+    && nonVuota(body.path);
+  if (!valido) {
+    const errore = new Error('Corpo non valido: atteso {id, repo, revision (hash 40-64 esa), files: [{path, bytes, sha256}], bytes, path}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+}
+
 function requireCustomTaskBody(body) {
   // ⭐⭐⭐ 29/8 — FASE K: stesso principio di requireTaskIdBody, modelloPlanner riusa modelloRichiestaValido.
   const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo'];
@@ -1757,6 +1886,8 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const body = await leggiCorpoJson(req, 1_000_000);
+        // 08/9, BH-07 — prima l'input di chi chiama, poi il servizio: stesso ordine di /huggingface/repo e /huggingface/image, e un corpo malformato non torna valido aspettando (vedi la doc su requireHuggingFaceDownloadBody)
+        requireHuggingFaceDownloadBody(body);
         if (!localModelTransfer || typeof localModelTransfer.start !== 'function') { const error = new Error('Download Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const data = await localModelTransfer.start(body);
         sendJson(res, 200, successEnvelope(data, clock), method);
@@ -2765,7 +2896,16 @@ export function createHttpApp({
         data = await hfHubClient.searchModels({ query, limit, cursor, sort, direction, author, filters });
       } else if (url.pathname === '/api/v1/huggingface/repo') {
         const repo = url.searchParams.get('repo'); const revision = url.searchParams.get('revision');
-        if (!repo || !hfHubClient?.describeModel || !hfHubClient?.listGgufFiles) { const error = new Error('Hub Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
+        /*
+         * ⛔⛔ 08/9, BH-19 — DUE GUASTI DIVERSI SOTTO LO STESSO CODICE. «manca il parametro
+         * `repo`» e «l'hub non è collegato» stavano nella stessa guardia, e la risposta era per
+         * entrambi 503 RUNTIME_NOT_AVAILABLE: una richiesta scritta male accusava il server di
+         * essere giù, e chi la leggeva andava a cercare un servizio spento che non c'entrava.
+         * ⇒ Prima l'input di chi chiama (400), poi la disponibilità del servizio (503) —
+         *   la stessa forma che `/api/v1/huggingface/image` usa già trenta righe più sotto.
+         */
+        if (!repo) { const error = new Error('Parametro repo mancante'); error.code = 'QUERY_INVALID'; throw error; }
+        if (!hfHubClient?.describeModel || !hfHubClient?.listGgufFiles) { const error = new Error('Hub Hugging Face non configurato'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
         const detail = await hfHubClient.describeModel(repo, revision || 'main');
         /*
          * ⛔⛔⛔ 03/9 — BUG REALE trovato riproducendo la chiamata a mano:
@@ -3533,6 +3673,18 @@ export function createHttpApp({
           const asset = await staticHandler(url.pathname);
           if (!asset) {
             sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+            return;
+          }
+          /*
+           * ⛔ 08/9, BH-06 — solo il DOCUMENTO porta il nonce, e uno diverso a ogni risposta:
+           * un foglio di stile o uno script serviti a parte non hanno un `<style>` da timbrare,
+           * e ripetere lo stesso valore su più risposte trasformerebbe il nonce in una costante
+           * pubblica. Il file su disco non viene toccato: la riga entra qui, mentre si serve.
+           */
+          if (typeof asset.contentType === 'string' && asset.contentType.startsWith('text/html')) {
+            const nonce = creaNonceCsp();
+            const documento = iniettaNonceNelDocumento(asset.body.toString('utf8'), nonce);
+            send(res, asset.statusCode, asset.contentType, documento, method, intestazioniDocumentoConNonce(nonce));
             return;
           }
           send(res, asset.statusCode, asset.contentType, asset.body, method);

@@ -223,7 +223,7 @@ export function modelloRichiestaValido(raw) {
  * **59 modelli del catalogo dichiarano `max`**, 8 lo hanno come predefinito.
  * Ricerca 06/09/2026 (openrouter.ai «Reasoning tokens»; big-AGI #940; OpenRouterTeam/ai-sdk-provider,
  * «Provider options and reasoning»): l'insieme canonico è xhigh/high/medium/low/minimal/none, e i
- * modelli Claude accettano anche `max`; ciò che un modello non supporta viene mappato da OpenRouter
+ * alcune famiglie di modelli accettano anche `max`; ciò che un modello non supporta viene mappato da OpenRouter
  * sul livello più vicino. ⇒ Il cancello ammette anche `max`: rifiutare un valore che il NOSTRO
  * catalogo dichiara è un cancello che litiga con i propri dati.
  */
