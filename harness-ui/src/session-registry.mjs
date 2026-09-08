@@ -2806,7 +2806,33 @@ export function createSessionRegistry({
         };
       }
       return avviaESegui({
-        taskId: originale.taskId, cartella: originale.cartella, task: originale.task,
+        taskId: originale.taskId,
+        /*
+         * ⛔⛔⛔ 08/09/2026 — TERZA cosa che `forka` dimenticava di ripassare, per lo STESSO
+         * motivo delle due già raccontate qui sotto (i permessi, e `permessiPerAttrezzo`): un fork
+         * crea una VOCE NUOVA, quindi tutto ciò che la voce DERIVA va ripassato per nome.
+         * Passando `originale.cartella` (già effettiva) senza la bandiera, `avviaESegui`
+         * ricostruiva la voce e ripassava da `cartellaEffettivaPerPermessi` con
+         * `cartellaGiaScelta` a `false`: una sessione avviata su una cartella SCELTA A MANO — che
+         * passa obbligatoriamente da «Full access», vedi il cancello in `avviaLibero` — vedeva il
+         * suo fork allargato alla RADICE DEL DISCO. Misurato: `actual: 'C:'`, lo stesso danno
+         * curato la mattina stessa per la delega (`subagent-orchestrator.mjs`, `da8df6f1`).
+         *
+         * ⇒ Si ripassano ENTRAMBI i pezzi da cui la cartella si deriva — quella di PARTENZA e la
+         *   bandiera — non il risultato: così il fork riproduce l'originale anche PIÙ TARDI, se il
+         *   permesso viene alzato a metà conversazione (`aggiornaImpostazioni` rifa lo stesso
+         *   calcolo su `cartellaBase` + `cartellaGiaScelta`).
+         *
+         * Ricerca 08/09/2026: lo stato dell'arte tratta la cartella di un fork come una cosa che
+         * non deve andare alla deriva — Claude Code issue #60272 («decouple new sessions from the
+         * working directory of prior sessions»), e le note di GitKraken Desktop sui fork, che
+         * «keep their own captured path or fall back cleanly to the project root rather than
+         * drifting». Qui la deriva non era nemmeno verso la radice del progetto: verso quella del
+         * disco.
+         */
+        cartella: originale.cartellaBase ?? originale.cartella,
+        cartellaGiaScelta: originale.cartellaGiaScelta === true,
+        task: originale.task,
         comandoProva: originale.comandoProva, messaggiIniziali: originale.messaggiFinali,
         forkDa: sessionIdOrigine, mobile: originale.mobile,
         /*
