@@ -403,6 +403,34 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-session-item.is-selection-mode > .talos-checkbox{order:-1; margin:0; align-self:center; justify-self:center}
 .talos-session-item.is-selected{border-color:var(--talos-accent-border); background:var(--talos-accent-soft)}
 .talos-session-item:hover{background:var(--talos-card-subtle)}
+/* ⛔ 08/09 — le figlie di una delega: rientrate sotto la loro madre, legate da una linea ad albero.
+   Non si nascondono (hermes-webui #1004: «should remain visible as a tree»); si annidano, che è
+   anche la cura all'allagamento della barra (OpenClaw #89249, opencode #14053).
+
+   ⛔ 08/09, owner: «fai in modo che le sotto righe siano più compatte verticalmente e facciano
+   capire con una linea tree che sono correlate a quella sessione padre». Due cose, entrambe qui:
+
+   (1) PIÙ COMPATTE — l'altezza scende da `--talos-row-session` (66px) a `--talos-row` (44px), che è
+       il passo di riga già in uso altrove nel tema: non un numero nuovo. Il contenuto è lo stesso,
+       stretto sulle sue misure; il pallino e il testo secondario restano leggibili.
+   (2) LA LINEA AD ALBERO — un tronco verticale (`::before`) e un gomito orizzontale (`::after`)
+       che entra nella riga a metà altezza: la forma con cui ogni albero di file disegna
+       l'appartenenza, riconoscibile senza spiegazioni. L'ULTIMA figlia ferma il tronco al gomito
+       (`--ultima`), o la linea proseguirebbe nel vuoto sotto l'ultima riga — è il dettaglio che
+       distingue un albero vero da tre trattini messi lì.
+   Il colore è `--talos-border-subtle`, il bordo tenue già del tema: la linea guida l'occhio, non
+   compete col contenuto. */
+.talos-session-item--figlia{position:relative; width:auto; min-height:var(--talos-row); margin-left:calc(var(--talos-space-md) * var(--talos-delega-livello, 1)); padding-top:calc(var(--talos-row-pad) - 6px); padding-bottom:calc(var(--talos-row-pad) - 6px)}
+.talos-session-item--figlia .talos-session-item__title{font-weight:450}
+/* ⛔ `top` NEGATIVO di un passo di pila: le righe della barra sono separate da `--talos-gap`, e un
+   tronco che parte dal bordo superiore della figlia lascia quel vuoto scoperto — la linea sembrava
+   nascere dal nulla invece che dalla madre. Visto nella foto, non nei numeri. Risalendo del gap, il
+   tronco della prima figlia tocca la riga della madre e quelli delle sorelle si saldano fra loro:
+   una linea sola e continua, che è ciò che l'owner ha chiesto («facciano capire che sono correlate
+   a quella sessione padre»). */
+.talos-session-item--figlia::before{content:""; position:absolute; left:calc(var(--talos-space-sm) * -1); top:calc(var(--talos-gap) * -1); bottom:0; width:1px; background:var(--talos-border-subtle)}
+.talos-session-item--figlia::after{content:""; position:absolute; left:calc(var(--talos-space-sm) * -1); top:50%; width:calc(var(--talos-space-sm) - 1px); height:1px; background:var(--talos-border-subtle)}
+.talos-session-item--figlia.talos-session-item--ultima::before{bottom:50%}
 .talos-session-item[aria-current="true"]{background:linear-gradient(90deg,var(--talos-accent-soft),color-mix(in srgb,var(--talos-accent) 8%,transparent)); border-color:var(--talos-accent-border); box-shadow:inset 2px 0 var(--talos-accent); color:var(--talos-text)}
 .talos-session-item > span:first-child{min-width:0}
 .talos-session-item__title{display:block; font-weight:600; font-size:13.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--talos-text)}
@@ -2281,9 +2309,16 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
            pagina (misurato su una lettura vera: 4.157 caratteri su ~39.000) — e si rispegne da solo. -->
       <!-- ⛔ 08/9, owner: «rimetti il pulsante pagina accanto a testo dell’agente». I due modi
            tornano a essere una coppia, ma QUI, nella riga delle azioni, non più in una striscia
-           tutta loro che si prendeva una riga intera sopra la pagina. -->
-      <button class="talos-button talos-button--secondary talos-button--sm" data-browser-modo="pagina" aria-pressed="true" data-tip-lato="sotto" title="Mostra la pagina come si vede davvero">Pagina</button>
-      <button class="talos-button talos-button--ghost talos-button--sm" data-browser-modo="testo" aria-pressed="false" data-tip-lato="sotto" title="Mostra il testo che ha ricevuto l'agente, che può essere una parte della pagina">Testo dell’agente<span class="talos-browser__quanto" data-browser-quanto hidden></span></button>
+           tutta loro che si prendeva una riga intera sopra la pagina.
+           ⛔ La richiesta era la POSIZIONE, non quale dei due fosse premuto: spostandolo avevo
+           invertito anche lo stato, e il mockup e' finito in contraddizione con se' stesso —
+           «Pagina» premuto sopra un corpo che disegna il TESTO acquisito. Trovato dal cancello
+           di parita' appena e' tornato a girare. Qui il premuto resta «Testo dell'agente», che e'
+           cio' che questo disegno illustra e che il laboratorio riproduce (lab/main.js,
+           modoIniziale 'testo'); nel prodotto il predefinito e' «Pagina», e la differenza sta
+           dichiarata in components/browser.js. -->
+      <button class="talos-button talos-button--ghost talos-button--sm" data-browser-modo="pagina" aria-pressed="false" data-tip-lato="sotto" title="Mostra la pagina come si vede davvero">Pagina</button>
+      <button class="talos-button talos-button--secondary talos-button--sm" data-browser-modo="testo" aria-pressed="true" data-tip-lato="sotto" title="Mostra il testo che ha ricevuto l'agente, che può essere una parte della pagina">Testo dell’agente<span class="talos-browser__quanto" data-browser-quanto hidden></span></button>
       <button class="talos-button talos-button--secondary talos-button--sm" data-browser-demo="annotate" title="Prepara una bozza nella chat senza inviarla">Annota</button>
       <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="note" aria-expanded="false" aria-controls="browserEditorNota">Nota locale</button>
       <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="copy">Copia testo</button>

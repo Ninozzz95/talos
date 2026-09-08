@@ -406,6 +406,18 @@ function esitoDelProcesso(chiamata) {
  *   `registrato:false` + `processi:null` quando non c'è NIENTE da leggere —
  *   che è un fatto diverso da «nessun processo» (`registrato:true`, `[]`).
  */
+/**
+ * Il nome corto di una delega: la prima riga non vuota, al massimo 80 caratteri.
+ * ⛔ Stessa regola con cui il ripristino ricava il `nome` di un compito libero — una sola forma per
+ *   «come si chiama a schermo un compito», invece di due che divergono.
+ */
+export function nomeCortoDaConsegna(consegna) {
+  const riga = String(consegna || '').split(String.fromCharCode(10)).map((r) => r.trim()).find((r) => r.length > 0);
+  if (!riga) return null;
+  const pulita = riga.replace(/\s+/g, ' ');
+  return pulita.length > 80 ? `${pulita.slice(0, 79)}…` : pulita;
+}
+
 export function processiDaEventi(eventi, { istanti = null, adesso = null } = {}) {
   if (!Array.isArray(eventi) || eventi.length === 0) {
     return { registrato: false, processi: null, motivo: 'non-registrato' };
@@ -3982,6 +3994,53 @@ export function createSessionRegistry({
           permessiPerAttrezzo: voce.permessiPerAttrezzo ?? null,
           provider: voce.provider ?? 'cloud', runtimeId: voce.runtimeId ?? null, modelId: voce.modelId ?? voce.modello ?? null,
           fallbackProvider: voce.fallbackProvider ?? null,
+          /*
+           * ⛔⛔⛔ 08/09/2026 — senza questi due campi la barra a sinistra NON PUÒ sapere che una
+           * sessione è una figlia: mostra le deleghe sciolte accanto alla madre, come tre lavori
+           * indipendenti (visto dal vivo dall'owner). Non era un difetto di disegno del frontend —
+           * lì la parola `padreId` non compariva nemmeno una volta: il dato non usciva di qui.
+           * `forkDa` c'era già e non basta: un fork è una sessione PARI, una figlia è subordinata.
+           *
+           * ⭐ È anche la causa vera di quello che sembrava un difetto della scheda «Agenti»: quella
+           *   dipende dalla sessione attiva, e con le figlie in mezzo alle madri è facilissimo
+           *   trovarsi su quella sbagliata.
+           *
+           * Ricerca 08/09/2026 — lo stato dell'arte dice cosa farne, e cosa NON fare:
+           * `nesquena/hermes-webui` #1004 (le figlie «should be displayed as a delegation tree
+           * rather than collapsed… should remain visible as a tree» ⇒ non si nascondono), OpenClaw
+           * Control UI (riga madre espandibile, figlie annidate con stato e durata, e aprirne una
+           * «preserva la gerarchia»), Zed #57481 (l'unica domanda aperta è quanto indentare prima di
+           * appiattire, «for MAX_SUBAGENT_DEPTH > 2» — da noi non si pone, il limite è 2).
+           * ⛔ E il modo di sbagliare, documentato tre volte: OpenClaw #89249 (il selettore diventa
+           * inusabile, «1 / 177», tutto il resto sono figlie), opencode #14053 (la Web UI mostra le
+           * figlie che la TUI filtra) e la segnalazione su Codex («flood the desktop app sidebar with
+           * no way to scope them»). È esattamente dove eravamo.
+           *
+           * ⇒ Qui esce il DATO, e nient'altro: `null`/`0` per ogni sessione avviata da una persona,
+           *   mai un legame inventato. Come presentarlo lo decide la barra.
+           */
+          padreId: voce.padreId ?? null,
+          profonditaDelega: voce.profonditaDelega ?? 0,
+          /*
+           * ⛔ 08/09, visto nella foto della barra dopo aver annidato le figlie: si chiamavano
+           *   entrambe «Delega · e02f5d85-b610-4e3b-…» — l'id della MADRE, identico per tutte, e per
+           *   giunta un identificatore grezzo a schermo (vietato dalla regola sui nomi tecnici).
+           *   Due righe indistinguibili: per sapere quale è quale bisognava aprirle. È lo stesso
+           *   difetto trovato oggi sulle schede del browser, in un altro punto dello schermo.
+           * ⇒ La figlia porta il SUO compito. `elencaFigli` lo esponeva già (per il foglio «Albero
+           *   sessione»): qui esce anche nell'elenco, che è ciò che la barra legge.
+           *   `null` per una sessione che un compito non ce l'ha: mai una stringa inventata.
+           */
+          /*
+           * ⛔ La forma CORTA, e non è un dettaglio: la prima versione passava la consegna intera e
+           *   la colonna destra la stampava per venti righe, spingendo le schede
+           *   «Contesto/File/Agenti/Processi» fuori dalla vista. Visto nella foto della pagina
+           *   intera, non dai numeri — la barra e la testata tagliano da sole con l'ellissi, il
+           *   pannello destro no. Un nome si accorcia dove NASCE, o ogni superficie deve ricordarsi
+           *   di farlo. 80 caratteri e la prima riga: la stessa regola già usata dal ripristino per
+           *   il `nome` di un compito libero.
+           */
+          taskDelega: voce.padreId ? nomeCortoDaConsegna(voce.task?.consegnaCorta || voce.task?.consegna) : null,
           // ⭐⭐⭐ FASE L (30/8) — true SOLO per una voce ricostruita dopo un riavvio il cui ultimo evento non era RunFinished/RunError: il processo che la eseguiva è sparito, mai un turno "ancora in corso" travestito da tale.
           interrotta: voce.interrotta ?? false,
           // ⭐⭐⭐ 02/09 — la campanella del desktop: una sessione ferma su un'approvazione è la notifica più urgente, e solo l'elenco la può dire a chi guarda un'ALTRA sessione.

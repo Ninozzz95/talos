@@ -298,3 +298,82 @@ test('⛔ FORK, AL CONTRARIO: l\'allargamento LEGITTIMO dell\'allowlist sopravvi
     rmSync(progetto, { recursive: true, force: true });
   }
 });
+
+/*
+ * ⛔⛔⛔ LA BARRA A SINISTRA NON PUÒ SAPERE CHE UNA SESSIONE È UNA FIGLIA (08/09).
+ *
+ * L'owner l'ha visto dal vivo: dopo una delega la barra mostra due sessioni «Delega» sciolte,
+ * accanto alla madre, come se fossero tre lavori indipendenti. Non è un difetto di disegno del
+ * frontend: `elenca()` espone `forkDa` ma NON `padreId` né `profonditaDelega`, e nel frontend la
+ * parola `padreId` non compare nemmeno una volta (verificato con grep su `frontend/src/`). La
+ * barra non ha proprio il dato — nessuna scelta di presentazione era possibile.
+ *
+ * ⭐ È anche la causa VERA di quello che sembrava un difetto della scheda «Agenti»: la scheda
+ *   dipende dalla sessione attiva, e con le figlie sciolte in mezzo alle madri è facilissimo
+ *   trovarsi su quella sbagliata senza accorgersene (vedi §8.1 del ticket).
+ *
+ * ⭐ Ricerca 08/09/2026 — lo stato dell'arte è concorde su COSA farne, e su cosa NON fare:
+ *   · `nesquena/hermes-webui` #1004: le sessioni figlie «should be displayed as a delegation tree
+ *     rather than collapsed… should remain visible as a tree» ⇒ **non si nascondono**.
+ *   · OpenClaw Control UI: la madre ha una riga espandibile, le figlie righe annidate con stato e
+ *     durata; aprire una figlia «preserva la gerarchia».
+ *   · Zed #57481 lascia aperta una sola domanda — quanto indentare prima di appiattire, «for
+ *     MAX_SUBAGENT_DEPTH > 2». Da noi non si pone: `LIMITE_PROFONDITA_DELEGA = 2`.
+ *   · ⛔ E il modo di sbagliare, documentato tre volte: OpenClaw #89249 (il selettore diventa
+ *     inusabile, «1 / 177», tutto il resto sono figlie), opencode #14053 (la Web UI mostra le
+ *     figlie che la TUI filtra) e la segnalazione su Codex («flood the desktop app sidebar with no
+ *     way to scope them»). È esattamente dove eravamo.
+ *
+ * ⇒ Primo passo, qui: il DATO. Senza `padreId` e `profonditaDelega` nell'elenco, l'albero non si
+ *   può disegnare. La presentazione viene subito dopo, nella barra.
+ */
+test('⛔ BARRA: l\'elenco delle sessioni dice CHI è figlia di chi, o l\'albero non si può disegnare', async () => {
+  const cartellaMadre = cartellaVera('talos-barra-');
+  try {
+    const finto = modelloFinto();
+    const { registro, madreId } = registroConMadre(cartellaMadre, finto);
+    finto.avvii[0].onDelega('scrivi la PARTE 1');
+
+    const elenco = registro.elenca();
+    assert.equal(elenco.length, 2, 'madre + figlia: sono due sessioni vere, entrambe nell\'elenco');
+
+    const madre = elenco.find((s) => s.sessionId === madreId);
+    const figlia = elenco.find((s) => s.sessionId !== madreId);
+
+    assert.equal(madre.padreId, null, 'una sessione avviata da una persona non ha padre: mai un id inventato');
+    assert.equal(madre.profonditaDelega, 0, 'la madre sta alla radice dell\'albero');
+
+    assert.equal(figlia.padreId, madreId,
+      'la figlia deve dire di chi è figlia, o la barra la mostra sciolta accanto alla madre');
+    assert.equal(figlia.profonditaDelega, 1,
+      'la profondità serve a indentare: senza, l\'albero è piatto anche avendo i legami');
+  } finally {
+    rmSync(cartellaMadre, { recursive: true, force: true });
+  }
+});
+
+test('⛔ BARRA: il nome di una figlia è CORTO alla fonte — la prima riga, 80 caratteri', async () => {
+  /*
+   * ⛔ Visto nella foto della pagina intera, non nei numeri: passando la consegna INTERA, la colonna
+   *   destra la stampava per venti righe e spingeva le schede «Contesto/File/Agenti/Processi» fuori
+   *   dalla vista. La barra e la testata tagliano da sole con l'ellissi, quel pannello no.
+   * ⇒ Un nome si accorcia dove NASCE, o ogni superficie deve ricordarsi di farlo.
+   */
+  const cartellaMadre = cartellaVera('talos-nome-');
+  try {
+    const finto = modelloFinto();
+    const { registro, madreId } = registroConMadre(cartellaMadre, finto);
+    const lunga = `Scrivi la PARTE 1 di un paper tecnico su GLM-5.3 e la metodologia di post-training scaling${'x'.repeat(200)}\nSeconda riga`;
+    finto.avvii[0].onDelega(lunga);
+
+    const figlia = registro.elenca().find((s) => s.padreId === madreId);
+    assert.ok(figlia.taskDelega, 'una figlia deve portare il suo compito, o la barra non sa come chiamarla');
+    assert.ok(figlia.taskDelega.length <= 80, `il nome deve stare in 80 caratteri, ne ha ${figlia.taskDelega.length}`);
+    assert.ok(figlia.taskDelega.endsWith('…'), 'un nome tagliato lo dichiara con i puntini, non finisce di colpo');
+    assert.ok(!figlia.taskDelega.includes('Seconda riga'), 'solo la PRIMA riga: un nome non è un paragrafo');
+    assert.equal(registro.elenca().find((s) => s.sessionId === madreId).taskDelega, null,
+      'una sessione avviata da una persona non ha un «compito delegato»: mai un nome inventato');
+  } finally {
+    rmSync(cartellaMadre, { recursive: true, force: true });
+  }
+});

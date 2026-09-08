@@ -1227,6 +1227,38 @@ select:focus-visible,
 .talos-session-item:hover {
   background: var(--talos-card-subtle);
 }
+.talos-session-item--figlia {
+  position: relative;
+  width: auto;
+  min-height: var(--talos-row);
+  margin-left: calc(var(--talos-space-md) * var(--talos-delega-livello, 1));
+  padding-top: calc(var(--talos-row-pad) - 6px);
+  padding-bottom: calc(var(--talos-row-pad) - 6px);
+}
+.talos-session-item--figlia .talos-session-item__title {
+  font-weight: 450;
+}
+.talos-session-item--figlia::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--talos-space-sm) * -1);
+  top: calc(var(--talos-gap) * -1);
+  bottom: 0;
+  width: 1px;
+  background: var(--talos-border-subtle);
+}
+.talos-session-item--figlia::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--talos-space-sm) * -1);
+  top: 50%;
+  width: calc(var(--talos-space-sm) - 1px);
+  height: 1px;
+  background: var(--talos-border-subtle);
+}
+.talos-session-item--figlia.talos-session-item--ultima::before {
+  bottom: 50%;
+}
 .talos-session-item[aria-current=true] {
   background:
     linear-gradient(
