@@ -167,6 +167,7 @@ function esempioDiIndirizzo(schema) {
   }
   corpo = corpo.split('([^/]+)').join('esempio');            // un id qualunque
   corpo = corpo.split('[a-f0-9]{12}').join('a1b2c3d4e5f6');  // il riferimento di Doctor
+  corpo = corpo.split('[a-f0-9]{64}').join('a'.repeat(64));  // il riferimento immagine
   corpo = corpo.replace(/\(([^)]*)\)/g, (_, dentro) => dentro.split('|')[0]); // prima alternativa
   return corpo.split(BARRA_ROVESCIA + '/').join('/');
 }

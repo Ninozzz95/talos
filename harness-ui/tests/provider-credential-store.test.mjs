@@ -21,6 +21,14 @@ function fakeKeyring(initial = {}) {
   };
 }
 
+test('NATIVE-STORE-01 adapter collegati e credenziale configurata sono stati distinti', () => {
+  const rows = createProviderCredentialStore({ env: {}, keyring: fakeKeyring() }).listPublic();
+  for (const id of ['openai', 'anthropic', 'gemini']) {
+    assert.equal(rows.find(row => row.id === id).execution, 'collegato');
+    assert.equal(rows.find(row => row.id === id).keyConfigured, false);
+  }
+});
+
 test('PROVIDER-STORE-01 bootstrap ambiente e lista pubblica non espongono i segreti', () => {
   const secret = 'sk-openrouter-private';
   const store = createProviderCredentialStore({ env: { OPENROUTER_API_KEY: `  ${secret}  ` } });

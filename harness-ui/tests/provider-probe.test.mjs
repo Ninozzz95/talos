@@ -1,7 +1,57 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+test('NATIVE-CATALOG-01 Gemini pagina modelli utilizzabili senza esportare la chiave', async () => {
+  let calls = 0;
+  const probe = createProviderProbe({ leggiChiave: () => 'test-key', leggiRuntime: () => ({endpoint:'https://generativelanguage.googleapis.com/v1beta'}), fetchImpl: async (url, init) => {
+    calls++;
+    assert.equal(new Headers(init.headers).get('x-goog-api-key'), 'test-key');
+    assert.ok(!String(url).includes('test-key'));
+    return Response.json(calls === 1 ? {models:[{name:'models/gemini-3.8-flash',displayName:'Gemini Flash',supportedGenerationMethods:['generateContent'],inputTokenLimit:1000000}],nextPageToken:'next'} : {models:[{name:'models/embedding-001',supportedGenerationMethods:['embedContent']}]});
+  }});
+  const result = await probe.elencaModelli('gemini');
+  assert.equal(calls,2); assert.deepEqual(result.modelli.map(m=>m.id),['gemini:gemini-3.8-flash']);
+  assert.ok(!JSON.stringify(result).includes('test-key'));
+});
 
 import { createProviderProbe, SONDE_PROVIDER } from '../src/provider-probe.mjs';
+
+test('NATIVE-CATALOG-03 dati incompleti o malformati non diventano un catalogo valido', async () => {
+  for (const [provider, reply] of [
+    ['anthropic',()=>Response.json({data:[{id:'claude-a'}],has_more:true})],
+    ['gemini',()=>Response.json({models:[{supportedGenerationMethods:['generateContent']}]})],
+    ['openai',()=>new Response('{bad-json')],
+  ]) {
+    const probe=createProviderProbe({leggiChiave:()=> 'k',leggiRuntime:()=>({endpoint:'https://provider.test/v1'}),fetchImpl:reply});
+    await assert.rejects(probe.elencaModelli(provider),{code:'CATALOG_UPSTREAM_ERROR'});
+  }
+});
+
+test('NATIVE-CATALOG-02 cataloghi Anthropic/OpenAI e paginazione guasta restano espliciti', async () => {
+  const calls = [];
+  const probe = createProviderProbe({
+    leggiChiave: () => 'catalog-test-secret',
+    leggiRuntime: () => ({ endpoint: 'https://provider.test/v1', timeoutSeconds: 5 }),
+    fetchImpl: async (url, init) => {
+      calls.push({ url: new URL(url), headers: new Headers(init.headers) });
+      if (init.headers.Authorization) return Response.json({ data: [{id:'gpt-5.4'}, {id:'gpt-4o-audio-preview'}, {id:'gpt-3.5-turbo-instruct'}] });
+      return Response.json(calls.length === 1
+        ? { data: [{id:'claude-a',display_name:'Claude A',max_input_tokens:200000,capabilities:{image_input:{supported:true}}}], has_more:true,last_id:'claude-a' }
+        : { data: [{id:'claude-b'}], has_more:false });
+    },
+  });
+  const anthropic = await probe.elencaModelli('anthropic');
+  assert.deepEqual(anthropic.modelli.map(m=>m.id), ['anthropic:claude-a','anthropic:claude-b']);
+  assert.deepEqual(anthropic.modelli[0].inputModalities, ['text','image']);
+  assert.equal(calls[0].headers.get('anthropic-version'), '2023-06-01');
+  assert.equal(calls[1].url.searchParams.get('after_id'), 'claude-a');
+  const openai = await probe.elencaModelli('openai');
+  assert.deepEqual(openai.modelli.map(m=>m.id), ['openai:gpt-5.4']);
+  assert.ok(!JSON.stringify([anthropic,openai]).includes('catalog-test-secret'));
+  const broken = createProviderProbe({ leggiChiave:()=> 'k', leggiRuntime:()=>({endpoint:'https://provider.test/v1'}), fetchImpl:async()=>Response.json({data:[],has_more:true,last_id:'same'}) });
+  await assert.rejects(broken.elencaModelli('anthropic'), {code:'CATALOG_UPSTREAM_ERROR'});
+  const missing = createProviderProbe({ leggiChiave:()=>null, leggiRuntime:()=>({}), fetchImpl:()=>assert.fail('Non chiamare senza credenziale') });
+  await assert.rejects(missing.elencaModelli('gemini'), {code:'PROVIDER_KEY_MISSING'});
+});
 
 /*
  * ⭐⭐⭐ 03/9 — «questa chiave funziona davvero?».

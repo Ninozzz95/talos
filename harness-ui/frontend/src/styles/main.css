@@ -1,3 +1,4 @@
 /* Punto d'ingresso dei fogli (06/09): il foglio del mockup generato + il tampone del foglio «Nuova sessione» del monolite. */
 @import './index.css';
 @import './foglio-monolite.css';
+@import './immagini-chat.css';

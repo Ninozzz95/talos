@@ -23,11 +23,8 @@
  * ⇒ Per i modelli LOCALI e altri quattro provider basta cambiare indirizzo e
  * intestazioni. Nessuna traduzione del corpo, nessun adattatore nuovo.
  *
- * ⛔ Anthropic e Gemini NO: vogliono una forma di richiesta diversa
- * (`/v1/messages` con `x-api-key`; `:generateContent` con la chiave in query,
- * e ruoli/contenuti strutturati altrimenti). Qui vengono RIFIUTATI con un
- * messaggio che dice perché e cosa manca — mai instradati su un URL che
- * risponderebbe 404 lasciando credere a una chiave sbagliata.
+ * Anthropic e Gemini usano native-provider-adapter con SDK fissati nel lock:
+ * /v1/messages e :generateContent, immagini e firme di ragionamento native.
  *
  * ## La convenzione sul nome, e perché i DUE PUNTI
  *
@@ -67,17 +64,14 @@ export function separaFonteModello(modello) {
 }
 
 /** Chi parla `POST {base}/chat/completions` con Bearer: il corpo non si tocca. */
-const COMPATIBILI_OPENAI = Object.freeze(['openrouter', 'openai', 'deepseek', 'ollama', 'local']);
+const COMPATIBILI_OPENAI = Object.freeze(['openrouter', 'deepseek', 'ollama', 'local']);
 
 /**
  * Chi NON lo parla, e cosa gli servirebbe. ⛔ Il messaggio dice la cosa vera —
  * la credenziale può essere ottima, manca la traduzione dalla nostra parte —
  * perché un errore che sembra colpa della chiave manda a rigenerarne una buona.
  */
-const DA_TRADURRE = Object.freeze({
-  anthropic: 'Anthropic usa /v1/messages con un formato di richiesta diverso: la traduzione non è ancora scritta.',
-  gemini: 'Gemini usa :generateContent con un formato di richiesta diverso: la traduzione non è ancora scritta.',
-});
+const NATIVI = Object.freeze(['anthropic', 'gemini', 'openai']);
 
 /**
  * @param {string} modello id, con o senza prefisso di fonte
@@ -93,8 +87,7 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
   }
   const { fonte, modelloRemoto } = separaFonteModello(modello);
 
-  if (DA_TRADURRE[fonte]) throw new ModelDestinationError(DA_TRADURRE[fonte], 'MODEL_PROVIDER_NOT_SUPPORTED_YET');
-  if (!COMPATIBILI_OPENAI.includes(fonte)) throw new ModelDestinationError(`Fonte del modello non riconosciuta: ${fonte}`, 'MODEL_DESTINATION_INVALID');
+  if (!COMPATIBILI_OPENAI.includes(fonte) && !NATIVI.includes(fonte)) throw new ModelDestinationError(`Fonte del modello non riconosciuta: ${fonte}`, 'MODEL_DESTINATION_INVALID');
 
   if (fonte === 'local') {
     /*
@@ -133,6 +126,7 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
     throw new ModelDestinationError(`Manca la chiave per ${fonte}: inseriscila in Laboratorio modelli → Provider.`, 'PROVIDER_KEY_MISSING');
   }
 
+  if (NATIVI.includes(fonte)) return { fonte, modelloRemoto, native: true, baseURL: base, apiKey: chiave };
   const headers = { 'Content-Type': 'application/json' };
   if (chiave) headers.Authorization = `Bearer ${chiave}`;
   // ⛔ Ollama espone il protocollo OpenAI sotto /v1, il suo indirizzo base no.

@@ -13,6 +13,14 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { describe, it } from 'node:test'
+it('NATIVE-06 conserva lo stato firmato soltanto con fine stream completa', async () => {
+    const state = { version: 1, provider: 'gemini', model: 'gemini-3.8-flash', content: [{ type: 'text', text: 'ciao' }] }
+    const frame = `data: ${JSON.stringify({ choices: [{ delta: { content: 'ciao', talos_provider_state: state } }] })}\n\n`
+    const complete = await consumaFlussoSSE(new Response(frame + 'data: [DONE]\n\n'))
+    assert.deepEqual(complete.scelta.talos_provider_state, state)
+    const partial = await consumaFlussoSSE(new Response(frame))
+    assert.equal(partial.scelta.talos_provider_state, undefined)
+})
 import { fileURLToPath } from 'node:url'
 import {
     siRitenta, attesaDelTentativo, chiamaConRitenta, consumaFlussoSSE,

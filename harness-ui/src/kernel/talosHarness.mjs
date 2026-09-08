@@ -54,6 +54,7 @@ import { request as richiestaHttp } from 'node:http'
 import { request as richiestaHttps } from 'node:https'
 import { basename, dirname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { imageMessageContent } from '../chat-image-attachments.mjs'
 import { discoNode, fontiDaDisco, cancelloSemantico, libreriaStandard }
     from './dist/kernelPerIlBanco.js'
 
@@ -376,6 +377,8 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
     let reasoning = ''
     const toolCalls = []
     let usage = null
+    let providerState = null
+    let streamCompleted = false
     /*
      * ⛔⛔ LO STOP CHE ARRIVA DENTRO LO STREAM — 08/09/2026, owner: «se clicco
      * fermo la conversazione si ferma all'istante», e il «prossimo punto
@@ -448,12 +451,13 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
             const riga = evento.split('\n').find((l) => l.startsWith('data: '))
             if (!riga) continue
             const dati = riga.slice('data: '.length).trim()
-            if (dati === '[DONE]') continue
+            if (dati === '[DONE]') { streamCompleted = true; continue }
             let pacchetto = null
             try { pacchetto = JSON.parse(dati) } catch { continue /* chunk incompleto o rumore, mai un crash su un pezzo malformato */ }
             if (pacchetto.usage) usage = pacchetto.usage
             const delta = pacchetto?.choices?.[0]?.delta
             if (!delta) continue
+            if (delta.talos_provider_state?.version === 1) providerState = delta.talos_provider_state
             if (delta.content) { content += delta.content; onDelta?.({ tipo: 'testo', delta: delta.content }) }
             const ragionamento = delta.reasoning_content ?? delta.reasoning
             if (ragionamento) { reasoning += ragionamento; onDelta?.({ tipo: 'ragionamento', delta: ragionamento }) }
@@ -506,6 +510,7 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
     const scelta = { role: 'assistant', content: content || null }
     if (toolCalls.length > 0) scelta.tool_calls = toolCalls
     if (reasoning) scelta.reasoning_content = reasoning
+    if (streamCompleted && !ripetizione && providerState) scelta.talos_provider_state = providerState
     return { scelta, usage, ...(ripetizione ? { ripetizione } : {}) }
 }
 
@@ -4612,7 +4617,7 @@ export async function talosLavora({
                 messaggi.push({ role: 'system', content: `[Ambiente del device collegato] ${esitoSonda}` })
             }
         }
-        messaggi.push({ role: 'user', content: task.consegna })
+        messaggi.push({ role: 'user', content: imageMessageContent(task.consegna, task.immagini) })
     }
     /*
      * ⭐⭐⭐ FASE K (29/8) — R2, il pre-loop del planner. Vedi la doc

@@ -1,14 +1,40 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+test('IMAGE-06 — risolve immagini soltanto nelle richieste modello senza alterare la cronologia', async () => {
+  let sent;
+  const content = [{ type: 'image_url', image_url: { url: '/api/v1/chat-images/' + 'a'.repeat(64) } }];
+  const adapter = createOwnerRuntimeAdapter({
+    modulePath: process.cwd() + '/runtime-image-fixture.mjs',
+    importFn: async () => ({ talosLavora: async input => input.fetchDiRete('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', body: JSON.stringify({ model: 'google/gemini-3.8-flash', messages: [{ role: 'user', content }], stream: false }) }) }),
+    resolveImagesFn: async messages => messages.map(m => ({ ...m, content: [{ type: 'image_url', image_url: { url: 'data:image/png;base64,AA==' } }] })),
+  });
+  await adapter.talosLavora({ fetchDiRete: async (url, init) => { sent = JSON.parse(init.body); return new Response('{}', { status: 200 }); } });
+  assert.equal(sent.messages[0].content[0].image_url.url, 'data:image/png;base64,AA==');
+  assert.match(content[0].image_url.url, /^\/api/);
+});
+
 import {
   OwnerRuntimeUnavailableError,
   adattaRichiestaConDescrizioneComando,
   chiamaConRitentaLocale,
   compattaConversazioneLocale,
   creaFetchConDescrizioneComando,
+  creaFetchMultiProvider,
   createOwnerRuntimeAdapter,
 } from '../src/runtime-owner-adapter.mjs';
+
+test('NATIVE-09 OpenAI traduce il ragionamento senza perdere le immagini', async () => {
+  let sent;
+  const routed = creaFetchMultiProvider(async (_url, init) => {sent = JSON.parse(init.body);return Response.json({});}, {
+    dipendenze:{}, risolvi:()=>({fonte:'openai',modelloRemoto:'gpt-5.4-mini',url:'https://api.openai.com/v1/chat/completions',headers:{Authorization:'Bearer test'}}),
+  });
+  const messages = [{role:'user',content:[{type:'image_url',image_url:{url:'data:image/png;base64,AA=='}}]}];
+  await routed('https://openrouter.ai/api/v1/chat/completions',{body:JSON.stringify({model:'openai:gpt-5.4-mini',messages,reasoning:{effort:'low',exclude:true}})});
+  assert.equal(sent.reasoning_effort,'low');
+  assert.equal(sent.reasoning,undefined);
+  assert.deepEqual(sent.messages,messages);
+});
 
 test('TOOL-DESCRIPTION-CONTRACT-01 — lo schema desktop richiede al modello una descrizione umana per shell', () => {
   const richiesta = {

@@ -15,6 +15,37 @@ import {
 } from '../src/session-registry.mjs';
 import { CustomTaskError } from '../src/custom-task.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
+import { imageMessageContent } from '../src/chat-image-attachments.mjs';
+
+test('IMAGE-09 — dopo errore prima del checkpoint la ripresa conserva i pixel referenziati', async () => {
+  const finta = sessioneControllabile();
+  const image = { id: 'c'.repeat(64), nome: 'controllo.png', tipo: 'immagine', url: '/api/v1/chat-images/' + 'c'.repeat(64) };
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta, cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto', nome: 'progetto' }], modello: 'm', chiave: 'k' });
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'Guarda questa', immagini: [image] });
+  finta.concludi({ type: 'RunError', message: 'rete interrotta' }, { ok: false });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(registro.resume(sessionId, 'riprova per favore').sessionId, sessionId);
+  assert.deepEqual(finta.ultimoInput.messaggiIniziali[0].content, imageMessageContent('Guarda questa', [image]));
+});
+
+test('IMAGE-05 — resume conserva riferimento immagine nel checkpoint e nel replay', async () => {
+  const cartellaStore = cartellaStoreVera(), sessionId = 'sess-image-resume';
+  const image = { id: 'b'.repeat(64), nome: 'controllo.png', tipo: 'immagine', url: '/api/v1/chat-images/' + 'b'.repeat(64) };
+  const finta = sessioneControllabile();
+  try {
+    seminaStoricoRecupero(cartellaStore, sessionId, storiaRecuperoMinima());
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+    assert.equal(registro.resume(sessionId, 'Guarda questa immagine', [image]).sessionId, sessionId);
+    assert.deepEqual(finta.ultimoInput.messaggiIniziali.at(-1).content, imageMessageContent('Guarda questa immagine', [image]));
+    assert.deepEqual(finta.ultimoInput.task.immagini, [image]);
+    const stored = readFileSync(join(cartellaStore, sessionId + '.jsonl'), 'utf8');
+    assert.ok(stored.includes(image.url));
+  } finally {
+    if (finta.chiamate) { finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali } }); await attendiRegistroSuDisco(cartellaStore, sessionId, r => r.some(x => x.tipo === 'messaggi-finali' && x.versioneGiro === 2)); }
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
 import { WorkspaceTreeError } from '../src/workspace-tree.mjs';
 import { WorkspaceFileError } from '../src/workspace-files.mjs';
 import { HookRegistryError } from '../src/hook-registry.mjs';
@@ -4361,6 +4392,20 @@ test('REGISTRY-REDIRECT-07/REPLAY-12 — reindirizza interrompe al confine sicur
   await new Promise((resolve) => setImmediate(resolve));
 });
 
+test('IMAGE-10 redirect conserva foto sia nel contesto sia nell’evento di replay', async () => {
+  const first = sessioneControllabile(), second = sessioneControllabile(); let calls = 0;
+  const registro = createSessionRegistry({avviaSessioneFn: input => (++calls === 1 ? first : second).avviaSessioneFn(input),preparaEsecuzioneFn:preparaEsecuzioneFinta,modello:'m',chiave:'k'});
+  const {sessionId} = registro.avvia('task-vero');
+  const image = { id:'f'.repeat(64), tipo:'immagine', nome:'nota.png', url:'/api/v1/chat-images/'+ 'f'.repeat(64) };
+  const events = []; registro.iscriviti(sessionId,event=>events.push(event));
+  registro.reindirizza(sessionId,'Guarda questa invece',{immagini:[image]});
+  first.concludi({type:'RunFinished'}, {ok:false,esito:{messaggiFinali:[{role:'user',content:'Ciao'}]}});
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(events.find(e=>e.type==='RunRedirectApplied').immagini,[image]);
+  assert.deepEqual(second.ultimoInput.messaggiIniziali.at(-1).content,imageMessageContent('Guarda questa invece',[image]));
+  second.concludi({type:'RunFinished'});
+});
+
 test('REGISTRY-REDIRECT-TIMEOUT-14 — un timeout prima del primo token riparte dal task noto invece di perdere il redirect', async () => {
   const primoGiro = sessioneControllabile();
   const secondoGiro = sessioneControllabile();
@@ -4917,6 +4962,23 @@ test('WORKSPACE-CHANGED-EPHEMERAL-02 — al ripristino i WorkspaceChanged già s
   } finally {
     rmSync(cartellaStore, { recursive: true, force: true });
   }
+});
+
+test('WORKSPACE-CHANGED-EPHEMERAL-03 watcher dopo fine giro non avanza il cursore di ripresa', async () => {
+  const finta=sessioneControllabile();
+  let notify;
+  const registry=createSessionRegistry({avviaSessioneFn:finta.avviaSessioneFn,preparaEsecuzioneFn:preparaEsecuzioneFinta,guardaWorkspaceFn:(_p,fn)=>{notify=fn;return()=>{};},modello:'m',chiave:'k'});
+  const {sessionId}=registry.avvia('task-vero');
+  const seen=[];const stop=registry.iscriviti(sessionId,e=>seen.push(e));
+  finta.concludi({type:'RunFinished'}, {ok:true});
+  await new Promise(resolve=>setImmediate(resolve));
+  const durable=Math.max(...seen.map(e=>e._sequenza||0));
+  notify(['nota.txt']);notify(['altro.txt']);
+  const cursor=Math.max(...seen.map(e=>e._sequenza||0));
+  assert.equal(cursor,durable,'Il client può ricordare solo un cursore recuperabile dopo il riavvio');
+  assert.equal(seen.at(-1).type,'WorkspaceChanged');
+  assert.equal(seen.at(-1)._sequenza,undefined);
+  stop();
 });
 
 test('ELENCA-APPROVAZIONE-03 — elenca() dice se una sessione è ferma su un approvazione, e torna false appena risolta', async () => {

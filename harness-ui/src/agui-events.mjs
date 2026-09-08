@@ -58,8 +58,8 @@ export function runRedirectRequested({ redirectId, testo }) {
     return { type: 'RunRedirectRequested', redirectId, testo }
 }
 
-export function runRedirectApplied({ redirectId, testo }) {
-    return { type: 'RunRedirectApplied', redirectId, testo }
+export function runRedirectApplied({ redirectId, testo, immagini = [] }) {
+    return { type: 'RunRedirectApplied', redirectId, testo, ...(immagini.length ? { immagini } : {}) }
 }
 
 export function runRedirectCancelled({ redirectId }) {

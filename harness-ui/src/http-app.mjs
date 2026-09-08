@@ -609,6 +609,9 @@ function normalizeError(error) {
  * che accetta GET, perché a servirlo è `send()`, non una riga della catena.
  */
 const ROTTE_API = Object.freeze([
+  { schema: '/api/v1/chat-images', metodi: ['POST'] },
+  { schema: /^\/api\/v1\/chat-images\/[a-f0-9]{64}$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/providers\/(openai|anthropic|gemini)\/models$/, metodi: ['GET'] },
   { schema: '/api/v1/health', metodi: ['GET'] },
   { schema: '/api/v1/tasks', metodi: ['GET'] },
   { schema: '/api/v1/projects', metodi: ['GET'] },
@@ -1263,6 +1266,7 @@ export function createHttpApp({
   // ⭐ 04/9, W1-10 — token di loopback (config.token): quando c'è, /api/* vuole il cookie talos_token; `GET /?token=<t>` lo imposta e rimanda a `/`.
   token = null,
   workspaceLaunchStore = null,
+  chatImageStore = null,
   workspaceBrowser = null,
   /*
    * ⭐⭐⭐ 05/9, W1-01 — il registro delle SCHEDE terminale
@@ -1305,6 +1309,14 @@ export function createHttpApp({
   // ⛔⛔⛔ 28/8 — iniettabili SOLO per il test del battito SSE sotto: mai un setInterval reale nei test unitari, stesso principio di ogni altra dipendenza di questo file.
   impostaIntervalloFn = setInterval, cancellaIntervalloFn = clearInterval,
 }) {
+  async function imageInput(body) {
+    if (!body || !Object.hasOwn(body, 'immagini')) return { body, immagini: [] };
+    if (!chatImageStore) throw Object.assign(new Error('Gli allegati immagine non sono configurati.'), { code: 'QUERY_INVALID' });
+    const immagini = await chatImageStore.validateReferences(body.immagini);
+    const rest = { ...body };
+    delete rest.immagini;
+    return { body: rest, immagini };
+  }
   async function handle(req, res) {
     if (req.aborted || res.destroyed) return;
     const method = req.method || 'GET';
@@ -1381,6 +1393,32 @@ export function createHttpApp({
         sendJson(res, 401, errorEnvelope('AUTH_REQUIRED', clock), method);
         return;
       }
+    }
+
+    const nativeModelsMatch = url.pathname.match(/^\/api\/v1\/providers\/(openai|anthropic|gemini)\/models$/);
+    if (method === 'GET' && nativeModelsMatch && providerProbe) {
+      try { requireNoQuery(url); sendJson(res, 200, successEnvelope(await providerProbe.elencaModelli(nativeModelsMatch[1]), clock), method); }
+      catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
+      return;
+    }
+    const isImageUpload = method === 'POST' && url.pathname === '/api/v1/chat-images';
+    const isImageRead = method === 'GET' && /^\/api\/v1\/chat-images\/[a-f0-9]{64}$/.test(url.pathname);
+    if (chatImageStore && (isImageUpload || isImageRead)) {
+      try {
+        requireNoQuery(url);
+        if (method === 'POST') {
+          const image = await chatImageStore.upload(await leggiCorpoJson(req, 7 * 1024 * 1024));
+          sendJson(res, 201, successEnvelope(image, clock), method);
+        } else {
+          const image = await chatImageStore.read(url.pathname.split('/').at(-1));
+          res.writeHead(200, { 'Content-Type': image.mimeType, 'Content-Length': image.bytes.length, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, no-store', 'Content-Security-Policy': "default-src 'none'; sandbox" });
+          res.end(image.bytes);
+        }
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
     }
 
     if (method === 'POST' && workspaceLaunchStore && url.pathname === '/api/v1/workspace-launches') {
@@ -1914,7 +1952,9 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const richiesta = requireCustomTaskBody(corpo);
+        const { body: senzaImmagini, immagini } = await imageInput(corpo);
+        const richiesta = requireCustomTaskBody(senzaImmagini);
+        if (immagini.length) richiesta.immagini = immagini;
         const esito = sessionRegistry.avviaLibero(richiesta);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
@@ -2291,8 +2331,9 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
-        const { messaggio, redirectId } = requireRedirectBody(await leggiCorpoJson(req));
-        const esito = sessionRegistry.reindirizza(sessionId, messaggio, redirectId ? { redirectId } : {});
+        const { body, immagini } = await imageInput(await leggiCorpoJson(req));
+        const { messaggio, redirectId } = requireRedirectBody(body);
+        const esito = sessionRegistry.reindirizza(sessionId, messaggio, { ...(redirectId ? { redirectId } : {}), ...(immagini.length ? { immagini } : {}) });
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
@@ -2354,8 +2395,10 @@ export function createHttpApp({
          * campo diverso da stringa: un body malformato resta silenziosamente
          * "nessun messaggio nuovo" invece di rompere il resume classico.
          */
-        const nuovoMessaggioUtente = requireResumeBody(await leggiCorpoJson(req));
-        const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente);
+        const { body, immagini } = await imageInput(await leggiCorpoJson(req));
+        const nuovoMessaggioUtente = requireResumeBody(body);
+        if (!nuovoMessaggioUtente && immagini.length) throw Object.assign(new Error('Scrivi un messaggio per inviare le immagini.'), { code: 'QUERY_INVALID' });
+        const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente, immagini);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
@@ -2662,8 +2705,9 @@ export function createHttpApp({
           return;
         }
         const corpo = await leggiCorpoJson(req);
-        const messaggio = requireQueueBody(corpo);
-        const esito = sessionRegistry.accodaMessaggio(sessionId, messaggio);
+        const { body, immagini } = await imageInput(corpo);
+        const messaggio = requireQueueBody(body);
+        const esito = sessionRegistry.accodaMessaggio(sessionId, messaggio, immagini);
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
