@@ -63,6 +63,21 @@ test('CHAT-ATTESA-03 — lo storico interrotto non inventa una run attiva', asyn
 });
 
 for (const [width, height] of [[1440, 900], [1280, 900], [1024, 900], [1920, 1080], [2560, 1440], [3840, 2160]]) {
+  test(`CHAT-RECUPERO-01 — nota dello storico recuperato una sola volta, ${width}`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height });
+    await apri(page);
+    const recupero = { type: 'StateDelta', _sequenza: 2, delta: [{ op: 'add', path: '/recuperoCronologia', value: { versioneGiro: 2, chiamate: 1 } }] };
+    await eventi(page, [{ ...avvio, _sequenza: 1 }, recupero, recupero]);
+    const nota = page.locator('.real-session-status').filter({ hasText: 'Storico recuperato' });
+    await expect(nota).toHaveCount(1);
+    await expect(nota).toBeVisible();
+    await expect(nota).toContainText('1 chiamata incompleta');
+    await page.screenshot({ path: testInfo.outputPath(`storico-recuperato-${width}.png`) });
+    await apri(page, 'altra', true);
+    await apri(page);
+    await eventi(page, [{ ...avvio, _sequenza: 1 }, recupero, recupero]);
+    await expect(nota).toHaveCount(1);
+  });
   test(`CHAT-FONDO-01 — torno in fondo anche dopo la fine, ${width}`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height });
     await page.emulateMedia({ reducedMotion: width === 1440 ? 'no-preference' : 'reduce' });
