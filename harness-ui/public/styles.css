@@ -4593,6 +4593,22 @@ body.reduce-motion *::after {
 }
 @container (max-width:980px) {
   .talos-browser__tools {
+    gap: 4px;
+  }
+  .talos-browser__tools .talos-button {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .talos-browser__tools .talos-grow {
+    flex-grow: 0;
+  }
+  .talos-browser__tools {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+}
+@container (max-width:980px) {
+  .talos-browser__tools {
     flex-wrap: wrap;
   }
   .talos-browser__tools::after {

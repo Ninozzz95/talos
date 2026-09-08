@@ -1312,6 +1312,20 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
    striscia delle schede (`@container (max-width:720px)`, che si lega al contenitore più vicino) e
    a 1024 le schede si stringevano a «GL…». La striscia è SORELLA della card, non figlia: così la
    sua query torna a misurare quello che misurava prima. Difetto creato da me e visto nella foto. */
+/* ⛔ 08/9, visto a 1280x620: con sei azioni in riga «Copia testo» finiva a capo DA SOLA. Sotto i
+   760px di pannello le azioni stringono il passo — meno spazio fra loro e etichette piu corte non
+   servono, basta togliere il respiro in eccesso — e tornano a stare insieme. */
+@container (max-width:980px){
+  .talos-browser__tools{gap:4px}
+  .talos-browser__tools .talos-button{padding-left:8px; padding-right:8px}
+  /* ⛔ lo spaziatore si prendeva tutto lo spazio residuo e spingeva l ultimo pulsante a capo:
+     misurato a 1280x620, cinque azioni su una riga e «Copia testo» da sola sotto. Dove lo spazio
+     e poco, le azioni stanno attaccate: allineare a destra vale meno che vederle tutte. */
+  .talos-browser__tools .talos-grow{flex-grow:0}
+  /* ⛔ mancava UN pixel: azioni 559 + gap 24 = 583 contro 582 di area utile. Il respiro laterale
+     della riga vale meno di un pulsante che va a capo da solo. */
+  .talos-browser__tools{padding-left:6px; padding-right:6px}
+}
 @container (max-width:980px){
   .talos-browser__tools{flex-wrap:wrap}
   /* ⛔ l'a capo va CHIESTO, non sperato: con la sola flex-basis la coppia «Lettura N di N» +
