@@ -62,9 +62,9 @@ test('CHAT-ATTESA-03 — lo storico interrotto non inventa una run attiva', asyn
   await expect(page.locator('#conversation .talos-waiting')).toHaveCount(0);
 });
 
-for (const width of [1440, 1280, 1024]) {
+for (const [width, height] of [[1440, 900], [1280, 900], [1024, 900], [1920, 1080], [2560, 1440], [3840, 2160]]) {
   test(`CHAT-FONDO-01 — torno in fondo anche dopo la fine, ${width}`, async ({ page }, testInfo) => {
-    await page.setViewportSize({ width, height: 900 });
+    await page.setViewportSize({ width, height });
     await page.emulateMedia({ reducedMotion: width === 1440 ? 'no-preference' : 'reduce' });
     await apri(page);
     const button = page.getByRole('button', { name: 'Torna in fondo alla conversazione', exact: true });
@@ -79,6 +79,32 @@ for (const width of [1440, 1280, 1024]) {
     expect(box.width).toBeGreaterThanOrEqual(36);
     expect(box.width).toBe(box.height);
     expect(await button.evaluate(b => { const r = b.getBoundingClientRect(); return b.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); })).toBe(true);
+    await test.step('CHAT-FONDO-HOVER-02 — puntatore fermo al bordo, nessun salto o lampeggio', async () => {
+      const iniziale = await button.evaluate(b => {
+        const s = getComputedStyle(b);
+        return { color: s.backgroundColor, bordo: s.borderTopColor, icona: s.color };
+      });
+      await page.mouse.move(box.x + 3, box.y + box.height / 2);
+      const campioni = await button.evaluate(async b => {
+        const values = [];
+        for (let i = 0; i < 45; i++) {
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          const r = b.getBoundingClientRect();
+          const s = getComputedStyle(b);
+          values.push({ x: r.x, y: r.y, hover: b.matches(':hover'), color: s.backgroundColor, bordo: s.borderTopColor, icona: s.color });
+        }
+        return values;
+      });
+      await page.screenshot({ path: testInfo.outputPath(`hover-fondo-${width}.png`) });
+      expect(campioni.every(c => c.hover)).toBe(true);
+      expect(Math.max(...campioni.map(c => Math.abs(c.x - box.x)))).toBeLessThan(0.5);
+      expect(Math.max(...campioni.map(c => Math.abs(c.y - box.y)))).toBeLessThan(0.5);
+      expect(new Set(campioni.slice(-10).map(c => c.color)).size).toBe(1);
+      for (const c of campioni) {
+        expect({ color: c.color, bordo: c.bordo, icona: c.icona }).toEqual(iniziale);
+      }
+      await page.mouse.move(0, 0);
+    });
     await page.screenshot({ path: testInfo.outputPath(`torna-in-fondo-${width}.png`) });
     await button.focus();
     await page.keyboard.press('Enter');

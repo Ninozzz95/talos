@@ -1,12 +1,18 @@
 # Chat e modelli locali — segnalazioni owner 08/09/2026
 
+Precisazione vincolante owner su CHAT-FONDO-HOVER-02: nessun cambio di colore. Il requisito sostituisce il precedente feedback hover normale: sfondo, bordo e icona identici a riposo e hover/active. L'ispezione intermedia a 1280 ha inoltre mostrato testo sottostante attraverso lo sfondo hover trasparente: esito respinto. Il test confronta tutti i colori con lo stato iniziale per 45 frame. Correzione circoscritta al selettore già pianificato, con gli stessi token opachi dello stato iniziale. MDN translate consultata nuovamente 08/09/2026: https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/translate. Nessuna dipendenza aggiunta.
+
 ## Perimetro e responsabilità
+
+Regola owner aggiunta 08/09/2026: d'ora in poi includere screenshot 1080p (1920×1080), 1440p (2560×1440), 4K (3840×2160), aperti e giudicati dal principale. Si aggiungono alle larghezze 1440/1280/1024, non le sostituiscono. File interessati da questa estensione: `harness-ui/frontend/tests/browser/chat-attesa-fondo.spec.mjs`, questo ledger e `.claude/taccuini/astra-chat-locali-2026-09-08.md`; immagini sotto la cartella di prova già dichiarata. Ricerca prima dell'edit: documentazione Playwright emulation#viewport e screenshots, consultata 08/09/2026; stessa versione pinned 1.62.1. Viewport CSS a scala dispositivo 1, screenshot della viewport completa, nessun ridimensionamento artificiale del file.
 
 Base `dbb062b3`, worktree AVM-harness-desktop, branch lane/harness-desktop. Priorità ai tre difetti nuovi; il pannello destro e la coda restano aperti. 4174 solo lettura/prove visive; scritture e run di prova su 4314 isolata. Nessuna riparazione dello storico dell'owner senza decisione esplicita. Nessun push o modifica AGENTS.
 
 Owner informato prima della ricerca complessa: Astra xhigh consigliato, Fast spento. Agente `ricerca_motore_locale`, Astra xhigh, incaricato esplicitamente della ricerca approfondita e letture del motore; nessun edit, piano o avvio di modello delegato. Principale responsabile delle diagnosi, codice, prove e decisioni da sottoporre all'owner.
 
 ## Scenari permanenti
+
+- CHAT-FONDO-HOVER-02 (owner 08/09, priorità immediata): il pulsante ritorno al fondo cambia posizione al passaggio del mouse e oscilla di colore. Causa candidata: `.talos-button:hover` sostituisce `transform:translateX(-50%)` con `translateY(-1px)`, spostando il bersaglio dal puntatore. Ricerca MDN translate/transform consultata 08/09/2026: trasformazione di posizione individuale indipendente da transform; adattare CSS nativo senza librerie. Prima RED con puntatore fermo vicino al bordo, campionamento di coordinate, hover e colore su più frame. Correzione: centratura tramite translate indipendente e nessun sollevamento hover/active sul solo pulsante flottante; colore hover normale rimane stabile. File: mockup canonico, CSS e template rigenerati, test browser già previsto, public/styles.css e public/build-manifest.json generati, ledger e taccuino. Nessun nuovo token né modifica agli altri pulsanti. Recupero locale fermato al test RED finché questa regressione non è chiusa.
 
 Decisione owner 08/09/2026, risposta «scusa ho sbagliato, stessa conversazione»: LOCAL-RESUME-01 deve recuperare nella **stessa sessione**, preservando gli eventi originali e registrando esplicitamente ogni correzione. Supera l'opzione proposta di copia recuperata. Non chiedere di nuovo questa scelta; nessuna cancellazione o riscrittura silenziosa dello storico. Prove di scrittura restano isolate, prima della consegna sul prodotto.
 
@@ -67,3 +73,9 @@ Consegna UI: GREEN finale 9/9 (sei casi nuovi + tre regressioni replay/reasoning
 Diagnosi locale in sola lettura: sessione `8407d564-f7a0-4e4c-b737-ca5851046a50`, snapshot 2–5, messaggio indice 4, tool `elenca`, id `mIgrhDLAG26vqpiWzuk0OmPvg2BaTKmB`, argomenti `{`. Snapshot iniziale sano, 398 chiamate nel secondo, argomento incompleto conservato nei tre follow-up falliti. Il kernel attuale normalizza le nuove risposte ma `resume()` riusa gli snapshot precedenti senza quella normalizzazione. Occorre recupero tracciato e prevenzione verificati separatamente; nessun file di sessione originale modificato.
 
 **Cosa deve fare l'owner:** scelta ricevuta, stessa conversazione; nessun'altra azione per questa fase. **Cosa faccio io:** consegna UI e piano dettagliato del recupero locale, usando la ricerca delegata conclusa. **Cosa rimane:** recupero, prevenzione, prove reali/benchmark e coda, incluso PO-08.
+
+## Consegna hover 08/09/2026
+
+RED posizione: salto orizzontale misurato 18 px. RED colore successivo: sfondo e bordo differiscono dallo stato iniziale. GREEN: 9/9 casi browser, 45 frame per viewport con sfondo/bordo/icona identici allo stato iniziale e posizione entro 0,5 px; parità ChatFooter 3/3. Unità frontend 463/463 nella stessa fase. La regola hover/active del solo ritorno al fondo conserva gli stessi token del riposo. Build e riavvio 4174 completati; prove frontend con trasporto controllato, nessuna inferenza implicata. Screenshot finali aperti a tutte le sei risoluzioni e prova live scura Full HD.
+
+Cosa deve fare l'owner: ricaricare la 4174 per vedere il fix. Cosa faccio io dopo: recupero della conversazione locale nella stessa sessione. Cosa rimane: recupero e prevenzione, inferenza reale e benchmark, coda PO-08 e altre proposte.

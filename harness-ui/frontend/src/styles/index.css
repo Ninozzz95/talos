@@ -722,7 +722,8 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 /* ---------- 9. PIEDE DELLA CHAT: striscia (B31), coda (B15), compositore ---------- */
 .talos-chat-foot{flex:none; padding:0 44px 12px}   /* ⛔ 44 come la conversazione: e cosi che le due colonne coincidono */
 .talos-chat-return{position:relative; height:0}
-.talos-chat-return__button{position:absolute; bottom:12px; left:50%; transform:translateX(-50%); width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
+.talos-chat-return__button{position:absolute; bottom:12px; left:50%; translate:-50% 0; width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
+.talos-chat-return__button:is(:hover,:active):not(:disabled){transform:none; background:var(--talos-panel-soft); border-color:var(--talos-border)}
 .talos-status-strip{display:flex; align-items:center; gap:12px; padding:9px 14px; margin-bottom:8px; border-radius:11px; border:1px solid var(--talos-border); background:var(--talos-panel)}
 .talos-status-strip__pulse{width:8px; height:8px; border-radius:50%; background:var(--talos-accent-hover); flex:none; animation:talos-pulse 1.6s var(--talos-motion-ease) infinite}
 @keyframes talos-pulse{0%,100%{opacity:.35; transform:scale(.9)} 50%{opacity:1; transform:scale(1)}}
