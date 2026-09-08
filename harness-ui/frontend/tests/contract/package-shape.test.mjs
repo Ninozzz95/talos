@@ -12,12 +12,19 @@ test('il pacchetto frontend ha toolchain e comandi pinned senza cutover implicit
   const pkg = JSON.parse(await readFile(packagePath, 'utf8'));
   assert.equal(pkg.private, true);
   assert.equal(pkg.type, 'module');
-  // 05/9: via test:browser (suite di Opus cancellata); test:componenti e' il cancello dei componenti
-  for (const name of ['build', 'build:lab', 'test:unit', 'test:componenti', 'test:lab', 'test', 'verify']) {
+  /* 05/9: via test:browser (suite di Opus cancellata); test:componenti e' il cancello dei componenti.
+     ⛔ 08/09/2026, owner: «leva astra». `test:lab` faceva girare la suite ASTRA, scritta da un altro
+     agente (ChatGPT-6 Astra) che ha finito i crediti giorni fa: rossa da prima dell'08/9 — verificato
+     con un A/B su `558e2e97`, 9 falliti prima e 9 dopo, stessi nomi — e senza nessuno che la
+     riparasse. Una suite rossa che nessuno mantiene non e' una guardia: e' rumore che nasconde le
+     regressioni vere. I file restano nella storia di git, il comando no. */
+  for (const name of ['build', 'build:lab', 'test:unit', 'test:componenti', 'test', 'verify']) {
     assert.equal(typeof pkg.scripts?.[name], 'string', `script mancante: ${name}`);
   }
   assert.equal(pkg.scripts.build, 'node scripts/build.mjs');
-  assert.equal(pkg.scripts['test:lab'], 'node scripts/run-browser-tests.mjs --config=playwright.lab.config.mjs');
+  // AL CONTRARIO: la suite tolta non deve poter rientrare di soppiatto in un comando
+  assert.equal(pkg.scripts['test:lab'], undefined, 'ASTRA e\' stata tolta: non si rimette senza dirlo');
+  assert.doesNotMatch(pkg.scripts.test, /test:lab/, 'e non deve restare nel comando principale');
   assert.equal(pkg.devDependencies?.esbuild, '0.28.2');
   assert.equal(pkg.devDependencies?.['@playwright/test'], '1.62.1');
   assert.equal(pkg.devDependencies?.['axe-core'], '4.13.0');
