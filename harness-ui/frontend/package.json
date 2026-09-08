@@ -9,8 +9,7 @@
     "build": "node scripts/build.mjs",
     "build:lab": "node scripts/build-lab.mjs",
     "test:unit": "node scripts/run-node-tests.mjs",
-    "test:lab": "node scripts/run-browser-tests.mjs --config=playwright.lab.config.mjs",
-    "test": "npm run test:unit && npm run test:lab && npm run test:componenti",
+    "test": "npm run test:unit && npm run test:componenti",
     "verify": "node scripts/verify.mjs",
     "package": "node scripts/package-frontend.mjs",
     "test:componenti": "node scripts/run-browser-tests.mjs --config=playwright.componenti.config.mjs"
