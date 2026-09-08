@@ -13,6 +13,56 @@ import { API_SCHEMA, createHttpApp } from '../src/http-app.mjs';
 // provata in session-registry.test.mjs).
 import { createSessionRegistry } from '../src/session-registry.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
+import { createChatImageStore } from '../src/chat-image-attachments.mjs';
+
+test('NATIVE-CATALOG-HTTP il selettore riceve cataloghi nativi senza credenziali', async () => {
+  const calls = [];
+  const app = createHttpApp({ staticHandler: () => {}, providerProbe: { elencaModelli: async provider => {
+    calls.push(provider);
+    return {provider, modelli:[{id:provider+':modello',nome:'Modello reale'}]};
+  } } });
+  const server = createServer(app);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    for (const provider of ['anthropic','gemini','openai']) {
+      const response = await fetch(base + '/api/v1/providers/' + provider + '/models');
+      assert.equal(response.status,200);
+      assert.deepEqual((await response.json()).data, {provider,modelli:[{id:provider+':modello',nome:'Modello reale'}]});
+    }
+    assert.deepEqual(calls,['anthropic','gemini','openai']);
+    assert.equal((await fetch(base+'/api/v1/providers/gemini/models?key=browser-key')).status,400);
+  } finally { await new Promise(resolve=>server.close(resolve)); }
+});
+
+test('IMAGE-04 — upload e tutti gli ingressi trasmettono i riferimenti verificati', async () => {
+  const rootDir = mkdtempSync(join(tmpdir(), 'talos-image-http-'));
+  const store = createChatImageStore({ rootDir });
+  const calls = [];
+  const registry = {
+    avviaLibero: value => { calls.push(value); return { sessionId: 's' }; },
+    resume: (...value) => { calls.push(value); return { sessionId: 's' }; },
+    accodaMessaggio: (...value) => { calls.push(value); return { ok: true, posizione: 1 }; },
+    reindirizza: (...value) => { calls.push(value); return { ok: true, redirectId: 'r' }; },
+  };
+  const app = createHttpApp({ staticHandler: () => {}, sessionRegistry: registry, chatImageStore: store });
+  const server = createServer(app);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const post = (path, data) => fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  try {
+    const response = await post('/api/v1/chat-images', { nome: 'prova.png', dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC' });
+    assert.equal(response.status, 201);
+    const image = (await response.json()).data;
+    assert.equal((await fetch(base + image.url)).headers.get('content-type'), 'image/png');
+    for (const suffix of ['custom', 's/resume', 's/queue', 's/redirect']) {
+      const body = suffix === 'custom' ? { cartellaId: 'p1', consegna: 'Cosa vedi?' } : { messaggio: 'Cosa vedi?' };
+      const sent = await post('/api/v1/sessions/' + suffix, { ...body, immagini: [{ id: image.id }] });
+      assert.ok(sent.ok, suffix + ': ' + await sent.text());
+      assert.ok(JSON.stringify(calls.at(-1)).includes(image.id));
+    }
+  } finally { await new Promise(resolve => server.close(resolve)); rmSync(rootDir, { recursive: true, force: true }); }
+});
 
 // ⛔ Un sessionRegistry FINTO, scritto qui apposta: session-registry.mjs ha
 // già i suoi 10 test (buffer, iscrizione tardiva, stop). Questo file prova

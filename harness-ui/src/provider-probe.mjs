@@ -149,5 +149,44 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     };
   }
 
-  return Object.freeze({ prova });
+  async function elencaModelli(provider) {
+    if (!['openai', 'anthropic', 'gemini'].includes(provider)) throw new ProviderProbeError('Catalogo diretto non disponibile.', 'PROVIDER_INVALID');
+    const key = leggiChiave(provider);
+    if (!key) throw new ProviderProbeError('Inserisci la chiave nel pannello Provider.', 'PROVIDER_KEY_MISSING');
+    const runtime = leggiRuntime(provider);
+    const headers = { Accept: 'application/json' };
+    if (provider === 'anthropic') { headers['x-api-key'] = key; headers['anthropic-version'] = '2023-06-01'; }
+    else if (provider === 'gemini') headers['x-goog-api-key'] = key;
+    else headers.Authorization = `Bearer ${key}`;
+    const signal = AbortSignal.timeout(Math.min(runtime.timeoutSeconds || 30, 30) * 1000);
+    const rows = []; const cursors = new Set(); let cursor;
+    do {
+      const url = new URL(urlDellaSonda(SONDE_PROVIDER[provider], runtime.endpoint));
+      if (provider === 'gemini') { url.searchParams.set('pageSize', '1000'); if (cursor) url.searchParams.set('pageToken', cursor); }
+      if (provider === 'anthropic') { url.searchParams.set('limit', '1000'); if (cursor) url.searchParams.set('after_id', cursor); }
+      let response;
+      try { response = await fetchImpl(url.toString(), { headers, signal, redirect: 'error' }); }
+      catch { throw new ProviderProbeError('Catalogo del provider non raggiungibile.', 'CATALOG_UNREACHABLE'); }
+      if (!response.ok) throw new ProviderProbeError(`Catalogo ${provider}: HTTP ${response.status}.`, 'CATALOG_UPSTREAM_ERROR');
+      let data;
+      try { data = await response.json(); }
+      catch { throw new ProviderProbeError('Catalogo del provider non valido.', 'CATALOG_UPSTREAM_ERROR'); }
+      const page = provider === 'gemini' ? data?.models : data?.data;
+      if (!Array.isArray(page) || page.some(row => !row || typeof (provider === 'gemini' ? row.name : row.id) !== 'string')) throw new ProviderProbeError('Catalogo del provider non valido.', 'CATALOG_UPSTREAM_ERROR');
+      if (provider === 'anthropic' && data.has_more === true && (typeof data.last_id !== 'string' || !data.last_id)) throw new ProviderProbeError('Paginazione del catalogo incompleta.', 'CATALOG_UPSTREAM_ERROR');
+      rows.push(...page);
+      cursor = provider === 'gemini' ? data.nextPageToken : provider === 'anthropic' && data.has_more ? data.last_id : null;
+      if (cursor && (cursors.has(cursor) || cursors.size >= 20)) throw new ProviderProbeError('Paginazione del catalogo non valida.', 'CATALOG_UPSTREAM_ERROR');
+      cursors.add(cursor);
+    } while (cursor);
+    const modelli = rows.filter(row => provider === 'gemini' ? row.supportedGenerationMethods?.includes('generateContent') && !/(tts|image)/u.test(row.name) : provider === 'openai' ? /^(gpt-|chatgpt-|o[1-9])/u.test(row.id) && !/(audio|realtime|transcribe|tts|image|codex|instruct)/u.test(row.id) : typeof row.id === 'string').map(row => {
+      const id = provider === 'gemini' ? row.name.replace(/^models\//u, '') : row.id;
+      return { id: `${provider}:${id}`, nome: row.display_name || row.displayName || id, provider,
+        contextLength: row.max_input_tokens ?? row.inputTokenLimit ?? null,
+        ...(row.capabilities?.image_input ? { inputModalities: row.capabilities.image_input.supported ? ['text','image'] : ['text'] } : {}),
+      };
+    });
+    return { provider, modelli };
+  }
+  return Object.freeze({ prova, elencaModelli });
 }

@@ -50,8 +50,9 @@ test('MODEL-DEST-02 — il prefisso di fonte instrada, e il provider non vede la
   assert.equal(locale.modelloRemoto, 'qwen3-0.6b-q2-k', 'il prefisso non deve uscire verso il provider');
 
   const openai = risolviDestinazioneModello('openai:gpt-5.6', DEPS);
-  assert.equal(openai.url, 'https://api.openai.com/v1/chat/completions');
-  assert.equal(openai.headers.Authorization, 'Bearer k-openai');
+  assert.equal(openai.native, true);
+  assert.equal(openai.baseURL, 'https://api.openai.com/v1');
+  assert.equal(openai.apiKey, 'k-openai');
 
   // ⛔ Ollama espone il protocollo OpenAI sotto /v1; il suo indirizzo base no.
   const ollama = risolviDestinazioneModello('ollama:llama3.2', DEPS);
@@ -92,17 +93,16 @@ test('MODEL-DEST-05 — AL CONTRARIO: chiave mancante si dichiara PRIMA di chiam
   );
 });
 
-test('MODEL-DEST-06 — Anthropic e Gemini vengono RIFIUTATI con il motivo vero', async () => {
-  /*
-   * ⛔ Non parlano il protocollo OpenAI. Instradarli lì darebbe un 404 che
-   * sembra una credenziale sbagliata, e manderebbe a rigenerare una chiave
-   * buona — misurata funzionante il 03/9 (Anthropic 11 modelli, Gemini 50).
-   */
+test('MODEL-DEST-06 — Anthropic e Gemini usano il loro adapter nativo e richiedono la chiave', async () => {
   for (const fonte of ['anthropic', 'gemini']) {
+    const deps = { ...DEPS, leggiRuntime: () => ({ endpoint: 'https://provider.example/v1' }), leggiChiave: () => 'test-key' };
+    const destinazione = risolviDestinazioneModello(`${fonte}:un-modello`, deps);
+    assert.equal(destinazione.native, true);
+    assert.equal(destinazione.fonte, fonte);
+    assert.equal(destinazione.baseURL, 'https://provider.example/v1');
     assert.throws(
-      () => risolviDestinazioneModello(`${fonte}:un-modello`, DEPS),
-      (e) => e.code === 'MODEL_PROVIDER_NOT_SUPPORTED_YET' && /non è ancora scritta/u.test(e.message),
-      `${fonte} dovrebbe essere rifiutato dichiarando che manca la traduzione`,
+      () => risolviDestinazioneModello(`${fonte}:un-modello`, { ...deps, leggiChiave: () => null }),
+      (e) => e.code === 'PROVIDER_KEY_MISSING',
     );
   }
 });

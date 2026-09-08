@@ -37,6 +37,7 @@ import {
   reasoningMessageStart, reasoningMessageContent, reasoningMessageEnd, toolCallStart, toolCallArgs,
 } from './agui-events.mjs';
 import { CustomTaskError, preparaEsecuzioneLibera as preparaEsecuzioneLiberaReale } from './custom-task.mjs';
+import { imageMessageContent } from './chat-image-attachments.mjs';
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
 import {
@@ -1416,25 +1417,25 @@ export function createSessionRegistry({
     let messaggi = [];
     const testiAssistant = new Map();
     const aggiungi = (role, content) => {
-      if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string' || content.trim() === '') return;
+      if ((role !== 'user' && role !== 'assistant') || !(typeof content === 'string' ? content.trim() !== '' : Array.isArray(content) && content.length > 0)) return;
       const messaggio = { role, content };
       const ultimo = messaggi.at(-1);
-      if (ultimo?.role === messaggio.role && ultimo.content === messaggio.content) return;
+      if (ultimo?.role === messaggio.role && JSON.stringify(ultimo.content) === JSON.stringify(messaggio.content)) return;
       messaggi.push(messaggio);
     };
     // Gli eventi legacy di test/primi build non portavano ancora `input` nel
     // RunStarted: l'intestazione conserva comunque il prompt originale e
     // deve precedere qualunque risposta assistant completa.
-    aggiungi('user', voce.task?.consegna ?? voce.task?.consegnaCorta);
+    aggiungi('user', imageMessageContent(voce.task?.consegna ?? voce.task?.consegnaCorta, voce.task?.immagini));
     for (const evento of voce.eventi ?? []) {
       if (evento?.type === 'RunStarted') {
         if (Array.isArray(evento.input)) {
           const canonici = evento.input
-            .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && typeof item.content === 'string' && item.content.trim() !== '')
+            .filter((item) => item && (item.role === 'user' || item.role === 'assistant') && (typeof item.content === 'string' ? item.content.trim() !== '' : Array.isArray(item.content) && item.content.length > 0))
             .map((item) => ({ role: item.role, content: item.content }));
           if (canonici.length > 0) messaggi = canonici;
         } else {
-          aggiungi('user', evento.input?.consegna ?? evento.input?.consegnaCorta);
+          aggiungi('user', imageMessageContent(evento.input?.consegna ?? evento.input?.consegnaCorta, evento.input?.immagini));
         }
         continue;
       }
@@ -1554,7 +1555,6 @@ export function createSessionRegistry({
   }
 
   function broadcast(voce, evento) {
-    evento._sequenza = (voce.prossimaSequenza = (voce.prossimaSequenza ?? 0) + 1);
     /*
      * ⛔⛔⛔ 02/09 — review complessiva. WorkspaceChanged è STATO del
      * filesystem, non storia della sessione: la sessione e572474a (workspace
@@ -1566,9 +1566,11 @@ export function createSessionRegistry({
      * aggiorna dal vivo, contratto invariato), MAI in voce.eventi né su disco
      * — il client svuota comunque la cache dell'albero a ogni nuova
      * generazione, quindi un WorkspaceChanged storico non aveva niente da
-     * dire. `_sequenza` avanza lo stesso: Last-Event-ID resta monotono.
+     * dire. La notifica effimera non ha id SSE: il cursore di ripresa deve
+     * poter essere recuperato dal disco anche dopo il riavvio del server.
      */
     const effimero = evento.type === 'WorkspaceChanged';
+    if (!effimero) evento._sequenza = (voce.prossimaSequenza = (voce.prossimaSequenza ?? 0) + 1);
     if (!effimero) voce.eventi.push(evento);
     /*
      * ⭐⭐⭐ 04/9 — W1-02, l'istante in cui questo evento è arrivato. Serve al
@@ -2225,10 +2227,12 @@ export function createSessionRegistry({
       // Un input prioritario è già stato accettato: la FIFO resta intatta
       // per il giro successivo, mai consumata dal giro che stiamo fermando.
       if (voce.reindirizzamentoPendente) return null;
-      const testo = voce.codaMessaggi.shift();
-      if (testo == null) return null;
-      broadcast(voce, queuedMessageDelivered({ testo }));
-      return testo;
+      const item = voce.codaMessaggi.shift();
+      if (item == null) return null;
+      const testo = typeof item === 'string' ? item : item.testo;
+      const immagini = typeof item === 'string' ? [] : item.immagini;
+      broadcast(voce, { ...queuedMessageDelivered({ testo }), ...(immagini?.length ? { immagini } : {}) });
+      return imageMessageContent(testo, immagini);
     };
 
     /*
@@ -2343,7 +2347,7 @@ export function createSessionRegistry({
         voce.reindirizzamentoPendente = null;
         const haCronologiaCanonica = Array.isArray(voce.messaggiFinali);
         const messaggiInizialiRedirect = haCronologiaCanonica
-          ? [...voce.messaggiFinali, { role: 'user', content: redirect.testo }]
+          ? [...voce.messaggiFinali, { role: 'user', content: imageMessageContent(redirect.testo, redirect.immagini) }]
           : undefined;
         const consegnaOriginale = task?.consegna || task?.consegnaCorta || '';
         const consegnaRedirect = haCronologiaCanonica
@@ -2364,13 +2368,14 @@ export function createSessionRegistry({
           }
           voce.messaggiPendente = messaggiInizialiRedirect;
         }
-        broadcast(voce, runRedirectApplied({ redirectId: redirect.redirectId, testo: redirect.testo }));
+        broadcast(voce, runRedirectApplied({ redirectId: redirect.redirectId, testo: redirect.testo, immagini: redirect.immagini }));
         const ripartenza = avviaESegui({
           sessionId,
           taskId: voce.taskId,
           cartella: voce.cartella,
           task: {
             consegna: consegnaRedirect,
+            ...(redirect.immagini?.length ? { immagini: redirect.immagini } : {}),
             progetto: task?.progetto ?? voce.task?.progetto,
             seguito: true,
             reindirizzato: true,
@@ -2666,7 +2671,7 @@ export function createSessionRegistry({
      * diversi, mai sovrapposti.
      * @returns {{ok:true, posizione:number}|{erroreAvvio:string, code:string}}
      */
-    accodaMessaggio(sessionId, testo) {
+    accodaMessaggio(sessionId, testo, immagini = []) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       if (voce.conclusa) return { erroreAvvio: 'La sessione è già conclusa: usa resume(), non la coda', code: 'SESSION_NOT_READY' };
@@ -2684,7 +2689,7 @@ export function createSessionRegistry({
         return { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un messaggio in coda qui non verrebbe mai consegnato. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' };
       }
       if (typeof testo !== 'string' || testo.trim() === '') return { erroreAvvio: 'Il messaggio in coda non può essere vuoto', code: 'QUERY_INVALID' };
-      voce.codaMessaggi.push(testo);
+      voce.codaMessaggi.push(immagini.length ? { testo, immagini } : testo);
       return { ok: true, posizione: voce.codaMessaggi.length };
     },
     /**
@@ -2777,7 +2782,7 @@ export function createSessionRegistry({
      * client HTTP diretto non passa dal frontend).
      */
     avviaLibero({
-      cartellaId, cartellaLibera, workspaceLaunchId, consegna, comandoProva,
+      cartellaId, cartellaLibera, workspaceLaunchId, consegna, comandoProva, immagini = [],
       modello: modelloScelto = null, modelloPlanner: modelloPlannerScelto = null, reasoning: reasoningScelto = null, mobile = false,
       permessi: permessiScelto = null, permessiPerAttrezzo: permessiPerAttrezzoScelto = null,
     }) {
@@ -2809,6 +2814,7 @@ export function createSessionRegistry({
         if (errore instanceof CustomTaskError) return { erroreAvvio: errore.message, code: errore.code };
         throw errore;
       }
+      if (immagini.length) preparato.task = { ...preparato.task, immagini };
       const risultato = avviaESegui({
         taskId: workspaceLaunchId ? 'libero:workspace-launch' : (cartellaLibera ? 'libero:full-access' : `libero:${cartellaId}`), cartella: preparato.cartella, task: preparato.task,
         comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, modelloPlannerRichiesta: modelloPlannerScelto, reasoningRichiesto: reasoningScelto, mobile,
@@ -2934,7 +2940,7 @@ export function createSessionRegistry({
      * @param {string} [nuovoMessaggioUtente]
      * @returns {{sessionId:string}|{erroreAvvio:string, code:string}}
      */
-    resume(sessionId, nuovoMessaggioUtente = null) {
+    resume(sessionId, nuovoMessaggioUtente = null, immagini = []) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       if (!voce.conclusa && !voce.interrotta) {
@@ -2988,7 +2994,7 @@ export function createSessionRegistry({
         return { erroreAvvio: 'Lo storico contiene una chiamata danneggiata che non può essere associata con certezza al suo risultato. Nessun dato è stato modificato.', code: 'HISTORY_RECOVERY_AMBIGUOUS' };
       }
       const messaggiIniziali = nuovoMessaggioUtente
-        ? [...storiaRiprendibile, { role: 'user', content: nuovoMessaggioUtente }]
+        ? [...storiaRiprendibile, { role: 'user', content: imageMessageContent(nuovoMessaggioUtente, immagini) }]
         : storiaRiprendibile;
       const prossimaVersioneGiro = (voce.versioneGiro ?? 0) + 1;
       if (recupero) recupero.versioneGiro = prossimaVersioneGiro;
@@ -3017,7 +3023,7 @@ export function createSessionRegistry({
        * `seguito:true` distingue "questo è un secondo turno" per app.js.
        */
       const taskAnnunciato = nuovoMessaggioUtente
-        ? { consegna: nuovoMessaggioUtente, progetto: voce.task?.progetto, seguito: true }
+        ? { consegna: nuovoMessaggioUtente, progetto: voce.task?.progetto, seguito: true, ...(immagini.length ? { immagini } : {}) }
         : voce.task;
       const ripresa = avviaESegui({
         sessionId, taskId: voce.taskId, cartella: voce.cartella, task: taskAnnunciato,
@@ -3743,7 +3749,7 @@ export function createSessionRegistry({
      * riparte sullo stesso sessionId con la storia realmente restituita dal
      * kernel e il nuovo input utente.
      */
-    reindirizza(sessionId, testo, { redirectId: redirectIdRichiesto = null } = {}) {
+    reindirizza(sessionId, testo, { redirectId: redirectIdRichiesto = null, immagini = [] } = {}) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       const redirectId = typeof redirectIdRichiesto === 'string' && redirectIdRichiesto.length > 0
@@ -3760,7 +3766,7 @@ export function createSessionRegistry({
       if (voce.reindirizzamentoPendente) {
         return { erroreAvvio: 'Un reindirizzamento è già in attesa del prossimo confine sicuro', code: 'SESSION_NOT_READY' };
       }
-      voce.reindirizzamentoPendente = { redirectId, testo: pulito };
+      voce.reindirizzamentoPendente = { redirectId, testo: pulito, ...(immagini.length ? { immagini } : {}) };
       broadcast(voce, runRedirectRequested({ redirectId, testo: pulito }));
       negaApprovazionePendente(voce);
       voce.controller.abort();

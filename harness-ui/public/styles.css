@@ -9219,4 +9219,153 @@ dialog.command-dialog .tool-chips .status-chip,
   --talos-tampone-monolite:1;
 }
 
+/* src/styles/immagini-chat.css */
+.talos-image-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 8px 0 0;
+  max-width: 100%;
+}
+.talos-image-card {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  width: 240px;
+  max-width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--talos-border);
+  border-radius: 12px;
+  background: var(--talos-panel);
+  color: var(--talos-text);
+  font: inherit;
+  text-align: left;
+  cursor: zoom-in;
+  transform: none;
+  transition: none;
+}
+.talos-image-card:hover {
+  background: var(--talos-panel);
+  color: var(--talos-text);
+  transform: none;
+}
+.talos-image-card:focus-visible {
+  outline: 2px solid var(--talos-ring);
+  outline-offset: 3px;
+}
+.talos-image-card img {
+  display: block;
+  width: 100%;
+  height: 160px;
+  object-fit: contain;
+  background: var(--talos-background);
+  padding: 6px;
+}
+.talos-image-card__caption {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  padding: 8px 10px;
+  border-top: 1px solid var(--talos-border-subtle);
+  font-size: 11px;
+  color: var(--talos-muted);
+}
+.talos-image-card--compact {
+  width: 132px;
+  border-radius: 9px;
+}
+.talos-image-card--compact img {
+  height: 80px;
+  padding: 4px;
+}
+.talos-image-card--compact .talos-image-card__caption {
+  padding: 5px 7px;
+  font-size: 10px;
+}
+.talos-allegati:has(.talos-image-card) {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.talos-allegati__voce:has(.talos-image-card) {
+  position: relative;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: grid;
+  gap: 4px;
+}
+.talos-allegati__voce:has(.talos-image-card) > .talos-allegati__nome {
+  display: none;
+}
+.talos-allegati__voce:has(.talos-image-card) > .talos-allegati__togli {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--talos-panel);
+  border: 1px solid var(--talos-border);
+  color: var(--talos-text);
+}
+.talos-image-viewer {
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--talos-border);
+  border-radius: 14px;
+  background: var(--talos-panel);
+  color: var(--talos-text);
+  width: min(1100px, 94vw);
+  max-height: 92dvh;
+  overflow: hidden;
+}
+.talos-image-viewer::backdrop {
+  background: var(--talos-overlay);
+}
+.talos-image-viewer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--talos-border);
+}
+.talos-image-viewer__header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.talos-image-viewer__header button {
+  padding: 6px 12px;
+  border: 1px solid var(--talos-border);
+  border-radius: 7px;
+  background: var(--talos-panel-soft);
+  color: var(--talos-text);
+  cursor: pointer;
+}
+.talos-image-viewer > img {
+  display: block;
+  max-height: calc(92dvh - 64px);
+  width: 100%;
+  object-fit: contain;
+  padding: 12px;
+}
+@media (max-width: 480px) {
+  .talos-image-card {
+    width: 200px;
+  }
+  .talos-image-card--compact {
+    width: 112px;
+  }
+  .talos-image-card img {
+    height: 136px;
+  }
+  .talos-image-card--compact img {
+    height: 72px;
+  }
+}
+
 /* src/styles/main.css */

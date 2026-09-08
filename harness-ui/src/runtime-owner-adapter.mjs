@@ -14,6 +14,7 @@ import { createParser } from 'eventsource-parser';
 import { eseguiFlowForgeLocale, FORGE_PREFISSO_NOME_TOOL, validaManifestForgeLocale } from './forge-contract.mjs';
 import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
 import { risolviDestinazioneModello, separaFonteModello } from './model-destination.mjs';
+import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
 const RICHIESTA_DI_RIASSUNTO = 'Riassumi la conversazione mantenendo decisioni, file e risultati utili al lavoro.';
@@ -529,7 +530,16 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, { risolvi = risolviD
       await dipendenze.avviaLocale(modelloRemoto); // ⛔ se l'avvio stesso fallisce, il SUO errore (non quello generico "non acceso") arriva a chi ha chiamato
       destinazione = risolvi(corpo.model, dipendenze); // dopo un avvio riuscito questo non deve più lanciare: se lancia ancora, è un errore vero da mostrare, non da inghiottire
     }
+    if (destinazione.native) return nativeProviderResponse({ provider: destinazione.fonte, model: destinazione.modelloRemoto, apiKey: destinazione.apiKey, baseURL: destinazione.baseURL, body: corpo, fetchFn: fetchDiRete, signal: opzioni.signal });
+    if (corpo.messages?.some(m => m.talos_provider_state)) {
+      corpo = { ...corpo, messages: stripNativeMetadata(corpo.messages) };
+      opzioni = { ...opzioni, body: JSON.stringify(corpo) };
+    }
     if (destinazione.fonte === 'openrouter') return fetchDiRete(url, opzioni);
+    if (destinazione.fonte === 'openai' && corpo.reasoning) {
+      const { reasoning, ...resto } = corpo;
+      corpo = { ...resto, ...(typeof reasoning.effort === 'string' ? { reasoning_effort: reasoning.effort } : {}) };
+    }
     const corpoRiscritto = JSON.stringify({ ...corpo, model: destinazione.modelloRemoto });
     /*
      * ⛔ Il motore locale si chiama attraverso il SUO supervisore, non con una
@@ -565,6 +575,7 @@ export function createOwnerRuntimeAdapter({
    * sempre, byte per byte: chi non le passa non cambia di una virgola.
    */
   destinazioneModelloDeps = null,
+  resolveImagesFn = null,
 } = {}) {
   const specifier = normalizzaModuloPath(modulePath);
   let moduloPromise = null;
@@ -693,7 +704,22 @@ export function createOwnerRuntimeAdapter({
        * dirottata altrove.
        */
       const fetchInstradata = creaFetchMultiProvider(fetchResiliente, { dipendenze: destinazioneModelloDeps });
-      return richiama('talosLavora', { ...input, fetchDiRete: fetchInstradata });
+      const fetchConImmagini = async (url, init = {}) => {
+        if (!resolveImagesFn || !String(url).includes('/chat/completions') || typeof init.body !== 'string') return fetchInstradata(url, init);
+        let body;
+        try { body = JSON.parse(init.body); } catch { return fetchInstradata(url, init); }
+        if (!Array.isArray(body.messages)) return fetchInstradata(url, init);
+        const hasImages = body.messages.some(m => Array.isArray(m.content) && m.content.some(p => p?.type === 'image_url'));
+        if (hasImages) {
+          const capability = await Promise.resolve(modelCapabilityFn(body.model)).catch(() => null);
+          if (capability?.inputModalities?.length && !capability.inputModalities.includes('image')) {
+            throw new OwnerRuntimeUnavailableError('Il modello selezionato non accetta immagini. Scegli un modello con visione.', 'MODEL_IMAGE_NOT_SUPPORTED');
+          }
+        }
+        const messages = await resolveImagesFn(body.messages);
+        return fetchInstradata(url, { ...init, body: JSON.stringify({ ...body, messages }) });
+      };
+      return richiama('talosLavora', { ...input, fetchDiRete: fetchConImmagini });
     },
     async eseguiComandoSandboxato(...args) { return richiama('eseguiComandoSandboxato', ...args); },
     async eseguiFlowForge(...args) {

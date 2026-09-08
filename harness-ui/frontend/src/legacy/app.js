@@ -53,7 +53,8 @@ import { montaNote } from '../components/note.js'; // 06/9 C24: la pagina delle 
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
 import { sommaUsage, usageDellaSessione } from '../components/consumo-sessione.js'; // 06/9 CB-04: il consumo della SESSIONE, non dell'ultimo invio
-import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, chipDegliAllegati, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js'; // 06/9 B4/B6/B7/B9: il «+» allega, e ogni allegato dichiara il suo costo // 06/9 O-22/O-23: gli errori del giro detti a una persona // 05/9 Fase 2: ChatFooter — striscia del giro, chip e barra di stato dai dati
+import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, chipDegliAllegati, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js';
+import { creaAnteprimaImmagine, payloadImmagini } from '../components/immagini-chat.js';
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
@@ -5156,6 +5157,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
     let modelliCache = null;
     let modelliLocali = null;
+    let modelliDiretti = null;
+    let erroriDiretti = [];
     let fonteScelta = 'openrouter';
     let valoreScelto = valoreIniziale;
     let aperto = false;
@@ -5167,10 +5170,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
 
     function filtraModelli(query) {
-      if (!modelliCache) return [];
+      const catalogo = fonteScelta === 'diretti' ? modelliDiretti : modelliCache;
+      if (!catalogo) return [];
       const q = query.trim().toLowerCase();
-      if (!q) return modelliCache;
-      return modelliCache.filter((m) => m.id.toLowerCase().includes(q) || m.nome.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q));
+      if (!q) return catalogo;
+      return catalogo.filter((m) => m.id.toLowerCase().includes(q) || m.nome.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q));
     }
 
     function raggruppaPerProvider(modelli) {
@@ -5187,6 +5191,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const voci = [
         { id: 'openrouter', etichetta: 'OpenRouter', conto: modelliCache ? modelliCache.length : null },
         { id: 'locali', etichetta: 'Locali', conto: modelliLocali ? modelliLocali.length : null },
+        { id: 'diretti', etichetta: 'Diretti', conto: modelliDiretti?.length ?? null },
       ];
       fonti.replaceChildren(...voci.map((voce) => {
         const bottone = document.createElement('button');
@@ -5199,7 +5204,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         bottone.classList.toggle('active', attiva);
         bottone.append(textElement('span', '', voce.etichetta));
         if (Number.isFinite(voce.conto)) bottone.append(textElement('span', 'model-picker-source-count', String(voce.conto)));
-        bottone.addEventListener('click', () => { fonteScelta = voce.id; renderFonti(); renderLista(); });
+        bottone.addEventListener('click', () => { fonteScelta = voce.id; renderFonti(); renderLista(); if (fonteScelta === 'diretti' && !modelliDiretti) caricaDiretti(); });
         return bottone;
       }));
     }
@@ -5316,18 +5321,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
     function renderLista() {
       if (fonteScelta === 'locali') { renderListaLocali(); return; }
+      if (fonteScelta === 'diretti') metaSpan.textContent = modelliDiretti ? `${modelliDiretti.length} modelli · API dirette` : 'Cataloghi diretti';
+      else metaSpan.textContent = modelliCache ? `${modelliCache.length} modelli · OpenRouter` : '';
       const query = searchInput.value;
-      if (!modelliCache) {
-        listEl.replaceChildren(textElement('p', 'board-empty', 'Carico il catalogo da OpenRouter…'));
+      if (!(fonteScelta === 'diretti' ? modelliDiretti : modelliCache)) {
+        listEl.replaceChildren(textElement('p', 'board-empty', fonteScelta === 'diretti' ? 'Leggo i cataloghi dei provider collegati…' : 'Carico il catalogo da OpenRouter…'));
         return;
       }
       const filtrati = filtraModelli(query);
       if (filtrati.length === 0) {
-        listEl.replaceChildren(textElement('p', 'board-empty', query.trim() ? `Nessun modello corrisponde a "${query.trim()}".` : 'Nessun modello disponibile.'));
+        listEl.replaceChildren(textElement('p', 'board-empty', query.trim() ? `Nessun modello corrisponde a "${query.trim()}".` : fonteScelta === 'diretti' ? (erroriDiretti.join(' · ') || 'Collega OpenAI, Anthropic o Gemini dal pannello Provider.') : 'Nessun modello disponibile.'));
         return;
       }
       const cercando = query.trim() !== '';
       const pezzi = [];
+      if (fonteScelta === 'diretti' && erroriDiretti.length) pezzi.push(textElement('p', 'model-picker-source-note', erroriDiretti.join(' · ')));
       for (const [provider, modelli] of raggruppaPerProvider(filtrati)) {
         const aprireGruppo = cercando || gruppiAperti.has(provider);
         const header = document.createElement('button');
@@ -5429,7 +5437,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       listEl.replaceChildren(...pezzi);
     }
 
+    async function caricaDiretti() {
+      erroriDiretti = [];
+      try {
+        const dati = await apiGet('/api/v1/providers');
+        const disponibili = (dati.items || dati.providers || []).filter(p => ['openai','anthropic','gemini'].includes(p.id) && p.keyConfigured);
+        const results = await Promise.all(disponibili.map(async p => {
+          try { return (await apiGet(`/api/v1/providers/${p.id}/models`)).modelli; }
+          catch (e) { erroriDiretti.push(`${p.label}: ${e.message}`); return []; }
+        }));
+        modelliDiretti = results.flat();
+      } catch (e) { erroriDiretti = [e.message]; modelliDiretti = []; }
+      renderFonti(); if (fonteScelta === 'diretti') renderLista();
+    }
+
     async function carica({ forza = false } = {}) {
+      if (fonteScelta === 'diretti') { await caricaDiretti(); return; }
       listEl.replaceChildren(textElement('p', 'board-empty', 'Carico il catalogo da OpenRouter…'));
       try {
         const dati = await apiGet(`/api/v1/models${forza ? '?forza=1' : ''}`);
@@ -6890,7 +6913,6 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           ${[
             ['Toolsets', 'Raggruppare gli attrezzi in insiemi accendibili per sessione', 'i-code'],
             ['Computer use', 'Pilotare schermo, mouse e tastiera — oggi TALOS legge solo il testo delle pagine, con naviga', 'i-layout'],
-            ['Immagini in ingresso', 'Allegare uno screenshot al messaggio — nessun canale immagine verso il modello: il kernel non manda nessun image_url', 'i-image'],
             ['Gateways · Telegram, Discord, Slack, WhatsApp', 'Parlare con TALOS da un’app di messaggistica', 'i-link'],
             ['Profiles', 'Insiemi di preferenze salvate e richiamabili per tipo di lavoro', 'i-robot'],
           ].map(([name, desc, ico]) => `
@@ -7522,10 +7544,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * dei riferimenti @, che elenca i file VERI del workspace della sessione
      * (`suggerimentiRiferimentiReali`) e li scrive nel composer — e senza
      * sessione dice onestamente che non ce ne sono, invece di fingere un
-     * picker. ⛔ «Screenshot / immagine» non esiste più come azione: non
-     * c'è nessun canale immagine verso il modello (zero `image_url` nel
-     * kernel), quindi è sceso fra le voci «Non ancora implementato» invece
-     * di restare un bottone che promette qualcosa di impossibile.
+     * picker. Le immagini entrano dal «+» del composer, incolla o trascina:
+     * vengono salvate e inviate attraverso il canale multimodale (08/09).
      */
     $$('[data-capability-action]', sheetBody).forEach((button) => {
       button.addEventListener('click', () => {
@@ -7990,11 +8010,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *    raggiungibile da tastiera e il suo titolo si legge): cambia quello che promette.
      */
     const senzaContatto = attivo && contattoPerso();
+    sendButton.disabled = !attivo && uploadImmaginiInCorso();
     sendButton.setAttribute('aria-label', senzaContatto ? 'Il server non risponde' : attivo ? 'Interrompi risposta' : 'Invia');
     sendButton.title = senzaContatto ? 'Il server non risponde: la richiesta di fermare non arriverebbe.' : attivo ? 'Interrompi adesso' : 'Invia';
     if (use) use.setAttribute('href', attivo ? '#i-stop' : '#i-send');
     redirectRunButton.hidden = !(attivo && haTesto);
-    redirectRunButton.disabled = redirectOccupato;
+    redirectRunButton.disabled = redirectOccupato || uploadImmaginiInCorso();
     redirectRunButton.setAttribute('aria-label', 'Reindirizza con il testo scritto');
     // ⭐ 3/9 — item 10: un suggerimento vale solo a riposo, campo vuoto, niente in coda.
     if (suggerimentoComposerAttivo && (attivo || haTesto)) svuotaSuggerimentoComposer();
@@ -8250,7 +8271,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const turno = creaTurno({ numeri: [{ n: base, tick: 1, tono: 'current' }] });
     turno.dataset.turno = 'talos';
     turno.dataset.spineBase = String(base);
-    turno.append(creaMessaggioTalos({ modello: nomeModelloBreve(state.realSession.currentRunModel), ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio() }));
+    turno.dataset.oraMessaggio = state.realSession.deferHistoricalRendering ? '' : oraMessaggio();
+    turno.append(creaMessaggioTalos({ modello: nomeModelloBreve(state.realSession.currentRunModel), ora: turno.dataset.oraMessaggio }));
     conversation?.appendChild(turno);
     markMotionEnter(turno);
     return turno;
@@ -8349,7 +8371,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         : 'Comando diretto') + etichettaPermessiGiro(contesto);
     // 05/9 Fase 2: Conversazione — il messaggio della persona nel blocco del mockup (ora · etichetta del giro)
     const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(), meta: etichettaMeta }), 'utente')
-    if (daMostrare?.allegati?.length) disegnaChipAllegati(article, daMostrare.allegati);;
+    const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : task.immagini;
+    if (allegatiVisibili?.length) disegnaChipAllegati(article, allegatiVisibili);
     void conversation;
     markMotionEnter(article);
     /* ⛔ 28/8, owner: "auto centramento dello scroll dei messaggi appena se ne invia uno nuovo (meta schermo)" — questa era l'UNICA delle sei chiamate scrollIntoView di questo file con block:'center' invece di 'end': ogni messaggio inviato veniva centrato a metà schermo invece di scorrere in fondo come ogni altro elemento appeso alla conversazione. */
@@ -8369,7 +8392,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⛔ Niente `innerHTML`: il nome di un file e l'indirizzo di una pagina vengono da fuori.
    */
   function disegnaChipAllegati(articolo, allegati) {
-    const chip = chipDegliAllegati(allegati, state.model);
+    const immagini = allegati.filter(a => a.tipo === 'immagine' && a.url);
+    if (immagini.length) {
+      const gallery = document.createElement('div');
+      gallery.className = 'talos-image-gallery';
+      gallery.setAttribute('aria-label', 'Immagini allegate');
+      for (const a of immagini) {
+        const card = creaAnteprimaImmagine(a, { apiBase: window.__talosHarnessApiBase || '' });
+        if (card) gallery.append(card);
+      }
+      articolo.append(gallery);
+      const bubble = articolo.querySelector('.message-bubble');
+      if (bubble && (!bubble.textContent.trim() || bubble.textContent.trim() === 'Descrivi l’immagine allegata.')) bubble.hidden = true;
+    }
+    const chip = chipDegliAllegati(allegati.filter(a => !immagini.includes(a)), state.model);
     if (!chip.length) return null; // ⛔ nessun allegato, nessuna riga: mai un contenitore vuoto
     const riga = document.createElement('div');
     riga.className = 'talos-allegati-chip';
@@ -8391,7 +8427,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return riga;
   }
 
-  function appendUserFollowUp(text, contesto = null) {
+  function appendUserFollowUp(text, contesto = null, immagini = []) {
     /*
      * ⛔ 03/9 — si ricorda QUI, dove il testo passa per davvero, e non
      * rileggendolo dal DOM: una bolla può essere ridisegnata, tradotta o
@@ -8409,7 +8445,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const testoBolla = daMostrare && typeof daMostrare.testo === 'string' ? daMostrare.testo : text;
     // 05/9 Fase 2: Conversazione — il follow-up e' un messaggio della persona nel blocco del mockup
     const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(), meta: `Follow-up${etichettaPermessiGiro(contesto)}` }), 'utente');
-    if (daMostrare?.allegati?.length) disegnaChipAllegati(article, daMostrare.allegati);
+    const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : immagini;
+    if (allegatiVisibili.length) disegnaChipAllegati(article, allegatiVisibili);
     markMotionEnter(article);
     scorriAllaBollaAppesa(article);
   }
@@ -8474,7 +8511,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * costare la frase appena scritta.
    */
   function apriBivioInvio(testo) {
-    if (!bivioInvio) { accodaMessaggioReale(testo); return; }
+    if (!bivioInvio) { accodaDalComposer(testo); return; }
     bivioInvio.dataset.testoInSospeso = testo;
     const etichetta = $('[data-bivio-testo]', bivioInvio);
     if (etichetta) etichetta.textContent = `«${tronca(testo, 46)}» — il giro è in corso: lo indirizzo adesso o lo metto in coda?`;
@@ -8491,6 +8528,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     composerInput.value = '';
     autoGrowTextarea();
     syncRunComposerState();
+  }
+
+  function accodaDalComposer(testo) {
+    if (attendiUploadImmagini()) return;
+    const immagini = allegatiComposer.filter(a => a.tipo === 'immagine');
+    const completo = testoConAllegati(testo);
+    svuotaComposerDopoScelta();
+    svuotaAllegati();
+    accodaMessaggioReale(completo, immagini);
   }
 
   /*
@@ -12286,10 +12332,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           appendRealTaskStart(evento.input, evento.contesto);
         } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
           if (state.realSession.followUpBubbleInAttesa) {
+            const turnoInAttesa = state.realSession.attesaBubble?.closest('[data-turno="talos"]');
+            const metaInAttesa = turnoInAttesa?.querySelector(':scope > .talos-message > .talos-message__head > .talos-message__meta');
+            if (metaInAttesa) metaInAttesa.textContent = [nomeModelloBreve(state.realSession.currentRunModel), turnoInAttesa.dataset.oraMessaggio].filter(Boolean).join(' · ');
             state.realSession.followUpBubbleInAttesa = false; // già mostrato dal vivo, non duplicare
             allineaPilloleAlGiroVivo(evento.contesto);
           } else {
-            appendUserFollowUp(evento.input.consegna, evento.contesto); // replay dopo un reload: nessun ottimismo l'ha già mostrato
+            appendUserFollowUp(evento.input.consegna, evento.contesto, evento.input.immagini); // replay con allegati persistiti
           }
         }
         // Anche il replay di una sessione attiva deve ricostruire l'attesa
@@ -12594,7 +12643,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * niente si assume) lascerebbe comunque la lista locale corretta
          * alla lunghezza, solo con l'etichetta sbagliata nel banner.
          */
-        appendUserFollowUp(evento.testo);
+        appendUserFollowUp(evento.testo, null, evento.immagini);
         state.realSession.codaMessaggi.shift();
         renderizzaBannerCoda();
         mostraAttesaRisposta();
@@ -12612,7 +12661,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         state.realSession.redirectInvalidatedIds.delete(evento.redirectId);
         state.realSession.redirectPendingId = null;
         state.realSession.eventoTerminaleVisto = false;
-        appendUserFollowUp(evento.testo);
+        appendUserFollowUp(evento.testo, null, evento.immagini);
         state.realSession.followUpBubbleInAttesa = true;
         mostraAttesaRisposta();
         syncRunComposerState();
@@ -12991,8 +13040,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   async function reindirizzaSessioneReale(testo) {
+    if (attendiUploadImmagini()) return false;
+    const immagini = allegatiComposer.filter(a => a.tipo === 'immagine');
     const sessionId = state.realSession.id;
-    const pulito = String(testo || '').trim();
+    const pulito = String(testo || (immagini.length ? 'Descrivi l’immagine allegata.' : '')).trim();
     if (!sessionId || state.realSession.eventoTerminaleVisto || !pulito || state.realSession.redirectRequestInFlight || state.realSession.redirectPendingId) return false;
     const redirectId = crypto.randomUUID();
     state.realSession.redirectRequestInFlight = true;
@@ -13000,8 +13051,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     redirectRunButton.disabled = true;
     redirectRunButton.setAttribute('aria-busy', 'true');
     try {
-      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/redirect`, { messaggio: pulito, redirectId });
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/redirect`, { messaggio: pulito, redirectId, ...(immagini.length ? { immagini: payloadImmagini(immagini) } : {}) });
       if (sessionId !== state.realSession.id) return true;
+      for (const image of immagini) {
+        const index = allegatiComposer.indexOf(image);
+        if (index >= 0) allegatiComposer.splice(index, 1);
+      }
+      disegnaAllegati();
       const idAccettato = dati?.redirectId || redirectId;
       if (state.realSession.redirectInvalidatedIds.has(redirectId) || state.realSession.redirectInvalidatedIds.has(idAccettato)) {
         state.realSession.redirectInvalidatedIds.delete(redirectId);
@@ -13095,10 +13151,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * turno di chat reale — vedi submitPrompt(), unico chiamante di questo
    * secondo caso. Stesso endpoint, stessa funzione: nessuna duplicazione.
    */
-  async function resumeSession(messaggioFollowUp) {
+  async function resumeSession(messaggioFollowUp, immagini = []) {
     if (!state.realSession.id) { toast('Nessuna sessione reale da riprendere'); return; }
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
+    const generationAtSend = state.realSession.generation;
     /*
      * ⭐ 04/9, W1-12 (ricerca) — PRIMA di chiamare la rotta si
      * dice cosa si sta riprendendo: quanto è vecchia la sessione e quanto
@@ -13112,11 +13169,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       toast('Ripresa della sessione', `${eta ? `avviata ${eta} fa` : 'età non registrata'} · riprendere costa ${stimaTokenRipresa(voceElenco.usage)}`);
     }
     iniziaMisuraLatenza(messaggioFollowUp ? 'follow-up' : 'resume senza messaggio');
-    if (messaggioFollowUp) { appendUserFollowUp(messaggioFollowUp); state.realSession.followUpBubbleInAttesa = true; }
+    if (messaggioFollowUp) { appendUserFollowUp(messaggioFollowUp, null, immagini); state.realSession.followUpBubbleInAttesa = true; }
     mostraAttesaRisposta(); // sia il follow-up sia un resume senza messaggio riavviano un giro vero
     try {
       segnaTappaLatenza('postInviata');
-      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp } : {});
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp, ...(immagini.length ? { immagini: payloadImmagini(immagini) } : {}) } : {});
+      if (sessionId !== state.realSession.id || generationAtSend !== state.realSession.generation) return;
       segnaTappaLatenza('postRisposta');
       // continua:true — STESSA vista: la conversazione resta a schermo, il
       // follow-up già mostrato (sopra) e la risposta che arriva bastano.
@@ -13177,9 +13235,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       aggiornaElencoSessioniReali();
       if (!messaggioFollowUp) toast('Sessione ripresa', 'Un nuovo giro è iniziato sulla stessa conversazione.');
     } catch (error) {
+      if (sessionId !== state.realSession.id || generationAtSend !== state.realSession.generation) return;
       nascondiAttesaRisposta();
       if (messaggioFollowUp) appendStatusNote(`Invio non riuscito: ${error.message}`, true); // il bubble utente resta — l'ha scritto davvero, solo non e' arrivato
       toast(messaggioFollowUp ? 'Invio non riuscito' : 'Resume non riuscito', error.message);
+      if (sessionId === state.realSession.id) ripristinaImmagini(immagini, messaggioFollowUp);
     }
   }
 
@@ -13191,10 +13251,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * davvero (vedi renderizzaBannerCoda). Fallita la POST, il testo
    * torna nel composer: non si perde mai in silenzio.
    */
-  async function accodaMessaggioReale(testo) {
+  async function accodaMessaggioReale(testo, immagini = []) {
     const sessionId = state.realSession.id;
     try {
-      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue`, { messaggio: testo });
+      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue`, { messaggio: testo, ...(immagini.length ? { immagini: payloadImmagini(immagini) } : {}) });
       if (sessionId !== state.realSession.id) return; // la sessione a schermo è già un'altra, questo accodamento non la riguarda più
       state.realSession.codaMessaggi.push(testo);
       renderizzaBannerCoda();
@@ -13219,12 +13279,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         state.realSession.chiusaDalServer = true;
         state.realSession.eventoTerminaleVisto = true;
         syncRunComposerState();
-        resumeSession(testo);
+        resumeSession(testo, immagini);
         return;
       }
       composerInput.value = testo;
       autoGrowTextarea();
       toast('Messaggio non accodato', error.message);
+      if (sessionId === state.realSession.id) ripristinaImmagini(immagini, testo);
     }
   }
 
@@ -15223,10 +15284,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return String(testo || '').replace(/\s+/g, ' ').trim().slice(0, 80);
   }
 
-  async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
+  async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, immagini = [] }) {
     iniziaMisuraLatenza('primo messaggio della sessione');
     const generation = nuovaGenerazioneSessione();
-    const taskSintetico = { id: `libero:${nomeCartella}`, consegna };
+    const taskSintetico = { id: `libero:${nomeCartella}`, consegna, immagini };
     state.realSession.taskId = taskSintetico.id;
     state.realSession.treeWorkspaceKey = cartellaId
       ? `project:${cartellaId}`
@@ -15263,6 +15324,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           ? { cartellaLibera, consegna, client }
           : { cartellaId, consegna, client };
       if (comandoProva) corpo.comandoProva = comandoProva;
+      if (immagini.length) corpo.immagini = payloadImmagini(immagini);
       const modelloEffettivo = modello || state.model; // ⭐ la scelta fatta nel picker della modale ha priorità
       if (modelloEffettivo) corpo.modello = modelloEffettivo;
       // ⭐ 28/8 — stesso principio del modello: la scelta esplicita dell'effort picker ha priorità, altrimenti quella già impostata sulla sessione (pillola/foglio); assente se l'owner non ha mai toccato lo slider.
@@ -15300,6 +15362,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       nascondiAttesaRisposta();
       appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
       toast('Avvio non riuscito', error.message);
+      ripristinaImmagini(immagini, consegna);
       /* ⛔ 27/8, trovato dalla pipeline QA visiva: il titolo restava "ottimista" (il nome della sessione appena tentata) anche quando la POST falliva — la sessione non è mai esistita lato server (state.realSession.id resta null). */
       state.session = 'Nessuna sessione';
       $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
@@ -15370,6 +15433,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         togli.setAttribute('aria-label', `Togli ${nome.textContent}`);
         togli.addEventListener('click', () => { allegatiComposer.splice(indice, 1); disegnaAllegati(); });
         li.append(nome, costo, togli);
+        if (a.tipo === 'immagine') {
+          const preview = creaAnteprimaImmagine(a, { compatta: true, apiBase: window.__talosHarnessApiBase || '' });
+          if (preview) li.prepend(preview);
+        }
         lista.append(li);
       });
     }
@@ -15386,12 +15453,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   /** Il testo che accompagna il messaggio: i percorsi, non i byte (vedi la doc di allegati.js). */
   const TETTO_TESTO_ALLEGATO = 20_000; // ~5k token: oltre, una pagina sola mangerebbe mezza finestra
+  function ripristinaImmagini(immagini, testo) {
+    for (const image of immagini) if (!allegatiComposer.some(a => a.id === image.id)) aggiungiAllegato(image);
+    if (immagini.length && !composerInput.value.trim()) composerInput.value = testo || '';
+    disegnaAllegati(); syncRunComposerState();
+  }
   function testoConAllegati(testo) {
     if (allegatiComposer.length === 0) return testo;
     const righe = [];
     const blocchi = [];
     for (const a of allegatiComposer) {
-      if (a.tipo === 'immagine') { righe.push(`- immagine allegata: ${a.nome}${a.larghezza ? ` (${a.larghezza}×${a.altezza})` : ''}`); continue; }
+      if (a.tipo === 'immagine') continue;
       /*
        * ⛔⛔⛔ 06/9, owner: «il modello deve avere gli occhi sulla sezione Browser anche se sono io a
        * navigarci dentro». Per un FILE del progetto basta il percorso — l'agente lo apre da sé, e i
@@ -15407,10 +15479,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
       righe.push(`- file allegato: ${a.percorso || a.nome}`);
     }
+    if (!righe.length && !blocchi.length) return testo || 'Descrivi l’immagine allegata.';
     const testa = `${testo}\n\nAllegati di questo messaggio:\n${righe.join('\n')}`;
     return blocchi.length ? `${testa}\n\n${blocchi.join('\n\n')}` : testa;
   }
-  function svuotaAllegati() { allegatiComposer.length = 0; disegnaAllegati(); }
+  function svuotaAllegati() { state.imageDraftEpoch = (state.imageDraftEpoch || 0) + 1; allegatiComposer.length = 0; disegnaAllegati(); }
+
+  function uploadImmaginiInCorso() {
+    return (state.imageUploads || []).some(u => u.generation === state.realSession.generation && u.epoch === (state.imageDraftEpoch || 0));
+  }
+  function attendiUploadImmagini() {
+    if (!uploadImmaginiInCorso()) return false;
+    toast('Caricamento immagine', 'Attendi che compaia l’anteprima prima di inviare.');
+    return true;
+  }
 
   function apriMenuAllega(ancora) {
     const menu = $('#menuAllega');
@@ -15463,9 +15545,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!file) return;
     const immagine = /^image\//.test(file.type || '');
     if (immagine) {
-      const misure = await misuraImmagine(file).catch(() => ({ larghezza: 0, altezza: 0 }));
-      // se le misure non si leggono il costo non si inventa: si dichiara ignoto (mai «gratis» per sbaglio)
-      aggiungiAllegato({ tipo: 'immagine', nome: file.name || 'immagine incollata', ...misure, costoIgnoto: !(misure.larghezza > 0) });
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) { toast('Formato immagine non supportato', 'Usa PNG, JPEG o WebP.'); return; }
+      if (file.size > 5 * 1024 * 1024) { toast('Immagine troppo grande', 'Massimo 5 MiB per immagine.'); return; }
+      const upload = { generation: state.realSession.generation, epoch: state.imageDraftEpoch || 0 };
+      (state.imageUploads ||= []).push(upload);
+      syncRunComposerState();
+      try {
+        const misure = await misuraImmagine(file);
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Non riesco a leggere il file.'));
+          reader.readAsDataURL(file);
+        });
+        const saved = await apiPost('/api/v1/chat-images', { nome: file.name || 'immagine incollata.png', dataUrl });
+        if (upload.generation !== state.realSession.generation || upload.epoch !== (state.imageDraftEpoch || 0)) return;
+        aggiungiAllegato({ ...saved, ...misure, costoIgnoto: !(misure.larghezza > 0) });
+      } catch (error) { if (upload.generation === state.realSession.generation) toast('Immagine non allegata', error.message); }
+      finally { state.imageUploads = state.imageUploads.filter(u => u !== upload); syncRunComposerState(); }
       return;
     }
     let caratteri = file.size;
@@ -15497,6 +15594,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function submitPrompt(text, { mostra = null, allegati = [] } = {}) {
+    if (attendiUploadImmagini()) return false;
+    const immagini = allegati.filter(a => a.tipo === 'immagine');
     const value = String(text || '').trim();
     if (!value) return false;
     /*
@@ -15518,6 +15617,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.bollaDaMostrare = { testo: mostra, allegati: Array.isArray(allegati) ? allegati : [] };
     }
     if (value.startsWith('!')) {
+      if (immagini.length) { toast('Le immagini si inviano al modello', 'Togli il prefisso ! per inviarle in chat.'); return false; }
       const hidden = value.startsWith('!!');
       const comando = value.replace(/^!!?/, '').trim();
       setView('terminal');
@@ -15555,11 +15655,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   sessione, che e la strada giusta e funziona.
      */
     if (state.realSession.id && runRealeAttivo()) {
-      accodaMessaggioReale(value);
+      accodaMessaggioReale(value, immagini);
       return true;
     }
     if (state.realSession.id) {
-      resumeSession(value);
+      resumeSession(value, immagini);
       return true;
     }
     /*
@@ -15595,7 +15695,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
       state.pendingCustomSession = null;
       startCustomSession({
-        cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna: value,
+        cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna: value, immagini,
         modello: state.model, effort: state.effort, modelloPlanner,
         permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo },
       });
@@ -15626,11 +15726,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * SCARTATO" più sotto in questo file: due test pretendono ZERO
      * chiamate di rete al mount.
      */
-    avviaSessioneImplicitaSeUnaSolaCartella(value);
+    avviaSessioneImplicitaSeUnaSolaCartella(value, immagini);
     return true;
   }
 
-  async function avviaSessioneImplicitaSeUnaSolaCartella(consegna) {
+  async function avviaSessioneImplicitaSeUnaSolaCartella(consegna, immagini = []) {
     let progetti;
     try {
       progetti = await apiGet('/api/v1/projects').then((r) => r.items);
@@ -15642,7 +15742,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       return;
     }
     const [{ id: cartellaId, nome: nomeCartella }] = progetti;
-    startCustomSession({ cartellaId, nomeCartella, consegna, modello: state.model, effort: state.effort });
+    startCustomSession({ cartellaId, nomeCartella, consegna, immagini, modello: state.model, effort: state.effort });
   }
 
   function announceComposerAction(action) {
@@ -16582,11 +16682,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   composerInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
-      const testo = composerInput.value.trim();
+      if (attendiUploadImmagini()) return;
+      const testo = composerInput.value.trim() || (allegatiComposer.some(a => a.tipo === 'immagine') ? 'Descrivi l’immagine allegata.' : '');
       const durante = Boolean(testo) && runRealeAttivo();
       // B15: Ctrl+Invio (⌘+Invio su Apple) accoda diretto, senza passare dal bivio.
       if (event.ctrlKey || event.metaKey) {
-        if (durante) { chiudiBivioInvio(); svuotaComposerDopoScelta(); accodaMessaggioReale(testo); return; }
+        if (durante) { chiudiBivioInvio(); accodaDalComposer(testo); return; }
         composerForm.requestSubmit();
         return;
       }
@@ -16678,8 +16779,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!testo) { chiudiBivioInvio({ tornaAlComposer: true }); return; }
     chiudiBivioInvio();
     if (scelta === 'indirizza') { reindirizzaSessioneReale(testo); return; }
-    svuotaComposerDopoScelta();
-    accodaMessaggioReale(testo);
+    accodaDalComposer(testo);
   });
   $('#fermaGiroConferma')?.addEventListener('click', async () => {
     chiudiVeloMockup('veloFermaGiro');

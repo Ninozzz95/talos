@@ -15,10 +15,10 @@ export const PROVIDER_IDS = Object.freeze([
 ]);
 
 export const PROVIDER_DEFINITIONS = Object.freeze({
-  openai: Object.freeze({ id: 'openai', label: 'OpenAI', keyEnv: ['OPENAI_API_KEY'], defaultEndpoint: 'https://api.openai.com/v1', supportsEndpoint: true, supportsTimeout: true, requiresKey: true, execution: 'in preparazione' }),
+  openai: Object.freeze({ id: 'openai', label: 'OpenAI', keyEnv: ['OPENAI_API_KEY'], defaultEndpoint: 'https://api.openai.com/v1', supportsEndpoint: true, supportsTimeout: true, requiresKey: true, execution: 'collegato' }),
   deepseek: Object.freeze({ id: 'deepseek', label: 'DeepSeek', keyEnv: ['DEEPSEEK_API_KEY'], defaultEndpoint: 'https://api.deepseek.com', supportsEndpoint: true, supportsTimeout: true, requiresKey: true, execution: 'in preparazione' }),
-  anthropic: Object.freeze({ id: 'anthropic', label: 'Anthropic', keyEnv: ['ANTHROPIC_API_KEY'], defaultEndpoint: 'https://api.anthropic.com/v1', supportsEndpoint: false, supportsTimeout: true, requiresKey: true, execution: 'in preparazione' }),
-  gemini: Object.freeze({ id: 'gemini', label: 'Google Gemini', keyEnv: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'], defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta', supportsEndpoint: false, supportsTimeout: true, requiresKey: true, execution: 'in preparazione' }),
+  anthropic: Object.freeze({ id: 'anthropic', label: 'Anthropic', keyEnv: ['ANTHROPIC_API_KEY'], defaultEndpoint: 'https://api.anthropic.com/v1', supportsEndpoint: false, supportsTimeout: true, requiresKey: true, execution: 'collegato' }),
+  gemini: Object.freeze({ id: 'gemini', label: 'Google Gemini', keyEnv: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'], defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta', supportsEndpoint: false, supportsTimeout: true, requiresKey: true, execution: 'collegato' }),
   openrouter: Object.freeze({ id: 'openrouter', label: 'OpenRouter', keyEnv: ['OPENROUTER_API_KEY'], defaultEndpoint: 'https://openrouter.ai/api/v1', supportsEndpoint: true, supportsTimeout: true, requiresKey: true, execution: 'collegato' }),
   ollama: Object.freeze({ id: 'ollama', label: 'Ollama Local', keyEnv: ['OLLAMA_API_KEY'], defaultEndpoint: 'http://127.0.0.1:11434', endpointEnv: ['OLLAMA_BASE_URL'], supportsEndpoint: true, supportsTimeout: true, requiresKey: false, execution: 'runtime locale' }),
   huggingface: Object.freeze({ id: 'huggingface', label: 'Hugging Face', keyEnv: ['HF_TOKEN', 'HUGGINGFACE_HUB_TOKEN'], defaultEndpoint: null, supportsEndpoint: false, supportsTimeout: false, requiresKey: false, execution: 'catalogo e download' }),

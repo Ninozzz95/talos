@@ -31,6 +31,7 @@ import { createProviderProbe } from './src/provider-probe.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
 import { createOwnerRuntimeAdapter } from './src/runtime-owner-adapter.mjs';
+import { createChatImageStore } from './src/chat-image-attachments.mjs';
 import { avviaSessione } from './src/agent-service.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA } from './src/runtime-contract.mjs';
 import { closeRuntimeResources } from './src/http-lifecycle.mjs';
@@ -142,7 +143,9 @@ async function startServer() {
 
   let supervisoreLocale = null;
 
+  const chatImageStore = createChatImageStore({ rootDir: fileURLToPath(new URL('.chat-images/', import.meta.url)) });
   const ownerRuntime = createOwnerRuntimeAdapter({
+    resolveImagesFn: messages => chatImageStore.resolveMessages(messages),
     modulePath: config.ownerRuntimeModule,
     openRouterRuntimeFn: () => providerStore.getRuntime('openrouter'),
     /*
@@ -536,6 +539,7 @@ async function startServer() {
   });
 
   const app = createHttpApp({
+    chatImageStore,
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
     terminalRegistry: registroSchedeTerminale, // ⭐ 05/9, W1-01

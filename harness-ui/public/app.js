@@ -9571,6 +9571,62 @@ var init_allegati = __esm({
   }
 });
 
+// src/components/immagini-chat.js
+function urlImmagineValida(url) {
+  return typeof url === "string" && /^\/api\/v1\/chat-images\/[a-f0-9]{64}$/.test(url);
+}
+function payloadImmagini(allegati = []) {
+  return allegati.filter((a) => a.tipo === "immagine").map((a) => {
+    if (!/^[a-f0-9]{64}$/.test(a.id || "")) throw new Error("L’immagine non è stata caricata. Allegala di nuovo prima di inviare.");
+    return { id: a.id };
+  });
+}
+function creaAnteprimaImmagine(image, { compatta = false, document: doc = globalThis.document, apiBase = "" } = {}) {
+  if (!urlImmagineValida(image?.url)) return null;
+  const card = doc.createElement("button");
+  card.type = "button";
+  card.className = "talos-image-card" + (compatta ? " talos-image-card--compact" : "");
+  card.setAttribute("aria-label", `Apri immagine: ${image.nome}`);
+  const picture = doc.createElement("img");
+  picture.src = apiBase + image.url;
+  picture.alt = image.nome;
+  picture.loading = "lazy";
+  const caption = doc.createElement("span");
+  caption.className = "talos-image-card__caption";
+  caption.textContent = image.nome;
+  card.append(picture, caption);
+  card.addEventListener("click", () => {
+    const dialog = doc.createElement("dialog");
+    dialog.className = "talos-image-viewer";
+    dialog.setAttribute("aria-label", `Immagine: ${image.nome}`);
+    const header = doc.createElement("div");
+    header.className = "talos-image-viewer__header";
+    const title = doc.createElement("span");
+    title.textContent = image.nome;
+    const close = doc.createElement("button");
+    close.type = "button";
+    close.textContent = "Chiudi";
+    close.addEventListener("click", () => dialog.close());
+    header.append(title, close);
+    const large = doc.createElement("img");
+    large.src = picture.src;
+    large.alt = image.nome;
+    dialog.append(header, large);
+    dialog.addEventListener("close", () => {
+      dialog.remove();
+      card.focus();
+    }, { once: true });
+    doc.body.append(dialog);
+    dialog.showModal();
+    close.focus();
+  });
+  return card;
+}
+var init_immagini_chat = __esm({
+  "src/components/immagini-chat.js"() {
+  }
+});
+
 // src/components/stato-vuoto.js
 function el24(documentObj, tag, className, testo3) {
   const nodo4 = documentObj.createElement(tag);
@@ -9795,6 +9851,7 @@ var init_app = __esm({
     init_cartella_ritratto();
     init_consumo_sessione();
     init_allegati();
+    init_immagini_chat();
     init_review();
     init_stato_vuoto();
     init_topbar();
@@ -13968,6 +14025,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         wrap.append(trigger, panel);
         let modelliCache = null;
         let modelliLocali = null;
+        let modelliDiretti = null;
+        let erroriDiretti = [];
         let fonteScelta = "openrouter";
         let valoreScelto = valoreIniziale;
         let aperto = false;
@@ -13977,10 +14036,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           triggerLabel.textContent = valoreScelto || etichettaVuota;
         }
         function filtraModelli2(query) {
-          if (!modelliCache) return [];
+          const catalogo = fonteScelta === "diretti" ? modelliDiretti : modelliCache;
+          if (!catalogo) return [];
           const q = query.trim().toLowerCase();
-          if (!q) return modelliCache;
-          return modelliCache.filter((m) => m.id.toLowerCase().includes(q) || m.nome.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q));
+          if (!q) return catalogo;
+          return catalogo.filter((m) => m.id.toLowerCase().includes(q) || m.nome.toLowerCase().includes(q) || m.provider.toLowerCase().includes(q));
         }
         function raggruppaPerProvider(modelli) {
           const mappa = /* @__PURE__ */ new Map();
@@ -13993,7 +14053,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         function renderFonti() {
           const voci = [
             { id: "openrouter", etichetta: "OpenRouter", conto: modelliCache ? modelliCache.length : null },
-            { id: "locali", etichetta: "Locali", conto: modelliLocali ? modelliLocali.length : null }
+            { id: "locali", etichetta: "Locali", conto: modelliLocali ? modelliLocali.length : null },
+            { id: "diretti", etichetta: "Diretti", conto: modelliDiretti?.length ?? null }
           ];
           fonti.replaceChildren(...voci.map((voce) => {
             const bottone3 = document.createElement("button");
@@ -14010,6 +14071,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
               fonteScelta = voce.id;
               renderFonti();
               renderLista();
+              if (fonteScelta === "diretti" && !modelliDiretti) caricaDiretti();
             });
             return bottone3;
           }));
@@ -14083,18 +14145,21 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             renderListaLocali();
             return;
           }
+          if (fonteScelta === "diretti") metaSpan.textContent = modelliDiretti ? `${modelliDiretti.length} modelli · API dirette` : "Cataloghi diretti";
+          else metaSpan.textContent = modelliCache ? `${modelliCache.length} modelli · OpenRouter` : "";
           const query = searchInput.value;
-          if (!modelliCache) {
-            listEl.replaceChildren(textElement("p", "board-empty", "Carico il catalogo da OpenRouter…"));
+          if (!(fonteScelta === "diretti" ? modelliDiretti : modelliCache)) {
+            listEl.replaceChildren(textElement("p", "board-empty", fonteScelta === "diretti" ? "Leggo i cataloghi dei provider collegati…" : "Carico il catalogo da OpenRouter…"));
             return;
           }
           const filtrati = filtraModelli2(query);
           if (filtrati.length === 0) {
-            listEl.replaceChildren(textElement("p", "board-empty", query.trim() ? `Nessun modello corrisponde a "${query.trim()}".` : "Nessun modello disponibile."));
+            listEl.replaceChildren(textElement("p", "board-empty", query.trim() ? `Nessun modello corrisponde a "${query.trim()}".` : fonteScelta === "diretti" ? erroriDiretti.join(" · ") || "Collega OpenAI, Anthropic o Gemini dal pannello Provider." : "Nessun modello disponibile."));
             return;
           }
           const cercando = query.trim() !== "";
           const pezzi = [];
+          if (fonteScelta === "diretti" && erroriDiretti.length) pezzi.push(textElement("p", "model-picker-source-note", erroriDiretti.join(" · ")));
           for (const [provider, modelli] of raggruppaPerProvider(filtrati)) {
             const aprireGruppo = cercando || gruppiAperti.has(provider);
             const header = document.createElement("button");
@@ -14188,7 +14253,32 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           }
           listEl.replaceChildren(...pezzi);
         }
+        async function caricaDiretti() {
+          erroriDiretti = [];
+          try {
+            const dati = await apiGet("/api/v1/providers");
+            const disponibili = (dati.items || dati.providers || []).filter((p) => ["openai", "anthropic", "gemini"].includes(p.id) && p.keyConfigured);
+            const results = await Promise.all(disponibili.map(async (p) => {
+              try {
+                return (await apiGet(`/api/v1/providers/${p.id}/models`)).modelli;
+              } catch (e) {
+                erroriDiretti.push(`${p.label}: ${e.message}`);
+                return [];
+              }
+            }));
+            modelliDiretti = results.flat();
+          } catch (e) {
+            erroriDiretti = [e.message];
+            modelliDiretti = [];
+          }
+          renderFonti();
+          if (fonteScelta === "diretti") renderLista();
+        }
         async function carica({ forza = false } = {}) {
+          if (fonteScelta === "diretti") {
+            await caricaDiretti();
+            return;
+          }
           listEl.replaceChildren(textElement("p", "board-empty", "Carico il catalogo da OpenRouter…"));
           try {
             const dati = await apiGet(`/api/v1/models${forza ? "?forza=1" : ""}`);
@@ -15402,7 +15492,6 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           ${[
             ["Toolsets", "Raggruppare gli attrezzi in insiemi accendibili per sessione", "i-code"],
             ["Computer use", "Pilotare schermo, mouse e tastiera — oggi TALOS legge solo il testo delle pagine, con naviga", "i-layout"],
-            ["Immagini in ingresso", "Allegare uno screenshot al messaggio — nessun canale immagine verso il modello: il kernel non manda nessun image_url", "i-image"],
             ["Gateways · Telegram, Discord, Slack, WhatsApp", "Parlare con TALOS da un’app di messaggistica", "i-link"],
             ["Profiles", "Insiemi di preferenze salvate e richiamabili per tipo di lavoro", "i-robot"]
           ].map(([name, desc, ico]) => `
@@ -16282,11 +16371,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const use = $2("use", sendButton);
         sendButton.classList.toggle("is-stop", attivo);
         const senzaContatto = attivo && contattoPerso();
+        sendButton.disabled = !attivo && uploadImmaginiInCorso();
         sendButton.setAttribute("aria-label", senzaContatto ? "Il server non risponde" : attivo ? "Interrompi risposta" : "Invia");
         sendButton.title = senzaContatto ? "Il server non risponde: la richiesta di fermare non arriverebbe." : attivo ? "Interrompi adesso" : "Invia";
         if (use) use.setAttribute("href", attivo ? "#i-stop" : "#i-send");
         redirectRunButton.hidden = !(attivo && haTesto);
-        redirectRunButton.disabled = redirectOccupato;
+        redirectRunButton.disabled = redirectOccupato || uploadImmaginiInCorso();
         redirectRunButton.setAttribute("aria-label", "Reindirizza con il testo scritto");
         if (suggerimentoComposerAttivo && (attivo || haTesto)) svuotaSuggerimentoComposer();
         composerInput.placeholder = attivo ? "Scrivi un follow-up… Invio per scegliere, Ctrl+Invio accoda" : suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? "Scrivi il primo messaggio…" : "Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda");
@@ -16430,7 +16520,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const turno = creaTurno({ numeri: [{ n: base, tick: 1, tono: "current" }] });
         turno.dataset.turno = "talos";
         turno.dataset.spineBase = String(base);
-        turno.append(creaMessaggioTalos({ modello: nomeModelloBreve(state.realSession.currentRunModel), ora: state.realSession.deferHistoricalRendering ? "" : oraMessaggio() }));
+        turno.dataset.oraMessaggio = state.realSession.deferHistoricalRendering ? "" : oraMessaggio();
+        turno.append(creaMessaggioTalos({ modello: nomeModelloBreve(state.realSession.currentRunModel), ora: turno.dataset.oraMessaggio }));
         conversation?.appendChild(turno);
         markMotionEnter(turno);
         return turno;
@@ -16488,15 +16579,28 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const testoBolla = daMostrare && typeof daMostrare.testo === "string" && daMostrare.testo.trim() !== "" ? daMostrare.testo : task.consegna || task.consegnaCorta || task.comandoDiretto || (task.id ? task.id : "Comando diretto");
         const etichettaMeta = (task.id ? nomeLeggibileSessione(task.id) : task.consegna || task.consegnaCorta ? `Compito libero${task.progetto ? ` · ${task.progetto}` : ""}` : "Comando diretto") + etichettaPermessiGiro(contesto2);
         const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? "" : oraMessaggio(), meta: etichettaMeta }), "utente");
-        if (daMostrare?.allegati?.length) disegnaChipAllegati(article, daMostrare.allegati);
-        ;
+        const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : task.immagini;
+        if (allegatiVisibili?.length) disegnaChipAllegati(article, allegatiVisibili);
         void conversation;
         markMotionEnter(article);
         scorriAllaBollaAppesa(article);
         state.realSession.taskBubbleMostrata = true;
       }
       function disegnaChipAllegati(articolo, allegati) {
-        const chip = chipDegliAllegati(allegati, state.model);
+        const immagini = allegati.filter((a) => a.tipo === "immagine" && a.url);
+        if (immagini.length) {
+          const gallery = document.createElement("div");
+          gallery.className = "talos-image-gallery";
+          gallery.setAttribute("aria-label", "Immagini allegate");
+          for (const a of immagini) {
+            const card = creaAnteprimaImmagine(a, { apiBase: window.__talosHarnessApiBase || "" });
+            if (card) gallery.append(card);
+          }
+          articolo.append(gallery);
+          const bubble = articolo.querySelector(".message-bubble");
+          if (bubble && (!bubble.textContent.trim() || bubble.textContent.trim() === "Descrivi l’immagine allegata.")) bubble.hidden = true;
+        }
+        const chip = chipDegliAllegati(allegati.filter((a) => !immagini.includes(a)), state.model);
         if (!chip.length) return null;
         const riga = document.createElement("div");
         riga.className = "talos-allegati-chip";
@@ -16517,13 +16621,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         articolo.append(riga);
         return riga;
       }
-      function appendUserFollowUp(text, contesto2 = null) {
+      function appendUserFollowUp(text, contesto2 = null, immagini = []) {
         if (typeof text === "string" && text.trim() !== "") state.realSession.ultimaDomanda = text;
         const daMostrare = state.realSession.bollaDaMostrare;
         state.realSession.bollaDaMostrare = null;
         const testoBolla = daMostrare && typeof daMostrare.testo === "string" ? daMostrare.testo : text;
         const article = nellaChat(creaMessaggioUtente({ testo: testoBolla, ora: state.realSession.deferHistoricalRendering ? "" : oraMessaggio(), meta: `Follow-up${etichettaPermessiGiro(contesto2)}` }), "utente");
-        if (daMostrare?.allegati?.length) disegnaChipAllegati(article, daMostrare.allegati);
+        const allegatiVisibili = daMostrare?.allegati?.length ? daMostrare.allegati : immagini;
+        if (allegatiVisibili.length) disegnaChipAllegati(article, allegatiVisibili);
         markMotionEnter(article);
         scorriAllaBollaAppesa(article);
       }
@@ -16555,7 +16660,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       function apriBivioInvio(testo3) {
         if (!bivioInvio) {
-          accodaMessaggioReale(testo3);
+          accodaDalComposer(testo3);
           return;
         }
         bivioInvio.dataset.testoInSospeso = testo3;
@@ -16577,6 +16682,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         composerInput.value = "";
         autoGrowTextarea();
         syncRunComposerState();
+      }
+      function accodaDalComposer(testo3) {
+        if (attendiUploadImmagini()) return;
+        const immagini = allegatiComposer.filter((a) => a.tipo === "immagine");
+        const completo = testoConAllegati(testo3);
+        svuotaComposerDopoScelta();
+        svuotaAllegati();
+        accodaMessaggioReale(completo, immagini);
       }
       function chiediSeFermareIlGiro() {
         const velo = $2("#veloFermaGiro");
@@ -19650,10 +19763,13 @@ ${testo3}` : testo3;
               appendRealTaskStart(evento.input, evento.contesto);
             } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
               if (state.realSession.followUpBubbleInAttesa) {
+                const turnoInAttesa = state.realSession.attesaBubble?.closest('[data-turno="talos"]');
+                const metaInAttesa = turnoInAttesa?.querySelector(":scope > .talos-message > .talos-message__head > .talos-message__meta");
+                if (metaInAttesa) metaInAttesa.textContent = [nomeModelloBreve(state.realSession.currentRunModel), turnoInAttesa.dataset.oraMessaggio].filter(Boolean).join(" · ");
                 state.realSession.followUpBubbleInAttesa = false;
                 allineaPilloleAlGiroVivo(evento.contesto);
               } else {
-                appendUserFollowUp(evento.input.consegna, evento.contesto);
+                appendUserFollowUp(evento.input.consegna, evento.contesto, evento.input.immagini);
               }
             }
             if (!state.realSession.chiusaDalServer) mostraAttesaRisposta();
@@ -19867,7 +19983,7 @@ ${testo3}` : testo3;
             break;
           }
           case "QueuedMessageDelivered": {
-            appendUserFollowUp(evento.testo);
+            appendUserFollowUp(evento.testo, null, evento.immagini);
             state.realSession.codaMessaggi.shift();
             renderizzaBannerCoda();
             mostraAttesaRisposta();
@@ -19885,7 +20001,7 @@ ${testo3}` : testo3;
             state.realSession.redirectInvalidatedIds.delete(evento.redirectId);
             state.realSession.redirectPendingId = null;
             state.realSession.eventoTerminaleVisto = false;
-            appendUserFollowUp(evento.testo);
+            appendUserFollowUp(evento.testo, null, evento.immagini);
             state.realSession.followUpBubbleInAttesa = true;
             mostraAttesaRisposta();
             syncRunComposerState();
@@ -20121,8 +20237,10 @@ ${testo3}` : testo3;
         }
       }
       async function reindirizzaSessioneReale(testo3) {
+        if (attendiUploadImmagini()) return false;
+        const immagini = allegatiComposer.filter((a) => a.tipo === "immagine");
         const sessionId = state.realSession.id;
-        const pulito = String(testo3 || "").trim();
+        const pulito = String(testo3 || (immagini.length ? "Descrivi l’immagine allegata." : "")).trim();
         if (!sessionId || state.realSession.eventoTerminaleVisto || !pulito || state.realSession.redirectRequestInFlight || state.realSession.redirectPendingId) return false;
         const redirectId = crypto.randomUUID();
         state.realSession.redirectRequestInFlight = true;
@@ -20130,8 +20248,13 @@ ${testo3}` : testo3;
         redirectRunButton.disabled = true;
         redirectRunButton.setAttribute("aria-busy", "true");
         try {
-          const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/redirect`, { messaggio: pulito, redirectId });
+          const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/redirect`, { messaggio: pulito, redirectId, ...immagini.length ? { immagini: payloadImmagini(immagini) } : {} });
           if (sessionId !== state.realSession.id) return true;
+          for (const image of immagini) {
+            const index = allegatiComposer.indexOf(image);
+            if (index >= 0) allegatiComposer.splice(index, 1);
+          }
+          disegnaAllegati();
           const idAccettato = dati?.redirectId || redirectId;
           if (state.realSession.redirectInvalidatedIds.has(redirectId) || state.realSession.redirectInvalidatedIds.has(idAccettato)) {
             state.realSession.redirectInvalidatedIds.delete(redirectId);
@@ -20185,13 +20308,14 @@ ${testo3}` : testo3;
           toast("Fork non riuscito", error.message);
         }
       }
-      async function resumeSession(messaggioFollowUp) {
+      async function resumeSession(messaggioFollowUp, immagini = []) {
         if (!state.realSession.id) {
           toast("Nessuna sessione reale da riprendere");
           return;
         }
         const sessionId = state.realSession.id;
         const taskId = state.realSession.taskId;
+        const generationAtSend = state.realSession.generation;
         const voceElenco = state.sessionSelection.available.get(sessionId);
         if (voceElenco?.conclusa) {
           const eta = formattaEta(voceElenco.avviataAlle);
@@ -20199,13 +20323,14 @@ ${testo3}` : testo3;
         }
         iniziaMisuraLatenza(messaggioFollowUp ? "follow-up" : "resume senza messaggio");
         if (messaggioFollowUp) {
-          appendUserFollowUp(messaggioFollowUp);
+          appendUserFollowUp(messaggioFollowUp, null, immagini);
           state.realSession.followUpBubbleInAttesa = true;
         }
         mostraAttesaRisposta();
         try {
           segnaTappaLatenza("postInviata");
-          await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp } : {});
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp, ...immagini.length ? { immagini: payloadImmagini(immagini) } : {} } : {});
+          if (sessionId !== state.realSession.id || generationAtSend !== state.realSession.generation) return;
           segnaTappaLatenza("postRisposta");
           const generation = nuovaGenerazioneSessione({ continua: true });
           mostraAttesaRisposta();
@@ -20214,15 +20339,17 @@ ${testo3}` : testo3;
           aggiornaElencoSessioniReali();
           if (!messaggioFollowUp) toast("Sessione ripresa", "Un nuovo giro è iniziato sulla stessa conversazione.");
         } catch (error) {
+          if (sessionId !== state.realSession.id || generationAtSend !== state.realSession.generation) return;
           nascondiAttesaRisposta();
           if (messaggioFollowUp) appendStatusNote(`Invio non riuscito: ${error.message}`, true);
           toast(messaggioFollowUp ? "Invio non riuscito" : "Resume non riuscito", error.message);
+          if (sessionId === state.realSession.id) ripristinaImmagini(immagini, messaggioFollowUp);
         }
       }
-      async function accodaMessaggioReale(testo3) {
+      async function accodaMessaggioReale(testo3, immagini = []) {
         const sessionId = state.realSession.id;
         try {
-          const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue`, { messaggio: testo3 });
+          const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue`, { messaggio: testo3, ...immagini.length ? { immagini: payloadImmagini(immagini) } : {} });
           if (sessionId !== state.realSession.id) return;
           state.realSession.codaMessaggi.push(testo3);
           renderizzaBannerCoda();
@@ -20233,12 +20360,13 @@ ${testo3}` : testo3;
             state.realSession.chiusaDalServer = true;
             state.realSession.eventoTerminaleVisto = true;
             syncRunComposerState();
-            resumeSession(testo3);
+            resumeSession(testo3, immagini);
             return;
           }
           composerInput.value = testo3;
           autoGrowTextarea();
           toast("Messaggio non accodato", error.message);
+          if (sessionId === state.realSession.id) ripristinaImmagini(immagini, testo3);
         }
       }
       async function compactSession() {
@@ -21926,10 +22054,10 @@ ${testo3}` : testo3;
       function titoloDalPrimoMessaggio(testo3) {
         return String(testo3 || "").replace(/\s+/g, " ").trim().slice(0, 80);
       }
-      async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
+      async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, immagini = [] }) {
         iniziaMisuraLatenza("primo messaggio della sessione");
         const generation = nuovaGenerazioneSessione();
-        const taskSintetico = { id: `libero:${nomeCartella2}`, consegna };
+        const taskSintetico = { id: `libero:${nomeCartella2}`, consegna, immagini };
         state.realSession.taskId = taskSintetico.id;
         state.realSession.treeWorkspaceKey = cartellaId ? `project:${cartellaId}` : workspaceLaunchId ? `launch:${workspaceLaunchId}` : `path:${cartellaLibera || nomeCartella2}`;
         state.session = `Compito libero · ${nomeCartella2}`;
@@ -21948,6 +22076,7 @@ ${testo3}` : testo3;
           const client = window.__talosHarnessApiBase ? "mobile" : "desktop";
           const corpo = workspaceLaunchId ? { workspaceLaunchId, consegna, client } : cartellaLibera ? { cartellaLibera, consegna, client } : { cartellaId, consegna, client };
           if (comandoProva) corpo.comandoProva = comandoProva;
+          if (immagini.length) corpo.immagini = payloadImmagini(immagini);
           const modelloEffettivo = modello || state.model;
           if (modelloEffettivo) corpo.modello = modelloEffettivo;
           const effortEffettivo = effort || state.effort;
@@ -21967,6 +22096,7 @@ ${testo3}` : testo3;
           nascondiAttesaRisposta();
           appendStatusNote(`Avvio non riuscito: ${error.message}`, true);
           toast("Avvio non riuscito", error.message);
+          ripristinaImmagini(immagini, consegna);
           state.session = "Nessuna sessione";
           $$("[data-current-session-title]").forEach((label) => {
             label.textContent = state.session;
@@ -22024,6 +22154,10 @@ ${testo3}` : testo3;
               disegnaAllegati();
             });
             li.append(nome, costo, togli);
+            if (a.tipo === "immagine") {
+              const preview = creaAnteprimaImmagine(a, { compatta: true, apiBase: window.__talosHarnessApiBase || "" });
+              if (preview) li.prepend(preview);
+            }
             lista.append(li);
           });
         }
@@ -22042,15 +22176,18 @@ ${testo3}` : testo3;
         syncRunComposerState();
       }
       const TETTO_TESTO_ALLEGATO = 2e4;
+      function ripristinaImmagini(immagini, testo3) {
+        for (const image of immagini) if (!allegatiComposer.some((a) => a.id === image.id)) aggiungiAllegato(image);
+        if (immagini.length && !composerInput.value.trim()) composerInput.value = testo3 || "";
+        disegnaAllegati();
+        syncRunComposerState();
+      }
       function testoConAllegati(testo3) {
         if (allegatiComposer.length === 0) return testo3;
         const righe = [];
         const blocchi = [];
         for (const a of allegatiComposer) {
-          if (a.tipo === "immagine") {
-            righe.push(`- immagine allegata: ${a.nome}${a.larghezza ? ` (${a.larghezza}×${a.altezza})` : ""}`);
-            continue;
-          }
+          if (a.tipo === "immagine") continue;
           if (a.contenuto) {
             const corpo = String(a.contenuto).slice(0, TETTO_TESTO_ALLEGATO);
             const tagliato = String(a.contenuto).length > TETTO_TESTO_ALLEGATO;
@@ -22061,6 +22198,7 @@ ${corpo}`);
           }
           righe.push(`- file allegato: ${a.percorso || a.nome}`);
         }
+        if (!righe.length && !blocchi.length) return testo3 || "Descrivi l’immagine allegata.";
         const testa = `${testo3}
 
 Allegati di questo messaggio:
@@ -22070,8 +22208,17 @@ ${righe.join("\n")}`;
 ${blocchi.join("\n\n")}` : testa;
       }
       function svuotaAllegati() {
+        state.imageDraftEpoch = (state.imageDraftEpoch || 0) + 1;
         allegatiComposer.length = 0;
         disegnaAllegati();
+      }
+      function uploadImmaginiInCorso() {
+        return (state.imageUploads || []).some((u) => u.generation === state.realSession.generation && u.epoch === (state.imageDraftEpoch || 0));
+      }
+      function attendiUploadImmagini() {
+        if (!uploadImmaginiInCorso()) return false;
+        toast("Caricamento immagine", "Attendi che compaia l’anteprima prima di inviare.");
+        return true;
       }
       function apriMenuAllega(ancora) {
         const menu = $2("#menuAllega");
@@ -22132,8 +22279,34 @@ ${blocchi.join("\n\n")}` : testa;
         if (!file) return;
         const immagine = /^image\//.test(file.type || "");
         if (immagine) {
-          const misure = await misuraImmagine(file).catch(() => ({ larghezza: 0, altezza: 0 }));
-          aggiungiAllegato({ tipo: "immagine", nome: file.name || "immagine incollata", ...misure, costoIgnoto: !(misure.larghezza > 0) });
+          if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+            toast("Formato immagine non supportato", "Usa PNG, JPEG o WebP.");
+            return;
+          }
+          if (file.size > 5 * 1024 * 1024) {
+            toast("Immagine troppo grande", "Massimo 5 MiB per immagine.");
+            return;
+          }
+          const upload = { generation: state.realSession.generation, epoch: state.imageDraftEpoch || 0 };
+          (state.imageUploads ||= []).push(upload);
+          syncRunComposerState();
+          try {
+            const misure = await misuraImmagine(file);
+            const dataUrl = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result);
+              reader.onerror = () => reject(new Error("Non riesco a leggere il file."));
+              reader.readAsDataURL(file);
+            });
+            const saved = await apiPost("/api/v1/chat-images", { nome: file.name || "immagine incollata.png", dataUrl });
+            if (upload.generation !== state.realSession.generation || upload.epoch !== (state.imageDraftEpoch || 0)) return;
+            aggiungiAllegato({ ...saved, ...misure, costoIgnoto: !(misure.larghezza > 0) });
+          } catch (error) {
+            if (upload.generation === state.realSession.generation) toast("Immagine non allegata", error.message);
+          } finally {
+            state.imageUploads = state.imageUploads.filter((u) => u !== upload);
+            syncRunComposerState();
+          }
           return;
         }
         let caratteri = file.size;
@@ -22168,6 +22341,8 @@ ${blocchi.join("\n\n")}` : testa;
         });
       }
       function submitPrompt(text, { mostra = null, allegati = [] } = {}) {
+        if (attendiUploadImmagini()) return false;
+        const immagini = allegati.filter((a) => a.tipo === "immagine");
         const value = String(text || "").trim();
         if (!value) return false;
         state.realSession.chiusaDalServer = false;
@@ -22175,6 +22350,10 @@ ${blocchi.join("\n\n")}` : testa;
           state.realSession.bollaDaMostrare = { testo: mostra, allegati: Array.isArray(allegati) ? allegati : [] };
         }
         if (value.startsWith("!")) {
+          if (immagini.length) {
+            toast("Le immagini si inviano al modello", "Togli il prefisso ! per inviarle in chat.");
+            return false;
+          }
           const hidden = value.startsWith("!!");
           const comando = value.replace(/^!!?/, "").trim();
           setView("terminal");
@@ -22186,11 +22365,11 @@ ${blocchi.join("\n\n")}` : testa;
           return true;
         }
         if (state.realSession.id && runRealeAttivo()) {
-          accodaMessaggioReale(value);
+          accodaMessaggioReale(value, immagini);
           return true;
         }
         if (state.realSession.id) {
-          resumeSession(value);
+          resumeSession(value, immagini);
           return true;
         }
         if (state.pendingCustomSession) {
@@ -22206,6 +22385,7 @@ ${blocchi.join("\n\n")}` : testa;
             workspaceLaunchId,
             nomeCartella: nomeCartella2,
             consegna: value,
+            immagini,
             modello: state.model,
             effort: state.effort,
             modelloPlanner,
@@ -22214,10 +22394,10 @@ ${blocchi.join("\n\n")}` : testa;
           });
           return true;
         }
-        avviaSessioneImplicitaSeUnaSolaCartella(value);
+        avviaSessioneImplicitaSeUnaSolaCartella(value, immagini);
         return true;
       }
-      async function avviaSessioneImplicitaSeUnaSolaCartella(consegna) {
+      async function avviaSessioneImplicitaSeUnaSolaCartella(consegna, immagini = []) {
         let progetti;
         try {
           progetti = await apiGet("/api/v1/projects").then((r) => r.items);
@@ -22229,7 +22409,7 @@ ${blocchi.join("\n\n")}` : testa;
           return;
         }
         const [{ id: cartellaId, nome: nomeCartella2 }] = progetti;
-        startCustomSession({ cartellaId, nomeCartella: nomeCartella2, consegna, modello: state.model, effort: state.effort });
+        startCustomSession({ cartellaId, nomeCartella: nomeCartella2, consegna, immagini, modello: state.model, effort: state.effort });
       }
       function announceComposerAction(action) {
         if (action === "references") {
@@ -22909,13 +23089,13 @@ ${blocchi.join("\n\n")}` : testa;
       composerInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
           event.preventDefault();
-          const testo3 = composerInput.value.trim();
+          if (attendiUploadImmagini()) return;
+          const testo3 = composerInput.value.trim() || (allegatiComposer.some((a) => a.tipo === "immagine") ? "Descrivi l’immagine allegata." : "");
           const durante = Boolean(testo3) && runRealeAttivo();
           if (event.ctrlKey || event.metaKey) {
             if (durante) {
               chiudiBivioInvio();
-              svuotaComposerDopoScelta();
-              accodaMessaggioReale(testo3);
+              accodaDalComposer(testo3);
               return;
             }
             composerForm.requestSubmit();
@@ -22991,8 +23171,7 @@ ${blocchi.join("\n\n")}` : testa;
           reindirizzaSessioneReale(testo3);
           return;
         }
-        svuotaComposerDopoScelta();
-        accodaMessaggioReale(testo3);
+        accodaDalComposer(testo3);
       });
       $2("#fermaGiroConferma")?.addEventListener("click", async () => {
         chiudiVeloMockup("veloFermaGiro");
