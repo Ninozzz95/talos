@@ -163,4 +163,3 @@ Stesso hardware/modello/hash/finestra/riserva/prompt, un locale alla volta. Conf
 Chat reale composer/backend/provider, naturali e refusi, followup/reload/stop; screenshot1920x1080,2560x1440,3840x2160 e regressioni viewportesistenti.
 ## Consegne e rollback
 Contratti/RED -> archivio -> engine -> provider/ricerca/toolcatalog -> UI -> qualificazione -> provaowner. Commit perconsegna, nopush/notrailer. Backup verificato prima trial. Rollback tramite exportoriginali compatibile.4174 invariato, istanzaprove separata. Custodia privata con manifest/hash/insuccessi.
-

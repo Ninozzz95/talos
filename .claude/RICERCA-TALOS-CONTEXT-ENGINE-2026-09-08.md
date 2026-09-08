@@ -23,4 +23,3 @@ Consultazione rinnovata prima della fase 0: 2026-09-08 UTC. Non sono prove di pr
 ## Osservazioni locali vincolanti
 Kernel manca callback asincrona messaggio/checkpoint; String(esito).slice(0,8000) prima del risultato persistito; manuale non persiste versione e usa modello globale; mutazioni in-place possono invalidare prefix. Registro JSONL coda corrotta e append da proteggere.
 43 descrizioni strumenti: 29972 caratteri, circa7494 token euristici, NON conteggio runtime. Auto compaction ogni8giri non risolve preflight di una ripresa fuori limite.
-

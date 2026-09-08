@@ -76,3 +76,15 @@ GETstate -> Snapshot con measurement?,usage?,semanticStatus e capabilityflags re
 ## Test primo RED
 CTX-CONTRACTS: importa contracts.mjs assente, poi valida recordroles/toolpairs/settingsratio/summarysource/schema. Atteso ERR_MODULE_NOT_FOUND prima implementazione. Qualsiasi necessaria aggiunta publicmethod viene prima annotata qui e nelledger.
 
+## Emendamento F0 — interfacce completate prima implementazione
+- sourceHash SHA256(JSON.stringify(prefixRecords.map(({id,sha256})=>({id,sha256})))) per sequence fino coveredThrough; manifest payloadSha256 SHA256(JSON.stringify(archive senza manifest)).
+- Testo fonti: content string intatto; array solo parti text/input_text/output_text con text concatenate con newline; offsets UTF16 JS sul testo normalizzato.
+- StorePort tutti i metodi congelati nel contratto, inclusi init/readOriginals/settings/version/fact/blob/search/usage/export/import/backup/health/close.
+- waitForCompaction aggiunto engine per compatHTTP e test.
+- Provider aggiunge buildPreparedProviderRequest({messages,tools,model,signal})->{body,headers}; usa SDK pubblico con fetch di sola cattura che termina prima rete, niente Response artificiale/import privati. Header solo protocollo senza auth. Native createNativeCompactionAdapter({fetchFn,resolveProfile,verifyEvidence}); qualifyNativeCompaction({model,evidenceId}) accetta solo evidence backend con provider/model/protocolPin/artifactHash/transportlive/checks compaction continuation portableRecovery cancellation.
+- F0 RED reale: node --test tests/contracts.test.mjs, ERR_MODULE_NOT_FOUND contratti assenti. npm install --ignore-scripts: Zod4.5.4/sqlite-vec0.1.9, audit0, nessuna inferenza.
+- Whitespace nel primo commit documentale: righe vuote finali corrette; nessun cambiamento semantico.
+
+AssetPort readAsset({sessionId,id}) -> {sessionId,id,bytes,mimeType,sha256?}; originalRef compressore {sessionId,recordId,sha256}. Confermato root primaedit agente.
+
+Emendamento integrazione 2026-09-09: buildPreparedProviderRequest accetta requestOptions opzionale, limitato a reasoning_effort/reasoning/tool_choice/max_tokens/max_completion_tokens/temperature/top_p/stop. Nessuna opzione di trasporto o credenziale dal chiamante. Riserva del contatore coerente con il corpo serializzato. Record origin resta stringa; import legacy usa 'legacy-jsonl' e conserva provenienza strutturata nella metadata. Content assente ammesso per assistant con tool_calls; date ISO con offset ammesse, originali non riscritti.

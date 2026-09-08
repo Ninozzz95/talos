@@ -151,3 +151,23 @@ Test soltanto directory temporanee. Pubblicazione transazionale/CAS. BackupAPI+m
 ## Consegna corrente
 Owner: nessuna scelta. Io dopo: test RED e contratti, primaondata. Rimane: implementazione completa e qualificazione.
 
+## Emendamento F0 — interfacce completate prima implementazione
+- sourceHash SHA256(JSON.stringify(prefixRecords.map(({id,sha256})=>({id,sha256})))) per sequence fino coveredThrough; manifest payloadSha256 SHA256(JSON.stringify(archive senza manifest)).
+- Testo fonti: content string intatto; array solo parti text/input_text/output_text con text concatenate con newline; offsets UTF16 JS sul testo normalizzato.
+- StorePort tutti i metodi congelati nel contratto, inclusi init/readOriginals/settings/version/fact/blob/search/usage/export/import/backup/health/close.
+- waitForCompaction aggiunto engine per compatHTTP e test.
+- Provider aggiunge buildPreparedProviderRequest({messages,tools,model,signal})->{body,headers}; usa SDK pubblico con fetch di sola cattura che termina prima rete, niente Response artificiale/import privati. Header solo protocollo senza auth. Native createNativeCompactionAdapter({fetchFn,resolveProfile,verifyEvidence}); qualifyNativeCompaction({model,evidenceId}) accetta solo evidence backend con provider/model/protocolPin/artifactHash/transportlive/checks compaction continuation portableRecovery cancellation.
+- F0 RED reale: node --test tests/contracts.test.mjs, ERR_MODULE_NOT_FOUND contratti assenti. npm install --ignore-scripts: Zod4.5.4/sqlite-vec0.1.9, audit0, nessuna inferenza.
+- Whitespace nel primo commit documentale: righe vuote finali corrette; nessun cambiamento semantico.
+
+## F0 GREEN
+- Contratti/pianificatore/sintesi: 11/11 test passati su Node24.18.0. RED osservato prima implementazione: moduli assenti.
+- Prove: richieste fuori finestra, risultato tool100000caratteri con valore in coda, citazione inventata, toolpair incompleta, pin intatto, testo/firme non promossi a istruzioni.
+- Emendamento assetPort: readAsset({sessionId,id}) -> {sessionId,id,bytes,mimeType,sha256}; originalRef compressore {sessionId,recordId,sha256}.
+- Non qualificato: nessuna inferenza reale e nessun collegamento prodotto ancora.
+Owner: nessuna scelta. Io: implementare controller, integrare primaondata. Rimane: backend/UI/qualificazione.
+
+## Prima ondata: regressioni aggiunte 2026-09-09
+RED riprodotti dagli agenti, test permanenti nei rispettivi file assegnati: CTX-NATIVE-SIGNATURE-ORDER, CTX-TOOL-SCHEMA-DEFAULT; CTX-EMBEDDING-SINGLE-FLIGHT, CTX-EMBEDDING-MALFORMED-JSON, CTX-EMBEDDING-INPUT-LIMIT, CTX-ASSET-MALFORMED-HASH, CTX-EMBEDDING-SPARSE, CTX-EMBEDDING-HEALTH-EXIT, CTX-EMBEDDING-CLOSE-WAIT; CTX-ARCHIVE-REJECT, CTX-LEGACY-NONFINITE, CTX-JOB-STALE-PROGRESS, CTX-IMPORT-IDEMPOTENT-ORDER. Esiti integrazione da verificare su root; provider riferisce 36/36.
+Emendamenti prima integrazione: helper provider requestOptions limitato alle opzioni serializzate documentate nel contratto; origin legacy stringa, provenienza in metadata, content assistant/tool_calls assente consentito, date ISO con offset preservate.
+Ricerca root rinnovata 2026-09-09: https://www.sqlite.org/atomiccommit.html e https://platform.claude.com/docs/en/build-with-claude/compaction. SQLite adottato direttamente; controller TALOS gestisce validazione, cancellazione e pubblicazione condizionata; compattazione nativa solo dopo qualificazione. Node docs URL non disponibile in questo controllo, non usato come nuova prova.
