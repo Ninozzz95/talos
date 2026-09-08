@@ -7115,7 +7115,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     modi: [...schermo.querySelectorAll("[data-browser-modo]")]
     // 06/9 O-28: Pagina / Testo dell'agente
   };
-  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === "testo" ? "testo" : "pagina", modoChiesto: null };
+  let stato = { schede: [], attiva: null, note: {}, richiesta: null, annotazioni: {}, annotaAttivo: false, modo: modoIniziale === "testo" ? "testo" : "pagina", modoChiesto: null, modiScelti: {}, riaperte: /* @__PURE__ */ new Set() };
   const frameAttivo = () => el25.live?.querySelector("iframe") || null;
   const dialogaConOverlay = (messaggio) => {
     try {
@@ -7179,11 +7179,13 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       const lettura = attiva();
       if (scelto === "pagina" && lettura && lettura.tipo !== "viva" && lettura.incorniciabile === false && lettura.url) {
         stato.modoChiesto = "pagina";
+        if (lettura.id) stato.modiScelti[lettura.id] = "pagina";
         azioni.apri?.(lettura.url, lettura.id);
         return;
       }
       if (scelto === stato.modo) return;
       stato.modoChiesto = scelto;
+      if (lettura && lettura.id) stato.modiScelti[lettura.id] = scelto;
       stato.modo = scelto;
       if (scelto === "testo") mostraAvviso("");
       renderizza();
@@ -7425,6 +7427,11 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   }
   function renderizza() {
     const s = attiva();
+    if (s && s.tipo !== "viva" && s.id && stato.modiScelti[s.id] === "pagina" && s.incorniciabile === false && s.url && !stato.riaperte.has(s.id)) {
+      stato.riaperte.add(s.id);
+      azioni.apri?.(s.url, s.id);
+      return;
+    }
     const avvisoCornice = corniceDellaLettura(s);
     const letture = stato.schede.filter((x) => x.tipo !== "viva").length;
     const vive = stato.schede.length - letture;
@@ -7533,7 +7540,12 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
   return {
     /** @param {{schede?:Array, attiva?:string|null, note?:object, richiesta?:object|null}} nuovo */
     aggiorna(nuovo) {
-      if (nuovo && "attiva" in nuovo && nuovo.attiva !== stato.attiva) stato.modoChiesto = null;
+      if (nuovo && "attiva" in nuovo && nuovo.attiva !== stato.attiva) {
+        stato.riaperte.delete(nuovo.attiva);
+        const suo = stato.modiScelti[nuovo.attiva] || null;
+        stato.modoChiesto = suo;
+        if (suo) stato.modo = suo;
+      }
       stato = { ...stato, ...nuovo };
       if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false;
       renderizza();
@@ -17682,6 +17694,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const m = /^lettura-(\d+)$/.exec(rs.browserAttiva || "");
         rs.browserIndice = m ? Number(m[1]) : -1;
         ui.aggiorna({ schede, attiva: rs.browserAttiva, note: noteBrowser(), richiesta: rs.browserRichiesta, annotazioni: rs.browserAnnotazioni, annotaAttivo: rs.browserAnnotaAttivo });
+        const telaViva = $2("#browserVistaViva");
+        if (telaViva) telaViva.hidden = !(vistaViva && vistaVivaDi && rs.browserAttiva === vistaVivaDi);
         aggiornaRigaBrowserCapability();
       }
       function mostraPaginaBrowser(indice2) {
@@ -17702,10 +17716,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         browserUi?.fuocoSullaScheda();
       }
       let vistaViva = null;
+      let vistaVivaDi = null;
       let flussoVivo = null;
       const IDENTITA_BROWSER = "browser-di-questa-pagina";
       const identitaBrowser = () => IDENTITA_BROWSER;
       function smontaVistaViva() {
+        vistaVivaDi = null;
         if (flussoVivo) {
           try {
             flussoVivo.close();
@@ -17764,6 +17780,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (!contenitore || !voce?.url) return false;
         await smontaVistaViva();
         contenitore.hidden = false;
+        vistaVivaDi = voce.id;
         vistaViva = creaVistaViva(contenitore, {
           onGesto: (gesto) => {
             if (state.realSession.browserAnnotaAttivo && gesto?.tipo === "su" && gesto.dentro !== false) {

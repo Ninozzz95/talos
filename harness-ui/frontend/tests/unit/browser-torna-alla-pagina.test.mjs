@@ -37,9 +37,22 @@ test('CHIEDERE LA PAGINA su un sito che vieta la cornice APRE la pagina viva', (
     'il clic deve chiamare l\'apertura viva quando la cornice non è possibile: il ripiego è trasparente');
 });
 
-test('AL CONTRARIO — la scelta non si trascina su un\'altra scheda', () => {
-  assert.match(senzaCommenti, /'attiva' in nuovo && nuovo\.attiva !== stato\.attiva\) stato\.modoChiesto = null/,
-    'cambiando pagina si torna al comportamento automatico: una scelta vale per la pagina su cui è stata fatta');
+/*
+ * ⛔ 08/09/2026, owner: «se il pulsante pagina viene cliccato e cambio scheda mi va a
+ *   visualizzazione sorgente, non deve succedere, deve ricordare la mia scelta».
+ *   Questa prova diceva il CONTRARIO — l'avevo scritta io poche ore prima per difendere la mia
+ *   decisione di azzerare la scelta al cambio scheda, che era sbagliata: è una PREFERENZA.
+ *   La guardia non si cancella, si GIRA: adesso pretende il contrario e resta una guardia.
+ */
+test('LA SCELTA SI RICORDA, per scheda: cambiando pagina e tornando indietro si ritrova', () => {
+  assert.match(senzaCommenti, /stato\.modiScelti\[[^\]]+\] = scelto/,
+    'la scelta va messa via con l\'id della scheda a cui appartiene');
+  assert.match(senzaCommenti, /const suo = stato\.modiScelti\[nuovo\.attiva\] \|\| null/,
+    'e ripresa quando quella scheda torna attiva');
+});
+
+test('AL CONTRARIO — due schede restano indipendenti: non una scelta sola per tutte', () => {
+  assert.match(senzaCommenti, /modiScelti: \{\}/, 'una memoria per scheda, non un valore unico');
 });
 
 test('LO STATO NASCE senza una scelta della persona: il ripiego automatico deve poter agire', () => {
