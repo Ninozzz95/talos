@@ -15,6 +15,12 @@ Questo documento registra requisiti, non certifica fattibilità, completezza o s
 | PO-06 | Bash diretto dal composer con prefisso ! | Modalità di esecuzione esplicita, come il riferimento Claude Code: comando umano eseguito direttamente, output visibile in chat. Ricercare UX, riconoscimento del prefisso, incolla, multilinea, cronologia, streaming stdout/stderr, codice d'uscita, arresto dei processi, timeout, workspace, concorrenza con il modello, Windows/WSL/Git Bash, sandbox e permessi. Nessun aggiramento implicito delle policy TALOS. |
 | PO-07 | Computer use integrato in TALOS — richiesta precedente mantenuta | Dopo la consegna UI: ricognizione tecnica estremamente dettagliata di backend e frontend, documentazione e implementazioni reali, confronto con ChatGPT e gli altri competitor. Forze, debolezze e miglioramenti misurabili; architettura, contratti, dipendenze fissate, sicurezza, controllo umano, prove sul sistema reale e rollback. Nessuna supposizione presentata come fatto. |
 
+### PO-08 — Conversazione del sotto-agente nel pannello destro
+
+Richiesta aggiunta dall'owner l'08/09/2026, ACK dato in chat: cliccando il sommario/la riga di un sotto-agente si apre la conversazione diretta con quell'agente **dentro il pannello destro**. Un pulsante **Indietro** riporta all'elenco dei sotto-agenti. Il riferimento indicato è Codex: comportamento e documentazione da ispezionare, senza assumere conoscenza implicita del prodotto. Conservare relazione madre/figlio, identità della sessione mostrata e continuità della conversazione principale. Funzioni, permessi ed eventuali limiti dell'interazione diretta da proporre all'owner dopo la ricerca; nessuna scelta fondamentale autonoma.
+
+Stato: **IN CODA**, non implementato. Si collega al pannello destro del ticket; non interrompe la diagnosi dei difetti segnalati oggi (ragionamento dopo cambio sessione, ritorno in fondo, ripresa locale).
+
 ## Metodo richiesto per ogni proposta
 
 1. Ispezione dell'implementazione TALOS attuale e delle prove esistenti.
@@ -38,4 +44,4 @@ Questo documento registra requisiti, non certifica fattibilità, completezza o s
 
 - **Cosa deve fare l'owner:** nessuna scelta richiesta per registrare la coda.
 - **Cosa faccio io dopo:** completare la presa in carico del ticket e seguire le priorità correnti.
-- **Cosa rimane:** ricerca approfondita, proposte applicabili e implementazioni PO-01–PO-07.
+- **Cosa rimane:** ricerca approfondita, proposte applicabili e implementazioni PO-01–PO-08.

@@ -315,6 +315,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       followUpBubbleInAttesa: false,
       /** ⭐⭐⭐ 27/8, owner: "non esiste nessun loading quando il modello elabora... fa sembrare che si sia piantato" — l'elemento DOM della bolla di attesa (porta di TalosLineLoader.vue, mobile), o null quando non ce n'è una a schermo. Vedi mostraAttesaRisposta()/nascondiAttesaRisposta(). */
       attesaBubble: null,
+      faseAttesa: 0,
       /** Timer e istante monotono della riga di attivita. Restano separati dal
        * DOM per fermarli anche quando il nodo e gia stato rimosso. */
       attesaTimer: null,
@@ -905,7 +906,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      * nulla (ritmo appena partito) non è "stampato", e chiudere lì
      * riaprirebbe esattamente il buco che stiamo togliendo.
      */
-    if (statoRender.mostrato > 0) {
+    // Un frame arretrato appartiene alla fase in cui è arrivato il testo:
+    // non può cancellare il ragionamento iniziato nel frattempo (CHAT-ATTESA-02).
+    if (statoRender.mostrato > 0 && element.dataset.faseAttesa === String(state.realSession.faseAttesa)) {
       if (state.realSession.attesaBubble) segnaTappaLatenza('primoPixel');
       nascondiAttesaRisposta();
     }
@@ -8541,6 +8544,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     { dopoSecondi: 12, testo: 'Ci sta mettendo più del solito — resta in attesa…' },
   ];
   function mostraAttesaRisposta(stato = 'attesa') {
+    state.realSession.faseAttesa += 1;
     const etichette = {
       attesa: ETICHETTE_ATTESA_PER_TEMPO[0].testo,
       reasoning: 'Ragionamento in corso…',
@@ -12288,6 +12292,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             appendUserFollowUp(evento.input.consegna, evento.contesto); // replay dopo un reload: nessun ottimismo l'ha già mostrato
           }
         }
+        // Anche il replay di una sessione attiva deve ricostruire l'attesa
+        // prima del primo token. Una sessione dichiarata chiusa resta chiusa.
+        if (!state.realSession.chiusaDalServer) mostraAttesaRisposta();
         if (evento.contesto) { aggiornaPannelloAmbiente(evento.contesto); state.realSession.contesto = evento.contesto; } // 06/9 B2
         programmaRenderAlberoReale();
         break;
@@ -12313,6 +12320,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          */
         chiudiBatchTool(); // 30/8 — testo vero dell'assistente: chiude il batch di tool-call corrente, se ce n'è uno aperto (vedi doc su apriBatchSeServe)
         const element = ensureAssistantMessageElement(evento.messageId);
+        const faseAttesa = String(state.realSession.faseAttesa);
+        if (element.dataset.faseAttesa !== faseAttesa) element.dataset.faseAttesa = faseAttesa;
         if (!element.classList.contains('is-streaming')) element.classList.add('is-streaming');
         // ⛔⛔⛔ 27/8 — testo GREZZO accumulato a parte (mai letto da
         // .textContent, che ora contiene il RENDER): renderizzaMarkdownSemplice()
@@ -12351,7 +12360,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        * doverlo chiudere lui stesso.
        */
       case 'ReasoningMessageStart': {
-        mostraAttesaRisposta('reasoning');
+        if (!state.realSession.chiusaDalServer) mostraAttesaRisposta('reasoning');
         // Un evento che l'utente ha scelto di nascondere non è un confine
         // visibile: il batch resta unico. Quando il ragionamento è mostrato,
         // invece, conserva la cronologia reale e chiude il gruppo precedente.
@@ -12378,7 +12387,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
         }
         state.realSession.ragionamentoBubble.delete(evento.messageId); // la bolla resta a schermo, solo non si aggiorna più
-        mostraAttesaRisposta('preparing');
+        if (!state.realSession.chiusaDalServer) mostraAttesaRisposta('preparing');
         break;
       }
       case 'ToolCallStart': {
