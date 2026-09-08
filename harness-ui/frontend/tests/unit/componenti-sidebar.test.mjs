@@ -116,7 +116,15 @@ test('un taskId tecnico diventa un nome leggibile', () => {
   assert.equal(nomeLeggibileSessione('libero:progetto-3'), 'Compito libero · progetto-3');
   assert.equal(nomeLeggibileSessione('libero:full-access'), 'Compito libero · cartella scelta a mano');
   assert.equal(nomeLeggibileSessione('libero:default'), 'Compito libero');
-  assert.equal(nomeLeggibileSessione('delega:analisi'), 'Delega · analisi');
+  /*
+   * ⛔ 08/09 — qui l'atteso era `Delega · analisi`, cioè «Delega · <id della madre>»: sullo schermo
+   *   diventava `Delega · e02f5d85-b610-4e3b-…`, un identificatore grezzo (vietato) e identico per
+   *   tutte le figlie della stessa madre — due righe indistinguibili. Il test lo confermava perché
+   *   la fixture usava un id finto e leggibile («analisi»), che nella app non esiste.
+   * ⇒ Il nome di una figlia è il suo COMPITO (`taskDelega`, dall'elenco); questo è solo il ripiego.
+   */
+  assert.equal(nomeLeggibileSessione('delega:e02f5d85-b610-4e3b-8a91-a7589e5863c6'), 'Sotto-agente');
+  assert.equal(nomeLeggibileSessione('delega:'), 'Sotto-agente', 'nessun id a schermo, in nessun caso');
 });
 
 test('senza taskId non si inventa un nome, e una forma sconosciuta resta com è', () => {

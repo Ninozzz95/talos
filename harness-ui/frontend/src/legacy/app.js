@@ -37,7 +37,7 @@ import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
 import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSIMO_SCHEDE as MASSIMO_SCHEDE_BROWSER, localeAnnotabile, hostDaUrl } from '../components/browser.js'; // 06/9 K-I: il Browser a schede
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser con annotazione 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
-import { creaSessionItem, statoSessione } from '../components/session-item.js';
+import { creaSessionItem, ordinaSessioniAdAlbero, statoSessione } from '../components/session-item.js';
 import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
@@ -13502,7 +13502,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     $('#conversation')?.classList.toggle('is-restoring', state.realSession.deferHistoricalRendering);
     state.realSession.taskId = taskId;
     state.realSession.treeWorkspaceKey = `session:${sessionId}`;
-    state.session = nome || nomeLeggibileSessione(taskId); // ⭐ un nome scelto dall'owner vince sul taskId
+    /*
+     * ⛔ 08/09, visto nella FOTO della pagina intera (la barra era già a posto): la testata e la
+     *   colonna destra dicevano «Sotto-agente» mentre la riga nella barra diceva «Scrivi la PARTE 2
+     *   di un paper…» — DUE NOMI per la stessa sessione, sullo stesso schermo. Il nome di una figlia
+     *   è il suo compito, e deve esserlo ovunque: la barra non è un posto speciale.
+     *   `nomeLeggibileSessione` resta l'ultimo ripiego (una figlia aperta da un punto che non passa
+     *   la riga intera, es. l'albero dei rami), e non mostra più nessun id.
+     */
+    state.session = nome || impostazioniSessione?.taskDelega || nomeLeggibileSessione(taskId); // ⭐ un nome scelto dall'owner vince su tutto
     applicaImpostazioniSessione(contrattoSessione);
     sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
@@ -13799,7 +13807,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const conteggio = $('#sessionList .talos-sidebar__block-head .talos-nav-item__count');
     if (conteggio) conteggio.textContent = String(elenco.length);
     const pezzi = [...pendente];
-    for (const sessione of elenco) {
+    /*
+     * ⛔⛔⛔ 08/09 — le figlie di una delega comparivano SCIOLTE accanto alla madre, come tre lavori
+     * indipendenti (visto dal vivo dall'owner). Ora escono annidate sotto di lei: `ordinaSessioniAdAlbero`
+     * fa il lavoro puro (ordine + rientro) ed è provata a parte; qui resta solo il rientro a schermo.
+     * ⛔ Non si NASCONDONO: sono sessioni vere, con un costo e una storia — vedi la doc della funzione.
+     */
+    for (const { sessione, profondita, ultima } of ordinaSessioniAdAlbero(elenco)) {
       const etichetta = sessione.nome || sessione.taskId; // ⭐ un nome scelto dall'owner vince sempre sul taskId
       const button = creaSessionItem(sessione, {
         corrente: sessione.sessionId === state.realSession.id,
@@ -13811,6 +13825,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         onMenu: (event) => apriMenuAzioniSessione({ ...sessione, nome: etichetta }, { x: event.clientX, y: event.clientY, focusElement: button }),
       });
       button.classList.add('real-session-item'); // il vocabolario del monolite (selezione multipla, is-selected)
+      if (profondita > 0) {
+        button.classList.add('talos-session-item--figlia');
+        // ⭐ l'ultima del gruppo ferma il tronco verticale al suo gomito, o la linea proseguirebbe
+        //   nel vuoto sotto l'ultima riga: è ciò che distingue un albero da tre trattini
+        if (ultima) button.classList.add('talos-session-item--ultima');
+        // il livello guida il rientro dal CSS: un solo numero, nessuna misura scritta a mano qui
+        button.style.setProperty('--talos-delega-livello', String(profondita));
+      }
       pezzi.push(button);
     }
     /*

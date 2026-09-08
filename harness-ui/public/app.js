@@ -280,8 +280,39 @@ function nomeLeggibileSessione(taskId) {
     if (dove === "full-access" || dove === "workspace-launch") return "Compito libero · cartella scelta a mano";
     return `Compito libero · ${dove}`;
   }
-  if (grezzo.startsWith("delega:")) return `Delega · ${grezzo.slice("delega:".length).trim() || "sotto-compito"}`;
+  if (grezzo.startsWith("delega:")) return "Sotto-agente";
   return grezzo;
+}
+function ordinaSessioniAdAlbero(elenco2) {
+  const righe = Array.isArray(elenco2) ? elenco2.filter(Boolean) : [];
+  const presenti = new Set(righe.map((s) => s.sessionId));
+  const figliePer = /* @__PURE__ */ new Map();
+  for (const s of righe) {
+    const padre = s.padreId && presenti.has(s.padreId) ? s.padreId : null;
+    if (!padre) continue;
+    if (!figliePer.has(padre)) figliePer.set(padre, []);
+    figliePer.get(padre).push(s);
+  }
+  for (const gruppo of figliePer.values()) {
+    gruppo.sort((a, b) => String(a.avviataAlle ?? "").localeCompare(String(b.avviataAlle ?? "")));
+  }
+  const fatte = /* @__PURE__ */ new Set();
+  const fuori = [];
+  const scendi = (sessione, profondita) => {
+    if (fatte.has(sessione.sessionId)) return;
+    fatte.add(sessione.sessionId);
+    fuori.push({ sessione, profondita });
+    for (const figlia of figliePer.get(sessione.sessionId) ?? []) scendi(figlia, profondita + 1);
+  };
+  for (const s of righe) {
+    if (s.padreId && presenti.has(s.padreId)) continue;
+    scendi(s, 0);
+  }
+  for (const s of righe) if (!fatte.has(s.sessionId)) fuori.push({ sessione: s, profondita: 0 });
+  return fuori.map((v, i) => {
+    const dopo = fuori.slice(i + 1).find((altra) => altra.profondita <= v.profondita);
+    return { ...v, ultima: !dopo || dopo.profondita < v.profondita };
+  });
 }
 function creaSessionItem(sessione, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
@@ -290,7 +321,7 @@ function creaSessionItem(sessione, opzioni = {}) {
   riga.setAttribute("data-c", "SessionItem");
   if (opzioni.corrente) riga.setAttribute("aria-current", "true");
   if (sessione.sessionId) riga.dataset.realSessionId = sessione.sessionId;
-  const etichetta = opzioni.pendente ? `Nuova · ${sessione.nomeCartella || ""}` : `${sessione.nome || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? " · ramo" : ""}`;
+  const etichetta = opzioni.pendente ? `Nuova · ${sessione.nomeCartella || ""}` : `${sessione.nome || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? " · ramo" : ""}`;
   const stato = opzioni.pendente ? { classe: "pendente", testo: ETICHETTE.pendente, tono: null } : statoSessione(sessione);
   riga.dataset.sessionState = stato.classe;
   if (stato.aiuto) riga.title = stato.aiuto;
@@ -7072,6 +7103,7 @@ function titoloScheda2(pagina) {
   if (pagina?.titolo) return pagina.titolo;
   const daHtml = titoloDaHtml(pagina?.testo);
   if (daHtml) return daHtml;
+  if (statoHttpDiLettura(pagina) === null) return titoloDaLettura(pagina);
   return hostDaUrl(pagina?.url) || titoloDaLettura(pagina);
 }
 function prossimaDopoChiusura(lista, indice2) {
@@ -20398,7 +20430,7 @@ ${testo3}` : testo3;
         $2("#conversation")?.classList.toggle("is-restoring", state.realSession.deferHistoricalRendering);
         state.realSession.taskId = taskId;
         state.realSession.treeWorkspaceKey = `session:${sessionId}`;
-        state.session = nome || nomeLeggibileSessione(taskId);
+        state.session = nome || impostazioniSessione?.taskDelega || nomeLeggibileSessione(taskId);
         applicaImpostazioniSessione(contrattoSessione);
         sessionTitle.textContent = state.session;
         aggiornaTestataSessione();
@@ -20585,7 +20617,7 @@ ${testo3}` : testo3;
         const conteggio2 = $2("#sessionList .talos-sidebar__block-head .talos-nav-item__count");
         if (conteggio2) conteggio2.textContent = String(elenco2.length);
         const pezzi = [...pendente];
-        for (const sessione of elenco2) {
+        for (const { sessione, profondita, ultima } of ordinaSessioniAdAlbero(elenco2)) {
           const etichetta = sessione.nome || sessione.taskId;
           const button2 = creaSessionItem(sessione, {
             corrente: sessione.sessionId === state.realSession.id,
@@ -20595,6 +20627,11 @@ ${testo3}` : testo3;
             onMenu: (event) => apriMenuAzioniSessione({ ...sessione, nome: etichetta }, { x: event.clientX, y: event.clientY, focusElement: button2 })
           });
           button2.classList.add("real-session-item");
+          if (profondita > 0) {
+            button2.classList.add("talos-session-item--figlia");
+            if (ultima) button2.classList.add("talos-session-item--ultima");
+            button2.style.setProperty("--talos-delega-livello", String(profondita));
+          }
           pezzi.push(button2);
         }
         const righe = pezzi.filter((el25) => el25.classList.contains("talos-session-item"));

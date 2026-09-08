@@ -168,8 +168,84 @@ export function nomeLeggibileSessione(taskId) {
     if (dove === 'full-access' || dove === 'workspace-launch') return 'Compito libero · cartella scelta a mano';
     return `Compito libero · ${dove}`;
   }
-  if (grezzo.startsWith('delega:')) return `Delega · ${grezzo.slice('delega:'.length).trim() || 'sotto-compito'}`;
+  /*
+   * ⛔ 08/09 — questa riga metteva a schermo `Delega · e02f5d85-b610-4e3b-…`: l'id della MADRE,
+   *   identico per tutte le sue figlie (due righe indistinguibili) e un identificatore grezzo, che
+   *   la regola sui nomi tecnici vieta. Visto nella foto della barra appena le figlie sono state
+   *   annidate — prima non si notava perché nessuno guardava quelle righe.
+   * ⇒ Il nome di una figlia è il suo COMPITO (`taskDelega`, che ora esce dall'elenco); qui resta
+   *   solo il ripiego per quando il compito non c'è, e senza id.
+   */
+  if (grezzo.startsWith('delega:')) return 'Sotto-agente';
   return grezzo;
+}
+
+/**
+ * Riordina l'elenco piatto di `GET /api/v1/sessions` in un ALBERO DI DELEGA: ogni figlia subito
+ * sotto la sua madre, e una profondità con cui indentarla.
+ *
+ * ⛔ 08/09/2026 — l'owner l'ha visto dal vivo: dopo una delega la barra mostrava le figlie sciolte
+ *   accanto alla madre, come tre lavori indipendenti. Il frontend non poteva fare di meglio: il
+ *   legame (`padreId`) non usciva dal server. Ora esce, e questa funzione lo usa.
+ *
+ * ⭐ Ricerca 08/09/2026 — le figlie NON si nascondono: `nesquena/hermes-webui` #1004 dice che vanno
+ *   mostrate «as a delegation tree rather than collapsed… should remain visible as a tree», e la
+ *   Control UI di OpenClaw annida le righe sotto una madre espandibile, dove aprire una figlia
+ *   «preserva la gerarchia». ⛔ Il modo di sbagliare è documentato tre volte — OpenClaw #89249 (il
+ *   selettore diventa inusabile, «1 / 177», tutto il resto sono figlie), opencode #14053 (la Web UI
+ *   mostra le figlie che la TUI filtra) e la stessa lamentela su Codex: una barra allagata di
+ *   sessioni che nessuno ha aperto. Annidare risolve entrambi: si vedono, ma sotto la loro madre.
+ *
+ * ⛔ Non inventa e non perde niente: una figlia la cui madre non è nell'elenco (madre cancellata,
+ *   elenco filtrato) resta al primo livello invece di sparire — perdere una sessione dalla barra è
+ *   peggio che mostrarla senza il suo posto. La profondità è limitata a 1 livello di rientro perché
+ *   `LIMITE_PROFONDITA_DELEGA` è 2: è la stessa domanda che Zed #57481 lascia aperta («how deeply
+ *   nested before flattening»), e da noi ha già una risposta.
+ *
+ * ⛔ 08/09, owner: «facciano capire con una linea tree che sono correlate a quella sessione padre».
+ *   La linea la disegna il CSS, ma sapere QUALE riga è l'ultima del suo gruppo è una domanda
+ *   sull'albero, non sullo stile: senza `ultima`, il tronco verticale proseguirebbe nel vuoto sotto
+ *   l'ultima figlia. L'elenco è già in ordine di visita (una madre, poi tutta la sua discendenza),
+ *   quindi «ultima del gruppo» si legge guardando la prima riga successiva che NON è una sua
+ *   discendente: se non esiste, o è meno profonda, questa era l'ultima.
+ *
+ * @param {Array<object>} elenco righe dell'API, nell'ordine in cui arrivano (più recenti prima)
+ * @returns {Array<{sessione:object, profondita:number, ultima:boolean}>}
+ */
+export function ordinaSessioniAdAlbero(elenco) {
+  const righe = Array.isArray(elenco) ? elenco.filter(Boolean) : [];
+  const presenti = new Set(righe.map((s) => s.sessionId));
+  const figliePer = new Map();
+  for (const s of righe) {
+    const padre = s.padreId && presenti.has(s.padreId) ? s.padreId : null;
+    if (!padre) continue;
+    if (!figliePer.has(padre)) figliePer.set(padre, []);
+    figliePer.get(padre).push(s);
+  }
+  // le figlie in ordine di AVVIO (la prima delegata prima), all'opposto dell'elenco delle madri:
+  // dentro un albero l'ordine di lettura è quello in cui il lavoro è stato distribuito
+  for (const gruppo of figliePer.values()) {
+    gruppo.sort((a, b) => String(a.avviataAlle ?? '').localeCompare(String(b.avviataAlle ?? '')));
+  }
+  const fatte = new Set();
+  const fuori = [];
+  const scendi = (sessione, profondita) => {
+    if (fatte.has(sessione.sessionId)) return; // una catena circolare non deve appendere la barra
+    fatte.add(sessione.sessionId);
+    fuori.push({ sessione, profondita });
+    for (const figlia of figliePer.get(sessione.sessionId) ?? []) scendi(figlia, profondita + 1);
+  };
+  for (const s of righe) {
+    if (s.padreId && presenti.has(s.padreId)) continue; // esce sotto la sua madre, non qui
+    scendi(s, 0);
+  }
+  // ⛔ AL CONTRARIO: nessuna riga si perde per strada, nemmeno dentro un ciclo di padri
+  for (const s of righe) if (!fatte.has(s.sessionId)) fuori.push({ sessione: s, profondita: 0 });
+  return fuori.map((v, i) => {
+    // la prima riga successiva che non è una sua discendente: se manca, o è più in alto, è l'ultima
+    const dopo = fuori.slice(i + 1).find((altra) => altra.profondita <= v.profondita);
+    return { ...v, ultima: !dopo || dopo.profondita < v.profondita };
+  });
 }
 
 export function creaSessionItem(sessione, opzioni = {}) {
@@ -182,7 +258,8 @@ export function creaSessionItem(sessione, opzioni = {}) {
 
   const etichetta = opzioni.pendente
     ? `Nuova · ${sessione.nomeCartella || ''}`
-    : `${sessione.nome || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? ' · ramo' : ''}`;
+    // ⭐ 08/09: una figlia si chiama col suo compito — un nome scelto a mano vince comunque
+    : `${sessione.nome || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? ' · ramo' : ''}`;
   const stato = opzioni.pendente ? { classe: 'pendente', testo: ETICHETTE.pendente, tono: null } : statoSessione(sessione);
   riga.dataset.sessionState = stato.classe;
   if (stato.aiuto) riga.title = stato.aiuto; // il consiglio dove non ruba spazio alla riga
