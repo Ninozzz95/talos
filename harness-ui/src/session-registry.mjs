@@ -2139,7 +2139,8 @@ export function createSessionRegistry({
      */
     const livelloAccesso = voce.permessi === 'Read only'
       ? 'lettura'
-      : voce.permessi === 'On request' ? 'su-richiesta' : undefined;
+      : voce.permessi === 'On request' ? 'su-richiesta'
+        : voce.permessi === 'Full access' ? 'accesso-pieno' : undefined;
     /*
      * ⛔⛔⛔ FASE B (28/8) — RIPIEGO TEMPORANEO, non la cura finale.
      *

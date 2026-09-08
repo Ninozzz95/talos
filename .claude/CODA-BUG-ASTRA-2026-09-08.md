@@ -1,12 +1,12 @@
 # Coda owner — 08/09/2026
 
-1. In corso: immagini nel composer → byte al modello e contenitore visivo nella chat. Ledger: LEDGER-IMMAGINI-CHAT-2026-09-08.md.
-2. Subito dopo: Full access non permette al modello di leggere cartelle esterne alla cartella iniziale. Ricerca competitor obbligatoria, ispezione tool/errori reali e test RED; non fidarsi della spiegazione generata dal modello. Screenshot owner `ScreenShot Tool -20260908204332 (1).png`, `ScreenShot Tool -20260908204315.png`. L'owner richiede esplicitamente accesso fuori cartella in Full access. Non allargare le altre modalità.
+1. Consegnato nel commit `151ae64`: immagini nel composer → byte al modello e contenitore visivo nella chat. OpenAI e Gemini diretti verificati; Anthropic diretto raggiunto ma inferenza bloccata dal saldo API. Ledger: LEDGER-IMMAGINI-CHAT-2026-09-08.md.
+2. Corretto e verificato: Full access fuori dalla cartella iniziale. Il trace reale mostrava trifecta senza canale; l'owner ha scelto opzione 2, niente conferma trifecta in Accesso pieno. Corretta anche la risoluzione dei percorsi assoluti. Lettura, scrittura, due shell e seguito dopo reload provati sul Desktop. Ledger: LEDGER-FULL-ACCESS-2026-09-08.md. Policy degli altri livelli conservate.
 3. Riprendere scelta engine Autocompact; esiti e archivio della qualificazione già conservati nel commit 15ab635d.
 
 4. Proposta owner: fallback automatico con gruppi di provider/modelli organizzati in tier. L'utente sceglie composizione e ordine dei gruppi; quando il budget del tier si esaurisce si passa al successivo. Riferimento richiesto: [9router](https://github.com/decolua/9router), README consultato 08/09/2026. Da qualificare prima del piano: integrazione upstream/adattatore, licenza e pin, rilevazione quota e budget, reset, distinzione fra esaurimento e guasto, continuità multimodale e strumenti, prevenzione della doppia esecuzione, tracciamento del passaggio e destinazioni autorizzate dall'utente. Nessuna integrazione o scelta architetturale già approvata.
 5. Proposta owner: RTK Token Saver per comprimere automaticamente il contenuto dei tool_result. Valutare con l'owner l'integrazione di [rtk-ai/rtk](https://github.com/rtk-ai/rtk) oppure una soluzione interna, senza scegliere anticipatamente. README consultato 08/09/2026. Il 20–40% per richiesta è una dichiarazione del README 9router, non un risultato TALOS: misurare input, output, correttezza e perdita di riferimenti su run identici ON/OFF. Distinguere compressione dell'output dei comandi RTK dalla compressione generica di tutti i risultati degli strumenti. Conservare originali recuperabili, errori, percorsi e risultati completi delle prove. Verificare interoperabilità con il futuro Autocompact, licenza, versione, sicurezza, manutenzione e costo d'integrazione prima della decisione.
 
 Cosa deve fare l'owner: nulla adesso; scelte fondamentali da discutere dopo la ricognizione.
-Cosa fai tu dopo: terminare immagini/provider diretti, poi correggere Accesso pieno.
+Cosa fai tu dopo: riprendere con l'owner la decisione sull'engine Autocompact usando gli esiti conservati.
 Cosa rimane: Autocompact e proposte in coda, senza attivazioni implicite.
