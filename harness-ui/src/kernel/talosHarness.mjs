@@ -20,6 +20,7 @@
  *
  * ⛔ E la ragione del divario è misurata, non supposta: claude-code manda
  * **42.272 token di prompt di sistema a ogni giro**. Aider vince perché è
+SEGNAPOSTO **42.272 token di prompt di sistema a ogni giro**. Aider vince perché è
  * magro, non perché ragiona meglio.
  *
  * ⇒ Il nostro vantaggio è già costruito e già misurato — l'**apertura a
@@ -315,7 +316,59 @@ export function attesaDelTentativo(tentativo, caso = Math.random) {
  * fallimento silenzioso: un riavvio a metà stream inventerebbe testo mai
  * arrivato se solo lo si ignorasse.
  */
-export async function consumaFlussoSSE(response, onDelta) {
+/**
+ * ⛔⛔⛔ LA VALANGA DI CHIAMATE IDENTICHE — misurata 08/09/2026 sulla sessione
+ * vera dell'owner col motore locale, non dedotta:
+ * `.sessions-store/8407d564-….jsonl`, modello
+ * `local:…Nemotron-Cascade-2-30B-A3B-Q4_0`, consegna «ciao belloooo».
+ *
+ *   · 398 `ToolCallStart` in UN SOLO messaggio assistant (`messaggi-finali`:
+ *     `assistant` con `tool_calls.length === 398`, gli altri giri 0 attrezzi);
+ *   · 398 id DISTINTI, e 398 elementi distinti nell'array ⇒ il server mandava
+ *     un `index` diverso per ognuna;
+ *   · 795 `ToolCallArgs` in tutto — cioè ~2 frammenti per chiamata (`{` e `}`):
+ *     i frammenti li abbiamo uniti BENE, il conteggio delle chiamate non li
+ *     segue. ⇒ `pezzo.index ?? 0` qui sotto è INNOCENTE: non le fabbrichiamo
+ *     noi, le emette il server;
+ *   · combinazioni nome+argomenti distinte: **2** su 398 — «elenca {}» 397
+ *     volte e un «elenca {» troncato; risultati distinti: **1** su 398.
+ *
+ * ⇒ È la degenerazione nota del tool-calling dei server locali, non un nostro
+ * assemblaggio sbagliato. Fonti (lette 08/09/2026):
+ *   · ik_llama.cpp #1613 (11/04/2026) — «keeps emitting
+ *     `<tool_call>submit_implementation({})</tool_call>` blocks indefinitely
+ *     (hundreds of calls, **bounded only by max_tokens or client timeout**)»,
+ *     238 copie in più, ognuna con il PROPRIO index nella risposta OpenAI;
+ *   · ggml-org/llama.cpp #21375 — «infinite repetition loop in llama-server
+ *     … during tool calls», il modello non raggiunge mai EOS;
+ *   · ggml-org/llama.cpp #22072 (18/04/2026) — gli argomenti a volte sono
+ *     solo `{`, troncati prima della prima chiave, e il server risponde
+ *     **HTTP 500** «Failed to parse tool call arguments as JSON» quando quel
+ *     pezzo gli torna indietro dentro la conversazione. È esattamente il
+ *     `RunError` che ha chiuso la sessione dell'owner, subito dopo lo stop.
+ *
+ * ⛔ La causa prima sta a monte e non si cura da qui: il modello/decoder
+ * degenera. Ma la fonte dice anche DOVE sta l'unico limite — «bounded only by
+ * … client timeout»: il client siamo noi, e finora non limitavamo niente.
+ * Questa è la nostra parte della causa, e si cura qui: appena la STESSA
+ * identica chiamata (stesso nome, stessi argomenti) compare per la
+ * `ripetizioniMassime`-esima volta nella STESSA risposta, il flusso si CHIUDE
+ * (`lettore.cancel()`, la connessione col server cade) e si torna `ripetizione`
+ * — chi chiama lo dice alla persona invece di eseguire la valanga.
+ *
+ * ⛔ NON è un tetto sul numero di attrezzi: chiamate DIVERSE nello stesso giro
+ * passano tutte, quante sono. Si conta la ripetizione, non il volume — è la
+ * stessa scelta di Hermes Agent, che chiude i suoi tool-loop guardrails su
+ * «tool name + canonical args» (NousResearch/hermes-agent #60084, 07/07/2026);
+ * e il buco che quell'issue denuncia — argomenti diversi ma risultato sempre
+ * uguale — resta aperto anche qui, dichiarato, non nascosto.
+ */
+export const RIPETIZIONI_IDENTICHE_MASSIME = 3
+
+/** Un valore che nessun `lettore.read()` può mai tornare: così la gara fra lettura e stop non confonde «è arrivato lo stop» con «è arrivato un pezzo». */
+const SENTINELLA_FERMATO = Symbol('fermato-su-richiesta')
+
+export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetizioniMassime = RIPETIZIONI_IDENTICHE_MASSIME } = {}) {
     const lettore = response.body.getReader()
     const decoder = new TextDecoder()
     let bufferGrezzo = ''
@@ -323,8 +376,70 @@ export async function consumaFlussoSSE(response, onDelta) {
     let reasoning = ''
     const toolCalls = []
     let usage = null
+    /*
+     * ⛔⛔ LO STOP CHE ARRIVA DENTRO LO STREAM — 08/09/2026, owner: «se clicco
+     * fermo la conversazione si ferma all'istante», e il «prossimo punto
+     * sicuro» non deve esistere. Prima di oggi `segnaleStop` era guardato SOLO
+     * fra un giro e l'altro: premuto «Ferma» a metà di una risposta lunga, il
+     * flusso restava aperto fino alla fine o fino ai 180 s del timeout.
+     *
+     * ⭐ Ricerca 08/09/2026 (Ken Huang, «Cancellation & Abort Propagation —
+     * Claude Code vs. Hermes Agent»): Claude Code passa `AbortController.signal`
+     * attraverso OGNI confine async; Hermes usa un flag cooperativo che gli
+     * attrezzi lunghi consultano — cioè proprio il «punto sicuro» rifiutato.
+     * Qui si fa la prima cosa: il segnale corre in gara con la lettura, e chi
+     * arriva primo decide. La `fetch` porta lo stesso segnale composto
+     * (`chiamaConRitenta`), ma la gara serve lo stesso: non tutti i trasporti
+     * abortiscono davvero una risposta già cominciata, e senza gara ci
+     * fideremmo di una promessa che non possiamo verificare.
+     */
+    let sveglia = null
+    const abortito = segnaleStop
+        ? new Promise((risolvi) => {
+            sveglia = () => risolvi(SENTINELLA_FERMATO)
+            if (segnaleStop.aborted) sveglia()
+            else segnaleStop.addEventListener('abort', sveglia, { once: true })
+        })
+        : null
+
+    /* La firma di una chiamata: quello che il modello ha CHIESTO, non il suo id — gli id sono casuali e nella valanga misurata erano 398 diversi per 398 richieste identiche. */
+    const conteggioFirme = new Map()
+    const finalizzate = new Set()
+    let ripetizione = null
+    /*
+     * Una chiamata è COMPLETA quando ne comincia un'altra (o quando il flusso
+     * finisce): solo allora i suoi argomenti non cresceranno più, e solo
+     * allora la firma è confrontabile. Contare prima vorrebbe dire confrontare
+     * `{` con `{` e vedere ripetizioni dove c'è solo un frammento a metà.
+     */
+    const finalizza = (escludi) => {
+        for (let j = 0; j < toolCalls.length; j += 1) {
+            if (j === escludi || !toolCalls[j] || finalizzate.has(j)) continue
+            finalizzate.add(j)
+            const firma = `${toolCalls[j].function.name} ${toolCalls[j].function.arguments}`
+            const quante = (conteggioFirme.get(firma) ?? 0) + 1
+            conteggioFirme.set(firma, quante)
+            if (quante >= ripetizioniMassime && !ripetizione) {
+                ripetizione = {
+                    nome: toolCalls[j].function.name,
+                    argomenti: toolCalls[j].function.arguments,
+                    viste: quante,
+                    daScartare: j,
+                }
+            }
+        }
+    }
+
+    try {
     for (;;) {
-        const { done, value } = await lettore.read()
+        const letto = abortito ? await Promise.race([lettore.read(), abortito]) : await lettore.read()
+        if (letto === SENTINELLA_FERMATO) {
+            await lettore.cancel().catch(() => { /* la connessione se ne va comunque: un cancel che lancia non deve coprire il motivo vero, che è lo stop */ })
+            const fermata = new Error('⛔ fermato su richiesta mentre il modello stava rispondendo.')
+            fermata.fermatoSuRichiesta = true
+            throw fermata
+        }
+        const { done, value } = letto
         if (done) break
         bufferGrezzo += decoder.decode(value, { stream: true })
         const eventi = bufferGrezzo.split('\n\n')
@@ -365,13 +480,33 @@ export async function consumaFlussoSSE(response, onDelta) {
                  */
                 if (eraNuova) onDelta?.({ tipo: 'tool-inizio', indice: i, toolCallId: toolCalls[i].id, nome: toolCalls[i].function.name })
                 if (pezzo.function?.arguments) onDelta?.({ tipo: 'tool-args', indice: i, toolCallId: toolCalls[i].id, delta: pezzo.function.arguments })
+                /* Comincia una chiamata nuova ⇒ tutte le altre sono chiuse: è qui che si contano le firme, e qui che la valanga si vede al terzo colpo invece che al 398°. */
+                if (eraNuova) finalizza(i)
+                if (ripetizione) break
             }
+            if (ripetizione) break
+        }
+        if (ripetizione) {
+            /* ⛔ Chiudere la connessione è la cura, non un dettaglio: la fonte dice che quella valanga è «bounded only by max_tokens or client timeout» — se il client non chiude, il server continua a generare copie. */
+            await lettore.cancel().catch(() => { /* il flusso è comunque abbandonato: un cancel che lancia non cambia il verdetto */ })
+            break
         }
     }
+    } finally {
+        if (sveglia) segnaleStop?.removeEventListener?.('abort', sveglia)
+    }
+    finalizza(-1)
+    /*
+     * Le copie oltre la soglia non entrano nella conversazione. ⛔ Si taglia
+     * l'ARRAY, non solo l'esecuzione: un `tool_call` senza il suo
+     * `tool_result` avvelena la chat per sempre (già imparato), e le copie
+     * scartate non avranno mai un esito.
+     */
+    if (ripetizione) toolCalls.length = ripetizione.daScartare
     const scelta = { role: 'assistant', content: content || null }
     if (toolCalls.length > 0) scelta.tool_calls = toolCalls
     if (reasoning) scelta.reasoning_content = reasoning
-    return { scelta, usage }
+    return { scelta, usage, ...(ripetizione ? { ripetizione } : {}) }
 }
 
 /**
@@ -398,11 +533,22 @@ export async function chiamaConRitenta({
     caso = Math.random,
     onDelta,
     reasoning,
+    segnaleStop,
 }) {
     const inStreaming = Boolean(onDelta)
     let ultimoStato = null
     let ultimoTesto = ''
     for (let tentativo = 0; tentativo < tentativiMassimi; tentativo += 1) {
+        /*
+         * ⛔ 08/09/2026 — chi ha premuto «Ferma» non aspetta il prossimo
+         * tentativo: fin qui un 429 al primo colpo poteva far ripartire la
+         * chiamata DOPO lo stop, e la sessione sembrava non fermarsi mai.
+         */
+        if (segnaleStop?.aborted) {
+            const fermata = new Error('⛔ fermato su richiesta prima di chiamare il modello.')
+            fermata.fermatoSuRichiesta = true
+            throw fermata
+        }
         const r = await fetchDiRete('https://openrouter.ai/api/v1/chat/completions', {
             method: 'POST',
             headers: { Authorization: `Bearer ${chiave}`, 'Content-Type': 'application/json' },
@@ -414,13 +560,24 @@ export async function chiamaConRitenta({
                 ...(inStreaming ? { stream: true, stream_options: { include_usage: true } } : {}),
                 ...(reasoning ? { reasoning } : {}),
             }),
-            signal: AbortSignal.timeout(180_000),
+            /*
+             * ⭐⭐⭐ 08/09/2026 — il segnale di stop arriva FIN QUI. Prima c'era
+             * solo il timeout: premendo «Ferma» durante una risposta lunga la
+             * connessione col modello restava aperta fino ai 180 s, e i token
+             * continuavano ad arrivare a una sessione che l'utente aveva già
+             * chiuso. `AbortSignal.any` (Node ≥ 20.3; qui gira v24.18.0)
+             * compone i due: chiude chi arriva primo, e il timeout resta
+             * intatto per chi non ha nessuno stop.
+             */
+            signal: segnaleStop
+                ? AbortSignal.any([segnaleStop, AbortSignal.timeout(180_000)])
+                : AbortSignal.timeout(180_000),
         })
         if (r.ok) {
             if (inStreaming) {
-                const { scelta, usage } = await consumaFlussoSSE(r, onDelta)
+                const { scelta, usage, ripetizione } = await consumaFlussoSSE(r, onDelta, { segnaleStop })
                 if (!scelta.content && !scelta.tool_calls) throw new Error('flusso SSE senza contenuto ne tool_calls')
-                return { scelta, usage, tentativi: tentativo + 1 }
+                return { scelta, usage, tentativi: tentativo + 1, ...(ripetizione ? { ripetizione } : {}) }
             }
             const j = await r.json()
             const scelta = j?.choices?.[0]?.message
@@ -3947,12 +4104,13 @@ export function formattaEsitoForge(risultato) {
     return `${risultato.error?.code ?? 'TALOS_FORGE_FAILED'}: ${risultato.error?.message ?? 'the tool failed.'}`
 }
 
-async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete, onDelta, reasoning, attrezziOpenAI = ATTREZZI_OPENAI) {
+async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete, onDelta, reasoning, attrezziOpenAI = ATTREZZI_OPENAI, segnaleStop) {
     return chiamaConRitenta({
         modello, chiave, messaggi, attrezzi: attrezziOpenAI,
         ...(fetchDiRete ? { fetchDiRete } : {}),
         ...(onDelta ? { onDelta } : {}),
         ...(reasoning ? { reasoning } : {}),
+        ...(segnaleStop ? { segnaleStop } : {}),
     })
 }
 
@@ -4508,6 +4666,8 @@ export async function talosLavora({
     let ultimoAvevaContenuto = false
     /** ⭐ vedi comeFinita più sotto: un fermo su richiesta non è mai 'concluso'. */
     let fermatoSuRichiesta = false
+    /** ⭐ 08/09/2026 — la valanga di chiamate identiche ha un esito SUO: né 'concluso', né 'fermato' su richiesta di una persona. Vedi comeFinita. */
+    let fermatoPerRipetizione = null
     /** ⭐ Stadio A: quante volte questo task ha compattato la conversazione. */
     let compattazioni = 0
     /*
@@ -4620,11 +4780,36 @@ export async function talosLavora({
          * `LIMITE_DI_TRAFFICO` in harness.mjs) non cambia comportamento, solo
          * lo raggiunge dopo aver ritentato.
          */
-        const { scelta: risposta, usage } = await chiamaIlModelloConRitenta(
-            modello, chiave, messaggi, fetchDiRete,
-            onDelta ? (e) => onDelta({ giro, ...e }) : undefined,
-            reasoning, attrezziOpenAI,
-        )
+        let risposta = null
+        let usage = null
+        let ripetizione = null
+        try {
+            const esitoChiamata = await chiamaIlModelloConRitenta(
+                modello, chiave, messaggi, fetchDiRete,
+                onDelta ? (e) => onDelta({ giro, ...e }) : undefined,
+                reasoning, attrezziOpenAI, segnaleStop,
+            )
+            risposta = esitoChiamata.scelta
+            usage = esitoChiamata.usage
+            ripetizione = esitoChiamata.ripetizione ?? null
+        }
+        catch (rotta) {
+            /*
+             * ⛔⛔ 08/09/2026 — lo stop a metà risposta NON è un errore da
+             * mostrare: è l'esito che l'utente ha chiesto. La `fetch` ora
+             * porta il segnale (vedi `chiamaConRitenta`), quindi abortisce
+             * con un'eccezione — si legge il SEGNALE, non il tipo
+             * dell'eccezione: un `AbortError` può arrivare anche dal timeout,
+             * e i due non si confondono.
+             * ⛔ E la risposta a metà non entra in conversazione: un
+             * `tool_call` senza il suo esito avvelenerebbe ogni ripresa.
+             */
+            if (segnaleStop?.aborted) {
+                fermatoSuRichiesta = true
+                break
+            }
+            throw rotta
+        }
         if (usage) {
             conto.prompt_tokens += Number(usage.prompt_tokens ?? 0) || 0
             conto.completion_tokens += Number(usage.completion_tokens ?? 0) || 0
@@ -4636,6 +4821,26 @@ export async function talosLavora({
         }
         ultimoAvevaContenuto = Boolean(risposta.content)
         if (risposta.content) ultimoTesto = String(risposta.content)
+        /*
+         * ⛔⛔ GLI ARGOMENTI TRONCATI AVVELENANO LA CONVERSAZIONE — misurato
+         * 08/09/2026 sulla stessa sessione della valanga: l'ultima delle 398
+         * chiamate aveva `arguments: '{'`, e la richiesta successiva è morta
+         * con `HTTP 500 … Failed to parse tool call arguments as JSON` dopo
+         * tutti e 4 i tentativi. Non era un guasto del server: llama.cpp
+         * ri-legge come JSON gli argomenti dei messaggi che gli TORNANO
+         * indietro, e un `{` a metà lo fa 500 per sempre (ggml-org/llama.cpp
+         * #22072, 18/04/2026 — «arguments sometimes just `{`… server returns
+         * HTTP 500»). ⇒ Un pezzo di JSON a metà non è una richiesta: entra in
+         * conversazione come `{}`. Id e nome restano al loro posto, quindi
+         * nessuna chiamata orfana; e l'esito che il modello leggerà sarà
+         * quello vero di una chiamata senza argomenti, non un successo finto.
+         */
+        for (const c of risposta.tool_calls ?? []) {
+            const grezzi = c.function?.arguments
+            if (typeof grezzi !== 'string' || grezzi === '') continue
+            try { JSON.parse(grezzi) }
+            catch { c.function.arguments = '{}' }
+        }
         messaggi.push(risposta)
         /*
          * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 —
@@ -4676,7 +4881,18 @@ export async function talosLavora({
             break
         }
 
+        let fermatoDentroIlGiro = false
         for (const c of chiamate) {
+            /*
+             * ⛔⛔ 08/09/2026 — quello che avevamo già ACCODATO va fermato
+             * anche lui. È il limite noto di chi si ferma solo a monte
+             * (thomasdevos.com, 16/08/2026, «Stopping Claude Code does not
+             * cancel queued MCP work»: il modello smette di produrre token e
+             * il lavoro già in coda continua). Nella sessione misurata questo
+             * significava 398 esecuzioni da portare a termine DOPO che
+             * l'utente aveva già premuto «Ferma».
+             */
+            if (segnaleStop?.aborted) { fermatoDentroIlGiro = true; break }
             const nome = c.function?.name
             let argomenti = {}
             try { argomenti = JSON.parse(c.function?.arguments || '{}') } catch { /* vuoto */ }
@@ -6117,6 +6333,45 @@ export async function talosLavora({
             onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool })
         }
 
+        if (fermatoDentroIlGiro) {
+            /*
+             * ⛔ Chi si ferma lascia comunque la conversazione VALIDA: ogni
+             * `tool_call` annunciato deve avere il suo `tool_result`, anche
+             * quello che non gireremo mai — un `tool_use` senza risposta
+             * avvelena la chat per sempre, e la ripresa morirebbe qui.
+             * L'esito dice il vero: non è stato eseguito.
+             */
+            const gia = new Set(messaggi.filter((m) => m.role === 'tool').map((m) => m.tool_call_id))
+            for (const c of chiamate) {
+                if (gia.has(c.id)) continue
+                const contenutoFermato = '⛔ fermato su richiesta: questo attrezzo non e stato eseguito.'
+                messaggi.push({ role: 'tool', tool_call_id: c.id, content: contenutoFermato })
+                onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoFermato })
+            }
+            fermatoSuRichiesta = true
+            break
+        }
+
+        /*
+         * ⛔⛔⛔ LA RETE DI SICUREZZA, DICHIARATA PER QUELLO CHE È — 08/09/2026.
+         * La causa prima della valanga sta a monte (vedi la doc di
+         * `consumaFlussoSSE`): il decoder del server locale ripete la stessa
+         * chiamata finché qualcuno non chiude la connessione. Da qui non si
+         * cura il modello; si può solo NON far finta di niente. Il flusso è
+         * già stato chiuso a metà, le copie in più non sono entrate in
+         * conversazione, e le prime — che sono lavoro vero — sono state
+         * eseguite. Quello che resta è dirlo, e fermare il giro invece di
+         * rilanciare un contesto pieno di copie identiche (nella sessione
+         * misurata: 398 esiti, UNO SOLO distinto — il carburante perfetto
+         * perché il giro dopo degeneri peggio).
+         * ⛔ Non è un tetto sul numero di attrezzi: un giro con tante chiamate
+         * DIVERSE non passa mai di qui.
+         */
+        if (ripetizione) {
+            fermatoPerRipetizione = ripetizione
+            break
+        }
+
         /*
          * ⭐ STADIO A: LA RIFLESSIONE — vedi la doc sopra `GIRI_PRIMA_DI_RIFLETTERE`.
          * Appesa all'ULTIMO esito del giro, non a uno a caso: e' quello che il
@@ -6148,9 +6403,26 @@ export async function talosLavora({
     const comeFinita = fermatoSuRichiesta
         ? {
             esito: 'fermato',
-            detto: '⛔ interrotto su richiesta prima di completare il giro successivo.',
+            detto: '⛔ interrotto su richiesta.',
         }
-        : comeSonoFinitiIGiri({
+        /*
+         * ⛔ Un esito SUO, e una frase che una persona capisce senza sapere
+         * cos'è una tool-call: «giri esauriti» e «ha ripetuto la stessa cosa»
+         * sono due guasti diversi, e leggerli uguali fa studiare il problema
+         * sbagliato — la stessa lezione del 429 letto come «fallito».
+         */
+        : fermatoPerRipetizione
+            ? {
+                esito: 'ripetizione',
+                detto: `⛔ il modello ha chiesto ${fermatoPerRipetizione.viste} volte la stessa identica cosa`
+                    + ` nella stessa risposta ("${fermatoPerRipetizione.nome}" con gli stessi argomenti),`
+                    + ' e continuava: la risposta e stata chiusa li. Le prime copie sono state eseguite,'
+                    + ' le altre no. Non e un limite sul numero di attrezzi — richieste DIVERSE nello stesso'
+                    + ' giro passano tutte. Succede con i modelli locali quando il decoder entra in ripetizione'
+                    + ' (llama.cpp/ik_llama.cpp, difetto noto): con un altro modello, o un altro quantizzato,'
+                    + ' di solito non si ripresenta.',
+            }
+            : comeSonoFinitiIGiri({
             giroRaggiunto: turniUsati,
             giriMassimi: giriMassimiEffettivi,
             haRisposto: ultimoAvevaContenuto,

@@ -75,7 +75,13 @@ export function creaStatoVuoto(dati = {}, opzioni = {}) {
   const titolo = el(documentObj, 'h2', 'talos-empty__title');
   titolo.append(documentObj.createTextNode('Cosa costruiamo in '), el(documentObj, 'span', 'talos-empty__project', dati.progetto || 'questa cartella'), documentObj.createTextNode('?'));
   const lead = el(documentObj, 'p', 'talos-empty__lead', dati.lead || 'TALOS legge, scrive ed esegue nella cartella che gli apri. Ogni azione lascia una ricevuta firmata, e niente esce da questa macchina se non lo chiedi tu.');
-  colonna.append(marchio, titolo, lead);
+  /* ⛔ 08/09/2026 — il mockup ha la scritta TALOS in Orbitron sotto il glifo (owner 07/9, O-46:
+     «la chat vuota senza logo e senza TALOS in Orbitron»), e questo componente non la produceva:
+     la parità componenti↔mockup era rossa alle tre viewport. Il mockup è la fonte, e chi disegna
+     dai dati deve arrivare allo stesso DOM. */
+  const nome = el(documentObj, 'span', 'talos-empty__marchio talos-orbitron-brand', 'TALOS');
+  nome.setAttribute('aria-hidden', 'true');
+  colonna.append(marchio, nome, titolo, lead);
   const suggerimenti = Array.isArray(dati.suggerimenti) ? dati.suggerimenti : [];
   if (suggerimenti.length > 0) {
     const lista = el(documentObj, 'div', 'talos-card talos-list');

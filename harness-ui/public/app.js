@@ -9569,7 +9569,9 @@ function creaStatoVuoto(dati = {}, opzioni = {}) {
   const titolo2 = el24(documentObj, "h2", "talos-empty__title");
   titolo2.append(documentObj.createTextNode("Cosa costruiamo in "), el24(documentObj, "span", "talos-empty__project", dati.progetto || "questa cartella"), documentObj.createTextNode("?"));
   const lead = el24(documentObj, "p", "talos-empty__lead", dati.lead || "TALOS legge, scrive ed esegue nella cartella che gli apri. Ogni azione lascia una ricevuta firmata, e niente esce da questa macchina se non lo chiedi tu.");
-  colonna.append(marchio, titolo2, lead);
+  const nome = el24(documentObj, "span", "talos-empty__marchio talos-orbitron-brand", "TALOS");
+  nome.setAttribute("aria-hidden", "true");
+  colonna.append(marchio, nome, titolo2, lead);
   const suggerimenti = Array.isArray(dati.suggerimenti) ? dati.suggerimenti : [];
   if (suggerimenti.length > 0) {
     const lista = el24(documentObj, "div", "talos-card talos-list");
@@ -10505,8 +10507,35 @@ var init_app = __esm({
         const ridotto = document.body.classList.contains("reduce-motion");
         scroller.scrollTo({ top: scroller.scrollHeight, behavior: ridotto ? "auto" : "smooth" });
       }
+      const SIMBOLO_RIPIEGO = "i-ignoto";
+      const ALIAS_SIMBOLI = { "i-chevron": "i-chev", "i-chevron-right": "i-chev", "i-file": "i-doc" };
+      const registroIconeMorte = /* @__PURE__ */ new Map();
+      function simboloDisegnato(nome) {
+        const elemento = document.getElementById(nome);
+        return elemento != null && String(elemento.tagName).toLowerCase() === "symbol";
+      }
+      function risolviSimboloIcona(nome) {
+        const chiesto = String(nome ?? "");
+        if (!/^[A-Za-z][A-Za-z0-9_-]*$/.test(chiesto)) return { nome: null, stato: "malformato", chiesto };
+        if (typeof document === "undefined" || !document.querySelector || !document.querySelector("symbol")) {
+          return { nome: chiesto, stato: "nonValidabile", chiesto };
+        }
+        if (simboloDisegnato(chiesto)) return { nome: chiesto, stato: "disegnato", chiesto };
+        const tradotto = ALIAS_SIMBOLI[chiesto];
+        if (tradotto && simboloDisegnato(tradotto)) return { nome: tradotto, stato: "tradotto", chiesto };
+        return { nome: simboloDisegnato(SIMBOLO_RIPIEGO) ? SIMBOLO_RIPIEGO : null, stato: "assente", chiesto };
+      }
+      function registraIconaMorta(esito) {
+        if (esito.stato !== "assente" && esito.stato !== "malformato") return;
+        const viste = registroIconeMorte.get(esito.chiesto) || 0;
+        registroIconeMorte.set(esito.chiesto, viste + 1);
+        if (viste === 0) console.error(`[TALOS] icona «${esito.chiesto}»: nessun simbolo con questo nome nello sprite, a schermo resta un vuoto. Disegnalo in mockup/talos-mockup.html e rigenera il template.`);
+      }
       function icon(id) {
-        return `<svg aria-hidden="true"><use href="#${id}"/></svg>`;
+        const esito = risolviSimboloIcona(id);
+        registraIconaMorta(esito);
+        if (!esito.nome) return '<svg aria-hidden="true"></svg>';
+        return `<svg aria-hidden="true"><use href="#${esito.nome}"/></svg>`;
       }
       function demoLabelsEnabled() {
         return window.__talosHarnessUiLab === true || new URLSearchParams(window.location.search).get("ui-lab") === "1" || window.location.hash === "#ui-lab";
@@ -13963,8 +13992,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
               iconWrap.className = "sheet-icon";
               iconWrap.innerHTML = icon("i-brain");
               const textWrap = document.createElement("span");
-              textWrap.append(textElement("strong", "", modello.name || modello.id));
+              textWrap.append(textElement("strong", "", nomeModelloUmano(valore) || modello.name || modello.id));
               textWrap.append(textElement("small", "", `su questo computer · ${formattaByteModelLab(Number(modello.bytes || 0))}${modello.state === "ready" ? "" : ` · ${modello.state}`}`));
+              opt.title = modello.id;
               opt.append(iconWrap, textWrap);
               opt.addEventListener("click", async () => {
                 const applicaScelta = () => {
@@ -16210,7 +16240,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         sendButton.classList.toggle("is-stop", attivo);
         const senzaContatto = attivo && contattoPerso();
         sendButton.setAttribute("aria-label", senzaContatto ? "Il server non risponde" : attivo ? "Interrompi risposta" : "Invia");
-        sendButton.title = senzaContatto ? "Il server non risponde: la richiesta di fermare non arriverebbe." : attivo ? "Interrompi al prossimo punto sicuro" : "Invia";
+        sendButton.title = senzaContatto ? "Il server non risponde: la richiesta di fermare non arriverebbe." : attivo ? "Interrompi adesso" : "Invia";
         if (use) use.setAttribute("href", attivo ? "#i-stop" : "#i-send");
         redirectRunButton.hidden = !(attivo && haTesto);
         redirectRunButton.disabled = redirectOccupato;
@@ -18940,10 +18970,11 @@ ${testo3}` : testo3;
         const svg = document.createElementNS(svgNs, "svg");
         svg.setAttribute("class", "i");
         svg.setAttribute("aria-hidden", "true");
+        const esito = risolviSimboloIcona(nomeSimbolo);
+        registraIconaMorta(esito);
+        if (!esito.nome) return svg;
         const uso = document.createElementNS(svgNs, "use");
-        const ALIAS2 = { "i-chevron-right": "i-chev", "i-file": "i-doc", "i-chevron": "i-chev" };
-        const nome = document.getElementById(nomeSimbolo) ? nomeSimbolo : ALIAS2[nomeSimbolo] || nomeSimbolo;
-        uso.setAttribute("href", `#${nome}`);
+        uso.setAttribute("href", `#${esito.nome}`);
         svg.append(uso);
         return svg;
       }
@@ -20025,7 +20056,7 @@ ${testo3}` : testo3;
         sendButton.setAttribute("aria-busy", "true");
         try {
           await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/stop`, redirectId ? { redirectId } : {});
-          toast("Stop richiesto", "La sessione si ferma al prossimo punto sicuro.");
+          toast("Fermata", "La sessione si è fermata.");
         } catch (error) {
           toast("Stop non riuscito", error.message);
         } finally {
@@ -23132,6 +23163,12 @@ ${blocchi.join("\n\n")}` : testa;
         apriFileAlbero,
         scollegaTerminaleReale,
         statoTerminale,
+        /* ⭐ 08/9 CB-10 — il risolutore dei simboli e il registro dei nomi non risolti: esposti perché
+         * un riferimento SVG morto non produce nessun segnale (SVG 2: «not rendered … equivalent to an
+         * empty container element»), quindi l'unico modo di dire «zero buchi» avendolo guardato è
+         * chiederlo alla app viva. Internals reali, non un secondo contratto. */
+        risolviSimboloIcona,
+        registroIconeMorte,
         get backgroundAnimationRunning() {
           return backgroundAnimationRunning;
         },

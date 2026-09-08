@@ -16,7 +16,7 @@ import { describe, it } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import {
     siRitenta, attesaDelTentativo, chiamaConRitenta, consumaFlussoSSE,
-    comeSonoFinitiIGiri, uscitaUtile,
+    comeSonoFinitiIGiri, uscitaUtile, RIPETIZIONI_IDENTICHE_MASSIME,
     stimaToken, stimaTokenConversazione, serveCompattare, compattaConversazione,
     GIRI_PRIMA_DI_COMPATTARE, TOKEN_MINIMI_PER_COMPATTARE,
     serveRiflettere, GIRI_PRIMA_DI_RIFLETTERE,
@@ -6093,5 +6093,328 @@ describe('talosLavora - Tool Forge (FASE N, nono e ultimo sistema, "fetta onesta
         for (const id of Object.keys(CAPACITA_FORGE)) {
             assert.ok(strumento.function.description.includes(id), `la description di tool_create deve nominare "${id}"`)
         }
+    })
+})
+
+/* ═════════════════════════════════════════════════════════════════════════
+ * ⛔⛔⛔ LA VALANGA DI CHIAMATE IDENTICHE, E LO STOP CHE NON ERA IMMEDIATO
+ * 08/09/2026.
+ *
+ * I frammenti SSE di questi test NON sono inventati: hanno la forma ESATTA
+ * misurata sulla sessione vera dell'owner col motore locale
+ * (`.sessions-store/8407d564-….jsonl`, modello Nemotron-Cascade-2-30B-A3B):
+ * un `index` diverso e un `id` casuale diverso per ogni chiamata, e gli
+ * argomenti spezzati in due frammenti — `{` e poi `}`. Erano 398 chiamate,
+ * 398 id distinti, 795 frammenti di argomenti, DUE sole combinazioni
+ * nome+argomenti («elenca {}» 397 volte, «elenca {» una) e UN SOLO risultato
+ * distinto su 398.
+ * ═══════════════════════════════════════════════════════════════════════ */
+describe('⛔⛔⛔ la valanga di chiamate identiche del motore locale — 08/09/2026', () => {
+
+    /** I frammenti veri: per ogni chiamata un inizio (id+nome), poi `{`, poi `}`. */
+    function frammentiValanga(quante, nome = 'elenca') {
+        const eventi = []
+        for (let i = 0; i < quante; i += 1) {
+            eventi.push({ choices: [{ delta: { tool_calls: [{ index: i, id: `id-casuale-${i}`, type: 'function', function: { name: nome, arguments: '' } }] } }] })
+            eventi.push({ choices: [{ delta: { tool_calls: [{ index: i, function: { arguments: '{' } }] } }] })
+            eventi.push({ choices: [{ delta: { tool_calls: [{ index: i, function: { arguments: '}' } }] } }] })
+        }
+        return eventi
+    }
+
+    /** Un flusso che consegna UN evento per pezzo di rete, e che sa dire quanti gliene sono stati chiesti e se e' stato chiuso a meta'. */
+    function flussoAPezzi(eventi) {
+        const stato = { chiesti: 0, annullato: false }
+        let i = 0
+        const risposta = {
+            ok: true,
+            status: 200,
+            body: new ReadableStream({
+                pull(controllore) {
+                    if (i >= eventi.length) { controllore.close(); return }
+                    stato.chiesti += 1
+                    controllore.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(eventi[i])}\n\n`))
+                    i += 1
+                },
+                cancel() { stato.annullato = true },
+            }),
+        }
+        return { risposta, stato }
+    }
+
+    it('⛔⛔⛔ LA RIPRODUZIONE: 398 chiamate identiche in una risposta sola — il flusso si CHIUDE alla terza, non alla 398esima', async () => {
+        const { risposta, stato } = flussoAPezzi(frammentiValanga(398))
+        const { scelta, ripetizione } = await consumaFlussoSSE(risposta, () => {})
+
+        assert.ok(ripetizione, 'la valanga deve essere riconosciuta, non subita')
+        assert.equal(ripetizione.nome, 'elenca')
+        assert.equal(ripetizione.argomenti, '{}')
+        assert.equal(ripetizione.viste, RIPETIZIONI_IDENTICHE_MASSIME)
+        assert.equal(scelta.tool_calls.length, RIPETIZIONI_IDENTICHE_MASSIME - 1,
+            'le copie oltre la soglia non entrano nella conversazione: nessuna verra mai eseguita, nessuna restera orfana')
+        assert.equal(stato.annullato, true, 'la connessione col server va CHIUSA: la fonte dice che quella valanga e limitata solo dal client')
+        assert.ok(stato.chiesti < 30, `letti ${stato.chiesti} pezzi su 1194: il flusso non deve essere consumato tutto`)
+    })
+
+    it('⛔⛔ e il conto lo dimostra: 1.194 frammenti SSE per 398 chiamate — 3 frammenti ciascuna, uniti BENE. `index ?? 0` non fabbrica niente', async () => {
+        /* Due frammenti con lo STESSO index restano UNA chiamata: se fossimo noi a moltiplicarle, qui ne uscirebbero due. */
+        const eventi = [
+            { choices: [{ delta: { tool_calls: [{ index: 0, id: 'uno', function: { name: 'elenca', arguments: '' } }] } }] },
+            { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '{"percorso":' } }] } }] },
+            { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '"."}' } }] } }] },
+        ]
+        const { risposta } = flussoAPezzi(eventi)
+        const { scelta, ripetizione } = await consumaFlussoSSE(risposta, () => {})
+        assert.equal(scelta.tool_calls.length, 1, 'tre frammenti, una chiamata sola')
+        assert.equal(scelta.tool_calls[0].function.arguments, '{"percorso":"."}')
+        assert.equal(ripetizione, undefined)
+    })
+
+    it('⛔⛔⛔ AL CONTRARIO — sei chiamate DIVERSE nello stesso giro: passano tutte e sei, nessuna fermata', async () => {
+        const eventi = []
+        const nomi = ['elenca', 'leggi', 'cerca', 'shell', 'scrivi', 'leggi']
+        const argomenti = ['{"a":1}', '{"a":2}', '{"a":3}', '{"a":4}', '{"a":5}', '{"a":6}']
+        for (let i = 0; i < 6; i += 1) {
+            eventi.push({ choices: [{ delta: { tool_calls: [{ index: i, id: `x${i}`, function: { name: nomi[i], arguments: '' } }] } }] })
+            eventi.push({ choices: [{ delta: { tool_calls: [{ index: i, function: { arguments: argomenti[i] } }] } }] })
+        }
+        const { risposta, stato } = flussoAPezzi(eventi)
+        const { scelta, ripetizione } = await consumaFlussoSSE(risposta, () => {})
+        assert.equal(ripetizione, undefined, 'un ventaglio di lavoro vero non e una valanga')
+        assert.equal(scelta.tool_calls.length, 6)
+        assert.equal(stato.annullato, false, 'il flusso deve finire da solo, non essere chiuso da noi')
+    })
+
+    it('⛔⛔ AL CONTRARIO — due copie identiche (sotto la soglia) restano ENTRAMBE: si conta la ripetizione, non il volume', async () => {
+        const { risposta } = flussoAPezzi(frammentiValanga(2))
+        const { scelta, ripetizione } = await consumaFlussoSSE(risposta, () => {})
+        assert.equal(ripetizione, undefined)
+        assert.equal(scelta.tool_calls.length, 2)
+    })
+
+    it('⭐⭐ due chiamate identiche NON di fila, separate da una diversa: contano lo stesso (la ripetizione non e solo consecutiva)', async () => {
+        const eventi = []
+        const firme = [['elenca', '{}'], ['leggi', '{"f":1}'], ['elenca', '{}'], ['leggi', '{"f":2}'], ['elenca', '{}'], ['leggi', '{"f":3}']]
+        firme.forEach(([nome, args], i) => {
+            eventi.push({ choices: [{ delta: { tool_calls: [{ index: i, id: `y${i}`, function: { name: nome, arguments: '' } }] } }] })
+            eventi.push({ choices: [{ delta: { tool_calls: [{ index: i, function: { arguments: args } }] } }] })
+        })
+        const { risposta } = flussoAPezzi(eventi)
+        const { ripetizione } = await consumaFlussoSSE(risposta, () => {})
+        assert.ok(ripetizione, 'tre «elenca {}» sono tre, anche con altro in mezzo')
+        assert.equal(ripetizione.nome, 'elenca')
+    })
+})
+
+describe('⛔⛔⛔ la valanga vista da talosLavora, e l argomento troncato che avvelenava la conversazione', () => {
+    function cartellaDiProva(t) {
+        const radice = mkdtempSync(join(tmpdir(), 'talos-valanga-'))
+        writeFileSync(join(radice, 'un-file.txt'), 'contenuto', 'utf8')
+        t.after(() => rmSync(radice, { recursive: true, force: true }))
+        return radice
+    }
+
+    function reteStreaming(eventiPerChiamata) {
+        const chiamate = []
+        return {
+            chiamate,
+            fetch: async (url, opzioni) => {
+                const indice = chiamate.length
+                chiamate.push({ corpo: JSON.parse(opzioni.body) })
+                const eventi = eventiPerChiamata[Math.min(indice, eventiPerChiamata.length - 1)]
+                const testo = eventi.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('')
+                return {
+                    ok: true,
+                    status: 200,
+                    body: new ReadableStream({
+                        start(c) { c.enqueue(new TextEncoder().encode(testo)); c.close() },
+                    }),
+                    text: async () => '',
+                }
+            },
+        }
+    }
+
+    it('⛔⛔⛔ il giro si FERMA e DICE PERCHE: esito «ripetizione», e le copie sopravvissute sono state eseguite davvero', async (t) => {
+        const cartella = cartellaDiProva(t)
+        const eventi = []
+        for (let i = 0; i < 50; i += 1) {
+            eventi.push({ choices: [{ delta: { tool_calls: [{ index: i, id: `id-${i}`, function: { name: 'elenca', arguments: '' } }] } }] })
+            eventi.push({ choices: [{ delta: { tool_calls: [{ index: i, function: { arguments: '{}' } }] } }] })
+        }
+        const rete = reteStreaming([eventi])
+
+        const esito = await talosLavora({
+            cartella, task: { consegna: 'ciao belloooo' }, modello: 'x', chiave: 'y',
+            fetchDiRete: rete.fetch, onDelta: () => {},
+        })
+
+        assert.equal(esito.comeFinita, 'ripetizione', 'ne «concluso» ne «giri-esauriti»: e un guasto suo, con un nome suo')
+        assert.match(esito.detto, /stessa identica cosa/)
+        assert.match(esito.detto, /elenca/)
+        assert.match(esito.detto, /Non e un limite sul numero di attrezzi/)
+        assert.equal(rete.chiamate.length, 1, 'niente secondo giro: il contesto non si riempie di copie identiche')
+
+        const assistente = esito.messaggiFinali.filter((m) => m.role === 'assistant' && m.tool_calls)
+        assert.equal(assistente.length, 1)
+        assert.equal(assistente[0].tool_calls.length, 2, 'due copie eseguite, le altre 48 mai entrate')
+        const esitiAttrezzo = esito.messaggiFinali.filter((m) => m.role === 'tool')
+        assert.equal(esitiAttrezzo.length, 2, 'una risposta per ogni chiamata annunciata: nessuna chiamata orfana')
+        assert.match(esitiAttrezzo[0].content, /un-file\.txt/, 'le chiamate sopravvissute sono lavoro vero, eseguito davvero')
+    })
+
+    it('⛔⛔ AL CONTRARIO — un giro con attrezzi DIVERSI non si ferma: arriva fino in fondo e conclude', async (t) => {
+        const cartella = cartellaDiProva(t)
+        const primoGiro = [
+            { choices: [{ delta: { tool_calls: [{ index: 0, id: 'a', function: { name: 'elenca', arguments: '{}' } }] } }] },
+            { choices: [{ delta: { tool_calls: [{ index: 1, id: 'b', function: { name: 'leggi', arguments: '{"percorso":"un-file.txt"}' } }] } }] },
+            { choices: [{ delta: { tool_calls: [{ index: 2, id: 'c', function: { name: 'elenca', arguments: '{"percorso":"."}' } }] } }] },
+        ]
+        const secondoGiro = [{ choices: [{ delta: { content: 'ho finito' } }] }]
+        const rete = reteStreaming([primoGiro, secondoGiro])
+
+        const esito = await talosLavora({
+            cartella, task: { consegna: 'fai tre cose diverse' }, modello: 'x', chiave: 'y',
+            fetchDiRete: rete.fetch, onDelta: () => {},
+        })
+
+        assert.equal(esito.comeFinita, 'concluso')
+        assert.equal(esito.messaggiFinali.filter((m) => m.role === 'tool').length, 3, 'tutte e tre eseguite')
+    })
+
+    it('⛔⛔⛔ un argomento TRONCATO non entra mai in conversazione: `{` diventa `{}` — era l HTTP 500 che chiudeva la sessione', async (t) => {
+        const cartella = cartellaDiProva(t)
+        const chiamate = []
+        const risposte = [
+            { role: 'assistant', content: null, tool_calls: [{ id: 't1', type: 'function', function: { name: 'elenca', arguments: '{' } }] },
+            { role: 'assistant', content: 'fatto', tool_calls: [] },
+        ]
+        const fetchFinto = async (url, opzioni) => {
+            const indice = chiamate.length
+            chiamate.push(JSON.parse(opzioni.body))
+            return {
+                ok: true, status: 200,
+                json: async () => ({ choices: [{ message: risposte[Math.min(indice, risposte.length - 1)] }] }),
+                text: async () => '',
+            }
+        }
+
+        const esito = await talosLavora({
+            cartella, task: { consegna: 'una cosa sola' }, modello: 'x', chiave: 'y', fetchDiRete: fetchFinto,
+        })
+
+        assert.equal(esito.comeFinita, 'concluso')
+        const inviatiAlSecondoGiro = chiamate[1].messages.filter((m) => m.role === 'assistant' && m.tool_calls)
+        assert.equal(inviatiAlSecondoGiro.length, 1)
+        assert.equal(inviatiAlSecondoGiro[0].tool_calls[0].function.arguments, '{}',
+            'un JSON a meta rimandato al server locale lo fa rispondere 500 per sempre (llama.cpp #22072)')
+        assert.equal(inviatiAlSecondoGiro[0].tool_calls[0].id, 't1', 'id e nome restano: nessuna chiamata orfana')
+    })
+})
+
+describe('⛔⛔⛔ lo STOP e immediato — 08/09/2026, owner: «si ferma all istante»', () => {
+    function cartellaDiProva(t) {
+        const radice = mkdtempSync(join(tmpdir(), 'talos-stop-'))
+        writeFileSync(join(radice, 'un-file.txt'), 'contenuto', 'utf8')
+        t.after(() => rmSync(radice, { recursive: true, force: true }))
+        return radice
+    }
+
+    /** Una risposta che comincia e non finisce piu': esattamente il caso in cui prima d oggi lo stop aspettava fino a 180 s. */
+    function rispostaCheNonFinisceMai(registro) {
+        return {
+            ok: true,
+            status: 200,
+            body: new ReadableStream({
+                start(c) { c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content: 'sto scrivendo' } }] })}\n\n`)) },
+                pull() { return new Promise(() => { /* non arrivera mai altro */ }) },
+                cancel() { registro.annullato = true },
+            }),
+        }
+    }
+
+    it('⛔⛔⛔ LA MISURA: fra l abort e la chiusura passano millisecondi, non i 180 s del timeout', async () => {
+        const registro = { annullato: false }
+        const controllo = new AbortController()
+        let segnaleVistoDallaFetch = null
+        const fetchFinto = async (url, opzioni) => {
+            segnaleVistoDallaFetch = opzioni.signal
+            return rispostaCheNonFinisceMai(registro)
+        }
+
+        const promessa = chiamaConRitenta({
+            modello: 'x', chiave: 'y', messaggi: [], attrezzi: [],
+            fetchDiRete: fetchFinto, onDelta: () => {}, segnaleStop: controllo.signal,
+        })
+        await new Promise((ok) => setTimeout(ok, 20))
+
+        const partenza = performance.now()
+        controllo.abort()
+        await assert.rejects(promessa, (rotta) => rotta.fermatoSuRichiesta === true)
+        const millisecondi = performance.now() - partenza
+
+        assert.ok(millisecondi < 250, `dall abort alla chiusura sono passati ${millisecondi.toFixed(1)} ms: devono essere pochi, non 180.000`)
+        assert.equal(registro.annullato, true, 'e il flusso HTTP verso il modello si CHIUDE, non resta aperto a consumare token')
+        assert.equal(segnaleVistoDallaFetch.aborted, true, 'il segnale di stop arriva anche alla fetch, composto col timeout (AbortSignal.any)')
+    })
+
+    it('⛔⛔ AL CONTRARIO — senza nessun abort, una risposta lenta finisce in pace', async () => {
+        let mandati = 0
+        const fetchLento = async () => ({
+            ok: true,
+            status: 200,
+            body: new ReadableStream({
+                async pull(c) {
+                    if (mandati >= 3) { c.close(); return }
+                    await new Promise((ok) => setTimeout(ok, 15))
+                    mandati += 1
+                    c.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ delta: { content: `pezzo${mandati} ` } }] })}\n\n`))
+                },
+            }),
+        })
+        const controllo = new AbortController()
+        const r = await chiamaConRitenta({
+            modello: 'x', chiave: 'y', messaggi: [], attrezzi: [],
+            fetchDiRete: fetchLento, onDelta: () => {}, segnaleStop: controllo.signal,
+        })
+        assert.equal(r.scelta.content, 'pezzo1 pezzo2 pezzo3 ')
+    })
+
+    it('⛔⛔⛔ lo stop premuto MENTRE girano gli attrezzi: quelli in coda non partono, e ognuno ha comunque il suo esito', async (t) => {
+        const cartella = cartellaDiProva(t)
+        const controllo = new AbortController()
+        const risposta = {
+            role: 'assistant',
+            content: null,
+            tool_calls: [
+                { id: 'u1', type: 'function', function: { name: 'elenca', arguments: '{}' } },
+                { id: 'u2', type: 'function', function: { name: 'elenca', arguments: '{"percorso":"."}' } },
+                { id: 'u3', type: 'function', function: { name: 'leggi', arguments: '{"percorso":"un-file.txt"}' } },
+            ],
+        }
+        let chiamateAlModello = 0
+        const fetchFinto = async () => {
+            chiamateAlModello += 1
+            return { ok: true, status: 200, json: async () => ({ choices: [{ message: risposta }] }), text: async () => '' }
+        }
+
+        const esiti = []
+        const esito = await talosLavora({
+            cartella, task: { consegna: 'tre attrezzi' }, modello: 'x', chiave: 'y',
+            fetchDiRete: fetchFinto, segnaleStop: controllo.signal,
+            onGiro: (e) => {
+                if (e.tipo !== 'tool-esito') return
+                esiti.push(e)
+                if (esiti.length === 1) controllo.abort()
+            },
+        })
+
+        assert.equal(esito.comeFinita, 'fermato')
+        assert.equal(chiamateAlModello, 1, 'nessun altro giro dopo lo stop')
+        const risposteAttrezzo = esito.messaggiFinali.filter((m) => m.role === 'tool')
+        assert.equal(risposteAttrezzo.length, 3, 'ogni tool_call annunciata deve avere il suo esito, anche quella mai eseguita')
+        assert.match(risposteAttrezzo[1].content, /non e stato eseguito/)
+        assert.match(risposteAttrezzo[2].content, /non e stato eseguito/)
+        assert.equal(risposteAttrezzo[0].content.includes('non e stato eseguito'), false, 'la prima era gia partita: il suo esito e quello vero')
     })
 })
