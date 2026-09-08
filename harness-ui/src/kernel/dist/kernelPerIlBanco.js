@@ -1,7 +1,22 @@
 import { mkdir, writeFile, readFile, readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 function discoNode(o) {
-  const radice = o.radice.replace(/[\\/]+$/, "");
+  /*
+   * ⛔ 08/09/2026 — MISURATO, non dedotto: su Windows `"C:"` non è la radice del disco, è il
+   * percorso relativo al drive, cioè la DIRECTORY CORRENTE del processo.
+   *   readdir("C:")   → 34 voci: .automations .hooks-trust .local-models …  (cioè harness-ui/)
+   *   readdir("C:\\")  → 47 voci: $RECYCLE.BIN AMD .cache …               (la radice vera)
+   * Lo `replace` qui sotto toglieva la barra finale — giusto per `…/progetto/` → `…/progetto`,
+   * sbagliato per `C:\\` → `C:` — e una sessione con la radice come workspace finiva a leggere la
+   * cartella del server. Trovato mentre curavo le sessioni delegate che giravano in `C:\\`:
+   * quelle chiedevano `cerca` e ricevevano i 13 file del server, senza che niente lo dicesse.
+   *
+   * ⛔ Il difetto NON è in `join`, che normalizza `join("C:", x)` in `C:\\x`: è nel ramo di
+   * `dentro()` col percorso vuoto, che restituisce la radice grezza senza passare da `join`.
+   * (La prima ipotesi accusava `join`: la misura l'ha scagionato.)
+   */
+  const spogliata = o.radice.replace(/[\\/]+$/, "");
+  const radice = /^[A-Za-z]:$/.test(spogliata) ? spogliata + "\\" : spogliata;
   const dentro = (percorso) => percorso ? join(radice, percorso) : radice;
   return {
     async elenca(cartella) {
