@@ -1571,6 +1571,12 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-topbar:has([data-vistetab]) .talos-tabs{grid-column:2; justify-self:center}
 .talos-topbar:has([data-vistetab]) .talos-topbar__actions{grid-column:3; justify-self:end}
 .talos-topbar__title .talos-topbar__path{flex:0 1 auto; min-width:0; max-width:100%}
+/* RIP-V01, owner 08/09/2026: copia come icona quando manca spazio, conservando
+   le viste al centro. Fonte letta 08/09/2026: https://fluent2.microsoft.design/components/web/react/core/toolbar/usage */
+@container (max-width:1000px){
+  #schermoReview #copyAllDiffs{width:36px; min-width:36px; padding:0; flex:none}
+  #schermoReview .talos-review__copy-label{display:none}
+}
 
 .talos-topbar [data-vistetab]{flex-wrap:nowrap}
 #veloComandi .talos-dialog__body{display:flex;flex-direction:column;overflow:hidden}

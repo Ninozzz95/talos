@@ -68,13 +68,13 @@
     },
     {
       "path": "index.html",
-      "bytes": 322233,
-      "sha256": "cb797e8d0fde2c982411bca4877d55a2fb5f461e6b99568b2205ad5a6729395a"
+      "bytes": 322338,
+      "sha256": "47f996a4b3d79f53a092fe5a8f84a01cac9281f061411a6f48dd8e3d35145b21"
     },
     {
       "path": "styles.css",
-      "bytes": 221398,
-      "sha256": "55bf81cbd1c57154582b49d0431ea3dbeb7563d14a1a6501742043ee7dea9a7e"
+      "bytes": 221607,
+      "sha256": "cc620849734095099628e93951c1a1dba646e8ea790dab7b6dd95ca735af57e4"
     },
     {
       "path": "talos/brand/logo-short.svg",

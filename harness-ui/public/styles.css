@@ -5104,6 +5104,17 @@ body.reduce-motion *::after {
   min-width: 0;
   max-width: 100%;
 }
+@container (max-width:1000px) {
+  #schermoReview #copyAllDiffs {
+    width: 36px;
+    min-width: 36px;
+    padding: 0;
+    flex: none;
+  }
+  #schermoReview .talos-review__copy-label {
+    display: none;
+  }
+}
 .talos-topbar [data-vistetab] {
   flex-wrap: nowrap;
 }
