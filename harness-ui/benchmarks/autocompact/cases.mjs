@@ -33,6 +33,10 @@ export function scoreRecall(text, expected) {
 }
 
 export function validateSummary(response, { before, after, limit }) {
+  // A native engine can hide invalid auxiliary output behind an assembled
+  // context. Conservatively disqualify it; originals may still be in its DB.
+  if (response.summaryResponses?.some(result => result.finishReason === 'length')) throw new Error('SUMMARY_TRUNCATED');
+  if (response.summaryResponses?.some(result => result.hasText === false)) throw new Error('SUMMARY_EMPTY');
   if (response.finishReason === 'length') throw new Error('SUMMARY_TRUNCATED');
   if (response.finishReason === 'aborted' || response.finishReason === 'error') throw new Error('SUMMARY_INTERRUPTED');
   if (typeof response.text !== 'string' || !response.text.trim()) throw new Error('SUMMARY_EMPTY');

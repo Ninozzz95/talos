@@ -1,6 +1,16 @@
 # Autocompact: ricerca tecnica e proposta per TALOS
 
-Ricognizione del 08/09/2026. Stato: ricerca completata, proposta da validare; nessuna modifica al motore o alla conversazione. Non è un benchmark né un piano esecutivo già approvato. Le versioni di settembre e lo studio di agosto distinguono aggiornamenti recenti da riferimenti precedenti ancora pertinenti. Data di consultazione non significa data di pubblicazione.
+Ricognizione del 08/09/2026. Stato aggiornato: qualificazione isolata approvata dall'owner e in esecuzione; nessuna modifica al motore prodotto o alla conversazione originale. L'architettura definitiva resta da decidere dopo le prove. Le versioni di settembre e lo studio di agosto distinguono aggiornamenti recenti da riferimenti precedenti ancora pertinenti. Data di consultazione non significa data di pubblicazione.
+
+## Evidenze esecutive aggiunte il 08/09
+
+Hermes AIAgent al pin scelto impone MINIMUM_CONTEXT_LENGTH=64000 per provider custom; verificato nel [codice di inizializzazione](https://github.com/NousResearch/hermes-agent/blob/2237be355906fbe6065ce1815711eee52b2d646e/agent/agent_init.py) e in 12 avvii reali con le due configurazioni locali a 16384. L'eccezione di LM Studio è legata esplicitamente a quel provider; non viene applicata a llama.cpp sotto falso nome. Il componente ContextCompressor è istanziabile separatamente: i risultati dei suoi metodi non qualificano l'app completa.
+
+TALOS/Pi/Hermes separatamente inviano richieste di sintesi oltre la finestra nella ripresa problematica: 21964/18208/30230 token osservati sullo stesso Nemotron a 16384. Il dato Hermes proviene dal batch corretto 16:35; il batch Python 16:24 è escluso per due errori del trasporto del banco, documentati e riprodotti con test RED/GREEN. Dettagli, grezzi e limiti nella consegna della qualificazione.
+
+Il [codice LCM](https://github.com/stephenschoettler/hermes-lcm/blob/8d1b1e6d3d63f5fc7b209e8d7ec1dc9b814f2e54/compaction.py) mantiene un backlog inferiore alla soglia leaf anche se la chiamata è forzata. Per misurare cinque compattazioni effettive il protocollo v2 fornisce 72 note intermedie per ciclo, senza ripetere i fatti, e richiede nuove repliche memoria per tutti i candidati. Nessuna conversione retroattiva dei vecchi esiti.
+
+Nel banco, lo streaming richiesto dal client Hermes riceve il risultato reale tramite adattamento SSE bufferizzato: finish reason e usage preservati, nessuna misura del primo token. Python su Windows viene avviato con [UTF-8 mode ufficiale](https://docs.python.org/3.11/library/os.html#python-utf-8-mode); il round trip reale italiano/giapponese ha una regressione automatica permanente. Le misure di memoria usano [Win32_Process](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-process) e i contatori GPU del solo PID posseduto dal banco, massimi campionati e non picchi assoluti.
 
 ## Risposta alla domanda dell'owner
 

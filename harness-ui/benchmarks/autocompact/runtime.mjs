@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createLlamaServerSupervisor } from '../../src/llama-server-supervisor.mjs';
 import { fixtureTools } from './cases.mjs';
+import { startMemorySampler } from './measurements.mjs';
 
 export function createRecorder(root) {
   let pending = Promise.resolve();
@@ -34,7 +35,7 @@ export async function recordedRequest(supervisor, record, model, path, body, sig
   return payload;
 }
 
-export async function startRuntime({ repo, root, manifest, record }) {
+export async function startRuntime({ repo, root, manifest, record, captureScope }) {
   // Refuse to compete with an owner's loaded runtime. The owner can unload it
   // through the app; this benchmark never kills or reconfigures that process.
   const { stdout } = await promisify(execFile)('powershell.exe', ['-NoProfile', '-Command', 'Get-CimInstance Win32_Process -Filter "Name = \'llama-server.exe\'" | Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress'], { windowsHide: true });
@@ -44,12 +45,13 @@ export async function startRuntime({ repo, root, manifest, record }) {
   const modelPath = resolve(repo, 'harness-ui/.local-models', manifest.path, manifest.files[0].path);
   supervisor.subscribeLogs(({ stream, text }) => { appendFile(join(root, 'runtime.log'), `${stream}: ${text}`).catch(() => {}); });
   const status = await supervisor.start({ modelId: manifest.id, modelPath, contextLength: 16384 });
+  let memorySampler;
   const runtime = {
     model: manifest.id, supervisor, status, record,
     async request(path, body, signal) {
       return recordedRequest(supervisor, record, manifest.id, path, body, signal);
     },
-    async stop() { await supervisor.stop(); },
+    async stop() { await memorySampler?.stop(); await supervisor.stop(); },
   };
   try {
   const props = await runtime.request('/props', undefined, AbortSignal.timeout(30_000));
@@ -58,6 +60,7 @@ export async function startRuntime({ repo, root, manifest, record }) {
     throw new Error('CONTEXT_MISMATCH');
   }
   await record('runtime', { model: manifest.id, modelPath, status, props, manifest, context: 16384, gpuLayers: 99 });
+  memorySampler = await startMemorySampler({ record, captureScope });
   return runtime;
   } catch (error) { await runtime.stop(); throw error; }
 }
@@ -111,6 +114,7 @@ export async function runReadOnlyTurn(runtime, messages, fixtureDir, signal) {
 // own socket policy also rejects any external destination. No owner API key.
 export async function createLoopbackBridge(runtime) {
   const token = randomUUID();
+  const responses = [];
   const server = createServer(async (req, res) => {
     try {
       if (req.headers.authorization !== `Bearer ${token}`) { res.writeHead(401); res.end(); return; }
@@ -124,10 +128,22 @@ export async function createLoopbackBridge(runtime) {
       const body = { ...upstreamBody, temperature: 0, seed: 193, max_tokens: 4096, stream: false };
       delete body.max_completion_tokens;
       if (body.model !== runtime.model) throw new Error('BENCH_MODEL_MISMATCH');
-      if (upstreamBody.stream) throw new Error('BENCH_STREAM_NOT_SUPPORTED');
       const counted = await countRequest(runtime, body);
       await runtime.record('budget', { model: runtime.model, counted, context: 16384, responseReserve: body.max_tokens ?? body.max_completion_tokens ?? null, reserveExplicit: body.max_tokens != null || body.max_completion_tokens != null });
       const result = await runtime.request('/v1/chat/completions', body, AbortSignal.timeout(240_000));
+      responses.push({ finishReason: result.choices?.[0]?.finish_reason, hasText: typeof result.choices?.[0]?.message?.content === 'string' && Boolean(result.choices[0].message.content.trim()), usage: result.usage });
+      if (upstreamBody.stream) {
+        // Buffered compatibility transport, not a first-token latency test.
+        // Preserve the actual model result; never manufacture summary content.
+        const chunk = { id: result.id, object: 'chat.completion.chunk', created: result.created, model: result.model,
+          choices: result.choices.map((choice, index) => ({ index: choice.index ?? index,
+            delta: { ...choice.message, ...(choice.message.tool_calls ? { tool_calls: choice.message.tool_calls.map((call, index) => ({ index, ...call })) } : {}) },
+            finish_reason: choice.finish_reason })), usage: result.usage };
+        await runtime.record('buffered-sse-response', { model: runtime.model, chunk });
+        res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' });
+        res.end(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`);
+        return;
+      }
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify(result));
     } catch (error) {
@@ -136,5 +152,5 @@ export async function createLoopbackBridge(runtime) {
     }
   });
   await new Promise((resolveListen, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolveListen); });
-  return { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, token, close: () => new Promise(resolveClose => server.close(resolveClose)) };
+  return { baseUrl: `http://127.0.0.1:${server.address().port}/v1`, token, get responseCount() { return responses.length; }, responsesSince: index => structuredClone(responses.slice(index)), close: () => new Promise(resolveClose => server.close(resolveClose)) };
 }

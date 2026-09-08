@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, appendFile, readdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, appendFile, readdir, stat, copyFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { hostname, cpus, totalmem, freemem } from 'node:os';
 import { createRecorder, startRuntime, createLoopbackBridge, countRequest, complete, runReadOnlyTurn } from './runtime.mjs';
 import { createEngine } from './engines.mjs';
+import { summarizeMemory } from './measurements.mjs';
 import { loadRecoveredHistory, scoreRecall, validateSummary, writeCheckpoint, readCheckpoint, makeMemoryHistory } from './cases.mjs';
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -55,6 +56,16 @@ if (!args.includes('--run')) { console.log(JSON.stringify(checks, null, 2)); pro
 const batchId = new Date().toISOString().replaceAll(':','-');
 const batchRoot = join(root, 'runs', batchId);
 await mkdir(batchRoot, { recursive: true });
+checks.protocolVersion = 2;
+checks.memoryFillerMessagesPerRound = 72;
+checks.binarySha256 = await hashFile(join(repo,'harness-ui/.local-runtime/b10517-vulkan/llama-server.exe'));
+checks.scripts = {};
+await mkdir(join(batchRoot,'scripts'));
+for (const name of ['qualification.mjs','engines.mjs','runtime.mjs','measurements.mjs','cases.mjs','python-worker.py','package.json','package-lock.json']) {
+  const source = fileURLToPath(new URL(name, import.meta.url));
+  checks.scripts[name] = await hashFile(source);
+  await copyFile(source,join(batchRoot,'scripts',name));
+}
 await writeFile(join(batchRoot,'checks.json'), JSON.stringify(checks,null,2));
 const hardware = { at: new Date().toISOString(), hostname: hostname(), cpu: cpus()[0]?.model, logicalCpus: cpus().length, totalMemoryBytes: totalmem(), freeMemoryBytes: freemem() };
 await writeFile(join(batchRoot,'hardware.json'), JSON.stringify(hardware,null,2));
@@ -76,7 +87,7 @@ for (const manifest of selected) {
   let runtime, bridge;
   try {
     scope = { model: manifest.id, phase: 'runtime' };
-    runtime = await startRuntime({ repo, root: batchRoot, manifest, record });
+    runtime = await startRuntime({ repo, root: batchRoot, manifest, record, captureScope: () => ({...scope}) });
     bridge = await createLoopbackBridge(runtime);
     // Verify the installed binary before the first inference; no assumption from docs.
     const probeBody = { model: runtime.model, messages: [{ role: 'user', content: 'Ciao.' }], max_tokens: 4096, stream: false };
@@ -105,7 +116,7 @@ for (const manifest of selected) {
           if (interrupted) throw new Error('BENCH_CANCELLED');
           if (round > 1) {
             // Identical declared filler, no repeated facts that could re-teach recall.
-            messages.push(...makeMemoryHistory().slice(3,-1).slice(0,24));
+            messages.push(...makeMemoryHistory().slice(3,-1).map(message => ({...message, content: `Verifica del ciclo ${round}. ${message.content}`})));
             messages.push({ role: 'user', content: `Proseguiamo con il controllo ${round}. Mantieni le decisioni già prese.` });
           }
           const before = await countRequest(runtime, { model: runtime.model, messages, max_tokens: 4096, stream: false });
@@ -156,7 +167,7 @@ for (const manifest of selected) {
       row.refusedRequests = responses.filter(e => e.status >= 400).length;
       row.tokens = responses.reduce((sum,e) => ({ input: sum.input + (e.payload.usage?.prompt_tokens ?? 0), output: sum.output + (e.payload.usage?.completion_tokens ?? 0) }), { input: 0, output: 0 });
       row.nodeRssPeakObserved = Math.max(0,...responses.map(e => e.processMemory.rss));
-      row.serverAndGpuPeakMemory = 'not-measured';
+      row.serverAndGpuPeakMemory = { ...summarizeMemory(caseEvents.filter(event => event.kind === 'memory-sample' && event.scope?.model === row.model && event.scope?.arm === row.arm && event.scope?.scenario === row.scenario && event.scope?.repetition === row.repetition)), method: 'Windows CIM process and GPUProcessMemory; observed maxima, 5000ms interval plus probe time' };
       await emit(row);
     }
   } catch (error) { await emit({ model: manifest.id, phase: 'runtime', status: 'failed', error: error.message }); }
@@ -167,4 +178,4 @@ const summary = { batchId, root: batchRoot, completedAt: new Date().toISOString(
 await writeFile(join(batchRoot,'summary.json'), JSON.stringify(summary,null,2));
 await writeFile(join(root,'summary.json'), JSON.stringify(summary,null,2));
 console.log(JSON.stringify(summary,null,2));
-if (summary.failed || interrupted) process.exitCode = 2;
+if (summary.failed || interrupted || !summary.originalHistoryUnchanged) process.exitCode = 2;
