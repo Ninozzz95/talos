@@ -2,6 +2,8 @@
 
 Banco locale separato da prodotto, API pubbliche e dipendenze TALOS. Il ledger `.claude/LEDGER-QUALIFICAZIONE-AUTOCOMPACT-2026-09-08.md` definisce la fase esecutiva.
 
+Campagna 08/09 conclusa: 96 casi selezionati, 132 grezzi conservati, nessun candidato promosso. Rapporto `.claude/RISULTATI-QUALIFICAZIONE-AUTOCOMPACT-2026-09-08.md`; custodia `.claude/CUSTODIA-BENCHMARK-AUTOCOMPACT-2026-09-08.md`. L'indice privato definitivo `selected-cases-v2.json` mantiene esito automatico e revisione semantica separati; tre strumenti TALOS/Nemotron sono stati ripetuti per uniformare la domanda. Indice e archivio v1 restano conservati. Non rieseguire inferenze per leggere il rapporto. Le etichette remainingGates dei vecchi summary sono storiche: prevalgono i cancelli e limiti esplicitati nel rapporto.
+
 ## Comandi
 
 Da questa directory, Windows, Node >=22.19 e `gh` già autenticato:
@@ -40,6 +42,8 @@ Filtri: `--models=nemotron|gptoss|all`, `--arms=talos,pi,hermes,lcm`, `--scenari
 `passed-component-case` indica soltanto componente e tool loop comune. **Non promuove l'engine nel prodotto.** `fullQualificationComplete` resta falso finché mancano prove complete di applicazioni/composer, riavvio/store nativi, guasti degli upstream e memoria server/GPU.
 
 La ripresa owner richiede revisione umana dei riferimenti. La memoria sintetica valuta cinque valori su righe etichettate; non è un giudice semantico. I fatti sono nel primo messaggio utente: un engine che lo conserva può superarli senza riassumerli. Nessuna generalizzazione sulla memoria arbitraria.
+
+Limite Pi: `createEngine` usa la API pubblica come sintesi del testo corrente, reinserendo la sintesi precedente nei messaggi; non passa il parametro `previousSummary` supportato da `summarizeWithPi`. Non è una prova della modalità incrementale nativa dell'app Pi. Il valutatore esatto cerca valori e non associa etichette: nel rapporto i pass e le risposte sono stati revisionati manualmente per quella corrispondenza; non presentare lo scorer come validatore generale dello schema.
 
 `leggi` legge realmente solo README.md della fixture. Non espone scritture. La continuità usa un nuovo processo Node per leggere il checkpoint del banco e riavvia il worker Python quando presente. Non dimostra il riavvio completo TALOS/Hermes o il recupero tramite i tool LCM.
 
