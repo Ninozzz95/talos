@@ -200,3 +200,45 @@ test('AQ-18 profilo identico sulle inferenze Python', async () => {
     assert.deepEqual(requests[0].body, requests[1].body);
   } finally { await bridge.close(); }
 });
+
+test('AQ-19 Hermes streaming adapter preserves result and truncation metadata', async () => {
+  const requests = [];
+  const bridge = await createLoopbackBridge({ model:'fixture', record:async()=>{}, request:async(path,body)=>{
+    requests.push({path,body});
+    return path.endsWith('input_tokens') ? {input_tokens:12} : { id:'fixed', model:'fixture', created:1, choices:[{index:0,message:{role:'assistant',content:'parziale',reasoning_content:'verifico'},finish_reason:'length'}], usage:{prompt_tokens:12,completion_tokens:4096,total_tokens:4108} };
+  }});
+  try {
+    const response=await fetch(`${bridge.baseUrl}/chat/completions`, {method:'POST',headers:{Authorization:`Bearer ${bridge.token}`,'Content-Type':'application/json'},body:JSON.stringify({model:'fixture',messages:[],stream:true})});
+    assert.equal(response.status,200);
+    assert.match(response.headers.get('content-type'),/text\/event-stream/);
+    const data=(await response.text()).split('\n').filter(line=>line.startsWith('data: ')).map(line=>line.slice(6));
+    assert.equal(data.at(-1),'[DONE]');
+    const chunk=JSON.parse(data[0]);
+    assert.equal(chunk.choices[0].delta.content,'parziale');
+    assert.equal(chunk.choices[0].delta.reasoning_content,'verifico');
+    assert.equal(chunk.choices[0].finish_reason,'length');
+    assert.equal(chunk.usage.total_tokens,4108);
+    assert.equal(requests.at(-1).body.stream,false);
+  } finally {await bridge.close();}
+});
+
+test('AQ-20 real Python worker preserves UTF-8 history without inference', async () => {
+  const { startPythonWorker } = await import('./engines.mjs');
+  const { fileURLToPath } = await import('node:url');
+  const root = fileURLToPath(new URL('../../../scratchpad/prove/autocompact-qualification-20260908/', import.meta.url));
+  const sources = JSON.parse(await readFile(join(root,'sources.json'),'utf8'));
+  const home = await mkdtemp(join(tmpdir(),'talos-aq-'));
+  let worker;
+  try {
+    worker=await startPythonWorker({home,arm:'hermes',sessionId:'utf8',model:'utf8-fixture',baseUrl:'http://127.0.0.1:1/v1',token:'fixture',hermesPath:sources.find(s=>s.name==='hermes').path},async()=>{});
+    const messages=[{role:'user',content:'La consegna è giovedì. 日本語.'}];
+    const response=await worker.compress(messages,10);
+    assert.deepEqual(response.messages,messages);
+  } finally {await worker?.close();await cleanup(home);}
+});
+
+test('AQ-21 native wrapper cannot hide a truncated or empty auxiliary response', () => {
+  const native={text:'sintesi nativa',finishReason:'native-engine-result'};
+  assert.throws(()=>validateSummary({...native,summaryResponses:[{finishReason:'length',hasText:true}]},{before:100,after:10,limit:50}),/TRUNCATED/);
+  assert.throws(()=>validateSummary({...native,summaryResponses:[{finishReason:'stop',hasText:false}]},{before:100,after:10,limit:50}),/EMPTY/);
+});

@@ -42,9 +42,9 @@ export async function summarizeWithPi(messages, { runtime, streamFn, signal, pre
   return { ...result, finishReason: lastResponse?.finishReason ?? 'controlled', nativeUsage: lastResponse?.usage };
 }
 
-async function startPythonWorker(config, record) {
+export async function startPythonWorker(config, record, { workerPath = fileURLToPath(new URL('./python-worker.py', import.meta.url)) } = {}) {
   const python = join(process.env.LOCALAPPDATA, 'hermes/hermes-agent/.venv/Scripts/python.exe');
-  const child = spawn(python, ['-B', fileURLToPath(new URL('./python-worker.py', import.meta.url))], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(python, ['-X', 'utf8', '-B', workerPath], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   const waiting = new Map();
   let nextId = 0;
   let readyResolve, readyReject;
@@ -70,14 +70,15 @@ async function startPythonWorker(config, record) {
   const timer = setTimeout(() => { readyReject(new Error('PYTHON_START_TIMEOUT')); child.kill(); }, 60_000);
   try { await record('python-ready', await ready); } catch (error) { child.kill(); throw error; } finally { clearTimeout(timer); }
   return {
-    async compress(messages, tokens) {
+    async request(operation, payload = {}) {
       const id = ++nextId;
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => { waiting.delete(id); child.kill(); reject(new Error('PYTHON_COMPACTION_TIMEOUT')); }, 900_000);
         waiting.set(id, { resolve, reject, timer });
-        child.stdin.write(JSON.stringify({ id, operation: 'compress', messages, tokens }) + '\n');
+        child.stdin.write(JSON.stringify({ id, operation, ...payload }) + '\n');
       });
     },
+    async compress(messages, tokens) { return this.request('compress', { messages, tokens }); },
     async close() {
       if (child.exitCode !== null) return;
       child.stdin.end(JSON.stringify({ operation: 'close' }) + '\n');
@@ -108,8 +109,9 @@ export async function createEngine(arm, { runtime, sources, home, bridge, sessio
   let worker = await startPythonWorker(config, runtime.record);
   return {
     async compact(messages, tokens) {
+      const responseStart = bridge.responseCount;
       const result = await worker.compress(structuredClone(messages), tokens);
-      return { ...result, text: result.messages.map(m => m.content ?? '').join('\n'), finishReason: 'native-engine-result' };
+      return { ...result, text: result.messages.map(m => m.content ?? '').join('\n'), finishReason: 'native-engine-result', summaryResponses: bridge.responsesSince(responseStart) };
     },
     async restart() { await worker.close(); worker = await startPythonWorker(config, runtime.record); },
     close: () => worker.close(),
