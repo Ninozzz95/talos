@@ -66,6 +66,22 @@ for (const name of ['qualification.mjs','engines.mjs','runtime.mjs','measurement
   checks.scripts[name] = await hashFile(source);
   await copyFile(source,join(batchRoot,'scripts',name));
 }
+checks.externalScripts = {};
+await mkdir(join(batchRoot,'external-scripts'));
+for (const [name, source] of [
+  ['llama-server-supervisor.mjs', join(repo,'harness-ui/src/llama-server-supervisor.mjs')],
+  ['process-policy.mjs', join(repo,'harness-ui/src/process-policy.mjs')],
+  ['talosHarness.mjs', ownerModule],
+  ['dist/kernelPerIlBanco.js', join(dirname(ownerModule),'dist/kernelPerIlBanco.js')],
+]) {
+  checks.externalScripts[name] = { source, sha256: await hashFile(source) };
+  await mkdir(dirname(join(batchRoot,'external-scripts',name)), { recursive: true });
+  await copyFile(source,join(batchRoot,'external-scripts',name));
+}
+const pythonPath = join(process.env.LOCALAPPDATA,'hermes/hermes-agent/.venv/Scripts/python.exe');
+const pythonProbe = 'import importlib.metadata as m,json,sys;print(json.dumps({"python":sys.version,"executable":sys.executable,"packages":sorted([{"name":x.metadata["Name"],"version":x.version} for x in m.distributions()],key=lambda x:x["name"].lower())}))';
+const pythonInventory = await promisify(execFile)(pythonPath,['-X','utf8','-c',pythonProbe],{windowsHide:true,maxBuffer:2_000_000});
+checks.pythonEnvironment = {...JSON.parse(pythonInventory.stdout), executableSha256:await hashFile(pythonPath)};
 await writeFile(join(batchRoot,'checks.json'), JSON.stringify(checks,null,2));
 const hardware = { at: new Date().toISOString(), hostname: hostname(), cpu: cpus()[0]?.model, logicalCpus: cpus().length, totalMemoryBytes: totalmem(), freeMemoryBytes: freemem() };
 await writeFile(join(batchRoot,'hardware.json'), JSON.stringify(hardware,null,2));
