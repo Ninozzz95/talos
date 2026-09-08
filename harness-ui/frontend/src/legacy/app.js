@@ -9898,7 +9898,46 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     vistaViva.stato('apro');
 
     try {
-      const esito = await apiPost(`/api/v1/browser/vivo/apri?sessione=${encodeURIComponent(sessione)}`, { url: voce.url });
+      /* ⛔ 08/9, owner: «non si estende a tutto schermo». La pagina pilotata nasceva 1280x800 fissi,
+         qualunque fosse il riquadro davanti alla persona: forma sbagliata, bande vuote ai lati.
+         Qui si misura il riquadro VERO e glielo si dice, all'apertura e poi a ogni ridimensionamento. */
+      const misuraDelRiquadro = () => {
+        const dove = document.querySelector('#browserVistaViva') || document.querySelector('#browserLive');
+        const r = dove ? dove.getBoundingClientRect() : null;
+        // il riquadro puo' non essere ancora disegnato: allora si lascia decidere al server
+        return r && r.width > 40 && r.height > 40
+          ? { larghezza: Math.round(r.width), altezza: Math.round(r.height) }
+          : {};
+      };
+      const esito = await apiPost(`/api/v1/browser/vivo/apri?sessione=${encodeURIComponent(sessione)}`, { url: voce.url, ...misuraDelRiquadro() });
+      /* ⛔ Il ridimensionamento non ricarica la pagina: cambia solo il viewport. Si aspetta che la
+         mano si fermi (l'ultimo evento di una raffica), o si manderebbero decine di chiamate mentre
+         si trascina il bordo della finestra. */
+      /* ⛔ Il `resize` della FINESTRA non basta, e la prima misura da sola nemmeno: all'apertura il
+         riquadro non ha ancora la sua altezza (la vista viva nasce al minimo e cresce quando la
+         pagina arriva). Misurato: la tela usciva 926×320 dentro un riquadro 926×571 — larghezza
+         giusta, altezza di un riquadro che non esisteva più. Serve guardare il RIQUADRO, non la
+         finestra: un ResizeObserver vede anche i cambi che la finestra non racconta (la colonna
+         destra che si apre, il pannello che cresce, il montaggio stesso). */
+      const riquadroDaSeguire = document.querySelector('#browserVistaViva') || document.querySelector('#browserLive');
+      if (riquadroDaSeguire && !riquadroDaSeguire.dataset.misuraCollegata) {
+        riquadroDaSeguire.dataset.misuraCollegata = 'si';
+        let attesa = null;
+        let ultima = '';
+        const manda = () => {
+          clearTimeout(attesa);
+          attesa = setTimeout(() => {
+            const misura = misuraDelRiquadro();
+            if (!misura.larghezza) return;
+            const firma = `${misura.larghezza}x${misura.altezza}`;
+            if (firma === ultima) return; // ⛔ stessa misura, nessuna chiamata: il server non è un diario
+            ultima = firma;
+            apiPost(`/api/v1/browser/vivo/misura?sessione=${encodeURIComponent(sessione)}`, misura).catch(() => {});
+          }, 180);
+        };
+        try { new ResizeObserver(manda).observe(riquadroDaSeguire); } catch { window.addEventListener('resize', manda); }
+        manda();
+      }
       voce.url = esito?.url || voce.url;
       voce.viaVista = 'vivo';
       voce.annotabile = Boolean(esito?.annotabile);

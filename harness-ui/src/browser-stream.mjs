@@ -55,12 +55,33 @@
 export const QUALITA_PREDEFINITA = 60;
 export const QUALITA_MASSIMA = 85;
 export const QUALITA_MINIMA = 10;
-export const LARGHEZZA_PREDEFINITA = 1280;
-export const ALTEZZA_PREDEFINITA = 800;
-export const LARGHEZZA_MASSIMA = 1920;
-export const ALTEZZA_MASSIMA = 1200;
-export const FOTOGRAMMI_AL_SECONDO_PREDEFINITI = 15;
-export const FOTOGRAMMI_AL_SECONDO_MASSIMI = 30;
+/* ⛔ 08/09/2026: questi due erano 1280 e 800, e finivano dritti in `maxWidth`/`maxHeight` di
+ * `Page.startScreencast`. Ma quei due parametri sono un TETTO sul fotogramma, non la misura della
+ * pagina: la misura la decide il viewport (`Emulation.setDeviceMetricsOverride`). Con un tetto a
+ * 800 un riquadro alto 830 riceveva un fotogramma 893×800 — misurato sul 4174 — e restava una
+ * banda scoperta che nessun ridimensionamento poteva togliere, perche' `startScreencast` non si
+ * ri-negozia da solo. ⇒ il tetto sta al tetto; a dire quanto e' grande la pagina ci pensa il
+ * viewport, che invece si cambia a caldo. */
+export const LARGHEZZA_PREDEFINITA = 2560;
+export const ALTEZZA_PREDEFINITA = 1600;
+export const LARGHEZZA_MASSIMA = 2560;  /* 08/9: la vista si estende quanto il riquadro, e un 1440p ci sta */
+export const ALTEZZA_MASSIMA = 1600;
+/* ⛔ 08/09/2026, owner: «il frame rate è bassissimo». MISURATO prima di toccare, con una pagina
+ * animata e tre configurazioni a confronto (C35/C35-bis nello scratchpad): il trasporto CDP su
+ * 127.0.0.1 consegna ~100 fotogrammi al secondo, identici con la finestra davanti, con la finestra
+ * COPERTA e in headless. Il collo NON era Chrome: era questo tetto a 15, che buttava l'85% dei
+ * fotogrammi che Chrome aveva gia' prodotto E compresso in JPEG — lavoro pagato e gettato.
+ *
+ * ⭐ La sonda e' stata provata prima di crederle: con `everyNthFrame:3` il conteggio scende a un
+ *   terzo esatto (499 → 166) e senza conferma si ferma a 3 fotogrammi, come dice il protocollo.
+ *   Tre numeri identici sono un allarme, non una conferma: quello era il caso.
+ *
+ * ⛔ Perche' 60 e non 100: oltre il refresh dello schermo i fotogrammi in piu' non si vedono, e
+ *   ognuno costa una compressione JPEG lato Chrome e un disegno lato pagina. 60 e' quanto un
+ *   monitor mostra; il tetto a 90 lascia spazio agli schermi piu' veloci senza aprire la porta a
+ *   una richiesta che chieda l'impossibile. */
+export const FOTOGRAMMI_AL_SECONDO_PREDEFINITI = 60;
+export const FOTOGRAMMI_AL_SECONDO_MASSIMI = 90;
 /** Quanti fotogrammi Chrome può mandare prima di pretendere una conferma. Il default del protocollo è 3; 2 tiene la latenza più bassa a parità di banda. */
 export const FOTOGRAMMI_IN_VOLO = 2;
 

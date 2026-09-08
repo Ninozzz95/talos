@@ -187,12 +187,28 @@ export function trovaChromium({ piattaforma = process.platform, ambiente = proce
  *   in quel browser — cioè al contenuto non affidabile che stiamo isolando.
  * · `--disable-dev-shm-usage` — è una cura per `/dev/shm` piccola dentro
  *   Docker; qui il browser gira sul computer della persona.
- * · `--headless` — la finestra serve viva: lo schermo lo trasmette M2 col
- *   `Page.startScreencast`, che prende i frame dal compositore.
+ * · `--headless=new` — ⛔ 08/09/2026, owner: «non si devono aprire schede chrome in bg». Fino a
+ *   oggi qui c'era scritto il contrario («la finestra serve viva») ed era una premessa mai
+ *   misurata: una finestra vera spuntava sullo schermo della persona, e restava li' mentre lei
+ *   lavorava. MISURATO prima di cambiarla (C35 nello scratchpad): stessa pagina animata, 6 secondi,
+ *   **599 fotogrammi** con la finestra davanti, **599** con la finestra coperta da un'altra e
+ *   **599** in headless. Il compositore produce lo stesso, e lo screencast li prende lo stesso.
+ *   ⇒ la finestra non serviva a vedere: serviva solo a disturbare.
  *
  * @param {{cartellaProfilo:string, porta?:number}} opzioni
  * @returns {string[]}
  */
+/**
+ * Lo user agent di Chrome senza la parola «Headless»: in headless Chrome la aggiunge da se', e
+ * alcuni siti servono una pagina diversa (o un blocco) a chi la porta. Non si finge un altro
+ * browser — versione, sistema e motore restano quelli veri: si toglie solo l'etichetta.
+ */
+export function userAgentSenzaHeadless(agente = AGENTE_PREDEFINITO) {
+  return String(agente).replace(/HeadlessChrome/gi, 'Chrome');
+}
+
+export const AGENTE_PREDEFINITO = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
+
 export function argomentiChromium({ cartellaProfilo, porta = 0 } = {}) {
   if (!cartellaProfilo) throw errore('BROWSER_VIVO_PROFILO_MANCANTE', 'Serve la cartella del profilo: il browser pilotato non usa mai quello personale');
   return [
@@ -228,6 +244,15 @@ export function argomentiChromium({ cartellaProfilo, porta = 0 } = {}) {
     '--deny-permission-prompts',
     '--disable-notifications',
     '--disable-features=Translate,MediaRouter,OptimizationHints',
+    /* ⛔ Nessuna finestra sullo schermo di chi lavora. `--headless=new` e' lo stesso browser
+       completo (stesso rendering, stesse estensioni possibili, stesso compositore): dal 132 il
+       vecchio headless non esiste piu' e `--headless` da solo significa gia' questo, ma il nome
+       esplicito dice a chi legge QUALE dei due si intende. */
+    '--headless=new',
+    /* ⛔ In headless lo user agent contiene «HeadlessChrome» e alcuni siti lo rifiutano o servono
+       una pagina diversa: la lettura sarebbe di un'altra pagina rispetto a quella che la persona
+       vede nel suo browser. Si toglie la parola, non si finge un altro browser. */
+    `--user-agent=${userAgentSenzaHeadless()}`,
     /* Si parte da una pagina vuota: la «nuova scheda» di Chrome fa rete e
        mostra contenuti che non c'entrano niente con noi. */
     'about:blank',

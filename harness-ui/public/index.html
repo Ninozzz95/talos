@@ -493,6 +493,10 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
            Era una coppia di schede sempre a schermo che rubava una riga; adesso la pagina è LA vista e
            questo è un interruttore: mostra cosa ha ricevuto davvero il modello — spesso una fetta della
            pagina (misurato su una lettura vera: 4.157 caratteri su ~39.000) — e si rispegne da solo. -->
+      <!-- ⛔ 08/9, owner: «rimetti il pulsante pagina accanto a testo dell’agente». I due modi
+           tornano a essere una coppia, ma QUI, nella riga delle azioni, non più in una striscia
+           tutta loro che si prendeva una riga intera sopra la pagina. -->
+      <button class="talos-button talos-button--ghost talos-button--sm" data-browser-modo="pagina" aria-pressed="true" data-tip-lato="sotto" title="Mostra la pagina come si vede davvero">Pagina</button>
       <button class="talos-button talos-button--ghost talos-button--sm" data-browser-modo="testo" aria-pressed="false" data-tip-lato="sotto" title="Mostra il testo che ha ricevuto l'agente, che può essere una parte della pagina">Testo dell’agente</button>
       <button class="talos-button talos-button--secondary talos-button--sm" data-browser-demo="annotate" title="Prepara una bozza nella chat senza inviarla">Annota</button>
       <button class="talos-button talos-button--ghost talos-button--sm" data-browser-demo="note" aria-expanded="false" aria-controls="browserEditorNota">Nota locale</button>

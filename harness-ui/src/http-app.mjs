@@ -550,6 +550,7 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/browser/vivo/apri', metodi: ['POST'] },
   { schema: '/api/v1/browser/vivo/gesto', metodi: ['POST'] },
   { schema: '/api/v1/browser/vivo/descrivi', metodi: ['POST'] },
+  { schema: '/api/v1/browser/vivo/misura', metodi: ['POST'] },
   { schema: '/api/v1/browser/vivo/schermo', metodi: ['GET'] },
   { schema: '/api/v1/browser/vivo/stato', metodi: ['GET'] },
   { schema: '/api/v1/search-source', metodi: ['GET'] },
@@ -2585,7 +2586,8 @@ export function createHttpApp({
        *   Verboso qui, ma nessuna porta resta fuori dall'elenco che decide 404 contro 405.
        */
       const VIVE = ['/api/v1/browser/vivo/apri', '/api/v1/browser/vivo/gesto', '/api/v1/browser/vivo/descrivi',
-        '/api/v1/browser/vivo/chiudi', '/api/v1/browser/vivo/schermo', '/api/v1/browser/vivo/stato'];
+        '/api/v1/browser/vivo/chiudi', '/api/v1/browser/vivo/schermo', '/api/v1/browser/vivo/stato',
+        '/api/v1/browser/vivo/misura'];
       if (VIVE.includes(url.pathname)) {
         /* Fuori dal ramo GET non c'è né `data` né il try che normalizza gli errori: qui ce li mette
            questo blocco, così una rotta nuova non eredita per sbaglio il comportamento di un'altra. */
@@ -2631,6 +2633,15 @@ export function createHttpApp({
           } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/descrivi') {
             const corpo = await leggiCorpoJson(req);
             data = await browserVivo.descrivi(sessionId, { x: Number(corpo?.x) || 0, y: Number(corpo?.y) || 0 });
+          } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/misura') {
+            /* ⛔ 08/9, owner: «non si estende a tutto schermo». La pagina pilotata prende la forma
+               del riquadro che la persona ha davanti, all'apertura e a ogni ridimensionamento.
+               Niente ricaricamento: cambia il viewport, non la pagina. */
+            const corpo = await leggiCorpoJson(req);
+            data = await browserVivo.misura(sessionId, {
+              larghezza: Number(corpo?.larghezza) || 0,
+              altezza: Number(corpo?.altezza) || 0,
+            });
           } else if (method === 'POST' && url.pathname === '/api/v1/browser/vivo/chiudi') {
             data = await browserVivo.chiudi(sessionId);
           } else { const error = new Error('Metodo non consentito'); error.code = 'METHOD_NOT_ALLOWED'; throw error; }
