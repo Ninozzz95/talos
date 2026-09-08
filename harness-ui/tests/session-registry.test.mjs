@@ -1065,12 +1065,12 @@ test('⭐⭐⭐ 06/9 — "On request" dichiara il LIVELLO al kernel, oltre al ca
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
-test('⭐⭐ "Workspace write"/"Full access" restano entrambi senza livelloAccesso/chiediApprovazioneFn — "Full access" NON tocca mai il kernel (dove cambia la cartella dipende dal percorso di lancio, vedi W0-08 sotto)', () => {
+test('FULL-ACCESS-REGISTRY-01 Full access arriva esplicito al kernel, Workspace write conserva il contratto precedente', () => {
   for (const permessiScelto of ['Workspace write', 'Full access']) {
     const finta = sessioneControllabile();
     const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
     registro.avvia('task-vero', { permessiScelto });
-    assert.equal(finta.ultimoInput.livelloAccesso, undefined, permessiScelto);
+    assert.equal(finta.ultimoInput.livelloAccesso, permessiScelto === 'Full access' ? 'accesso-pieno' : undefined, permessiScelto);
     assert.equal(finta.ultimoInput.chiediApprovazioneFn, undefined, permessiScelto);
     finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
   }
@@ -1145,7 +1145,7 @@ test('⛔⛔⭐⭐⭐ AL CONTRARIO — avviaLibero() con cartellaLibera resta SE
 
   assert.ok(risultato.sessionId);
   assert.equal(finta.ultimoInput.cartella, 'C:\\tmp\\percorso-a-piacere', 'cartellaLibera è già la scelta esatta della persona: MAI allargata, nemmeno con Full access');
-  assert.equal(finta.ultimoInput.livelloAccesso, undefined, '"Full access" non tocca il kernel: solo la cartella cambia (qui: non cambia affatto)');
+  assert.equal(finta.ultimoInput.livelloAccesso, 'accesso-pieno', 'Full access arriva al kernel senza cambiare la cartella scelta');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 

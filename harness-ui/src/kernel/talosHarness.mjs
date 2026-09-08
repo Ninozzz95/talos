@@ -3575,9 +3575,8 @@ export function creaRicevutaOperazione({
  *                        da quella funzione — fail-closed (rifiuta) se
  *                        il canale manca, stessa disciplina già in uso
  *                        per `permessiPerAttrezzo:'chiedi'` senza funzione.
- *   'accesso-pieno'   — esiste da prima: non lettura, nessun vincolo
- *                        di percorso, chiede solo se chiediApprovazioneFn
- *                        è presente (comportamento bit-per-bit di oggi).
+ *   'accesso-pieno'   — nessuna conferma ordinaria o forzatura trifecta.
+ *                        Restano gli override chiedi/nega e i cancelli speciali.
  */
 /*
  * ⭐⭐⭐ FASE N (29/8), library_context_policy_update — porto diretto di
@@ -3628,7 +3627,9 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
      * attrezzo di cui non si conosce la portata.
      */
     const sicurezzaProssima = SICUREZZA_PER_ATTREZZO[azione.tipo] ?? { canTransmit: false }
-    const trifectaChiude = verdettoTrifecta(catena, sicurezzaProssima)
+    // Decisione owner 08/09/2026: Full access supera la conferma trifecta.
+    // Il verdetto osservativo nelle ricevute resta calcolato sulla catena reale.
+    const trifectaChiude = livelloAccesso !== 'accesso-pieno' && verdettoTrifecta(catena, sicurezzaProssima)
 
     /*
      * ⭐⭐⭐ FASE D, ricerca 28/8 — `via` dichiara QUALE meccanismo ha

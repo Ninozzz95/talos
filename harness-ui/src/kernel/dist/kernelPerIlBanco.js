@@ -1,5 +1,5 @@
 import { mkdir, writeFile, readFile, readdir, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 function discoNode(o) {
   /*
    * ⛔ 08/09/2026 — MISURATO, non dedotto: su Windows `"C:"` non è la radice del disco, è il
@@ -17,7 +17,9 @@ function discoNode(o) {
    */
   const spogliata = o.radice.replace(/[\\/]+$/, "");
   const radice = /^[A-Za-z]:$/.test(spogliata) ? spogliata + "\\" : spogliata;
-  const dentro = (percorso) => percorso ? join(radice, percorso) : radice;
+  // Un percorso assoluto identifica il file richiesto, non un figlio della radice.
+  // Le autorizzazioni appartengono al kernel chiamante, prima della scrittura.
+  const dentro = (percorso) => percorso ? resolve(radice, percorso) : radice;
   return {
     async elenca(cartella) {
       const voci = await readdir(dentro(cartella), { withFileTypes: true });
