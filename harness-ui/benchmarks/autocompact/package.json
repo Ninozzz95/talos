@@ -1,0 +1,13 @@
+{
+  "name": "talos-autocompact-qualification",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test qualification.test.mjs",
+    "prepare:bench": "node prepare.mjs",
+    "qualify": "node qualification.mjs"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.85.1"
+  }
+}

@@ -111,6 +111,20 @@ Confronto host: stesso modello locale e stessa finestra su TALOS e competitor co
 
 ## 7. Consegna e prossima decisione
 
+### Aggiornamento esecutivo 08/09 — qualificazione approvata
+
+Il piano di qualificazione è stato approvato dall'owner; esecuzione in `harness-ui/benchmarks/autocompact`, ledger dedicato `LEDGER-QUALIFICAZIONE-AUTOCOMPACT-2026-09-08.md`. Nessuna scelta definitiva dell'engine o integrazione prodotto.
+
+Pi 0.85.1 è ora installato nel solo banco e la sua API pubblica è esercitata. Prove controllate: la risposta vuota viene restituita dall'API, quella terminata per limite viene rifiutata; il chiamante deve verificare l'annullamento anche dopo il ritorno della sintesi. I controlli del banco impediscono pubblicazione in questi casi. Le precedenti indicazioni «import non verificato» sono quindi superate limitatamente a questa prova.
+
+Hermes v2026.9.7 è stato acquisito integralmente al commit `2237be355906fbe6065ce1815711eee52b2d646e`: 12.173 blob verificati contro l'albero Git ufficiale `c98901d7f46d1ab5213ef00e8ee5df989f9131b7`. Codeload/git/archive rispondevano 429 e jsDelivr limitava il repository a 50 MB. Risolto tramite GitHub GraphQL/Git Blobs, senza cambiare pin. LCM al commit `8d1b1e6d3d63f5fc7b209e8d7ec1dc9b814f2e54` acquisito; entrambi i worker Python si avviano dalle copie fissate. Origine e hash in `hermes-materialization.json`, nessuna modifica dell'installazione owner. [Git Trees API](https://docs.github.com/en/rest/git/trees), [GraphQL GitHub](https://docs.github.com/en/graphql/reference/git), consultati 08/09.
+
+Sul Nemotron Q4_0 e sul binario locale b10517, `/v1/chat/completions/input_tokens` risponde con conteggio intero della richiesta. La sintesi TALOS sulla copia recuperata viene rifiutata 3/3: 21.964 token per finestra 16.384. La API Pi diretta viene rifiutata 3/3: 18.208 token. Questi sono conteggi delle richieste del banco, diversi dal precedente errore del giro completo: non una correzione retroattiva di quel dato. La sola chiamata di sintesi non risolve quindi l'input già oltre limite. [Contratto b10517](https://github.com/ggml-org/llama.cpp/blob/dc72703fc69698b1ea68ece8d2dd8a96e6a4e1fe/tools/server/README.md).
+
+TALOS supera 3/3 la memoria sintetica dopo cinque compattazioni, con i cinque valori esatti. Il compattatore conserva il primo messaggio utente che contiene i fatti: questo risultato non dimostra la preservazione arbitraria di informazioni riassunte. Lettura file e riavvio del checkpoint del banco hanno prove reali, ma non equivalgono al loop completo del prodotto o dei competitor. Risultati grezzi nella tranche `runs/2026-09-08T15-21-39.086Z`; interrotta durante i successivi scenari Pi, senza attribuire successo al caso incompleto.
+
+Il banco ha 18 test controllati verdi. Questi numeri non sono punteggi competitivi. Rimangono tranche dei due modelli, guasti nativi, tool di recupero LCM, prove complete delle applicazioni e raccomandazione finale con l'owner.
+
 Raccomandazione: progettare l'Autocompact Engine completo; la deduplicazione rimane un operatore controllato al suo interno. Primo gate di riuso: Pi tramite API pubblica; separatamente valutare memoria LCM. Il piano esecutivo deve poi enumerare file, simboli, test RED, migrazioni e rollback; questo documento non li sostituisce.
 
 **Cosa deve fare l'owner:** valutare questa direzione prima delle scelte fondamentali su engine, memoria e intervento sui loop. **Cosa faccio io dopo:** prova isolata del componente upstream e piano esecutivo con misure, prima di innestarlo nel prodotto. **Cosa rimane:** implementazione backend/UI, ripresa dello storico lungo e benchmark. La riduzione delle ripetizioni non è stata applicata.
