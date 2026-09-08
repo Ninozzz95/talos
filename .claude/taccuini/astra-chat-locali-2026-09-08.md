@@ -47,3 +47,37 @@ Verifica live in sola lettura sulla 4174: «Vai al giro 1» porta allo storico; 
 | live-hover-fix-consegna.jpg | Consegna 4174 scura Full HD: pulsante leggibile sopra il composer nello storico reale. |
 
 Le altre fotografie green-hover ad alta risoluzione sono intermedi non usati per il verdetto. La stabilità temporale dei colori è provata dalle asserzioni sui 45 frame, non dedotta dalla sola foto. Nessuna scrittura nella conversazione dell'owner.
+
+## Recupero locale: immagini aperte e giudicate il 08/09
+
+| Immagine | Giudizio visivo |
+|---|---|
+| regressione-recupero-attesa-ritrovata.png | Attesa e Stop coerenti. Fixture con toast SSE e tema transitorio: prova semantica, non riferimento estetico. |
+| recupero-reale-avviato.jpg | Banco 4317: nota di recupero e attesa visibili; inizio chat sopra la piega. |
+| recupero-reale-limite-contesto.jpg | Banco 4317: limite 30.821/16.384 leggibile; titolo errore sopra la piega, cattura diagnostica incompleta. |
+| recupero-reale-risposta.jpg | Prova controllata: risposta Livia sotto la nota, attesa conclusa e Invio disponibile. |
+| recupero-reale-lettura.jpg | Prova controllata: un file letto e sole-47 visibili, risposta conclusa e composer libero. |
+| live-recupero-consegna.jpg | 4174 dopo riavvio: chat owner leggibile, errori storici conservati. Non prova la ripresa: nessun invio consentito qui. |
+| storico-recuperato-1024.png | Nota leggibile e in colonna; nessuna sovrapposizione col composer. Replay unico verificato dal test. |
+| regressione-recupero-hover-fondo-1024.png | Pulsante rotondo centrato, sfondo opaco, composer accessibile. Geometria e colori invarianti verificati sui frame. |
+| regressione-recupero-torna-in-fondo-1024.png | Pulsante rotondo centrato, sfondo opaco, composer accessibile. Geometria e colori invarianti verificati sui frame. |
+| storico-recuperato-1280.png | Nota leggibile e in colonna; nessuna sovrapposizione col composer. Replay unico verificato dal test. |
+| regressione-recupero-hover-fondo-1280.png | Pulsante rotondo centrato, sfondo opaco, composer accessibile. Geometria e colori invarianti verificati sui frame. |
+| regressione-recupero-torna-in-fondo-1280.png | Pulsante rotondo centrato, sfondo opaco, composer accessibile. Geometria e colori invarianti verificati sui frame. |
+| storico-recuperato-1440.png | Nota leggibile e in colonna; nessuna sovrapposizione col composer. Replay unico verificato dal test. |
+| regressione-recupero-hover-fondo-1440.png | Pulsante rotondo centrato, sfondo opaco, composer accessibile. Geometria e colori invarianti verificati sui frame. |
+| regressione-recupero-torna-in-fondo-1440.png | Pulsante rotondo centrato, sfondo opaco, composer accessibile. Geometria e colori invarianti verificati sui frame. |
+| storico-recuperato-1920.png | Nota leggibile e in colonna; nessuna sovrapposizione col composer. Replay unico verificato dal test. |
+| regressione-recupero-hover-fondo-1920.png | Pulsante rotondo centrato, sfondo opaco, composer accessibile. Geometria e colori invarianti verificati sui frame. |
+| regressione-recupero-torna-in-fondo-1920.png | Pulsante rotondo centrato, sfondo opaco, composer accessibile. Geometria e colori invarianti verificati sui frame. |
+| storico-recuperato-2560.png | Nota leggibile e in colonna; nessuna sovrapposizione col composer. Replay unico verificato dal test. |
+| regressione-recupero-hover-fondo-2560.png | Pulsante rotondo centrato, sfondo opaco, composer accessibile. Geometria e colori invarianti verificati sui frame. |
+| regressione-recupero-torna-in-fondo-2560.png | Pulsante rotondo centrato, sfondo opaco, composer accessibile. Geometria e colori invarianti verificati sui frame. |
+| storico-recuperato-3840.png | Nota leggibile e in colonna; nessuna sovrapposizione col composer. Replay unico verificato dal test. |
+| regressione-recupero-hover-fondo-3840.png | Pulsante rotondo centrato, sfondo opaco, composer accessibile. Geometria e colori invarianti verificati sui frame. |
+| regressione-recupero-torna-in-fondo-3840.png | Pulsante rotondo centrato, sfondo opaco, composer accessibile. Geometria e colori invarianti verificati sui frame. |
+| green-hover-fondo-1920.png | Intermedio precedente al vincolo colore, aperto e respinto come riferimento finale; sostituito dalle foto final-hover. |
+| green-hover-fondo-2560.png | Intermedio precedente al vincolo colore, aperto e respinto come riferimento finale; sostituito dalle foto final-hover. |
+| green-hover-fondo-3840.png | Intermedio precedente al vincolo colore, aperto e respinto come riferimento finale; sostituito dalle foto final-hover. |
+
+PNG alti conservati a 1920×1080, 2560×1440 e 3840×2160. Le fotografie reali sono del banco con inferenza effettiva; quelle della suite usano eventi controllati. Il file originale owner è rimasto intatto.

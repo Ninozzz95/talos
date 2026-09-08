@@ -80,6 +80,151 @@ function sessioneControllabile() {
   };
 }
 
+test('LOCAL-RESUME-JSON-01 — recupera nella stessa sessione senza riscrivere chiamate e risultati originali', async () => {
+  const cartellaStore = cartellaStoreVera();
+  const sessionId = 'sess-json-recupero';
+  const finta = sessioneControllabile();
+  const storia = [
+    { role: 'user', content: 'Ciao, cosa vedi nel progetto?' },
+    { role: 'assistant', content: 'Controllo i file.', tool_calls: [
+      { id: 'rotta', type: 'function', function: { name: 'elenca', arguments: '{' } },
+      { id: 'valida', type: 'function', function: { name: 'elenca', arguments: '{"cartella":"src"}' } },
+    ] },
+    { role: 'tool', tool_call_id: 'rotta', content: 'README.md' },
+    { role: 'tool', tool_call_id: 'valida', content: 'app.js' },
+  ];
+  try {
+    registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: storia[0].content }, modello: 'm', avviataAlle: new Date().toISOString() } });
+    registraRigaSync({ cartellaStore, sessionId, record: { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali: storia } });
+    registraRigaSync({ cartellaStore, sessionId, record: { type: 'RunError', message: 'JSON incompleto', _sequenza: 1 } });
+    const originale = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8');
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+    assert.equal(registro.resume(sessionId, 'ci sie?').sessionId, sessionId);
+    const inviati = finta.ultimoInput.messaggiIniziali;
+    for (const m of inviati) for (const c of m.tool_calls ?? []) assert.doesNotThrow(() => JSON.parse(c.function.arguments));
+    assert.deepEqual(inviati.find(m => m.tool_calls)?.tool_calls, [storia[1].tool_calls[1]]);
+    assert.deepEqual(inviati.find(m => m.tool_call_id === 'valida'), storia[3]);
+    assert.equal(inviati.some(m => m.tool_call_id === 'rotta'), false, 'nessun risultato orfano');
+    assert.match(inviati.find(m => m.role === 'assistant').content, /README\.md/);
+    assert.match(inviati.find(m => m.role === 'assistant').content, /Recupero dello storico/);
+    assert.deepEqual(inviati.at(-1), { role: 'user', content: 'ci sie?' });
+    const aggiornato = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8');
+    assert.equal(aggiornato.slice(0, originale.length), originale, 'il prefisso originale è intatto');
+    const checkpoint = aggiornato.trim().split('\n').map(JSON.parse).find(r => r.tipo === 'checkpoint-ripresa');
+    assert.equal(checkpoint.recupero.schema, 'talos.history-recovery.v1');
+    assert.equal(checkpoint.recupero.correzioni[0].chiamata.function.arguments, '{');
+    assert.equal(checkpoint.recupero.correzioni[0].risultati[0].content, 'README.md');
+  } finally {
+    if (finta.chiamate) {
+      finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali } });
+      await attendiRegistroSuDisco(cartellaStore, sessionId, r => r.some(x => x.tipo === 'messaggi-finali' && x.versioneGiro === 2));
+    }
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+function seminaStoricoRecupero(cartellaStore, sessionId, messaggiFinali) {
+  for (const record of [
+    { tipo: 'intestazione', sessionId, taskId: 'task-vero', cartella: '/tmp/x', task: { consegna: 'Ciao' }, modello: 'm', avviataAlle: new Date().toISOString() },
+    { type: 'RunStarted', _sequenza: 1 },
+    { tipo: 'messaggi-finali', versioneGiro: 1, messaggiFinali },
+    { type: 'RunError', message: 'JSON incompleto', _sequenza: 2 },
+  ]) registraRigaSync({ cartellaStore, sessionId, record });
+}
+const storiaRecuperoMinima = () => [
+  { role: 'user', content: 'Leggi il progetto' },
+  { role: 'assistant', content: null, tool_calls: [{ id: 'rotta', type: 'function', function: { name: 'elenca', arguments: '{' } }] },
+  { role: 'tool', tool_call_id: 'rotta', content: 'README.md' },
+];
+
+test('LOCAL-RESUME-JSON-02 — riavvio dopo checkpoint, stesso storico e recupero idempotente', async () => {
+  const cartellaStore = cartellaStoreVera(), sessionId = 'sess-json-riavvio';
+  const finta = sessioneControllabile();
+  try {
+    seminaStoricoRecupero(cartellaStore, sessionId, storiaRecuperoMinima());
+    const opzioni = { cartellaStore, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' };
+    const primo = createSessionRegistry({ ...opzioni, avviaSessioneFn: () => new Promise(() => {}) });
+    await primo.ripristina();
+    assert.equal(primo.resume(sessionId, 'ci sei?').sessionId, sessionId);
+    // Simula la perdita del processo dopo il checkpoint, prima del primo evento.
+    const secondo = createSessionRegistry({ ...opzioni, avviaSessioneFn: finta.avviaSessioneFn });
+    await secondo.ripristina();
+    assert.equal(secondo.resume(sessionId, 'riprova per favore').sessionId, sessionId);
+    const messaggi = finta.ultimoInput.messaggiIniziali;
+    assert.equal(messaggi.filter(m => typeof m.content === 'string' && m.content.includes('Recupero dello storico')).length, 1);
+    assert.equal(messaggi.filter(m => m.content === 'ci sei?').length, 1);
+    assert.equal(messaggi.at(-1).content, 'riprova per favore');
+    const record = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(record.filter(r => r.recupero).length, 1, 'audit non duplicato');
+  } finally {
+    if (finta.chiamate) {
+      finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali } });
+      await attendiRegistroSuDisco(cartellaStore, sessionId, r => r.some(x => x.tipo === 'messaggi-finali' && x.versioneGiro === 3));
+    }
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
+test('LOCAL-RESUME-JSON-03 — disco non scrivibile, nessun runtime e nessuna mutazione', async () => {
+  const cartellaStore = cartellaStoreVera(), sessionId = 'sess-json-disco';
+  try {
+    seminaStoricoRecupero(cartellaStore, sessionId, storiaRecuperoMinima());
+    const originale = readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8');
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', registraRigaSyncFn: () => { throw new Error('ENOSPC'); } });
+    await registro.ripristina();
+    assert.equal(registro.resume(sessionId).code, 'SESSION_STORE_WRITE_FAILED', 'anche il recupero senza nuovo testo deve salvare prima');
+    assert.equal(finta.chiamate, 0);
+    assert.equal(readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8'), originale);
+    assert.equal(registro.resume(sessionId, 'riprova').code, 'SESSION_STORE_WRITE_FAILED');
+    assert.equal(finta.chiamate, 0);
+  } finally { rmSync(cartellaStore, { recursive: true, force: true }); }
+});
+
+for (const caso of ['id assente', 'id duplicato', 'risultato duplicato']) {
+  test(`LOCAL-RESUME-JSON-04 — ${caso}: associazione ambigua rifiutata`, async () => {
+    const cartellaStore = cartellaStoreVera(), sessionId = 'sess-json-ambigua';
+    try {
+      const storia = storiaRecuperoMinima();
+      if (caso === 'id assente') delete storia[1].tool_calls[0].id;
+      if (caso === 'id duplicato') storia[1].tool_calls.push(structuredClone(storia[1].tool_calls[0]));
+      if (caso === 'risultato duplicato') storia.push(structuredClone(storia[2]));
+      seminaStoricoRecupero(cartellaStore, sessionId, storia);
+      const finta = sessioneControllabile();
+      const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+      await registro.ripristina();
+      assert.equal(registro.resume(sessionId, 'continua').code, 'HISTORY_RECOVERY_AMBIGUOUS');
+      assert.equal(finta.chiamate, 0);
+    } finally { rmSync(cartellaStore, { recursive: true, force: true }); }
+  });
+}
+
+test('LOCAL-RESUME-JSON-05 — contenuti multimodali e chiamate valide conservati senza mutazione', async () => {
+  const cartellaStore = cartellaStoreVera(), sessionId = 'sess-json-contenuti';
+  const finta = sessioneControllabile();
+  try {
+    const storia = storiaRecuperoMinima();
+    storia[1].content = [{ type: 'text', text: 'Controllo' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,AA==' } }];
+    storia.push({ role: 'assistant', content: 'Altra chiamata', tool_calls: [{ id: 'rotta', type: 'function', function: { name: 'elenca', arguments: '{}' } }] }, { role: 'tool', tool_call_id: 'rotta', content: 'src' });
+    seminaStoricoRecupero(cartellaStore, sessionId, storia);
+    const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k' });
+    await registro.ripristina();
+    assert.equal(registro.resume(sessionId).sessionId, sessionId);
+    const inviati = finta.ultimoInput.messaggiIniziali;
+    assert.deepEqual(inviati[1].content.slice(0, 2), storia[1].content);
+    assert.equal(inviati[1].tool_calls, undefined);
+    assert.deepEqual(inviati.slice(-2), storia.slice(-2), 'id riusato in altro turno non è lo stesso risultato');
+    assert.equal(storia[1].tool_calls[0].function.arguments, '{');
+  } finally {
+    if (finta.chiamate) {
+      finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali } });
+      await attendiRegistroSuDisco(cartellaStore, sessionId, r => r.some(x => x.tipo === 'messaggi-finali' && x.versioneGiro === 2));
+    }
+    rmSync(cartellaStore, { recursive: true, force: true });
+  }
+});
+
 test('avvia(): RunStarted è già nel buffer al RITORNO, non dopo — provato con un iscritto immediato', async () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });

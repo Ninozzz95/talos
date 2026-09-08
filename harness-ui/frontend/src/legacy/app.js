@@ -12529,6 +12529,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * mai più il bottone "✏️ File scritto" su un aggiornamento di
          * token, e mai il contatore aggiornato su una scrittura vera.
          */
+        const recupero = Array.isArray(evento.delta) ? evento.delta.find(patch => patch?.path === '/recuperoCronologia') : null;
+        if (recupero) {
+          const numero = recupero.value?.chiamate;
+          if (Number.isSafeInteger(numero) && numero > 0) {
+            appendStatusNote(`${numero === 1 ? '1 chiamata incompleta è stata conservata' : `${numero} chiamate incomplete sono state conservate`} come nota nello storico. I messaggi originali sono intatti. Puoi continuare questa conversazione.`, false, { meta: 'Storico recuperato' });
+          }
+          break;
+        }
         const path = evento.delta?.[0]?.path;
         if (path === '/usage') {
           /*
