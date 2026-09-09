@@ -25,7 +25,8 @@ test.beforeAll(async () => {
     { type: 'RunStarted', _sequenza: 1, input: { consegna: messages[0].content } },
     { type: 'TextMessageContent', _sequenza: 2, messageId: 'answer', delta: messages[1].content },
     { type: 'TextMessageEnd', _sequenza: 3, messageId: 'answer' },
-    { type: 'RunFinished', _sequenza: 4 },
+    { type: 'StateDelta', _sequenza: 4, delta: [{ path: '/usage', value: { prompt_tokens: 100, completion_tokens: 20, cached_tokens: 40, giri: 1 } }] },
+    { type: 'RunFinished', _sequenza: 5 },
   ].map(JSON.stringify).join('\n') + '\n');
   child = spawn(process.execPath, ['server.mjs'], { cwd: harness, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
     ...process.env, TALOS_HARNESS_UI_PORT: String(port), TALOS_HARNESS_UI_TOKEN: token,
@@ -84,10 +85,19 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
     const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
     const version = { schema: 'talos.context.version.v1', id: 'ui-fixture-version', sessionId, coveredThrough: 2, sourceIds: records.map(r => r.id), sourceHash: hash(records.map(({ id, sha256 }) => ({ id, sha256 }))), summary: { schema: 'talos.context.summary.v1', text: 'SQLite locale.', goal: 'Riprendere', decisions: ['SQLite locale'], constraints: [], completed: [], pending: [], resources: [], sources: [{ recordId: records[1].id, quote: 'SQLite' }] }, activeMessages: [{ role: 'user', content: 'SQLite locale.' }], model: job.model, measurement: { schema: 'talos.context.tokens.v1', inputTokens: 10, windowTokens: 16384, responseReserve: 2048, method: 'heuristic', exact: false, requestHash: hash('fixture'), provider: 'openrouter', model }, createdAt };
     await store.commitContextVersion({ sessionId, expectedRevision: snapshot.revision, expectedStateRevision: snapshot.stateRevision, jobId: job.id, version });
+    await store.recordUsage({ sessionId, jobId: job.id, operationId: 'ui-usage-fixture', usage: { prompt_tokens: 1800, completion_tokens: 80 } });
+    await store.recordUsage({ sessionId, jobId: job.id, operationId: 'ui-usage-fixture', usage: { prompt_tokens: 1800, completion_tokens: 80 } });
   } finally { await store.close(); }
   await page.getByRole('button', { name: 'Aggiorna', exact: true }).click();
   await page.keyboard.press('Escape');
   await expect(page.locator('#conversation [data-context-separator]')).toHaveCount(1);
+  await expect(page.locator('[data-runtime-usage]')).toContainText('2,0k');
+  await expect(page.locator('[data-runtime-cache]')).toContainText('cache 40%');
+  for (const [width, height] of [[1920, 1080], [2560, 1440], [3840, 2160]]) {
+    await page.setViewportSize({ width, height });
+    await page.screenshot({ path: join(photos, `desktop-usage-${width}x${height}.png`) });
+  }
+  await page.setViewportSize({ width: 1920, height: 1080 });
   await page.locator('#conversation').getByRole('button', { name: 'Vedi contesto' }).click();
   await page.getByText('Fonti', { exact: true }).click();
   await page.getByRole('button', { name: 'Apri fonte', exact: true }).click();
@@ -96,6 +106,8 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
   await page.reload(); await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.evaluate(({ sessionId, model }) => window.__talosHarnessUiRuntime.passaASessione(sessionId, 'fixture', 'Decisione sul database', model, { conclusa: true, modello: model }), { sessionId, model });
   await expect(page.locator('#conversation [data-context-separator]')).toHaveCount(1);
+  await expect(page.locator('[data-runtime-usage]')).toContainText('2,0k');
+  await expect(page.locator('[data-runtime-cache]')).toContainText('cache 40%');
   await page.locator('#compactSessionBtn').click();
   await page.getByText('Da non dimenticare', { exact: true }).click();
   await expect(page.locator('[data-context-facts]')).toContainText('Il database deve restare locale.');

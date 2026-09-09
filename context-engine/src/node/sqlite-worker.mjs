@@ -158,6 +158,13 @@ function writeVersion(sessionId, version) {
   run('INSERT INTO context_versions(session_id,id,version_json) VALUES(?,?,?)', sessionId, version.id, JSON.stringify(version));
   run('INSERT INTO summary_nodes(session_id,version_id,summary_json) VALUES(?,?,?)', sessionId, version.id, JSON.stringify(version.summary));
 }
+const usageBackfilled = new Set();
+function enqueueUsage(sessionId, operationId, jobId, usage) {
+  const event = { schema: 'talos.context.event.v1', id: `usage-${hash(JSON.stringify([sessionId, operationId]))}`, sessionId,
+    ...(jobId ? { jobId } : {}), kind: 'context.usage.recorded', createdAt: new Date().toISOString(), payload: { operationId, usage } };
+  // The retained receipt includes acknowledged deliveries: retry cannot revive it.
+  run('INSERT INTO context_outbox(session_id,id,event_json) VALUES(?,?,?) ON CONFLICT(session_id,id) DO NOTHING', sessionId, event.id, JSON.stringify(event));
+}
 function activate(sessionId, version, jobId, kind = 'context.version.committed') {
   run('UPDATE context_sessions SET active_version_id=?,revision=revision+1,state_revision=state_revision+1 WHERE session_id=?', version.id, sessionId);
   const event = { schema: 'talos.context.event.v1', id: randomUUID(), sessionId, ...(jobId ? { jobId } : {}), versionId: version.id, kind, createdAt: version.createdAt, payload: { coveredThrough: version.coveredThrough } };
@@ -348,6 +355,14 @@ const methods = {
   },
   readContextOutbox({ sessionId, limit = 100 }) {
     id(sessionId, 'sessionId'); integer(limit, 'limit');
+    if (!usageBackfilled.has(sessionId) && session(sessionId, false)) {
+      tx(() => {
+        for (const row of all('SELECT operation_id,job_id,usage_json FROM usage_records WHERE session_id=? ORDER BY ordinal', sessionId)) {
+          enqueueUsage(sessionId, row.operation_id, row.job_id, JSON.parse(row.usage_json));
+        }
+      });
+      usageBackfilled.add(sessionId);
+    }
     return parseRows('SELECT event_json FROM context_outbox WHERE session_id=? AND acknowledged=0 ORDER BY ordinal LIMIT ?', 'event_json', sessionId, limit);
   },
   ackContextEvent({ sessionId, eventId }) { id(sessionId, 'sessionId'); id(eventId); run('UPDATE context_outbox SET acknowledged=1 WHERE session_id=? AND id=?', sessionId, eventId); },
@@ -365,9 +380,13 @@ const methods = {
       const prior = get('SELECT job_id,usage_json FROM usage_records WHERE session_id=? AND operation_id=?', sessionId, operationId);
       if (prior) {
         if (prior.job_id !== jobId || prior.usage_json !== JSON.stringify(usage)) fail('Usage operation contains different accounting', 'CTX_IDEMPOTENCY_CONFLICT');
+        enqueueUsage(sessionId, operationId, jobId, usage);
         return;
       }
       run('INSERT INTO usage_records(session_id,operation_id,job_id,usage_json) VALUES(?,?,?,?)', sessionId, operationId, jobId, JSON.stringify(usage));
+      fault('usage-after-record');
+      enqueueUsage(sessionId, operationId, jobId, usage);
+      fault('usage-after-outbox');
     });
   },
   readUsage({ sessionId }) {
