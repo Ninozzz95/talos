@@ -142,7 +142,10 @@ for (const [name, response, code] of [
   assert.equal(job.state, 'failed'); assert.equal(job.error.code, code);
   assert.equal((await engine.getContextState({ sessionId: 'chat' })).activeVersion, null);
   await compact(engine);
-  assert.equal(calls.length, 1);
+  // 09/09 — una sintesi TRONCATA si ritenta UNA volta con l'istruzione compatta (giro vero D1): due chiamate
+  //   dentro lo STESSO tentativo, e una richiesta diversa — non la stessa ripetuta. Il secondo compact() non
+  //   chiama più nessuno, come prima.
+  assert.equal(calls.length, name === 'TRUNCATED' ? 2 : 1);
   assert.equal((await store.readOriginals({ sessionId: 'chat' })).length, 10);
 });
 test('CTX-CANCEL aborting synthesis preserves originals and blocks late completion', async t => {
@@ -272,4 +275,44 @@ test('CTX-MEASURE-OVERFLOW: a measurement that does not fit is still recorded �
   await assert.rejects(auto.engine.prepareForRequest({ sessionId: 'chat', sessionModel: small }), { code: 'CTX_NO_REDUCTION' });
   const autoState = await auto.engine.getContextState({ sessionId: 'chat' });
   assert.ok(autoState.measurement && autoState.measurement.tokens.inputTokens > 4096, 'anche quando l’automazione fallisce, la prima misura è un fatto e resta');
+});
+
+/*
+ * 09/09 — quarto difetto del GIRO VERO (D1): sintesi troncata (`length`) ⇒ compattazione fallita ⇒ giro
+ * morto. Una risposta troppo lunga non è un guasto del modello: è un budget non dichiarato. Il motore
+ * ritenta UNA volta con l'istruzione compatta (limite dimezzato); se anche quella è troncata, l'errore
+ * resta CTX_TRUNCATED_SUMMARY — mai un ciclo.
+ */
+test('CTX-SUMMARY-RETRY-COMPACT: a truncated summary is retried once with the compact instruction, then committed', async t => {
+  const richieste = [];
+  const { engine, store, calls } = await fixture(t, { summarize: request => {
+    richieste.push(request.messages[0].content);
+    if (richieste.length === 1) return { text: '{"schema":"talos.context.summary.v1","text":"troppo lun', finishReason: 'length', usage: { inputTokens: 50, outputTokens: 2048 } };
+    const sourceId = JSON.parse(request.messages.at(-1).content).sourceIds?.[0] ?? 'u0';
+    const quote = sourceId === 'u0' ? 'Database SQLite' : sourceId.startsWith('a') ? 'risposta' : `richiesta ${sourceId.slice(1)}`;
+    return { text: JSON.stringify({ ...summary, sources: [{ recordId: sourceId, quote }] }), finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 300 } };
+  } });
+  const largeWindow = { ...modelProfile, windowTokens: 131072 };
+  const sessionId = 'retry-compact';
+  await store.initSession({ sessionId, settings: parseContextSettings({}) });
+  // originali abbastanza lunghi perché la sintesi RIDUCA davvero (altrimenti CTX_NO_REDUCTION, giustamente)
+  const lungo = ' ' + 'dettaglio '.repeat(400);
+  for (const [i, message] of [{ role: 'user', content: 'Database SQLite' + lungo }, { role: 'assistant', content: 'risposta' + lungo }, { role: 'user', content: 'richiesta 2' + lungo }, { role: 'assistant', content: 'risposta' + lungo }].entries()) await engine.appendOriginal({ sessionId, record: { id: `${i % 2 ? 'a' : 'u'}${i}`, message, createdAt: now } });
+  const started = await engine.startCompaction({ sessionId, sessionModel: largeWindow, idempotencyKey: 'retry-compact' });
+  const job = await engine.waitForCompaction({ sessionId, jobId: started.id });
+  assert.equal(job.state, 'committed', JSON.stringify(job.error));
+  assert.ok(calls.length >= 2, 'la seconda chiamata è il ritentativo');
+  assert.match(richieste[1], /precedente era troppo lunga/i, 'il ritentativo porta l’istruzione compatta');
+});
+
+test('CTX-SUMMARY-RETRY-ONCE: two truncations in a row fail with CTX_TRUNCATED_SUMMARY, no loop', async t => {
+  let n = 0;
+  const { engine, store } = await fixture(t, { summarize: () => { n++; return { text: '{"schema":"talos.context.summary.v1","text":"tronc', finishReason: 'length', usage: { inputTokens: 50, outputTokens: 2048 } }; } });
+  const sessionId = 'retry-once';
+  await store.initSession({ sessionId, settings: parseContextSettings({}) });
+  for (const [i, message] of [{ role: 'user', content: 'Database SQLite' }, { role: 'assistant', content: 'risposta' }, { role: 'user', content: 'richiesta 2' }, { role: 'assistant', content: 'risposta' }].entries()) await engine.appendOriginal({ sessionId, record: { id: `${i % 2 ? 'a' : 'u'}${i}`, message, createdAt: now } });
+  const started = await engine.startCompaction({ sessionId, sessionModel: { ...modelProfile, windowTokens: 131072 }, idempotencyKey: 'retry-once' });
+  const job = await engine.waitForCompaction({ sessionId, jobId: started.id });
+  assert.equal(job.state, 'failed'); assert.equal(job.error?.code, 'CTX_TRUNCATED_SUMMARY');
+  assert.equal(n, 2, 'esattamente un ritentativo, poi basta');
 });

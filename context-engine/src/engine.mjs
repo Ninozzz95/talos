@@ -80,18 +80,31 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       const segments = planning.segments;
       if (!segments.length) fail('CTX_NOTHING_TO_COMPACT', 'Non ci sono scambi completi da compattare.');
       job = await save(job, { state: 'summarizing', progress: { completed: job.completedSegments.length, total: Math.max(segments.length, job.completedSegments.length), phase: 'summarizing' } });
-      const invoke = async (request, sourceRecords, label) => {
-        await assertCurrent(job, signal);
-        const measured = await measure(request.messages, [], profile, signal);
-        if (!budgetFor(measured, snapshot.settings).fits) fail('CTX_SEGMENT_TOO_LARGE', 'Il segmento supera lo spazio del modello di sintesi.');
-        const operationId = `${job.id}:${idFactory()}`;
-        if (usagePolicy?.authorize && await usagePolicy.authorize({ sessionId: job.sessionId, model: profile, operationId, maxOutputTokens: profile.responseReserve, signal }) !== true) fail('CTX_USAGE_DENIED', 'Il servizio della sessione non autorizza questa sintesi.');
-        let response;
-        try { response = await model.summarize({ model: profile, messages: request.messages, maxOutputTokens: profile.responseReserve, signal, operationId }); }
-        catch (error) { await account(job, operationId, error.usage); throw error; }
-        await account(job, operationId, response.usage);
-        signal?.throwIfAborted();
-        return validateSummary(response, { records: sourceRecords });
+      /*
+       * 09/09 — `build(compact)` al posto della richiesta già costruita: una sintesi TRONCATA (`length`) si
+       * ritenta UNA volta con l'istruzione compatta, mai di più. Trovato dal giro vero: senza limite
+       * dichiarato il modello scriveva 2.048 token e la compattazione — e il giro — morivano lì.
+       */
+      const invoke = async (build, sourceRecords, label) => {
+        const once = async (compact) => {
+          const request = build(compact);
+          await assertCurrent(job, signal);
+          const measured = await measure(request.messages, [], profile, signal);
+          if (!budgetFor(measured, snapshot.settings).fits) fail('CTX_SEGMENT_TOO_LARGE', 'Il segmento supera lo spazio del modello di sintesi.');
+          const operationId = `${job.id}:${idFactory()}`;
+          if (usagePolicy?.authorize && await usagePolicy.authorize({ sessionId: job.sessionId, model: profile, operationId, maxOutputTokens: profile.responseReserve, signal }) !== true) fail('CTX_USAGE_DENIED', 'Il servizio della sessione non autorizza questa sintesi.');
+          let response;
+          try { response = await model.summarize({ model: profile, messages: request.messages, maxOutputTokens: profile.responseReserve, signal, operationId }); }
+          catch (error) { await account(job, operationId, error.usage); throw error; }
+          await account(job, operationId, response.usage);
+          signal?.throwIfAborted();
+          return validateSummary(response, { records: sourceRecords });
+        };
+        try { return await once(false); }
+        catch (error) {
+          if (error?.code !== 'CTX_TRUNCATED_SUMMARY') throw error;
+          return once(true);
+        }
       };
       const summaries = [];
       for (let index = 0; index < segments.length; index++) {
@@ -99,7 +112,8 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         const fingerprint = await hash({ segment, profile, focus: snapshot.settings.focus });
         const prior = job.completedSegments.find(entry => entry.fingerprint === fingerprint);
         if (prior) { summaries.push(validateSummary({ text: JSON.stringify(prior.summary), finishReason: 'stop' }, { records })); continue; }
-        const request = buildSummaryRequest({ segment, focus: snapshot.settings.focus });
+        const build = compact => buildSummaryRequest({ segment, focus: snapshot.settings.focus, maxOutputTokens: profile.responseReserve, compact });
+        const request = build(false);
         const measured = await measure(request.messages, [], profile, signal);
         if (!budgetFor(measured, snapshot.settings).fits) {
           if (segment.text.length < 512) fail('CTX_CONTEXT_TOO_SMALL', 'Istruzioni e segmento minimo non entrano nella finestra.');
@@ -108,7 +122,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
           segments.splice(index, 1, { ...segment, id: `${segment.id}.a`, text: segment.text.slice(0, midpoint) }, { ...segment, id: `${segment.id}.b`, text: segment.text.slice(midpoint) });
           index--; continue;
         }
-        const summary = await invoke(request, records.filter(record => segment.sourceIds.includes(record.id)), segment.id);
+        const summary = await invoke(build, records.filter(record => segment.sourceIds.includes(record.id)), segment.id);
         summaries.push(summary);
         job = await save(job, { completedSegments: [...job.completedSegments, { fingerprint, segmentId: segment.id, summary }], progress: { completed: job.completedSegments.length + 1, total: Math.max(segments.length, job.completedSegments.length + 1), phase: 'summarizing' } });
       }
@@ -120,7 +134,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         for (let index = 0; index < level.length; index += 2) {
           if (index + 1 === level.length) { next.push(level[index]); continue; }
           const pair = level.slice(index, index + 2);
-          const merged = await invoke(buildSummaryRequest({ summaries: pair, focus: snapshot.settings.focus }), records, `merge-${depth}-${index}`);
+          const merged = await invoke(compact => buildSummaryRequest({ summaries: pair, focus: snapshot.settings.focus, maxOutputTokens: profile.responseReserve, compact }), records, `merge-${depth}-${index}`);
           if (JSON.stringify(merged).length >= JSON.stringify(pair).length) fail('CTX_NO_REDUCTION', 'La fusione non libera spazio.');
           next.push(merged);
         }

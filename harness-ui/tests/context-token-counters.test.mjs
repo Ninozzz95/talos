@@ -112,3 +112,25 @@ test('CTX-COUNT-NETWORK provider failures retain no response secrets and do not 
   await assert.rejects(counter.countPreparedContext({ messages, model: model('openai') }), error => error.code === 'CTX_TOKEN_NETWORK' && !JSON.stringify(error).includes('secret') && !error.message.includes('secret'));
   assert.equal(calls, 1);
 });
+
+/*
+ * 09/09 — trovato dal GIRO VERO (D1, glm-5.3-flash): la stima euristica contava i BYTE come token —
+ * 70.903 «token» per un corpo di 39.513 byte che OpenRouter ha misurato in 10.073 token
+ * (3,92 byte/token, 3,64 caratteri/token, italiano). Con la finestra a 16.384 ogni richiesta sembrava
+ * un overflow e la compattazione partiva forzata a ogni giro. Qui la stima deve stare vicino al
+ * conteggio vero, restando prudente: byte/3,5 sta a +12% e il margine dichiarato copre il resto.
+ */
+test('CTX-HEURISTIC-CALIBRATED bytes are not tokens: an Italian body of 39.5k bytes estimates near 10-11k, never 39k', async () => {
+  const counter = createContextTokenCounter({ resolveProfile: async () => ({ apiKey: null }), fetchFn: async () => { throw new Error('nessuna rete attesa'); } });
+  const body = [];
+  for (let i = 0; i < 40; i++) {
+    body.push({ role: 'user', content: `Punto ${i + 1}: come gestiamo la guardia di stallo nel registro dei processi? Dammi una proposta concreta.` });
+    body.push({ role: 'assistant', content: `Proposta ${i + 1}. Decisione: adottiamo la regola R${i + 1}, che prevede tre passaggi. Primo, ogni processo avviato scrive una riga con identificatore, comando, cartella e istante di avvio, così il registro non dipende dalla memoria del processo padre. Secondo, il silenzio viene valutato ogni ${5 + (i % 7)} secondi con una finestra mobile di ${20 + i} eventi: se non arriva niente per ${30 + i * 2} secondi il processo è marcato «silenzioso», non «fallito», perché il silenzio non è un esito. Terzo, il verdetto resta nel registro con l'ora e la ragione, e chi legge domani trova la causa e non solo il numero. Vincolo aggiunto: nessun valore scritto a mano, tutto viene misurato dal processo stesso. Nota per il prossimo passo: la regola R${i + 1} va provata anche al contrario, cioè con un processo che parla ma non progredisce.` });
+  }
+  const bytes = Buffer.byteLength(JSON.stringify({ messages: body }), 'utf8');
+  const result = await counter.countPreparedContext({ messages: body, tools: [], model: { provider: 'other-provider', model: 'x', windowTokens: 16384, responseReserve: 2048 } });
+  assert.equal(result.method, 'heuristic');
+  assert.ok(result.inputTokens < bytes * 0.4, `la stima (${result.inputTokens}) non può valere quanto i byte (${bytes}): misurati 3,92 byte per token`);
+  assert.ok(result.inputTokens >= Math.floor(bytes / 3.92), `la stima (${result.inputTokens}) deve restare PRUDENTE, mai sotto il conteggio vero (${Math.floor(bytes / 3.92)})`);
+  assert.ok(result.inputTokens <= Math.ceil(bytes / 3.92 * 1.2), `la stima (${result.inputTokens}) non deve superare il vero di oltre il 20%`);
+});

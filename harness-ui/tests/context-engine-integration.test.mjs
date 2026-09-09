@@ -97,3 +97,41 @@ test('CTX-REGISTRY-PREPARE-FAILURE refuses inference after archive preparation f
   assert.equal(calls, 0);
   assert.equal(r.elenca().find(s => s.sessionId === started.sessionId).conclusa, true);
 });
+
+/*
+ * 09/09 — trovato dal GIRO VERO (D1, glm-5.3-flash via OpenRouter): la sintesi tornava senza `content`
+ * perché il modello ragiona per difetto e il ragionamento si mangiava il budget («Reasoning is mandatory
+ * for this endpoint and cannot be disabled» quando si prova a spegnerlo). Misurato con quattro chiamate:
+ * senza campo reasoning 133 token di ragionamento; con `reasoning.effort: 'low'` 0 token, `finish_reason:
+ * stop`, costo più basso. Una sintesi non ha bisogno di pensare a lungo: chiede poco ragionamento, nel
+ * rispetto delle capacità dichiarate dal catalogo (mai `none` a un modello che lo vieta).
+ */
+test('CTX-SUMMARY-LOW-REASONING a summary asks the provider for low reasoning effort, within the model capability rules', async () => {
+  let sent = null;
+  const adapter = createOwnerRuntimeAdapter({
+    destinazioneModelloDeps: { leggiChiave: () => 'k', leggiRuntime: () => ({ endpoint: 'https://openrouter.ai/api/v1' }), localePronto: () => false, chiamaLocale: async () => { throw new Error('no'); } },
+    modelCapabilityFn: async () => ({ reasoning: { mandatory: true, supportedEfforts: ['low', 'medium', 'high'], defaultEffort: 'medium' } }),
+  });
+  const result = await adapter.callContextModel({ provider: 'openrouter', model: 'z-ai/glm-5.3-flash', messages: history, maxOutputTokens: 2048,
+    fetchDiRete: async (_url, init) => { sent = JSON.parse(init.body); return Response.json({ choices: [{ message: { content: '{"text":"ok"}' }, finish_reason: 'stop' }], usage: { completion_tokens: 12 } }); } });
+  assert.deepEqual(sent.reasoning, { effort: 'low' }, 'la sintesi chiede poco ragionamento, esplicitamente');
+  assert.equal(result.text, '{"text":"ok"}');
+});
+
+test('CTX-SUMMARY-LOW-REASONING-CAPABILITY a model that only supports "high" gets high, never a value it refuses', async () => {
+  let sent = null;
+  const adapter = createOwnerRuntimeAdapter({
+    destinazioneModelloDeps: { leggiChiave: () => 'k', leggiRuntime: () => ({ endpoint: 'https://openrouter.ai/api/v1' }), localePronto: () => false, chiamaLocale: async () => { throw new Error('no'); } },
+    modelCapabilityFn: async () => ({ reasoning: { mandatory: true, supportedEfforts: ['high'], defaultEffort: 'high' } }),
+  });
+  await adapter.callContextModel({ provider: 'openrouter', model: 'x/solo-high', messages: history, maxOutputTokens: 2048,
+    fetchDiRete: async (_url, init) => { sent = JSON.parse(init.body); return Response.json({ choices: [{ message: { content: 'ok' }, finish_reason: 'stop' }], usage: {} }); } });
+  assert.deepEqual(sent.reasoning, { effort: 'high' });
+});
+
+test('CTX-SUMMARY-REASONING-ATE-BUDGET a reply with no text but reasoning tokens is a truncation, said in words', async () => {
+  const adapter = createOwnerRuntimeAdapter({ destinazioneModelloDeps: { leggiChiave: () => 'k', leggiRuntime: () => ({ endpoint: 'https://openrouter.ai/api/v1' }), localePronto: () => false, chiamaLocale: async () => { throw new Error('no'); } } });
+  await assert.rejects(adapter.callContextModel({ provider: 'openrouter', model: 'z-ai/glm-5.3-flash', messages: history, maxOutputTokens: 512,
+    fetchDiRete: async () => Response.json({ choices: [{ message: { content: null, reasoning: 'pensa pensa' }, finish_reason: 'length' }], usage: { completion_tokens: 512, completion_tokens_details: { reasoning_tokens: 512 } } }) }),
+    error => error.code === 'CTX_TRUNCATED_SUMMARY' && /512 token/.test(error.message) && /ragionamento/.test(error.message) && error.usage?.completion_tokens === 512);
+});

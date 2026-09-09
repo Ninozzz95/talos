@@ -738,9 +738,23 @@ export function createOwnerRuntimeAdapter({
       const routed = creaFetchMultiProvider(fetchDiRete, { dipendenze: destinazioneModelloDeps });
       const key = provider === 'openrouter' ? destinazioneModelloDeps.leggiChiave?.('openrouter') : null;
       if (provider === 'openrouter' && !key) fail('CTX_TOKEN_AUTH', 'La chiave del provider selezionato non è disponibile.');
+      /*
+       * ⛔ 09/09/2026 — trovato dal giro vero D1 (z-ai/glm-5.3-flash via OpenRouter): la sintesi tornava
+       *   SENZA testo, perché il modello ragiona per difetto e il ragionamento si mangiava il budget della
+       *   risposta. Spegnerlo non si può («Reasoning is mandatory for this endpoint and cannot be
+       *   disabled», HTTP 400, misurato). Misurato con quattro chiamate: senza campo reasoning 133 token
+       *   di ragionamento e a volte `finish_reason: length`; con `reasoning.effort: 'low'` ZERO token di
+       *   ragionamento, `finish_reason: stop`, costo più basso. Una sintesi non ha bisogno di pensare a
+       *   lungo: chiede poco, nel rispetto delle capacità del catalogo (`normalizzaReasoningPerModello`
+       *   toglie un effort che il modello non supporta, mai `none` a chi lo vieta).
+       *   Fonte 09/09/2026: openrouter.ai/docs/use-cases/reasoning-tokens — «low: approximately 20% of
+       *   max_tokens», `effort: 'none'` disabilita e va evitato sui modelli «mandatory».
+       */
+      const capability = provider === 'openrouter' ? await Promise.resolve(modelCapabilityFn(model)).catch(() => null) : null;
+      const reasoning = provider === 'openrouter' ? normalizzaReasoningPerModello({ effort: 'low' }, capability) : undefined;
       const response = await routed(ENDPOINT_OPENROUTER, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
-        body: JSON.stringify({ model: provider === 'openrouter' ? model : `${provider}:${model}`, messages: structuredClone(messages), tools: [], max_tokens: maxOutputTokens, stream: false, ...(provider === 'openrouter' ? { transforms: [], plugins: [{ id: 'context-compression', enabled: false }] } : {}) }),
+        body: JSON.stringify({ model: provider === 'openrouter' ? model : `${provider}:${model}`, messages: structuredClone(messages), tools: [], max_tokens: maxOutputTokens, stream: false, ...(reasoning ? { reasoning } : {}), ...(provider === 'openrouter' ? { transforms: [], plugins: [{ id: 'context-compression', enabled: false }] } : {}) }),
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000),
       });
       if (!response.ok) {
@@ -752,6 +766,12 @@ export function createOwnerRuntimeAdapter({
       const choice = result?.choices?.[0];
       const usage = result?.usage;
       if (choice?.message?.tool_calls?.length) fail('CTX_SUMMARY_TOOLS', 'La sintesi non può eseguire strumenti.', usage);
+      // 09/09 — il caso visto dal vivo: niente testo ma token di ragionamento spesi. Non è una risposta
+      //   «invalida» da guardare nel codice: è un budget finito nel pensiero, e va detto in quelle parole.
+      const reasoningTokens = usage?.completion_tokens_details?.reasoning_tokens;
+      if (typeof choice?.message?.content !== 'string' && Number.isSafeInteger(reasoningTokens) && reasoningTokens > 0) {
+        fail('CTX_TRUNCATED_SUMMARY', `Il modello ha speso ${reasoningTokens} token nel ragionamento e non ha lasciato spazio alla sintesi.`, usage);
+      }
       if (typeof choice?.message?.content !== 'string' || typeof choice?.finish_reason !== 'string') fail('CTX_SUMMARY_RESPONSE_INVALID', 'La sintesi non dichiara testo e stato finale.', usage);
       return { text: choice.message.content, finishReason: choice.finish_reason, usage };
     },
