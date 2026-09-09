@@ -10,6 +10,16 @@ import { separaFonteModello } from './model-destination.mjs';
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
 const isLocal = profile => ['local', 'ollama', 'llama.cpp'].includes(profile.provider);
 
+export async function resolveDesktopContextProfile({ profiles, provider, model, readLocalRuntime }) {
+  const profile = profiles?.find(item => item.provider === provider && item.model === model);
+  if (!profile) fail('CTX_MODEL_NOT_CONFIGURED', 'Il modello non ha un profilo fissato per questa prova.');
+  if (provider === 'local') {
+    const runtime = await readLocalRuntime?.();
+    if (runtime?.state !== 'ready' || runtime.modelId !== model || !Number.isSafeInteger(runtime.windowTokens) || runtime.windowTokens !== profile.windowTokens) fail('CTX_RUNTIME_PROFILE_MISMATCH', 'Il modello locale caricato o la finestra effettiva non corrispondono al profilo di prova.');
+  }
+  return { provider: profile.provider, model: profile.model, windowTokens: profile.windowTokens, responseReserve: profile.responseReserve };
+}
+
 /** Desktop composition root. Model metadata, credentials, counter transport and
  * common usage policy are backend ports; no model payload chooses a DB path. */
 export async function createDesktopContextRuntime({ sessionDirectory, enabledSessionIds = [], readSession, resolveModelProfile, tokenCounter, callModel, usagePolicy, onEvent, loadLegacy } = {}) {
@@ -34,7 +44,8 @@ export async function createDesktopContextRuntime({ sessionDirectory, enabledSes
     const selected = session.provider === 'local'
       ? { provider: 'local', model: session.modelId ?? session.modello }
       : (() => { const { fonte, modelloRemoto } = separaFonteModello(session.modello); return { provider: fonte, model: modelloRemoto }; })();
-    return profileFor(selected);
+    const profile = await profileFor(selected);
+    return { ...profile, requestOptions: session.reasoning == null ? {} : { reasoning: structuredClone(session.reasoning) } };
   }
   const adapter = createContextModelAdapter({
     resolveModel: ({ sessionModel, settings }) => profileFor(settings?.model?.mode === 'explicit' ? settings.model : sessionModel),
