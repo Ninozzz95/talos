@@ -205,3 +205,14 @@ test('CTX-ORIGINAL-WIRE missing assistant tool content and ISO offset remain byt
   assert.equal(stored.sha256, hash(JSON.stringify(input.message)));
   assert.equal((await store.exportSession({ sessionId: 'a' })).records[0].createdAt, input.createdAt);
 });
+
+test('CTX-CANCEL-DURABLE-MERGE cancellation preserves concurrently committed job progress', async t => {
+  const { store } = await fixture(t);
+  await store.appendOriginalBatch({ sessionId: 'a', records: [record('r1')] });
+  const { job } = await candidate(store);
+  const newer = { ...job, progress: { ...job.progress, completed: 2, total: 2 } };
+  await store.saveJobProgress({ sessionId: 'a', job: newer });
+  const cancelled = await store.saveJobProgress({ sessionId: 'a', job: { ...job, state: 'cancelled' } });
+  assert.equal(cancelled.state, 'cancelled');
+  assert.deepEqual(cancelled.progress, newer.progress);
+});
