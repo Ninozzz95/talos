@@ -81,3 +81,221 @@ che la modale mostra il dato quando esiste, non che il kernel lo produca (quello
 - `tcec-desktop-measure-2560x1440.png` — aperta: stessa riga e stessi numeri, modale centrata, la barra di avanzamento della compattazione «Completati 1 di 3» sotto la misura è coerente con la fixture.
 - `tcec-desktop-measure-3840x2160.png` — aperta: identica composizione a 4K; dietro la modale si vede la barra «Compattazione contesto in corso» nella chat, coerente con lo stato.
 Non difetti, verificati: «3200» e «2048» senza separatore delle migliaia contro «16.384» con — è la regola CLDR dell'italiano (raggruppa da cinque cifre in su), non un'incoerenza del formato. Nessuna dicitura «cambiato dopo la misura» perché la revisione coincide: giusto così.
+
+## 09/09/2026 — D1, i giri VERI su Context Manager con z-ai/glm-5.3-flash (Claude)
+
+Processo desktop isolato, cronologia seminata di 40 scambi, un messaggio dal composer per giro. Ogni fotogramma «durante» è stato scattato ogni 4 secondi; i fotogrammi byte-identici sono dichiarati tali con l'hash e non riaperti. Tutti gli altri sono stati aperti uno per uno.
+
+### Giro 1 (19:39) — il primo giro vero, morto su «La sintesi non dichiara testo e stato finale»
+- `D1-01-prima-modale.png` — aperta: modale «Context Manager» con «Misura non ancora disponibile» tre volte, come atteso prima di qualunque richiesta; automazione spuntata
+- `D1-03-dopo-chat.png` — aperta: carta di errore generica «Questa forma di errore non è ancora tradotta», barra «Compattazione non riuscita»; colonna destra dice «Finestra del contesto 1310,7k» contro i 16.384 del trial: due fonti di verità (registrato)
+- `D1-04-dopo-modale.png` — aperta: misura 70.903 / 16.384 «Stima euristica · misurata alle 19:39» — il primo difetto (byte contati come token) letto a schermo; job «Compattazione non riuscita · La sintesi non dichiara testo e stato finale»
+- `D1-02-durante-01.png` — aperta: t+4s, «TALOS sta elaborando la risposta…», barra «Compattazione contesto in corso» già presente sotto il messaggio
+- `D1-02-durante-02.png` — aperta: t+8s, «Il modello ci sta ancora lavorando…», barra indeterminata
+- `D1-02-durante-03.png` — aperta: t+12s, «Ci sta mettendo più del solito — resta in attesa…», sessione «in corso»
+- `D1-02-durante-04.png` — aperta: t+16s, stesso stato, la barra resta indeterminata
+- `D1-02-durante-05.png` — aperta: t+20s, stesso stato
+- `D1-02-durante-06.png` — aperta: t+24s, la carta di errore «Il giro si è interrotto per un errore» sopra la barra «Compattazione non riuscita», sessione ancora «in corso»
+- `D1-02-durante-07.png` — aperta: carta di errore, sessione passata a «errore», piede 6,0k token
+- `D1-02-durante-08.png` — byte-identica a D1-02-durante-07.png (sha256 2f594498d62b), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-09.png` — byte-identica a D1-02-durante-07.png (sha256 2f594498d62b), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-10.png` — aperta: stato finale stabile: errore non tradotto («internal-error»), barra «Compattazione non riuscita» con pulsante Context Manager
+- `D1-02-durante-11.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-12.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-13.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-14.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-15.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-16.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-17.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-18.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-19.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-20.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-21.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-22.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-23.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-24.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-25.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-26.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-27.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-28.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-29.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-30.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-31.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-32.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-33.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-34.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-35.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-36.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-37.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-38.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-39.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-40.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-41.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-42.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-43.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-44.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-45.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-46.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-47.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-48.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-49.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-50.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-51.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-52.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-53.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-54.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-55.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-56.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-57.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-58.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-59.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1-02-durante-60.png` — byte-identica a D1-02-durante-10.png (sha256 149e8e6cd7ed), stesso stato a schermo, verificata con l'hash e non riaperta
+
+### Giro 2 (19:53) — dopo contatore e ragionamento: muore su «Una citazione non corrisponde agli originali»
+- `D1b-01-prima-modale.png` — aperta: modale prima del giro: misura non disponibile, come atteso
+- `D1b-03-dopo-chat.png` — aperta: carta di errore generica; piede 11,3k token (due tentativi di sintesi pagati)
+- `D1b-04-dopo-modale.png` — aperta: misura 20.305 / 16.384 (contatore tarato: era 70.903); job fallito «Una citazione non corrisponde agli originali» — terzo difetto letto a schermo
+- `D1b-02-durante-01.png` — aperta: t+4s, elaborazione e barra di compattazione presenti
+- `D1b-02-durante-02.png` — aperta: t+8s, «Il modello ci sta ancora lavorando…»
+- `D1b-02-durante-03.png` — aperta: t+12s, «Ci sta mettendo più del solito»
+- `D1b-02-durante-04.png` — aperta: t+16s, stesso stato di attesa
+- `D1b-02-durante-05.png` — byte-identica a D1b-02-durante-04.png (sha256 5923b74fb67d), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-06.png` — byte-identica a D1b-02-durante-04.png (sha256 5923b74fb67d), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-07.png` — aperta: carta di errore comparsa, sessione «in corso»
+- `D1b-02-durante-08.png` — byte-identica a D1b-02-durante-07.png (sha256 e48f4936deec), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-09.png` — byte-identica a D1b-02-durante-07.png (sha256 e48f4936deec), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-10.png` — aperta: stato finale: errore, barra «Compattazione non riuscita», piede 11,3k token
+- `D1b-02-durante-11.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-12.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-13.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-14.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-15.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-16.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-17.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-18.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-19.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-20.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-21.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-22.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-23.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-24.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-25.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-26.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-27.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-28.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-29.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-30.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-31.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-32.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-33.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-34.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-35.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-36.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-37.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-38.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-39.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-40.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-41.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-42.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-43.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-44.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-45.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-46.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-47.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-48.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-49.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-50.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-51.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-52.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-53.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-54.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-55.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-56.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-57.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-58.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-59.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1b-02-durante-60.png` — byte-identica a D1b-02-durante-10.png (sha256 447b812412ad), stesso stato a schermo, verificata con l'hash e non riaperta
+
+### Giro 3 (20:02) — dopo le citazioni elise: muore su «La sintesi non è stata completata» (finish_reason length)
+- `D1c-01-prima-modale.png` — aperta: modale prima del giro: misura non disponibile
+- `D1c-03-dopo-chat.png` — aperta: carta di errore generica, barra «Compattazione non riuscita»
+- `D1c-04-dopo-modale.png` — aperta: misura 20.305 / 16.384; job fallito «La sintesi non è stata completata» — quarto difetto (budget di uscita non dichiarato) letto a schermo
+- `D1c-02-durante-01.png` — aperta: t+4s, elaborazione e barra presenti
+- `D1c-02-durante-02.png` — aperta: t+8s, attesa
+- `D1c-02-durante-03.png` — aperta: t+12s, attesa
+- `D1c-02-durante-04.png` — aperta: t+16s, attesa
+- `D1c-02-durante-05.png` — aperta: t+20s, attesa, stesso stato
+- `D1c-02-durante-06.png` — byte-identica a D1c-02-durante-05.png (sha256 ce9380b00c41), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-07.png` — aperta: carta di errore comparsa
+- `D1c-02-durante-08.png` — byte-identica a D1c-02-durante-07.png (sha256 15748dedab74), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-09.png` — byte-identica a D1c-02-durante-07.png (sha256 15748dedab74), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-10.png` — aperta: stato finale: errore, barra «Compattazione non riuscita», piede 11,2k token
+- `D1c-02-durante-11.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-12.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-13.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-14.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-15.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-16.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-17.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-18.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-19.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-20.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-21.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-22.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-23.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-24.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-25.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-26.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-27.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-28.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-29.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-30.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-31.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-32.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-33.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-34.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-35.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-36.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-37.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-38.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-39.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-40.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-41.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-42.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-43.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-44.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-45.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-46.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-47.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-48.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-49.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-50.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-51.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-52.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-53.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-54.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-55.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-56.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-57.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-58.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-59.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+- `D1c-02-durante-60.png` — byte-identica a D1c-02-durante-10.png (sha256 7b0c762eef36), stesso stato a schermo, verificata con l'hash e non riaperta
+
+### Giro 4 (20:12) — dopo le QUATTRO cure: compattazione riuscita, risposta vera, tutte le foto aperte una per una
+- `D1d-01-prima-modale.png` — aperta: modale prima del giro, «Misura non ancora disponibile» tre volte, automazione spuntata, come atteso
+- `D1d-02-durante-01.png` — aperta: t+4s, «TALOS sta elaborando la risposta…», barra «Compattazione contesto in corso» indeterminata sotto il messaggio
+- `D1d-02-durante-02.png` — aperta: t+8s, «Il modello ci sta ancora lavorando…», barra ancora indeterminata
+- `D1d-02-durante-03.png` — aperta: t+12s, la barra è DETERMINATA a metà (1 segmento su 2 fatto), piede 10,5k token
+- `D1d-02-durante-04.png` — aperta: t+16s, barra piena (2 su 2), piede 20,0k token: i due segmenti sono stati sintetizzati
+- `D1d-02-durante-05.png` — aperta: t+20s, la barra è SPARITA e al suo posto c'è il separatore «Contesto compattato · Vedi contesto»; il modello è a «Ragionamento in corso», piede 24,0k
+- `D1d-02-durante-06.png` — aperta: t+24s, separatore presente, ragionamento in corso, nessun doppione del separatore
+- `D1d-02-durante-07.png` — aperta: t+28s, stesso stato, un solo separatore
+- `D1d-02-durante-08.png` — aperta: t+32s, «Ragionamento in corso», separatore unico, piede fermo a 24,0k
+- `D1d-02-durante-09.png` — aperta: t+36s, stesso stato di attesa della risposta
+- `D1d-02-durante-10.png` — aperta: t+40s, stesso stato
+- `D1d-02-durante-11.png` — aperta: t+44s, stesso stato, sessione ancora «in corso»
+- `D1d-02-durante-12.png` — aperta: t+48s, stesso stato; la risposta arriva subito dopo (primo token a 61,2 s, misurato dal piede)
+- `D1d-03-dopo-chat.png` — aperta: la risposta VERA di glm-5.3-flash in cinque punti sulle regole R1-R40 e il «prossimo passo più urgente»; sessione «conclusa · 1 giro»; piede «35,0k token · 1 giro · primo token 61,2 s»
+- `D1d-04-dopo-modale.png` — aperta: «10.163 / 16.384 token — Stima euristica · misurata alle 20:12 · il contesto è cambiato dopo la misura» (la risposta è arrivata dopo la misura: giusto così), «Contesto aggiornato · Completati 2 di 2», automazione spuntata
+
+Visto fuori dal compito, registrato e non curato qui: la colonna destra dice «Finestra del contesto 1310,7k · Conversazione 11k · 0,8%» — è la finestra del CATALOGO, mentre la modale usa i 16.384 del profilo di prova: due fonti di verità sullo stesso schermo. E il primo token a 61,2 s è il costo della strada sincrona (la chat aspetta la compattazione quando il contesto non entra): accettabile per la prova, da misurare prima dell'attivazione.

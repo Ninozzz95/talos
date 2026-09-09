@@ -342,3 +342,49 @@ Package context-engine 75/75; backend desktop-service/routes/integration/runtime
 browser playwright.context 2/2 dopo build. Nessuna inferenza reale. Fonti: Claude Code /context (scomposizione
 viva della finestra) e Codex /status, lette il 09/09/2026 — qui la misura è quella dell'ultima richiesta preparata
 ed è etichettata «misurata alle …», mai spacciata per viva.
+
+## D1 — il GIRO VERO su Context Manager (Claude, 09/09/2026, approvato dall'owner: solo glm-5.3-flash)
+
+Processo desktop isolato, trial su una chat, cronologia seminata di 40 scambi (39.513 byte), finestra
+dichiarata 16.384, un messaggio dal composer. Esito: il giro è MORTO — RunError «La sintesi non dichiara
+testo e stato finale» — e ha trovato due difetti veri che nessun test con fixture poteva vedere.
+(1) `context-token-counters.mjs`: la stima euristica contava i BYTE come token: 70.903 per un corpo che
+OpenRouter ha misurato in 10.073 (taratura con `max_tokens: 8`: 3,92 byte/token, 3,64 caratteri/token).
+Ogni richiesta sembrava un overflow, la compattazione partiva forzata e bloccante. Cura: byte/3,5 (+12% sul
+vero) + 4 token per messaggio, margine 15% invariato. RED CTX-HEURISTIC-CALIBRATED, GREEN.
+(2) `runtime-owner-adapter.mjs` `callContextModel`: glm-5.3-flash ragiona per difetto e il ragionamento si
+mangiava il budget della sintesi; spegnerlo dà HTTP 400 «Reasoning is mandatory for this endpoint and
+cannot be disabled». Misurato con quattro chiamate (costo totale < $0,001): senza campo 133 token di
+ragionamento; `reasoning.effort: 'low'` → 0 token, `finish_reason: stop`. Cura: la sintesi chiede `low`
+passando da `normalizzaReasoningPerModello` (mai `none` a un modello mandatory, mai un effort non
+supportato); una risposta senza testo con token di ragionamento spesi è `CTX_TRUNCATED_SUMMARY` con il
+numero nel messaggio, non «risposta invalida». Il corpo CONTATO porta lo stesso campo del corpo INVIATO
+(invariante di CTX-DESKTOP-SUMMARY-WIRE, che l'ha imposto diventando rosso). RED CTX-SUMMARY-LOW-REASONING,
+-CAPABILITY, -REASONING-ATE-BUDGET; GREEN 58/58 sul gruppo counters/integration/adapter/runtime/service.
+Visto nelle foto e NON curato qui: la colonna destra dice «Finestra del contesto 1310,7k» (catalogo) mentre
+la modale dice 16.384 (profilo del trial) — due fonti di verità; e l'errore di compattazione arriva in chat
+come «internal-error, forma non ancora tradotta». Registrati nella coda.
+Fonti 09/09/2026: openrouter.ai/docs/use-cases/reasoning-tokens (effort low ≈ 20% di max_tokens, `none`
+disabilita); Hermes «Context Compression and Caching» (soglia 50%, protect_last_n 20).
+
+D1, giri 2-4 (Claude, 09/09/2026, sempre z-ai/glm-5.3-flash, ~$0,01 in tutto):
+(3) giro 2 morto su CTX_INVALID_SOURCE. Riprodotta la richiesta esatta del motore (planCompaction + buildSummaryRequest)
+sul modello vero: 1 citazione su 4 esatta, 3 ELISE — due frammenti veri uniti dai puntini («adottiamo la regola R1... se
+non arriva niente per 30 secondi il processo è marcato «silenzioso», non «fallito»») — e `indexOf` della stringa intera
+bocciava l'intera sintesi. Cura in `summary.mjs`: `locateQuote` cerca ogni frammento fra i puntini da solo e in ordine,
+con mappa carattere-per-carattere (virgolette tipografiche/dritte, trattini, maiuscole; MAI normalizzazione Unicode che
+cambia lunghezza — limite dichiarato); una citazione comunque introvabile viene scartata e registrata in
+`unverifiedSources` (contratto esteso, opzionale); la sintesi cade solo se non resta nessuna fonte verificata, e l'errore
+nomina la citazione. Prompt: «citazione contigua copiata alla lettera, 20-200 caratteri, senza puntini». RED
+CTX-SOURCE-ELLIPSIS/-TYPOGRAPHY/-DROP-ONE/-DROP-ALL/-PROMPT, GREEN; CTX-SOURCE-VALIDATION (citazione fabbricata → rifiuto)
+invariata. Fonte 09/09: arXiv 2605.08580 Slipstream (validazione della sintesi con un giudice, non con l'uguaglianza).
+(4) giro 3 morto su CTX_TRUNCATED_SUMMARY. Stesso segmento (21.708 caratteri), due chiamate: 1.073 token di uscita e
+`stop`, poi 2.048 e `length` — il prompt non diceva QUANTO scrivere. Cura: `buildSummaryRequest` riceve
+`maxOutputTokens` e dichiara un limite in parole (un quarto dei token; con `compact` un ottavo), e il motore ritenta
+UNA volta con l'istruzione compatta; una seconda troncatura resta CTX_TRUNCATED_SUMMARY. RED CTX-SUMMARY-LENGTH-BOUND,
+CTX-SUMMARY-RETRY-COMPACT, CTX-SUMMARY-RETRY-ONCE; la prova storica CTX-TRUNCATED-SUMMARY ammette ora 2 chiamate (richieste
+DIVERSE, non la stessa ripetuta). GREEN package 83/83; backend context+adapter 117/117.
+Giro 4 (20:12): compattazione COMMITTATA (2 segmenti su 2, versione con coveredThrough 78, sintesi vera), barra
+determinata → sparita, UN separatore «Contesto compattato», risposta vera in cinque punti, misura 10.163 / 16.384 con
+«il contesto è cambiato dopo la misura». Foto D1d-* tutte aperte e annotate. Costo del percorso sincrono: primo token a
+61,2 s — da misurare prima dell'attivazione.

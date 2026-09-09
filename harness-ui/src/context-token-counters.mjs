@@ -21,6 +21,12 @@ export async function buildPreparedDesktopContextRequest({ messages, tools = [],
     const capability = await Promise.resolve(readModelCapabilities?.(model.model)).catch(() => null);
     const reasoning = normalizzaReasoningPerModello(requestOptions.reasoning, capability);
     if (reasoning !== undefined) requestOptions.reasoning = reasoning;
+  } else if (model.provider === 'openrouter') {
+    /* 09/09 — una SINTESI chiede poco ragionamento (vedi callContextModel nell'adapter: misurato sul giro
+       vero D1, senza questo campo glm-5.3-flash si mangiava il budget nel pensiero). Il corpo contato deve
+       portare lo stesso campo del corpo inviato, o la misura non è quella della richiesta. */
+    const capability = await Promise.resolve(readModelCapabilities?.(model.model)).catch(() => null);
+    requestOptions.reasoning = normalizzaReasoningPerModello({ effort: 'low' }, capability);
   }
   const compiled = await buildPreparedProviderRequest({ messages: preparedMessages, tools: preparedTools, model, signal, requestOptions });
   if (!['openai', 'anthropic', 'gemini'].includes(model.provider) && !preparedTools.length) compiled.body.tools = [];
@@ -50,8 +56,18 @@ export function createContextTokenCounter({ fetchFn, resolveProfile, hashFn = te
       const requestHash = await hashFn(JSON.stringify({ provider, model: model.model, body }));
       const base = { schema: 'talos.context.tokens.v1', windowTokens: model.windowTokens, responseReserve: model.responseReserve, requestHash, provider, model: model.model };
       const heuristic = () => {
-        // UTF-8 bytes + framing is deliberately conservative, never an exact tokenizer.
-        const inputTokens = Buffer.byteLength(JSON.stringify(body), 'utf8') + messages.length * 12;
+        /*
+         * ⛔ 09/09/2026 — fino a oggi qui si contavano i BYTE come token («deliberately conservative»):
+         *   sul giro vero D1 un corpo di 39.513 byte, che OpenRouter ha misurato in 10.073 token, valeva
+         *   70.903 — 3,9 volte il vero, sopra una finestra di 16.384. Effetto: ogni richiesta sembrava un
+         *   overflow, la compattazione partiva forzata a ogni giro e il giro moriva. «Prudente» non vuol
+         *   dire quadruplo: vuol dire un po' sopra il vero, con il margine dichiarato a parte.
+         *   Misurato (z-ai/glm-5.3-flash, italiano, JSON del corpo): 3,92 byte/token, 3,64 caratteri/token.
+         *   Byte/3,5 sta al +12% sul vero; `estimatedMarginTokens` (15%) copre testi più densi (codice,
+         *   JSON di strumenti). Resta una stima, e resta dichiarata tale — chi ha un conteggio del
+         *   fornitore lo usa.
+         */
+        const inputTokens = Math.ceil(Buffer.byteLength(JSON.stringify(body), 'utf8') / 3.5) + messages.length * 4;
         return { ...base, inputTokens, method: 'heuristic', exact: false, estimatedMarginTokens: Math.max(256, Math.ceil(inputTokens * 0.15)) };
       };
       const cloud = Object.hasOwn(defaults, provider);
