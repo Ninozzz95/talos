@@ -32,13 +32,20 @@ Fatto e visto nelle foto (processo desktop isolato, chat fixture, **nessuna infe
   reload (`context-progress.js`, `context-monitor.js`), con «Context Manager» a destra per riaprire;
 - separatore di versione persistente (già in v003), verificato al reload.
 
-Non ancora fatto (v004 §Prossimi passi, ancora vero):
-1. Una **prova che nessuna condizione del click** chiami `/compact` o `/context/jobs` implicitamente.
-2. La **misura corrente del contesto** nella modale: oggi dice «Non disponibile» tre volte. Va derivata
-   dal corpo preparato con strumenti e riserva — non da un GET con tools vuoti, non da un dato storico.
-3. Fine compattazione: sparizione della barra, **un solo** separatore, consumi aggiornati nel piede —
-   Astra lo stava verificando quando i crediti sono finiti. La suite browser è 2/2 ma copre il
-   percorso desktop, non questa chiusura come l'owner la vede.
+Chiusi da Claude alle 19:23 del 09/09, commit **`175cc2ef`** (`codex/talos-context-engine`, pushato):
+1. ✅ **Nessun click avvia una compattazione**: la spec browser lo asseriva già per il pulsante del topbar
+   e per la chat non abilitata; aggiunta CTX-PROGRESS-OPEN-ONLY per il terzo click, quello nella barra in
+   chat (può solo aprire: non ha un client).
+2. ✅ **La misura nella modale**: tabella `context_measurements`, `store.recordMeasurement`, snapshot con
+   `measurement = {revision, measuredAt, tokens}`, motore che registra dopo la prima misura e dopo una
+   compattazione riuscita; a schermo «3200 / 16.384 token — Conteggio del motore (esatto) · misurata alle
+   10:05» e, se la revisione è avanzata, «il contesto è cambiato dopo la misura». Foto a tre risoluzioni
+   (misura seminata dal test, dichiarata fixture) in `.claude/ISPEZIONI-FOTO.md`. RED/GREEN nel ledger.
+3. ✅ **Fine compattazione**: la spec roundtrip di Astra asserisce già barra a 0, un solo separatore e piede
+   «2,0k · cache 40%» dopo il reload — rilanciata verde due volte oggi (2/2). ⛔ Resta vero che è il
+   percorso desktop con fixture, non un giro reale col modello.
+
+Non ancora fatto (v004 §Prossimi passi):
 4. Tutto il resto dell'elenco v004 (impostazioni strict, cambio modello, job tardivi, embedding
    locale, qualificazione sui due GGUF, prova dal composer, revisione finale, prova owner, attivazione).
 
@@ -49,7 +56,7 @@ generale è dell'owner, dopo la sua prova.
 
 | Cosa | Percorso |
 |---|---|
-| Codice TCEC + F5c | `C:/Users/Antonino/Desktop/projects/AVM-context-engine`, branch `codex/talos-context-engine`, HEAD `25cf2602` |
+| Codice TCEC + F5c | `C:/Users/Antonino/Desktop/projects/AVM-context-engine`, branch `codex/talos-context-engine`, HEAD `175cc2ef` (pushato su origin) |
 | App desktop dell'owner | `C:/Users/Antonino/Desktop/projects/AVM-harness-desktop`, branch `lane/harness-desktop`, HEAD `8173622c` (+ i commit di questa consegna) |
 | Consegne precedenti | `.claude/CONSEGNA-ASTRA-A-CLAUDE-2026-09-09-v004-134857Z.md` (v001-v004 dentro) |
 | Ticket di lavoro di Claude | `.claude/TICKET-CONSEGNA-AD-ASTRA-2026-09-08.md`, §8 registro cronologico |
@@ -73,5 +80,5 @@ Le due nuove:
   riavvio mai avvenuto.
 
 **Owner:** decidere quando provare Context Manager di persona (è la porta dell'attivazione).
-**Claude dopo:** i punti 1-3 del §2, in quest'ordine, nel worktree TCEC.
+**Claude dopo:** i punti 1-3 sono chiusi; il prossimo passo lo sceglie l'owner dall'elenco v004 (impostazioni strict, cambio modello, qualificazione sui due GGUF, prova dal composer).
 **Rimane:** tutto il §2 «non ancora fatto», la qualificazione reale, la revisione finale.

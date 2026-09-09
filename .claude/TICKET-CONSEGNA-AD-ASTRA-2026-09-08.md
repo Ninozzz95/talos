@@ -522,6 +522,7 @@ dato potrebbe già arrivare senza essere mostrato.
 | 09/09 19:08 | **Lavoro di Astra messo al sicuro**: foto aperte e registrate, commit `25cf2602` su `codex/talos-context-engine` (worktree AVM-context-engine). Unit 475/475, browser context 2/2 | ✅ |
 | 09/09 19:03 | **Repo privato senza ignorati** (`.claude/`, `CLAUDE.md`, `AGENTS.md`: 1.345 file, 453 MB), commit `8173622c`, **pushato** `dff4d2ef..8173622c` con i 13 commit di Astra dell'08/09 | ✅ |
 | 09/09 19:10 | **Consegna v005 scritta**: `.claude/CONSEGNA-CLAUDE-2026-09-09-v005.md` (puntatore in `CONSEGNA-ASTRA-A-CLAUDE-LATEST.md`) | ✅ |
+| 09/09 19:23 | **F5c punti 1-3 chiusi** (click solo apre · misura nella modale con ora e freschezza · fine compattazione), commit `175cc2ef` pushato. Package 75/75, backend 25/25, unit 477/477, browser 2/2, tre foto ispezionate | ✅ |
 
 ### 8.1 · Scheda «Agenti» vuota — quello che è già ESCLUSO, per non rifarlo
 
