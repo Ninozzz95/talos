@@ -13553,7 +13553,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   `nomeLeggibileSessione` resta l'ultimo ripiego (una figlia aperta da un punto che non passa
      *   la riga intera, es. l'albero dei rami), e non mostra più nessun id.
      */
-    state.session = nome || impostazioniSessione?.taskDelega || nomeLeggibileSessione(taskId); // ⭐ un nome scelto dall'owner vince su tutto
+    /*
+     * ⛔ 10/09 — riprodotto da una mia sonda che apriva una sessione con `passaASessione(id)` e basta:
+     *   la testata diceva «Sessione senza nome» mentre la barra, per la STESSA sessione, diceva «ciso».
+     *   Il nome c'era (il server lo espone come `nome`), ma questo punto lo conosceva solo se il
+     *   chiamante glielo passava. Chi apre una sessione da un punto che non ha la riga intera —
+     *   l'albero dei rami, un collegamento, una sonda — perdeva il nome.
+     * ⇒ Ultimo ripiego prima di inventare: l'elenco che il client ha GIÀ in memoria, quello stesso
+     *   che disegna la barra (`state.sessionSelection.available`, riscritto a ogni giro dell'elenco).
+     *   Non è una chiamata in più: è leggere ciò che avevamo già.
+     */
+    const dallElenco = state.sessionSelection.available?.get?.(sessionId) ?? null;
+    state.session = nome || impostazioniSessione?.taskDelega || dallElenco?.nome || dallElenco?.taskDelega
+      || nomeLeggibileSessione(taskId || dallElenco?.taskId); // ⭐ un nome scelto dall'owner vince su tutto
     applicaImpostazioniSessione(contrattoSessione);
     sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
