@@ -48,7 +48,7 @@ import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nom
 import { montaProgetti, progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
-import { spiegaErrore, spiegaRifiutoAttrezzo } from '../components/errori.js';
+import { spiegaErrore, spiegaRifiutoAttrezzo, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
 import { montaNote } from '../components/note.js'; // 06/9 C24: la pagina delle Note // 06/9 O-22/O-23/O-36: gli errori e i rifiuti detti a una persona
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
@@ -57,6 +57,7 @@ import { contextUsageFromEvents } from '../../../../context-engine/src/usage.mjs
 import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, chipDegliAllegati, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js';
 import { creaAnteprimaImmagine, payloadImmagini } from '../components/immagini-chat.js';
 import { montaContextCompactor } from '../components/context-compactor.js';
+import { finestraDiContesto } from '../components/contesto.js'; // 09/09: la finestra è UNA SOLA — la colonna destra e la modale leggono lo stesso descrittore
 import { aggiornaSeparatoreContesto } from '../components/context-separator.js';
 import { createContextClient } from '../services/context-client.js';
 import { createContextMonitor } from '../services/context-monitor.js';
@@ -3855,7 +3856,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         finestra = finestraContestoDelModello();
       } catch { /* senza catalogo si mostrano i token senza percentuale */ }
     }
-    aggiornaContesto(pannello, ripartizioneContesto({ attrezzi, finestra }));
+    /*
+     * ⛔ 09/09 — stesso difetto della colonna destra, terza superficie: qui il peso degli schemi
+     * degli attrezzi si divideva per il `contextLength` del CATALOGO (1.310.720) mentre la richiesta
+     * vera viene costruita contro `windowTokens` del profilo (16.384). Il «0,6%» dichiarato era in
+     * realtà il 45%. Stesso lettore unico della colonna e della modale: se un giorno cambia il
+     * contratto, cambiano tutte e tre insieme.
+     */
+    const finestraUnica = finestraDiContesto({
+      misura: contextChatSnapshot?.measurement ?? null,
+      revisione: contextChatSnapshot?.revision ?? null,
+      finestraCatalogo: finestra,
+    });
+    aggiornaContesto(pannello, ripartizioneContesto({ attrezzi, finestra: finestraUnica }));
   }
 
   /** D21/D22 — consumo per giorno e per modello, dalla SOLA lista delle sessioni (mai una chiamata per sessione: BH-18). */
@@ -7976,12 +7989,36 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const inspector = $('#inspectorSessione') || $('.talos-inspector');
     if (!inspector) return;
     const file = [...(state.realSession.reviewFiles?.values?.() || [])].map((v) => { const c = contaDiff(v); return { path: v.path, aggiunte: c.aggiunte, rimozioni: c.rimozioni }; });
+    /*
+     * ⛔⛔⛔ 09/09/2026, owner: «UNIFICA». La stessa chat, nello stesso istante, diceva due cose:
+     * la colonna «Finestra del contesto 1310,7k · Conversazione 11k · 0,8%» e la modale «10.163 /
+     * 16.384», cioè il 62,0%. Nessuno dei due sbagliava il proprio conto: la colonna divideva per il
+     * `contextLength` del CATALOGO, la modale per il `windowTokens` del profilo, che è il tetto contro
+     * cui la richiesta viene davvero costruita e su cui scatta la compattazione. Mancava la regola su
+     * QUALE finestra si cita quando ce ne sono due — e la più grande era quella sbagliata.
+     * ⇒ `finestraDiContesto()` è il lettore unico: prende la misura del motore quando c'è (e allora
+     *   dichiara `fonte: 'profilo'`), altrimenti torna al catalogo dicendolo. La colonna riceve il
+     *   descrittore, non un numero: così le due superfici non possono divergere per COSTRUZIONE.
+     */
+    const finestra = finestraDiContesto({
+      misura: contextChatSnapshot?.measurement ?? null,
+      revisione: contextChatSnapshot?.revision ?? null,
+      finestraCatalogo: finestraDelModelloCorrente(),
+      usage: state.realSession.usage,
+      ripartizione: state.realSession.ripartizioneContesto || null,
+    });
     aggiornaInspector(inspector, {
       titolo: state.realSession.id ? (state.session || 'Sessione') : 'Nessuna sessione aperta',
       contesto: state.realSession.contesto || null,
-      usage: state.realSession.usage,
-      finestra: finestraDelModelloCorrente(),
-      ripartizione: state.realSession.ripartizioneContesto || null,
+      usage: finestra.perInspector.usage,
+      /*
+       * ⛔ Il NUMERO, non il descrittore: `righeFinestra` fa aritmetica su questo valore
+       * (`finestra - occupati`), e un oggetto le fa produrre NaN — a schermo «Libera — · 100,0%»,
+       * una percentuale sopra una finestra dichiarata ignota. Trovato nella FOTO della barra di
+       * avanzamento: i 509 test unitari erano verdi.
+       */
+      finestra: finestra.perInspector.finestra,
+      ripartizione: finestra.perInspector.ripartizione,
       giri: giriPerInspector(),
       file,
       processi: processiDagliEventi(state.realSession.eventiAttrezzi),
@@ -9163,12 +9200,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * 06/9 (T05-D2): «Hai fermato il giro» non e' un errore. Stessa forma — cosa, perche', cosa
      * puoi fare — ma badge e titolo lo dicono per quello che e'.
      */
-    const fermato = spiegazione?.id === 'fermato-da-te';
+    /*
+     * ⛔ 09/09 — questo `if` conosceva UNA sola eccezione, «fermato-da-te», e così una compattazione
+     * del contesto fallita usciva col badge rosso «Errore»: chi leggeva credeva di aver sbagliato la
+     * domanda appena scritta, mentre gli originali erano intatti e il giro si era fermato per il
+     * motivo opposto. Trovato in TRE giri veri con glm-5.3-flash.
+     * ⇒ La vestizione la decide la FAMIGLIA della spiegazione (`vestizioneErrore`), accanto alle
+     *   frasi: una famiglia nuova porta già il suo badge, il suo titolo e il suo tono, senza tornare
+     *   qui ad aggiungere un ramo — che è esattamente il modo in cui questo ramo era rimasto solo.
+     */
+    const vestizione = vestizioneErrore(spiegazione);
     const article = spiegazione
       ? creaNotaErrore({
-        titolo: etichettaMeta || (fermato ? 'TALOS · fermato' : 'TALOS · errore'),
-        badge: fermato ? 'Fermato' : 'Errore',
-        tono: fermato ? 'accent' : 'danger',
+        titolo: etichettaMeta || vestizione.titolo,
+        badge: vestizione.badge,
+        tono: vestizione.tono,
         spiegazione,
       })
       : creaNotaSistema({ tipo: isError ? 'danger' : 'info', badge: isError ? 'Errore' : 'Nota', titolo: etichettaMeta || (isError ? 'TALOS · errore' : 'TALOS · concluso'), testo: text });
@@ -13348,6 +13394,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     contextChatSnapshot = snapshot;
     aggiornaAvanzamentoContesto($('#conversation'), snapshot, { onOpen: () => compactSession() });
     contextCompactor?.update(snapshot);
+    // ⛔ la colonna destra legge la misura da qui: senza questa riga resterebbe ferma al catalogo
+    //    finché non cambia qualcos'altro, cioè proprio la divergenza che stiamo togliendo.
+    aggiornaInspectorDaStato();
   }
 
   function ottieniMonitorContesto() {

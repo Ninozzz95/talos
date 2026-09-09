@@ -1392,7 +1392,23 @@ export async function avviaSessione({
      * 'giri-esauriti'/'fermato'.
      */
     const messaggio = errore instanceof Error ? errore.message : String(errore);
-    onEvento(runError({ message: messaggio, code: 'internal-error' }));
+    /*
+     * ⛔ 09/09 — il `code` era FISSO a 'internal-error', e con esso spariva l'unica cosa che la chat
+     * poteva usare per riconoscere l'errore: una `ContextEngineError` arriva qui con il suo
+     * `CTX_TRUNCATED_SUMMARY` / `CTX_INVALID_SOURCE` / `CTX_SUMMARY_RESPONSE_INVALID` addosso, e
+     * questa riga lo buttava. Misurato in tre giri veri con glm-5.3-flash: il messaggio (italiano)
+     * sopravviveva, il codice no, e la chat doveva indovinare dalla frase.
+     * ⛔ Resta vero ciò che dice il commento sopra: un throw è un guasto del SERVIZIO. Per questo il
+     *   codice si prende solo se è una stringa in forma di codice (nessuno spazio, non vuota) e MAI
+     *   uno di quelli che descrivono un esito del task — un errore interno non deve poter fingersi
+     *   'fermato' o 'giri-esauriti' passando per il `.code` di un'eccezione qualunque.
+     */
+    const ESITI_DEL_TASK = new Set(['fermato', 'giri-esauriti', 'premesse-negate', 'concluso']);
+    const codiceGrezzo = typeof errore?.code === 'string' ? errore.code.trim() : '';
+    const code = codiceGrezzo && !/\s/.test(codiceGrezzo) && !ESITI_DEL_TASK.has(codiceGrezzo)
+      ? codiceGrezzo
+      : 'internal-error';
+    onEvento(runError({ message: messaggio, code }));
     return { threadId, runId, ok: false, esito: null, erroreInterno: messaggio };
   } finally {
     /*

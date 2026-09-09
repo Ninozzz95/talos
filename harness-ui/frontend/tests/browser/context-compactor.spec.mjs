@@ -83,7 +83,16 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
     expect(snapshot.activeVersion).toBeNull();
     expect(snapshot.facts[0].text).toBe('Il database deve restare locale.');
     const records = await store.readOriginals({ sessionId });
-    const createdAt = '2026-09-09T08:00:00.000Z';
+    /*
+     * ⛔ 09/09 — la barra in chat ricava la stima del tempo residuo da `createdAt`: con una data
+     * FISSA la fixture mostrerebbe un residuo assurdo («circa 90 minuti») o niente, a seconda
+     * dell'ora in cui gira la prova. Un inizio relativo a ORA rende lo screenshot quello vero:
+     * 1 segmento su 3 in 20 secondi ⇒ «circa 40 secondi rimanenti (stima)».
+     * ⛔ Si cambia QUESTA costante e non i `createdAt` dei singoli oggetti: il worker tratta
+     *   `createdAt` come immutabile fra i salvataggi dello stesso job, e rifiuta un `updatedAt`
+     *   che va indietro — `job`, `activeJob` e il salvataggio finale devono condividerla.
+     */
+    const createdAt = new Date(Date.now() - 20_000).toISOString();
     const job = { schema: 'talos.context.job.v1', id: 'ui-fixture-job', sessionId, idempotencyKey: 'ui-fixture-job', requestFingerprint: 'fixture', kind: 'compact', state: 'ready', baseRevision: snapshot.revision, baseStateRevision: snapshot.stateRevision, coveredThrough: 2, model: { provider: 'openrouter', model }, createdAt, updatedAt: createdAt, completedSegments: [], progress: { completed: 1, total: 1, phase: 'ready' } };
     const activeJob = { ...job, state: 'summarizing', progress: { completed: 1, total: 3, phase: 'summarizing' } };
     // 09/09 — CTX-UI-MEASURE: la misura dell'ultima richiesta preparata (fixture dichiarata, non un
