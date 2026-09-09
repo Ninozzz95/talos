@@ -5577,7 +5577,7 @@ function disegnaAgenti(d, contenitore, agenti) {
     card.dataset.stato = statoDelega(a);
     if (a.sessionId) card.dataset.sessioneFiglia = a.sessionId;
     const head = el20(d, "div", "talos-inspector-card__head");
-    head.append(el20(d, "b", "", tronca(a.task || "Delega senza compito registrato", 52)), el20(d, "span", `talos-badge talos-badge--sm${statoDelega(a) === "fallita" ? " talos-badge--danger" : statoDelega(a) === "conclusa" ? " talos-badge--success" : ""}`, etichettaDelega(a)));
+    head.append(el20(d, "b", "", tronca(a.taskCorto || a.task || "Delega senza compito registrato", 52)), el20(d, "span", `talos-badge talos-badge--sm${statoDelega(a) === "fallita" ? " talos-badge--danger" : statoDelega(a) === "conclusa" ? " talos-badge--success" : ""}`, etichettaDelega(a)));
     card.append(head);
     const ev = a.evidenzaDelega && typeof a.evidenzaDelega === "object" ? a.evidenzaDelega : null;
     const righe = [];
@@ -7801,6 +7801,87 @@ function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   gruppo.append(bottone3("ask-again", "Chiedi di nuovo", "i-history"));
   return gruppo;
 }
+function chiaveLinguaggio(dichiarato) {
+  const pulito = String(dichiarato || "").trim().toLowerCase();
+  if (!pulito) return "";
+  return ALIAS_LINGUAGGIO[pulito] || pulito;
+}
+function etichettaLinguaggio(dichiarato) {
+  const pulito = String(dichiarato || "").trim();
+  if (!pulito) return "";
+  return NOMI_LINGUAGGIO[pulito.toLowerCase()] || pulito;
+}
+function evidenziaConPrism(testo3, chiave) {
+  const grammatica = chiave && globalThis.Prism?.languages?.[chiave];
+  if (!grammatica) return null;
+  try {
+    return globalThis.Prism.highlight(testo3, grammatica, chiave);
+  } catch {
+    return null;
+  }
+}
+function scriviCodice(parti, testo3, chiuso) {
+  const { pre, code, chiave, evidenzia } = parti;
+  const scorrimento = pre.scrollLeft;
+  const evidenziato = chiuso && chiave ? evidenzia(testo3, chiave) : null;
+  if (evidenziato === null || evidenziato === void 0) {
+    code.textContent = testo3;
+    code.className = "";
+  } else {
+    code.innerHTML = evidenziato;
+    code.className = `language-${chiave}`;
+  }
+  pre.scrollLeft = scorrimento;
+}
+function aggiornaBottone(bottone3, chiuso) {
+  bottone3.disabled = !chiuso;
+  bottone3.textContent = chiuso ? "Copia" : "In arrivo…";
+}
+function creaBloccoCodice({ testo: testo3 = "", linguaggio = "", chiuso = true } = {}, opzioni = {}) {
+  const documentObj = opzioni.document || globalThis.document;
+  const etichetta = etichettaLinguaggio(linguaggio);
+  const blocco = el22(documentObj, "div", "code-block");
+  blocco.dataset.lingua = chiaveLinguaggio(linguaggio);
+  const intestazione = el22(documentObj, "div", "code-block-head");
+  const nome = el22(documentObj, "span", "code-block-lang", etichetta || "testo");
+  const bottone3 = el22(documentObj, "button", "code-block-copy");
+  bottone3.type = "button";
+  intestazione.append(nome, bottone3);
+  const pre = el22(documentObj, "pre");
+  pre.setAttribute("tabindex", "0");
+  pre.setAttribute("role", "group");
+  pre.setAttribute("aria-label", ["Blocco di codice", etichetta].filter(Boolean).join(" "));
+  const code = el22(documentObj, "code");
+  pre.append(code);
+  const parti = {
+    pre,
+    code,
+    bottone: bottone3,
+    nome,
+    chiave: chiaveLinguaggio(linguaggio),
+    evidenzia: opzioni.evidenzia || evidenziaConPrism,
+    copia: opzioni.copia || copiaDiSerie,
+    testo: String(testo3 ?? ""),
+    chiuso: Boolean(chiuso)
+  };
+  PARTI_DEL_BLOCCO.set(blocco, parti);
+  bottone3.addEventListener("click", async () => {
+    if (!parti.chiuso) return;
+    await parti.copia(parti.testo);
+    bottone3.textContent = "Copiato";
+    bottone3.classList.add("is-fatto");
+    const attesa = globalThis.setTimeout?.(() => {
+      aggiornaBottone(bottone3, true);
+      bottone3.classList.remove("is-fatto");
+    }, 1800);
+    attesa?.unref?.();
+  });
+  if (!parti.chiuso) blocco.classList.add("code-block-in-arrivo");
+  aggiornaBottone(bottone3, parti.chiuso);
+  scriviCodice(parti, parti.testo, parti.chiuso);
+  blocco.append(intestazione, pre);
+  return blocco;
+}
 function iconaAttrezzo(nome) {
   return ICONA_ATTREZZO[nome] || "i-bolt";
 }
@@ -8030,10 +8111,69 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
   blocco.append(riga);
   return { blocco, label, elapsed };
 }
-var SVG_NS, ICONA_ATTREZZO;
+var SVG_NS, ALIAS_LINGUAGGIO, NOMI_LINGUAGGIO, PARTI_DEL_BLOCCO, copiaDiSerie, ICONA_ATTREZZO;
 var init_conversazione = __esm({
   "src/components/conversazione.js"() {
     SVG_NS = "http://www.w3.org/2000/svg";
+    ALIAS_LINGUAGGIO = Object.freeze({
+      js: "javascript",
+      jsx: "jsx",
+      ts: "typescript",
+      tsx: "tsx",
+      mjs: "javascript",
+      cjs: "javascript",
+      py: "python",
+      python3: "python",
+      sh: "bash",
+      shell: "bash",
+      zsh: "bash",
+      console: "bash",
+      html: "markup",
+      xml: "markup",
+      svg: "markup",
+      vue: "markup",
+      yml: "yaml",
+      "c++": "cpp",
+      "c#": "csharp",
+      cs: "csharp",
+      golang: "go",
+      rs: "rust",
+      md: "markdown"
+    });
+    NOMI_LINGUAGGIO = Object.freeze({
+      js: "JavaScript",
+      jsx: "JSX",
+      ts: "TypeScript",
+      tsx: "TSX",
+      javascript: "JavaScript",
+      typescript: "TypeScript",
+      py: "Python",
+      python: "Python",
+      sh: "Bash",
+      bash: "Bash",
+      shell: "Shell",
+      json: "JSON",
+      yaml: "YAML",
+      yml: "YAML",
+      sql: "SQL",
+      html: "HTML",
+      xml: "XML",
+      css: "CSS",
+      rust: "Rust",
+      go: "Go",
+      java: "Java",
+      c: "C",
+      cpp: "C++",
+      "c++": "C++",
+      csharp: "C#",
+      "c#": "C#",
+      markdown: "Markdown",
+      md: "Markdown",
+      vue: "Vue",
+      php: "PHP"
+    });
+    PARTI_DEL_BLOCCO = /* @__PURE__ */ new WeakMap();
+    copiaDiSerie = (testo3) => globalThis.navigator?.clipboard?.writeText?.(testo3) ?? Promise.resolve();
     ICONA_ATTREZZO = Object.freeze({
       leggi: "i-eye",
       cerca: "i-search",
@@ -11112,77 +11252,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (sottotitolo) hero.appendChild(textElement("p", "hero-subtitle", sottotitolo));
         return hero;
       }
-      const LINGUAGGI_CODICE_ALIAS = {
-        js: "javascript",
-        jsx: "jsx",
-        ts: "typescript",
-        tsx: "tsx",
-        mjs: "javascript",
-        cjs: "javascript",
-        py: "python",
-        python3: "python",
-        sh: "bash",
-        shell: "bash",
-        zsh: "bash",
-        console: "bash",
-        html: "markup",
-        xml: "markup",
-        svg: "markup",
-        vue: "markup",
-        yml: "yaml",
-        "c++": "cpp",
-        "c#": "csharp",
-        cs: "csharp",
-        golang: "go",
-        rs: "rust",
-        md: "markdown"
-      };
-      function etichettaLinguaggio(dichiarato) {
-        const pulito = String(dichiarato || "").trim();
-        if (!pulito) return "";
-        const noti = { js: "JavaScript", jsx: "JSX", ts: "TypeScript", tsx: "TSX", javascript: "JavaScript", typescript: "TypeScript", py: "Python", python: "Python", sh: "Bash", bash: "Bash", shell: "Shell", json: "JSON", yaml: "YAML", yml: "YAML", sql: "SQL", html: "HTML", xml: "XML", css: "CSS", rust: "Rust", go: "Go", java: "Java", c: "C", cpp: "C++", "c++": "C++", csharp: "C#", "c#": "C#", markdown: "Markdown", md: "Markdown", vue: "Vue" };
-        return noti[pulito.toLowerCase()] || pulito;
-      }
       function costruisciBloccoCodice(testoCodice, linguaggioDichiarato, chiuso) {
-        const blocco = document.createElement("div");
-        blocco.className = "code-block";
-        if (!chiuso) blocco.classList.add("code-block-in-arrivo");
-        const etichetta = etichettaLinguaggio(linguaggioDichiarato);
-        const intestazione = document.createElement("div");
-        intestazione.className = "code-block-head";
-        intestazione.append(textElement("span", "code-block-lang", etichetta || "testo"));
-        const copia = document.createElement("button");
-        copia.type = "button";
-        copia.className = "code-block-copy";
-        copia.textContent = chiuso ? "Copia" : "In arrivo…";
-        copia.disabled = !chiuso;
-        if (chiuso) {
-          copia.addEventListener("click", async () => {
-            await copyText(testoCodice, "Codice copiato");
-            copia.textContent = "Copiato";
-            copia.classList.add("is-fatto");
-            window.setTimeout(() => {
-              copia.textContent = "Copia";
-              copia.classList.remove("is-fatto");
-            }, 1800);
-          });
-        }
-        intestazione.append(copia);
-        const pre = document.createElement("pre");
-        const code = textElement("code", "", testoCodice);
-        const chiave = LINGUAGGI_CODICE_ALIAS[String(linguaggioDichiarato || "").toLowerCase()] || String(linguaggioDichiarato || "").toLowerCase();
-        const grammatica = chiuso && chiave && window.Prism?.languages?.[chiave];
-        if (grammatica) {
-          code.className = `language-${chiave}`;
-          try {
-            code.innerHTML = window.Prism.highlight(testoCodice, grammatica, chiave);
-          } catch {
-            code.textContent = testoCodice;
-          }
-        }
-        pre.appendChild(code);
-        blocco.append(intestazione, pre);
-        return blocco;
+        return creaBloccoCodice(
+          { testo: testoCodice, linguaggio: linguaggioDichiarato, chiuso },
+          { copia: (testo3) => copyText(testo3, "Codice copiato") }
+        );
       }
       function renderizzaMarkdownSemplice(testoGrezzo) {
         const frammento = document.createDocumentFragment();

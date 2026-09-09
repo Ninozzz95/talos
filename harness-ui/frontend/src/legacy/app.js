@@ -38,7 +38,7 @@ import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSI
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser con annotazione 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, ordinaSessioniAdAlbero, statoSessione } from '../components/session-item.js';
-import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
+import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
 import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo schermo del browser pilotato dal server
@@ -1890,58 +1890,23 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * testo che cambia, con sfarfallio e costo inutile) e copia disabilitata
    * — si copierebbe codice a metà.
    */
-  const LINGUAGGI_CODICE_ALIAS = {
-    js: 'javascript', jsx: 'jsx', ts: 'typescript', tsx: 'tsx', mjs: 'javascript', cjs: 'javascript',
-    py: 'python', python3: 'python', sh: 'bash', shell: 'bash', zsh: 'bash', console: 'bash',
-    html: 'markup', xml: 'markup', svg: 'markup', vue: 'markup', yml: 'yaml',
-    'c++': 'cpp', 'c#': 'csharp', cs: 'csharp', golang: 'go', rs: 'rust', md: 'markdown',
-  };
-  /** Il nome da mostrare nell'intestazione: quello dichiarato dal modello, non quello interno di Prism. */
-  function etichettaLinguaggio(dichiarato) {
-    const pulito = String(dichiarato || '').trim();
-    if (!pulito) return '';
-    const noti = { js: 'JavaScript', jsx: 'JSX', ts: 'TypeScript', tsx: 'TSX', javascript: 'JavaScript', typescript: 'TypeScript', py: 'Python', python: 'Python', sh: 'Bash', bash: 'Bash', shell: 'Shell', json: 'JSON', yaml: 'YAML', yml: 'YAML', sql: 'SQL', html: 'HTML', xml: 'XML', css: 'CSS', rust: 'Rust', go: 'Go', java: 'Java', c: 'C', cpp: 'C++', 'c++': 'C++', csharp: 'C#', 'c#': 'C#', markdown: 'Markdown', md: 'Markdown', vue: 'Vue' };
-    return noti[pulito.toLowerCase()] || pulito;
-  }
+  /* ⛔ 09/09: la tabella degli alias e i nomi leggibili dei linguaggi stavano qui in copia. Due
+     tabelle uguali in due file divergono al primo linguaggio aggiunto: adesso ne esiste UNA sola,
+     `ALIAS_LINGUAGGIO` / `etichettaLinguaggio` in `components/conversazione.js`. */
+  /*
+   * ⛔ 09/09 — il generatore che stava qui è diventato `creaBloccoCodice` in
+   * `components/conversazione.js`, dove ha le sue prove e tre buchi in meno che si vedevano solo
+   * misurando la pagina spedita: il `<pre>` scorreva con `tabindex -1` (axe
+   * `scrollable-region-focusable`, letto 09/09/2026), lo streaming rifaceva il nodo a ogni frame
+   * portandosi via scorrimento e selezione, e la copia rileggeva il DOM evidenziato invece del testo
+   * grezzo. ⛔ Il montaggio sta qui e non nel componente: la copia di TALOS mostra anche la conferma
+   * in pagina, che il componente da solo non conosce.
+   */
   function costruisciBloccoCodice(testoCodice, linguaggioDichiarato, chiuso) {
-    const blocco = document.createElement('div');
-    blocco.className = 'code-block';
-    if (!chiuso) blocco.classList.add('code-block-in-arrivo');
-    const etichetta = etichettaLinguaggio(linguaggioDichiarato);
-    const intestazione = document.createElement('div');
-    intestazione.className = 'code-block-head';
-    intestazione.append(textElement('span', 'code-block-lang', etichetta || 'testo'));
-    const copia = document.createElement('button');
-    copia.type = 'button';
-    copia.className = 'code-block-copy';
-    copia.textContent = chiuso ? 'Copia' : 'In arrivo…';
-    copia.disabled = !chiuso;
-    if (chiuso) {
-      copia.addEventListener('click', async () => {
-        await copyText(testoCodice, 'Codice copiato');
-        copia.textContent = 'Copiato';
-        copia.classList.add('is-fatto');
-        window.setTimeout(() => { copia.textContent = 'Copia'; copia.classList.remove('is-fatto'); }, 1800);
-      });
-    }
-    intestazione.append(copia);
-    const pre = document.createElement('pre');
-    const code = textElement('code', '', testoCodice);
-    const chiave = LINGUAGGI_CODICE_ALIAS[String(linguaggioDichiarato || '').toLowerCase()] || String(linguaggioDichiarato || '').toLowerCase();
-    const grammatica = chiuso && chiave && window.Prism?.languages?.[chiave];
-    if (grammatica) {
-      code.className = `language-${chiave}`;
-      try {
-        // `highlightElement` va bene, ma passa da un hook globale e da
-        // `Prism.plugins`: qui basta la funzione pura, più prevedibile.
-        code.innerHTML = window.Prism.highlight(testoCodice, grammatica, chiave);
-      } catch {
-        code.textContent = testoCodice; // ⛔ una grammatica che lancia non deve mangiarsi il codice: si torna al testo nudo
-      }
-    }
-    pre.appendChild(code);
-    blocco.append(intestazione, pre);
-    return blocco;
+    return creaBloccoCodice(
+      { testo: testoCodice, linguaggio: linguaggioDichiarato, chiuso },
+      { copia: (testo) => copyText(testo, 'Codice copiato') },
+    );
   }
 
   function renderizzaMarkdownSemplice(testoGrezzo) {

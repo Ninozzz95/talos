@@ -99,9 +99,13 @@ dialog.sheet-dialog .mini-icon svg,dialog.command-dialog .mini-icon svg,.ft-acti
 .assistant-copy :where(p, li, blockquote, h1, h2, h3, h4, h5, h6){ overflow-wrap: anywhere; }
 .assistant-copy pre{ max-width: 100%; margin: 12px 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; white-space: pre; }
 .assistant-copy pre code{ white-space: pre; overflow-wrap: normal; }
-.assistant-copy .code-block{ margin: 12px 0; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--bg-deep); overflow: hidden; }
-.assistant-copy .code-block pre{ margin: 0; padding: 12px; background: transparent; }
-.assistant-copy .code-block code{ font-family: var(--font-mono); font-size: calc(12.5px * var(--talos-ui-font-scale)); line-height: 1.6; }
+/* ⛔ 09/09: le regole dei blocchi di codice NON stanno più qui. Vivevano in due file (qui e nel
+   mockup) e questo vinceva per specificità: chi avesse cambiato il mockup non avrebbe visto niente
+   cambiare a schermo. Fonte unica: `mockup/talos-mockup.html`, da cui si rigenera `src/styles/index.css`. */
+.assistant-copy .code-block .code-block-copy[disabled]{opacity:.7; cursor:default}
+/* Il chip del codice inline resta quello di prima; `box-decoration-break:clone` gli fa tenere angoli e
+   spaziatura anche quando va a capo a metà (css-tricks.com, stessa fonte). */
+.assistant-copy :where(p,li,td,th,dd) > code{box-decoration-break:clone; -webkit-box-decoration-break:clone}
 dialog.sheet-dialog .token.selector,dialog.command-dialog .token.selector,.ft-actions-menu .token.selector,.talos-dialog .token.selector{ color: var(--accent-2); }
 .assistant-copy hr{ margin: 14px 0; border: 0; border-top: 1px solid var(--line); }
 dialog.sheet-dialog .message-actions svg,dialog.command-dialog .message-actions svg,.ft-actions-menu .message-actions svg,.talos-dialog .message-actions svg{ width: 15px; height: 15px; }

@@ -198,6 +198,205 @@ export function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   return gruppo;
 }
 
+/* --------------------------------------------------------------- CodeBlock */
+
+/*
+ * ⛔⛔⛔ 09/09/2026, owner con lo screenshot: «i blocchi di codice nella chat appaiono frammentati
+ * in strisce come codice inline, separati dalla barra lingua/Copia».
+ *
+ * Misurato in Chromium 151 sul CSS spedito, prima della cura: `.code-block` aveva background
+ * `rgba(0,0,0,0)`, `border none`, `border-radius 0px` — il contenitore non c'era proprio — e il
+ * `<code>` dentro il `<pre>` risultava `display:inline` con `background rgb(43,44,48)`,
+ * `padding 1px 5px`, `border-radius 5px`: gli stessi identici valori del codice inline dentro un
+ * paragrafo. `code.getClientRects()` restituiva **5 rettangoli per 5 righe** — le strisce della foto.
+ * Quelle due cause stanno nel CSS e sono curate lì; qui sta il markup, che misurando la stessa
+ * pagina ha mostrato altri tre buchi:
+ *
+ *  1. il `<pre>` scorreva (`scrollWidth > clientWidth`) con `tabIndex` **-1**: chi usa la tastiera
+ *     non poteva raggiungere la fine di una riga lunga. La regola axe `scrollable-region-focusable`
+ *     (dequeuniversity.com, letta 09/09/2026) chiede il solo `tabindex="0"`; il nome lo diamo con
+ *     `role="group"` e non con `role="region"`, che è un landmark e in una chat piena di blocchi
+ *     riempirebbe di voci l'elenco dei punti di riferimento;
+ *  2. durante lo streaming `renderizzaMarkdownIncrementale` tiene il fence aperto nella CODA, e la
+ *     coda si distrugge e si ricostruisce a ogni frame: il blocco rinasce ogni volta e con lui se ne
+ *     vanno la posizione di scorrimento e la selezione di chi stava leggendo. Da qui
+ *     `aggiornaBloccoCodice`, che tocca lo stesso nodo invece di rifarlo;
+ *  3. il testo grezzo non era tenuto da nessuna parte, quindi dopo un aggiornamento la copia avrebbe
+ *     dato una versione vecchia. Ora vive in una WeakMap accanto al blocco.
+ *
+ * Ricerca 09/09/2026 (regola zero): streamdown.ai/docs/code-blocks — «copy buttons automatically
+ * disabled during streaming», il blocco si disegna comunque «even without the closing backticks»,
+ * scorrimento orizzontale per le righe lunghe e temi distinti per chiaro e scuro; css-tricks.com
+ * «Styling Code In and Out of Blocks» — `pre code{display:block; background:none; padding:0}` e
+ * l'idioma `:not(pre) > code` per separare inline e blocco; prismjs/prism `src/themes/dark.css`
+ * (via ctx7) — un tema Prism fissa anche `white-space:pre`, `word-break:normal`, `word-wrap:normal`,
+ * `tab-size:4`, `hyphens:none`, ⛔ ma i suoi selettori sono `pre[class*="language-"]` e qui la classe
+ * `language-*` sta sul `<code>`, non sul `<pre>`: un tema di serie si applicherebbe a metà, e per un
+ * linguaggio non riconosciuto (dove la classe non c'è per scelta) non si applicherebbe affatto.
+ *
+ * ⛔ Il linguaggio NON si indovina: si scrive quello che il fence dichiara, e l'evidenziazione si
+ * accende solo se quella grammatica esiste davvero. ⛔ E finché il fence è aperto non si evidenzia:
+ * sarebbe rifatta a ogni frame su un testo che cambia, con sfarfallio e costo, e la copia darebbe
+ * codice a metà.
+ */
+
+/** Quello che il modello scrive dopo i backtick → il nome della grammatica Prism. */
+export const ALIAS_LINGUAGGIO = Object.freeze({
+  js: 'javascript', jsx: 'jsx', ts: 'typescript', tsx: 'tsx', mjs: 'javascript', cjs: 'javascript',
+  py: 'python', python3: 'python', sh: 'bash', shell: 'bash', zsh: 'bash', console: 'bash',
+  html: 'markup', xml: 'markup', svg: 'markup', vue: 'markup', yml: 'yaml',
+  'c++': 'cpp', 'c#': 'csharp', cs: 'csharp', golang: 'go', rs: 'rust', md: 'markdown',
+});
+
+/** Il nome scritto per le persone: «JavaScript», non «javascript» né la chiave interna di Prism. */
+const NOMI_LINGUAGGIO = Object.freeze({
+  js: 'JavaScript', jsx: 'JSX', ts: 'TypeScript', tsx: 'TSX', javascript: 'JavaScript', typescript: 'TypeScript',
+  py: 'Python', python: 'Python', sh: 'Bash', bash: 'Bash', shell: 'Shell', json: 'JSON', yaml: 'YAML', yml: 'YAML',
+  sql: 'SQL', html: 'HTML', xml: 'XML', css: 'CSS', rust: 'Rust', go: 'Go', java: 'Java', c: 'C', cpp: 'C++',
+  'c++': 'C++', csharp: 'C#', 'c#': 'C#', markdown: 'Markdown', md: 'Markdown', vue: 'Vue', php: 'PHP',
+});
+
+/** La chiave della grammatica per Prism (`py` → `python`); stringa vuota se il fence non dichiara niente. */
+export function chiaveLinguaggio(dichiarato) {
+  const pulito = String(dichiarato || '').trim().toLowerCase();
+  if (!pulito) return '';
+  return ALIAS_LINGUAGGIO[pulito] || pulito;
+}
+
+/** Il nome da mostrare nell'intestazione: quello dichiarato dal modello, non quello interno di Prism. */
+export function etichettaLinguaggio(dichiarato) {
+  const pulito = String(dichiarato || '').trim();
+  if (!pulito) return '';
+  return NOMI_LINGUAGGIO[pulito.toLowerCase()] || pulito;
+}
+
+/**
+ * Le parti vive di un blocco, per poterlo aggiornare sul posto mentre arriva.
+ * WeakMap e non `dataset`: il testo del codice può essere lungo migliaia di caratteri, e un attributo
+ * HTML lo scriverebbe nel DOM una seconda volta.
+ */
+const PARTI_DEL_BLOCCO = new WeakMap();
+
+/** L'evidenziatore di serie: Prism se la pagina ce l'ha, altrimenti niente colore — mai un errore. */
+function evidenziaConPrism(testo, chiave) {
+  const grammatica = chiave && globalThis.Prism?.languages?.[chiave];
+  if (!grammatica) return null;
+  try {
+    // `highlightElement` passa da un hook globale e da `Prism.plugins`: qui basta la funzione pura.
+    return globalThis.Prism.highlight(testo, grammatica, chiave);
+  } catch {
+    return null; // ⛔ una grammatica che lancia non deve mangiarsi il codice: si torna al testo nudo
+  }
+}
+
+const copiaDiSerie = (testo) => globalThis.navigator?.clipboard?.writeText?.(testo) ?? Promise.resolve();
+
+/** Scrive nel `<code>` senza perdere il punto in cui la persona stava leggendo. */
+function scriviCodice(parti, testo, chiuso) {
+  const { pre, code, chiave, evidenzia } = parti;
+  const scorrimento = pre.scrollLeft;
+  const evidenziato = chiuso && chiave ? evidenzia(testo, chiave) : null;
+  if (evidenziato === null || evidenziato === undefined) {
+    code.textContent = testo;
+    // ⛔ Niente `language-*` se non stiamo evidenziando davvero: la classe è una dichiarazione, e
+    // dichiarare un linguaggio che non abbiamo colorato è lo stesso genere di bugia dell'etichetta.
+    code.className = '';
+  } else {
+    code.innerHTML = evidenziato;
+    code.className = `language-${chiave}`;
+  }
+  // ⛔ Riscrivere il contenuto riporta il `<pre>` a sinistra: chi stava leggendo la coda di una riga
+  // lunga la perderebbe a ogni frame dello streaming.
+  pre.scrollLeft = scorrimento;
+}
+
+/** Il pulsante: durante lo streaming non si copia codice a metà (Streamdown, letto 09/09/2026). */
+function aggiornaBottone(bottone, chiuso) {
+  bottone.disabled = !chiuso;
+  bottone.textContent = chiuso ? 'Copia' : 'In arrivo…';
+}
+
+/**
+ * Un blocco di codice della chat: UN contenitore, con la barra del linguaggio e «Copia» dentro, e il
+ * codice sotto. `chiuso` è falso finché il fence non ha trovato i backtick di chiusura.
+ */
+export function creaBloccoCodice({ testo = '', linguaggio = '', chiuso = true } = {}, opzioni = {}) {
+  const documentObj = opzioni.document || globalThis.document;
+  const etichetta = etichettaLinguaggio(linguaggio);
+
+  const blocco = el(documentObj, 'div', 'code-block');
+  blocco.dataset.lingua = chiaveLinguaggio(linguaggio);
+
+  const intestazione = el(documentObj, 'div', 'code-block-head');
+  const nome = el(documentObj, 'span', 'code-block-lang', etichetta || 'testo');
+  const bottone = el(documentObj, 'button', 'code-block-copy');
+  bottone.type = 'button';
+  intestazione.append(nome, bottone);
+
+  const pre = el(documentObj, 'pre');
+  pre.setAttribute('tabindex', '0');
+  pre.setAttribute('role', 'group');
+  pre.setAttribute('aria-label', ['Blocco di codice', etichetta].filter(Boolean).join(' '));
+  const code = el(documentObj, 'code');
+  pre.append(code);
+
+  const parti = {
+    pre, code, bottone, nome,
+    chiave: chiaveLinguaggio(linguaggio),
+    evidenzia: opzioni.evidenzia || evidenziaConPrism,
+    copia: opzioni.copia || copiaDiSerie,
+    testo: String(testo ?? ''),
+    chiuso: Boolean(chiuso),
+  };
+  PARTI_DEL_BLOCCO.set(blocco, parti);
+
+  bottone.addEventListener('click', async () => {
+    if (!parti.chiuso) return;
+    // ⛔ Si copia il testo GREZZO tenuto qui, non `code.textContent`: dopo l'evidenziazione quello è
+    // ricostruito da span, e un ritorno a capo o un tab persi lì renderebbero il codice non incollabile.
+    await parti.copia(parti.testo);
+    bottone.textContent = 'Copiato';
+    bottone.classList.add('is-fatto');
+    const attesa = globalThis.setTimeout?.(() => { aggiornaBottone(bottone, true); bottone.classList.remove('is-fatto'); }, 1800);
+    attesa?.unref?.(); // un timer che riporta un'etichetta non tiene vivo un processo (si vede nei test)
+  });
+
+  if (!parti.chiuso) blocco.classList.add('code-block-in-arrivo');
+  aggiornaBottone(bottone, parti.chiuso);
+  scriviCodice(parti, parti.testo, parti.chiuso);
+  blocco.append(intestazione, pre);
+  return blocco;
+}
+
+/**
+ * Il blocco cambia SUL POSTO mentre il modello scrive. Ritorna `false` quando non c'era niente da
+ * fare: a fence aperto lo stream chiama a ogni frame, e toccare il DOM per niente cancella la
+ * selezione di chi sta leggendo.
+ */
+export function aggiornaBloccoCodice(blocco, { testo, linguaggio, chiuso } = {}) {
+  const parti = PARTI_DEL_BLOCCO.get(blocco);
+  if (!parti) return false;
+  const nuovoTesto = testo === undefined ? parti.testo : String(testo ?? '');
+  const nuovoChiuso = chiuso === undefined ? parti.chiuso : Boolean(chiuso);
+  const nuovaChiave = linguaggio === undefined ? parti.chiave : chiaveLinguaggio(linguaggio);
+  if (nuovoTesto === parti.testo && nuovoChiuso === parti.chiuso && nuovaChiave === parti.chiave) return false;
+
+  if (nuovaChiave !== parti.chiave) {
+    const etichetta = etichettaLinguaggio(linguaggio);
+    parti.chiave = nuovaChiave;
+    parti.nome.textContent = etichetta || 'testo';
+    parti.pre.setAttribute('aria-label', ['Blocco di codice', etichetta].filter(Boolean).join(' '));
+    blocco.dataset.lingua = nuovaChiave;
+  }
+  parti.testo = nuovoTesto;
+  parti.chiuso = nuovoChiuso;
+  if (nuovoChiuso) blocco.classList.remove('code-block-in-arrivo');
+  else blocco.classList.add('code-block-in-arrivo');
+  aggiornaBottone(parti.bottone, nuovoChiuso);
+  scriviCodice(parti, nuovoTesto, nuovoChiuso);
+  return true;
+}
+
 /* ---------------------------------------------------------- Activity/Tool */
 
 /** Le icone dello sprite per ogni attrezzo del kernel (i nomi che riceve il modello NON cambiano: qui si sceglie solo il simbolo). */
