@@ -518,6 +518,10 @@ dato potrebbe già arrivare senza essere mostrato.
 | 12:52 | **PUSHATO** su `lane/harness-desktop`: `23eb8fdb..044b52aa` | ✅ albero pulito, niente in sospeso |
 | 13:20 | **`npm run verify` era rotto da me** dal `d706c8fe` (config cancellato, riferimento rimasto): riparato, e ha trovato **due difetti veri del browser** — mockup in contraddizione con sé stesso, e nome delle schede che ignorava il contenuto. Commit `2501833d` | ✅ unit 453/453, parità 120/120 |
 | 13:45 | **La barra mostra l'ALBERO delle deleghe**: figlie annidate sotto la madre, compatte, con la linea tree (richiesta owner a metà lavoro). Tre difetti trovati nelle FOTO e curati. Commit `dff4d2ef` | ✅ server 1766/1766, foto C44-C50 ispezionate |
+| 09/09 ~16:10 | **Astra finisce i crediti a metà di F5c** (Context Manager). Lavoro sul disco non committato: 14 file, sei foto mai annotate. Consegna v004: `.claude/CONSEGNA-ASTRA-A-CLAUDE-2026-09-09-v004-134857Z.md` | ⚠ |
+| 09/09 19:08 | **Lavoro di Astra messo al sicuro**: foto aperte e registrate, commit `25cf2602` su `codex/talos-context-engine` (worktree AVM-context-engine). Unit 475/475, browser context 2/2 | ✅ |
+| 09/09 19:03 | **Repo privato senza ignorati** (`.claude/`, `CLAUDE.md`, `AGENTS.md`: 1.345 file, 453 MB), commit `8173622c`, **pushato** `dff4d2ef..8173622c` con i 13 commit di Astra dell'08/09 | ✅ |
+| 09/09 19:10 | **Consegna v005 scritta**: `.claude/CONSEGNA-CLAUDE-2026-09-09-v005.md` (puntatore in `CONSEGNA-ASTRA-A-CLAUDE-LATEST.md`) | ✅ |
 
 ### 8.1 · Scheda «Agenti» vuota — quello che è già ESCLUSO, per non rifarlo
 
