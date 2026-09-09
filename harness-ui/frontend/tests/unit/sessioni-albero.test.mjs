@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ordinaSessioniAdAlbero } from '../../src/components/session-item.js';
+import { ordinaSessioniAdAlbero, prefissoComuneDiParole, nomiDistintiFraSorelle } from '../../src/components/session-item.js';
 
 /*
  * ⛔ 08/09/2026 — la barra a sinistra mostrava le figlie di una delega SCIOLTE accanto alla madre.
@@ -75,3 +75,67 @@ test('LINEA, il caso che inganna: una figlia con una NIPOTE sotto non è l’ult
   assert.equal(per['nipote'], true, 'la nipote è sola nel suo gruppo');
   assert.equal(per['figlia-b'], true, 'l’ultima figlia della nonna chiude il tronco');
 });
+
+/*
+ * ⛔ 09/09 — dalla FOTO del giro vero con delega (D2): le due figlie erano «crea un file chiamato
+ * parte1.md con tre righe sul registro dei processi» e «crea un file chiamato parte2.md con tre righe
+ * sugli allarmi». Nella riga della barra ne entrano ~28 caratteri, e a schermo erano due righe
+ * IDENTICHE: «crea un file chiamato par…». Il nome era già quello giusto: mancava ciò che distingue.
+ */
+test('SORELLE-DISTINTE: le parole che tutte le sorelle hanno in comune spariscono, e resta ci\u00f2 che distingue', () => {
+  const nomi = nomiDistintiFraSorelle([
+    'crea un file chiamato parte1.md con tre righe sul registro dei processi',
+    'crea un file chiamato parte2.md con tre righe sugli allarmi',
+  ]);
+  assert.deepEqual(nomi, [
+    '\u2026parte1.md con tre righe sul registro dei processi',
+    '\u2026parte2.md con tre righe sugli allarmi',
+  ]);
+  // ci\u00f2 che conta \u00e8 il TRONCAMENTO a schermo: i primi 28 caratteri devono differire
+  assert.notEqual(nomi[0].slice(0, 28), nomi[1].slice(0, 28), 'a schermo le due righe restano diverse');
+});
+
+test('SORELLE-DISTINTE: il prefisso si taglia su un confine di PAROLA, mai a met\u00e0', () => {
+  assert.equal(prefissoComuneDiParole(['scrivi il file alfa', 'scrivi il file beta']), 'scrivi il file ');
+  // \u26d4 «parte» \u00e8 comune ma \u00e8 mezza parola: non \u00e8 un prefisso, \u00e8 un troncamento
+  assert.equal(prefissoComuneDiParole(['parte1 del lavoro', 'parte2 del lavoro']), '');
+  assert.equal(prefissoComuneDiParole(['uno', 'due']), '', 'senza niente in comune non si taglia niente');
+  assert.equal(prefissoComuneDiParole(['solo io']), '', 'una sorella sola non ha nessuno da cui distinguersi');
+});
+
+/*
+ * ⛔ AL CONTRARIO — le tre guardie. Una cura che migliora il caso brutto e peggiora quello normale non
+ * è una cura: qui si prova che nei casi in cui NON serve i nomi tornano intatti, carattere per carattere.
+ */
+test('SORELLE-DISTINTE, AL CONTRARIO: quando la cura non serve i nomi restano INTATTI', () => {
+  const gia_diversi = ['leggi il registro degli errori', 'scrivi il riassunto della giornata'];
+  assert.deepEqual(nomiDistintiFraSorelle(gia_diversi), gia_diversi, 'niente in comune: niente da togliere');
+
+  const prefisso_corto = ['crea alfa e poi fermati', 'crea beta e poi fermati'];
+  assert.deepEqual(nomiDistintiFraSorelle(prefisso_corto), prefisso_corto,
+    '\u00abcrea \u00bb sono 5 caratteri: toglierlo fa perdere l\u2019inizio della frase e non aiuta nessuno');
+
+  const resto_troppo_corto = ['scrivi il file di configurazione a', 'scrivi il file di configurazione b'];
+  assert.deepEqual(nomiDistintiFraSorelle(resto_troppo_corto), resto_troppo_corto,
+    'dopo il taglio resterebbe \u00aba\u00bb: un nome di un carattere \u00e8 peggio di uno troncato');
+
+  const una_sola = ['crea un file chiamato parte1.md con tre righe'];
+  assert.deepEqual(nomiDistintiFraSorelle(una_sola), una_sola);
+  assert.deepEqual(nomiDistintiFraSorelle([]), []);
+  assert.deepEqual(nomiDistintiFraSorelle(['crea un file chiamato alfa', '']), ['crea un file chiamato alfa', ''],
+    'una figlia senza compito non fa perdere il nome alle altre');
+});
+
+test('SORELLE-DISTINTE: l\u2019albero porta il nome distintivo accanto alla riga, senza toccare la sessione', () => {
+  const madre = { sessionId: 'm', taskId: 'libero' };
+  const f1 = { sessionId: 'f1', padreId: 'm', avviataAlle: '2026-09-09T20:31:00Z', taskDelega: 'crea un file chiamato parte1.md con tre righe sul registro dei processi' };
+  const f2 = { sessionId: 'f2', padreId: 'm', avviataAlle: '2026-09-09T20:32:00Z', taskDelega: 'crea un file chiamato parte2.md con tre righe sugli allarmi' };
+  const righe = ordinaSessioniAdAlbero([madre, f1, f2]);
+
+  assert.equal(righe[0].nomeDistintivo, null, 'una madre non ha sorelle: nessun nome distintivo');
+  assert.equal(righe[1].nomeDistintivo, '\u2026parte1.md con tre righe sul registro dei processi');
+  assert.equal(righe[2].nomeDistintivo, '\u2026parte2.md con tre righe sugli allarmi');
+  assert.equal(f1.taskDelega, 'crea un file chiamato parte1.md con tre righe sul registro dei processi',
+    '\u26d4 la sessione NON viene toccata: \u00e8 il dato del server, il nome viaggia accanto');
+});
+

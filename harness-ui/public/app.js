@@ -283,6 +283,27 @@ function nomeLeggibileSessione(taskId) {
   if (grezzo.startsWith("delega:")) return "Sotto-agente";
   return grezzo;
 }
+function prefissoComuneDiParole(nomi2) {
+  const righe = (Array.isArray(nomi2) ? nomi2 : []).map((n) => String(n ?? ""));
+  if (righe.length < 2 || righe.some((n) => !n)) return "";
+  let comune = righe[0];
+  for (const n of righe.slice(1)) {
+    let i = 0;
+    while (i < comune.length && i < n.length && comune[i] === n[i]) i += 1;
+    comune = comune.slice(0, i);
+    if (!comune) return "";
+  }
+  const ultimoSpazio = comune.lastIndexOf(" ");
+  return ultimoSpazio > 0 ? comune.slice(0, ultimoSpazio + 1) : "";
+}
+function nomiDistintiFraSorelle(nomi2, { minimoPrefisso = 12, minimoResto = 6 } = {}) {
+  const righe = (Array.isArray(nomi2) ? nomi2 : []).map((n) => String(n ?? ""));
+  const comune = prefissoComuneDiParole(righe);
+  if (comune.trim().length < minimoPrefisso) return righe;
+  const tagliati = righe.map((n) => n.slice(comune.length).trim());
+  if (tagliati.some((n) => n.length < minimoResto)) return righe;
+  return tagliati.map((n) => `…${n}`);
+}
 function ordinaSessioniAdAlbero(elenco2) {
   const righe = Array.isArray(elenco2) ? elenco2.filter(Boolean) : [];
   const presenti = new Set(righe.map((s) => s.sessionId));
@@ -295,6 +316,13 @@ function ordinaSessioniAdAlbero(elenco2) {
   }
   for (const gruppo of figliePer.values()) {
     gruppo.sort((a, b) => String(a.avviataAlle ?? "").localeCompare(String(b.avviataAlle ?? "")));
+  }
+  const distintivoPer = /* @__PURE__ */ new Map();
+  for (const gruppo of figliePer.values()) {
+    const nomi2 = nomiDistintiFraSorelle(gruppo.map((f) => f.taskDelega ?? ""));
+    gruppo.forEach((f, i) => {
+      if (nomi2[i] && nomi2[i] !== f.taskDelega) distintivoPer.set(f.sessionId, nomi2[i]);
+    });
   }
   const fatte = /* @__PURE__ */ new Set();
   const fuori = [];
@@ -311,7 +339,7 @@ function ordinaSessioniAdAlbero(elenco2) {
   for (const s of righe) if (!fatte.has(s.sessionId)) fuori.push({ sessione: s, profondita: 0 });
   return fuori.map((v, i) => {
     const dopo = fuori.slice(i + 1).find((altra) => altra.profondita <= v.profondita);
-    return { ...v, ultima: !dopo || dopo.profondita < v.profondita };
+    return { ...v, ultima: !dopo || dopo.profondita < v.profondita, nomeDistintivo: distintivoPer.get(v.sessione.sessionId) ?? null };
   });
 }
 function creaSessionItem(sessione, opzioni = {}) {
@@ -321,7 +349,7 @@ function creaSessionItem(sessione, opzioni = {}) {
   riga.setAttribute("data-c", "SessionItem");
   if (opzioni.corrente) riga.setAttribute("aria-current", "true");
   if (sessione.sessionId) riga.dataset.realSessionId = sessione.sessionId;
-  const etichetta = opzioni.pendente ? `Nuova · ${sessione.nomeCartella || ""}` : `${sessione.nome || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? " · ramo" : ""}`;
+  const etichetta = opzioni.pendente ? `Nuova · ${sessione.nomeCartella || ""}` : `${sessione.nome || opzioni.nomeDistintivo || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? " · ramo" : ""}`;
   const stato = opzioni.pendente ? { classe: "pendente", testo: ETICHETTE.pendente, tono: null } : statoSessione(sessione);
   riga.dataset.sessionState = stato.classe;
   if (stato.aiuto) riga.title = stato.aiuto;
@@ -20842,10 +20870,13 @@ ${testo3}` : testo3;
         const conteggio2 = $2("#sessionList .talos-sidebar__block-head .talos-nav-item__count");
         if (conteggio2) conteggio2.textContent = String(elenco2.length);
         const pezzi = [...pendente];
-        for (const { sessione, profondita, ultima } of ordinaSessioniAdAlbero(elenco2)) {
+        for (const { sessione, profondita, ultima, nomeDistintivo } of ordinaSessioniAdAlbero(elenco2)) {
           const etichetta = sessione.nome || sessione.taskId;
           const button2 = creaSessionItem(sessione, {
             corrente: sessione.sessionId === state.realSession.id,
+            /* ⛔ 09/09: fra sorelle il nome perde le parole che hanno TUTTE in comune — senza, due deleghe
+               diverse arrivano a schermo come la stessa riga troncata (visto nella foto del giro D2). */
+            nomeDistintivo,
             selezione: state.sessionSelection.active ? { attiva: true, selezionata: state.sessionSelection.selected.has(sessione.sessionId), onToggle: (checked) => toggleSessionSelection(sessione.sessionId, checked) } : null,
             onApri: () => passaASessione(sessione.sessionId, sessione.taskId, sessione.nome, sessione.modello, sessione),
             /* ⭐ 31/8 P0 — tasto destro apre il menu completo condiviso con la Board e con il menu CRUD dei Files. */

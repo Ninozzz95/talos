@@ -212,6 +212,48 @@ export function nomeLeggibileSessione(taskId) {
  * @param {Array<object>} elenco righe dell'API, nell'ordine in cui arrivano (più recenti prima)
  * @returns {Array<{sessione:object, profondita:number, ultima:boolean}>}
  */
+/*
+ * ⛔ 09/09 — trovato nella FOTO del giro con delega: le due figlie si chiamavano
+ * «crea un file chiamato parte1.md…» e «crea un file chiamato parte2.md…», e nella riga della barra
+ * ne entrano ~28 caratteri: a schermo erano DUE RIGHE IDENTICHE, «crea un file chiamato par…». Il nome
+ * era giusto (è il compito vero, curato poche ore prima); a mancare era ciò che DISTINGUE.
+ *
+ * ⇒ Fra sorelle, le parole che hanno tutte in comune non distinguono niente: si tolgono, e al loro
+ *   posto va un'ellissi che dice che il compito comincia prima. «crea un file chiamato…» sparisce,
+ *   «…parte1.md con tre righe sul registro dei processi» resta.
+ *
+ * ⛔ Tre guardie, perché una cura non deve mai peggiorare il caso normale:
+ *   · serve più di una sorella (con una sola non c'è niente da distinguere);
+ *   · il prefisso comune si taglia su un confine di PAROLA e deve valere la pena (≥ 12 caratteri):
+ *     togliere «crea » non aiuta nessuno e fa perdere l'inizio della frase;
+ *   · dopo il taglio deve restare abbastanza testo (≥ 6 caratteri), altrimenti si tiene il nome intero.
+ *  Se una qualunque non è soddisfatta, i nomi tornano immutati: nel dubbio si mostra il compito vero.
+ */
+export function prefissoComuneDiParole(nomi) {
+  const righe = (Array.isArray(nomi) ? nomi : []).map((n) => String(n ?? ''));
+  if (righe.length < 2 || righe.some((n) => !n)) return '';
+  let comune = righe[0];
+  for (const n of righe.slice(1)) {
+    let i = 0;
+    while (i < comune.length && i < n.length && comune[i] === n[i]) i += 1;
+    comune = comune.slice(0, i);
+    if (!comune) return '';
+  }
+  // il taglio cade su un confine di parola: mezza parola in comune non è un prefisso, è un troncamento
+  const ultimoSpazio = comune.lastIndexOf(' ');
+  return ultimoSpazio > 0 ? comune.slice(0, ultimoSpazio + 1) : '';
+}
+
+/** I nomi delle sorelle senza le parole che hanno tutte in comune. Immutati se la cura non serve. */
+export function nomiDistintiFraSorelle(nomi, { minimoPrefisso = 12, minimoResto = 6 } = {}) {
+  const righe = (Array.isArray(nomi) ? nomi : []).map((n) => String(n ?? ''));
+  const comune = prefissoComuneDiParole(righe);
+  if (comune.trim().length < minimoPrefisso) return righe;
+  const tagliati = righe.map((n) => n.slice(comune.length).trim());
+  if (tagliati.some((n) => n.length < minimoResto)) return righe;
+  return tagliati.map((n) => `\u2026${n}`);
+}
+
 export function ordinaSessioniAdAlbero(elenco) {
   const righe = Array.isArray(elenco) ? elenco.filter(Boolean) : [];
   const presenti = new Set(righe.map((s) => s.sessionId));
@@ -226,6 +268,15 @@ export function ordinaSessioniAdAlbero(elenco) {
   // dentro un albero l'ordine di lettura è quello in cui il lavoro è stato distribuito
   for (const gruppo of figliePer.values()) {
     gruppo.sort((a, b) => String(a.avviataAlle ?? '').localeCompare(String(b.avviataAlle ?? '')));
+  }
+  /*
+   * ⛔ Il nome distintivo si può calcolare SOLO qui: dipende dalle sorelle, e una riga da sola non sa
+   * di averne. Non si tocca la sessione (è il dato del server): il nome viaggia accanto alla riga.
+   */
+  const distintivoPer = new Map();
+  for (const gruppo of figliePer.values()) {
+    const nomi = nomiDistintiFraSorelle(gruppo.map((f) => f.taskDelega ?? ''));
+    gruppo.forEach((f, i) => { if (nomi[i] && nomi[i] !== f.taskDelega) distintivoPer.set(f.sessionId, nomi[i]); });
   }
   const fatte = new Set();
   const fuori = [];
@@ -244,7 +295,7 @@ export function ordinaSessioniAdAlbero(elenco) {
   return fuori.map((v, i) => {
     // la prima riga successiva che non è una sua discendente: se manca, o è più in alto, è l'ultima
     const dopo = fuori.slice(i + 1).find((altra) => altra.profondita <= v.profondita);
-    return { ...v, ultima: !dopo || dopo.profondita < v.profondita };
+    return { ...v, ultima: !dopo || dopo.profondita < v.profondita, nomeDistintivo: distintivoPer.get(v.sessione.sessionId) ?? null };
   });
 }
 
@@ -259,7 +310,9 @@ export function creaSessionItem(sessione, opzioni = {}) {
   const etichetta = opzioni.pendente
     ? `Nuova · ${sessione.nomeCartella || ''}`
     // ⭐ 08/09: una figlia si chiama col suo compito — un nome scelto a mano vince comunque
-    : `${sessione.nome || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? ' · ramo' : ''}`;
+    // ⛔ `nomeDistintivo` prima di `taskDelega`: fra sorelle è lo stesso compito senza le parole che
+    //    hanno tutte in comune — senza, a schermo due deleghe diverse sono la stessa riga troncata.
+    : `${sessione.nome || opzioni.nomeDistintivo || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? ' · ramo' : ''}`;
   const stato = opzioni.pendente ? { classe: 'pendente', testo: ETICHETTE.pendente, tono: null } : statoSessione(sessione);
   riga.dataset.sessionState = stato.classe;
   if (stato.aiuto) riga.title = stato.aiuto; // il consiglio dove non ruba spazio alla riga

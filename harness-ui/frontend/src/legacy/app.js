@@ -13856,10 +13856,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * fa il lavoro puro (ordine + rientro) ed è provata a parte; qui resta solo il rientro a schermo.
      * ⛔ Non si NASCONDONO: sono sessioni vere, con un costo e una storia — vedi la doc della funzione.
      */
-    for (const { sessione, profondita, ultima } of ordinaSessioniAdAlbero(elenco)) {
+    for (const { sessione, profondita, ultima, nomeDistintivo } of ordinaSessioniAdAlbero(elenco)) {
       const etichetta = sessione.nome || sessione.taskId; // ⭐ un nome scelto dall'owner vince sempre sul taskId
       const button = creaSessionItem(sessione, {
         corrente: sessione.sessionId === state.realSession.id,
+        /* ⛔ 09/09: fra sorelle il nome perde le parole che hanno TUTTE in comune — senza, due deleghe
+           diverse arrivano a schermo come la stessa riga troncata (visto nella foto del giro D2). */
+        nomeDistintivo,
         selezione: state.sessionSelection.active
           ? { attiva: true, selezionata: state.sessionSelection.selected.has(sessione.sessionId), onToggle: (checked) => toggleSessionSelection(sessione.sessionId, checked) }
           : null,
