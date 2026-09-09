@@ -872,8 +872,19 @@ Una segnalazione di stallo non termina il processo.</pre>
     <div class="talos-inspector__head"><div class="talos-grow"><span class="talos-eyebrow">Sessione</span><h2>W1-02 registro processi</h2></div><button id="chiudiDettagli" class="talos-button talos-button--ghost talos-icon-button talos-inspector-close" aria-label="Chiudi dettagli"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     <div class="talos-tabs talos-tabs--underline talos-inspector__tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" id="railTabs" aria-label="Sezioni della colonna">
       <button class="talos-tabs__tab" role="tab" aria-selected="true" data-rail="contesto" aria-controls="railContesto">Contesto</button>
-      <button class="talos-tabs__tab" role="tab" aria-selected="false" data-rail="file" aria-controls="railFile" title="File toccati dal giro">File</button>
-      <button class="talos-tabs__tab" role="tab" aria-selected="false" data-rail="agenti" aria-controls="railAgenti" title="Sotto-agenti">Agenti</button>
+      <!-- ⛔ 09/09 — i due `title` sono stati TOLTI. Nella foto del giro con delega il fumetto nativo
+           «Sotto-agenti» si apriva verso l'alto e copriva il titolo della sessione: si leggeva
+           «Compito libero · [Sotto-agenti] a mano». Un tooltip nativo non si può posizionare.
+           E non perdiamo niente: «Sotto-agenti» ripeteva la parola già scritta sul bottone, e «File
+           toccati dal giro» è già l'intestazione dentro il pannello («File toccati in questa sessione»),
+           dove si vede sempre invece che al passaggio del mouse.
+           Fonti 09/09/2026: MDN, attributo `title` (agg. 17/04/2026) — problematico per chi usa solo il
+           tocco, la tastiera, uno screen reader o un magnificatore, e per chi ha difficoltà motorie o
+           cognitive, per «inconsistent browser support», con l'invito a usare una tecnica accessibile;
+           W3C ARIA APG, schema «Tabs» — prescrive `aria-controls` e `aria-selected` sui tab e l'etichetta
+           sul `tablist`, e NON prevede alcuna descrizione supplementare sul singolo tab. -->
+      <button class="talos-tabs__tab" role="tab" aria-selected="false" data-rail="file" aria-controls="railFile">File</button>
+      <button class="talos-tabs__tab" role="tab" aria-selected="false" data-rail="agenti" aria-controls="railAgenti">Agenti</button>
       <button class="talos-tabs__tab" role="tab" aria-selected="false" data-rail="processi" aria-controls="railProcessi">Processi</button>
     </div></div>
 
