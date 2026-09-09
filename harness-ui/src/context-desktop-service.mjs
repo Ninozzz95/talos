@@ -12,6 +12,7 @@ const validId = value => typeof value === 'string' && value.length > 0 && value.
 export function createDesktopContextService({ engine, store, loadLegacy, resolveSessionModel, isSessionEnabled, readSession, onEvent, runInference, clock = () => new Date().toISOString() }) {
   if (!engine || !store || typeof readSession !== 'function' || typeof resolveSessionModel !== 'function' || typeof isSessionEnabled !== 'function') fail('CTX_PORT_MISSING', 'Servizi desktop del contesto incompleti.');
   const queues = new Map();
+  const deliveries = new Map();
   const ownedJobs = new Map();
   let closed = false;
   function serial(sessionId, task) {
@@ -41,12 +42,22 @@ export function createDesktopContextService({ engine, store, loadLegacy, resolve
       afterSequence = page.at(-1).sequence;
     }
   }
-  async function deliver(sessionId) {
-    if (!onEvent) return;
-    for (const event of await store.readContextOutbox({ sessionId })) {
-      await onEvent({ sessionId, event });
-      await store.ackContextEvent({ sessionId, eventId: event.id });
-    }
+  function deliver(sessionId) {
+    if (!onEvent) return Promise.resolve();
+    if (deliveries.has(sessionId)) return deliveries.get(sessionId);
+    const pending = (async () => {
+      for (;;) {
+        const events = await store.readContextOutbox({ sessionId });
+        if (!events.length) return;
+        for (const event of events) {
+          await onEvent({ sessionId, event });
+          await store.ackContextEvent({ sessionId, eventId: event.id });
+        }
+      }
+    })();
+    deliveries.set(sessionId, pending);
+    pending.finally(() => { if (deliveries.get(sessionId) === pending) deliveries.delete(sessionId); }).catch(() => {});
+    return pending;
   }
   async function modelFor(sessionId) { return resolveSessionModel({ sessionId, session: await readSession(sessionId) }); }
   function common(body, fields = []) {
@@ -177,6 +188,7 @@ export function createDesktopContextService({ engine, store, loadLegacy, resolve
       if (closed) return;
       closed = true;
       await Promise.allSettled([...queues.values()]);
+      await Promise.allSettled([...deliveries.values()]);
       for (const options of ownedJobs.values()) {
         const job = await store.readContextJob(options);
         if (job && !terminal.has(job.state)) await engine.cancelCompaction(options);

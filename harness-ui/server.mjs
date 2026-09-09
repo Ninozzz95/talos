@@ -460,6 +460,7 @@ async function startServer() {
       resolveModelProfile: selected => resolveDesktopContextProfile({ profiles: config.contextTrial.models, ...selected, readLocalRuntime }),
       tokenCounter,
       callModel: request => ownerRuntime.callContextModel(request),
+      onEvent: input => sessionRegistry.pubblicaEventoContesto(input),
     });
   }
   const workspaceBrowser = createWorkspaceBrowser({
