@@ -50,6 +50,26 @@ test('CTX-ENGINE-PUBLISH archives originals and publishes only validated reduced
   assert.ok(calls.every(c => !c.tools?.length));
   assert.equal((await store.readUsage({ sessionId: 'chat' })).length, calls.length);
 });
+
+test('CTX-AUTO-PAUSED-RESUME resumes the same paused job when inference needs space and clears its old error', async t => {
+  const { engine, model } = await fixture(t);
+  const normal = model.summarize; let busy = true;
+  model.summarize = async request => {
+    if (busy) { busy = false; throw Object.assign(new Error('Chat has priority'), { code: 'CTX_RESOURCE_BUSY' }); }
+    return normal(request);
+  };
+  const profile = { ...modelProfile, windowTokens: 8192 };
+  await assert.rejects(engine.prepareForRequest({ sessionId: 'chat', sessionModel: profile }), { code: 'CTX_RESOURCE_BUSY' });
+  const paused = (await engine.getContextState({ sessionId: 'chat' })).jobs[0];
+  assert.equal(paused.state, 'paused');
+  const prepared = await engine.prepareForRequest({ sessionId: 'chat', sessionModel: profile });
+  assert.ok(prepared.versionId);
+  const final = await engine.getContextState({ sessionId: 'chat' });
+  assert.equal(final.jobs.length, 1);
+  assert.equal(final.jobs[0].id, paused.id);
+  assert.equal(final.jobs[0].state, 'committed');
+  assert.equal(final.jobs[0].error, undefined);
+});
 for (const [name, response, code] of [
   ['EMPTY', { text: '', finishReason: 'stop' }, 'CTX_EMPTY_SUMMARY'],
   ['TRUNCATED', { text: JSON.stringify(summary), finishReason: 'length' }, 'CTX_TRUNCATED_SUMMARY'],

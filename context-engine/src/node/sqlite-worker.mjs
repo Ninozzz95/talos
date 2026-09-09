@@ -280,6 +280,7 @@ const methods = {
         if (prior.state === 'paused' && activeStates.includes(job.state)) {
           requireNoOtherActive(sessionId, prior.id);
           const resumed = { ...prior, state: job.state, updatedAt: job.updatedAt };
+          delete resumed.error;
           run('UPDATE compaction_jobs SET state=?,job_json=? WHERE session_id=? AND id=?', resumed.state, JSON.stringify(resumed), sessionId, prior.id);
           return resumed;
         }

@@ -208,7 +208,8 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       if (terminal.has(job.state)) return job;
       await assertCurrent(job, signal);
       if (job.state !== 'paused') job = await save(job, { state: 'paused' });
-      job = await store.claimContextJob({ sessionId, job: { ...job, state: 'queued', updatedAt: clock() } });
+      const { error: previousError, ...resumable } = job;
+      job = await store.claimContextJob({ sessionId, job: { ...resumable, state: 'queued', updatedAt: clock() } });
       launch(job, { sessionModel, tools, signal });
       return job;
     },
@@ -224,6 +225,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         job = snapshot.jobs.find(entry => !terminal.has(entry.state));
         if (!job) job = await api.startCompaction({ sessionId, idempotencyKey: `auto-${snapshot.revision}-${await hash(identity(sessionModel))}`, sessionModel, tools, signal });
         if (!budget.fits) {
+          if (job.state === 'paused') job = await api.resumeCompaction({ sessionId, jobId: job.id, sessionModel, tools, signal });
           const result = await api.waitForCompaction({ sessionId, jobId: job.id });
           if (result.state !== 'committed') fail(result.error?.code ?? 'CTX_COMPACTION_REQUIRED', result.error?.message ?? 'Il contesto richiede una compattazione completata.');
           snapshot = await state(sessionId);

@@ -22,6 +22,26 @@ it('NATIVE-06 conserva lo stato firmato soltanto con fine stream completa', asyn
     assert.equal(partial.scelta.talos_provider_state, undefined)
 })
 import { fileURLToPath } from 'node:url'
+it('CTX-KERNEL-INFERENCE-LEASE holds the resource through complete SSE consumption', async (t) => {
+    const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
+    t.after(() => rmSync(cartella, { recursive: true, force: true }))
+    let held = false, invoked = false
+    const result = await talosLavora({ cartella, task: { consegna: 'continua' }, modello: 'x', chiave: 'y', onDelta: () => { assert.equal(held, true) },
+        contextHooks: { capture: async () => {}, prepare: async ({ messages }) => ({ messages }), infer: async ({ signal }, invoke) => { held = true; invoked = true; try { return await invoke(signal) } finally { held = false } } },
+        fetchDiRete: async () => {
+            assert.equal(held, true)
+            return new Response(new ReadableStream({ async start(controller) {
+                await new Promise(resolve => setImmediate(resolve))
+                assert.equal(held, true)
+                controller.enqueue(new TextEncoder().encode('data: ' + JSON.stringify({ choices: [{ delta: { content: 'Continuiamo' }, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n'))
+                controller.close()
+            } }))
+        },
+    })
+    assert.equal(invoked, true)
+    assert.equal(held, false)
+    assert.equal(result.messaggiFinali.at(-1).content, 'Continuiamo')
+})
 it('CTX-KERNEL-RESPONSE-RESERVE bounds the actual provider generation to the measured reserve', async (t) => {
     const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
     t.after(() => rmSync(cartella, { recursive: true, force: true }))
