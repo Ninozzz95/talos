@@ -294,6 +294,9 @@ const methods = {
       if (prior.state === 'cancelled' && JSON.stringify(prior) !== JSON.stringify(job)) fail('Cancelled job cannot be changed', 'CTX_JOB_CANCELLED');
       if (['committed', 'failed'].includes(prior.state) && JSON.stringify(prior) !== JSON.stringify(job)) fail('Completed job cannot be changed', 'CTX_JOB_TERMINAL');
       for (const key of ['schema', 'id', 'sessionId', 'idempotencyKey', 'requestFingerprint', 'kind', 'baseRevision', 'baseStateRevision', 'coveredThrough', 'model', 'createdAt']) if (JSON.stringify(prior[key]) !== JSON.stringify(job[key])) fail('Job identity and base snapshot are immutable', 'CTX_JOB_CONFLICT');
+      // Cancellation changes state, never replaces a concurrent progress write.
+      // Merge under the same SQLite transaction after validating immutable identity.
+      if (job.state === 'cancelled') job = { ...prior, state: 'cancelled', updatedAt: Date.parse(job.updatedAt) >= Date.parse(prior.updatedAt) ? job.updatedAt : prior.updatedAt, ...(job.error ? { error: job.error } : {}) };
       if (job.state === 'committed' && prior.state !== 'committed') fail('A job may be committed only with a version', 'CTX_JOB_NOT_READY');
       if (job.versionId !== prior.versionId) fail('Job version is assigned by publication', 'CTX_JOB_CONFLICT');
       if (activeStates.includes(prior.state) && activeStates.includes(job.state) && activeStates.indexOf(job.state) < activeStates.indexOf(prior.state)) fail('Job phase cannot move backwards', 'CTX_JOB_CONFLICT');
