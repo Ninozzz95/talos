@@ -55,6 +55,9 @@ import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.j
 import { sommaUsage, usageDellaSessione } from '../components/consumo-sessione.js'; // 06/9 CB-04: il consumo della SESSIONE, non dell'ultimo invio
 import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, chipDegliAllegati, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js';
 import { creaAnteprimaImmagine, payloadImmagini } from '../components/immagini-chat.js';
+import { montaContextCompactor } from '../components/context-compactor.js';
+import { aggiornaSeparatoreContesto } from '../components/context-separator.js';
+import { createContextClient } from '../services/context-client.js';
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
@@ -443,6 +446,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   const embeddedHeaderScrollers = [...new Set([...views, chatConversation].filter(Boolean))];
   const embeddedHeaderScrollPositions = new WeakMap();
   let compattazioneInCorso = false;
+  let contextCompactor = null;
+  let contextOpening = false;
+  let contextClient = null;
   let streamingScrollFrame = null;
   let streamingScrollTarget = null;
   /*
@@ -12228,6 +12234,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function handleRealEvent(evento, generation) {
     if (generation !== state.realSession.generation) return; // sessione più vecchia: scartato, non renderizzato
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.context') {
+      const value = evento.value;
+      if (value?.schema !== 'talos.context.event.v1' || value.sessionId !== state.realSession.id) return;
+      aggiornaSeparatoreContesto($('#conversation'), [value], { sessionId: state.realSession.id, onOpen: () => compactSession() });
+      if (contextCompactor && !$('#veloContesto')?.hidden) void contextCompactor.refresh({ quiet: true });
+      return;
+    }
     /*
      * ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — riprodotto: ogni
      * riconnessione SSE sulla stessa sessione (l'EventSource nativo dopo una
@@ -12903,6 +12916,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** Chiude l'EventSource corrente (se c'è) e apre una nuova generazione. */
   function nuovaGenerazioneSessione({ continua = false } = {}) {
+    if (!continua) { contextCompactor?.close(); contextCompactor?.setSession(null); }
     nascondiAttesaRisposta();
     cancellaRenderMessaggiStreaming();
     cancellaRenderAlberoDifferito();
@@ -13296,10 +13310,28 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function compactSession() {
     if (!state.realSession.id) {
-      toast('Contesto compattato', '18.7k -> 9.3k token equivalenti.');
+      toast('Contesto della chat', 'Apri una conversazione per gestirne il contesto.');
       return;
     }
-    if (compattazioneInCorso) return;
+    if (compattazioneInCorso || contextOpening) return;
+    const contextSessionId = state.realSession.id;
+    const contextGeneration = state.realSession.generation;
+    contextOpening = true;
+    try {
+      contextClient ??= createContextClient({ fetchFn: fetchSorvegliata, baseURL: API('/api/v1') });
+      const snapshot = await contextClient.getContextState({ sessionId: contextSessionId });
+      if (contextSessionId !== state.realSession.id || contextGeneration !== state.realSession.generation) return;
+      const root = $('#veloContesto');
+      if (!root) throw new Error('La finestra del contesto non è disponibile. Aggiorna la pagina.');
+      if (!contextCompactor) contextCompactor = montaContextCompactor(root, { client: contextClient, sessionId: contextSessionId, state: snapshot });
+      else contextCompactor.setSession(contextSessionId, snapshot);
+      contextCompactor.open();
+      return;
+    } catch (error) {
+      if (contextSessionId !== state.realSession.id || contextGeneration !== state.realSession.generation) return;
+      // Soltanto le sessioni fuori dalla sperimentazione conservano il percorso legacy.
+      if (error.code !== 'CTX_NOT_ENABLED') { toast('Contesto non disponibile', error.message); return; }
+    } finally { contextOpening = false; }
     const bottoneCompattazione = $('#compactSessionBtn');
     compattazioneInCorso = true;
     if (bottoneCompattazione) {
@@ -17032,6 +17064,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {
+    contextCompactor?.destroy(); contextCompactor = null;
     window.clearInterval(notificheTimer);
     document.querySelector('.notifications-menu')?.remove();
     cancelMotionAnimations();
@@ -17292,6 +17325,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   });
   let ultimoFuocoVelo = null;
   function apriVeloMockup(id) {
+    if (id === 'veloContesto') { void compactSession(); return; }
     const v = $(`#${id}`); if (!v) return;
     if (id === 'veloIntro' && !introMockup) { void apiGet('/api/v1/setup/stato').catch(() => null).then((stato) => apriIntroMockup(0, stato)); return; } // 06/9 B7b: «Ripeti il primo avvio»
     ultimoFuocoVelo = ROOT().activeElement;
@@ -17316,6 +17350,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     primo?.focus();
   }
   function chiudiVeloMockup(id) {
+    if (id === 'veloContesto' && contextCompactor) { contextCompactor.close(); return; }
     const v = $(`#${id}`); if (!v || v.hidden) return;
     v.hidden = true;
     if (ultimoFuocoVelo?.focus) ultimoFuocoVelo.focus();

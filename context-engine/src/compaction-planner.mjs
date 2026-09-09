@@ -24,7 +24,8 @@ export function selectClosedPrefix(records, { retainRecentTurns = 2, force = fal
     if (pending.size === 0 && hasConversation) boundaries.push(index + 1);
   }
   let cut = boundaries.filter(value => value <= desired).at(-1) ?? 0;
-  if (!cut && force) cut = boundaries.filter(value => value < records.length).at(-1) ?? 0;
+  // A manual request may retain fewer turns, but never half of the latest exchange.
+  if (!cut && force) cut = boundaries.filter(value => value <= (userIndices.at(-1) ?? 0)).at(-1) ?? 0;
   return { prefix: records.slice(0, cut), tail: records.slice(cut), pendingCalls: [...pending], coveredThrough: records[cut - 1]?.sequence ?? 0 };
 }
 

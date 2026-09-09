@@ -42,6 +42,12 @@ Stato: **IN CODA**, non implementato. Si collega al pannello destro del ticket; 
 
 ## Consegna
 
+### Debito UI non urgente — blocchi di codice, 09/09/2026
+
+Richiesta owner durante TCEC, riferimento visivo: `C:/Users/Antonino/Downloads/ScreenShot Tool -20260909110154.png`. Il codice multilinea appare frammentato in strisce come codice inline, separato dalla barra lingua/Copia. Stato: **in coda, non implementato**; non interrompere Context Engine.
+
+Obiettivo: un contenitore unico coerente con TALOS; tipografia monospace leggibile, evidenziazione sintattica, contrasto e spaziatura curati, intestazione e Copia integrati. Preservare fedelmente contenuto, indentazione, selezione e copia; verificare righe lunghe, streaming, linguaggi non riconosciuti, tema chiaro/scuro, tastiera e viewport 1080p/1440p/4K. Prima della patch: ispezione renderer/CSS reali, ricerca primaria aggiornata, confronto visivo competitor e ledger RED/GREEN. Lo screenshot dimostra il difetto percepito, non identifica da solo la causa CSS. Decisioni fondamentali da sottoporre all'owner; nessun redesign della testata o delle altre viste implicato.
+
 - **Cosa deve fare l'owner:** nessuna scelta richiesta per registrare la coda.
 - **Cosa faccio io dopo:** completare la presa in carico del ticket e seguire le priorità correnti.
 - **Cosa rimane:** ricerca approfondita, proposte applicabili e implementazioni PO-01–PO-08.
