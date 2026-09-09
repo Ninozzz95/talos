@@ -47,3 +47,27 @@ test('CTX-DESKTOP-FACTS owner changes and deletion expose real persisted state',
   await request(service, 'DELETE', '/facts/db', { expectedRevision: next.revision, idempotencyKey: 'remove' });
   assert.deepEqual((await request(service, 'GET', '/facts')).facts.filter(f => f.status !== 'removed'), []);
 });
+
+test('CTX-DESKTOP-PROVIDER-RAW archives the untouched provider response before normalization', async t => {
+  const { service, store } = await fixture(t);
+  const hooks = await service.createKernelHooks({ sessionId: 'chat', runId: 'run-one' });
+  const response = { role: 'assistant', tool_calls: [{ id: 'call', type: 'function', function: { name: 'read', arguments: '{' } }] };
+  await hooks.captureProviderResponse({ response, giro: 0 });
+  response.tool_calls[0].function.arguments = '{}';
+  const exported = await store.exportSession({ sessionId: 'chat' });
+  const raw = exported.blobs.find(blob => blob.id.startsWith('provider-response-'));
+  assert.ok(raw);
+  assert.equal(JSON.parse(Buffer.from(raw.base64, 'base64').toString('utf8')).response.tool_calls[0].function.arguments, '{');
+  assert.equal((await store.readOriginals({ sessionId: 'chat' })).length, 0, 'raw transport evidence must not create a second assistant message');
+  await hooks.capture({ messages: [{ role: 'user', content: 'Leggi il file' }, response], reason: 'response' });
+  assert.equal((await store.readOriginals({ sessionId: 'chat' })).length, 2);
+});
+
+test('CTX-DESKTOP-HOOK-NOT-ENABLED leaves unrelated sessions on the legacy path', async t => {
+  const { store, engine } = await fixture(t);
+  const service = createDesktopContextService({ store, engine, readSession: () => ({ sessionId: 'other' }), isSessionEnabled: () => false, resolveSessionModel: () => { throw new Error('Not called'); } });
+  t.after(() => service.close());
+  assert.equal(await service.createKernelHooks({ sessionId: 'other', runId: 'other-run' }), undefined);
+  assert.equal(await service.compact({ sessionId: 'other', messages: [] }), undefined);
+  assert.equal(await store.readContextSnapshot({ sessionId: 'other' }), null);
+});

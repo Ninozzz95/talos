@@ -22,6 +22,19 @@ it('NATIVE-06 conserva lo stato firmato soltanto con fine stream completa', asyn
     assert.equal(partial.scelta.talos_provider_state, undefined)
 })
 import { fileURLToPath } from 'node:url'
+it('CTX-KERNEL-RESPONSE-RESERVE bounds the actual provider generation to the measured reserve', async (t) => {
+    const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
+    t.after(() => rmSync(cartella, { recursive: true, force: true }))
+    let body
+    await talosLavora({ cartella, task: { consegna: 'continua' }, modello: 'x', chiave: 'y',
+        contextHooks: { capture: async () => {}, prepare: async ({ messages }) => ({ messages, measurement: { responseReserve: 2048 } }) },
+        fetchDiRete: async (_url, input) => { body = JSON.parse(input.body); return Response.json({ choices: [{ message: { role: 'assistant', content: 'Va bene' } }] }) },
+    })
+    assert.equal(body.max_tokens, 2048)
+    let called = false
+    await assert.rejects(chiamaConRitenta({ modello: 'x', chiave: 'y', messaggi: [], maxOutputTokens: -1, fetchDiRete: async () => { called = true } }), { code: 'CTX_INVALID_RESERVE' })
+    assert.equal(called, false)
+})
 it('CTX-KERNEL-PREPARE sends prepared copy while preserving original conversation', async (t) => {
     const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
     t.after(() => rmSync(cartella, { recursive: true, force: true }))

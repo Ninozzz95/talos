@@ -994,6 +994,8 @@ export function createSessionRegistry({
   resolveWorkspaceLaunchFn = null,
   consumeWorkspaceLaunchFn = null,
   compattaSessioneFn = compattaSessioneReale,
+  contextHooksFn,
+  contextCompactFn,
   eseguiComandoDirettoFn = eseguiComandoDirettoReale,
   leggiAlberoWorkspaceFn = leggiAlberoWorkspaceReale,
   leggiContenutoFileFn = leggiContenutoFileReale,
@@ -2314,7 +2316,13 @@ export function createSessionRegistry({
           broadcast(voce, { type: 'RuntimeFallback', from: 'local', to: 'openrouter', reason: errore?.code || 'LOCAL_RUNTIME_FAILED', provider: 'local', runtimeId: runtimeIdEffettivo, modelId: voce.modelId, backend: runtimeIdEffettivo, at: clock().toISOString() });
           return avviaSessioneFn(cloudOptions);
         })
-      : avviaSessioneFn(cloudOptions);
+      : typeof contextHooksFn === 'function'
+        ? Promise.resolve().then(async () => {
+          const contextHooks = await contextHooksFn({ sessionId, runId: `${sessionId}:${versioneGiro}`, signal: controller.signal });
+          controller.signal.throwIfAborted();
+          return avviaSessioneFn({ ...cloudOptions, ...(contextHooks ? { contextHooks } : {}) });
+        })
+        : avviaSessioneFn(cloudOptions);
     esecuzione.then((risultato) => {
       /*
        * ⭐ Catturato per un resume/fork FUTURO. Se talosLavora non ha
@@ -2483,6 +2491,11 @@ export function createSessionRegistry({
   }
 
   return Object.freeze({
+    /** Backend-only model identity; no credentials or mutable session object. */
+    leggiSessioneContesto(sessionId) {
+      const voce = sessioni.get(sessionId);
+      return voce ? structuredClone({ sessionId, modello: voce.modello, provider: voce.provider, runtimeId: voce.runtimeId, modelId: voce.modelId, reasoning: voce.reasoning, conclusa: voce.conclusa, interrotta: voce.interrotta === true }) : null;
+    },
     /**
      * ⭐⭐⭐ FASE L (30/8) — chiamata UNA volta da `server.mjs`, prima di
      * accettare richieste: legge `.sessions-store/`, ricostruisce una
@@ -3143,6 +3156,10 @@ export function createSessionRegistry({
     async compatta(sessionId) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (typeof contextCompactFn === 'function') {
+        const result = await contextCompactFn({ sessionId, messages: voce.messaggiFinali });
+        if (result !== undefined) return result;
+      }
       if (!voce.messaggiFinali) {
         // ⭐⭐⭐ FASE L (30/8) — stessa distinzione onesta di resume()/forka(): "ancora in corso" e "interrotta da un riavvio" non sono lo stesso stato.
         if (voce.interrotta) {
