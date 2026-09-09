@@ -1798,3 +1798,36 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-runtime-panel .model-lab-runtime-controls{margin:var(--talos-space-control) 0}
 .talos-runtime-panel .model-lab-runtime-actions{display:flex;gap:var(--talos-space-sm);flex-wrap:wrap;margin:var(--talos-space-control) 0}
 .talos-runtime-panel>.talos-field--stack{margin:var(--talos-space-control) 0}
+/* Context Compactor: componenti e token del mockup, dati forniti dal motore. */
+#veloContesto .talos-dialog{width:min(760px,100%)}
+#veloContesto .talos-dialog[data-user-sized]{width:var(--talos-dialog-w);height:var(--talos-dialog-h)}
+#veloContesto .talos-dialog__body{display:block;overflow:auto;min-height:0}
+.talos-context__overview{display:grid;gap:var(--talos-space-md)}
+.talos-context__auto{display:flex;align-items:center;justify-content:space-between;gap:var(--talos-space-lg);padding:var(--talos-space-md);border:1px solid var(--talos-border);border-radius:var(--talos-radius-control);background:var(--talos-panel-soft)}
+.talos-context__auto p{margin:4px 0 0;color:var(--talos-muted);font-size:var(--talos-font-size-xs)}
+.talos-context__auto input{width:18px;height:18px;accent-color:var(--talos-accent);flex-shrink:0}
+.talos-context__metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--talos-space-md);margin:0}
+.talos-context__metrics dt{font-size:var(--talos-font-size-xs);color:var(--talos-muted)}
+.talos-context__metrics dd{margin:4px 0 0;font-family:var(--talos-font-mono);font-size:var(--talos-font-size-sm)}
+.talos-context__meter,.talos-context__progress{display:block;width:100%;height:6px;accent-color:var(--talos-accent);border:0;border-radius:3px;overflow:hidden}
+.talos-context__progress::-webkit-progress-bar{background:var(--talos-panel-soft)}
+.talos-context__progress::-webkit-progress-value{background:var(--talos-accent)}
+.talos-context__disclosure{border-top:1px solid var(--talos-border);margin-top:var(--talos-space-md);padding-top:var(--talos-space-md)}
+.talos-context__disclosure>summary{cursor:pointer;font-weight:500;padding-block:4px}
+.talos-context__disclosure>summary:focus-visible{outline:2px solid var(--talos-accent);outline-offset:3px}
+.talos-context__disclosure>div,.talos-context__disclosure>form{margin-top:var(--talos-space-md)}
+.talos-context__fact,.talos-context__version{padding:var(--talos-space-md);border:1px solid var(--talos-border);border-radius:var(--talos-radius-control);margin-bottom:var(--talos-space-sm);overflow-wrap:anywhere}
+.talos-context__fact p,.talos-context__version p{white-space:pre-wrap;margin:0 0 var(--talos-space-sm)}
+.talos-context__actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--talos-space-sm)}
+.talos-context__source{border-left:2px solid var(--talos-border-strong);padding-left:var(--talos-space-md);margin-block:var(--talos-space-md)}
+.talos-context__source blockquote{margin:0 0 var(--talos-space-sm);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--talos-muted)}
+.talos-context__conflict{border:1px solid var(--talos-border-strong);border-radius:var(--talos-radius-control);padding:var(--talos-space-md);margin-top:var(--talos-space-sm)}
+.talos-context__form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--talos-space-md)}
+#veloContesto label.talos-stack{gap:var(--talos-space-xs)}
+#veloContesto textarea{resize:vertical;min-height:72px;width:100%}
+#veloContesto [data-context-source-text]{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:220px;overflow:auto}
+#veloContesto [data-context-status]:empty{display:none}
+#veloContesto [data-context-status][role=alert],#veloContesto [data-context-job-error]{color:var(--talos-danger)}
+.talos-context-separator{display:flex;align-items:center;gap:var(--talos-space-sm);color:var(--talos-muted);font-size:var(--talos-font-size-xs);margin-block:var(--talos-space-lg)}
+.talos-context-separator::before{content:"";height:1px;background:var(--talos-border);flex:1}
+@media(max-width:600px){.talos-context__metrics,.talos-context__form-grid{grid-template-columns:1fr}.talos-context-separator{flex-wrap:wrap}}

@@ -3,6 +3,17 @@ import assert from 'node:assert/strict';
 import { computeContextBudget, selectClosedPrefix, planCompaction } from '../src/compaction-planner.mjs';
 const record = (sequence, role, content, extra = {}) => ({ id: `m${sequence}`, sequence, message: { role, content, ...extra } });
 
+test('CTX-SMALL-COMPLETE-TURN: manual fallback keeps the latest question and answer together', () => {
+  const one = [record(1, 'user', 'ciao'), record(2, 'assistant', 'ciao!')];
+  assert.deepEqual(selectClosedPrefix(one, { force: true }).prefix, []);
+  const two = [...one, record(3, 'user', 'come va?'), record(4, 'assistant', 'bene')];
+  const selected = selectClosedPrefix(two, { force: true });
+  assert.deepEqual(selected.prefix, one);
+  assert.deepEqual(selected.tail, two.slice(2));
+  const withTool = [...one, record(3, 'user', 'leggi il file'), record(4, 'assistant', null, { tool_calls: [{ id: 'read', function: { name: 'read', arguments: '{}' } }] }), record(5, 'tool', 'contenuto', { tool_call_id: 'read' }), record(6, 'assistant', 'letto')];
+  assert.deepEqual(selectClosedPrefix(withTool, { force: true }).tail, withTool.slice(2));
+});
+
 test('CTX-BUDGET: count complete request and reserve response before deciding available input', () => {
   const budget = computeContextBudget({ windowTokens: 16384, responseReserve: 4096, method: 'runtime', inputTokens: 12000 });
   assert.ok(budget.inputLimit < 12288);

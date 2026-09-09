@@ -38,6 +38,68 @@ async function compact(engine, key = 'one') {
   const job = await engine.startCompaction({ sessionId: 'chat', idempotencyKey: key, sessionModel: modelProfile });
   return engine.waitForCompaction({ sessionId: 'chat', jobId: job.id });
 }
+
+test('CTX-SMALL-NO-INFERENCE: empty, instructions-only and one exchange do not load a model or publish', async t => {
+  const { engine, store, model, calls } = await fixture(t);
+  let resolves = 0;
+  model.resolveModel = async () => { resolves++; throw new Error('Must not load the runtime for a structural no-op'); };
+  for (const [sessionId, messages] of [
+    ['empty', []], ['instructions', [{ role: 'system', content: 'Regole' }]],
+    ['one', [{ role: 'user', content: 'ciao' }, { role: 'assistant', content: 'ciao!' }]],
+    ['waiting', [{ role: 'user', content: 'ci sei?' }]],
+  ]) {
+    await store.initSession({ sessionId, settings: parseContextSettings({}) });
+    for (const [i, message] of messages.entries()) await engine.appendOriginal({ sessionId, record: { id: `${sessionId}-${i}`, message, createdAt: now } });
+    const before = await engine.getContextState({ sessionId });
+    const original = await store.readOriginals({ sessionId });
+    await assert.rejects(engine.startCompaction({ sessionId, idempotencyKey: 'manual', sessionModel: modelProfile }), { code: 'CTX_NOTHING_TO_COMPACT' });
+    assert.deepEqual(await engine.getContextState({ sessionId }), before);
+    assert.deepEqual(await store.readOriginals({ sessionId }), original);
+  }
+  assert.equal(resolves, 0); assert.equal(calls.length, 0);
+});
+
+test('CTX-MANUAL-BELOW-TRIGGER: manual compaction works below the automatic threshold with automation off', async t => {
+  const { engine, calls } = await fixture(t, { settings: { auto: false } });
+  const largeWindow = { ...modelProfile, windowTokens: 131072 };
+  const prepared = await engine.prepareForRequest({ sessionId: 'chat', sessionModel: largeWindow });
+  assert.ok(prepared.measurement.inputTokens < 131072 * 0.55);
+  assert.equal(calls.length, 0);
+  const started = await engine.startCompaction({ sessionId: 'chat', sessionModel: largeWindow, idempotencyKey: 'manual-below' });
+  const job = await engine.waitForCompaction({ sessionId: 'chat', jobId: started.id });
+  assert.equal(job.state, 'committed', JSON.stringify(job.error));
+  assert.ok(calls.length > 0);
+});
+
+test('CTX-SMALL-AUTO-NOOP: a still-fitting request proceeds when only its instructions exceed the early trigger', async t => {
+  const { engine, store, calls, model } = await fixture(t);
+  const sessionId = 'instruction-heavy';
+  await store.initSession({ sessionId, settings: parseContextSettings({}) });
+  for (const [i, message] of [{ role: 'system', content: 'x'.repeat(42000) }, { role: 'user', content: 'ciao' }, { role: 'assistant', content: 'ciao!' }].entries()) await engine.appendOriginal({ sessionId, record: { id: `heavy-${i}`, message, createdAt: now } });
+  let resolves = 0; model.resolveModel = async () => { resolves++; return modelProfile; };
+  const prepared = await engine.prepareForRequest({ sessionId, sessionModel: modelProfile });
+  assert.ok(prepared.measurement.inputTokens > 10000);
+  assert.equal(prepared.messages.length, 3);
+  assert.equal(calls.length, 0); assert.equal(resolves, 0);
+  await assert.rejects(engine.prepareForRequest({ sessionId, sessionModel: { ...modelProfile, windowTokens: 8192 } }), { code: 'CTX_CONTEXT_OVERFLOW' });
+  assert.equal(calls.length, 0);
+});
+
+test('CTX-SMALL-NO-REDUCTION: expanding a short exchange leaves originals intact without a retry loop', async t => {
+  const { engine, store, calls } = await fixture(t);
+  const sessionId = 'brief';
+  await store.initSession({ sessionId, settings: parseContextSettings({}) });
+  for (const [id, role, content] of [['u0', 'user', 'Database SQLite'], ['a0', 'assistant', 'va bene'], ['u1', 'user', 'confermi?'], ['a1', 'assistant', 'sì']]) await engine.appendOriginal({ sessionId, record: { id, message: { role, content }, createdAt: now } });
+  const before = await store.readOriginals({ sessionId });
+  const request = { sessionId, sessionModel: modelProfile, idempotencyKey: 'short' };
+  const started = await engine.startCompaction(request);
+  const job = await engine.waitForCompaction({ sessionId, jobId: started.id });
+  assert.equal(job.state, 'failed'); assert.equal(job.error.code, 'CTX_NO_REDUCTION');
+  await engine.startCompaction(request);
+  assert.equal(calls.length, 1);
+  assert.equal((await engine.getContextState({ sessionId })).activeVersion, null);
+  assert.deepEqual(await store.readOriginals({ sessionId }), before);
+});
 test('CTX-ENGINE-PUBLISH archives originals and publishes only validated reduced context', async t => {
   const { engine, store, calls } = await fixture(t);
   const before = await store.readOriginals({ sessionId: 'chat' });

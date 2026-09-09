@@ -20,6 +20,7 @@
 export const CHIAVE_MISURE = 'talos-harness-modal-sizes-v1';
 export const PASSO_TASTIERA = 16;
 export const CHIAVI_MISURA = Object.freeze({
+  veloContesto: 'sheet:context',
   veloScorciatoie: 'sheet:shortcuts', veloNuova: 'sheet:new-session', veloComandi: 'command:palette', veloModello: 'sheet:model', veloPermessi: 'sheet:permissions',
   veloAlbero: 'sheet:sessionTree', veloIntro: 'dialog:introDialog', veloAmbiente: 'sheet:environment', veloRinomina: 'sheet:rename',
   veloRiferimenti: 'sheet:references', veloFile: 'sheet:fileViewer', veloRinominaFile: 'sheet:renameFile', veloEliminaFile: 'sheet:deleteFile',

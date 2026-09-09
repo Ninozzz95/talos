@@ -174,15 +174,16 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       signal?.throwIfAborted();
       const snapshot = await state(sessionId);
       const existing = snapshot.jobs.find(job => job.idempotencyKey === idempotencyKey);
-      const profile = await model.resolveModel({ sessionModel, settings: snapshot.settings });
       if (existing) {
+        const profile = await model.resolveModel({ sessionModel, settings: snapshot.settings });
         if (!sameModel(existing.model, profile) || existing.kind !== kind) fail('CTX_IDEMPOTENCY_CONFLICT', 'Questa chiave identifica una richiesta diversa.');
         return existing;
       }
       const records = await originals(sessionId);
       const selection = selectClosedPrefix(records, { retainRecentTurns: snapshot.settings.retainRecentTurns, force: true });
       if (selection.pendingCalls.length) fail('CTX_PENDING_TOOLS', 'Attendere i risultati degli strumenti.');
-      if (!selection.prefix.length) fail('CTX_NOTHING_TO_COMPACT', 'Non ci sono scambi completi da compattare.');
+      if (!selection.prefix.length) fail('CTX_NOTHING_TO_COMPACT', 'Non ci sono scambi precedenti da compattare mantenendo intero l’ultimo scambio. Nessun messaggio è stato modificato.');
+      const profile = await model.resolveModel({ sessionModel, settings: snapshot.settings });
       const fingerprint = await hash({ sessionId, revision: snapshot.revision, settings: snapshot.settings, profile, kind, tools });
       const job = ContextJobV1.parse({ schema: 'talos.context.job.v1', id: idFactory(), sessionId, idempotencyKey, requestFingerprint: fingerprint, kind, state: 'queued', baseRevision: snapshot.revision, baseStateRevision: snapshot.stateRevision, coveredThrough: selection.coveredThrough, model: identity(profile), createdAt: clock(), updatedAt: clock(), completedSegments: [], progress: { completed: 0, total: 0, phase: 'queued' } });
       const claimed = await store.claimContextJob({ sessionId, job });
@@ -228,8 +229,11 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       let job;
       if (snapshot.settings.auto && budget.shouldPrepare) {
         job = snapshot.jobs.find(entry => !terminal.has(entry.state));
-        if (!job) job = await api.startCompaction({ sessionId, idempotencyKey: `auto-${snapshot.revision}-${await hash(identity(sessionModel))}`, sessionModel, tools, signal });
-        if (!budget.fits) {
+        if (!job) {
+          try { job = await api.startCompaction({ sessionId, idempotencyKey: `auto-${snapshot.revision}-${await hash(identity(sessionModel))}`, sessionModel, tools, signal }); }
+          catch (error) { if (error.code !== 'CTX_NOTHING_TO_COMPACT') throw error; }
+        }
+        if (!budget.fits && job) {
           if (job.state === 'paused') job = await api.resumeCompaction({ sessionId, jobId: job.id, sessionModel, tools, signal });
           const result = await api.waitForCompaction({ sessionId, jobId: job.id });
           if (result.state !== 'committed') fail(result.error?.code ?? 'CTX_COMPACTION_REQUIRED', result.error?.message ?? 'Il contesto richiede una compattazione completata.');
