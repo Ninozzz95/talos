@@ -2,13 +2,15 @@ import { preparaMisuraDialogo, collegaRidimensionamentoDialoghi } from './dialog
 import { t, linguaCorrenteDiT, EVENTO_LINGUA } from './lingua.js';
 
 const ACTIVE = new Set(['queued', 'preparing', 'summarizing', 'validating', 'ready', 'paused']);
-const JOB_LABELS = { queued: 'In attesa', preparing: 'Preparazione', summarizing: 'Sintesi in corso', validating: 'Verifica della sintesi', ready: 'Pubblicazione in corso', committed: 'Contesto aggiornato', paused: 'Compattazione in pausa', cancelled: 'Compattazione annullata', failed: 'Compattazione non riuscita' };
+const JOB_LABELS = { queued: 'In attesa', preparing: 'Preparazione', summarizing: 'Compattazione contesto in corso', validating: 'Verifica della sintesi', ready: 'Pubblicazione in corso', committed: 'Contesto aggiornato', paused: 'Compattazione in pausa', cancelled: 'Compattazione annullata', failed: 'Compattazione non riuscita' };
 const EN = {
+  'Apri una conversazione per gestirne il contesto.': 'Open a conversation to manage its context.',
+  'Context Manager non è ancora attivo per questa conversazione. Nessun messaggio è stato modificato.': 'Context Manager is not enabled for this conversation yet. No messages have been changed.',
   'Contesto della chat': 'Chat context', 'Solo questa chat. Gli originali restano disponibili.': 'This chat only. Original messages remain available.',
   'Chiudi': 'Close', 'Aggiorna': 'Refresh', 'Gestisci automaticamente': 'Manage automatically', 'TALOS prepara una sintesi quando il contesto si riempie.': 'TALOS prepares a summary as the context fills up.',
   'Misura non ancora disponibile.': 'Measurement is not available yet.', 'Token in ingresso': 'Input tokens', 'Finestra del modello': 'Model context window', 'Riservati alla risposta': 'Reserved for the response', 'Non disponibile': 'Not available',
   'Conteggio del motore': 'Runtime count', 'Conteggio del fornitore': 'Provider count', 'Stima euristica': 'Heuristic estimate', 'esatto': 'exact', 'stima': 'estimate',
-  'In attesa': 'Queued', 'Preparazione': 'Preparing', 'Sintesi in corso': 'Summarizing', 'Verifica della sintesi': 'Validating summary', 'Pubblicazione in corso': 'Publishing', 'Contesto aggiornato': 'Context updated', 'Compattazione in pausa': 'Compaction paused', 'Compattazione annullata': 'Compaction cancelled', 'Compattazione non riuscita': 'Compaction failed',
+  'In attesa': 'Queued', 'Preparazione': 'Preparing', 'Compattazione contesto in corso': 'Context compaction in progress', 'Verifica della sintesi': 'Validating summary', 'Pubblicazione in corso': 'Publishing', 'Contesto aggiornato': 'Context updated', 'Compattazione in pausa': 'Compaction paused', 'Compattazione annullata': 'Compaction cancelled', 'Compattazione non riuscita': 'Compaction failed',
   'Nessuna compattazione in corso.': 'No compaction in progress.', 'Caricamento del contesto…': 'Loading context…', 'Annulla compattazione': 'Cancel compaction', 'Riprendi compattazione': 'Resume compaction', 'Compatta ora': 'Compact now', 'Rigenera sintesi': 'Regenerate summary',
   'Da non dimenticare': 'Keep in mind', 'Questi fatti restano separati dalla sintesi.': 'These facts remain separate from the summary.', 'Nessun fatto protetto. Aggiungi ciò che TALOS deve conservare.': 'No protected facts. Add what TALOS must retain.', 'Aggiungi un fatto': 'Add a fact', 'Salva fatto': 'Save fact', 'Annulla modifica': 'Cancel edit', 'Modifica': 'Edit', 'Rimuovi': 'Remove', 'Proposta da verificare': 'Proposal to review', 'Accetta proposta': 'Accept proposal', 'Mantieni il fatto': 'Keep the fact',
   'Versioni': 'Versions', 'Nessuna versione salvata.': 'No saved versions.', 'Versione attiva': 'Active version', 'Ripristina': 'Restore', 'Ripristinare questa versione? I messaggi successivi restano nella chat.': 'Restore this version? Later messages stay in the chat.', 'Conferma ripristino': 'Confirm restore', 'Annulla': 'Cancel', 'Fonti': 'Sources', 'Apri fonte': 'Open source', 'Nessuna fonte nella sintesi attiva.': 'No sources in the active summary.', 'Fonte originale': 'Original source',
@@ -150,7 +152,8 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   }
   function schedule() { clearTimeout(timer); if (opened && !destroyed && ACTIVE.has(descriviContextCompactor(snapshot).job?.state)) timer = setTimeout(() => refresh(), 1200); }
   async function refresh({ quiet = false } = {}) {
-    if (destroyed || !sessionId || busy) return null;
+    if (destroyed || busy) return null;
+    if (!sessionId) { available = false; render(); say(translate('Apri una conversazione per gestirne il contesto.')); return null; }
     const current = epoch, ticket = ++sequence;
     if (!quiet) say(translate('Caricamento del contesto…'));
     try {
@@ -161,7 +164,7 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
       if (!quiet) say(''); onState?.(structuredClone(snapshot)); schedule(); return snapshot;
     } catch (error) {
       if (current !== epoch || ticket !== sequence || destroyed || error.name === 'AbortError') return null;
-      available = false; render(); say(translate('Contesto non disponibile. Usa Aggiorna per riprovare.'), true); clearTimeout(timer); return null;
+      available = false; render(); say(translate(error.code === 'CTX_NOT_ENABLED' ? 'Context Manager non è ancora attivo per questa conversazione. Nessun messaggio è stato modificato.' : 'Contesto non disponibile. Usa Aggiorna per riprovare.'), error.code !== 'CTX_NOT_ENABLED'); clearTimeout(timer); return null;
     }
   }
   async function mutate(action, success) {

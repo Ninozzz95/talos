@@ -59,6 +59,8 @@ import { creaAnteprimaImmagine, payloadImmagini } from '../components/immagini-c
 import { montaContextCompactor } from '../components/context-compactor.js';
 import { aggiornaSeparatoreContesto } from '../components/context-separator.js';
 import { createContextClient } from '../services/context-client.js';
+import { createContextMonitor } from '../services/context-monitor.js';
+import { aggiornaAvanzamentoContesto } from '../components/context-progress.js';
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
@@ -448,10 +450,10 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   const topbar = $('.topbar');
   const embeddedHeaderScrollers = [...new Set([...views, chatConversation].filter(Boolean))];
   const embeddedHeaderScrollPositions = new WeakMap();
-  let compattazioneInCorso = false;
   let contextCompactor = null;
-  let contextOpening = false;
   let contextClient = null;
+  let contextMonitor = null;
+  let contextChatSnapshot = null;
   let streamingScrollFrame = null;
   let streamingScrollTarget = null;
   /*
@@ -12261,8 +12263,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         state.realSession.eventiUsageContesto.set(operationId, evento);
         aggiornaUsageSessione();
         aggiornaContatoreUsage();
+        aggiornaPiedeChatDaStato();
       }
       aggiornaSeparatoreContesto($('#conversation'), [value], { sessionId: state.realSession.id, onOpen: () => compactSession() });
+      void contextMonitor?.refresh();
       if (contextCompactor && !$('#veloContesto')?.hidden) void contextCompactor.refresh({ quiet: true });
       return;
     }
@@ -12299,6 +12303,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     switch (evento.type) {
       case 'RunStarted': {
         streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio visto in ricerca
+        contextMonitor?.setRunning(true);
         streamingLastTargetTop = null;
         /*
          * ⛔⛔⛔ 06/9, CB-04 — QUI è il confine fra due invii: il consumo
@@ -12725,6 +12730,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         break;
       }
       case 'RunFinished': {
+        contextMonitor?.setRunning(false); void contextMonitor?.refresh({ afterPending: true });
         /*
          * ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
          * modello" — la causa PRINCIPALE della "risposta duplicata" non era
@@ -12803,6 +12809,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         break;
       }
       case 'RunError': {
+        contextMonitor?.setRunning(false); void contextMonitor?.refresh({ afterPending: true });
         if (state.realSession.redirectPendingId) mostraAttesaRisposta('redirect');
         else nascondiAttesaRisposta();
         chiudiBatchTool(); // 30/8 — vedi RunFinished sopra, stesso motivo
@@ -12898,6 +12905,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   function collegaEventiSessione(sessionId, generation) {
     state.realSession.id = sessionId;
+    void ottieniMonitorContesto().follow(sessionId);
     state.realSession.eventoTerminaleVisto = false;
     syncRunComposerState();
     const demoBadgeChat = $$('.demo-surface-badge', $('.chat-view'))
@@ -12942,7 +12950,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** Chiude l'EventSource corrente (se c'è) e apre una nuova generazione. */
   function nuovaGenerazioneSessione({ continua = false } = {}) {
-    if (!continua) { contextCompactor?.close(); contextCompactor?.setSession(null); }
+    if (!continua) { contextCompactor?.close(); contextCompactor?.setSession(null); contextMonitor?.stop(); contextChatSnapshot = null; aggiornaAvanzamentoContesto($('#conversation'), null); }
     nascondiAttesaRisposta();
     cancellaRenderMessaggiStreaming();
     cancellaRenderAlberoDifferito();
@@ -13332,63 +13340,41 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   /**
-   * ⭐ "Compatta ora" reale quando c'è una sessione reale CONCLUSA attiva.
-   * Non avvia nessun giro nuovo: sostituisce ciò che una PROSSIMA
-   * resume/fork erediterebbe — la conversazione già mostrata non cambia.
+   * Context Manager osserva il lavoro persistito senza avviare inferenze.
+   * Il pulsante apre soltanto il dialogo; il kernel governa l'automazione.
    */
+  function aggiornaContestoChat(snapshot) {
+    if (snapshot?.sessionId !== state.realSession.id) return;
+    contextChatSnapshot = snapshot;
+    aggiornaAvanzamentoContesto($('#conversation'), snapshot, { onOpen: () => compactSession() });
+    contextCompactor?.update(snapshot);
+  }
+
+  function ottieniMonitorContesto() {
+    contextClient ??= createContextClient({ fetchFn: fetchSorvegliata, baseURL: API('/api/v1') });
+    contextMonitor ??= createContextMonitor({
+      client: contextClient,
+      onState: aggiornaContestoChat,
+      onError: (_error, { sessionId }) => {
+        if (sessionId !== state.realSession.id) return;
+        aggiornaAvanzamentoContesto($('#conversation'), contextChatSnapshot, { stale: true, onOpen: () => compactSession() });
+      },
+    });
+    return contextMonitor;
+  }
+
   async function compactSession() {
-    if (!state.realSession.id) {
-      toast('Contesto della chat', 'Apri una conversazione per gestirne il contesto.');
-      return;
-    }
-    if (compattazioneInCorso || contextOpening) return;
-    const contextSessionId = state.realSession.id;
-    const contextGeneration = state.realSession.generation;
-    contextOpening = true;
-    try {
-      contextClient ??= createContextClient({ fetchFn: fetchSorvegliata, baseURL: API('/api/v1') });
-      const snapshot = await contextClient.getContextState({ sessionId: contextSessionId });
-      if (contextSessionId !== state.realSession.id || contextGeneration !== state.realSession.generation) return;
-      const root = $('#veloContesto');
-      if (!root) throw new Error('La finestra del contesto non è disponibile. Aggiorna la pagina.');
-      if (!contextCompactor) contextCompactor = montaContextCompactor(root, { client: contextClient, sessionId: contextSessionId, state: snapshot });
-      else contextCompactor.setSession(contextSessionId, snapshot);
-      contextCompactor.open();
-      return;
-    } catch (error) {
-      if (contextSessionId !== state.realSession.id || contextGeneration !== state.realSession.generation) return;
-      // Soltanto le sessioni fuori dalla sperimentazione conservano il percorso legacy.
-      if (error.code !== 'CTX_NOT_ENABLED') { toast('Contesto non disponibile', error.message); return; }
-    } finally { contextOpening = false; }
-    const bottoneCompattazione = $('#compactSessionBtn');
-    compattazioneInCorso = true;
-    if (bottoneCompattazione) {
-      bottoneCompattazione.disabled = true;
-      bottoneCompattazione.setAttribute('aria-busy', 'true');
-      bottoneCompattazione.setAttribute('aria-label', 'Compattazione in corso');
-      bottoneCompattazione.title = 'Compattazione in corso…';
-      bottoneCompattazione.classList.add('is-loading');
-    }
-    try {
-      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/compact`, {});
-      toast(
-        dati.compattato ? 'Contesto compattato' : 'Compattazione saltata',
-        dati.compattato
-          ? 'Il prossimo resume o fork riparte dal riassunto.'
-          : 'Il modello non ha risposto: la conversazione resta quella intera.',
-      );
-    } catch (error) {
-      toast('Compattazione non riuscita', error.message);
-    } finally {
-      compattazioneInCorso = false;
-      if (bottoneCompattazione) {
-        bottoneCompattazione.disabled = false;
-        bottoneCompattazione.removeAttribute('aria-busy');
-        bottoneCompattazione.setAttribute('aria-label', 'Comprimi il contesto');
-        bottoneCompattazione.removeAttribute('title');
-        bottoneCompattazione.classList.remove('is-loading');
-      }
-    }
+    const root = $('#veloContesto');
+    if (!root) { toast('Context Manager', 'La finestra del contesto non è disponibile. Aggiorna la pagina.'); return; }
+    ottieniMonitorContesto();
+    const sessionId = state.realSession.id;
+    const snapshot = contextChatSnapshot?.sessionId === sessionId ? contextChatSnapshot : null;
+    if (!contextCompactor) contextCompactor = montaContextCompactor(root, {
+      client: contextClient, sessionId, state: snapshot,
+      onState: next => contextMonitor?.update(next),
+    });
+    else contextCompactor.setSession(sessionId, snapshot);
+    contextCompactor.open();
   }
 
   /**
@@ -17093,6 +17079,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   };
   window.__talosHarnessDestroy = () => {
     contextCompactor?.destroy(); contextCompactor = null;
+    contextMonitor?.stop(); contextMonitor = null;
     window.clearInterval(notificheTimer);
     document.querySelector('.notifications-menu')?.remove();
     cancelMotionAnimations();

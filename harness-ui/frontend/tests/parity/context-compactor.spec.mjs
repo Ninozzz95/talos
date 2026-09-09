@@ -121,7 +121,7 @@ test('CTX-UI-CLOSE-MUTATION riaprire durante una modifica non lascia la modale b
 test('CTX-UI-PROGRESS avanzamento e resize usano dati e maniglie reali', async ({ page }) => {
   await mount(page);
   await page.locator('[data-context-start]').click();
-  await expect(page.locator('[data-context-job]')).toHaveText('Sintesi in corso');
+  await expect(page.locator('[data-context-job]')).toHaveText('Compattazione contesto in corso');
   await expect(page.locator('[data-context-progress]')).toHaveText('Completati 1 di 3');
   await expect(page.locator('[data-context-progress-bar]')).toHaveAttribute('value', '1');
   await page.evaluate(() => { window.ctxState.jobs[0].progress = { completed: 0, total: 0 }; window.ctx.update(window.ctxState); });

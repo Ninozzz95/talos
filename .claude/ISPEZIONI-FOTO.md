@@ -27,3 +27,47 @@ Screenshot aperti personalmente dopo la patch, runner desktop HTTP/SQLite reale 
 - full-access-1080p.png: risposta completa e diff visibili, composer raggiungibile, titolo lungo correttamente troncato.
 - full-access-1440p.png: lettura e scrittura esterne documentate in chat, nessuna sovrapposizione fra composer e risposta.
 - full-access-4k.png: pagina completa nelle dimensioni vere, testata su una riga, dettagli e controllo Accesso pieno visibili.
+
+## 09/09/2026 — F5c, le sei foto scattate da Astra alle 16:13 e mai annotate (crediti finiti)
+
+Aperte da Claude il 09/09 alle 16:5x, tutte e sei, dopo aver preso in carico il lavoro. Provengono
+dal processo desktop ISOLATO con chat fixture («fixture», modello `no-inference`): nessuna prova sul
+4174, nessuna inferenza reale.
+
+### La modale, tre risoluzioni — APERTE tutte e tre
+- `tcec-manager-modal-1920x1080.png` — aperta: titolo «Context Manager», automazione spuntata, misure «Non disponibile», spiegazione del caso troppo breve leggibile.
+- `tcec-manager-modal-2560x1440.png` — aperta: stessa composizione della 1080p, nessun elemento tagliato o sovrapposto.
+- `tcec-manager-modal-3840x2160.png` — aperta: stessa composizione; la modale resta ~800 px come tutti i dialoghi, non si allarga col viewport.
+La modale si chiama **«Context Manager»** (titolo, sopra l'eyebrow «Contesto della chat»): la
+rinomina chiesta dall'owner è a schermo. «Gestisci automaticamente» è **spuntato** — l'automazione è
+attiva di default, come deciso. Le tre misure (Token in ingresso · Finestra del modello · Riservati
+alla risposta) dicono «Non disponibile» sotto «Misura non ancora disponibile»: non è un difetto della
+foto, è il punto aperto n. 2 della consegna v004 (misura corrente da derivare dal corpo preparato),
+dichiarato e non nascosto. «Nessuna compattazione in corso», «Compatta ora» / «Aggiorna», e sotto la
+spiegazione del caso troppo breve («Non ci sono scambi precedenti da compattare mantenendo intero
+l'ultimo scambio. Nessun messaggio è stato modificato.»): è il comportamento chiesto il 09/09
+mattina, e non è un errore generico. Quattro sezioni chiuse: Da non dimenticare · Versioni · Fonti ·
+Impostazioni avanzate. Le tre risoluzioni sono coerenti: stessa composizione, la modale non si
+allarga col viewport (a 4K resta ~800 px, come tutti i dialoghi dell'app — non è un difetto di questa
+modale). La maniglia di ridimensionamento in basso a destra tocca il bordo del pulsante «Chiudi»:
+è la stessa forma degli altri dialoghi, la annoto e non la tocco qui.
+
+### La barra nella chat, tre risoluzioni — APERTE tutte e tre
+- `tcec-manager-progress-1920x1080.png` — aperta: «Compattazione contesto in corso» sotto l'ultimo scambio, barra a metà, pulsante «Context Manager» a destra.
+- `tcec-manager-progress-2560x1440.png` — aperta: stessa barra e stesso testo, colonna destra coerente («finestra non dichiarata», «Libera –»).
+- `tcec-manager-progress-3840x2160.png` — aperta: stessa composizione, piede «120 token · 1 giro · cache 40%» come nelle altre due.
+A modale chiusa, la barra vive **nella chat**, sotto l'ultimo scambio: «**Compattazione contesto in
+corso**» (la dicitura dell'owner delle 16:07, non più «Sintesi in corso»), barra di avanzamento
+circa a metà, e a destra il pulsante «Context Manager» che riapre la modale. È esattamente il
+collegamento persistente che la v004 dava per «ancora da completare». La colonna destra dice
+«finestra non dichiarata» e «Libera –»: coerente con le misure non disponibili della modale, un solo
+stato raccontato in due posti. Piede: «120 token · 1 giro · cache 40%» — è la chat fixture prima
+della pubblicazione della sintesi, quindi i 2,0k della prova F5a non ci sono ancora e non devono
+esserci. Le tre risoluzioni coincidono nella composizione.
+
+Visto fuori dal compito, non un difetto di questa fetta: nella barra a sinistra le due sessioni si
+chiamano entrambe «fixture» con la stessa ora «02:00» — è il dato della fixture, non un errore.
+
+⛔ Cosa queste foto NON provano: che la barra sparisca alla fine con un solo separatore e i consumi
+aggiornati (Astra stava verificando esattamente quello quando i crediti sono finiti). Lo prova la
+suite browser `context-compactor.spec.mjs`, rilanciata da Claude dopo questa ispezione.

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +28,7 @@ test.beforeAll(async () => {
     { type: 'StateDelta', _sequenza: 4, delta: [{ path: '/usage', value: { prompt_tokens: 100, completion_tokens: 20, cached_tokens: 40, giri: 1 } }] },
     { type: 'RunFinished', _sequenza: 5 },
   ].map(JSON.stringify).join('\n') + '\n');
+  await writeFile(join(directory, 'context-disabled-proof.jsonl'), (await readFile(join(directory, `${sessionId}.jsonl`), 'utf8')).replaceAll(sessionId, 'context-disabled-proof'));
   child = spawn(process.execPath, ['server.mjs'], { cwd: harness, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
     ...process.env, TALOS_HARNESS_UI_PORT: String(port), TALOS_HARNESS_UI_TOKEN: token,
     TALOS_HARNESS_UI_SESSIONS_DIR: directory, TALOS_HARNESS_UI_PROJECT_DIRS: workspace,
@@ -54,6 +55,9 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
   await page.evaluate(({ sessionId, model }) => window.__talosHarnessUiRuntime.passaASessione(sessionId, 'fixture', 'Decisione sul database', model, { conclusa: true, modello: model }), { sessionId, model });
   await page.locator('#compactSessionBtn').click();
   await expect(page.locator('#veloContesto')).toBeVisible();
+  await expect(page.locator('#compactSessionBtn')).toHaveAccessibleName('Context Manager');
+  await expect(page.locator('[data-context-title]')).toHaveText('Context Manager');
+  await expect(page.locator('[data-context-auto]')).toBeChecked();
   await expect(page.locator('[data-context-start]')).toBeEnabled();
   expect(inference, 'aprire la modale non avvia inferenze').toEqual([]);
   const noOp = page.waitForResponse(response => response.url().endsWith('/context/jobs') && response.request().method() === 'POST');
@@ -81,17 +85,37 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
     const records = await store.readOriginals({ sessionId });
     const createdAt = '2026-09-09T08:00:00.000Z';
     const job = { schema: 'talos.context.job.v1', id: 'ui-fixture-job', sessionId, idempotencyKey: 'ui-fixture-job', requestFingerprint: 'fixture', kind: 'compact', state: 'ready', baseRevision: snapshot.revision, baseStateRevision: snapshot.stateRevision, coveredThrough: 2, model: { provider: 'openrouter', model }, createdAt, updatedAt: createdAt, completedSegments: [], progress: { completed: 1, total: 1, phase: 'ready' } };
-    await store.claimContextJob({ sessionId, job });
+    const activeJob = { ...job, state: 'summarizing', progress: { completed: 1, total: 3, phase: 'summarizing' } };
+    await store.claimContextJob({ sessionId, job: activeJob });
+    await page.getByRole('button', { name: 'Aggiorna', exact: true }).click();
+    await expect(page.locator('[data-context-progress]')).toContainText('1 di 3');
+    await page.keyboard.press('Escape');
+    const chatProgress = page.locator('#conversation [data-context-chat-progress]');
+    await expect(chatProgress).toBeVisible();
+    await expect(chatProgress.locator('progress')).toHaveAttribute('max', '3');
+    await store.saveJobProgress({ sessionId, job: { ...activeJob, progress: { ...activeJob.progress, completed: 2 } } });
+    await expect(chatProgress.locator('progress')).toHaveAttribute('value', '2');
+    await page.reload(); await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+    await page.evaluate(({ sessionId, model }) => window.__talosHarnessUiRuntime.passaASessione(sessionId, 'fixture', 'Decisione sul database', model, { conclusa: true, modello: model }), { sessionId, model });
+    await expect(page.locator('#veloContesto')).toBeHidden();
+    await expect(chatProgress.locator('progress')).toHaveAttribute('value', '2');
+    for (const [width, height] of [[1920, 1080], [2560, 1440], [3840, 2160]]) {
+      await page.setViewportSize({ width, height });
+      const bounds = await chatProgress.boundingBox();
+      expect(bounds.width).toBeGreaterThan(200); expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+      await page.screenshot({ path: join(photos, `desktop-progress-${width}x${height}.png`) });
+    }
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await store.saveJobProgress({ sessionId, job: { ...job, progress: { completed: 3, total: 3, phase: 'ready' } } });
     const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
     const version = { schema: 'talos.context.version.v1', id: 'ui-fixture-version', sessionId, coveredThrough: 2, sourceIds: records.map(r => r.id), sourceHash: hash(records.map(({ id, sha256 }) => ({ id, sha256 }))), summary: { schema: 'talos.context.summary.v1', text: 'SQLite locale.', goal: 'Riprendere', decisions: ['SQLite locale'], constraints: [], completed: [], pending: [], resources: [], sources: [{ recordId: records[1].id, quote: 'SQLite' }] }, activeMessages: [{ role: 'user', content: 'SQLite locale.' }], model: job.model, measurement: { schema: 'talos.context.tokens.v1', inputTokens: 10, windowTokens: 16384, responseReserve: 2048, method: 'heuristic', exact: false, requestHash: hash('fixture'), provider: 'openrouter', model }, createdAt };
+    await store.recordUsage({ sessionId, jobId: job.id, operationId: 'ui-usage-fixture', usage: { prompt_tokens: 1800, completion_tokens: 80 } });
+    await store.recordUsage({ sessionId, jobId: job.id, operationId: 'ui-usage-fixture', usage: { prompt_tokens: 1800, completion_tokens: 80 } });
     await store.commitContextVersion({ sessionId, expectedRevision: snapshot.revision, expectedStateRevision: snapshot.stateRevision, jobId: job.id, version });
-    await store.recordUsage({ sessionId, jobId: job.id, operationId: 'ui-usage-fixture', usage: { prompt_tokens: 1800, completion_tokens: 80 } });
-    await store.recordUsage({ sessionId, jobId: job.id, operationId: 'ui-usage-fixture', usage: { prompt_tokens: 1800, completion_tokens: 80 } });
   } finally { await store.close(); }
-  await page.getByRole('button', { name: 'Aggiorna', exact: true }).click();
-  await page.keyboard.press('Escape');
+  await expect(page.locator('#conversation [data-context-chat-progress]')).toHaveCount(0);
   await expect(page.locator('#conversation [data-context-separator]')).toHaveCount(1);
-  await expect(page.locator('[data-runtime-usage]')).toContainText('2,0k');
+  await expect(page.locator('[data-runtime-usage]'), 'CTX-UI-USAGE-CLOSED-RELOAD').toContainText('2,0k');
   await expect(page.locator('[data-runtime-cache]')).toContainText('cache 40%');
   for (const [width, height] of [[1920, 1080], [2560, 1440], [3840, 2160]]) {
     await page.setViewportSize({ width, height });
@@ -112,4 +136,21 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
   await page.getByText('Da non dimenticare', { exact: true }).click();
   await expect(page.locator('[data-context-facts]')).toContainText('Il database deve restare locale.');
   expect(inference).toEqual([`${base}/api/v1/sessions/${sessionId}/context/jobs`]);
+});
+
+test('CTX-UI-DISABLED-OPEN opens Context Manager without a legacy compaction or inference', async ({ page, context }) => {
+  await context.addCookies([{ name: 'talos_token', value: token, url: base, httpOnly: true, sameSite: 'Strict' }]);
+  await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
+  const mutations = [];
+  page.on('request', request => { if (/\/compact$|\/context\//.test(request.url()) && request.method() !== 'GET') mutations.push(request.url()); });
+  await page.goto(base); await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.evaluate(model => window.__talosHarnessUiRuntime.passaASessione('context-disabled-proof', 'fixture', 'Contesto non ancora attivo', model, { conclusa: true, modello: model }), model);
+  await page.locator('#compactSessionBtn').click();
+  await expect(page.locator('#veloContesto')).toBeVisible();
+  await expect(page.locator('[data-context-status]')).toContainText('non è ancora attivo');
+  await expect(page.locator('[data-context-start]')).toBeDisabled();
+  await expect(page.locator('[data-context-auto]')).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#compactSessionBtn')).toBeFocused();
+  expect(mutations).toEqual([]);
 });
