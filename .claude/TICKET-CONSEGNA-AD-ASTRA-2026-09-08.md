@@ -587,3 +587,50 @@ sessione: qui sarebbe il contrario, un campo azzerato di troppo.
    `agenti` come argomento: è già testabile senza DOM completo).
 3. ⛔ **Si chiude con la FOTO della scheda piena**, non con una riga di codice — è la parola
    testuale del registro dell'owner su O-10.
+
+---
+
+## §9 — 09/09/2026, sera: D2 chiuso dal vivo, e le tre cure che ne sono uscite
+
+### D2 — IL GIRO VERO CON DELEGA SUL 4174: **RIUSCITO**
+Approvato dall'owner con «unico modello permesso: glm 5.3 flash». Sessione nuova su cartella
+temporanea (`POST /api/v1/sessions/custom` con `cartellaLibera`, permesso «Full access»).
+
+- il modello ha chiamato `delega_sottotask` **due volte**;
+- le due figlie sono nate **annidate** sotto la madre nella barra, con tronco e gomito;
+- entrambe concluse con `esitoDelega: successo`;
+- **`parte1.md` e `parte2.md` scritti davvero** nella cartella della madre, col contenuto giusto;
+- scheda «Agenti»: due schede «Conclusa · 2 chiamate · **1 scritture**».
+
+Prima della cura dell'08/09 questo giro finiva con `EPERM mkdir 'C:\'` e zero file. È la prova che
+l'owner chiedeva dall'08/09, e che nessuna prova con modello finto poteva dare.
+
+**Due difetti trovati nelle foto, non nei numeri** (`D2-durante-*.png`, `D2-scheda-agenti.png`):
+1. ✅ **CURATO** — le due figlie si chiamavano ENTRAMBE «Sei una sessione di lavoro autonoma; non hai
+   altro …»: il preambolo del kernel, uguale per tutte. Il compito vero comincia dopo «Compito:», a
+   825 caratteri di consegna misurati nel JSONL. Curato in `elenca()` (barra) **e** in `elencaFigli()`
+   (scheda Agenti e foglio dell'albero), da una funzione sola. Commit `d2bd0d7b`.
+   Verificato a schermo dopo il riavvio: 4 figlie, 4 nomi distinti, nessun preambolo.
+2. ⏳ **IN CODA** — il fumetto «Sotto-agenti» copre il titolo della sessione in alto a destra
+   («Compito libero · [Sotto-agenti] a mano»). Ora c'è la foto.
+3. ⏳ **IN CODA, nuovo** — le due righe delle figlie troncano a «crea un file chiamato par…» e la
+   differenza (parte1/parte2) cade DOPO il taglio: due righe indistinguibili a colpo d'occhio.
+
+### D8 — I BLOCCHI DI CODICE (commit `03c6c629`)
+Owner con lo screenshot: «si vedono a strisce, come codice inline». Due cause, nessuna nel markup:
+una `var()` che non risolve fuori dai dialoghi (la dichiarazione cade in silenzio) e `.talos-message
+code` che prendeva anche il `<code>` dentro il `<pre>`, dove ogni riga si dipinge il suo rettangolo.
+Misurato prima: 5 rettangoli per 5 righe. Dopo: **1 rettangolo per 6 righe**, contenitore con fondo,
+bordo e raggio 12px, `<pre>` con `tabindex=0` e `role=group`. Provato in entrambi i temi.
+Le regole vivono ora nel MOCKUP soltanto: erano in due file e il foglio del monolite vinceva per
+specificità, quindi cambiare il mockup non cambiava niente a schermo.
+
+### Context Engine (worktree `AVM-context-engine`, commit `bd9f8e30`)
+- **la finestra è UNA SOLA** (owner: «unifica»): colonna, modale e pagina «Memoria e contesto»
+  leggono lo stesso descrittore. Prima: 1310,7k del catalogo contro 16.384 del profilo, cioè 0,8%
+  contro 62,0% sullo stesso fatto. Verificato in una foto sola: modale «3200 / 16.384» e colonna
+  «3,2k · 19,5%»;
+- **il tempo stimato nella barra** (owner: «aspettiamo ma con tempo stimato»): «Compattazione contesto
+  in corso · ancora pochi secondi (stima)», e nessun numero prima del primo segmento;
+- **un errore del contesto non è colpa di chi scrive**: badge, titolo e tono per famiglia, e il
+  `code` dell'errore non viene più appiattito a `internal-error` da `agent-service.mjs`.

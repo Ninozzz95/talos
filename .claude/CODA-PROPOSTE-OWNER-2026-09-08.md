@@ -70,3 +70,20 @@ distinguere tra schede terminale agente e utente.» Requisiti: ogni comando eseg
 compare nel Terminale con output e stato, in ordine; schede **agente** distinte dalle schede **utente** (nome,
 colore/pallino, sola lettura per quelle dell'agente); nessun comando inventato — solo quelli davvero eseguiti,
 letti dagli eventi ToolCall; stessa fonte del pannello Processi.
+
+### PO-11 — Il DIFF del file modificato, dentro la chat (owner, 09/09)
+«Quando un file viene modificato non c'è il diff direttamente nella chat: bisogna farlo come Claude e il
+resto dei competitor.»
+
+Oggi, misurato nella foto dell'owner (sessione «Nella cartella C:\Users\Antonino\Desktop\TALOS-prova-accesso…»,
+claude-sonnet-5): la riga «1 file letto, 1 file modificato · +1 −1» si apre e mostra **il testo dell'argomento
+dell'attrezzo** — `percorso: … / contenuto: ametista / Esito: written: …` — non un diff. Il conteggio
+«+1 −1» esiste già in testata, quindi la differenza è già calcolata da qualche parte: manca la resa.
+
+Requisiti: sotto la riga dell'attrezzo di scrittura compare il **diff vero riga per riga** (verde/rosso,
+numeri di riga, contesto attorno alla modifica), ripiegato o aperto secondo la lunghezza; percorso cliccabile;
+per un file nuovo si mostra il contenuto come tutte-aggiunte; per un file grande si taglia dichiarando quanto
+resta fuori; niente diff inventato — se il prima non è noto si dice, non si finge una riga rossa.
+Da cercare prima di disegnare: come lo rendono Claude Code, Codex e Hermes (colori, tetto delle righe,
+diff a parole dentro la riga), e cosa la Review già sa fare — il calcolo potrebbe essere già nostro
+(`contaDiff` alimenta la testata), e allora è solo un pezzo di resa in più, non un motore nuovo.
