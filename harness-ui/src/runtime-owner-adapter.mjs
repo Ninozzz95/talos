@@ -13,7 +13,7 @@ import { isAbsolute } from 'node:path';
 import { createParser } from 'eventsource-parser';
 import { eseguiFlowForgeLocale, FORGE_PREFISSO_NOME_TOOL, validaManifestForgeLocale } from './forge-contract.mjs';
 import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
-import { risolviDestinazioneModello, separaFonteModello } from './model-destination.mjs';
+import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO } from './model-destination.mjs';
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
@@ -720,6 +720,32 @@ export function createOwnerRuntimeAdapter({
         return fetchInstradata(url, { ...init, body: JSON.stringify({ ...body, messages }) });
       };
       return richiama('talosLavora', { ...input, fetchDiRete: fetchConImmagini });
+    },
+    /** One bounded summary request through the same provider adapters as chat. */
+    async callContextModel({ provider, model, messages, maxOutputTokens, signal, fetchDiRete = fetch }) {
+      const fail = (code, message, usage) => { throw Object.assign(new Error(message), { code, ...(usage !== undefined ? { usage } : {}) }); };
+      if (!FONTI_MODELLO.includes(provider) || typeof model !== 'string' || !model.trim() || !Array.isArray(messages) || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1) fail('CTX_MODEL_INVALID', 'Richiesta di sintesi non valida.');
+      if (!destinazioneModelloDeps) fail('CTX_TRANSPORT_UNAVAILABLE', 'Il trasporto del modello non è collegato al compattatore.');
+      signal?.throwIfAborted();
+      const routed = creaFetchMultiProvider(fetchDiRete, { dipendenze: destinazioneModelloDeps });
+      const key = provider === 'openrouter' ? destinazioneModelloDeps.leggiChiave?.('openrouter') : null;
+      if (provider === 'openrouter' && !key) fail('CTX_TOKEN_AUTH', 'La chiave del provider selezionato non è disponibile.');
+      const response = await routed(ENDPOINT_OPENROUTER, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
+        body: JSON.stringify({ model: provider === 'openrouter' ? model : `${provider}:${model}`, messages: structuredClone(messages), tools: [], max_tokens: maxOutputTokens, stream: false, ...(provider === 'openrouter' ? { transforms: [] } : {}) }),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000),
+      });
+      if (!response.ok) {
+        await response.body?.cancel();
+        fail('CTX_SUMMARY_HTTP', `Il modello di sintesi ha risposto con HTTP ${response.status}.`);
+      }
+      let result;
+      try { result = await response.json(); } catch { fail('CTX_SUMMARY_RESPONSE_INVALID', 'Risposta di sintesi non leggibile.'); }
+      const choice = result?.choices?.[0];
+      const usage = result?.usage;
+      if (choice?.message?.tool_calls?.length) fail('CTX_SUMMARY_TOOLS', 'La sintesi non può eseguire strumenti.', usage);
+      if (typeof choice?.message?.content !== 'string' || typeof choice?.finish_reason !== 'string') fail('CTX_SUMMARY_RESPONSE_INVALID', 'La sintesi non dichiara testo e stato finale.', usage);
+      return { text: choice.message.content, finishReason: choice.finish_reason, usage };
     },
     async eseguiComandoSandboxato(...args) { return richiama('eseguiComandoSandboxato', ...args); },
     async eseguiFlowForge(...args) {

@@ -205,7 +205,7 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
  */
 export async function avviaSessione({
   cartella, task, modello, chiave, comandoProva,
-  onEvento, segnaleStop, messaggiIniziali, reasoning, mobile = false,
+  onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, mobile = false,
   /*
    * ⛔⛔⛔ 02/09 — LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md, §6/§7.
    * L'etichetta del permesso della sessione ("Read only"/"Workspace
@@ -1367,7 +1367,7 @@ export async function avviaSessione({
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
-      onGiro, onScrittura, onDelta, reasoning,
+      onGiro, onScrittura, onDelta, reasoning, contextHooks,
       strumentiEstesi, ricercaWeb, richiediRicercaFn, onArtefatto, onDocumento, onImmagine, modelloPlanner,
       livelloAccesso, chiediApprovazioneFn, hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,

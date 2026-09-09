@@ -532,6 +532,7 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
  */
 export async function chiamaConRitenta({
     modello, chiave, messaggi, attrezzi,
+    maxOutputTokens,
     tentativiMassimi = 4,
     fetchDiRete = fetch,
     dormi = (ms) => new Promise((ok) => setTimeout(ok, ms)),
@@ -540,6 +541,9 @@ export async function chiamaConRitenta({
     reasoning,
     segnaleStop,
 }) {
+    if (maxOutputTokens !== undefined && (!Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1)) {
+        throw Object.assign(new Error('La riserva di risposta deve essere un intero positivo.'), { code: 'CTX_INVALID_RESERVE' })
+    }
     const inStreaming = Boolean(onDelta)
     let ultimoStato = null
     let ultimoTesto = ''
@@ -562,6 +566,7 @@ export async function chiamaConRitenta({
                 messages: messaggi,
                 tools: attrezzi,
                 tool_choice: 'auto',
+                ...(maxOutputTokens !== undefined ? { max_tokens: maxOutputTokens } : {}),
                 ...(inStreaming ? { stream: true, stream_options: { include_usage: true } } : {}),
                 ...(reasoning ? { reasoning } : {}),
             }),
@@ -4110,9 +4115,9 @@ export function formattaEsitoForge(risultato) {
     return `${risultato.error?.code ?? 'TALOS_FORGE_FAILED'}: ${risultato.error?.message ?? 'the tool failed.'}`
 }
 
-async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete, onDelta, reasoning, attrezziOpenAI = ATTREZZI_OPENAI, segnaleStop) {
+async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete, onDelta, reasoning, attrezziOpenAI = ATTREZZI_OPENAI, segnaleStop, maxOutputTokens) {
     return chiamaConRitenta({
-        modello, chiave, messaggi, attrezzi: attrezziOpenAI,
+        modello, chiave, messaggi, attrezzi: attrezziOpenAI, maxOutputTokens,
         ...(fetchDiRete ? { fetchDiRete } : {}),
         ...(onDelta ? { onDelta } : {}),
         ...(reasoning ? { reasoning } : {}),
@@ -4798,7 +4803,7 @@ export async function talosLavora({
             const esitoChiamata = await chiamaIlModelloConRitenta(
                 modello, chiave, preparedContext?.messages ?? messaggi, fetchDiRete,
                 onDelta ? (e) => onDelta({ giro, ...e }) : undefined,
-                reasoning, attrezziOpenAI, segnaleStop,
+                reasoning, attrezziOpenAI, segnaleStop, preparedContext?.measurement?.responseReserve,
             )
             risposta = esitoChiamata.scelta
             usage = esitoChiamata.usage

@@ -58,6 +58,33 @@ export function createDesktopContextService({ engine, store, loadLegacy, resolve
     return store[operation]({ ...args, sessionId, idempotencyKey: body.idempotencyKey, requestFingerprint });
   }
   const api = {
+    async createKernelHooks({ sessionId, runId }) {
+      if (!await isSessionEnabled(sessionId)) return undefined;
+      if (!validId(runId)) fail('CTX_INVALID_INPUT', 'Identità del giro non valida.');
+      await serial(sessionId, () => ensure(sessionId));
+      return Object.freeze({
+        capture: ({ messages }) => api.syncOriginals({ sessionId, messages }),
+        prepare: ({ messages, tools, signal }) => api.prepare({ sessionId, messages, tools, signal }),
+        captureProviderResponse: async ({ response, giro }) => {
+          if (!response || typeof response !== 'object' || !Number.isSafeInteger(giro) || giro < 0) fail('CTX_INVALID_INPUT', 'Risposta del modello non archiviabile.');
+          const bytes = Buffer.from(JSON.stringify({ schema: 'talos.context.provider-response.v1', runId, giro, response }), 'utf8');
+          return serial(sessionId, async () => {
+            await ensure(sessionId);
+            return store.putBlob({ sessionId, id: `provider-response-${digest({ runId, giro })}`, bytes, mimeType: 'application/json' });
+          });
+        },
+      });
+    },
+    async compact({ sessionId, messages }) {
+      if (!await isSessionEnabled(sessionId)) return undefined;
+      const session = await readSession(sessionId);
+      if (Array.isArray(messages) && session?.conclusa !== false) await api.syncOriginals({ sessionId, messages });
+      const snapshot = await serial(sessionId, () => ensure(sessionId));
+      const { job } = await api.request({ sessionId, method: 'POST', path: '/jobs', body: { kind: 'compact', expectedRevision: snapshot.revision, idempotencyKey: randomUUID() } });
+      const finished = await engine.waitForCompaction({ sessionId, jobId: job.id });
+      await deliver(sessionId);
+      return { ok: true, compattato: finished.state === 'committed', jobId: job.id, ...(finished.error ? { error: finished.error } : {}) };
+    },
     async request({ sessionId, method, path = '/', body, signal }) {
       signal?.throwIfAborted();
       let snapshot = await serial(sessionId, () => ensure(sessionId));

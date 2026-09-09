@@ -1,4 +1,6 @@
 # Ricerca TCEC — 2026-09-08
+
+Riletture dirette HTTPS 200 il 2026-09-09 (il tool web aveva restituito token_revoked; nessuna credenziale impiegata): Node globals https://nodejs.org/api/globals.html e transazioni SQLite https://www.sqlite.org/lang_transaction.html alle 06:42 UTC; llama.cpp b10517 README fissato https://raw.githubusercontent.com/ggml-org/llama.cpp/dc72703fc69698b1ea68ece8d2dd8a96e6a4e1fe/tools/server/README.md alle 06:49 UTC; https://openrouter.ai/docs/guides/features/message-transforms e https://ai-sdk.dev/docs/reference/ai-sdk-core/generate-text alle 06:53 UTC. Adozione dei campi/protocolli e SDK esistenti tramite adattatore: riserva risposta esplicita, transforms disattivati nel riassuntore OpenRouter, maxRetries 0 gia presente nel native adapter. Fonti attestano i contratti, non qualifica del prodotto o migliori prestazioni.
 Consultazione rinnovata prima della fase 0: 2026-09-08 UTC. Non sono prove di prestazione TALOS.
 ## Decisioni upstream
 - SQLite: adozione node:sqlite in worker; Node 24.18.0, SQLite 3.53.1 e FTS5 verificati in memoria. Transazioni WAL/FULL, backup API. https://www.sqlite.org/atomiccommit.html https://www.sqlite.org/wal.html https://www.sqlite.org/backup.html https://nodejs.org/api/sqlite.html
