@@ -136,3 +136,29 @@ prima di dire «va bene così» su qualcosa che l'owner sta guardando.
 > con Fable senza fermarmi e ho bruciato i crediti dell'owner («babbeo, non
 > farlo mai più»). Una richiesta grande NON autorizza né a saltare la fermata
 > né a spawnare più di un agente.
+
+## 📚 Lezioni del 03-07/09 — spostate qui il 09/09/2026
+
+> ⛔ `MEMORY.md` era a **20.004 byte** contro il tetto d'allarme di 19.900 dopo la lezione sui quattro giri veri del
+> Context Manager. Queste righe erano nella coda di «Tutto il resto»: blocco intero spostato, non accorciato. Restano
+> vincolanti come prima.
+
+- ⛔⛔⛔ [Consiglio modello ed effort a OGNI fase, e FERMATA prima di ogni fase](consiglio-modello-ed-effort-a-ogni-fase.md) — owner 03/09 + 04/09: modello + effort con basi FATTUALI (ledger §1-bis), poi `⛔ FERMATA (1)` SEMPRE, non solo quando il modello cambia; avvisare quando il lavoro tocca a Fable
+- ⛔⛔⛔ [LE RIGHE O E W NON SI DIMENTICANO](le-righe-o-e-w-si-implementano-dopo-il-refactor.md) — owner 04/09: «non dimenticare mai al mondo queste fasi». Si implementano DENTRO le superfici estratte (public/ è congelato), mai due volte, e ognuna vuole la sua verifica
+- ⛔⛔⛔ [RISPETTARE IL SISTEMA DI DESIGN ESISTENTE](rispettare-il-sistema-di-design-esistente.md) — 04/09, owner furioso («bruttissimo, layout 2010»): il mockup ignorava il tema Calm che TALOS ha già. Prima di disegnare: tokens.css, styles.css, screenshot veri; si cambia la STRUTTURA, non il linguaggio visivo
+- [Un cancello che nega a chi ha OBBEDITO](un-cancello-che-nega-a-chi-ha-obbedito.md) — 04/09: il cancello della ricerca web bloccava sempre gli agenti delegati, e uno ha dovuto aggirarlo pur avendo cercato. Si prova anche nel verso di chi obbedisce da un contesto diverso
+- [Il codice di uscita del task in background NON è quello del comando](il-codice-di-uscita-del-task-in-background-non-e-quello-del-comando.md) — 04/09: tre `verify` rossi passati per verdi; si legge la riga `EXIT:` del comando, mai la notifica
+- ⛔⛔ [La persistenza si corrompe DA SOLA](la-persistenza-si-corrompe-da-sola.md) — 04/09: il file «corrotto» era una sessione VERA persa dal 31/08; due `appendFile` concorrenti intrecciati su un record oltre **1,5 MiB**. Un confine tondo è la firma di una scrittura spezzata: si guarda cosa c'è dentro prima di buttare
+- ⛔⛔⛔ [Un IMPORT faceva partire la pipeline A PAGAMENTO](un-import-faceva-partire-la-pipeline-a-pagamento.md) — 04/09: ogni `verify:all` apriva Chrome sul **4174 vivo** e avviava una sessione vera con un modello a pagamento, perché uno script chiamava `main()` a livello di modulo e un test lo importava per una costante. ⛔ Un conteggio di test verdi non dice cosa la suite ha FATTO: il log si legge fino in fondo
+- ⛔⛔⛔ [RIEPILOGO VELOCE A OGNI CHIUSURA: le tre domande, sempre](formula-di-chiusura-fase-tre-domande.md) — RECIDIVA 04/09, owner: «non lo dimenticare più o saranno guai». Ogni fase chiusa e ogni `⛔ FERMATA` finisce con **Cosa devi fare tu · Cosa faccio io · Cosa rimane**. Prove e numeri nel ledger, non nel messaggio
+- ⛔⛔⛔ [CONFRONTO CON HERMES DOPO IL CUTOVER](confronto-con-hermes-dopo-il-cutover.md) — owner 05/09: ogni componente verificato E pareggiato/superato contro Hermes (poi Claude, Codex) con script automatici precisi, screenshot affiancati e ricognizione tecnica nel taccuino; piano in `.claude/PIANO-CONFRONTO-HERMES-2026-09-05.md`
+- ⛔⛔ [PROMPT PER ASTRA SU FILE, col percorso](prompt-per-astra-su-file-con-percorso.md) — owner 05/09, terza volta: si salva in `.claude/PROMPT-ASTRA-<data>-<tema>.md` e in chat si dà il percorso
+- ⛔⛔⛔ [MAI SOTTO LA UI ORIGINALE](mai-sotto-la-ui-originale.md) — owner 05/09: «se ogni aspetto è inferiore all'originale, che senso ha?»; intro con albero compatto, modali ridimensionabili e ricordate, composer ridimensionabile; un difetto visto in uno screenshot si corregge nello stesso giro (il send che andava a capo)
+- ⛔⛔ **NIENTE NOMI TECNICI NELLA UI** — owner 04/09: mai `web_search`, `tool_create`, `document_create` a schermo; mappa nome-tecnico → nome-umano in UN posto solo, il grezzo al più come dettaglio secondario, e **mai** toccare i nomi che riceve il modello (sono il contratto col kernel)
+- [Astra ha finito i crediti: il resto della Fase 2 lo faccio IO, inline](astra-finito-i-crediti-claude-fa-tutto-inline.md) — owner 06/09 «farai tutto tu, inline»: B6.8-B6.10, B2, B7, B1, B8, K-I, niente agenti
+- [`tasklist /FI` da Git Bash dice ZERO](tasklist-fi-da-git-bash-dice-zero.md) — 05/09: quattro Electron vivi e il filtro rotto diceva 0; processi con `Get-Process`, kill con `taskkill //PID`
+- [Ownership TOTALE su Hermes](ownership-totale-su-hermes.md) — owner 04/09: «non esitare più». Costruire, avviare, configurare e cambiare qualunque cosa dentro Hermes senza chiedere; restano fuori il 4174, il mobile e il kernel
+- ⛔⛔⛔ [MAI LA VIA PIÙ PIGRA](mai-la-via-piu-pigra.md) — owner 06/09: chiesta tre volte la barra stile ChatGPT, io ho fatto il contorno. La cosa che nomina lui si fa per prima e per intera; una richiesta ripetuta è già un allarme
+- ⛔⛔ [RIAVVIO 4174 AUTONOMO, e sempre aggiornato](riavvio-4174-autonomo-e-sempre-aggiornato.md) — owner 06/09: niente permesso per riavviare, l'obbligo è tenerlo acceso con l'ultimo codice; le sonde restano vietate sul 4174. Approvate le cancellazioni del cutover (28 skip, frontend Opus); il backup del monolite si tiene FUORI dal repo
+- ⛔⛔ [PRE-RELEASE: tabella di marcia, prove da utente nuovo, UX rifinita](pre-release-tabella-di-marcia-e-prove-da-utente-nuovo.md) — owner 07/09: si fa POCO PRIMA del rilascio, con ricerca sul deploy engineering fresca di quel mese; piano in `.claude/PIANO-PRE-RELEASE-2026-09-07.md`
+- [STATO RELEASE DESKTOP: cinque blocchi](stato-release-desktop-cinque-blocchi.md) — 07/09: app viva, release no (kernel fuori dal repo, nessuna prova col modello, lane 1.583 commit avanti a main, CI/release solo mobile, controlli morti della Review); doc in `.claude/STATO-RELEASE-DESKTOP-2026-09-07.md`

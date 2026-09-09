@@ -45,6 +45,19 @@ Chiusi da Claude alle 19:23 del 09/09, commit **`175cc2ef`** (`codex/talos-conte
    «2,0k · cache 40%» dopo il reload — rilanciata verde due volte oggi (2/2). ⛔ Resta vero che è il
    percorso desktop con fixture, non un giro reale col modello.
 
+**D1 — il giro vero, approvato dall'owner (solo glm-5.3-flash), fatto alle 20:20: commit `a08f9cef`, pushato.**
+Quattro giri, un difetto per giro, nessuno visibile dalle fixture: (1) il contatore euristico contava i
+BYTE come token (70.903 per 10.073 veri, 3,92 byte/token); (2) glm ragiona per difetto e il ragionamento si
+mangiava la sintesi — `reasoning.effort: low` → 0 token; (3) i modelli veri citano per elisione e il
+validatore bocciava tutta la sintesi — ora verifica frammento per frammento e scarta le citazioni
+introvabili registrandole; (4) senza limite dichiarato la sintesi finiva troncata — ora il prompt dice
+quante parole e il motore ritenta una volta. Il quarto giro ha chiuso il ciclo intero: compattazione
+committata, barra → separatore, risposta vera, misura «10.163 / 16.384 · il contesto è cambiato dopo la
+misura». 204 foto aperte o dichiarate byte-identiche in `ISPEZIONI-FOTO.md`. Costo totale ≈ $0,01.
+⚠ Registrato, non curato: la colonna destra mostra la finestra del catalogo (1310,7k) mentre la modale usa
+il profilo di prova (16.384); l'errore di compattazione arriva in chat come «internal-error»; primo token
+a 61,2 s sul percorso sincrono. ⛔ D1 vale per UN modello: glm-5.3-flash. Ogni altro modello va provato.
+
 Non ancora fatto (v004 §Prossimi passi):
 4. Tutto il resto dell'elenco v004 (impostazioni strict, cambio modello, job tardivi, embedding
    locale, qualificazione sui due GGUF, prova dal composer, revisione finale, prova owner, attivazione).
@@ -56,7 +69,7 @@ generale è dell'owner, dopo la sua prova.
 
 | Cosa | Percorso |
 |---|---|
-| Codice TCEC + F5c | `C:/Users/Antonino/Desktop/projects/AVM-context-engine`, branch `codex/talos-context-engine`, HEAD `175cc2ef` (pushato su origin) |
+| Codice TCEC + F5c + D1 | `C:/Users/Antonino/Desktop/projects/AVM-context-engine`, branch `codex/talos-context-engine`, HEAD `a08f9cef` (pushato su origin) |
 | App desktop dell'owner | `C:/Users/Antonino/Desktop/projects/AVM-harness-desktop`, branch `lane/harness-desktop`, HEAD `8173622c` (+ i commit di questa consegna) |
 | Consegne precedenti | `.claude/CONSEGNA-ASTRA-A-CLAUDE-2026-09-09-v004-134857Z.md` (v001-v004 dentro) |
 | Ticket di lavoro di Claude | `.claude/TICKET-CONSEGNA-AD-ASTRA-2026-09-08.md`, §8 registro cronologico |

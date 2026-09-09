@@ -45,3 +45,28 @@ Stato: **IN CODA**, non implementato. Si collega al pannello destro del ticket; 
 - **Cosa deve fare l'owner:** nessuna scelta richiesta per registrare la coda.
 - **Cosa faccio io dopo:** completare la presa in carico del ticket e seguire le priorità correnti.
 - **Cosa rimane:** ricerca approfondita, proposte applicabili e implementazioni PO-01–PO-08.
+
+## Decisioni owner del 09/09/2026 (sera) — ordine vincolante
+
+Debiti: **D1** approvato (un giro reale su Context Manager, processo isolato) · **D2** approvato (giro reale con
+delega sul 4174) — ⛔ **unico modello permesso: `glm-5.3-flash`**, effort a scelta di Claude · **D4** prova
+dell'owner dopo D1 · **D5** nella release solo cambio modello a metà chat e ripresa JSONL corrotta · **D6**
+release in una giornata dedicata dopo D1-D2 · **D7** `C:\` storico si lascia, BC-04 da riverificare con foto ·
+**D8** (blocchi di codice, righe strumenti) subito dopo D1 · **D3** (file-coordination fra figlie concorrenti):
+l'owner vuole una spiegazione semplice, potrebbe essere critica — decisione sospesa.
+
+Nuove implementazioni, in quest'ordine: **PO-04/05 → PO-06 → PO-08 → PO-01 → N1 (barra laterale viva) →
+chiusura delle decisioni P-01…P-18 → il resto.**
+
+### PO-09 — Terminale in split orizzontale in basso (owner, 09/09)
+«Un pulsantino per far aprire il terminale splittato in orizzontale in basso, come fa Hermes, Codex e tanti
+altri tipo VS Code: resizable, intuitivo.» Requisiti: un pulsante piccolo (topbar o piede), pannello in basso
+sotto la chat, maniglia di ridimensionamento con misura ricordata (stessa chiave dei dialoghi), chiusura e
+riapertura senza perdere la sessione del terminale; ricerca su Hermes/Codex/VS Code prima di disegnare.
+
+### PO-10 — I comandi dell'agente dentro la sezione Terminale (owner, 09/09)
+«Nella sezione terminale si integrano tutti i comandi effettuati fino a quel momento dall'agente, e quindi
+distinguere tra schede terminale agente e utente.» Requisiti: ogni comando eseguito dall'agente (shell/prova)
+compare nel Terminale con output e stato, in ordine; schede **agente** distinte dalle schede **utente** (nome,
+colore/pallino, sola lettura per quelle dell'agente); nessun comando inventato — solo quelli davvero eseguiti,
+letti dagli eventi ToolCall; stessa fonte del pannello Processi.
