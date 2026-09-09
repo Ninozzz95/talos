@@ -5616,6 +5616,13 @@ function disegnaAgenti(d, contenitore, agenti) {
       kv4.append(el20(d, "span", "talos-kv__k", k), el20(d, "span", "talos-kv__v talos-mono", v));
       card.append(kv4);
     }
+    const collisioni = Array.isArray(a.collisioni) ? a.collisioni : [];
+    if (collisioni.length) {
+      const nota = el20(d, "p", "talos-inspector__hint talos-inspector__hint--danger");
+      const file = [...new Set(collisioni.map((c) => c.percorso))];
+      nota.textContent = file.length === 1 ? `Anche un'altra delega ha scritto ${file[0]}: l'ultima scrittura ha coperto la precedente. Riaprilo prima di fidarti.` : `Anche altre deleghe hanno scritto questi file: ${file.join(", ")}. L'ultima scrittura ha coperto le precedenti.`;
+      card.append(nota);
+    }
     contenitore.appendChild(card);
   }
   return lista.length;

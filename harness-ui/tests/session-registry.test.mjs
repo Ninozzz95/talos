@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, parse as parsePath } from 'node:path';
 import test from 'node:test';
 
+import { percorsoScrittoDaEvento, registraScritturaDiFiglia } from '../src/session-registry.mjs';
 import {
   createSessionRegistry as createSessionRegistryReale,
   guardiaDiStallo,
@@ -5977,4 +5978,68 @@ test('⛔⛔ AL CONTRARIO — su una sessione VIVA gli stessi tre payload dicono
   assert.equal(registro.esporta(sessionId).interrotta, false);
 
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⛔⛔⛔ D3 — owner 09/09/2026, via A approvata. Fino a dieci figlie lavorano NELLA STESSA cartella
+ * della madre e non c'è nessun lucchetto sui file: se due toccano lo stesso percorso, l'ultima che
+ * salva vince e il lavoro dell'altra sparisce senza un errore da nessuna parte. Il lucchetto vero va
+ * PRIMA della scrittura, e quel cancello vive nel kernel (qui una copia dell'owner). Ciò che è nostro
+ * è il momento dopo: togliere il SILENZIO. Queste prove tengono la parte pura.
+ * Letto il 10/09 in Hermes (`tools/file_state.py`): «Prevents mangled edits when concurrent subagents
+ * … touch the same file» — lock per percorso; e il promemoria al padre quando il figlio ha toccato
+ * file che il padre aveva letto. Claude Code e Codex non hanno nessun lock per file.
+ */
+test('D3: il percorso di una scrittura si legge dall\u2019evento, e un evento che non \u00e8 una scrittura d\u00e0 null', () => {
+  const scrittura = { type: 'StateDelta', delta: [{ op: 'add', path: '/file/parte1.md', value: 'ciao' }] };
+  assert.equal(percorsoScrittoDaEvento(scrittura), 'parte1.md');
+  const sottocartella = { type: 'StateDelta', delta: [{ op: 'replace', path: '/file/src/app/config.json', value: '{}' }] };
+  assert.equal(percorsoScrittoDaEvento(sottocartella), 'src/app/config.json');
+
+  assert.equal(percorsoScrittoDaEvento({ type: 'StateDelta', delta: [{ op: 'replace', path: '/usage', value: {} }] }), null,
+    'il consumo non \u00e8 una scrittura di file');
+  assert.equal(percorsoScrittoDaEvento({ type: 'TextMessageContent', delta: 'testo' }), null);
+  assert.equal(percorsoScrittoDaEvento(null), null);
+  assert.equal(percorsoScrittoDaEvento({ type: 'StateDelta' }), null, 'un delta assente non fa lanciare niente');
+});
+
+test('D3: due figlie DIVERSE sullo stesso file \u2192 collisione, e dice CHI e QUALE file', () => {
+  const memoria = new Map();
+  const prima = registraScritturaDiFiglia(memoria, { madreId: 'm', figliaId: 'f1', percorso: 'note.md', quando: 'T1' });
+  assert.equal(prima, null, 'la prima scrittura non \u00e8 una collisione: non c\u2019era nessuno');
+
+  const poi = registraScritturaDiFiglia(memoria, { madreId: 'm', figliaId: 'f2', percorso: 'note.md', quando: 'T2' });
+  assert.deepEqual(poi, { percorso: 'note.md', prima: 'f1', poi: 'f2' });
+});
+
+/*
+ * ⛔ AL CONTRARIO, ed è la metà che conta: un allarme che scatta anche quando va tutto bene insegna
+ * a ignorarlo. Quattro casi in cui NON deve scattare.
+ */
+test('D3, AL CONTRARIO: nessun falso allarme \u2014 file diversi, madri diverse, e la stessa figlia che riscrive', () => {
+  const memoria = new Map();
+  assert.equal(registraScritturaDiFiglia(memoria, { madreId: 'm', figliaId: 'f1', percorso: 'parte1.md', quando: 'T1' }), null);
+  assert.equal(registraScritturaDiFiglia(memoria, { madreId: 'm', figliaId: 'f2', percorso: 'parte2.md', quando: 'T2' }), null,
+    'due figlie su file DIVERSI \u00e8 esattamente il giro D2 riuscito: nessun allarme');
+
+  // la stessa figlia che riscrive il suo file tre volte: leggi, cambia, riscrivi \u00e8 lavoro normale
+  assert.equal(registraScritturaDiFiglia(memoria, { madreId: 'm', figliaId: 'f1', percorso: 'parte1.md', quando: 'T3' }), null);
+  assert.equal(registraScritturaDiFiglia(memoria, { madreId: 'm', figliaId: 'f1', percorso: 'parte1.md', quando: 'T4' }), null);
+
+  // figlie di madri diverse non si pestano i piedi fra loro: cartelle diverse, storie diverse
+  assert.equal(registraScritturaDiFiglia(memoria, { madreId: 'm2', figliaId: 'g1', percorso: 'parte1.md', quando: 'T5' }), null);
+
+  // e il dato mancante non inventa una collisione
+  assert.equal(registraScritturaDiFiglia(memoria, { madreId: null, figliaId: 'f9', percorso: 'x.md', quando: 'T6' }), null);
+  assert.equal(registraScritturaDiFiglia(memoria, { madreId: 'm', figliaId: 'f9', percorso: '', quando: 'T7' }), null);
+});
+
+test('D3: tre figlie sullo stesso file \u2192 ogni arrivo successivo trova chi c\u2019era prima', () => {
+  const memoria = new Map();
+  registraScritturaDiFiglia(memoria, { madreId: 'm', figliaId: 'f1', percorso: 'indice.json', quando: 'T1' });
+  const seconda = registraScritturaDiFiglia(memoria, { madreId: 'm', figliaId: 'f2', percorso: 'indice.json', quando: 'T2' });
+  const terza = registraScritturaDiFiglia(memoria, { madreId: 'm', figliaId: 'f3', percorso: 'indice.json', quando: 'T3' });
+  assert.equal(seconda.prima, 'f1');
+  assert.equal(terza.poi, 'f3');
+  assert.ok(['f1', 'f2'].includes(terza.prima), 'la terza trova una sorella che c\u2019era gi\u00e0');
 });

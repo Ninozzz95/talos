@@ -412,6 +412,68 @@ function esitoDelProcesso(chiamata) {
  * ⛔ Stessa regola con cui il ripristino ricava il `nome` di un compito libero — una sola forma per
  *   «come si chiama a schermo un compito», invece di due che divergono.
  */
+/*
+ * ⛔⛔⛔ D3 — DUE FIGLIE CHE SCRIVONO LO STESSO FILE, E NESSUNO LO DICE. Owner 09/09/2026: via A
+ * approvata, via C (un worktree per figlia) approvata per più avanti.
+ *
+ * Il fatto, misurato in questo codice: `LIMITE_FIGLI_CONCORRENTI = 10` figlie possono lavorare insieme
+ * NELLA STESSA CARTELLA della madre (la cura `cartellaGiaScelta`, provata dal vivo l'08/09), e non
+ * esiste nessun lucchetto sui file. Se due toccano lo stesso percorso, l'ultima che salva vince e il
+ * lavoro dell'altra sparisce: non è un conflitto git, non è un errore, ed entrambe riferiscono «fatto».
+ *
+ * COME FANNO I TRE, letto nel loro codice il 10/09/2026 (cloni a commit fissato):
+ *  · Hermes Agent v0.21 — `tools/file_state.py`, docstring: «Cross-agent file state coordination.
+ *    Prevents mangled edits when concurrent subagents (same process, same filesystem) touch the same
+ *    file»: un `threading.Lock` PER PERCORSO attorno al read→modify→write, preso in ordine
+ *    deterministico per non incastrarsi su patch multi-file; più uno scheduler che serializza i tool
+ *    di scrittura con percorsi sovrapposti, e un promemoria al padre — «[NOTE: subagent modified files
+ *    the parent previously read — re-read before editing: …]». Il worktree per figlia esiste ma è
+ *    opt-in, default `false`.
+ *  · Claude Code — nessun lucchetto per file (cercato: file lock, same file, concurrent write, lease,
+ *    mutex: zero). La difesa è spaziale (`isolation: "worktree"`, un checkout per sotto-agente) più
+ *    l'ancoraggio testuale di `Edit`, che fallisce se il punto è già cambiato. Tetto: 20 concorrenti.
+ *  · Codex — nessun lucchetto sui file di lavoro; `apply_patch` prende il write lock esclusivo del
+ *    turno, ma è per-processo. Tetto: 4 agenti per sessione.
+ *
+ * ⇒ QUI, OGGI: il lucchetto vero andrebbe messo PRIMA della scrittura, e quel cancello vive nel
+ *   kernel (`talosHarness.mjs`), che in questo repo è una COPIA: la fonte è nel worktree dell'owner e
+ *   portarla è un suo gesto (`scripts/kernel-controlla.mjs`). Ciò che è nostro è il momento DOPO: qui
+ *   passa ogni evento di ogni sessione, e la voce sa chi è figlia di chi.
+ *   Non possiamo ancora impedire la collisione; possiamo togliere il SILENZIO, che è il danno vero.
+ *   Chi legge la scheda «Agenti» vede che due deleghe hanno scritto lo stesso file, e in che ordine.
+ */
+const PERCORSO_SCRITTURA = /^\/file\/(.+)$/;
+
+/** Il percorso scritto da un evento, o `null` se l'evento non è una scrittura. Puro. */
+export function percorsoScrittoDaEvento(evento) {
+  if (evento?.type !== 'StateDelta' || !Array.isArray(evento.delta)) return null;
+  for (const d of evento.delta) {
+    const m = PERCORSO_SCRITTURA.exec(String(d?.path ?? ''));
+    if (m) return m[1];
+  }
+  return null;
+}
+
+/**
+ * Le scritture che DUE figlie diverse della stessa madre hanno fatto sullo stesso percorso.
+ * `scrittePerMadre`: Map madreId → Map percorso → [{ figliaId, quando }].
+ * @returns {{percorso:string, prima:string, poi:string}|null} la collisione appena avvenuta, se c'è
+ */
+export function registraScritturaDiFiglia(scrittePerMadre, { madreId, figliaId, percorso, quando }) {
+  if (!madreId || !figliaId || !percorso) return null;
+  if (!scrittePerMadre.has(madreId)) scrittePerMadre.set(madreId, new Map());
+  const perPercorso = scrittePerMadre.get(madreId);
+  const gia = perPercorso.get(percorso) ?? [];
+  /*
+   * ⛔ Una figlia che riscrive un file suo NON è una collisione: è il lavoro normale (leggi, cambia,
+   *   riscrivi, magari tre volte). La collisione è fra figlie DIVERSE, ed è l'unica cosa che si dice —
+   *   un allarme che scatta anche quando va tutto bene insegna a ignorarlo.
+   */
+  const altra = gia.find((v) => v.figliaId !== figliaId);
+  perPercorso.set(percorso, [...gia, { figliaId, quando }]);
+  return altra ? { percorso, prima: altra.figliaId, poi: figliaId } : null;
+}
+
 export function nomeCortoDaConsegna(consegna) {
   const riga = String(consegna || '').split(String.fromCharCode(10)).map((r) => r.trim()).find((r) => r.length > 0);
   if (!riga) return null;
@@ -1554,6 +1616,11 @@ export function createSessionRegistry({
     }
   }
 
+  /* D3 — chi ha scritto cosa, per madre: Map madreId → Map percorso → [{figliaId, quando}].
+     Vive quanto il processo, come il resto del registro vivo: serve a dire una collisione mentre
+     succede, non a tenerne la storia (quella è negli eventi, già persistiti). */
+  const scrittureDelleFiglie = new Map();
+
   function broadcast(voce, evento) {
     /*
      * ⛔⛔⛔ 02/09 — review complessiva. WorkspaceChanged è STATO del
@@ -1572,6 +1639,25 @@ export function createSessionRegistry({
     const effimero = evento.type === 'WorkspaceChanged';
     if (!effimero) evento._sequenza = (voce.prossimaSequenza = (voce.prossimaSequenza ?? 0) + 1);
     if (!effimero) voce.eventi.push(evento);
+    /*
+     * ⛔ D3 — due figlie della stessa madre che scrivono lo stesso file. Non possiamo ancora
+     *   impedirlo (il cancello di `scrivi` vive nel kernel, che qui è una copia dell'owner), ma
+     *   il danno vero è il SILENZIO: qui la collisione viene registrata sulla voce della madre, e
+     *   da lì esce nella scheda «Agenti». ⛔ Non tocca l'evento e non ne aggiunge: la storia
+     *   persistita resta byte per byte quella di prima.
+     */
+    if (voce.padreId) {
+      const percorso = percorsoScrittoDaEvento(evento);
+      if (percorso) {
+        const collisione = registraScritturaDiFiglia(scrittureDelleFiglie, {
+          madreId: voce.padreId, figliaId: voce.sessionId, percorso, quando: new Date().toISOString(),
+        });
+        if (collisione) {
+          const madre = sessioni.get(voce.padreId);
+          if (madre) (madre.collisioniDiScrittura ??= []).push(collisione);
+        }
+      }
+    }
     /*
      * ⭐⭐⭐ 04/9 — W1-02, l'istante in cui questo evento è arrivato. Serve al
      * process ledger per dire "quanto è durato" e alla guardia per dire "tace

@@ -193,6 +193,15 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
            * rifare il giro fra un mese. Il nome corto viaggia accanto.
            */
           taskCorto: voce.task?.consegnaCorta ?? (voce.task?.consegna ? compitoDaPromptDiDelega(voce.task.consegna) : null),
+          /*
+           * ⛔ D3 — i file che QUESTA figlia ha scritto e che anche un'altra sorella ha toccato. La
+           * lista sta sulla madre (il registro la scrive mentre gli eventi passano); qui esce filtrata
+           * per la figlia, perché la scheda «Agenti» parla di una delega alla volta. Vuota quasi
+           * sempre: se non lo è, due deleghe si sono pestate i piedi e va detto.
+           */
+          collisioni: (sessioni.get(voce.padreId)?.collisioniDiScrittura ?? [])
+            .filter((c) => c.prima === sessionId || c.poi === sessionId)
+            .map((c) => ({ percorso: c.percorso, primaDi: c.prima === sessionId ? null : c.prima, dopoDi: c.poi === sessionId ? null : c.poi })),
           conclusa: voce.conclusa,
           /*
            * ⛔ 06/9, T05-D3 un piano più sotto: senza questo campo un sotto-agente ucciso dalla

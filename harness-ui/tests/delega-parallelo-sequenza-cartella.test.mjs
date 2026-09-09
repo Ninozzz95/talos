@@ -66,6 +66,10 @@ function modelloFinto() {
         permessi: input.permessi,
         modello: input.modello,
         onDelega: input.onDelega,
+        /* ⛔ 10/09 (D3): la porta da cui una sessione manda i suoi eventi al registro. Serve per
+           provare ciò che il registro fa MENTRE gli eventi passano — per esempio accorgersi che due
+           figlie hanno scritto lo stesso file. */
+        onEvento: input.onEvento,
         /*
          * ⛔ EMETTE `RunFinished` PRIMA di risolvere, perche' e' quello che fa la sessione vera:
          *   `agent-service.mjs:149` (`esitoInEventoFinale`) manda sempre un RunFinished o un
@@ -439,6 +443,62 @@ test('⛔ NOME, AL CONTRARIO: una figlia RIPRISTINATA dal disco (senza consegnaC
     finto.avvii[0].onDelega('Sei una sessione di lavoro autonoma; non hai altro contesto. Compito: scrivi il file storico.md.');
     const figlia = registro.elenca().find((s) => s.padreId);
     assert.ok(figlia.taskDelega.startsWith('scrivi il file storico.md'), `invece: «${figlia.taskDelega}»`);
+  } finally {
+    rmSync(cartellaMadre, { recursive: true, force: true });
+  }
+});
+
+/*
+ * ⛔⛔⛔ D3, LA PROVA CHE CONTA — due figlie VERE della stessa madre che scrivono lo STESSO file, sul
+ * registro vero (solo il modello è finto). Prima di questa cura succedeva in silenzio: l'ultima che
+ * salva vince, il lavoro dell'altra sparisce, e tutte e due dicono «fatto». Ora la madre se ne
+ * accorge mentre gli eventi passano, e la scheda «Agenti» lo dice — col nome del FILE, che è ciò che
+ * chi legge deve andare a riaprire.
+ * ⛔ Non è il lucchetto: il cancello di `scrivi` vive nel kernel, che qui è una copia dell'owner.
+ *   È la fine del silenzio, che è il danno vero (owner 09/09, via A; la via C è per più avanti).
+ */
+test('D3 sul registro VERO — due figlie sullo stesso file: la collisione arriva alla scheda Agenti', async () => {
+  const cartellaMadre = cartellaVera('talos-d3-');
+  try {
+    const finto = modelloFinto();
+    const { registro, madreId } = registroConMadre(cartellaMadre, finto);
+    const madre = finto.avvii[0];
+
+    const uno = madre.onDelega({ task: 'Compito: scrivi la parte 1 in comune.md' });
+    const due = madre.onDelega({ task: 'Compito: scrivi la parte 2 in comune.md' });
+    await new Promise((r) => setImmediate(r));
+    assert.equal(finto.avvii.length, 3, 'la madre e le sue due figlie');
+
+    const [, f1, f2] = finto.avvii;
+    const scrittura = (percorso, contenuto) => ({
+      type: 'StateDelta',
+      delta: [{ op: 'add', path: `/file/${percorso}`, value: contenuto }],
+    });
+
+    // ogni figlia riscrive PRIMA il suo file due volte: lavoro normale, nessun allarme
+    f1.onEvento(scrittura('parte1.md', 'a'));
+    f1.onEvento(scrittura('parte1.md', 'a2'));
+    f2.onEvento(scrittura('parte2.md', 'b'));
+
+    const figlie = () => registro.elencaFigli(madreId).figli;
+    assert.deepEqual(figlie().flatMap((f) => f.collisioni), [],
+      'AL CONTRARIO: due figlie su file diversi — e una che riscrive il suo — non fanno scattare niente');
+
+    // e adesso il caso vero: tutte e due su comune.md
+    f1.onEvento(scrittura('comune.md', 'la mia versione'));
+    f2.onEvento(scrittura('comune.md', 'la mia, che copre la sua'));
+
+    const dopo = figlie();
+    const conCollisione = dopo.filter((f) => f.collisioni.length > 0);
+    assert.equal(conCollisione.length, 2, 'la collisione riguarda ENTRAMBE le figlie: chi ha coperto e chi è stato coperto');
+    for (const f of conCollisione) assert.equal(f.collisioni[0].percorso, 'comune.md', 'si nomina il FILE, non un conteggio');
+
+    const coperta = dopo.find((f) => f.collisioni.some((c) => c.dopoDi));
+    const coprente = dopo.find((f) => f.collisioni.some((c) => c.primaDi));
+    assert.ok(coperta && coprente && coperta.sessionId !== coprente.sessionId,
+      'si sa CHI ha scritto per primo e chi dopo: senza, la nota non è azionabile');
+
+    f1.concludi(); f2.concludi(); await uno; await due;
   } finally {
     rmSync(cartellaMadre, { recursive: true, force: true });
   }
