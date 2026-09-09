@@ -1,19 +1,9 @@
-# Consegna Astra a Claude — indice corrente
+# Ultima consegna Astra a Claude
 
-Versione **002**, stato congelato **2026-09-09T08:17:06Z / 10:17:06+02:00 Europe/Rome**.
-Codice TCEC salvato nel commit **d0c3bbee**, branch codex/talos-context-engine.
-**Crediti Astra a rischio di esaurimento improvviso:** leggere lo snapshot prima di proseguire.
+Versione 003 — 2026-09-09T09:04:54Z / 11:04:54 Europe/Rome.
 
-[Apri la consegna v002 e il resoconto cumulativo v001](./CONSEGNA-ASTRA-A-CLAUDE-2026-09-09-v002-081706Z.md)
+[Consegna cumulativa e stato di ripresa](CONSEGNA-ASTRA-A-CLAUDE-2026-09-09-v003-090454Z.md)
 
-Copia canonica versionata da git:
-C:/Users/Antonino/Desktop/projects/AVM-context-engine/.claude/CONSEGNA-ASTRA-A-CLAUDE-2026-09-09-v002-081706Z.md
+Codice: 7cf21930, codex/talos-context-engine. SHA-256 documento: 3eccf69a8cac51e7ae8601316b31bd59f1ebf6ef568e15b1ddcbd31bc72e109f.
 
-Copia di consultazione identica nella .claude della worktree AVM-harness-desktop.
-La copia di consultazione non cambia il codice o il server desktop.
-
-Copertura: ticket08/09, fix Review/chat/recupero, qualificazione Autocompact, immagini/provider, Accesso pieno, TCEC implementato e bozze non integrate, test, limiti, code e passi di ripresa.
-
-Owner: nessuna azione immediata.
-Astra dopo: continua inline; pubblica una nuova versione locale quando cambia la consegna.
-Rimane: integrazione completa, UI, qualificazione reale e approvazione attivazione.
+Leggere anche v001 e v002 indicati nel documento. Crediti potenzialmente esauribili senza preavviso; lavoro ancora aperto, nessuna attivazione generale.
