@@ -4800,11 +4800,14 @@ export async function talosLavora({
             const preparedContext = contextHooks
                 ? await contextHooks.prepare({ messages: messaggi, tools: attrezziOpenAI, model: modello, signal: segnaleStop })
                 : null
-            const esitoChiamata = await chiamaIlModelloConRitenta(
+            const invoke = (signal = segnaleStop) => chiamaIlModelloConRitenta(
                 modello, chiave, preparedContext?.messages ?? messaggi, fetchDiRete,
                 onDelta ? (e) => onDelta({ giro, ...e }) : undefined,
-                reasoning, attrezziOpenAI, segnaleStop, preparedContext?.measurement?.responseReserve,
+                reasoning, attrezziOpenAI, signal, preparedContext?.measurement?.responseReserve,
             )
+            const esitoChiamata = contextHooks?.infer
+                ? await contextHooks.infer({ signal: segnaleStop }, invoke)
+                : await invoke()
             risposta = esitoChiamata.scelta
             usage = esitoChiamata.usage
             ripetizione = esitoChiamata.ripetizione ?? null

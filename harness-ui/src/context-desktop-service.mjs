@@ -9,7 +9,7 @@ const validId = value => typeof value === 'string' && value.length > 0 && value.
 
 /** Desktop ownership and transport adaptation; archive paths and model credentials
  * never originate in the HTTP request. Every durable mutation has a receipt. */
-export function createDesktopContextService({ engine, store, loadLegacy, resolveSessionModel, isSessionEnabled, readSession, onEvent, clock = () => new Date().toISOString() }) {
+export function createDesktopContextService({ engine, store, loadLegacy, resolveSessionModel, isSessionEnabled, readSession, onEvent, runInference, clock = () => new Date().toISOString() }) {
   if (!engine || !store || typeof readSession !== 'function' || typeof resolveSessionModel !== 'function' || typeof isSessionEnabled !== 'function') fail('CTX_PORT_MISSING', 'Servizi desktop del contesto incompleti.');
   const queues = new Map();
   const ownedJobs = new Map();
@@ -65,6 +65,7 @@ export function createDesktopContextService({ engine, store, loadLegacy, resolve
       return Object.freeze({
         capture: ({ messages }) => api.syncOriginals({ sessionId, messages }),
         prepare: ({ messages, tools, signal }) => api.prepare({ sessionId, messages, tools, signal }),
+        infer: ({ signal }, operation) => runInference ? runInference({ sessionId, priority: 'chat', signal }, operation) : operation(signal),
         captureProviderResponse: async ({ response, giro }) => {
           if (!response || typeof response !== 'object' || !Number.isSafeInteger(giro) || giro < 0) fail('CTX_INVALID_INPUT', 'Risposta del modello non archiviabile.');
           const bytes = Buffer.from(JSON.stringify({ schema: 'talos.context.provider-response.v1', runId, giro, response }), 'utf8');

@@ -6,5 +6,7 @@ Verifica root: 58/58 test package; 556/556 kernel; 5/5 servizio desktop/rotte; 3
 Owner: nessuna scelta.
 Ulteriore fetta F3: registro e agente inoltrano hook context per le sole conversazioni abilitate; compattazione manuale delegabile alla pipeline comune. Risposte provider originali archiviate prima della normalizzazione. Trasporto sintesi tramite routing/SDK esistenti, nessun retry o tool. Riserva inviata davvero al provider. 472/472 regressioni registro/agente e 46/46 routing/provider/integration; kernel completo verde con la nuova prova (557 test). Wiring server e UI ancora da completare.
 
-Io dopo: completare composizione runtime, contatori, scheduler e UI.
+Composizione runtime e scheduler aggiunti: SQLite e riavvio 5/5; priorita chat e annullamento controllato 5/5; package 59/59. La risorsa resta acquisita fino alla fine dello stream. Le sintesi in pausa riprendono quando serve spazio. Non ancora qualificato su GPU reale; server non ancora cablato.
+
+Io dopo: completare wiring server, contatori e UI.
 Rimane: integrazione completa, qualifica reale, revisione ingegneristica finale e prova owner.
