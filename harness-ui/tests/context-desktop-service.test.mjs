@@ -1,0 +1,49 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createDesktopContextService } from '../src/context-desktop-service.mjs';
+import { createSqliteContextStore } from '../../context-engine/src/node/sqlite-store.mjs';
+import { createContextEngine } from '../../context-engine/src/engine.mjs';
+
+async function fixture(t) {
+  const store = createSqliteContextStore({ databasePath: ':memory:' });
+  t.after(() => store.close());
+  const engine = createContextEngine({ store, model: { resolveModel: async ({ sessionModel }) => sessionModel, summarize: async () => { throw new Error('Not used'); } }, tokenCounter: { countPreparedContext: async () => { throw new Error('Not used'); } } });
+  const service = createDesktopContextService({ store, engine, readSession: id => id === 'chat' ? { sessionId: id, modello: 'local:test' } : null, isSessionEnabled: id => id === 'chat', resolveSessionModel: async () => ({ provider: 'local', model: 'test', windowTokens: 16384, responseReserve: 2048 }), clock: () => '2026-09-09T00:00:00.000Z' });
+  t.after(() => service.close());
+  return { store, engine, service };
+}
+const request = (service, method, path, body) => service.request({ sessionId: 'chat', method, path, body });
+test('CTX-DESKTOP-ISOLATION unknown session cannot initialize archive or access originals', async t => {
+  const { service, store } = await fixture(t);
+  await assert.rejects(service.request({ sessionId: 'unknown', method: 'GET', path: '/' }), { code: 'CTX_SESSION_NOT_FOUND' });
+  assert.equal(await store.readContextSnapshot({ sessionId: 'unknown' }), null);
+});
+test('CTX-DESKTOP-SETTINGS persistent idempotence and expected revision control updates', async t => {
+  const { service } = await fixture(t);
+  const initial = await request(service, 'GET', '/');
+  const body = { patch: { auto: false }, expectedRevision: initial.revision, idempotencyKey: 'one' };
+  const first = await request(service, 'PATCH', '/settings', body);
+  assert.equal(first.settings.auto, false);
+  assert.deepEqual(await request(service, 'PATCH', '/settings', body), first);
+  await assert.rejects(request(service, 'PATCH', '/settings', { ...body, patch: { auto: true } }), { code: 'CTX_IDEMPOTENCY_CONFLICT' });
+  await assert.rejects(request(service, 'PATCH', '/settings', { ...body, idempotencyKey: 'two' }), { code: 'CTX_STALE_REVISION' });
+});
+test('CTX-DESKTOP-RAW retains full tool output with deterministic append identity', async t => {
+  const { service, store } = await fixture(t);
+  const messages = [{ role: 'user', content: 'leggi il file' }, { role: 'assistant', tool_calls: [{ id: 'call', type: 'function', function: { name: 'leggi', arguments: '{}' } }] }, { role: 'tool', tool_call_id: 'call', content: 'x'.repeat(18000) + 'VALORE FINALE' }];
+  await service.syncOriginals({ sessionId: 'chat', messages });
+  await service.syncOriginals({ sessionId: 'chat', messages });
+  const records = await store.readOriginals({ sessionId: 'chat' });
+  assert.equal(records.length, 3);
+  assert.equal(records.at(-1).message.content, messages.at(-1).content);
+  await assert.rejects(service.syncOriginals({ sessionId: 'chat', messages: [{ role: 'user', content: 'sostituito' }] }), { code: 'CTX_HISTORY_DIVERGED' });
+});
+test('CTX-DESKTOP-FACTS owner changes and deletion expose real persisted state', async t => {
+  const { service } = await fixture(t);
+  const state = await request(service, 'GET', '/');
+  const result = await request(service, 'POST', '/facts', { fact: { id: 'db', text: 'SQLite', sources: [] }, expectedRevision: state.revision, idempotencyKey: 'fact' });
+  assert.equal(result.fact.text, 'SQLite');
+  const next = await request(service, 'GET', '/');
+  await request(service, 'DELETE', '/facts/db', { expectedRevision: next.revision, idempotencyKey: 'remove' });
+  assert.deepEqual((await request(service, 'GET', '/facts')).facts.filter(f => f.status !== 'removed'), []);
+});

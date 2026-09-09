@@ -710,6 +710,18 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/resume$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/settings$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compact$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/?$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/settings$/, metodi: ['PATCH'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/jobs$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/jobs\/([^/]+)$/, metodi: ['GET', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/jobs\/([^/]+)\/resume$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/versions$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/versions\/([^/]+)\/restore$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/facts$/, metodi: ['GET', 'POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/facts\/([^/]+)$/, metodi: ['PATCH', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/facts\/([^/]+)\/resolve$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/sources\/([^/]+)$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/export$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/shell$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/approve$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue$/, metodi: ['POST'] },
@@ -740,6 +752,8 @@ export function metodiAmmessiPerRotta(pathname) {
   const ordinati = [];
   if (metodi.has('GET')) ordinati.push('GET', 'HEAD');
   if (metodi.has('POST')) ordinati.push('POST');
+  if (metodi.has('PATCH')) ordinati.push('PATCH');
+  if (metodi.has('DELETE')) ordinati.push('DELETE');
   return ordinati;
 }
 
@@ -1257,7 +1271,7 @@ export function leggiCookie(req, nome) {
 }
 
 export function createHttpApp({
-  staticHandler, sessionRegistry = null, listaTaskDisponibili = () => [],
+  staticHandler, sessionRegistry = null, contextService = null, listaTaskDisponibili = () => [],
   elencaCartelleProgetto = () => [], automationStore = null, diagnosiFn = null,
   // ⭐ 04/9, R-02 — stato del primo avvio (src/setup-stato.mjs): quali passi dell'intro sono già fatti, letti dalla realtà, mai un segreto.
   setupStatoFn = null,
@@ -1342,9 +1356,10 @@ export function createHttpApp({
       res.setHeader('Vary', 'Origin');
     }
     if (method === 'OPTIONS') {
+      const contextPreflight = /^\/api\/v1\/sessions\/[^/]+\/context(?:\/|$)/u.test(req.url ?? '');
       res.writeHead(204, {
-        'Access-Control-Allow-Methods': 'GET, HEAD, POST',
-        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': contextPreflight ? 'GET, HEAD, POST, PATCH, DELETE' : 'GET, HEAD, POST',
+        'Access-Control-Allow-Headers': contextPreflight ? 'Content-Type, Idempotency-Key' : 'Content-Type',
         'Access-Control-Max-Age': '600',
       });
       res.end();
@@ -1393,6 +1408,38 @@ export function createHttpApp({
         sendJson(res, 401, errorEnvelope('AUTH_REQUIRED', clock), method);
         return;
       }
+    }
+
+    const contextMatch = /^\/api\/v1\/sessions\/([^/]+)\/context(\/.*)?$/u.exec(url.pathname);
+    if (contextMatch) {
+      const allowed = metodiAmmessiPerRotta(url.pathname);
+      if (!allowed) { sendJson(res, 404, { error: { code: 'CTX_ROUTE_NOT_FOUND', message: 'Operazione del contesto non trovata.' } }, method); return; }
+      if (!allowed.includes(method)) { sendJson(res, 405, { error: { code: 'METHOD_NOT_ALLOWED', message: 'Metodo non consentito.' } }, method, { Allow: allowed.join(', ') }); return; }
+      if (!contextService) { sendJson(res, 503, { error: { code: 'CTX_NOT_ENABLED', message: 'Il motore del contesto non è attivo in questa istanza.' } }, method); return; }
+      try {
+        requireNoQuery(url);
+        const sessionId = decodeURIComponent(contextMatch[1]);
+        const segments = (contextMatch[2] ?? '/').split('/').map(segment => decodeURIComponent(segment));
+        if (segments.slice(1).some(segment => segment.includes('/') || segment.includes('\\') || segment === '..' || segment === '.')) throw Object.assign(new Error('Percorso del contesto non valido.'), { code: 'CTX_INVALID_INPUT' });
+        const path = segments.join('/');
+        const body = ['GET', 'HEAD'].includes(method) ? undefined : await leggiCorpoJson(req);
+        const headerKey = req.headers['idempotency-key'];
+        if (headerKey && body) {
+          if (body.idempotencyKey && body.idempotencyKey !== headerKey) throw Object.assign(new Error('Identità della richiesta discordante.'), { code: 'CTX_INVALID_INPUT' });
+          body.idempotencyKey = headerKey;
+        }
+        const result = await contextService.request({ sessionId, method: method === 'HEAD' ? 'GET' : method, path, body });
+        if (!res.destroyed) sendJson(res, 200, result, method);
+      } catch (error) {
+        if (error?.code?.startsWith('CTX_')) {
+          const status = /NOT_FOUND$/u.test(error.code) ? 404 : /INVALID/u.test(error.code) ? 400 : /NOT_ENABLED|CLOSED|FAILED$/u.test(error.code) ? 503 : 409;
+          sendJson(res, status, { error: { code: error.code, message: error.message } }, method);
+        } else {
+          const normalized = normalizeError(error);
+          sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+        }
+      }
+      return;
     }
 
     const nativeModelsMatch = url.pathname.match(/^\/api\/v1\/providers\/(openai|anthropic|gemini)\/models$/);
