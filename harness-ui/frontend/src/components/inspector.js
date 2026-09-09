@@ -184,6 +184,22 @@ export function disegnaAgenti(d, contenitore, agenti) {
       kv.append(el(d, 'span', 'talos-kv__k', k), el(d, 'span', 'talos-kv__v talos-mono', v));
       card.append(kv);
     }
+    /*
+     * ⛔ D3 — due deleghe che hanno scritto lo STESSO file. Finora succedeva in silenzio: l'ultima
+     *   che salva vince e il lavoro dell'altra sparisce, senza un errore da nessuna parte, e tutte e
+     *   due dicono «fatto». Il server ora se ne accorge mentre passa l'evento; qui si dice.
+     * ⛔ Si nomina il FILE, non un conteggio: «attenzione, 2 collisioni» non è azionabile, il nome
+     *   del file sì — è quello che chi legge deve andare a riaprire.
+     */
+    const collisioni = Array.isArray(a.collisioni) ? a.collisioni : [];
+    if (collisioni.length) {
+      const nota = el(d, 'p', 'talos-inspector__hint talos-inspector__hint--danger');
+      const file = [...new Set(collisioni.map((c) => c.percorso))];
+      nota.textContent = file.length === 1
+        ? `Anche un'altra delega ha scritto ${file[0]}: l'ultima scrittura ha coperto la precedente. Riaprilo prima di fidarti.`
+        : `Anche altre deleghe hanno scritto questi file: ${file.join(', ')}. L'ultima scrittura ha coperto le precedenti.`;
+      card.append(nota);
+    }
     contenitore.appendChild(card);
   }
   return lista.length;

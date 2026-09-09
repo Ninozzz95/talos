@@ -634,3 +634,62 @@ specificità, quindi cambiare il mockup non cambiava niente a schermo.
   in corso · ancora pochi secondi (stima)», e nessun numero prima del primo segmento;
 - **un errore del contesto non è colpa di chi scrive**: badge, titolo e tono per famiglia, e il
   `code` dell'errore non viene più appiattito a `internal-error` da `agent-service.mjs`.
+
+---
+
+## §10 — 10/09/2026: D3, come lo risolvono i tre — letto nel loro CODICE
+
+Owner 09/09: «approvo A adesso, C più avanti **MA DEVE ESSERE RICORDATO**», e «guarda come fanno
+codex claude e hermes proprio a livello di codice e documentazioni». Cloni a commit fissato in
+`%LOCALAPPDATA%\Temp\talos-competitor`, letti il 10/09/2026.
+
+### Il quadro, in una riga per ciascuno
+| | lucchetto per FILE | isolamento | tetto concorrenza | attrezzo di modifica |
+|---|---|---|---|---|
+| **Hermes v0.21** | **Sì**, per percorso, fra subagent | worktree **opt-in**, default `false` | — | `patch` (old/new) + `write_file` |
+| **Claude Code** | **No** (cercato: zero) | `isolation:"worktree"`, guard su git/Bash | 20 concorrenti, profondità 3-5 | `Edit` ancorato al testo |
+| **Codex** | **No** (cercato: zero) | nessun worktree per agente | 4 agenti per sessione | `apply_patch` freeform (Lark) |
+
+### Hermes — è l'unico che fa la via A, e la fa al momento della SCRITTURA
+`tools/file_state.py`, docstring verbatim: «Cross-agent file state coordination. Prevents mangled
+edits when concurrent subagents (same process, same filesystem) touch the same file… subagent B
+writes a file that subagent A already read, so A's next write would overwrite B's changes with stale
+content.» — un `threading.Lock` **per percorso** attorno al read→modify→write; i lock si prendono in
+ordine deterministico per non incastrarsi sulle patch multi-file; uno scheduler serializza i tool di
+scrittura con percorsi sovrapposti; e alla fine della delega il padre riceve
+«[NOTE: subagent modified files the parent previously read — re-read before editing: …]».
+⛔ Il controllo di «file cambiato dopo la lettura» esiste ma **non blocca**: finisce in `_warning`.
+⛔ E il lock è **intra-processo**: due Hermes distinti sulla stessa cartella non si vedono.
+
+### Claude Code — nessun lucchetto: la difesa è SPAZIALE, più l'ancoraggio del testo
+Cercato `file lock`, `same file`, `concurrent write`, `lease`, `mutex`: zero risultati pertinenti.
+Ogni sotto-agente isolato ha un worktree e un branch suoi, e un guard gli impedisce di raggiungere il
+checkout condiviso — anche via `git -C`, `--git-dir`, `GIT_DIR`, `GIT_WORK_TREE`. Le collisioni si
+spostano al merge, dove si vedono. Ciò che protegge le scritture è `Edit`: `old_string` deve
+combaciare in modo **univoco**. ⛔ Il rifiuto per «file modificato dopo la lettura» è stato tolto
+apposta (CHANGELOG: «Fixed the Edit tool failing on files modified after reading when the target text
+still matches uniquely»): l'unicità del testo è considerata garanzia sufficiente.
+
+### Codex — il più esposto dei tre
+`apply_patch` è un tool **freeform** con grammatica Lark (`*** Begin Patch`, `@@` come ancora testuale
+senza numeri di riga). Rifiuta se il contesto non si trova. ⛔ **Non ha nessun controllo di
+ambiguità**: `seek_sequence` restituisce la **prima** occorrenza e si ferma — cercato `ambiguous`,
+`multiple matches`, `occurrences`: zero. Fuzzy a quattro livelli (esatto → `trim_end` → `trim` →
+normalizzazione di trattini, virgolette e spazi Unicode). Nessuna verifica di freschezza
+(`WriteFileOptions` ha un solo campo, `follow_symlinks`). Il solo lock è un `RwLock` **per turno**:
+`apply_patch` non dichiara `supports_parallel_tool_calls`, quindi prende il write lock esclusivo.
+
+### Che cosa ne facciamo
+1. ✅ **Fatto oggi (la metà che è nostra):** il registro si accorge, mentre gli eventi passano, che due
+   figlie della stessa madre hanno scritto lo stesso percorso, e la scheda «Agenti» lo dice col nome
+   del file. Non impedisce: toglie il SILENZIO, che è il danno vero. Provato al contrario — due figlie
+   su file diversi, e una che riscrive il suo, non fanno scattare niente.
+2. ⏳ **Il lucchetto vero** va PRIMA della scrittura, e quel cancello vive nel kernel
+   (`talosHarness.mjs`), che in questo repo è una COPIA: la fonte sta nel worktree dell'owner e
+   portarla è un suo gesto (`scripts/kernel-controlla.mjs`). ⛔ Serve l'owner.
+3. ⏳ **PO-12** (attrezzo di modifica) è la seconda metà: con `scrivi` che sostituisce il file intero,
+   la seconda figlia cancella la prima per costruzione. Il nostro **+1 misurabile**: rifiutare
+   l'ambiguità **elencando le posizioni** (Hermes lo fa, Claude Code chiede l'unicità, Codex prende
+   la prima occorrenza in silenzio — è il difetto peggiore dei tre).
+4. ⏳ **Via C** (un worktree per figlia): approvata dall'owner per più avanti. Claude Code la usa come
+   difesa principale, Hermes ce l'ha opt-in. **Va riproposta, non aspettata.**

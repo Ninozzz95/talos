@@ -1067,6 +1067,11 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-inspector-card__head b{font-weight:600; font-size:13.5px; flex:1}
 .talos-inspector-card__head .i{color:var(--talos-muted); width:16px; height:16px}
 .talos-inspector__hint{color:var(--talos-muted); font-size:12.5px; padding:0 4px}
+/* ⛔ 10/09 — D3: due deleghe che hanno scritto lo stesso file. Non è un errore del giro (che è
+   riuscito): è una cosa da andare a guardare, e va distinta dai suggerimenti spenti accanto.
+   Filo a sinistra invece di una parete rossa: il testo resta leggibile, ed è il testo che conta.
+   Stessa scelta già fatta per la nota di un errore spiegato («nessun rosso addosso al testo»). */
+.talos-inspector__hint--danger{color:var(--talos-assistant-text); border-left:2px solid var(--talos-danger); padding-left:8px; margin:8px 0 0}
 .talos-inspector__hint + .talos-button{margin-top:10px}
 .talos-kv{display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:30px; border-top:1px solid var(--talos-border-subtle)}
 .talos-kv:first-of-type{border-top:0}

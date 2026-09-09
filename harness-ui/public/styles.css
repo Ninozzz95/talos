@@ -3326,6 +3326,12 @@ body.reduce-motion *::after {
   font-size: 12.5px;
   padding: 0 4px;
 }
+.talos-inspector__hint--danger {
+  color: var(--talos-assistant-text);
+  border-left: 2px solid var(--talos-danger);
+  padding-left: 8px;
+  margin: 8px 0 0;
+}
 .talos-inspector__hint + .talos-button {
   margin-top: 10px;
 }
