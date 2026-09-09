@@ -151,6 +151,20 @@ export function esisteCartella(percorso, { esiste = existsSync, stato = statSync
  * `cartellaEsisteFn` si inietta: le prove costruiscono sessioni con cartelle che sul disco non
  * esistono, e il controllo vero (quello che ferma un percorso in forma WSL) resta acceso in produzione.
  */
+/**
+ * Il COMPITO dentro il prompt che il kernel costruisce per una figlia.
+ * ⛔ `Compito:` è il marcatore del kernel dell'owner (`mobile/scripts/harness-talos`), che non è di questa
+ *   lane: se un giorno cambia, il nome torna a essere il preambolo — brutto e visibile, mai un silenzio.
+ *   Senza marcatore si restituisce la stringa intera: non si indovina dove finisce un preambolo che non c'è.
+ */
+export function compitoDaPromptDiDelega(prompt) {
+  const testo = typeof prompt === 'string' ? prompt : prompt?.consegna ?? '';
+  const marcatore = new RegExp(String.raw`(?:^|[.` + String.fromCharCode(10) + String.raw`])\s*Compito\s*:\s*`, 'u').exec(testo);
+  if (!marcatore) return testo;
+  const dopo = testo.slice(marcatore.index + marcatore[0].length).trim();
+  return dopo || testo;
+}
+
 export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsisteFn = esisteCartella }) {
   function contaFigliAttivi(sessionPadreId) {
     let n = 0;
@@ -168,6 +182,17 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
         figli.push({
           sessionId,
           task: voce.task?.consegna ?? null,
+          /*
+           * ⛔ 09/09, visto nella FOTO della scheda «Agenti» dopo il giro vero della delega (D2): le due
+           * schede si chiamavano ENTRAMBE «Sei una sessione di lavoro autonoma; non hai altro …», cioè
+           * il preambolo del kernel, che è identico per ogni figlia. La barra era già stata curata poche
+           * ore prima; qui no, perché la scheda legge QUESTA funzione e non `elenca()`. Stesso difetto,
+           * secondo consumatore — la cura non si copia, si espone il dato una volta sola.
+           * ⛔ `task` resta la consegna INTERA: il foglio «Albero sessione» la mostra per esteso, e
+           * togliere informazione a un consumatore per aggiustarne un altro è esattamente il modo di
+           * rifare il giro fra un mese. Il nome corto viaggia accanto.
+           */
+          taskCorto: voce.task?.consegnaCorta ?? (voce.task?.consegna ? compitoDaPromptDiDelega(voce.task.consegna) : null),
           conclusa: voce.conclusa,
           /*
            * ⛔ 06/9, T05-D3 un piano più sotto: senza questo campo un sotto-agente ucciso dalla
@@ -286,7 +311,16 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
          * restringere.
          */
         cartellaGiaScelta: true,
-        task: { consegna: task },
+        /*
+         * ⛔ 09/09/2026 — trovato dal giro vero sul 4174: nella barra e nella scheda «Agenti» le due figlie
+         *   si chiamavano entrambe «Sei una sessione di lavoro autonoma; non hai altro …». Il kernel non
+         *   passa il compito nudo: passa il PROMPT INTERO della figlia (825 caratteri, letti dal JSONL),
+         *   che comincia con un preambolo di sistema e mette il compito dopo «Compito:». Chi legge la barra
+         *   vedeva due righe identiche e doveva aprirle per sapere quale fosse quale.
+         * ⇒ La forma corta si costruisce QUI, dove si sa che quella stringa è il prompt di una delega:
+         *   `session-registry` non può saperlo, e il kernel dell'owner non è mio.
+         */
+        task: { consegna: task, consegnaCorta: compitoDaPromptDiDelega(task) },
         padreId: sessionPadreId,
         profonditaDelega: profonditaVoluta,
         modelloRichiesta: padre.modello ?? null,

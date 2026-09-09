@@ -51,7 +51,7 @@ import {
   WorkspaceFileError,
 } from './workspace-files.mjs';
 import { guardaWorkspace as guardaWorkspaceReale } from './workspace-watcher.mjs';
-import { analizzaEvidenzaDelega, creaSubagentOrchestrator, esisteCartella, esitoDelegaDaEventi } from './subagent-orchestrator.mjs';
+import { analizzaEvidenzaDelega, compitoDaPromptDiDelega, creaSubagentOrchestrator, esisteCartella, esitoDelegaDaEventi } from './subagent-orchestrator.mjs';
 import {
   caricaHooks as caricaHooksReale,
   eseguiHook as eseguiHookReale,
@@ -4098,7 +4098,10 @@ export function createSessionRegistry({
            *   di farlo. 80 caratteri e la prima riga: la stessa regola già usata dal ripristino per
            *   il `nome` di un compito libero.
            */
-          taskDelega: voce.padreId ? nomeCortoDaConsegna(voce.task?.consegnaCorta || voce.task?.consegna) : null,
+          /* ⛔ 09/09: anche qui, non solo nell'orchestratore. Una figlia RIPRISTINATA dal disco non ha
+             `consegnaCorta` (le sessioni nate prima di questa cura), e senza il taglio tornerebbe a
+             chiamarsi col preambolo di sistema del kernel: la storia si legge bene senza riscriverla. */
+          taskDelega: voce.padreId ? nomeCortoDaConsegna(voce.task?.consegnaCorta || compitoDaPromptDiDelega(voce.task?.consegna)) : null,
           // ⭐⭐⭐ FASE L (30/8) — true SOLO per una voce ricostruita dopo un riavvio il cui ultimo evento non era RunFinished/RunError: il processo che la eseguiva è sparito, mai un turno "ancora in corso" travestito da tale.
           interrotta: voce.interrotta ?? false,
           // ⭐⭐⭐ 02/09 — la campanella del desktop: una sessione ferma su un'approvazione è la notifica più urgente, e solo l'elenco la può dire a chi guarda un'ALTRA sessione.
