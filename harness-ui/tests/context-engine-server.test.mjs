@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
+import { createSqliteContextStore } from '../../context-engine/src/node/sqlite-store.mjs';
 
 const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
 const delay = ms => new Promise(done => setTimeout(done, ms));
@@ -51,10 +52,31 @@ test('CTX-SERVER-TRIAL-ROUNDTRIP real server imports and persists context across
   const body = { fact: { id: 'database', text: 'La decisione confermata è SQLite.' }, expectedRevision: initial.revision, idempotencyKey: 'pin-database' };
   const pinned = await fetch(`${base}/facts`, { method: 'POST', headers, body: JSON.stringify(body) });
   assert.equal(pinned.status, 200); await pinned.json();
+  // Pubblicazione fixture tramite lo store reale: nessuna inferenza e nessun
+  // endpoint di prova aggiunto al prodotto. Il server deve drenare l'outbox.
+  const store = createSqliteContextStore({ databasePath: join(directory, 'context', 'context.sqlite') });
+  let contextEvent;
+  try {
+    const snapshot = await store.readContextSnapshot({ sessionId });
+    const records = await store.readOriginals({ sessionId });
+    const createdAt = '2026-09-09T08:00:00.000Z';
+    const job = { schema: 'talos.context.job.v1', id: 'fixture-job', sessionId, idempotencyKey: 'fixture-job', requestFingerprint: 'fixture', kind: 'compact', state: 'ready', baseRevision: snapshot.revision, baseStateRevision: snapshot.stateRevision, coveredThrough: 2, model: { provider: 'openrouter', model }, createdAt, updatedAt: createdAt, completedSegments: [], progress: { completed: 1, total: 1, phase: 'ready' } };
+    await store.claimContextJob({ sessionId, job });
+    const version = { schema: 'talos.context.version.v1', id: 'fixture-version', sessionId, coveredThrough: 2, sourceIds: records.map(r => r.id), sourceHash: createHash('sha256').update(JSON.stringify(records.map(({ id, sha256 }) => ({ id, sha256 })))).digest('hex'), summary: { schema: 'talos.context.summary.v1', text: 'Decisione SQLite.', goal: 'Riprendere', decisions: ['SQLite'], constraints: [], completed: [], pending: [], resources: [], sources: [{ recordId: records[0].id, quote: 'SQLite' }] }, activeMessages: [{ role: 'user', content: 'Decisione SQLite.' }], model: job.model, measurement: { schema: 'talos.context.tokens.v1', inputTokens: 10, windowTokens: 16384, responseReserve: 2048, method: 'heuristic', exact: false, requestHash: 'fixture', provider: 'openrouter', model }, createdAt };
+    version.measurement.requestHash = createHash('sha256').update('fixture-request').digest('hex');
+    await store.commitContextVersion({ sessionId, expectedRevision: snapshot.revision, expectedStateRevision: snapshot.stateRevision, jobId: job.id, version });
+    [contextEvent] = await store.readContextOutbox({ sessionId });
+    const delivered = await fetch(base, { headers }); assert.equal(delivered.status, 200); await delivered.json();
+    const log = (await readFile(join(directory, `${sessionId}.jsonl`), 'utf8')).trim().split('\n').map(JSON.parse);
+    assert.equal(log.filter(record => record.type === 'CUSTOM' && record.value?.id === contextEvent.id).length, 1);
+    assert.deepEqual(await store.readContextOutbox({ sessionId }), []);
+  } finally { await store.close(); }
   await stop(); const resumed = await start(); assert.equal(resumed.status, 200);
   const state = await resumed.json(); assert.equal(state.facts[0].text, body.fact.text);
   const replay = await fetch(`${base}/facts`, { method: 'POST', headers, body: JSON.stringify(body) });
   assert.equal(replay.status, 200); await replay.json();
   const exported = await fetch(`${base}/export`, { headers }); const archive = await exported.json();
   assert.deepEqual(archive.records.map(record => record.message), messages);
+  const afterRestart = (await readFile(join(directory, `${sessionId}.jsonl`), 'utf8')).trim().split('\n').map(JSON.parse);
+  assert.equal(afterRestart.filter(record => record.type === 'CUSTOM' && record.value?.id === contextEvent.id).length, 1);
 });

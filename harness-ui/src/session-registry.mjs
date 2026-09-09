@@ -31,7 +31,7 @@ import {
   eseguiComandoDiretto as eseguiComandoDirettoReale,
 } from './agent-service.mjs';
 import {
-  approvalRequested, approvalResolved, hookInvoked, queuedMessageDelivered, workspaceChanged,
+  approvalRequested, approvalResolved, hookInvoked, queuedMessageDelivered, workspaceChanged, contextEngineEvent,
   runRedirectApplied, runRedirectCancelled, runRedirectFailed, runRedirectRequested,
   runStarted, runFinished, runError, textMessageStart, textMessageContent, textMessageEnd,
   reasoningMessageStart, reasoningMessageContent, reasoningMessageEnd, toolCallStart, toolCallArgs,
@@ -1269,6 +1269,7 @@ export function createSessionRegistry({
 } = {}) {
   const preparaTask = preparaEsecuzioneFn ?? ((taskId) => preparaEsecuzioneReale(taskId, taskCatalogProvider));
   const sessioni = new Map();
+  const contextDeliveries = new WeakMap();
   let ultimoRipristino = { ripristinate: 0, totali: 0 };
   let sessioniCorrotte = [];
   let sessioniScartate = []; // ⭐ 04/9, W0-01 — [{ sessionId, motivo, dettaglio? }]
@@ -1556,7 +1557,7 @@ export function createSessionRegistry({
     }
   }
 
-  function broadcast(voce, evento) {
+  function broadcast(voce, evento, { durable = false } = {}) {
     /*
      * ⛔⛔⛔ 02/09 — review complessiva. WorkspaceChanged è STATO del
      * filesystem, non storia della sessione: la sessione e572474a (workspace
@@ -1592,7 +1593,12 @@ export function createSessionRegistry({
      * che è già interamente in memoria: un numero per evento, non un oggetto.
      */
     if (!effimero) (voce.istantiEvento ??= new Map()).set(evento._sequenza, clock().getTime());
-    for (const ascoltatore of voce.ascoltatori) ascoltatore(evento);
+    for (const ascoltatore of voce.ascoltatori) {
+      if (!durable) ascoltatore(evento);
+      else {
+        try { ascoltatore(evento); } catch { /* La riconnessione rilegge l'evento persistito. */ }
+      }
+    }
     if (evento.type === 'RunFinished' || evento.type === 'RunError') {
       voce.conclusa = true;
       rilasciaWatcherSessioneSeInattiva(voce);
@@ -1612,6 +1618,7 @@ export function createSessionRegistry({
      * guard esplicito costa una riga.
      */
     if (!effimero && cartellaStore && voce.sessionId) {
+      if (durable) return registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento, durable: true });
       registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento })
         .catch((errore) => { console.error(`[session-store] scrittura fallita per ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore); });
     }
@@ -2491,6 +2498,32 @@ export function createSessionRegistry({
   }
 
   return Object.freeze({
+    async pubblicaEventoContesto({ sessionId, event }) {
+      const voce = sessioni.get(sessionId);
+      if (!voce || !cartellaStore) throw Object.assign(new Error('Registro persistente della conversazione non disponibile.'), { code: 'CTX_SESSION_NOT_FOUND' });
+      const wire = contextEngineEvent(event);
+      if (wire.value.sessionId !== sessionId) throw Object.assign(new Error('Evento di un altra conversazione.'), { code: 'CTX_SESSION_MISMATCH' });
+      const existing = voce.eventi.find(item => item.type === 'CUSTOM' && item.name === 'talos.context' && item.value?.id === event.id);
+      if (existing && JSON.stringify(existing.value) !== JSON.stringify(wire.value)) throw Object.assign(new Error('Identita evento gia usata con un contenuto diverso.'), { code: 'CTX_EVENT_CONFLICT' });
+      let deliveries = contextDeliveries.get(voce);
+      if (!deliveries) { deliveries = new Map(); contextDeliveries.set(voce, deliveries); }
+      let receipt = deliveries.get(event.id);
+      if (receipt && JSON.stringify(receipt.wire.value) !== JSON.stringify(wire.value)) throw Object.assign(new Error('Identita evento gia in consegna con un contenuto diverso.'), { code: 'CTX_EVENT_CONFLICT' });
+      // Un evento ricostruito dal registro e gia persistito. Le ricevute in
+      // memoria distinguono invece il tentativo corrente da uno fallito.
+      if (existing && !receipt) return structuredClone(existing);
+      if (receipt?.committed) return structuredClone(receipt.wire);
+      if (!receipt) { receipt = { wire, committed: false, pending: null }; deliveries.set(event.id, receipt); }
+      if (!receipt.pending) {
+        const current = receipt;
+        current.pending = Promise.resolve().then(() => existing
+          ? registraRigaFn({ cartellaStore, sessionId, record: current.wire, durable: true })
+          : broadcast(voce, current.wire, { durable: true }))
+          .then(() => { current.committed = true; return current.wire; })
+          .finally(() => { current.pending = null; });
+      }
+      return structuredClone(await receipt.pending);
+    },
     /** Backend-only model identity; no credentials or mutable session object. */
     leggiSessioneContesto(sessionId) {
       const voce = sessioni.get(sessionId);
@@ -2550,7 +2583,15 @@ export function createSessionRegistry({
         if (schemaFile > SCHEMA_SESSIONE) { scartate.push({ sessionId, motivo: 'schema-futuro', dettaglio: `schema ${schemaFile}, questo TALOS legge fino a ${SCHEMA_SESSIONE}` }); continue; }
         // ⛔ `type` (AG-UI, PascalCase) contro `tipo` (i record di questo file, italiano): due nomi di campo DIVERSI apposta, mai un'ambiguità nel distinguerli nello stesso file.
         // ⛔ 02/09 — i file scritti PRIMA di oggi contengono WorkspaceChanged (vedi broadcast()): stato del filesystem, non storia — si scartano al ripristino, così anche i log vecchi tornano leggeri senza riscriverli.
-        const eventiFisici = record.filter((r) => typeof r.type === 'string' && r.type !== 'WorkspaceChanged');
+        const contextReplay = new Set();
+        const eventiFisici = record.filter((r) => typeof r.type === 'string' && r.type !== 'WorkspaceChanged').filter(evento => {
+          if (evento.type !== 'CUSTOM' || evento.name !== 'talos.context' || !evento.value?.id) return true;
+          // Append riuscito ma ack interrotto: il log puo contenere lo stesso
+          // evento due volte. Solo le copie identiche sono deduplicate.
+          const identity = JSON.stringify(evento.value);
+          if (contextReplay.has(identity)) return false;
+          contextReplay.add(identity); return true;
+        });
         const eventi = eventiFisici.every((evento) => Number.isSafeInteger(evento._sequenza))
           ? [...eventiFisici].sort((a, b) => a._sequenza - b._sequenza)
           : eventiFisici;

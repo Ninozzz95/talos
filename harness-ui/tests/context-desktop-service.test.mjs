@@ -13,6 +13,28 @@ async function fixture(t) {
   return { store, engine, service };
 }
 const request = (service, method, path, body) => service.request({ sessionId: 'chat', method, path, body });
+
+test('CTX-OUTBOX-SINGLE-FLIGHT drains all pages once and acknowledges only successful delivery', { timeout: 2000 }, async () => {
+  const pending = [{ id: 'one' }, { id: 'two' }, { id: 'three' }];
+  const delivered = []; const releases = []; let failOnce = true;
+  const store = { readContextSnapshot: async () => ({ sessionId: 'chat' }), readUsage: async () => [],
+    readContextOutbox: async () => pending.slice(0, 1), ackContextEvent: async ({ eventId }) => { assert.equal(pending[0].id, eventId); pending.shift(); } };
+  const service = createDesktopContextService({ store, engine: {}, readSession: () => ({}), isSessionEnabled: () => true, resolveSessionModel: () => ({}), onEvent: async ({ event }) => {
+    delivered.push(event.id);
+    if (failOnce) { await new Promise(resolve => { releases.push(resolve); }); throw new Error('not persisted'); }
+  } });
+  const first = request(service, 'GET', '/');
+  const second = request(service, 'GET', '/');
+  const rejected = Promise.all([assert.rejects(first, /not persisted/), assert.rejects(second, /not persisted/)]);
+  await new Promise(resolve => setImmediate(resolve));
+  const during = [...delivered]; const waiting = pending.length;
+  failOnce = false; for (const release of releases) release(); await rejected;
+  assert.deepEqual(during, ['one']); assert.equal(waiting, 3);
+  await request(service, 'GET', '/');
+  assert.deepEqual(delivered, ['one', 'one', 'two', 'three']);
+  assert.deepEqual(pending, []);
+  await service.close();
+});
 test('CTX-DESKTOP-ISOLATION unknown session cannot initialize archive or access originals', async t => {
   const { service, store } = await fixture(t);
   await assert.rejects(service.request({ sessionId: 'unknown', method: 'GET', path: '/' }), { code: 'CTX_SESSION_NOT_FOUND' });
