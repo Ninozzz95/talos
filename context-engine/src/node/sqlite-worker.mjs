@@ -45,10 +45,15 @@ function json(value, ancestors = new Set()) {
   for (const entry of Object.values(value)) json(entry, ancestors);
   ancestors.delete(value);
 }
+let transactionDepth = 0;
 function tx(fn) {
-  db.exec('BEGIN IMMEDIATE');
-  try { const result = fn(); db.exec('COMMIT'); return result; }
-  catch (error) { db.exec('ROLLBACK'); throw error; }
+  const depth = transactionDepth++;
+  const name = `context_nested_${depth}`;
+  try {
+    db.exec(depth ? `SAVEPOINT ${name}` : 'BEGIN IMMEDIATE');
+    try { const result = fn(); db.exec(depth ? `RELEASE ${name}` : 'COMMIT'); return result; }
+    catch (error) { db.exec(depth ? `ROLLBACK TO ${name}; RELEASE ${name}` : 'ROLLBACK'); throw error; }
+  } finally { transactionDepth--; }
 }
 function fault(point) {
   if (faultPoint === `crash-${point}`) process.exit(91);
@@ -105,12 +110,14 @@ function archive(sessionId) {
     schema: 'talos.context.archive.v1', session: snap, records: originals(sessionId),
     versions: methods.listContextVersions({ sessionId }), facts: snap.facts, jobs: snap.jobs,
     usage: methods.readUsage({ sessionId }),
+    mutations: all('SELECT idempotency_key AS idempotencyKey, request_fingerprint AS requestFingerprint, result_json FROM context_mutations WHERE session_id=? ORDER BY idempotency_key', sessionId).map(({ result_json, ...entry }) => ({ ...entry, result: JSON.parse(result_json) })),
     blobs: all('SELECT a.id,a.sha256,a.mime_type,b.bytes FROM record_assets a JOIN content_blobs b ON b.sha256=a.sha256 WHERE a.session_id=? ORDER BY a.id', sessionId).map(row => ({ id: row.id, sha256: row.sha256, mimeType: row.mime_type, base64: Buffer.from(row.bytes).toString('base64') })),
   };
   return { ...payload, manifest: { schema: 'talos.context.manifest.v1', algorithm: 'sha256', payloadSha256: hash(JSON.stringify(payload)) } };
 }
 function comparableArchive(value) {
   const { manifest, ...payload } = value;
+  payload.mutations = [...(payload.mutations ?? [])].sort((a, b) => a.idempotencyKey.localeCompare(b.idempotencyKey));
   const byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   return {
     ...payload,
@@ -366,6 +373,14 @@ const methods = {
     id(sessionId, 'sessionId');
     return all('SELECT operation_id,job_id,usage_json FROM usage_records WHERE session_id=? ORDER BY ordinal', sessionId).map(row => ({ sessionId, operationId: row.operation_id, jobId: row.job_id, usage: JSON.parse(row.usage_json) }));
   },
+  readContextMutation({ sessionId, idempotencyKey, requestFingerprint }) {
+    id(sessionId); id(idempotencyKey);
+    if (typeof requestFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(requestFingerprint)) fail('Invalid request fingerprint');
+    const prior = get('SELECT request_fingerprint,result_json FROM context_mutations WHERE session_id=? AND idempotency_key=?', sessionId, idempotencyKey);
+    if (!prior) return null;
+    if (prior.request_fingerprint !== requestFingerprint) fail('Idempotency key identifies a different request', 'CTX_IDEMPOTENCY_CONFLICT');
+    return { result: JSON.parse(prior.result_json) };
+  },
   putBlob({ sessionId, id: blobId, bytes, mimeType, sha256 }) {
     id(blobId);
     if (!(bytes instanceof Uint8Array) || typeof mimeType !== 'string' || !mimeType || mimeType.length > 256) fail('Invalid blob bytes or MIME');
@@ -447,6 +462,7 @@ const methods = {
       for (const fact of verified.facts) run('INSERT INTO protected_facts(session_id,id,fact_json) VALUES(?,?,?)', sessionId, fact.id, JSON.stringify(fact));
       for (const job of verified.jobs) run('INSERT INTO compaction_jobs(session_id,id,idempotency_key,state,job_json) VALUES(?,?,?,?,?)', sessionId, job.id, job.idempotencyKey, job.state, JSON.stringify(job));
       for (const item of verified.usage) run('INSERT INTO usage_records(session_id,operation_id,job_id,usage_json) VALUES(?,?,?,?)', sessionId, item.operationId, item.jobId ?? null, JSON.stringify(item.usage));
+      for (const item of verified.mutations ?? []) run('INSERT INTO context_mutations(session_id,idempotency_key,request_fingerprint,result_json) VALUES(?,?,?,?)', sessionId, item.idempotencyKey, item.requestFingerprint, JSON.stringify(item.result));
       return snapshot(sessionId);
     });
   },
@@ -472,11 +488,21 @@ const methods = {
 };
 
 let queue = Promise.resolve();
+const idempotentMethods = new Set(['updateSessionSettings', 'upsertProtectedFact', 'removeProtectedFact', 'restoreContextVersion', 'saveJobProgress']);
 parentPort.on('message', request => {
   queue = queue.then(async () => {
     try {
       if (!object(request) || !Object.hasOwn(methods, request.method) || !object(request.args)) fail('Unknown context worker operation');
-      const result = await methods[request.method](request.args);
+      const result = idempotentMethods.has(request.method) && request.args.idempotencyKey !== undefined
+        ? tx(() => {
+          const prior = methods.readContextMutation(request.args);
+          if (prior) return prior.result;
+          const output = methods[request.method](request.args);
+          json(output);
+          run('INSERT INTO context_mutations(session_id,idempotency_key,request_fingerprint,result_json) VALUES(?,?,?,?)', request.args.sessionId, request.args.idempotencyKey, request.args.requestFingerprint, JSON.stringify(output));
+          return output;
+        })
+        : await methods[request.method](request.args);
       parentPort.postMessage({ id: request.id, result });
       if (request.method === 'close') parentPort.close();
     } catch (error) {

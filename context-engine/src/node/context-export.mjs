@@ -81,7 +81,7 @@ export function verifyContextArchive(archive) {
   try {
     jsonData(archive);
     if (!object(archive) || archive.schema !== 'talos.context.archive.v1') fail('Unsupported context archive');
-    const keys = ['schema', 'session', 'records', 'versions', 'facts', 'jobs', 'usage', 'blobs', 'manifest'];
+    const keys = ['schema', 'session', 'records', 'versions', 'facts', 'jobs', 'usage', 'blobs', 'manifest', ...(Object.hasOwn(archive, 'mutations') ? ['mutations'] : [])];
     if (Object.keys(archive).length !== keys.length || keys.some(key => !Object.hasOwn(archive, key))) fail('Unexpected archive fields');
     const { manifest, ...payload } = archive;
     if (!object(manifest) || manifest.schema !== 'talos.context.manifest.v1' || manifest.algorithm !== 'sha256' || !hash(manifest.payloadSha256) || manifest.payloadSha256 !== digest(JSON.stringify(payload))) fail('Archive manifest mismatch');
@@ -139,6 +139,13 @@ export function verifyContextArchive(archive) {
         if (['inputTokens', 'outputTokens', 'totalTokens', 'cachedTokens'].includes(key) && !integer(value)) fail('Invalid usage token count');
         if (key === 'cost' && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) fail('Invalid usage cost');
         if (['currency', 'requestId'].includes(key) && typeof value !== 'string') fail('Invalid usage metadata');
+      }
+    }
+    if (archive.mutations !== undefined) {
+      if (!Array.isArray(archive.mutations)) fail('Invalid mutation receipts');
+      unique(archive.mutations, 'idempotencyKey');
+      for (const receipt of archive.mutations) {
+        if (!hash(receipt.requestFingerprint) || !object(receipt.result) || (receipt.result.sessionId !== undefined && receipt.result.sessionId !== session.sessionId)) fail('Invalid mutation receipt ownership');
       }
     }
     return JSON.parse(JSON.stringify(archive));

@@ -60,7 +60,7 @@ export function createSqliteContextStore({ databasePath, vectorExtension = false
     'updateSessionSettings', 'listContextVersions', 'commitContextVersion',
     'restoreContextVersion', 'claimContextJob', 'saveJobProgress', 'readContextJob',
     'upsertProtectedFact', 'removeProtectedFact', 'readContextOutbox', 'ackContextEvent',
-    'recordUsage', 'readUsage', 'putBlob', 'readBlob', 'replaceSearchChunks',
+    'recordUsage', 'readUsage', 'readContextMutation', 'putBlob', 'readBlob', 'replaceSearchChunks',
     'searchLexical', 'searchVector', 'exportSession', 'importSession', 'backup', 'health',
   ]) store[method] = args => request(method, args);
   store.close = () => {

@@ -216,3 +216,32 @@ test('CTX-CANCEL-DURABLE-MERGE cancellation preserves concurrently committed job
   assert.equal(cancelled.state, 'cancelled');
   assert.deepEqual(cancelled.progress, newer.progress);
 });
+
+test('CTX-MUTATION-REPLAY durable retry preserves one revision and rejects changed payload', async t => {
+  const { store, databasePath } = await fixture(t);
+  const args = { sessionId: 'a', settings: { ...settings, auto: false }, expectedRevision: 0, idempotencyKey: 'request1', requestFingerprint: hash('request1') };
+  const first = await store.updateSessionSettings(args);
+  assert.equal(first.revision, 1);
+  assert.deepEqual(await store.updateSessionSettings(args), first);
+  const archive = await store.exportSession({ sessionId: 'a' });
+  assert.equal(archive.mutations.length, 1);
+  const imported = createSqliteContextStore({ databasePath: ':memory:' });
+  try {
+    await imported.importSession({ archive });
+    assert.deepEqual(await imported.updateSessionSettings(args), first);
+  } finally { await imported.close(); }
+  await assert.rejects(store.updateSessionSettings({ ...args, requestFingerprint: hash('changed') }), { code: 'CTX_IDEMPOTENCY_CONFLICT' });
+  await store.close();
+  const reopened = createSqliteContextStore({ databasePath });
+  try {
+    assert.deepEqual(await reopened.updateSessionSettings(args), first);
+    assert.deepEqual(await reopened.readContextMutation({ sessionId: 'a', idempotencyKey: 'request1', requestFingerprint: hash('request1') }), { result: first });
+  } finally { await reopened.close(); }
+});
+
+test('CTX-MUTATION-ROLLBACK failed mutation never leaves a successful receipt', async t => {
+  const { store } = await fixture(t);
+  const args = { sessionId: 'a', settings: { ...settings, auto: false }, expectedRevision: 10, idempotencyKey: 'request1', requestFingerprint: hash('request1') };
+  await assert.rejects(store.updateSessionSettings(args), { code: 'CTX_STALE_REVISION' });
+  assert.equal(await store.readContextMutation(args), null);
+});

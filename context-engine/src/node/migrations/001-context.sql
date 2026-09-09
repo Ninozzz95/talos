@@ -107,4 +107,11 @@ CREATE TABLE IF NOT EXISTS usage_records (
   usage_json TEXT NOT NULL CHECK(json_valid(usage_json)),
   UNIQUE(session_id, operation_id)
 ) STRICT;
+CREATE TABLE IF NOT EXISTS context_mutations (
+  session_id TEXT NOT NULL REFERENCES context_sessions(session_id),
+  idempotency_key TEXT NOT NULL,
+  request_fingerprint TEXT NOT NULL,
+  result_json TEXT NOT NULL CHECK(json_valid(result_json)),
+  PRIMARY KEY(session_id,idempotency_key)
+) STRICT;
 PRAGMA user_version = 1;
