@@ -1,5 +1,7 @@
 # Risultati TCEC — 2026-09-08
 
+2026-09-09T09:46:18+02:00: package 59/59 fresco. Gruppo server/config/runtime/counter/integration/owner 84/84 verde. Suite ampliata includendo kernel, native-provider, model-destination, context-provider, context-routes, desktop-service e scheduler: exit 0. Controllo server su processo Node reale e due avvii, SQLite reale; inferenza assente. Nuovi RED: plugin OpenRouter lasciato attivo, export helper contatore assente, reasoning sessione assente, directory trial bianca accettata; tutti GREEN dopo correzione. Primo RED plugin era invece fixture senza endpoint, corretta prima di riprodurre il difetto. Nessuna qualifica prestazionale o prova visuale nuova.
+
 Ultima verifica 2026-09-09: package 59/59; scheduler 5/5; composizione runtime con SQLite e riavvio reale 5/5; kernel completo aggiornato 558 test e insieme interessato integration/provider/counter exit 0. Priorita/preemption sono provate con operazioni controllate, non con GGUF. Il primo cleanup della fixture Windows ha dato EBUSY per ordine dei teardown: corretto, esito successivo verde senza force-exit. Nessuna nuova inferenza reale.
 
 Non qualificato. Nessuna nuova inferenza eseguita. Conservare separati i risultati del banco precedente.

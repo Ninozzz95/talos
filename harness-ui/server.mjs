@@ -31,6 +31,8 @@ import { createProviderProbe } from './src/provider-probe.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
 import { createOwnerRuntimeAdapter } from './src/runtime-owner-adapter.mjs';
+import { createDesktopContextRuntime, resolveDesktopContextProfile } from './src/context-runtime.mjs';
+import { createContextTokenCounter, buildPreparedDesktopContextRequest } from './src/context-token-counters.mjs';
 import { createChatImageStore } from './src/chat-image-attachments.mjs';
 import { avviaSessione } from './src/agent-service.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA } from './src/runtime-contract.mjs';
@@ -142,8 +144,15 @@ async function startServer() {
   }
 
   let supervisoreLocale = null;
+  let contextRuntime = null;
 
   const chatImageStore = createChatImageStore({ rootDir: fileURLToPath(new URL('.chat-images/', import.meta.url)) });
+  const readModelCapabilities = async modelId => {
+    try {
+      const { modelli } = await modelCatalog.ottieni();
+      return modelli.find(modello => modello.id === modelId) ?? null;
+    } catch { return null; }
+  };
   const ownerRuntime = createOwnerRuntimeAdapter({
     resolveImagesFn: messages => chatImageStore.resolveMessages(messages),
     modulePath: config.ownerRuntimeModule,
@@ -186,16 +195,7 @@ async function startServer() {
         return runtime.load(modelId);
       },
     },
-    modelCapabilityFn: async (modelId) => {
-      try {
-        const { modelli } = await modelCatalog.ottieni();
-        return modelli.find((modello) => modello.id === modelId) ?? null;
-      } catch {
-        // Il catalogo degradato non impedisce una richiesta: il provider
-        // conserva la validazione finale e Doctor espone già il guasto.
-        return null;
-      }
-    },
+    modelCapabilityFn: readModelCapabilities,
   });
   let taskCatalogProvider = null;
   let taskCatalogError = null;
@@ -363,6 +363,8 @@ async function startServer() {
    * CONFIG_INVALID, dichiarato al chiamante, non un rifiuto all'avvio.
    */
   const sessionRegistry = createSessionRegistry({
+    contextHooksFn: config.contextTrial ? input => contextRuntime.service.createKernelHooks(input) : undefined,
+    contextCompactFn: config.contextTrial ? input => contextRuntime.service.compact(input) : undefined,
     avviaSessioneFn: (input) => avviaSessione({
       ...input,
       talosLavoraFn: (runtimeInput) => ownerRuntime.talosLavora(runtimeInput),
@@ -422,6 +424,44 @@ async function startServer() {
    */
   const { ripristinate, totali } = await sessionRegistry.ripristina();
   if (totali > 0) console.log(`[session-store] ${ripristinate}/${totali} sessioni ripristinate da .sessions-store/`);
+  if (config.contextTrial) {
+    const localCounterBase = 'http://talos-context-runtime.invalid/v1';
+    const readLocalRuntime = async () => {
+      const before = supervisoreLocale?.status();
+      if (before?.state !== 'ready') return before;
+      const response = await supervisoreLocale.request('/props', { signal: AbortSignal.timeout(5000) });
+      if (!response.ok) return { state: 'unavailable' };
+      const props = await response.json();
+      const after = supervisoreLocale.status();
+      if (after.modelId !== before.modelId || after.state !== 'ready') return { state: 'changed' };
+      return { state: after.state, modelId: after.modelId, windowTokens: props.default_generation_settings?.n_ctx };
+    };
+    const tokenCounter = createContextTokenCounter({
+      resolveProfile: async model => ({
+        ...(model.provider === 'local'
+          ? { baseURL: localCounterBase }
+          : { baseURL: providerStore.getRuntime(model.provider).endpoint, apiKey: providerStore.getKey(model.provider) }),
+        nativeRequestBuilder: request => buildPreparedDesktopContextRequest(request, {
+          resolveImages: messages => chatImageStore.resolveMessages(messages), readModelCapabilities,
+        }),
+      }),
+      fetchFn: (url, options) => {
+        if (String(url).startsWith(`${localCounterBase}/`)) {
+          if (!supervisoreLocale) throw Object.assign(new Error('Motore locale non disponibile.'), { code: 'CTX_RUNTIME_PROFILE_MISMATCH' });
+          return supervisoreLocale.request(new URL(url).pathname, options);
+        }
+        return fetch(url, options);
+      },
+    });
+    contextRuntime = await createDesktopContextRuntime({
+      sessionDirectory: config.cartellaStore,
+      enabledSessionIds: config.contextTrial.sessionIds,
+      readSession: sessionId => sessionRegistry.leggiSessioneContesto(sessionId),
+      resolveModelProfile: selected => resolveDesktopContextProfile({ profiles: config.contextTrial.models, ...selected, readLocalRuntime }),
+      tokenCounter,
+      callModel: request => ownerRuntime.callContextModel(request),
+    });
+  }
   const workspaceBrowser = createWorkspaceBrowser({
     rootDir: parse(process.cwd()).root,
     projectDirectories: config.cartelleProgetto,
@@ -539,6 +579,7 @@ async function startServer() {
   });
 
   const app = createHttpApp({
+    contextService: contextRuntime?.service,
     chatImageStore,
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
@@ -704,6 +745,7 @@ async function startServer() {
     await closeRuntimeResources('shutdown', {
       resources: [
         { stop: () => automationScheduler.ferma() },
+        ...(contextRuntime ? [{ close: () => contextRuntime.close() }] : []),
         ...Object.values(localRuntimes).map((runtime) => ({ close: () => typeof runtime?.unload === 'function' ? runtime.unload() : undefined })),
       ],
       logger: console,

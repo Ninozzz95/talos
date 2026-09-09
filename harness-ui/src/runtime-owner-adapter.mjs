@@ -705,6 +705,14 @@ export function createOwnerRuntimeAdapter({
        */
       const fetchInstradata = creaFetchMultiProvider(fetchResiliente, { dipendenze: destinazioneModelloDeps });
       const fetchConImmagini = async (url, init = {}) => {
+        if (input?.contextHooks && String(url).includes('/chat/completions') && typeof init.body === 'string') {
+          let body;
+          try { body = JSON.parse(init.body); } catch { /* Preserve the existing malformed-body path. */ }
+          if (typeof body?.model === 'string' && separaFonteModello(body.model).fonte === 'openrouter') {
+            const plugins = (Array.isArray(body.plugins) ? body.plugins : []).filter(plugin => plugin?.id !== 'context-compression');
+            init = { ...init, body: JSON.stringify({ ...body, plugins: [...plugins, { id: 'context-compression', enabled: false }] }) };
+          }
+        }
         if (!resolveImagesFn || !String(url).includes('/chat/completions') || typeof init.body !== 'string') return fetchInstradata(url, init);
         let body;
         try { body = JSON.parse(init.body); } catch { return fetchInstradata(url, init); }
@@ -732,7 +740,7 @@ export function createOwnerRuntimeAdapter({
       if (provider === 'openrouter' && !key) fail('CTX_TOKEN_AUTH', 'La chiave del provider selezionato non è disponibile.');
       const response = await routed(ENDPOINT_OPENROUTER, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
-        body: JSON.stringify({ model: provider === 'openrouter' ? model : `${provider}:${model}`, messages: structuredClone(messages), tools: [], max_tokens: maxOutputTokens, stream: false, ...(provider === 'openrouter' ? { transforms: [] } : {}) }),
+        body: JSON.stringify({ model: provider === 'openrouter' ? model : `${provider}:${model}`, messages: structuredClone(messages), tools: [], max_tokens: maxOutputTokens, stream: false, ...(provider === 'openrouter' ? { transforms: [], plugins: [{ id: 'context-compression', enabled: false }] } : {}) }),
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000),
       });
       if (!response.ok) {

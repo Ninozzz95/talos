@@ -38,11 +38,16 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
     return measurement;
   };
   const budgetFor = (measurement, settings) => computeContextBudget({ ...measurement, settings });
-  function compiled(snapshot, records, { summary = snapshot.activeVersion?.summary, coveredThrough = snapshot.activeVersion?.coveredThrough ?? 0, evidence = [] } = {}) {
+  function compiled(snapshot, records, { summary = snapshot.activeVersion?.summary, coveredThrough = snapshot.activeVersion?.coveredThrough ?? 0, evidence = [], targetModel } = {}) {
     const systemMessages = records.filter(r => ['system', 'developer'].includes(r.message.role)).map(r => r.message);
     const tailMessages = records.filter(r => r.sequence > coveredThrough && !['system', 'developer'].includes(r.message.role)).map(r => r.message);
-    if (!summary && !snapshot.facts.some(f => f.status !== 'removed') && !evidence.length) return structuredClone([...systemMessages, ...tailMessages]);
-    return composeActiveContext({ systemMessages, summary: summary ?? null, facts: snapshot.facts, tailMessages, evidence });
+    const messages = !summary && !snapshot.facts.some(f => f.status !== 'removed') && !evidence.length
+      ? structuredClone([...systemMessages, ...tailMessages])
+      : composeActiveContext({ systemMessages, summary: summary ?? null, facts: snapshot.facts, tailMessages, evidence });
+    if (!model.prepareContext || !targetModel) return messages;
+    const prepared = model.prepareContext({ messages, model: targetModel, reset: Boolean(summary) });
+    if (!Array.isArray(prepared?.messages)) fail('CTX_PROVIDER_CONTEXT_INVALID', 'Il modello non ha preparato un contesto valido.');
+    return prepared.messages;
   }
   async function save(job, patch) {
     const next = ContextJobV1.parse({ ...job, ...patch, updatedAt: clock() });
@@ -126,15 +131,15 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       const all = await originals(job.sessionId);
       if (selectClosedPrefix(all, { retainRecentTurns: 0 }).pendingCalls.length) fail('CTX_PENDING_TOOLS', 'Attendere i risultati degli strumenti prima della pubblicazione.');
       const summary = level[0];
-      const active = compiled(latest, all, { summary, coveredThrough: job.coveredThrough });
-      const before = await measure(compiled(latest, all), tools, sessionModel, signal);
+      const active = compiled(latest, all, { summary, coveredThrough: job.coveredThrough, targetModel: sessionModel });
+      const before = await measure(compiled(latest, all, { targetModel: sessionModel }), tools, sessionModel, signal);
       const measurement = await measure(active, tools, sessionModel, signal);
       const budget = budgetFor(measurement, latest.settings);
       if (!budget.fits || measurement.inputTokens >= before.inputTokens) fail('CTX_NO_REDUCTION', 'La sintesi non libera spazio sufficiente. La versione precedente rimane valida.');
       job = await save(job, { state: 'ready', progress: { ...job.progress, phase: 'ready' } });
       await assertCurrent(job, signal);
       const prefix = all.filter(record => record.sequence <= job.coveredThrough);
-      const version = ContextVersionV1.parse({ schema: 'talos.context.version.v1', id: idFactory(), sessionId: job.sessionId, coveredThrough: job.coveredThrough, sourceIds: prefix.map(r => r.id), sourceHash: await hash(prefix.map(({ id, sha256 }) => ({ id, sha256 }))), summary, activeMessages: compiled(latest, prefix, { summary, coveredThrough: job.coveredThrough }), model: job.model, measurement, createdAt: clock() });
+      const version = ContextVersionV1.parse({ schema: 'talos.context.version.v1', id: idFactory(), sessionId: job.sessionId, coveredThrough: job.coveredThrough, sourceIds: prefix.map(r => r.id), sourceHash: await hash(prefix.map(({ id, sha256 }) => ({ id, sha256 }))), summary, activeMessages: compiled(latest, prefix, { summary, coveredThrough: job.coveredThrough, targetModel: sessionModel }), model: job.model, measurement, createdAt: clock() });
       signal?.throwIfAborted();
       await store.commitContextVersion({ sessionId: job.sessionId, expectedRevision: latest.revision, expectedStateRevision: latest.stateRevision, jobId: job.id, version });
       return store.readContextJob({ sessionId: job.sessionId, jobId: job.id });
@@ -217,7 +222,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       let snapshot = await state(sessionId);
       const records = await originals(sessionId);
       if (messages && JSON.stringify(messages) !== JSON.stringify(records.map(r => r.message))) fail('CTX_UNARCHIVED_CONTEXT', 'Archiviare i nuovi messaggi prima di preparare la richiesta.');
-      let prepared = compiled(snapshot, records);
+      let prepared = compiled(snapshot, records, { targetModel: sessionModel });
       let measurement = await measure(prepared, tools, sessionModel, signal);
       const budget = budgetFor(measurement, snapshot.settings);
       let job;
@@ -229,7 +234,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
           const result = await api.waitForCompaction({ sessionId, jobId: job.id });
           if (result.state !== 'committed') fail(result.error?.code ?? 'CTX_COMPACTION_REQUIRED', result.error?.message ?? 'Il contesto richiede una compattazione completata.');
           snapshot = await state(sessionId);
-          prepared = compiled(snapshot, await originals(sessionId));
+          prepared = compiled(snapshot, await originals(sessionId), { targetModel: sessionModel });
           measurement = await measure(prepared, tools, sessionModel, signal);
         }
       }

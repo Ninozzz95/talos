@@ -6,6 +6,9 @@ const identity = value => value && typeof value.provider === 'string' && value.p
 export function createContextModelAdapter({ resolveModel, callModel, usagePolicy } = {}) {
   if (typeof resolveModel !== 'function' || typeof callModel !== 'function') fail('CTX_MODEL_PORT_INVALID', 'Model resolution and invocation must be injected.');
   return {
+    prepareContext({ messages, model, reset = false }) {
+      return prepareProviderContext({ messages, provider: model.provider, model: model.model, reset });
+    },
     async resolveModel({ sessionModel, settings }) {
       const selected = settings?.model?.mode === 'explicit' ? settings.model : sessionModel;
       if (!identity(selected)) fail('CTX_MODEL_INVALID', 'A session or explicit model is required.');

@@ -1,9 +1,35 @@
 import { createHash } from 'node:crypto';
 import { buildPreparedProviderRequest } from './context-provider-adapter.mjs';
+import { adattaRichiestaConDescrizioneComando, normalizzaReasoningPerModello } from './runtime-owner-adapter.mjs';
 
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
 const defaults = { openai: 'https://api.openai.com/v1', anthropic: 'https://api.anthropic.com/v1', gemini: 'https://generativelanguage.googleapis.com/v1beta' };
 const pick = (body, keys) => Object.fromEntries(keys.filter(key => body[key] !== undefined).map(key => [key, body[key]]));
+
+/** Reuse desktop transforms before public SDK serialization. Profiles for chat
+ * carry requestOptions; summary profiles deliberately omit those chat options. */
+export async function buildPreparedDesktopContextRequest({ messages, tools = [], model, signal }, { resolveImages, readModelCapabilities } = {}) {
+  signal?.throwIfAborted();
+  const chat = Object.hasOwn(model, 'requestOptions');
+  let preparedMessages = structuredClone(messages);
+  if (chat && resolveImages) preparedMessages = await resolveImages(preparedMessages);
+  signal?.throwIfAborted();
+  let preparedTools = structuredClone(tools);
+  const requestOptions = { ...(chat ? structuredClone(model.requestOptions) : {}), max_tokens: model.responseReserve, ...(chat && tools.length ? { tool_choice: 'auto' } : {}) };
+  if (chat && model.provider === 'openrouter') {
+    preparedTools = adattaRichiestaConDescrizioneComando({ tools: preparedTools }).tools;
+    const capability = await Promise.resolve(readModelCapabilities?.(model.model)).catch(() => null);
+    const reasoning = normalizzaReasoningPerModello(requestOptions.reasoning, capability);
+    if (reasoning !== undefined) requestOptions.reasoning = reasoning;
+  }
+  const compiled = await buildPreparedProviderRequest({ messages: preparedMessages, tools: preparedTools, model, signal, requestOptions });
+  if (!['openai', 'anthropic', 'gemini'].includes(model.provider) && !preparedTools.length) compiled.body.tools = [];
+  if (model.provider === 'openrouter') {
+    compiled.body.plugins = [{ id: 'context-compression', enabled: false }];
+    if (!chat) compiled.body.transforms = [];
+  }
+  return compiled;
+}
 
 export function createContextTokenCounter({ fetchFn, resolveProfile, hashFn = text => createHash('sha256').update(text).digest('hex') } = {}) {
   if (typeof resolveProfile !== 'function' || typeof fetchFn !== 'function') fail('CTX_TOKEN_PORT_INVALID', 'Profile resolution and transport must be injected.');

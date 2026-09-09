@@ -1,5 +1,15 @@
 # Consegna TCEC — F3 parziale verificata, 2026-09-09
 
+## Stato corrente — 2026-09-09T09:46:18+02:00 / 07:46:18Z
+
+Questa sezione supera le indicazioni storiche sotto sul server non cablato. Il server reale ora compone il motore soltanto con TALOS_CONTEXT_TRIAL, chat esplicite, profili fissati, directory sessioni esplicita e porta diversa da 4174. Provati import JSONL, fatto protetto, riavvio processo e ripetizione idempotente via HTTP reale. Nessuna inferenza reale TCEC, nessuna modale integrata, nessuna attivazione generale.
+
+Il contatore desktop risolve immagini e riusa le trasformazioni del trasporto; conserva reasoning corrente della chat, riserva risposta e preparazione dei contenuti opachi. OpenRouter context-compression esplicitamente disabled nei percorsi TCEC, senza cambiare la chat legacy. Finestra locale verificata sul modello caricato. Corretta anche configurazione trial con directory di soli spazi.
+
+GREEN fresco: package 59/59; gruppo config/runtime/counter/integration/owner/server 84/84. Successiva suite ampliata con kernel completo, provider nativi, rotte, servizio e scheduler exit 0. Sono prove automatiche con SQLite/processi/SDK reali e modello controllato, non benchmark di inferenza. Nessuna nuova immagine UI in questa fase.
+
+Prossimo: contabilità comune, eventi persistenti, recupero automatico/fonti/allegati, modale, banco reale e revisione finale. I crediti possono esaurirsi senza preavviso: consegna cumulativa versionata per Claude in preparazione; riprendere dai file e dal git status, non dalle sole sezioni storiche.
+
 Archivio SQLite, adapter provider, ricerca/allegati/RTK integrati nel ramo codex/talos-context-engine. Controller iniziale con sintesi segmentata, validazione, checkpoint atomico, annullamento e ripresa. Non ancora integrato nella chat, nessuna qualifica modelli.
 Verifica root: 58/58 test package; 556/556 kernel; 5/5 servizio desktop/rotte; 35/35 regressioni HTTP e rotte context. Adapter harness precedentemente verificati 58/58, invariati. SQLite e RTK reali; inferenza sintetica nei test del controller. Ricevute idempotenti conservate anche dopo riavvio/export; hook kernel conservano output integrali e chiusura delle chiamate annullate. Rotte e servizio iniettabili, non ancora cablati nel server. Root continua inline senza deleghe. Servizio 4174 invariato.
 

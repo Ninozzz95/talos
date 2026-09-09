@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createContextTokenCounter } from '../src/context-token-counters.mjs';
+import { createContextTokenCounter, buildPreparedDesktopContextRequest } from '../src/context-token-counters.mjs';
+import { createOwnerRuntimeAdapter } from '../src/runtime-owner-adapter.mjs';
 import { nativeProviderResponse } from '../src/native-provider-adapter.mjs';
 import { buildPreparedProviderRequest } from '../src/context-provider-adapter.mjs';
 
@@ -9,6 +10,33 @@ const tools = [{ type: 'function', function: { name: 'read', description: 'Read 
 const models = { openai: 'gpt-5.4-mini', anthropic: 'claude-sonnet-5', gemini: 'gemini-3.8-flash', local: 'qwen', openrouter: 'provider/model' };
 const model = provider => ({ provider, model: models[provider], windowTokens: 16384, responseReserve: 2048 });
 const select = (body, keys) => Object.fromEntries(keys.filter(k => body[k] !== undefined).map(k => [k, body[k]]));
+
+test('CTX-DESKTOP-COUNT-WIRE counts resolved images, shell schema and normalized chat reasoning', async () => {
+  const shell = [{ type: 'function', function: { name: 'shell', parameters: { type: 'object', properties: { comando: { type: 'string' } }, required: ['comando'] } } }];
+  const original = [{ role: 'user', content: [{ type: 'image_url', image_url: { url: '/api/v1/chat-images/' + 'a'.repeat(64) } }] }];
+  const resolveImages = async input => input.map(m => ({ ...m, content: [{ type: 'image_url', image_url: { url: 'data:image/png;base64,AA==' } }] }));
+  const readModelCapabilities = async () => ({ reasoning: { mandatory: true, supportedEfforts: ['low'], defaultEffort: 'low' } });
+  const selected = { ...model('openrouter'), requestOptions: { reasoning: { effort: 'none' } } };
+  let sent;
+  const adapter = createOwnerRuntimeAdapter({ modulePath: 'C:/fixture/runtime.mjs', resolveImagesFn: resolveImages, modelCapabilityFn: readModelCapabilities,
+    importFn: async () => ({ talosLavora: input => input.fetchDiRete('https://openrouter.ai/api/v1/chat/completions', { body: JSON.stringify({ model: selected.model, messages: original, tools: shell, tool_choice: 'auto', reasoning: selected.requestOptions.reasoning, max_tokens: selected.responseReserve }) }) }),
+  });
+  await adapter.talosLavora({ contextHooks: {}, fetchDiRete: async (_url, init) => { sent = JSON.parse(init.body); return Response.json({}); } });
+  const compiled = await buildPreparedDesktopContextRequest({ messages: original, tools: shell, model: selected }, { resolveImages, readModelCapabilities });
+  assert.deepEqual(compiled.body, sent);
+  assert.match(original[0].content[0].image_url.url, /^\/api/);
+  assert.ok(sent.tools[0].function.parameters.required.includes('descrizione'));
+});
+
+test('CTX-DESKTOP-SUMMARY-WIRE preserves the separate tool-free summary transport', async () => {
+  let sent;
+  const selected = model('openrouter');
+  const adapter = createOwnerRuntimeAdapter({ destinazioneModelloDeps: { leggiChiave: () => 'fixture', leggiRuntime: () => ({ endpoint: 'https://openrouter.ai/api/v1' }) } });
+  await adapter.callContextModel({ ...selected, messages, maxOutputTokens: selected.responseReserve, fetchDiRete: async (_url, init) => { sent = JSON.parse(init.body); return Response.json({ choices: [{ message: { content: 'Sintesi' }, finish_reason: 'stop' }] }); } });
+  const compiled = await buildPreparedDesktopContextRequest({ messages, model: selected }, { readModelCapabilities: async () => { throw new Error('Summary does not use chat capability transforms'); } });
+  delete sent.stream;
+  assert.deepEqual(compiled.body, sent);
+});
 
 for (const provider of ['openai', 'anthropic', 'gemini']) test(`CTX-WIRE-${provider} count payload matches the real pinned SDK outbound semantic body`, async () => {
   let generation; let counting;

@@ -8,6 +8,23 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 const history = [{ role: 'user', content: 'Riprendiamo da dove eravamo' }, { role: 'assistant', content: 'Controllo le decisioni.' }];
 const completed = { ok: true, esito: { comeFinita: 'concluso', detto: 'fatto', messaggiFinali: history } };
 
+test('CTX-OPENROUTER-NO-DOUBLE-COMPRESSION disables the documented plugin only on context-owned requests', async () => {
+  let sent;
+  const capture = async (_url, init) => { sent = JSON.parse(init.body); return Response.json({ choices: [{ message: { content: 'Sintesi' }, finish_reason: 'stop' }] }); };
+  const plugins = [{ id: 'web' }, { id: 'context-compression', enabled: true }];
+  const adapter = createOwnerRuntimeAdapter({
+    modulePath: 'C:/fixture/runtime.mjs',
+    importFn: async () => ({ talosLavora: input => input.fetchDiRete('https://openrouter.ai/api/v1/chat/completions', { body: JSON.stringify({ model: 'provider/model', messages: history, plugins }) }) }),
+    destinazioneModelloDeps: { leggiChiave: () => 'fixture-key', leggiRuntime: () => ({ endpoint: 'https://openrouter.ai/api/v1' }) },
+  });
+  await adapter.talosLavora({ fetchDiRete: capture });
+  assert.deepEqual(sent.plugins, plugins);
+  await adapter.talosLavora({ contextHooks: {}, fetchDiRete: capture });
+  assert.deepEqual(sent.plugins, [{ id: 'web' }, { id: 'context-compression', enabled: false }]);
+  await adapter.callContextModel({ provider: 'openrouter', model: 'provider/model', messages: history, maxOutputTokens: 128, fetchDiRete: capture });
+  assert.deepEqual(sent.plugins, [{ id: 'context-compression', enabled: false }]);
+});
+
 test('CTX-CONTEXT-TRANSPORT-LOCAL uses the existing supervisor without cloud fallback or tools', async () => {
   let body; let clouds = 0;
   const adapter = createOwnerRuntimeAdapter({ destinazioneModelloDeps: { leggiChiave: () => null, leggiRuntime: () => ({}), localePronto: () => true, chiamaLocale: async (path, options) => {

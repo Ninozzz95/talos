@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { accessSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -169,10 +169,10 @@ test('config.cartelleProgetto usa la workspace predefinita quando TALOS_HARNESS_
   accessSync(config.cartelleProgetto[0].percorso);
 });
 
-test('config zero-config dal server punta alla radice desktop reale', () => {
+test('CTX-CONFIG-WORKTREE config zero-config dal server punta alla radice desktop reale', () => {
   const config = loadConfig({}, new URL('../server.mjs', import.meta.url));
   assert.equal(config.cartelleProgetto.length, 1);
-  assert.match(config.cartelleProgetto[0].percorso, /AVM-harness-desktop$/i);
+  assert.equal(config.cartelleProgetto[0].percorso, resolve(fileURLToPath(new URL('../../', import.meta.url))));
 });
 
 test('config accetta un elenco di cartelle progetto VERE, separate da ";", con id stabili e nomi derivati', (t) => {
