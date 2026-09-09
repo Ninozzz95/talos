@@ -26,7 +26,7 @@ test('CTX-UI-JOB: active job wins over terminal history; no fabricated progress'
   assert.equal(result.job, job);
   assert.equal(result.canCompact, false);
   assert.equal(result.auto, false);
-  assert.match(result.jobLabel, /sintesi/i);
+  assert.equal(result.jobLabel, 'Compattazione contesto in corso');
 });
 
 test('CTX-UI-CAPABILITY: explicit server denial disables manual compaction', () => {

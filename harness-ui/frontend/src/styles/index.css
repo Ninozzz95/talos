@@ -1812,6 +1812,9 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-context__meter,.talos-context__progress{display:block;width:100%;height:6px;accent-color:var(--talos-accent);border:0;border-radius:3px;overflow:hidden}
 .talos-context__progress::-webkit-progress-bar{background:var(--talos-panel-soft)}
 .talos-context__progress::-webkit-progress-value{background:var(--talos-accent)}
+.talos-context-chat-progress{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:var(--talos-space-sm);margin-block:var(--talos-space-lg);padding:var(--talos-space-md);border:1px solid var(--talos-border);border-radius:var(--talos-radius-control);color:var(--talos-muted);font-size:var(--talos-font-size-sm)}
+.talos-context-chat-progress>progress{grid-column:1/-1}
+.talos-context-chat-progress>span{overflow-wrap:anywhere}
 .talos-context__disclosure{border-top:1px solid var(--talos-border);margin-top:var(--talos-space-md);padding-top:var(--talos-space-md)}
 .talos-context__disclosure>summary{cursor:pointer;font-weight:500;padding-block:4px}
 .talos-context__disclosure>summary:focus-visible{outline:2px solid var(--talos-accent);outline-offset:3px}
