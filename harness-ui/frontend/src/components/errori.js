@@ -22,10 +22,159 @@
  *   addestramento: si verifica il runtime caricato, non il flag di avvio (ggml-org/llama.cpp #18376).
  * - Il contesto non azzerato fra un messaggio e l'altro produce lo stesso 400 anche su prompt corti
  *   (continuedev/continue #9797): per questo il primo rimedio è compattare, non alzare la finestra.
+ *
+ * ⛔⛔⛔ 09/9 — TRE GIRI VERI con `z-ai/glm-5.3-flash`: la compattazione automatica del contesto è
+ * fallita e in chat è uscita la carta GENERICA («Il giro si è interrotto per un errore» · «Questa
+ * forma di errore non è ancora tradotta»). Il server, invece, l'errore lo diceva benissimo e in
+ * italiano — tanto che la modale «Context Manager» lo mostrava già in rosso sotto lo stato del
+ * lavoro (`context-compactor.js`, `view.job.error.message`). Chi guardava la chat capiva solo che
+ * il giro era «errore», e sembrava colpa della domanda appena scritta.
+ *
+ * Ricerca 09/09/2026, prima di scrivere:
+ * - Nous Research, Hermes Agent, `docs/micro-compaction.md` (letto 09/09/2026): quando una sintesi
+ *   fallisce «the transcript is left untouched and the failure is counted», e dopo tre fallimenti di
+ *   fila il cursore avanza invece di ritentare all'infinito. ⇒ «gli originali restano» non è una
+ *   rassicurazione di cortesia: è il fatto che descrive la macchina, e va detto per primo. ⛔ Vincolo
+ *   scoperto lì e non deducibile dal nostro codice: da Hermes un fallimento di compattazione NON
+ *   interrompe il turno; da noi sì, perché arriva solo quando il contesto non entra più.
+ * - Nielsen Norman Group, «Error-Message Guidelines» (14/05/2023) più le euristiche collegate, lette
+ *   via ctx7 il 09/09/2026: un messaggio generico come «An error occurred» «lacks context»; si
+ *   descrive il problema con precisione, si offre un rimedio, e si evitano «technical jargon,
+ *   obscure error codes, and abbreviations, reserving them only for technical diagnostic purposes».
+ *   ⇒ il codice `CTX_*` vive SOLO nel dettaglio richiuso, mai come titolo.
+ * - Nielsen Norman Group, «Hostile Patterns in Error Messages» (30/10/2022): non si usa lo stile
+ *   dell'errore per ciò che non è un errore di chi legge — «Let's assist users, not admonish them».
+ *   ⇒ la carta della compattazione ha badge, titolo e tono suoi (vedi `vestizioneErrore`), non il
+ *   rosso di «hai sbagliato tu».
+ * - Pencil & Paper, «Error Message UX, Handling & Feedback», Meganne Ohata (25/10/2024): gli errori
+ *   si dividono fra quelli che nascono DAL SISTEMA e quelli che nascono da un'incomprensione di chi
+ *   usa lo strumento; «Share details about what happened and what impact it might have had» e «Let
+ *   the user know what they can do to move ahead», senza soluzioni-uguali-per-tutti. ⇒ ogni carta
+ *   qui sotto dice anche COSA NON È SUCCESSO, e porta l'azione della sua famiglia (Context Manager),
+ *   non un «riprova» buono per qualunque cosa.
  */
+
+/*
+ * ⛔ 09/9 — le tre frasi che i tre giri veri hanno prodotto, con la loro sorgente:
+ *   · CTX_SUMMARY_RESPONSE_INVALID — «La sintesi non dichiara testo e stato finale.»
+ *       `harness-ui/src/runtime-owner-adapter.mjs`, ramo `choice.message.content` non stringa
+ *   · CTX_INVALID_SOURCE           — «Nessuna citazione corrisponde agli originali (es. «…» in …).»
+ *       `context-engine/src/summary.mjs`, quando nessuna citazione si ritrova negli originali
+ *   · CTX_TRUNCATED_SUMMARY        — «La sintesi non è stata completata.»
+ *       `context-engine/src/summary.mjs`, `finishReason` diverso da stop/end_turn
+ *
+ * ⛔⛔ Il CODICE non arriva alla chat: quando `contextHooks.prepare` lancia dentro `talosLavora`,
+ * `harness-ui/src/agent-service.mjs` scrive `code: 'internal-error'` FISSO, e la `ContextEngineError`
+ * perde il suo `.code` per strada. Perciò ogni regola riconosce dal MESSAGGIO — che è già in
+ * italiano e sopravvive — e in più dal codice, così il giorno in cui il server lo passerà (patch
+ * separata: non è questo file) qui non cambia niente.
+ */
+const COSA_CONTESTO = 'La compattazione del contesto non è riuscita, e il giro si è fermato lì.';
+
+/*
+ * ⛔ È vero, ed è la cosa che chi legge deve sapere per prima: il motore non pubblica NIENTE finché
+ * la sintesi non passa la verifica (la versione nuova si scrive solo su `committed`), quindi un
+ * fallimento lascia la conversazione esattamente com'era. Stessa scelta di Hermes, citata sopra.
+ */
+const ORIGINALI_INTATTI = 'Nessun messaggio è stato modificato: gli originali restano tutti al loro posto — non è la tua richiesta ad aver sbagliato.';
+
+const APRI_CONTEXT_MANAGER = 'Apri Context Manager: lì trovi lo stato della compattazione, le versioni del contesto e le fonti citate.';
+const COMPATTA_A_MANO = 'Da lì «Compatta ora» rifà il tentativo da capo, sugli stessi messaggi.';
+
+/** I rimedi della famiglia contesto: dove guardare, poi il consiglio del caso, poi cosa si può rifare. */
+const rimediContesto = (proprio) => [APRI_CONTEXT_MANAGER, ...(proprio ? [proprio] : []), COMPATTA_A_MANO];
+
+const CODICE_CONTESTO = /\bCTX_[A-Z0-9_]+/;
+
+/**
+ * Il grezzo della famiglia contesto: il codice tecnico NON si mostra a schermo (regola: niente nomi
+ * tecnici nella UI) ma è quello che si incolla in una segnalazione, quindi entra nel dettaglio
+ * richiuso — e non si duplica se il server l'aveva già scritto dentro il messaggio.
+ */
+function grezzoContesto(tecnico, codice) {
+  const trovato = CODICE_CONTESTO.exec(String(codice ?? ''))?.[0];
+  if (!trovato || tecnico.includes(trovato)) return tecnico;
+  return tecnico ? `[${trovato}] ${tecnico}` : `[${trovato}]`;
+}
 
 /** Il codice tecnico e il messaggio grezzo, come li manda il server. */
 const REGOLE = [
+  {
+    /*
+     * Caso 1 dei tre veri: il modello della sintesi ha risposto senza il testo del riassunto o senza
+     * dire se l'aveva finito. Non c'è niente da verificare, quindi il contesto scarta — e non è un
+     * guasto del compito che stavi chiedendo.
+     */
+    id: 'contesto-sintesi-invalida',
+    famiglia: 'contesto',
+    riconosce: (t) => /\bCTX_SUMMARY_RESPONSE_INVALID\b/.test(t) || /sintesi non dichiara testo e stato finale|risposta di sintesi non leggibile/i.test(t),
+    spiega: (t, codice) => ({
+      cosa: COSA_CONTESTO,
+      perche: `Il modello incaricato di riassumere la conversazione ha risposto in una forma che non si può verificare: manca il testo del riassunto, o manca il segnale che dice se l’ha finito. Il contesto l’ha scartato invece di pubblicarlo. ${ORIGINALI_INTATTI}`,
+      rimedi: rimediContesto('Se succede sempre con questo modello, cambia il modello della sintesi nelle impostazioni avanzate del Context Manager: alcuni modelli spendono tutto lo spazio di risposta nel ragionamento e non ne lasciano al riassunto.'),
+      tecnico: grezzoContesto(t, codice),
+    }),
+  },
+  {
+    /*
+     * Caso 2: la verifica delle citazioni. È il controllo che impedisce a un riassunto di INVENTARE —
+     * ogni fonte deve ritrovarsi alla lettera in un messaggio originale — e qui non ne è stata
+     * ritrovata nessuna. Un rifiuto motivato, non un guasto: va detto come tale.
+     */
+    id: 'contesto-citazioni',
+    famiglia: 'contesto',
+    riconosce: (t) => /\bCTX_INVALID_SOURCE\b/.test(t) || /citazione corrisponde agli originali|non riporta fonti verificabili/i.test(t),
+    spiega: (t, codice) => ({
+      cosa: COSA_CONTESTO,
+      perche: `Un riassunto viene accettato solo se cita alla lettera pezzi dei messaggi originali: è il controllo che gli impedisce di inventare. Qui nessuna delle citazioni proposte è stata ritrovata negli originali di questa conversazione, e il riassunto è stato respinto. ${ORIGINALI_INTATTI}`,
+      rimedi: rimediContesto('Se si ripete, scegli un altro modello per la sintesi nelle impostazioni avanzate del Context Manager: copiare una citazione alla lettera è la prima cosa che sbagliano i modelli più piccoli.'),
+      tecnico: grezzoContesto(t, codice),
+    }),
+  },
+  {
+    /*
+     * Caso 3: la sintesi troncata. ⛔ È l'UNICO caso in cui il motore ritenta da solo, e ritenta UNA
+     * volta sola, chiedendo un riassunto della metà (il `catch` che rilancia `once(true)` soltanto
+     * per `CTX_TRUNCATED_SUMMARY`). Quando questa carta arriva, quel ritentativo è già stato speso:
+     * prometterne un altro sarebbe una bugia.
+     */
+    id: 'contesto-sintesi-troncata',
+    famiglia: 'contesto',
+    riconosce: (t) => /\bCTX_TRUNCATED_SUMMARY\b/.test(t) || /sintesi non è stata completata|non ha lasciato spazio alla sintesi/i.test(t),
+    spiega: (t, codice) => {
+      // il numero dei token di ragionamento sta dentro l'errore quando c'è: si usa, non si butta
+      const ragionamento = Number((/(\d+)\s*token nel ragionamento/i.exec(t) || [])[1]) || null;
+      const speso = ragionamento ? ` Qui il modello ha speso ${ragionamento.toLocaleString('it-IT')} token nel ragionamento, senza lasciarne alla sintesi.` : '';
+      return {
+        cosa: COSA_CONTESTO,
+        perche: `Il riassunto si è interrotto prima della fine: lo spazio di risposta è finito prima che il modello lo chiudesse.${speso} TALOS l’ha già chiesto una seconda volta, più corto, e neanche quella è arrivata intera; altri tentativi non ne fa. ${ORIGINALI_INTATTI}`,
+        rimedi: rimediContesto('Se si ripete, scegli per la sintesi un modello con più spazio di risposta nelle impostazioni avanzate del Context Manager: la lunghezza che il riassunto può avere dipende da quello.'),
+        tecnico: grezzoContesto(t, codice),
+      };
+    },
+  },
+  {
+    /*
+     * Tutti gli altri guasti del motore del contesto. ⛔ Riconosce SOLO dal codice `CTX_*`: una frase
+     * italiana qualsiasi non diventa un guasto del contesto per il fatto di essere italiana.
+     * Il messaggio del motore è già scritto per una persona — è lo stesso che la modale mostra sotto
+     * lo stato del lavoro — quindi si riporta com'è, invece di dire «forma non ancora tradotta» su
+     * un testo che si legge benissimo.
+     */
+    id: 'contesto',
+    famiglia: 'contesto',
+    riconosce: (t) => CODICE_CONTESTO.test(t),
+    spiega: (t, codice) => {
+      const detto = t.replace(CODICE_CONTESTO, '').replace(/^[\s:—-]+/u, '').trim();
+      const frase = detto ? (/[.!?…]$/u.test(detto) ? detto : `${detto}.`) : 'Il motore del contesto non ha detto altro.';
+      return {
+        cosa: COSA_CONTESTO,
+        perche: `${frase} ${ORIGINALI_INTATTI}`,
+        rimedi: rimediContesto(''),
+        tecnico: grezzoContesto(t, codice),
+      };
+    },
+  },
   {
     id: 'contesto-pieno',
     riconosce: (t) => /exceed_context_size|exceeds the available context size|context (?:size|length) exceeded/i.test(t),
@@ -76,6 +225,7 @@ const REGOLE = [
      * dice il vero e non chiede di riprovare come se fosse andato storto qualcosa.
      */
     id: 'fermato-da-te',
+    famiglia: 'fermato',
     riconosce: (t) => /operation was aborted|AbortError|aborted by user|fermato dall'utente/i.test(t),
     spiega: () => ({
       cosa: 'Hai fermato il giro.',
@@ -184,17 +334,48 @@ export function spiegaErrore(messaggio, codice = '') {
   const testo = `${codice} ${tecnico}`;
   for (const regola of REGOLE) {
     if (!regola.riconosce(testo, codice)) continue;
-    const s = regola.spiega(tecnico);
-    return { id: regola.id, ...s, tecnico, riconosciuto: true };
+    /*
+     * ⛔ 09/9: il codice arriva anche a `spiega`. Serve alla famiglia contesto, che deve poterlo
+     * mettere nel GREZZO (dove va) senza mostrarlo a schermo — e per questo una regola può dettare
+     * il proprio `tecnico` invece di ereditare il messaggio nudo.
+     */
+    const s = regola.spiega(tecnico, codice);
+    return { id: regola.id, famiglia: regola.famiglia ?? null, ...s, tecnico: s.tecnico ?? tecnico, riconosciuto: true };
   }
   return {
     id: 'sconosciuto',
+    famiglia: null,
     cosa: 'Il giro si è interrotto per un errore.',
     perche: 'Questa forma di errore non è ancora tradotta: qui sotto c’è il testo che ha mandato il server, così com’è.',
     rimedi: ['Riprova il giro.', 'Se si ripete, apri Doctor e allega il testo qui sotto.'],
     tecnico,
     riconosciuto: false,
   };
+}
+
+/*
+ * ⛔ 09/9 — come si VESTE la carta. Prima questa scelta viveva in `legacy/app.js` come un confronto
+ * a mano (`spiegazione?.id === 'fermato-da-te'`): ogni famiglia nuova voleva una riga in più là
+ * dentro, lontana dalle regole che la producono. Ora la decide la famiglia, qui.
+ *
+ * ⛔ La compattazione fallita NON porta il rosso del guasto: NN/g, «Hostile Patterns in Error
+ * Messages» (30/10/2022) — lo stile dell'errore non si usa per ciò che non è un errore di chi
+ * legge. Il giro si è comunque fermato, e la carta lo dice nel testo; ma il colpo d'occhio deve
+ * separare «il contesto non si è compattato» da «la tua richiesta è andata storta».
+ */
+const VESTIZIONI = {
+  fermato: { badge: 'Fermato', titolo: 'TALOS · fermato', tono: 'accent' },
+  contesto: { badge: 'Contesto', titolo: 'TALOS · contesto non compattato', tono: 'warning' },
+};
+const VESTIZIONE_ERRORE = { badge: 'Errore', titolo: 'TALOS · errore', tono: 'danger' };
+
+/**
+ * Badge, titolo e tono della nota che mostra una spiegazione.
+ * @param {{famiglia?:string|null}|null} spiegazione l'esito di `spiegaErrore`
+ * @returns {{badge:string, titolo:string, tono:string}}
+ */
+export function vestizioneErrore(spiegazione) {
+  return { ...(VESTIZIONI[spiegazione?.famiglia] ?? VESTIZIONE_ERRORE) };
 }
 
 /** La stessa spiegazione in una riga sola, per i posti stretti (elenco sessioni, riepiloghi). */

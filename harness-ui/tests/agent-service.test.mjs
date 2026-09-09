@@ -414,6 +414,44 @@ test('⛔ talosLavora che LANCIA non si propaga: diventa RunError "internal-erro
   assert.equal(risultato.erroreInterno, 'rete giù per davvero');
 });
 
+/*
+ * ⛔ 09/09 — misurato in TRE giri veri con glm-5.3-flash: una compattazione del contesto fallita
+ * arrivava in chat come carta generica «Il giro si è interrotto per un errore», perché il `code` qui
+ * era FISSO a 'internal-error' e la `ContextEngineError` perdeva per strada il suo
+ * `CTX_TRUNCATED_SUMMARY`. Il messaggio (già in italiano) sopravviveva; il codice no, e la chat
+ * doveva riconoscere l'errore indovinando dalla frase.
+ */
+test('⛔ il CODICE di un errore che sa dirsi sopravvive: CTX_TRUNCATED_SUMMARY non diventa "internal-error"', async () => {
+  const eventi = [];
+  const errore = Object.assign(new Error('La sintesi non è stata completata.'), { code: 'CTX_TRUNCATED_SUMMARY' });
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn: talosLavoraFinto({ script: { tipo: 'lancia', errore } }) });
+  const finale = eventi.at(-1);
+  assert.equal(finale.type, 'RunError');
+  assert.equal(finale.code, 'CTX_TRUNCATED_SUMMARY');
+  assert.equal(finale.message, 'La sintesi non è stata completata.');
+});
+
+/*
+ * ⛔ AL CONTRARIO, e sono i due casi che tengono in piedi il commento del `catch`: un throw resta un
+ * guasto del SERVIZIO, e non deve poter fingersi un esito del TASK passando per il `.code` di
+ * un'eccezione qualunque. Né può finire in chat una frase intera travestita da codice.
+ */
+test('⛔ AL CONTRARIO: un errore interno non si traveste da esito del task, e una frase non è un codice', async () => {
+  const casi = [
+    [Object.assign(new Error('boom'), { code: 'fermato' }), 'internal-error'],
+    [Object.assign(new Error('boom'), { code: 'giri-esauriti' }), 'internal-error'],
+    [Object.assign(new Error('boom'), { code: 'la rete non risponde' }), 'internal-error'],
+    [Object.assign(new Error('boom'), { code: '   ' }), 'internal-error'],
+    [Object.assign(new Error('boom'), { code: 42 }), 'internal-error'],
+    [new Error('boom'), 'internal-error'],
+  ];
+  for (const [errore, atteso] of casi) {
+    const eventi = [];
+    await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn: talosLavoraFinto({ script: { tipo: 'lancia', errore } }) });
+    assert.equal(eventi.at(-1).code, atteso, `il codice ${JSON.stringify(errore.code)} non deve arrivare in chat`);
+  }
+});
+
 test('⭐ RunStarted porta il contesto workspace (progetto/cartella/branch), letto PRIMA di emettere l\'evento', async () => {
   const eventi = [];
   const contestoFinto = { progetto: 'listino', cartella: '/tmp/x', branch: null };
