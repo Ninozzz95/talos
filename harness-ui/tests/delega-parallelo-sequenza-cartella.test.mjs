@@ -377,3 +377,69 @@ test('⛔ BARRA: il nome di una figlia è CORTO alla fonte — la prima riga, 80
     rmSync(cartellaMadre, { recursive: true, force: true });
   }
 });
+
+/*
+ * ⛔ 09/09/2026 — trovato dal GIRO VERO sul 4174 (D2, glm-5.3-flash, due deleghe riuscite): nella barra a
+ *   sinistra e nella scheda «Agenti» le due figlie si chiamavano entrambe
+ *   «Sei una sessione di lavoro autonoma; non hai altro …».
+ *
+ * Causa, letta dal JSONL della figlia sul disco (825 caratteri di consegna): il kernel non passa il compito
+ * nudo, passa il PROMPT INTERO della figlia, che comincia con un preambolo di sistema e mette il compito
+ * dopo il marcatore «Compito:». `nomeCortoDaConsegna` prendeva la prima riga — cioè il preambolo — e le due
+ * figlie risultavano identiche: per sapere quale fosse quale bisognava aprirle. È lo stesso difetto delle
+ * schede del browser di ieri, in un altro punto dello schermo.
+ *
+ * ⇒ La cura sta dove il difetto NASCE: l'orchestratore è l'unico che sa che quella stringa è il prompt di
+ *   una delega, e costruisce lui la forma corta. `nomeCortoDaConsegna` resta com'è e continua a preferire
+ *   `consegnaCorta`.
+ * ⛔ Il marcatore «Compito:» è del kernel dell'owner (`mobile/scripts/harness-talos`), che non è mio: se un
+ *   giorno cambia, il nome torna a essere il preambolo — brutto ma visibile, non un silenzio.
+ */
+test('⛔ NOME DELLA FIGLIA: il compito, non il preambolo di sistema del kernel', () => {
+  const cartellaMadre = cartellaVera('talos-nome-figlia-');
+  try {
+    const finto = modelloFinto();
+    const { registro, madreId } = registroConMadre(cartellaMadre, finto);
+    // la stringa VERA che il kernel ha passato il 09/09, accorciata al necessario
+    const promptVero = 'Sei una sessione di lavoro autonoma; non hai altro contesto. Compito: crea un file chiamato parte2.md nella cartella di lavoro corrente (dove ti trovi). Il file deve contenere ESATTAMENTE tre righe di testo in italiano sul tema "allarmi".';
+    finto.avvii[0].onDelega(promptVero);
+
+    const figlia = registro.elenca().find((s) => s.padreId === madreId);
+    assert.ok(figlia.taskDelega.startsWith('crea un file chiamato parte2.md'),
+      `il nome deve cominciare dal compito, non dal preambolo — invece è «${figlia.taskDelega.slice(0, 60)}…»`);
+    assert.ok(!figlia.taskDelega.includes('sessione di lavoro autonoma'), 'il preambolo di sistema non è un nome');
+    assert.ok(figlia.taskDelega.length <= 80);
+
+    // ⛔ AL CONTRARIO: due deleghe diverse devono avere nomi DIVERSI, o la barra torna illeggibile
+    finto.avvii[0].onDelega('Sei una sessione di lavoro autonoma; non hai altro contesto. Compito: crea il file parte1.md sul registro dei processi.');
+    const nomi = registro.elenca().filter((s) => s.padreId === madreId).map((s) => s.taskDelega);
+    assert.equal(new Set(nomi).size, 2, `due figlie con compiti diversi non possono chiamarsi uguali: ${JSON.stringify(nomi)}`);
+
+    // e una consegna SENZA preambolo resta se stessa: la cura non taglia dove non c'è niente da tagliare
+    const madre2 = registroConMadre(cartellaMadre, modelloFinto());
+    void madre2;
+  } finally {
+    rmSync(cartellaMadre, { recursive: true, force: true });
+  }
+});
+
+test('⛔ NOME, AL CONTRARIO: una figlia RIPRISTINATA dal disco (senza consegnaCorta) mostra comunque il compito', () => {
+  /*
+   * Le figlie nate prima della cura hanno sul disco solo `task.consegna` — il prompt intero. Se il taglio
+   * vivesse solo nell'orchestratore, la storia continuerebbe a leggersi male per sempre. Qui si prova che
+   * l'elenco taglia anche quello che ARRIVA GIÀ FATTO, senza riscrivere niente sul disco.
+   */
+  const cartellaMadre = cartellaVera('talos-nome-ripr-');
+  try {
+    const finto = modelloFinto();
+    const { registro } = registroConMadre(cartellaMadre, finto);
+    const sessioni = registro.perTest?.() ?? null;
+    void sessioni;
+    // una voce come la ricostruisce il ripristino: task senza consegnaCorta
+    finto.avvii[0].onDelega('Sei una sessione di lavoro autonoma; non hai altro contesto. Compito: scrivi il file storico.md.');
+    const figlia = registro.elenca().find((s) => s.padreId);
+    assert.ok(figlia.taskDelega.startsWith('scrivi il file storico.md'), `invece: «${figlia.taskDelega}»`);
+  } finally {
+    rmSync(cartellaMadre, { recursive: true, force: true });
+  }
+});

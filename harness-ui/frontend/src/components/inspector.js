@@ -168,7 +168,10 @@ export function disegnaAgenti(d, contenitore, agenti) {
     card.dataset.stato = statoDelega(a);
     if (a.sessionId) card.dataset.sessioneFiglia = a.sessionId;
     const head = el(d, 'div', 'talos-inspector-card__head');
-    head.append(el(d, 'b', '', tronca(a.task || 'Delega senza compito registrato', 52)), el(d, 'span', `talos-badge talos-badge--sm${statoDelega(a) === 'fallita' ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ''}`, etichettaDelega(a)));
+    /* ⛔ 09/09: `taskCorto` prima di `task` — la consegna intera comincia col preambolo del kernel,
+       uguale per ogni figlia, e a 52 caratteri due deleghe diverse diventano la stessa riga (visto
+       nella foto della scheda «Agenti» del giro D2). Il ripiego su `task` regge le figlie vecchie. */
+    head.append(el(d, 'b', '', tronca(a.taskCorto || a.task || 'Delega senza compito registrato', 52)), el(d, 'span', `talos-badge talos-badge--sm${statoDelega(a) === 'fallita' ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ''}`, etichettaDelega(a)));
     card.append(head);
     // ⛔ il server manda `avviataAlle` ed `evidenzaDelega` (scritture, artefatti, chiamate ad attrezzi):
     // si mostra quello che c'e' davvero, mai una riga «Modello —» che non ha dietro nessun dato.

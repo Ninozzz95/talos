@@ -179,7 +179,7 @@ test('⭐⭐⭐ delegaSottoTask: avvio riuscito — avviaESeguiFn riceve task/ca
   });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'scrivi un modulo', cartella: '/figlio' });
   assert.equal(opzioniRicevute.cartella, '/figlio');
-  assert.deepEqual(opzioniRicevute.task, { consegna: 'scrivi un modulo' });
+  assert.deepEqual(opzioniRicevute.task, { consegna: 'scrivi un modulo', consegnaCorta: 'scrivi un modulo' } /* 09/09: la forma corta nasce qui — senza il marcatore «Compito:» del kernel resta la stringa intera, che è giusto: non si indovina un preambolo che non c'è */);
   assert.equal(opzioniRicevute.padreId, 'padre-1');
   assert.equal(opzioniRicevute.profonditaDelega, 1);
   assert.equal(esito.esito, 'concluso');
@@ -374,4 +374,48 @@ test('AL CONTRARIO — la cartella non viene inventata: resta quella della madre
   void orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'leggi un file' });
   assert.equal(visto?.cartella, madre.cartella);
   assert.notEqual(visto?.cartella, 'C:\\', 'la radice del disco non e mai una cartella di lavoro legittima per una figlia');
+});
+
+/*
+ * ⛔ 09/09 — trovato nella FOTO della scheda «Agenti» durante il giro vero della delega (D2, glm-5.3-flash
+ * sul 4174): le due schede portavano lo STESSO nome, «Sei una sessione di lavoro autonoma; non hai altro
+ * …». È il preambolo del kernel, identico per ogni figlia; il compito vero comincia dopo il marcatore
+ * «Compito:», a 700+ caratteri di distanza (la consegna misurata nel JSONL del giro era 825 caratteri).
+ * La barra a sinistra era già curata: la scheda no, perché legge `elencaFigli` e non `elenca()`.
+ * ⛔ `task` resta la consegna intera — il foglio «Albero sessione» la mostra per esteso.
+ */
+test('elencaFigli: accanto alla consegna intera esce il COMPITO, o due deleghe diverse diventano la stessa riga', () => {
+  const preambolo = 'Sei una sessione di lavoro autonoma; non hai altro contesto oltre a questo messaggio. '
+    + 'Non chiedere conferme, non fare domande: porta a termine il lavoro e poi riassumi in poche righe.\n\n';
+  const sessioni = new Map([
+    ['padre-1', vocePadre()],
+    ['f1', { cartella: '/x', padreId: 'padre-1', conclusa: true, task: { consegna: `${preambolo}Compito: crea un file chiamato parte1.md con tre righe sul registro dei processi` }, avviataAlle: '2026-09-09T20:31:00.000Z' }],
+    ['f2', { cartella: '/x', padreId: 'padre-1', conclusa: true, task: { consegna: `${preambolo}Compito: crea un file chiamato parte2.md con tre righe sugli allarmi` }, avviataAlle: '2026-09-09T20:32:00.000Z' }],
+  ]);
+  const figli = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => ({ sessionId: 'mai' }) }).elencaFigli('padre-1');
+
+  assert.equal(figli[0].taskCorto, 'crea un file chiamato parte1.md con tre righe sul registro dei processi');
+  assert.equal(figli[1].taskCorto, 'crea un file chiamato parte2.md con tre righe sugli allarmi');
+  assert.notEqual(figli[0].taskCorto, figli[1].taskCorto, 'due deleghe diverse portano due nomi diversi');
+  assert.ok(figli[0].task.startsWith(preambolo), 'la consegna intera NON viene accorciata: il foglio dell’albero la mostra tutta');
+  /*
+   * ⛔ AL CONTRARIO, e è il caso che conta a schermo: alla scheda arrivano i primi 52 caratteri. Se il
+   * nome corto non ci fosse, i due sarebbero il medesimo troncamento del preambolo — esattamente ciò che
+   * si vedeva nella foto.
+   */
+  assert.equal(figli[0].task.slice(0, 52), figli[1].task.slice(0, 52), 'la prova che il ripiego su `task` NON basta');
+  assert.notEqual(figli[0].taskCorto.slice(0, 52), figli[1].taskCorto.slice(0, 52));
+});
+
+test('elencaFigli: una figlia ripristinata dal disco (senza consegnaCorta) ricava lo stesso il compito; una senza consegna non inventa niente', () => {
+  const sessioni = new Map([
+    ['padre-1', vocePadre()],
+    /* ripristinata: il registro rilegge `task.consegna` dal JSONL e `consegnaCorta` non c’è mai stata */
+    ['ripresa', { cartella: '/x', padreId: 'padre-1', conclusa: true, task: { consegna: 'Preambolo lungo qualunque.\nCompito: conta le righe di parte1.md' }, avviataAlle: '2026-09-09T20:31:00.000Z' }],
+    ['muta', { cartella: '/x', padreId: 'padre-1', conclusa: true, task: null, avviataAlle: '2026-09-09T20:33:00.000Z' }],
+  ]);
+  const figli = creaSubagentOrchestrator({ sessioni, cartellaEsisteFn: () => true, avviaESeguiFn: () => ({ sessionId: 'mai' }) }).elencaFigli('padre-1');
+  assert.equal(figli[0].taskCorto, 'conta le righe di parte1.md');
+  assert.equal(figli[1].taskCorto, null, 'senza consegna il campo è null, e la scheda mostra la sua frase di ripiego');
+  assert.equal(figli[1].task, null);
 });
