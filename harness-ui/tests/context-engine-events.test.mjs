@@ -1,11 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { contextEngineEvent } from '../src/agui-events.mjs';
-import { createSessionRegistry } from '../src/session-registry.mjs';
+import { createSessionRegistry, usageSessioneDaEventi, metricheDaEventi } from '../src/session-registry.mjs';
 import { registraRiga } from '../src/session-store.mjs';
 
 const event = sessionId => ({ schema: 'talos.context.event.v1', id: 'event-one', sessionId, versionId: 'version-one', kind: 'version.committed', createdAt: '2026-09-09T08:00:00.000Z', payload: { coveredThrough: 20 } });
 const tick = () => new Promise(resolve => setImmediate(resolve));
+
+test('CTX-USAGE-ZERO-PROMPT cache without a positive denominator stays unavailable', () => {
+  const billed = contextEngineEvent({ ...event('chat'), kind: 'context.usage.recorded', payload: { operationId: 'zero-input', usage: { prompt_tokens: 0, completion_tokens: 1, cached_tokens: 0 } } });
+  assert.equal(metricheDaEventi([billed]).cache.frazione, null);
+});
+
+test('CTX-USAGE-REPLAY context attempts join session total without becoming a chat turn', () => {
+  const chat = { prompt_tokens: 100, completion_tokens: 20, cached_tokens: 40, giri: 2 };
+  const billed = { ...contextEngineEvent({ ...event('chat'), kind: 'context.usage.recorded', payload: { operationId: 'summary', usage: { prompt_tokens: 30, completion_tokens: 5 } } }), _sequenza: 3 };
+  const total = usageSessioneDaEventi([{ type: 'RunStarted', _sequenza: 1 }, { type: 'StateDelta', _sequenza: 2, delta: [{ path: '/usage', value: chat }] }, billed, structuredClone(billed)]);
+  assert.equal(total.prompt_tokens, 130); assert.equal(total.completion_tokens, 25);
+  assert.equal(total.giri, 2); assert.equal(total.esecuzioni, 1);
+  assert.deepEqual(total.ultimaEsecuzione, chat);
+  assert.equal(total.compattazione.operazioni, 1);
+  const only = usageSessioneDaEventi([billed]);
+  assert.equal(only.prompt_tokens, 30); assert.equal(only.ultimaEsecuzione, null); assert.equal(only.esecuzioni, 0);
+});
 function registry(extra = {}) {
   return createSessionRegistry({ modello: 'local:test', chiave: 'fixture', cartellaStore: 'C:/fixture',
     registraRigaSyncFn: () => {}, registraRigaFn: async () => {}, guardaWorkspaceFn: () => () => {},

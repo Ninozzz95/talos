@@ -53,6 +53,7 @@ import { montaNote } from '../components/note.js'; // 06/9 C24: la pagina delle 
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
 import { sommaUsage, usageDellaSessione } from '../components/consumo-sessione.js'; // 06/9 CB-04: il consumo della SESSIONE, non dell'ultimo invio
+import { contextUsageFromEvents } from '../../../../context-engine/src/usage.mjs';
 import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, chipDegliAllegati, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js';
 import { creaAnteprimaImmagine, payloadImmagini } from '../components/immagini-chat.js';
 import { montaContextCompactor } from '../components/context-compactor.js';
@@ -348,6 +349,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
        * riportato consumo — mai uno zero fabbricato.
        */
       usageSessione: null,
+      eventiUsageContesto: new Map(),
+      cachePromptPrecedenti: 0,
       /** La somma dei totali degli invii GIÀ CHIUSI (fino all'ultimo `RunStarted`). */
       usageEsecuzioniPrecedenti: null,
       /**
@@ -12232,11 +12235,33 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     el.title = 'TALOS legge il testo delle pagine con l\'attrezzo naviga; compaiono nella vista Browser.';
   }
 
+  function aggiornaUsageSessione() {
+    const chat = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
+    const compattazione = contextUsageFromEvents([...state.realSession.eventiUsageContesto.values()], { sessionId: state.realSession.id });
+    if (!compattazione) { state.realSession.usageSessione = chat; return; }
+    const corrente = state.realSession.usage;
+    const cacheCorrente = Number.isFinite(corrente?.cached_tokens) && Number.isFinite(corrente?.prompt_tokens) && corrente.prompt_tokens > 0 ? corrente.prompt_tokens : 0;
+    const totale = { ...chat, compattazione, prompt_tokens_con_cache: state.realSession.cachePromptPrecedenti + cacheCorrente + (compattazione.prompt_tokens_con_cache ?? 0) };
+    for (const key of ['prompt_tokens', 'completion_tokens', 'cached_tokens']) {
+      const current = Number.isFinite(chat?.[key]) ? chat[key] : null;
+      const extra = compattazione[key];
+      totale[key] = current === null && extra === null ? null : (current ?? 0) + (extra ?? 0);
+    }
+    state.realSession.usageSessione = totale;
+  }
+
   function handleRealEvent(evento, generation) {
     if (generation !== state.realSession.generation) return; // sessione più vecchia: scartato, non renderizzato
     if (evento.type === 'CUSTOM' && evento.name === 'talos.context') {
       const value = evento.value;
       if (value?.schema !== 'talos.context.event.v1' || value.sessionId !== state.realSession.id) return;
+      if (contextUsageFromEvents([evento], { sessionId: state.realSession.id })) {
+        const operationId = value.payload.operationId;
+        if (state.realSession.eventiUsageContesto.has(operationId)) return;
+        state.realSession.eventiUsageContesto.set(operationId, evento);
+        aggiornaUsageSessione();
+        aggiornaContatoreUsage();
+      }
       aggiornaSeparatoreContesto($('#conversation'), [value], { sessionId: state.realSession.id, onOpen: () => compactSession() });
       if (contextCompactor && !$('#veloContesto')?.hidden) void contextCompactor.refresh({ quiet: true });
       return;
@@ -12284,9 +12309,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * esattamente il difetto misurato — 7.716 token dichiarati su 23.060
          * spesi. Vale sia dal vivo sia al replay di una cronologia.
          */
+        if (Number.isFinite(state.realSession.usage?.cached_tokens) && Number.isFinite(state.realSession.usage?.prompt_tokens) && state.realSession.usage.prompt_tokens > 0) state.realSession.cachePromptPrecedenti += state.realSession.usage.prompt_tokens;
         state.realSession.usageEsecuzioniPrecedenti = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
         state.realSession.usage = null;
-        state.realSession.usageSessione = state.realSession.usageEsecuzioniPrecedenti;
+        aggiornaUsageSessione();
         state.realSession.currentRunModel = typeof evento.contesto?.modello === 'string' && evento.contesto.modello.trim()
           ? evento.contesto.modello.trim()
           : (state.model || null);
@@ -12610,7 +12636,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            * eventi passano tutti da qui, nello stesso ordine.
            */
           state.realSession.usage = evento.delta[0].value;
-          state.realSession.usageSessione = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
+          aggiornaUsageSessione();
           aggiornaContatoreUsage();
           aggiornaComposerUsage(state.realSession.usage);
           break;
@@ -12964,6 +12990,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.attesaBubble = null; // il nodo è già sparito con replaceChildren() qui sopra
       state.realSession.usage = null; // Fase 3 — un resume (continua:true) TIENE il conto, una sessione nuova riparte da IGNOTO
       state.realSession.usageSessione = null; // 06/9 CB-04 — idem per il totale della conversazione
+      state.realSession.eventiUsageContesto = new Map();
+      state.realSession.cachePromptPrecedenti = 0;
       state.realSession.usageEsecuzioniPrecedenti = null;
       state.realSession.eventiAttrezzi = []; // O-02 — la diagnosi dei giri parla della sessione che si sta guardando, mai di quella prima
       state.realSession.tettoGiriDichiarato = null; // O-02 — il tetto lo dichiara il kernel di QUESTA sessione (il planner ne ha uno diverso), mai ereditato

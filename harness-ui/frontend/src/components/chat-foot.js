@@ -188,6 +188,7 @@ export function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {
   const prompt = Number(sessione?.prompt_tokens ?? 0) || 0;
   const completion = Number(sessione?.completion_tokens ?? 0) || 0;
   const cache = Number(sessione?.cached_tokens ?? 0) || 0;
+  const baseCache = Number.isFinite(sessione?.prompt_tokens_con_cache) ? sessione.prompt_tokens_con_cache : prompt;
   // ⛔ i giri della barra sono quelli della SESSIONE; quello del chip col tetto è dell'invio in corso
   const giriSessione = Number.isFinite(Number(sessione?.giri)) ? Number(sessione.giri) : null;
   const giri = Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null;
@@ -198,7 +199,7 @@ export function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {
   const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond ?? sessione?.tokens_per_second ?? sessione?.tokensPerSecond);
   return {
     tokenGiri: parti.join(' · '),
-    cache: cache > 0 && prompt > 0 ? `cache ${Math.round((cache / prompt) * 100)}%` : '',
+    cache: cache > 0 && baseCache > 0 ? `cache ${Math.round((cache / baseCache) * 100)}%` : '',
     giri,
     velocita: Number.isFinite(throughput) && throughput > 0 ? `${Math.round(throughput)} token/s` : '',
   };

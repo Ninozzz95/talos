@@ -66,10 +66,16 @@ test('CTX-SERVER-TRIAL-ROUNDTRIP real server imports and persists context across
     version.measurement.requestHash = createHash('sha256').update('fixture-request').digest('hex');
     await store.commitContextVersion({ sessionId, expectedRevision: snapshot.revision, expectedStateRevision: snapshot.stateRevision, jobId: job.id, version });
     [contextEvent] = await store.readContextOutbox({ sessionId });
+    // CTX-USAGE-SERVER-RESTART: attempt receipt must join the common session
+    // total even when no chat /usage exists, with one durable event per attempt.
+    await store.recordUsage({ sessionId, jobId: job.id, operationId: 'billed-attempt', usage: { prompt_tokens: 1800, completion_tokens: 80 } });
     const delivered = await fetch(base, { headers }); assert.equal(delivered.status, 200); await delivered.json();
     const log = (await readFile(join(directory, `${sessionId}.jsonl`), 'utf8')).trim().split('\n').map(JSON.parse);
     assert.equal(log.filter(record => record.type === 'CUSTOM' && record.value?.id === contextEvent.id).length, 1);
     assert.deepEqual(await store.readContextOutbox({ sessionId }), []);
+    const sessions = await (await fetch(`http://127.0.0.1:${port}/api/v1/sessions`, { headers })).json();
+    const row = sessions.data.items.find(item => item.sessionId === sessionId);
+    assert.equal(row.usageSessione.prompt_tokens, 1800); assert.equal(row.usageSessione.esecuzioni, 0);
   } finally { await store.close(); }
   await stop(); const resumed = await start(); assert.equal(resumed.status, 200);
   const state = await resumed.json(); assert.equal(state.facts[0].text, body.fact.text);
@@ -79,4 +85,7 @@ test('CTX-SERVER-TRIAL-ROUNDTRIP real server imports and persists context across
   assert.deepEqual(archive.records.map(record => record.message), messages);
   const afterRestart = (await readFile(join(directory, `${sessionId}.jsonl`), 'utf8')).trim().split('\n').map(JSON.parse);
   assert.equal(afterRestart.filter(record => record.type === 'CUSTOM' && record.value?.id === contextEvent.id).length, 1);
+  assert.equal(afterRestart.filter(record => record.type === 'CUSTOM' && record.value?.kind === 'context.usage.recorded').length, 1);
+  const sessions = await (await fetch(`http://127.0.0.1:${port}/api/v1/sessions`, { headers })).json();
+  assert.equal(sessions.data.items.find(item => item.sessionId === sessionId).usageSessione.prompt_tokens, 1800);
 });

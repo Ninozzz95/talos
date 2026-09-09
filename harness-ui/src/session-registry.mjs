@@ -1,3 +1,5 @@
+import { contextUsageFromEvents } from '../../context-engine/src/usage.mjs';
+
 /**
  * session-registry.mjs — le sessioni Harness UI vive in memoria: chi le ha
  * avviate, il buffer dei loro eventi AG-UI, e come fermarle. Piano
@@ -859,7 +861,8 @@ function usagePerEsecuzione(ordinati) {
  */
 export function usageSessioneDaEventi(eventi) {
   const finali = usagePerEsecuzione(eventiInOrdine(eventi));
-  if (finali.length === 0) return null;
+  const compattazione = contextUsageFromEvents(eventi);
+  if (finali.length === 0 && !compattazione) return null;
   const numero = (valore) => (Number.isFinite(valore) ? valore : 0);
   const somma = finali.reduce((acc, u) => ({
     prompt_tokens: acc.prompt_tokens + numero(u.prompt_tokens),
@@ -870,13 +873,23 @@ export function usageSessioneDaEventi(eventi) {
   // ⛔ Nessuna esecuzione ha dichiarato `cached_tokens` ⇒ `null`, mai lo zero
   //    che verrebbe fuori dalla somma: «non dichiarato» non è «nessuno».
   const conCache = finali.filter((u) => Number.isFinite(u.cached_tokens));
-  return {
+  const risultato = {
     ...somma,
     cached_tokens: conCache.length === 0 ? null : somma.cached_tokens,
     esecuzioni: finali.length,
     esecuzioniConCache: conCache.length,
-    ultimaEsecuzione: finali[finali.length - 1],
+    ultimaEsecuzione: finali.at(-1) ?? null,
   };
+  if (compattazione) {
+    for (const key of ['prompt_tokens', 'completion_tokens', 'cached_tokens']) {
+      const chat = finali.some(u => Number.isFinite(u[key])) ? risultato[key] : null;
+      const context = compattazione[key];
+      risultato[key] = chat === null && context === null ? null : (chat ?? 0) + (context ?? 0);
+    }
+    risultato.compattazione = compattazione;
+    risultato.prompt_tokens_con_cache = conCache.reduce((n, u) => n + (Number.isFinite(u.prompt_tokens) && u.prompt_tokens > 0 ? u.prompt_tokens : 0), 0) + (compattazione.prompt_tokens_con_cache ?? 0);
+  }
+  return risultato;
 }
 
 /**
@@ -886,8 +899,9 @@ export function usageSessioneDaEventi(eventi) {
  */
 function cacheDaEventi(ordinati) {
   const finali = usagePerEsecuzione(ordinati);
+  const compattazione = contextUsageFromEvents(ordinati);
   const vuoto = { frazione: null, percentuale: null, promptTokens: null, cachedTokens: null, denominatore: 'prompt_tokens', esecuzioni: 0 };
-  if (finali.length === 0) return { ...vuoto, motivoAssente: MOTIVO_USAGE_ASSENTE };
+  if (finali.length === 0 && !compattazione) return { ...vuoto, motivoAssente: MOTIVO_USAGE_ASSENTE };
 
   /*
    * ⛔ Numeratore e denominatore vengono dalle STESSE esecuzioni: un invio che
@@ -897,13 +911,13 @@ function cacheDaEventi(ordinati) {
    */
   const conPrompt = finali.filter((u) => Number.isFinite(u.prompt_tokens) && u.prompt_tokens > 0);
   const conCache = conPrompt.filter((u) => Number.isFinite(u.cached_tokens));
-  const prompt = conPrompt.length === 0 ? null : conPrompt.reduce((n, u) => n + u.prompt_tokens, 0);
-  const cached = conCache.length === 0 ? null : conCache.reduce((n, u) => n + u.cached_tokens, 0);
+  const prompt = conPrompt.length === 0 && compattazione?.prompt_tokens == null ? null : conPrompt.reduce((n, u) => n + u.prompt_tokens, 0) + (compattazione?.prompt_tokens ?? 0);
+  const cached = conCache.length === 0 && compattazione?.cached_tokens == null ? null : conCache.reduce((n, u) => n + u.cached_tokens, 0) + (compattazione?.cached_tokens ?? 0);
   const base = { ...vuoto, esecuzioni: finali.length, promptTokens: prompt, cachedTokens: cached };
-  if (prompt === null) return { ...base, motivoAssente: MOTIVO_PROMPT_ZERO };
+  if (prompt === null || prompt <= 0) return { ...base, motivoAssente: MOTIVO_PROMPT_ZERO };
   if (cached === null || cached < 0) return { ...base, motivoAssente: MOTIVO_CACHED_ASSENTE };
   // Il denominatore del TASSO è quello delle sole esecuzioni che hanno dichiarato la cache.
-  const promptConCache = conCache.reduce((n, u) => n + u.prompt_tokens, 0);
+  const promptConCache = conCache.reduce((n, u) => n + u.prompt_tokens, 0) + (compattazione?.prompt_tokens_con_cache ?? 0);
   if (cached > promptConCache) return { ...base, motivoAssente: MOTIVO_CACHE_INCOERENTE };
 
   const frazione = cached / promptConCache;

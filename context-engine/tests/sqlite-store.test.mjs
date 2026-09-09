@@ -11,6 +11,48 @@ const settings = { auto: true, model: { mode: 'follow-session' }, triggerRatio: 
 const createdAt = '2026-09-08T00:00:00.000Z';
 const hash = value => createHash('sha256').update(value).digest('hex');
 const record = (id, content = id) => ({ id, message: { role: 'user', content }, createdAt });
+
+test('CTX-USAGE-ATOMIC durable usage and outbox share identity across replay and restart', async t => {
+  const { store, databasePath } = await fixture(t);
+  const input = { sessionId: 'a', operationId: 'attempt', usage: { prompt_tokens: 30, completion_tokens: 4 } };
+  await store.recordUsage(input);
+  const events = await store.readContextOutbox({ sessionId: 'a' });
+  assert.equal(events.length, 1);
+  assert.equal(events[0].kind, 'context.usage.recorded');
+  assert.deepEqual(events[0].payload, { operationId: 'attempt', usage: input.usage });
+  await store.recordUsage(input);
+  assert.deepEqual(await store.readContextOutbox({ sessionId: 'a' }), events);
+  await store.ackContextEvent({ sessionId: 'a', eventId: events[0].id });
+  await store.close();
+  const reopened = createSqliteContextStore({ databasePath });
+  try {
+    await reopened.recordUsage(input);
+    assert.deepEqual(await reopened.readContextOutbox({ sessionId: 'a' }), []);
+    assert.equal((await reopened.readUsage({ sessionId: 'a' })).length, 1);
+  } finally { await reopened.close(); }
+});
+
+for (const faultPoint of ['usage-after-record', 'crash-usage-after-record', 'usage-after-outbox', 'crash-usage-after-outbox']) {
+  test(`CTX-USAGE-CRASH ${faultPoint}: receipt and accounting roll back together`, async t => {
+    const { store, databasePath } = await fixture(t, { faultPoint });
+    await assert.rejects(store.recordUsage({ sessionId: 'a', operationId: 'attempt', usage: { inputTokens: 9 } }), { code: faultPoint.startsWith('crash') ? 'CTX_WORKER_EXIT' : 'CTX_PERSISTENCE_FAILED' });
+    await store.close();
+    const reopened = createSqliteContextStore({ databasePath });
+    try {
+      assert.deepEqual(await reopened.readUsage({ sessionId: 'a' }), []);
+      assert.deepEqual(await reopened.readContextOutbox({ sessionId: 'a' }), []);
+    } finally { await reopened.close(); }
+  });
+}
+
+test('CTX-USAGE-LEGACY prior accounting rows get a durable delivery receipt without changing the archive', async t => {
+  const { store, databasePath } = await fixture(t);
+  const db = new DatabaseSync(databasePath);
+  db.prepare('INSERT INTO usage_records(session_id,operation_id,usage_json) VALUES(?,?,?)').run('a', 'old', JSON.stringify({ inputTokens: 7 })); db.close();
+  const events = await store.readContextOutbox({ sessionId: 'a' });
+  assert.equal(events.length, 1); assert.equal(events[0].payload.operationId, 'old');
+  assert.equal((await store.readContextSnapshot({ sessionId: 'a' })).revision, 0);
+});
 async function fixture(t, options = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'talos-context-store-'));
   const databasePath = join(directory, 'context.sqlite');
