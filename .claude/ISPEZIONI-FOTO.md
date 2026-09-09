@@ -71,3 +71,13 @@ chiamano entrambe «fixture» con la stessa ora «02:00» — è il dato della f
 ⛔ Cosa queste foto NON provano: che la barra sparisca alla fine con un solo separatore e i consumi
 aggiornati (Astra stava verificando esattamente quello quando i crediti sono finiti). Lo prova la
 suite browser `context-compactor.spec.mjs`, rilanciata da Claude dopo questa ispezione.
+
+## 09/09/2026 — F5c punto 2, la misura nella modale (Claude)
+
+Processo desktop isolato, chat fixture, misura SEMINATA nello SQLite dal test (3200 / 16.384, riserva 2048,
+metodo «motore», esatto, misurata alle 08:05Z): è una fixture dichiarata, non un conteggio reale — prova
+che la modale mostra il dato quando esiste, non che il kernel lo produca (quello lo provano i test del motore).
+- `tcec-desktop-measure-1920x1080.png` — aperta: la riga dice «3200 / 16.384 token — Conteggio del motore (esatto) · misurata alle 10:05», la barra sotto è al 20%, i tre valori sono numeri veri e non più «Non disponibile»; l'ora è quella locale della misura seminata (08:05Z → 10:05).
+- `tcec-desktop-measure-2560x1440.png` — aperta: stessa riga e stessi numeri, modale centrata, la barra di avanzamento della compattazione «Completati 1 di 3» sotto la misura è coerente con la fixture.
+- `tcec-desktop-measure-3840x2160.png` — aperta: identica composizione a 4K; dietro la modale si vede la barra «Compattazione contesto in corso» nella chat, coerente con lo stato.
+Non difetti, verificati: «3200» e «2048» senza separatore delle migliaia contro «16.384» con — è la regola CLDR dell'italiano (raggruppa da cinque cifre in su), non un'incoerenza del formato. Nessuna dicitura «cambiato dopo la misura» perché la revisione coincide: giusto così.

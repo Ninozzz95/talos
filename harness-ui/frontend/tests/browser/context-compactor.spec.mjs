@@ -86,9 +86,20 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
     const createdAt = '2026-09-09T08:00:00.000Z';
     const job = { schema: 'talos.context.job.v1', id: 'ui-fixture-job', sessionId, idempotencyKey: 'ui-fixture-job', requestFingerprint: 'fixture', kind: 'compact', state: 'ready', baseRevision: snapshot.revision, baseStateRevision: snapshot.stateRevision, coveredThrough: 2, model: { provider: 'openrouter', model }, createdAt, updatedAt: createdAt, completedSegments: [], progress: { completed: 1, total: 1, phase: 'ready' } };
     const activeJob = { ...job, state: 'summarizing', progress: { completed: 1, total: 3, phase: 'summarizing' } };
+    // 09/09 — CTX-UI-MEASURE: la misura dell'ultima richiesta preparata (fixture dichiarata, non un
+    //   conteggio reale) deve comparire nella modale con l'ORA della misura, al posto di «Non disponibile».
+    await store.recordMeasurement({ sessionId, revision: snapshot.revision, measuredAt: '2026-09-09T08:05:00.000Z', measurement: { schema: 'talos.context.tokens.v1', inputTokens: 3200, windowTokens: 16384, responseReserve: 2048, method: 'runtime', exact: true, requestHash: 'ui-fixture-measure', provider: 'openrouter', model } });
     await store.claimContextJob({ sessionId, job: activeJob });
     await page.getByRole('button', { name: 'Aggiorna', exact: true }).click();
     await expect(page.locator('[data-context-progress]')).toContainText('1 di 3');
+    await expect(page.locator('[data-context-measurement]'), 'CTX-UI-MEASURE').toContainText('misurata alle');
+    await expect(page.locator('[data-context-measurement]')).not.toContainText('Non disponibile');
+    await expect(page.locator('[data-context-input]')).not.toContainText('Non disponibile');
+    for (const [width, height] of [[1920, 1080], [2560, 1440], [3840, 2160]]) {
+      await page.setViewportSize({ width, height });
+      await page.screenshot({ path: join(photos, `desktop-measure-${width}x${height}.png`) });
+    }
+    await page.setViewportSize({ width: 1920, height: 1080 });
     await page.keyboard.press('Escape');
     const chatProgress = page.locator('#conversation [data-context-chat-progress]');
     await expect(chatProgress).toBeVisible();

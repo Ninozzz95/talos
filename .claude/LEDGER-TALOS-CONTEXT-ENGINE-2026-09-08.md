@@ -310,3 +310,35 @@ CTX-ROUTE-SAMPLE: suite backend completa 1898 test, 1895 pass, 1 fail, 2 skipped
 Root inline. File: harness-ui/src/agui-events.mjs (contextEngineEvent), harness-ui/src/session-registry.mjs (pubblicaEventoContesto; broadcast parametro interno durable opzionale), harness-ui/src/session-store.mjs (registraRiga durable opzionale, flush), harness-ui/src/context-desktop-service.mjs (deliver single-flight e drenaggio paginato), harness-ui/server.mjs (onEvent wiring), nuovo harness-ui/tests/context-engine-events.test.mjs; aggiornare tests/context-desktop-service.test.mjs e tests/context-engine-server.test.mjs. Compatibilita legacy broadcast sincrona, sequenza SSE assegnata nello stesso ordine; nessuna attesa aggiunta ai chiamanti storici. Evento AG-UI CUSTOM/name talos.context/value ContextEventV1, validato, id immutabile. SQLite resta autorevole; ack outbox solo dopo append JSONL con flush riuscito. Tentativo fallito resta ritentabile, replay idempotente anche dopo restart; una notifica visibile prima del flush rappresenta comunque un checkpoint gia valido in SQLite, non una pubblicazione parziale. Nessuna garanzia exactly-once di rete: identita stabile e dedup.
 
 RED CTX-EVENT-AGUI, CTX-EVENT-DURABLE, CTX-EVENT-RETRY, CTX-EVENT-RESTART, CTX-OUTBOX-SINGLE-FLIGHT. GREEN node --test tests/context-engine-events.test.mjs tests/context-desktop-service.test.mjs tests/context-engine-server.test.mjs; regressioni session-store/session-registry/agui-events/HTTP. Fonte corrente https://docs.ag-ui.com/sdk/js/core/events (CUSTOM name/value) e https://nodejs.org/api/fs.html#fspromisesappendfilepath-data-options (flush, introdotto Node20.10; runtime fissato24.18.0), consultate2026-09-09. Adottare contratto AG-UI e API Node native; adattare ricevuta outbox TALOS, nessuna nuova dipendenza. UI e prova provider restano fase successiva. Rollback: commit isolato, nessuna modifica4174. Consegna cumulativa nuova versione a finefetta.
+
+## F5c punto 2 — la misura corrente nella modale, inventario prima edit (Claude, 09/09/2026)
+
+Causa letta nel codice, non presunta: `engine.prepareForRequest` misura a ogni giro il corpo preparato
+(con strumenti e riserva) e RESTITUISCE la misura, ma nessuno la salva; `store.readContextSnapshot`
+non ha il campo, quindi la modale legge `state.measurement` = undefined e scrive «Non disponibile».
+File: `context-engine/src/node/migrations/001-context.sql` (tabella `context_measurements`, una riga
+per sessione, `CREATE TABLE IF NOT EXISTS` idempotente, user_version invariato), `sqlite-worker.mjs`
+(`recordMeasurement` in transazione, upsert; `snapshot()` espone `measurement`), `sqlite-store.mjs`
+(metodo esposto), `contracts.mjs` (`ContextMeasurementV1 = {revision, measuredAt, tokens}`, opzionale
+e nullable nello snapshot), `engine.mjs` (registra PRIMA del controllo di overflow: la misura che
+causa un rifiuto è proprio quella da mostrare), UI `context-compactor.js` (legge `tokens`, aggiunge
+ora della misura e «il contesto è cambiato dopo la misura» quando la revisione è avanzata).
+RED attesi: CTX-MEASURE-PERSISTED, CTX-MEASURE-OVERFLOW (engine), CTX-MEASURE-UPSERT (store),
+CTX-MEASURE-LABEL (frontend). Nessun ricalcolo su GET; nessuna inferenza; archivio/export invariati
+(la misura è derivabile e si rifà alla prima richiesta dopo un ripristino — dichiarato, non nascosto).
+Ricerca 09/09/2026: Claude Code `/context` mostra una scomposizione VIVA della finestra (sistema,
+strumenti, memoria, messaggi, spazio libero); Codex la espone in `/status`. Qui la misura è quella
+dell'ULTIMA richiesta preparata, ed è etichettata così: non è viva, e non finge di esserlo.
+
+GREEN F5c punto 2, 09/09/2026 (Claude): RED osservati prima della cura su tutti e quattro (CTX-MEASURE-PERSISTED,
+CTX-MEASURE-OVERFLOW, CTX-MEASURE-UPSERT, CTX-MEASURE-LABEL). Due correzioni trovate dai test, non dalla lettura:
+(1) con l'automazione accesa un solo messaggio enorme fa fallire la compattazione con CTX_NO_REDUCTION PRIMA del
+controllo di overflow, e la misura non veniva salvata — ora si registra subito dopo la prima misura, e di nuovo
+dopo una compattazione riuscita; la prova copre entrambe le strade. (2) CTX-LEGACY-SOURCE rosso: due archivi della
+stessa sessione «divergevano» solo perché nel frattempo una richiesta era stata misurata — `comparableArchive`
+esclude `measurement`, che è un fatto sul presente e non stato archiviato. (3) CTX-UI-COUNT-METHOD rosso: la
+modale accetta anche la forma piatta dei vecchi stati/fixture, senza però dichiarare ora né freschezza.
+Package context-engine 75/75; backend desktop-service/routes/integration/runtime 25/25; unit frontend 477/477;
+browser playwright.context 2/2 dopo build. Nessuna inferenza reale. Fonti: Claude Code /context (scomposizione
+viva della finestra) e Codex /status, lette il 09/09/2026 — qui la misura è quella dell'ultima richiesta preparata
+ed è etichettata «misurata alle …», mai spacciata per viva.

@@ -8,7 +8,7 @@ const EN = {
   'Context Manager non è ancora attivo per questa conversazione. Nessun messaggio è stato modificato.': 'Context Manager is not enabled for this conversation yet. No messages have been changed.',
   'Contesto della chat': 'Chat context', 'Solo questa chat. Gli originali restano disponibili.': 'This chat only. Original messages remain available.',
   'Chiudi': 'Close', 'Aggiorna': 'Refresh', 'Gestisci automaticamente': 'Manage automatically', 'TALOS prepara una sintesi quando il contesto si riempie.': 'TALOS prepares a summary as the context fills up.',
-  'Misura non ancora disponibile.': 'Measurement is not available yet.', 'Token in ingresso': 'Input tokens', 'Finestra del modello': 'Model context window', 'Riservati alla risposta': 'Reserved for the response', 'Non disponibile': 'Not available',
+  'Misura non ancora disponibile.': 'Measurement is not available yet.', 'misurata alle': 'measured at', 'il contesto è cambiato dopo la misura': 'the context changed after this measurement', 'Token in ingresso': 'Input tokens', 'Finestra del modello': 'Model context window', 'Riservati alla risposta': 'Reserved for the response', 'Non disponibile': 'Not available',
   'Conteggio del motore': 'Runtime count', 'Conteggio del fornitore': 'Provider count', 'Stima euristica': 'Heuristic estimate', 'esatto': 'exact', 'stima': 'estimate',
   'In attesa': 'Queued', 'Preparazione': 'Preparing', 'Compattazione contesto in corso': 'Context compaction in progress', 'Verifica della sintesi': 'Validating summary', 'Pubblicazione in corso': 'Publishing', 'Contesto aggiornato': 'Context updated', 'Compattazione in pausa': 'Compaction paused', 'Compattazione annullata': 'Compaction cancelled', 'Compattazione non riuscita': 'Compaction failed',
   'Nessuna compattazione in corso.': 'No compaction in progress.', 'Caricamento del contesto…': 'Loading context…', 'Annulla compattazione': 'Cancel compaction', 'Riprendi compattazione': 'Resume compaction', 'Compatta ora': 'Compact now', 'Rigenera sintesi': 'Regenerate summary',
@@ -22,15 +22,25 @@ function translateDefault(text) { return linguaCorrenteDiT() === 'en' ? (EN[text
 const number = v => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
 export function descriviContextCompactor(state, { translate = translateDefault } = {}) {
-  const m = state?.measurement;
+  // 09/09 — la misura arriva dallo stato come {revision, measuredAt, tokens}: i numeri stanno in `tokens`,
+  //   e la revisione dice se il contesto è cambiato DOPO la misura. Una misura vecchia non si spaccia per viva.
+  const meta = state?.measurement && typeof state.measurement === 'object' ? state.measurement : null;
+  // forma piatta (stati e fixture precedenti al 09/09): i numeri valgono, ma senza revisione né ora
+  //   non si afferma nulla su quanto siano freschi — niente «cambiato dopo», niente «misurata alle»
+  const m = meta?.tokens ?? (number(meta?.inputTokens) ? meta : null);
   const known = number(m?.inputTokens) && number(m?.windowTokens) && m.windowTokens > 0;
+  const current = known && (meta?.tokens ? Number.isSafeInteger(meta?.revision) && meta.revision === state?.revision : false);
+  const dichiaraFreschezza = Boolean(meta?.tokens);
+  const oraMisura = known && typeof meta?.measuredAt === 'string' && !Number.isNaN(Date.parse(meta.measuredAt))
+    ? new Date(meta.measuredAt).toLocaleTimeString(linguaCorrenteDiT() === 'en' ? 'en-GB' : 'it-IT', { hour: '2-digit', minute: '2-digit' }) : null;
   const exact = m?.exact === true && m?.method !== 'heuristic';
   const method = m?.method === 'runtime' ? 'Conteggio del motore' : m?.method === 'provider' ? 'Conteggio del fornitore' : m?.method === 'heuristic' ? 'Stima euristica' : 'Non disponibile';
   const jobs = Array.isArray(state?.jobs) ? state.jobs : [];
   const job = jobs.find(j => ACTIVE.has(j.state)) ?? [...jobs].sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)))[0] ?? null;
   return {
     measurement: { known, inputTokens: number(m?.inputTokens) ? m.inputTokens : null, windowTokens: number(m?.windowTokens) ? m.windowTokens : null, responseReserve: number(m?.responseReserve) ? m.responseReserve : null,
-      ratio: known ? m.inputTokens / m.windowTokens : null, exact, methodLabel: `${translate(method)}${known && m?.method !== 'heuristic' ? ` (${translate(exact ? 'esatto' : 'stima')})` : ''}` },
+      ratio: known ? m.inputTokens / m.windowTokens : null, exact, current, measuredAt: meta?.measuredAt ?? null,
+      methodLabel: `${translate(method)}${known && m?.method !== 'heuristic' ? ` (${translate(exact ? 'esatto' : 'stima')})` : ''}${oraMisura ? ` · ${translate('misurata alle')} ${oraMisura}` : ''}${known && dichiaraFreschezza && !current ? ` · ${translate('il contesto è cambiato dopo la misura')}` : ''}` },
     job, jobLabel: translate(job ? JOB_LABELS[job.state] ?? 'Non disponibile' : 'Nessuna compattazione in corso.'),
     auto: state?.settings?.auto !== false, canCompact: Boolean(state) && state?.capabilities?.compact !== false && !ACTIVE.has(job?.state),
   };
