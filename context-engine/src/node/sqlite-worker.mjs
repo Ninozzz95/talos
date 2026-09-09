@@ -96,9 +96,11 @@ function snapshot(sessionId) {
   const row = session(sessionId, false);
   if (!row) return null;
   const active = row.active_version_id === null ? null : get('SELECT version_json FROM context_versions WHERE session_id=? AND id=?', sessionId, row.active_version_id);
+  const measured = get('SELECT revision, measured_at, measurement_json FROM context_measurements WHERE session_id=?', sessionId);
   return {
     schema: 'talos.context.snapshot.v1', sessionId, revision: row.revision, stateRevision: row.state_revision, headSequence: row.head_sequence,
     settings: JSON.parse(row.settings_json), metadata: JSON.parse(row.metadata_json), activeVersion: active ? JSON.parse(active.version_json) : null,
+    measurement: measured ? { schema: 'talos.context.measurement.v1', revision: measured.revision, measuredAt: measured.measured_at, tokens: JSON.parse(measured.measurement_json) } : null,
     facts: parseRows('SELECT fact_json FROM protected_facts WHERE session_id=? ORDER BY id', 'fact_json', sessionId),
     jobs: parseRows('SELECT job_json FROM compaction_jobs WHERE session_id=? ORDER BY id', 'job_json', sessionId),
   };
@@ -121,7 +123,9 @@ function comparableArchive(value) {
   const byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   return {
     ...payload,
-    session: { ...payload.session, facts: [...payload.session.facts].sort(byId), jobs: [...payload.session.jobs].sort(byId) },
+    // 09/09 — `measurement` è un fatto sul presente che invecchia, non stato archiviato: due archivi
+    //   della stessa sessione non divergono perché una richiesta è stata misurata nel frattempo.
+    session: { ...payload.session, measurement: undefined, facts: [...payload.session.facts].sort(byId), jobs: [...payload.session.jobs].sort(byId) },
     blobs: [...payload.blobs].sort(byId), facts: [...payload.facts].sort(byId), jobs: [...payload.jobs].sort(byId),
   };
 }
@@ -181,6 +185,18 @@ const methods = {
     });
   },
   readContextSnapshot({ sessionId }) { return tx(() => snapshot(sessionId)); },
+  /* 09/09 — l'ultima misura preparata: una per sessione, l'ultima vince. Non è una versione né un
+     evento: è un fatto sul presente che invecchia, e per questo porta la revisione e l'ora. */
+  recordMeasurement({ sessionId, revision: measuredRevision, measuredAt, measurement }) {
+    id(sessionId, 'sessionId'); json(measurement);
+    if (!Number.isSafeInteger(measuredRevision) || measuredRevision < 0) fail('Invalid measurement revision');
+    if (typeof measuredAt !== 'string' || Number.isNaN(Date.parse(measuredAt))) fail('Invalid measurement date');
+    return tx(() => {
+      session(sessionId);
+      run('INSERT INTO context_measurements(session_id,revision,measured_at,measurement_json) VALUES(?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET revision=excluded.revision, measured_at=excluded.measured_at, measurement_json=excluded.measurement_json', sessionId, measuredRevision, measuredAt, JSON.stringify(measurement));
+      return snapshot(sessionId);
+    });
+  },
   appendOriginalBatch({ sessionId, records, expectedRevision }) {
     if (!Array.isArray(records)) fail('Original records must be an array');
     return tx(() => {

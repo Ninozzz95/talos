@@ -234,3 +234,42 @@ test('CTX-RESUME-USAGE-IDENTITY paid paused attempt and resumed attempt retain d
   assert.equal(usage.length, f.calls.length + 1);
   assert.equal(new Set(usage.map(record => record.operationId)).size, usage.length);
 });
+
+/*
+ * 09/09 — punto 2 della consegna v004: la modale diceva «Non disponibile» tre volte perché la misura
+ * vera (calcolata a ogni giro da prepareForRequest, con gli strumenti e la riserva) non veniva mai
+ * salvata: restava nel valore di ritorno e moriva lì. Qui si prova che l'ultima misura preparata
+ * finisce nello stato, con la revisione a cui si riferisce e l'ora: mai un ricalcolo a strumenti
+ * vuoti, mai un dato storico spacciato per attuale.
+ */
+test('CTX-MEASURE-PERSISTED: the last prepared measurement is stored with its revision and exposed in state', async t => {
+  const { engine } = await fixture(t);
+  await engine.appendOriginal({ sessionId: 'chat', record: { id: 'm0', message: { role: 'user', content: 'ciao' }, createdAt: now } });
+  assert.equal((await engine.getContextState({ sessionId: 'chat' })).measurement ?? null, null, 'prima di una richiesta non esiste nessuna misura: non si inventa');
+  const prepared = await engine.prepareForRequest({ sessionId: 'chat', sessionModel: modelProfile, tools: [{ name: 'shell' }] });
+  const state = await engine.getContextState({ sessionId: 'chat' });
+  assert.deepEqual(state.measurement.tokens, prepared.measurement, 'la misura nello stato è ESATTAMENTE quella della richiesta preparata, strumenti compresi');
+  assert.equal(state.measurement.revision, state.revision);
+  assert.equal(state.measurement.measuredAt, now);
+  await engine.appendOriginal({ sessionId: 'chat', record: { id: 'm1', message: { role: 'assistant', content: 'ciao!' }, createdAt: now } });
+  const later = await engine.getContextState({ sessionId: 'chat' });
+  assert.ok(later.measurement.revision < later.revision, 'una misura vecchia resta leggibile ma dichiara la revisione a cui apparteneva');
+});
+
+test('CTX-MEASURE-OVERFLOW: a measurement that does not fit is still recorded — on both refusal paths', async t => {
+  const small = { ...modelProfile, windowTokens: 4096, responseReserve: 512 };
+  const big = { id: 'big', message: { role: 'user', content: 'x'.repeat(60000) }, createdAt: now };
+  // automazione spenta: il rifiuto è l'overflow, e la misura è lì
+  const manual = await fixture(t, { settings: { auto: false } });
+  await manual.engine.appendOriginal({ sessionId: 'chat', record: big });
+  await assert.rejects(manual.engine.prepareForRequest({ sessionId: 'chat', sessionModel: small }), { code: 'CTX_CONTEXT_OVERFLOW' });
+  const manualState = await manual.engine.getContextState({ sessionId: 'chat' });
+  assert.ok(manualState.measurement && manualState.measurement.tokens.inputTokens > 4096, 'la misura che ha causato il rifiuto è quella che l’utente deve vedere');
+  // automazione accesa: la compattazione tentata NON riduce un solo messaggio enorme, il rifiuto è
+  // CTX_NO_REDUCTION — e la misura che l'ha fatta scattare deve restare comunque
+  const auto = await fixture(t);
+  await auto.engine.appendOriginal({ sessionId: 'chat', record: big });
+  await assert.rejects(auto.engine.prepareForRequest({ sessionId: 'chat', sessionModel: small }), { code: 'CTX_NO_REDUCTION' });
+  const autoState = await auto.engine.getContextState({ sessionId: 'chat' });
+  assert.ok(autoState.measurement && autoState.measurement.tokens.inputTokens > 4096, 'anche quando l’automazione fallisce, la prima misura è un fatto e resta');
+});

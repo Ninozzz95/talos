@@ -225,6 +225,11 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       if (messages && JSON.stringify(messages) !== JSON.stringify(records.map(r => r.message))) fail('CTX_UNARCHIVED_CONTEXT', 'Archiviare i nuovi messaggi prima di preparare la richiesta.');
       let prepared = compiled(snapshot, records, { targetModel: sessionModel });
       let measurement = await measure(prepared, tools, sessionModel, signal);
+      /* 09/09 — si salva SUBITO, prima di qualunque automazione: se la compattazione automatica fallisce
+         (CTX_NO_REDUCTION su un solo messaggio enorme, per esempio) la misura che ha fatto scattare tutto
+         è comunque un fatto vero, ed è quello che la modale deve poter mostrare. */
+      const record = m => store.recordMeasurement({ sessionId, revision: snapshot.revision, measuredAt: clock(), measurement: m });
+      await record(measurement);
       const budget = budgetFor(measurement, snapshot.settings);
       let job;
       if (snapshot.settings.auto && budget.shouldPrepare) {
@@ -240,6 +245,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
           snapshot = await state(sessionId);
           prepared = compiled(snapshot, await originals(sessionId), { targetModel: sessionModel });
           measurement = await measure(prepared, tools, sessionModel, signal);
+          await record(measurement); // dopo una compattazione riuscita la misura nuova sostituisce quella vecchia
         }
       }
       if (!budgetFor(measurement, snapshot.settings).fits) fail('CTX_CONTEXT_OVERFLOW', 'Il contesto supera la finestra. Compattare o modificare le informazioni protette.');

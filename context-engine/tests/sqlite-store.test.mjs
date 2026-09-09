@@ -287,3 +287,16 @@ test('CTX-MUTATION-ROLLBACK failed mutation never leaves a successful receipt', 
   await assert.rejects(store.updateSessionSettings(args), { code: 'CTX_STALE_REVISION' });
   assert.equal(await store.readContextMutation(args), null);
 });
+
+test('CTX-MEASURE-UPSERT one measurement per session: the latest wins, it survives reopen, an unknown session is refused', async t => {
+  const { store, databasePath } = await fixture(t);
+  await store.initSession({ sessionId: 'a', settings });
+  const tokens = { schema: 'talos.context.tokens.v1', inputTokens: 10, windowTokens: 100, responseReserve: 5, method: 'heuristic', exact: false, requestHash: 'h1', provider: 'local', model: 'm' };
+  await assert.rejects(store.recordMeasurement({ sessionId: 'missing', revision: 0, measuredAt: createdAt, measurement: tokens }), { code: 'CTX_SESSION_NOT_FOUND' });
+  await store.recordMeasurement({ sessionId: 'a', revision: 0, measuredAt: createdAt, measurement: tokens });
+  const snap = await store.recordMeasurement({ sessionId: 'a', revision: 1, measuredAt: createdAt, measurement: { ...tokens, inputTokens: 20, requestHash: 'h2' } });
+  assert.equal(snap.measurement.tokens.inputTokens, 20); assert.equal(snap.measurement.revision, 1); assert.equal(snap.measurement.measuredAt, createdAt);
+  await store.close();
+  const reopened = createSqliteContextStore({ databasePath });
+  try { assert.equal((await reopened.readContextSnapshot({ sessionId: 'a' })).measurement.tokens.requestHash, 'h2'); } finally { await reopened.close(); }
+});

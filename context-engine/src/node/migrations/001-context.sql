@@ -115,3 +115,12 @@ CREATE TABLE IF NOT EXISTS context_mutations (
   PRIMARY KEY(session_id,idempotency_key)
 ) STRICT;
 PRAGMA user_version = 1;
+
+-- 09/09/2026 — l'ULTIMA misura preparata per la richiesta (strumenti e riserva compresi), con la
+-- revisione a cui si riferisce: la modale la mostra come «misurata alle …», mai come dato vivo.
+CREATE TABLE IF NOT EXISTS context_measurements (
+  session_id TEXT PRIMARY KEY REFERENCES context_sessions(session_id),
+  revision INTEGER NOT NULL CHECK(revision >= 0),
+  measured_at TEXT NOT NULL,
+  measurement_json TEXT NOT NULL CHECK(json_valid(measurement_json))
+) STRICT;
