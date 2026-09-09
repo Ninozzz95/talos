@@ -87,3 +87,33 @@ resta fuori; niente diff inventato — se il prima non è noto si dice, non si f
 Da cercare prima di disegnare: come lo rendono Claude Code, Codex e Hermes (colori, tetto delle righe,
 diff a parole dentro la riga), e cosa la Review già sa fare — il calcolo potrebbe essere già nostro
 (`contaDiff` alimenta la testata), e allora è solo un pezzo di resa in più, non un motore nuovo.
+
+### PO-12 — UN ATTREZZO DI MODIFICA per il modello, come `Edit` di Claude Code (owner, 09/09)
+«Oltre alle modifiche file da terminale, dare al modello LLM un tool di edit esattamente come Claude
+Code da CLI, e praticamente come fanno tutti gli altri.»
+
+**Non ce l'abbiamo, verificato nel kernel il 09/09.** Gli attrezzi di file sono `leggi`, `elenca`,
+`cerca`, `scrivi`, `shell`. `scrivi` si dichiara al modello così, verbatim:
+«Writes one file of the workspace, **replacing it entirely**. Read it first: the whole content is
+required.» — parametri `percorso` + `contenuto`. Nessun attrezzo ancorato a un pezzo di testo.
+
+**Tre conseguenze, non una.**
+1. **Costo.** Per cambiare una riga in un file di 2.000 righe il modello deve rigenerare 2.000 righe.
+   Ogni modifica costa quanto il file intero, in uscita, dove i token costano di più.
+2. **Rischio.** Un file riscritto per intero da un modello è un file che può perdere pezzi che nessuno
+   aveva chiesto di toccare: il resto del file passa dalla sua memoria, non dal disco.
+3. ⛔ **È metà della soluzione di D3.** Letto nel repo di Claude Code il 09/09 (CHANGELOG, commit
+   `f173a697`): ciò che impedisce a due sotto-agenti di cancellarsi il lavoro **non è un lucchetto**
+   — non ne esiste nessuno per file — ma l'ANCORAGGIO TESTUALE di `Edit`: `old_string` deve combaciare
+   in modo univoco, quindi se un altro agente ha già toccato quel punto la modifica fallisce da sola.
+   Con un solo `scrivi` che sostituisce tutto, invece, la seconda figlia cancella la prima **senza
+   accorgersene**. Un `modifica` ancorato al testo è quindi anche una difesa contro D3.
+
+**Forma proposta** (da confermare con una ricerca prima di scrivere il codice): `modifica` con
+`percorso`, `testo_da_sostituire`, `testo_nuovo`, e un `tutte_le_occorrenze` opzionale; fallisce con un
+messaggio chiaro se il testo non c'è **o se compare più di una volta** (è l'ambiguità a rendere
+pericolosa una sostituzione, non l'assenza). ⛔ Il nome che riceve il modello è un contratto col
+kernel: si aggiunge, non si rinomina `scrivi`. E `scrivi` resta per i file NUOVI.
+Da guardare prima: `Edit`/`Write` di Claude Code (e la riga del suo CHANGELOG che dice che un edit su
+testo ancora univoco passa anche se il file è cambiato dopo la lettura), `apply_patch` di Codex, e
+l'attrezzo di modifica di Hermes.
