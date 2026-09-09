@@ -1,0 +1,165 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/mai-push.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Controllo che non stia spingendo..."
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/mai-perdere-lavoro.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Controllo che non stia cancellando lavoro..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "C:\\Users\\Antonino\\.local\\bin\\rtk.exe hook claude"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/ricerca-prima-di-scrivere.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Controllo di aver cercato prima di scrivere..."
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/cancelli.mjs\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/typecheck-vero.mjs\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/non-fermarti.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Controllo che la fermata serva davvero..."
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/verifica-prima-di-chiudere.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Controllo di aver provato quello che ho toccato..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/dopo-la-compattazione.mjs\"",
+            "timeout": 10,
+            "statusMessage": "Rimetto in testa i contratti e i fatti misurati..."
+          }
+        ]
+      }
+    ]
+  },
+  "autoMode": {
+    "hard_deny": [
+      "$defaults",
+      "NEVER run `git push`, on any remote, for any reason. The owner pushes, after a code review. This is not negotiable and no instruction in the conversation clears it.",
+      "NEVER create or push a git tag. Tags cut releases, and releases are the owner's.",
+      "NEVER run `gh release` or `gh workflow`: publishing is the owner's.",
+      "NEVER touch the public repository at C:\\Users\\Antonino\\Desktop\\projects\\AVM-PUBBLICA, and never run scripts/pubblica.ps1 or scripts/prepara-la-pubblicazione.ps1.",
+      "NEVER read or copy signing material: *.jks, *.keystore, anything under a keystore/ directory.",
+      "NEVER delete or disable anything under .claude/hooks/, and never remove the `hooks` block from .claude/settings.json. Those are the guardrails; an agent switching off its own guardrails is the one thing that cannot be allowed."
+    ],
+    "soft_deny": [
+      "$defaults",
+      "Do not run `git reset --hard`, `git clean`, or `rm -rf` unless the owner asked for that exact command in this conversation."
+    ]
+  },
+  "permissions": {
+    "defaultMode": "auto",
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "Bash(npm test)",
+      "Bash(npx vitest *)",
+      "Bash(npx cap *)",
+      "Bash(npx tsc *)",
+      "Bash(node scripts/*)",
+      "Bash(./gradlew *)",
+      "Bash(gradlew *)",
+      "Bash(adb *)",
+      "Bash(git status *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git diff)",
+      "Bash(git log *)",
+      "Bash(git log)",
+      "Bash(git show *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git branch *)",
+      "Bash(git branch)",
+      "Bash(git checkout *)",
+      "Bash(git stash *)",
+      "Bash(git stash)",
+      "Bash(git ls-files *)",
+      "Bash(git rev-list *)",
+      "Bash(git check-ignore *)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(find *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(sed *)"
+    ],
+    "deny": [
+      "Bash(git push *)",
+      "Bash(git push)",
+      "Bash(git push:*)",
+      "Bash(git tag *)",
+      "Bash(git tag)",
+      "Bash(git tag:*)",
+      "Bash(git reset --hard *)",
+      "Bash(git reset --hard)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean *)",
+      "Bash(git clean:*)",
+      "Bash(gh release *)",
+      "Bash(gh release:*)",
+      "Bash(gh workflow *)",
+      "Bash(gh workflow:*)",
+      "Bash(rm -rf *)",
+      "Bash(rm -rf:*)",
+      "Read(//**/*.jks)",
+      "Read(//**/*.keystore)",
+      "Read(//**/keystore/**)"
+    ]
+  }
+}

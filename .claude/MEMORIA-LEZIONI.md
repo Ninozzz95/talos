@@ -1,0 +1,110 @@
+# MEMORIA — le lezioni chiuse
+
+> Questo file è la **seconda metà dell'indice di memoria**, importata da
+> `CLAUDE.md` alla radice del repo. Esiste perché `MEMORY.md` ha due tetti
+> COMPILATI dentro claude.exe — **200 righe** e **25 KB** — e oltre quelli il
+> contenuto viene tagliato **in silenzio**, senza che nessuno se ne accorga.
+> Owner 2026-08-19: «dobbiamo trovare il modo per aumentare il tetto».
+> ⇒ Il tetto non si alza: si sdoppia l'indice. Nessuna riga è stata persa.
+>
+> ⛔ I file citati qui sotto stanno in
+> `~/.claude/projects/C--Users-Antonino-Desktop-projects-AVM/memory/`.
+> Si aprono per nome, come dall'altro indice.
+
+## ✅ Spostata qui il 03/09 — la voce chiusa del 27/8 sul gitignore
+
+> ⛔ `MEMORY.md` era a **20.429 byte** contro il tetto d'allarme di 19.900 dopo la voce
+> «consiglio modello ed effort a ogni fase». Questa era già ✅ e stava ancora fra gli APERTI:
+> blocco intero spostato, non accorciato.
+
+- ✅⛔⛔⭐⭐⭐ [27/8 — `mobile/docs/` bloccava in silenzio OGNI screenshot nuovo dal 18/8](gitignore-mobile-docs-blocca-screenshot-nuovi.md) — un pattern di directory (`mobile/docs/`) rendeva inerte la negazione `!docs/immagini/*.png`; corretto a `mobile/docs/*` + `!mobile/docs/immagini/` (il GLOB, non la directory, è la forma che funziona) — verificato con `git check-ignore -v`, zero effetti collaterali sul resto già tracciato. 🔜 Resta APERTO solo `git add`/`git commit` dei tre screenshot: cartella condivisa con una sessione viva, decide l'owner · [[harness-ui-inglese-debito-readme]] — screenshot harness in italiano nel README, eccezione esplicita dell'owner, debito registrato
+
+## ✅ Chiusa il 24/8 — il buco RTF non spiegato
+
+> ⛔ Spostata qui dagli APERTI di `MEMORY.md` il 24/8: l'indice era a 19.819
+> byte, sopra il tetto d'allarme di 19.900. Il motore Pocket TTS che questa
+> voce descriveva come rotto è lo stesso che `CHANGELOG.md` v0.1.19 (scritto
+> lo stesso giorno) dichiara riparato — stutter e underrun misurati spariti,
+> tempo al primo audio 449-537 ms — quindi la voce è chiusa, non solo spostata.
+
+- ✅⛔⛔⭐⭐⭐ [0.1.19 — il buco NON SPIEGATO era più grande del deficit](il-buco-non-spiegato-era-piu-grande-del-deficit.md) — il file prediceva RTF 0,73-0,89, il Pad misurava **1,5**: ~50 ms/frame attribuiti a niente contro i **40** che servivano. Causa candidata verificata alla fonte (`torch.cat` a ogni frame, O(T²)). Chiusa nel rifacimento del motore su Pocket TTS, v0.1.19
+
+## ✅ Le CHIUSE del 23/8 — il banco che misura se stesso, e il guardiano che accusava
+
+> ⛔ Aggiunte qui e non in `MEMORY.md`: quello era a **19.354 byte** su un tetto
+> d'allarme di 19.900, e sono lezioni **chiuse**. In `MEMORY.md` resta la sola
+> riga vincolante, quella sull'uccidere un processo.
+
+- ⛔⛔⛔⭐⭐⭐ [LA COLONNA DEL COSTO HA UNA RISOLUZIONE](la-colonna-del-costo-ha-una-risoluzione.md) — `(nessuno)` non chiama nessuna API **per costruzione**, e gli erano attribuiti **$0,0276**: il banco aveva addosso da sempre una sonda di taratura mai letta. ⇒ **risoluzione $0,0021 per riga**, e **talos ($0,0014) e aider ($0,0016) stanno SOTTO**: il confronto fra i due non ha contenuto. ⭐ L'errore **scivola in avanti** — la baseline corre dopo codex ed è il 6-23% della sua spesa sullo stesso task, 13 su 13, mai negativo (r = 0,545): è fatturazione in ritardo, `ATTESA_DEL_CREDITO_MS = 4_000` è troppo corta. ⛔ La cura NON è allungare l'attesa (nessuna la garantisce): è **dichiarare la risoluzione**, perché «sotto la risoluzione» non è «economico». ⛔ E il totale di aider ($0,0273) è della **stessa taglia** dell'errore: il primo in classifica sta dentro il rumore
+- ⛔⛔⛔⭐⭐⭐ [IL GUARDIANO ACCUSAVA LA SESSIONE DELL'OWNER](il-guardiano-accusava-la-sessione-dellowner.md) — la sorveglianza gridava «3 ORFANI, rubano CPU» e uno era **`codex resume` dell'owner, vivo**: nomina un harness, è nato dopo la corsa, e il genitore è morto perché è una shell staccata. **Due volte a un passo dall'ucciderlo**, e la seconda gli stessi tre erano un albero **vivo della campagna** su un task pagato. ⛔ **Terza forma** dello stesso difetto in un giorno: *un filtro che riconosce la MENZIONE invece della cosa*. ⭐ Cura: l'appartenenza **si prova** — l'orfano o un suo figlio devono toccare una cartella `banco-*`. ⭐ E ogni allarme porta **CHI**, non solo quanti. ⛔ Quattro banchi di prova a mano hanno MENTITO (gli escape non sopravvivono alla shell): si prova dalla **porta vera**, `unGiro()`
+- ⛔⛔⭐⭐ [IL DEBUG WIRELESS MOSTRA IL PAD DUE VOLTE](il-debug-wireless-mostra-il-pad-due-volte.md) — due trasporti per lo stesso tablet ⇒ ogni adb senza `-s` muore con *more than one device/emulator*. ⛔ `run-device-tests.mjs` **stampava** l'indirizzo e poi falliva all'install: sapere e non passare. ⭐ Riparato (seriale scelto una volta, passato ovunque, si ferma se non è collegato) e dotato di **prova a secco** `TALOS_PROVA_A_SECCO=1`: i comandi che leggono girano davvero, quelli che cambiano il telefono si stampano. ⛔ `termica.mjs` no: vuole `ANDROID_SERIAL`
+
+## ✅ Spostate qui il 23/8 (seconda tranche) — tre lezioni chiuse rimaste nell'indice sbagliato
+
+> ⛔ `MEMORY.md` era di nuovo sopra il tetto d'allarme (19.987 byte su
+> 19.900) dopo l'aggiunta del terzo documento custodito sul motore locale
+> (il piano tecnico Fase 4/5). Questi tre bullet erano già senza `🔜` — cioè
+> già lezioni chiuse, mai migrate dall'indice degli aperti. Testo
+> invariato, solo spostato e marcato ✅.
+
+- ✅⛔⭐⭐ [Plugin Capacitor terzo che crasha: si SCAVALCA con load()](plugin-capacitor-terze-parti-si-scavalca.md)
+- ✅⛔⭐⭐ [OnePlus 13: crash avvio, getPermissionState NULL](getpermissionstate-torna-null.md) — chiuso; manca il giro completo
+- ✅⛔⛔⭐⭐⭐ [ROMA a chi era a CATANIA](roma-a-chi-era-a-catania.md) — la precisa era negata e tacevamo; ⛔ la mia nota era falsa: 6 decimali, il codice ne fa 4
+
+## ✅ CHIUSI — le lezioni che restano
+
+> ⛔ Spostate qui il 2026-08-23: `MEMORY.md` era a **20.140 byte**, SOPRA il
+> tetto d'allarme di 19.900. Sono le due lezioni del banco chiuse fra il 22 e il
+> 23 — curate lo stesso giorno in cui sono state trovate, quindi il loro posto
+> è qui. Blocco intero, non accorciato.
+
+- ⛔⛔⛔⭐⭐⭐ [TRE RIPETIZIONI PAGATE, UNA USATA](tre-ripetizioni-pagate-una-usata.md) — l'`esito` della riga era quello dell'**ultimo giro** (`ms` era una mediana, il verdetto no), e da lì escono pass-rate, bootstrap e costo/risolto: **11 righe su 120 cambiano** e il **vincitore cambia** (dsh 12 → pi 12). ⭐ Curato nel LETTORE, non riscrivendo le righe
+- ⛔⛔⭐⭐⭐ [STRINGERE una guardia crea un FALSO NEGATIVO](stringere-una-guardia-crea-un-falso-negativo.md) — tolto un falso allarme (le mie shell contate come figlie della corsa), la sorveglianza ha smesso di vedere un `codex` **vivo da 5,7 ore** perche' ORFANO. ⛔ Dopo aver stretto una guardia si cerca il caso che ora le sfugge; e due guasti diversi vogliono due allarmi diversi, non una soglia spostata
+
+> ⛔ Spostata qui il 2026-08-22 (secondo giro): `MEMORY.md` era a **19.829 byte**
+> contro un tetto d'allarme di 19.900. Blocco intero, non accorciato.
+
+- ✅⛔⛔⭐⭐⭐ [La GPU è spedita, è scelta, è usata](la-gpu-non-e-spedita-non-e-scelta-non-e-usata.md) — chiusa 21/8, `lane/motore-gpu`, antenata di `lane/voce-personale`: Fase 7(a)(b)(c) + sei commit lo stesso giorno chiudono ANCHE il sondaggio (consenso tri-stato, `qualifyBackend()`, modale, pulsante manuale). Catena intera, non solo collegata — verificato due volte prima di fidarsi
+
+- ⛔⛔⭐⭐⭐ **Lo schermo e l'occhio:** [Gli indici NON erano in ordine visivo](gli-indici-non-erano-in-ordine-visivo.md) — «il primo» era a caso · [Il cursore ACCETTA e non si muove](il-cursore-accetta-e-non-si-muove.md) — dichiarata e ignorata · [L'occhio ELENCATO e mai LEGATO](occhio-elencato-ma-crashato.md) — `Crashed services:{TalosOcchio}` · [L'occhio AGGANCIATO si crede cieco](occhio-bound-ma-si-crede-cieco.md) — `onInterrupt` non è la fine · [GUARDA LO SCHERMO, non il DOM](guarda-lo-schermo-non-il-dom.md) — non dice *dov'è, di che colore* · [Un giro dell'agente costa 3,0 s](il-giro-dell-agente-costa.md) — il 71% è `uiautomator dump`
+- ⛔⭐⭐⭐ **Dire il vero su cosa è successo:** [La bugia era nel PREAMBOLO](la-bugia-era-nel-preambolo.md) — **prima** di chiamare · [Una domanda che non accetta risposte](una-domanda-che-non-accetta-risposte.md) — omonimi per NOME · [«È partito?» — TRE prove](finalizzazione-obiettivo-tre-prove.md) — il testo **migra** · [CIECO non è FALLITO](cieco-non-e-fallito.md) — Maps si apriva **davvero** · [«APERTA» non è «FATTA»](aperta-non-e-fatta.md) — col pulsante intatto · [«Collegato» NON è «in carica»](collegato-non-e-in-carica.md) · [`ok:false` su un elenco vero fa INVENTARE](ok-false-su-un-elenco-fa-inventare.md) — gli stati sono **tre** · [«Inviato» senza aver chiamato niente](storia-senza-chiamate-insegna-a-mentire.md) — **eravamo noi** a insegnargli a mentire · [L'ultimo centimetro](ultimo-centimetro-e-la-prova-dell-invio.md) — «inviato» perché il pulsante **sparisce**
+- ⛔⭐⭐⭐ **Voce e orecchio:** ⛔⛔ [SUL PAD FUNZIONA, e la soglia NON si alza](sul-pad-la-parola-funziona-e-la-soglia-non-si-alza.md) — 10/10 con **0 falsi**; a 0,60 ne perdi 2, e il «non scatta» era la BUILD · ⛔⛔ [LA PREMESSA ERA VECCHIA DI DUE GIORNI](la-premessa-era-vecchia-di-due-giorni.md) — riaddestravo un modello **sano**, e il log-mel è invariante al guadagno · [DIECI SU DIECI](hey-talos-dieci-su-dieci.md) · [È VIVO](hey-talos-e-vivo.md) · [era la SCALA](la-scala-la-decide-chi-addestra.md) · [«Ha finito» è una DOMANDA](ha-finito-e-una-domanda-al-motore.md) — `onDone` è per frase · [La parola SCRITTA non si pronuncia](la-parola-scritta-non-si-pronuncia.md) — 7 controlli innocenti, era il **modello** · [Il SILENZIO non è un esito](il-silenzio-non-e-un-esito.md) — chiude a 1,7 s · [La voce RUOTA](voce-che-ruota-non-sorteggia.md) · [Non era Android: era OXYGENOS](era-oxygenos-e-il-ponte-lo-ferma.md) — 4 → 1 → **0** a schermo spento
+- ⛔⛔⭐⭐⭐ [Il ruolo assistente NON si chiede](il-ruolo-assistente-non-si-chiede.md) — AOSP lo dichiara `requestable=false`: 53 ms e RESULT_CANCELED. La via senza ponte è `ACTION_VOICE_INPUT_SETTINGS`; ⛔ `isRoleAvailable` dice che ESISTE, non che si possa chiedere
+- ⛔⭐⭐⭐ **Il telefono e ColorOS:** [Una GARA, e la perdevamo](stavamo-facendo-una-gara-e-la-perdevamo.md) — 37 ms nostri, 850 ms suoi · [«Success» installa UN'ALTRA APP](adb-success-non-vuol-dire-aggiornato.md) — l'app di prova è `ai.talos.dev`, **solo** con `-PtalosSideBySide` · [ColorOS INTERCETTA](coloros-intercetta-e-il-ruolo-non-basta.md) — nessun gesto arriva a TALOS, **né a Google** · [Le quattro caselle](quattro-combinazioni-su-dispositivo.md) — `accelerometer_rotation` non resta a 0 · [Il TOGGLE non si riaccende — ma NON SERVE](il-debug-wireless-non-si-riaccende-da-solo.md) — è un host ADB: `tcpip:5555` · [Il RUOLO regala schermo E screenshot](ruolo-assistente-regala-schermo-e-screenshot.md) — solo se la persona CHIAMA · [I TRE PRESET](i-tre-preset-e-il-tasto-che-si-puo-prendere.md) — Power e angolo NON si mappano
+- ⛔⭐⭐⭐ **Interrogare il telefono:** [DUE domande diverse allo stesso telefono](due-domande-diverse-allo-stesso-telefono.md) · [La casella di posta che NON ESISTE](posta-non-letta-e-la-casella-che-non-esiste.md) — `^i` non c'era: la posta in arrivo è divisa in quattro · [Il codice GIUSTO che nessuno chiama](il-codice-giusto-che-nessuno-chiama.md) — `onBackPressed()` morto con targetSdk 36 · [TRE GIORNI per una richiesta sola](tre-giorni-per-una-richiesta-sola.md) · [TALOS CHIAMA](chiedi-al-telefono-non-alla-tabella.md) — usa gli **id del framework**, uguali per tutti · [INVIARE UN FILE](inviare-file-da-libreria-e-da-memoria.md) — ⛔ manca il destinatario (R-32) · [Gli ALLEGATI, catena intera](allegati-dallassistente-la-catena-intera.md)
+- ⛔⭐⭐⭐ **Impostazioni e consensi:** [Un default che NESSUN percorso produce](il-default-irraggiungibile.md) — una migrazione del 25/7 zittiva quella del 27 · [Spegnere non è dimenticare](spegnere-non-e-dimenticare.md) — «disattiva» **cancellava la chiave** · [L'assistente senza web non era un permesso](assistente-senza-web-non-era-un-permesso.md) — nessun motore, e l'interruttore lo nascondeva · [Il «sì» fra BARRIERA e CANCELLO](si-perso-fra-barriera-e-cancello.md) — il consenso ha **due** cancelli · [Il cerchio vuoto tace](il-cerchio-vuoto-non-dice-niente.md)
+- ⛔⛔⛔⭐⭐⭐ **Il costo che non si vedeva — 21/8:** [La sonda non poteva rispondere PER COSTRUZIONE](la-sonda-non-poteva-rispondere-per-costruzione.md) — leggeva `riga.fuori`, un campo **che non esiste**: «costo IGNOTO» su ogni corsa da sempre, e IGNOTO è una risposta valida ⇒ nessun controllo poteva vederlo · [Chi va in TIMEOUT sembra GRATIS](chi-va-in-timeout-sembra-gratis.md) — righe $0,0097 contro credito $0,6475 (**66,6×**); e il dichiarato di claude-code era **315×** i token, perché `quantoECostato` lo leggeva **per primo**
+- ⛔⛔⭐⭐⭐ **Il banco che si legge da solo — 21/8:** [Un titolo che dichiara ZERO per costruzione](un-titolo-che-dichiara-zero-per-costruzione.md) — `manomissioni 0` era **la stringa `'0'`**, e sei righe sotto la tabella diceva `hermes 4`; nella stessa pagina, `54 · 42 · 12` task confrontati per conteggio · [DUE controlli che si leggono come UNO](due-controlli-che-si-leggono-come-uno.md) — cinque file, due risposte: la salute dichiarava «zero righe mai misurate» su **66 avvelenate**, e le tre sconfitte erano 429
+- ⛔⛔⛔⭐⭐⭐ **Il crash del 22/8 — quello che ha scoperto:** [Il RILANCIO cancellava il lavoro pagato](il-rilancio-cancellava-il-lavoro-pagato.md) — `writeFileSync(dove,'')` prima del ciclo: 56 righe e **$2,64** distrutti da un'operazione **riuscita**, senza un errore da nessuna parte ⇒ ciò che è costato denaro non si sovrascrive mai, e la ripresa vuole **quattro guardie** (misura · stessi giri · stesso modello+quota · stesso corpus) · [Chi è in FONDO all'elenco è il primo a NON ESISTERE](chi-e-in-fondo-allelenco-e-il-primo-a-non-esistere.md) — `for harness → for task` con TALOS **settimo su otto**: 4,63 ore per misurare tutti tranne noi. ⛔ Il ciclo esterno è l'**unità di confronto**, non il soggetto confrontato
+- ⛔⛔⛔⭐⭐⭐ [HO AZZOPPATO AIDER ragionando sul costo](ho-azzoppato-aider-ragionando-sul-costo.md) — spenta la sua repo map «per fargli costare meno»: **9/15 → 5/15** e costo per risolto **RADDOPPIATO** ($0,0021 → $0,0043). ⛔ Il costo TOTALE era quasi identico: il danno stava nei RISOLTI, e solo il **costo per task risolto** tiene insieme le due cose. ⭐ Il banco ha smentito chi lo costruisce
+- ⛔⛔⭐⭐⭐ **Il COSTO di un agente — 22/8, misurato sul banco:**
+  ⛔⛔⭐⭐⭐ [COMPRIMERE l ingresso ROMPE la cache](comprimere-l-ingresso-rompe-la-cache.md) — misurato 22/8 valutando **Caveman** (100k stelle): il prefisso compresso del **42%** costa **3,5 volte tanto**, perche cambia e la cache si azzera. ⛔ Non due cure che si sommano: due che **si escludono**. La cache vale **2,5×** la compressione ed e gia accesa. ⛔ E un proxy che riscrive l input e **proibito nel banco**: rompe la parita
+  🔜⛔⛔⭐⭐⭐ [LA CACHE vale SEI VOLTE e non la contavamo](la-cache-vale-sei-volte-e-non-la-contavamo.md) — misurato 22/8: **87 token dentro per ogni 1 fuori**, il **93%** del costo e rileggere. `input_cache_read` costa **$0,01/M contro $0,06/M** e la cache PRENDE (16.768 su 16.811 alla **terza** chiamata: la sticky routing impara). ⛔ Z.AI cacheggia da solo: la cura non era nell agente, era che **due lettori** non conoscevano il nome `prompt_tokens_details.cached_tokens`
+- ⛔⛔⛔⭐⭐⭐ **Il rilascio della 0.1.18 — 22/8:** [La cura che vive nella MEMORIA non e una cura](la-cura-che-vive-nella-memoria-non-e-una-cura.md) — lo script di pubblicazione ha **svuotato la copia pubblica due volte a sei giorni**: la cura del 16/8 («System32 in testa al PATH») stava nella testa di chi pubblicava, non nel codice. ⛔ E il difetto peggiore era il CONTROLLO: verificava che l'**archivio** esistesse, non che l'**estrazione** avesse prodotto — stampava `FATTO` su una cartella vuota. ⭐ Ogni cancello dice **cosa ha guardato**; e tarare non e indebolire, se toglie falsi allarmi (3 giri: il nome dell'owner è attribuzione della firma, `casa@gmail.com` è una fixture)
+- ⛔⭐⭐⭐ **Schede e resoconto:** [METÀ delle capacità era giù](meta-delle-capacita-giu-e-nessuno-lo-diceva.md) — col ponte spento il resoconto taceva · [Il MODELLO si cambia dalla barra](il-modello-si-cambia-dalla-barra.md) — esisteva, mancava il montaggio · [La scheda non sopravvive a chi la SMENTISCE](scheda-non-sopravvive-a-chi-la-smentisce.md) — «cancellato», e la scheda lo mostrava · [La VETRINA ha trovato QUATTRO difetti](la-vetrina-ha-trovato-quattro-difetti.md) — `tool_details` a schermo · [«MODELLI ITALIANI» = la PAROLA](modelli-italiani-da-caricare.md) — non un LLM
+- ⛔⭐⭐⭐ **WebView e finestre:** [Il lampo nero era IL NOSTRO FONDO](il-lampo-era-il-nostro-fondo.md) — la WebView · [La finestra del ruolo era colpa NOSTRA](finestra-ruolo-era-colpa-nostra.md) — `getCallingPackage()` null con `startActivity` · [Il colore dice CHI ha disegnato](il-colore-dice-chi-ha-disegnato.md) — `BridgeActivity.onCreate` sovrascrive il manifest · [Due porte che sembrano una](due-porte-che-sembrano-una.md) — `showSession` → nodi=448 · [Il valore che muore all'ULTIMO ponte](valore-che-muore-allultimo-ponte.md) — ⛔ `console.info` non va in logcat · [Il vetro non vede l'altra finestra](il-vetro-non-vede-l-altra-finestra.md)
+- ⛔⭐⭐⭐ **Strumenti che mentono:** ⛔⛔ [Il resolve di HuggingFace può essere relativo](resolve-huggingface-puo-essere-relativo.md) — 22/8: tre `catch` senza un `Log.*`, `unreachable` con 0 byte; la vera causa era una Location relativa presa alla lettera, e il "riprova" non ritentava niente (`start()` su un id già `failed`) · ⛔⛔ [L'AMBIENTE DEL FIGLIO SI DICHIARA](lambiente-del-figlio-si-dichiara.md) — 3 volte: `TERM`/aider, pi/LM Studio, `NODE_TEST_CONTEXT` ⇒ ogni task «regredito» · [Una sonda che SCAGIONA è troppo facile](manda-un-file-e-non-chiama-linvio.md) — 12/12 con 3 attrezzi, 8/12 con la folla vera · [L'attrezzo sull'APP SBAGLIATA](strumento-puntato-sullapp-sbagliata.md) — `adb forward` lega la porta al pid · [La sonda in fila davanti a sé](la-sonda-si-mette-in-fila-davanti-a-se-stessa.md) — 3.123→8.694 ms · [LOCALE e API allineati al 100%](locale-e-api-allineati-al-100.md) · [Due modelli su tre sbagliavano su Telegram](incrocio-provider-trova-il-difetto.md) — lo mostrava il disaccordo · [Una prova che ESCE costa a una persona](una-prova-che-esce-costa-a-una-persona.md) — 47 s di squillo
+- ⛔⭐⭐⭐ **Ponte, prestazioni, diagnosi:** [153 MB in fila](centocinquanta-mb-in-fila.md) — si sonda il ponte, non `window.fetch` · [Il ponte si riaggancia DA SOLO](ponte-si-riaggancia-da-solo.md) — il collo è **accorgersi** della caduta · [Il girello da 10 s era il PONTE](campiona-la-pila-non-indovinare-inquilino.md) — campionare la pila del thread fermo · [Il pilota non partiva tranne che sul mio](freno-senza-shell-e-freno-zombie.md) · [SGRASSARE il grafo d'avvio](sgrassare-il-grafo-davvio.md) — si chiede a Rollup, non alla sourcemap · [L'ascolto anticipato di un LANCIO](ascolto-anticipato-di-un-lancio-di-activity.md) — 344→200 ms · [L'APERTURA A GRADI](apertura-a-gradi-degli-attrezzi.md) — 11.483→505 token
+- ⛔⭐⭐⭐ **Chat e dati:** [Una CHIAMATA ORFANA avvelena la chat per sempre](chiamata-orfana-avvelena-la-chat.md) — un `tool_use` senza `tool_result` · [Ventiquattro chat tutte «Nuova chat»](parola-tradotta-nel-database.md) — il titolo si salvava tradotto · [La riga per il MODELLO sullo schermo](righe-per-il-modello-sullo-schermo.md) — il test puro attraversa il chiamante · [LA CI È VERDE — e 16 s erano una DIAGNOSI](quattro-errori-non-gestiti-nella-suite.md) — moriva prima di partire
+- ✅⭐⭐⭐ [IL PAREGGIO DEL 14 AGOSTO — ed è un SORPASSO](pareggio-gemini-14-agosto.md) — «cerca Telegram sul Play Store»: Gemini **rifiuta**
+
+## ✅ Le CHIUSE del 20-21/8 — spostate qui il 2026-08-22
+
+> ⛔ `MEMORY.md` era a **19.664 byte** contro un tetto di allarme di 19.900,
+> e oltre i 25 KB compilati il contenuto si taglia **in silenzio**. Queste
+> cinque voci erano già marcate ✅ e stavano ancora nell'indice degli APERTI:
+> sono lezioni chiuse, e il loro posto è qui. Blocco intero, non accorciato.
+
+- ✅⭐⭐⭐ [«Scatta foto» NON crasha: la fotocamera non c'è](assistente-crasha-su-scatta-foto.md) — fra i 15 attrezzi **nessuno scatta**
+- ✅⭐⭐ [Due misure che non tornavano](le-due-misure-che-non-tornano.md) — chiuso: lo strumento è fedele a **0,0005**
+- ✅⛔⛔⭐⭐⭐ **0.1.16 — la UI Ricerca approfondita: FATTA** (20/8): contesa aperta sul rapporto, tenuta nel tempo, BibTeX/RIS, fonti+token in testata. ⛔ La contesa NON POTEVA esistere — [funzione coi test e nessun chiamante](funzione-con-i-test-e-nessun-chiamante.md). Resta fuori: «estendi con una linea» → [ledger](ricerche-custodite-fuori-dal-repo.md)
+- ✅⛔⭐⭐⭐ [Lo STOP sotto GPU — CHIUSO il 21/8](stop-sotto-gpu-non-interrompe.md) — la cura in `ggml-opencl` porta 1.430 → **32/36/36 ms** al microbatch PIENO **512**: il 192 non serve piu. ⛔ Il costo della cura e **per GRAFO**, non per token ⇒ un riferimento «senza cura» dentro un confronto fra configurazioni e un **fantasma**
+- ✅⭐⭐⭐ [L'ABORT su GPU e' una FUNZIONE MANCANTE — **implementata il 21/8**, non una legge](labort-su-gpu-e-una-funzione-mancante.md) — la implementano solo CPU e **Metal**; `ggml-opencl` ha `get_proc_address = NULL`. Cura ~30 righe a **costo zero**, e upstream #10509 e' **stale**
+
+## 📱 Mobile — spostato in CATALOGO.md il 2026-09-04
+
+> ⛔ Questo file aveva superato i **25.000 byte** (25.580), il tetto oltre cui il contenuto si
+> taglia **in silenzio**: gli aperti della lane mobile e le regole dell'assistente sul telefono
+> sono in `CATALOGO.md`, sezione «Mobile, 04/09». Restano vere; semplicemente non le implemento
+> io (ownership mobile revocata dall'owner il 04/09) e non devono consumare un indice che si
+> carica a ogni sessione desktop.

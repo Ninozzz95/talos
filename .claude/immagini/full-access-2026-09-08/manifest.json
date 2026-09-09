@@ -1,0 +1,25 @@
+{
+  "date": "2026-09-08T20:24:50.161Z",
+  "sessionId": "2236ac46-59f9-4db6-b0fe-4572807c1b10",
+  "server": "http://127.0.0.1:4174",
+  "evidence": [
+    {
+      "path": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\.claude\\immagini\\full-access-2026-09-08\\full-access-1080p.png",
+      "width": 1920,
+      "height": 1080,
+      "bytes": 232691
+    },
+    {
+      "path": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\.claude\\immagini\\full-access-2026-09-08\\full-access-1440p.png",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 293418
+    },
+    {
+      "path": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\.claude\\immagini\\full-access-2026-09-08\\full-access-4k.png",
+      "width": 3840,
+      "height": 2160,
+      "bytes": 328907
+    }
+  ]
+}

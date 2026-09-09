@@ -1,0 +1,54 @@
+{
+  "source": "Playwright 1.62.1, server reale 4174, nessuna inferenza aggiuntiva",
+  "date": "2026-09-08T20:07:32.319Z",
+  "evidence": [
+    {
+      "kind": "chat",
+      "width": 1920,
+      "height": 1080,
+      "path": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\.claude\\immagini\\immagini-chat-2026-09-08\\chat-1080p-verificata.png",
+      "mime": "image/png",
+      "bytes": 230290
+    },
+    {
+      "kind": "dialogo",
+      "width": 1920,
+      "height": 1080,
+      "path": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\.claude\\immagini\\immagini-chat-2026-09-08\\dialogo-1080p-verificata.png",
+      "mime": "image/png",
+      "bytes": 222940
+    },
+    {
+      "kind": "chat",
+      "width": 2560,
+      "height": 1440,
+      "path": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\.claude\\immagini\\immagini-chat-2026-09-08\\chat-1440p-verificata.png",
+      "mime": "image/png",
+      "bytes": 276951
+    },
+    {
+      "kind": "dialogo",
+      "width": 2560,
+      "height": 1440,
+      "path": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\.claude\\immagini\\immagini-chat-2026-09-08\\dialogo-1440p-verificata.png",
+      "mime": "image/png",
+      "bytes": 256478
+    },
+    {
+      "kind": "chat",
+      "width": 3840,
+      "height": 2160,
+      "path": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\.claude\\immagini\\immagini-chat-2026-09-08\\chat-4k-verificata.png",
+      "mime": "image/png",
+      "bytes": 339608
+    },
+    {
+      "kind": "dialogo",
+      "width": 3840,
+      "height": 2160,
+      "path": "C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\.claude\\immagini\\immagini-chat-2026-09-08\\dialogo-4k-verificata.png",
+      "mime": "image/png",
+      "bytes": 307668
+    }
+  ]
+}

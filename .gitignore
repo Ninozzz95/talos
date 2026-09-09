@@ -177,9 +177,9 @@ docs/superpowers/
 # Resta fuori solo il file delle preferenze PERSONALI, che è per definizione
 # di chi sta alla tastiera e non della squadra.
 .claude/settings.local.json
-.agents/
-.codex/
-AGENTS.md
+# ⛔ 08/09: `.agents/`, `.codex/` e `AGENTS.md` NON si ignorano più qui — vedi il blocco in fondo a
+#    questo file: nella repo PRIVATA il lavoro degli agenti si versiona, è nella PUBBLICA che non
+#    deve arrivarci. Restano ignorate solo le preferenze personali qui sopra.
 
 # ⛔ Le scorie che gli strumenti di lavoro lasciano cadere nella cartella.
 #
@@ -327,19 +327,35 @@ harness-ui/.talos-4174*.log
 .gravi/
 harness-ui/.talos-4198*.log
 
-# ⛔⛔⛔ 07/09/2026, owner: «.claude via senza ombra di dubbio». Qui dentro c'è il materiale di
-# LAVORO — ledger, briefing, memoria delle sessioni, audit, prompt, taccuini: percorsi locali,
-# nomi di persone, ricerche interne. Non è il prodotto, e in un repo pubblico non ha niente da fare.
-# ⛔ I file NON sono stati cancellati: `git rm -r --cached` li toglie dal repo e li lascia sul disco,
-#    dove servono a chi lavora. Chi clona non li vede.
-# ⛔ Il MOCKUP era l'unica cosa qui dentro di cui il PRODOTTO ha bisogno (la build del frontend e i
-#    cancelli di parità lo leggono): spostato in `harness-ui/frontend/mockup/talos-mockup.html`,
-#    dove appartiene, con i suoi cinque riferimenti aggiornati.
-.claude/
-
-# ⛔⛔ 07/09/2026, owner: «nella repo non ci deve essere assolutamente traccia di alcun agente AI».
-# Questi due file descrivono COME lavorano gli agenti su questo repo (istruzioni, spartizione delle
-# lane, regole di condotta): sono materiale di lavoro interno, esattamente come `.claude/`.
-# ⛔ Restano sul disco per chi lavora; escono dal repo.
-CLAUDE.md
-AGENTS.md
+# ══════════════════════════════════════════════════════════════════════════
+# ⛔⛔⛔ 08/09/2026 — LA REGOLA DEL 07/09 È SUPERATA, E LA DIFFERENZA È QUALE REPO
+#
+# Owner, 08/09: «nella repo pubblica deve essere completamente ignorato claude e qualunque
+# riferimento a ricerche e agenti, nella repo privata possiamo mettere tutto quello che vogliamo»,
+# e poi «aggiorna ticket nella privata, non ignorare nulla».
+#
+# Il 07/09 l'ordine era «.claude via senza ombra di dubbio» e «nella repo non ci deve essere
+# assolutamente traccia di alcun agente AI» — giusto, ma detto quando questa cartella sembrava LA
+# repo destinata a diventare pubblica. Non lo è: sono DUE remoti con storie separate.
+#   · `origin`  → github.com/Ninozzz95/agent-virtual-machine  — PRIVATA (verificato: isPrivate=true)
+#   · `public`  → github.com/Ninozzz95/talos                  — PUBBLICA, storia separata, si
+#                 costruisce da `mobile/` come radice (scripts/prepara-la-pubblicazione.ps1)
+#
+# ⇒ Qui, nella PRIVATA, non si ignora il lavoro. E la ragione non è comodità: il 20/08
+#   `.claude/settings.json` è stato sovrascritto e nessuno se n'è accorto per ore, perché fuori
+#   dall'indice un file non ha storia — `git status` tace, `git show` non recupera, un danno non si
+#   vede. È tornato solo perché per caso ne esisteva una copia. Le guardie che ci impediscono di
+#   sbagliare devono essere versionate almeno quanto il codice che proteggono. Lo stesso vale per il
+#   ticket di consegna, che l'08/09 uno script mio ha azzerato e che ho potuto ricostruire solo dal
+#   trascritto della sessione: non c'era nessun `git checkout` a cui tornare.
+#
+# ⛔ RESTA VERO PER LA PUBBLICA, e va fatto rispettare LÌ, non qui: nessuna traccia di agenti,
+#   ricerche, ledger o memoria di sessione. Il cancello della pubblicazione è
+#   `scripts/prepara-la-pubblicazione.ps1`, che pubblica SOLO ciò che sta dentro `mobile/`: una
+#   cartella alla radice — `.claude/`, `CLAUDE.md`, `AGENTS.md` — non ha nessuna strada per
+#   arrivarci. Se un giorno la pubblicazione cambiasse forma, questa è la riga da rileggere per
+#   prima.
+#
+# Resta fuori solo il file delle preferenze PERSONALI, che è di chi sta alla tastiera e non della
+# squadra (dichiarato più sopra, `.claude/settings.local.json`).
+# ══════════════════════════════════════════════════════════════════════════
