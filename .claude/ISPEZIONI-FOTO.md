@@ -325,3 +325,15 @@ Processo desktop isolato, cronologia seminata di 40 scambi, un messaggio dal com
 
 Visto fuori dal compito, registrato e non curato qui: la colonna destra dice «Finestra del contesto 1310,7k · Conversazione 11k · 0,8%» — è la finestra del CATALOGO, mentre la modale usa i 16.384 del profilo di prova: due fonti di verità sullo stesso schermo. E il primo token a 61,2 s è il costo della strada sincrona (la chat aspetta la compattazione quando il contesto non entra): accettabile per la prova, da misurare prima dell'attivazione.
 >>>>>>> codex/talos-context-engine
+
+## PO-08 — la conversazione di un sotto-agente nel pannello, 10/09/2026 (foto in `scratchpad/prove/foto/po08-figlia-20260910/`)
+
+| Foto | Che cosa ci ho visto |
+|---|---|
+| 01-elenco-agenti.png | La scheda «Agenti» con le due deleghe della sessione 187acfb7: ogni card porta il compito, il badge «Conclusa» e il chevron che dice che si apre. |
+| 02-conversazione-figlia.png | La vista aperta dentro il pannello: «← Indietro | Nel workspace corr… | Conclusa», poi Modello z-ai/glm-5.3-flash e Ha fatto 1 giro · 4 chiamate in coppia chiave-valore, la bolla TU col compito per intero, «4 attrezzi usati» con nomi UMANI (elenco della cartella, lettura di un file README.md, scrittura di un file riepilogo.md) e i pallini verdi, e in fondo la risposta della figlia. |
+| 03-tornato-allelenco.png | Dopo «Indietro»: l'elenco è tornato con le sue due card e la vista è stata smontata (il flusso chiuso). |
+
+⛔ Due difetti visti in queste foto e curati nello stesso giro: la bolla del compito andava a capo
+ogni tre parole (le misure della chat larga dentro una colonna di 340 px), e una mia regola aveva
+impilato «Modello» e «Ha fatto» CENTRATI su due righe invece di lasciarli in coppia chiave-valore.

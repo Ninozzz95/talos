@@ -59,3 +59,15 @@ PNG alti conservati a 1920×1080, 2560×1440 e 3840×2160. Le fotografie reali s
 ⛔ Difetti annotati e NON ancora curati, visti in queste foto: la riga di stato troncata dal comando
 ripetuto a destra; la Finestra del contesto che si spegne a «− / −» dopo un comando diretto mentre la
 barra in basso dichiara ancora i token; i numeri dell'Indice dei giri che saltano (2, 3, 5, 6, 8…).
+
+## PO-08 — la conversazione di un sotto-agente nel pannello, 10/09/2026 (foto in `scratchpad/prove/foto/po08-figlia-20260910/`)
+
+| Foto | Che cosa ci ho visto |
+|---|---|
+| 01-elenco-agenti.png | La scheda «Agenti» con le due deleghe della sessione 187acfb7: ogni card porta il compito, il badge «Conclusa» e il chevron che dice che si apre. |
+| 02-conversazione-figlia.png | La vista aperta dentro il pannello: «← Indietro | Nel workspace corr… | Conclusa», poi Modello z-ai/glm-5.3-flash e Ha fatto 1 giro · 4 chiamate in coppia chiave-valore, la bolla TU col compito per intero, «4 attrezzi usati» con nomi UMANI (elenco della cartella, lettura di un file README.md, scrittura di un file riepilogo.md) e i pallini verdi, e in fondo la risposta della figlia. |
+| 03-tornato-allelenco.png | Dopo «Indietro»: l'elenco è tornato con le sue due card e la vista è stata smontata (il flusso chiuso). |
+
+⛔ Due difetti visti in queste foto e curati nello stesso giro: la bolla del compito andava a capo
+ogni tre parole (le misure della chat larga dentro una colonna di 340 px), e una mia regola aveva
+impilato «Modello» e «Ha fatto» CENTRATI su due righe invece di lasciarli in coppia chiave-valore.

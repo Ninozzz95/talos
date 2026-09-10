@@ -38,6 +38,7 @@ import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSI
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser con annotazione 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, ordinaSessioniAdAlbero, statoSessione } from '../components/session-item.js';
+import { montaConversazioneFiglia } from '../components/conversazione-figlia.js'; // PO-08 (10/09): la conversazione di un sotto-agente, nel pannello
 import { leggiEsitoComando, rigaDiStatoComando } from '../components/esito-comando.js'; // PO-06 (10/09): l'esito di un comando, detto a una persona
 import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFileScaricabile, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
@@ -7975,6 +7976,56 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const m = (state.modelLab?.catalogoModelli?.modelli || []).find((x) => x.id === id) || null;
     return Number.isFinite(m?.contextLength) ? m.contextLength : null;
   }
+  /*
+   * ⛔⛔ PO-08 — la conversazione di UNA figlia alla volta, nel pannello destro.
+   */
+  let figliaAperta = null;
+
+  /** L'unico posto che sa come si ascolta una sessione figlia: il componente resta puro, e le sue
+      prove non hanno bisogno di rete. Ritorna la funzione che stacca il flusso. */
+  function apriFlussoFiglia(sessionId, onEvento) {
+    const sorgente = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
+    sorgente.onmessage = (messaggio) => {
+      try { onEvento(JSON.parse(messaggio.data)); }
+      catch { /* un frammento illeggibile non deve buttare giù la vista: si scarta */ }
+    };
+    return () => { try { sorgente.close(); } catch { /* già chiusa */ } };
+  }
+
+  /** Torna all'elenco. ⛔ `distruggi()` chiude già il flusso, stacca l'elemento e ridià il fuoco:
+      qui si rimette solo l'elenco al suo posto. Rifare quelle tre cose vorrebbe dire, per il
+      fuoco, mandarlo su un nodo che non esiste più. */
+  function chiudiConversazioneFiglia() {
+    if (!figliaAperta) return;
+    const aperta = figliaAperta;
+    figliaAperta = null;
+    try { aperta.maniglia?.distruggi?.(); } catch { /* già smontata */ }
+    aperta.contenitore?.remove();
+    const elenco = $('#railAgenti');
+    if (elenco) elenco.hidden = false;
+    aggiornaInspectorDaStato();
+  }
+
+  function apriConversazioneFiglia(figlia) {
+    if (!figlia?.sessionId) return;
+    if (figliaAperta?.sessionId === figlia.sessionId) return; // già aperta: un secondo clic non la rimonta
+    chiudiConversazioneFiglia();
+    const elenco = $('#railAgenti');
+    if (!elenco?.parentElement) return;
+    const contenitore = document.createElement('div');
+    contenitore.dataset.c = 'PannelloFiglia';
+    elenco.parentElement.insertBefore(contenitore, elenco.nextSibling);
+    elenco.hidden = true;
+    const maniglia = montaConversazioneFiglia(contenitore, {
+      sessionId: figlia.sessionId,
+      nome: figlia.taskCorto || figlia.task || 'Delega senza compito registrato',
+      apriFlusso: apriFlussoFiglia,
+      onIndietro: chiudiConversazioneFiglia,
+      document,
+    });
+    figliaAperta = { sessionId: figlia.sessionId, contenitore, maniglia };
+  }
+
   function aggiornaInspectorDaStato() {
     const inspector = $('#inspectorSessione') || $('.talos-inspector');
     if (!inspector) return;
@@ -8013,6 +8064,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       file,
       processi: processiDagliEventi(state.realSession.eventiAttrezzi),
       agenti: state.realSession.figli || [],
+      /* PO-08: la card diventa apribile solo perché qui c'è chi ascolta — senza questa funzione
+         `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
+      azioniAgenti: { onApri: apriConversazioneFiglia },
     });
   }
 
