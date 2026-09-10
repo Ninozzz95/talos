@@ -226,3 +226,46 @@ kernel, la stessa domanda sulla stessa cartella è la prova del «dopo».
 3. Console: una risorsa risponde **503**.
 4. Pannello Ambiente: «Worktree —» vuoto mentre la sessione gira **dentro un worktree**
    (`lane/harness-desktop`), e «Repo annidati: nessuno» su un repo che ne contiene.
+
+---
+
+## ⛔⛔ Prima di lanciare il banco: due cose che l'avrebbero reso inutile
+
+Stavo per lanciare il «prima» approvato. Non l'ho fatto, e non per prudenza generica: guardando come
+il banco chiama TALOS sono saltate fuori due cose che avrebbero fatto tornare **due numeri identici**
+dopo ~10 ore e $1,67, con la conclusione falsa «P-13 non serve».
+
+### 1 · Il banco NON passa da `agent-service.mjs`
+
+`TALOS-BANCO/harness.mjs:1591` chiama **`talosLavora` direttamente**. P-13 è agganciato in
+`agent-service.mjs` — l'unico punto dove un `await` non rompe l'ordine di `RunStarted` — quindi
+l'elenco non sarebbe mai arrivato al banco.
+
+**Curato**: leva `BANCO_ELENCO_PROFONDO=1` in `harness.mjs`, opt-in esattamente come `BANCO_EFFORT`
+che le sta accanto («senza la variabile il comportamento resta bit-per-bit quello di sempre»). È ciò
+che rende possibile un prima/dopo onesto: stesso codice, stesso corpus, stesso modello, **cambia una
+leva sola**. Provata nei quattro versi, senza chiamare nessun modello:
+
+| leva | che cosa riceve il kernel |
+|---|---|
+| assente | `undefined` |
+| `=1` | **stringa di 22.805 caratteri** |
+| `=si` (valore qualsiasi) | `undefined` — solo `1` accende |
+| `=1` su cartella inesistente | `undefined`, **e il task parte lo stesso** |
+
+L'ultima riga è la più importante: un task che fallisse per un elenco mancante entrerebbe nella
+misura come se il modello avesse sbagliato, cioè falserebbe il numero che stiamo misurando.
+
+### 2 · Il banco usa un ALTRO kernel, vecchio di quattro giorni
+
+`TALOS_HARNESS` non è impostata, quindi il banco usa il default:
+`AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs` — **350.796 byte, 06/09**. Il kernel di
+questo repo è `harness-ui/src/kernel/talosHarness.mjs` — **368.343 byte, 10/09**. Sono due file
+diversi, 17.547 byte e quattro giorni di distanza.
+
+⇒ Se le due righe di P-13 finiscono nel kernel del desktop, **il banco non le vede**. La corsa va
+lanciata con `TALOS_HARNESS` puntato al kernel che contiene le due righe — e prima e dopo devono
+usare **lo stesso** file, altrimenti si confronterebbero due kernel invece di una leva.
+
+⛔ Nessuna delle due si vedeva dal codice di P-13: si vedono solo guardando **come il banco chiama
+TALOS**. È il motivo per cui il preventivo di una misura si legge insieme al cablaggio che la porta.
