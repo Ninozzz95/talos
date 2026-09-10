@@ -9757,6 +9757,102 @@ var init_diff_hunk = __esm({
   }
 });
 
+// src/components/risultati-ricerca.js
+function leggiRisultatiRicerca(testo3) {
+  if (typeof testo3 !== "string" || testo3.trim() === "") return null;
+  const righe = testo3.split("\n");
+  let query = null;
+  let quanti = null;
+  const testata = righe.find((r) => TESTATA.test(r));
+  if (testata) {
+    const m = TESTATA.exec(testata);
+    quanti = Number(m[1]);
+    query = m[2].replace(/^["'«]+|["'».]+$/g, "").trim() || null;
+  }
+  const risultati = [];
+  let corrente = null;
+  for (const riga of righe) {
+    const inizio = INIZIO_RISULTATO.exec(riga);
+    if (inizio && !RIGA_URL.test(riga)) {
+      if (corrente) risultati.push(corrente);
+      corrente = { titolo: inizio[2], url: null, quando: null, estratto: "" };
+      continue;
+    }
+    if (!corrente) continue;
+    const url = RIGA_URL.exec(riga);
+    if (url) {
+      corrente.url = url[1];
+      continue;
+    }
+    const data = RIGA_DATA.exec(riga);
+    if (data) {
+      const valore = data[1].trim();
+      corrente.quando = /unknown|sconosciut/i.test(valore) ? null : valore;
+      continue;
+    }
+    const pezzo2 = riga.trim();
+    if (pezzo2) corrente.estratto = corrente.estratto ? `${corrente.estratto} ${pezzo2}` : pezzo2;
+  }
+  if (corrente) risultati.push(corrente);
+  if (risultati.length === 0) return null;
+  return { query, quanti, risultati };
+}
+function creaRisultatiRicerca(letti, { document: doc, tetto = 8 } = {}) {
+  const documentObj = doc || globalThis.document;
+  if (!letti || !Array.isArray(letti.risultati) || letti.risultati.length === 0) return null;
+  const blocco = documentObj.createElement("div");
+  blocco.className = "talos-ricerca-web";
+  blocco.setAttribute("data-c", "SearchResults");
+  const mostrati = letti.risultati.slice(0, tetto);
+  for (const r of mostrati) {
+    const voce = documentObj.createElement("div");
+    voce.className = "talos-ricerca-web__voce";
+    const titolo2 = documentObj.createElement(r.url ? "a" : "span");
+    titolo2.className = "talos-ricerca-web__titolo";
+    titolo2.textContent = r.titolo;
+    if (r.url) {
+      titolo2.href = r.url;
+      titolo2.target = "_blank";
+      titolo2.rel = "noopener noreferrer";
+    }
+    voce.append(titolo2);
+    if (r.url) {
+      const dominio = documentObj.createElement("span");
+      dominio.className = "talos-ricerca-web__dove";
+      let dove = r.url;
+      try {
+        dove = new URL(r.url).hostname.replace(/^www\./, "");
+      } catch {
+      }
+      dominio.textContent = r.quando ? `${dove} · ${r.quando}` : dove;
+      voce.append(dominio);
+    }
+    if (r.estratto) {
+      const estratto = documentObj.createElement("p");
+      estratto.className = "talos-ricerca-web__estratto";
+      estratto.textContent = r.estratto;
+      voce.append(estratto);
+    }
+    blocco.append(voce);
+  }
+  if (letti.risultati.length > mostrati.length) {
+    const resto = documentObj.createElement("p");
+    resto.className = "talos-ricerca-web__resto";
+    resto.textContent = `Altri ${letti.risultati.length - mostrati.length} risultati non sono mostrati qui.`;
+    blocco.append(resto);
+  }
+  return blocco;
+}
+var INIZIO_RISULTATO, RIGA_URL, RIGA_DATA, TESTATA;
+var init_risultati_ricerca = __esm({
+  "src/components/risultati-ricerca.js"() {
+    INIZIO_RISULTATO = /^\s*(\d+)\.\s+(.+?)\s*$/;
+    RIGA_URL = /^\s*url:\s*(\S+)\s*$/i;
+    RIGA_DATA = /^\s*published:\s*(.+?)\s*$/i;
+    TESTATA = /^\s*(\d+)\s+results?\s+for\s+(.*)$/i;
+  }
+});
+
 // src/components/cronologia.js
 function larghezzaLente(indice2, fuoco) {
   if (!Number.isFinite(indice2) || !Number.isFinite(fuoco)) return LENTE[LENTE.length - 1];
@@ -11986,6 +12082,7 @@ var init_app = __esm({
     init_conversazione_figlia();
     init_esito_comando();
     init_diff_hunk();
+    init_risultati_ricerca();
     init_conversazione();
     init_cronologia();
     init_frase_cercata();
@@ -19180,10 +19277,13 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           diffBadge,
           testa: attivita.testa,
           attrezzi: 0,
-          contatori: { letti: 0, cercati: 0, comandi: 0, comandiErrore: 0, nuovi: 0, modificati: 0, altro: 0, falliti: 0, diffAgg: 0, diffRim: 0 },
+          // ⛔ 10/09: `ricercheWeb` e `pagine` vanno dichiarate QUI. Le categorie nuove senza una
+          //   chiave iniziale davano `undefined - 1` = NaN, e un NaN in un contatore non si vede a
+          //   schermo: si vede molto dopo, in un riassunto che smette di tornare.
+          contatori: { letti: 0, cercati: 0, comandi: 0, comandiErrore: 0, nuovi: 0, modificati: 0, altro: 0, falliti: 0, diffAgg: 0, diffRim: 0, ricercheWeb: 0, pagine: 0 },
           // Lo Start non è un successo. Questi contatori descrivono soltanto
           // ciò che è ancora vivo; i totali sopra avanzano al ToolCallResult.
-          inCorso: { letto: 0, cercato: 0, comando: 0, scrittura: 0, altro: 0 },
+          inCorso: { letto: 0, cercato: 0, comando: 0, scrittura: 0, altro: 0, "ricerca-web": 0, pagina: 0 },
           // ⭐ FIFO: la bubble {summaryText,detail} di ogni `scrivi` in attesa
           // del proprio StateDelta (che porta prima/dopo — vedi updateRealReview
           // più sotto). Il kernel esegue le tool-call in sequenza, mai in
@@ -19205,6 +19305,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (nome === "cerca" || nome === "elenca") return "cercato";
         if (nome === "shell" || nome === "prova") return "comando";
         if (nome === "scrivi") return "scrittura";
+        if (nome === "web_search") return "ricerca-web";
+        if (nome === "naviga") return "pagina";
         return "altro";
       }
       function formattaConteggioAttivita(categoria, totale2) {
@@ -19214,6 +19316,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (categoria === "nuovo") return totale2 === 1 ? "1 file creato" : `${totale2} file creati`;
         if (categoria === "comando") return totale2 === 1 ? "1 comando eseguito" : `${totale2} comandi eseguiti`;
         if (categoria === "fallito") return totale2 === 1 ? "1 attività non riuscita" : `${totale2} attività non riuscite`;
+        if (categoria === "ricerca-web") return totale2 === 1 ? "1 ricerca sul web" : `${totale2} ricerche sul web`;
+        if (categoria === "pagina") return totale2 === 1 ? "1 pagina aperta" : `${totale2} pagine aperte`;
         return totale2 === 1 ? "1 altra azione" : `${totale2} altre azioni`;
       }
       function formattaAttivitaInCorso(categoria, totale2) {
@@ -19221,6 +19325,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (categoria === "cercato") return totale2 === 1 ? "1 ricerca in corso…" : `${totale2} ricerche in corso…`;
         if (categoria === "comando") return `esecuzione di ${totale2} comand${totale2 === 1 ? "o" : "i"}…`;
         if (categoria === "scrittura") return `scrittura di ${totale2} file…`;
+        if (categoria === "ricerca-web") return totale2 === 1 ? "ricerca sul web…" : `${totale2} ricerche sul web…`;
+        if (categoria === "pagina") return totale2 === 1 ? "apertura di una pagina…" : `apertura di ${totale2} pagine…`;
         return totale2 === 1 ? "1 attività in corso…" : `${totale2} attività in corso…`;
       }
       function aggiornaRiassuntoBatch(batch) {
@@ -19235,9 +19341,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           const erroreParte = c.comandiErrore > 0 ? ` (${c.comandiErrore} error${c.comandiErrore === 1 ? "e" : "i"})` : "";
           parti.push(`${formattaConteggioAttivita("comando", c.comandi)}${erroreParte}`);
         }
+        if (c.ricercheWeb > 0) parti.push(formattaConteggioAttivita("ricerca-web", c.ricercheWeb));
+        if (c.pagine > 0) parti.push(formattaConteggioAttivita("pagina", c.pagine));
         if (c.altro > 0) parti.push(formattaConteggioAttivita("altro", c.altro));
         if (c.falliti > 0) parti.push(formattaConteggioAttivita("fallito", c.falliti));
-        for (const categoria of ["letto", "cercato", "comando", "scrittura", "altro"]) {
+        for (const categoria of ["letto", "cercato", "comando", "scrittura", "ricerca-web", "pagina", "altro"]) {
           if (batch.inCorso[categoria] > 0) parti.push(formattaAttivitaInCorso(categoria, batch.inCorso[categoria]));
         }
         batch.summaryText.textContent = parti.length > 0 ? `${parti[0].charAt(0).toUpperCase()}${parti[0].slice(1)}${parti.slice(1).map((p) => `, ${p}`).join("")}` : "Attività…";
@@ -22443,6 +22551,10 @@ ${testo3}` : testo3;
               const pre = document.createElement("pre");
               pre.className = "tool-result-block";
               const daMostrare = esitoUmano ? esitoUmano.output.trim() === "" ? "Nessun output." : esitoUmano.output : testoEsito;
+              if (info.nome === "web_search") {
+                const elencoRicerca = creaRisultatiRicerca(leggiRisultatiRicerca(daMostrare));
+                if (elencoRicerca) info.detail.appendChild(elencoRicerca);
+              }
               const righeEsito = String(daMostrare).split("\n");
               const tagliato = righeEsito.length > RIGHE_ESITO_IN_CHAT;
               pre.appendChild(textElement("code", "", tagliato ? righeEsito.slice(0, RIGHE_ESITO_IN_CHAT).join("\n") : daMostrare));
@@ -22470,6 +22582,8 @@ ${testo3}` : testo3;
                 }
               } else if (categoria === "letto") batch.contatori.letti += 1;
               else if (categoria === "cercato") batch.contatori.cercati += 1;
+              else if (categoria === "ricerca-web") batch.contatori.ricercheWeb += 1;
+              else if (categoria === "pagina") batch.contatori.pagine += 1;
               else if (categoria === "altro") batch.contatori.altro += 1;
               info.stato = fallito ? "error" : "complete";
               aggiornaRiassuntoBatch(batch);

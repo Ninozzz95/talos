@@ -515,3 +515,29 @@ un processo che non ha l'input dell'utente, e la cattura ha fotografato lo scher
 schermo non è una foto di quella finestra**. Se serve la finestra di un'altra app, o la porta davanti
 una persona, oppure si cattura la finestra per handle (PrintWindow) invece dell'area di schermo.
 Le due foto restano agli atti come tentativi falliti, non come prove: non provano niente su Hermes.
+
+## 10/09/2026, 19:08 — la ricerca web si legge come una ricerca
+
+Owner, con Hermes aperto accanto: «formatta molto meglio i comandi e la ricerca web».
+
+**`2026-09-10-ricerca-web-1440.png`** — guardata, prima della cura del nome: il batch diceva
+«**1 altra azione**». La parola dice che è successo qualcosa e non dice cosa. L'elenco dei risultati
+c'era già (misurato nel DOM: 5 titoli, primo «GLM-5.3 Benchmarks & Speed (September 2026) |
+BenchLM.ai», dominio `benchlm.ai`), ma sepolto in un batch che non si nominava.
+
+**`2026-09-10-ricerca-web-resa-1440.png`** — guardata, dopo. Il batch dice «**1 ricerca sul web**»,
+la riga dentro dice «Ricerca web: "GLM 5.3 benchmark"» con le parole chiave a destra e il pallino
+verde, e l'Indice dei giri nella colonna destra riporta «1 ricerca sul web · 1 attrezzo».
+Nella foto l'elenco dei risultati non si vede perché la riga è chiusa: il suo contenuto è stato
+verificato nel DOM sul giro precedente.
+
+⛔ Difetto trovato mentre lo curavo, e curato: le categorie nuove (`ricerca-web`, `pagina`) avevano
+contatori **non dichiarati** in `contatori`/`inCorso`, dove le chiavi sono fisse. `undefined - 1` fa
+`NaN`, e un NaN in un contatore non si vede a schermo: si vede molto dopo, in un riassunto che smette
+di tornare. Le chiavi sono state aggiunte insieme alle categorie.
+
+⛔ E un fatto che vale più della formattazione: **la prima ricerca è FALLITA** — `search failed:
+DuckDuckGo non raggiungibile: fetch failed`, lo stesso errore che si vedeva nella foto dell'owner.
+Misurato subito dopo dal mio processo: `html.duckduckgo.com` risponde **200 con risultati**, e la
+ricerca successiva dal 4174 è riuscita (5 risultati). Era transitorio, non una rottura: registrato
+qui perché se si ripresenta si sappia che è già successo due volte oggi.

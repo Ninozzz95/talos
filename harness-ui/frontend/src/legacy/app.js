@@ -41,6 +41,7 @@ import { creaSessionItem, ordinaSessioniAdAlbero, statoSessione } from '../compo
 import { montaConversazioneFiglia } from '../components/conversazione-figlia.js'; // PO-08 (10/09): la conversazione di un sotto-agente, nel pannello
 import { leggiEsitoComando, rigaDiStatoComando } from '../components/esito-comando.js'; // PO-06 (10/09): l'esito di un comando, detto a una persona
 import { raggruppaInHunk } from '../components/diff-hunk.js'; // PO-11 (10/09): i pezzi del diff
+import { leggiRisultatiRicerca, creaRisultatiRicerca } from '../components/risultati-ricerca.js'; // 10/09: la ricerca web si legge come una ricerca
 import { creaDiffInChat, aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFileScaricabile, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
@@ -9136,10 +9137,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       diffBadge,
       testa: attivita.testa,
       attrezzi: 0,
-      contatori: { letti: 0, cercati: 0, comandi: 0, comandiErrore: 0, nuovi: 0, modificati: 0, altro: 0, falliti: 0, diffAgg: 0, diffRim: 0 },
+      // ⛔ 10/09: `ricercheWeb` e `pagine` vanno dichiarate QUI. Le categorie nuove senza una
+      //   chiave iniziale davano `undefined - 1` = NaN, e un NaN in un contatore non si vede a
+      //   schermo: si vede molto dopo, in un riassunto che smette di tornare.
+      contatori: { letti: 0, cercati: 0, comandi: 0, comandiErrore: 0, nuovi: 0, modificati: 0, altro: 0, falliti: 0, diffAgg: 0, diffRim: 0, ricercheWeb: 0, pagine: 0 },
       // Lo Start non è un successo. Questi contatori descrivono soltanto
       // ciò che è ancora vivo; i totali sopra avanzano al ToolCallResult.
-      inCorso: { letto: 0, cercato: 0, comando: 0, scrittura: 0, altro: 0 },
+      inCorso: { letto: 0, cercato: 0, comando: 0, scrittura: 0, altro: 0, 'ricerca-web': 0, pagina: 0 },
       // ⭐ FIFO: la bubble {summaryText,detail} di ogni `scrivi` in attesa
       // del proprio StateDelta (che porta prima/dopo — vedi updateRealReview
       // più sotto). Il kernel esegue le tool-call in sequenza, mai in
@@ -9170,6 +9174,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (nome === 'cerca' || nome === 'elenca') return 'cercato';
     if (nome === 'shell' || nome === 'prova') return 'comando';
     if (nome === 'scrivi') return 'scrittura'; // risolto in nuovo/modificato solo quando arriva lo StateDelta — vedi updateRealReview
+    /*
+     * ⛔ 10/09 — il web aveva una categoria sola, e quella categoria era «altro». A schermo, dopo
+     *   una ricerca, si leggeva «1 altra azione»: la parola dice che è successo qualcosa e non
+     *   dice cosa. Owner, con Hermes aperto accanto: «formatta molto meglio i comandi e la
+     *   ricerca web». Due categorie in più, perché cercare e aprire una pagina sono due gesti
+     *   diversi — e chi legge la conversazione vuole sapere quale dei due è stato fatto.
+     */
+    if (nome === 'web_search') return 'ricerca-web';
+    if (nome === 'naviga') return 'pagina';
     return 'altro';
   }
 
@@ -9180,6 +9193,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (categoria === 'nuovo') return totale === 1 ? '1 file creato' : `${totale} file creati`;
     if (categoria === 'comando') return totale === 1 ? '1 comando eseguito' : `${totale} comandi eseguiti`;
     if (categoria === 'fallito') return totale === 1 ? '1 attività non riuscita' : `${totale} attività non riuscite`;
+    if (categoria === 'ricerca-web') return totale === 1 ? '1 ricerca sul web' : `${totale} ricerche sul web`;
+    if (categoria === 'pagina') return totale === 1 ? '1 pagina aperta' : `${totale} pagine aperte`;
     return totale === 1 ? '1 altra azione' : `${totale} altre azioni`;
   }
 
@@ -9188,6 +9203,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (categoria === 'cercato') return totale === 1 ? '1 ricerca in corso…' : `${totale} ricerche in corso…`;
     if (categoria === 'comando') return `esecuzione di ${totale} comand${totale === 1 ? 'o' : 'i'}…`;
     if (categoria === 'scrittura') return `scrittura di ${totale} file…`;
+    if (categoria === 'ricerca-web') return totale === 1 ? 'ricerca sul web…' : `${totale} ricerche sul web…`;
+    if (categoria === 'pagina') return totale === 1 ? 'apertura di una pagina…' : `apertura di ${totale} pagine…`;
     return totale === 1 ? '1 attività in corso…' : `${totale} attività in corso…`;
   }
 
@@ -9210,9 +9227,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const erroreParte = c.comandiErrore > 0 ? ` (${c.comandiErrore} error${c.comandiErrore === 1 ? 'e' : 'i'})` : '';
       parti.push(`${formattaConteggioAttivita('comando', c.comandi)}${erroreParte}`);
     }
+    if (c.ricercheWeb > 0) parti.push(formattaConteggioAttivita('ricerca-web', c.ricercheWeb));
+    if (c.pagine > 0) parti.push(formattaConteggioAttivita('pagina', c.pagine));
     if (c.altro > 0) parti.push(formattaConteggioAttivita('altro', c.altro));
     if (c.falliti > 0) parti.push(formattaConteggioAttivita('fallito', c.falliti));
-    for (const categoria of ['letto', 'cercato', 'comando', 'scrittura', 'altro']) {
+    for (const categoria of ['letto', 'cercato', 'comando', 'scrittura', 'ricerca-web', 'pagina', 'altro']) {
       if (batch.inCorso[categoria] > 0) parti.push(formattaAttivitaInCorso(categoria, batch.inCorso[categoria]));
     }
     batch.summaryText.textContent = parti.length > 0
@@ -13245,6 +13264,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            *   ciò per cui il comando è stato scritto (PO-06), e tagliarlo presto sarebbe togliere
            *   la cosa che serve. Duecento righe passano intere; oltre, si dice quante mancano.
            */
+          /*
+           * ⭐⭐⭐ 10/09, owner con Hermes aperto accanto: «formatta molto meglio i comandi e la
+           *   ricerca web». Per una ricerca il corpo mostrava il testo che riceve il MODELLO
+           *   (`8 results for … / url: … / published: date unknown`), messo davanti a una persona.
+           * ⛔ La resa si AGGIUNGE, non sostituisce. Ricerca 10/09/2026 (firecrawl.dev, «Best AI
+           *   Search Engines for Agents and Workflows in 2026»): «agents need CONTENT, not just
+           *   links» — il modello ha bisogno del testo intero, la persona di un elenco che si
+           *   legge. Due destinatari, due rese; il grezzo resta dov'era, come il `toolViewMode:
+           *   technical` di Hermes (fallback.tsx, letto lo stesso giorno).
+           */
+          if (info.nome === 'web_search') {
+            const elencoRicerca = creaRisultatiRicerca(leggiRisultatiRicerca(daMostrare));
+            if (elencoRicerca) info.detail.appendChild(elencoRicerca);
+          }
           const righeEsito = String(daMostrare).split('\n');
           const tagliato = righeEsito.length > RIGHE_ESITO_IN_CHAT;
           pre.appendChild(textElement('code', '', tagliato ? righeEsito.slice(0, RIGHE_ESITO_IN_CHAT).join('\n') : daMostrare));
@@ -13269,6 +13302,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             }
           } else if (categoria === 'letto') batch.contatori.letti += 1;
           else if (categoria === 'cercato') batch.contatori.cercati += 1;
+          else if (categoria === 'ricerca-web') batch.contatori.ricercheWeb += 1;
+          else if (categoria === 'pagina') batch.contatori.pagine += 1;
           // Una scrittura riuscita è contata soltanto dal relativo
           // StateDelta add/replace: il testo del tool non prova il disco.
           else if (categoria === 'altro') batch.contatori.altro += 1;
