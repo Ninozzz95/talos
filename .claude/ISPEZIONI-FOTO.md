@@ -333,6 +333,7 @@ Visto fuori dal compito, registrato e non curato qui: la colonna destra dice «F
 | 01-elenco-agenti.png | La scheda «Agenti» con le due deleghe della sessione 187acfb7: ogni card porta il compito, il badge «Conclusa» e il chevron che dice che si apre. |
 | 02-conversazione-figlia.png | La vista aperta dentro il pannello: «← Indietro | Nel workspace corr… | Conclusa», poi Modello z-ai/glm-5.3-flash e Ha fatto 1 giro · 4 chiamate in coppia chiave-valore, la bolla TU col compito per intero, «4 attrezzi usati» con nomi UMANI (elenco della cartella, lettura di un file README.md, scrittura di un file riepilogo.md) e i pallini verdi, e in fondo la risposta della figlia. |
 | 03-tornato-allelenco.png | Dopo «Indietro»: l'elenco è tornato con le sue due card e la vista è stata smontata (il flusso chiuso). |
+| 04-menu-tasto-destro.png | Il tasto destro sulla card apre il menu condiviso alle coordinate del puntatore (x=1216, y=280) con due voci e le loro icone: «Apri la conversazione» e «Apri come sessione intera». Niente «Ferma»: la delega e conclusa, e le voci si costruiscono al momento del clic. Esc lo chiude. ⛔ In questa foto ho letto «Ha fatto 4 chiamate · 1 scritture» — accordo sbagliato, curato nello stesso giro usando plurale.js. |
 
 ⛔ Due difetti visti in queste foto e curati nello stesso giro: la bolla del compito andava a capo
 ogni tre parole (le misure della chat larga dentro una colonna di 340 px), e una mia regola aveva

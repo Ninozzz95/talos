@@ -161,6 +161,11 @@ function kv(d, k, v, classeV = '') { const r = el(d, 'div', 'talos-kv'); r.appen
  *   affatto, e ad accorgersene è stato un test, non l'occhio.
  * Costruita a mano perché questo file non ha import: `el` sotto è locale per la stessa ragione.
  */
+/* ⛔ L'unico import di questo file, e vale la pena: `plurale.js` è il posto in cui vive il plurale
+   italiano (nato il 06/09 per il difetto BH-12, nove componenti che scrivevano «1 ricordi»). Qui
+   si leggeva «1 scritture»: la decima occorrenza dello stesso difetto. */
+import { plurale } from './plurale.js';
+
 const SVG_NS_INSPECTOR = 'http://www.w3.org/2000/svg';
 function chevron(d) {
   const svg = d.createElementNS(SVG_NS_INSPECTOR, 'svg');
@@ -227,7 +232,7 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     const ev = a.evidenzaDelega && typeof a.evidenzaDelega === 'object' ? a.evidenzaDelega : null;
     const righe = [];
     if (a.avviataAlle) righe.push(['Avviata', oraBreve(a.avviataAlle)]);
-    if (ev) righe.push(['Ha fatto', `${Number(ev.toolCalls || 0)} chiamate · ${Number(ev.scritture || 0)} scritture`]);
+    if (ev) righe.push(['Ha fatto', `${plurale(Number(ev.toolCalls || 0), 'chiamata')} · ${plurale(Number(ev.scritture || 0), 'scrittura', 'scritture')}`]);
     for (const [k, v] of righe) {
       const kv = el(d, 'div', 'talos-kv');
       kv.append(el(d, 'span', 'talos-kv__k', k), el(d, 'span', 'talos-kv__v talos-mono', v));
