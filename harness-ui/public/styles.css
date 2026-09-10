@@ -10176,5 +10176,32 @@ dialog.command-dialog .tool-chips .status-chip,
   padding: 2px;
   background: var(--talos-panel);
 }
+@keyframes talosMarchioRespira {
+  0%, 100% {
+    opacity: .45;
+    transform: scale(.94);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+body.talos-giro-vivo .talos-message:last-of-type .talos-avatar .glyph,
+body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar .glyph {
+  animation: talosMarchioRespira 2.4s ease-in-out infinite;
+  transform-origin: center;
+}
+body.talos-giro-vivo .talos-message:last-of-type .talos-avatar,
+body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar {
+  border-color: var(--talos-accent);
+  transition: border-color .3s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.talos-giro-vivo .talos-message:last-of-type .talos-avatar .glyph,
+  body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar .glyph {
+    animation: none;
+    opacity: 1;
+  }
+}
 
 /* src/styles/main.css */

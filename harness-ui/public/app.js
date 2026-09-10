@@ -19311,7 +19311,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         { dopoSecondi: 5, testo: "Il modello ci sta ancora lavorando…" },
         { dopoSecondi: 12, testo: "Ci sta mettendo più del solito — resta in attesa…" }
       ];
+      function segnaGiroVivo(vivo) {
+        document.body?.classList?.toggle("talos-giro-vivo", Boolean(vivo));
+      }
       function mostraAttesaRisposta(stato = "attesa") {
+        segnaGiroVivo(true);
         state.realSession.faseAttesa += 1;
         const etichette = {
           attesa: ETICHETTE_ATTESA_PER_TEMPO[0].testo,
@@ -20985,6 +20989,7 @@ ${f}`;
               break;
             }
             case "RunError": {
+              segnaGiroVivo(false);
               righe.push(`> ⛔ **ERRORE${evento.code ? ` [${evento.code}]` : ""}:** ${evento.message}`, "");
               break;
             }
@@ -22814,6 +22819,7 @@ ${testo3}` : testo3;
             break;
           }
           case "RunFinished": {
+            segnaGiroVivo(false);
             contextMonitor?.setRunning(false);
             void contextMonitor?.refresh({ afterPending: true });
             if (state.realSession.redirectPendingId) mostraAttesaRisposta("redirect");
