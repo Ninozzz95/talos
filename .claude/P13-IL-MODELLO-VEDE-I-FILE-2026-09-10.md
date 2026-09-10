@@ -136,3 +136,93 @@ E altre tre cose che la misura ha aggiunto:
 
 **Il preventivo vero**: $0,00794 a giro (dal credito del fornitore, non dal CLI), 105 giri per
 condizione a 3 ripetizioni ⇒ **$1,67 per prima+dopo**, circa 10 ore.
+
+---
+
+## ⛔ L'aggancio, 10/09 sera — due cose che solo la misura ha detto
+
+### 1 · Il punto giusto non era quello ovvio, e costa 148 test scoprirlo
+
+Avevo agganciato l'elenco in `session-registry.mjs`, dentro `avviaESegui`, prima di avviare la
+sessione. Sembra il posto naturale — è dove nasce `cloudOptions`. **Non lo è**, e non è un'opinione:
+
+| che cosa ho provato | esito |
+|---|---|
+| costruire l'elenco lì con `await` (tre rami collassati in due) | **213 test rossi** su 2084 |
+| solo `Promise.resolve().then(() => avviaSessioneFn(cloudOptions))` — **un tick**, niente altro | **148 rossi** |
+| il codice originale | 2084 verdi |
+
+⇒ Il colpevole non era l'elenco: era **il tick**. `avviaSessione` emette `RunStarted` come sua prima
+riga, e tutto ciò che chiama `avviaESegui` conta su quell'evento già nel buffer al ritorno sincrono.
+Il repo lo dice alla riga 2245 di quel file; io l'ho letto **dopo** aver rotto la suite.
+
+⭐ Il posto giusto è `agent-service.mjs`, fra `RunStarted` (riga 490, sincrono) e `talosLavoraFn`
+(1413) — e non è una scoperta: è l'idioma **già in uso lì** per MCP, Skills e Plugin, ognuno
+documentato con la stessa frase, «DOPO RunStarted (sincrono, sopra), PRIMA di talosLavoraFn (sotto)».
+
+⇒ Conseguenza buona: il kernel riceve una **stringa** già pronta, quindi le due righe di
+`KERNEL-P13-CONTESTO-DEL-PROGETTO.md` restano **invariate**.
+
+### 2 · Il primo giro vero costava quattro volte il dovuto, e nessun errore lo diceva
+
+Misurato sulla cartella vera `harness-ui`, non su una fixture:
+
+| | percorsi | token | troncato |
+|---|---|---|---|
+| come l'avevo scritto | 1500 | **25.163** | **sì** |
+| dopo la cura | **629** | **6.518** | no (34 ms, 0 ms in cache) |
+
+La causa: `contestoDelProgetto` chiama `creaFiltro(radice)` con una **stringa**;
+`creaFiltroGitignore` vuole `{radice}`. Node lanciava `ERR_INVALID_ARG_TYPE` — e il `try/catch`
+messo lì per il caso «`.gitignore` illeggibile» **lo scambiava per quello**, procedendo senza
+filtro. Nessun errore, nessun rosso: solo un elenco che sembra funzionare, arriva troncato e costa
+quattro volte tanto. Dentro c'erano anche `.talos-4174.err.log` e `.search-source.json`.
+
+⛔ È la forma esatta di [[il-cancello-semantico-era-spento-da-sempre]]: una funzione chiamata male,
+l'eccezione inghiottita da un `catch` legittimo, e il risultato che passa per buono. **Curato in due
+punti**: il chiamante passa `{radice}`, e il `catch` ora **rilancia** un errore di contratto
+(`TypeError`/`ERR_INVALID_ARG_TYPE`) invece di degradarlo — un file di regole illeggibile continua a
+degradarsi in silenzio, un bug di chi chiama no.
+
+### Le prove, e che mordono
+
+`tests/p13-elenco-al-modello.test.mjs` (4) e una in `tests/contesto-del-progetto.test.mjs`. Quella
+sull'ordine è stata provata **al contrario**: spostando la costruzione un tick prima di `RunStarted`
+diventa rossa **solo lei**, mentre le altre tre restano verdi. Suite: **2089/2089**.
+
+---
+
+## ⭐⭐⭐ IL «PRIMA» VISTO DAL VIVO — 10/09, sessione `186707d8` sul 4174
+
+Non una fixture: `glm-5.3-flash`, cartella `AVM-harness-desktop`, permesso «Solo lettura».
+Domanda: *«quanti file .mjs ci sono nella cartella harness-ui/src?»*
+
+Otto giri, **6 ricerche e 1 comando**, esito `successo · fine-lavoro`, 87.678 token in ingresso di cui
+35.520 dalla cache (41%). E la risposta, a schermo:
+
+> **0** — la cartella `harness-ui/src` non esiste (il codice sta in `harness-ui/frontend/src`, dove
+> non risulta nessun `.mjs`).
+
+**Sono 104.** `harness-ui/src/*.mjs` — `agent-service.mjs`, `session-registry.mjs`, tutto il server.
+E `harness-ui/frontend/src`, la cartella che il modello indica come quella vera, di `.mjs` **ne ha
+zero**: ha invertito esattamente le due.
+
+⇒ È il difetto del 22/08, ripreso oggi col modello vero e su questo repo: `elenca` arriva a
+profondità 2, `harness-ui/src/` sta a 3, e ciò che non si vede **non esiste**. Ma c'è un dettaglio
+peggiore del conteggio sbagliato, e riguarda l'onestà: non ha detto «non lo so» né «non riesco a
+guardarci dentro» — ha **negato l'esistenza della cartella**, con una motivazione costruita, dopo sei
+ricerche. Un modello che non vede non tace: **spiega**.
+
+⛔ Questo è il «prima» che nessun pass-rate potrà dire meglio, ed è registrato PRIMA che il kernel
+legga `contestoDelProgetto` — cioè prima di conoscere l'esito. Quando le due righe saranno nel
+kernel, la stessa domanda sulla stessa cartella è la prova del «dopo».
+
+### Difetti visti nella foto, che non c'entrano con P-13 (taccuino ispettore)
+
+1. Il suggerimento del composer propone **«Approfondisci "harness-ui/frontend/src"»** — cioè invita a
+   scavare dentro la premessa sbagliata appena prodotta dal modello.
+2. Console: `Applying inline style violates … Content Security Policy` (style-src con nonce) — uno
+   stile inline bloccato, e **l'azione è stata bloccata**, non solo segnalata.
+3. Console: una risorsa risponde **503**.
+4. Pannello Ambiente: «Worktree —» vuoto mentre la sessione gira **dentro un worktree**
+   (`lane/harness-desktop`), e «Repo annidati: nessuno» su un repo che ne contiene.

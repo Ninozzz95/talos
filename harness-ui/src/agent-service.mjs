@@ -33,6 +33,8 @@ import { salvaVoce as salvaVoceLibreriaReale } from './library-store.mjs'; // 06
 import { generateTalosDocument as generateTalosDocumentReale, TALOS_SOURCE_TEXT_FORMATS, verifyTalosDocument as verifyTalosDocumentReale } from './document-generator.mjs';
 import { generaImmagineOpenRouter as generaImmagineOpenRouterReale } from './image-generator.mjs';
 import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspace-context.mjs';
+import { contestoDelProgetto as contestoDelProgettoReale } from './contesto-del-progetto.mjs'; // P-13: l'elenco dei file che il modello riceve
+import { creaFiltroGitignore as creaFiltroGitignoreReale } from './gitignore-elenco.mjs'; // P-13: le regole che decidono cosa NON elencare
 import { creaFileWorkspace as creaFileWorkspaceReale, WorkspaceFileError } from './workspace-files.mjs';
 import { preparaToolMcpPerSessione as preparaToolMcpPerSessioneReale } from './mcp-session.mjs';
 import { caricaSkill as caricaSkillReale } from './skill-registry.mjs';
@@ -367,6 +369,10 @@ export async function avviaSessione({
   eseguiHookFn = eseguiHookReale,
   talosLavoraFn = talosLavoraReale,
   leggiContestoWorkspaceFn = leggiContestoWorkspaceReale,
+  // ⭐ P-13 (10/09) — iniettabili per le prove, come ogni altro *Fn qui: nessun test deve
+  // camminare un albero vero per provare l'ordine degli eventi.
+  contestoDelProgettoFn = contestoDelProgettoReale,
+  creaFiltroGitignoreFn = creaFiltroGitignoreReale,
   salvaArtefattoFn = salvaArtefattoReale,
   /*
    * ⛔⛔⛔ 06/9, owner: «con i modelli a chiave API gli artefatti vengono creati, ma non salvati
@@ -488,6 +494,46 @@ export async function avviaSessione({
   };
 
   onEvento(runStarted({ threadId, runId, input: task, contesto }));
+
+  /*
+   * ⛔⛔⛔ P-13 (10/09) — L'ELENCO DEI FILE, e perché sta ESATTAMENTE qui.
+   *
+   * IL DIFETTO, misurato il 22/08: l'attrezzo `elenca` arriva a profondità 2; i 106 percorsi dei
+   * task del corpus `storia` stanno a profondità 4-6, ZERO a profondità ≤2; e 35 consegne su 35
+   * non nominano nessun file. Il modello non può risolverli — non per bravura: non li VEDE.
+   *
+   * ⛔ IL PUNTO NON È UNA PREFERENZA, È UNA MISURA. Il primo tentativo agganciava questo in
+   *   `session-registry.mjs`, dentro `avviaESegui`: un solo tick di ritardo lì fa cadere 148
+   *   test su 2084, perché `avviaSessione` emette RunStarted come sua PRIMA riga e chi chiama
+   *   conta su quell'evento già nel buffer al ritorno (la riga 2245 di quel file lo dice a
+   *   chiare lettere). Qui invece siamo DOPO RunStarted e PRIMA di talosLavoraFn — lo stesso
+   *   posto, e per la stessa ragione, dove già vivono MCP (sotto), Skills e Plugin.
+   * ⛔ E SE FALLISCE NON SI FERMA NIENTE: stesso principio delle Skills poche righe sotto —
+   *   una sessione che non parte perché non si sono potuti elencare i file sarebbe una cura
+   *   molto peggiore della malattia.
+   * ⭐ Al kernel arriva una STRINGA già pronta: `contesto-del-progetto.mjs` tiene la cache per
+   *   cartella (39 ms la prima volta su questo repo, 2 ms dopo — misurato), e la stabilità di
+   *   quella stringa è ciò che fa prendere la cache del fornitore: costa un sesto e prende
+   *   dalla terza chiamata (22/08, 16.768 token su 16.811 letti dalla cache).
+   */
+  let testoContestoProgetto;
+  try {
+    /*
+     * ⛔ I DUE CONTRATTI, e non è pignoleria: `contestoDelProgetto` chiama `creaFiltro(radice)`
+     *   con una STRINGA; `creaFiltroGitignore` vuole `{radice}`. Passata la stringa nuda, Node
+     *   lancia ERR_INVALID_ARG_TYPE, il catch là dentro lo scambia per un .gitignore illeggibile
+     *   e l'elenco esce SENZA FILTRO. Trovato dal vivo il 10/09 sulla cartella vera: 1500
+     *   percorsi troncati e 25.163 token invece di ~6.500, con dentro i file di log. Non un
+     *   errore visibile: un elenco che sembra funzionare e costa quattro volte tanto.
+     */
+    const elencoProgetto = await contestoDelProgettoFn({
+      cartella,
+      creaFiltro: (radice) => creaFiltroGitignoreFn({ radice }),
+    });
+    testoContestoProgetto = elencoProgetto?.testo;
+  } catch {
+    // ⭐ nessun elenco: si parte esattamente come prima di P-13, zero differenza per la sessione.
+  }
 
   /*
    * ⭐⭐⭐ 29/8 — FASE E: DOPO RunStarted (sincrono, sopra), PRIMA di
@@ -1412,6 +1458,9 @@ export async function avviaSessione({
   try {
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
+      // ⭐ P-13 — il kernel lo mette in testa al prompt, subito dopo le istruzioni e PRIMA della
+      // consegna: un contenuto stabile messo DOPO uno variabile non viene mai riusato dalla cache.
+      contestoDelProgetto: testoContestoProgetto,
       onGiro, onScrittura, onDelta, reasoning, contextHooks,
       strumentiEstesi, ricercaWeb, richiediRicercaFn, onArtefatto, onDocumento, onImmagine, modelloPlanner,
       livelloAccesso, chiediApprovazioneFn, hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
