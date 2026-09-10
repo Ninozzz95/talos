@@ -794,6 +794,48 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 /* ⛔ Nessun bottone che finge: senza indirizzo si dice che non è disponibile, e non si offre un clic
    che fallirebbe. È la stessa regola del «mai un rimedio falso» delle note d'errore. */
 .talos-file-scaricabile__assente{flex:none; font-size:12px; color:var(--talos-muted)}
+/* ⛔⛔ 10/09/2026 — LE AZIONI DELLA LIBRERIA. Owner: «ogni artefatto va salvato in libreria,
+   con CRUD completo e azioni Windows», e poi: «fai in modo che le azioni e i pulsanti della libreria
+   FUNZIONINO A SCHERMO». Prima di oggi la riga aveva solo «Dettagli» e un «Apri» con `hidden` e
+   `richiede='fase3'`: disegnato e morto.
+
+   ⛔ Cinque bottoni in una riga d'elenco sono tanti, e a 1024×800 la colonna è stretta. Perciò il
+   gruppo appare al passaggio del mouse o quando prende il fuoco da tastiera — la stessa regola già
+   usata per le azioni di un messaggio. ⛔ `:focus-within` non è un dettaglio: senza, chi naviga con
+   il Tab arriverebbe su bottoni invisibili. E sotto i 1024 restano visibili sempre: su una finestra
+   stretta il passaggio del mouse è meno affidabile, e nascondere l'unica via è peggio che stringere.
+
+   ⛔ `a.talos-button` vuole `text-decoration:none`: «Apri» e «Scarica» sono collegamenti vestiti da
+   bottone, e il foglio non lo dichiarava — sarebbero usciti sottolineati. */
+.talos-list-row__azioni{display:flex; align-items:center; gap:4px; flex:none; opacity:0; transition:opacity var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease)}
+.talos-list-row:hover .talos-list-row__azioni,
+.talos-list-row:focus-within .talos-list-row__azioni{opacity:1}
+@media (max-width:1100px){ .talos-list-row__azioni{opacity:1} }
+a.talos-button{text-decoration:none}
+
+/* La rinomina avviene NELLA riga: un dialogo per cambiare un nome è attrito senza guadagno
+   (logrocket, «Modal UX design», letto 10/09/2026: «editable forms and inline elements don't need
+   modals»). Il campo prende tutto lo spazio che resta e non spinge fuori i due bottoni. */
+.talos-list-row__rinomina{display:flex; gap:6px; align-items:center; flex:1; min-width:0}
+.talos-list-row__nome{
+  flex:1; min-width:0; font:600 13.5px/1.35 var(--talos-font-sans, inherit); padding:2px 6px;
+  border:1px solid var(--talos-border); border-radius:6px;
+  background:var(--talos-panel-soft); color:var(--talos-text);
+}
+.talos-list-row__nome:focus-visible{outline:2px solid var(--talos-accent-border); outline-offset:1px}
+
+/* ⛔ L'esito si dice NELLA riga, non in un angolo dello schermo: chi ha appena premuto un bottone
+   guarda lì. Un errore è rosso, uno stato è spento, e il testo va a capo invece di sfondare. */
+.talos-list-row__messaggio{display:block; font-size:12px; margin-top:2px; overflow-wrap:anywhere}
+.talos-list-row__messaggio[data-tono="errore"]{color:var(--talos-danger)}
+.talos-list-row__messaggio[data-tono="stato"]{color:var(--talos-muted)}
+
+/* ⛔ Eliminare è l'unica azione irreversibile della riga, e l'unica che chiede conferma: la
+   conferma si spende dove serve (NN/g, «Confirmation Dialogs Can Prevent User Errors», e
+   saasui.design sulla scala dell'attrito, letti 10/09/2026). Chiederla anche per rinomina o
+   scarico insegnerebbe solo a cliccare «sì» senza leggere. */
+.talos-list-row__conferma{display:flex; align-items:center; gap:6px}
+.talos-list-row__conferma-testo{font-size:12px; color:var(--talos-danger)}
 .assistant-copy .md-table-wrap{margin:12px 0; overflow-x:auto; overscroll-behavior-x:contain}
 .assistant-copy .md-table{border-collapse:collapse; width:100%; font-size:13px; font-variant-numeric:tabular-nums}
 .assistant-copy .md-table th{text-align:left; padding:7px 12px 7px 0; border-bottom:1px solid var(--talos-border-strong); color:var(--talos-muted); font-weight:600; white-space:nowrap}

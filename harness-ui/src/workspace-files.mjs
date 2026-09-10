@@ -99,7 +99,9 @@ export async function leggiContenutoFile({ cartella, percorso }, deps = {}) {
  *   chi chiama: niente a capo né virgolette che possano spezzare l'intestazione (una risposta HTTP
  *   con un'intestazione spezzata è una vulnerabilità, non un nome brutto).
  */
-const DIMENSIONE_MASSIMA_SCARICO = 64 * 1024 * 1024;
+/* ⛔ Esportato il 10/09/2026: lo scarico di una voce di Libreria (`library-store.mjs`) ha lo
+   STESSO tetto, e due numeri scritti in due file un giorno dicono due cose diverse. */
+export const DIMENSIONE_MASSIMA_SCARICO = 64 * 1024 * 1024;
 
 /** Il nome, ridotto a ciò che può stare in un'intestazione HTTP senza spezzarla. Puro. */
 export function nomeSicuroPerIntestazione(nome) {
@@ -349,17 +351,83 @@ export async function creaVoceWorkspace({ cartella, percorsoBase, nome, tipo }, 
  * noto, non un guasto di questo codice) — l'unico fallimento vero da
  * segnalare è `execFile` che non trova l'eseguibile affatto.
  */
+/*
+ * ⛔⛔ 10/09/2026 — «APRI», l'azione Windows che mancava. Owner: «con CRUD completo e AZIONI
+ * WINDOWS», e poi «fai in modo che le azioni e i pulsanti della libreria funzionino a schermo».
+ *
+ * Il problema, misurato: la rotta che serve i byte manda `Content-Disposition: attachment` e
+ * `application/octet-stream` — giusto per uno SCARICO, ma vuol dire che un pulsante «Apri» agganciato
+ * lì farebbe scaricare il file una seconda volta invece di aprirlo. Su Windows «aprire» ha un
+ * significato preciso e diverso: lo apre il programma associato all'estensione (Word per un .docx,
+ * il visualizzatore foto per un .jpg).
+ *
+ * ⛔ `explorer.exe <percorso>` è la stessa porta già usata da `rivelaInEsploraFile` qui sotto, senza
+ *   `/select`: con il percorso di un FILE, Explorer lo apre col programma associato. Riusa la stessa
+ *   politica di processo (`EXPLORER_PROCESS_POLICY`), che ammette solo `explorer.exe`: nessun
+ *   eseguibile nuovo, nessuna shell, e il percorso resta un ARGOMENTO — mai una stringa di comando,
+ *   che con un nome contenente `&` o `"` sarebbe un'iniezione.
+ * ⛔ E come la sorella: fuori da Windows non finge, dichiara che non è disponibile.
+ */
+export async function apriFileConProgrammaPredefinito({ cartella, percorso }, deps = {}) {
+  const { reale } = risolviPercorsoEsistente(cartella, percorso, deps);
+  if ((deps.platform ?? process.platform) !== 'win32') {
+    throw new WorkspaceFileError('Disponibile solo su Windows', 'PLATFORM_UNSUPPORTED');
+  }
+  const stat = await (deps.statFn ?? fsp.stat)(reale);
+  /* ⛔ Una cartella si «rivela», non si «apre col programma»: due azioni diverse, due bottoni diversi. */
+  if (!stat.isFile()) throw new WorkspaceFileError('Non è un file: usa «Mostra nella cartella»');
+  /*
+   * ⛔⛔ 10/09/2026 — QUESTA RIGA NON HA MAI FUNZIONATO CON LA POLITICA VERA, e nessun test se n'era
+   *   accorto. Il wrapper dichiarava `(comando, argomenti, opzioni, callback)` ma qui sotto veniva
+   *   chiamato con TRE argomenti: la funzione di richiamo finiva nel posto delle OPZIONI, e
+   *   `callback` restava `undefined` ⇒ `execFile` non richiamava nessuno, la promessa non si
+   *   risolveva mai, e la richiesta HTTP restava appesa per sempre.
+   * ⛔ Misurato dal vivo il 10/09 premendo il bottone sul 4174: la rotta non rispondeva entro 15
+   *   secondi, e `curl` chiudeva con «0 bytes received». Fuori dal server, la funzione restava appesa
+   *   oltre gli 8 secondi. Con `execFile` diretto, invece, il richiamo arriva in **126 ms**.
+   * ⛔ Perché i test erano verdi: iniettavano un finto a TRE parametri `(comando, argomenti, cb)`,
+   *   cioè con la forma sbagliata — un finto che non imita il vero misura il finto. Ora il wrapper
+   *   accetta entrambe le forme, e una prova nuova chiama con QUATTRO argomenti come fa il codice.
+   */
+  const politica = (comando, argomenti, opzioni, callback) => EXPLORER_PROCESS_POLICY.execFile(comando, argomenti, {
+    ...opzioni,
+    cwd: opzioni?.cwd ?? cartella,
+  }, callback);
+  const grezza = deps.execFileFn ?? politica;
+  /* Chi inietta un finto a tre parametri continua a funzionare: l'ultimo argomento è il richiamo. */
+  const execFileFn = (comando, argomenti, opzioni, callback) => (
+    grezza.length <= 3
+      ? grezza(comando, argomenti, callback)
+      : grezza(comando, argomenti, opzioni, callback)
+  );
+  await new Promise((ok, no) => {
+    execFileFn('explorer.exe', [reale], {}, (errore) => {
+      if (errore && errore.code === 'ENOENT') { no(errore); return; }
+      ok(); // ⛔ explorer.exe esce con codici non-zero anche quando ha funzionato: è noto, e non è un guasto
+    });
+  });
+  return { aperto: true };
+}
+
 export async function rivelaInEsploraFile({ cartella, percorso }, deps = {}) {
   const { reale } = risolviPercorsoEsistente(cartella, percorso, deps);
   if ((deps.platform ?? process.platform) !== 'win32') {
     throw new WorkspaceFileError('Disponibile solo su Windows', 'PLATFORM_UNSUPPORTED');
   }
-  const execFileFn = deps.execFileFn ?? ((comando, argomenti, opzioni, callback) => EXPLORER_PROCESS_POLICY.execFile(comando, argomenti, {
+  /* ⛔ Stesso wrapper della funzione qui sopra, e per lo stesso motivo: chiamato con tre argomenti
+     il richiamo finiva nel posto delle opzioni e la promessa non si risolveva mai. Vedi là la storia. */
+  const politica = (comando, argomenti, opzioni, callback) => EXPLORER_PROCESS_POLICY.execFile(comando, argomenti, {
     ...opzioni,
     cwd: opzioni?.cwd ?? cartella,
-  }, callback));
+  }, callback);
+  const grezza = deps.execFileFn ?? politica;
+  const execFileFn = (comando, argomenti, opzioni, callback) => (
+    grezza.length <= 3
+      ? grezza(comando, argomenti, callback)
+      : grezza(comando, argomenti, opzioni, callback)
+  );
   await new Promise((ok, no) => {
-    execFileFn('explorer.exe', [`/select,${reale}`], (errore) => {
+    execFileFn('explorer.exe', [`/select,${reale}`], {}, (errore) => {
       if (errore && errore.code === 'ENOENT') { no(errore); return; }
       ok(); // qualunque altro codice di uscita: comportamento noto di explorer.exe, non un fallimento
     });

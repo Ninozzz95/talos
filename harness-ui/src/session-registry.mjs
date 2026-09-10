@@ -48,6 +48,7 @@ import {
   leggiFilePerScarico as leggiFilePerScaricoReale,
   rinominaFile as rinominaFileReale,
   rivelaInEsploraFile as rivelaInEsploraFileReale,
+  apriFileConProgrammaPredefinito as apriFileConProgrammaPredefinitoReale,
   spostaFile as spostaFileReale,
   WorkspaceFileError,
 } from './workspace-files.mjs';
@@ -72,6 +73,11 @@ import { ePercorsoDiControllo } from './path-policy.mjs';
 import {
   elencaVoci as elencaVociReale, leggiVoce as leggiVoceLibreriaReale, salvaVoce as salvaVoceLibreriaReale,
   eliminaVoce as eliminaVoceLibreriaReale, LibraryStoreError,
+  /* ⭐⭐⭐⭐ 10/09/2026 — il CRUD della Libreria per la PERSONA (finora ce l'aveva solo il modello):
+     i byte per lo scarico, la rinomina, la provenienza (per sapere se una voce esiste senza
+     leggerne il contenuto) e il percorso del file dentro il progetto per «mostrala nella cartella». */
+  leggiBytesVoce as leggiBytesVoceLibreriaReale, rinominaVoce as rinominaVoceLibreriaReale,
+  origineVoce as origineVoceLibreriaReale, percorsoContenutoVoce,
 } from './library-store.mjs';
 import { elencaNote as elencaNoteReale, NoteStoreError } from './notes-store.mjs';
 import { elencaAttivita as elencaAttivitaReale, TaskStoreError } from './tasks-store.mjs';
@@ -1064,6 +1070,7 @@ export function createSessionRegistry({
   rinominaFileFn = rinominaFileReale,
   eliminaFileFn = eliminaFileReale,
   rivelaInEsploraFileFn = rivelaInEsploraFileReale,
+  apriFileConProgrammaPredefinitoFn = apriFileConProgrammaPredefinitoReale,
   spostaFileFn = spostaFileReale,
   copiaFileFn = copiaFileReale,
   creaVoceWorkspaceFn = creaVoceWorkspaceReale,
@@ -1234,6 +1241,11 @@ export function createSessionRegistry({
   creaRicercaFn = creaRicercaReale, leggiRicercaFn = leggiRicercaReale, aggiornaRicercaFn = aggiornaRicercaReale,
   eliminaRicercaFn = eliminaRicercaReale, elencaRicercheFn = elencaRicercheReale,
   salvaVoceLibreriaFn = salvaVoceLibreriaReale, leggiVoceLibreriaFn = leggiVoceLibreriaReale, eliminaVoceLibreriaFn = eliminaVoceLibreriaReale,
+  /* ⭐⭐⭐⭐ 10/09/2026 — le tre porte nuove del CRUD Libreria lato persona (vedi i metodi
+     `scaricaVoceLibreria`/`rinominaVoceLibreria`/`rivelaVoceLibreria`). `eliminaVoceLibreriaFn`
+     qui sopra c'era già e si riusa com'è: è la STESSA cancellazione che chiama il modello. */
+  leggiBytesVoceLibreriaFn = leggiBytesVoceLibreriaReale, rinominaVoceLibreriaFn = rinominaVoceLibreriaReale,
+  origineVoceLibreriaFn = origineVoceLibreriaReale,
   randomUUIDFn = randomUUID,
   /*
    * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge. GLOBALE
@@ -3560,6 +3572,132 @@ export function createSessionRegistry({
         voci: voci.map((v) => ({ id: v.id, nome: v.nome, fileType: v.fileType, origine: v.origine, aggiornatoIl: v.aggiornatoIl })),
         errore: null,
       };
+    },
+
+    /*
+     * ⭐⭐⭐⭐ 10/09/2026, owner: «ogni artefatto va salvato in libreria, con CRUD COMPLETO e azioni
+     * Windows». Misurato prima di scrivere, non presunto: gli artefatti in Libreria ci arrivano
+     * davvero (byte veri + `meta.json`) e il MODELLO ha già tutto il giro (elenca, leggi, rinomina,
+     * elimina, esporta, cerca) — ma la PERSONA aveva UNA rotta sola, l'elenco, e nient'altro:
+     * niente scarico, niente rinomina, niente eliminazione, nessuna azione di Windows. Questi
+     * quattro metodi sono quella metà mancante, e sono l'unica porta che il pannello ha per
+     * arrivarci: la disposizione della cartella resta tutta dentro `library-store.mjs`.
+     *
+     * ⛔ Stessa forma esatta delle sorelle sull'albero dei file (`scaricaFile`, `rinominaFile`,
+     *   `eliminaFile`, `rivelaFile`, più sotto in questo stesso file): `{ok:true, ...}` oppure
+     *   `{erroreAvvio, code}`, mai un'eccezione che scappa. E come loro nessun guard su `conclusa`:
+     *   sono azioni dell'OWNER sui suoi file, non sul ciclo dell'agente — un artefatto di una
+     *   sessione chiusa la settimana scorsa si scarica e si rinomina come quello di adesso.
+     * ⛔ `null` dal magazzino NON è un guasto: è «quella voce non c'è», l'esito onesto sia per un
+     *   id sconosciuto sia per un id fuori grammatica (vedi `idVoceLibreriaValido`). Diventa un 404
+     *   col SUO codice, `LIBRARY_NOT_FOUND`, distinto dal `NOT_FOUND` della sessione inesistente:
+     *   sono due 404 che dicono due cose diverse, e chi legge la risposta deve poterle distinguere.
+     */
+    async scaricaVoceLibreria(sessionId, voceId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        const esito = await leggiBytesVoceLibreriaFn({ cartella: voce.cartella, id: voceId });
+        if (!esito) return { erroreAvvio: 'Questa voce della Libreria non esiste', code: 'LIBRARY_NOT_FOUND' };
+        return { ok: true, ...esito };
+      } catch (errore) {
+        if (errore instanceof LibraryStoreError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
+    /*
+     * ⛔ Rinominare cambia SOLO l'etichetta dentro `meta.json`: il file sul disco continua a
+     *   chiamarsi come si chiamava, e la cartella della voce ha per nome l'id, non il titolo. È la
+     *   stessa distinzione che fa `rinominaFile` sull'albero — «un NOME, non un percorso» — solo
+     *   portata fino in fondo: qui il nome non tocca affatto il filesystem, quindi una barra o un
+     *   `..` non possono diventare una cartella. La sanificazione vive comunque nel magazzino
+     *   (`sanificaNomeLibreria`), perché quel nome finisce in un file VERO quando si esporta.
+     */
+    async rinominaVoceLibreria(sessionId, voceId, nome) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        const esito = await rinominaVoceLibreriaFn({ cartella: voce.cartella, id: voceId, nome });
+        if (!esito) return { erroreAvvio: 'Questa voce della Libreria non esiste', code: 'LIBRARY_NOT_FOUND' };
+        return { ok: true, ...esito };
+      } catch (errore) {
+        if (errore instanceof LibraryStoreError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
+    /*
+     * ⛔⛔ DISTRUTTIVA, e senza cestino: la cartella della voce sparisce dal disco per intero.
+     *   Ricerca 10/09/2026 prima di scrivere (saasui.design, «SaaS Destructive Actions &
+     *   Confirmation UX Patterns», 2026; Pajamas/GitLab, «Destructive actions»): la frizione si
+     *   misura sul RAGGIO del danno, e la conferma è un dialogo VERO davanti alla persona — non
+     *   una domanda del server, che non ha nessuno a cui chiederla. Qui quindi si esegue e basta,
+     *   esattamente come `eliminaFile` sull'albero; il cancello che chiede «sei sicuro?» sta nel
+     *   pannello, ed è l'altra metà di questo lavoro.
+     * ⛔ Elimina UNA voce, mai due: la cartella cancellata è `<progetto>/.harness-ui-library/<id>/`,
+     *   e le sorelle non sono dentro di lei — il test «cancellarne una NON tocca le altre» esiste
+     *   apposta per impedire che un domani questo diventi una cancellazione ricorsiva più in alto.
+     */
+    async eliminaVoceLibreria(sessionId, voceId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        const esito = await eliminaVoceLibreriaFn({ cartella: voce.cartella, id: voceId });
+        if (!esito) return { erroreAvvio: 'Questa voce della Libreria non esiste', code: 'LIBRARY_NOT_FOUND' };
+        return { ok: true, ...esito };
+      } catch (errore) {
+        if (errore instanceof LibraryStoreError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
+    /*
+     * ⛔ «Mostrala nella cartella» — la stessa `rivelaInEsploraFile` dell'albero, non una seconda
+     *   copia: un solo argomento argv `/select,<percorso>`, nessuna shell di mezzo, e un codice di
+     *   uscita diverso da zero che NON è un fallimento (comportamento noto di explorer.exe).
+     * ⛔ Si chiede PRIMA al magazzino se la voce esiste: senza, un id inventato uscirebbe come
+     *   «file non trovato» del workspace — vero, e muto su che cosa manchi davvero. Il percorso
+     *   dentro il progetto lo compone `percorsoContenutoVoce`, mai questo file: la disposizione
+     *   della cartella di Libreria ha un solo proprietario.
+     */
+    /*
+     * ⛔ 10/09 — «Apri»: il file si apre col programma che Windows gli associa (Word per un .docx).
+     *   Non passa dalla rotta dei byte, che manda `attachment`: quella è uno SCARICO, e agganciarci
+     *   «Apri» farebbe scaricare il file una seconda volta invece di aprirlo.
+     *   Gemella di `rivelaVoceLibreria` qui sotto, stessa forma di errore: due azioni Windows
+     *   diverse — una apre il file, l'altra lo mostra nella cartella.
+     */
+    async apriVoceLibreria(sessionId, voceId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const percorso = percorsoContenutoVoce(voceId);
+      try {
+        const origine = percorso ? await origineVoceLibreriaFn({ cartella: voce.cartella, id: voceId }) : null;
+        if (!origine) return { erroreAvvio: 'Questa voce della Libreria non esiste', code: 'LIBRARY_NOT_FOUND' };
+        return { ok: true, ...(await apriFileConProgrammaPredefinitoFn({ cartella: voce.cartella, percorso })) };
+      } catch (errore) {
+        if (errore instanceof WorkspaceFileError || errore instanceof LibraryStoreError) {
+          return { erroreAvvio: errore.message, code: errore.code };
+        }
+        throw errore;
+      }
+    },
+
+    async rivelaVoceLibreria(sessionId, voceId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      const percorso = percorsoContenutoVoce(voceId);
+      try {
+        const origine = percorso ? await origineVoceLibreriaFn({ cartella: voce.cartella, id: voceId }) : null;
+        if (!origine) return { erroreAvvio: 'Questa voce della Libreria non esiste', code: 'LIBRARY_NOT_FOUND' };
+        return { ok: true, ...(await rivelaInEsploraFileFn({ cartella: voce.cartella, percorso })) };
+      } catch (errore) {
+        if (errore instanceof WorkspaceFileError || errore instanceof LibraryStoreError) {
+          return { erroreAvvio: errore.message, code: errore.code };
+        }
+        throw errore;
+      }
     },
 
     /**

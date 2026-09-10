@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,6 +14,8 @@ import { API_SCHEMA, createHttpApp } from '../src/http-app.mjs';
 import { createSessionRegistry } from '../src/session-registry.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { createChatImageStore } from '../src/chat-image-attachments.mjs';
+// ⭐ 10/9 — per la prova end-to-end del CRUD di Libreria: una voce VERA su disco, non un finto registro.
+import { CARTELLA_LIBRERIA, salvaVoce } from '../src/library-store.mjs';
 
 test('NATIVE-CATALOG-HTTP il selettore riceve cataloghi nativi senza credenziali', async () => {
   const calls = [];
@@ -255,6 +257,44 @@ function registroFinto() {
       if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       if (sessionId === 'sess-libreria-rotta') return { ok: true, voci: null, errore: '.harness-ui-library/rotta/meta.json non è un JSON valido' };
       return { ok: true, voci: [{ id: 'lib-1', nome: 'report.md', fileType: 'document', origine: 'uploaded', aggiornatoIl: '2026-08-29T10:00:00.000Z' }], errore: null };
+    },
+    /*
+     * ⭐⭐⭐⭐ 10/9 — il CRUD di UNA voce di Libreria per la persona. Stesso stile di elencaLibreria
+     * appena sopra: il registro VERO è provato in session-registry.test.mjs, qui si prova che le
+     * quattro rotte HTTP lo raggiungano con i parametri giusti e ne riportino l'esito com'è.
+     * ⛔ `lib-1` è l'unica voce che esiste: qualunque altro id risponde LIBRARY_NOT_FOUND, che è
+     *   un 404 DIVERSO da quello della sessione inesistente — le due assenze non vanno confuse.
+     */
+    ultimeChiamateLibreria: [],
+    async scaricaVoceLibreria(sessionId, voceId) {
+      this.ultimeChiamateLibreria.push({ azione: 'scarica', sessionId, voceId });
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (voceId !== 'lib-1') return { erroreAvvio: 'Questa voce della Libreria non esiste', code: 'LIBRARY_NOT_FOUND' };
+      return {
+        ok: true,
+        bytes: Buffer.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0x00, 0xc3, 0x28]),
+        dimensione: 8,
+        nome: 'relazione finàle.docx',
+        mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      };
+    },
+    async rinominaVoceLibreria(sessionId, voceId, nome) {
+      this.ultimeChiamateLibreria.push({ azione: 'rinomina', sessionId, voceId, nome });
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (voceId !== 'lib-1') return { erroreAvvio: 'Questa voce della Libreria non esiste', code: 'LIBRARY_NOT_FOUND' };
+      return { ok: true, id: voceId, nomePrima: 'report.md', nomeDopo: nome };
+    },
+    async eliminaVoceLibreria(sessionId, voceId) {
+      this.ultimeChiamateLibreria.push({ azione: 'elimina', sessionId, voceId });
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (voceId !== 'lib-1') return { erroreAvvio: 'Questa voce della Libreria non esiste', code: 'LIBRARY_NOT_FOUND' };
+      return { ok: true, id: voceId, nome: 'report.md' };
+    },
+    async rivelaVoceLibreria(sessionId, voceId) {
+      this.ultimeChiamateLibreria.push({ azione: 'rivela', sessionId, voceId });
+      if (!sessioni.has(sessionId)) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (voceId !== 'lib-1') return { erroreAvvio: 'Questa voce della Libreria non esiste', code: 'LIBRARY_NOT_FOUND' };
+      return { ok: true, rivelato: true };
     },
     /*
      * ⭐⭐⭐ FASE N, quarto sistema (30/8): stesso stile esatto di
@@ -1547,6 +1587,250 @@ test('⛔ AL CONTRARIO — GET .../library su un id inesistente: 404 NOT_FOUND',
   const { base } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/non-esiste/library`);
   assert.equal(risposta.status, 404);
+});
+
+/*
+ * ⭐⭐⭐⭐ 10/09/2026, owner: «ogni artefatto va salvato in libreria, con CRUD COMPLETO e azioni
+ * Windows». Fino a ieri la persona aveva la sola rotta qui sopra, l'elenco. Queste quattro sono lo
+ * scarico, la rinomina, l'eliminazione e «mostrala nella cartella» — e ognuna è provata anche AL
+ * CONTRARIO: voce inesistente, sessione inesistente, corpo sbagliato, metodo sbagliato.
+ */
+test('⭐⭐⭐ GET .../library/{voceId}/file: i BYTE, col nome in tutte e due le forme di RFC 6266', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/library/lib-1/file`);
+
+  assert.equal(risposta.status, 200);
+  assert.equal(risposta.headers.get('content-type'), 'application/octet-stream');
+  assert.equal(risposta.headers.get('content-length'), '8');
+  // ⛔ `filename` è il ripiego ASCII (l'accento diventa `_`), `filename*` la forma UTF-8 che vince dove c'è.
+  assert.equal(
+    risposta.headers.get('content-disposition'),
+    'attachment; filename="relazione fin_le.docx"; filename*=UTF-8\'\'relazione%20fin%C3%A0le.docx',
+  );
+  assert.equal(risposta.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(risposta.headers.get('cache-control'), 'private, no-store');
+  assert.match(risposta.headers.get('content-security-policy'), /default-src 'none'/);
+  const bytes = Buffer.from(await risposta.arrayBuffer());
+  assert.equal(Buffer.compare(bytes, Buffer.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0x00, 0xc3, 0x28])), 0, 'byte per byte: un docx passato da JSON o da utf8 sarebbe arrivato rotto');
+});
+
+test('⛔⛔ AL CONTRARIO — .../library/{voceId}: due 404 DIVERSI, la voce che non c\'è e la sessione che non c\'è', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+
+  const voceAssente = await fetch(`${base}/api/v1/sessions/${sessionId}/library/lib-fantasma/file`);
+  assert.equal(voceAssente.status, 404);
+  assert.equal((await voceAssente.json()).error.code, 'LIBRARY_NOT_FOUND');
+
+  const sessioneAssente = await fetch(`${base}/api/v1/sessions/mai-esistita/library/lib-1/file`);
+  assert.equal(sessioneAssente.status, 404);
+  assert.equal((await sessioneAssente.json()).error.code, 'NOT_FOUND', 'se questi due codici diventassero uno solo, la risposta manderebbe a cercare nel posto sbagliato');
+});
+
+test('⛔⛔ AL CONTRARIO — un id con "../" dentro arriva DECODIFICATO al registro, che lo respinge', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/library/..%2F..%2Fetc/file`);
+
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'LIBRARY_NOT_FOUND');
+  // ⛔ La prova che conta: il percorso NON è stato spezzato dall'instradamento, e il magazzino ha
+  //    visto l'id vero — è lì (library-store.mjs, `idVoceLibreriaValido`) che la traversata muore.
+  assert.deepEqual(sessionRegistry.ultimeChiamateLibreria.at(-1), { azione: 'scarica', sessionId, voceId: '../../etc' });
+});
+
+test('⛔ GET .../library/{voceId}/file con una query addosso: 400, mai un file servito a caso', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/library/lib-1/file?percorso=../segreto`);
+  assert.equal(risposta.status, 400);
+  assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+});
+
+test('⭐⭐⭐ PATCH .../library/{voceId}: rinomina, e il nome arriva al registro com\'è stato scritto', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/library/lib-1`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: 'Relazione trimestrale.docx' }),
+  });
+
+  assert.equal(risposta.status, 200);
+  assert.deepEqual((await risposta.json()).data, { id: 'lib-1', nomePrima: 'report.md', nomeDopo: 'Relazione trimestrale.docx' });
+  assert.deepEqual(sessionRegistry.ultimeChiamateLibreria.at(-1), { azione: 'rinomina', sessionId, voceId: 'lib-1', nome: 'Relazione trimestrale.docx' });
+});
+
+test('⛔⛔ AL CONTRARIO — PATCH con un corpo che non è {nome}: 400, mai un campo indovinato', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const corpiSbagliati = [{}, { percorso: 'a.txt' }, { nome: 'a.md', percorso: 'b' }, { nome: 42 }];
+  for (const corpo of corpiSbagliati) {
+    const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/library/lib-1`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
+    });
+    assert.equal(risposta.status, 400, JSON.stringify(corpo));
+    assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
+  }
+});
+
+test('⛔ AL CONTRARIO — PATCH su una voce che non esiste: 404 LIBRARY_NOT_FOUND', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/library/lib-fantasma`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: 'x.md' }),
+  });
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'LIBRARY_NOT_FOUND');
+});
+
+test('⭐⭐⭐ DELETE .../library/{voceId}: elimina, e la risposta dice QUALE voce è sparita', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/library/lib-1`, { method: 'DELETE' });
+
+  assert.equal(risposta.status, 200, '200 con la busta standard, non 204: ogni risposta di questa API porta {ok,data,meta}');
+  assert.deepEqual((await risposta.json()).data, { eliminato: true, id: 'lib-1', nome: 'report.md' });
+  assert.deepEqual(sessionRegistry.ultimeChiamateLibreria.at(-1), { azione: 'elimina', sessionId, voceId: 'lib-1' });
+});
+
+test('⛔ AL CONTRARIO — DELETE su una voce che non esiste: 404, e nessun\'altra voce toccata', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/library/lib-fantasma`, { method: 'DELETE' });
+
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'LIBRARY_NOT_FOUND');
+  const elenco = await fetch(`${base}/api/v1/sessions/${sessionId}/library`);
+  assert.deepEqual((await elenco.json()).data.voci.map((v) => v.id), ['lib-1'], 'la voce vera è ancora al suo posto');
+});
+
+test('⭐⭐ POST .../library/{voceId}/rivela: apre la cartella, e risponde solo che l\'ha fatto', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/library/lib-1/rivela`, { method: 'POST' });
+
+  assert.equal(risposta.status, 200);
+  assert.deepEqual((await risposta.json()).data, { rivelato: true });
+  assert.deepEqual(sessionRegistry.ultimeChiamateLibreria.at(-1), { azione: 'rivela', sessionId, voceId: 'lib-1' });
+});
+
+test('⛔ AL CONTRARIO — POST .../rivela su una voce che non esiste: 404, nessuna finestra aperta', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/library/lib-fantasma/rivela`, { method: 'POST' });
+  assert.equal(risposta.status, 404);
+  assert.equal((await risposta.json()).error.code, 'LIBRARY_NOT_FOUND');
+});
+
+/*
+ * ⛔⛔ Il verso che il guardiano dell'inventario (tests/http-inventario-rotte.test.mjs) non prova:
+ * che l'Allow dica il VERO su queste rotte nuove. Fino a ieri `metodiAmmessiPerRotta` conosceva
+ * due soli verbi, GET/HEAD e POST — un `Allow:` vuoto su una rotta che serve PATCH e DELETE
+ * sarebbe stato il difetto del 07/9 rifatto al contrario.
+ */
+test('⛔⛔ metodo sbagliato sulle rotte nuove: 405 con l\'Allow VERO (PATCH, DELETE / POST / GET)', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const casi = [
+    { percorso: `/api/v1/sessions/${sessionId}/library/lib-1`, metodo: 'GET', allow: 'PATCH, DELETE' },
+    { percorso: `/api/v1/sessions/${sessionId}/library/lib-1`, metodo: 'PUT', allow: 'PATCH, DELETE' },
+    { percorso: `/api/v1/sessions/${sessionId}/library/lib-1/rivela`, metodo: 'DELETE', allow: 'POST' },
+    { percorso: `/api/v1/sessions/${sessionId}/library/lib-1/file`, metodo: 'DELETE', allow: 'GET, HEAD' },
+  ];
+  for (const caso of casi) {
+    const risposta = await fetch(`${base}${caso.percorso}`, { method: caso.metodo });
+    assert.equal(risposta.status, 405, `${caso.metodo} ${caso.percorso}`);
+    assert.equal(risposta.headers.get('allow'), caso.allow, `Allow di ${caso.metodo} ${caso.percorso}`);
+  }
+});
+
+test('⛔ AL CONTRARIO — una sotto-rotta di Libreria INVENTATA resta 404, non 405', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  for (const metodo of ['GET', 'POST', 'PATCH', 'DELETE']) {
+    const risposta = await fetch(`${base}/api/v1/sessions/${sessionId}/library/lib-1/inventata`, { method: metodo });
+    assert.equal(risposta.status, 404, `${metodo} .../library/lib-1/inventata`);
+  }
+});
+
+/*
+ * ⭐⭐⭐⭐ 10/09/2026 — IL GIRO INTERO, senza nessun finto in mezzo: rotta HTTP → registro VERO →
+ * magazzino VERO → cartella VERA sul disco. I test qui sopra provano che la rotta chiama il
+ * registro; questo prova che ciò che arriva alla persona sono i byte che stanno davvero sul disco,
+ * che la rinomina cambia la scheda e non il file, e che l'eliminazione toglie UNA voce sola.
+ * ⛔ L'unico pezzo sostituito è l'apertura di Esplora file: un test non deve aprire una finestra
+ *   sul computer di chi lo lancia. Tutto il resto — id, percorsi, byte — è reale.
+ */
+test('⭐⭐⭐⭐ END-TO-END: scarica, rinomina, mostra ed elimina una voce VERA sul disco, passando dalle rotte', async (t) => {
+  const progetto = mkdtempSync(join(tmpdir(), 'talos-libreria-http-'));
+  t.after(() => rmSync(progetto, { recursive: true, force: true }));
+  const binario = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0x00, 0xc3, 0x28, 0x1a]);
+  const idVoce = await salvaVoce({
+    cartella: progetto, nome: 'relazione finàle.docx', origine: 'generated',
+    mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    base64: binario.toString('base64'),
+  });
+  const idResta = await salvaVoce({ cartella: progetto, nome: 'appunti.md', mediaType: 'text/markdown', testo: 'restano' });
+
+  const rivelati = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: async () => new Promise(() => {}),
+    preparaEsecuzioneFn: () => ({ cartella: progetto, comandoProva: 'npm test', task: { id: 'sconto-a-scaglioni', consegna: 'c' } }),
+    guardaWorkspaceFn: () => () => {},
+    rivelaInEsploraFileFn: async (input) => { rivelati.push(input); return { rivelato: true }; },
+    modello: 'm', chiave: 'k',
+  });
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  const indirizzo = (coda) => `${base}/api/v1/sessions/${sessionId}/library/${coda}`;
+
+  // 1. Lo scarico: i byte che sono sul disco, non una loro copia passata da JSON.
+  const scarico = await fetch(indirizzo(`${idVoce}/file`));
+  assert.equal(scarico.status, 200);
+  assert.equal(Buffer.compare(Buffer.from(await scarico.arrayBuffer()), binario), 0);
+  assert.match(scarico.headers.get('content-disposition'), /filename\*=UTF-8''relazione%20fin%C3%A0le\.docx$/);
+
+  // 2. La rinomina: cambia la scheda, NON il file — e i byte restano gli stessi.
+  const rinomina = await fetch(indirizzo(idVoce), {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ nome: '../fuori/preso.docx' }),
+  });
+  assert.equal(rinomina.status, 200);
+  const esitoRinomina = (await rinomina.json()).data;
+  assert.equal(esitoRinomina.nomePrima, 'relazione finàle.docx');
+  assert.equal(esitoRinomina.nomeDopo, 'fuori preso.docx', 'i separatori di percorso diventano spazi: un nome, mai un percorso');
+  assert.ok(existsSync(join(progetto, CARTELLA_LIBRERIA, idVoce, 'contenuto')), 'la rinomina non tocca il file sul disco');
+  assert.equal(Buffer.compare(readFileSync(join(progetto, CARTELLA_LIBRERIA, idVoce, 'contenuto')), binario), 0);
+  assert.equal(existsSync(join(progetto, 'fuori')), false, 'nessuna cartella nuova fuori dalla Libreria');
+
+  // 3. «Mostrala nella cartella»: il percorso che arriva a Esplora file è quello della voce.
+  const rivela = await fetch(indirizzo(`${idVoce}/rivela`), { method: 'POST' });
+  assert.equal(rivela.status, 200);
+  assert.deepEqual(rivelati.at(-1), { cartella: progetto, percorso: `${CARTELLA_LIBRERIA}/${idVoce}/contenuto` });
+
+  // 4. AL CONTRARIO, prima di cancellare: un id che risale non trova niente e non tocca niente.
+  const traversata = await fetch(indirizzo('..%2F..'), { method: 'DELETE' });
+  assert.equal(traversata.status, 404);
+  assert.equal((await traversata.json()).error.code, 'LIBRARY_NOT_FOUND');
+  assert.ok(existsSync(join(progetto, CARTELLA_LIBRERIA)), 'la Libreria è ancora al suo posto');
+
+  // 5. L'eliminazione: sparisce UNA voce, l'altra resta.
+  const elimina = await fetch(indirizzo(idVoce), { method: 'DELETE' });
+  assert.equal(elimina.status, 200);
+  assert.deepEqual((await elimina.json()).data, { eliminato: true, id: idVoce, nome: 'fuori preso.docx' });
+  assert.equal(existsSync(join(progetto, CARTELLA_LIBRERIA, idVoce)), false, 'la cartella della voce è sparita DAVVERO');
+  const elenco = await fetch(`${base}/api/v1/sessions/${sessionId}/library`);
+  assert.deepEqual((await elenco.json()).data.voci.map((v) => v.id), [idResta], 'cancellarne una non tocca le altre');
+
+  // 6. E la stessa eliminazione, ripetuta, dice «non c'è più» invece di fingere di averla rifatta.
+  const dinuovo = await fetch(indirizzo(idVoce), { method: 'DELETE' });
+  assert.equal(dinuovo.status, 404);
+  assert.equal((await dinuovo.json()).error.code, 'LIBRARY_NOT_FOUND');
 });
 
 /*

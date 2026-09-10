@@ -164,6 +164,10 @@ dialog.sheet-dialog .ft-icon-code svg,dialog.command-dialog .ft-icon-code svg,.f
 .ft-actions-menu-item{ display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); font-size: calc(13px * var(--talos-ui-font-scale)); text-align: left; cursor: pointer; }
 .ft-actions-menu-item:hover{ background: var(--surface-2); color: var(--text); }
 .ft-actions-menu-item svg{ width: 15px; height: 15px; flex-shrink: 0; color: var(--muted); }
+/* ⛔ 10/09 — il filo che stacca l'azione che non si rifà dalle altre. La distanza è già mezza
+   difesa: la mano che scorre il menu non arriva su «Elimina» per inerzia. L'altra metà è la
+   conferma, che resta nella riga. */
+.ft-actions-menu-sep{ height: 1px; margin: 4px 6px; background: var(--line, var(--talos-border)); }
 .ft-actions-menu-item-danger{ color: var(--danger); }
 .ft-actions-menu-item-danger svg{ color: var(--danger); }
 .ft-actions-menu-item-danger:hover{ background: var(--danger-soft); }

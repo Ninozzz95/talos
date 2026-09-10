@@ -4579,7 +4579,31 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const attuale = () => generazioniLibreria.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === 'libreria' && !mount.hidden : mount === $('#libraryListMount', sheetBody));
     function mostra(voci, { errore = null, caricamento = false } = {}) {
       if (pagina) {
-        aggiornaPaginaLibreria(mount, voci, { errore, caricamento, onAggiorna: () => caricaPannelloLibreria({ pagina: true }) });
+        /*
+         * ⛔ 10/09 — `sessionId` non era passato, e per COSTRUZIONE nessuna delle cinque azioni della
+         *   riga (Apri, Scarica, Rinomina, Mostra nella cartella, Elimina) poteva comparire: senza
+         *   sessione non esiste un indirizzo, e la riga — giustamente — non disegna bottoni che non
+         *   potrebbero funzionare. Una riga che non finge è la metà giusta del contratto; l'altra
+         *   metà è darle ciò che le serve.
+         * ⛔ `onCambiata` ricarica l'elenco dopo una rinomina o un'eliminazione: senza, a schermo
+         *   resterebbe il nome vecchio, o una voce che sul disco non c'è più.
+         */
+        aggiornaPaginaLibreria(mount, voci, {
+          errore, caricamento, sessionId,
+          onAggiorna: () => caricaPannelloLibreria({ pagina: true }),
+          /*
+           * ⛔ 10/09, visto nella FOTO subito dopo un'eliminazione riuscita: la pagina diceva
+           *   «0 file · Nessun file in Libreria» e il contatore nella barra a sinistra diceva ancora
+           *   «Libreria 1». Due numeri diversi per la stessa cosa, sullo stesso schermo.
+           *   Il contatore si rinfrescava solo al giro dell'elenco delle sessioni, che dopo
+           *   un'azione sulla Libreria non ha nessuna ragione di ripartire.
+           */
+          onCambiata: () => {
+            caricaPannelloLibreria({ pagina: true });
+            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+          },
+          onMenu: apriMenuAzioniLibreria,
+        });
       } else {
         mount.setAttribute('role', voci.length ? 'list' : 'group');
         mount.replaceChildren(...voci.map(rigaVoceLibreria));
@@ -11630,6 +11654,73 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * radice"), non un secondo menu duplicato: stessa funzione, stesso
    * meccanismo di posizionamento/chiusura, solo l'elenco `voci` cambia.
    */
+  /*
+   * ⛔⛔ 10/09/2026, owner: «non mettere i pulsanti uno accanto all'altro, usa i tre puntini +
+   *   dropdown… e anche azioni tasto destro mouse, ragiona sempre in questo modo». La riga della
+   *   Libreria aveva cinque bottoni in fila; ora ne ha uno solo, e le azioni vivono qui.
+   * ⛔ Non un menu NUOVO: lo stesso `.ft-actions-menu` dell'albero dei file e della barra delle
+   *   sessioni. Aspetto, tastiera, chiusura al clic fuori, Esc e ritorno del fuoco sono già provati
+   *   lì — un secondo menu sarebbe una seconda cosa da tenere allineata alla prima, e le due
+   *   divergerebbero al primo cambiamento.
+   * ⛔ Le VOCI le costruisce la riga (`vociMenu`), non questa funzione: chi sa quali azioni ha un
+   *   file è il componente che lo disegna. Qui si sa solo come si apre un menu.
+   */
+  function apriMenuAzioniLibreria(voci, posizionamento) {
+    if (!Array.isArray(voci) || voci.length === 0) return;
+    document.querySelector('.ft-actions-menu')?.remove();
+    const menu = document.createElement('div');
+    menu.className = 'ft-actions-menu';
+    menu.setAttribute('role', 'menu');
+
+    for (const voce of voci) {
+      /* ⛔ La riga chiede una separazione PRIMA della voce che non si rifà: la distanza è già mezza
+         difesa, e il resto lo fa la conferma nella riga. */
+      if (voce.separaPrima && menu.childElementCount > 0) {
+        const riga = document.createElement('div');
+        riga.className = 'ft-actions-menu-sep';
+        riga.setAttribute('role', 'separator');
+        menu.appendChild(riga);
+      }
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `ft-actions-menu-item${voce.pericolo ? ' ft-actions-menu-item-danger' : ''}`;
+      btn.setAttribute('role', 'menuitem');
+      btn.dataset.azione = voce.chiave;
+      btn.appendChild(iconaSvgAlbero(voce.icona));
+      btn.appendChild(textElement('span', '', voce.etichetta));
+      btn.addEventListener('click', () => { chiudiMenuLibreria(); voce.aziona(); });
+      menu.appendChild(btn);
+    }
+    document.body.appendChild(menu);
+
+    if (posizionamento.ancoraEl) {
+      const rect = posizionamento.ancoraEl.getBoundingClientRect();
+      menu.style.top = `${rect.bottom + 4}px`;
+      menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
+    } else {
+      /* Il tasto destro: il menu nasce nel punto del clic, ma mai fuori dallo schermo — misurato DOPO
+         l'append, quando le sue dimensioni vere esistono. */
+      const misura = menu.getBoundingClientRect();
+      menu.style.left = `${Math.max(8, Math.min(posizionamento.x, window.innerWidth - misura.width - 8))}px`;
+      menu.style.top = `${Math.max(8, Math.min(posizionamento.y, window.innerHeight - misura.height - 8))}px`;
+    }
+
+    function chiudiMenuLibreria() {
+      menu.remove();
+      document.removeEventListener('click', suClicFuori);
+      document.removeEventListener('keydown', suTasto);
+      posizionamento.ancoraEl?.focus?.();
+    }
+    function suClicFuori(evento) { if (!menu.contains(evento.target)) chiudiMenuLibreria(); }
+    function suTasto(evento) { if (evento.key === 'Escape') { evento.preventDefault(); chiudiMenuLibreria(); } }
+    /* ⛔ Al giro dopo: senza il rinvio, il clic che ha APERTO il menu lo chiuderebbe subito. */
+    setTimeout(() => {
+      document.addEventListener('click', suClicFuori);
+      document.addEventListener('keydown', suTasto);
+    }, 0);
+    menu.querySelector('.ft-actions-menu-item')?.focus();
+  }
+
   function apriMenuAzioniFile(percorsoCompleto, nome, posizionamento, cartella = false, soloCreazione = false) {
     document.querySelector('.ft-actions-menu')?.remove();
 

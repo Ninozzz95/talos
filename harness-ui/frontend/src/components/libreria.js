@@ -1,5 +1,50 @@
 import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
 /** LibraryRow del mockup, metadati GET /library. WAI Tabs/Disclosure, 05/09/2026. */
+/*
+ * ⛔⛔ 10/09/2026, owner: «ogni artefatto va salvato in libreria, con CRUD COMPLETO e azioni Windows».
+ *
+ * Misurato PRIMA di toccare niente, su questo stesso file (53 righe): la riga della Libreria aveva
+ * DUE bottoni e UNO SOLO raggiungibile — «Dettagli» apriva la data, e «Apri» nasceva `hidden` con
+ * `dataset.richiede='fase3'`, cioè disegnato e morto. ⇒ 0 azioni su 5 (apri, scarica, rinomina,
+ * elimina, mostra nella cartella): un file entrava in Libreria e da lì non si poteva più né tirare
+ * fuori né togliere.
+ *
+ * ⛔ Ricerca fatta PRIMA di scrivere (regola zero), il 10/09/2026:
+ * · saasui.design, «SaaS Destructive Actions & Confirmation UX Patterns» — l'attrito è una SCALA
+ *   (nessuna conferma · conferma semplice · conferma con la conseguenza scritta · scrivi il nome),
+ *   e ogni azione sta sul gradino che il suo rischio si merita; «their effectiveness depends
+ *   directly on their rarity» ⇒ QUI la conferma è SOLO su Elimina, e dice la conseguenza. Le altre
+ *   quattro non chiedono niente: scaricare e mostrare una cartella non rompono niente, e una
+ *   rinomina si rifà rinominando di nuovo.
+ * · nngroup.com, «Confirmation Dialogs Can Prevent User Errors» — la conferma serve quando l'azione
+ *   non si annulla; il server qui cancella il file per davvero e non c'è nessun cestino.
+ * · blog.logrocket.com, «Modal UX design: patterns, examples and best practices» — «editable forms
+ *   and inline elements don't need modals»: rinominare è UN passo, e una modale ci metterebbe due
+ *   aperture e un cambio di fuoco in mezzo ⇒ rinomina IN LINEA, dentro la riga.
+ * · W3C APG, «Providing Accessible Names and Descriptions» — il nome accessibile serve anche a
+ *   «distinguish the element from other elements on the page»; con dieci file in elenco, dieci
+ *   «Elimina» identici sono indistinguibili ⇒ ogni bottone nomina IL SUO file, e il gruppo di
+ *   azioni porta «Azioni su <nome>» (deque axe `aria-command-name`, stessa data).
+ * · learn.microsoft.com, «Naming Files, Paths, and Namespaces» — < > : " / \ | ? * sono riservati
+ *   ⇒ un nome che li contiene si rifiuta QUI, senza far fare un giro a vuoto al server; e la barra
+ *   è in particolare ciò che trasformerebbe un nome in un percorso.
+ *
+ * ⛔ I concorrenti, stessa data — che cosa fanno e il vincolo che ne viene:
+ * · Hermes Agent (l'obiettivo da battere), changelog di settembre 2026: la desktop app disegna gli
+ *   artefatti come «versioned cards with sandboxed live preview», e il file arriva alla persona con
+ *   `ctx.download` dal SDK dei plugin; il file browser esplora la cartella di lavoro — ma nessun
+ *   CRUD di libreria: rinomina ed elimina non ci sono. Il nostro +1 misurabile è esattamente questo.
+ * · treasure.ai, note di rilascio: i file generati «si organizzano dal livello cartella — creare
+ *   cartelle, rinominare, spostare, eliminare» ⇒ il CRUD in elenco è lo stato dell'arte, non un lusso.
+ * · ⛔ IL VINCOLO CHE NON SAPEVO, dalle stesse note: «Reveal in File Explorer was fixed to properly
+ *   SELECT the target file on Windows». Aprire la cartella NON basta: in una cartella con cento file
+ *   la persona resta a cercare. La rotta `/rivela` deve SELEZIONARE il file (su Windows
+ *   `explorer /select,<percorso>`) — è metà server, ed è scritto qui perché è la metà che questa
+ *   interfaccia non può garantire da sola.
+ *
+ * ⛔ Il server lo scrive un'altra sessione, in parallelo: se una rotta non risponde ancora, la riga
+ *   lo DICE (`role="alert"`, col codice HTTP) e non finge. Nessun bottone che sembra aver funzionato.
+ */
 const TIPI=new Map([['document',{testo:'Documento',icona:'doc'}],['image',{testo:'Immagine',icona:'image'}]]);
 const ORIGINI=new Map([['uploaded','Caricato'],['generated','Generato']]);
 export function tipoVoceLibreria(tipo){return TIPI.get(tipo)||{testo:'Tipo non registrato',icona:'files'};}
@@ -13,23 +58,182 @@ export function filtraLibreria(voci,{query='',origine='tutte'}={}){
  const q=String(query).trim().toLocaleLowerCase('it');
  return voci.filter(v=>(origine==='tutte'||v?.origine===origine)&&(!q||[testiVoceLibreria(v).nome,tipoVoceLibreria(v?.fileType).testo,origineVoceLibreria(v?.origine)].join(' ').toLocaleLowerCase('it').includes(q)));
 }
+/** L'indirizzo dei BYTE veri di una voce. Vuoto se manca l'id o la sessione: mai un link rotto (stessa regola di `indirizzoScarico`, conversazione.js). */
+export function indirizzoFileLibreria(sessionId,voceId){if(!sessionId||!voceId)return '';return '/api/v1/sessions/'+encodeURIComponent(sessionId)+'/library/'+encodeURIComponent(voceId)+'/file';}
+/** ⛔ Un NOME, non un percorso: la barra è il carattere che separa i pezzi di un percorso (Microsoft Learn, 10/09/2026), e `..` risalirebbe di una cartella. */
+export function nomeLibreriaValido(nome){
+ const n=String(nome??'').trim();
+ if(!n)return{ok:false,motivo:'Il nome non può essere vuoto.'};
+ if(/[\\/]/.test(n))return{ok:false,motivo:'Il nome non può contenere una barra: qui va un nome, non un percorso.'};
+ if(n==='.'||n==='..')return{ok:false,motivo:'«'+n+'» non è un nome di file.'};
+ if(/[<>:"|?*]/.test(n)||[...n].some(c=>c.codePointAt(0)<32))return{ok:false,motivo:'Windows non accetta < > : " | ? * nel nome di un file.'};
+ if(n.length>255)return{ok:false,motivo:'Il nome supera i 255 caratteri.'};
+ return{ok:true,nome:n};
+}
+/* ⛔ 404/405/501 non sono un guasto: sono «quella rotta non c'è ancora» (il server lo scrive un'altra sessione, adesso). Si dice così, col numero, invece di un «non riuscito» che manderebbe a cercare il difetto dalla parte sbagliata. */
+const NON_ANCORA=new Set([404,405,501]);
+async function motivoRisposta(r){
+ if(!r)return 'Il server non ha risposto.';
+ let dettaglio='';
+ try{const testo=await r.text?.();if(testo){try{const j=JSON.parse(testo);dettaglio=String(j?.errore||j?.error?.message||j?.error||j?.message||'').trim();}catch{dettaglio=String(testo).slice(0,200).trim();}}}catch{/* un corpo illeggibile non deve mangiarsi il codice HTTP */}
+ if(NON_ANCORA.has(r.status))return 'Questa azione non è ancora disponibile sul server (HTTP '+r.status+').'+(dettaglio?' '+dettaglio:'');
+ return 'Il server ha risposto HTTP '+r.status+(dettaglio?': '+dettaglio:'.');
+}
+/**
+ * Le tre azioni che SCRIVONO, contro le rotte del contratto. Ognuna torna `{ok, motivo}` e non lancia
+ * mai: chi chiama deve poter mettere il perché a schermo, non inghiottirlo in un `catch`.
+ * `null` quando manca la sessione — e senza servizio la riga non disegna quei bottoni affatto.
+ */
+export function azioniLibreria({sessionId,fetch:rete=globalThis.fetch}={}){
+ if(!sessionId||typeof rete!=='function')return null;
+ const base=id=>'/api/v1/sessions/'+encodeURIComponent(sessionId)+'/library/'+encodeURIComponent(id);
+ const manda=async(url,opzioni)=>{try{const r=await rete(url,opzioni);return r?.ok?{ok:true}:{ok:false,motivo:await motivoRisposta(r)};}catch(e){return{ok:false,motivo:'Il server non ha risposto: '+(e?.message||'errore sconosciuto')+'.'};}};
+ return{
+  rinomina:(id,nome)=>manda(base(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({nome})}),
+  elimina:id=>manda(base(id),{method:'DELETE'}),
+  rivela:id=>manda(base(id)+'/rivela',{method:'POST'}),
+  /* ⛔ 10/09: «Apri» NON è lo scarico. La rotta dei byte manda `attachment`, quindi un'ancora lì
+     scaricherebbe il file una seconda volta invece di aprirlo; su Windows «aprire» vuol dire che
+     lo apre il programma associato all'estensione — Word per un .docx. Verbo POST come `rivela`,
+     e per la stessa ragione: non scrive niente, ma ha un effetto fuori da questa API. */
+  apri:id=>manda(base(id)+'/apri',{method:'POST'}),
+ };
+}
 function el(doc,tag,classe,testo){const n=doc.createElement(tag);if(classe)n.className=classe;if(testo!==undefined)n.textContent=testo;return n;}
-export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=false,onEspandi}={}){
- const t=testiVoceLibreria(voce),tipo=tipoVoceLibreria(voce?.fileType),origine=origineVoceLibreria(voce?.origine);
- const riga=el(doc,'div','talos-list-row');riga.dataset.c='LibraryRow';riga.dataset.libraryId=voce?.id||'';riga.setAttribute('role','listitem');
+/* ⛔ 10/09: il `title` nativo qui c'era e COPRIVA i filtri della pagina — visto nella foto delle
+   azioni: il fumetto «Relazione di prova.docx» si apriva sopra «Generati». Un tooltip nativo non si
+   può posizionare, ed è lo stesso difetto tolto ieri dai tab della colonna destra (MDN, attributo
+   `title`, agg. 17/04/2026: problematico per tocco, tastiera, screen reader e difficoltà
+   cognitive). Il nome per intero sta già in «Dettagli» e negli `aria-label` delle cinque azioni. */
+export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=false,onEspandi,sessionId='',azioni=null,modo='normale',bozza=null,onModo,onCambiata,onMenu}={}){
+ const t=testiVoceLibreria(voce),tipo=tipoVoceLibreria(voce?.fileType),origine=origineVoceLibreria(voce?.origine),id=voce?.id||'';
+ const riga=el(doc,'div','talos-list-row');riga.dataset.c='LibraryRow';riga.dataset.libraryId=id;riga.setAttribute('role','listitem');
  const icona=el(doc,'span','talos-list-row__icon'),svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),use=doc.createElementNS('http://www.w3.org/2000/svg','use');svg.setAttribute('class','i');svg.setAttribute('aria-hidden','true');use.setAttribute('href','#i-'+tipo.icona);svg.append(use);icona.append(svg);
- const testo=el(doc,'span','talos-list-row__text'),titolo=el(doc,'span','talos-list-row__title',t.nome),sotto=el(doc,'span','talos-list-row__sub');titolo.title=t.nome;testo.append(titolo,sotto);
+ const testo=el(doc,'span','talos-list-row__text'),titolo=el(doc,'span','talos-list-row__title',t.nome),sotto=el(doc,'span','talos-list-row__sub');
  const aside=el(doc,'span','talos-list-row__aside');aside.append(el(doc,'span','talos-badge'+(voce?.origine==='generated'?' talos-badge--accent':''),origine));
- const apri=el(doc,'button','talos-button talos-button--ghost talos-button--sm','Apri');apri.type='button';apri.hidden=true;apri.dataset.richiede='fase3';
- const dettagli=el(doc,'button','talos-button talos-button--ghost talos-button--sm');dettagli.type='button';
- function mostra(){riga.dataset.aperta=String(aperta);sotto.textContent=tipo.testo+' · '+(aperta&&t.aggiornata?'Aggiornato il '+t.aggiornata:t.dataBreve);dettagli.textContent=aperta?'Chiudi':'Dettagli';dettagli.setAttribute('aria-expanded',String(aperta));dettagli.setAttribute('aria-label',(aperta?'Chiudi i dettagli di ':'Dettagli di ')+t.nome);}
- dettagli.addEventListener('click',()=>{aperta=!aperta;mostra();onEspandi?.(aperta);});mostra();aside.append(apri,dettagli);riga.append(icona,testo,aside);return riga;
+ const indirizzo=indirizzoFileLibreria(sessionId,id),servizio=azioni||azioniLibreria({sessionId});
+ /* ⛔ L'esito di un'azione non è un toast che passa: resta nella riga, sotto il nome, finché non se ne fa un'altra. */
+ const messaggio=el(doc,'span','talos-list-row__messaggio');messaggio.hidden=true;
+ const bottoni=[];
+ const nuovoBottone=(etichetta,nomeAccessibile,azione,extra)=>{const b=el(doc,'button','talos-button talos-button--ghost talos-button--sm'+(extra||''),etichetta);b.type='button';b.dataset.azione=azione;b.setAttribute('aria-label',nomeAccessibile);bottoni.push(b);return b;};
+ const nuovaAncora=(etichetta,nomeAccessibile,azione)=>{const a=el(doc,'a','talos-button talos-button--ghost talos-button--sm',etichetta);a.href=indirizzo;a.dataset.azione=azione;a.setAttribute('aria-label',nomeAccessibile);return a;};
+ /* ⛔ Il gruppo nomina il file per chi lo sente annunciato entrandoci; ogni bottone lo ripete, perché il nome del gruppo non arriva a tutti gli screen reader (APG, 10/09/2026). */
+ const gruppo=el(doc,'span','talos-list-row__azioni');gruppo.setAttribute('role','group');gruppo.setAttribute('aria-label','Azioni su '+t.nome);
+ let rinominaBtn=null,eliminaBtn=null,rivelaBtn=null;
+ let apriBtn=null,menuBtn=null;
+ /*
+  * ⛔⛔ 10/09/2026, owner, guardando cinque bottoni in fila in questa riga: «non mettere i pulsanti
+  *   uno accanto all'altro, usa i tre puntini + dropdown… e anche azioni tasto destro mouse, ragiona
+  *   sempre in questo modo».
+  * ⇒ Le azioni non si MOSTRANO tutte: si RACCOLGONO. Resta un bottone solo, «…», e le cinque voci
+  *   vivono nel menu che TALOS ha già (`.ft-actions-menu`, lo stesso dell'albero dei file e della
+  *   barra delle sessioni): stesso aspetto, stessa tastiera, stessa chiusura — e nessun secondo
+  *   menu da tenere allineato al primo.
+  * ⛔ I bottoni veri restano costruiti qui, ma FUORI dalla riga: sono ciò che il menu aziona, e sono
+  *   il modo in cui questo componente resta provabile senza aprire un menu. Chi disegna il menu
+  *   (l'app) riceve le voci già pronte da `voceMenu`.
+  * ⛔ Il tasto destro non sostituisce il bottone: lo affianca. Una scorciatoia che si scopre solo se
+  *   già la conosci non può essere l'unica via.
+  */
+ if(servizio&&id){
+  apriBtn=nuovoBottone('Apri','Apri '+t.nome+' con il programma predefinito','apri');
+  rinominaBtn=nuovoBottone('Rinomina','Rinomina '+t.nome,'rinomina');
+  rivelaBtn=nuovoBottone('Mostra nella cartella','Mostra '+t.nome+' nella cartella','rivela');
+  eliminaBtn=nuovoBottone('Elimina','Elimina '+t.nome,'elimina',' talos-button--danger');
+ }
+ /* ⛔ Scarica resta un'ANCORA anche dentro il menu: i byte li porta il browser, e vale anche per un
+    file da 50 MB, che in pagina non ci starebbe. */
+ const scaricaEl=indirizzo?nuovaAncora('Scarica','Scarica '+t.nome,'scarica'):null;
+ if(scaricaEl)scaricaEl.setAttribute('download',t.nome);
+ /* Le voci del menu, nell'ordine in cui si usano: prima ciò che si fa spesso, per ultima e staccata
+    quella che non si rifa. `separaPrima` lo dice a chi disegna, senza che debba saperlo a memoria. */
+ const vociMenu=[
+  apriBtn&&{chiave:'apri',etichetta:'Apri',icona:'i-doc',elemento:apriBtn},
+  scaricaEl&&{chiave:'scarica',etichetta:'Scarica',icona:'i-download',elemento:scaricaEl},
+  rinominaBtn&&{chiave:'rinomina',etichetta:'Rinomina',icona:'i-edit',elemento:rinominaBtn},
+  rivelaBtn&&{chiave:'rivela',etichetta:'Mostra nella cartella',icona:'i-folder',elemento:rivelaBtn},
+  eliminaBtn&&{chiave:'elimina',etichetta:'Elimina',icona:'i-trash',elemento:eliminaBtn,pericolo:true,separaPrima:true},
+ ].filter(Boolean);
+ riga.vociMenu=()=>vociMenu.map(v=>({...v,aziona:()=>v.elemento.click()}));
+ if(vociMenu.length){
+  /* ⛔ L'icona «i-more» dello sprite, non tre puntini scritti a mano: il design system ce l'ha
+     già, e un carattere tipografico non si allinea come un'icona né eredita il colore allo
+     stesso modo. Il nome accessibile sta nell'aria-label: l'icona è muta per chi ascolta. */
+  menuBtn=nuovoBottone('','Azioni su '+t.nome,'menu');
+  {const sv=doc.createElementNS('http://www.w3.org/2000/svg','svg'),us=doc.createElementNS('http://www.w3.org/2000/svg','use');sv.setAttribute('class','i');sv.setAttribute('aria-hidden','true');us.setAttribute('href','#i-more');sv.append(us);menuBtn.append(sv);}
+  menuBtn.setAttribute('aria-haspopup','menu');
+  menuBtn.addEventListener('click',(e)=>{e.stopPropagation();onMenu?.(riga.vociMenu(),{ancoraEl:menuBtn});});
+  gruppo.append(menuBtn);
+  /* ⛔ Il tasto destro apre lo STESSO menu, alle coordinate del puntatore: due strade, una lista sola. */
+  riga.addEventListener('contextmenu',(e)=>{e.preventDefault();onMenu?.(riga.vociMenu(),{x:e.clientX,y:e.clientY});});
+ }
+ /* Rinomina IN LINEA: un passo solo, quindi niente modale (LogRocket, 10/09/2026). Invio conferma, Esc annulla, e il fuoco torna da dove era partito. */
+ const forma=el(doc,'form','talos-list-row__rinomina');forma.hidden=true;
+ const campo=el(doc,'input','talos-list-row__nome');campo.type='text';campo.value=bozza??t.nome;campo.maxLength=255;campo.autocomplete='off';campo.spellcheck=false;campo.setAttribute('aria-label','Nuovo nome per '+t.nome);
+ const salva=el(doc,'button','talos-button talos-button--primary talos-button--sm','Salva');salva.type='submit';salva.dataset.azione='rinomina-salva';salva.setAttribute('aria-label','Salva il nuovo nome di '+t.nome);
+ const annullaRinomina=el(doc,'button','talos-button talos-button--ghost talos-button--sm','Annulla');annullaRinomina.type='button';annullaRinomina.dataset.azione='rinomina-annulla';annullaRinomina.setAttribute('aria-label','Annulla la rinomina di '+t.nome);
+ bottoni.push(salva,annullaRinomina);forma.append(campo,salva,annullaRinomina);
+ /* ⛔ Il gradino della scala: la conseguenza scritta, non un «Sei sicuro?». È l'unica delle cinque che non si rifà (saasui.design + NN/g, 10/09/2026). */
+ const conferma=el(doc,'span','talos-list-row__conferma');conferma.hidden=true;
+ const noElimina=el(doc,'button','talos-button talos-button--ghost talos-button--sm','Annulla');noElimina.type='button';noElimina.dataset.azione='elimina-annulla';noElimina.setAttribute('aria-label','Annulla l’eliminazione di '+t.nome);
+ const siElimina=el(doc,'button','talos-button talos-button--danger talos-button--sm','Elimina');siElimina.type='button';siElimina.dataset.azione='elimina-conferma';siElimina.setAttribute('aria-label','Elimina definitivamente '+t.nome+': non si torna indietro');
+ bottoni.push(noElimina,siElimina);conferma.append(el(doc,'span','talos-list-row__conferma-testo','Eliminare definitivamente? Non si torna indietro.'),noElimina,siElimina);
+ const dettagli=el(doc,'button','talos-button talos-button--ghost talos-button--sm');dettagli.type='button';dettagli.dataset.azione='dettagli';
+ let stato=servizio&&id?String(modo||'normale'):'normale',occupata=false,avviso=null;
+ function mostra(){
+  riga.dataset.aperta=String(aperta);riga.dataset.modo=stato;
+  sotto.textContent=tipo.testo+' · '+(aperta&&t.aggiornata?'Aggiornato il '+t.aggiornata:t.dataBreve);
+  dettagli.textContent=aperta?'Chiudi':'Dettagli';dettagli.setAttribute('aria-expanded',String(aperta));dettagli.setAttribute('aria-label',(aperta?'Chiudi i dettagli di ':'Dettagli di ')+t.nome);
+  titolo.hidden=stato==='rinomina';forma.hidden=stato!=='rinomina';gruppo.hidden=stato!=='normale';conferma.hidden=stato!=='conferma';
+  riga.classList.toggle('talos-list-row--muted',stato==='eliminata');
+  messaggio.hidden=!avviso;
+  if(avviso){messaggio.textContent=avviso.testo;messaggio.dataset.tono=avviso.tono;messaggio.setAttribute('role',avviso.tono==='errore'?'alert':'status');}
+  for(const b of bottoni)b.disabled=occupata;
+ }
+ function cambiaModo(nuovo,ritorno){
+  stato=nuovo;onModo?.(nuovo,nuovo==='rinomina'?campo.value:null);mostra();
+  if(nuovo==='rinomina'){campo.focus?.();campo.select?.();}
+  else if(nuovo==='conferma')noElimina.focus?.(); // ⛔ il fuoco va sulla via d'uscita, non sul bottone che cancella: un Invio di troppo non deve distruggere un file
+  else if(ritorno==='rinomina')rinominaBtn?.focus?.();
+  else if(ritorno==='elimina')eliminaBtn?.focus?.();
+ }
+ async function esegui(chiama,dopo){
+  if(!servizio||occupata)return;
+  occupata=true;avviso=null;mostra();
+  const esito=await chiama().catch(e=>({ok:false,motivo:'Il server non ha risposto: '+(e?.message||'errore sconosciuto')+'.'}));
+  occupata=false;
+  if(esito?.ok){dopo();return;}
+  avviso={tono:'errore',testo:esito?.motivo||'Azione non riuscita.'};mostra();
+ }
+ rinominaBtn?.addEventListener('click',()=>{campo.value=t.nome;cambiaModo('rinomina');});
+ eliminaBtn?.addEventListener('click',()=>cambiaModo('conferma'));
+ /* ⛔ L'esito si dice: «Apri» apre una finestra FUORI dal browser, quindi a schermo non cambierebbe
+    niente e chi ha premuto non saprebbe se è successo qualcosa. Stessa ragione di «Mostrato nella
+    cartella» qui sotto. */
+ apriBtn?.addEventListener('click',()=>esegui(()=>servizio.apri(id),()=>{avviso={tono:'stato',testo:'Aperto con il programma predefinito.'};mostra();}));
+ rivelaBtn?.addEventListener('click',()=>esegui(()=>servizio.rivela(id),()=>{avviso={tono:'stato',testo:'Mostrato nella cartella.'};mostra();}));
+ noElimina.addEventListener('click',()=>cambiaModo('normale','elimina'));
+ siElimina.addEventListener('click',()=>esegui(()=>servizio.elimina(id),()=>{stato='eliminata';onModo?.('normale',null);avviso={tono:'stato',testo:'File eliminato.'};mostra();onCambiata?.();}));
+ annullaRinomina.addEventListener('click',()=>cambiaModo('normale','rinomina'));
+ campo.addEventListener('input',()=>{if(stato==='rinomina')onModo?.('rinomina',campo.value);});
+ campo.addEventListener('keydown',e=>{if(e.key==='Escape'){e.preventDefault?.();cambiaModo('normale','rinomina');}});
+ forma.addEventListener('submit',e=>{
+  e.preventDefault?.();
+  /* ⛔ Il nome si controlla QUI prima di partire: un giro a vuoto sul server per una barra è tempo perso e un errore meno chiaro. */
+  const v=nomeLibreriaValido(campo.value);
+  if(!v.ok){avviso={tono:'errore',testo:v.motivo};mostra();campo.focus?.();return;}
+  if(v.nome===t.nome){cambiaModo('normale','rinomina');return;}
+  esegui(()=>servizio.rinomina(id,v.nome),()=>{stato='normale';onModo?.('normale',null);avviso={tono:'stato',testo:'Rinominato in '+v.nome+'.'};mostra();rinominaBtn?.focus?.();onCambiata?.();});
+ });
+ dettagli.addEventListener('click',()=>{aperta=!aperta;mostra();onEspandi?.(aperta);});
+ mostra();
+ testo.append(titolo,forma,sotto,messaggio);aside.append(gruppo,conferma,dettagli);riga.append(icona,testo,aside);return riga;
 }
 const PAGINE=new WeakMap();
 export function aggiornaPaginaLibreria(schermo,voci,opzioni={}){
  let pagina=PAGINE.get(schermo);
  if(!pagina){
-  pagina={voci:[],opzioni:{},query:'',origine:'tutte',aperte:new Set()};PAGINE.set(schermo,pagina);
+  pagina={voci:[],opzioni:{},query:'',origine:'tutte',aperte:new Set(),modi:new Map()};PAGINE.set(schermo,pagina);
   const tabs=[...schermo.querySelectorAll('[data-library-origine]')];
   for(const tab of tabs){
    tab.addEventListener('click',()=>{pagina.origine=tab.dataset.libraryOrigine;renderLibreria(schermo,pagina);});
@@ -46,8 +250,20 @@ function renderLibreria(schermo,pagina){
  schermo.querySelector('[data-library-refresh]').disabled=Boolean(opzioni.caricamento);
  schermo.querySelector('.talos-topbar__path').textContent=opzioni.errore?'Libreria non disponibile':opzioni.caricamento?'Caricamento Libreria…':plurale(voci.length,'file')+' · Token non disponibili';
  const esito=schermo.querySelector('[data-library-esito]');esito.textContent=opzioni.errore||(opzioni.caricamento?'Caricamento Libreria…':visibili.length===voci.length?plurale(voci.length,'file'):visibili.length+' di '+plurale(voci.length,'file'));esito.setAttribute('role',opzioni.errore?'alert':'status');
- const lista=schermo.querySelector('[data-library-list]'),attivo=doc.activeElement?.closest('[data-library-id]')?.dataset.libraryId;lista.setAttribute('role',visibili.length?'list':'group');
- lista.replaceChildren(...visibili.map(v=>creaLibraryRow(v,{document:doc,aperta:pagina.aperte.has(v.id),onEspandi:aperta=>{if(aperta)pagina.aperte.add(v.id);else pagina.aperte.delete(v.id);}})));
+ /* ⛔ Il ridisegno non deve buttare via né il fuoco né il nome digitato a metà: un aggiornamento dell'elenco arrivato mentre stai rinominando ti farebbe ricominciare da capo. */
+ const lista=schermo.querySelector('[data-library-list]'),fuoco=doc.activeElement,attivo=fuoco?.closest?.('[data-library-id]')?.dataset.libraryId,azioneAttiva=fuoco?.dataset?.azione||'';
+ lista.setAttribute('role',visibili.length?'list':'group');
+ const ricarica=()=>(opzioni.onCambiata||opzioni.onAggiorna)?.();
+ lista.replaceChildren(...visibili.map(v=>{
+  const memoria=pagina.modi.get(v.id)||null;
+  return creaLibraryRow(v,{document:doc,aperta:pagina.aperte.has(v.id),onEspandi:aperta=>{if(aperta)pagina.aperte.add(v.id);else pagina.aperte.delete(v.id);},
+   sessionId:opzioni.sessionId||'',azioni:opzioni.azioni||null,modo:memoria?.modo||'normale',bozza:memoria?.bozza??null,
+   onModo:(modo,bozza)=>{if(modo==='normale')pagina.modi.delete(v.id);else pagina.modi.set(v.id,{modo,bozza});},
+   onCambiata:()=>{pagina.modi.delete(v.id);ricarica();},onMenu:opzioni.onMenu||null});
+ }));
  if(!visibili.length)lista.append(el(doc,'p','talos-list-row talos-muted',opzioni.errore||(opzioni.caricamento?'Caricamento Libreria…':voci.length?'Nessun file corrisponde ai filtri.':'Nessun file in Libreria per questo progetto.')));
- if(attivo)[...lista.querySelectorAll('[data-library-id]')].find(n=>n.dataset.libraryId===attivo)?.querySelector('button:not([hidden])')?.focus({preventScroll:true});
+ if(attivo){
+  const tornata=[...lista.querySelectorAll('[data-library-id]')].find(n=>n.dataset.libraryId===attivo);
+  (azioneAttiva&&tornata?.querySelector('[data-azione="'+azioneAttiva+'"]:not([hidden])')||tornata?.querySelector('button:not([hidden]):not([disabled])'))?.focus({preventScroll:true});
+ }
 }

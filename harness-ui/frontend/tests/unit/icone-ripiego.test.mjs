@@ -252,6 +252,7 @@ test('⛔ i punti in cui il nome viene da una TABELLA DI DATI esistono ancora �
    *    spiegarle, e contare le menzioni invece delle cose è già costato tre difetti in un giorno.
    */
   const senzaCommenti = sorgenteApp.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  assert.equal((senzaCommenti.match(/iconaSvgAlbero\(voce\.icona\)/g) ?? []).length, 2, 'i due menu contestuali prendono il nome dell’icona da una voce di menu');
+  assert.equal((senzaCommenti.match(/iconaSvgAlbero\(voce\.icona\)/g) ?? []).length, 3,
+    'i TRE menu contestuali prendono il nome dell’icona da una voce di menu — sessioni, albero dei file e, dal 10/09, Libreria');
   assert.equal((senzaCommenti.match(/\bicon\(ico\)/g) ?? []).length, 1, 'l’elenco delle capability prende il nome dalla riga della tabella');
 });
