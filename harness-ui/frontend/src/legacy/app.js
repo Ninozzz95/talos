@@ -9022,10 +9022,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       return;
     }
     // 05/9 Fase 2: Conversazione — l'attesa e' lo scheletro del mockup con la riga animata del marchio (stessa immagine del mobile)
-    const { blocco: article, label: labelEl, elapsed } = creaAttesa({ etichetta });
+    const { blocco: article, label: labelEl, elapsed, fermaMotore } = creaAttesa({ etichetta });
     article.dataset.activity = stato;
     nellaChat(article);
     state.realSession.attesaBubble = article;
+    state.realSession.fermaMotoreSegnavia = fermaMotore;
     state.realSession.attesaAvviataA = typeof performance !== 'undefined' && typeof performance.now === 'function'
       ? performance.now()
       : Date.now();
@@ -9066,6 +9067,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
     state.realSession.attesaAvviataA = null;
     if (!state.realSession.attesaBubble) return;
+    /* ⛔ 10/09: il motore del segnavia si spegne QUI, dove si sa che la bolla se ne va. Si
+       autospegne anche da solo (`isConnected`), ma un frame di lavoro inutile e' un frame. */
+    state.realSession.fermaMotoreSegnavia?.();
+    state.realSession.fermaMotoreSegnavia = null;
     state.realSession.attesaBubble.remove();
     state.realSession.attesaBubble = null;
   }
