@@ -474,3 +474,34 @@ Va rifatto sul selettore vero, o cade dentro la decisione qui sopra.
 | **O-45** | i tre pallini non animati | **QUATTRO CAUSE ESCLUSE il 07/9** (Windows, CSS, GPU, animazione ricreata). 🔜 resta da guardare DURANTE un giro vero |
 | **O-47 / O-48 / O-49 / O-50** | stop, stato del giro, errore ripetuto, riprendere | **CHIUSE**: stop misurato 4 ms; `runRealeAttivo` guarda il server; `APPROVAL_NOT_PENDING` invece di «Query non valida»; resume provato dal vivo |
 | **fogli legacy** | «capabilities» e «control» erano due indici di cose che hanno già la loro schermata | **CHIUSA il 07/9**: `apriCapabilityDaFoglio()` e `case 'control' → eseguiDoctor()`; tolto anche l'ultimo chiamante (il pulsante «Apri Doctor» dell'errore cartella). 🔁 resta: i due TEMPLATE morti in `app.js` non si cancellano finché il velo `references` non ha un'altra via d'apertura (era lì dentro) |
+
+## D-11 — il 4174 non sa dire CHI ha creato una sessione (10/09/2026)
+
+**Il fatto.** Fra le 16:29 e le 16:33 sono comparse sul 4174 quattro sessioni che non ho avviato io:
+`3c8a5214`, `241e526f`, `6c3091c4`, `39f582b7` — consegna «Add and export a function `sottrai(a, b)`
+in src/matematica.mjs», `comandoProva: npm test`, modello `~deepseek/deepseek-v4-flash-latest`
+(**non** `glm-5.3-flash`, contro la regola dell'owner del 09/09), `taskId: libero:default`, permesso
+`Read only`, concluse con successo, 4-6 giri, ~245.000 token in ingresso in totale.
+
+**Chi è stato: NON LO SO, e non ho più il modo di saperlo.** La sessione peer `avm-1b` esclude sé
+stessa e i suoi due sotto-agenti (motivi circostanziati, non una prova). Il mio agente in background
+sui task di coding non ha ancora risposto. E la prova diretta non c'è più: **l'ho distrutta io**,
+riavviando il 4174 prima di guardarne i log, che il riavvio riazzera.
+
+**Il debito, che è più grande dell'episodio.** Il record di una sessione (`.sessions-store/*.jsonl`,
+intestazione) dichiara cartella, task, modello, permessi, padre — **ma non l'origine della
+richiesta**. Non c'è nessun campo che dica quale client, processo o sessione l'ha creata. Con dieci
+figlie, due sessioni Claude e un banco che può parlare via HTTP, «chi ha avviato questa» è una
+domanda senza risposta, e resterà tale ogni volta che si ripresenta.
+
+⇒ È la stessa forma di [[il-guardiano-accusava-la-sessione-dellowner]] («un allarme che dice QUANTI
+e non CHI non è azionabile») e di [[una-sonda-di-unaltra-sessione-scrive-sul-server-vivo]], la cui
+cura fu proprio far viaggiare il dato mancante nell'evento.
+
+**Proposta, NON implementata — serve il tuo sì.** L'intestazione registra l'origine: `client`
+(già ammesso oggi, ma opzionale e generico), più indirizzo remoto e `User-Agent` della richiesta che
+ha creato la sessione. Costo: piccolo. Effetto: la domanda «chi è stato» ha una risposta sul disco,
+anche dopo un riavvio.
+
+⛔ E una regola per me, che vale da subito: **prima di riavviare il 4174, se c'è qualcosa da
+spiegare nei suoi log, si copiano.** Il riavvio è autonomo, ma non è gratis.
