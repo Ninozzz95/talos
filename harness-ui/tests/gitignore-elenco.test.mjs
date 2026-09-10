@@ -281,10 +281,17 @@ function fsFinto(albero, { readdirEsplode = null, readFileEsplode = null } = {})
     const parti = norm(percorso).split('/');
     for (let i = 1; i < parti.length; i += 1) cartelle.add(parti.slice(0, i).join('/'));
   }
-  const chiamate = { readFile: [], readdir: [] };
+  const chiamate = { readFile: [], readdir: [], stat: [] };
   return {
     chiamate,
     promises: null,
+    async stat(percorso) {
+      const chiave = norm(percorso);
+      chiamate.stat.push(chiave);
+      if (cartelle.has(chiave)) return { isDirectory: () => true };
+      if (chiave in albero) return { isDirectory: () => false };
+      const e = new Error('ENOENT finto'); e.code = 'ENOENT'; throw e;
+    },
     async readFile(percorso, _codifica) {
       const chiave = norm(percorso);
       chiamate.readFile.push(chiave);
@@ -397,7 +404,133 @@ test('⭐ il filtro dichiara quante regole ha e da dove vengono', async () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────
-// 9. Robustezza dell'ingresso
+// 9. ⛔ La RISALITA: partire da una SOTTOCARTELLA del repo
+// ─────────────────────────────────────────────────────────────────────────────────────
+
+test('⛔⛔⛔⭐⭐⭐ da una SOTTOCARTELLA si applicano anche i `.gitignore` dei GENITORI', async () => {
+  // ⛔ Il difetto misurato il 10/09/2026: creando il filtro da `harness-ui/` si trovavano
+  // 7 regole da 2 fonti invece di 132 da 4, e 4.177 file di `.qa-runs` — che git considera
+  // ignorati per una regola scritta nel `.gitignore` di RADICE — finivano nell'elenco.
+  // [G] «Patterns read from a .gitignore file in the same directory as the path, or in any
+  // PARENT DIRECTORY (up to the top-level of the working tree)».
+  const fs = fsFinto({
+    'repo/.git/HEAD': 'ref: x',
+    'repo/.gitignore': 'lavoro/.qa-runs/\n',
+    'repo/lavoro/src/vero.mjs': 'x',
+    'repo/lavoro/.qa-runs/foto.png': 'x',
+  });
+  const tieni = await creaFiltroGitignore({ radice: 'repo/lavoro', fs });
+  assert.equal(tieni.prefissoLavoro, 'lavoro', 'sa dove si trova rispetto al repo');
+  assert.equal(tieni('.qa-runs', true), false, 'la regola del genitore morde anche da qui');
+  assert.equal(tieni('.qa-runs/foto.png'), false, '⛔ questo e il file che finiva nell elenco');
+  assert.equal(tieni('src/vero.mjs'), true, 'e il resto non si tocca');
+});
+
+test('⛔⭐⭐⭐ una regola del genitore vale con la SUA base, non con quella della cartella di lavoro', async () => {
+  // `/build` nel `.gitignore` di radice e ancorato ALLA RADICE DEL REPO: da `lavoro/` non
+  // deve toccare `lavoro/build`. Se la base fosse riscritta male, lo escluderebbe.
+  const fs = fsFinto({
+    'repo/.git/HEAD': 'ref: x',
+    'repo/.gitignore': '/build\n/lavoro/scarto\n',
+    'repo/build/roba.js': 'x',
+    'repo/lavoro/build/serve.js': 'x',
+    'repo/lavoro/scarto/x.js': 'x',
+  });
+  const tieni = await creaFiltroGitignore({ radice: 'repo/lavoro', fs });
+  assert.equal(tieni.radiceRepo, 'repo', 'la risalita e avvenuta davvero');
+  assert.equal(tieni('scarto/x.js'), false, '`/lavoro/scarto` del genitore morde: le regole ci sono');
+  assert.equal(tieni('build/serve.js'), true, '⛔ ma `/build` e ancorato alla RADICE, non a lavoro/');
+});
+
+test('⭐⭐⭐ precedenza: il `.gitignore` PIU VICINO batte quello del genitore', async () => {
+  const fs = fsFinto({
+    'repo/.git/HEAD': 'ref: x',
+    'repo/.gitignore': '*.png\n*.jpg\n',
+    'repo/lavoro/.gitignore': '!*.png\n',
+    'repo/lavoro/foto.png': 'x',
+    'repo/lavoro/altra.jpg': 'x',
+  });
+  const tieni = await creaFiltroGitignore({ radice: 'repo/lavoro', fs });
+  assert.equal(tieni('altra.jpg'), false, 'il genitore morde: le sue regole sono arrivate qui');
+  assert.equal(tieni('foto.png'), true, 'e la negazione LOCALE vince su di lui');
+});
+
+test('⛔ un `.git` FILE (worktree) vale quanto una directory, e `info/exclude` si trova via `commondir`', async () => {
+  // ⛔ Questa sessione gira in un worktree: `.git` e un FILE con dentro `gitdir: <percorso>`.
+  // Trattarne solo la forma-directory avrebbe fatto fallire la risalita IN SILENZIO.
+  const fs = fsFinto({
+    'repo/.git': 'gitdir: altrove/.git/worktrees/uno\n',
+    'altrove/.git/worktrees/uno/commondir': '../..\n',
+    'altrove/.git/info/exclude': 'segreto.txt\n',
+    'repo/.gitignore': 'niente\n',
+    'repo/lavoro/segreto.txt': 'x',
+    'repo/lavoro/normale.txt': 'x',
+  });
+  const tieni = await creaFiltroGitignore({ radice: 'repo/lavoro', fs });
+  assert.equal(tieni.radiceRepo, 'repo', 'la risalita ha funzionato col `.git` FILE');
+  assert.equal(tieni('segreto.txt'), false, 'e info/exclude del COMMON DIR e stato letto');
+  assert.equal(tieni('normale.txt'), true);
+});
+
+test('⛔⛔ AL CONTRARIO — nessun `.git` risalendo: ci si FERMA alla radice data, non si sale verso `C:\\`', async () => {
+  const fs = fsFinto({
+    'fuori/.gitignore': '*.txt\n', // un genitore che NON e un repo: non deve contare
+    'fuori/lavoro/uno.txt': 'x',
+  });
+  const tieni = await creaFiltroGitignore({ radice: 'fuori/lavoro', fs });
+  assert.equal(tieni.radiceRepo, null, 'nessun repo trovato');
+  assert.equal(tieni.prefissoLavoro, '', 'e quindi nessun prefisso');
+  assert.equal(tieni('uno.txt'), true, '⛔ le regole di una cartella qualunque sopra NON si ereditano');
+});
+
+test('⛔ il tetto di risalita e DICHIARATO: con `risalitaMassima: 0` non si sale di un livello', async () => {
+  const fs = fsFinto({
+    'repo/.git/HEAD': 'ref: x',
+    'repo/.gitignore': 'lavoro/*.txt\n',
+    'repo/lavoro/uno.txt': 'x',
+  });
+  const conTetto = await creaFiltroGitignore({ radice: 'repo/lavoro', fs, risalitaMassima: 0 });
+  assert.equal(conTetto.radiceRepo, null, 'col tetto a zero non si e salito');
+  assert.equal(conTetto('uno.txt'), true);
+
+  const senzaTetto = await creaFiltroGitignore({ radice: 'repo/lavoro', fs });
+  assert.equal(senzaTetto('uno.txt'), false, 'col tetto normale la regola del genitore morde');
+});
+
+test('⛔⛔⭐⭐⭐ L7 — se la CARTELLA DI LAVORO stessa e ignorata, l elenco NON si svuota', async () => {
+  // Come ripgrep: `skip_entry` non filtra le voci a depth 0, cioe' i percorsi dati
+  // esplicitamente. Il verso opposto e' il difetto aperto di Hermes Agent #45286, dove in
+  // un monorepo le cartelle top-level possedute da repo figli spariscono dalla vista.
+  const fs = fsFinto({
+    'repo/.git/HEAD': 'ref: x',
+    'repo/.gitignore': 'vendor/\n*.tmp\n',
+    'repo/vendor/pacco/index.js': 'x',
+    'repo/vendor/pacco/scarto.tmp': 'x',
+  });
+  const tieni = await creaFiltroGitignore({ radice: 'repo/vendor', fs });
+  assert.equal(tieni('pacco/index.js'), true, '⛔ aprire una cartella ignorata non da un elenco VUOTO');
+  assert.equal(tieni('pacco/scarto.tmp'), false, 'ma le altre regole del repo valgono lo stesso');
+});
+
+test('⭐ le fonti dichiarate dicono da DOVE arrivano le regole, genitori compresi', async () => {
+  const fs = fsFinto({
+    'repo/.git/HEAD': 'ref: x',
+    'repo/.gitignore': 'uno\n',
+    'repo/lavoro/.gitignore': 'due\n',
+    'repo/lavoro/dentro/.gitignore': 'tre\n',
+    'repo/lavoro/dentro/x.txt': 'x',
+  });
+  const tieni = await creaFiltroGitignore({ radice: 'repo/lavoro', fs });
+  assert.deepEqual(tieni.fonti, [
+    '(implicita) .git/',
+    '.gitignore',
+    'lavoro/.gitignore',
+    'lavoro/dentro/.gitignore',
+  ], 'in ordine di precedenza crescente, con le basi relative al REPO');
+});
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// 10. Robustezza dell'ingresso
 // ─────────────────────────────────────────────────────────────────────────────────────
 
 test('⭐ percorsi con backslash Windows, `./` iniziale e slash di troppo sono normalizzati', () => {
