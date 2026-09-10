@@ -870,3 +870,32 @@ che in questo progetto non esiste — la griglia si chiama `talos-choice-grid` �
 un involucro che rompeva la disposizione a colonne del velo, con «Linux (WSL2)» tagliato a metà. La
 forma che funziona è quella che «Per attrezzo» usava già: due fratelli diretti, nessun involucro.
 ⇒ Prima di scrivere una classe nuova si guarda come lo fa il blocco accanto.
+
+## 11/09 — IL VERDE, SPIEGATO: una preferenza dormiente che si sveglia
+
+**`2026-09-11-il-verde-spiegato.png`** — guardata. È lo stesso fondo verde che l'owner ha visto
+(«oddio che succede adesso perché il bg è verde») riprodotto in laboratorio, con le macchie negli
+angoli e il fondo verdastro sotto la conversazione.
+
+**Causa, misurata contando i PIXEL** (il colore dichiarato di `html` non bastava: la scena dipinge
+sopra, con `body::before/::after`):
+
+| scena | pixel verdi su 1.296.000 |
+|---|---|
+| calm | 1.553 (0,12%) |
+| **terminal** | **289.423 (22,33%)** |
+| telemetry | 1.636 (0,13%) |
+| aurora | 1.381 (0,11%) |
+
+La scena `terminal` ha tinta `#67d391`. Il punto non è che sia verde — è **quando** si è accesa:
+finché `aspetto.css` non esisteva, nessun CSS leggeva `data-talos-scene`, quindi la preferenza
+salvata nel browser dell'owner era **inerte**. Importando i fogli si è svegliata, e ha dipinto.
+
+⇒ Non è un difetto dei fogli: è una **preferenza dormiente che si sveglia**. È una classe di difetto
+che vale oltre questo caso — quando si dà effetto a un'impostazione che prima non ne aveva, chi
+l'aveva scelta mesi fa (o l'aveva sfiorata per caso) si trova l'app cambiata sotto gli occhi senza
+aver toccato niente.
+
+⛔ Le mie due misure precedenti non l'avevano trovato perché guardavano `backgroundColor` di `html`
+e `body` — che infatti NON cambiano: cambia ciò che viene dipinto SOPRA. È la lezione della notte
+applicata al contrario: un attributo che non cambia non prova che i pixel non cambino.
