@@ -1999,12 +1999,15 @@ function eseguiProva(comando, cartella) {
         const p = spawn(comando, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
         let fuori = ''
         let errori = ''
-        p.stdout?.on('data', (d) => { fuori += d })
-        p.stderr?.on('data', (d) => { errori += d })
+        /* ⛔ D-10C — `insieme` cresce nell'ordine in cui i dati ARRIVANO: è l'unico posto dove
+           l'errore sta dopo la riga che l'ha preceduto. `fuori` ed `errori` restano invariati. */
+        let insieme = ''
+        p.stdout?.on('data', (d) => { fuori += d; insieme += d })
+        p.stderr?.on('data', (d) => { errori += d; insieme += d })
         const timer = setTimeout(() => p.kill(), 120_000)
         p.on('close', (codice) => {
             clearTimeout(timer)
-            risolvi({ codice, testo: uscitaUtile(`${fuori}\n${errori}`.trim(), 4_000, 0.25) })
+            risolvi({ codice, testo: uscitaUtile((insieme || `${fuori}\n${errori}`).trim(), 4_000, 0.25) })
         })
         p.on('error', (e) => {
             clearTimeout(timer)
@@ -2050,14 +2053,36 @@ function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd } = {}) {
     return new Promise((risolvi) => {
         // ⛔ Stesso scrub di ambienteSenzaCredenziali() sopra — questa funzione instrada anche wsl.exe/adb col comando del modello dentro (eseguiComandoSandboxato sotto), difesa in profondità anche se WSLENV non inoltra le variabili Windows per default.
         const p = spawn(programma, argomenti, { windowsHide: true, cwd, env: ambienteSenzaCredenziali() })
+        /*
+         * ⛔⛔ D-10C (10/09) — L'ORDINE FRA I DUE FLUSSI ERA PERSO PER COSTRUZIONE.
+         *
+         * Misurato: `console.log('FUORI-1'); console.error('ERRORE-1'); console.log('FUORI-2')`
+         * usciva come «FUORI-1 FUORI-2 ... ERRORE-1». Non è un caso limite: erano due array
+         * separati, concatenati alla fine, e due array non sanno in che ordine sono arrivati.
+         * Quando si legge un errore, sapere DOPO QUALE RIGA è comparso è metà dell'informazione.
+         *
+         * Ricerca 10/09/2026 (nodejs/node issue #9214; l'opzione `all` di execa, che «interleaves
+         * stdout and stderr by creating a mixed stream»): l'ordine si preserva facendo passare i
+         * due flussi per LO STESSO collo mentre arrivano — non catturandoli separatamente e
+         * unendoli dopo, che è esattamente ciò che facevamo.
+         *
+         * ⭐ `fuori` ed `errori` restano quelli di prima, byte per byte: nessun chiamante cambia.
+         *   `insieme` è in più, ed è l'unico posto dove l'ordine è vero.
+         */
         const pezziFuori = []
         const pezziErrori = []
-        p.stdout?.on('data', (d) => pezziFuori.push(d))
-        p.stderr?.on('data', (d) => pezziErrori.push(d))
+        const pezziInsieme = []
+        p.stdout?.on('data', (d) => { pezziFuori.push(d); pezziInsieme.push(d) })
+        p.stderr?.on('data', (d) => { pezziErrori.push(d); pezziInsieme.push(d) })
         const timer = setTimeout(() => p.kill(), timeoutMs)
         p.on('close', (codice) => {
             clearTimeout(timer)
-            risolvi({ codice, fuori: Buffer.concat(pezziFuori).toString('utf8'), errori: Buffer.concat(pezziErrori).toString('utf8') })
+            risolvi({
+                codice,
+                fuori: Buffer.concat(pezziFuori).toString('utf8'),
+                errori: Buffer.concat(pezziErrori).toString('utf8'),
+                insieme: Buffer.concat(pezziInsieme).toString('utf8'),
+            })
         })
         p.on('error', () => {
             clearTimeout(timer)
@@ -2244,30 +2269,33 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
             }
         }
         const comandoConCd = `cd ${JSON.stringify(mirrorDevice)} && ${comando}`
-        const { codice, fuori, errori } = await eseguiComando(
+        const { codice, fuori, errori, insieme } = await eseguiComando(
             trovaAdbLocale(), ['-s', seriale, 'shell', comandoConCd], { timeoutMs: 120_000 },
         )
-        return { codice, testo: uscitaUtile(`${fuori}\n${errori}`.trim(), 4_000, 0.25), enforcement: 'adb-shell-on-device' }
+        return { codice, testo: uscitaUtile((insieme ?? `${fuori}\n${errori}`).trim(), 4_000, 0.25), enforcement: 'adb-shell-on-device' }
     }
     const distro = distroWslPredefinita()
     if (distro && await programmaDisponibileInWsl(distro, primoProgramma(comando))) {
         const percorsoWsl = convertiPercorsoWsl(cartella)
-        const { codice, fuori, errori } = await eseguiComando(
+        const { codice, fuori, errori, insieme } = await eseguiComando(
             'wsl.exe', ['-d', distro, '--', 'bash', '-lc', `cd ${JSON.stringify(percorsoWsl)} && ${comando}`],
             { timeoutMs: 120_000 },
         )
-        return { codice, testo: uscitaUtile(`${fuori}\n${errori}`.trim(), 4_000, 0.25), enforcement: 'wsl2' }
+        return { codice, testo: uscitaUtile((insieme ?? `${fuori}\n${errori}`).trim(), 4_000, 0.25), enforcement: 'wsl2' }
     }
     return new Promise((risolvi) => {
         const p = spawn(comando, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
         let fuori = ''
         let errori = ''
-        p.stdout?.on('data', (d) => { fuori += d })
-        p.stderr?.on('data', (d) => { errori += d })
+        /* ⛔ D-10C — `insieme` cresce nell'ordine in cui i dati ARRIVANO: è l'unico posto dove
+           l'errore sta dopo la riga che l'ha preceduto. `fuori` ed `errori` restano invariati. */
+        let insieme = ''
+        p.stdout?.on('data', (d) => { fuori += d; insieme += d })
+        p.stderr?.on('data', (d) => { errori += d; insieme += d })
         const timer = setTimeout(() => p.kill(), 120_000)
         p.on('close', (codice) => {
             clearTimeout(timer)
-            risolvi({ codice, testo: uscitaUtile(`${fuori}\n${errori}`.trim(), 4_000, 0.25), enforcement: 'none' })
+            risolvi({ codice, testo: uscitaUtile((insieme || `${fuori}\n${errori}`).trim(), 4_000, 0.25), enforcement: 'none' })
         })
         p.on('error', (e) => {
             clearTimeout(timer)

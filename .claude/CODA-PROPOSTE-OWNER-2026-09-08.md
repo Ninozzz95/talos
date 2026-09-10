@@ -270,3 +270,26 @@ provato con un OpenRouter finto (31 prove) e la card guardata a schermo con le r
 nella risposta (`api_key` → altro), oggi il flusso muore pulito con un errore dichiarato invece di
 indovinare campi alternativi. Accettare oggi un campo che non esiste vuol dire accettare, il giorno
 in cui esisterà, qualcosa di cui non conosciamo il significato.
+
+---
+
+## ✅ D-10C — CHIUSO il 10/09/2026, sera
+
+**La causa, trovata nel codice**: i due flussi finivano in **due array separati** (`pezziFuori`,
+`pezziErrori`) concatenati alla fine — e due array non sanno in che ordine sono arrivati. Non un caso
+limite: l'ordine era perso **per costruzione**, in tutti e quattro i rami di esecuzione (WSL2,
+adb-shell, Windows nativo, e la funzione ausiliaria dei comandi brevi).
+
+**La cura**: un terzo accumulatore, `insieme`, che cresce nell'ordine in cui i dati **arrivano**.
+`fuori` ed `errori` restano invariati byte per byte — nessun chiamante cambia. Ricerca 10/09/2026
+(nodejs/node issue #9214; l'opzione `all` di execa, «interleaves stdout and stderr by creating a
+mixed stream»): l'ordine si preserva facendo passare i due flussi per **lo stesso collo** mentre
+arrivano, non catturandoli separatamente e unendoli dopo.
+
+**Misurato dal vivo sul 4174**, col caso esatto del debito e nel ramo che l'owner usa davvero (WSL2):
+
+| | prima | dopo |
+|---|---|---|
+| `console.log('FUORI-1'); console.error('ERRORE-1'); console.log('FUORI-2')` | `FUORI-1 FUORI-2 … ERRORE-1` | **`FUORI-1 ERRORE-1 FUORI-2`** |
+
+Quattro prove nuove, due al contrario (solo stdout, comando muto). Suite 2115/2115.
