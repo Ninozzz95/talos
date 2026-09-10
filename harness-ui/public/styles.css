@@ -10237,4 +10237,53 @@ dialog.command-dialog .tool-chips .status-chip,
   }
 }
 
+/* src/styles/modalita-shell.css */
+.talos-composer--shell {
+  border-color: var(--talos-danger-border);
+  box-shadow: 0 0 0 3px var(--talos-danger-soft);
+}
+.talos-composer--shell:focus-within {
+  border-color: var(--talos-danger);
+  box-shadow: 0 0 0 3px var(--talos-danger-soft);
+}
+.talos-composer--shell .talos-composer__input {
+  font-family: var(--talos-font-mono);
+  font-size: 13px;
+}
+.talos-composer__shell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: var(--talos-danger);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+.talos-composer__shell::before {
+  content: ">_";
+  font-family: var(--talos-font-mono);
+  font-weight: 600;
+  letter-spacing: -.04em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--talos-danger-soft);
+  border: 1px solid var(--talos-danger-border);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .talos-composer {
+    transition: border-color .12s ease, box-shadow .12s ease;
+  }
+  .talos-composer__shell {
+    animation: talosShellEntra .12s ease-out;
+  }
+  @keyframes talosShellEntra {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
 /* src/styles/main.css */

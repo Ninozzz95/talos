@@ -7962,6 +7962,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * (l'input listener, RunStarted) chiama syncRunComposerState() da sé,
    * subito dopo — mai qui dentro.
    */
+  /* ⛔ Il segnale della shell segue SEMPRE il valore vero del campo: dopo un invio il campo si
+     svuota da codice, e un `input` non scatta. Senza questa riga il bordo rosso resterebbe acceso
+     su un composer vuoto — un avviso che parla di qualcosa che non c'è più. */
   function svuotaSuggerimentoComposer() {
     if (suggerimentoComposerAttivo === null) return;
     suggerimentoComposerAttivo = null;
@@ -10778,6 +10781,31 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * vecchia — provato nel backend che una connessione già aperta da prima
    * non riceve questi eventi dal vivo).
    */
+  /**
+   * Accende o spegne il segnale «modalità shell libera» sul composer.
+   * @param {string} valore il testo del campo, così com'è
+   */
+  function aggiornaModalitaShell(valore) {
+    const testo = String(valore ?? '');
+    const inShell = testo.startsWith('!');
+    const silenzioso = testo.startsWith('!!');
+    composerForm.classList.toggle('talos-composer--shell', inShell);
+    composerForm.classList.toggle('talos-composer--shell-muta', silenzioso);
+    let avviso = composerForm.querySelector('.talos-composer__shell');
+    if (!inShell) { avviso?.remove(); return; }
+    if (!avviso) {
+      avviso = document.createElement('p');
+      avviso.className = 'talos-composer__shell';
+      /* ⛔ `role="status"` e non `alert`: non è successo niente di brutto, è un modo di scrivere.
+         Un `alert` interromperebbe chi usa uno screen reader a ogni carattere digitato. */
+      avviso.setAttribute('role', 'status');
+      composerForm.prepend(avviso);
+    }
+    avviso.textContent = silenzioso
+      ? 'Comando in silenzio: gira subito sulla tua macchina e non comparirà in chat.'
+      : 'Comando: gira subito sulla tua macchina, senza passare dal modello.';
+  }
+
   async function runDirectShell(comando, silenzioso) {
     if (!state.realSession.id) {
       toast('Nessuna sessione reale attiva', 'Avvia un task dal corpus prima di usare un comando diretto.');
@@ -17681,6 +17709,25 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     autoGrowTextarea();
     syncRunComposerState();
     const value = composerInput.value;
+    /*
+     * ⭐⭐⭐ 10/09, owner: «se digito ! prima di tutto metti un alertino o un contorno rosso al
+     *   composer o qualcosa del genere per fare capire che sei in modalità shell libera».
+     *
+     * ⛔ Il segnale più forte non è il bordo: è il MATERIALE. In modalità shell il testo che
+     *   scrivi diventa monospazio, perché è codice che una macchina eseguirà alla lettera — e la
+     *   differenza fra `rm -rf ./ build` e `rm -rf ./build` si legge solo a larghezza fissa. È la
+     *   stessa ragione già scritta in `appendComandoDiretto` per la bolla del comando: qui arriva
+     *   un istante prima, mentre lo stai ancora scrivendo.
+     * ⛔ I colori NON sono inventati: `--talos-danger*` esistono già nel tema. Un rosso nuovo
+     *   accanto al Calm sarebbe stonato e, peggio, sarebbe un secondo vocabolario per «attento».
+     * ⛔ Due casi, due frasi: `!` finisce in chat, `!!` no. Dirlo prima di premere Invio è metà
+     *   del valore — dopo è tardi.
+     * Fonte 10/09/2026: Claude Code, «Interactive mode» e il suo CHANGELOG («Pasting `!command`
+     * into an empty prompt now enters bash mode, matching typed `!` behavior») — per loro è una
+     * MODALITÀ in cui si entra, non un prefisso che si scrive, e vale anche incollando. Qui
+     * infatti si guarda il valore del campo a ogni cambiamento, non il tasto premuto.
+     */
+    aggiornaModalitaShell(value);
     if (value === '/') openCommandPalette();
     if (/@[^\s]*$/.test(value) && value.endsWith('@')) openSheet('references');
   });
