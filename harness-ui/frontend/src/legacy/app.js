@@ -10738,6 +10738,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * sarebbe la stessa fuffa già tolta ovunque in questo file.
    */
   const RIGHE_MASSIME_DIFF = 1500;
+  /*
+   * Quante righe di un esito entrano nella chat prima di dichiarare il resto. Alto apposta: per
+   * un comando della persona l'output è la ragione stessa del comando (PO-06). Vedi il punto in
+   * cui si usa, sotto `tool-result-block`.
+   */
+  const RIGHE_ESITO_IN_CHAT = 200;
 
   /*
    * 06/09 (Review di NOTE.md appena creato): «+1 −1» con una riga «−» vuota.
@@ -13224,8 +13230,30 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           const daMostrare = esitoUmano
             ? (esitoUmano.output.trim() === '' ? 'Nessun output.' : esitoUmano.output)
             : testoEsito;
-          pre.appendChild(textElement('code', '', daMostrare));
+          /*
+           * ⛔⛔ 10/09 — UN ESITO LUNGO NON SI ROVESCIA NELLA CHAT.
+           *
+           * Trovato guardando la foto di PO-11: sotto «1 file letto» c'era il CONTENUTO INTERO
+           * del file, che spingeva in basso tutto il resto della conversazione — compreso il
+           * diff appena aggiunto. Vale per ogni attrezzo, non solo per `leggi`: un comando che
+           * stampa cinquemila righe allaga la chat allo stesso modo.
+           *
+           * ⛔ Si TAGLIA dichiarando quanto resta, mai in silenzio — stessa regola già scritta
+           *   per il diff (PO-11) e per l'elenco dei file (P-13). Il testo intero non si perde:
+           *   il file sta nel pannello File e nella Review, l'output di un comando nel Terminale.
+           * ⛔ Il tetto è alto apposta: per un comando scritto dalla persona l'output è tutto
+           *   ciò per cui il comando è stato scritto (PO-06), e tagliarlo presto sarebbe togliere
+           *   la cosa che serve. Duecento righe passano intere; oltre, si dice quante mancano.
+           */
+          const righeEsito = String(daMostrare).split('\n');
+          const tagliato = righeEsito.length > RIGHE_ESITO_IN_CHAT;
+          pre.appendChild(textElement('code', '', tagliato ? righeEsito.slice(0, RIGHE_ESITO_IN_CHAT).join('\n') : daMostrare));
           info.detail.appendChild(pre);
+          if (tagliato) {
+            const quante = righeEsito.length - RIGHE_ESITO_IN_CHAT;
+            info.detail.appendChild(textElement('p', 'tool-result-tagliato',
+              `Altre ${quante} righe non sono mostrate qui (in tutto ${righeEsito.length}).`));
+          }
         }
         if (info?.batch && info.stato === 'running') {
           const { batch, categoria } = info;

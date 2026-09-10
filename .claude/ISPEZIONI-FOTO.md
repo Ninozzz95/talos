@@ -471,3 +471,47 @@ sequenza intera in una schermata: la consegna, il batch «1 file letto, 1 file m
 due righe degli attrezzi col percorso a destra, e sotto il diff aperto — «righe 6-11», contesto 6-8
 in grigio, le due tolte in rosso **senza numero**, le due aggiunte verdi numerate 9 e 10, la 11 di
 chiusura. Il composer resta libero sotto, niente si sovrappone, nessun testo tagliato.
+
+## 10/09/2026, 18:43 — il taglio di un esito lungo
+
+Giro vero `43228400` sul 4174: un comando che stampa **400 righe** (`seq 1 400`).
+
+**`2026-09-10-taglio-esito-1440.png`** — guardata. La conversazione resta **pulita**: «1 comando
+eseguito» chiuso, poi «Fatto.». Prima di questa cura quelle 400 righe finivano nel corpo della riga
+e spingevano in basso tutto il resto — compreso il diff appena aggiunto con PO-11.
+
+Misurato nel DOM aprendo la riga: **200 righe nel riquadro**, e sotto la dichiarazione
+«Altre 201 righe non sono mostrate qui (in tutto 401)». Il taglio si vede, si conta, e dice quanto
+manca — mai in silenzio.
+
+⛔ **Correzione a una mia diagnosi**: avevo scritto che «il riquadro di *1 file letto* mostra il
+contenuto intero del file» come se fosse un difetto della lettura. Rimisurato: quel file era di 11
+righe, quindi il riquadro mostrava semplicemente un file corto — e una lettura di
+`harness-ui/src/agent-service.mjs` ne ha mostrate 73, perché il kernel tronca già a `MAX_BYTE_LETTI`
+(`talosHarness.mjs:1944`). Il caso che rende utile questa cura non è `leggi`: è un **comando** che
+stampa migliaia di righe, come quello provato qui.
+
+### Il pulsante sovrapposto: NON riprodotto
+
+Il tondo «vai in fondo» che nella foto delle 18:30 copriva il bordo destro del diff non si è più
+presentato, e una sonda che cerca ogni elemento in `position:absolute/fixed` di quelle dimensioni
+non trova niente. Resta annotato come visto una volta e non riprodotto — non come difetto aperto,
+perché non ho modo di dire dove sia.
+
+## 10/09/2026, 18:39 — Hermes aperto su richiesta dell'owner (due foto MANCATE)
+
+L'owner: «aprimi hermes voglio provare a vedere se interfaccia nostra è ancora indietro». Hermes è
+stato avviato — finestra «Hermes», Electron, PID 34560 — e l'owner l'ha usato per conto suo.
+
+**`2026-09-10-hermes-aperto.png`** — guardata: **non ritrae Hermes**. La cattura per rettangolo ha
+preso ciò che stava sopra in quella posizione dello schermo (una conversazione con un artefatto
+`Talos_Calm_Sezioni_Interattivo.html`). Inservibile come verifica.
+
+**`2026-09-10-hermes-fronte.png`** — guardata: **non ritrae Hermes** neanche lei. Mostra Chrome con
+ChatGPT aperto. `SetForegroundWindow` non ha portato Hermes davanti: Windows nega il primo piano a
+un processo che non ha l'input dell'utente, e la cattura ha fotografato lo schermo così com'era.
+
+⛔ Lezione, e vale per ogni confronto futuro con un'app nativa: **una cattura per rettangolo dello
+schermo non è una foto di quella finestra**. Se serve la finestra di un'altra app, o la porta davanti
+una persona, oppure si cattura la finestra per handle (PrintWindow) invece dell'area di schermo.
+Le due foto restano agli atti come tentativi falliti, non come prove: non provano niente su Hermes.
