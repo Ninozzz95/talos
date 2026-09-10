@@ -2048,6 +2048,23 @@ export function createSessionRegistry({
   function avviaESegui({
     sessionId = randomUUID(), taskId, cartella, task, comandoProva, messaggiIniziali,
     forkDa = null, voceEsistente = null, modelloRichiesta = null, reasoningRichiesto = null, mobile = false,
+    /*
+     * ⭐⭐⭐ D-11 (10/09) — DA DOVE È ARRIVATA LA RICHIESTA.
+     *
+     * Il 10/09 sono comparse sul 4174 quattro sessioni con un modello fuori regola, e non c'è
+     * stato modo di sapere chi le avesse create: cinque piste seguite, due sessioni interrogate,
+     * una corrispondenza testuale esatta, e nessuna risposta possibile — perché il dato non
+     * veniva registrato da nessuno. L'intestazione dichiarava cartella, task, modello, permessi
+     * e padre; l'origine no.
+     *
+     * ⛔ È DIAGNOSTICA, NON SICUREZZA, e la distinzione non è una formalità: un'intestazione
+     *   HTTP la scrive il chiamante, quindi si può falsificare (ricerca 10/09/2026: InfoSec
+     *   Writeups «Header Manipulation», Microsoft Learn «Add data to audit logs by using custom
+     *   headers» — utili per il contesto, mai come controllo d'accesso). Questo campo serve a
+     *   rispondere a «chi è stato» quando la risposta è uno strumento di casa; non decide nulla,
+     *   non nega nulla, e nessun codice deve MAI leggerlo per autorizzare qualcosa.
+     */
+    origineRichiesta = null,
     permessiRichiesti = null, permessiPerAttrezzoRichiesti = null,
     /*
      * ⭐⭐⭐ 03/9 — vedi la doc di cartellaEffettivaPerPermessi: `true` per
@@ -2161,6 +2178,8 @@ export function createSessionRegistry({
       // indietro se il permesso viene abbassato più tardi.
       cartella: cartellaEffettivaPerPermessi(cartella, permessiEffettivi, cartellaGiaScelta), cartellaBase: cartella,
       cartellaGiaScelta,
+      // ⭐ D-11: chi ha creato questa sessione. Diagnostica, mai un controllo d'accesso.
+      origineRichiesta,
       task, comandoProva, forkDa,
       avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
       modelloPlanner: modelloPlannerEffettivo,
@@ -2224,6 +2243,8 @@ export function createSessionRegistry({
             provider: voce.provider, runtimeId: voce.runtimeId, modelId: voce.modelId, fallbackConsent: voce.fallbackConsent,
             // ⭐⭐⭐ 03/9 — persistita: senza questa, un ripristino dopo un riavvio perderebbe la distinzione e allargherebbe una cartella già scelta esattamente (stesso bug appena corretto, ma dopo un riavvio invece che subito).
             cartellaGiaScelta: voce.cartellaGiaScelta,
+            // ⭐ D-11: sopravvive al riavvio, perché è qui e non nei log — che il riavvio riazzera.
+            ...(voce.origineRichiesta ? { origine: voce.origineRichiesta } : {}),
           },
         });
       } catch (errore) {
@@ -2929,7 +2950,14 @@ export function createSessionRegistry({
       modelloScelto = null, modelloPlannerScelto = null, reasoningScelto = null, mobile = false,
       permessiScelto = null, permessiPerAttrezzoScelto = null,
       provider = 'cloud', runtimeId = null, modelId = null, fallbackConsent = false,
-    } = {}) {
+    } = {},
+    /*
+     * ⭐ D-11 — ARGOMENTO A PARTE, e non per stile: l'origine non è una scelta di chi avvia la
+     *   sessione (come il modello o i permessi), è un fatto sulla RICHIESTA. Tenerla fuori
+     *   dall'oggetto delle opzioni lascia quel contratto identico — tre test che lo asseriscono
+     *   con `deepEqual` se ne sono accorti subito, ed è giusto che siano rimasti severi.
+     */
+    origineRichiesta = null) {
       let preparato;
       try {
         preparato = preparaTask(taskId);
@@ -2944,6 +2972,7 @@ export function createSessionRegistry({
         // ⭐⭐⭐ 04/9 — W0-08: la cartella di un task del catalogo non è MAI un punto di partenza "stretto" da cui allargarsi — è sempre la copia usa-e-getta preparata da task-catalog.mjs. Vedi la doc qui sopra.
         cartellaGiaScelta: true,
         provider, runtimeId, modelId, fallbackConsent,
+        origineRichiesta, // ⭐ D-11
       });
     },
 
@@ -2968,7 +2997,8 @@ export function createSessionRegistry({
       cartellaId, cartellaLibera, workspaceLaunchId, consegna, comandoProva, immagini = [],
       modello: modelloScelto = null, modelloPlanner: modelloPlannerScelto = null, reasoning: reasoningScelto = null, mobile = false,
       permessi: permessiScelto = null, permessiPerAttrezzo: permessiPerAttrezzoScelto = null,
-    }) {
+    },
+    origineRichiesta = null) { // ⭐ D-11, argomento a parte: vedi la doc su `avvia`
       const scelteWorkspace = [cartellaId, cartellaLibera, workspaceLaunchId].filter((value) => typeof value === 'string' && value.length > 0);
       if (scelteWorkspace.length !== 1) {
         return { erroreAvvio: 'Serve una sola cartella per questa sessione', code: 'QUERY_INVALID' };
@@ -3004,6 +3034,7 @@ export function createSessionRegistry({
         permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto,
         // ⭐⭐⭐ 03/9 — cartellaLibera/workspaceLaunchId: la persona ha scelto ESATTAMENTE questa cartella, "Full access" qui è solo il cancello obbligato per poterla scegliere (vedi il gate poco sopra), mai un invito ad allargarla oltre — cartellaId (allowlist) resta l'unico caso che allarga.
         cartellaGiaScelta: Boolean(cartellaLibera) || Boolean(workspaceLaunchId),
+        origineRichiesta, // ⭐ D-11
       });
       if (workspaceLaunchId && risultato.sessionId && typeof consumeWorkspaceLaunchFn === 'function') {
         try { consumeWorkspaceLaunchFn(workspaceLaunchId); } catch { /* la sessione è già partita: mai trasformare un successo in errore */ }
