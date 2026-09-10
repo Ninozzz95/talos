@@ -13,7 +13,7 @@ import { isAbsolute } from 'node:path';
 import { createParser } from 'eventsource-parser';
 import { eseguiFlowForgeLocale, FORGE_PREFISSO_NOME_TOOL, validaManifestForgeLocale } from './forge-contract.mjs';
 import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
-import { risolviDestinazioneModello, separaFonteModello } from './model-destination.mjs';
+import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO } from './model-destination.mjs';
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
@@ -705,6 +705,14 @@ export function createOwnerRuntimeAdapter({
        */
       const fetchInstradata = creaFetchMultiProvider(fetchResiliente, { dipendenze: destinazioneModelloDeps });
       const fetchConImmagini = async (url, init = {}) => {
+        if (input?.contextHooks && String(url).includes('/chat/completions') && typeof init.body === 'string') {
+          let body;
+          try { body = JSON.parse(init.body); } catch { /* Preserve the existing malformed-body path. */ }
+          if (typeof body?.model === 'string' && separaFonteModello(body.model).fonte === 'openrouter') {
+            const plugins = (Array.isArray(body.plugins) ? body.plugins : []).filter(plugin => plugin?.id !== 'context-compression');
+            init = { ...init, body: JSON.stringify({ ...body, plugins: [...plugins, { id: 'context-compression', enabled: false }] }) };
+          }
+        }
         if (!resolveImagesFn || !String(url).includes('/chat/completions') || typeof init.body !== 'string') return fetchInstradata(url, init);
         let body;
         try { body = JSON.parse(init.body); } catch { return fetchInstradata(url, init); }
@@ -720,6 +728,52 @@ export function createOwnerRuntimeAdapter({
         return fetchInstradata(url, { ...init, body: JSON.stringify({ ...body, messages }) });
       };
       return richiama('talosLavora', { ...input, fetchDiRete: fetchConImmagini });
+    },
+    /** One bounded summary request through the same provider adapters as chat. */
+    async callContextModel({ provider, model, messages, maxOutputTokens, signal, fetchDiRete = fetch }) {
+      const fail = (code, message, usage) => { throw Object.assign(new Error(message), { code, ...(usage !== undefined ? { usage } : {}) }); };
+      if (!FONTI_MODELLO.includes(provider) || typeof model !== 'string' || !model.trim() || !Array.isArray(messages) || !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1) fail('CTX_MODEL_INVALID', 'Richiesta di sintesi non valida.');
+      if (!destinazioneModelloDeps) fail('CTX_TRANSPORT_UNAVAILABLE', 'Il trasporto del modello non è collegato al compattatore.');
+      signal?.throwIfAborted();
+      const routed = creaFetchMultiProvider(fetchDiRete, { dipendenze: destinazioneModelloDeps });
+      const key = provider === 'openrouter' ? destinazioneModelloDeps.leggiChiave?.('openrouter') : null;
+      if (provider === 'openrouter' && !key) fail('CTX_TOKEN_AUTH', 'La chiave del provider selezionato non è disponibile.');
+      /*
+       * ⛔ 09/09/2026 — trovato dal giro vero D1 (z-ai/glm-5.3-flash via OpenRouter): la sintesi tornava
+       *   SENZA testo, perché il modello ragiona per difetto e il ragionamento si mangiava il budget della
+       *   risposta. Spegnerlo non si può («Reasoning is mandatory for this endpoint and cannot be
+       *   disabled», HTTP 400, misurato). Misurato con quattro chiamate: senza campo reasoning 133 token
+       *   di ragionamento e a volte `finish_reason: length`; con `reasoning.effort: 'low'` ZERO token di
+       *   ragionamento, `finish_reason: stop`, costo più basso. Una sintesi non ha bisogno di pensare a
+       *   lungo: chiede poco, nel rispetto delle capacità del catalogo (`normalizzaReasoningPerModello`
+       *   toglie un effort che il modello non supporta, mai `none` a chi lo vieta).
+       *   Fonte 09/09/2026: openrouter.ai/docs/use-cases/reasoning-tokens — «low: approximately 20% of
+       *   max_tokens», `effort: 'none'` disabilita e va evitato sui modelli «mandatory».
+       */
+      const capability = provider === 'openrouter' ? await Promise.resolve(modelCapabilityFn(model)).catch(() => null) : null;
+      const reasoning = provider === 'openrouter' ? normalizzaReasoningPerModello({ effort: 'low' }, capability) : undefined;
+      const response = await routed(ENDPOINT_OPENROUTER, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
+        body: JSON.stringify({ model: provider === 'openrouter' ? model : `${provider}:${model}`, messages: structuredClone(messages), tools: [], max_tokens: maxOutputTokens, stream: false, ...(reasoning ? { reasoning } : {}), ...(provider === 'openrouter' ? { transforms: [], plugins: [{ id: 'context-compression', enabled: false }] } : {}) }),
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(180_000)]) : AbortSignal.timeout(180_000),
+      });
+      if (!response.ok) {
+        await response.body?.cancel();
+        fail('CTX_SUMMARY_HTTP', `Il modello di sintesi ha risposto con HTTP ${response.status}.`);
+      }
+      let result;
+      try { result = await response.json(); } catch { fail('CTX_SUMMARY_RESPONSE_INVALID', 'Risposta di sintesi non leggibile.'); }
+      const choice = result?.choices?.[0];
+      const usage = result?.usage;
+      if (choice?.message?.tool_calls?.length) fail('CTX_SUMMARY_TOOLS', 'La sintesi non può eseguire strumenti.', usage);
+      // 09/09 — il caso visto dal vivo: niente testo ma token di ragionamento spesi. Non è una risposta
+      //   «invalida» da guardare nel codice: è un budget finito nel pensiero, e va detto in quelle parole.
+      const reasoningTokens = usage?.completion_tokens_details?.reasoning_tokens;
+      if (typeof choice?.message?.content !== 'string' && Number.isSafeInteger(reasoningTokens) && reasoningTokens > 0) {
+        fail('CTX_TRUNCATED_SUMMARY', `Il modello ha speso ${reasoningTokens} token nel ragionamento e non ha lasciato spazio alla sintesi.`, usage);
+      }
+      if (typeof choice?.message?.content !== 'string' || typeof choice?.finish_reason !== 'string') fail('CTX_SUMMARY_RESPONSE_INVALID', 'La sintesi non dichiara testo e stato finale.', usage);
+      return { text: choice.message.content, finishReason: choice.finish_reason, usage };
     },
     async eseguiComandoSandboxato(...args) { return richiama('eseguiComandoSandboxato', ...args); },
     async eseguiFlowForge(...args) {

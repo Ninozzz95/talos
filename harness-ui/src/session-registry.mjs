@@ -1,3 +1,5 @@
+import { contextUsageFromEvents } from '../../context-engine/src/usage.mjs';
+
 /**
  * session-registry.mjs — le sessioni Harness UI vive in memoria: chi le ha
  * avviate, il buffer dei loro eventi AG-UI, e come fermarle. Piano
@@ -31,7 +33,7 @@ import {
   eseguiComandoDiretto as eseguiComandoDirettoReale,
 } from './agent-service.mjs';
 import {
-  approvalRequested, approvalResolved, hookInvoked, queuedMessageDelivered, workspaceChanged,
+  approvalRequested, approvalResolved, hookInvoked, queuedMessageDelivered, workspaceChanged, contextEngineEvent,
   runRedirectApplied, runRedirectCancelled, runRedirectFailed, runRedirectRequested,
   runStarted, runFinished, runError, textMessageStart, textMessageContent, textMessageEnd,
   reasoningMessageStart, reasoningMessageContent, reasoningMessageEnd, toolCallStart, toolCallArgs,
@@ -928,7 +930,8 @@ function usagePerEsecuzione(ordinati) {
  */
 export function usageSessioneDaEventi(eventi) {
   const finali = usagePerEsecuzione(eventiInOrdine(eventi));
-  if (finali.length === 0) return null;
+  const compattazione = contextUsageFromEvents(eventi);
+  if (finali.length === 0 && !compattazione) return null;
   const numero = (valore) => (Number.isFinite(valore) ? valore : 0);
   const somma = finali.reduce((acc, u) => ({
     prompt_tokens: acc.prompt_tokens + numero(u.prompt_tokens),
@@ -939,13 +942,23 @@ export function usageSessioneDaEventi(eventi) {
   // ⛔ Nessuna esecuzione ha dichiarato `cached_tokens` ⇒ `null`, mai lo zero
   //    che verrebbe fuori dalla somma: «non dichiarato» non è «nessuno».
   const conCache = finali.filter((u) => Number.isFinite(u.cached_tokens));
-  return {
+  const risultato = {
     ...somma,
     cached_tokens: conCache.length === 0 ? null : somma.cached_tokens,
     esecuzioni: finali.length,
     esecuzioniConCache: conCache.length,
-    ultimaEsecuzione: finali[finali.length - 1],
+    ultimaEsecuzione: finali.at(-1) ?? null,
   };
+  if (compattazione) {
+    for (const key of ['prompt_tokens', 'completion_tokens', 'cached_tokens']) {
+      const chat = finali.some(u => Number.isFinite(u[key])) ? risultato[key] : null;
+      const context = compattazione[key];
+      risultato[key] = chat === null && context === null ? null : (chat ?? 0) + (context ?? 0);
+    }
+    risultato.compattazione = compattazione;
+    risultato.prompt_tokens_con_cache = conCache.reduce((n, u) => n + (Number.isFinite(u.prompt_tokens) && u.prompt_tokens > 0 ? u.prompt_tokens : 0), 0) + (compattazione.prompt_tokens_con_cache ?? 0);
+  }
+  return risultato;
 }
 
 /**
@@ -955,8 +968,9 @@ export function usageSessioneDaEventi(eventi) {
  */
 function cacheDaEventi(ordinati) {
   const finali = usagePerEsecuzione(ordinati);
+  const compattazione = contextUsageFromEvents(ordinati);
   const vuoto = { frazione: null, percentuale: null, promptTokens: null, cachedTokens: null, denominatore: 'prompt_tokens', esecuzioni: 0 };
-  if (finali.length === 0) return { ...vuoto, motivoAssente: MOTIVO_USAGE_ASSENTE };
+  if (finali.length === 0 && !compattazione) return { ...vuoto, motivoAssente: MOTIVO_USAGE_ASSENTE };
 
   /*
    * ⛔ Numeratore e denominatore vengono dalle STESSE esecuzioni: un invio che
@@ -966,13 +980,13 @@ function cacheDaEventi(ordinati) {
    */
   const conPrompt = finali.filter((u) => Number.isFinite(u.prompt_tokens) && u.prompt_tokens > 0);
   const conCache = conPrompt.filter((u) => Number.isFinite(u.cached_tokens));
-  const prompt = conPrompt.length === 0 ? null : conPrompt.reduce((n, u) => n + u.prompt_tokens, 0);
-  const cached = conCache.length === 0 ? null : conCache.reduce((n, u) => n + u.cached_tokens, 0);
+  const prompt = conPrompt.length === 0 && compattazione?.prompt_tokens == null ? null : conPrompt.reduce((n, u) => n + u.prompt_tokens, 0) + (compattazione?.prompt_tokens ?? 0);
+  const cached = conCache.length === 0 && compattazione?.cached_tokens == null ? null : conCache.reduce((n, u) => n + u.cached_tokens, 0) + (compattazione?.cached_tokens ?? 0);
   const base = { ...vuoto, esecuzioni: finali.length, promptTokens: prompt, cachedTokens: cached };
-  if (prompt === null) return { ...base, motivoAssente: MOTIVO_PROMPT_ZERO };
+  if (prompt === null || prompt <= 0) return { ...base, motivoAssente: MOTIVO_PROMPT_ZERO };
   if (cached === null || cached < 0) return { ...base, motivoAssente: MOTIVO_CACHED_ASSENTE };
   // Il denominatore del TASSO è quello delle sole esecuzioni che hanno dichiarato la cache.
-  const promptConCache = conCache.reduce((n, u) => n + u.prompt_tokens, 0);
+  const promptConCache = conCache.reduce((n, u) => n + u.prompt_tokens, 0) + (compattazione?.prompt_tokens_con_cache ?? 0);
   if (cached > promptConCache) return { ...base, motivoAssente: MOTIVO_CACHE_INCOERENTE };
 
   const frazione = cached / promptConCache;
@@ -1063,6 +1077,8 @@ export function createSessionRegistry({
   resolveWorkspaceLaunchFn = null,
   consumeWorkspaceLaunchFn = null,
   compattaSessioneFn = compattaSessioneReale,
+  contextHooksFn,
+  contextCompactFn,
   eseguiComandoDirettoFn = eseguiComandoDirettoReale,
   leggiAlberoWorkspaceFn = leggiAlberoWorkspaceReale,
   leggiContenutoFileFn = leggiContenutoFileReale,
@@ -1343,6 +1359,7 @@ export function createSessionRegistry({
 } = {}) {
   const preparaTask = preparaEsecuzioneFn ?? ((taskId) => preparaEsecuzioneReale(taskId, taskCatalogProvider));
   const sessioni = new Map();
+  const contextDeliveries = new WeakMap();
   let ultimoRipristino = { ripristinate: 0, totali: 0 };
   let sessioniCorrotte = [];
   let sessioniScartate = []; // ⭐ 04/9, W0-01 — [{ sessionId, motivo, dettaglio? }]
@@ -1635,7 +1652,10 @@ export function createSessionRegistry({
      succede, non a tenerne la storia (quella è negli eventi, già persistiti). */
   const scrittureDelleFiglie = new Map();
 
-  function broadcast(voce, evento) {
+  /* ⛔ Merge del 10/09 — due aggiunte indipendenti nello stesso punto: la Map qui sopra (D3,
+     collisioni fra figlie) e il parametro `durable` del Context Manager. Tenerne una sola
+     avrebbe spento una funzione intera senza che nessun test lo dicesse. */
+  function broadcast(voce, evento, { durable = false } = {}) {
     /*
      * ⛔⛔⛔ 02/09 — review complessiva. WorkspaceChanged è STATO del
      * filesystem, non storia della sessione: la sessione e572474a (workspace
@@ -1690,7 +1710,12 @@ export function createSessionRegistry({
      * che è già interamente in memoria: un numero per evento, non un oggetto.
      */
     if (!effimero) (voce.istantiEvento ??= new Map()).set(evento._sequenza, clock().getTime());
-    for (const ascoltatore of voce.ascoltatori) ascoltatore(evento);
+    for (const ascoltatore of voce.ascoltatori) {
+      if (!durable) ascoltatore(evento);
+      else {
+        try { ascoltatore(evento); } catch { /* La riconnessione rilegge l'evento persistito. */ }
+      }
+    }
     if (evento.type === 'RunFinished' || evento.type === 'RunError') {
       voce.conclusa = true;
       rilasciaWatcherSessioneSeInattiva(voce);
@@ -1710,6 +1735,7 @@ export function createSessionRegistry({
      * guard esplicito costa una riga.
      */
     if (!effimero && cartellaStore && voce.sessionId) {
+      if (durable) return registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento, durable: true });
       registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento })
         .catch((errore) => { console.error(`[session-store] scrittura fallita per ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore); });
     }
@@ -2414,7 +2440,13 @@ export function createSessionRegistry({
           broadcast(voce, { type: 'RuntimeFallback', from: 'local', to: 'openrouter', reason: errore?.code || 'LOCAL_RUNTIME_FAILED', provider: 'local', runtimeId: runtimeIdEffettivo, modelId: voce.modelId, backend: runtimeIdEffettivo, at: clock().toISOString() });
           return avviaSessioneFn(cloudOptions);
         })
-      : avviaSessioneFn(cloudOptions);
+      : typeof contextHooksFn === 'function'
+        ? Promise.resolve().then(async () => {
+          const contextHooks = await contextHooksFn({ sessionId, runId: `${sessionId}:${versioneGiro}`, signal: controller.signal });
+          controller.signal.throwIfAborted();
+          return avviaSessioneFn({ ...cloudOptions, ...(contextHooks ? { contextHooks } : {}) });
+        })
+        : avviaSessioneFn(cloudOptions);
     esecuzione.then((risultato) => {
       /*
        * ⭐ Catturato per un resume/fork FUTURO. Se talosLavora non ha
@@ -2583,6 +2615,37 @@ export function createSessionRegistry({
   }
 
   return Object.freeze({
+    async pubblicaEventoContesto({ sessionId, event }) {
+      const voce = sessioni.get(sessionId);
+      if (!voce || !cartellaStore) throw Object.assign(new Error('Registro persistente della conversazione non disponibile.'), { code: 'CTX_SESSION_NOT_FOUND' });
+      const wire = contextEngineEvent(event);
+      if (wire.value.sessionId !== sessionId) throw Object.assign(new Error('Evento di un altra conversazione.'), { code: 'CTX_SESSION_MISMATCH' });
+      const existing = voce.eventi.find(item => item.type === 'CUSTOM' && item.name === 'talos.context' && item.value?.id === event.id);
+      if (existing && JSON.stringify(existing.value) !== JSON.stringify(wire.value)) throw Object.assign(new Error('Identita evento gia usata con un contenuto diverso.'), { code: 'CTX_EVENT_CONFLICT' });
+      let deliveries = contextDeliveries.get(voce);
+      if (!deliveries) { deliveries = new Map(); contextDeliveries.set(voce, deliveries); }
+      let receipt = deliveries.get(event.id);
+      if (receipt && JSON.stringify(receipt.wire.value) !== JSON.stringify(wire.value)) throw Object.assign(new Error('Identita evento gia in consegna con un contenuto diverso.'), { code: 'CTX_EVENT_CONFLICT' });
+      // Un evento ricostruito dal registro e gia persistito. Le ricevute in
+      // memoria distinguono invece il tentativo corrente da uno fallito.
+      if (existing && !receipt) return structuredClone(existing);
+      if (receipt?.committed) return structuredClone(receipt.wire);
+      if (!receipt) { receipt = { wire, committed: false, pending: null }; deliveries.set(event.id, receipt); }
+      if (!receipt.pending) {
+        const current = receipt;
+        current.pending = Promise.resolve().then(() => existing
+          ? registraRigaFn({ cartellaStore, sessionId, record: current.wire, durable: true })
+          : broadcast(voce, current.wire, { durable: true }))
+          .then(() => { current.committed = true; return current.wire; })
+          .finally(() => { current.pending = null; });
+      }
+      return structuredClone(await receipt.pending);
+    },
+    /** Backend-only model identity; no credentials or mutable session object. */
+    leggiSessioneContesto(sessionId) {
+      const voce = sessioni.get(sessionId);
+      return voce ? structuredClone({ sessionId, modello: voce.modello, provider: voce.provider, runtimeId: voce.runtimeId, modelId: voce.modelId, reasoning: voce.reasoning, conclusa: voce.conclusa, interrotta: voce.interrotta === true }) : null;
+    },
     /**
      * ⭐⭐⭐ FASE L (30/8) — chiamata UNA volta da `server.mjs`, prima di
      * accettare richieste: legge `.sessions-store/`, ricostruisce una
@@ -2637,7 +2700,15 @@ export function createSessionRegistry({
         if (schemaFile > SCHEMA_SESSIONE) { scartate.push({ sessionId, motivo: 'schema-futuro', dettaglio: `schema ${schemaFile}, questo TALOS legge fino a ${SCHEMA_SESSIONE}` }); continue; }
         // ⛔ `type` (AG-UI, PascalCase) contro `tipo` (i record di questo file, italiano): due nomi di campo DIVERSI apposta, mai un'ambiguità nel distinguerli nello stesso file.
         // ⛔ 02/09 — i file scritti PRIMA di oggi contengono WorkspaceChanged (vedi broadcast()): stato del filesystem, non storia — si scartano al ripristino, così anche i log vecchi tornano leggeri senza riscriverli.
-        const eventiFisici = record.filter((r) => typeof r.type === 'string' && r.type !== 'WorkspaceChanged');
+        const contextReplay = new Set();
+        const eventiFisici = record.filter((r) => typeof r.type === 'string' && r.type !== 'WorkspaceChanged').filter(evento => {
+          if (evento.type !== 'CUSTOM' || evento.name !== 'talos.context' || !evento.value?.id) return true;
+          // Append riuscito ma ack interrotto: il log puo contenere lo stesso
+          // evento due volte. Solo le copie identiche sono deduplicate.
+          const identity = JSON.stringify(evento.value);
+          if (contextReplay.has(identity)) return false;
+          contextReplay.add(identity); return true;
+        });
         const eventi = eventiFisici.every((evento) => Number.isSafeInteger(evento._sequenza))
           ? [...eventiFisici].sort((a, b) => a._sequenza - b._sequenza)
           : eventiFisici;
@@ -3243,6 +3314,10 @@ export function createSessionRegistry({
     async compatta(sessionId) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (typeof contextCompactFn === 'function') {
+        const result = await contextCompactFn({ sessionId, messages: voce.messaggiFinali });
+        if (result !== undefined) return result;
+      }
       if (!voce.messaggiFinali) {
         // ⭐⭐⭐ FASE L (30/8) — stessa distinzione onesta di resume()/forka(): "ancora in corso" e "interrotta da un riavvio" non sono lo stesso stato.
         if (voce.interrotta) {

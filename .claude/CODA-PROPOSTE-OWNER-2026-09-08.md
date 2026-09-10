@@ -42,6 +42,18 @@ Stato: **IN CODA**, non implementato. Si collega al pannello destro del ticket; 
 
 ## Consegna
 
+### Debito UI non urgente — esito nella colonna destra degli strumenti, 09/09/2026
+
+Richiesta owner: `C:/Users/Antonino/Downloads/ScreenShot Tool -20260909132722 (1).png`. Nello screenshot ogni riga ripete a destra la descrizione dell'azione già presente a sinistra. Stato: **annotato, non implementato**; priorità successiva al Context Engine.
+
+Comportamento richiesto: azione a sinistra, esito reale a destra. Per esempio mostrare il risultato della ricerca, l'esito del comando o il motivo dell'errore quando attestati dall'output; durante l'esecuzione indicare lo stato in corso. Non dedurre un successo dal solo completamento della chiamata, non inventare quantità o risultati mancanti. Conservare accesso ai dettagli e all'output completo. Prima della patch: ispezionare renderer e contratto degli eventi, ricerca tecnica primaria, test RED della duplicazione e degli errori, verifica dalla chat con reload e screenshot 1080p/1440p/4K.
+
+### Debito UI non urgente — blocchi di codice, 09/09/2026
+
+Richiesta owner durante TCEC, riferimento visivo: `C:/Users/Antonino/Downloads/ScreenShot Tool -20260909110154.png`. Il codice multilinea appare frammentato in strisce come codice inline, separato dalla barra lingua/Copia. Stato: **in coda, non implementato**; non interrompere Context Engine.
+
+Obiettivo: un contenitore unico coerente con TALOS; tipografia monospace leggibile, evidenziazione sintattica, contrasto e spaziatura curati, intestazione e Copia integrati. Preservare fedelmente contenuto, indentazione, selezione e copia; verificare righe lunghe, streaming, linguaggi non riconosciuti, tema chiaro/scuro, tastiera e viewport 1080p/1440p/4K. Prima della patch: ispezione renderer/CSS reali, ricerca primaria aggiornata, confronto visivo competitor e ledger RED/GREEN. Lo screenshot dimostra il difetto percepito, non identifica da solo la causa CSS. Decisioni fondamentali da sottoporre all'owner; nessun redesign della testata o delle altre viste implicato.
+
 - **Cosa deve fare l'owner:** nessuna scelta richiesta per registrare la coda.
 - **Cosa faccio io dopo:** completare la presa in carico del ticket e seguire le priorità correnti.
 - **Cosa rimane:** ricerca approfondita, proposte applicabili e implementazioni PO-01–PO-08.

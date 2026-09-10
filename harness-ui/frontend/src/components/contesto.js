@@ -23,6 +23,10 @@
  *    lo mostri, nessuno si accorge di quando raddoppia.
  */
 
+// 09/09 — la misura del Context Engine si legge da UN lettore solo, lo stesso che alimenta la modale:
+//   così le due superfici non possono divergere per costruzione, non per disciplina di chi scrive.
+import { descriviContextCompactor } from './context-compactor.js';
+
 /** Un totale leggibile: 7454 → «7.454». */
 const NUM = new Intl.NumberFormat('it-IT');
 
@@ -52,6 +56,14 @@ export function pesoAttrezzi(attrezzi = []) {
  * Un 8% calcolato su una finestra inventata è peggio di nessun 8%.
  */
 export function ripartizioneContesto({ attrezzi = [], finestra = null, istruzioniToken = null, memoriaToken = null } = {}) {
+  /*
+   * ⛔ 09/09 — `finestra` accetta ANCHE il descrittore di `finestraDiContesto()`, non solo un
+   * numero: la pagina «Memoria e contesto» divideva il peso degli schemi per il `contextLength`
+   * del catalogo (1.310.720) mentre la richiesta vera era costruita contro 16.384 — il 0,6%
+   * dichiarato era in realtà il 45%. Stessa regola della colonna destra, stesso lettore.
+   */
+  const descrittore = finestra && typeof finestra === 'object' ? finestra : null;
+  const finestraToken = descrittore ? descrittore.finestra : finestra;
   const attr = pesoAttrezzi(attrezzi);
   /*
    * ⛔ Una voce che NON so misurare non entra nell'elenco: non ci entra come
@@ -66,10 +78,13 @@ export function ripartizioneContesto({ attrezzi = [], finestra = null, istruzion
   if (misurato(istruzioniToken)) voci.push({ id: 'istruzioni', nome: 'Istruzioni di sistema', token: Number(istruzioniToken), stima: true });
   if (misurato(memoriaToken)) voci.push({ id: 'memoria', nome: 'Ricordi', token: Number(memoriaToken), stima: true });
   const occupato = voci.reduce((s, v) => s + v.token, 0);
-  const f = Number.isFinite(Number(finestra)) && Number(finestra) > 0 ? Number(finestra) : null;
+  const f = Number.isFinite(Number(finestraToken)) && Number(finestraToken) > 0 ? Number(finestraToken) : null;
   for (const v of voci) v.percentuale = f ? (v.token / f) * 100 : null;
   return {
     voci, occupato, finestra: f,
+    // ⛔ da DOVE viene la finestra: senza questa parola due percentuali diverse sembrano un errore di calcolo
+    fonteFinestra: descrittore?.fonte ?? null,
+    finestraDescritta: descrittore,
     // ⛔ le voci PROMESSE dal cappello della sezione che non si sono potute misurare: si dichiarano.
     mancanti: ['istruzioni', 'memoria'].filter((id) => !voci.some((v) => v.id === id)),
     percentuale: f ? (occupato / f) * 100 : null,
@@ -88,7 +103,10 @@ export function frasiRipartizione(r) {
     ? ' · finestra del modello non dichiarata, la percentuale non si può calcolare'
     : ` su ${NUM.format(r.finestra)} · ${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(r.percentuale)}% della finestra, ${NUM.format(r.libero)} liberi`;
   const mancanti = r.attrezziSenzaStima ? ` · ⛔ ${r.attrezziSenzaStima} attrezzi su ${r.attrezziTotale} non dichiarano quanto pesano: non sono in questo totale` : '';
-  return `${base}${quota}${mancanti} (stima)`;
+  // ⛔ 09/09: la percentuale senza la sua finestra non si può verificare, e due finestre diverse
+  //    sullo stesso schermo sono esattamente il difetto misurato oggi. La fonte si NOMINA.
+  const fonte = r.fonteFinestra === 'profilo' ? ' · finestra del profilo di questa chat' : r.fonteFinestra === 'catalogo' ? ' · finestra del catalogo del modello' : '';
+  return `${base}${quota}${fonte}${mancanti} (stima)`;
 }
 
 function el(d, tag, classe, testo) { const n = d.createElement(tag); if (classe) n.className = classe; if (testo != null) n.textContent = testo; return n; }
@@ -99,7 +117,16 @@ export function aggiornaContesto(pannello, ripartizione, { document: d = globalT
   const barra = pannello.querySelector('#contestoRipartizione');
   const etichetta = pannello.querySelector('#contestoEtichetta');
   const voci = pannello.querySelector('#contestoVoci');
-  if (etichetta) etichetta.textContent = frasiRipartizione(ripartizione);
+  if (etichetta) {
+    etichetta.textContent = frasiRipartizione(ripartizione);
+    /*
+     * ⛔ Il rapporto misurato dal motore («10.163 / 16.384 · 62,0%») e la sua freschezza stanno
+     * nel suggerimento, con le STESSE parole della modale: chi confronta i due schermi deve
+     * leggere la stessa frase, non due arrotondamenti diversi dello stesso fatto.
+     */
+    const d = ripartizione?.finestraDescritta || null;
+    if (d) etichetta.title = frasiFinestraContesto(d); else etichetta.removeAttribute('title');
+  }
   if (barra) {
     /*
      * ⛔ Senza finestra dichiarata la barra si NASCONDE, non si svuota: una
@@ -143,4 +170,137 @@ export function aggiornaContesto(pannello, ripartizione, { document: d = globalT
     }
   }
   return ripartizione;
+}
+
+/*
+ * ═══ LA FINESTRA È UNA SOLA ═══ 09/09/2026, decisione dell'owner: «UNIFICA».
+ *
+ * ⛔ IL DIFETTO, misurato dal vivo nella stessa foto, stessa chat, stesso istante:
+ *   · colonna destra, scheda «Contesto» → «Finestra del contesto 1310,7k»,
+ *                                         «Conversazione 11k · 0,8%»
+ *   · modale «Context Manager»          → «10.163 / 16.384», cioè il 62,0%
+ * Due fonti di verità sullo stesso fatto, e quella GRANDE era quella sbagliata: il
+ * giro reale è stato preparato e compattato contro 16.384 — `windowTokens` del
+ * profilo del Context Engine — mentre la colonna divideva per il `contextLength`
+ * del CATALOGO del modello (1.310.720). Un contesto pieno al 62% si leggeva 0,8%.
+ *
+ * CAUSA: `finestraDelModelloCorrente()` in `src/legacy/app.js` legge `contextLength`
+ * da `/api/v1/models` e lo passa come `finestra` ad `aggiornaInspector`; la modale
+ * legge invece `snapshot.measurement.tokens` (contratto `ContextMeasurementV1`).
+ * Nessuno dei due sbagliava il proprio calcolo: mancava la regola su QUALE finestra
+ * si cita quando ce ne sono due.
+ *
+ * RICERCA WEB 09/09/2026, PRIMA di scrivere — i vincoli che il codice non mostrava:
+ *  · Eden AI, «OpenAI quietly cut Codex context window by 27%» (07/08/2026,
+ *    edenai.co): il limite del fornitore è tagliato lato server mentre il modello
+ *    «still supports larger contexts» ⇒ «limits are configuration, not contracts»,
+ *    e a contare è il limite APPLICATO — scoperto altrimenti solo quando le
+ *    operazioni lunghe cominciano a fallire. La finestra del catalogo è una
+ *    specifica, non una misura;
+ *  · Codex Knowledge Base, «Context Compaction Deep Dive: Codex CLI, Claude Code,
+ *    OpenCode» (14/04/2026, agg. 09/09/2026, codex.danielvaughan.com): il
+ *    denominatore di Codex è `model_context_window`, un valore CONFIGURABILE e
+ *    sovrascrivibile, e la soglia di compattazione si calcola sullo STESSO valore
+ *    (`effective_window = model_context_window - min(max_output_tokens, 20000)`)
+ *    ⇒ la finestra mostrata e la finestra su cui scatta la compattazione sono la
+ *    stessa. Qui quella finestra è `windowTokens` del profilo, non il catalogo;
+ *  · Claude Code, «Explore the context window» (code.claude.com/docs/en/
+ *    context-window, 2026) e il comando `/context`: la ripartizione è LIVE, per
+ *    categoria, e comprende il buffer riservato all'autocompattazione ⇒ una
+ *    riserva dichiarata fa parte del budget mostrato, non si nasconde
+ *    (`responseReserve`);
+ *  · Nous Research, hermes-agent issue #683 «CLI Status Bar & Token/Cost Tracking»
+ *    (08/03/2026, github.com): Hermes mostra «Tokens: 12,450 / 200K … 62%» con il
+ *    denominatore preso da `model_metadata.py` — il CATALOGO — e l'issue NON dice
+ *    cosa fare quando catalogo ed effettivo divergono. È esattamente il buco che
+ *    ci ha morso: il nostro +1 misurabile su Hermes è dichiarare la FONTE della
+ *    finestra e la freschezza della misura, non solo il rapporto.
+ *
+ * ⇒ REGOLA: quando il Context Engine ha una misura per questa chat, la finestra e
+ * l'occupazione sono le SUE; quando non ce l'ha, resta il comportamento storico
+ * (catalogo) e si dice che è il catalogo. ⛔ Mai un terzo numero inventato, mai
+ * uno zero al posto di «non misurato», mai una misura vecchia spacciata per viva.
+ */
+
+/**
+ * La finestra di contesto da citare, e l'occupazione coerente con essa.
+ *
+ * @param {object|null} misura `snapshot.measurement` (`{revision, measuredAt, tokens}`);
+ *   la forma piatta pre-09/09 è accettata, ma senza revisione non si afferma freschezza.
+ * @param {number|null} revisione `snapshot.revision`: serve solo a dire se il contesto
+ *   si è mosso DOPO la misura.
+ * @param {number|null} finestraCatalogo `contextLength` da `/api/v1/models` — il ripiego.
+ * @param {object|null} usage l'ultimo `/usage` del kernel — il ripiego per l'occupazione.
+ * @param {object|null} ripartizione la ripartizione per categoria (attrezzi/istruzioni/memoria)
+ *   che il kernel dichiara, quando la dichiara. ⛔ Sopra una misura del motore NON si disegna:
+ *   quei token sono già dentro `inputTokens`, e sommarli li conterebbe due volte. La scelta sta
+ *   qui e non nel chiamante, perché il doppio conteggio è l'errore che il chiamante non vede.
+ * @returns {{fonte:'profilo'|'catalogo'|null, finestra:number|null, occupato:number|null,
+ *   riserva:number|null, attuale:boolean, misurataAlle:string|null, nota:string,
+ *   perInspector:{usage:object|null, finestra:number|null, ripartizione:null}}}
+ */
+export function finestraDiContesto({ misura = null, revisione = null, finestraCatalogo = null, usage = null, ripartizione = null } = {}) {
+  /*
+   * ⛔ La misura NON si rilegge a mano qui: si chiede a `descriviContextCompactor`,
+   * lo stesso lettore che alimenta la modale. Se un giorno cambia la forma del
+   * contratto, le due superfici cambiano INSIEME — è questo che rende la divergenza
+   * del 09/09 strutturalmente impossibile, non la disciplina di chi scrive.
+   */
+  const m = descriviContextCompactor({ revision: revisione, measurement: misura }, { translate: (x) => x }).measurement;
+  const catalogo = Number.isFinite(Number(finestraCatalogo)) && Number(finestraCatalogo) > 0 ? Number(finestraCatalogo) : null;
+  const daUsage = usage && Number.isFinite(Number(usage.prompt_tokens))
+    ? Number(usage.prompt_tokens) + (Number.isFinite(Number(usage.completion_tokens)) ? Number(usage.completion_tokens) : 0)
+    : null;
+
+  if (m.known) {
+    /*
+     * ⛔ La finestra resta quella del profilo ANCHE se la misura è vecchia: una
+     * revisione più nuova sposta l'occupazione, non il tetto contro cui la
+     * richiesta viene costruita. Quello che invecchia è `occupato`, e si dichiara.
+     */
+    return {
+      fonte: 'profilo',
+      finestra: m.windowTokens,
+      occupato: m.inputTokens,
+      riserva: m.responseReserve,
+      attuale: m.current,
+      misurataAlle: m.measuredAt,
+      nota: m.current ? '' : 'il contesto è cambiato dopo la misura',
+      perInspector: {
+        // ⛔ `completion_tokens: 0` non è un dato mancante travestito da zero: `inputTokens`
+        //    È GIÀ tutto ciò che occupa la finestra alla prossima richiesta (la risposta del
+        //    turno precedente compresa). Sommarci il completion la conterebbe due volte.
+        usage: { prompt_tokens: m.inputTokens, completion_tokens: 0 },
+        finestra: m.windowTokens,
+        // ⛔ niente ripartizione attrezzi/istruzioni/memoria sopra una misura del motore:
+        //    quei token sono GIÀ dentro `inputTokens`, e disegnarli a parte li conta due volte.
+        ripartizione: null,
+      },
+    };
+  }
+
+  // Nessuna misura: comportamento storico, dichiarato per quello che è.
+  return {
+    fonte: catalogo === null ? null : 'catalogo',
+    finestra: catalogo,
+    occupato: daUsage,
+    riserva: null,
+    attuale: false,
+    misurataAlle: null,
+    // ⛔ senza misura e senza catalogo non si sceglie un valore di comodo: si dice che manca.
+    nota: catalogo === null ? 'finestra non dichiarata' : 'finestra dichiarata dal catalogo del modello',
+    perInspector: { usage: usage ?? null, finestra: catalogo, ripartizione: ripartizione ?? null },
+  };
+}
+
+/** «10.163 / 16.384 token · 62,0% · profilo del contesto di questa chat». */
+export function frasiFinestraContesto(f) {
+  if (!f || f.finestra == null) return 'Finestra del contesto non dichiarata.';
+  const percentuale = f.occupato == null ? null : new Intl.NumberFormat('it-IT', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.floor((f.occupato / f.finestra) * 1000) / 10);
+  const testa = f.occupato == null
+    ? `${NUM.format(f.finestra)} token di finestra · occupazione non ancora misurata`
+    : `${NUM.format(f.occupato)} / ${NUM.format(f.finestra)} token · ${percentuale}%`;
+  const fonte = f.fonte === 'profilo' ? ' · profilo del contesto di questa chat' : f.fonte === 'catalogo' ? ' · catalogo del modello' : '';
+  const avviso = f.fonte === 'profilo' && f.nota ? ` · ⛔ ${f.nota}` : '';
+  return `${testa}${fonte}${avviso}`;
 }

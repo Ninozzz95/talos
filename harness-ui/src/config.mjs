@@ -442,6 +442,26 @@ function parseOwnerRuntimeModule(raw, moduleUrl) {
   return percorso;
 }
 
+function parseContextTrial(env) {
+  const raw = env.TALOS_CONTEXT_TRIAL;
+  if (raw === undefined || raw === '') return null;
+  if (typeof raw !== 'string' || raw.length > 65536) fail('TALOS_CONTEXT_TRIAL deve essere un manifest JSON limitato alle chat di prova.');
+  if (!env.TALOS_HARNESS_UI_PORT || parsePort(env.TALOS_HARNESS_UI_PORT) === 4174 || typeof env.TALOS_HARNESS_UI_SESSIONS_DIR !== 'string' || !env.TALOS_HARNESS_UI_SESSIONS_DIR.trim()) fail('Il trial del contesto richiede una porta esplicita diversa da 4174 e una directory sessioni isolata.');
+  let trial;
+  try { trial = JSON.parse(raw); } catch { fail('TALOS_CONTEXT_TRIAL non contiene JSON valido.'); }
+  if (!trial || Array.isArray(trial) || Object.keys(trial).some(key => !['sessionIds', 'models'].includes(key)) || !Array.isArray(trial.sessionIds) || !trial.sessionIds.length || !Array.isArray(trial.models) || !trial.models.length) fail('Manifest del trial del contesto non valido.');
+  if (trial.sessionIds.some(id => typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/u.test(id)) || new Set(trial.sessionIds).size !== trial.sessionIds.length) fail('Identità delle chat di prova non valide o duplicate.');
+  const models = new Set();
+  for (const profile of trial.models) {
+    if (!profile || Array.isArray(profile) || Object.keys(profile).some(key => !['provider', 'model', 'windowTokens', 'responseReserve'].includes(key)) || !['local', 'ollama', 'openrouter', 'openai', 'anthropic', 'gemini', 'deepseek'].includes(profile.provider) || typeof profile.model !== 'string' || !profile.model.trim() || !Number.isSafeInteger(profile.windowTokens) || !Number.isSafeInteger(profile.responseReserve) || profile.responseReserve < 1 || profile.responseReserve >= profile.windowTokens) fail('Profilo modello del trial non valido: indicare finestra e riserva, senza credenziali.');
+    const id = `${profile.provider}:${profile.model}`;
+    if (models.has(id)) fail('Profilo modello duplicato nel trial.');
+    models.add(id); Object.freeze(profile);
+  }
+  Object.freeze(trial.models); Object.freeze(trial.sessionIds);
+  return Object.freeze(trial);
+}
+
 export function loadConfig(
   env,
   moduleUrl = new URL('../server.mjs', import.meta.url),
@@ -493,6 +513,7 @@ export function loadConfig(
 
   return Object.freeze({
     host,
+    contextTrial: parseContextTrial(env),
     port: parsePort(env.TALOS_HARNESS_UI_PORT),
     // ⭐ 03/9, R-01: true solo se l'owner ha scritto qualcosa in
     // TALOS_HARNESS_UI_PORT — vedi trovaPortaLibera() sopra.

@@ -18,6 +18,14 @@
  * viaggia come POST separato invece di aprire un canale bidirezionale.
  */
 
+import { ContextEventV1 } from '../../context-engine/src/contracts.mjs';
+
+/** AG-UI CUSTOM ufficiale; l'identita persistita resta nel payload TALOS v1. */
+export function contextEngineEvent(input) {
+    const value = ContextEventV1.parse(structuredClone(input));
+    return { type: 'CUSTOM', name: 'talos.context', timestamp: Date.parse(value.createdAt), value };
+}
+
 export function runStarted({ threadId, runId, input, contesto }) {
     const evento = { type: 'RunStarted', threadId, runId }
     if (input !== undefined) evento.input = input

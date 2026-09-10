@@ -30,7 +30,7 @@ test('HF-DIRECT-01 scarica, verifica e pubblica ready', async (t) => {
   });
   const result = await transfer.start(manifest());
   assert.equal(result.state, 'running');
-  for (let i = 0; i < 20 && transfer.status('org-model').state !== 'ready'; i += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+  await t.waitFor(() => assert.equal(transfer.status('org-model').state, 'ready'), { timeout: 5000, interval: 10 });
   assert.equal(transfer.status('org-model').state, 'ready');
   // 06/09 B6.10: la coda a schermo vuole file, repository e ora di fine, non l'id interno
   assert.equal(transfer.status('org-model').file, 'model.gguf');
@@ -46,13 +46,21 @@ test('HF-DIRECT-SECURITY-01 rifiuta risposta CDN non HTTPS', async (t) => {
   const badStore = { inspect: async () => null, register: async () => ({}), setState: async () => ({}) };
   const bad = createHfDirectTransfer({ rootDir: 'C:\\tmp', modelStore: badStore, hubClient: { resolveDownload: async () => ({ url: 'http://evil.example/file' }) }, fetchImpl: async () => ({}) });
   await bad.start(request);
-  for (let i = 0; i < 20 && !['failed', 'cancelled'].includes(bad.status(request.id)?.state); i += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+  await t.waitFor(() => assert.ok(['failed', 'cancelled'].includes(bad.status(request.id)?.state)), { timeout: 5000, interval: 10 });
   assert.equal(bad.status(request.id).reason, 'HF_REDIRECT_HOST_REJECTED');
   void transfer;
 });
 
 test('HF-DIRECT-CONTROLS-01 pausa e annullamento conservano lo stato terminale corretto', async (t) => {
-  const { store, transfer } = await setup(t, async (_url, options = {}) => ({ ok: true, status: 200, body: new ReadableStream({ async start(controller) { controller.enqueue(bytes.subarray(0, 2)); await new Promise((resolve) => setTimeout(resolve, 30)); controller.enqueue(bytes.subarray(2)); controller.close(); } }), signal: options.signal }));
+  // A real fetch rejects a pre-aborted signal and interrupts a pending read.
+  // Keep the fixture in flight until the controls exercise that contract.
+  const { store, transfer } = await setup(t, async (_url, options = {}) => {
+    options.signal?.throwIfAborted();
+    return { ok: true, status: 200, body: new ReadableStream({ start(controller) {
+      controller.enqueue(bytes.subarray(0, 2));
+      options.signal?.addEventListener('abort', () => controller.error(options.signal.reason), { once: true });
+    } }) };
+  });
   await transfer.start(manifest());
   assert.equal(await transfer.pause('org-model'), true);
   assert.equal(transfer.status('org-model').state, 'paused');

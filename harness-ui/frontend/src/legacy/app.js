@@ -49,13 +49,20 @@ import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nom
 import { montaProgetti, progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
-import { spiegaErrore, spiegaRifiutoAttrezzo } from '../components/errori.js';
+import { spiegaErrore, spiegaRifiutoAttrezzo, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
 import { montaNote } from '../components/note.js'; // 06/9 C24: la pagina delle Note // 06/9 O-22/O-23/O-36: gli errori e i rifiuti detti a una persona
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
 import { sommaUsage, usageDellaSessione } from '../components/consumo-sessione.js'; // 06/9 CB-04: il consumo della SESSIONE, non dell'ultimo invio
+import { contextUsageFromEvents } from '../../../../context-engine/src/usage.mjs';
 import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, chipDegliAllegati, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js';
 import { creaAnteprimaImmagine, payloadImmagini } from '../components/immagini-chat.js';
+import { montaContextCompactor } from '../components/context-compactor.js';
+import { finestraDiContesto } from '../components/contesto.js'; // 09/09: la finestra è UNA SOLA — la colonna destra e la modale leggono lo stesso descrittore
+import { aggiornaSeparatoreContesto } from '../components/context-separator.js';
+import { createContextClient } from '../services/context-client.js';
+import { createContextMonitor } from '../services/context-monitor.js';
+import { aggiornaAvanzamentoContesto } from '../components/context-progress.js';
 import { aggiornaDiffReview, creaRigaFileReview, nascondiAzioniFase3, riassuntoReview } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno del mockup
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { aggiornaTopbar } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati
@@ -346,6 +353,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
        * riportato consumo — mai uno zero fabbricato.
        */
       usageSessione: null,
+      eventiUsageContesto: new Map(),
+      cachePromptPrecedenti: 0,
       /** La somma dei totali degli invii GIÀ CHIUSI (fino all'ultimo `RunStarted`). */
       usageEsecuzioniPrecedenti: null,
       /**
@@ -443,7 +452,10 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   const topbar = $('.topbar');
   const embeddedHeaderScrollers = [...new Set([...views, chatConversation].filter(Boolean))];
   const embeddedHeaderScrollPositions = new WeakMap();
-  let compattazioneInCorso = false;
+  let contextCompactor = null;
+  let contextClient = null;
+  let contextMonitor = null;
+  let contextChatSnapshot = null;
   let streamingScrollFrame = null;
   let streamingScrollTarget = null;
   /*
@@ -3810,7 +3822,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         finestra = finestraContestoDelModello();
       } catch { /* senza catalogo si mostrano i token senza percentuale */ }
     }
-    aggiornaContesto(pannello, ripartizioneContesto({ attrezzi, finestra }));
+    /*
+     * ⛔ 09/09 — stesso difetto della colonna destra, terza superficie: qui il peso degli schemi
+     * degli attrezzi si divideva per il `contextLength` del CATALOGO (1.310.720) mentre la richiesta
+     * vera viene costruita contro `windowTokens` del profilo (16.384). Il «0,6%» dichiarato era in
+     * realtà il 45%. Stesso lettore unico della colonna e della modale: se un giorno cambia il
+     * contratto, cambiano tutte e tre insieme.
+     */
+    const finestraUnica = finestraDiContesto({
+      misura: contextChatSnapshot?.measurement ?? null,
+      revisione: contextChatSnapshot?.revision ?? null,
+      finestraCatalogo: finestra,
+    });
+    aggiornaContesto(pannello, ripartizioneContesto({ attrezzi, finestra: finestraUnica }));
   }
 
   /** D21/D22 — consumo per giorno e per modello, dalla SOLA lista delle sessioni (mai una chiamata per sessione: BH-18). */
@@ -7955,12 +7979,36 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const inspector = $('#inspectorSessione') || $('.talos-inspector');
     if (!inspector) return;
     const file = [...(state.realSession.reviewFiles?.values?.() || [])].map((v) => { const c = contaDiff(v); return { path: v.path, aggiunte: c.aggiunte, rimozioni: c.rimozioni }; });
+    /*
+     * ⛔⛔⛔ 09/09/2026, owner: «UNIFICA». La stessa chat, nello stesso istante, diceva due cose:
+     * la colonna «Finestra del contesto 1310,7k · Conversazione 11k · 0,8%» e la modale «10.163 /
+     * 16.384», cioè il 62,0%. Nessuno dei due sbagliava il proprio conto: la colonna divideva per il
+     * `contextLength` del CATALOGO, la modale per il `windowTokens` del profilo, che è il tetto contro
+     * cui la richiesta viene davvero costruita e su cui scatta la compattazione. Mancava la regola su
+     * QUALE finestra si cita quando ce ne sono due — e la più grande era quella sbagliata.
+     * ⇒ `finestraDiContesto()` è il lettore unico: prende la misura del motore quando c'è (e allora
+     *   dichiara `fonte: 'profilo'`), altrimenti torna al catalogo dicendolo. La colonna riceve il
+     *   descrittore, non un numero: così le due superfici non possono divergere per COSTRUZIONE.
+     */
+    const finestra = finestraDiContesto({
+      misura: contextChatSnapshot?.measurement ?? null,
+      revisione: contextChatSnapshot?.revision ?? null,
+      finestraCatalogo: finestraDelModelloCorrente(),
+      usage: state.realSession.usage,
+      ripartizione: state.realSession.ripartizioneContesto || null,
+    });
     aggiornaInspector(inspector, {
       titolo: state.realSession.id ? (state.session || 'Sessione') : 'Nessuna sessione aperta',
       contesto: state.realSession.contesto || null,
-      usage: state.realSession.usage,
-      finestra: finestraDelModelloCorrente(),
-      ripartizione: state.realSession.ripartizioneContesto || null,
+      usage: finestra.perInspector.usage,
+      /*
+       * ⛔ Il NUMERO, non il descrittore: `righeFinestra` fa aritmetica su questo valore
+       * (`finestra - occupati`), e un oggetto le fa produrre NaN — a schermo «Libera — · 100,0%»,
+       * una percentuale sopra una finestra dichiarata ignota. Trovato nella FOTO della barra di
+       * avanzamento: i 509 test unitari erano verdi.
+       */
+      finestra: finestra.perInspector.finestra,
+      ripartizione: finestra.perInspector.ripartizione,
       giri: giriPerInspector(),
       file,
       processi: processiDagliEventi(state.realSession.eventiAttrezzi),
@@ -9268,12 +9316,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * 06/9 (T05-D2): «Hai fermato il giro» non e' un errore. Stessa forma — cosa, perche', cosa
      * puoi fare — ma badge e titolo lo dicono per quello che e'.
      */
-    const fermato = spiegazione?.id === 'fermato-da-te';
+    /*
+     * ⛔ 09/09 — questo `if` conosceva UNA sola eccezione, «fermato-da-te», e così una compattazione
+     * del contesto fallita usciva col badge rosso «Errore»: chi leggeva credeva di aver sbagliato la
+     * domanda appena scritta, mentre gli originali erano intatti e il giro si era fermato per il
+     * motivo opposto. Trovato in TRE giri veri con glm-5.3-flash.
+     * ⇒ La vestizione la decide la FAMIGLIA della spiegazione (`vestizioneErrore`), accanto alle
+     *   frasi: una famiglia nuova porta già il suo badge, il suo titolo e il suo tono, senza tornare
+     *   qui ad aggiungere un ramo — che è esattamente il modo in cui questo ramo era rimasto solo.
+     */
+    const vestizione = vestizioneErrore(spiegazione);
     const article = spiegazione
       ? creaNotaErrore({
-        titolo: etichettaMeta || (fermato ? 'TALOS · fermato' : 'TALOS · errore'),
-        badge: fermato ? 'Fermato' : 'Errore',
-        tono: fermato ? 'accent' : 'danger',
+        titolo: etichettaMeta || vestizione.titolo,
+        badge: vestizione.badge,
+        tono: vestizione.tono,
         spiegazione,
       })
       : creaNotaSistema({ tipo: isError ? 'danger' : 'info', badge: isError ? 'Errore' : 'Nota', titolo: etichettaMeta || (isError ? 'TALOS · errore' : 'TALOS · concluso'), testo: text });
@@ -12450,8 +12507,39 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     el.title = 'TALOS legge il testo delle pagine con l\'attrezzo naviga; compaiono nella vista Browser.';
   }
 
+  function aggiornaUsageSessione() {
+    const chat = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
+    const compattazione = contextUsageFromEvents([...state.realSession.eventiUsageContesto.values()], { sessionId: state.realSession.id });
+    if (!compattazione) { state.realSession.usageSessione = chat; return; }
+    const corrente = state.realSession.usage;
+    const cacheCorrente = Number.isFinite(corrente?.cached_tokens) && Number.isFinite(corrente?.prompt_tokens) && corrente.prompt_tokens > 0 ? corrente.prompt_tokens : 0;
+    const totale = { ...chat, compattazione, prompt_tokens_con_cache: state.realSession.cachePromptPrecedenti + cacheCorrente + (compattazione.prompt_tokens_con_cache ?? 0) };
+    for (const key of ['prompt_tokens', 'completion_tokens', 'cached_tokens']) {
+      const current = Number.isFinite(chat?.[key]) ? chat[key] : null;
+      const extra = compattazione[key];
+      totale[key] = current === null && extra === null ? null : (current ?? 0) + (extra ?? 0);
+    }
+    state.realSession.usageSessione = totale;
+  }
+
   function handleRealEvent(evento, generation) {
     if (generation !== state.realSession.generation) return; // sessione più vecchia: scartato, non renderizzato
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.context') {
+      const value = evento.value;
+      if (value?.schema !== 'talos.context.event.v1' || value.sessionId !== state.realSession.id) return;
+      if (contextUsageFromEvents([evento], { sessionId: state.realSession.id })) {
+        const operationId = value.payload.operationId;
+        if (state.realSession.eventiUsageContesto.has(operationId)) return;
+        state.realSession.eventiUsageContesto.set(operationId, evento);
+        aggiornaUsageSessione();
+        aggiornaContatoreUsage();
+        aggiornaPiedeChatDaStato();
+      }
+      aggiornaSeparatoreContesto($('#conversation'), [value], { sessionId: state.realSession.id, onOpen: () => compactSession() });
+      void contextMonitor?.refresh();
+      if (contextCompactor && !$('#veloContesto')?.hidden) void contextCompactor.refresh({ quiet: true });
+      return;
+    }
     /*
      * ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — riprodotto: ogni
      * riconnessione SSE sulla stessa sessione (l'EventSource nativo dopo una
@@ -12492,6 +12580,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     switch (evento.type) {
       case 'RunStarted': {
         streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio visto in ricerca
+        contextMonitor?.setRunning(true);
         streamingLastTargetTop = null;
         /*
          * ⛔⛔⛔ 06/9, CB-04 — QUI è il confine fra due invii: il consumo
@@ -12502,9 +12591,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * esattamente il difetto misurato — 7.716 token dichiarati su 23.060
          * spesi. Vale sia dal vivo sia al replay di una cronologia.
          */
+        if (Number.isFinite(state.realSession.usage?.cached_tokens) && Number.isFinite(state.realSession.usage?.prompt_tokens) && state.realSession.usage.prompt_tokens > 0) state.realSession.cachePromptPrecedenti += state.realSession.usage.prompt_tokens;
         state.realSession.usageEsecuzioniPrecedenti = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
         state.realSession.usage = null;
-        state.realSession.usageSessione = state.realSession.usageEsecuzioniPrecedenti;
+        aggiornaUsageSessione();
         state.realSession.currentRunModel = typeof evento.contesto?.modello === 'string' && evento.contesto.modello.trim()
           ? evento.contesto.modello.trim()
           : (state.model || null);
@@ -12912,7 +13002,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            * eventi passano tutti da qui, nello stesso ordine.
            */
           state.realSession.usage = evento.delta[0].value;
-          state.realSession.usageSessione = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
+          aggiornaUsageSessione();
           aggiornaContatoreUsage();
           aggiornaComposerUsage(state.realSession.usage);
           break;
@@ -13001,6 +13091,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         break;
       }
       case 'RunFinished': {
+        contextMonitor?.setRunning(false); void contextMonitor?.refresh({ afterPending: true });
         /*
          * ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
          * modello" — la causa PRINCIPALE della "risposta duplicata" non era
@@ -13079,6 +13170,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         break;
       }
       case 'RunError': {
+        contextMonitor?.setRunning(false); void contextMonitor?.refresh({ afterPending: true });
         if (state.realSession.redirectPendingId) mostraAttesaRisposta('redirect');
         else nascondiAttesaRisposta();
         chiudiBatchTool(); // 30/8 — vedi RunFinished sopra, stesso motivo
@@ -13174,6 +13266,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   function collegaEventiSessione(sessionId, generation) {
     state.realSession.id = sessionId;
+    void ottieniMonitorContesto().follow(sessionId);
     state.realSession.eventoTerminaleVisto = false;
     syncRunComposerState();
     const demoBadgeChat = $$('.demo-surface-badge', $('.chat-view'))
@@ -13218,6 +13311,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** Chiude l'EventSource corrente (se c'è) e apre una nuova generazione. */
   function nuovaGenerazioneSessione({ continua = false } = {}) {
+    if (!continua) { contextCompactor?.close(); contextCompactor?.setSession(null); contextMonitor?.stop(); contextChatSnapshot = null; aggiornaAvanzamentoContesto($('#conversation'), null); }
     nascondiAttesaRisposta();
     cancellaRenderMessaggiStreaming();
     cancellaRenderAlberoDifferito();
@@ -13265,6 +13359,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.attesaBubble = null; // il nodo è già sparito con replaceChildren() qui sopra
       state.realSession.usage = null; // Fase 3 — un resume (continua:true) TIENE il conto, una sessione nuova riparte da IGNOTO
       state.realSession.usageSessione = null; // 06/9 CB-04 — idem per il totale della conversazione
+      state.realSession.eventiUsageContesto = new Map();
+      state.realSession.cachePromptPrecedenti = 0;
       state.realSession.usageEsecuzioniPrecedenti = null;
       state.realSession.eventiAttrezzi = []; // O-02 — la diagnosi dei giri parla della sessione che si sta guardando, mai di quella prima
       state.realSession.tettoGiriDichiarato = null; // O-02 — il tetto lo dichiara il kernel di QUESTA sessione (il planner ne ha uno diverso), mai ereditato
@@ -13605,45 +13701,44 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   /**
-   * ⭐ "Compatta ora" reale quando c'è una sessione reale CONCLUSA attiva.
-   * Non avvia nessun giro nuovo: sostituisce ciò che una PROSSIMA
-   * resume/fork erediterebbe — la conversazione già mostrata non cambia.
+   * Context Manager osserva il lavoro persistito senza avviare inferenze.
+   * Il pulsante apre soltanto il dialogo; il kernel governa l'automazione.
    */
+  function aggiornaContestoChat(snapshot) {
+    if (snapshot?.sessionId !== state.realSession.id) return;
+    contextChatSnapshot = snapshot;
+    aggiornaAvanzamentoContesto($('#conversation'), snapshot, { onOpen: () => compactSession() });
+    contextCompactor?.update(snapshot);
+    // ⛔ la colonna destra legge la misura da qui: senza questa riga resterebbe ferma al catalogo
+    //    finché non cambia qualcos'altro, cioè proprio la divergenza che stiamo togliendo.
+    aggiornaInspectorDaStato();
+  }
+
+  function ottieniMonitorContesto() {
+    contextClient ??= createContextClient({ fetchFn: fetchSorvegliata, baseURL: API('/api/v1') });
+    contextMonitor ??= createContextMonitor({
+      client: contextClient,
+      onState: aggiornaContestoChat,
+      onError: (_error, { sessionId }) => {
+        if (sessionId !== state.realSession.id) return;
+        aggiornaAvanzamentoContesto($('#conversation'), contextChatSnapshot, { stale: true, onOpen: () => compactSession() });
+      },
+    });
+    return contextMonitor;
+  }
+
   async function compactSession() {
-    if (!state.realSession.id) {
-      toast('Contesto compattato', '18.7k -> 9.3k token equivalenti.');
-      return;
-    }
-    if (compattazioneInCorso) return;
-    const bottoneCompattazione = $('#compactSessionBtn');
-    compattazioneInCorso = true;
-    if (bottoneCompattazione) {
-      bottoneCompattazione.disabled = true;
-      bottoneCompattazione.setAttribute('aria-busy', 'true');
-      bottoneCompattazione.setAttribute('aria-label', 'Compattazione in corso');
-      bottoneCompattazione.title = 'Compattazione in corso…';
-      bottoneCompattazione.classList.add('is-loading');
-    }
-    try {
-      const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/compact`, {});
-      toast(
-        dati.compattato ? 'Contesto compattato' : 'Compattazione saltata',
-        dati.compattato
-          ? 'Il prossimo resume o fork riparte dal riassunto.'
-          : 'Il modello non ha risposto: la conversazione resta quella intera.',
-      );
-    } catch (error) {
-      toast('Compattazione non riuscita', error.message);
-    } finally {
-      compattazioneInCorso = false;
-      if (bottoneCompattazione) {
-        bottoneCompattazione.disabled = false;
-        bottoneCompattazione.removeAttribute('aria-busy');
-        bottoneCompattazione.setAttribute('aria-label', 'Comprimi il contesto');
-        bottoneCompattazione.removeAttribute('title');
-        bottoneCompattazione.classList.remove('is-loading');
-      }
-    }
+    const root = $('#veloContesto');
+    if (!root) { toast('Context Manager', 'La finestra del contesto non è disponibile. Aggiorna la pagina.'); return; }
+    ottieniMonitorContesto();
+    const sessionId = state.realSession.id;
+    const snapshot = contextChatSnapshot?.sessionId === sessionId ? contextChatSnapshot : null;
+    if (!contextCompactor) contextCompactor = montaContextCompactor(root, {
+      client: contextClient, sessionId, state: snapshot,
+      onState: next => contextMonitor?.update(next),
+    });
+    else contextCompactor.setSession(sessionId, snapshot);
+    contextCompactor.open();
   }
 
   /**
@@ -17405,6 +17500,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     realSessionState: state.realSession,
   };
   window.__talosHarnessDestroy = () => {
+    contextCompactor?.destroy(); contextCompactor = null;
+    contextMonitor?.stop(); contextMonitor = null;
     window.clearInterval(notificheTimer);
     document.querySelector('.notifications-menu')?.remove();
     cancelMotionAnimations();
@@ -17665,6 +17762,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   });
   let ultimoFuocoVelo = null;
   function apriVeloMockup(id) {
+    if (id === 'veloContesto') { void compactSession(); return; }
     const v = $(`#${id}`); if (!v) return;
     if (id === 'veloIntro' && !introMockup) { void apiGet('/api/v1/setup/stato').catch(() => null).then((stato) => apriIntroMockup(0, stato)); return; } // 06/9 B7b: «Ripeti il primo avvio»
     ultimoFuocoVelo = ROOT().activeElement;
@@ -17689,6 +17787,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     primo?.focus();
   }
   function chiudiVeloMockup(id) {
+    if (id === 'veloContesto' && contextCompactor) { contextCompactor.close(); return; }
     const v = $(`#${id}`); if (!v || v.hidden) return;
     v.hidden = true;
     if (ultimoFuocoVelo?.focus) ultimoFuocoVelo.focus();
