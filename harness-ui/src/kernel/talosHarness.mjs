@@ -4193,6 +4193,12 @@ export async function talosLavora({
     messaggiIniziali, onGiro, onScrittura, segnaleStop, fetchDiRete, mobile = false,
     onDelta, reasoning, contextHooks,
     /*
+     * ⭐⭐⭐ P-13 (10/09) — il contesto STABILE del progetto: oggi l'elenco dei file.
+     *   Opzionale come tutti gli altri: chi non lo passa (TALOS-BANCO senza la leva
+     *   `BANCO_ELENCO_PROFONDO`) ha un comportamento bit-per-bit identico a prima.
+     */
+    contestoDelProgetto,
+    /*
      * ⭐⭐⭐ TRE parametri nuovi, tutti opzionali — vedi la doc sopra
      * `ATTREZZI_ESTESI`. Nessuno passato da TALOS-BANCO
      * (`TALOS-BANCO/harness.mjs` verificato alla fonte, come già fatto
@@ -4605,6 +4611,31 @@ export async function talosLavora({
     }
     else {
         messaggi = [{ role: 'system', content: ISTRUZIONI }]
+        /*
+         * ⭐⭐⭐ P-13 (10/09) — QUALI FILE ESISTONO, e perché sta ESATTAMENTE qui.
+         *
+         * IL DIFETTO, misurato: l'attrezzo `elenca` arriva a profondità 2, i percorsi dei task
+         * del corpus `storia` stanno a 4-6, e 35 consegne su 35 non nominano nessun file. Visto
+         * col modello vero il 10/09: alla domanda «quanti file .mjs ci sono in harness-ui/src?»
+         * TALOS ha risposto «0 — la cartella non esiste», dopo sei ricerche e otto giri. Sono
+         * 104. Non ha detto «non lo so»: ha NEGATO l'esistenza della cartella, con una
+         * motivazione costruita. Un modello che non vede non tace, spiega.
+         *
+         * ⛔ SUBITO DOPO LE ISTRUZIONI E PRIMA DELLA CONSEGNA, e non è una preferenza: la cache
+         *   dei fornitori funziona per PREFISSO ESATTO, e un contenuto stabile messo dopo uno
+         *   variabile non viene mai riusato fra sessioni diverse sulla stessa cartella. Misurato
+         *   il 22/08: la cache costa un sesto e prende dalla terza chiamata (16.768 token su
+         *   16.811 letti dalla cache). Ricerca 10/09/2026 (Claude Platform Docs «Prompt
+         *   caching», OpenAI Cookbook «Prompt Caching 201», arXiv 2601.06007 «Don't Break the
+         *   Cache»): spostare il dinamico fuori dal prefisso porta il riuso dal 7% al 74%.
+         *
+         * ⛔ Solo su sessione FRESCA, come l'ambiente del device qui sotto: una ripresa ha già
+         *   il suo sistema di messaggi formato, e inserirsi lì cambierebbe il prefisso di una
+         *   conversazione in corso — cioè romperebbe la cache invece di sfruttarla.
+         */
+        if (typeof contestoDelProgetto === 'string' && contestoDelProgetto.trim()) {
+            messaggi.push({ role: 'system', content: contestoDelProgetto })
+        }
         /*
          * ⭐⭐⭐ FIX-2, ledger FASE-3 §6-quater — dichiara l'ambiente PRIMA
          * del primo giro, non lasciarlo scoprire a tentativi (misurato:
