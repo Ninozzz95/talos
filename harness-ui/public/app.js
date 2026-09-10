@@ -9184,7 +9184,8 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
   elapsed.setAttribute("aria-hidden", "true");
   riga.append(svg, label, elapsed);
   blocco.append(riga);
-  return { blocco, label, elapsed, fermaMotore: () => fermaMotore() };
+  return { blocco, label, elapsed, fermaMotore: () => {
+  } };
 }
 function creaDiffInChat(gruppi, { percorso = "", apertoSeSotto = 40, document: doc } = {}) {
   const documentObj = doc || globalThis.document;
@@ -19361,11 +19362,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           if (label) label.textContent = etichetta;
           return;
         }
-        const { blocco: article, label: labelEl, elapsed, fermaMotore: fermaMotore2 } = creaAttesa({ etichetta });
+        const { blocco: article, label: labelEl, elapsed, fermaMotore } = creaAttesa({ etichetta });
         article.dataset.activity = stato;
         nellaChat(article);
         state.realSession.attesaBubble = article;
-        state.realSession.fermaMotoreSegnavia = fermaMotore2;
+        state.realSession.fermaMotoreSegnavia = fermaMotore;
         state.realSession.attesaAvviataA = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
         const aggiornaTempoAttesa = () => {
           if (!state.realSession.attesaBubble || state.realSession.attesaAvviataA === null) return;
