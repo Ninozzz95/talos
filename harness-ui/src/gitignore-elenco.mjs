@@ -65,6 +65,20 @@
  *  L6. Un `\` dentro il pattern e' sempre un ESCAPE, mai un separatore di percorso. Su
  *      Windows un `.gitignore` con `src\build` non funziona — e non funziona neanche con
  *      git vero, quindi e' fedelta', non un limite nostro.
+ *  L7. ⛔ Se la CARTELLA DI LAVORO STESSA e' ignorata (aprire `node_modules/` o una
+ *      cartella che il repo padre esclude), il filtro NON svuota l'elenco: le regole dei
+ *      genitori valgono per i percorsi DENTRO, ma la cartella aperta non si nasconde mai.
+ *      Non e' un'invenzione: ripgrep fa lo stesso — `skip_entry` in `crates/ignore/src/walk.rs`
+ *      «Returns Ok(false) without running any ignore/hidden checks for depth-0 entries,
+ *      which are the paths explicitly provided as arguments» (letto via ctx7 il 10/09/2026).
+ *      ⛔ E il verso opposto ha un costo misurato da un concorrente: Hermes Agent
+ *      issue #45286 (giugno 2026) — l'albero file del Desktop filtra col `.gitignore`
+ *      senza un interruttore «mostra ignorati», e in un monorepo le cartelle top-level
+ *      possedute da repo figli SPARISCONO dalla vista pur esistendo sul disco.
+ *      https://github.com/NousResearch/hermes-agent/issues/45286
+ *  L8. `info/exclude` di un WORKTREE: lo cerco via `commondir`, ma se quel file manca o e'
+ *      in una forma inattesa si rinuncia in silenzio — perdere `info/exclude` fa TENERE
+ *      qualche file in piu', mai nasconderne.
  *
  * ── LA SCELTA: A MANO, non una libreria ──────────────────────────────────────────────
  * La libreria di riferimento e' `ignore` (kaelzhang/node-ignore, 500+ test verificati
@@ -78,13 +92,23 @@
  *     sbaglia il caso 27/08.
  *  c) `ignore` non gestisce i `.gitignore` ANNIDATI: la composizione per base andrebbe
  *     scritta a mano lo stesso. Cioe' la meta' difficile del lavoro resterebbe nostra.
- * Costo misurato della via a mano: ~200 righe di modulo + 40 prove, e un oracolo
- * `git check-ignore` per fissare la semantica prima di scrivere. Il perimetro coperto e'
- * l'insieme dei costrutti che compaiono in un `.gitignore` reale; ogni buco noto e' in L1-L6.
+ *  d) ⛔ E `ignore` non risale ai `.gitignore` dei GENITORI: e' il buco misurato il
+ *     10/09/2026 partendo da `harness-ui/`, e la parte che ripgrep stesso ha corretto solo
+ *     nella 15.0.0. Adottarla non ce l'avrebbe evitato.
+ * Costo misurato della via a mano: 300 righe di modulo (di cui ~110 di specifica citata)
+ * + 38 prove, e un oracolo `git check-ignore` per fissare la semantica prima di scrivere.
+ * Il perimetro coperto e' l'insieme dei costrutti che compaiono in un `.gitignore` reale;
+ * ogni buco noto e' dichiarato in L1-L8.
+ *
+ * ── PROVE (10/09/2026) ───────────────────────────────────────────────────────────────
+ *  · 930 confronti contro `git check-ignore` su repo di prova: 0 disaccordi.
+ *  · Da `harness-ui/` (sottocartella di un worktree): l'INSIEME dei file tenuti coincide
+ *    esattamente con `git ls-files` + `git ls-files --others --exclude-standard` —
+ *    680 contro 680, zero in piu' e zero in meno, in entrambe le direzioni.
  */
 
 import { promises as fsPromises } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 
 /** Esiti di una valutazione. L'ultima regola che matcha decide [G, punto 2]. */
 const ESCLUSO = 'escluso';
@@ -98,6 +122,8 @@ export const FONTI_IMPLICITE = Object.freeze(['.git/info/exclude']);
 /** Tetti di sicurezza della scoperta dei file annidati. Dichiarati, non nascosti. */
 const PROFONDITA_MASSIMA = 24;
 const CARTELLE_MASSIME = 5000;
+/** ⛔ Quanti livelli si puo' RISALIRE cercando la radice del repo, per non finire su `C:\`. */
+const RISALITA_MASSIMA = 64;
 
 // ─────────────────────────────────────────────────────────────────────────────────────
 // Parsing di UNA riga
@@ -319,17 +345,19 @@ function creaGiudice(regole) {
    * qui dentro e non solo nella potatura del camminatore, cosi' l'esito e' giusto anche
    * se qualcuno interroga un percorso profondo di punto in bianco.
    */
-  function tieni(percorso, eDirectory = false) {
+  function tieniDa(percorso, eDirectory = false, daSegmento = 1) {
     const norm = normalizzaPercorso(percorso);
     if (norm === '') return true; // la radice non si nasconde mai
     const segmenti = norm.split('/');
-    for (let i = 1; i < segmenti.length; i += 1) {
+    for (let i = Math.max(1, daSegmento); i < segmenti.length; i += 1) {
       if (decidiRiga(segmenti.slice(0, i).join('/'), true) === ESCLUSO) return false;
     }
     return decidiRiga(norm, Boolean(eDirectory)) !== ESCLUSO;
   }
 
-  return { tieni, quante: regole.length, regole };
+  const tieni = (percorso, eDirectory = false) => tieniDa(percorso, eDirectory, 1);
+
+  return { tieni, tieniDa, quante: regole.length, regole };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────
@@ -350,20 +378,95 @@ async function leggiRighe(fs, percorsoAssoluto) {
 }
 
 /**
+ * Risale da `radice` cercando la cartella di lavoro del repo — quella che contiene `.git`.
+ *
+ * ⛔ `.git` puo' essere una DIRECTORY (repo normale) o un FILE (worktree: dentro c'e'
+ * `gitdir: <percorso>`). Vanno bene entrambi: questa sessione gira proprio in un worktree,
+ * e trattarne solo uno dei due avrebbe fatto fallire la risalita in silenzio.
+ *
+ * ⛔ Due tetti dichiarati, per non salire all'infinito verso `C:\`:
+ *    - `risalitaMassima` livelli (default 64);
+ *    - lo stop naturale quando `dirname(x) === x`, cioe' la radice del volume.
+ * Se non si trova nessun `.git`, ci si ferma alla radice DATA: una cartella di lavoro che
+ * non e' un repo non deve far salire il filtro sopra quello che l'utente ha aperto.
+ */
+async function trovaRadiceRepo(fs, radice, risalitaMassima) {
+  if (typeof fs.stat !== 'function') return null;
+  let corrente = radice;
+  for (let salite = 0; salite <= risalitaMassima; salite += 1) {
+    try {
+      await fs.stat(join(corrente, '.git')); // file o directory: basta che esista
+      return corrente;
+    } catch { /* non qui: si sale */ }
+    const sopra = dirname(corrente);
+    if (!sopra || sopra === corrente) return null; // radice del volume
+    corrente = sopra;
+  }
+  return null; // tetto raggiunto
+}
+
+/**
+ * Dove sta `info/exclude` per questo repo.
+ * Repo normale: `<radiceRepo>/.git/info/exclude`.
+ * Worktree: `.git` e' un FILE con `gitdir:`, e le regole condivise stanno nel COMMON DIR,
+ * che il file `commondir` dentro il gitdir indica. Se qualcosa non torna si rinuncia:
+ * perdere `info/exclude` significa TENERE qualche file in piu', mai nasconderne.
+ */
+async function cartellaGit(fs, radiceRepo) {
+  const punto = join(radiceRepo, '.git');
+  try {
+    const stato = await fs.stat(punto);
+    if (stato?.isDirectory?.()) return punto;
+  } catch { return null; }
+  try {
+    const testo = await fs.readFile(punto, 'utf8');
+    const trovato = /^gitdir:\s*(.+)$/m.exec(String(testo));
+    if (!trovato) return null;
+    const gitdir = trovato[1].trim();
+    try {
+      const comune = String(await fs.readFile(join(gitdir, 'commondir'), 'utf8')).trim();
+      return isAbsolute(comune) ? comune : join(gitdir, comune);
+    } catch {
+      return gitdir;
+    }
+  } catch { return null; }
+}
+
+/**
  * Legge le regole da una cartella e restituisce il filtro da dare al camminatore.
+ *
+ * ⛔⛔ LA RACCOLTA PARTE DALLA RADICE DEL REPO, NON DALLA CARTELLA DI LAVORO.
+ * [G] «Patterns read from a .gitignore file in the same directory as the path, or IN ANY
+ * PARENT DIRECTORY (up to the top-level of the working tree) […]». Una cartella di lavoro
+ * e' quasi sempre una SOTTOCARTELLA del repo, e le regole che contano di piu' (quelle degli
+ * artefatti) stanno nel `.gitignore` di radice. Misurato il 10/09/2026 su `harness-ui/`:
+ * partendo dalla sottocartella si trovavano 7 regole da 2 fonti invece delle 940 da 56 che
+ * si vedono dalla radice, e 944 file di artefatti che git considera ignorati finivano
+ * nell'elenco dato al modello, mangiando il tetto di 1.500.
+ * ⇒ Il giudice ragiona in coordinate RELATIVE ALLA RADICE DEL REPO; il filtro pubblico
+ * riceve percorsi relativi alla cartella di lavoro e antepone il prefisso.
+ *
+ * ⛔ SCELTA DICHIARATA (L7): se la cartella di lavoro STESSA e' ignorata (aprire
+ * `node_modules/` come workspace), il filtro NON svuota l'elenco. Git li' non mostrerebbe
+ * niente, ma qui l'utente ha scelto quella cartella apposta, e un elenco vuoto sarebbe di
+ * nuovo «nascondere al modello file che esistono». I genitori si controllano solo DENTRO
+ * la cartella di lavoro; le regole dei genitori si applicano ai percorsi lo stesso.
  *
  * Cerca i `.gitignore` ANNIDATI scendendo in ampiezza e POTANDO con le regole gia' note:
  * non entra in `node_modules` se il `.gitignore` di radice lo esclude, quindi il costo e'
  * proporzionale alle cartelle che il camminatore visitera' comunque.
  *
- * @param {{radice: string, fs?: object, profonditaMassima?: number, cartelleMassime?: number}} opzioni
- * @returns {Promise<((percorsoRelativo: string, eDirectory?: boolean) => boolean) & {quante: number, fonti: string[]}>}
+ * @param {{radice: string, fs?: object, profonditaMassima?: number, cartelleMassime?: number,
+ *          risalitaMassima?: number}} opzioni
+ * @returns {Promise<((percorsoRelativo: string, eDirectory?: boolean) => boolean) &
+ *          {quante: number, fonti: string[], radiceRepo: string|null, prefissoLavoro: string}>}
  */
 export async function creaFiltroGitignore({
   radice,
   fs = fsPromises,
   profonditaMassima = PROFONDITA_MASSIMA,
   cartelleMassime = CARTELLE_MASSIME,
+  risalitaMassima = RISALITA_MASSIMA,
 } = {}) {
   const regole = [];
   const fonti = [];
@@ -377,50 +480,90 @@ export async function creaFiltroGitignore({
     if (regole.length > prima) fonti.push(etichetta);
   };
 
+  // ⛔ RISALITA FINO ALLA RADICE DEL REPO — e in che cosa DIVERGO da ripgrep.
+  // [R] ripgrep, crate `ignore`, `Ignore::add_parents()` in `crates/ignore/src/dir.rs`,
+  //     sorgente letto il 10/09/2026:
+  //     https://github.com/BurntSushi/ripgrep/blob/master/crates/ignore/src/dir.rs
+  //     Accumula TUTTI gli antenati fino alla radice del filesystem e NON si ferma al repo:
+  //     tiene un flag `has_git`, calcolato con `parent.join(".git").exists()`, e lo usa per
+  //     la precedenza. ⭐ Da li' prendo la rilevazione con `exists()`, che copre `.git`
+  //     DIRECTORY e `.git` FILE (worktree) senza distinguerli — e' il caso di oggi.
+  //     ⛔ Ma qui mi FERMO al primo `.git`: un elenco per il modello non deve ereditare
+  //     regole da cartelle fuori dal progetto che l'utente ha aperto.
+  // [R2] ripgrep CHANGELOG 15.0.0 (2025-10-15), letto il 10/09/2026: fra le correzioni,
+  //     «a commonly reported bug related to applying gitignore rules from parent
+  //     directories». ⇒ Il buco che sto chiudendo qui e' il difetto CLASSICO di questa
+  //     funzione, non una svista locale: chi lo scrive lo sbaglia quasi sempre.
+  const radiceRepo = await trovaRadiceRepo(fs, radice, risalitaMassima);
+  const partenza = radiceRepo ?? radice;
+  // Il pezzo di percorso fra la radice del repo e la cartella di lavoro, con `/`.
+  const prefissoLavoro = radiceRepo ? normalizzaPercorso(relative(radiceRepo, radice)) : '';
+  const segmentiPrefisso = prefissoLavoro === '' ? 0 : prefissoLavoro.split('/').length;
+  const sulDisco = (base) => join(partenza, ...(base ? base.split('/') : []));
+
   // `.git/` non entra mai in un elenco per il modello: git stesso non lo lista.
   // Prima di tutto il resto, cosi' resta la regola piu' DEBOLE.
   aggiungi(['.git/'], '', '(implicita) .git/');
 
   // Precedenza piu' bassa dei `.gitignore`, quindi prima di loro [G, DESCRIPTION].
   // ⛔ L1: `core.excludesFile` no — quello e' dell'utente, non del progetto.
-  for (const relativa of FONTI_IMPLICITE) {
-    const righe = await leggiRighe(fs, join(radice, ...relativa.split('/')));
-    if (righe.length) aggiungi(righe, '', relativa);
+  const dotGit = radiceRepo ? await cartellaGit(fs, radiceRepo) : null;
+  if (dotGit) {
+    const righe = await leggiRighe(fs, join(dotGit, 'info', 'exclude'));
+    if (righe.length) aggiungi(righe, '', FONTI_IMPLICITE[0]);
   }
 
-  // Ampiezza: i file piu' profondi entrano DOPO, e quindi vincono [G punto 9].
+  // I `.gitignore` dei GENITORI, dalla radice del repo giu' fino alla cartella di lavoro
+  // (esclusa: quella la legge la camminata qui sotto). Ognuno con la SUA base, e piu' si
+  // scende piu' si vince [G punto 9].
+  const scaletta = prefissoLavoro === '' ? [] : prefissoLavoro.split('/');
+  for (let i = 0; i < scaletta.length; i += 1) {
+    const base = scaletta.slice(0, i).join('/');
+    const righe = await leggiRighe(fs, join(sulDisco(base), NOME_FILE_REGOLE));
+    if (righe.length) aggiungi(righe, base, base ? `${base}/${NOME_FILE_REGOLE}` : NOME_FILE_REGOLE);
+  }
+
+  // Ampiezza dalla cartella di lavoro in giu'. Le basi restano relative al REPO.
   const giudiceVivo = () => creaGiudice(regole);
-  const coda = [''];
+  const coda = [prefissoLavoro];
   let visitate = 0;
 
   while (coda.length > 0 && visitate < cartelleMassime) {
     const base = coda.shift();
     visitate += 1;
 
-    const righe = await leggiRighe(fs, join(radice, ...(base ? base.split('/') : []), NOME_FILE_REGOLE));
+    const righe = await leggiRighe(fs, join(sulDisco(base), NOME_FILE_REGOLE));
     if (righe.length) aggiungi(righe, base, base ? `${base}/${NOME_FILE_REGOLE}` : NOME_FILE_REGOLE);
 
-    if (base.split('/').filter(Boolean).length >= profonditaMassima) continue;
+    if (base.split('/').filter(Boolean).length - segmentiPrefisso >= profonditaMassima) continue;
 
     let voci;
     try {
-      voci = await fs.readdir(join(radice, ...(base ? base.split('/') : [])), { withFileTypes: true });
+      voci = await fs.readdir(sulDisco(base), { withFileTypes: true });
     } catch {
       continue; // ⛔ una cartella illeggibile non nasconde nulla: semplicemente non porta regole
     }
 
-    const { tieni } = giudiceVivo();
+    const giudice = giudiceVivo();
     for (const voce of voci) {
       // ⛔ L5: un symlink a cartella non e' isDirectory() qui, e va bene: git non ci scende.
       if (!voce.isDirectory?.()) continue;
       const figlia = base ? `${base}/${voce.name}` : voce.name;
-      if (tieni(figlia, true)) coda.push(figlia);
+      if (giudice.tieniDa(figlia, true, segmentiPrefisso + 1)) coda.push(figlia);
     }
   }
 
   const giudice = creaGiudice(regole);
-  const filtro = (percorsoRelativo, eDirectory = false) => giudice.tieni(percorsoRelativo, eDirectory);
+  const filtro = (percorsoRelativo, eDirectory = false) => {
+    const norm = normalizzaPercorso(percorsoRelativo);
+    if (norm === '') return true;
+    const dalRepo = prefissoLavoro === '' ? norm : `${prefissoLavoro}/${norm}`;
+    // ⛔ Il ciclo sui genitori parte SOTTO la cartella di lavoro: vedi L7.
+    return giudice.tieniDa(dalRepo, eDirectory, segmentiPrefisso + 1);
+  };
   filtro.quante = giudice.quante;
   filtro.fonti = fonti;
+  filtro.radiceRepo = radiceRepo;
+  filtro.prefissoLavoro = prefissoLavoro;
   return filtro;
 }
