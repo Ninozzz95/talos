@@ -2056,7 +2056,23 @@ function eseguiProva(comando, cartella) {
  */
 let distroWslCache // undefined = non ancora provata, null = nessuna trovata
 
-function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd } = {}) {
+/*
+ * ⛔⛔⛔ D-10B — L'OUTPUT ARRIVAVA TUTTO ALLA FINE, PER COSTRUZIONE.
+ *
+ * Misurato: 2.091 ms di silenzio su un comando da 2.091 ms. Non era un difetto della chat — qui
+ * dentro NESSUNO emetteva niente prima di `close`, quindi non c'era nulla da mostrare. Chi lancia
+ * `npm test` guarda uno schermo fermo finche' non finisce.
+ *
+ * Ricerca 10/09/2026 (Vercel Academy, «Streaming and Tool Rendering»; AG-UI, il protocollo che
+ * questo progetto gia' parla): un agente che lavora emette eventi tipizzati mentre lavora, e
+ * l'output di un attrezzo e' uno di quelli — non un blocco che compare alla fine. Anthropic
+ * dichiara la stessa cosa per la sua shell mode («shows real-time progress and output»).
+ *
+ * ⇒ `onPezzo` e' opzionale e non cambia NIENTE per chi non lo passa: senza, questa funzione si
+ *   comporta byte per byte come prima. Il taglio, l'accorpamento e la decisione di che farne
+ *   restano fuori di qui — questa funzione sa solo dire «e' arrivato questo, adesso».
+ */
+function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd, onPezzo } = {}) {
     return new Promise((risolvi) => {
         // ⛔ Stesso scrub di ambienteSenzaCredenziali() sopra — questa funzione instrada anche wsl.exe/adb col comando del modello dentro (eseguiComandoSandboxato sotto), difesa in profondità anche se WSLENV non inoltra le variabili Windows per default.
         const p = spawn(programma, argomenti, { windowsHide: true, cwd, env: ambienteSenzaCredenziali() })
@@ -2079,8 +2095,11 @@ function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd } = {}) {
         const pezziFuori = []
         const pezziErrori = []
         const pezziInsieme = []
-        p.stdout?.on('data', (d) => { pezziFuori.push(d); pezziInsieme.push(d) })
-        p.stderr?.on('data', (d) => { pezziErrori.push(d); pezziInsieme.push(d) })
+        /* ⛔ D-10B — `onPezzo` non deve poter buttare giu' un comando: un guasto di chi ascolta e'
+           suo, e un `throw` qui ucciderebbe la lettura del flusso a meta'. */
+        const avvisa = (flusso, d) => { try { onPezzo?.({ flusso, testo: String(d) }) } catch { /* chi ascolta si arrangia */ } }
+        p.stdout?.on('data', (d) => { pezziFuori.push(d); pezziInsieme.push(d); avvisa('fuori', d) })
+        p.stderr?.on('data', (d) => { pezziErrori.push(d); pezziInsieme.push(d); avvisa('errori', d) })
         const timer = setTimeout(() => p.kill(), timeoutMs)
         p.on('close', (codice) => {
             clearTimeout(timer)
@@ -2239,7 +2258,7 @@ async function sondaRuntimeMobileNode(seriale) {
  *   più di un dispositivo pronto → `enforcement:'none'` dichiarato, non un
  *   errore nascosto.
  */
-export async function eseguiComandoSandboxato(comando, cartella, { mobile = false } = {}) {
+export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo } = {}) {
     if (mobile) {
         const seriale = await risolviSerialeAdbAttivo()
         if (!seriale) {
@@ -2277,7 +2296,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         }
         const comandoConCd = `cd ${JSON.stringify(mirrorDevice)} && ${comando}`
         const { codice, fuori, errori, insieme } = await eseguiComando(
-            trovaAdbLocale(), ['-s', seriale, 'shell', comandoConCd], { timeoutMs: 120_000 },
+            trovaAdbLocale(), ['-s', seriale, 'shell', comandoConCd], { timeoutMs: 120_000, onPezzo },
         )
         return { codice, testo: uscitaUtile((insieme ?? `${fuori}\n${errori}`).trim(), 4_000, 0.25), enforcement: 'adb-shell-on-device' }
     }
@@ -2286,7 +2305,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         const percorsoWsl = convertiPercorsoWsl(cartella)
         const { codice, fuori, errori, insieme } = await eseguiComando(
             'wsl.exe', ['-d', distro, '--', 'bash', '-lc', `cd ${JSON.stringify(percorsoWsl)} && ${comando}`],
-            { timeoutMs: 120_000 },
+            { timeoutMs: 120_000, onPezzo },
         )
         return { codice, testo: uscitaUtile((insieme ?? `${fuori}\n${errori}`).trim(), 4_000, 0.25), enforcement: 'wsl2' }
     }
@@ -2305,8 +2324,10 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
          */
         const TETTO_ACCUMULO = 160_000
         const aggiungi = (dove, d) => (dove.length > TETTO_ACCUMULO ? dove : dove + d)
-        p.stdout?.on('data', (d) => { fuori = aggiungi(fuori, d); insieme = aggiungi(insieme, d) })
-        p.stderr?.on('data', (d) => { errori = aggiungi(errori, d); insieme = aggiungi(insieme, d) })
+        /* ⛔ D-10B, come sopra: chi ascolta non puo' buttare giu' la lettura del flusso. */
+        const avvisa = (flusso, d) => { try { onPezzo?.({ flusso, testo: String(d) }) } catch { /* chi ascolta si arrangia */ } }
+        p.stdout?.on('data', (d) => { fuori = aggiungi(fuori, d); insieme = aggiungi(insieme, d); avvisa('fuori', d) })
+        p.stderr?.on('data', (d) => { errori = aggiungi(errori, d); insieme = aggiungi(insieme, d); avvisa('errori', d) })
         /*
          * ⛔⛔ D-10G — UN COMANDO FERMATO NON È UN COMANDO RIUSCITO.
          *   `p.kill()` fa arrivare `close` con `codice: null` (ucciso da segnale), e `null` non
@@ -5257,7 +5278,38 @@ export async function talosLavora({
                             esito = `REFUSED. ${permessoShell.motivo} The command was not run.`
                         }
                         else {
-                            p = await eseguiComandoSandboxato(argomenti.comando ?? '', cartella, { mobile })
+                            /*
+                             * ⛔⛔⛔ D-10B — l'output esce MENTRE esce, non alla fine.
+                             *
+                             * ⛔ Ma non un evento per ogni `data`: un `npm test` ne produce a
+                             *   raffica, e mandarli uno per uno inonderebbe l'SSE con eventi da
+                             *   pochi byte. Si accorpa — ogni 120 ms, oppure appena il pezzo
+                             *   accumulato supera i 2 KB, quello che viene prima. È la stessa
+                             *   scelta che il progetto fa già per i delta del testo.
+                             * ⛔ E c'è un tetto: `TETTO_USCITA_IN_CORSO`. Un comando che stampa
+                             *   senza fermarsi non deve poter riempire la chat — il testo intero
+                             *   arriva comunque alla fine, tagliato da `uscitaUtile` come sempre.
+                             */
+                            let accumulato = ''
+                            let ultimoInvio = 0
+                            let mandati = 0
+                            const TETTO_USCITA_IN_CORSO = 40_000
+                            const svuota = () => {
+                                if (!accumulato || mandati >= TETTO_USCITA_IN_CORSO) return
+                                const delta = accumulato.slice(0, TETTO_USCITA_IN_CORSO - mandati)
+                                accumulato = ''
+                                mandati += delta.length
+                                onGiro?.({ giro, tipo: 'tool-uscita', toolCallId: c.id, delta })
+                            }
+                            p = await eseguiComandoSandboxato(argomenti.comando ?? '', cartella, {
+                                mobile,
+                                onPezzo: ({ testo }) => {
+                                    accumulato += testo
+                                    const ora = Date.now()
+                                    if (accumulato.length >= 2_048 || ora - ultimoInvio >= 120) { ultimoInvio = ora; svuota() }
+                                },
+                            })
+                            svuota() // ⛔ l'ultimo pezzo non resta in mano: il silenzio finale sarebbe il difetto di prima, in piccolo
                             esito = `exit ${p.codice} [sandbox: ${p.enforcement}]\n${p.testo}`
                         }
                     }

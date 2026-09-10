@@ -713,3 +713,24 @@ dice **giri reali SOLO con `glm-5.3-flash`**. Non l'ho cambiato io; le foto dell
 oggi mostrano `glm-5.3-flash` sulla stessa sessione. ⇒ Le due sonde di questo giro
 (`nodi.mjs`, `ripiego.mjs`) hanno quindi speso due giri con un modello non autorizzato: lo dichiaro
 invece di nasconderlo. Da qui in avanti le sonde controllano il modello prima di inviare.
+
+## 10/09, tarda sera — D-10B: l'uscita di un comando mentre esce
+
+**`2026-09-10-d10b-uscita-viva.png`** — guardata, scattata DURANTE un comando vero lanciato col `!`
+del composer (nessun modello, nessun costo). A schermo, dall'alto: la card «Comando eseguito da te»
+col comando colorato; sotto, «Esecuzione di 1 comando…» con «In corso…» e il pallino acceso; e
+dentro, il riquadro con **«riga … di 6»** e il **cursore lampeggiante** in coda. È esattamente ciò
+che il debito chiedeva: prima c'erano 2.091 ms di riquadro vuoto su un comando da 2.091 ms.
+Misurato nello stesso giro: **primo carattere a schermo a +256 ms** su un comando da ~2.400 ms, e
+**sei lunghezze distinte** del testo vivo (11, 22, 33, 44, 55, 66 caratteri) — una riga alla volta,
+sei volte, dal +256 al +2.508 ms. L'uscita viva sparisce quando arriva l'esito: zero campioni con
+tutt'e due insieme.
+
+⛔ Difetti NOTATI nella stessa foto, fuori da ciò che stavo facendo:
+- il comando mostra `echo "riga $i di 6"` e a schermo esce **«riga  di 6»**: la variabile del ciclo
+  non si espande. Il comando arriva a bash intero (il `for` gira, sei righe escono), quindi non è il
+  ciclo: è `$i` che sparisce. Sospetto lo scrub dell'ambiente (`ambienteSenzaCredenziali()`), da
+  misurare — registrato, non curato di straforo.
+- tre sessioni della barra sono in stato **errore** (`Conta lentamente…` 20:35, 20:36, 20:40): sono
+  quelle che il mio riavvio del server ha interrotto mentre il 4174 era senza kernel. Il guasto è
+  curato, le sessioni restano segnate.

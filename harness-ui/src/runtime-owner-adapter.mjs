@@ -8,8 +8,9 @@
  * funzioni pure minime per la compattazione restano qui, per mantenere il
  * comportamento già coperto dai test senza nascondere una dipendenza.
  */
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { isAbsolute } from 'node:path';
+import { statSync } from 'node:fs';
 import { createParser } from 'eventsource-parser';
 import { eseguiFlowForgeLocale, FORGE_PREFISSO_NOME_TOOL, validaManifestForgeLocale } from './forge-contract.mjs';
 import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
@@ -564,8 +565,34 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, { risolvi = risolviD
   };
 }
 
+/**
+ * ⛔⛔⛔ 10/09 — IL SERVER DELL'OWNER E' RIMASTO SENZA KERNEL DOPO UN RIAVVIO.
+ *
+ * Sintomo: ogni giro moriva con «Il runtime agente non è configurato per questa installazione.»
+ * (`RunError`, `code: internal-error`), e in chat compariva «Il giro si è interrotto per un
+ * errore». Misurato leggendo il registro della sessione: `RunStarted → ToolCallStart →
+ * ToolCallArgs → RunError`, con zero eventi in mezzo.
+ *
+ * CAUSA: qui il modulo del kernel si leggeva SOLO da `process.env.TALOS_OWNER_RUNTIME_MODULE`,
+ * e `scripts/aggiorna-4174.ps1` ha smesso di forzarla. Senza variabile: `null` ⇒ nessun runtime.
+ * ⛔ Il ripiego esisteva già nel repo, in un altro file: `config.mjs` ha `kernelNelRepo()`, che
+ *   quando la variabile manca torna il kernel versionato — cioè il progetto aveva già DECISO che
+ *   il kernel nel repo è il default. Questo file semplicemente non lo sapeva. (È la regola «prima
+ *   di cercare fuori, cerca nel tuo codebase»: la risposta era a due file di distanza.)
+ * ⇒ Stessa decisione, un posto solo in più. Chi imposta la variabile continua a vincere, byte per
+ *   byte: il ripiego vale SOLO quando la variabile non c'è.
+ */
+function kernelNelRepo() {
+  try {
+    const percorso = fileURLToPath(new URL('kernel/talosHarness.mjs', import.meta.url));
+    return statSync(percorso).isFile() ? percorso : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createOwnerRuntimeAdapter({
-  modulePath = process.env.TALOS_OWNER_RUNTIME_MODULE ?? null,
+  modulePath = process.env.TALOS_OWNER_RUNTIME_MODULE ?? kernelNelRepo(),
   importFn = (specifier) => import(specifier),
   openRouterRuntimeFn = () => ({ timeoutSeconds: OPENROUTER_IDLE_MS_PREDEFINITO / 1_000 }),
   modelCapabilityFn = async () => null,

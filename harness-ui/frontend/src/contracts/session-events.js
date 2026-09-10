@@ -5,6 +5,13 @@ export const SESSION_EVENT_TYPES = new Set([
   'RunRedirectCancelled', 'RunRedirectFailed', 'RunRedirectRequested',
   'RunStarted', 'StateDelta',
   'TextMessageContent', 'TextMessageEnd', 'TextMessageStart', 'ToolCallArgs',
+  /* ⛔⛔⛔ D-10B (10/09) — `ToolCallOutput` e' l'uscita di un comando MENTRE esce, e senza questa
+     riga il giro MORIVA: `normalizeSessionEvent` non conosce i tipi fuori da questo insieme e
+     LANCIA, quindi il primo pezzo di output faceva comparire in chat «Il giro si e' interrotto per
+     un errore». Misurato dal vivo sul 4174: il comando partiva davvero (l'Indice dei giri diceva
+     «Esecuzione di 1 comando… · 1 attrezzo») e il giro moriva subito dopo.
+     ⇒ Un evento nuovo nel kernel non basta: va DICHIARATO anche qui, o la pagina lo rifiuta. */
+  'ToolCallOutput',
   'ToolCallResult', 'ToolCallStart', 'WorkspaceChanged',
 ]);
 

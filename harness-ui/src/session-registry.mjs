@@ -1677,11 +1677,20 @@ export function createSessionRegistry({
      * dire. La notifica effimera non ha id SSE: il cursore di ripresa deve
      * poter essere recuperato dal disco anche dopo il riavvio del server.
      */
-    const effimero = evento.type === 'WorkspaceChanged';
+    const workspaceCambiato = evento.type === 'WorkspaceChanged';
+    /*
+     * ⛔⛔ D-10B — `ToolCallOutput` è effimero per la STESSA ragione di WorkspaceChanged, e la
+     *   lezione è già pagata: 490 eventi su 756, 1,9 MB rigiocati a ogni apertura. L'uscita di un
+     *   comando mentre esce è avanzamento — si mostra a chi è connesso ADESSO e si dimentica. Il
+     *   testo definitivo è già nel `ToolCallResult`, tagliato da `uscitaUtile`: persistere anche i
+     *   pezzi vorrebbe dire scrivere due volte la stessa cosa, la seconda senza tetto, e
+     *   rigiocarla a ogni riapertura della sessione.
+     */
+    const effimero = workspaceCambiato || evento.type === 'ToolCallOutput';
     /* ⛔ P-13 — i file sono cambiati davvero: il prossimo giro ricostruirà l'elenco. Si chiama
        SOLO da qui, cioè quando il disco cambia: farlo a ogni evento annullerebbe la cache e con
        essa tutto il vantaggio, riportando l'elenco a costare pieno ogni volta. */
-    if (effimero && voce.cartella) segnalaFileCambiatiFn(voce.cartella);
+    if (workspaceCambiato && voce.cartella) segnalaFileCambiatiFn(voce.cartella);
     if (!effimero) evento._sequenza = (voce.prossimaSequenza = (voce.prossimaSequenza ?? 0) + 1);
     if (!effimero) voce.eventi.push(evento);
     /*

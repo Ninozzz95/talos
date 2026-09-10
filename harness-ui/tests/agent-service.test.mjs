@@ -678,7 +678,12 @@ test('eseguiComandoDiretto passa {mobile:true} a eseguiComandoSandboxatoFn quand
     cartella: '/tmp/x', comando: 'pm list packages', onEvento: () => {}, mobile: true, eseguiComandoSandboxatoFn,
   });
 
-  assert.deepEqual(opzioniCatturate, { mobile: true });
+  /* ⛔ D-10B: ora c'e' anche `onPezzo` (l'uscita mentre esce). Si prova che `mobile` sia quello
+     giusto E che il gancio ci sia — non si allenta l'asserzione a un `mobile` solo, che smetterebbe
+     di accorgersi se domani qualcuno passasse un'opzione di troppo. */
+  assert.equal(opzioniCatturate.mobile, true);
+  assert.equal(typeof opzioniCatturate.onPezzo, 'function', 'D-10B: senza questo l’output torna ad arrivare tutto alla fine');
+  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['mobile', 'onPezzo']);
 });
 
 test('⛔ AL CONTRARIO: senza mobile, eseguiComandoSandboxatoFn riceve {mobile:false} — il comportamento desktop di sempre', async () => {
@@ -692,7 +697,9 @@ test('⛔ AL CONTRARIO: senza mobile, eseguiComandoSandboxatoFn riceve {mobile:f
     cartella: '/tmp/x', comando: 'echo x', onEvento: () => {}, eseguiComandoSandboxatoFn,
   });
 
-  assert.deepEqual(opzioniCatturate, { mobile: false });
+  assert.equal(opzioniCatturate.mobile, false);
+  assert.equal(typeof opzioniCatturate.onPezzo, 'function');
+  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['mobile', 'onPezzo']);
 });
 
 /*
@@ -2728,4 +2735,59 @@ test('O-37, al contrario: se la Libreria non è scrivibile il GIRO NON si rompe'
     salvaVoceLibreriaFn: async () => { throw new Error('disco pieno'); },
   });
   assert.equal(risultato.ok, true, 'il giro deve concludersi lo stesso');
+});
+
+/*
+ * ⛔⛔⛔ D-10B — L'USCITA DI UN COMANDO ARRIVAVA TUTTA ALLA FINE.
+ *
+ * Misurato: 2.091 ms di schermo fermo su un comando da 2.091 ms. Chi lancia `!npm test` col `!` del
+ * composer guarda un riquadro vuoto finché non finisce, e non sa nemmeno se è partito.
+ * Ricerca 10/09/2026: AG-UI («a vocabulary of typed events that agents emit to frontends», dove
+ * l'avanzamento è distinto dal messaggio finale) e Vercel Academy, «Streaming and Tool Rendering».
+ */
+test('D-10B: i pezzi di output escono come ToolCallOutput PRIMA del risultato, e nell’ordine', async () => {
+  const eventi = [];
+  const eseguiComandoSandboxatoFn = async (comando, cartella, { onPezzo }) => {
+    onPezzo({ flusso: 'fuori', testo: 'riga uno\n' });
+    onPezzo({ flusso: 'errori', testo: 'attenzione\n' });
+    onPezzo({ flusso: 'fuori', testo: 'riga due\n' });
+    return { codice: 0, testo: 'riga uno\nattenzione\nriga due', enforcement: 'none' };
+  };
+  await eseguiComandoDiretto({ cartella: '/tmp/x', comando: 'x', onEvento: (e) => eventi.push(e), eseguiComandoSandboxatoFn });
+
+  const tipi = eventi.map((e) => e.type);
+  const primaUscita = tipi.indexOf('ToolCallOutput');
+  const esito = tipi.indexOf('ToolCallResult');
+  assert.notEqual(primaUscita, -1, '⛔ senza ToolCallOutput lo schermo resta fermo come prima');
+  assert.ok(primaUscita < esito, '⛔ l’avanzamento arriva PRIMA del risultato, mai dopo');
+  const uscite = eventi.filter((e) => e.type === 'ToolCallOutput');
+  assert.equal(uscite.map((e) => e.delta).join(''), 'riga uno\nattenzione\nriga due\n',
+    '⛔ né perso né riordinato: è lo stesso ordine in cui i due flussi sono arrivati (D-10C)');
+  assert.ok(uscite.every((e) => typeof e.toolCallId === 'string' && e.toolCallId));
+  /* ⛔ E l'esito finale non cambia di un byte: chi leggeva solo quello vede quel che vedeva. */
+  assert.equal(eventi.find((e) => e.type === 'ToolCallResult').content, 'exit 0 [sandbox: none]\nriga uno\nattenzione\nriga due');
+});
+
+test('D-10B, AL CONTRARIO: un comando muto non inventa nessun ToolCallOutput', async () => {
+  const eventi = [];
+  await eseguiComandoDiretto({
+    cartella: '/tmp/x', comando: 'true', onEvento: (e) => eventi.push(e),
+    eseguiComandoSandboxatoFn: async () => ({ codice: 0, testo: '', enforcement: 'none' }),
+  });
+  assert.equal(eventi.filter((e) => e.type === 'ToolCallOutput').length, 0);
+  assert.equal(eventi.filter((e) => e.type === 'ToolCallResult').length, 1);
+});
+
+test('D-10B: un comando che stampa senza fermarsi ha un TETTO, e non riempie la chat', async () => {
+  const eventi = [];
+  await eseguiComandoDiretto({
+    cartella: '/tmp/x', comando: 'yes', onEvento: (e) => eventi.push(e),
+    eseguiComandoSandboxatoFn: async (c, k, { onPezzo }) => {
+      for (let i = 0; i < 200; i += 1) onPezzo({ flusso: 'fuori', testo: 'x'.repeat(1_000) });
+      return { codice: 0, testo: 'tagliato', enforcement: 'none' };
+    },
+  });
+  const mandati = eventi.filter((e) => e.type === 'ToolCallOutput').reduce((n, e) => n + e.delta.length, 0);
+  assert.ok(mandati > 0, 'qualcosa deve pur uscire');
+  assert.ok(mandati <= 40_000, `⛔ il tetto è 40.000 caratteri, mandati ${mandati}: senza, 200 KB finiscono nella chat`);
 });

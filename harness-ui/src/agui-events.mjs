@@ -122,6 +122,22 @@ export function toolCallArgs({ toolCallId, delta }) {
     return { type: 'ToolCallArgs', toolCallId, delta }
 }
 
+/**
+ * ⭐⭐⭐ D-10B — l'uscita di un comando MENTRE esce.
+ *
+ * ⛔ Non e' un `ToolCallResult` parziale: quello e' l'esito, arriva una volta sola e ha un
+ *   `messageId` perche' entra nella conversazione come messaggio di ruolo `tool`. Questo invece e'
+ *   avanzamento — si mostra e si dimentica, e il testo definitivo resta quello del risultato.
+ *   Tenerli distinti e' la ragione per cui un consumer vecchio, che non conosce questo tipo, lo
+ *   ignora e continua a vedere esattamente cio' che vedeva prima.
+ * Ricerca 10/09/2026: AG-UI definisce «a vocabulary of typed events that agents emit to frontends»
+ * e tiene separati i chunk di avanzamento dai messaggi finali; Vercel Academy, «Streaming and Tool
+ * Rendering», per la stessa distinzione lato resa.
+ */
+export function toolCallOutput({ toolCallId, delta }) {
+    return { type: 'ToolCallOutput', toolCallId, delta: String(delta ?? '') }
+}
+
 export function toolCallResult({ messageId, toolCallId, content, role = 'tool' }) {
     return { type: 'ToolCallResult', messageId, toolCallId, content, role }
 }
