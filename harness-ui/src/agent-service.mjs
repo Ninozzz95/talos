@@ -1580,6 +1580,9 @@ export async function compattaSessione({
  */
 export async function eseguiComandoDiretto({
   cartella, comando, onEvento, mobile = false,
+  /* ⛔ D-10F — dove gira questo comando: 'wsl2', 'windows', o null = «come prima» (il ripiego
+     automatico). E' una scelta della SESSIONE, non una conseguenza di quale programma hai scritto. */
+  dove = null,
   eseguiComandoSandboxatoFn = eseguiComandoSandboxatoReale,
 }) {
   /*
@@ -1624,6 +1627,7 @@ export async function eseguiComandoDiretto({
     /* ⛔ D-10D-bis: si chiede al kernel di dire DOVE si e' fermato il comando, cosi' il prossimo
        riparte da li'. Chi non lo chiede non vede nessuna differenza. */
     tracciaCartella: true,
+    dove,
     onPezzo: ({ testo }) => {
       accumulato += testo;
       const ora = Date.now();

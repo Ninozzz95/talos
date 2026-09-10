@@ -697,7 +697,9 @@ test('eseguiComandoDiretto passa {mobile:true} a eseguiComandoSandboxatoFn quand
   /* ⛔ 10/09: si aggiunge `tracciaCartella` — il kernel dice DOVE il comando si e' fermato, cosi'
      il prossimo riparte da li' (il `cd` che non persisteva). L'elenco resta CHIUSO apposta: se
      domani nasce un'altra opzione, questo test la fa vedere invece di lasciarla passare muta. */
-  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['mobile', 'onPezzo', 'tracciaCartella']);
+  /* ⛔ 11/09: si aggiunge `dove` (D-10F) — dove gira il comando e' una scelta della sessione.
+     L'elenco resta CHIUSO apposta: un'opzione nuova la fa vedere invece di lasciarla passare muta. */
+  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'mobile', 'onPezzo', 'tracciaCartella']);
   assert.equal(opzioniCatturate.tracciaCartella, true);
 });
 
@@ -717,7 +719,9 @@ test('⛔ AL CONTRARIO: senza mobile, eseguiComandoSandboxatoFn riceve {mobile:f
   /* ⛔ 10/09: si aggiunge `tracciaCartella` — il kernel dice DOVE il comando si e' fermato, cosi'
      il prossimo riparte da li' (il `cd` che non persisteva). L'elenco resta CHIUSO apposta: se
      domani nasce un'altra opzione, questo test la fa vedere invece di lasciarla passare muta. */
-  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['mobile', 'onPezzo', 'tracciaCartella']);
+  /* ⛔ 11/09: si aggiunge `dove` (D-10F) — dove gira il comando e' una scelta della sessione.
+     L'elenco resta CHIUSO apposta: un'opzione nuova la fa vedere invece di lasciarla passare muta. */
+  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['dove', 'mobile', 'onPezzo', 'tracciaCartella']);
   assert.equal(opzioniCatturate.tracciaCartella, true);
 });
 
@@ -2836,4 +2840,32 @@ test('⛔ CARTELLA, AL CONTRARIO: se il comando non sa dire dove si è fermato, 
     eseguiComandoSandboxatoFn: async () => ({ codice: 0, testo: 'x', enforcement: 'adb-shell-on-device' }),
   });
   assert.equal(risultato.cartellaFinale, null, '⛔ meglio ripartire da un posto noto che da uno inventato');
+});
+
+/*
+ * ⛔⛔⛔ D-10F — DOVE GIRA UN COMANDO: UNA SCELTA, NON UNA SORPRESA.
+ *
+ * Misurato il 10/09: `!npm --version` rispondeva `11.16.0`, che è l'npm di Linux; un comando col
+ * programma assente in WSL finiva invece su `cmd`. Due sistemi operativi nella stessa sessione, a
+ * seconda di cosa scrivi — con due filesystem, due PATH e due `node` diversi, e nessuno che l'abbia
+ * scelto. Ricerca 10/09/2026: Claude Code su Windows è nativo e usa PowerShell (WSL solo se lo
+ * scegli), Codex CLI idem; in entrambi la scelta è UNA e DICHIARATA. Owner: «io punterei sulla
+ * scelta».
+ */
+test('D-10F: la scelta di dove gira il comando arriva al kernel', async () => {
+  let opzioni = null;
+  await eseguiComandoDiretto({
+    cartella: '/tmp/x', comando: 'npm --version', onEvento: () => {}, dove: 'windows',
+    eseguiComandoSandboxatoFn: async (c, k, o) => { opzioni = o; return { codice: 0, testo: '', enforcement: 'none' }; },
+  });
+  assert.equal(opzioni.dove, 'windows');
+});
+
+test('⛔ D-10F, AL CONTRARIO: senza scelta si passa `null`, cioè il comportamento di prima', async () => {
+  let opzioni = null;
+  await eseguiComandoDiretto({
+    cartella: '/tmp/x', comando: 'npm --version', onEvento: () => {},
+    eseguiComandoSandboxatoFn: async (c, k, o) => { opzioni = o; return { codice: 0, testo: '', enforcement: 'wsl2' }; },
+  });
+  assert.equal(opzioni.dove, null, '⛔ chi non sceglie non deve vedere nessun cambiamento');
 });
