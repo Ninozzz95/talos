@@ -26,6 +26,9 @@ try {
   p.on('pageerror', (e) => errori.push('pageerror: ' + e.message.slice(0, 200)));
   await p.goto(url);
   await p.waitForTimeout(6000);
+  /* Con Full access scelto, il pulsante deve attivarsi e dire il nome della cartella. */
+  const fullAccess = p.locator('.workspace-chooser').getByText('Full access', { exact: false }).first();
+  if (await fullAccess.count()) { await fullAccess.click(); await p.waitForTimeout(900); }
   const stato = await p.evaluate(() => {
     const velo = [...document.querySelectorAll('dialog, .talos-velo, [data-c="Modal"], #veloNuovaSessione')]
       .find((n) => n.open || getComputedStyle(n).display !== 'none');

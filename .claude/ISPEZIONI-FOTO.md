@@ -742,3 +742,21 @@ il modello lavora, che è esattamente ciò che D-10D chiedeva e che prima veniva
 Misurato nello stesso giro: POST `/shell` → **200**, comando in chat dopo **+153 ms**, nessun
 rifiuto e nessun errore. Prima: nessuna richiesta partiva affatto.
 ⛔ Difetto NOTATO: «Finestra del contesto» mostra `—` durante il giro (già annotato, resta aperto).
+
+## 10/09, notte — il tasto destro di Windows apre la modale «Nuova sessione»
+
+**`2026-09-10-tasto-destro-modale.png`** — guardata, 1440×900. Aprendo l'URL che lo script del menu
+contestuale produce, si apre la modale «Nuova sessione» (prima si apriva l'ultima sessione, e basta).
+In basso a sinistra: **«CARTELLA SCELTA — AVM-harness-desktop · scelta da Windows»**, e col permesso
+Full access il pulsante è attivo e dice **«Continua nella chat — AVM-harness-desktop»**. L'albero
+resta aperto sotto, quindi si può ancora cambiare cartella.
+⛔ Il percorso assoluto non compare da nessuna parte, ed è voluto: `workspace-launch.mjs` dichiara
+che «il percorso assoluto non attraversa mai URL, localStorage o risposta HTTP».
+
+⛔ Difetti NOTATI nella stessa foto, non miei e non curati:
+- **«Seleziona modello» è vuoto** nella colonna destra: il catalogo non è arrivato. Nella stessa
+  pagina la console segna un **503** su una risorsa. Da misurare a parte — un avvio senza modello
+  scelto non parte.
+- il pulsante resta disabilitato finché non si sceglie Full access: è corretto (il server lo esige
+  anche per il launcher, `session-registry.mjs:3044`), e ora il testo lo spiega invece di trattare
+  la cartella come un'estranea.

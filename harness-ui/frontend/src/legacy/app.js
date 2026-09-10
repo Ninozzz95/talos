@@ -15047,7 +15047,25 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * — il compito si scrive nel composer normale, come in OGNI concorrente
    * verificato: il testo libero è SEMPRE nella chat, mai in un modulo a parte prima di essa).
    */
-  function creaWorkspaceChooser() {
+  /**
+   * ⭐⭐⭐ 10/09 — LA CARTELLA CHE ARRIVA DAL TASTO DESTRO DI WINDOWS.
+   *
+   * Owner: «il tasto destro su una cartella non fa partire TALOS con la modale nuova sessione in
+   * quella directory». Misurato dal vivo: lo script PowerShell funziona e produce un URL valido,
+   * e la pagina consuma il fragment — ma poi apriWorkspaceDaLauncher chiamava direttamente
+   * avviaSessionePendente piu' un toast, cioe' SALTAVA la modale: chi aveva appena scelto una
+   * cartella si ritrovava sull'ultima sessione aperta, senza capire perche'.
+   *
+   * ⛔ Il vincolo che decide la forma: il percorso assoluto NON puo' arrivare al browser —
+   *   src/workspace-launch.mjs lo dichiara («Il percorso assoluto non attraversa mai URL,
+   *   localStorage o risposta HTTP») e dal server arrivano solo id, nome e scadenza. Quindi la
+   *   cartella si mostra per NOME, e la sua identita' viaggia come workspaceLaunchId. Non e' una
+   *   scorciatoia: e' la ragione per cui questa integrazione e' sicura.
+   * ⛔ Nessun widget nuovo: la scelta entra nella carta «Cartella scelta» che la modale ha gia',
+   *   e l'albero resta sotto, aperto, per cambiare idea. (Regola dell'owner del 04/09: si
+   *   rispetta il sistema di design che il progetto ha gia'.)
+   */
+  function creaWorkspaceChooser({ launch = null } = {}) {
     const form = document.createElement('form');
     form.className = 'workspace-chooser';
     form.id = 'workspaceChooser';
@@ -15065,7 +15083,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       typeaheadTimer: null,
       collapsed: false,
       creatingFolder: false,
+      /* ⛔ La cartella del tasto destro: nome sì, percorso no — e non è una mancanza, è il patto. */
+      launch,
     };
+    if (launch) local.selected = { path: null, name: launch.nome, launchId: launch.id, projectId: null };
 
     const shortcuts = document.createElement('div');
     shortcuts.className = 'workspace-chooser-shortcuts';
@@ -15315,7 +15336,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
     function aggiornaConfermaWorkspaceChooser() {
       const selectedPath = $('[data-workspace-selected-path]', selectedCard);
-      if (selectedPath) selectedPath.textContent = local.selected?.path || 'Nessuna cartella scelta';
+      /*
+       * ⛔ 10/09 — Tre stati, non due: una cartella scelta nell'albero (si mostra il percorso),
+       *   una cartella arrivata dal tasto destro di Windows (si mostra il NOME: il percorso non
+       *   attraversa mai il browser, per costruzione), e nessuna scelta.
+       */
+      if (selectedPath) {
+        selectedPath.textContent = local.selected?.path
+          || (local.selected?.launchId ? `${local.selected.name} · scelta da Windows` : 'Nessuna cartella scelta');
+      }
       /*
        * ⛔⛔ 06/9, MISURATO dal vivo: la carta diceva «Cartella scelta: …\AVM-harness-desktop» e
        * subito sotto «più di 20.000 file · 35.512 cartelle» con l'avviso «Questa è una cartella
@@ -15332,10 +15361,27 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const allowlisted = Boolean(local.selected?.projectId);
       const ready = !local.busy && Boolean(local.selected) && (allowlisted || local.permission === 'Full access');
       submit.disabled = !ready;
-      submit.textContent = local.busy ? 'Apro la cartella…' : ready ? `Continua nella chat — ${folderName(local.selected.path)}` : 'Scegli una cartella';
+      /*
+       * ⛔ 10/09 — `folderName(path)` non regge la cartella arrivata dal tasto destro: quel
+       *   percorso non esiste nel browser per costruzione. Il nome sì, e basta a chi legge.
+       */
+      const nomeScelto = local.selected?.path ? folderName(local.selected.path) : (local.selected?.name ?? '');
+      submit.textContent = local.busy ? 'Apro la cartella…' : ready ? `Continua nella chat — ${nomeScelto}` : 'Scegli una cartella';
       if (local.busy) policyGate.textContent = 'Attendi che la cartella scelta sia pronta.';
       else if (!local.selected) policyGate.textContent = 'Scegli una cartella per continuare.';
       else if (allowlisted) policyGate.textContent = `${local.permission}: TALOS resterà nella cartella scelta.`;
+      /*
+       * ⛔⛔ 10/09 — LA CARTELLA DEL TASTO DESTRO NON È UN'ESTRANEA, e il testo non deve trattarla
+       *   come tale. Il permesso serve lo stesso — il server lo esige anche qui, e questa modale
+       *   non promuove niente di nascosto (consegna del 01/09: «la selezione non promuove
+       *   silenziosamente i permessi a Full access») — ma chi legge deve capire PERCHÉ glielo si
+       *   chiede per una cartella che ha appena indicato lui in Esplora file.
+       */
+      else if (local.selected?.launchId) {
+        policyGate.textContent = local.permission === 'Full access'
+          ? `${nomeScelto} arriva da Esplora file. TALOS resterà esattamente in questa cartella.`
+          : `${nomeScelto} è fuori dai progetti già autorizzati: per usarla scegli Full access. TALOS resterà comunque solo qui dentro.`;
+      }
       else if (local.permission === 'Full access') policyGate.textContent = 'Full access consente di usare questa cartella esterna. La scelta sarà verificata di nuovo all’avvio.';
       else policyGate.textContent = 'Questa cartella è esterna ai progetti già autorizzati. Se vuoi usarla, scegli Full access.';
       const toolsDisabled = local.busy || local.creatingFolder || !local.current;
@@ -15645,14 +15691,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       aggiornaPillolaPermessi();
       salvaPreferenzeChatDesktop();
       const input = {
-        nomeCartella: folderName(local.selected.path),
+        nomeCartella: local.selected.path ? folderName(local.selected.path) : local.selected.name,
         modello: model,
         effort,
         modelloPlanner: planner,
         permessi: local.permission,
         permessiPerAttrezzo: { ...state.permessiPerAttrezzo },
       };
-      if (allowlisted) input.cartellaId = local.selected.projectId;
+      /* ⛔ 10/09 — la cartella del tasto destro non ha un percorso da passare: ha un permesso
+         monouso gia' verificato dal server. E' quello che viaggia. */
+      if (local.selected.launchId) input.workspaceLaunchId = local.selected.launchId;
+      else if (allowlisted) input.cartellaId = local.selected.projectId;
       else input.cartellaLibera = local.selected.path;
       closeEmbeddedDialog(sheetDialog);
       avviaSessionePendente(input);
@@ -15699,13 +15748,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     };
   }
 
-  async function openRealTaskSheet() {
+  /**
+   * @param {{launch?: {id: string, nome: string}|null}} [opzioni] la cartella gia' scelta dal
+   *   tasto destro di Windows, quando la modale si apre da li'.
+   */
+  async function openRealTaskSheet({ launch = null } = {}) {
     sheetDialog.classList.add('sheet-dialog--new-session');
     sheetEyebrow.textContent = 'Nuova sessione';
     sheetTitle.textContent = 'Su quale progetto lavora TALOS?';
     const demoBadge = $('.demo-surface-badge', sheetDialog);
     if (demoBadge) demoBadge.hidden = true;
-    const chooser = creaWorkspaceChooser();
+    const chooser = creaWorkspaceChooser({ launch });
     sheetBody.replaceChildren(chooser.elemento);
     prepareResizableDialog(sheetDialog, 'sheet:new-session');
     showEmbeddedDialog(sheetDialog);
@@ -15742,15 +15795,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     try {
       const launch = await apiGet(`/api/v1/workspace-launches/${encodeURIComponent(workspaceLaunchId)}`);
       rimuoviWorkspaceLaunchFragment();
-      avviaSessionePendente({
-        workspaceLaunchId,
-        nomeCartella: launch.nome,
-        modello: state.model,
-        effort: state.effort,
-        permessi: state.permissions,
-        permessiPerAttrezzo: { ...state.permessiPerAttrezzo },
-      });
-      toast('Cartella pronta', `${launch.nome} è pronta per una nuova sessione.`);
+      /*
+       * ⛔⛔⛔ 10/09, owner: «il tasto destro su una cartella non fa partire TALOS con la modale
+       *   nuova sessione in quella directory». Qui c'era `avviaSessionePendente` piu' un toast:
+       *   la cartella veniva preparata in silenzio e la persona restava sull'ultima sessione
+       *   aperta. Il toast diceva «pronta», ma non si vedeva niente di pronto.
+       * ⇒ Si apre la modale che si aprirebbe col «+», con quella cartella gia' scelta. Chi ha
+       *   fatto tasto destro vede il nome della SUA cartella, sceglie modello e permessi come
+       *   sempre, e puo' ancora cambiare idea nell'albero sotto.
+       */
+      await openRealTaskSheet({ launch: { id: workspaceLaunchId, nome: launch.nome } });
       return true;
     } catch (error) {
       rimuoviWorkspaceLaunchFragment();

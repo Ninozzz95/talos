@@ -23929,7 +23929,7 @@ ${testo3}` : testo3;
         });
         sheetBody.replaceChildren(form);
       }
-      function creaWorkspaceChooser() {
+      function creaWorkspaceChooser({ launch = null } = {}) {
         const form = document.createElement("form");
         form.className = "workspace-chooser";
         form.id = "workspaceChooser";
@@ -23945,8 +23945,11 @@ ${testo3}` : testo3;
           typeahead: "",
           typeaheadTimer: null,
           collapsed: false,
-          creatingFolder: false
+          creatingFolder: false,
+          /* ⛔ La cartella del tasto destro: nome sì, percorso no — e non è una mancanza, è il patto. */
+          launch
         };
+        if (launch) local.selected = { path: null, name: launch.nome, launchId: launch.id, projectId: null };
         const shortcuts = document.createElement("div");
         shortcuts.className = "workspace-chooser-shortcuts";
         shortcuts.setAttribute("aria-label", "Cartelle consigliate");
@@ -24180,16 +24183,21 @@ ${testo3}` : testo3;
         }
         function aggiornaConfermaWorkspaceChooser() {
           const selectedPath = $2("[data-workspace-selected-path]", selectedCard);
-          if (selectedPath) selectedPath.textContent = local.selected?.path || "Nessuna cartella scelta";
+          if (selectedPath) {
+            selectedPath.textContent = local.selected?.path || (local.selected?.launchId ? `${local.selected.name} · scelta da Windows` : "Nessuna cartella scelta");
+          }
           if (local.selected?.path) void chiediRitrattoCartella(local.selected.path);
           const allowlisted = Boolean(local.selected?.projectId);
           const ready = !local.busy && Boolean(local.selected) && (allowlisted || local.permission === "Full access");
           submit.disabled = !ready;
-          submit.textContent = local.busy ? "Apro la cartella…" : ready ? `Continua nella chat — ${folderName(local.selected.path)}` : "Scegli una cartella";
+          const nomeScelto = local.selected?.path ? folderName(local.selected.path) : local.selected?.name ?? "";
+          submit.textContent = local.busy ? "Apro la cartella…" : ready ? `Continua nella chat — ${nomeScelto}` : "Scegli una cartella";
           if (local.busy) policyGate.textContent = "Attendi che la cartella scelta sia pronta.";
           else if (!local.selected) policyGate.textContent = "Scegli una cartella per continuare.";
           else if (allowlisted) policyGate.textContent = `${local.permission}: TALOS resterà nella cartella scelta.`;
-          else if (local.permission === "Full access") policyGate.textContent = "Full access consente di usare questa cartella esterna. La scelta sarà verificata di nuovo all’avvio.";
+          else if (local.selected?.launchId) {
+            policyGate.textContent = local.permission === "Full access" ? `${nomeScelto} arriva da Esplora file. TALOS resterà esattamente in questa cartella.` : `${nomeScelto} è fuori dai progetti già autorizzati: per usarla scegli Full access. TALOS resterà comunque solo qui dentro.`;
+          } else if (local.permission === "Full access") policyGate.textContent = "Full access consente di usare questa cartella esterna. La scelta sarà verificata di nuovo all’avvio.";
           else policyGate.textContent = "Questa cartella è esterna ai progetti già autorizzati. Se vuoi usarla, scegli Full access.";
           const toolsDisabled = local.busy || local.creatingFolder || !local.current;
           newFolderButton.disabled = toolsDisabled;
@@ -24502,14 +24510,15 @@ ${testo3}` : testo3;
           aggiornaPillolaPermessi();
           salvaPreferenzeChatDesktop();
           const input = {
-            nomeCartella: folderName(local.selected.path),
+            nomeCartella: local.selected.path ? folderName(local.selected.path) : local.selected.name,
             modello: model,
             effort,
             modelloPlanner: planner,
             permessi: local.permission,
             permessiPerAttrezzo: { ...state.permessiPerAttrezzo }
           };
-          if (allowlisted) input.cartellaId = local.selected.projectId;
+          if (local.selected.launchId) input.workspaceLaunchId = local.selected.launchId;
+          else if (allowlisted) input.cartellaId = local.selected.projectId;
           else input.cartellaLibera = local.selected.path;
           closeEmbeddedDialog(sheetDialog);
           avviaSessionePendente(input);
@@ -24552,13 +24561,13 @@ ${testo3}` : testo3;
           }
         };
       }
-      async function openRealTaskSheet() {
+      async function openRealTaskSheet({ launch = null } = {}) {
         sheetDialog.classList.add("sheet-dialog--new-session");
         sheetEyebrow.textContent = "Nuova sessione";
         sheetTitle.textContent = "Su quale progetto lavora TALOS?";
         const demoBadge = $2(".demo-surface-badge", sheetDialog);
         if (demoBadge) demoBadge.hidden = true;
-        const chooser = creaWorkspaceChooser();
+        const chooser = creaWorkspaceChooser({ launch });
         sheetBody.replaceChildren(chooser.elemento);
         prepareResizableDialog(sheetDialog, "sheet:new-session");
         showEmbeddedDialog(sheetDialog);
@@ -24579,15 +24588,7 @@ ${testo3}` : testo3;
         try {
           const launch = await apiGet(`/api/v1/workspace-launches/${encodeURIComponent(workspaceLaunchId)}`);
           rimuoviWorkspaceLaunchFragment();
-          avviaSessionePendente({
-            workspaceLaunchId,
-            nomeCartella: launch.nome,
-            modello: state.model,
-            effort: state.effort,
-            permessi: state.permissions,
-            permessiPerAttrezzo: { ...state.permessiPerAttrezzo }
-          });
-          toast("Cartella pronta", `${launch.nome} è pronta per una nuova sessione.`);
+          await openRealTaskSheet({ launch: { id: workspaceLaunchId, nome: launch.nome } });
           return true;
         } catch (error) {
           rimuoviWorkspaceLaunchFragment();
