@@ -3430,6 +3430,34 @@ a.talos-button {
   padding: 12px 14px;
   margin-bottom: 10px;
 }
+.talos-inspector-card--apribile {
+  cursor: pointer;
+  transition: background var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease), border-color var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease);
+}
+.talos-inspector-card--apribile:hover {
+  background: var(--talos-panel-soft);
+  border-color: var(--talos-accent-border);
+}
+.talos-inspector-card--apribile:focus-visible {
+  outline: 2px solid var(--talos-accent-border);
+  outline-offset: 2px;
+}
+.talos-inspector-card__vai {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--talos-muted);
+  opacity: .75;
+}
+.talos-inspector-card--apribile:hover .talos-inspector-card__vai {
+  color: var(--talos-text);
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .talos-inspector-card--apribile {
+    transition: none;
+  }
+}
 .talos-inspector-card__head {
   display: flex;
   align-items: center;
