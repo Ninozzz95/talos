@@ -10,6 +10,7 @@ import {
   creaVoceWorkspace,
   eliminaFile,
   leggiContenutoFile,
+  apriFileConProgrammaPredefinito,
   leggiFilePerScarico,
   nomiPerContentDisposition,
   nomeSicuroPerIntestazione,
@@ -572,4 +573,79 @@ test('PO-05: il nome per Content-Disposition \u2014 ripiego ASCII, versione UTF-
   }
   assert.equal(nomeSicuroPerIntestazione('   '), 'file', 'un nome vuoto non produce un\u2019intestazione senza nome');
   assert.equal(nomiPerContentDisposition('\u4e2d\u6587.pdf').ascii, '__.pdf', 'un nome tutto non-ASCII ha comunque un ripiego valido');
+});
+
+/*
+ * ⛔⛔⛔ 10/09/2026 — LE AZIONI WINDOWS NON HANNO MAI FUNZIONATO CON LA POLITICA VERA, e i test
+ * erano verdi. Il wrapper interno dichiara `(comando, argomenti, opzioni, callback)`, ma il codice lo
+ * chiamava con TRE argomenti: il richiamo finiva nel posto delle opzioni, `callback` restava
+ * `undefined`, e la promessa non si risolveva MAI.
+ * Misurato premendo il bottone sul 4174: la rotta non rispondeva entro 15 secondi (`curl`: «0 bytes
+ * received»); fuori dal server la funzione restava appesa oltre 8 secondi. Dopo la cura: 131 ms
+ * («mostra nella cartella») e 242 ms («apri»).
+ * ⛔ Perché nessun test lo vedeva: iniettavano un finto a TRE parametri `(comando, argomenti, cb)`,
+ * cioè con la forma sbagliata. Un finto che non imita il vero misura il finto. Queste prove chiamano
+ * con QUATTRO argomenti, come fa la politica vera.
+ */
+test('⛔ AZIONI WINDOWS: il richiamo arriva anche quando il finto ha la firma VERA a quattro argomenti', async () => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-win-'));
+  try {
+    writeFileSync(join(cartella, 'documento.docx'), 'x');
+    for (const [nome, fn, atteso] of [
+      ['rivela', rivelaInEsploraFile, { rivelato: true }],
+      ['apri', apriFileConProgrammaPredefinito, { aperto: true }],
+    ]) {
+      let visto = null;
+      const esito = await Promise.race([
+        fn({ cartella, percorso: 'documento.docx' }, {
+          platform: 'win32',
+          // ⛔ QUATTRO parametri: è la forma che usa `EXPLORER_PROCESS_POLICY.execFile`
+          execFileFn: (comando, argomenti, opzioni, callback) => { visto = { comando, argomenti, opzioni }; callback(null); },
+        }),
+        new Promise((r) => setTimeout(() => r('APPESA'), 3000)),
+      ]);
+      assert.deepEqual(esito, atteso, `⛔ ${nome} non ha risolto: era il difetto del 10/09`);
+      assert.equal(visto.comando, 'explorer.exe');
+      assert.equal(typeof visto.opzioni, 'object', '⛔ se qui arriva una FUNZIONE, il richiamo è finito nel posto sbagliato');
+    }
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⛔ AZIONI WINDOWS: chi inietta un finto a TRE argomenti continua a funzionare', async () => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-win-'));
+  try {
+    writeFileSync(join(cartella, 'documento.docx'), 'x');
+    const esito = await Promise.race([
+      rivelaInEsploraFile({ cartella, percorso: 'documento.docx' }, {
+        platform: 'win32',
+        execFileFn: (comando, argomenti, cb) => cb(null),
+      }),
+      new Promise((r) => setTimeout(() => r('APPESA'), 3000)),
+    ]);
+    assert.deepEqual(esito, { rivelato: true }, 'la forma vecchia resta valida: le prove già scritte non diventano rosse');
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⛔ APRI, AL CONTRARIO: una cartella non si apre col programma, e fuori da Windows si dichiara', async () => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-win-'));
+  try {
+    mkdirSync(join(cartella, 'sotto'));
+    await assert.rejects(
+      () => apriFileConProgrammaPredefinito({ cartella, percorso: 'sotto' }, { platform: 'win32', execFileFn: (a, b, c, cb) => cb(null) }),
+      (e) => e instanceof WorkspaceFileError && /Mostra nella cartella/.test(e.message),
+      'una cartella si RIVELA, non si apre col programma: due azioni diverse',
+    );
+    writeFileSync(join(cartella, 'x.txt'), 'y');
+    await assert.rejects(
+      () => apriFileConProgrammaPredefinito({ cartella, percorso: 'x.txt' }, { platform: 'linux' }),
+      (e) => e.code === 'PLATFORM_UNSUPPORTED',
+      'fuori da Windows non finge: lo dichiara',
+    );
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
 });

@@ -2351,6 +2351,68 @@ body.reduce-motion *::after {
   font-size: 12px;
   color: var(--talos-muted);
 }
+.talos-list-row__azioni {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  opacity: 0;
+  transition: opacity var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease);
+}
+.talos-list-row:hover .talos-list-row__azioni,
+.talos-list-row:focus-within .talos-list-row__azioni {
+  opacity: 1;
+}
+@media (max-width: 1100px) {
+  .talos-list-row__azioni {
+    opacity: 1;
+  }
+}
+a.talos-button {
+  text-decoration: none;
+}
+.talos-list-row__rinomina {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+.talos-list-row__nome {
+  flex: 1;
+  min-width: 0;
+  font: 600 13.5px/1.35 var(--talos-font-sans, inherit);
+  padding: 2px 6px;
+  border: 1px solid var(--talos-border);
+  border-radius: 6px;
+  background: var(--talos-panel-soft);
+  color: var(--talos-text);
+}
+.talos-list-row__nome:focus-visible {
+  outline: 2px solid var(--talos-accent-border);
+  outline-offset: 1px;
+}
+.talos-list-row__messaggio {
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.talos-list-row__messaggio[data-tono=errore] {
+  color: var(--talos-danger);
+}
+.talos-list-row__messaggio[data-tono=stato] {
+  color: var(--talos-muted);
+}
+.talos-list-row__conferma {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.talos-list-row__conferma-testo {
+  font-size: 12px;
+  color: var(--talos-danger);
+}
 .assistant-copy .md-table-wrap {
   margin: 12px 0;
   overflow-x: auto;
@@ -7028,6 +7090,11 @@ dialog.command-dialog .ft-icon-code svg,
   height: 15px;
   flex-shrink: 0;
   color: var(--muted);
+}
+.ft-actions-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--line, var(--talos-border));
 }
 .ft-actions-menu-item-danger {
   color: var(--danger);

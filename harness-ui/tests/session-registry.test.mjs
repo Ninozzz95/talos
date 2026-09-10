@@ -2987,6 +2987,164 @@ test('⛔ AL CONTRARIO — elencaLibreria su un id inesistente: NOT_FOUND', asyn
 });
 
 /*
+ * ⭐⭐⭐⭐ 10/09/2026, owner: «ogni artefatto va salvato in libreria, con CRUD COMPLETO e azioni
+ * Windows». `elencaLibreria` qui sopra era l'unica porta che la PERSONA aveva sulla Libreria:
+ * questi quattro metodi sono lo scarico, la rinomina, l'eliminazione e «mostrala nella cartella».
+ * Stessa forma delle sorelle sull'albero dei file (`scaricaFile` & co., più sopra): `{ok:true,...}`
+ * oppure `{erroreAvvio, code}` — e i due 404 restano DISTINTI, «la sessione non c'è» (NOT_FOUND) e
+ * «la voce non c'è» (LIBRARY_NOT_FOUND), perché mandano a cercare in due posti diversi.
+ */
+test('⭐⭐⭐ scaricaVoceLibreria: cartella e id VERI al magazzino, e i byte tornano com\'erano', async () => {
+  const finta = sessioneControllabile();
+  const bytes = Buffer.from([0xff, 0x00, 0xc3, 0x28]);
+  let catturato = null;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    leggiBytesVoceLibreriaFn: async (input) => { catturato = input; return { bytes, dimensione: 4, nome: 'r.docx', mediaType: 'application/vnd.x' }; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.scaricaVoceLibreria(sessionId, 'lib-42');
+
+  assert.equal(catturato.id, 'lib-42');
+  assert.equal(typeof catturato.cartella, 'string');
+  assert.ok(catturato.cartella.length > 0, 'la cartella della sessione, non una stringa vuota');
+  assert.equal(esito.ok, true);
+  assert.equal(Buffer.compare(esito.bytes, bytes), 0);
+  assert.equal(esito.nome, 'r.docx');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — le quattro azioni su una VOCE che non esiste: LIBRARY_NOT_FOUND, non NOT_FOUND', async () => {
+  const finta = sessioneControllabile();
+  let rivelaChiamata = 0;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    leggiBytesVoceLibreriaFn: async () => null,
+    rinominaVoceLibreriaFn: async () => null,
+    eliminaVoceLibreriaFn: async () => null,
+    origineVoceLibreriaFn: async () => null,
+    rivelaInEsploraFileFn: async () => { rivelaChiamata += 1; return { rivelato: true }; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  for (const esito of [
+    await registro.scaricaVoceLibreria(sessionId, 'lib-fantasma'),
+    await registro.rinominaVoceLibreria(sessionId, 'lib-fantasma', 'nuovo.md'),
+    await registro.eliminaVoceLibreria(sessionId, 'lib-fantasma'),
+    await registro.rivelaVoceLibreria(sessionId, 'lib-fantasma'),
+  ]) {
+    assert.equal(esito.code, 'LIBRARY_NOT_FOUND');
+    assert.equal(esito.ok, undefined);
+  }
+  assert.equal(rivelaChiamata, 0, 'una voce che non esiste non apre nessuna finestra sul computer');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ AL CONTRARIO — le quattro azioni su una SESSIONE che non esiste: NOT_FOUND per tutte e quattro', async () => {
+  const registro = createSessionRegistry({ modello: 'm', chiave: 'k' });
+  for (const esito of [
+    await registro.scaricaVoceLibreria('mai-esistita', 'lib-1'),
+    await registro.rinominaVoceLibreria('mai-esistita', 'lib-1', 'x.md'),
+    await registro.eliminaVoceLibreria('mai-esistita', 'lib-1'),
+    await registro.rivelaVoceLibreria('mai-esistita', 'lib-1'),
+  ]) {
+    assert.deepEqual(esito, { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' });
+  }
+});
+
+test('⭐⭐ rinominaVoceLibreria: il nome arriva al magazzino così com\'è, e torna il prima e il dopo', async () => {
+  const finta = sessioneControllabile();
+  let catturato = null;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    rinominaVoceLibreriaFn: async (input) => { catturato = input; return { id: input.id, nomePrima: 'vecchio.md', nomeDopo: 'nuovo.md' }; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.rinominaVoceLibreria(sessionId, 'lib-7', '  nuovo.md  ');
+
+  assert.equal(catturato.nome, '  nuovo.md  ', 'la sanificazione è UNA sola, e vive nel magazzino — qui non si tocca');
+  assert.deepEqual({ ...esito }, { ok: true, id: 'lib-7', nomePrima: 'vecchio.md', nomeDopo: 'nuovo.md' });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ rinominaVoceLibreria: un nome vuoto dopo la sanificazione esce col SUO codice, non come errore interno', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    rinominaVoceLibreriaFn: async () => { throw new LibraryStoreError('Il nome è vuoto una volta tolti i caratteri di percorso', 'LIBRARY_NAME_EMPTY'); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.rinominaVoceLibreria(sessionId, 'lib-7', '///');
+
+  assert.equal(esito.code, 'LIBRARY_NAME_EMPTY');
+  assert.match(esito.erroreAvvio, /vuoto/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐⭐ rivelaVoceLibreria: il percorso passato a Esplora file è quello della voce, composto dal magazzino', async () => {
+  const finta = sessioneControllabile();
+  let catturato = null;
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    origineVoceLibreriaFn: async () => ({ nome: 'r.docx', origine: 'generated', modello: 'm', provider: 'p', creatoIl: 'x' }),
+    rivelaInEsploraFileFn: async (input) => { catturato = input; return { rivelato: true }; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.rivelaVoceLibreria(sessionId, 'lib-9');
+
+  assert.deepEqual({ ...esito }, { ok: true, rivelato: true });
+  assert.equal(catturato.percorso, '.harness-ui-library/lib-9/contenuto');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ rivelaVoceLibreria: fuori da Windows si dichiara — PLATFORM_UNSUPPORTED, non un errore interno', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    origineVoceLibreriaFn: async () => ({ nome: 'r.docx', origine: 'uploaded', modello: null, provider: null, creatoIl: 'x' }),
+    rivelaInEsploraFileFn: async () => { throw new WorkspaceFileError('Disponibile solo su Windows', 'PLATFORM_UNSUPPORTED'); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.rivelaVoceLibreria(sessionId, 'lib-9');
+
+  assert.equal(esito.code, 'PLATFORM_UNSUPPORTED');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔ AL CONTRARIO — un errore IMPREVISTO (non un errore dichiarato) si PROPAGA, mai inghiottito', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    eliminaVoceLibreriaFn: async () => { throw new Error('bug vero, non un LibraryStoreError'); },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  await assert.rejects(() => registro.eliminaVoceLibreria(sessionId, 'lib-1'), /bug vero, non un LibraryStoreError/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⭐⭐ eliminaVoceLibreria: è la STESSA cancellazione che chiama il modello, non una seconda strada', async () => {
+  const finta = sessioneControllabile();
+  const chiamate = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    eliminaVoceLibreriaFn: async (input) => { chiamate.push(input); return { id: input.id, nome: 'via.md' }; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+
+  const esito = await registro.eliminaVoceLibreria(sessionId, 'lib-3');
+
+  assert.deepEqual({ ...esito }, { ok: true, id: 'lib-3', nome: 'via.md' });
+  assert.equal(chiamate.length, 1, 'una sola cancellazione, mai due strade per la stessa cosa');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
  * ⭐⭐⭐ FASE N, quarto sistema (30/8): `elencaNote` è ciò che il
  * Capability hub chiama — stesso schema di `elencaLibreria` appena
  * sopra, MA `elencaNoteRegistroFn` deve ricevere `cartellaNote`

@@ -59,6 +59,15 @@ const API_ERROR_CODES = new Set([
   'FILE_TOO_LARGE',
   'FILE_EXISTS',
   'PLATFORM_UNSUPPORTED',
+  /* ⭐ 10/9 — il CRUD di una voce di Libreria per la persona. Sono gli STESSI nomi che usa
+     `library-store.mjs`: tradurli qui in altri codici vorrebbe dire tenere due vocabolari per
+     gli stessi stati, e prima o poi farne divergere uno. */
+  'LIBRARY_NOT_FOUND',
+  'LIBRARY_NAME_EMPTY',
+  'LIBRARY_TOO_LARGE',
+  'LIBRARY_MALFORMED',
+  'LIBRARY_READ_FAILED',
+  'LIBRARY_INVALID',
   /* ⭐ 28/8 — FASE A (hook): .harness-ui-hooks.json malformato, o un hookId che non combacia nessuna voce del file. */
   'HOOK_INVALID',
   /* ⭐ 29/8 — FASE E: .harness-ui-mcp.json malformato, o un serverId che non combacia nessuna voce del file. */
@@ -183,6 +192,17 @@ const STATUS_BY_CODE = Object.freeze({
   /** ⭐ 27/8 — stesso status di SESSION_NOT_READY: la richiesta è legittima ma lo stato attuale (un file già lì) la blocca. */
   FILE_EXISTS: 409,
   PLATFORM_UNSUPPORTED: 501,
+  /** ⭐ 10/9 — 404 come FILE_NOT_FOUND, ma DISTINTO da NOT_FOUND: «la sessione non c'è» e «la voce non c'è» sono due assenze diverse, e una risposta che non le distingue manda a cercare nel posto sbagliato. */
+  LIBRARY_NOT_FOUND: 404,
+  /** ⭐ 10/9 — 400: il nome l'ha mandato il chiamante e, tolti i caratteri di percorso, non resta niente. */
+  LIBRARY_NAME_EMPTY: 400,
+  /** ⭐ 10/9 — 413 come FILE_TOO_LARGE, stessa famiglia: «contenuto oltre il limite». */
+  LIBRARY_TOO_LARGE: 413,
+  /** ⭐ 10/9 — 500, e non 4xx: una scheda `meta.json` illeggibile o un file sparito sotto la sua scheda non sono colpa di chi chiede, sono uno stato ROTTO da riparare qui. */
+  LIBRARY_MALFORMED: 500,
+  LIBRARY_READ_FAILED: 500,
+  /** ⭐ 10/9 — 400: il codice generico del magazzino, che nasce da un argomento mancante o assurdo. */
+  LIBRARY_INVALID: 400,
   /** ⭐ 28/8 — stesso status di ROW_INVALID/QUERY_INVALID: il contenuto della richiesta (hookId, o il file hooks.json stesso) non è valido. */
   HOOK_INVALID: 422,
   /** ⭐ 29/8 — stesso status di HOOK_INVALID, stesso motivo: il contenuto della richiesta (serverId, o il file .harness-ui-mcp.json stesso) non è valido. */
@@ -314,6 +334,12 @@ const MESSAGE_BY_CODE = Object.freeze({
   FILE_TOO_LARGE: 'File troppo grande per l\'anteprima',
   FILE_EXISTS: 'Esiste già un file con questo nome',
   PLATFORM_UNSUPPORTED: 'Non disponibile su questa piattaforma',
+  LIBRARY_NOT_FOUND: 'Questo file della Libreria non esiste più',
+  LIBRARY_NAME_EMPTY: 'Serve un nome con almeno una lettera o un numero',
+  LIBRARY_TOO_LARGE: 'File troppo grande da scaricare',
+  LIBRARY_MALFORMED: 'La scheda di questo file della Libreria è illeggibile',
+  LIBRARY_READ_FAILED: 'Non riesco a leggere questo file della Libreria',
+  LIBRARY_INVALID: 'Richiesta non valida per la Libreria',
   HOOK_INVALID: 'Configurazione hook non valida',
   MCP_INVALID: 'Configurazione server MCP non valida',
   PLUGIN_INVALID: 'Configurazione plugin non valida',
@@ -678,6 +704,18 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/branch$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/skills$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library$/, metodi: ['GET'] },
+  /*
+   * ⭐⭐⭐⭐ 10/9 — il CRUD di UNA voce di Libreria, per la PERSONA. Fino a ieri qui c'era la sola
+   * riga sopra, l'elenco: il modello aveva sei attrezzi sulla Libreria e chi guarda lo schermo
+   * non poteva né scaricare, né rinominare, né eliminare, né aprire la cartella.
+   * ⛔ Tre righe e non due: `/library/:voceId` accetta PATCH e DELETE, `/library/:voceId/file` solo
+   *   GET e `/library/:voceId/rivela` solo POST — così l'Allow del 405 dice il vero su ognuna,
+   *   invece di dichiarare su tutte l'unione dei metodi di tutte.
+   */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/file$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/rivela$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/apri$/, metodi: ['POST'] }, // 10/09: l'azione Windows «Apri», gemella di «rivela»
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/, metodi: ['PATCH', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/plugins$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/notes$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks$/, metodi: ['GET'] },
@@ -742,6 +780,15 @@ export function metodiAmmessiPerRotta(pathname) {
   const ordinati = [];
   if (metodi.has('GET')) ordinati.push('GET', 'HEAD');
   if (metodi.has('POST')) ordinati.push('POST');
+  /*
+   * ⛔ 10/9 — fino a oggi questa funzione conosceva due soli verbi, perché due soli ne
+   *   esistevano nella catena: un `metodi: ['PATCH']` dichiarato lì sopra sarebbe uscito da qui
+   *   come un elenco VUOTO, cioè un `Allow:` senza niente dentro su una rotta che invece la
+   *   PATCH la serve — il difetto del 07/9 («Allow che dice il falso») rifatto al contrario.
+   *   Il CRUD della Libreria è il primo a usarli davvero.
+   */
+  if (metodi.has('PATCH')) ordinati.push('PATCH');
+  if (metodi.has('DELETE')) ordinati.push('DELETE');
   return ordinati;
 }
 
@@ -1004,7 +1051,15 @@ function requireAutomationToggleBody(body) {
   return body.attiva;
 }
 
-/** ⛔ Un'allowlist di UNA chiave sola, come requireTaskIdBody — la validazione FINE del nome (trim, 1-80) resta in session-registry.rinomina(), qui si controlla solo la FORMA del corpo. */
+/*
+ * ⛔ Un'allowlist di UNA chiave sola, come requireTaskIdBody — la validazione FINE del nome resta
+ *   a valle, qui si controlla solo la FORMA del corpo: per la sessione è `session-registry.rinomina()`
+ *   (trim, 1-80), per una voce di Libreria è `sanificaNomeLibreria` nel magazzino, che toglie i
+ *   caratteri di percorso e rifiuta ciò che dopo resta vuoto.
+ * ⛔ 10/9 — lo usa anche `PATCH .../library/:voceId`: stesso corpo `{nome}`, stessa forma. Una
+ *   seconda copia scritta apposta per la Libreria è durata cinque minuti (il controllo di sintassi
+ *   l'ha vista subito): due lettori identici dello stesso corpo sono due posti dove cambiare idea.
+ */
 function requireNomeBody(body) {
   const chiavi = Object.keys(body ?? {});
   if (chiavi.length !== 1 || chiavi[0] !== 'nome' || typeof body.nome !== 'string') {
@@ -1449,6 +1504,208 @@ export function createHttpApp({
       }
       return;
     }
+    /*
+     * ⭐⭐⭐⭐ 10/09/2026, owner: «ogni artefatto va salvato in libreria, con CRUD COMPLETO e azioni
+     * Windows». Misurato prima di scrivere, non presunto: gli artefatti in Libreria ci finiscono
+     * davvero (byte veri più `meta.json`) e il MODELLO ha il giro completo — elenca, leggi,
+     * rinomina, elimina, esporta, cerca. La PERSONA aveva UNA rotta sola, `GET .../library`, cioè
+     * l'elenco: niente scarico, niente rinomina, niente eliminazione, nessuna azione di Windows.
+     * Queste quattro rotte sono quella metà mancante, e sono modellate riga per riga sullo scarico
+     * di un file del workspace qui sopra (PO-05).
+     *
+     * ⛔ Il pareggio, misurato il 10/09/2026: Hermes Agent — il concorrente da battere — espone un
+     *   solo endpoint HTTP, compatibile OpenAI, e nella sua documentazione («API Server», letta
+     *   oggi) non esiste nessuna gestione degli artefatti via API: scarico, rinomina ed
+     *   eliminazione di un artefatto non ci sono. Qui sono quattro rotte dichiarate.
+     * ⛔ Verbi diversi per cose diverse, non un POST per tutto come sull'albero dei file: RFC 5789
+     *   (rfc-editor.org, letta 10/09/2026) dice che PATCH porta «un insieme di istruzioni per
+     *   modificare la risorsa» e che le modifiche si applicano TUTTE o NESSUNA — che è esattamente
+     *   una rinomina, un campo solo dentro `meta.json`. E RFC 9110 §9.3.5 (via http.dev/delete,
+     *   10/09/2026): dopo una DELETE riuscita il server manda 204 se non ha niente da dire, 200 se
+     *   la risposta porta una rappresentazione. Qui è 200 con la busta standard, e non per pigrizia:
+     *   ogni risposta di questa API è `{ok, data, meta}`, e un 204 sarebbe l'unica muta di tutte —
+     *   la busta dice QUALE voce è sparita, che è ciò che il pannello mostra dopo.
+     */
+    const libreriaScaricoMatch = method === 'GET' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/file$/.exec(url.pathname)
+      : null;
+    if (libreriaScaricoMatch) {
+      let sessionId;
+      let voceId;
+      try {
+        [sessionId, voceId] = [decodeURIComponent(libreriaScaricoMatch[1]), decodeURIComponent(libreriaScaricoMatch[2])];
+      } catch {
+        // un indirizzo con una sequenza percent non valida non nomina nessuna voce: è un 404, non un errore del server
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      try {
+        requireNoQuery(url);
+        const esito = await sessionRegistry.scaricaVoceLibreria(sessionId, voceId);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        /*
+         * ⛔ Intestazioni identiche a quelle dello scarico di un file del workspace, e per gli
+         *   stessi motivi: `attachment` con ENTRAMBE le forme del nome (RFC 6266 — `filename` è il
+         *   ripiego ASCII, `filename*` la forma UTF-8, e dove ci sono tutte e due vince la seconda),
+         *   `nosniff`, `no-store`, CSP che vieta tutto.
+         * ⛔ `application/octet-stream` e non il `mediaType` della voce, di proposito: quel tipo lo
+         *   ha scritto chi ha salvato la voce (spesso il modello) e non è mai stato verificato sui
+         *   byte — spedirlo come tipo dichiarato significherebbe far decidere a un'etichetta non
+         *   controllata come il browser tratta il file. Il contenuto esce così com'è, da salvare.
+         */
+        const nomi = nomiPerContentDisposition(esito.nome);
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': esito.bytes.length,
+          'Content-Disposition': `attachment; filename="${nomi.ascii}"; filename*=UTF-8''${nomi.utf8}`,
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'private, no-store',
+          'Content-Security-Policy': "default-src 'none'; sandbox",
+        });
+        res.end(esito.bytes);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    const libreriaRinominaMatch = method === 'PATCH' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/.exec(url.pathname)
+      : null;
+    if (libreriaRinominaMatch) {
+      let sessionId;
+      let voceId;
+      try {
+        [sessionId, voceId] = [decodeURIComponent(libreriaRinominaMatch[1]), decodeURIComponent(libreriaRinominaMatch[2])];
+      } catch {
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      try {
+        requireNoQuery(url);
+        const nome = requireNomeBody(await leggiCorpoJson(req));
+        const esito = await sessionRegistry.rinominaVoceLibreria(sessionId, voceId, nome);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ id: esito.id, nomePrima: esito.nomePrima, nomeDopo: esito.nomeDopo }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    const libreriaEliminaMatch = method === 'DELETE' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/.exec(url.pathname)
+      : null;
+    if (libreriaEliminaMatch) {
+      let sessionId;
+      let voceId;
+      try {
+        [sessionId, voceId] = [decodeURIComponent(libreriaEliminaMatch[1]), decodeURIComponent(libreriaEliminaMatch[2])];
+      } catch {
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      try {
+        requireNoQuery(url);
+        /* ⛔ Nessun corpo da leggere: la DELETE nomina la voce nell'indirizzo, e un corpo qui
+           sarebbe una seconda verità sul CHE COSA cancellare. La conferma davanti alla persona
+           vive nel pannello (ricerca 10/09/2026, saasui.design «SaaS Destructive Actions &
+           Confirmation UX Patterns» e Pajamas/GitLab «Destructive actions»: la frizione si mette
+           dove c'è qualcuno da fermare, e si misura sul raggio del danno). Il server non ha
+           nessuno a cui chiedere «sei sicuro?»: esegue, e dice esattamente che cosa ha tolto. */
+        const esito = await sessionRegistry.eliminaVoceLibreria(sessionId, voceId);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ eliminato: true, id: esito.id, nome: esito.nome }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⛔ 10/09 — «Apri», gemella di «rivela» qui sotto e con lo stesso verbo, per la stessa ragione:
+     *   non scrive niente, ma apre una finestra sul computer che ospita il server — un effetto fuori
+     *   da questa API, e una GET non deve averne (RFC 9110 §9.2.1).
+     * ⛔ Non passa dalla rotta dei byte: quella manda `attachment`, cioè è uno SCARICO. «Apri» su
+     *   Windows vuol dire un'altra cosa — lo apre il programma associato all'estensione.
+     */
+    const libreriaApriMatch = method === 'POST' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/apri$/.exec(url.pathname)
+      : null;
+    if (libreriaApriMatch) {
+      let sessionId;
+      let voceId;
+      try {
+        [sessionId, voceId] = [decodeURIComponent(libreriaApriMatch[1]), decodeURIComponent(libreriaApriMatch[2])];
+      } catch {
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      try {
+        requireNoQuery(url);
+        const esito = await sessionRegistry.apriVoceLibreria(sessionId, voceId);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ aperto: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+    const libreriaRivelaMatch = method === 'POST' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/rivela$/.exec(url.pathname)
+      : null;
+    if (libreriaRivelaMatch) {
+      let sessionId;
+      let voceId;
+      try {
+        [sessionId, voceId] = [decodeURIComponent(libreriaRivelaMatch[1]), decodeURIComponent(libreriaRivelaMatch[2])];
+      } catch {
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      try {
+        requireNoQuery(url);
+        /* ⛔ POST e non GET benché non si scriva niente sul disco: apre una finestra sul computer
+           di chi ospita il server, cioè ha un effetto fuori da questa API — e una GET non deve
+           avere effetti (RFC 9110 §9.2.1, «metodi sicuri»). È lo stesso verbo di `.../tree/reveal`. */
+        const esito = await sessionRegistry.rivelaVoceLibreria(sessionId, voceId);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ rivelato: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const isImageUpload = method === 'POST' && url.pathname === '/api/v1/chat-images';
     const isImageRead = method === 'GET' && /^\/api\/v1\/chat-images\/[a-f0-9]{64}$/.test(url.pathname);
     if (chatImageStore && (isImageUpload || isImageRead)) {

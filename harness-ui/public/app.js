@@ -3373,17 +3373,70 @@ function filtraLibreria(voci, { query = "", origine = "tutte" } = {}) {
   const q = String(query).trim().toLocaleLowerCase("it");
   return voci.filter((v) => (origine === "tutte" || v?.origine === origine) && (!q || [testiVoceLibreria(v).nome, tipoVoceLibreria(v?.fileType).testo, origineVoceLibreria(v?.origine)].join(" ").toLocaleLowerCase("it").includes(q)));
 }
+function indirizzoFileLibreria(sessionId, voceId) {
+  if (!sessionId || !voceId) return "";
+  return "/api/v1/sessions/" + encodeURIComponent(sessionId) + "/library/" + encodeURIComponent(voceId) + "/file";
+}
+function nomeLibreriaValido(nome) {
+  const n = String(nome ?? "").trim();
+  if (!n) return { ok: false, motivo: "Il nome non può essere vuoto." };
+  if (/[\\/]/.test(n)) return { ok: false, motivo: "Il nome non può contenere una barra: qui va un nome, non un percorso." };
+  if (n === "." || n === "..") return { ok: false, motivo: "«" + n + "» non è un nome di file." };
+  if (/[<>:"|?*]/.test(n) || [...n].some((c) => c.codePointAt(0) < 32)) return { ok: false, motivo: 'Windows non accetta < > : " | ? * nel nome di un file.' };
+  if (n.length > 255) return { ok: false, motivo: "Il nome supera i 255 caratteri." };
+  return { ok: true, nome: n };
+}
+async function motivoRisposta(r) {
+  if (!r) return "Il server non ha risposto.";
+  let dettaglio = "";
+  try {
+    const testo3 = await r.text?.();
+    if (testo3) {
+      try {
+        const j = JSON.parse(testo3);
+        dettaglio = String(j?.errore || j?.error?.message || j?.error || j?.message || "").trim();
+      } catch {
+        dettaglio = String(testo3).slice(0, 200).trim();
+      }
+    }
+  } catch {
+  }
+  if (NON_ANCORA.has(r.status)) return "Questa azione non è ancora disponibile sul server (HTTP " + r.status + ")." + (dettaglio ? " " + dettaglio : "");
+  return "Il server ha risposto HTTP " + r.status + (dettaglio ? ": " + dettaglio : ".");
+}
+function azioniLibreria({ sessionId, fetch: rete = globalThis.fetch } = {}) {
+  if (!sessionId || typeof rete !== "function") return null;
+  const base = (id) => "/api/v1/sessions/" + encodeURIComponent(sessionId) + "/library/" + encodeURIComponent(id);
+  const manda = async (url, opzioni) => {
+    try {
+      const r = await rete(url, opzioni);
+      return r?.ok ? { ok: true } : { ok: false, motivo: await motivoRisposta(r) };
+    } catch (e) {
+      return { ok: false, motivo: "Il server non ha risposto: " + (e?.message || "errore sconosciuto") + "." };
+    }
+  };
+  return {
+    rinomina: (id, nome) => manda(base(id), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nome }) }),
+    elimina: (id) => manda(base(id), { method: "DELETE" }),
+    rivela: (id) => manda(base(id) + "/rivela", { method: "POST" }),
+    /* ⛔ 10/09: «Apri» NON è lo scarico. La rotta dei byte manda `attachment`, quindi un'ancora lì
+       scaricherebbe il file una seconda volta invece di aprirlo; su Windows «aprire» vuol dire che
+       lo apre il programma associato all'estensione — Word per un .docx. Verbo POST come `rivela`,
+       e per la stessa ragione: non scrive niente, ma ha un effetto fuori da questa API. */
+    apri: (id) => manda(base(id) + "/apri", { method: "POST" })
+  };
+}
 function el10(doc, tag, classe, testo3) {
   const n = doc.createElement(tag);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
   return n;
 }
-function creaLibraryRow(voce, { document: doc = globalThis.document, aperta = false, onEspandi } = {}) {
-  const t2 = testiVoceLibreria(voce), tipo = tipoVoceLibreria(voce?.fileType), origine = origineVoceLibreria(voce?.origine);
+function creaLibraryRow(voce, { document: doc = globalThis.document, aperta = false, onEspandi, sessionId = "", azioni = null, modo = "normale", bozza = null, onModo, onCambiata, onMenu } = {}) {
+  const t2 = testiVoceLibreria(voce), tipo = tipoVoceLibreria(voce?.fileType), origine = origineVoceLibreria(voce?.origine), id = voce?.id || "";
   const riga = el10(doc, "div", "talos-list-row");
   riga.dataset.c = "LibraryRow";
-  riga.dataset.libraryId = voce?.id || "";
+  riga.dataset.libraryId = id;
   riga.setAttribute("role", "listitem");
   const icona7 = el10(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg.setAttribute("class", "i");
@@ -3392,37 +3445,217 @@ function creaLibraryRow(voce, { document: doc = globalThis.document, aperta = fa
   svg.append(use);
   icona7.append(svg);
   const testo3 = el10(doc, "span", "talos-list-row__text"), titolo2 = el10(doc, "span", "talos-list-row__title", t2.nome), sotto = el10(doc, "span", "talos-list-row__sub");
-  titolo2.title = t2.nome;
-  testo3.append(titolo2, sotto);
   const aside = el10(doc, "span", "talos-list-row__aside");
   aside.append(el10(doc, "span", "talos-badge" + (voce?.origine === "generated" ? " talos-badge--accent" : ""), origine));
-  const apri = el10(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Apri");
-  apri.type = "button";
-  apri.hidden = true;
-  apri.dataset.richiede = "fase3";
+  const indirizzo = indirizzoFileLibreria(sessionId, id), servizio = azioni || azioniLibreria({ sessionId });
+  const messaggio = el10(doc, "span", "talos-list-row__messaggio");
+  messaggio.hidden = true;
+  const bottoni = [];
+  const nuovoBottone = (etichetta, nomeAccessibile, azione, extra) => {
+    const b = el10(doc, "button", "talos-button talos-button--ghost talos-button--sm" + (extra || ""), etichetta);
+    b.type = "button";
+    b.dataset.azione = azione;
+    b.setAttribute("aria-label", nomeAccessibile);
+    bottoni.push(b);
+    return b;
+  };
+  const nuovaAncora = (etichetta, nomeAccessibile, azione) => {
+    const a = el10(doc, "a", "talos-button talos-button--ghost talos-button--sm", etichetta);
+    a.href = indirizzo;
+    a.dataset.azione = azione;
+    a.setAttribute("aria-label", nomeAccessibile);
+    return a;
+  };
+  const gruppo = el10(doc, "span", "talos-list-row__azioni");
+  gruppo.setAttribute("role", "group");
+  gruppo.setAttribute("aria-label", "Azioni su " + t2.nome);
+  let rinominaBtn = null, eliminaBtn = null, rivelaBtn = null;
+  let apriBtn = null, menuBtn = null;
+  if (servizio && id) {
+    apriBtn = nuovoBottone("Apri", "Apri " + t2.nome + " con il programma predefinito", "apri");
+    rinominaBtn = nuovoBottone("Rinomina", "Rinomina " + t2.nome, "rinomina");
+    rivelaBtn = nuovoBottone("Mostra nella cartella", "Mostra " + t2.nome + " nella cartella", "rivela");
+    eliminaBtn = nuovoBottone("Elimina", "Elimina " + t2.nome, "elimina", " talos-button--danger");
+  }
+  const scaricaEl = indirizzo ? nuovaAncora("Scarica", "Scarica " + t2.nome, "scarica") : null;
+  if (scaricaEl) scaricaEl.setAttribute("download", t2.nome);
+  const vociMenu = [
+    apriBtn && { chiave: "apri", etichetta: "Apri", icona: "i-doc", elemento: apriBtn },
+    scaricaEl && { chiave: "scarica", etichetta: "Scarica", icona: "i-download", elemento: scaricaEl },
+    rinominaBtn && { chiave: "rinomina", etichetta: "Rinomina", icona: "i-edit", elemento: rinominaBtn },
+    rivelaBtn && { chiave: "rivela", etichetta: "Mostra nella cartella", icona: "i-folder", elemento: rivelaBtn },
+    eliminaBtn && { chiave: "elimina", etichetta: "Elimina", icona: "i-trash", elemento: eliminaBtn, pericolo: true, separaPrima: true }
+  ].filter(Boolean);
+  riga.vociMenu = () => vociMenu.map((v) => ({ ...v, aziona: () => v.elemento.click() }));
+  if (vociMenu.length) {
+    menuBtn = nuovoBottone("", "Azioni su " + t2.nome, "menu");
+    {
+      const sv = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), us = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+      sv.setAttribute("class", "i");
+      sv.setAttribute("aria-hidden", "true");
+      us.setAttribute("href", "#i-more");
+      sv.append(us);
+      menuBtn.append(sv);
+    }
+    menuBtn.setAttribute("aria-haspopup", "menu");
+    menuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onMenu?.(riga.vociMenu(), { ancoraEl: menuBtn });
+    });
+    gruppo.append(menuBtn);
+    riga.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      onMenu?.(riga.vociMenu(), { x: e.clientX, y: e.clientY });
+    });
+  }
+  const forma = el10(doc, "form", "talos-list-row__rinomina");
+  forma.hidden = true;
+  const campo2 = el10(doc, "input", "talos-list-row__nome");
+  campo2.type = "text";
+  campo2.value = bozza ?? t2.nome;
+  campo2.maxLength = 255;
+  campo2.autocomplete = "off";
+  campo2.spellcheck = false;
+  campo2.setAttribute("aria-label", "Nuovo nome per " + t2.nome);
+  const salva = el10(doc, "button", "talos-button talos-button--primary talos-button--sm", "Salva");
+  salva.type = "submit";
+  salva.dataset.azione = "rinomina-salva";
+  salva.setAttribute("aria-label", "Salva il nuovo nome di " + t2.nome);
+  const annullaRinomina = el10(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Annulla");
+  annullaRinomina.type = "button";
+  annullaRinomina.dataset.azione = "rinomina-annulla";
+  annullaRinomina.setAttribute("aria-label", "Annulla la rinomina di " + t2.nome);
+  bottoni.push(salva, annullaRinomina);
+  forma.append(campo2, salva, annullaRinomina);
+  const conferma = el10(doc, "span", "talos-list-row__conferma");
+  conferma.hidden = true;
+  const noElimina = el10(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Annulla");
+  noElimina.type = "button";
+  noElimina.dataset.azione = "elimina-annulla";
+  noElimina.setAttribute("aria-label", "Annulla l’eliminazione di " + t2.nome);
+  const siElimina = el10(doc, "button", "talos-button talos-button--danger talos-button--sm", "Elimina");
+  siElimina.type = "button";
+  siElimina.dataset.azione = "elimina-conferma";
+  siElimina.setAttribute("aria-label", "Elimina definitivamente " + t2.nome + ": non si torna indietro");
+  bottoni.push(noElimina, siElimina);
+  conferma.append(el10(doc, "span", "talos-list-row__conferma-testo", "Eliminare definitivamente? Non si torna indietro."), noElimina, siElimina);
   const dettagli = el10(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   dettagli.type = "button";
+  dettagli.dataset.azione = "dettagli";
+  let stato = servizio && id ? String(modo || "normale") : "normale", occupata = false, avviso = null;
   function mostra() {
     riga.dataset.aperta = String(aperta);
+    riga.dataset.modo = stato;
     sotto.textContent = tipo.testo + " · " + (aperta && t2.aggiornata ? "Aggiornato il " + t2.aggiornata : t2.dataBreve);
     dettagli.textContent = aperta ? "Chiudi" : "Dettagli";
     dettagli.setAttribute("aria-expanded", String(aperta));
     dettagli.setAttribute("aria-label", (aperta ? "Chiudi i dettagli di " : "Dettagli di ") + t2.nome);
+    titolo2.hidden = stato === "rinomina";
+    forma.hidden = stato !== "rinomina";
+    gruppo.hidden = stato !== "normale";
+    conferma.hidden = stato !== "conferma";
+    riga.classList.toggle("talos-list-row--muted", stato === "eliminata");
+    messaggio.hidden = !avviso;
+    if (avviso) {
+      messaggio.textContent = avviso.testo;
+      messaggio.dataset.tono = avviso.tono;
+      messaggio.setAttribute("role", avviso.tono === "errore" ? "alert" : "status");
+    }
+    for (const b of bottoni) b.disabled = occupata;
   }
+  function cambiaModo(nuovo, ritorno) {
+    stato = nuovo;
+    onModo?.(nuovo, nuovo === "rinomina" ? campo2.value : null);
+    mostra();
+    if (nuovo === "rinomina") {
+      campo2.focus?.();
+      campo2.select?.();
+    } else if (nuovo === "conferma") noElimina.focus?.();
+    else if (ritorno === "rinomina") rinominaBtn?.focus?.();
+    else if (ritorno === "elimina") eliminaBtn?.focus?.();
+  }
+  async function esegui(chiama, dopo) {
+    if (!servizio || occupata) return;
+    occupata = true;
+    avviso = null;
+    mostra();
+    const esito = await chiama().catch((e) => ({ ok: false, motivo: "Il server non ha risposto: " + (e?.message || "errore sconosciuto") + "." }));
+    occupata = false;
+    if (esito?.ok) {
+      dopo();
+      return;
+    }
+    avviso = { tono: "errore", testo: esito?.motivo || "Azione non riuscita." };
+    mostra();
+  }
+  rinominaBtn?.addEventListener("click", () => {
+    campo2.value = t2.nome;
+    cambiaModo("rinomina");
+  });
+  eliminaBtn?.addEventListener("click", () => cambiaModo("conferma"));
+  apriBtn?.addEventListener("click", () => esegui(() => servizio.apri(id), () => {
+    avviso = { tono: "stato", testo: "Aperto con il programma predefinito." };
+    mostra();
+  }));
+  rivelaBtn?.addEventListener("click", () => esegui(() => servizio.rivela(id), () => {
+    avviso = { tono: "stato", testo: "Mostrato nella cartella." };
+    mostra();
+  }));
+  noElimina.addEventListener("click", () => cambiaModo("normale", "elimina"));
+  siElimina.addEventListener("click", () => esegui(() => servizio.elimina(id), () => {
+    stato = "eliminata";
+    onModo?.("normale", null);
+    avviso = { tono: "stato", testo: "File eliminato." };
+    mostra();
+    onCambiata?.();
+  }));
+  annullaRinomina.addEventListener("click", () => cambiaModo("normale", "rinomina"));
+  campo2.addEventListener("input", () => {
+    if (stato === "rinomina") onModo?.("rinomina", campo2.value);
+  });
+  campo2.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault?.();
+      cambiaModo("normale", "rinomina");
+    }
+  });
+  forma.addEventListener("submit", (e) => {
+    e.preventDefault?.();
+    const v = nomeLibreriaValido(campo2.value);
+    if (!v.ok) {
+      avviso = { tono: "errore", testo: v.motivo };
+      mostra();
+      campo2.focus?.();
+      return;
+    }
+    if (v.nome === t2.nome) {
+      cambiaModo("normale", "rinomina");
+      return;
+    }
+    esegui(() => servizio.rinomina(id, v.nome), () => {
+      stato = "normale";
+      onModo?.("normale", null);
+      avviso = { tono: "stato", testo: "Rinominato in " + v.nome + "." };
+      mostra();
+      rinominaBtn?.focus?.();
+      onCambiata?.();
+    });
+  });
   dettagli.addEventListener("click", () => {
     aperta = !aperta;
     mostra();
     onEspandi?.(aperta);
   });
   mostra();
-  aside.append(apri, dettagli);
+  testo3.append(titolo2, forma, sotto, messaggio);
+  aside.append(gruppo, conferma, dettagli);
   riga.append(icona7, testo3, aside);
   return riga;
 }
 function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
   let pagina = PAGINE5.get(schermo);
   if (!pagina) {
-    pagina = { voci: [], opzioni: {}, query: "", origine: "tutte", aperte: /* @__PURE__ */ new Set() };
+    pagina = { voci: [], opzioni: {}, query: "", origine: "tutte", aperte: /* @__PURE__ */ new Set(), modi: /* @__PURE__ */ new Map() };
     PAGINE5.set(schermo, pagina);
     const tabs = [...schermo.querySelectorAll("[data-library-origine]")];
     for (const tab of tabs) {
@@ -3460,21 +3693,46 @@ function renderLibreria(schermo, pagina) {
   const esito = schermo.querySelector("[data-library-esito]");
   esito.textContent = opzioni.errore || (opzioni.caricamento ? "Caricamento Libreria…" : visibili.length === voci.length ? plurale(voci.length, "file") : visibili.length + " di " + plurale(voci.length, "file"));
   esito.setAttribute("role", opzioni.errore ? "alert" : "status");
-  const lista = schermo.querySelector("[data-library-list]"), attivo = doc.activeElement?.closest("[data-library-id]")?.dataset.libraryId;
+  const lista = schermo.querySelector("[data-library-list]"), fuoco = doc.activeElement, attivo = fuoco?.closest?.("[data-library-id]")?.dataset.libraryId, azioneAttiva = fuoco?.dataset?.azione || "";
   lista.setAttribute("role", visibili.length ? "list" : "group");
-  lista.replaceChildren(...visibili.map((v) => creaLibraryRow(v, { document: doc, aperta: pagina.aperte.has(v.id), onEspandi: (aperta) => {
-    if (aperta) pagina.aperte.add(v.id);
-    else pagina.aperte.delete(v.id);
-  } })));
+  const ricarica = () => (opzioni.onCambiata || opzioni.onAggiorna)?.();
+  lista.replaceChildren(...visibili.map((v) => {
+    const memoria = pagina.modi.get(v.id) || null;
+    return creaLibraryRow(v, {
+      document: doc,
+      aperta: pagina.aperte.has(v.id),
+      onEspandi: (aperta) => {
+        if (aperta) pagina.aperte.add(v.id);
+        else pagina.aperte.delete(v.id);
+      },
+      sessionId: opzioni.sessionId || "",
+      azioni: opzioni.azioni || null,
+      modo: memoria?.modo || "normale",
+      bozza: memoria?.bozza ?? null,
+      onModo: (modo, bozza) => {
+        if (modo === "normale") pagina.modi.delete(v.id);
+        else pagina.modi.set(v.id, { modo, bozza });
+      },
+      onCambiata: () => {
+        pagina.modi.delete(v.id);
+        ricarica();
+      },
+      onMenu: opzioni.onMenu || null
+    });
+  }));
   if (!visibili.length) lista.append(el10(doc, "p", "talos-list-row talos-muted", opzioni.errore || (opzioni.caricamento ? "Caricamento Libreria…" : voci.length ? "Nessun file corrisponde ai filtri." : "Nessun file in Libreria per questo progetto.")));
-  if (attivo) [...lista.querySelectorAll("[data-library-id]")].find((n) => n.dataset.libraryId === attivo)?.querySelector("button:not([hidden])")?.focus({ preventScroll: true });
+  if (attivo) {
+    const tornata = [...lista.querySelectorAll("[data-library-id]")].find((n) => n.dataset.libraryId === attivo);
+    (azioneAttiva && tornata?.querySelector('[data-azione="' + azioneAttiva + '"]:not([hidden])') || tornata?.querySelector("button:not([hidden]):not([disabled])"))?.focus({ preventScroll: true });
+  }
 }
-var TIPI, ORIGINI2, PAGINE5;
+var TIPI, ORIGINI2, NON_ANCORA, PAGINE5;
 var init_libreria = __esm({
   "src/components/libreria.js"() {
     init_plurale();
     TIPI = /* @__PURE__ */ new Map([["document", { testo: "Documento", icona: "doc" }], ["image", { testo: "Immagine", icona: "image" }]]);
     ORIGINI2 = /* @__PURE__ */ new Map([["uploaded", "Caricato"], ["generated", "Generato"]]);
+    NON_ANCORA = /* @__PURE__ */ new Set([404, 405, 501]);
     PAGINE5 = /* @__PURE__ */ new WeakMap();
   }
 });
@@ -13715,7 +13973,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const attuale = () => generazioniLibreria.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === "libreria" && !mount.hidden : mount === $2("#libraryListMount", sheetBody));
         function mostra(voci, { errore = null, caricamento = false } = {}) {
           if (pagina) {
-            aggiornaPaginaLibreria(mount, voci, { errore, caricamento, onAggiorna: () => caricaPannelloLibreria({ pagina: true }) });
+            aggiornaPaginaLibreria(mount, voci, {
+              errore,
+              caricamento,
+              sessionId,
+              onAggiorna: () => caricaPannelloLibreria({ pagina: true }),
+              /*
+               * ⛔ 10/09, visto nella FOTO subito dopo un'eliminazione riuscita: la pagina diceva
+               *   «0 file · Nessun file in Libreria» e il contatore nella barra a sinistra diceva ancora
+               *   «Libreria 1». Due numeri diversi per la stessa cosa, sullo stesso schermo.
+               *   Il contatore si rinfrescava solo al giro dell'elenco delle sessioni, che dopo
+               *   un'azione sulla Libreria non ha nessuna ragione di ripartire.
+               */
+              onCambiata: () => {
+                caricaPannelloLibreria({ pagina: true });
+                void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+              },
+              onMenu: apriMenuAzioniLibreria
+            });
           } else {
             mount.setAttribute("role", voci.length ? "list" : "group");
             mount.replaceChildren(...voci.map(rigaVoceLibreria));
@@ -19450,6 +19725,63 @@ ${testo3}` : testo3;
           await apriCartellaAlbero(li, icon2, childUl, percorsoCompleto, profondita);
         }
         return li;
+      }
+      function apriMenuAzioniLibreria(voci, posizionamento) {
+        if (!Array.isArray(voci) || voci.length === 0) return;
+        document.querySelector(".ft-actions-menu")?.remove();
+        const menu = document.createElement("div");
+        menu.className = "ft-actions-menu";
+        menu.setAttribute("role", "menu");
+        for (const voce of voci) {
+          if (voce.separaPrima && menu.childElementCount > 0) {
+            const riga = document.createElement("div");
+            riga.className = "ft-actions-menu-sep";
+            riga.setAttribute("role", "separator");
+            menu.appendChild(riga);
+          }
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = `ft-actions-menu-item${voce.pericolo ? " ft-actions-menu-item-danger" : ""}`;
+          btn.setAttribute("role", "menuitem");
+          btn.dataset.azione = voce.chiave;
+          btn.appendChild(iconaSvgAlbero(voce.icona));
+          btn.appendChild(textElement("span", "", voce.etichetta));
+          btn.addEventListener("click", () => {
+            chiudiMenuLibreria();
+            voce.aziona();
+          });
+          menu.appendChild(btn);
+        }
+        document.body.appendChild(menu);
+        if (posizionamento.ancoraEl) {
+          const rect = posizionamento.ancoraEl.getBoundingClientRect();
+          menu.style.top = `${rect.bottom + 4}px`;
+          menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
+        } else {
+          const misura = menu.getBoundingClientRect();
+          menu.style.left = `${Math.max(8, Math.min(posizionamento.x, window.innerWidth - misura.width - 8))}px`;
+          menu.style.top = `${Math.max(8, Math.min(posizionamento.y, window.innerHeight - misura.height - 8))}px`;
+        }
+        function chiudiMenuLibreria() {
+          menu.remove();
+          document.removeEventListener("click", suClicFuori);
+          document.removeEventListener("keydown", suTasto);
+          posizionamento.ancoraEl?.focus?.();
+        }
+        function suClicFuori(evento) {
+          if (!menu.contains(evento.target)) chiudiMenuLibreria();
+        }
+        function suTasto(evento) {
+          if (evento.key === "Escape") {
+            evento.preventDefault();
+            chiudiMenuLibreria();
+          }
+        }
+        setTimeout(() => {
+          document.addEventListener("click", suClicFuori);
+          document.addEventListener("keydown", suTasto);
+        }, 0);
+        menu.querySelector(".ft-actions-menu-item")?.focus();
       }
       function apriMenuAzioniFile(percorsoCompleto, nome, posizionamento, cartella = false, soloCreazione = false) {
         document.querySelector(".ft-actions-menu")?.remove();

@@ -41,6 +41,9 @@ import { promises as fsp } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
+// ⛔ Il tetto dello scarico è UNO SOLO per tutto il prodotto: vedi `leggiBytesVoce` in fondo.
+import { DIMENSIONE_MASSIMA_SCARICO } from './workspace-files.mjs';
+
 export class LibraryStoreError extends Error {
   constructor(message, code = 'LIBRARY_INVALID') {
     super(message);
@@ -77,6 +80,55 @@ export function tipoFileLibreria(mediaType) {
  */
 export function creaCursoriLibreria() {
   return new Map();
+}
+
+/*
+ * ⛔⛔⛔ 10/09/2026 — L'ID DI UNA VOCE NON È PIÙ SOLO UNA COSA DEL MODELLO.
+ *
+ * Fino a oggi ogni `id` arrivava da `impaginaVoci`/`cercaVoci`, cioè da un elenco che questo
+ * file aveva appena letto dal disco. Da oggi arriva anche da un SEGMENTO DI INDIRIZZO HTTP
+ * (`/api/v1/sessions/:id/library/:voceId/...`), cioè da fuori: un id `..%2f..` diventerebbe
+ * `join(cartella, '.harness-ui-library', '..', '..')` e uscirebbe dalla cartella del progetto,
+ * e `leggiVoce`/`rinominaVoce`/`eliminaVoce` lo avrebbero seguito senza fiatare. La stessa porta
+ * era già aperta dalla parte del modello (`agent-service.mjs` passa `argomenti?.id ?? ''` così
+ * com'è): la difesa sta QUI, nel magazzino, così vale per tutti e due i chiamanti e non c'è una
+ * seconda copia che un giorno diverge.
+ *
+ * Ricerca 10/09/2026, prima di scrivere (Microsoft Learn, «Naming Files, Paths, and Namespaces»;
+ * npm `sanitize-filename` e la sua tabella di casi): un nome di file sicuro non è «una stringa
+ * senza `..`» — sono vietati anche i separatori, i caratteri di controllo, i punti e gli spazi
+ * in coda, e i nomi riservati di Windows (CON, PRN, AUX, NUL, COM1-9, LPT1-9) perfino con
+ * un'estensione appiccicata dietro. Qui il tetto è più stretto di quell'elenco, e per questo non
+ * serve ricopiarlo: un id di Libreria lo genera SEMPRE `salvaVoce` nella forma `lib-<uuid>` (mai
+ * il chiamante), e `randomUUID` produce solo cifre esadecimali e trattini ⇒ un'allowlist di
+ * lettere, cifre, punto, trattino e trattino basso accetta tutto ciò che esiste davvero sul disco
+ * e rifiuta tutto il resto.
+ *
+ * ⛔ Un id fuori grammatica torna `null` — «questa voce non c'è», non un'eccezione: è vero (un id
+ *   con una barra dentro non può nominare nessuna voce) e non cambia il contratto delle funzioni
+ *   qui sotto, che per un id sconosciuto rispondono già `null`. Un'eccezione nuova, invece,
+ *   sarebbe arrivata in faccia al modello per una chiamata che oggi si chiude con un «non trovato».
+ */
+export function idVoceLibreriaValido(id) {
+  return typeof id === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(id);
+}
+
+/**
+ * Il percorso RELATIVO (dalla cartella del progetto) del file di una voce — la sola forma in cui
+ * la disposizione interna della Libreria esce da questo file. `null` se l'id non è valido.
+ * Serve a «rivela in Esplora file», che vuole un percorso dentro il workspace: farlo comporre al
+ * chiamante vorrebbe dire scrivere `.harness-ui-library/<id>/contenuto` in due posti, cioè tenere
+ * due mappe della stessa cartella — e quando la Libreria cambierà forma se ne aggiornerà una sola.
+ */
+export function percorsoContenutoVoce(id) {
+  if (!idVoceLibreriaValido(id)) return null;
+  return `${CARTELLA_LIBRERIA}/${id}/${NOME_FILE_CONTENUTO}`;
+}
+
+/** La cartella di UNA voce, o `null` se l'id non è un nome piatto (vedi `idVoceLibreriaValido`). */
+function cartellaDellaVoce(cartella, id) {
+  if (!idVoceLibreriaValido(id)) return null;
+  return join(cartella, CARTELLA_LIBRERIA, id);
 }
 
 function meta2voce(id, meta) {
@@ -276,7 +328,8 @@ export function cercaVoci(vociConTesto, { query, limit = 5, offset = 0 } = {}) {
  */
 export async function leggiVoce({ cartella, id }, deps = {}) {
   const readFileFn = deps.readFileFn ?? fsp.readFile;
-  const cartellaVoce = join(cartella, CARTELLA_LIBRERIA, id);
+  const cartellaVoce = cartellaDellaVoce(cartella, id);
+  if (!cartellaVoce) return null;
   const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
   if (meta === undefined) return null;
   const voce = meta2voce(id, meta);
@@ -299,6 +352,47 @@ export async function leggiVoce({ cartella, id }, deps = {}) {
   return { nome: voce.nome, mediaType: voce.mediaType, origine: voce.origine, testo };
 }
 
+
+/**
+ * I BYTE di una voce, per essere SCARICATA — sorella di `leggiVoce` qui sopra, con una differenza
+ * che non è un dettaglio: `leggiVoce` legge in `utf8` tutto ciò che non è un'immagine, e un `.docx`
+ * (che è uno zip) o un `.pdf` passati da lì tornano CORROTTI in modo irreversibile — ogni byte non
+ * valido diventa U+FFFD e non torna più indietro. Quella porta serve al modello, che vuole del
+ * testo; questa serve alla persona che clicca «scarica», e qui i byte restano byte.
+ *
+ * ⛔ Il tetto dei 64 MB non è un numero nuovo: è `DIMENSIONE_MASSIMA_SCARICO`, lo stesso identico
+ *   dello scarico di un file del workspace (`workspace-files.mjs`) — importato, non ricopiato,
+ *   perché due tetti scritti in due posti sono due tetti che un giorno diranno numeri diversi.
+ *   Serve davvero: qui i byte finiscono TUTTI in memoria prima di partire.
+ * @returns {Promise<{bytes:Buffer, dimensione:number, nome:string, mediaType:string}|null>} `null`
+ *   se l'id non nomina nessuna voce (id sconosciuto o fuori grammatica).
+ */
+export async function leggiBytesVoce({ cartella, id }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const statFn = deps.statFn ?? fsp.stat;
+  const cartellaVoce = cartellaDellaVoce(cartella, id);
+  if (!cartellaVoce) return null;
+  const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
+  if (meta === undefined) return null;
+  const voce = meta2voce(id, meta);
+  const percorsoContenuto = join(cartellaVoce, NOME_FILE_CONTENUTO);
+  let stat;
+  try {
+    stat = await statFn(percorsoContenuto);
+  } catch (errore) {
+    // ⛔ La scheda c'è e il file no: uno stato ROTTO, non un «non trovato» — dirlo è il solo modo perché qualcuno lo ripari.
+    throw new LibraryStoreError(`${id}: la scheda c'è, il file no (${errore.message})`, 'LIBRARY_READ_FAILED');
+  }
+  if (stat.size > DIMENSIONE_MASSIMA_SCARICO) {
+    throw new LibraryStoreError(
+      `File troppo grande da scaricare (${Math.round(stat.size / 1024 / 1024)} MB, tetto ${DIMENSIONE_MASSIMA_SCARICO / 1024 / 1024} MB)`,
+      'LIBRARY_TOO_LARGE',
+    );
+  }
+  const bytes = await readFileFn(percorsoContenuto);
+  return { bytes, dimensione: stat.size, nome: voce.nome, mediaType: voce.mediaType };
+}
+
 /**
  * Solo la provenienza — MAI il contenuto: la stessa "seconda porta"
  * di `library_file_origin` mobile (owner: "ogni funzione ha DUE
@@ -308,7 +402,9 @@ export async function leggiVoce({ cartella, id }, deps = {}) {
  */
 export async function origineVoce({ cartella, id }, deps = {}) {
   const readFileFn = deps.readFileFn ?? fsp.readFile;
-  const meta = await leggiMeta(join(cartella, CARTELLA_LIBRERIA, id, NOME_FILE_META), readFileFn, id);
+  const cartellaVoce = cartellaDellaVoce(cartella, id);
+  if (!cartellaVoce) return null;
+  const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
   if (meta === undefined) return null;
   const voce = meta2voce(id, meta);
   return { nome: voce.nome, origine: voce.origine, modello: voce.modello, provider: voce.provider, creatoIl: voce.creatoIl };
@@ -367,7 +463,8 @@ export async function rinominaVoce({ cartella, id, nome }, deps = {}) {
   if (!nomeSicuro) {
     throw new LibraryStoreError('Il nome è vuoto una volta tolti i caratteri di percorso — scegline uno semplice.', 'LIBRARY_NAME_EMPTY');
   }
-  const cartellaVoce = join(cartella, CARTELLA_LIBRERIA, id);
+  const cartellaVoce = cartellaDellaVoce(cartella, id);
+  if (!cartellaVoce) return null;
   const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
   if (meta === undefined) return null;
   const nomePrima = meta.nome;
@@ -386,7 +483,8 @@ export async function rinominaVoce({ cartella, id, nome }, deps = {}) {
 export async function eliminaVoce({ cartella, id }, deps = {}) {
   const readFileFn = deps.readFileFn ?? fsp.readFile;
   const rmFn = deps.rmFn ?? fsp.rm;
-  const cartellaVoce = join(cartella, CARTELLA_LIBRERIA, id);
+  const cartellaVoce = cartellaDellaVoce(cartella, id);
+  if (!cartellaVoce) return null;
   const meta = await leggiMeta(join(cartellaVoce, NOME_FILE_META), readFileFn, id);
   if (meta === undefined) return null;
   await rmFn(cartellaVoce, { recursive: true, force: true });

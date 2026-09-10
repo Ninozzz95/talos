@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -12,9 +12,12 @@ import {
   eliminaVoce,
   elencaVoci,
   elencaVociConTesto,
+  idVoceLibreriaValido,
   impaginaVoci,
+  leggiBytesVoce,
   leggiVoce,
   origineVoce,
+  percorsoContenutoVoce,
   rinominaVoce,
   salvaVoce,
   sanificaNomeLibreria,
@@ -431,6 +434,131 @@ test('⛔ AL CONTRARIO — eliminaVoce: un id già sparito torna null, MAI un\'e
   const cartella = cartellaVera();
   try {
     assert.equal(await eliminaVoce({ cartella, id: 'lib-mai-esistito' }), null);
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+/*
+ * ⭐⭐⭐⭐ 10/09/2026 — LA METÀ SERVER DEL CRUD DI LIBRERIA PER LA PERSONA.
+ *
+ * Due cose nuove nel magazzino, e questi test provano tutte e due anche AL CONTRARIO:
+ *  1. `leggiBytesVoce` — i BYTE di una voce, per scaricarla. `leggiVoce` legge in `utf8` tutto ciò
+ *     che non è un'immagine, e un `.docx` (uno zip) o un `.pdf` passati da lì tornano corrotti in
+ *     modo irreversibile: il primo test qui sotto misura proprio quel danno, invece di raccontarlo.
+ *  2. la grammatica dell'id — da oggi un id arriva anche da un segmento di indirizzo HTTP, cioè da
+ *     fuori. Il test che conta non è «rifiuta i puntini»: è quello che PREPARA la trappola (un
+ *     `meta.json` valido nella cartella del progetto) e verifica che senza la guardia
+ *     `eliminaVoce({id:'..'})` avrebbe cancellato l'INTERO progetto.
+ */
+
+const BINARIO_CATTIVO = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0xff, 0xfe, 0x00, 0x80, 0xc3, 0x28, 0x1a]);
+
+test('⭐⭐⭐ leggiBytesVoce: i byte di un binario arrivano IDENTICI — e utf8 li avrebbe distrutti', async () => {
+  const cartella = cartellaVera();
+  try {
+    const id = await salvaVoce({
+      cartella, nome: 'relazione.docx', origine: 'generated',
+      mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      base64: BINARIO_CATTIVO.toString('base64'),
+    });
+    const esito = await leggiBytesVoce({ cartella, id });
+    assert.equal(Buffer.compare(esito.bytes, BINARIO_CATTIVO), 0, 'byte per byte, non "quasi"');
+    assert.equal(esito.dimensione, BINARIO_CATTIVO.length);
+    assert.equal(esito.nome, 'relazione.docx');
+    assert.equal(esito.mediaType, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    // La misura del danno che questa funzione evita: la strada utf8 non torna più indietro.
+    const perLaStradaSbagliata = Buffer.from(BINARIO_CATTIVO.toString('utf8'), 'utf8');
+    assert.notEqual(Buffer.compare(perLaStradaSbagliata, BINARIO_CATTIVO), 0, 'se questo non fallisse, il test non starebbe misurando niente');
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⛔ AL CONTRARIO — leggiBytesVoce: un id che non esiste torna null, mai un\'eccezione', async () => {
+  const cartella = cartellaVera();
+  try {
+    assert.equal(await leggiBytesVoce({ cartella, id: 'lib-mai-esistito' }), null);
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ leggiBytesVoce: la scheda c\'è e il file no — è uno stato ROTTO dichiarato, non un "non trovato"', async () => {
+  const cartella = cartellaVera();
+  try {
+    const id = await salvaVoce({ cartella, nome: 'x.md', mediaType: 'text/plain', testo: 'x' });
+    rmSync(join(cartella, CARTELLA_LIBRERIA, id, 'contenuto'));
+    await assert.rejects(() => leggiBytesVoce({ cartella, id }), (errore) => {
+      assert.ok(errore instanceof LibraryStoreError);
+      assert.equal(errore.code, 'LIBRARY_READ_FAILED');
+      return true;
+    });
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ leggiBytesVoce: oltre il tetto dello scarico si DICHIARA, mai si tronca in silenzio', async () => {
+  const cartella = cartellaVera();
+  try {
+    const id = await salvaVoce({ cartella, nome: 'enorme.bin', mediaType: 'application/octet-stream', testo: 'finto' });
+    await assert.rejects(
+      () => leggiBytesVoce({ cartella, id }, { statFn: async () => ({ size: 65 * 1024 * 1024 }) }),
+      (errore) => {
+        assert.equal(errore.code, 'LIBRARY_TOO_LARGE');
+        assert.match(errore.message, /65 MB/);
+        assert.match(errore.message, /tetto 64 MB/);
+        return true;
+      },
+    );
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐ idVoceLibreriaValido: passa ciò che salvaVoce genera davvero, respinge tutto il resto', async () => {
+  const cartella = cartellaVera();
+  try {
+    const id = await salvaVoce({ cartella, nome: 'vera.md', mediaType: 'text/plain', testo: 'x' });
+    assert.equal(idVoceLibreriaValido(id), true, 'un id vero, generato da salvaVoce, deve passare');
+    assert.match(id, /^lib-/);
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+  for (const cattivo of ['..', '.', '../..', 'lib/../..', 'lib\\..', '.nascosto', '', ' ', 'a/b', 'a'.repeat(129), null, undefined, 42]) {
+    assert.equal(idVoceLibreriaValido(cattivo), false, `doveva rifiutare ${JSON.stringify(cattivo)}`);
+  }
+});
+
+test('⭐ percorsoContenutoVoce: una mappa sola della cartella di Libreria, e null per un id che non è un nome', () => {
+  assert.equal(percorsoContenutoVoce('lib-1'), `${CARTELLA_LIBRERIA}/lib-1/contenuto`);
+  assert.equal(percorsoContenutoVoce('..'), null);
+  assert.equal(percorsoContenutoVoce('a/b'), null);
+});
+
+test('⛔⛔⛔ AL CONTRARIO — un id con "../" non legge, non rinomina e non cancella NIENTE fuori dalla Libreria', async () => {
+  const cartella = cartellaVera();
+  try {
+    // La trappola, armata apposta: senza la guardia sull'id, `join(cartella, '.harness-ui-library', '..')`
+    // è la cartella del PROGETTO, questo meta.json la fa passare per una voce vera, e `eliminaVoce`
+    // la cancella tutta con rm(recursive). Senza questo file il test passerebbe anche senza cura.
+    writeFileSync(join(cartella, 'meta.json'), JSON.stringify({ nome: 'esca.md' }), 'utf8');
+    writeFileSync(join(cartella, 'segreto.txt'), 'roba dell\'owner', 'utf8');
+    const idVero = await salvaVoce({ cartella, nome: 'vera.md', mediaType: 'text/plain', testo: 'contenuto vero' });
+
+    for (const cattivo of ['..', '../..', 'lib/../..', '']) {
+      assert.equal(await leggiVoce({ cartella, id: cattivo }), null, `leggiVoce ha seguito ${cattivo}`);
+      assert.equal(await leggiBytesVoce({ cartella, id: cattivo }), null, `leggiBytesVoce ha seguito ${cattivo}`);
+      assert.equal(await origineVoce({ cartella, id: cattivo }), null, `origineVoce ha seguito ${cattivo}`);
+      assert.equal(await rinominaVoce({ cartella, id: cattivo, nome: 'preso.md' }), null, `rinominaVoce ha seguito ${cattivo}`);
+      assert.equal(await eliminaVoce({ cartella, id: cattivo }), null, `eliminaVoce ha seguito ${cattivo}`);
+    }
+
+    // Niente è stato toccato: né i file del progetto, né la voce vera, né l'etichetta dell'esca.
+    assert.equal(readFileSync(join(cartella, 'segreto.txt'), 'utf8'), 'roba dell\'owner');
+    assert.deepEqual(JSON.parse(readFileSync(join(cartella, 'meta.json'), 'utf8')), { nome: 'esca.md' });
+    assert.deepEqual((await elencaVoci({ cartella })).map((v) => v.id), [idVero]);
+    assert.equal((await leggiVoce({ cartella, id: idVero })).testo, 'contenuto vero');
   } finally {
     rmSync(cartella, { recursive: true, force: true });
   }
