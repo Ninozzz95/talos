@@ -533,3 +533,22 @@ riavviando.
 ⛔ Questo è il punto del debito, ed è dimostrato invece che supposto: **con tre attori interrogati,
 una pista testuale esatta e nessuna risposta possibile, la domanda «chi ha avviato questa sessione»
 oggi non ha modo di ricevere risposta.** Non serve un'indagine migliore: serve il campo mancante.
+
+### D-11, chiusura dell'indagine — cinque piste, tutte esaurite
+
+Alle tre già chiuse se ne aggiungono due, trovate cercando la consegna esatta su tutto il disco:
+
+- **`mobile/tests/unit/harness/harnessUiRealSession.test.ts`** — il nome («real session») e le
+  chiamate a `http://localhost:4174/api/v1/sessions` lo rendevano il sospetto migliore, tanto più
+  che `avm-1b` lancia `npx vitest run` sul mobile. **Ma usa `fetchMock`**: gli URL del 4174 sono
+  valori attesi in asserzioni contro un finto, nessuna richiesta vera parte.
+- **`harness-ui/frontend/artifacts/confronto/*/esiti.json`** — contengono quella consegna perché la
+  campagna di confronto la usò; sono file di dati, e sono **del 5 settembre**, non toccati oggi.
+
+⇒ La consegna vive in sei posti (due documenti `.claude/`, quattro artefatti, la pipeline QA, un
+test con mock) e **nessuno di essi ha girato oggi**. L'indagine è esaurita: non c'è altro da
+guardare, perché ciò che servirebbe non è stato registrato da nessuno.
+
+**Questo chiude la domanda «chi è stato» come NON RISPONDIBILE, e conferma il debito.** Non è che
+l'indagine sia stata fatta male: è che il dato non esiste. Cinque piste, una corrispondenza testuale
+esatta, due attori interrogati, e zero modi di sapere quale processo abbia fatto quel `POST`.
