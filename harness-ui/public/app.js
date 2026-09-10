@@ -9167,6 +9167,7 @@ function animaSegnavia(svg, { window: finestra = globalThis, adesso = () => fine
       const f = (t2 - FASI_NODI[i] + 1) % 1;
       const acceso = f < 0.12 ? 0 : f < 0.22 ? (f - 0.12) / 0.1 : f < 0.82 ? 1 : Math.max(0, 1 - (f - 0.82) / 0.18);
       nodo4.setAttribute("fill-opacity", acceso.toFixed(3));
+      nodo4.setAttribute("r", (RAGGIO_SPENTO + (RAGGIO_ACCESO - RAGGIO_SPENTO) * acceso).toFixed(2));
     });
   };
   let frameVisti = 0;
@@ -9208,6 +9209,12 @@ function animaSegnavia(svg, { window: finestra = globalThis, adesso = () => fine
 }
 function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
+  let menoMovimento = false;
+  try {
+    menoMovimento = Boolean(opzioni.window?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+  } catch {
+    menoMovimento = false;
+  }
   const blocco = el22(documentObj, "div", "talos-stack talos-waiting");
   blocco.setAttribute("role", "status");
   blocco.setAttribute("aria-live", "polite");
@@ -9226,7 +9233,8 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
     linea.setAttribute("y1", "8");
     linea.setAttribute("x2", "92");
     linea.setAttribute("y2", "8");
-    if (classe === "talos-line-loader-sweep") {
+    if (classe === "talos-line-loader-sweep" && menoMovimento) linea.setAttribute("stroke-dashoffset", "0");
+    else if (classe === "talos-line-loader-sweep") {
       const moto = documentObj.createElementNS(SVG_NS, "animate");
       moto.setAttribute("attributeName", "stroke-dashoffset");
       moto.setAttribute("values", "88;-88");
@@ -9241,9 +9249,13 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
     nodo4.setAttribute("class", "talos-line-loader-node");
     nodo4.setAttribute("cx", String(cx));
     nodo4.setAttribute("cy", "8");
-    nodo4.setAttribute("r", "5");
+    nodo4.setAttribute("r", String(menoMovimento ? RAGGIO_ACCESO : RAGGIO_SPENTO));
     nodo4.setAttribute("fill", "currentColor");
-    nodo4.setAttribute("fill-opacity", "0");
+    nodo4.setAttribute("fill-opacity", menoMovimento ? "1" : "0");
+    if (menoMovimento) {
+      svg.append(nodo4);
+      continue;
+    }
     const acceso = documentObj.createElementNS(SVG_NS, "animate");
     acceso.setAttribute("attributeName", "fill-opacity");
     acceso.setAttribute("values", "0;0;1;1;0");
@@ -9252,18 +9264,19 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
     acceso.setAttribute("begin", `${[0, 0.36, 0.73][i]}s`);
     acceso.setAttribute("repeatCount", "indefinite");
     nodo4.append(acceso);
+    const cresciuto = documentObj.createElementNS(SVG_NS, "animate");
+    cresciuto.setAttribute("attributeName", "r");
+    cresciuto.setAttribute("values", `${RAGGIO_SPENTO};${RAGGIO_SPENTO};${RAGGIO_ACCESO};${RAGGIO_ACCESO};${RAGGIO_SPENTO}`);
+    cresciuto.setAttribute("keyTimes", "0;0.12;0.22;0.82;1");
+    cresciuto.setAttribute("dur", "1.6s");
+    cresciuto.setAttribute("begin", `${[0, 0.36, 0.73][i]}s`);
+    cresciuto.setAttribute("repeatCount", "indefinite");
+    nodo4.append(cresciuto);
     svg.append(nodo4);
   }
   let fermaMotore = () => {
   };
-  try {
-    if (opzioni.window?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
-      svg.querySelector(".talos-line-loader-sweep")?.setAttribute("stroke-dashoffset", "0");
-      for (const n of svg.querySelectorAll?.(".talos-line-loader-node") ?? []) n.setAttribute("fill-opacity", "1");
-      svg.pauseAnimations?.();
-    } else fermaMotore = animaSegnavia(svg, { window: opzioni.window ?? globalThis });
-  } catch {
-  }
+  if (!menoMovimento) fermaMotore = animaSegnavia(svg, { window: opzioni.window ?? globalThis });
   const label = el22(documentObj, "span", "talos-waiting__label run-activity-label", etichetta);
   const elapsed = el22(documentObj, "span", "talos-mono talos-muted run-activity-elapsed", "0s");
   elapsed.setAttribute("aria-hidden", "true");
@@ -9307,7 +9320,7 @@ function creaDiffInChat(gruppi, { percorso = "", apertoSeSotto = 40, document: d
   blocco.append(dettaglio);
   return blocco;
 }
-var SVG_NS, ALIAS_LINGUAGGIO, NOMI_LINGUAGGIO, PARTI_DEL_BLOCCO, copiaDiSerie, ICONA_ATTREZZO, ATTESA_VERIFICA_MS, INTERVALLO_CONFRONTO_MS, CICLO_MS, FASI_NODI;
+var SVG_NS, ALIAS_LINGUAGGIO, NOMI_LINGUAGGIO, PARTI_DEL_BLOCCO, copiaDiSerie, ICONA_ATTREZZO, ATTESA_VERIFICA_MS, INTERVALLO_CONFRONTO_MS, CICLO_MS, FASI_NODI, RAGGIO_SPENTO, RAGGIO_ACCESO;
 var init_conversazione = __esm({
   "src/components/conversazione.js"() {
     SVG_NS = "http://www.w3.org/2000/svg";
@@ -9391,6 +9404,8 @@ var init_conversazione = __esm({
     INTERVALLO_CONFRONTO_MS = 140;
     CICLO_MS = 1600;
     FASI_NODI = [0, 0.36 / 1.6, 0.73 / 1.6];
+    RAGGIO_SPENTO = 4;
+    RAGGIO_ACCESO = 7;
   }
 });
 
@@ -12261,7 +12276,22 @@ function aggiornaWorkspaceFooter(piede, dati = {}) {
 var NOMI_TEMA;
 var init_workspace_footer = __esm({
   "src/components/workspace-footer.js"() {
-    NOMI_TEMA = Object.freeze({ calm: "Calm", forge: "Forge", paper: "Paper", terminal: "Terminal" });
+    NOMI_TEMA = Object.freeze({
+      forge: "Forge",
+      paper: "Paper",
+      terminal: "Terminal",
+      aurora: "Aurora",
+      glacier: "Glacier",
+      ember: "Ember",
+      atlas: "Atlas",
+      noir: "Noir",
+      signal: "Signal",
+      violet: "Violet",
+      claudius: "Claudius",
+      basicus: "Basicus",
+      telemetry: "Telemetry",
+      calm: "Calm"
+    });
   }
 });
 
@@ -19385,6 +19415,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       function svuotaComposerDopoScelta() {
         composerInput.value = "";
+        aggiornaModalitaShell("");
         autoGrowTextarea();
         syncRunComposerState();
       }
@@ -22624,6 +22655,7 @@ ${testo3}` : testo3;
           case "ComandoUtenteIniziato": {
             const comando = typeof evento.comando === "string" ? evento.comando.trim() : "";
             if (!comando) break;
+            chiudiBatchTool();
             state.realSession.comandoDirettoDaAprire = true;
             state.realSession.giroComandoDiretto = true;
             appendComandoDiretto(comando, evento.contesto);
@@ -23264,6 +23296,7 @@ ${testo3}` : testo3;
             return false;
           }
           if (composerInput.value.trim() === pulito) composerInput.value = "";
+          aggiornaModalitaShell("");
           autoGrowTextarea();
           syncRunComposerState();
           toast("Reindirizzamento richiesto", "La correzione verrà applicata al prossimo punto sicuro.");
@@ -26174,6 +26207,7 @@ ${blocchi.join("\n\n")}` : testa;
         if (!submitPrompt(text, { mostra: scritto, allegati: [...allegatiComposer] })) return;
         svuotaAllegati();
         composerInput.value = "";
+        aggiornaModalitaShell("");
         autoGrowTextarea();
         syncRunComposerState();
       });

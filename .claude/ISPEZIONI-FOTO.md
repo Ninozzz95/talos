@@ -783,3 +783,19 @@ Misurato negli stessi istanti, quattro casi compreso il verso contrario:
 
 ⭐ E nella stessa foto si vede D-10B e D-10D funzionare dal vivo: sopra il composer c'è l'esito di un
 comando con «Riuscito · **in Linux (WSL), non su Windows** · 1 ms» e l'output vero sotto.
+
+## 10/09, notte — i comandi tornano a turni, e i fogli dei temi sono staccati
+
+**`2026-09-10-comandi-a-turni.png`** — guardata. Tre comandi `!echo` di fila danno **tre blocchi
+distinti** («1 comando eseguito» ciascuno, e nell'Indice dei giri due righe separate), non più una
+card sola da «7 comandi eseguiti» come nella foto che l'owner aveva mandato. Nella card: «Riuscito ·
+in Linux (WSL), non su Windows · 165 ms» e l'output `tre` sotto.
+Il composer è tornato normale: campo vuoto, nessun bordo rosso, nessun avviso — misurato insieme,
+perché nella foto dell'owner l'avviso della shell era rimasto acceso su un campo già svuotato.
+Il tema è quello di sempre: **niente verde**.
+
+⛔⛔ Il fondo VERDE che l'owner ha visto era mio, e per pochi minuti: avevo appena importato
+`temi.css` e `aspetto.css` dal worktree dell'agente, e uno dei due dipinge di suo senza che nessuno
+lo chieda. Staccati subito — `data-talos-theme` nel CSS servito è tornato a **0** — e il lavoro resta
+nel repo, non importato, finché la causa non è misurata. Un server rotto davanti a chi lo usa si
+ripara prima e si indaga dopo.

@@ -8930,6 +8930,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   function svuotaComposerDopoScelta() {
     composerInput.value = '';
+    aggiornaModalitaShell(''); // ⛔ il campo si svuota da codice: `input` non scatta, e il segnale resterebbe acceso sul vuoto
     autoGrowTextarea();
     syncRunComposerState();
   }
@@ -12997,6 +12998,24 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       case 'ComandoUtenteIniziato': {
         const comando = typeof evento.comando === 'string' ? evento.comando.trim() : '';
         if (!comando) break;
+        /*
+         * ⛔⛔⛔ 10/09, owner con la foto davanti: «i comandi non vengono formattati bene, vengono
+         *   accorpati allo stesso messaggio non a turni». Misurato nella sua schermata: sette
+         *   comandi scritti da lui (`ls`, `cd Games`, `cd games`, `ls`…) finivano in UNA sola card,
+         *   «7 comandi eseguiti · 7 attrezzi», con le sette bolle sopra e un blocco solo sotto.
+         *
+         *   È una conseguenza di D-10D, chiusa poche ore fa: da quando un comando non apre più un
+         *   giro del modello, non passa più da `RunStarted` — e il batch degli attrezzi, che si
+         *   chiude sul testo dell'assistente o a fine giro, non aveva più niente che lo chiudesse
+         *   fra un comando e il successivo. Così il secondo comando entrava nel blocco del primo.
+         *
+         * ⛔ Il raggruppamento resta giusto DOVE è nato: venti file toccati dall'agente in un giro
+         *   sono un blocco solo, e il riassunto è il contenuto. Ma due comandi scritti a mano sono
+         *   due gesti distinti, in due momenti distinti: accorparli cancella proprio la cosa che
+         *   chi legge cerca — quale output apparteneva a quale comando.
+         * ⇒ Ogni comando della persona chiude il blocco precedente e apre il suo.
+         */
+        chiudiBatchTool();
         state.realSession.comandoDirettoDaAprire = true;
         state.realSession.giroComandoDiretto = true;
         appendComandoDiretto(comando, evento.contesto);
@@ -14002,6 +14021,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         return false;
       }
       if (composerInput.value.trim() === pulito) composerInput.value = '';
+      aggiornaModalitaShell(''); // ⛔ il campo si svuota da codice: `input` non scatta, e il segnale resterebbe acceso sul vuoto
       autoGrowTextarea();
       syncRunComposerState();
       toast('Reindirizzamento richiesto', 'La correzione verrà applicata al prossimo punto sicuro.');
@@ -17842,6 +17862,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!submitPrompt(text, { mostra: scritto, allegati: [...allegatiComposer] })) return;
     svuotaAllegati();
     composerInput.value = '';
+    aggiornaModalitaShell(''); // ⛔ il campo si svuota da codice: `input` non scatta, e il segnale resterebbe acceso sul vuoto
     autoGrowTextarea();
     syncRunComposerState();
   });

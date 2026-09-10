@@ -5,3 +5,11 @@
 @import './diff-in-chat.css';
 @import './uscita-viva.css';
 @import './modalita-shell.css'; /* il composer dice quando sei in shell libera */ /* D-10B: l'uscita di un comando mentre esce */
+/*
+ * ⛔⛔⛔ 10/09, RIPRISTINO IMMEDIATO — `temi.css` e `aspetto.css` sono STACCATI.
+ *   Appena importati, l'owner ha visto il fondo dell'app diventare VERDE mentre lo guardava. I due
+ *   fogli restano nel repo, non importati, finche' la causa non e' misurata: un server rotto davanti
+ *   a chi lo usa si ripara prima e si indaga dopo.
+ *   Il lavoro che contengono e' vero e misurato (26 comandi di aspetto su 39 non muovevano un
+ *   pixel), quindi non si butta — si riaggancia quando smette di dipingere di suo.
+ */

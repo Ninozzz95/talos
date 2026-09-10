@@ -29,7 +29,21 @@
  */
 
 /** I preset del tema, con il nome come lo scrive il mockup. */
-export const NOMI_TEMA = Object.freeze({ calm: 'Calm', forge: 'Forge', paper: 'Paper', terminal: 'Terminal' });
+/*
+ * ⛔ 10/09 — TROVATO GUARDANDO UNA FOTO, non cercandolo: con il tema **Violet** applicato (palette
+ *   viola a schermo, `data-talos-theme="violet"` sulla radice) il piede della barra diceva
+ *   «Tema Calm». Questa mappa ne conosceva **quattro** su quattordici, e il ripiego `|| NOMI_TEMA.calm`
+ *   trasformava ogni tema mancante in una BUGIA invece che in un buco visibile: Aurora, Glacier,
+ *   Ember, Atlas, Noir, Signal, Violet, Claudius, Basicus e Telemetry si presentavano tutti come Calm.
+ * ⛔ La sorgente dei quattordici è `TALOS_THEME_IDS` in `legacy/app.js`: se un giorno ne nasce un
+ *   quindicesimo, va aggiunto anche qui — il ripiego resta apposta (un nome mancante non deve far
+ *   sparire il piede), ma ora copre solo l'ignoto vero.
+ */
+export const NOMI_TEMA = Object.freeze({
+  forge: 'Forge', paper: 'Paper', terminal: 'Terminal', aurora: 'Aurora', glacier: 'Glacier',
+  ember: 'Ember', atlas: 'Atlas', noir: 'Noir', signal: 'Signal', violet: 'Violet',
+  claudius: 'Claudius', basicus: 'Basicus', telemetry: 'Telemetry', calm: 'Calm',
+});
 
 /** Il nome della cartella da un percorso assoluto (Windows o POSIX), oppure null. */
 export function nomeDaPercorso(percorso) {
