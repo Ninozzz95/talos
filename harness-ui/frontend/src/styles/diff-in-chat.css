@@ -1,0 +1,46 @@
+/*
+ * PO-11 — il diff del file modificato, dentro la chat.
+ *
+ * ⛔ Nessun colore, nessun font, nessun raggio NUOVO: il linguaggio del diff esiste già
+ *   (`.talos-diff`, `--talos-success`/`--talos-danger` coi loro `-soft`, monospazio 12px) ed è quello
+ *   della carta di approvazione e della Review. Qui si aggiunge solo ciò che mancava: la STRUTTURA —
+ *   i pezzi, la loro intestazione, e il modo di aprirli.
+ * ⛔ Sta in un foglio suo perché `index.css` è GENERATO dal mockup (`mockup-to-template.mjs`), che è
+ *   la fonte del disegno e cambia solo per mano dell'owner. Stesso precedente di `immagini-chat.css`.
+ */
+
+/* Il blocco intero, sotto la riga «Modificato <file> +18 −2». */
+.talos-diff-chat{margin:6px 0 2px;border:1px solid var(--talos-border);border-radius:10px;overflow:hidden;background:var(--talos-window-bg)}
+
+/*
+ * L'intestazione di un pezzo dice DOVE si sta guardando, a parole.
+ * ⛔ Non `@@ -2245,7 +2245,9 @@`: quella è la sintassi di git, e i nomi tecnici non vanno a schermo.
+ *   Chi legge la chat vuole sapere a quale riga del file si trova, non in quale formato.
+ */
+.talos-diff-chat__pezzo{display:flex;align-items:baseline;gap:8px;padding:5px 12px;border-top:1px solid var(--talos-border);background:var(--talos-panel);color:var(--talos-muted);font-size:11px;line-height:1.5}
+.talos-diff-chat__pezzo:first-child{border-top:0}
+.talos-diff-chat__righe{font-family:var(--talos-font-mono)}
+
+/* Le righe riusano `.talos-diff` tale e quale: stesso fondo, stessi colori, stesso scorrimento. */
+.talos-diff-chat .talos-diff{padding:4px 0}
+
+/*
+ * Il numero di riga vive nella riga stessa, in una colonna che non si seleziona: copiando il diff si
+ * porta via il codice, non i numeri. `user-select:none` è la sola ragione per cui è uno <span> a sé.
+ */
+.talos-diff-chat__num{display:inline-block;width:4ch;margin-right:10px;color:var(--talos-muted);text-align:right;user-select:none;opacity:.75}
+.talos-diff-chat__segno{display:inline-block;width:1ch;margin-right:8px;user-select:none}
+
+/* Ciò che resta fuori si dichiara: mai un taglio silenzioso. */
+.talos-diff-chat__resto{padding:6px 12px;border-top:1px solid var(--talos-border);color:var(--talos-muted);font-size:11px}
+
+/*
+ * Aperto/chiuso. `details` nativo: la tastiera lo apre da sola, e lo stato resta se la conversazione
+ * si ridisegna. Il triangolo predefinito è sostituito da un segno nostro, allineato al testo.
+ */
+.talos-diff-chat details>summary{list-style:none;cursor:pointer;padding:5px 12px;color:var(--talos-muted);font-size:11px}
+.talos-diff-chat details>summary::-webkit-details-marker{display:none}
+.talos-diff-chat details>summary:focus-visible{outline:2px solid var(--talos-accent);outline-offset:-2px}
+.talos-diff-chat details>summary::before{content:'›';display:inline-block;width:1em;margin-right:4px;transition:transform .12s ease}
+.talos-diff-chat details[open]>summary::before{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){.talos-diff-chat details>summary::before{transition:none}}

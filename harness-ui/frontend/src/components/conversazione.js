@@ -830,3 +830,76 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
   blocco.append(riga);
   return { blocco, label, elapsed };
 }
+
+/* ------------------------------------------------------- PO-11: il diff in chat */
+
+/**
+ * ⭐⭐⭐ PO-11 — il diff del file modificato, sotto la riga della scrittura.
+ *
+ * Owner, 09/09: «quando un file viene modificato non c'è il diff direttamente nella chat: bisogna
+ * farlo come Claude e il resto dei competitor». Prima, aprendo quella riga, si leggeva il testo
+ * grezzo dell'argomento dell'attrezzo — `percorso: … / contenuto: … / Esito: written: …`.
+ *
+ * ⛔ Il calcolo NON è qui e non è nuovo: `calcolaDiffRighe` (LCS) esiste da prima e alimenta la
+ *   Review; `raggruppaInHunk` (10/09) lo taglia nei pezzi che si leggono. Questa funzione fa solo la
+ *   resa, e riusa `.talos-diff` così com'è — stesso fondo, stessi colori, stesso scorrimento della
+ *   carta di approvazione. Nessun colore nuovo per una funzione nuova.
+ *
+ * @param {ReturnType<import('./diff-hunk.js').raggruppaInHunk>} gruppi
+ * @param {{percorso?: string, apertoSeSotto?: number, document?: Document}} [opzioni]
+ */
+export function creaDiffInChat(gruppi, { percorso = '', apertoSeSotto = 40, document: doc } = {}) {
+  const documentObj = doc || globalThis.document;
+  if (!gruppi || !Array.isArray(gruppi.pezzi) || gruppi.pezzi.length === 0) return null;
+
+  const blocco = el(documentObj, 'div', 'talos-diff-chat');
+  blocco.setAttribute('data-c', 'DiffInChat');
+
+  const righeTotali = gruppi.pezzi.reduce((n, p) => n + p.righe.length, 0);
+  /*
+   * ⛔ Aperto o chiuso lo decide la LUNGHEZZA, non un default: un diff di tre righe chiuso costringe
+   *   a un clic per niente, uno di trecento aperto sommerge la conversazione. La soglia è dichiarata
+   *   e passabile, non nascosta in un `if`.
+   */
+  const dettaglio = el(documentObj, 'details', '');
+  if (righeTotali <= apertoSeSotto) dettaglio.open = true;
+
+  const riassunto = el(documentObj, 'summary', '');
+  const quanti = gruppi.pezzi.length;
+  riassunto.textContent = quanti === 1
+    ? `Differenza${percorso ? ` in ${percorso}` : ''} · ${righeTotali} righe`
+    : `Differenza${percorso ? ` in ${percorso}` : ''} · ${quanti} punti del file, ${righeTotali} righe`;
+  dettaglio.append(riassunto);
+
+  for (const pezzo of gruppi.pezzi) {
+    const testa = el(documentObj, 'div', 'talos-diff-chat__pezzo');
+    /* A parole: chi legge vuole sapere a quale riga del file si trova. */
+    const dove = pezzo.daRiga === null
+      ? 'righe tolte'
+      : (pezzo.daRiga === pezzo.aRiga ? `riga ${pezzo.daRiga}` : `righe ${pezzo.daRiga}-${pezzo.aRiga}`);
+    testa.append(el(documentObj, 'span', 'talos-diff-chat__righe', dove));
+    dettaglio.append(testa);
+
+    const corpo = el(documentObj, 'div', 'talos-diff');
+    corpo.setAttribute('data-c', 'DiffView');
+    for (const r of pezzo.righe) {
+      const riga = el(documentObj, 'div', `talos-diff__line talos-diff__line--${r.tipo}`);
+      /* Il numero e il segno non si selezionano: copiando il diff si porta via il codice, non le colonne. */
+      riga.append(el(documentObj, 'span', 'talos-diff-chat__num', r.numero === null ? '' : String(r.numero)));
+      riga.append(el(documentObj, 'span', 'talos-diff-chat__segno', r.tipo === 'add' ? '+' : r.tipo === 'del' ? '−' : ' '));
+      riga.append(documentObj.createTextNode(r.testo));
+      corpo.append(riga);
+    }
+    dettaglio.append(corpo);
+  }
+
+  /* ⛔ Il taglio si dichiara coi numeri: un taglio silenzioso fa credere che il file sia cambiato meno. */
+  if (gruppi.tagliato) {
+    const resto = el(documentObj, 'div', 'talos-diff-chat__resto');
+    resto.textContent = `Altri ${gruppi.pezziNascosti} punti del file non sono mostrati qui (${gruppi.righeNascoste} righe). Il totale +${gruppi.aggiunte} −${gruppi.rimozioni} li conta tutti.`;
+    dettaglio.append(resto);
+  }
+
+  blocco.append(dettaglio);
+  return blocco;
+}

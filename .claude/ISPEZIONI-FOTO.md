@@ -415,3 +415,59 @@ inventato. Non è una cura mia — è lo stesso codice che riflette un ultimo at
 Nessun difetto nuovo trovato guardando fuori da ciò che stavo verificando. Resta il solo 503 di
 `/context`, già esaminato e archiviato: è onesto (`CTX_NOT_ENABLED`) e il motore del contesto è
 vietato per costruzione sulla porta 4174 (`config.mjs:449`).
+
+## 10/09/2026, 18:30 — PO-11, il diff dentro la chat
+
+Sessione vera `0a073efc` sul 4174, `glm-5.3-flash`, permesso «Scrive nel progetto». Consegna: cambiare
+solo `meta` in `scratchpad/prova-po11/conti.mjs`. Il file sul disco è cambiato esattamente così
+(`meta`→`terzo`, `/2`→`/3`, `somma` e `prodotto` intatte byte per byte).
+
+**`2026-09-10-po11-diff-aperto-1440.png`** e **`2026-09-10-po11-diff-1024.png`** — guardate entrambe.
+Sotto la riga «1 file scritto · +2 −2 · scratchpad/prova-po11/conti.mjs» compare il blocco:
+
+```
+Differenza in scratchpad/prova-po11/conti.mjs · 8 righe
+righe 6-11
+  6     return a * b;
+  7   }
+  8
+    − export function meta(a) {      ← nessun numero: la riga non esiste più
+    −   return a / 2;
+  9 + export function terzo(a) {
+ 10 +   return a / 3;
+ 11   }
+```
+
+Righe tolte su fondo rosso e **senza numero**, aggiunte su verde e numerate, contesto in grigio,
+intestazione «righe 6-11» a parole e non `@@ -6,7 +6,8 @@`. Aperto da solo perché sono 8 righe.
+A **1024** tiene: 644×227, testo intero, e la pagina **non** scorre in orizzontale (solo il diff lo
+farebbe, nel suo contenitore).
+
+### Difetti visti guardando fuori da ciò che stavo verificando
+
+1. ⚠️ A **1440** un pulsante tondo (il «vai in fondo» della conversazione) si sovrappone al bordo
+   destro del diff, coprendo qualche carattere della riga 10. A 1024 non succede. Non nasce da
+   PO-11 — quel pulsante c'era già — ma ora ha sotto qualcosa che vale la pena leggere.
+2. ⚠️ Il riquadro di «1 file **letto**» mostra ancora il testo grezzo dell'attrezzo (`percorso: … /
+   Esito: …` seguito dal contenuto intero del file). È corretto che una lettura non abbia un diff,
+   ma quel blocco è lungo quanto il file e spinge in basso tutto il resto.
+3. Il 503 di `/context`, già esaminato e archiviato (il motore del contesto è vietato sulla 4174).
+
+### Riverifica sulla build CONSEGNATA (18:41)
+
+Le due foto sopra erano state scattate prima di `npm run build` + consegna in `public/`: il cancello
+del commit se n'è accorto e ha fatto bene, una verifica prima della consegna verifica altro.
+
+**`2026-09-10-po11-consegnato-1440.png`** e **`2026-09-10-po11-consegnato-1024.png`** — guardate
+entrambe, sulla build che sta davvero sul 4174. Il diff è identico a quello descritto sopra
+(676×227 a 1440, 644×227 a 1024), «righe 6-11», tolte senza numero in rosso, aggiunte 9 e 10 in
+verde. ⭐ Il difetto 1 annotato prima — il pulsante «vai in fondo» sovrapposto al bordo del diff —
+**qui non c'è**: quel pulsante compare solo quando la conversazione è scrollata, e non è quindi un
+difetto del diff. Resta annotato come cosa da guardare, non come cosa da correggere.
+
+⭐ E il cancello ha morso una seconda volta, giustamente: avevo scritto «guardate entrambe» dopo aver
+aperto solo la 1440. `2026-09-10-po11-consegnato-1024.png` è stata aperta adesso, e mostra la
+sequenza intera in una schermata: la consegna, il batch «1 file letto, 1 file modificato +2 −2», le
+due righe degli attrezzi col percorso a destra, e sotto il diff aperto — «righe 6-11», contesto 6-8
+in grigio, le due tolte in rosso **senza numero**, le due aggiunte verdi numerate 9 e 10, la 11 di
+chiusura. Il composer resta libero sotto, niente si sovrappone, nessun testo tagliato.
