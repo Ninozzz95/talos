@@ -916,7 +916,20 @@ export async function avviaSessione({
 
     const testuale = TALOS_SOURCE_TEXT_FORMATS.includes(documento.format) || ['md', 'csv', 'html'].includes(documento.format);
     const valore = testuale ? new TextDecoder('utf-8').decode(documento.bytes) : `[binary ${documento.format} file, ${documento.bytes.byteLength} bytes]`;
-    onEvento(eventoPerScrittura({ percorso: salvato.percorso, contenuto: valore, esisteva: false }));
+    /*
+     * ⛔ PO-05 — `[binary docx file, 7714 bytes]` è una riga onesta e inservibile: dice che il file
+     *   esiste e non dà modo di averlo. L'allegato viaggia accanto al valore (mai al posto suo: chi
+     *   legge la chat come testo continua a vedere la stessa riga di prima) e porta il minimo per
+     *   costruire il collegamento — nome, formato, byte. I BYTE no: quelli stanno dietro la rotta.
+     * ⛔ Vale per TUTTI i formati, non solo i binari: anche un `.md` generato si scarica con un clic,
+     *   ed è la differenza fra «te lo mostro» e «te lo do».
+     */
+    onEvento(eventoPerScrittura({
+      percorso: salvato.percorso,
+      contenuto: valore,
+      esisteva: false,
+      allegato: { nome: documento.fileName, formato: documento.format, byte: documento.bytes.byteLength },
+    }));
 
     /*
      * La copia durevole in Libreria, come per gli artefatti HTML. ⛔ Non blocca e non fa fallire il

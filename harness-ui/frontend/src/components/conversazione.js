@@ -198,6 +198,81 @@ export function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   return gruppo;
 }
 
+/* ------------------------------------------------------------ FileScaricabile */
+
+/*
+ * ⛔⛔ PO-05, owner: «ogni file generato deve avere un collegamento diretto per scaricarlo con un
+ * clic; nome, formato, dimensione e disponibilità REALI. Un link o una scheda SENZA FILE non soddisfa
+ * il requisito.»
+ *
+ * Prima di oggi, dopo che il modello generava un documento, in chat si leggeva
+ * `[binary docx file, 7714 bytes]`: vero, e inservibile — il file era nel workspace e per averlo
+ * bisognava andarselo a prendere. Qui la riga diventa una scheda con il nome vero, il formato, la
+ * dimensione, e un collegamento che scarica i byte veri dalla rotta `/sessions/:id/file`.
+ *
+ * ⛔ I numeri non si inventano: `byte` è la dimensione MISURATA dal server sul file scritto, non una
+ *   stima e non la lunghezza del testo che si vede in chat. Se manca, la riga non la scrive.
+ * ⛔ La scheda è un `<a download>`: è il browser a scaricare, non noi a ricostruire il file in
+ *   pagina. Così vale anche per un `.docx` da 50 MB, che in memoria non ci starebbe.
+ */
+
+/** «7.714 byte» diventa «7,5 KB». Puro: nessuna unità inventata, e 0 resta 0. */
+export function dimensioneLeggibile(byte) {
+  /* ⛔ `Number(null)` è 0, e 0 è una dimensione LEGITTIMA (un file vuoto esiste): senza questo
+     controllo un dato ASSENTE si sarebbe letto «0 byte», cioè un numero inventato. Zero si dice solo
+     quando il server ha misurato zero. */
+  if (typeof byte !== 'number') return '';
+  const n = byte;
+  if (!Number.isFinite(n) || n < 0) return '';
+  if (n < 1024) return `${n} byte`;
+  const unita = ['KB', 'MB', 'GB'];
+  let valore = n / 1024;
+  let i = 0;
+  while (valore >= 1024 && i < unita.length - 1) { valore /= 1024; i += 1; }
+  return `${valore.toFixed(valore < 10 ? 1 : 0).replace('.', ',')} ${unita[i]}`;
+}
+
+/** L'indirizzo da cui si scaricano i byte veri. Vuoto se manca ciò che serve: mai un link rotto. */
+export function indirizzoScarico({ sessionId, percorso } = {}) {
+  if (!sessionId || !percorso) return '';
+  return `/api/v1/sessions/${encodeURIComponent(sessionId)}/file?percorso=${encodeURIComponent(percorso)}`;
+}
+
+/**
+ * La scheda di un file pronto da scaricare.
+ * `allegato` = { nome, formato, byte } (dal server), `percorso` = dove sta nel workspace.
+ */
+export function creaFileScaricabile({ allegato, percorso, sessionId } = {}, opzioni = {}) {
+  const d = opzioni.document || globalThis.document;
+  const nome = String(allegato?.nome || percorso || '').split(/[\\/]/).pop() || 'file';
+  const formato = String(allegato?.formato || nome.split('.').pop() || '').toUpperCase();
+  const indirizzo = opzioni.indirizzo ?? indirizzoScarico({ sessionId, percorso });
+
+  const scheda = el(d, 'div', 'talos-file-scaricabile');
+  scheda.dataset.c = 'FileScaricabile';
+  const testo = el(d, 'div', 'talos-file-scaricabile__testo');
+  testo.append(el(d, 'span', 'talos-file-scaricabile__nome', nome));
+  /* ⛔ Formato e dimensione stanno su una riga sola e spenta: sono il contorno, il nome è la cosa. */
+  const misura = [formato, dimensioneLeggibile(allegato?.byte)].filter(Boolean).join(' · ');
+  if (misura) testo.append(el(d, 'span', 'talos-file-scaricabile__misura', misura));
+  scheda.append(testo);
+
+  if (indirizzo) {
+    const link = el(d, 'a', 'talos-file-scaricabile__scarica', 'Scarica');
+    link.href = indirizzo;
+    link.setAttribute('download', nome); // il nome resta quello vero anche se l'indirizzo non lo dice
+    /* ⛔ Il nome sta già accanto: senza questo, uno screen reader annuncerebbe solo «Scarica», e in
+       una chat con tre allegati i tre collegamenti sarebbero indistinguibili. */
+    link.setAttribute('aria-label', `Scarica ${nome}`);
+    scheda.append(link);
+  } else {
+    /* ⛔ Nessun indirizzo = nessun bottone che finge. «Un link o una scheda senza file non soddisfa
+       il requisito»: allora si dice che non è disponibile, invece di offrire un clic che fallisce. */
+    scheda.append(el(d, 'span', 'talos-file-scaricabile__assente', 'Non disponibile da qui'));
+  }
+  return scheda;
+}
+
 /* --------------------------------------------------------------- CodeBlock */
 
 /*

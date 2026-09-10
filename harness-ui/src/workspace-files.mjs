@@ -73,6 +73,69 @@ export async function leggiContenutoFile({ cartella, percorso }, deps = {}) {
   return { contenuto, dimensione: stat.size };
 }
 
+/*
+ * ⛔⛔ PO-05, owner: «ogni file generato deve avere un collegamento diretto per scaricarlo con un
+ * clic; nome, formato, dimensione e disponibilità REALI». Fino a oggi un documento generato finiva nel
+ * workspace e in Libreria, e in chat arrivava la riga `[binary docx file, 7714 bytes]`: vera, ma non
+ * cliccabile. Questa è la metà del server.
+ *
+ * ⛔ Perché non basta `leggiContenutoFile`, che è qui sopra: quella legge in **utf8** — un `.docx` è
+ *   uno zip, e passarlo da `readFile(…, 'utf8')` lo corrompe irreparabilmente (ogni byte non valido
+ *   diventa U+FFFD e non torna più indietro) — e ha il tetto dell'ANTEPRIMA (512 KB), che per un
+ *   allegato è la misura sbagliata. Qui i byte restano byte.
+ * ⛔ La difesa NON si riscrive: è la stessa `risolviPercorsoEsistente` delle sorelle (canonicalizza
+ *   con `realpath` e confina dentro la cartella della sessione, quindi né `..` né un collegamento
+ *   simbolico portano fuori). Una difesa copiata è una difesa che un giorno diverge.
+ *
+ * Ricerca 09-10/09/2026, prima di scrivere:
+ *  · IETF RFC 6266 (`Use of the Content-Disposition Header Field in HTTP`): «attachment» dice al
+ *    destinatario di proporre il salvataggio; il parametro `filename*` estende `filename` alle
+ *    codifiche oltre l'ASCII e, quando ci sono entrambi, **`filename*` ha la precedenza** ⇒ si
+ *    mandano TUTTI E DUE: `filename` come ripiego ASCII e `filename*` in UTF-8. UTF-8 è la codifica
+ *    raccomandata perché almeno un'implementazione diffusa non ne conosce altre.
+ *  · MDN, `Content-Disposition` (letto 10/09/2026): stessa regola, e l'avvertenza che un agente che
+ *    non conosce RFC 5987 mostrerebbe la sequenza percent-encoded — da cui il doppio parametro.
+ * ⛔ Il nome che finisce nell'intestazione è il **nome del file sul disco**, non un testo scelto da
+ *   chi chiama: niente a capo né virgolette che possano spezzare l'intestazione (una risposta HTTP
+ *   con un'intestazione spezzata è una vulnerabilità, non un nome brutto).
+ */
+const DIMENSIONE_MASSIMA_SCARICO = 64 * 1024 * 1024;
+
+/** Il nome, ridotto a ciò che può stare in un'intestazione HTTP senza spezzarla. Puro. */
+export function nomeSicuroPerIntestazione(nome) {
+  const pulito = String(nome ?? '').replace(/[\r\n\0]/g, '').trim();
+  return pulito.length > 0 ? pulito : 'file';
+}
+
+/**
+ * Le due forme del nome per `Content-Disposition`, secondo RFC 6266: `ascii` è il ripiego (i
+ * caratteri fuori ASCII diventano `_`, le virgolette e la barra rovescia spariscono), `utf8` è il
+ * valore percent-encoded per `filename*`. Puro, così si prova senza un server.
+ */
+export function nomiPerContentDisposition(nome) {
+  const sicuro = nomeSicuroPerIntestazione(nome);
+  const ascii = sicuro.replace(/["\\]/g, '').replace(/[^\x20-\x7E]/g, '_');
+  return { ascii: ascii.trim() || 'file', utf8: encodeURIComponent(sicuro) };
+}
+
+/**
+ * Un file del workspace, in BYTE, per essere scaricato. Stessa difesa delle sorelle.
+ * @returns {Promise<{bytes:Buffer, dimensione:number, nome:string}>}
+ */
+export async function leggiFilePerScarico({ cartella, percorso }, deps = {}) {
+  const { reale } = risolviPercorsoEsistente(cartella, percorso, deps);
+  const stat = await (deps.statFn ?? fsp.stat)(reale);
+  if (!stat.isFile()) throw new WorkspaceFileError('Non è un file: una cartella non si scarica');
+  if (stat.size > DIMENSIONE_MASSIMA_SCARICO) {
+    throw new WorkspaceFileError(
+      `File troppo grande da scaricare (${Math.round(stat.size / 1024 / 1024)} MB, tetto ${DIMENSIONE_MASSIMA_SCARICO / 1024 / 1024} MB)`,
+      'FILE_TOO_LARGE',
+    );
+  }
+  const bytes = await (deps.readFileFn ?? fsp.readFile)(reale);
+  return { bytes, dimensione: stat.size, nome: reale.split(/[\\/]/).pop() };
+}
+
 /**
  * "Rinomina" — `nuovoNome` è un NOME, non un percorso: niente `/`, `\`,
  * `..` — sposta il file nella STESSA cartella, non altrove (rinominare

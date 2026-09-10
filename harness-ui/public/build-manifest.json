@@ -8,8 +8,8 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 1255450,
-      "sha256": "2f7b34748c9bb9eeb152b67a05706b1330f8b8b6f532c61d7013d583a4ec73f0"
+      "bytes": 1257769,
+      "sha256": "32250d43285bb1fda770ea95457d06a561d68ba5672c8626c15fe71e2fe4508d"
     },
     {
       "path": "asset-manifest.json",
@@ -73,8 +73,8 @@
     },
     {
       "path": "styles.css",
-      "bytes": 228438,
-      "sha256": "f457af39297d73eee695fcfb7cec0cea936321a40a4d8a601b5deb8371dd8dc6"
+      "bytes": 229744,
+      "sha256": "9ba21d744f7d5ca92b91665ba18d3809fc9050149b2ace29d0172f4532155150"
     },
     {
       "path": "talos/brand/logo-short.svg",

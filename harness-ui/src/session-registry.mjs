@@ -45,6 +45,7 @@ import {
   creaVoceWorkspace as creaVoceWorkspaceReale,
   eliminaFile as eliminaFileReale,
   leggiContenutoFile as leggiContenutoFileReale,
+  leggiFilePerScarico as leggiFilePerScaricoReale,
   rinominaFile as rinominaFileReale,
   rivelaInEsploraFile as rivelaInEsploraFileReale,
   spostaFile as spostaFileReale,
@@ -1059,6 +1060,7 @@ export function createSessionRegistry({
   eseguiComandoDirettoFn = eseguiComandoDirettoReale,
   leggiAlberoWorkspaceFn = leggiAlberoWorkspaceReale,
   leggiContenutoFileFn = leggiContenutoFileReale,
+  leggiFilePerScaricoFn = leggiFilePerScaricoReale,
   rinominaFileFn = rinominaFileReale,
   eliminaFileFn = eliminaFileReale,
   rivelaInEsploraFileFn = rivelaInEsploraFileReale,
@@ -3912,6 +3914,22 @@ export function createSessionRegistry({
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       try {
         return { ok: true, ...(await leggiContenutoFileFn({ cartella: voce.cartella, percorso })) };
+      } catch (errore) {
+        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
+    /*
+     * ⛔ PO-05 — il file per essere SCARICATO: byte, non testo. Sorella di `apriFile`, con la stessa
+     *   forma di errore; la difesa sul percorso vive dove vive per le altre (`workspace-files.mjs`),
+     *   e qui non si aggiunge nessun controllo nuovo che un domani possa divergere dal suo.
+     */
+    async scaricaFile(sessionId, percorso) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        return { ok: true, ...(await leggiFilePerScaricoFn({ cartella: voce.cartella, percorso })) };
       } catch (errore) {
         if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
         throw errore;
