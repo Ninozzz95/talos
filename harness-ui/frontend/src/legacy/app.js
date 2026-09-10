@@ -9136,6 +9136,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       summaryText,
       diffBadge,
       testa: attivita.testa,
+      card: article, // ⭐ serve a chiudiBatchTool per togliere il bordo quando la testa sparisce
       attrezzi: 0,
       // ⛔ 10/09: `ricercheWeb` e `pagine` vanno dichiarate QUI. Le categorie nuove senza una
       //   chiave iniziale davano `undefined - 1` = NaN, e un NaN in un contatore non si vede a
@@ -9178,6 +9179,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (batch && batch.attrezzi === 1 && batch.testa && batch.contenitore) {
       batch.testa.setAttribute('aria-expanded', 'true');
       batch.contenitore.hidden = false;
+      /*
+       * ⛔ Owner, seconda volta: «il collapse esiste ancora su un tool». Aprirlo non bastava —
+       *   restava la TESTA con la freccia e il riassunto «1 ricerca sul web» sopra la riga
+       *   «Ricerca web: …», cioè la stessa cosa detta due volte, con un comando per richiuderla.
+       *   Per una chiamata sola la testa non ha niente da riassumere: sparisce, e resta la riga.
+       * ⛔ `hidden` e non `remove()`: se un secondo attrezzo arrivasse nello stesso batch (non
+       *   succede oggi, il batch è già chiuso qui) la testa tornerebbe da sé invece di essere persa.
+       */
+      batch.testa.hidden = true;
+      batch.card?.classList?.add?.('talos-activity--nuda');
     }
     if (batch) state.realSession.ultimoBatchChiuso = batch;
     state.realSession.batchAttivo = null;

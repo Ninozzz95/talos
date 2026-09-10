@@ -11,6 +11,7 @@ import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
 import { getDiagnosticProblem, toPublicProblem } from './public-problem.mjs';
 import { createSseSession } from './http-lifecycle.mjs';
+import { iconaDelDominio } from './favicon-proxy.mjs'; // 10/09: le favicon delle fonti, prese dal server e mai dal browser
 import { creaRegistroAttese, ritornoDaHost, scambiaCodicePerChiave } from './openrouter-oauth.mjs'; // PO-01 10/9: i conti dell'accesso a OpenRouter, puri e provabili senza rete
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
@@ -718,6 +719,8 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/chat-images', metodi: ['POST'] },
   { schema: /^\/api\/v1\/chat-images\/[a-f0-9]{64}$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/providers\/(openai|anthropic|gemini)\/models$/, metodi: ['GET'] },
+  // ⭐ 10/09: le favicon delle fonti, servite dal server perché il browser non bussi ai siti citati.
+  { schema: '/api/v1/favicon', metodi: ['GET'] },
   { schema: '/api/v1/health', metodi: ['GET'] },
   { schema: '/api/v1/tasks', metodi: ['GET'] },
   { schema: '/api/v1/projects', metodi: ['GET'] },
@@ -1461,6 +1464,12 @@ export function createHttpApp({
   // ⭐ 04/9, W1-10 — token di loopback (config.token): quando c'è, /api/* vuole il cookie talos_token; `GET /?token=<t>` lo imposta e rimanda a `/`.
   token = null,
   workspaceLaunchStore = null,
+  /*
+   * ⭐ 10/09 — dove tenere le favicon delle fonti prese una volta sola. `null` = funzione spenta,
+   *   e la rotta risponde 204: il frontend mostra le lettere, come faceva il mobile prima di avere
+   *   il suo archivio. Nessun comportamento nuovo per chi non la configura.
+   */
+  cartellaFavicon = null,
   chatImageStore = null,
   workspaceBrowser = null,
   /*
@@ -3482,6 +3491,36 @@ export function createHttpApp({
 
     try {
       let data;
+      /*
+       * ⭐⭐⭐ 10/09 — LE FAVICON DELLE FONTI. Owner: «i favicon dei siti delle fonti non ci sono
+       *   (il mobile l'ha già fatto)». Il mobile le legge da card salvate su disco e VIETA di
+       *   scaricarle a schermo — «a request to every site every time the surface is opened».
+       * ⇒ Qui il browser chiede l'icona SOLO a noi; il server la prende una volta e la tiene. Nessuna
+       *   pagina della conversazione bussa mai a un sito citato. È l'architettura di SearXNG,
+       *   verificata prima di scriverla (docs.searxng.org «Favicons», letto il 10/09/2026).
+       * ⛔ Fuori dall'involucro JSON: qui viaggiano i byte di un'immagine, non un `data`.
+       */
+      if (url.pathname === '/api/v1/favicon') {
+        const icona = cartellaFavicon
+          ? await iconaDelDominio(url.searchParams.get('dominio') ?? '', { cartellaCache: cartellaFavicon })
+          : null;
+        if (!icona) {
+          /* ⛔ 204 e non 404: «questo sito non ha un'icona» non è un errore ma una risposta, e il
+             frontend deve poterla distinguere per mostrare la lettera senza rumore in console. */
+          res.writeHead(204, { 'Cache-Control': 'public, max-age=86400' });
+          res.end();
+          return;
+        }
+        res.writeHead(200, {
+          'Content-Type': icona.tipo,
+          'Content-Length': icona.byte.length,
+          'Cache-Control': 'public, max-age=604800',
+          'X-Content-Type-Options': 'nosniff',
+          'Referrer-Policy': 'no-referrer',
+        });
+        res.end(method === 'HEAD' ? undefined : icona.byte);
+        return;
+      }
       if (url.pathname === '/api/v1/health') {
         requireNoQuery(url);
         data = { status: 'ok' };
