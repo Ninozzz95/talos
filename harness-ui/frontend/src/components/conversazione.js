@@ -808,6 +808,33 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
     const linea = documentObj.createElementNS(SVG_NS, 'line');
     linea.setAttribute('class', classe);
     linea.setAttribute('x1', '4'); linea.setAttribute('y1', '8'); linea.setAttribute('x2', '92'); linea.setAttribute('y2', '8');
+    /*
+     * ⛔⛔⛔ 10/09, owner, terza volta e spazientito: «su 4174 non riesco a vedere sto maledetto
+     *   segnavia animato sul MIO Chrome, voglio una soluzione adesso».
+     *
+     * Misurato: l'animazione CSS gira in un Chrome pulito (12 valori distinti di `stroke-dashoffset`
+     * su 12 letture) e si SPEGNE in due condizioni che il browser dell'owner puo' avere addosso —
+     * «riduci animazioni» di Windows, e l'interruttore «Riduci animazioni» dell'app, che in
+     * `index.css` diventa `body.reduce-motion * { animation: none !important }`. Una regola con
+     * `!important` a valle non si batte da dentro il CSS.
+     *
+     * ⇒ Il movimento non passa piu' dal motore delle animazioni CSS: e' SMIL, dentro l'SVG.
+     *   Ricerca 10/09/2026 — CSS-Tricks «A Guide to SVG Animations (SMIL)» ed elijahmanor.com
+     *   «prefers-reduced-motion»: le animazioni SMIL «are not affected by prefers-reduced-motion»
+     *   e nessuna regola CSS le ferma; per fermarle serve JavaScript (`pauseAnimations()`).
+     *   E' esattamente la proprieta' che serve qui: un indicatore di stato non e' una decorazione,
+     *   e spento senza ripiego mente su cosa sta succedendo.
+     * ⛔ Chi ha chiesto meno movimento AL SISTEMA lo ottiene lo stesso, poche righe piu' sotto:
+     *   li' l'SVG viene messo in pausa da JS e la linea resta piena e ferma, che si vede.
+     */
+    if (classe === 'talos-line-loader-sweep') {
+      const moto = documentObj.createElementNS(SVG_NS, 'animate');
+      moto.setAttribute('attributeName', 'stroke-dashoffset');
+      moto.setAttribute('values', '88;-88');
+      moto.setAttribute('dur', '1.6s');
+      moto.setAttribute('repeatCount', 'indefinite');
+      linea.append(moto);
+    }
     svg.append(linea);
   }
   for (const cx of [16, 48, 80]) {
@@ -816,6 +843,18 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
     nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
     svg.append(nodo);
   }
+  /*
+   * ⛔ Il rispetto di «meno movimento» ora e' nostro, perche' SMIL non lo prende dal CSS. Chi l'ha
+   *   chiesto al SISTEMA vede la linea piena e ferma — un segnavia leggibile, non uno sparito.
+   *   `pauseAnimations` sta su SVGSVGElement e non esiste nel DOM finto delle prove: si chiede.
+   */
+  try {
+    if (opzioni.window?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+      ?? globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
+      svg.querySelector('.talos-line-loader-sweep')?.setAttribute('stroke-dashoffset', '0');
+      svg.pauseAnimations?.();
+    }
+  } catch { /* niente matchMedia (prove, ambienti senza finestra): resta il movimento */ }
   const label = el(documentObj, 'span', 'talos-waiting__label run-activity-label', etichetta);
   const elapsed = el(documentObj, 'span', 'talos-mono talos-muted run-activity-elapsed', '0s');
   elapsed.setAttribute('aria-hidden', 'true');

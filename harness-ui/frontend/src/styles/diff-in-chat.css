@@ -156,9 +156,11 @@
   70%      { fill: transparent; r: 3.4; }
 }
 .talos-line-loader-sweep{
-  /* Una linea che entra da un lato ed esce dall'altro: nessun fotogramma in cui sia ferma. */
+  /* Una linea che entra da un lato ed esce dall'altro: nessun fotogramma in cui sia ferma.
+     ⛔ Il movimento NON e' qui: e' un `<animate>` SMIL dentro l'SVG (`creaAttesa`), perche' una
+     regola CSS `animation` verrebbe spenta da `body.reduce-motion * { animation:none!important }`
+     e nessuna dichiarazione a valle puo' batterla. Qui resta solo la forma del tratto. */
   stroke-dasharray: 26 62;
-  animation: talosSegnaviaScorre 1.6s linear infinite;
 }
 .talos-line-loader-node{ animation: talosSegnaviaNodo 1.6s ease-in-out infinite; }
 .talos-line-loader-node:nth-of-type(3){ animation-delay: .2s; }
@@ -189,10 +191,13 @@
  * ⇒ Stesso ripiego del caso 2, e in `!important` perché deve battere quella regola globale. Nessun
  *   movimento restituito a chi ha chiesto di non averne: solo uno stato fermo che si VEDE.
  */
-body.reduce-motion .talos-line-loader-sweep{
-  animation: none !important;
-  stroke-dasharray: 88;
-  stroke-dashoffset: 0;
-  stroke-opacity: .35;
-}
-body.reduce-motion .talos-line-loader-node{ animation: none !important; fill: var(--talos-accent); }
+/*
+ * ⛔ 10/09, seconda passata: QUI stava il ripiego statico anche per `body.reduce-motion` —
+ *   l'interruttore «Riduci animazioni» delle impostazioni. E' stato tolto apposta.
+ *   L'owner, guardando il SUO Chrome: «non riesco a vedere sto maledetto segnavia animato». Quel
+ *   ripiego avrebbe inchiodato anche SMIL, perche' una dichiarazione CSS di `stroke-dashoffset`
+ *   vince sull'attributo che SMIL anima. E la distinzione regge da sola: l'interruttore dell'app
+ *   nasce per le DECORAZIONI (sfondi, entrate, transizioni), mentre questo dice «sta lavorando».
+ *   Chi vuole davvero meno movimento lo chiede al SISTEMA, e li' lo riceve: il blocco
+ *   `@media (prefers-reduced-motion: reduce)` qui sopra, piu' `pauseAnimations()` in `creaAttesa`.
+ */

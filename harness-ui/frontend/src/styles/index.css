@@ -388,7 +388,11 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
    un'etichetta di testo che si prende tutta l'attenzione. Qui cresce a 72x12 e la traccia si vede. */
 .talos-line-loader{display:block; width:72px; height:12px; overflow:visible; flex:none}
 .talos-line-loader-track{stroke:var(--talos-accent); stroke-opacity:.28; stroke-width:2.5; stroke-linecap:round}
-.talos-line-loader-sweep{stroke:var(--talos-accent); stroke-width:2.5; stroke-linecap:round; stroke-dasharray:88; stroke-dashoffset:88; animation:talosLineSweep 2.2s ease-in-out infinite}
+/* ⛔ 10/09: il movimento dello sweep e' SMIL (`<animate>` dentro l'SVG, vedi creaAttesa). Una
+   dichiarazione CSS di `stroke-dashoffset` VINCE sull'attributo animato da SMIL e lo
+   inchioderebbe: qui non se ne dichiara nessuna, e nemmeno un'`animation` che farebbe a botte
+   con quella. Il dasharray lo mette diff-in-chat.css. */
+.talos-line-loader-sweep{stroke:var(--talos-accent); stroke-width:2.5; stroke-linecap:round}
 .talos-line-loader-node{fill:transparent; stroke:var(--talos-accent); stroke-width:2.5; animation:talosLineNodeFill 2.2s ease-in-out infinite}
 .talos-line-loader-node:nth-of-type(2){animation-delay:.5s} .talos-line-loader-node:nth-of-type(3){animation-delay:1s}
 @keyframes talosLineSweep{0%{stroke-dashoffset:88} 70%,100%{stroke-dashoffset:0}}
@@ -1565,7 +1569,7 @@ a.talos-button{text-decoration:none}
 @media (prefers-reduced-motion: reduce){
   .talos-line-loader-node{fill:var(--talos-accent); stroke:var(--talos-accent)}
   .talos-line-loader-track{stroke-opacity:.55}
-  .talos-line-loader-sweep{stroke-dashoffset:0; stroke-opacity:.35}
+  .talos-line-loader-sweep{stroke-dashoffset:0; stroke-opacity:.35} /* qui SI': e' la richiesta di meno movimento fatta al SISTEMA, e il JS mette l'SVG in pausa nello stesso caso */
 }
 
 /* il corsivo era sul TESTO SCRITTO: e uno stile da segnaposto, e qui che appartiene */
