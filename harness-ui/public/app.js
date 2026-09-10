@@ -6651,10 +6651,17 @@ function titoloRispostaDaTurno(turno, parole = 5) {
   if (!testo3) return "";
   return testo3.split(/\s+/).slice(0, parole).join(" ");
 }
+function titoloMessaggioUtente(turno, parole = 5) {
+  const nodo4 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_TESTO_UTENTE) : null;
+  const testo3 = typeof nodo4?.textContent === "string" ? nodo4.textContent.trim() : "";
+  if (!testo3) return "";
+  return testo3.split(/\s+/).slice(0, parole).join(" ");
+}
 function righeGiri(giri = []) {
   return giri.map((g) => {
-    const misura = g.senzaContatto ? "senza contatto" : g.inCorso ? "in corso" : Number.isFinite(g.token) ? kilo(g.token) : Number.isFinite(g.attrezzi) ? `${g.attrezzi} ${g.attrezzi === 1 ? "attrezzo" : "attrezzi"}` : "—";
-    return [`${g.numero} · ${g.titolo || "Giro"}`, misura, g.senzaContatto ? "warning" : g.inCorso ? "accent" : ""];
+    const misura = g.tu ? "tuo messaggio" : g.senzaContatto ? "senza contatto" : g.inCorso ? "in corso" : Number.isFinite(g.token) ? kilo(g.token) : Number.isFinite(g.attrezzi) ? `${g.attrezzi} ${g.attrezzi === 1 ? "attrezzo" : "attrezzi"}` : "—";
+    const titolo2 = g.titolo || (g.tu ? "Messaggio" : "Giro");
+    return [`${g.numero} · ${titolo2}`, misura, g.senzaContatto ? "warning" : g.inCorso ? "accent" : ""];
   });
 }
 function righeFile(file = []) {
@@ -6853,13 +6860,14 @@ function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = 
   for (const p of lista) if (p.stato === "in-corso" && Number.isFinite(p.avviatoA)) p.fermoDaMs = adesso - p.avviatoA;
   return lista.reverse();
 }
-var num, numPercento, SELETTORE_RISPOSTA_TURNO, SVG_NS_INSPECTOR;
+var num, numPercento, SELETTORE_RISPOSTA_TURNO, SELETTORE_TESTO_UTENTE, SVG_NS_INSPECTOR;
 var init_inspector = __esm({
   "src/components/inspector.js"() {
     init_plurale();
     num = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
     numPercento = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     SELETTORE_RISPOSTA_TURNO = ".talos-message__copy .assistant-copy";
+    SELETTORE_TESTO_UTENTE = ".talos-message--user .message-bubble p";
     SVG_NS_INSPECTOR = "http://www.w3.org/2000/svg";
   }
 });
@@ -8708,11 +8716,6 @@ function simbolo(documentObj, classe, nome) {
   svg.append(use);
   return svg;
 }
-function avatar(documentObj) {
-  const span = el22(documentObj, "span", "talos-avatar talos-avatar--sm");
-  span.append(simbolo(documentObj, "glyph", "glifo"));
-  return span;
-}
 function oraMessaggio(quando = /* @__PURE__ */ new Date()) {
   const data = quando instanceof Date ? quando : new Date(quando);
   if (Number.isNaN(data.getTime())) return "";
@@ -8797,7 +8800,7 @@ function creaMessaggioTalos({ modello = "", ora = "", paragrafi = [] } = {}, opz
   const messaggio = el22(documentObj, "div", "talos-message");
   messaggio.setAttribute("data-c", "Message");
   const testata = el22(documentObj, "div", "talos-message__head");
-  testata.append(avatar(documentObj), el22(documentObj, "span", "talos-message__who talos-message__who--talos", "TALOS"), el22(documentObj, "span", "talos-message__meta", [modello, ora].filter(Boolean).join(" · ")));
+  testata.append(el22(documentObj, "span", "talos-message__who talos-message__who--talos", "TALOS"), el22(documentObj, "span", "talos-message__meta", [modello, ora].filter(Boolean).join(" · ")));
   messaggio.append(testata);
   for (const testo3 of paragrafi) messaggio.append(el22(documentObj, "p", null, testo3));
   return messaggio;
@@ -9150,8 +9153,8 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
   const svg = documentObj.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "talos-line-loader");
   svg.setAttribute("viewBox", "0 0 96 16");
-  svg.setAttribute("width", "48");
-  svg.setAttribute("height", "8");
+  svg.setAttribute("width", "72");
+  svg.setAttribute("height", "12");
   svg.setAttribute("aria-hidden", "true");
   for (const classe of ["talos-line-loader-track", "talos-line-loader-sweep"]) {
     const linea = documentObj.createElementNS(SVG_NS, "line");
@@ -18736,8 +18739,13 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       function giriPerInspector() {
         const attivo = runRealeAttivo();
         const giri = [];
-        for (const t2 of $2("#conversation")?.querySelectorAll('.talos-turn[data-turno="talos"]') || []) {
+        for (const t2 of $2("#conversation")?.querySelectorAll(".talos-turn") || []) {
           const numeri = [...t2.querySelectorAll(".talos-turn-spine__n")].map((n) => Number(n.textContent)).filter(Number.isFinite);
+          if (t2.dataset.turno === "utente") {
+            const titolo2 = titoloMessaggioUtente(t2);
+            for (const numero5 of numeri) giri.push({ numero: numero5, titolo: titolo2.length > 32 ? `${titolo2.slice(0, 31)}…` : titolo2 || "Messaggio", tu: true, inCorso: false });
+            continue;
+          }
           const gruppi = [...t2.querySelectorAll('[data-c="ActivityBundle"]:not(.real-reasoning-note)')];
           const risposta = titoloRispostaDaTurno(t2);
           numeri.forEach((numero5, i) => {
@@ -18746,7 +18754,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             giri.push({ numero: numero5, titolo: riassunto.length > 32 ? `${riassunto.slice(0, 31)}…` : riassunto, attrezzi: g ? g.querySelectorAll('[data-c="ToolRow"]').length : 0, inCorso: false });
           });
         }
-        if (attivo && giri.length) {
+        if (attivo && giri.length && !giri[giri.length - 1].tu) {
           if (contattoPerso()) giri[giri.length - 1].senzaContatto = true;
           else giri[giri.length - 1].inCorso = true;
         }

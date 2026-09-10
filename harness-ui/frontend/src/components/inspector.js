@@ -114,17 +114,46 @@ export function titoloRispostaDaTurno(turno, parole = 5) {
 }
 
 /**
- * Le righe di «Indice dei giri». `giri` = [{ numero, titolo, token?, attrezzi?, inCorso?, senzaContatto? }].
+ * ⛔⛔ D-10A — le prime parole del messaggio DELLA PERSONA, per farne il titolo della sua riga.
+ * Il testo sta nella bolla (`creaMessaggioUtente`: `.talos-message__body.message-bubble > p`).
+ */
+export const SELETTORE_TESTO_UTENTE = '.talos-message--user .message-bubble p';
+
+export function titoloMessaggioUtente(turno, parole = 5) {
+  const nodo = turno && typeof turno.querySelector === 'function' ? turno.querySelector(SELETTORE_TESTO_UTENTE) : null;
+  const testo = typeof nodo?.textContent === 'string' ? nodo.textContent.trim() : '';
+  if (!testo) return '';
+  return testo.split(/\s+/).slice(0, parole).join(' ');
+}
+
+/**
+ * Le righe di «Indice dei giri». `giri` = [{ numero, titolo, token?, attrezzi?, inCorso?, senzaContatto?, tu? }].
  * ⛔ 06/9, CB-20-bis: col server irraggiungibile un giro non è «in corso» — è un giro di cui
  * non abbiamo più notizie. Sono due fatti diversi e prendono due parole diverse.
  */
 export function righeGiri(giri = []) {
   return giri.map((g) => {
-    const misura = g.senzaContatto ? 'senza contatto'
-      : g.inCorso ? 'in corso'
-        : Number.isFinite(g.token) ? kilo(g.token)
-          : (Number.isFinite(g.attrezzi) ? `${g.attrezzi} ${g.attrezzi === 1 ? 'attrezzo' : 'attrezzi'}` : '—');
-    return [`${g.numero} · ${g.titolo || 'Giro'}`, misura, g.senzaContatto ? 'warning' : g.inCorso ? 'accent' : ''];
+    /*
+     * ⛔⛔⛔ D-10A, 10/09 — l'indice saltava i numeri: 2 · 3 · 5 · 6 · 8 · 9 · 11 · 12 · 14.
+     * MISURATO sul 4174 in sola lettura (sonda `scratchpad/prove/d10a-indice-giri/sonda.mjs`, otto
+     * sessioni vere aperte): i numeri mancanti non erano persi né mai nati — erano i turni della
+     * PERSONA. Ogni messaggio dell'utente apre un `.talos-turn[data-turno="utente"]` che prende un
+     * numero della spine (`nellaChat(el,'utente')`), lo mostra in chat, e poi non compariva qui
+     * perché `giriPerInspector()` guardava solo i turni di TALOS. Nessuna numerazione rotta:
+     * mancavano le RIGHE.
+     * ⇒ La cura NON è rinumerare (il numero dell'indice deve restare quello che la chat mostra
+     *   accanto al messaggio): è mostrare anche la riga omessa, dicendo di chi è.
+     * Ricerca 10/09/2026 — opencode #25910 «Chat Navigation Index/Sidebar» (l'indice elenca «key
+     * messages (such as user prompts)») e le mappe di conversazione del 2026, dove i prompt della
+     * persona sono voci di prima classe accanto ai turni dell'assistente, distinte dal ruolo.
+     */
+    const misura = g.tu ? 'tuo messaggio'
+      : g.senzaContatto ? 'senza contatto'
+        : g.inCorso ? 'in corso'
+          : Number.isFinite(g.token) ? kilo(g.token)
+            : (Number.isFinite(g.attrezzi) ? `${g.attrezzi} ${g.attrezzi === 1 ? 'attrezzo' : 'attrezzi'}` : '—');
+    const titolo = g.titolo || (g.tu ? 'Messaggio' : 'Giro');
+    return [`${g.numero} · ${titolo}`, misura, g.senzaContatto ? 'warning' : g.inCorso ? 'accent' : ''];
   });
 }
 

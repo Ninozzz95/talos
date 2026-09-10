@@ -381,10 +381,15 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-waiting{margin-top:6px}
 .talos-waiting__row{display:flex; align-items:center; gap:10px; min-height:22px; font-size:12.5px; color:var(--talos-muted)}
 .talos-waiting__label{flex:1 1 auto; min-width:0}
-.talos-line-loader{display:block; width:48px; height:8px; overflow:visible; flex:none}
-.talos-line-loader-track{stroke:var(--talos-accent); stroke-opacity:.18; stroke-width:2; stroke-linecap:round}
-.talos-line-loader-sweep{stroke:var(--talos-accent); stroke-width:2; stroke-linecap:round; stroke-dasharray:88; stroke-dashoffset:88; animation:talosLineSweep 2.2s ease-in-out infinite}
-.talos-line-loader-node{fill:transparent; stroke:var(--talos-accent); stroke-width:2; animation:talosLineNodeFill 2.2s ease-in-out infinite}
+/* ⛔ 10/09, owner: «non vedo il segnavia a tre nodi animato su 4174». MISURATO prima di toccarlo, in
+   un giro vero con glm-5.3-flash: il segnavia c'e' e si muove — a schermo 5.040 ms su un giro di
+   5.914, `talosSegnaviaScorre` in `running`, 41 valori di `stroke-dashoffset` distinti su 41
+   campioni. Non era fermo: era PICCOLO. 48x8 px con la traccia al 18% di opacita', accanto a
+   un'etichetta di testo che si prende tutta l'attenzione. Qui cresce a 72x12 e la traccia si vede. */
+.talos-line-loader{display:block; width:72px; height:12px; overflow:visible; flex:none}
+.talos-line-loader-track{stroke:var(--talos-accent); stroke-opacity:.28; stroke-width:2.5; stroke-linecap:round}
+.talos-line-loader-sweep{stroke:var(--talos-accent); stroke-width:2.5; stroke-linecap:round; stroke-dasharray:88; stroke-dashoffset:88; animation:talosLineSweep 2.2s ease-in-out infinite}
+.talos-line-loader-node{fill:transparent; stroke:var(--talos-accent); stroke-width:2.5; animation:talosLineNodeFill 2.2s ease-in-out infinite}
 .talos-line-loader-node:nth-of-type(2){animation-delay:.5s} .talos-line-loader-node:nth-of-type(3){animation-delay:1s}
 @keyframes talosLineSweep{0%{stroke-dashoffset:88} 70%,100%{stroke-dashoffset:0}}
 @keyframes talosLineNodeFill{0%,12%{fill:transparent} 22%,82%{fill:var(--talos-accent)} 100%{fill:transparent}}
@@ -407,6 +412,12 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-brand{display:flex; align-items:center; gap:10px; padding:18px 18px 14px}
 .talos-brand__mark{width:30px; height:30px; display:grid; place-items:center; color:var(--talos-accent-hover)}
 .talos-brand__mark .glyph{width:22px; height:22px}
+/* ⛔ 10/09, owner, due volte e alla fine in maiuscolo: «aumenta la grandezza del logo TALOS brand
+   mark SOLO NELLA SIDEBAR A SINISTRA … quello in alto a sinistra». Restretto a `.talos-brand`
+   apposta: la stessa classe la porta anche il marchio dello stato vuoto (`.talos-empty__mark`,
+   stato-vuoto.js), che ha misure sue e non c'entra con questa richiesta. */
+.talos-brand > .talos-brand__mark{width:42px; height:42px}
+.talos-brand > .talos-brand__mark .glyph{width:40px; height:40px}
 .talos-brand__copy{display:flex; flex-direction:column; line-height:1; margin-right:auto}
 .talos-brand__copy strong{font-size:18px; letter-spacing:.02em; font-weight:600}
 .talos-brand__copy span{font-size:10px; color:var(--talos-muted); margin-top:4px; text-transform:uppercase; letter-spacing:.16em}
@@ -476,8 +487,13 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-sidebar__foot-sub{font-size:12px; color:var(--talos-muted)}
 .talos-avatar{width:34px; height:34px; border-radius:50%; background:var(--talos-panel-soft); border:1px solid var(--talos-border); display:grid; place-items:center; color:var(--talos-accent-hover); flex:none}
 .talos-avatar .glyph{width:14px; height:14px}
-.talos-avatar--sm{width:24px; height:24px}
-.talos-avatar--sm .glyph{width:11px; height:11px}
+/* ⛔ 10/09, owner: «fai il glifo accanto a TALOS nelle risposte piu' grande ed adatto e senza
+   contenitore». La pastiglia con bordo e fondo era un avatar da rubrica: il glifo e' il MARCHIO,
+   e un marchio non sta in una capsula. `--sm` vive SOLO nella testata di un messaggio di TALOS
+   (unico uso: `avatar()` in components/conversazione.js), quindi l'avatar della persona nel piede
+   della barra resta identico. */
+.talos-avatar--sm{width:22px; height:22px; border:0; background:none; border-radius:0}
+.talos-avatar--sm .glyph{width:22px; height:22px}
 :root[data-sidebar="icone"] .talos-brand__copy,:root[data-sidebar="icone"] .talos-sidebar__actions,:root[data-sidebar="icone"] .talos-nav-item__label,:root[data-sidebar="icone"] .talos-nav-item__count,:root[data-sidebar="icone"] .talos-nav-item .talos-kbd,:root[data-sidebar="icone"] .talos-sidebar__block-head,:root[data-sidebar="icone"] .talos-sidebar__sessions,:root[data-sidebar="icone"] .talos-sidebar__foot > :not(.talos-avatar){display:none}
 :root[data-sidebar="icone"] .talos-nav-item{justify-content:center; padding:0}
 :root[data-sidebar="icone"] .talos-brand{flex-direction:column; justify-content:center; gap:8px; padding:18px 0 10px}

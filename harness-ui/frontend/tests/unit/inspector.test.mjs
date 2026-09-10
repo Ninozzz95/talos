@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { kilo, righeAmbiente, righeFinestra, righeGiri, righeFile, datiProcesso, processiDagliEventi, comandoDagliArgomenti, titoloRispostaDaTurno, SELETTORE_RISPOSTA_TURNO } from '../../src/components/inspector.js';
+import { kilo, righeAmbiente, righeFinestra, righeGiri, righeFile, datiProcesso, processiDagliEventi, comandoDagliArgomenti, titoloRispostaDaTurno, SELETTORE_RISPOSTA_TURNO, titoloMessaggioUtente, SELETTORE_TESTO_UTENTE } from '../../src/components/inspector.js';
 import { INSPECTOR } from '../../lab/fixtures/inspector.js';
 
 // 06/09 B2 — la colonna dei dettagli dice il vero: dati del monolite, «—» dove mancano.
@@ -30,6 +30,41 @@ test('INSP-GIRI e FILE', () => {
   assert.deepEqual(g[4], ['7 · Suite completa', 'in corso', 'accent']);
   assert.deepEqual(righeGiri([{ numero: 2, titolo: 'Lettura', attrezzi: 3 }])[0].slice(0, 2), ['2 · Lettura', '3 attrezzi']);
   assert.deepEqual(righeFile(INSPECTOR.file), [['src/session-registry.mjs', '+18 −2'], ['tests/session-registry.test.mjs', '+64'], ['src/http-app.mjs', '+30']]);
+});
+
+/*
+ * ⛔⛔⛔ D-10A — l'indice saltava i numeri: 2 · 3 · 5 · 6 · 8 · 9 · 11 · 12 · 14.
+ * MISURATO sul 4174 in sola lettura (`scratchpad/prove/d10a-indice-giri/sonda.mjs`, otto sessioni
+ * vere): i mancanti erano i turni della PERSONA — `utente numeri=[1]`, `[4]`, `[7]`, `[10]`, `[13]`
+ * fra `talos numeri=[2,3]`, `[5,6]`, `[8,9]`. Nessun numero perso: mancavano le RIGHE.
+ */
+test('D-10A: il messaggio della persona ha la sua riga, e tiene il numero che la chat mostra', () => {
+  const righe = righeGiri([
+    { numero: 1, titolo: 'Fai la suite completa', tu: true },
+    { numero: 2, titolo: 'Lettura', attrezzi: 3 },
+    { numero: 3, titolo: 'Fatto.', attrezzi: 0 },
+    { numero: 4, titolo: 'ok adesso aprilo nel', tu: true },
+  ]);
+  assert.deepEqual(righe.map((r) => r[0]), ['1 · Fai la suite completa', '2 · Lettura', '3 · Fatto.', '4 · ok adesso aprilo nel']);
+  assert.deepEqual(righe.map((r) => r[1]), ['tuo messaggio', '3 attrezzi', '0 attrezzi', 'tuo messaggio']);
+  /* ⛔ La successione non ha piu' buchi: e' esattamente questo che il difetto rompeva. */
+  assert.deepEqual(righe.map((r) => Number(r[0].split(' · ')[0])), [1, 2, 3, 4]);
+});
+
+test("D-10A, AL CONTRARIO: senza `tu` niente cambia, e un messaggio senza testo non resta senza nome", () => {
+  assert.deepEqual(righeGiri([{ numero: 2, titolo: 'Lettura', attrezzi: 3 }])[0], ['2 · Lettura', '3 attrezzi', '']);
+  assert.deepEqual(righeGiri([{ numero: 5, attrezzi: 1, inCorso: true }])[0], ['5 · Giro', 'in corso', 'accent']);
+  assert.deepEqual(righeGiri([{ numero: 4, tu: true }])[0], ['4 · Messaggio', 'tuo messaggio', '']);
+  /* ⛔ Un messaggio della persona non e' un giro: non prende mai «in corso» ne' l'accento. */
+  assert.equal(righeGiri([{ numero: 4, tu: true, attrezzi: 9 }])[0][1], 'tuo messaggio');
+});
+
+test("D-10A: il titolo di una riga «tu» sono le prime parole della bolla, e senza bolla resta vuoto", () => {
+  const bolla = { textContent: '  Conta   lentamente da 1 a 40, un numero per riga.  ' };
+  assert.equal(titoloMessaggioUtente({ querySelector: (s) => (s === SELETTORE_TESTO_UTENTE ? bolla : null) }), 'Conta lentamente da 1 a');
+  assert.equal(titoloMessaggioUtente({ querySelector: () => null }), '');
+  assert.equal(titoloMessaggioUtente(null), '');
+  assert.equal(titoloMessaggioUtente({ querySelector: () => ({ textContent: '   ' }) }), '');
 });
 
 test('INSP-PROCESSI: dagli eventi degli attrezzi al comando con durata e uscita; il comando viene dagli argomenti JSON', () => {

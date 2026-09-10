@@ -27,7 +27,7 @@ import { aggiornaCosti } from '../components/costi-consumo.js'; // 06/9 D21/D22:
 import { aggiornaContesto, ripartizioneContesto } from '../components/contesto.js'; // 06/9 D26: ripartizione della finestra di contesto
 import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
-import { aggiornaInspector, processiDagliEventi, titoloRispostaDaTurno } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento
+import { aggiornaInspector, processiDagliEventi, titoloMessaggioUtente, titoloRispostaDaTurno } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
@@ -8076,8 +8076,23 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const attivo = runRealeAttivo();
     // un giro = un numero nella spine; il suo titolo è il riassunto del gruppo di attività corrispondente
     const giri = [];
-    for (const t of $('#conversation')?.querySelectorAll('.talos-turn[data-turno="talos"]') || []) {
+    for (const t of $('#conversation')?.querySelectorAll('.talos-turn') || []) {
       const numeri = [...t.querySelectorAll('.talos-turn-spine__n')].map((n) => Number(n.textContent)).filter(Number.isFinite);
+      /*
+       * ⛔⛔⛔ D-10A, 10/09 — qui il selettore era `.talos-turn[data-turno="talos"]`, e l'indice
+       * saltava i numeri: 2 · 3 · 5 · 6 · 8 · 9 · 11 · 12 · 14. MISURATO in sola lettura sul 4174
+       * (`scratchpad/prove/d10a-indice-giri/sonda.mjs`, otto sessioni vere): i numeri mancanti
+       * stavano tutti su un turno della PERSONA — `utente numeri=[1]`, `[4]`, `[7]`, `[10]`, `[13]`
+       * fra `talos numeri=[2,3]`, `[5,6]`, `[8,9]`… Ogni messaggio dell'utente prende un numero
+       * della spine e lo mostra in chat; l'indice non lo guardava. Niente era perso: MANCAVANO LE
+       * RIGHE. E rinumerare sarebbe stato peggio, perché il numero dell'indice deve restare quello
+       * che la persona vede accanto al messaggio.
+       */
+      if (t.dataset.turno === 'utente') {
+        const titolo = titoloMessaggioUtente(t);
+        for (const numero of numeri) giri.push({ numero, titolo: titolo.length > 32 ? `${titolo.slice(0, 31)}…` : (titolo || 'Messaggio'), tu: true, inCorso: false });
+        continue;
+      }
       const gruppi = [...t.querySelectorAll('[data-c="ActivityBundle"]:not(.real-reasoning-note)')];
       /*
        * ⛔⛔⛔ 06/9, CB-03 — qui c'era `.assistant-copy p, .assistant-copy`, e il titolo dei
@@ -8104,9 +8119,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         giri.push({ numero, titolo: riassunto.length > 32 ? `${riassunto.slice(0, 31)}…` : riassunto, attrezzi: g ? g.querySelectorAll('[data-c="ToolRow"]').length : 0, inCorso: false });
       });
     }
-    if (attivo && giri.length) {
+    if (attivo && giri.length && !giri[giri.length - 1].tu) {
       // ⛔ 06/9, CB-20-bis: col server irraggiungibile il giro non è «in corso», è un giro
       //    di cui non abbiamo più notizie. Due fatti diversi, due parole diverse.
+      // ⛔ 10/9, D-10A: e un messaggio della persona non è mai «in corso» — non è un giro.
       if (contattoPerso()) giri[giri.length - 1].senzaContatto = true;
       else giri[giri.length - 1].inCorso = true;
     }
