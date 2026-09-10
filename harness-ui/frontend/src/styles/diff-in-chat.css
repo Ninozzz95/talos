@@ -122,46 +122,15 @@
 .talos-fonti__marchio__icona,.talos-fonti-elenco__marchio__icona{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:2px;background:var(--talos-panel)}
 
 /*
- * ⭐⭐⭐ IL MARCHIO CHE RESPIRA MENTRE IL GIRO È VIVO.
- *
- * Owner 10/09, con Hermes accanto: «il loro logo è animato, il nostro no, te l'ho detto un sacco di
- * volte ma ancora il nostro logo di caricamento risposta è statico».
- *
- * ⛔ Il segnavia a tre nodi ESISTE ed è animato — ma vive solo fra RunStarted e il primo token, che
- *   con glm-5.3-flash e la cache all'86% sono poche centinaia di millisecondi: misurato oggi, un giro
- *   intero senza mai vederlo comparire. Ciò che resta a schermo per tutta la risposta è il glifo
- *   accanto a «TALOS», e quello era fermo. Per questo la cura sta QUI e non nel segnavia.
- *
- * ⛔ Solo l'ULTIMO avatar della conversazione: animarli tutti farebbe pulsare l'intera cronologia,
- *   e il movimento smetterebbe di dire «sta lavorando adesso» per dire soltanto «questa è una chat».
- * ⛔ Un respiro, non una giostra: 2,4s, opacità e scala minime. Un logo che gira veloce è rumore, e
- *   il tema Calm si chiama così per una ragione.
+ * ⛔ 10/09 — QUI stava «il marchio che respira»: il glifo accanto a «TALOS» che pulsava finché il
+ *   giro era vivo, nato la mattina stessa perché il segnavia dura poco. L'owner, guardando la
+ *   testata a schermo, ha chiesto di togliere il glifo del tutto («leva il logo da qui e mantieni
+ *   solo la scritta TALOS»): senza glifo quelle regole non avevano più un elemento su cui cadere,
+ *   e restare sarebbero state codice morto che promette un'animazione inesistente.
+ *   Il segno «sta lavorando adesso» resta uno solo, e vero: il segnavia a tre nodi qui sotto.
+ *   `body.talos-giro-vivo` resta acceso (lo mettono `mostraAttesaRisposta`/`fineGiroReale`): non è
+ *   orfana, è la leva su cui si appoggia chi vorrà di nuovo un segno per tutto il giro.
  */
-@keyframes talosMarchioRespira {
-  0%, 100% { opacity: .45; transform: scale(.94); }
-  50%      { opacity: 1;   transform: scale(1.06); }
-}
-body.talos-giro-vivo .talos-message:last-of-type .talos-avatar .glyph,
-body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar .glyph{
-  animation: talosMarchioRespira 2.4s ease-in-out infinite;
-  transform-origin: center;
-}
-/* L'anello attorno al glifo accompagna il respiro, senza spostare nulla: solo il colore del bordo. */
-body.talos-giro-vivo .talos-message:last-of-type .talos-avatar,
-body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar{
-  border-color: var(--talos-accent);
-  transition: border-color .3s ease;
-}
-/*
- * ⛔ Chi ha chiesto meno movimento NON riceve il respiro — ma nemmeno un logo che sembra spento:
- *   resta l'anello acceso, che dice «sta lavorando» senza muoversi. Stessa scelta già fatta per il
- *   segnavia a tre nodi (MDN «prefers-reduced-motion», W3C WCAG 2.3.3).
- */
-@media (prefers-reduced-motion: reduce) {
-  body.talos-giro-vivo .talos-message:last-of-type .talos-avatar .glyph,
-  body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar .glyph{ animation: none; opacity: 1; }
-}
-
 /*
  * ⭐⭐⭐ IL SEGNAVIA A TRE NODI, SENZA PUNTI MORTI — owner 10/09: «parlavo proprio del segnavia a tre
  *   nodi, era quello che deve essere animato».
@@ -203,3 +172,27 @@ body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar{
   .talos-line-loader-sweep{ animation: none; stroke-dasharray: 88; stroke-dashoffset: 0; stroke-opacity: .35; }
   .talos-line-loader-node{ animation: none; fill: var(--talos-accent); }
 }
+/*
+ * ⛔⛔⛔ 10/09, owner: «il segnavia è più grande e CONTINUA A NON FUNZIONARE NEL MIO SERVER» — mentre
+ *   nella mia misura girava. La differenza non era il codice: era lo STATO del suo browser.
+ *
+ * MISURATO, stesso 4174, tre condizioni, contando i valori distinti di `stroke-dashoffset` su
+ * dodici letture (`scratchpad/prove/segnavia-quanto-dura/perche-fermo.mjs`):
+ *   1) browser normale ............ 12 valori distinti, `talosSegnaviaScorre` in `running`
+ *   2) OS «riduci animazioni» ..... 1 valore, fermo a 0px — il ripiego qui sopra, LEGGIBILE
+ *   3) app → «Riduci animazioni» .. 1 valore, fermo a **88px**, e a 88px con `stroke-dasharray:
+ *      26 62` su una linea di 88 non si disegna NIENTE: il segnavia non era fermo, era SPARITO.
+ *
+ * CAUSA: `index.css` spegne ogni animazione sotto `body.reduce-motion` con
+ * `animation:none!important` — giusto per le decorazioni, sbagliato qui, perché il segnavia non
+ * decora: dice «sta lavorando». Spento senza ripiego, mente.
+ * ⇒ Stesso ripiego del caso 2, e in `!important` perché deve battere quella regola globale. Nessun
+ *   movimento restituito a chi ha chiesto di non averne: solo uno stato fermo che si VEDE.
+ */
+body.reduce-motion .talos-line-loader-sweep{
+  animation: none !important;
+  stroke-dasharray: 88;
+  stroke-dashoffset: 0;
+  stroke-opacity: .35;
+}
+body.reduce-motion .talos-line-loader-node{ animation: none !important; fill: var(--talos-accent); }

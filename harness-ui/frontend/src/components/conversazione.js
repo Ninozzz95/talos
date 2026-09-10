@@ -44,12 +44,6 @@ function simbolo(documentObj, classe, nome) {
   return svg;
 }
 
-function avatar(documentObj) {
-  const span = el(documentObj, 'span', 'talos-avatar talos-avatar--sm');
-  span.append(simbolo(documentObj, 'glyph', 'glifo'));
-  return span;
-}
-
 /** L'ora come la scrive il mockup nella meta di un messaggio («18:04»). */
 export function oraMessaggio(quando = new Date()) {
   const data = quando instanceof Date ? quando : new Date(quando);
@@ -166,7 +160,11 @@ export function creaMessaggioTalos({ modello = '', ora = '', paragrafi = [] } = 
   const messaggio = el(documentObj, 'div', 'talos-message');
   messaggio.setAttribute('data-c', 'Message');
   const testata = el(documentObj, 'div', 'talos-message__head');
-  testata.append(avatar(documentObj), el(documentObj, 'span', 'talos-message__who talos-message__who--talos', 'TALOS'), el(documentObj, 'span', 'talos-message__meta', [modello, ora].filter(Boolean).join(' · ')));
+  /* ⛔ 10/09, owner, con la foto della testata davanti: «puoi levare il logo da qui e mantenere solo
+     la scritta TALOS». Il glifo era stato ingrandito e liberato dalla capsula poche ore prima, nello
+     stesso giro: guardato a schermo, accanto a un nome in maiuscoletto, era rumore. Chi risponde lo
+     dice il nome; che stia lavorando lo dice il segnavia. */
+  testata.append(el(documentObj, 'span', 'talos-message__who talos-message__who--talos', 'TALOS'), el(documentObj, 'span', 'talos-message__meta', [modello, ora].filter(Boolean).join(' · ')));
   messaggio.append(testata);
   for (const testo of paragrafi) messaggio.append(el(documentObj, 'p', null, testo));
   return messaggio;
@@ -803,8 +801,8 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
   const svg = documentObj.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('class', 'talos-line-loader');
   svg.setAttribute('viewBox', '0 0 96 16');
-  svg.setAttribute('width', '48');
-  svg.setAttribute('height', '8');
+  svg.setAttribute('width', '72'); // 10/09: cresciuto con la regola CSS, cosi' il ripiego senza foglio ha la stessa taglia
+  svg.setAttribute('height', '12');
   svg.setAttribute('aria-hidden', 'true');
   for (const classe of ['talos-line-loader-track', 'talos-line-loader-sweep']) {
     const linea = documentObj.createElementNS(SVG_NS, 'line');

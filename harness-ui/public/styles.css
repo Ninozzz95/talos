@@ -979,20 +979,20 @@ select:focus-visible,
 }
 .talos-line-loader {
   display: block;
-  width: 48px;
-  height: 8px;
+  width: 72px;
+  height: 12px;
   overflow: visible;
   flex: none;
 }
 .talos-line-loader-track {
   stroke: var(--talos-accent);
-  stroke-opacity: .18;
-  stroke-width: 2;
+  stroke-opacity: .28;
+  stroke-width: 2.5;
   stroke-linecap: round;
 }
 .talos-line-loader-sweep {
   stroke: var(--talos-accent);
-  stroke-width: 2;
+  stroke-width: 2.5;
   stroke-linecap: round;
   stroke-dasharray: 88;
   stroke-dashoffset: 88;
@@ -1001,7 +1001,7 @@ select:focus-visible,
 .talos-line-loader-node {
   fill: transparent;
   stroke: var(--talos-accent);
-  stroke-width: 2;
+  stroke-width: 2.5;
   animation: talosLineNodeFill 2.2s ease-in-out infinite;
 }
 .talos-line-loader-node:nth-of-type(2) {
@@ -1109,6 +1109,14 @@ select:focus-visible,
 .talos-brand__mark .glyph {
   width: 22px;
   height: 22px;
+}
+.talos-brand > .talos-brand__mark {
+  width: 42px;
+  height: 42px;
+}
+.talos-brand > .talos-brand__mark .glyph {
+  width: 40px;
+  height: 40px;
 }
 .talos-brand__copy {
   display: flex;
@@ -1339,12 +1347,15 @@ select:focus-visible,
   height: 14px;
 }
 .talos-avatar--sm {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: none;
+  border-radius: 0;
 }
 .talos-avatar--sm .glyph {
-  width: 11px;
-  height: 11px;
+  width: 22px;
+  height: 22px;
 }
 :root[data-sidebar=icone] .talos-brand__copy,
 :root[data-sidebar=icone] .talos-sidebar__actions,
@@ -10176,33 +10187,6 @@ dialog.command-dialog .tool-chips .status-chip,
   padding: 2px;
   background: var(--talos-panel);
 }
-@keyframes talosMarchioRespira {
-  0%, 100% {
-    opacity: .45;
-    transform: scale(.94);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.06);
-  }
-}
-body.talos-giro-vivo .talos-message:last-of-type .talos-avatar .glyph,
-body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar .glyph {
-  animation: talosMarchioRespira 2.4s ease-in-out infinite;
-  transform-origin: center;
-}
-body.talos-giro-vivo .talos-message:last-of-type .talos-avatar,
-body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar {
-  border-color: var(--talos-accent);
-  transition: border-color .3s ease;
-}
-@media (prefers-reduced-motion: reduce) {
-  body.talos-giro-vivo .talos-message:last-of-type .talos-avatar .glyph,
-  body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar .glyph {
-    animation: none;
-    opacity: 1;
-  }
-}
 @keyframes talosSegnaviaScorre {
   0% {
     stroke-dashoffset: 88;
@@ -10249,6 +10233,16 @@ body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar {
     animation: none;
     fill: var(--talos-accent);
   }
+}
+body.reduce-motion .talos-line-loader-sweep {
+  animation: none !important;
+  stroke-dasharray: 88;
+  stroke-dashoffset: 0;
+  stroke-opacity: .35;
+}
+body.reduce-motion .talos-line-loader-node {
+  animation: none !important;
+  fill: var(--talos-accent);
 }
 
 /* src/styles/main.css */
