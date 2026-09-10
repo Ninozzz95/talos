@@ -20883,6 +20883,25 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           console.warn("[browser] la pagina non è stata letta per il modello:", errore?.message || errore);
         }
       }
+      function aggiornaModalitaShell(valore) {
+        const testo3 = String(valore ?? "");
+        const inShell = testo3.startsWith("!");
+        const silenzioso = testo3.startsWith("!!");
+        composerForm.classList.toggle("talos-composer--shell", inShell);
+        composerForm.classList.toggle("talos-composer--shell-muta", silenzioso);
+        let avviso = composerForm.querySelector(".talos-composer__shell");
+        if (!inShell) {
+          avviso?.remove();
+          return;
+        }
+        if (!avviso) {
+          avviso = document.createElement("p");
+          avviso.className = "talos-composer__shell";
+          avviso.setAttribute("role", "status");
+          composerForm.prepend(avviso);
+        }
+        avviso.textContent = silenzioso ? "Comando in silenzio: gira subito sulla tua macchina e non comparirà in chat." : "Comando: gira subito sulla tua macchina, senza passare dal modello.";
+      }
       async function runDirectShell(comando, silenzioso) {
         if (!state.realSession.id) {
           toast("Nessuna sessione reale attiva", "Avvia un task dal corpus prima di usare un comando diretto.");
@@ -26075,6 +26094,7 @@ ${blocchi.join("\n\n")}` : testa;
         autoGrowTextarea();
         syncRunComposerState();
         const value = composerInput.value;
+        aggiornaModalitaShell(value);
         if (value === "/") openCommandPalette();
         if (/@[^\s]*$/.test(value) && value.endsWith("@")) openSheet("references");
       });

@@ -760,3 +760,26 @@ che «il percorso assoluto non attraversa mai URL, localStorage o risposta HTTP�
 - il pulsante resta disabilitato finché non si sceglie Full access: è corretto (il server lo esige
   anche per il launcher, `session-registry.mjs:3044`), e ora il testo lo spiega invece di trattare
   la cartella come un'estranea.
+
+## 10/09, notte — il composer dice quando sei in shell libera
+
+⛔⛔ PRIMA, UNA CORREZIONE A ME STESSO. Poche righe sopra avevo annotato come difetto «"Seleziona
+modello" è VUOTO nella modale, con un 503 in console: un avvio senza modello non parte». **Non è un
+difetto del prodotto.** L'owner: «a me non è così». Misurato subito dopo: `/api/v1/models` risponde
+**HTTP 200 con 437 modelli** (e `/setup/stato` e `/projects` pure, 200). Il campo era vuoto **nella
+mia sonda**, dove `localStorage` è sandboxed — l'errore lo diceva nella stessa console che avevo
+citato — quindi la preferenza salvata non si legge e il selettore resta sul suo segnaposto.
+⇒ Un difetto visto solo dentro il proprio banco va provato fuori dal banco prima di essere scritto.
+
+**`2026-09-10-modalita-shell.png`** — guardata, 1440×900. Digitando `!npm test` il composer cambia
+in tre modi insieme: bordo rosso, un badge `>_`, e la riga «Comando: gira subito sulla tua macchina,
+senza passare dal modello». Il testo digitato è in **monospazio**, che è il segnale che conta di più:
+cambia il materiale di ciò che stai scrivendo, non solo il contorno.
+Misurato negli stessi istanti, quattro casi compreso il verso contrario:
+· testo normale → bordo `rgb(184,138,73)` (ambra), carattere Instrument Sans, nessun avviso;
+· `!npm test` → bordo `rgb(160,61,61)`, **JetBrains Mono**, avviso «senza passare dal modello»;
+· `!!git status` → stesso bordo, classe in più, avviso «e non comparirà in chat»;
+· tolto il `!` → **torna tutto identico al primo caso**.
+
+⭐ E nella stessa foto si vede D-10B e D-10D funzionare dal vivo: sopra il composer c'è l'esito di un
+comando con «Riuscito · **in Linux (WSL), non su Windows** · 1 ms» e l'output vero sotto.

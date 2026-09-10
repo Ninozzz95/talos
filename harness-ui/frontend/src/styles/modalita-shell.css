@@ -1,0 +1,68 @@
+/*
+ * ⭐⭐⭐ MODALITÀ SHELL LIBERA — il composer lo dice mentre lo scrivi.
+ *
+ * Owner 10/09: «se digito ! prima di tutto metti un alertino o un contorno rosso al composer o
+ * qualcosa del genere per fare capire che sei in modalità shell libera».
+ *
+ * ⛔ Il segnale più forte non è il bordo: è il MATERIALE. Il testo diventa monospazio, perché è
+ *   codice che una macchina eseguirà alla lettera — la differenza fra `rm -rf ./ build` e
+ *   `rm -rf ./build` si legge solo a larghezza fissa. Il bordo accompagna, non porta da solo il peso.
+ * ⛔ Nessun colore nuovo: `--talos-danger*` sono già nel tema. Un rosso inventato accanto al Calm
+ *   sarebbe stonato e, peggio, sarebbe un secondo vocabolario per dire «attento».
+ * ⛔ Foglio a sé perché `index.css` è GENERATO dal mockup: ciò che si scrive lì a mano sparisce alla
+ *   prima rigenerazione.
+ */
+
+/* Il guscio: bordo e alone parlano la lingua che il composer usa già per il fuoco, cambiando solo colore. */
+.talos-composer--shell{
+  border-color: var(--talos-danger-border);
+  box-shadow: 0 0 0 3px var(--talos-danger-soft);
+}
+.talos-composer--shell:focus-within{
+  border-color: var(--talos-danger);
+  box-shadow: 0 0 0 3px var(--talos-danger-soft);
+}
+
+/*
+ * ⛔ Il testo diventa monospazio. Questa riga è il cuore della cosa: cambia COSA STAI SCRIVENDO,
+ *   non il contorno di dove lo scrivi.
+ */
+.talos-composer--shell .talos-composer__input{
+  font-family: var(--talos-font-mono);
+  font-size: 13px;
+}
+
+/* La riga che dice cosa succede: sopra il campo, dentro il guscio, dove l'occhio è già. */
+.talos-composer__shell{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: var(--talos-danger);
+  font-size: 12.5px;
+  line-height: 1.35;
+}
+/*
+ * Il segno «>_»: il prompt di un terminale, disegnato col carattere che i terminali usano. Dice
+ * «shell» senza scrivere la parola — e senza un'icona nuova da mantenere.
+ */
+.talos-composer__shell::before{
+  content: ">_";
+  font-family: var(--talos-font-mono);
+  font-weight: 600;
+  letter-spacing: -.04em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--talos-danger-soft);
+  border: 1px solid var(--talos-danger-border);
+}
+
+/*
+ * ⛔ La comparsa risponde a un gesto (hai appena digitato `!`), quindi una transizione breve mostra
+ *   COSA È CAMBIATO. Non è un'entrata scenica: 120 ms, e nessuno spostamento del contenuto.
+ */
+@media (prefers-reduced-motion: no-preference){
+  .talos-composer{ transition: border-color .12s ease, box-shadow .12s ease; }
+  .talos-composer__shell{ animation: talosShellEntra .12s ease-out; }
+  @keyframes talosShellEntra { from { opacity: 0; } to { opacity: 1; } }
+}
