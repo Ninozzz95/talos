@@ -1003,9 +1003,19 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
    * nemmeno: erano tre rettangoli fermi. Resta la riga onesta: segnavia, cosa sta facendo, da quanto.
    */
   blocco.append(riga);
-  /* ⛔ `fermaMotore` viaggia con la bolla: chi la rimuove ferma anche il disegno. Il motore si
-     autospegne comunque su `isConnected`, ma un chiamante che PUO' dirlo non deve aspettare. */
-  return { blocco, label, elapsed, fermaMotore: () => fermaMotore() };
+  /*
+   * ⛔⛔⛔ 11/09 — QUESTA RIGA HA BLOCCATO IL 4174 DELL'OWNER. Diceva
+   *   `fermaMotore: () => fermaMotore()` e chiamava una variabile che era sparita insieme al
+   *   motore JS del segnavia, tolto poche ore prima: ogni bolla d'attesa lanciava
+   *   «fermaMotore is not defined», e da lì la pagina smetteva di rispondere — l'owner non
+   *   riusciva più nemmeno a cambiare sessione.
+   * ⛔ Il build passava e 620 test erano verdi: nessuno dei due guarda cosa succede a RUNTIME
+   *   quando la funzione viene chiamata davvero. La prova che l'ha trovato è stata aprire la
+   *   pagina e leggere gli errori della console — la cosa che non avevo fatto prima di consegnare.
+   * ⇒ Resta nel contratto (chi la chiama non deve cambiare), e non fa niente: il segnavia oggi si
+   *   muove col CSS del mobile, e non c'è nessun motore da fermare.
+   */
+  return { blocco, label, elapsed, fermaMotore: () => {} };
 }
 
 /* ------------------------------------------------------- PO-11: il diff in chat */
