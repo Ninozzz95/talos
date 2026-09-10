@@ -171,8 +171,58 @@ l'unica cosa che dice se funziona.
 Tutti nati lavorando su PO-06 (il `!` dal composer) e sul merge del Context Manager. Nessuno è stato
 curato di straforo dentro un'altra riga: stanno qui perché l'owner decida quando valgono.
 
-### D-10A · L'Indice dei giri salta i numeri, con passo 3
-Misurato nelle foto del 10/09 (`dopo-02-dove-finisce.png`): l'indice mostra 2, 3, 5, 6, 8, 9, 11, 12,
+### D-10R · IL SEGNAVIA NON SI MUOVE SUL CHROME DELL'OWNER — «debito rompicoglioni»
+
+> Nome dato dall'owner, 10/09, testualmente: «segnalo come debito rompicoglioni (si esattamente
+> cosi)». Cinque tentativi in una sera, tutti falliti dal suo lato.
+
+**Il fatto.** Sul Chrome dell'owner il segnavia a tre nodi della bolla d'attesa **non si muove**.
+Su ogni banco che so costruire, si muove.
+
+**Cosa è già stato provato, e con quale misura** (tutto in `scratchpad/prove/segnavia-quanto-dura/`):
+
+| tentativo | misura sul mio banco | esito da lui |
+|---|---|---|
+| ingrandito 48×8 → 72×12, traccia 18% → 28% | visibile 5.040 ms su un giro di 5.914 | fermo |
+| animazione CSS → **SMIL** (`<animate>`), che nessuna regola CSS può spegnere | 37 valori distinti di `stroke-dashoffset` su 37 campioni, `getAnimations()` vuoto | fermo |
+| tolto ogni `stroke-dashoffset`/`animation` dal CSS (vincevano su SMIL) | idem | fermo |
+| profilo dei nodi copiato dal mobile (pieno dal 22% all'82%), sfasamenti 0/0,36/0,73 | nodi 11 · 8 · 6 valori distinti su 30 | fermo |
+| **motore JS di riserva** con `data-motore` (`smil` \| `js` \| `js-intervallo`) | al contrario, SMIL tolto: `smil → js`, 25 valori su 30 | fermo |
+
+**Cause ESCLUSE con una misura, non per opinione:**
+- non è il tema — due temi × tre modi di «riduci animazioni»: **12 valori distinti su 12, sei volte
+  su sei**;
+- non è l'interruttore «Riduci animazioni» dell'app né quello di Windows — stessa misura;
+- non è la cache — `app.js` va con `Cache-Control: no-store`, e il bundle servito contiene l'SMIL
+  (`curl` trova `"animate"`, `repeatCount`, `88;-88`);
+- non è un secondo segnavia statico ereditato dal mockup — a riposo nel DOM ce ne sono **zero**.
+
+**Cosa NON è stato provato, ed è dove va cercata la causa:** il suo Chrome vero. Il progetto sa già
+che ha l'**accelerazione hardware disattivata** (misurato il 02/09: da 6,1 ms a 109 ms per
+fotogramma, p95 212). Nessuna delle mie misure gira lì dentro.
+
+**La prossima mossa, quando l'owner vorrà riaprirlo** — una sola, e decisiva: leggere `data-motore`
+sul SUO schermo. Il valore dice in una parola dove sta il guasto e chiude cinque ipotesi insieme:
+`smil` = il codice crede che SMIL funzioni e si sbaglia (bug nel rilevamento);
+`js`/`js-intervallo` = il ripiego è acceso e allora nemmeno il JavaScript riesce a dipingere, e il
+problema è il rendering, non il segnavia. Si legge passando il mouse sulla riga d'attesa con gli
+strumenti aperti, o da una foto dell'ispettore.
+
+⛔ Nessuna cura ulteriore senza quel dato: cinque tentativi al buio sono già cinque di troppo.
+
+### ✅ D-10A · L'Indice dei giri salta i numeri, con passo 3 — CHIUSO il 10/09/2026, sera
+
+> **Causa misurata** (sonda in sola lettura sul 4174, `scratchpad/prove/d10a-indice-giri/sonda.mjs`,
+> otto sessioni vere): i numeri mancanti stavano tutti su un turno della PERSONA —
+> `utente numeri=[1]`, `[4]`, `[7]`, `[10]`, `[13]` fra `talos numeri=[2,3]`, `[5,6]`, `[8,9]`. Ogni
+> messaggio dell'utente prende un numero della spine e lo mostra in chat; `giriPerInspector()`
+> guardava solo i turni di TALOS. Nessun numero perso, nessuna numerazione rotta: **mancavano le
+> righe**. Cura: mostrare la riga omessa dicendo di chi è («4 · ma che cavolo significa?» / «tuo
+> messaggio»), NON rinumerare — il numero dell'indice deve restare quello che la chat mostra accanto
+> al messaggio. Verificato dal vivo: 1 · 2 · 3 · 4 · 5 · 6 · 7 · 8 · 9 · 10, senza un buco.
+> Commit `7f0d4b0a`.
+
+Il testo originale del debito, per memoria: misurato nelle foto del 10/09 (`dopo-02-dove-finisce.png`): l'indice mostra 2, 3, 5, 6, 8, 9, 11, 12,
 14, 15, 17, 18, 20, 21. Cioè ogni ciclo consuma **tre** numeri e ne mostra due. ⛔ La causa NON è
 ancora misurata: i numeri arrivano dalla spine del turno (`segnaGiroNellaSpine`), e prima di dire
 perché salta uno serve strumentare, non rileggere. Non è grave (nessun dato è sbagliato, solo la
