@@ -852,15 +852,39 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
   for (const [i, cx] of [16, 48, 80].entries()) {
     const nodo = documentObj.createElementNS(SVG_NS, 'circle');
     nodo.setAttribute('class', 'talos-line-loader-node');
-    nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
+    /* ⛔ Il viewBox e' 96x16 e lo rendiamo a 48x8: TUTTO e' disegnato a meta' scala, e un nodo
+       r=4 arriva a schermo come un cerchio di 4 px in tutto. Il mobile rende lo stesso viewBox a
+       96x16, cioe' il doppio. L'owner vuole la riga piccola: allora crescono i NODI dentro il
+       disegno (r 4 → 5), non la riga. */
+    nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '5');
     nodo.setAttribute('fill', 'currentColor');
     nodo.setAttribute('fill-opacity', '0');
+    /*
+     * ⛔⛔⛔ 10/09, owner: «guarda come ha fatto il mobile, forse trovi qualcosa di utile». Trovato,
+     *   e sono DUE cose che il nostro sbagliava — `mobile/src/components/brand/TalosLineLoader.vue`
+     *   e `mobile/src/style.css`, letti oggi:
+     *
+     *   1. IL PROFILO. Il mobile tiene il nodo pieno dal **22% all'82%** del ciclo
+     *      (`@keyframes talosLineNodeFill`): pieno per il 60% del tempo, cioè un nodo ACCESO che a
+     *      un certo punto si spegne. Il nostro toccava l'opacità 1 per un istante solo e poi
+     *      decadeva: a schermo non e' un'onda, e' uno sfarfallio debole. Qui si copia il profilo suo.
+     *   2. IL TEMPO. Sweep e nodi condividono lo stesso ciclo di **1,6 s**, e i tre `begin`
+     *      (0 · 0,36 · 0,73) sono calcolati perche' ogni nodo si accenda QUANDO LA LINEA LO
+     *      RAGGIUNGE sui suoi 88 px — non tre ritardi scelti a occhio come i miei 0,28.
+     *
+     * ⛔ E il difetto peggiore stava nel CSS che abbiamo tolto: i ritardi erano su
+     *   `.talos-line-loader-node:nth-of-type(3)` e `(4)`, ma `nth-of-type` conta PER TIPO — i
+     *   `<circle>` sono 1, 2 e 3, non 3, 4 e 5. Il primo e il secondo nodo pulsavano quindi
+     *   IN SINCRONO (ritardo 0 entrambi) e il `(4)` non esisteva. Tre pallini che lampeggiano
+     *   insieme non si leggono come movimento: si leggono come uno sfarfallio. Il mobile usa
+     *   `nth-of-type(1)/(2)/(3)` e non ha mai avuto questo difetto.
+     */
     const acceso = documentObj.createElementNS(SVG_NS, 'animate');
     acceso.setAttribute('attributeName', 'fill-opacity');
-    acceso.setAttribute('values', '0;1;0');
-    acceso.setAttribute('keyTimes', '0;0.35;1');
-    acceso.setAttribute('dur', '1.2s');
-    acceso.setAttribute('begin', `${i * 0.28}s`);
+    acceso.setAttribute('values', '0;0;1;1;0');
+    acceso.setAttribute('keyTimes', '0;0.12;0.22;0.82;1');
+    acceso.setAttribute('dur', '1.6s');
+    acceso.setAttribute('begin', `${[0, 0.36, 0.73][i]}s`);
     acceso.setAttribute('repeatCount', 'indefinite');
     nodo.append(acceso);
     svg.append(nodo);
