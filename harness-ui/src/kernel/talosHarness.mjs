@@ -649,7 +649,14 @@ export function uscitaUtile(testo, tetto = 4_000, quotaInTesta = 0.25) {
     const coda = tetto - testa
     const tolti = t.length - tetto
     return t.slice(0, testa)
-        + `\n\n… [${tolti} caratteri tolti nel mezzo: l elenco completo dei test] …\n\n`
+        /*
+         * ⛔ D-10G (10/09) — questa frase diceva «l elenco completo dei test» su QUALUNQUE
+         *   troncamento. Vista dall'owner su una PAGINA WEB: «[131346 caratteri tolti nel mezzo:
+         *   l elenco completo dei test]». Nominava il caso in cui era stata scritta invece di ciò
+         *   che stava davvero tagliando — e un marcatore che mente sul contenuto è peggio di uno
+         *   muto, perché chi legge crede di sapere che cosa non sta vedendo.
+         */
+        + `\n\n… [tolti ${tolti} caratteri dal mezzo] …\n\n`
         + t.slice(t.length - coda)
 }
 
@@ -2290,12 +2297,36 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         /* ⛔ D-10C — `insieme` cresce nell'ordine in cui i dati ARRIVANO: è l'unico posto dove
            l'errore sta dopo la riga che l'ha preceduto. `fuori` ed `errori` restano invariati. */
         let insieme = ''
-        p.stdout?.on('data', (d) => { fuori += d; insieme += d })
-        p.stderr?.on('data', (d) => { errori += d; insieme += d })
-        const timer = setTimeout(() => p.kill(), 120_000)
+        /*
+         * ⛔ D-10G — l'accumulo aveva un tetto SOLO alla fine (`uscitaUtile`), quindi un comando
+         *   che stampa senza fermarsi riempiva la memoria fino a lì. Il tetto ora è DURANTE: si
+         *   tiene molto più del necessario (quaranta volte ciò che si mostra) perché il taglio
+         *   finale possa ancora scegliere testa e coda, ma non più all'infinito.
+         */
+        const TETTO_ACCUMULO = 160_000
+        const aggiungi = (dove, d) => (dove.length > TETTO_ACCUMULO ? dove : dove + d)
+        p.stdout?.on('data', (d) => { fuori = aggiungi(fuori, d); insieme = aggiungi(insieme, d) })
+        p.stderr?.on('data', (d) => { errori = aggiungi(errori, d); insieme = aggiungi(insieme, d) })
+        /*
+         * ⛔⛔ D-10G — UN COMANDO FERMATO NON È UN COMANDO RIUSCITO.
+         *   `p.kill()` fa arrivare `close` con `codice: null` (ucciso da segnale), e `null` non
+         *   si distingue da un successo muto: chi legge non ha modo di sapere che il comando è
+         *   stato fermato allo scadere del tempo. In chat la bugia era già smascherata; alla
+         *   fonte no. Ora la fonte lo DICE, e il testo lo dice a chi legge.
+         */
+        let fermatoDalTempo = false
+        const timer = setTimeout(() => { fermatoDalTempo = true; p.kill() }, 120_000)
         p.on('close', (codice) => {
             clearTimeout(timer)
-            risolvi({ codice, testo: uscitaUtile((insieme || `${fuori}\n${errori}`).trim(), 4_000, 0.25), enforcement: 'none' })
+            const uscita = uscitaUtile((insieme || `${fuori}\n${errori}`).trim(), 4_000, 0.25)
+            risolvi({
+                codice: fermatoDalTempo ? 124 : codice, // 124: il codice che `timeout(1)` usa da sempre per «tempo scaduto»
+                fermatoDalTempo,
+                testo: fermatoDalTempo
+                    ? `${uscita}\n\n⛔ Fermato allo scadere dei 120 secondi: non ha finito da solo.`.trim()
+                    : uscita,
+                enforcement: 'none',
+            })
         })
         p.on('error', (e) => {
             clearTimeout(timer)

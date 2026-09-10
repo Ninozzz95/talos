@@ -590,3 +590,26 @@ chiamata sola la testa sparisce e la card perde bordo e fondo.
 
 **La rotta**, provata dal vivo: `GET /api/v1/favicon?dominio=benchlm.ai` → **200, 623 byte,
 image/vnd.microsoft.icon**; `?dominio=localhost` → **204**, rifiutato senza nemmeno provare a uscire.
+
+## 10/09/2026, 20:45 — il marchio che respira, e D-10G
+
+Owner, con Hermes accanto: «il loro logo è animato, il nostro no, te l'ho detto un sacco di volte ma
+ancora il nostro logo di caricamento risposta è statico».
+
+**`2026-09-10-marchio-vivo.png`** — guardata, con un giro vero in corso. Si vedono **due** cose vive:
+il segnavia a tre nodi accanto a «TALOS sta elaborando la risposta… 1s», e il glifo dell'avatar che
+ora respira. Misurato nel tempo, non a occhio: `animationName: talosMarchioRespira`, opacità
+**0,45 → 0,52 → 0,73 → 0,93 → 1,00** su cinque letture, e alla fine del giro la classe sparisce
+(«si ferma a fine giro: true»).
+
+⛔ **Perché il segnavia non bastava**, ed è la ragione per cui la cura sta sull'avatar: `creaAttesa`
+vive solo fra `RunStarted` e il PRIMO TOKEN. Con `glm-5.3-flash` e la cache all'86% sono poche
+centinaia di millisecondi — misurato oggi, un giro intero senza mai vederlo comparire. Ciò che resta
+a schermo per tutta la risposta è il glifo accanto a «TALOS», e quello era fermo.
+
+### Difetto visto guardando la foto
+
+Nel pannello destro, «Finestra del contesto» mostra **«Conversazione —» e «Libera —»**: durante il
+giro i due numeri spariscono, mentre a giro fermo dicono «88,0k · 6,7%» e «1252k · 95,6%». Un
+trattino al posto di un numero che esisteva un attimo prima si legge come «non lo sappiamo», e non è
+vero: il dato c'è, semplicemente non viene aggiornato mentre il giro corre. Da guardare.

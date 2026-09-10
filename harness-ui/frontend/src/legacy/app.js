@@ -8974,7 +8974,23 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     { dopoSecondi: 5, testo: 'Il modello ci sta ancora lavorando…' },
     { dopoSecondi: 12, testo: 'Ci sta mettendo più del solito — resta in attesa…' },
   ];
+  /*
+   * ⭐⭐⭐ IL MARCHIO VIVO — owner 10/09, con Hermes accanto: «il loro logo è animato, il nostro no,
+   *   te l'ho detto un sacco di volte ma ancora il nostro logo di caricamento risposta è statico».
+   *
+   * ⛔ Il segnavia a tre nodi (`creaAttesa`) esiste ed è animato — ma vive solo fra RunStarted e il
+   *   PRIMO TOKEN, che con glm-5.3-flash e la cache all'86% sono poche centinaia di millisecondi:
+   *   misurato oggi, un giro intero senza mai vederlo comparire. Ciò che resta a schermo per tutto il
+   *   tempo della risposta è il glifo accanto a «TALOS», e quello era fermo.
+   * ⇒ Finché il giro è vivo il documento lo dichiara, e il glifo respira. Una classe sola, messa e
+   *   tolta negli stessi due punti che già governano l'attesa: nessuno stato nuovo da tenere in piedi.
+   */
+  function segnaGiroVivo(vivo) {
+    document.body?.classList?.toggle('talos-giro-vivo', Boolean(vivo));
+  }
+
   function mostraAttesaRisposta(stato = 'attesa') {
+    segnaGiroVivo(true);
     state.realSession.faseAttesa += 1;
     const etichette = {
       attesa: ETICHETTE_ATTESA_PER_TEMPO[0].testo,
@@ -9026,6 +9042,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function nascondiAttesaRisposta() {
+    /* ⛔ Il marchio NON si ferma qui: il primo token toglie il segnavia, ma la risposta sta ancora
+       arrivando. Si ferma quando il giro finisce davvero — vedi `fineGiroReale`. */
     if (state.realSession.attesaTimer !== null) {
       window.clearInterval(state.realSession.attesaTimer);
       state.realSession.attesaTimer = null;
@@ -10994,6 +11012,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           break;
         }
         case 'RunError': {
+        segnaGiroVivo(false); // ⛔ anche un giro fallito è un giro finito: il marchio non resta vivo su un errore
           righe.push(`> ⛔ **ERRORE${evento.code ? ` [${evento.code}]` : ''}:** ${evento.message}`, '');
           break;
         }
@@ -13468,6 +13487,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         break;
       }
       case 'RunFinished': {
+        segnaGiroVivo(false); // ⭐ il marchio smette di respirare quando il giro finisce DAVVERO
         contextMonitor?.setRunning(false); void contextMonitor?.refresh({ afterPending: true });
         /*
          * ⛔⛔⛔ 27/8, owner: "non riesco ad avere una conversazione base col
