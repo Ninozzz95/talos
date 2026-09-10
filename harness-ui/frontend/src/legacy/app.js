@@ -2641,36 +2641,73 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   async function avviaAccessoProvider(provider) {
     const corrente = () => $('#providerList')?.querySelector('[data-provider-id="' + provider + '"]');
+    /*
+     * \u26d4 LA FINESTRA SI APRE ADESSO, dentro il clic, e si riempie dopo.
+     *   MDN «Window.open» (letto il 10/09/2026): «Popup windows must be opened in direct response to
+     *   user input, and a separate user gesture event is required for each Window.open() call» \u2014 e
+     *   l'attivazione transitoria dura pochi secondi. Aprirla DOPO l'attesa del server significava
+     *   chiedere al browser di fidarsi di un clic ormai vecchio: la bloccava, e aveva ragione.
+     *   Misurato dall'owner il 10/09, con lo screenshot del messaggio rosso.
+     * \u26d4 Niente `noopener` QUI: con quel flag il riferimento torna `null` e la finestra non si
+     *   potrebbe pi\u00f9 riempire. `opener` si azzera subito dopo, che d\u00e0 la stessa difesa.
+     */
+    const finestra = window.open('', '_blank');
+    if (finestra) { try { finestra.opener = null; } catch { /* alcuni browser lo vietano: non \u00e8 un errore */ } }
     try {
       const risposta = await apiPost('/api/v1/auth/' + encodeURIComponent(provider) + '/inizia', {});
       const indirizzo = risposta?.indirizzo;
       if (typeof indirizzo !== 'string' || !indirizzo) throw new Error('Il server non ha restituito un indirizzo di accesso.');
-      const finestra = window.open(indirizzo, '_blank', 'noopener,noreferrer');
-      if (!finestra) {
-        mostraEsitoProvider(corrente(), 'Il browser ha bloccato la finestra dell\u2019accesso. Aprila a mano: ' + indirizzo, true);
-        return;
-      }
+      if (!finestra) { mostraLinkAccesso(corrente(), indirizzo); return; }
+      finestra.location.href = indirizzo;
       mostraEsitoProvider(corrente(), 'Accesso aperto nel browser. Torna qui quando hai finito: la chiave arriva da sola.');
-      /* ⛔ Il messaggio vive in fondo alla card, e su una card lunga finisce SOTTO il bordo dello
-         schermo: chi ha appena premuto non vede nessuna conferma e crede che non sia successo
-         niente. Trovato nella foto del 10/09, non dal DOM — il testo c'era, semplicemente non si
-         vedeva. Le altre azioni scorrono già nel loro `finally`; questa non ci passa. */
+      /*
+       * \u26d4 Il messaggio vive in fondo alla card, e su una card lunga finisce SOTTO il bordo dello
+       *   schermo: chi ha appena premuto non vede nessuna conferma e crede che non sia successo
+       *   niente. Trovato nella foto del 10/09, non dal DOM \u2014 il testo c'era e non si vedeva.
+       */
       corrente()?.querySelector('[data-provider-feedback]')?.scrollIntoView({ block: 'nearest' });
       /*
-       * ⛔ Il ritorno lo riceve il SERVER, non questa pagina: senza questo risveglio la card
-       *   continuerebbe a dire «Chiave mancante» dopo un accesso RIUSCITO, che è indistinguibile
-       *   da uno fallito. Si ricarica quando la finestra torna in primo piano — una volta sola.
+       * \u26d4 Il ritorno lo riceve il SERVER, non questa pagina: senza questo risveglio la card
+       *   continuerebbe a dire «Chiave mancante» dopo un accesso RIUSCITO, che \u00e8 indistinguibile da
+       *   uno fallito. Si ricarica quando la finestra torna in primo piano \u2014 una volta sola.
        */
       const alRitorno = async () => {
         window.removeEventListener('focus', alRitorno);
         await caricaProviderModelLab();
         const riga = state.modelLab.providers?.find((r) => r.id === provider);
-        if (riga?.keyConfigured) mostraEsitoProvider(corrente(), 'Accesso fatto: la chiave è nel portachiavi del computer.');
+        if (riga?.keyConfigured) mostraEsitoProvider(corrente(), 'Accesso fatto: la chiave \u00e8 nel portachiavi del computer.');
       };
       window.addEventListener('focus', alRitorno);
     } catch (errore) {
-      mostraEsitoProvider(corrente(), errore.message || 'Non è stato possibile aprire l\u2019accesso.', true);
+      /* La finestra vuota gi\u00e0 aperta va chiusa: lasciarla l\u00ec, bianca e senza spiegazione, \u00e8 peggio
+         del non averla aperta. */
+      try { finestra?.close(); } catch { /* gi\u00e0 chiusa dalla persona */ }
+      mostraEsitoProvider(corrente(), errore.message || 'Non \u00e8 stato possibile aprire l\u2019accesso.', true);
+      corrente()?.querySelector('[data-provider-feedback]')?.scrollIntoView({ block: 'nearest' });
     }
+  }
+
+  /**
+   * Il ripiego quando il browser blocca comunque: un LINK su cui cliccare, non trecento caratteri di
+   * indirizzo da copiare a mano \u2014 che \u00e8 quello che si leggeva prima, e non \u00e8 un'istruzione: \u00e8 un muro.
+   * \u26d4 `mostraEsitoProvider` scrive TESTO, e deve continuare a farlo: ci passano messaggi del server,
+   *   che non vanno mai interpretati come markup. Qui serve un elemento, quindi si costruisce a mano.
+   */
+  function mostraLinkAccesso(card, indirizzo) {
+    const feedback = card?.querySelector('[data-provider-feedback]');
+    if (!feedback) return;
+    feedback.replaceChildren();
+    feedback.append(document.createTextNode('Il browser ha bloccato la finestra. '));
+    const link = document.createElement('a');
+    link.href = indirizzo;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = 'Apri l\u2019accesso';
+    feedback.append(link);
+    feedback.classList.add('is-error');
+    feedback.setAttribute('role', 'alert');
+    feedback.hidden = false;
+    feedback.scrollIntoView({ block: 'nearest' });
   }
 
   async function gestisciAzioneProvider(button) {
