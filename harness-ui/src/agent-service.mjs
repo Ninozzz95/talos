@@ -1621,6 +1621,9 @@ export async function eseguiComandoDiretto({
   };
   const risultato = await eseguiComandoSandboxatoFn(comando, cartella, {
     mobile,
+    /* ⛔ D-10D-bis: si chiede al kernel di dire DOVE si e' fermato il comando, cosi' il prossimo
+       riparte da li'. Chi non lo chiede non vede nessuna differenza. */
+    tracciaCartella: true,
     onPezzo: ({ testo }) => {
       accumulato += testo;
       const ora = Date.now();
@@ -1631,5 +1634,5 @@ export async function eseguiComandoDiretto({
   const content = `exit ${risultato.codice} [sandbox: ${risultato.enforcement}]\n${risultato.testo}`;
   onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId, content }));
   onEvento(comandoUtenteFinito({ comandoId, codice: risultato.codice, enforcement: risultato.enforcement }));
-  return { ok: true, codice: risultato.codice, enforcement: risultato.enforcement };
+  return { ok: true, codice: risultato.codice, enforcement: risultato.enforcement, cartellaFinale: risultato.cartellaFinale ?? null };
 }

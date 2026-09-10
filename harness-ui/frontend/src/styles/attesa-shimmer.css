@@ -15,7 +15,12 @@
  *   di riserva, ripiego per chi chiede meno movimento) e torna con una riga di CSS il giorno in cui
  *   si riprogetta il grafo. Cancellarlo butterebbe anche le misure che sono costate la serata.
  */
-.talos-waiting .talos-line-loader{ display: none; }
+/*
+ * ⛔ 10/09, owner: «ok rimetti il segnavia ma fallo piu' piccolo e mi raccomando identico a quello
+ *   che c'e' gia' nel mobile, e piccolo». Torna visibile — e ora PUO' muoversi, perche' le due
+ *   regole universali che spegnevano ogni animazione sono state eliminate. Non era mai stato un
+ *   problema del segnavia.
+ */
 
 /*
  * Il testo si illumina da sinistra a destra. `background-clip: text` dipinge il gradiente DENTRO le

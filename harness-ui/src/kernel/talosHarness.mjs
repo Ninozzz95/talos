@@ -2258,7 +2258,58 @@ async function sondaRuntimeMobileNode(seriale) {
  *   più di un dispositivo pronto → `enforcement:'none'` dichiarato, non un
  *   errore nascosto.
  */
-export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo } = {}) {
+/*
+ * ⭐⭐⭐ LA CARTELLA DI LAVORO CHE RESTA FRA UN COMANDO E L'ALTRO.
+ *
+ * Owner 10/09, con la sua schermata: `ls` mostrava il Desktop, `cd Games` non faceva niente, e un
+ * `ls` dopo mostrava ancora il Desktop. «Non funziona un cazzo» — e aveva ragione: ogni comando
+ * ripartiva da capo. Non era un terminale: erano esecuzioni isolate che si somigliavano.
+ *
+ * ⛔ Non e' un difetto solo nostro. Claude Code ha lo stesso aperto su Windows
+ * (anthropics/claude-code#16361, «Working directory does not persist between Bash commands on
+ * Windows», letto il 10/09/2026), e la ragione e' strutturale: una shell non interattiva nasce,
+ * esegue e muore, e `cd` e' INTERNO alla shell, quindi muore con lei. La via, dalla stessa
+ * ricerca: tenere la cartella come STATO di chi chiama, non dentro il processo figlio.
+ *
+ * ⇒ Il comando viene seguito da una riga che stampa la cartella finale, marcata. Chi chiama la
+ * legge, la tiene, e la passa al comando dopo. L'output torna ripulito: il marcatore non si vede
+ * mai — ne' alla fine, ne' nei pezzi che escono mentre escono (D-10B).
+ * ⛔ Senza `tracciaCartella` non cambia NIENTE, byte per byte: il comando eseguito e' quello di
+ * prima, e `eseguiComando` resta generico — non sa nemmeno che questo marcatore esista.
+ */
+export const MARCATORE_CARTELLA = '__TALOS_CWD__'
+
+/** La coda che stampa la cartella finale, nella lingua della shell che esegue davvero. */
+export function codaCheStampaLaCartella(perWindows) {
+    /*
+     * ⛔⛔ MISURATO il 10/09, e la prima versione sbagliava proprio qui: con `"$(pwd)"` (bash) e
+     *   `%CD%` (cmd) la cartella tornava quella di PARTENZA anche dopo un `cd` riuscito — il
+     *   comando stampava `…/harness-ui/frontend` e il marcatore `…/AVM-harness-desktop`.
+     *   Provato a mano in WSL: `… ; printf "MARCA%s" "$(pwd)"` → cartella iniziale;
+     *   `… ; printf "MARCA" ; pwd` → **cartella giusta**. La sostituzione viene valutata prima
+     *   che il `cd` abbia effetto; `pwd` come COMANDO, invece, chiede alla shell dov'e' adesso.
+     * ⛔ `;` e non `&&`: la cartella si vuole sapere ANCHE quando il comando fallisce — anzi
+     *   soprattutto allora, perche' e' il caso in cui si riprova da dove si era rimasti.
+     */
+    return perWindows
+        ? ` & echo.${MARCATORE_CARTELLA}& cd`
+        : ` ; printf '\\n${MARCATORE_CARTELLA}' ; pwd`
+}
+
+/**
+ * Stacca il marcatore dall'uscita: torna il testo pulito e la cartella finale (o `null`).
+ * ⛔ Si guarda l'ULTIMA occorrenza: un comando puo' stampare quella stringa per conto suo (un
+ *   `grep` su questo file, per dire), e la NOSTRA e' sempre in fondo.
+ */
+export function staccaCartellaFinale(testo) {
+    const t = String(testo ?? '')
+    const i = t.lastIndexOf(MARCATORE_CARTELLA)
+    if (i === -1) return { testo: t, cartella: null }
+    const cartella = t.slice(i + MARCATORE_CARTELLA.length).split('\n')[0].trim()
+    return { testo: t.slice(0, i).replace(/[\r\n]+$/, ''), cartella: cartella || null }
+}
+
+export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, tracciaCartella = false } = {}) {
     if (mobile) {
         const seriale = await risolviSerialeAdbAttivo()
         if (!seriale) {
@@ -2304,13 +2355,17 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
     if (distro && await programmaDisponibileInWsl(distro, primoProgramma(comando))) {
         const percorsoWsl = convertiPercorsoWsl(cartella)
         const { codice, fuori, errori, insieme } = await eseguiComando(
-            'wsl.exe', ['-d', distro, '--', 'bash', '-lc', `cd ${JSON.stringify(percorsoWsl)} && ${comando}`],
-            { timeoutMs: 120_000, onPezzo },
+            'wsl.exe', ['-d', distro, '--', 'bash', '-lc', `cd ${JSON.stringify(percorsoWsl)} && { ${comando} ; }${tracciaCartella ? codaCheStampaLaCartella(false) : ''}`],
+            /* ⛔ Il marcatore non si vede nemmeno nei pezzi che escono mentre escono (D-10B). */
+            { timeoutMs: 120_000, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo).testo })) },
         )
-        return { codice, testo: uscitaUtile((insieme ?? `${fuori}\n${errori}`).trim(), 4_000, 0.25), enforcement: 'wsl2' }
+        const ripulito = staccaCartellaFinale((insieme ?? `${fuori}\n${errori}`).trim())
+        return { codice, testo: uscitaUtile(ripulito.testo, 4_000, 0.25), enforcement: 'wsl2', cartellaFinale: ripulito.cartella }
     }
     return new Promise((risolvi) => {
-        const p = spawn(comando, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
+        /* ⛔ Su Windows la shell qui e' cmd: la coda parla la sua lingua, non quella di bash. */
+        const coda = tracciaCartella ? codaCheStampaLaCartella(process.platform === 'win32') : ''
+        const p = spawn(`${comando}${coda}`, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
         let fuori = ''
         let errori = ''
         /* ⛔ D-10C — `insieme` cresce nell'ordine in cui i dati ARRIVANO: è l'unico posto dove
@@ -2325,7 +2380,8 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         const TETTO_ACCUMULO = 160_000
         const aggiungi = (dove, d) => (dove.length > TETTO_ACCUMULO ? dove : dove + d)
         /* ⛔ D-10B, come sopra: chi ascolta non puo' buttare giu' la lettura del flusso. */
-        const avvisa = (flusso, d) => { try { onPezzo?.({ flusso, testo: String(d) }) } catch { /* chi ascolta si arrangia */ } }
+        /* ⛔ Il marcatore non si vede mai, nemmeno nei pezzi che escono mentre escono (D-10B). */
+        const avvisa = (flusso, d) => { try { onPezzo?.({ flusso, testo: staccaCartellaFinale(String(d)).testo }) } catch { /* chi ascolta si arrangia */ } }
         p.stdout?.on('data', (d) => { fuori = aggiungi(fuori, d); insieme = aggiungi(insieme, d); avvisa('fuori', d) })
         p.stderr?.on('data', (d) => { errori = aggiungi(errori, d); insieme = aggiungi(insieme, d); avvisa('errori', d) })
         /*
@@ -2339,7 +2395,8 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         const timer = setTimeout(() => { fermatoDalTempo = true; p.kill() }, 120_000)
         p.on('close', (codice) => {
             clearTimeout(timer)
-            const uscita = uscitaUtile((insieme || `${fuori}\n${errori}`).trim(), 4_000, 0.25)
+            const ripulito = staccaCartellaFinale((insieme || `${fuori}\n${errori}`).trim())
+            const uscita = uscitaUtile(ripulito.testo, 4_000, 0.25)
             risolvi({
                 codice: fermatoDalTempo ? 124 : codice, // 124: il codice che `timeout(1)` usa da sempre per «tempo scaduto»
                 fermatoDalTempo,
@@ -2347,6 +2404,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
                     ? `${uscita}\n\n⛔ Fermato allo scadere dei 120 secondi: non ha finito da solo.`.trim()
                     : uscita,
                 enforcement: 'none',
+                cartellaFinale: ripulito.cartella,
             })
         })
         p.on('error', (e) => {

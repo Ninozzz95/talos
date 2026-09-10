@@ -169,22 +169,7 @@ function documentoSvgFinto() {
   return { createElement: (t) => nodo(t), createElementNS: (_ns, t) => nodo(t), createTextNode: (t) => ({ tag: '#text', textContent: String(t), figli: [] }) };
 }
 
-test('SEGNAVIA: ogni nodo ha DUE animazioni SMIL sincrone — l’opacità e il raggio', async () => {
-  const { creaAttesa } = await import('../../src/components/conversazione.js');
-  const { blocco } = creaAttesa({ etichetta: 'prova' }, { document: documentoSvgFinto(), window: {} });
-  const nodi = blocco.conClasse('talos-line-loader-node');
-  assert.equal(nodi.length, 3, 'tre nodi, come il mockup e come il mobile');
-  for (const [i, n] of nodi.entries()) {
-    const anim = n.tuttiConTag('animate').filter((a) => a !== n);
-    const quali = anim.map((a) => a.getAttribute('attributeName')).sort();
-    assert.deepEqual(quali, ['fill-opacity', 'r'], `⛔ nodo ${i}: servono tutte e due — il salto visibile è il raggio`);
-    const chiavi = new Set(anim.map((a) => `${a.getAttribute('keyTimes')}|${a.getAttribute('dur')}|${a.getAttribute('begin')}`));
-    assert.equal(chiavi.size, 1, `⛔ nodo ${i}: profili sfasati fra loro — sarebbero due movimenti che si disturbano, non uno che si legge`);
-  }
-  /* ⛔ AL CONTRARIO: a riposo il nodo deve essere PICCOLO. Se `r` partisse già al valore acceso, la
-     crescita non si vedrebbe e la misura dei pixel tornerebbe quella di prima. */
-  assert.equal(nodi[0].getAttribute('r'), '4');
-});
+
 
 /*
  * ⛔⛔⛔ MENO MOVIMENTO: i tre nodi devono essere accesi TUTTI E TRE.
@@ -195,19 +180,7 @@ test('SEGNAVIA: ogni nodo ha DUE animazioni SMIL sincrone — l’opacità e il 
  * scrivevano a mano i valori fermi e poi si chiamava `pauseAnimations()`: a t=0 solo l'animazione
  * con `begin="0s"` era già partita, e sovrascriveva il primo nodo col suo valore iniziale.
  */
-test('SEGNAVIA, MENO MOVIMENTO: nessun `<animate>`, e tutti e tre i nodi accesi e cresciuti', async () => {
-  const { creaAttesa } = await import('../../src/components/conversazione.js');
-  const finestra = { matchMedia: (q) => ({ matches: q.includes('reduced-motion') }) };
-  const { blocco } = creaAttesa({ etichetta: 'prova' }, { document: documentoSvgFinto(), window: finestra });
-  const nodi = blocco.conClasse('talos-line-loader-node');
-  assert.equal(nodi.length, 3);
-  assert.deepEqual(nodi.map((n) => n.getAttribute('fill-opacity')), ['1', '1', '1'], '⛔ tre pallini di cui uno spento sembrano un errore di disegno, non uno stato');
-  assert.deepEqual(nodi.map((n) => n.getAttribute('r')), ['7', '7', '7'], '⛔ fermo vuol dire acceso E cresciuto, non «al primo fotogramma»');
-  const animazioni = blocco.tuttiConTag('animate');
-  assert.equal(animazioni.length, 0, '⛔ un solo `<animate>` basta a sovrascrivere i valori fermi appena l’SVG entra nel documento');
-  const linea = blocco.conClasse('talos-line-loader-sweep')[0];
-  assert.equal(linea.getAttribute('stroke-dashoffset'), '0', 'la linea resta piena: si vede che c’è');
-});
+
 
 test('SEGNAVIA, AL CONTRARIO: il ripiego JavaScript muove ANCHE il raggio', () => {
   const svg = segnaviaFinto({ smilSiMuove: false });
@@ -223,4 +196,54 @@ test('SEGNAVIA, AL CONTRARIO: il ripiego JavaScript muove ANCHE il raggio', () =
     raggi.add(svg.nodi.map((n) => n.get('r')).join('|'));
   }
   assert.equal(raggi.size, 4, `⛔ un ripiego che accende ma non fa crescere vale meno dell’originale. Trovato: ${[...raggi].join(' / ')}`);
+});
+
+/*
+ * ⛔⛔⛔ 10/09 — IL SEGNAVIA E' QUELLO DEL MOBILE, e questo test lo inchioda.
+ *
+ * Owner: «identico a quello che c'e' gia' nel mobile, e piccolo». «Identico» e' una promessa che
+ * si puo' rompere in silenzio con una riga — un raggio diverso, un nodo spostato — e allora la
+ * si prova: la geometria qui sotto e' letta da `mobile/src/components/brand/TalosLineLoader.vue`.
+ *
+ * ⛔ Qui NON si prova piu' SMIL, e non e' una rinuncia: SMIL e il motore JS di riserva erano due
+ *   cure a un problema che non esisteva. Il segnavia non si muoveva perche' due regole universali
+ *   con `!important` (`body.reduce-motion *` e `@media (prefers-reduced-motion){ * }`) spegnevano
+ *   OGNI animazione dell'app. Tolte quelle, l'animazione CSS del mobile funziona.
+ */
+import { creaAttesa } from '../../src/components/conversazione.js';
+
+test('SEGNAVIA: geometria identica a quella del mobile, resa piccola', () => {
+  const creati = [];
+  const finto = {
+    createElementNS: (_ns, tag) => {
+      const attr = new Map();
+      const nodo = { tag, attr, figli: [], setAttribute: (k, v) => attr.set(k, String(v)), getAttribute: (k) => attr.get(k) ?? null, append: (...x) => nodo.figli.push(...x), querySelector: () => null, querySelectorAll: () => [] };
+      creati.push(nodo);
+      return nodo;
+    },
+    createElement: (tag) => {
+      const n = { tag, className: '', dataset: {}, children: [], setAttribute() {}, getAttribute: () => null, append: (...x) => n.children.push(...x), appendChild: (x) => n.children.push(x), querySelector: () => null, querySelectorAll: () => [], insertBefore() {} };
+      return n;
+    },
+    createTextNode: (t) => ({ t }),
+  };
+  creaAttesa({ etichetta: 'x' }, { document: finto });
+  const svg = creati.find((n) => n.tag === 'svg');
+  assert.equal(svg.getAttribute('viewBox'), '0 0 96 16', "il viewBox e quello del mobile");
+  assert.equal(svg.getAttribute('width'), '36', '⛔ owner: «piccolo»');
+  assert.equal(svg.getAttribute('height'), '6');
+
+  const linee = creati.filter((n) => n.tag === 'line');
+  assert.equal(linee.length, 2, 'traccia e sweep, come nel mobile');
+  for (const l of linee) {
+    assert.deepEqual([l.getAttribute('x1'), l.getAttribute('y1'), l.getAttribute('x2'), l.getAttribute('y2')], ['4', '8', '92', '8'],
+      'la linea va da 4 a 92 su y=8: sono gli 88 px su cui sono calcolati i ritardi dei nodi');
+  }
+  const nodi = creati.filter((n) => n.tag === 'circle');
+  assert.deepEqual(nodi.map((n) => n.getAttribute('cx')), ['16', '48', '80'], 'i tre nodi stanno dove li mette il mobile');
+  assert.deepEqual(nodi.map((n) => n.getAttribute('r')), ['4', '4', '4'], 'raggio 4, come il mobile');
+
+  /* ⛔ AL CONTRARIO: niente SMIL. Se un `<animate>` ricomparisse, tornerebbero due motori sullo
+     stesso attributo — ed e' il difetto che ha fatto perdere una serata. */
+  assert.equal(creati.filter((n) => n.tag === 'animate').length, 0, "⛔ il movimento e del CSS, come nel mobile");
 });

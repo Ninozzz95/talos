@@ -1,0 +1,57 @@
+/*
+ * ⭐⭐⭐ IL SEGNAVIA A TRE NODI — QUELLO DEL MOBILE, COPIATO.
+ *
+ * Owner 10/09: «ok rimetti il segnavia ma fallo più piccolo e mi raccomando identico a quello che
+ * c'è già nel mobile, e piccolo».
+ *
+ * ⛔ «Identico» vuol dire identico: queste regole sono quelle di `mobile/src/style.css`
+ *   (`.talos-line-loader*`, `@keyframes talosLineSweep`, `@keyframes talosLineNodeFill`), lette
+ *   oggi e riportate senza reinterpretarle. Il mobile lo rende a 96×16, qui a 36×6.
+ *
+ * ⛔ Perché adesso può funzionare, e prima no: il segnavia non era rotto. Erano due regole
+ *   universali con `!important` — `body.reduce-motion *` e `@media (prefers-reduced-motion){ * }` —
+ *   a spegnere ogni animazione dell'app. Eliminate quelle, l'animazione CSS del mobile si muove, ed
+ *   è esattamente ciò che l'owner voleva vedere. Sei tentativi di cura su un componente sano.
+ *
+ * ⛔ Niente SMIL, niente motore JS di riserva, niente `data-motore`: erano cure a un problema che
+ *   non esisteva. Meno codice, e il disegno di un componente già provato su un altro prodotto.
+ */
+.talos-line-loader{ display: block; width: 36px; height: 6px; overflow: visible; flex: none; }
+.talos-line-loader-track{
+  stroke: var(--talos-accent);
+  stroke-opacity: .18;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.talos-line-loader-sweep{
+  stroke: var(--talos-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 88;
+  stroke-dashoffset: 88;
+  animation: talosLineSweep 1.6s ease-in-out infinite;
+}
+.talos-line-loader-node{
+  fill: transparent;
+  stroke: var(--talos-accent);
+  stroke-width: 2;
+  animation: talosLineNodeFill 1.6s ease-in-out infinite;
+}
+/*
+ * I ritardi del mobile, e il selettore GIUSTO: `nth-of-type` conta per TIPO, e i `<circle>` sono 1,
+ * 2 e 3 — non 3, 4 e 5. Il nostro vecchio foglio usava `(3)` e `(4)`, quindi il primo e il secondo
+ * nodo pulsavano IN SINCRONO e il terzo ritardo non esisteva. Il mobile non ha mai avuto il difetto.
+ * I tempi corrispondono all'istante in cui la linea raggiunge x=16, 48 e 80 sui suoi 88 px.
+ */
+.talos-line-loader-node:nth-of-type(1){ animation-delay: 0s; }
+.talos-line-loader-node:nth-of-type(2){ animation-delay: .36s; }
+.talos-line-loader-node:nth-of-type(3){ animation-delay: .73s; }
+@keyframes talosLineSweep{
+  0%        { stroke-dashoffset: 88; }
+  70%, 100% { stroke-dashoffset: 0; }
+}
+@keyframes talosLineNodeFill{
+  0%, 12%   { fill: transparent; }
+  22%, 82%  { fill: var(--talos-accent); }
+  100%      { fill: transparent; }
+}

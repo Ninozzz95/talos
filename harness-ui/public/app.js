@@ -9143,70 +9143,6 @@ function creaArtefatto({ titolo: titolo2 = "Artefatto", formato = "", src = "", 
   card.append(testa, frame);
   return { card, frame, apri };
 }
-function animaSegnavia(svg, { window: finestra = globalThis, adesso = () => finestra.performance?.now?.() ?? Date.now() } = {}) {
-  const sweep = svg?.querySelector?.(".talos-line-loader-sweep");
-  if (!sweep) return () => {
-  };
-  const nodi = [...svg.querySelectorAll?.(".talos-line-loader-node") ?? []];
-  let fermato = false;
-  let handle = null;
-  let intervallo = null;
-  const ferma = () => {
-    fermato = true;
-    if (handle != null) finestra.cancelAnimationFrame?.(handle);
-    if (intervallo != null) finestra.clearInterval?.(intervallo);
-    handle = null;
-    intervallo = null;
-  };
-  const inizio = adesso();
-  const disegna = () => {
-    if (fermato || !svg.isConnected) return ferma();
-    const t2 = (adesso() - inizio) % CICLO_MS / CICLO_MS;
-    sweep.setAttribute("stroke-dashoffset", String(88 - 176 * t2));
-    nodi.forEach((nodo4, i) => {
-      const f = (t2 - FASI_NODI[i] + 1) % 1;
-      const acceso = f < 0.12 ? 0 : f < 0.22 ? (f - 0.12) / 0.1 : f < 0.82 ? 1 : Math.max(0, 1 - (f - 0.82) / 0.18);
-      nodo4.setAttribute("fill-opacity", acceso.toFixed(3));
-      nodo4.setAttribute("r", (RAGGIO_SPENTO + (RAGGIO_ACCESO - RAGGIO_SPENTO) * acceso).toFixed(2));
-    });
-  };
-  let frameVisti = 0;
-  const giro = () => {
-    if (fermato || !svg.isConnected) return ferma();
-    frameVisti += 1;
-    disegna();
-    handle = finestra.requestAnimationFrame?.(giro) ?? null;
-    if (handle == null) {
-      svg.setAttribute("data-motore", "js-intervallo");
-      intervallo = finestra.setInterval?.(disegna, 60) ?? null;
-    }
-  };
-  svg.setAttribute("data-motore", "smil");
-  finestra.setTimeout?.(() => {
-    if (fermato || !svg.isConnected) return;
-    const primo = finestra.getComputedStyle?.(sweep)?.strokeDashoffset ?? null;
-    finestra.setTimeout?.(() => decidi(primo), INTERVALLO_CONFRONTO_MS);
-  }, ATTESA_VERIFICA_MS);
-  function decidi(primo) {
-    if (fermato || !svg.isConnected) return;
-    const ora = finestra.getComputedStyle?.(sweep)?.strokeDashoffset ?? null;
-    if (primo !== null && ora !== null && primo !== ora) return;
-    try {
-      svg.pauseAnimations?.();
-    } catch {
-    }
-    svg.setAttribute("data-motore", "js");
-    giro();
-    finestra.setTimeout?.(() => {
-      if (fermato || !svg.isConnected || frameVisti > 4) return;
-      if (handle != null) finestra.cancelAnimationFrame?.(handle);
-      handle = null;
-      svg.setAttribute("data-motore", "js-intervallo");
-      intervallo = finestra.setInterval?.(disegna, 60) ?? null;
-    }, 500);
-  }
-  return ferma;
-}
 function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   let menoMovimento = false;
@@ -9223,8 +9159,8 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
   const svg = documentObj.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "talos-line-loader");
   svg.setAttribute("viewBox", "0 0 96 16");
-  svg.setAttribute("width", "48");
-  svg.setAttribute("height", "8");
+  svg.setAttribute("width", "36");
+  svg.setAttribute("height", "6");
   svg.setAttribute("aria-hidden", "true");
   for (const classe of ["talos-line-loader-track", "talos-line-loader-sweep"]) {
     const linea = documentObj.createElementNS(SVG_NS, "line");
@@ -9233,50 +9169,16 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
     linea.setAttribute("y1", "8");
     linea.setAttribute("x2", "92");
     linea.setAttribute("y2", "8");
-    if (classe === "talos-line-loader-sweep" && menoMovimento) linea.setAttribute("stroke-dashoffset", "0");
-    else if (classe === "talos-line-loader-sweep") {
-      const moto = documentObj.createElementNS(SVG_NS, "animate");
-      moto.setAttribute("attributeName", "stroke-dashoffset");
-      moto.setAttribute("values", "88;-88");
-      moto.setAttribute("dur", "1.6s");
-      moto.setAttribute("repeatCount", "indefinite");
-      linea.append(moto);
-    }
     svg.append(linea);
   }
-  for (const [i, cx] of [16, 48, 80].entries()) {
+  for (const cx of [16, 48, 80]) {
     const nodo4 = documentObj.createElementNS(SVG_NS, "circle");
     nodo4.setAttribute("class", "talos-line-loader-node");
     nodo4.setAttribute("cx", String(cx));
     nodo4.setAttribute("cy", "8");
-    nodo4.setAttribute("r", String(menoMovimento ? RAGGIO_ACCESO : RAGGIO_SPENTO));
-    nodo4.setAttribute("fill", "currentColor");
-    nodo4.setAttribute("fill-opacity", menoMovimento ? "1" : "0");
-    if (menoMovimento) {
-      svg.append(nodo4);
-      continue;
-    }
-    const acceso = documentObj.createElementNS(SVG_NS, "animate");
-    acceso.setAttribute("attributeName", "fill-opacity");
-    acceso.setAttribute("values", "0;0;1;1;0");
-    acceso.setAttribute("keyTimes", "0;0.12;0.22;0.82;1");
-    acceso.setAttribute("dur", "1.6s");
-    acceso.setAttribute("begin", `${[0, 0.36, 0.73][i]}s`);
-    acceso.setAttribute("repeatCount", "indefinite");
-    nodo4.append(acceso);
-    const cresciuto = documentObj.createElementNS(SVG_NS, "animate");
-    cresciuto.setAttribute("attributeName", "r");
-    cresciuto.setAttribute("values", `${RAGGIO_SPENTO};${RAGGIO_SPENTO};${RAGGIO_ACCESO};${RAGGIO_ACCESO};${RAGGIO_SPENTO}`);
-    cresciuto.setAttribute("keyTimes", "0;0.12;0.22;0.82;1");
-    cresciuto.setAttribute("dur", "1.6s");
-    cresciuto.setAttribute("begin", `${[0, 0.36, 0.73][i]}s`);
-    cresciuto.setAttribute("repeatCount", "indefinite");
-    nodo4.append(cresciuto);
+    nodo4.setAttribute("r", "4");
     svg.append(nodo4);
   }
-  let fermaMotore = () => {
-  };
-  if (!menoMovimento) fermaMotore = animaSegnavia(svg, { window: opzioni.window ?? globalThis });
   const label = el22(documentObj, "span", "talos-waiting__label run-activity-label", etichetta);
   const elapsed = el22(documentObj, "span", "talos-mono talos-muted run-activity-elapsed", "0s");
   elapsed.setAttribute("aria-hidden", "true");
@@ -9320,7 +9222,7 @@ function creaDiffInChat(gruppi, { percorso = "", apertoSeSotto = 40, document: d
   blocco.append(dettaglio);
   return blocco;
 }
-var SVG_NS, ALIAS_LINGUAGGIO, NOMI_LINGUAGGIO, PARTI_DEL_BLOCCO, copiaDiSerie, ICONA_ATTREZZO, ATTESA_VERIFICA_MS, INTERVALLO_CONFRONTO_MS, CICLO_MS, FASI_NODI, RAGGIO_SPENTO, RAGGIO_ACCESO;
+var SVG_NS, ALIAS_LINGUAGGIO, NOMI_LINGUAGGIO, PARTI_DEL_BLOCCO, copiaDiSerie, ICONA_ATTREZZO, FASI_NODI;
 var init_conversazione = __esm({
   "src/components/conversazione.js"() {
     SVG_NS = "http://www.w3.org/2000/svg";
@@ -9400,12 +9302,7 @@ var init_conversazione = __esm({
       time_now: "i-clock",
       research_start: "i-globe"
     });
-    ATTESA_VERIFICA_MS = 420;
-    INTERVALLO_CONFRONTO_MS = 140;
-    CICLO_MS = 1600;
     FASI_NODI = [0, 0.36 / 1.6, 0.73 / 1.6];
-    RAGGIO_SPENTO = 4;
-    RAGGIO_ACCESO = 7;
   }
 });
 
@@ -19464,11 +19361,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           if (label) label.textContent = etichetta;
           return;
         }
-        const { blocco: article, label: labelEl, elapsed, fermaMotore } = creaAttesa({ etichetta });
+        const { blocco: article, label: labelEl, elapsed, fermaMotore: fermaMotore2 } = creaAttesa({ etichetta });
         article.dataset.activity = stato;
         nellaChat(article);
         state.realSession.attesaBubble = article;
-        state.realSession.fermaMotoreSegnavia = fermaMotore;
+        state.realSession.fermaMotoreSegnavia = fermaMotore2;
         state.realSession.attesaAvviataA = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
         const aggiornaTempoAttesa = () => {
           if (!state.realSession.attesaBubble || state.realSession.attesaAvviataA === null) return;
