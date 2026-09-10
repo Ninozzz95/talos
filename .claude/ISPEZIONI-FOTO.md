@@ -636,3 +636,65 @@ cui il segnavia sia fermo.
 Nell'Indice dei giri si legge **2 · 3 · 5 · 6 · 8 · 9 · 11 · 13 · 14**: mancano 4, 7, 10, 12. È
 esattamente il debito «l'Indice dei giri salta i numeri», qui visto su una sessione vera invece che
 in una foto di ieri.
+
+## 10/09, sera — D-10A chiuso, il segnavia, il glifo
+
+Foto in `scratchpad/prove/foto/`. Tutte e tre aperte e guardate, non solo scattate.
+
+**`2026-09-10-segnavia-glifo-indice.png`** — scattata DURANTE un giro vero con `glm-5.3-flash`
+(invio → +~2 s), 1440×900. Tre cose da verificare, tutte e tre vere a schermo:
+
+- il **segnavia a tre nodi** si vede accanto a «TALOS sta elaborando la risposta… 0s»: due nodi
+  pieni, il terzo vuoto, e la linea che li attraversa. Alla taglia nuova (72×12, traccia al 28%) è
+  leggibile; alla vecchia (48×8 al 18%) spariva accanto all'etichetta di testo.
+- la testata del messaggio è **«TALOS glm-5.3-flash»** e basta: il glifo non c'è più, come chiesto.
+- l'**Indice dei giri** fa `1 · Conta lentamente da 1 a` → *tuo messaggio*, `2 · Risposta`,
+  `3 · UnoDueTre…`, `4 · ma che cavolo significa?` → *tuo messaggio*, `5`, `6`, `7`, `8`, `9`, `10`:
+  **consecutivo, senza un buco**. La foto di stamattina, sopra, diceva 2 · 3 · 5 · 6 · 8 · 9 · 11 ·
+  13 · 14. D-10A è chiuso, e ogni numero è lo stesso che la chat mostra accanto a quel messaggio.
+
+⛔ Difetti NOTATI nella stessa foto, fuori da ciò che stavo facendo:
+
+- «Finestra del contesto» mostra `—` su Conversazione e Libera **mentre il giro è in corso**, e i
+  numeri tornano solo a giro finito. Già annotato come debito: resta aperto.
+- la **spine del turno di TALOS** è una colonna di tick alta ~340 px (da y≈280 a y≈620) senza un solo
+  numero visibile accanto. Troppi tick per un turno, e il numero — che è il senso della spine — non
+  si legge. Nuovo, da registrare come debito a sé.
+
+**`2026-09-10-logo-barra.png`** — il marchio in alto a sinistra è ora 40 px di glifo dentro uno
+spazio di 42, senza capsula né bordo, allineato con «TALOS / CODICE». Le due icone a destra
+(campanella, comprimi barra) restano della loro taglia: cresce il logo, non la riga.
+
+**`2026-09-10-testata-senza-glifo.png`** — solo «TALOS» in maiuscoletto ambrato e `glm-5.3-flash` in
+mono accanto. Nessun residuo del glifo e nessuno spazio vuoto al suo posto: la riga parte dal bordo
+del testo come le altre.
+
+**`2026-09-10-segnavia-smil.png`** — guardata, giro vero con `glm-5.3-flash`, scattata DURANTE.
+Il segnavia si vede accanto a «TALOS sta elaborando la risposta…» e ora il suo movimento è SMIL:
+misurato nello stesso giro, **37 valori distinti di `stroke-dashoffset` su 37 campioni**, con
+`getAnimations()` **vuoto** — che è esattamente la prova che il movimento non passa più dal motore
+delle animazioni CSS, quello che `body.reduce-motion` spegneva con `!important`. Nelle tre
+condizioni di prova (Chrome pulito · «riduci animazioni» di Windows · interruttore dell'app) il
+segnavia ora fa 12 valori distinti su 12 in tutte e tre.
+Il resto della schermata è quello già annotato sopra e non cambia: testata «TALOS glm-5.3-flash»
+senza glifo, logo della barra grande, Indice dei giri consecutivo.
+
+**`2026-09-10-segnavia-nodi.png`** — guardata, giro vero con `glm-5.3-flash`, scattata DURANTE.
+Accanto a «TALOS sta elaborando la risposta… 0s» il segnavia è colto a metà ciclo: **il primo nodo
+pieno, gli altri due vuoti**. È esattamente ciò che deve fare — i tre nodi si accendono a turno — e
+in una foto sola si vede solo un fotogramma, quindi la prova sta nei numeri misurati nello stesso
+giro: nodo 1 **28 valori distinti di `fill-opacity` su 30 campioni**, nodo 2 **28**, nodo 3 **24**,
+e lo sweep **30 su 30**. Taglia tornata a **48×8 px** («ancora troppo grande»): ora si vede per il
+movimento, non per l'ingombro.
+Nel resto della schermata niente di nuovo rispetto alle ispezioni sopra.
+
+**`2026-09-10-segnavia-profilo-mobile.png`** — guardata, giro vero, scattata DURANTE. Il segnavia è
+colto con **il primo nodo pieno e gli altri due vuoti**: è l'onda che il mobile fa da sempre, e che
+il nostro non faceva. I nodi sono visibilmente più grandi di prima (r 4 → 5 nel viewBox) pur restando
+la riga a 48×8 px.
+Misurato nello stesso giro, 30 campioni: nodo 1 **11** valori distinti, nodo 2 **8**, nodo 3 **6**,
+sweep **30**. I pochi valori distinti sui nodi NON sono un difetto: è il profilo del mobile, che tiene
+il nodo pieno dal 22% all'82% del ciclo — acceso e spento, con due transizioni brevi, invece dello
+sfarfallio continuo di prima.
+⛔ Verificato e SMENTITO in questo giro: il tema scuro non c'entrava. Misurati i due temi × le tre
+condizioni di «riduci animazioni» — **12 valori distinti su 12 in tutte e sei**.
