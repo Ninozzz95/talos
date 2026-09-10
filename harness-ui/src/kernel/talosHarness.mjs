@@ -2358,59 +2358,13 @@ export function staccaCartellaFinale(testo) {
     return { testo: t.slice(0, i).replace(/[\r\n]+$/, ''), cartella: cartella || null }
 }
 
-export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, tracciaCartella = false } = {}) {
-    if (mobile) {
-        const seriale = await risolviSerialeAdbAttivo()
-        if (!seriale) {
-            return {
-                codice: -1,
-                testo: 'Nessun dispositivo ADB pronto in questo momento: la sessione è mobile, ma il telefono non è raggiungibile (scollegato, o più di un dispositivo collegato).',
-                enforcement: 'none',
-            }
-        }
-        /*
-         * ⭐⭐⭐ FIX-1, ledger FASE-3 §6-quater (28/8): senza questo, `shell`
-         * girava sempre nella root del telefono (`/`, sola lettura,
-         * confermato a mano) — scollegata da `cartella`, dove `scrivi`
-         * scrive davvero. Pattern preso dal remote-dev tooling generale
-         * (VS Code Remote-SSH/Codespaces/devcontainer: workspace e shell
-         * SEMPRE sullo stesso host, mai due filesystem a bridge continuo),
-         * non da un concorrente di coding — nessuno tratta un telefono come
-         * bersaglio di esecuzione. `adb push <cartella>/. <mirror>` crea da
-         * solo l'albero di destinazione (verificato a mano: nessun `mkdir`
-         * separato serve) e sovrascrive un mirror deterministico, un'unica
-         * direzione (PC→device, mai il contrario): una scrittura fatta dal
-         * modello DIRETTAMENTE via `shell` sul device non torna indietro,
-         * dichiarato nel ledger, non un bug nascosto.
-         */
-        const mirrorDevice = percorsoMirrorDevice(cartella)
-        const push = await eseguiComando(
-            trovaAdbLocale(), ['-s', seriale, 'push', join(cartella, '.'), mirrorDevice], { timeoutMs: 60_000 },
-        )
-        if (push.codice !== 0) {
-            return {
-                codice: push.codice,
-                testo: `Impossibile sincronizzare la cartella del task sul telefono (adb push fallito): ${uscitaUtile(`${push.fuori}\n${push.errori}`.trim(), 2_000, 0.25)}`,
-                enforcement: 'adb-shell-on-device',
-            }
-        }
-        const comandoConCd = `cd ${JSON.stringify(mirrorDevice)} && ${comando}`
-        const { codice, fuori, errori, insieme } = await eseguiComando(
-            trovaAdbLocale(), ['-s', seriale, 'shell', comandoConCd], { timeoutMs: 120_000, onPezzo },
-        )
-        return { codice, testo: uscitaUtile((insieme ?? `${fuori}\n${errori}`).trim(), 4_000, 0.25), enforcement: 'adb-shell-on-device' }
-    }
-    const distro = distroWslPredefinita()
-    if (distro && await programmaDisponibileInWsl(distro, primoProgramma(comando))) {
-        const percorsoWsl = convertiPercorsoWsl(cartella)
-        const { codice, fuori, errori, insieme } = await eseguiComando(
-            'wsl.exe', ['-d', distro, '--', 'bash', '-lc', `cd ${JSON.stringify(percorsoWsl)} && { ${comando} ; }${tracciaCartella ? codaCheStampaLaCartella(false) : ''}`],
-            /* ⛔ Il marcatore non si vede nemmeno nei pezzi che escono mentre escono (D-10B). */
-            { timeoutMs: 120_000, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo).testo })) },
-        )
-        const ripulito = staccaCartellaFinale((insieme ?? `${fuori}\n${errori}`).trim())
-        return { codice, testo: uscitaUtile(ripulito.testo, 4_000, 0.25), enforcement: 'wsl2', cartellaFinale: ripulito.cartella }
-    }
+/**
+ * ⭐ D-10F — il ramo che esegue sul SISTEMA DI CASA (Windows con cmd, o la shell del sistema
+ *   altrove). Estratto da `eseguiComandoSandboxato` senza cambiarne una riga: serviva un nome per
+ *   poterlo scegliere, ora che «dove gira un comando» e' una decisione della sessione e non piu'
+ *   una conseguenza di quale programma hai scritto.
+ */
+function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false } = {}) {
     return new Promise((risolvi) => {
         /* ⛔ Su Windows la shell qui e' cmd: la coda parla la sua lingua, non quella di bash. */
         const coda = tracciaCartella ? codaCheStampaLaCartella(process.platform === 'win32') : ''
@@ -2461,6 +2415,89 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
             risolvi({ codice: -1, testo: String(e.message), enforcement: 'none' })
         })
     })
+}
+
+export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, tracciaCartella = false, dove = null } = {}) {
+    if (mobile) {
+        const seriale = await risolviSerialeAdbAttivo()
+        if (!seriale) {
+            return {
+                codice: -1,
+                testo: 'Nessun dispositivo ADB pronto in questo momento: la sessione è mobile, ma il telefono non è raggiungibile (scollegato, o più di un dispositivo collegato).',
+                enforcement: 'none',
+            }
+        }
+        /*
+         * ⭐⭐⭐ FIX-1, ledger FASE-3 §6-quater (28/8): senza questo, `shell`
+         * girava sempre nella root del telefono (`/`, sola lettura,
+         * confermato a mano) — scollegata da `cartella`, dove `scrivi`
+         * scrive davvero. Pattern preso dal remote-dev tooling generale
+         * (VS Code Remote-SSH/Codespaces/devcontainer: workspace e shell
+         * SEMPRE sullo stesso host, mai due filesystem a bridge continuo),
+         * non da un concorrente di coding — nessuno tratta un telefono come
+         * bersaglio di esecuzione. `adb push <cartella>/. <mirror>` crea da
+         * solo l'albero di destinazione (verificato a mano: nessun `mkdir`
+         * separato serve) e sovrascrive un mirror deterministico, un'unica
+         * direzione (PC→device, mai il contrario): una scrittura fatta dal
+         * modello DIRETTAMENTE via `shell` sul device non torna indietro,
+         * dichiarato nel ledger, non un bug nascosto.
+         */
+        const mirrorDevice = percorsoMirrorDevice(cartella)
+        const push = await eseguiComando(
+            trovaAdbLocale(), ['-s', seriale, 'push', join(cartella, '.'), mirrorDevice], { timeoutMs: 60_000 },
+        )
+        if (push.codice !== 0) {
+            return {
+                codice: push.codice,
+                testo: `Impossibile sincronizzare la cartella del task sul telefono (adb push fallito): ${uscitaUtile(`${push.fuori}\n${push.errori}`.trim(), 2_000, 0.25)}`,
+                enforcement: 'adb-shell-on-device',
+            }
+        }
+        const comandoConCd = `cd ${JSON.stringify(mirrorDevice)} && ${comando}`
+        const { codice, fuori, errori, insieme } = await eseguiComando(
+            trovaAdbLocale(), ['-s', seriale, 'shell', comandoConCd], { timeoutMs: 120_000, onPezzo },
+        )
+        return { codice, testo: uscitaUtile((insieme ?? `${fuori}\n${errori}`).trim(), 4_000, 0.25), enforcement: 'adb-shell-on-device' }
+    }
+    /*
+     * ⭐⭐⭐ D-10F — DOVE GIRA UN COMANDO: UNA SCELTA, NON UNA SORPRESA.
+     *
+     * ⛔ Prima si decideva COMANDO PER COMANDO: se il programma esisteva in WSL si andava in
+     *   Linux, altrimenti si ripiegava su Windows. Misurato il 10/09: `!npm --version` rispondeva
+     *   `11.16.0`, che e' l'npm di Linux, mentre un comando col programma assente finiva su cmd.
+     *   Due sistemi operativi diversi a seconda di cosa scrivi, nella stessa sessione, senza che
+     *   nessuno lo abbia scelto — e con due filesystem, due PATH e due `node` diversi.
+     *
+     * Ricerca 10/09/2026: Claude Code su Windows e' NATIVO e usa PowerShell (WSL solo se lo
+     * scegli tu), Codex CLI idem. In entrambi la scelta e' UNA SOLA e DICHIARATA, mai decisa
+     * comando per comando. Owner, lo stesso giorno: «io punterei sulla scelta».
+     *
+     * ⇒ `dove` e' la scelta della sessione: `wsl2`, `windows`, oppure `null` = «come prima»,
+     *   cioe' il ripiego automatico, che resta il default finche' l'interfaccia non offre la
+     *   scelta. Nessun chiamante cambia comportamento senza chiederlo.
+     * ⛔ E se la scelta e' `wsl2` ma WSL non c'e', NON si ripiega in silenzio: si dice. Un
+     *   ripiego muto e' esattamente il difetto che questa riga chiude.
+     */
+    if (dove === 'windows') return eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella })
+    const distro = distroWslPredefinita()
+    if (dove === 'wsl2' && !distro) {
+        return {
+            codice: -1,
+            testo: "Questa sessione e impostata su Linux (WSL2), ma WSL non e installato o non risponde. Cambia la scelta nella sessione, oppure installa WSL2.",
+            enforcement: 'none',
+        }
+    }
+    if (distro && (dove === 'wsl2' || (dove === null && await programmaDisponibileInWsl(distro, primoProgramma(comando))))) {
+        const percorsoWsl = convertiPercorsoWsl(cartella)
+        const { codice, fuori, errori, insieme } = await eseguiComando(
+            'wsl.exe', ['-d', distro, '--', 'bash', '-lc', `cd ${JSON.stringify(percorsoWsl)} && { ${comando} ; }${tracciaCartella ? codaCheStampaLaCartella(false) : ''}`],
+            /* ⛔ Il marcatore non si vede nemmeno nei pezzi che escono mentre escono (D-10B). */
+            { timeoutMs: 120_000, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo).testo })) },
+        )
+        const ripulito = staccaCartellaFinale((insieme ?? `${fuori}\n${errori}`).trim())
+        return { codice, testo: uscitaUtile(ripulito.testo, 4_000, 0.25), enforcement: 'wsl2', cartellaFinale: ripulito.cartella }
+    }
+    return eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella })
 }
 
 /**

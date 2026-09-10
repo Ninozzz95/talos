@@ -4085,6 +4085,8 @@ export function createSessionRegistry({
        */
       eseguiComandoDirettoFn({
         cartella: voce.cartellaComandi || voce.cartella, comando, mobile: voce.mobile, onEvento: (evento) => broadcast(voce, evento),
+        /* ⛔ D-10F — la scelta della sessione, se c'e'. Assente = ripiego automatico, come prima. */
+        dove: voce.doveGiranoIComandi ?? null,
       })
         .then((esito) => { if (esito?.cartellaFinale) voce.cartellaComandi = esito.cartellaFinale; }).catch((errore) => {
         /* ⛔ Un comando fallito non è un giro fallito: dirlo con `RunError` spegnerebbe la sessione
