@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ambienteSenzaCredenziali, eUnaCredenziale } from '../src/kernel/talosHarness.mjs';
+import { ambienteSenzaCredenziali, convertiPercorsoWsl, eUnaCredenziale } from '../src/kernel/talosHarness.mjs';
 
 /*
  * ⛔ File nato il 10/09 per D-10E. Il kernel ha i suoi test altrove (nel repo dell'owner, fuori da
@@ -55,4 +55,31 @@ test('D-10E: l’ambiente costruito non contiene NESSUNA chiave che somigli a un
   assert.deepEqual(Object.keys(ambiente).sort(), ['HOME', 'PATH'], '⛔ passano solo le due neutre');
   /* ⛔ E il valore non resta neppure come stringa vuota: la chiave non c'è proprio. */
   assert.equal('TALOS_HARNESS_UI_TOKEN' in ambiente, false);
+});
+
+/*
+ * ⛔⛔⛔ 11/09 — CONVERTIRE DUE VOLTE PRODUCEVA `/mnt/nt/c/…`, e l'owner l'ha visto a schermo:
+ * «bash: line 1: cd: /mnt/nt/c/Users/Antonino/Desktop/projects/AVM-harness-desktop/».
+ *
+ * Nato poche ore prima, insieme alla cartella che RESTA fra un comando e l'altro: `cartellaFinale`
+ * torna già in formato WSL (`/mnt/c/…`), viene tenuta sulla sessione, e al comando dopo ripassava
+ * dalla conversione — che prende la prima lettera (`m`), butta i primi due caratteri (`/m`) e
+ * incolla: `/mnt/` + `m` + `nt/c/…`.
+ * ⇒ Un percorso già POSIX è già arrivato: non si converte. La funzione diventa IDEMPOTENTE, che è la
+ *   proprietà che le mancava e che il chiamante nuovo dava per scontata senza dirlo.
+ */
+test('PERCORSO: convertire due volte non rompe più niente', () => {
+  const bs = String.fromCharCode(92);
+  const windows = `C:${bs}Users${bs}x${bs}progetto`;
+  const uno = convertiPercorsoWsl(windows);
+  assert.equal(uno, '/mnt/c/Users/x/progetto');
+  assert.equal(convertiPercorsoWsl(uno), uno, '⛔ è il caso che l’owner ha visto rotto');
+  assert.equal(convertiPercorsoWsl(convertiPercorsoWsl(uno)), uno, 'e nemmeno tre volte');
+});
+
+test('⛔ PERCORSO, AL CONTRARIO: un percorso di Windows si converte ancora, e i casi vuoti non esplodono', () => {
+  const bs = String.fromCharCode(92);
+  assert.equal(convertiPercorsoWsl(`D:${bs}lavoro`), '/mnt/d/lavoro', 'la conversione vera resta intatta');
+  assert.equal(convertiPercorsoWsl(''), '');
+  assert.equal(convertiPercorsoWsl(null), null, 'niente da convertire, niente da rompere');
 });

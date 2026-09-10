@@ -2195,6 +2195,17 @@ export function primoProgramma(comando) {
 }
 
 export function convertiPercorsoWsl(percorsoWindows) {
+    /*
+     * ⛔⛔⛔ 11/09 — CONVERTIRE DUE VOLTE PRODUCE `/mnt/nt/c/…`, e l'owner l'ha visto a schermo:
+     *   «bash: line 1: cd: /mnt/nt/c/Users/…». Difetto nato poche ore prima, con la cartella che
+     *   RESTA fra un comando e l'altro: `cartellaFinale` torna gia' in formato WSL (`/mnt/c/…`),
+     *   viene tenuta sulla sessione, e al comando dopo ripassava di qui — che prende la prima
+     *   lettera (`m`), butta i primi due caratteri (`/m`) e incolla: `/mnt/` + `m` + `nt/c/…`.
+     * ⇒ Un percorso gia' POSIX non si converte: e' gia' arrivato. La funzione diventa idempotente,
+     *   che e' la proprieta' che le mancava e che il chiamante nuovo dava per scontata.
+     */
+    if (typeof percorsoWindows !== 'string' || percorsoWindows === '') return percorsoWindows
+    if (percorsoWindows.startsWith('/')) return percorsoWindows
     const lettera = percorsoWindows[0].toLowerCase()
     const resto = percorsoWindows.slice(2).replace(/\\/g, '/')
     return `/mnt/${lettera}${resto}`
