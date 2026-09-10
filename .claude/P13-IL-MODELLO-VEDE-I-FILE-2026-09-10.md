@@ -269,3 +269,46 @@ usare **lo stesso** file, altrimenti si confronterebbero due kernel invece di un
 
 ⛔ Nessuna delle due si vedeva dal codice di P-13: si vedono solo guardando **come il banco chiama
 TALOS**. È il motivo per cui il preventivo di una misura si legge insieme al cablaggio che la porta.
+
+---
+
+## ⭐⭐⭐ IL «DOPO» — misurato, stessa domanda, stessa cartella
+
+Sessione `ef6c07c0`, `glm-5.3-flash`, cartella `AVM-harness-desktop`, «Solo lettura». Identica al
+«prima» in tutto tranne una cosa: il kernel ora legge `contestoDelProgetto`.
+
+| | PRIMA (`186707d8`) | DOPO (`ef6c07c0`) |
+|---|---|---|
+| risposta | «**0** — la cartella `harness-ui/src` non esiste» | «**104**: sono i file `.mjs` contati nella sezione `harness-ui/src/` **dell'elenco**» |
+| esatta? | **no** (sono 104, e ha invertito le due cartelle) | **sì** |
+| giri | 8 | **4** |
+| attrezzi | 6 ricerche, 1 comando | 2 ricerche, 1 comando |
+| primo giro | 7.760 token | 29.025 token (+21.265: l'elenco) |
+| cache | 41% | **74%** |
+
+⭐ La frase che chiude la questione è del modello stesso: «*ho contato **dall'elenco dei percorsi**,
+che per quella cartella appare completo, da `agent-service.mjs` a `workspace-watcher.mjs`*». Non solo
+la risposta è giusta: **dice da dove viene**, e viene da P-13.
+
+⭐ E costa **meno giri**, non di più: 4 contro 8. L'elenco si paga una volta in testa al prompt e
+toglie al modello il lavoro di cercare a tentoni ciò che non vede.
+
+## ⛔ Il difetto che stava per far dichiarare fallito P-13
+
+Il primo tentativo di «dopo» aveva **lo stesso identico primo giro del prima: 7.760 token in
+entrambi**. Le due righe erano nel kernel del repo, la suite era verde, e non arrivava niente.
+
+Causa: `scripts/aggiorna-4174.ps1` impostava a ogni riavvio `TALOS_OWNER_RUNTIME_MODULE` al kernel
+del **mobile** (`AVM-harness/mobile/…`, 350.796 byte del 06/09), scavalcando il default. Ma
+`config.mjs` (`kernelNelRepo`) dichiara dal 07/09 che il kernel canonico è `src/kernel/talosHarness.mjs`
+e che quella variabile serve a puntare **altrove**, non a rifare il default. Lo script era un
+residuo del prima: il 4174 girava su un altro file, e nessun errore lo diceva.
+
+⇒ Questo corregge anche un consiglio che avevo dato all'owner poche ore prima. Avevo detto: «il
+banco usa un kernel diverso dal prodotto, punta il banco a quello del desktop». Era vero a metà, e la
+metà mancante era peggiore: **anche il 4174** usava il kernel del mobile, e quello del repo non lo
+usava **nessuno dei due**. La cura resta quella, la ragione era più grave di come l'avevo raccontata.
+
+⛔ La spia c'era ed era leggibile: due misure identiche al token su due configurazioni che dovevano
+differire. «Numeri troppo uguali sono un allarme, non una conferma» — lezione già scritta il 22/08,
+e stavolta l'ho applicata.
