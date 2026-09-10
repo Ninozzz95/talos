@@ -44,3 +44,11 @@
 .talos-diff-chat details>summary::before{content:'›';display:inline-block;width:1em;margin-right:4px;transition:transform .12s ease}
 .talos-diff-chat details[open]>summary::before{transform:rotate(90deg)}
 @media (prefers-reduced-motion:reduce){.talos-diff-chat details>summary::before{transition:none}}
+
+/*
+ * ⛔ 10/09 — un esito lungo non si rovescia nella chat: si taglia DICHIARANDO quanto resta.
+ *   Trovato guardando la foto di PO-11: sotto «1 file letto» c'era il contenuto intero del file, che
+ *   spingeva in basso tutto il resto — compreso il diff appena aggiunto. La riga qui sotto è quella
+ *   dichiarazione; senza una regola sarebbe una frase invisibile, cioè un taglio silenzioso.
+ */
+.tool-result-tagliato{margin:4px 0 0;padding:0 2px;color:var(--talos-muted);font-size:11px}

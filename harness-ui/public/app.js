@@ -20543,6 +20543,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
       }
       const RIGHE_MASSIME_DIFF = 1500;
+      const RIGHE_ESITO_IN_CHAT = 200;
       const righeDelTesto = (testo3) => {
         const t2 = String(testo3 ?? "").replace(/\r\n/g, "\n").replace(/\n$/, "");
         return t2 === "" ? [] : t2.split("\n");
@@ -22442,8 +22443,18 @@ ${testo3}` : testo3;
               const pre = document.createElement("pre");
               pre.className = "tool-result-block";
               const daMostrare = esitoUmano ? esitoUmano.output.trim() === "" ? "Nessun output." : esitoUmano.output : testoEsito;
-              pre.appendChild(textElement("code", "", daMostrare));
+              const righeEsito = String(daMostrare).split("\n");
+              const tagliato = righeEsito.length > RIGHE_ESITO_IN_CHAT;
+              pre.appendChild(textElement("code", "", tagliato ? righeEsito.slice(0, RIGHE_ESITO_IN_CHAT).join("\n") : daMostrare));
               info.detail.appendChild(pre);
+              if (tagliato) {
+                const quante = righeEsito.length - RIGHE_ESITO_IN_CHAT;
+                info.detail.appendChild(textElement(
+                  "p",
+                  "tool-result-tagliato",
+                  `Altre ${quante} righe non sono mostrate qui (in tutto ${righeEsito.length}).`
+                ));
+              }
             }
             if (info?.batch && info.stato === "running") {
               const { batch, categoria } = info;

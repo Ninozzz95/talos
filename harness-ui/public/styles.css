@@ -9991,5 +9991,11 @@ dialog.command-dialog .tool-chips .status-chip,
     transition: none;
   }
 }
+.tool-result-tagliato {
+  margin: 4px 0 0;
+  padding: 0 2px;
+  color: var(--talos-muted);
+  font-size: 11px;
+}
 
 /* src/styles/main.css */
