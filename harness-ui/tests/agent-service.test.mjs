@@ -880,6 +880,55 @@ test('⭐⭐⭐ generate_image: genera→salva, un evento StateDelta con una rig
   assert.match(evento.delta[0].value, /^\[image image\/png, 4 bytes\]$/, 'mai i byte grezzi — un\'immagine non è testo UTF-8');
 });
 
+/*
+ * ⛔⛔ 10/09, owner: «OGNI artefatto va salvato in libreria». Misurato prima di curare: la copia in
+ * Libreria era chiamata DUE volte in questo file — artefatto HTML e documento — e l'immagine
+ * generata non era nessuna delle due: finiva solo nel workspace, e chi riapriva la sessione domani
+ * non la ritrovava fra le cose prodotte.
+ * ⛔ E l'evento porta l'allegato (PO-05), o in chat resta una riga onesta e inservibile, senza
+ * nessun modo di avere il file.
+ */
+test('⛔ generate_image: l’immagine finisce in LIBRERIA (base64, mai testo) e l’evento porta l’allegato', async () => {
+  const eventi = [];
+  const inLibreria = [];
+  const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]); // firma PNG vera
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e),
+    talosLavoraFn: talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, immagini: [{ argomenti: { prompt: 'un gatto rosso', shape: 'square' } }] } }),
+    immagine: IMMAGINE_CONFIG,
+    generaImmagineFn: async () => ({ mediaType: 'image/png', bytes, fileStem: 'un gatto rosso' }),
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+    salvaVoceLibreriaFn: async (voce) => { inLibreria.push(voce); return { id: 'lib-1' }; },
+  });
+
+  assert.equal(inLibreria.length, 1, 'l’immagine generata è un artefatto: in Libreria ci va');
+  assert.equal(inLibreria[0].nome, 'un gatto rosso.png');
+  assert.equal(inLibreria[0].mediaType, 'image/png');
+  assert.equal(inLibreria[0].origine, 'generated');
+  assert.equal(inLibreria[0].base64, Buffer.from(bytes).toString('base64'), 'i byte VERI, in base64');
+  assert.equal(inLibreria[0].testo, undefined, '⛔ un PNG in un campo di testo si corromperebbe');
+
+  const delta = eventi.find((e) => e.type === 'StateDelta').delta[0];
+  assert.deepEqual(delta.allegato, { nome: 'un gatto rosso.png', formato: 'png', byte: 6 },
+    'nome, formato e byte MISURATI: senza, la chat non può costruire il collegamento');
+});
+
+test('⛔ AL CONTRARIO — se la Libreria non è scrivibile, il giro NON fallisce e l’immagine resta nel workspace', async () => {
+  const eventi = [];
+  const risultato = await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e),
+    talosLavoraFn: talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, immagini: [{ argomenti: { prompt: 'x', shape: 'square' } }] } }),
+    immagine: IMMAGINE_CONFIG,
+    generaImmagineFn: async () => ({ mediaType: 'image/png', bytes: new Uint8Array([0x89, 0x50]), fileStem: 'x' }),
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+    salvaVoceLibreriaFn: async () => { throw new Error('disco pieno'); },
+  });
+  /* ⛔ Meglio un'immagine senza copia che un giro rotto per una copia: stessa scelta già fatta per
+     l'artefatto HTML e per il documento. */
+  assert.equal(risultato.ok, true, 'il giro arriva in fondo');
+  assert.ok(eventi.some((e) => e.type === 'StateDelta' && e.delta[0].path === '/file/x.png'), 'e l’immagine è nel workspace');
+});
+
 test('⭐⭐⭐ generate_image: generaImmagineFn riceve prompt/shape VERI del modello, e modello/nativo/chiave dalla config di sessione', async () => {
   let catturato;
   const talosLavoraFn = talosLavoraFinto({
