@@ -44,5 +44,32 @@ test('RUNTIME-01: aprire la app non produce nessun errore JavaScript', async ({ 
     await page.waitForTimeout(2500);
   }
 
+  /*
+   * ⛔ 11/09 — LE SUPERFICI CHE UNA NOTTE DI LAVORO HA TOCCATO. Aprire la app non basta: i tre
+   *   errori che sono arrivati fino all'owner stanotte («fermaMotore is not defined», «$2 is not a
+   *   function», «$$(...).querySelectorAll is not a function») nascevano tutti quando qualcosa
+   *   veniva CHIAMATO — una bolla d'attesa che nasce, un velo che si apre. Un cancello che guarda
+   *   solo il caricamento li avrebbe lasciati passare tutti e tre.
+   *   ⛔ Ogni gesto è tollerante (`.catch(() => {})`): questo test non prova che la funzione
+   *   esista — prova che nessuna di esse LANCI. Sono due domande diverse, e mescolarle darebbe un
+   *   rosso ogni volta che una superficie cambia nome.
+   */
+  const composer = page.locator('#composerInput');
+  if (await composer.count()) {
+    /* La modalità shell: il composer cambia faccia mentre si scrive. */
+    await composer.fill('!echo prova-del-cancello').catch(() => {});
+    await page.waitForTimeout(600);
+    await composer.fill('').catch(() => {});
+    await page.waitForTimeout(400);
+  }
+  /* Il velo dei permessi, che stanotte ha smesso di aprirsi per un dollaro mangiato. */
+  const permessi = page.locator('[data-open-sheet="permissions"]').first();
+  if (await permessi.count()) {
+    await permessi.click({ timeout: 5000 }).catch(() => {});
+    await page.waitForTimeout(1200);
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(600);
+  }
+
   expect(errori, `⛔ la pagina ha lanciato ${errori.length} errori:\n  ${errori.slice(0, 6).join('\n  ')}`).toEqual([]);
 });
