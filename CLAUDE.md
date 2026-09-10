@@ -16,6 +16,10 @@ non un import**: non pesa sul contesto finché non serve.
 
 @.claude/MEMORIA-REGOLE.md
 
+@.claude/MEMORIA-INGEGNERIA.md
+
+@.claude/MEMORIA-BANCO.md
+
 ⛔ Perché esistono: `MEMORY.md` ha due tetti **compilati dentro claude.exe** —
 **200 righe** e **25 KB** — e oltre quelli il contenuto viene tagliato **in
 silenzio**, senza avviso in sessione. Nessuna impostazione li alza (verificato
@@ -28,8 +32,15 @@ caricano tutti a ogni sessione:
 ```
 MEMORY.md               le regole VINCOLANTI, gli aperti, chi è l'owner
 MEMORIA-LEZIONI.md      le lezioni chiuse
-MEMORIA-REGOLE.md       le regole di ingegneria e la catena fino al telefono
+MEMORIA-REGOLE.md       la catena fino al telefono, gli aperti del desktop, l'orchestrazione
+MEMORIA-INGEGNERIA.md   le regole di ingegneria (sonde, cancelli, misure, screenshot, viewport)
+MEMORIA-BANCO.md        gli aperti del banco TALOS-BANCO
 ```
+
+⛔ **Dal 10/09/2026 sono CINQUE.** `MEMORIA-REGOLE.md` era arrivato a **28.850 byte**, cioè
+**3.850 SOPRA il tetto di 25.000**: stava già perdendo righe in silenzio, e nessuno se n'era accorto
+perché il taglio non lascia traccia. Tolto il banco restavano 26.537 — ancora sopra. ⇒ Il controllo
+non è «quando aggiungo»: è **misurare i byte di OGNI indice**, ogni volta che se ne tocca uno.
 
 Nessuna riga è andata persa in nessuna delle due divisioni.
 
