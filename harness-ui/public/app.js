@@ -21997,7 +21997,7 @@ ${testo3}` : testo3;
         const repoAnnidati = $2("#envRepoAnnidati");
         if (workspace) workspace.textContent = contesto2.progetto || "—";
         if (branch) branch.textContent = contesto2.branch || "—";
-        if (worktree) worktree.textContent = "—";
+        if (worktree) worktree.textContent = contesto2.worktree || "—";
         if (root) root.textContent = contesto2.cartella;
         if (repoAnnidati) {
           const elenco2 = Array.isArray(contesto2.repoAnnidati) ? contesto2.repoAnnidati : [];
