@@ -13611,15 +13611,22 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       async function avviaAccessoProvider(provider) {
         const corrente = () => $2("#providerList")?.querySelector('[data-provider-id="' + provider + '"]');
+        const finestra = window.open("", "_blank");
+        if (finestra) {
+          try {
+            finestra.opener = null;
+          } catch {
+          }
+        }
         try {
           const risposta = await apiPost("/api/v1/auth/" + encodeURIComponent(provider) + "/inizia", {});
           const indirizzo = risposta?.indirizzo;
           if (typeof indirizzo !== "string" || !indirizzo) throw new Error("Il server non ha restituito un indirizzo di accesso.");
-          const finestra = window.open(indirizzo, "_blank", "noopener,noreferrer");
           if (!finestra) {
-            mostraEsitoProvider(corrente(), "Il browser ha bloccato la finestra dell’accesso. Aprila a mano: " + indirizzo, true);
+            mostraLinkAccesso(corrente(), indirizzo);
             return;
           }
+          finestra.location.href = indirizzo;
           mostraEsitoProvider(corrente(), "Accesso aperto nel browser. Torna qui quando hai finito: la chiave arriva da sola.");
           corrente()?.querySelector("[data-provider-feedback]")?.scrollIntoView({ block: "nearest" });
           const alRitorno = async () => {
@@ -13630,8 +13637,29 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           };
           window.addEventListener("focus", alRitorno);
         } catch (errore) {
+          try {
+            finestra?.close();
+          } catch {
+          }
           mostraEsitoProvider(corrente(), errore.message || "Non è stato possibile aprire l’accesso.", true);
+          corrente()?.querySelector("[data-provider-feedback]")?.scrollIntoView({ block: "nearest" });
         }
+      }
+      function mostraLinkAccesso(card, indirizzo) {
+        const feedback = card?.querySelector("[data-provider-feedback]");
+        if (!feedback) return;
+        feedback.replaceChildren();
+        feedback.append(document.createTextNode("Il browser ha bloccato la finestra. "));
+        const link = document.createElement("a");
+        link.href = indirizzo;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.textContent = "Apri l’accesso";
+        feedback.append(link);
+        feedback.classList.add("is-error");
+        feedback.setAttribute("role", "alert");
+        feedback.hidden = false;
+        feedback.scrollIntoView({ block: "nearest" });
       }
       async function gestisciAzioneProvider(button2) {
         const card = button2.closest("[data-provider-id]"), provider = card?.dataset.providerId, action = button2.dataset.providerAction;
