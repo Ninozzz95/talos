@@ -42,11 +42,13 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  if(conAccesso){
   const accedi=button('oauth-start',row.origineChiave==='accesso'?'Rifai l\u2019accesso':'Accedi con '+(row.label||row.id),'primary');
   accedi.classList.add('talos-provider__accedi');
-  body.append(accedi);
+  /* ⛔ Pulsante e nota nella STESSA riga: la nota sotto lasciava un vuoto verticale grande
+     quanto la card, e il pulsante da solo su una riga intera si stirava come un banner. */
+  const riga=el('div','talos-provider__accesso');riga.append(accedi);
   const nota=el('p','talos-muted',row.origineChiave==='ambiente'
    ?'Adesso vale la chiave impostata fuori da TALOS: finch\u00e9 c\u2019\u00e8, l\u2019accesso non viene usato.'
    :'Si apre il sito del fornitore: la password non passa da TALOS, e alla fine torna una chiave.');
-  body.append(nota);
+  riga.append(nota);body.append(riga);
   const oppure=document.createElement('details');oppure.className='talos-provider__oppure';
   const riassunto=document.createElement('summary');riassunto.textContent='Oppure incolla una chiave';
   oppure.append(riassunto,campoChiave);body.append(oppure);

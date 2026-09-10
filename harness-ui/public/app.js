@@ -91,9 +91,11 @@ function creaProviderCard(row, { aperta = false, prova = null, occupato = false,
     if (conAccesso) {
       const accedi = button("oauth-start", row.origineChiave === "accesso" ? "Rifai l’accesso" : "Accedi con " + (row.label || row.id), "primary");
       accedi.classList.add("talos-provider__accedi");
-      body.append(accedi);
+      const riga = el("div", "talos-provider__accesso");
+      riga.append(accedi);
       const nota = el("p", "talos-muted", row.origineChiave === "ambiente" ? "Adesso vale la chiave impostata fuori da TALOS: finché c’è, l’accesso non viene usato." : "Si apre il sito del fornitore: la password non passa da TALOS, e alla fine torna una chiave.");
-      body.append(nota);
+      riga.append(nota);
+      body.append(riga);
       const oppure = document.createElement("details");
       oppure.className = "talos-provider__oppure";
       const riassunto = document.createElement("summary");
@@ -13607,6 +13609,30 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           if (feedback.textContent === message) feedback.hidden = true;
         }, 3500);
       }
+      async function avviaAccessoProvider(provider) {
+        const corrente = () => $2("#providerList")?.querySelector('[data-provider-id="' + provider + '"]');
+        try {
+          const risposta = await apiPost("/api/v1/auth/" + encodeURIComponent(provider) + "/inizia", {});
+          const indirizzo = risposta?.indirizzo;
+          if (typeof indirizzo !== "string" || !indirizzo) throw new Error("Il server non ha restituito un indirizzo di accesso.");
+          const finestra = window.open(indirizzo, "_blank", "noopener,noreferrer");
+          if (!finestra) {
+            mostraEsitoProvider(corrente(), "Il browser ha bloccato la finestra dell’accesso. Aprila a mano: " + indirizzo, true);
+            return;
+          }
+          mostraEsitoProvider(corrente(), "Accesso aperto nel browser. Torna qui quando hai finito: la chiave arriva da sola.");
+          corrente()?.querySelector("[data-provider-feedback]")?.scrollIntoView({ block: "nearest" });
+          const alRitorno = async () => {
+            window.removeEventListener("focus", alRitorno);
+            await caricaProviderModelLab();
+            const riga = state.modelLab.providers?.find((r) => r.id === provider);
+            if (riga?.keyConfigured) mostraEsitoProvider(corrente(), "Accesso fatto: la chiave è nel portachiavi del computer.");
+          };
+          window.addEventListener("focus", alRitorno);
+        } catch (errore) {
+          mostraEsitoProvider(corrente(), errore.message || "Non è stato possibile aprire l’accesso.", true);
+        }
+      }
       async function gestisciAzioneProvider(button2) {
         const card = button2.closest("[data-provider-id]"), provider = card?.dataset.providerId, action = button2.dataset.providerAction;
         if (!provider || !action || state.modelLab.provePr?.get(provider)?.esito === "in-corso") return;
@@ -13614,6 +13640,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (state.modelLab.providerOccupati.has(provider)) return;
         if (action === "test") {
           await provaProviderModelLab(provider);
+          return;
+        }
+        if (action === "oauth-start") {
+          await avviaAccessoProvider(provider);
           return;
         }
         const key = card.querySelector("[data-provider-key]")?.value || "", endpoint = card.querySelector("[data-provider-endpoint]")?.value || "", timeoutSeconds = Number(card.querySelector("[data-provider-timeout]")?.value || 60);

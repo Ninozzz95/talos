@@ -2627,11 +2627,58 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!errore) window.setTimeout(() => { if (feedback.textContent === message) feedback.hidden = true; }, 3500);
   }
 
+  /*
+   * ⛔⛔ PO-01 (10/09) — l'accesso a un fornitore senza incollare una chiave.
+   *
+   * La password non passa MAI da TALOS: si apre il sito del fornitore in una finestra del
+   * browser, e il server riceve il rientro su una sua rotta. È la forma che RFC 8252 raccomanda
+   * per le applicazioni native, ed è anche l'unica onesta: un campo password dentro TALOS che
+   * chiede le credenziali di OpenRouter sarebbe indistinguibile da un furto.
+   *
+   * ⛔ `window.open` con `noopener`: la pagina che apriamo non deve poter toccare la nostra.
+   * ⛔ Se il browser blocca la finestra (succede quando il clic non è riconosciuto come gesto
+   *   della persona) NON si finge che sia andata: si mostra l'indirizzo e si lascia decidere.
+   */
+  async function avviaAccessoProvider(provider) {
+    const corrente = () => $('#providerList')?.querySelector('[data-provider-id="' + provider + '"]');
+    try {
+      const risposta = await apiPost('/api/v1/auth/' + encodeURIComponent(provider) + '/inizia', {});
+      const indirizzo = risposta?.indirizzo;
+      if (typeof indirizzo !== 'string' || !indirizzo) throw new Error('Il server non ha restituito un indirizzo di accesso.');
+      const finestra = window.open(indirizzo, '_blank', 'noopener,noreferrer');
+      if (!finestra) {
+        mostraEsitoProvider(corrente(), 'Il browser ha bloccato la finestra dell\u2019accesso. Aprila a mano: ' + indirizzo, true);
+        return;
+      }
+      mostraEsitoProvider(corrente(), 'Accesso aperto nel browser. Torna qui quando hai finito: la chiave arriva da sola.');
+      /* ⛔ Il messaggio vive in fondo alla card, e su una card lunga finisce SOTTO il bordo dello
+         schermo: chi ha appena premuto non vede nessuna conferma e crede che non sia successo
+         niente. Trovato nella foto del 10/09, non dal DOM — il testo c'era, semplicemente non si
+         vedeva. Le altre azioni scorrono già nel loro `finally`; questa non ci passa. */
+      corrente()?.querySelector('[data-provider-feedback]')?.scrollIntoView({ block: 'nearest' });
+      /*
+       * ⛔ Il ritorno lo riceve il SERVER, non questa pagina: senza questo risveglio la card
+       *   continuerebbe a dire «Chiave mancante» dopo un accesso RIUSCITO, che è indistinguibile
+       *   da uno fallito. Si ricarica quando la finestra torna in primo piano — una volta sola.
+       */
+      const alRitorno = async () => {
+        window.removeEventListener('focus', alRitorno);
+        await caricaProviderModelLab();
+        const riga = state.modelLab.providers?.find((r) => r.id === provider);
+        if (riga?.keyConfigured) mostraEsitoProvider(corrente(), 'Accesso fatto: la chiave è nel portachiavi del computer.');
+      };
+      window.addEventListener('focus', alRitorno);
+    } catch (errore) {
+      mostraEsitoProvider(corrente(), errore.message || 'Non è stato possibile aprire l\u2019accesso.', true);
+    }
+  }
+
   async function gestisciAzioneProvider(button) {
     const card=button.closest('[data-provider-id]'),provider=card?.dataset.providerId,action=button.dataset.providerAction;
     if(!provider||!action||state.modelLab.provePr?.get(provider)?.esito==='in-corso')return;
     state.modelLab.providerOccupati??=new Set();if(state.modelLab.providerOccupati.has(provider))return;
     if(action==='test'){await provaProviderModelLab(provider);return;}
+    if(action==='oauth-start'){await avviaAccessoProvider(provider);return;}
     const key=card.querySelector('[data-provider-key]')?.value||'',endpoint=card.querySelector('[data-provider-endpoint]')?.value||'',timeoutSeconds=Number(card.querySelector('[data-provider-timeout]')?.value||60);
     const corrente=()=>$('#providerList')?.querySelector('[data-provider-id="'+provider+'"]');
     state.modelLab.providerOccupati.add(provider);renderizzaProviderModelLab();

@@ -1944,8 +1944,29 @@ a.talos-button{text-decoration:none}
 .talos-provider__head:focus-visible{outline:2px solid var(--talos-accent);outline-offset:-3px}
 .talos-provider__name{min-width:110px;margin-right:auto}
 .talos-provider__head .talos-cluster{justify-content:flex-end}
-.talos-provider__body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--talos-space-control);padding:var(--talos-space-md);border-top:1px solid var(--talos-border)}
+/* ⛔ 10/09 — le colonne nascono dal CONTENUTO, non dallo spazio: `1fr 1fr` faceva un campo da
+   646 px per due cifre a schermo intero. Con `auto-fit` fra 220 e 320 px si ha una colonna a
+   340 px e quattro a 1340, e nessun campo si stira mai. */
+.talos-provider__body{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,320px));justify-content:start;align-items:start;gap:var(--talos-space-control) var(--talos-space-md);padding:var(--talos-space-md);border-top:1px solid var(--talos-border)}
 .talos-provider__body[hidden]{display:none}
+/* Un numero non merita la larghezza di un indirizzo: ogni campo dichiara la sua misura. */
+.talos-provider__field input[type="number"]{max-width:8rem}
+/* ⛔ L'accesso è la prima cosa e prende la riga, ma il PULSANTE si dimensiona sul suo testo:
+   stirato per mezza pagina sembrava un banner pubblicitario, non un'azione. La nota gli sta
+   ACCANTO e non sotto — sotto lasciava un vuoto verticale grande quanto la card. */
+.talos-provider__accesso{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:var(--talos-space-sm) var(--talos-space-md)}
+.talos-provider__accedi{flex:none}
+.talos-provider__accesso p{margin:0;flex:1 1 22rem;min-width:0;max-width:52ch}
+/* «Oppure incolla una chiave»: chiuso non deve occupare una colonna intera; aperto prende la sua. */
+.talos-provider__oppure{grid-column:1/-1}
+.talos-provider__oppure>summary{cursor:pointer;color:var(--talos-muted);font-size:12.5px;padding:2px 0}
+.talos-provider__oppure>summary:focus-visible{outline:2px solid var(--talos-accent-border);outline-offset:2px}
+.talos-provider__oppure[open]>summary{margin-bottom:var(--talos-space-sm)}
+.talos-provider__oppure .talos-provider__field{max-width:320px}
+/* Le azioni chiudono la scheda: una linea sottile le lega al resto invece di lasciarle sospese. */
+.talos-provider__body>.talos-cluster{align-items:center;justify-content:flex-start;padding-top:var(--talos-space-sm);border-top:1px solid var(--talos-border-subtle)}
+.talos-provider__body>.talos-cluster .talos-button{flex:none}
+
 .talos-provider__body>.talos-cluster,.talos-provider__body>p{grid-column:1/-1;margin:0;overflow-wrap:anywhere}
 .talos-provider__field{min-width:0;gap:var(--talos-space-sm)}
 .talos-provider__field .talos-field__input{width:100%;min-width:0}
