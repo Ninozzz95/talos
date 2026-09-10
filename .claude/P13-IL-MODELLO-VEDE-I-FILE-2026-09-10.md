@@ -105,3 +105,34 @@ quante ripetizioni?
 Il costo dell'elenco sul corpus `storia` **non** è stato rimisurato oggi: il numero 13.489 viene dalla
 misura del 22/08 su 1.324 file. La misura di oggi (~6.494 token per 676 file) è su **questo** repo, ed
 è coerente con quella — ma sono due alberi diversi, e dirlo è meglio che sommarli.
+
+---
+
+## ⛔ CORREZIONE del 10/09, sera — «0 su 35» era falso
+
+Ho ripetuto tutto il giorno, in questo documento e nei commit, che il pass-rate su `storia` è **0 su
+35**. Misurato sul disco del banco, non è vero:
+
+- **12 task su 35 sono stati misurati**, e **2 sono riusciti** (`storia-1c843dc`, `storia-3d9be1d`,
+  fetta Stadio B a 3 ripetizioni);
+- gli altri 5 (`esiti-22ago-storia`) fanno 0/5 — quella campagna girò a `quantiPerCorpus: 5`, non su 35;
+- **23 task non hanno mai corso.**
+
+⇒ «0 su 35» era «0 su 5, più un buco da 23». È il difetto [[il-banco-non-vede-chi-manca]], che avevo
+citato io stesso nel brief dell'agente e poi ripetuto senza verificarlo. **Il PRIMA non si può
+saltare** dicendo «tanto sappiamo che è zero»: 23 task non hanno nessun «prima» con cui confrontarsi.
+
+E altre tre cose che la misura ha aggiunto:
+
+1. **La barra non è 4 task, è 7.** Tre prove concordi (bootstrap del banco, McNemar esatto, e il
+   pavimento del rumore rimisurato oggi: 22 verdetti su 118 = **18,6%**). «Da 0 a 4» passerebbe la
+   soglia del banco e cadrebbe **sotto il rumore che il banco produce da solo** confrontando due
+   corse identiche.
+2. **Le consegne senza nomi di file sono una scelta, non un difetto**: il generatore dà solo i nomi
+   dei test rossi perché «consegne troppo dettagliate gonfiano i tassi» (arXiv:2507.02825).
+3. **`glm-5.3-flash` ha 28 endpoint su 25 fornitori** (letto dall'API di OpenRouter oggi). Il caso
+   `qwen3.7-flash` — un fornitore solo, campagna contaminata dai 429 — qui è molto più improbabile.
+   Non impossibile: nello strumento i 429 restano **non misurati**, mai fallimenti.
+
+**Il preventivo vero**: $0,00794 a giro (dal credito del fornitore, non dal CLI), 105 giri per
+condizione a 3 ripetizioni ⇒ **$1,67 per prima+dopo**, circa 10 ore.
