@@ -17789,6 +17789,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const demoBadge = $2(".demo-surface-badge", sheetDialog);
         if (demoBadge) demoBadge.hidden = TIPI_FOGLIO_INTERAMENTE_ONESTI.has(type);
       }
+      const DOVE_GIRANO = [
+        { valore: null, nome: "Automatico", icona: "i-bolt", nota: "Come prima", descrizione: "Sceglie da sé, e può cambiare da un comando all’altro." },
+        { valore: "wsl2", nome: "Linux (WSL2)", icona: "i-terminal", nota: "Consigliato", descrizione: "Sempre in Linux. Se WSL non c’è, il comando lo dice invece di ripiegare." },
+        { valore: "windows", nome: "Windows", icona: "i-folder", nota: "", descrizione: "Sempre sul sistema di casa, con i percorsi C: che vedi in Esplora file." }
+      ];
       const sheetTemplates = {
         model: {
           eyebrow: "Runtime",
@@ -17821,6 +17826,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           ""}${POLITICHE.map((p) => `
             <button class="sheet-option ${p.valore === state.permissions ? "active" : ""}" data-permission-choice="${p.valore}">
               <span class="sheet-icon">${icon("i-shield")}</span><span><strong>${p.nome}</strong><small>${p.descrizione}</small></span><span>${p.nota}</span>
+            </button>`).join("")}
+        </div>
+        <div class="sheet-section">
+          ${/*
+           * ⭐⭐⭐ D-10F — DOVE GIRANO I COMANDI. Misurato il 10/09: `!npm --version` rispondeva
+           *   con l'npm di LINUX, mentre un comando col programma assente in WSL finiva su `cmd`.
+           *   Due sistemi operativi nella stessa sessione a seconda di cosa scrivi, con due
+           *   filesystem e due PATH — e nessuno che lo avesse scelto.
+           * ⛔ Sta QUI e non come sesta pillola nel composer: questo foglio è già il posto dove si
+           *   decide come i comandi toccano il computer, e la riga del composer ha già cinque
+           *   comandi (regola dell'owner del 10/09: più di due azioni vogliono un menu, non
+           *   bottoni affiancati).
+           */
+          ""}
+          <span class="sheet-label">Dove girano i comandi</span>
+          ${DOVE_GIRANO.map((d) => `
+            <button class="sheet-option ${d.valore === (state.realSession.doveGiranoIComandi ?? null) ? "active" : ""}" data-dove-choice="${d.valore ?? ""}">
+              <span class="sheet-icon">${icon(d.icona)}</span><span><strong>${d.nome}</strong><small>${d.descrizione}</small></span><span>${d.nota}</span>
             </button>`).join("")}
         </div>
         <div class="sheet-section">
@@ -18250,6 +18273,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       ]);
       function disegnaPermessiIn(radice) {
         if (!radice) return;
+        for (const bottone3 of $$("[data-dove-choice]", radice)) {
+          const suo = (bottone3.dataset.doveChoice || null) === (state.realSession.doveGiranoIComandi ?? null);
+          bottone3.setAttribute("aria-checked", String(suo));
+          bottone3.classList.toggle("is-attiva", suo);
+        }
         for (const bottone3 of $$("[data-permission-choice]", radice)) {
           const suo = bottone3.dataset.permissionChoice === state.permissions;
           bottone3.setAttribute("aria-checked", String(suo));
@@ -18286,6 +18314,26 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }, ridisegna = () => {
       } } = {}) {
         if (!radice) return;
+        $$("[data-dove-choice]", radice).forEach((button2) => {
+          if (button2.dataset.doveCollegato) return;
+          button2.dataset.doveCollegato = "si";
+          button2.addEventListener("click", async () => {
+            const sessionId = state.realSession.id;
+            const scelta = button2.dataset.doveChoice || null;
+            if (!sessionId) {
+              toast("Nessuna sessione aperta", "Avvia una sessione: la scelta vale per quella sessione.");
+              return;
+            }
+            try {
+              await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/dove-girano-i-comandi`, { dove: scelta });
+              state.realSession.doveGiranoIComandi = scelta;
+              aggiornaPillolaPermessi?.();
+              dopoLaScelta();
+            } catch (errore) {
+              toast("Scelta non applicata", messaggioErroreUtente(errore, "Riprova, o guarda Doctor se si ripete."));
+            }
+          });
+        });
         $$("[data-permission-choice]", radice).forEach((button2) => {
           if (button2.dataset.permessiCollegati) return;
           button2.dataset.permessiCollegati = "si";

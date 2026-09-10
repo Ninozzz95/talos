@@ -66,3 +66,17 @@
   .talos-composer__shell{ animation: talosShellEntra .12s ease-out; }
   @keyframes talosShellEntra { from { opacity: 0; } to { opacity: 1; } }
 }
+
+/*
+ * ⭐ D-10F — le tre scelte «Dove girano i comandi» dentro il velo dei permessi.
+ * ⛔ Il corpo di quel velo dispone i figli in colonne: senza questa regola le tre scelte cadevano
+ *   in colonna a sinistra con l'intestazione staccata a destra, e il testo veniva tagliato a metà.
+ *   Provato tre volte prima di trovarla: la forma che funziona è quella di «Per attrezzo», cioè
+ *   due fratelli diretti, non un involucro in più.
+ */
+#veloPermessi .talos-choice-grid[aria-label="Dove girano i comandi"]{
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
