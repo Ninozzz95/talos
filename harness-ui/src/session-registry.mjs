@@ -4036,23 +4036,50 @@ export function createSessionRegistry({
     /**
      * @returns {{ok:true}|{erroreAvvio:string, code:string}}
      */
+    /**
+     * ⭐⭐⭐ D-10D — UN COMANDO DELLA PERSONA MENTRE IL MODELLO LAVORA.
+     *
+     * ⛔ Prima qui c'erano due righe che facevano il danno: un rifiuto se la sessione non era
+     *   conclusa, e `voce.conclusa = false` per la durata del comando. Cioè il comando si
+     *   TRAVESTIVA da giro del modello — e da lì **sette lettori del registro credevano a una
+     *   bugia**: il watcher del workspace si spegneva a metà scrittura, `resume`/`fork`/`compatta`
+     *   diventavano leciti su una sessione viva, `reindirizza` rifiutava, la barra la dava per
+     *   finita. E chi scriveva `!` mentre il modello lavorava si sentiva dire di aspettare.
+     *
+     * ⇒ Due operazioni distinte sulla stessa sessione, ognuna col suo vocabolario
+     *   (`ComandoUtenteIniziato`/`ComandoUtenteFinito`, vedi agui-events.mjs) e il suo stato.
+     *   `conclusa` torna a voler dire una cosa sola: il GIRO DEL MODELLO è finito.
+     *
+     * Ricerca 10/09/2026, due fonti che dicono la stessa cosa:
+     * · AWS Bedrock AgentCore («Execute shell commands in AgentCore Runtime sessions»):
+     *   `InvokeAgentRuntime` e `InvokeAgentRuntimeCommand` sono operazioni distinte sulla stessa
+     *   sessione, e «command execution doesn't block agent invocations, and you can invoke the
+     *   agent and run commands concurrently on the same session»;
+     * · Hermes v0.21 (`acp_adapter/session.py:179`), il concorrente che l'owner ha messo per primo:
+     *   lo stato «sta girando» è un campo SUO (`is_running`, accanto a `cancel_event`), non dedotto
+     *   da un altro; e i canali sono separati per attore (`agent_message_chunk` contro
+     *   `user_message_chunk`). È esattamente ciò che qui mancava.
+     *
+     * ⛔ Resta un rifiuto, e uno solo: una sessione interrotta da un riavvio. Lì non c'è una
+     *   cronologia viva a cui appendere niente, ed è un fatto diverso da «sta lavorando».
+     */
     shell(sessionId, comando) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
-      if (!voce.conclusa) {
-        // ⭐⭐⭐ FASE L (30/8) — stessa distinzione onesta di resume()/forka()/compatta(): "ancora in corso" e "interrotta da un riavvio" non sono lo stesso stato.
-        if (voce.interrotta) {
-          return { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un comando diretto qui richiederebbe scrivere sopra una cronologia che non concluderà mai. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' };
-        }
-        return { erroreAvvio: 'La sessione è ancora in corso: aspetta che concluda prima di un comando diretto', code: 'SESSION_NOT_READY' };
+      if (!voce.conclusa && voce.interrotta) {
+        // ⭐⭐⭐ FASE L (30/8) — "ancora in corso" e "interrotta da un riavvio" non sono lo stesso stato.
+        return { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un comando diretto qui richiederebbe scrivere sopra una cronologia che non concluderà mai. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' };
       }
-      voce.conclusa = false;
+      /* ⛔ Il conteggio dei comandi vivi è SUO: non tocca `conclusa`, che parla del giro del modello. */
+      voce.comandiUtenteInCorso = (voce.comandiUtenteInCorso ?? 0) + 1;
       eseguiComandoDirettoFn({
         cartella: voce.cartella, comando, mobile: voce.mobile, onEvento: (evento) => broadcast(voce, evento),
       }).catch((errore) => {
-        if (!voce.conclusa) {
-          broadcast(voce, { type: 'RunError', message: errore instanceof Error ? errore.message : String(errore), code: 'internal-error' });
-        }
+        /* ⛔ Un comando fallito non è un giro fallito: dirlo con `RunError` spegnerebbe la sessione
+           del modello, che magari sta ancora lavorando. Lo dice il suo evento. */
+        broadcast(voce, { type: 'ComandoUtenteFinito', comandoId: null, errore: errore instanceof Error ? errore.message : String(errore) });
+      }).finally(() => {
+        voce.comandiUtenteInCorso = Math.max(0, (voce.comandiUtenteInCorso ?? 1) - 1);
       });
       return { ok: true };
     },

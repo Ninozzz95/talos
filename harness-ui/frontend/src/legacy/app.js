@@ -10787,9 +10787,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const taskId = state.realSession.taskId;
     try {
       await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/shell`, { comando });
-      const generation = nuovaGenerazioneSessione({ continua: true });
-      state.realSession.taskId = taskId;
-      collegaEventiSessione(sessionId, generation);
+      /*
+       * ⛔⛔⛔ D-10D — QUI c'era il SECONDO cancello, e non era un rifiuto: era una perdita.
+       *   Queste due righe rifacevano la generazione e RICOLLEGAVANO il flusso della sessione.
+       *   Aveva senso finche' un comando poteva partire SOLO su una sessione conclusa: li' il
+       *   flusso era chiuso e andava riaperto. Con il modello al lavoro il flusso e' gia' aperto,
+       *   e rifarlo butta via quello vivo: misurato dal vivo il 10/09 — il comando partiva sul
+       *   server (nessun rifiuto) e in chat non compariva NIENTE, ne' la bolla ne' l'output.
+       * ⇒ Si ricollega solo quando serve davvero, cioe' quando non c'e' gia' un giro vivo.
+       */
+      const giroGiaVivo = runRealeAttivo();
+      if (!giroGiaVivo) {
+        const generation = nuovaGenerazioneSessione({ continua: true });
+        state.realSession.taskId = taskId;
+        collegaEventiSessione(sessionId, generation);
+      }
       aggiornaElencoSessioniReali();
       /*
        * ⛔ PO-06 (10/09) — niente avviso col comando dentro: il comando è già in chat, nella sua
@@ -12936,11 +12948,48 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   chiusa, nome dell'attrezzo). Spento su ENTRAMBE le uscite del giro, non solo su quella
      *   riuscita: un comando che fallisce chiude il giro esattamente come uno che riesce.
      */
-    if (evento.type === 'RunFinished' || evento.type === 'RunError') state.realSession.giroComandoDiretto = false;
+    /* ⛔ D-10D: anche `ComandoUtenteFinito` chiude il comando della persona — e' il suo evento vero;
+       gli altri due restano perche' un giro che muore deve comunque ripulire questo stato. */
+    if (evento.type === 'RunFinished' || evento.type === 'RunError' || evento.type === 'ComandoUtenteFinito') state.realSession.giroComandoDiretto = false;
     /* N1 — un punto solo, dove passano tutti gli eventi: la riga della sessione viva si tiene al
        passo col giro invece di restare quella del momento in cui è nata. */
     segnalaRigaSessioneViva();
     switch (evento.type) {
+      /*
+       * ⛔⛔⛔ D-10D — UN COMANDO DELLA PERSONA HA IL SUO VOCABOLARIO.
+       *   Questo ramo stava dentro `RunStarted`, perche' il comando si travestiva da giro del
+       *   modello. Da quel travestimento nascevano due danni: sette lettori del registro che
+       *   credevano a una bugia, e il rifiuto del `!` mentre il modello lavora. Ora sono due
+       *   operazioni distinte sulla stessa sessione — come AWS Bedrock AgentCore
+       *   (`InvokeAgentRuntime` contro `InvokeAgentRuntimeCommand`, «command execution doesn't
+       *   block agent invocations») e come Hermes v0.21, che tiene `is_running` come campo suo e
+       *   separa i canali per attore. Letti entrambi il 10/09/2026.
+       * ⛔ Il corpo e' lo STESSO di prima, spostato: nessun comportamento nuovo qui dentro.
+       */
+      case 'ComandoUtenteIniziato': {
+        const comando = typeof evento.comando === 'string' ? evento.comando.trim() : '';
+        if (!comando) break;
+        state.realSession.comandoDirettoDaAprire = true;
+        state.realSession.giroComandoDiretto = true;
+        appendComandoDiretto(comando, evento.contesto);
+        mostraAttesaRisposta();
+        if (evento.contesto) { aggiornaPannelloAmbiente(evento.contesto); state.realSession.contesto = evento.contesto; }
+        programmaRenderAlberoReale();
+        break;
+      }
+      /*
+       * ⛔ La fine di un comando NON e' la fine di un giro: non tocca l'usage, non chiude il
+       *   turno, non spegne la sessione — il modello puo' essere ancora al lavoro. Fa una cosa
+       *   sola: toglie l'attesa e riapre il composer.
+       */
+      case 'ComandoUtenteFinito': {
+        state.realSession.giroComandoDiretto = false;
+        state.realSession.comandoDirettoDaAprire = false;
+        nascondiAttesaRisposta();
+        syncRunComposerState();
+        programmaRenderAlberoReale();
+        break;
+      }
       case 'RunStarted': {
         streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio visto in ricerca
         contextMonitor?.setRunning(true);
@@ -13036,16 +13085,6 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          *   che Anthropic descrive per la shell mode («shows real-time progress and output»,
          *   «Interactive mode», letto il 10/09/2026).
          */
-        if (typeof evento.input?.comandoDiretto === 'string' && evento.input.comandoDiretto.trim()) {
-          const comando = evento.input.comandoDiretto.trim();
-          state.realSession.comandoDirettoDaAprire = true;
-          state.realSession.giroComandoDiretto = true;
-          appendComandoDiretto(comando, evento.contesto);
-          mostraAttesaRisposta();
-          if (evento.contesto) { aggiornaPannelloAmbiente(evento.contesto); state.realSession.contesto = evento.contesto; }
-          programmaRenderAlberoReale();
-          break;
-        }
         if (!state.realSession.taskBubbleMostrata && evento.input) {
           appendRealTaskStart(evento.input, evento.contesto);
         } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
@@ -17597,6 +17636,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (attendiUploadImmagini()) return;
       const testo = composerInput.value.trim() || (allegatiComposer.some(a => a.tipo === 'immagine') ? 'Descrivi l’immagine allegata.' : '');
       const durante = Boolean(testo) && runRealeAttivo();
+      /*
+       * ⛔⛔⛔ D-10D — UN COMANDO NON E' NE' UN INDIRIZZO NE' UNA CODA.
+       *
+       *   Il rifiuto del server era solo il primo dei tre cancelli fra chi scrive  e il
+       *   comando che parte. QUESTO era il terzo, ed e' quello che si vedeva: a giro acceso
+       *   l'Invio apre il bivio «indirizza il giro / accoda», e il ramo  non veniva MAI
+       *   raggiunto. Misurato dal vivo il 10/09 guardando la rete: con il modello al lavoro,
+       *   dopo , **nessuna richiesta a  partiva** — nessun errore, nessun
+       *   rifiuto, semplicemente niente.
+       *
+       *   ⛔ E il bivio non ha senso per un comando: «indirizza» cambia rotta al modello,
+       *   «accoda» gli parla dopo. Un comando non parla al modello affatto — gira sulla
+       *   macchina, subito. Chiedere quale delle due sarebbe una domanda senza risposta giusta.
+       *   ⭐  (silenzioso) passa di qui come : e' lo stesso gesto.
+       */
+      if (testo.startsWith('!')) { chiudiBivioInvio(); composerForm.requestSubmit(); return; }
       // B15: Ctrl+Invio (⌘+Invio su Apple) accoda diretto, senza passare dal bivio.
       if (event.ctrlKey || event.metaKey) {
         if (durante) { chiudiBivioInvio(); accodaDalComposer(testo); return; }
