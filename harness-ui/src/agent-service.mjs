@@ -1017,7 +1017,39 @@ export async function avviaSessione({
     }
 
     // ⛔ mai i byte grezzi dentro un evento SSE/JSON (non sono UTF-8 valido) — stessa disciplina già in uso per un documento binario in onDocumento.
-    onEvento(eventoPerScrittura({ percorso: salvato.percorso, contenuto: `[image ${immagineGenerata.mediaType}, ${immagineGenerata.bytes.byteLength} bytes]`, esisteva: false }));
+    /*
+     * ⛔⛔ 10/09, owner: «OGNI artefatto va salvato in libreria». Misurato in questo file prima di
+     *   toccarlo: `salvaVoceLibreriaFn` era chiamata DUE volte — per l'artefatto HTML e per il
+     *   documento — e l'immagine generata non era nessuna delle due. Finiva solo nel workspace, e chi
+     *   riapriva la sessione domani non la ritrovava fra le cose prodotte.
+     * ⛔ Come per l'artefatto e il documento, questa scrittura NON blocca e non fa fallire il giro: se
+     *   la Libreria non è scrivibile l'immagine resta comunque nel workspace, dove il modello l'ha
+     *   messa. Meglio un'immagine senza copia che un giro rotto per una copia.
+     * ⛔ I byte viaggiano in base64 (`salvaVoce` lo prevede): un PNG dentro un campo di testo non è
+     *   UTF-8 valido e si corromperebbe — lo stesso motivo per cui il documento binario fa così.
+     */
+    try {
+      await salvaVoceLibreriaFn({
+        cartella,
+        nome: `${immagineGenerata.fileStem}.${estensione}`,
+        mediaType: immagineGenerata.mediaType,
+        origine: 'generated',
+        base64: Buffer.from(immagineGenerata.bytes).toString('base64'),
+      });
+    } catch (errore) {
+      console.error('[immagini] copia in Libreria non riuscita:', errore instanceof Error ? errore.message : errore);
+    }
+    /*
+     * ⛔ PO-05, stessa cura del documento: `[image image/png, 51234 bytes]` è una riga onesta e
+     *   inservibile. Con l'allegato accanto, la chat costruisce la scheda con nome, formato,
+     *   dimensione misurata e il collegamento che scarica i byte veri.
+     */
+    onEvento(eventoPerScrittura({
+      percorso: salvato.percorso,
+      contenuto: `[image ${immagineGenerata.mediaType}, ${immagineGenerata.bytes.byteLength} bytes]`,
+      esisteva: false,
+      allegato: { nome: `${immagineGenerata.fileStem}.${estensione}`, formato: estensione, byte: immagineGenerata.bytes.byteLength },
+    }));
 
     const dimensioneKb = Math.max(1, Math.round(immagineGenerata.bytes.byteLength / 1024));
     return {
