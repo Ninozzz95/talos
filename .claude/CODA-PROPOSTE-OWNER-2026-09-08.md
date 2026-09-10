@@ -126,3 +126,30 @@ davvero quella funzione, nessuno gli crederà. Da guardare: la prova è su pausa
 il sospetto è un'attesa a tempo invece di un'attesa su uno stato.
 ⛔ Registrato e non curato: è un'altra area, e la lezione dice che un filo trovato dentro una fase
 non è quella fase.
+
+### PO-01 — aggiunta dell'owner (10/09): **anche OAuth OpenRouter**
+«Nella fase oauth aggiungi anche oauth openrouter, è già stato fatto nel mobile, dovrebbe essere
+facile e veloce da implementare.»
+
+**Verificato: c'è davvero, ed è completo.** `AVM/mobile/src/lib/auth/openRouterOAuth.ts`, 173 righe,
+con il flusso PKCE per intero:
+- `TALOS_OPENROUTER_AUTH_URL = 'https://openrouter.ai/auth'` e
+  `TALOS_OPENROUTER_KEYS_URL = 'https://openrouter.ai/api/v1/auth/keys'` (righe 46-47);
+- `talosCreateCodeVerifier`, `talosBase64Url`, `talosCreateCodeChallenge` (S256), `talosCreatePkcePair`
+  — cioè la parte che di solito costa fatica è già scritta e già provata;
+- `TALOS_OAUTH_CALLBACK_PATH = '/talos-openrouter'`.
+
+⛔ Che cosa cambia sul desktop, e perché non è una copia:
+1. il **ritorno**: sul telefono è un deep link, qui è una rotta del nostro server — abbiamo già la
+   4174, quindi il redirect può essere `http://127.0.0.1:4174/<percorso>` e il codice torna a casa
+   senza inventare niente;
+2. il **linguaggio**: il mobile è TypeScript, `harness-ui/src` è JavaScript — si porta la logica,
+   non il file;
+3. la **custodia della chiave**: dove finisce, chi la legge, come si revoca. È la parte che PO-01
+   chiede per ogni provider («rinnovo, scadenza, logout, custodia dei segreti»), e sul desktop non
+   può essere la stessa del telefono.
+4. ⛔ **Non ho ownership sul mobile**: quel file si LEGGE come riferimento, non si tocca.
+
+⇒ L'owner ha ragione sul «facile e veloce»: la parte crittografica è fatta. Resta il giro completo
+da provare dal vivo — login, chiave che arriva, chiamata vera con quella chiave, logout — che è
+l'unica cosa che dice se funziona.
