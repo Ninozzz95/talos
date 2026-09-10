@@ -10203,5 +10203,52 @@ body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar {
     opacity: 1;
   }
 }
+@keyframes talosSegnaviaScorre {
+  0% {
+    stroke-dashoffset: 88;
+  }
+  100% {
+    stroke-dashoffset: -88;
+  }
+}
+@keyframes talosSegnaviaNodo {
+  0%, 100% {
+    fill: transparent;
+    r: 3.4;
+  }
+  40% {
+    fill: var(--talos-accent);
+    r: 4.4;
+  }
+  70% {
+    fill: transparent;
+    r: 3.4;
+  }
+}
+.talos-line-loader-sweep {
+  stroke-dasharray: 26 62;
+  animation: talosSegnaviaScorre 1.6s linear infinite;
+}
+.talos-line-loader-node {
+  animation: talosSegnaviaNodo 1.6s ease-in-out infinite;
+}
+.talos-line-loader-node:nth-of-type(3) {
+  animation-delay: .2s;
+}
+.talos-line-loader-node:nth-of-type(4) {
+  animation-delay: .4s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .talos-line-loader-sweep {
+    animation: none;
+    stroke-dasharray: 88;
+    stroke-dashoffset: 0;
+    stroke-opacity: .35;
+  }
+  .talos-line-loader-node {
+    animation: none;
+    fill: var(--talos-accent);
+  }
+}
 
 /* src/styles/main.css */

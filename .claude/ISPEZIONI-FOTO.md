@@ -613,3 +613,26 @@ Nel pannello destro, «Finestra del contesto» mostra **«Conversazione —» e 
 giro i due numeri spariscono, mentre a giro fermo dicono «88,0k · 6,7%» e «1252k · 95,6%». Un
 trattino al posto di un numero che esisteva un attimo prima si legge come «non lo sappiamo», e non è
 vero: il dato c'è, semplicemente non viene aggiornato mentre il giro corre. Da guardare.
+
+## 10/09/2026, 20:55 — il segnavia a tre nodi, senza punti morti
+
+Owner, precisando: «parlavo proprio del segnavia a tre nodi, era quello che deve essere animato».
+
+⛔ **Misurato PRIMA di toccarlo**, e la misura ha corretto la diagnosi: l'animazione c'era e girava
+(`animationPlayState: running`, dashoffset 88px → 83,3 → 64,6 → 36,2 → 11,7 → 0,58). Il difetto non
+era che fosse ferma: era **dove** si fermava. I keyframe dicevano `70%,100%{stroke-dashoffset:0}` —
+per **un terzo di ogni ciclo** la linea resta piena e immobile e i nodi accesi. Chi guarda in quel
+momento, ed è un momento su tre, vede un disegno fermo. «Sembra statico» era una descrizione esatta.
+
+**`2026-09-10-segnavia-continuo.png`** — guardata. Il segnavia è catturato **a metà movimento**: un
+nodo acceso, la linea in transito, gli altri spenti — non più lo stato pieno e immobile di prima.
+
+**La prova che conta**, con campionamento fitto (24 letture a 120 ms durante un giro vero):
+**24 valori distinti su 24 campioni, zero coppie consecutive identiche.** Non c'è più un istante in
+cui il segnavia sia fermo.
+
+### E la foto conferma D-10A, dal vivo
+
+Nell'Indice dei giri si legge **2 · 3 · 5 · 6 · 8 · 9 · 11 · 13 · 14**: mancano 4, 7, 10, 12. È
+esattamente il debito «l'Indice dei giri salta i numeri», qui visto su una sessione vera invece che
+in una foto di ieri.
