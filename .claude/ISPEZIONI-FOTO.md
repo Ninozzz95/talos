@@ -394,3 +394,24 @@ quattro «Add and export a function `sottrai(a, …`» delle 16:29-16:33 con mod
 `Read only` (nessuna scrittura), 4-6 giri, ~245k token in ingresso in totale. Chiesto conto
 all'agente in background; se le ha avviate lui ha violato «il 4174 non si delega mai» e «giri reali
 solo con glm-5.3-flash».
+
+## 10/09/2026, 17:22 — il «dopo» di P-13
+
+**`2026-09-10-p13-DOPO-104-1440.png`** — guardata. La risposta è a schermo per intero:
+«**104**: sono i file `.mjs` contati nella sezione `harness-ui/src/` dell'elenco (la shell era
+bloccata in sola lettura, quindi ho contato dall'elenco dei percorsi, che per quella cartella appare
+completo, da `agent-service.mjs` a `workspace-watcher.mjs`)». Testata: **4 giri**, «2 ricerche
+completate, 1 comando eseguito», piè di pagina «124,3k token · 4 giri · cache 74%». Nel pannello
+Ambiente il **Worktree dice `AVM-harness-desktop`** — la cura di stamattina, vista di nuovo qui.
+
+Nell'elenco a sinistra si vedono le due sessioni figlie **rientrate sotto la madre** (17:10 e 17:13,
+profondità 1 e 2): sono le deleghe che il modello aveva fatto nel tentativo precedente, quando non
+vedeva i file e cercava un altro modo di contarli. La resa ad albero è corretta e leggibile.
+
+Il suggerimento del composer ora dice «Approfondisci "agent-service.mjs"»: nomina un file **vero**,
+al contrario di stamattina quando proponeva di approfondire una cartella che il modello si era
+inventato. Non è una cura mia — è lo stesso codice che riflette un ultimo attrezzo diverso.
+
+Nessun difetto nuovo trovato guardando fuori da ciò che stavo verificando. Resta il solo 503 di
+`/context`, già esaminato e archiviato: è onesto (`CTX_NOT_ENABLED`) e il motore del contesto è
+vietato per costruzione sulla porta 4174 (`config.mjs:449`).

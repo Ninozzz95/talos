@@ -103,3 +103,28 @@ impilato «Modello» e «Ha fatto» CENTRATI su due righe invece di lasciarli in
 diceva «16 giri» a meta corsa e «3 giri» alla fine, sulla stessa sessione. Usavo `runCount`, che conta
 i RunStarted visti dalla PAGINA (replay compresi) e non i giri della sessione. Curato leggendo dalla
 stessa fonte della riga vera: dopo, 4 → 5, coerente.
+
+## 10/09/2026, 16:38 — il worktree e la CSP, dopo la cura
+
+Sessione `f2ad4532` avviata apposta (nuova: una vecchia mostrerebbe il contesto registrato al SUO
+avvio, e infatti ne ho vista una che diceva ancora «—»). Server 4174 ricostruito e riavviato.
+
+**`2026-09-10-worktree-e-csp-1440.png`** — guardata. Pannello «Ambiente», colonna destra:
+«Ramo `lane/harness-desktop`» e, sotto, **«Worktree `AVM-harness-desktop`»** — prima era `—` cablato.
+«Non salvate —», «Repo annidati nessuno». La chat mostra la consegna e la risposta «pronto», 1 giro,
+7,8k token, `glm-5.3-flash` nel composer e in testata. **Nessun errore di CSP in console**: prima ce
+n'era uno a ogni apertura, da `about:srcdoc`. Resta il solo 503 di `/context`, che è onesto
+(`CTX_NOT_ENABLED`) e già gestito dal frontend.
+
+**`2026-09-10-worktree-e-csp-1024.png`** — guardata. A questa larghezza la **colonna destra si
+ritrae del tutto**: il pannello Ambiente non è a schermo, e restano le tre icone in testata per
+richiamarlo. Non è un difetto nuovo (è il comportamento del layout), ma va detto: la verifica del
+worktree a 1024 si fa aprendo il pannello, non a colpo d'occhio. Il resto tiene: composer intero,
+elenco sessioni leggibile, nessuna colonna schiacciata, nessun testo tagliato.
+
+⛔ Difetto NOTATO e non mio, registrato qui perché non si perda: nell'elenco sessioni compaiono
+quattro «Add and export a function `sottrai(a, …`» delle 16:29-16:33 con modello
+`~deepseek/deepseek-v4-flash` — non `glm-5.3-flash`. Non le ho avviate io. Concluse con successo,
+`Read only` (nessuna scrittura), 4-6 giri, ~245k token in ingresso in totale. Chiesto conto
+all'agente in background; se le ha avviate lui ha violato «il 4174 non si delega mai» e «giri reali
+solo con glm-5.3-flash».
