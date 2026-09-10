@@ -900,6 +900,40 @@ export function metodiAmmessiPerRotta(pathname) {
  * Legge il corpo di una richiesta POST come JSON, con un tetto di byte — le
  * rotte GET esistenti non avevano mai avuto bisogno di leggere un corpo.
  */
+/*
+ * ⭐⭐⭐ D-11 (10/09) — DA DOVE ARRIVA QUESTA RICHIESTA.
+ *
+ * Il 10/09 sono comparse sul 4174 quattro sessioni con un modello fuori regola, e non c'è stato
+ * modo di sapere chi le avesse create: cinque piste seguite, due sessioni interrogate, una
+ * corrispondenza testuale esatta con lo scenario della pipeline QA, e nessuna risposta possibile.
+ * Il dato non veniva registrato da nessuno, e i log del server — l'unico posto dove sarebbe potuto
+ * essere — li azzera ogni riavvio.
+ *
+ * ⛔⛔ È DIAGNOSTICA, NON SICUREZZA. Qui gira tutto su 127.0.0.1: l'indirizzo non distingue un
+ *   browser da `curl`, da uno script node o da un agente. L'unica cosa che separa davvero è
+ *   l'`User-Agent` (Chrome contro `node`/`undici`/`curl`), più un'intestazione che i NOSTRI
+ *   strumenti dichiarano. Entrambe le scrive il chiamante, quindi entrambe si possono falsificare
+ *   — ricerca 10/09/2026: InfoSec Writeups «Header Manipulation: Bypasses, Probing...», Microsoft
+ *   Learn «Add data to audit logs by using custom headers», Sonar «Audit Logging Best Practices».
+ * ⇒ Serve a rispondere «chi è stato» quando la risposta è uno strumento di casa. Non decide
+ *   niente, non nega niente, e nessun codice deve MAI leggerlo per autorizzare qualcosa.
+ */
+const TETTO_CAMPO_ORIGINE = 200;
+
+export function origineDellaRichiesta(req) {
+  const taglia = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, TETTO_CAMPO_ORIGINE) : null);
+  const intestazioni = req?.headers ?? {};
+  const dichiarata = taglia(intestazioni['x-talos-origine']);
+  const agente = taglia(intestazioni['user-agent']);
+  const indirizzo = taglia(req?.socket?.remoteAddress);
+  if (!dichiarata && !agente && !indirizzo) return null;
+  return {
+    ...(dichiarata ? { dichiarata } : {}),
+    ...(agente ? { agente } : {}),
+    ...(indirizzo ? { indirizzo } : {}),
+  };
+}
+
 function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     let totale = 0;
@@ -2082,7 +2116,13 @@ export function createHttpApp({
         if (provider !== 'cloud' || runtimeId !== null || modelId !== null || fallbackConsent === true) {
           Object.assign(opzioniSessione, { provider, runtimeId, modelId, fallbackConsent });
         }
-        const esito = sessionRegistry.avvia(taskId, opzioniSessione);
+        /*
+         * ⭐ D-11: chi ha creato questa sessione, per poterlo chiedere al disco invece che a memoria.
+         * ⛔ Additivo: quando non c'è niente da dire il campo non viene aggiunto affatto, e la
+         *   chiamata resta identica a prima — stessa disciplina di ogni altro parametro opzionale
+         *   qui dentro. Tre test che asseriscono la FORMA degli argomenti se ne sono accorti.
+         */
+        const esito = sessionRegistry.avvia(taskId, opzioniSessione, origineDellaRichiesta(req));
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
@@ -2544,7 +2584,7 @@ export function createHttpApp({
         const { body: senzaImmagini, immagini } = await imageInput(corpo);
         const richiesta = requireCustomTaskBody(senzaImmagini);
         if (immagini.length) richiesta.immagini = immagini;
-        const esito = sessionRegistry.avviaLibero(richiesta);
+        const esito = sessionRegistry.avviaLibero(richiesta, origineDellaRichiesta(req));
         if ('erroreAvvio' in esito) {
           const errore = new Error(esito.erroreAvvio);
           errore.code = esito.code;
