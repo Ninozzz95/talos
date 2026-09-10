@@ -1843,7 +1843,17 @@ button.talos-turn-spine__tick:focus-visible {
   flex-direction: column;
   align-items: flex-end;
 }
-.talos-message--user .talos-message__body {
+.talos-message--user .talos-message__body--comando {
+  max-width: min(86%, 52rem);
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border-color: transparent;
+}
+.talos-message__body--comando .code-block {
+  margin: 0;
+}
+.talos-message__body {
   max-width: min(72%, 44rem);
   width: fit-content;
   margin-left: auto;
@@ -2448,7 +2458,7 @@ a.talos-button {
 .assistant-copy .md-table code {
   font-size: 12px;
 }
-.assistant-copy .code-block {
+:is(.assistant-copy, .talos-message__body--comando) .code-block {
   --codice-fondo:var(--talos-window-bg);
   --codice-testa:var(--talos-panel-soft);
   --codice-commento:var(--talos-muted);
@@ -2467,14 +2477,14 @@ a.talos-button {
   background: var(--codice-fondo);
   overflow: hidden;
 }
-:root[data-theme=light] .assistant-copy .code-block {
+:root[data-theme=light] :is(.assistant-copy, .talos-message__body--comando) .code-block {
   --codice-commento:#5a5c62;
   --codice-stringa:#2a6142;
   --codice-numero:#7a4f0f;
   --codice-funzione:#2d5c8a;
   --codice-simbolo:#2f6459;
 }
-.assistant-copy .code-block .code-block-head {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-head {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -2483,7 +2493,7 @@ a.talos-button {
   border-bottom: 1px solid var(--talos-border-subtle);
   background: var(--codice-testa);
 }
-.assistant-copy .code-block .code-block-lang {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-lang {
   flex: 1;
   min-width: 0;
   font-family: var(--talos-font-mono);
@@ -2494,7 +2504,7 @@ a.talos-button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.assistant-copy .code-block .code-block-copy {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-copy {
   flex: none;
   border: 1px solid transparent;
   border-radius: 8px;
@@ -2509,25 +2519,25 @@ a.talos-button {
     background var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease),
     border-color var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease);
 }
-.assistant-copy .code-block .code-block-copy:hover {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-copy:hover {
   color: var(--talos-text);
   background: var(--talos-accent-soft);
   border-color: var(--talos-accent-border);
 }
-.assistant-copy .code-block .code-block-copy:focus-visible {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-copy:focus-visible {
   outline: 2px solid var(--talos-accent-border);
   outline-offset: 2px;
 }
-.assistant-copy .code-block .code-block-copy.is-fatto {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-copy.is-fatto {
   color: var(--talos-success, var(--talos-text));
   border-color: transparent;
   background: transparent;
 }
-.assistant-copy .code-block .code-block-copy[disabled] {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-copy[disabled] {
   opacity: .55;
   cursor: default;
 }
-.assistant-copy .code-block > pre {
+:is(.assistant-copy, .talos-message__body--comando) .code-block > pre {
   margin: 0;
   padding: 12px 14px;
   overflow-x: auto;
@@ -2536,11 +2546,11 @@ a.talos-button {
   border: 0;
   border-radius: 0;
 }
-.assistant-copy .code-block > pre:focus-visible {
+:is(.assistant-copy, .talos-message__body--comando) .code-block > pre:focus-visible {
   outline: 2px solid var(--talos-accent-border);
   outline-offset: -2px;
 }
-.assistant-copy .code-block pre code {
+:is(.assistant-copy, .talos-message__body--comando) .code-block pre code {
   display: block;
   background: none;
   padding: 0;
@@ -2555,60 +2565,60 @@ a.talos-button {
   tab-size: 2;
   hyphens: none;
 }
-.assistant-copy .code-block pre code .token {
+:is(.assistant-copy, .talos-message__body--comando) .code-block pre code .token {
   background: none;
 }
-.assistant-copy .code-block .token.comment,
-.assistant-copy .code-block .token.prolog,
-.assistant-copy .code-block .token.doctype,
-.assistant-copy .code-block .token.cdata {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.comment,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.prolog,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.doctype,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.cdata {
   color: var(--codice-commento);
   font-style: italic;
 }
-.assistant-copy .code-block .token.punctuation {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.punctuation {
   color: var(--codice-punteggiatura);
 }
-.assistant-copy .code-block .token.keyword,
-.assistant-copy .code-block .token.atrule,
-.assistant-copy .code-block .token.rule,
-.assistant-copy .code-block .token.important,
-.assistant-copy .code-block .token.selector {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.keyword,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.atrule,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.rule,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.important,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.selector {
   color: var(--codice-parola);
   font-weight: 600;
 }
-.assistant-copy .code-block .token.string,
-.assistant-copy .code-block .token.char,
-.assistant-copy .code-block .token.attr-value,
-.assistant-copy .code-block .token.regex,
-.assistant-copy .code-block .token.url {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.string,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.char,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.attr-value,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.regex,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.url {
   color: var(--codice-stringa);
 }
-.assistant-copy .code-block .token.number,
-.assistant-copy .code-block .token.boolean,
-.assistant-copy .code-block .token.constant,
-.assistant-copy .code-block .token.symbol,
-.assistant-copy .code-block .token.inserted {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.number,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.boolean,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.constant,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.symbol,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.inserted {
   color: var(--codice-numero);
 }
-.assistant-copy .code-block .token.function,
-.assistant-copy .code-block .token.class-name,
-.assistant-copy .code-block .token.builtin {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.function,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.class-name,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.builtin {
   color: var(--codice-funzione);
 }
-.assistant-copy .code-block .token.tag,
-.assistant-copy .code-block .token.attr-name,
-.assistant-copy .code-block .token.property,
-.assistant-copy .code-block .token.variable,
-.assistant-copy .code-block .token.operator {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.tag,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.attr-name,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.property,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.variable,
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.operator {
   color: var(--codice-simbolo);
 }
-.assistant-copy .code-block .token.deleted {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.deleted {
   color: var(--talos-danger);
 }
-.assistant-copy .code-block .token.namespace {
+:is(.assistant-copy, .talos-message__body--comando) .code-block .token.namespace {
   opacity: .75;
 }
-.assistant-copy .code-block-in-arrivo {
+:is(.assistant-copy, .talos-message__body--comando) .code-block-in-arrivo {
   border-color: var(--talos-accent-border);
 }
 .talos-visivamente-nascosto {
