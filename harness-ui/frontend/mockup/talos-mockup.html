@@ -707,7 +707,6 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
    (piu stretta); portandola a 768 px il vuoto ai lati diventa evidente. */
 :root.chat-full-width .talos-message,:root.chat-full-width .talos-empty{max-width:none}
 :root.immersive-header .talos-topbar{border-bottom-color:transparent}
-body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{animation:none!important; transition:none!important}
 .talos-touched{margin-top:10px; overflow:hidden}
 .talos-touched__head{padding:10px 14px; border-bottom:1px solid var(--talos-border-subtle)}
 .talos-touched__row{display:flex; align-items:center; gap:10px; min-height:var(--talos-row); padding:0 14px}
@@ -1529,7 +1528,6 @@ a.talos-button{text-decoration:none}
 @media (max-width:980px){ .talos-settings{grid-template-columns:minmax(0,1fr)} .talos-review{grid-template-columns:minmax(0,1fr)} }
 @media (max-width:860px){ .talos-shell, :root[data-vista="pagina"] .talos-shell{grid-template-columns:minmax(0,1fr)} .talos-sidebar{display:none} }
 @media (max-width:760px){ .talos-picker{grid-template-columns:minmax(0,1fr)} }
-@media (prefers-reduced-motion: reduce){ *{animation:none !important; transition:none !important} }
 /* Owner 06/09: «logo loading non e animato». Vero, e giusto: con «riduci le animazioni» acceso in Windows
    la regola qui sopra ferma TUTTO, e il segnavia restava una riga con tre cerchi vuoti — sembrava rotto.
    Col movimento ridotto non si rimette il movimento: si rende leggibile lo stato fermo (nodi pieni, traccia

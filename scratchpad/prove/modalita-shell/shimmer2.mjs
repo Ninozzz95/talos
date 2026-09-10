@@ -7,6 +7,8 @@ try {
   await p.goto('http://127.0.0.1:4174/');
   await p.waitForTimeout(3500);
   const r = await p.evaluate(async () => {
+    /* ⛔ La condizione dell'owner: l'interruttore «Riduci animazioni» dell'app acceso. */
+    document.body.classList.add('reduce-motion');
     const riga = document.createElement('div');
     riga.className = 'talos-stack talos-waiting';
     riga.innerHTML = '<div class="talos-waiting__row"><svg class="talos-line-loader"></svg><span class="talos-waiting__label">TALOS sta elaborando la risposta…</span></div>';

@@ -820,3 +820,37 @@ leggendo, perché lì ci sono le parole. Non è un segnale più bello: è più g
 tornano con una riga di CSS quando si riprogetta il grafo. E il ripiego dello shimmer è scritto
 PRIMA stavolta: con le animazioni spente il testo torna pieno, perché un testo `transparent` senza
 gradiente in movimento sarebbe invisibile — lo stesso modo in cui il segnavia era «sparito».
+
+## 10/09, notte fonda — STANATO chi ammazzava le animazioni
+
+Owner, tre volte: «c'è qualcosa in questo cazzo di progetto che elimina le animazioni, bisogna
+stanarlo e eliminarlo» · «ELIMINALI ENTRAMBI» · «NON LI VOGLIO».
+
+Erano **due regole universali con `!important`**, nel foglio generato dal mockup:
+1. `body.reduce-motion *, ::before, ::after { animation:none!important; transition:none!important }`
+   — la accende l'interruttore «Riduci animazioni» dentro le impostazioni dell'app;
+2. `@media (prefers-reduced-motion: reduce) { * { animation:none!important } }`
+   — la accende l'impostazione di Windows.
+
+⛔ **È la spiegazione di tutta la serata.** Una regola universale con `!important` non si batte da
+valle: nessuna dichiarazione più specifica la supera. Sei tentativi sul segnavia (taglia, SMIL, CSS
+ripulito, profilo del mobile, motore JS di riserva, nodo che cresce) non potevano funzionare, e non
+perché fossero sbagliati: morivano prima di arrivare a schermo. Non c'era niente di rotto — c'era un
+interruttore acceso che nessuno aveva stanato.
+
+MISURATO, `background-position` distinte su 10 letture, prima e dopo l'eliminazione:
+| condizione | prima | dopo |
+|---|---|---|
+| browser normale | 10/10 | **10/10** |
+| interruttore «Riduci animazioni» dell'app | 0 (tutto spento) | **10/10** |
+| «riduci animazioni» di Windows | 1/10 | **10/10** |
+| tutt'e due insieme | 1/10 | **10/10** |
+
+⛔ Restano in piedi le `@media (prefers-reduced-motion: reduce)` **mirate**, quelle scritte su un
+componente per volta: lì chi ha scritto il componente ha deciso cosa mettere al posto del movimento.
+La differenza è fra rispettare una richiesta e spegnere la luce.
+⛔ Detto chiaro invece che taciuto: chi imposta «riduci animazioni» nel sistema di solito ha una
+ragione (emicrania, vertigini), e W3C WCAG 2.3.3 dice di rispettarla. Lo shimmer ora si muove
+comunque — decisione dell'owner, ripetuta tre volte, scritta nel CSS perché sia una scelta leggibile
+e non una dimenticanza. Il movimento resta il più gentile possibile: un gradiente dentro le lettere,
+1,9 s, senza spostare né ridimensionare niente.

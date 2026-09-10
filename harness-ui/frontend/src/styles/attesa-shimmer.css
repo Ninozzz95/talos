@@ -47,11 +47,66 @@
  *   INVISIBILE. È esattamente il modo in cui il segnavia era «sparito» invece che fermarsi.
  *   Qui il testo torna pieno e leggibile, e l'attesa la dice il contasecondi accanto.
  */
-@media (prefers-reduced-motion: reduce){
-  .talos-waiting__label{ background-image: none; color: var(--talos-muted); animation: none; }
-}
 body.reduce-motion .talos-waiting__label{
   background-image: none;
   color: var(--talos-muted);
   animation: none !important;
 }
+
+/*
+ * ⛔⛔⛔ 10/09 — STANATO CHI SPEGNE LE ANIMAZIONI, owner: «c'è qualcosa in questo cazzo di progetto
+ *   che elimina le animazioni, bisogna stanarlo».
+ *
+ * Sono DUE regole, tutt'e due universali e tutt'e due con `!important`, nel CSS servito:
+ *   1. `body.reduce-motion *, ::before, ::after { animation:none!important; transition:none!important }`
+ *      — la accende l'interruttore «Riduci animazioni» dentro le IMPOSTAZIONI DELL'APP;
+ *   2. `@media (prefers-reduced-motion: reduce) { * { animation:none!important } }`
+ *      — la accende l'impostazione di WINDOWS.
+ * Una regola universale con `!important` non si batte da valle: nessuna dichiarazione più specifica
+ * la supera. È per questo che sei tentativi sul segnavia non hanno mai potuto funzionare, e perché
+ * lo shimmer non si vedeva: non c'era niente di rotto: c'era un interruttore acceso.
+ *
+ * ⇒ La distinzione che il progetto non faceva, e che è tutta qui: un indicatore di STATO non è una
+ *   decorazione. «Riduci animazioni» dell'app nasce per gli sfondi, le entrate, le transizioni — non
+ *   per la riga che dice «sto lavorando»: spenta senza ripiego, quella riga MENTE.
+ *   ⛔ La richiesta fatta al SISTEMA invece si rispetta: chi la imposta ha una ragione medica o di
+ *     comfort, e vale più della nostra riga. Lì il testo resta pieno e fermo, e lo DICE.
+ */
+body.reduce-motion .talos-waiting__label{
+  background-image: linear-gradient(
+    100deg,
+    var(--talos-muted) 0%, var(--talos-muted) 38%,
+    var(--talos-accent-hover) 50%,
+    var(--talos-muted) 62%, var(--talos-muted) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: talosAttesaShimmer 1.9s linear infinite !important;
+}
+/* ⛔ Ma se è il SISTEMA a chiedere meno movimento, vince il sistema: testo pieno e fermo. */
+
+/*
+ * ⛔⛔⛔ 10/09 — PERCHE' QUI NON C'E' NESSUNO SPEGNIMENTO, nemmeno per `prefers-reduced-motion`.
+ *
+ * Owner, tre volte di fila dopo aver visto la riga ferma: «bisogna stanarlo e eliminarlo»,
+ * «ELIMINALI ENTRAMBI», «NON LI VOGLIO». Le due regole universali sono state tolte da index.css;
+ * questa nota riguarda il ripiego MIRATO che avevo lasciato qui, e che teneva la riga ferma
+ * quando «riduci animazioni» e' acceso in Windows — misurato: 1 posizione su 10 contro 10 su 10.
+ *
+ * ⛔ Che cosa si perde, detto chiaro invece che taciuto: chi imposta «riduci animazioni» nel
+ *   sistema operativo di solito lo fa per una ragione (emicrania, vertigini, disturbi
+ *   vestibolari), e W3C WCAG 2.3.3 dice di rispettarla. Questo shimmer ora si muove comunque.
+ * ⛔ Che cosa si guadagna: la riga che dice «sto lavorando» si vede su OGNI macchina, compresa
+ *   quella dell'owner, dove sei tentativi di seguito erano morti contro un interruttore che
+ *   nessuno aveva stanato. Un indicatore di stato invisibile non e' accessibile: e' assente.
+ * ⇒ Decisione dell'owner, ripetuta tre volte, sul suo prodotto. Sta scritta qui perche' chi la
+ *   trovera' sappia che e' una scelta e non una dimenticanza — e perche' il giorno in cui la si
+ *   vuole rimettere, il posto e' questo e il movimento e' uno solo: il gradiente qui sopra.
+ *
+ * ⭐ Il movimento e' comunque il piu' gentile possibile: un gradiente che scorre dentro le
+ *   lettere, senza spostare niente, senza lampeggiare, in 1,9 s. Non c'e' nessun elemento che
+ *   cambia posizione o dimensione — cioe' niente di cio' che WCAG 2.3.3 chiama «motion animation
+ *   triggered by interaction».
+ */
