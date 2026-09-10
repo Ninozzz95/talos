@@ -9153,8 +9153,8 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
   const svg = documentObj.createElementNS(SVG_NS, "svg");
   svg.setAttribute("class", "talos-line-loader");
   svg.setAttribute("viewBox", "0 0 96 16");
-  svg.setAttribute("width", "72");
-  svg.setAttribute("height", "12");
+  svg.setAttribute("width", "48");
+  svg.setAttribute("height", "8");
   svg.setAttribute("aria-hidden", "true");
   for (const classe of ["talos-line-loader-track", "talos-line-loader-sweep"]) {
     const linea = documentObj.createElementNS(SVG_NS, "line");
@@ -9173,17 +9173,28 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
     }
     svg.append(linea);
   }
-  for (const cx of [16, 48, 80]) {
+  for (const [i, cx] of [16, 48, 80].entries()) {
     const nodo4 = documentObj.createElementNS(SVG_NS, "circle");
     nodo4.setAttribute("class", "talos-line-loader-node");
     nodo4.setAttribute("cx", String(cx));
     nodo4.setAttribute("cy", "8");
     nodo4.setAttribute("r", "4");
+    nodo4.setAttribute("fill", "currentColor");
+    nodo4.setAttribute("fill-opacity", "0");
+    const acceso = documentObj.createElementNS(SVG_NS, "animate");
+    acceso.setAttribute("attributeName", "fill-opacity");
+    acceso.setAttribute("values", "0;1;0");
+    acceso.setAttribute("keyTimes", "0;0.35;1");
+    acceso.setAttribute("dur", "1.2s");
+    acceso.setAttribute("begin", `${i * 0.28}s`);
+    acceso.setAttribute("repeatCount", "indefinite");
+    nodo4.append(acceso);
     svg.append(nodo4);
   }
   try {
     if (opzioni.window?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
       svg.querySelector(".talos-line-loader-sweep")?.setAttribute("stroke-dashoffset", "0");
+      for (const n of svg.querySelectorAll?.(".talos-line-loader-node") ?? []) n.setAttribute("fill-opacity", "1");
       svg.pauseAnimations?.();
     }
   } catch {

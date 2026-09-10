@@ -801,8 +801,8 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
   const svg = documentObj.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('class', 'talos-line-loader');
   svg.setAttribute('viewBox', '0 0 96 16');
-  svg.setAttribute('width', '72'); // 10/09: cresciuto con la regola CSS, cosi' il ripiego senza foglio ha la stessa taglia
-  svg.setAttribute('height', '12');
+  svg.setAttribute('width', '48'); // 10/09, owner: «ancora troppo grande» — si vede per il movimento dei nodi, non per la taglia
+  svg.setAttribute('height', '8');
   svg.setAttribute('aria-hidden', 'true');
   for (const classe of ['talos-line-loader-track', 'talos-line-loader-sweep']) {
     const linea = documentObj.createElementNS(SVG_NS, 'line');
@@ -837,10 +837,32 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
     }
     svg.append(linea);
   }
-  for (const cx of [16, 48, 80]) {
+  /*
+   * ⛔⛔⛔ 10/09, owner, quarta volta: «mi stai prendendo per il culo, è statico e ancora troppo
+   *   grande». Il bundle servito dal 4174 CONTIENE gia' l'SMIL sullo sweep (verificato con curl:
+   *   `"animate"`, `repeatCount`, `88;-88`) — ma una linea sottile che scorre e' un movimento che si
+   *   puo' non vedere, soprattutto su un tema scuro e con un rendering software.
+   * ⇒ Il movimento sta dove si guarda: i TRE NODI si accendono a turno. Tre cerchi che pulsano in
+   *   sequenza sono leggibili a colpo d'occhio dove una linea da 2,5 px non lo e'.
+   * ⛔ `fill-opacity` e non `fill`: SMIL non conosce `var(--talos-accent)`, mentre `currentColor` sul
+   *   riempimento eredita il colore che il CSS ha gia' dato al segnavia — un valore solo, un posto solo.
+   * ⛔ E il CSS non deve dichiarare ne' `fill` ne' `fill-opacity` sui nodi: una dichiarazione CSS
+   *   vince sull'attributo di presentazione che SMIL anima, e lo inchioderebbe.
+   */
+  for (const [i, cx] of [16, 48, 80].entries()) {
     const nodo = documentObj.createElementNS(SVG_NS, 'circle');
     nodo.setAttribute('class', 'talos-line-loader-node');
     nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
+    nodo.setAttribute('fill', 'currentColor');
+    nodo.setAttribute('fill-opacity', '0');
+    const acceso = documentObj.createElementNS(SVG_NS, 'animate');
+    acceso.setAttribute('attributeName', 'fill-opacity');
+    acceso.setAttribute('values', '0;1;0');
+    acceso.setAttribute('keyTimes', '0;0.35;1');
+    acceso.setAttribute('dur', '1.2s');
+    acceso.setAttribute('begin', `${i * 0.28}s`);
+    acceso.setAttribute('repeatCount', 'indefinite');
+    nodo.append(acceso);
     svg.append(nodo);
   }
   /*
@@ -852,6 +874,7 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
     if (opzioni.window?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
       ?? globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
       svg.querySelector('.talos-line-loader-sweep')?.setAttribute('stroke-dashoffset', '0');
+      for (const n of svg.querySelectorAll?.('.talos-line-loader-node') ?? []) n.setAttribute('fill-opacity', '1');
       svg.pauseAnimations?.();
     }
   } catch { /* niente matchMedia (prove, ambienti senza finestra): resta il movimento */ }
