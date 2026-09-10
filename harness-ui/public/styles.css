@@ -3458,6 +3458,55 @@ a.talos-button {
     transition: none;
   }
 }
+.talos-figlia .talos-message__body {
+  max-width: 100%;
+  width: auto;
+  margin-left: 0;
+}
+.talos-figlia .talos-message {
+  margin: 0;
+}
+.talos-figlia__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.talos-figlia__titolo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.talos-figlia__indietro {
+  flex: none;
+}
+.talos-figlia__corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.talos-figlia__turno {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.talos-figlia__vuoto,
+.talos-figlia__nota {
+  color: var(--talos-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.talos-figlia__errore {
+  color: var(--talos-danger, var(--talos-text));
+  font-size: 12px;
+  line-height: 1.5;
+}
+.talos-figlia__misure {
+  margin-bottom: 8px;
+}
 .talos-inspector-card__head {
   display: flex;
   align-items: center;

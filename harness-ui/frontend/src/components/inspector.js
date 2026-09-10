@@ -152,7 +152,27 @@ function kv(d, k, v, classeV = '') { const r = el(d, 'div', 'talos-kv'); r.appen
  * Ogni riga porta il compito, lo stato della delega e il modello; senza deleghe resta lo stato vuoto del
  * mockup, che è una frase onesta, non un buco.
  */
-export function disegnaAgenti(d, contenitore, agenti) {
+/*
+ * Il segno «questa card porta da un'altra parte».
+ * ⛔ `i-chevron-right` e non `i-chev`: nello sprite sono due icone diverse e il progetto le usa
+ *   con due significati — `i-chev` è il chevron che ruota per aprire qualcosa SUL POSTO (le card
+ *   dell'attività), `i-chevron-right` è «vai a». Qui si cambia vista, quindi è il secondo.
+ * ⛔ Verificata nello sprite prima di usarla: stamattina ne avevo scelta una che non esisteva
+ *   affatto, e ad accorgersene è stato un test, non l'occhio.
+ * Costruita a mano perché questo file non ha import: `el` sotto è locale per la stessa ragione.
+ */
+const SVG_NS_INSPECTOR = 'http://www.w3.org/2000/svg';
+function chevron(d) {
+  const svg = d.createElementNS(SVG_NS_INSPECTOR, 'svg');
+  svg.setAttribute('class', 'i talos-inspector-card__vai');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = d.createElementNS(SVG_NS_INSPECTOR, 'use');
+  use.setAttribute('href', '#i-chevron-right');
+  svg.append(use);
+  return svg;
+}
+
+export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
   const lista = Array.isArray(agenti) ? agenti : [];
   contenitore.replaceChildren();
   if (!lista.length) {
@@ -167,11 +187,40 @@ export function disegnaAgenti(d, contenitore, agenti) {
     card.dataset.c = 'AgentRow';
     card.dataset.stato = statoDelega(a);
     if (a.sessionId) card.dataset.sessioneFiglia = a.sessionId;
+    /*
+     * ⛔⛔ PO-08 (10/09) — la card si apre, e lo si vede PRIMA di cliccarla.
+     * `role="button"` + `tabindex` perché una card che si apre col mouse e non con Invio è una
+     * card che metà delle persone non può aprire.
+     * ⛔ Solo se c'è davvero un ascoltatore E la figlia ha un id: senza uno dei due la card resta
+     *   esattamente com'era, statica. Una promessa a schermo che non porta da nessuna parte è il
+     *   difetto peggiore di tutti, perché non fa rumore.
+     */
+    const apribile = typeof azioni.onApri === 'function' && Boolean(a.sessionId);
+    if (apribile) {
+      card.classList.add('talos-inspector-card--apribile');
+      card.setAttribute('role', 'button');
+      card.tabIndex = 0;
+      card.setAttribute('aria-label', `Apri la conversazione di: ${a.taskCorto || a.task || 'delega senza compito'}`);
+      const apri = () => azioni.onApri(a);
+      card.addEventListener('click', apri);
+      card.addEventListener('keydown', (evento) => {
+        if (evento.key !== 'Enter' && evento.key !== ' ') return;
+        evento.preventDefault();
+        apri();
+      });
+      if (typeof azioni.onMenu === 'function') {
+        card.addEventListener('contextmenu', (evento) => {
+          evento.preventDefault();
+          azioni.onMenu(a, { x: evento.clientX, y: evento.clientY, ancora: card });
+        });
+      }
+    }
     const head = el(d, 'div', 'talos-inspector-card__head');
     /* ⛔ 09/09: `taskCorto` prima di `task` — la consegna intera comincia col preambolo del kernel,
        uguale per ogni figlia, e a 52 caratteri due deleghe diverse diventano la stessa riga (visto
        nella foto della scheda «Agenti» del giro D2). Il ripiego su `task` regge le figlie vecchie. */
     head.append(el(d, 'b', '', tronca(a.taskCorto || a.task || 'Delega senza compito registrato', 52)), el(d, 'span', `talos-badge talos-badge--sm${statoDelega(a) === 'fallita' ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ''}`, etichettaDelega(a)));
+    if (apribile) head.append(chevron(d));
     card.append(head);
     // ⛔ il server manda `avviataAlle` ed `evidenzaDelega` (scritture, artefatti, chiamate ad attrezzi):
     // si mostra quello che c'e' davvero, mai una riga «Modello —» che non ha dietro nessun dato.
@@ -240,7 +289,7 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
   const file = righeFile(dati.file);
   riempiCard(d, fileCard, file.length ? file : [['Nessun file scritto finora', '—']], { classiValore: (r) => (r[1].startsWith('+') ? 'talos-diff-num--plus' : '') });
   const agenti = inspector.querySelector('#railAgenti');
-  if (agenti) disegnaAgenti(d, agenti, dati.agenti);
+  if (agenti) disegnaAgenti(d, agenti, dati.agenti, dati.azioniAgenti || {});
   const processi = inspector.querySelector('#railProcessi');
   if (processi) {
     processi.replaceChildren();
