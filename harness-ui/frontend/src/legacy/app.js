@@ -38,6 +38,7 @@ import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSI
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser con annotazione 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, ordinaSessioniAdAlbero, statoSessione } from '../components/session-item.js';
+import { leggiEsitoComando, rigaDiStatoComando } from '../components/esito-comando.js'; // PO-06 (10/09): l'esito di un comando, detto a una persona
 import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFileScaricabile, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
@@ -8440,6 +8441,90 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     scorriAllaBollaAppesa(article);
   }
 
+  /*
+   * ⛔⛔⛔ PO-06 (10/09) — LA BOLLA DEL COMANDO SCRITTO DALLA PERSONA.
+   *
+   * Owner: «i comandi ! vanno chiamati sul composer chat non sul terminale». Se il posto in cui si
+   * scrivono è la chat, il posto in cui si vedono è la chat: prima non compariva niente: il comando
+   * spariva dal composer e ricompariva solo dentro una card chiusa, come se l'avesse deciso l'agente.
+   *
+   * ⛔ Due cose che NON sono un dettaglio:
+   *  · il comando va in **monospazio**: è testo che una macchina eseguirà alla lettera, e la
+   *    differenza fra `rm -rf ./ build` e `rm -rf ./build` si legge solo con i caratteri a
+   *    larghezza fissa (W3C WCAG, tecnica dei caratteri per il contenuto di tipo codice);
+   *  · la meta dice **chi ha deciso** («Comando eseguito da te»), che è l'unica informazione che
+   *    distingue questa riga da un attrezzo scelto dal modello. Niente nomi tecnici a schermo:
+   *    non `shell`, non `comandoDiretto` — regola dell'owner del 04/09.
+   */
+  function appendComandoDiretto(comando, contesto = null) {
+    state.realSession.ultimaDomanda = comando;
+    const article = nellaChat(creaMessaggioUtente({
+      testo: comando,
+      ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(),
+      meta: `Comando eseguito da te${etichettaPermessiGiro(contesto)}`,
+    }), 'utente');
+    const paragrafo = article.querySelector('.talos-message__body p');
+    if (paragrafo) paragrafo.classList.add('talos-mono');
+    markMotionEnter(article);
+    scorriAllaBollaAppesa(article);
+    return article;
+  }
+
+  /*
+   * ⭐ PO-06 — la cronologia dei comandi, richiamabile con ↑ a composer vuoto.
+   *
+   * È la prima cosa che una persona cerca dopo aver scritto un comando sbagliato, e ce l'hanno tutti
+   * i terminali del mondo; Anthropic la nomina fra le proprietà della shell mode («command history»,
+   * «Interactive mode», letto il 10/09/2026). Vive in `localStorage` perché deve sopravvivere a un
+   * F5 — un ricordo che si perde a ogni ricarica non è una cronologia.
+   *
+   * ⛔ Un tetto dichiarato (non «tanto sono pochi»): 50 voci, senza ripetizioni consecutive, il più
+   *   recente per primo. E ogni lettura/scrittura è protetta: in una finestra privata o con i dati
+   *   di sito bloccati `localStorage` LANCIA invece di restituire vuoto, e una cronologia assente
+   *   non deve mai impedire di mandare un comando.
+   */
+  const CHIAVE_CRONOLOGIA_COMANDI = 'talos.harness.desktop.comandi.v1';
+  const TETTO_CRONOLOGIA_COMANDI = 50;
+  let cronologiaComandi = null;
+  let indiceCronologiaComandi = -1;
+
+  function leggiCronologiaComandi() {
+    if (cronologiaComandi) return cronologiaComandi;
+    try {
+      const grezzo = JSON.parse(localStorage.getItem(CHIAVE_CRONOLOGIA_COMANDI) || '[]');
+      cronologiaComandi = Array.isArray(grezzo) ? grezzo.filter((v) => typeof v === 'string' && v.trim()) : [];
+    } catch { cronologiaComandi = []; }
+    return cronologiaComandi;
+  }
+
+  function ricordaComandoDiretto(comando) {
+    const testo = String(comando || '').trim();
+    if (!testo) return;
+    const lista = leggiCronologiaComandi();
+    if (lista[0] !== testo) lista.unshift(testo);
+    cronologiaComandi = lista.slice(0, TETTO_CRONOLOGIA_COMANDI);
+    indiceCronologiaComandi = -1;
+    try { localStorage.setItem(CHIAVE_CRONOLOGIA_COMANDI, JSON.stringify(cronologiaComandi)); } catch { /* niente cronologia, il comando parte lo stesso */ }
+  }
+
+  /**
+   * ↑/↓ scorrono la cronologia. `direzione` = -1 (più indietro) o +1 (più avanti).
+   * @returns {boolean} true se ha scritto qualcosa nel composer (e allora il tasto è stato consumato).
+   */
+  function scorriCronologiaComandi(direzione) {
+    const lista = leggiCronologiaComandi();
+    if (!lista.length) return false;
+    const prossimo = indiceCronologiaComandi + (direzione < 0 ? 1 : -1);
+    if (prossimo < -1 || prossimo >= lista.length) return false;
+    indiceCronologiaComandi = prossimo;
+    /* Tornati oltre il più recente si torna al foglio bianco, non all'ultimo comando ripetuto. */
+    composerInput.value = prossimo === -1 ? '' : `!${lista[prossimo]}`;
+    autoGrowTextarea();
+    syncRunComposerState();
+    composerInput.setSelectionRange(composerInput.value.length, composerInput.value.length);
+    return true;
+  }
+
   /**
    * ⭐⭐⭐ FASE D (28/8) — il banner "Follow-up in coda" mostra la coda
    * VERA (state.realSession.codaMessaggi, popolata SOLO da una POST
@@ -8713,7 +8798,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function apriBatchSeServe() {
     if (state.realSession.batchAttivo) return state.realSession.batchAttivo;
     // 05/9 Fase 2: Conversazione — il batch e' l'ActivityBundle del mockup (testa richiudibile, righe dentro)
-    const attivita = creaAttivita({ riassunto: 'Attivita\u2026' });
+    /*
+     * ⛔⛔ PO-06 (10/09) — la card di un comando scritto dalla PERSONA nasce APERTA.
+     *
+     * Il default chiuso è giusto per l'agente, che in un giro può toccare venti file: lì il
+     * riassunto è il contenuto, e il dettaglio si apre se interessa. Per un comando digitato tre
+     * secondi fa dall'owner è il contrario — l'output È la ragione per cui l'ha scritto.
+     * Misurato dal vivo PRIMA della cura: il testo dell'esito esisteva nel DOM con rettangolo
+     * **0×0**, e in chat restava solo «1 comando eseguito» da cliccare.
+     * ⛔ Si consuma UNA volta: un batch successivo dello stesso giro torna al comportamento
+     *   normale — è l'agente che lavora, non più la persona che ha chiesto una cosa sola.
+     */
+    const apertoPerComandoDiretto = Boolean(state.realSession.comandoDirettoDaAprire);
+    state.realSession.comandoDirettoDaAprire = false;
+    /* ⛔ `giroComandoDiretto` invece dura fino a RunFinished: la CARD si apre una volta sola, ma
+       ogni riga di quel giro appartiene ancora al comando che la persona ha scritto. */
+    const attivita = creaAttivita({ riassunto: 'Attivita\u2026', aperto: apertoPerComandoDiretto });
     const article = attivita.card;
     const { contenitore, summaryText } = attivita;
     const diffBadge = { hidden: true, replaceChildren() {} }; // il badge del diff vive nella testa: vedi aggiornaRiassuntoBatch
@@ -8828,7 +8928,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * DENTRO il contenitore del batch invece che direttamente in
    * conversazione — la riga in sé resta IDENTICA, cambia solo dove vive.
    */
-  function appendToolNote(riassuntoIniziale, { classeExtra = '', glifo = '⚙', contenitore, attrezzo = '' } = {}) {
+  function appendToolNote(riassuntoIniziale, { classeExtra = '', glifo = '⚙', contenitore, attrezzo = '', aperto = false } = {}) {
     /*
      * 05/9 Fase 2: Conversazione — ogni attrezzo e' una ToolRow del mockup:
      * icona per attrezzo, nome umano, dettaglio (percorso/comando) e pallino
@@ -8843,6 +8943,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const summaryText = riga.summaryText;
     const detail = riga.corpo;
     detail.classList.add('assistant-copy');
+    /*
+     * ⛔⛔ PO-06 (10/09) — per un comando scritto dalla persona il corpo nasce APERTO: lì dentro
+     *   c'è l'output, che è tutto ciò per cui il comando è stato scritto. Il CSS nasconde il corpo
+     *   con `.talos-tool-row[aria-expanded="false"] + .talos-tool-row__body{display:none}`, quindi
+     *   l'attributo è lo stato: misurato prima della cura, il testo dell'esito stava nel DOM con
+     *   rettangolo 0×0 — c'era e non si vedeva.
+     */
+    if (aperto && riga.riga.hasAttribute('aria-expanded')) riga.riga.setAttribute('aria-expanded', 'true');
     if (contenitore) {
       if (classeExtra) article.classList.add(...classeExtra.split(' ').filter(Boolean));
       contenitore.append(article, detail);
@@ -10281,7 +10389,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.taskId = taskId;
       collegaEventiSessione(sessionId, generation);
       aggiornaElencoSessioniReali();
-      if (!silenzioso) toast('Comando inviato', comando);
+      /*
+       * ⛔ PO-06 (10/09) — niente avviso col comando dentro: il comando è già in chat, nella sua
+       *   bolla, insieme all'output. Un avviso che sparisce da solo e ripete una cosa che resta
+       *   scritta a schermo è rumore, e per giunta copre l'angolo in basso a destra (visto nella
+       *   foto del 10/09). Resta solo per `!!`, dove in chat per scelta non compare niente e
+       *   senza un cenno sembrerebbe non aver fatto nulla.
+       */
+      if (silenzioso) toast('Comando eseguito in silenzio', 'Non compare in chat, come hai chiesto con !!.');
     } catch (error) {
       toast('Comando non eseguito', error.message);
     }
@@ -12348,6 +12463,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (evento.type === 'ToolCallStart') state.realSession.eventiAttrezzi.push({ type: 'ToolCallStart', toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), giro: state.realSession.runCount || null }); // 06/9 B2: ora e giro per «Processi»
     else if (evento.type === 'ToolCallArgs') state.realSession.eventiAttrezzi.push({ type: 'ToolCallArgs', toolCallId: evento.toolCallId, delta: evento.delta });
     else if (evento.type === 'ToolCallResult') state.realSession.eventiAttrezzi.push({ type: 'ToolCallResult', toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error) });
+    /*
+     * ⛔ PO-06 (10/09) — il giro del comando scritto dalla persona finisce qui: da adesso le
+     *   righe che arrivano sono di nuovo dell'agente e tornano al comportamento normale (card
+     *   chiusa, nome dell'attrezzo). Spento su ENTRAMBE le uscite del giro, non solo su quella
+     *   riuscita: un comando che fallisce chiude il giro esattamente come uno che riesce.
+     */
+    if (evento.type === 'RunFinished' || evento.type === 'RunError') state.realSession.giroComandoDiretto = false;
     switch (evento.type) {
       case 'RunStarted': {
         streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio visto in ricerca
@@ -12418,6 +12540,31 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * sopra, e non serve un secondo meccanismo che gli corra dietro.
          */
         segnaTappaLatenza('runStarted');
+        /*
+         * ⛔⛔⛔ PO-06 (10/09) — IL COMANDO DELLA PERSONA SI VEDE, come qualunque altra cosa che ha
+         * scritto lei. `input.comandoDiretto` è l'unico segno che distingue «l'ha scelto l'agente»
+         * da «l'ha digitato l'owner» (lo mette `eseguiComandoDiretto`, agent-service.mjs).
+         *
+         * Prima di questa riga non compariva NESSUNA bolla: `taskBubbleMostrata` è già true (la
+         * sessione ha il suo task) e `input.seguito` non c'è, quindi entrambi i rami sotto
+         * scivolavano via. Misurato dal vivo: in chat restava solo «1 comando eseguito», una card
+         * chiusa — né il comando, né l'output, né l'esito.
+         *
+         * ⛔ `comandoDirettoDaAprire` fa nascere APERTA la card dell'attività di questo giro: chi
+         *   scrive un comando vuole vederne l'output, non un titolo da cliccare. È la stessa cosa
+         *   che Anthropic descrive per la shell mode («shows real-time progress and output»,
+         *   «Interactive mode», letto il 10/09/2026).
+         */
+        if (typeof evento.input?.comandoDiretto === 'string' && evento.input.comandoDiretto.trim()) {
+          const comando = evento.input.comandoDiretto.trim();
+          state.realSession.comandoDirettoDaAprire = true;
+          state.realSession.giroComandoDiretto = true;
+          appendComandoDiretto(comando, evento.contesto);
+          mostraAttesaRisposta();
+          if (evento.contesto) { aggiornaPannelloAmbiente(evento.contesto); state.realSession.contesto = evento.contesto; }
+          programmaRenderAlberoReale();
+          break;
+        }
         if (!state.realSession.taskBubbleMostrata && evento.input) {
           appendRealTaskStart(evento.input, evento.contesto);
         } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
@@ -12543,7 +12690,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (evento.toolCallName === 'delega_sottotask') void caricaFigliSessione();
         // ⭐⭐⭐ 30/8 — raggruppamento: la riga nasce DENTRO il batch corrente, non più direttamente in conversazione. Vedi apriBatchSeServe.
         const batch = apriBatchSeServe();
-        const bubble = appendToolNote(riassuntoAttrezzoInCorso(evento.toolCallName, null), { contenitore: batch.contenitore, attrezzo: evento.toolCallName });
+        /*
+         * ⛔ PO-06 (10/09) — la riga di un comando DELLA PERSONA nasce aperta, e non ripete il
+         *   riassunto della card che la contiene. Misurato dal vivo: si leggeva «1 comando eseguito»
+         *   due volte, una nel titolo e una nella riga dentro — lo stesso conteggio annidato in se
+         *   stesso, che non dice niente a chi ha appena scritto quel comando.
+         */
+        const rigaDiComandoMio = Boolean(state.realSession.giroComandoDiretto) && evento.toolCallName === 'shell';
+        const bubble = appendToolNote(
+          rigaDiComandoMio ? 'Comando' : riassuntoAttrezzoInCorso(evento.toolCallName, null),
+          { contenitore: batch.contenitore, attrezzo: evento.toolCallName, aperto: rigaDiComandoMio },
+        );
         impostaEsitoRiga(bubble.article, 'running'); // 05/9 Fase 2: pallino «in corso»
         bubble.article.setAttribute('aria-busy', 'true');
         batch.attrezzi = (batch.attrezzi || 0) + 1;
@@ -12566,6 +12723,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           argomentiParsati: null,
           categoria,
           batch,
+          /* PO-06 — chi ha chiesto questo comando, e da quando aspetta: il kernel non manda né
+             l'una né l'altra cosa (misurato il 10/09), e il tempo trascorso è uno dei tre dati che
+             chiudono onestamente un blocco di output. Qui è il tempo che ha aspettato la PERSONA:
+             si dichiara per quello che è, non come durata del processo. */
+          comandoDellaPersona: rigaDiComandoMio,
+          iniziatoA: Date.now(),
           stato: 'running',
           ...bubble,
         });
@@ -12581,6 +12744,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           let argomentiParsati = null;
           try { argomentiParsati = JSON.parse(info.argomenti); } catch { /* delta ancora incompleto: il riassunto resta quello generico finché non arriva tutto */ }
           if (argomentiParsati) info.argomentiParsati = argomentiParsati;
+          /*
+           * ⛔⛔ PO-06 (10/09) — per un comando della PERSONA il corpo non rifa l'eco degli
+           *   argomenti. Misurato dal vivo: dentro il riquadro compariva `comando: echo ciao-po06`,
+           *   cioè la TERZA copia della stessa stringa nella stessa schermata — c'è già nella bolla
+           *   che la persona ha appena mandato e nel dettaglio a destra della riga. Quel riquadro
+           *   serve all'output, che è l'unica cosa che non sa già.
+           * ⛔ E il riassunto della riga resta «In corso…» invece del nome dell'attrezzo: mentre il
+           *   comando gira non c'è ancora un verdetto da dare, e «1 comando eseguito» al presente
+           *   sarebbe falso — non è ancora eseguito.
+           */
+          if (info.comandoDellaPersona) {
+            if (info.summaryText) info.summaryText.textContent = 'In corso…';
+            if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati);
+            break;
+          }
           if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
           if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati); // 05/9 Fase 2: il dettaglio mono della ToolRow
           if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti);
@@ -12607,17 +12785,34 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         }
         const testoEsito = String(evento.content).slice(0, 4000);
         const fallito = info ? esitoAttrezzoFallito(info.nome, testoEsito) : false;
-        if (info?.summaryText) info.summaryText.textContent = riassuntoAttrezzoConcluso(info.nome, info.argomentiParsati, testoEsito, fallito);
+        /*
+         * ⛔⛔ PO-06 (10/09) — per un comando scritto dalla PERSONA la riga porta il VERDETTO, non
+         *   il conteggio della card che la contiene. Misurato dal vivo prima della cura: si leggeva
+         *   «1 comando eseguito» due volte, annidato in se stesso.
+         * ⛔ E il verdetto dice anche DOVE è girato: sulla macchina dell'owner un comando finisce
+         *   dentro Linux (WSL), non su Windows — `!npm --version` risponde con l'npm di Linux
+         *   (misurato il 10/09/2026). Chi scrive un comando crede di parlare al proprio computer.
+         */
+        const esitoUmano = info?.comandoDellaPersona ? leggiEsitoComando(testoEsito) : null;
+        if (info?.summaryText) {
+          info.summaryText.textContent = esitoUmano
+            ? rigaDiStatoComando(esitoUmano, typeof info.iniziatoA === 'number' ? Date.now() - info.iniziatoA : null)
+            : riassuntoAttrezzoConcluso(info.nome, info.argomentiParsati, testoEsito, fallito);
+        }
         if (info?.article) {
           impostaEsitoRiga(info.article, fallito ? 'error' : 'success'); // 05/9 Fase 2: il pallino della ToolRow
           info.article.setAttribute('aria-busy', 'false');
           if (info.dettaglio && info.argomentiParsati) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, info.argomentiParsati);
         }
         if (info?.detail) {
-          const separatore = document.createElement('div');
-          separatore.className = 'tool-arg-key';
-          separatore.textContent = 'Esito:';
-          info.detail.appendChild(separatore);
+          /* PO-06 — per un comando della persona l'etichetta «Esito:» è di troppo: la riga della
+             ToolRow porta già il verdetto, e sotto c'è solo l'output. */
+          if (!info.comandoDellaPersona) {
+            const separatore = document.createElement('div');
+            separatore.className = 'tool-arg-key';
+            separatore.textContent = 'Esito:';
+            info.detail.appendChild(separatore);
+          }
           /*
            * ⛔ 06/9, owner con lo screenshot: l'esito era «REFUSED. Empty html: nothing was created.»
            * — inglese e gergo. Un REFUSED non è un guasto: è il kernel che ha detto di no, e chi
@@ -12630,7 +12825,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           }
           const pre = document.createElement('pre');
           pre.className = 'tool-result-block';
-          pre.appendChild(textElement('code', '', testoEsito));
+          /*
+           * ⛔ PO-06 — per un comando della persona nel corpo va l'OUTPUT, non l'intestazione del
+           *   kernel: `exit 0 [sandbox: wsl2]` sono nomi tecnici a schermo (vietati dall'owner il
+           *   04/09) e quel che dicono è già nella riga sopra, in italiano. Un output VUOTO si dice
+           *   invece di lasciare un riquadro bianco: un comando può legittimamente non stampare
+           *   niente, e «niente» è una risposta — ma va scritta.
+           */
+          const daMostrare = esitoUmano
+            ? (esitoUmano.output.trim() === '' ? 'Nessun output.' : esitoUmano.output)
+            : testoEsito;
+          pre.appendChild(textElement('code', '', daMostrare));
           info.detail.appendChild(pre);
         }
         if (info?.batch && info.stato === 'running') {
@@ -15721,12 +15926,40 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (mostra !== null && mostra !== value) {
       state.realSession.bollaDaMostrare = { testo: mostra, allegati: Array.isArray(allegati) ? allegati : [] };
     }
+    /*
+     * ⛔⛔⛔ PO-06 (10/09) — IL COMANDO SCRITTO DALLA PERSONA RESTA NELLA CHAT.
+     *
+     * Owner, 10/09, mentre misuravo: «i comandi ! vanno chiamati sul composer chat non sul
+     * terminale ovviamente». Qui c'era `setView('terminal')`, e la misura dal vivo sul 4174 ha
+     * mostrato che era sbagliato in DUE modi insieme, non uno:
+     *  1. la vista Terminale è un PTY a parte («tu · Git Bash»), e il comando NON gira lì: dopo
+     *     `!echo ciao-po06` quel terminale mostrava un prompt vuoto — la persona veniva portata su
+     *     una schermata dove non c'era niente da vedere, con un toast che diceva «Comando inviato»;
+     *  2. l'output vero arrivava in chat (`eseguiComandoDiretto` trasmette sul canale della
+     *     sessione) ma dentro una card richiudibile CHIUSA: misurato nel DOM, il testo dell'esito
+     *     esisteva con rettangolo **0×0**. Lo stesso difetto della scheda dell'allegato di stamattina.
+     *
+     * ⇒ Si resta in chat, e il giro si annuncia da sé: la bolla col comando e la card dell'esito
+     *   APERTA le costruisce il ramo `comandoDiretto` di RunStarted (vedi lì).
+     *
+     * Ricerca 10/09/2026, fonte primaria — Anthropic, «Week 26 · June 22-26, 2026» (v2.1.186) e
+     * «Interactive mode»: il prefisso `!` «adds the command and its output to the conversation
+     * context», e «doesn't require Claude to interpret or approve the command». ⭐ Fatto che dal
+     * nostro codice non si vedeva: da v2.1.186 Claude Code per default fa anche RISPONDERE il
+     * modello all'output («now get a response from Claude once the output lands in the transcript…
+     * The response costs the same as sending a normal prompt»), con `respondToBashCommands:false`
+     * per tornare al comportamento di prima. ⛔ Da noi la risposta NON parte da sola: costa come un
+     * invio normale, e farla partire senza dirlo spenderebbe i soldi dell'owner per una cosa che non
+     * ha chiesto. Il suggerimento «Spiega cosa ha fatto: …» che compare già nel composer è la stessa
+     * cosa, ma decisa da chi paga. (Se l'owner la vuole automatica, è un interruttore, non un default.)
+     */
     if (value.startsWith('!')) {
       if (immagini.length) { toast('Le immagini si inviano al modello', 'Togli il prefisso ! per inviarle in chat.'); return false; }
       const hidden = value.startsWith('!!');
       const comando = value.replace(/^!!?/, '').trim();
-      setView('terminal');
+      setView('chat');
       if (!comando) { toast('Comando vuoto', 'Scrivi qualcosa dopo "!".'); return true; }
+      ricordaComandoDiretto(comando);
       runDirectShell(comando, hidden);
       return true;
     }
@@ -16799,6 +17032,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       // B14: durante un giro l'Invio non sceglie per te.
       if (durante) { apriBivioInvio(testo); return; }
       composerForm.requestSubmit();
+    }
+    /*
+     * ⭐ PO-06 (10/09) — ↑ richiama l'ultimo comando, ↓ torna avanti.
+     *
+     * ⛔ Solo a campo VUOTO, o mentre si sta già scorrendo: in una textarea le frecce muovono il
+     *   cursore fra le righe, ed è ciò che si aspetta chi sta scrivendo un messaggio lungo. Rubare
+     *   sempre ↑ romperebbe la scrittura normale per far comodo a un caso raro — la cronologia si
+     *   prende il tasto solo quando non c'è nient'altro che possa farci.
+     */
+    if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      const inScorrimento = indiceCronologiaComandi >= 0;
+      if ((composerInput.value === '' || inScorrimento) && scorriCronologiaComandi(event.key === 'ArrowUp' ? -1 : 1)) {
+        event.preventDefault();
+        return;
+      }
     }
     /*
      * ⭐⭐⭐ 3/9 — item 10: Tab promuove il suggerimento a testo vero. Solo a

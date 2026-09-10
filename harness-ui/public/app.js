@@ -7961,6 +7961,43 @@ var init_nav_item = __esm({
   }
 });
 
+// src/components/esito-comando.js
+function dovEGirato(livello) {
+  const l = String(livello ?? "").trim();
+  if (l === "wsl2") return "in Linux (WSL), non su Windows";
+  if (l === "none") return "su Windows, senza isolamento";
+  if (l === "adb-shell-on-device") return "sul telefono collegato";
+  return null;
+}
+function leggiEsitoComando(grezzo) {
+  const testo3 = String(grezzo ?? "");
+  const trovato = INTESTAZIONE.exec(testo3);
+  if (!trovato) {
+    return { uscita: null, riuscito: false, fermato: false, dove: null, livello: null, output: testo3, verdetto: "" };
+  }
+  const uscita = trovato[1] === "null" ? null : Number(trovato[1]);
+  const livello = trovato[2] ? trovato[2].trim() : null;
+  const output = testo3.slice(trovato[0].length);
+  const fermato = uscita === null;
+  const riuscito = uscita === 0;
+  const verdetto = fermato ? "Fermato: ha superato il tempo massimo" : riuscito ? "Riuscito" : `Non riuscito · codice ${uscita}`;
+  return { uscita, riuscito, fermato, dove: dovEGirato(livello), livello, output, verdetto };
+}
+function rigaDiStatoComando(esito, millisecondi = null) {
+  const parti = [esito.verdetto];
+  if (esito.dove) parti.push(esito.dove);
+  if (typeof millisecondi === "number" && Number.isFinite(millisecondi) && millisecondi >= 0) {
+    parti.push(millisecondi < 1e3 ? `${Math.round(millisecondi)} ms` : `${(millisecondi / 1e3).toFixed(1)} s`);
+  }
+  return parti.filter(Boolean).join(" · ");
+}
+var INTESTAZIONE;
+var init_esito_comando = __esm({
+  "src/components/esito-comando.js"() {
+    INTESTAZIONE = /^exit (-?\d+|null)(?: \[sandbox: ([^\]]*)\])?\n?/u;
+  }
+});
+
 // src/components/conversazione.js
 function el22(documentObj, tag, className, testo3) {
   const nodo4 = documentObj.createElement(tag);
@@ -10309,6 +10346,7 @@ var init_app = __esm({
     init_annotazioni();
     init_nav_item();
     init_session_item();
+    init_esito_comando();
     init_conversazione();
     init_cronologia();
     init_frase_cercata();
@@ -17057,6 +17095,57 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         markMotionEnter(article);
         scorriAllaBollaAppesa(article);
       }
+      function appendComandoDiretto(comando, contesto2 = null) {
+        state.realSession.ultimaDomanda = comando;
+        const article = nellaChat(creaMessaggioUtente({
+          testo: comando,
+          ora: state.realSession.deferHistoricalRendering ? "" : oraMessaggio(),
+          meta: `Comando eseguito da te${etichettaPermessiGiro(contesto2)}`
+        }), "utente");
+        const paragrafo = article.querySelector(".talos-message__body p");
+        if (paragrafo) paragrafo.classList.add("talos-mono");
+        markMotionEnter(article);
+        scorriAllaBollaAppesa(article);
+        return article;
+      }
+      const CHIAVE_CRONOLOGIA_COMANDI = "talos.harness.desktop.comandi.v1";
+      const TETTO_CRONOLOGIA_COMANDI = 50;
+      let cronologiaComandi = null;
+      let indiceCronologiaComandi = -1;
+      function leggiCronologiaComandi() {
+        if (cronologiaComandi) return cronologiaComandi;
+        try {
+          const grezzo = JSON.parse(localStorage.getItem(CHIAVE_CRONOLOGIA_COMANDI) || "[]");
+          cronologiaComandi = Array.isArray(grezzo) ? grezzo.filter((v) => typeof v === "string" && v.trim()) : [];
+        } catch {
+          cronologiaComandi = [];
+        }
+        return cronologiaComandi;
+      }
+      function ricordaComandoDiretto(comando) {
+        const testo3 = String(comando || "").trim();
+        if (!testo3) return;
+        const lista = leggiCronologiaComandi();
+        if (lista[0] !== testo3) lista.unshift(testo3);
+        cronologiaComandi = lista.slice(0, TETTO_CRONOLOGIA_COMANDI);
+        indiceCronologiaComandi = -1;
+        try {
+          localStorage.setItem(CHIAVE_CRONOLOGIA_COMANDI, JSON.stringify(cronologiaComandi));
+        } catch {
+        }
+      }
+      function scorriCronologiaComandi(direzione) {
+        const lista = leggiCronologiaComandi();
+        if (!lista.length) return false;
+        const prossimo = indiceCronologiaComandi + (direzione < 0 ? 1 : -1);
+        if (prossimo < -1 || prossimo >= lista.length) return false;
+        indiceCronologiaComandi = prossimo;
+        composerInput.value = prossimo === -1 ? "" : `!${lista[prossimo]}`;
+        autoGrowTextarea();
+        syncRunComposerState();
+        composerInput.setSelectionRange(composerInput.value.length, composerInput.value.length);
+        return true;
+      }
       function renderizzaBannerCoda() {
         const coda = state.realSession.codaMessaggi;
         const testoEl = $2("#queuedMessageText", queuedMessage) || $2("[data-coda-testo]", queuedMessage);
@@ -17216,7 +17305,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       function apriBatchSeServe() {
         if (state.realSession.batchAttivo) return state.realSession.batchAttivo;
-        const attivita = creaAttivita({ riassunto: "Attivita…" });
+        const apertoPerComandoDiretto = Boolean(state.realSession.comandoDirettoDaAprire);
+        state.realSession.comandoDirettoDaAprire = false;
+        const attivita = creaAttivita({ riassunto: "Attivita…", aperto: apertoPerComandoDiretto });
         const article = attivita.card;
         const { contenitore, summaryText } = attivita;
         const diffBadge = { hidden: true, replaceChildren() {
@@ -17293,7 +17384,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         batch.summaryText.textContent = parti.length > 0 ? `${parti[0].charAt(0).toUpperCase()}${parti[0].slice(1)}${parti.slice(1).map((p) => `, ${p}`).join("")}` : "Attività…";
         if (c.diffAgg > 0 || c.diffRim > 0) impostaDiffAttivita(batch.testa, c.diffAgg, c.diffRim);
       }
-      function appendToolNote(riassuntoIniziale, { classeExtra = "", glifo = "⚙", contenitore, attrezzo = "" } = {}) {
+      function appendToolNote(riassuntoIniziale, { classeExtra = "", glifo = "⚙", contenitore, attrezzo = "", aperto = false } = {}) {
         void glifo;
         const nomeAttrezzo = attrezzo || (classeExtra.includes("reasoning") ? "memory_write" : "");
         const riga = creaRigaAttrezzo({ attrezzo: nomeAttrezzo, nome: riassuntoIniziale, dettaglio: "", esito: null, conDettaglio: true });
@@ -17301,6 +17392,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const summaryText = riga.summaryText;
         const detail = riga.corpo;
         detail.classList.add("assistant-copy");
+        if (aperto && riga.riga.hasAttribute("aria-expanded")) riga.riga.setAttribute("aria-expanded", "true");
         if (contenitore) {
           if (classeExtra) article.classList.add(...classeExtra.split(" ").filter(Boolean));
           contenitore.append(article, detail);
@@ -18586,7 +18678,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           state.realSession.taskId = taskId;
           collegaEventiSessione(sessionId, generation);
           aggiornaElencoSessioniReali();
-          if (!silenzioso) toast("Comando inviato", comando);
+          if (silenzioso) toast("Comando eseguito in silenzio", "Non compare in chat, come hai chiesto con !!.");
         } catch (error) {
           toast("Comando non eseguito", error.message);
         }
@@ -20236,6 +20328,7 @@ ${testo3}` : testo3;
         if (evento.type === "ToolCallStart") state.realSession.eventiAttrezzi.push({ type: "ToolCallStart", toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), giro: state.realSession.runCount || null });
         else if (evento.type === "ToolCallArgs") state.realSession.eventiAttrezzi.push({ type: "ToolCallArgs", toolCallId: evento.toolCallId, delta: evento.delta });
         else if (evento.type === "ToolCallResult") state.realSession.eventiAttrezzi.push({ type: "ToolCallResult", toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error) });
+        if (evento.type === "RunFinished" || evento.type === "RunError") state.realSession.giroComandoDiretto = false;
         switch (evento.type) {
           case "RunStarted": {
             streamingAutoFollow = true;
@@ -20251,6 +20344,19 @@ ${testo3}` : testo3;
             state.realSession.runCount = (state.realSession.runCount || 0) + 1;
             segnaGiroNellaSpine();
             segnaTappaLatenza("runStarted");
+            if (typeof evento.input?.comandoDiretto === "string" && evento.input.comandoDiretto.trim()) {
+              const comando = evento.input.comandoDiretto.trim();
+              state.realSession.comandoDirettoDaAprire = true;
+              state.realSession.giroComandoDiretto = true;
+              appendComandoDiretto(comando, evento.contesto);
+              mostraAttesaRisposta();
+              if (evento.contesto) {
+                aggiornaPannelloAmbiente(evento.contesto);
+                state.realSession.contesto = evento.contesto;
+              }
+              programmaRenderAlberoReale();
+              break;
+            }
             if (!state.realSession.taskBubbleMostrata && evento.input) {
               appendRealTaskStart(evento.input, evento.contesto);
             } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
@@ -20346,7 +20452,11 @@ ${testo3}` : testo3;
             nascondiAttesaRisposta();
             if (evento.toolCallName === "delega_sottotask") void caricaFigliSessione();
             const batch = apriBatchSeServe();
-            const bubble = appendToolNote(riassuntoAttrezzoInCorso(evento.toolCallName, null), { contenitore: batch.contenitore, attrezzo: evento.toolCallName });
+            const rigaDiComandoMio = Boolean(state.realSession.giroComandoDiretto) && evento.toolCallName === "shell";
+            const bubble = appendToolNote(
+              rigaDiComandoMio ? "Comando" : riassuntoAttrezzoInCorso(evento.toolCallName, null),
+              { contenitore: batch.contenitore, attrezzo: evento.toolCallName, aperto: rigaDiComandoMio }
+            );
             impostaEsitoRiga(bubble.article, "running");
             bubble.article.setAttribute("aria-busy", "true");
             batch.attrezzi = (batch.attrezzi || 0) + 1;
@@ -20361,6 +20471,12 @@ ${testo3}` : testo3;
               argomentiParsati: null,
               categoria,
               batch,
+              /* PO-06 — chi ha chiesto questo comando, e da quando aspetta: il kernel non manda né
+                 l'una né l'altra cosa (misurato il 10/09), e il tempo trascorso è uno dei tre dati che
+                 chiudono onestamente un blocco di output. Qui è il tempo che ha aspettato la PERSONA:
+                 si dichiara per quello che è, non come durata del processo. */
+              comandoDellaPersona: rigaDiComandoMio,
+              iniziatoA: Date.now(),
               stato: "running",
               ...bubble
             });
@@ -20379,6 +20495,11 @@ ${testo3}` : testo3;
               } catch {
               }
               if (argomentiParsati) info.argomentiParsati = argomentiParsati;
+              if (info.comandoDellaPersona) {
+                if (info.summaryText) info.summaryText.textContent = "In corso…";
+                if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati);
+                break;
+              }
               if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
               if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati);
               if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti);
@@ -20398,24 +20519,30 @@ ${testo3}` : testo3;
             }
             const testoEsito = String(evento.content).slice(0, 4e3);
             const fallito = info ? esitoAttrezzoFallito(info.nome, testoEsito) : false;
-            if (info?.summaryText) info.summaryText.textContent = riassuntoAttrezzoConcluso(info.nome, info.argomentiParsati, testoEsito, fallito);
+            const esitoUmano = info?.comandoDellaPersona ? leggiEsitoComando(testoEsito) : null;
+            if (info?.summaryText) {
+              info.summaryText.textContent = esitoUmano ? rigaDiStatoComando(esitoUmano, typeof info.iniziatoA === "number" ? Date.now() - info.iniziatoA : null) : riassuntoAttrezzoConcluso(info.nome, info.argomentiParsati, testoEsito, fallito);
+            }
             if (info?.article) {
               impostaEsitoRiga(info.article, fallito ? "error" : "success");
               info.article.setAttribute("aria-busy", "false");
               if (info.dettaglio && info.argomentiParsati) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, info.argomentiParsati);
             }
             if (info?.detail) {
-              const separatore = document.createElement("div");
-              separatore.className = "tool-arg-key";
-              separatore.textContent = "Esito:";
-              info.detail.appendChild(separatore);
+              if (!info.comandoDellaPersona) {
+                const separatore = document.createElement("div");
+                separatore.className = "tool-arg-key";
+                separatore.textContent = "Esito:";
+                info.detail.appendChild(separatore);
+              }
               const rifiuto = spiegaRifiutoAttrezzo(testoEsito);
               if (rifiuto.rifiutato) {
                 info.detail.appendChild(textElement("p", "tool-rifiuto", rifiuto.detto));
               }
               const pre = document.createElement("pre");
               pre.className = "tool-result-block";
-              pre.appendChild(textElement("code", "", testoEsito));
+              const daMostrare = esitoUmano ? esitoUmano.output.trim() === "" ? "Nessun output." : esitoUmano.output : testoEsito;
+              pre.appendChild(textElement("code", "", daMostrare));
               info.detail.appendChild(pre);
             }
             if (info?.batch && info.stato === "running") {
@@ -22852,11 +22979,12 @@ ${blocchi.join("\n\n")}` : testa;
           }
           const hidden = value.startsWith("!!");
           const comando = value.replace(/^!!?/, "").trim();
-          setView("terminal");
+          setView("chat");
           if (!comando) {
             toast("Comando vuoto", 'Scrivi qualcosa dopo "!".');
             return true;
           }
+          ricordaComandoDiretto(comando);
           runDirectShell(comando, hidden);
           return true;
         }
@@ -23602,6 +23730,13 @@ ${blocchi.join("\n\n")}` : testa;
             return;
           }
           composerForm.requestSubmit();
+        }
+        if ((event.key === "ArrowUp" || event.key === "ArrowDown") && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          const inScorrimento = indiceCronologiaComandi >= 0;
+          if ((composerInput.value === "" || inScorrimento) && scorriCronologiaComandi(event.key === "ArrowUp" ? -1 : 1)) {
+            event.preventDefault();
+            return;
+          }
         }
         if (event.key === "Tab" && suggerimentoComposerAttivo && composerInput.value === "") {
           event.preventDefault();
