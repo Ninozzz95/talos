@@ -8463,8 +8463,27 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       ora: state.realSession.deferHistoricalRendering ? '' : oraMessaggio(),
       meta: `Comando eseguito da te${etichettaPermessiGiro(contesto)}`,
     }), 'utente');
-    const paragrafo = article.querySelector('.talos-message__body p');
-    if (paragrafo) paragrafo.classList.add('talos-mono');
+    /*
+     * Owner 10/09, con lo screenshot della sua interfaccia: «la bolla deve essere formattata
+     * diversamente». Un comando non è una frase detta a qualcuno: è testo che una macchina
+     * esegue alla lettera, e il blocco di codice è la forma che la chat ha già per quello.
+     * ⛔ Si riusa `creaBloccoCodice` invece di vestire un `<p>` da codice: da lì arrivano il
+     *   fondo, il monospazio, il fuoco da tastiera sul `pre` e il pulsante COPIA — che qui non
+     *   è un fronzolo: ricopiare un comando per rilanciarlo è il gesto più frequente che ci sia.
+     * ⛔ L'etichetta dice «Comando», non «bash»: l'evidenziazione resta quella della shell, ma il
+     *   nome tecnico non va a schermo.
+     */
+    const corpoBolla = article.querySelector('.talos-message__body');
+    const paragrafo = corpoBolla?.querySelector('p');
+    if (corpoBolla) {
+      const blocco = creaBloccoCodice({ testo: comando, linguaggio: 'bash', chiuso: true });
+      const etichetta = blocco.querySelector('.code-block-lang');
+      if (etichetta) etichetta.textContent = 'Comando';
+      corpoBolla.classList.add('talos-message__body--comando');
+      if (paragrafo) paragrafo.replaceWith(blocco); else corpoBolla.append(blocco);
+    } else if (paragrafo) {
+      paragrafo.classList.add('talos-mono'); // ripiego onesto: meglio monospazio che niente
+    }
     markMotionEnter(article);
     scorriAllaBollaAppesa(article);
     return article;

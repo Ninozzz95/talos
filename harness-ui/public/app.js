@@ -17102,8 +17102,18 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           ora: state.realSession.deferHistoricalRendering ? "" : oraMessaggio(),
           meta: `Comando eseguito da te${etichettaPermessiGiro(contesto2)}`
         }), "utente");
-        const paragrafo = article.querySelector(".talos-message__body p");
-        if (paragrafo) paragrafo.classList.add("talos-mono");
+        const corpoBolla = article.querySelector(".talos-message__body");
+        const paragrafo = corpoBolla?.querySelector("p");
+        if (corpoBolla) {
+          const blocco = creaBloccoCodice({ testo: comando, linguaggio: "bash", chiuso: true });
+          const etichetta = blocco.querySelector(".code-block-lang");
+          if (etichetta) etichetta.textContent = "Comando";
+          corpoBolla.classList.add("talos-message__body--comando");
+          if (paragrafo) paragrafo.replaceWith(blocco);
+          else corpoBolla.append(blocco);
+        } else if (paragrafo) {
+          paragrafo.classList.add("talos-mono");
+        }
         markMotionEnter(article);
         scorriAllaBollaAppesa(article);
         return article;
