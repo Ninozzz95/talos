@@ -304,6 +304,9 @@ const STATUS_BY_CODE = Object.freeze({
   /** ⭐ PO-01 10/9 — senza una funzione di custodia collegata l'accesso non può nemmeno cominciare: è un servizio non configurato, come ogni altro store di questo file. */
   OAUTH_NON_CONFIGURATO: 503,
   /** Lo `stato` non è (più) valido: la richiesta è malformata dal punto di vista del server, non un guasto suo. */
+  /* ⛔ 10/09 — il nome dell'azione è UNO SOLO in tutto il giro: a schermo il pulsante dice
+     «Accedi con OpenRouter», e qui si diceva «ricomincia da «Collega account»». Due nomi per la
+     stessa cosa mandano a cercare un pulsante che non esiste. */
   OAUTH_ATTESA_IGNOTA: 400,
   OAUTH_CODICE_MANCANTE: 400,
   /** 502: il guasto è a monte, in OpenRouter o nella strada che ci porta. Non è colpa di chi ha chiesto. */
@@ -393,9 +396,9 @@ const MESSAGE_BY_CODE = Object.freeze({
    * Ognuna dice COSA FARE, perché il codice più utile è quello che indica la porta aperta.
    */
   OAUTH_NON_CONFIGURATO: 'Su questo server non è possibile collegare un account: incolla una chiave nelle Impostazioni',
-  OAUTH_ATTESA_IGNOTA: 'Questa richiesta di collegamento non vale più: ricomincia da «Collega account»',
-  OAUTH_CODICE_MANCANTE: 'Manca il codice di conferma: ricomincia da «Collega account»',
-  OAUTH_SCAMBIO_RIFIUTATO: 'OpenRouter non ha accettato questa conferma: ricomincia da «Collega account»',
+  OAUTH_ATTESA_IGNOTA: 'Questa richiesta di collegamento non vale più: ricomincia da «Accedi con OpenRouter»',
+  OAUTH_CODICE_MANCANTE: 'Manca il codice di conferma: ricomincia da «Accedi con OpenRouter»',
+  OAUTH_SCAMBIO_RIFIUTATO: 'OpenRouter non ha accettato questa conferma: ricomincia da «Accedi con OpenRouter»',
   OAUTH_RETE: 'Non sono riuscito a raggiungere OpenRouter: controlla la connessione e riprova',
   OAUTH_RISPOSTA_INATTESA: 'OpenRouter ha risposto in un modo che non riconosco: riprova più tardi',
   OAUTH_CUSTODIA_FALLITA: 'Il collegamento è riuscito ma non sono riuscito a metterlo al sicuro: apri Doctor',
@@ -580,7 +583,7 @@ function paginaRitornoOpenRouter(res, method, problema) {
   const titolo = problema ? 'Non sono riuscito a collegare l’account' : 'Account collegato';
   const frase = problema
     /* ⛔ Le frasi di MESSAGE_BY_CODE non finiscono con un punto (sono etichette): aggiungerlo qui
-       evita la riga sgrammaticata che si legge a schermo, «ricomincia da «Collega account» Puoi…». */
+       evita la riga sgrammaticata che si legge a schermo, «ricomincia da «Accedi con OpenRouter» Puoi…». */
     ? `${/[.!?]$/u.test(problema) ? problema : `${problema}.`} Puoi chiudere questa scheda e riprovare da TALOS.`
     : 'Il tuo account OpenRouter è collegato a TALOS. Puoi chiudere questa scheda e tornare all’app.';
   const html = '<!doctype html><html lang="it"><head><meta charset="utf-8">'
