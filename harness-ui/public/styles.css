@@ -10535,6 +10535,12 @@ dialog.command-dialog .tool-chips .status-chip,
     }
   }
 }
+#veloPermessi .talos-choice-grid[aria-label="Dove girano i comandi"] {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
 
 /* src/styles/attesa-shimmer.css */
 .talos-waiting__label {

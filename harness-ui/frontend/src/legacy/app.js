@@ -6898,6 +6898,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (demoBadge) demoBadge.hidden = TIPI_FOGLIO_INTERAMENTE_ONESTI.has(type);
   }
 
+  /*
+   * ⛔ Tre scelte, e la prima è il comportamento di sempre: chi non decide non cambia niente.
+   *   ⛔ «Automatico» dice anche il suo PREZZO («può cambiare da un comando all'altro»), perché è
+   *   esattamente il difetto che questa riga chiude: chi lo lascia deve sapere cosa accetta.
+   *   ⛔ Nessun nome tecnico a schermo: «Linux (WSL2)» e «Windows», non `wsl2`/`win32` — i valori
+   *   grezzi restano in `data-dove-choice`, che è il contratto col server.
+   */
+  const DOVE_GIRANO = [
+    { valore: null, nome: 'Automatico', icona: 'i-bolt', nota: 'Come prima', descrizione: 'Sceglie da sé, e può cambiare da un comando all’altro.' },
+    { valore: 'wsl2', nome: 'Linux (WSL2)', icona: 'i-terminal', nota: 'Consigliato', descrizione: 'Sempre in Linux. Se WSL non c’è, il comando lo dice invece di ripiegare.' },
+    { valore: 'windows', nome: 'Windows', icona: 'i-folder', nota: '', descrizione: 'Sempre sul sistema di casa, con i percorsi C:\ che vedi in Esplora file.' },
+  ];
+
   const sheetTemplates = {
     model: {
       eyebrow: 'Runtime',
@@ -6914,6 +6927,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       html: () => '<div class="sheet-section" id="modelPickerMount"></div>',
     },
+
     permissions: {
       eyebrow: 'Sicurezza',
       title: 'Permessi di esecuzione',
@@ -6929,6 +6943,23 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
              */''}${POLITICHE.map((p) => `
             <button class="sheet-option ${p.valore === state.permissions ? 'active' : ''}" data-permission-choice="${p.valore}">
               <span class="sheet-icon">${icon('i-shield')}</span><span><strong>${p.nome}</strong><small>${p.descrizione}</small></span><span>${p.nota}</span>
+            </button>`).join('')}
+        </div>
+        <div class="sheet-section">
+          ${/*
+             * ⭐⭐⭐ D-10F — DOVE GIRANO I COMANDI. Misurato il 10/09: `!npm --version` rispondeva
+             *   con l'npm di LINUX, mentre un comando col programma assente in WSL finiva su `cmd`.
+             *   Due sistemi operativi nella stessa sessione a seconda di cosa scrivi, con due
+             *   filesystem e due PATH — e nessuno che lo avesse scelto.
+             * ⛔ Sta QUI e non come sesta pillola nel composer: questo foglio è già il posto dove si
+             *   decide come i comandi toccano il computer, e la riga del composer ha già cinque
+             *   comandi (regola dell'owner del 10/09: più di due azioni vogliono un menu, non
+             *   bottoni affiancati).
+             */''}
+          <span class="sheet-label">Dove girano i comandi</span>
+          ${DOVE_GIRANO.map((d) => `
+            <button class="sheet-option ${d.valore === (state.realSession.doveGiranoIComandi ?? null) ? 'active' : ''}" data-dove-choice="${d.valore ?? ''}">
+              <span class="sheet-icon">${icon(d.icona)}</span><span><strong>${d.nome}</strong><small>${d.descrizione}</small></span><span>${d.nota}</span>
             </button>`).join('')}
         </div>
         <div class="sheet-section">
@@ -7414,6 +7445,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   function disegnaPermessiIn(radice) {
     if (!radice) return;
+    /* ⛔ D-10F: la scelta attiva si vede, come per i permessi qui sotto.  e la stringa vuota
+       sono lo stesso stato — «Automatico» — e vanno confrontati come tali. */
+    /*
+     * ⛔⛔⛔ 11/09 — QUI C'ERA `$(` invece di `$$(`, e la pagina lanciava «$2 is not a function or
+     *   its return value is not iterable»: `$` torna UN elemento, e un `for…of` su un elemento
+     *   solo esplode. Da lì il velo dei permessi non si apriva più.
+     *   E' la lezione «String.replace MANGIA i dollari» (02/09), che ho appena rifatto: passando
+     *   una patch da `node -e`, `$$` nella stringa di sostituzione diventa `$`. Da qui in poi le
+     *   patch passano da uno script SU FILE, e questa riga resta a ricordare perché.
+     */
+    for (const bottone of $$('[data-dove-choice]', radice)) {
+      const suo = (bottone.dataset.doveChoice || null) === (state.realSession.doveGiranoIComandi ?? null);
+      bottone.setAttribute('aria-checked', String(suo));
+      bottone.classList.toggle('is-attiva', suo);
+    }
     for (const bottone of $$('[data-permission-choice]', radice)) {
       const suo = bottone.dataset.permissionChoice === state.permissions;
       bottone.setAttribute('aria-checked', String(suo));
@@ -7462,6 +7508,33 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   function collegaAzioniPermessi(radice, { dopoLaScelta = () => {}, ridisegna = () => {} } = {}) {
     if (!radice) return;
+    /*
+     * ⭐⭐⭐ D-10F — la scelta di DOVE girano i comandi arriva al server.
+     * ⛔ Si scrive nello stato SOLO dopo che il server ha detto sì: un'interfaccia che si aggiorna
+     *   prima della conferma racconta una scelta che potrebbe non essere stata accettata — e qui
+     *   il server RIFIUTA per davvero (400 DOVE_NON_VALIDO), non e' una formalità.
+     * ⛔ E se non c'e' una sessione aperta non si finge: la scelta appartiene a una sessione.
+     */
+    $$('[data-dove-choice]', radice).forEach((button) => {
+      if (button.dataset.doveCollegato) return;
+      button.dataset.doveCollegato = 'si';
+      button.addEventListener('click', async () => {
+        const sessionId = state.realSession.id;
+        const scelta = button.dataset.doveChoice || null;
+        if (!sessionId) {
+          toast('Nessuna sessione aperta', 'Avvia una sessione: la scelta vale per quella sessione.');
+          return;
+        }
+        try {
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/dove-girano-i-comandi`, { dove: scelta });
+          state.realSession.doveGiranoIComandi = scelta;
+          aggiornaPillolaPermessi?.();
+          dopoLaScelta();
+        } catch (errore) {
+          toast('Scelta non applicata', messaggioErroreUtente(errore, 'Riprova, o guarda Doctor se si ripete.'));
+        }
+      });
+    });
     $$('[data-permission-choice]', radice).forEach((button) => {
       if (button.dataset.permessiCollegati) return;
       button.dataset.permessiCollegati = 'si';
@@ -8079,6 +8152,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const attivo = runRealeAttivo();
     // un giro = un numero nella spine; il suo titolo è il riassunto del gruppo di attività corrispondente
     const giri = [];
+      /* ⛔ 11/09: qui `$` (UNO) e' giusto — si cerca IL contenitore della conversazione e poi gli si
+         chiede `querySelectorAll`. Uno script che stanotte riparava a tappeto i `$$` mangiati ha
+         cambiato anche questa, e `$$` torna un array: `?.querySelectorAll` non esiste su un array.
+         ⇒ Una riparazione a tappeto va provata anche sulle righe SANE, o ne rompe una per ognuna
+         che aggiusta. */
     for (const t of $('#conversation')?.querySelectorAll('.talos-turn') || []) {
       const numeri = [...t.querySelectorAll('.talos-turn-spine__n')].map((n) => Number(n.textContent)).filter(Number.isFinite);
       /*

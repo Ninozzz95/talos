@@ -3162,6 +3162,23 @@ export function registraSessione(sessione) {
         <button class="talos-choice" role="radio" aria-checked="true" data-permission-choice="Workspace write"><span class="talos-choice__title">Scrive nel progetto</span><span class="talos-badge talos-badge--warning talos-badge--sm">rischio medio</span><p>Scrive solo dentro la cartella della sessione. Comandi e test passano dal cancello. <span class="talos-choice__hint">Consigliato</span></p></button>
         <button class="talos-choice" role="radio" aria-checked="false" data-permission-choice="On request"><span class="talos-choice__title">Chiede prima</span><span class="talos-badge talos-badge--warning talos-badge--sm">rischio medio</span><p>Ti chiede conferma prima di ogni azione che lascia traccia: scritture, comandi, rete.</p></button>
         <button class="talos-choice" role="radio" aria-checked="false" data-permission-choice="Full access"><span class="talos-choice__title">Accesso pieno</span><span class="talos-badge talos-badge--danger talos-badge--sm">rischio molto alto</span><p>File e rete senza i cancelli ordinari. Solo se sai gia cosa sta per fare.</p></button>
+      <!--
+        ⭐⭐⭐ D-10F — DOVE GIRANO I COMANDI. Misurato il 10/09: `!npm --version` rispondeva con
+        l'npm di LINUX, mentre un comando col programma assente in WSL finiva su `cmd`. Due sistemi
+        operativi nella stessa sessione a seconda di cosa scrivi, con due filesystem e due PATH, e
+        nessuno che lo avesse scelto.
+        ⛔ Sta QUI e non come sesta pillola nel composer: questa finestra è già il posto dove si
+        decide come i comandi toccano il computer, e la riga del composer ha già cinque comandi
+        (regola dell'owner del 10/09: più di due azioni vogliono un menu, mai bottoni affiancati).
+        ⛔ E sta PRIMA dei permessi per attrezzo perché è la domanda più larga: prima «su quale
+        computer», poi «con quali poteri».
+      -->
+      <div class="talos-toolbar talos-toolbar--inset"><span class="talos-eyebrow">Dove girano i comandi</span><span class="talos-muted">Vale per questa sessione · cambiarlo riporta i comandi nella cartella di partenza</span></div>
+      <div class="talos-choice-grid" role="radiogroup" aria-label="Dove girano i comandi">
+        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice=""><span class="talos-choice__title">Automatico</span><span class="talos-badge talos-badge--sm">Come prima</span><span class="talos-choice__sub">Sceglie da sé, e può cambiare da un comando all’altro.</span></button>
+        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice="wsl2"><span class="talos-choice__title">Linux (WSL2)</span><span class="talos-badge talos-badge--sm">Consigliato</span><span class="talos-choice__sub">Sempre in Linux. Se WSL non c’è, il comando lo dice invece di ripiegare in silenzio.</span></button>
+        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice="windows"><span class="talos-choice__title">Windows</span><span class="talos-choice__sub">Sempre sul sistema di casa, con i percorsi C: che vedi in Esplora file.</span></button>
+      </div>
       </div>
       <div class="talos-toolbar talos-toolbar--inset"><span class="talos-eyebrow">Per attrezzo</span><!-- ⛔ 07/9 — qui c'erano due schede, «Tutti e 43» e «Hanno un cancello», e non filtravano niente:
              l'elenco mostra i CINQUE attrezzi che hanno un cancello proprio, mai 43. Una promessa vuota

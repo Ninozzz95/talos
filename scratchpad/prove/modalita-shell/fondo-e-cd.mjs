@@ -38,11 +38,12 @@ try {
   await p.waitForTimeout(2500);
   const composer = p.locator('#composerInput');
   const uscite = [];
-  for (const cmd of ['!pwd', '!cd harness-ui', '!pwd']) {
+  for (const cmd of ['!pwd', '!cd projects', '!pwd']) {
     await composer.fill(cmd);
     await composer.press('Enter');
     await p.waitForTimeout(2500);
-    uscite.push(await p.evaluate(() => [...document.querySelectorAll('#conversation .tool-detail pre code')].pop()?.textContent?.trim().slice(0, 90) ?? '(niente)'));
+        /* ⛔ Il testo dell'ULTIMO blocco di attività: i selettori fini cambiano con la resa, il blocco no. */
+    uscite.push(await p.evaluate(() => { const b = [...document.querySelectorAll('#conversation [data-c="ActivityBundle"]')].pop(); return b ? b.textContent.replace(new RegExp(String.fromCharCode(92) + 's+', 'g'), ' ').trim().slice(-90) : '(nessun blocco)'; }));
   }
   console.log('\n!pwd            →', uscite[0]);
   console.log('!cd harness-ui  →', uscite[1]);

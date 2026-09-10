@@ -854,3 +854,19 @@ ragione (emicrania, vertigini), e W3C WCAG 2.3.3 dice di rispettarla. Lo shimmer
 comunque — decisione dell'owner, ripetuta tre volte, scritta nel CSS perché sia una scelta leggibile
 e non una dimenticanza. Il movimento resta il più gentile possibile: un gradiente dentro le lettere,
 1,9 s, senza spostare né ridimensionare niente.
+
+## 11/09 — D-10F: la scelta di dove girano i comandi, a schermo
+
+**`2026-09-11-scelta-dove-girano-i-comandi.png`** — guardata, 1440×900. Nel velo «Quanto può fare
+TALOS qui», sotto le quattro politiche, ci sono le tre scelte affiancate: **Automatico** (attiva,
+bordo ambra, «Come prima · Sceglie da sé, e può cambiare da un comando all'altro»), **Linux (WSL2)**
+(«Consigliato · Se WSL non c'è, il comando lo dice invece di ripiegare in silenzio») e **Windows**
+(«con i percorsi C: che vedi in Esplora file»). Nessun testo tagliato, nessuna colonna storta.
+Misurato nello stesso giro: il clic manda `{"dove":"windows"}` alla rotta, e non c'è nessun errore
+JavaScript in pagina.
+
+⛔ Il layout è costato TRE tentativi, e vale scriverlo: avevo inventato una classe (`talos-choices`)
+che in questo progetto non esiste — la griglia si chiama `talos-choice-grid` — e poi avevo aggiunto
+un involucro che rompeva la disposizione a colonne del velo, con «Linux (WSL2)» tagliato a metà. La
+forma che funziona è quella che «Per attrezzo» usava già: due fratelli diretti, nessun involucro.
+⇒ Prima di scrivere una classe nuova si guarda come lo fa il blocco accanto.
