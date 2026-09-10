@@ -4063,6 +4063,24 @@ export function createSessionRegistry({
      * ⛔ Resta un rifiuto, e uno solo: una sessione interrotta da un riavvio. Lì non c'è una
      *   cronologia viva a cui appendere niente, ed è un fatto diverso da «sta lavorando».
      */
+    /**
+     * ⭐ D-10F — dove girano i comandi di QUESTA sessione.
+     * @param {'wsl2'|'windows'|null} dove `null` = ripiego automatico, il comportamento di sempre
+     */
+    doveGiranoIComandi(sessionId, dove) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (dove !== null && dove !== 'wsl2' && dove !== 'windows') {
+        return { erroreAvvio: 'Scelta non valida: attesi "wsl2", "windows" o null.', code: 'DOVE_NON_VALIDO' };
+      }
+      voce.doveGiranoIComandi = dove;
+      /* ⛔ La cartella di lavoro NON sopravvive al cambio: `/mnt/c/…` e `C:…` sono due modi di
+         dire la stessa cosa che le due shell non si scambiano. Si riparte dalla cartella della
+         sessione, che e' vera in tutt'e due. */
+      voce.cartellaComandi = null;
+      return { ok: true, dove };
+    },
+
     shell(sessionId, comando) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
