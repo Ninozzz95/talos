@@ -38,6 +38,12 @@ function nodoFinto(tag) {
     setAttribute: (k, v) => attributi.set(k, String(v)),
     getAttribute: (k) => (attributi.has(k) ? attributi.get(k) : null),
     append: (...x) => nodo.figli.push(...x),
+    /* ⛔ Il vero li ha: `apriModaleFonti` aggancia il clic su «Chiudi» e sul velo, e `remove()`
+       toglie la modale. Un finto senza queste tre esplode dove il vero funziona. */
+    addEventListener: (t, m) => nodo.ascolti.push({ t, m }),
+    remove: () => { nodo.rimosso = true; },
+    focus: () => { nodo.fuoco = true; },
+    ascolti: [],
     tutti(classe, dentro = []) {
       if (nodo.classi.has(classe)) dentro.push(nodo);
       for (const f of nodo.figli) f.tutti?.(classe, dentro);
@@ -123,4 +129,93 @@ test('ricerca: le classi hanno una regola, e l’estratto è limitato a tre righ
   }
   assert.ok(css.includes('-webkit-line-clamp:3'), 'tre righe di estratto, come il line-clamp-3 di Hermes');
   assert.ok(css.includes('.talos-ricerca-web__titolo:focus-visible'), 'il collegamento deve vedersi anche da tastiera');
+});
+
+/*
+ * ⛔ La pillola delle fonti — presa dal mobile (`TalosMobileSourcesChip.vue`), non inventata.
+ * Owner 10/09: «il mobile fa già le pilline delle fonti molto bene, non dobbiamo inventare nulla».
+ */
+test('fonti: la pillola porta fino a tre marchi, poi il +N', async () => {
+  const { creaPillolaFonti } = await import('../../src/components/risultati-ricerca.js');
+  const righe = ['5 results for "x".', ''];
+  for (const d of ['uno.it', 'due.com', 'tre.org', 'quattro.net', 'cinque.dev']) {
+    righe.push(`${righe.length}. Titolo di ${d}`, `   url: https://www.${d}/pagina`);
+  }
+  const pillola = creaPillolaFonti(leggiRisultatiRicerca(righe.join('\n')), { document: documentoFinto() });
+  assert.ok(pillola);
+  assert.equal(pillola.tag, 'button');
+  assert.equal(pillola.getAttribute('aria-label'), '5 fonti web');
+  const marchi = pillola.tutti('talos-fonti__marchio');
+  assert.equal(marchi.length, 4, 'tre marchi più il contatore, come nel mobile');
+  /* La lettera è quella del dominio SENZA www: «U» di uno.it, non «W» di www. */
+  assert.deepEqual(marchi.slice(0, 3).map((m) => m.textContent), ['U', 'D', 'T']);
+  assert.equal(marchi[3].textContent, '+2');
+});
+
+test('fonti, AL CONTRARIO: senza URL non c’è nessuna pillola', async () => {
+  const { creaPillolaFonti } = await import('../../src/components/risultati-ricerca.js');
+  assert.equal(creaPillolaFonti(null, { document: documentoFinto() }), null);
+  assert.equal(creaPillolaFonti({ risultati: [] }, { document: documentoFinto() }), null);
+  const senzaUrl = leggiRisultatiRicerca('1 results for "x".\n\n1. Solo un titolo');
+  assert.equal(creaPillolaFonti(senzaUrl, { document: documentoFinto() }), null, '⛔ una fonte che non si apre non è una fonte');
+});
+
+test('fonti: la pillola ha una regola di stile, e i marchi si sovrappongono come nel mobile', () => {
+  const qui = path.dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(path.join(qui, '../../src/styles/diff-in-chat.css'), 'utf8');
+  for (const classe of ['talos-fonti', 'talos-fonti__marchi', 'talos-fonti__marchio']) {
+    assert.ok(css.includes(`.${classe}`), `manca la regola per .${classe}`);
+  }
+  assert.match(css, /\.talos-fonti__marchio\{[^}]*margin-left:-6px/, 'i marchi si sovrappongono, come il -space-x del mobile');
+  assert.ok(css.includes('.talos-fonti:focus-visible'), 'un bottone deve vedersi anche da tastiera');
+});
+
+/*
+ * ⛔ La modale delle fonti — owner 10/09: «bisogna aprire una modalina delle fonti come sul mobile
+ * che ti danno i siti e i link esatti». Nel mobile ogni riga porta marchio, titolo, dominio, data
+ * (o la sua assenza dichiarata) e l'URL per intero.
+ */
+function documentoConBody() {
+  const body = nodoFinto('body');
+  const ascolti = [];
+  return {
+    body,
+    createElement: (tag) => nodoFinto(tag),
+    createTextNode: (t) => ({ tag: '#text', textContent: String(t), figli: [], tutti: () => [], tuttiTag: () => [] }),
+    addEventListener: (t, m) => ascolti.push({ t, m }),
+    removeEventListener: () => {},
+  };
+}
+
+test('fonti: la modale elenca titolo, dominio e URL ESATTO di ogni fonte', async () => {
+  const { apriModaleFonti } = await import('../../src/components/risultati-ricerca.js');
+  const doc = documentoConBody();
+  const velo = apriModaleFonti(leggiRisultatiRicerca(VERO), { document: doc });
+  assert.ok(velo, 'la modale si apre');
+  assert.equal(velo.getAttribute('role'), 'dialog');
+  assert.equal(velo.getAttribute('aria-modal'), 'true');
+  const titoli = velo.tutti('talos-fonti-elenco__titolo');
+  assert.equal(titoli.length, 2);
+  assert.equal(titoli[0].href, 'https://benchlm.ai/models/glm-5-3');
+  assert.equal(titoli[0].rel, 'noopener noreferrer');
+  const url = velo.tutti('talos-fonti-elenco__url');
+  assert.equal(url[0].textContent, 'https://benchlm.ai/models/glm-5-3', '⛔ l’URL per INTERO: è ciò che l’owner ha chiesto per nome');
+  const dove = velo.tutti('talos-fonti-elenco__dove');
+  assert.equal(dove[0].textContent, 'benchlm.ai · data non dichiarata', 'una pagina senza data lo DICE, non lascia un vuoto');
+  assert.equal(dove[1].textContent, 'iamag.it · 2026-09-02');
+});
+
+test('fonti, AL CONTRARIO: senza fonti apribili la modale non si apre', async () => {
+  const { apriModaleFonti } = await import('../../src/components/risultati-ricerca.js');
+  assert.equal(apriModaleFonti(null, { document: documentoConBody() }), null);
+  assert.equal(apriModaleFonti({ risultati: [{ titolo: 'x', url: null }] }, { document: documentoConBody() }), null);
+});
+
+test('fonti: la modale ha le sue regole di stile, e l’URL va a capo invece di essere troncato', () => {
+  const qui = path.dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(path.join(qui, '../../src/styles/diff-in-chat.css'), 'utf8');
+  for (const classe of ['talos-fonti-elenco', 'talos-fonti-elenco__voce', 'talos-fonti-elenco__titolo', 'talos-fonti-elenco__url']) {
+    assert.ok(css.includes(`.${classe}`), `manca la regola per .${classe}`);
+  }
+  assert.match(css, /\.talos-fonti-elenco__url\{[^}]*overflow-wrap:anywhere/, 'troncarlo lo renderebbe di nuovo incompleto');
 });

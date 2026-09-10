@@ -75,3 +75,58 @@ test('DDG-TRASPORTO-05 — il trasporto iniettato risponde SOLO per l\'host sent
   await assert.rejects(() => trasporto(new URL('https://api.tavily.com/search?q=x')), (e) => e.code === 'SEARCH_FAILED');
   await assert.rejects(() => trasporto(new URL('http://127.0.0.1:4174/api/v1/health?q=x')), (e) => e.code === 'SEARCH_FAILED');
 });
+
+/*
+ * ⛔⛔ IL RITENTATIVO — 10/09/2026, e non nasce da un'impressione.
+ *
+ * Misurato: la ricerca dal 4174 è fallita TRE volte con «fetch failed» mentre, nello stesso momento,
+ * tre chiamate identiche da un processo appena avviato davano 200 con risultati. Lo user-agent è
+ * stato escluso per misura (quello del server dà 200, uno da browser dà 202 anti-bot). La differenza
+ * era che il server gira da ore.
+ *
+ * Ricerca 10/09/2026 — nodejs/undici issue #5450 e #3141: undici riusa un socket del pool nello
+ * stesso istante in cui il server lo chiude, e la richiesta muore come `TypeError: fetch failed`;
+ * per una GET un solo ritentativo su connessione nuova è sicuro, perché la richiesta non è mai
+ * arrivata all'applicazione.
+ */
+test('ricerca: un fetch fallito una volta viene ritentato, e la seconda riesce', async () => {
+  let chiamate = 0;
+  const fetchFn = async () => {
+    chiamate += 1;
+    if (chiamate === 1) throw new TypeError('fetch failed');
+    /* ⛔ `ok: true` come gli altri finti di questo file: senza, il finto non imita il vero e il
+       test misura il finto — è già successo tre volte in questo repo. */
+    return { ok: true, status: 200, text: async () => '<a class="result__a" href="https://esempio.it/x">Titolo</a>' };
+  };
+  const esiti = await cercaDuckDuckGo('prova', 8, { fetchFn });
+  assert.equal(chiamate, 2, 'una volta sola in più, non di più');
+  assert.ok(Array.isArray(esiti));
+});
+
+/* ⛔ Due fallimenti sono un guasto vero: si dichiara, e si dice che si era già ritentato. */
+test('ricerca: se fallisce due volte si dichiara, dicendo che aveva già ritentato', async () => {
+  let chiamate = 0;
+  const fetchFn = async () => { chiamate += 1; throw new TypeError('fetch failed'); };
+  await assert.rejects(
+    () => cercaDuckDuckGo('prova', 8, { fetchFn }),
+    (e) => e.code === 'SEARCH_UNREACHABLE' && /già ritentato/.test(e.message),
+  );
+  assert.equal(chiamate, 2, 'due tentativi in tutto, mai tre');
+});
+
+/*
+ * ⛔ AL CONTRARIO, ed è il caso che conta di più: su un abort NON si ritenta. Se il tempo è scaduto
+ *   o la persona ha fermato il giro, insistere è esattamente ciò che non deve succedere.
+ */
+test('ricerca, AL CONTRARIO: su un abort non si ritenta affatto', async () => {
+  let chiamate = 0;
+  const fetchFn = async () => {
+    chiamate += 1;
+    throw Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+  };
+  await assert.rejects(
+    () => cercaDuckDuckGo('prova', 8, { fetchFn }),
+    (e) => e.code === 'SEARCH_UNREACHABLE' && /tempo scaduto/.test(e.message) && !/ritentato/.test(e.message),
+  );
+  assert.equal(chiamate, 1, '⛔ un solo tentativo: chi ha fermato il giro non va contraddetto');
+});

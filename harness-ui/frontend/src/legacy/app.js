@@ -41,7 +41,7 @@ import { creaSessionItem, ordinaSessioniAdAlbero, statoSessione } from '../compo
 import { montaConversazioneFiglia } from '../components/conversazione-figlia.js'; // PO-08 (10/09): la conversazione di un sotto-agente, nel pannello
 import { leggiEsitoComando, rigaDiStatoComando } from '../components/esito-comando.js'; // PO-06 (10/09): l'esito di un comando, detto a una persona
 import { raggruppaInHunk } from '../components/diff-hunk.js'; // PO-11 (10/09): i pezzi del diff
-import { leggiRisultatiRicerca, creaRisultatiRicerca } from '../components/risultati-ricerca.js'; // 10/09: la ricerca web si legge come una ricerca
+import { leggiRisultatiRicerca, creaRisultatiRicerca, creaPillolaFonti, apriModaleFonti } from '../components/risultati-ricerca.js'; // 10/09: la ricerca web si legge come una ricerca
 import { creaDiffInChat, aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFileScaricabile, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
@@ -9165,7 +9165,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * segue ha già chiuso il batch — updateRealReview lo cerca lì.
    */
   function chiudiBatchTool() {
-    if (state.realSession.batchAttivo) state.realSession.ultimoBatchChiuso = state.realSession.batchAttivo;
+    const batch = state.realSession.batchAttivo;
+    /*
+     * ⭐⭐ 10/09, owner: «se la chiamata del tool è una sola non usare un collapse».
+     *
+     * Il richiudibile serve quando in un giro l'agente tocca venti file: lì il riassunto è il
+     * contenuto, e il dettaglio si apre se interessa. Per UNA chiamata sola il riassunto ripete
+     * la riga che sta sotto — «1 ricerca sul web» sopra «Ricerca web: …» — e chiede un clic per
+     * vedere una cosa che poteva stare lì. Si apre alla chiusura del batch, non all'apertura,
+     * perché solo allora si sa quante chiamate conteneva davvero.
+     */
+    if (batch && batch.attrezzi === 1 && batch.testa && batch.contenitore) {
+      batch.testa.setAttribute('aria-expanded', 'true');
+      batch.contenitore.hidden = false;
+    }
+    if (batch) state.realSession.ultimoBatchChiuso = batch;
     state.realSession.batchAttivo = null;
   }
 
@@ -13275,8 +13289,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            *   technical` di Hermes (fallback.tsx, letto lo stesso giorno).
            */
           if (info.nome === 'web_search') {
-            const elencoRicerca = creaRisultatiRicerca(leggiRisultatiRicerca(daMostrare));
+            const fonti = leggiRisultatiRicerca(daMostrare);
+            const elencoRicerca = creaRisultatiRicerca(fonti);
             if (elencoRicerca) info.detail.appendChild(elencoRicerca);
+            /*
+             * ⭐ La pillola «Fonti» sta FUORI dal corpo pieghevole, sotto la riga dell'attrezzo:
+             *   è il posto che ha nel mobile (sotto la risposta) e la ragione è la stessa — le
+             *   fonti su cui poggia una risposta si vedono senza dover aprire niente.
+             */
+            /* ⭐ Owner 10/09: «bisogna aprire una modalina delle fonti come sul mobile che ti danno
+               i siti e i link esatti». La pillola apre quella, non il corpo grezzo. */
+            const pillola = creaPillolaFonti(fonti, { onApri: () => apriModaleFonti(fonti) });
+            if (pillola && info.detail.parentNode) info.detail.parentNode.insertBefore(pillola, info.detail.nextSibling);
           }
           const righeEsito = String(daMostrare).split('\n');
           const tagliato = righeEsito.length > RIGHE_ESITO_IN_CHAT;
