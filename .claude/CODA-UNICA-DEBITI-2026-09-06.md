@@ -505,3 +505,31 @@ anche dopo un riavvio.
 
 ⛔ E una regola per me, che vale da subito: **prima di riavviare il 4174, se c'è qualcosa da
 spiegare nei suoi log, si copiano.** Il riavvio è autonomo, ma non è gratis.
+
+### D-11, aggiornamento della sera — tre piste chiuse, la domanda resta aperta
+
+Ho interrogato tutti gli attori possibili e guardato le tracce. **Nessuno risponde di sì**, e questo
+rende il debito più forte, non più debole:
+
+- **`avm-1b`** (sessione peer, viva da 11 h): esclude sé stessa e i suoi due sotto-agenti. Lavora
+  solo su `AVM/mobile` (misure sul Pad via adb, JNI, typecheck, vitest), nessun modello a chiave.
+- **Il mio agente sui task di coding**: esclude sé stesso con dettagli che reggono — i suoi task
+  hanno id `desktop-<sha7>`, comando `node --test --test-reporter=tap` e casi in italiano, nulla in
+  comune con «Add and export a function `sottrai(a, b)`» + `npm test`. In più aveva messo una
+  guardia apposta, `ambienteSenzaChiavi()`, che toglie al processo figlio ogni variabile
+  `KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|COOKIE`: un test che provasse a chiamare un fornitore
+  fallirebbe per mancanza di chiave invece di essere pagato.
+- **La pipeline QA visiva**, che era la pista migliore: `scripts/qa-visual-pipeline.mjs:1842` digita
+  nel composer **esattamente quella consegna** e fa il submit — è lo scenario
+  `nuova-sessione-compito-libero`. Ma la guardia del 04/09 regge (`eseguitoDirettamente` confronta
+  `process.argv[1]` con `import.meta.url`: importarla non fa niente), e soprattutto **non ha girato
+  oggi**: l'ultima cartella in `.qa-runs/` è del **4 settembre**.
+
+⇒ La consegna delle quattro sessioni è, parola per parola, quella della pipeline QA — quindi
+qualcuno o qualcosa ha eseguito quello scenario, o l'ha copiato. Ma **con che cosa, e da dove, non è
+ricostruibile**: il record della sessione non porta l'origine, e i log del server li ho azzerati io
+riavviando.
+
+⛔ Questo è il punto del debito, ed è dimostrato invece che supposto: **con tre attori interrogati,
+una pista testuale esatta e nessuna risposta possibile, la domanda «chi ha avviato questa sessione»
+oggi non ha modo di ricevere risposta.** Non serve un'indagine migliore: serve il campo mancante.
