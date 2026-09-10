@@ -85,15 +85,48 @@ export async function cercaDuckDuckGo(query, maxRisultati = 8, { fetchFn = globa
   if (!q) return [];
   const url = new URL(DUCKDUCKGO_ENDPOINT);
   url.searchParams.set('q', q);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  /*
+   * ⛔⛔ 10/09 — UN RITENTATIVO, e la ragione non è «a volte la rete fa i capricci».
+   *
+   * MISURATO oggi: la ricerca dal 4174 è fallita **tre volte** con «fetch failed», e nello stesso
+   * momento tre chiamate identiche da un processo appena avviato hanno dato 200 con risultati.
+   * Provato anche lo user-agent: quello del server funziona MEGLIO di uno da browser (200 con
+   * risultati contro 202, la pagina anti-bot) — quindi non era né DuckDuckGo né la nostra firma.
+   * La differenza è che il server gira da ore.
+   *
+   * Ricerca del 10/09/2026 (nodejs/undici issue #5450 «fetch failed under concurrent load due to
+   * socket reuse / keep-alive timeout mismatch», issue #3141 «Race condition at-or-near
+   * keep-alive expiration»): undici riusa un socket del pool nello stesso istante in cui il
+   * server lo chiude, e la richiesta muore sul filo come `TypeError: fetch failed`.
+   * ⇒ «A reset on an idle pooled socket almost always means the request **never reached** the
+   *   application — for GET a single retry on a fresh connection is safe and clears the large
+   *   majority of these errors.»
+   *
+   * ⛔ UNO solo, e solo per la rete: due ritentativi nasconderebbero un guasto vero dietro
+   *   un'attesa più lunga. E MAI su un abort: se è scaduto il tempo o la persona ha fermato il
+   *   giro, insistere è esattamente ciò che non deve succedere.
+   */
+  const chiamata = async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      return await fetchFn(url, { headers: { 'user-agent': USER_AGENT, accept: 'text/html' }, signal: controller.signal, redirect: 'follow' });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   let risposta;
   try {
-    risposta = await fetchFn(url, { headers: { 'user-agent': USER_AGENT, accept: 'text/html' }, signal: controller.signal, redirect: 'follow' });
-  } catch (errore) {
-    throw Object.assign(new Error(`DuckDuckGo non raggiungibile: ${errore?.name === 'AbortError' ? 'tempo scaduto' : errore?.message ?? errore}`), { code: 'SEARCH_UNREACHABLE' });
-  } finally {
-    clearTimeout(timer);
+    risposta = await chiamata();
+  } catch (primo) {
+    if (primo?.name === 'AbortError') {
+      throw Object.assign(new Error('DuckDuckGo non raggiungibile: tempo scaduto'), { code: 'SEARCH_UNREACHABLE' });
+    }
+    try {
+      risposta = await chiamata();
+    } catch (secondo) {
+      throw Object.assign(new Error(`DuckDuckGo non raggiungibile: ${secondo?.name === 'AbortError' ? 'tempo scaduto' : secondo?.message ?? secondo} (già ritentato una volta)`), { code: 'SEARCH_UNREACHABLE' });
+    }
   }
   const testo = (await risposta.text()).slice(0, MAX_BYTE);
   if (sembraBloccoDuckDuckGo(risposta.status, testo)) {

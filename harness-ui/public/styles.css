@@ -10042,5 +10042,116 @@ dialog.command-dialog .tool-chips .status-chip,
   color: var(--talos-muted);
   font-size: 11px;
 }
+.talos-fonti {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  margin: 6px 0 2px;
+  padding: 0 12px;
+  border: 1px solid var(--talos-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--talos-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease;
+}
+.talos-fonti:hover {
+  color: var(--talos-text);
+  border-color: var(--talos-border-strong);
+}
+.talos-fonti:focus-visible {
+  outline: 2px solid var(--talos-accent);
+  outline-offset: 2px;
+}
+.talos-fonti__marchi {
+  display: inline-flex;
+  align-items: center;
+}
+.talos-fonti__marchio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: -6px;
+  border: 1px solid var(--talos-border);
+  border-radius: 999px;
+  background: var(--talos-panel);
+  color: var(--talos-text);
+  font-size: 10px;
+  line-height: 1;
+}
+.talos-fonti__marchio:first-child {
+  margin-left: 0;
+}
+.talos-fonti__marchio--extra {
+  color: var(--talos-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .talos-fonti {
+    transition: none;
+  }
+}
+.talos-fonti-elenco {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.talos-fonti-elenco__voce {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--talos-border);
+  border-radius: 12px;
+}
+.talos-fonti-elenco__titolo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--talos-text);
+  font-size: 13px;
+  line-height: 1.4;
+  text-decoration: none;
+}
+.talos-fonti-elenco__titolo:hover {
+  text-decoration: underline;
+}
+.talos-fonti-elenco__titolo:focus-visible {
+  outline: 2px solid var(--talos-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.talos-fonti-elenco__marchio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--talos-border);
+  border-radius: 999px;
+  background: var(--talos-panel);
+  color: var(--talos-accent);
+  font-size: 10px;
+}
+.talos-fonti-elenco__dove {
+  margin: 0;
+  color: var(--talos-muted);
+  font-size: 11px;
+  font-family: var(--talos-font-mono);
+}
+.talos-fonti-elenco__url {
+  margin: 2px 0 0;
+  color: var(--talos-muted);
+  font-size: 11px;
+  font-family: var(--talos-font-mono);
+  overflow-wrap: anywhere;
+  opacity: .85;
+}
 
 /* src/styles/main.css */

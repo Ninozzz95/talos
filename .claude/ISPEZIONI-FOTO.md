@@ -541,3 +541,30 @@ DuckDuckGo non raggiungibile: fetch failed`, lo stesso errore che si vedeva nell
 Misurato subito dopo dal mio processo: `html.duckduckgo.com` risponde **200 con risultati**, e la
 ricerca successiva dal 4174 è riuscita (5 risultati). Era transitorio, non una rottura: registrato
 qui perché se si ripresenta si sappia che è già successo due volte oggi.
+
+## 10/09/2026, 20:11 — le fonti: pillola, modale, e niente collapse per un attrezzo solo
+
+Tre richieste dell'owner nello stesso giro, verificate su un giro vero (`38d8361a`, glm-5.3-flash,
+ricerca riuscita con 5 risultati).
+
+**`2026-09-10-fonti-pillola-1440.png`** — guardata. Sotto la riga della ricerca c'è la pillola
+«Fonti» con tre marchi tondi sovrapposti (`B`, `Q`, `A` — le iniziali dei domini) e il contatore
+`+2`, esattamente la forma di `TalosMobileSourcesChip.vue`. Misurato nel DOM: 4 marchi in tutto.
+
+**`2026-09-10-fonti-modale-1440.png`** — guardata. «Fonti (5)», cinque voci, ognuna con il marchio a
+lettera, il titolo, `dominio · data non dichiarata` e **l'URL per intero** su una riga sua:
+`https://www.qubrid.com/blog/glm-53-is-here-full-benchmark-breakdown-architecture-pricing` si legge
+tutto, non troncato. È quello che l'owner ha chiesto per nome («i siti e i link esatti»). Si chiude
+con Escape (verificato) e col clic fuori.
+
+**Niente collapse per una chiamata sola** — misurato nel DOM, non a occhio: la card del batch ha
+`aria-expanded="true"`, contenitore `hidden: false`, una riga dentro. ⛔ La prima misura diceva il
+contrario, ed era sbagliata: il selettore prendeva la card del **Ragionamento** (`real-reasoning-note`),
+non il batch. Un selettore che prende «la prima card» prende la prima che c'è, non quella che
+intendevi.
+
+### Difetto visto guardando la foto
+
+Nel titolo della modale il pulsante «Chiudi» sta appiccicato a «Fonti (5)», senza spazio fra i due:
+`talos-dialog__header` mette i figli in fila con `gap:12px`, e senza un elemento che cresca in mezzo
+il pulsante resta attaccato al titolo invece di andare a destra. Da correggere.

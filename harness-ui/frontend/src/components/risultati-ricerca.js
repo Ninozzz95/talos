@@ -152,3 +152,160 @@ export function creaRisultatiRicerca(letti, { document: doc, tetto = 8 } = {}) {
   }
   return blocco;
 }
+
+/**
+ * ⭐⭐⭐ LA PILLOLA DELLE FONTI — presa dal mobile, non inventata.
+ *
+ * Owner, 10/09: «il mobile fa già le pilline delle fonti molto bene, non dobbiamo inventare nulla».
+ * Letto in `mobile/src/components/chat/TalosMobileSourcesChip.vue` (sola lettura: su `mobile/` non
+ * ho ownership) e portato qui nella stessa forma:
+ *  · un bottone a pillola «Fonti», con fino a **tre** marchi tondi sovrapposti;
+ *  · ogni marchio porta la favicon del sito, e in sua assenza **la lettera iniziale del dominio**;
+ *  · un `+N` quando le fonti sono più di tre.
+ *
+ * ⛔ E il vincolo che il mobile dichiara, che vale identico qui: le favicon **si leggono, non si
+ *   scaricano** — «a favicon requested when a chat is OPENED is a request to every cited site every
+ *   time», e romperebbe l'unica cosa che la funzione promette, cioè che dal dispositivo esce solo la
+ *   query. Sul desktop quelle icone non le abbiamo salvate da nessuna parte ⇒ si usano **le lettere**,
+ *   che è il ripiego già previsto dal mobile, non una scelta al ribasso presa qui.
+ */
+export function creaPillolaFonti(letti, { document: doc, marchiMax = 3, onApri } = {}) {
+  const documentObj = doc || globalThis.document;
+  const fonti = (letti?.risultati ?? []).filter((r) => r.url);
+  if (fonti.length === 0) return null;
+
+  const dominioDi = (url) => {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+  };
+
+  const pillola = documentObj.createElement('button');
+  pillola.type = 'button';
+  pillola.className = 'talos-fonti';
+  pillola.setAttribute('data-c', 'SourcesChip');
+  pillola.setAttribute('aria-label', fonti.length === 1 ? '1 fonte web' : `${fonti.length} fonti web`);
+
+  const etichetta = documentObj.createElement('span');
+  etichetta.className = 'talos-fonti__testo';
+  etichetta.textContent = 'Fonti';
+  pillola.append(etichetta);
+
+  const marchi = documentObj.createElement('span');
+  marchi.className = 'talos-fonti__marchi';
+  marchi.setAttribute('aria-hidden', 'true');
+  for (const fonte of fonti.slice(0, marchiMax)) {
+    const segno = documentObj.createElement('span');
+    segno.className = 'talos-fonti__marchio';
+    segno.textContent = dominioDi(fonte.url).charAt(0).toUpperCase();
+    segno.title = dominioDi(fonte.url);
+    marchi.append(segno);
+  }
+  if (fonti.length > marchiMax) {
+    const extra = documentObj.createElement('span');
+    extra.className = 'talos-fonti__marchio talos-fonti__marchio--extra';
+    extra.textContent = `+${fonti.length - marchiMax}`;
+    marchi.append(extra);
+  }
+  pillola.append(marchi);
+  if (typeof onApri === 'function') pillola.addEventListener('click', onApri);
+  return pillola;
+}
+
+/**
+ * ⭐⭐⭐ LA MODALE DELLE FONTI — la stessa del mobile, con i siti e i link esatti.
+ *
+ * Owner, 10/09: «bisogna aprire una modalina delle fonti come sul mobile che ti danno i siti e i
+ * link esatti». Nel mobile è `TalosMobileComposerSheet` aperto dalla pillola, e ogni riga porta —
+ * nell'ordine — il marchio del sito, il titolo, il dominio, la data (o «data sconosciuta») e l'URL
+ * per intero. Qui la stessa cosa, con le classi del dialogo che il desktop ha già.
+ *
+ * ⛔ Costruita a runtime e non nel template: `index.template.html` è generato dal mockup, che è la
+ *   fonte del disegno e cambia solo per mano dell'owner. Le classi però sono le sue — nessuno stile
+ *   nuovo per una modale in più.
+ * ⛔ E la data: «date unknown» non diventa una data vuota, diventa «data non dichiarata». È la
+ *   stessa scelta del mobile («a page that declares no date says so, rather than leaving a blank the
+ *   reader fills in with "recent"»).
+ */
+export function apriModaleFonti(letti, { document: doc } = {}) {
+  const documentObj = doc || globalThis.document;
+  const fonti = (letti?.risultati ?? []).filter((r) => r.url);
+  if (fonti.length === 0) return null;
+
+  const dominioDi = (url) => {
+    try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return url; }
+  };
+
+  const velo = documentObj.createElement('div');
+  velo.className = 'overlay-layer overlay-layer--modal';
+  velo.setAttribute('data-c', 'SourcesDialog');
+  velo.setAttribute('role', 'dialog');
+  velo.setAttribute('aria-modal', 'true');
+  velo.setAttribute('aria-label', fonti.length === 1 ? '1 fonte web' : `${fonti.length} fonti web`);
+
+  const dialogo = documentObj.createElement('div');
+  dialogo.className = 'talos-dialog talos-dialog--medium';
+
+  const testa = documentObj.createElement('div');
+  testa.className = 'talos-dialog__header';
+  const titolo = documentObj.createElement('h2');
+  titolo.className = 'talos-dialog__title';
+  titolo.textContent = fonti.length === 1 ? 'Fonte' : `Fonti (${fonti.length})`;
+  testa.append(titolo);
+  const chiudi = documentObj.createElement('button');
+  chiudi.type = 'button';
+  chiudi.className = 'talos-button talos-button--ghost talos-button--sm';
+  chiudi.textContent = 'Chiudi';
+  testa.append(chiudi);
+  dialogo.append(testa);
+
+  const corpo = documentObj.createElement('div');
+  corpo.className = 'talos-dialog__body';
+  const lista = documentObj.createElement('ul');
+  lista.className = 'talos-fonti-elenco';
+  for (const fonte of fonti) {
+    const voce = documentObj.createElement('li');
+    voce.className = 'talos-fonti-elenco__voce';
+
+    const link = documentObj.createElement('a');
+    link.className = 'talos-fonti-elenco__titolo';
+    link.href = fonte.url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    /* Il marchio è la lettera del dominio, come nella pillola: nessuna favicon da scaricare. */
+    const marchio = documentObj.createElement('span');
+    marchio.className = 'talos-fonti-elenco__marchio';
+    marchio.textContent = dominioDi(fonte.url).charAt(0).toUpperCase();
+    marchio.setAttribute('aria-hidden', 'true');
+    link.append(marchio, documentObj.createTextNode(fonte.titolo || dominioDi(fonte.url)));
+    voce.append(link);
+
+    const dove = documentObj.createElement('p');
+    dove.className = 'talos-fonti-elenco__dove';
+    dove.textContent = fonte.quando ? `${dominioDi(fonte.url)} · ${fonte.quando}` : `${dominioDi(fonte.url)} · data non dichiarata`;
+    voce.append(dove);
+
+    /* ⛔ «i link esatti»: l'URL per intero, non troncato — è ciò che l'owner ha chiesto per nome. */
+    const indirizzo = documentObj.createElement('p');
+    indirizzo.className = 'talos-fonti-elenco__url';
+    indirizzo.textContent = fonte.url;
+    voce.append(indirizzo);
+
+    lista.append(voce);
+  }
+  corpo.append(lista);
+  dialogo.append(corpo);
+  velo.append(dialogo);
+
+  const chiudiTutto = () => {
+    velo.remove();
+    documentObj.removeEventListener?.('keydown', suTasto);
+  };
+  function suTasto(evento) { if (evento.key === 'Escape') chiudiTutto(); }
+  chiudi.addEventListener('click', chiudiTutto);
+  /* Un clic sul velo (fuori dal dialogo) chiude: è il gesto che ogni modale del prodotto già accetta. */
+  velo.addEventListener('click', (evento) => { if (evento.target === velo) chiudiTutto(); });
+  documentObj.addEventListener?.('keydown', suTasto);
+
+  (documentObj.body ?? documentObj.documentElement)?.append?.(velo);
+  chiudi.focus?.();
+  return velo;
+}

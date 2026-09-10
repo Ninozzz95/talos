@@ -9843,6 +9843,124 @@ function creaRisultatiRicerca(letti, { document: doc, tetto = 8 } = {}) {
   }
   return blocco;
 }
+function creaPillolaFonti(letti, { document: doc, marchiMax = 3, onApri } = {}) {
+  const documentObj = doc || globalThis.document;
+  const fonti = (letti?.risultati ?? []).filter((r) => r.url);
+  if (fonti.length === 0) return null;
+  const dominioDi = (url) => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return url;
+    }
+  };
+  const pillola = documentObj.createElement("button");
+  pillola.type = "button";
+  pillola.className = "talos-fonti";
+  pillola.setAttribute("data-c", "SourcesChip");
+  pillola.setAttribute("aria-label", fonti.length === 1 ? "1 fonte web" : `${fonti.length} fonti web`);
+  const etichetta = documentObj.createElement("span");
+  etichetta.className = "talos-fonti__testo";
+  etichetta.textContent = "Fonti";
+  pillola.append(etichetta);
+  const marchi = documentObj.createElement("span");
+  marchi.className = "talos-fonti__marchi";
+  marchi.setAttribute("aria-hidden", "true");
+  for (const fonte of fonti.slice(0, marchiMax)) {
+    const segno = documentObj.createElement("span");
+    segno.className = "talos-fonti__marchio";
+    segno.textContent = dominioDi(fonte.url).charAt(0).toUpperCase();
+    segno.title = dominioDi(fonte.url);
+    marchi.append(segno);
+  }
+  if (fonti.length > marchiMax) {
+    const extra = documentObj.createElement("span");
+    extra.className = "talos-fonti__marchio talos-fonti__marchio--extra";
+    extra.textContent = `+${fonti.length - marchiMax}`;
+    marchi.append(extra);
+  }
+  pillola.append(marchi);
+  if (typeof onApri === "function") pillola.addEventListener("click", onApri);
+  return pillola;
+}
+function apriModaleFonti(letti, { document: doc } = {}) {
+  const documentObj = doc || globalThis.document;
+  const fonti = (letti?.risultati ?? []).filter((r) => r.url);
+  if (fonti.length === 0) return null;
+  const dominioDi = (url) => {
+    try {
+      return new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      return url;
+    }
+  };
+  const velo = documentObj.createElement("div");
+  velo.className = "overlay-layer overlay-layer--modal";
+  velo.setAttribute("data-c", "SourcesDialog");
+  velo.setAttribute("role", "dialog");
+  velo.setAttribute("aria-modal", "true");
+  velo.setAttribute("aria-label", fonti.length === 1 ? "1 fonte web" : `${fonti.length} fonti web`);
+  const dialogo = documentObj.createElement("div");
+  dialogo.className = "talos-dialog talos-dialog--medium";
+  const testa = documentObj.createElement("div");
+  testa.className = "talos-dialog__header";
+  const titolo2 = documentObj.createElement("h2");
+  titolo2.className = "talos-dialog__title";
+  titolo2.textContent = fonti.length === 1 ? "Fonte" : `Fonti (${fonti.length})`;
+  testa.append(titolo2);
+  const chiudi = documentObj.createElement("button");
+  chiudi.type = "button";
+  chiudi.className = "talos-button talos-button--ghost talos-button--sm";
+  chiudi.textContent = "Chiudi";
+  testa.append(chiudi);
+  dialogo.append(testa);
+  const corpo = documentObj.createElement("div");
+  corpo.className = "talos-dialog__body";
+  const lista = documentObj.createElement("ul");
+  lista.className = "talos-fonti-elenco";
+  for (const fonte of fonti) {
+    const voce = documentObj.createElement("li");
+    voce.className = "talos-fonti-elenco__voce";
+    const link = documentObj.createElement("a");
+    link.className = "talos-fonti-elenco__titolo";
+    link.href = fonte.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    const marchio = documentObj.createElement("span");
+    marchio.className = "talos-fonti-elenco__marchio";
+    marchio.textContent = dominioDi(fonte.url).charAt(0).toUpperCase();
+    marchio.setAttribute("aria-hidden", "true");
+    link.append(marchio, documentObj.createTextNode(fonte.titolo || dominioDi(fonte.url)));
+    voce.append(link);
+    const dove = documentObj.createElement("p");
+    dove.className = "talos-fonti-elenco__dove";
+    dove.textContent = fonte.quando ? `${dominioDi(fonte.url)} · ${fonte.quando}` : `${dominioDi(fonte.url)} · data non dichiarata`;
+    voce.append(dove);
+    const indirizzo = documentObj.createElement("p");
+    indirizzo.className = "talos-fonti-elenco__url";
+    indirizzo.textContent = fonte.url;
+    voce.append(indirizzo);
+    lista.append(voce);
+  }
+  corpo.append(lista);
+  dialogo.append(corpo);
+  velo.append(dialogo);
+  const chiudiTutto = () => {
+    velo.remove();
+    documentObj.removeEventListener?.("keydown", suTasto);
+  };
+  function suTasto(evento) {
+    if (evento.key === "Escape") chiudiTutto();
+  }
+  chiudi.addEventListener("click", chiudiTutto);
+  velo.addEventListener("click", (evento) => {
+    if (evento.target === velo) chiudiTutto();
+  });
+  documentObj.addEventListener?.("keydown", suTasto);
+  (documentObj.body ?? documentObj.documentElement)?.append?.(velo);
+  chiudi.focus?.();
+  return velo;
+}
 var INIZIO_RISULTATO, RIGA_URL, RIGA_DATA, TESTATA;
 var init_risultati_ricerca = __esm({
   "src/components/risultati-ricerca.js"() {
@@ -19297,7 +19415,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return batch;
       }
       function chiudiBatchTool() {
-        if (state.realSession.batchAttivo) state.realSession.ultimoBatchChiuso = state.realSession.batchAttivo;
+        const batch = state.realSession.batchAttivo;
+        if (batch && batch.attrezzi === 1 && batch.testa && batch.contenitore) {
+          batch.testa.setAttribute("aria-expanded", "true");
+          batch.contenitore.hidden = false;
+        }
+        if (batch) state.realSession.ultimoBatchChiuso = batch;
         state.realSession.batchAttivo = null;
       }
       function categoriaAttrezzoPerBatch(nome) {
@@ -22552,8 +22675,11 @@ ${testo3}` : testo3;
               pre.className = "tool-result-block";
               const daMostrare = esitoUmano ? esitoUmano.output.trim() === "" ? "Nessun output." : esitoUmano.output : testoEsito;
               if (info.nome === "web_search") {
-                const elencoRicerca = creaRisultatiRicerca(leggiRisultatiRicerca(daMostrare));
+                const fonti = leggiRisultatiRicerca(daMostrare);
+                const elencoRicerca = creaRisultatiRicerca(fonti);
                 if (elencoRicerca) info.detail.appendChild(elencoRicerca);
+                const pillola = creaPillolaFonti(fonti, { onApri: () => apriModaleFonti(fonti) });
+                if (pillola && info.detail.parentNode) info.detail.parentNode.insertBefore(pillola, info.detail.nextSibling);
               }
               const righeEsito = String(daMostrare).split("\n");
               const tagliato = righeEsito.length > RIGHE_ESITO_IN_CHAT;
