@@ -9143,6 +9143,69 @@ function creaArtefatto({ titolo: titolo2 = "Artefatto", formato = "", src = "", 
   card.append(testa, frame);
   return { card, frame, apri };
 }
+function animaSegnavia(svg, { window: finestra = globalThis, adesso = () => finestra.performance?.now?.() ?? Date.now() } = {}) {
+  const sweep = svg?.querySelector?.(".talos-line-loader-sweep");
+  if (!sweep) return () => {
+  };
+  const nodi = [...svg.querySelectorAll?.(".talos-line-loader-node") ?? []];
+  let fermato = false;
+  let handle = null;
+  let intervallo = null;
+  const ferma = () => {
+    fermato = true;
+    if (handle != null) finestra.cancelAnimationFrame?.(handle);
+    if (intervallo != null) finestra.clearInterval?.(intervallo);
+    handle = null;
+    intervallo = null;
+  };
+  const inizio = adesso();
+  const disegna = () => {
+    if (fermato || !svg.isConnected) return ferma();
+    const t2 = (adesso() - inizio) % CICLO_MS / CICLO_MS;
+    sweep.setAttribute("stroke-dashoffset", String(88 - 176 * t2));
+    nodi.forEach((nodo4, i) => {
+      const f = (t2 - FASI_NODI[i] + 1) % 1;
+      const acceso = f < 0.12 ? 0 : f < 0.22 ? (f - 0.12) / 0.1 : f < 0.82 ? 1 : Math.max(0, 1 - (f - 0.82) / 0.18);
+      nodo4.setAttribute("fill-opacity", acceso.toFixed(3));
+    });
+  };
+  let frameVisti = 0;
+  const giro = () => {
+    if (fermato || !svg.isConnected) return ferma();
+    frameVisti += 1;
+    disegna();
+    handle = finestra.requestAnimationFrame?.(giro) ?? null;
+    if (handle == null) {
+      svg.setAttribute("data-motore", "js-intervallo");
+      intervallo = finestra.setInterval?.(disegna, 60) ?? null;
+    }
+  };
+  svg.setAttribute("data-motore", "smil");
+  finestra.setTimeout?.(() => {
+    if (fermato || !svg.isConnected) return;
+    const primo = finestra.getComputedStyle?.(sweep)?.strokeDashoffset ?? null;
+    finestra.setTimeout?.(() => decidi(primo), INTERVALLO_CONFRONTO_MS);
+  }, ATTESA_VERIFICA_MS);
+  function decidi(primo) {
+    if (fermato || !svg.isConnected) return;
+    const ora = finestra.getComputedStyle?.(sweep)?.strokeDashoffset ?? null;
+    if (primo !== null && ora !== null && primo !== ora) return;
+    try {
+      svg.pauseAnimations?.();
+    } catch {
+    }
+    svg.setAttribute("data-motore", "js");
+    giro();
+    finestra.setTimeout?.(() => {
+      if (fermato || !svg.isConnected || frameVisti > 4) return;
+      if (handle != null) finestra.cancelAnimationFrame?.(handle);
+      handle = null;
+      svg.setAttribute("data-motore", "js-intervallo");
+      intervallo = finestra.setInterval?.(disegna, 60) ?? null;
+    }, 500);
+  }
+  return ferma;
+}
 function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const blocco = el22(documentObj, "div", "talos-stack talos-waiting");
@@ -9191,12 +9254,14 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
     nodo4.append(acceso);
     svg.append(nodo4);
   }
+  let fermaMotore = () => {
+  };
   try {
     if (opzioni.window?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
       svg.querySelector(".talos-line-loader-sweep")?.setAttribute("stroke-dashoffset", "0");
       for (const n of svg.querySelectorAll?.(".talos-line-loader-node") ?? []) n.setAttribute("fill-opacity", "1");
       svg.pauseAnimations?.();
-    }
+    } else fermaMotore = animaSegnavia(svg, { window: opzioni.window ?? globalThis });
   } catch {
   }
   const label = el22(documentObj, "span", "talos-waiting__label run-activity-label", etichetta);
@@ -9204,7 +9269,7 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
   elapsed.setAttribute("aria-hidden", "true");
   riga.append(svg, label, elapsed);
   blocco.append(riga);
-  return { blocco, label, elapsed };
+  return { blocco, label, elapsed, fermaMotore: () => fermaMotore() };
 }
 function creaDiffInChat(gruppi, { percorso = "", apertoSeSotto = 40, document: doc } = {}) {
   const documentObj = doc || globalThis.document;
@@ -9242,7 +9307,7 @@ function creaDiffInChat(gruppi, { percorso = "", apertoSeSotto = 40, document: d
   blocco.append(dettaglio);
   return blocco;
 }
-var SVG_NS, ALIAS_LINGUAGGIO, NOMI_LINGUAGGIO, PARTI_DEL_BLOCCO, copiaDiSerie, ICONA_ATTREZZO;
+var SVG_NS, ALIAS_LINGUAGGIO, NOMI_LINGUAGGIO, PARTI_DEL_BLOCCO, copiaDiSerie, ICONA_ATTREZZO, ATTESA_VERIFICA_MS, INTERVALLO_CONFRONTO_MS, CICLO_MS, FASI_NODI;
 var init_conversazione = __esm({
   "src/components/conversazione.js"() {
     SVG_NS = "http://www.w3.org/2000/svg";
@@ -9322,6 +9387,10 @@ var init_conversazione = __esm({
       time_now: "i-clock",
       research_start: "i-globe"
     });
+    ATTESA_VERIFICA_MS = 420;
+    INTERVALLO_CONFRONTO_MS = 140;
+    CICLO_MS = 1600;
+    FASI_NODI = [0, 0.36 / 1.6, 0.73 / 1.6];
   }
 });
 
@@ -19364,10 +19433,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           if (label) label.textContent = etichetta;
           return;
         }
-        const { blocco: article, label: labelEl, elapsed } = creaAttesa({ etichetta });
+        const { blocco: article, label: labelEl, elapsed, fermaMotore } = creaAttesa({ etichetta });
         article.dataset.activity = stato;
         nellaChat(article);
         state.realSession.attesaBubble = article;
+        state.realSession.fermaMotoreSegnavia = fermaMotore;
         state.realSession.attesaAvviataA = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
         const aggiornaTempoAttesa = () => {
           if (!state.realSession.attesaBubble || state.realSession.attesaAvviataA === null) return;
@@ -19394,6 +19464,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
         state.realSession.attesaAvviataA = null;
         if (!state.realSession.attesaBubble) return;
+        state.realSession.fermaMotoreSegnavia?.();
+        state.realSession.fermaMotoreSegnavia = null;
         state.realSession.attesaBubble.remove();
         state.realSession.attesaBubble = null;
       }

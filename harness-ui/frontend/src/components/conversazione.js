@@ -786,6 +786,120 @@ export function creaArtefatto({ titolo = 'Artefatto', formato = '', src = '', on
 /* ------------------------------------------------------------------ Attesa */
 
 /**
+ * ⭐⭐⭐ IL MOTORE DEL SEGNAVIA — misura sul browser di chi guarda, e prende il comando se serve.
+ *
+ * ⛔⛔ Owner, 10/09, cinque volte: «non si muove», e ogni volta le mie misure dicevano di sì. Il
+ *   punto è che le mie misure erano fatte in un Chromium headless mio, non nel suo Chrome: SMIL
+ *   gira in tutte le condizioni che so riprodurre (due temi × tre modi di «riduci animazioni»:
+ *   12 valori distinti su 12, sei volte su sei), quindi ciò che lo ferma da lui è qualcosa che io
+ *   non riesco a mettere sul banco. ⇒ Si smette di indovinare la causa e si sposta la MISURA dove
+ *   sta il problema: questa funzione guarda se il disegno si è mosso davvero, sul browser vero.
+ *
+ * Come funziona, e perché in quest'ordine:
+ *   1. lascia lavorare SMIL — è il motore più economico, non costa un frame di JavaScript;
+ *   2. dopo `ATTESA_VERIFICA_MS` legge `stroke-dashoffset`: se è cambiato, si spegne e non fa altro;
+ *   3. se NON è cambiato, disegna lui con `requestAnimationFrame` — che «syncs animations with the
+ *      browser's repaint cycle» (Paul Irish, «requestAnimationFrame for smart animating», letto il
+ *      10/09/2026), mentre `setInterval` «isn't ideal … the browser can't really optimize it»;
+ *   4. e se nemmeno rAF avanza (un caso che questo progetto ha già misurato: Chrome pilotato via CDP
+ *      in background strozza rAF a ~1/s), passa a `setInterval`, che in quel caso continua.
+ *
+ * ⛔ `data-motore` sull'SVG dice QUALE via è viva: `smil`, `js`, `js-intervallo`. Non è un residuo
+ *   di debug: è l'unico modo che ho di sapere cosa succede su una macchina che non è la mia — si
+ *   legge da una foto o da una riga di console, senza chiedere niente a chi guarda.
+ * ⛔ Si autospegne quando l'SVG esce dal documento (`isConnected`): la bolla d'attesa viene rimossa
+ *   al primo token, e un timer che sopravvive al suo elemento è una perdita che nessuno vede.
+ *
+ * @param {SVGSVGElement} svg il segnavia già montato
+ * @param {object} [deps] finestre e tempi iniettabili, per provarlo senza aspettare davvero
+ * @returns {() => void} la funzione che ferma il motore
+ */
+export const ATTESA_VERIFICA_MS = 420;
+/* ⛔ Fra le due letture: abbastanza perché un ciclo da 1,6 s abbia mosso il disegno in modo
+   misurabile, abbastanza poco perché un segnavia fermo non resti fermo più di mezzo secondo. */
+export const INTERVALLO_CONFRONTO_MS = 140;
+const CICLO_MS = 1600;
+const FASI_NODI = [0, 0.36 / 1.6, 0.73 / 1.6];
+
+export function animaSegnavia(svg, { window: finestra = globalThis, adesso = () => (finestra.performance?.now?.() ?? Date.now()) } = {}) {
+  const sweep = svg?.querySelector?.('.talos-line-loader-sweep');
+  if (!sweep) return () => {};
+  const nodi = [...(svg.querySelectorAll?.('.talos-line-loader-node') ?? [])];
+  let fermato = false;
+  let handle = null;
+  let intervallo = null;
+  const ferma = () => {
+    fermato = true;
+    if (handle != null) finestra.cancelAnimationFrame?.(handle);
+    if (intervallo != null) finestra.clearInterval?.(intervallo);
+    handle = null; intervallo = null;
+  };
+
+  /* Il disegno, un istante alla volta: la stessa geometria dell'SMIL, scritta a mano. */
+  const inizio = adesso();
+  const disegna = () => {
+    if (fermato || !svg.isConnected) return ferma();
+    const t = ((adesso() - inizio) % CICLO_MS) / CICLO_MS;
+    sweep.setAttribute('stroke-dashoffset', String(88 - 176 * t));
+    nodi.forEach((nodo, i) => {
+      const f = (t - FASI_NODI[i] + 1) % 1;
+      /* Il profilo del mobile: spento fino al 12%, pieno dal 22% all'82%, poi si spegne. */
+      const acceso = f < 0.12 ? 0 : f < 0.22 ? (f - 0.12) / 0.1 : f < 0.82 ? 1 : Math.max(0, 1 - (f - 0.82) / 0.18);
+      nodo.setAttribute('fill-opacity', acceso.toFixed(3));
+    });
+  };
+
+  let frameVisti = 0;
+  const giro = () => {
+    if (fermato || !svg.isConnected) return ferma();
+    frameVisti += 1;
+    disegna();
+    handle = finestra.requestAnimationFrame?.(giro) ?? null;
+    if (handle == null) { svg.setAttribute('data-motore', 'js-intervallo'); intervallo = finestra.setInterval?.(disegna, 60) ?? null; }
+  };
+
+  svg.setAttribute('data-motore', 'smil');
+  /*
+   * ⛔⛔⛔ LE DUE LETTURE VANNO FATTE ENTRAMBE A ELEMENTO INSERITO, e la prima versione di questa
+   *   funzione sbagliava proprio qui: leggeva `primo` SUBITO, cioè mentre l'SVG è ancora fuori dal
+   *   documento (`animaSegnavia` gira dentro `creaAttesa`, prima che `nellaChat` lo appenda), e
+   *   `getComputedStyle` su un elemento non connesso torna stringa vuota. Confronto: `''` contro
+   *   `'88px'` — sempre diversi ⇒ «SMIL lavora» sempre ⇒ **il ripiego non partiva mai**, nemmeno con
+   *   SMIL tolto di mezzo. Trovato dalla prova AL CONTRARIO dal vivo
+   *   (`scratchpad/prove/segnavia-quanto-dura/ripiego.mjs`): con gli `<animate>` rimossi, `sweep`
+   *   dava 1 solo valore distinto su 30 campioni e `data-motore` restava `smil`. Un ripiego che non
+   *   si accende è peggio di nessun ripiego: fa credere che ci sia una rete.
+   * ⇒ Due letture, tutte e due dopo l'attesa, separate da un intervallo breve.
+   */
+  finestra.setTimeout?.(() => {
+    if (fermato || !svg.isConnected) return;
+    const primo = finestra.getComputedStyle?.(sweep)?.strokeDashoffset ?? null;
+    finestra.setTimeout?.(() => decidi(primo), INTERVALLO_CONFRONTO_MS);
+  }, ATTESA_VERIFICA_MS);
+
+  function decidi(primo) {
+    if (fermato || !svg.isConnected) return;
+    const ora = finestra.getComputedStyle?.(sweep)?.strokeDashoffset ?? null;
+    if (primo !== null && ora !== null && primo !== ora) return; // ⭐ SMIL lavora: nessun secondo motore
+    /* ⛔ SMIL è fermo su questa macchina: si toglie di mezzo (altrimenti litiga con noi sull'attributo). */
+    try { svg.pauseAnimations?.(); } catch { /* niente SMIL qui: meglio così */ }
+    svg.setAttribute('data-motore', 'js');
+    giro();
+    /* ⛔ E se nemmeno rAF avanza — misurato in questo progetto su Chrome pilotato in background —
+       dopo mezzo secondo si passa all'intervallo, che lì continua a scattare. */
+    finestra.setTimeout?.(() => {
+      if (fermato || !svg.isConnected || frameVisti > 4) return;
+      if (handle != null) finestra.cancelAnimationFrame?.(handle);
+      handle = null;
+      svg.setAttribute('data-motore', 'js-intervallo');
+      intervallo = finestra.setInterval?.(disegna, 60) ?? null;
+    }, 500);
+  }
+
+  return ferma;
+}
+
+/**
  * L'attesa della risposta: lo scheletro del mockup (tre barre) preceduto dalla
  * riga animata del marchio — la STESSA immagine del mobile (owner 02/9:
  * TalosLineLoader, viewBox 96×16, tre nodi che si riempiono) — con l'etichetta
@@ -894,6 +1008,7 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
    *   chiesto al SISTEMA vede la linea piena e ferma — un segnavia leggibile, non uno sparito.
    *   `pauseAnimations` sta su SVGSVGElement e non esiste nel DOM finto delle prove: si chiede.
    */
+  let fermaMotore = () => {};
   try {
     if (opzioni.window?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
       ?? globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
@@ -901,6 +1016,7 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
       for (const n of svg.querySelectorAll?.('.talos-line-loader-node') ?? []) n.setAttribute('fill-opacity', '1');
       svg.pauseAnimations?.();
     }
+    else fermaMotore = animaSegnavia(svg, { window: opzioni.window ?? globalThis });
   } catch { /* niente matchMedia (prove, ambienti senza finestra): resta il movimento */ }
   const label = el(documentObj, 'span', 'talos-waiting__label run-activity-label', etichetta);
   const elapsed = el(documentObj, 'span', 'talos-mono talos-muted run-activity-elapsed', '0s');
@@ -912,7 +1028,9 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
    * nemmeno: erano tre rettangoli fermi. Resta la riga onesta: segnavia, cosa sta facendo, da quanto.
    */
   blocco.append(riga);
-  return { blocco, label, elapsed };
+  /* ⛔ `fermaMotore` viaggia con la bolla: chi la rimuove ferma anche il disegno. Il motore si
+     autospegne comunque su `isConnected`, ma un chiamante che PUO' dirlo non deve aspettare. */
+  return { blocco, label, elapsed, fermaMotore: () => fermaMotore() };
 }
 
 /* ------------------------------------------------------- PO-11: il diff in chat */

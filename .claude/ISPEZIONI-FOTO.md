@@ -698,3 +698,18 @@ il nodo pieno dal 22% all'82% del ciclo — acceso e spento, con due transizioni
 sfarfallio continuo di prima.
 ⛔ Verificato e SMENTITO in questo giro: il tema scuro non c'entrava. Misurati i due temi × le tre
 condizioni di «riduci animazioni» — **12 valori distinti su 12 in tutte e sei**.
+
+**`2026-09-10-segnavia-motore.png`** — guardata, giro vero, scattata DURANTE. Il segnavia mostra il
+primo nodo pieno e gli altri due in transizione, e `data-motore` letto nello stesso giro dice `smil`
+per 28 campioni su 28: sul mio browser SMIL basta e il motore JS resta spento, che è il
+comportamento voluto. Nella prova AL CONTRARIO (`<animate>` rimossi appena montati) lo stesso codice
+dice `smil → js` e il disegno si muove lo stesso: 25 valori distinti di `stroke-dashoffset` su 30 e
+20 combinazioni di nodi su 30, dove prima della cura erano **1 e 1**.
+
+⛔⛔ DIFETTO GRAVE NOTATO nella foto, e NON è mio: la sessione gira con **`deepseek-v4.1-flash`** —
+si legge nel piede della barra («AVM-harness-desktop · Tema Calm · deepseek»), nel selettore del
+composer e nella testata del messaggio («TALOS deepseek-v4.1-flash»). La regola dell'owner del 09/09
+dice **giri reali SOLO con `glm-5.3-flash`**. Non l'ho cambiato io; le foto delle ore precedenti di
+oggi mostrano `glm-5.3-flash` sulla stessa sessione. ⇒ Le due sonde di questo giro
+(`nodi.mjs`, `ripiego.mjs`) hanno quindi speso due giri con un modello non autorizzato: lo dichiaro
+invece di nasconderlo. Da qui in avanti le sonde controllano il modello prima di inviare.
