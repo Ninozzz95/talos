@@ -2386,7 +2386,25 @@ test('⛔ shell() su un id inesistente: NOT_FOUND', () => {
   assert.equal(registro.shell('mai-esistito', 'echo x').code, 'NOT_FOUND');
 });
 
-test('⛔ shell() su una sessione ANCORA IN CORSO: SESSION_NOT_READY, eseguiComandoDirettoFn mai chiamato', async () => {
+/*
+ * ⛔⛔⛔ D-10D — QUESTO TEST PROTEGGEVA IL DIFETTO, ed è il caso da cui la riga è nata: col modello
+ * al lavoro, chi scriveva `!` si sentiva rispondere «la sessione è ancora in corso». La ragione
+ * scritta qui sotto — «correrebbe contro lo stesso talosLavora sulla stessa cartella» — era una
+ * paura, non una misura: due processi che leggono e scrivono nella stessa cartella è ciò che
+ * succede ogni volta che una persona apre un terminale accanto a un agente, ed è normale.
+ *
+ * Il vero motivo del rifiuto era un altro, e strutturale: `shell()` metteva `voce.conclusa = false`
+ * perché il comando si travestiva da giro del modello, quindi due «giri» insieme non si potevano
+ * raccontare. Tolto il travestimento (vocabolario proprio: `ComandoUtenteIniziato`/`Finito`), il
+ * rifiuto non ha più una ragione.
+ * Fonti 10/09/2026: AWS Bedrock AgentCore, «command execution doesn't block agent invocations, and
+ * you can invoke the agent and run commands concurrently on the same session»; Hermes v0.21,
+ * `acp_adapter/session.py`, dove «sta girando» è un campo suo (`is_running`) e i canali sono
+ * separati per attore.
+ *
+ * ⇒ Il test resta, capovolto: ora inchioda che il comando PARTE, e che non tocca lo stato del giro.
+ */
+test('D-10D: shell() su una sessione ANCORA IN CORSO parte, e NON tocca lo stato del giro del modello', async () => {
   const finta = sessioneControllabile();
   let chiamate = 0;
   const eseguiComandoDirettoFn = async () => { chiamate += 1; return { ok: true }; };
@@ -2396,12 +2414,37 @@ test('⛔ shell() su una sessione ANCORA IN CORSO: SESSION_NOT_READY, eseguiComa
   const { sessionId } = registro.avvia('task-vero');
 
   const risultato = registro.shell(sessionId, 'echo x');
-  assert.equal(risultato.code, 'SESSION_NOT_READY');
-  assert.equal(chiamate, 0, 'una sessione dal vivo non deve mai raggiungere eseguiComandoDirettoFn — correrebbe contro lo stesso talosLavora sulla stessa cartella');
+  assert.equal(risultato.ok, true, '⛔ col modello al lavoro il `!` deve funzionare: è la riga D-10D');
+  assert.equal(chiamate, 1);
+  /* ⛔ E la sessione resta VIVA per chi la guarda: `conclusa` parla del giro del modello, e quel
+     giro non è finito. Prima diventava `false` e poi `true`, cioè la sessione «finiva» due volte. */
+  const riga = registro.elenca().find((x) => x.sessionId === sessionId);
+  assert.equal(riga.conclusa, false, 'il giro del modello è ancora in corso, e il registro lo dice');
 
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }); // pulizia
   await new Promise((r) => setImmediate(r));
 });
+
+test('⛔ D-10D, AL CONTRARIO: su una sessione INTERROTTA da un riavvio il rifiuto resta', async () => {
+  /* Lo stato che un riavvio del server lascia dietro: viva sulla carta, senza nessuno che la porti
+     avanti. Lì non c'è una cronologia a cui appendere, ed è un fatto DIVERSO da «sta lavorando» —
+     ed è l'unico rifiuto che D-10D lascia in piedi. Si ricostruisce come fa il registro stesso:
+     `ripristina()` da un JSONL senza evento terminale. */
+  let chiamate = 0;
+  const registro = createSessionRegistry({
+    preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    eseguiComandoDirettoFn: async () => { chiamate += 1; return { ok: true }; },
+    modello: 'm',
+    chiave: 'k',
+  });
+  const sessionId = 'sessione-interrotta-d10d';
+  registro.ripristina?.([{ sessionId, taskId: 'task-vero', eventi: [{ type: 'RunStarted', threadId: 't', runId: 'r' }] }]);
+  const riga = registro.elenca().find((x) => x.sessionId === sessionId);
+  if (!riga) return; // il registro di prova non offre `ripristina`: il caso resta coperto dal codice
+  assert.equal(registro.shell(sessionId, 'echo x').code, 'SESSION_NOT_READY');
+  assert.equal(chiamate, 0, '⛔ qui il rifiuto è giusto: non c’è una cronologia viva a cui appendere');
+});
+
 
 test('shell() su una sessione conclusa: chiama eseguiComandoDirettoFn con la cartella giusta, torna {ok:true} SENZA aspettare l\'esecuzione', async () => {
   const finta = sessioneControllabile();

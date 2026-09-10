@@ -637,13 +637,19 @@ test('eseguiComandoDiretto emette RunStarted, ToolCallStart/Args, ToolCallResult
     cartella: '/tmp/cartella-sessione', comando: 'echo ciao', onEvento: (e) => eventi.push(e), eseguiComandoSandboxatoFn,
   });
 
-  assert.deepEqual(eventi.map((e) => e.type), ['RunStarted', 'ToolCallStart', 'ToolCallArgs', 'ToolCallResult', 'RunFinished']);
+  assert.deepEqual(eventi.map((e) => e.type), ['ComandoUtenteIniziato', 'ToolCallStart', 'ToolCallArgs', 'ToolCallResult', 'ComandoUtenteFinito']);
+  /* ⛔ Nessun evento del giro del modello, mai: è tutto il punto della riga. */
+  assert.equal(eventi.some((e) => e.type === 'RunStarted' || e.type === 'RunFinished'), false,
+    '⛔ un comando della persona non apre e non chiude un giro: sette lettori del registro ci credevano');
+  assert.equal(eventi[0].comando, 'echo ciao', 'chi legge deve sapere QUALE comando è partito');
+  assert.equal(eventi[0].comandoId, eventi[4].comandoId, 'inizio e fine parlano dello stesso comando');
   assert.equal(eventi[1].toolCallName, 'shell', 'lo stesso nome attrezzo che il modello userebbe dentro talosLavora — un solo vocabolario');
   assert.equal(eventi[1].toolCallId, eventi[2].toolCallId, 'ToolCallArgs deve riferirsi allo STESSO toolCallId di ToolCallStart');
   assert.equal(eventi[1].toolCallId, eventi[3].toolCallId, 'e ToolCallResult pure');
   assert.match(eventi[3].content, /exit 0 \[sandbox: wsl2\]/, 'il livello usato e\' dichiarato nel testo, mai taciuto');
   assert.match(eventi[3].content, /ciao/);
-  assert.deepEqual(eventi[4].outcome, { type: 'success' });
+  assert.equal(eventi[4].codice, 0);
+  assert.equal(eventi[4].enforcement, 'wsl2');
   assert.equal(risultato.ok, true);
   assert.equal(risultato.enforcement, 'wsl2');
 });
@@ -657,8 +663,13 @@ test('⛔ verso contrario: un\'uscita diversa da zero NON diventa un RunError �
   });
 
   const finale = eventi.at(-1);
-  assert.equal(finale.type, 'RunFinished', 'un\'uscita non-zero è informazione, non un guasto del SERVIZIO — vedi la stessa distinzione già in esitoInEventoFinale');
-  assert.deepEqual(finale.outcome, { type: 'success' });
+  /* ⛔ D-10D: l'evento finale non e' piu' RunFinished (un comando della persona non chiude un giro
+     del modello), ma la DISTINZIONE che questo test difende vale identica: un'uscita diversa da
+     zero e' informazione, non un guasto del servizio. */
+  assert.equal(finale.type, 'ComandoUtenteFinito');
+  assert.equal(finale.codice, 1, 'e il codice si dice, invece di sparire dentro un esito generico');
+  assert.equal(finale.errore, undefined, 'uscita 1 non e la stessa cosa di non e partito: due fatti, due campi');
+  assert.equal(eventi.some((e) => e.type === 'RunError'), false);
 });
 
 /**

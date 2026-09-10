@@ -20892,9 +20892,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const taskId = state.realSession.taskId;
         try {
           await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/shell`, { comando });
-          const generation = nuovaGenerazioneSessione({ continua: true });
-          state.realSession.taskId = taskId;
-          collegaEventiSessione(sessionId, generation);
+          const giroGiaVivo = runRealeAttivo();
+          if (!giroGiaVivo) {
+            const generation = nuovaGenerazioneSessione({ continua: true });
+            state.realSession.taskId = taskId;
+            collegaEventiSessione(sessionId, generation);
+          }
           aggiornaElencoSessioniReali();
           if (silenzioso) toast("Comando eseguito in silenzio", "Non compare in chat, come hai chiesto con !!.");
         } catch (error) {
@@ -22585,9 +22588,47 @@ ${testo3}` : testo3;
         if (evento.type === "ToolCallStart") state.realSession.eventiAttrezzi.push({ type: "ToolCallStart", toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), giro: state.realSession.runCount || null });
         else if (evento.type === "ToolCallArgs") state.realSession.eventiAttrezzi.push({ type: "ToolCallArgs", toolCallId: evento.toolCallId, delta: evento.delta });
         else if (evento.type === "ToolCallResult") state.realSession.eventiAttrezzi.push({ type: "ToolCallResult", toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error) });
-        if (evento.type === "RunFinished" || evento.type === "RunError") state.realSession.giroComandoDiretto = false;
+        if (evento.type === "RunFinished" || evento.type === "RunError" || evento.type === "ComandoUtenteFinito") state.realSession.giroComandoDiretto = false;
         segnalaRigaSessioneViva();
         switch (evento.type) {
+          /*
+           * ⛔⛔⛔ D-10D — UN COMANDO DELLA PERSONA HA IL SUO VOCABOLARIO.
+           *   Questo ramo stava dentro `RunStarted`, perche' il comando si travestiva da giro del
+           *   modello. Da quel travestimento nascevano due danni: sette lettori del registro che
+           *   credevano a una bugia, e il rifiuto del `!` mentre il modello lavora. Ora sono due
+           *   operazioni distinte sulla stessa sessione — come AWS Bedrock AgentCore
+           *   (`InvokeAgentRuntime` contro `InvokeAgentRuntimeCommand`, «command execution doesn't
+           *   block agent invocations») e come Hermes v0.21, che tiene `is_running` come campo suo e
+           *   separa i canali per attore. Letti entrambi il 10/09/2026.
+           * ⛔ Il corpo e' lo STESSO di prima, spostato: nessun comportamento nuovo qui dentro.
+           */
+          case "ComandoUtenteIniziato": {
+            const comando = typeof evento.comando === "string" ? evento.comando.trim() : "";
+            if (!comando) break;
+            state.realSession.comandoDirettoDaAprire = true;
+            state.realSession.giroComandoDiretto = true;
+            appendComandoDiretto(comando, evento.contesto);
+            mostraAttesaRisposta();
+            if (evento.contesto) {
+              aggiornaPannelloAmbiente(evento.contesto);
+              state.realSession.contesto = evento.contesto;
+            }
+            programmaRenderAlberoReale();
+            break;
+          }
+          /*
+           * ⛔ La fine di un comando NON e' la fine di un giro: non tocca l'usage, non chiude il
+           *   turno, non spegne la sessione — il modello puo' essere ancora al lavoro. Fa una cosa
+           *   sola: toglie l'attesa e riapre il composer.
+           */
+          case "ComandoUtenteFinito": {
+            state.realSession.giroComandoDiretto = false;
+            state.realSession.comandoDirettoDaAprire = false;
+            nascondiAttesaRisposta();
+            syncRunComposerState();
+            programmaRenderAlberoReale();
+            break;
+          }
           case "RunStarted": {
             streamingAutoFollow = true;
             contextMonitor?.setRunning(true);
@@ -22607,19 +22648,6 @@ ${testo3}` : testo3;
             state.realSession.runCount = (state.realSession.runCount || 0) + 1;
             segnaGiroNellaSpine();
             segnaTappaLatenza("runStarted");
-            if (typeof evento.input?.comandoDiretto === "string" && evento.input.comandoDiretto.trim()) {
-              const comando = evento.input.comandoDiretto.trim();
-              state.realSession.comandoDirettoDaAprire = true;
-              state.realSession.giroComandoDiretto = true;
-              appendComandoDiretto(comando, evento.contesto);
-              mostraAttesaRisposta();
-              if (evento.contesto) {
-                aggiornaPannelloAmbiente(evento.contesto);
-                state.realSession.contesto = evento.contesto;
-              }
-              programmaRenderAlberoReale();
-              break;
-            }
             if (!state.realSession.taskBubbleMostrata && evento.input) {
               appendRealTaskStart(evento.input, evento.contesto);
             } else if (state.realSession.taskBubbleMostrata && evento.input?.seguito) {
@@ -26055,6 +26083,11 @@ ${blocchi.join("\n\n")}` : testa;
           if (attendiUploadImmagini()) return;
           const testo3 = composerInput.value.trim() || (allegatiComposer.some((a) => a.tipo === "immagine") ? "Descrivi l’immagine allegata." : "");
           const durante = Boolean(testo3) && runRealeAttivo();
+          if (testo3.startsWith("!")) {
+            chiudiBivioInvio();
+            composerForm.requestSubmit();
+            return;
+          }
           if (event.ctrlKey || event.metaKey) {
             if (durante) {
               chiudiBivioInvio();

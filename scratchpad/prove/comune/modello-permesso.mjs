@@ -18,12 +18,11 @@ export const MODELLO_PERMESSO = 'glm-5.3-flash';
  */
 export async function esigiModelloPermesso(pagina) {
   const letto = await pagina.evaluate(() => {
-    /* Il selettore del composer e' la fonte: e' cio' che partira' col prossimo invio. */
-    const bottone = document.querySelector('#composerModello, [data-c="ModelPicker"], .talos-composer__modello');
-    const daBottone = bottone?.textContent?.trim();
-    if (daBottone) return daBottone;
-    const piede = document.querySelector('.talos-workspace-footer__meta, .talos-sidebar__foot')?.textContent ?? '';
-    return piede.trim();
+    /* ⛔ La pillola del modello NEL COMPOSER: e' cio' che partira' col prossimo invio.
+       La prima versione leggeva il piede della barra e tornava «AVM-harness-desktop Tema Calm · z-ai»,
+       cioe' fermava la sonda per un motivo sbagliato: un cancello che nega a chi ha obbedito. */
+    const pillola = document.querySelector('[data-open-sheet="model"] span');
+    return pillola?.textContent?.trim() ?? null;
   });
   if (!letto || !letto.includes(MODELLO_PERMESSO)) {
     throw new Error(

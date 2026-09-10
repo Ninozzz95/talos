@@ -734,3 +734,11 @@ tutt'e due insieme.
 - tre sessioni della barra sono in stato **errore** (`Conta lentamente…` 20:35, 20:36, 20:40): sono
   quelle che il mio riavvio del server ha interrotto mentre il 4174 era senza kernel. Il guasto è
   curato, le sessioni restano segnate.
+
+**`2026-09-10-d10d-comando-durante-il-giro.png`** — guardata, scattata DURANTE. In chat c'è la bolla
+«Comando eseguito da te» col comando in monospazio, e sotto «Esecuzione di 1 comando… · In corso…».
+La riga della barra dice **«in corso · glm-5.3-flash · 5 giri»**: cioè il comando sta girando mentre
+il modello lavora, che è esattamente ciò che D-10D chiedeva e che prima veniva rifiutato.
+Misurato nello stesso giro: POST `/shell` → **200**, comando in chat dopo **+153 ms**, nessun
+rifiuto e nessun errore. Prima: nessuna richiesta partiva affatto.
+⛔ Difetto NOTATO: «Finestra del contesto» mostra `—` durante il giro (già annotato, resta aperto).

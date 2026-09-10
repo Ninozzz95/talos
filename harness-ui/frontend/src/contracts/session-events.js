@@ -11,6 +11,12 @@ export const SESSION_EVENT_TYPES = new Set([
      un errore». Misurato dal vivo sul 4174: il comando partiva davvero (l'Indice dei giri diceva
      «Esecuzione di 1 comando… · 1 attrezzo») e il giro moriva subito dopo.
      ⇒ Un evento nuovo nel kernel non basta: va DICHIARATO anche qui, o la pagina lo rifiuta. */
+  /* ⛔⛔ D-10D (10/09) — un comando scritto dalla PERSONA non e' un giro del modello: ha il suo
+     vocabolario. Prima si travestiva da giro (RunStarted/RunFinished) e sette lettori del
+     registro credevano a una bugia; e col modello al lavoro il ! veniva rifiutato. Fonti:
+     AWS Bedrock AgentCore (due operazioni distinte sulla stessa sessione, eseguibili insieme) e
+     Hermes v0.21, acp_adapter/session.py (is_running proprio, canali separati per attore). */
+  'ComandoUtenteIniziato', 'ComandoUtenteFinito',
   'ToolCallOutput',
   'ToolCallResult', 'ToolCallStart', 'WorkspaceChanged',
 ]);

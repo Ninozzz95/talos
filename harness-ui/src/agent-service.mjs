@@ -92,7 +92,7 @@ import { eseguiHook as eseguiHookReale } from './hook-registry.mjs';
 import {
   artifactCreated,
   eventiPerRisposta,
-  eventoPerEsitoTool, toolCallOutput,
+  comandoUtenteFinito, comandoUtenteIniziato, eventoPerEsitoTool, toolCallOutput,
   eventoPerScrittura,
   eventoPerUsage,
   hookInvoked,
@@ -1582,10 +1582,15 @@ export async function eseguiComandoDiretto({
   cartella, comando, onEvento, mobile = false,
   eseguiComandoSandboxatoFn = eseguiComandoSandboxatoReale,
 }) {
-  const threadId = randomUUID();
-  const runId = randomUUID();
+  /*
+   * ⛔⛔⛔ D-10D — questo NON è più un giro del modello: ha il suo vocabolario.
+   *   Vedi `comandoUtenteIniziato` in agui-events.mjs per il perché e per la fonte (AWS Bedrock
+   *   AgentCore: due operazioni distinte sulla stessa sessione, eseguibili insieme).
+   *   Il `toolCallId` resta, perché la resa in chat della riga «comando» è già quella e non cambia.
+   */
+  const comandoId = randomUUID();
   const toolCallId = randomUUID();
-  onEvento(runStarted({ threadId, runId, input: { comandoDiretto: comando } }));
+  onEvento(comandoUtenteIniziato({ comandoId, comando }));
   onEvento(toolCallStart({ toolCallId, toolCallName: 'shell' }));
   onEvento(toolCallArgs({ toolCallId, delta: JSON.stringify({ comando }) }));
   /*
@@ -1625,6 +1630,6 @@ export async function eseguiComandoDiretto({
   svuota(); // ⛔ l'ultimo pezzo non resta in mano: sarebbe il difetto di prima, in piccolo
   const content = `exit ${risultato.codice} [sandbox: ${risultato.enforcement}]\n${risultato.testo}`;
   onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId, content }));
-  onEvento(runFinished({ threadId, runId, outcome: { type: 'success' }, result: { detto: content } }));
+  onEvento(comandoUtenteFinito({ comandoId, codice: risultato.codice, enforcement: risultato.enforcement }));
   return { ok: true, codice: risultato.codice, enforcement: risultato.enforcement };
 }

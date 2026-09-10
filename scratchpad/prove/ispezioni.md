@@ -128,3 +128,30 @@ quattro «Add and export a function `sottrai(a, …`» delle 16:29-16:33 con mod
 `Read only` (nessuna scrittura), 4-6 giri, ~245k token in ingresso in totale. Chiesto conto
 all'agente in background; se le ha avviate lui ha violato «il 4174 non si delega mai» e «giri reali
 solo con glm-5.3-flash».
+
+## 10/09 — D-10A, il segnavia e il glifo (foto in `scratchpad/prove/foto/`)
+
+**`2026-09-10-segnavia-glifo-indice.png`** — guardata, scattata DURANTE un giro vero con
+`glm-5.3-flash` (invio → +~2 s). Tre cose da verificare, tutte e tre vere a schermo:
+· il **segnavia a tre nodi** si vede accanto a «TALOS sta elaborando la risposta… 0s»: due nodi
+  pieni, il terzo vuoto, e la linea che li attraversa — alla taglia nuova (72×12) è leggibile, alla
+  vecchia (48×8) spariva accanto all'etichetta;
+· la testata del messaggio è **«TALOS glm-5.3-flash»** e basta: il glifo non c'è più, come chiesto;
+· l'**Indice dei giri** a destra fa `1 · Conta lentamente da 1 a` → *tuo messaggio*, `2 · Risposta`,
+  `3 · UnoDueTre…`, `4 · ma che cavolo significa?` → *tuo messaggio*, `5 · Risposta`, `6`, `7`, `8`,
+  `9`, `10` — **consecutivo, senza un buco**. È D-10A chiuso, e il numero di ogni riga è lo stesso
+  che la chat mostra accanto a quel messaggio.
+⛔ Difetti NOTATI nella stessa foto, fuori da ciò che stavo facendo:
+· «Finestra del contesto» mostra `—` su Conversazione e Libera **mentre il giro è in corso**, e i
+  numeri tornano solo a giro finito (difetto già annotato: resta aperto);
+· la **spine del turno di TALOS** è una colonna di tick alta ~340 px (da y≈280 a y≈620) senza un solo
+  numero visibile accanto: troppi tick per un turno, e il numero — che è il senso della spine — non
+  si legge. Nuovo, da registrare come debito a sé.
+
+**`2026-09-10-logo-barra.png`** — guardata. Il marchio in alto a sinistra è ora 40 px di glifo dentro
+uno spazio di 42, senza capsula né bordo, allineato con «TALOS / CODICE». Le due icone a destra
+(campanella, comprimi barra) restano della loro taglia: il logo cresce, la riga no.
+
+**`2026-09-10-testata-senza-glifo.png`** — guardata. Solo «TALOS» in maiuscoletto ambrato e
+`glm-5.3-flash` in mono accanto. Nessun residuo del glifo, nessuno spazio vuoto al suo posto: la
+riga parte dal bordo del testo come le altre.

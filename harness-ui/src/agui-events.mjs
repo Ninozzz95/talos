@@ -134,6 +134,41 @@ export function toolCallArgs({ toolCallId, delta }) {
  * e tiene separati i chunk di avanzamento dai messaggi finali; Vercel Academy, «Streaming and Tool
  * Rendering», per la stessa distinzione lato resa.
  */
+/**
+ * ⭐⭐⭐ D-10D — UN COMANDO SCRITTO DALLA PERSONA NON È UN GIRO DEL MODELLO.
+ *
+ * ⛔ Prima si travestiva da giro: `eseguiComandoDiretto` emetteva `RunStarted`/`RunFinished`, e
+ *   `shell()` metteva `voce.conclusa = false` per la sua durata. Da lì **sette lettori del registro
+ *   credevano a una bugia** — il watcher del workspace si spegneva a metà scrittura,
+ *   `resume`/`fork`/`compatta` diventavano leciti su una sessione viva, `reindirizza` rifiutava, la
+ *   barra dava la sessione per finita. E il prezzo più alto lo pagava chi scrive: col modello al
+ *   lavoro il `!` veniva respinto («la sessione è ancora in corso»), perché due giri insieme non si
+ *   possono raccontare con un vocabolario che ne conosce uno solo.
+ *
+ * ⇒ Due operazioni distinte sulla stessa sessione, ognuna col suo vocabolario. È la forma che usa
+ *   AWS Bedrock AgentCore (docs.aws.amazon.com, «Execute shell commands in AgentCore Runtime
+ *   sessions», letto il 10/09/2026): `InvokeAgentRuntime` per il ragionamento e
+ *   `InvokeAgentRuntimeCommand` per la shell deterministica, con la garanzia dichiarata che
+ *   «command execution doesn't block agent invocations, and you can invoke the agent and run
+ *   commands concurrently on the same session».
+ *
+ * ⛔ `comandoId` e non `runId`: sono due spazi di nomi diversi, e confonderli riporterebbe il
+ *   difetto da un'altra porta.
+ */
+export function comandoUtenteIniziato({ comandoId, comando }) {
+    return { type: 'ComandoUtenteIniziato', comandoId, comando: String(comando ?? '') }
+}
+
+export function comandoUtenteFinito({ comandoId, codice, enforcement, errore }) {
+    const evento = { type: 'ComandoUtenteFinito', comandoId }
+    if (codice !== undefined) evento.codice = codice
+    if (enforcement !== undefined) evento.enforcement = enforcement
+    /* ⛔ Un comando che non è nemmeno partito lo DICE qui: senza, resterebbe indistinguibile da uno
+       finito bene e muto — la stessa confusione che `codice: null` faceva in D-10G. */
+    if (errore !== undefined) evento.errore = String(errore)
+    return evento
+}
+
 export function toolCallOutput({ toolCallId, delta }) {
     return { type: 'ToolCallOutput', toolCallId, delta: String(delta ?? '') }
 }
