@@ -9177,6 +9177,42 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
   blocco.append(riga);
   return { blocco, label, elapsed };
 }
+function creaDiffInChat(gruppi, { percorso = "", apertoSeSotto = 40, document: doc } = {}) {
+  const documentObj = doc || globalThis.document;
+  if (!gruppi || !Array.isArray(gruppi.pezzi) || gruppi.pezzi.length === 0) return null;
+  const blocco = el22(documentObj, "div", "talos-diff-chat");
+  blocco.setAttribute("data-c", "DiffInChat");
+  const righeTotali = gruppi.pezzi.reduce((n, p) => n + p.righe.length, 0);
+  const dettaglio = el22(documentObj, "details", "");
+  if (righeTotali <= apertoSeSotto) dettaglio.open = true;
+  const riassunto = el22(documentObj, "summary", "");
+  const quanti = gruppi.pezzi.length;
+  riassunto.textContent = quanti === 1 ? `Differenza${percorso ? ` in ${percorso}` : ""} · ${righeTotali} righe` : `Differenza${percorso ? ` in ${percorso}` : ""} · ${quanti} punti del file, ${righeTotali} righe`;
+  dettaglio.append(riassunto);
+  for (const pezzo2 of gruppi.pezzi) {
+    const testa = el22(documentObj, "div", "talos-diff-chat__pezzo");
+    const dove = pezzo2.daRiga === null ? "righe tolte" : pezzo2.daRiga === pezzo2.aRiga ? `riga ${pezzo2.daRiga}` : `righe ${pezzo2.daRiga}-${pezzo2.aRiga}`;
+    testa.append(el22(documentObj, "span", "talos-diff-chat__righe", dove));
+    dettaglio.append(testa);
+    const corpo = el22(documentObj, "div", "talos-diff");
+    corpo.setAttribute("data-c", "DiffView");
+    for (const r of pezzo2.righe) {
+      const riga = el22(documentObj, "div", `talos-diff__line talos-diff__line--${r.tipo}`);
+      riga.append(el22(documentObj, "span", "talos-diff-chat__num", r.numero === null ? "" : String(r.numero)));
+      riga.append(el22(documentObj, "span", "talos-diff-chat__segno", r.tipo === "add" ? "+" : r.tipo === "del" ? "−" : " "));
+      riga.append(documentObj.createTextNode(r.testo));
+      corpo.append(riga);
+    }
+    dettaglio.append(corpo);
+  }
+  if (gruppi.tagliato) {
+    const resto = el22(documentObj, "div", "talos-diff-chat__resto");
+    resto.textContent = `Altri ${gruppi.pezziNascosti} punti del file non sono mostrati qui (${gruppi.righeNascoste} righe). Il totale +${gruppi.aggiunte} −${gruppi.rimozioni} li conta tutti.`;
+    dettaglio.append(resto);
+  }
+  blocco.append(dettaglio);
+  return blocco;
+}
 var SVG_NS, ALIAS_LINGUAGGIO, NOMI_LINGUAGGIO, PARTI_DEL_BLOCCO, copiaDiSerie, ICONA_ATTREZZO;
 var init_conversazione = __esm({
   "src/components/conversazione.js"() {
@@ -9644,6 +9680,80 @@ var INTESTAZIONE;
 var init_esito_comando = __esm({
   "src/components/esito-comando.js"() {
     INTESTAZIONE = /^exit (-?\d+|null)(?: \[sandbox: ([^\]]*)\])?\n?/u;
+  }
+});
+
+// src/components/diff-hunk.js
+function raggruppaInHunk(righe = [], { contesto: contesto2 = CONTESTO_PREDEFINITO, tetto = TETTO_RIGHE_PREDEFINITO } = {}) {
+  const vuoto = { pezzi: [], aggiunte: 0, rimozioni: 0, righeNascoste: 0, pezziNascosti: 0, tagliato: false };
+  if (!Array.isArray(righe) || righe.length === 0) return vuoto;
+  const ctx = Number.isFinite(contesto2) && contesto2 >= 0 ? Math.floor(contesto2) : CONTESTO_PREDEFINITO;
+  const numeri = [];
+  let corrente = 0;
+  for (const [tipo] of righe) {
+    if (tipo === "del") numeri.push(null);
+    else {
+      corrente += 1;
+      numeri.push(corrente);
+    }
+  }
+  const aggiunte = righe.filter(([t2]) => t2 === "add").length;
+  const rimozioni = righe.filter(([t2]) => t2 === "del").length;
+  if (aggiunte === 0 && rimozioni === 0) return { ...vuoto, pezzi: [] };
+  const pezzi = [];
+  let i = 0;
+  while (i < righe.length) {
+    if (righe[i][0] === "ctx") {
+      i += 1;
+      continue;
+    }
+    const inizio = Math.max(0, i - ctx);
+    let fine = i;
+    while (fine < righe.length) {
+      if (righe[fine][0] !== "ctx") {
+        fine += 1;
+        continue;
+      }
+      let prossimo = fine;
+      while (prossimo < righe.length && righe[prossimo][0] === "ctx") prossimo += 1;
+      if (prossimo < righe.length && prossimo - fine <= ctx * 2) fine = prossimo + 1;
+      else break;
+    }
+    const finePezzo = Math.min(righe.length, fine + ctx);
+    const dentro = [];
+    for (let k = inizio; k < finePezzo; k += 1) dentro.push({ tipo: righe[k][0], testo: righe[k][1], numero: numeri[k] });
+    const conNumero = dentro.filter((r) => r.numero !== null);
+    pezzi.push({
+      daRiga: conNumero.length ? conNumero[0].numero : null,
+      aRiga: conNumero.length ? conNumero[conNumero.length - 1].numero : null,
+      righe: dentro
+    });
+    i = finePezzo;
+  }
+  const tettoValido = Number.isFinite(tetto) && tetto > 0 ? Math.floor(tetto) : TETTO_RIGHE_PREDEFINITO;
+  let mostrate = 0;
+  const tenuti = [];
+  let nascoste = 0;
+  for (const pezzo2 of pezzi) {
+    if (mostrate + pezzo2.righe.length <= tettoValido || tenuti.length === 0) {
+      tenuti.push(pezzo2);
+      mostrate += pezzo2.righe.length;
+    } else nascoste += pezzo2.righe.length;
+  }
+  return {
+    pezzi: tenuti,
+    aggiunte,
+    rimozioni,
+    righeNascoste: nascoste,
+    pezziNascosti: pezzi.length - tenuti.length,
+    tagliato: tenuti.length < pezzi.length
+  };
+}
+var CONTESTO_PREDEFINITO, TETTO_RIGHE_PREDEFINITO;
+var init_diff_hunk = __esm({
+  "src/components/diff-hunk.js"() {
+    CONTESTO_PREDEFINITO = 3;
+    TETTO_RIGHE_PREDEFINITO = 240;
   }
 });
 
@@ -11875,6 +11985,7 @@ var init_app = __esm({
     init_session_item();
     init_conversazione_figlia();
     init_esito_comando();
+    init_diff_hunk();
     init_conversazione();
     init_cronologia();
     init_frase_cercata();
@@ -20689,6 +20800,9 @@ ${f}`;
             diffSpan.className = "tool-note-diff";
             diffSpan.append(textElement("span", "add", `+${agg}`), document.createTextNode(" "), textElement("span", "del", `-${rim}`));
             bubbleScrittura.summaryText.after(diffSpan);
+            const pezziDelDiff = raggruppaInHunk(righe);
+            const bloccoDiff = creaDiffInChat(pezziDelDiff, { percorso });
+            if (bloccoDiff && bubbleScrittura.detail) bubbleScrittura.detail.after(bloccoDiff);
             if (operazione.op === "add") batch.contatori.nuovi += 1;
             else batch.contatori.modificati += 1;
             batch.contatori.diffAgg += agg;

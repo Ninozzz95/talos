@@ -40,7 +40,8 @@ import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2:
 import { creaSessionItem, ordinaSessioniAdAlbero, statoSessione } from '../components/session-item.js';
 import { montaConversazioneFiglia } from '../components/conversazione-figlia.js'; // PO-08 (10/09): la conversazione di un sotto-agente, nel pannello
 import { leggiEsitoComando, rigaDiStatoComando } from '../components/esito-comando.js'; // PO-06 (10/09): l'esito di un comando, detto a una persona
-import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFileScaricabile, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
+import { raggruppaInHunk } from '../components/diff-hunk.js'; // PO-11 (10/09): i pezzi del diff
+import { creaDiffInChat, aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFileScaricabile, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
 import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo schermo del browser pilotato dal server
@@ -11062,6 +11063,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         diffSpan.className = 'tool-note-diff';
         diffSpan.append(textElement('span', 'add', `+${agg}`), document.createTextNode(' '), textElement('span', 'del', `-${rim}`));
         bubbleScrittura.summaryText.after(diffSpan);
+        /*
+         * ⭐⭐⭐ PO-11 (10/09), owner: «quando un file viene modificato non c'è il diff
+         *   direttamente nella chat: bisogna farlo come Claude e il resto dei competitor».
+         *   Prima, aprendo questa riga, si leggeva il testo grezzo dell'argomento dell'attrezzo
+         *   (`percorso: … / contenuto: … / Esito: written: …`). Il conteggio `+N −M` qui sopra
+         *   dimostrava che la differenza era già calcolata: mancava solo la resa.
+         * ⛔ Fratello del corpo, non dentro: `detail` è un <pre>, e un diff strutturato lì dentro
+         *   sarebbe markup dentro testo preformattato. Il grezzo resta dov'è, per chi lo vuole.
+         * ⛔ E niente diff INVENTATO: se il «prima» non è noto, `righe` non porta né add né del,
+         *   `raggruppaInHunk` non produce pezzi e qui non compare niente. Meglio nessun diff che
+         *   un diff che sembra vero.
+         */
+        const pezziDelDiff = raggruppaInHunk(righe);
+        const bloccoDiff = creaDiffInChat(pezziDelDiff, { percorso });
+        if (bloccoDiff && bubbleScrittura.detail) bubbleScrittura.detail.after(bloccoDiff);
         if (operazione.op === 'add') batch.contatori.nuovi += 1; else batch.contatori.modificati += 1;
         batch.contatori.diffAgg += agg;
         batch.contatori.diffRim += rim;
