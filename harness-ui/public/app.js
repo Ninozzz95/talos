@@ -396,6 +396,54 @@ function ordinaSessioniAdAlbero(elenco2) {
     return { ...v, ultima: !dopo || dopo.profondita < v.profondita, nomeDistintivo: distintivoPer.get(v.sessione.sessionId) ?? null };
   });
 }
+function aggiornaSessionItem(riga, dati = {}) {
+  if (!riga || typeof riga.querySelector !== "function") return false;
+  let cambiato = false;
+  const stato = dati.stato;
+  if (stato && typeof stato.classe === "string") {
+    if (riga.dataset.sessionState !== stato.classe) {
+      riga.dataset.sessionState = stato.classe;
+      cambiato = true;
+    }
+    const pallino = riga.querySelector(".talos-dot");
+    if (pallino) {
+      const classe = `talos-dot talos-dot--sm${stato.tono ? ` talos-dot--${stato.tono}` : ""}`;
+      if (pallino.className !== classe) {
+        pallino.className = classe;
+        cambiato = true;
+      }
+    }
+    const testo3 = riga.querySelector(".talos-session-item__state");
+    if (testo3) {
+      const modello = dati.modello === void 0 ? testo3.textContent.includes(" · ") ? testo3.textContent.split(" · ").slice(1).join(" · ") : null : dati.modello;
+      const frase = modello ? `${stato.testo} · ${modello}` : stato.testo;
+      if (testo3.textContent !== frase) {
+        testo3.textContent = frase;
+        cambiato = true;
+      }
+    }
+  }
+  if (Number.isFinite(dati.giri) && dati.giri > 0) {
+    const aside = riga.querySelector(".talos-session-item__aside");
+    if (aside) {
+      const frase = `${dati.giri} gir${dati.giri === 1 ? "o" : "i"}`;
+      const ultimo = aside.lastElementChild;
+      const eIlConteggio = ultimo && /\bgir[oi]\b/.test(ultimo.textContent || "");
+      if (eIlConteggio) {
+        if (ultimo.textContent !== frase) {
+          ultimo.textContent = frase;
+          cambiato = true;
+        }
+      } else {
+        const nuovo = riga.ownerDocument.createElement("span");
+        nuovo.textContent = frase;
+        aside.append(nuovo);
+        cambiato = true;
+      }
+    }
+  }
+  return cambiato;
+}
 function creaSessionItem(sessione, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const riga = el2(documentObj, "button", "talos-session-item");
@@ -13609,6 +13657,33 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           if (feedback.textContent === message) feedback.hidden = true;
         }, 3500);
       }
+      const RITMO_RIGA_VIVA_MS = 500;
+      let ultimaRigaViva = 0;
+      let rigaVivaProgrammata = null;
+      function scriviRigaSessioneViva() {
+        rigaVivaProgrammata = null;
+        ultimaRigaViva = Date.now();
+        const id = state.realSession.id;
+        if (!id) return;
+        const riga = $2('.talos-session-item[data-real-session-id="' + id + '"]');
+        if (!riga) return;
+        const giri = Number(usageDellaSessione(state.realSession)?.giri) || null;
+        if (state.realSession.approvazioniPendenti?.size > 0) {
+          aggiornaSessionItem(riga, { giri });
+          return;
+        }
+        if (!runRealeAttivo()) return;
+        aggiornaSessionItem(riga, { stato: { classe: "vivo", testo: "in corso", tono: "live" }, giri });
+      }
+      function segnalaRigaSessioneViva() {
+        if (rigaVivaProgrammata) return;
+        const passato = Date.now() - ultimaRigaViva;
+        if (passato >= RITMO_RIGA_VIVA_MS) {
+          scriviRigaSessioneViva();
+          return;
+        }
+        rigaVivaProgrammata = window.setTimeout(scriviRigaSessioneViva, RITMO_RIGA_VIVA_MS - passato);
+      }
       async function avviaAccessoProvider(provider) {
         const corrente = () => $2("#providerList")?.querySelector('[data-provider-id="' + provider + '"]');
         const finestra = window.open("", "_blank");
@@ -22035,6 +22110,7 @@ ${testo3}` : testo3;
         else if (evento.type === "ToolCallArgs") state.realSession.eventiAttrezzi.push({ type: "ToolCallArgs", toolCallId: evento.toolCallId, delta: evento.delta });
         else if (evento.type === "ToolCallResult") state.realSession.eventiAttrezzi.push({ type: "ToolCallResult", toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error) });
         if (evento.type === "RunFinished" || evento.type === "RunError") state.realSession.giroComandoDiretto = false;
+        segnalaRigaSessioneViva();
         switch (evento.type) {
           case "RunStarted": {
             streamingAutoFollow = true;

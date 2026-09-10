@@ -87,3 +87,19 @@ impilato «Modello» e «Ha fatto» CENTRATI su due righe invece di lasciarli in
 | 04-ridisegno-1024.png | La stessa card a 1024 px: una colonna sola, i badge vanno a capo sotto il nome, il pulsante resta 158 e il tempo 128. Niente si stira e niente si stringe oltre il leggibile. |
 | 05-accesso-premuto.png | Dopo il clic: parte la chiamata, l indirizzo si apre e in fondo alla card si legge «Accesso aperto nel browser. Torna qui quando hai finito: la chiave arriva da sola». ⛔ Al primo giro quel messaggio finiva SOTTO il bordo dello schermo — c era nel DOM e non si vedeva, e chi premeva credeva che non fosse successo niente. Ora la pagina ci scorre. |
 | 06-popup-non-bloccato.png | Dopo la cura del popup: la card con «Accedi con OpenRouter», e in fondo «Accesso aperto nel browser. Torna qui quando hai finito: la chiave arriva da sola», visibile senza dover scorrere. La sequenza misurata dice il resto: clic → finestra aperta VUOTA (dentro il gesto) → indirizzo caricato 1,5 s dopo, quando il server risponde. Prima la finestra si apriva solo DOPO l attesa, e il browser la bloccava. |
+
+## N1 — la barra laterale viva, 10/09/2026 (foto in `scratchpad/prove/foto/n1-barra-viva-20260910/`)
+
+| Foto | Che cosa ci ho visto |
+|---|---|
+| 01-prima.png | La riga della sessione a riposo: «conclusa · glm-5.3-flash», pallino verde, 4 giri. |
+| 02-durante-8s.png | N1 al lavoro durante un giro vero: la riga in cima dice «in corso · glm-5.3-flash» col pallino arancione mentre in chat si legge «TALOS sta elaborando la risposta… 1s» e il pulsante d invio e diventato stop. Prima di questa cura quella riga sarebbe rimasta «conclusa» per tutto il giro. |
+| 02-durante-20s.png | Poco dopo, a giro finito: la riga e tornata «conclusa» e il conteggio e salito. Nessuno stato rimasto appeso. |
+| 03-dopo.png | Lo stato finale, coerente con la barra in fondo alla chat. |
+| 02-durante-4s.png | Scattata a giro appena concluso (il modello ha risposto «ok» alle 13:18, primo token 1,8 s): la riga e gia tornata «conclusa · 4 giri». ⛔ Il nome della foto e fuorviante — dice 4s ma il campionamento e a 300 ms, quindi e il quarto campione, +1,2 s. Utile lo stesso: mostra che alla fine del giro nessuno stato resta appeso, e che la Finestra del contesto dice «8,2k · 0,6%» invece dei trattini. |
+| 02-durante-10s.png | Il decimo campione (+3 s), a giro finito da un pezzo: tutto fermo e coerente — riga «conclusa», piede «32,9k token · 4 giri · cache 14% · primo token 1,8 s», Indice dei giri che cresce. Nessun residuo di «in corso». |
+
+⛔ Il difetto che ha trovato il GIRO VERO, e che 578 prove verdi non vedevano: al primo giro la riga
+diceva «16 giri» a meta corsa e «3 giri» alla fine, sulla stessa sessione. Usavo `runCount`, che conta
+i RunStarted visti dalla PAGINA (replay compresi) e non i giri della sessione. Curato leggendo dalla
+stessa fonte della riga vera: dopo, 4 → 5, coerente.
