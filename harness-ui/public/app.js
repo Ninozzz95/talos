@@ -12,7 +12,13 @@ var __esm = (fn, res, err) => function __init() {
 function statoProvider(row = {}, prova = null) {
   const esito = prova?.esito, labels = { "in-corso": "Prova in corso…", "non-autorizzato": "Credenziale rifiutata", irraggiungibile: "Non raggiungibile", "non-provabile": "Da configurare", errore: "Prova non riuscita" };
   const conteggio2 = Number.isInteger(prova?.modelli) && prova.modelli >= 0 ? " · " + prova.modelli + " modelli" : "";
-  return { chiave: row.keyConfigured === true ? "Chiave salvata" : row.requiresKey === true ? "Chiave mancante" : "Chiave facoltativa", tempo: row.id !== "huggingface", prova: !prova ? "Mai provato" : esito === "collegato" ? row.id === "huggingface" ? "Profilo raggiunto" : "Servizio raggiunto" + conteggio2 : labels[esito] || "Prova non riuscita", tono: esito === "collegato" ? "success" : ["non-autorizzato", "irraggiungibile", "errore"].includes(esito) ? "danger" : "warning", occupato: esito === "in-corso" };
+  return { chiave: etichettaOrigineChiave(row), tempo: row.id !== "huggingface", prova: !prova ? "Mai provato" : esito === "collegato" ? row.id === "huggingface" ? "Profilo raggiunto" : "Servizio raggiunto" + conteggio2 : labels[esito] || "Prova non riuscita", tono: esito === "collegato" ? "success" : ["non-autorizzato", "irraggiungibile", "errore"].includes(esito) ? "danger" : "warning", occupato: esito === "in-corso" };
+}
+function etichettaOrigineChiave(row = {}) {
+  if (row.origineChiave === "ambiente") return "Chiave dall’ambiente";
+  if (row.origineChiave === "accesso") return "Accesso fatto";
+  if (row.keyConfigured === true) return "Chiave salvata";
+  return row.requiresKey === true ? "Chiave mancante" : "Chiave facoltativa";
 }
 function el(tag, cls, txt) {
   const n = document.createElement(tag);
@@ -80,7 +86,21 @@ function creaProviderCard(row, { aperta = false, prova = null, occupato = false,
   body.id = "provider-body-" + row.id;
   body.hidden = !aperta;
   {
-    body.append(campo(row.keyConfigured ? "Sostituisci la chiave" : row.requiresKey ? "Chiave API" : "Chiave API (facoltativa)", "password", "providerKey", row));
+    const conAccesso = row.supportsOAuth === true;
+    const campoChiave = campo(row.keyConfigured ? "Sostituisci la chiave" : row.requiresKey ? "Chiave API" : "Chiave API (facoltativa)", "password", "providerKey", row);
+    if (conAccesso) {
+      const accedi = button("oauth-start", row.origineChiave === "accesso" ? "Rifai l’accesso" : "Accedi con " + (row.label || row.id), "primary");
+      accedi.classList.add("talos-provider__accedi");
+      body.append(accedi);
+      const nota = el("p", "talos-muted", row.origineChiave === "ambiente" ? "Adesso vale la chiave impostata fuori da TALOS: finché c’è, l’accesso non viene usato." : "Si apre il sito del fornitore: la password non passa da TALOS, e alla fine torna una chiave.");
+      body.append(nota);
+      const oppure = document.createElement("details");
+      oppure.className = "talos-provider__oppure";
+      const riassunto = document.createElement("summary");
+      riassunto.textContent = "Oppure incolla una chiave";
+      oppure.append(riassunto, campoChiave);
+      body.append(oppure);
+    } else body.append(campoChiave);
     if (row.supportsEndpoint) body.append(campo("Indirizzo del servizio", "url", "providerEndpoint", row, row.endpoint || ""));
     if (d.tempo) body.append(campo("Tempo massimo (secondi)", "number", "providerTimeout", row, String(row.timeoutSeconds ?? 60)));
     const actions = el("div", "talos-cluster");

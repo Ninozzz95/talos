@@ -146,6 +146,9 @@ function writeRuntimePreferences(runtimeFile, runtimes) {
  */
 export function createProviderCredentialStore({ env = process.env, keyring = null, runtimeFile = null, logger = () => {} } = {}) {
   const keys = new Map();
+  /* ⛔ PO-01 — i provider la cui chiave viene dal PORTACHIAVI. Senza questo insieme l'origine si
+     potrebbe solo indovinare, perché `keys` non ricorda da dove è arrivato ogni valore. */
+  const daPortachiavi = new Set();
   const runtimes = new Map();
   for (const provider of PROVIDER_IDS) {
     const definition = PROVIDER_DEFINITIONS[provider];
@@ -176,12 +179,14 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     if (normalized.length > MAX_KEY_LENGTH) throw new ProviderCredentialError('PROVIDER_KEY_INVALID');
     keyringOperation('set', provider, normalized);
     keys.set(provider, normalized);
+    daPortachiavi.add(provider); // appena salvata lì: l'accesso e il campo «incolla» finiscono nello stesso posto
     return { provider, keyConfigured: true };
   }
   function clearKey(provider) {
     requireProvider(provider);
     keyringOperation('remove', provider);
     keys.delete(provider);
+    daPortachiavi.delete(provider);
     return { provider, keyConfigured: false };
   }
   function loadFromKeyring() {
@@ -190,7 +195,7 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     for (const provider of PROVIDER_IDS) {
       try {
         const value = keyring.get(KEYRING_SERVICE, provider);
-        if (typeof value === 'string' && value.trim() !== '' && value.length <= MAX_KEY_LENGTH) { keys.set(provider, value.trim()); loaded += 1; }
+        if (typeof value === 'string' && value.trim() !== '' && value.length <= MAX_KEY_LENGTH) { keys.set(provider, value.trim()); daPortachiavi.add(provider); loaded += 1; }
       } catch { noSecretLogger(logger, `Chiave ${provider} non leggibile dal portachiavi`); }
     }
     return { loaded, available: true };
@@ -240,6 +245,19 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
         endpointConfigured: runtime.endpointConfigured,
         timeoutSeconds: runtime.timeoutSeconds,
         execution: definition.execution,
+        /*
+         * ⛔ PO-01 (10/09) — la guardia della UI: il pulsante «Accedi con …» compare solo dove il
+         *   server sa servire il flusso. Un pulsante che apre un accesso inesistente è peggio di
+         *   nessun pulsante.
+         */
+        supportsOAuth: provider === 'openrouter',
+        /*
+         * ⛔ Da DOVE viene la chiave in uso. Il portachiavi VINCE sull'ambiente (l'ambiente semina
+         *   la mappa alla partenza, `loadFromKeyring` la sovrascrive), e questo campo lo dice
+         *   invece di lasciarlo scoprire: senza, «Rimuovi chiave» sembra rotto quando la chiave
+         *   dall'ambiente continua a funzionare dopo.
+         */
+        origineChiave: daPortachiavi.has(provider) ? 'custodia' : (hasKey(provider) ? 'ambiente' : null),
       };
     });
   }

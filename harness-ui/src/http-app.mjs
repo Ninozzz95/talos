@@ -11,6 +11,7 @@ import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
 import { getDiagnosticProblem, toPublicProblem } from './public-problem.mjs';
 import { createSseSession } from './http-lifecycle.mjs';
+import { creaRegistroAttese, ritornoDaHost, scambiaCodicePerChiave } from './openrouter-oauth.mjs'; // PO-01 10/9: i conti dell'accesso a OpenRouter, puri e provabili senza rete
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
@@ -120,6 +121,17 @@ const API_ERROR_CODES = new Set([
   'MODEL_NOT_READY', 'MODEL_HEADER_INVALID', 'MODEL_HEADER_UNREADABLE', 'RUNTIME_PROBE_FAILED', 'FIT_INVALID', 'LOCAL_RUNTIME_PROBE_MISCONFIGURED',
   /* ⭐ 02/9 — stesso probe, qualify(): un giro di generazione reale, consenso esplicito obbligatorio. */
   'PROBE_CONSENT_REQUIRED', 'PROBE_GENERATION_FAILED', 'PROBE_GENERATION_INCOMPLETE', 'MODEL_NOT_COMPATIBLE',
+  /*
+   * ⭐⭐⭐ PO-01 (10/9) — l'accesso a OpenRouter senza incollare una chiave
+   * (`src/openrouter-oauth.mjs`). ⛔ Sette codici e non uno solo: chi legge «non ha funzionato»
+   * non sa se deve riprovare adesso, ricominciare l'accesso da capo o smettere — e sono tre
+   * azioni diverse. ⛔ Ognuno ha la sua riga anche in `STATUS_BY_CODE` qui sotto: la voragine
+   * dell'08/9 (un codice noto senza stato faceva CADERE la risposta) non si rifà oggi.
+   * ⛔ `OAUTH_ATTESA_IGNOTA` è UNO per tre casi — stato mai visto, già usato, scaduto — di
+   *   proposito: distinguerli direbbe a chi bussa se uno stato è mai esistito.
+   */
+  'OAUTH_NON_CONFIGURATO', 'OAUTH_ATTESA_IGNOTA', 'OAUTH_CODICE_MANCANTE',
+  'OAUTH_SCAMBIO_RIFIUTATO', 'OAUTH_RETE', 'OAUTH_RISPOSTA_INATTESA', 'OAUTH_CUSTODIA_FALLITA',
 ]);
 
 const STATUS_BY_CODE = Object.freeze({
@@ -289,6 +301,17 @@ const STATUS_BY_CODE = Object.freeze({
   PROBE_GENERATION_INCOMPLETE: 502,
   /** ⭐ 02/9 — stesso status di MODEL_NOT_READY/SESSION_NOT_READY: il modello esiste ma il suo stato attuale (non compatibile) blocca l'azione. */
   MODEL_NOT_COMPATIBLE: 409,
+  /** ⭐ PO-01 10/9 — senza una funzione di custodia collegata l'accesso non può nemmeno cominciare: è un servizio non configurato, come ogni altro store di questo file. */
+  OAUTH_NON_CONFIGURATO: 503,
+  /** Lo `stato` non è (più) valido: la richiesta è malformata dal punto di vista del server, non un guasto suo. */
+  OAUTH_ATTESA_IGNOTA: 400,
+  OAUTH_CODICE_MANCANTE: 400,
+  /** 502: il guasto è a monte, in OpenRouter o nella strada che ci porta. Non è colpa di chi ha chiesto. */
+  OAUTH_SCAMBIO_RIFIUTATO: 502,
+  OAUTH_RETE: 502,
+  OAUTH_RISPOSTA_INATTESA: 502,
+  /** 500: qui la colpa è nostra davvero — l'accesso è riuscito e non siamo riusciti a metterlo al sicuro. */
+  OAUTH_CUSTODIA_FALLITA: 500,
 });
 
 const MESSAGE_BY_CODE = Object.freeze({
@@ -364,6 +387,18 @@ const MESSAGE_BY_CODE = Object.freeze({
   PROVIDER_STORE_UNAVAILABLE: 'Il portachiavi del computer non è disponibile: controlla Doctor',
   PROVIDER_RUNTIME_INVALID: 'Controlla indirizzo e tempo massimo del provider',
   PROVIDER_RUNTIME_UNAVAILABLE: 'Non è stato possibile salvare le preferenze del provider: controlla Doctor',
+  /*
+   * ⭐⭐⭐ PO-01 (10/9) — le sette frasi dell'accesso a OpenRouter. ⛔ Le legge una PERSONA:
+   * niente nomi tecnici, nessun `code_verifier`, nessuno `state`, nessun numero di stato HTTP.
+   * Ognuna dice COSA FARE, perché il codice più utile è quello che indica la porta aperta.
+   */
+  OAUTH_NON_CONFIGURATO: 'Su questo server non è possibile collegare un account: incolla una chiave nelle Impostazioni',
+  OAUTH_ATTESA_IGNOTA: 'Questa richiesta di collegamento non vale più: ricomincia da «Collega account»',
+  OAUTH_CODICE_MANCANTE: 'Manca il codice di conferma: ricomincia da «Collega account»',
+  OAUTH_SCAMBIO_RIFIUTATO: 'OpenRouter non ha accettato questa conferma: ricomincia da «Collega account»',
+  OAUTH_RETE: 'Non sono riuscito a raggiungere OpenRouter: controlla la connessione e riprova',
+  OAUTH_RISPOSTA_INATTESA: 'OpenRouter ha risposto in un modo che non riconosco: riprova più tardi',
+  OAUTH_CUSTODIA_FALLITA: 'Il collegamento è riuscito ma non sono riuscito a metterlo al sicuro: apri Doctor',
   RUNTIME_NOT_AVAILABLE: 'Runtime locale non disponibile',
   RUNTIME_UNREACHABLE: 'Runtime locale non raggiungibile',
   RUNTIME_OPERATION_UNSUPPORTED: 'Operazione runtime non supportata',
@@ -524,6 +559,47 @@ ok: false,
 error: { code, message: MESSAGE_BY_CODE[code] ?? problem.title, ...problem },
 meta: { schema: API_SCHEMA, generatedAt: generatedAt(clock) },
 };
+}
+
+/*
+ * ⭐⭐⭐ PO-01 (10/9) — LA PAGINA CHE VEDE UNA PERSONA quando il browser rientra da OpenRouter.
+ *
+ * ⛔ Non è una risposta d'API e non deve esserlo: qui non arriva del codice nostro, arriva un
+ *   essere umano che ha appena premuto «Autorizza» su un altro sito e sta guardando una scheda
+ *   del browser. Un JSON a schermo, in quel momento, è un vicolo cieco.
+ * ⛔ Nella pagina NON c'è e non può esserci la chiave: qui dentro non entra mai, per costruzione
+ *   — questa funzione riceve un esito, non un segreto.
+ * ⛔ CSP tutta chiusa (`default-src 'none'`) e lo stile legato a un nonce nuovo a ogni risposta:
+ *   nessuno script, nessuna immagine, nessuna connessione in uscita. La pagina è un cartello.
+ * ⛔ `Referrer-Policy: no-referrer` sta già in SECURITY_HEADERS ed è dirimente proprio qui:
+ *   l'indirizzo di questa pagina contiene il codice di autorizzazione, e senza quell'intestazione
+ *   finirebbe nel campo Referer di qualunque cosa la pagina caricasse.
+ */
+function paginaRitornoOpenRouter(res, method, problema) {
+  const nonce = randomBytes(16).toString('base64');
+  const titolo = problema ? 'Non sono riuscito a collegare l’account' : 'Account collegato';
+  const frase = problema
+    /* ⛔ Le frasi di MESSAGE_BY_CODE non finiscono con un punto (sono etichette): aggiungerlo qui
+       evita la riga sgrammaticata che si legge a schermo, «ricomincia da «Collega account» Puoi…». */
+    ? `${/[.!?]$/u.test(problema) ? problema : `${problema}.`} Puoi chiudere questa scheda e riprovare da TALOS.`
+    : 'Il tuo account OpenRouter è collegato a TALOS. Puoi chiudere questa scheda e tornare all’app.';
+  const html = '<!doctype html><html lang="it"><head><meta charset="utf-8">'
+    + '<meta name="viewport" content="width=device-width, initial-scale=1">'
+    + `<title>${titolo}</title>`
+    + `<style nonce="${nonce}">`
+    + ':root{color-scheme:light dark}'
+    + 'body{margin:0;min-height:100vh;display:grid;place-items:center;'
+    + 'font:16px/1.55 system-ui,-apple-system,sans-serif;background:#0f1115;color:#e8eaed}'
+    + '@media (prefers-color-scheme: light){body{background:#f6f7f9;color:#1b1d21}}'
+    + 'main{max-width:34rem;padding:2.5rem 1.5rem;text-align:center}'
+    + 'h1{font-size:1.4rem;margin:0 0 .75rem;font-weight:650}'
+    + 'p{margin:0;opacity:.82}'
+    + '</style></head><body><main>'
+    + `<h1>${titolo}</h1><p>${frase}</p>`
+    + '</main></body></html>';
+  send(res, problema ? 400 : 200, 'text/html; charset=utf-8', html, method, {
+    'Content-Security-Policy': `default-src 'none'; style-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+  });
 }
 
 function sendJson(res, statusCode, value, method, extraHeaders) {
@@ -770,6 +846,19 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge\/([^/]+)\/enable$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/mcp\/([^/]+)\/trust$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/plugins\/([^/]+)\/trust$/, metodi: ['POST'] },
+  /*
+   * ⭐⭐⭐ PO-01 (10/9) — le tre porte dell'accesso a OpenRouter.
+   * ⛔ `ritorno` è dichiarato in DUE forme perché ne serve una sola, ma quale dipende da
+   *   OpenRouter: lo `stato` viaggia nel PERCORSO (`/ritorno/<stato>`) perché la documentazione
+   *   di OpenRouter, riletta il 10/09/2026 cercandolo apposta, NON nomina mai un parametro
+   *   `state` — lo promette solo un annuncio su X del 28/04/2025, che non è un contratto. La
+   *   forma corta con `?state=` resta aperta come ripiego: se un giorno la documentassero non
+   *   ci sarebbe niente da cambiare, e intanto è la forma che una persona incolla a mano.
+   */
+  { schema: '/api/v1/auth/openrouter/inizia', metodi: ['POST'] },
+  { schema: '/api/v1/auth/openrouter/codice', metodi: ['POST'] },
+  { schema: '/api/v1/auth/openrouter/ritorno', metodi: ['GET'] },
+  { schema: /^\/api\/v1\/auth\/openrouter\/ritorno\/([^/]+)$/u, metodi: ['GET'] },
 ]);
 
 /**
@@ -1377,6 +1466,24 @@ export function createHttpApp({
   providerProbe = null,
   // ⛔⛔⛔ 28/8 — iniettabili SOLO per il test del battito SSE sotto: mai un setInterval reale nei test unitari, stesso principio di ogni altra dipendenza di questo file.
   impostaIntervalloFn = setInterval, cancellaIntervalloFn = clearInterval,
+  /*
+   * ⭐⭐⭐ PO-01 (10/9) — ACCESSO A OPENROUTER, le tre dipendenze.
+   *
+   * ⛔ `custodisciChiaveOpenRouter(chiave)` è l'UNICO posto in cui la chiave ottenuta va a
+   *   finire. Questo file non la scrive su disco, non la mette in un log, non la rimanda
+   *   indietro in una risposta e non la nomina in nessun errore: la passa e la dimentica. Se non
+   *   è collegata, le rotte rispondono OAUTH_NON_CONFIGURATO invece di cominciare un accesso che
+   *   non avrebbe dove finire — stesso principio di ogni altro store facoltativo di questo file.
+   * ⛔ `registroOAuthOpenRouter` tiene i verificatori in attesa SOLO in memoria e SOLO in questo
+   *   processo (vedi `src/openrouter-oauth.mjs`): un verificatore su disco sarebbe un segreto
+   *   scritto per dieci minuti e lasciato lì per sempre.
+   * ⛔ `fetchOpenRouterFn` è separato da `fetchFn` (che serve la cornice del Browser) apposta:
+   *   una prova che finge OpenRouter non deve poter cambiare, per sbaglio, il comportamento di
+   *   una rotta che non c'entra niente.
+   */
+  custodisciChiaveOpenRouter = null,
+  registroOAuthOpenRouter = creaRegistroAttese(),
+  fetchOpenRouterFn = globalThis.fetch,
 }) {
   async function imageInput(body) {
     if (!body || !Object.hasOwn(body, 'immagini')) return { body, immagini: [] };
@@ -1459,9 +1566,138 @@ export function createHttpApp({
         }
         return;
       }
-      if (url.pathname.startsWith('/api/') && leggiCookie(req, 'talos_token') !== token) {
+      /*
+       * ⛔⛔⛔ PO-01 (10/9) — L'UNICA ROTTA ESENTE DAL COOKIE, E NON È UNA SCORCIATOIA.
+       *
+       * Il cookie `talos_token` è impostato `SameSite=Strict`. MDN «Set-Cookie», letta il
+       * 10/09/2026 PRIMA di scrivere questa riga: «Strict — send the cookie only for requests
+       * originating from the same site that set the cookie», senza nessuna eccezione per le
+       * navigazioni di primo livello. Il rientro da `openrouter.ai` È una navigazione di primo
+       * livello cross-site ⇒ il browser NON manda il cookie, e senza questa esenzione ogni
+       * accesso finirebbe su un 401 — cioè la funzione non potrebbe funzionare mai, sulla
+       * macchina dell'owner, che il token ce l'ha sempre.
+       *
+       * ⛔ La via che NON si prende: abbassare il cookie a `SameSite=Lax` (che sulle navigazioni
+       *   GET di primo livello viaggia, stessa fonte). Sarebbe indebolire OGNI rotta dell'API per
+       *   farne funzionare una.
+       * ⛔ L'altra via che NON si prende: mettere il token dentro il `callback_url`. Quel valore
+       *   viene consegnato a OpenRouter, che lo conserva e lo rimanda: il segreto di casa
+       *   finirebbe nei registri di qualcun altro.
+       * ⇒ Qui la difesa non è il cookie ed è più stretta: la rotta non fa NIENTE senza uno
+       *   `stato` opaco da 32 byte di caso, a uso singolo, vivo dieci minuti, che questo processo
+       *   ha generato un istante prima. Chi non ce l'ha ottiene un rifiuto che non dice nemmeno
+       *   se quello stato sia mai esistito.
+       */
+      const rientroOAuth = method === 'GET' && url.pathname.startsWith('/api/v1/auth/openrouter/ritorno');
+      if (!rientroOAuth && url.pathname.startsWith('/api/') && leggiCookie(req, 'talos_token') !== token) {
         sendJson(res, 401, errorEnvelope('AUTH_REQUIRED', clock), method);
         return;
+      }
+    }
+
+    /*
+     * ⭐⭐⭐ PO-01 (10/9) — ACCEDERE A OPENROUTER SENZA INCOLLARE UNA CHIAVE.
+     *
+     * Owner: «nella fase oauth aggiungi anche oauth openrouter, è già stato fatto nel mobile».
+     * Fino a oggi la chiave OpenRouter aveva UNA sola porta d'ingresso su questo desktop:
+     * `env.OPENROUTER_API_KEY` (`src/config.mjs:537`). I conti stanno tutti in
+     * `src/openrouter-oauth.mjs`, con le fonti e le date; qui c'è solo il traffico.
+     *
+     * Tre porte, e la terza non è un lusso:
+     *  · `POST .../inizia`  — genera la coppia PKCE, la lega a uno `stato` opaco, restituisce
+     *                        l'indirizzo da aprire nel browser DI SISTEMA (la password di
+     *                        OpenRouter non attraversa mai il nostro processo);
+     *  · `GET  .../ritorno` — il browser rientra qui, si scambia, si custodisce, e si risponde
+     *                        una PAGINA a una persona;
+     *  · `POST .../codice`  — la modalità senza rientro: OpenRouter mostra il codice a schermo e
+     *                        la persona lo incolla. ⛔ Serve davvero: TALOS gira su un server, e
+     *                        chi lo usa via SSH o da un'altra macchina non ha nessun `127.0.0.1`
+     *                        raggiungibile — senza questa strada non potrebbe accedere MAI.
+     *
+     * ⛔ Il verificatore non esce da questo processo, in nessuna delle tre. Non compare in una
+     *   risposta, in un errore o in un log: l'unica cosa che la persona vede è lo `stato`, che
+     *   è 32 byte di caso e non significa niente.
+     */
+    if (url.pathname.startsWith('/api/v1/auth/openrouter/')) {
+      const ritornoOAuth = method === 'GET' && /^\/api\/v1\/auth\/openrouter\/ritorno(?:\/([^/]+))?$/u.exec(url.pathname);
+      const iniziaOAuth = method === 'POST' && url.pathname === '/api/v1/auth/openrouter/inizia';
+      const codiceOAuth = method === 'POST' && url.pathname === '/api/v1/auth/openrouter/codice';
+      if (ritornoOAuth || iniziaOAuth || codiceOAuth) {
+        /*
+         * ⛔ La chiave attraversa QUESTA funzione e nient'altro. Non torna a chi ha chiamato,
+         *   non entra in `errorEnvelope`, non entra nel registro diagnostico: va alla custodia e
+         *   sparisce. Anche il guasto della custodia viene RISCRITTO da capo, perché il messaggio
+         *   di un portachiavi che fallisce è esattamente il posto in cui un segreto può finire
+         *   per sbaglio.
+         */
+        const concludiAccessoOpenRouter = async (stato, codice) => {
+          if (typeof codice !== 'string' || codice.trim() === '') {
+            const errore = new Error('Manca il codice di conferma'); errore.code = 'OAUTH_CODICE_MANCANTE'; throw errore;
+          }
+          /* ⛔ Il codice si controlla PRIMA di consumare lo stato: una richiesta a metà non deve
+             bruciare un accesso che la persona può ancora concludere. */
+          const { verifier } = registroOAuthOpenRouter.consuma(stato);
+          const { chiave } = await scambiaCodicePerChiave({ codice, verifier, fetchDiRete: fetchOpenRouterFn });
+          try {
+            await custodisciChiaveOpenRouter(chiave);
+          } catch {
+            const errore = new Error('Chiave non messa al sicuro'); errore.code = 'OAUTH_CUSTODIA_FALLITA'; throw errore;
+          }
+        };
+        try {
+          if (typeof custodisciChiaveOpenRouter !== 'function') {
+            const errore = new Error('Custodia delle chiavi non collegata'); errore.code = 'OAUTH_NON_CONFIGURATO'; throw errore;
+          }
+          if (iniziaOAuth) {
+            requireNoQuery(url);
+            const corpo = await leggiCorpoJson(req, 1024);
+            /*
+             * `senzaRitorno: true` forza la modalità «codice a schermo» anche da locale (è la via
+             * per chi apre TALOS da un'altra macchina). Senza il flag si prova il rientro
+             * automatico, che però esiste solo se l'`Host` con cui la richiesta è arrivata è di
+             * loopback: `ritornoDaHost` restituisce `null` per tutto il resto, e allora si ricade
+             * sulla modalità a schermo invece di promettere un rientro impossibile.
+             */
+            const senzaRitorno = corpo && typeof corpo === 'object' && corpo.senzaRitorno === true;
+            const apertura = registroOAuthOpenRouter.apri({
+              costruisciRitorno: senzaRitorno ? null : (stato) => ritornoDaHost(req.headers.host, stato),
+            });
+            sendJson(res, 200, successEnvelope(apertura, clock), method);
+            return;
+          }
+          if (codiceOAuth) {
+            requireNoQuery(url);
+            const corpo = await leggiCorpoJson(req, 4096);
+            const stato = corpo && typeof corpo.stato === 'string' ? corpo.stato : '';
+            const codice = corpo && typeof corpo.codice === 'string' ? corpo.codice : '';
+            await concludiAccessoOpenRouter(stato, codice);
+            /* ⛔ `custodita: true` e nient'altro: chi ha chiamato non ha bisogno di rivedere la chiave. */
+            sendJson(res, 200, successEnvelope({ custodita: true }, clock), method);
+            return;
+          }
+          /*
+           * Il rientro dal browser. Lo `stato` sta nel PERCORSO (è la forma che `inizia`
+           * costruisce, e nessuna implementazione può perdere un pezzo del proprio indirizzo);
+           * `?state=` e `?stato=` restano accettati come ripiego — vedi la nota nell'inventario
+           * delle rotte. Gli altri parametri della query si ignorano: la lunghezza totale è già
+           * limitata da MAX_REQUEST_TARGET_BYTES, e rifiutare un parametro in più aggiunto un
+           * domani da OpenRouter romperebbe l'accesso di tutti per una regola che non protegge
+           * niente — la difesa è lo `stato`, non l'assenza di rumore.
+           */
+          const statoDelRientro = ritornoOAuth[1]
+            ? decodeURIComponent(ritornoOAuth[1])
+            : (url.searchParams.get('state') ?? url.searchParams.get('stato') ?? '');
+          await concludiAccessoOpenRouter(statoDelRientro, url.searchParams.get('code') ?? '');
+          paginaRitornoOpenRouter(res, method, null);
+          return;
+        } catch (error) {
+          const normalized = normalizeError(error);
+          /* ⛔ Al rientro dal browser risponde una PAGINA anche il guasto: chi sta guardando è una
+             persona, e un JSON di errore la lascerebbe davanti a un muro senza uscita. */
+          if (ritornoOAuth) { paginaRitornoOpenRouter(res, method, MESSAGE_BY_CODE[normalized.code] ?? null); return; }
+          sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+          return;
+        }
       }
     }
 
