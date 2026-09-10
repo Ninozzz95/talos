@@ -146,3 +146,25 @@ test('P-13: due cartelle diverse hanno due elenchi diversi, e non si scambiano',
   assert.equal(aDiNuovo.testo, a.testo, 'la seconda cartella non ha sporcato la prima');
   assert.equal(aDiNuovo.riusato, true);
 });
+
+/*
+ * ⛔⛔ IL BUG CHE QUESTO CATCH HA GIÀ NASCOSTO UNA VOLTA (10/09).
+ *
+ * `agent-service.mjs` passava la cartella NUDA a `creaFiltroGitignore`, che vuole `{radice}`. Node
+ * lanciava ERR_INVALID_ARG_TYPE, il catch qui sopra lo scambiava per un file di regole illeggibile,
+ * e l'elenco usciva SENZA FILTRO: 1500 percorsi troncati e 25.163 token invece di 629 e 6.518 —
+ * quattro volte il costo, con dentro i file di log, e nessun errore da nessuna parte.
+ * ⇒ Un `.gitignore` illeggibile si degrada in silenzio; un errore di CONTRATTO deve farsi sentire.
+ */
+test('P-13, AL CONTRARIO: un errore di CONTRATTO non si degrada in silenzio', async () => {
+  const deps = { fs: fsFinto(ALBERO) };
+  await assert.rejects(
+    () => contestoDelProgetto({
+      cartella: 'radice',
+      creaFiltro: async () => { const e = new TypeError('radice non è una stringa'); e.code = 'ERR_INVALID_ARG_TYPE'; throw e; },
+      deps,
+    }),
+    /radice/,
+    '⛔ inghiottire questo errore è come è nato il difetto da 25.163 token',
+  );
+});

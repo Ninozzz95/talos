@@ -75,7 +75,20 @@ export async function contestoDelProgetto({ cartella, creaFiltro, contatore, fin
     /* ⛔ Un `.gitignore` illeggibile non deve far sparire l'elenco: si procede senza filtro, e il
        modello vede QUALCHE file in più. Il contrario — nessun elenco per colpa di un file di regole
        — sarebbe rifare il difetto che stiamo curando. */
-    try { filtro = await creaFiltro(cartella); } catch { filtro = undefined; }
+    /*
+     * ⛔⛔ QUESTO CATCH HA GIÀ NASCOSTO UN BUG, il 10/09: il chiamante passava la stringa nuda a
+     *   `creaFiltroGitignore`, che vuole `{radice}`; Node lanciava ERR_INVALID_ARG_TYPE e qui
+     *   veniva scambiato per un file di regole illeggibile — elenco senza filtro, 1500 percorsi
+     *   troncati e 25.163 token al posto di ~6.500, e nessun errore da nessuna parte.
+     * ⇒ Un `.gitignore` illeggibile si degrada in silenzio (giusto: il modello vede qualche file
+     *   in più). Un errore di CONTRATTO no: quello è un bug di chi chiama, e deve farsi sentire.
+     */
+    try {
+      filtro = await creaFiltro(cartella);
+    } catch (errore) {
+      if (errore?.code === 'ERR_INVALID_ARG_TYPE' || errore instanceof TypeError) throw errore;
+      filtro = undefined;
+    }
     /*
      * L'ADATTATORE FRA I DUE CONTRATTI — e la sua storia, perché è istruttiva.
      *   Il camminatore chiama `filtro(percorso, { cartella })` — un OGGETTO (`elenco-profondo.mjs:212`).

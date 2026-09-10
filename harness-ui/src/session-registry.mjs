@@ -27,6 +27,7 @@ import { randomUUID } from 'node:crypto';
 import { parse as parsePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { segnalaFileCambiati } from './contesto-del-progetto.mjs'; // P-13 (10/09): l'elenco si rifà quando i file cambiano davvero
 import {
   avviaSessione as avviaSessioneReale,
   compattaSessione as compattaSessioneReale,
@@ -1068,6 +1069,12 @@ export function metricheDaEventi(eventi, { istanti = null, adesso = null } = {})
 
 export function createSessionRegistry({
   avviaSessioneFn = avviaSessioneReale,
+  /*
+   * P-13 (10/09): qui resta SOLO l'invalidazione. L'elenco lo costruisce `agent-service.mjs`, fra
+   * RunStarted e talosLavora — dentro `avviaESegui` non si può, e non è un'opinione: un tick di
+   * ritardo lì fa cadere 148 test, perché chi chiama conta su RunStarted già nel buffer.
+   */
+  segnalaFileCambiatiFn = segnalaFileCambiati,
   // 06/9: la delega rifiuta una cartella che non esiste (il percorso in forma WSL che il modello
   // inventava per aggirare il vecchio divieto). Iniettabile: le prove costruiscono cartelle finte.
   cartellaEsisteFn = esisteCartella,
@@ -1671,6 +1678,10 @@ export function createSessionRegistry({
      * poter essere recuperato dal disco anche dopo il riavvio del server.
      */
     const effimero = evento.type === 'WorkspaceChanged';
+    /* ⛔ P-13 — i file sono cambiati davvero: il prossimo giro ricostruirà l'elenco. Si chiama
+       SOLO da qui, cioè quando il disco cambia: farlo a ogni evento annullerebbe la cache e con
+       essa tutto il vantaggio, riportando l'elenco a costare pieno ogni volta. */
+    if (effimero && voce.cartella) segnalaFileCambiatiFn(voce.cartella);
     if (!effimero) evento._sequenza = (voce.prossimaSequenza = (voce.prossimaSequenza ?? 0) + 1);
     if (!effimero) voce.eventi.push(evento);
     /*
