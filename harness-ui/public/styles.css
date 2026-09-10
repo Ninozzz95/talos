@@ -10286,4 +10286,45 @@ dialog.command-dialog .tool-chips .status-chip,
   }
 }
 
+/* src/styles/attesa-shimmer.css */
+.talos-waiting .talos-line-loader {
+  display: none;
+}
+.talos-waiting__label {
+  background-image:
+    linear-gradient(
+      100deg,
+      var(--talos-muted) 0%,
+      var(--talos-muted) 38%,
+      var(--talos-accent-hover) 50%,
+      var(--talos-muted) 62%,
+      var(--talos-muted) 100%);
+  background-size: 220% 100%;
+  background-position: 120% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: talosAttesaShimmer 1.9s linear infinite;
+}
+@keyframes talosAttesaShimmer {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .talos-waiting__label {
+    background-image: none;
+    color: var(--talos-muted);
+    animation: none;
+  }
+}
+body.reduce-motion .talos-waiting__label {
+  background-image: none;
+  color: var(--talos-muted);
+  animation: none !important;
+}
+
 /* src/styles/main.css */

@@ -4,7 +4,8 @@
 @import './immagini-chat.css';
 @import './diff-in-chat.css';
 @import './uscita-viva.css';
-@import './modalita-shell.css'; /* il composer dice quando sei in shell libera */ /* D-10B: l'uscita di un comando mentre esce */
+@import './modalita-shell.css';
+@import './attesa-shimmer.css'; /* 10/09: l'attesa si vede sulla riga, il segnavia e' nascosto */ /* il composer dice quando sei in shell libera */ /* D-10B: l'uscita di un comando mentre esce */
 /*
  * ⛔⛔⛔ 10/09, RIPRISTINO IMMEDIATO — `temi.css` e `aspetto.css` sono STACCATI.
  *   Appena importati, l'owner ha visto il fondo dell'app diventare VERDE mentre lo guardava. I due

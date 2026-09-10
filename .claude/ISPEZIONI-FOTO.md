@@ -799,3 +799,24 @@ Il tema è quello di sempre: **niente verde**.
 lo chieda. Staccati subito — `data-talos-theme` nel CSS servito è tornato a **0** — e il lavoro resta
 nel repo, non importato, finché la causa non è misurata. Un server rotto davanti a chi lo usa si
 ripara prima e si indaga dopo.
+
+## 10/09, notte fonda — l'attesa passa dal segnavia alla RIGA
+
+Owner, dopo sei tentativi sul segnavia: «il logo della crocevia non funziona, per adesso
+nascondiamolo e mettiamo nella riga accanto uno shimmer da sinistra a destra… ma dopo, per adesso ho
+i coglioni girati». Poi, a scanso di equivoci: «parlo della riga TALOS sta elaborando la risposta».
+
+Misurato sul CSS che il 4174 serve davvero, montando un `.talos-waiting__label` nella pagina:
+· segnavia `display: none` → **nascosto**;
+· animazione sulla riga: **`talosAttesaShimmer`**;
+· `background-position`: **12 valori distinti su 12 letture** (120% → 110,5% → 101%…);
+· colore del testo `rgba(0,0,0,0)` — il gradiente dipinge DENTRO le lettere, non accanto.
+
+⛔ Perché questa ha una probabilità che il segnavia non aveva, e non è un'opinione: il segnavia
+occupa 48×8 = 864 pixel e ne cambiava **11,6 per fotogramma (1,3%)**. La riga è larga quanto la
+conversazione, e il gradiente ne attraversa centinaia — sulla superficie che l'occhio sta già
+leggendo, perché lì ci sono le parole. Non è un segnale più bello: è più grande, e dove si guarda.
+⛔ Il segnavia è NASCOSTO, non cancellato: SMIL, motore di riserva e ripiego restano nel codice e
+tornano con una riga di CSS quando si riprogetta il grafo. E il ripiego dello shimmer è scritto
+PRIMA stavolta: con le animazioni spente il testo torna pieno, perché un testo `transparent` senza
+gradiente in movimento sarebbe invisibile — lo stesso modo in cui il segnavia era «sparito».
