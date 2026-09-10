@@ -1,0 +1,231 @@
+/*
+ * ⭐⭐⭐ LO SFONDO ANIMATO, E OGNI ALTRO COMANDO DI ASPETTO CHE NON FACEVA NIENTE
+ *   Owner 10/09/2026: «e anche i BG animati, fai in modo che qualunque impostazione di aspetto sia
+ *   funzionante al 100 percento».
+ *
+ * ⛔ MISURATO PRIMA DI SCRIVERE (banco su una copia costruita, porta 5210 — mai il 4174). Ogni
+ *   comando della schermata Impostazioni cambiato davvero dalla UI, e fotografato lo schermo intero
+ *   (1440×900 = 1.296.000 pixel) prima e dopo:
+ *     · `colorMode` ......... 1.276.583 pixel cambiati — funzionava;
+ *     · `uiFontScale` ....... 52.445;  `composerShape` 6.107;  `uiDensity` 2.048;  `immersiveHeader` 824;
+ *     · `themePreset` ....... 134 (solo il testo del `<select>`);
+ *     · **ventisei comandi su trentanove: ZERO pixel.**
+ *   E alla fonte: nel foglio costruito (240 KB) `--talos-motion-intensity`, `--talos-motion-glow`,
+ *   `--talos-motion-density`, `--talos-motion-depth`, `--talos-motion-trails`,
+ *   `--talos-motion-contrast`, `--talos-motion-parallax`, `--talos-motion-speed`,
+ *   `--talos-background-cycle`, `--talos-motion-stagger`, `--talos-motion-ui-intensity` comparivano
+ *   **0 volte ciascuna**, e così `background-motion-active`, `background-motion-paused`,
+ *   `background-motion-off`, `interface-motion-off`, `data-talos-motion-quality`,
+ *   `data-talos-streaming-animation`, `data-talos-window-presentation`. Il JavaScript le calcolava
+ *   tutte, a ogni cambio, da mesi: **non esisteva nessuno sfondo su cui cadessero.**
+ *
+ * ⇒ Qui nasce la scena, e ogni cursore di quel pannello ne governa una proprietà misurabile. Nessun
+ *   colore nuovo: la scena è fatta con l'accento e il fondo del tema in corso, quindi cambia da sola
+ *   quando cambia il tema. All'intensità di serie (20) è una presenza appena percepibile — è uno
+ *   sfondo, non un effetto.
+ *
+ * Ricerca 10/09/2026, prima di scrivere:
+ *   · tryhoverify.com «I wish I had known this sooner about CSS gradient performance» e
+ *     instantgradient.com «Animated Gradient Backgrounds: When to Use Them»: si animano SOLO
+ *     proprietà da compositor (`transform`, `opacity`), mai `background-color`, `filter`, `width`,
+ *     `top`; durate lunghe (8-20 s) per uno sfondo. Qui i gradienti sono statici e si muove solo un
+ *     `transform` — e il ciclo di serie è 36 s. ⛔ Conta doppio su questo prodotto: il Chrome
+ *     dell'owner ha l'accelerazione hardware DISATTIVATA (misurato il 02/09: 6,1 ms → 109 ms per
+ *     fotogramma), e una scena che ridipinge a ogni frame lì sarebbe insostenibile.
+ *   · «About 5 to 10 percent of users have reduced-motion turned on … showing them a
+ *     constantly-shifting gradient is a real accessibility failure» ⇒ con `prefers-reduced-motion`
+ *     la scena resta, ferma. Non sparisce: sparire cambierebbe la stanza a chi ha chiesto meno moto.
+ */
+
+/* ---------- 0. Il colore della pagina passa a `html` ----------
+   ⛔ Serve perché la scena vive a `z-index:-1`: sopra lo sfondo del CANVAS, sotto tutto il
+   contenuto. Finché il fondo lo dichiarava `body`, quel colore veniva propagato al canvas e la
+   scena ci finiva SOTTO — invisibile. Dandolo a `html`, `body` torna un elemento come gli altri e
+   può farsi trasparente quando la scena è accesa. Nessun pixel cambia quando la scena è spenta. */
+html { background: var(--talos-background); }
+
+/* ---------- 1. LA SCENA ----------
+   ⛔ La TINTA della scena si dichiara qui una volta sola, e cambia con la luce della stanza.
+   Misurato: con la stessa tinta in tutte e due le modalità, accendere e spegnere lo sfondo cambiava
+   **81.102 pixel (6,3%) in Calm scuro** e **850 pixel (0,1%) in Calm chiaro** — cioè in chiaro era di
+   nuovo invisibile, lo stesso difetto appena curato. Un oro al 22% sopra la crema non si vede: in
+   chiaro la tinta va verso l'inchiostro, e la macchia SCURISCE invece di schiarire. */
+:root { --talos-scena-tinta: var(--talos-scena-accento, var(--talos-accent)); }
+:root[data-theme="light"] { --talos-scena-tinta: color-mix(in srgb, var(--talos-scena-accento, var(--talos-accent)) 58%, #241f19); }
+
+/*
+ * ⛔⛔⛔ LA SCENA NON ESISTE FINCHÉ LA APP NON LA DICHIARA — trovato dal cancello di parità, non da me.
+ *   La prima stesura la mostrava con `body:not(.background-motion-off)`, cioè per DIFETTO: bastava
+ *   una pagina che carica questo foglio senza far girare `app.js` (il laboratorio dei componenti, che
+ *   confronta ogni componente col mockup) e lo sfondo compariva lì dentro. Misura del cancello:
+ *   **82 prove rosse su 144**, con differenze di pixel su componenti che non c'entrano niente
+ *   (`comp-RuntimeCard` 1.486 pixel, `comp-MemoryMeter` 3.459, `comp-FonteRicerca` 2.317).
+ * ⇒ Si parte SPENTA e si accende solo su un marcatore che scrive `avviaBackgroundDesktop()`:
+ *   `background-motion-active` (viva) o `background-motion-paused` (presente ma ferma — è lo stato di
+ *   `motionMode: static`, della finestra nascosta e del risparmio dati). Nessuna delle due c'è se
+ *   nessuno ha applicato le preferenze.
+ */
+body::before,
+body::after {
+  display: none;
+  content: '';
+  position: fixed;
+  /* Debordare del 18% è ciò che permette al `translate` del parallasse di non scoprire mai un bordo. */
+  inset: -18%;
+  z-index: -1;
+  pointer-events: none;
+  background-repeat: no-repeat;
+  /* `motionDensity` (25…150) decide quanto sono larghe le macchie: più densa, più piccole e più fitte. */
+  background-size: calc(190% / var(--talos-motion-density, 1)) calc(190% / var(--talos-motion-density, 1));
+  will-change: transform;
+}
+
+/* Lo strato di fondo: due macchie d'accento agli angoli opposti.
+   `motionContrast` decide quanto l'accento emerge dal fondo; `motionTrails` quanto sfumano i bordi. */
+/*
+ * ⛔ La prima stesura miscelava l'accento col FONDO (`color-mix(… , var(--talos-background))`) e poi
+ *   abbassava l'opacità dello strato: due attenuazioni in fila. Misurato — accendere e spegnere lo
+ *   sfondo ai valori di serie cambiava **820 pixel su 1.296.000 (0,06%)**, cioè niente che un occhio
+ *   possa vedere. Un interruttore che si misura ma non si vede è lo stesso difetto che sto curando.
+ *   ⇒ Si miscela con `transparent`: `motionContrast` diventa l'alfa vera della macchia, e a 0 la
+ *   scena sparisce davvero — che è ciò che quel cursore promette.
+ */
+body::before {
+  background-image:
+    radial-gradient(circle at 22% 28%,
+      color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 100%), transparent) 0%,
+      transparent calc(38% + var(--talos-motion-trails, .5) * 26%)),
+    radial-gradient(circle at 78% 74%,
+      color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 74%), transparent) 0%,
+      transparent calc(34% + var(--talos-motion-trails, .5) * 26%));
+  background-position: 0% 0%, 100% 100%;
+  /* ⛔ Il coefficiente è tarato, non scelto: a 1,6 il fondo di serie (intensità 20) tingeva la
+     colonna della chat in modo che si IMPONEVA, e questa è una superficie di lavoro, non una vetrina.
+     I numeri sotto stanno nel resoconto: si vede, e non si mette davanti al testo. */
+  opacity: calc(var(--talos-motion-intensity, .2) * 1.1);
+  animation: talosScenaDeriva var(--talos-background-cycle, 36000ms) var(--talos-motion-ease, ease-in-out) infinite alternate;
+}
+
+/* Lo strato di luce: `motionGlow` è la sua sola ragione di esistere, e `motionStagger` il ritardo
+   con cui insegue il primo — è letteralmente uno sfasamento, ed è quello che quel cursore dichiara. */
+body::after {
+  background-image:
+    radial-gradient(ellipse at 55% 12%,
+      color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 100%), transparent) 0%,
+      transparent calc(30% + var(--talos-motion-trails, .5) * 30%));
+  background-position: 50% 0%;
+  opacity: calc(var(--talos-motion-glow, .1) * .55);
+  animation: talosScenaLuce var(--talos-background-cycle, 36000ms) var(--talos-motion-ease, ease-in-out) infinite alternate;
+  animation-delay: var(--talos-motion-stagger, 40ms);
+}
+
+/* `motionParallax` è la distanza percorsa (il JS la scrive già in px in `--talos-background-shift-*`),
+   `motionDepth` quanto la scena respira avvicinandosi. Si muove SOLO `transform`. */
+@keyframes talosScenaDeriva {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(var(--talos-background-shift-x, 16px), var(--talos-background-shift-y, 10px), 0)
+                    scale(calc(1 + var(--talos-motion-depth, .92) * .06)); }
+}
+@keyframes talosScenaLuce {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(calc(var(--talos-background-shift-x, 16px) * -1.4), calc(var(--talos-background-shift-y, 10px) * .8), 0)
+                    scale(calc(1 + var(--talos-motion-depth, .92) * .1)); }
+}
+
+/* Perché la scena si veda: la colonna centrale smette di dipingere il proprio fondo.
+   ⛔ Barra laterale e ispettore restano opachi apposta — sono superfici di lavoro, e una lista di
+   sessioni sopra un gradiente in movimento si legge peggio. La scena vive dove c'è aria. */
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off)::before,
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off)::after { display: block; }
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) { background: transparent; }
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) .talos-shell { background: transparent; }
+
+/* Ferma ma presente: è ciò che chiedono `motionMode: static`, «metti in pausa quando la finestra non
+   si vede» e «rispetta il risparmio dati». Prima quelle tre preferenze non avevano niente da fermare. */
+body.background-motion-paused::before,
+body.background-motion-paused::after { animation-play-state: paused; }
+
+/* `motionQuality`: quanto costa la scena. Basso = un solo strato e nessuna luce. */
+:root[data-talos-motion-quality="low"] body::after { display: none; }
+:root[data-talos-motion-quality="low"] body::before { background-image: radial-gradient(circle at 30% 32%, color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 100%), transparent) 0%, transparent 52%); }
+:root[data-talos-motion-quality="high"] body::before { opacity: calc(var(--talos-motion-intensity, .2) * 1.05); }
+:root[data-talos-motion-quality="high"] body::after { opacity: calc(var(--talos-motion-glow, .1) * .85); }
+
+/* `motionMode: simple` — una scena senza secondo strato, ma ancora viva. */
+:root[data-talos-motion-mode="simple"] body::after { display: none; }
+
+/* ⛔ Con «meno movimento» chiesto al SISTEMA la scena non sparisce: si ferma. Toglierla cambierebbe
+   la stanza a chi ha chiesto solo di non vederla muovere (W3C WAI, «prefers-reduced-motion»). */
+@media (prefers-reduced-motion: reduce) {
+  body::before, body::after { animation: none; transform: none; }
+}
+
+/* ---------- 2. L'ENTRATA DEI MESSAGGI ----------
+   `markMotionEnter()` mette la classe `.motion-enter` e la toglie su `animationend`. Misurato: in
+   tutto il foglio non esisteva NESSUNA regola per quella classe fuori dal velo dei dialoghi ⇒
+   l'evento non arrivava mai e la classe restava attaccata per sempre a ogni bolla della chat.
+   Qui la classe fa il suo mestiere, e consuma i due token che nessuno leggeva:
+   `--talos-motion-ui-intensity` (quanto viaggia) e `--talos-motion-duration-message-insert` (quanto dura).
+   ⛔ Solo dentro la conversazione: un'entrata su OGNI pannello è il tic delle interfacce generate. */
+@keyframes talosEntrataMessaggio {
+  from { opacity: 0; transform: translateY(calc(var(--talos-motion-ui-intensity, .65) * 12px)); }
+  to   { opacity: 1; transform: none; }
+}
+#conversation .motion-enter {
+  animation: talosEntrataMessaggio var(--talos-motion-duration-message-insert, 180ms) var(--talos-motion-ease, ease-out) both;
+}
+/* «Movimento dei messaggi» spento, o «movimento dell'interfaccia» spento: l'entrata non c'è. */
+:root.motion-messages-off #conversation .motion-enter,
+:root.interface-motion-off #conversation .motion-enter { animation: none; }
+
+/* ---------- 3. LE SEI LEVE «dove» DEL MOVIMENTO ----------
+   Erano sei interruttori con due sole regole dietro (`motion-windows-off`, `motion-messages-off`,
+   in `foglio-monolite.css`). Le altre quattro non toccavano niente. */
+:root.interface-motion-off *,
+:root.interface-motion-off *::before,
+:root.interface-motion-off *::after { transition-duration: 0s !important; }
+:root.motion-surfaces-off .talos-card,
+:root.motion-surfaces-off .talos-panel,
+:root.motion-surfaces-off .talos-dialog { transition: none !important; }
+:root.motion-navigation-off .talos-nav-item,
+:root.motion-navigation-off .talos-session-item,
+:root.motion-navigation-off .talos-tab { transition: none !important; }
+/* ⛔ «Movimento del composer» era spento e acceso senza differenza per una ragione precisa, misurata:
+   il composer non aveva **nessuna** transizione da togliere — `transitionDuration` calcolata `0s` in
+   tutti e due gli stati. Il fuoco ci arrivava di scatto. Qui il bordo e l'alone del fuoco prendono la
+   durata che il progetto calcolava già e non usava (`--talos-motion-duration-composer-expand`), e
+   l'interruttore ha finalmente qualcosa da spegnere. */
+.talos-composer {
+  transition:
+    border-color var(--talos-motion-duration-composer-expand, 180ms) var(--talos-motion-ease, ease-out),
+    box-shadow var(--talos-motion-duration-composer-expand, 180ms) var(--talos-motion-ease, ease-out);
+}
+:root.motion-composer-off .talos-composer,
+:root.motion-composer-off .talos-composer__input,
+:root.motion-composer-off .talos-composer__bar * { transition: none !important; }
+:root.motion-feedback-off .talos-toast,
+:root.motion-feedback-off .talos-badge,
+:root.motion-feedback-off .talos-button { transition: none !important; }
+
+/* ---------- 4. «Animazione dello streaming»: typewriter o dissolvenza ----------
+   L'attributo `data-talos-streaming-animation` esisteva sulla radice e non lo leggeva nessuno.
+   `typewriter` = il cursore che lampeggia accanto a ciò che TALOS sta scrivendo; `fade` = niente
+   cursore, il testo arriva e basta. Due stati, tutti e due visibili. */
+@keyframes talosCursoreScrittura { 0%, 49% { opacity: 1 } 50%, 100% { opacity: 0 } }
+:root[data-talos-streaming-animation="typewriter"] .run-activity-label::after {
+  content: '▌';
+  margin-left: 2px;
+  color: var(--talos-accent);
+  animation: talosCursoreScrittura 1.06s steps(1, end) infinite;
+}
+
+/* ---------- 5. «Presentazione delle finestre»: cassetto o schermo intero ----------
+   Anche questo attributo non aveva una riga dietro: il foglio si apriva uguale in tutti e due i casi. */
+:root[data-talos-window-presentation="fullscreen"] dialog.sheet-dialog,
+:root[data-talos-window-presentation="fullscreen"] dialog.command-dialog {
+  width: 100vw; max-width: none;
+  height: 100vh; max-height: none;
+  border-radius: 0;
+  inset: 0;
+  margin: 0;
+}

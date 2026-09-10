@@ -820,6 +820,31 @@ export const ATTESA_VERIFICA_MS = 420;
 export const INTERVALLO_CONFRONTO_MS = 140;
 const CICLO_MS = 1600;
 const FASI_NODI = [0, 0.36 / 1.6, 0.73 / 1.6];
+/*
+ * ⭐⭐⭐ D-10R, 10/09/2026 — IL NODO NON SI LIMITA AD ACCENDERSI: CRESCE.
+ *
+ * ⛔ La misura che ha chiuso il debito non era sul DOM, era sui PIXEL. Fotografando il rettangolo
+ *   del segnavia venti volte a 80 ms, in tema Calm scuro e con `--disable-gpu` (la condizione del
+ *   Chrome dell'owner), cambiavano **11,6 pixel per fotogramma su 864 (1,3%)**, e fra i due istanti
+ *   più diversi dell'intero ciclo **42 pixel (4,9%)**. Non era fermo: era troppo poco per leggersi
+ *   come movimento. Cinque tentativi in una sera avevano tutti misurato quanti valori DISTINTI
+ *   assumeva `stroke-dashoffset` — un attributo che cambia non è un pixel che cambia.
+ *
+ * ⛔ Cinque varianti provate sullo stesso banco, stessa misura, prima di scegliere:
+ *     A com'è oggi ......................................... 11,6/fotogramma · salto massimo  42 (4,9%)
+ *     F il nodo cresce (SMIL anche su `r`, 4→7) ............ 25,8 ............ salto massimo 132 (15,3%)
+ *     G F + tratto 2,5→3,5 e traccia più accesa ............ 25,2 ............ salto massimo 105
+ *     H G + nodi color accento ............................. 17,0 ............ salto massimo  69
+ *     I H + linea che si disegna invece di scorrere ........ 13,4 ............ salto massimo  73
+ *   ⇒ Vince **F**, e le due varianti "più forti" all'occhio (tratto grosso, colore d'accento) fanno
+ *   PEGGIO: l'accento (#c08b3c) contro il fondo Calm scuro sta a 5,49:1, il grigio `currentColor`
+ *   di serie a **6,09:1** — cambiare colore avrebbe abbassato il contrasto credendo di alzarlo.
+ *   ⛔ Nessuna variante ingrandisce il segnavia: l'owner l'ha bocciato due volte («ancora troppo
+ *   grande»), e la misura gli dà ragione — raddoppiando la scala la PERCENTUALE di pixel che
+ *   cambiano resta 1,8%.
+ */
+const RAGGIO_SPENTO = 4;
+const RAGGIO_ACCESO = 7;
 
 export function animaSegnavia(svg, { window: finestra = globalThis, adesso = () => (finestra.performance?.now?.() ?? Date.now()) } = {}) {
   const sweep = svg?.querySelector?.('.talos-line-loader-sweep');
@@ -846,6 +871,10 @@ export function animaSegnavia(svg, { window: finestra = globalThis, adesso = () 
       /* Il profilo del mobile: spento fino al 12%, pieno dal 22% all'82%, poi si spegne. */
       const acceso = f < 0.12 ? 0 : f < 0.22 ? (f - 0.12) / 0.1 : f < 0.82 ? 1 : Math.max(0, 1 - (f - 0.82) / 0.18);
       nodo.setAttribute('fill-opacity', acceso.toFixed(3));
+      /* ⛔ Anche il RAGGIO, con lo stesso profilo: è la metà del movimento (vedi RAGGIO_ACCESO).
+         Se il ripiego disegnasse solo l'opacità, accendersi dal JavaScript varrebbe meno che da
+         SMIL — e un ripiego che vale meno dell'originale è un ripiego che mente. */
+      nodo.setAttribute('r', (RAGGIO_SPENTO + (RAGGIO_ACCESO - RAGGIO_SPENTO) * acceso).toFixed(2));
     });
   };
 
@@ -907,6 +936,27 @@ export function animaSegnavia(svg, { window: finestra = globalThis, adesso = () 
  */
 export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
+  /*
+   * ⛔⛔⛔ 10/09 — TROVATO DALLA PROVA AL VERSO CONTRARIO, e c'era da prima di oggi. Con
+   *   `prefers-reduced-motion: reduce` il segnavia fermo mostrava `fill-opacity [0, 1, 1]`: il PRIMO
+   *   nodo spento e gli altri due accesi. Causa: si costruivano gli `<animate>`, si scrivevano a mano
+   *   i valori «fermi» sugli attributi e poi si chiamava `pauseAnimations()`. Ma appena l'SVG entra
+   *   nel documento SMIL parte, e a t=0 solo l'animazione con `begin="0s"` è già cominciata: quella
+   *   sovrascrive l'attributo del primo nodo col suo valore iniziale (spento), mentre le altre due,
+   *   non ancora avviate, lasciano in piedi il valore scritto da noi. Tre pallini di cui uno solo
+   *   spento non sono uno stato: sembrano un errore di disegno.
+   * ⇒ Quando si chiede meno movimento gli `<animate>` NON SI CREANO. Niente da mettere in pausa,
+   *   niente che possa sovrascrivere: il disegno fermo è quello che vogliamo, e basta.
+   *   (SMIL non guarda `prefers-reduced-motion` da sé — CSS-Tricks «A Guide to SVG Animations (SMIL)»
+   *   ed elijahmanor.com «prefers-reduced-motion», letti il 10/09/2026: «SMIL animations are not
+   *   affected by prefers-reduced-motion … you will need to use JavaScript». Questa è quella
+   *   JavaScript, presa nel punto in cui costa meno: prima di crearle.)
+   */
+  let menoMovimento = false;
+  try {
+    menoMovimento = Boolean(opzioni.window?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+      ?? globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches);
+  } catch { menoMovimento = false; /* niente matchMedia (prove, ambienti senza finestra): resta il movimento */ }
   const blocco = el(documentObj, 'div', 'talos-stack talos-waiting');
   blocco.setAttribute('role', 'status');
   blocco.setAttribute('aria-live', 'polite');
@@ -941,7 +991,8 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
      * ⛔ Chi ha chiesto meno movimento AL SISTEMA lo ottiene lo stesso, poche righe piu' sotto:
      *   li' l'SVG viene messo in pausa da JS e la linea resta piena e ferma, che si vede.
      */
-    if (classe === 'talos-line-loader-sweep') {
+    if (classe === 'talos-line-loader-sweep' && menoMovimento) linea.setAttribute('stroke-dashoffset', '0'); // la linea piena e ferma: si vede che c'è
+    else if (classe === 'talos-line-loader-sweep') {
       const moto = documentObj.createElementNS(SVG_NS, 'animate');
       moto.setAttribute('attributeName', 'stroke-dashoffset');
       moto.setAttribute('values', '88;-88');
@@ -970,9 +1021,9 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
        r=4 arriva a schermo come un cerchio di 4 px in tutto. Il mobile rende lo stesso viewBox a
        96x16, cioe' il doppio. L'owner vuole la riga piccola: allora crescono i NODI dentro il
        disegno (r 4 → 5), non la riga. */
-    nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '5');
+    nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', String(menoMovimento ? RAGGIO_ACCESO : RAGGIO_SPENTO));
     nodo.setAttribute('fill', 'currentColor');
-    nodo.setAttribute('fill-opacity', '0');
+    nodo.setAttribute('fill-opacity', menoMovimento ? '1' : '0');
     /*
      * ⛔⛔⛔ 10/09, owner: «guarda come ha fatto il mobile, forse trovi qualcosa di utile». Trovato,
      *   e sono DUE cose che il nostro sbagliava — `mobile/src/components/brand/TalosLineLoader.vue`
@@ -993,6 +1044,7 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
      *   insieme non si leggono come movimento: si leggono come uno sfarfallio. Il mobile usa
      *   `nth-of-type(1)/(2)/(3)` e non ha mai avuto questo difetto.
      */
+    if (menoMovimento) { svg.append(nodo); continue; } // fermo, acceso e cresciuto: nessun `<animate>` da sovrascrivere
     const acceso = documentObj.createElementNS(SVG_NS, 'animate');
     acceso.setAttribute('attributeName', 'fill-opacity');
     acceso.setAttribute('values', '0;0;1;1;0');
@@ -1001,23 +1053,33 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
     acceso.setAttribute('begin', `${[0, 0.36, 0.73][i]}s`);
     acceso.setAttribute('repeatCount', 'indefinite');
     nodo.append(acceso);
+    /*
+     * ⛔ Stesso profilo, stessi `keyTimes`, stesso `begin`: il nodo si accende E cresce nello stesso
+     *   istante, altrimenti sarebbero due movimenti che si disturbano invece di uno solo che si legge.
+     * ⛔ `r` come attributo animato da SMIL, non come dichiarazione CSS: `r` È una proprietà CSS dal
+     *   2018, e se il foglio la dichiarasse vincerebbe sull'attributo e inchioderebbe il nodo —
+     *   esattamente il difetto già pagato il 10/09 con `stroke-dashoffset`. In `index.css` e
+     *   `diff-in-chat.css` non c'è nessuna `r` sui nodi, ed è una condizione da non violare.
+     */
+    const cresciuto = documentObj.createElementNS(SVG_NS, 'animate');
+    cresciuto.setAttribute('attributeName', 'r');
+    cresciuto.setAttribute('values', `${RAGGIO_SPENTO};${RAGGIO_SPENTO};${RAGGIO_ACCESO};${RAGGIO_ACCESO};${RAGGIO_SPENTO}`);
+    cresciuto.setAttribute('keyTimes', '0;0.12;0.22;0.82;1');
+    cresciuto.setAttribute('dur', '1.6s');
+    cresciuto.setAttribute('begin', `${[0, 0.36, 0.73][i]}s`);
+    cresciuto.setAttribute('repeatCount', 'indefinite');
+    nodo.append(cresciuto);
     svg.append(nodo);
   }
   /*
-   * ⛔ Il rispetto di «meno movimento» ora e' nostro, perche' SMIL non lo prende dal CSS. Chi l'ha
-   *   chiesto al SISTEMA vede la linea piena e ferma — un segnavia leggibile, non uno sparito.
-   *   `pauseAnimations` sta su SVGSVGElement e non esiste nel DOM finto delle prove: si chiede.
+   * ⛔ Il rispetto di «meno movimento» e' nostro, perche' SMIL non lo prende dal CSS — ma ormai e'
+   *   gia' stato onorato COSTRUENDO il disegno fermo (nessun `<animate>`, nodi accesi e cresciuti,
+   *   linea piena). Qui resta solo la scelta del motore: se il movimento c'e', il segnavia si
+   *   sorveglia da solo. ⛔ Niente `pauseAnimations()`: non c'e' piu' niente da mettere in pausa, e
+   *   chiamarlo darebbe l'impressione che serva ancora.
    */
   let fermaMotore = () => {};
-  try {
-    if (opzioni.window?.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
-      ?? globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) {
-      svg.querySelector('.talos-line-loader-sweep')?.setAttribute('stroke-dashoffset', '0');
-      for (const n of svg.querySelectorAll?.('.talos-line-loader-node') ?? []) n.setAttribute('fill-opacity', '1');
-      svg.pauseAnimations?.();
-    }
-    else fermaMotore = animaSegnavia(svg, { window: opzioni.window ?? globalThis });
-  } catch { /* niente matchMedia (prove, ambienti senza finestra): resta il movimento */ }
+  if (!menoMovimento) fermaMotore = animaSegnavia(svg, { window: opzioni.window ?? globalThis });
   const label = el(documentObj, 'span', 'talos-waiting__label run-activity-label', etichetta);
   const elapsed = el(documentObj, 'span', 'talos-mono talos-muted run-activity-elapsed', '0s');
   elapsed.setAttribute('aria-hidden', 'true');

@@ -16,6 +16,17 @@ test('WorkspaceFooter: cartella, tema e fornitore dai dati del monolite — e ni
   assert.deepEqual(testiPiede({ cartella: null, tema: 'calm', modello: 'local:x' }), { titolo: 'Workspace locale', sotto: 'Tema Calm · locale' });
   assert.deepEqual(testiPiede({ cartella: 'D:\\lavoro\\talos', tema: 'forge', modello: 'claude-opus-5' }), { titolo: 'talos', sotto: 'Tema Forge' });
   assert.equal(testiPiede({ cartella: null, nomeAnteprima: 'nuovo-progetto', tema: 'ignoto' }).titolo, 'nuovo-progetto');
+  /*
+   * ⛔ 10/09 — trovato guardando una foto: col tema **Violet** a schermo il piede diceva «Tema Calm».
+   *   La mappa ne conosceva quattro su quattordici e il ripiego trasformava i mancanti in una bugia.
+   *   Qui si prova ogni preset che le impostazioni offrono: se ne nasce un quindicesimo e nessuno
+   *   aggiunge il nome, questo test lo dice invece di lasciarlo diventare «Calm».
+   */
+  for (const [id, atteso] of [['aurora', 'Aurora'], ['glacier', 'Glacier'], ['ember', 'Ember'], ['atlas', 'Atlas'], ['noir', 'Noir'], ['signal', 'Signal'], ['violet', 'Violet'], ['claudius', 'Claudius'], ['basicus', 'Basicus'], ['telemetry', 'Telemetry'], ['paper', 'Paper'], ['terminal', 'Terminal']]) {
+    assert.equal(testiPiede({ cartella: null, tema: id }).sotto, `Tema ${atteso}`, `⛔ il tema ${id} si presentava con un altro nome`);
+  }
+  /* ⛔ AL CONTRARIO: un id che non esiste davvero non deve far sparire il piede — lì il ripiego serve. */
+  assert.equal(testiPiede({ cartella: null, tema: 'inventato' }).sotto, 'Tema Calm');
 });
 
 /*

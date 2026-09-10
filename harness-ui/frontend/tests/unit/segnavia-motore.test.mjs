@@ -138,3 +138,89 @@ test('SEGNAVIA, AL CONTRARIO: senza sweep non esplode e non fa niente', () => {
   const finto = { isConnected: true, querySelector: () => null, setAttribute() {} };
   assert.doesNotThrow(() => animaSegnavia(finto, { window: finestraFinta() }));
 });
+
+/*
+ * ⭐⭐⭐ D-10R — IL NODO CRESCE, non solo si accende.
+ *
+ * ⛔ La misura che ha chiuso il debito sta sui PIXEL, non qui: 11,6 pixel cambiati per fotogramma su
+ *   864 (1,3%) prima, 25,8 (3,0%) dopo, e il salto massimo fra due istanti del ciclo da 42 a 132
+ *   (4,9% → 15,3%), in Chrome con `--disable-gpu` (la condizione del Chrome dell'owner). Questi test
+ *   tengono le due condizioni da cui quella misura dipende, e che nessuno vedrebbe rompersi: che i
+ *   due `<animate>` ci siano e siano sincroni, e che il ripiego JavaScript disegni ANCHE il raggio.
+ */
+function documentoSvgFinto() {
+  const nodo = (tag) => {
+    const attributi = new Map();
+    const self = {
+      tag, figli: [], testoProprio: null, className: '',
+      get textContent() { return self.testoProprio ?? self.figli.map((f) => f.textContent ?? '').join(''); },
+      set textContent(v) { self.testoProprio = String(v); },
+      setAttribute: (k, v) => attributi.set(k, String(v)),
+      getAttribute: (k) => (attributi.has(k) ? attributi.get(k) : null),
+      append: (...x) => self.figli.push(...x),
+      addEventListener() {},
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      tuttiConTag(t, dentro = []) { if (self.tag === t) dentro.push(self); for (const f of self.figli) f.tuttiConTag?.(t, dentro); return dentro; },
+      conClasse(c, dentro = []) { if (String(self.getAttribute('class') || self.className || '').split(/\s+/).includes(c)) dentro.push(self); for (const f of self.figli) f.conClasse?.(c, dentro); return dentro; },
+    };
+    return self;
+  };
+  return { createElement: (t) => nodo(t), createElementNS: (_ns, t) => nodo(t), createTextNode: (t) => ({ tag: '#text', textContent: String(t), figli: [] }) };
+}
+
+test('SEGNAVIA: ogni nodo ha DUE animazioni SMIL sincrone — l’opacità e il raggio', async () => {
+  const { creaAttesa } = await import('../../src/components/conversazione.js');
+  const { blocco } = creaAttesa({ etichetta: 'prova' }, { document: documentoSvgFinto(), window: {} });
+  const nodi = blocco.conClasse('talos-line-loader-node');
+  assert.equal(nodi.length, 3, 'tre nodi, come il mockup e come il mobile');
+  for (const [i, n] of nodi.entries()) {
+    const anim = n.tuttiConTag('animate').filter((a) => a !== n);
+    const quali = anim.map((a) => a.getAttribute('attributeName')).sort();
+    assert.deepEqual(quali, ['fill-opacity', 'r'], `⛔ nodo ${i}: servono tutte e due — il salto visibile è il raggio`);
+    const chiavi = new Set(anim.map((a) => `${a.getAttribute('keyTimes')}|${a.getAttribute('dur')}|${a.getAttribute('begin')}`));
+    assert.equal(chiavi.size, 1, `⛔ nodo ${i}: profili sfasati fra loro — sarebbero due movimenti che si disturbano, non uno che si legge`);
+  }
+  /* ⛔ AL CONTRARIO: a riposo il nodo deve essere PICCOLO. Se `r` partisse già al valore acceso, la
+     crescita non si vedrebbe e la misura dei pixel tornerebbe quella di prima. */
+  assert.equal(nodi[0].getAttribute('r'), '4');
+});
+
+/*
+ * ⛔⛔⛔ MENO MOVIMENTO: i tre nodi devono essere accesi TUTTI E TRE.
+ *
+ * Il difetto che questo test tiene fermo è stato trovato provando al verso contrario dal vivo, con
+ * `prefers-reduced-motion: reduce`: il segnavia mostrava `fill-opacity [0, 1, 1]` e `r [4, 7, 7]` —
+ * il PRIMO nodo spento e piccolo, gli altri due accesi. Si costruivano gli `<animate>`, si
+ * scrivevano a mano i valori fermi e poi si chiamava `pauseAnimations()`: a t=0 solo l'animazione
+ * con `begin="0s"` era già partita, e sovrascriveva il primo nodo col suo valore iniziale.
+ */
+test('SEGNAVIA, MENO MOVIMENTO: nessun `<animate>`, e tutti e tre i nodi accesi e cresciuti', async () => {
+  const { creaAttesa } = await import('../../src/components/conversazione.js');
+  const finestra = { matchMedia: (q) => ({ matches: q.includes('reduced-motion') }) };
+  const { blocco } = creaAttesa({ etichetta: 'prova' }, { document: documentoSvgFinto(), window: finestra });
+  const nodi = blocco.conClasse('talos-line-loader-node');
+  assert.equal(nodi.length, 3);
+  assert.deepEqual(nodi.map((n) => n.getAttribute('fill-opacity')), ['1', '1', '1'], '⛔ tre pallini di cui uno spento sembrano un errore di disegno, non uno stato');
+  assert.deepEqual(nodi.map((n) => n.getAttribute('r')), ['7', '7', '7'], '⛔ fermo vuol dire acceso E cresciuto, non «al primo fotogramma»');
+  const animazioni = blocco.tuttiConTag('animate');
+  assert.equal(animazioni.length, 0, '⛔ un solo `<animate>` basta a sovrascrivere i valori fermi appena l’SVG entra nel documento');
+  const linea = blocco.conClasse('talos-line-loader-sweep')[0];
+  assert.equal(linea.getAttribute('stroke-dashoffset'), '0', 'la linea resta piena: si vede che c’è');
+});
+
+test('SEGNAVIA, AL CONTRARIO: il ripiego JavaScript muove ANCHE il raggio', () => {
+  const svg = segnaviaFinto({ smilSiMuove: false });
+  const f = finestraFinta();
+  f.getComputedStyle = () => svg.stile();
+  let tempo = 0;
+  animaSegnavia(svg, { window: f, adesso: () => tempo });
+  f.scaricaTimer();
+  const raggi = new Set();
+  for (const t of [0, 400, 800, 1200]) {
+    tempo = t;
+    f.frame.splice(0).forEach((fn) => fn());
+    raggi.add(svg.nodi.map((n) => n.get('r')).join('|'));
+  }
+  assert.equal(raggi.size, 4, `⛔ un ripiego che accende ma non fa crescere vale meno dell’originale. Trovato: ${[...raggi].join(' / ')}`);
+});
