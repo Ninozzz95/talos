@@ -7836,6 +7836,47 @@ function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   gruppo.append(bottone3("ask-again", "Chiedi di nuovo", "i-history"));
   return gruppo;
 }
+function dimensioneLeggibile(byte2) {
+  if (typeof byte2 !== "number") return "";
+  const n = byte2;
+  if (!Number.isFinite(n) || n < 0) return "";
+  if (n < 1024) return `${n} byte`;
+  const unita = ["KB", "MB", "GB"];
+  let valore = n / 1024;
+  let i = 0;
+  while (valore >= 1024 && i < unita.length - 1) {
+    valore /= 1024;
+    i += 1;
+  }
+  return `${valore.toFixed(valore < 10 ? 1 : 0).replace(".", ",")} ${unita[i]}`;
+}
+function indirizzoScarico({ sessionId, percorso } = {}) {
+  if (!sessionId || !percorso) return "";
+  return `/api/v1/sessions/${encodeURIComponent(sessionId)}/file?percorso=${encodeURIComponent(percorso)}`;
+}
+function creaFileScaricabile({ allegato, percorso, sessionId } = {}, opzioni = {}) {
+  const d = opzioni.document || globalThis.document;
+  const nome = String(allegato?.nome || percorso || "").split(/[\\/]/).pop() || "file";
+  const formato = String(allegato?.formato || nome.split(".").pop() || "").toUpperCase();
+  const indirizzo = opzioni.indirizzo ?? indirizzoScarico({ sessionId, percorso });
+  const scheda = el22(d, "div", "talos-file-scaricabile");
+  scheda.dataset.c = "FileScaricabile";
+  const testo3 = el22(d, "div", "talos-file-scaricabile__testo");
+  testo3.append(el22(d, "span", "talos-file-scaricabile__nome", nome));
+  const misura = [formato, dimensioneLeggibile(allegato?.byte)].filter(Boolean).join(" · ");
+  if (misura) testo3.append(el22(d, "span", "talos-file-scaricabile__misura", misura));
+  scheda.append(testo3);
+  if (indirizzo) {
+    const link = el22(d, "a", "talos-file-scaricabile__scarica", "Scarica");
+    link.href = indirizzo;
+    link.setAttribute("download", nome);
+    link.setAttribute("aria-label", `Scarica ${nome}`);
+    scheda.append(link);
+  } else {
+    scheda.append(el22(d, "span", "talos-file-scaricabile__assente", "Non disponibile da qui"));
+  }
+  return scheda;
+}
 function chiaveLinguaggio(dichiarato) {
   const pulito = String(dichiarato || "").trim().toLowerCase();
   if (!pulito) return "";
@@ -18510,6 +18551,7 @@ ${f}`;
         const righeGrezze = haPrima ? calcolaDiffRighe(operazione.prima ?? "", dopo) : null;
         const righe = righeGrezze ?? dopo.split("\n").map((riga) => [operazione.op === "add" ? "add" : "ctx", riga]);
         const simboliPersi = haPrima ? simboliSpariti(operazione.prima ?? "", dopo) : [];
+        let bubbleScrittura = null;
         state.realSession.reviewFiles.set(percorso, {
           path: percorso,
           giro: state.realSession.runCount || null,
@@ -18526,7 +18568,7 @@ ${f}`;
           const agg = righe.filter(([tipo]) => tipo === "add").length;
           const rim = righe.filter(([tipo]) => tipo === "del").length;
           const batch = [state.realSession.batchAttivo, state.realSession.ultimoBatchChiuso].find((b) => b?.scrittureInAttesa.length > 0);
-          const bubbleScrittura = batch?.scrittureInAttesa.shift();
+          bubbleScrittura = batch?.scrittureInAttesa.shift();
           if (bubbleScrittura) {
             const diffSpan = document.createElement("span");
             diffSpan.className = "tool-note-diff";
@@ -18538,6 +18580,15 @@ ${f}`;
             batch.contatori.diffRim += rim;
             aggiornaRiassuntoBatch(batch);
           }
+        }
+        if (operazione.allegato && state.realSession.id) {
+          const batchDelFile = [state.realSession.batchAttivo, state.realSession.ultimoBatchChiuso].find(Boolean);
+          const card = batchDelFile?.contenitore?.parentElement ?? null;
+          card?.appendChild(creaFileScaricabile({
+            allegato: operazione.allegato,
+            percorso,
+            sessionId: state.realSession.id
+          }));
         }
       }
       function aggiornaSommarioReviewReale() {

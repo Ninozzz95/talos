@@ -308,13 +308,25 @@ export function eventoPerEsitoTool({ messageId, toolCallId, content }) {
  * chiave fantasma `prima: undefined` che romperebbe un
  * `assert.deepStrictEqual` già scritto altrove.
  */
-export function eventoPerScrittura({ percorso, contenuto, esisteva, contenutoPrima }) {
+/*
+ * ⛔⛔ PO-05, owner: «ogni file generato deve avere un collegamento diretto per scaricarlo con un
+ * clic; nome, formato, dimensione e disponibilità REALI». `allegato` — sesto campo, come `prima`
+ * fuori dalla RFC 6902 e come `prima` innocuo per chi non lo conosce — porta ciò che serve a
+ * costruire quel collegamento e a scrivere l'etichetta: nome, formato e byte.
+ * ⛔ NON porta i byte: quelli si prendono dalla rotta, uno per uno, quando la persona clicca. Un
+ *   `.docx` dentro un evento SSE andrebbe ricodificato, cioè spedito due volte e corrotto una.
+ * ⛔ E si aggiunge SOLO quando c'è (`allegato !== undefined`): un chiamante che non lo passa produce
+ *   l'oggetto identico di prima, byte per byte — stessa disciplina di `prima`, e per lo stesso
+ *   motivo (un `assert.deepStrictEqual` già scritto altrove non deve diventare rosso da solo).
+ */
+export function eventoPerScrittura({ percorso, contenuto, esisteva, contenutoPrima, allegato }) {
     return stateDelta({
         delta: [{
             op: esisteva ? 'replace' : 'add',
             path: `/file/${percorso}`,
             value: contenuto,
             ...(contenutoPrima !== undefined ? { prima: contenutoPrima } : {}),
+            ...(allegato !== undefined ? { allegato } : {}),
         }],
     })
 }

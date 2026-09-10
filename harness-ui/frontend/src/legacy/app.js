@@ -38,7 +38,7 @@ import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSI
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser con annotazione 06/9
 import { aggiornaConteggiNav } from '../components/nav-item.js'; // 05/9 Fase 2: NavItem — i badge dei Luoghi sono dati veri
 import { creaSessionItem, ordinaSessioniAdAlbero, statoSessione } from '../components/session-item.js';
-import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
+import { aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFileScaricabile, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
 import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo schermo del browser pilotato dal server
@@ -10567,6 +10567,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       ?? dopo.split('\n').map((riga) => [operazione.op === 'add' ? 'add' : 'ctx', riga]);
     // ⛔⛔⛔ 30/8 — vedi il blocco di doc sopra REGEX_SIMBOLI_TOP_LEVEL: solo su una riscrittura di un file ESISTENTE (haPrima), mai su un file nuovo (nulla può "sparire" da niente).
     const simboliPersi = haPrima ? simboliSpariti(operazione.prima ?? '', dopo) : [];
+    /* ⛔ dichiarata qui perché la serve anche il blocco dell'allegato, in fondo alla funzione. */
+    let bubbleScrittura = null;
     state.realSession.reviewFiles.set(percorso, {
       path: percorso,
       giro: state.realSession.runCount || null, // 05/9 Fase 2: Review — «giro N» nella riga
@@ -10597,7 +10599,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       // ⛔ prima il batch ancora aperto (raro: lo StateDelta ha battuto il testo che lo chiude), poi l'ultimo appena chiuso (il caso normale) — mai perso, mai assegnato al batch sbagliato.
       const batch = [state.realSession.batchAttivo, state.realSession.ultimoBatchChiuso]
         .find((b) => b?.scrittureInAttesa.length > 0);
-      const bubbleScrittura = batch?.scrittureInAttesa.shift();
+      bubbleScrittura = batch?.scrittureInAttesa.shift();
       if (bubbleScrittura) {
         const diffSpan = document.createElement('span');
         diffSpan.className = 'tool-note-diff';
@@ -10608,6 +10610,38 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         batch.contatori.diffRim += rim;
         aggiornaRiassuntoBatch(batch);
       }
+    }
+    /*
+     * ⛔⛔ PO-05 — il documento generato diventa una scheda con un collegamento vero: prima al suo
+     *   posto si leggeva `[binary docx file, 8267 bytes]`, che dice che il file esiste e non dà modo
+     *   di averlo. Nome, formato e dimensione arrivano MISURATI dal server (`allegato`).
+     * ⛔ Fuori dal ramo qui sopra, e non per eleganza: quel ramo è la bolla di `scrivi`, mentre un
+     *   documento nasce da `document_create`, che è categoria 'altro' — `scrittureInAttesa` è vuoto e
+     *   la scheda non sarebbe MAI comparsa. Trovato dal vivo: il giro generava il .docx (8.267 byte
+     *   sul disco), l'evento portava l'allegato, e a schermo non c'era niente.
+     * ⛔ La bolla giusta è quella della scrittura se c'è, altrimenti l'ULTIMA tool-call vista: le
+     *   Map di JS conservano l'ordine di inserimento, e il file lo ha prodotto l'attrezzo che ha
+     *   appena finito. Se non c'è nessuna bolla non si attacca niente — mai una scheda orfana in
+     *   mezzo alla chat.
+     * ⛔ Nessun allegato = nessuna scheda: una scrittura normale del modello resta la riga di sempre.
+     */
+    if (operazione.allegato && state.realSession.id) {
+      /*
+       * ⛔ La scheda va nella CARD del batch, dopo il corpo — non dentro la riga dell'attrezzo.
+       *   Misurato dal vivo: attaccata alla riga, la scheda esisteva nel DOM con tutti i dati giusti
+       *   («Relazione di prova.docx», «DOCX · 8,1 KB», il link con `download`) e misurava **0×0 a
+       *   x=0**, perché il corpo dell'attività nasce `hidden` e si apre solo con un clic.
+       *   Un file consegnato alla persona non può stare dietro un clic che nessuno sa di dover fare:
+       *   la testa dell'attività è sempre visibile, e la scheda le sta sotto.
+       * ⛔ Se non troviamo la card non si attacca niente: mai una scheda orfana in mezzo alla chat.
+       */
+      const batchDelFile = [state.realSession.batchAttivo, state.realSession.ultimoBatchChiuso].find(Boolean);
+      const card = batchDelFile?.contenitore?.parentElement ?? null;
+      card?.appendChild(creaFileScaricabile({
+        allegato: operazione.allegato,
+        percorso,
+        sessionId: state.realSession.id,
+      }));
     }
   }
 

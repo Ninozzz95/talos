@@ -117,3 +117,12 @@ kernel: si aggiunge, non si rinomina `scrivi`. E `scrivi` resta per i file NUOVI
 Da guardare prima: `Edit`/`Write` di Claude Code (e la riga del suo CHANGELOG che dice che un edit su
 testo ancora univoco passa anche se il file è cambiato dopo la lettura), `apply_patch` di Codex, e
 l'attrezzo di modifica di Hermes.
+
+### DEBITO — `HF-DIRECT-CONTROLS-01` è un test FRAGILE (trovato 10/09, non mio)
+Misurato lanciando `tests/hf-direct-transfer.test.mjs` tre volte di fila **sullo stesso codice**:
+rosso, verde, verde. Il file `src/hf-direct-transfer.mjs` non era nel diff di chi l'ha visto fallire.
+⇒ Un test che cambia esito senza che il codice cambi non protegge niente: il giorno che rompe
+davvero quella funzione, nessuno gli crederà. Da guardare: la prova è su pausa/annullamento, quindi
+il sospetto è un'attesa a tempo invece di un'attesa su uno stato.
+⛔ Registrato e non curato: è un'altra area, e la lezione dice che un filo trovato dentro una fase
+non è quella fase.

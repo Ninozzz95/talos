@@ -724,6 +724,43 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after{
 .talos-system-note__tecnico > summary::before{content:'▸'; display:inline-block; margin-right:6px; transition:transform var(--talos-motion-duration-control,.15s) var(--talos-motion-ease)}
 .talos-system-note__tecnico[open] > summary::before{transform:rotate(90deg)}
 .talos-system-note__grezzo{margin:8px 0 0; padding:10px 12px; border-radius:10px; border:1px solid var(--talos-border); background:var(--talos-code-bg, rgba(0,0,0,.18)); font-family:var(--talos-font-mono); font-size:12px; line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; overflow:auto; max-height:12em}
+/* ⛔⛔ PO-05 — IL FILE GENERATO SI SCARICA CON UN CLIC. Owner: «ogni file generato deve avere un
+   collegamento diretto… nome, formato, dimensione e disponibilità reali. Un link o una scheda SENZA
+   FILE non soddisfa il requisito.» Prima, dopo che il modello generava un documento, in chat si
+   leggeva `[binary docx file, 7714 bytes]`.
+
+   Come lo fanno i tre, letto nel loro codice il 10/09/2026 (cloni a commit fissato):
+   · Codex: NON lo consegna — stampa tre righe di testo, `Saved to: file:///tmp/ig-1.png`, e basta
+     (`codex-rs/tui/src/history_cell/patches.rs`, snapshot della TUI);
+   · Claude Code: «clickable file attachments in chat — Cmd/Ctrl-click reveals the file in
+     Finder/Explorer» (CHANGELOG:1587): apre la cartella, non scarica;
+   · Hermes v0.21: è l'unico che lo consegna davvero — scheda con bottone `Download` nell'app desktop
+     (`apps/desktop/src/components/chat/preview-attachment.tsx`) e allegati nativi nelle piattaforme di
+     messaggistica. ⛔ Ma la sua scheda mostra SOLO il nome (basename, col percorso nel tooltip): non
+     la dimensione, non il tipo, nessuna anteprima.
+   ⇒ Il nostro +1 misurabile è esattamente lì: nome, FORMATO e DIMENSIONE REALE (i byte che il server
+     ha misurato sul file scritto), più un collegamento vero — che Codex e Claude Code non hanno.
+
+   Forma: una riga sola, dentro la bolla dell'attrezzo, senza diventare una card che ruba l'occhio al
+   testo. Il nome è la cosa e tronca per primo; formato e dimensione sono il contorno, in tono spento
+   e con le cifre tabulari; «Scarica» sta a destra e non si stringe mai. */
+.talos-file-scaricabile{
+  display:flex; align-items:center; gap:10px; margin:8px 0 0; padding:8px 10px;
+  border:1px solid var(--talos-border); border-radius:10px; background:var(--talos-panel-soft);
+}
+.talos-file-scaricabile__testo{display:flex; flex-direction:column; gap:1px; min-width:0; flex:1}
+.talos-file-scaricabile__nome{font-size:13px; color:var(--talos-text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.talos-file-scaricabile__misura{font-size:11.5px; color:var(--talos-muted); font-variant-numeric:tabular-nums}
+.talos-file-scaricabile__scarica{
+  flex:none; padding:4px 12px; border:1px solid var(--talos-accent-border); border-radius:8px;
+  background:var(--talos-accent-soft); color:var(--talos-accent-text); font-size:12px; text-decoration:none;
+  transition:background var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease);
+}
+.talos-file-scaricabile__scarica:hover{background:var(--talos-accent-hover); color:var(--talos-window-bg)}
+.talos-file-scaricabile__scarica:focus-visible{outline:2px solid var(--talos-accent-border); outline-offset:2px}
+/* ⛔ Nessun bottone che finge: senza indirizzo si dice che non è disponibile, e non si offre un clic
+   che fallirebbe. È la stessa regola del «mai un rimedio falso» delle note d'errore. */
+.talos-file-scaricabile__assente{flex:none; font-size:12px; color:var(--talos-muted)}
 .assistant-copy .md-table-wrap{margin:12px 0; overflow-x:auto; overscroll-behavior-x:contain}
 .assistant-copy .md-table{border-collapse:collapse; width:100%; font-size:13px; font-variant-numeric:tabular-nums}
 .assistant-copy .md-table th{text-align:left; padding:7px 12px 7px 0; border-bottom:1px solid var(--talos-border-strong); color:var(--talos-muted); font-weight:600; white-space:nowrap}

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'; // 08/9, BH-06: il nonce CSP del documento, nuovo a ogni risposta
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
+import { nomiPerContentDisposition } from './workspace-files.mjs'; // PO-05: le due forme del nome per Content-Disposition (RFC 6266)
 import { verificaIncorniciabile } from './browser-frame.mjs';
 import { decidiVia } from './browser-proxy-universale.mjs'; // 07/9: la scelta della corsia sta in un posto solo // K-I 06/9: la cornice del Browser si decide dalle intestazioni della pagina
 import { proxyPagina } from './browser-proxy.mjs';
@@ -667,6 +668,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/export$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/file$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/file$/, metodi: ['GET'] }, // PO-05: lo scarico di un file, in byte
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/hooks$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tools$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/mcp$/, metodi: ['GET'] },
@@ -1399,6 +1401,52 @@ export function createHttpApp({
     if (method === 'GET' && nativeModelsMatch && providerProbe) {
       try { requireNoQuery(url); sendJson(res, 200, successEnvelope(await providerProbe.elencaModelli(nativeModelsMatch[1]), clock), method); }
       catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
+      return;
+    }
+    /*
+     * ⛔⛔ PO-05, owner: «ogni file generato deve avere un collegamento diretto per scaricarlo con un
+     * clic». Prima di oggi un documento generato finiva nel workspace e in Libreria, e in chat si
+     * leggeva `[binary docx file, 7714 bytes]`: vero, e inservibile.
+     *
+     * ⛔ Non passa da `sendJson` come le sue vicine, e non può: un `.docx` è uno zip, e dentro un
+     *   JSON dovrebbe essere ricodificato — il che significa spedire i byte due volte, o corromperli.
+     *   Qui i byte escono così come sono, con la stessa forma di risposta binaria già usata per le
+     *   immagini di chat (`nosniff`, `no-store`, CSP che vieta tutto): un allegato non deve poter
+     *   essere interpretato come pagina.
+     * ⛔ `Content-Disposition` porta ENTRAMBE le forme del nome (RFC 6266, letto il 10/09/2026):
+     *   `filename` è il ripiego ASCII, `filename*` la versione UTF-8, e quando ci sono tutti e due
+     *   è `filename*` a vincere — senza, un nome con gli accenti arriva storto o percent-encoded
+     *   a schermo. È sempre `attachment`: un file del workspace non si apre DENTRO la nostra pagina.
+     * ⛔ La difesa sul percorso non è qui: è in `workspace-files.mjs`, la stessa delle altre rotte
+     *   dell'albero (realpath + confine della cartella di sessione).
+     */
+    const scaricoMatch = method === 'GET' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/file$/.exec(url.pathname)
+      : null;
+    if (scaricoMatch) {
+      try {
+        const sessionId = decodeURIComponent(scaricoMatch[1]);
+        const percorso = parseTreeQuery(url);
+        const esito = await sessionRegistry.scaricaFile(sessionId, percorso);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        const nomi = nomiPerContentDisposition(esito.nome);
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': esito.bytes.length,
+          'Content-Disposition': `attachment; filename="${nomi.ascii}"; filename*=UTF-8''${nomi.utf8}`,
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'private, no-store',
+          'Content-Security-Policy': "default-src 'none'; sandbox",
+        });
+        res.end(esito.bytes);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
       return;
     }
     const isImageUpload = method === 'POST' && url.pathname === '/api/v1/chat-images';

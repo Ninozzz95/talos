@@ -10,6 +10,9 @@ import {
   creaVoceWorkspace,
   eliminaFile,
   leggiContenutoFile,
+  leggiFilePerScarico,
+  nomiPerContentDisposition,
+  nomeSicuroPerIntestazione,
   rinominaFile,
   rivelaInEsploraFile,
   spostaFile,
@@ -500,4 +503,73 @@ test('⛔ creaVoceWorkspace: un tipo diverso da "file"/"cartella" è rifiutato',
   } finally {
     rmSync(radice, { recursive: true, force: true });
   }
+});
+
+/*
+ * ⛔⛔ PO-05, owner: «ogni file generato deve avere un collegamento diretto per scaricarlo con un
+ * clic; nome, formato, dimensione e disponibilità REALI», e «verificare i BYTES scaricati».
+ * Il difetto che queste prove chiudono è preciso: `leggiContenutoFile` legge in utf8, e un `.docx`
+ * è uno zip — misurato il 10/09/2026, un docx vero generato da TALOS pesa 7.714 byte e comincia con
+ * la firma `50 4b 03 04`; passandolo da utf8 ogni byte non valido diventa U+FFFD e non torna indietro.
+ */
+test('PO-05: i byte di un binario arrivano IDENTICI, e utf8 li avrebbe distrutti', async () => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-scarico-'));
+  try {
+    // gli stessi primi byte di un OOXML vero (PK\x03\x04), pi\u00f9 byte che non sono UTF-8 valido
+    const originale = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x08, 0xff, 0xfe, 0x80, 0x81]);
+    writeFileSync(join(cartella, 'prova.docx'), originale);
+
+    const scaricato = await leggiFilePerScarico({ cartella, percorso: 'prova.docx' });
+    assert.deepEqual([...scaricato.bytes], [...originale], 'byte per byte, senza una sola sostituzione');
+    assert.equal(scaricato.dimensione, originale.length);
+    assert.equal(scaricato.nome, 'prova.docx');
+
+    // \u26d4 AL CONTRARIO: la via testuale sugli stessi byte NON li restituisce
+    const testuale = await leggiContenutoFile({ cartella, percorso: 'prova.docx' });
+    const riconvertito = Buffer.from(testuale.contenuto, 'utf8');
+    assert.notDeepEqual([...riconvertito], [...originale],
+      'se questa passasse, `leggiFilePerScarico` non servirebbe: \u00e8 la prova che il difetto era reale');
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('PO-05: un file fuori dalla cartella della sessione non si scarica', async () => {
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-scarico-'));
+  const fuori = mkdtempSync(join(tmpdir(), 'talos-fuori-'));
+  try {
+    writeFileSync(join(fuori, 'segreto.txt'), 'roba di un altro');
+    for (const percorso of ['../' + join(fuori, 'segreto.txt'), '..', '../..', 'sotto/../../fuori.txt']) {
+      await assert.rejects(
+        () => leggiFilePerScarico({ cartella, percorso }),
+        (e) => e instanceof WorkspaceFileError,
+        `\u26d4 «${percorso}» \u00e8 uscito dalla cartella della sessione`,
+      );
+    }
+    // e una cartella non \u00e8 un file
+    mkdirSync(join(cartella, 'sottocartella'));
+    await assert.rejects(() => leggiFilePerScarico({ cartella, percorso: 'sottocartella' }), (e) => e instanceof WorkspaceFileError);
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+    rmSync(fuori, { recursive: true, force: true });
+  }
+});
+
+/*
+ * ⛔ Il nome finisce in un'intestazione HTTP. RFC 6266 (letto 10/09/2026): `filename*` estende
+ * `filename` oltre l'ASCII e, quando ci sono entrambi, è `filename*` a vincere ⇒ si mandano tutti e
+ * due. E un a-capo dentro un'intestazione non è un nome brutto: è un'intestazione spezzata.
+ */
+test('PO-05: il nome per Content-Disposition \u2014 ripiego ASCII, versione UTF-8, e niente intestazioni spezzate', () => {
+  const conAccenti = nomiPerContentDisposition('Relazione citt\u00e0 perch\u00e9.docx');
+  assert.equal(conAccenti.ascii, 'Relazione citt_ perch_.docx', 'il ripiego resta ASCII puro');
+  assert.equal(conAccenti.utf8, encodeURIComponent('Relazione citt\u00e0 perch\u00e9.docx'));
+  assert.doesNotMatch(conAccenti.ascii, /["\\]/, 'virgolette e barra rovescia romperebbero il parametro quotato');
+
+  for (const cattivo of ['a\nX-Iniettato: si', 'b\rSet-Cookie: x=1', 'c\u0000d']) {
+    const nome = nomeSicuroPerIntestazione(cattivo);
+    assert.doesNotMatch(nome, /[\r\n\u0000]/, `\u26d4 «${JSON.stringify(cattivo)}» poteva spezzare l\u2019intestazione`);
+  }
+  assert.equal(nomeSicuroPerIntestazione('   '), 'file', 'un nome vuoto non produce un\u2019intestazione senza nome');
+  assert.equal(nomiPerContentDisposition('\u4e2d\u6587.pdf').ascii, '__.pdf', 'un nome tutto non-ASCII ha comunque un ripiego valido');
 });
