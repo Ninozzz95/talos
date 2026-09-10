@@ -2574,7 +2574,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           : (conChiave > 0 ? `${conChiave} con chiave · nessuno ancora provato` : 'Nessun accesso configurato');
       }
     }
-    aggiornaProviderList($('#providerList'),rows,{aperte:state.modelLab.providerAperti,prove:state.modelLab.provePr,occupati:state.modelLab.providerOccupati,caricamento:state.modelLab.loadingProviders,errore:state.modelLab.providerError});
+    aggiornaProviderList($('#providerList'),rows,{aperte:state.modelLab.providerAperti,prove:state.modelLab.provePr,occupati:state.modelLab.providerOccupati,caricamento:state.modelLab.loadingProviders,errore:state.modelLab.providerError,
+      /* ⛔ 10/09 — le azioni di un fornitore non stanno più in fila: qui si passa chi sa aprire
+         il menu condiviso `.ft-actions-menu`, lo stesso della Libreria e dell'albero dei file.
+         `posizionamento` arriva come {ancora} dal clic sui «⋯» e come {x,y} dal tasto destro. */
+      onMenu:(voci,dove)=>apriMenuAzioniLibreria(voci,Number.isFinite(dove?.x)&&Number.isFinite(dove?.y)?{x:dove.x,y:dove.y}:{ancoraEl:dove?.ancora??null})});
     const refresh=$('#providerRefresh');if(refresh)refresh.disabled=state.modelLab.loadingProviders;
   }
 

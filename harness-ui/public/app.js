@@ -47,7 +47,17 @@ function button(action, label, tone = "secondary") {
   b.dataset.providerAction = action;
   return b;
 }
-function creaProviderCard(row, { aperta = false, prova = null, occupato = false } = {}) {
+function simboloProvider(nome) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("class", "i i--sm");
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS(NS, "use");
+  use.setAttribute("href", "#" + nome);
+  svg.append(use);
+  return svg;
+}
+function creaProviderCard(row, { aperta = false, prova = null, occupato = false, onMenu = null } = {}) {
   const d = statoProvider(row, prova), busy = occupato || d.occupato, card = el("article", "talos-card talos-provider");
   card.dataset.c = "ProviderCard";
   card.dataset.providerId = row.id;
@@ -74,10 +84,32 @@ function creaProviderCard(row, { aperta = false, prova = null, occupato = false 
     if (row.supportsEndpoint) body.append(campo("Indirizzo del servizio", "url", "providerEndpoint", row, row.endpoint || ""));
     if (d.tempo) body.append(campo("Tempo massimo (secondi)", "number", "providerTimeout", row, String(row.timeoutSeconds ?? 60)));
     const actions = el("div", "talos-cluster");
-    actions.append(button("save-key", "Salva chiave", "primary"), button("test", "Prova collegamento"));
-    if (d.tempo) actions.append(button("save-runtime", row.supportsEndpoint ? "Salva collegamento" : "Salva tempo massimo"));
-    if (row.supportsEndpoint && row.endpointConfigured) actions.append(button("reset-runtime", "Ripristina indirizzo"));
-    if (row.keyConfigured) actions.append(button("remove-key", "Rimuovi chiave", "ghost talos-button--danger"));
+    actions.append(button("save-key", "Salva chiave", "primary"));
+    const nascoste = [];
+    const aggiungiNascosto = (b) => {
+      b.hidden = true;
+      nascoste.push(b);
+      return b;
+    };
+    const vociMenu = [{ chiave: "test", etichetta: "Prova collegamento", icona: "i-play", elemento: aggiungiNascosto(button("test", "Prova collegamento")) }];
+    if (d.tempo) vociMenu.push({ chiave: "save-runtime", etichetta: row.supportsEndpoint ? "Salva collegamento" : "Salva tempo massimo", icona: "i-clock", elemento: aggiungiNascosto(button("save-runtime", row.supportsEndpoint ? "Salva collegamento" : "Salva tempo massimo")) });
+    if (row.supportsEndpoint && row.endpointConfigured) vociMenu.push({ chiave: "reset-runtime", etichetta: "Ripristina indirizzo", icona: "i-history", elemento: aggiungiNascosto(button("reset-runtime", "Ripristina indirizzo")) });
+    if (row.keyConfigured) vociMenu.push({ chiave: "remove-key", etichetta: "Rimuovi chiave", icona: "i-trash", pericolo: true, separaPrima: true, elemento: aggiungiNascosto(button("remove-key", "Rimuovi chiave", "ghost talos-button--danger")) });
+    if (typeof onMenu === "function" && vociMenu.length) {
+      const tre = el("button", "talos-button talos-button--ghost talos-icon-button talos-button--sm");
+      tre.type = "button";
+      tre.setAttribute("aria-label", "Altre azioni per " + (row.label || row.id));
+      tre.setAttribute("aria-haspopup", "menu");
+      tre.append(simboloProvider("i-more"));
+      const voci = () => vociMenu.map((v) => ({ chiave: v.chiave, etichetta: v.etichetta, icona: v.icona, pericolo: v.pericolo, separaPrima: v.separaPrima, aziona: () => v.elemento.click() }));
+      tre.addEventListener("click", () => onMenu(voci(), { ancora: tre }));
+      card.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+        onMenu(voci(), { x: e.clientX, y: e.clientY });
+      });
+      actions.append(tre);
+    }
+    actions.append(...nascoste);
     body.append(actions);
     if (prova && prova.esito !== "in-corso") {
       const note = el("p", "talos-muted", prova.esito === "collegato" ? row.id === "openrouter" ? "Il catalogo risponde. La validità della chiave richiede una verifica dedicata." : "La verifica del servizio non esegue un modello." : prova.motivo || d.prova);
@@ -95,7 +127,7 @@ function creaProviderCard(row, { aperta = false, prova = null, occupato = false 
   card.append(body);
   return card;
 }
-function aggiornaProviderList(lista, rows, { aperte = /* @__PURE__ */ new Set(), prove = /* @__PURE__ */ new Map(), occupati = /* @__PURE__ */ new Set(), caricamento = false, errore = null } = {}) {
+function aggiornaProviderList(lista, rows, { aperte = /* @__PURE__ */ new Set(), prove = /* @__PURE__ */ new Map(), occupati = /* @__PURE__ */ new Set(), caricamento = false, errore = null, onMenu = null } = {}) {
   if (!lista) return;
   lista.className = "talos-provider-list";
   lista.setAttribute("aria-busy", String(caricamento));
@@ -111,7 +143,7 @@ function aggiornaProviderList(lista, rows, { aperte = /* @__PURE__ */ new Set(),
   const cards = rows.map((row) => {
     const op = { aperta: aperte.has(row.id), prova: prove.get(row.id) || null, occupato: occupati.has(row.id) || caricamento }, signature = JSON.stringify([row, op]), precedente = old.get(row.id);
     if (precedente?.dataset.providerSignature === signature && !precedente.dataset.providerReset) return precedente;
-    const card = creaProviderCard(row, op);
+    const card = creaProviderCard(row, { ...op, onMenu });
     card.dataset.providerSignature = signature;
     if (precedente && !precedente.dataset.providerReset) {
       for (const input of card.querySelectorAll("input")) {
@@ -13502,7 +13534,17 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             status.textContent = provati > 0 ? `${provati} provider collegat${provati === 1 ? "o" : "i"} · ${conChiave} con chiave` : conChiave > 0 ? `${conChiave} con chiave · nessuno ancora provato` : "Nessun accesso configurato";
           }
         }
-        aggiornaProviderList($2("#providerList"), rows, { aperte: state.modelLab.providerAperti, prove: state.modelLab.provePr, occupati: state.modelLab.providerOccupati, caricamento: state.modelLab.loadingProviders, errore: state.modelLab.providerError });
+        aggiornaProviderList($2("#providerList"), rows, {
+          aperte: state.modelLab.providerAperti,
+          prove: state.modelLab.provePr,
+          occupati: state.modelLab.providerOccupati,
+          caricamento: state.modelLab.loadingProviders,
+          errore: state.modelLab.providerError,
+          /* ⛔ 10/09 — le azioni di un fornitore non stanno più in fila: qui si passa chi sa aprire
+             il menu condiviso `.ft-actions-menu`, lo stesso della Libreria e dell'albero dei file.
+             `posizionamento` arriva come {ancora} dal clic sui «⋯» e come {x,y} dal tasto destro. */
+          onMenu: (voci, dove) => apriMenuAzioniLibreria(voci, Number.isFinite(dove?.x) && Number.isFinite(dove?.y) ? { x: dove.x, y: dove.y } : { ancoraEl: dove?.ancora ?? null })
+        });
         const refresh = $2("#providerRefresh");
         if (refresh) refresh.disabled = state.modelLab.loadingProviders;
       }

@@ -72,3 +72,12 @@ barra in basso dichiara ancora i token; i numeri dell'Indice dei giri che saltan
 ⛔ Due difetti visti in queste foto e curati nello stesso giro: la bolla del compito andava a capo
 ogni tre parole (le misure della chat larga dentro una colonna di 340 px), e una mia regola aveva
 impilato «Modello» e «Ha fatto» CENTRATI su due righe invece di lasciarli in coppia chiave-valore.
+
+## PO-01, preparazione — le azioni di un fornitore nel menu, 10/09/2026 (foto in `scratchpad/prove/foto/po01-provider-20260910/`)
+
+| Foto | Che cosa ci ho visto |
+|---|---|
+| 00-impostazioni.png | Le Impostazioni si aprono su «Aspetto e movimento»: le dieci sezioni ci sono tutte, comprese «Laboratorio modelli» e «Provider e accessi». |
+| 01-sezione-provider.png | «Provider e accessi» e una vista di RIEPILOGO — sette fornitori con lo stato in parole («chiave configurata sul server», «runtime locale, nessuna chiave richiesta», «accesso pubblico, chiave non richiesta») e il pulsante «Gestisci chiavi e indirizzi». Non e scollegata come temevo: rimanda alla gestione vera. |
+| 01-pannello.png | Il pannello vero, «Fornitori e accessi» dentro il Laboratorio modelli: sette card chiuse (OpenAI, DeepSeek, Anthropic, Google Gemini, OpenRouter, Ollama Local, Hugging Face), ognuna coi suoi badge — «Chiave salvata» o «Chiave facoltativa», «Indirizzo predefinito» solo per chi lo supporta, «Mai provato» — e il «+» per aprirle. In testa «Accessi server · 5 con chiave · nessuno ancora provato», che e onesto: avere la chiave non e averla provata. E qui che andra «Accedi con OpenRouter», nella quinta card. |
+| 02-menu-aperto.png | La card OpenAI dopo la cura: un solo pulsante a vista, «Salva chiave», piu il «⋯». Il menu porta «Prova collegamento», «Salva collegamento» e, dopo un separatore, «Rimuovi chiave» in rosso, ognuna con la sua icona. Prima erano fino a cinque pulsanti in fila. |
