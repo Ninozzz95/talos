@@ -92,7 +92,7 @@ import { eseguiHook as eseguiHookReale } from './hook-registry.mjs';
 import {
   artifactCreated,
   eventiPerRisposta,
-  eventoPerEsitoTool,
+  eventoPerEsitoTool, toolCallOutput,
   eventoPerScrittura,
   eventoPerUsage,
   hookInvoked,
@@ -842,6 +842,14 @@ export async function avviaSessione({
       if (evento.totali) onEvento(eventoPerUsage(evento.totali));
       return;
     }
+    /*
+     * ⛔ D-10B — l'uscita mentre esce. Sta PRIMA di `tool-esito` perche' e' cio' che arriva prima:
+     *   chi legge gli eventi in ordine vede l'avanzamento e poi il risultato, mai il contrario.
+     */
+    if (evento.tipo === 'tool-uscita') {
+      onEvento(toolCallOutput({ toolCallId: evento.toolCallId, delta: evento.delta }));
+      return;
+    }
     if (evento.tipo === 'tool-esito') {
       onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.content }));
     }
@@ -1580,7 +1588,41 @@ export async function eseguiComandoDiretto({
   onEvento(runStarted({ threadId, runId, input: { comandoDiretto: comando } }));
   onEvento(toolCallStart({ toolCallId, toolCallName: 'shell' }));
   onEvento(toolCallArgs({ toolCallId, delta: JSON.stringify({ comando }) }));
-  const risultato = await eseguiComandoSandboxatoFn(comando, cartella, { mobile });
+  /*
+   * ⛔⛔⛔ D-10B — È QUI CHE IL DEBITO FA PIÙ MALE: questo è il comando scritto DALLA PERSONA col
+   *   `!` del composer. Misurato prima della cura: 2.091 ms di schermo fermo su un comando da
+   *   2.091 ms — un `await` dell'intero comando e poi un solo `ToolCallResult`. Chi lancia
+   *   `!npm test` guarda un riquadro vuoto finché non finisce, e non sa nemmeno se è partito.
+   *
+   * ⛔ L'accorpamento è lo stesso dell'attrezzo shell del modello (kernel, `talosLavora`): ogni
+   *   120 ms oppure appena il pezzo supera i 2 KB, con un tetto. Un evento per ogni `data` di un
+   *   `npm test` inonderebbe l'SSE con eventi da pochi byte.
+   * ⛔ Il testo definitivo resta quello del `ToolCallResult` qui sotto, tagliato da `uscitaUtile`:
+   *   questi pezzi sono avanzamento, non storia — `session-registry` non li persiste (sono
+   *   effimeri come `WorkspaceChanged`, stessa lezione: 1,9 MB rigiocati a ogni apertura).
+   * Ricerca 10/09/2026: AG-UI, «a vocabulary of typed events that agents emit to frontends», dove
+   * l'avanzamento è distinto dal messaggio finale; Vercel Academy, «Streaming and Tool Rendering».
+   */
+  let accumulato = '';
+  let ultimoInvio = 0;
+  let mandati = 0;
+  const TETTO_USCITA_IN_CORSO = 40_000;
+  const svuota = () => {
+    if (!accumulato || mandati >= TETTO_USCITA_IN_CORSO) return;
+    const delta = accumulato.slice(0, TETTO_USCITA_IN_CORSO - mandati);
+    accumulato = '';
+    mandati += delta.length;
+    onEvento(toolCallOutput({ toolCallId, delta }));
+  };
+  const risultato = await eseguiComandoSandboxatoFn(comando, cartella, {
+    mobile,
+    onPezzo: ({ testo }) => {
+      accumulato += testo;
+      const ora = Date.now();
+      if (accumulato.length >= 2_048 || ora - ultimoInvio >= 120) { ultimoInvio = ora; svuota(); }
+    },
+  });
+  svuota(); // ⛔ l'ultimo pezzo non resta in mano: sarebbe il difetto di prima, in piccolo
   const content = `exit ${risultato.codice} [sandbox: ${risultato.enforcement}]\n${risultato.testo}`;
   onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId, content }));
   onEvento(runFinished({ threadId, runId, outcome: { type: 'success' }, result: { detto: content } }));

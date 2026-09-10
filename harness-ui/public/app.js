@@ -20903,6 +20903,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       const RIGHE_MASSIME_DIFF = 1500;
       const RIGHE_ESITO_IN_CHAT = 200;
+      const RIGHE_USCITA_VIVA = 40;
       const righeDelTesto = (testo3) => {
         const t2 = String(testo3 ?? "").replace(/\r\n/g, "\n").replace(/\n$/, "");
         return t2 === "" ? [] : t2.split("\n");
@@ -22767,8 +22768,48 @@ ${testo3}` : testo3;
             }
             break;
           }
+          /*
+           * ⛔⛔⛔ D-10B — L'USCITA DI UN COMANDO, MENTRE ESCE.
+           *
+           * Misurato prima della cura: 2.091 ms di schermo fermo su un comando da 2.091 ms. Non era un
+           * difetto della chat — nel kernel NESSUNO emetteva niente prima di `close`, quindi non c'era
+           * niente da mostrare. Ora `eseguiComando` avvisa a ogni pezzo, il kernel li accorpa (ogni
+           * 120 ms o 2 KB) e li manda come `ToolCallOutput`; qui si vedono.
+           *
+           * ⛔ Va in un nodo SUO, che sparisce quando arriva l'esito: se restasse, l'output finirebbe
+           *   scritto due volte — una viva e una definitiva — e la seconda è quella tagliata e giusta.
+           * ⛔ E si tiene solo la CODA: un `npm test` stampa più di quanto una chat possa mostrare, e
+           *   ciò che serve mentre aspetti è l'ultima riga, non la prima.
+           * Ricerca 10/09/2026: AG-UI («a vocabulary of typed events that agents emit to frontends»,
+           * dove l'avanzamento è distinto dal messaggio finale) e Vercel Academy, «Streaming and Tool
+           * Rendering», per la stessa distinzione lato resa.
+           */
+          case "ToolCallOutput": {
+            const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+            if (!info?.detail || typeof evento.delta !== "string" || !evento.delta) break;
+            if (!info.uscitaViva) {
+              const pre = document.createElement("pre");
+              pre.className = "tool-out tool-out--viva";
+              pre.setAttribute("aria-live", "polite");
+              info.uscitaViva = document.createElement("code");
+              pre.appendChild(info.uscitaViva);
+              info.detail.appendChild(pre);
+              info.uscitaVivaTesto = "";
+            }
+            info.uscitaVivaTesto += evento.delta;
+            const righe = info.uscitaVivaTesto.split(/\r?\n/);
+            if (righe.length > RIGHE_USCITA_VIVA) info.uscitaVivaTesto = righe.slice(-RIGHE_USCITA_VIVA).join("\n");
+            info.uscitaViva.textContent = info.uscitaVivaTesto;
+            info.uscitaViva.parentElement.scrollTop = info.uscitaViva.parentElement.scrollHeight;
+            break;
+          }
           case "ToolCallResult": {
             const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+            if (info?.uscitaViva) {
+              info.uscitaViva.parentElement?.remove();
+              info.uscitaViva = null;
+              info.uscitaVivaTesto = "";
+            }
             if (info?.nome === "delega_sottotask") void caricaFigliSessione();
             if (info?.nome === "naviga") {
               let url = "(url)";
