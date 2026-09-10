@@ -1403,7 +1403,7 @@ select:focus-visible,
   }
 }
 @container (max-width:820px) {
-  .talos-topbar [data-azione=comprimi] {
+  .talos-topbar [data-azione=comandi] {
     display: none;
   }
 }

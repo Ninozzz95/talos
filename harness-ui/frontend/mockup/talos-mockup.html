@@ -456,7 +456,11 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-topbar .talos-tabs, .talos-topbar__actions{flex:none}
 .talos-topbar{container-type:inline-size; overflow:hidden}
 @container (max-width:900px){ .talos-topbar__path{display:none} .talos-topbar__title{min-width:min(140px,30%)} }
-@container (max-width:820px){ .talos-topbar [data-azione="comprimi"]{display:none} }
+/* ⛔ 10/09 — a spazio stretto cede ciò che ha un'ALTRA porta, mai l'unica porta di qualcosa.
+   Qui spariva «Context Manager», che non ha né scorciatoia né voce di menu: col pannello di destra
+   aperto la colonna centrale misura 824 px, cioè si stava sul filo, e l'owner non trovava più il
+   pulsante. «Comandi» invece si apre anche con Ctrl+K e scrivendo `/` nel composer. */
+@container (max-width:820px){ .talos-topbar [data-azione="comandi"]{display:none} }
 @container (max-width:720px){ .talos-topbar [data-azione="comandi"]{display:none} .talos-topbar__actions{gap:4px} }
 .talos-topbar__title h1{font-size:15px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .talos-topbar__title .i{color:var(--talos-muted)}
