@@ -580,6 +580,17 @@ async function startServer() {
   });
 
   const app = createHttpApp({
+    /*
+     * ⛔⛔ PO-01 (10/09) — l'UNICO punto in cui la chiave ottenuta dall'accesso lascia il flusso
+     *   OAuth. Va nel PORTACHIAVI DEL SISTEMA, da dove entrano già tutte le altre chiavi
+     *   (`providerStore`, cablato sopra con `@napi-rs/keyring`): così «Rimuovi chiave», il Doctor,
+     *   l'elenco dei fornitori e la prova di collegamento continuano a funzionare senza sapere che
+     *   esiste un accesso, e non nascono due custodie destinate a divergere.
+     * ⛔ La chiave passa come argomento e basta: non entra in un log, in un errore o in una
+     *   risposta HTTP. Se questa riga manca, le rotte rispondono che l'accesso non è configurato
+     *   invece di far fare tutto il giro sul sito del fornitore e buttare la chiave alla fine.
+     */
+    custodisciChiaveOpenRouter: async (chiave) => { providerStore.setKey('openrouter', chiave); },
     contextService: contextRuntime?.service,
     chatImageStore,
     staticHandler: createStaticHandler(config.publicDir),

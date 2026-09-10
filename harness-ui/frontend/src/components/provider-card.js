@@ -2,7 +2,21 @@
 export function statoProvider(row={},prova=null){
  const esito=prova?.esito,labels={'in-corso':'Prova in corso…','non-autorizzato':'Credenziale rifiutata',irraggiungibile:'Non raggiungibile','non-provabile':'Da configurare',errore:'Prova non riuscita'};
  const conteggio=Number.isInteger(prova?.modelli)&&prova.modelli>=0?' · '+prova.modelli+' modelli':'';
- return {chiave:row.keyConfigured===true?'Chiave salvata':row.requiresKey===true?'Chiave mancante':'Chiave facoltativa',tempo:row.id!=='huggingface',prova:!prova?'Mai provato':esito==='collegato'?(row.id==='huggingface'?'Profilo raggiunto':'Servizio raggiunto'+conteggio):labels[esito]||'Prova non riuscita',tono:esito==='collegato'?'success':['non-autorizzato','irraggiungibile','errore'].includes(esito)?'danger':'warning',occupato:esito==='in-corso'};
+ return {chiave:etichettaOrigineChiave(row),tempo:row.id!=='huggingface',prova:!prova?'Mai provato':esito==='collegato'?(row.id==='huggingface'?'Profilo raggiunto':'Servizio raggiunto'+conteggio):labels[esito]||'Prova non riuscita',tono:esito==='collegato'?'success':['non-autorizzato','irraggiungibile','errore'].includes(esito)?'danger':'warning',occupato:esito==='in-corso'};
+}
+/*
+ * ⛔ PO-01 — «Chiave salvata» non basta più: da quando esiste l'accesso, una chiave può arrivare
+ *   da tre posti diversi, e uno dei tre NON si tocca da qui. `origineChiave` lo dice il server
+ *   (`custodia` / `ambiente`); senza quel campo si torna esattamente a com'era.
+ * ⛔ «Chiave dall'ambiente» è la più importante: l'ha impostata qualcuno fuori da TALOS, vince su
+ *   quella salvata, e da questa pagina non si rimuove. Senza dirlo, una chiave vecchia continua a
+ *   essere usata e nessuno capisce perché.
+ */
+export function etichettaOrigineChiave(row={}){
+ if(row.origineChiave==='ambiente')return 'Chiave dall\u2019ambiente';
+ if(row.origineChiave==='accesso')return 'Accesso fatto';
+ if(row.keyConfigured===true)return 'Chiave salvata';
+ return row.requiresKey===true?'Chiave mancante':'Chiave facoltativa';
 }
 function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!=null)n.textContent=txt;return n;}
 function campo(label,tipo,key,row,valore=''){const wrap=el('label','talos-stack talos-provider__field');wrap.append(el('span','talos-muted',label));const input=el('input','talos-field__input');input.type=tipo;input.dataset[key]=row.id;input.autocomplete='off';input.value=valore;if(tipo==='password'){input.spellcheck=false;input.placeholder=row.keyConfigured?'Incolla una nuova chiave':'Incolla la chiave';}if(tipo==='number'){input.min='5';input.max='300';input.step='1';}wrap.append(input);return wrap;}
@@ -17,7 +31,26 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  for(const [txt,tone]of [[d.chiave,row.keyConfigured?'success':''],[row.supportsEndpoint?(row.endpointConfigured?'Indirizzo personalizzato':'Indirizzo predefinito'):null,''],[d.prova,d.tono]])if(txt){const badge=el('span','talos-badge talos-badge--sm'+(tone?' talos-badge--'+tone:''),txt);badge.dataset.c='Badge';marks.append(badge);}card.append(head);
  const body=el('div','talos-provider__body');body.id='provider-body-'+row.id;body.hidden=!aperta;
  {
- body.append(campo(row.keyConfigured?'Sostituisci la chiave':row.requiresKey?'Chiave API':'Chiave API (facoltativa)','password','providerKey',row));
+ /*
+  * ⛔ PO-01 — se il fornitore ha l'accesso, quello è il gesto principale e il campo della chiave
+  *   scende sotto, in un dettaglio richiudibile: resta per chi una chiave ce l'ha già, ma smette
+  *   di essere la prima cosa che si vede. Il pulsante compare SOLO se il server dichiara di
+  *   saperlo servire: un pulsante che apre un flusso inesistente è peggio di nessun pulsante.
+  */
+ const conAccesso=row.supportsOAuth===true;
+ const campoChiave=campo(row.keyConfigured?'Sostituisci la chiave':row.requiresKey?'Chiave API':'Chiave API (facoltativa)','password','providerKey',row);
+ if(conAccesso){
+  const accedi=button('oauth-start',row.origineChiave==='accesso'?'Rifai l\u2019accesso':'Accedi con '+(row.label||row.id),'primary');
+  accedi.classList.add('talos-provider__accedi');
+  body.append(accedi);
+  const nota=el('p','talos-muted',row.origineChiave==='ambiente'
+   ?'Adesso vale la chiave impostata fuori da TALOS: finch\u00e9 c\u2019\u00e8, l\u2019accesso non viene usato.'
+   :'Si apre il sito del fornitore: la password non passa da TALOS, e alla fine torna una chiave.');
+  body.append(nota);
+  const oppure=document.createElement('details');oppure.className='talos-provider__oppure';
+  const riassunto=document.createElement('summary');riassunto.textContent='Oppure incolla una chiave';
+  oppure.append(riassunto,campoChiave);body.append(oppure);
+ }else body.append(campoChiave);
  if(row.supportsEndpoint)body.append(campo('Indirizzo del servizio','url','providerEndpoint',row,row.endpoint||''));
  if(d.tempo)body.append(campo('Tempo massimo (secondi)','number','providerTimeout',row,String(row.timeoutSeconds??60)));
  /*
