@@ -99,7 +99,7 @@ function percorsoDi(cartellaStore, sessionId) {
  */
 const codeDiScrittura = new Map();
 
-export async function registraRiga({ cartellaStore, sessionId, record }, deps = {}) {
+export async function registraRiga({ cartellaStore, sessionId, record, durable = false }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const appendFileFn = deps.appendFileFn ?? fsp.appendFile;
   const percorso = percorsoDi(cartellaStore, sessionId);
@@ -108,7 +108,7 @@ export async function registraRiga({ cartellaStore, sessionId, record }, deps = 
   const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
   const corrente = precedente.catch(() => {}).then(async () => {
     await mkdirFn(cartellaStore, { recursive: true });
-    await appendFileFn(percorso, riga, 'utf8');
+    await appendFileFn(percorso, riga, durable ? { encoding: 'utf8', flush: true } : 'utf8');
   });
   codeDiScrittura.set(percorso, corrente);
   // La mappa non deve crescere per sempre: chi è l'ultimo della fila la ripulisce.

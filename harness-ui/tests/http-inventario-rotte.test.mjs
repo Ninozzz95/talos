@@ -165,12 +165,22 @@ function esempioDiIndirizzo(schema) {
     if (inizio < 0 || fine < 0) break;
     corpo = corpo.slice(0, inizio) + corpo.slice(fine + 2);
   }
+  // Anche un gruppo catturante facoltativo puo essere omesso. La sonda
+  // gestisce qui i gruppi semplici presenti nelle rotte, non regex arbitrarie.
+  corpo = corpo.replace(/\((?:\\.|[^()])*\)\?/g, '');
   corpo = corpo.split('([^/]+)').join('esempio');            // un id qualunque
   corpo = corpo.split('[a-f0-9]{12}').join('a1b2c3d4e5f6');  // il riferimento di Doctor
   corpo = corpo.split('[a-f0-9]{64}').join('a'.repeat(64));  // il riferimento immagine
   corpo = corpo.replace(/\(([^)]*)\)/g, (_, dentro) => dentro.split('|')[0]); // prima alternativa
   return corpo.split(BARRA_ROVESCIA + '/').join('/');
 }
+
+test('CTX-ROUTE-SAMPLE un gruppo catturante facoltativo produce un indirizzo realmente accettato', () => {
+  const schema = /^\/api\/v1\/sessions\/([^/]+)\/context(\/.*)?$/;
+  const indirizzo = esempioDiIndirizzo(schema.toString());
+  assert.equal(indirizzo, '/api/v1/sessions/esempio/context');
+  assert.equal(schema.test(indirizzo), true);
+});
 
 test('⛔⛔⛔ GUARDIANO — ogni rotta nominata nella catena è anche nell’inventario che decide 404 contro 405', () => {
   const sorgente = readFileSync(PERCORSO_HTTP_APP, 'utf8');

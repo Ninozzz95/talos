@@ -22,6 +22,85 @@ it('NATIVE-06 conserva lo stato firmato soltanto con fine stream completa', asyn
     assert.equal(partial.scelta.talos_provider_state, undefined)
 })
 import { fileURLToPath } from 'node:url'
+it('CTX-KERNEL-INFERENCE-LEASE holds the resource through complete SSE consumption', async (t) => {
+    const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
+    t.after(() => rmSync(cartella, { recursive: true, force: true }))
+    let held = false, invoked = false
+    const result = await talosLavora({ cartella, task: { consegna: 'continua' }, modello: 'x', chiave: 'y', onDelta: () => { assert.equal(held, true) },
+        contextHooks: { capture: async () => {}, prepare: async ({ messages }) => ({ messages }), infer: async ({ signal }, invoke) => { held = true; invoked = true; try { return await invoke(signal) } finally { held = false } } },
+        fetchDiRete: async () => {
+            assert.equal(held, true)
+            return new Response(new ReadableStream({ async start(controller) {
+                await new Promise(resolve => setImmediate(resolve))
+                assert.equal(held, true)
+                controller.enqueue(new TextEncoder().encode('data: ' + JSON.stringify({ choices: [{ delta: { content: 'Continuiamo' }, finish_reason: 'stop' }] }) + '\n\ndata: [DONE]\n\n'))
+                controller.close()
+            } }))
+        },
+    })
+    assert.equal(invoked, true)
+    assert.equal(held, false)
+    assert.equal(result.messaggiFinali.at(-1).content, 'Continuiamo')
+})
+it('CTX-KERNEL-RESPONSE-RESERVE bounds the actual provider generation to the measured reserve', async (t) => {
+    const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
+    t.after(() => rmSync(cartella, { recursive: true, force: true }))
+    let body
+    await talosLavora({ cartella, task: { consegna: 'continua' }, modello: 'x', chiave: 'y',
+        contextHooks: { capture: async () => {}, prepare: async ({ messages }) => ({ messages, measurement: { responseReserve: 2048 } }) },
+        fetchDiRete: async (_url, input) => { body = JSON.parse(input.body); return Response.json({ choices: [{ message: { role: 'assistant', content: 'Va bene' } }] }) },
+    })
+    assert.equal(body.max_tokens, 2048)
+    let called = false
+    await assert.rejects(chiamaConRitenta({ modello: 'x', chiave: 'y', messaggi: [], maxOutputTokens: -1, fetchDiRete: async () => { called = true } }), { code: 'CTX_INVALID_RESERVE' })
+    assert.equal(called, false)
+})
+it('CTX-KERNEL-PREPARE sends prepared copy while preserving original conversation', async (t) => {
+    const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
+    t.after(() => rmSync(cartella, { recursive: true, force: true }))
+    const captured = []; const requests = []
+    const result = await talosLavora({ cartella, task: { consegna: 'riprendiamo da dove eravamo' }, modello: 'x', chiave: 'y',
+        contextHooks: { capture: async ({ messages }) => captured.push(structuredClone(messages)), prepare: async () => ({ messages: [{ role: 'user', content: 'Contesto verificato' }], versionId: 'version1' }) },
+        fetchDiRete: async (url, options) => { requests.push(JSON.parse(options.body)); return { ok: true, status: 200, json: async () => ({ choices: [{ message: { role: 'assistant', content: 'Continuiamo' } }] }), text: async () => '' } },
+    })
+    assert.equal(requests[0].messages[0].content, 'Contesto verificato')
+    assert.ok(result.messaggiFinali.some(m => m.content === 'riprendiamo da dove eravamo'))
+    assert.equal(captured.at(-1).at(-1).content, 'Continuiamo')
+})
+it('CTX-KERNEL-RAW-8000 archives full result and raw provider response before normalization', async (t) => {
+    const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
+    t.after(() => rmSync(cartella, { recursive: true, force: true }))
+    const text = 'dato '.repeat(3000) + 'ULTIMO VALORE'
+    const raw = []; const captured = []; let count = 0
+    const result = await talosLavora({ cartella, task: { consegna: 'leggi il file e controlla' }, modello: 'x', chiave: 'y', strumentiEstesi: ['document_create'],
+        onDocumento: async () => ({ ok: true, esito: text }),
+        contextHooks: { capture: async ({ messages }) => captured.push(structuredClone(messages)), captureProviderResponse: async ({ response }) => raw.push(structuredClone(response)), prepare: async ({ messages }) => ({ messages }) },
+        fetchDiRete: async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: count++ ? { role: 'assistant', content: 'fatto' } : { role: 'assistant', content: null, tool_calls: [{ id: 'd1', type: 'function', function: { name: 'document_create', arguments: '{' } }] } }] }), text: async () => '' }),
+    })
+    assert.equal(raw[0].tool_calls[0].function.arguments, '{')
+    assert.equal(result.messaggiFinali.find(m => m.role === 'tool').content, text)
+    assert.equal(captured.at(-1).find(m => m.role === 'tool').content, text)
+})
+it('CTX-KERNEL-PERSIST-GATE failed archival prevents the next model request and tool effects', async (t) => {
+    const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
+    t.after(() => rmSync(cartella, { recursive: true, force: true }))
+    let requests = 0
+    await assert.rejects(talosLavora({ cartella, task: { consegna: 'continua' }, modello: 'x', chiave: 'y', contextHooks: { capture: async () => { throw Object.assign(new Error('disk full'), { code: 'CTX_PERSISTENCE_FAILED' }) }, prepare: async ({ messages }) => ({ messages }) }, fetchDiRete: async () => { requests++; throw new Error('must not run') } }), { code: 'CTX_PERSISTENCE_FAILED' })
+    assert.equal(requests, 0)
+})
+it('CTX-KERNEL-STOP-ARCHIVE persists the result for every cancelled pending tool', async (t) => {
+    const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
+    t.after(() => rmSync(cartella, { recursive: true, force: true }))
+    const controller = new AbortController(); const captured = []
+    const calls = ['one', 'two'].map(id => ({ id, type: 'function', function: { name: 'elenca', arguments: '{}' } }))
+    const result = await talosLavora({ cartella, task: { consegna: 'controlla' }, modello: 'x', chiave: 'y', segnaleStop: controller.signal,
+        contextHooks: { capture: async ({ messages }) => captured.push(structuredClone(messages)), prepare: async ({ messages }) => ({ messages }) },
+        onGiro: event => { if (event.tipo === 'tool-esito') controller.abort() },
+        fetchDiRete: async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { role: 'assistant', content: null, tool_calls: calls } }] }), text: async () => '' }),
+    })
+    assert.deepEqual(captured.at(-1), result.messaggiFinali)
+    assert.equal(captured.at(-1).filter(m => m.role === 'tool').length, 2)
+})
 import {
     siRitenta, attesaDelTentativo, chiamaConRitenta, consumaFlussoSSE,
     comeSonoFinitiIGiri, uscitaUtile, RIPETIZIONI_IDENTICHE_MASSIME,

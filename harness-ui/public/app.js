@@ -777,7 +777,7 @@ function aggiornaDettaglioCatalogo(mount, m, { fornitori } = {}) {
   mount.append(access);
 }
 function aggiornaCatalogoModelli(panel, dati, { query = "", provider = "all", selezionato = null, limite = 120, caricamento = false, errore = "", seleziona, altri, fornitori } = {}) {
-  const list = panel.querySelector("[data-catalog-list]"), detail = panel.querySelector("[data-catalog-detail]"), count = panel.querySelector("[data-catalog-count]"), more = panel.querySelector("[data-catalog-more]"), vuoto = panel.querySelector("#vuotoCatalogo"), refresh = panel.querySelector("[data-catalog-refresh]");
+  const list = panel.querySelector("[data-catalog-list]"), detail = panel.querySelector("[data-catalog-detail]"), count2 = panel.querySelector("[data-catalog-count]"), more = panel.querySelector("[data-catalog-more]"), vuoto = panel.querySelector("#vuotoCatalogo"), refresh = panel.querySelector("[data-catalog-refresh]");
   if (!list || !detail) return null;
   const attivo = document.activeElement, focusId = list.contains(attivo) ? attivo.dataset.catalog : null, scroll = list.scrollTop;
   const filtered = dati ? filtraModelli(normalizzaCatalogoModelli(dati).modelli, query, provider) : [];
@@ -791,11 +791,11 @@ function aggiornaCatalogoModelli(panel, dati, { query = "", provider = "all", se
     const p = el4("p", "talos-card talos-card--pad", errore);
     p.setAttribute("role", "alert");
     list.append(p);
-    count.textContent = "Catalogo non disponibile";
+    count2.textContent = "Catalogo non disponibile";
     aggiornaDettaglioCatalogo(detail, null);
     return null;
   }
-  count.textContent = caricamento ? "Aggiornamento del catalogo…" : dati ? filtered.length + " di " + dati.modelli.length + " modelli · OpenRouter · " + (dati.daCache ? "copia salvata · " : "") + new Date(dati.aggiornatoAlle).toLocaleString("it-IT", { timeZone: "Europe/Rome" }) : "Catalogo non caricato";
+  count2.textContent = caricamento ? "Aggiornamento del catalogo…" : dati ? filtered.length + " di " + dati.modelli.length + " modelli · OpenRouter · " + (dati.daCache ? "copia salvata · " : "") + new Date(dati.aggiornatoAlle).toLocaleString("it-IT", { timeZone: "Europe/Rome" }) : "Catalogo non caricato";
   if (!dati) {
     list.append(el4("p", "talos-card--pad talos-muted", caricamento ? "Caricamento…" : "Apri questa sezione per caricare il catalogo."));
   } else if (!filtered.length) {
@@ -2038,6 +2038,9 @@ function impostaLingua(lingua) {
   } catch {
     regolePlurale = new Intl.PluralRules(LINGUA_PREDEFINITA);
   }
+  return linguaCorrente;
+}
+function linguaCorrenteDiT() {
   return linguaCorrente;
 }
 function interpola(frase, parametri) {
@@ -5448,6 +5451,677 @@ var init_costi_consumo = __esm({
   }
 });
 
+// src/components/dialoghi.js
+function limitiDialogo(idVelo, { innerWidth, innerHeight, pad = 24 }) {
+  const maxW = Math.max(280, innerWidth - pad * 2);
+  const maxH = Math.max(240, Math.min(innerHeight - pad * 2, innerHeight * 0.9));
+  return { minW: Math.min(idVelo === "veloComandi" ? 420 : 520, maxW), minH: Math.min(idVelo === "veloComandi" ? 240 : 340, maxH), maxW, maxH };
+}
+function misuraDialogo(width, height, limiti) {
+  const w = Math.round(Math.max(limiti.minW, Math.min(limiti.maxW, Number(width) || limiti.minW)));
+  const h = Math.round(Math.max(limiti.minH, Math.min(limiti.maxH, Number(height) || limiti.minH)));
+  return { width: w, height: h };
+}
+function leggiMisure(storage = globalThis.localStorage) {
+  try {
+    const v = JSON.parse(storage.getItem(CHIAVE_MISURE) || "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+function salvaMisura(chiave, misura, storage = globalThis.localStorage) {
+  try {
+    const s = leggiMisure(storage);
+    s[chiave] = { width: Math.round(misura.width), height: Math.round(misura.height) };
+    storage.setItem(CHIAVE_MISURE, JSON.stringify(s));
+  } catch {
+  }
+}
+function dimenticaMisura(chiave, storage = globalThis.localStorage) {
+  try {
+    const s = leggiMisure(storage);
+    delete s[chiave];
+    storage.setItem(CHIAVE_MISURE, JSON.stringify(s));
+  } catch {
+  }
+}
+function applica(dialogo, velo, width, height, finestra) {
+  const pad = parseFloat(finestra.getComputedStyle(velo).paddingLeft) || 24;
+  const m = misuraDialogo(width, height, limitiDialogo(velo.id, { innerWidth: finestra.innerWidth, innerHeight: finestra.innerHeight, pad }));
+  dialogo.style.setProperty("--talos-dialog-w", `${m.width}px`);
+  dialogo.style.setProperty("--talos-dialog-h", `${m.height}px`);
+  dialogo.dataset.userSized = "true";
+  return m;
+}
+function preparaMisuraDialogo(velo, { finestra = globalThis.window, storage = globalThis.localStorage } = {}) {
+  const d = velo?.querySelector(".talos-dialog");
+  if (!d) return null;
+  d.dataset.dialogResizeKey = CHIAVI_MISURA[velo.id] || `sheet:${velo.id}`;
+  const s = leggiMisure(storage)[d.dataset.dialogResizeKey];
+  if (s && Number.isFinite(s.width) && Number.isFinite(s.height)) return applica(d, velo, s.width, s.height, finestra);
+  d.style.removeProperty("--talos-dialog-w");
+  d.style.removeProperty("--talos-dialog-h");
+  delete d.dataset.userSized;
+  return null;
+}
+function collegaRidimensionamentoDialoghi(radice = globalThis.document, { finestra = globalThis.window, storage = globalThis.localStorage } = {}) {
+  let collegate = 0;
+  for (const h of radice.querySelectorAll("[data-dialog-resize]")) {
+    if (h.dataset.ridimensionaCollegato) continue;
+    h.dataset.ridimensionaCollegato = "si";
+    const d = h.closest(".talos-dialog");
+    const velo = h.closest(".overlay-layer");
+    if (!d || !velo) continue;
+    const axis = h.dataset.dialogResize;
+    const chiave = () => d.dataset.dialogResizeKey || CHIAVI_MISURA[velo.id] || `sheet:${velo.id}`;
+    h.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      h.focus();
+      const r = d.getBoundingClientRect();
+      const x = e.clientX;
+      const y = e.clientY;
+      h.setPointerCapture?.(e.pointerId);
+      h.dataset.trascina = "si";
+      const move = (m) => applica(d, velo, axis === "height" ? r.width : r.width + (m.clientX - x) * 2, axis === "width" ? r.height : r.height + (m.clientY - y) * 2, finestra);
+      const end = () => {
+        delete h.dataset.trascina;
+        if (h.hasPointerCapture?.(e.pointerId)) h.releasePointerCapture(e.pointerId);
+        const rr = d.getBoundingClientRect();
+        salvaMisura(chiave(), { width: rr.width, height: rr.height }, storage);
+        h.removeEventListener("pointermove", move);
+        h.removeEventListener("pointerup", end);
+        h.removeEventListener("pointercancel", end);
+      };
+      h.addEventListener("pointermove", move);
+      h.addEventListener("pointerup", end);
+      h.addEventListener("pointercancel", end);
+    });
+    h.addEventListener("keydown", (e) => {
+      const hor = ["ArrowLeft", "ArrowRight"].includes(e.key);
+      const ver = ["ArrowUp", "ArrowDown"].includes(e.key);
+      if (!hor && !ver || axis === "height" && hor || axis === "width" && ver) return;
+      e.preventDefault();
+      const r = d.getBoundingClientRect();
+      const m = applica(d, velo, r.width + (hor ? e.key === "ArrowRight" ? PASSO_TASTIERA : -PASSO_TASTIERA : 0), r.height + (ver ? e.key === "ArrowDown" ? PASSO_TASTIERA : -PASSO_TASTIERA : 0), finestra);
+      salvaMisura(chiave(), m, storage);
+    });
+    h.addEventListener("dblclick", () => {
+      d.style.removeProperty("--talos-dialog-w");
+      d.style.removeProperty("--talos-dialog-h");
+      delete d.dataset.userSized;
+      dimenticaMisura(chiave(), storage);
+    });
+    collegate += 1;
+  }
+  return collegate;
+}
+var CHIAVE_MISURE, PASSO_TASTIERA, CHIAVI_MISURA;
+var init_dialoghi = __esm({
+  "src/components/dialoghi.js"() {
+    CHIAVE_MISURE = "talos-harness-modal-sizes-v1";
+    PASSO_TASTIERA = 16;
+    CHIAVI_MISURA = Object.freeze({
+      veloContesto: "sheet:context",
+      veloScorciatoie: "sheet:shortcuts",
+      veloNuova: "sheet:new-session",
+      veloComandi: "command:palette",
+      veloModello: "sheet:model",
+      veloPermessi: "sheet:permissions",
+      veloAlbero: "sheet:sessionTree",
+      veloIntro: "dialog:introDialog",
+      veloAmbiente: "sheet:environment",
+      veloRinomina: "sheet:rename",
+      veloRiferimenti: "sheet:references",
+      veloFile: "sheet:fileViewer",
+      veloRinominaFile: "sheet:renameFile",
+      veloEliminaFile: "sheet:deleteFile",
+      veloEliminaSessione: "sheet:deleteSession",
+      veloCreaFile: "sheet:createFile",
+      veloEsporta: "sheet:export",
+      veloFermaGiro: "dialog:stopRun"
+    });
+  }
+});
+
+// src/components/context-compactor.js
+function translateDefault(text) {
+  return linguaCorrenteDiT() === "en" ? EN[text] ?? t(text) : t(text);
+}
+function descriviContextCompactor(state, { translate = translateDefault } = {}) {
+  const meta = state?.measurement && typeof state.measurement === "object" ? state.measurement : null;
+  const m = meta?.tokens ?? (number(meta?.inputTokens) ? meta : null);
+  const known = number(m?.inputTokens) && number(m?.windowTokens) && m.windowTokens > 0;
+  const current = known && (meta?.tokens ? Number.isSafeInteger(meta?.revision) && meta.revision === state?.revision : false);
+  const dichiaraFreschezza = Boolean(meta?.tokens);
+  const oraMisura = known && typeof meta?.measuredAt === "string" && !Number.isNaN(Date.parse(meta.measuredAt)) ? new Date(meta.measuredAt).toLocaleTimeString(linguaCorrenteDiT() === "en" ? "en-GB" : "it-IT", { hour: "2-digit", minute: "2-digit" }) : null;
+  const exact = m?.exact === true && m?.method !== "heuristic";
+  const method = m?.method === "runtime" ? "Conteggio del motore" : m?.method === "provider" ? "Conteggio del fornitore" : m?.method === "heuristic" ? "Stima euristica" : "Non disponibile";
+  const jobs = Array.isArray(state?.jobs) ? state.jobs : [];
+  const job = jobs.find((j) => ACTIVE.has(j.state)) ?? [...jobs].sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)))[0] ?? null;
+  return {
+    measurement: {
+      known,
+      inputTokens: number(m?.inputTokens) ? m.inputTokens : null,
+      windowTokens: number(m?.windowTokens) ? m.windowTokens : null,
+      responseReserve: number(m?.responseReserve) ? m.responseReserve : null,
+      ratio: known ? m.inputTokens / m.windowTokens : null,
+      exact,
+      current,
+      measuredAt: meta?.measuredAt ?? null,
+      methodLabel: `${translate(method)}${known && m?.method !== "heuristic" ? ` (${translate(exact ? "esatto" : "stima")})` : ""}${oraMisura ? ` · ${translate("misurata alle")} ${oraMisura}` : ""}${known && dichiaraFreschezza && !current ? ` · ${translate("il contesto è cambiato dopo la misura")}` : ""}`
+    },
+    job,
+    jobLabel: translate(job ? JOB_LABELS[job.state] ?? "Non disponibile" : "Nessuna compattazione in corso."),
+    auto: state?.settings?.auto !== false,
+    canCompact: Boolean(state) && state?.capabilities?.compact !== false && !ACTIVE.has(job?.state)
+  };
+}
+function montaContextCompactor(root, { client, sessionId, state = null, document: doc = root?.ownerDocument ?? globalThis.document, onState, onClose, translate = translateDefault } = {}) {
+  if (MOUNTED.has(root)) return MOUNTED.get(root);
+  if (!root?.querySelector("[data-context-body]") || !client) throw new TypeError("ContextCompactor richiede markup canonico e client.");
+  const win = doc.defaultView ?? globalThis.window;
+  const q = (name) => root.querySelector(`[data-context-${name}]`);
+  const listen = (node, event, callback) => {
+    node.addEventListener(event, callback);
+    removers.push(() => node.removeEventListener(event, callback));
+  };
+  const removers = [];
+  let snapshot = state?.sessionId === sessionId ? structuredClone(state) : null;
+  let available = Boolean(snapshot);
+  let epoch = 0, sequence = 0, busy = false, destroyed = false, opened = !root.hidden, timer, requestController, trigger, editingId = null, editingSources = [], settingsDirty = false, versions = [], factsKey = "", versionsKey = "", sourcesKey = "", statusText = "";
+  const inertBefore = /* @__PURE__ */ new Map();
+  const num2 = (value) => number(value) ? new Intl.NumberFormat(linguaCorrenteDiT() === "en" ? "en-US" : "it-IT").format(value) : translate("Non disponibile");
+  function element(tag, text, className) {
+    const node = doc.createElement(tag);
+    if (text != null) node.textContent = text;
+    if (className) node.className = className;
+    return node;
+  }
+  function button2(text, action) {
+    const node = element("button", translate(text), "talos-button talos-button--ghost talos-button--sm");
+    node.type = "button";
+    node.dataset.contextMutation = "";
+    node.disabled = busy || !snapshot;
+    node.addEventListener("click", action);
+    return node;
+  }
+  function say(message, error = false) {
+    statusText = message;
+    const node = q("status");
+    node.textContent = message;
+    node.setAttribute("role", error ? "alert" : "status");
+  }
+  function requestOptions(extra = {}) {
+    return { sessionId, expectedRevision: snapshot?.revision, signal: requestController?.signal, ...extra };
+  }
+  function resetEditor() {
+    editingId = null;
+    editingSources = [];
+    q("fact-text").value = "";
+    q("fact-cancel").hidden = true;
+  }
+  function renderSettings() {
+    if (settingsDirty) return;
+    const s = snapshot?.settings;
+    q("model-mode").value = s?.model?.mode ?? "follow-session";
+    q("provider").value = s?.model?.provider ?? "";
+    q("model").value = s?.model?.model ?? "";
+    q("trigger").value = String((s?.triggerRatio ?? 0.75) * 100);
+    q("target").value = String((s?.targetRatio ?? 0.55) * 100);
+    q("recent").value = String(s?.retainRecentTurns ?? 2);
+    q("focus").value = s?.focus ?? "";
+    q("semantic").checked = s?.semanticSearch !== false;
+    q("native").checked = s?.nativeMode === "qualified";
+    q("explicit-model").hidden = q("model-mode").value !== "explicit";
+  }
+  function showSource(ref) {
+    const current = epoch;
+    q("source-detail").hidden = false;
+    q("source-text").textContent = translate("Caricamento del contesto…");
+    client.readContextSource(requestOptions({ sourceId: ref.recordId })).then(({ source }) => {
+      if (current !== epoch || destroyed) return;
+      const content = source?.message?.content;
+      q("source-text").textContent = typeof content === "string" ? content : JSON.stringify(content, null, 2);
+      q("source-id").textContent = source?.id ?? ref.recordId;
+    }).catch((error) => {
+      if (current === epoch && !destroyed && error.name !== "AbortError") q("source-text").textContent = translate("Contesto non disponibile. Usa Aggiorna per riprovare.");
+    });
+  }
+  function sourceLinks(parent, refs = []) {
+    for (const ref of refs) {
+      const row = element("div", null, "talos-context__source");
+      const quote = element("blockquote", ref.quote);
+      const open2 = button2("Apri fonte", () => showSource(ref));
+      delete open2.dataset.contextMutation;
+      open2.disabled = false;
+      row.append(quote, open2);
+      parent.append(row);
+    }
+  }
+  function renderFacts() {
+    const facts = (snapshot?.facts ?? []).filter((f) => f.status !== "removed");
+    const key = JSON.stringify(facts);
+    if (key === factsKey) return;
+    factsKey = key;
+    const list = q("facts");
+    list.replaceChildren();
+    if (!facts.length) list.append(element("p", translate("Nessun fatto protetto. Aggiungi ciò che TALOS deve conservare."), "talos-muted"));
+    for (const fact of facts) {
+      const row = element("article", null, "talos-context__fact");
+      row.dataset.contextFactId = fact.id;
+      row.append(element("p", fact.text));
+      const actions = element("div", null, "talos-context__actions");
+      actions.append(button2("Modifica", () => {
+        editingId = fact.id;
+        editingSources = structuredClone(fact.sources ?? []);
+        q("fact-text").value = fact.text;
+        q("fact-cancel").hidden = false;
+        q("fact-text").focus();
+      }), button2("Rimuovi", () => mutate(() => client.removeProtectedFact(requestOptions({ factId: fact.id })))));
+      row.append(actions);
+      sourceLinks(row, fact.sources);
+      if (fact.status === "conflict" && fact.conflict) {
+        const conflict = element("div", null, "talos-context__conflict");
+        conflict.append(element("strong", translate("Proposta da verificare")), element("p", fact.conflict.proposedText));
+        sourceLinks(conflict, fact.conflict.sources);
+        conflict.append(button2("Accetta proposta", () => mutate(() => client.resolveFactConflict(requestOptions({ factId: fact.id, accept: true })))), button2("Mantieni il fatto", () => mutate(() => client.resolveFactConflict(requestOptions({ factId: fact.id, accept: false })))));
+        row.append(conflict);
+      }
+      list.append(row);
+    }
+  }
+  function renderVersions() {
+    const key = JSON.stringify([versions, snapshot?.activeVersion?.id]);
+    if (key === versionsKey) return;
+    versionsKey = key;
+    q("versions").replaceChildren();
+    if (!versions.length) q("versions").append(element("p", translate("Nessuna versione salvata."), "talos-muted"));
+    for (const version of versions) {
+      const row = element("article", null, "talos-context__version");
+      row.dataset.contextVersionId = version.id;
+      const date = new Date(version.createdAt);
+      row.append(element("strong", Number.isFinite(date.getTime()) ? date.toLocaleString(linguaCorrenteDiT() === "en" ? "en-US" : "it-IT") : version.id));
+      row.append(element("p", version.summary?.text ?? ""));
+      if (snapshot?.activeVersion?.id === version.id) row.append(element("span", translate("Versione attiva"), "talos-badge"));
+      else row.append(button2("Ripristina", () => {
+        const confirm = element("div", null, "talos-context__conflict");
+        confirm.append(element("p", translate("Ripristinare questa versione? I messaggi successivi restano nella chat.")));
+        const yes = button2("Conferma ripristino", () => mutate(() => client.restoreContextVersion(requestOptions({ versionId: version.id }))));
+        confirm.append(yes, button2("Annulla", () => {
+          confirm.remove();
+          row.querySelector("button")?.focus();
+        }));
+        row.querySelector(".talos-context__conflict")?.remove();
+        row.append(confirm);
+        yes.focus();
+      }));
+      q("versions").append(row);
+    }
+  }
+  function render4() {
+    if (destroyed) return;
+    const view = descriviContextCompactor(snapshot, { translate });
+    const m = view.measurement;
+    for (const node of root.querySelectorAll("[data-context-label]")) node.textContent = translate(node.dataset.contextLabel);
+    if (!busy) q("auto").checked = view.auto;
+    q("meter").hidden = !m.known;
+    if (m.known) {
+      q("meter").value = Math.min(m.inputTokens, m.windowTokens);
+      q("meter").max = m.windowTokens;
+      q("meter").setAttribute("aria-valuetext", `${num2(m.inputTokens)} / ${num2(m.windowTokens)}`);
+    }
+    q("measurement").textContent = m.known ? `${num2(m.inputTokens)} / ${num2(m.windowTokens)} token — ${m.methodLabel}` : translate("Misura non ancora disponibile.");
+    q("input").textContent = num2(m.inputTokens);
+    q("window").textContent = num2(m.windowTokens);
+    q("reserve").textContent = num2(m.responseReserve);
+    q("job").textContent = view.jobLabel;
+    const p = view.job?.progress;
+    q("progress").textContent = number(p?.completed) && number(p?.total) && p.total > 0 && p.completed <= p.total ? `${translate("Completati")} ${num2(p.completed)} ${translate("di")} ${num2(p.total)}` : "";
+    const progress = q("progress-bar");
+    progress.hidden = !ACTIVE.has(view.job?.state);
+    progress.setAttribute("aria-label", view.jobLabel);
+    if (number(p?.completed) && number(p?.total) && p.total > 0 && p.completed <= p.total) {
+      progress.max = p.total;
+      progress.value = p.completed;
+    } else progress.removeAttribute("value");
+    q("job-error").textContent = view.job?.error?.message ?? "";
+    q("job-error").hidden = !view.job?.error;
+    renderSettings();
+    renderFacts();
+    renderVersions();
+    const refs = snapshot?.activeVersion?.summary?.sources ?? [];
+    const key = JSON.stringify(refs);
+    if (key !== sourcesKey) {
+      sourcesKey = key;
+      q("sources").replaceChildren();
+      if (!refs.length) q("sources").append(element("p", translate("Nessuna fonte nella sintesi attiva."), "talos-muted"));
+      else sourceLinks(q("sources"), refs);
+    }
+    q("semantic-status").textContent = translate(snapshot?.semanticStatus === "ready" || snapshot?.semanticStatus?.available === true ? "Ricerca semantica disponibile." : "Ricerca semantica non disponibile. La ricerca testuale resta attiva.");
+    const focused = doc.activeElement;
+    for (const node of root.querySelectorAll("[data-context-mutation]")) node.disabled = busy || !available;
+    q("start").disabled = busy || !available || !view.canCompact;
+    q("regenerate").disabled = busy || !available || !view.canCompact || !snapshot?.activeVersion;
+    q("cancel").hidden = !ACTIVE.has(view.job?.state);
+    q("resume").hidden = view.job?.state !== "paused";
+    q("native").disabled = busy || !available || snapshot?.capabilities?.nativeCompaction !== true;
+    q("native-help").hidden = snapshot?.capabilities?.nativeCompaction === true;
+    root.setAttribute("aria-busy", String(busy));
+    root.querySelector("[data-context-close]").setAttribute("aria-label", translate("Chiudi"));
+    if (opened && focused?.disabled && root.contains(focused)) q("title").focus({ preventScroll: true });
+  }
+  function schedule() {
+    clearTimeout(timer);
+    if (opened && !destroyed && ACTIVE.has(descriviContextCompactor(snapshot).job?.state)) timer = setTimeout(() => refresh(), 1200);
+  }
+  async function refresh({ quiet = false } = {}) {
+    if (destroyed || busy) return null;
+    if (!sessionId) {
+      available = false;
+      render4();
+      say(translate("Apri una conversazione per gestirne il contesto."));
+      return null;
+    }
+    const current = epoch, ticket = ++sequence;
+    if (!quiet) say(translate("Caricamento del contesto…"));
+    try {
+      const [next, history] = await Promise.all([client.getContextState(requestOptions()), client.listContextVersions(requestOptions())]);
+      if (current !== epoch || ticket !== sequence || destroyed) return null;
+      if (next?.sessionId !== sessionId || !Array.isArray(history?.versions)) throw new Error("CTX_INVALID_RESPONSE");
+      snapshot = structuredClone(next);
+      available = true;
+      versions = history.versions.filter((v) => v.sessionId === sessionId);
+      render4();
+      if (!quiet) say("");
+      onState?.(structuredClone(snapshot));
+      schedule();
+      return snapshot;
+    } catch (error) {
+      if (current !== epoch || ticket !== sequence || destroyed || error.name === "AbortError") return null;
+      available = false;
+      render4();
+      say(translate(error.code === "CTX_NOT_ENABLED" ? "Context Manager non è ancora attivo per questa conversazione. Nessun messaggio è stato modificato." : "Contesto non disponibile. Usa Aggiorna per riprovare."), error.code !== "CTX_NOT_ENABLED");
+      clearTimeout(timer);
+      return null;
+    }
+  }
+  async function mutate(action, success) {
+    if (busy || !available || !snapshot || destroyed) return;
+    const current = epoch;
+    busy = true;
+    clearTimeout(timer);
+    ++sequence;
+    say("");
+    render4();
+    try {
+      await action();
+      if (current !== epoch || destroyed) return;
+      busy = false;
+      const refreshed = await refresh({ quiet: true });
+      if (refreshed && current === epoch && !destroyed) {
+        success?.();
+        render4();
+      }
+    } catch (error) {
+      if (current !== epoch || destroyed) return;
+      busy = false;
+      if (error.name !== "AbortError") {
+        if (error.code === "CTX_NOTHING_TO_COMPACT") say(translate("Non ci sono scambi precedenti da compattare mantenendo intero l’ultimo scambio. Nessun messaggio è stato modificato."));
+        else if (error.code === "CTX_STALE_REVISION") {
+          await refresh({ quiet: true });
+          say(translate("Il contesto è cambiato. I dati sono aggiornati: verifica e ripeti la modifica."), true);
+        } else say(translate("Operazione non riuscita. Usa Aggiorna per verificare lo stato prima di riprovare."), true);
+      }
+      render4();
+    }
+  }
+  listen(q("auto"), "change", () => {
+    const auto = q("auto").checked;
+    mutate(() => client.updateContextSettings(requestOptions({ patch: { auto } })));
+  });
+  listen(q("refresh"), "click", () => refresh());
+  listen(q("start"), "click", () => mutate(() => client.startCompaction(requestOptions({ kind: "compact" }))));
+  listen(q("regenerate"), "click", () => mutate(() => client.startCompaction(requestOptions({ kind: "regenerate" }))));
+  listen(q("cancel"), "click", () => mutate(() => client.cancelCompaction(requestOptions({ jobId: descriviContextCompactor(snapshot).job.id }))));
+  listen(q("resume"), "click", () => mutate(() => client.resumeCompaction(requestOptions({ jobId: descriviContextCompactor(snapshot).job.id }))));
+  listen(q("fact-form"), "submit", (event) => {
+    event.preventDefault();
+    const text = q("fact-text").value.trim();
+    if (!text) return;
+    mutate(() => client.upsertProtectedFact(requestOptions({ fact: { ...editingId ? { id: editingId } : {}, text, sources: editingSources } })), () => {
+      resetEditor();
+      say(translate("Fatto salvato."));
+    });
+  });
+  listen(q("fact-cancel"), "click", resetEditor);
+  listen(q("settings"), "input", () => {
+    settingsDirty = true;
+  });
+  listen(q("model-mode"), "change", () => {
+    settingsDirty = true;
+    q("explicit-model").hidden = q("model-mode").value !== "explicit";
+  });
+  listen(q("settings"), "submit", (event) => {
+    event.preventDefault();
+    const triggerRatio = Number(q("trigger").value) / 100, targetRatio = Number(q("target").value) / 100;
+    if (!(targetRatio > 0 && targetRatio < triggerRatio && triggerRatio < 1)) {
+      say(translate("L’obiettivo deve essere inferiore alla soglia di avvio."), true);
+      return;
+    }
+    const model = q("model-mode").value === "explicit" ? { mode: "explicit", provider: q("provider").value.trim(), model: q("model").value.trim() } : { mode: "follow-session" };
+    if (model.mode === "explicit" && (!model.provider || !model.model)) {
+      q(!model.provider ? "provider" : "model").focus();
+      return;
+    }
+    const patch = { model, triggerRatio, targetRatio, retainRecentTurns: Number(q("recent").value), focus: q("focus").value, semanticSearch: q("semantic").checked, nativeMode: q("native").checked ? "qualified" : "off" };
+    mutate(() => client.updateContextSettings(requestOptions({ patch })), () => {
+      settingsDirty = false;
+      say(translate("Impostazioni salvate."));
+    });
+  });
+  function close() {
+    if (!opened) return;
+    ++epoch;
+    ++sequence;
+    busy = false;
+    opened = false;
+    root.hidden = true;
+    clearTimeout(timer);
+    requestController?.abort();
+    for (const [node, old] of inertBefore) node.inert = old;
+    inertBefore.clear();
+    trigger?.focus?.({ preventScroll: true });
+    onClose?.();
+  }
+  function open() {
+    if (destroyed) return;
+    if (!opened) {
+      trigger = doc.activeElement;
+      opened = true;
+    }
+    requestController?.abort();
+    requestController = new AbortController();
+    root.hidden = false;
+    preparaMisuraDialogo(root, { finestra: win });
+    collegaRidimensionamentoDialoghi(root, { finestra: win });
+    for (let current = root; current?.parentElement; current = current.parentElement) for (const sibling of current.parentElement.children) {
+      if (sibling === current || ["SCRIPT", "STYLE", "LINK"].includes(sibling.tagName)) continue;
+      if (!inertBefore.has(sibling)) inertBefore.set(sibling, sibling.inert);
+      sibling.inert = true;
+    }
+    q("title").focus();
+    refresh();
+  }
+  listen(root, "click", (event) => {
+    if (event.target === root || event.target.closest("[data-context-close]")) close();
+  });
+  listen(doc, "keydown", (event) => {
+    if (!opened || destroyed) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    }
+    if (event.key !== "Tab") return;
+    const items = [...root.querySelectorAll('button,input,textarea,select,summary,[tabindex="0"]')].filter((node) => !node.disabled && !node.closest("[hidden]") && node.getClientRects().length);
+    const first = items[0], last = items.at(-1);
+    if (event.shiftKey && (doc.activeElement === first || doc.activeElement === q("title"))) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && doc.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
+  });
+  const languageChange = () => {
+    factsKey = versionsKey = sourcesKey = "";
+    render4();
+  };
+  listen(win, EVENTO_LINGUA, languageChange);
+  const api = {
+    refresh,
+    open,
+    close,
+    update(next) {
+      if (next?.sessionId !== sessionId || snapshot && next.revision < snapshot.revision) return;
+      snapshot = structuredClone(next);
+      available = true;
+      render4();
+      schedule();
+    },
+    setSession(nextSession, nextState = null) {
+      ++epoch;
+      ++sequence;
+      requestController?.abort();
+      clearTimeout(timer);
+      requestController = new AbortController();
+      busy = false;
+      sessionId = nextSession;
+      snapshot = nextState?.sessionId === sessionId ? structuredClone(nextState) : null;
+      available = Boolean(snapshot);
+      versions = [];
+      settingsDirty = false;
+      factsKey = versionsKey = sourcesKey = "";
+      resetEditor();
+      q("source-detail").hidden = true;
+      q("source-text").textContent = "";
+      say("");
+      render4();
+      if (opened) return refresh();
+    },
+    destroy() {
+      close();
+      destroyed = true;
+      ++epoch;
+      requestController?.abort();
+      clearTimeout(timer);
+      removers.forEach((remove) => remove());
+      MOUNTED.delete(root);
+    }
+  };
+  requestController = new AbortController();
+  MOUNTED.set(root, api);
+  render4();
+  return api;
+}
+var ACTIVE, JOB_LABELS, EN, number, MOUNTED;
+var init_context_compactor = __esm({
+  "src/components/context-compactor.js"() {
+    init_dialoghi();
+    init_lingua();
+    ACTIVE = /* @__PURE__ */ new Set(["queued", "preparing", "summarizing", "validating", "ready", "paused"]);
+    JOB_LABELS = { queued: "In attesa", preparing: "Preparazione", summarizing: "Compattazione contesto in corso", validating: "Verifica della sintesi", ready: "Pubblicazione in corso", committed: "Contesto aggiornato", paused: "Compattazione in pausa", cancelled: "Compattazione annullata", failed: "Compattazione non riuscita" };
+    EN = {
+      "Apri una conversazione per gestirne il contesto.": "Open a conversation to manage its context.",
+      "Context Manager non è ancora attivo per questa conversazione. Nessun messaggio è stato modificato.": "Context Manager is not enabled for this conversation yet. No messages have been changed.",
+      "Contesto della chat": "Chat context",
+      "Solo questa chat. Gli originali restano disponibili.": "This chat only. Original messages remain available.",
+      "Chiudi": "Close",
+      "Aggiorna": "Refresh",
+      "Gestisci automaticamente": "Manage automatically",
+      "TALOS prepara una sintesi quando il contesto si riempie.": "TALOS prepares a summary as the context fills up.",
+      "Misura non ancora disponibile.": "Measurement is not available yet.",
+      "misurata alle": "measured at",
+      "il contesto è cambiato dopo la misura": "the context changed after this measurement",
+      "Token in ingresso": "Input tokens",
+      "Finestra del modello": "Model context window",
+      "Riservati alla risposta": "Reserved for the response",
+      "Non disponibile": "Not available",
+      "Conteggio del motore": "Runtime count",
+      "Conteggio del fornitore": "Provider count",
+      "Stima euristica": "Heuristic estimate",
+      "esatto": "exact",
+      "stima": "estimate",
+      "In attesa": "Queued",
+      "Preparazione": "Preparing",
+      "Compattazione contesto in corso": "Context compaction in progress",
+      "Verifica della sintesi": "Validating summary",
+      "Pubblicazione in corso": "Publishing",
+      "Contesto aggiornato": "Context updated",
+      "Compattazione in pausa": "Compaction paused",
+      "Compattazione annullata": "Compaction cancelled",
+      "Compattazione non riuscita": "Compaction failed",
+      "Nessuna compattazione in corso.": "No compaction in progress.",
+      "Caricamento del contesto…": "Loading context…",
+      "Annulla compattazione": "Cancel compaction",
+      "Riprendi compattazione": "Resume compaction",
+      "Compatta ora": "Compact now",
+      "Rigenera sintesi": "Regenerate summary",
+      "Da non dimenticare": "Keep in mind",
+      "Questi fatti restano separati dalla sintesi.": "These facts remain separate from the summary.",
+      "Nessun fatto protetto. Aggiungi ciò che TALOS deve conservare.": "No protected facts. Add what TALOS must retain.",
+      "Aggiungi un fatto": "Add a fact",
+      "Salva fatto": "Save fact",
+      "Annulla modifica": "Cancel edit",
+      "Modifica": "Edit",
+      "Rimuovi": "Remove",
+      "Proposta da verificare": "Proposal to review",
+      "Accetta proposta": "Accept proposal",
+      "Mantieni il fatto": "Keep the fact",
+      "Versioni": "Versions",
+      "Nessuna versione salvata.": "No saved versions.",
+      "Versione attiva": "Active version",
+      "Ripristina": "Restore",
+      "Ripristinare questa versione? I messaggi successivi restano nella chat.": "Restore this version? Later messages stay in the chat.",
+      "Conferma ripristino": "Confirm restore",
+      "Annulla": "Cancel",
+      "Fonti": "Sources",
+      "Apri fonte": "Open source",
+      "Nessuna fonte nella sintesi attiva.": "No sources in the active summary.",
+      "Fonte originale": "Original source",
+      "Impostazioni avanzate": "Advanced settings",
+      "Modello per la sintesi": "Summary model",
+      "Segui il modello della chat": "Follow the chat model",
+      "Scegli un modello": "Choose a model",
+      "Fornitore": "Provider",
+      "Modello": "Model",
+      "Avvia automaticamente al (%)": "Start automatically at (%)",
+      "Obiettivo dopo la sintesi (%)": "Target after summary (%)",
+      "Scambi recenti da conservare": "Recent turns to retain",
+      "Istruzioni per la sintesi": "Summary instructions",
+      "Ricerca semantica locale": "Local semantic search",
+      "Compattazione nativa qualificata": "Qualified native compaction",
+      "Non qualificata per questo modello.": "Not qualified for this model.",
+      "Salva impostazioni": "Save settings",
+      "L’obiettivo deve essere inferiore alla soglia di avvio.": "The target must be below the start threshold.",
+      "Il contesto è cambiato. I dati sono aggiornati: verifica e ripeti la modifica.": "The context changed. Data is refreshed: review and repeat your change.",
+      "Contesto non disponibile. Usa Aggiorna per riprovare.": "Context unavailable. Use Refresh to retry.",
+      "Operazione non riuscita. Usa Aggiorna per verificare lo stato prima di riprovare.": "Operation failed. Use Refresh to check the state before trying again.",
+      "Impostazioni salvate.": "Settings saved.",
+      "Fatto salvato.": "Fact saved.",
+      "Ricerca semantica non disponibile. La ricerca testuale resta attiva.": "Semantic search unavailable. Text search remains active.",
+      "Ricerca semantica disponibile.": "Semantic search available.",
+      "Completati": "Completed",
+      "di": "of"
+    };
+    EN["Non ci sono scambi precedenti da compattare mantenendo intero l’ultimo scambio. Nessun messaggio è stato modificato."] = "There are no earlier exchanges to compact while keeping the latest exchange intact. No messages were changed.";
+    number = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
+    MOUNTED = /* @__PURE__ */ new WeakMap();
+  }
+});
+
 // src/components/contesto.js
 function pesoAttrezzi(attrezzi = []) {
   let token = 0;
@@ -5466,18 +6140,23 @@ function pesoAttrezzi(attrezzi = []) {
   return { token, senzaStima, contati: attrezzi.length - senzaStima, totale: attrezzi.length, perCategoria };
 }
 function ripartizioneContesto({ attrezzi = [], finestra = null, istruzioniToken = null, memoriaToken = null } = {}) {
+  const descrittore = finestra && typeof finestra === "object" ? finestra : null;
+  const finestraToken = descrittore ? descrittore.finestra : finestra;
   const attr = pesoAttrezzi(attrezzi);
   const misurato = (v) => v != null && v !== "" && Number.isFinite(Number(v)) && Number(v) >= 0;
   const voci = [{ id: "attrezzi", nome: "Attrezzi", token: attr.token, stima: true }];
   if (misurato(istruzioniToken)) voci.push({ id: "istruzioni", nome: "Istruzioni di sistema", token: Number(istruzioniToken), stima: true });
   if (misurato(memoriaToken)) voci.push({ id: "memoria", nome: "Ricordi", token: Number(memoriaToken), stima: true });
   const occupato = voci.reduce((s, v) => s + v.token, 0);
-  const f = Number.isFinite(Number(finestra)) && Number(finestra) > 0 ? Number(finestra) : null;
+  const f = Number.isFinite(Number(finestraToken)) && Number(finestraToken) > 0 ? Number(finestraToken) : null;
   for (const v of voci) v.percentuale = f ? v.token / f * 100 : null;
   return {
     voci,
     occupato,
     finestra: f,
+    // ⛔ da DOVE viene la finestra: senza questa parola due percentuali diverse sembrano un errore di calcolo
+    fonteFinestra: descrittore?.fonte ?? null,
+    finestraDescritta: descrittore,
     // ⛔ le voci PROMESSE dal cappello della sezione che non si sono potute misurare: si dichiarano.
     mancanti: ["istruzioni", "memoria"].filter((id) => !voci.some((v) => v.id === id)),
     percentuale: f ? occupato / f * 100 : null,
@@ -5492,7 +6171,8 @@ function frasiRipartizione(r) {
   const base = `${NUM2.format(r.occupato)} token occupati prima che tu scriva`;
   const quota = r.percentuale == null ? " · finestra del modello non dichiarata, la percentuale non si può calcolare" : ` su ${NUM2.format(r.finestra)} · ${new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 }).format(r.percentuale)}% della finestra, ${NUM2.format(r.libero)} liberi`;
   const mancanti = r.attrezziSenzaStima ? ` · ⛔ ${r.attrezziSenzaStima} attrezzi su ${r.attrezziTotale} non dichiarano quanto pesano: non sono in questo totale` : "";
-  return `${base}${quota}${mancanti} (stima)`;
+  const fonte = r.fonteFinestra === "profilo" ? " · finestra del profilo di questa chat" : r.fonteFinestra === "catalogo" ? " · finestra del catalogo del modello" : "";
+  return `${base}${quota}${fonte}${mancanti} (stima)`;
 }
 function el18(d, tag, classe, testo3) {
   const n = d.createElement(tag);
@@ -5505,7 +6185,12 @@ function aggiornaContesto(pannello, ripartizione, { document: d = globalThis.doc
   const barra = pannello.querySelector("#contestoRipartizione");
   const etichetta = pannello.querySelector("#contestoEtichetta");
   const voci = pannello.querySelector("#contestoVoci");
-  if (etichetta) etichetta.textContent = frasiRipartizione(ripartizione);
+  if (etichetta) {
+    etichetta.textContent = frasiRipartizione(ripartizione);
+    const d2 = ripartizione?.finestraDescritta || null;
+    if (d2) etichetta.title = frasiFinestraContesto(d2);
+    else etichetta.removeAttribute("title");
+  }
   if (barra) {
     const senzaScala = !ripartizione || ripartizione.percentuale == null;
     barra.hidden = senzaScala;
@@ -5539,9 +6224,55 @@ function aggiornaContesto(pannello, ripartizione, { document: d = globalThis.doc
   }
   return ripartizione;
 }
+function finestraDiContesto({ misura = null, revisione = null, finestraCatalogo = null, usage = null, ripartizione = null } = {}) {
+  const m = descriviContextCompactor({ revision: revisione, measurement: misura }, { translate: (x) => x }).measurement;
+  const catalogo = Number.isFinite(Number(finestraCatalogo)) && Number(finestraCatalogo) > 0 ? Number(finestraCatalogo) : null;
+  const daUsage = usage && Number.isFinite(Number(usage.prompt_tokens)) ? Number(usage.prompt_tokens) + (Number.isFinite(Number(usage.completion_tokens)) ? Number(usage.completion_tokens) : 0) : null;
+  if (m.known) {
+    return {
+      fonte: "profilo",
+      finestra: m.windowTokens,
+      occupato: m.inputTokens,
+      riserva: m.responseReserve,
+      attuale: m.current,
+      misurataAlle: m.measuredAt,
+      nota: m.current ? "" : "il contesto è cambiato dopo la misura",
+      perInspector: {
+        // ⛔ `completion_tokens: 0` non è un dato mancante travestito da zero: `inputTokens`
+        //    È GIÀ tutto ciò che occupa la finestra alla prossima richiesta (la risposta del
+        //    turno precedente compresa). Sommarci il completion la conterebbe due volte.
+        usage: { prompt_tokens: m.inputTokens, completion_tokens: 0 },
+        finestra: m.windowTokens,
+        // ⛔ niente ripartizione attrezzi/istruzioni/memoria sopra una misura del motore:
+        //    quei token sono GIÀ dentro `inputTokens`, e disegnarli a parte li conta due volte.
+        ripartizione: null
+      }
+    };
+  }
+  return {
+    fonte: catalogo === null ? null : "catalogo",
+    finestra: catalogo,
+    occupato: daUsage,
+    riserva: null,
+    attuale: false,
+    misurataAlle: null,
+    // ⛔ senza misura e senza catalogo non si sceglie un valore di comodo: si dice che manca.
+    nota: catalogo === null ? "finestra non dichiarata" : "finestra dichiarata dal catalogo del modello",
+    perInspector: { usage: usage ?? null, finestra: catalogo, ripartizione: ripartizione ?? null }
+  };
+}
+function frasiFinestraContesto(f) {
+  if (!f || f.finestra == null) return "Finestra del contesto non dichiarata.";
+  const percentuale = f.occupato == null ? null : new Intl.NumberFormat("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.floor(f.occupato / f.finestra * 1e3) / 10);
+  const testa = f.occupato == null ? `${NUM2.format(f.finestra)} token di finestra · occupazione non ancora misurata` : `${NUM2.format(f.occupato)} / ${NUM2.format(f.finestra)} token · ${percentuale}%`;
+  const fonte = f.fonte === "profilo" ? " · profilo del contesto di questa chat" : f.fonte === "catalogo" ? " · catalogo del modello" : "";
+  const avviso = f.fonte === "profilo" && f.nota ? ` · ⛔ ${f.nota}` : "";
+  return `${testa}${fonte}${avviso}`;
+}
 var NUM2;
 var init_contesto = __esm({
   "src/components/contesto.js"() {
+    init_context_compactor();
     NUM2 = new Intl.NumberFormat("it-IT");
   }
 });
@@ -6117,139 +6848,6 @@ function nascondiAzioniFase3(radice) {
 }
 var init_review = __esm({
   "src/components/review.js"() {
-  }
-});
-
-// src/components/dialoghi.js
-function limitiDialogo(idVelo, { innerWidth, innerHeight, pad = 24 }) {
-  const maxW = Math.max(280, innerWidth - pad * 2);
-  const maxH = Math.max(240, Math.min(innerHeight - pad * 2, innerHeight * 0.9));
-  return { minW: Math.min(idVelo === "veloComandi" ? 420 : 520, maxW), minH: Math.min(idVelo === "veloComandi" ? 240 : 340, maxH), maxW, maxH };
-}
-function misuraDialogo(width, height, limiti) {
-  const w = Math.round(Math.max(limiti.minW, Math.min(limiti.maxW, Number(width) || limiti.minW)));
-  const h = Math.round(Math.max(limiti.minH, Math.min(limiti.maxH, Number(height) || limiti.minH)));
-  return { width: w, height: h };
-}
-function leggiMisure(storage = globalThis.localStorage) {
-  try {
-    const v = JSON.parse(storage.getItem(CHIAVE_MISURE) || "{}");
-    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
-  } catch {
-    return {};
-  }
-}
-function salvaMisura(chiave, misura, storage = globalThis.localStorage) {
-  try {
-    const s = leggiMisure(storage);
-    s[chiave] = { width: Math.round(misura.width), height: Math.round(misura.height) };
-    storage.setItem(CHIAVE_MISURE, JSON.stringify(s));
-  } catch {
-  }
-}
-function dimenticaMisura(chiave, storage = globalThis.localStorage) {
-  try {
-    const s = leggiMisure(storage);
-    delete s[chiave];
-    storage.setItem(CHIAVE_MISURE, JSON.stringify(s));
-  } catch {
-  }
-}
-function applica(dialogo, velo, width, height, finestra) {
-  const pad = parseFloat(finestra.getComputedStyle(velo).paddingLeft) || 24;
-  const m = misuraDialogo(width, height, limitiDialogo(velo.id, { innerWidth: finestra.innerWidth, innerHeight: finestra.innerHeight, pad }));
-  dialogo.style.setProperty("--talos-dialog-w", `${m.width}px`);
-  dialogo.style.setProperty("--talos-dialog-h", `${m.height}px`);
-  dialogo.dataset.userSized = "true";
-  return m;
-}
-function preparaMisuraDialogo(velo, { finestra = globalThis.window, storage = globalThis.localStorage } = {}) {
-  const d = velo?.querySelector(".talos-dialog");
-  if (!d) return null;
-  d.dataset.dialogResizeKey = CHIAVI_MISURA[velo.id] || `sheet:${velo.id}`;
-  const s = leggiMisure(storage)[d.dataset.dialogResizeKey];
-  if (s && Number.isFinite(s.width) && Number.isFinite(s.height)) return applica(d, velo, s.width, s.height, finestra);
-  d.style.removeProperty("--talos-dialog-w");
-  d.style.removeProperty("--talos-dialog-h");
-  delete d.dataset.userSized;
-  return null;
-}
-function collegaRidimensionamentoDialoghi(radice = globalThis.document, { finestra = globalThis.window, storage = globalThis.localStorage } = {}) {
-  let collegate = 0;
-  for (const h of radice.querySelectorAll("[data-dialog-resize]")) {
-    if (h.dataset.ridimensionaCollegato) continue;
-    h.dataset.ridimensionaCollegato = "si";
-    const d = h.closest(".talos-dialog");
-    const velo = h.closest(".overlay-layer");
-    if (!d || !velo) continue;
-    const axis = h.dataset.dialogResize;
-    const chiave = () => d.dataset.dialogResizeKey || CHIAVI_MISURA[velo.id] || `sheet:${velo.id}`;
-    h.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      h.focus();
-      const r = d.getBoundingClientRect();
-      const x = e.clientX;
-      const y = e.clientY;
-      h.setPointerCapture?.(e.pointerId);
-      h.dataset.trascina = "si";
-      const move = (m) => applica(d, velo, axis === "height" ? r.width : r.width + (m.clientX - x) * 2, axis === "width" ? r.height : r.height + (m.clientY - y) * 2, finestra);
-      const end = () => {
-        delete h.dataset.trascina;
-        if (h.hasPointerCapture?.(e.pointerId)) h.releasePointerCapture(e.pointerId);
-        const rr = d.getBoundingClientRect();
-        salvaMisura(chiave(), { width: rr.width, height: rr.height }, storage);
-        h.removeEventListener("pointermove", move);
-        h.removeEventListener("pointerup", end);
-        h.removeEventListener("pointercancel", end);
-      };
-      h.addEventListener("pointermove", move);
-      h.addEventListener("pointerup", end);
-      h.addEventListener("pointercancel", end);
-    });
-    h.addEventListener("keydown", (e) => {
-      const hor = ["ArrowLeft", "ArrowRight"].includes(e.key);
-      const ver = ["ArrowUp", "ArrowDown"].includes(e.key);
-      if (!hor && !ver || axis === "height" && hor || axis === "width" && ver) return;
-      e.preventDefault();
-      const r = d.getBoundingClientRect();
-      const m = applica(d, velo, r.width + (hor ? e.key === "ArrowRight" ? PASSO_TASTIERA : -PASSO_TASTIERA : 0), r.height + (ver ? e.key === "ArrowDown" ? PASSO_TASTIERA : -PASSO_TASTIERA : 0), finestra);
-      salvaMisura(chiave(), m, storage);
-    });
-    h.addEventListener("dblclick", () => {
-      d.style.removeProperty("--talos-dialog-w");
-      d.style.removeProperty("--talos-dialog-h");
-      delete d.dataset.userSized;
-      dimenticaMisura(chiave(), storage);
-    });
-    collegate += 1;
-  }
-  return collegate;
-}
-var CHIAVE_MISURE, PASSO_TASTIERA, CHIAVI_MISURA;
-var init_dialoghi = __esm({
-  "src/components/dialoghi.js"() {
-    CHIAVE_MISURE = "talos-harness-modal-sizes-v1";
-    PASSO_TASTIERA = 16;
-    CHIAVI_MISURA = Object.freeze({
-      veloScorciatoie: "sheet:shortcuts",
-      veloNuova: "sheet:new-session",
-      veloComandi: "command:palette",
-      veloModello: "sheet:model",
-      veloPermessi: "sheet:permissions",
-      veloAlbero: "sheet:sessionTree",
-      veloIntro: "dialog:introDialog",
-      veloAmbiente: "sheet:environment",
-      veloRinomina: "sheet:rename",
-      veloRiferimenti: "sheet:references",
-      veloFile: "sheet:fileViewer",
-      veloRinominaFile: "sheet:renameFile",
-      veloEliminaFile: "sheet:deleteFile",
-      veloEliminaSessione: "sheet:deleteSession",
-      veloCreaFile: "sheet:createFile",
-      veloEsporta: "sheet:export",
-      veloFermaGiro: "dialog:stopRun"
-    });
   }
 });
 
@@ -9285,6 +9883,7 @@ function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {}) {
   const prompt = Number(sessione?.prompt_tokens ?? 0) || 0;
   const completion = Number(sessione?.completion_tokens ?? 0) || 0;
   const cache = Number(sessione?.cached_tokens ?? 0) || 0;
+  const baseCache = Number.isFinite(sessione?.prompt_tokens_con_cache) ? sessione.prompt_tokens_con_cache : prompt;
   const giriSessione = Number.isFinite(Number(sessione?.giri)) ? Number(sessione.giri) : null;
   const giri = Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null;
   const totale2 = prompt + completion;
@@ -9294,7 +9893,7 @@ function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {}) {
   const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond ?? sessione?.tokens_per_second ?? sessione?.tokensPerSecond);
   return {
     tokenGiri: parti.join(" · "),
-    cache: cache > 0 && prompt > 0 ? `cache ${Math.round(cache / prompt * 100)}%` : "",
+    cache: cache > 0 && baseCache > 0 ? `cache ${Math.round(cache / baseCache * 100)}%` : "",
     giri,
     velocita: Number.isFinite(throughput) && throughput > 0 ? `${Math.round(throughput)} token/s` : ""
   };
@@ -9712,6 +10311,11 @@ var init_permessi = __esm({
 });
 
 // src/components/errori.js
+function grezzoContesto(tecnico, codice) {
+  const trovato = CODICE_CONTESTO.exec(String(codice ?? ""))?.[0];
+  if (!trovato || tecnico.includes(trovato)) return tecnico;
+  return tecnico ? `[${trovato}] ${tecnico}` : `[${trovato}]`;
+}
 function spiegaRifiutoAttrezzo(esito) {
   const testo3 = String(esito ?? "").trim();
   if (!/^REFUSED\b/i.test(testo3)) return { rifiutato: false, detto: "", tecnico: testo3 };
@@ -9728,11 +10332,12 @@ function spiegaErrore(messaggio, codice = "") {
   const testo3 = `${codice} ${tecnico}`;
   for (const regola of REGOLE) {
     if (!regola.riconosce(testo3, codice)) continue;
-    const s = regola.spiega(tecnico);
-    return { id: regola.id, ...s, tecnico, riconosciuto: true };
+    const s = regola.spiega(tecnico, codice);
+    return { id: regola.id, famiglia: regola.famiglia ?? null, ...s, tecnico: s.tecnico ?? tecnico, riconosciuto: true };
   }
   return {
     id: "sconosciuto",
+    famiglia: null,
     cosa: "Il giro si è interrotto per un errore.",
     perche: "Questa forma di errore non è ancora tradotta: qui sotto c’è il testo che ha mandato il server, così com’è.",
     rimedi: ["Riprova il giro.", "Se si ripete, apri Doctor e allega il testo qui sotto."],
@@ -9740,10 +10345,94 @@ function spiegaErrore(messaggio, codice = "") {
     riconosciuto: false
   };
 }
-var REGOLE, RIFIUTI;
+function vestizioneErrore(spiegazione) {
+  return { ...VESTIZIONI[spiegazione?.famiglia] ?? VESTIZIONE_ERRORE };
+}
+var COSA_CONTESTO, ORIGINALI_INTATTI, APRI_CONTEXT_MANAGER, COMPATTA_A_MANO, rimediContesto, CODICE_CONTESTO, REGOLE, RIFIUTI, VESTIZIONI, VESTIZIONE_ERRORE;
 var init_errori = __esm({
   "src/components/errori.js"() {
+    COSA_CONTESTO = "La compattazione del contesto non è riuscita, e il giro si è fermato lì.";
+    ORIGINALI_INTATTI = "Nessun messaggio è stato modificato: gli originali restano tutti al loro posto — non è la tua richiesta ad aver sbagliato.";
+    APRI_CONTEXT_MANAGER = "Apri Context Manager: lì trovi lo stato della compattazione, le versioni del contesto e le fonti citate.";
+    COMPATTA_A_MANO = "Da lì «Compatta ora» rifà il tentativo da capo, sugli stessi messaggi.";
+    rimediContesto = (proprio) => [APRI_CONTEXT_MANAGER, ...proprio ? [proprio] : [], COMPATTA_A_MANO];
+    CODICE_CONTESTO = /\bCTX_[A-Z0-9_]+/;
     REGOLE = [
+      {
+        /*
+         * Caso 1 dei tre veri: il modello della sintesi ha risposto senza il testo del riassunto o senza
+         * dire se l'aveva finito. Non c'è niente da verificare, quindi il contesto scarta — e non è un
+         * guasto del compito che stavi chiedendo.
+         */
+        id: "contesto-sintesi-invalida",
+        famiglia: "contesto",
+        riconosce: (t2) => /\bCTX_SUMMARY_RESPONSE_INVALID\b/.test(t2) || /sintesi non dichiara testo e stato finale|risposta di sintesi non leggibile/i.test(t2),
+        spiega: (t2, codice) => ({
+          cosa: COSA_CONTESTO,
+          perche: `Il modello incaricato di riassumere la conversazione ha risposto in una forma che non si può verificare: manca il testo del riassunto, o manca il segnale che dice se l’ha finito. Il contesto l’ha scartato invece di pubblicarlo. ${ORIGINALI_INTATTI}`,
+          rimedi: rimediContesto("Se succede sempre con questo modello, cambia il modello della sintesi nelle impostazioni avanzate del Context Manager: alcuni modelli spendono tutto lo spazio di risposta nel ragionamento e non ne lasciano al riassunto."),
+          tecnico: grezzoContesto(t2, codice)
+        })
+      },
+      {
+        /*
+         * Caso 2: la verifica delle citazioni. È il controllo che impedisce a un riassunto di INVENTARE —
+         * ogni fonte deve ritrovarsi alla lettera in un messaggio originale — e qui non ne è stata
+         * ritrovata nessuna. Un rifiuto motivato, non un guasto: va detto come tale.
+         */
+        id: "contesto-citazioni",
+        famiglia: "contesto",
+        riconosce: (t2) => /\bCTX_INVALID_SOURCE\b/.test(t2) || /citazione corrisponde agli originali|non riporta fonti verificabili/i.test(t2),
+        spiega: (t2, codice) => ({
+          cosa: COSA_CONTESTO,
+          perche: `Un riassunto viene accettato solo se cita alla lettera pezzi dei messaggi originali: è il controllo che gli impedisce di inventare. Qui nessuna delle citazioni proposte è stata ritrovata negli originali di questa conversazione, e il riassunto è stato respinto. ${ORIGINALI_INTATTI}`,
+          rimedi: rimediContesto("Se si ripete, scegli un altro modello per la sintesi nelle impostazioni avanzate del Context Manager: copiare una citazione alla lettera è la prima cosa che sbagliano i modelli più piccoli."),
+          tecnico: grezzoContesto(t2, codice)
+        })
+      },
+      {
+        /*
+         * Caso 3: la sintesi troncata. ⛔ È l'UNICO caso in cui il motore ritenta da solo, e ritenta UNA
+         * volta sola, chiedendo un riassunto della metà (il `catch` che rilancia `once(true)` soltanto
+         * per `CTX_TRUNCATED_SUMMARY`). Quando questa carta arriva, quel ritentativo è già stato speso:
+         * prometterne un altro sarebbe una bugia.
+         */
+        id: "contesto-sintesi-troncata",
+        famiglia: "contesto",
+        riconosce: (t2) => /\bCTX_TRUNCATED_SUMMARY\b/.test(t2) || /sintesi non è stata completata|non ha lasciato spazio alla sintesi/i.test(t2),
+        spiega: (t2, codice) => {
+          const ragionamento = Number((/(\d+)\s*token nel ragionamento/i.exec(t2) || [])[1]) || null;
+          const speso = ragionamento ? ` Qui il modello ha speso ${ragionamento.toLocaleString("it-IT")} token nel ragionamento, senza lasciarne alla sintesi.` : "";
+          return {
+            cosa: COSA_CONTESTO,
+            perche: `Il riassunto si è interrotto prima della fine: lo spazio di risposta è finito prima che il modello lo chiudesse.${speso} TALOS l’ha già chiesto una seconda volta, più corto, e neanche quella è arrivata intera; altri tentativi non ne fa. ${ORIGINALI_INTATTI}`,
+            rimedi: rimediContesto("Se si ripete, scegli per la sintesi un modello con più spazio di risposta nelle impostazioni avanzate del Context Manager: la lunghezza che il riassunto può avere dipende da quello."),
+            tecnico: grezzoContesto(t2, codice)
+          };
+        }
+      },
+      {
+        /*
+         * Tutti gli altri guasti del motore del contesto. ⛔ Riconosce SOLO dal codice `CTX_*`: una frase
+         * italiana qualsiasi non diventa un guasto del contesto per il fatto di essere italiana.
+         * Il messaggio del motore è già scritto per una persona — è lo stesso che la modale mostra sotto
+         * lo stato del lavoro — quindi si riporta com'è, invece di dire «forma non ancora tradotta» su
+         * un testo che si legge benissimo.
+         */
+        id: "contesto",
+        famiglia: "contesto",
+        riconosce: (t2) => CODICE_CONTESTO.test(t2),
+        spiega: (t2, codice) => {
+          const detto = t2.replace(CODICE_CONTESTO, "").replace(/^[\s:—-]+/u, "").trim();
+          const frase = detto ? /[.!?…]$/u.test(detto) ? detto : `${detto}.` : "Il motore del contesto non ha detto altro.";
+          return {
+            cosa: COSA_CONTESTO,
+            perche: `${frase} ${ORIGINALI_INTATTI}`,
+            rimedi: rimediContesto(""),
+            tecnico: grezzoContesto(t2, codice)
+          };
+        }
+      },
       {
         id: "contesto-pieno",
         riconosce: (t2) => /exceed_context_size|exceeds the available context size|context (?:size|length) exceeded/i.test(t2),
@@ -9794,6 +10483,7 @@ var init_errori = __esm({
          * dice il vero e non chiede di riprovare come se fosse andato storto qualcosa.
          */
         id: "fermato-da-te",
+        famiglia: "fermato",
         riconosce: (t2) => /operation was aborted|AbortError|aborted by user|fermato dall'utente/i.test(t2),
         spiega: () => ({
           cosa: "Hai fermato il giro.",
@@ -9864,6 +10554,11 @@ var init_errori = __esm({
       { prova: /non ha un canale di approvazione|approval channel/i, detto: "Serviva un permesso che questa sessione non poteva chiedere." },
       { prova: /too large|troppo grande/i, detto: "Il contenuto era troppo grande per essere accettato." }
     ];
+    VESTIZIONI = {
+      fermato: { badge: "Fermato", titolo: "TALOS · fermato", tono: "accent" },
+      contesto: { badge: "Contesto", titolo: "TALOS · contesto non compattato", tono: "warning" }
+    };
+    VESTIZIONE_ERRORE = { badge: "Errore", titolo: "TALOS · errore", tono: "danger" };
   }
 });
 
@@ -9978,6 +10673,50 @@ function avvisoRitratto(ritratto) {
 }
 var init_cartella_ritratto = __esm({
   "src/components/cartella-ritratto.js"() {
+  }
+});
+
+// ../../context-engine/src/usage.mjs
+function contextUsageFromEvents(events, { sessionId } = {}) {
+  if (!Array.isArray(events)) return null;
+  const seen = /* @__PURE__ */ new Set();
+  const totals = { prompt_tokens: null, completion_tokens: null, cached_tokens: null, operazioni: 0, prompt_tokens_con_cache: null, operazioniConCache: 0 };
+  const overflow = /* @__PURE__ */ new Set();
+  const add = (key, value) => {
+    if (value === null || overflow.has(key)) return;
+    const sum = (totals[key] ?? 0) + value;
+    if (!Number.isSafeInteger(sum)) {
+      totals[key] = null;
+      overflow.add(key);
+    } else totals[key] = sum;
+  };
+  for (const wire of events) {
+    if (wire?.type !== "CUSTOM" || wire.name !== "talos.context") continue;
+    const event = wire.value;
+    if (event?.schema !== "talos.context.event.v1" || event.kind !== "context.usage.recorded" || typeof event.sessionId !== "string" || !event.sessionId || sessionId !== void 0 && event.sessionId !== sessionId) continue;
+    const { operationId, usage } = event.payload ?? {};
+    if (typeof operationId !== "string" || !operationId || !usage || typeof usage !== "object" || Array.isArray(usage)) continue;
+    const key = JSON.stringify([event.sessionId, operationId]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    totals.operazioni++;
+    const input = count(usage.inputTokens ?? usage.prompt_tokens);
+    const output = count(usage.outputTokens ?? usage.completion_tokens);
+    const cached = count(usage.cachedTokens ?? usage.cached_tokens ?? usage.prompt_tokens_details?.cached_tokens);
+    add("prompt_tokens", input);
+    add("completion_tokens", output);
+    if (input !== null && cached !== null && cached <= input) {
+      add("cached_tokens", cached);
+      add("prompt_tokens_con_cache", input);
+      totals.operazioniConCache++;
+    }
+  }
+  return totals.operazioni ? totals : null;
+}
+var count;
+var init_usage = __esm({
+  "../../context-engine/src/usage.mjs"() {
+    count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
   }
 });
 
@@ -10135,6 +10874,310 @@ function creaAnteprimaImmagine(image, { compatta = false, document: doc = global
 }
 var init_immagini_chat = __esm({
   "src/components/immagini-chat.js"() {
+  }
+});
+
+// src/components/context-separator.js
+function identity(event) {
+  if (!event?.sessionId || !event.versionId || event.state && event.state !== "committed") return null;
+  return JSON.stringify([event.sessionId, event.versionId]);
+}
+function creaSeparatoreContesto(event, { document: doc = globalThis.document, onOpen } = {}) {
+  const key = identity(event);
+  if (!key) return null;
+  const row = doc.createElement("div");
+  row.className = "talos-context-separator";
+  row.dataset.contextSeparator = key;
+  row.dataset.contextVersion = event.versionId;
+  row.dataset.contextSession = event.sessionId;
+  row.setAttribute("role", "group");
+  const restored = event.kind?.includes("restor");
+  const label = linguaCorrenteDiT() === "en" ? restored ? "Context restored" : "Context compacted" : t(restored ? "Contesto ripristinato" : "Contesto compattato");
+  row.setAttribute("aria-label", label);
+  const text = doc.createElement("span");
+  text.textContent = label;
+  row.append(text);
+  if (onOpen) {
+    const button2 = doc.createElement("button");
+    button2.type = "button";
+    button2.className = "talos-button talos-button--ghost talos-button--sm";
+    button2.textContent = linguaCorrenteDiT() === "en" ? "View context" : t("Vedi contesto");
+    button2.addEventListener("click", () => onOpen(event));
+    row.append(button2);
+  }
+  return row;
+}
+function aggiornaSeparatoreContesto(container, events = [], { sessionId, ...options } = {}) {
+  if (!container || !sessionId) return [];
+  const current = /* @__PURE__ */ new Map();
+  for (const node of container.querySelectorAll("[data-context-separator]")) {
+    if (node.dataset.contextSession !== sessionId) node.remove();
+    else current.set(node.dataset.contextSeparator, node);
+  }
+  const nodes = [];
+  for (const event of events) {
+    if (event.sessionId !== sessionId) continue;
+    const key = identity(event);
+    if (!key) continue;
+    let node = current.get(key);
+    if (!node) {
+      node = creaSeparatoreContesto(event, options);
+      container.append(node);
+      current.set(key, node);
+    }
+    if (!nodes.includes(node)) nodes.push(node);
+  }
+  return nodes;
+}
+var init_context_separator = __esm({
+  "src/components/context-separator.js"() {
+    init_lingua();
+  }
+});
+
+// src/services/context-client.js
+function fault(code, message, status) {
+  return Object.assign(new Error(message), { code, status });
+}
+function segment(value) {
+  if (typeof value !== "string" || !value.trim() || value.length > 256 || value === "." || value === "..") throw fault("CTX_INVALID_ARGUMENT", "Identificatore del contesto non valido.");
+  return encodeURIComponent(value);
+}
+function createContextClient({ fetchFn = globalThis.fetch, baseURL = "/api/v1", headers = {}, signal: defaultSignal } = {}) {
+  async function request(options, suffix = "", method = "GET", payload) {
+    const url = `${baseURL.replace(/\/$/, "")}/sessions/${segment(options.sessionId)}/context${suffix}`;
+    let response;
+    try {
+      response = await fetchFn(url, {
+        method,
+        credentials: "same-origin",
+        signal: options.signal ?? defaultSignal,
+        headers: { ...headers, Accept: "application/json", ...payload ? { "Content-Type": "application/json" } : {} },
+        ...payload ? { body: JSON.stringify(payload) } : {}
+      });
+    } catch (error) {
+      if (error?.name === "AbortError") throw error;
+      throw fault("CTX_NETWORK_ERROR", "Connessione al contesto interrotta. Riprova con Aggiorna.");
+    }
+    let data;
+    try {
+      data = await response.json();
+    } catch {
+      throw fault("CTX_INVALID_RESPONSE", "Il server non ha restituito un contesto leggibile.", response.status);
+    }
+    if (!response.ok || data?.error) throw fault(data?.error?.code || "CTX_HTTP_ERROR", data?.error?.message || "Operazione sul contesto non riuscita.", response.status);
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw fault("CTX_INVALID_RESPONSE", "Risposta del contesto non valida.", response.status);
+    return data;
+  }
+  const mutation = (o, body = {}) => ({ ...body, expectedRevision: o.expectedRevision, idempotencyKey: o.idempotencyKey ?? globalThis.crypto.randomUUID() });
+  return Object.freeze({
+    getContextState: (o) => request(o),
+    updateContextSettings: (o) => request(o, "/settings", "PATCH", mutation(o, { patch: o.patch })),
+    startCompaction: (o) => request(o, "/jobs", "POST", mutation(o, { kind: o.kind ?? "compact" })),
+    getContextJob: (o) => request(o, `/jobs/${segment(o.jobId)}`),
+    cancelCompaction: (o) => request(o, `/jobs/${segment(o.jobId)}`, "DELETE", mutation(o)),
+    resumeCompaction: (o) => request(o, `/jobs/${segment(o.jobId)}/resume`, "POST", mutation(o)),
+    listContextVersions: (o) => request(o, "/versions"),
+    restoreContextVersion: (o) => request(o, `/versions/${segment(o.versionId)}/restore`, "POST", mutation(o)),
+    listProtectedFacts: (o) => request(o, "/facts"),
+    upsertProtectedFact: (o) => request(o, o.fact?.id ? `/facts/${segment(o.fact.id)}` : "/facts", o.fact?.id ? "PATCH" : "POST", mutation(o, { fact: o.fact })),
+    removeProtectedFact: (o) => request(o, `/facts/${segment(o.factId)}`, "DELETE", mutation(o)),
+    resolveFactConflict: (o) => request(o, `/facts/${segment(o.factId)}/resolve`, "POST", mutation(o, { accept: o.accept })),
+    readContextSource: (o) => request(o, `/sources/${segment(o.sourceId)}`)
+  });
+}
+var init_context_client = __esm({
+  "src/services/context-client.js"() {
+  }
+});
+
+// src/services/context-monitor.js
+function createContextMonitor({ client, onState, onError, intervalMs = 1200, setTimeoutFn = setTimeout, clearTimeoutFn = clearTimeout }) {
+  let sessionId = null, running = false, snapshot = null, epoch = 0, sequence = 0, pending = null, timer, controller, failures = 0, unavailable = false;
+  const active = () => snapshot?.jobs?.some((job) => ACTIVE2.has(job.state));
+  function schedule() {
+    clearTimeoutFn(timer);
+    if (sessionId && !unavailable && (running || active())) timer = setTimeoutFn(() => api.refresh(), Math.min(15e3, intervalMs * 2 ** Math.min(failures, 4)));
+  }
+  const api = {
+    follow(next, options = {}) {
+      if (next !== sessionId) {
+        api.stop();
+        sessionId = next;
+      }
+      running = options.running === true;
+      return api.refresh();
+    },
+    setRunning(value) {
+      running = value === true;
+      schedule();
+    },
+    update(next) {
+      if (!sessionId || next?.sessionId !== sessionId || snapshot && next.revision < snapshot.revision) return;
+      ++sequence;
+      controller?.abort();
+      pending = null;
+      snapshot = structuredClone(next);
+      failures = 0;
+      unavailable = false;
+      onState?.(structuredClone(snapshot));
+      schedule();
+    },
+    refresh({ afterPending = false } = {}) {
+      if (!sessionId || unavailable) return Promise.resolve(null);
+      if (pending) {
+        const current2 = epoch;
+        return afterPending ? pending.then(() => current2 === epoch ? api.refresh() : null) : pending;
+      }
+      clearTimeoutFn(timer);
+      const current = epoch, ticket = ++sequence, selected = sessionId;
+      controller = new AbortController();
+      const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(1e4)]);
+      const request = (async () => {
+        await Promise.resolve();
+        try {
+          const next = await client.getContextState({ sessionId: selected, signal });
+          if (current !== epoch || ticket !== sequence) return null;
+          if (next?.sessionId !== selected || !Array.isArray(next.jobs)) throw new Error("CTX_INVALID_RESPONSE");
+          snapshot = structuredClone(next);
+          failures = 0;
+          onState?.(structuredClone(snapshot));
+          return snapshot;
+        } catch (error) {
+          if (current !== epoch || ticket !== sequence) return null;
+          failures++;
+          unavailable = error.code === "CTX_NOT_ENABLED" || error.code === "CTX_SESSION_NOT_FOUND";
+          onError?.(error, { sessionId: selected });
+          return null;
+        } finally {
+          if (current === epoch && ticket === sequence) {
+            pending = null;
+            schedule();
+          }
+        }
+      })();
+      pending = request;
+      return request;
+    },
+    stop() {
+      ++epoch;
+      ++sequence;
+      clearTimeoutFn(timer);
+      controller?.abort();
+      pending = null;
+      sessionId = null;
+      running = false;
+      snapshot = null;
+      failures = 0;
+      unavailable = false;
+    }
+  };
+  return Object.freeze(api);
+}
+var ACTIVE2;
+var init_context_monitor = __esm({
+  "src/services/context-monitor.js"() {
+    ACTIVE2 = /* @__PURE__ */ new Set(["queued", "preparing", "summarizing", "validating", "ready"]);
+  }
+});
+
+// src/components/context-progress.js
+function stimaResiduoContesto(job, adesso = Date.now()) {
+  if (job?.state !== "summarizing") return SENZA_STIMA;
+  const completed = job.progress?.completed, total = job.progress?.total;
+  if (!Number.isSafeInteger(completed) || !Number.isSafeInteger(total)) return SENZA_STIMA;
+  if (!(total > 0 && completed >= 1 && completed <= total)) return SENZA_STIMA;
+  const inizio = Date.parse(job.createdAt ?? "");
+  if (!Number.isFinite(inizio)) return SENZA_STIMA;
+  const trascorso = adesso - inizio;
+  if (!(trascorso > 0)) return SENZA_STIMA;
+  const msPerSegmento = trascorso / completed;
+  const segmentiResidui = total - completed;
+  const msResidui = msPerSegmento * segmentiResidui;
+  if (!Number.isFinite(msResidui) || msResidui > RESIDUO_ASSURDO_MS) return SENZA_STIMA;
+  return { noto: true, msResidui, msPerSegmento, segmentiResidui };
+}
+function descriviStimaResiduo(stima2, { english = false } = {}) {
+  if (!stima2?.noto) return english ? "time not measurable yet" : "tempo non ancora stimabile";
+  const ms = stima2.msResidui;
+  if (ms < SOGLIA_NUMERO_MS) return english ? "a few seconds left (estimate)" : "ancora pochi secondi (stima)";
+  const secondi = Math.round(ms / PASSO_SECONDI_MS) * (PASSO_SECONDI_MS / 1e3);
+  if (secondi < 60) return english ? `about ${secondi} seconds remaining (estimate)` : `circa ${secondi} secondi rimanenti (stima)`;
+  const minuti = Math.max(1, Math.round(ms / MINUTO_MS));
+  return english ? `about ${minuti} minute${minuti === 1 ? "" : "s"} remaining (estimate)` : `circa ${minuti} minut${minuti === 1 ? "o" : "i"} rimanent${minuti === 1 ? "e" : "i"} (stima)`;
+}
+function descriviAvanzamentoContesto(snapshot, { adesso = Date.now() } = {}) {
+  const view = descriviContextCompactor(snapshot);
+  const job = view.job;
+  const completed = job?.progress?.completed, total = job?.progress?.total;
+  const determinate = job?.state === "summarizing" && Number.isSafeInteger(completed) && Number.isSafeInteger(total) && total > 0 && completed >= 0 && completed <= total;
+  return { job, label: view.jobLabel, visible: Boolean(job && job.state !== "committed"), active: ACTIVE3.has(job?.state), determinate, value: determinate ? completed : null, max: determinate ? total : null, stima: stimaResiduoContesto(job, adesso) };
+}
+function aggiornaAvanzamentoContesto(container, snapshot, { onOpen, stale = false, adesso = Date.now() } = {}) {
+  if (!container) return;
+  const view = descriviAvanzamentoContesto(snapshot, { adesso });
+  let row = container.querySelector("[data-context-chat-progress]");
+  if (!view.visible) {
+    row?.remove();
+    return;
+  }
+  const doc = container.ownerDocument, english = linguaCorrenteDiT() === "en";
+  if (!row || row.dataset.contextSession !== snapshot.sessionId) {
+    row?.remove();
+    row = doc.createElement("section");
+    row.className = "talos-context-chat-progress";
+    row.dataset.contextChatProgress = "";
+    row.dataset.contextSession = snapshot.sessionId;
+    const testo3 = doc.createElement("span");
+    testo3.dataset.contextChatText = "";
+    const status = doc.createElement("span");
+    status.dataset.contextChatStatus = "";
+    status.setAttribute("role", "status");
+    const stima2 = doc.createElement("span");
+    stima2.dataset.contextChatEta = "";
+    stima2.setAttribute("aria-live", "off");
+    testo3.append(status, stima2);
+    const bar2 = doc.createElement("progress");
+    bar2.className = "talos-context__progress";
+    const button2 = doc.createElement("button");
+    button2.type = "button";
+    button2.className = "talos-button talos-button--ghost talos-button--sm";
+    button2.textContent = "Context Manager";
+    button2.addEventListener("click", () => onOpen?.());
+    row.append(testo3, button2, bar2);
+    container.append(row);
+  }
+  row.dataset.contextJob = view.job.id;
+  row.dataset.contextState = view.job.state;
+  const bar = row.querySelector("progress");
+  bar.hidden = !view.active;
+  const text = stale ? english ? "Progress unavailable. Reconnecting…" : "Avanzamento non disponibile. Riconnessione…" : view.label;
+  row.querySelector("[data-context-chat-status]").textContent = text;
+  bar.setAttribute("aria-label", english ? "Context compaction" : "Compattazione del contesto");
+  const testoStima = !stale && view.job.state === "summarizing" ? descriviStimaResiduo(view.stima, { english }) : "";
+  row.querySelector("[data-context-chat-eta]").textContent = testoStima ? ` · ${testoStima}` : "";
+  if (view.determinate && !stale) {
+    bar.max = view.max;
+    bar.value = view.value;
+    const conteggio2 = english ? `${view.value} of ${view.max} segments` : `${view.value} di ${view.max} segmenti`;
+    bar.setAttribute("aria-valuetext", view.stima.noto ? `${conteggio2} · ${testoStima}` : conteggio2);
+  } else {
+    bar.removeAttribute("value");
+    bar.removeAttribute("aria-valuetext");
+  }
+  return row;
+}
+var ACTIVE3, MINUTO_MS, SOGLIA_NUMERO_MS, PASSO_SECONDI_MS, RESIDUO_ASSURDO_MS, SENZA_STIMA;
+var init_context_progress = __esm({
+  "src/components/context-progress.js"() {
+    init_context_compactor();
+    init_lingua();
+    ACTIVE3 = /* @__PURE__ */ new Set(["queued", "preparing", "summarizing", "validating", "ready"]);
+    MINUTO_MS = 6e4;
+    SOGLIA_NUMERO_MS = 15e3;
+    PASSO_SECONDI_MS = 5e3;
+    RESIDUO_ASSURDO_MS = 99 * MINUTO_MS;
+    SENZA_STIMA = Object.freeze({ noto: false, msResidui: null, msPerSegmento: null, segmentiResidui: null });
   }
 });
 
@@ -10362,8 +11405,15 @@ var init_app = __esm({
     init_testo_pagina();
     init_cartella_ritratto();
     init_consumo_sessione();
+    init_usage();
     init_allegati();
     init_immagini_chat();
+    init_context_compactor();
+    init_contesto();
+    init_context_separator();
+    init_context_client();
+    init_context_monitor();
+    init_context_progress();
     init_review();
     init_stato_vuoto();
     init_topbar();
@@ -10641,6 +11691,8 @@ var init_app = __esm({
            * riportato consumo — mai uno zero fabbricato.
            */
           usageSessione: null,
+          eventiUsageContesto: /* @__PURE__ */ new Map(),
+          cachePromptPrecedenti: 0,
           /** La somma dei totali degli invii GIÀ CHIUSI (fino all'ultimo `RunStarted`). */
           usageEsecuzioniPrecedenti: null,
           /**
@@ -10736,7 +11788,10 @@ var init_app = __esm({
       const topbar = $2(".topbar");
       const embeddedHeaderScrollers = [...new Set([...views, chatConversation].filter(Boolean))];
       const embeddedHeaderScrollPositions = /* @__PURE__ */ new WeakMap();
-      let compattazioneInCorso = false;
+      let contextCompactor = null;
+      let contextClient = null;
+      let contextMonitor = null;
+      let contextChatSnapshot = null;
       let streamingScrollFrame = null;
       let streamingScrollTarget = null;
       let streamingAutoFollow = true;
@@ -13281,7 +14336,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           } catch {
           }
         }
-        aggiornaContesto(pannello, ripartizioneContesto({ attrezzi, finestra }));
+        const finestraUnica = finestraDiContesto({
+          misura: contextChatSnapshot?.measurement ?? null,
+          revisione: contextChatSnapshot?.revision ?? null,
+          finestraCatalogo: finestra
+        });
+        aggiornaContesto(pannello, ripartizioneContesto({ attrezzi, finestra: finestraUnica }));
       }
       async function caricaCostiConsumo() {
         const pannello = $2('[data-settings-panel="costi"]');
@@ -16797,12 +17857,25 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           const c = contaDiff(v);
           return { path: v.path, aggiunte: c.aggiunte, rimozioni: c.rimozioni };
         });
+        const finestra = finestraDiContesto({
+          misura: contextChatSnapshot?.measurement ?? null,
+          revisione: contextChatSnapshot?.revision ?? null,
+          finestraCatalogo: finestraDelModelloCorrente(),
+          usage: state.realSession.usage,
+          ripartizione: state.realSession.ripartizioneContesto || null
+        });
         aggiornaInspector(inspector, {
           titolo: state.realSession.id ? state.session || "Sessione" : "Nessuna sessione aperta",
           contesto: state.realSession.contesto || null,
-          usage: state.realSession.usage,
-          finestra: finestraDelModelloCorrente(),
-          ripartizione: state.realSession.ripartizioneContesto || null,
+          usage: finestra.perInspector.usage,
+          /*
+           * ⛔ Il NUMERO, non il descrittore: `righeFinestra` fa aritmetica su questo valore
+           * (`finestra - occupati`), e un oggetto le fa produrre NaN — a schermo «Libera — · 100,0%»,
+           * una percentuale sopra una finestra dichiarata ignota. Trovato nella FOTO della barra di
+           * avanzamento: i 509 test unitari erano verdi.
+           */
+          finestra: finestra.perInspector.finestra,
+          ripartizione: finestra.perInspector.ripartizione,
           giri: giriPerInspector(),
           file,
           processi: processiDagliEventi(state.realSession.eventiAttrezzi),
@@ -17667,11 +18740,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
       }
       function appendStatusNote(text, isError = false, { meta: etichettaMeta = null, spiegazione = null } = {}) {
-        const fermato = spiegazione?.id === "fermato-da-te";
+        const vestizione = vestizioneErrore(spiegazione);
         const article = spiegazione ? creaNotaErrore({
-          titolo: etichettaMeta || (fermato ? "TALOS · fermato" : "TALOS · errore"),
-          badge: fermato ? "Fermato" : "Errore",
-          tono: fermato ? "accent" : "danger",
+          titolo: etichettaMeta || vestizione.titolo,
+          badge: vestizione.badge,
+          tono: vestizione.tono,
           spiegazione
         }) : creaNotaSistema({ tipo: isError ? "danger" : "info", badge: isError ? "Errore" : "Nota", titolo: etichettaMeta || (isError ? "TALOS · errore" : "TALOS · concluso"), testo: text });
         article.classList.add("real-session-status");
@@ -20329,8 +21402,41 @@ ${testo3}` : testo3;
         el25.textContent = pagine === 0 ? "nessuna pagina letta" : `${pagine} pagin${pagine === 1 ? "a letta" : "e lette"}`;
         el25.title = "TALOS legge il testo delle pagine con l'attrezzo naviga; compaiono nella vista Browser.";
       }
+      function aggiornaUsageSessione() {
+        const chat = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
+        const compattazione = contextUsageFromEvents([...state.realSession.eventiUsageContesto.values()], { sessionId: state.realSession.id });
+        if (!compattazione) {
+          state.realSession.usageSessione = chat;
+          return;
+        }
+        const corrente = state.realSession.usage;
+        const cacheCorrente = Number.isFinite(corrente?.cached_tokens) && Number.isFinite(corrente?.prompt_tokens) && corrente.prompt_tokens > 0 ? corrente.prompt_tokens : 0;
+        const totale2 = { ...chat, compattazione, prompt_tokens_con_cache: state.realSession.cachePromptPrecedenti + cacheCorrente + (compattazione.prompt_tokens_con_cache ?? 0) };
+        for (const key of ["prompt_tokens", "completion_tokens", "cached_tokens"]) {
+          const current = Number.isFinite(chat?.[key]) ? chat[key] : null;
+          const extra = compattazione[key];
+          totale2[key] = current === null && extra === null ? null : (current ?? 0) + (extra ?? 0);
+        }
+        state.realSession.usageSessione = totale2;
+      }
       function handleRealEvent(evento, generation) {
         if (generation !== state.realSession.generation) return;
+        if (evento.type === "CUSTOM" && evento.name === "talos.context") {
+          const value = evento.value;
+          if (value?.schema !== "talos.context.event.v1" || value.sessionId !== state.realSession.id) return;
+          if (contextUsageFromEvents([evento], { sessionId: state.realSession.id })) {
+            const operationId = value.payload.operationId;
+            if (state.realSession.eventiUsageContesto.has(operationId)) return;
+            state.realSession.eventiUsageContesto.set(operationId, evento);
+            aggiornaUsageSessione();
+            aggiornaContatoreUsage();
+            aggiornaPiedeChatDaStato();
+          }
+          aggiornaSeparatoreContesto($2("#conversation"), [value], { sessionId: state.realSession.id, onOpen: () => compactSession() });
+          void contextMonitor?.refresh();
+          if (contextCompactor && !$2("#veloContesto")?.hidden) void contextCompactor.refresh({ quiet: true });
+          return;
+        }
         if (typeof evento._sequenza === "number") {
           if (state.realSession.sequenzeViste.has(evento._sequenza)) return;
           state.realSession.sequenzeViste.add(evento._sequenza);
@@ -20342,10 +21448,12 @@ ${testo3}` : testo3;
         switch (evento.type) {
           case "RunStarted": {
             streamingAutoFollow = true;
+            contextMonitor?.setRunning(true);
             streamingLastTargetTop = null;
+            if (Number.isFinite(state.realSession.usage?.cached_tokens) && Number.isFinite(state.realSession.usage?.prompt_tokens) && state.realSession.usage.prompt_tokens > 0) state.realSession.cachePromptPrecedenti += state.realSession.usage.prompt_tokens;
             state.realSession.usageEsecuzioniPrecedenti = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
             state.realSession.usage = null;
-            state.realSession.usageSessione = state.realSession.usageEsecuzioniPrecedenti;
+            aggiornaUsageSessione();
             state.realSession.currentRunModel = typeof evento.contesto?.modello === "string" && evento.contesto.modello.trim() ? evento.contesto.modello.trim() : state.model || null;
             state.realSession.redirectPendingId = null;
             state.realSession.eventoTerminaleVisto = false;
@@ -20588,7 +21696,7 @@ ${testo3}` : testo3;
             const path = evento.delta?.[0]?.path;
             if (path === "/usage") {
               state.realSession.usage = evento.delta[0].value;
-              state.realSession.usageSessione = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
+              aggiornaUsageSessione();
               aggiornaContatoreUsage();
               aggiornaComposerUsage(state.realSession.usage);
               break;
@@ -20654,6 +21762,8 @@ ${testo3}` : testo3;
             break;
           }
           case "RunFinished": {
+            contextMonitor?.setRunning(false);
+            void contextMonitor?.refresh({ afterPending: true });
             if (state.realSession.redirectPendingId) mostraAttesaRisposta("redirect");
             else nascondiAttesaRisposta();
             chiudiBatchTool();
@@ -20682,6 +21792,8 @@ ${testo3}` : testo3;
             break;
           }
           case "RunError": {
+            contextMonitor?.setRunning(false);
+            void contextMonitor?.refresh({ afterPending: true });
             if (state.realSession.redirectPendingId) mostraAttesaRisposta("redirect");
             else nascondiAttesaRisposta();
             chiudiBatchTool();
@@ -20723,6 +21835,7 @@ ${testo3}` : testo3;
       }
       function collegaEventiSessione(sessionId, generation) {
         state.realSession.id = sessionId;
+        void ottieniMonitorContesto().follow(sessionId);
         state.realSession.eventoTerminaleVisto = false;
         syncRunComposerState();
         const demoBadgeChat = $$(".demo-surface-badge", $2(".chat-view")).find((badge5) => badge5.closest("[data-demo-surface]")?.dataset.demoSurface === "chat");
@@ -20755,6 +21868,13 @@ ${testo3}` : testo3;
         };
       }
       function nuovaGenerazioneSessione({ continua = false } = {}) {
+        if (!continua) {
+          contextCompactor?.close();
+          contextCompactor?.setSession(null);
+          contextMonitor?.stop();
+          contextChatSnapshot = null;
+          aggiornaAvanzamentoContesto($2("#conversation"), null);
+        }
         nascondiAttesaRisposta();
         cancellaRenderMessaggiStreaming();
         cancellaRenderAlberoDifferito();
@@ -20793,6 +21913,8 @@ ${testo3}` : testo3;
           state.realSession.attesaBubble = null;
           state.realSession.usage = null;
           state.realSession.usageSessione = null;
+          state.realSession.eventiUsageContesto = /* @__PURE__ */ new Map();
+          state.realSession.cachePromptPrecedenti = 0;
           state.realSession.usageEsecuzioniPrecedenti = null;
           state.realSession.eventiAttrezzi = [];
           state.realSession.tettoGiriDichiarato = null;
@@ -20997,39 +22119,42 @@ ${testo3}` : testo3;
           if (sessionId === state.realSession.id) ripristinaImmagini(immagini, testo3);
         }
       }
+      function aggiornaContestoChat(snapshot) {
+        if (snapshot?.sessionId !== state.realSession.id) return;
+        contextChatSnapshot = snapshot;
+        aggiornaAvanzamentoContesto($2("#conversation"), snapshot, { onOpen: () => compactSession() });
+        contextCompactor?.update(snapshot);
+        aggiornaInspectorDaStato();
+      }
+      function ottieniMonitorContesto() {
+        contextClient ??= createContextClient({ fetchFn: fetchSorvegliata, baseURL: API("/api/v1") });
+        contextMonitor ??= createContextMonitor({
+          client: contextClient,
+          onState: aggiornaContestoChat,
+          onError: (_error, { sessionId }) => {
+            if (sessionId !== state.realSession.id) return;
+            aggiornaAvanzamentoContesto($2("#conversation"), contextChatSnapshot, { stale: true, onOpen: () => compactSession() });
+          }
+        });
+        return contextMonitor;
+      }
       async function compactSession() {
-        if (!state.realSession.id) {
-          toast("Contesto compattato", "18.7k -> 9.3k token equivalenti.");
+        const root = $2("#veloContesto");
+        if (!root) {
+          toast("Context Manager", "La finestra del contesto non è disponibile. Aggiorna la pagina.");
           return;
         }
-        if (compattazioneInCorso) return;
-        const bottoneCompattazione = $2("#compactSessionBtn");
-        compattazioneInCorso = true;
-        if (bottoneCompattazione) {
-          bottoneCompattazione.disabled = true;
-          bottoneCompattazione.setAttribute("aria-busy", "true");
-          bottoneCompattazione.setAttribute("aria-label", "Compattazione in corso");
-          bottoneCompattazione.title = "Compattazione in corso…";
-          bottoneCompattazione.classList.add("is-loading");
-        }
-        try {
-          const dati = await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/compact`, {});
-          toast(
-            dati.compattato ? "Contesto compattato" : "Compattazione saltata",
-            dati.compattato ? "Il prossimo resume o fork riparte dal riassunto." : "Il modello non ha risposto: la conversazione resta quella intera."
-          );
-        } catch (error) {
-          toast("Compattazione non riuscita", error.message);
-        } finally {
-          compattazioneInCorso = false;
-          if (bottoneCompattazione) {
-            bottoneCompattazione.disabled = false;
-            bottoneCompattazione.removeAttribute("aria-busy");
-            bottoneCompattazione.setAttribute("aria-label", "Comprimi il contesto");
-            bottoneCompattazione.removeAttribute("title");
-            bottoneCompattazione.classList.remove("is-loading");
-          }
-        }
+        ottieniMonitorContesto();
+        const sessionId = state.realSession.id;
+        const snapshot = contextChatSnapshot?.sessionId === sessionId ? contextChatSnapshot : null;
+        if (!contextCompactor) contextCompactor = montaContextCompactor(root, {
+          client: contextClient,
+          sessionId,
+          state: snapshot,
+          onState: (next) => contextMonitor?.update(next)
+        });
+        else contextCompactor.setSession(sessionId, snapshot);
+        contextCompactor.open();
       }
       function normalizzaModelloSessione(sessioneOrModel) {
         if (typeof sessioneOrModel === "string") return sessioneOrModel.trim();
@@ -24054,6 +25179,10 @@ ${blocchi.join("\n\n")}` : testa;
         realSessionState: state.realSession
       };
       window.__talosHarnessDestroy = () => {
+        contextCompactor?.destroy();
+        contextCompactor = null;
+        contextMonitor?.stop();
+        contextMonitor = null;
         window.clearInterval(notificheTimer);
         document.querySelector(".notifications-menu")?.remove();
         cancelMotionAnimations();
@@ -24260,6 +25389,10 @@ ${blocchi.join("\n\n")}` : testa;
       });
       let ultimoFuocoVelo = null;
       function apriVeloMockup(id) {
+        if (id === "veloContesto") {
+          void compactSession();
+          return;
+        }
         const v = $2(`#${id}`);
         if (!v) return;
         if (id === "veloIntro" && !introMockup) {
@@ -24276,6 +25409,10 @@ ${blocchi.join("\n\n")}` : testa;
         primo?.focus();
       }
       function chiudiVeloMockup(id) {
+        if (id === "veloContesto" && contextCompactor) {
+          contextCompactor.close();
+          return;
+        }
         const v = $2(`#${id}`);
         if (!v || v.hidden) return;
         v.hidden = true;

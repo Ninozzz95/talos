@@ -15,6 +15,15 @@ import { testiUsage } from '../../src/components/chat-foot.js';
  * dei cached su somma dei prompt).
  */
 
+test('CTX-USAGE-CACHE-UNKNOWN summary cache not reported does not dilute the measured chat cache', () => {
+  const chat = { prompt_tokens: 100, completion_tokens: 20, cached_tokens: 40, giri: 1 };
+  const compattazione = { prompt_tokens: 1800, completion_tokens: 80, cached_tokens: null, prompt_tokens_con_cache: null };
+  const total = { ...chat, prompt_tokens: 1900, completion_tokens: 100, compattazione, prompt_tokens_con_cache: 100 };
+  const shown = testiUsage(chat, { usageSessione: total });
+  assert.equal(shown.cache, 'cache 40%');
+  assert.match(shown.tokenGiri, /2,0k token · 1 giro/);
+});
+
 const INVII = [
   { prompt_tokens: 7669, completion_tokens: 68, cached_tokens: 7616, giri: 1 },
   { prompt_tokens: 7675, completion_tokens: 28, cached_tokens: 0, giri: 1 },

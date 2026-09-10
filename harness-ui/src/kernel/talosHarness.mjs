@@ -532,6 +532,7 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
  */
 export async function chiamaConRitenta({
     modello, chiave, messaggi, attrezzi,
+    maxOutputTokens,
     tentativiMassimi = 4,
     fetchDiRete = fetch,
     dormi = (ms) => new Promise((ok) => setTimeout(ok, ms)),
@@ -540,6 +541,9 @@ export async function chiamaConRitenta({
     reasoning,
     segnaleStop,
 }) {
+    if (maxOutputTokens !== undefined && (!Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1)) {
+        throw Object.assign(new Error('La riserva di risposta deve essere un intero positivo.'), { code: 'CTX_INVALID_RESERVE' })
+    }
     const inStreaming = Boolean(onDelta)
     let ultimoStato = null
     let ultimoTesto = ''
@@ -562,6 +566,7 @@ export async function chiamaConRitenta({
                 messages: messaggi,
                 tools: attrezzi,
                 tool_choice: 'auto',
+                ...(maxOutputTokens !== undefined ? { max_tokens: maxOutputTokens } : {}),
                 ...(inStreaming ? { stream: true, stream_options: { include_usage: true } } : {}),
                 ...(reasoning ? { reasoning } : {}),
             }),
@@ -4110,9 +4115,9 @@ export function formattaEsitoForge(risultato) {
     return `${risultato.error?.code ?? 'TALOS_FORGE_FAILED'}: ${risultato.error?.message ?? 'the tool failed.'}`
 }
 
-async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete, onDelta, reasoning, attrezziOpenAI = ATTREZZI_OPENAI, segnaleStop) {
+async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete, onDelta, reasoning, attrezziOpenAI = ATTREZZI_OPENAI, segnaleStop, maxOutputTokens) {
     return chiamaConRitenta({
-        modello, chiave, messaggi, attrezzi: attrezziOpenAI,
+        modello, chiave, messaggi, attrezzi: attrezziOpenAI, maxOutputTokens,
         ...(fetchDiRete ? { fetchDiRete } : {}),
         ...(onDelta ? { onDelta } : {}),
         ...(reasoning ? { reasoning } : {}),
@@ -4186,7 +4191,7 @@ async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete,
 export async function talosLavora({
     cartella, task, modello, chiave, comandoProva = 'npm test',
     messaggiIniziali, onGiro, onScrittura, segnaleStop, fetchDiRete, mobile = false,
-    onDelta, reasoning,
+    onDelta, reasoning, contextHooks,
     /*
      * ⭐⭐⭐ TRE parametri nuovi, tutti opzionali — vedi la doc sopra
      * `ATTREZZI_ESTESI`. Nessuno passato da TALOS-BANCO
@@ -4731,6 +4736,7 @@ export async function talosLavora({
      * chiamata normale (assente ⇒ stesso valore di prima).
      */
     const giriMassimiEffettivi = _giriMassimiInterno ?? GIRI_MASSIMI
+    await contextHooks?.capture?.({ messages: messaggi, reason: 'start' })
 
     for (let giro = 0; giro < giriMassimiEffettivi; giro++) {
         /*
@@ -4751,7 +4757,7 @@ export async function talosLavora({
          * chiamata normale del giro, non dopo: o si compatta, o si lavora,
          * mai le due cose nello stesso giro.
          */
-        if (serveCompattare(giro, messaggi)) {
+        if (!contextHooks && serveCompattare(giro, messaggi)) {
             const esito = await compattaConversazione(
                 messaggi,
                 (richiesta) => chiamaConRitenta({
@@ -4790,11 +4796,18 @@ export async function talosLavora({
         let usage = null
         let ripetizione = null
         try {
-            const esitoChiamata = await chiamaIlModelloConRitenta(
-                modello, chiave, messaggi, fetchDiRete,
+            await contextHooks?.capture?.({ messages: messaggi, reason: 'before-request' })
+            const preparedContext = contextHooks
+                ? await contextHooks.prepare({ messages: messaggi, tools: attrezziOpenAI, model: modello, signal: segnaleStop })
+                : null
+            const invoke = (signal = segnaleStop) => chiamaIlModelloConRitenta(
+                modello, chiave, preparedContext?.messages ?? messaggi, fetchDiRete,
                 onDelta ? (e) => onDelta({ giro, ...e }) : undefined,
-                reasoning, attrezziOpenAI, segnaleStop,
+                reasoning, attrezziOpenAI, signal, preparedContext?.measurement?.responseReserve,
             )
+            const esitoChiamata = contextHooks?.infer
+                ? await contextHooks.infer({ signal: segnaleStop }, invoke)
+                : await invoke()
             risposta = esitoChiamata.scelta
             usage = esitoChiamata.usage
             ripetizione = esitoChiamata.ripetizione ?? null
@@ -4841,6 +4854,7 @@ export async function talosLavora({
          * nessuna chiamata orfana; e l'esito che il modello leggerà sarà
          * quello vero di una chiamata senza argomenti, non un successo finto.
          */
+        await contextHooks?.captureProviderResponse?.({ response: risposta, giro })
         for (const c of risposta.tool_calls ?? []) {
             const grezzi = c.function?.arguments
             if (typeof grezzi !== 'string' || grezzi === '') continue
@@ -4848,6 +4862,7 @@ export async function talosLavora({
             catch { c.function.arguments = '{}' }
         }
         messaggi.push(risposta)
+        await contextHooks?.capture?.({ messages: messaggi, reason: 'response' })
         /*
          * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 —
          * `usage`/`totali` sono campi ADDITIVI (stesso stile già in uso
@@ -6330,12 +6345,13 @@ export async function talosLavora({
                 catch { /* notify-only: un ascoltatore che lancia non tocca il verdetto già deciso */ }
             }
 
-            const contenutoTool = String(esito).slice(0, 8_000)
+            const contenutoTool = contextHooks ? String(esito) : String(esito).slice(0, 8_000)
             messaggi.push({
                 role: 'tool',
                 tool_call_id: c.id,
                 content: contenutoTool,
             })
+            await contextHooks?.capture?.({ messages: messaggi, reason: 'tool-result' })
             onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool })
         }
 
@@ -6385,7 +6401,8 @@ export async function talosLavora({
          */
         if (serveRiflettere(giro) && chiamate.length > 0) {
             const ultimo = messaggi[messaggi.length - 1]
-            ultimo.content = String(ultimo.content) + NUDGE_RIFLESSIONE
+            if (contextHooks) messaggi.push({ role: 'user', content: NUDGE_RIFLESSIONE })
+            else ultimo.content = String(ultimo.content) + NUDGE_RIFLESSIONE
         }
     }
 
@@ -6482,6 +6499,7 @@ export async function talosLavora({
         ? `${ultimoTesto}\n${JSON.stringify({ usage: usageOpenRouter })}`
         : ultimoTesto
 
+    await contextHooks?.capture?.({ messages: messaggi, reason: 'finished' })
     return {
         detto: ultimoTesto,
         fuori: conConto,

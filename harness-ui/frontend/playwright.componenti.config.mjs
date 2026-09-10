@@ -21,7 +21,7 @@ export default defineConfig({
   // ⛔ 07/9: accanto alla parita coi componenti gira la prova che il cancello dei veli MORDE
   //    (`veli-sani.banco.html`): un controllo mai messo alla prova contro un difetto noto non
   //    si sa se prende quelli veri.
-  testMatch: ['componenti.spec.mjs', 'veli-sani-morde.spec.mjs', 'review-testata.spec.mjs'],
+  testMatch: ['componenti.spec.mjs', 'veli-sani-morde.spec.mjs', 'review-testata.spec.mjs', 'context-compactor.spec.mjs'],
   timeout: 60_000,
   fullyParallel: false,
   forbidOnly: true,
