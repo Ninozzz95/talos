@@ -1,6 +1,6 @@
 import {aggiornaProviderList,montaProviderPanel} from '../components/provider-card.js';
 import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica } from '../components/politiche.js';
-import { nomeLeggibileSessione } from '../components/session-item.js';
+import { nomeLeggibileSessione, aggiornaSessionItem } from '../components/session-item.js'; // N1 (10/09): la riga della sessione viva cambia sul posto
 import { collegaScia, aggiornaTutteLeScie } from '../components/range-scia.js';
 import {aggiornaElencoRuntime,montaPannelloRuntime} from '../components/runtime-modelli.js';
 import {normalizzaCapacita,aggiornaMisuraMemoria,montaMisuraMemoria} from '../components/misura-memoria.js';
@@ -2639,6 +2639,62 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⛔ Se il browser blocca la finestra (succede quando il clic non è riconosciuto come gesto
    *   della persona) NON si finge che sia andata: si mostra l'indirizzo e si lascia decidere.
    */
+  /*
+   * ⛔⛔ N1 (10/09) — LA BARRA LATERALE VIVA.
+   *
+   * Misurato prima: durante un giro l'unica cosa che si aggiornava era l'albero delle figlie. La
+   * riga della sessione restava com'era nata — «1 giro» anche al quinto — finché non arrivava
+   * una richiesta di approvazione o non si ricaricava la pagina.
+   *
+   * ⛔ Il freno non è prudenza generica: gli eventi arrivano a raffica (uno per token), e toccare
+   *   il DOM per riscrivere lo stesso numero cancella la selezione di chi sta leggendo. Mezzo
+   *   secondo è più rapido di quanto un occhio noti un conteggio che sale, e mille volte meno
+   *   lavoro.
+   */
+  const RITMO_RIGA_VIVA_MS = 500;
+  let ultimaRigaViva = 0;
+  let rigaVivaProgrammata = null;
+
+  function scriviRigaSessioneViva() {
+    rigaVivaProgrammata = null;
+    ultimaRigaViva = Date.now();
+    const id = state.realSession.id;
+    if (!id) return;
+    const riga = $('.talos-session-item[data-real-session-id="' + id + '"]');
+    if (!riga) return; // la sessione non è nell'elenco visibile: non c'è niente da aggiornare
+    /*
+     * Lo stato si legge da ciò che la pagina già sa, con la stessa domanda che usa il pulsante
+     * di invio (`runRealeAttivo`): due letture diverse dello stesso fatto sono il difetto O-50,
+     * già pagato il 07/09.
+     */
+    /*
+     * ⛔⛔ I GIRI SI LEGGONO DA DOVE LI LEGGE LA RIGA VERA, non da `runCount`.
+     *   Il giro vero del 10/09 ha mostrato «16 giri» a metà corsa e «3 giri» alla fine, sulla
+     *   stessa sessione: `runCount` conta i `RunStarted` visti da questa PAGINA — replay della
+     *   cronologia compresi — e non i giri della sessione. È la stessa famiglia del difetto CB-04
+     *   del 06/09 («1 giro» su tre), e la cura è la stessa: una fonte sola.
+     * ⛔ 578 prove verdi non l'hanno visto. L'ha visto un giro col modello, guardando la barra.
+     */
+    const giri = Number(usageDellaSessione(state.realSession)?.giri) || null;
+    /*
+     * ⛔ Se la sessione sta aspettando una risposta dell'owner, lo STATO non si tocca: quello lo
+     *   scrive già il ramo `ApprovalRequested` (che ricarica l'elenco vero), e sovrascriverlo con
+     *   «in corso» rifarebbe il difetto curato il 04/09 — una riga che dice «in corso» mentre a
+     *   schermo c'è una carta che aspetta te. Qui si aggiornano solo i giri.
+     */
+    if (state.realSession.approvazioniPendenti?.size > 0) { aggiornaSessionItem(riga, { giri }); return; }
+    if (!runRealeAttivo()) return; // conclusa o interrotta: lo dice l'elenco vero, che si ricarica da sé
+    aggiornaSessionItem(riga, { stato: { classe: 'vivo', testo: 'in corso', tono: 'live' }, giri });
+  }
+
+  /** Chiede un aggiornamento della riga viva, non più spesso del ritmo dichiarato. */
+  function segnalaRigaSessioneViva() {
+    if (rigaVivaProgrammata) return;
+    const passato = Date.now() - ultimaRigaViva;
+    if (passato >= RITMO_RIGA_VIVA_MS) { scriviRigaSessioneViva(); return; }
+    rigaVivaProgrammata = window.setTimeout(scriviRigaSessioneViva, RITMO_RIGA_VIVA_MS - passato);
+  }
+
   async function avviaAccessoProvider(provider) {
     const corrente = () => $('#providerList')?.querySelector('[data-provider-id="' + provider + '"]');
     /*
@@ -12763,6 +12819,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   riuscita: un comando che fallisce chiude il giro esattamente come uno che riesce.
      */
     if (evento.type === 'RunFinished' || evento.type === 'RunError') state.realSession.giroComandoDiretto = false;
+    /* N1 — un punto solo, dove passano tutti gli eventi: la riga della sessione viva si tiene al
+       passo col giro invece di restare quella del momento in cui è nata. */
+    segnalaRigaSessioneViva();
     switch (evento.type) {
       case 'RunStarted': {
         streamingAutoFollow = true; // un nuovo giro ri-arma il "segui il centro" — stesso principio visto in ricerca

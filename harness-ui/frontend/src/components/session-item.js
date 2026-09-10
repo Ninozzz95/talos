@@ -299,6 +299,66 @@ export function ordinaSessioniAdAlbero(elenco) {
   });
 }
 
+/**
+ * N1 \u2014 aggiorna una riga GI\u00c0 disegnata, senza ricostruirla.
+ *
+ * \u26d4 Sul posto, e non \u00e8 un vezzo: ricostruire la riga a ogni evento le farebbe perdere il fuoco
+ *   sotto le dita di chi naviga da tastiera, e la farebbe lampeggiare a ogni token che arriva.
+ * \u26d4 Tocca solo ci\u00f2 che \u00e8 CAMBIATO: scrivere lo stesso testo nel DOM cancella comunque la selezione
+ *   di chi stava leggendo, ed \u00e8 il difetto che il blocco di codice della chat ha gi\u00e0 pagato.
+ * \u26d4 Il conteggio dei giri parla della SESSIONE, non dell'ultimo invio (CB-04, 06/09): chi chiama
+ *   passa il totale, non l'usage del turno.
+ *
+ * @param {Element} riga la `.talos-session-item` da aggiornare
+ * @param {{stato?:{classe:string,testo:string,tono:string|null}, modello?:string|null, giri?:number|null}} dati
+ * @returns {boolean} `true` se qualcosa \u00e8 davvero cambiato
+ */
+export function aggiornaSessionItem(riga, dati = {}) {
+  if (!riga || typeof riga.querySelector !== 'function') return false;
+  let cambiato = false;
+
+  const stato = dati.stato;
+  if (stato && typeof stato.classe === 'string') {
+    if (riga.dataset.sessionState !== stato.classe) { riga.dataset.sessionState = stato.classe; cambiato = true; }
+    const pallino = riga.querySelector('.talos-dot');
+    if (pallino) {
+      const classe = `talos-dot talos-dot--sm${stato.tono ? ` talos-dot--${stato.tono}` : ''}`;
+      if (pallino.className !== classe) { pallino.className = classe; cambiato = true; }
+    }
+    const testo = riga.querySelector('.talos-session-item__state');
+    if (testo) {
+      /* Il modello sta nella stessa frase dello stato: se chi chiama non lo passa si tiene quello
+         che c'\u00e8 gi\u00e0 a schermo, invece di cancellarlo. */
+      const modello = dati.modello === undefined
+        ? (testo.textContent.includes(' \u00b7 ') ? testo.textContent.split(' \u00b7 ').slice(1).join(' \u00b7 ') : null)
+        : dati.modello;
+      const frase = modello ? `${stato.testo} \u00b7 ${modello}` : stato.testo;
+      if (testo.textContent !== frase) { testo.textContent = frase; cambiato = true; }
+    }
+  }
+
+  if (Number.isFinite(dati.giri) && dati.giri > 0) {
+    const aside = riga.querySelector('.talos-session-item__aside');
+    if (aside) {
+      const frase = `${dati.giri} gir${dati.giri === 1 ? 'o' : 'i'}`;
+      /* L'ultimo figlio dell'aside \u00e8 il conteggio, quando c'\u00e8: si riconosce dalla parola, non dalla
+         posizione \u2014 una riga senza giri ha l\u00ec solo l'ora, e sovrascriverla direbbe l'ora sbagliata. */
+      const ultimo = aside.lastElementChild;
+      const eIlConteggio = ultimo && /\bgir[oi]\b/.test(ultimo.textContent || '');
+      if (eIlConteggio) {
+        if (ultimo.textContent !== frase) { ultimo.textContent = frase; cambiato = true; }
+      } else {
+        const nuovo = riga.ownerDocument.createElement('span');
+        nuovo.textContent = frase;
+        aside.append(nuovo);
+        cambiato = true;
+      }
+    }
+  }
+
+  return cambiato;
+}
+
 export function creaSessionItem(sessione, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const riga = el(documentObj, 'button', 'talos-session-item');

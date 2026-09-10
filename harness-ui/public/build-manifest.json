@@ -8,8 +8,8 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 1365308,
-      "sha256": "a02c601c36b04bdd93f03cabefbd2ec95a143e9a1c4e83e4de0db40dda221b09"
+      "bytes": 1368245,
+      "sha256": "800273cda34a8e82cca5df6d5cfadda0d67015082b754e356ee3ef82d55969c9"
     },
     {
       "path": "asset-manifest.json",
