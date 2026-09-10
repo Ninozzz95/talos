@@ -6576,7 +6576,16 @@ function kv3(d, k, v, classeV = "") {
   r.append(el20(d, "span", "talos-kv__k", k), el20(d, "span", `talos-kv__v${classeV ? ` ${classeV}` : ""}`, v));
   return r;
 }
-function disegnaAgenti(d, contenitore, agenti) {
+function chevron(d) {
+  const svg = d.createElementNS(SVG_NS_INSPECTOR, "svg");
+  svg.setAttribute("class", "i talos-inspector-card__vai");
+  svg.setAttribute("aria-hidden", "true");
+  const use = d.createElementNS(SVG_NS_INSPECTOR, "use");
+  use.setAttribute("href", "#i-chevron-right");
+  svg.append(use);
+  return svg;
+}
+function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
   const lista = Array.isArray(agenti) ? agenti : [];
   contenitore.replaceChildren();
   if (!lista.length) {
@@ -6593,8 +6602,29 @@ function disegnaAgenti(d, contenitore, agenti) {
     card.dataset.c = "AgentRow";
     card.dataset.stato = statoDelega(a);
     if (a.sessionId) card.dataset.sessioneFiglia = a.sessionId;
+    const apribile = typeof azioni.onApri === "function" && Boolean(a.sessionId);
+    if (apribile) {
+      card.classList.add("talos-inspector-card--apribile");
+      card.setAttribute("role", "button");
+      card.tabIndex = 0;
+      card.setAttribute("aria-label", `Apri la conversazione di: ${a.taskCorto || a.task || "delega senza compito"}`);
+      const apri = () => azioni.onApri(a);
+      card.addEventListener("click", apri);
+      card.addEventListener("keydown", (evento) => {
+        if (evento.key !== "Enter" && evento.key !== " ") return;
+        evento.preventDefault();
+        apri();
+      });
+      if (typeof azioni.onMenu === "function") {
+        card.addEventListener("contextmenu", (evento) => {
+          evento.preventDefault();
+          azioni.onMenu(a, { x: evento.clientX, y: evento.clientY, ancora: card });
+        });
+      }
+    }
     const head = el20(d, "div", "talos-inspector-card__head");
     head.append(el20(d, "b", "", tronca(a.taskCorto || a.task || "Delega senza compito registrato", 52)), el20(d, "span", `talos-badge talos-badge--sm${statoDelega(a) === "fallita" ? " talos-badge--danger" : statoDelega(a) === "conclusa" ? " talos-badge--success" : ""}`, etichettaDelega(a)));
+    if (apribile) head.append(chevron(d));
     card.append(head);
     const ev = a.evidenzaDelega && typeof a.evidenzaDelega === "object" ? a.evidenzaDelega : null;
     const righe = [];
@@ -6660,7 +6690,7 @@ function aggiornaInspector(inspector, dati = {}, { document: d = globalThis.docu
   const file = righeFile(dati.file);
   riempiCard(d, fileCard, file.length ? file : [["Nessun file scritto finora", "—"]], { classiValore: (r) => r[1].startsWith("+") ? "talos-diff-num--plus" : "" });
   const agenti = inspector.querySelector("#railAgenti");
-  if (agenti) disegnaAgenti(d, agenti, dati.agenti);
+  if (agenti) disegnaAgenti(d, agenti, dati.agenti, dati.azioniAgenti || {});
   const processi = inspector.querySelector("#railProcessi");
   if (processi) {
     processi.replaceChildren();
@@ -6721,12 +6751,13 @@ function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = 
   for (const p of lista) if (p.stato === "in-corso" && Number.isFinite(p.avviatoA)) p.fermoDaMs = adesso - p.avviatoA;
   return lista.reverse();
 }
-var num, numPercento, SELETTORE_RISPOSTA_TURNO;
+var num, numPercento, SELETTORE_RISPOSTA_TURNO, SVG_NS_INSPECTOR;
 var init_inspector = __esm({
   "src/components/inspector.js"() {
     num = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
     numPercento = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     SELETTORE_RISPOSTA_TURNO = ".talos-message__copy .assistant-copy";
+    SVG_NS_INSPECTOR = "http://www.w3.org/2000/svg";
   }
 });
 
@@ -21450,10 +21481,13 @@ ${testo3}` : testo3;
             streamingAutoFollow = true;
             contextMonitor?.setRunning(true);
             streamingLastTargetTop = null;
-            if (Number.isFinite(state.realSession.usage?.cached_tokens) && Number.isFinite(state.realSession.usage?.prompt_tokens) && state.realSession.usage.prompt_tokens > 0) state.realSession.cachePromptPrecedenti += state.realSession.usage.prompt_tokens;
-            state.realSession.usageEsecuzioniPrecedenti = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
-            state.realSession.usage = null;
-            aggiornaUsageSessione();
+            const eUnComandoDellaPersona = typeof evento.input?.comandoDiretto === "string" && evento.input.comandoDiretto.trim() !== "";
+            if (!eUnComandoDellaPersona) {
+              if (Number.isFinite(state.realSession.usage?.cached_tokens) && Number.isFinite(state.realSession.usage?.prompt_tokens) && state.realSession.usage.prompt_tokens > 0) state.realSession.cachePromptPrecedenti += state.realSession.usage.prompt_tokens;
+              state.realSession.usageEsecuzioniPrecedenti = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
+              state.realSession.usage = null;
+              aggiornaUsageSessione();
+            }
             state.realSession.currentRunModel = typeof evento.contesto?.modello === "string" && evento.contesto.modello.trim() ? evento.contesto.modello.trim() : state.model || null;
             state.realSession.redirectPendingId = null;
             state.realSession.eventoTerminaleVisto = false;

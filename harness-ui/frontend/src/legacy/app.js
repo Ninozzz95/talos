@@ -12591,10 +12591,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * esattamente il difetto misurato — 7.716 token dichiarati su 23.060
          * spesi. Vale sia dal vivo sia al replay di una cronologia.
          */
-        if (Number.isFinite(state.realSession.usage?.cached_tokens) && Number.isFinite(state.realSession.usage?.prompt_tokens) && state.realSession.usage.prompt_tokens > 0) state.realSession.cachePromptPrecedenti += state.realSession.usage.prompt_tokens;
-        state.realSession.usageEsecuzioniPrecedenti = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
-        state.realSession.usage = null;
-        aggiornaUsageSessione();
+        /*
+         * ⛔ PO-06 (10/09) — un comando `!` NON è un invio al modello: non consuma contesto e non
+         *   apre un turno. Prima di questa guardia spegneva la Finestra del contesto («Conversazione
+         *   − · Libera −») mentre la barra sotto continuava a dichiarare i token del turno vero:
+         *   una misura buona buttata via, e nessuna che arrivasse a sostituirla.
+         */
+        const eUnComandoDellaPersona = typeof evento.input?.comandoDiretto === 'string' && evento.input.comandoDiretto.trim() !== '';
+        if (!eUnComandoDellaPersona) {
+          if (Number.isFinite(state.realSession.usage?.cached_tokens) && Number.isFinite(state.realSession.usage?.prompt_tokens) && state.realSession.usage.prompt_tokens > 0) state.realSession.cachePromptPrecedenti += state.realSession.usage.prompt_tokens;
+          state.realSession.usageEsecuzioniPrecedenti = sommaUsage(state.realSession.usageEsecuzioniPrecedenti, state.realSession.usage);
+          state.realSession.usage = null;
+          aggiornaUsageSessione();
+        }
         state.realSession.currentRunModel = typeof evento.contesto?.modello === 'string' && evento.contesto.modello.trim()
           ? evento.contesto.modello.trim()
           : (state.model || null);

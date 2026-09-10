@@ -54,6 +54,7 @@ PNG alti conservati a 1920×1080, 2560×1440 e 3840×2160. Le fotografie reali s
 | context-manager-pulsante-assente.png | Dopo il merge: nella testata della chat ci sono ramo, comandi, layout e play — il pulsante Context Manager NON c'e. Non e un problema del merge: una regola @container lo nasconde sotto gli 820px, e col pannello destro aperto la colonna centrale ne misura 824. |
 | context-manager-modale-1024.png | Alla viewport laptop, quella dove il pulsante spariva: ora c'e e la modale si apre — «CONTESTO DELLA CHAT · Context Manager · Solo questa chat. Gli originali restano disponibili», con Gestisci automaticamente spuntato, le tre misure a «Non disponibile» e la frase onesta «Context Manager non e ancora attivo per questa conversazione». Il fumetto in alto e il NOSTRO tooltip a tema, verificato: al passaggio del mouse il title viene migrato in data-tip. |
 | context-manager-modale-1440.png | Stessa modale a schermo largo, 760x746: nessuna differenza di composizione, e la testata non trabocca (824 su 824). |
+| contesto-non-si-spegne.png | Dopo la guardia: la Finestra del contesto dice ancora «Conversazione 16,5k · 1,2%» e «Libera 1294,2k · 98,8%» anche dopo un comando !, coerente con la barra sotto (16,5k token · 2 giri). Nella testata si vede il Context Manager al posto di Comandi, come vuole la cura della regola @container. |
 
 ⛔ Difetti annotati e NON ancora curati, visti in queste foto: la riga di stato troncata dal comando
 ripetuto a destra; la Finestra del contesto che si spegne a «− / −» dopo un comando diretto mentre la
