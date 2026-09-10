@@ -162,9 +162,9 @@
      e nessuna dichiarazione a valle puo' batterla. Qui resta solo la forma del tratto. */
   stroke-dasharray: 26 62;
 }
-.talos-line-loader-node{ animation: talosSegnaviaNodo 1.6s ease-in-out infinite; }
-.talos-line-loader-node:nth-of-type(3){ animation-delay: .2s; }
-.talos-line-loader-node:nth-of-type(4){ animation-delay: .4s; }
+/* ⛔ 10/09: i nodi si accendono con SMIL (`fill-opacity` sfasato, vedi `creaAttesa`), non con una
+   `animation` CSS che `body.reduce-motion` spegnerebbe con `!important`. Qui non resta niente da
+   dichiarare: nemmeno un `fill`, che vincerebbe sull'attributo animato. */
 /*
  * ⛔ Con «meno movimento» non si rimette il movimento: si rende leggibile lo stato fermo — nodi
  *   pieni e traccia accesa — invece di lasciare tre cerchi vuoti che sembrano un errore di disegno.
@@ -172,7 +172,7 @@
  */
 @media (prefers-reduced-motion: reduce){
   .talos-line-loader-sweep{ animation: none; stroke-dasharray: 88; stroke-dashoffset: 0; stroke-opacity: .35; }
-  .talos-line-loader-node{ animation: none; fill: var(--talos-accent); }
+  .talos-line-loader-node{ animation: none; } /* il riempimento lo mette il JS, insieme a pauseAnimations */
 }
 /*
  * ⛔⛔⛔ 10/09, owner: «il segnavia è più grande e CONTINUA A NON FUNZIONARE NEL MIO SERVER» — mentre
