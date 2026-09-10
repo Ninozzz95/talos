@@ -20507,7 +20507,6 @@ ${testo3}` : testo3;
               if (argomentiParsati) info.argomentiParsati = argomentiParsati;
               if (info.comandoDellaPersona) {
                 if (info.summaryText) info.summaryText.textContent = "In corso…";
-                if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati);
                 break;
               }
               if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
@@ -20536,7 +20535,7 @@ ${testo3}` : testo3;
             if (info?.article) {
               impostaEsitoRiga(info.article, fallito ? "error" : "success");
               info.article.setAttribute("aria-busy", "false");
-              if (info.dettaglio && info.argomentiParsati) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, info.argomentiParsati);
+              if (info.dettaglio && info.argomentiParsati && !info.comandoDellaPersona) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, info.argomentiParsati);
             }
             if (info?.detail) {
               if (!info.comandoDellaPersona) {

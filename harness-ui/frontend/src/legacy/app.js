@@ -12775,7 +12775,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
            */
           if (info.comandoDellaPersona) {
             if (info.summaryText) info.summaryText.textContent = 'In corso…';
-            if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati);
+            /* ⛔ Niente comando ripetuto a destra: è già nel blocco sopra, e rubava spazio alla
+               riga di stato fino a troncarla («…non su Win…», visto nella foto del 10/09). */
             break;
           }
           if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
@@ -12821,7 +12822,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (info?.article) {
           impostaEsitoRiga(info.article, fallito ? 'error' : 'success'); // 05/9 Fase 2: il pallino della ToolRow
           info.article.setAttribute('aria-busy', 'false');
-          if (info.dettaglio && info.argomentiParsati) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, info.argomentiParsati);
+          if (info.dettaglio && info.argomentiParsati && !info.comandoDellaPersona) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, info.argomentiParsati);
         }
         if (info?.detail) {
           /* PO-06 — per un comando della persona l'etichetta «Esito:» è di troppo: la riga della
