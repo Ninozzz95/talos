@@ -165,3 +165,59 @@ con il flusso PKCE per intero:
 ⇒ L'owner ha ragione sul «facile e veloce»: la parte crittografica è fatta. Resta il giro completo
 da provare dal vivo — login, chiave che arriva, chiamata vera con quella chiave, logout — che è
 l'unica cosa che dice se funziona.
+
+## Debiti trovati il 10/09/2026 — misurati, non curati
+
+Tutti nati lavorando su PO-06 (il `!` dal composer) e sul merge del Context Manager. Nessuno è stato
+curato di straforo dentro un'altra riga: stanno qui perché l'owner decida quando valgono.
+
+### D-10A · L'Indice dei giri salta i numeri, con passo 3
+Misurato nelle foto del 10/09 (`dopo-02-dove-finisce.png`): l'indice mostra 2, 3, 5, 6, 8, 9, 11, 12,
+14, 15, 17, 18, 20, 21. Cioè ogni ciclo consuma **tre** numeri e ne mostra due. ⛔ La causa NON è
+ancora misurata: i numeri arrivano dalla spine del turno (`segnaGiroNellaSpine`), e prima di dire
+perché salta uno serve strumentare, non rileggere. Non è grave (nessun dato è sbagliato, solo la
+numerazione non è consecutiva) ma è il genere di cosa che fa dubitare di tutto il pannello.
+
+### D-10B · L'output di un comando arriva tutto alla fine
+`eseguiComandoDiretto` fa `await` dell'intero comando e poi emette un solo `ToolCallResult`: misurato
+2.091 ms su un comando da 2.091 ms. Chi lancia `!npm test` guarda uno schermo fermo finché non
+finisce. Anthropic per la shell mode dichiara il contrario («shows real-time progress and output»,
+«Interactive mode», letto il 10/09/2026), e la stessa richiesta è aperta su altri due prodotti
+(deepseek-harness #5584, anthropics/claude-code #33265).
+
+### D-10C · stdout e stderr sono fusi **e riordinati**
+Misurato: `console.log('FUORI-1'); console.error('ERRORE-1'); console.log('FUORI-2')` esce come
+`"FUORI-1\nFUORI-2\n\nERRORE-1"`. L'ordine cronologico è perso — e quando si legge un errore, sapere
+*dopo quale riga* è comparso è metà dell'informazione. (Mostrarli aggregati resta giusto: lo dicono
+Nushell e Boot.dev sui flussi POSIX. È il RIORDINO il difetto.)
+
+### D-10D · `!` non funziona mentre il modello lavora
+`sessionRegistry.shell()` rifiuta con `SESSION_NOT_READY` se la sessione non è conclusa. Aprirlo
+richiede un vocabolario di eventi separato (`ComandoUtenteIniziato/Finito`) perché oggi il comando si
+traveste da giro del modello: `broadcast` mette `conclusa = true` sul suo `RunFinished`, e da lì
+**sette** lettori del registro credono a una bugia (watcher del workspace spento a metà scrittura,
+`resume`/`fork`/`compatta` permessi su una sessione viva, `reindirizza` che rifiuta, sidebar che la
+dà per finita). Diagnosi completa con i file:riga nel resoconto dell'agente del 10/09.
+
+### D-10E · Il token dell'API e la chiave privata di firma viaggiano nel processo del comando
+L'ambiente del figlio esclude **una sola** chiave (`OPENROUTER_API_KEY`). Passano invece, misurate:
+`TALOS_HARNESS_UI_TOKEN` (il token di loopback che protegge tutta l'API) e
+`TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64` (chiave privata delle ricevute), più `HF_TOKEN` e la chiave
+della ricerca. `src/process-policy.mjs` avrebbe un'allowlist di 12 chiavi neutre e non è usata da
+questa catena. ⛔ Chiuderlo costa: `parseProcessCommand` rifiuta `&& | ; < >`, quindi `!npm test &&
+npm run lint` smetterebbe di funzionare. È una decisione dell'owner, non mia.
+
+### D-10F · Dove gira un comando dell'owner: WSL2, non Windows
+`!npm --version` risponde `11.16.0`, che è l'npm di Linux. E se il programma non esiste in WSL, lo
+stesso comando ripiega su `cmd.exe`: due sistemi operativi a seconda di cosa scrivi. Dal 10/09 la
+riga di stato lo DICE a schermo, ma il comportamento non è cambiato. Ricerca 10/09/2026: Claude Code
+su Windows è nativo e usa PowerShell (WSL solo se lo scegli), Codex CLI idem — in entrambi la scelta
+è **una sola e dichiarata**, mai decisa comando per comando. Owner 10/09: «io punterei sulla scelta».
+⇒ Proposta: una scelta per SESSIONE, visibile accanto alla pillola dei permessi.
+
+### D-10G · Difetti nel kernel, che qui è una copia
+Trovati misurando la catena del comando, e non toccabili da questa lane: il marcatore di troncamento
+dice «l elenco completo dei test» su qualunque comando (`uscitaUtile`); l'output del ramo `none` si
+accumula in memoria senza tetto e viene tagliato solo alla fine; il timeout a 120 s restituisce
+`codice: null` con `outcome: success`, cioè un comando fermato è indistinguibile da uno riuscito e
+muto (in chat la bugia è già smascherata, alla fonte no).
