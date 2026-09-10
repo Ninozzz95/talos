@@ -51,6 +51,20 @@ export async function generaTemplate() {
     .replace(/<script>\s*\(function\(\)\{[\s\S]*?\}\)\(\);\s*<\/script>\s*/u, '')
     // 06/9 cutover: OGNI script in linea del mockup (es. la regia demo della Capability, B4.2) resta fuori — la CSP `script-src 'self'` lo bloccherebbe comunque, e a schermo dava un errore di console a ogni avvio
     .replace(/<script>(?![^<]*src=)[\s\S]*?<\/script>\s*/gu, '')
+    /*
+     * ⭐ 10/09 — stessa disciplina della riga sopra, per lo stesso motivo esatto: l'anteprima
+     *   demo dell'artefatto viaggia in un `srcdoc` con uno stile IN LINEA, e la CSP della pagina
+     *   (`style-src 'self' 'nonce-…'`) lo blocca — un nonce non copre gli ATTRIBUTI style, e un
+     *   `about:srcdoc` eredita la CSP di chi lo crea (è già scritto in app.js, dove per gli
+     *   artefatti VERI si è passati a una risposta HTTP con la sua CSP).
+     * ⛔ Effetto misurato il 10/09 sul 4174: il browser carica il srcdoc al parsing, la CSP lo
+     *   blocca e stampa un errore in console A OGNI APERTURA — poi l'app rimuove l'elemento, che
+     *   infatti a runtime non è nemmeno nel DOM. Un caricamento inutile e un errore che confonde
+     *   chi cerca quelli veri.
+     * ⛔ Si toglie QUI e non nel mockup: `mockup/talos-mockup.html` è la fonte del disegno e
+     *   cambia solo per mano dell'owner. Questo è il posto dove il mockup diventa prodotto.
+     */
+    .replace(/(<iframe[^>]*class="talos-artifact__frame"[^>]*?)\s+srcdoc="[^"]*"/gu, '$1')
     .replace(/<title>[\s\S]*?<\/title>/u, '');
   // La barra di regia e' del mockup: dal suo <div> fino al guscio.
   corpo = taglia(corpo, '<div class="talos-regia"', '<div class="talos-shell"');

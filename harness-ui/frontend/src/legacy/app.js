@@ -12646,7 +12646,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const repoAnnidati = $('#envRepoAnnidati');
     if (workspace) workspace.textContent = contesto.progetto || '—';
     if (branch) branch.textContent = contesto.branch || '—';
-    if (worktree) worktree.textContent = '—'; // mai un repository git nel corpus di oggi, vedi doc in workspace-context.mjs
+    /*
+     * ⭐ 10/09 — il worktree arriva da workspace-context.mjs (`worktreeGit`), come il ramo qui
+     *   sopra. Prima era `—` CABLATO, con un commento che diceva «mai un repository git nel
+     *   corpus di oggi»: vero per i task del corpus (copie di tre file), FALSO per una sessione
+     *   su una cartella dell'allowlist — e la riga «Ramo» lo smentiva già da sola. Visto dal
+     *   vivo il 10/09: «Ramo lane/harness-desktop» accanto a «Worktree —», nello stesso pannello.
+     * ⛔ Resta `—` quando il worktree è il PRINCIPALE o la cartella non è un repo: quello è un
+     *   trattino onesto, non un valore mancante.
+     */
+    if (worktree) worktree.textContent = contesto.worktree || '—';
     if (root) root.textContent = contesto.cartella;
     /*
      * ⭐⭐⭐ 04/9 — W1-13: `contesto.repoAnnidati` arriva già da

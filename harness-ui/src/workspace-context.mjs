@@ -68,11 +68,44 @@ function ramoGit(cartella, exec) {
 }
 
 /**
+ * Il nome del worktree collegato, o `null` se questa cartella e' il worktree PRINCIPALE.
+ *
+ * ⛔ Il modo affidabile non e' confrontare `--git-dir` con `--git-common-dir`: e' cercare il
+ *   segmento `worktrees/` dentro `--git-dir` (git-scm.com/docs/git-worktree e la doc di
+ *   `git-rev-parse`, lette il 10/09/2026). Misurato su questo repo: in un worktree collegato
+ *   `--git-dir` vale `.../AVM/.git/worktrees/AVM-harness-desktop`, mentre nel principale vale `.git`
+ *   — relativo, senza quel segmento. `$GIT_COMMON_DIR` puo' essere definito a mano e rendere il
+ *   confronto fra i due bugiardo; il segmento no.
+ *
+ * ⛔⛔ Perche' questa funzione esiste: fino al 10/09 il pannello «Ambiente» scriveva `—` CABLATO,
+ *   con un commento che diceva «mai un repository git nel corpus di oggi». Vero per i task del
+ *   corpus (copie di tre file), FALSO per una sessione su una cartella dell'allowlist — e la riga
+ *   sopra, «Ramo», lo smentiva gia' da sola mostrando `lane/harness-desktop`. Un trattino onesto
+ *   quando non si sa; ma qui si sapeva, e non si guardava.
+ */
+function worktreeGit(cartella, exec) {
+  try {
+    const uscita = exec('git', ['-C', cartella, 'rev-parse', '--git-dir'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    /* Windows e git mescolano le due barre nello stesso percorso: si separa su entrambe. */
+    const dentro = String(uscita).trim().split(/[/\\]+/);
+    const posizione = dentro.lastIndexOf('worktrees');
+    if (posizione < 0 || posizione === dentro.length - 1) return null;
+    return dentro[posizione + 1] || null;
+  } catch {
+    // Non un repository git, o git non installato: stesso stato onesto di ramoGit.
+    return null;
+  }
+}
+
+/**
  * @param {{cartella:string, progetto:string|null}} input
  * @param {{exec?: Function}} [dipendenze] — SOLO per test: inietta
  *   un `exec` finto per provare "non è un repository git" senza spawnare un
  *   processo vero, o per provare un fallimento arbitrario.
- * @returns {{progetto:string|null, cartella:string, branch:string|null}}
+ * @returns {{progetto:string|null, cartella:string, branch:string|null, worktree:string|null}}
  */
 export function leggiContestoWorkspace({ cartella, progetto = null }, { exec } = {}) {
   const execFn = exec ?? ((comando, argomenti, opzioni = {}) => GIT_PROCESS_POLICY.execFileSync(comando, argomenti, {
@@ -83,6 +116,8 @@ export function leggiContestoWorkspace({ cartella, progetto = null }, { exec } =
     progetto,
     cartella,
     branch: ramoGit(cartella, execFn),
+    // ⭐ 10/09 — il nome del worktree collegato: la scheda Ambiente lo scriveva `—` cablato.
+    worktree: worktreeGit(cartella, execFn),
     // ⭐ 04/9, W1-13 — repository dentro il workspace: fiducia separata (mostrato nella scheda Ambiente)
     repoAnnidati: repoAnnidati(cartella),
   };
