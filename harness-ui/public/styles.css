@@ -10153,5 +10153,28 @@ dialog.command-dialog .tool-chips .status-chip,
   overflow-wrap: anywhere;
   opacity: .85;
 }
+.talos-activity--nuda {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.talos-activity--nuda .talos-activity__body {
+  padding: 0;
+}
+.talos-fonti__marchio,
+.talos-fonti-elenco__marchio {
+  position: relative;
+  overflow: hidden;
+}
+.talos-fonti__marchio__icona,
+.talos-fonti-elenco__marchio__icona {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 2px;
+  background: var(--talos-panel);
+}
 
 /* src/styles/main.css */

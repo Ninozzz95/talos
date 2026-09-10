@@ -104,3 +104,19 @@
 /* ⛔ «i link esatti»: l'URL per intero. Va a capo invece di essere troncato — troncarlo lo renderebbe
    di nuovo incompleto, che è la ragione per cui l'owner ha chiesto questa modale. */
 .talos-fonti-elenco__url{margin:2px 0 0;color:var(--talos-muted);font-size:11px;font-family:var(--talos-font-mono);overflow-wrap:anywhere;opacity:.85}
+
+/*
+ * ⛔ Owner 10/09, due volte: «se la chiamata del tool è una sola non usare un collapse» e poi «il
+ *   collapse esiste ancora su un tool». Con la testa nascosta la card resterebbe un riquadro vuoto
+ *   attorno a una riga: qui perde bordo e fondo e la riga vive da sola nella conversazione.
+ */
+.talos-activity--nuda{border:0;background:transparent;padding:0}
+.talos-activity--nuda .talos-activity__body{padding:0}
+
+/*
+ * La favicon dentro il marchio: sta SOPRA la lettera, che resta sotto come ripiego. Se l'immagine
+ * non arriva (204, sito morto, rete giù) `onerror` la toglie e la lettera è già lì — nessun buco,
+ * nessun secondo giro.
+ */
+.talos-fonti__marchio,.talos-fonti-elenco__marchio{position:relative;overflow:hidden}
+.talos-fonti__marchio__icona,.talos-fonti-elenco__marchio__icona{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:2px;background:var(--talos-panel)}

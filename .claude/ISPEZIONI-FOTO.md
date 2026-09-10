@@ -568,3 +568,25 @@ intendevi.
 Nel titolo della modale il pulsante «Chiudi» sta appiccicato a «Fonti (5)», senza spazio fra i due:
 `talos-dialog__header` mette i figli in fila con `gap:12px`, e senza un elemento che cresca in mezzo
 il pulsante resta attaccato al titolo invece di andare a destra. Da correggere.
+
+## 10/09/2026, 20:25 — le favicon vere, e il collapse che sparisce davvero
+
+Owner, due segnalazioni: «il collapse esiste ancora su un tool» e «i favicon dei siti delle fonti non
+ci sono (il mobile l'ha già fatto)».
+
+**`2026-09-10-favicon-modale-1440.png`** — guardata. Nella modale «Fonti (5)» tre voci portano la
+**favicon vera del sito** (BenchLM.ai il suo logo nero, atoms.dev l'icona blu, aitoolsreview la sua)
+e due tengono la lettera (`Q` di qubrid, `M` di mindstudio) perché quei siti non ne hanno restituita
+una. Il ripiego funziona come previsto: nessun buco, nessun quadrato rotto. Il «Chiudi» è a destra —
+la correzione di `talos-grow` sul titolo si vede.
+
+**`2026-09-10-favicon-pillola-1440.png`** — guardata. La pillola porta le icone al posto delle
+lettere dove ci sono. Misurato nel DOM: 2 icone caricate davvero (`complete && naturalWidth > 0`).
+
+**Il collapse**: misurato nel DOM, non a occhio — `testaNascosta: true`, `cardNuda: true`, 1 riga.
+Aprirlo non bastava (l'owner l'ha detto due volte): restava la testa con la freccia e il riassunto
+sopra la riga, cioè la stessa cosa detta due volte più un comando per richiuderla. Ora per una
+chiamata sola la testa sparisce e la card perde bordo e fondo.
+
+**La rotta**, provata dal vivo: `GET /api/v1/favicon?dominio=benchlm.ai` → **200, 623 byte,
+image/vnd.microsoft.icon**; `?dominio=localhost` → **204**, rifiutato senza nemmeno provare a uscire.

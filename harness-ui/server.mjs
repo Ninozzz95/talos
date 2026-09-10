@@ -592,6 +592,8 @@ async function startServer() {
      */
     custodisciChiaveOpenRouter: async (chiave) => { providerStore.setKey('openrouter', chiave); },
     contextService: contextRuntime?.service,
+    // ⭐ 10/09: le favicon delle fonti, prese dal server una volta sola e tenute qui accanto alle sessioni.
+    cartellaFavicon: fileURLToPath(new URL('.favicon-cache/', import.meta.url)),
     chatImageStore,
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,

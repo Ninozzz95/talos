@@ -9843,6 +9843,25 @@ function creaRisultatiRicerca(letti, { document: doc, tetto = 8 } = {}) {
   }
   return blocco;
 }
+function marchioDelSito(documentObj, url, classe) {
+  const segno = documentObj.createElement("span");
+  segno.className = classe;
+  let dominio = url;
+  try {
+    dominio = new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+  }
+  segno.textContent = dominio.charAt(0).toUpperCase();
+  segno.title = dominio;
+  const icona7 = documentObj.createElement("img");
+  icona7.className = `${classe}__icona`;
+  icona7.src = `/api/v1/favicon?dominio=${encodeURIComponent(dominio)}`;
+  icona7.alt = "";
+  icona7.loading = "lazy";
+  icona7.addEventListener?.("error", () => icona7.remove?.());
+  segno.append(icona7);
+  return segno;
+}
 function creaPillolaFonti(letti, { document: doc, marchiMax = 3, onApri } = {}) {
   const documentObj = doc || globalThis.document;
   const fonti = (letti?.risultati ?? []).filter((r) => r.url);
@@ -9867,11 +9886,7 @@ function creaPillolaFonti(letti, { document: doc, marchiMax = 3, onApri } = {}) 
   marchi.className = "talos-fonti__marchi";
   marchi.setAttribute("aria-hidden", "true");
   for (const fonte of fonti.slice(0, marchiMax)) {
-    const segno = documentObj.createElement("span");
-    segno.className = "talos-fonti__marchio";
-    segno.textContent = dominioDi(fonte.url).charAt(0).toUpperCase();
-    segno.title = dominioDi(fonte.url);
-    marchi.append(segno);
+    marchi.append(marchioDelSito(documentObj, fonte.url, "talos-fonti__marchio"));
   }
   if (fonti.length > marchiMax) {
     const extra = documentObj.createElement("span");
@@ -9907,6 +9922,7 @@ function apriModaleFonti(letti, { document: doc } = {}) {
   const titolo2 = documentObj.createElement("h2");
   titolo2.className = "talos-dialog__title";
   titolo2.textContent = fonti.length === 1 ? "Fonte" : `Fonti (${fonti.length})`;
+  titolo2.classList?.add?.("talos-grow");
   testa.append(titolo2);
   const chiudi = documentObj.createElement("button");
   chiudi.type = "button";
@@ -9926,9 +9942,7 @@ function apriModaleFonti(letti, { document: doc } = {}) {
     link.href = fonte.url;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
-    const marchio = documentObj.createElement("span");
-    marchio.className = "talos-fonti-elenco__marchio";
-    marchio.textContent = dominioDi(fonte.url).charAt(0).toUpperCase();
+    const marchio = marchioDelSito(documentObj, fonte.url, "talos-fonti-elenco__marchio");
     marchio.setAttribute("aria-hidden", "true");
     link.append(marchio, documentObj.createTextNode(fonte.titolo || dominioDi(fonte.url)));
     voce.append(link);
@@ -19394,6 +19408,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           summaryText,
           diffBadge,
           testa: attivita.testa,
+          card: article,
+          // ⭐ serve a chiudiBatchTool per togliere il bordo quando la testa sparisce
           attrezzi: 0,
           // ⛔ 10/09: `ricercheWeb` e `pagine` vanno dichiarate QUI. Le categorie nuove senza una
           //   chiave iniziale davano `undefined - 1` = NaN, e un NaN in un contatore non si vede a
@@ -19419,6 +19435,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (batch && batch.attrezzi === 1 && batch.testa && batch.contenitore) {
           batch.testa.setAttribute("aria-expanded", "true");
           batch.contenitore.hidden = false;
+          batch.testa.hidden = true;
+          batch.card?.classList?.add?.("talos-activity--nuda");
         }
         if (batch) state.realSession.ultimoBatchChiuso = batch;
         state.realSession.batchAttivo = null;

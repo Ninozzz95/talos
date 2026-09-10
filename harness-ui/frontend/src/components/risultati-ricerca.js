@@ -169,6 +169,32 @@ export function creaRisultatiRicerca(letti, { document: doc, tetto = 8 } = {}) {
  *   query. Sul desktop quelle icone non le abbiamo salvate da nessuna parte ⇒ si usano **le lettere**,
  *   che è il ripiego già previsto dal mobile, non una scelta al ribasso presa qui.
  */
+/**
+ * Il marchio di un sito: la sua favicon se il server ce l'ha, altrimenti la lettera.
+ *
+ * ⛔ L'icona arriva SOLO dal nostro server (`/api/v1/favicon`), che la prende una volta e la tiene:
+ *   la pagina non bussa mai a un sito citato. È il vincolo che il mobile dichiara per sé
+ *   («a request to every site every time the surface is opened») e che qui vale identico.
+ * ⛔ La lettera resta SOTTO l'immagine, non al suo posto: se l'icona non arriva — sito morto, 204,
+ *   rete giù — `onerror` la toglie e sotto c'è già il ripiego, senza un buco e senza un secondo giro.
+ */
+function marchioDelSito(documentObj, url, classe) {
+  const segno = documentObj.createElement('span');
+  segno.className = classe;
+  let dominio = url;
+  try { dominio = new URL(url).hostname.replace(/^www\./, ''); } catch { /* URL storto: resta com'è */ }
+  segno.textContent = dominio.charAt(0).toUpperCase();
+  segno.title = dominio;
+  const icona = documentObj.createElement('img');
+  icona.className = `${classe}__icona`;
+  icona.src = `/api/v1/favicon?dominio=${encodeURIComponent(dominio)}`;
+  icona.alt = '';
+  icona.loading = 'lazy';
+  icona.addEventListener?.('error', () => icona.remove?.());
+  segno.append(icona);
+  return segno;
+}
+
 export function creaPillolaFonti(letti, { document: doc, marchiMax = 3, onApri } = {}) {
   const documentObj = doc || globalThis.document;
   const fonti = (letti?.risultati ?? []).filter((r) => r.url);
@@ -193,11 +219,7 @@ export function creaPillolaFonti(letti, { document: doc, marchiMax = 3, onApri }
   marchi.className = 'talos-fonti__marchi';
   marchi.setAttribute('aria-hidden', 'true');
   for (const fonte of fonti.slice(0, marchiMax)) {
-    const segno = documentObj.createElement('span');
-    segno.className = 'talos-fonti__marchio';
-    segno.textContent = dominioDi(fonte.url).charAt(0).toUpperCase();
-    segno.title = dominioDi(fonte.url);
-    marchi.append(segno);
+    marchi.append(marchioDelSito(documentObj, fonte.url, 'talos-fonti__marchio'));
   }
   if (fonti.length > marchiMax) {
     const extra = documentObj.createElement('span');
@@ -249,6 +271,10 @@ export function apriModaleFonti(letti, { document: doc } = {}) {
   const titolo = documentObj.createElement('h2');
   titolo.className = 'talos-dialog__title';
   titolo.textContent = fonti.length === 1 ? 'Fonte' : `Fonti (${fonti.length})`;
+  /* ⛔ Visto nella foto: senza qualcosa che cresca in mezzo, `talos-dialog__header` (flex, gap 12px)
+     lascia «Chiudi» appiccicato al titolo invece di mandarlo a destra. `talos-grow` è la classe che
+     il prodotto usa già per questo, nelle sue testate. */
+  titolo.classList?.add?.('talos-grow');
   testa.append(titolo);
   const chiudi = documentObj.createElement('button');
   chiudi.type = 'button';
@@ -271,9 +297,7 @@ export function apriModaleFonti(letti, { document: doc } = {}) {
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     /* Il marchio è la lettera del dominio, come nella pillola: nessuna favicon da scaricare. */
-    const marchio = documentObj.createElement('span');
-    marchio.className = 'talos-fonti-elenco__marchio';
-    marchio.textContent = dominioDi(fonte.url).charAt(0).toUpperCase();
+    const marchio = marchioDelSito(documentObj, fonte.url, 'talos-fonti-elenco__marchio');
     marchio.setAttribute('aria-hidden', 'true');
     link.append(marchio, documentObj.createTextNode(fonte.titolo || dominioDi(fonte.url)));
     voce.append(link);
