@@ -8026,6 +8026,50 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     figliaAperta = { sessionId: figlia.sessionId, contenitore, maniglia };
   }
 
+  /**
+   * Il menu di una delega: tasto destro sulla card. ⛔ Le voci si costruiscono ADESSO, non alla
+   * nascita della card: fra il disegno e il clic destro la delega può essere finita, e un menu che
+   * offre «Ferma» su una delega già conclusa è un pulsante che mente.
+   */
+  function menuDellaDelega(figlia, dove) {
+    const viva = figlia?.conclusa !== true && figlia?.interrotta !== true;
+    const voci = [
+      { chiave: 'apri', etichetta: 'Apri la conversazione', icona: 'i-doc', aziona: () => apriConversazioneFiglia(figlia) },
+      {
+        chiave: 'sessione',
+        etichetta: 'Apri come sessione intera',
+        icona: 'i-branch',
+        aziona: () => {
+          /* ⛔ Questa lascia la conversazione corrente: è esattamente ciò che PO-08 evita, quindi
+             si dice prima di farlo invece di scoprirlo dopo. */
+          if (!window.confirm('Aprire questa delega come sessione intera? Lasci la conversazione che stai leggendo.')) return;
+          chiudiConversazioneFiglia();
+          passaASessione({ id: figlia.sessionId, modello: figlia.modello || null });
+        },
+      },
+    ];
+    if (viva) {
+      voci.push({
+        chiave: 'ferma',
+        etichetta: 'Ferma questa delega',
+        icona: 'i-stop',
+        pericolo: true,
+        separaPrima: true,
+        aziona: async () => {
+          if (!window.confirm('Fermare questa delega? Il lavoro già fatto resta, quello in corso no.')) return;
+          try {
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(figlia.sessionId)}/stop`, {});
+            toast('Delega fermata', figlia.taskCorto || 'La delega non prosegue.');
+            void caricaFigliSessione();
+          } catch (errore) {
+            toast('Delega non fermata', errore.message);
+          }
+        },
+      });
+    }
+    apriMenuAzioniLibreria(voci, dove?.ancora ? { ancoraEl: dove.ancora } : { x: dove?.x ?? 0, y: dove?.y ?? 0 });
+  }
+
   function aggiornaInspectorDaStato() {
     const inspector = $('#inspectorSessione') || $('.talos-inspector');
     if (!inspector) return;
@@ -8066,7 +8110,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       agenti: state.realSession.figli || [],
       /* PO-08: la card diventa apribile solo perché qui c'è chi ascolta — senza questa funzione
          `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
-      azioniAgenti: { onApri: apriConversazioneFiglia },
+      azioniAgenti: { onApri: apriConversazioneFiglia, onMenu: menuDellaDelega },
     });
   }
 

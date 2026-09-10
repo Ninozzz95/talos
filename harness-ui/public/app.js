@@ -6629,7 +6629,7 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     const ev = a.evidenzaDelega && typeof a.evidenzaDelega === "object" ? a.evidenzaDelega : null;
     const righe = [];
     if (a.avviataAlle) righe.push(["Avviata", oraBreve2(a.avviataAlle)]);
-    if (ev) righe.push(["Ha fatto", `${Number(ev.toolCalls || 0)} chiamate · ${Number(ev.scritture || 0)} scritture`]);
+    if (ev) righe.push(["Ha fatto", `${plurale(Number(ev.toolCalls || 0), "chiamata")} · ${plurale(Number(ev.scritture || 0), "scrittura", "scritture")}`]);
     for (const [k, v] of righe) {
       const kv4 = el20(d, "div", "talos-kv");
       kv4.append(el20(d, "span", "talos-kv__k", k), el20(d, "span", "talos-kv__v talos-mono", v));
@@ -6754,6 +6754,7 @@ function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = 
 var num, numPercento, SELETTORE_RISPOSTA_TURNO, SVG_NS_INSPECTOR;
 var init_inspector = __esm({
   "src/components/inspector.js"() {
+    init_plurale();
     num = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
     numPercento = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     SELETTORE_RISPOSTA_TURNO = ".talos-message__copy .assistant-copy";
@@ -18280,6 +18281,42 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         });
         figliaAperta = { sessionId: figlia.sessionId, contenitore, maniglia };
       }
+      function menuDellaDelega(figlia, dove) {
+        const viva = figlia?.conclusa !== true && figlia?.interrotta !== true;
+        const voci = [
+          { chiave: "apri", etichetta: "Apri la conversazione", icona: "i-doc", aziona: () => apriConversazioneFiglia(figlia) },
+          {
+            chiave: "sessione",
+            etichetta: "Apri come sessione intera",
+            icona: "i-branch",
+            aziona: () => {
+              if (!window.confirm("Aprire questa delega come sessione intera? Lasci la conversazione che stai leggendo.")) return;
+              chiudiConversazioneFiglia();
+              passaASessione({ id: figlia.sessionId, modello: figlia.modello || null });
+            }
+          }
+        ];
+        if (viva) {
+          voci.push({
+            chiave: "ferma",
+            etichetta: "Ferma questa delega",
+            icona: "i-stop",
+            pericolo: true,
+            separaPrima: true,
+            aziona: async () => {
+              if (!window.confirm("Fermare questa delega? Il lavoro già fatto resta, quello in corso no.")) return;
+              try {
+                await apiPost(`/api/v1/sessions/${encodeURIComponent(figlia.sessionId)}/stop`, {});
+                toast("Delega fermata", figlia.taskCorto || "La delega non prosegue.");
+                void caricaFigliSessione();
+              } catch (errore) {
+                toast("Delega non fermata", errore.message);
+              }
+            }
+          });
+        }
+        apriMenuAzioniLibreria(voci, dove?.ancora ? { ancoraEl: dove.ancora } : { x: dove?.x ?? 0, y: dove?.y ?? 0 });
+      }
       function aggiornaInspectorDaStato() {
         const inspector = $2("#inspectorSessione") || $2(".talos-inspector");
         if (!inspector) return;
@@ -18312,7 +18349,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           agenti: state.realSession.figli || [],
           /* PO-08: la card diventa apribile solo perché qui c'è chi ascolta — senza questa funzione
              `disegnaAgenti` la lascia statica, e non promette niente che non può mantenere. */
-          azioniAgenti: { onApri: apriConversazioneFiglia }
+          azioniAgenti: { onApri: apriConversazioneFiglia, onMenu: menuDellaDelega }
         });
       }
       async function caricaFigliSessione() {
