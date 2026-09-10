@@ -994,9 +994,6 @@ select:focus-visible,
   stroke: var(--talos-accent);
   stroke-width: 2.5;
   stroke-linecap: round;
-  stroke-dasharray: 88;
-  stroke-dashoffset: 88;
-  animation: talosLineSweep 2.2s ease-in-out infinite;
 }
 .talos-line-loader-node {
   fill: transparent;
@@ -10211,7 +10208,6 @@ dialog.command-dialog .tool-chips .status-chip,
 }
 .talos-line-loader-sweep {
   stroke-dasharray: 26 62;
-  animation: talosSegnaviaScorre 1.6s linear infinite;
 }
 .talos-line-loader-node {
   animation: talosSegnaviaNodo 1.6s ease-in-out infinite;
@@ -10233,16 +10229,6 @@ dialog.command-dialog .tool-chips .status-chip,
     animation: none;
     fill: var(--talos-accent);
   }
-}
-body.reduce-motion .talos-line-loader-sweep {
-  animation: none !important;
-  stroke-dasharray: 88;
-  stroke-dashoffset: 0;
-  stroke-opacity: .35;
-}
-body.reduce-motion .talos-line-loader-node {
-  animation: none !important;
-  fill: var(--talos-accent);
 }
 
 /* src/styles/main.css */

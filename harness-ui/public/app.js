@@ -9163,6 +9163,14 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
     linea.setAttribute("y1", "8");
     linea.setAttribute("x2", "92");
     linea.setAttribute("y2", "8");
+    if (classe === "talos-line-loader-sweep") {
+      const moto = documentObj.createElementNS(SVG_NS, "animate");
+      moto.setAttribute("attributeName", "stroke-dashoffset");
+      moto.setAttribute("values", "88;-88");
+      moto.setAttribute("dur", "1.6s");
+      moto.setAttribute("repeatCount", "indefinite");
+      linea.append(moto);
+    }
     svg.append(linea);
   }
   for (const cx of [16, 48, 80]) {
@@ -9172,6 +9180,13 @@ function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
     nodo4.setAttribute("cy", "8");
     nodo4.setAttribute("r", "4");
     svg.append(nodo4);
+  }
+  try {
+    if (opzioni.window?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+      svg.querySelector(".talos-line-loader-sweep")?.setAttribute("stroke-dashoffset", "0");
+      svg.pauseAnimations?.();
+    }
+  } catch {
   }
   const label = el22(documentObj, "span", "talos-waiting__label run-activity-label", etichetta);
   const elapsed = el22(documentObj, "span", "talos-mono talos-muted run-activity-elapsed", "0s");
