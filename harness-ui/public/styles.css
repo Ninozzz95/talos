@@ -10163,6 +10163,268 @@ dialog.command-dialog .tool-chips .status-chip,
   padding: 2px;
   background: var(--talos-panel);
 }
+.talos-diff-chat {
+  margin: 6px 0 2px;
+  border: 1px solid var(--talos-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--talos-window-bg);
+}
+.talos-diff-chat__pezzo {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 12px;
+  border-top: 1px solid var(--talos-border);
+  background: var(--talos-panel);
+  color: var(--talos-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.talos-diff-chat__pezzo:first-child {
+  border-top: 0;
+}
+.talos-diff-chat__righe {
+  font-family: var(--talos-font-mono);
+}
+.talos-diff-chat .talos-diff {
+  padding: 4px 0;
+}
+.talos-diff-chat__num {
+  display: inline-block;
+  width: 4ch;
+  margin-right: 10px;
+  color: var(--talos-muted);
+  text-align: right;
+  user-select: none;
+  opacity: .75;
+}
+.talos-diff-chat__segno {
+  display: inline-block;
+  width: 1ch;
+  margin-right: 8px;
+  user-select: none;
+}
+.talos-diff-chat__resto {
+  padding: 6px 12px;
+  border-top: 1px solid var(--talos-border);
+  color: var(--talos-muted);
+  font-size: 11px;
+}
+.talos-diff-chat details > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 5px 12px;
+  color: var(--talos-muted);
+  font-size: 11px;
+}
+.talos-diff-chat details > summary::-webkit-details-marker {
+  display: none;
+}
+.talos-diff-chat details > summary:focus-visible {
+  outline: 2px solid var(--talos-accent);
+  outline-offset: -2px;
+}
+.talos-diff-chat details > summary::before {
+  content: "›";
+  display: inline-block;
+  width: 1em;
+  margin-right: 4px;
+  transition: transform .12s ease;
+}
+.talos-diff-chat details[open] > summary::before {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .talos-diff-chat details > summary::before {
+    transition: none;
+  }
+}
+.tool-result-tagliato {
+  margin: 4px 0 0;
+  padding: 0 2px;
+  color: var(--talos-muted);
+  font-size: 11px;
+}
+.talos-ricerca-web {
+  display: grid;
+  gap: 10px;
+  margin: 6px 0 2px;
+}
+.talos-ricerca-web__voce {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.talos-ricerca-web__titolo {
+  color: var(--talos-accent);
+  font-size: 13px;
+  line-height: 1.4;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.talos-ricerca-web__titolo:hover {
+  text-decoration: underline;
+}
+.talos-ricerca-web__titolo:focus-visible {
+  outline: 2px solid var(--talos-accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.talos-ricerca-web__dove {
+  color: var(--talos-muted);
+  font-size: 11px;
+  font-family: var(--talos-font-mono);
+}
+.talos-ricerca-web__estratto {
+  margin: 2px 0 0;
+  color: var(--talos-text);
+  font-size: 12px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.talos-ricerca-web__resto {
+  margin: 0;
+  color: var(--talos-muted);
+  font-size: 11px;
+}
+.talos-fonti {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  margin: 6px 0 2px;
+  padding: 0 12px;
+  border: 1px solid var(--talos-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--talos-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease;
+}
+.talos-fonti:hover {
+  color: var(--talos-text);
+  border-color: var(--talos-border-strong);
+}
+.talos-fonti:focus-visible {
+  outline: 2px solid var(--talos-accent);
+  outline-offset: 2px;
+}
+.talos-fonti__marchi {
+  display: inline-flex;
+  align-items: center;
+}
+.talos-fonti__marchio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: -6px;
+  border: 1px solid var(--talos-border);
+  border-radius: 999px;
+  background: var(--talos-panel);
+  color: var(--talos-text);
+  font-size: 10px;
+  line-height: 1;
+}
+.talos-fonti__marchio:first-child {
+  margin-left: 0;
+}
+.talos-fonti__marchio--extra {
+  color: var(--talos-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .talos-fonti {
+    transition: none;
+  }
+}
+.talos-fonti-elenco {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.talos-fonti-elenco__voce {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--talos-border);
+  border-radius: 12px;
+}
+.talos-fonti-elenco__titolo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--talos-text);
+  font-size: 13px;
+  line-height: 1.4;
+  text-decoration: none;
+}
+.talos-fonti-elenco__titolo:hover {
+  text-decoration: underline;
+}
+.talos-fonti-elenco__titolo:focus-visible {
+  outline: 2px solid var(--talos-accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.talos-fonti-elenco__marchio {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--talos-border);
+  border-radius: 999px;
+  background: var(--talos-panel);
+  color: var(--talos-accent);
+  font-size: 10px;
+}
+.talos-fonti-elenco__dove {
+  margin: 0;
+  color: var(--talos-muted);
+  font-size: 11px;
+  font-family: var(--talos-font-mono);
+}
+.talos-fonti-elenco__url {
+  margin: 2px 0 0;
+  color: var(--talos-muted);
+  font-size: 11px;
+  font-family: var(--talos-font-mono);
+  overflow-wrap: anywhere;
+  opacity: .85;
+}
+.talos-activity--nuda {
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+.talos-activity--nuda .talos-activity__body {
+  padding: 0;
+}
+.talos-fonti__marchio,
+.talos-fonti-elenco__marchio {
+  position: relative;
+  overflow: hidden;
+}
+.talos-fonti__marchio__icona,
+.talos-fonti-elenco__marchio__icona {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 2px;
+  background: var(--talos-panel);
+}
 @keyframes talosSegnaviaScorre {
   0% {
     stroke-dashoffset: 88;
@@ -10275,9 +10537,6 @@ dialog.command-dialog .tool-chips .status-chip,
 }
 
 /* src/styles/attesa-shimmer.css */
-.talos-waiting .talos-line-loader {
-  display: none;
-}
 .talos-waiting__label {
   background-image:
     linear-gradient(
@@ -10321,6 +10580,63 @@ body.reduce-motion .talos-waiting__label {
   background-clip: text;
   color: transparent;
   animation: talosAttesaShimmer 1.9s linear infinite !important;
+}
+
+/* src/styles/segnavia-mobile.css */
+.talos-line-loader {
+  display: block;
+  width: 36px;
+  height: 6px;
+  overflow: visible;
+  flex: none;
+}
+.talos-line-loader-track {
+  stroke: var(--talos-accent);
+  stroke-opacity: .18;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.talos-line-loader-sweep {
+  stroke: var(--talos-accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-dasharray: 88;
+  stroke-dashoffset: 88;
+  animation: talosLineSweep 1.6s ease-in-out infinite;
+}
+.talos-line-loader-node {
+  fill: transparent;
+  stroke: var(--talos-accent);
+  stroke-width: 2;
+  animation: talosLineNodeFill 1.6s ease-in-out infinite;
+}
+.talos-line-loader-node:nth-of-type(1) {
+  animation-delay: 0s;
+}
+.talos-line-loader-node:nth-of-type(2) {
+  animation-delay: .36s;
+}
+.talos-line-loader-node:nth-of-type(3) {
+  animation-delay: .73s;
+}
+@keyframes talosLineSweep {
+  0% {
+    stroke-dashoffset: 88;
+  }
+  70%, 100% {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes talosLineNodeFill {
+  0%, 12% {
+    fill: transparent;
+  }
+  22%, 82% {
+    fill: var(--talos-accent);
+  }
+  100% {
+    fill: transparent;
+  }
 }
 
 /* src/styles/main.css */

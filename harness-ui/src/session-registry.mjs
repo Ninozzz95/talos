@@ -4072,9 +4072,21 @@ export function createSessionRegistry({
       }
       /* ⛔ Il conteggio dei comandi vivi è SUO: non tocca `conclusa`, che parla del giro del modello. */
       voce.comandiUtenteInCorso = (voce.comandiUtenteInCorso ?? 0) + 1;
+      /*
+       * ⛔⛔⛔ 10/09 — LA CARTELLA DI LAVORO E' DELLA SESSIONE, non del singolo comando.
+       *   Owner, con la sua schermata: `ls` mostrava il Desktop, `cd Games` non faceva niente, e un
+       *   `ls` dopo mostrava ancora il Desktop. Ogni comando ripartiva dalla cartella della
+       *   sessione, perche' `cd` e' interno alla shell e muore con lei.
+       * ⇒ Qui la cartella si TIENE: il kernel dice dove il comando si e' fermato, e il prossimo
+       *   riparte da li'. E' la stessa cosa che fa un terminale, ottenuta senza tenerne uno aperto.
+       * ⛔ Si torna alla cartella della sessione se il comando non ha saputo dirlo (niente
+       *   marcatore, un ramo che non lo supporta): meglio ripartire da un posto noto che da uno
+       *   inventato.
+       */
       eseguiComandoDirettoFn({
-        cartella: voce.cartella, comando, mobile: voce.mobile, onEvento: (evento) => broadcast(voce, evento),
-      }).catch((errore) => {
+        cartella: voce.cartellaComandi || voce.cartella, comando, mobile: voce.mobile, onEvento: (evento) => broadcast(voce, evento),
+      })
+        .then((esito) => { if (esito?.cartellaFinale) voce.cartellaComandi = esito.cartellaFinale; }).catch((errore) => {
         /* ⛔ Un comando fallito non è un giro fallito: dirlo con `RunError` spegnerebbe la sessione
            del modello, che magari sta ancora lavorando. Lo dice il suo evento. */
         broadcast(voce, { type: 'ComandoUtenteFinito', comandoId: null, errore: errore instanceof Error ? errore.message : String(errore) });

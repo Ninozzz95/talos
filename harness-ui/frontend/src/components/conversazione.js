@@ -965,121 +965,34 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
   const svg = documentObj.createElementNS(SVG_NS, 'svg');
   svg.setAttribute('class', 'talos-line-loader');
   svg.setAttribute('viewBox', '0 0 96 16');
-  svg.setAttribute('width', '48'); // 10/09, owner: «ancora troppo grande» — si vede per il movimento dei nodi, non per la taglia
-  svg.setAttribute('height', '8');
+  /*
+   * ⛔⛔ 10/09, owner: «identico a quello che c'e' gia' nel mobile, e piccolo».
+   *   Identico vuol dire IDENTICO: stessa geometria di `mobile/src/components/brand/
+   *   TalosLineLoader.vue` (viewBox 96x16, traccia + sweep da x=4 a x=92, tre nodi a 16/48/80 con
+   *   r=4) e stesse animazioni CSS di `mobile/src/style.css` (`talosLineSweep`, `talosLineNodeFill`,
+   *   ritardi 0 / 0,36 / 0,73 su `nth-of-type(1)(2)(3)`). Il mobile lo rende a 96x16; qui a 36x6,
+   *   che e' «piccolo» come chiesto.
+   * ⛔ Via SMIL e via il motore JS di riserva: erano due cure a un problema che non esisteva — il
+   *   segnavia non si muoveva perche' `body.reduce-motion *` e `@media (prefers-reduced-motion)
+   *   { * }` spegnevano ogni animazione dell'app con `!important`. Tolte quelle, l'animazione CSS
+   *   del mobile funziona, ed e' quella che l'owner vuole vedere. Meno codice, e lo stesso
+   *   disegno di un componente gia' provato su un altro prodotto.
+   */
+  svg.setAttribute('width', '36');
+  svg.setAttribute('height', '6');
   svg.setAttribute('aria-hidden', 'true');
   for (const classe of ['talos-line-loader-track', 'talos-line-loader-sweep']) {
     const linea = documentObj.createElementNS(SVG_NS, 'line');
     linea.setAttribute('class', classe);
     linea.setAttribute('x1', '4'); linea.setAttribute('y1', '8'); linea.setAttribute('x2', '92'); linea.setAttribute('y2', '8');
-    /*
-     * ⛔⛔⛔ 10/09, owner, terza volta e spazientito: «su 4174 non riesco a vedere sto maledetto
-     *   segnavia animato sul MIO Chrome, voglio una soluzione adesso».
-     *
-     * Misurato: l'animazione CSS gira in un Chrome pulito (12 valori distinti di `stroke-dashoffset`
-     * su 12 letture) e si SPEGNE in due condizioni che il browser dell'owner puo' avere addosso —
-     * «riduci animazioni» di Windows, e l'interruttore «Riduci animazioni» dell'app, che in
-     * `index.css` diventa `body.reduce-motion * { animation: none !important }`. Una regola con
-     * `!important` a valle non si batte da dentro il CSS.
-     *
-     * ⇒ Il movimento non passa piu' dal motore delle animazioni CSS: e' SMIL, dentro l'SVG.
-     *   Ricerca 10/09/2026 — CSS-Tricks «A Guide to SVG Animations (SMIL)» ed elijahmanor.com
-     *   «prefers-reduced-motion»: le animazioni SMIL «are not affected by prefers-reduced-motion»
-     *   e nessuna regola CSS le ferma; per fermarle serve JavaScript (`pauseAnimations()`).
-     *   E' esattamente la proprieta' che serve qui: un indicatore di stato non e' una decorazione,
-     *   e spento senza ripiego mente su cosa sta succedendo.
-     * ⛔ Chi ha chiesto meno movimento AL SISTEMA lo ottiene lo stesso, poche righe piu' sotto:
-     *   li' l'SVG viene messo in pausa da JS e la linea resta piena e ferma, che si vede.
-     */
-    if (classe === 'talos-line-loader-sweep' && menoMovimento) linea.setAttribute('stroke-dashoffset', '0'); // la linea piena e ferma: si vede che c'è
-    else if (classe === 'talos-line-loader-sweep') {
-      const moto = documentObj.createElementNS(SVG_NS, 'animate');
-      moto.setAttribute('attributeName', 'stroke-dashoffset');
-      moto.setAttribute('values', '88;-88');
-      moto.setAttribute('dur', '1.6s');
-      moto.setAttribute('repeatCount', 'indefinite');
-      linea.append(moto);
-    }
     svg.append(linea);
   }
-  /*
-   * ⛔⛔⛔ 10/09, owner, quarta volta: «mi stai prendendo per il culo, è statico e ancora troppo
-   *   grande». Il bundle servito dal 4174 CONTIENE gia' l'SMIL sullo sweep (verificato con curl:
-   *   `"animate"`, `repeatCount`, `88;-88`) — ma una linea sottile che scorre e' un movimento che si
-   *   puo' non vedere, soprattutto su un tema scuro e con un rendering software.
-   * ⇒ Il movimento sta dove si guarda: i TRE NODI si accendono a turno. Tre cerchi che pulsano in
-   *   sequenza sono leggibili a colpo d'occhio dove una linea da 2,5 px non lo e'.
-   * ⛔ `fill-opacity` e non `fill`: SMIL non conosce `var(--talos-accent)`, mentre `currentColor` sul
-   *   riempimento eredita il colore che il CSS ha gia' dato al segnavia — un valore solo, un posto solo.
-   * ⛔ E il CSS non deve dichiarare ne' `fill` ne' `fill-opacity` sui nodi: una dichiarazione CSS
-   *   vince sull'attributo di presentazione che SMIL anima, e lo inchioderebbe.
-   */
-  for (const [i, cx] of [16, 48, 80].entries()) {
+  for (const cx of [16, 48, 80]) {
     const nodo = documentObj.createElementNS(SVG_NS, 'circle');
     nodo.setAttribute('class', 'talos-line-loader-node');
-    /* ⛔ Il viewBox e' 96x16 e lo rendiamo a 48x8: TUTTO e' disegnato a meta' scala, e un nodo
-       r=4 arriva a schermo come un cerchio di 4 px in tutto. Il mobile rende lo stesso viewBox a
-       96x16, cioe' il doppio. L'owner vuole la riga piccola: allora crescono i NODI dentro il
-       disegno (r 4 → 5), non la riga. */
-    nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', String(menoMovimento ? RAGGIO_ACCESO : RAGGIO_SPENTO));
-    nodo.setAttribute('fill', 'currentColor');
-    nodo.setAttribute('fill-opacity', menoMovimento ? '1' : '0');
-    /*
-     * ⛔⛔⛔ 10/09, owner: «guarda come ha fatto il mobile, forse trovi qualcosa di utile». Trovato,
-     *   e sono DUE cose che il nostro sbagliava — `mobile/src/components/brand/TalosLineLoader.vue`
-     *   e `mobile/src/style.css`, letti oggi:
-     *
-     *   1. IL PROFILO. Il mobile tiene il nodo pieno dal **22% all'82%** del ciclo
-     *      (`@keyframes talosLineNodeFill`): pieno per il 60% del tempo, cioè un nodo ACCESO che a
-     *      un certo punto si spegne. Il nostro toccava l'opacità 1 per un istante solo e poi
-     *      decadeva: a schermo non e' un'onda, e' uno sfarfallio debole. Qui si copia il profilo suo.
-     *   2. IL TEMPO. Sweep e nodi condividono lo stesso ciclo di **1,6 s**, e i tre `begin`
-     *      (0 · 0,36 · 0,73) sono calcolati perche' ogni nodo si accenda QUANDO LA LINEA LO
-     *      RAGGIUNGE sui suoi 88 px — non tre ritardi scelti a occhio come i miei 0,28.
-     *
-     * ⛔ E il difetto peggiore stava nel CSS che abbiamo tolto: i ritardi erano su
-     *   `.talos-line-loader-node:nth-of-type(3)` e `(4)`, ma `nth-of-type` conta PER TIPO — i
-     *   `<circle>` sono 1, 2 e 3, non 3, 4 e 5. Il primo e il secondo nodo pulsavano quindi
-     *   IN SINCRONO (ritardo 0 entrambi) e il `(4)` non esisteva. Tre pallini che lampeggiano
-     *   insieme non si leggono come movimento: si leggono come uno sfarfallio. Il mobile usa
-     *   `nth-of-type(1)/(2)/(3)` e non ha mai avuto questo difetto.
-     */
-    if (menoMovimento) { svg.append(nodo); continue; } // fermo, acceso e cresciuto: nessun `<animate>` da sovrascrivere
-    const acceso = documentObj.createElementNS(SVG_NS, 'animate');
-    acceso.setAttribute('attributeName', 'fill-opacity');
-    acceso.setAttribute('values', '0;0;1;1;0');
-    acceso.setAttribute('keyTimes', '0;0.12;0.22;0.82;1');
-    acceso.setAttribute('dur', '1.6s');
-    acceso.setAttribute('begin', `${[0, 0.36, 0.73][i]}s`);
-    acceso.setAttribute('repeatCount', 'indefinite');
-    nodo.append(acceso);
-    /*
-     * ⛔ Stesso profilo, stessi `keyTimes`, stesso `begin`: il nodo si accende E cresce nello stesso
-     *   istante, altrimenti sarebbero due movimenti che si disturbano invece di uno solo che si legge.
-     * ⛔ `r` come attributo animato da SMIL, non come dichiarazione CSS: `r` È una proprietà CSS dal
-     *   2018, e se il foglio la dichiarasse vincerebbe sull'attributo e inchioderebbe il nodo —
-     *   esattamente il difetto già pagato il 10/09 con `stroke-dashoffset`. In `index.css` e
-     *   `diff-in-chat.css` non c'è nessuna `r` sui nodi, ed è una condizione da non violare.
-     */
-    const cresciuto = documentObj.createElementNS(SVG_NS, 'animate');
-    cresciuto.setAttribute('attributeName', 'r');
-    cresciuto.setAttribute('values', `${RAGGIO_SPENTO};${RAGGIO_SPENTO};${RAGGIO_ACCESO};${RAGGIO_ACCESO};${RAGGIO_SPENTO}`);
-    cresciuto.setAttribute('keyTimes', '0;0.12;0.22;0.82;1');
-    cresciuto.setAttribute('dur', '1.6s');
-    cresciuto.setAttribute('begin', `${[0, 0.36, 0.73][i]}s`);
-    cresciuto.setAttribute('repeatCount', 'indefinite');
-    nodo.append(cresciuto);
+    nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
     svg.append(nodo);
   }
-  /*
-   * ⛔ Il rispetto di «meno movimento» e' nostro, perche' SMIL non lo prende dal CSS — ma ormai e'
-   *   gia' stato onorato COSTRUENDO il disegno fermo (nessun `<animate>`, nodi accesi e cresciuti,
-   *   linea piena). Qui resta solo la scelta del motore: se il movimento c'e', il segnavia si
-   *   sorveglia da solo. ⛔ Niente `pauseAnimations()`: non c'e' piu' niente da mettere in pausa, e
-   *   chiamarlo darebbe l'impressione che serva ancora.
-   */
-  let fermaMotore = () => {};
-  if (!menoMovimento) fermaMotore = animaSegnavia(svg, { window: opzioni.window ?? globalThis });
   const label = el(documentObj, 'span', 'talos-waiting__label run-activity-label', etichetta);
   const elapsed = el(documentObj, 'span', 'talos-mono talos-muted run-activity-elapsed', '0s');
   elapsed.setAttribute('aria-hidden', 'true');

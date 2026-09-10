@@ -694,7 +694,11 @@ test('eseguiComandoDiretto passa {mobile:true} a eseguiComandoSandboxatoFn quand
      di accorgersi se domani qualcuno passasse un'opzione di troppo. */
   assert.equal(opzioniCatturate.mobile, true);
   assert.equal(typeof opzioniCatturate.onPezzo, 'function', 'D-10B: senza questo l’output torna ad arrivare tutto alla fine');
-  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['mobile', 'onPezzo']);
+  /* ⛔ 10/09: si aggiunge `tracciaCartella` — il kernel dice DOVE il comando si e' fermato, cosi'
+     il prossimo riparte da li' (il `cd` che non persisteva). L'elenco resta CHIUSO apposta: se
+     domani nasce un'altra opzione, questo test la fa vedere invece di lasciarla passare muta. */
+  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['mobile', 'onPezzo', 'tracciaCartella']);
+  assert.equal(opzioniCatturate.tracciaCartella, true);
 });
 
 test('⛔ AL CONTRARIO: senza mobile, eseguiComandoSandboxatoFn riceve {mobile:false} — il comportamento desktop di sempre', async () => {
@@ -710,7 +714,11 @@ test('⛔ AL CONTRARIO: senza mobile, eseguiComandoSandboxatoFn riceve {mobile:f
 
   assert.equal(opzioniCatturate.mobile, false);
   assert.equal(typeof opzioniCatturate.onPezzo, 'function');
-  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['mobile', 'onPezzo']);
+  /* ⛔ 10/09: si aggiunge `tracciaCartella` — il kernel dice DOVE il comando si e' fermato, cosi'
+     il prossimo riparte da li' (il `cd` che non persisteva). L'elenco resta CHIUSO apposta: se
+     domani nasce un'altra opzione, questo test la fa vedere invece di lasciarla passare muta. */
+  assert.deepEqual(Object.keys(opzioniCatturate).sort(), ['mobile', 'onPezzo', 'tracciaCartella']);
+  assert.equal(opzioniCatturate.tracciaCartella, true);
 });
 
 /*
@@ -2801,4 +2809,31 @@ test('D-10B: un comando che stampa senza fermarsi ha un TETTO, e non riempie la 
   const mandati = eventi.filter((e) => e.type === 'ToolCallOutput').reduce((n, e) => n + e.delta.length, 0);
   assert.ok(mandati > 0, 'qualcosa deve pur uscire');
   assert.ok(mandati <= 40_000, `⛔ il tetto è 40.000 caratteri, mandati ${mandati}: senza, 200 KB finiscono nella chat`);
+});
+
+/*
+ * ⛔⛔⛔ LA CARTELLA DI LAVORO CHE RESTA — owner 10/09, con la sua schermata: `ls` mostrava il
+ * Desktop, `cd Games` non faceva niente, e un `ls` dopo mostrava ancora il Desktop. «Non funziona un
+ * cazzo». Ogni comando ripartiva da capo: non era un terminale, erano esecuzioni isolate.
+ * Fonte: anthropics/claude-code#16361, «Working directory does not persist between Bash commands on
+ * Windows» (letto il 10/09/2026) — stesso difetto, stessa causa: `cd` è interno alla shell e muore
+ * con lei, quindi la cartella va tenuta come STATO di chi chiama.
+ */
+test('CARTELLA: eseguiComandoDiretto chiede la traccia e riporta dove il comando si è fermato', async () => {
+  let opzioni = null;
+  const risultato = await eseguiComandoDiretto({
+    cartella: '/tmp/base', comando: 'cd sotto', onEvento: () => {},
+    eseguiComandoSandboxatoFn: async (c, k, o) => { opzioni = o; return { codice: 0, testo: '', enforcement: 'wsl2', cartellaFinale: '/tmp/base/sotto' }; },
+  });
+  assert.equal(opzioni.tracciaCartella, true, '⛔ senza questo il kernel non dice dove si è fermato');
+  assert.equal(risultato.cartellaFinale, '/tmp/base/sotto', 'e chi chiama la riceve, per passarla al comando dopo');
+});
+
+test('⛔ CARTELLA, AL CONTRARIO: se il comando non sa dire dove si è fermato, si torna a `null`', async () => {
+  const risultato = await eseguiComandoDiretto({
+    cartella: '/tmp/base', comando: 'echo x', onEvento: () => {},
+    /* Un ramo che non supporta la traccia (adb) non mette `cartellaFinale`: e non deve inventarla. */
+    eseguiComandoSandboxatoFn: async () => ({ codice: 0, testo: 'x', enforcement: 'adb-shell-on-device' }),
+  });
+  assert.equal(risultato.cartellaFinale, null, '⛔ meglio ripartire da un posto noto che da uno inventato');
 });

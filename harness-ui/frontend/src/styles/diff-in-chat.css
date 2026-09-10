@@ -132,6 +132,139 @@
  *   orfana, è la leva su cui si appoggia chi vorrà di nuovo un segno per tutto il giro.
  */
 /*
+ * PO-11 — il diff del file modificato, dentro la chat.
+ *
+ * ⛔ Nessun colore, nessun font, nessun raggio NUOVO: il linguaggio del diff esiste già
+ *   (`.talos-diff`, `--talos-success`/`--talos-danger` coi loro `-soft`, monospazio 12px) ed è quello
+ *   della carta di approvazione e della Review. Qui si aggiunge solo ciò che mancava: la STRUTTURA —
+ *   i pezzi, la loro intestazione, e il modo di aprirli.
+ * ⛔ Sta in un foglio suo perché `index.css` è GENERATO dal mockup (`mockup-to-template.mjs`), che è
+ *   la fonte del disegno e cambia solo per mano dell'owner. Stesso precedente di `immagini-chat.css`.
+ */
+
+/* Il blocco intero, sotto la riga «Modificato <file> +18 −2». */
+.talos-diff-chat{margin:6px 0 2px;border:1px solid var(--talos-border);border-radius:10px;overflow:hidden;background:var(--talos-window-bg)}
+
+/*
+ * L'intestazione di un pezzo dice DOVE si sta guardando, a parole.
+ * ⛔ Non `@@ -2245,7 +2245,9 @@`: quella è la sintassi di git, e i nomi tecnici non vanno a schermo.
+ *   Chi legge la chat vuole sapere a quale riga del file si trova, non in quale formato.
+ */
+.talos-diff-chat__pezzo{display:flex;align-items:baseline;gap:8px;padding:5px 12px;border-top:1px solid var(--talos-border);background:var(--talos-panel);color:var(--talos-muted);font-size:11px;line-height:1.5}
+.talos-diff-chat__pezzo:first-child{border-top:0}
+.talos-diff-chat__righe{font-family:var(--talos-font-mono)}
+
+/* Le righe riusano `.talos-diff` tale e quale: stesso fondo, stessi colori, stesso scorrimento. */
+.talos-diff-chat .talos-diff{padding:4px 0}
+
+/*
+ * Il numero di riga vive nella riga stessa, in una colonna che non si seleziona: copiando il diff si
+ * porta via il codice, non i numeri. `user-select:none` è la sola ragione per cui è uno <span> a sé.
+ */
+.talos-diff-chat__num{display:inline-block;width:4ch;margin-right:10px;color:var(--talos-muted);text-align:right;user-select:none;opacity:.75}
+.talos-diff-chat__segno{display:inline-block;width:1ch;margin-right:8px;user-select:none}
+
+/* Ciò che resta fuori si dichiara: mai un taglio silenzioso. */
+.talos-diff-chat__resto{padding:6px 12px;border-top:1px solid var(--talos-border);color:var(--talos-muted);font-size:11px}
+
+/*
+ * Aperto/chiuso. `details` nativo: la tastiera lo apre da sola, e lo stato resta se la conversazione
+ * si ridisegna. Il triangolo predefinito è sostituito da un segno nostro, allineato al testo.
+ */
+.talos-diff-chat details>summary{list-style:none;cursor:pointer;padding:5px 12px;color:var(--talos-muted);font-size:11px}
+.talos-diff-chat details>summary::-webkit-details-marker{display:none}
+.talos-diff-chat details>summary:focus-visible{outline:2px solid var(--talos-accent);outline-offset:-2px}
+.talos-diff-chat details>summary::before{content:'›';display:inline-block;width:1em;margin-right:4px;transition:transform .12s ease}
+.talos-diff-chat details[open]>summary::before{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){.talos-diff-chat details>summary::before{transition:none}}
+
+/*
+ * ⛔ 10/09 — un esito lungo non si rovescia nella chat: si taglia DICHIARANDO quanto resta.
+ *   Trovato guardando la foto di PO-11: sotto «1 file letto» c'era il contenuto intero del file, che
+ *   spingeva in basso tutto il resto — compreso il diff appena aggiunto. La riga qui sotto è quella
+ *   dichiarazione; senza una regola sarebbe una frase invisibile, cioè un taglio silenzioso.
+ */
+.tool-result-tagliato{margin:4px 0 0;padding:0 2px;color:var(--talos-muted);font-size:11px}
+
+/*
+ * I risultati di una ricerca web, letti come si legge una ricerca.
+ * ⛔ Nessun colore nuovo: gli stessi token del resto della chat. L'unica cosa che questa resa
+ *   aggiunge è la STRUTTURA — titolo cliccabile, dominio, estratto — perché prima al suo posto
+ *   c'era il testo che riceve il modello (`url:`, `published: date unknown`, `maxResults`).
+ * ⛔ E si AGGIUNGE al grezzo, non lo sostituisce: il modello ha bisogno del testo intero, la persona
+ *   di un elenco (ricerca 10/09/2026, firecrawl.dev: «agents need content, not just links»).
+ */
+.talos-ricerca-web{display:grid;gap:10px;margin:6px 0 2px}
+.talos-ricerca-web__voce{display:grid;gap:2px;min-width:0}
+.talos-ricerca-web__titolo{color:var(--talos-accent);font-size:13px;line-height:1.4;text-decoration:none;overflow-wrap:anywhere}
+.talos-ricerca-web__titolo:hover{text-decoration:underline}
+.talos-ricerca-web__titolo:focus-visible{outline:2px solid var(--talos-accent);outline-offset:2px;border-radius:3px}
+.talos-ricerca-web__dove{color:var(--talos-muted);font-size:11px;font-family:var(--talos-font-mono)}
+/*
+ * Tre righe di estratto, come Hermes (`line-clamp-3` in fallback.tsx): abbastanza per capire se la
+ * fonte serve, non tanto da trasformare l'elenco in un muro di testo.
+ */
+.talos-ricerca-web__estratto{margin:2px 0 0;color:var(--talos-text);font-size:12px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.talos-ricerca-web__resto{margin:0;color:var(--talos-muted);font-size:11px}
+
+/*
+ * La pillola delle fonti — la stessa forma del mobile (TalosMobileSourcesChip.vue), non una nuova.
+ * ⛔ I marchi si sovrappongono (margine negativo) come là, e portano la LETTERA del dominio: sul
+ *   desktop le favicon non sono salvate da nessuna parte, e scaricarle all'apertura di una chat
+ *   sarebbe una richiesta a ogni sito citato ogni volta — il mobile lo dichiara e vale identico qui.
+ */
+.talos-fonti{display:inline-flex;align-items:center;gap:8px;min-height:30px;margin:6px 0 2px;padding:0 12px;border:1px solid var(--talos-border);border-radius:999px;background:transparent;color:var(--talos-muted);font:inherit;font-size:12px;cursor:pointer;transition:color .15s ease,border-color .15s ease}
+.talos-fonti:hover{color:var(--talos-text);border-color:var(--talos-border-strong)}
+.talos-fonti:focus-visible{outline:2px solid var(--talos-accent);outline-offset:2px}
+.talos-fonti__marchi{display:inline-flex;align-items:center}
+.talos-fonti__marchio{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;margin-left:-6px;border:1px solid var(--talos-border);border-radius:999px;background:var(--talos-panel);color:var(--talos-text);font-size:10px;line-height:1}
+.talos-fonti__marchio:first-child{margin-left:0}
+.talos-fonti__marchio--extra{color:var(--talos-muted)}
+@media (prefers-reduced-motion:reduce){.talos-fonti{transition:none}}
+
+/*
+ * La modale delle fonti — la stessa del mobile, con i siti e i link esatti (owner 10/09).
+ * ⛔ Il velo e il dialogo riusano le classi che il prodotto ha già (`overlay-layer`,
+ *   `talos-dialog`): qui c'è solo l'elenco, che è la parte nuova.
+ */
+.talos-fonti-elenco{display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.talos-fonti-elenco__voce{display:grid;gap:2px;padding:10px 12px;border:1px solid var(--talos-border);border-radius:12px}
+.talos-fonti-elenco__titolo{display:flex;align-items:center;gap:8px;color:var(--talos-text);font-size:13px;line-height:1.4;text-decoration:none}
+.talos-fonti-elenco__titolo:hover{text-decoration:underline}
+.talos-fonti-elenco__titolo:focus-visible{outline:2px solid var(--talos-accent);outline-offset:2px;border-radius:4px}
+.talos-fonti-elenco__marchio{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:20px;height:20px;border:1px solid var(--talos-border);border-radius:999px;background:var(--talos-panel);color:var(--talos-accent);font-size:10px}
+.talos-fonti-elenco__dove{margin:0;color:var(--talos-muted);font-size:11px;font-family:var(--talos-font-mono)}
+/* ⛔ «i link esatti»: l'URL per intero. Va a capo invece di essere troncato — troncarlo lo renderebbe
+   di nuovo incompleto, che è la ragione per cui l'owner ha chiesto questa modale. */
+.talos-fonti-elenco__url{margin:2px 0 0;color:var(--talos-muted);font-size:11px;font-family:var(--talos-font-mono);overflow-wrap:anywhere;opacity:.85}
+
+/*
+ * ⛔ Owner 10/09, due volte: «se la chiamata del tool è una sola non usare un collapse» e poi «il
+ *   collapse esiste ancora su un tool». Con la testa nascosta la card resterebbe un riquadro vuoto
+ *   attorno a una riga: qui perde bordo e fondo e la riga vive da sola nella conversazione.
+ */
+.talos-activity--nuda{border:0;background:transparent;padding:0}
+.talos-activity--nuda .talos-activity__body{padding:0}
+
+/*
+ * La favicon dentro il marchio: sta SOPRA la lettera, che resta sotto come ripiego. Se l'immagine
+ * non arriva (204, sito morto, rete giù) `onerror` la toglie e la lettera è già lì — nessun buco,
+ * nessun secondo giro.
+ */
+.talos-fonti__marchio,.talos-fonti-elenco__marchio{position:relative;overflow:hidden}
+.talos-fonti__marchio__icona,.talos-fonti-elenco__marchio__icona{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;padding:2px;background:var(--talos-panel)}
+
+/*
+ * ⛔ 10/09 — QUI stava «il marchio che respira»: il glifo accanto a «TALOS» che pulsava finché il
+ *   giro era vivo, nato la mattina stessa perché il segnavia dura poco. L'owner, guardando la
+ *   testata a schermo, ha chiesto di togliere il glifo del tutto («leva il logo da qui e mantieni
+ *   solo la scritta TALOS»): senza glifo quelle regole non avevano più un elemento su cui cadere,
+ *   e restare sarebbero state codice morto che promette un'animazione inesistente.
+ *   Il segno «sta lavorando adesso» resta uno solo, e vero: il segnavia a tre nodi qui sotto.
+ *   `body.talos-giro-vivo` resta acceso (lo mettono `mostraAttesaRisposta`/`fineGiroReale`): non è
+ *   orfana, è la leva su cui si appoggia chi vorrà di nuovo un segno per tutto il giro.
+ */
+/*
  * ⭐⭐⭐ IL SEGNAVIA A TRE NODI, SENZA PUNTI MORTI — owner 10/09: «parlavo proprio del segnavia a tre
  *   nodi, era quello che deve essere animato».
  *
