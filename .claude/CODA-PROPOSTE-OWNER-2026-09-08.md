@@ -221,3 +221,37 @@ dice «l elenco completo dei test» su qualunque comando (`uscitaUtile`); l'outp
 accumula in memoria senza tetto e viene tagliato solo alla fine; il timeout a 120 s restituisce
 `codice: null` con `outcome: success`, cioè un comando fermato è indistinguibile da uno riuscito e
 muto (in chat la bugia è già smascherata, alla fonte no).
+
+### D-10H · La chiave privata delle ricevute passa da un `.env`, e da lì all'ambiente di ogni figlio
+Trovato il 10/09 lavorando a PO-01, guardando come il progetto maneggia già un segreto.
+`src/harness-receipt-keypair.mjs:96-102` scrive la chiave privata Ed25519 delle ricevute dentro un
+file `.env`. Quel file **diventa l'ambiente del processo**, e l'ambiente del processo arriva a **ogni
+processo figlio** — cioè a ogni comando che l'agente o l'owner lanciano. È la stessa classe di
+difetto misurata stamattina sui comandi `!` (D-10E), scritta però in casa nostra.
+
+Tre cose fatte bene lì (temporaneo + rename + flag `wx`, `chmod 600`, validazione della coppia) e tre
+che non tornano:
+1. il `.env` è il canale sbagliato per un segreto: la sua natura è propagarsi ai figli;
+2. il `chmod 600` ha un `.catch()` che **ingoia l'errore su Windows** — cioè lì non protegge e non lo
+   dice (e su Windows `chmod` tocca solo il bit di sola lettura: doc di Node, letta il 10/09/2026);
+3. il percorso del `.env` lo sceglie il chiamante e nessuno controlla che non sia dentro il repo.
+
+⛔ Non curato: non è la riga su cui stavo lavorando, e toccare la firma delle ricevute vuole il suo
+giro di prove. Registrato perché è il tipo di difetto che nessuno trova per caso una seconda volta.
+
+### D-10I · PO-01: le tre scelte che restano all'owner
+La custodia della chiave è scritta e provata (23 prove), il flusso OAuth è in corso. Tre decisioni
+non sono mie:
+1. **Cifratura a riposo: no, per ora.** Il file resta in chiaro sotto `%APPDATA%\TALOS\custodia`,
+   come fanno Claude Code su Windows (`.credentials.json` in chiaro), Codex CLI (`auth.json`, «trattalo
+   come una password») e npm (`.npmrc`). Cifrare vuole una chiave per cifrare la chiave, e un'app
+   locale non ha dove tenerla: accanto al file è teatro. Le due vie non-teatro sono DPAPI con una
+   dipendenza nativa (che però non difende da un processo che gira già come te) o una passphrase
+   all'avvio (che rimetterebbe un copia-incolla proprio dove PO-01 lo toglie). Fonti del 10/09/2026
+   nei commenti di `src/custodia-chiavi.mjs`.
+2. **Precedenza: vince l'ambiente.** Chi imposta `OPENROUTER_API_KEY` in una shell lo fa apposta e
+   adesso; la custodia è il gesto permanente. È anche la precedenza di `gh` (`GH_TOKEN` scavalca
+   l'accesso salvato). ⛔ Perché non diventi silenziosa, la UI deve DIRE da dove viene la chiave che
+   sta usando: «accesso fatto» / «chiave incollata» / «chiave dall'ambiente».
+3. **Dove**: `%APPDATA%\TALOS\custodia`, fuori dal repo. ⛔ Non accanto a `cartellaStore`, che vive
+   **dentro la copia di lavoro git**: un `git add -A` distratto e la chiave finisce in un commit.
