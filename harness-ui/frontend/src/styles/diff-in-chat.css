@@ -161,3 +161,45 @@ body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar{
   body.talos-giro-vivo .talos-message:last-of-type .talos-avatar .glyph,
   body.talos-giro-vivo .real-assistant-message:last-of-type .talos-avatar .glyph{ animation: none; opacity: 1; }
 }
+
+/*
+ * ⭐⭐⭐ IL SEGNAVIA A TRE NODI, SENZA PUNTI MORTI — owner 10/09: «parlavo proprio del segnavia a tre
+ *   nodi, era quello che deve essere animato».
+ *
+ * ⛔ Misurato prima di toccarlo: l'animazione c'ERA e girava (`animationPlayState: running`,
+ *   dashoffset 88px → 0,58px). Il difetto non era che fosse ferma, era DOVE si fermava: i keyframe
+ *   originali dicono `70%,100%{stroke-dashoffset:0}`, cioè per **un terzo di ogni ciclo** la linea
+ *   resta piena e immobile, e i nodi restano accesi. Chi guarda in quel momento — ed è un momento su
+ *   tre — vede un disegno fermo. «Sembra statico» era una descrizione esatta di ciò che succedeva.
+ *
+ * ⇒ Qui il movimento è CONTINUO: la linea scorre senza mai sostare, e i tre nodi pulsano a onda,
+ *   sfasati, così c'è sempre qualcosa che si muove in qualunque istante si guardi.
+ * ⛔ Override nel nostro foglio e non in `index.css`, che è generato dal mockup (fonte del disegno,
+ *   cambia solo per mano dell'owner). L'ordine di `@import` in main.css fa il resto.
+ */
+@keyframes talosSegnaviaScorre {
+  0%   { stroke-dashoffset: 88; }
+  100% { stroke-dashoffset: -88; }
+}
+@keyframes talosSegnaviaNodo {
+  0%, 100% { fill: transparent; r: 3.4; }
+  40%      { fill: var(--talos-accent); r: 4.4; }
+  70%      { fill: transparent; r: 3.4; }
+}
+.talos-line-loader-sweep{
+  /* Una linea che entra da un lato ed esce dall'altro: nessun fotogramma in cui sia ferma. */
+  stroke-dasharray: 26 62;
+  animation: talosSegnaviaScorre 1.6s linear infinite;
+}
+.talos-line-loader-node{ animation: talosSegnaviaNodo 1.6s ease-in-out infinite; }
+.talos-line-loader-node:nth-of-type(3){ animation-delay: .2s; }
+.talos-line-loader-node:nth-of-type(4){ animation-delay: .4s; }
+/*
+ * ⛔ Con «meno movimento» non si rimette il movimento: si rende leggibile lo stato fermo — nodi
+ *   pieni e traccia accesa — invece di lasciare tre cerchi vuoti che sembrano un errore di disegno.
+ *   È la stessa scelta già presa il 06/09 per questo componente (MDN «prefers-reduced-motion»).
+ */
+@media (prefers-reduced-motion: reduce){
+  .talos-line-loader-sweep{ animation: none; stroke-dasharray: 88; stroke-dashoffset: 0; stroke-opacity: .35; }
+  .talos-line-loader-node{ animation: none; fill: var(--talos-accent); }
+}
