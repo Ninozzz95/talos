@@ -1986,11 +1986,60 @@ export async function cercaNelProgetto(disco, { testo, nome }) {
  * ecosistema (stesso nome in `provaTalos.mjs` e in
  * `harness-ui/src/config.mjs`, mai una copia con un nome diverso).
  */
+/*
+ * ⭐⭐⭐ D-10E — IL PROCESSO DI UN COMANDO NON EREDITA I NOSTRI SEGRETI.
+ *
+ * Misurato: qui si nascondeva UNA SOLA chiave (`OPENROUTER_API_KEY`), e passavano invece
+ * `TALOS_HARNESS_UI_TOKEN` (il token di loopback che protegge TUTTA la nostra API) e
+ * `TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64` (la chiave privata Ed25519 con cui si firmano le
+ * ricevute), piu' `HF_TOKEN` e la chiave della ricerca. Ogni `!comando` scritto dalla persona, e
+ * ogni comando scelto dal modello, li portava dentro il proprio ambiente — dove un `env` basta a
+ * leggerli, e un processo figlio qualunque li eredita a sua volta.
+ *
+ * Ricerca 10/09/2026 (nodejs-security.com, «Do not use secrets in environment variables»;
+ * GitGuardian; OWASP secrets management): «any secret stored in an environment variable of the
+ * parent process becomes accessible to ALL of its child processes, regardless of whether they
+ * actually need that information» — e' una violazione diretta del minimo privilegio.
+ *
+ * ⛔ Perche una DENYLIST PER FORMA e non un elenco chiuso: un elenco chiuso e' gia' stato
+ *   provato, ed e questo — copriva una chiave su cinque, e la sesta che nascera' domani non la
+ *   coprirebbe comunque. La forma (TOKEN, KEY, SECRET, PASSWORD, CREDENTIAL, PRIVATE) copre anche
+ *   cio che non esiste ancora. ⛔ E NON e' un'allowlist come `process-policy.mjs`: quella e'
+ *   giusta per un processo che sappiamo cosa fara, ma un `npm test` ha bisogno di decine di
+ *   variabili che nessuno puo elencare in anticipo, e una allowlist stretta romperebbe i comandi
+ *   veri invece di proteggerli.
+ *
+ * ⛔ LE ECCEZIONI SONO DICHIARATE, non dimenticate: `SSH_AUTH_SOCK` contiene «AUTH» ma non e un
+ *   segreto — e il percorso del socket dell'agente SSH, e senza di lui `git push` su un
+ *   repository remoto smette di funzionare dentro un comando. Toglierla sarebbe rompere una cosa
+ *   vera per un guadagno immaginario.
+ */
 export const CHIAVI_CREDENZIALI_DA_NASCONDERE = ['OPENROUTER_API_KEY']
 
+/** La forma di una credenziale. Volutamente larga: quel che non e un segreto, qui sotto e' elencato. */
+const FORMA_DI_CREDENZIALE = /TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|PRIVATE_KEY|_KEY$|^KEY_|APIKEY|API_KEY|ACCESS_KEY|AUTH/i
+
+/** ⛔ Non sono segreti, e servono: si dichiarano una per una, col perche. */
+const NON_SONO_SEGRETI = new Set([
+    'SSH_AUTH_SOCK',      // il socket dell'agente SSH: senza, `git push` dentro un comando smette di funzionare
+    'GPG_AGENT_INFO',     // stesso motivo, per le firme
+    'KEYBOARD_LAYOUT',    // combacia per caso con `KEY`
+    'AUTHORITY',          // idem
+])
+
+/** Vero se questa variabile non deve entrare nel processo di un comando. */
+export function eUnaCredenziale(chiave) {
+    const k = String(chiave ?? '')
+    if (NON_SONO_SEGRETI.has(k)) return false
+    if (CHIAVI_CREDENZIALI_DA_NASCONDERE.includes(k)) return true
+    return FORMA_DI_CREDENZIALE.test(k)
+}
+
 export function ambienteSenzaCredenziali() {
-    const ambiente = { ...process.env }
-    for (const chiave of CHIAVI_CREDENZIALI_DA_NASCONDERE) delete ambiente[chiave]
+    const ambiente = {}
+    for (const [chiave, valore] of Object.entries(process.env)) {
+        if (!eUnaCredenziale(chiave)) ambiente[chiave] = valore
+    }
     return ambiente
 }
 
