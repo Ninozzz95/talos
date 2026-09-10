@@ -2163,12 +2163,6 @@ button.talos-turn-spine__tick:focus-visible {
 :root.immersive-header .talos-topbar {
   border-bottom-color: transparent;
 }
-body.reduce-motion *,
-body.reduce-motion *::before,
-body.reduce-motion *::after {
-  animation: none !important;
-  transition: none !important;
-}
 .talos-touched {
   margin-top: 10px;
   overflow: hidden;
@@ -4878,12 +4872,6 @@ a.talos-button {
 @media (max-width: 760px) {
   .talos-picker {
     grid-template-columns: minmax(0, 1fr);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  * {
-    animation: none !important;
-    transition: none !important;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -10314,17 +10302,25 @@ dialog.command-dialog .tool-chips .status-chip,
     background-position: -60% 0;
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .talos-waiting__label {
-    background-image: none;
-    color: var(--talos-muted);
-    animation: none;
-  }
-}
 body.reduce-motion .talos-waiting__label {
   background-image: none;
   color: var(--talos-muted);
   animation: none !important;
+}
+body.reduce-motion .talos-waiting__label {
+  background-image:
+    linear-gradient(
+      100deg,
+      var(--talos-muted) 0%,
+      var(--talos-muted) 38%,
+      var(--talos-accent-hover) 50%,
+      var(--talos-muted) 62%,
+      var(--talos-muted) 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: talosAttesaShimmer 1.9s linear infinite !important;
 }
 
 /* src/styles/main.css */
