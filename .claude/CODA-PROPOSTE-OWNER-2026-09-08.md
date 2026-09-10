@@ -239,19 +239,34 @@ che non tornano:
 ⛔ Non curato: non è la riga su cui stavo lavorando, e toccare la firma delle ricevute vuole il suo
 giro di prove. Registrato perché è il tipo di difetto che nessuno trova per caso una seconda volta.
 
-### D-10I · PO-01: le tre scelte che restano all'owner
-La custodia della chiave è scritta e provata (23 prove), il flusso OAuth è in corso. Tre decisioni
-non sono mie:
-1. **Cifratura a riposo: no, per ora.** Il file resta in chiaro sotto `%APPDATA%\TALOS\custodia`,
-   come fanno Claude Code su Windows (`.credentials.json` in chiaro), Codex CLI (`auth.json`, «trattalo
-   come una password») e npm (`.npmrc`). Cifrare vuole una chiave per cifrare la chiave, e un'app
-   locale non ha dove tenerla: accanto al file è teatro. Le due vie non-teatro sono DPAPI con una
-   dipendenza nativa (che però non difende da un processo che gira già come te) o una passphrase
-   all'avvio (che rimetterebbe un copia-incolla proprio dove PO-01 lo toglie). Fonti del 10/09/2026
-   nei commenti di `src/custodia-chiavi.mjs`.
-2. **Precedenza: vince l'ambiente.** Chi imposta `OPENROUTER_API_KEY` in una shell lo fa apposta e
-   adesso; la custodia è il gesto permanente. È anche la precedenza di `gh` (`GH_TOKEN` scavalca
-   l'accesso salvato). ⛔ Perché non diventi silenziosa, la UI deve DIRE da dove viene la chiave che
-   sta usando: «accesso fatto» / «chiave incollata» / «chiave dall'ambiente».
-3. **Dove**: `%APPDATA%\TALOS\custodia`, fuori dal repo. ⛔ Non accanto a `cartellaStore`, che vive
-   **dentro la copia di lavoro git**: un `git add -A` distratto e la chiave finisce in un commit.
+### D-10I · PO-01: com'è finita davvero (la voce precedente era sbagliata, ed era colpa mia)
+
+⛔ **Questa voce sostituisce quella scritta poche ore prima**, che raccomandava una cartella
+`%APPDATA%\TALOS\custodia`, un file in chiaro e la precedenza «l'ambiente vince». Tutte e tre le cose
+nascevano da una mia affermazione falsa nel brief dell'agente — «sul desktop non esiste nessuna
+custodia» — che avevo dedotto da un grep su `config.mjs`.
+
+**Come stanno le cose, misurate:** esiste `src/provider-credential-store.mjs`, e `server.mjs` gli
+inietta il **portachiavi vero del sistema operativo** (`@napi-rs/keyring`; su questa macchina
+`keyring-win32-x64-msvc`, verificato caricabile il 10/09/2026). Se manca, il server lo dice e il
+Doctor segnala il limite. Cioè il progetto aveva già la custodia migliore delle due, e il modulo
+scritto sulla premessa sbagliata è stato buttato invece di essere committato.
+
+**La precedenza vera, letta nel codice:** l'ambiente semina la mappa delle chiavi alla partenza, poi
+`loadFromKeyring()` la **sovrascrive**. Quindi **il portachiavi vince sull'ambiente** — l'opposto di
+ciò che avevo registrato. Non è stato cambiato; è stato smesso di tacerlo: ogni card dice ora da dove
+viene la chiave in uso («Chiave dall'ambiente» su OpenAI, DeepSeek, Anthropic e Gemini, «Chiave
+salvata» su OpenRouter, misurato dal vivo).
+
+**Cifratura a riposo: la domanda non si pone più.** Con il portachiavi di sistema la chiave non sta
+in un file nostro, e il confronto con Claude Code (`.credentials.json` in chiaro su Windows), Codex
+(`auth.json`) e npm (`.npmrc`) dice che siamo **sopra**, non sotto.
+
+⛔ **Resta una cosa che l'owner deve fare, e che non posso fare io:** il giro vero. Nessun accesso
+reale a OpenRouter è stato eseguito — richiede le sue credenziali sul sito del fornitore. Tutto è
+provato con un OpenRouter finto (31 prove) e la card guardata a schermo con le rotte intercettate.
+
+⛔ **E una domanda tecnica che resta all'owner:** se un giorno OpenRouter cambia il nome del campo
+nella risposta (`api_key` → altro), oggi il flusso muore pulito con un errore dichiarato invece di
+indovinare campi alternativi. Accettare oggi un campo che non esiste vuol dire accettare, il giorno
+in cui esisterà, qualcosa di cui non conosciamo il significato.
