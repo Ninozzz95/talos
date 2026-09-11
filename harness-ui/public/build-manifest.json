@@ -78,8 +78,8 @@
     },
     {
       "path": "styles.css",
-      "bytes": 324729,
-      "sha256": "0036ef63291f0a6deface45f155c047c25058d6c122226983ee3e4519d78f019"
+      "bytes": 324531,
+      "sha256": "da38d204387a2a8b0fb628d46b72112dbdea6e566bc4bb83cc9be36ec61b4635"
     },
     {
       "path": "talos/brand/logo-short.svg",
