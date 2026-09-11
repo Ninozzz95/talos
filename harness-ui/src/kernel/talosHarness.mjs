@@ -1033,10 +1033,47 @@ export function conMarcatoreDiCache(messaggi, marcatore = { type: 'ephemeral', t
      *   elencano per prima proprio «a prompt below the provider's token minimum».
      * ⇒ Si usa il minimo più ALTO fra quelli documentati, in caratteri (~4 per token): un
      *   marcatore che non può essere onorato è solo un formato in più da far attraversare a ogni
-     *   messaggio. Il nostro preambolo vero ne ha 66.523, quindi passa largamente; un preambolo
-     *   corto resta una stringa, come è sempre stato.
+     *   messaggio.
+     * ⛔ AGGIORNATO L'11/09/2026, e la riga qui sotto lo dice per intero: quel «66.523» era il
+     *   preambolo VECCHIO, fatto di elenco file. Tolto quello (BC-07) il preambolo di
+     *   `harness-ui/` scende a 13.744 byte — sotto questa soglia — mentre il PREFISSO totale
+     *   resta molte volte sopra il minimo. ⇒ Non si abbassa la soglia: si misura la cosa giusta.
      */
-    if (String(messaggi[ultimoSistema].content).length < CARATTERI_MINIMI_PER_CACHE) return messaggi
+    /*
+     * ⛔⛔⛔ 11/09/2026 — SI MISURA IL PREFISSO, NON L'ULTIMO BLOCCO. Questa riga misurava
+     *   `messaggi[ultimoSistema].content.length`, cioe' la lunghezza del SOLO blocco marcato, e
+     *   la confrontava con un minimo che i fornitori dichiarano sul PROMPT INTERO.
+     *   Fonte primaria, Claude Platform Docs «Prompt caching» (letto 11/09/2026,
+     *   <https://platform.claude.com/docs/en/docs/build-with-claude/prompt-caching>), verbatim:
+     *     «Prompt caching references the entire prompt — tools, system, and messages (in that
+     *      order) up to and including the block designated with cache_control»
+     *   e «The cache lookup operates on the full prefix up to the breakpoint, not individual
+     *   blocks». I minimi documentati sono per modello: 512 (Fable/Mythos/Opus 5), 1.024
+     *   (Sonnet 5/4.6/4.5, Opus 4.8/4.1), 2.048 (Haiku 3.5, Opus 4.7), 4.096 (Opus 4.6/4.5,
+     *   Haiku 4.5). Su OpenRouter (letto lo stesso giorno) il piu' alto resta 4.096.
+     *
+     * ⛔ LA SOGLIA NON SI ABBASSA: resta 16.000 caratteri, cioe' ~4.096 token a 3,9 byte/token —
+     *   il minimo piu' ALTO fra quelli documentati. Quello che cambia e' COSA si misura.
+     *   Scoperto togliendo l'elenco dei file dal preambolo (BC-07): il preambolo nuovo di
+     *   `harness-ui/` sta in 13.744 byte contro i 66.523 del vecchio, e con la vecchia misura il
+     *   marcatore sarebbe SPARITO da solo, in silenzio, proprio mentre il prefisso totale (attrezzi
+     *   + istruzioni + preambolo) resta molte volte sopra il minimo. Una cura che ne disarma
+     *   un'altra senza dirlo.
+     *
+     * ⭐ La somma copre i soli MESSAGGI: gli attrezzi non arrivano fin qui, e la loro definizione
+     *   JSON e' la parte piu' pesante del prefisso. Quindi questo numero e' un PAVIMENTO del
+     *   prefisso vero — si sbaglia nel verso prudente (non si marca mai qualcosa di troppo corto),
+     *   mai in quello che spreca un marcatore.
+     */
+    let caratteriDelPrefisso = 0
+    for (let i = 0; i <= ultimoSistema; i += 1) {
+        const contenuto = messaggi[i]?.content
+        if (typeof contenuto === 'string') caratteriDelPrefisso += contenuto.length
+        else if (Array.isArray(contenuto)) {
+            for (const pezzo of contenuto) if (typeof pezzo?.text === 'string') caratteriDelPrefisso += pezzo.text.length
+        }
+    }
+    if (caratteriDelPrefisso < CARATTERI_MINIMI_PER_CACHE) return messaggi
     return messaggi.map((m, i) => (i === ultimoSistema
         ? { ...m, content: [{ type: 'text', text: m.content, cache_control: { ...marcatore } }] }
         : m))

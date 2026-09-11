@@ -114,8 +114,12 @@ test('P-13, AL CONTRARIO: se il filtro esplode, l’elenco esce lo stesso', asyn
     creaFiltro: async () => { throw new Error('.gitignore illeggibile'); },
     deps,
   });
-  assert.ok(esito, '⛔ nessun elenco per colpa di un file di regole sarebbe la cura che rifà la malattia');
-  assert.ok(esito.percorsi > 0);
+  assert.ok(esito, '⛔ nessun preambolo per colpa di un file di regole sarebbe la cura che rifà la malattia');
+  /* ⛔ BC-07 (11/09): `percorsi` non esiste più — il preambolo non è un elenco di file, è la
+     MAPPA DELLE CARTELLE. L'intento della prova è invariato: senza filtro si vede QUALCOSA IN PIÙ,
+     mai niente. Qui si guarda la mappa, che è ciò che ha preso il posto dell'elenco. */
+  assert.ok(esito.blocchi.mappa, 'senza filtro la mappa resta, con qualche cartella in piu');
+  assert.ok(esito.blocchi.mappa.cartelle > 0);
 });
 
 test('P-13, AL CONTRARIO: una cartella che non si legge dà null, non un’eccezione', async () => {
