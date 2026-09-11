@@ -72,6 +72,19 @@ for (const [nome, larghezza] of [['desktop', 1440], ['laptop', 1024]]) {
           { id: 'unaCasaEditriceMoltoLunga-un-modello-dal-nome-interminabile-che-nessuna-regola-puo-accorciare-perche-non-dichiara-ne-parametri-ne-quantizzazione', name: '', bytes: 900_000_000, state: 'ready' },
         ] }, meta: { schema: 'talos.harness-ui.api.v1' } }),
       }));
+      /*
+       * ⛔ Anche il CATALOGO va servito, non solo i locali: il picker chiama `/api/v1/models` per
+       *   primo e, se quella fallisce, mostra «Catalogo non disponibile» e **non disegna nemmeno le
+       *   fonti** — niente scheda «Locali», niente righe, niente da misurare. È il terzo modo in cui
+       *   questo cancello è nato inerte, e ognuno dei tre diceva «verde» sul nulla.
+       */
+      await pagina.route('**/api/v1/models*', (rotta) => rotta.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, data: { modelli: [
+          { id: 'z-ai/glm-5.3-flash', name: 'GLM 5.3 Flash', context_length: 200000, pricing: { prompt: '0.0000002', completion: '0.0000008' } },
+        ], daCache: true }, meta: { schema: 'talos.harness-ui.api.v1' } }),
+      }));
       await pagina.goto(BASE, { waitUntil: 'domcontentloaded' });
       await pagina.waitForTimeout(3000);
       await pagina.evaluate(() => document.getElementById('introSalta')?.click());
@@ -80,6 +93,15 @@ for (const [nome, larghezza] of [['desktop', 1440], ['laptop', 1024]]) {
       /* Si apre il selettore dalla pill del composer, com'è il gesto vero. */
       await pagina.evaluate(() => document.querySelector('[data-open-sheet="model"]')?.click());
       await pagina.waitForTimeout(1500);
+      /*
+       * ⛔⛔ E SI APRE LA SCHEDA «LOCALI»: era il pezzo che mancava, e la ragione per cui questo
+       *   cancello è nato inerte due volte. Il selettore si apre su «OpenRouter»; i modelli locali
+       *   — quelli coi nomi lunghi, quelli di BC-04 — stanno in un'altra fonte, e finché non la si
+       *   apre la lista misurata è quella sbagliata. Misurare la superficie sbagliata dà sempre
+       *   ragione a chi misura.
+       */
+      await pagina.evaluate(() => document.querySelector('[data-picker-source="locali"]')?.click());
+      await pagina.waitForTimeout(1200);
 
       const misura = await pagina.evaluate(() => {
         const lista = document.querySelector('.model-picker-panel:not([hidden]) .model-picker-list')

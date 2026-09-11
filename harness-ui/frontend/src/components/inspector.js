@@ -342,6 +342,92 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
   }
   return lista.length;
 }
+/*
+ * ⛔⛔⛔ BC-18 (owner, 11/09/2026) — «la scheda AGENTI resta VUOTA mentre la sotto-attività è VIVA».
+ * Nella foto dell'owner: la chat dice «1 attività in corso — Sotto-attività: Devi assemblare e
+ * validare un file HTML…», la barra a sinistra mostra la figlia annidata sotto la madre con «in
+ * corso · qwen3.8-flash», e questa colonna scrive «Nessun sotto-agente in questa sessione».
+ *
+ * RIPRODOTTO sul banco l'11/09 (porta 4178 — NON la 4174 — con una COPIA dello store dell'owner):
+ * sessione madre `8dde6bff…` aperta, la barra disegna 13 righe e fra queste la figlia `37e10d21…`;
+ * dopo un giro dell'elenco la scheda Agenti mostra **0 card**. Due viste della stessa verità, e una
+ * delle due è ferma su una risposta scaduta.
+ *
+ * CAUSA — non è il DATO, è la CADENZA. Il server dice il vero: sul banco
+ * `GET /api/v1/sessions/8dde6bff…/children` risponde con **una** figlia (e `…/37e10d21…/children`
+ * risponde `[]` perché quella è la FIGLIA, non la madre — chiedere l'id sbagliato fa sembrare rotto
+ * il server che funziona). Le due viste però leggono con due orologi diversi:
+ *   · la barra rilegge `GET /api/v1/sessions` (che porta `padreId`) OGNI 15 SECONDI
+ *     (`legacy/app.js`: `window.setInterval(… 15_000)` finché la pagina è visibile);
+ *   · questa scheda rilegge `…/children` in TRE momenti soli: apertura della sessione,
+ *     `ToolCallStart` di `delega_sottotask`, `ToolCallResult` della stessa.
+ *   ⛔ E il `ToolCallStart` è l'istante in cui la figlia NON PUÒ ANCORA ESISTERE. Misurato sul
+ *     disco della sessione vera dell'owner (`8dde6bff….jsonl`): `ToolCallStart` è la riga
+ *     `_sequenza: 33590`, e SOLO DOPO arrivano i `ToolCallArgs` che compitano a pezzi il task da
+ *     4.776 caratteri (`{"task": `, `"Devi assembl`, `are e valid`, …). Il kernel può chiamare
+ *     `delegaSottoTask` — cioè creare la sessione figlia — solo quando l'ultimo pezzo è arrivato.
+ *   ⇒ La scheda chiede «hai figlie?» un istante PRIMA che la figlia nasca, si sente rispondere
+ *     «no» — che in quel momento è la verità — e non lo richiede più finché la delega non è
+ *     FINITA. Tutto il tempo in cui la figlia è viva, cioè esattamente quando la si guarda, la
+ *     colonna è ferma su una risposta scaduta.
+ *
+ * RICERCA 11/09/2026, prima di scrivere (regola zero):
+ *  · è un difetto di CLASSE, e dai concorrenti è APERTO: openai/codex #38478 («completed subagents
+ *    remain shown as running/processing in the summary panel», per ore), #23931 e #23930 (card di
+ *    sotto-agenti che restano in una vista e non nell'altra, senza modo di riconciliarle), #38408
+ *    (sotto-agenti «stuck as running» dopo un riavvio). In tutti e quattro il pannello e l'albero
+ *    vivo non sono d'accordo, esattamente come qui.
+ *  · La regola generale, dalla letteratura sulle viste derivate (Tacnode, «Incremental Materialized
+ *    View: How to Keep Derived State Fresh in Real Time», letto l'11/09/2026): «multiple
+ *    materialized views refreshed independently produce inconsistent snapshots when read
+ *    concurrently». Due viste della stessa verità con due aggiornamenti indipendenti DEVONO
+ *    divergere: è una proprietà del disegno, non una sfortuna.
+ *  ⇒ La cura non è un terzo canale né un timer nuovo: è togliere il SECONDO OROLOGIO. L'elenco che
+ *    la barra già rilegge diventa il TRIGGER; `…/children` resta la FONTE, perché porta quello che
+ *    l'elenco non ha (`taskCorto` pulito, `collisioni` fra sorelle, `evidenzaDelega`). Costa una
+ *    fetch solo quando le due viste non sono d'accordo, zero quando lo sono.
+ */
+
+/**
+ * L'impronta di una delega per confrontare le due viste: CHI è, e se ha smesso di lavorare.
+ * ⛔ Lo stato entra nell'impronta e non solo l'id: il difetto gemello dei concorrenti (codex
+ *   #38478) è una card che resta «In corso» per ore su una delega già finita — stessa divergenza,
+ *   verso opposto. `conclusa` e `interrotta` sono gli stessi due campi in tutt'e due le rotte
+ *   (verificato sul banco l'11/09: per `37e10d21…` entrambe dicono `conclusa:false,
+ *   interrotta:true`), quindi il confronto non può rilevare una differenza che non c'è — che
+ *   sarebbe una rilettura a vuoto ogni 15 secondi, per sempre.
+ */
+function improntaDelega(riga) {
+  return `${riga?.sessionId ?? ''}|${riga?.conclusa === true ? 1 : 0}|${riga?.interrotta === true ? 1 : 0}`;
+}
+
+/**
+ * Le due viste sono d'accordo sulle deleghe della sessione aperta?
+ *
+ * @param {object} dati
+ * @param {Array<object>} dati.elenco lo snapshot di `GET /api/v1/sessions` che la barra ha appena letto
+ * @param {string|null} dati.sessioneCorrente la sessione aperta in chat
+ * @param {Array<object>} dati.figli le deleghe che la scheda sta mostrando (ultima risposta di `…/children`)
+ * @returns {boolean} true quando la scheda va riletta: lo snapshot la smentisce
+ */
+export function schedaAgentiDaRileggere({ elenco = [], sessioneCorrente = null, figli = [] } = {}) {
+  if (!sessioneCorrente) return false; // senza una sessione aperta non c'è una scheda di cui dire niente
+  const righe = Array.isArray(elenco) ? elenco.filter(Boolean) : [];
+  /*
+   * ⛔ AL CONTRARIO, la guardia che conta: se lo snapshot non nomina nemmeno la sessione APERTA,
+   *   quello snapshot non sa niente di lei (elenco filtrato, risposta parziale, sessione appena
+   *   creata e non ancora nell'indice). Senza questa riga un elenco incompleto farebbe rileggere
+   *   `/children` per far sparire card VERE: cioè BC-18 al rovescio, e a pagarlo sarebbe la foto
+   *   giusta invece di quella sbagliata.
+   */
+  if (!righe.some((s) => s.sessionId === sessioneCorrente)) return false;
+  const dallaBarra = new Set(righe.filter((s) => s.padreId === sessioneCorrente).map(improntaDelega));
+  const dallaScheda = new Set((Array.isArray(figli) ? figli.filter(Boolean) : []).map(improntaDelega));
+  if (dallaBarra.size !== dallaScheda.size) return true;
+  for (const impronta of dallaBarra) if (!dallaScheda.has(impronta)) return true;
+  return false;
+}
+
 // ⛔ 06/9, T05-D3: «interrotta» PRIMA di «in corso» — un figlio che nessuno sta più eseguendo non è vivo.
 function statoDelega(a) { if (a?.interrotta === true) return 'interrotta'; if (!a?.conclusa) return 'in-corso'; return a.esitoDelega === 'fallito' ? 'fallita' : 'conclusa'; }
 function etichettaDelega(a) { const s = statoDelega(a); return s === 'interrotta' ? 'Interrotta' : s === 'in-corso' ? 'In corso' : s === 'fallita' ? 'Non riuscita' : 'Conclusa'; }

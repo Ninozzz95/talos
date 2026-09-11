@@ -374,7 +374,36 @@ export function montaConversazioneFiglia(contenitore, {
   nota.hidden = true;
   elemento.append(nota);
 
+  /*
+   * ⛔⛔⛔ IL PANNELLO NON SCORREVA — owner, 11/09/2026: «falla scrollare la barra conversazione
+   *   agenti». Misurato sul banco (porta 4178, copia dello store dell'owner, Chrome 1440×900, la
+   *   figlia vera da 100 righe attrezzo): `.talos-figlia` alta **8.688 px** dentro una colonna alta
+   *   **900 px**, il suo fondo **7.921 px sotto il bordo della finestra**, e `overflow-y: visible`
+   *   su OGNI antenato fino a `body` (che è `hidden`). `scrollTop = 99999` lasciava `scrollTop` a
+   *   **0**: non era scomodo da scorrere, era impossibile — 7.921 px di conversazione disegnati
+   *   fuori dallo schermo e irraggiungibili.
+   *
+   * CAUSA: l'unico contenitore che scorre, in questa colonna, è `.talos-inspector__body`
+   *   (`overflow-y:auto`), cioè `#railAgenti` — e chi apre questa vista lo mette `hidden` e infila
+   *   il pannello come SUO FRATELLO, in un `div` senza classe. Un `div` senza classe dentro un
+   *   flex-column non ha né `overflow` né `min-height:0`: spegnere l'unico scorrevole e metterci
+   *   accanto qualcosa che non lo è lascia la colonna senza nessuno che scorra.
+   *
+   * RICERCA 11/09/2026, prima di scrivere:
+   *  · la regola di flexbox che rende inerte un `overflow:auto` annidato è `min-width/height:auto`
+   *    (W3C css-flexbox, «the `auto` minimum size applies only when overflow is visible»; philipwalton/
+   *    flexbugs #241 la elenca come caso speciale dei contenitori annidati) ⇒ `min-height:0` serve a
+   *    OGNI livello della catena, non solo a quello che scorre. Qui: `.talos-figlia-ospite`,
+   *    `.talos-figlia`, `.talos-figlia__corpo`.
+   *  · un contenitore che scorre dev'essere raggiungibile da tastiera — axe `scrollable-region-focusable`,
+   *    WCAG 2.1.1: «ensure it is programmatically focusable using tabindex=0», altrimenti frecce e
+   *    PagGiù non hanno dove agire. Il `tabindex` sta QUI, sul corpo che scorre, e non sulla card
+   *    (che ha già `tabIndex = -1` per ricevere il fuoco al montaggio: -1 non entra nel giro del Tab).
+   *  · `overscroll-behavior: contain` (MDN): arrivati in fondo, la rotella NON prosegue sul pannello
+   *    dietro — lo «scroll chaining» qui farebbe scorrere la chat della madre mentre si legge la figlia.
+   */
   const corpo = el(d, 'div', 'talos-figlia__corpo');
+  corpo.tabIndex = 0;
   elemento.append(corpo);
 
   const vuoto = el(d, 'p', 'talos-inspector__hint talos-figlia__vuoto', 'Nessun evento ancora da questo sotto-agente. Il collegamento è aperto: appena la figlia dice o fa qualcosa, compare qui.');
@@ -431,7 +460,29 @@ export function montaConversazioneFiglia(contenitore, {
     if (vista.esitoMostrato !== blocco.esito) { impostaEsitoRiga(vista.riga, blocco.esito); vista.esitoMostrato = blocco.esito; }
   }
 
+  /*
+   * ⛔ Quanto vicino al fondo conta come «in fondo». 24 px: meno di una riga di testo, abbastanza
+   *   da assorbire l'arrotondamento sub-pixel di un contenitore che cresce mentre si legge.
+   */
+  const VICINO_AL_FONDO_PX = 24;
+  /**
+   * ⛔⛔ Il pannello che scorre apre una domanda che prima non esisteva: dove guarda mentre la
+   *   figlia LAVORA? Ricerca 11/09/2026 (stackblitz-labs/use-stick-to-bottom; CSS-Tricks, «Pin
+   *   Scrolling to Bottom»; «Intuitive Scrolling for Chatbot Message Streaming»): la vista segue il
+   *   fondo finché chi legge È al fondo, e **si fa da parte nell'istante in cui risale**. Un
+   *   pannello che riporta in fondo mentre si rilegge un comando di dieci righe fa perdere il posto
+   *   a ogni evento — e questa figlia ne emette centinaia.
+   * ⛔ Geometria sconosciuta (vista non ancora attaccata al documento, DOM finto di una prova) =
+   *   non si tocca lo scorrimento di nessuno: muovere `scrollTop` alla cieca è peggio che non farlo.
+   */
+  function seguivaIlFondo() {
+    const altezza = corpo.scrollHeight; const visibile = corpo.clientHeight; const dove = corpo.scrollTop;
+    if (!Number.isFinite(altezza) || !Number.isFinite(visibile) || !Number.isFinite(dove)) return false;
+    return altezza - dove - visibile <= VICINO_AL_FONDO_PX;
+  }
+
   function disegna() {
+    const seguiva = seguivaIlFondo(); // ⛔ PRIMA di mutare: dopo, l'altezza è già cambiata e la domanda non ha più senso
     const ridotto = riduciEventiFiglia(eventi);
 
     badge.textContent = ETICHETTA_STATO_FIGLIA[ridotto.stato];
@@ -488,9 +539,23 @@ export function montaConversazioneFiglia(contenitore, {
         aggiornaVistaBlocco(vista, blocco);
       }
     }
+
+    /* ⛔ Solo se ci si era: chi è risalito a rileggere resta dov'è (vedi `seguivaIlFondo`). */
+    if (seguiva) corpo.scrollTop = corpo.scrollHeight;
   }
 
   disegna();
+  /*
+   * ⛔⛔ L'OSPITE SI MARCA, e la marca non è cosmetica: dentro la colonna il pannello è un figlio
+   *   di un flex-column ALTO QUANTO LA FINESTRA, e senza `flex:1 1 auto; min-height:0` su QUESTO
+   *   nodo la catena si spezza al primo anello e il corpo non può scorrere (vedi la misura in testa
+   *   a `corpo`: 8.688 px in 900, `scrollTop` bloccato a 0).
+   * ⛔ La classe la mette il componente e non chi lo monta: il pannello si apre da `legacy/app.js`,
+   *   ma anche dal laboratorio e dalle prove — un contratto che vive in UNO dei tre chiamanti è un
+   *   contratto che gli altri due rompono senza accorgersene. `distruggi()` la toglie: l'ospite non
+   *   è nostro, si restituisce com'era.
+   */
+  contenitore?.classList?.add?.('talos-figlia-ospite');
   contenitore?.append(elemento);
   elemento.focus?.();
 
@@ -541,6 +606,7 @@ export function montaConversazioneFiglia(contenitore, {
       chiudiFlusso = null;
       elemento.removeEventListener?.('keydown', suTasto);
       elemento.remove?.();
+      contenitore?.classList?.remove?.('talos-figlia-ospite'); // l'ospite torna com'era: la classe è nostra solo finché siamo montati
       disegnati.clear();
       /* W3C APG: il fuoco torna a chi ha aperto, «unless the invoking element no longer exists».
          Un nodo staccato manderebbe il fuoco su <body>, che è peggio del non fare niente. */

@@ -39,7 +39,24 @@ function documentoFinto() {
       hidden: false,
       id: '',
       type: '',
-      tabIndex: 0,
+      /*
+       * ⛔⛔ 11/09 — CORRETTO da 0 a -1, e va detto perché: il finto rispondeva `tabIndex: 0` a
+       *   QUALUNQUE nodo, e con quel valore la prova «il contenitore che scorre è raggiungibile da
+       *   tastiera» restava VERDE anche togliendo la riga che lo imposta — provato l'11/09, guasto
+       *   rimesso e nessun rosso. Nel DOM vero un `div` senza `tabindex` risponde **-1**: il finto
+       *   ora dice la stessa cosa, e la prova morde. Il fatto non è cambiato; era sbagliato il finto.
+       */
+      tabIndex: -1,
+      /*
+       * ⛔ 11/09, BC-18-bis — la GEOMETRIA del contenitore che scorre. Il finto non la INVENTA:
+       *   parte da zero (vista non ancora attaccata, altezza sconosciuta) e la prova la mette a
+       *   mano quando vuole descrivere una vista alta e scorsa. Un finto che rispondesse numeri
+       *   plausibili da solo farebbe passare un pannello che a schermo non scorre — ed è
+       *   esattamente il difetto che l'owner ha visto l'11/09.
+       */
+      scrollTop: 0,
+      scrollHeight: 0,
+      clientHeight: 0,
       get className() { return [...nodo.classi].join(' '); },
       set className(v) { nodo.classi = new Set(String(v).split(/\s+/).filter(Boolean)); },
       classList: {
@@ -389,4 +406,100 @@ test('FIGLIA-AGGIORNA: una storia più corta si rifà, invece di mescolarsi con 
   const testo = testoIntero(vista.elemento);
   assert.ok(testo.includes('un’altra figlia'));
   assert.ok(!testo.includes('secondo'), '⛔ il turno della storia precedente non resta appeso');
+});
+
+
+/* ═════════════════════════════ Il pannello che SCORRE — owner 11/09/2026 ═══ */
+
+/*
+ * ⛔⛔⛔ «falla scrollare la barra conversazione agenti» (owner, 11/09/2026).
+ *
+ * MISURATO PRIMA DELLA CURA, su un banco mio (porta 4178, copia dello store dell'owner, Chrome
+ * 1440×900, la figlia vera con 100 righe attrezzo): `.talos-figlia` alta **8.688 px** dentro una
+ * colonna alta **900**, il fondo **7.921 px SOTTO il bordo della finestra**, `overflow-y:visible`
+ * su OGNI antenato fino a `body`, e `scrollTop = 99999` che lasciava `scrollTop` a **0**. Non
+ * scomodo da leggere: impossibile.
+ * DOPO: il corpo ha una corsa di **7.931 px**, una rotella VERA di 1.200 px lo muove di 1.200 e il
+ * documento resta fermo (`overscroll-behavior: contain`).
+ *
+ * Qui sotto sta la parte che si può provare senza un browser: il CONTRATTO che rende possibile
+ * quella misura — chi porta la classe, chi porta il `tabindex`, e dove guarda la vista quando
+ * arriva un evento nuovo. Il pixel lo prova il banco; queste prove impediscono che il contratto
+ * sparisca senza che nessuno se ne accorga.
+ */
+
+test("FIGLIA-SCORRE: l’OSPITE viene marcato al montaggio e SMARCATO alla distruzione", () => {
+  const { contenitore, vista } = monta({ eventiIniziali: [START()] });
+  assert.equal(
+    contenitore.classList.contains('talos-figlia-ospite'), true,
+    '⛔ senza questa classe il pannello è un div senza niente dentro un flex-column: la catena `min-height:0` si spezza al primo anello e il corpo non può scorrere (8.688 px in 900, misurato)',
+  );
+  vista.distruggi();
+  assert.equal(
+    contenitore.classList.contains('talos-figlia-ospite'), false,
+    'l’ospite non è nostro: si restituisce com’era, o la colonna resta deformata dopo un «Indietro»',
+  );
+});
+
+test('FIGLIA-SCORRE: il contenitore che scorre è raggiungibile da TASTIERA', () => {
+  const { vista } = monta({ eventiIniziali: [START()] });
+  const corpo = unaConClasse(vista.elemento, 'talos-figlia__corpo');
+  assert.equal(corpo.tabIndex, 0, '⛔ axe `scrollable-region-focusable` / WCAG 2.1.1: senza tabindex 0 frecce e PagGiù non hanno dove agire, e questa vista è lunga migliaia di pixel');
+  /* ⛔ E NON sulla card: quella ha `tabIndex = -1` per ricevere il fuoco al montaggio — metterla
+     a 0 aggiungerebbe una fermata del Tab su un contenitore che non scorre. */
+  assert.equal(vista.elemento.tabIndex, -1);
+});
+
+test('FIGLIA-SCORRE: un evento nuovo tiene il FONDO in vista, se ci si era', () => {
+  const { vista, spia } = monta({ eventiIniziali: [START(), DELTA('m1', 'prima riga')] });
+  const corpo = unaConClasse(vista.elemento, 'talos-figlia__corpo');
+  // la vista è alta 1.000 px, ne vediamo 400, e stiamo guardando il FONDO
+  corpo.scrollHeight = 1000; corpo.clientHeight = 400; corpo.scrollTop = 600;
+  spia.manda(DELTA('m1', ' e la seconda'));
+  assert.equal(corpo.scrollTop, corpo.scrollHeight, 'chi guarda il fondo continua a vedere quello che la figlia sta facendo ADESSO');
+});
+
+test('FIGLIA-SCORRE, AL CONTRARIO: chi è RISALITO a rileggere non viene riportato in fondo', () => {
+  const { vista, spia } = monta({ eventiIniziali: [START(), DELTA('m1', 'prima riga')] });
+  const corpo = unaConClasse(vista.elemento, 'talos-figlia__corpo');
+  // stessa vista, ma si sta rileggendo un comando più in alto
+  corpo.scrollHeight = 1000; corpo.clientHeight = 400; corpo.scrollTop = 120;
+  spia.manda(DELTA('m1', ' e la seconda'));
+  assert.equal(
+    corpo.scrollTop, 120,
+    '⛔ questa figlia emette centinaia di eventi: riportare in fondo a ognuno farebbe perdere il posto a ogni riga letta (ricerca 11/09: use-stick-to-bottom, CSS-Tricks «Pin Scrolling to Bottom»)',
+  );
+});
+
+test('FIGLIA-SCORRE, AL CONTRARIO: con la geometria SCONOSCIUTA non si tocca lo scorrimento di nessuno', () => {
+  /* Vista non ancora attaccata al documento, o un finto che non sa rispondere: muovere `scrollTop`
+     alla cieca è peggio che non farlo. Qui i tre numeri sono quelli di una vista mai misurata. */
+  const { vista, spia } = monta({ eventiIniziali: [START()] });
+  const corpo = unaConClasse(vista.elemento, 'talos-figlia__corpo');
+  corpo.scrollTop = 42; corpo.scrollHeight = undefined; corpo.clientHeight = undefined;
+  spia.manda(DELTA('m1', 'qualcosa'));
+  assert.equal(corpo.scrollTop, 42);
+});
+
+test("FIGLIA-SCORRE: il CSS dichiara la catena intera, non solo l’ultimo anello", async () => {
+  /*
+   * ⛔ La regola di flexbox che rende inerte un `overflow:auto` annidato è `min-height:auto`
+   *   (W3C css-flexbox; philipwalton/flexbugs #241, letti l'11/09/2026): il `min-height:0` serve a
+   *   OGNI livello della catena. Questa prova guarda il foglio VERO perché la cura vive lì: se
+   *   qualcuno toglie un anello, il pannello torna a non scorrere e nessun test JS se ne accorge.
+   */
+  const { readFile } = await import('node:fs/promises');
+  const { fileURLToPath } = await import('node:url');
+  const css = await readFile(fileURLToPath(new URL('../../src/styles/index.css', import.meta.url)), 'utf8');
+  const regola = (selettore) => {
+    const i = css.indexOf(`
+${selettore}{`);
+    assert.notEqual(i, -1, `regola mancante nel foglio: ${selettore}`);
+    return css.slice(i + selettore.length + 2, css.indexOf('}', i));
+  };
+  for (const selettore of ['.talos-figlia-ospite', '.talos-figlia', '.talos-figlia__corpo']) {
+    assert.match(regola(selettore), /min-height:\s*0/, `${selettore} deve poter scendere sotto il suo contenuto, o la catena si spezza qui`);
+  }
+  assert.match(regola('.talos-figlia__corpo'), /overflow-y:\s*auto/, 'il corpo è il contenitore che scorre');
+  assert.match(regola('.talos-figlia__corpo'), /overscroll-behavior:\s*contain/, 'arrivati in fondo la rotella NON prosegue sulla chat della madre (MDN, scroll chaining)');
 });
