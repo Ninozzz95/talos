@@ -31,6 +31,18 @@ import { MEMORIE } from './fixtures/memoria.js';
 import { aggiornaBoard } from '../src/components/board.js';
 import { ADESSO_BOARD, SESSIONI_BOARD, METRICHE_BOARD, CARTELLE_BOARD } from './fixtures/board.js';
 import template from '../index.template.html';
+/* 11/09 — lotti C · E · F · G: le sezioni elenco+dettaglio, lo studio dei temi e la modale. */
+/* ⛔ Nomi con l'alias `td`: le funzioni si chiamano come quelle dei sei componenti originali (è
+   il punto — l'aggancio in `legacy/app.js` è di sole righe di import), e qui convivono con
+   quelle vecchie, che restano importate per i laboratori `MemoryRow`/`TaskRow`/`LibraryRow`/`ReportRow`. */
+import {
+  montaNote as montaNoteTd, aggiornaPaginaMemoria as memoriaTd, aggiornaPaginaAttivita as attivitaTd,
+  aggiornaPaginaLibreria as libreriaTd, aggiornaPaginaRicerca as ricercaTd, montaProgetti as progettiTd,
+} from '../src/components/sezioni-adattatori.js';
+import { apriStudioTemi, montaScorciatoiaTemi } from '../src/components/theme-studio.js';
+import { confermaModale } from '../src/components/modale-td.js';
+import { NOTE, ADESSO_NOTE } from './fixtures/note.js';
+import { PROGETTI } from './fixtures/progetti.js';
 import { creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaFallimentoAttrezzo, creaFileToccati, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRicevuta, creaRigaAttrezzo, creaTurno } from '../src/components/conversazione.js';
 import { aggiornaPiedeChat } from '../src/components/chat-foot.js';
 import { aggiornaDiffReview, creaRigaFileReview, riassuntoReview } from '../src/components/review.js';
@@ -90,6 +102,37 @@ document.documentElement.setAttribute('data-vista', 'sessione');
 document.documentElement.setAttribute('data-schermo', 'chat');
 
 const componente = new URLSearchParams(location.search).get('componente') || '';
+
+/*
+ * Una schermata-pagina si guarda come la guarda la app: la chat via, `data-vista="pagina"` (che
+ * toglie la colonna dei dettagli) e `data-schermo` col nome giusto. È la stessa regia di `setView`
+ * in `legacy/app.js:1384-1388` — qui a mano, perché il laboratorio non carica il monolite.
+ */
+function mostraSchermo(id, nome) {
+  /*
+   * ⛔ TROVATO DALLA PRIMA SERIE DI FOTO, tutte nere: `#talosAvvio` — il velo d'avvio — nel
+   *   laboratorio resta acceso, perché `src/avvio.js` è un entry a parte che qui non viene
+   *   caricato. Senza il suo foglio è alto 8.697 px dentro un `body` flex da 900: la shell riceve
+   *   zero spazio e la app diventa invisibile. Si toglie qui, dove si decide cosa guardare.
+   */
+  document.getElementById('talosAvvio')?.remove();
+  /* ⛔ `#centro` PORTA ANCHE LUI la classe `.talos-screen`: nasconderlo svuota la finestra, e la
+     prima serie di foto è uscita tutta nera per questo. Si escludono i contenitori. */
+  for (const pane of document.querySelectorAll('#centro > .talos-screen')) pane.hidden = pane.id !== id;
+  document.documentElement.setAttribute('data-vista', 'pagina');
+  document.documentElement.setAttribute('data-schermo', nome);
+  return document.getElementById(id);
+}
+/* La pila dei toast vera della app, per far vedere l'annullamento del lotto E senza il monolite. */
+function notificaDiProva(titolo, messaggio, opzioni = {}) {
+  const regione = document.querySelector('#regioneToast');
+  for (const finto of regione.querySelectorAll('.talos-toast')) finto.remove();
+  const { scheda, azione } = creaToast({ id: Date.now(), titolo, messaggio, tono: opzioni.tono, azione: opzioni.azione });
+  if (azione && typeof opzioni.azione?.esegui === 'function') azione.addEventListener('click', () => { opzioni.azione.esegui(); scheda.remove(); });
+  regione.append(scheda);
+  regione.hidden = false;
+  return scheda;
+}
 
 const LABORATORI = {
  ProviderCard(){document.querySelector('#veloFornitori [data-c=ProviderCard]').replaceWith(creaProviderCard(PROVIDER_CARD[4],{aperta:true}));},
@@ -157,6 +200,81 @@ const LABORATORI = {
   ModelliInstallati() {
     const panel = document.querySelector('#panel-installati');
     aggiornaInstallati(panel, MODELLI_INSTALLATI, { runtime: RUNTIME_INSTALLATI, fit: FIT_INSTALLATI, selezionato: 'qwen8' });
+  },
+  SezioneNote() {
+    montaNoteTd(mostraSchermo('schermoNote', 'note'), NOTE, { adesso: ADESSO_NOTE, notifica: notificaDiProva, onCopia: () => notificaDiProva('Copiata', 'La nota è negli appunti.') });
+  },
+  SezioneNote_dettaglio() {
+    const schermo = mostraSchermo('schermoNote', 'note');
+    montaNoteTd(schermo, NOTE, { adesso: ADESSO_NOTE, notifica: notificaDiProva, onCopia: () => {} });
+    schermo.querySelector('.td-card .td-card-open').click();
+  },
+  SezioneNote_vuota() {
+    montaNoteTd(mostraSchermo('schermoNote', 'note'), [], { adesso: ADESSO_NOTE });
+  },
+  SezioneMemoria() {
+    const schermo = mostraSchermo('schermoMemoria', 'memoria');
+    memoriaTd(schermo, MEMORIE, { notifica: notificaDiProva });
+    schermo.querySelector('.td-card .td-card-open').click();
+  },
+  SezioneAttivita() {
+    const schermo = mostraSchermo('schermoAttivita', 'attivita');
+    attivitaTd(schermo, ATTIVITA, {});
+    schermo.querySelector('.td-card .td-card-open').click();
+  },
+  SezioneLibreria() {
+    const schermo = mostraSchermo('schermoLibreria', 'libreria');
+    libreriaTd(schermo, LIBRERIA, { sessionId: 'fx-lab', notifica: notificaDiProva, onMenu: () => {} });
+    schermo.querySelector('.td-card .td-card-open').click();
+  },
+  SezioneRicerca() {
+    const schermo = mostraSchermo('schermoRicerca', 'ricerca');
+    ricercaTd(schermo, RICERCHE, {});
+    schermo.querySelector('.td-card .td-card-open').click();
+  },
+  SezioneProgetti() {
+    const schermo = mostraSchermo('schermoProgetti', 'progetti');
+    progettiTd(schermo, PROGETTI, { onApriSessione: () => {} });
+    schermo.querySelector('.td-card .td-card-open').click();
+  },
+  SezioneLibreria_elenco() {
+    /* C-bis: la stessa Libreria in vista RIGHE — la copertina del file sparisce, resta la riga. */
+    const schermo = mostraSchermo('schermoLibreria', 'libreria');
+    libreriaTd(schermo, LIBRERIA, { sessionId: 'fx-lab', notifica: notificaDiProva, onMenu: () => {} });
+    schermo.querySelector('[data-vista="elenco"]').click();
+  },
+  SezioneNote_elenco() {
+    const schermo = mostraSchermo('schermoNote', 'note');
+    montaNoteTd(schermo, NOTE, { adesso: ADESSO_NOTE });
+    schermo.querySelector('[data-vista="elenco"]').click();
+  },
+  SezioneElenco() {
+    /* La stessa sezione in vista ELENCO: è la seconda metà del segmento, e va guardata. */
+    const schermo = mostraSchermo('schermoMemoria', 'memoria');
+    memoriaTd(schermo, MEMORIE, {});
+    schermo.querySelector('[data-vista="elenco"]').click();
+  },
+  ThemeStudio() {
+    mostraSchermo('schermoImpostazioni', 'impostazioni');
+    apriStudioTemi();
+  },
+  ScorciatoiaTemi() {
+    const schermo = mostraSchermo('schermoImpostazioni', 'impostazioni');
+    montaScorciatoiaTemi(schermo);
+  },
+  ModaleConferma() {
+    mostraSchermo('schermoImpostazioni', 'impostazioni');
+    confermaModale({
+      titolo: 'Rimetto tutte le preferenze ai valori iniziali?',
+      domanda: 'Tema, densità, lingua, preferenze della chat e cartelle ricordate tornano come appena installato.',
+      conseguenza: 'Le conversazioni e i file NON vengono toccati.',
+      etichettaConferma: 'Ripristina',
+      onConferma: () => {},
+    });
+  },
+  ToastAnnulla() {
+    mostraSchermo('schermoChat', 'chat');
+    notificaDiProva('Rinominato', '«contratto-eventi.json» adesso si chiama «contratto-eventi-v2.json».', { tono: 'riuscito', azione: { etichetta: 'Annulla', esegui: () => {} } });
   },
   Toast() {
     const regione = document.querySelector('#regioneToast');

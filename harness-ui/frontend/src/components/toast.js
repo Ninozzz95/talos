@@ -54,6 +54,32 @@ export function messaggioUmano(messaggio) {
 }
 
 /**
+ * L'ANNULLAMENTO del mockup (`toast(text, undo)`, riga 6038) — lotto E, 11/09/2026.
+ *
+ * ⛔ Il mockup ha una cosa che qui mancava: un toast che porta con sé il modo di DISFARE ciò che
+ *   ha appena annunciato, e che per questo resta in video più a lungo (11.000 ms contro 6.200).
+ *   La pila di toast di questo file sapeva già mostrare un'azione (`opzioni.azione.esegui`): qui
+ *   sopra non si costruisce un secondo sistema, si dichiara la coppia di valori giusta.
+ *
+ * ⛔ Ricerca fatta PRIMA di scrivere, 11/09/2026 — NN/g «Confirmation Dialogs Can Prevent User
+ *   Errors» + Joel Pascual «A UX guide to destructive actions» (Bootcamp): quando l'azione è
+ *   REVERSIBILE la conferma va sostituita dall'annullamento, perché la conferma insegna la paura e
+ *   l'annullamento insegna la sicurezza. E designsystemproblems.com «Toast Notification
+ *   Accessibility» + WCAG 2.2.1 «Timing Adjustable»: un toast che porta un'azione deve restare
+ *   abbastanza da poterla leggere E premere — 11 s, più il timer che si ferma sotto il mouse e col
+ *   fuoco dentro (già in `creaPilaToast`).
+ *   ⇒ L'irreversibile (eliminare un file) resta con la sua conferma; il reversibile (rinominare)
+ *   passa di qui.
+ *
+ * @param {Function} esegui cosa fare per tornare indietro
+ * @param {{etichetta?:string, durata?:number}} [opzioni]
+ */
+export const DURATA_CON_ANNULLA = 11_000;
+export function azioneAnnulla(esegui, { etichetta = 'Annulla', durata = DURATA_CON_ANNULLA } = {}) {
+  return { tono: 'riuscito', durata, azione: { etichetta, dati: 'annulla', esegui } };
+}
+
+/**
  * Crea la scheda del toast, esattamente come nel mockup.
  * @param {{ id:string|number, titolo:string, messaggio?:string, tono?:keyof typeof TONI,
  *           azione?: { etichetta:string, dati?:string } }} dati
