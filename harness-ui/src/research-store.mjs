@@ -25,8 +25,11 @@
  * progetto, raggiungibile dalle sessioni future sullo STESSO progetto —
  * non in un limbo globale che nessun `library_list` di progetto
  * vedrebbe mai. Storage quindi accanto a `.harness-ui-library/`, dentro
- * il workspace: `.harness-ui-research/<id>.json`, un file per ricerca
- * (mai un array riscritto — la classe di bug già evitata altrove).
+ * il workspace: `.harness-ui-research/<id>/`, una CARTELLA per ricerca
+ * dall'11/09/2026 (era `<id>.json`, un file solo: vedi il blocco «L4 —
+ * DA UN FILE A UNA CARTELLA» più sotto per cosa c'è dentro adesso e per
+ * come si leggono ancora le ricerche nate nella forma vecchia). Mai un
+ * array riscritto — la classe di bug già evitata altrove.
  *
  * ⛔⛔⛔ Deliberatamente SENZA lo stato "sta girando ORA" come campo:
  * mobile stesso separa "il giornale" (`sources.list()`) da "sta girando
@@ -42,8 +45,9 @@
  * funzioni async con `deps` opzionali per i test, mai un vero
  * filesystem mockato altrove.
  */
+import { createHash, randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 export class ResearchStoreError extends Error {
   constructor(message, code = 'RESEARCH_INVALID') {
@@ -82,8 +86,155 @@ export const STATI_TERMINATI = Object.freeze([
   'giri-esauriti',
 ]);
 
-function percorsoVoce(cartella, id) {
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * L4 (11/09/2026) — DA UN FILE A UNA CARTELLA, E IL GIORNALE CHE LA RENDE RIPRENDIBILE
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * Prima di oggi una ricerca era UN file: `.harness-ui-research/<id>.json`, riscritto per intero
+ * a ogni aggiornamento. Va bene per quattro campi; non va bene per una cosa che costa denaro e
+ * che si deve poter RIPRENDERE dopo un riavvio, perché un file riscritto sopra sé stesso dice
+ * cosa crede sia vero adesso e non dice mai che un passo era finito prima che il processo
+ * morisse (`src/research/run.mjs`, testa del file: «la differenza fra pagare una ricerca una
+ * volta e pagarla due»).
+ *
+ * ⇒ La forma di §6.2 del disegno:
+ *
+ *     .harness-ui-research/<id>/
+ *       ├── meta.json        la voce (era `<id>.json`) — riscritta, ma SEMPRE in modo atomico
+ *       ├── giornale.jsonl   gli eventi del motore — SOLO append, mai riscritto
+ *       ├── piano.json       il piano approvato — riscritto in modo atomico
+ *       ├── fonti/<sha256>.txt  il testo TENUTO di una fonte — scritto UNA volta, mai sopra
+ *       └── rapporto.md      il rapporto depositato da `research_deposit` (già qui da L1)
+ *
+ * ⛔⛔ IL VINCOLO CHE COMANDA TUTTO: ciò che è costato denaro non si sovrascrive mai. Lezione
+ *   già pagata in questo repo — il rilancio che ha distrutto 56 righe e $2,64 con un
+ *   `writeFileSync(dove,'')` riuscito, senza un errore da nessuna parte.
+ *   ⇒ due regole, non una: (a) il giornale è **solo append**; (b) tutto il resto si scrive su
+ *   un temporaneo e poi si `rename`, così un crash a metà lascia il file PRECEDENTE intatto.
+ *
+ * ⭐ RICERCA WEB PRIMA DI SCRIVERE (obbligo owner) — `WebSearch` era esaurito (200/200, come per
+ *   L1-L3), quindi fonti primarie via `WebFetch`, lette l'11/09/2026:
+ *
+ *   - **LWN, «Ensuring data reaches disk»** (<https://lwn.net/Articles/457667/>): la sequenza
+ *     sicura è **cinque** passi, non due — «1. create a new temp file (on the same file
+ *     system!) 2. write data to the temp file 3. fsync() the temp file 4. rename the temp file
+ *     to the appropriate name 5. fsync() the containing directory». I due `fsync` fanno lavori
+ *     diversi: il primo porta i DATI su disco prima del rename, il secondo la VOCE di
+ *     directory. ⇒ `scriviAtomico` qui sotto fa 1-2-3-4; il punto 5 è dichiarato e **non
+ *     fatto**, vedi sotto il perché su Windows.
+ *   - **`rename(2)`** (<https://man7.org/linux/man-pages/man2/rename.2.html>): «If newpath
+ *     already exists, it will be atomically replaced, so that there is no point at which
+ *     another process attempting to access newpath will find it missing». È la garanzia su cui
+ *     poggia tutto: un lettore vede il vecchio o il nuovo, mai mezzo file.
+ *   - **`MoveFileExW` / `MOVEFILE_REPLACE_EXISTING`**
+ *     (<https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw>) +
+ *     **libuv `src/win/fs.c`** (letto alla fonte: `fs__rename` chiama
+ *     `MoveFileExW(..., MOVEFILE_REPLACE_EXISTING)`, e `fs__fsync` chiama `FlushFileBuffers`).
+ *     ⛔ **Questo è il vincolo che NON conoscevo e che la ricerca ha aggiunto**: la pagina
+ *     Windows promette che il contenuto viene **sostituito** «provided that security
+ *     requirements regarding ACLs are met» — NON usa mai la parola «atomically» come fa POSIX,
+ *     e non c'è modo di fare l'`fsync` della *directory* (su Windows non si apre una directory
+ *     come file descriptor). ⇒ il punto 5 di LWN qui non è disponibile, e lo scrivo invece di
+ *     lasciar credere che la ricetta sia applicata per intero. Ciò che resta garantito su
+ *     entrambe le piattaforme è quello che serve davvero al vincolo: **se il rename non
+ *     riesce, il file vecchio è ancora intatto** — ed è la prova che il test «crash fra
+ *     temporaneo e rename» misura.
+ *   - **GraphFlow** — [arXiv:2605.14968](https://arxiv.org/abs/2605.14968), 14/05/2026: «a
+ *     durable engine records outcomes in an **append-only event log** and can enforce contracts
+ *     at system boundaries, **supporting replay, retries, and audit**». ⇒ conferma la forma, e
+ *     nomina le tre cose che il giornale compra insieme: ripresa, ritentativi e verificabilità.
+ *   - **Verified Detection … in Multi-Agent LLM Systems** —
+ *     [arXiv:2606.17182](https://arxiv.org/abs/2606.17182), 15/06/2026: le macchine a esecuzione
+ *     durevole impongono la semantica «by **deterministic replay**». ⇒ è la ragione per cui il
+ *     giornale porta SOLO fatti (`resultRef`, non il carico) e per cui rigiocare due volte lo
+ *     stesso file deve dare lo stesso stato — provato, non dichiarato.
+ *
+ * ⭐ E dentro il PROPRIO codebase, prima ancora che fuori (lezione 06/09 «chi guarda da fuori
+ *   inventa quello che dentro aveva già»): `session-store.mjs` ha già il giornale JSONL con la
+ *   coda per percorso (W0-07, 04/09 — due `appendFile` concorrenti intrecciati su un record da
+ *   1,5 MiB) e la lettura che tollera l'ultima riga spezzata; `local-model-store.mjs`,
+ *   `harness-receipt-keypair.mjs` e `generated-image-store.mjs` hanno già temporaneo+`rename`.
+ *   Qui NON si inventa un sesto modo: si riusa la stessa forma, con le due differenze
+ *   dichiarate più sotto (`flush` sempre acceso; una riga rotta **in mezzo** si salta invece di
+ *   far fallire la lettura).
+ */
+
+/** La voce di metadata, dentro la cartella della ricerca. Era `<id>.json` accanto ad essa. */
+export const NOME_META = 'meta.json';
+/** Il giornale degli eventi — SOLO append. */
+export const NOME_GIORNALE = 'giornale.jsonl';
+/** Il piano approvato. */
+export const NOME_PIANO = 'piano.json';
+/** La cartella del testo TENUTO delle fonti, indirizzato dal contenuto. */
+export const CARTELLA_FONTI = 'fonti';
+
+/**
+ * ⭐ Il numero di formato vive sulla VOCE, non su un file a parte, e serve a una cosa sola: dire
+ * se una ricerca è nata prima o dopo il record recintato. `2` = nata con la cartella e col
+ * giornale; assente o `1` = migrata da `<id>.json`, cioè una ricerca il cui rapporto può essere
+ * solo prosa perché il record recintato non esisteva quando è stata fatta. Il cancello di
+ * consegna (`research-orchestrator.mjs`) legge questo campo per decidere se il **ripiego** sulla
+ * forma minima è lecito — mai per decidere se lo stato è `done`.
+ */
+export const FORMATO_CORRENTE = 2;
+
+/** La voce, nella forma di oggi: `<progetto>/.harness-ui-research/<id>/meta.json`. */
+export function percorsoMeta(cartella, id) {
+  return join(cartella, CARTELLA_RICERCA, id, NOME_META);
+}
+
+/** La voce, nella forma di ieri: `<progetto>/.harness-ui-research/<id>.json`. Si legge ancora. */
+export function percorsoVoceLegacy(cartella, id) {
   return join(cartella, CARTELLA_RICERCA, `${id}.json`);
+}
+
+export function percorsoGiornale(cartella, id) {
+  return join(cartella, CARTELLA_RICERCA, id, NOME_GIORNALE);
+}
+
+export function percorsoPiano(cartella, id) {
+  return join(cartella, CARTELLA_RICERCA, id, NOME_PIANO);
+}
+
+export function cartellaDelleFonti(cartella, id) {
+  return join(cartella, CARTELLA_RICERCA, id, CARTELLA_FONTI);
+}
+
+/**
+ * ⭐⭐⭐ LA SCRITTURA CHE NON PUÒ DISTRUGGERE QUELLA DI PRIMA.
+ *
+ * Temporaneo **nella stessa cartella** (LWN: «on the same file system!» — un temporaneo in
+ * `%TEMP%` renderebbe il `rename` una copia, che non è atomica), `flush:true` per portare i byte
+ * su disco prima del rename (LWN passo 3; su Node è `FlushFileBuffers`/`fsync` sotto), poi
+ * `rename`.
+ *
+ * ⛔ Il `catch` **non degrada in silenzio**: pulisce il temporaneo e **rilancia**. Un temporaneo
+ *   lasciato lì sporcherebbe la cartella della ricerca a ogni guasto, e un errore inghiottito
+ *   qui vorrebbe dire «salvato» su una voce mai salvata — la bugia esatta che L2 ha tolto dallo
+ *   stato. (Lezione 10/09: «il catch GIUSTO nasconde il bug SBAGLIATO».)
+ *
+ * ⛔ Il punto 5 di LWN (`fsync` della directory) **non c'è**, ed è dichiarato: su Windows non si
+ *   apre una directory per farne il flush, e questo prodotto gira lì. Conseguenza onesta: dopo
+ *   un crash del SISTEMA (non del processo) la voce di directory potrebbe non essere ancora
+ *   durevole. Il file vecchio resta comunque intatto: nessuna perdita di ciò che era già pagato.
+ */
+export async function scriviAtomico(percorso, contenuto, deps = {}) {
+  const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
+  const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
+  const renameFn = deps.renameFn ?? fsp.rename;
+  const rmFn = deps.rmFn ?? fsp.rm;
+  const randomUUIDFn = deps.randomUUIDFn ?? randomUUID;
+  await mkdirFn(dirname(percorso), { recursive: true });
+  const temporaneo = `${percorso}.tmp-${process.pid}-${randomUUIDFn()}`;
+  try {
+    await writeFileFn(temporaneo, contenuto, { encoding: 'utf8', flush: true });
+    await renameFn(temporaneo, percorso);
+  } catch (errore) {
+    try { await rmFn(temporaneo, { force: true }); } catch { /* il temporaneo può non essere mai nato: pulire è un di più, non una condizione. */ }
+    throw errore;
+  }
+  return percorso;
 }
 
 /**
@@ -96,37 +247,65 @@ export async function elencaRicerche({ cartella }, deps = {}) {
   const readdirFn = deps.readdirFn ?? fsp.readdir;
   const readFileFn = deps.readFileFn ?? fsp.readFile;
   const cartellaRicerca = join(cartella, CARTELLA_RICERCA);
-  let file;
+  let voci;
   try {
-    file = await readdirFn(cartellaRicerca);
+    voci = await readdirFn(cartellaRicerca, { withFileTypes: true });
   } catch {
     return [];
   }
-  const ricerche = [];
-  for (const nomeFile of file) {
-    if (!nomeFile.endsWith('.json')) continue;
+  /*
+   * ⭐ L4 — DUE FORME SULLO STESSO DISCO, e l'elenco le vede entrambe.
+   * ⛔ La chiave è l'ID, non il file: durante una migrazione interrotta (meta.json già scritto,
+   *   `<id>.json` non ancora tolto) la stessa ricerca esiste in due posti, e mostrarla due volte
+   *   sarebbe un elenco che mente. Vince la CARTELLA — è la forma nuova, ed è quella che l'ultima
+   *   scrittura ha prodotto.
+   */
+  const perId = new Map();
+  for (const voce of voci) {
+    const nome = typeof voce === 'string' ? voce : voce.name;
+    const eCartella = typeof voce === 'string' ? false : voce.isDirectory();
+    const percorso = eCartella ? join(cartellaRicerca, nome, NOME_META) : join(cartellaRicerca, nome);
+    if (!eCartella && !nome.endsWith('.json')) continue;
+    const id = eCartella ? nome : nome.slice(0, -'.json'.length);
+    if (!eCartella && perId.has(id)) continue; // la cartella, già letta, vince sul file legacy.
     try {
-      const grezzo = await readFileFn(join(cartellaRicerca, nomeFile), 'utf8');
-      ricerche.push(JSON.parse(grezzo));
+      const letta = JSON.parse(await readFileFn(percorso, 'utf8'));
+      if (eCartella || !perId.has(id)) perId.set(id, letta);
     } catch {
-      // ⛔ una voce corrotta non impedisce di vedere le altre — stesso principio di leggiRegistro (session-store.mjs) su un'ultima riga tollerata.
+      // ⛔ una voce corrotta (o una cartella senza meta.json: una ricerca nuova può avere solo
+      // il rapporto se la metadata non è ancora stata migrata) non impedisce di vedere le altre
+      // — stesso principio di leggiRegistro (session-store.mjs) su un'ultima riga tollerata.
     }
   }
+  const ricerche = [...perId.values()];
   ricerche.sort((a, b) => String(b.avviataAlle || '').localeCompare(String(a.avviataAlle || '')));
   return ricerche;
 }
 
-/** @returns {Promise<object|null>} — null se l'id non esiste. */
+/**
+ * ⭐ L4 — legge la voce nella forma di oggi (`<id>/meta.json`) e, se non c'è, in quella di ieri
+ * (`<id>.json`). **Leggere non migra**: la migrazione costa una scrittura, e una scrittura su
+ * venti voci solo per disegnare un elenco sarebbe esattamente la migrazione «in blocco» che il
+ * disegno vieta. Si migra al primo tocco che scrive — vedi `migraRicerca`.
+ *
+ * @returns {Promise<object|null>} — null se l'id non esiste in nessuna delle due forme.
+ */
 export async function leggiRicerca({ cartella, id }, deps = {}) {
   const readFileFn = deps.readFileFn ?? fsp.readFile;
-  let grezzo;
-  try {
-    grezzo = await readFileFn(percorsoVoce(cartella, id), 'utf8');
-  } catch (errore) {
-    if (errore?.code === 'ENOENT') return null;
-    throw new ResearchStoreError(`${id}: metadata presente ma illeggibile: ${errore.message}`, 'RESEARCH_READ_FAILED');
+  for (const percorso of [percorsoMeta(cartella, id), percorsoVoceLegacy(cartella, id)]) {
+    let grezzo;
+    try {
+      grezzo = await readFileFn(percorso, 'utf8');
+    } catch (errore) {
+      // ⛔ Non solo ENOENT: su Windows chiedere `<id>/meta.json` quando `<id>` è un FILE dà
+      //   ENOTDIR/ENOENT a seconda del punto, e su POSIX dà ENOTDIR. Entrambi vogliono dire «in
+      //   questa forma non c'è», non «il disco è rotto»: si prova l'altra forma.
+      if (errore?.code === 'ENOENT' || errore?.code === 'ENOTDIR') continue;
+      throw new ResearchStoreError(`${id}: metadata presente ma illeggibile: ${errore.message}`, 'RESEARCH_READ_FAILED');
+    }
+    return JSON.parse(grezzo);
   }
-  return JSON.parse(grezzo);
+  return null;
 }
 
 /**
@@ -145,13 +324,25 @@ export async function creaRicerca({ cartella, id, domanda, profondita, padreId =
   if (typeof domanda !== 'string' || domanda.trim().length === 0) {
     throw new ResearchStoreError('Una ricerca vuole una domanda', 'RESEARCH_INVALID');
   }
-  const cartellaRicerca = join(cartella, CARTELLA_RICERCA);
+  if (!idRicercaValido(id)) {
+    // ⛔ L4 — l'id è diventato un NOME DI CARTELLA: quello che prima poteva al più sporcare un
+    //   nome di file adesso può attraversare il disco. Il controllo c'era già a valle (nel
+    //   kernel, per il deposito); qui è a monte, sul dato, dove nasce.
+    throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+  }
+  const cartellaRicerca = cartellaDellaRicerca(cartella, id);
   await mkdirFn(cartellaRicerca, { recursive: true });
   const adesso = new Date().toISOString();
   const voce = {
     id, domanda: domanda.trim(), profondita: profondita || 'deep',
     titolo: null, avviataAlle: adesso, aggiornataAlle: adesso,
     terminata: null, reportLibraryId: null,
+    /*
+     * ⭐ L4 — il numero di formato. `2` = nata nella cartella, col giornale. Una voce senza
+     * questo campo è nata prima dell'11/09 e il suo rapporto non può contenere il record
+     * recintato: è l'unico caso in cui il cancello accetta il ripiego sulla forma minima.
+     */
+    formato: FORMATO_CORRENTE,
     /*
      * ⭐ L1/§6.6 (11/09) — DUE campi nuovi, entrambi `null` per ogni voce nata prima di oggi
      * (il lettore li normalizza, vedi `research-orchestrator.elenca`): non serve nessuna
@@ -169,8 +360,52 @@ export async function creaRicerca({ cartella, id, domanda, profondita, padreId =
     padreId: typeof padreId === 'string' && padreId.length > 0 ? padreId : null,
     nome: typeof nome === 'string' && nome.trim().length > 0 ? nome.trim() : null,
   };
-  await writeFileFn(percorsoVoce(cartella, id), JSON.stringify(voce, null, 2), 'utf8');
+  // ⛔ L4 — atomica anche alla nascita: una voce scritta a metà è una ricerca che l'elenco non
+  //   vede più, e la sessione che la esegue sta già spendendo denaro.
+  await scriviAtomico(percorsoMeta(cartella, id), JSON.stringify(voce, null, 2), { ...deps, writeFileFn, mkdirFn });
   return voce;
+}
+
+/**
+ * ⭐⭐⭐ L4 — LA MIGRAZIONE, AL PRIMO TOCCO CHE SCRIVE. Mai in blocco.
+ *
+ * Una ricerca vecchia vive in `<id>.json`. Quando qualcosa la aggiorna (e solo allora) la voce
+ * passa in `<id>/meta.json`, e il file vecchio si toglie **dopo** che il nuovo è sul disco.
+ *
+ * ⛔ L'ordine non è arbitrario ed è tutto il punto: se il processo muore fra le due operazioni,
+ *   sul disco ci sono ENTRAMBE le copie — `elencaRicerche` dà la precedenza alla cartella,
+ *   quindi la ricerca appare una volta sola e con i dati NUOVI. L'ordine opposto (togliere prima
+ *   di scrivere) avrebbe una finestra in cui la ricerca non esiste: è la classe di guasto di
+ *   `writeFileSync(dove,'')`, e non si ripete.
+ * ⛔ `formato` resta **assente** su ciò che è migrato, e non è una dimenticanza: quella voce è
+ *   nata quando il record recintato non esisteva, e il cancello di consegna deve continuare a
+ *   saperlo per sempre. Un `formato: 2` messo qui trasformerebbe una migrazione di contenitore
+ *   in una promessa sul contenuto.
+ *
+ * @returns {Promise<object|null>} — la voce migrata, o `null` se non c'era niente da migrare.
+ */
+export async function migraRicerca({ cartella, id }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const rmFn = deps.rmFn ?? fsp.rm;
+  if (!idRicercaValido(id)) return null;
+  const legacy = percorsoVoceLegacy(cartella, id);
+  let grezzo;
+  try {
+    grezzo = await readFileFn(legacy, 'utf8');
+  } catch {
+    return null; // niente forma vecchia: o è già migrata, o non è mai esistita.
+  }
+  let voce;
+  try {
+    voce = JSON.parse(grezzo);
+  } catch (errore) {
+    // ⛔ Un `<id>.json` illeggibile NON si cancella e NON si sostituisce: è l'unica copia di
+    //   qualcosa che è costato denaro. Si dice, e si lascia dov'è.
+    throw new ResearchStoreError(`${id}: la voce da migrare è illeggibile, lasciata dov'era: ${errore.message}`, 'RESEARCH_READ_FAILED');
+  }
+  await scriviAtomico(percorsoMeta(cartella, id), JSON.stringify({ ...voce, migrataDa: `${id}.json` }, null, 2), deps);
+  await rmFn(legacy, { force: true });
+  return { ...voce, migrataDa: `${id}.json` };
 }
 
 /**
@@ -187,15 +422,14 @@ export async function creaRicerca({ cartella, id, domanda, profondita, padreId =
  * la macchina degli stati vive tutta in `research-orchestrator.mjs`, in un posto solo.
  */
 export async function aggiornaRicerca({ cartella, id, titolo, terminata, reportLibraryId, conclusaAlle, ultimoMessaggio, motivoDettaglio }, deps = {}) {
-  const readFileFn = deps.readFileFn ?? fsp.readFile;
-  const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
-  let voce;
-  try {
-    voce = JSON.parse(await readFileFn(percorsoVoce(cartella, id), 'utf8'));
-  } catch (errore) {
-    if (errore?.code === 'ENOENT') return null;
-    throw new ResearchStoreError(`${id}: metadata presente ma illeggibile: ${errore.message}`, 'RESEARCH_READ_FAILED');
-  }
+  /*
+   * ⭐⭐⭐ L4 — QUESTO È «IL PRIMO TOCCO». Un aggiornamento è una scrittura: se la voce è ancora
+   * nella forma vecchia, qui si migra — una volta, per quella ricerca, e solo perché stavamo
+   * comunque per scrivere. Nessun costo aggiunto a chi legge.
+   */
+  await migraRicerca({ cartella, id }, deps);
+  const voce = await leggiRicerca({ cartella, id }, deps);
+  if (!voce) return null;
   const aggiornata = {
     ...voce,
     titolo: titolo !== undefined ? titolo : voce.titolo,
@@ -216,7 +450,7 @@ export async function aggiornaRicerca({ cartella, id, titolo, terminata, reportL
     motivoDettaglio: motivoDettaglio !== undefined ? motivoDettaglio : (voce.motivoDettaglio ?? null),
     aggiornataAlle: new Date().toISOString(),
   };
-  await writeFileFn(percorsoVoce(cartella, id), JSON.stringify(aggiornata, null, 2), 'utf8');
+  await scriviAtomico(percorsoMeta(cartella, id), JSON.stringify(aggiornata, null, 2), deps);
   return aggiornata;
 }
 
@@ -230,15 +464,20 @@ export async function aggiornaRicerca({ cartella, id, titolo, terminata, reportL
  * "It may already be gone").
  */
 export async function eliminaRicerca({ cartella, id }, deps = {}) {
-  const readFileFn = deps.readFileFn ?? fsp.readFile;
   const rmFn = deps.rmFn ?? fsp.rm;
-  try {
-    await readFileFn(percorsoVoce(cartella, id), 'utf8');
-  } catch (errore) {
-    if (errore?.code === 'ENOENT') return null;
-    throw new ResearchStoreError(`${id}: metadata presente ma illeggibile: ${errore.message}`, 'RESEARCH_READ_FAILED');
-  }
-  await rmFn(percorsoVoce(cartella, id), { force: true });
+  if (!idRicercaValido(id)) return null;
+  const esistente = await leggiRicerca({ cartella, id }, deps);
+  if (!esistente) return null;
+  /*
+   * ⭐ L4 — adesso una ricerca è una CARTELLA: si toglie tutta (giornale, piano, fonti,
+   * rapporto), non solo la voce. ⛔ Ed è una cancellazione CHIESTA da una persona (o dal
+   * modello via `research_delete`), non un effetto collaterale: è l'unico posto di questo file
+   * dove qualcosa di pagato sparisce, e sparisce perché qualcuno l'ha ordinato.
+   * ⛔ Si toglie anche il `<id>.json` di una ricerca mai migrata: altrimenti l'elenco
+   *   continuerebbe a mostrare una ricerca dichiarata eliminata.
+   */
+  await rmFn(cartellaDellaRicerca(cartella, id), { recursive: true, force: true });
+  await rmFn(percorsoVoceLegacy(cartella, id), { force: true });
   return { id };
 }
 
@@ -331,7 +570,9 @@ export async function scriviRapporto({ cartella, id, testo }, deps = {}) {
     throw new ResearchStoreError(`${percorso} non risolve dentro ${radice}`, 'RESEARCH_INVALID');
   }
   await mkdirFn(radice, { recursive: true });
-  await writeFileFn(percorso, testo, 'utf8');
+  // ⛔ L4 — atomica: un rapporto è il prodotto per cui la ricerca è stata pagata. Se la scrittura
+  //   muore a metà, quello che c'era prima (un deposito precedente) resta leggibile.
+  await scriviAtomico(percorso, testo, { ...deps, mkdirFn, writeFileFn });
   return { percorso, byte: Buffer.byteLength(testo, 'utf8') };
 }
 
@@ -411,4 +652,250 @@ export function rileggiRapportoMinimo(testo) {
   if (affermazioni === 0) return { ok: false, intestazione, affermazioni, fonti, motivo: 'il rapporto non contiene nessuna affermazione' };
   if (fonti.length === 0) return { ok: false, intestazione, affermazioni, fonti, motivo: 'il rapporto non elenca nessuna fonte' };
   return { ok: true, intestazione, affermazioni, fonti, motivo: null };
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * L4 — IL GIORNALE, IL PIANO E LE FONTI TENUTE
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
+/**
+ * ⭐⭐⭐ LA CODA PER PERCORSO — copiata, non reinventata, da `session-store.mjs` (W0-07, 04/09).
+ *
+ * ⛔ Perché serve, e non è prudenza teorica: nello store dell'owner il file `b7b1b7d2…` (31/08)
+ *   aveva quattro righe rotte, la prima spezzata a **1.572.866 byte, esattamente 1,5 MiB**,
+ *   perché due `appendFile` concorrenti si erano intrecciati. `O_APPEND` è atomico per SINGOLA
+ *   chiamata di scrittura: un record grande viene spezzato in più chiamate, ed è lì che due
+ *   scrittori si infilano l'uno dentro l'altro. ⇒ le scritture sullo STESSO file si mettono in
+ *   fila; file diversi non si aspettano (la chiave è il percorso), così una ricerca lenta non
+ *   rallenta le altre.
+ * ⛔ Un errore su una scrittura non blocca la coda: la successiva parte comunque.
+ */
+const codeDelGiornale = new Map();
+
+/**
+ * ⭐⭐⭐ UN EVENTO NEL GIORNALE — SOLO APPEND, MAI UNA RISCRITTURA.
+ *
+ * `evento` è uno degli undici che `src/research/run.mjs` conosce (`TalosResearchEvent`): questo
+ * file non li interpreta, li mette a registro. ⛔ Il giornale porta FATTI e RIFERIMENTI, mai il
+ * carico: il testo di una pagina sta in `fonti/<sha256>.txt` e nel giornale ne compare il nome
+ * (`resultRef`). Un giornale che porta cento kilobyte per riga è un giornale che nessuno
+ * rigioca.
+ *
+ * ⭐ `flush: true` di default — ed è la DIFFERENZA dichiarata rispetto a `session-store.mjs`,
+ *   che di proposito non fa `fsync` a ogni riga. La ragione è che le due cose non hanno lo
+ *   stesso valore: là ogni riga è un evento di interfaccia fra migliaia, qui una riga è un passo
+ *   di ricerca PAGATO, e sono pochi per corsa. La ricerca del 04/09 lo diceva già e allora era
+ *   restato debito: «una scrittura riuscita vive nella cache del kernel finché non c'è un
+ *   `fsync`». Qui il debito si chiude, perché qui si può permettere.
+ *
+ * @returns {Promise<void>}
+ */
+export async function accodaEvento({ cartella, id, evento, durevole = true }, deps = {}) {
+  const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
+  const appendFileFn = deps.appendFileFn ?? fsp.appendFile;
+  if (!idRicercaValido(id)) throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+  if (!evento || typeof evento !== 'object' || typeof evento.kind !== 'string' || evento.kind.length === 0) {
+    throw new ResearchStoreError('Un evento del giornale vuole un `kind`', 'RESEARCH_INVALID');
+  }
+  const percorso = percorsoGiornale(cartella, id);
+  // ⛔ Serializzato SUBITO, non dentro la coda: `evento` potrebbe cambiare mentre aspetta il turno.
+  const riga = `${JSON.stringify(evento)}\n`;
+  const precedente = codeDelGiornale.get(percorso) ?? Promise.resolve();
+  const corrente = precedente.catch(() => {}).then(async () => {
+    await mkdirFn(dirname(percorso), { recursive: true });
+    await appendFileFn(percorso, riga, durevole ? { encoding: 'utf8', flush: true } : 'utf8');
+  });
+  codeDelGiornale.set(percorso, corrente);
+  corrente.catch(() => {}).finally(() => {
+    if (codeDelGiornale.get(percorso) === corrente) codeDelGiornale.delete(percorso);
+  });
+  return corrente;
+}
+
+/**
+ * ⭐⭐⭐ IL GIORNALE RILETTO — E NON SI RIFIUTA MAI DI CARICARE.
+ *
+ * ⛔ Una riga illeggibile si **salta**, ovunque sia, e si conta. È una deviazione VOLUTA da
+ *   `session-store.leggiRegistro`, che invece lancia su una riga rotta che non sia l'ultima, e
+ *   il motivo è scritto nella testa di `src/research/run.mjs`: «l'unica cosa che non deve fare
+ *   mai è rifiutarsi di caricare: un giro che non si può rigiocare è un giro il cui lavoro
+ *   pagato è perso». Là il file è una trascrizione da mostrare; qui è la prova di ciò che è
+ *   stato speso, e perderla tutta per una riga è il guasto peggiore dei due.
+ * ⛔ `righeSaltate` non è decorazione: senza quel numero «il giornale si è caricato» e «il
+ *   giornale si è caricato per intero» sarebbero la stessa frase, e non lo sono.
+ *
+ * @returns {Promise<{eventi: object[], righeSaltate: number, byte: number}>}
+ */
+export async function leggiGiornale({ cartella, id }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const vuoto = { eventi: [], righeSaltate: 0, byte: 0 };
+  if (!idRicercaValido(id)) return vuoto;
+  let testo;
+  try {
+    testo = await readFileFn(percorsoGiornale(cartella, id), 'utf8');
+  } catch {
+    return vuoto; // nessun giornale è uno stato onesto: una ricerca vecchia non ne ha mai avuto uno.
+  }
+  const eventi = [];
+  let righeSaltate = 0;
+  for (const riga of testo.split('\n')) {
+    if (riga.trim() === '') continue;
+    try {
+      const letto = JSON.parse(riga);
+      if (letto && typeof letto === 'object' && typeof letto.kind === 'string') eventi.push(letto);
+      else righeSaltate += 1;
+    } catch {
+      righeSaltate += 1; // riga mozzata da un processo morto a metà `appendFile`, o rumore: si salta.
+    }
+  }
+  return { eventi, righeSaltate, byte: Buffer.byteLength(testo, 'utf8') };
+}
+
+/** Il piano approvato, scritto atomicamente. `piano` è `TalosResearchBranch[]` (vedi `run.mjs`). */
+export async function scriviPiano({ cartella, id, piano }, deps = {}) {
+  if (!idRicercaValido(id)) throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+  await scriviAtomico(percorsoPiano(cartella, id), JSON.stringify(piano, null, 2), deps);
+  return percorsoPiano(cartella, id);
+}
+
+/** @returns {Promise<object|null>} — `null` se non c'è (o è illeggibile): un piano assente non è un guasto. */
+export async function leggiPiano({ cartella, id }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  if (!idRicercaValido(id)) return null;
+  try {
+    return JSON.parse(await readFileFn(percorsoPiano(cartella, id), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ⭐⭐⭐ IL TESTO TENUTO DI UNA FONTE, INDIRIZZATO DAL CONTENUTO.
+ *
+ * Il nome del file è lo `sha256` del testo. Tre cose vengono gratis, e nessuna è un vezzo:
+ *  1. **due linee d'indagine che leggono la stessa pagina la tengono una volta sola** — è il
+ *     caso normale (§6.2, e la cache del fetch di L6 punta allo stesso risparmio);
+ *  2. **niente si sovrascrive mai**: stesso contenuto ⇒ stesso nome ⇒ la seconda scrittura non
+ *     ha niente da cambiare, e si salta. È il vincolo «ciò che è costato denaro» applicato
+ *     senza dover ricordare di applicarlo;
+ *  3. il `resultRef` del giornale è un nome **stabile e verificabile**: chi rilegge può
+ *     ricalcolare l'impronta e accorgersi se il file è stato manomesso.
+ *
+ * @returns {Promise<{ref:string, percorso:string, byte:number, giaPresente:boolean}>}
+ */
+export async function scriviFonte({ cartella, id, testo }, deps = {}) {
+  const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
+  const statFn = deps.statFn ?? fsp.stat;
+  if (!idRicercaValido(id)) throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+  if (typeof testo !== 'string' || testo.length === 0) {
+    throw new ResearchStoreError('Una fonte tenuta vuole del testo', 'RESEARCH_INVALID');
+  }
+  const impronta = createHash('sha256').update(testo, 'utf8').digest('hex');
+  const ref = `${CARTELLA_FONTI}/${impronta}.txt`;
+  const percorso = join(cartellaDelleFonti(cartella, id), `${impronta}.txt`);
+  await mkdirFn(cartellaDelleFonti(cartella, id), { recursive: true });
+  try {
+    await statFn(percorso);
+    return { ref, percorso, byte: Buffer.byteLength(testo, 'utf8'), giaPresente: true };
+  } catch { /* non c'è ancora: si scrive. */ }
+  await scriviAtomico(percorso, testo, deps);
+  return { ref, percorso, byte: Buffer.byteLength(testo, 'utf8'), giaPresente: false };
+}
+
+/**
+ * Rilegge una fonte tenuta dal suo `ref` (`fonti/<sha256>.txt`).
+ *
+ * ⛔ Il `ref` arriva dal giornale, cioè da un file su disco che qualcuno potrebbe aver
+ *   modificato: si accetta **solo** la forma esatta `fonti/<64 esadecimali>.txt`, e in più il
+ *   percorso risolto si ricontrolla con `dentroLaRadice`. Due difese indipendenti sullo stesso
+ *   confine, come già per il deposito del rapporto (L1) — mai una sola.
+ *
+ * @returns {Promise<string|null>}
+ */
+export async function leggiFonte({ cartella, id, ref }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  if (!idRicercaValido(id)) return null;
+  const combacia = typeof ref === 'string' ? ref.match(/^fonti\/([0-9a-f]{64})\.txt$/) : null;
+  if (!combacia) return null;
+  const percorso = join(cartellaDelleFonti(cartella, id), `${combacia[1]}.txt`);
+  if (!dentroLaRadice(cartellaDellaRicerca(cartella, id), percorso)) return null;
+  try {
+    return await readFileFn(percorso, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+/** I `ref` delle fonti tenute, in ordine stabile. `[]` se non ce ne sono (mai un errore). */
+export async function elencaFonti({ cartella, id }, deps = {}) {
+  const readdirFn = deps.readdirFn ?? fsp.readdir;
+  if (!idRicercaValido(id)) return [];
+  try {
+    const nomi = await readdirFn(cartellaDelleFonti(cartella, id));
+    return nomi.filter((n) => /^[0-9a-f]{64}\.txt$/.test(n)).sort().map((n) => `${CARTELLA_FONTI}/${n}`);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * ⭐ L4 — L'IMPRONTA DEL RAPPORTO, per la cache dell'elenco.
+ *
+ * `elenca()` adesso rilegge il rapporto di ogni voce `done` (la lista mentiva: mostrava
+ * «Conclusa» dove il dettaglio diceva «senza rapporto»). Venti letture a ogni apertura della
+ * sezione però si pagano, e si pagherebbero anche quando non è cambiato niente: questa funzione
+ * dà `mtimeMs` e `size`, che sono la chiave con cui il lettore sa se può riusare il giudizio già
+ * dato. ⛔ `null` se il rapporto non c'è: un'assenza non è un guasto, ed è essa stessa una
+ * risposta valida da mettere in cache.
+ *
+ * @returns {Promise<{mtimeMs:number, size:number}|null>}
+ */
+export async function statRapporto({ cartella, id }, deps = {}) {
+  const statFn = deps.statFn ?? fsp.stat;
+  if (!idRicercaValido(id)) return null;
+  try {
+    const s = await statFn(percorsoRapporto(cartella, id));
+    return { mtimeMs: Number(s.mtimeMs), size: Number(s.size) };
+  } catch {
+    return null;
+  }
+}
+
+/** L'istantanea della cache del fetch, accanto al giornale. */
+export const NOME_CACHE_FETCH = 'cache.json';
+
+export function percorsoCacheFetch(cartella, id) {
+  return join(cartella, CARTELLA_RICERCA, id, NOME_CACHE_FETCH);
+}
+
+/**
+ * ⭐⭐⭐ L4 + L6 — L'ISTANTANEA DELLA CACHE DEL FETCH, SU DISCO.
+ *
+ * `src/research/fetch-cache.mjs` produce con `snapshot()` un oggetto JSON-serializzabile e
+ * dichiara, nella sua stessa doc, che «questo modulo non scrive niente su disco»: la scrittura
+ * è di chi persiste, cioè di qui. ⛔ Atomica come tutto il resto — un'istantanea scritta a metà
+ * farebbe ripagare pagine già pagate, che è esattamente il costo che esiste per evitare.
+ */
+export async function scriviIstantaneaCache({ cartella, id, istantanea }, deps = {}) {
+  if (!idRicercaValido(id)) throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+  await scriviAtomico(percorsoCacheFetch(cartella, id), JSON.stringify(istantanea), deps);
+  return percorsoCacheFetch(cartella, id);
+}
+
+/**
+ * @returns {Promise<object|null>} — `null` se non c'è o non è JSON.
+ * ⛔ Non valida la VERSIONE: quella la controlla `restore()` nel modulo che la possiede, e
+ *   duplicare qui il numero di versione creerebbe due posti che divergono. Qui si dice solo se
+ *   c'è qualcosa di leggibile; il giudizio su cosa farne è di chi sa cos'è.
+ */
+export async function leggiIstantaneaCache({ cartella, id }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  if (!idRicercaValido(id)) return null;
+  try {
+    return JSON.parse(await readFileFn(percorsoCacheFetch(cartella, id), 'utf8'));
+  } catch {
+    return null;
+  }
 }

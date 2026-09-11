@@ -60,7 +60,137 @@
  * Restano entrambi iniettabili (vedi `creaResearchOrchestrator`), quindi i test non toccano
  * mai un filesystem — stessa disciplina di tutte le altre `*Fn` di questo modulo.
  */
-import { leggiRapporto, rileggiRapportoMinimo } from './research-store.mjs';
+import {
+  accodaEvento, elencaFonti, leggiGiornale, leggiIstantaneaCache, leggiPiano, leggiRapporto,
+  rileggiRapportoMinimo, scriviIstantaneaCache, statRapporto,
+} from './research-store.mjs';
+import { talosResearchFetchCache } from './research/fetch-cache.mjs';
+/*
+ * ⭐⭐⭐ L4 (11/09/2026) — IL MOTORE PORTATO DAL MOBILE ENTRA IN SCENA.
+ *
+ * Fino a ieri `src/research/` era un albero nuovo che **nessuno chiamava** (L3a/L3b lo dicono
+ * entrambi, nel loro «cosa NON ho verificato»): venti file, 275 test verdi, zero chiamanti.
+ * Queste tre righe sono il primo aggancio, e agganciano esattamente due cose:
+ *
+ *   `report.mjs`       il record recintato ```talos-research-report — il cancello di consegna
+ *                      smette di giudicare la PROSA e comincia a giudicare il RECORD;
+ *   `run.mjs`          il replay del giornale — la ripresa smette di dipendere da
+ *                      `voce.messaggiFinali` (che un riavvio cancella) e riparte dal disco;
+ *   `verification.mjs` il bilancio delle affermazioni, che è ciò con cui la riga in elenco
+ *                      guida (§6.7: mai col conteggio delle fonti).
+ *
+ * ⛔ Nessuno di questi import entra nel kernel: `talosHarness.mjs` importa TRE costanti da
+ *   `research-store.mjs` e niente altro, e `research-store.mjs` continua a non importare nulla
+ *   da `src/research/`. Il motore vive qui, nel direttore — non nel cancello di sicurezza.
+ */
+import { talosResearchParseReport } from './research/report.mjs';
+import {
+  talosResearchIsTerminal, talosResearchNextStep, talosResearchRecover,
+  talosResearchReplay, talosResearchSpent, talosResearchWorkLeft,
+} from './research/run.mjs';
+import { talosResearchVerifiedStanding } from './research/verification.mjs';
+
+/**
+ * ⭐⭐⭐ L4 §6.5 — IL CANCELLO DI CONSEGNA, SUL RECORD VERO.
+ *
+ * L2 controllava la PROSA: un titolo, una riga di testo, un URL sotto «## Fonti». Bastava a
+ * respingere la scusa da 290 byte dell'11/09 — ed era dichiaratamente un ripiego, perché il
+ * record recintato non esisteva ancora nel repo. Adesso esiste (`src/research/report.mjs`,
+ * portato dal mobile), e il cancello guarda quello.
+ *
+ * ⛔ La differenza non è di severità, è di NATURA. La prosa dice «qui c'è un URL»; il record
+ *   dice **quale affermazione** poggia su **quale fonte**, con quale passaggio e — quando un
+ *   giudice c'è stato — con quale verdetto. Solo la seconda si può rileggere un mese dopo e
+ *   ricontrollare. `report.mjs` lo scrive nella sua testa: «un prodotto che conserva gli URL
+ *   non può farlo a nessun prezzo, perché la prova che ha controllato non c'è più».
+ *
+ * ⛔ `talosResearchParseReport` torna `null` e non un recupero parziale — è il contratto del
+ *   mobile, conservato byte per byte dal porto: «un rapporto letto a metà mostrerebbe verdetti
+ *   accanto ad affermazioni a cui non appartengono, e un segno di verifica sbagliato è peggio
+ *   di nessuno». Qui `null` diventa «non rilegge», mai «va bene lo stesso».
+ *
+ * ⛔⛔ IL RIPIEGO, e perché è STRETTO. Le ricerche nate prima dell'11/09 non possono avere il
+ *   record: quando sono state fatte non esisteva. Respingerle adesso vorrebbe dire timbrare
+ *   «senza rapporto» su lavoro vero già pagato, cioè l'errore opposto e speculare a quello che
+ *   L2 ha tolto. ⇒ per quelle, e SOLO per quelle (`ripiegoConsentito`, che il chiamante ricava
+ *   dal campo `formato` della voce), vale ancora la forma minima — e l'esito lo **dichiara**
+ *   con `ripiego:true`, invece di far passare due controlli diversi sotto lo stesso `ok`.
+ *
+ * @param {string} testo
+ * @param {{ripiegoConsentito?: boolean}} [opzioni]
+ */
+export function rileggiRapportoRecintato(testo, { ripiegoConsentito = false } = {}) {
+  const vuoto = { ok: false, intestazione: null, affermazioni: 0, fonti: [], motivo: null, bilancio: null, proveDistinte: 0, ripiego: false, record: null };
+  if (typeof testo !== 'string' || testo.trim().length === 0) {
+    return { ...vuoto, motivo: 'il rapporto è vuoto' };
+  }
+  const record = talosResearchParseReport(testo);
+  if (record) {
+    const fonti = record.sources.map((f) => f?.url).filter((u) => typeof u === 'string' && u.trim().length > 0);
+    const comune = {
+      intestazione: typeof record.question === 'string' && record.question.trim() ? record.question.trim() : null,
+      affermazioni: record.claims.length,
+      fonti,
+      bilancio: bilancioDelRecord(record),
+      proveDistinte: proveDistinteDelRecord(record),
+      ripiego: false,
+      record,
+    };
+    if (record.claims.length === 0) return { ...comune, ok: false, motivo: 'il record del rapporto non porta nessuna affermazione' };
+    if (fonti.length === 0) return { ...comune, ok: false, motivo: 'il record del rapporto non elenca nessuna fonte' };
+    return { ...comune, ok: true, motivo: null };
+  }
+  if (!ripiegoConsentito) {
+    return { ...vuoto, motivo: 'il rapporto non porta il record verificabile (blocco ```talos-research-report)' };
+  }
+  const minimo = rileggiRapportoMinimo(testo);
+  return { ...minimo, bilancio: null, proveDistinte: 0, ripiego: true, record: null };
+}
+
+/**
+ * ⭐ §6.7 — IL BILANCIO, che è ciò con cui la riga in elenco guida. Mai il conteggio delle fonti.
+ *
+ * ⛔ Il motivo è misurato, non estetico: «Sci-MMR» (arXiv:2609.11243, 10/09/2026) trova che
+ *   l'accuratezza della risposta supera di oltre venti punti il recupero delle prove — cioè un
+ *   rapporto sembra buono anche quando le prove non ci sono. Un numero di fonti conferma quella
+ *   impressione; un bilancio la smentisce quando è il caso.
+ * ⛔ `nonSostenute` e `nonVerificate` restano SEPARATE, e `contese` sta fuori da tutte:
+ *   `verification.mjs` lo dice alla riga del conteggio — «"non abbiamo potuto controllarlo" e
+ *   "abbiamo controllato, e la fonte non lo dice" sono due ammissioni diverse, e fonderle
+ *   lusingherebbe la seconda». I nomi qui sono in italiano perché in italiano è tutto il
+ *   contratto verso il frontend (`stato`, `motivo`, `domanda`): due lingue nello stesso oggetto
+ *   sono due contratti che divergono.
+ */
+function bilancioDelRecord(record) {
+  const s = talosResearchVerifiedStanding(record.claims);
+  return {
+    totali: s.total,
+    sostenute: s.supported,
+    inParte: s.partial,
+    nonSostenute: s.unsupported,
+    contese: s.contested,
+    nonVerificate: s.unchecked,
+  };
+}
+
+/**
+ * ⭐ Quante fonti DIVERSE portano almeno un passaggio davvero ritrovato nel loro testo.
+ *
+ * ⛔ Non è `sources.length`, ed è tutta la differenza: la bibliografia dice cosa è stato
+ *   citato, questo dice su quante fonti distinte poggia davvero qualcosa. Un rapporto con dodici
+ *   fonti in fondo e un solo passaggio trovato ha `proveDistinte: 1`, e quel numero è l'unico dei
+ *   due che non si può gonfiare allungando l'elenco dei link.
+ * ⛔ Un `passage` vuoto è, nel contratto di `report.mjs`, esattamente «non ci è mai stato
+ *   trovato» — quindi non conta, e il rapporto in prosa lo scrive pure: «(il passaggio citato
+ *   non è nel testo della fonte…)».
+ */
+function proveDistinteDelRecord(record) {
+  const distinte = new Set();
+  for (const c of record.claims) {
+    if (typeof c?.passage === 'string' && c.passage.trim().length > 0) distinte.add(c.sourceIndex);
+  }
+  return distinte.size;
+}
 
 function promptRicerca(question, depth) {
   const guida = depth === 'quick'
@@ -86,6 +216,24 @@ function promptRicerca(question, depth) {
      *   una forma che nessuno ha detto.
      */
     'When you are done investigating, call the tool `research_deposit` with the complete report in `testo`: a Markdown document with a "# " title, your findings as prose, and a "## Sources" section listing the full http(s) URLs you actually opened.',
+    /*
+     * ⭐⭐⭐ L4 — LA CONSEGNA CHIEDE IL RECORD, perché il cancello adesso lo pretende.
+     *
+     * ⛔ Se il cancello chiede una forma e la consegna non la dichiara, il cancello è una
+     *   trappola, non una difesa — è scritto così in L2 e vale ancora. Quindi qui c'è la forma
+     *   ESATTA, campo per campo, con un esempio che si può copiare.
+     *
+     * ⛔⛔ E `claimSupported` è `"unchecked"`, `judge` è `null`, **per ordine**: il record porta
+     *   verdetti solo quando a darli è stato un giudice INDIPENDENTE (`report.mjs`: «Verifica
+     *   eseguita da: … — mai dal modello che ha scritto il rapporto»). Un modello che si
+     *   timbra da solo «sostenuta dalla fonte» produrrebbe esattamente il segno di verifica
+     *   falso che tutto questo disegno esiste per togliere. Il bilancio dirà «N non
+     *   verificate», che è la verità di oggi; i verdetti veri arrivano con la ri-verifica.
+     */
+    'The document MUST end with a machine-readable record, fenced exactly like this, on its own lines: ```talos-research-report then one line of JSON then ```.',
+    'That JSON is: {"version":1,"question":"<the question>","summary":"<2-4 sentences>","judge":null,"claims":[{"text":"<one claim>","sourceIndex":1,"passage":"<the exact sentence you read in that source, copied verbatim, or \\"\\" if you could not find it>","checks":{"claimSupported":"unchecked"}}],"sources":[{"url":"<full http(s) url>","title":"<page title>","publishedAt":null,"obtained":"page"}]}.',
+    '`sourceIndex` is 1-based into `sources`. Use "obtained":"snippet" when you only saw a search-result snippet instead of the page. Never invent a passage: an empty string is the honest answer, and it is counted as such.',
+    'Do NOT set `judge` or change `claimSupported`: you are not allowed to mark your own claims as verified — an independent check happens later.',
     'That deposited document IS the permanent report. Your chat message is not the report and is never saved as one — after depositing, just tell the user in one or two lines that the report is ready.',
     'Note any real uncertainty instead of guessing, and never deposit a report without sources.',
     'You cannot write files, run shell commands or create documents in this project: `research_deposit` is the one and only thing you are allowed to write, and it is all you need.',
@@ -109,6 +257,46 @@ function nomeDallaDomanda(domanda) {
 }
 
 const PROMPT_RIPRESA = 'Continue the research from where you left off, using web_search and naviga as needed, then write the final report as your last message.';
+
+/**
+ * ⭐⭐⭐ L4 §6.6 — LA CONSEGNA DI UNA RIPRESA DAL GIORNALE.
+ *
+ * Quando il server è stato riavviato la conversazione non c'è più: al modello non si può
+ * ridare il suo contesto, e fingere di averlo sarebbe la bugia. Gli si dà invece quello che il
+ * giornale sa davvero — la domanda, quanto è già stato speso, quali linee sono ancora aperte,
+ * quale passo era in volo, e dove sta il testo già tenuto.
+ *
+ * ⛔ Nessuna di queste righe è inventata: ognuna esce dal replay o dal disco. Se una lista è
+ *   vuota non si scrive («0 rami rimasti» su un giro che non ha mai avuto un piano direbbe che
+ *   non c'è più niente da fare, che è il contrario del vero) — la riga semplicemente non c'è.
+ * ⛔ E la consegna ORIGINALE viene riproposta per intera, perché contiene le istruzioni sul
+ *   deposito e sulla forma del record: senza, una ricerca ripresa consegnerebbe qualcosa che il
+ *   cancello respinge — un guasto introdotto dalla cura, cioè il peggiore.
+ */
+function consegnaDiRipresa({ giro, prossimo, rimasti, speso, fonti, task }) {
+  const righe = [
+    'This research was interrupted (the app or the server restarted). Its conversation is gone, but its journal is not — here is exactly where it stood.',
+    `Question: "${giro.question}"`,
+    `Already spent before the interruption: ${speso.tokens} tokens, ${speso.searches} searches, ${speso.pages} pages opened. Do not redo work that is listed as done below.`,
+  ];
+  const fatti = giro.steps.filter((p) => p.state === 'done');
+  if (fatti.length > 0) righe.push(`Steps already completed: ${fatti.map((p) => p.id).join(', ')}.`);
+  if (prossimo) righe.push(`Resume from this step: ${prossimo.id} (${prossimo.kind}), which was ${prossimo.state === 'interrupted' ? 'in flight when the process died' : 'never started'}.`);
+  if (rimasti.length > 0) righe.push(`Lines of inquiry still open: ${rimasti.map((r) => `«${r.question}»`).join(' · ')}.`);
+  if (fonti.length > 0) righe.push(`${fonti.length} source page(s) were already fetched and kept on disk; their text is available without paying for them again.`);
+  if (!prossimo && rimasti.length === 0 && fatti.length === 0) {
+    /*
+     * ⛔ Il caso di oggi, e si dichiara invece di nasconderlo: il giornale registra il ciclo di
+     *   vita del giro (avvio, pausa, ripresa, fine) ma non ancora i singoli passi di raccolta,
+     *   perché il collettore non è agganciato (vedi la testa di questo file). Il modello deve
+     *   sapere che riparte dall'indagine, non da un passo preciso — non che «non c'è niente da
+     *   fare».
+     */
+    righe.push('The journal records the run itself but not individual collection steps, so restart the investigation for this question from the beginning of the evidence you can still see, and do not assume anything was already concluded.');
+  }
+  righe.push(typeof task?.consegna === 'string' && task.consegna.trim() ? task.consegna.trim() : PROMPT_RIPRESA);
+  return righe.join('\n');
+}
 
 /**
  * ⛔⛔⛔ L2 (11/09/2026) — QUESTA FUNZIONE HA CAMBIATO NOME, E IL NOME È LA CURA.
@@ -240,9 +428,197 @@ export function creaResearchOrchestrator({
    *   vedi `rileggiRapportoMinimo`.
    */
   leggiRapportoFn = leggiRapporto,
-  rileggiRapportoFn = rileggiRapportoMinimo,
+  /*
+   * ⭐⭐⭐ L4 — IL PUNTO DI INNESTO È STATO USATO. L2 aveva lasciato qui `rileggiRapportoMinimo`
+   * scrivendo «il giorno in cui il record recintato esiste si cambia QUESTA riga, non la
+   * macchina degli stati». Quel giorno è oggi: il default è il lettore del record vero, e la
+   * forma minima resta dietro, come ripiego dichiarato per le ricerche vecchie.
+   * ⛔ La firma è cresciuta di un argomento (`{ripiegoConsentito}`): un lettore iniettato che lo
+   *   ignora continua a funzionare — è il motivo per cui è un oggetto di opzioni e non un
+   *   secondo parametro posizionale obbligatorio.
+   */
+  rileggiRapportoFn = rileggiRapportoRecintato,
+  /*
+   * ⭐⭐⭐ L4 — LE QUATTRO PORTE NUOVE SUL DISCO DELLA RICERCA, tutte iniettabili come le altre.
+   *
+   * `accodaEventoFn`  scrive UNA riga nel giornale (solo append);
+   * `leggiGiornaleFn` lo rilegge tollerando le righe mozzate — è ciò da cui `riprendi()` rigioca;
+   * `leggiPianoFn`    il piano approvato, quando c'è;
+   * `statRapportoFn`  `mtimeMs`+`size` del rapporto: la chiave della cache di `elenca()`.
+   *
+   * ⛔ Iniettabili per la ragione di sempre, e stavolta con un caso già visto: senza queste
+   *   porte un test dell'orchestratore andrebbe a scrivere sul filesystem VERO della macchina
+   *   che lo esegue — cioè misurerebbe l'ambiente invece dell'oggetto (lezione 10/09).
+   */
+  accodaEventoFn = accodaEvento,
+  leggiGiornaleFn = leggiGiornale,
+  leggiPianoFn = leggiPiano,
+  statRapportoFn = statRapporto,
+  elencaFontiFn = elencaFonti,
+  /*
+   * ⭐ L4+L6 — la cache del fetch, persistita accanto al giornale (`<id>/cache.json`).
+   * `creaCacheFetchFn` è la fabbrica, iniettabile come tutto il resto: i test non devono
+   * dipendere dall'orologio vero né dai tetti di default.
+   */
+  leggiIstantaneaCacheFn = leggiIstantaneaCache,
+  scriviIstantaneaCacheFn = scriviIstantaneaCache,
+  creaCacheFetchFn = talosResearchFetchCache,
   clock = () => new Date(),
 }) {
+  /*
+   * ⭐⭐⭐ L4 — LA CACHE DEL GIUDIZIO SUL RAPPORTO, e perché `elenca()` adesso rilegge.
+   *
+   * ⛔ Il difetto che chiude, visto dall'owner: `elenca()` NON rileggeva i rapporti e `leggi()`
+   *   sì, quindi la ricerca `d2a453a8` compariva **«Conclusa» in lista** e
+   *   **«bloccata dal permesso» quando la si apriva**. Due viste sullo stesso fatto che si
+   *   contraddicono: la lista mentiva e il dettaglio la smentiva. L2 aveva chiamato quella
+   *   divergenza «voluta» per non pagare venti letture a ogni apertura della sezione — il costo
+   *   era vero, la conclusione no: si paga una volta e si mette in cache.
+   *
+   * ⛔ La chiave NON è l'id: è l'id PIÙ l'impronta del file (`mtimeMs`+`size`). Una cache a
+   *   chiave-id sola servirebbe un giudizio vecchio su un rapporto ri-depositato — cioè
+   *   riprodurrebbe in memoria la stessa bugia che sta togliendo dal disco. `null` (nessun
+   *   rapporto) è anch'esso un'impronta valida e si mette in cache come le altre: appena il file
+   *   nasce, l'impronta cambia e il giudizio si rifà.
+   *
+   * ⛔ E la mappa non cresce per sempre: oltre 200 voci si svuota tutta. Una LRU vera qui
+   *   sarebbe codice in più per un limite che nessun progetto reale tocca (20 ricerche per
+   *   cartella è già il tetto della pagina); quello che NON si può fare è lasciarla illimitata
+   *   dentro un processo che vive per giorni.
+   */
+  const giudiziRapporto = new Map();
+  const TETTO_CACHE_GIUDIZI = 200;
+  /**
+   * ⭐ L4 — UN EVENTO NEL GIORNALE, e un guasto del giornale NON ferma la ricerca.
+   *
+   * ⛔ La scelta è deliberata e va detta: il giornale è la prova di ciò che è stato speso, non
+   *   la condizione perché si possa spendere. Se il disco è pieno, la ricerca deve continuare a
+   *   girare e a consegnare — perderemmo la ripresa, non il lavoro. L'errore si inghiotte **qui
+   *   e solo qui**, e questo è l'unico `catch` muto di questo file.
+   */
+  /*
+   * ⭐⭐⭐ L4+L6 — LA CACHE DEL FETCH DI UNA CORSA, che sopravvive al riavvio.
+   *
+   * Una ricerca ripresa non deve ripagare le pagine che aveva già aperto: `fetch-cache.mjs`
+   * (L6) sa tenerle e sa serializzarsi (`snapshot()`/`restore()`), ma dichiara di non scrivere
+   * niente su disco — la persistenza è di chi orchestra, cioè di qui. La mappa tiene
+   * l'istanza VIVA di una corsa; `cache.json` la tiene fra una vita e l'altra.
+   *
+   * ⛔⛔ DICHIARATO, non lasciato credere: **oggi nessuno riempie questa cache**. Il collettore
+   *   (`collector.mjs`) non è agganciato, e le pagine le apre il kernel con `naviga`, che non
+   *   passa di qui. ⇒ il giro completo salva-e-ripristina è provato nei due versi, ma sui dati
+   *   VERI l'istantanea di oggi è vuota. È il punto di innesto pronto, non un risparmio già
+   *   misurato: dire il contrario sarebbe vendere un numero che non esiste.
+   */
+  const cacheDelleRicerche = new Map();
+
+  /** @returns {number} quante voci sono rientrate dall'istantanea su disco (0 se non ce n'era una valida). */
+  async function ripristinaCacheFetch({ cartella, id }) {
+    const cache = creaCacheFetchFn();
+    cacheDelleRicerche.set(id, cache);
+    let rientrate = 0;
+    try {
+      /*
+       * ⛔ Il VERSO CONTRARIO è già garantito dal modulo che possiede il formato: `restore()`
+       *   torna 0 su un'istantanea assente, di versione sconosciuta o malformata — «un formato
+       *   più nuovo non deve impedire a una ricerca di RIPARTIRE, al massimo la fa ripagare».
+       *   Qui NON si ricontrolla la versione: duplicarla creerebbe due numeri che divergono.
+       */
+      rientrate = cache.restore(await leggiIstantaneaCacheFn({ cartella, id })) ?? 0;
+    } catch {
+      rientrate = 0; // un'istantanea illeggibile costa una ri-lettura delle pagine, mai la ripresa.
+    }
+    return rientrate;
+  }
+
+  /** Salva l'istantanea a un punto sicuro (pausa, conclusione). Un guasto qui non ferma niente. */
+  async function salvaIstantaneaCache({ cartella, id }) {
+    const cache = cacheDelleRicerche.get(id);
+    if (!cache) return;
+    try {
+      await scriviIstantaneaCacheFn({ cartella, id, istantanea: cache.snapshot() });
+    } catch { /* come il giornale: la cache è un risparmio, non una condizione per lavorare. */ }
+  }
+
+  async function registra(cartella, id, evento) {
+    try {
+      await accodaEventoFn({ cartella, id, evento: { at: clock().toISOString(), ...evento } });
+    } catch { /* vedi sopra: un giornale che non si scrive non deve fermare una corsa già pagata. */ }
+  }
+
+  /**
+   * ⭐⭐⭐ L4 — IL GIUDIZIO SUL RAPPORTO, **UNA SOLA VOLTA E IN UN SOLO POSTO**.
+   *
+   * La chiamano `elenca()` e `leggi()`, e questo è il punto: prima ce n'erano due di fatto —
+   * l'elenco che non guardava niente e il dettaglio che guardava — e le due viste si
+   * contraddicevano a schermo. Una funzione sola non può contraddirsi.
+   *
+   * Ordine di lettura, e il perché di ognuno:
+   *   1. il file depositato (`.harness-ui-research/<id>/rapporto.md`) — la via di oggi;
+   *   2. la voce di Libreria, **solo** se il file non c'è — la via di ieri, l'unica che hanno
+   *      le ricerche già su disco. Costa una lettura in più ed è per questo che è seconda.
+   *
+   * ⛔ `ripiegoConsentito` si ricava dal campo `formato` della voce, non da un'euristica: una
+   *   ricerca nata oggi (`formato: 2`) DEVE portare il record; una nata prima non può, e non le
+   *   si chiede l'impossibile.
+   * ⛔ E il file su disco **non si riscrive mai**: la correzione vive nella lettura. È la stessa
+   *   forma di «TRE RIPETIZIONI PAGATE, UNA USATA» (22/8), dove la cura stava nel lettore.
+   *
+   * @returns {Promise<{stato:'done'|'senza-rapporto', motivoDettaglio:string|null, contenutoRapporto:string|null, letto:object|null}>}
+   */
+  async function giudicaRapporto({ cartella, record }) {
+    const id = record.id;
+    const chiave = `${cartella}::${id}`;
+    const impronta = await statRapportoFn({ cartella, id });
+    const inCache = giudiziRapporto.get(chiave);
+    const stessaImpronta = inCache
+      && ((inCache.impronta === null && impronta === null)
+        || (inCache.impronta && impronta && inCache.impronta.mtimeMs === impronta.mtimeMs && inCache.impronta.size === impronta.size));
+    if (stessaImpronta) return inCache.esito;
+
+    const ripiegoConsentito = !(Number(record.formato) >= 2);
+    let testo = await leggiRapportoFn({ cartella, id });
+    /*
+     * ⛔ `daDeposito` distingue «il modello ha consegnato» da «esiste una copia in Libreria da
+     *   una vita precedente», e serve a una cosa sola ma importante: al momento della
+     *   conclusione, «non ha depositato» ha tre diagnosi diverse (permesso, giri, altro) e non
+     *   deve essere confuso con «ha depositato una cosa che non passa». Senza questo campo una
+     *   ricerca vecchia ripresa avrebbe perso la diagnosi `bloccata-dal-permesso`.
+     */
+    const daDeposito = testo !== null && testo !== undefined;
+    if (!daDeposito && record.reportLibraryId && leggiVoceLibreriaFn) {
+      try {
+        const voce = await leggiVoceLibreriaFn({ cartella, id: record.reportLibraryId });
+        testo = voce?.testo ?? null;
+      } catch {
+        testo = null; // il rapporto è dichiarato pronto ma illeggibile ORA — onesto, mai un crash.
+      }
+    }
+    const letto = (testo === null || testo === undefined) ? null : rileggiRapportoFn(testo, { ripiegoConsentito });
+    const esito = letto?.ok
+      ? { stato: 'done', motivoDettaglio: null, contenutoRapporto: testo, contenutoRespinto: null, letto, daDeposito }
+      : {
+        stato: 'senza-rapporto',
+        daDeposito,
+        motivoDettaglio: letto?.motivo ?? 'non c\'è nessun file di rapporto',
+        /*
+         * ⛔⛔ `contenutoRapporto` resta NULL quando il cancello dice di no — e il testo respinto
+         *   esce da un'altra porta, `contenutoRespinto`. Due nomi perché sono due cose: se la
+         *   scusa da 290 byte uscisse dal campo che si chiama «il rapporto», il frontend la
+         *   disegnerebbe come tale e avremmo rifatto il guasto dell'11/09 dentro la sua cura.
+         * ⛔ Ma non si butta: un rapporto che non porta il record è comunque il prodotto di una
+         *   corsa pagata, e nasconderlo perderebbe 484.171 token di lavoro per una forma
+         *   mancante. Il cancello decide lo STATO; non decide cosa si può leggere.
+         */
+        contenutoRapporto: null,
+        contenutoRespinto: (testo === null || testo === undefined) ? null : testo,
+        letto,
+      };
+    if (giudiziRapporto.size >= TETTO_CACHE_GIUDIZI) giudiziRapporto.clear();
+    giudiziRapporto.set(chiave, { impronta, esito });
+    return esito;
+  }
+
   /**
    * ⭐⭐⭐ L2 §6.5 — IL CANCELLO DI CONSEGNA.
    *
@@ -270,9 +646,24 @@ export function creaResearchOrchestrator({
     const richiesta = voceSessione?._ricercaTerminataRichiesta ?? null;
     // ⛔ SEMPRE azzerato qui, su OGNI conclusione — mai lasciato sporco per il giro successivo (vedi la doc di testa: pausa→ripresa→conclusione naturale non deve essere scambiata per una seconda pausa).
     if (voceSessione) voceSessione._ricercaTerminataRichiesta = null;
-    if (richiesta === 'paused') return; // terminata resta null: resumable, il bucket "paused" lo deriva statoVivo() dal vivo.
+    if (richiesta === 'paused') {
+      /*
+       * ⭐ L4 — «fermo» si registra, e non è la stessa riga di «chiesto di fermarsi» (quella
+       * l'ha scritta `mettiInPausa`). `run.mjs` tiene separati `pause_requested` e `paused`
+       * «perché in mezzo c'è del denaro»: il passo in volo viene drenato prima del punto sicuro.
+       * Senza questa riga, un giornale rigiocato direbbe che la ricerca stava ancora fermandosi.
+       */
+      await registra(cartella, id, { kind: 'run_paused' });
+      // ⭐ L6 — il punto sicuro è ANCHE il punto in cui si salva ciò che è già stato scaricato.
+      await salvaIstantaneaCache({ cartella, id });
+      return; // terminata resta null: resumable, il bucket "paused" lo deriva statoVivo() dal vivo.
+    }
     if (richiesta === 'cancelled') {
       await aggiornaRicercaFn({ cartella, id, terminata: 'cancelled', conclusaAlle: clock().toISOString() });
+      await registra(cartella, id, { kind: 'run_cancelled' });
+      // ⛔ Nessuna istantanea su un annullamento: `cancelled` è terminale e non si riprende mai
+      //   (`run.mjs`), quindi scrivere un file che nessuno rileggerà sarebbe solo disco sporcato.
+      cacheDelleRicerche.delete(id);
       return;
     }
     const record = await leggiRicercaFn({ cartella, id });
@@ -286,10 +677,31 @@ export function creaResearchOrchestrator({
      */
     const ultimoMessaggio = (ultimoMessaggioDelModello(messaggi) ?? '').slice(0, 2_000) || null;
     const comune = { conclusaAlle: clock().toISOString(), ultimoMessaggio };
+    /*
+     * ⭐ L6 — una conclusione è un punto sicuro come la pausa, e vale ANCHE per i guasti:
+     * `bloccata-dal-permesso` e `giri-esauriti` sono proprio i casi che si riprendono, e chi
+     * riprende non deve ripagare le pagine. L'istantanea si salva PRIMA di decidere lo stato,
+     * così nessun ramo di ritorno anticipato può saltarla.
+     */
+    await salvaIstantaneaCache({ cartella, id });
+    cacheDelleRicerche.delete(id);
 
-    const testoRapporto = await leggiRapportoFn({ cartella, id });
+    /*
+     * ⭐⭐⭐ L4 — LO STESSO CANCELLO DI `elenca()` E `leggi()`, non una terza copia.
+     * ⛔ La cache si invalida da sola: `giudicaRapporto` chiave sull'impronta del file, e qui il
+     *   file è appena stato depositato ⇒ impronta nuova ⇒ giudizio rifatto. Nessuna riga di
+     *   invalidazione a mano, cioè nessuna riga da ricordarsi di scrivere la prossima volta.
+     */
+    const giudizio = record ? await giudicaRapporto({ cartella, record }) : null;
+    /*
+     * ⛔ Alla CONCLUSIONE conta il deposito, non una copia di Libreria ereditata: se il modello
+     *   non ha depositato, la domanda giusta è «perché» (permesso? giri?) e le tre diagnosi
+     *   sotto sono l'unica risposta utile. Un rapporto che passa il cancello vale comunque —
+     *   anche se arriva dalla Libreria di una vita precedente — perché consegnare è consegnare.
+     */
+    const testoRapporto = (giudizio?.daDeposito || giudizio?.letto?.ok) ? (giudizio.contenutoRapporto ?? giudizio.contenutoRespinto ?? null) : null;
     if (testoRapporto !== null && testoRapporto !== undefined) {
-      const letto = rileggiRapportoFn(testoRapporto);
+      const letto = giudizio.letto;
       if (letto?.ok) {
         /*
          * ⛔ La voce di Libreria si scrive DAL RAPPORTO VERO, non dall'ultimo messaggio: è la
@@ -307,9 +719,11 @@ export function creaResearchOrchestrator({
            * ciò che è costato denaro non si dichiara perso perché una copia non è riuscita.
            */
           await aggiornaRicercaFn({ cartella, id, terminata: 'done', reportLibraryId: null, ...comune });
+          await registra(cartella, id, { kind: 'run_finished' });
           return;
         }
         await aggiornaRicercaFn({ cartella, id, terminata: 'done', reportLibraryId, ...comune });
+        await registra(cartella, id, { kind: 'run_finished' });
         return;
       }
       await aggiornaRicercaFn({ cartella, id, terminata: 'senza-rapporto', motivoDettaglio: letto?.motivo ?? null, ...comune });
@@ -327,6 +741,17 @@ export function creaResearchOrchestrator({
     }
     await aggiornaRicercaFn({ cartella, id, terminata: 'failed', ...comune });
   }
+
+  /*
+   * ⛔⛔ NESSUN `run_finished` sui tre rami di guasto, ed è una scelta, non una dimenticanza.
+   *   `talosResearchApply` porta `run_finished` a `status:'done'`, cioè a uno stato TERMINALE
+   *   da cui `talosResearchNextStep` non restituisce più niente: scriverlo su una ricerca
+   *   bloccata dal permesso o rimasta senza giri la renderebbe **non riprendibile** nel giornale,
+   *   pur essendo esattamente il caso che deve potersi riprendere. La metadata dice com'è finita;
+   *   il giornale dice che il lavoro è ancora dovuto. Le due cose non si contraddicono: rispondono
+   *   a due domande diverse (`run.mjs`, `talosResearchWorkLeft`: «i due rispondono a domande
+   *   diverse e servono entrambi»).
+   */
 
   /**
    * Avvia — torna `{ok, esito, id}` SUBITO, mai atteso il .then() (vedi
@@ -355,6 +780,23 @@ export function creaResearchOrchestrator({
     const id = randomUUIDFn();
     const nome = nomeDallaDomanda(question);
     await creaRicercaFn({ cartella, id, domanda: question, profondita: depth || 'deep', padreId, nome });
+    /*
+     * ⭐⭐⭐ L4 — LA PRIMA RIGA DEL GIORNALE, e l'ordine conta.
+     *
+     * Scritta PRIMA di `avviaESeguiFn`, per la stessa ragione per cui la metadata lo è: una
+     * conclusione fulminea (un mock, o un modello istantaneo) non deve poter scrivere
+     * `run_finished` su un giornale che non ha ancora il suo `run_started`. `talosResearchApply`
+     * su un giornale che comincia senza `run_started` torna `null` a ogni evento — cioè un
+     * giro che non si può rigiocare, che è esattamente il guasto da cui tutto questo nasce.
+     *
+     * ⛔ `engine: 'device'` non è una bugia sul desktop: è il valore che `run.mjs` usa per «gira
+     *   qui, in locale» contro `'cloud'` (R1b, la migrazione su server). Qui gira in locale.
+     */
+    await registra(cartella, id, {
+      kind: 'run_started', id, sessionId: id, question, depth: depth || 'deep', engine: 'device',
+    });
+    // ⭐ L6 — la cache di QUESTA corsa nasce qui e vive finché la corsa vive (vedi `cacheDelleRicerche`).
+    cacheDelleRicerche.set(id, creaCacheFetchFn());
     avviaESeguiFn({
       sessionId: id, cartella, taskId: 'ricerca',
       /*
@@ -420,6 +862,13 @@ export function creaResearchOrchestrator({
     }
     voce._ricercaTerminataRichiesta = 'paused';
     voce.controller.abort();
+    /*
+     * ⭐ L4 — `run_pause_requested`: l'INTENZIONE, registrata adesso. Il `run_paused` lo scrive
+     * `onConclusioneRicerca` quando il punto sicuro è raggiunto. ⛔ Non atteso (`mettiInPausa` è
+     * sincrona per contratto col kernel): se la riga non arriva, la pausa resta comunque vera
+     * nella metadata — il giornale è la prova, non la condizione.
+     */
+    registra(voce.cartella, id, { kind: 'run_pause_requested' });
     return { ok: true, esito: 'That research is paused. Everything it collected is kept, and it can be resumed.' };
   }
 
@@ -429,6 +878,7 @@ export function creaResearchOrchestrator({
     if (voce.conclusa) {
       // ⭐ una ricerca già ferma (in pausa, o già conclusa) si annulla lo stesso: cambia solo la metadata (terminata:'cancelled'), nessun abort da fare — mai un rifiuto per un caso che mobile stesso permette (research_cancel su una "paused"/"unfinished").
       return aggiornaRicercaFn({ cartella: voce.cartella, id, terminata: 'cancelled' })
+        .then(() => registra(voce.cartella, id, { kind: 'run_cancelled' }))
         .then(() => ({ ok: true, esito: 'That research is stopped for good. What it collected is still readable.' }));
     }
     voce._ricercaTerminataRichiesta = 'cancelled';
@@ -436,29 +886,101 @@ export function creaResearchOrchestrator({
     return { ok: true, esito: 'That research is stopped for good. What it collected is still readable.' };
   }
 
+  /**
+   * ⭐⭐⭐ L4 §6.6 — LA RIPRESA VERA, DAL GIORNALE E NON DALLA MEMORIA.
+   *
+   * ⛔ Cosa faceva prima, e perché era poco: riprendeva la CONVERSAZIONE (`voce.messaggiFinali`)
+   *   e rifiutava quando quella mancava — cioè **dopo ogni riavvio del server**, con un messaggio
+   *   che diceva «start a new one». Rifarla da capo costa di nuovo tutto: sulla ricerca
+   *   dell'11/09 sarebbero stati 484.171 token di ingresso, 9 ricerche e 14 pagine, ripagati per
+   *   un processo morto.
+   *
+   * Adesso ci sono DUE vie, in quest'ordine, e la prima è la migliore quando c'è:
+   *
+   *   A. **la conversazione è ancora in memoria** ⇒ si riprende quella, com'è sempre stato.
+   *      È superiore perché il modello ritrova il proprio contesto esatto, non un riassunto.
+   *   B. **la conversazione non c'è più (riavvio), ma il giornale sì** ⇒ si rigioca
+   *      `giornale.jsonl` con `talosResearchReplay`, si deducono i passi rimasti in volo con
+   *      `talosResearchRecover` («un evento che nessuno è vivo per aggiungere è una bugia nel
+   *      giornale»), e si riparte **dal passo dopo l'ultimo committato** con una consegna che
+   *      dice al modello dove eravamo e cosa manca.
+   *
+   * ⛔ Una ricerca il cui giornale è già TERMINALE non si riprende, e non è un dettaglio:
+   *   `run.mjs` rifiuta `run_resumed` da uno stato terminale «perché cancellato vuol dire
+   *   cancellato, e una ripresa che lo riaprisse spenderebbe denaro su un giro che la persona ha
+   *   chiuso». Qui la stessa regola si fa rispettare **prima** di spendere, non dentro il replay.
+   *
+   * ⛔ Niente `cartella` fra gli argomenti: arriva da `voce.cartella`, che dopo un riavvio
+   *   `ripristina()` rimette a posto dall'intestazione della sessione. Un parametro nuovo
+   *   avrebbe voluto una riga in `session-registry.mjs` fuori dal perimetro di questo lotto.
+   */
   async function riprendi({ id }) {
     const voce = sessioni.get(id);
     if (!voce) return { ok: false, esito: 'There is no research with that id. Call research_list to see the current ones.' };
-    if (!voce.messaggiFinali) {
-      return {
-        ok: false,
-        esito: voce.interrotta
-          ? 'That research was interrupted by a server restart and cannot be resumed: start a new one.'
-          : 'That research is still running: nothing to resume.',
-      };
+    const cartella = voce.cartella;
+
+    if (voce.messaggiFinali) {
+      await registra(cartella, id, { kind: 'run_resumed' });
+      avviaESeguiFn({
+        sessionId: id, taskId: voce.taskId, cartella, task: voce.task, comandoProva: voce.comandoProva,
+        messaggiIniziali: [...voce.messaggiFinali, { role: 'user', content: PROMPT_RIPRESA }],
+        forkDa: voce.forkDa, voceEsistente: voce,
+        onConclusioneFn: (risultato) => onConclusioneRicerca({ cartella, id, risultato }),
+      });
+      return { ok: true, esito: 'That research is running again, from where it had stopped.' };
+    }
+
+    if (!voce.interrotta) return { ok: false, esito: 'That research is still running: nothing to resume.' };
+
+    // Via B — il giornale. Da qui in poi la conversazione non esiste più: esiste il registro.
+    const { eventi, righeSaltate } = await leggiGiornaleFn({ cartella, id });
+    const giro = talosResearchReplay(eventi);
+    if (!giro) {
+      /*
+       * ⛔ Nessun giornale (una ricerca nata prima dell'11/09) o un giornale che non comincia con
+       *   `run_started`: non c'è niente da cui ripartire, e si dice la verità di prima. ⛔ Non si
+       *   inventa un `run_started` adesso per «sistemare» il file: sarebbe scrivere nel registro
+       *   un fatto che nessuno ha osservato.
+       */
+      return { ok: false, esito: 'That research was interrupted by a server restart and has no journal to resume from: start a new one.' };
+    }
+    if (talosResearchIsTerminal(giro.status)) {
+      return { ok: false, esito: `That research is ${giro.status} and will not be resumed: start a new one if you need more.` };
+    }
+    const recuperato = talosResearchRecover(giro, clock().toISOString());
+    const prossimo = talosResearchNextStep(recuperato);
+    const rimasti = talosResearchWorkLeft(recuperato);
+    const speso = talosResearchSpent(recuperato);
+    const fonti = await elencaFontiFn({ cartella, id });
+    const ripristinateDallaCache = await ripristinaCacheFetch({ cartella, id });
+
+    await registra(cartella, id, { kind: 'run_resumed' });
+    if (prossimo) {
+      /*
+       * ⛔ Il passo che era IN VOLO quando il processo è morto viene ri-annunciato come iniziato:
+       *   `talosResearchApply` su `step_started` di un passo già `done` non fa niente («già
+       *   pagato: ricominciarlo è l'errore che tutto questo file esiste per rendere
+       *   impossibile»), quindi questa riga non può far ripagare un passo concluso.
+       */
+      await registra(cartella, id, { kind: 'step_started', stepId: prossimo.id, branchId: prossimo.branchId, stepKind: prossimo.kind });
     }
     avviaESeguiFn({
-      sessionId: id, taskId: voce.taskId, cartella: voce.cartella, task: voce.task, comandoProva: voce.comandoProva,
-      messaggiIniziali: [...voce.messaggiFinali, { role: 'user', content: PROMPT_RIPRESA }],
+      sessionId: id, taskId: voce.taskId, cartella, task: voce.task, comandoProva: voce.comandoProva,
+      messaggiIniziali: [{ role: 'user', content: consegnaDiRipresa({ giro: recuperato, prossimo, rimasti, speso, fonti, task: voce.task }) }],
       forkDa: voce.forkDa, voceEsistente: voce,
-      onConclusioneFn: (risultato) => onConclusioneRicerca({ cartella: voce.cartella, id, risultato }),
+      onConclusioneFn: (risultato) => onConclusioneRicerca({ cartella, id, risultato }),
     });
-    return { ok: true, esito: 'That research is running again, from where it had stopped.' };
+    return {
+      ok: true,
+      esito: `That research is running again from its journal (${eventi.length} recorded events${righeSaltate ? `, ${righeSaltate} unreadable lines skipped` : ''}${ripristinateDallaCache ? `, ${ripristinateDallaCache} cached pages restored` : ''}). It restarts from the step after the last committed one.`,
+    };
   }
 
   async function rinomina({ cartella, id, title }) {
     const aggiornata = await aggiornaRicercaFn({ cartella, id, titolo: title });
     if (!aggiornata) return { ok: false, esito: 'There is no research with that id. Call research_list to see the current ones.' };
+    // ⭐ L4 — `run_renamed` è uno degli undici eventi: un giro rigiocato deve riprendere anche il suo nome, non solo il suo stato.
+    await registra(cartella, id, { kind: 'run_renamed', title: title ?? null });
     return {
       ok: true,
       esito: title === null ? 'That research shows its question again.' : `Renamed that research to «${title}».`,
@@ -511,7 +1033,7 @@ export function creaResearchOrchestrator({
    *   lista sarebbero un costo per ogni apertura della sezione); `leggi()` sì, sulla singola.
    *   È una divergenza VOLUTA fra le due viste, e sta scritta qui perché si veda.
    */
-  function voceEsposta(r, stato) {
+  function voceEsposta(r, stato, letto = null) {
     const domanda = r.domanda ?? null;
     return {
       id: r.id,
@@ -526,12 +1048,49 @@ export function creaResearchOrchestrator({
       motivo: stato === 'done' ? null : motivoDelloStato(stato, r.motivoDettaglio ?? null),
       padreId: r.padreId ?? null,
       ultimoMessaggio: r.ultimoMessaggio ?? null,
+      /*
+       * ⭐⭐⭐ L4 — I DUE CAMPI NUOVI, e sono ADDITIVI: nessuno dei dodici di L2 cambia nome,
+       * tipo o significato. Il test `CONTRATTO §6.4` asserisce le chiavi con `deepEqual`
+       * proprio perché una crescita si veda invece di scivolare dentro in silenzio.
+       *
+       * `bilancio`      — sostenute / in parte / non sostenute / contese / non verificate.
+       *                   `null` quando il record recintato non c'è: ⛔ `null` e «tutto a zero»
+       *                   NON sono la stessa cosa, e mostrare zeri su una ricerca che non è mai
+       *                   stata misurata sarebbe un verdetto inventato. È la riga con cui §6.7
+       *                   vuole che la scheda guidi — mai col conteggio delle fonti.
+       * `proveDistinte` — su quante fonti diverse poggia almeno un passaggio davvero ritrovato.
+       */
+      bilancio: letto?.bilancio ?? null,
+      proveDistinte: letto?.proveDistinte ?? 0,
     };
   }
 
+  /**
+   * ⛔⛔⛔ L4 — L'ELENCO ADESSO RILEGGE, e questa è una correzione a una scelta di L2.
+   *
+   * Il difetto, visto dall'owner: la ricerca `d2a453a8` compariva **«Conclusa» in lista** e
+   * **«bloccata dal permesso» quando la si apriva**. L2 aveva chiamato quella divergenza
+   * «voluta» — venti letture di file per disegnare una lista sembravano un costo per niente. Il
+   * costo era vero; la conclusione no: **una lista che mente costa di più**, e il costo si paga
+   * una volta sola grazie alla cache su `mtime`+`size` (vedi `giudiziRapporto`).
+   *
+   * ⛔ Rilegge SOLO le voci che si dichiarano `done`: sono le uniche che possono mentire. Una
+   *   `running`, una `failed` o una `cancelled` non hanno un rapporto da smentire, e leggerle
+   *   sarebbe costo puro.
+   * ⛔ E il file su disco **non si riscrive**, nemmeno adesso che la bugia si vede in due posti:
+   *   la correzione vive nella lettura.
+   */
   async function elenca({ cartella, status, page_size: pageSize, offset }) {
     const record = await elencaRicercheFn({ cartella });
-    const conStato = record.map((r) => voceEsposta(r, statoVivo(r, sessioni.get(r.id))));
+    const conStato = [];
+    for (const r of record) {
+      const stato = statoVivo(r, sessioni.get(r.id));
+      // ⛔ Gli stessi DUE stati di `leggi()`: sono i soli che parlano del rapporto, e sono i soli
+      //   che possono mentire. Una `running`/`failed`/`cancelled` non ha un rapporto da smentire.
+      if (stato !== 'done' && stato !== 'senza-rapporto') { conStato.push(voceEsposta(r, stato)); continue; }
+      const giudizio = await giudicaRapporto({ cartella, record: r });
+      conStato.push(voceEsposta({ ...r, motivoDettaglio: giudizio.motivoDettaglio ?? r.motivoDettaglio ?? null }, giudizio.stato, giudizio.letto));
+    }
     const filtrate = !status || status === 'all' ? conStato : conStato.filter((r) => r.stato === status);
     const dimensionePagina = clampNumero(pageSize, 1, 20, 10);
     const salto = clampNumero(offset, 0, Number.MAX_SAFE_INTEGER, 0);
@@ -544,42 +1103,64 @@ export function creaResearchOrchestrator({
     if (!record) return { trovata: false };
     let stato = statoVivo(record, sessioni.get(id));
     let contenutoRapporto = null;
+    let contenutoRespinto = null;
     let motivoDettaglio = record.motivoDettaglio ?? null;
-    if (stato === 'done') {
+    let letto = null;
+    /*
+     * ⛔ DUE stati, non uno: `done` e `senza-rapporto` sono i due esiti che PARLANO del rapporto,
+     *   e vanno riletti entrambi. Guardare solo `done` (come faceva L2) lasciava fuori proprio il
+     *   caso in cui l'owner ha più bisogno di vedere: una ricerca che ha depositato qualcosa che
+     *   il cancello respinge. La rilettura può anche PROMUOVERE: se nel frattempo è stato
+     *   depositato un rapporto valido, `senza-rapporto` torna `done` — sempre nel lettore, mai
+     *   riscrivendo il file.
+     */
+    if (stato === 'done' || stato === 'senza-rapporto') {
       /*
        * ⛔⛔⛔ §6.5, LA COMPATIBILITÀ ALL'INDIETRO — CALCOLATA AL VOLO, SENZA RISCRIVERE.
        *
        * Ogni ricerca fatta prima dell'11/09 ha `terminata:'done'` e un `reportLibraryId` che
-       * può puntare a qualunque cosa: sulla `d2a453a8` punta a 290 byte di scusa. Qui il
-       * rapporto si RILEGGE davvero: prima il file depositato (la via nuova), poi la voce di
-       * Libreria (la via vecchia, l'unica che le ricerche già su disco hanno). Se nessuna
-       * delle due supera la forma minima, lo stato MOSTRATO diventa `'senza-rapporto'`.
+       * può puntare a qualunque cosa: sulla `d2a453a8` punta a 290 byte di scusa. Il giudizio
+       * lo dà `giudicaRapporto`, la STESSA funzione che usa `elenca()` — mai due lettori dello
+       * stesso file, perché due lettori sono due verità e a schermo si contraddicono.
        *
        * ⛔ Il file su disco non si tocca. Mai riscrivere in silenzio un record già pagato: la
        *   correzione vive nella LETTURA, come per «TRE RIPETIZIONI PAGATE, UNA USATA» (22/8),
        *   dove la cura stava nel lettore e non nelle righe.
        */
-      const depositato = await leggiRapportoFn({ cartella, id });
-      let testo = depositato ?? null;
-      if (testo === null && record.reportLibraryId && leggiVoceLibreriaFn) {
-        try {
-          const voce = await leggiVoceLibreriaFn({ cartella, id: record.reportLibraryId });
-          testo = voce?.testo ?? null;
-        } catch {
-          testo = null; // il rapporto è dichiarato pronto ma illeggibile ORA — onesto, mai un crash.
-        }
-      }
-      const letto = testo === null ? null : rileggiRapportoFn(testo);
-      if (letto?.ok) contenutoRapporto = testo;
-      else {
-        stato = 'senza-rapporto';
-        motivoDettaglio = letto?.motivo ?? (testo === null ? 'non c\'è nessun file di rapporto' : null);
-      }
+      const giudizio = await giudicaRapporto({ cartella, record });
+      stato = giudizio.stato;
+      motivoDettaglio = giudizio.motivoDettaglio ?? motivoDettaglio;
+      contenutoRapporto = giudizio.contenutoRapporto;
+      contenutoRespinto = giudizio.contenutoRespinto ?? null;
+      letto = giudizio.letto;
     }
+    /*
+     * ⭐⭐⭐ L4 — IL GIORNALE ESPOSTO: `piano`, `passi`, `spesa`, `giornale`.
+     *
+     * ⛔ Tutti e quattro ADDITIVI e tutti e quattro DERIVATI: `piano` e `passi` escono dal
+     *   replay degli eventi veri, non da un campo salvato che potrebbe divergere. Un giro senza
+     *   giornale (una ricerca vecchia) dà `piano: []`, `passi: []` e `giornale: null` — e
+     *   `null` sul giornale è la differenza fra «non ne ha uno» e «ne ha uno vuoto».
+     * ⛔ `righeSaltate` esce allo scoperto: se una riga del registro è illeggibile, la sezione
+     *   deve poterlo dire. «Si è caricato» e «si è caricato per intero» non sono la stessa frase.
+     */
+    const { eventi, righeSaltate } = await leggiGiornaleFn({ cartella, id });
+    const giro = talosResearchReplay(eventi);
+    const pianoSuDisco = await leggiPianoFn({ cartella, id });
     return {
       trovata: true,
-      ...voceEsposta({ ...record, motivoDettaglio }, stato),
+      ...voceEsposta({ ...record, motivoDettaglio }, stato, letto),
       contenutoRapporto,
+      /*
+       * ⛔ Il testo che il cancello ha RESPINTO, in un campo che dice di esserlo. La sezione può
+       *   mostrarlo come «ciò che la ricerca ha depositato, e che non passa il controllo»: si
+       *   vede tutto il lavoro pagato, e nessuno lo scambia per un rapporto.
+       */
+      contenutoRespinto,
+      piano: Array.isArray(pianoSuDisco) ? pianoSuDisco : (giro?.plan ?? []),
+      passi: giro?.steps ?? [],
+      spesa: giro ? talosResearchSpent(giro) : null,
+      giornale: giro ? { eventi: eventi.length, righeSaltate, stato: giro.status } : null,
     };
   }
 

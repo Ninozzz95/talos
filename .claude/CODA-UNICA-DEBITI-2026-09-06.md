@@ -1097,3 +1097,18 @@ misurare (non da supporre): `prepare()` abbassa il dpr sotto `devicePixelRatio` 
 pixel e chi disegna usa l'altro; il containing block di `.talos-motion-canvas` (`inset:0`) non è
 `#schermoChat`; un padding in coda della conversazione pari a `clientHeight/2`. Delegato (Opus 5
 high) con riproduzione a DPR 1 / 1.25 / 2, cura minima provata al contrario, foto chiaro/scuro.
+
+### BC-24 — albero dei file: «Apri» manca sulla radice, e le cartelle si espandono ma non si comprimono (owner, 11/09/2026 sera)
+Foto della scheda «File» dell'inspector (cartella `talos-bc11-3WpcAS`): tasto destro sulla radice
+senza «Apri in Esplora file» (le azioni esistono per i FILE dal 27/8 e «Apri» gemella di «rivela»
+dal 10/09: vanno estese alla cartella con la stessa validazione di `workspace-files.mjs`); le
+cartelle si aprono e non si chiudono (`app.js` ~13239). Delegato (Opus 5 high): cura, prove nei due
+versi, pattern APG Tree View, foto chiaro/scuro.
+
+### BC-25 — Libreria: il dettaglio non mostra il file, né renderizzato né come testo (owner, 11/09/2026 sera)
+Foto sul 4174: dettaglio «File di prova – Markdown.md» con «Azioni sul file» e un riquadro vuoto.
+Il mockup (ordine dell'owner, «tale e quale») mostra il contenuto con due modi, Anteprima e Testo.
+Delegato (Opus 5 high): switch Anteprima·Testo nel dettaglio (MD col render della chat, CSV a
+tabella, PDF in iframe se il CSP lo permette, DOCX «si apre con l'app del sistema» senza finzioni),
+fixture dei quattro tipi, foto chiaro/scuro; aggancio in app.js come diff (app.js è in mano al lotto
+BC-24).

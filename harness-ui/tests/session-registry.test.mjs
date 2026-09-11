@@ -17,6 +17,8 @@ import {
 import { CustomTaskError } from '../src/custom-task.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { imageMessageContent } from '../src/chat-image-attachments.mjs';
+// ⭐ L4 (11/09) — lo scrittore VERO del record recintato, per le fixture di ricerca.
+import { talosResearchReportDocument } from '../src/research/report.mjs';
 
 test('IMAGE-09 — dopo errore prima del checkpoint la ripresa conserva i pixel referenziati', async () => {
   const finta = sessioneControllabile();
@@ -4890,27 +4892,70 @@ test('Doctor può leggere il riepilogo delle sessioni corrotte senza cancellarle
  * `leggiRapportoFn`, altrimenti il registro leggerebbe il filesystem VERO della macchina che
  * esegue i test — cioè misurerebbe l’ambiente invece dell’oggetto.
  */
-const RAPPORTO_DEPOSITATO = [
-  '# Il caching di OpenRouter',
-  '',
-  'Il prefisso in cache costa un sesto di quello non in cache.',
-  '',
-  '## Fonti',
-  '- https://openrouter.ai/docs/features/prompt-caching',
-].join('\n');
+/*
+ * ⭐⭐⭐ L4 (11/09/2026) — il rapporto non è più prosa: porta il record recintato
+ * ```talos-research-report, e lo scrive `talosResearchReportDocument`, cioè lo STESSO scrittore
+ * del motore portato dal mobile. Una fixture scritta a mano proverebbe solo che il mio parser
+ * legge la mia stringa.
+ */
+const RAPPORTO_DEPOSITATO = talosResearchReportDocument({
+  question: 'Il caching di OpenRouter',
+  summary: 'Il prefisso in cache costa un sesto di quello non in cache.',
+  judge: null,
+  claims: [{
+    claim: { text: 'Il prefisso in cache costa un sesto.', sourceIndex: 1, quote: 'cache read' },
+    passage: 'cached input is billed at a fraction of the uncached rate',
+    checks: { claimSupported: 'unchecked' },
+  }],
+  sources: [{ url: 'https://openrouter.ai/docs/features/prompt-caching', title: 'Prompt caching', publishedAt: null, obtained: 'page' }],
+});
 
 function storeRicercaFinto() {
   const record = new Map();
   const libreria = new Map();
   const rapporti = new Map();
+  /*
+   * ⛔⛔ L4 — il giornale, il piano, le fonti e l'istantanea della cache sono FINTI anche qui, e
+   *   non per simmetria: coi default reali questi test scriverebbero davvero in `/tmp/x`
+   *   (cioè `C:\tmp\x` su Windows) e — misurato mentre scrivevo L4 — un `await` in più verso il
+   *   disco bastava a far scadere l'unico `setImmediate` con cui il filo intero aspetta la
+   *   conclusione, facendo fallire un test che non c'entrava niente. Misurare l'ambiente invece
+   *   dell'oggetto costa due volte: una in correttezza e una in tempo perso a capire perché.
+   */
+  const giornali = new Map();
+  const istantanee = new Map();
+  let orologio = 0;
+  const mtime = new Map();
   let prossimoIdLibreria = 1;
   return {
     rapporti,
+    /** Deposita come farebbe `research_deposit`: il testo E l'impronta nuova (la cache di elenca() si regge su quella). */
+    deposita(cartella, id, testo) {
+      rapporti.set(`${cartella}::${id}`, testo);
+      orologio += 1;
+      mtime.set(`${cartella}::${id}`, orologio);
+    },
     leggiRapportoFn: async ({ cartella, id }) => rapporti.get(`${cartella}::${id}`) ?? null,
+    statRapportoFn: async ({ cartella, id }) => {
+      const chiave = `${cartella}::${id}`;
+      if (!rapporti.has(chiave)) return null;
+      return { mtimeMs: mtime.get(chiave) ?? 0, size: rapporti.get(chiave).length };
+    },
+    accodaEventoFn: async ({ cartella, id, evento }) => {
+      const chiave = `${cartella}::${id}`;
+      giornali.set(chiave, [...(giornali.get(chiave) ?? []), evento]);
+    },
+    leggiGiornaleFn: async ({ cartella, id }) => ({ eventi: giornali.get(`${cartella}::${id}`) ?? [], righeSaltate: 0, byte: 0 }),
+    leggiPianoFn: async () => null,
+    elencaFontiFn: async () => [],
+    leggiIstantaneaCacheFn: async ({ cartella, id }) => istantanee.get(`${cartella}::${id}`) ?? null,
+    scriviIstantaneaCacheFn: async ({ cartella, id, istantanea }) => { istantanee.set(`${cartella}::${id}`, istantanea); },
     creaRicercaFn: async ({ cartella, id, domanda, profondita, padreId = null, nome = null }) => {
       const voce = {
         id, domanda, profondita, titolo: null, terminata: null, reportLibraryId: null,
         avviataAlle: '2026-08-30T10:00:00.000Z', conclusaAlle: null, padreId, nome,
+        // ⛔ `formato: 2` come lo store vero: senza, il cancello accetterebbe il ripiego sulla prosa.
+        formato: 2,
         ultimoMessaggio: null, motivoDettaglio: null,
       };
       record.set(`${cartella}::${id}`, voce);
@@ -4985,7 +5030,7 @@ test('⭐⭐⭐⭐ research FILO INTERO: onRicercaAvvia avvia DAVVERO una second
   assert.match(finta.ultimoInput.task.consegna, /Come funziona il caching di OpenRouter\?/);
 
   // ⭐ La ricerca DEPOSITA il rapporto: è ciò che `research_deposit` fa sul disco vero.
-  store.rapporti.set(`/tmp/x::${id}`, RAPPORTO_DEPOSITATO);
+  store.deposita(`/tmp/x`, id, RAPPORTO_DEPOSITATO);
   finta.concludi(
     { type: 'RunFinished', threadId: 't2', runId: 'r2' },
     { ok: true, esito: { detto: 'x', comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'Il rapporto è pronto.' }] } },

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { creaResearchOrchestrator } from '../src/research-orchestrator.mjs';
+import { talosResearchReportDocument } from '../src/research/report.mjs';
 
 /*
  * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research, piano
@@ -32,6 +33,39 @@ const RAPPORTO_VERO = [
 ].join('\n');
 
 /*
+ * ⭐⭐⭐ L4 (11/09/2026) — IL RAPPORTO CHE IL CANCELLO ACCETTA DA OGGI, e non è più prosa.
+ *
+ * ⛔ Non è scritto a mano: lo produce `talosResearchReportDocument`, cioè **lo stesso
+ *   scrittore** che il mobile usa, portato in L3a e provato carattere per carattere contro il
+ *   TypeScript originale. Una fixture scritta a mano proverebbe che il mio parser legge la mia
+ *   stringa; questa prova che il cancello legge ciò che il motore SCRIVE.
+ * ⛔ `judge: null` e `claimSupported: 'unchecked'` sono la verità di oggi: nessun giudice
+ *   indipendente ha ancora controllato niente, e il bilancio deve dirlo («2 non verificate»)
+ *   invece di mostrare due spunte verdi che nessuno ha guadagnato.
+ */
+const RAPPORTO_RECINTATO = talosResearchReportDocument({
+  question: 'Come stanno evolvendo gli harness agentici desktop',
+  summary: 'Convergono su tre capacità: controllo del computer, permessi per attrezzo e memoria persistente.',
+  judge: null,
+  claims: [
+    {
+      claim: { text: 'I permessi per attrezzo sono lo standard di fatto nel 2026.', sourceIndex: 1, quote: 'per-tool permissions' },
+      passage: 'per-tool permissions are becoming the default posture',
+      checks: { claimSupported: 'unchecked' },
+    },
+    {
+      claim: { text: 'Il privilegio minimo va imposto al confine dell\'azione.', sourceIndex: 2, quote: 'action boundary' },
+      passage: 'least privilege enforced outside the model at the action boundary',
+      checks: { claimSupported: 'unchecked' },
+    },
+  ],
+  sources: [
+    { url: 'https://arxiv.org/abs/2606.20023', title: 'When Lower Privileges Suffice', publishedAt: '2026-06-18', obtained: 'page' },
+    { url: 'https://arxiv.org/abs/2606.28739', title: 'Agent Safety Is Action Alignment', publishedAt: '2026-06-27', obtained: 'page' },
+  ],
+});
+
+/*
  * ⛔⛔⛔ LA SCUSA VERBATIM della sessione `d2a453a8-67e3-4c7a-85a0-c3e1dbe10b35`, 11/09/2026,
  * ore 19:00: 290 byte, salvati in Libreria come «Research - …md» e timbrati `terminata:'done'`
  * dopo 9 `web_search`, 14 `naviga` e 484.171 token di ingresso pagati. Sta qui parola per
@@ -49,15 +83,58 @@ function storeFinto() {
   const record = new Map(); // chiave: `${cartella}::${id}`
   const libreria = new Map(); // chiave: `${cartella}::${id}` -> {testo}
   const rapporti = new Map(); // chiave: `${cartella}::${id}` -> testo del rapporto DEPOSITATO
+  /*
+   * ⭐⭐⭐ L4 (11/09) — IL GIORNALE FINTO, e perché non poteva restare fuori.
+   *
+   * ⛔ Trovato dal vivo mentre scrivevo L4, non previsto: lasciando i default reali, questi
+   *   test hanno creato `C:\p\.harness-ui-research\` e `C:\progetto\.harness-ui-research\` sul
+   *   disco della macchina — le cartelle finte `/p` e `/progetto` risolte davvero — e il primo
+   *   effetto è stato un test di `riprendi` che passava/falliva a seconda di cosa avevano
+   *   scritto i test PRECEDENTI. È la lezione del 10/09 alla lettera: misuravo l'ambiente
+   *   invece dell'oggetto. Da qui in giù, zero filesystem.
+   * ⛔ E `mtime` è un contatore, non `Date.now()`: due scritture nello stesso millisecondo
+   *   devono dare due impronte diverse, altrimenti la cache di `elenca()` servirebbe un
+   *   giudizio vecchio e il test non se ne accorgerebbe mai.
+   */
+  const giornali = new Map(); // chiave: `${cartella}::${id}` -> evento[]
+  const piani = new Map();
+  const fonti = new Map(); // chiave: `${cartella}::${id}` -> ref[]
+  const istantanee = new Map();
+  let orologioRapporti = 0;
+  const mtime = new Map(); // chiave: `${cartella}::${id}` -> mtimeMs finto
+  const segnaRapporto = (chiave) => { orologioRapporti += 1; mtime.set(chiave, orologioRapporti); };
   let prossimoIdLibreria = 1;
   return {
-    record, libreria, rapporti,
+    record, libreria, rapporti, giornali, piani, fonti, istantanee, segnaRapporto,
+    /** Deposita un rapporto come farebbe `research_deposit`: il testo E la sua impronta nuova. */
+    deposita(cartella, id, testo) {
+      rapporti.set(`${cartella}::${id}`, testo);
+      segnaRapporto(`${cartella}::${id}`);
+    },
     /* ⛔ Il lettore del rapporto è iniettato: nessun test di questo file tocca un filesystem vero. */
     leggiRapportoFn: async ({ cartella, id }) => rapporti.get(`${cartella}::${id}`) ?? null,
+    statRapportoFn: async ({ cartella, id }) => {
+      const chiave = `${cartella}::${id}`;
+      if (!rapporti.has(chiave)) return null;
+      return { mtimeMs: mtime.get(chiave) ?? 0, size: rapporti.get(chiave).length };
+    },
+    accodaEventoFn: async ({ cartella, id, evento }) => {
+      const chiave = `${cartella}::${id}`;
+      giornali.set(chiave, [...(giornali.get(chiave) ?? []), evento]);
+    },
+    leggiGiornaleFn: async ({ cartella, id }) => ({ eventi: giornali.get(`${cartella}::${id}`) ?? [], righeSaltate: 0, byte: 0 }),
+    leggiPianoFn: async ({ cartella, id }) => piani.get(`${cartella}::${id}`) ?? null,
+    elencaFontiFn: async ({ cartella, id }) => fonti.get(`${cartella}::${id}`) ?? [],
+    leggiIstantaneaCacheFn: async ({ cartella, id }) => istantanee.get(`${cartella}::${id}`) ?? null,
+    scriviIstantaneaCacheFn: async ({ cartella, id, istantanea }) => { istantanee.set(`${cartella}::${id}`, istantanea); },
     creaRicercaFn: async ({ cartella, id, domanda, profondita, padreId = null, nome = null }) => {
       const voce = {
         id, domanda, profondita, titolo: null, terminata: null, reportLibraryId: null,
         avviataAlle: '2026-08-30T10:00:00.000Z', conclusaAlle: null,
+        // ⛔ `formato: 2` come lo store VERO: senza, ogni ricerca nata nei test sembrerebbe
+        //   vecchia e il cancello accetterebbe il ripiego sulla prosa — cioè proverei il ramo
+        //   sbagliato credendo di provare quello nuovo.
+        formato: 2,
         padreId, nome, ultimoMessaggio: null, motivoDettaglio: null,
       };
       record.set(`${cartella}::${id}`, voce);
@@ -313,6 +390,9 @@ test('elenca: filtra per status, deriva il bucket dal vivo (non dalla sola metad
   await store.creaRicercaFn({ cartella: '/p', id: 'sess-paused', domanda: 'B' });
   await store.creaRicercaFn({ cartella: '/p', id: 'sess-done', domanda: 'C' });
   await store.aggiornaRicercaFn({ cartella: '/p', id: 'sess-done', terminata: 'done' });
+  // ⭐ L4 — «done» in metadata non basta più NEMMENO IN ELENCO: senza un rapporto rileggibile
+  //   la riga dice `senza-rapporto`. Qui il rapporto c'è, quindi `done` è meritato.
+  store.deposita('/p', 'sess-done', RAPPORTO_RECINTATO);
 
   const tutte = await orch.elenca({ cartella: '/p' });
   assert.equal(tutte.totale, 3);
@@ -358,28 +438,38 @@ test('leggi: ricerca "done" con un rapporto DEPOSITATO e valido — contenutoRap
   const sessioni = new Map([['sess-1', vocePadre({ cartella: '/p', conclusa: true })]]);
   const { orch, store } = orchestratoreDiProva(sessioni);
   await store.creaRicercaFn({ cartella: '/p', id: 'sess-1', domanda: 'x' });
-  store.rapporti.set('/p::sess-1', RAPPORTO_VERO);
-  const libId = await store.salvaVoceLibreriaFn({ cartella: '/p', testo: RAPPORTO_VERO });
+  store.deposita('/p', 'sess-1', RAPPORTO_RECINTATO);
+  const libId = await store.salvaVoceLibreriaFn({ cartella: '/p', testo: RAPPORTO_RECINTATO });
   await store.aggiornaRicercaFn({ cartella: '/p', id: 'sess-1', terminata: 'done', reportLibraryId: libId, titolo: 'Titolo scelto' });
   const esito = await orch.leggi({ cartella: '/p', id: 'sess-1' });
   assert.equal(esito.trovata, true);
   assert.equal(esito.stato, 'done');
   assert.equal(esito.titolo, 'Titolo scelto');
-  assert.equal(esito.contenutoRapporto, RAPPORTO_VERO);
+  assert.equal(esito.contenutoRapporto, RAPPORTO_RECINTATO);
   assert.equal(esito.motivo, null, 'un «motivo» su una cosa riuscita sarebbe rumore');
 });
 
 test('⛔⛔⛔ §6.5 COMPATIBILITÀ ALL\'INDIETRO — una ricerca già su disco con terminata:"done" e in Libreria la SCUSA del 11/09 si mostra "senza-rapporto", e il file NON viene riscritto', async () => {
   const sessioni = new Map([['d2a453a8', vocePadre({ cartella: '/p', conclusa: true })]]);
   const { orch, store } = orchestratoreDiProva(sessioni);
-  await store.creaRicercaFn({ cartella: '/p', id: 'd2a453a8', domanda: 'Come stanno evolvendo gli harness agentici desktop nel 2026' });
   const libId = await store.salvaVoceLibreriaFn({ cartella: '/p', testo: SCUSA_DEL_11_SETTEMBRE });
-  await store.aggiornaRicercaFn({ cartella: '/p', id: 'd2a453a8', terminata: 'done', reportLibraryId: libId });
-  // ⛔ nessun rapporto depositato: è una ricerca nata prima che `research_deposit` esistesse.
+  /*
+   * ⛔ L4 — la voce si costruisce A MANO, com'era sul disco prima dell'11/09: **senza
+   *   `formato`**. Passando da `creaRicercaFn` avrebbe `formato: 2` e il cancello le
+   *   chiederebbe il record recintato — cioè proverei il ramo nuovo credendo di provare la
+   *   compatibilità all'indietro. La forma di una fixture vecchia deve essere vecchia davvero.
+   * ⛔ E nessun rapporto depositato: è una ricerca nata prima che `research_deposit` esistesse.
+   */
+  store.record.set('/p::d2a453a8', {
+    id: 'd2a453a8', domanda: 'Come stanno evolvendo gli harness agentici desktop nel 2026',
+    profondita: 'deep', titolo: null, avviataAlle: '2026-09-11T18:56:46.041Z',
+    terminata: 'done', reportLibraryId: libId,
+  });
 
   const esito = await orch.leggi({ cartella: '/p', id: 'd2a453a8' });
   assert.equal(esito.stato, 'senza-rapporto', 'il timbro verde non regge alla rilettura del contenuto');
   assert.equal(esito.contenutoRapporto, null, 'una scusa non si serve come rapporto');
+  assert.equal(esito.contenutoRespinto, SCUSA_DEL_11_SETTEMBRE, 'ma il testo pagato non si butta: esce da una porta che dichiara di essere quella degli scarti');
   assert.match(esito.motivo, /non ha un'intestazione|non elenca nessuna fonte/, 'il motivo dice PERCHÉ, in italiano');
   // ⛔ Ciò che è costato denaro non si sovrascrive: la correzione vive nella LETTURA.
   assert.equal(store.record.get('/p::d2a453a8').terminata, 'done', 'il record su disco resta com\'era: nessuna riscrittura in silenzio');
@@ -418,12 +508,12 @@ test('L2 — rapporto DEPOSITATO e valido: terminata:"done", la Libreria porta i
   const sessioni = new Map();
   const { orch, store, conclusione } = conclusioneDiProva(sessioni);
   const { id } = await orch.avvia({ cartella: '/p', question: 'x', depth: 'deep' });
-  store.rapporti.set(`/p::${id}`, RAPPORTO_VERO);
+  store.deposita(`/p`, id, RAPPORTO_RECINTATO);
   await conclusione({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'Fatto, il rapporto è pronto.' }] } });
   const record = store.record.get(`/p::${id}`);
   assert.equal(record.terminata, 'done');
   assert.ok(record.reportLibraryId);
-  assert.equal(store.libreria.get(`/p::${record.reportLibraryId}`).testo, RAPPORTO_VERO, 'in Libreria finisce il DEPOSITO, non la chiacchiera finale');
+  assert.equal(store.libreria.get(`/p::${record.reportLibraryId}`).testo, RAPPORTO_RECINTATO, 'in Libreria finisce il DEPOSITO, non la chiacchiera finale');
   assert.equal(record.ultimoMessaggio, 'Fatto, il rapporto è pronto.', 'l\'ultimo messaggio si conserva come ALLEGATO');
   assert.ok(record.conclusaAlle, 'conclusaAlle è scritto una volta sola, alla conclusione vera');
 });
@@ -489,21 +579,71 @@ test('⭐ L2 — un rapporto VALIDO depositato E i giri esauriti: vince il PRODO
   const sessioni = new Map();
   const { orch, store, conclusione } = conclusioneDiProva(sessioni);
   const { id } = await orch.avvia({ cartella: '/p', question: 'x', depth: 'deep' });
-  store.rapporti.set(`/p::${id}`, RAPPORTO_VERO);
+  store.deposita(`/p`, id, RAPPORTO_RECINTATO);
   await conclusione({ ok: true, esito: { comeFinita: 'giri-esauriti', messaggiFinali: [{ role: 'assistant', content: 'ho finito i giri' }] } });
   assert.equal(store.record.get(`/p::${id}`).terminata, 'done', 'chi ha consegnato ha consegnato: i giri finiti dopo non annullano la consegna');
 });
 
-test('L2 — rapporto depositato ma SENZA FONTI: "senza-rapporto", e il motivo lo dice', async () => {
+test('L4 — rapporto col RECORD ma SENZA FONTI: "senza-rapporto", e il motivo nomina il record', async () => {
   const sessioni = new Map();
   const { orch, store, conclusione } = conclusioneDiProva(sessioni);
   const { id } = await orch.avvia({ cartella: '/p', question: 'x', depth: 'deep' });
-  store.rapporti.set(`/p::${id}`, '# Un titolo\n\nUna affermazione senza nessuna prova dietro.\n');
+  // ⛔ Il recinto c'è e si rilegge: quello che manca è la sostanza, ed è per QUELLA che si respinge.
+  store.deposita('/p', id, talosResearchReportDocument({
+    question: 'x', summary: 'una sintesi', judge: null,
+    claims: [{ claim: { text: 'Una affermazione senza prove.', sourceIndex: 1, quote: 'q' }, passage: '', checks: { claimSupported: 'unchecked' } }],
+    sources: [],
+  }));
   await conclusione({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'fatto' }] } });
   const record = store.record.get(`/p::${id}`);
   assert.equal(record.terminata, 'senza-rapporto');
-  assert.equal(record.motivoDettaglio, 'il rapporto non elenca nessuna fonte');
+  assert.equal(record.motivoDettaglio, 'il record del rapporto non elenca nessuna fonte');
   assert.equal(store.libreria.size, 0, 'un rapporto che non passa il cancello non entra in Libreria');
+});
+
+/*
+ * ⭐⭐⭐ L4 — LA PROSA DA SOLA NON BASTA PIÙ, e questo è il cambio di NATURA del cancello.
+ *
+ * Il testo qui sotto passava L2 in pieno: titolo, affermazioni, una sezione «## Fonti» con due
+ * URL veri. È esattamente ciò che si legge bene e non si può ricontrollare — nessuna
+ * affermazione è legata alla sua fonte, nessun passaggio è conservato, e fra un mese nessuno
+ * potrà chiedere «come l'avete verificato». ⇒ per una ricerca nata OGGI (`formato: 2`) è
+ * `senza-rapporto`, col motivo che nomina esattamente ciò che manca.
+ */
+test('⛔⛔⛔ L4, VERSO CONTRARIO — un rapporto in PROSA che passava L2 non passa più: manca il record, e il motivo lo dice', async () => {
+  const sessioni = new Map();
+  const { orch, store, conclusione } = conclusioneDiProva(sessioni);
+  const { id } = await orch.avvia({ cartella: '/p', question: 'x', depth: 'deep' });
+  store.deposita('/p', id, RAPPORTO_VERO);
+  await conclusione({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'fatto' }] } });
+  const record = store.record.get(`/p::${id}`);
+  assert.equal(record.terminata, 'senza-rapporto');
+  assert.match(record.motivoDettaglio, /record verificabile/);
+  assert.equal(store.libreria.size, 0);
+  // ⛔ Ma il lavoro pagato non sparisce: si legge, da una porta che dichiara di essere quella degli scarti.
+  const letta = await orch.leggi({ cartella: '/p', id });
+  assert.equal(letta.contenutoRapporto, null);
+  assert.equal(letta.contenutoRespinto, RAPPORTO_VERO);
+});
+
+/*
+ * ⭐⭐⭐ L4 — IL RIPIEGO, e che sia STRETTO si prova qui: LO STESSO testo, due esiti opposti,
+ * e l'unica differenza è l'età della ricerca. Senza questo test «ripiego consentito» sarebbe
+ * una parola in un commento.
+ */
+test('⭐⭐⭐ L4 — la STESSA prosa su una ricerca VECCHIA (senza `formato`) passa col ripiego, e lo dichiara', async () => {
+  const sessioni = new Map([['vecchia', vocePadre({ cartella: '/p', conclusa: true })]]);
+  const { orch, store } = orchestratoreDiProva(sessioni);
+  store.record.set('/p::vecchia', {
+    id: 'vecchia', domanda: 'Una domanda di ieri', avviataAlle: '2026-09-01T10:00:00.000Z',
+    terminata: 'done', reportLibraryId: null,
+  });
+  store.deposita('/p', 'vecchia', RAPPORTO_VERO);
+  const letta = await orch.leggi({ cartella: '/p', id: 'vecchia' });
+  assert.equal(letta.stato, 'done', 'a chi è nato prima del record non si chiede l\'impossibile');
+  assert.equal(letta.contenutoRapporto, RAPPORTO_VERO);
+  assert.equal(letta.bilancio, null, 'ma un bilancio non si inventa: senza record non ce n\'è uno, e `null` non è «tutto a zero»');
+  assert.equal(letta.proveDistinte, 0);
 });
 
 test('⭐ L2 — il rapporto è su disco ma la Libreria lancia: resta "done" con reportLibraryId null — il posto vero del rapporto è la sua cartella', async () => {
@@ -512,7 +652,7 @@ test('⭐ L2 — il rapporto è su disco ma la Libreria lancia: resta "done" con
     salvaVoceLibreriaFn: async () => { throw new Error('disco pieno'); },
   });
   const { id } = await orch.avvia({ cartella: '/p', question: 'x', depth: 'deep' });
-  store.rapporti.set(`/p::${id}`, RAPPORTO_VERO);
+  store.deposita(`/p`, id, RAPPORTO_RECINTATO);
   await conclusione({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'fatto' }] } });
   const record = store.record.get(`/p::${id}`);
   assert.equal(record.terminata, 'done', 'ciò che è costato denaro non si dichiara perso perché una COPIA non è riuscita');
@@ -531,20 +671,36 @@ test('AL CONTRARIO — conclusione senza NESSUN testo assistente e senza rapport
   assert.equal(store.libreria.size, 0);
 });
 
-test('⭐⭐⭐ CONTRATTO §6.4 — ogni voce di elenca() porta i dodici campi che la sezione legge', async () => {
+/*
+ * ⭐⭐⭐ CONTRATTO — CRESCIUTO DA DODICI A QUATTORDICI CAMPI, l'11/09 con L4, e il perché va
+ * scritto qui perché è l'unico posto che qualcuno rileggerà quando cambierà di nuovo.
+ *
+ * I dodici di L2 restano **identici**: stesso nome, stesso tipo, stesso significato. Si
+ * aggiungono `bilancio` e `proveDistinte`, e si aggiungono perché §6.7 dice che la riga in
+ * elenco deve guidare **col bilancio** e mai col conteggio delle fonti — e fino a ieri l'elenco
+ * non aveva il dato per farlo, quindi la sezione non poteva che mostrare un timbro.
+ *
+ * ⛔ La crescita è ADDITIVA per scelta: un contratto che cambia un campo esistente rompe un
+ *   frontend in silenzio, uno che ne aggiunge due no. E il `deepEqual` sulle chiavi resta,
+ *   proprio perché la prossima crescita debba passare da qui invece di scivolare dentro.
+ */
+test('⭐⭐⭐ CONTRATTO §6.4 — ogni voce di elenca() porta i quattordici campi che la sezione legge (dodici di L2 + bilancio e proveDistinte)', async () => {
   const sessioni = new Map();
   const { orch, store, conclusione } = conclusioneDiProva(sessioni);
   const { id } = await orch.avvia({ cartella: '/p', question: 'Quanto costa il caching?', depth: 'deep', padreId: 'madre-1' });
-  store.rapporti.set(`/p::${id}`, RAPPORTO_VERO);
+  store.deposita(`/p`, id, RAPPORTO_RECINTATO);
   await conclusione({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'pronto' }] } });
 
   const { ricerche } = await orch.elenca({ cartella: '/p' });
   assert.equal(ricerche.length, 1);
   const v = ricerche[0];
   assert.deepEqual(Object.keys(v).sort(), [
-    'avviataAlle', 'conclusaAlle', 'domanda', 'id', 'motivo', 'nome',
-    'padreId', 'question', 'reportLibraryId', 'stato', 'titolo', 'ultimoMessaggio',
+    'avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'id', 'motivo', 'nome',
+    'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'stato', 'titolo', 'ultimoMessaggio',
   ], 'il contratto è esattamente questo: il frontend ci sta scrivendo sopra');
+  assert.deepEqual(v.bilancio, { totali: 2, sostenute: 0, inParte: 0, nonSostenute: 0, contese: 0, nonVerificate: 2 },
+    'il bilancio dice la verità di oggi: due affermazioni, nessun giudice, due non verificate — mai due spunte verdi che nessuno ha guadagnato');
+  assert.equal(v.proveDistinte, 2, 'due fonti diverse portano un passaggio davvero ritrovato');
   assert.equal(v.id, id);
   assert.equal(v.question, 'Quanto costa il caching?');
   assert.equal(v.question, v.domanda, 'due nomi, lo stesso valore: mai una traduzione muta a metà strada');
@@ -623,13 +779,13 @@ test('⭐⭐⭐ AL CONTRARIO — il flag si azzera: pausa → ripresa → conclu
   voce.taskId = 'ricerca'; voce.task = { consegna: 'x' }; voce.interrotta = false;
   await orch.riprendi({ id });
   // ⭐ L2: la ripresa consegna DAVVERO, cioè deposita. Prima d'oggi «consegnare» voleva dire «dire qualcosa».
-  store.rapporti.set(`/p::${id}`, RAPPORTO_VERO);
+  store.deposita(`/p`, id, RAPPORTO_RECINTATO);
   await onConclusioneCatturata({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'Depositato.' }] } });
 
   const record = store.record.get(`/p::${id}`);
   assert.equal(record.terminata, 'done', 'la conclusione naturale del SECONDO giro non è scambiata per un\'altra pausa');
   assert.ok(record.reportLibraryId);
-  assert.equal(store.libreria.get(`/p::${record.reportLibraryId}`).testo, RAPPORTO_VERO);
+  assert.equal(store.libreria.get(`/p::${record.reportLibraryId}`).testo, RAPPORTO_RECINTATO);
 });
 
 test('la cancellazione (via onConclusioneFn): terminata:"cancelled", ZERO scritture in Libreria', async () => {
