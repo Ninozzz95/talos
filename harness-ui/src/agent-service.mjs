@@ -1092,7 +1092,11 @@ export async function avviaSessione({
       return {
         ok: false,
         esito: `A .${documento.format} file cannot be appended to: it is a binary container, and joining two of them produces a corrupt file. `
-          + 'Send the whole document in one call, or use a text format (md, html, txt, or a source format) if you need to build it in pieces.',
+          /* ⛔ 11/9 — `html` era in questo elenco e NON è accodabile: `formatoAccodabile` (sei righe
+             sopra) ammette `TALOS_SOURCE_TEXT_FORMATS` più `md` e `csv`, e `html` non è in nessuno
+             dei due. Il commento sopra lo diceva già, questa riga no: il suggerimento mandava il
+             modello dritto sull'errore che stava rifiutando. */
+          + 'Send the whole document in one call, or use a text format (md, txt, or a source format) if you need to build it in pieces.',
       };
     }
 

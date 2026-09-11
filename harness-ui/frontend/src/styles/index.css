@@ -1616,10 +1616,44 @@ a.talos-button{text-decoration:none}
 :root[data-vista="pagina"] .talos-inspector, .talos-shell.inspector-collapsed .talos-inspector{display:none}
 :root[data-vista="pagina"] .talos-shell, .talos-shell.inspector-collapsed{grid-template-columns:var(--talos-sidebar-w) minmax(0,1fr)}
 :root[data-vista="pagina"][data-sidebar="icone"] .talos-shell{grid-template-columns:64px minmax(0,1fr)}
-@media (max-width:1240px){ .talos-shell, :root[data-sidebar="icone"] .talos-shell{grid-template-columns:var(--talos-sidebar-w) minmax(0,1fr)} .talos-inspector{display:none} }
+/*
+ * ⭐⭐⭐ 11/9 — LE DUE BANDIERINE: il numero della soglia vive QUI, e in un posto solo.
+ *
+ * Il difetto che le ha fatte nascere (§2 di `.claude/RAPPORTO-CSS-SPAZI-2026-09-11.md`, misurato a
+ * 1100×800): il JavaScript decideva con `window.innerWidth > 1040` in TREDICI punti, mentre questo
+ * foglio toglie la colonna dei dettagli a **1240** (riga qui sotto) e la barra delle sessioni a
+ * **860**. Fra 1041 e 1240 il pulsante Dettagli collassava una colonna GIÀ invisibile e salvava
+ * `inspectorCollapsed:true` nelle preferenze: alla riapertura a 1440 la colonna partiva chiusa,
+ * senza che nessuno l'avesse chiusa. Due numeri per una decisione sola, e uno dei due sbagliato.
+ *
+ * ⛔ Perché la bandierina e non una variabile con dentro `1240px`: una custom property NON si può
+ *   usare dentro la CONDIZIONE di una media query — le media query si valutano prima che il CSSOM
+ *   esista (MDN «Using CSS custom properties», tutorialpedia «Why CSS Native Variables Fail in
+ *   Media Queries», letti l'11/09/2026). Una `--talos-soglia:1240px` accanto alla media query
+ *   sarebbe di nuovo DUE numeri da tenere allineati a mano: esattamente il difetto di partenza.
+ * ⇒ Si gira il verso: la media query DICHIARA lo stato, il JavaScript lo LEGGE con
+ *   `getComputedStyle(document.documentElement).getPropertyValue(...)` (CSS-Tricks «How to Get All
+ *   Custom Properties on a Page in JavaScript», letto l'11/09/2026). Il numero resta uno, dove fa
+ *   il lavoro; spostarlo qui basta, e il JavaScript segue da solo.
+ * ⛔ «flottante» = la colonna non è più nella griglia, quindi il pulsante deve APRIRE uno strato
+ *   sopra la app invece di collassare una colonna. Il valore di riposo è `0` e sta qui sopra la
+ *   media query apposta: senza foglio (o con la bandierina assente) il JavaScript ripiega su «non
+ *   flottante», che è coerente — senza foglio nessuna regola nasconde niente, e la colonna È lì.
+ */
+:root{--talos-inspector-flottante:0; --talos-sidebar-flottante:0}
+/* ⛔ 11/9 — la barra COMPRESSA restava larga 276 px sotto i 1240. Qui c'era un selettore solo,
+   `.talos-shell, :root[data-sidebar="icone"] .talos-shell{…var(--talos-sidebar-w)…}`: togliendo la
+   terza colonna si riscriveva anche la PRIMA, e la modalita' a icone perdeva i suoi 64 px. Misurato
+   a 1100×800 e a 900×800, nei due temi: griglia `276px 824px` con dentro sette icone centrate e 212
+   px di vuoto a lato — la barra si svuotava senza stringersi. Le due righe adesso sono due, e la
+   modalita' a icone tiene i suoi 64 px a ogni misura (0-2-0 batte 0-1-0, stessa media query). */
+@media (max-width:1240px){ :root{--talos-inspector-flottante:1} .talos-shell{grid-template-columns:var(--talos-sidebar-w) minmax(0,1fr)} :root[data-sidebar="icone"] .talos-shell{grid-template-columns:64px minmax(0,1fr)} .talos-inspector{display:none} }
 @media (max-width:1100px){ .talos-split{grid-template-columns:minmax(0,1fr)} .talos-detail{position:static} }
 @media (max-width:980px){ .talos-settings{grid-template-columns:minmax(0,1fr)} .talos-review{grid-template-columns:minmax(0,1fr)} }
-@media (max-width:860px){ .talos-shell, :root[data-vista="pagina"] .talos-shell{grid-template-columns:minmax(0,1fr)} .talos-sidebar{display:none} }
+/* ⛔ `:root[data-sidebar="icone"]` nell'elenco: senza, la regola a 64 px della media query qui sopra
+   (0-2-0) batterebbe questa (0-1-0) e sotto gli 860 resterebbe una colonna di 64 px per una barra
+   che e' `display:none`. Vale anche se l'attributo resta appiccicato da una misura piu' larga. */
+@media (max-width:860px){ :root{--talos-sidebar-flottante:1} .talos-shell, :root[data-vista="pagina"] .talos-shell, :root[data-sidebar="icone"] .talos-shell{grid-template-columns:minmax(0,1fr)} .talos-sidebar{display:none} }
 @media (max-width:760px){ .talos-picker{grid-template-columns:minmax(0,1fr)} }
 /* Owner 06/09: «logo loading non e animato». Vero, e giusto: con «riduci le animazioni» acceso in Windows
    la regola qui sopra ferma TUTTO, e il segnavia restava una riga con tre cerchi vuoti — sembrava rotto.
@@ -1915,13 +1949,9 @@ a.talos-button{text-decoration:none}
  * ⛔ `:root:not([data-vista="pagina"])` perche' nella vista «pagina» la colonna dei dettagli e' tolta
  *   di proposito (riga con `[data-vista="pagina"] .talos-inspector{display:none}`, specificita' 0-2-1):
  *   senza quel `:not` la mia regola, piu' specifica, la riaprirebbe li' dentro.
- * ⛔ RESTA SCOPERTA LA FASCIA 1041-1240 px, e la cura NON e' in questo file: li' il JavaScript prende
- *   l'altro ramo (`window.innerWidth > 1040` in `legacy/app.js:1481`, `:1521`, `:18599`, `:18796`) e
- *   scrive `inspector-collapsed` sulla shell invece di `open` sul pannello — misurato a 1100x800: il
- *   clic collassa una colonna gia' invisibile e salva `inspectorCollapsed:true` nelle preferenze.
- *   Il CSS non puo' distinguere «chiesto aperto» da «mai toccato», perche' l'assenza di
- *   `inspector-collapsed` e' anche lo stato di partenza. La soglia del JavaScript deve diventare 1240,
- *   cioe' la stessa di questa media query. */
+ * ✅ 11/9, SERA — LA FASCIA 1041-1240 px E' CHIUSA, e non alzando un numero: il JavaScript non ha
+ *   piu' nessun `1040` addosso. Legge `--talos-inspector-flottante`, che questa stessa media query
+ *   accende (vedi il blocco delle due bandierine alla sezione 14). Il numero resta uno solo, qui. */
 @media(max-width:1240px){
  :root:not([data-vista="pagina"]) .talos-inspector.open{display:flex;position:fixed;inset:0 0 0 auto;width:min(var(--talos-inspector-w),100vw);z-index:calc(var(--talos-z-app-overlay) - 1);box-shadow:var(--talos-shadow-floating)}
  :root:not([data-vista="pagina"]) .talos-inspector.open .talos-inspector-close{display:inline-flex}

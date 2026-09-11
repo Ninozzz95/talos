@@ -16,18 +16,18 @@ italiano; commenti col PERCHÉ e i numeri; RICERCA WEB PRIMA su ogni punto (font
 foto chiaro E scuro a 1440 e 1024, guardate una per una; non copiare `dist/` in `public/`; test
 mirati durante, `npm run test:unit` una volta alla fine.
 
-## Lotti (spuntare quelli approvati)
-- [ ] A. **Sidebar a gruppi** «Spazi di lavoro» / «Strumenti» richiudibili (`initSidebar`), con
+## Lotti — TUTTI APPROVATI dall'owner l'11/09 sera, uno per uno, con la spiegazione semplice di ciascuno
+- [x] A. **Sidebar a gruppi** «Spazi di lavoro» / «Strumenti» richiudibili (`initSidebar`), con
       i conteggi veri; pulsante flottante e drawer sotto 860 px (`openDrawer`/`closeDrawer`).
-- [ ] B. **Transizione al cambio pagina** (`navigate` → `motion(...,'tab-change')`, opacity .4→1 +
+- [x] B. **Transizione al cambio pagina** (`navigate` → `motion(...,'tab-change')`, opacity .4→1 +
       5 px): rispettare `prefers-reduced-motion` e l'interruttore «Animazioni interfaccia».
-- [ ] C. **Master/detail nelle sezioni** (`td-master`/`td-detail`, `renderSection`/`renderDetail`)
+- [x] C. **Master/detail nelle sezioni** (`td-master`/`td-detail`, `renderSection`/`renderDetail`)
       per Note, Libreria, Memoria, Attività, Ricerca, Progetti — coi dati veri.
-- [ ] D. **Menu della sessione** nella barra (`sessionMenu`: tre puntini + tasto destro) e
+- [x] D. **Menu della sessione** nella barra (`sessionMenu`: tre puntini + tasto destro) e
       selezione multipla (`td-session-selection`, toolbar «N selezionate»).
-- [ ] E. **Toast** (`toast`, `td-toast-host`) al posto delle note di stato dove il mockup li usa.
-- [ ] F. **Theme studio** nelle Impostazioni (`themeChooser`, `initAtelier`, `td-theme-*`).
-- [ ] G. **Modali** `modalShow`/`modalClose` (`td-modal`) al posto dei dialoghi attuali dove il
+- [x] E. **Toast** (`toast`, `td-toast-host`) al posto delle note di stato dove il mockup li usa.
+- [x] F. **Theme studio** nelle Impostazioni (`themeChooser`, `initAtelier`, `td-theme-*`).
+- [x] G. **Modali** `modalShow`/`modalClose` (`td-modal`) al posto dei dialoghi attuali dove il
       mockup li usa.
 
 Rapporto in `.claude/RAPPORTO-PORTING-MOCKUP-2026-09-11.md`: per ogni lotto — cosa fa il mockup
