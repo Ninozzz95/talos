@@ -181,9 +181,21 @@ body.background-motion-paused::after { animation-play-state: paused; }
 /* ---------- 3. LE SEI LEVE «dove» DEL MOVIMENTO ----------
    Erano sei interruttori con due sole regole dietro (`motion-windows-off`, `motion-messages-off`,
    in `foglio-monolite.css`). Le altre quattro non toccavano niente. */
-:root.interface-motion-off *,
-:root.interface-motion-off *::before,
-:root.interface-motion-off *::after { transition-duration: 0s !important; }
+/*
+ * ⛔⛔⛔ 11/09 — QUI C'ERA UNA REGOLA UNIVERSALE CON `!important`, ED E' STATA TOLTA.
+ *   Diceva `:root.interface-motion-off *, *::before, *::after { transition-duration: 0s !important }`.
+ *   E' la stessa FORMA delle due regole cancellate la notte del 10-11/09
+ *   (`body.reduce-motion * { animation:none!important }` e la gemella dentro
+ *   `@media (prefers-reduced-motion)`), che spegnevano OGNI animazione dell'app e sono costate SEI
+ *   cure di fila su un componente sano: una regola universale con `!important` non si batte da
+ *   valle, e chi cerca il colpevole guarda il componente invece dell'ambiente.
+ *   ⛔ Non conta che qui fosse dietro una classe spenta di serie: conta che, il giorno in cui
+ *     qualcuno accende quell'interruttore, il difetto e' di nuovo invisibile e di nuovo globale.
+ * ⇒ «Movimento dell'interfaccia spento» ora si esprime sui TOKEN, non con un martello universale:
+ *   `aggiornaMotionDesktop` scrive `0s` in tutte le `--talos-motion-duration-*`. Chi legge quei
+ *   token si ferma; chi non li legge non viene spento alle spalle; e la cosa si trova con un grep
+ *   sul nome del token invece che con sei tentativi.
+ */
 :root.motion-surfaces-off .talos-card,
 :root.motion-surfaces-off .talos-panel,
 :root.motion-surfaces-off .talos-dialog { transition: none !important; }
