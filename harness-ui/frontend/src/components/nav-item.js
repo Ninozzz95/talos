@@ -30,21 +30,41 @@
  * Elemento a Light DOM, CSS globale del mockup (blog.master.dev/light-dom-only).
  */
 
-/** I Luoghi del mockup, nell'ordine e con le icone dello sprite. */
-export const LUOGHI = Object.freeze([
-  { vaia: 'capability', icona: 'i-list', etichetta: 'Capability' },
-  { vaia: 'board', icona: 'i-grid', etichetta: 'Board' },
+/*
+ * ⭐ 11/09/2026, lotto A — QUI C'ERANO `LUOGHI` e `LUOGHI_ALTRI`, cioè i cinque luoghi in cima più
+ * i quattro sotto il disclosure «Altro». Il mockup interattivo dell'owner (`initSidebar`, riga
+ * 6098) li rimpiazza con DUE gruppi richiudibili, e il template ha seguito: «Altro» non esiste più,
+ * quindi le due liste vecchie sono state rifatte — non affiancate. Due elenchi che descrivono la
+ * stessa barra divergono al primo ritocco, ed è il modo in cui il laboratorio smette in silenzio di
+ * mostrare la app vera.
+ *
+ * ⛔ L'ordine è quello del mockup, che NON è alfabetico e non è casuale: si scende da ciò che si
+ *   apre più spesso (le conversazioni) a ciò che si consulta (Board).
+ */
+
+/** «Spazi di lavoro»: dove vive il lavoro di una sessione. */
+export const SPAZI_DI_LAVORO = Object.freeze([
+  { vaia: 'chat', icona: 'i-list', etichetta: 'Conversazioni' },
+  { vaia: 'note', conteggio: 'note', icona: 'i-doc', etichetta: 'Note' },
+  { vaia: 'attivita', icona: 'i-check-sq', etichetta: 'Attività' },
   { vaia: 'libreria', icona: 'i-files', etichetta: 'Libreria' },
   { vaia: 'memoria', icona: 'i-brain', etichetta: 'Memoria' },
-  { vaia: 'attivita', icona: 'i-check-sq', etichetta: 'Attività' },
+  { vaia: 'ricerca', icona: 'i-globe', etichetta: 'Ricerca approfondita' },
+  { vaia: 'progetti', icona: 'i-folder', etichetta: 'Progetti' },
+  { vaia: 'board', icona: 'i-grid', etichetta: 'Board' },
 ]);
 
-/** I Luoghi sotto «Altro» (il disclosure `#luoghiAltri`). `note` non ha una schermata sua: solo il conteggio. */
-export const LUOGHI_ALTRI = Object.freeze([
-  { conteggio: 'note', icona: 'i-doc', etichetta: 'Note' },
-  { vaia: 'ricerca', icona: 'i-globe', etichetta: 'Ricerca approfondita' },
+/**
+ * «Strumenti»: ciò con cui si governa la app.
+ * ⛔ `modelli` non è una schermata del ponte: il Model Lab vive dentro Impostazioni → «Laboratorio
+ *   modelli», e il monolite gestisce questa voce a parte (`app.js`, la regia del mockup).
+ */
+export const STRUMENTI = Object.freeze([
+  { vaia: 'modelli', icona: 'i-bolt', etichetta: 'Modelli' },
+  { vaia: 'capability', icona: 'i-list', etichetta: 'Capability' },
   { vaia: 'officina', icona: 'i-code', etichetta: 'Officina attrezzi' },
   { vaia: 'automazioni', icona: 'i-clock', etichetta: 'Automazioni' },
+  { vaia: 'doctor', icona: 'i-shield', etichetta: 'Doctor' },
 ]);
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

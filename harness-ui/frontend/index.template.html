@@ -258,25 +258,72 @@
              Le parole dicono cosa succede quando premi, e cambiano con lo stato: «Seleziona tutte»
              diventa «Deseleziona tutte», e l'eliminazione dice QUANTE ne porta via — mai un
              «Elimina» generico davanti a un'azione che non si annulla. -->
+        <!-- ⛔ 11/09 (lotto D) — le AZIONI DI GRUPPO erano una sola, «Elimina», ed era un bottone
+             affiancato. Owner 10/09: più di due azioni su un oggetto vogliono un menu overflow, mai
+             bottoni in fila. Qui restano a schermo il conteggio e la sola cosa che NON agisce sulle
+             sessioni (estendere o annullare la selezione); esportare, copiare gli identificativi ed
+             eliminare vivono dietro i tre puntini (`apriMenuSelezioneSessioni` in app.js), dove
+             l'azione che non si annulla non si preme per sbaglio.
+             ⛔ Il conteggio nasce VUOTO: «Nessuna selezionata» era una frase che parlava solo di sé
+             (owner 07/9, «deve sparire se non è selezionato nulla»). -->
         <div class="talos-sidebar__selezione" id="sessionSelectionToolbar" hidden>
-          <span class="talos-muted" id="sessionSelectionCount" role="status">Nessuna selezionata</span>
+          <span class="talos-muted" id="sessionSelectionCount" role="status"></span>
           <button class="talos-button talos-button--ghost talos-button--sm" id="sessionSelectionSelectAll">Seleziona tutte</button>
-          <button class="talos-button talos-button--ghost talos-button--sm talos-button--danger" id="sessionSelectionDelete">Elimina</button>
+          <button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" id="sessionSelectionMore" aria-haspopup="menu" aria-expanded="false" aria-label="Altre azioni sulle sessioni selezionate" title="Altre azioni"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button>
     </div>
 
-    <div class="talos-sidebar__block" data-c="NavGroup">
-      <div class="talos-sidebar__block-head"><span class="talos-eyebrow" data-t="luoghi">Luoghi</span></div>
-      <button class="talos-nav-item" data-c="NavItem" data-vaia="capability"><svg class="i"><use href="#i-list"/></svg><span class="talos-nav-item__label" data-t="capability">Capability</span><span class="talos-nav-item__count">43</span></button>
-      <button class="talos-nav-item" data-c="NavItem" data-vaia="board"><svg class="i"><use href="#i-grid"/></svg><span class="talos-nav-item__label" data-t="board">Board</span><span class="talos-nav-item__count">69</span></button>
-      <button class="talos-nav-item" data-c="NavItem" data-vaia="libreria"><svg class="i"><use href="#i-files"/></svg><span class="talos-nav-item__label" data-t="libreria">Libreria</span><span class="talos-nav-item__count">18</span></button>
-      <button class="talos-nav-item" data-c="NavItem" data-vaia="memoria"><svg class="i"><use href="#i-brain"/></svg><span class="talos-nav-item__label" data-t="memoria">Memoria</span><span class="talos-nav-item__count">7</span></button>
-      <button class="talos-nav-item" data-c="NavItem" data-vaia="attivita"><svg class="i"><use href="#i-check-sq"/></svg><span class="talos-nav-item__label" data-t="attivita">Attività</span><span class="talos-nav-item__count">4</span></button>
-      <button class="talos-nav-item" data-c="NavItem" id="altroLuoghi" aria-expanded="false" aria-controls="luoghiAltri"><svg class="i"><use href="#i-more"/></svg><span class="talos-nav-item__label" data-t="altro">Altro</span></button>
-      <div id="luoghiAltri" hidden>
-        <button class="talos-nav-item" data-c="NavItem" data-vaia="note" data-conteggio="note"><svg class="i"><use href="#i-doc"/></svg><span class="talos-nav-item__label">Note</span><span class="talos-nav-item__count">11</span></button>
-        <button class="talos-nav-item" data-c="NavItem" data-vaia="ricerca"><svg class="i"><use href="#i-globe"/></svg><span class="talos-nav-item__label">Ricerca approfondita</span><span class="talos-nav-item__count">6</span></button>
-        <button class="talos-nav-item" data-c="NavItem" data-vaia="officina"><svg class="i"><use href="#i-code"/></svg><span class="talos-nav-item__label">Officina attrezzi</span><span class="talos-nav-item__count">2</span></button>
-        <button class="talos-nav-item" data-c="NavItem" data-vaia="automazioni"><svg class="i"><use href="#i-clock"/></svg><span class="talos-nav-item__label">Automazioni</span><span class="talos-nav-item__count">3</span></button>
+    <!-- ===================== I DUE GRUPPI DELLA BARRA (lotto A, 11/09/2026) =====================
+         Il mockup dell'owner (`initSidebar`, riga 6098) sostituisce il blocco «Luoghi» e il
+         disclosure «Altro» con DUE gruppi richiudibili: «Spazi di lavoro» e «Strumenti». Qui sono
+         markup statico invece che generati a runtime — il mockup li costruisce in JS solo perché
+         deve riscrivere una pagina che non è sua.
+
+         ⛔ Perché due gruppi e non un elenco più lungo: le voci passano da 9 a 13, e 13 voci senza
+            gerarchia sono un muro. La divisione dice anche COSA sono: «Spazi di lavoro» è dove vive
+            il lavoro di una sessione, «Strumenti» è ciò con cui si governa la app.
+         ⛔ La testata di gruppo è un `button` con `aria-expanded` + `aria-controls`, cioè il pattern
+            «disclosure»: è quello che la ricerca dell'11/09/2026 indica come standard per una
+            navigazione richiudibile (216digital, «Accessible Navigation Design Patterns: 2026 Best
+            Practices for WCAG Conformance»; The A11Y Collective, «Practical Guide on Implementing
+            aria-expanded»; Intelligence Community Design System, «Side navigation / accessibility»).
+            Niente `role="menu"`: una barra di navigazione non è un menu applicativo, e chi legge con
+            uno screen reader si aspetterebbe frecce che qui non servono.
+         ⛔ Il monolite ha GIÀ l'ascoltatore del disclosure per ogni `[aria-expanded][aria-controls]`
+            (app.js, la «regia del mockup»): qui non serve un ascoltatore nuovo, solo la memoria
+            della scelta (`ricordaGruppoBarra`).
+
+         ⛔ NESSUN CONTEGGIO SCRITTO A MANO. Il mockup ha numeri d'esempio (43 · 69 · 18 · 7 · 4…) e
+            il template li aveva copiati: restavano a schermo finché una rotta non rispondeva, cioè
+            erano una bugia per i primi secondi di ogni avvio. Il badge lo crea `impostaConteggioNav`
+            quando il numero VERO arriva; assente è uno stato onesto (components/nav-item.js). -->
+    <div class="td-sidebar-nav" data-c="NavGroups">
+      <button type="button" class="td-nav-head" id="testataGruppoLavoro" data-gruppo="lavoro" aria-expanded="true" aria-controls="gruppoLavoro"><span class="talos-eyebrow">Spazi di lavoro</span><svg class="i" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <div class="td-nav-group" id="gruppoLavoro">
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="chat"><svg class="i"><use href="#i-list"/></svg><span class="talos-nav-item__label">Conversazioni</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="note" data-conteggio="note"><svg class="i"><use href="#i-doc"/></svg><span class="talos-nav-item__label">Note</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="attivita"><svg class="i"><use href="#i-check-sq"/></svg><span class="talos-nav-item__label">Attività</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="libreria"><svg class="i"><use href="#i-files"/></svg><span class="talos-nav-item__label">Libreria</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="memoria"><svg class="i"><use href="#i-brain"/></svg><span class="talos-nav-item__label">Memoria</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="ricerca"><svg class="i"><use href="#i-globe"/></svg><span class="talos-nav-item__label">Ricerca approfondita</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="progetti"><svg class="i"><use href="#i-folder"/></svg><span class="talos-nav-item__label">Progetti</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="board"><svg class="i"><use href="#i-grid"/></svg><span class="talos-nav-item__label">Board</span></button>
+      </div>
+      <!-- ⛔ «Strumenti» nasce CHIUSO, come nel mockup (`state.groups = {lavoro:true, strumenti:false}`),
+           e la prima foto a 1440×900 ha mostrato perché: con tutti e due aperti le 13 voci più le due
+           testate misurano ~530 px su ~726 disponibili, la barra schiaccia l'elenco delle sessioni e
+           le ultime voci di «Strumenti» finiscono dentro uno scorrimento che nessuno vede. Chiuso, il
+           gruppo occupa 30 px e si apre quando serve — e la scelta si ricorda. -->
+      <button type="button" class="td-nav-head" id="testataGruppoStrumenti" data-gruppo="strumenti" aria-expanded="false" aria-controls="gruppoStrumenti"><span class="talos-eyebrow">Strumenti</span><svg class="i" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <div class="td-nav-group" id="gruppoStrumenti" hidden>
+        <!-- ⛔ «Modelli» è il Model Lab, che nel prodotto vive dentro Impostazioni → sezione
+             «models»: `#schermoModelLab` esiste nel template ma NON è in `VISTA_PER_SCHERMATA`,
+             cioè è una schermata senza porta. Finché quella porta non esiste, la voce apre la
+             sezione VERA invece di una schermata morta — vedi `apriLuogoBarra` in app.js. -->
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="modelli"><svg class="i"><use href="#i-bolt"/></svg><span class="talos-nav-item__label">Modelli</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="capability"><svg class="i"><use href="#i-list"/></svg><span class="talos-nav-item__label">Capability</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="officina"><svg class="i"><use href="#i-code"/></svg><span class="talos-nav-item__label">Officina attrezzi</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="automazioni"><svg class="i"><use href="#i-clock"/></svg><span class="talos-nav-item__label">Automazioni</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="doctor"><svg class="i"><use href="#i-shield"/></svg><span class="talos-nav-item__label">Doctor</span></button>
       </div>
     </div>
 
@@ -323,6 +370,19 @@
     </div>
     <button class="talos-resizer talos-resizer--sidebar" data-ridimensiona="sidebar" aria-label="Ridimensiona la barra laterale" title="Trascina per ridimensionare, doppio click per il valore normale"></button>
   </nav>
+
+  <!-- ⛔ IL BOTTONE DEL CASSETTO (lotto A, 11/09/2026) — l'UNICA porta alla barra sotto gli 860 px.
+       Fino a oggi `@media (max-width:860px)` faceva `display:none` sulla barra e basta: sessioni,
+       luoghi, ricerca e «Nuova» sparivano senza nessun modo di riaprirli. Il mockup lo crea in JS
+       (`initSidebar`, riga 6101); qui è markup, perché una porta non deve dipendere dal fatto che
+       uno script sia arrivato in fondo.
+       ⛔ Tondo e in basso a sinistra: è la posizione del mockup, ed è dove sta il pollice.
+       ⛔ `aria-expanded` SENZA `aria-controls`, e non è una dimenticanza: la «regia del mockup» in
+          app.js tratta OGNI `[aria-expanded][aria-controls]` come un disclosure e mette `hidden`
+          sull'elemento controllato. Con `aria-controls="sessionsPanel"` il bottone avrebbe aperto
+          il cassetto e NASCOSTO la barra nello stesso clic. Lo stato aperto/chiuso resta detto —
+          è ciò che serve a chi non vede il pannello scorrere. -->
+  <button type="button" class="td-floating-menu" id="apriCassettoBarra" aria-label="Apri la navigazione" title="Apri la navigazione" aria-expanded="false"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
 
   <!-- ===================== CENTRO ===================== -->
   <main class="talos-screen" id="centro">

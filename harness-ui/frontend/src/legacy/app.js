@@ -15,10 +15,18 @@ import {aggiornaEstensioni,collegaSchedeCapability,mostraSchedaCapability} from 
 import { aggiornaPaginaCapability, creaToolListRow } from '../components/capability.js';
 import { creaAutomationRow, aggiornaPaginaAutomazioni } from '../components/automazioni.js';
 import { creaForgeRow, aggiornaPaginaOfficina } from '../components/officina.js'; // 05/9 Fase 2: Officina
-import { creaReportRow, aggiornaPaginaRicerca } from '../components/ricerca.js'; // 05/9 Fase 2: Ricerca
-import { creaLibraryRow, aggiornaPaginaLibreria } from '../components/libreria.js'; // 05/9 Fase 2: Libreria
-import { creaTaskRow, aggiornaPaginaAttivita } from '../components/attivita.js'; // 05/9 Fase 2: Attività
-import { creaMemoryRow, aggiornaPaginaMemoria } from '../components/memoria.js'; // 05/9 Fase 2: Memoria
+import { creaReportRow } from '../components/ricerca.js'; // 05/9 Fase 2: Ricerca (riga del foglio laterale)
+import { creaLibraryRow } from '../components/libreria.js'; // 05/9 Fase 2: Libreria (riga del foglio laterale)
+import { creaTaskRow } from '../components/attivita.js'; // 05/9 Fase 2: Attività (riga del foglio laterale)
+import { creaMemoryRow } from '../components/memoria.js'; // 05/9 Fase 2: Memoria (riga del foglio laterale)
+/* 11/09 lotto C — le PAGINE passano all'elenco+dettaglio del mockup. Stesse firme di prima:
+   cambia l'import, non le chiamate. I sei adattatori riusano i componenti qui sopra. */
+import {
+  aggiornaPaginaRicerca, aggiornaPaginaLibreria, aggiornaPaginaAttivita,
+  aggiornaPaginaMemoria, montaNote, montaProgetti,
+} from '../components/sezioni-adattatori.js';
+import { confermaModale } from '../components/modale-td.js'; // 11/09 lotto G: al posto di window.confirm()
+import { montaScorciatoiaTemi } from '../components/theme-studio.js'; // 11/09 lotto F
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
 import { creaPilaToast } from '../components/toast.js';
 import { creaSorveglianzaConnessione, aggiornaStatoConnessione } from '../components/connessione.js'; // 05/9 T-15: stato onesto della connessione
@@ -52,11 +60,11 @@ import { montaMiglioraPrompt } from '../components/migliora-prompt.js'; // 11/9 
 import { gestoPerIlServer } from '../components/browser-gesti.js'; // 07/9: la vista e il server parlano due lingue: qui si traducono
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
-import { montaProgetti, progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina
+import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
 import { spiegaErrore, spiegaRifiutoAttrezzo, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
-import { montaNote } from '../components/note.js'; // 06/9 C24: la pagina delle Note // 06/9 O-22/O-23/O-36: gli errori e i rifiuti detti a una persona
+// 06/9 C24: la pagina delle Note — la monta `sezioni-adattatori.js`, che riusa `note.js`
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
 import { sommaUsage, usageDellaSessione } from '../components/consumo-sessione.js'; // 06/9 CB-04: il consumo della SESSIONE, non dell'ultimo invio
@@ -421,7 +429,10 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   const sessionSelectionToolbar = $('#sessionSelectionToolbar');
   const sessionSelectionToggle = $('#sessionSelectionToggle');
   const sessionSelectionSelectAll = $('#sessionSelectionSelectAll');
-  const sessionSelectionDelete = $('#sessionSelectionDelete');
+  /* ⛔ 11/09 (lotto D) — `#sessionSelectionDelete` non è più un bottone affiancato: «Elimina» è una
+     voce del menu overflow della selezione (`apriMenuSelezioneSessioni`), insieme a «Esporta» e
+     «Copia gli identificativi». Owner 10/09: più di due azioni non si affiancano. */
+  const sessionSelectionMore = $('#sessionSelectionMore');
   const sessionSelectionCount = $('#sessionSelectionCount');
   const inspectorPanel = $('#inspectorPanel');
   const commandDialog = $('#commandDialog');
@@ -1094,6 +1105,137 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     element.addEventListener('animationend', () => element.classList.remove('motion-enter'), { once: true });
   }
 
+  /*
+   * ⭐⭐⭐ LOTTO B (11/09/2026) — LA TRANSIZIONE AL CAMBIO PAGINA.
+   *
+   * Il mockup dell'owner la fa in una riga sola (`navigate`, riga 6095):
+   *   motion(visible, [{opacity:.4, transform:'translateY(5px)'}, {opacity:1, transform:'none'}], 'tab-change')
+   * Parte da .4 e non da 0 perché non è un'apparizione: la pagina è già lì, si sta solo
+   * SISTEMANDO — cinque pixel e un velo, quanto basta a dire «è cambiato qualcosa» senza
+   * far aspettare nessuno.
+   *
+   * ⛔ TRE interruttori, non uno, e tutti e tre devono dire di sì:
+   *   1. `prefers-reduced-motion` del SISTEMA. Qui si legge con `matchMedia`, perché una
+   *      media query CSS non ferma un'animazione della Web Animations API: la ricerca
+   *      dell'11/09/2026 (Smashing Magazine, «The View Transitions API And Delightful UI
+   *      Animations»; dev.to «Mastering Smooth Page Transitions… in 2026») lo dice esplicito —
+   *      `matchMedia('(prefers-reduced-motion: reduce)').matches` per saltare la transizione
+   *      via codice, e la preferenza va trattata come un contratto, non come una rifinitura.
+   *   2. l'interruttore «Animazioni interfaccia» delle Impostazioni (`interfaceMotion`), che si
+   *      esprime come classe `interface-motion-off` sull'host E azzerando i token (11/09);
+   *   3. la leva più fine «movimento della navigazione» (`motionNavigation` → `motion-navigation-off`):
+   *      chi l'ha spenta ha chiesto proprio QUESTA animazione, non un'altra.
+   * ⛔ La durata resta un TOKEN (`--talos-motion-duration-tab-change`, 180 ms di base): non un
+   *   numero scritto qui, o il profilo di movimento della persona non conterebbe niente.
+   *   `motionMilliseconds` torna già 0 con `reduce-motion` acceso — il quarto cancello, gratis.
+   * ⛔ Perché NON `document.startViewTransition`: la stessa ricerca dice che l'API non è
+   *   supportata da Safari e che lì tutto degrada a navigazione istantanea. Qui il cambio pagina
+   *   è un `hidden` fra due `<section>` già nel DOM: WAAPI fa la stessa cosa ovunque.
+   */
+  function movimentoRidottoDalSistema() {
+    try { return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+    catch { return false; } // un browser che non sa rispondere non deve spegnere la app
+  }
+
+  function animaCambioPagina(pannello) {
+    if (!pannello || typeof pannello.animate !== 'function') return null;
+    if (movimentoRidottoDalSistema()) return null;
+    const host = HOST();
+    if (host.classList.contains('interface-motion-off') || host.classList.contains('motion-navigation-off')) return null;
+    const durata = motionMilliseconds('--talos-motion-duration-tab-change', 180);
+    if (durata <= 0) return null;
+    const easing = getComputedStyle(host).getPropertyValue('--talos-motion-ease').trim() || 'cubic-bezier(.2,.7,.2,1)';
+    const animazione = pannello.animate(
+      [{ opacity: 0.4, transform: 'translateY(5px)' }, { opacity: 1, transform: 'none' }],
+      { duration: durata, easing, fill: 'none' },
+    );
+    motionAnimations.add(animazione);
+    const fine = () => motionAnimations.delete(animazione);
+    animazione.finished.then(fine, fine);
+    return animazione;
+  }
+
+  /*
+   * ⭐ LOTTO B, seconda metà — OGNI PAGINA SI RICORDA DOVE ERI (il `viewScroll` del mockup,
+   * righe 6091 e 6093).
+   *
+   * ⛔ Prima di oggi `setView` faceva `target.scrollTop = 0` su OGNI ingresso: scendevi in fondo
+   *   alla Libreria, aprivi la Board, tornavi, e ricominciavi dall'alto. Su un elenco lungo è
+   *   la differenza fra consultare e ricercare da capo.
+   * ⛔ La chat è ESCLUSA di proposito, e non per dimenticanza: la sua regola è l'opposto — «quando
+   *   clicchi una riga sessione la chat deve trovarsi già in fondo» (owner 02/09), e il fondo lo
+   *   tengono `mantieniFondoDuranteRipristino` e `scorriInFondoConversazione`. Ricordare una
+   *   posizione qui vorrebbe dire litigare con loro a ogni apertura.
+   *   Stessa ragione per terminale, review, browser e vista vuota: nessuno dei quattro scorre in
+   *   una colonna che il cambio pagina possa rimettere dov'era.
+   * ⛔ Si riapplica anche al frame dopo: una pagina che si riempie da una rotta cresce DOPO che
+   *   `setView` è finito, e uno `scrollTop` più grande dell'altezza di allora viene troncato.
+   */
+  const VISTE_CON_SCORRIMENTO_RICORDATO = new Set(['dashboard', 'capability', 'memoria', 'attivita', 'note', 'progetti', 'settings', 'doctor', 'libreria', 'ricerca', 'officina', 'automations']);
+  const scorrimentoPerVista = new Map();
+  /**
+   * La colonna che scorre davvero dentro una vista: l'elenco del mockup se c'è, poi la pagina,
+   * altrimenti il pannello stesso.
+   * ⛔ `.td-master` PRIMA di `.talos-page`, e non è teorico: dal lotto C le sei sezioni (Note,
+   *   Libreria, Memoria, Attività, Ricerca, Progetti) sono elenco+dettaglio e `.talos-page` lì non
+   *   esiste più — misurato sul banco, tutte e sei. Senza questa riga la memoria dello scorrimento
+   *   sarebbe rimasta accesa e inerte, cioè il peggiore dei due stati.
+   *   È lo stesso ordine che usa `navigate` nel mockup (riga 6091): `.td-master,.talos-page,.talos-conversation`.
+   */
+  function scrollerDellaVista(pannello) {
+    if (!pannello) return null;
+    return pannello.querySelector?.('.td-master, .talos-page') || pannello;
+  }
+  function ricordaScorrimentoVista(vista, pannello) {
+    if (!vista || !VISTE_CON_SCORRIMENTO_RICORDATO.has(vista)) return;
+    const scroller = scrollerDellaVista(pannello);
+    if (scroller) scorrimentoPerVista.set(vista, Math.max(0, scroller.scrollTop));
+  }
+  function ripristinaScorrimentoVista(vista, pannello) {
+    if (!pannello) return;
+    const scroller = scrollerDellaVista(pannello);
+    if (!VISTE_CON_SCORRIMENTO_RICORDATO.has(vista)) {
+      pannello.scrollTop = 0;
+      if (scroller && scroller !== pannello) scroller.scrollTop = 0;
+      return;
+    }
+    const y = scorrimentoPerVista.get(vista) || 0;
+    let nostro = false;
+    const applica = () => {
+      if (!scroller) return;
+      nostro = true;
+      scroller.scrollTop = y;
+      if (scroller !== pannello) pannello.scrollTop = 0;
+      window.setTimeout(() => { nostro = false; }, 0); // l'evento `scroll` di questa assegnazione è nostro
+    };
+    applica();
+    if (y <= 0 || !scroller) return;
+    /*
+     * ⛔ LA PARTE CHE UNA SOLA ASSEGNAZIONE NON POTEVA FARE, e la prova l'ha detto subito: «prima
+     *   420, dopo 0». La pagina si RIEMPIE da una rotta DOPO che `setView` è finito
+     *   (`caricaPannelloLibreria` & c. sono `async`), e `replaceChildren` riporta lo scorrimento a
+     *   zero un attimo dopo che l'abbiamo messo a posto. Uno `scrollTop` dato prima che il
+     *   contenuto esista non si applica a niente.
+     * ⇒ Si riprova finché il contenuto cresce, con tre freni: al massimo 1,2 s, si smette se la
+     *   vista cambia, e si smette al PRIMO scorrimento non nostro — da lì comanda la persona.
+     *   È la stessa forma già collaudata in `mantieniFondoDuranteRipristino`.
+     */
+    let smesso = false;
+    const suScroll = () => { if (!nostro && !smesso && Math.abs(scroller.scrollTop - y) > 4) smetti(); };
+    const osservatore = new MutationObserver(() => { if (smesso || state.view !== vista) { smetti(); return; } applica(); });
+    function smetti() {
+      if (smesso) return;
+      smesso = true;
+      osservatore.disconnect();
+      scroller.removeEventListener('scroll', suScroll);
+      window.clearTimeout(sveglia);
+    }
+    scroller.addEventListener('scroll', suScroll, { passive: true });
+    osservatore.observe(pannello, { childList: true, subtree: true });
+    const sveglia = window.setTimeout(smetti, 1_200);
+    window.requestAnimationFrame(applica);
+  }
+
   /**
    * ⛔ 02/09, owner: "quando clicchi su una riga sessione la chat deve
    * trovarsi già in fondo senza animazioni". Le bolle appese durante il
@@ -1293,8 +1435,18 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
      * `setView`, tenuta qui in un posto solo.
      */
     const schermoCorrente = document.documentElement.getAttribute('data-schermo');
+    /*
+     * ⛔ LOTTO A (11/09) — «Modelli» e «Impostazioni» puntano alla STESSA schermata: senza questa
+     *   riga, aprendo il Laboratorio modelli si accendevano tutte e due le voci, e un elenco con
+     *   due «sei qui» non dice dove sei. Vince la più precisa: dentro la sezione «models» è accesa
+     *   «Modelli», altrove «Impostazioni».
+     */
+    const dentroModelLab = schermoCorrente === 'impostazioni' && state.settingsSection === 'models';
     $$('.talos-sidebar [data-vaia]').forEach((voce) => {
-      if (voce.dataset.vaia === schermoCorrente) voce.setAttribute('aria-current', 'page');
+      const suo = voce.dataset.vaia === 'modelli' ? dentroModelLab
+        : voce.dataset.vaia === 'impostazioni' ? (schermoCorrente === 'impostazioni' && !dentroModelLab)
+          : voce.dataset.vaia === schermoCorrente;
+      if (suo) voce.setAttribute('aria-current', 'page');
       else voce.removeAttribute('aria-current');
     });
     $$('[data-vistetab] [role="tab"]').forEach((tab) => {
@@ -1355,6 +1507,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     // usata per dialog/backdrop, senza introdurre un secondo lifecycle.
     cancelMotionAnimationsFor(target);
     prossimaGenerazione(target);
+    // LOTTO B: dove eravamo nella pagina che stiamo lasciando — si legge PRIMA di nasconderla,
+    // perché uno `scrollTop` letto da un elemento con `hidden` è 0 e cancellerebbe la memoria.
+    ricordaScorrimentoVista(previous?.dataset?.view || null, previous);
     state.view = view;
     if (options.mode) state.mode = options.mode;
     else if (view === 'dashboard') state.mode = 'dashboard';
@@ -1387,7 +1542,17 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     document.documentElement.setAttribute('data-vista', ['chat', 'vuota', 'terminale', 'review', 'browser'].includes(schermo) ? 'sessione' : 'pagina');
     document.documentElement.setAttribute('data-schermo', schermo);
     syncNavigationState();
-    target.scrollTop = 0;
+    /*
+     * LOTTO B (11/09) — qui c'era `target.scrollTop = 0`, cioè «ogni pagina ricomincia dall'alto».
+     * Adesso le pagine che scorrono davvero tornano dov'eri; per le altre il comportamento è
+     * identico a prima (azzerato), vedi `ripristinaScorrimentoVista`.
+     * ⛔ La dissolvenza sta DOPO l'unhide di `views.forEach`: animare un pannello ancora `hidden`
+     *   vuol dire far partire un'animazione che nessuno vede per il primo frame.
+     */
+    ripristinaScorrimentoVista(view, target);
+    if (previous !== target) animaCambioPagina(target);
+    // Il cassetto della barra si chiude appena si naviga: è il `closeDrawer()` in coda a `navigate` del mockup (riga 6097).
+    chiudiCassettoBarra({ restituisciFuoco: false });
     resetEmbeddedTopbarScroll(view === 'chat' ? chatConversation : target);
     window.__talosHarnessHostViewChange?.(view);
     if (view === 'settings') inizializzaModelLab();
@@ -1433,6 +1598,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
         apiGet('/api/v1/sessions').catch(() => ({ items: [] })), // senza le sessioni i progetti si vedono lo stesso
       ]);
       montaProgetti(schermo, progettiConSessioni(elenco?.items || [], sessioni?.items || []), {
+        onAggiorna: () => void caricaPaginaProgetti(), // 11/09 lotto C: «Aggiorna» esiste solo dove qualcuno ricarica davvero
         onApriSessione: (s) => { if (s?.sessionId) passaASessione(s.sessionId, s.sessionId, s.nome); },
       });
     } catch (errore) {
@@ -1469,6 +1635,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     const cerca = $('#cercaNota', schermo)?.value || '';
     montaNote(schermo, noteCaricate, {
       cerca,
+      notifica: toast, // 11/09 lotto E: «Esportata» invece di una nota di stato che nessuno legge
+      onAggiorna: () => void caricaPaginaNote(),
       onCopia: (nota) => copyText(`${nota?.titolo || ''}
 
 ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
@@ -1541,7 +1709,140 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     } catch { /* storage negato: si parte espansi la prossima volta, nessun crash */ }
   }
 
+  /* ═══════════ LOTTO A (11/09/2026) — I DUE GRUPPI E IL CASSETTO ═══════════
+   *
+   * Il mockup dell'owner (`initSidebar` 6098, `toggleSidebar` 6104, `openDrawer`/`closeDrawer`
+   * 6114-6115) fa tre cose che il prodotto non aveva:
+   *   · divide i luoghi in «Spazi di lavoro» e «Strumenti», due disclosure richiudibili;
+   *   · sotto gli 860 px trasforma la barra in un CASSETTO con un bottone tondo che la apre;
+   *   · ricorda la scelta.
+   * Il markup dei gruppi sta nel template; qui c'è ciò che il markup non può dire: la memoria e
+   * il comportamento del cassetto.
+   */
+
+  /**
+   * La soglia del cassetto. ⛔ Non è un numero scelto qui: è la SOLA media query che nasconde la
+   * barra (`index.css`: `@media (max-width:860px){ .talos-sidebar{display:none} }`, e la stessa in
+   * `mockup-sidebar.css`). Vive in due posti — qui e nel CSS — e il cancello che lo tiene onesto è
+   * la prova dal vivo `A4` (`artifacts/prove.mjs`): a 800 px la barra DEVE risultare nascosta.
+   * Cambiarne uno solo fa diventare rossa quella riga.
+   */
+  const SOGLIA_CASSETTO_PX = 860;
+  function larghezzaDaCassetto() { return window.innerWidth <= SOGLIA_CASSETTO_PX; }
+
+  const GRUPPI_BARRA_STORAGE_KEY = 'talos.harness.desktop.barra.gruppi.v1';
+  function leggiGruppiBarra() {
+    try {
+      const grezzo = JSON.parse(window.localStorage.getItem(GRUPPI_BARRA_STORAGE_KEY) || 'null');
+      return grezzo && typeof grezzo === 'object' && !Array.isArray(grezzo) ? grezzo : {};
+    } catch { return {}; } // storage negato: nessuna scelta ⇒ vale il default del template (lavoro aperto, strumenti chiuso)
+  }
+  function ricordaGruppoBarra(nome, aperto) {
+    if (!nome) return;
+    try {
+      const scelte = leggiGruppiBarra();
+      scelte[nome] = aperto === true;
+      window.localStorage.setItem(GRUPPI_BARRA_STORAGE_KEY, JSON.stringify(scelte));
+    } catch { /* una preferenza non salvata non deve rompere la navigazione */ }
+  }
+  /**
+   * Rimette i gruppi come li avevi lasciati. L'APERTURA e la chiusura le fa già la «regia del
+   * mockup» (l'ascoltatore generico su `[aria-expanded][aria-controls]`): qui si ripristina lo
+   * stato all'avvio e si prende nota quando cambia.
+   * ⛔ L'ascoltatore che prende nota va registrato DOPO quello della regia: sono due ascoltatori
+   *   delegati sullo stesso nodo, e l'ordine di registrazione è l'ordine di chiamata (DOM Standard).
+   *   Registrato prima, leggerebbe `aria-expanded` ancora al valore VECCHIO e salverebbe l'opposto
+   *   di quello che vedi. È il motivo per cui `montaGruppiBarra()` si chiama in coda all'avvio.
+   */
+  function montaGruppiBarra() {
+    const scelte = leggiGruppiBarra();
+    for (const testata of $$('.td-nav-head[data-gruppo]')) {
+      const contenitore = $(`#${testata.getAttribute('aria-controls')}`);
+      if (!contenitore) continue;
+      const nome = testata.dataset.gruppo;
+      if (!Object.hasOwn(scelte, nome)) continue; // mai scelto: resta com'è nel template (aperto)
+      const aperto = scelte[nome] === true;
+      testata.setAttribute('aria-expanded', String(aperto));
+      contenitore.hidden = !aperto;
+    }
+    ROOT().addEventListener('click', (event) => {
+      const testata = event.target.closest?.('.td-nav-head[data-gruppo]');
+      if (!testata) return;
+      const aperto = testata.getAttribute('aria-expanded') === 'true';
+      ricordaGruppoBarra(testata.dataset.gruppo, aperto);
+      /*
+       * ⛔ Visto nella FOTO a 1440×900 (tema scuro), non dedotto: aperto «Strumenti», dei suoi
+       *   cinque luoghi se ne vedevano tre e mezzo — il blocco è alto al massimo metà barra e il
+       *   resto stava sotto il bordo, senza niente che lo dicesse. Il tetto resta (o la barra si
+       *   mangerebbe le sessioni): a muoversi è la vista, che porta sotto gli occhi il gruppo
+       *   appena aperto. `block:'nearest'` non muove niente se ci sta già.
+       */
+      if (!aperto) return;
+      const contenitore = $(`#${testata.getAttribute('aria-controls')}`);
+      contenitore?.scrollIntoView?.({ block: 'nearest', behavior: movimentoRidottoDalSistema() || document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth' });
+    });
+  }
+
+  /*
+   * IL CASSETTO. Ricerca 11/09/2026 (js-offcanvas di vmitsaras; Kahoot! «Focus on accessibility —
+   * accessible menus and modals»; UXPin «How to Build Accessible Modals with Focus Traps (2026)»;
+   * Peter Benoit sull'attributo `inert`): un pannello fuori schermo è pronto solo se fa QUATTRO
+   * cose — porta il fuoco dentro, rende inerte ciò che resta fuori, chiude con Escape, e
+   * restituisce il fuoco a chi l'aveva aperto. Ne mancasse una, «it is not ready for production».
+   * ⛔ Niente trappola del fuoco scritta a mano: `inert` sul resto della pagina fa lo stesso lavoro
+   *   dicendolo anche alle tecnologie assistive, che una trappola di `Tab` non fa.
+   */
+  let fuocoPrimaDelCassetto = null;
+  function elementiFuoriDalCassetto() {
+    const barra = $('.talos-sidebar');
+    /* ⛔ I fratelli della barra dentro il guscio — centro, colonna dei dettagli, suggerimento e il
+       bottone stesso che ha aperto il cassetto. NON il velo: quello vive sul `body` e deve restare
+       premibile, perché chiudere è la sua unica ragione di esistere. E nemmeno i frammenti legacy
+       (toast, dialoghi): un toast che arriva mentre il cassetto è aperto va letto. */
+    return [...(appShell?.children || [])].filter((nodo) => nodo !== barra);
+  }
+  function cassettoAperto() { return document.documentElement.classList.contains('td-drawer-open'); }
+  function apriCassettoBarra() {
+    if (!larghezzaDaCassetto() || cassettoAperto()) return;
+    const barra = $('.talos-sidebar');
+    if (!barra) return;
+    fuocoPrimaDelCassetto = ROOT().activeElement || null;
+    document.documentElement.classList.add('td-drawer-open');
+    for (const nodo of elementiFuoriDalCassetto()) nodo.inert = true;
+    let velo = $('.td-scrim');
+    if (!velo) {
+      velo = document.createElement('button');
+      velo.type = 'button';
+      velo.className = 'td-scrim';
+      velo.setAttribute('aria-label', 'Chiudi la navigazione');
+      velo.addEventListener('click', () => chiudiCassettoBarra());
+      document.body.append(velo);
+    }
+    $('#apriCassettoBarra')?.setAttribute('aria-expanded', 'true');
+    // L'entrata da sinistra, con gli stessi tre cancelli del cambio pagina (sistema, impostazione, leva).
+    if (!movimentoRidottoDalSistema() && !HOST().classList.contains('interface-motion-off') && typeof barra.animate === 'function') {
+      const durata = motionMilliseconds('--talos-motion-duration-surface-enter', 180);
+      if (durata > 0) barra.animate([{ transform: 'translateX(-100%)' }, { transform: 'none' }], { duration: durata, easing: getComputedStyle(HOST()).getPropertyValue('--talos-motion-ease').trim() || 'cubic-bezier(.2,.7,.2,1)' });
+    }
+    // Il fuoco entra: la prima voce di navigazione, o la barra stessa se il markup cambia.
+    (barra.querySelector('[data-vaia]') || barra).focus?.({ preventScroll: true });
+  }
+  function chiudiCassettoBarra({ restituisciFuoco = true } = {}) {
+    if (!cassettoAperto()) return;
+    document.documentElement.classList.remove('td-drawer-open');
+    for (const nodo of elementiFuoriDalCassetto()) nodo.inert = false;
+    $('.td-scrim')?.remove();
+    $('#apriCassettoBarra')?.setAttribute('aria-expanded', 'false');
+    if (restituisciFuoco) (fuocoPrimaDelCassetto?.isConnected ? fuocoPrimaDelCassetto : $('#apriCassettoBarra'))?.focus?.({ preventScroll: true });
+    fuocoPrimaDelCassetto = null;
+  }
+  function alternaCassettoBarra() { if (cassettoAperto()) chiudiCassettoBarra(); else apriCassettoBarra(); }
+
   function toggleSessionsPanel() {
+    // ⛔ Sotto gli 860 px la barra non è «compressa a icone»: non c'è proprio. L'unico gesto
+    //   sensato per il pulsante del menu, lì, è aprire il cassetto — è il `toggleSidebar` del
+    //   mockup (riga 6104: `if(innerWidth<=860){openDrawer();return;}`).
+    if (larghezzaDaCassetto()) { alternaCassettoBarra(); return; }
     /* ⛔ La barra delle sessioni ha la SUA soglia (860, `styles/index.css` sezione 14), non quella
        della colonna dei dettagli: con un numero solo per tutti e due, fra 861 e 1040 px questo
        pulsante apriva uno strato sopra una barra che era gia' li' e visibile. */
@@ -3905,6 +4206,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       try { window.localStorage.setItem(SETTINGS_SECTION_STORAGE_KEY, selected); } catch { /* preferenza non bloccante */ }
     }
     mostraSezioneImpostazioni($('#schermoImpostazioni'), selected);
+    syncNavigationState(); // LOTTO A: la voce «Modelli» della barra si accende su questa sezione, non sulla schermata
     if (selected === 'models' && !state.modelLab.initialized) inizializzaModelLab();
     if (selected === 'tools') void caricaPannelloRicercaWeb(); // ⭐ 04/9, R-03 — stato vero dal server a ogni apertura della scheda
     // 06/9 D26 e D21/D22: si leggono all'APERTURA della sezione, non a ogni ridisegno.
@@ -3957,6 +4259,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const documento = leggiImpostazioniDesktop();
         applicaAspettoDesktop(documento.appearance);
         montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection });
+        montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
         dillo(`Preferenze importate da «${file.name}».`);
         toast('Preferenze importate', file.name);
@@ -3965,19 +4268,33 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       } finally { campo.value = ''; }
     });
 
+    /*
+     * ⛔ 11/09, lotto G — qui c'era un `window.confirm`, cioè il riquadro del SISTEMA sopra una app
+     *   che ha un tema suo. `confermaModale` è ASINCRONA (ed è il punto: una modale non blocca il
+     *   thread come `confirm`), quindi il corpo non può restare in linea — va in una callback.
+     */
     $('#settingsRipristina')?.addEventListener('click', () => {
       // ⛔ distruttivo: si chiede prima, e si dice esattamente cosa NON viene toccato.
-      if (!window.confirm('Rimetto tutte le preferenze ai valori iniziali?\n\nTema, densità, lingua, preferenze della chat e cartelle ricordate tornano come appena installato.\nLe conversazioni e i file NON vengono toccati.')) return;
+      confermaModale({
+        titolo: 'Rimetto tutte le preferenze ai valori iniziali?',
+        domanda: 'Tema, densità, lingua, preferenze della chat e cartelle ricordate tornano come appena installato.',
+        conseguenza: 'Le conversazioni e i file NON vengono toccati.',
+        etichettaConferma: 'Ripristina',
+        onConferma: () => { ripristinaPreferenzeDesktop(); },
+      });
+    });
+    function ripristinaPreferenzeDesktop() {
       try {
         window.localStorage.removeItem(DESKTOP_SETTINGS_KEY);
         const documento = leggiImpostazioniDesktop();
         applicaAspettoDesktop(documento.appearance);
         montaImpostazioni($('#schermoImpostazioni'), documento.appearance, { recupera: (id) => $('#' + id), cambiaSezione: setSettingsSection });
+        montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
         sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(documento.appearance));
         dillo('Preferenze riportate ai valori iniziali. Le conversazioni non sono state toccate.');
         toast('Preferenze ripristinate', 'Le conversazioni non sono state toccate');
       } catch (errore) { dillo(`Ripristino non riuscito: ${errore.message}`, true); }
-    });
+    }
   }
 
   /*
@@ -4124,6 +4441,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function inizializzaSettingsNavigation() {
     montaImpostazioni($('#schermoImpostazioni'), leggiImpostazioniDesktop().appearance, { recupera: id => $('#' + id), cambiaSezione: setSettingsSection });
+    montaScorciatoiaTemi($('#schermoImpostazioni')); // 11/09 lotto F: idempotente — `montaImpostazioni` ridisegna le righe
     montaTrasferimentoImpostazioni(); // 06/9 D5: esporta · importa · ripristina
     sincronizzaSelettoriDensitaLingua(normalizzaAspettoDesktop(leggiImpostazioniDesktop().appearance)); // 06/9 B8
     $$('[data-settings-tab]').filter(tab => !tab.closest('#schermoImpostazioni')).forEach((tab) => {
@@ -4822,6 +5140,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          */
         aggiornaPaginaLibreria(mount, voci, {
           errore, caricamento, sessionId,
+          notifica: toast, // 11/09 lotto E: la rinomina riuscita esce con «Annulla», non come nota di stato
           onAggiorna: () => caricaPannelloLibreria({ pagina: true }),
           /*
            * ⛔ 10/09, visto nella FOTO subito dopo un'eliminazione riuscita: la pagina diceva
@@ -6318,35 +6637,38 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
 
-  function apriMenuAzioniSessione(sessione, posizionamento) {
-    document.querySelector('.session-actions-menu')?.remove();
-    const target = {
-      ...sessione,
-      sessionId: sessione.sessionId,
-      taskId: sessione.taskId || sessione.sessionId,
-      nome: sessione.nome || sessione.taskId || 'Sessione',
-      modello: normalizzaModelloSessione(sessione),
-    };
-    state.sessioneTarget = target;
-
+  /**
+   * ⭐⭐⭐ LOTTO D (11/09/2026) — IL MENU DI AZIONI, UNO SOLO PER TUTTI.
+   *
+   * Era il corpo di `apriMenuAzioniSessione`; adesso è generico perché serve a DUE chiamanti: le
+   * azioni di UNA sessione (tre puntini della riga e tasto destro) e le azioni di GRUPPO della
+   * selezione multipla. Due copie dello stesso menu sarebbero due tastiere diverse al primo ritocco.
+   *
+   * ⛔ LA TASTIERA, che prima non c'era. Ricerca 11/09/2026 (Carbon Design System, «Overflow menu /
+   *   accessibility»; dfm2html, «Accessible Drop-Down Menus in 2026 Without a Framework»): un menu
+   *   overflow si apre con Invio o Spazio, all'apertura il fuoco va sulla PRIMA voce, e le frecce
+   *   muovono fra le voci. Prima di oggi il menu si apriva col fuoco rimasto sul pulsante: con
+   *   `role="menu"` dichiarato e nessuna freccia che funzionasse, cioè una promessa non mantenuta.
+   * ⛔ Il fuoco entra solo se il menu è stato aperto DA TASTIERA (`fuoco:true`): rubare il cursore
+   *   a chi ha appena cliccato col mouse sposterebbe la pagina sotto le sue dita.
+   *
+   * @param {{voci:Array, etichetta:string, classe?:string, posizionamento?:object}} opzioni
+   */
+  function apriMenuAzioni({ voci, etichetta, classe = '', posizionamento = {} }) {
+    document.querySelector('.ft-actions-menu.talos-menu-azioni')?.remove();
     const menu = document.createElement('div');
-    menu.className = 'ft-actions-menu session-actions-menu';
+    menu.className = `ft-actions-menu talos-menu-azioni${classe ? ` ${classe}` : ''}`;
     menu.setAttribute('role', 'menu');
-    menu.setAttribute('aria-label', `Azioni per ${target.nome}`);
-    const voci = [
-      { etichetta: 'Apri', icona: 'i-eye', azione: () => passaASessione(target.sessionId, target.taskId, target.nome, target.modello, target) },
-      { etichetta: 'Rinomina', icona: 'i-edit', azione: () => openSheet('rename') },
-      { etichetta: 'Fork', icona: 'i-branch', azione: () => forkSession(target) },
-      { etichetta: 'Copia identificativo', icona: 'i-link', azione: () => copyText(target.sessionId, 'Identificativo copiato') },
-      { etichetta: 'Elimina', icona: 'i-trash', azione: () => openSheet('deleteSession'), pericoloso: true },
-    ];
+    menu.setAttribute('aria-label', etichetta);
     for (const voce of voci) {
+      if (!voce) continue;
       const button = document.createElement('button');
       button.type = 'button';
       button.className = `ft-actions-menu-item${voce.pericoloso ? ' ft-actions-menu-item-danger' : ''}`;
       button.setAttribute('role', 'menuitem');
+      button.tabIndex = -1; // roving: una sola fermata di Tab, le frecce fanno il resto
       button.append(iconaSvgAlbero(voce.icona), textElement('span', '', voce.etichetta));
-      button.addEventListener('click', () => { chiudiMenu(); voce.azione(); });
+      button.addEventListener('click', () => { chiudiMenu({ restituisciFuoco: false }); voce.azione(); });
       menu.appendChild(button);
     }
     document.body.appendChild(menu);
@@ -6363,22 +6685,79 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       menu.style.top = `${Math.max(8, top)}px`;
     }
     const focusElement = pos.focusElement || null;
-    function chiudiMenu() {
+    const grilletto = pos.ancoraEl || null;
+    grilletto?.setAttribute?.('aria-expanded', 'true');
+    const items = () => [...menu.querySelectorAll('[role="menuitem"]')];
+    function chiudiMenu({ restituisciFuoco = false } = {}) {
       menu.remove();
+      grilletto?.setAttribute?.('aria-expanded', 'false');
       document.removeEventListener('click', onDocumentClick);
-      document.removeEventListener('keydown', onKeydown);
+      document.removeEventListener('keydown', onKeydown, true); // stesso `true` della registrazione, o non si stacca
+      if (restituisciFuoco) (focusElement || grilletto)?.focus?.();
     }
     function onDocumentClick(event) { if (!menu.contains(event.target)) chiudiMenu(); }
     function onKeydown(event) {
-      if (event.key !== 'Escape') return;
+      /*
+       * ⛔ 11/09, TROVATO DAL BANCO e non da un'ipotesi: con il menu aperto su una sessione VIVA,
+       *   Esc chiudeva il menu **e** apriva il velo «fermo il giro?». Due strati smontati con un
+       *   tasto solo, il secondo dei quali chiede di interrompere del lavoro pagato.
+       *   La causa è l'ordine: la catena di Esc della app è registrata all'avvio, quindi in fase di
+       *   BOLLA gira prima di questa, e un `stopPropagation` qui arriverebbe troppo tardi.
+       * ⇒ Questo ascoltatore sta in fase di CATTURA (terzo argomento `true`): vede il tasto per
+       *   primo e lo ferma. È la stessa regola dei layer di WAI-ARIA APG — si smonta lo strato più
+       *   interno, e solo quello.
+       */
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); chiudiMenu({ restituisciFuoco: true }); return; }
+      const tutte = items();
+      if (tutte.length === 0) return;
+      const i = tutte.indexOf(document.activeElement);
+      let j = null;
+      if (event.key === 'ArrowDown') j = i < 0 ? 0 : (i + 1) % tutte.length;
+      else if (event.key === 'ArrowUp') j = i <= 0 ? tutte.length - 1 : i - 1;
+      else if (event.key === 'Home') j = 0;
+      else if (event.key === 'End') j = tutte.length - 1;
+      else if (event.key === 'Tab') { chiudiMenu({ restituisciFuoco: true }); return; } // Tab esce dal menu, non ci gira dentro
+      if (j === null) return;
       event.preventDefault();
-      chiudiMenu();
-      focusElement?.focus?.();
+      tutte[j].focus();
     }
+    if (pos.fuoco) items()[0]?.focus();
     window.setTimeout(() => {
       document.addEventListener('click', onDocumentClick);
-      document.addEventListener('keydown', onKeydown);
+      document.addEventListener('keydown', onKeydown, true);
     }, 0);
+    return { chiudi: chiudiMenu };
+  }
+
+  function apriMenuAzioniSessione(sessione, posizionamento) {
+    const target = {
+      ...sessione,
+      sessionId: sessione.sessionId,
+      taskId: sessione.taskId || sessione.sessionId,
+      nome: sessione.nome || sessione.taskId || 'Sessione',
+      modello: normalizzaModelloSessione(sessione),
+    };
+    state.sessioneTarget = target;
+    /*
+     * ⛔ Solo azioni che il prodotto HA davvero, e ognuna passa da una rotta esistente: apri,
+     *   rinomina (`/rename`), duplica come ramo (`/fork`), esporta (`/export`), copia
+     *   l'identificativo, elimina (`/delete`).
+     * ⛔ «Archivia» NON c'è, e non si finge: il server non ha una rotta per archiviare una sessione
+     *   (nessuna `/archive` in `http-app.mjs`, controllato l'11/09). Una voce che apre un toast
+     *   «non collegato» è esattamente il genere di bugia che questa app ha passato mesi a togliere.
+     * ⛔ «Duplica» si chiama «Duplica come ramo» e non «Fork»: il nome tecnico resta il contratto
+     *   col kernel, non la parola a schermo (regola owner 04/09). Il ramo eredita la storia, e
+     *   dirlo qui evita la domanda «duplica cosa?».
+     */
+    const voci = [
+      { etichetta: 'Apri', icona: 'i-eye', azione: () => passaASessione(target.sessionId, target.taskId, target.nome, target.modello, target) },
+      { etichetta: 'Rinomina', icona: 'i-edit', azione: () => openSheet('rename') },
+      { etichetta: 'Duplica come ramo', icona: 'i-branch', azione: () => forkSession(target) },
+      { etichetta: 'Esporta la trascrizione', icona: 'i-download', azione: () => { void esportaTrascrizioneSessione('markdown', target); } },
+      { etichetta: 'Copia identificativo', icona: 'i-link', azione: () => copyText(target.sessionId, 'Identificativo copiato') },
+      { etichetta: 'Elimina', icona: 'i-trash', azione: () => openSheet('deleteSession'), pericoloso: true },
+    ];
+    return apriMenuAzioni({ voci, etichetta: `Azioni per ${target.nome}`, classe: 'session-actions-menu', posizionamento });
   }
 
   /*
@@ -6459,14 +6838,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * Esporta la sessione nel formato scelto. Estratta dal gestore vecchio il 07/9.
    * @returns {Promise<{ok:boolean, motivo?:string}>}
    */
-  async function esportaSessioneCorrente(formato) {
-    if (!state.realSession.id) return { ok: false, motivo: 'Nessuna sessione aperta da esportare.' };
+  /**
+   * ⛔ 11/09 (lotto D) — si chiamava `esportaSessioneCorrente` e guardava SOLO
+   * `state.realSession.id`: dal menu della riga si poteva esportare unicamente la sessione già
+   * aperta, cioè l'unica per cui il comando non serviva. Ora la sessione è un argomento; senza,
+   * resta quella aperta — il comportamento di prima, per chi chiamava da lì.
+   */
+  async function esportaTrascrizioneSessione(formato, sessione = null) {
+    const id = sessione?.sessionId || state.realSession.id;
+    if (!id) return { ok: false, motivo: 'Nessuna sessione aperta da esportare.' };
     try {
-      const esportato = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/export`);
+      const esportato = await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/export`);
       const markdown = formato === 'markdown';
       const testo = markdown ? costruisciTrascrizioneMarkdown(esportato) : JSON.stringify(esportato, null, 2);
       if (!testo || !testo.trim()) throw new Error('Esportazione vuota: nessun contenuto da scrivere.');
-      scaricaTesto(testo, `talos-sessione-${state.realSession.id}.${markdown ? 'md' : 'json'}`, markdown ? 'text/markdown' : 'application/json');
+      scaricaTesto(testo, `talos-sessione-${id}.${markdown ? 'md' : 'json'}`, markdown ? 'text/markdown' : 'application/json');
       toast('Sessione esportata', markdown ? 'Trascrizione Markdown pronta.' : 'JSON pronto.');
       return { ok: true };
     } catch (error) {
@@ -6722,7 +7108,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         bottone.addEventListener('click', async () => {
           const tutti = $$('[data-export-choice]', velo);
           tutti.forEach((b) => { b.disabled = true; });
-          const esito = await esportaSessioneCorrente(bottone.dataset.exportChoice);
+          const esito = await esportaTrascrizioneSessione(bottone.dataset.exportChoice);
           tutti.forEach((b) => { b.disabled = false; });
           if (esito.ok) chiudiVeloMockup('veloEsporta');
         });
@@ -8671,10 +9057,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         icona: 'i-branch',
         aziona: () => {
           /* ⛔ Questa lascia la conversazione corrente: è esattamente ciò che PO-08 evita, quindi
-             si dice prima di farlo invece di scoprirlo dopo. */
-          if (!window.confirm('Aprire questa delega come sessione intera? Lasci la conversazione che stai leggendo.')) return;
-          chiudiConversazioneFiglia();
-          passaASessione({ id: figlia.sessionId, modello: figlia.modello || null });
+             si dice prima di farlo invece di scoprirlo dopo.
+             ⛔ 11/09 lotto G: `confermaModale` è asincrona — il seguito vive nella callback. */
+          confermaModale({
+            titolo: 'Aprire questa delega come sessione intera?',
+            domanda: 'Lasci la conversazione che stai leggendo.',
+            conseguenza: 'La delega continua comunque: cambia solo quello che hai davanti.',
+            etichettaConferma: 'Apri la delega',
+            onConferma: () => { chiudiConversazioneFiglia(); passaASessione({ id: figlia.sessionId, modello: figlia.modello || null }); },
+          });
         },
       },
     ];
@@ -8685,15 +9076,23 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         icona: 'i-stop',
         pericolo: true,
         separaPrima: true,
-        aziona: async () => {
-          if (!window.confirm('Fermare questa delega? Il lavoro già fatto resta, quello in corso no.')) return;
-          try {
-            await apiPost(`/api/v1/sessions/${encodeURIComponent(figlia.sessionId)}/stop`, {});
-            toast('Delega fermata', figlia.taskCorto || 'La delega non prosegue.');
-            void caricaFigliSessione();
-          } catch (errore) {
-            toast('Delega non fermata', errore.message);
-          }
+        aziona: () => {
+          // ⛔ 11/09 lotto G: niente `window.confirm` sincrono — la conferma è una modale nostra.
+          confermaModale({
+            titolo: 'Fermare questa delega?',
+            domanda: 'Il lavoro già fatto resta al suo posto.',
+            conseguenza: 'Quello in corso no: il giro si interrompe dove è arrivato.',
+            etichettaConferma: 'Ferma la delega',
+            onConferma: async () => {
+              try {
+                await apiPost(`/api/v1/sessions/${encodeURIComponent(figlia.sessionId)}/stop`, {});
+                toast('Delega fermata', figlia.taskCorto || 'La delega non prosegue.');
+                void caricaFigliSessione();
+              } catch (errore) {
+                toast('Delega non fermata', errore.message);
+              }
+            },
+          });
         },
       });
     }
@@ -15019,8 +15418,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     sessionSelectionSelectAll.disabled = totale === 0;
     const tutto = totale > 0 && selezionate === totale;
     sessionSelectionSelectAll.textContent = tutto ? 'Deseleziona tutto' : 'Seleziona tutto';
-    sessionSelectionDelete.hidden = !state.sessionSelection.active;
-    sessionSelectionDelete.disabled = selezionate === 0 || state.sessionSelection.deleting;
+    /*
+     * ⛔ 11/09 (lotto D) — i tre puntini delle azioni di gruppo. Sono SPENTI finché non c'è niente
+     *   di selezionato: un menu che si apre su «0 sessioni» offrirebbe tre azioni che non possono
+     *   fare niente, e la prima è distruttiva. Lo stato si dice anche nel nome, non solo nel grigio.
+     */
+    if (sessionSelectionMore) {
+      sessionSelectionMore.hidden = !state.sessionSelection.active;
+      sessionSelectionMore.disabled = selezionate === 0 || state.sessionSelection.deleting;
+      const nome = selezionate === 0
+        ? 'Azioni sulle sessioni selezionate (nessuna selezionata)'
+        : `Azioni su ${selezionate} session${selezionate === 1 ? 'e' : 'i'} selezionat${selezionate === 1 ? 'a' : 'e'}`;
+      sessionSelectionMore.setAttribute('aria-label', nome);
+      sessionSelectionMore.title = nome;
+    }
     sessionSelectionCount.hidden = selezionate === 0;
     sessionSelectionCount.textContent = selezionate === 0 ? '' : `${selezionate} selezionat${selezionate === 1 ? 'a' : 'e'}`;
   }
@@ -15048,11 +15459,88 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     aggiornaStatoRigheSelezione();
   }
 
+  /** Gli id davvero selezionati, filtrati su quelli che esistono ancora nell'elenco. */
+  function sessioniSelezionate() {
+    return [...state.sessionSelection.selected].filter((id) => state.sessionSelection.available.has(id));
+  }
+
+  /*
+   * ⭐ LOTTO D (11/09) — LE AZIONI DI GRUPPO. Fino a oggi la selezione multipla sapeva fare UNA
+   * cosa sola, eliminare: si potevano spuntare venti righe e l'unico gesto disponibile era quello
+   * che non si annulla.
+   *
+   * ⛔ UN FILE SOLO, non venti. Un ciclo di `scaricaTesto` farebbe partire N download, e i browser
+   *   ne bloccano tutti tranne il primo (senza dire niente a nessuno): il risultato sarebbe
+   *   «esportate 20» a schermo e un file sul disco. Le trascrizioni si concatenano, separate da una
+   *   riga orizzontale, con il nome che dice quante sono.
+   * ⛔ Una per volta e non in parallelo: venti `/export` insieme sullo stesso server locale sono
+   *   una raffica, e qui non c'è nessuna fretta da guadagnare.
+   * ⛔ Se qualcuna fallisce si scrive comunque quello che c'è, e si DICE quante mancano: perdere
+   *   diciannove trascrizioni perché la ventesima non si legge sarebbe il difetto peggiore.
+   */
+  async function esportaSessioniSelezionate() {
+    const ids = sessioniSelezionate();
+    if (ids.length === 0) { toast('Nessuna sessione selezionata', 'Spunta almeno una riga.'); return; }
+    const pezzi = [];
+    const fallite = [];
+    for (const id of ids) {
+      try { pezzi.push(costruisciTrascrizioneMarkdown(await apiGet(`/api/v1/sessions/${encodeURIComponent(id)}/export`))); }
+      catch { fallite.push(id); }
+    }
+    if (pezzi.length === 0) { toast('Esportazione non riuscita', 'Nessuna trascrizione si è lasciata leggere. Apri Doctor e riprova.'); return; }
+    scaricaTesto(pezzi.join('\n\n---\n\n'), `talos-sessioni-${pezzi.length}.md`, 'text/markdown');
+    toast('Trascrizioni esportate', fallite.length === 0
+      ? `${pezzi.length} session${pezzi.length === 1 ? 'e' : 'i'} in un file Markdown.`
+      : `${pezzi.length} nel file; ${fallite.length} non si è lasciata leggere.`);
+  }
+
+  function copiaIdentificativiSelezionati() {
+    const ids = sessioniSelezionate();
+    if (ids.length === 0) { toast('Nessuna sessione selezionata', 'Spunta almeno una riga.'); return; }
+    copyText(ids.join('\n'), `${ids.length} identificativ${ids.length === 1 ? 'o copiato' : 'i copiati'}`);
+  }
+
+  /** Il menu overflow della barra di selezione: le stesse tre azioni, sempre nello stesso ordine,
+   *  con quella che non si annulla in fondo e marcata. */
+  function apriMenuSelezioneSessioni(evento) {
+    const quante = sessioniSelezionate().length;
+    if (quante === 0) return;
+    const voci = [
+      { etichetta: 'Esporta le trascrizioni', icona: 'i-download', azione: () => { void esportaSessioniSelezionate(); } },
+      { etichetta: 'Copia gli identificativi', icona: 'i-link', azione: () => copiaIdentificativiSelezionati() },
+      { etichetta: `Elimina ${quante} session${quante === 1 ? 'e' : 'i'}`, icona: 'i-trash', azione: () => chiediEdEliminaSessioniSelezionate(), pericoloso: true },
+    ];
+    apriMenuAzioni({
+      voci,
+      etichetta: `Azioni su ${quante} session${quante === 1 ? 'e selezionata' : 'i selezionate'}`,
+      classe: 'session-bulk-menu',
+      posizionamento: { ancoraEl: sessionSelectionMore, focusElement: sessionSelectionMore, fuoco: evento?.detail === 0 },
+    });
+  }
+
+  /*
+   * ⛔ 11/09 (lotto D + lotto G) — la conferma era l'ULTIMO `window.confirm` della barra: il riquadro
+   *   del sistema, senza il tema della app, sopra l'azione che non si annulla. Ora passa dalla
+   *   modale del mockup (`confermaModale`, lotto G), che è ASINCRONA: la domanda sta qui, il lavoro
+   *   in `eliminaSessioniSelezionate`, che non chiede più niente.
+   * ⛔ Il testo dice QUANTE e dice cosa succede al disco: un «Elimina» generico davanti a una
+   *   cancellazione irreversibile è la cosa che l'owner ha già fatto togliere una volta.
+   */
+  function chiediEdEliminaSessioniSelezionate() {
+    const quante = sessioniSelezionate().length;
+    if (quante === 0 || state.sessionSelection.deleting) return;
+    confermaModale({
+      titolo: `Eliminare ${quante} session${quante === 1 ? 'e' : 'i'} selezionat${quante === 1 ? 'a' : 'e'}?`,
+      domanda: 'Le trascrizioni vengono cancellate dal disco.',
+      conseguenza: 'Non si annulla da TALOS.',
+      etichettaConferma: quante === 1 ? 'Elimina la sessione' : `Elimina ${quante} sessioni`,
+      onConferma: () => { void eliminaSessioniSelezionate(); },
+    });
+  }
+
   async function eliminaSessioniSelezionate() {
     const ids = [...state.sessionSelection.selected].filter((id) => state.sessionSelection.available.has(id));
     if (ids.length === 0 || state.sessionSelection.deleting) return;
-    const conferma = window.confirm(`Eliminare ${ids.length} session${ids.length === 1 ? 'e' : 'i'} selezionat${ids.length === 1 ? 'a' : 'e'}? Le trascrizioni verranno cancellate dal disco.`);
-    if (!conferma) return;
     state.sessionSelection.deleting = true;
     aggiornaToolbarSelezioneSessioni();
     const risultati = await Promise.allSettled(ids.map((id) => apiPost(`/api/v1/sessions/${encodeURIComponent(id)}/delete`, {})));
@@ -15377,8 +15865,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (stessa) return;
     contatoriLuoghi.sessione = id;
     contatoriLuoghi.quando = Date.now();
-    const [capability, automazioni] = await Promise.all([conta('/api/v1/tools', 'attrezzi'), conta('/api/v1/automations', 'items')]);
-    aggiornaConteggiNav(radice, { capability, automazioni });
+    /*
+     * ⛔ LOTTO A (11/09) — «Progetti» è entrata nel gruppo «Spazi di lavoro» e il suo badge non
+     *   esisteva: la rotta `/api/v1/projects` c'era già (la legge `caricaPaginaProgetti`), mancava
+     *   solo di contarla qui. I progetti sono GLOBALI come gli attrezzi e le automazioni, quindi
+     *   stanno in questo gruppo di tre e non in quello che dipende dalla sessione aperta.
+     */
+    const [capability, automazioni, progetti] = await Promise.all([conta('/api/v1/tools', 'attrezzi'), conta('/api/v1/automations', 'items'), conta('/api/v1/projects', 'items')]);
+    aggiornaConteggiNav(radice, { capability, automazioni, progetti });
     if (!id) {
       aggiornaConteggiNav(radice, { libreria: null, memoria: null, attivita: null, note: null, ricerca: null, officina: null });
       return;
@@ -15545,17 +16039,67 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         // il livello guida il rientro dal CSS: un solo numero, nessuna misura scritta a mano qui
         button.style.setProperty('--talos-delega-livello', String(profondita));
       }
-      pezzi.push(button);
+      /*
+       * ⭐⭐⭐ LOTTO D (11/09) — I TRE PUNTINI SULLA RIGA.
+       *
+       * Fino a oggi le azioni di una sessione si raggiungevano SOLO col tasto destro: un comando
+       * che non si vede è un comando che non esiste per chi non sa che c'è (e sul trackpad di
+       * molti non c'è proprio). Owner 10/09: più di due azioni su un oggetto vogliono un menu
+       * overflow **e** il tasto destro, mai bottoni in fila.
+       *
+       * ⛔ L'involucro non è un vezzo: `.talos-session-item` È un `<button>`, e un secondo bottone
+       *   non può stargli dentro (contenuto interattivo annidato: HTML non valido, e la tastiera
+       *   si perde). `.td-session-row` mette i due controlli FRATELLI — è la stessa forma del
+       *   mockup (`renderSessions`, riga 6103).
+       * ⛔ Con la selezione multipla accesa i tre puntini spariscono: la casella occupa quel posto,
+       *   e due bersagli sovrapposti sulla stessa riga sono un errore in attesa.
+       */
+      const riga = document.createElement('div');
+      riga.className = `td-session-row${state.sessionSelection.active ? ' td-session-selection' : ''}`;
+      riga.append(button);
+      if (!state.sessionSelection.active) {
+        const trePuntini = document.createElement('button');
+        trePuntini.type = 'button';
+        trePuntini.className = 'td-session-menu';
+        trePuntini.setAttribute('aria-haspopup', 'menu');
+        trePuntini.setAttribute('aria-expanded', 'false');
+        trePuntini.setAttribute('aria-label', `Azioni per ${etichetta}`);
+        trePuntini.title = 'Azioni';
+        trePuntini.tabIndex = -1; // segue la riga nel roving: vedi `fermataRiga` qui sotto
+        trePuntini.append(iconaSvgAlbero('i-more'));
+        trePuntini.addEventListener('click', (event) => {
+          event.preventDefault();
+          event.stopPropagation(); // il clic non deve anche APRIRE la sessione: sono due gesti diversi
+          /* `detail === 0` = attivato da tastiera (Invio/Spazio): solo allora il fuoco entra nel
+             menu. Rubarlo a chi ha cliccato col mouse sposterebbe la pagina sotto le sue dita. */
+          apriMenuAzioniSessione({ ...sessione, nome: etichetta }, { ancoraEl: trePuntini, focusElement: trePuntini, fuoco: event.detail === 0 });
+        });
+        trePuntini.addEventListener('contextmenu', (event) => {
+          event.preventDefault(); event.stopPropagation();
+          apriMenuAzioniSessione({ ...sessione, nome: etichetta }, { x: event.clientX, y: event.clientY, focusElement: trePuntini });
+        });
+        riga.append(trePuntini);
+      }
+      pezzi.push(riga);
     }
     /*
      * 05/9 Fase 2 (H27-H30, tastiera come cancello): 74 righe = 74 fermate di Tab
      * era il difetto trovato camminando la pagina. Roving tabindex: una sola
      * fermata (la sessione aperta, o la prima), frecce su/giu' e Home/End
      * per muoversi, Invio/Spazio aprono (e' un <button>).
+     * ⛔ 11/09 — le righe adesso stanno DENTRO `.td-session-row`, quindi non si filtrano più per
+     *   classe sul primo livello: si cercano. E la fermata di Tab porta con sé i tre puntini della
+     *   stessa riga — altrimenti l'unico modo di aprire il menu da tastiera sarebbe non averne
+     *   nessuno (Carbon Design System: un menu overflow si raggiunge con Tab).
      */
-    const righe = pezzi.filter((el) => el.classList.contains('talos-session-item'));
+    const righe = pezzi.flatMap((el) => (el.classList.contains('talos-session-item') ? [el] : [...el.querySelectorAll('.talos-session-item')]));
     const fermata = righe.find((el) => el.getAttribute('aria-current') === 'true') || righe[0];
-    for (const riga of righe) riga.tabIndex = riga === fermata ? 0 : -1;
+    const fermataRiga = (riga, attiva) => {
+      riga.tabIndex = attiva ? 0 : -1;
+      const menu = riga.parentElement?.querySelector?.(':scope > .td-session-menu');
+      if (menu) menu.tabIndex = attiva ? 0 : -1;
+    };
+    for (const riga of righe) fermataRiga(riga, riga === fermata);
     if (!contenitore.dataset.tastiera) {
       contenitore.dataset.tastiera = 'si';
       contenitore.addEventListener('keydown', (event) => {
@@ -15569,8 +16113,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         else if (event.key === 'End') j = tutte.length - 1;
         else return;
         event.preventDefault();
-        tutte[i].tabIndex = -1;
-        tutte[j].tabIndex = 0;
+        fermataRiga(tutte[i], false);
+        fermataRiga(tutte[j], true);
         tutte[j].focus();
       });
     }
@@ -19031,6 +19575,11 @@ ${testo}`;
       apriVeloMockup('veloScorciatoie');
     }
     if (event.key === 'Escape' && (commandDialog.open || sheetDialog.open)) dismissTransientLayers();
+    /* LOTTO A — il cassetto della barra è uno strato aperto come gli altri: Esc lo chiude e
+       restituisce il fuoco al bottone che l'ha aperto. Sta QUI, in mezzo alla catena degli Esc,
+       perché l'ordine conta (WAI-ARIA APG: si smonta lo strato più interno per primo) — dopo i
+       dialoghi nativi, prima dei pannelli laterali, che sotto gli 860 px non esistono comunque. */
+    else if (event.key === 'Escape' && cassettoAperto()) { event.preventDefault(); chiudiCassettoBarra(); }
     else if (event.key === 'Escape' && bivioInvio && !bivioInvio.hidden) chiudiBivioInvio({ tornaAlComposer: true });
     else if (event.key === 'Escape' && (sessionsPanel.classList.contains('open') || inspectorPanel.classList.contains('open'))) closePanels();
     /*
@@ -19085,6 +19634,11 @@ ${testo}`;
       appShell.classList.remove('inspector-collapsed');
     }
     if (!layoutCompatto()) sessionsPanel.classList.remove('open');
+    /* LOTTO A — sopra gli 860 px la barra torna al suo posto nella griglia: un cassetto «aperto»
+       lascerebbe la pagina inerte e un velo sopra una barra che si vede già (il mockup fa lo
+       stesso, riga 6160). Niente fuoco restituito: qui non l'ha chiuso nessuno, l'ha chiuso la
+       finestra — riportare il cursore sotto le dita di chi sta trascinando sarebbe un dispetto. */
+    if (!larghezzaDaCassetto()) chiudiCassettoBarra({ restituisciFuoco: false });
     syncInspectorToggle();
     /* ⛔ Senza soglia qui: i due collassi ricordati hanno soglie DIVERSE, e chi sa distinguerle e'
        `loadPanelWidths()` (una guardia per pannello). Un'unica guardia esterna col numero della
@@ -19225,6 +19779,9 @@ ${testo}`;
   });
 
   sessionsCollapseBtn?.addEventListener('click', toggleSessionsPanel);
+  /* LOTTO A — il bottone tondo: sotto gli 860 px è l'unica porta alla barra. Alterna, non solo
+     apre: chi lo preme una seconda volta si aspetta di richiudere quello che ha aperto. */
+  $('#apriCassettoBarra')?.addEventListener('click', alternaCassettoBarra);
   sessionSelectionToggle?.addEventListener('click', () => { toggleSessionSelectionMode(); });
   sessionSelectionSelectAll?.addEventListener('click', () => {
     const tutto = state.sessionSelection.available.size > 0
@@ -19234,7 +19791,7 @@ ${testo}`;
       : new Set(state.sessionSelection.available.keys());
     aggiornaStatoRigheSelezione();
   });
-  sessionSelectionDelete?.addEventListener('click', () => { eliminaSessioniSelezionate(); });
+  sessionSelectionMore?.addEventListener('click', (event) => { event.stopPropagation(); apriMenuSelezioneSessioni(event); });
 
   // Ridimensionamento reale delle due sidebar, con limiti — owner 24/8.
   // Un trascinamento vero (pointer capture) e la stessa cosa da tastiera,
@@ -19420,6 +19977,16 @@ ${testo}`;
   const VISTA_PER_VAIA = { chat: 'chat', vuota: 'vuota', terminale: 'terminal', review: 'diff', capability: 'capability', board: 'dashboard', memoria: 'memoria', attivita: 'attivita', note: 'note', progetti: 'progetti', impostazioni: 'settings', doctor: 'doctor', libreria: 'libreria', ricerca: 'ricerca', officina: 'officina', automazioni: 'automations', browser: 'browser' };
   ROOT().addEventListener('click', (event) => {
     const vaia = event.target.closest?.('[data-vaia]');
+    /*
+     * ⛔ LOTTO A (11/09) — «Modelli» è l'unica voce della barra che non ha una schermata sua.
+     *   `#schermoModelLab` ESISTE nel template, completo di tutte e sei le schede, ma non è in
+     *   `VISTA_PER_SCHERMATA` (bridge/legacy-dom.js): è una schermata senza porta, la stessa
+     *   famiglia di difetti già trovata per «Note» e «Progetti». Nel prodotto il Model Lab si
+     *   apre da Impostazioni → «Laboratorio modelli», e quella è la porta VERA: la voce ci porta,
+     *   invece di aprire una schermata che nessuno disegna.
+     *   🔜 Quando la schermata avrà la sua riga nel ponte, questa eccezione sparisce.
+     */
+    if (vaia?.dataset.vaia === 'modelli') { setView('settings'); setSettingsSection('models'); return; }
     if (vaia && VISTA_PER_VAIA[vaia.dataset.vaia]) { setView(VISTA_PER_VAIA[vaia.dataset.vaia]); return; }
     const apre = event.target.closest?.('[data-apre-velo]');
     if (apre) { apriVeloMockup(apre.dataset.apreVelo); return; }
@@ -19433,6 +20000,11 @@ ${testo}`;
       if (c) { const aperto = disclosure.getAttribute('aria-expanded') === 'true'; disclosure.setAttribute('aria-expanded', String(!aperto)); c.hidden = aperto; }
     }
   });
+  /* ⛔ LOTTO A — QUI e non prima: `montaGruppiBarra` registra un secondo ascoltatore delegato sulla
+     stessa radice, che deve leggere `aria-expanded` GIÀ invertito dalla regia qui sopra. Due
+     ascoltatori sullo stesso nodo vengono chiamati nell'ordine in cui sono stati registrati (DOM
+     Standard): messo più in alto salverebbe sempre l'opposto di quello che si vede. */
+  montaGruppiBarra();
   let ultimoFuocoVelo = null;
   function apriVeloMockup(id) {
     if (id === 'veloContesto') { void compactSession(); return; }
