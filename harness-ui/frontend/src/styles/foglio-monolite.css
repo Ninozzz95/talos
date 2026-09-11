@@ -159,6 +159,28 @@ dialog.sheet-dialog .ft-icon-code svg,dialog.command-dialog .ft-icon-code svg,.f
 .file-tree .ft-actions-btn{ flex-shrink: 0; width: 24px; height: 24px; display: none; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); cursor: pointer; margin-left: auto; }
 .ft-row:hover .ft-actions-btn,.ft-row:focus-within .ft-actions-btn,.ft-row.ft-selected .ft-actions-btn{ display: inline-flex; }
 .ft-actions-btn:hover{ background: var(--surface-2); color: var(--text); }
+/*
+ * ⛔⛔ 11/09/2026 — la RADICE dell'albero non è una `.ft-row`: è `.tree-root`, e la regola qui sopra
+ *   che scopre il «···» al passaggio del mouse la nominava soltanto per le righe. Risultato misurato
+ *   sul banco prima di questa riga: il bottone della radice esisteva nel DOM e stava a `display:none`
+ *   per sempre — cioè le sue tre azioni erano raggiungibili solo col tasto destro, e da tastiera per
+ *   niente. `:focus-within` è la metà che serve a chi arriva col Tab.
+ */
+.tree-root:hover .ft-actions-btn,.tree-root:focus-within .ft-actions-btn{ display: inline-flex; }
+/*
+ * ⛔⛔ 11/09/2026 — la freccetta non diceva se la cartella è aperta o chiusa. La regola che la
+ *   ruotava (`.ft-node.ft-open > .ft-row > .ft-chevron`) è andata persa nel cutover insieme a
+ *   `.ft-node > ul{display:none}` (vedi `apriCartellaAlbero` in app.js per quella storia), e la
+ *   regola del mockup che sembrava sostituirla — `.talos-file-tree [aria-expanded=false] >
+ *   .talos-file-row > .talos-file-chevron` — NON può scattare qui: `.talos-file-chevron` sta sull'SVG,
+ *   e il figlio diretto della riga è lo `<span class="ft-chevron">` che lo contiene. Misurato sul
+ *   banco: `transform: none` in tutti gli stati, aperta e chiusa.
+ * ⛔ Si ruota lo stato APERTO (non si de-ruota il chiuso): l'icona di partenza è già una freccia a
+ *   destra, quindi «chiuso» è il disegno così com'è e «aperto» è l'unico stato che ha bisogno di una
+ *   regola. La durata è quella delle disclosure del sistema, non un numero nuovo.
+ */
+.file-tree .ft-chevron{ display: inline-grid; place-items: center; flex: none; transition: transform var(--talos-motion-duration-disclosure, 180ms) var(--talos-motion-ease, cubic-bezier(.2,.7,.2,1)); }
+.file-tree .ft-node.ft-open > .ft-row > .ft-chevron{ transform: rotate(90deg); }
 .ft-actions-btn svg{ width: 17px; height: 17px; }
 .ft-actions-menu{ position: fixed; z-index: 40; min-width: 200px; display: flex; flex-direction: column; padding: 6px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-elevated); box-shadow: var(--shadow); }
 .ft-actions-menu-item{ display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); font-size: calc(13px * var(--talos-ui-font-scale)); text-align: left; cursor: pointer; }

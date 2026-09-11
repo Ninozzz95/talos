@@ -52,6 +52,7 @@ import {
   rinominaFile as rinominaFileReale,
   rivelaInEsploraFile as rivelaInEsploraFileReale,
   apriFileConProgrammaPredefinito as apriFileConProgrammaPredefinitoReale,
+  apriInEsploraFile as apriInEsploraFileReale,
   spostaFile as spostaFileReale,
   WorkspaceFileError,
 } from './workspace-files.mjs';
@@ -1215,6 +1216,7 @@ export function createSessionRegistry({
   eliminaFileFn = eliminaFileReale,
   rivelaInEsploraFileFn = rivelaInEsploraFileReale,
   apriFileConProgrammaPredefinitoFn = apriFileConProgrammaPredefinitoReale,
+  apriInEsploraFileFn = apriInEsploraFileReale,
   spostaFileFn = spostaFileReale,
   copiaFileFn = copiaFileReale,
   creaVoceWorkspaceFn = creaVoceWorkspaceReale,
@@ -4693,6 +4695,24 @@ export function createSessionRegistry({
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       try {
         return { ok: true, ...(await rivelaInEsploraFileFn({ cartella: voce.cartella, percorso })) };
+      } catch (errore) {
+        if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
+        throw errore;
+      }
+    },
+
+    /*
+     * ⛔ 11/09/2026 — «Apri in Esplora file», gemella esatta di `rivelaFile` qui sopra: stessa forma
+     *   di ritorno, stesso modo di risolvere `sessionId` → `voce.cartella`, e la validazione del
+     *   PERCORSO che resta tutta in `workspace-files.mjs` (mai duplicata qui). L'unica differenza è
+     *   quale delle due porte di Explorer si apre — e che questa accetta anche `percorso: ''`, cioè
+     *   la RADICE della sessione: è l'azione che l'owner ha chiesto sul tasto destro della root.
+     */
+    async apriInEsploraFile(sessionId, percorso) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      try {
+        return { ok: true, ...(await apriInEsploraFileFn({ cartella: voce.cartella, percorso })) };
       } catch (errore) {
         if (errore instanceof WorkspaceFileError) return { erroreAvvio: errore.message, code: errore.code };
         throw errore;
