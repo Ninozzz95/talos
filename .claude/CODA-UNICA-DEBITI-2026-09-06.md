@@ -666,3 +666,64 @@ Da fare: le voci diventano i turni (utente **e** assistente), il fumetto al pass
 parole di quel messaggio, e la lente resta com'è. ⛔ Attenzione al numero di voci: con entrambi i
 lati raddoppiano, e la barra ha un tetto di altezza (`min(70vh, 40rem)`) — va deciso cosa succede
 quando le voci non ci stanno, invece di lasciarle schiacciare.
+
+### BC-07 — la prima indagine, 11/09/2026: **il preambolo è quasi tutto elenco di file, e la cache al primo giro è ZERO**
+
+Misurato sui `.jsonl` di tutte le sessioni sul disco (nessuna corsa pagata, nessuna ipotesi).
+
+⛔ **Prima stesura della sonda SBAGLIATA, e va detto:** `prompt_tokens` in `/usage` non è cumulativo
+sulla sessione, **si azzera a ogni invio** (`RunStarted`). Attraversando quei confini uscivano delta
+negativi assurdi (**−995.869** su `7b21ff93`). Rifatta segmentando per invio.
+
+**I tre numeri:**
+
+| misura | valore |
+|---|---|
+| token in ingresso al PRIMO giro di un invio (24 invii) | **mediana 29.148**, min 24.417, max 43.779 |
+| cache al PRIMO giro di un invio | **mediana 0%** — **16 invii su 24 sotto il 10%** |
+| cache all'ULTIMO giro dello stesso invio | **87-100%** |
+
+⇒ Dentro un invio la cache prende benissimo. Ma **la prima risposta — l'unica che la persona sta
+guardando — ripaga ogni volta tutto il preambolo da zero.** È il «Ragionamento in corso… 27 s» che
+l'owner ha fotografato, e il «primo token 23,8 s» della sessione `7b21ff93`.
+
+**Il prefisso NON cambia fra un invio e l'altro** (cinque blocchi di sistema, **una sola impronta**
+`ee1cb4343d1d`): la causa non è la cache rotta da noi — è la finestra di cache del fornitore che
+scade fra un messaggio e l'altro. ⇒ Quello che si può governare non è la cache: è **quanto pesa il
+preambolo**.
+
+**E il preambolo è quasi tutto UNA COSA SOLA:**
+
+| blocco | peso |
+|---|---|
+| le istruzioni vere del kernel | **337 caratteri, ~84 token** |
+| l'elenco dei file (`contestoDelProgetto`, P-13) | **66.523-69.545 caratteri, ~16.600-17.400 token** |
+
+Cioè **il 99,5% del preambolo è l'elenco dei file** — e comincia così, su ogni sessione misurata,
+sia col workspace `Desktop` sia col repo `AVM-harness-desktop`:
+
+> `⚠ ELENCO INCOMPLETO — mi sono fermato a 1500 percorsi, l'albero ne ha altri.`
+
+⛔ **È incompleto: non serve nemmeno allo scopo per cui lo paghiamo.** P-13 era stata misurata su un
+corpus piccolo (655 righe, ~5.900 token, profondità 5); sullo spazio vero si ferma al tetto di 1500
+percorsi e costa **tre volte tanto**.
+
+**Direzione della cura (nessuna riga scritta: decide l'owner, e va misurata).** Le tre candidate, in
+ordine di rapporto fra guadagno e rischio:
+1. **tagliare l'elenco** a una manciata di centinaia di percorsi (o toglierlo dove è dichiarato
+   incompleto) e lasciare che il modello usi `cerca` — che è **già** la conclusione del banco
+   ([[talos-non-vede-i-file-del-corpus-storia]]: «la cura ovvia è sbagliata, serve `cerca`, non un
+   elenco più profondo»). Guadagno stimato dai numeri sopra: preambolo da ~29k a **~12k**;
+2. non rimandare l'elenco quando è **identico** a quello dell'invio precedente;
+3. chiedere al fornitore una cache esplicita con TTL lungo, dove esiste.
+
+⛔ **Prima di scegliere serve l'A/B**: stessa domanda, stesso modello, con e senza elenco, misurando
+il tempo al primo token. Costa due giri veri. Senza quello non sappiamo **quanto** dei 27 s siano
+token e quanto sia il fornitore — e in questo progetto una cura presa dall'intuito ha già dimezzato
+i risolti di aider.
+
+⛔ **E c'è un buco strutturale da chiudere per primo:** i tempi **non si persistono**.
+`metricheDaEventi` (session-registry.mjs) calcola già il tempo al primo token, ma gli istanti vivono
+solo in memoria — la sua stessa doc lo dichiara: «il caso NORMALE per una sessione ripresa da disco:
+nessun evento persistito porta un orario». ⇒ Nessuna sessione passata è misurabile, e ogni indagine
+va rifatta a mano. Finché quel dato non finisce nel `.jsonl`, di latenza si parla per aneddoti.
