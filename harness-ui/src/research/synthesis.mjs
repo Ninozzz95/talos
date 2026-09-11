@@ -31,6 +31,8 @@
  * ne aveva.
  */
 
+import { TALOS_RESEARCH_PAGE_BUDGET, talosResearchPageBudget } from './page-budget.mjs';
+
 /**
  * @typedef {import('./collector.mjs').TalosResearchCollection} TalosResearchCollection
  * @typedef {import('./collector.mjs').TalosResearchSource} TalosResearchSource
@@ -55,8 +57,15 @@
  * @property {readonly TalosResearchSource[]} sources Le fonti nell'ordine in cui il prompt le ha numerate, così le citazioni risolvono.
  */
 
-/** Quanto di una fonte entra nel prompt. Oltre questo è imbottitura. */
-const PROMPT_CHARS_PER_SOURCE = 4_000;
+/*
+ * L6 (11/09/2026, approvato dall'owner con il numero davanti: +16.500 token per corsa, +3,4 %, per
+ * 3,75× più prove) — il budget per fonte vive in `page-budget.mjs`, misurato su 430 pagine vere:
+ * 15.000 caratteri testa+coda, contro i 4.000 di sola testa di prima, che consegnavano il 26 % dei
+ * caratteri e facevano arrivare intera 1 pagina su 14. Finché questa riga non c'era, il budget era
+ * calcolato e non letto — un cancello spento (lezione «il cancello semantico era spento da sempre»).
+ * Se la fonte porta già la finestra calcolata dal collettore (`source.window`) si usa quella; per le
+ * fonti di un dossier vecchio, senza finestra, la si calcola qui con lo stesso tetto.
+ */
 
 /**
  * ⛔⛔ DOPPIONI-01 — la stessa pagina, contata una volta per linea d'indagine.
@@ -153,7 +162,7 @@ export function talosResearchSynthesisPrompt(question, collections) {
     source.url,
     source.publishedAt ? `data dichiarata: ${source.publishedAt}` : 'data non dichiarata',
     source.obtained === 'snippet' ? 'ATTENZIONE: solo estratto dal motore di ricerca' : '',
-    source.text.slice(0, PROMPT_CHARS_PER_SOURCE),
+    source.window ?? talosResearchPageBudget(source.text, { cap: TALOS_RESEARCH_PAGE_BUDGET }).window,
   ].filter(Boolean).join('\n')).join('\n\n---\n\n');
 
   const prompt = [
