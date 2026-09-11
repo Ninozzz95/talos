@@ -1778,6 +1778,18 @@ export function createSessionRegistry({
      avrebbe spento una funzione intera senza che nessun test lo dicesse. */
   function broadcast(voce, evento, { durable = false } = {}) {
     /*
+     * ⭐⭐⭐ QUANDO IL MODELLO HA PARLATO L'ULTIMA VOLTA. Owner, 11/09: nella barra laterale le
+     *   sessioni in corso salgono in cima, e «se ne ho tre e quelle più in basso mandano un
+     *   messaggio, dopo un attimo sale in cima e viene segnalato».
+     *
+     * ⛔ L'istante si prende QUI e non dagli eventi persistiti: quelli non portano un orario
+     *   (vedi `MOTIVO_SENZA_ISTANTI` in questo file), quindi il tempo si conosce solo mentre passa.
+     * ⛔ Si segna su `TextMessageEnd`, cioè quando il modello ha FINITO di dire una cosa: usare
+     *   ogni pezzo dello streaming farebbe risalire una riga a ogni token, e la barra diventerebbe
+     *   un tabellone che si rimescola sotto le dita.
+     */
+    if (evento?.type === 'TextMessageEnd') voce.ultimaRispostaAlle = new Date().toISOString();
+    /*
      * ⛔⛔⛔ 02/09 — review complessiva. WorkspaceChanged è STATO del
      * filesystem, non storia della sessione: la sessione e572474a (workspace
      * = Desktop intero) ne aveva 490 su 756 eventi, 355 DOPO la fine del
@@ -4716,6 +4728,9 @@ export function createSessionRegistry({
           taskId: voce.taskId,
           nome: voce.nome ?? null,
           avviataAlle: voce.avviataAlle,
+          /* ⭐ 11/09 — l'ultima volta che il modello ha parlato in questa sessione: è ciò che
+             decide chi sta in cima fra le sessioni vive. `null` finché non ha mai risposto. */
+          ultimaRispostaAlle: voce.ultimaRispostaAlle ?? null,
           conclusa: voce.conclusa,
           forkDa: voce.forkDa,
           modello: voce.modello ?? null,

@@ -139,3 +139,61 @@ test('SORELLE-DISTINTE: l\u2019albero porta il nome distintivo accanto alla riga
     '\u26d4 la sessione NON viene toccata: \u00e8 il dato del server, il nome viaggia accanto');
 });
 
+
+/* ══════════════ Le sessioni in corso salgono in cima (owner, 11/09/2026) ══════════════ */
+
+/*
+ * ⛔ Owner: «una cosa importantissima: nella barra laterale fare salire automaticamente in cima le
+ *   sessioni in corso»; e poi: «se ne ho tre e quelle più in basso mandano un messaggio, dopo un
+ *   attimo sale in cima e viene segnalato».
+ *
+ * Qui si prova che l'ordine dice la verità in tutti i casi che contano, compreso quello che rende
+ * la funzione pericolosa: che NON si rimescoli da sola. Ricerca 11/09/2026 — ChatGPT riordina per
+ * `updated_at` e «una chat di sei mesi fa salta in cima appena scrivi»; sul forum di Cursor c'è una
+ * richiesta esplicita di un ordine che non si riordini sull'attività. Un elenco che salta mentre lo
+ * leggi è un difetto, non una funzione.
+ */
+test('le sessioni in corso salgono sopra quelle concluse', () => {
+  const ordine = ordinaSessioniAdAlbero([
+    { sessionId: 'ferma-1', conclusa: true },
+    { sessionId: 'viva', conclusa: false },
+    { sessionId: 'ferma-2', conclusa: true },
+  ]).map((v) => v.sessione.sessionId);
+  assert.equal(ordine[0], 'viva', `la sessione in corso deve stare in cima. Ordine: ${ordine.join(' · ')}`);
+});
+
+test('fra due sessioni in corso, comanda quella che ha parlato per ULTIMA', () => {
+  const ordine = ordinaSessioniAdAlbero([
+    { sessionId: 'vecchia', conclusa: false, ultimaRispostaAlle: '2026-09-11T10:00:00.000Z' },
+    { sessionId: 'appena-parlata', conclusa: false, ultimaRispostaAlle: '2026-09-11T12:00:00.000Z' },
+    { sessionId: 'muta', conclusa: false, ultimaRispostaAlle: null },
+  ]).map((v) => v.sessione.sessionId);
+  assert.equal(ordine[0], 'appena-parlata', `Ordine: ${ordine.join(' · ')}`);
+  assert.equal(ordine.at(-1), 'muta', 'chi non ha mai risposto non scavalca chi ha risposto');
+});
+
+test('una madre conclusa con una FIGLIA in corso conta come viva: l’albero sta parlando', () => {
+  const ordine = ordinaSessioniAdAlbero([
+    { sessionId: 'altra-ferma', conclusa: true },
+    { sessionId: 'madre', conclusa: true },
+    { sessionId: 'figlia', conclusa: false, padreId: 'madre' },
+  ]).map((v) => v.sessione.sessionId);
+  assert.equal(ordine[0], 'madre', `la madre di una figlia viva sale, e la figlia resta sotto di lei. Ordine: ${ordine.join(' · ')}`);
+  assert.equal(ordine[1], 'figlia', 'la figlia NON si stacca dalla madre per anzianità: l’albero resta leggibile');
+});
+
+test('⛔ AL CONTRARIO: fra sessioni FERME l’ordine non cambia — la barra non si rimescola da sola', () => {
+  const ferme = [
+    { sessionId: 'a', conclusa: true, ultimaRispostaAlle: '2026-09-11T08:00:00.000Z' },
+    { sessionId: 'b', conclusa: true, ultimaRispostaAlle: '2026-09-11T20:00:00.000Z' },
+    { sessionId: 'c', conclusa: true, ultimaRispostaAlle: '2026-09-11T14:00:00.000Z' },
+  ];
+  const ordine = ordinaSessioniAdAlbero(ferme).map((v) => v.sessione.sessionId);
+  assert.deepEqual(ordine, ['a', 'b', 'c'],
+    `⛔ nessuna sessione ferma deve saltare per un orario: l'ordine deve restare quello ricevuto. Trovato: ${ordine.join(' · ')}`);
+});
+
+test('⛔ AL CONTRARIO: senza nessuna sessione viva l’ordine resta esattamente quello ricevuto', () => {
+  const righe = [{ sessionId: 'x', conclusa: true }, { sessionId: 'y', conclusa: true }];
+  assert.deepEqual(ordinaSessioniAdAlbero(righe).map((v) => v.sessione.sessionId), ['x', 'y']);
+});
