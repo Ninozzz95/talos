@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { nomeModello, oraCompatta, statoSessione, nomeLeggibileSessione } from '../../src/components/session-item.js';
-import { LUOGHI, LUOGHI_ALTRI } from '../../src/components/nav-item.js';
+import { SPAZI_DI_LAVORO, STRUMENTI } from '../../src/components/nav-item.js';
 import { fornitoreDelModello, nomeDaPercorso, testiPiede } from '../../src/components/workspace-footer.js';
 
 test('WorkspaceFooter: cartella, tema e fornitore dai dati del monolite — e niente inventato', () => {
@@ -90,9 +90,20 @@ test('nomeModello: via il fornitore, mai una stringa vuota', () => {
   assert.equal(nomeModello(undefined), null);
 });
 
-test('LUOGHI: le voci del mockup, nell\'ordine, con una sola voce senza schermata (Note)', () => {
-  assert.deepEqual(LUOGHI.map((l) => l.vaia), ['capability', 'board', 'libreria', 'memoria', 'attivita']);
-  assert.deepEqual(LUOGHI_ALTRI.filter((l) => !l.vaia).map((l) => l.conteggio), ['note']);
+/*
+ * 11/09, lotto A — i «Luoghi» del mockup di Fase 2 sono diventati i DUE gruppi del mockup
+ * interattivo dell'owner. La prova cambia con loro: se le liste del componente e le voci del
+ * template divergono, il laboratorio disegna una barra che nel prodotto non esiste — ed è il modo
+ * in cui una vetrina smette di dire il vero senza che nessuno se ne accorga.
+ */
+test('SPAZI DI LAVORO e STRUMENTI: le voci dei due gruppi, nell\'ordine del mockup', () => {
+  assert.deepEqual(SPAZI_DI_LAVORO.map((l) => l.vaia), ['chat', 'note', 'attivita', 'libreria', 'memoria', 'ricerca', 'progetti', 'board']);
+  assert.deepEqual(STRUMENTI.map((l) => l.vaia), ['modelli', 'capability', 'officina', 'automazioni', 'doctor']);
+  /* «Note» conta la lista della sessione aperta (`/notes`), che ha una chiave sua: senza
+     `conteggio`, il badge finirebbe sulla voce sbagliata o non arriverebbe affatto. */
+  assert.deepEqual(SPAZI_DI_LAVORO.filter((l) => l.conteggio).map((l) => l.conteggio), ['note']);
+  /* ⛔ Nessuna voce senza icona: nella barra compressa a icone resterebbe un vuoto premibile. */
+  assert.deepEqual([...SPAZI_DI_LAVORO, ...STRUMENTI].filter((l) => !l.icona), []);
 });
 
 /*

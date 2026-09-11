@@ -49,7 +49,7 @@ import { aggiornaDiffReview, creaRigaFileReview, riassuntoReview } from '../src/
 import { creaStatoVuoto } from '../src/components/stato-vuoto.js';
 import { REVIEW } from './fixtures/review.js';
 import { VUOTA } from './fixtures/vuota.js';
-import { LUOGHI, LUOGHI_ALTRI, creaNavItem } from '../src/components/nav-item.js';
+import { SPAZI_DI_LAVORO, STRUMENTI, creaNavItem } from '../src/components/nav-item.js';
 import { CONVERSAZIONE } from './fixtures/conversazione.js';
 import { PIEDE } from './fixtures/piede.js';
 import { TOAST } from './fixtures/toast.js';
@@ -333,12 +333,20 @@ const LABORATORI = {
     finto.replaceWith(creaWorkspaceFooter(WORKSPACE));
   },
   NavItem() {
-    /* Le voci dei Luoghi rifatte dal componente: le prime cinque prima di «Altro», le altre dentro #luoghiAltri. */
-    const altro = document.getElementById('altroLuoghi');
-    const altri = document.getElementById('luoghiAltri');
-    for (const finta of document.querySelectorAll('.talos-sidebar .talos-nav-item:not(#altroLuoghi)')) finta.remove();
-    for (const luogo of LUOGHI) altro.before(creaNavItem(luogo, { conteggio: CONTEGGI[luogo.vaia] }));
-    for (const luogo of LUOGHI_ALTRI) altri.append(creaNavItem(luogo, { conteggio: CONTEGGI[luogo.vaia || luogo.conteggio] }));
+    /*
+     * 11/09, lotto A — le voci rifatte dal componente dentro i DUE gruppi del mockup. Prima stavano
+     * attorno al disclosure «Altro», che non esiste più: il laboratorio segue il template, o smette
+     * di mostrare la app vera senza dirlo a nessuno.
+     * ⛔ Il gruppo «Strumenti» si apre qui: nel prodotto nasce chiuso per non schiacciare le
+     *   sessioni, ma la vetrina dei componenti esiste per far VEDERE le voci.
+     */
+    const lavoro = document.getElementById('gruppoLavoro');
+    const strumenti = document.getElementById('gruppoStrumenti');
+    for (const finta of document.querySelectorAll('.td-sidebar-nav .talos-nav-item')) finta.remove();
+    for (const luogo of SPAZI_DI_LAVORO) lavoro.append(creaNavItem(luogo, { conteggio: CONTEGGI[luogo.conteggio || luogo.vaia] }));
+    for (const luogo of STRUMENTI) strumenti.append(creaNavItem(luogo, { conteggio: CONTEGGI[luogo.vaia] }));
+    strumenti.hidden = false;
+    document.getElementById('testataGruppoStrumenti')?.setAttribute('aria-expanded', 'true');
   },
   SessionItem() {
     const fissate = document.querySelector('.talos-sidebar__block:has(.talos-eyebrow[data-t="fissate"])');

@@ -270,7 +270,7 @@ function installPreview() {
   const panel = document.createElement('section');
   panel.className = 'talos-motion-preview';
   panel.dataset.talosMotionPreview = 'true';
-  panel.innerHTML = '<div class="talos-motion-preview__copy"><span class="talos-eyebrow">Scena del tema</span><strong data-motion-preview-name></strong><small>Anteprima dal renderer Canvas mobile. La conversazione la ferma appena compare un messaggio.</small></div><div class="talos-motion-preview__stage" aria-hidden="true"></div><span class="talos-motion-preview__status" data-motion-preview-status></span>';
+  panel.innerHTML = '<div class="talos-motion-preview__copy"><span class="talos-eyebrow">Scena del tema</span><strong data-motion-preview-name></strong><small>Anteprima dal renderer Canvas del pacchetto. Si muove anche dietro i messaggi, finché è accesa.</small></div><div class="talos-motion-preview__stage" aria-hidden="true"></div><span class="talos-motion-preview__status" data-motion-preview-status></span>';
   const themeRow = appearance.querySelector('[data-setting-row="sceneOverrideSelect"]') || appearance.querySelector('[data-setting-row="themePresetSelect"]');
   if (themeRow) themeRow.insertAdjacentElement('afterend', panel); else appearance.prepend(panel);
   const stage = mountStage(panel.querySelector('.talos-motion-preview__stage'), { preview: true });
