@@ -952,3 +952,11 @@ metà `scrivi` è ancora scoperta. E il difetto più grande: `document_create fo
 body e gli passa `escapeHtml` (`document-generator.mjs:234-245`) — **non può scrivere una pagina HTML
 scritta a mano**. Per «genera un file html di 1000 righe» non esisteva NESSUN attrezzo capace.
 Rapporto: `.claude/RAPPORTO-ATTREZZI-MENO-GIRI-2026-09-11.md`.
+
+## BC-19 — il logo del velo d'avvio deve leggere i token del tema
+Owner 11/09/2026 sera: «anche il logo di boot deve essere legato ai token del tema». Oggi il velo
+`#talosAvvio` (`frontend/index.template.html`, `frontend/src/avvio.js`) porta il marchio copiato dal
+mobile con i suoi colori: l'oro e il fondo vanno presi da `--talos-accent`/`--talos-background` del
+tema salvato (il ponte del tema in `avvio.js` già legge la preferenza prima del primo disegno), così
+un tema diverso da Calm non mostra un logo di un altro colore per 650 ms. Verificare nei preset
+esistenti (calm, forge, terminal, claudius…) e nei due modi colore.
