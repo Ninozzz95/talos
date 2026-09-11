@@ -444,6 +444,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
             <button type="button" class="talos-badge talos-badge--lg" data-c="Chip" data-open-sheet="model" title="Cambia modello"><svg class="i i--sm"><use href="#i-bolt"/></svg><span class="talos-chip__label">claude-opus-5</span> <span class="talos-kbd">Ctrl ⇧ M</span></button>
             <button type="button" class="talos-badge talos-badge--lg talos-badge--warning" data-c="Chip" data-open-sheet="permissions" title="Cambia il permesso"><svg class="i i--sm"><use href="#i-shield"/></svg><span class="talos-chip__label">Scrive nel progetto</span></button>
             <span class="talos-badge talos-badge--lg" data-c="Chip" data-runtime-giri>Giri <span class="talos-mono talos-measure">7</span></span>
+            <button type="button" class="talos-badge talos-badge--lg" data-c="Chip" id="pillTerminale" aria-expanded="false" aria-controls="pannelloTerminale" title="Apri il terminale qui sotto"><svg class="i i--sm"><use href="#i-terminal"/></svg><span class="talos-chip__label">Terminale</span></button>
             <span class="talos-badge talos-badge--lg" data-c="Chip" data-runtime-costo>Sessione <span class="talos-mono talos-measure--estimate">$0,08</span></span>
             <button type="button" class="talos-button talos-button--secondary talos-button--sm" id="redirectRunButton" hidden title="Interrompi al prossimo punto sicuro e applica questa correzione">Reindirizza</button>
             <button type="button" class="talos-composer__attach talos-composer__mic" data-c="IconButton" title="Voce" aria-label="Voce"><svg class="i"><use href="#i-mic"/></svg></button>
@@ -457,6 +458,29 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
           <button type="button" class="talos-button talos-button--ghost talos-button--sm" data-bivio="annulla" aria-label="Lascia il messaggio nel composer">Annulla</button>
         </div>
         <div class="talos-statusbar" data-c="StatusBar"><span class="talos-statusbar__connessione" data-runtime-connessione hidden></span><button type="button" class="talos-button talos-button--ghost talos-button--sm" data-runtime-riprova hidden>Riprova</button><span data-statusbar="tema">42 token/s</span><span data-runtime-usage>41,2k token · 7 giri</span><span data-runtime-cache>cache 87%</span><span data-runtime-latenza>primo token 1,4 s</span></div>
+        <!--
+          ⭐⭐⭐ PO-09 — IL TERMINALE IN BASSO. Owner, 09/09: «un pulsantino per far aprire il
+          terminale splittato in orizzontale in basso, come fa Hermes, Codex e tanti altri tipo VS
+          Code: resizable, intuitivo»; 11/09: il pulsante è una pill nel composer, accanto a «Giri».
+
+          ⛔ QUESTO PANNELLO È VUOTO APPOSTA: non contiene un secondo terminale, OSPITA quello che
+          esiste già. Aprendolo, `.talos-terminal` viene spostato qui dentro dalla vista Terminale e
+          alla chiusura torna al suo posto. Due ragioni misurate, non estetiche:
+           · xterm.js non sa misurarsi dentro un elemento nascosto (xterm.js #3029, #494) e i
+             browser limitano i contesti WebGL vivi per pagina (#4379): due istanze sarebbero due
+             volte i problemi che questo progetto ha già dovuto risolvere una volta;
+           · e soprattutto sarebbe un ALTRO terminale, con altre PTY. Chi apre il pannello si
+             aspetta le SUE schede, non un secondo posto dove ricominciare.
+
+          Ricerca 11/09/2026 (techinterview «Build a Resizable Panels Layout: VS Code and Linear
+          Style»; docs VS Code «Terminal Basics»): la maniglia è un `separator` ARIA, operabile da
+          tastiera; la misura si salva a fine trascinamento e si ripristina all'apertura; si muove
+          una variabile CSS, non `style.height`, per non rifare il layout a ogni movimento.
+        -->
+        <section class="talos-terminale-basso" id="pannelloTerminale" hidden aria-label="Terminale">
+          <div class="talos-terminale-basso__maniglia" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Altezza del terminale: frecce su e giù per cambiarla" data-maniglia-terminale></div>
+          <div class="talos-terminale-basso__ospite" data-ospite-terminale></div>
+        </section>
       </div>
     </section>
 

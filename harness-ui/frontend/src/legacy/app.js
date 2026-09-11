@@ -17773,6 +17773,169 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (menu && !menu.hidden) { chiudiMenuAllega(); return; }
     apriMenuAllega($('#capabilityBtn'));
   });
+  collegaTerminaleInBasso();
+
+  /* ══════════════════ PO-09 — IL TERMINALE IN SPLIT ORIZZONTALE IN BASSO ══════════════════ */
+
+  const ALTEZZA_TERMINALE_CHIAVE = 'talos.harness.desktop.terminale-basso.altezza';
+  const ALTEZZA_TERMINALE_MIN = 120;
+
+  /** Quanto spazio può prendersi il pannello senza mangiare la conversazione: due terzi, non tutto. */
+  function tettoAltezzaTerminale() {
+    const schermo = $('#schermoChat');
+    const disponibile = schermo?.getBoundingClientRect().height || window.innerHeight;
+    return Math.max(ALTEZZA_TERMINALE_MIN, Math.round(disponibile * 0.66));
+  }
+
+  function leggiAltezzaTerminale() {
+    try {
+      const salvata = Number.parseInt(window.localStorage.getItem(ALTEZZA_TERMINALE_CHIAVE) ?? '', 10);
+      if (Number.isFinite(salvata) && salvata >= ALTEZZA_TERMINALE_MIN) return Math.min(salvata, tettoAltezzaTerminale());
+    } catch { /* preferenze illeggibili: si riparte dal default, dichiarato nel CSS */ }
+    return null;
+  }
+
+  function scriviAltezzaTerminale(px) {
+    try { window.localStorage.setItem(ALTEZZA_TERMINALE_CHIAVE, String(Math.round(px))); } catch { /* niente */ }
+  }
+
+  function applicaAltezzaTerminale(pannello, px) {
+    const limitata = Math.min(Math.max(Math.round(px), ALTEZZA_TERMINALE_MIN), tettoAltezzaTerminale());
+    /* ⛔ Si muove la VARIABILE, non `style.height`: il layout si rifà una volta, non a ogni pixel
+       (ricerca 11/09: techinterview «Build a Resizable Panels Layout: VS Code and Linear Style»). */
+    pannello.style.setProperty('--talos-terminale-h', limitata + 'px');
+    return limitata;
+  }
+
+  /**
+   * ⛔⛔⛔ IL PANNELLO NON CREA UN TERMINALE: SPOSTA QUELLO CHE C'È.
+   *
+   * Due ragioni misurate, nessuna estetica:
+   *  · xterm.js non sa misurarsi dentro un elemento nascosto (#3029, #494) e i browser limitano i
+   *    contesti WebGL vivi per pagina (#4379) — due istanze sarebbero due volte i problemi che
+   *    questo progetto ha già risolto una volta;
+   *  · e sarebbe un ALTRO terminale, con altre PTY. Chi apre il pannello si aspetta le SUE schede,
+   *    non un secondo posto dove ricominciare.
+   * ⇒ `.talos-terminal` viene spostato qui e alla chiusura torna al suo posto. Il `ResizeObserver`
+   *   che ogni scheda ha già (vedi `montaSchedaTerminale`) rifà il `fit()` da sé.
+   */
+  function collegaTerminaleInBasso() {
+    const pill = $('#pillTerminale');
+    const pannello = $('#pannelloTerminale');
+    const ospite = pannello ? pannello.querySelector('[data-ospite-terminale]') : null;
+    const maniglia = pannello ? pannello.querySelector('[data-maniglia-terminale]') : null;
+    if (!pill || !pannello || !ospite || !maniglia) return;
+    /*
+     * ⛔⛔ UNA VOLTA SOLA, e non è prudenza: misurato con una sonda, un click produceva
+     *   apertura E chiusura insieme. Questo punto del file viene eseguito più di una volta, quindi
+     *   i listener si sommavano: il primo `apri()` spostava il terminale e mostrava il pannello, il
+     *   secondo `chiudi()` — di un'altra closure, con la sua `casa` ancora `null` — lo nascondeva
+     *   **senza riportare il terminale al suo posto**. Il risultato era un pannello invisibile con
+     *   dentro il terminale di tutti.
+     * ⇒ Stessa guardia che il file usa già per i permessi (`dataset.permessiCollegati`).
+     */
+    if (pannello.dataset.terminaleCollegato) return;
+    pannello.dataset.terminaleCollegato = 'si';
+
+    const casaDelTerminale = () => $('#schermoTerminale .talos-terminal');
+    let casa = null; // dove stava prima: ci torna da lì, non «da qualche parte»
+
+    /** Il pannello si è aperto: si prende il terminale che esiste e gli si dà l'altezza ricordata. */
+    function prendiIlTerminale() {
+      const pane = casaDelTerminale() || ospite.querySelector('.talos-terminal');
+      if (!pane) {
+        toast('Terminale non disponibile', 'La vista Terminale non è ancora montata in questa sessione.');
+        return;
+      }
+      if (!casa) casa = pane.parentElement;
+      if (pane.parentElement !== ospite) ospite.append(pane);
+      const salvata = leggiAltezzaTerminale();
+      if (salvata) applicaAltezzaTerminale(pannello, salvata);
+      /* ⛔ Il fuoco va DENTRO il terminale: chi lo apre vuole scriverci, non cercarlo col mouse. */
+      requestAnimationFrame(() => {
+        const dentro = pane.querySelector('textarea, .xterm-helper-textarea');
+        if (dentro) dentro.focus();
+      });
+    }
+
+    /** Il pannello si è chiuso: il terminale torna DA DOVE VENIVA, non «da qualche parte». */
+    function riportaACasa() {
+      const pane = ospite.querySelector('.talos-terminal');
+      if (pane && casa) casa.append(pane);
+    }
+
+    /*
+     * ⛔⛔⛔ IL PADRONE DI `hidden` È UNO SOLO, e non sono io.
+     *
+     * Misurato con un setter intercettato e lo stack: in `app.js` esiste un gestore GENERICO che
+     * tratta qualunque elemento con `aria-expanded` + `aria-controls` come una «disclosure» — al
+     * click inverte l'attributo e fa `controllato.hidden = aperto`. La mia pill ha entrambi gli
+     * attributi, quindi due gestori si contendevano lo stesso stato: il generico apriva, il mio
+     * leggeva «già aperto» e richiudeva subito. A schermo: niente, e nessun errore.
+     *
+     * ⇒ Non si combatte un meccanismo che funziona: lo si asseconda. La pill resta una disclosure
+     *   ordinaria — apertura, chiusura, `aria-expanded` e tastiera li fa il gestore generico, come
+     *   per ogni altro pannello dell'app — e qui si REAGISCE al cambiamento, spostando il
+     *   terminale e sistemando l'altezza. Un solo padrone dello stato, nessuna gara.
+     */
+    new MutationObserver(() => {
+      if (pannello.hidden) riportaACasa(); else prendiIlTerminale();
+    }).observe(pannello, { attributes: true, attributeFilter: ['hidden'] });
+
+    /* ⛔ Esc chiude il pannello SOLO se il fuoco è dentro: altrove Esc ferma il giro, e rubarglielo
+       sarebbe peggio del pannello che resta aperto. */
+    pannello.addEventListener('keydown', (evento) => {
+      if (evento.key !== 'Escape') return;
+      evento.stopPropagation();
+      /* ⛔ Si chiude cliccando la pill, non scrivendo `hidden`: lo stato ha un padrone solo. */
+      $('#pillTerminale')?.click();
+    });
+
+    let trascino = null;
+    maniglia.addEventListener('pointerdown', (evento) => {
+      trascino = { y: evento.clientY, altezza: pannello.getBoundingClientRect().height };
+      maniglia.setPointerCapture(evento.pointerId);
+      maniglia.dataset.trascino = 'si';
+      evento.preventDefault();
+    });
+    maniglia.addEventListener('pointermove', (evento) => {
+      if (!trascino) return;
+      /* Si trascina verso l'ALTO per ingrandire: il pannello cresce dal basso. */
+      applicaAltezzaTerminale(pannello, trascino.altezza + (trascino.y - evento.clientY));
+    });
+    const fineTrascino = (evento) => {
+      if (!trascino) return;
+      trascino = null;
+      delete maniglia.dataset.trascino;
+      try { maniglia.releasePointerCapture(evento.pointerId); } catch { /* già rilasciato */ }
+      /* ⛔ Si salva a FINE trascinamento: sessanta scritture al secondo in `localStorage` sono
+         lavoro sul thread principale, cioè proprio ciò che rende scattoso. */
+      scriviAltezzaTerminale(pannello.getBoundingClientRect().height);
+    };
+    maniglia.addEventListener('pointerup', fineTrascino);
+    maniglia.addEventListener('pointercancel', fineTrascino);
+
+    /* ⛔ Un `separator` ARIA si opera anche senza mouse: è la parte che quasi tutti dimenticano, e
+       senza la quale `tabindex="0"` è solo una trappola per chi naviga da tastiera. */
+    maniglia.addEventListener('keydown', (evento) => {
+      const passo = evento.shiftKey ? 48 : 16;
+      const ora = pannello.getBoundingClientRect().height;
+      let nuova = null;
+      if (evento.key === 'ArrowUp') nuova = ora + passo;
+      else if (evento.key === 'ArrowDown') nuova = ora - passo;
+      else if (evento.key === 'Home') nuova = tettoAltezzaTerminale();
+      else if (evento.key === 'End') nuova = ALTEZZA_TERMINALE_MIN;
+      if (nuova === null) return;
+      evento.preventDefault();
+      scriviAltezzaTerminale(applicaAltezzaTerminale(pannello, nuova));
+    });
+
+    window.addEventListener('resize', () => {
+      if (pannello.hidden) return;
+      applicaAltezzaTerminale(pannello, pannello.getBoundingClientRect().height);
+    });
+  }
+
   ROOT().addEventListener('click', (evento) => { if (!evento.target.closest?.('#menuAllega, #capabilityBtn')) chiudiMenuAllega(); });
   // B7: incolla E trascina, entrambi, sullo stesso composer
   composerInput.addEventListener('paste', (evento) => {
