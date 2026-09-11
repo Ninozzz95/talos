@@ -833,3 +833,77 @@ cache**, perché costa poche righe e non toglie niente a nessuno.
 ⛔ Resta l'A/B da fare prima di cantare vittoria: la cache si misura da
 `prompt_tokens_details.cached_tokens`, che già leggiamo — e adesso, con `tipo:'tempi-giro'` su
 disco, un A/B si legge da sé senza sonde a mano.
+
+---
+
+# Debiti raccolti l'11/09/2026 dopo la ripresa dei crediti — BC-11 … BC-16
+
+> Owner: «ricorda dove segni tutte le cose che ti ho detto da quando hai finito i crediti fino
+> adesso». È **questo file**, `.claude/CODA-UNICA-DEBITI-2026-09-06.md`, in fondo. Ogni riga qui
+> sotto è una sua frase, riportata com'è stata detta.
+
+## BC-11 ⛔⛔⛔ CRITICO — il modello fa un giro assurdo per scrivere un file grande
+
+Owner, con due schermate della sessione «genera dentro questa cartella un file html di almeno 1000
+righe»: «il modello fa un giro assurdo per fare una cosa semplicissima… ha fatto un giro assurdo e
+consumato un bordello di token. Questa cosa deve essere trattata con le pinze, devi fare un'analisi
+delicatissima di come Hermes e gli altri competitor fanno in modo di ottimizzare tutti i tool e fare
+in modo che il modello faccia meno giri possibili». E: «ho anche chiesto un html simulatore tokenizer
+da 1000 righe, ci sta veramente troppo tempo, cioè ci deve stare il giusto».
+
+**Quello che si vede nelle sue due schermate, testuale:**
+- `exit 1 [sandbox: none]` · **«La riga di comando è troppo lunga.»** — il modello aveva provato ad
+  accodare il contenuto con un comando di shell da **23.941 caratteri**;
+- poi ha ripiegato da solo: «La shell rifiuta comandi troppo lunghi: scrivo le parti come file
+  separati e le assemblerò in coda» ⇒ `_p2.html`, `_p3.html`, … un file per giro;
+- e una scrittura è morta con **`error: EISDIR: illegal operation on a directory, open 'C:\Users\
+  Antonino\Desktop\qwen 3.8'`** — il percorso è stato troncato allo **spazio** dentro «qwen 3.8
+  research», quindi lo strumento ha aperto la CARTELLA invece del file;
+- risultato: **13 giri** e ancora non finito, per un singolo file HTML.
+
+⇒ Tre difetti distinti, e nessuno è «il modello è scemo»:
+1. **`scrivi` non ha un modo di APPENDERE**: per un file più grande di una risposta, l'unica strada
+   che il modello trova è la shell — che ha un tetto sulla riga di comando (~8.191 caratteri su
+   `cmd`, 32.767 su `CreateProcess`) e lo rifiuta;
+2. **un percorso con uno spazio viene troncato** da qualche parte fra il modello e il disco (EISDIR
+   sulla cartella «qwen 3.8» invece del file dentro «qwen 3.8 research»);
+3. **niente dice al modello quanto può scrivere in un colpo**, quindi scopre il limite sbattendoci.
+
+⛔ **Ricerca obbligatoria PRIMA di scrivere**, e non solo sul web: **nel codice dei concorrenti**.
+Hermes, Codex, Claude Code, DeepSeek harness, Qwen — come fanno a far scrivere un file lungo in
+pochi giri? (patch/diff invece del contenuto intero? append esplicito? un attrezzo `apply_patch`?
+streaming su file? un tetto dichiarato negli argomenti?). Cloni già sul disco in
+`%LOCALAPPDATA%\Temp\talos-competitor`. Fonte + file + riga nel commit.
+
+## BC-12 — «Diretti» va spezzata per provider
+
+Owner: «diretti deve diventare per provider, quindi una tab dedicata per gemini openai e anthropic».
+Oggi il selettore modelli ha tre schede — OpenRouter 444, Locali 2, **Diretti 113** — e dentro
+«Diretti» i provider sono gruppi richiudibili (Anthropic 11, Gemini 31, OpenAI 71). Devono diventare
+**schede di primo livello**, una per provider.
+
+## BC-13 — i modelli locali devono comparire ISTANTANEI, e il mobile l'ha già fatto
+
+Owner: «fare caricare i modelli locali in modo più istantaneo possibile, segnalo dicendo che bisogna
+guardare il mobile e prendere spunto da lui — **il mobile ci ha lavorato proprio oggi**».
+⇒ Si legge come lo fa `AVM/mobile` (ownership altrui: si LEGGE, non si tocca) e si porta qui.
+
+## BC-14 — la modale «Nuova sessione»: il permesso disabilita Avvia e mente sul perché
+
+Owner: «nella modale nuova sessione i tasti read only, workspace write e on request rendono il
+pulsante avvia disabilitato perché mi dice "scegli una cartella" anche se l'ho appena scelta».
+⇒ Difetto doppio: il pulsante si blocca **e** la ragione mostrata è falsa. Con «Full access» non
+succede — il che dice già dove guardare (`cartellaGiaScelta` / `cartellaEffettivaPerPermessi` e la
+validazione della modale, che probabilmente leggono due stati diversi della stessa scelta).
+
+## BC-15 — il PROMPT ENHANCER, già pronto nel mobile
+
+Owner: «segna anche questa nuova implementazione: il prompt enhancer, il mobile ce l'ha già bello e
+pronto quindi basta guardare lì».
+
+## BC-16 — il punto 1 di BC-07 è APPROVATO
+
+Owner: «approvato il punto 1». ⇒ `cache_control` esplicito con TTL 1h, marcatore sull'ultimo blocco
+cacheable, layout sull'envelope del messaggio per OpenRouter — il metodo letto nel codice di Hermes
+(`agent_init.py:986-1008`, `agent_runtime_helpers.py:2365-2430`), che dichiara anche che **Zhipu GLM
+e i modelli Qwen/Alibaba senza marcatori servono ZERO cache hit**.
