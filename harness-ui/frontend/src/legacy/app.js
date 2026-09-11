@@ -8862,12 +8862,40 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⇒ «Sono in fondo» vuol dire che si vede la fine del CONTENUTO, non del contenitore: lo spazio in
    * coda si sottrae, perché è vuoto per costruzione.
    */
+  /*
+   * ⛔⛔ 11/09 — UNA LETTURA DI LAYOUT PER FOTOGRAMMA, NON UNA PER EVENTO.
+   *
+   * Misurato col profilo CPU aprendo la sessione da 34.026 righe, DOPO la cura di
+   * `mantieniFondoDuranteRipristino`: questa funzione è diventata la prima voce della classifica
+   * con **1.343 ms** di self-time, e l'attribuzione per chiamante dice da dove arriva:
+   * `aggiornaPiedeChatDaStato` ← `aggiornaRiassuntoBatch` (881 ms) e ← `aggiornaComposerUsage`
+   * (363 ms), entrambi dentro `handleRealEvent` — cioè UNA VOLTA PER EVENTO. Ogni chiamata legge
+   * `getComputedStyle().paddingBottom` e poi scrollHeight/scrollTop/clientHeight su un albero da
+   * 19.482 nodi appena mutato: stile + layout ricalcolati da zero, ogni volta (Paul Irish, «What
+   * forces layout/reflow», agg. 09/09/2026: tutte e tre le metriche forzano il layout; web.dev
+   * «Avoid large, complex layouts and layout thrashing», agg. 07/05/2025, «batch your style reads
+   * and do them first» — lette l'11/09/2026).
+   *
+   * ⛔ La risposta descrive ciò che la persona VEDE, e fra due letture nello stesso fotogramma la
+   *   persona non ha visto niente di nuovo: nessun paint è avvenuto in mezzo. Il valore si calcola
+   *   quindi una volta per fotogramma. La memoria si butta al fotogramma successivo (rAF) e
+   *   comunque dopo 250 ms — la seconda scadenza serve a una scheda in secondo piano, dove il rAF
+   *   non arriva e un valore vecchio resterebbe vecchio per sempre.
+   * ⛔ Niente giro di rAF perpetuo: si prenota SOLO quando c'è una risposta da buttare.
+   */
+  let fondoInVistaRicordato = null;
+  let fondoInVistaRicordatoA = 0;
   function fondoConversazioneInVista() {
+    if (fondoInVistaRicordato !== null && performance.now() - fondoInVistaRicordatoA < 250) return fondoInVistaRicordato;
     const c = scrollerConversazione();
     if (!c) return true;
     const colonna = $('#conversation');
     const coda = colonna ? (parseFloat(getComputedStyle(colonna).paddingBottom) || 0) : 0;
-    return fondoInVista({ scrollHeight: c.scrollHeight, scrollTop: c.scrollTop, clientHeight: c.clientHeight, coda });
+    const valore = fondoInVista({ scrollHeight: c.scrollHeight, scrollTop: c.scrollTop, clientHeight: c.clientHeight, coda });
+    fondoInVistaRicordato = valore;
+    fondoInVistaRicordatoA = performance.now();
+    window.requestAnimationFrame(() => { fondoInVistaRicordato = null; });
+    return valore;
   }
   // 06/9: la striscia chiede di tornare in fondo, la chat la porta (l'evento sale dal componente)
   ROOT().addEventListener('talos-vai-in-fondo', () => {
@@ -10455,10 +10483,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * backend ma non impossibile), il testo grezzo resta leggibile in un
    * <pre> invece di sparire — mai un crash per un problema di forma.
    */
-  function renderizzaArgomentiAttrezzo(contenitore, jsonGrezzo) {
+  /* ⛔ 11/09 — `argomentiGiaParsati` è il terzo parametro OPZIONALE: chi chiama ha quasi sempre
+     già l'oggetto in mano (il ramo ToolCallArgs lo parsa per il riassunto della riga) e riparsarlo
+     qui era lavoro doppio sulla stessa stringa. Chi non ce l'ha chiama come prima, con due
+     argomenti, e il parse si fa qui: nessun chiamante è costretto a cambiare. */
+  function renderizzaArgomentiAttrezzo(contenitore, jsonGrezzo, argomentiGiaParsati = undefined) {
     contenitore.replaceChildren();
     let argomenti;
-    try { argomenti = JSON.parse(jsonGrezzo); } catch { argomenti = null; }
+    if (argomentiGiaParsati !== undefined) argomenti = argomentiGiaParsati;
+    else { try { argomenti = JSON.parse(jsonGrezzo); } catch { argomenti = null; } }
     if (!argomenti || typeof argomenti !== 'object') {
       const pre = document.createElement('pre');
       pre.className = 'tool-result-block';
@@ -13967,6 +14000,67 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     state.realSession.usageSessione = totale;
   }
 
+  /*
+   * ⛔ 11/09 — IL DISEGNO DEGLI ARGOMENTI DI UN ATTREZZO, UNA VOLTA PER FOTOGRAMMA.
+   *
+   * Questo è il corpo che stava dentro `case 'ToolCallArgs'` e girava a OGNI delta: identico riga
+   * per riga (compreso il ramo PO-06 del comando della persona), solo chiamato da due posti.
+   * Durante un replay la coda `argomentiAttrezzoInAttesa` accumula e un solo requestAnimationFrame
+   * li disegna tutti: il JSON si parsa una volta per fotogramma invece che una per delta, e il
+   * sottoalbero si ricostruisce una volta invece di 3.411.
+   *
+   * ⛔ `renderizzaArgomentiAttrezzo` fa `replaceChildren()`: se il disegno differito arrivasse
+   *   DOPO che `ToolCallOutput`/`ToolCallResult` hanno appeso il loro contenuto a `info.detail`, lo
+   *   cancellerebbe. Per questo quei due rami svuotano la coda (`disegnaArgomentiSeInAttesa`)
+   *   PRIMA di toccare `detail` — non è un'ottimizzazione, è la condizione perché a schermo resti
+   *   esattamente lo stesso contenuto.
+   */
+  const argomentiAttrezzoInAttesa = new Set();
+  let frameArgomentiAttrezzo = null;
+
+  function aggiornaVistaArgomentiAttrezzo(info) {
+    argomentiAttrezzoInAttesa.delete(info);
+    if (!info) return;
+    let argomentiParsati = null;
+    try { argomentiParsati = JSON.parse(info.argomenti); } catch { /* delta ancora incompleto: il riassunto resta quello generico finché non arriva tutto */ }
+    if (argomentiParsati) info.argomentiParsati = argomentiParsati;
+    /*
+     * ⛔⛔ PO-06 (10/09) — per un comando della PERSONA il corpo non rifa l'eco degli
+     *   argomenti. Misurato dal vivo: dentro il riquadro compariva `comando: echo ciao-po06`,
+     *   cioè la TERZA copia della stessa stringa nella stessa schermata — c'è già nella bolla
+     *   che la persona ha appena mandato e nel dettaglio a destra della riga. Quel riquadro
+     *   serve all'output, che è l'unica cosa che non sa già.
+     * ⛔ E il riassunto della riga resta «In corso…» invece del nome dell'attrezzo: mentre il
+     *   comando gira non c'è ancora un verdetto da dare, e «1 comando eseguito» al presente
+     *   sarebbe falso — non è ancora eseguito.
+     */
+    if (info.comandoDellaPersona) {
+      if (info.summaryText) info.summaryText.textContent = 'In corso…';
+      /* ⛔ Niente comando ripetuto a destra: è già nel blocco sopra, e rubava spazio alla
+         riga di stato fino a troncarla («…non su Win…», visto nella foto del 10/09). */
+      return;
+    }
+    if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
+    if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati); // 05/9 Fase 2: il dettaglio mono della ToolRow
+    if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti, argomentiParsati);
+  }
+
+  function chiediDisegnoArgomentiAttrezzo(info) {
+    argomentiAttrezzoInAttesa.add(info);
+    if (frameArgomentiAttrezzo !== null) return;
+    const generazione = state.realSession.generation;
+    frameArgomentiAttrezzo = window.requestAnimationFrame(() => {
+      frameArgomentiAttrezzo = null;
+      if (generazione !== state.realSession.generation) { argomentiAttrezzoInAttesa.clear(); return; }
+      for (const voce of [...argomentiAttrezzoInAttesa]) aggiornaVistaArgomentiAttrezzo(voce);
+    });
+  }
+
+  /** Il disegno differito si salda PRIMA che qualcun altro scriva dentro `info.detail`. */
+  function disegnaArgomentiSeInAttesa(info) {
+    if (info && argomentiAttrezzoInAttesa.has(info)) aggiornaVistaArgomentiAttrezzo(info);
+  }
+
   function handleRealEvent(evento, generation) {
     if (generation !== state.realSession.generation) return; // sessione più vecchia: scartato, non renderizzato
     if (evento.type === 'CUSTOM' && evento.name === 'talos.context') {
@@ -14352,31 +14446,29 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const info = state.realSession.toolCallNomi.get(evento.toolCallId);
         if (info) {
           info.argomenti += evento.delta;
-          let argomentiParsati = null;
-          try { argomentiParsati = JSON.parse(info.argomenti); } catch { /* delta ancora incompleto: il riassunto resta quello generico finché non arriva tutto */ }
-          if (argomentiParsati) info.argomentiParsati = argomentiParsati;
           /*
-           * ⛔⛔ PO-06 (10/09) — per un comando della PERSONA il corpo non rifa l'eco degli
-           *   argomenti. Misurato dal vivo: dentro il riquadro compariva `comando: echo ciao-po06`,
-           *   cioè la TERZA copia della stessa stringa nella stessa schermata — c'è già nella bolla
-           *   che la persona ha appena mandato e nel dettaglio a destra della riga. Quel riquadro
-           *   serve all'output, che è l'unica cosa che non sa già.
-           * ⛔ E il riassunto della riga resta «In corso…» invece del nome dell'attrezzo: mentre il
-           *   comando gira non c'è ancora un verdetto da dare, e «1 comando eseguito» al presente
-           *   sarebbe falso — non è ancora eseguito.
+           * ⛔⛔ 11/09 — QUI si disegnava a OGNI delta. Contati sul file della sessione 8dde6bff
+           *   (34.026 righe): 15.952 `ToolCallArgs`, di cui una sola tool-call ne ha 3.411 per
+           *   37 KB di argomenti finali ⇒ la stringa CRESCENTE veniva riparsata a ogni delta (due
+           *   volte, perché `renderizzaArgomentiAttrezzo` riparsava per conto suo) e il
+           *   sottoalbero DOM ricostruito con `replaceChildren` altrettante volte.
+           * ⛔ Il ramo gemello `ReasoningMessageContent` (poco sopra) durante un replay NON
+           *   disegna: rispetta `deferHistoricalRendering`. `ToolCallArgs` era l'unico grande
+           *   delta che disegnava anche mentre si rigioca il passato — l'asimmetria che lo
+           *   qualifica come difetto e non come scelta.
+           * ⇒ Durante il ripristino il testo si accumula e si disegna una volta per FOTOGRAMMA
+           *   (stesso principio di `mantieniFondoDuranteRipristino`, e stessa ricerca dell'11/09:
+           *   web.dev / webperf.tips sul batching con requestAnimationFrame). Dal vivo, mentre il
+           *   modello scrive, la grana delta-per-delta resta il prodotto e non si tocca.
            */
-          if (info.comandoDellaPersona) {
-            if (info.summaryText) info.summaryText.textContent = 'In corso…';
-            /* ⛔ Niente comando ripetuto a destra: è già nel blocco sopra, e rubava spazio alla
-               riga di stato fino a troncarla («…non su Win…», visto nella foto del 10/09). */
-            break;
-          }
-          if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
-          if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati); // 05/9 Fase 2: il dettaglio mono della ToolRow
-          if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti);
+          if (state.realSession.deferHistoricalRendering) { chiediDisegnoArgomentiAttrezzo(info); break; }
+          aggiornaVistaArgomentiAttrezzo(info);
         }
         break;
       }
+      /* ⇧ il corpo che stava qui è diventato `aggiornaVistaArgomentiAttrezzo`, poco sopra: identico
+         riga per riga, solo chiamato una volta per fotogramma durante un replay invece che a ogni
+         delta. Il segnaposto qui sotto non esiste più. */
       /*
        * ⛔⛔⛔ D-10B — L'USCITA DI UN COMANDO, MENTRE ESCE.
        *
@@ -14395,6 +14487,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       case 'ToolCallOutput': {
         const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+        disegnaArgomentiSeInAttesa(info); // 11/09: gli argomenti differiti PRIMA di appendere, o replaceChildren li cancellerebbe
         if (!info?.detail || typeof evento.delta !== 'string' || !evento.delta) break;
         if (!info.uscitaViva) {
           const pre = document.createElement('pre');
@@ -14414,6 +14507,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
       case 'ToolCallResult': {
         const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+        disegnaArgomentiSeInAttesa(info); // 11/09: idem — qui sotto si appende a `info.detail`
         /* ⛔ D-10B — l'uscita viva se ne va appena c'è quella vera: due copie della stessa cosa,
            di cui una senza tetto, sono peggio di nessuna. */
         if (info?.uscitaViva) { info.uscitaViva.parentElement?.remove(); info.uscitaViva = null; info.uscitaVivaTesto = ''; }
@@ -15596,7 +15690,34 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     };
     // Scopre la conversazione SOLO quando è già in fondo: prima porta il fondo, poi toglie is-restoring, poi ribatte il fondo (togliere la classe non cambia il layout, ma costa zero essere sicuri).
     const scopri = () => { if (generation !== state.realSession.generation) return; inFondo(); conversation.classList.remove('is-restoring'); inFondo(); };
-    const osservatore = new MutationObserver(inFondo);
+    /*
+     * ⛔⛔⛔ 11/09 — LAYOUT THRASHING, misurato col profilo CPU del renderer (banco su porta
+     * libera, copia dello store, Chrome vero con i tre flag anti-throttling, campionamento 200 µs):
+     * aprendo la sessione da 34.026 righe (19.482 nodi in chat) il self-time diceva
+     * `aggiornaSpazioCodaConversazione` 1.334 ms, `fondoConversazioneInVista` 572 ms e
+     * `querySelectorAll` 502 ms su 7,0 s di apertura — ≈ i due long task residui.
+     * Causa: questo callback LEGGE il layout (clientHeight/scrollHeight) e lo SCRIVE (scrollTop)
+     * dentro il callback stesso, a OGNI mutazione: reflow sincrono forzato, il caso da manuale.
+     * Ricerca 11/09/2026: web.dev «Avoid large, complex layouts and layout thrashing» (agg.
+     * 07/05/2025) — «you should always batch your style reads and do them first… and then do any
+     * writes»; webperf.tips «Layout Thrashing and Forced Reflows» (11/12/2022), che nomina
+     * proprio i MutationObserver fra le sorgenti tipiche e indica requestAnimationFrame come
+     * rimedio; Paul Irish «What forces layout/reflow» (agg. 09/09/2026): scrollTop, scrollHeight
+     * e clientHeight forzano il layout sia in lettura sia in scrittura.
+     * ⛔ E ogni scrittura di `scrollTop` emette un evento `scroll`: a valle ridisegna il piede
+     *   della chat (`fondoConversazioneInVista`) e ricalcola la cronologia (`querySelectorAll` su
+     *   tutta la conversazione). Il costo non è solo il reflow: è la cascata che parte da qui.
+     * ⇒ Il callback ora MARCA soltanto; la coppia lettura+scrittura avviene una volta per
+     *   FOTOGRAMMA. Il fondo finale non dipende da questa corsia: lo ribattono `scopri()` e le due
+     *   repliche (rAF + 250 ms) alla fine del ripristino, che restano sincrone.
+     */
+    let fondoChiesto = false;
+    const chiediFondo = () => {
+      if (fondoChiesto || smesso) return;
+      fondoChiesto = true;
+      window.requestAnimationFrame(() => { fondoChiesto = false; inFondo(); });
+    };
+    const osservatore = new MutationObserver(chiediFondo);
     // ⛔ 02/09 — misurato dal vivo: 12320 su 12334, 14px sopra il fondo per 4s filati. L'ultima MUTAZIONE di figli non è l'ultimo cambio di altezza: markMotionEnter cambia una classe (attributo, non childList) un frame dopo l'inserimento e il layout cresce ancora. Si osservano anche gli attributi, e alla fine del ripristino si ribatte il fondo su due frame successivi.
     osservatore.observe(conversation, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'style'] });
     const scroller = scrollerConversazione(conversation);
@@ -15614,7 +15735,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (distanza > 40) smetti(); // si è allontanata dal fondo di sua volontà: da qui comanda lei
     }
     scroller?.addEventListener('scroll', suScroll, { passive: true });
+    /* 11/09 — la rete di sicurezza qui sotto ha bisogno di sapere se il replay sta ancora
+       portando eventi: `sequenzeViste` cresce a ogni evento nuovo (14003), e questo intervallo
+       gira già ogni 200 ms. Una lettura di `.size`, nessun timer in più. */
+    let visteUltime = -1;
+    let ultimoEventoNuovo = performance.now();
     const fermaSeFinito = window.setInterval(() => {
+      const viste = state.realSession.sequenzeViste?.size ?? 0;
+      if (viste !== visteUltime) { visteUltime = viste; ultimoEventoNuovo = performance.now(); }
       if (generation !== state.realSession.generation || state.realSession.eventoTerminaleVisto) {
         osservatore.disconnect();
         window.clearInterval(fermaSeFinito);
@@ -15622,7 +15750,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       }
     }, 200);
     // Rete di sicurezza per la VISIBILITÀ: una sessione conclusa senza evento terminale nel replay (interrotta) non resta nascosta per sempre — 8s bastano a qualunque cronologia vista finora (1.235 righe in ~1s).
-    window.setTimeout(() => { if (!smesso) scopri(); }, 8_000);
+    /* ⛔ 11/09 — gli 8 s erano tarati su «1.235 righe in ~1s» (il commento sopra lo dichiara):
+       su 34.026 righe scoprire a 8 s vuol dire scoprire una cronologia a METÀ. Il tetto non è più
+       un numero fisso — e nemmeno una formula calcolata qui, perché a questo istante
+       `sequenzeViste` è ancora vuota e un `8_000 + size * 2` varrebbe SEMPRE 8.000. Si guarda se
+       il replay porta ancora eventi nuovi, e si aspetta al massimo fino a 20 s. */
+    const inizioRipristino = performance.now();
+    const reteDiSicurezza = () => {
+      if (smesso) return;
+      const fermoDa = performance.now() - ultimoEventoNuovo;
+      if (fermoDa < 1_000 && performance.now() - inizioRipristino < 20_000) { window.setTimeout(reteDiSicurezza, 500); return; }
+      scopri();
+    };
+    window.setTimeout(reteDiSicurezza, 8_000);
     // Rete di sicurezza: mai un osservatore vivo per sempre se il segnale di fine non arriva (connessione caduta, sessione mai conclusa per davvero).
     window.setTimeout(smetti, 30_000);
   }
