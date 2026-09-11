@@ -13008,5 +13008,210 @@ dialog.td-modal:has(.td-theme-studio) {
     gap: 7px;
   }
 }
+.td-bilancio {
+  margin: 0 0 14px;
+}
+.td-bilancio-barra {
+  display: flex;
+  gap: 2px;
+  height: 8px;
+  border-radius: var(--talos-radius-pill);
+  overflow: hidden;
+  background: var(--talos-border);
+}
+.td-bilancio-barra i {
+  display: block;
+  min-width: 3px;
+  background: var(--talos-muted);
+}
+.td-bilancio-barra i[data-tone=success] {
+  background: var(--talos-success);
+}
+.td-bilancio-barra i[data-tone=warning] {
+  background: var(--talos-warning);
+}
+.td-bilancio-barra i[data-tone=info] {
+  background: var(--talos-info);
+}
+.td-bilancio-barra i[data-tone=danger] {
+  background: var(--talos-danger);
+}
+.td-bilancio-voci {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 9px;
+  color: var(--talos-text);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.td-bilancio-voci span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.td-bilancio-voci i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--talos-muted);
+  flex: none;
+}
+.td-bilancio-voci i[data-tone=success] {
+  background: var(--talos-success);
+}
+.td-bilancio-voci i[data-tone=warning] {
+  background: var(--talos-warning);
+}
+.td-bilancio-voci i[data-tone=info] {
+  background: var(--talos-info);
+}
+.td-bilancio-voci i[data-tone=danger] {
+  background: var(--talos-danger);
+}
+.td-viste {
+  display: inline-flex;
+  flex-wrap: wrap;
+  margin: 18px 0 16px;
+  max-width: 100%;
+}
+.td-viste button {
+  padding: 0 10px;
+}
+.td-vista {
+  min-height: 120px;
+}
+.td-vista:focus-visible {
+  outline: var(--talos-focus-width, 2px) solid var(--talos-ring);
+  outline-offset: 4px;
+  border-radius: var(--talos-radius-control);
+}
+.td-vista > :first-child {
+  margin-top: 0;
+}
+.td-prosa-rapporto {
+  max-width: 72ch;
+}
+.td-prosa-rapporto h2 {
+  font-size: 18px;
+  margin: 22px 0 8px;
+  letter-spacing: -.02em;
+}
+.td-prosa-rapporto h3 {
+  font-size: 15px;
+  margin: 20px 0 6px;
+}
+.td-prosa-rapporto h4 {
+  font-size: 13px;
+  margin: 16px 0 6px;
+  color: var(--talos-muted);
+}
+.td-prosa-rapporto p {
+  margin: 0 0 12px;
+  white-space: normal;
+}
+.td-passaggio {
+  margin: 10px 0;
+  padding: 8px 0 8px 13px;
+  border-left: 2px solid var(--talos-accent-border);
+  color: var(--talos-assistant-text);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.td-affermazione {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--talos-border);
+}
+.td-affermazione:last-child {
+  border-bottom: 0;
+}
+.td-affermazione-testa {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 8px;
+}
+.td-affermazione-numero {
+  color: var(--talos-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  min-width: 1.4em;
+}
+.td-affermazione-testo {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.td-affermazione-piede {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.td-affermazione-piede a {
+  color: var(--talos-accent-text);
+  overflow-wrap: anywhere;
+}
+.td-contraria {
+  margin: 10px 0 0 13px;
+  padding: 10px 12px;
+  border: 1px solid var(--talos-border);
+  border-radius: var(--talos-radius-control);
+  background: var(--talos-card-subtle, var(--talos-card));
+}
+.td-contraria a {
+  color: var(--talos-accent-text);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.td-andata {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 13px;
+}
+.td-andata dt {
+  color: var(--talos-muted);
+  font-size: 12px;
+}
+.td-andata dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.td-allegato {
+  margin: 10px 0 0;
+  padding: 13px 15px;
+  border: 1px dashed var(--talos-border-strong);
+  border-radius: var(--talos-radius-control);
+  background: var(--talos-window-bg);
+  color: var(--talos-assistant-text);
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.td-detail {
+  container-type: inline-size;
+  container-name: dettaglio;
+}
+@container dettaglio (max-width: 430px) {
+  .td-andata {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+  .td-andata dd {
+    margin-bottom: 8px;
+  }
+  .td-viste button {
+    padding: 0 8px;
+    font-size: 11px;
+  }
+}
 
 /* src/styles/main.css */

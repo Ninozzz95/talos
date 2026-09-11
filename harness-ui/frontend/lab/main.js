@@ -43,6 +43,8 @@ import { apriStudioTemi, montaScorciatoiaTemi } from '../src/components/theme-st
 import { confermaModale } from '../src/components/modale-td.js';
 import { NOTE, ADESSO_NOTE } from './fixtures/note.js';
 import { PROGETTI } from './fixtures/progetti.js';
+/* 11/09 lotto L7 — la Ricerca approfondita col suo dentro: rapporto, affermazioni, fonti. */
+import { RICERCHE as RICERCHE_L7, leggiRapportoFinto, apriMenuDiProva } from './fixtures/ricerche.js';
 import { creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaFallimentoAttrezzo, creaFileToccati, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRicevuta, creaRigaAttrezzo, creaTurno } from '../src/components/conversazione.js';
 import { aggiornaPiedeChat } from '../src/components/chat-foot.js';
 import { aggiornaDiffReview, creaRigaFileReview, riassuntoReview } from '../src/components/review.js';
@@ -132,6 +134,28 @@ function notificaDiProva(titolo, messaggio, opzioni = {}) {
   regione.append(scheda);
   regione.hidden = false;
   return scheda;
+}
+
+/* Il banco della Ricerca approfondita: monta, aspetta il rapporto, apre la scheda chiesta. */
+async function montaRicerca({ apri = null, vista = 'rapporto', menu = false, righe = false } = {}) {
+  const schermo = mostraSchermo('schermoRicerca', 'ricerca');
+  const opzioni = {
+    leggiRapporto: leggiRapportoFinto,
+    onMenu: apriMenuDiProva,
+    onApriSessione: () => {},
+    notifica: notificaDiProva,
+  };
+  ricercaTd(schermo, RICERCHE_L7, opzioni);
+  if (righe) schermo.querySelector('[data-vista="elenco"]').click();
+  if (!apri) return schermo;
+  schermo.querySelector(`.td-card[data-item="${apri}"] .td-card-open`).click();
+  /* Due giri di microtask: uno per la lettura del file, uno per il ridisegno che ne segue. */
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((fatto) => setTimeout(fatto, 0));
+  if (vista) schermo.querySelector(`.td-viste [data-vista="${vista}"]`)?.click();
+  if (menu) schermo.querySelector('.td-detail-meta .td-tools button').click();
+  return schermo;
 }
 
 const LABORATORI = {
@@ -227,11 +251,25 @@ const LABORATORI = {
     libreriaTd(schermo, LIBRERIA, { sessionId: 'fx-lab', notifica: notificaDiProva, onMenu: () => {} });
     schermo.querySelector('.td-card .td-card-open').click();
   },
-  SezioneRicerca() {
-    const schermo = mostraSchermo('schermoRicerca', 'ricerca');
-    ricercaTd(schermo, RICERCHE, {});
-    schermo.querySelector('.td-card .td-card-open').click();
+  /*
+   * 11/09 lotto L7 — la Ricerca approfondita. `leggiRapporto` è la stessa forma che avrà in
+   * produzione (`GET /library/:voceId/file` → testo), qui servita dalla fixture: il rapporto
+   * arriva DOPO, in una promessa, e la sezione si ridisegna da sola quando è pronto. Le pagine
+   * sono `async` per questo — si aspetta il ridisegno, non si fotografa il «Leggo il rapporto…».
+   */
+  SezioneRicerca: () => montaRicerca(),
+  SezioneRicerca_vuota() {
+    ricercaTd(mostraSchermo('schermoRicerca', 'ricerca'), [], {});
   },
+  SezioneRicerca_rapporto: () => montaRicerca({ apri: 'ric-conclusa' }),
+  SezioneRicerca_senza: () => montaRicerca({ apri: 'ric-bloccata' }),
+  SezioneRicerca_affermazioni: () => montaRicerca({ apri: 'ric-conclusa', vista: 'affermazioni' }),
+  SezioneRicerca_fonti: () => montaRicerca({ apri: 'ric-conclusa', vista: 'fonti' }),
+  SezioneRicerca_piano: () => montaRicerca({ apri: 'ric-conclusa', vista: 'piano' }),
+  SezioneRicerca_andata: () => montaRicerca({ apri: 'ric-bloccata', vista: 'andata' }),
+  SezioneRicerca_senza_record: () => montaRicerca({ apri: 'ric-senza-record' }),
+  SezioneRicerca_menu: () => montaRicerca({ apri: 'ric-conclusa', menu: true }),
+  SezioneRicerca_elenco: () => montaRicerca({ vista: null, righe: true }),
   SezioneProgetti() {
     const schermo = mostraSchermo('schermoProgetti', 'progetti');
     progettiTd(schermo, PROGETTI, { onApriSessione: () => {} });
@@ -360,5 +398,11 @@ const LABORATORI = {
 };
 
 if (componente && !LABORATORI[componente]) throw new Error(`componente di laboratorio sconosciuto: ${componente}`);
-if (componente) LABORATORI[componente]();
-document.documentElement.dataset.visualReady = 'true';
+/* ⛔ 11/09 (L7): una pagina può essere ASINCRONA — il rapporto di una ricerca arriva da una
+   promessa. `visualReady` si alza solo quando la pagina ha finito, o la foto coglierebbe il
+   «Leggo il rapporto…» e nessuno capirebbe perché il pannello è vuoto. */
+if (componente) {
+  Promise.resolve(LABORATORI[componente]()).then(() => { document.documentElement.dataset.visualReady = 'true'; });
+} else {
+  document.documentElement.dataset.visualReady = 'true';
+}

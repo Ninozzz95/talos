@@ -21,7 +21,8 @@
  *   · `libreria.js` → `tipoVoceLibreria`, `origineVoceLibreria`, `testiVoceLibreria`,
  *     `azioniLibreria`, `indirizzoFileLibreria` e **la riga vera** `creaLibraryRow`, che vive
  *     dentro il dettaglio con tutte e cinque le sue azioni;
- *   · `ricerca.js` → `statoRicerca`, `testiRicerca`, `riepilogoRicerche`;
+ *   · `ricerca.js` → `riepilogoRicerche` (dall'11/09 le parole degli stati e il dettaglio a cinque
+ *     viste stanno in `ricerca-dettaglio.js`: la riga del foglio laterale resta dov'era);
  *   · `progetti.js` → `frasiProgetto`, `sommarioProgetti`, `ultimeSessioni`;
  *   · `plurale.js` → il plurale italiano, che vive in un posto solo.
  *
@@ -37,7 +38,13 @@ import { titoloNota, quandoNota, sommarioNote } from './note.js';
 import { genereMemoria, testiMemoria } from './memoria.js';
 import { statoAttivita, prioritaAttivita, testiAttivita, riepilogoAttivita } from './attivita.js';
 import { tipoVoceLibreria, origineVoceLibreria, testiVoceLibreria, azioniLibreria, indirizzoFileLibreria, creaLibraryRow } from './libreria.js';
-import { statoRicerca, testiRicerca, riepilogoRicerche } from './ricerca.js';
+import { riepilogoRicerche } from './ricerca.js';
+/* 11/09 lotto L7 — la Ricerca approfondita ha un dentro: parole degli stati, bilancio, cinque
+   viste, menu e esportazioni vivono in un file loro, come `libreria.js` per la Libreria. */
+import {
+  frasiVoce, frasiBilancio, bilancioDaRecord, magazzinoRicerche, articoloData,
+  montaDettaglioRicerca, vociMenuRicerca, collegaTastoDestro, scaricaTesto,
+} from './ricerca-dettaglio.js';
 import { frasiProgetto, sommarioProgetti, ultimeSessioni } from './progetti.js';
 import { plurale } from './plurale.js';
 import { montaSezione } from './sezione-elenco-dettaglio.js';
@@ -407,24 +414,97 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
 
 /* ---------------------------------------------------------------------------------- RICERCA */
 
-/**
- * Cosa vuol dire quello stato, in una riga. ⛔ Non è un dato del server: è la SPIEGAZIONE dello
- * stato che il server manda, scritta una volta sola e qui — non un contenuto inventato come nel
- * mockup, che nella scheda mostra una sintesi e delle «fonti illustrate» che non esistono.
+/*
+ * ⛔⛔ 11/09/2026, lotto L7 — LA SEZIONE AVEVA UN ELENCO E NESSUN DENTRO.
+ *
+ *   Fino a stasera qui c'erano due frasi false e una promessa vuota:
+ *     · «Il rapporto è stato scritto in .harness-ui-research/» — in quella cartella c'è SOLO la
+ *       scheda della ricerca; il testo è una voce di Libreria (`research-orchestrator.mjs:132`);
+ *     · «Da qui non si consultano ancora» — e infatti il dettaglio mostrava tre metadati;
+ *     · «Conclusa» su una ricerca che non aveva prodotto nessun rapporto.
+ *   Il guasto completo, con la catena dei cinque difetti che lo produce, sta in
+ *   `.claude/DISEGNO-RICERCA-APPROFONDITA-2026-09-11.md` §1-§2.
+ *
+ * ⛔ Adesso la rotta manda ANCHE `reportLibraryId`, `motivo`, `conclusaAlle`, `padreId`, `nome` e
+ *   `ultimoMessaggio`, e gli stati sono otto invece di cinque. Le parole, i verdetti, il bilancio
+ *   e le esportazioni vivono in `ricerca-dettaglio.js`: qui resta la sola COLLA fra i dati e
+ *   l'impianto elenco+dettaglio, come per le altre cinque sezioni.
+ *
+ * ⛔ Il ripiego su `titolo` resta: una sezione che legge un solo nome mostrerebbe «Ricerca senza
+ *   domanda» su tutto l'archivio il giorno in cui la rotta cambia parola.
  */
-const FRASI_RICERCA = new Map([
-  ['running', 'Il rapporto si sta scrivendo.'],
-  ['paused', 'Ferma: riparte da dove si era interrotta.'],
-  /* 11/09 sera (disegno BC-21): il rapporto NON sta in `.harness-ui-research/` — lì c'è solo la scheda
-     della ricerca; il testo è una voce di Libreria (`reportLibraryId`, `research-orchestrator.mjs:132`).
-     E «done» oggi non prova che ci sia un rapporto vero: la ricerca di stasera è «done» con 290 byte
-     di scusa del modello. La frase dice il posto giusto e non promette più di quanto il server sappia. */
-  ['done', 'Conclusa: il rapporto, se è stato scritto, sta in Libreria.'],
-  ['cancelled', 'Interrotta prima di arrivare a un rapporto.'],
-  ['failed', 'Non è arrivata a un rapporto.'],
-]);
+
+/** Copia negli appunti: quella della app quando c'è, altrimenti quella del browser. */
+function copiatore(opzioni) {
+  if (typeof opzioni?.copia === 'function') return opzioni.copia;
+  return (testo) => globalThis.navigator?.clipboard?.writeText?.(testo);
+}
 
 export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
+  const elenco = Array.isArray(ricerche) ? ricerche : [];
+  const magazzino = magazzinoRicerche(schermo);
+  const avvisa = notificatore(opzioni);
+  const copia = copiatore(opzioni);
+  const ridisegna = () => aggiornaPaginaRicerca(schermo, ricerche, opzioni);
+  const trovaVoce = (id) => elenco.find((r) => String(r?.id) === String(id)) || null;
+  /*
+   * ⛔ Il rapporto si legge dalla rotta che ESISTE GIÀ: `GET /library/:voceId/file` (la stessa che
+   *   scarica un file della Libreria, `http-app.mjs:2023`). Quindi al chiamante basta passare
+   *   `sessionId` — nessuna rotta nuova, nessun secondo modo di leggere lo stesso file.
+   *   Chi vuole leggerlo in un altro modo (un test, il laboratorio) passa `leggiRapporto` e vince.
+   * ⛔ Se non arriva né l'uno né l'altro NON si finge un'attesa: il dettaglio lo dice.
+   */
+  const leggiRapporto = typeof opzioni.leggiRapporto === 'function' ? opzioni.leggiRapporto
+    : (opzioni.sessionId ? async (voce) => {
+      const indirizzo = indirizzoFileLibreria(opzioni.sessionId, voce?.reportLibraryId);
+      if (!indirizzo) throw new Error('questa ricerca non ha un rapporto in Libreria');
+      const risposta = await fetch(indirizzo);
+      if (!risposta.ok) throw new Error(`il file non si apre (${risposta.status})`);
+      return risposta.text();
+    } : null);
+
+  function letturaDi(voce) {
+    const chiave = String(voce?.reportLibraryId ?? '');
+    return chiave ? magazzino.rapporti.get(chiave) || null : null;
+  }
+
+  function apriMenu(voce, dove) {
+    const voci = vociMenuRicerca(voce, {
+      lettura: letturaDi(voce),
+      onApriSessione: opzioni.onApriSessione,
+      onCopia: (prosa) => {
+        Promise.resolve(copia(prosa)).then(
+          () => avvisa('Copiato', 'Il testo del rapporto è negli appunti.'),
+          () => avvisa('Non copiato', 'Gli appunti non sono disponibili in questa finestra.', { tono: 'errore' }),
+        );
+      },
+      onEsporta: (nome, testo, mime) => {
+        scaricaTesto(schermo.ownerDocument || globalThis.document, nome, testo, mime);
+        avvisa('Esportato', `${nome} è nella cartella dei download.`);
+      },
+    });
+    /* ⛔ Il menu lo disegna `legacy/app.js` (`apriMenuAzioniLibreria`), lo stesso dell'albero dei
+       file e della Libreria: qui si sa QUALI azioni ha una ricerca, non come si apre un menu.
+       Senza iniezione non compare un secondo menu: il pulsante resta, e non fa niente di sbagliato. */
+    if (typeof opzioni.onMenu === 'function' && voci.length) opzioni.onMenu(voci, dove);
+  }
+
+  collegaTastoDestro(schermo, { trovaVoce, apriMenu });
+
+  /*
+   * ⛔ LA FRASE FALSA DELL'INTRO, tolta da qui perché il suo file non è di questa lane.
+   *   `index.template.html:1058` (e la sua copia in `public/`) dice ancora «I rapporti vivono in
+   *   .harness-ui-research/»: è falsa (lì c'è solo la scheda) e la sezione la MOSTRA, perché
+   *   `montaSezione` sposta il paragrafo del prodotto dentro `.td-intro`. Il diff per il file vero
+   *   sta nel rapporto del lotto; finché non è applicato, la frase si corregge qui — dove la si
+   *   vede — invece di lasciarla a schermo un giorno in più.
+   */
+  const spiegazioneVera = 'Ogni ricerca approfondita di questo progetto, col suo rapporto, le affermazioni verificate e le fonti da cui vengono.';
+  for (const p of schermo.querySelectorAll('.talos-page__head p, .td-intro p')) {
+    if (p.getAttribute('role') === 'status' || p.hasAttribute('data-research-esito')) continue;
+    if (p.textContent.includes('.harness-ui-research') || p.textContent.includes('non è ancora disponibile')) p.textContent = spiegazioneVera;
+  }
+
   return montaSezione(schermo, {
     chiave: 'ricerca',
     nome: 'Ricerca',
@@ -434,45 +514,94 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
        la riga di stato non può dire «5 rapporti». Il rapporto è ciò che una ricerca PRODUCE. */
     sostantivo: 'ricerca',
     pluraleEsplicito: 'ricerche',
-    voci: Array.isArray(ricerche) ? ricerche : [],
+    voci: elenco,
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: 'Caricamento ricerche…',
     onAggiorna: opzioni.onAggiorna,
+    /*
+     * ⛔ QUATTRO filtri e non otto. Gli stati sono otto, ma un filtro per ognuno darebbe una riga
+     *   di bottoni che nessuno legge, e quattro di essi direbbero sempre zero. Le domande che una
+     *   persona si fa davvero sono: cosa sta lavorando, cosa ha prodotto un rapporto, cosa no.
+     *   ⛔ «Col rapporto» guarda il RAPPORTO, non lo stato: è la stessa distinzione che il cancello
+     *   di consegna fa lato server, e l'unica che non può mentire.
+     */
     filtri: [
       { id: 'tutte', etichetta: 'Tutte' },
-      { id: 'running', etichetta: 'In corso', quando: (r) => r?.stato === 'running' },
-      { id: 'paused', etichetta: 'In pausa', quando: (r) => r?.stato === 'paused' },
-      { id: 'done', etichetta: 'Concluse', quando: (r) => r?.stato === 'done' },
-      { id: 'cancelled', etichetta: 'Annullate', quando: (r) => r?.stato === 'cancelled' },
-      { id: 'failed', etichetta: 'Non riuscite', quando: (r) => r?.stato === 'failed' },
+      { id: 'vive', etichetta: 'In corso', quando: (r) => r?.stato === 'running' || r?.stato === 'paused' },
+      { id: 'con-rapporto', etichetta: 'Col rapporto', quando: (r) => Boolean(r?.reportLibraryId) },
+      { id: 'senza-rapporto', etichetta: 'Senza rapporto', quando: (r) => !r?.reportLibraryId && r?.stato !== 'running' && r?.stato !== 'paused' },
     ],
     idDi: (r) => r?.id,
-    titoloDi: (r) => testiRicerca(r).titolo,
-    quandoDi: (r) => r?.avviataAlle ?? null,
-    cercaIn: (r) => `${testiRicerca(r).titolo} ${statoRicerca(r?.stato).testo}`,
-    sommarioBarra: (n, { errore, caricamento }) => (errore ? 'Ricerche non disponibili' : caricamento ? 'Caricamento ricerche…' : riepilogoRicerche(Array.isArray(ricerche) ? ricerche : [])),
+    titoloDi: (r) => frasiVoce(r).domanda,
+    /* Una ricerca finita si ordina per quando è FINITA; una viva non è ancora finita e vale l'avvio. */
+    quandoDi: (r) => r?.conclusaAlle ?? r?.avviataAlle ?? null,
+    cercaIn: (r) => {
+      const f = frasiVoce(r);
+      return `${f.domanda} ${f.parola} ${f.nome || ''}`;
+    },
+    sommarioBarra: (n, { errore, caricamento }) => (errore ? 'Ricerche non disponibili' : caricamento ? 'Caricamento ricerche…' : riepilogoRicerche(elenco)),
     scheda: (r, { doc, icona, etichetta }) => {
-      const s = statoRicerca(r?.stato);
+      const f = frasiVoce(r);
+      const lettura = letturaDi(r);
+      /*
+       * ⛔ La scheda guida col BILANCIO quando lo sappiamo, col PERCHÉ quando non c'è un rapporto —
+       *   mai col numero delle fonti (§6.7: una risposta sembra buona anche quando le prove non ci
+       *   sono). Il bilancio si sa solo dopo aver letto quel rapporto: la rotta manda l'elenco, non
+       *   i bilanci, e leggere venti file all'apertura della sezione sarebbe venti richieste per
+       *   una riga di testo. ⇒ finché non l'hai aperta, la scheda dice la frase dello stato.
+       */
+      const riga = lettura?.stato === 'pronto' && lettura.record
+        ? frasiBilancio(bilancioDaRecord(lettura.record))
+        : f.spiegazione;
       return {
-        alto: [icona('globe'), nodo(doc, 'span', '', 'Dossier'), etichetta(s.testo, s.tono)],
-        corpo: [nodo(doc, 'p', 'td-excerpt', FRASI_RICERCA.get(r?.stato) || 'Stato non registrato: il server non dice a che punto è.')],
-        basso: [nodo(doc, 'span', '', testiRicerca(r).avviata ? `Avviata il ${testiRicerca(r).avviata}` : 'Data non registrata')],
+        alto: [icona('globe'), etichetta(f.parola, f.tono)],
+        corpo: [nodo(doc, 'p', 'td-excerpt', riga)],
+        /*
+         * ⛔ TROVATO NELLA FOTO: «Avviata il 11/09/20…» e «Rapporto disponibi…», tutti e due
+         *   troncati. `.td-card-bottom span` taglia con i puntini, e in 250 px di scheda due frasi
+         *   lunghe non ci stanno. ⇒ a destra si scrive solo quando AGGIUNGE qualcosa: su una
+         *   conclusa col rapporto lo dice già il timbro, mentre «Conclusa senza rapporto» è
+         *   un'anomalia che deve saltare all'occhio, e un rapporto su una ricerca non conclusa è
+         *   una cosa che chi guarda vuole sapere.
+         */
+        basso: [
+          nodo(doc, 'span', '', f.avviata ? `Avviata ${articoloData(r?.avviataAlle)}${dataBreve(r?.avviataAlle)}` : 'Data non registrata'),
+          nodo(doc, 'span', '', r?.stato === 'done' ? (f.haRapporto ? '' : 'Nessun rapporto') : (f.haRapporto ? 'Col rapporto' : '')),
+        ],
+        adorno: (() => {
+          /* ⛔ Un solo bottone, non cinque affiancati (owner 10/09): le azioni stanno nel menu, e
+             il tasto destro sulla scheda apre lo stesso elenco. */
+          const b = nodo(doc, 'button', 'td-card-azioni');
+          b.type = 'button';
+          b.setAttribute('aria-haspopup', 'menu');
+          b.setAttribute('aria-label', `Azioni su ${f.domanda}`);
+          const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          const use = doc.createElementNS('http://www.w3.org/2000/svg', 'use');
+          svg.setAttribute('class', 'i');
+          svg.setAttribute('aria-hidden', 'true');
+          use.setAttribute('href', '#i-more');
+          svg.append(use);
+          b.append(svg);
+          b.addEventListener('click', (e) => { e.stopPropagation(); apriMenu(r, { ancoraEl: b }); });
+          return b;
+        })(),
       };
     },
-    dettaglio: (r, { doc, etichetta }) => {
-      const s = statoRicerca(r?.stato);
-      const t = testiRicerca(r);
-      return [
-        meta(doc, [etichetta(s.testo, s.tono), nodo(doc, 'span', '', t.avviata || 'data non registrata')]),
-        nodo(doc, 'h2', '', t.titolo),
-        /* ⛔ Il mockup mostra qui piano, rapporto e «fonti illustrate»: sono dati suoi, inventati.
-           La rotta vera manda i soli metadati, e lo stato «Conclusa» non certifica le fonti. Si
-           dice cosa manca invece di riempire lo spazio. */
-        nodo(doc, 'p', 'td-prose', 'Di questa ricerca il server manda per ora soltanto titolo, stato e data di avvio. Il rapporto, quando c’è, è una voce della Libreria; le fonti restano nella conversazione della ricerca. Da qui non si consultano ancora.'),
-        nodo(doc, 'p', 'td-subtle', 'Lo stato «Conclusa» non certifica le fonti del rapporto.'),
-      ];
+    dettaglio: (r, { doc }) => montaDettaglioRicerca(r, {
+      doc,
+      magazzino,
+      ridisegna,
+      apriMenu,
+      opzioni: {
+        leggiRapporto,
+        onApriSessione: opzioni.onApriSessione,
+        rendiMarkdown: opzioni.rendiMarkdown,
+      },
+    }),
+    vuoto: {
+      titolo: 'Nessuna ricerca',
+      testo: 'Chiedi in chat di avviare una ricerca approfondita: comparirà qui mentre lavora, e ci resterà col suo rapporto.',
     },
-    vuoto: { titolo: 'Nessuna ricerca', testo: 'Le ricerche approfondite di questo progetto compaiono qui, fino a venti fra le più recenti.' },
   });
 }
 

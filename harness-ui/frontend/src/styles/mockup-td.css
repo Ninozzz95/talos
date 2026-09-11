@@ -295,3 +295,82 @@ dialog.td-modal:has(.td-theme-studio) { width: min(1120px, calc(100vw - 40px)); 
   .td-theme-choice > .td-theme-segno { display: none; }
   .td-theme-details { gap: 7px; }
 }
+
+/* ---------------------------------------------------------------------------------------------
+ * L7, 11/09/2026 — la Ricerca approfondita nel dettaglio: bilancio, cinque viste, affermazioni.
+ *
+ * ⛔ NESSUN COLORE NUOVO. I cinque toni della barra sono i quattro semantici che i temi hanno già
+ *   (`--talos-success`, `--talos-warning`, `--talos-info`, `--talos-danger`) più il muto: una
+ *   scala inventata qui sarebbe la quindicesima tavolozza del progetto, e a ogni tema nuovo
+ *   qualcuno dovrebbe ricordarsi di riallinearla.
+ * ⛔ NESSUNA ANIMAZIONE: due regole universali con `!important` le spengono tutte a valle.
+ * ------------------------------------------------------------------------------------------- */
+
+/* Il bilancio: la barra dice la proporzione, le voci dicono i numeri. Una lettura, due strade. */
+.td-bilancio { margin: 0 0 14px; }
+.td-bilancio-barra { display: flex; gap: 2px; height: 8px; border-radius: var(--talos-radius-pill); overflow: hidden; background: var(--talos-border); }
+.td-bilancio-barra i { display: block; min-width: 3px; background: var(--talos-muted); }
+.td-bilancio-barra i[data-tone="success"] { background: var(--talos-success); }
+.td-bilancio-barra i[data-tone="warning"] { background: var(--talos-warning); }
+.td-bilancio-barra i[data-tone="info"] { background: var(--talos-info); }
+.td-bilancio-barra i[data-tone="danger"] { background: var(--talos-danger); }
+.td-bilancio-voci { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 9px; color: var(--talos-text); font-size: 12px; font-variant-numeric: tabular-nums; }
+.td-bilancio-voci span { display: inline-flex; align-items: center; gap: 6px; }
+.td-bilancio-voci i { width: 8px; height: 8px; border-radius: 50%; background: var(--talos-muted); flex: none; }
+.td-bilancio-voci i[data-tone="success"] { background: var(--talos-success); }
+.td-bilancio-voci i[data-tone="warning"] { background: var(--talos-warning); }
+.td-bilancio-voci i[data-tone="info"] { background: var(--talos-info); }
+.td-bilancio-voci i[data-tone="danger"] { background: var(--talos-danger); }
+
+/* Le cinque viste: è il `.td-segment` della vista schede/elenco, che sa già stare in un tema.
+   ⛔ Va a capo: a 320 px di dettaglio cinque parole su una riga sola uscirebbero dal pannello. */
+/* ⛔ `inline-flex` come il segmento del prodotto: con `flex` la cornice si stirava da un bordo
+   all'altro del dettaglio (visto nella foto a 1024 px, dove il pannello prende tutta la larghezza). */
+.td-viste { display: inline-flex; flex-wrap: wrap; margin: 18px 0 16px; max-width: 100%; }
+.td-viste button { padding: 0 10px; }
+.td-vista { min-height: 120px; }
+.td-vista:focus-visible { outline: var(--talos-focus-width, 2px) solid var(--talos-ring); outline-offset: 4px; border-radius: var(--talos-radius-control); }
+.td-vista > :first-child { margin-top: 0; }
+
+/* La prosa del rapporto: titoli più piccoli del titolo della ricerca, righe corte da leggere. */
+.td-prosa-rapporto { max-width: 72ch; }
+.td-prosa-rapporto h2 { font-size: 18px; margin: 22px 0 8px; letter-spacing: -.02em; }
+.td-prosa-rapporto h3 { font-size: 15px; margin: 20px 0 6px; }
+.td-prosa-rapporto h4 { font-size: 13px; margin: 16px 0 6px; color: var(--talos-muted); }
+/* ⛔ `.td-prose` tiene gli a capo (`pre-wrap`): giusto per una nota scritta a mano, sbagliato per
+   un paragrafo che nel file va a capo a cento colonne. Qui il testo si ricompone da solo. */
+.td-prosa-rapporto p { margin: 0 0 12px; white-space: normal; }
+
+/* Il passaggio della fonte è una CITAZIONE, non un riassunto: si vede che è parola d'altri. */
+.td-passaggio { margin: 10px 0; padding: 8px 0 8px 13px; border-left: 2px solid var(--talos-accent-border); color: var(--talos-assistant-text); font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.td-affermazione { padding: 16px 0; border-bottom: 1px solid var(--talos-border); }
+.td-affermazione:last-child { border-bottom: 0; }
+.td-affermazione-testa { display: flex; align-items: center; gap: 9px; margin-bottom: 8px; }
+.td-affermazione-numero { color: var(--talos-muted); font-size: 11px; font-variant-numeric: tabular-nums; min-width: 1.4em; }
+.td-affermazione-testo { margin: 0; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.td-affermazione-piede { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; margin-top: 8px; font-size: 12px; }
+.td-affermazione-piede a { color: var(--talos-accent-text); overflow-wrap: anywhere; }
+/* La contraria sta ACCANTO, rientrata: si legge come una seconda voce, mai come una correzione. */
+.td-contraria { margin: 10px 0 0 13px; padding: 10px 12px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-card-subtle, var(--talos-card)); }
+.td-contraria a { color: var(--talos-accent-text); font-size: 12px; overflow-wrap: anywhere; }
+
+/* «Come è andata»: due colonne finché ci stanno, una sola quando il dettaglio si stringe. */
+.td-andata { display: grid; grid-template-columns: minmax(120px, auto) minmax(0, 1fr); gap: 8px 16px; margin: 0; font-size: 13px; }
+.td-andata dt { color: var(--talos-muted); font-size: 12px; }
+.td-andata dd { margin: 0; overflow-wrap: anywhere; }
+/* ⛔ L'ultimo messaggio è un ALLEGATO: sfondo diverso dalla prosa, perché non è il rapporto. */
+.td-allegato { margin: 10px 0 0; padding: 13px 15px; border: 1px dashed var(--talos-border-strong); border-radius: var(--talos-radius-control); background: var(--talos-window-bg); color: var(--talos-assistant-text); font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/*
+ * ⛔ La soglia e' sul DETTAGLIO, non sulla finestra: il pannello puo' stare a 320 px dentro uno
+ *   schermo da 1440, e una `@media` non lo vedrebbe mai stretto. `container-name` per dire quale
+ *   contenitore si sta interrogando; le query senza nome di questo foglio guardano la sezione e
+ *   nessuna di loro tocca i discendenti del dettaglio, quindi non cambiano comportamento.
+ */
+.td-detail { container-type: inline-size; container-name: dettaglio; }
+@container dettaglio (max-width: 430px) {
+  .td-andata { grid-template-columns: 1fr; gap: 2px; }
+  .td-andata dd { margin-bottom: 8px; }
+  .td-viste button { padding: 0 8px; font-size: 11px; }
+}

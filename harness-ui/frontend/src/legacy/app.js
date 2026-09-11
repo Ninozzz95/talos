@@ -5327,7 +5327,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const attuale = () => generazioniRicerca.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === 'ricerca' && !mount.hidden : mount === $('#researchListMount', sheetBody));
     function mostra(ricerche, { errore = null, caricamento = false } = {}) {
       if (pagina) {
-        aggiornaPaginaRicerca(mount, ricerche, { errore, caricamento, onAggiorna: () => caricaPannelloRicerca({ pagina: true }) });
+        aggiornaPaginaRicerca(mount, ricerche, {
+          errore, caricamento,
+          onAggiorna: () => caricaPannelloRicerca({ pagina: true }),
+          /* 11/09 L7 (BC-21) — la sezione CONSULTA la ricerca: con `sessionId` il rapporto si legge dalla
+             rotta che esiste già (`GET /library/:voceId/file`), il menu è lo stesso dell'albero e della
+             Libreria, «Apri la conversazione» passa alla sessione figlia, la prosa passa dal render della
+             chat e non da un secondo motore. Senza queste righe niente si rompe: il dettaglio degrada
+             dichiarando che il rapporto è in Libreria. */
+          sessionId,
+          notifica: toast,
+          copia: (testo) => copyText(testo, 'Rapporto copiato'),
+          onMenu: apriMenuAzioniLibreria,
+          onApriSessione: ({ id }) => passaASessione(id),
+          rendiMarkdown: renderizzaMarkdownSemplice,
+        });
       } else {
         mount.setAttribute('role', ricerche.length ? 'list' : 'group');
         mount.replaceChildren(...ricerche.map(rigaRicerca));
@@ -5349,7 +5363,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function rigaRicerca(ricerca) {
-    return creaReportRow(ricerca);
+    // 11/09 L7: il pulsante «Apri il rapporto» compare solo se c'è un rapporto E se sappiamo dove portare chi lo preme.
+    return creaReportRow(ricerca, { onApriRapporto: () => { setView('ricerca'); caricaPannelloRicerca({ pagina: true }); } });
   }
 
   /**
