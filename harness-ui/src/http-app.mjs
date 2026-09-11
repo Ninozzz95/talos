@@ -31,6 +31,7 @@ const QA_STATES = new Set([
 ]);
 const API_ERROR_CODES = new Set([
   'DOVE_NON_VALIDO', // D-10F: scelta diversa da wsl2/windows/null — errore di chi chiede, 400
+  'SCELTA_NON_VALIDA', // D-10S: lo switch dei comandi in conversazione vuole true o false, 400
   /* ⛔ 07/9, trovato dalla prova C25 sul 4174: senza queste righe OGNI errore del browser vivo
      usciva come «Errore interno» — il motivo vero («questa sessione non ha una pagina aperta»,
      «non trovo un Chromium») restava nel server e a schermo arrivava un muro. `normalizeError`
@@ -151,6 +152,7 @@ const STATUS_BY_CODE = Object.freeze({
      Senza dichiararlo qui, `normalizeError` lo degradava a INTERNAL_ERROR e rispondeva 500 —
      misurato dal vivo con `{"dove":"marte"}`. */
   DOVE_NON_VALIDO: 400,
+  SCELTA_NON_VALIDA: 400,
   REPORT_UNAVAILABLE: 404,
   PAYLOAD_LIMIT: 413,
   METHOD_NOT_ALLOWED: 405,
@@ -851,6 +853,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/export$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/shell$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/dove-girano-i-comandi$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/comandi-nella-conversazione$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/approve$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue\/annulla$/, metodi: ['POST'] },
@@ -3131,6 +3134,35 @@ export function createHttpApp({
         if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, dove: esito.dove }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐ D-10S — i comandi `!` di questa sessione entrano nella conversazione del modello?
+     *
+     * Owner 11/09: «facciamo entrambi con switch scelto da utente, default off». I due
+     * comportamenti esistono tutti e due nel settore, opposti apposta: Claude Code li mette in
+     * conversazione, Hermes Agent no («the prompt cache is untouched»). Spento di default.
+     * ⛔ `SCELTA_NON_VALIDA` è dichiarato in ENTRAMBI gli elenchi qui sopra: D-10F ha insegnato che
+     *   un codice dichiarato in uno solo esce come 500 invece che come 400.
+     */
+    const conversazioneMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/comandi-nella-conversazione$/.exec(url.pathname);
+    if (conversazioneMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(conversazioneMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const corpo = await leggiCorpoJson(req);
+        const esito = sessionRegistry.comandiNellaConversazione(sessionId, corpo?.acceso);
+        if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true, acceso: esito.acceso }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
