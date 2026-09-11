@@ -25,3 +25,14 @@ await import('./legacy/app.js');
 /* TALOS-DESKTOP-FINAL-UI */
 const { initTalosDesktopBackground } = await import('./motion/desktop-background.js');
 initTalosDesktopBackground();
+
+/*
+ * 11/09 — le animazioni del mockup che rispondono a un clic (pressione dei pulsanti, gruppi della
+ * barra, schede, pannelli delle impostazioni, collasso della barra).
+ * ⛔ DOPO il monolite, non prima: l'ascoltatore di `animazioni-mockup.js` sta su `document` e legge
+ *   lo stato GIÀ cambiato dai gestori del monolite, che stanno su `document.documentElement`.
+ *   Montarlo prima non cambierebbe quell'ordine (lo decide la risalita dell'evento, non la
+ *   registrazione), ma montarlo qui rende la dipendenza leggibile.
+ */
+const { montaAnimazioniMockup } = await import('./components/animazioni-mockup.js');
+montaAnimazioniMockup(document);

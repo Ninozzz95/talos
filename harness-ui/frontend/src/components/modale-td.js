@@ -28,6 +28,8 @@
  *   nella prima quando si chiude la seconda.
  */
 
+import { motion } from './motion-mockup.js';
+
 /** Nessuna `innerHTML`: i titoli e i testi arrivano da dati veri (nomi di file, note scritte da un modello). */
 function nodo(doc, tag, classe, testo) {
   const el = doc.createElement(tag);
@@ -59,7 +61,7 @@ export function modaleAperta() { return aperta; }
  */
 export function apriModale(titolo, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
   if (!doc?.body) return null;
-  chiudiModale();
+  chiudiModale({ immediata: true }); // una alla volta: l'uscita della precedente sotto l'entrata della nuova sarebbe rumore
   const dialogo = nodo(doc, 'dialog', 'td-modal');
   if (ampia) dialogo.dataset.ampia = 'si';
   const idTitolo = `td-modal-title-${Math.random().toString(36).slice(2, 8)}`;
@@ -92,6 +94,17 @@ export function apriModale(titolo, contenuto, { document: doc = globalThis.docum
   doc.body.append(dialogo);
   if (typeof dialogo.showModal === 'function') dialogo.showModal();
   else dialogo.setAttribute('open', ''); // ripiego: un ambiente senza `showModal` vede comunque il contenuto
+  /*
+   * L'ENTRATA del mockup (`modalShow`, riga 6039): `motion($('.td-modal',layer),
+   * [{opacity:0,transform:'translateY(12px) scale(.99)'},{opacity:1,transform:'none'}])`, token
+   * di default `surface-enter`.
+   * ⛔ DOPO `showModal()`, non prima: finché il `<dialog>` non è aperto è `display:none`, e una
+   *   WAAPI su un elemento non disegnato parte e finisce senza che si veda niente.
+   * ⛔ Il `.td-modal` del mockup è un `<section>` dentro un `<div>` host; qui il `<dialog>` È il
+   *   `.td-modal` (vedi la testata), quindi i fotogrammi vanno su di lui. Il fondo scuro resta
+   *   istantaneo come nel mockup, dove l'host non veniva animato.
+   */
+  motion(dialogo, [{ opacity: 0, transform: 'translateY(12px) scale(.99)' }, { opacity: 1, transform: 'none' }], { leva: 'motion-surfaces-off', document: doc });
   aperta = { dialogo, contenuto: corpo, suChiusura, chiudi: () => chiudiModale() };
   // Il primo controllo utile, non il contenitore: chi ascolta sente «Elimina» invece del silenzio.
   const primo = corpo.querySelector('input:not([type=hidden]), textarea, select, button') || chiudiBtn;
@@ -99,13 +112,35 @@ export function apriModale(titolo, contenuto, { document: doc = globalThis.docum
   return aperta;
 }
 
-export function chiudiModale() {
+/**
+ * @param {{immediata?:boolean}} [opzioni] `immediata` salta l'uscita — serve a `apriModale`, che
+ *   chiude la precedente prima di aprire la nuova: lì l'uscita si vedrebbe SOTTO l'entrata.
+ *   È lo stesso `modalClose(true)` del mockup.
+ */
+export function chiudiModale({ immediata = false } = {}) {
   const viva = aperta;
   if (!viva) return false;
   aperta = null;
   const { dialogo } = viva;
-  if (typeof dialogo.close === 'function' && dialogo.open) dialogo.close();
-  else { dialogo.remove(); viva.suChiusura?.(); }
+  const chiudiDavvero = () => {
+    if (typeof dialogo.close === 'function' && dialogo.open) dialogo.close();
+    else { dialogo.remove(); viva.suChiusura?.(); }
+  };
+  /*
+   * L'USCITA del mockup (`modalClose`, riga 6040): `motion($('.td-modal',m),
+   * [{opacity:1,transform:'none'},{opacity:0,transform:'translateY(6px)'}],'surface-exit')`, e
+   * l'elemento se ne va solo quando l'animazione è finita.
+   * ⛔ PRIMA di `close()`, non dopo: un `<dialog>` chiuso è `display:none` e un `close` qui dentro
+   *   porta anche il `dialogo.remove()` dell'ascoltatore. Animare dopo vorrebbe dire animare il
+   *   nulla — è la stessa ragione per cui l'entrata sta dopo `showModal()`, al contrario.
+   * ⛔ `pointerEvents:none` mentre esce (il mockup fa lo stesso): per ~150 ms la modale è ancora
+   *   sopra tutto, e un clic che la attraversasse premerebbe qualcosa che non si vede più.
+   */
+  if (immediata) { chiudiDavvero(); return true; }
+  const uscita = motion(dialogo, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(6px)' }], { token: 'surface-exit', leva: 'motion-surfaces-off', document: dialogo.ownerDocument || globalThis.document });
+  if (!uscita) { chiudiDavvero(); return true; }
+  dialogo.style.pointerEvents = 'none';
+  uscita.finished.then(chiudiDavvero, chiudiDavvero);
   return true;
 }
 
