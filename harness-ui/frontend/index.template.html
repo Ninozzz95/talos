@@ -34,7 +34,7 @@
       ⛔ E i tratti RESTANO accesi (`both`, e le keyframe finiscono al 100%): il marchio si
       costruisce e rimane costruito — a toglierlo è la dissolvenza del velo, non l'animazione.
     -->
-    <script>
+    <script data-talos-nonce>
       /*
        * ⛔⛔⛔ IL PONTE DEL TEMA, e perché senza il velo PEGGIORA il difetto che cura.
        *
@@ -66,15 +66,29 @@
         radice.style.setProperty('color-scheme', chiaro ? 'light' : 'dark');
       }());
     </script>
-    <style>
+    <style data-talos-nonce>
+      /*
+       * ⛔⛔⛔ COLORE E IMMAGINE SEPARATI, e non è pignoleria: la prima versione scriveva
+       *   `background: radial-gradient(...), var(--talos-background, #1e1f22)` in una scorciatoia
+       *   sola. Sul server di prova funzionava; sul 4174 vero il fondo risultava
+       *   **`rgba(0,0,0,0)` — trasparente**, cioè il velo lasciava vedere lo scheletro che esiste
+       *   per coprire. Misurato, non supposto.
+       * ⇒ Un `var()` che non risolve NON ripiega sul suo fallback se la proprietà esiste ma è
+       *   vuota: rende invalida l'intera dichiarazione («invalid at computed-value time»), e con la
+       *   scorciatoia si porta via anche il colore. Tenuti separati, un'immagine che fallisce lascia
+       *   in piedi il colore — e il colore qui è un valore LETTERALE, senza variabili, perché è
+       *   l'unica cosa che deve reggere anche quando nessun foglio è ancora arrivato.
+       */
       #talosAvvio{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;
-        background:radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--talos-accent, #c08b3c) 12%, transparent), transparent 60%), var(--talos-background, #1e1f22);
+        background-color:#1e1f22;
+        background-image:radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--talos-accent, #c08b3c) 12%, transparent), transparent 60%);
         transition:opacity .3s ease}
       #talosAvvio[data-uscita="si"]{opacity:0;pointer-events:none}
       /* ⛔ Sull'ATTRIBUTO, non su `prefers-color-scheme`: la scelta salvata batte quella di sistema,
          come in `applicaThemeDesktop`. Il ponte qui sopra ha già stampato l'attributo. */
-      :root[data-theme="light"] #talosAvvio{background:radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--talos-accent, #c08b3c) 10%, transparent), transparent 60%), var(--talos-background, #ece9e2)}
-      :root[data-theme="light"] #talosAvvio .avvio-parola{color:var(--talos-text,#2b2a27)}
+      :root[data-theme="light"] #talosAvvio{background-color:#ece9e2;
+        background-image:radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--talos-accent, #c08b3c) 10%, transparent), transparent 60%)}
+      :root[data-theme="light"] #talosAvvio .avvio-parola{color:#2b2a27}
       #talosAvvio .avvio-marchio{position:absolute;top:50%;left:50%;width:125px;height:125px;transform:translate(-50%,-50%)}
       #talosAvvio .hex{stroke:var(--talos-accent,#c08b3c);stroke-opacity:.18}
       #talosAvvio .edge{stroke:var(--talos-accent,#c08b3c);opacity:0;transform:scaleY(0);transform-box:fill-box;transform-origin:center top;will-change:transform,opacity}
@@ -124,7 +138,7 @@
   </svg>
   <span class="avvio-parola talos-orbitron-brand">TALOS</span>
 </div>
-<script>
+<script data-talos-nonce>
   /*
    * ⛔ Nessun ritardo artificiale (ricerca 11/09/2026, uxpin): si esce appena la pagina è pronta,
    *   e il minimo di 650 ms serve solo a non tagliare a metà la sequenza del marchio.
