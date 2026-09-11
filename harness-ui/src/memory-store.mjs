@@ -93,6 +93,29 @@ function validaGenere(kind) {
   return kind;
 }
 
+/* ⛔ 11/09 — CHI ha scritto questa memoria: stesso principio e stesso default di notes-store.mjs/tasks-store.mjs. */
+const ORIGINI = Object.freeze(['persona', 'modello']);
+
+function validaOrigine(origine) {
+  if (!ORIGINI.includes(origine)) {
+    throw new MemoryStoreError(`origine deve essere una fra ${ORIGINI.join('/')}`, 'MEMORY_INVALID');
+  }
+  return origine;
+}
+
+/** La forma PUBBLICA di una memoria — l'unica che esce da questo prodotto, uguale per ogni superficie che la mostra. */
+export function formaPubblicaMemoria(voce) {
+  return {
+    id: voce.id,
+    titolo: voce.titolo,
+    contenuto: voce.contenuto,
+    genere: voce.genere,
+    creataAlle: voce.creataAlle ?? null,
+    aggiornataAlle: voce.aggiornataAlle ?? null,
+    origine: ORIGINI.includes(voce.origine) ? voce.origine : 'modello',
+  };
+}
+
 /** Più recentemente aggiornate per prime. Cartella assente ⇒ `[]`, mai un errore. */
 export async function elencaMemorie({ cartella }, deps = {}) {
   const readdirFn = deps.readdirFn ?? fsp.readdir;
@@ -153,10 +176,11 @@ export function cercaMemorie(memorie, { query, limit = 5 } = {}) {
  * un dettaglio).
  * @throws {MemoryStoreError} MEMORY_INVALID PRIMA di ogni I/O.
  */
-export async function creaMemoria({ cartella, title, content, kind = 'preference' }, deps = {}) {
+export async function creaMemoria({ cartella, title, content, kind = 'preference', origine = 'modello' }, deps = {}) {
   const titolo = validaTitolo(title);
   const contenuto = validaContenuto(content);
   const genere = validaGenere(kind);
+  const daChi = validaOrigine(origine);
   const readdirFn = deps.readdirFn ?? fsp.readdir;
   const readFileFn = deps.readFileFn ?? fsp.readFile;
   const gemello = await trovaMemoriaPerTitolo({ cartella, title: titolo }, { readdirFn, readFileFn });
@@ -165,7 +189,7 @@ export async function creaMemoria({ cartella, title, content, kind = 'preference
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   const clockFn = deps.clockFn ?? (() => new Date());
   const ora = clockFn().toISOString();
-  const voce = { id: randomUUID(), titolo, contenuto, genere, creataAlle: ora, aggiornataAlle: ora };
+  const voce = { id: randomUUID(), titolo, contenuto, genere, origine: daChi, creataAlle: ora, aggiornataAlle: ora };
   await mkdirFn(cartella, { recursive: true });
   await writeFileFn(percorsoDi(cartella, voce.id), JSON.stringify(voce, null, 2), 'utf8');
   return { voce, duplicato: false };

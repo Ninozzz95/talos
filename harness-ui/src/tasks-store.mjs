@@ -84,6 +84,45 @@ function validaStato(status) {
   return status;
 }
 
+/*
+ * ⛔ 11/09 — CHI ha scritto questa attività, stesso identico principio (e stesso default) di
+ *   `ORIGINI` in notes-store.mjs: due porte sole — gli attrezzi `tasks_*` del modello e le
+ *   rotte HTTP della persona — e ciò che è già sul disco viene tutto dal modello, perché fino
+ *   a oggi la persona non aveva una porta per scrivere.
+ */
+const ORIGINI = Object.freeze(['persona', 'modello']);
+
+function validaOrigine(origine) {
+  if (!ORIGINI.includes(origine)) {
+    throw new TaskStoreError(`origine deve essere una fra ${ORIGINI.join('/')}`, 'TASK_INVALID');
+  }
+  return origine;
+}
+
+/**
+ * La forma PUBBLICA di un'attività — l'unica che esce da questo prodotto.
+ * ⛔ `fatta` è CALCOLATA da `stato`, mai scritta sul disco: due campi che dicono la stessa cosa
+ *   e possono divergere sono un difetto, non una comodità. Esce dalla porta perché un pannello
+ *   ha bisogno di una casella da spuntare, ma la verità resta una sola (`stato`).
+ * ⛔ Nessuna `scadenza`: non esiste in questo magazzino e non esiste in nessun attrezzo del
+ *   modello (vedi l'intestazione di questo file sulle colonne mobile NON portate). Inventarla
+ *   qui vorrebbe dire un campo che solo la persona può scrivere e che il modello non vedrà mai
+ *   — la asimmetria che questo porto esiste per evitare.
+ */
+export function formaPubblicaAttivita(voce) {
+  return {
+    id: voce.id,
+    titolo: voce.titolo,
+    descrizione: voce.descrizione ?? null,
+    stato: voce.stato,
+    fatta: voce.stato === 'done',
+    priorita: voce.priorita,
+    creataAlle: voce.creataAlle ?? null,
+    aggiornataAlle: voce.aggiornataAlle ?? null,
+    origine: ORIGINI.includes(voce.origine) ? voce.origine : 'modello',
+  };
+}
+
 /** Più recentemente aggiornate per prime — stesso ordine di `tasks_list` mobile. Cartella assente ⇒ `[]`, mai un errore. */
 export async function elencaAttivita({ cartella }, deps = {}) {
   const readdirFn = deps.readdirFn ?? fsp.readdir;
@@ -115,15 +154,16 @@ export async function leggiAttivita({ cartella, id }, deps = {}) {
 }
 
 /** @returns l'attività creata: `{id, titolo, descrizione, priorita, stato:'todo', creataAlle, aggiornataAlle}`. @throws {TaskStoreError} TASK_INVALID PRIMA di ogni I/O. */
-export async function creaAttivita({ cartella, title, description, priority = 'normal' }, deps = {}) {
+export async function creaAttivita({ cartella, title, description, priority = 'normal', origine = 'modello' }, deps = {}) {
   const titolo = validaTitolo(title);
   const descrizione = validaDescrizione(description);
   const priorita = validaPriorita(priority);
+  const daChi = validaOrigine(origine);
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   const clockFn = deps.clockFn ?? (() => new Date());
   const ora = clockFn().toISOString();
-  const voce = { id: randomUUID(), titolo, descrizione, priorita, stato: 'todo', creataAlle: ora, aggiornataAlle: ora };
+  const voce = { id: randomUUID(), titolo, descrizione, priorita, stato: 'todo', origine: daChi, creataAlle: ora, aggiornataAlle: ora };
   await mkdirFn(cartella, { recursive: true });
   await writeFileFn(percorsoDi(cartella, voce.id), JSON.stringify(voce, null, 2), 'utf8');
   return voce;
