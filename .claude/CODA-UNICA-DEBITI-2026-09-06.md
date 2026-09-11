@@ -1017,3 +1017,24 @@ dal secondo giro dello STESSO invio (87-100%) è quindi automatica del fornitore
 noi. Il marcatore resta nel kernel — è innocuo, ~0 byte, e serve ai modelli che lo onorano (Qwen,
 Claude) — ma **la leva per GLM è il PREAMBOLO**: ~17k token di elenco file, dichiarato incompleto.
 Costo dell'A/B: due giri brevi (~$0,01). Registrato con `tempi-giro` su disco, nessuna sonda a mano.
+
+### BC-07, la ricognizione sui quattro (11/09 sera) — rapporto `.claude/RAPPORTO-PREAMBOLO-CONCORRENTI-2026-09-11.md`
+**Nessuno dei quattro manda al modello un elenco di file; tutti e quattro mandano le ISTRUZIONI di
+progetto — TALOS è l'unico che manda l'elenco e non le istruzioni.** Letto nel codice: Codex
+`<environment_context>` ~35 token + `AGENTS.md` (32 KiB) + `rg --files` nel prompt, contesto reso a
+delta e appeso, mai riscritto; Claude Code 2.1.268 (dal binario) quattro chiavi di sessione,
+`gitStatus` tagliato a 2.000 caratteri, `CLAUDE.md` a 200 righe/25.000 byte, memoria come indice di
+percorsi, sezioni memoizzate e rottura della cache strumentata; Hermes «workspace block» ~100-130
+token («never re-probed per turn: that would shatter the prompt cache») e un solo `search_files`
+al posto di ls/grep/find; DeepSeek harness UNA frase + istruzioni a budget e approfondimento a
+domanda (l'`AGENTS.md` profondo arriva solo dopo che un read/write tocca quella cartella).
+**Misurato sui nostri moduli:** l'elenco di oggi copre il **30%** dei file (troncato a 1.500) e
+pesa 15-20k token; una mappa delle sole CARTELLE, completa, pesa **1.400-1.700** (profondità 3).
+⛔ **Da sistemare PRIMA di togliere l'elenco:** `cerca` ha una allowlist di estensioni — 1.004 file
+`.php` del kernel non sono cercabili per contenuto, e `startsWith('.')` + `android/ios/vendor`
+nascondono altri 505 file. Togliere l'elenco senza curare `cerca` = «ho azzoppato aider».
+**Proposta:** preambolo in 4 blocchi — kernel (84) + scheda di lavoro (~150-250) + `AGENTS.md`
+con tetto (oggi 0) + mappa delle cartelle completa (~1.000-1.700) — e contesto che si APPENDE, non
+si riscrive. Risparmio stimato **15.500-19.300 token a messaggio**. **Regola del banco da
+riscrivere**: metrica `pass^3`, colonne `tokenPrimoGiro`/`giriUsati`, corpus `storia` spaccato in
+9 ciechi / 26 instabili, premessa «0 su 35» corretta.
