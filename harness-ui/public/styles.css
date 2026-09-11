@@ -10647,126 +10647,140 @@ body.reduce-motion .talos-waiting__label {
 
 /* src/styles/temi.css */
 :root[data-talos-theme=forge] {
-  --talos-seme-accento:#c98b32;
-  --talos-seme-fondo:#080b11;
-  --talos-seme-secondario:#6ad4d4;
-  --talos-seme-linea:#27313e;
+  --talos-tema-accento:#c08b3c;
+  --talos-tema-fondo:#201d1a;
+  --talos-tema-pannello:#2b2621;
+  --talos-tema-testo:#f5efe6;
+  --talos-tema-tenue:#b5a89a;
+  --talos-tema-bordo:#4b3e31;
   --talos-radius-card:14px;
-  --talos-radius-control:14px;
+  --talos-radius-control:14px ;
 }
 :root[data-talos-theme=paper] {
-  --talos-seme-accento:#a96617;
-  --talos-seme-fondo:#f8fafc;
-  --talos-seme-secondario:#2f6f7d;
-  --talos-seme-linea:#d7dee8;
-  --talos-seme-fondo-chiaro:#f8fafc;
-  --talos-seme-fondo-scuro:color-mix(in srgb, #a96617 10%, #06080d);
+  --talos-tema-accento:#9b5b2a;
+  --talos-tema-fondo:#f5f1e8;
+  --talos-tema-pannello:#fffdf8;
+  --talos-tema-testo:#24211e;
+  --talos-tema-tenue:#756e65;
+  --talos-tema-bordo:#d9d0c3;
   --talos-radius-card:10px;
-  --talos-radius-control:10px;
+  --talos-radius-control:10px ;
 }
 :root[data-talos-theme=terminal] {
-  --talos-seme-accento:#63f08e;
-  --talos-seme-fondo:#020403;
-  --talos-seme-secondario:#d6ff72;
-  --talos-seme-linea:#163821;
+  --talos-tema-accento:#67d391;
+  --talos-tema-fondo:#101714;
+  --talos-tema-pannello:#16231e;
+  --talos-tema-testo:#e5f6ec;
+  --talos-tema-tenue:#8ba99a;
+  --talos-tema-bordo:#2b4a3a;
   --talos-radius-card:6px;
   --talos-radius-control:6px;
   --talos-font-ui:"JetBrains Mono","SFMono-Regular",Consolas,monospace;
-  --talos-font-display:"JetBrains Mono","SFMono-Regular",Consolas,monospace;
+  --talos-font-display:"JetBrains Mono","SFMono-Regular",Consolas,monospace ;
 }
 :root[data-talos-theme=aurora] {
-  --talos-seme-accento:#42e7c7;
-  --talos-seme-fondo:#071113;
-  --talos-seme-secondario:#ff6bb5;
-  --talos-seme-linea:#233742;
+  --talos-tema-accento:#a995ff;
+  --talos-tema-fondo:#171629;
+  --talos-tema-pannello:#24233e;
+  --talos-tema-testo:#f1efff;
+  --talos-tema-tenue:#aaa6c8;
+  --talos-tema-bordo:#44416c;
   --talos-radius-card:16px;
-  --talos-radius-control:16px;
+  --talos-radius-control:16px ;
 }
 :root[data-talos-theme=glacier] {
-  --talos-seme-accento:#2367d1;
-  --talos-seme-fondo:#f4f9fb;
-  --talos-seme-secondario:#ef7d30;
-  --talos-seme-linea:#c9d7e3;
-  --talos-seme-fondo-chiaro:#f4f9fb;
-  --talos-seme-fondo-scuro:color-mix(in srgb, #2367d1 10%, #06080d);
+  --talos-tema-accento:#8fd8f3;
+  --talos-tema-fondo:#111c25;
+  --talos-tema-pannello:#1b2a37;
+  --talos-tema-testo:#eef9ff;
+  --talos-tema-tenue:#9eb7c4;
+  --talos-tema-bordo:#345064;
   --talos-radius-card:14px;
-  --talos-radius-control:14px;
+  --talos-radius-control:14px ;
 }
 :root[data-talos-theme=ember] {
-  --talos-seme-accento:#ff5c62;
-  --talos-seme-fondo:#10090a;
-  --talos-seme-secondario:#ffbd5c;
-  --talos-seme-linea:#3b2224;
+  --talos-tema-accento:#ef8b57;
+  --talos-tema-fondo:#211719;
+  --talos-tema-pannello:#302022;
+  --talos-tema-testo:#fff1eb;
+  --talos-tema-tenue:#c6a39a;
+  --talos-tema-bordo:#5b3534;
   --talos-radius-card:14px;
-  --talos-radius-control:14px;
+  --talos-radius-control:14px ;
 }
 :root[data-talos-theme=atlas] {
-  --talos-seme-accento:#d49a52;
-  --talos-seme-fondo:#07101f;
-  --talos-seme-secondario:#57d49c;
-  --talos-seme-linea:#243146;
+  --talos-tema-accento:#74a8ff;
+  --talos-tema-fondo:#151b29;
+  --talos-tema-pannello:#202c43;
+  --talos-tema-testo:#edf4ff;
+  --talos-tema-tenue:#a4b2c9;
+  --talos-tema-bordo:#3a4e75;
   --talos-radius-card:12px;
-  --talos-radius-control:12px;
+  --talos-radius-control:12px ;
 }
 :root[data-talos-theme=noir] {
-  --talos-seme-accento:#f2f2f2;
-  --talos-seme-fondo:#050505;
-  --talos-seme-secondario:#ff405a;
-  --talos-seme-linea:#333333;
+  --talos-tema-accento:#d4d4d8;
+  --talos-tema-fondo:#0e0e10;
+  --talos-tema-pannello:#19191c;
+  --talos-tema-testo:#f5f5f5;
+  --talos-tema-tenue:#929297;
+  --talos-tema-bordo:#35353a;
   --talos-radius-card:4px;
-  --talos-radius-control:4px;
+  --talos-radius-control:4px ;
 }
 :root[data-talos-theme=signal] {
-  --talos-seme-accento:#ff6f61;
-  --talos-seme-fondo:#091011;
-  --talos-seme-secondario:#b4f06f;
-  --talos-seme-linea:#213236;
+  --talos-tema-accento:#5ce1e6;
+  --talos-tema-fondo:#101b1e;
+  --talos-tema-pannello:#17272b;
+  --talos-tema-testo:#e9ffff;
+  --talos-tema-tenue:#91b9bc;
+  --talos-tema-bordo:#2f555a;
   --talos-radius-card:10px;
-  --talos-radius-control:10px;
+  --talos-radius-control:10px ;
 }
 :root[data-talos-theme=violet] {
-  --talos-seme-accento:#b794f6;
-  --talos-seme-fondo:#0d0a19;
-  --talos-seme-secondario:#6ee7b7;
-  --talos-seme-linea:#2f2848;
+  --talos-tema-accento:#d3a6ff;
+  --talos-tema-fondo:#1c1625;
+  --talos-tema-pannello:#2a2038;
+  --talos-tema-testo:#fbf3ff;
+  --talos-tema-tenue:#b5a0c3;
+  --talos-tema-bordo:#523c68;
   --talos-radius-card:18px;
-  --talos-radius-control:18px;
+  --talos-radius-control:18px ;
 }
 :root[data-talos-theme=claudius] {
-  --talos-seme-accento:#d97757;
-  --talos-seme-fondo:#faf9f5;
-  --talos-seme-secondario:#6a9bcc;
-  --talos-seme-linea:#e8e6dc;
-  --talos-seme-fondo-chiaro:#faf9f5;
-  --talos-seme-fondo-scuro:color-mix(in srgb, #d97757 10%, #06080d);
+  --talos-tema-accento:#d2a96d;
+  --talos-tema-fondo:#211e1a;
+  --talos-tema-pannello:#302b24;
+  --talos-tema-testo:#f8f1e4;
+  --talos-tema-tenue:#b6aa98;
+  --talos-tema-bordo:#514638;
   --talos-radius-card:12px;
-  --talos-radius-control:12px;
+  --talos-radius-control:12px ;
 }
 :root[data-talos-theme=basicus] {
-  --talos-seme-accento:#1976d2;
-  --talos-seme-fondo:#fafafa;
-  --talos-seme-secondario:#9c27b0;
-  --talos-seme-linea:#e0e0e0;
-  --talos-seme-fondo-chiaro:#fafafa;
-  --talos-seme-fondo-scuro:color-mix(in srgb, #1976d2 10%, #06080d);
+  --talos-tema-accento:#aeb4c0;
+  --talos-tema-fondo:#202124;
+  --talos-tema-pannello:#2b2c30;
+  --talos-tema-testo:#f1f3f5;
+  --talos-tema-tenue:#9ea4ad;
+  --talos-tema-bordo:#45484f;
   --talos-radius-card:8px;
-  --talos-radius-control:8px;
+  --talos-radius-control:8px ;
 }
 :root[data-talos-theme=telemetry] {
-  --talos-seme-accento:#6ad4d4;
-  --talos-seme-fondo:#0b0f11;
-  --talos-seme-secondario:#63f08e;
-  --talos-seme-linea:#1f3238;
+  --talos-tema-accento:#75d0a4;
+  --talos-tema-fondo:#101b1d;
+  --talos-tema-pannello:#18292b;
+  --talos-tema-testo:#e7fff2;
+  --talos-tema-tenue:#96b8a8;
+  --talos-tema-bordo:#315448;
   --talos-radius-card:10px;
   --talos-radius-control:10px;
   --talos-font-ui:"JetBrains Mono","SFMono-Regular",Consolas,monospace;
-  --talos-font-display:"JetBrains Mono","SFMono-Regular",Consolas,monospace;
+  --talos-font-display:"JetBrains Mono","SFMono-Regular",Consolas,monospace ;
 }
 :root[data-talos-theme=calm] {
-  --talos-seme-accento:#c08b3c;
-  --talos-seme-fondo:#1e1f22;
-  --talos-seme-secondario:#8e9095;
-  --talos-seme-linea:#36373b;
   --talos-tema-accento:#c08b3c;
   --talos-tema-fondo:#1e1f22;
   --talos-tema-pannello:#25262a;
@@ -10777,77 +10791,61 @@ body.reduce-motion .talos-waiting__label {
   --talos-radius-control:12px ;
 }
 :root[data-talos-scene=forge] {
-  --talos-scena-accento:#c98b32 ;
+  --talos-scena-accento:#c08b3c ;
 }
 :root[data-talos-scene=paper] {
-  --talos-scena-accento:#a96617 ;
+  --talos-scena-accento:#9b5b2a ;
 }
 :root[data-talos-scene=terminal] {
-  --talos-scena-accento:#63f08e ;
+  --talos-scena-accento:#67d391 ;
 }
 :root[data-talos-scene=aurora] {
-  --talos-scena-accento:#42e7c7 ;
+  --talos-scena-accento:#a995ff ;
 }
 :root[data-talos-scene=glacier] {
-  --talos-scena-accento:#2367d1 ;
+  --talos-scena-accento:#8fd8f3 ;
 }
 :root[data-talos-scene=ember] {
-  --talos-scena-accento:#ff5c62 ;
+  --talos-scena-accento:#ef8b57 ;
 }
 :root[data-talos-scene=atlas] {
-  --talos-scena-accento:#d49a52 ;
+  --talos-scena-accento:#74a8ff ;
 }
 :root[data-talos-scene=noir] {
-  --talos-scena-accento:#f2f2f2 ;
+  --talos-scena-accento:#d4d4d8 ;
 }
 :root[data-talos-scene=signal] {
-  --talos-scena-accento:#ff6f61 ;
+  --talos-scena-accento:#5ce1e6 ;
 }
 :root[data-talos-scene=violet] {
-  --talos-scena-accento:#b794f6 ;
+  --talos-scena-accento:#d3a6ff ;
 }
 :root[data-talos-scene=claudius] {
-  --talos-scena-accento:#d97757 ;
+  --talos-scena-accento:#d2a96d ;
 }
 :root[data-talos-scene=basicus] {
-  --talos-scena-accento:#1976d2 ;
+  --talos-scena-accento:#aeb4c0 ;
 }
 :root[data-talos-scene=telemetry] {
-  --talos-scena-accento:#6ad4d4 ;
+  --talos-scena-accento:#75d0a4 ;
 }
 :root[data-talos-scene=calm] {
   --talos-scena-accento:#c08b3c ;
 }
-:root[data-talos-theme]:not([data-talos-theme=calm]):not([data-theme=light]) {
-  --talos-tema-accento: var(--talos-seme-accento);
-  --talos-tema-fondo: var(--talos-seme-fondo-scuro, var(--talos-seme-fondo));
-  --talos-tema-pannello: color-mix(in srgb, var(--talos-tema-fondo) 86%, #141a24);
-  --talos-tema-testo: #edf2f7;
-  --talos-tema-tenue: color-mix(in srgb, var(--talos-tema-testo) 68%, var(--talos-tema-fondo));
-  --talos-tema-bordo: color-mix(in srgb, var(--talos-seme-linea) 74%, #111827);
-}
-:root[data-talos-theme]:not([data-talos-theme=calm])[data-theme=light] {
-  --talos-tema-accento: var(--talos-seme-accento);
-  --talos-tema-fondo: var(--talos-seme-fondo-chiaro, color-mix(in srgb, var(--talos-seme-accento) 5%, #f8fafc));
-  --talos-tema-pannello: color-mix(in srgb, var(--talos-tema-fondo) 92%, #ffffff);
-  --talos-tema-testo: #111827;
-  --talos-tema-tenue: color-mix(in srgb, var(--talos-tema-testo) 68%, var(--talos-tema-fondo));
-  --talos-tema-bordo: color-mix(in srgb, var(--talos-seme-linea) 72%, #d7dee8);
-}
 :root[data-talos-theme]:not([data-theme=light]) {
   --talos-background: var(--talos-tema-fondo);
   --talos-panel: var(--talos-tema-pannello);
-  --talos-panel-soft: color-mix(in srgb, var(--talos-tema-pannello) 74%, #05070b);
-  --talos-card: color-mix(in srgb, var(--talos-tema-pannello) 88%, #05070b);
-  --talos-window-bg: color-mix(in srgb, var(--talos-tema-pannello) 92%, #05070b);
+  --talos-panel-soft: color-mix(in srgb, var(--talos-tema-pannello) 92%, var(--talos-tema-testo));
+  --talos-card: color-mix(in srgb, var(--talos-tema-pannello) 86%, var(--talos-tema-testo));
+  --talos-window-bg: color-mix(in srgb, var(--talos-tema-fondo) 86%, #000);
   --talos-text: var(--talos-tema-testo);
   --talos-assistant-text: color-mix(in srgb, var(--talos-tema-testo) 78%, var(--talos-tema-tenue));
   --talos-muted: var(--talos-tema-tenue);
   --talos-border: var(--talos-tema-bordo);
-  --talos-border-strong: color-mix(in srgb, var(--talos-seme-linea, var(--talos-tema-bordo)) 82%, #dce7f5);
+  --talos-border-strong: color-mix(in srgb, var(--talos-tema-bordo) 62%, var(--talos-tema-testo));
   --talos-accent: var(--talos-tema-accento);
   --talos-accent-hover: color-mix(in srgb, var(--talos-tema-accento) 78%, #fff);
-  --talos-accent-soft: color-mix(in srgb, var(--talos-tema-accento) 18%, var(--talos-tema-fondo));
+  --talos-accent-soft: color-mix(in srgb, var(--talos-tema-accento) 14%, transparent);
   --talos-accent-border: color-mix(in srgb, var(--talos-tema-accento) 34%, transparent);
   --talos-accent-text: color-mix(in srgb, var(--talos-tema-accento) 62%, #fff);
   --talos-ring: color-mix(in srgb, var(--talos-tema-accento) 84%, #fff);
@@ -10856,37 +10854,27 @@ body.reduce-motion .talos-waiting__label {
   --talos-measure-measured: var(--talos-tema-testo);
   --talos-measure-estimated: var(--talos-tema-tenue);
 }
-:root[data-talos-theme=calm]:not([data-theme=light]) {
-  --talos-panel-soft: color-mix(in srgb, var(--talos-tema-pannello) 92%, var(--talos-tema-testo));
-  --talos-card: color-mix(in srgb, var(--talos-tema-pannello) 86%, var(--talos-tema-testo));
-  --talos-window-bg: color-mix(in srgb, var(--talos-tema-fondo) 86%, #000);
-  --talos-border-strong: color-mix(in srgb, var(--talos-tema-bordo) 62%, var(--talos-tema-testo));
-  --talos-accent-soft: color-mix(in srgb, var(--talos-tema-accento) 14%, transparent);
-}
-:root:is([data-talos-theme=paper], [data-talos-theme=glacier], [data-talos-theme=claudius], [data-talos-theme=basicus])[data-theme=light] {
+:root[data-talos-theme=paper]:not([data-theme=light]) {
   color-scheme: light;
+  --talos-text-on-accent:#fffdf8;
+  --talos-window-bg: color-mix(in srgb, var(--talos-tema-fondo) 90%, #6b6155) ;
 }
 :root[data-talos-theme][data-theme=light]:not([data-talos-theme=calm]) {
-  --talos-background: var(--talos-tema-fondo);
-  --talos-panel: var(--talos-tema-pannello);
-  --talos-panel-soft: color-mix(in srgb, var(--talos-tema-fondo) 78%, #ffffff);
-  --talos-card: color-mix(in srgb, var(--talos-tema-pannello) 96%, #ffffff);
-  --talos-window-bg: color-mix(in srgb, var(--talos-tema-pannello) 96%, #ffffff);
-  --talos-text: var(--talos-tema-testo);
-  --talos-assistant-text: color-mix(in srgb, var(--talos-tema-testo) 88%, var(--talos-tema-tenue));
-  --talos-muted: var(--talos-tema-tenue);
-  --talos-border: var(--talos-tema-bordo);
-  --talos-border-strong: color-mix(in srgb, var(--talos-seme-linea) 86%, #9aa7b8);
-  --talos-accent: color-mix(in srgb, var(--talos-seme-accento) 46%, #241f19);
-  --talos-accent-hover: color-mix(in srgb, var(--talos-seme-accento) 34%, #241f19);
-  --talos-accent-soft: color-mix(in srgb, var(--talos-seme-accento) 13%, var(--talos-tema-fondo));
-  --talos-accent-border: color-mix(in srgb, var(--talos-seme-accento) 55%, #ffffff);
-  --talos-accent-text: color-mix(in srgb, var(--talos-seme-accento) 40%, #1a1712);
-  --talos-ring: color-mix(in srgb, var(--talos-seme-accento) 42%, #241f19);
-  --talos-ring-soft: color-mix(in srgb, var(--talos-seme-accento) 30%, #ffffff);
+  --talos-background: color-mix(in srgb, var(--talos-tema-accento) 6%, #ece9e2);
+  --talos-panel: color-mix(in srgb, var(--talos-tema-accento) 3%, #f7f4ee);
+  --talos-panel-soft: color-mix(in srgb, var(--talos-tema-accento) 7%, #e8e4db);
+  --talos-card: color-mix(in srgb, var(--talos-tema-accento) 2%, #ffffff);
+  --talos-window-bg: color-mix(in srgb, var(--talos-tema-accento) 10%, #ded9cf);
+  --talos-border: color-mix(in srgb, var(--talos-tema-accento) 16%, #c8c3b9);
+  --talos-border-strong: color-mix(in srgb, var(--talos-tema-accento) 22%, #949087);
+  --talos-accent: color-mix(in srgb, var(--talos-tema-accento) 46%, #241f19);
+  --talos-accent-hover: color-mix(in srgb, var(--talos-tema-accento) 34%, #241f19);
+  --talos-accent-soft: color-mix(in srgb, var(--talos-tema-accento) 22%, #ffffff);
+  --talos-accent-border: color-mix(in srgb, var(--talos-tema-accento) 55%, #ffffff);
+  --talos-accent-text: color-mix(in srgb, var(--talos-tema-accento) 40%, #1a1712);
+  --talos-ring: color-mix(in srgb, var(--talos-tema-accento) 42%, #241f19);
+  --talos-ring-soft: color-mix(in srgb, var(--talos-tema-accento) 30%, #ffffff);
   --talos-text-on-accent: #ffffff;
-  --talos-measure-measured: var(--talos-tema-testo);
-  --talos-measure-estimated: var(--talos-tema-tenue);
 }
 
 /* src/styles/aspetto.css */
@@ -10899,22 +10887,19 @@ html {
 :root[data-theme=light] {
   --talos-scena-tinta: color-mix(in srgb, var(--talos-scena-accento, var(--talos-accent)) 58%, #241f19);
 }
-:root {
-  --talos-scena-alfa: calc((.32 + var(--talos-motion-intensity, .2) * .8) * .21);
-}
-#schermoChat::before,
-#schermoChat::after {
+body::before,
+body::after {
   display: none;
   content: "";
-  position: absolute;
-  inset: 0;
+  position: fixed;
+  inset: -18%;
   z-index: -1;
   pointer-events: none;
   background-repeat: no-repeat;
   background-size: calc(190% / var(--talos-motion-density, 1)) calc(190% / var(--talos-motion-density, 1));
   will-change: transform;
 }
-#schermoChat::before {
+body::before {
   background-image:
     radial-gradient(
       circle at 22% 28%,
@@ -10925,18 +10910,18 @@ html {
       color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 74%), transparent) 0%,
       transparent calc(34% + var(--talos-motion-trails, .5) * 26%));
   background-position: 0% 0%, 100% 100%;
-  opacity: var(--talos-scena-alfa);
-  animation: talosScenaDeriva var(--talos-background-cycle, 90000ms) var(--talos-motion-ease, ease-in-out) infinite alternate;
+  opacity: calc(var(--talos-motion-intensity, .2) * 1.1);
+  animation: talosScenaDeriva var(--talos-background-cycle, 36000ms) var(--talos-motion-ease, ease-in-out) infinite alternate;
 }
-#schermoChat::after {
+body::after {
   background-image:
     radial-gradient(
       ellipse at 55% 12%,
       color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 100%), transparent) 0%,
       transparent calc(30% + var(--talos-motion-trails, .5) * 30%));
   background-position: 50% 0%;
-  opacity: calc(var(--talos-motion-glow, .1) * var(--talos-scena-alfa) * 3);
-  animation: talosScenaLuce var(--talos-background-cycle, 90000ms) var(--talos-motion-ease, ease-in-out) infinite alternate;
+  opacity: calc(var(--talos-motion-glow, .1) * .55);
+  animation: talosScenaLuce var(--talos-background-cycle, 36000ms) var(--talos-motion-ease, ease-in-out) infinite alternate;
   animation-delay: var(--talos-motion-stagger, 40ms);
 }
 @keyframes talosScenaDeriva {
@@ -10955,57 +10940,42 @@ html {
     transform: translate3d(calc(var(--talos-background-shift-x, 16px) * -1.4), calc(var(--talos-background-shift-y, 10px) * .8), 0) scale(calc(1 + var(--talos-motion-depth, .92) * .1));
   }
 }
-body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat {
-  isolation: isolate;
-  background: var(--talos-background);
-}
-body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::before,
-body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::after {
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off)::before,
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off)::after {
   display: block;
 }
-:root {
-  --talos-scena-velo: 72%;
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) {
+  background: transparent;
 }
-body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #conversation {
-  background-image:
-    linear-gradient(
-      to right,
-      transparent 0%,
-      color-mix(in srgb, var(--talos-background) var(--talos-scena-velo), transparent) 7%,
-      color-mix(in srgb, var(--talos-background) var(--talos-scena-velo), transparent) 93%,
-      transparent 100%);
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) .talos-shell {
+  background: transparent;
 }
-body.background-motion-paused #schermoChat::before,
-body.background-motion-paused #schermoChat::after {
+body.background-motion-paused::before,
+body.background-motion-paused::after {
   animation-play-state: paused;
 }
-#schermoChat:has(#conversation > *)::before,
-#schermoChat:has(#conversation > *)::after {
-  animation: none;
-  will-change: auto;
-}
-:root[data-talos-motion-quality=low] body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::after {
+:root[data-talos-motion-quality=low] body::after {
   display: none;
 }
-:root[data-talos-motion-quality=low] #schermoChat::before {
+:root[data-talos-motion-quality=low] body::before {
   background-image:
     radial-gradient(
       circle at 30% 32%,
       color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 100%), transparent) 0%,
       transparent 52%);
 }
-:root[data-talos-motion-quality=high] #schermoChat::before {
-  opacity: calc(var(--talos-scena-alfa) * 1.25);
+:root[data-talos-motion-quality=high] body::before {
+  opacity: calc(var(--talos-motion-intensity, .2) * 1.05);
 }
-:root[data-talos-motion-quality=high] #schermoChat::after {
-  opacity: calc(var(--talos-motion-glow, .1) * var(--talos-scena-alfa) * 4.6);
+:root[data-talos-motion-quality=high] body::after {
+  opacity: calc(var(--talos-motion-glow, .1) * .85);
 }
-:root[data-talos-motion-mode=simple] body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::after {
+:root[data-talos-motion-mode=simple] body::after {
   display: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  #schermoChat::before,
-  #schermoChat::after {
+  body::before,
+  body::after {
     animation: none;
     transform: none;
   }

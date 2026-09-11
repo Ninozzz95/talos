@@ -44,77 +44,34 @@
    può farsi trasparente quando la scena è accesa. Nessun pixel cambia quando la scena è spenta. */
 html { background: var(--talos-background); }
 
-/* ---------- 1. LA SCENA — ⭐ 11/09: E' LO SFONDO DELLA CHAT, NON UN VELO SU TUTTA LA PAGINA ----------
- *
- * Owner 11/09/2026, guardando la sua conversazione: «correggi subito questa porcata di sfondo
- * giallognolo nella chat», e poi: «portare lo sfondo animato dentro la CHAT: deve essere lo sfondo
- * della conversazione». ⭐ «Il mobile è la sorgente di verità: lì funziona tutto alla perfezione.»
- *
- * ⛔ COSA C'ERA, MISURATO SUL BANCO (copia costruita su porta 5310 — mai il 4174; confronto pixel a
- *   pixel scritto a mano, soglia 2/255, perché `pixelmatch@7.2.0` ha già risposto **0** su due
- *   schermate visibilmente diverse):
- *     · le due macchie stavano su `body::before/::after`, `position:fixed`, `inset:-18%` ⇒ coprivano
- *       il VIEWPORT INTERO, e si vedevano su OGNI schermata. Accendere e spegnere lo sfondo cambiava
- *       **942.179 px (72,70%)** su Impostazioni, **1.025.207 (79,11%)** su Memoria,
- *       **1.027.807 (79,31%)** su Attività, **983.517 (75,89%)** su Board. Uno sfondo «della chat»
- *       che dipinge i tre quarti della schermata Impostazioni non è lo sfondo della chat.
- *     · l'alfa vera dell'accento al centro della macchia era `opacity .22 x mix 80%` = **0,176**.
- *
- * ⛔ COME LO FA IL MOBILE (letto nel codice, non dedotto):
- *     · `mobile/src/App.vue:1157-1163` — lo sfondo è UN canvas a livello di shell, sotto il
- *       contenuto, mai un secondo strato dentro la chat;
- *     · `mobile/src/motion-v6/scenes/complex/sceneTools.ts:191-195` — l'alfa di OGNI tratto è
- *       `base * (0.32 + intensity/100*0.8) * (0.7 + contrast/100*0.46)`; coi default del mobile
- *       (intensity 20, contrast 80) il fattore vale **0,5126**;
- *     · `mobile/src/motion-v6/scenes/complex/calm.ts` — il campo che respira è dipinto a
- *       `alpha(0.018)` = **0,0092**, e i tratti che si VEDONO (orizzonte, filamento) stanno fra
- *       **0,056 e 0,082**. ⇒ Il registro visibile del mobile è ~8%, non 17,6%.
- *     · `mobile/src/screens/ChatScreen.vue:1124-1131` — l'unico velo di leggibilità che esiste
- *       davvero è `radial-gradient(ellipse at center, var(--talos-background) 35%, transparent 78%)`,
- *       cioè **il fondo del tema usato come velo**, che sfuma ai bordi.
- *     · Periodo: `breath += dt*0.07` ⇒ ~90 s, `drift += dt*0.025` ⇒ ~251 s. Il desktop girava in 36 s.
- *
- * ⇒ QUI: la scena si aggancia a `#schermoChat` — la sezione che contiene topbar, conversazione e
- *   composer, e che il router mette a `display:none` quando sei su un'altra schermata (verificato
- *   sulla pagina viva). Barra laterale e ispettore restano fuori per COSTRUZIONE, non perché
- *   dipingono opaco. E la forza è quella del mobile.
- *
- * Ricerca 11/09/2026 prima di scrivere: instantgradient.com «Making Gradient Backgrounds
- * Accessible» e webability.io «Color Contrast for Accessibility: WCAG Guide (2026)» — su un
- * gradiente il contrasto CAMBIA lungo la superficie, si campiona a 0%/50%/100%, e la forma
- * raccomandata è **il gradiente come decorazione con un velo sopra che si prende la leggibilità**,
- * non il testo appoggiato sullo strato vivo. I numeri stanno nel rapporto.
- */
+/* ---------- 1. LA SCENA ----------
+   ⛔ La TINTA della scena si dichiara qui una volta sola, e cambia con la luce della stanza.
+   Misurato: con la stessa tinta in tutte e due le modalità, accendere e spegnere lo sfondo cambiava
+   **81.102 pixel (6,3%) in Calm scuro** e **850 pixel (0,1%) in Calm chiaro** — cioè in chiaro era di
+   nuovo invisibile, lo stesso difetto appena curato. Un oro al 22% sopra la crema non si vede: in
+   chiaro la tinta va verso l'inchiostro, e la macchia SCURISCE invece di schiarire. */
 :root { --talos-scena-tinta: var(--talos-scena-accento, var(--talos-accent)); }
 :root[data-theme="light"] { --talos-scena-tinta: color-mix(in srgb, var(--talos-scena-accento, var(--talos-accent)) 58%, #241f19); }
 
-/* La CURVA dell'intensità è quella del mobile (`sceneTools.ts:191-195`), il coefficiente `.21` è
-   tarato perché coi valori di serie (intensità 20, contrasto 80) l'alfa dell'accento al centro
-   della macchia valga **0,081** — cioè esattamente il registro visibile delle scene del mobile
-   (orizzonte 0,082, filamento 0,056) invece dei 0,176 di prima.
-   ⛔ Il contrasto resta nel `color-mix` e NON nella curva: nel mobile a contrasto 0 la scena non
-   sparisce (il fattore si ferma a 0,7), qui sì — ed è una promessa che quel cursore fa già. */
-:root { --talos-scena-alfa: calc((.32 + var(--talos-motion-intensity, .2) * .8) * .21); }
-
 /*
  * ⛔⛔⛔ LA SCENA NON ESISTE FINCHÉ LA APP NON LA DICHIARA — trovato dal cancello di parità, non da me.
- *   La prima stesura la mostrava per DIFETTO: bastava una pagina che carica questo foglio senza far
- *   girare `app.js` (il laboratorio dei componenti, che confronta ogni componente col mockup) e lo
- *   sfondo compariva lì dentro. Misura del cancello: **82 prove rosse su 144**, con differenze di
- *   pixel su componenti che non c'entrano niente (`comp-RuntimeCard` 1.486 px, `comp-MemoryMeter`
- *   3.459, `comp-FonteRicerca` 2.317).
+ *   La prima stesura la mostrava con `body:not(.background-motion-off)`, cioè per DIFETTO: bastava
+ *   una pagina che carica questo foglio senza far girare `app.js` (il laboratorio dei componenti, che
+ *   confronta ogni componente col mockup) e lo sfondo compariva lì dentro. Misura del cancello:
+ *   **82 prove rosse su 144**, con differenze di pixel su componenti che non c'entrano niente
+ *   (`comp-RuntimeCard` 1.486 pixel, `comp-MemoryMeter` 3.459, `comp-FonteRicerca` 2.317).
  * ⇒ Si parte SPENTA e si accende solo su un marcatore che scrive `avviaBackgroundDesktop()`:
  *   `background-motion-active` (viva) o `background-motion-paused` (presente ma ferma — è lo stato di
- *   `motionMode: static`, della finestra nascosta e del risparmio dati).
+ *   `motionMode: static`, della finestra nascosta e del risparmio dati). Nessuna delle due c'è se
+ *   nessuno ha applicato le preferenze.
  */
-#schermoChat::before,
-#schermoChat::after {
+body::before,
+body::after {
   display: none;
   content: '';
-  /* ⛔ `absolute`, non `fixed`: il blocco contenitore è `#schermoChat` (`.talos-screen` è già
-     `position:relative`), quindi la scena è larga e alta quanto la chat e NON esiste altrove. */
-  position: absolute;
-  inset: 0;
+  position: fixed;
+  /* Debordare del 18% è ciò che permette al `translate` del parallasse di non scoprire mai un bordo. */
+  inset: -18%;
   z-index: -1;
   pointer-events: none;
   background-repeat: no-repeat;
@@ -124,10 +81,16 @@ html { background: var(--talos-background); }
 }
 
 /* Lo strato di fondo: due macchie d'accento agli angoli opposti.
-   `motionContrast` decide quanto l'accento emerge dal fondo; `motionTrails` quanto sfumano i bordi.
-   ⛔ Si miscela con `transparent` e non col fondo: `motionContrast` è l'alfa vera della macchia, e a
-   0 la scena sparisce davvero — che è ciò che quel cursore promette. */
-#schermoChat::before {
+   `motionContrast` decide quanto l'accento emerge dal fondo; `motionTrails` quanto sfumano i bordi. */
+/*
+ * ⛔ La prima stesura miscelava l'accento col FONDO (`color-mix(… , var(--talos-background))`) e poi
+ *   abbassava l'opacità dello strato: due attenuazioni in fila. Misurato — accendere e spegnere lo
+ *   sfondo ai valori di serie cambiava **820 pixel su 1.296.000 (0,06%)**, cioè niente che un occhio
+ *   possa vedere. Un interruttore che si misura ma non si vede è lo stesso difetto che sto curando.
+ *   ⇒ Si miscela con `transparent`: `motionContrast` diventa l'alfa vera della macchia, e a 0 la
+ *   scena sparisce davvero — che è ciò che quel cursore promette.
+ */
+body::before {
   background-image:
     radial-gradient(circle at 22% 28%,
       color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 100%), transparent) 0%,
@@ -136,21 +99,23 @@ html { background: var(--talos-background); }
       color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 74%), transparent) 0%,
       transparent calc(34% + var(--talos-motion-trails, .5) * 26%));
   background-position: 0% 0%, 100% 100%;
-  opacity: var(--talos-scena-alfa);
-  animation: talosScenaDeriva var(--talos-background-cycle, 90000ms) var(--talos-motion-ease, ease-in-out) infinite alternate;
+  /* ⛔ Il coefficiente è tarato, non scelto: a 1,6 il fondo di serie (intensità 20) tingeva la
+     colonna della chat in modo che si IMPONEVA, e questa è una superficie di lavoro, non una vetrina.
+     I numeri sotto stanno nel resoconto: si vede, e non si mette davanti al testo. */
+  opacity: calc(var(--talos-motion-intensity, .2) * 1.1);
+  animation: talosScenaDeriva var(--talos-background-cycle, 36000ms) var(--talos-motion-ease, ease-in-out) infinite alternate;
 }
 
 /* Lo strato di luce: `motionGlow` è la sua sola ragione di esistere, e `motionStagger` il ritardo
-   con cui insegue il primo. ⛔ Passa anche dall'alfa della scena, come nel mobile, dove `alpha()`
-   moltiplica OGNI tratto: alzare l'intensità alza tutto insieme, invece di scollarsi. */
-#schermoChat::after {
+   con cui insegue il primo — è letteralmente uno sfasamento, ed è quello che quel cursore dichiara. */
+body::after {
   background-image:
     radial-gradient(ellipse at 55% 12%,
       color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 100%), transparent) 0%,
       transparent calc(30% + var(--talos-motion-trails, .5) * 30%));
   background-position: 50% 0%;
-  opacity: calc(var(--talos-motion-glow, .1) * var(--talos-scena-alfa) * 3);
-  animation: talosScenaLuce var(--talos-background-cycle, 90000ms) var(--talos-motion-ease, ease-in-out) infinite alternate;
+  opacity: calc(var(--talos-motion-glow, .1) * .55);
+  animation: talosScenaLuce var(--talos-background-cycle, 36000ms) var(--talos-motion-ease, ease-in-out) infinite alternate;
   animation-delay: var(--talos-motion-stagger, 40ms);
 }
 
@@ -167,118 +132,32 @@ html { background: var(--talos-background); }
                     scale(calc(1 + var(--talos-motion-depth, .92) * .1)); }
 }
 
-/* Perché la scena si veda.
- *
- * ⛔⛔⛔ 11/09 — LA VECCHIA FORMA CAMBIAVA L'ANTIALIASING DI TUTTO IL TESTO DELLA APP.
- *   Per far emergere una scena a `z-index:-1` il foglio rendeva TRASPARENTI `body` e `.talos-shell`.
- *   Misurato guardando DOVE cambiano i pixel invece di contarli: il delta massimo (133/255) non
- *   stava nella scena, stava nelle LETTERE —
- *     spento  [123,31,34] [30,161,201]  canali sbilanciati = antialiasing SUBPIXEL (LCD)
- *     acceso  [ 89,87,84] [163,160,154] canali quasi uguali = antialiasing GRIGIO
- *   Chrome non fa subpixel antialiasing sopra una superficie non opaca e ripiega sul grigio: il
- *   testo cambiava spessore ovunque, barra laterale compresa, per uno sfondo che sta nella chat.
- *
- * ⇒ Non si toglie il fondo a nessuno. `#schermoChat` prende `isolation: isolate` — che crea un
- *   contesto di impilamento e NIENT'ALTRO — e il suo fondo opaco: il `z-index:-1` della scena resta
- *   dentro quel contesto, e si dipinge sopra quel fondo e sotto il contenuto.
- * ⛔ Provato prima di scriverlo che dentro `#schermoChat` non ci sia nessun `position:fixed`, nessun
- *   `position:sticky` e nessun `z-index >= 50` (sonda sulla pagina viva): veli, menu, pannello
- *   notifiche e toast sono tutti figli di `body`, quindi il contesto nuovo non intrappola niente.
- * ⛔ Barra laterale e ispettore dipingono il loro fondo (`index.css`) e stanno comunque FUORI da
- *   `#schermoChat`: la scena non li tocca né prima né dopo — misurato, 0 pixel.
- */
-body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat {
-  isolation: isolate;
-  background: var(--talos-background);
-}
-body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::before,
-body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::after { display: block; }
-
-/* ---------- 1-bis. IL VELO DELLA COLONNA DI LETTURA ----------
- * La forma viene dal mobile (`ChatScreen.vue:1124-1131`): **il fondo del tema usato come velo**, che
- * sfuma dove il testo finisce. Lì è un'ellisse perché l'hero è una schermata sola; qui la colonna
- * SCORRE, e un'ellisse lascerebbe scoperti la testa e la coda del filo ⇒ il velo sfuma in
- * ORIZZONTALE: pieno dove si legge, trasparente nei margini, dove la scena resta viva.
- * ⛔ `#conversation` È la colonna di lettura: la app la costruisce così
- *   (`div.talos-conversation > div#conversation.talos-conversation__column`, verificato sulla pagina
- *   viva). Non è un selettore morto.
- */
-:root { --talos-scena-velo: 72%; }
-body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #conversation {
-  background-image: linear-gradient(to right,
-    transparent 0%,
-    color-mix(in srgb, var(--talos-background) var(--talos-scena-velo), transparent) 7%,
-    color-mix(in srgb, var(--talos-background) var(--talos-scena-velo), transparent) 93%,
-    transparent 100%);
-}
+/* Perché la scena si veda: la colonna centrale smette di dipingere il proprio fondo.
+   ⛔ Barra laterale e ispettore restano opachi apposta — sono superfici di lavoro, e una lista di
+   sessioni sopra un gradiente in movimento si legge peggio. La scena vive dove c'è aria. */
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off)::before,
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off)::after { display: block; }
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) { background: transparent; }
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) .talos-shell { background: transparent; }
 
 /* Ferma ma presente: è ciò che chiedono `motionMode: static`, «metti in pausa quando la finestra non
-   si vede», «rispetta il risparmio dati» e la pausa mentre si scorre.
-   ⛔ Qui `animation-play-state` e non `animation:none`: sono pause TRANSITORIE, e azzerare
-   l'animazione farebbe SALTARE la scena alla posizione di partenza sotto gli occhi di chi scorre. */
-body.background-motion-paused #schermoChat::before,
-body.background-motion-paused #schermoChat::after { animation-play-state: paused; }
+   si vede» e «rispetta il risparmio dati». Prima quelle tre preferenze non avevano niente da fermare. */
+body.background-motion-paused::before,
+body.background-motion-paused::after { animation-play-state: paused; }
 
-/* ---------- 1-ter. SUL FILO VIVO LA SCENA SI FERMA ----------
- *
- * ⭐ La regola viene dal MOBILE, ed è scritta lì per esteso —
- *   `mobile/src/App.vue:1157-1163`  :paused="activeRoute === 'chat' && chatHasMessages"
- *   `mobile/src/App.vue:64-67`      «The animated workspace backdrop is useful on the empty hero,
- *                                    but it is pure competition once a real thread is visible.»
- *
- * ⛔ E sul desktop ha una seconda ragione, MISURATA qui e non prevista da nessuno — l'antialiasing.
- *   Chrome spegne il subpixel antialiasing del testo dentro un gruppo isolato che contiene un
- *   layer animato. Firma misurata (sbilanciamento medio dei canali sui bordi delle lettere: alto =
- *   LCD acceso, basso = grigio), zona dei messaggi, 1440x900 scuro:
- *       sfondo spento .................... 68,7   (LCD)
- *       sfondo acceso, animazione VIVA .... 7,6   (grigio)
- *       sfondo acceso, `animation: none` .. 66,8   (LCD)
- *   Provato uno per uno: NON è `will-change` (7,6 anche con `will-change:auto`), NON è
- *   `animation-play-state: paused` (7,6 lo stesso, il layer resta promosso): è l'animazione VIVA
- *   dentro il contesto isolato. E il difetto c'era già prima di questo giro, in un'altra forma:
- *   col vecchio `body` trasparente la stessa zona misurava **22,4** contro 68,7.
- *
- * ⇒ Quando nella conversazione c'è anche un solo messaggio, la scena resta — ferma. Il testo
- *   riprende il subpixel antialiasing, e non si legge più sopra qualcosa che si muove
- *   (instantgradient.com, «Making Gradient Backgrounds Accessible»: un'area che cambia tono di
- *   continuo dietro il testo è un difetto di leggibilità, non un effetto).
- * ⛔ `:has()` e non una classe scritta dal JS: la condizione è «c'è un messaggio nella colonna», e
- *   il DOM la sa già. Una classe vorrebbe un chiamante in ogni punto che inserisce un messaggio —
- *   cioè un'altra `markMotionEnter` che nessuno richiama. Il bersaglio è `#conversation > *`, i
- *   figli DIRETTI della colonna (i giri), non un discendente qualunque: l'invalidazione resta sul
- *   primo livello.
- * ⛔ `animation: none` e non `paused`: solo togliere l'animazione toglie il layer, ed è il layer il
- *   problema. Il salto alla posizione di partenza vale al massimo `--talos-background-shift-x`
- *   (16 px di serie) su una macchia sfocata all'8% — misurato sotto la soglia della vista.
- */
-#schermoChat:has(#conversation > *)::before,
-#schermoChat:has(#conversation > *)::after { animation: none; will-change: auto; }
+/* `motionQuality`: quanto costa la scena. Basso = un solo strato e nessuna luce. */
+:root[data-talos-motion-quality="low"] body::after { display: none; }
+:root[data-talos-motion-quality="low"] body::before { background-image: radial-gradient(circle at 30% 32%, color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 100%), transparent) 0%, transparent 52%); }
+:root[data-talos-motion-quality="high"] body::before { opacity: calc(var(--talos-motion-intensity, .2) * 1.05); }
+:root[data-talos-motion-quality="high"] body::after { opacity: calc(var(--talos-motion-glow, .1) * .85); }
 
-/* `motionQuality`: quanto costa la scena. Basso = un solo strato e nessuna luce.
- *
- * ⛔⛔ 11/09 — QUESTE DUE LEVE NON HANNO MAI TOLTO LO STRATO DI LUCE, e non l'aveva visto nessuno.
- *   Trovato provandole al VERSO CONTRARIO invece che implementandole: la regola che ACCENDE la
- *   scena (`body:is(...)...::after { display: block }`) ha specificita' **(0,3,2)**, queste che la
- *   spengono avevano **(0,2,2)** ⇒ `block` vinceva su `none`, sempre, e `motionQuality: low` e
- *   `motionMode: simple` cambiavano **zero pixel** sul secondo strato. Vale anche per la forma di
- *   ieri (`body::after`): il difetto e' vecchio quanto la scena.
- * ⇒ Portano lo stesso guardiano della regola che accende, cosi' arrivano a **(0,4,2)** e vincono
- *   per specificita', senza un `!important` (che qui sarebbe la solita regola che non si batte da
- *   valle). Provato nei due versi: con `low` lo strato sparisce, con `balanced` torna.
- */
-:root[data-talos-motion-quality="low"] body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::after { display: none; }
-:root[data-talos-motion-quality="low"] #schermoChat::before { background-image: radial-gradient(circle at 30% 32%, color-mix(in srgb, var(--talos-scena-tinta) calc(var(--talos-motion-contrast, .8) * 100%), transparent) 0%, transparent 52%); }
-:root[data-talos-motion-quality="high"] #schermoChat::before { opacity: calc(var(--talos-scena-alfa) * 1.25); }
-:root[data-talos-motion-quality="high"] #schermoChat::after { opacity: calc(var(--talos-motion-glow, .1) * var(--talos-scena-alfa) * 4.6); }
-
-/* `motionMode: simple` — una scena senza secondo strato, ma ancora viva. Stessa cura, stessa causa. */
-:root[data-talos-motion-mode="simple"] body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::after { display: none; }
+/* `motionMode: simple` — una scena senza secondo strato, ma ancora viva. */
+:root[data-talos-motion-mode="simple"] body::after { display: none; }
 
 /* ⛔ Con «meno movimento» chiesto al SISTEMA la scena non sparisce: si ferma. Toglierla cambierebbe
-   la stanza a chi ha chiesto solo di non vederla muovere (W3C WAI, «prefers-reduced-motion»), ed è
-   anche ciò che fa il mobile — `runtimePolicy.ts:205-217` degrada a `static`, non a `off`. */
+   la stanza a chi ha chiesto solo di non vederla muovere (W3C WAI, «prefers-reduced-motion»). */
 @media (prefers-reduced-motion: reduce) {
-  #schermoChat::before, #schermoChat::after { animation: none; transform: none; }
+  body::before, body::after { animation: none; transform: none; }
 }
 
 /* ---------- 2. L'ENTRATA DEI MESSAGGI ----------
