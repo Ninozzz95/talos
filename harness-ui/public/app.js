@@ -6214,7 +6214,7 @@ var init_theme_studio = __esm({
 // src/components/board.js
 function statoBoard(sessione) {
   const chiave = statoSessione(sessione).classe;
-  const [testo3, tono] = STATO[chiave];
+  const [testo3, tono] = STATO[chiave] ?? ["Stato non riconosciuto", null];
   return { chiave, testo: testo3, tono };
 }
 function tempoBoard(iso, adesso = /* @__PURE__ */ new Date()) {
@@ -6421,7 +6421,7 @@ function renderBoard(schermo, vista) {
   schermo.querySelector('[data-c="DataTable"]').replaceWith(tabella);
   if (attivo) [...tabella.querySelectorAll("[data-board-session-id]")].find((n) => n.dataset.boardSessionId === attivo)?.querySelector("button").focus({ preventScroll: true });
 }
-var NUMERO2, valido, totale, compatto, MOTIVI, STATO, VISTE2;
+var NUMERO2, valido, totale, compatto, MOTIVI, STATO, CLASSI_STATO_BOARD, VISTE2;
 var init_board = __esm({
   "src/components/board.js"() {
     init_session_item();
@@ -6435,7 +6435,8 @@ var init_board = __esm({
     };
     compatto = (n) => !valido(n) ? "—" : n >= 1e3 ? NUMERO2.format(n / 1e3) + "k" : NUMERO2.format(n);
     MOTIVI = { "fine-lavoro": "fine lavoro", "giri-finiti": "giri finiti", fermata: "fermata da te", errore: "errore" };
-    STATO = { vivo: ["In corso", "accent"], attesa: ["Aspetta te", "warning"], successo: ["Conclusa", "success"], errore: ["Errore", "danger"], interrotto: ["Interrotta", null], ignoto: ["Conclusa · esito non registrato", null] };
+    STATO = { vivo: ["In corso", "accent"], attesa: ["Aspetta te", "warning"], successo: ["Conclusa", "success"], errore: ["Errore", "danger"], fermata: ["Fermata da te", null], interrotto: ["Interrotta", null], pendente: ["Nuova", null], ignoto: ["Conclusa · esito non registrato", null] };
+    CLASSI_STATO_BOARD = Object.keys(STATO);
     VISTE2 = /* @__PURE__ */ new WeakMap();
   }
 });

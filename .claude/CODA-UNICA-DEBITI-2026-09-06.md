@@ -1112,3 +1112,27 @@ Delegato (Opus 5 high): switch Anteprima·Testo nel dettaglio (MD col render del
 tabella, PDF in iframe se il CSP lo permette, DOCX «si apre con l'app del sistema» senza finzioni),
 fixture dei quattro tipi, foto chiaro/scuro; aggancio in app.js come diff (app.js è in mano al lotto
 BC-24).
+
+### BC-26 ⛔⛔⛔ NON NEGOZIABILE — note in markdown renderizzate; CRUD completo su Note, Attività, Memoria, Libreria (owner, 11/09/2026 sera)
+«Le note, se sono markdown, devono essere renderizzate in markdown; tutte le Note, Attività,
+Memoria, Libreria devono avere CRUD completi, non negotiable.» Oggi note/attività/memoria hanno
+rotte SOLO GET (il modello scrive via attrezzi, la persona no) e i lotti UI di stasera hanno tolto i
+pulsanti proprio per questo. Due lotti: **backend** (delegato ora: rotte crea/modifica/elimina/leggi
+sulle stesse funzioni degli store che usano gli attrezzi del modello, contratto JSON, 405 con Allow
+esatto) → **frontend** (dopo BC-25, su `sezioni-adattatori.js`: form di creazione/modifica nel
+dettaglio, elimina con `confermaModale`, note in markdown col render della chat, switch
+Anteprima·Testo come la Libreria; confronto testa a testa col mockup).
+
+### BC-27 — il Board mostra «undefined is not iterable» (owner, 11/09/2026 sera)
+`board.js:16` destruttura `STATO[chiave]` e la chiave viene da `statoSessione().classe`: una classe
+non prevista dalla mappa (es. `pendente`, la «Nuova sessione» in attesa di avvio) fa cadere tutta la
+pagina invece di una riga. Cura in loco: mappa completa + ripiego dichiarato, e un test che passa
+OGNI classe di `statoSessione` per la mappa del Board (il verso contrario: una classe nuova senza
+riga nel Board deve far diventare rosso il test, non la pagina).
+
+### BC-28 — le animazioni del mockup vanno riportate «alla perfezione» nella app (owner, 11/09/2026 sera)
+Inventario di OGNI animazione e transizione del mockup interattivo (`@keyframes`, `transition`,
+JS: cambio pagina, apertura pannelli, menu, toast, hover, schede, cassetto, sfondo) contro la app,
+testa a testa, con misura (durata, easing, proprietà) e foto/registrazione; porting di quelle
+mancanti o diverse; `prefers-reduced-motion` e le preferenze «animazioni dell'interfaccia» rispettate.
+Delegato (Opus 5 high).
