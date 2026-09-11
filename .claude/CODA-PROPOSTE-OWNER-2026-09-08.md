@@ -667,3 +667,23 @@ difetto: è esattamente per questo che l'owner chiede le schede distinte, non un
    solo il testo.
 
 **Stato:** APERTA, decisa dall'owner, da implementare.
+
+## PO-13 — GPT-Live-1 nell'API: voce full-duplex (owner 11/09/2026, «non urgente ma interessantissima»)
+
+Fonte: https://openai.com/index/introducing-gpt-live-1-in-the-api/ (annuncio API del 10/09/2026; in
+ChatGPT dall'8/07). Letto l'11/09/2026 dai riassunti pubblici (la pagina risponde 403 al fetch):
+- **ascolta e parla nello stesso momento** (full duplex): l'agente vocale può interrompere e
+  cambiare turno in modo naturale, invece di aspettare la fine della frase;
+- +30 punti su Full Duplex Bench rispetto a GPT-Realtime-2.1, con guadagni grossi su latenza del
+  turno e comportamento interattivo; più voci, accenti, dialetti e lingue;
+- **prezzo**: $0,05 al minuto di sessione, fatturato al secondo ($3/ora) — e i modelli/tool di
+  backend che usa durante la conversazione si pagano A PARTE.
+
+⛔ Dove starebbe in TALOS: il pulsante microfono del composer oggi fa dettatura; questa è un'altra
+cosa — una conversazione a voce continua con l'agente, con il kernel come backend degli attrezzi.
+Prima di qualunque riga: (1) leggere la doc API vera (WebSocket/WebRTC, come si innesta il tool
+calling nostro dentro la sessione vocale, quale modello di backend), (2) confrontare col mobile,
+che ha già voce e TTS locali (Pocket TTS, 0.1.19) e con Hermes/Codex se hanno qualcosa di simile,
+(3) misurare il costo reale su una sessione vera, perché $3/ora più il backend cambia la classe
+di spesa rispetto a tutto il resto. ⛔ Fuori dal principio local-first del mobile: qui è desktop e
+va bene come OPZIONE a chiave, mai come unica via per la voce.
