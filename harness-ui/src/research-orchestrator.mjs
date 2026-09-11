@@ -83,7 +83,31 @@ import { talosResearchFetchCache } from './research/fetch-cache.mjs';
  *   `research-store.mjs` e niente altro, e `research-store.mjs` continua a non importare nulla
  *   da `src/research/`. Il motore vive qui, nel direttore — non nel cancello di sicurezza.
  */
-import { talosResearchParseReport } from './research/report.mjs';
+import { talosResearchParseReport, talosResearchSupportLabel } from './research/report.mjs';
+/*
+ * ⭐⭐⭐ L5 (12/09/2026) — IL MOTORE DELLA RI-VERIFICA NEL TEMPO, agganciato per la prima volta.
+ *
+ * `recheck.mjs` era, come tutto `src/research/`, un albero senza chiamanti. Lo chiama la rotta
+ * `POST …/research/:id/riverifica`, ed è il «+1.1» del disegno (§6.8): la riga della tabella
+ * dove OGNI concorrente ispezionato ha ❌, perché per farla serve aver tenuto il TESTO, non
+ * l'URL.
+ *
+ * ⛔⛔ E QUI VA DETTO SUBITO COSA OGGI NON SI PUÒ MISURARE, perché il modulo, se lo si chiama
+ *   senza saperlo, risponde una bugia educata. `talosResearchRecheckReport` vuole
+ *   `keptByUrl`: il testo tenuto, **per url**. Sul disco di oggi quel testo non è
+ *   ricostruibile — `fonti/<sha256>.txt` è indirizzato dal CONTENUTO (nessun url nel nome), e
+ *   il giornale porta `resultRef` ma non l'indirizzo da cui quel testo viene. ⇒ la mappa è
+ *   vuota, e con una mappa vuota `talosResearchSurvival` torna **1** («niente di ciò su cui ci
+ *   appoggiavamo è sparito») e la fonte esce **`intact`**. Sarebbe un timbro «intatta» su una
+ *   pagina che nessuno ha mai confrontato: esattamente il segno di verifica falso che tutto
+ *   questo disegno esiste per togliere.
+ * ⇒ Il lettore qui sotto NON pubblica `intact` quando il testo tenuto manca: pubblica
+ *   `non-misurabile`, e dice perché. La metà che invece è vera **senza** testo tenuto — «il
+ *   passaggio citato è ancora ritrovabile in quella pagina?» — si misura eccome, perché il
+ *   passaggio sta nel record del rapporto, non nel testo tenuto: ed è la metà che `recheck.mjs`
+ *   stesso dichiara essere «nessuna euristica, nessuna soglia, nessuna opinione».
+ */
+import { talosResearchRecheckReport } from './research/recheck.mjs';
 import {
   talosResearchIsTerminal, talosResearchNextStep, talosResearchRecover,
   talosResearchReplay, talosResearchSpent, talosResearchWorkLeft,
@@ -463,6 +487,23 @@ export function creaResearchOrchestrator({
   leggiIstantaneaCacheFn = leggiIstantaneaCache,
   scriviIstantaneaCacheFn = scriviIstantaneaCache,
   creaCacheFetchFn = talosResearchFetchCache,
+  /*
+   * ⭐⭐⭐ L5 (12/09/2026) — LA LETTURA DI UNA PAGINA, per la ri-verifica nel tempo.
+   *
+   * `leggiPaginaFn(url) => Promise<{url, stato, corpo}>`. Il default è **null**, e non è
+   * pigrizia: qui dentro non si costruisce un secondo lettore del web. Quello vero esiste già
+   * (`agent-service.leggiPaginaPerLaVista` → `leggiPaginaSicura` del kernel) e porta con sé la
+   * validazione contro gli indirizzi interni che l'attrezzo `naviga` usa da mesi — allowlist di
+   * schema, nessun indirizzo privato, catena di redirect limitata (OWASP «Server Side Request
+   * Forgery Prevention Cheat Sheet», letta il 12/09/2026: «verify the value against an allowed
+   * list of protocols (HTTP or HTTPS)», «Disable the support for the following of the
+   * redirection … to prevent the bypass of the input validation»). Scriverne un secondo qui
+   * vorrebbe dire due validazioni che divergono.
+   * ⛔ Lo inietta `session-registry.mjs`, che è dove vive il cablaggio. Se resta `null` la
+   *   ri-verifica **lo dice** invece di provarci: una rotta che finge di aver guardato è peggio
+   *   di una che ammette di non poter guardare.
+   */
+  leggiPaginaFn = null,
   clock = () => new Date(),
 }) {
   /*
@@ -488,6 +529,15 @@ export function creaResearchOrchestrator({
    */
   const giudiziRapporto = new Map();
   const TETTO_CACHE_GIUDIZI = 200;
+  /*
+   * ⛔ L5 — QUANTE PAGINE una sola ri-verifica ha il diritto di andare a riaprire. Non è
+   * burocrazia: `talosResearchRecheckReport` gira **in sequenza** (lo dichiara: «una dozzina di
+   * richieste simultanee è il modo in cui una connessione domestica e un sito di notizie
+   * decidono entrambi che sei uno scraper»), quindi un rapporto con cinquanta fonti terrebbe
+   * aperta una richiesta HTTP per minuti. Si guardano le prime venti e la risposta dice
+   * `troncata: true` con quante erano in tutto — mai un silenzio che somigli a «erano venti».
+   */
+  const TETTO_FONTI_RIVERIFICA = 20;
   /**
    * ⭐ L4 — UN EVENTO NEL GIORNALE, e un guasto del giornale NON ferma la ricerca.
    *
@@ -998,6 +1048,135 @@ export function creaResearchOrchestrator({
   }
 
   /**
+   * ⭐⭐⭐⭐ L5 §6.8 «+1.1» — «DICE ANCORA QUESTO?»
+   *
+   * La domanda non è «il link risponde»: un soft 404 e una pagina riscritta in silenzio
+   * rispondono **200**. La domanda è *quello che abbiamo letto è ancora lì*, e si può porre solo
+   * perché il record del rapporto tiene il **passaggio** citato, non solo l'URL.
+   *
+   * Tre cancelli prima di spendere una sola richiesta HTTP, e ognuno risponde una cosa diversa:
+   *   1. la ricerca non esiste                  → `{trovata:false}`  (la rotta fa 404)
+   *   2. non c'è un record verificabile         → `{ok:false, motivo}` (409, e il motivo lo dice)
+   *   3. non c'è niente di misurabile           → `{ok:false, motivo}` (409)
+   *
+   * ⛔ Il caso (2) comprende le ricerche VECCHIE, quelle passate col ripiego in prosa: hanno un
+   *   rapporto vero e pagato, ma non hanno i passaggi, quindi non c'è niente da ri-trovare. Dire
+   *   «ricontrollate, tutto a posto» su quelle sarebbe la bugia più facile di tutta la funzione.
+   * ⛔ Nessun evento nel giornale. Il giornale è la prova di ciò che la CORSA ha speso
+   *   (`run.mjs` conosce undici `kind` e li elenca nel suo typedef): una ri-verifica fatta
+   *   settimane dopo non è un passo di quella corsa, e infilarcela dentro cambierebbe il
+   *   significato del file — oltre a scrivere un dodicesimo `kind` in un modulo che non è mio.
+   *   ⇒ l'esito NON è persistito, e §6.7 («l'esito dell'ultima ri-verifica, con la data») resta
+   *   aperto: va un magazzino suo, dichiarato nel rapporto di questo lotto.
+   *
+   * @returns {Promise<{trovata:false}|{trovata:true, ok:false, motivo:string}|{trovata:true, ok:true, riverifica:object}>}
+   */
+  async function riverifica({ cartella, id }) {
+    const record = await leggiRicercaFn({ cartella, id });
+    if (!record) return { trovata: false };
+
+    const giudizio = await giudicaRapporto({ cartella, record });
+    const recintato = giudizio.letto?.record ?? null;
+    if (!recintato) {
+      const coda = giudizio.letto?.ripiego
+        ? 'il suo rapporto è in forma vecchia, senza il record verificabile: non porta i passaggi citati, e senza quelli non c\'è niente da ri-trovare'
+        : (giudizio.motivoDettaglio ?? 'non c\'è nessun file di rapporto');
+      return { trovata: true, ok: false, motivo: `questa ricerca non si può ricontrollare: ${coda}` };
+    }
+    if (typeof leggiPaginaFn !== 'function') {
+      return { trovata: true, ok: false, motivo: 'la lettura delle pagine non è disponibile su questo TALOS: senza di quella non si può andare a vedere se le fonti dicono ancora questo' };
+    }
+
+    /*
+     * ⛔⛔ IL TESTO TENUTO, e perché oggi la mappa esce VUOTA (vedi la testa del file). Le fonti
+     *   su disco si contano — `testiTenuti` è un numero vero e va nella risposta — ma non si
+     *   possono attribuire a un url: `fonti/<sha256>.txt` prende il nome dal proprio contenuto.
+     *   Il giorno in cui il collettore scriverà un indice url→ref, questa è l'unica riga da
+     *   cambiare, e il resto della funzione comincerà a dire `intatta`/`cambiata` da solo.
+     */
+    const refs = await elencaFontiFn({ cartella, id });
+    const testoTenutoPerUrl = new Map();
+
+    const passaggiCitati = recintato.claims.filter((c) => typeof c?.passage === 'string' && c.passage.trim().length > 0).length;
+    if (passaggiCitati === 0 && testoTenutoPerUrl.size === 0) {
+      return {
+        trovata: true,
+        ok: false,
+        motivo: 'non c\'è ancora niente da ricontrollare: il rapporto non porta nessun passaggio citato e il testo delle fonti non è stato tenuto',
+      };
+    }
+
+    const fontiDaGuardare = recintato.sources.slice(0, TETTO_FONTI_RIVERIFICA);
+    const deps = {
+      /*
+       * ⛔ `read` torna `null` quando la pagina non si è potuta LEGGERE, ed è una risposta
+       *   diversa da un lancio: `recheck.mjs` le tratta uguali («unreachable») ma il motivo che
+       *   riportiamo cambia. Uno stato ≥ 400 e un corpo vuoto sono entrambi «non l'ho vista»:
+       *   confrontare il nulla con il testo tenuto direbbe «cambiata» su una pagina che magari
+       *   è intatta e ha solo rifiutato questa richiesta.
+       */
+      read: async (indirizzo) => {
+        const pagina = await leggiPaginaFn(indirizzo);
+        const corpo = typeof pagina?.corpo === 'string' ? pagina.corpo : '';
+        if (!pagina || Number(pagina.stato) >= 400 || corpo.trim().length === 0) return null;
+        return { text: corpo };
+      },
+      at: () => clock().toISOString(),
+    };
+    const esito = await talosResearchRecheckReport(deps, { ...recintato, sources: fontiDaGuardare }, testoTenutoPerUrl);
+
+    const fonti = esito.sources.map((f) => {
+      const tenuto = testoTenutoPerUrl.has(f.url);
+      const stato = f.state === 'unreachable'
+        ? 'irraggiungibile'
+        : (tenuto ? (f.state === 'intact' ? 'intatta' : 'cambiata') : 'non-misurabile');
+      return {
+        url: f.url,
+        titolo: f.title,
+        stato,
+        // ⛔ `null`, mai `1`, quando non c'era testo da confrontare: uno e «non misurato» non sono lo stesso numero.
+        sopravvissuto: tenuto && f.state !== 'unreachable' ? f.survived : null,
+        motivoLettura: f.reason ? String(f.reason).slice(0, 200) : null,
+        passaggiRitrovati: f.passagesStanding,
+        passaggiPersi: f.passagesLost,
+      };
+    });
+    /*
+     * ⛔ `talosResearchRecheckStanding` NON è il lettore giusto oggi, e va detto invece di
+     *   lasciarlo credere: conta gli stati del modulo, dove ogni fonte senza testo tenuto è
+     *   `intact` — cioè conterebbe come «intatte» proprio quelle che non abbiamo potuto
+     *   misurare. Il bilancio qui si fa sugli stati NORMALIZZATI, che sono quelli pubblicati.
+     */
+    const conta = (valore) => fonti.filter((f) => f.stato === valore).length;
+    return {
+      trovata: true,
+      ok: true,
+      riverifica: {
+        id,
+        fattaAlle: esito.at,
+        misurabile: testoTenutoPerUrl.size > 0,
+        avvertenza: testoTenutoPerUrl.size > 0
+          ? null
+          : 'Il testo delle pagine non era stato tenuto per questa ricerca: «intatta» o «cambiata» non si possono dire. Ciò che si misura è se i passaggi citati sono ancora nella pagina di oggi.',
+        fonti,
+        bilancio: {
+          fonti: fonti.length,
+          intatte: conta('intatta'),
+          cambiate: conta('cambiata'),
+          irraggiungibili: conta('irraggiungibile'),
+          nonMisurabili: conta('non-misurabile'),
+          passaggiCitati,
+          passaggiRitrovati: fonti.reduce((t, f) => t + f.passaggiRitrovati, 0),
+          passaggiPersi: fonti.reduce((t, f) => t + f.passaggiPersi, 0),
+        },
+        troncata: recintato.sources.length > fontiDaGuardare.length,
+        fontiTotali: recintato.sources.length,
+        testiTenuti: refs.length,
+      },
+    };
+  }
+
+  /**
    * ⭐⭐⭐ L2 §6.4 (contratto) — LA VOCE CHE LA SEZIONE LEGGE, campo per campo.
    *
    * Prima d'oggi erano QUATTRO campi (`id`, `titolo`, `stato`, `avviataAlle`) e la sezione non
@@ -1157,6 +1336,56 @@ export function creaResearchOrchestrator({
        *   vede tutto il lavoro pagato, e nessuno lo scambia per un rapporto.
        */
       contenutoRespinto,
+      /*
+       * ⭐⭐⭐⭐ L5 §6.7 — LE AFFERMAZIONI E LE FONTI, STRUTTURATE.
+       *
+       * Fino a ieri di qui usciva `contenutoRapporto`: il markdown intero, col record recintato
+       * dentro un blocco ```talos-research-report. La sezione avrebbe dovuto **ri-parsare** quel
+       * blocco nel browser per disegnare le due viste che §6.7 chiede (Affermazioni e Fonti) —
+       * cioè scrivere un secondo lettore del record, in un altro linguaggio, che diverge dal
+       * primo alla prima modifica del formato. Il lettore è UNO, sta in `report.mjs`, e gira
+       * qui: alla sezione arriva il risultato.
+       *
+       * ⛔ `null` — MAI `[]` — quando il record non c'è (ricerca vecchia, o rapporto respinto):
+       *   una lista vuota si disegna come «nessuna affermazione», che è un fatto; `null` è «non
+       *   lo sappiamo», che è la verità. Sono le stesse due parole che `bilancio` distingue.
+       * ⛔ `verdettoUmano` esce da `talosResearchSupportLabel`, cioè dalla STESSA funzione che
+       *   scrive la prosa del rapporto: due frasari per lo stesso verdetto sono due verdetti.
+       * ⛔ `contrarie` (CONTESA-01) è `null` quando `opposing` è assente, e `[]` quando è stato
+       *   guardato e non si è trovato niente: «non guardato» e «guardato, nessuna» si leggono
+       *   uguali solo se non importa sbagliare.
+       * ⛔ Costo per il MODELLO: zero. `formattaLetturaRicerca` (kernel) legge solo `trovata`,
+       *   `contenutoRapporto` e `stato` — questi campi non entrano mai in un prompt.
+       */
+      affermazioni: letto?.record
+        ? letto.record.claims.map((c, i) => ({
+          numero: i + 1,
+          testo: c?.text ?? '',
+          fonte: c?.sourceIndex ?? null,
+          passaggio: typeof c?.passage === 'string' ? c.passage : '',
+          ritrovato: c?.checks?.quotePresent === true,
+          tratto: c?.checks?.quoteSpan ?? null,
+          verdetto: c?.checks?.claimSupported ?? 'unchecked',
+          verdettoUmano: talosResearchSupportLabel(c?.checks ?? {}),
+          motivoVerdetto: c?.checks?.supportReason ?? null,
+          giudice: c?.checks?.judge ?? null,
+          giudicataAlle: c?.checks?.judgedAt ?? null,
+          contrarie: Array.isArray(c?.checks?.opposing) ? c.checks.opposing : null,
+        }))
+        : null,
+      fonti: letto?.record
+        ? letto.record.sources.map((f, i) => ({
+          numero: i + 1,
+          url: f?.url ?? '',
+          titolo: f?.title ?? '',
+          pubblicataAlle: f?.publishedAt ?? null,
+          // 'page' = la pagina è stata aperta e letta; 'snippet' = se n'è visto solo l'estratto della ricerca.
+          ottenuta: f?.obtained ?? null,
+        }))
+        : null,
+      sintesi: letto?.record?.summary ?? null,
+      /* ⛔ Chi era disponibile a giudicare la CORSA — un fatto suo, mai dedotto dalle affermazioni (`report.mjs` lo spiega: dedurlo mente su una corsa con un giudice buono e citazioni tutte fallite). */
+      giudice: letto?.record?.judge ?? null,
       piano: Array.isArray(pianoSuDisco) ? pianoSuDisco : (giro?.plan ?? []),
       passi: giro?.steps ?? [],
       spesa: giro ? talosResearchSpent(giro) : null,
@@ -1164,5 +1393,5 @@ export function creaResearchOrchestrator({
     };
   }
 
-  return Object.freeze({ avvia, mettiInPausa, annulla, riprendi, rinomina, elimina, elenca, leggi });
+  return Object.freeze({ avvia, mettiInPausa, annulla, riprendi, rinomina, elimina, elenca, leggi, riverifica });
 }
