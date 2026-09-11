@@ -191,8 +191,27 @@ body:is(.background-motion-active, .background-motion-paused):not(.background-mo
   isolation: isolate;
   background: var(--talos-background);
 }
+
 body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::before,
 body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat::after { display: block; }
+
+/*
+ * ⛔⛔ LA TESTATA E IL COMPOSER NON SONO FINESTRE SULLA SCENA.
+ *
+ * Riprodotto lo stato SALVATO dell'owner (scena `terminal`, cursori 100/100/100/150: alfa 0,235
+ * contro lo 0,10 di un profilo vergine — senza `addInitScript` non si vede quasi niente e si crede
+ * che vada bene), la scena traspariva in una fascia sola: quella della topbar, alta 60 px e larga
+ * quanto la finestra. È la «schermata gialla, ora tagliata»: non uno sfondo, una BANDA.
+ * ⛔ Una scena che si vede in una striscia sola non si legge come profondità — si legge come un
+ *   errore di ritaglio. Il mobile non ha questo problema perché lì lo sfondo sta dietro la
+ *   CONVERSAZIONE, non dietro la barra dei comandi.
+ * ⇒ Testata e composer prendono il fondo del tema. La scena resta dove deve stare: dietro il
+ *   testo, e intorno a esso.
+ */
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat > .talos-topbar,
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #schermoChat > .talos-composer-wrap {
+  background: var(--talos-background);
+}
 
 /* ---------- 1-bis. LA COLONNA DI LETTURA È OPACA — LA SCENA NON LE PASSA SOTTO ----------
  *
@@ -244,6 +263,74 @@ body:is(.background-motion-active, .background-motion-paused):not(.background-mo
  */
 body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #conversation {
   background-color: var(--talos-background);
+}
+
+/*
+ * ⭐ 11/09, secondo giro — IL BORDO DELLA COLONNA NON DEV'ESSERE UNA RIGA NETTA.
+ *
+ * ⛔ Trovato guardando le foto, non contando i pixel: coi cursori al massimo (scena `terminal`,
+ *   intensità 100, contrasto 100) la colonna opaca si stacca dallo sfondo come un RETTANGOLO a
+ *   spigoli vivi in mezzo al verde — la garanzia regge, il disegno no.
+ *
+ * ⇒ È il pattern dello SCRIM, e ha un nome: uno strato semi-opaco che sfuma ai bordi, «the most
+ *   subtle way of reliably overlaying text on images» (Smashing Magazine, «Designing Accessible
+ *   Text Over Images», e Google Material Design «Scrims» — letti l'11/09/2026). Il mobile fa
+ *   esattamente questo: `mobile/src/screens/ChatScreen.vue:1124-1131` usa
+ *   `radial-gradient(ellipse at center, var(--talos-background) 35%, transparent 78%)`, cioè il
+ *   fondo del tema PIENO al centro e sfumato ai bordi. Lì è un'ellisse perché l'hero è una
+ *   schermata sola; qui la colonna SCORRE, quindi la sfumatura è solo orizzontale.
+ * ⭐ Il concorrente di riferimento non ha questo problema perché non ha la funzione: Hermes Agent
+ *   spedisce otto skin (Official, Classic, Slate, Mono x chiaro/scuro) su una tavolozza
+ *   «black-centric, TUI-first» e NESSUNO sfondo animato dietro la conversazione
+ *   (hermes-agent.nousresearch.com/docs/user-guide/features/skins, letto l'11/09/2026). Il nostro
+ *   +1 misurabile non è «abbiamo lo sfondo»: è che con lo sfondo acceso il fondo sotto il testo
+ *   resta lo STESSO PIXEL di quando è spento.
+ *
+ * ⇒ Lo scroller `.talos-conversation` — largo quanto la chat, contiene la colonna — prende lo
+ *   stesso fondo del tema, PIENO dove si legge e sfumato negli ultimi 40 px a destra e a sinistra,
+ *   dove per costruzione non c'è nessun testo (la colonna vive dentro un padding di 44 px,
+ *   `index.css:576`). Il bordo netto sparisce; la garanzia non si tocca, perché questo strato può
+ *   solo AGGIUNGERE opacità sopra ciò che la colonna già copre.
+ * ⛔ Un gradiente statico, non un `box-shadow` sfocato né un `background-attachment: fixed`: il
+ *   Chrome dell'owner ha l'accelerazione hardware DISATTIVATA (misurato il 02/09: 6,1 ms → 109 ms
+ *   per fotogramma), e la ricerca dell'11/09 (Four Kitchens «Fix scrolling performance with CSS
+ *   will-change»; bugzilla Mozilla 657603 «slow scrolling with CSS gradients») dice che ciò che
+ *   costa è il RIDIPINTO a ogni fotogramma — un fondo fisso o una `background-position` animata.
+ *   Il fondo di un contenitore che scorre è ancorato al suo padding box e NON scorre col
+ *   contenuto: si dipinge una volta sola e lo scorrimento non lo tocca.
+ * ⛔ `:has(#conversation > *)`: a chat VUOTA la scena resta scoperta e intera — è il punto in cui il
+ *   mobile la mostra con più forza, perché non c'è niente da leggere.
+ */
+/*
+/*
+ * ⛔⛔⛔ 11/09/2026 — TERZO GIRO, E IL MOBILE ERA GIÀ LA RISPOSTA. Owner, furioso: «il mobile l'ha
+ *   fatto alla perfezione e tu non ci riesci?». Ha ragione, e le mie due stesure precedenti erano
+ *   sbagliate per lo stesso identico motivo: **un velo RETTANGOLARE**.
+ *
+ * ⛔ Che cosa ho rotto, dichiarato invece che nascosto:
+ *     1ª stesura (velo sullo scroller) — fondo pieno su tutta la chat tranne 40 px per lato: la
+ *        scena sopravviveva solo in due strisce. Owner: «il ritorno della schermata gialla, ora
+ *        tagliata»;
+ *     2ª stesura (velo sui messaggi) — peggio: ogni messaggio diventava un rettangolo opaco dentro
+ *        un'area colorata, con un bordo netto. Una chat che galleggia su una tovaglia.
+ *   In tutt'e due il difetto è lo stesso: un bordo DURO fra ciò che è velato e ciò che non lo è.
+ *
+ * ⭐ IL MOBILE NON HA BORDI, e il suo codice lo dice — `mobile/src/screens/ChatScreen.vue:1124-1131`:
+ *     radial-gradient(ellipse at center, var(--talos-background) 35%, transparent 78%)
+ *   cioè il fondo del tema PIENO al centro, dove si legge, sfumato fino a sparire ai bordi. Non c'è
+ *   nessuna linea perché non c'è nessun confine: il velo è tutt'uno con la stanza.
+ * ⇒ Stessa forma qui, sullo scroller, che è dove vive il testo. La colonna di lettura sta dentro la
+ *   parte piena; la scena riemerge verso i bordi, dove per costruzione non c'è nessun glifo.
+ * ⛔ `at 50% 38%` e non `at center`: la conversazione è più alta che larga e il testo si addensa in
+ *   alto — un'ellisse centrata sul centro geometrico lascerebbe scoperta la prima riga.
+ */
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) .talos-conversation:has(#conversation > *) {
+  background-image: radial-gradient(
+    ellipse 96% 86% at 50% 38%,
+    var(--talos-background) 0%,
+    var(--talos-background) 62%,
+    transparent 100%
+  );
 }
 
 /* Ferma ma presente: è ciò che chiedono `motionMode: static`, «metti in pausa quando la finestra non
@@ -396,3 +483,43 @@ body.background-motion-paused #schermoChat::after { animation-play-state: paused
   inset: 0;
   margin: 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+ * ⛔⛔⛔⛔ 11/09/2026 — LO SFONDO ANIMATO È ABOLITO. Owner, dopo il terzo giro fallito:
+ *   «SFONDO ANIMATO ABOLITO, NASCONDI DALLE IMPOSTAZIONI E SPEGNI COMPLETAMENTE GLI SFONDI ANIMATI
+ *   DALLA UI, CI ANDREMO SUCCESSIVAMENTE, MI SONO ROTTO IL CAZZO».
+ *
+ * Questa riga vince su TUTTO il foglio qui sopra, che resta intero e non si cancella: descrive un
+ * lavoro misurato (la curva del mobile, le alfe, i cancelli di leggibilità) che servirà quando si
+ * tornerà a questa funzione. Ma oggi non si disegna: la scena non compare, in nessun tema, con
+ * nessuna preferenza salvata, nemmeno se le classi del body dicono il contrario.
+ *
+ * ⛔ Spegnere QUI e non nel JavaScript è deliberato: le classi `background-motion-*` continuano ad
+ *   arrivare dalle preferenze di chi le aveva già salvate, e una cura che vivesse solo nel codice
+ *   che le scrive lascerebbe accesa la scena a chiunque abbia quello stato sul disco. Una regola
+ *   universale con `!important` su questi due pseudo-elementi non si batte da valle: è la stessa
+ *   forma che in questo progetto aveva già spento OGNI animazione dell'app, e qui la si usa apposta.
+ * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+#schermoChat::before,
+#schermoChat::after,
+body::before,
+body::after {
+  display: none !important;
+  content: none !important;
+  animation: none !important;
+}
+/* E il velo di leggibilità non serve più: senza scena dietro, dipingerebbe un'ellisse di fondo
+   sopra il fondo — invisibile, ma un ridipinto in più a ogni scorrimento. */
+body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) .talos-conversation:has(#conversation > *) {
+  background-image: none !important;
+}
+
+/*
+ * ⛔ E la sezione «Sfondo e risorse» sparisce dalle Impostazioni. Owner, stesso messaggio:
+ *   «NASCONDI DALLE IMPOSTAZIONI». Un comando che non governa più niente è peggio di un comando
+ *   assente: promette una cosa e non la fa — è esattamente la classe di difetto che questo
+ *   progetto ha già pagato («ventisei comandi su trentanove: ZERO pixel»).
+ * ⛔ Nascosta, non cancellata: quando la funzione tornerà, il markup e i campi sono ancora lì, e
+ *   basta togliere questa regola. La riga del debito dice a che condizioni si toglie.
+ */
+[data-settings-group="sfondo"] { display: none !important; }

@@ -169,6 +169,33 @@
    invenzione. Resta solo `color-scheme`: senza, le scrollbar e i controlli nativi litigherebbero. */
 :root:is([data-talos-theme="paper"],[data-talos-theme="glacier"],[data-talos-theme="claudius"],[data-talos-theme="basicus"])[data-theme="light"] { color-scheme: light }
 
+/* ---------- 2-bis. IL TESTO TENUE DI `calm` CHIARO NON ARRIVAVA AD AA — misurato in pixel ----------
+ *
+ * ⛔ Trovato dal cancello `aspetto-non-rende-illeggibile.spec.mjs`, non a occhio: nel tema di serie
+ *   in modo CHIARO il testo tenue (`--talos-muted: #686a70`, cioè rgb 104 106 112) misurato sul
+ *   fondo VERO sotto le lettere dà
+ *     · 4,46:1 sulla riga del modello e dell'ora (`.talos-message__meta`, fondo rgb 236 233 226);
+ *     · 4,30:1 sul sopratitolo (`.talos-eyebrow`, fondo rgb 232 229 222);
+ *     · 4,26:1 sul corpo di una nota di sistema (fondo rgb 231 228 222).
+ *   WCAG 2.2 AA chiede **4,5:1** per il testo normale. Sono tre mancati su tre superfici diverse,
+ *   e sono l'UNICO testo ordinario della conversazione sotto la soglia in 28 combinazioni
+ *   tema x modo. ⛔ Non c'entra lo sfondo animato: sotto il testo la scena cambia **0 pixel**
+ *   (misurato), quindi questi numeri sono identici a scena spenta — è la tavolozza.
+ *
+ * ⇒ `#62646a` (rgb 98 100 106), cioè SEI punti più scuro, stessa tinta. Rimisurato sul banco:
+ *     4,46 → **4,88**   4,30 → **4,70**   4,26 → **4,66**. Tutte e tre sopra la soglia, con margine.
+ * ⛔ Sta QUI e non in `index.css` perché quel foglio è GENERATO dal mockup e si riscrive da solo;
+ *   e vale per `calm` chiaro soltanto, perché gli altri tredici temi derivano il tenue con la
+ *   formula del mobile (`mix(testo 68%, fondo)`) e nessuno di loro è sotto AA.
+ * ⛔ È la sola tinta del tema di serie toccata da questo giro, ed è reversibile in una riga:
+ *   togliere questo blocco riporta esattamente `#686a70`. Specificità (0,3,0), niente `!important`.
+ *
+ * Ricerca 11/09/2026 prima di scrivere: webability.io «Color Contrast for Accessibility: WCAG Guide
+ * (2026)» e achecks.org «Gradients: Accessible Colour Contrasts with Gradient Backgrounds» — su un
+ * fondo che varia si campiona nel punto di contrasto PIÙ BASSO sotto il testo, non un colore solo.
+ */
+:root[data-talos-theme="calm"][data-theme="light"] { --talos-muted: #62646a; }
+
 /* ---------- 3. Il chiaro: neutri dal tema, accento SCURITO ----------
    ⛔ I neutri seguono il mobile (sezione 1-ter). L'ACCENTO no, e la ragione e' misurabile: in chiaro
    l'accento grezzo di un tema scuro (per es. `terminal` #63f08e) su carta non arriva a 3:1, e
