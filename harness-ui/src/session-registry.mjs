@@ -90,6 +90,11 @@ import {
   eliminaRicerca as eliminaRicercaReale, elencaRicerche as elencaRicercheReale,
   // ⭐ L2 (11/09) — il lettore del rapporto depositato da `research_deposit`.
   leggiRapporto as leggiRapportoReale, ResearchStoreError,
+  // ⭐ L4 (11/09) — il giornale su disco, il piano, le fonti tenute e l'istantanea della cache.
+  accodaEvento as accodaEventoReale, leggiGiornale as leggiGiornaleReale,
+  leggiPiano as leggiPianoReale, statRapporto as statRapportoReale,
+  elencaFonti as elencaFontiReale,
+  leggiIstantaneaCache as leggiIstantaneaCacheReale, scriviIstantaneaCache as scriviIstantaneaCacheReale,
 } from './research-store.mjs';
 import { creaResearchOrchestrator } from './research-orchestrator.mjs';
 import {
@@ -1387,6 +1392,22 @@ export function createSessionRegistry({
    *   l'ambiente invece dell'oggetto. Il default resta la lettura vera.
    */
   leggiRapportoFn = leggiRapportoReale,
+  /*
+   * ⭐⭐⭐ L4 (11/09/2026) — LE SEI PORTE DEL GIORNALE, iniettabili per lo STESSO motivo di
+   * `leggiRapportoFn` qui sopra, e stavolta il motivo si è fatto vedere invece di restare
+   * teorico: con i default reali, i test dell'orchestratore hanno creato `C:\p` e `C:\progetto`
+   * sul disco della macchina — cioè hanno misurato l'ambiente invece dell'oggetto, la lezione
+   * del 10/09. Da qui in giù, un test del registro non tocca un filesystem vero.
+   *
+   * ⛔ Il default resta la scrittura vera: il prodotto scrive davvero il giornale.
+   */
+  accodaEventoFn = accodaEventoReale,
+  leggiGiornaleFn = leggiGiornaleReale,
+  leggiPianoFn = leggiPianoReale,
+  statRapportoFn = statRapportoReale,
+  elencaFontiFn = elencaFontiReale,
+  leggiIstantaneaCacheFn = leggiIstantaneaCacheReale,
+  scriviIstantaneaCacheFn = scriviIstantaneaCacheReale,
   salvaVoceLibreriaFn = salvaVoceLibreriaReale, leggiVoceLibreriaFn = leggiVoceLibreriaReale, eliminaVoceLibreriaFn = eliminaVoceLibreriaReale,
   /* ⭐⭐⭐⭐ 10/09/2026 — le tre porte nuove del CRUD Libreria lato persona (vedi i metodi
      `scaricaVoceLibreria`/`rinominaVoceLibreria`/`rivelaVoceLibreria`). `eliminaVoceLibreriaFn`
@@ -1514,6 +1535,9 @@ export function createSessionRegistry({
   const researchOrchestrator = creaResearchOrchestrator({
     sessioni, avviaESeguiFn: avviaESegui,
     creaRicercaFn, leggiRicercaFn, aggiornaRicercaFn, eliminaRicercaFn, elencaRicercheFn, leggiRapportoFn,
+    // ⭐ L4 — il giornale, il piano, le fonti e l'istantanea della cache: stessa disciplina DI.
+    accodaEventoFn, leggiGiornaleFn, leggiPianoFn, statRapportoFn, elencaFontiFn,
+    leggiIstantaneaCacheFn, scriviIstantaneaCacheFn,
     salvaVoceLibreriaFn, leggiVoceLibreriaFn, eliminaVoceLibreriaFn, randomUUIDFn,
   });
 
