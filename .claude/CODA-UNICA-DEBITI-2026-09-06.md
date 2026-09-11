@@ -907,3 +907,35 @@ Owner: «approvato il punto 1». ⇒ `cache_control` esplicito con TTL 1h, marca
 cacheable, layout sull'envelope del messaggio per OpenRouter — il metodo letto nel codice di Hermes
 (`agent_init.py:986-1008`, `agent_runtime_helpers.py:2365-2430`), che dichiara anche che **Zhipu GLM
 e i modelli Qwen/Alibaba senza marcatori servono ZERO cache hit**.
+
+## BC-17 ⛔⛔⛔ CRITICO — `shell` riceve la stringa del comando VUOTA
+
+Owner 11/09/2026, con la schermata della sessione «genera dentro questa cartella un file html».
+Il modello scrive, nella chat, la propria diagnosi:
+
+> «a un certo punto il tool `shell` di questo ambiente si è rotto — la stringa comando arriva
+> **vuota** a bash (`cd "…" && { ; }` → syntax error), anche su un banale `pwd`. Ho provato tre
+> volte ed è sempre la stessa cosa, quindi non è un mio errore di sintassi. Senza shell non posso
+> fare la concatenazione né eseguire i controlli.»
+
+⛔ Questa è quasi certamente la causa VERA di BC-11 (il «giro assurdo»): il modello non stava
+girando a vuoto per stupidità — **stava ritentando uno strumento rotto**, e ha finito per
+inventarsi la strada dei file separati perché l'unica che gli restava.
+
+⛔ Il guscio che si vede nell'errore (`cd "…" && { ; }`) dice dove guardare: il comando viene
+interpolato dentro un involucro, e quando la stringa è vuota l'involucro resta e bash trova un
+blocco vuoto. Da capire **perché arriva vuota** — troncatura degli argomenti in streaming? un JSON
+degli argomenti chiuso male? un nome di campo diverso da quello atteso (`comando` vs `command`)?
+⇒ Si riproduce con un giro vero, si guarda il `.jsonl` (gli argomenti arrivano in `ToolCallArgs`, a
+pezzi) e **si legge il pezzo che arriva prima del guasto**, non quello dopo.
+
+## BC-18 — la scheda «Agenti» resta vuota MENTRE una sotto-attività è in corso
+
+Owner 11/09/2026, due schermate affiancate: nella chat c'è «**1 attività in corso…** · Sotto-attività:
+Devi assemblare e validare un file HTML… · task: 4776 caratteri», e nella colonna di destra la
+scheda **Agenti** dice «**Nessun sotto-agente in questa sessione.**»
+
+⛔ BC-03 era stato dichiarato chiuso l'11/09 con foto e test — ma il suo stesso rapporto dichiarava
+il buco: «**non verificato: nessun giro reale col modello, quindi la scheda con una figlia VIVA (e
+il "Ferma questa delega") non l'ho mai vista a schermo**». Eccola: con una figlia viva la scheda è
+vuota. ⇒ BC-03 **si riapre**, e la parte che mancava è esattamente quella che non era stata provata.
