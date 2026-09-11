@@ -10348,6 +10348,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     ws.onclose = () => { if (record.ws === ws && record.stato !== 'terminato') impostaStatoScheda(record, 'disconnesso'); };
   }
 
+  /** Il terminale è a schermo: nella sua vista, oppure nel pannello in basso del composer (PO-09). */
+  function terminaleAschermo() {
+    if (state.view === 'terminal') return true;
+    const pannello = document.getElementById('pannelloTerminale');
+    return Boolean(pannello && !pannello.hidden);
+  }
+
   function attivaSchedaTerminale(id) {
     const t = statoTerminale();
     const record = t.schede.get(id);
@@ -10360,7 +10367,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       spegniWebglTerminale(altra);
     }
     if (record.mount) record.mount.hidden = false;
-    if (state.view === 'terminal' && montaSchedaTerminale(record)) {
+    /*
+     * ⛔⛔⛔ CONTA DOVE SI VEDE, NON DOVE STA. Qui c'era `state.view === 'terminal'`: il terminale
+     *   si montava solo se la VISTA corrente era il Terminale. Col pannello in basso (PO-09) la
+     *   vista è la Chat, quindi le schede nascevano — misurato: tre, coi loro nomi «tu · shell» —
+     *   ma **nessuna xterm veniva mai montata**: un terminale senza terminale dentro.
+     * ⇒ La domanda giusta non è «quale vista è aperta» ma «il terminale è a schermo»: lo è se la
+     *   vista è il Terminale, oppure se il pannello in basso è aperto.
+     * ⛔ Il resto della disciplina resta: xterm.js non sa misurarsi dentro un elemento nascosto
+     *   (#3029) e i contesti WebGL per pagina sono limitati (#4379) — per questo si monta solo
+     *   quando si vede davvero, e si smonta quando non si vede più.
+     */
+    if (terminaleAschermo() && montaSchedaTerminale(record)) {
       accendiWebglTerminale(record);
       collegaWsScheda(record);
       requestAnimationFrame(() => { record.fit?.fit(); inviaResizeTerminale(record); record.term?.focus(); });
@@ -17851,6 +17869,30 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (pane.parentElement !== ospite) ospite.append(pane);
       const salvata = leggiAltezzaTerminale();
       if (salvata) applicaAltezzaTerminale(pannello, salvata);
+      /*
+       * ⛔⛔⛔ SE NON C'È UNA SHELL, SE NE APRE UNA. Owner, guardando il pannello vuoto: «deve
+       *   essere un terminale bash esattamente identico alla scheda terminale».
+       *
+       * La misura gli ha dato ragione, e ha anche detto dove NON era il difetto: nella vista
+       * Terminale il bash c'è davvero (4 schede «tu · Git Bash», 2 xterm vivi, misurato sul server
+       * di prova), mentre il pannello mostrava lo stesso componente nello stato «nessuna scheda
+       * aperta» — che è la verità, ma non è ciò che serve a chi ha appena chiesto un terminale.
+       * ⇒ Chi apre il pannello vuole scrivere un comando, non leggere che non c'è niente.
+       *
+       * Ricerca 11/09/2026 (docs VS Code «Terminal Basics»): là `Ctrl+\`` è documentato come
+       * toggle del pannello e la creazione esplicita è `Ctrl+Shift+\``. Qui la scelta è diversa ed
+       * è dell'owner: il pannello si apre CON una shell dentro. La dichiaro invece di spacciarla
+       * per imitazione.
+       * ⛔ Solo se non ce ne sono già: chi ha tre schede non se ne ritrova una quarta ogni volta
+       *   che apre e chiude. E senza una sessione aperta `nuovaSchedaTerminale` lo dice da sé con
+       *   un toast — quel messaggio non si duplica qui.
+       */
+      const stato = statoTerminale();
+      if (!pane.querySelector('.talos-terminal__mount')) void nuovaSchedaTerminale();
+      /* ⛔ E se le schede ci sono già, si riattiva quella corrente: il montaggio dell'xterm avviene
+         in `attivaSchedaTerminale`, e senza questa riga il pannello mostrerebbe le schede con
+         dentro il vuoto — che è esattamente il difetto appena corretto, in un altro punto. */
+      else if (stato?.attiva) attivaSchedaTerminale(stato.attiva);
       /* ⛔ Il fuoco va DENTRO il terminale: chi lo apre vuole scriverci, non cercarlo col mouse. */
       requestAnimationFrame(() => {
         const dentro = pane.querySelector('textarea, .xterm-helper-textarea');
