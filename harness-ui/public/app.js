@@ -386,10 +386,34 @@ function ordinaSessioniAdAlbero(elenco2) {
     fuori.push({ sessione, profondita });
     for (const figlia of figliePer.get(sessione.sessionId) ?? []) scendi(figlia, profondita + 1);
   };
-  for (const s of righe) {
-    if (s.padreId && presenti.has(s.padreId)) continue;
-    scendi(s, 0);
+  const vivaPer = /* @__PURE__ */ new Map();
+  const discendenzaViva = (sessione, visti = /* @__PURE__ */ new Set()) => {
+    if (visti.has(sessione.sessionId)) return false;
+    visti.add(sessione.sessionId);
+    const classe = statoSessione(sessione).classe;
+    if (classe === "vivo" || classe === "attesa") return true;
+    return (figliePer.get(sessione.sessionId) ?? []).some((f) => discendenzaViva(f, visti));
+  };
+  const parlatoPer = /* @__PURE__ */ new Map();
+  const ultimaVoceDellAlbero = (sessione, visti = /* @__PURE__ */ new Set()) => {
+    if (visti.has(sessione.sessionId)) return "";
+    visti.add(sessione.sessionId);
+    const mia = String(sessione.ultimaRispostaAlle ?? "");
+    const figlie = (figliePer.get(sessione.sessionId) ?? []).map((f) => ultimaVoceDellAlbero(f, visti));
+    return [mia, ...figlie].sort().at(-1) ?? "";
+  };
+  const radici = righe.filter((s) => !(s.padreId && presenti.has(s.padreId)));
+  for (const r of radici) {
+    vivaPer.set(r.sessionId, discendenzaViva(r));
+    parlatoPer.set(r.sessionId, ultimaVoceDellAlbero(r));
   }
+  const ordinate = [...radici].sort((a, b) => {
+    const viva = Number(vivaPer.get(b.sessionId)) - Number(vivaPer.get(a.sessionId));
+    if (viva !== 0) return viva;
+    if (!vivaPer.get(a.sessionId)) return 0;
+    return String(parlatoPer.get(b.sessionId) ?? "").localeCompare(String(parlatoPer.get(a.sessionId) ?? ""));
+  });
+  for (const s of ordinate) scendi(s, 0);
   for (const s of righe) if (!fatte.has(s.sessionId)) fuori.push({ sessione: s, profondita: 0 });
   return fuori.map((v, i) => {
     const dopo = fuori.slice(i + 1).find((altra) => altra.profondita <= v.profondita);
@@ -451,6 +475,11 @@ function creaSessionItem(sessione, opzioni = {}) {
   riga.setAttribute("data-c", "SessionItem");
   if (opzioni.corrente) riga.setAttribute("aria-current", "true");
   if (sessione.sessionId) riga.dataset.realSessionId = sessione.sessionId;
+  const quando = Date.parse(sessione.ultimaRispostaAlle ?? "");
+  const adessoMs = (opzioni.adesso instanceof Date ? opzioni.adesso : /* @__PURE__ */ new Date()).getTime();
+  if (Number.isFinite(quando) && !opzioni.corrente && adessoMs - quando <= SEGNALE_NOVITA_MS) {
+    riga.dataset.novita = "si";
+  }
   const etichetta = opzioni.pendente ? `Nuova · ${sessione.nomeCartella || ""}` : `${sessione.nome || opzioni.nomeDistintivo || sessione.taskDelega || nomeLeggibileSessione(sessione.taskId)}${sessione.forkDa ? " · ramo" : ""}`;
   const stato = opzioni.pendente ? { classe: "pendente", testo: ETICHETTE.pendente, tono: null } : statoSessione(sessione);
   riga.dataset.sessionState = stato.classe;
@@ -491,10 +520,11 @@ function creaSessionItem(sessione, opzioni = {}) {
   }
   return riga;
 }
-var TONI, ETICHETTE;
+var SEGNALE_NOVITA_MS, TONI, ETICHETTE;
 var init_session_item = __esm({
   "src/components/session-item.js"() {
     init_consumo_sessione();
+    SEGNALE_NOVITA_MS = 6e4;
     TONI = Object.freeze({
       attesa: "warning",
       vivo: "live",
@@ -6732,6 +6762,28 @@ function chevron(d) {
   svg.append(use);
   return svg;
 }
+function bottoneAzioni(d, a, azioni) {
+  const nome = a.taskCorto || a.task || "delega senza compito";
+  const b = el20(d, "button", "talos-button talos-button--ghost talos-button--sm");
+  b.type = "button";
+  b.dataset.azione = "menu";
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-label", `Azioni su: ${nome}`);
+  b.title = "Azioni su questa delega";
+  const svg = d.createElementNS(SVG_NS_INSPECTOR, "svg");
+  svg.setAttribute("class", "i");
+  svg.setAttribute("aria-hidden", "true");
+  const use = d.createElementNS(SVG_NS_INSPECTOR, "use");
+  use.setAttribute("href", "#i-more");
+  svg.append(use);
+  b.append(svg);
+  b.addEventListener("click", (evento) => {
+    evento.preventDefault();
+    evento.stopPropagation();
+    azioni.onMenu(a, { ancora: b });
+  });
+  return b;
+}
 function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
   const lista = Array.isArray(agenti) ? agenti : [];
   contenitore.replaceChildren();
@@ -6740,7 +6792,7 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     vuoto.dataset.c = "EmptyState";
     const head = el20(d, "div", "talos-inspector-card__head");
     head.appendChild(el20(d, "b", "", "Sotto-agenti"));
-    vuoto.append(head, el20(d, "p", "talos-inspector__hint", "Nessun sotto-agente in questa sessione. Quando ce ne sarà uno, qui compaiono i suoi giri, le sue richieste di permesso e il pulsante per fermarlo."));
+    vuoto.append(head, el20(d, "p", "talos-inspector__hint", "Nessun sotto-agente in questa sessione. Quando una delega parte, qui compare con il suo compito, lo stato e quello che ha fatto; da lì si apre la sua conversazione o si ferma."));
     contenitore.appendChild(vuoto);
     return 0;
   }
@@ -6758,6 +6810,7 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
       const apri = () => azioni.onApri(a);
       card.addEventListener("click", apri);
       card.addEventListener("keydown", (evento) => {
+        if (evento.target && evento.target !== card) return;
         if (evento.key !== "Enter" && evento.key !== " ") return;
         evento.preventDefault();
         apri();
@@ -6771,6 +6824,7 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     }
     const head = el20(d, "div", "talos-inspector-card__head");
     head.append(el20(d, "b", "", tronca(a.taskCorto || a.task || "Delega senza compito registrato", 52)), el20(d, "span", `talos-badge talos-badge--sm${statoDelega(a) === "fallita" ? " talos-badge--danger" : statoDelega(a) === "conclusa" ? " talos-badge--success" : ""}`, etichettaDelega(a)));
+    if (typeof azioni.onMenu === "function" && a.sessionId) head.append(bottoneAzioni(d, a, azioni));
     if (apribile) head.append(chevron(d));
     card.append(head);
     const ev = a.evidenzaDelega && typeof a.evidenzaDelega === "object" ? a.evidenzaDelega : null;
@@ -8645,9 +8699,8 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     aggiorna(nuovo) {
       if (nuovo && "attiva" in nuovo && nuovo.attiva !== stato.attiva) {
         stato.riaperte.delete(nuovo.attiva);
-        const suo = stato.modiScelti[nuovo.attiva] || null;
-        stato.modoChiesto = suo;
-        if (suo) stato.modo = suo;
+        stato.modo = "pagina";
+        stato.modoChiesto = null;
       }
       stato = { ...stato, ...nuovo };
       if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false;
@@ -13894,12 +13947,6 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (quotaRipetute >= 0.15) return `${riassunto.ripetute} chiamate erano già state fatte identiche: indica tu i percorsi da guardare, così i giri non tornano sugli stessi file.`;
         if (primo && primo.chiamate / riassunto.chiamate >= 0.4) return `${primo.chiamate} chiamate su ${riassunto.chiamate} sono andate a «${nomeUmanoAttrezzo2(primo.nome)}»: chiedi un passo più stretto, o dai tu il comando o il percorso giusto.`;
         return "Nel prossimo messaggio chiedi un passo solo: il tetto vale per giro, non per sessione.";
-      }
-      function tettoGiriDaMessaggio(messaggio) {
-        const trovato = /giri esauriti:\s*(\d+)\s+su\s+(\d+)/i.exec(String(messaggio ?? ""));
-        if (!trovato) return null;
-        const tetto = Number(trovato[2]);
-        return Number.isFinite(tetto) && tetto > 0 ? tetto : null;
       }
       function aggiornaContatoreUsage() {
         const nodo4 = $2("[data-usage-summary]");
@@ -20392,6 +20439,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           if (record.ws === ws && record.stato !== "terminato") impostaStatoScheda(record, "disconnesso");
         };
       }
+      function terminaleAschermo() {
+        if (state.view === "terminal") return true;
+        const pannello = document.getElementById("pannelloTerminale");
+        return Boolean(pannello && !pannello.hidden);
+      }
       function attivaSchedaTerminale(id) {
         const t2 = statoTerminale();
         const record = t2.schede.get(id);
@@ -20404,7 +20456,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           spegniWebglTerminale(altra);
         }
         if (record.mount) record.mount.hidden = false;
-        if (state.view === "terminal" && montaSchedaTerminale(record)) {
+        if (terminaleAschermo() && montaSchedaTerminale(record)) {
           accendiWebglTerminale(record);
           collegaWsScheda(record);
           requestAnimationFrame(() => {
@@ -23193,12 +23245,6 @@ ${testo3}` : testo3;
             chiudiBatchTool();
             let guida = "";
             if (evento.code === "giri-esauriti") {
-              const tetto = tettoGiriDaMessaggio(evento.message);
-              if (tetto) {
-                state.realSession.tettoGiriDichiarato = tetto;
-                aggiornaContatoreUsage();
-                aggiornaComposerUsage(state.realSession.usage);
-              }
               const riassunto = riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi);
               guida = ` — ${testoDiagnosiGiri(riassunto)}. ${consiglioDaRiassunto(riassunto)} Il prossimo messaggio continuerà questo task nella stessa sessione. Premi «Nuova» per iniziare un task separato.`;
             }
@@ -26042,6 +26088,114 @@ ${blocchi.join("\n\n")}` : testa;
         }
         apriMenuAllega($2("#capabilityBtn"));
       });
+      collegaTerminaleInBasso();
+      const ALTEZZA_TERMINALE_CHIAVE = "talos.harness.desktop.terminale-basso.altezza";
+      const ALTEZZA_TERMINALE_MIN = 120;
+      function tettoAltezzaTerminale() {
+        const schermo = $2("#schermoChat");
+        const disponibile = schermo?.getBoundingClientRect().height || window.innerHeight;
+        return Math.max(ALTEZZA_TERMINALE_MIN, Math.round(disponibile * 0.66));
+      }
+      function leggiAltezzaTerminale() {
+        try {
+          const salvata = Number.parseInt(window.localStorage.getItem(ALTEZZA_TERMINALE_CHIAVE) ?? "", 10);
+          if (Number.isFinite(salvata) && salvata >= ALTEZZA_TERMINALE_MIN) return Math.min(salvata, tettoAltezzaTerminale());
+        } catch {
+        }
+        return null;
+      }
+      function scriviAltezzaTerminale(px) {
+        try {
+          window.localStorage.setItem(ALTEZZA_TERMINALE_CHIAVE, String(Math.round(px)));
+        } catch {
+        }
+      }
+      function applicaAltezzaTerminale(pannello, px) {
+        const limitata = Math.min(Math.max(Math.round(px), ALTEZZA_TERMINALE_MIN), tettoAltezzaTerminale());
+        pannello.style.setProperty("--talos-terminale-h", limitata + "px");
+        return limitata;
+      }
+      function collegaTerminaleInBasso() {
+        const pill = $2("#pillTerminale");
+        const pannello = $2("#pannelloTerminale");
+        const ospite = pannello ? pannello.querySelector("[data-ospite-terminale]") : null;
+        const maniglia = pannello ? pannello.querySelector("[data-maniglia-terminale]") : null;
+        if (!pill || !pannello || !ospite || !maniglia) return;
+        if (pannello.dataset.terminaleCollegato) return;
+        pannello.dataset.terminaleCollegato = "si";
+        const casaDelTerminale = () => $2("#schermoTerminale .talos-terminal");
+        let casa = null;
+        function prendiIlTerminale() {
+          const pane = casaDelTerminale() || ospite.querySelector(".talos-terminal");
+          if (!pane) {
+            toast("Terminale non disponibile", "La vista Terminale non è ancora montata in questa sessione.");
+            return;
+          }
+          if (!casa) casa = pane.parentElement;
+          if (pane.parentElement !== ospite) ospite.append(pane);
+          const salvata = leggiAltezzaTerminale();
+          if (salvata) applicaAltezzaTerminale(pannello, salvata);
+          const stato = statoTerminale();
+          if (!pane.querySelector(".talos-terminal__mount")) void nuovaSchedaTerminale();
+          else if (stato?.attiva) attivaSchedaTerminale(stato.attiva);
+          requestAnimationFrame(() => {
+            const dentro = pane.querySelector("textarea, .xterm-helper-textarea");
+            if (dentro) dentro.focus();
+          });
+        }
+        function riportaACasa() {
+          const pane = ospite.querySelector(".talos-terminal");
+          if (pane && casa) casa.append(pane);
+        }
+        new MutationObserver(() => {
+          if (pannello.hidden) riportaACasa();
+          else prendiIlTerminale();
+        }).observe(pannello, { attributes: true, attributeFilter: ["hidden"] });
+        pannello.addEventListener("keydown", (evento) => {
+          if (evento.key !== "Escape") return;
+          evento.stopPropagation();
+          $2("#pillTerminale")?.click();
+        });
+        let trascino = null;
+        maniglia.addEventListener("pointerdown", (evento) => {
+          trascino = { y: evento.clientY, altezza: pannello.getBoundingClientRect().height };
+          maniglia.setPointerCapture(evento.pointerId);
+          maniglia.dataset.trascino = "si";
+          evento.preventDefault();
+        });
+        maniglia.addEventListener("pointermove", (evento) => {
+          if (!trascino) return;
+          applicaAltezzaTerminale(pannello, trascino.altezza + (trascino.y - evento.clientY));
+        });
+        const fineTrascino = (evento) => {
+          if (!trascino) return;
+          trascino = null;
+          delete maniglia.dataset.trascino;
+          try {
+            maniglia.releasePointerCapture(evento.pointerId);
+          } catch {
+          }
+          scriviAltezzaTerminale(pannello.getBoundingClientRect().height);
+        };
+        maniglia.addEventListener("pointerup", fineTrascino);
+        maniglia.addEventListener("pointercancel", fineTrascino);
+        maniglia.addEventListener("keydown", (evento) => {
+          const passo = evento.shiftKey ? 48 : 16;
+          const ora = pannello.getBoundingClientRect().height;
+          let nuova = null;
+          if (evento.key === "ArrowUp") nuova = ora + passo;
+          else if (evento.key === "ArrowDown") nuova = ora - passo;
+          else if (evento.key === "Home") nuova = tettoAltezzaTerminale();
+          else if (evento.key === "End") nuova = ALTEZZA_TERMINALE_MIN;
+          if (nuova === null) return;
+          evento.preventDefault();
+          scriviAltezzaTerminale(applicaAltezzaTerminale(pannello, nuova));
+        });
+        window.addEventListener("resize", () => {
+          if (pannello.hidden) return;
+          applicaAltezzaTerminale(pannello, pannello.getBoundingClientRect().height);
+        });
+      }
       ROOT().addEventListener("click", (evento) => {
         if (!evento.target.closest?.("#menuAllega, #capabilityBtn")) chiudiMenuAllega();
       });

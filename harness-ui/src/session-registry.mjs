@@ -1682,6 +1682,74 @@ export function createSessionRegistry({
     }
   }
 
+  /*
+   * ⭐⭐⭐ BC-07 (11/09/2026) — I TEMPI DI UN GIRO, SU DISCO. Una riga per giro, non un campo per evento.
+   *
+   * Owner: «dobbiamo indagare perché ci sta così tanto a rispondere usando i modelli api». La prima
+   * indagine è stata possibile solo sui TOKEN, perché il tempo non esisteva: `metricheDaEventi`
+   * calcola già il tempo al primo token, ma dagli istanti in `voce.istantiEvento`, che vivono SOLO
+   * IN MEMORIA — la doc di `broadcast` lo dichiara apertamente, e la conseguenza è che di latenza
+   * si può parlare solo per aneddoti: nessuna sessione passata è misurabile, e ogni indagine va
+   * rifatta a mano su una sessione ancora viva.
+   *
+   * ⛔ L'obiezione che aveva tenuto i tempi fuori dal disco è SERIA e resta valida: un campo in più
+   *   sull'oggetto evento finirebbe in OGNI riga di OGNI sessione (22.095 righe, nella sessione che
+   *   ha aperto questo debito) e sarebbe una seconda fonte di verità dentro gli eventi AG-UI.
+   * ⇒ Qui non si tocca nessun evento: si scrive UN record `tipo:'tempi-giro'` alla fine del giro,
+   *   accanto a `messaggi-finali` e `impostazioni-sessione` che già vivono lì. Nella stessa
+   *   sessione: **una riga per giro invece di un campo su 22.095**.
+   *
+   * ⭐ COSA ci va dentro, e perché non solo il TTFT. Ricerca 11/09/2026 — ClickHouse «LLM inference
+   *   latency: TTFT, tokens per second, and what to measure», Braintrust «LLM call observability»,
+   *   groundcover «AI Agent Observability»:
+   *    · il TTFT da solo non basta: serve anche la DURATA TOTALE e i token in uscita, perché sono
+   *      due fenomeni diversi (quanto ci mette a partire, quanto ci mette a scrivere);
+   *    · e soprattutto i TOKEN IN INGRESSO di quel giro, perché — parole loro — «una regressione
+   *      del TTFT spesso si scopre essere un prompt che è cresciuto». È esattamente il nostro caso
+   *      (~17k token di elenco file): senza il denominatore, il tempo non è interpretabile.
+   *    · le distribuzioni si leggono a p50/p95/p99, mai a media — ma quello è un lavoro del
+   *      lettore, non di chi scrive: qui si registrano i fatti grezzi di un giro solo.
+   *
+   * ⛔ Non lancia mai e non blocca niente: un giro non si rompe perché una misura non si è scritta.
+   *   Stessa disciplina della copia in Libreria e di `persistiMessaggiFinali` qui sopra.
+   */
+  function persistiTempiDelGiro(voce, versioneGiro) {
+    if (!cartellaStore || !voce?.sessionId) return;
+    try {
+      const metriche = metricheDaEventi(voce.eventi, { istanti: voce.istantiEvento ?? null, adesso: clock().getTime() });
+      /*
+       * ⛔ L'usage si LEGGE DAGLI EVENTI (`usageDaEventi`), non da un campo sulla voce: è la
+       *   stessa disciplina già dichiarata in cima al file — si legge ciò che è persistito, non si
+       *   tiene una seconda copia. La prima stesura leggeva `voce.usage`, che non esiste: il test
+       *   l'ha trovato subito (tokenDentro `null` invece di 29.148).
+       */
+      const usage = usageDaEventi(voce.eventi);
+      /*
+       * ⛔ Se non c'è NIENTE da dire non si scrive una riga di zeri: «non misurato» e «misurato e
+       *   vale zero» sono fatti diversi, ed è la stessa disciplina di `usage` e del ledger.
+       */
+      if (!metriche?.registrato || metriche.primoToken?.ms === null) return;
+      registraRigaSyncFn({
+        cartellaStore,
+        sessionId: voce.sessionId,
+        record: {
+          tipo: 'tempi-giro',
+          versioneGiro,
+          modello: voce.modelId ?? voce.modello ?? null,
+          primoTokenMs: metriche.primoToken.ms,
+          primoVisibileMs: metriche.primoToken.msPrimoVisibile ?? null,
+          tipoPrimoToken: metriche.primoToken.tipo ?? null,
+          giriDelGiro: usage?.giri ?? null,
+          tokenDentro: usage?.prompt_tokens ?? null,
+          tokenFuori: usage?.completion_tokens ?? null,
+          tokenDaCache: usage?.cached_tokens ?? null,
+        },
+      });
+    } catch (errore) {
+      console.error(`[session-store] tempi del giro non scritti per ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore);
+    }
+  }
+
   /**
    * Proiezione per il modello, senza riscrivere la storia originale.
    * Ricerca 08/09/2026: https://github.com/ggml-org/llama.cpp/issues/25510
@@ -2714,6 +2782,8 @@ export function createSessionRegistry({
        * a questo punto, prima che questo file venisse scritto su disco.
        */
       persistiMessaggiFinali(voce, versioneGiro);
+      /* ⭐ BC-07 (11/09) — e i TEMPI di questo giro, una riga sola: vedi `persistiTempiDelGiro`. */
+      persistiTempiDelGiro(voce, versioneGiro);
       // ⭐⭐⭐ FASE C (28/8) — per il foglio "Albero sessione": lo stato reale di OGNI sessione che conclude, non solo delle figlie (inerte/ignorato per una sessione senza padre).
       voce.esitoDelega = risultato?.esito?.comeFinita ?? (risultato?.ok === false ? 'fallito' : null);
       const redirect = voce.reindirizzamentoPendente;
