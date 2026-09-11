@@ -642,13 +642,41 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
   return {
     /** @param {{schede?:Array, attiva?:string|null, note?:object, richiesta?:object|null}} nuovo */
     aggiorna(nuovo) {
-      /* ⛔ Cambiando scheda si RIPRENDE la scelta fatta su quella scheda, non si butta: ognuna
-         ricorda la sua, e chi non ne ha una torna al comportamento automatico. */
+      /*
+       * ⛔⛔⛔ 11/09/2026, owner: «quando faccio una ricerca web nel browser integrato, navigando
+       *   nelle schede mi appare la visuale codice sorgente. Voglio che di default ci sia sempre
+       *   la visuale a pagina, quella renderizzata, sempre, anche se cambio scheda mentre sono in
+       *   modalità sorgente. Devo comunque poter passare al sorgente, ma la navigazione deve
+       *   essere sempre in modalità pagina».
+       *
+       * ⛔ Il difetto era proprio queste righe, nella forma che avevano prima: si riprendeva la
+       *   scelta della scheda di DESTINAZIONE, ma quando quella scheda non ne aveva una (`suo`
+       *   null) non si toccava `stato.modo` — che restava quello della scheda di PARTENZA. Cioè:
+       *   sorgente sulla scheda A, passo alla scheda B mai toccata, e B nasce in sorgente. Il modo
+       *   non era «di quella scheda»: era una variabile sola che si trascinava dietro l'ultimo
+       *   valore, e la mappa `modiScelti` copriva solo metà dei casi.
+       *
+       * ⇒ Il modo si RIAZZERA a «pagina» a ogni cambio scheda, sempre — anche se su questa scheda
+       *   avevo scelto il sorgente poco fa. Il sorgente resta una scelta viva finché resti lì, mai
+       *   uno stato che segue la navigazione: è la stessa cosa che fa un browser vero, dove
+       *   `view-source:` è un'altra pagina e non una modalità appiccicata alla sessione (MDN /
+       *   textslashplain «View-Source», letto l'11/09/2026 — la vista sorgente è un documento a
+       *   parte, non un interruttore globale).
+       *
+       * ⛔ `modoChiesto` torna a `null`, NON a 'pagina': non è la stessa cosa. Una richiesta
+       *   esplicita di «Pagina» disattiva il ripiego automatico al testo (vedi
+       *   `corniceDellaLettura`), e su un sito che vieta la cornice questo lascerebbe una cornice
+       *   vuota al posto del testo letto dall'agente — cioè peggio del difetto che si sta curando.
+       *   Azzerandolo, il ripiego resta libero di scattare dove serve davvero.
+       * ⭐ `modiScelti` resta, ma solo per quello che porta ancora informazione: una scheda che
+       *   aveva chiesto «Pagina» su un sito non incorniciabile va riaperta col browser pilotato
+       *   (la cura dell'08/09, poco sopra in `renderizza`). Una scelta «testo» invece non
+       *   sopravvive più al cambio scheda, ed è esattamente ciò che l'owner ha chiesto.
+       */
       if (nuovo && 'attiva' in nuovo && nuovo.attiva !== stato.attiva) {
         stato.riaperte.delete(nuovo.attiva); // tornandoci si puo' riaprire di nuovo
-        const suo = stato.modiScelti[nuovo.attiva] || null;
-        stato.modoChiesto = suo;
-        if (suo) stato.modo = suo;
+        stato.modo = 'pagina';
+        stato.modoChiesto = null;
       }
       stato = { ...stato, ...nuovo }; if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false; renderizza();
     },
