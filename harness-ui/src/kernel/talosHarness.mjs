@@ -62,6 +62,16 @@ import { imageMessageContent } from '../chat-image-attachments.mjs'
  * che la allowlist di `cerca` era. */
 import { ESTENSIONI_ESCLUSE_PREDEFINITE } from '../elenco-profondo.mjs'
 import { creaFiltroGitignore } from '../gitignore-elenco.mjs'
+/*
+ * ⛔ L1 (11/09/2026) — TRE costanti pure, non una dipendenza: `CARTELLA_RICERCA`/`NOME_RAPPORTO`
+ * sono il posto dove vive il rapporto di una ricerca, e `idRicercaValido` la forma di un id.
+ * Importate invece che ricopiate per la ragione di sempre: chi SCRIVE il rapporto (questo file) e
+ * chi lo RILEGGE (`research-orchestrator.mjs`) devono usare lo stesso percorso, e due stringhe
+ * scritte a mano in due file divergono. `research-store.mjs` non importa niente oltre
+ * `node:fs`/`node:path`, quindi il kernel resta senza dipendenze esterne — stesso precedente di
+ * `elenco-profondo.mjs`/`gitignore-elenco.mjs` qui sopra.
+ */
+import { CARTELLA_RICERCA, NOME_RAPPORTO, idRicercaValido } from '../research-store.mjs'
 import { discoNode, fontiDaDisco, cancelloSemantico, libreriaStandard }
     from './dist/kernelPerIlBanco.js'
 
@@ -2317,6 +2327,39 @@ const ATTREZZI_ESTESI = [
         },
     },
     /*
+     * ⭐⭐⭐ L1 (11/09/2026) — `research_deposit`: LA CONSEGNA È UN ATTREZZO, non un effetto
+     * collaterale dell'ultimo messaggio.
+     *
+     * ⛔ Zero parametri di percorso, e non per comodità: il percorso lo costruisce il dispatch
+     *   da `task.ricercaId` (dato del SERVER, non del modello) — vedi il ramo più sotto. Un
+     *   attrezzo che chiedesse «dove» al modello riaprirebbe esattamente il buco che il livello
+     *   `'ricerca'` chiude.
+     *
+     * ⛔ La descrizione dice cosa il rapporto DEVE contenere (titolo, affermazioni, una sezione
+     *   di fonti con gli URL veri) perché è l'unico posto in cui il modello può leggerlo PRIMA
+     *   di provarci — la stessa lezione già pagata su `document_create`/`mode` l'11/09: «uno
+     *   strumento che non nomina un campo, per il modello, non ce l'ha». Il cancello di
+     *   consegna (`research-store.rileggiRapportoMinimo`) controlla esattamente queste tre cose:
+     *   un cancello che chiede una forma mai dichiarata è una trappola, non una difesa.
+     */
+    {
+        name: 'research_deposit',
+        description: 'Deposit the final report of THIS deep research. Call it once, when the '
+            + 'investigation is over: the text you pass here is the permanent report — the one the '
+            + 'user will read and the one that gets saved. Your chat message is not the report and '
+            + 'is never saved as one. Write proper Markdown: a "# " title, the findings as prose, '
+            + 'and a "## Sources" section listing the full http(s) URLs you actually opened. A '
+            + 'deposit without a title, without findings or without at least one source is rejected '
+            + 'and the research is recorded as having produced no report.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                testo: { type: 'string', description: 'The complete report, as Markdown. Self-contained: do not refer to earlier messages.' },
+            },
+            required: ['testo'],
+        },
+    },
+    /*
      * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge, "fetta
      * onesta". Porto diretto del CONTRATTO di `tool_create` mobile
      * (`forgeCreateTool.ts`), con lo schema del flow riscritto per un
@@ -4306,6 +4349,15 @@ const AZIONI_MOBILE_PER_ATTREZZO = {
     research_resume: { action: 'write', requiredActions: ['write', 'outbound'] },
     research_cancel: { action: 'write', requiredActions: ['write'] },
     research_delete: { action: 'write', requiredActions: ['write'] },
+    /*
+     * ⭐ L1 (11/09/2026) — `research_deposit`. NESSUN omologo mobile da cui copiare: il mobile
+     * non ha questo attrezzo perché il suo motore event-sourced deposita il rapporto da sé,
+     * senza passare dal modello (`researchRun.ts`). Qui l'azione è `'write'` e basta: il
+     * deposito scrive UN file dentro la cartella della ricerca, non esce verso la rete
+     * (nessun 'outbound' — la rete l'ha già usata `web_search`/`naviga`, e attribuirla anche
+     * qui gonfierebbe la trifecta con una trasmissione che non avviene).
+     */
+    research_deposit: { action: 'write', requiredActions: ['write'] },
     // ⭐ FASE N, nono sistema (30/8) — omologo diretto, toolControlCatalog.ts riga 218 (letto alla fonte): ['write'] da solo.
     tool_create: { action: 'write', requiredActions: ['write'] },
 }
@@ -4448,6 +4500,17 @@ export const SICUREZZA_PER_ATTREZZO = {
     research_cancel: { risk: 'R1', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     // research_delete: R2 — irreversibile (come library_delete), non per canTransmit (resta false: una cancellazione locale non trasmette).
     research_delete: { risk: 'R2', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    /*
+     * ⭐ L1 (11/09/2026) — `research_deposit`: R1 come `scrivi`/`document_create` (scrive un
+     * file dentro il workspace, reversibile, portata di un file solo).
+     * ⛔ `readsUntrustedContent: true` — ed è il campo che conta, non il rischio: il testo del
+     *   rapporto è la SINTESI di pagine web aperte con `naviga`, cioè contenuto non attendibile
+     *   per definizione. È l'unico attrezzo di scrittura del kernel per cui questo è vero
+     *   sempre e per costruzione. `readsPrivateData:false`: il rapporto nasce dal web, non dal
+     *   workspace — se un giorno leggerà anche file del progetto, questo campo cambia con lui.
+     *   `canTransmit:false`: deposita su disco, non manda niente fuori.
+     */
+    research_deposit: { risk: 'R1', readsPrivateData: false, readsUntrustedContent: true, canTransmit: false },
     // ⭐ FASE N, nono e ultimo sistema (30/8) — omologo diretto, securityCatalog.ts riga 102 (letto alla fonte): R2, nessuna delle tre flag (crea un manifesto, non tocca dati privati/contenuto non fidato/rete — l'esecuzione VERA di un tool forgiato, quando accade, eredita la sicurezza delle SUE capability, non di tool_create).
     tool_create: { risk: 'R2', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     /*
@@ -4861,8 +4924,33 @@ export function creaRicevutaOperazione({
  * l'HTML del mockup, non presunto — non una matrice per-attrezzo
  * (quella è `permessiPerAttrezzo`, un'interfaccia diversa e separata).
  *
- * @typedef {'lettura'|'scrittura-area'|'su-richiesta'|'accesso-pieno'} LivelloAccessoHarness
+ * ⭐⭐⭐ L1, 11/09/2026 — IL QUINTO LIVELLO: `'ricerca'`. Nato da un guasto riprodotto sui dati
+ * veri, non da una simmetria: la ricerca approfondita partiva `'lettura'` (scritto a mano in
+ * `research-orchestrator.mjs:170`, come difesa in profondità, ed era un ragionamento giusto)
+ * — ma una sessione che non può scrivere NON PUÒ CONSEGNARE. I quattro livelli di prima non
+ * avevano una parola per «può depositare il proprio rapporto, e nient'altro»: `'lettura'` nega
+ * tutto, `'scrittura-area'` permette `scrivi` su tutto il workspace. Fra i due non c'era niente.
+ *
+ * ⛔ Non è un permesso «più largo di lettura»: è un permesso DIVERSO, largo un file solo. Il
+ *   confronto giusto non è con `scrittura-area` (che apre l'intero workspace) ma con
+ *   `ExitPlanMode` di Claude Code — l'unica via d'uscita da una modalità di sola lettura è un
+ *   attrezzo dedicato, mai un allargamento del livello. (Letto nel clone, `claude-code/
+ *   CHANGELOG.md`: righe 1172, 1538, 2638 documentano tre BYPASS diversi della plan mode, tutti
+ *   al cancello di chiamata — la prova che il cancello è il posto giusto e anche il più fragile.)
+ *
+ * ⭐ Vincolo dalla ricerca, fonte + data: «CAPMAS: Capability-Based Delegation of Privileges in
+ *   Multi-Agent Systems» (arXiv:2609.06500, 06/09/2026) chiede la RIDUZIONE MONOTONA del
+ *   privilegio lungo la delega: una figlia non deve mai superare la madre. Qui vale per
+ *   costruzione e non per promessa — `research_start` è esso stesso un'azione `write`, quindi
+ *   una madre `'lettura'` non può nemmeno avviare una ricerca (provato al contrario nei test):
+ *   non esiste un percorso in cui `'ricerca'` sia un'ESCALATION.
+ *
+ * @typedef {'lettura'|'ricerca'|'scrittura-area'|'su-richiesta'|'accesso-pieno'} LivelloAccessoHarness
  *   'lettura'         — esiste da prima: nessuna scrittura/comando/documento.
+ *   'ricerca'         — NUOVO (L1, 11/09): come `'lettura'` per TUTTO, tranne
+ *                        `research_deposit`, e solo se il percorso risolve dentro
+ *                        `.harness-ui-research/<id>/` della ricerca stessa. In UI si mostra
+ *                        «Ricerca approfondita», mai la parola tecnica.
  *   'scrittura-area'  — NUOVO: scrivi consentito SOLO se il percorso
  *                        risolve dentro `cartella`; `shell`/`document_create`
  *                        restano negati — un comando o un documento
@@ -4897,6 +4985,64 @@ export function creaRicevutaOperazione({
  * nome, quindi il tool non è mai offerto al suo modello.
  */
 const ATTREZZI_SEMPRE_DA_CONFERMARE = ['library_context_policy_update']
+
+/**
+ * ⭐⭐⭐ L1 §6.4, 11/09/2026 — LA LISTA DEGLI ATTREZZI SI FILTRA SUL LIVELLO.
+ *
+ * Fino a oggi la lista era la STESSA per ogni sessione, e il commento che lo dichiarava
+ * (`session-registry.mjs:1436-1455`) aveva una ragione buona: «è `verificaPermessoScrittura`,
+ * non questa lista, a decidere se una chiamata passa». Resta vero — ed è il motivo per cui il
+ * cancello sopra non cambia: **il confine di sicurezza è lì, non qui.**
+ *
+ * ⛔ Ma «il cancello decide» non implica «offrire tutto è gratis», e la corsa `d2a453a8`
+ *   dell'11/09 misura il costo: la prima `document_create` è la chiamata **652 su 979 eventi**,
+ *   e da lì in poi la sessione ha smesso di fare ricerca e ha cominciato a negoziare con
+ *   l'utente su come salvare un file che non poteva salvare. Un attrezzo mai offerto non si
+ *   chiama mai.
+ *
+ * ⭐ Ricerca web PRIMA di scrivere (fonte + data):
+ *   - «When Lower Privileges Suffice» (arXiv:2606.20023, 18/06/2026): la scelta di un attrezzo
+ *     a privilegio più alto quando ne basterebbe uno più basso è comune fra gli agenti
+ *     mainstream ed è **amplificata dai fallimenti transitori** — cioè proprio da un REFUSED.
+ *     Gli autori misurano che i controlli a livello di PROMPT danno «only limited mitigation
+ *     under transient failures»: scrivere «non scrivere file» nella consegna (cosa che
+ *     `promptRicerca` già faceva) non basta, e non bastava infatti.
+ *   - «How Many Tools Should an LLM Agent See? A Chance-Corrected Answer» (arXiv:2605.24660v2,
+ *     23/05/2026): su ToolBench, l'accuratezza di Claude passa da **87,1% con una rosa fissa
+ *     di 5** a **93,1% con 7 scelti**: il numero conta, ma conta *quali*, non «meno è meglio».
+ *     ⇒ qui non si taglia a caso: si tolgono SOLO i nomi che il cancello rifiuterebbe comunque.
+ *   - «Agent Safety Is Action Alignment» (arXiv:2606.28739, 27/06/2026): il minimo privilegio va
+ *     imposto «outside the model at the action boundary». ⇒ questo filtro NON sostituisce il
+ *     cancello, e i test lo provano offrendo l'attrezzo a forza e verificando che venga negato
+ *     lo stesso.
+ *
+ * ⛔ La lista dei negati NON è scritta a mano: è `AZIONI_MOBILE_PER_ATTREZZO`, cioè l'elenco
+ *   degli attrezzi che passano dal cancello. Una seconda lista scritta a mano diverge — è già
+ *   successo in questo repo. Chi aggiunge un attrezzo mutante lo aggiunge lì, e questo filtro
+ *   lo segue da solo.
+ *
+ * ⛔ Un override per-attrezzo `'sempre'`/`'chiedi'` VINCE sul livello dentro il cancello (vedi
+ *   i due `return` in cima a `verificaPermessoScrittura`): quell'attrezzo resta quindi
+ *   OFFERTO, altrimenti un permesso concesso dalla persona diventerebbe irraggiungibile.
+ *
+ * ⛔ TALOS-BANCO non passa `livelloAccesso` (né `strumentiEstesi` con questi nomi): con
+ *   `livelloAccesso` assente questa funzione torna un insieme VUOTO — comportamento
+ *   bit-per-bit quello di prima. Provato con un test dedicato, non dichiarato qui.
+ *
+ * @returns {Set<string>} i nomi da NON offrire al modello per questo livello.
+ */
+export function attrezziNegatiDalLivello({ livelloAccesso, permessiPerAttrezzo } = {}) {
+    if (livelloAccesso !== 'lettura' && livelloAccesso !== 'ricerca') return new Set()
+    const negati = new Set()
+    for (const nome of Object.keys(AZIONI_MOBILE_PER_ATTREZZO)) {
+        // L'unica scrittura che il livello `'ricerca'` ammette: la propria consegna.
+        if (livelloAccesso === 'ricerca' && nome === 'research_deposit') continue
+        const override = permessiPerAttrezzo?.[nome]
+        if (override === 'sempre' || override === 'chiedi') continue
+        negati.add(nome)
+    }
+    return negati
+}
 
 async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena = CATENA_VUOTA, segnaleStop } = {}) {
     const override = permessiPerAttrezzo?.[azione.tipo]
@@ -4946,6 +5092,40 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
     }
     if (!haOverride && livelloAccesso === 'lettura') {
         return { consentito: false, via: 'livello-lettura', motivo: 'la sessione è in sola lettura: nessuna scrittura, comando o documento è permesso in questo momento.' }
+    }
+    /*
+     * ⭐⭐⭐ L1, 11/09/2026 — il livello `'ricerca'`. Stessa FORMA di `livello-scrittura-area`
+     * qui sotto (un attrezzo solo, un controllo di percorso risolto), radice diversa: non
+     * `cartella` ma la cartella della ricerca stessa, `<cartella>/.harness-ui-research/<id>/`.
+     *
+     * ⛔ `azione.radice` la calcola il CHIAMANTE dentro il dispatch (dove `task.ricercaId` è in
+     *   scope), mai il modello: `research_deposit` non ha un parametro di percorso, per
+     *   costruzione. Il controllo qui sotto è la SECONDA difesa sullo stesso confine — se un
+     *   giorno qualcuno esporrà un percorso al modello, il cancello c'è già e i test lo provano
+     *   con un id ostile (`../../altro`).
+     *
+     * ⛔ Radice assente ⇒ NEGATO, mai permesso: è lo stesso fail-closed di `scrittura-area`
+     *   senza `cartella`. Una ricerca senza una cartella propria non ha un posto dove
+     *   depositare, e «non so dove» non è «ovunque».
+     */
+    if (!haOverride && livelloAccesso === 'ricerca') {
+        if (azione.tipo !== 'research_deposit') {
+            return {
+                consentito: false,
+                via: 'livello-ricerca',
+                motivo: `questa è una ricerca approfondita: può leggere, cercare e navigare, ma l'unica scrittura permessa è il deposito del proprio rapporto con "research_deposit" — "${azione.tipo}" resta negato.`,
+            }
+        }
+        const radice = azione.radice ? resolve(azione.radice) : null
+        const risolto = radice && azione.percorso ? resolve(azione.percorso) : null
+        const dentro = radice && risolto && (risolto === radice || risolto.startsWith(radice + sep))
+        if (!dentro) {
+            return {
+                consentito: false,
+                via: 'livello-ricerca',
+                motivo: `il rapporto di una ricerca si deposita solo nella cartella di quella ricerca: "${azione.percorso ?? '(nessun percorso)'}" non ci risolve dentro.`,
+            }
+        }
     }
     if (!haOverride && livelloAccesso === 'scrittura-area') {
         if (azione.tipo !== 'scrivi') {
@@ -5083,7 +5263,7 @@ const SOGLIA_SCRITTURE_SENZA_PROVA = 3
 // ⭐ FASE N, quarto sistema (30/8) — le 3 mutazioni Notes si aggiungono, stesso trattamento.
 // ⭐ FASE N, quinto sistema (30/8) — le 4 mutazioni Tasks si aggiungono, stesso trattamento.
 // ⭐ FASE N, sesto sistema (30/8) — le 3 mutazioni Memory si aggiungono, stesso trattamento.
-const AZIONI_MUTANTI_PER_HOOK = ['scrivi', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'tool_create']
+const AZIONI_MUTANTI_PER_HOOK = ['scrivi', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'research_deposit', 'tool_create']
 
 /*
  * ⭐⭐⭐ 29/8 — un asse DIVERSO da `AZIONI_MUTANTI_PER_HOOK` qui sopra, non lo
@@ -5099,7 +5279,7 @@ const AZIONI_MUTANTI_PER_HOOK = ['scrivi', 'shell', 'document_create', 'generate
 // ⭐ FASE N, quarto sistema (30/8) — le 3 mutazioni Notes si aggiungono.
 // ⭐ FASE N, quinto sistema (30/8) — le 4 mutazioni Tasks si aggiungono.
 // ⭐ FASE N, sesto sistema (30/8) — le 3 mutazioni Memory si aggiungono.
-const ATTREZZI_CON_RICEVUTA = ['scrivi', 'prova', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'tool_create']
+const ATTREZZI_CON_RICEVUTA = ['scrivi', 'prova', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'research_deposit', 'tool_create']
 
 /*
  * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge, "fetta onesta"
@@ -5868,9 +6048,20 @@ export async function talosLavora({
      */
     _giriMassimiInterno,
 }) {
-    const attrezziBase = strumentiEstesi?.length
+    /*
+     * ⭐⭐⭐ L1 §6.4 (11/09/2026) — il filtro sul LIVELLO, vedi `attrezziNegatiDalLivello` per il
+     * perché e per le fonti. Vuoto (quindi nessun cambiamento) per ogni livello che non sia
+     * `'lettura'`/`'ricerca'`, e vuoto anche quando `livelloAccesso` è assente — cioè per
+     * TALOS-BANCO, che non lo passa mai: `attrezziBase` resta l'oggetto di prima, identità
+     * inclusa (`negati.size === 0` ⇒ nessun `.filter()`, nessuna copia).
+     */
+    const negatiDalLivello = attrezziNegatiDalLivello({ livelloAccesso, permessiPerAttrezzo })
+    const attrezziBaseGrezzi = strumentiEstesi?.length
         ? [...ATTREZZI_OPENAI, ...ATTREZZI_ESTESI_OPENAI.filter((a) => strumentiEstesi.includes(a.function.name))]
         : ATTREZZI_OPENAI
+    const attrezziBase = negatiDalLivello.size
+        ? attrezziBaseGrezzi.filter((a) => !negatiDalLivello.has(a.function.name))
+        : attrezziBaseGrezzi
     const attrezziMcpOpenAI = toolMcp?.length
         ? toolMcp.map((t) => ({
             type: 'function',
@@ -7509,6 +7700,80 @@ export async function talosLavora({
                             firma, catena,
                         })
                         if (ricevuta.status === 'succeeded') catena = avanzaCatena(catena, SICUREZZA_PER_ATTREZZO.research_delete)
+                        onGiro?.({ giro, tipo: 'ricevuta', ricevuta })
+                    }
+                }
+                /*
+                 * ⭐⭐⭐ L1 (11/09/2026) — `research_deposit`: LA CONSEGNA DI UNA RICERCA.
+                 *
+                 * ⛔ Diverso da tutti gli altri mutanti di FASE N, e la differenza è il punto:
+                 *   non c'è nessun `onXxx(argomenti) => {ok,esito}` iniettato. Questo ramo
+                 *   scrive DA SÉ, con lo stesso `disco` di `scrivi`, per una ragione sola —
+                 *   il percorso non deve poter essere deciso da nessuno che parli col modello.
+                 *   `task.ricercaId` è scritto dal server (`research-orchestrator.avvia`), viaggia
+                 *   dentro il task, sopravvive a un resume perché il task è persistito
+                 *   nell'intestazione della sessione, e il modello non lo vede mai.
+                 *
+                 * ⛔ Le DUE difese sullo stesso confine, entrambe presenti apposta:
+                 *   (1) l'id deve essere un segmento di percorso legittimo (`idRicercaValido`,
+                 *       `research-store.mjs`) — un `../..` non arriva nemmeno al cancello;
+                 *   (2) il cancello risolve percorso e radice e confronta (`livello-ricerca`,
+                 *       `verificaPermessoScrittura`) — anche se un giorno la (1) venisse allentata.
+                 *   La ricerca lo chiede esplicitamente: «Agent Safety Is Action Alignment»
+                 *   (arXiv:2606.28739, 27/06/2026) — il minimo privilegio si impone «outside the
+                 *   model at the action boundary». Il filtro della lista NON è questa difesa.
+                 */
+                else if (nome === 'research_deposit') {
+                    const ricercaId = task?.ricercaId
+                    const idBuono = idRicercaValido(ricercaId)
+                    // ⛔ Percorso RELATIVO per `disco` (che è radicato su `cartella`), ASSOLUTO per il cancello: il cancello confronta percorsi risolti, non pezzi.
+                    const percorsoRelativo = idBuono ? join(CARTELLA_RICERCA, ricercaId, NOME_RAPPORTO) : null
+                    const radiceRicerca = idBuono ? join(cartella, CARTELLA_RICERCA, ricercaId) : null
+                    const percorsoAssoluto = idBuono ? join(cartella, percorsoRelativo) : null
+                    const permesso = await verificaPermessoScrittura(
+                        { tipo: 'research_deposit', percorso: percorsoAssoluto, radice: radiceRicerca },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
+                    )
+                    esitoPermessoPerRicevuta = permesso
+                    const testoRapporto = typeof argomenti.testo === 'string' ? argomenti.testo : ''
+                    let rapportoScritto = null
+                    if (!permesso.consentito) {
+                        esito = `REFUSED. ${permesso.motivo} No report was deposited.`
+                    }
+                    // ⛔ Onesto come `document_create` senza `onDocumento`: questo attrezzo esiste solo dentro una sessione di ricerca. Fuori non c'è un posto dove depositare, e inventarne uno sarebbe la bugia.
+                    else if (!idBuono) {
+                        esito = 'research_deposit is only available inside a deep research session: this session is not one, so there is no research folder to deposit into.'
+                    }
+                    else if (!testoRapporto.trim()) {
+                        esito = 'REFUSED. Empty report: nothing was deposited. Write the full report text in `testo`.'
+                    }
+                    else {
+                        try {
+                            await disco.scrivi(percorsoRelativo, testoRapporto)
+                            rapportoScritto = testoRapporto
+                            /*
+                             * ⛔ Il messaggio dice DOVE e QUANTO, non «fatto»: il modello deve poter
+                             * distinguere un deposito riuscito da uno che non è mai avvenuto, senza
+                             * ri-chiamare l'attrezzo. E dice esplicitamente di non ripeterlo: la
+                             * ripetizione identica è il modo in cui i giri si esauriscono.
+                             */
+                            esito = `deposited: the report is saved as ${percorsoRelativo} (${Buffer.byteLength(testoRapporto, 'utf8')} bytes). `
+                                + 'This is now the permanent report for this research. Do not deposit it again; finish with a short message for the user.'
+                        }
+                        catch (rotto) {
+                            esito = `research_deposit failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                        }
+                    }
+                    ricevutaEmessa = true
+                    {
+                        const ricevuta = creaRicevutaOperazione({
+                            // ⭐ `contenutoScritto` VERO, a differenza di document_create/generate_image: qui il contenuto lo abbiamo in mano, quindi l'hash di integrità della ricevuta è reale invece che `null`.
+                            azione: { tipo: 'research_deposit', percorso: percorsoAssoluto }, toolCallId: c.id,
+                            esitoPermesso: permesso, contenutoScritto: rapportoScritto,
+                            esecuzioneFallita: permesso.consentito && idBuono && testoRapporto.trim().length > 0 && rapportoScritto === null,
+                            firma, catena,
+                        })
+                        if (ricevuta.status === 'succeeded') catena = avanzaCatena(catena, SICUREZZA_PER_ATTREZZO.research_deposit)
                         onGiro?.({ giro, tipo: 'ricevuta', ricevuta })
                     }
                 }
