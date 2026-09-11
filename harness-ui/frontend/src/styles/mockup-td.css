@@ -506,3 +506,82 @@ dialog.td-modal:has(.td-theme-studio) { width: min(1120px, calc(100vw - 40px)); 
 .td-scope .td-detail-body .td-prosa-rapporto h2 { font: 550 18px/1.35 var(--talos-font-display); letter-spacing: -.02em; max-width: none; margin: 22px 0 8px; text-wrap: pretty; }
 .td-scope .td-detail-body .td-prosa-rapporto h3 { font-size: 15px; font-weight: 550; letter-spacing: -.01em; margin: 20px 0 6px; color: var(--talos-text); }
 .td-scope .td-detail-body .td-prosa-rapporto h4 { font-size: 13px; font-weight: 550; margin: 16px 0 6px; color: var(--talos-muted); }
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+ * 12/09/2026 — IL MODULO CHE CREA E MODIFICA (lotto CRUD di Note, Attività e Memoria).
+ *
+ * ⛔ IN CODA E CON IL PERCHÉ, perché questo foglio non è mio stanotte: un altro agente lavora
+ *   sulle animazioni in `styles/*`, e mettere mano in mezzo al file sarebbe la «stessa cartella,
+ *   due sessioni» del 26/8. Qui si aggiunge, non si riscrive: nessuna regola di sopra cambia.
+ *
+ * ⛔ NIENTE DI NUOVO DOVE ESISTE GIÀ. `.td-field-label`, `.td-edit-title` e `.td-edit-body` sono le
+ *   classi del MOCKUP (`Talos_Desktop_Final_Mockup_Interattivo.html`, righe 4081-4084), portate coi
+ *   loro valori; la rifinitura della nota — titolo e corpo senza cornice, come un documento invece
+ *   che come un campo — è la sua regola `[data-kind=note]` (4305-4306), qui agganciata alla classe
+ *   del modulo perché il nostro `.td-detail` non scrive `data-kind` (vedi la nota alla sezione 9).
+ *   L'interruttore «Anteprima · Testo» è il `.td-segment .td-viste` che la Ricerca e la Libreria
+ *   hanno già, e la fila dello stato è lo stesso `.td-segment`.
+ *
+ * ⛔ SOLO TOKEN: nessun colore scritto a mano, così il modulo nasce già giusto in chiaro e in scuro
+ *   (regola dell'owner dell'11/09: si guarda SEMPRE con tutti e due i temi).
+ * ════════════════════════════════════════════════════════════════════════════════════════════ */
+
+.td-modulo { display: block; }
+.td-modulo > h2 { margin: 0 0 18px; }
+.td-field-label { display: block; font-size: 12px; font-weight: 500; color: var(--talos-muted); margin: 0 0 8px; }
+.td-edit-title, .td-edit-body, .td-edit-scelta { box-sizing: border-box; width: 100%; padding: 12px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-background); color: var(--talos-text); font: inherit; resize: vertical; }
+.td-edit-title { font-size: 18px; }
+.td-edit-body { min-height: 220px; line-height: 1.8; font-size: 14px; }
+.td-edit-scelta { resize: none; min-height: var(--talos-control-height, 36px); }
+.td-edit-title:focus-visible, .td-edit-body:focus-visible, .td-edit-scelta:focus-visible { outline: var(--talos-focus-width, 2px) solid var(--talos-ring); outline-offset: 2px; }
+.td-edit-title[aria-invalid="true"], .td-edit-body[aria-invalid="true"] { border-color: var(--talos-danger); }
+
+/* La riga sotto il campo: l'errore a sinistra, il conteggio a destra, l'aiuto sotto tutti e due.
+   ⛔ Occupa spazio anche da vuota (`min-height`): senza, la comparsa di un errore faceva saltare in
+   giù tutto il modulo — e un campo che si sposta mentre lo si corregge si perde di vista. */
+.td-field-sotto { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 6px 0 18px; min-height: 16px; font-size: 11px; line-height: 1.45; }
+.td-field-errore { color: var(--talos-danger); flex: 1 1 auto; }
+.td-field-errore[hidden] { display: none; }
+.td-field-conta { color: var(--talos-muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+.td-field-conta[hidden] { display: none; }
+.td-field-aiuto { color: var(--talos-muted); flex: 1 0 100%; }
+.td-modulo-errore { margin: 0 0 4px; color: var(--talos-danger); font-size: 12px; line-height: 1.5; }
+
+/* La nota è un DOCUMENTO, non un modulo: titolo e corpo perdono la cornice e prendono la scala
+   della prosa (mockup 4305-4306). Le altre due restano campi, perché lì si compila. */
+.td-modulo--note .td-edit-title { font: 550 25px/1.4 var(--talos-font-display); letter-spacing: -.02em; background: transparent; border: 0; border-bottom: 1px solid var(--talos-border); border-radius: 0; padding: 10px 0; }
+.td-modulo--note .td-edit-body { font: 15px/1.9 var(--talos-font-ui); background: transparent; border: 0; border-top: 1px solid var(--talos-border); border-radius: 0; padding: 18px 0; min-height: 260px; }
+.td-modulo--note .td-edit-title[aria-invalid="true"], .td-modulo--note .td-edit-body[aria-invalid="true"] { border-color: var(--talos-danger); }
+
+/* Chi ha scritto la voce: una parola nella riga dei metadati, non un titoletto con sotto il valore
+   grezzo del campo. Compare solo quando la GET della voce l'ha portata davvero. */
+.td-origine { color: var(--talos-muted); }
+.td-origine::before { content: ""; display: inline-block; width: 3px; height: 3px; border-radius: 50%; background: var(--talos-border-strong); margin-right: 6px; vertical-align: middle; }
+
+/* Il testo di una nota Markdown, con l'interruttore: stesse misure del contenuto di un file. */
+.td-voce-vista > :first-child { margin-top: 0; }
+.td-voce-vista > .td-prosa-rapporto { max-width: 72ch; }
+.td-voce-modi { margin: 4px 0 16px; }
+
+/* La fila dei tre stati di un'attività: il `.td-segment` di sempre, in un `radiogroup`. */
+.td-stati-attivita { margin: 0 0 4px; }
+.td-stati-attivita button[disabled] { opacity: .55; cursor: default; }
+
+/* ⛔ LA CASELLA DI UN'ATTIVITÀ ADESSO SI PREME. Finché era un segno `aria-hidden` il rientro a
+   sinistra serviva solo sulle fatte; adesso c'è su tutte quelle comandabili, altrimenti la casella
+   finirebbe sopra il testo delle attività da fare. */
+.td-task[data-comandabile="true"] .td-card-open, .td-list .td-task[data-comandabile="true"] .td-card-open { padding-left: 52px; }
+.td-task-adorni { display: contents; }
+.td-task-toggle:not([disabled]) { cursor: pointer; }
+.td-task-toggle:not([disabled]):hover { border-color: var(--talos-accent); }
+.td-task-toggle:focus-visible { outline: var(--talos-focus-width, 2px) solid var(--talos-ring); outline-offset: 3px; }
+
+/* Il pulsante primario della testata («Nuova nota»): il `.td-tools` del mockup esisteva già, qui
+   serve solo che l'icona e la parola stiano insieme. */
+.td-tools [data-nuova] { display: inline-flex; align-items: center; gap: 7px; }
+.td-tools [data-nuova] .i { width: 15px; height: 15px; }
+
+@media (max-width: 900px) {
+  .td-field-sotto { margin-bottom: 14px; }
+  .td-modulo--note .td-edit-title { font-size: 21px; }
+}

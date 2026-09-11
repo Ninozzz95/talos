@@ -1632,6 +1632,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   function disegnaPaginaNote() {
     const schermo = $('#schermoNote');
     if (!schermo) return;
+    const id = state.realSession.id;
     const cerca = $('#cercaNota', schermo)?.value || '';
     montaNote(schermo, noteCaricate, {
       cerca,
@@ -1640,6 +1641,21 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       onCopia: (nota) => copyText(`${nota?.titolo || ''}
 
 ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
+      /*
+       * ⭐ 12/09 — il CRUD della persona. Le stesse quattro iniezioni che la Libreria ha dal 10/09:
+       *   la sessione (senza, nessun indirizzo esiste e i comandi non compaiono), la rete, il menu
+       *   della app e il ricarico dopo una scrittura. `rendiMarkdown` è quella della chat: una
+       *   nota Markdown si legge resa, che è l'ordine dell'owner dell'11/09.
+       */
+      sessionId: id,
+      rete: reteVociDellaPersona(),
+      onMenu: apriMenuAzioniLibreria,
+      onCambiata: () => {
+        void caricaPaginaNote();
+        void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+      },
+      copia: (testo) => copyText(testo, 'Nota copiata'),
+      rendiMarkdown: renderizzaMarkdownSemplice,
     });
   }
 
@@ -1821,7 +1837,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     $('#apriCassettoBarra')?.setAttribute('aria-expanded', 'true');
     // L'entrata da sinistra, con gli stessi tre cancelli del cambio pagina (sistema, impostazione, leva).
     if (!movimentoRidottoDalSistema() && !HOST().classList.contains('interface-motion-off') && typeof barra.animate === 'function') {
-      const durata = motionMilliseconds('--talos-motion-duration-surface-enter', 180);
+      /* ⛔ ×1,3 come nel mockup (`openDrawer`: `motion(…, 'surface-enter', 1.3)`): un pannello che
+         entra da fuori schermo percorre più strada di una superficie che appare sul posto, e alla
+         stessa durata sembra sbattere. Misurato: 180 ms contro 234, scarto del 30%. */
+      const durata = motionMilliseconds('--talos-motion-duration-surface-enter', 180) * 1.3;
       if (durata > 0) barra.animate([{ transform: 'translateX(-100%)' }, { transform: 'none' }], { duration: durata, easing: getComputedStyle(HOST()).getPropertyValue('--talos-motion-ease').trim() || 'cubic-bezier(.2,.7,.2,1)' });
     }
     // Il fuoco entra: la prima voce di navigazione, o la barra stessa se il markup cambia.
@@ -4619,6 +4638,51 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return envelope.data;
   }
 
+  /*
+   * ⭐ 12/09 — LE DUE PORTE CHE MANCAVANO. Fino a ieri la app sapeva solo chiedere (`apiGet`) e
+   * creare (`apiPost`): le rotte nuove di Note, Attività e Memoria vogliono anche `PATCH` (la
+   * modifica parziale, RFC 5789) e `DELETE`. Scritte come una sola funzione con il metodo
+   * dentro, perché erano già due copie della stessa: chi domani ne aggiunge una terza non
+   * ricopia la busta, il controllo di `ok` e il codice d'errore per la terza volta.
+   * ⛔ Il `.code` dell'errore è la sola parte VERA che esce da un 400 (`public-problem.mjs`
+   *   sostituisce il messaggio): è su quello che il modulo sceglie cosa dire, quindi qui si
+   *   conserva com'è invece di appiattirlo su un testo generico.
+   */
+  async function apiScrivi(metodo, pathname, body) {
+    const response = await fetchSorvegliata(API(pathname), {
+      method: metodo,
+      headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    let envelope;
+    try {
+      envelope = await response.json();
+    } catch {
+      const error = new Error('Risposta locale non valida');
+      error.code = 'INTERNAL_ERROR';
+      throw error;
+    }
+    if (!response.ok || !envelope?.ok) {
+      const error = new Error(envelope?.error?.message || 'Richiesta locale non riuscita');
+      error.code = envelope?.error?.code || 'INTERNAL_ERROR';
+      throw error;
+    }
+    return envelope.data;
+  }
+  function apiPatch(pathname, body) { return apiScrivi('PATCH', pathname, body); }
+  function apiDelete(pathname) { return apiScrivi('DELETE', pathname); }
+
+  /**
+   * La rete che le tre sezioni scrivibili ricevono: le stesse funzioni della app, niente indirizzi
+   * ricostruiti altrove. La forma delle rotte la conosce `modulo-voce.js` (`servizioVoci`), che è
+   * anche l'unico posto in cui è scritta.
+   * ⛔ Una FUNZIONE e non una costante: le tre sezioni si disegnano da gestori che possono partire
+   *   prima che questa riga del corpo sia stata eseguita, e una `const` letta in anticipo è un
+   *   errore a runtime — cioè esattamente la classe di guasto che il cancello dell'11/09 ha
+   *   dovuto inseguire nel browser perché build e test erano verdi.
+   */
+  function reteVociDellaPersona() { return { post: apiPost, patch: apiPatch, elimina: apiDelete, leggi: apiGet }; }
+
   /**
    * ⭐ 27/8 — blocco Settings/diagnostica: il pulsante Doctor mostrava
    * SEMPRE "Doctor: Healthy", hardcoded in due punti, indipendentemente
@@ -5248,7 +5312,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const attuale = () => generazioniAttivita.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === 'attivita' && !mount.hidden : mount === $('#tasksListMount', sheetBody));
     function mostra(attivita, { errore = null, caricamento = false } = {}) {
       if (pagina) {
-        aggiornaPaginaAttivita(mount, attivita, { errore, caricamento, onAggiorna: () => caricaPannelloAttivita({ pagina: true }) });
+        /* ⭐ 12/09 — stesse iniezioni della Libreria e delle Note: la sessione, la rete, il menu,
+           il ricarico. Senza `sessionId` nessuna azione di scrittura compare — e non perché sia
+           nascosta, ma perché non esisterebbe un indirizzo a cui mandarla. */
+        aggiornaPaginaAttivita(mount, attivita, {
+          errore, caricamento, sessionId,
+          notifica: toast,
+          onAggiorna: () => caricaPannelloAttivita({ pagina: true }),
+          rete: reteVociDellaPersona(),
+          onMenu: apriMenuAzioniLibreria,
+          onCambiata: () => {
+            caricaPannelloAttivita({ pagina: true });
+            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+          },
+          copia: (testo) => copyText(testo, 'Attività copiata'),
+        });
       } else {
         mount.setAttribute('role', attivita.length ? 'list' : 'group');
         mount.replaceChildren(...attivita.map(rigaAttivita));
@@ -5288,7 +5366,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const attuale = () => generazioniMemoria.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === 'memoria' && !mount.hidden : mount === $('#memoryListMount', sheetBody));
     function mostra(memorie, { errore = null, caricamento = false } = {}) {
       if (pagina) {
-        aggiornaPaginaMemoria(mount, memorie, { errore, caricamento, onAggiorna: () => caricaPannelloMemoria({ pagina: true }) });
+        aggiornaPaginaMemoria(mount, memorie, {
+          errore, caricamento, sessionId,
+          notifica: toast,
+          onAggiorna: () => caricaPannelloMemoria({ pagina: true }),
+          rete: reteVociDellaPersona(),
+          onMenu: apriMenuAzioniLibreria,
+          onCambiata: () => {
+            caricaPannelloMemoria({ pagina: true });
+            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+          },
+          copia: (testo) => copyText(testo, 'Ricordo copiato'),
+        });
       } else {
         mount.setAttribute('role', memorie.length ? 'list' : 'group');
         mount.replaceChildren(...memorie.map(rigaMemoria));

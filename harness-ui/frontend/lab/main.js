@@ -42,6 +42,8 @@ import {
 import { apriStudioTemi, montaScorciatoiaTemi } from '../src/components/theme-studio.js';
 import { confermaModale } from '../src/components/modale-td.js';
 import { NOTE, ADESSO_NOTE } from './fixtures/note.js';
+/* 12/09 lotto CRUD — la rete in memoria che accende i comandi di scrittura nelle tre sezioni. */
+import { reteDiProva } from './fixtures/crud.js';
 import { PROGETTI } from './fixtures/progetti.js';
 /* 11/09 lotto L7 — la Ricerca approfondita col suo dentro: rapporto, affermazioni, fonti. */
 import { RICERCHE as RICERCHE_L7, leggiRapportoFinto, apriMenuDiProva } from './fixtures/ricerche.js';
@@ -152,6 +154,69 @@ function notificaDiProva(titolo, messaggio, opzioni = {}) {
   return scheda;
 }
 
+/*
+ * Il banco del CRUD (12/09): monta una delle tre sezioni con la rete in memoria, e porta la
+ * schermata nello stato che si vuole fotografare — elenco, dettaglio, modulo nuovo, modulo di
+ * modifica, conferma d'eliminazione.
+ * ⛔ Ogni stato si raggiunge coi GESTI VERI (si preme il pulsante, si apre il menu, si sceglie
+ *   «Elimina»): una foto di uno stato costruito a mano proverebbe che il disegno esiste, non che
+ *   ci si arrivi. È la stessa ragione per cui il banco della Ricerca clicca la scheda.
+ */
+const SEZIONI_CRUD = {
+  note: { id: 'schermoNote', risorsa: 'notes', monta: montaNoteTd, dati: () => NOTE, extra: { adesso: ADESSO_NOTE } },
+  memoria: { id: 'schermoMemoria', risorsa: 'memory', monta: memoriaTd, dati: () => MEMORIE, extra: {} },
+  attivita: { id: 'schermoAttivita', risorsa: 'tasks', monta: attivitaTd, dati: () => ATTIVITA, extra: {} },
+};
+
+async function montaCrud(quale, { apri = null, nuova = false, modifica = false, elimina = false, salvaVuoto = false, modoTesto = false } = {}) {
+  const def = SEZIONI_CRUD[quale];
+  const schermo = mostraSchermo(def.id, quale);
+  const { rete, elenco } = reteDiProva({ [def.risorsa]: def.dati() });
+  const opzioni = {
+    ...def.extra,
+    sessionId: 'fx-lab',
+    rete,
+    notifica: notificaDiProva,
+    onMenu: apriMenuDiProva,
+    onCopia: () => notificaDiProva('Copiata', 'La voce è negli appunti.'),
+    rendiMarkdown: null, // il laboratorio non carica il monolite: resta la lettura strutturale di `prosaInNodi`
+    onAggiorna: () => def.monta(schermo, elenco(def.risorsa), opzioni),
+    onCambiata: () => def.monta(schermo, elenco(def.risorsa), opzioni),
+  };
+  def.monta(schermo, elenco(def.risorsa), opzioni);
+  const respira = async () => { for (let i = 0; i < 6; i += 1) await Promise.resolve(); };
+
+  if (nuova) {
+    schermo.querySelector('[data-nuova]').click();
+    await respira();
+    if (salvaVuoto) {
+      /* Si preme «Salva» su un modulo vuoto: è l'unico momento in cui gli errori possono comparire
+         (MDN: nessuna accusa prima di un tentativo), ed è ciò che questa foto deve mostrare. */
+      [...schermo.querySelectorAll('.td-detail-footer .talos-button')].find((b) => b.textContent === 'Salva').click();
+      await respira();
+    }
+    return schermo;
+  }
+  if (!apri) return schermo;
+  schermo.querySelector(`.td-card[data-item="${apri}"] .td-card-open`).click();
+  await respira();
+  if (modoTesto) {
+    schermo.querySelector('.td-voce-modi [data-modo="testo"]').click();
+    await respira();
+  }
+  if (modifica) {
+    [...schermo.querySelectorAll('.td-detail-footer .talos-button')].find((b) => b.textContent === 'Modifica').click();
+    await respira();
+  }
+  if (elimina) {
+    [...schermo.querySelectorAll('.td-detail-footer .talos-button')].find((b) => b.textContent === 'Tutte le azioni').click();
+    await respira();
+    [...document.querySelectorAll('.ft-actions-menu-item')].find((b) => b.textContent.includes('Elimina')).click();
+    await respira();
+  }
+  return schermo;
+}
+
 /* Il banco della Ricerca approfondita: monta, aspetta il rapporto, apre la scheda chiesta. */
 async function montaRicerca({ apri = null, vista = 'rapporto', menu = false, righe = false } = {}) {
   const schermo = mostraSchermo('schermoRicerca', 'ricerca');
@@ -246,6 +311,17 @@ const LABORATORI = {
   Browser() { // 06/9 K-I: le due letture del mockup, la seconda attiva
     const schede = LETTURE_BROWSER.map((l, i) => ({ ...l, id: `lettura-${i}`, tipo: 'lettura', origine: 'agente' }));
     creaBrowser(document.querySelector('#schermoBrowser'), { modoIniziale: 'testo' }).aggiorna({ schede, attiva: schede[STATO_BROWSER.attiva].id, note: {}, richiesta: null });
+    /*
+     * ⛔ 12/09 — `modoIniziale` NON SOPRAVVIVE PIÙ al primo `aggiorna`. Owner 11/09: «anche se cambio
+     *   scheda mentre sono in modalità sorgente… la navigazione deve essere sempre in modalità
+     *   pagina» ⇒ `browser.js` riazzera il modo a «pagina» a ogni cambio di scheda attiva, e la prima
+     *   chiamata (da `attiva: null` a una scheda) È un cambio di scheda. Il laboratorio mostrava
+     *   quindi la cornice VIVA di example.org — cioè una richiesta di rete dentro il cancello — al
+     *   posto del testo dell'agente che il mockup disegna.
+     * ⇒ Lo stato si raggiunge col GESTO VERO, premendo «Testo dell'agente»: è come ci arriva una
+     *   persona, e prova anche che il pulsante funziona.
+     */
+    document.querySelector('#schermoBrowser [data-browser-modo="testo"]')?.click();
   },
   Terminale() { // 06/9 B1: le schede e il piede; il corpo resta quello del mockup
     creaSchedeTerminale(document.querySelector('#schermoTerminale .talos-terminal')).aggiorna({ schede: SCHEDE_TERMINALE, ...CORNICE_TERMINALE });
@@ -262,27 +338,29 @@ const LABORATORI = {
     const panel = document.querySelector('#panel-installati');
     aggiornaInstallati(panel, MODELLI_INSTALLATI, { runtime: RUNTIME_INSTALLATI, fit: FIT_INSTALLATI, selezionato: 'qwen8' });
   },
-  SezioneNote() {
-    montaNoteTd(mostraSchermo('schermoNote', 'note'), NOTE, { adesso: ADESSO_NOTE, notifica: notificaDiProva, onCopia: () => notificaDiProva('Copiata', 'La nota è negli appunti.') });
-  },
-  SezioneNote_dettaglio() {
-    const schermo = mostraSchermo('schermoNote', 'note');
-    montaNoteTd(schermo, NOTE, { adesso: ADESSO_NOTE, notifica: notificaDiProva, onCopia: () => {} });
-    schermo.querySelector('.td-card .td-card-open').click();
-  },
+  SezioneNote: () => montaCrud('note'),
+  SezioneNote_dettaglio: () => montaCrud('note', { apri: 'nota-cache' }),
   SezioneNote_vuota() {
     montaNoteTd(mostraSchermo('schermoNote', 'note'), [], { adesso: ADESSO_NOTE });
   },
-  SezioneMemoria() {
-    const schermo = mostraSchermo('schermoMemoria', 'memoria');
-    memoriaTd(schermo, MEMORIE, { notifica: notificaDiProva });
-    schermo.querySelector('.td-card .td-card-open').click();
-  },
-  SezioneAttivita() {
-    const schermo = mostraSchermo('schermoAttivita', 'attivita');
-    attivitaTd(schermo, ATTIVITA, {});
-    schermo.querySelector('.td-card .td-card-open').click();
-  },
+  SezioneMemoria: () => montaCrud('memoria', { apri: 'fx-policy' }),
+  SezioneAttivita: () => montaCrud('attivita', { apri: 'task-ledger' }),
+
+  /* ───────── 12/09, lotto CRUD: le tre superfici di scrittura, per ognuna delle tre sezioni ───────── */
+  /* La nota in Markdown, col suo interruttore: è la vista che l'ordine dell'owner nomina. */
+  SezioneNote_markdown: () => montaCrud('note', { apri: 'nota-markdown' }),
+  SezioneNote_markdown_testo: () => montaCrud('note', { apri: 'nota-markdown', modoTesto: true }),
+  SezioneNote_nuova: () => montaCrud('note', { nuova: true }),
+  SezioneNote_modifica: () => montaCrud('note', { apri: 'nota-cache', modifica: true }),
+  SezioneNote_elimina: () => montaCrud('note', { apri: 'nota-cache', elimina: true }),
+  SezioneMemoria_nuova: () => montaCrud('memoria', { nuova: true }),
+  SezioneMemoria_modifica: () => montaCrud('memoria', { apri: 'fx-policy', modifica: true }),
+  SezioneMemoria_elimina: () => montaCrud('memoria', { apri: 'fx-policy', elimina: true }),
+  SezioneAttivita_nuova: () => montaCrud('attivita', { nuova: true }),
+  SezioneAttivita_modifica: () => montaCrud('attivita', { apri: 'task-ledger', modifica: true }),
+  SezioneAttivita_elimina: () => montaCrud('attivita', { apri: 'task-ledger', elimina: true }),
+  /* Il modulo che ha già SBAGLIATO: è la foto che dice se l'errore si legge, e dove sta. */
+  SezioneNote_moduloInvalido: () => montaCrud('note', { nuova: true, salvaVuoto: true }),
   SezioneLibreria() {
     const schermo = mostraSchermo('schermoLibreria', 'libreria');
     libreriaTd(schermo, LIBRERIA, { sessionId: 'fx-lab', notifica: notificaDiProva, onMenu: () => {} });
@@ -331,9 +409,8 @@ const LABORATORI = {
     libreriaTd(schermo, LIBRERIA, { sessionId: 'fx-lab', notifica: notificaDiProva, onMenu: () => {} });
     schermo.querySelector('[data-vista="elenco"]').click();
   },
-  SezioneNote_elenco() {
-    const schermo = mostraSchermo('schermoNote', 'note');
-    montaNoteTd(schermo, NOTE, { adesso: ADESSO_NOTE });
+  async SezioneNote_elenco() {
+    const schermo = await montaCrud('note');
     schermo.querySelector('[data-vista="elenco"]').click();
   },
   SezioneElenco() {
@@ -372,7 +449,12 @@ const LABORATORI = {
   ChatFooter() {
     /* Prima si svuota ciò che il mockup scrive a mano, poi il componente lo riscrive dai dati. */
     const piede = document.querySelector('#schermoChat .talos-chat-foot');
-    for (const el of piede.querySelectorAll('[data-run-what], [data-run-meta], .talos-chip__label, [data-runtime-giri] .talos-mono, [data-runtime-costo] .talos-mono, .talos-statusbar span')) el.textContent = '';
+    /* ⛔ 12/09 — SI SVUOTA SOLO CIÒ CHE IL COMPONENTE RISCRIVE. `.talos-chip__label` prendeva TUTTE
+       le pill, compresa quella del Terminale (PO-09), che è statica: nessuno la riempiva più e il
+       laboratorio mostrava una pill senza nome. Il cancello dei componenti lo ha visto come una
+       parola in meno rispetto al mockup — cioè come un difetto della app, che non era.
+       ⇒ Solo le due pill che `aggiornaPiedeChat` scrive davvero: modello e permesso. */
+    for (const el of piede.querySelectorAll('[data-run-what], [data-run-meta], [data-open-sheet="model"] .talos-chip__label, [data-open-sheet="permissions"] .talos-chip__label, [data-runtime-giri] .talos-mono, [data-runtime-costo] .talos-mono, .talos-statusbar span')) el.textContent = '';
     piede.querySelector('[data-open-sheet="permissions"]').classList.remove('talos-badge--warning');
     aggiornaPiedeChat(piede, PIEDE);
   },
