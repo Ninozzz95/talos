@@ -57,6 +57,11 @@ import { basename, dirname, join, resolve, sep } from 'node:path'
 import { setTimeout as dormiConSegnale } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { imageMessageContent } from '../chat-image-attachments.mjs'
+/* ⛔ P-13/BC-07: `cerca` riusa il filtro `.gitignore` e la denylist dei binari gia' provati,
+ * invece di riscriverli. Due moduli nostri con due regole opposte e' esattamente il difetto
+ * che la allowlist di `cerca` era. */
+import { ESTENSIONI_ESCLUSE_PREDEFINITE } from '../elenco-profondo.mjs'
+import { creaFiltroGitignore } from '../gitignore-elenco.mjs'
 import { discoNode, fontiDaDisco, cancelloSemantico, libreriaStandard }
     from './dist/kernelPerIlBanco.js'
 
@@ -2566,44 +2571,198 @@ const ISTRUZIONI = [
 ].join('\n')
 
 /*
- * ⛔ Cio' che non si scandaglia MAI. Non e' ottimizzazione: a profondita' 2 su un
- * albero vero l'agente vedeva 363 voci quasi tutte inutili — `.modelli/*.gguf`,
- * `.tmp-research/*.log` — e spendeva token per non trovare niente.
+ * ⛔⛔⛔ 11/09/2026 — LA ALLOWLIST DI ESTENSIONI E' STATA TOLTA, e questi sono i numeri
+ * che l'hanno tolta. Misurati su questo repo con `creaFiltroGitignore` come denominatore
+ * (cioe' «i file che git NON ignora», non l'albero grezzo: contare `node_modules`
+ * gonfierebbe la percentuale e non direbbe niente).
+ *
+ *   spazio                file del progetto   cercabili per CONTENUTO con la regola VECCHIA
+ *   AVM-harness-desktop         25.713              1.292  =  5,0%
+ *   harness-ui                     744                673  = 90,5%
+ *
+ * Dove finivano gli altri, nel repo intero:
+ *   · 23.251 file mai raccolti     — cartella nella lista fissa, o nome che inizia per `.`
+ *   ·  1.170 file raccolti e muti  — estensione fuori dalla allowlist, di cui **1.003 `.php`**
+ *   · e il tetto `MAX_FILE` mordeva: la camminata si fermava a 4.000 percorsi IN SILENZIO,
+ *     mentre la risposta continuava a dire «Scanned 4000 files» come se fossero tutti.
+ *
+ * ⛔ La prova che il buco era vero, non teorico: `cerca {testo:"namespace"}` sul repo
+ * intero tornava **ZERO** file `.php`, con 1.003 file `.php` sul disco che quella parola
+ * ce l'hanno in prima riga.
+ *
+ * ⇒ La regola e' rovesciata, ed e' la stessa che `src/elenco-profondo.mjs:39-49` argomenta
+ * gia' per l'elenco: *«una ALLOWLIST ("tieni solo .js e .md") invecchiando fa sparire un
+ * file che esiste … e il modello concluderebbe che non c'e': e' la BUGIA che questo modulo
+ * esiste per non dire»*. Due moduli nostri non possono avere due regole opposte.
+ *
+ * ## Che cosa decide adesso che cosa si guarda
+ *
+ * 1. `.gitignore` VERO, con `creaFiltroGitignore` (`src/gitignore-elenco.mjs`, 930 confronti
+ *    contro `git check-ignore` senza un disaccordo). Non una lista di nomi indovinata:
+ *    se una cartella va potata lo dice il progetto. ⛔ Riusato, non riscritto.
+ * 2. Due nomi potati SEMPRE, anche senza `.gitignore`, perche' non sono sorgente in nessun
+ *    progetto al mondo: `.git` e `node_modules`.
+ * 3. Una DENYLIST di estensioni binarie, quella gia' dichiarata e provata in
+ *    `elenco-profondo.mjs` — immagini, archivi, eseguibili, caratteri tipografici, pesi dei
+ *    modelli. Corta, commentata, e sbaglia dalla parte del rumore.
+ * 4. Una seconda rete sul CONTENUTO, per i binari che nessuna estensione annuncia.
+ *
+ * ## ⛔⛔ Perche' la seconda rete NON e' la regola di ripgrep (un solo byte NUL)
+ *
+ * Fonte primaria, ripgrep GUIDE.md sezione BINARY DATA (letta l'11/09/2026):
+ * *«a file is considered "binary" if and only if it contains a NUL byte somewhere in its
+ * contents»*, e *«as soon as a file is detected as binary, searching stops»*.
+ *
+ * ⛔ MISURATO sul nostro stesso codice, con ripgrep 15.2.0 installato su questa macchina:
+ *     $ rg -n "cercaNelProgetto" src/kernel/talosHarness.mjs
+ *     binary file matches (found "\0" byte around offset 22789)
+ *     $ rg -n --text "cercaNelProgetto" src/kernel/talosHarness.mjs
+ *     2621:export async function cercaNelProgetto(...)
+ * Il file piu' importante del progetto — QUESTO file — contiene un byte NUL letterale
+ * dentro un template usato come separatore, e la regola di ripgrep lo dichiara binario e
+ * smette di cercarci dentro. Adottarla renderebbe il kernel invisibile al suo stesso agente.
+ *
+ * ⇒ Si adotta invece la regola di DENSITA' di Hermes Agent
+ * (`hermes-agent-v21/tools/file_operations.py:1286-1310`, *«Content analysis: >30%
+ * non-printable chars = binary»*): un byte strano non prova niente, una distribuzione si'.
+ * Questo file passa (un NUL su 456.881 byte = 0,0002%).
  */
-const NON_SI_GUARDA = new Set([
-    'node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.cache',
-    '.modelli', '.tmp-research', '.gradle', '.idea', 'android', 'ios', 'vendor',
-])
-/** Solo i file che un agente di coding puo' voler leggere. */
-const ESTENSIONI = new Set([
-    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.json', '.md',
-    '.svelte', '.vue', '.css', '.html', '.yml', '.yaml', '.txt',
-])
+const SEMPRE_POTATE = new Set(['.git', 'node_modules'])
 /*
- * ⛔ I TRE TETTI, e servono tutti e tre: un albero vero ha 3.544 file, e senza
- * tetti `cerca` diventa esattamente l'inventario da 13.489 token che questo
- * attrezzo esiste per evitare.
+ * ⛔ Il RIPIEGO, e vale SOLO quando non c'e' un `.gitignore` da cui leggere (un workspace
+ * che non e' un repo, o un `disco` che non e' il filesystem locale — il ponte del telefono,
+ * un doppio nei test). E' la lista di prima MENO `android`, `ios`, `vendor` e MENO il
+ * `nome.startsWith('.')` cieco: erano quelli i 23.251. `.modelli` e `.tmp-research` restano,
+ * perche' li' dentro ci sono i pesi dei modelli e i log, e la misura del 22/8 (363 voci
+ * quasi tutte inutili a profondita' 2) vale ancora.
  */
-const MAX_FILE = 4_000
-const MAX_RISULTATI = 40
-const MAX_BYTE_LETTI = 200_000
+const POTATE_SENZA_GITIGNORE = new Set([
+    'dist', 'build', 'coverage', '.next', '.cache', '.gradle', '.idea',
+    '.modelli', '.tmp-research',
+])
+/** Vedi (3): la denylist e' quella di `elenco-profondo.mjs`, importata — mai una copia che diverge. */
+const ESTENSIONI_BINARIE = new Set(ESTENSIONI_ESCLUSE_PREDEFINITE)
 
-/** Tutti i percorsi dell'albero, a QUALSIASI profondita', potati e con un tetto. */
-async function tuttiIPercorsi(disco, dentro = '', raccolti = []) {
-    if (raccolti.length >= MAX_FILE) return raccolti
-    let voci = []
-    try { voci = await disco.elenca(dentro) }
-    catch { return raccolti }
-    for (const v of voci) {
-        const p = dentro ? `${dentro}/${v.nome}` : v.nome
-        if (v.cartella) {
-            if (NON_SI_GUARDA.has(v.nome) || v.nome.startsWith('.')) continue
-            await tuttiIPercorsi(disco, p, raccolti)
-        }
-        else raccolti.push(p)
-        if (raccolti.length >= MAX_FILE) break
+/*
+ * ⛔ I QUATTRO TETTI, e ognuno porta il numero che l'ha scelto. Misurato l'11/09/2026 su
+ * questo repo, scansione COMPLETA del contenuto:
+ *   harness-ui           744 file ·   708 letti ·  10,0 MB · filtro 17 ms + camminata 11 ms + lettura 118 ms
+ *   AVM-harness-desktop 25.713 file · 23.978 letti · 296,7 MB · filtro 1.211 ms + camminata 2.910 ms + lettura 16.019 ms
+ * Cioe' ~0,17 ms per file su uno spazio di lavoro normale e ~0,67 ms per file sul repo
+ * intero (dove 15.482 dei 25.713 sono `scratchpad/prove`, roba non tracciata).
+ *
+ * ⛔ Un tetto che morde non e' un difetto; un tetto che morde IN SILENZIO lo e'. Ognuno di
+ * questi, quando morde, finisce scritto nella risposta al modello.
+ */
+/** Quanti percorsi si raccolgono. 20.000 = 27× lo spazio di lavoro misurato (744). */
+const MAX_FILE = 20_000
+/** Di quanti si legge il CONTENUTO. 5.000 × 0,67 ms ≈ 3,3 s nel caso peggiore misurato. */
+const MAX_FILE_LETTI = 5_000
+/** Sopra questa taglia non si apre affatto: `disco.elenca` la sa gia' (`byte`), gratis. */
+const MAX_BYTE_FILE = 8_000_000
+/** Quanto si guarda DENTRO un file. Invariato dal 22/8. */
+const MAX_BYTE_LETTI = 200_000
+/** Quanti risultati si mostrano. Invariato: cambiarlo vuole una misura del banco, non un'opinione. */
+const MAX_RISULTATI = 40
+
+/*
+ * Il filtro `.gitignore` costa 17 ms su `harness-ui/` e 1.211 ms sul repo intero (969 regole
+ * da 57 file): si costruisce una volta per cartella e si tiene per cinque minuti.
+ * ⛔ Non «per sempre»: un `.gitignore` si modifica mentre la sessione e' viva, e un filtro
+ * immortale continuerebbe a nascondere — o a mostrare — in base a un file che non c'e' piu'.
+ */
+const filtriGitignore = new Map()
+const VITA_FILTRO_MS = 5 * 60_000
+
+async function filtroDelProgetto(radice) {
+    if (typeof radice !== 'string' || radice.length === 0) return null
+    const gia = filtriGitignore.get(radice)
+    if (gia && Date.now() - gia.quando < VITA_FILTRO_MS) return gia.filtro
+    try {
+        const filtro = await creaFiltroGitignore({ radice })
+        filtriGitignore.set(radice, { filtro, quando: Date.now() })
+        return filtro
     }
-    return raccolti
+    catch {
+        /* ⛔ Un `.gitignore` illeggibile non deve far sparire niente: si cerca senza filtro. */
+        return null
+    }
+}
+
+/**
+ * La seconda rete sui binari: densita' di caratteri di controllo nei primi 1.000 caratteri.
+ * ⛔ Non il singolo NUL di ripgrep — vedi il commento lungo sopra, e il fatto MISURATO che
+ * quella regola renderebbe questo stesso file invisibile.
+ */
+function sembraBinario(testo) {
+    const campione = testo.slice(0, 1_000)
+    if (campione.length === 0) return false
+    let controllo = 0
+    for (let i = 0; i < campione.length; i += 1) {
+        const c = campione.charCodeAt(i)
+        // \t \n \r sono testo; tutto il resto sotto 32, e il DEL, non lo e'.
+        if ((c < 32 && c !== 9 && c !== 10 && c !== 13) || c === 127) controllo += 1
+    }
+    return controllo / campione.length > 0.30
+}
+
+function estensioneDiPercorso(percorso) {
+    const punto = percorso.lastIndexOf('.')
+    const barra = percorso.lastIndexOf('/')
+    return punto > barra + 1 ? percorso.slice(punto).toLowerCase() : ''
+}
+
+/**
+ * Tutti i percorsi dell'albero, a QUALSIASI profondita'.
+ *
+ * ⛔ In AMPIEZZA, non in profondita' come prima, e le voci di ogni cartella si ordinano
+ * PRIMA di scendere. E' la decisione (3) di `elenco-profondo.mjs`, per la stessa ragione:
+ * `readdir` non promette nessun ordine, e con un tetto la camminata in profondita' taglia
+ * a caso dentro il primo sottoalbero, mentre in ampiezza cio' che sopravvive e' la roba
+ * vicina alla radice — `package.json`, `src/`, `tests/`.
+ *
+ * ⛔⛔ SCARTATA, e si scrive perche': avevo scritto una seconda versione che teneva una coda
+ * PER CARTELLA DI PRIMO LIVELLO e le apriva a giro (la tecnica di dsh,
+ * `deepseek-harness/packages/fs/tool-fs-search/src/glob.ts:254-338`, *«Every top-level entry
+ * receives a slot before any receives a second»*), convinto che `scratchpad/prove` — 15.482
+ * file su 25.714 in questo repo — affamasse `control-plane/` (793 `.php`) e `core/` (210).
+ * L'A/B sullo stesso albero, stesso tetto di 20.000, l'ha SMENTITA: l'ampiezza pura raccoglie
+ * **1.004 `.php` su 1.004**, esattamente come il giro (control-plane 1710 file, core 333 in
+ * entrambe). E sull'ordine di LETTURA, a parita' di budget: **106 `.php` trovati con l'ordine
+ * della camminata contro 107 col giro** — perche' lo stop a 120 risultati scatta dopo 1.012-1.368
+ * letture, molto prima del tetto di 5.000. ⇒ Una condizione che la misura non distingue dal
+ * rumore non paga la sua complessita': tolta, come lo Stadio B del banco
+ * ([[stadio-b-tre-condizioni-scartate]]). Lo zero `.php` che mi aveva convinto era una SONDA
+ * SBAGLIATA — cercavo `namespace Talos` e `kadmos_bench`, stringhe che in quei file non
+ * esistono; con `namespace` (751 file `.php` la contengono) il conto tornava gia'.
+ */
+async function tuttiIPercorsi(disco, { filtro = null } = {}) {
+    const percorsi = []
+    const dimensioni = new Map()
+    const stato = { tettoPercorsi: false, cartelleIlleggibili: 0 }
+    const coda = ['']
+    while (coda.length > 0 && !stato.tettoPercorsi) {
+        const dentro = coda.shift()
+        let voci = []
+        try { voci = await disco.elenca(dentro) }
+        catch { stato.cartelleIlleggibili += 1; continue }
+        const ordinate = [...voci].sort((a, b) => (a.nome === b.nome ? 0 : a.nome < b.nome ? -1 : 1))
+        for (const v of ordinate) {
+            const p = dentro ? `${dentro}/${v.nome}` : v.nome
+            if (v.cartella) {
+                if (SEMPRE_POTATE.has(v.nome)) continue
+                if (filtro) { if (!filtro(p, true)) continue }
+                else if (POTATE_SENZA_GITIGNORE.has(v.nome)) continue
+                coda.push(p)
+                continue
+            }
+            if (filtro && !filtro(p, false)) continue
+            if (percorsi.length >= MAX_FILE) { stato.tettoPercorsi = true; break }
+            if (typeof v.byte === 'number') dimensioni.set(p, v.byte)
+            percorsi.push(p)
+        }
+    }
+    return { percorsi, dimensioni, stato }
 }
 
 /**
@@ -2617,41 +2776,86 @@ async function tuttiIPercorsi(disco, dentro = '', raccolti = []) {
  * prima di chi combacia solo nel contenuto, perche' con `MAX_RISULTATI` a 40
  * cio' che sta in fondo non esiste. Un tetto silenzioso e' un taglio silenzioso:
  * quando morde, la risposta lo DICE.
+ *
+ * ⛔ E «lo dice» adesso vale per TUTTI e quattro i tetti, non solo per i risultati: la
+ * forma e' quella di dsh (`deepseek-harness/packages/fs/tool-fs-search/src/grep.ts:215-225`,
+ * `Found ${kept} of ${seen} matches` + la via di recupero) e il suo commento e' il criterio:
+ * *«The omitted count is a budget fact: the search itself completed»* — cioe' un taglio di
+ * budget si distingue da una ricerca finita, e non si spaccia per l'altro.
+ *
+ * @param {{elenca:Function, leggi:Function}} disco
+ * @param {{testo?: string, nome?: string}} argomenti
+ * @param {{radice?: string}} [opzioni] — la cartella VERA, per leggere il `.gitignore`.
+ *   Assente (test, ponte del telefono) ⇒ si usa il ripiego `POTATE_SENZA_GITIGNORE`.
  */
-export async function cercaNelProgetto(disco, { testo, nome }) {
+export async function cercaNelProgetto(disco, { testo, nome }, { radice } = {}) {
     const chiaveTesto = String(testo ?? '').trim().toLowerCase()
     const chiaveNome = String(nome ?? '').trim().toLowerCase()
     if (!chiaveTesto && !chiaveNome) return 'give at least one of "testo" or "nome".'
 
-    const percorsi = await tuttiIPercorsi(disco)
+    const filtro = await filtroDelProgetto(radice)
+    const { percorsi, dimensioni, stato } = await tuttiIPercorsi(disco, { filtro })
     const perNome = []
     const perTesto = []
+    const conto = { letti: 0, binari: 0, troppoGrandi: 0, illeggibili: 0, tettoLetture: false, tettoRicerca: false }
 
     for (const p of percorsi) {
         const basso = p.toLowerCase()
         const combaciaNome = chiaveNome && basso.includes(chiaveNome)
         if (combaciaNome) { perNome.push(p); continue }
         if (!chiaveTesto) continue
-        const punto = p.lastIndexOf('.')
-        if (punto < 0 || !ESTENSIONI.has(p.slice(punto).toLowerCase())) continue
-        if (perNome.length + perTesto.length >= MAX_RISULTATI * 3) break
+        if (ESTENSIONI_BINARIE.has(estensioneDiPercorso(basso))) { conto.binari += 1; continue }
+        const taglia = dimensioni.get(p)
+        if (typeof taglia === 'number' && taglia > MAX_BYTE_FILE) { conto.troppoGrandi += 1; continue }
+        /* ⛔ Si smette di cercare a 3× i risultati mostrabili: serve a sapere QUANTI sono,
+         * non a mostrarli tutti. Ma da qui in poi il conteggio e' un MINIMO, non un totale,
+         * e la riga di coda lo dice con un «+» invece di spacciarlo per esatto. */
+        if (perNome.length + perTesto.length >= MAX_RISULTATI * 3) { conto.tettoRicerca = true; break }
+        if (conto.letti >= MAX_FILE_LETTI) { conto.tettoLetture = true; break }
         try {
             const contenuto = String(await disco.leggi(p)).slice(0, MAX_BYTE_LETTI)
+            conto.letti += 1
+            if (sembraBinario(contenuto)) { conto.binari += 1; continue }
             if (contenuto.toLowerCase().includes(chiaveTesto)) perTesto.push(p)
         }
-        catch { /* ⛔ un file illeggibile non e' un risultato, e non e' un errore */ }
+        catch { conto.illeggibili += 1 /* ⛔ un file illeggibile non e' un risultato, e non e' un errore */ }
     }
+
+    /* ⛔ Ogni tetto che ha morso diventa una riga: chi legge deve poter distinguere
+     * «non c'e'» da «non sono arrivato fino in fondo». */
+    const avvisi = []
+    if (stato.tettoPercorsi) {
+        avvisi.push(`⚠ incomplete scan: I stopped after collecting ${MAX_FILE} paths — the tree has more. Search inside a subfolder.`)
+    }
+    if (conto.tettoLetture) {
+        avvisi.push(`⚠ incomplete scan: I stopped after reading ${MAX_FILE_LETTI} files. Narrow the search.`)
+    }
+    if (conto.tettoRicerca) {
+        avvisi.push(`⚠ I stopped looking after ${MAX_RISULTATI * 3} matches: there may be more than the count below.`)
+    }
+    const coda = avvisi.length > 0 ? `\n${avvisi.join('\n')}` : ''
 
     const trovati = [...perNome, ...perTesto]
     if (trovati.length === 0) {
-        return `no file matches. Scanned ${percorsi.length} files.`
+        const dettaglio = chiaveTesto
+            ? ` (${conto.letti} read for content`
+                + (conto.binari > 0 ? `, ${conto.binari} skipped as binary` : '')
+                + (conto.troppoGrandi > 0 ? `, ${conto.troppoGrandi} skipped as too large` : '')
+                + (conto.illeggibili > 0 ? `, ${conto.illeggibili} unreadable` : '')
+                + ')'
+            : ''
+        return `no file matches. Scanned ${percorsi.length} files${dettaglio}.`
             + (chiaveTesto ? ' Try a shorter or different "testo".' : '')
+            + coda
     }
     const mostrati = trovati.slice(0, MAX_RISULTATI)
     const tagliati = trovati.length - mostrati.length
     return mostrati.join('\n')
         // ⛔ Il taglio si DICHIARA: senza, «40 risultati» si legge come «sono 40».
-        + (tagliati > 0 ? `\n… and ${tagliati} more matches not shown — narrow the search.` : '')
+        // ⛔ E se la ricerca si e' fermata a 120, `${tagliati}` e' un MINIMO: il `+` lo dice
+        // dentro al numero, non solo nella riga di avviso venti caratteri piu' in la'.
+        + (tagliati > 0 ? `\n… and ${tagliati}${conto.tettoRicerca ? '+' : ''} more matches not shown — narrow the search.` : '')
+        + coda
 }
 
 /**
@@ -6124,7 +6328,13 @@ export async function talosLavora({
                     esito = [...voci.filter((v) => !v.cartella).map((v) => v.nome), ...dentro.flat()].join('\n')
                 }
                 else if (nome === 'cerca') {
-                    esito = await cercaNelProgetto(disco, argomenti)
+                    /*
+                     * ⛔ 11/09/2026 — `radice` e' la cartella VERA della sessione, e serve a una cosa
+                     * sola: leggere il `.gitignore` del progetto invece di indovinare quali cartelle
+                     * potare. Senza, `cerca` ricade sulla lista fissa — che e' il ripiego per il ponte
+                     * del telefono e per i test, non il caso normale.
+                     */
+                    esito = await cercaNelProgetto(disco, argomenti, { radice: cartella })
                 }
                 else if (nome === 'leggi') {
                     /*
