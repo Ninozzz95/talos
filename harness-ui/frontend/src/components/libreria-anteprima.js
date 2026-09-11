@@ -222,6 +222,59 @@ function cartaEsterna(doc, frase, { voce, opzioni }) {
   return box;
 }
 
+/**
+ * Quante colonne restano fuori a destra, e come dirlo.
+ *
+ * ⛔ Si misura, non si indovina: quante colonne escono dipende dalla larghezza del PANNELLO, che il
+ *   divisorio cambia a mano in qualunque momento. Quindi `ResizeObserver` (il pannello che si
+ *   stringe) più l'evento `scroll` (chi si è già spostato): la frase e la sfumatura dicono sempre
+ *   lo stato di adesso, e quando non c'è più niente a destra spariscono tutte e due.
+ * ⛔ Si misura coi rettangoli veri e non con `offsetLeft`: `offsetLeft` è relativo all'antenato
+ *   posizionato, che qui non è detto sia il riquadro che scorre.
+ * ⛔ Tutto in guardia: nel DOM finto dei test non esistono né `ResizeObserver` né
+ *   `getBoundingClientRect`, e una sonda che fa cadere una prova non prova niente.
+ */
+/**
+ * Quante colonne sforano il bordo destro, e la frase che lo dice.
+ *
+ * ⛔ Separata dal DOM di proposito: è la sola parte che può SBAGLIARE (un fuori-di-uno qui vuol
+ *   dire «scorri» su una tabella che sta tutta dentro), e così un test la morde senza dover
+ *   costruire un browser finto.
+ */
+export function colonneFuori(bordoDestro, destreDelleColonne) {
+  return (Array.isArray(destreDelleColonne) ? destreDelleColonne : []).filter((x) => x > bordoDestro + 1).length;
+}
+
+export function fraseScorrimento(quante) {
+  if (!quante) return '';
+  return quante === 1
+    ? 'Scorri a destra per l’altra colonna.'
+    : `Scorri a destra per le altre ${quante.toLocaleString('it-IT')} colonne.`;
+}
+
+function collegaScorrimento(scorre, tabella, avviso) {
+  if (typeof scorre?.addEventListener !== 'function' || typeof scorre.getBoundingClientRect !== 'function') return null;
+  let osservatore = null;
+  const celle = () => (tabella.querySelectorAll ? [...tabella.querySelectorAll('thead th')] : []);
+  const aggiorna = () => {
+    // ⛔ Il pannello si ridisegna a ogni giro: senza questo l'osservatore sopravvive al suo nodo.
+    if (scorre.isConnected === false) { osservatore?.disconnect?.(); return; }
+    const bordo = scorre.getBoundingClientRect().right;
+    const fuori = colonneFuori(bordo, celle().map((c) => c.getBoundingClientRect().right));
+    scorre.dataset.scorre = fuori ? 'si' : 'no';
+    avviso.hidden = fuori === 0;
+    avviso.textContent = fraseScorrimento(fuori);
+  };
+  scorre.addEventListener('scroll', aggiorna, { passive: true });
+  if (typeof globalThis.ResizeObserver === 'function') {
+    osservatore = new globalThis.ResizeObserver(aggiorna);
+    osservatore.observe(scorre);
+  } else if (typeof globalThis.requestAnimationFrame === 'function') {
+    globalThis.requestAnimationFrame(aggiorna);
+  }
+  return aggiorna;
+}
+
 function tabellaCsv(doc, testo, { nome, magazzino, chiave, ridisegna }) {
   const righe = righeCsv(testo, separatoreDi(nome));
   const pezzi = [];
@@ -253,6 +306,18 @@ function tabellaCsv(doc, testo, { nome, magazzino, chiave, ridisegna }) {
   tabella.append(testa, corpo);
   scorre.append(tabella);
   pezzi.push(scorre);
+  /*
+   * ⛔ VISTO NELLA FOTO (csv, scuro, 1440): a 415 px di dettaglio le ultime colonne uscivano dal
+   *   riquadro e NIENTE lo diceva — la tabella si poteva scorrere, ma sembrava tagliata. La
+   *   sfumatura sul bordo la disegna il CSS (`.td-file-tabella-scorre`); qui si conta quante
+   *   colonne restano fuori DAVVERO, perché «scorri a destra» quando non c'è niente a destra è
+   *   una promessa vuota come quella che questo pannello è nato per togliere.
+   */
+  const avviso = nodo(doc, 'p', 'td-file-scorri');
+  avviso.hidden = true;
+  avviso.setAttribute('role', 'status');
+  pezzi.push(avviso);
+  collegaScorrimento(scorre, tabella, avviso);
   /* ⛔ La prima riga è l'INTESTAZIONE: «30 righe su 214» conterebbe una riga che non è un dato. */
   const dati = Math.max(righe.length - 1, 0);
   const mostrati = Math.max(quante - 1, 0);
