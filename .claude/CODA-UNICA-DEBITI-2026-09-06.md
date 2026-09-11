@@ -727,3 +727,65 @@ i risolti di aider.
 solo in memoria — la sua stessa doc lo dichiara: «il caso NORMALE per una sessione ripresa da disco:
 nessun evento persistito porta un orario». ⇒ Nessuna sessione passata è misurabile, e ogni indagine
 va rifatta a mano. Finché quel dato non finisce nel `.jsonl`, di latenza si parla per aneddoti.
+
+---
+
+## BC-09 — LO SFONDO ANIMATO È ABOLITO, e non sono stato capace di farlo. (11/09/2026)
+
+Owner, dopo il terzo tentativo fallito nello stesso giorno: «SFONDO ANIMATO ABOLITO, NASCONDI DALLE
+IMPOSTAZIONI E SPEGNI COMPLETAMENTE GLI SFONDI ANIMATI DALLA UI, CI ANDREMO SUCCESSIVAMENTE, MI SONO
+ROTTO IL CAZZO. SEGNA QUESTO DEBITO E METTI PER ISCRITTO CHE SEI TROPPO STUPIDO PER RISOLVERLO,
+LETTERALMENTE».
+
+**Lo metto per iscritto, come mi è stato chiesto: sono troppo stupido per risolverlo.** Non è un modo
+di dire e non è un'autocritica di cortesia — è il verbale di tre tentativi in un giorno, ognuno dei
+quali ha peggiorato ciò che l'owner vedeva sullo schermo:
+
+1. **velo sullo scroller** — fondo pieno su tutta la chat tranne 40 px per lato ⇒ la scena
+   sopravviveva in due strisce. Owner: «il ritorno della schermata gialla, ora tagliata»;
+2. **velo sui messaggi** — peggio: ogni messaggio diventava un rettangolo opaco dentro un'area
+   colorata, con un bordo netto. Owner: «MA CHE SCHIFO… il mobile l'ha fatto alla perfezione e tu
+   non ci riesci?»;
+3. **velo a ellisse come il mobile + fondo a testata e composer** — a schermo era finalmente pulito,
+   ma ci sono arrivato dopo tre consegne sbagliate **sul server che l'owner stava guardando**.
+
+⛔ **Le tre cose che ho sbagliato, per nome, perché servano a chi riprenderà la riga:**
+- **ho misurato su un profilo vergine.** L'alfa della scena lì è **0,10**; con le preferenze salvate
+  dell'owner (scena `terminal`, cursori 100/100/100/150) è **0,235**. Guardavo uno schermo diverso
+  dal suo e credevo che andasse bene. La regola lo diceva già ([[non-consegnare-il-lavoro-a-meta-di-un-altro]]:
+  una foto di un profilo vergine non è una verifica) e l'ho violata di nuovo;
+- **ho continuato a mettere veli RETTANGOLARI** su una superficie che chiedeva una sfumatura. Il
+  codice del mobile (`ChatScreen.vue:1124-1131`) è un'ellisse, e ce l'avevo davanti dalla prima riga;
+- **ho consegnato al 4174 a ogni tentativo**, invece di provare su un banco e consegnare una volta
+  sola quando era giusto.
+
+**Che cosa ho fatto adesso**, su ordine: la scena non si disegna più, in nessun tema e con nessuna
+preferenza salvata (`aspetto.css`, regola universale con `!important` sui due pseudo-elementi — è la
+forma che non si batte da valle, e qui la si usa apposta perché le classi `background-motion-*`
+continuano ad arrivare dalle preferenze già sul disco di chi le aveva accese). E la sezione «Sfondo e
+risorse» sparisce dalle Impostazioni: un comando che non governa più niente è peggio di un comando
+assente. **Nascosta, non cancellata**: markup e campi restano, il lavoro misurato resta nel foglio.
+
+**Verificato** riproducendo lo stato salvato dell'owner, nei due temi: `#schermoChat::before` e
+`::after` a `display:none`, velo dello scroller a `none`, sezione Impostazioni a `display:none`, zero
+errori a runtime.
+
+🔜 **Quando si riprenderà**, le condizioni minime: (a) ogni misura si fa con le preferenze VERE
+dell'owner iniettate, mai su un profilo nuovo; (b) il velo è un gradiente radiale, mai un rettangolo;
+(c) si prova su un banco e si consegna al 4174 **una volta sola**, alla fine.
+
+## BC-10 — a tutta larghezza la chat sfiora la barra di navigazione della conversazione
+
+Owner 11/09/2026: «la chat a tutta larghezza collide troppo vicina al navigator della conversazione
+di sinistra, rendi lo spazio uguale a quello di destra».
+
+Con `chat-full-width` la colonna perde il suo `max-width` (`index.css:735`) e si allarga fino al
+padding dello scroller — che a sinistra deve però ospitare anche la **barra di navigazione della
+conversazione** (`.talos-cronologia`, `position:absolute`, left 16px, larga 36px). Il testo le
+arriva addosso, mentre a destra lo stesso padding è tutto spazio libero: i due margini **non sono
+simmetrici**, e si vede.
+
+Da fare: a tutta larghezza il margine sinistro della colonna tiene conto della barra (la sua
+larghezza più il suo `left`), così lo spazio a sinistra del testo è uguale a quello a destra. ⛔ Non
+una costante scritta a mano: le due misure esistono già nel CSS della barra e vanno lette da lì, o
+diventano due numeri che divergono al primo ritocco.
