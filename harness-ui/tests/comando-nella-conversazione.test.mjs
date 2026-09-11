@@ -295,3 +295,41 @@ test('D-10S, la rotta: accende, rifiuta ciò che non è booleano con 400, e la s
   const assente = await posta('mai-esistita', { acceso: true });
   assert.equal(assente.status, 404);
 });
+
+/*
+ * ⭐⭐⭐ Owner 11/09, la forma esatta che vuole — ed è il cuore della riga:
+ *
+ *   io      : ciao come va
+ *   modello : ciao, come posso esserti utile
+ *   io      : !cd games && ls
+ *   modello : NULLA — come se non avessi inviato nessun messaggio
+ *   io      : che giochi ho qui dentro?
+ *   modello : ho visto il tuo comando, sei entrato in games, e dentro vedo…
+ *
+ * ⛔ Cioè il comando NON avvia un giro. Lo si prova contando gli avvii, non guardando lo schermo:
+ *   dopo `shell()` il modello non deve essere stato chiamato nemmeno una volta in più.
+ */
+test('D-10S: il comando ! NON fa rispondere il modello — la risposta arriva al messaggio dopo', async () => {
+  const finta = sessioneControllabile();
+  const registro = registroCon(finta, comandoFinto('giochi-uno  giochi-due'));
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'ciao come va' });
+  finta.concludi([{ role: 'user', content: 'ciao come va' }, { role: 'assistant', content: 'ciao, come posso esserti utile' }]);
+  await unTick();
+
+  const avviiPrima = finta.inputs.length;
+  registro.comandiNellaConversazione(sessionId, true);
+  registro.shell(sessionId, 'cd games && ls');
+  await unTick();
+  await unTick();
+
+  assert.equal(finta.inputs.length, avviiPrima,
+    '⛔ il modello NON deve essere chiamato: un `!` è un comando, non un messaggio');
+
+  /* …e al messaggio dopo, senza `!`, il modello trova il comando nella conversazione. */
+  registro.resume(sessionId, 'che giochi ho qui dentro?');
+  await unTick();
+  assert.equal(finta.inputs.length, avviiPrima + 1, 'ORA sì: un giro solo, quello che ho chiesto io');
+  const testo = JSON.stringify(finta.ultimo.messaggiIniziali);
+  assert.ok(testo.includes('cd games'), 'e si porta dietro il comando');
+  assert.ok(testo.includes('giochi-uno'), 'e quello che il comando ha stampato');
+});
