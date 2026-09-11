@@ -1058,6 +1058,12 @@ Cinque righe `COMP …: dai dati alla riga del mockup — struttura, parole, pix
 CheckCard, ExtensionList_skills/mcp/plugins) falliscono a ~1 minuto l'una (timeout). L'agente della
 barra l'ha provato con A/B nel worktree rimettendo i quattro file a HEAD: **rosso già prima** del
 porting, quindi non introdotto dai lotti di stasera; rilanciato sulla lane dopo il merge: stesso
-esito, e la corsa non finisce entro 280 s. Sospetto (non provato): il cancello apre le pagine del
-laboratorio, dove `#talosAvvio` senza il `position:fixed` del template è un blocco da 8.697 px che
-copre tutto (trovato dal lotto sezioni). Da capire con un log intero, non a sensazione.
+esito. **Causa trovata (11/09, 23:10, una prova isolata su porte libere 4321/4322):** non è il
+velo del laboratorio — è il confronto delle PAROLE col mockup di riferimento (`tests/parity/aiuto.mjs`,
+`MOCKUP`). `COMP ProviderCard`: atteso «… Salva chiave Prova collegamento Salva collegamento Rimuovi
+chiave», ricevuto «… Salva chiave». La app ha spostato le azioni oltre le due in un menu «⋯» + tasto
+destro per regola dell'owner del 10/09 («le azioni non si affiancano»): il **riferimento è rimasto
+indietro rispetto alla decisione**, e i timeout a 1 minuto (CheckCard, ExtensionList×3) sono da
+guardare a parte. ⇒ Cura: aggiornare il riferimento dei componenti toccati dalla regola (o insegnare
+al confronto che le azioni nel menu overflow valgono come presenti), lotto a sé, dopo i lotti della
+ricerca approfondita. Non è un difetto della app.

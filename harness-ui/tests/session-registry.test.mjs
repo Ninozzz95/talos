@@ -4884,23 +4884,48 @@ test('Doctor può leggere il riepilogo delle sessioni corrotte senza cancellarle
  * research-orchestrator.test.mjs, qui iniettato al costruttore del
  * registro invece che al costruttore dell'orchestratore.
  */
+/*
+ * ⭐ L2 (11/09/2026) — il rapporto di una ricerca non è più l’ultimo messaggio: è un file
+ * DEPOSITATO con `research_deposit`. La fixture porta quindi anche `rapporti` e
+ * `leggiRapportoFn`, altrimenti il registro leggerebbe il filesystem VERO della macchina che
+ * esegue i test — cioè misurerebbe l’ambiente invece dell’oggetto.
+ */
+const RAPPORTO_DEPOSITATO = [
+  '# Il caching di OpenRouter',
+  '',
+  'Il prefisso in cache costa un sesto di quello non in cache.',
+  '',
+  '## Fonti',
+  '- https://openrouter.ai/docs/features/prompt-caching',
+].join('\n');
+
 function storeRicercaFinto() {
   const record = new Map();
   const libreria = new Map();
+  const rapporti = new Map();
   let prossimoIdLibreria = 1;
   return {
-    creaRicercaFn: async ({ cartella, id, domanda, profondita }) => {
-      const voce = { id, domanda, profondita, titolo: null, terminata: null, reportLibraryId: null, avviataAlle: '2026-08-30T10:00:00.000Z' };
+    rapporti,
+    leggiRapportoFn: async ({ cartella, id }) => rapporti.get(`${cartella}::${id}`) ?? null,
+    creaRicercaFn: async ({ cartella, id, domanda, profondita, padreId = null, nome = null }) => {
+      const voce = {
+        id, domanda, profondita, titolo: null, terminata: null, reportLibraryId: null,
+        avviataAlle: '2026-08-30T10:00:00.000Z', conclusaAlle: null, padreId, nome,
+        ultimoMessaggio: null, motivoDettaglio: null,
+      };
       record.set(`${cartella}::${id}`, voce);
       return voce;
     },
     leggiRicercaFn: async ({ cartella, id }) => record.get(`${cartella}::${id}`) ?? null,
-    aggiornaRicercaFn: async ({ cartella, id, titolo, terminata, reportLibraryId }) => {
+    aggiornaRicercaFn: async ({ cartella, id, titolo, terminata, reportLibraryId, conclusaAlle, ultimoMessaggio, motivoDettaglio }) => {
       const voce = record.get(`${cartella}::${id}`);
       if (!voce) return null;
       if (titolo !== undefined) voce.titolo = titolo;
       if (terminata !== undefined) voce.terminata = terminata;
       if (reportLibraryId !== undefined) voce.reportLibraryId = reportLibraryId;
+      if (conclusaAlle !== undefined) voce.conclusaAlle = conclusaAlle;
+      if (ultimoMessaggio !== undefined) voce.ultimoMessaggio = ultimoMessaggio;
+      if (motivoDettaglio !== undefined) voce.motivoDettaglio = motivoDettaglio;
       return voce;
     },
     eliminaRicercaFn: async ({ cartella, id }) => {
@@ -4933,27 +4958,46 @@ test('⭐⭐⭐ gli 8 onRicerca* sono SEMPRE costruiti su avvia() — funzioni v
 
 test('⭐⭐⭐⭐ research FILO INTERO: onRicercaAvvia avvia DAVVERO una seconda sessione, STESSA cartella del padre — a differenza della delega, MAI isolata', async () => {
   const finta = sessioneControllabile(); // STESSO fake per padre e ricerca: avviaSessioneFn iniettato una volta sola, la seconda avviaESegui() (per la ricerca) lo richiama identico
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', ...storeRicercaFinto() });
-  registro.avvia('task-vero'); // preparaEsecuzioneFinta: cartella '/tmp/x'
+  const store = storeRicercaFinto();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', ...store });
+  const avvioMadre = registro.avvia('task-vero'); // preparaEsecuzioneFinta: cartella '/tmp/x'
   const onRicercaAvviaDelPadre = finta.ultimoInput.onRicercaAvvia;
 
   const { id } = await onRicercaAvviaDelPadre({ question: 'Come funziona il caching di OpenRouter?', depth: 'deep' });
   assert.ok(id, 'research_start torna SUBITO un id, senza aspettare la CONCLUSIONE della ricerca');
   assert.equal(finta.chiamate, 2, 'research_start deve aver richiamato avviaSessioneFn una SECONDA volta, per la ricerca');
   assert.equal(finta.ultimoInput.cartella, '/tmp/x', 'la ricerca gira nella STESSA cartella del padre — MAI isolata come una delega');
-  assert.equal(finta.ultimoInput.livelloAccesso, 'lettura', 'permessiRichiesti:\'Read only\' si traduce nello stesso livelloAccesso del resto del prodotto');
+  /*
+   * ⛔⛔⛔ L1 (11/09) — «ricerca», non più «lettura». Con «lettura» la ricerca non poteva
+   * CONSEGNARE: la corsa `d2a453a8` ha speso 484.171 token e ha salvato come rapporto
+   * permanente la frase con cui si scusava di non poter scrivere il rapporto.
+   */
+  assert.equal(finta.ultimoInput.livelloAccesso, 'ricerca', 'permessiRichiesti «Research» si traduce nel livello che permette la sola consegna');
+  assert.equal(finta.ultimoInput.task.ricercaId, id, 'l\'id viaggia nel task: è da lì che il kernel costruisce il percorso del deposito, mai da un argomento del modello');
+  /*
+   * ⛔ Letto dal REGISTRO e non da `finta.ultimoInput`: `padreId` vive sulla voce di sessione e
+   * non viaggia dentro le opzioni passate al runtime — chiederlo lì avrebbe dato `undefined`
+   * per costruzione, cioè un test che passa guardando dove la cosa non è.
+   */
+  const rigaDellaRicerca = registro.elenca().find((s) => s.sessionId === id);
+  assert.equal(rigaDellaRicerca.padreId, avvioMadre.sessionId, '§6.6 — la ricerca è figlia della chat che l\'ha ordinata, non una sessione orfana');
+  assert.ok(rigaDellaRicerca.nome, '§6.6 — e non è più una riga senza nome in elenco');
   assert.match(finta.ultimoInput.task.consegna, /Come funziona il caching di OpenRouter\?/);
 
+  // ⭐ La ricerca DEPOSITA il rapporto: è ciò che `research_deposit` fa sul disco vero.
+  store.rapporti.set(`/tmp/x::${id}`, RAPPORTO_DEPOSITATO);
   finta.concludi(
     { type: 'RunFinished', threadId: 't2', runId: 'r2' },
-    { ok: true, esito: { detto: 'x', comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'Il rapporto trovato.' }] } },
+    { ok: true, esito: { detto: 'x', comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: 'Il rapporto è pronto.' }] } },
   );
   await new Promise((r) => setImmediate(r)); // store finto, in memoria: un solo tick basta a scaricare onConclusioneRicerca per intero
 
   const onRicercaLeggiDelPadre = finta.ultimoInput.onRicercaLeggi; // ⛔ dopo concludi(), ultimoInput torna a puntare all'ULTIMA chiamata catturata — ancora la ricerca (nessuna terza chiamata è avvenuta), quindi le stesse callback restano valide
   const letta = await onRicercaLeggiDelPadre({ id });
   assert.equal(letta.trovata, true);
-  assert.equal(letta.contenutoRapporto, 'Il rapporto trovato.', 'il rapporto è stato DAVVERO salvato in Libreria e si rilegge');
+  assert.equal(letta.stato, 'done');
+  assert.equal(letta.contenutoRapporto, RAPPORTO_DEPOSITATO, 'si rilegge il DEPOSITO, non l\'ultima frase del modello');
+  assert.equal(letta.ultimoMessaggio, 'Il rapporto è pronto.', 'l\'ultima frase resta, come allegato');
 });
 
 test('⭐⭐⭐ research_pause FILO INTERO: onRicercaPausa abortisce DAVVERO il controller della ricerca (segnaleStop.aborted)', async () => {

@@ -87,7 +87,9 @@ import { elencaAttivita as elencaAttivitaReale, TaskStoreError } from './tasks-s
 import { elencaMemorie as elencaMemorieReale, MemoryStoreError } from './memory-store.mjs';
 import {
   creaRicerca as creaRicercaReale, leggiRicerca as leggiRicercaReale, aggiornaRicerca as aggiornaRicercaReale,
-  eliminaRicerca as eliminaRicercaReale, elencaRicerche as elencaRicercheReale, ResearchStoreError,
+  eliminaRicerca as eliminaRicercaReale, elencaRicerche as elencaRicercheReale,
+  // ⭐ L2 (11/09) — il lettore del rapporto depositato da `research_deposit`.
+  leggiRapporto as leggiRapportoReale, ResearchStoreError,
 } from './research-store.mjs';
 import { creaResearchOrchestrator } from './research-orchestrator.mjs';
 import {
@@ -1377,6 +1379,14 @@ export function createSessionRegistry({
    */
   creaRicercaFn = creaRicercaReale, leggiRicercaFn = leggiRicercaReale, aggiornaRicercaFn = aggiornaRicercaReale,
   eliminaRicercaFn = eliminaRicercaReale, elencaRicercheFn = elencaRicercheReale,
+  /*
+   * ⭐ L2 (11/09/2026) — il LETTORE del rapporto depositato, iniettabile come gli altri cinque.
+   * ⛔ Non è un vezzo di simmetria: da oggi il rapporto è un file su disco
+   *   (`.harness-ui-research/<id>/rapporto.md`), quindi senza questa porta un test del registro
+   *   andrebbe a leggere il filesystem VERO della macchina che lo esegue — cioè misurerebbe
+   *   l'ambiente invece dell'oggetto. Il default resta la lettura vera.
+   */
+  leggiRapportoFn = leggiRapportoReale,
   salvaVoceLibreriaFn = salvaVoceLibreriaReale, leggiVoceLibreriaFn = leggiVoceLibreriaReale, eliminaVoceLibreriaFn = eliminaVoceLibreriaReale,
   /* ⭐⭐⭐⭐ 10/09/2026 — le tre porte nuove del CRUD Libreria lato persona (vedi i metodi
      `scaricaVoceLibreria`/`rinominaVoceLibreria`/`rivelaVoceLibreria`). `eliminaVoceLibreriaFn`
@@ -1442,6 +1452,16 @@ export function createSessionRegistry({
     'memory_search', 'memory_write', 'memory_update', 'memory_delete',
     'research_list', 'research_start', 'research_read', 'research_rename',
     'research_pause', 'research_resume', 'research_cancel', 'research_delete',
+    /*
+     * ⭐⭐⭐ L1 (11/09/2026) — `research_deposit`, il nono di Deep Research. Sta in lista come
+     * tutti gli altri, MA il kernel non lo offre mai a una sessione che non è una ricerca: è
+     * `attrezziNegatiDalLivello` (talosHarness.mjs) a filtrare la lista sul LIVELLO, non
+     * questo elenco. ⛔ Nelle chat normali (`Workspace write`/`Full access`) resta quindi
+     * offerto e innocuo — depositerebbe in una cartella di ricerca che non esiste, e lo dice:
+     * «this session is not one». Toglierlo anche lì vorrebbe un filtro per NOME oltre che per
+     * livello, cioè la seconda lista che diverge.
+     */
+    'research_deposit',
     'tool_create',
   ],
   ricercaWeb,
@@ -1493,7 +1513,7 @@ export function createSessionRegistry({
    */
   const researchOrchestrator = creaResearchOrchestrator({
     sessioni, avviaESeguiFn: avviaESegui,
-    creaRicercaFn, leggiRicercaFn, aggiornaRicercaFn, eliminaRicercaFn, elencaRicercheFn,
+    creaRicercaFn, leggiRicercaFn, aggiornaRicercaFn, eliminaRicercaFn, elencaRicercheFn, leggiRapportoFn,
     salvaVoceLibreriaFn, leggiVoceLibreriaFn, eliminaVoceLibreriaFn, randomUUIDFn,
   });
 
@@ -2554,10 +2574,22 @@ export function createSessionRegistry({
      * insieme alla clausola tolta là dentro, questo fa sì che «Per questa sessione» funzioni davvero:
      * un attrezzo passato a «sempre» smette di chiedere anche se un ALTRO attrezzo resta su «chiedi».
      */
+    /*
+     * ⭐⭐⭐ L1 §6.3 (11/09/2026) — la QUINTA parola: `'Research'` → `livelloAccesso:'ricerca'`.
+     *
+     * ⛔ È una parola INTERNA, non una quinta voce della pillola dei permessi: non la sceglie
+     *   nessuno a mano, la scrive solo `research-orchestrator.avvia()`. In UI la sessione di
+     *   una ricerca mostra «Ricerca approfondita» — mai «Research», mai «ricerca» (niente nomi
+     *   tecnici a schermo, regola owner 04/09).
+     * ⛔ Perché esiste: `'Read only'` vieta ANCHE la consegna, e una ricerca che non può
+     *   consegnare finisce come la `d2a453a8` dell'11/09 — 484.171 token spesi e, come
+     *   rapporto permanente, la frase con cui il modello si scusava di non poterlo scrivere.
+     */
     const livelloAccesso = voce.permessi === 'Read only'
       ? 'lettura'
-      : voce.permessi === 'On request' ? 'su-richiesta'
-        : voce.permessi === 'Full access' ? 'accesso-pieno' : undefined;
+      : voce.permessi === 'Research' ? 'ricerca'
+        : voce.permessi === 'On request' ? 'su-richiesta'
+          : voce.permessi === 'Full access' ? 'accesso-pieno' : undefined;
     /*
      * ⛔⛔⛔ FASE B (28/8) — RIPIEGO TEMPORANEO, non la cura finale.
      *
@@ -2667,7 +2699,15 @@ export function createSessionRegistry({
      * cartella allargata, non solo dal resume successivo.
      */
     const onRicercaLista = (argomenti) => researchOrchestrator.elenca({ cartella: voce.cartella, ...argomenti });
-    const onRicercaAvvia = (argomenti) => researchOrchestrator.avvia({ cartella: voce.cartella, question: argomenti?.question, depth: argomenti?.depth });
+    /*
+     * ⭐ §6.6 (11/09) — `padreId: sessionId`: la ricerca nasce AGGANCIATA alla chat che l'ha
+     * ordinata. Prima era `null` e nell'albero sessione non compariva sotto nessuno — per
+     * l'owner era «una sessione nuova», e lo era davvero anche nel registro.
+     * ⛔ `sessionId` e non `voce.sessionId`: sono lo stesso valore (`voce.sessionId = sessionId`
+     *   più sopra in avviaESegui), ma `sessionId` è il parametro chiuso in chiusura, cioè
+     *   quello che non può essere stato riscritto da nessuno nel frattempo.
+     */
+    const onRicercaAvvia = (argomenti) => researchOrchestrator.avvia({ cartella: voce.cartella, question: argomenti?.question, depth: argomenti?.depth, padreId: sessionId });
     const onRicercaLeggi = (argomenti) => researchOrchestrator.leggi({ cartella: voce.cartella, id: argomenti?.id });
     const onRicercaRinomina = (argomenti) => researchOrchestrator.rinomina({ cartella: voce.cartella, id: argomenti?.id, title: argomenti?.title ?? null });
     const onRicercaPausa = (argomenti) => researchOrchestrator.mettiInPausa({ id: argomenti?.id });
