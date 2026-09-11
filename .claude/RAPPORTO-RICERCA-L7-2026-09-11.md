@@ -18,9 +18,12 @@ che sta scrivendo il backend, non mie. Io ho toccato solo:
 | `frontend/lab/main.js` | le undici pagine del banco e la coda asincrona | ~50 |
 | `frontend/tests/unit/ricerca-dettaglio.test.mjs` | **nuovo**, 20 prove | 457 |
 | `frontend/tests/unit/ricerca.test.mjs` | una pretesa allineata alla data senza secondi | 3 |
+| `frontend/tests/parity/componenti.spec.mjs` | **fuori dal perimetro del brief**, e spiegato al §3-bis | 20 |
 
-⛔ **Non toccati**: `legacy/app.js`, `index.template.html`, `public/`. Gli agganci sono più sotto,
-come diff esatto.
+⛔ **Non toccati da me**: `legacy/app.js`, `index.template.html`, `public/`. Gli agganci li ho
+scritti come diff (§4) — e un'**altra sessione li ha applicati e ha committato tutto** mentre
+lavoravo (`66bbe73d`): stesso checkout, e `git commit` fotografa l'indice condiviso. Li ho riletti
+riga per riga: sono i miei, verbatim.
 
 ---
 
@@ -57,7 +60,7 @@ quel pannello è il posto dove si approva, non una scheda in più da inventare a
 | `sezioni-adattatori.js:418` (prima) | «Il rapporto è stato scritto in `.harness-ui-research/`» | lì c'è **solo la scheda** della ricerca; il rapporto è una voce di Libreria (`research-orchestrator.mjs:132`) |
 | `sezioni-adattatori.js:467-468` (prima) | «Da qui non si consultano ancora» + «Lo stato ‹Conclusa› non certifica le fonti» | era vero, ed era la descrizione di un buco, non di un prodotto |
 | `ricerca.js:21` (prima) | `apri.hidden = true; apri.dataset.richiede = 'fase3'` | un pulsante spento **da diciotto giorni** |
-| `index.template.html:1058` | «I rapporti vivono in `.harness-ui-research/`, dentro il progetto» | falsa, ed è **ancora lì**: il file non è di questa lane ⇒ diff al §4 |
+| `index.template.html:1058` | «I rapporti vivono in `.harness-ui-research/`, dentro il progetto» | falsa: il file non è di questa lane, il diff è al §4.2 ed è stato **applicato** |
 
 ### 1.2 La cura, con file:riga
 
@@ -171,9 +174,61 @@ script delle foto).
 
 ---
 
-## 4. L'aggancio da fare — diff esatti
+## 3-bis. ⛔ Il cancello dei componenti era INERTE, e adesso non lo è
 
-### 4.1 `frontend/src/legacy/app.js` — quattro iniezioni, una riga ciascuna
+Rilanciando la parità su `ReportRow` ho trovato una cosa più grande del mio lotto.
+
+**Il sintomo:** `ReportRow` cadeva sulle PAROLE (le due frasi corrette del §4.2 — vera divergenza,
+attesa). Curata quella, cadeva di nuovo: `locator.screenshot: element is not visible`, sessanta
+secondi di timeout.
+
+**La misura, non la deduzione:** ho lanciato lo stesso cancello su `TaskRow`, che **non ho toccato**.
+Stesso identico errore. ⇒ non era il mio componente.
+
+**La causa:** `#talosAvvio`, il velo d'avvio, arriva col template ma la regola che lo rende
+`position:fixed` vive nell'inline `<style>` di `index.template.html`, che `lab/index.html` non ha.
+Fuori dal `fixed` è un blocco alto **8.697 px** dentro un body flex da 900: la shell riceve 0 px e
+ogni schermata del laboratorio è **invisibile**. `lab/main.js` lo toglieva **solo dentro
+`mostraSchermo`** — e le pagine dei componenti (`ReportRow`, `TaskRow`, …) da lì non passano.
+Il debito era **già dichiarato** dal rapporto dei lotti C/E/F/G («il cancello di parità apre le
+stesse pagine: va guardato prima di fidarsi del suo verde»): qui si chiude.
+
+**La cura:** una riga in `lab/main.js:105-118`, il velo tolto **una volta all'ingresso**. Nessun
+laboratorio lo disegna di proposito.
+
+**Cosa dice il cancello adesso che è vivo** (`--project=desktop-1440x900`, banco su 4189/4190):
+
+```
+26 passati · 11 falliti   (prima: 0 passati sul confronto a pixel, tutti in timeout)
+✅ ReportRow — il mio, con la divergenza dichiarata
+✅ TaskRow · MemoryRow · Board · Topbar · Terminale · Review · Toast · Inspector (×2) ·
+   SettingRow · SettingsNav · CheckCard · ExtensionList (×4) · CatalogoModelli · CatalogoHf ·
+   ModelliInstallati · CodaDownload · RuntimeCard · MemoryMeter · FonteRicerca · AutomationRow · ForgeList
+❌ ProviderCard · ToolList · LibraryRow · SessionItem · NavItem · WorkspaceFooter ·
+   Conversazione · Browser · NotificationPanel · ChatFooter · EmptyState
+```
+
+⛔ **Gli undici rossi NON sono miei e non li ho indagati**: sono le superfici dei lotti A/B/D (barra a
+gruppi, sessioni, chat) e della Libreria, cioè proprio quelle che il porting del mockup ha cambiato
+**di proposito**. Per ognuna la domanda è la stessa del §4.2: la divergenza è voluta (e allora si
+dichiara, come ho fatto per `ReportRow`) o è una regressione? **Decide chi possiede quelle
+superfici** — io ho riacceso la luce, non ho riordinato la stanza.
+
+⛔ E una lezione che vale più del lotto: **un cancello che fallisce sempre allo stesso modo non è un
+cancello rosso, è un cancello spento**. Nessuno se n'era accorto perché nessuno l'aveva rilanciato
+dopo il velo.
+
+---
+
+## 4. L'aggancio — **già applicato**, e resta qui come registro
+
+⛔ **Mentre lavoravo, un'altra sessione ha committato questo lotto** (`66bbe73d`, 23:09) —
+stesso checkout, e `git commit` fotografa l'indice condiviso (lezione «DUE SESSIONI, STESSA
+CARTELLA»). In quel commit sono entrati **anche i due agganci qui sotto**: li ho riletti riga per
+riga e sono quelli che avevo scritto, verbatim. Restano scritti qui perché un aggancio senza il
+suo motivo è una riga che il primo che legge toglie.
+
+### 4.1 `frontend/src/legacy/app.js` — ✅ dentro (`app.js:5330-5343`)
 
 L'`import` del lotto C è **già dentro** (`app.js:21-25`): `aggiornaPaginaRicerca` viene già dal mio
 adattatore. Manca solo dirgli **cosa sa fare la app**.
@@ -213,11 +268,11 @@ Facoltativo, per la riga del foglio laterale (il pulsante «Apri il rapporto» c
 +  }
 ```
 
-### 4.2 `frontend/index.template.html` (e la copia in `public/`) — la frase falsa
+### 4.2 `frontend/index.template.html` (e la copia in `public/`) — ✅ dentro (`:1058`, `:1071`)
 
-⛔ **Non è la mia lane.** Finché non è applicato, l'adattatore corregge la frase **a schermo**
-(`sezioni-adattatori.js:496-506`), con il commento che dice di togliere quella toppa quando il
-template cambia.
+⛔ **Non era la mia lane**, e adesso è applicato. La toppa nell'adattatore
+(`sezioni-adattatori.js:496-506`) **resta** ed è inerte: corregge la frase solo se la ritrova.
+Toglierla è una riga — ma il mockup statico la porta ancora (§3-bis), quindi per ora fa da rete.
 
 ```diff
 @@ index.template.html:1058
@@ -264,10 +319,11 @@ perché una frase falsa nel sorgente torna a galla al primo che ricostruisce la 
 ## Riepilogo veloce
 
 **Cosa devi fare tu**
-1. Dire se l'aggancio di §4.1 lo applica l'agente che possiede `legacy/app.js` **stasera** o dopo il
-   backend: senza, la sezione funziona ma il rapporto resta «in Libreria» invece di aprirsi qui.
-2. Dire se la frase falsa di `index.template.html:1058` la correggo io (è fuori dalla mia lane) o
-   chi possiede quel file: fino ad allora resta la toppa nell'adattatore.
+1. Decidere chi guarda gli **undici componenti rossi** del §3-bis: il cancello di parità era spento
+   da quando è nato il velo d'avvio, e adesso dice la verità su tutta la app, non solo sul mio pezzo.
+2. Dire se la mia **divergenza dichiarata** in `componenti.spec.mjs` (correggo le due frasi false
+   anche nella copia del mockup) ti va bene, o se preferisci che il mockup resti intoccato e
+   `ReportRow` esca dal cancello.
 3. Guardare le 28 foto in `harness-ui/frontend/artifacts/l7/` e bocciare quello che non ti torna.
 
 **Cosa faccio io**
@@ -275,7 +331,8 @@ Appena la rotta manda i campi nuovi, rifaccio il giro vero sul 4174 — chiaro e
 conclusa e una bloccata, foto **durante** e non solo alla fine.
 
 **Cosa rimane**
-Il giro col server vero (punto 1 di §5); il menu con la regia del monolite; il tasto destro
+Gli **undici componenti rossi** del §3-bis, che non sono miei e ora si vedono; il giro col server
+vero (punto 1 di §5); il menu con la regia del monolite; il tasto destro
 fotografato; copia ed esportazioni premute davvero; un giro di tastiera/lettore di schermo; il
 `bilancio` nella rotta, che farebbe guidare **ogni** riga dell'elenco col bilancio invece che con la
 frase dello stato.

@@ -86,6 +86,27 @@ export function statoRicercaApprofondita(stato) {
 /** Solo `done` può dire «Conclusa»: la regola sta in una funzione, così un test può morderla. */
 export function conclusaDavvero(stato) { return stato === 'done'; }
 
+/**
+ * QUESTA RICERCA HA UN RAPPORTO DA LEGGERE?
+ *
+ * ⛔⛔ 11/09/2026, foto dell'owner sul 4174, ricerca `d2a453a8`. Sulla stessa schermata:
+ *   il timbro diceva «Senza rapporto», i filtri dicevano «Col rapporto 1 · Senza rapporto 0», il
+ *   piede della scheda diceva «Col rapporto», e il pannello «Rapporto» stampava come rapporto i
+ *   290 byte di scusa del modello. Quattro voci, tre in disaccordo con la quarta.
+ *   La causa è una sola: filtro, piede e pannello guardavano `reportLibraryId` — cioè «c'è un file
+ *   in Libreria» — mentre il timbro guarda lo STATO.
+ *
+ * ⇒ Quando le due domande sono in disaccordo vince lo STATO, e non è una preferenza: il cancello
+ *   di consegna lato server ha GIÀ deciso che quel file non è un rapporto, ed è per questo che la
+ *   ricerca è finita `senza-rapporto` invece che `done`. Un file depositato resta un file
+ *   depositato: si mostra, con quel nome, e mai al posto del rapporto.
+ * ⛔ Servono ENTRAMBE: un `done` senza file in Libreria non ha comunque niente da leggere — è
+ *   l'anomalia che il piede della scheda chiama «Nessun rapporto» da sempre.
+ */
+export function haRapportoLeggibile(voce) {
+  return conclusaDavvero(voce?.stato) && Boolean(voce?.reportLibraryId);
+}
+
 /*
  * ⛔ Niente SECONDI: `toLocaleString('it-IT')` scrive «11/09/2026, 20:56:46» e il terzo numero non
  *   dice niente a nessuno — in una riga di intestazione è solo rumore. Trovato guardando la foto.
@@ -540,13 +561,44 @@ export function barraBilancio(doc, bilancio) {
 function vistaRapporto(doc, voce, lettura, ctx) {
   const pezzi = [];
   const frasi = frasiVoce(voce);
-  if (!frasi.haRapporto) {
+  if (!haRapportoLeggibile(voce)) {
     pezzi.push(nodo(doc, 'p', 'td-prose', conclusaDavvero(voce?.stato)
       ? 'Questa ricerca risulta conclusa, ma non ha depositato nessun rapporto.'
       : 'Questa ricerca non ha depositato un rapporto.'));
     /* ⛔ La spiegazione sta già sotto il titolo quando la ricerca NON è conclusa: ripeterla qui la
        fa leggere due volte nella stessa schermata (visto nella foto a 1024 px). */
     if (conclusaDavvero(voce?.stato)) pezzi.push(nodo(doc, 'p', 'td-subtle', frasi.spiegazione));
+    /*
+     * ⛔⛔ IL FILE C'È, MA NON È IL RAPPORTO — la foto dell'11/09 sul 4174, ricerca `d2a453a8`:
+     *   `senza-rapporto` con un `reportLibraryId` vero, e questo pannello stampava i 290 byte di
+     *   scusa del modello come se fossero il rapporto («sotto c'è il testo così com'è stato
+     *   scritto»). Il cancello di consegna aveva già respinto quel file: mostrarlo al posto del
+     *   rapporto rifà lo stesso guasto un livello più in basso.
+     * ⇒ Si mostra, perché nasconderlo lascerebbe la persona a chiedersi cosa c'è in Libreria — ma
+     *   sotto il suo nome vero, «Ciò che è stato depositato», e come ALLEGATO: lo stesso trattamento
+     *   che l'ultimo messaggio ha in «Come è andata».
+     */
+    if (frasi.haRapporto) {
+      pezzi.push(nodo(doc, 'h3', '', 'Ciò che è stato depositato'));
+      /* ⛔ VISTO NELLA FOTO (ric-scusa, chiaro, 1440): questa riga ripeteva parola per parola il
+         motivo che il server manda e che sta già due righe sopra, sotto il titolo. Qui si dice
+         solo CHE COS'È il file; il perché lo dice il motivo, una volta sola. */
+      pezzi.push(nodo(doc, 'p', 'td-subtle', 'Il file che questa ricerca ha lasciato in Libreria. Non è il suo rapporto.'));
+      if (lettura?.stato === 'pronto') {
+        const deposto = (lettura.prosa || lettura.testo || '').trim();
+        pezzi.push(deposto
+          ? nodo(doc, 'blockquote', 'td-allegato', deposto)
+          : nodo(doc, 'p', 'td-subtle', 'Il file depositato è vuoto.'));
+      } else if (lettura?.stato === 'errore') {
+        const p = nodo(doc, 'p', 'td-subtle', `Il file depositato non si apre: ${lettura.errore}`);
+        p.setAttribute('role', 'alert');
+        pezzi.push(p);
+      } else if (!ctx?.puoLeggere) {
+        pezzi.push(nodo(doc, 'p', 'td-subtle', 'È in Libreria, in questo progetto: da lì si apre e si scarica.'));
+      } else {
+        pezzi.push(nodo(doc, 'p', 'td-subtle', 'Leggo il file depositato…'));
+      }
+    }
     /* ⛔ Il puntatore all'ultimo messaggio è qui, e dice cos'è: senza questa riga qualcuno andrebbe
        a cercarlo e lo scambierebbe per il rapporto — che è esattamente il guasto dell'11/09. */
     if (voce?.ultimoMessaggio) pezzi.push(nodo(doc, 'p', 'td-subtle', 'L’ultima cosa che la ricerca ha detto in chat è in «Come è andata». Non è un rapporto.'));
@@ -759,9 +811,16 @@ export function vociMenuRicerca(voce, ctx = {}) {
   if (typeof ctx.onApriSessione === 'function' && voce?.id) {
     voci.push({ chiave: 'apri-conversazione', etichetta: 'Apri la conversazione', icona: 'i-eye', aziona: () => ctx.onApriSessione({ id: voce.id }) });
   }
+  /*
+   * ⛔ TROVATO PER STRADA l'11/09, curando il pannello: il menu chiamava «rapporto» lo stesso file
+   *   che il pannello aveva appena smesso di chiamare così. Su una ricerca che un rapporto non ce
+   *   l'ha, le due voci restano — il file esiste e si copia — ma col suo nome vero.
+   */
   if (pronto && lettura.prosa) {
-    voci.push({ chiave: 'copia', etichetta: 'Copia il rapporto', icona: 'i-copy', aziona: () => ctx.onCopia?.(lettura.prosa, voce) });
-    voci.push({ chiave: 'esporta', etichetta: 'Esporta il rapporto', icona: 'i-download', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'md'), lettura.testo || lettura.prosa, 'text/markdown') });
+    const rapporto = haRapportoLeggibile(voce);
+    const cosa = rapporto ? 'il rapporto' : 'il file depositato';
+    voci.push({ chiave: 'copia', etichetta: `Copia ${cosa}`, icona: 'i-copy', aziona: () => ctx.onCopia?.(lettura.prosa, voce) });
+    voci.push({ chiave: 'esporta', etichetta: `Esporta ${cosa}`, icona: 'i-download', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'md'), lettura.testo || lettura.prosa, 'text/markdown') });
   }
   if (citazioni.length) {
     voci.push({ chiave: 'bibtex', etichetta: 'Esporta le citazioni (BibTeX)', icona: 'i-doc', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'bib'), bibtexDaCitazioni(citazioni), 'application/x-bibtex') });
@@ -833,7 +892,10 @@ export function montaDettaglioRicerca(voce, ctx) {
    *   ricerca senza rapporto «Rapporto» è tre righe che spiegano un'assenza, mentre «Come è andata»
    *   ha lo stato, il motivo, i tempi e l'ultimo messaggio. Chi ha già scelto una vista la ritrova.
    */
-  const scelta = magazzino.viste.get(String(voce?.id)) || (voce?.reportLibraryId ? 'rapporto' : 'andata');
+  /* ⛔ Il file in Libreria non basta ad aprire su «Rapporto»: su una `senza-rapporto` quel pannello
+     è una spiegazione di un'assenza più un allegato, mentre «Come è andata» ha lo stato, il motivo,
+     i tempi e l'ultimo messaggio. Si apre dove c'è da leggere. */
+  const scelta = magazzino.viste.get(String(voce?.id)) || (haRapportoLeggibile(voce) ? 'rapporto' : 'andata');
   const lista = nodo(doc, 'div', 'td-segment td-viste');
   lista.setAttribute('role', 'tablist');
   lista.setAttribute('aria-label', 'Viste della ricerca');

@@ -374,3 +374,47 @@ dialog.td-modal:has(.td-theme-studio) { width: min(1120px, calc(100vw - 40px)); 
   .td-andata dd { margin-bottom: 8px; }
   .td-viste button { padding: 0 8px; font-size: 11px; }
 }
+
+/* -------------------------------------------------------------------------------------------
+ * IL CONTENUTO DI UN FILE nel dettaglio della Libreria — 11/09/2026.
+ *
+ * ⛔ NIENTE DI NUOVO dove esiste già: l'interruttore è il `.td-segment .td-viste` delle viste
+ *   della Ricerca, il testo grezzo è il `.td-code` che il mockup usa al suo posto (riga 6078), e
+ *   la tabella prende i pesi della copertina `td-document-cover` del mockup (righe 4274-4276).
+ * ⛔ NESSUN COLORE NUOVO e NESSUNA ANIMAZIONE: solo token dei temi, che sanno già stare in chiaro
+ *   e in scuro, e due regole universali con `!important` spengono comunque ogni animazione.
+ * ------------------------------------------------------------------------------------------- */
+
+.td-file-modi { margin: 14px 0 12px; }
+.td-file-vista { min-height: 132px; }
+.td-file-vista > :first-child { margin-top: 0; }
+.td-file-vista > .td-prosa-rapporto { max-width: 72ch; }
+
+/* ⛔ Il blocco del testo ha un TETTO e scorre da solo: senza, un file da duemila righe spinge le
+   azioni fuori dal pannello e per raggiungerle bisogna scorrere tutto il file. */
+.td-file-testo { max-height: 52vh; overflow: auto; margin: 0; }
+
+/* La tabella: l'intestazione resta visibile mentre si scorre, le celle non vanno a capo (una
+   colonna di dati che si spezza in tre righe non si legge come una colonna). */
+.td-file-tabella-scorre { max-height: 52vh; overflow: auto; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-window-bg); }
+.td-file-tabella { border-collapse: collapse; width: 100%; font: 12px/1.6 var(--talos-font-mono); }
+.td-file-tabella th, .td-file-tabella td { padding: 7px 11px; text-align: left; border-bottom: 1px solid var(--talos-border); white-space: nowrap; }
+.td-file-tabella tbody tr:last-child td { border-bottom: 0; }
+.td-file-tabella th { position: sticky; top: 0; z-index: 1; font-weight: 500; color: var(--talos-accent-text); background: var(--talos-accent-soft); border-bottom-color: var(--talos-accent-border); }
+.td-file-tabella-scorre:focus-visible, .td-file-testo:focus-visible { outline: var(--talos-focus-width, 2px) solid var(--talos-ring); outline-offset: 2px; }
+.td-file-tabella-scorre + .talos-button { margin-top: 12px; }
+
+/* Il formato che questa finestra non apre: tratteggio, perché non è contenuto — è un rimando.
+   ⛔ VISTO NELLA FOTO (pdf, 1024, dettaglio espanso): la carta si stirava per 700 px con dentro
+   tre righe di testo, e il vuoto a destra la faceva sembrare un riquadro rotto. Una cosa che dice
+   una frase è larga quanto la frase. */
+.td-file-esterno { display: flex; flex-direction: column; align-items: flex-start; gap: 14px; padding: 18px; max-width: 62ch; border: 1px dashed var(--talos-border-strong); border-radius: var(--talos-radius-control); background: var(--talos-window-bg); }
+.td-file-esterno p { margin: 0; max-width: 54ch; color: var(--talos-assistant-text); font-size: 13px; line-height: 1.7; }
+
+.td-file-misura { margin: 12px 0 0; color: var(--talos-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+@container dettaglio (max-width: 430px) {
+  .td-file-testo, .td-file-tabella-scorre { max-height: 44vh; }
+  .td-file-tabella { font-size: 11px; }
+  .td-file-tabella th, .td-file-tabella td { padding: 6px 8px; }
+}

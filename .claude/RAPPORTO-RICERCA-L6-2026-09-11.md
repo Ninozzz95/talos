@@ -407,17 +407,38 @@ merito è della cache del **prompt** e non di questo lotto, e va detto.
 ## 9. La suite
 
 ```
-node --test tests/research/*.test.mjs          →  tests 325   pass 325   fail 0
+node --test tests/research/*.test.mjs          →  tests 325   pass 325   fail 0   (tre giri, identico)
+
 node --test tests/*.test.mjs tests/research/*.test.mjs
-                                               →  tests 2685  pass 2685  fail 0
+  giro 1 (22:5x) →  tests 2685  pass 2685  fail 0
+  giro 2 (22:5x) →  tests 2685  pass 2685  fail 0
+  giro 3 (23:0x) →  tests 2685  pass 2682  fail 3     ← e i tre NON sono miei
 ```
 
-- **I miei: 50 su 50 verdi** (27 cache + 10 budget + 13 misura), più i **7 del mobile intatti** — il
-  collettore resta un porto fedele quando nessuno gli passa cache o budget.
-- ⭐ **I 7 rossi che L3b attribuiva ai lotti L1/L2 non ci sono più**: la suite completa è **tutta
-  verde**. ⛔ E l'ho contata **due volte di fila** prima di scriverlo, perché un conteggio raccolto
-  mentre un altro agente scrive non è una misura: 2685/2685 entrambe le volte. Al momento della
-  seconda, `git status` mostrava in scrittura da altri solo `src/research-store.mjs`.
+**I miei: 50 su 50 verdi** (27 cache + 10 budget + 13 misura), più i **7 del mobile intatti** — il
+collettore resta un porto fedele quando nessuno gli passa cache o budget.
+
+⛔ **I tre rossi del terzo giro, e perché li scrivo invece di riportare i due giri verdi.** Fra il
+secondo e il terzo giro io ho toccato **solo un commento** (una citazione di riga). A cambiare è
+stato un altro agente: `git status` al terzo giro mostrava in scrittura
+`src/research-orchestrator.mjs`, `src/research-store.mjs` e
+`frontend/tests/parity/componenti.spec.mjs`, che al secondo giro non c'erano tutti. I tre rossi
+stanno in `tests/research-orchestrator.test.mjs` e `tests/session-registry.test.mjs` — i file dei
+lotti **L1/L2/L4**, che il brief mi vieta:
+
+```
+✖ leggi: ricerca "done" con un rapporto DEPOSITATO e valido — contenutoRapporto è il testo vero
+✖ ⛔⛔⛔ §6.5 COMPATIBILITÀ ALL'INDIETRO — una ricerca già su disco con terminata:"done" … "senza-rapporto"
+✖ ⭐⭐⭐⭐ research FILO INTERO: onRicercaAvvia avvia DAVVERO una seconda sessione …
+```
+
+La prova che non possono essere miei è **strutturale**, non un'opinione: fuori da `src/research/`
+**nessun file importa** `fetch-cache.mjs` o `page-budget.mjs`, e `collector.mjs` è importato solo da
+`dossier.mjs`, `report.mjs` e dai test di quella cartella — tutti dentro i **325 verdi**.
+
+⛔ E la lezione applicata a me stesso: avevo già scritto «la suite è tutta verde» sui primi due giri.
+Un conteggio raccolto mentre un altro agente scrive **non è una misura** — vale il verde quanto il
+rosso. ⇒ tre giri, tutti riportati, e i rossi **attribuiti**, non diagnosticati e non toccati.
 
 ---
 
