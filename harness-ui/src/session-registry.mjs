@@ -2623,6 +2623,21 @@ export function createSessionRegistry({
          comandi `!` lanciati dalla persona da quando il modello ha parlato l'ultima volta. Senza
          racconti in sospeso sono identici ai parametri, bit per bit. */
       cartella: voce.cartella, task: taskEffettivo, modello: modelloEffettivo, chiave: chiaveEffettiva, comandoProva, messaggiIniziali: messaggiInizialiEffettivi,
+      /*
+       * ⛔⛔⛔ 11/09/2026 — DOVE SI DEPOSITA UN FILE GENERATO: `cartellaBase`, non `cartella`.
+       *
+       * `voce.cartella` è la cartella EFFETTIVA, cioè quella che «Full access» allarga alla radice
+       * del disco (`cartellaEffettivaPerPermessi`, più sopra in questo file). Leggere da lì è il
+       * senso stesso del permesso; SCRIVERCI un file nuovo no: su Windows la radice del volume di
+       * sistema accetta cartelle ma non file (ACL di default del gruppo Users), quindi ogni
+       * `document_create` in una sessione «Full access» falliva con EPERM — misurato sulla sessione
+       * `91ae0634` dell'owner, e nessun nome diverso avrebbe potuto riuscire.
+       * ⛔ `cartellaBase` è immutabile e sopravvive al riavvio (`ripristina()` la rideriva
+       *   dall'intestazione): è la cartella che la persona ha scelto, cioè l'unico posto in cui un
+       *   file generato ha senso e in cui i permessi ci sono davvero. Il `??` copre le voci nate
+       *   prima che questo campo esistesse — lì il comportamento resta identico a prima.
+       */
+      cartellaCreazioni: voce.cartellaBase ?? voce.cartella,
       reasoning: reasoningEffettivo ?? undefined,
       // ⭐ 02/09 — l'etichetta del permesso, dichiarata in RunStarted.contesto (vedi agent-service.mjs): è `voce.permessi` letto ADESSO, cioè anche un cambio arrivato da un altro client via POST /settings fra un giro e l'altro.
       permessi: voce.permessi ?? null,

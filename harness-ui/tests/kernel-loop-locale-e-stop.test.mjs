@@ -28,6 +28,8 @@ import {
     talosLavora,
     RIPETIZIONI_IDENTICHE_MASSIME,
 } from '../src/kernel/talosHarness.mjs'
+import { avviaSessione } from '../src/agent-service.mjs'
+import { analizzaEvidenzaDelega } from '../src/subagent-orchestrator.mjs'
 
 const enc = new TextEncoder()
 
@@ -398,5 +400,207 @@ describe('BC-02 — lo STOP deve essere immediato, non «al prossimo punto sicur
             assert.equal(r.scelta.content, 'ok')
             assert.equal(r.tentativi, 2)
         })
+    })
+})
+
+/*
+ * ⛔⛔⛔ IL CONTEGGIO DEVE TORNARE — 11/09/2026, owner: «se la UI è avvisata di N
+ * attrezzi partiti, deve vedere finire N».
+ *
+ * La prova è in DUE strati, e nessuno dei due inventa la forma dei dati:
+ *   1. il kernel VERO contro un finto backend locale — si contano i delta
+ *      `tool-inizio` contro i sopravvissuti piu' gli `tool-annullato`;
+ *   2. `avviaSessione` VERO, a cui si RIGIOCANO i delta CATTURATI nello strato
+ *      1 — si contano gli eventi AG-UI `ToolCallStart` contro i
+ *      `ToolCallResult`. ⛔ I delta non sono scritti a mano: sono quelli che il
+ *      kernel ha prodotto davvero un attimo prima, altrimenti la prova
+ *      misurerebbe la mia idea del kernel invece del kernel.
+ */
+describe('BC-01/BC-02 — nessun indicatore resta a girare: N annunciati, N finiti', () => {
+    /** Raccoglie i delta del kernel VERO e dice quanti indicatori restano aperti. */
+    const contaSulKernel = async (fotogrammi, opzioni = {}) => {
+        const delta = []
+        const risultato = await consumaFlussoSSE(fintoBackend(fotogrammi), (d) => delta.push(d), opzioni)
+            .then((r) => r, () => null)
+        const annunciati = delta.filter((d) => d.tipo === 'tool-inizio').map((d) => d.toolCallId)
+        const annullati = delta.filter((d) => d.tipo === 'tool-annullato').map((d) => d.toolCallId)
+        const sopravvissuti = (risultato?.scelta?.tool_calls ?? []).map((c) => c.id)
+        return {
+            delta, annunciati, annullati, sopravvissuti,
+            orfani: annunciati.filter((id) => !sopravvissuti.includes(id) && !annullati.includes(id)),
+        }
+    }
+
+    /** Rigioca i delta dentro `avviaSessione` VERO e torna gli eventi AG-UI che ne escono. */
+    const contaSuAgUi = async (delta) => {
+        const eventi = []
+        await avviaSessione({
+            cartella: '/tmp/x', task: { consegna: 'x' }, modello: 'm', chiave: 'k',
+            onEvento: (e) => eventi.push(e),
+            talosLavoraFn: async (input) => {
+                for (const d of delta) input.onDelta?.({ ...d, giro: 0 })
+                return { comeFinita: 'ripetizione', detto: 'fatto' }
+            },
+        })
+        return {
+            eventi,
+            start: eventi.filter((e) => e.type === 'ToolCallStart').map((e) => e.toolCallId),
+            result: eventi.filter((e) => e.type === 'ToolCallResult').map((e) => e.toolCallId),
+        }
+    }
+
+    const valanga = (quante) => Array.from({ length: quante }, (_, i) => (
+        { choices: [{ delta: { tool_calls: [{ index: i, id: `c${i}`, function: { name: 'elenca', arguments: '{}' } }] } }] }
+    ))
+
+    it('⭐⭐⭐ VALANGA — 4 annunciati, 2 eseguiti, 2 annullati: ZERO orfani', async () => {
+        const k = await contaSulKernel(valanga(398))
+        assert.equal(k.annunciati.length, 4, 'la UI viene avvisata di 4 attrezzi partiti')
+        assert.equal(k.sopravvissuti.length, 2, 'solo 2 arrivano al ciclo degli attrezzi')
+        assert.equal(k.annullati.length, 2, 'gli altri 2 devono essere CHIUSI, non spariti')
+        assert.deepEqual(k.orfani, [], 'un indicatore che gira per sempre dice una cosa falsa e nessuno se ne accorge')
+    })
+
+    it('⛔⛔ VALANGA — chi e scartato DICE perche: il motivo nomina la ripetizione e l attrezzo', async () => {
+        const k = await contaSulKernel(valanga(398))
+        const annullo = k.delta.find((d) => d.tipo === 'tool-annullato')
+        assert.match(annullo.motivo, /Scartato: il modello ha chiesto 3 volte di fila la stessa identica cosa/)
+        assert.match(annullo.motivo, /"elenca"/)
+        assert.match(annullo.motivo, /non e stato eseguito/)
+        assert.equal(annullo.nome, 'elenca')
+    })
+
+    it('⭐⭐⭐ VALANGA, dal kernel fino agli eventi AG-UI: ogni annullo chiude un indicatore vero', async () => {
+        const k = await contaSulKernel(valanga(398))
+        /* ⛔ I 2 sopravvissuti li chiude il ciclo degli attrezzi (`tool-esito`): qui si prova che i 2 ANNULLATI arrivano allo schermo come risultato. */
+        const a = await contaSuAgUi(k.delta)
+        assert.equal(a.start.length, 4)
+        assert.equal(a.result.length, 2, 'i due annullati diventano ToolCallResult, l evento che il frontend gia disegna')
+        for (const id of a.result) assert.ok(a.start.includes(id), 'ogni risultato chiude un indicatore che era stato davvero aperto')
+        const rimastiAperti = a.start.filter((id) => !a.result.includes(id))
+        assert.deepEqual(rimastiAperti, ['c0', 'c1'], 'restano aperti SOLO i due che il ciclo degli attrezzi chiudera col loro esito vero')
+    })
+
+    it('⭐⭐⭐ STOP a meta risposta — 2 annunciati, 2 annullati: ZERO spinner permanenti', async () => {
+        const ac = new AbortController()
+        let timer = null
+        const infinito = new Response(new ReadableStream({
+            start(c) {
+                c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 0, id: 'a', function: { name: 'leggi', arguments: '{"f":"a"}' } }] } }] })}\n\n`))
+                c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { tool_calls: [{ index: 1, id: 'b', function: { name: 'leggi', arguments: '{"f":"b"}' } }] } }] })}\n\n`))
+                timer = setInterval(() => { try { c.enqueue(enc.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: '.' } }] })}\n\n`)) } catch { clearInterval(timer) } }, 20)
+                ac.signal.addEventListener('abort', () => clearInterval(timer), { once: true })
+            },
+        }))
+        const delta = []
+        setTimeout(() => ac.abort(), 200)
+        await consumaFlussoSSE(infinito, (d) => delta.push(d), { segnaleStop: ac.signal }).then(() => null, () => null)
+        clearInterval(timer)
+        const annunciati = delta.filter((d) => d.tipo === 'tool-inizio').map((d) => d.toolCallId)
+        const annullati = delta.filter((d) => d.tipo === 'tool-annullato')
+        assert.deepEqual(annunciati, ['a', 'b'])
+        assert.equal(annullati.length, 2, 'il giro non arriva MAI al ciclo degli attrezzi: se non li chiude questo, non li chiude nessuno')
+        assert.match(annullati[0].motivo, /Fermato su richiesta/)
+        const a = await contaSuAgUi(delta)
+        assert.equal(a.start.length, 2)
+        assert.equal(a.result.length, 2, 'N annunciati, N finiti')
+    })
+
+    describe('⛔⛔⛔ AL CONTRARIO — il lavoro legittimo non viene chiuso a forza', () => {
+        it('due attrezzi legittimi con gli STESSI argomenti restano due, e NESSUNO viene annullato', async () => {
+            const k = await contaSulKernel([0, 1].map((i) => (
+                { choices: [{ delta: { tool_calls: [{ index: i, id: `u${i}`, function: { name: 'leggi', arguments: '{"f":"a.txt"}' } }] } }] }
+            )))
+            assert.deepEqual(k.annunciati, ['u0', 'u1'])
+            assert.deepEqual(k.sopravvissuti, ['u0', 'u1'], 'due richieste vere non si mangiano')
+            assert.deepEqual(k.annullati, [], 'un annullo qui sarebbe lavoro buttato via a schermo')
+            assert.deepEqual(k.orfani, [], 'e i loro DUE indicatori li chiudera il ciclo degli attrezzi, col loro esito vero')
+        })
+
+        it('venti attrezzi DIVERSI: venti annunciati, zero annullati', async () => {
+            const k = await contaSulKernel(Array.from({ length: 20 }, (_, i) => (
+                { choices: [{ delta: { tool_calls: [{ index: i, id: `d${i}`, function: { name: 'leggi', arguments: `{"f":"${i}.txt"}` } }] } }] }
+            )))
+            assert.equal(k.annunciati.length, 20)
+            assert.equal(k.sopravvissuti.length, 20)
+            assert.deepEqual(k.annullati, [])
+        })
+
+        it('un giro che NESSUNO ferma e senza ripetizioni non emette nemmeno un `tool-annullato`', async () => {
+            const ac = new AbortController()
+            const k = await contaSulKernel([
+                { choices: [{ delta: { tool_calls: [{ index: 0, id: 'solo', function: { name: 'elenca', arguments: '{}' } }] } }] },
+            ], { segnaleStop: ac.signal })
+            assert.deepEqual(k.annullati, [])
+            assert.deepEqual(k.sopravvissuti, ['solo'])
+        })
+
+        it('⛔ un `tipo` di delta SCONOSCIUTO viene IGNORATO, non scambiato per ragionamento', async () => {
+            const eventi = []
+            await avviaSessione({
+                cartella: '/tmp/x', task: { consegna: 'x' }, modello: 'm', chiave: 'k',
+                onEvento: (e) => eventi.push(e),
+                talosLavoraFn: async (input) => {
+                    input.onDelta?.({ tipo: 'un-tipo-che-non-esiste', giro: 0, delta: 'NON DEVE COMPARIRE' })
+                    return { comeFinita: 'concluso', detto: 'fatto' }
+                },
+            })
+            const tipi = eventi.map((e) => e.type)
+            assert.ok(!tipi.includes('ReasoningMessageStart'), 'prima di oggi questo diventava un ragionamento del modello, inventato di sana pianta')
+            assert.ok(!JSON.stringify(eventi).includes('NON DEVE COMPARIRE'))
+        })
+    })
+})
+
+/*
+ * ⛔⛔⛔ LA FRASE DI UN ANNULLO NON È LIBERA — 11/09/2026.
+ *
+ * `subagent-orchestrator.mjs` classifica OGNI `ToolCallResult` come riuscito o
+ * fallito leggendone il TESTO, e `verificabile` si accende su `toolCallsOk > 0`.
+ * ⇒ chiudere gli indicatori orfani, da solo, faceva comparire due «successi»
+ * dove non era successo niente: MISURATO prima della correzione della frase,
+ * una delega con SOLI annulli usciva `toolCallsOk: 2, verificabile: true`.
+ *
+ * ⛔ Questa prova lega le due cose. Le stringhe non sono ricopiate a mano: sono
+ * quelle che il kernel VERO produce, catturate un attimo prima — se domani
+ * qualcuno «migliora» il testo di un annullo e lo fa ricadere fra i riusciti,
+ * qui diventa rosso invece di passare inosservato.
+ *
+ * ⛔ E resta scritto che reggersi sul testo è fragile: la cura solida è un terzo
+ * esito (o saltare gli annulli) in `subagent-orchestrator.mjs`, che non è di
+ * questa lane — sta nel rapporto, per l owner.
+ */
+describe('⛔⛔ un attrezzo ANNULLATO non deve contare come un attrezzo RIUSCITO', () => {
+    const risultatoDiTool = (toolCallId, content) => ({ type: 'ToolCallResult', messageId: `m-${toolCallId}`, toolCallId, content, role: 'tool' })
+
+    it('una delega che ha prodotto SOLO annulli non e «verificabile»', async () => {
+        /* Le frasi vere, prese dal kernel vero: la valanga e lo stop a meta. */
+        const dallaValanga = await consumaFlussoSSE(
+            fintoBackend(Array.from({ length: 398 }, (_, i) => (
+                { choices: [{ delta: { tool_calls: [{ index: i, id: `c${i}`, function: { name: 'elenca', arguments: '{}' } }] } }] }
+            ))),
+            () => {}, {},
+        ).then(() => null, () => null)
+        void dallaValanga
+        const motivi = []
+        await consumaFlussoSSE(
+            fintoBackend(Array.from({ length: 398 }, (_, i) => (
+                { choices: [{ delta: { tool_calls: [{ index: i, id: `c${i}`, function: { name: 'elenca', arguments: '{}' } }] } }] }
+            ))),
+            (d) => { if (d.tipo === 'tool-annullato') motivi.push(d.motivo) }, {},
+        )
+        assert.ok(motivi.length > 0, 'serve almeno un annullo vero da classificare')
+
+        const riassunto = analizzaEvidenzaDelega(motivi.map((m, i) => risultatoDiTool(`c${i}`, m)))
+        assert.equal(riassunto.toolCallsOk, 0, 'un attrezzo mai eseguito non e un attrezzo riuscito')
+        assert.equal(riassunto.toolCallsFalliti, motivi.length)
+        assert.equal(riassunto.verificabile, false, 'una delega che non ha fatto niente non si dichiara verificata')
+    })
+
+    it('⛔⛔ AL CONTRARIO — un esito VERO resta riuscito, e la delega resta verificabile', () => {
+        const riassunto = analizzaEvidenzaDelega([risultatoDiTool('vero', 'written: a.txt')])
+        assert.equal(riassunto.toolCallsOk, 1)
+        assert.equal(riassunto.toolCallsFalliti, 0)
+        assert.equal(riassunto.verificabile, true)
     })
 })

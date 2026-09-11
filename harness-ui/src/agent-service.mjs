@@ -26,6 +26,7 @@
  * agui-events.mjs resta provabile senza sapere di talosLavora.
  */
 import { createHash, randomUUID } from 'node:crypto';
+import { join as joinPercorso, relative as percorsoRelativo, sep as separatorePercorso } from 'node:path';
 
 import { createOwnerRuntimeAdapter } from './runtime-owner-adapter.mjs';
 import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
@@ -207,6 +208,35 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
  */
 export async function avviaSessione({
   cartella, task, modello, chiave, comandoProva,
+  /*
+   * ⛔⛔⛔ 11/09/2026 — DOVE FINISCE UN FILE *GENERATO*, che non è dove il modello LEGGE.
+   *
+   * Difetto misurato sulla sessione `91ae0634` dell'owner: `document_create` rispondeva
+   * `EPERM: operation not permitted, open 'C:\Qwen 3.8 ….pdf'`. Il PDF era corretto; falliva solo
+   * la scrittura, e sempre alla RADICE DEL DISCO. La catena, per intero:
+   *  1. la sessione nasce su `C:\Users\…\AVM-harness-desktop` con permesso «Read only»;
+   *  2. l'owner alza il permesso a «Full access» (riga 2242 del suo `.jsonl`);
+   *  3. `session-registry.mjs` ricalcola la cartella effettiva con `cartellaEffettivaPerPermessi`,
+   *     che per «Full access» ritorna `parse(base).root` — cioè `C:\` (è VOLUTO: al kernel non si
+   *     insegna un permesso nuovo, gli si consegna una cartella più larga);
+   *  4. `creaFileWorkspace` scrive «alla radice del workspace» ⇒ `C:\<nome>.pdf`;
+   *  5. Windows rifiuta. E non è un caso: la radice del volume di sistema è protetta da ACL che
+   *     lasciano al gruppo Users creare CARTELLE ma non FILE (WinTips.org, «FIX: Write Access
+   *     Denied on Drive C:\», e Microsoft Learn «Access Control: Understanding Windows File And
+   *     Registry Permissions», letti l'11/09/2026) ⇒ nessun nome diverso può mai riuscire.
+   *
+   * ⛔ La cura NON è restringere «Full access» (allargare è la funzione, e il modello deve poter
+   *   leggere tutto il disco). È separare le due domande, che finora erano una sola:
+   *   **da dove si legge** (il workspace, largo quanto il permesso dice) e **dove si DEPOSITA un
+   *   file appena generato** (la cartella da cui la sessione è partita, che l'owner ha scelto e
+   *   che ha i suoi permessi). `cartellaCreazioni` è la seconda. Assente ⇒ è la prima, cioè
+   *   esattamente il comportamento di prima per ogni chiamante che non la passa (tutti i test).
+   *
+   * ⭐ È anche la regola del minimo privilegio applicata al verso giusto: «un agente che deve solo
+   *   leggere una cartella non ha bisogno di scrivere nella radice del filesystem» (Firecrawl,
+   *   «AI Agent Sandbox: How to Safely Run Autonomous Agents in 2026», 11/09/2026).
+   */
+  cartellaCreazioni = null,
   onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, mobile = false,
   /*
    * ⛔⛔⛔ 02/09 — LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md, §6/§7.
@@ -485,6 +515,23 @@ export async function avviaSessione({
    * questo leggiContestoWorkspace non lancia mai, anche se questo file non
    * lo intercetta con un try/catch: la garanzia vive nella funzione stessa.
    */
+  /*
+   * ⭐ La cartella dove si DEPOSITA un file generato — vedi la doc di `cartellaCreazioni` in testa
+   *   a questa funzione. Senza il parametro è `cartella`: il comportamento di prima, invariato.
+   */
+  const cartellaPerCreare = cartellaCreazioni || cartella;
+  /*
+   * ⛔ Il pannello File e la scheda Review mostrano un percorso RELATIVO AL WORKSPACE: se il file
+   *   è stato depositato altrove (cioè `cartellaPerCreare !== cartella`), il solo nome sarebbe una
+   *   bugia — punterebbe alla radice del workspace, dove il file non c'è. Si ricalcola davvero.
+   *   Quando il deposito è FUORI dal workspace `relative` produce un percorso con `..`: la si
+   *   lascia passare com'è (è onesta) invece di inventare un percorso interno che non esiste.
+   */
+  const percorsoNellAlbero = (nome) => (
+    cartellaPerCreare === cartella
+      ? nome
+      : percorsoRelativo(cartella, joinPercorso(cartellaPerCreare, nome)).split(separatorePercorso).join('/')
+  );
   const contestoWorkspace = leggiContestoWorkspaceFn({ cartella, progetto: task?.progetto ?? null });
   const contesto = {
     ...contestoWorkspace,
@@ -793,6 +840,42 @@ export async function avviaSessione({
       onEvento(toolCallArgs({ toolCallId: evento.toolCallId, delta: evento.delta }));
       return;
     }
+    /*
+     * ⛔⛔⛔ 11/09/2026, owner: «se la UI è avvisata di N attrezzi partiti, deve
+     * vedere finire N». Il kernel annuncia un `tool-inizio` appena una chiamata
+     * comincia, ma DUE strade la lasciano senza esito — la valanga di copie
+     * identiche del modello locale (misurato: 4 annunciate, 2 sopravvissute) e
+     * lo stop premuto a metà risposta (2 annunciate, 2 orfane). In entrambi i
+     * casi restavano indicatori che giravano per sempre.
+     *
+     * ⭐ Si chiude con un `ToolCallResult`, cioè un evento che il frontend
+     * DISEGNA GIÀ: nessuna riga di UI cambia. È la forma che la spec AG-UI
+     * prescrive (`messageId` + `toolCallId` + `content`, `role` opzionale —
+     * `docs/concepts/messages.mdx`, letto via ctx7 l'11/09/2026) e la cura che
+     * ag-ui#1168 descrive per lo stesso guasto: «a fresh message ID is used so
+     * the client creates a proper standalone ToolMessage and closes the spinner
+     * correctly».
+     *
+     * ⛔ E il `content` PORTA IL MOTIVO, non è un segnaposto vuoto: openclaw
+     * #42112 («persisted orphaned toolCall poisons session replay») vale anche
+     * per noi, perché `session-registry.mjs` persiste questi eventi — chi
+     * rilegge la sessione domani deve trovare scritto perché quell'attrezzo non
+     * è mai partito, non un buco.
+     */
+    if (evento.tipo === 'tool-annullato') {
+      onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.motivo }));
+      return;
+    }
+    /*
+     * ⛔⛔ E QUI SOTTO C'ERA UNA TRAPPOLA: la riga successiva manda al ramo
+     * «ragionamento» QUALUNQUE tipo che non sia 'testo' — cioè un tipo nuovo,
+     * aggiunto un giorno nel kernel da chi non legge questo file, sarebbe
+     * comparso a schermo come un ragionamento del modello, inventato di sana
+     * pianta. È esattamente il motivo per cui `tool-annullato` non poteva
+     * essere emesso dal solo kernel. Adesso i tipi sconosciuti si IGNORANO:
+     * non sapere e mentire non sono la stessa cosa.
+     */
+    if (evento.tipo !== 'testo' && evento.tipo !== 'ragionamento') return;
     const mappa = evento.tipo === 'testo' ? messaggiTestoPerGiro : messaggiRagionamentoPerGiro;
     let messageId = mappa.get(evento.giro);
     if (!messageId) {
@@ -959,7 +1042,7 @@ export async function avviaSessione({
 
     let salvato;
     try {
-      salvato = await creaFileWorkspaceFn({ cartella, nome: documento.fileName, bytes: documento.bytes });
+      salvato = await creaFileWorkspaceFn({ cartella: cartellaPerCreare, nome: documento.fileName, bytes: documento.bytes });
     } catch (errore) {
       const dettaglio = errore instanceof WorkspaceFileError ? errore.message : (errore instanceof Error ? errore.message : String(errore));
       return {
@@ -979,7 +1062,7 @@ export async function avviaSessione({
      *   ed è la differenza fra «te lo mostro» e «te lo do».
      */
     onEvento(eventoPerScrittura({
-      percorso: salvato.percorso,
+      percorso: percorsoNellAlbero(salvato.percorso),
       contenuto: valore,
       esisteva: false,
       allegato: { nome: documento.fileName, formato: documento.format, byte: documento.bytes.byteLength },
@@ -1060,7 +1143,7 @@ export async function avviaSessione({
     }
     let salvato;
     try {
-      salvato = await creaFileWorkspaceFn({ cartella, nome: `${immagineGenerata.fileStem}.${estensione}`, bytes: immagineGenerata.bytes });
+      salvato = await creaFileWorkspaceFn({ cartella: cartellaPerCreare, nome: `${immagineGenerata.fileStem}.${estensione}`, bytes: immagineGenerata.bytes });
     } catch (errore) {
       if (persistito?.id && typeof removeGeneratedImageFn === 'function') await removeGeneratedImageFn(persistito.id).catch(() => {});
       const dettaglio = errore instanceof WorkspaceFileError ? errore.message : (errore instanceof Error ? errore.message : String(errore));
@@ -1099,7 +1182,7 @@ export async function avviaSessione({
      *   dimensione misurata e il collegamento che scarica i byte veri.
      */
     onEvento(eventoPerScrittura({
-      percorso: salvato.percorso,
+      percorso: percorsoNellAlbero(salvato.percorso),
       contenuto: `[image ${immagineGenerata.mediaType}, ${immagineGenerata.bytes.byteLength} bytes]`,
       esisteva: false,
       allegato: { nome: `${immagineGenerata.fileStem}.${estensione}`, formato: estensione, byte: immagineGenerata.bytes.byteLength },
@@ -1196,13 +1279,13 @@ export async function avviaSessione({
     const bytes = letta.immagineBase64 ? Buffer.from(letta.immagineBase64, 'base64') : Buffer.from(letta.testo ?? '', 'utf8');
     let salvato;
     try {
-      salvato = await creaFileWorkspaceFn({ cartella, nome: letta.nome, bytes });
+      salvato = await creaFileWorkspaceFn({ cartella: cartellaPerCreare, nome: letta.nome, bytes });
     } catch (errore) {
       const dettaglio = errore instanceof WorkspaceFileError ? errore.message : (errore instanceof Error ? errore.message : String(errore));
       return { ok: false, esito: `"${letta.nome}" could not be saved into the workspace: ${dettaglio}. Do not silently retry with the same name — offer a different name, or ask.` };
     }
     // ⛔ mai i byte grezzi dentro un evento SSE/JSON — stessa disciplina già in uso per un documento/immagine binari in onDocumento/onImmagine.
-    onEvento(eventoPerScrittura({ percorso: salvato.percorso, contenuto: letta.immagineBase64 ? `[image, ${bytes.byteLength} bytes]` : (letta.testo ?? ''), esisteva: false }));
+    onEvento(eventoPerScrittura({ percorso: percorsoNellAlbero(salvato.percorso), contenuto: letta.immagineBase64 ? `[image, ${bytes.byteLength} bytes]` : (letta.testo ?? ''), esisteva: false }));
     return { ok: true, esito: `Exported "${letta.nome}" into the workspace (${bytes.byteLength} bytes).` };
   };
 
