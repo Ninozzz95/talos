@@ -32,3 +32,8 @@ mirati durante, `npm run test:unit` una volta alla fine.
 
 Rapporto in `.claude/RAPPORTO-PORTING-MOCKUP-2026-09-11.md`: per ogni lotto — cosa fa il mockup
 (righe) → cosa esisteva già nel prodotto (riusato, non duplicato) → cura → foto → non verificato.
+- [x] **C-bis. Switch righe/card nelle sezioni** (owner 11/09 sera: «dal mockup manca anche lo switch
+      righe/card nelle sezioni tipo Note, ricordatelo»). Nel mockup è `data-td="layout"` (2
+      occorrenze): il toggle fra elenco a righe e griglia di schede in testa a ogni sezione, scelta
+      ricordata per sezione. Vale per tutte e sei le pagine. Mandato all'agente del lotto C mentre
+      lavorava.
