@@ -14,6 +14,17 @@ import { createSseSession } from './http-lifecycle.mjs';
 import { creaReplayCoalescente } from './sse-replay-coalescente.mjs'; // 11/09: il replay di una sessione lunga non si rigioca token per token — vedi la rotta /events
 import { iconaDelDominio } from './favicon-proxy.mjs'; // 10/09: le favicon delle fonti, prese dal server e mai dal browser
 import { creaRegistroAttese, ritornoDaHost, scambiaCodicePerChiave } from './openrouter-oauth.mjs'; // PO-01 10/9: i conti dell'accesso a OpenRouter, puri e provabili senza rete
+import { fileURLToPath } from 'node:url'; // 11/09: i tre magazzini GLOBALI stanno accanto a server.mjs, come li trova session-registry.mjs
+/*
+ * ⭐⭐⭐⭐ 11/09/2026, owner: «tutte le Note, Attività, Memoria, Libreria devono avere CRUD completi».
+ * ⛔ Sono le STESSE funzioni che usano gli attrezzi del modello (`agent-service.mjs` importa
+ *   esattamente queste): una scrittura della persona e una del modello devono finire nello stesso
+ *   file, con la stessa forma. Una seconda implementazione «per la UI» sarebbe la seconda verità
+ *   che questo progetto ha già pagato altrove.
+ */
+import { CARTELLA_NOTE, NoteStoreError, aggiornaNota, creaNota, eliminaNota, formaPubblicaNota, leggiNota } from './notes-store.mjs';
+import { CARTELLA_ATTIVITA, TaskStoreError, aggiornaAttivita, completaAttivita, creaAttivita, eliminaAttivita, formaPubblicaAttivita, leggiAttivita } from './tasks-store.mjs';
+import { CARTELLA_MEMORIA, MemoryStoreError, aggiornaMemoria, creaMemoria, eliminaMemoria, formaPubblicaMemoria, leggiMemoria } from './memory-store.mjs';
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
@@ -67,6 +78,19 @@ const API_ERROR_CODES = new Set([
   /* ⭐ 10/9 — il CRUD di una voce di Libreria per la persona. Sono gli STESSI nomi che usa
      `library-store.mjs`: tradurli qui in altri codici vorrebbe dire tenere due vocabolari per
      gli stessi stati, e prima o poi farne divergere uno. */
+  /* ⭐⭐⭐⭐ 11/9 — il CRUD di Note/Attività/Memoria per la persona. Stessa regola della Libreria
+     qui sopra: sono gli STESSI nomi che lanciano `notes-store.mjs`/`tasks-store.mjs`/
+     `memory-store.mjs`, mai tradotti in un secondo vocabolario.
+     ⛔ `TASK_INVALID`/`TASK_NOT_FOUND` parlano di un'ATTIVITÀ dell'owner («chiama l'idraulico»),
+       non del catalogo dei task del banco: quello ha già i suoi `TASK_NOT_ALLOWED`/
+       `TASK_CATALOG_UNAVAILABLE`. Due famiglie vicine di nome e lontane di significato — qui il
+       nome lo detta il magazzino che lancia l'errore, che è l'unico modo di non farle divergere. */
+  'NOTE_INVALID',
+  'NOTE_NOT_FOUND',
+  'TASK_INVALID',
+  'TASK_NOT_FOUND',
+  'MEMORY_INVALID',
+  'MEMORY_NOT_FOUND',
   'LIBRARY_NOT_FOUND',
   'LIBRARY_NAME_EMPTY',
   'LIBRARY_TOO_LARGE',
@@ -213,6 +237,18 @@ const STATUS_BY_CODE = Object.freeze({
   /** ⭐ 27/8 — stesso status di SESSION_NOT_READY: la richiesta è legittima ma lo stato attuale (un file già lì) la blocca. */
   FILE_EXISTS: 409,
   PLATFORM_UNSUPPORTED: 501,
+  /* ⭐⭐⭐⭐ 11/9 — il CRUD di Note/Attività/Memoria. Stesso identico criterio della Libreria qui
+     sotto: `*_NOT_FOUND` è 404 e resta DISTINTO da NOT_FOUND (la sessione c'è, la voce no — due
+     assenze diverse), `*_INVALID` è 400 perché nasce sempre da ciò che ha mandato chi chiede
+     (titolo vuoto, contenuto oltre il tetto, un genere che non esiste), mai da uno stato rotto.
+     ⛔ Ogni codice aggiunto all'elenco sopra HA la sua riga qui: la voragine dell'08/9 — un codice
+       noto senza stato faceva CADERE la risposta con `res.writeHead(undefined)` — non si rifà. */
+  NOTE_INVALID: 400,
+  NOTE_NOT_FOUND: 404,
+  TASK_INVALID: 400,
+  TASK_NOT_FOUND: 404,
+  MEMORY_INVALID: 400,
+  MEMORY_NOT_FOUND: 404,
   /** ⭐ 10/9 — 404 come FILE_NOT_FOUND, ma DISTINTO da NOT_FOUND: «la sessione non c'è» e «la voce non c'è» sono due assenze diverse, e una risposta che non le distingue manda a cercare nel posto sbagliato. */
   LIBRARY_NOT_FOUND: 404,
   /** ⭐ 10/9 — 400: il nome l'ha mandato il chiamante e, tolti i caratteri di percorso, non resta niente. */
@@ -369,6 +405,15 @@ const MESSAGE_BY_CODE = Object.freeze({
   FILE_TOO_LARGE: 'File troppo grande per l\'anteprima',
   FILE_EXISTS: 'Esiste già un file con questo nome',
   PLATFORM_UNSUPPORTED: 'Non disponibile su questa piattaforma',
+  /* ⛔ 11/9 — messaggi per una PERSONA, non per un programma: dicono che cosa non c'è e non
+     nominano né il codice né il file JSON dietro. Il motivo preciso del magazzino viaggia a
+     parte, in `errore.message`, come per ogni altra famiglia di questo elenco. */
+  NOTE_INVALID: 'Questa nota non è valida',
+  NOTE_NOT_FOUND: 'Questa nota non esiste più',
+  TASK_INVALID: 'Questa attività non è valida',
+  TASK_NOT_FOUND: 'Questa attività non esiste più',
+  MEMORY_INVALID: 'Questa memoria non è valida',
+  MEMORY_NOT_FOUND: 'Questa memoria non esiste più',
   LIBRARY_NOT_FOUND: 'Questo file della Libreria non esiste più',
   LIBRARY_NAME_EMPTY: 'Serve un nome con almeno una lettera o un numero',
   LIBRARY_TOO_LARGE: 'File troppo grande da scaricare',
@@ -832,13 +877,36 @@ const ROTTE_API = Object.freeze([
    *   invece di dichiarare su tutte l'unione dei metodi di tutte.
    */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/file$/, metodi: ['GET'] },
+  /*
+   * ⭐⭐⭐⭐ 11/9, owner: «il file deve essere visualizzato renderizzato» — un PDF della Libreria
+   * si guarda DENTRO TALOS. Rotta GEMELLA di `/file` e non un suo parametro: gli stessi byte
+   * escono con intestazioni OPPOSTE (`inline` invece di `attachment`, il tipo vero invece di
+   * `application/octet-stream`, una CSP che lascia vivere il lettore PDF del browser), e due
+   * contratti opposti sotto lo stesso indirizzo sarebbero un interruttore nascosto in una query.
+   */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/anteprima$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/rivela$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/apri$/, metodi: ['POST'] }, // 10/09: l'azione Windows «Apri», gemella di «rivela»
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/, metodi: ['PATCH', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/plugins$/, metodi: ['GET'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/notes$/, metodi: ['GET'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks$/, metodi: ['GET'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory$/, metodi: ['GET'] },
+  /*
+   * ⭐⭐⭐⭐ 11/9, owner («non negotiable»): «tutte le Note, Attività, Memoria, Libreria devono
+   * avere CRUD completi». Fino a stamattina queste tre righe dicevano `['GET']` e basta: il
+   * MODELLO creava, modificava e cancellava note/attività/memorie coi suoi attrezzi, la PERSONA
+   * poteva solo guardarle — e i pannelli erano usciti senza un pulsante di scrittura proprio
+   * perché la porta non c'era.
+   * ⛔ Due righe per risorsa e non una, esattamente come per la Libreria il 10/9: la collezione
+   *   accetta GET e POST, la singola voce GET/PATCH/DELETE, e il cambio di stato di un'attività
+   *   ha la sua riga con la sua sola POST. Così l'`Allow` del 405 dice il vero su OGNUNA invece
+   *   di dichiarare su tutte l'unione dei metodi di tutte.
+   */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/notes$/, metodi: ['GET', 'POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/notes\/([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks$/, metodi: ['GET', 'POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)\/stato$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory$/, metodi: ['GET', 'POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory\/([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/research$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/children$/, metodi: ['GET'] },
@@ -860,6 +928,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/rename$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/delete$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/reveal$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/open$/, metodi: ['POST'] }, // 11/09: «Apri in Esplora file», anche sulla RADICE (percorso: '')
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/move$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/copy$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/create$/, metodi: ['POST'] },
@@ -1253,6 +1322,95 @@ function requireNomeBody(body) {
   return body.nome;
 }
 
+/*
+ * ⭐⭐⭐⭐ 11/9 — LA FORMA DEL CORPO per Note/Attività/Memoria, owner: «CRUD completi».
+ *
+ * ⛔ Stessa divisione del lavoro già scritta sopra `requireNomeBody`, e per lo stesso motivo: qui
+ *   si controlla SOLO la forma (chiavi ammesse, tipi), mentre i tetti veri — 120 caratteri per il
+ *   titolo di una nota, 8.000 per il contenuto, i tre valori di `priorita`, i quattro di `genere`
+ *   — restano dentro `notes-store.mjs`/`tasks-store.mjs`/`memory-store.mjs`, l'unico posto che li
+ *   dichiara e lo stesso che li applica agli attrezzi del modello. Copiarli qui vorrebbe dire due
+ *   verità sullo stesso limite, destinate a divergere al primo cambiamento.
+ * ⛔ L'allowlist è ESPLICITA e una chiave sconosciuta è un errore, non un campo ignorato in
+ *   silenzio: un `contenutoo` scritto male dal frontend deve dire «chiave non ammessa», non
+ *   salvare una nota a metà. Il messaggio nomina la chiave rifiutata — un 400 che non dice quale
+ *   campo è sbagliato costringe a indovinare.
+ * ⛔ Su PATCH nessun campo è obbligatorio ma ALMENO UNO deve esserci: un corpo vuoto non è una
+ *   modifica, è una richiesta senza contenuto, e rispondere 200 le darebbe ragione.
+ */
+function erroreCorpo(messaggio) {
+  const errore = new Error(messaggio);
+  errore.code = 'QUERY_INVALID';
+  return errore;
+}
+
+function corpoConChiaviAmmesse(body, { ammesse, obbligatorie = [], forma }) {
+  const oggetto = body && typeof body === 'object' && !Array.isArray(body) ? body : null;
+  const chiavi = oggetto ? Object.keys(oggetto) : [];
+  const ignote = chiavi.filter((chiave) => !ammesse.includes(chiave));
+  const mancanti = obbligatorie.filter((chiave) => oggetto?.[chiave] === undefined);
+  if (!oggetto || chiavi.length === 0 || ignote.length > 0 || mancanti.length > 0) {
+    const dettaglio = ignote.length > 0
+      ? ` — chiave non ammessa: ${ignote.join(', ')}`
+      : (mancanti.length > 0 ? ` — manca: ${mancanti.join(', ')}` : '');
+    throw erroreCorpo(`Corpo non valido: atteso ${forma}${dettaglio}`);
+  }
+  return oggetto;
+}
+
+/** ⛔ `undefined` = «non lo cambio» (contratto di ogni `aggiorna*` dei tre magazzini): un campo assente non è un campo svuotato. */
+function testoSeC(corpo, chiave) {
+  if (corpo[chiave] === undefined) return undefined;
+  if (typeof corpo[chiave] !== 'string') throw erroreCorpo(`Corpo non valido: ${chiave} deve essere testo`);
+  return corpo[chiave];
+}
+
+/** ⭐ Corpo di POST/PATCH .../notes — `formato: null` su PATCH vuol dire «smetti di dichiararlo, tornalo a rilevare» (vedi aggiornaNota). */
+function requireNotaBody(body, { creazione }) {
+  const corpo = corpoConChiaviAmmesse(body, {
+    ammesse: ['titolo', 'contenuto', 'formato'],
+    obbligatorie: creazione ? ['titolo', 'contenuto'] : [],
+    forma: creazione ? '{titolo, contenuto, formato?}' : '{titolo?, contenuto?, formato?}, almeno uno',
+  });
+  const formato = corpo.formato;
+  const formatoAmmesso = formato === undefined
+    || formato === 'markdown' || formato === 'testo'
+    || (!creazione && formato === null);
+  if (!formatoAmmesso) {
+    throw erroreCorpo(`Corpo non valido: formato deve essere "markdown" o "testo"${creazione ? '' : ' oppure null'}`);
+  }
+  return { titolo: testoSeC(corpo, 'titolo'), contenuto: testoSeC(corpo, 'contenuto'), formato };
+}
+
+/** ⭐ Corpo di POST/PATCH .../tasks — MAI `stato`: quello ha la sua porta (`POST .../tasks/:id/stato`), stesso confine del magazzino e dell'attrezzo mobile («Do NOT use this to mark something done»). */
+function requireAttivitaBody(body, { creazione }) {
+  const corpo = corpoConChiaviAmmesse(body, {
+    ammesse: ['titolo', 'descrizione', 'priorita'],
+    obbligatorie: creazione ? ['titolo'] : [],
+    forma: creazione ? '{titolo, descrizione?, priorita?}' : '{titolo?, descrizione?, priorita?}, almeno uno',
+  });
+  if (corpo.descrizione !== undefined && corpo.descrizione !== null && typeof corpo.descrizione !== 'string') {
+    throw erroreCorpo('Corpo non valido: descrizione deve essere testo oppure null');
+  }
+  return { titolo: testoSeC(corpo, 'titolo'), descrizione: corpo.descrizione, priorita: testoSeC(corpo, 'priorita') };
+}
+
+/** ⭐ Corpo di POST .../tasks/:id/stato — una chiave sola, come requireAutomationToggleBody. I tre valori li valida il magazzino (`completaAttivita`), qui solo la forma. */
+function requireStatoAttivitaBody(body) {
+  const corpo = corpoConChiaviAmmesse(body, { ammesse: ['stato'], obbligatorie: ['stato'], forma: '{stato}' });
+  return testoSeC(corpo, 'stato');
+}
+
+/** ⭐ Corpo di POST/PATCH .../memory. */
+function requireMemoriaBody(body, { creazione }) {
+  const corpo = corpoConChiaviAmmesse(body, {
+    ammesse: ['titolo', 'contenuto', 'genere'],
+    obbligatorie: creazione ? ['titolo', 'contenuto'] : [],
+    forma: creazione ? '{titolo, contenuto, genere?}' : '{titolo?, contenuto?, genere?}, almeno uno',
+  });
+  return { titolo: testoSeC(corpo, 'titolo'), contenuto: testoSeC(corpo, 'contenuto'), genere: testoSeC(corpo, 'genere') };
+}
+
 /** Allowlist stretta per le preferenze che appartengono alla sessione. */
 function requireSessionSettingsBody(body) {
   const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo'];
@@ -1626,6 +1784,20 @@ export function createHttpApp({
    *   il suo archivio. Nessun comportamento nuovo per chi non la configura.
    */
   cartellaFavicon = null,
+  /*
+   * ⭐⭐⭐⭐ 11/09 — I TRE MAGAZZINI GLOBALI di Note/Attività/Memoria, per le rotte di scrittura
+   * della persona.
+   * ⛔⛔ GLOBALI e non per-progetto, e il default NON è una scelta ripetuta qui: è lo stesso
+   *   percorso che `session-registry.mjs` calcola per i suoi (`../.notes-store/` accanto a
+   *   `server.mjs`), col nome preso dalla costante esportata dal magazzino stesso invece che
+   *   riscritto a mano. Se divergessero, la persona scriverebbe in una cartella e il modello
+   *   leggerebbe in un'altra — cioè il difetto peggiore possibile per questa funzione.
+   * ⛔ Iniettabili perché un test deve poter girare su una cartella temporanea: la regola è che
+   *   una prova non tocca mai i dati veri dell'owner.
+   */
+  cartellaNote = fileURLToPath(new URL(`../${CARTELLA_NOTE}/`, import.meta.url)),
+  cartellaAttivita = fileURLToPath(new URL(`../${CARTELLA_ATTIVITA}/`, import.meta.url)),
+  cartellaMemoria = fileURLToPath(new URL(`../${CARTELLA_MEMORIA}/`, import.meta.url)),
   chatImageStore = null,
   workspaceBrowser = null,
   /*
@@ -1705,6 +1877,90 @@ export function createHttpApp({
     delete rest.immagini;
     return { body: rest, immagini };
   }
+
+  /*
+   * ⭐⭐⭐⭐ 11/09/2026 — I TRE MAGAZZINI DELLA PERSONA, in una tabella sola.
+   *
+   * Owner, «non negotiable»: «tutte le Note, Attività, Memoria, Libreria devono avere CRUD
+   * completi». Il MODELLO ce l'aveva già (`notes_*`, `tasks_*`, `memory_*` in agent-service.mjs);
+   * la persona aveva solo tre GET, e i pannelli di stasera sono usciti senza un pulsante di
+   * scrittura proprio perché la porta non esisteva.
+   *
+   * ⛔ Una tabella e non sette blocchi copiati: le tre risorse differiscono in QUATTRO punti
+   *   (come si chiama la voce nella risposta, quali campi accetta il corpo, quanto può essere
+   *   grande, chi lancia gli errori) e in nient'altro. Scritte a mano una per una, il giorno in
+   *   cui una cambia le altre due restano indietro in silenzio — è lo stesso motivo per cui
+   *   `requireNomeBody` è uno solo per sessione e Libreria.
+   * ⛔ Ogni riga chiama le FUNZIONI DEL MAGAZZINO, le stesse identiche che chiamano gli attrezzi
+   *   del modello: `creaNota` qui e `creaNota` là sono lo stesso codice sullo stesso file. Non
+   *   c'è nessun percorso che arrivi da fuori — la cartella la sceglie il server, il client
+   *   nomina una sessione e un id, mai un posto sul disco.
+   * ⛔ `origine: 'persona'` è scritto SOLO qui: è l'unica porta della persona che esiste, e da
+   *   qui non si può nemmeno dichiarare un'altra origine (il corpo non ha quella chiave). Così
+   *   «chi l'ha scritta» è un fatto misurato dalla porta, non una parola del chiamante.
+   */
+  const magazziniDellaPersona = Object.freeze({
+    notes: {
+      chiave: 'nota',
+      /* ⛔ 64 KB come «Migliora il prompt» (BC-15) e per la stessa ragione misurata quel giorno:
+         col tetto globale di 4.096 byte gli 8.000 caratteri ammessi da `notes-store.mjs` sarebbero
+         IRRAGGIUNGIBILI — la richiesta morirebbe con un 413 prima che il conto sui caratteri possa
+         rispondere «è troppo lunga». Il tetto vero resta nel magazzino, questo è solo la soglia
+         oltre cui non vale più la pena leggere. */
+      tettoCorpo: 64 * 1024,
+      errore: NoteStoreError,
+      forma: formaPubblicaNota,
+      corpo: requireNotaBody,
+      leggi: (id) => leggiNota({ cartella: cartellaNote, id }),
+      crea: (c) => creaNota({ cartella: cartellaNote, title: c.titolo, content: c.contenuto, formato: c.formato, origine: 'persona' }).then((voce) => ({ voce })),
+      aggiorna: (id, c) => aggiornaNota({ cartella: cartellaNote, id, title: c.titolo, content: c.contenuto, formato: c.formato }),
+      elimina: (id) => eliminaNota({ cartella: cartellaNote, id }),
+      codiceAssente: 'NOTE_NOT_FOUND',
+    },
+    tasks: {
+      chiave: 'attivita',
+      tettoCorpo: 16 * 1024, // 2.000 caratteri di descrizione, anche tutti fuori dal latino, più le fughe JSON
+      errore: TaskStoreError,
+      forma: formaPubblicaAttivita,
+      corpo: requireAttivitaBody,
+      leggi: (id) => leggiAttivita({ cartella: cartellaAttivita, id }),
+      crea: (c) => creaAttivita({ cartella: cartellaAttivita, title: c.titolo, description: c.descrizione, priority: c.priorita ?? 'normal', origine: 'persona' }).then((voce) => ({ voce })),
+      aggiorna: (id, c) => aggiornaAttivita({ cartella: cartellaAttivita, id, title: c.titolo, description: c.descrizione, priority: c.priorita }),
+      elimina: (id) => eliminaAttivita({ cartella: cartellaAttivita, id }),
+      codiceAssente: 'TASK_NOT_FOUND',
+    },
+    memory: {
+      chiave: 'memoria',
+      tettoCorpo: 16 * 1024, // 600 caratteri di contenuto: qui il tetto è larghissimo di proposito, così a rispondere è il magazzino e non la rete
+      errore: MemoryStoreError,
+      forma: formaPubblicaMemoria,
+      corpo: requireMemoriaBody,
+      leggi: (id) => leggiMemoria({ cartella: cartellaMemoria, id }),
+      /* ⛔ L'UNICA delle tre che può NON creare: `creaMemoria` deduplica per titolo e torna la
+         voce già esistente (vedi memory-store.mjs — «una seconda memoria accanto alla prima» è
+         una contraddizione che si autoalimenta). La rotta lo dice al chiamante invece di
+         nasconderlo: `duplicato:true` e 200 invece di 201. */
+      crea: (c) => creaMemoria({ cartella: cartellaMemoria, title: c.titolo, content: c.contenuto, kind: c.genere ?? 'preference', origine: 'persona' }),
+      aggiorna: (id, c) => aggiornaMemoria({ cartella: cartellaMemoria, id, title: c.titolo, content: c.contenuto, kind: c.genere }),
+      elimina: (id) => eliminaMemoria({ cartella: cartellaMemoria, id }),
+      codiceAssente: 'MEMORY_NOT_FOUND',
+    },
+  });
+
+  /**
+   * I due nomi che ogni rotta di questa famiglia deve decodificare, o un 404.
+   * ⛔ Una sequenza percent non valida non nomina nessuna sessione e nessuna voce: è un 404, non
+   * un errore del server — stessa scelta, e stesso commento, delle rotte della Libreria.
+   */
+  function nomiDellaRichiesta(res, method, clock, ...pezzi) {
+    try {
+      return pezzi.map((pezzo) => decodeURIComponent(pezzo));
+    } catch {
+      sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+      return null;
+    }
+  }
+
   async function handle(req, res) {
     if (req.aborted || res.destroyed) return;
     const method = req.method || 'GET';
@@ -1730,9 +1986,22 @@ export function createHttpApp({
       res.setHeader('Vary', 'Origin');
     }
     if (method === 'OPTIONS') {
-      const contextPreflight = /^\/api\/v1\/sessions\/[^/]+\/context(?:\/|$)/u.test(req.url ?? '');
+      const bersaglioPreflight = req.url ?? '';
+      const contextPreflight = /^\/api\/v1\/sessions\/[^/]+\/context(?:\/|$)/u.test(bersaglioPreflight);
+      /*
+       * ⛔ 11/09 — il CRUD della persona su una VOCE (Note/Attività/Memoria) usa PATCH e DELETE:
+       *   senza questa riga il preflight annuncerebbe «GET, HEAD, POST» e un browser di origine
+       *   diversa — il mobile dentro Capacitor, l'unico caso cross-origin vero di questo server —
+       *   bloccherebbe la modifica e la cancellazione PRIMA di mandarle. Sul desktop (stessa
+       *   origine) non cambia niente: il preflight non parte nemmeno.
+       * ⛔ La Libreria è in questa riga benché sia arrivata ieri: ha le stesse due lettere di
+       *   verbo e lo stesso identico buco, trovato leggendo qui. Lasciarla fuori avrebbe voluto
+       *   dire dichiarare il vero per tre risorse su quattro.
+       */
+      const vocePreflight = /^\/api\/v1\/sessions\/[^/]+\/(?:library|notes|tasks|memory)\/[^/?]+(?:[/?]|$)/u.test(bersaglioPreflight);
+      const scritturaEstesa = contextPreflight || vocePreflight;
       res.writeHead(204, {
-        'Access-Control-Allow-Methods': contextPreflight ? 'GET, HEAD, POST, PATCH, DELETE' : 'GET, HEAD, POST',
+        'Access-Control-Allow-Methods': scritturaEstesa ? 'GET, HEAD, POST, PATCH, DELETE' : 'GET, HEAD, POST',
         'Access-Control-Allow-Headers': contextPreflight ? 'Content-Type, Idempotency-Key' : 'Content-Type',
         'Access-Control-Max-Age': '600',
       });
@@ -2067,6 +2336,86 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⭐⭐⭐⭐ 11/09/2026 — L'ANTEPRIMA DI UN PDF DENTRO TALOS.
+     *
+     * Owner, foto del 4174: «il file non viene visualizzato come nel mockup… il file deve essere
+     * visualizzato renderizzato». Per un PDF non era una mancanza del frontend: erano TRE
+     * intestazioni della rotta `/file` qui sopra, misurate una per una
+     * (`.claude/RAPPORTO-LIBRERIA-ANTEPRIMA-2026-09-11.md` §4, con le fonti MDN lette l'11/09/2026):
+     *   1. `Content-Disposition: attachment` — un `<iframe>` su quell'indirizzo SCARICA il file
+     *      invece di mostrarlo («most browsers presenting a "Save as" dialog»);
+     *   2. `Content-Type: application/octet-stream` con `nosniff` — il browser non può trattarlo
+     *      da PDF nemmeno volendo;
+     *   3. la CSP della risposta, `sandbox` senza valore, «prevents the execution of plugins»,
+     *      cioè spegne il lettore PDF del browser anche se i primi due fossero a posto.
+     *
+     * ⛔ Rotta GEMELLA e non un parametro di `/file`: quella rotta è lo SCARICO e deve restare
+     *   ostile (byte anonimi, niente esecuzione, «salva e basta»). Qui il contratto è l'opposto, e
+     *   un contratto opposto vuole un indirizzo suo — un `?inline=1` avrebbe fatto dipendere la
+     *   sicurezza di una risposta da una query del client.
+     * ⛔ SOLO `.pdf`, e il tipo si decide dall'ESTENSIONE DEL NOME, mai dal `mediaType` salvato
+     *   nella scheda della voce: quell'etichetta l'ha scritta chi ha salvato il file (spesso il
+     *   modello) e non è mai stata verificata sui byte — farle scegliere come il browser tratta un
+     *   file sarebbe esattamente il difetto che `nosniff` esiste per impedire. Ogni altra
+     *   estensione è **404**: così questa rotta non diventa un modo generico di servire byte in
+     *   linea, che è il modo in cui un'anteprima si trasforma in un XSS ospitato in casa.
+     * ⛔ `allow-scripts` nella sandbox è il minimo che serve al lettore PDF integrato (punto 3),
+     *   e `object-src 'none'` resta: niente plugin esterni. La CSP della PAGINA non si tocca —
+     *   ha già `frame-src 'self'`, verificato prima di scrivere.
+     * ⛔ Il controllo sull'estensione arriva DOPO la lettura perché il nome vero lo conosce solo il
+     *   magazzino (`scaricaVoceLibreria` è l'unica porta che lo dà, e la stessa che verifica che la
+     *   voce appartenga a questa sessione): mai fidarsi del nome scritto nell'indirizzo.
+     */
+    const libreriaAnteprimaMatch = method === 'GET' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/anteprima$/.exec(url.pathname)
+      : null;
+    if (libreriaAnteprimaMatch) {
+      let sessionId;
+      let voceId;
+      try {
+        [sessionId, voceId] = [decodeURIComponent(libreriaAnteprimaMatch[1]), decodeURIComponent(libreriaAnteprimaMatch[2])];
+      } catch {
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      try {
+        requireNoQuery(url);
+        const esito = await sessionRegistry.scaricaVoceLibreria(sessionId, voceId);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (!/\.pdf$/iu.test(String(esito.nome ?? ''))) {
+          /* ⛔ 404 e non 415: a questo indirizzo, per una voce che non è un PDF, non esiste
+             NIENTE — e il codice resta `NOT_FOUND` (generico) invece di `LIBRARY_NOT_FOUND`, che
+             direbbe «questo file non esiste più» su un file che esiste benissimo. Due 404 diversi
+             per due cose diverse: la voce sparita e l'anteprima che non c'è per quel tipo. */
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const nomi = nomiPerContentDisposition(esito.nome);
+        res.writeHead(200, {
+          'Content-Type': 'application/pdf',
+          'Content-Length': esito.bytes.length,
+          /* ⛔ Le due forme del nome come nello scarico (RFC 6266): `filename` è il ripiego ASCII,
+             `filename*` la forma UTF-8 — cambia `attachment` in `inline`, non la regola sul nome. */
+          'Content-Disposition': `inline; filename="${nomi.ascii}"; filename*=UTF-8''${nomi.utf8}`,
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'private, no-store',
+          'Content-Security-Policy': "default-src 'none'; sandbox allow-scripts; object-src 'none'",
+        });
+        /* ⛔ Nessun ramo per HEAD: questo blocco si apre solo su `method === 'GET'`, esattamente
+           come lo scarico qui sopra. Scriverlo lo farebbe sembrare servito, e non lo è. */
+        res.end(esito.bytes);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const libreriaRinominaMatch = method === 'PATCH' && sessionRegistry
       ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/.exec(url.pathname)
       : null;
@@ -2192,6 +2541,188 @@ export function createHttpApp({
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ rivelato: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⭐⭐⭐⭐ 11/09/2026 — LE CINQUE PORTE DI SCRITTURA di Note, Attività e Memoria.
+     * Owner, «non negotiable»: «tutte le Note, Attività, Memoria, Libreria devono avere CRUD
+     * completi». La tabella `magazziniDellaPersona` (in cima a questa funzione) dice CHE COSA
+     * cambia fra le tre risorse; questi cinque blocchi dicono che cosa NON cambia: la sessione si
+     * verifica sempre, la query non si accetta mai, il corpo ha un tetto dichiarato per risorsa e
+     * una allowlist di chiavi, e l'errore del magazzino esce col suo nome.
+     *
+     * ⛔ Verbi diversi per cose diverse, come per la Libreria il 10/9 e con le stesse fonti:
+     *   POST sulla COLLEZIONE crea (RFC 9110 §15.3.2, rfc-editor.org letta l'11/09/2026: «A 201
+     *   response MUST contain a Location header field giving the URI of the newly created
+     *   resource» — e infatti la mandiamo, così il pannello sa dove ritrovare ciò che ha appena
+     *   scritto senza ricostruire l'indirizzo a mano); PATCH sulla VOCE modifica solo i campi
+     *   mandati (RFC 5789); DELETE sulla voce la toglie e risponde 200 con la busta standard,
+     *   non 204, perché ogni risposta di questa API è `{ok, data, meta}` e una muta sarebbe
+     *   l'unica eccezione.
+     * ⛔ Il cambio di STATO di un'attività ha una porta sua (`POST .../tasks/:id/stato`) e non è
+     *   un campo della PATCH: è lo stesso confine che il magazzino dichiara da sempre
+     *   (`aggiornaAttivita` non tocca `stato`, lo fa `completaAttivita`) e che l'attrezzo mobile
+     *   scrive a parole — «Do NOT use this to mark something done». Una porta sola che facesse
+     *   entrambe le cose avrebbe rotto quel confine dal lato della persona e lasciato intatto
+     *   quello del modello: due comportamenti diversi sullo stesso file.
+     */
+    const voceCreaMatch = method === 'POST' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)$/.exec(url.pathname)
+      : null;
+    if (voceCreaMatch) {
+      const nomi = nomiDellaRichiesta(res, method, clock, voceCreaMatch[1]);
+      if (!nomi) return;
+      const [sessionId] = nomi;
+      const risorsa = voceCreaMatch[2];
+      const magazzino = magazziniDellaPersona[risorsa];
+      try {
+        requireNoQuery(url);
+        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = magazzino.corpo(await leggiCorpoJson(req, magazzino.tettoCorpo), { creazione: true });
+        const { voce, duplicato } = await magazzino.crea(corpo);
+        if (req.aborted || res.destroyed) return;
+        const indirizzo = `/api/v1/sessions/${encodeURIComponent(sessionId)}/${risorsa}/${encodeURIComponent(voce.id)}`;
+        /* ⛔ `duplicato` esce SOLO dove esiste davvero (la Memoria): un `duplicato:false` finto su
+           note e attività sarebbe una promessa di deduplicazione che quei due magazzini non fanno. */
+        sendJson(
+          res,
+          duplicato ? 200 : 201,
+          successEnvelope({ [magazzino.chiave]: magazzino.forma(voce), ...(duplicato === undefined ? {} : { duplicato }) }, clock),
+          method,
+          { Location: indirizzo },
+        );
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    const voceLeggiMatch = method === 'GET' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname)
+      : null;
+    if (voceLeggiMatch) {
+      const nomi = nomiDellaRichiesta(res, method, clock, voceLeggiMatch[1], voceLeggiMatch[3]);
+      if (!nomi) return;
+      const [sessionId, voceId] = nomi;
+      const magazzino = magazziniDellaPersona[voceLeggiMatch[2]];
+      try {
+        requireNoQuery(url);
+        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const voce = await magazzino.leggi(voceId);
+        /* ⛔ Due assenze diverse, due codici diversi: `NOT_FOUND` è «questa sessione non esiste»,
+           `NOTE_NOT_FOUND`/`TASK_NOT_FOUND`/`MEMORY_NOT_FOUND` è «la sessione c'è, la voce no».
+           Una risposta che non le distingue manda a cercare nel posto sbagliato (10/9, Libreria). */
+        if (!voce) {
+          sendJson(res, 404, errorEnvelope(magazzino.codiceAssente, clock), method);
+          return;
+        }
+        sendJson(res, 200, successEnvelope({ [magazzino.chiave]: magazzino.forma(voce) }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    const voceModificaMatch = method === 'PATCH' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname)
+      : null;
+    if (voceModificaMatch) {
+      const nomi = nomiDellaRichiesta(res, method, clock, voceModificaMatch[1], voceModificaMatch[3]);
+      if (!nomi) return;
+      const [sessionId, voceId] = nomi;
+      const magazzino = magazziniDellaPersona[voceModificaMatch[2]];
+      try {
+        requireNoQuery(url);
+        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = magazzino.corpo(await leggiCorpoJson(req, magazzino.tettoCorpo), { creazione: false });
+        /* ⛔ Il 404 sulla voce assente lo lancia il magazzino (`*_NOT_FOUND`), non un controllo in
+           più qui: una lettura prima della scrittura sarebbe una seconda risposta alla stessa
+           domanda, e la risposta buona è quella di chi tiene il file. */
+        const voce = await magazzino.aggiorna(voceId, corpo);
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ [magazzino.chiave]: magazzino.forma(voce) }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    const voceEliminaMatch = method === 'DELETE' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/(notes|tasks|memory)\/([^/]+)$/.exec(url.pathname)
+      : null;
+    if (voceEliminaMatch) {
+      const nomi = nomiDellaRichiesta(res, method, clock, voceEliminaMatch[1], voceEliminaMatch[3]);
+      if (!nomi) return;
+      const [sessionId, voceId] = nomi;
+      const magazzino = magazziniDellaPersona[voceEliminaMatch[2]];
+      try {
+        requireNoQuery(url);
+        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        /*
+         * ⛔ Il magazzino cancella in modo IDEMPOTENTE (un id già sparito non è un errore: per il
+         *   modello «It may already be gone» è l'esito voluto) e quella proprietà non si tocca —
+         *   è il contratto dei suoi attrezzi. Ma la PERSONA sta guardando un elenco che dice che
+         *   quella voce c'è: rispondere «fatto» a un id che non esiste le confermerebbe uno
+         *   schermo vecchio. Quindi si guarda PRIMA, e la porta dice 404 mentre il magazzino resta
+         *   idempotente: due contratti diversi per due chiamanti diversi, nessuno dei due piegato.
+         * ⛔ Nessun corpo da leggere: la voce è nominata nell'indirizzo, e un corpo qui sarebbe
+         *   una seconda verità sul CHE COSA cancellare (stessa scelta della DELETE di Libreria).
+         */
+        const voce = await magazzino.leggi(voceId);
+        if (!voce) {
+          sendJson(res, 404, errorEnvelope(magazzino.codiceAssente, clock), method);
+          return;
+        }
+        await magazzino.elimina(voceId);
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ eliminata: true, id: voce.id, titolo: voce.titolo }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    const attivitaStatoMatch = method === 'POST' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/tasks\/([^/]+)\/stato$/.exec(url.pathname)
+      : null;
+    if (attivitaStatoMatch) {
+      const nomi = nomiDellaRichiesta(res, method, clock, attivitaStatoMatch[1], attivitaStatoMatch[2]);
+      if (!nomi) return;
+      const [sessionId, voceId] = nomi;
+      try {
+        requireNoQuery(url);
+        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        /* ⛔ Tre stati e non un interruttore acceso/spento: `todo`/`doing`/`done` sono quelli che
+           il magazzino conosce, e una porta che sapesse solo «fatta/non fatta» renderebbe `doing`
+           scrivibile dal modello e non dalla persona — la asimmetria che questo lotto chiude. */
+        const stato = requireStatoAttivitaBody(await leggiCorpoJson(req, MAX_REQUEST_BODY_BYTES));
+        const voce = await completaAttivita({ cartella: cartellaAttivita, id: voceId, status: stato });
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ attivita: formaPubblicaAttivita(voce) }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -2997,6 +3528,43 @@ export function createHttpApp({
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ rivelato: true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ⛔ 11/09/2026 — «Apri in Esplora file». Gemella riga per riga di `tree/reveal` qui sopra, e
+     *   deliberatamente NON una variante di quella con un flag: due azioni Windows diverse (aprire
+     *   la cartella / evidenziarla nel genitore) restano due rotte diverse, come sono due voci
+     *   diverse nel menu. L'unica cosa che cambia qui rispetto alle sorelle è che `percorso` può
+     *   essere la stringa VUOTA — la radice della sessione — e `requirePercorsoBody` la accetta già
+     *   (chiede una stringa, non una stringa non vuota): il confine lo tiene `workspace-files.mjs`.
+     */
+    const openFileMatch = method === 'POST' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/tree\/open$/.exec(url.pathname);
+    if (openFileMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try {
+          sessionId = decodeURIComponent(openFileMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const percorso = requirePercorsoBody(corpo);
+        const esito = await sessionRegistry.apriInEsploraFile(sessionId, percorso);
+        if ('erroreAvvio' in esito) {
+          const errore = new Error(esito.erroreAvvio);
+          errore.code = esito.code;
+          throw errore;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ aperto: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);

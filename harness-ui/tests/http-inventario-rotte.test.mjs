@@ -207,6 +207,23 @@ test('⛔⛔ AL CONTRARIO — il guardiano MORDE: ciò che la catena non nomina 
 });
 
 /*
+ * ⭐⭐⭐⭐ 11/09 — IL CRUD DI NOTE/ATTIVITÀ/MEMORIA nell'inventario, risorsa per risorsa.
+ * Il guardiano qui sopra prova che ogni rotta SERVITA sia dichiarata; questo prova il contrario
+ * per le sette righe nuove: che l'inventario dichiari ESATTAMENTE i metodi giusti, e non l'unione
+ * dei metodi di tutta la famiglia — che è il modo in cui un `Allow` torna a dire il falso.
+ */
+test('⭐⭐⭐ le rotte nuove di Note/Attività/Memoria dichiarano i metodi VERI, una per una', () => {
+  for (const risorsa of ['notes', 'tasks', 'memory']) {
+    assert.deepEqual(metodiAmmessiPerRotta(`/api/v1/sessions/x/${risorsa}`), ['GET', 'HEAD', 'POST'], `collezione ${risorsa}`);
+    assert.deepEqual(metodiAmmessiPerRotta(`/api/v1/sessions/x/${risorsa}/v1`), ['GET', 'HEAD', 'PATCH', 'DELETE'], `voce di ${risorsa}`);
+  }
+  // Il cambio di stato è SOLO delle attività, e solo in POST.
+  assert.deepEqual(metodiAmmessiPerRotta('/api/v1/sessions/x/tasks/t1/stato'), ['POST']);
+  assert.equal(metodiAmmessiPerRotta('/api/v1/sessions/x/notes/n1/stato'), null, 'una nota non ha uno stato: quell’indirizzo non esiste');
+  assert.equal(metodiAmmessiPerRotta('/api/v1/sessions/x/memory/m1/stato'), null);
+});
+
+/*
  * ⛔⛔ La stessa domanda dalla parte della GET. Prima della cura GET su una rotta POST che
  * ESISTE (/rename) e GET su un nome INVENTATO rispondevano identiche, 404: l’asimmetria
  * rendeva vera solo metà del contratto.

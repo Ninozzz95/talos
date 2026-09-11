@@ -68,6 +68,88 @@ function validaContenuto(content) {
   return content.trim();
 }
 
+/*
+ * ⭐⭐⭐⭐ 11/09/2026, owner: «le note, se sono markdown, devono essere renderizzate in markdown».
+ *
+ * ⛔ Chi decide non è il frontend, è questo modulo: una nota nasce qui, e se ogni superficie che
+ *   la mostra ricavasse il formato da sé avremmo tante risposte quante le superfici (la stessa
+ *   classe di difetto di «due lettori dello stesso corpo» già scritta in http-app.mjs).
+ * ⛔ `formato` è DICHIARATO oppure RILEVATO, mai indovinato due volte: se chi scrive lo dichiara
+ *   (la persona, da un interruttore nel pannello) il valore resta sul disco e vince per sempre;
+ *   se non lo dichiara (il modello, che nei suoi attrezzi non ha quel campo) lo rileva questa
+ *   funzione a ogni lettura — così una nota scritta ieri in testo semplice e modificata oggi con
+ *   un titolo `#` si vede subito come markdown, senza una migrazione.
+ *
+ * I marcatori sono quelli della specifica CommonMark 0.31.2 (spec.commonmark.org, letta
+ * l'11/09/2026), non una lista a memoria: titoli ATX (1-6 `#` seguiti da spazio, fino a 3 spazi
+ * di rientro), recinti di codice (3+ backtick o tilde), citazioni (`>`), elenchi puntati
+ * (`-`/`+`/`*` PIÙ uno spazio — senza lo spazio non è un elenco) ed elenchi numerati (1-9 cifre
+ * più `.` o `)`), righe orizzontali, link `[testo](url)` e enfasi `**`/`__`.
+ *
+ * ⛔ Enfasi ed elenchi puntati sono i due marcatori che un testo normale può contenere per caso
+ *   («3 * 4 * 5», un trattino a inizio riga): per questo richiedono la forma STRETTA — `**` o
+ *   `__` attorno a qualcosa, e il trattino solo a inizio riga seguito da spazio. Un asterisco
+ *   solitario non basta a chiamare markdown un promemoria della spesa.
+ */
+const MARCATORI_MARKDOWN = Object.freeze([
+  /^ {0,3}#{1,6}(?:[ \t]|$)/m,          // titolo ATX
+  /^ {0,3}(?:```|~~~)/m,                 // recinto di codice
+  /^ {0,3}>(?:[ \t]|$)/m,                // citazione
+  /^ {0,3}[-+*][ \t]+\S/m,               // elenco puntato (il marcatore VUOLE uno spazio)
+  /^ {0,3}\d{1,9}[.)][ \t]+\S/m,         // elenco numerato
+  /^ {0,3}(?:(?:[-*_][ \t]*){3,})$/m,    // riga orizzontale
+  /\[[^\]\n]+\]\([^)\s]+\)/,             // link in linea
+  /(\*\*|__)(?!\s)[^\n]+?\1/,            // enfasi forte
+  /^ {0,3}\|.*\|[ \t]*$/m,               // riga di tabella (estensione GFM, non CommonMark: dichiarata)
+]);
+
+/** `'markdown'` se il testo porta almeno un marcatore CommonMark, `'testo'` altrimenti. PURA: nessun I/O, si prova con una stringa letterale. */
+export function rilevaFormatoNota(contenuto) {
+  const testo = typeof contenuto === 'string' ? contenuto : '';
+  return MARCATORI_MARKDOWN.some((marcatore) => marcatore.test(testo)) ? 'markdown' : 'testo';
+}
+
+const FORMATI = Object.freeze(['markdown', 'testo']);
+/*
+ * ⛔ 11/09 — CHI ha scritto questa nota. Due soli valori possibili perché due sole porte
+ *   esistono: gli attrezzi `notes_*` del modello (agent-service.mjs) e le rotte HTTP della
+ *   persona (http-app.mjs). Il default è `'modello'` e non `'ignoto'` di proposito: fino a
+ *   oggi la persona NON aveva una porta per scrivere — ogni nota già sul disco viene di lì, e
+ *   un terzo valore inventerebbe un'incertezza che non c'è.
+ */
+const ORIGINI = Object.freeze(['persona', 'modello']);
+
+function validaFormato(formato) {
+  if (!FORMATI.includes(formato)) {
+    throw new NoteStoreError(`formato deve essere uno fra ${FORMATI.join('/')}`, 'NOTE_INVALID');
+  }
+  return formato;
+}
+
+function validaOrigine(origine) {
+  if (!ORIGINI.includes(origine)) {
+    throw new NoteStoreError(`origine deve essere una fra ${ORIGINI.join('/')}`, 'NOTE_INVALID');
+  }
+  return origine;
+}
+
+/**
+ * La forma PUBBLICA di una nota — l'unica che esce da questo prodotto, uguale per la rotta
+ * HTTP della persona e per chiunque altro la mostri. `formato` dichiarato vince, altrimenti
+ * si rileva dal contenuto; `origine` assente su disco vuol dire `'modello'` (vedi ORIGINI).
+ */
+export function formaPubblicaNota(voce) {
+  return {
+    id: voce.id,
+    titolo: voce.titolo,
+    contenuto: voce.contenuto,
+    formato: FORMATI.includes(voce.formato) ? voce.formato : rilevaFormatoNota(voce.contenuto),
+    creataAlle: voce.creataAlle ?? null,
+    aggiornataAlle: voce.aggiornataAlle ?? null,
+    origine: ORIGINI.includes(voce.origine) ? voce.origine : 'modello',
+  };
+}
+
 /** Più recentemente aggiornate per prime — stesso ordine di `notes_list` mobile (`chatDatabaseSchema.ts`: `ON talos_notes(updated_at DESC, id)`). Cartella assente ⇒ `[]`, mai un errore (primo avvio, nessuna nota ancora). */
 export async function elencaNote({ cartella }, deps = {}) {
   const readdirFn = deps.readdirFn ?? fsp.readdir;
@@ -98,15 +180,31 @@ export async function leggiNota({ cartella, id }, deps = {}) {
   }
 }
 
-/** @returns la nota creata: `{id, titolo, contenuto, creataAlle, aggiornataAlle}`. @throws {NoteStoreError} NOTE_INVALID su title/content fuori dai tetti — PRIMA di ogni I/O, mai una scrittura parziale. */
-export async function creaNota({ cartella, title, content }, deps = {}) {
+/**
+ * @returns la nota creata: `{id, titolo, contenuto, formato?, origine, creataAlle, aggiornataAlle}`.
+ * @throws {NoteStoreError} NOTE_INVALID su title/content/formato/origine fuori dai tetti — PRIMA di ogni I/O, mai una scrittura parziale.
+ * ⛔ 11/09 — `formato` si scrive sul disco SOLO se dichiarato: assente vuol dire «rilevalo a ogni
+ *   lettura» (vedi formaPubblicaNota), e scriverci dentro il risultato del rilevamento
+ *   congelerebbe per sempre una risposta che deve poter cambiare col contenuto.
+ */
+export async function creaNota({ cartella, title, content, formato, origine = 'modello' }, deps = {}) {
   const titolo = validaTitolo(title);
   const contenuto = validaContenuto(content);
+  const formatoDichiarato = formato === undefined ? undefined : validaFormato(formato);
+  const daChi = validaOrigine(origine);
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   const clockFn = deps.clockFn ?? (() => new Date());
   const ora = clockFn().toISOString();
-  const voce = { id: randomUUID(), titolo, contenuto, creataAlle: ora, aggiornataAlle: ora };
+  const voce = {
+    id: randomUUID(),
+    titolo,
+    contenuto,
+    ...(formatoDichiarato ? { formato: formatoDichiarato } : {}),
+    origine: daChi,
+    creataAlle: ora,
+    aggiornataAlle: ora,
+  };
   await mkdirFn(cartella, { recursive: true });
   await writeFileFn(percorsoDi(cartella, voce.id), JSON.stringify(voce, null, 2), 'utf8');
   return voce;
@@ -118,7 +216,7 @@ export async function creaNota({ cartella, title, content }, deps = {}) {
  * ("Send ONLY the fields you are changing").
  * @throws {NoteStoreError} NOTE_NOT_FOUND se l'id non esiste, NOTE_INVALID su un campo passato ma fuori dai tetti.
  */
-export async function aggiornaNota({ cartella, id, title, content }, deps = {}) {
+export async function aggiornaNota({ cartella, id, title, content, formato }, deps = {}) {
   const readFileFn = deps.readFileFn ?? fsp.readFile;
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
@@ -127,6 +225,11 @@ export async function aggiornaNota({ cartella, id, title, content }, deps = {}) 
   if (!voce) throw new NoteStoreError(`nessuna nota con id ${id}`, 'NOTE_NOT_FOUND');
   if (title !== undefined) voce.titolo = validaTitolo(title);
   if (content !== undefined) voce.contenuto = validaContenuto(content);
+  /* ⛔ `formato: null` NON è «lascia stare» come `undefined`: è «torna a rilevarlo dal contenuto»,
+     cioè l'unico modo di disfare una dichiarazione sbagliata. Senza questa riga un interruttore
+     acceso una volta non si sarebbe più potuto spegnere. */
+  if (formato === null) delete voce.formato;
+  else if (formato !== undefined) voce.formato = validaFormato(formato);
   voce.aggiornataAlle = clockFn().toISOString();
   await mkdirFn(cartella, { recursive: true });
   await writeFileFn(percorsoDi(cartella, id), JSON.stringify(voce, null, 2), 'utf8');
