@@ -960,3 +960,31 @@ mobile con i suoi colori: l'oro e il fondo vanno presi da `--talos-accent`/`--ta
 tema salvato (il ponte del tema in `avvio.js` già legge la preferenza prima del primo disegno), così
 un tema diverso da Calm non mostra un logo di un altro colore per 650 ms. Verificare nei preset
 esistenti (calm, forge, terminal, claudius…) e nei due modi colore.
+
+## BC-20 ⛔⛔ — il drop-in era un SOTTOINSIEME del mockup interattivo: manca tutto il JavaScript
+
+Owner 11/09/2026, sera, dopo la consegna del drop-in sul 4174: «ci sono molte cose che non
+funzionano, la sidebar se clicco su un elemento di Note, Libreria ecc, molte cose non sono state
+messe, animazioni ecc, pessimo lavoro». E ha caricato `Talos_Desktop_Final_Mockup_Interattivo.html`
+(938 KB) più un secondo zip — **identico byte per byte** al primo (stessi 41 file, diff vuoto).
+
+**Misurato, mockup contro prodotto (bundle `public/styles.css`):**
+- classi `.talos-*` del mockup: **574**, di cui **9** assenti nel prodotto; keyframes: **17 su 18** già
+  presenti (manca solo `td-track`). ⇒ Il CSS «talos» del mockup è già quasi tutto nel prodotto,
+  perché il mockup è costruito sul nostro template;
+- ciò che il drop-in NON portava: **~130 classi `td-*`** nuove (master/detail, card, filtri, modali,
+  toast, theme studio, drawer, sidebar a gruppi…) e **~90 funzioni JS**: `navigate` con transizione
+  al cambio pagina (`motion(visible, opacity .4 → 1, translateY 5px → 0)`), `initSidebar` che
+  riorganizza la barra in due gruppi richiudibili «Spazi di lavoro» (Conversazioni, Note, Attività,
+  Libreria, Memoria, Ricerca, Progetti, Board) e «Strumenti» (Modelli, Capability, Officina,
+  Automazioni, Doctor) con pulsante flottante e drawer sotto 860 px, `renderSection`/`renderDetail`
+  (master-detail per ogni sezione), `sessionMenu`, selezione multipla delle sessioni, `toast`,
+  `modalShow`, `themeChooser`/`initAtelier`, `initTerminal` (demo), `guide` (tour).
+⇒ La sidebar «che non funziona» è la sidebar VECCHIA che apre le sezioni senza transizione: nel
+  prodotto Note/Libreria/Memoria si aprono (foto dell'11/09 sera, due temi), ma senza la struttura e
+  il moto del mockup. Il drop-in consegnato conteneva 5 file (Canvas + CSS): nessuno di questi JS.
+
+**Cosa serve:** un porting vero, sezione per sezione, in `legacy/app.js` + `index.template.html` +
+un foglio `td-*`, con l'owner che decide COSA portare (è un mockup: «siamo noi che decidiamo»).
+Brief pronto in `.claude/BRIEF-PORTING-MOCKUP-2026-09-11.md`; parte quando l'agente dei residui
+rilascia `app.js`.
