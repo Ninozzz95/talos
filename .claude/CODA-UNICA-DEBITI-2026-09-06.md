@@ -988,3 +988,15 @@ messe, animazioni ecc, pessimo lavoro». E ha caricato `Talos_Desktop_Final_Mock
 un foglio `td-*`, con l'owner che decide COSA portare (è un mockup: «siamo noi che decidiamo»).
 Brief pronto in `.claude/BRIEF-PORTING-MOCKUP-2026-09-11.md`; parte quando l'agente dei residui
 rilascia `app.js`.
+
+### BC-20, precisazione (11/09 sera, dopo il confronto regola per regola)
+Il primo confronto (stringa esatta, mockup contro `public/styles.css`) diceva «603 regole solo nel
+mockup»: era troppo severo — differenze di virgolette e spazi contavano come regole assenti. Rifatto
+per famiglie e verificato con grep mirati: le 79 regole `:root.talos-final-ui …` delle sezioni sono
+nel bundle E la classe viene messa su `<html>` dal renderer (`bundle app.js` ×1); i preset di tema
+nuovi stanno già in `temi.css` (17 riferimenti). ⇒ **Il CSS del mockup è nel prodotto.** Ciò che
+manca è esattamente ciò che i quattro lotti in corso stanno portando: sidebar a gruppi, transizione
+al cambio pagina, elenco+dettaglio, menu e selezione delle sessioni, toast, theme studio, modali
+(~90 funzioni JS, 344 regole `td-*`). Le 259 «solo mockup non td» restanti sono stati `aria-*`,
+hover/focus e varianti (`data-densita`, `data-sidebar="icone"`) da riverificare UNA volta a merge
+fatto, sul DOM vero, non a confronto di stringhe.
