@@ -544,6 +544,60 @@ export function registraScritturaDiFiglia(scrittePerMadre, { madreId, figliaId, 
   return altra ? { percorso, prima: altra.figliaId, poi: figliaId } : null;
 }
 
+/**
+ * ⛔⛔⛔ BC-03 (11/09/2026) — LA COLLISIONE NON SOPRAVVIVEVA A UN RIAVVIO, e la scheda «Agenti»
+ * taceva proprio quando serviva di più: riaprendo la sessione il giorno dopo.
+ *
+ * Misurato prima della cura, su uno store isolato con due figlie che scrivono ENTRAMBE
+ * `condiviso.md`: a server appena riavviato `GET /api/v1/sessions/<madre>/children` rispondeva
+ * `"collisioni":[]` per tutte e due. La cura del 10/09 (D3) registra la collisione dentro
+ * `broadcast()`, cioè MENTRE l'evento passa: dopo un riavvio nessun evento passa più — gli eventi
+ * sono già sul disco — e la mappa `scrittureDelleFiglie` riparte vuota.
+ * ⇒ Un avviso che c'è solo finché il processo è vivo non è un avviso: è un caso fortunato.
+ *
+ * Qui le scritture persistite delle figlie RIPRISTINATE si rigiocano nella stessa mappa che usa
+ * `broadcast()`, così valgono due cose insieme: le collisioni di ieri tornano nella scheda, e una
+ * scrittura fatta DOPO il riavvio collide con una fatta PRIMA.
+ *
+ * ⛔ L'ordine non è inventato: gli eventi AG-UI persistiti non portano un istante (verificato in
+ *   `agui-events.mjs`: solo l'evento di contesto ha `timestamp`), e `_sequenza` è per sessione, non
+ *   globale. Si ordina per `avviataAlle` della figlia e poi per `_sequenza` — cioè «ha cominciato
+ *   prima» — e si dichiara: è un ordine fra SORELLE, non un orologio. Chi legge la scheda vede
+ *   comunque il nome del file, che è la cosa azionabile.
+ * ⛔ Solo le figlie `ripristinata:true`: una sessione viva ha già passato le sue scritture da
+ *   `broadcast()`, e rigiocarle qui significherebbe contare due volte la stessa collisione.
+ *
+ * @returns {number} quante collisioni sono state ricostruite (0 è il caso normale).
+ */
+export function ricostruisciCollisioniDiScrittura(sessioni, scrittePerMadre) {
+  const scritture = [];
+  for (const [figliaId, voce] of sessioni.entries()) {
+    if (!voce?.padreId || voce.ripristinata !== true || voce.collisioniRicostruite === true) continue;
+    if (!sessioni.has(voce.padreId)) continue; // senza la madre non c'è nessuna sorella con cui collidere
+    voce.collisioniRicostruite = true;
+    for (const evento of Array.isArray(voce.eventi) ? voce.eventi : []) {
+      const percorso = percorsoScrittoDaEvento(evento);
+      if (!percorso) continue;
+      scritture.push({
+        madreId: voce.padreId, figliaId, percorso,
+        quando: voce.avviataAlle ?? null,
+        ordine: Number.isSafeInteger(evento._sequenza) ? evento._sequenza : 0,
+      });
+    }
+  }
+  scritture.sort((a, b) => String(a.quando ?? '').localeCompare(String(b.quando ?? '')) || a.ordine - b.ordine);
+  let ricostruite = 0;
+  for (const scrittura of scritture) {
+    const collisione = registraScritturaDiFiglia(scrittePerMadre, scrittura);
+    if (!collisione) continue;
+    const madre = sessioni.get(scrittura.madreId);
+    if (!madre) continue;
+    (madre.collisioniDiScrittura ??= []).push(collisione);
+    ricostruite += 1;
+  }
+  return ricostruite;
+}
+
 export function nomeCortoDaConsegna(consegna) {
   const riga = String(consegna || '').split(String.fromCharCode(10)).map((r) => r.trim()).find((r) => r.length > 0);
   if (!riga) return null;
@@ -2974,6 +3028,12 @@ export function createSessionRegistry({
         }
         ripristinate += 1;
       }
+      /*
+       * ⛔ BC-03 — DOPO il ciclo, non dentro: una figlia può essere letta prima della sua madre
+       *   (l'ordine dei file sul disco non è quello della famiglia), e la collisione si giudica
+       *   solo quando tutte le sorelle sono nella Map. Vedi `ricostruisciCollisioniDiScrittura`.
+       */
+      ricostruisciCollisioniDiScrittura(sessioni, scrittureDelleFiglie);
       ultimoRipristino = { ripristinate, totali: id.length };
       sessioniCorrotte = corrotte;
       sessioniScartate = scartate;

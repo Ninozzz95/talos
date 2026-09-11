@@ -154,3 +154,85 @@ test('PO-08: due deleghe, due card, ognuna con la sua', () => {
   contenitore.figli[0].lancia('click');
   assert.deepEqual(viste, ['altra-figlia', FIGLIA.sessionId], 'ogni card apre la PROPRIA, non l\'ultima disegnata');
 });
+
+/*
+ * ⛔⛔⛔ BC-03 (11/09/2026) — LA SCHEDA NON DEVE MAI PROMETTERE CIÒ CHE NON DÀ.
+ *
+ * Il bug dell'08/09 diceva «la scheda Agenti resta vuota anche quando le figlie ci sono»: quella
+ * parte è curata e provata altrove (`tests/bc03-delega-visibile.test.mjs`, dal disco fino alla
+ * rotta). Guardando la scheda PIENA sul server isolato è però saltato fuori il resto dello stesso
+ * difetto: lo stato vuoto prometteva «i suoi giri, le sue richieste di permesso e il pulsante per
+ * fermarlo», e la card piena non mostra i giri, non mostra nessuna richiesta di permesso, e il
+ * «pulsante per fermarlo» esisteva solo sul TASTO DESTRO — invisibile a chi non lo sa già.
+ *
+ * ⇒ Queste prove tengono ferme le due metà: le parole dello stato vuoto, e il «…» che rende vera
+ *   l'unica di quelle tre promesse che valeva la pena mantenere.
+ */
+
+/** `trova` del finto cerca per CLASSE: un `<use>` non ne ha, quindi qui si cerca per tag. */
+function trovaPerTag(nodo, tag) {
+  if (nodo?.tag === tag) return nodo;
+  for (const figlio of nodo?.figli ?? []) { const t = trovaPerTag(figlio, tag); if (t) return t; }
+  return null;
+}
+
+/** Il finto non ha `querySelector`: il «…» si trova per `data-azione`, come lo troverebbe una persona. */
+function trovaBottoneMenu(nodo) {
+  if (nodo?.dataset?.azione === 'menu') return nodo;
+  for (const figlio of nodo?.figli ?? []) { const t = trovaBottoneMenu(figlio); if (t) return t; }
+  return null;
+}
+
+test('BC-03: la card porta un «…» visibile, e apre lo STESSO menu del tasto destro', () => {
+  const chiamate = [];
+  const { card } = disegna([FIGLIA], { onApri: () => {}, onMenu: (f, dove) => chiamate.push([f.sessionId, dove]) });
+  const bottone = trovaBottoneMenu(card);
+  assert.ok(bottone, '⛔ senza un bersaglio visibile, «ferma questa delega» si scopre solo per caso');
+  assert.equal(bottone.getAttribute('aria-haspopup'), 'menu', 'chi ascolta la pagina deve sapere che si apre un menu');
+  assert.match(bottone.getAttribute('aria-label'), /riepilogo\.md/, 'l\'etichetta dice su QUALE delega, non «azioni»');
+  assert.equal(trovaPerTag(bottone, 'use')?.getAttribute('href'), '#i-more', 'l\'icona dello sprite, non tre punti scritti a mano');
+
+  bottone.lancia('click', { stopPropagation() {} });
+  assert.equal(chiamate.length, 1);
+  assert.equal(chiamate[0][0], FIGLIA.sessionId);
+  assert.equal(chiamate[0][1].ancora, bottone, 'il menu si ancora al bottone: da tastiera non c\'è nessun puntatore');
+});
+
+test('BC-03, AL CONTRARIO: il «…» apre il menu e NON la conversazione — un gesto, una risposta', () => {
+  let aperte = 0; let menu = 0; let fermato = 0;
+  const { card } = disegna([FIGLIA], { onApri: () => { aperte += 1; }, onMenu: () => { menu += 1; } });
+  const bottone = trovaBottoneMenu(card);
+  bottone.lancia('click', { stopPropagation() { fermato += 1; } });
+  assert.equal(menu, 1);
+  assert.equal(aperte, 0, '⛔ la card intera è cliccabile: senza stopPropagation il «…» apriva il menu E la figlia');
+  assert.equal(fermato, 1, 'e lo fa fermando la propagazione, non sperando che nessuno clicchi');
+});
+
+test('BC-03, AL CONTRARIO: Invio sul «…» non apre la conversazione della figlia', () => {
+  let aperte = 0;
+  const { card } = disegna([FIGLIA], { onApri: () => { aperte += 1; }, onMenu: () => {} });
+  const bottone = trovaBottoneMenu(card);
+  card.lancia('keydown', { key: 'Enter', target: bottone, preventDefault() {} });
+  assert.equal(aperte, 0, 'il tasto premuto era del bottone, non della card');
+  card.lancia('keydown', { key: 'Enter', target: card, preventDefault() {} });
+  assert.equal(aperte, 1, 'e la card continua ad aprirsi con Invio, come prima');
+});
+
+test('BC-03, AL CONTRARIO: senza `onMenu` non compare nessun «…» — mai un bottone che non aziona niente', () => {
+  const { card } = disegna([FIGLIA], { onApri: () => {} });
+  assert.equal(trovaBottoneMenu(card), null);
+  const senzaId = disegna([{ ...FIGLIA, sessionId: null }], { onApri: () => {}, onMenu: () => {} });
+  assert.equal(trovaBottoneMenu(senzaId.card), null, 'senza id non c\'è nessuna delega da fermare');
+});
+
+test('BC-03: lo stato vuoto non promette giri e permessi che la scheda piena non mostra', () => {
+  const d = documentoFinto();
+  const contenitore = d.createElement('div');
+  const quante = disegnaAgenti(d, contenitore, []);
+  assert.equal(quante, 0);
+  const testo = contenitore.figli[0].textContent;
+  assert.match(testo, /Nessun sotto-agente in questa sessione/, 'lo stato vuoto onesto resta: nessuna figlia, nessuna riga');
+  assert.doesNotMatch(testo, /richieste di permesso/, '⛔ nessuno le mostra: prometterle è mentire in anticipo');
+  assert.doesNotMatch(testo, /i suoi giri/, '⛔ i giri stanno nella conversazione della figlia, non in questa scheda');
+  assert.match(testo, /si ferma/, 'e ciò che resta promesso — aprire e fermare — la card lo fa davvero');
+});
