@@ -500,9 +500,38 @@ function intestazioniDocumentoConNonce(nonce) {
  * documento non avesse un `</head>` non si inventa un posto: si lascia l'HTML com'è e il
  * nonce resta solo nell'intestazione — meglio una cura che non scatta di una pagina rotta.
  */
+/*
+ * ⭐⭐⭐ 11/09 — IL SEGNAPOSTO DEL NONCE, e il difetto che il server di prova non poteva mostrare.
+ *
+ * La schermata d'avvio nuova porta un `<style>` e uno `<script>` INLINE nel documento (devono
+ * essere inline: un foglio esterno arriva dopo il primo disegno, cioè dopo il lampo che coprono).
+ * Su un server statico funzionavano; sul 4174 **no**, e in silenzio: la CSP di questo server è
+ * `style-src 'self' 'nonce-…'`, quindi il browser li scartava senza un errore in pagina. La sonda
+ * diceva `regole: []` e `position: static` mentre il file su disco era giusto.
+ * ⛔ È la lezione «una misura fatta nell'ambiente sbagliato conferma qualunque cosa»: la prova che
+ *   conta è sempre sul server vero.
+ *
+ * Ricerca 11/09/2026 (MDN «nonce global attribute»; content-security-policy.com «CSP Nonce»;
+ * guida CSP di Next.js): il nonce serve proprio per allowlistare UN elemento inline invece di
+ * aprire `unsafe-inline`, e la forma raccomandata è «add nonce attributes which will be filled in
+ * by the template system».
+ *
+ * ⛔ Si timbrano SOLO i tag che portano il marcatore, mai tutti gli inline del documento: timbrare
+ *   a tappeto equivarrebbe a `unsafe-inline` scritto in un altro modo, e questo file esiste per
+ *   NON averlo (vedi BH-06 qui sopra).
+ */
+const MARCATORE_NONCE = 'data-talos-nonce';
+
 function iniettaNonceNelDocumento(html, nonce) {
-  const chiusuraHead = html.search(/<\/head>/iu);
-  if (chiusuraHead < 0) return html;
+  /* ⛔ `split`/`join` e non `replace`: una stringa di sostituzione con `$` viene interpretata da
+     `String.replace`, e un nonce base64 può contenerne — è la lezione «String.replace MANGIA i
+     dollari», già pagata tre volte in questo progetto. `split`/`join` non interpreta niente.
+     ⛔ E la sostituzione va fatta PRIMA di cercare `</head>`: cercare l'indice e poi cambiare la
+     stringa sotto di lui lo lascerebbe puntare al punto sbagliato. */
+  const documento = html.split(MARCATORE_NONCE).join(`nonce="${nonce}"`);
+  const chiusuraHead = documento.search(/<\/head>/iu);
+  if (chiusuraHead < 0) return documento;
+  html = documento;
   const timbro = `<script nonce="${nonce}">(function(){var n=${JSON.stringify(nonce)};var c=Document.prototype.createElement;`
     + 'Document.prototype.createElement=function(t){var e=c.apply(this,arguments);'
     + 'try{if(typeof t==="string"&&t.toLowerCase()==="style")e.nonce=n;}catch(_){}return e;};})();</script>';
