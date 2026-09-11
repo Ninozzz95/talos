@@ -25,6 +25,12 @@
  */
 import { usageDellaSessione } from './consumo-sessione.js'; // 06/9 CB-04: i giri della sessione, non dell'ultimo invio
 
+/**
+ * Per quanto tempo una riga dice «ha appena risposto». Un minuto: abbastanza da vederlo tornando
+ * allo schermo, poco abbastanza da non restare acceso su una sessione di mezz'ora fa.
+ */
+export const SEGNALE_NOVITA_MS = 60_000;
+
 /** Tono del pallino per ogni stato: le classi `talos-dot--*` del mockup. */
 const TONI = Object.freeze({
   attesa: 'warning',
@@ -286,10 +292,66 @@ export function ordinaSessioniAdAlbero(elenco) {
     fuori.push({ sessione, profondita });
     for (const figlia of figliePer.get(sessione.sessionId) ?? []) scendi(figlia, profondita + 1);
   };
-  for (const s of righe) {
-    if (s.padreId && presenti.has(s.padreId)) continue; // esce sotto la sua madre, non qui
-    scendi(s, 0);
+  /*
+   * ⭐⭐⭐ LE SESSIONI IN CORSO SALGONO IN CIMA. Owner, 11/09: «una cosa importantissima: nella
+   * barra laterale, fare salire automaticamente in cima le sessioni in corso».
+   *
+   * ⛔ Si ordinano solo le RADICI, mai le figlie: una figlia sta sotto la sua madre perché quella è
+   *   la sua storia, e staccarla per anzianità renderebbe illeggibile l'albero della delega.
+   * ⛔ Una radice conta come viva anche se è una sua DISCENDENTE a lavorare: l'albero è vivo, e
+   *   nascondere in fondo la madre di una figlia che sta girando è il caso peggiore — è proprio
+   *   quella che si vuole guardare.
+   * ⛔ E l'ordine dentro i due gruppi NON cambia: `sort` in JavaScript è stabile (ES2019), quindi
+   *   le vive restano fra loro nell'ordine che avevano, e così le altre. Ricerca 11/09/2026: il
+   *   rimescolamento a ogni attività è un difetto noto e odiato — ChatGPT riordina per
+   *   `updated_at` e «una chat di sei mesi fa salta in cima appena scrivi», e sul forum di Cursor
+   *   c'è una richiesta esplicita di un ordine che NON si riordini da solo. Qui l'unica cosa che
+   *   muove una riga è passare da viva a non viva: non un token che arriva.
+   */
+  const vivaPer = new Map();
+  const discendenzaViva = (sessione, visti = new Set()) => {
+    if (visti.has(sessione.sessionId)) return false; // una catena circolare non deve appendere la barra
+    visti.add(sessione.sessionId);
+    /* ⛔ `statoSessione` torna un OGGETTO (`{classe, testo, tono, aiuto}`), non una stringa: il
+       confronto diretto era sempre falso, e i test l'hanno preso al primo colpo. */
+    const classe = statoSessione(sessione).classe;
+    if (classe === 'vivo' || classe === 'attesa') return true;
+    return (figliePer.get(sessione.sessionId) ?? []).some((f) => discendenzaViva(f, visti));
+  };
+  /*
+   * ⭐ E FRA LE VIVE COMANDA CHI HA PARLATO PER ULTIMO. Owner, 11/09: «se ne ho tre e quelle più in
+   *   basso mandano un messaggio, dopo un attimo sale in cima e viene segnalato».
+   * ⛔ L'istante è quello dell'ultima risposta FINITA del modello (`ultimaRispostaAlle`, segnato dal
+   *   server su `TextMessageEnd`): non a ogni token, o la barra si rimescolerebbe sotto le dita
+   *   mentre il modello scrive — e un elenco che salta mentre lo leggi è il difetto che la ricerca
+   *   dell'11/09 trova odiato ovunque (ChatGPT riordina per `updated_at`; sul forum di Cursor
+   *   chiedono esplicitamente un ordine che non si riordini da solo).
+   * ⇒ Qui si muove **una riga alla volta e solo a risposta finita**: è un movimento che RACCONTA
+   *   qualcosa, non rumore.
+   * ⛔ Di una madre vale la risposta più recente di TUTTO il suo albero: se a parlare è la figlia,
+   *   è l'albero ad aver detto qualcosa.
+   */
+  const parlatoPer = new Map();
+  const ultimaVoceDellAlbero = (sessione, visti = new Set()) => {
+    if (visti.has(sessione.sessionId)) return '';
+    visti.add(sessione.sessionId);
+    const mia = String(sessione.ultimaRispostaAlle ?? '');
+    const figlie = (figliePer.get(sessione.sessionId) ?? []).map((f) => ultimaVoceDellAlbero(f, visti));
+    return [mia, ...figlie].sort().at(-1) ?? '';
+  };
+  const radici = righe.filter((s) => !(s.padreId && presenti.has(s.padreId)));
+  for (const r of radici) {
+    vivaPer.set(r.sessionId, discendenzaViva(r));
+    parlatoPer.set(r.sessionId, ultimaVoceDellAlbero(r));
   }
+  const ordinate = [...radici].sort((a, b) => {
+    const viva = Number(vivaPer.get(b.sessionId)) - Number(vivaPer.get(a.sessionId));
+    if (viva !== 0) return viva;
+    /* Fra due vive: la più recente in cima. Fra due ferme: nessun riordino, resta com'era. */
+    if (!vivaPer.get(a.sessionId)) return 0;
+    return String(parlatoPer.get(b.sessionId) ?? '').localeCompare(String(parlatoPer.get(a.sessionId) ?? ''));
+  });
+  for (const s of ordinate) scendi(s, 0);
   // ⛔ AL CONTRARIO: nessuna riga si perde per strada, nemmeno dentro un ciclo di padri
   for (const s of righe) if (!fatte.has(s.sessionId)) fuori.push({ sessione: s, profondita: 0 });
   return fuori.map((v, i) => {
@@ -366,6 +428,19 @@ export function creaSessionItem(sessione, opzioni = {}) {
   riga.setAttribute('data-c', 'SessionItem');
   if (opzioni.corrente) riga.setAttribute('aria-current', 'true');
   if (sessione.sessionId) riga.dataset.realSessionId = sessione.sessionId;
+  /*
+   * ⭐ «HA APPENA RISPOSTO». Owner, 11/09: la sessione che parla sale in cima «e viene segnalato,
+   *   con dei segnali pallini, cose abbastanza semplici e non invasive».
+   * ⛔ Il segnale dura quanto la novità: `SEGNALE_NOVITA_MS` dopo l'ultima risposta finita, poi
+   *   sparisce da sé al primo ridisegno. Un segnale che resta acceso per sempre smette di
+   *   significare «guarda qui» e diventa decorazione — e la riga della sessione aperta non lo porta
+   *   mai, perché quella la stai già guardando.
+   */
+  const quando = Date.parse(sessione.ultimaRispostaAlle ?? '');
+  const adessoMs = (opzioni.adesso instanceof Date ? opzioni.adesso : new Date()).getTime();
+  if (Number.isFinite(quando) && !opzioni.corrente && adessoMs - quando <= SEGNALE_NOVITA_MS) {
+    riga.dataset.novita = 'si';
+  }
 
   const etichetta = opzioni.pendente
     ? `Nuova · ${sessione.nomeCartella || ''}`

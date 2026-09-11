@@ -6,6 +6,7 @@
 @import './uscita-viva.css';
 @import './modalita-shell.css';
 @import './terminale-basso.css'; /* PO-09: il terminale in split orizzontale in basso */
+@import './sessioni-vive.css'; /* le sessioni in corso salgono in cima, e lo segnalano */
 @import './attesa-shimmer.css';
 @import './segnavia-mobile.css'; /* 10/09: il segnavia com'e' nel mobile, piu' piccolo */ /* 10/09: l'attesa si vede sulla riga, il segnavia e' nascosto */ /* il composer dice quando sei in shell libera */ /* D-10B: l'uscita di un comando mentre esce */
 /*
