@@ -11806,16 +11806,37 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    */
   const ASPETTO_SCELTA_VERSIONE = 2;
   /** Le sole preferenze che fino al 10/09/2026 non muovevano un pixel, e che i fogli nuovi svegliano. */
-  const ASPETTO_CHIAVI_VERSIONATE = ['themePreset', 'sceneOverride'];
+  const ASPETTO_CHIAVI_VERSIONATE = ['themePreset', 'sceneOverride', 'backgroundMotion'];
   const chiaveVersioneAspetto = (chiave) => `${chiave}Versione`;
   const DESKTOP_APPEARANCE_DEFAULTS = {
-    themePresetVersione: 0, sceneOverrideVersione: 0, // 11/09: 0 = «mai scelto da quando la scelta si vede»
+    /* 11/09: 0 = «mai scelto da quando la scelta si vede». `backgroundMotion` è nell'elenco per lo
+       stesso motivo degli altri due: un `true` salvato quando le macchie non dipingevano niente non
+       è una scelta di tenersi un velo giallo dietro la chat — è un residuo. Chi lo vuole lo riaccende
+       da Aspetto, e da quel momento il timbro lo rende definitivo. */
+    themePresetVersione: 0, sceneOverrideVersione: 0, backgroundMotionVersione: 0,
     themePreset: 'calm', colorMode: 'system', sceneOverride: 'follow-theme',
     uiDensity: 'comoda', uiLanguage: 'sistema', // 06/9 B8: densità delle liste (mockup `data-densita`) e lingua dei menu (H21)
     uiFontScale: 'default', chatFontScale: 'xcompact', composerShape: 'standard',
     composerPlus: 'drawer', messageStyle: 'sections', streamingAnimation: 'fade',
     windowPresentation: 'drawer', immersiveHeader: false, chatFullWidth: false, reducedMotion: false,
-    backgroundMotion: true, interfaceMotion: true, motionMode: 'adaptive',
+    /*
+     * ⛔⛔⛔ 11/09 — `backgroundMotion` PARTE SPENTO. Owner, guardando la sua chat: «correggi subito
+     *   questa porcata di sfondo giallognolo nella chat».
+     *
+     * Le due macchie di `body::before/::after` (aspetto.css) prendono la tinta della SCENA, che col
+     * tema `calm` è oro `#c08b3c`, e con `motionContrast: 80` emergono parecchio: dietro la colonna
+     * della chat diventano un velo giallognolo. Finché nessun CSS leggeva `data-talos-scene` non si
+     * vedevano; da quando i fogli sono riagganciati, si vedono — e il posto dove si vedono di più è
+     * esattamente quello dove si LEGGE.
+     *
+     * Ricerca 11/09/2026 (Eggradients «Gradient UI in 2026: How to Use Gradients Without
+     * Compromising Usability»): «se c'è un'area dietro il testo che cambia continuamente tono, rende
+     * difficile la lettura» — e un gradiente animato fatto male «stanca chi guarda».
+     *
+     * ⇒ Lo sfondo animato resta una funzione vera e completa, ma si ACCENDE da Aspetto, non si
+     *   subisce. Un default che decora la superficie di lettura è una scelta che nessuno ha fatto.
+     */
+    backgroundMotion: false, interfaceMotion: true, motionMode: 'adaptive',
     motionQuality: 'balanced', motionSpeed: 100, motionIntensity: 20,
     motionGlow: 10, motionDensity: 100, motionDepth: 92, motionTrails: 50,
     motionContrast: 80, motionParallax: 20, pauseWhenHidden: true,

@@ -109,20 +109,39 @@ function rigaUscitaComandi(d,a,o,doc){
  let riga=d.querySelector('[data-cap-uscita-riga]');
  if(a.nome!=='shell'){if(riga)riga.hidden=true;return;}
  if(!riga){
-  riga=el(doc,'div','talos-list-row');riga.setAttribute('data-cap-uscita-riga','');
-  const testo=el(doc,'span','');testo.append(el(doc,'strong','','Chi legge i comandi che lanci tu con !'),el(doc,'small','talos-muted','Comando e uscita entrano nella conversazione al giro dopo'));
-  const menu=doc.createElement('select');menu.setAttribute('data-cap-uscita','');
+  /*
+   * ⛔ LA FORMA LA DETTA IL PANNELLO, non io: qui dentro una scelta si scrive
+   * `label.talos-stack` + `select.talos-select`, con la spiegazione in un `p.talos-muted` sotto —
+   * esattamente come vive «Permesso» tre righe più su.
+   * La prima versione usava `talos-list-row`, che è il pattern dell'ELENCO, non del DETTAGLIO: in
+   * un pannello da ~320 px il menu finiva strozzato su tre righe. Trovato GUARDANDO LA FOTO, non
+   * rileggendo il codice — il DOM diceva «presente e visibile» e sarebbe bastato a ingannarmi.
+   * Ricerca 11/09/2026 (UX Patterns for Developers «Sidebar Pattern»; alfdesigngroup «Sidebar
+   * Design for Web Apps 2026»): in una colonna stretta i controlli si IMPILANO, etichetta sopra e
+   * campo a piena larghezza, ed è la spaziatura a rendere scannabile l'elenco.
+   */
+  riga=el(doc,'div','');riga.setAttribute('data-cap-uscita-riga','');
+  const etichetta=el(doc,'label','talos-stack','Chi legge i comandi che lanci tu con !');
+  const menu=doc.createElement('select');menu.className='talos-select';menu.setAttribute('data-cap-uscita','');
   menu.setAttribute('aria-label','Chi legge l’uscita dei comandi lanciati con il punto esclamativo');
   const no=doc.createElement('option');no.value='no';no.textContent='Solo tu — come prima';
-  const si=doc.createElement('option');si.value='si';si.textContent='Anche il modello · ~2.000 token';
+  const si=doc.createElement('option');si.value='si';si.textContent='Anche il modello';
   menu.append(no,si);
-  /* ⛔ `o` e' letto al momento del click, non catturato: le opzioni vengono rifatte a ogni render. */
+  /* ⛔ Le opzioni vengono rifatte a ogni render: si legge quella VIVA, non quella catturata qui. */
   menu.addEventListener('change',()=>{PAGINE.get(d.closest('#schermoCapability'))?.opzioni?.onUscitaComandi?.(menu.value==='si');});
-  riga.append(testo,menu);
+  etichetta.append(menu);
+  const spiega=el(doc,'p','talos-muted','');spiega.setAttribute('data-cap-uscita-spiega','');
+  riga.append(etichetta,spiega);
   d.append(riga);
  }
  riga.hidden=false;
  const menu=riga.querySelector('[data-cap-uscita]');
- menu.value=o.comandiNellaConversazione===true?'si':'no';
+ const acceso=o.comandiNellaConversazione===true;
+ menu.value=acceso?'si':'no';
  menu.disabled=Boolean(o.caricamento||o.salvataggio)||!o.ambito;
+ riga.querySelector('[data-cap-uscita-spiega]').textContent=!o.ambito
+  ?'Apri una sessione per scegliere: la scelta vale per quella sessione.'
+  :acceso
+   ?'Comando e uscita entrano nella conversazione al giro dopo (~2.000 token). Il comando non fa mai rispondere TALOS: la risposta arriva al messaggio successivo.'
+   :'I comandi che lanci con «!» restano solo sul tuo schermo. Il modello non li vede.';
 }
