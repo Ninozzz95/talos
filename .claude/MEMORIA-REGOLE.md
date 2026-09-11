@@ -124,3 +124,20 @@ prima di dire «va bene così» su qualcosa che l'owner sta guardando.
 - ⛔⛔ [PRE-RELEASE: tabella di marcia, prove da utente nuovo, UX rifinita](pre-release-tabella-di-marcia-e-prove-da-utente-nuovo.md) — owner 07/09: si fa POCO PRIMA del rilascio, con ricerca sul deploy engineering fresca di quel mese; piano in `.claude/PIANO-PRE-RELEASE-2026-09-07.md`
 - [STATO RELEASE DESKTOP: cinque blocchi](stato-release-desktop-cinque-blocchi.md) — 07/09: app viva, release no (kernel fuori dal repo, nessuna prova col modello, lane 1.583 commit avanti a main, CI/release solo mobile, controlli morti della Review); doc in `.claude/STATO-RELEASE-DESKTOP-2026-09-07.md`
 - ⛔⛔⛔⭐⭐⭐ [NIENTE PIU DELEGHE FINO A NUOVO ORDINE](niente-piu-deleghe-fino-a-nuovo-ordine.md) — owner 11/09/2026: «oltre agli agenti che stanno runnando adesso non hai più diritto a delega sub agenti fino a nuovo ordine». Sospende la regola dei cinque Opus 5 high dell'08/09. Gli avviati finiscono, il resto lo faccio io inline. ⛔ **SUPERATA lo stesso 11/09, pomeriggio**, col passaggio a Fable 5.1: «tu sei orchestratore e reviewer», «non farai modifiche dirette, tranne se strettamente necessario, delega ad Opus 5 in maniera precisa e alla fine review di loro», «lo sforzo massimo per AGENTI Opus è High». Torna la regola dei cinque, con file disgiunti o worktree e il 4174 mai delegato
+
+
+## 🔜 Velocita' del motore locale — spostato qui da MEMORY.md l'11/09/2026
+
+> ⛔ `MEMORY.md` era a **19.987 byte** contro il tetto d'allarme di 19.900. Blocco intero, non accorciato. Le righe restano VINCOLANTI.
+
+
+- ⛔⛔⛔ [NESSUN MODELLO PREDEFINITO: motore ottimizzato a livello UNIVERSALE](nessun-modello-predefinito-motore-universale.md) — owner 11/09: «non forziamo nulla, sarà l'utente a decidere». Mai un «consigliato» come cura; ogni euristica del motore vale per un GGUF qualunque, letta dal file e misurata sul telefono
+- ⛔⛔⛔⛔ [POCKETPAL SI EGUAGLIA O SI BATTE](pocketpal-si-eguaglia-o-si-batte.md) — owner 10/09: «obiettivo vincolante e necessario… inferenze istantanee come fa lui». Criterio di CHIUSURA, non desiderio. Misurato: loro **351 ms** con 25 token di sistema, noi **33,9 s** (LFM2) e **3,1 s** (gemma) con **2.877**; ⭐ in generazione siamo **2,2× davanti** (21,6 vs 9,69 t/s). ⛔ Ci si confronta **a parità di prompt**: eguagliarli spegnendo l'agente è cambiare prodotto. Bersaglio: **primo token sotto il secondo, con l'agente acceso**
+
+- ⛔⛔⛔ [IL CANCELLO 4 NON GUARDAVA TUTTO mobile/](cancello-4-non-guardava-tutto-mobile.md) — owner 06/09: «questa modifica va segnata su disco e memoria e **mai dimenticata**». Un percorso personale pubblicato in chiaro perche' il cancello dei dati personali elencava **tre sottocartelle scelte a mano**. ⛔ E il force-push di una storia pubblica riscritta **non lo esegue Claude**, mai, nemmeno con un si' gia' dato in chat
+
+> ⛔ Le altre quattro voci del 10/09 sono in `.claude/MEMORIA-REGOLE.md`
+> (sezione «Velocita' del motore locale e concorrenti»): questo indice era a
+> **19.382 byte** contro il tetto d'allarme di 19.900, e le avevo aggiunte io
+> nello stesso giorno. Blocco spostato intero, non accorciato.
+

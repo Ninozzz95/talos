@@ -1136,3 +1136,11 @@ JS: cambio pagina, apertura pannelli, menu, toast, hover, schede, cassetto, sfon
 testa a testa, con misura (durata, easing, proprietà) e foto/registrazione; porting di quelle
 mancanti o diverse; `prefers-reduced-motion` e le preferenze «animazioni dell'interfaccia» rispettate.
 Delegato (Opus 5 high).
+
+### ⚠️ Incidente 11/09 sera — gli store `.harness-ui-library` e `.harness-ui-research` del Desktop sono nel CESTINO
+Dopo il riavvio del 4174 (23:42) la sezione Ricerca del progetto Desktop era vuota e la Libreria
+aveva solo i 4 «File di prova» delle 23:36. Cercato: nessuna sessione con `library_delete`/
+`research_delete`, nessun test coi percorsi veri, nessun banco con store copiato che scriva lì.
+Il Cestino di Windows contiene `.harness-ui-research` (eliminata 20:56:46) e `.harness-ui-library`
+(21:00:33) provenienti dal Desktop: un `fs.rm` di Node NON passa dal Cestino, quindi è stata una
+cancellazione da Esplora file, non del codice. Sono ripristinabili dal Cestino (decide l'owner).
