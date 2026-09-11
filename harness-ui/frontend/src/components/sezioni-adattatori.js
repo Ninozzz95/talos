@@ -26,13 +26,16 @@
  *   · `progetti.js` → `frasiProgetto`, `sommarioProgetti`, `ultimeSessioni`;
  *   · `plurale.js` → il plurale italiano, che vive in un posto solo.
  *
- * ⛔ COSA NON C'E', E PERCHE' NON PUO' ESSERCI. Il mockup fa modificare, creare, spuntare ed
- *   eliminare ogni voce di ogni sezione, perché i suoi dati stanno in memoria. Sul server vero
- *   `notes`, `memory`, `tasks`, `research` e `projects` espongono **solo GET**
- *   (`harness-ui/src/http-app.mjs`, righe 762 e 840): un pulsante «Modifica» o una casella da
- *   spuntare qui sarebbe una promessa che nessuna rotta può mantenere — è la lezione
- *   «‹APERTA› non è ‹FATTA›». Quindi la spunta di un'attività è un SEGNO di stato, non un
- *   comando, e l'unica sezione che scrive è la Libreria, che le rotte ce le ha (PATCH/DELETE/POST).
+ * ⛔⛔ 12/09/2026 — QUI C'ERA SCRITTO «COSA NON C'E', E PERCHE' NON PUO' ESSERCI», e la ragione
+ *   NON VALE PIU'. Diceva: «sul server vero `notes`, `memory`, `tasks` espongono SOLO GET
+ *   (http-app.mjs, righe 762 e 840): un pulsante Modifica o una casella da spuntare sarebbe una
+ *   promessa che nessuna rotta può mantenere — la lezione ‹APERTA› non è ‹FATTA›». Era vero
+ *   quel giorno; la notte stessa il lotto di backend ha aperto le sette rotte che mancavano
+ *   (`.claude/RAPPORTO-CRUD-BACKEND-2026-09-11.md` §3, commit `c6ddfbdc`): `POST`, `GET`, `PATCH`,
+ *   `DELETE` per voce e `POST …/tasks/:id/stato`.
+ *   ⇒ La premessa era vera quando è stata scritta e oggi è falsa: si riapre, e si scrive perché.
+ *   Note, Attività e Memoria hanno il CRUD completo (ordine dell'owner dell'11/09, «non
+ *   negotiable»); Ricerca e Progetti no, perché per loro quelle rotte non esistono ancora.
  */
 import { titoloNota, quandoNota, sommarioNote } from './note.js';
 import { genereMemoria, testiMemoria } from './memoria.js';
@@ -48,8 +51,15 @@ import {
 } from './ricerca-dettaglio.js';
 import { frasiProgetto, sommarioProgetti, ultimeSessioni } from './progetti.js';
 import { plurale } from './plurale.js';
-import { montaSezione } from './sezione-elenco-dettaglio.js';
+import { montaSezione, statoSezione, icona } from './sezione-elenco-dettaglio.js';
 import { azioneAnnulla } from './toast.js';
+/* 12/09 lotto CRUD — il modulo crea/modifica, la validazione, le parole e la porta di rete stanno
+   in un file loro: uno solo per Note, Attività e Memoria, come `magazziniDellaPersona` lato server. */
+import {
+  SCHEMI, servizioVoci, valoriIniziali, validaValori, corpoCreazione, corpoModifica,
+  paroleErroreRete, parolaOrigine, parolaStato, STATI_ATTIVITA,
+  costruisciModulo, montaTestoVoce, costruisciStatoAttivita, confermaEliminazione, accordo,
+} from './modulo-voce.js';
 
 /* ------------------------------------------------------------------ utensili comuni, pure */
 
@@ -125,6 +135,387 @@ function meta(doc, pezzi) {
   return riga;
 }
 
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+ * LA SCRITTURA — l'impianto comune di Note, Attività e Memoria (12/09/2026)
+ *
+ * ⛔ LA TESTATA DI QUESTO FILE DICEVA «COSA NON C'È, E PERCHÉ NON PUÒ ESSERCI», e la sua ragione
+ *   NON VALE PIÙ. Diceva: «sul server vero `notes`, `memory`, `tasks` espongono solo GET
+ *   (http-app.mjs righe 762 e 840): un pulsante Modifica o una casella da spuntare qui sarebbe una
+ *   promessa che nessuna rotta può mantenere». Era vero l'11/09; la notte stessa il lotto di
+ *   backend (`.claude/RAPPORTO-CRUD-BACKEND-2026-09-11.md`, commit `c6ddfbdc`) ha aperto le sette
+ *   rotte che mancavano — `POST`, `GET`, `PATCH`, `DELETE` per voce e `POST …/tasks/:id/stato`.
+ *   ⇒ La premessa era vera quando è stata scritta e oggi è falsa: si riapre, e si scrive perché.
+ *   ⛔ La casella dell'attività, che quel commento aveva ridotto a un SEGNO `aria-hidden`, torna a
+ *     essere un comando vero — con il suo toast e il suo «Annulla», perché uno stato si disfa.
+ *
+ * ⛔ DOVE STA IL MODULO, e perché non è una modale come nel mockup. Il mockup crea dentro una
+ *   modale (`newItem`, riga 6128) e modifica dentro il dettaglio (`renderDetail`, `v.editing`).
+ *   Qui tutti e due stanno nel DETTAGLIO: una modale per creare e un pannello per modificare
+ *   sarebbero due posti in cui scrivere la stessa cosa, con due larghezze diverse per lo stesso
+ *   testo. Il brief dell'owner lo chiede esplicitamente («→ modulo nel dettaglio»).
+ *
+ * ⛔ COME CI STA, SENZA TOCCARE L'IMPIANTO. `sezione-elenco-dettaglio.js` apre il dettaglio solo su
+ *   una voce SELEZIONATA, e non è un file di questa lane. Quindi la voce in scrittura esiste: è una
+ *   BOZZA (`__bozza`) infilata nell'elenco che l'impianto riceve, e la selezione la si aggancia da
+ *   fuori con `statoSezione()`, che l'impianto esporta. Nessuna riga sua cambia.
+ *   ⛔ La bozza NON entra in nessun conto: ogni filtro la respinge (`quando` la esclude, compreso
+ *     «Tutte») e i due sommari contano l'elenco vero. Un «4 note» con tre note sul disco sarebbe la
+ *     stessa bugia dei contatori che puntavano a una pagina inesistente.
+ *   ⛔ E se la persona apre un'altra scheda o chiude il dettaglio, la selezione cambia sotto il
+ *     modulo: quello è il segnale che il modulo va chiuso, e la bozza si tiene da parte invece di
+ *     essere buttata.
+ * ══════════════════════════════════════════════════════════════════════════════════════════════ */
+
+const BOZZA = '__nuova__';
+const SCRITTURE = new WeakMap();
+
+/** Lo stato della scrittura di UNA sezione: il modulo aperto, le voci lette per intero, i modi. */
+export function magazzinoScrittura(schermo) {
+  let m = SCRITTURE.get(schermo);
+  if (!m) {
+    m = { modulo: null, bozza: null, voci: new Map(), modi: new Map(), selezionaDopo: null };
+    SCRITTURE.set(schermo, m);
+  }
+  return m;
+}
+
+/** Il testo di una voce, qualunque sia il nome del campo nella sua risorsa. */
+function testoDi(schema, voce) {
+  const campo = schema.campi.find((c) => c.tipo === 'testo');
+  return String(voce?.[campo.nome] ?? '');
+}
+
+function bottoneMenu(doc, titolo, apri) {
+  const b = nodo(doc, 'button', 'td-card-azioni');
+  b.type = 'button';
+  b.setAttribute('aria-haspopup', 'menu');
+  b.setAttribute('aria-label', `Azioni su ${titolo}`);
+  b.append(icona(doc, 'more'));
+  b.addEventListener('click', (e) => { e.stopPropagation(); apri({ ancoraEl: b }); });
+  return b;
+}
+
+/**
+ * Tutto ciò che serve a una sezione per SCRIVERE. Le tre la chiamano allo stesso modo e ne usano
+ * i pezzi dentro la loro `config`: qui non si sa niente di note, attività o ricordi — solo dello
+ * schema che arriva.
+ */
+function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
+  const doc = schermo.ownerDocument || globalThis.document;
+  const m = magazzinoScrittura(schermo);
+  const avvisa = notificatore(opzioni);
+  const servizio = opzioni.servizio || servizioVoci({ schema, sessionId: opzioni.sessionId, rete: opzioni.rete });
+  const ricarica = () => { (opzioni.onCambiata || opzioni.onAggiorna)?.(); };
+  const titoloDi = (v) => String(v?.titolo ?? '').trim() || `${schema.sostantivo.charAt(0).toUpperCase()}${schema.sostantivo.slice(1)} senza titolo`;
+
+  /* ---- la voce INTERA: l'elenco non porta formato, origine e data di nascita (backend §6) ---- */
+  function letturaDi(id) { return m.voci.get(String(id ?? '')) || null; }
+  function voceIntera(v) {
+    const letta = letturaDi(v?.id)?.voce;
+    return letta ? { ...v, ...letta } : v;
+  }
+  /** Una sola richiesta per voce aperta, e il pannello si ridisegna da solo quando arriva. */
+  function chiediVoceIntera(v) {
+    const id = String(v?.id ?? '');
+    if (!id || !servizio?.leggi || m.voci.has(id)) return;
+    m.voci.set(id, { stato: 'caricando' });
+    Promise.resolve()
+      .then(() => servizio.leggi(id))
+      .then((dati) => { m.voci.set(id, { stato: 'pronto', voce: dati?.[schema.campoRisposta] || null }); })
+      .catch((errore) => { m.voci.set(id, { stato: 'errore', errore: errore?.message || 'motivo non registrato' }); })
+      .then(() => ridisegna());
+  }
+
+  /* ------------------------------------- il modulo ------------------------------------- */
+
+  function apriModulo(modo, voce = null) {
+    const valori = modo === 'crea'
+      ? (m.bozza || valoriIniziali(schema))
+      : valoriIniziali(schema, voceIntera(voce));
+    m.modulo = { modo, id: modo === 'crea' ? BOZZA : String(voce?.id ?? ''), originale: modo === 'crea' ? null : voceIntera(voce), valori, errori: {}, inCorso: false, erroreRete: null, appesa: false };
+    ridisegna();
+  }
+  function chiudiModulo({ tieniBozza = false } = {}) {
+    if (m.modulo?.modo === 'crea') m.bozza = tieniBozza ? m.modulo.valori : null;
+    m.modulo = null;
+  }
+
+  async function salva() {
+    const mod = m.modulo;
+    if (!mod || mod.inCorso) return;
+    const esito = validaValori(schema, mod.valori);
+    mod.errori = esito.errori;
+    mod.erroreRete = null;
+    /* ⛔ MDN «aria-invalid»: un campo obbligatorio vuoto non si accusa prima che qualcuno abbia
+       provato a salvare. Questo è quel momento, e da qui in poi gli errori si vedono. */
+    if (!esito.ok) { ridisegna(); return; }
+    if (!servizio) { mod.erroreRete = 'Manca la sessione: riapri una conversazione e riprova.'; ridisegna(); return; }
+    mod.inCorso = true;
+    ridisegna();
+    try {
+      if (mod.modo === 'crea') {
+        const dati = await servizio.crea(corpoCreazione(schema, mod.valori));
+        const nata = dati?.[schema.campoRisposta] || null;
+        m.bozza = null;
+        chiudiModulo();
+        m.selezionaDopo = nata?.id ? String(nata.id) : null;
+        if (nata?.id) m.voci.set(String(nata.id), { stato: 'pronto', voce: nata });
+        /*
+         * ⛔ LA CREAZIONE DI UN RICORDO PUÒ NON CREARE NIENTE: se il titolo esiste già la risposta è
+         *   200 con `duplicato:true` e la voce VECCHIA, e il testo nuovo non sovrascrive quello
+         *   vecchio (contratto §4). Dirgli «Salvato» sarebbe una bugia con la ricevuta.
+         */
+        if (dati?.duplicato) {
+          avvisa('Esiste già', `«${titoloDi(nata)}» era già fra i ricordi: ho aperto quello, e il testo che avevi scritto non l’ha sostituito.`);
+        } else {
+          avvisa(accordo(schema, 'Salvat'), `«${titoloDi(nata)}» è fra le voci di ${schema.chiave === 'note' ? 'Note' : schema.chiave === 'attivita' ? 'Attività' : 'Memoria'}.`, azioneAnnulla(async () => {
+            try { await servizio.elimina(nata?.id); avvisa(accordo(schema, 'Annullat'), `«${titoloDi(nata)}» non è mai ${accordo(schema, 'stat')} ${accordo(schema, 'salvat')}.`); }
+            catch (errore) { avvisa(`Non ${accordo(schema, 'annullat')}`, paroleErroreRete(errore?.code, schema, { azione: 'annullare' }), { tono: 'errore' }); }
+            ricarica();
+          }));
+        }
+        ricarica();
+        ridisegna();
+        return;
+      }
+      const { corpo, cambiato } = corpoModifica(schema, mod.valori, mod.originale);
+      if (!cambiato) { chiudiModulo(); ridisegna(); return; } // un PATCH vuoto è un 400: qui si sa prima
+      const prima = mod.originale;
+      const dati = await servizio.modifica(mod.id, corpo);
+      const dopo = dati?.[schema.campoRisposta] || null;
+      if (dopo?.id) m.voci.set(String(dopo.id), { stato: 'pronto', voce: dopo });
+      const indietro = corpoModifica(schema, valoriIniziali(schema, prima), dopo).corpo;
+      chiudiModulo();
+      avvisa(accordo(schema, 'Modificat'), `«${titoloDi(dopo)}» è ${accordo(schema, 'aggiornat')}.`, azioneAnnulla(async () => {
+        try {
+          const tornata = await servizio.modifica(mod.id, indietro);
+          if (tornata?.[schema.campoRisposta]?.id) m.voci.set(String(mod.id), { stato: 'pronto', voce: tornata[schema.campoRisposta] });
+          avvisa(`${accordo(schema, 'Rimess')} com’era`, `«${titoloDi(prima)}» è ${accordo(schema, 'tornat')} al testo di prima.`);
+        } catch (errore) { avvisa(`Non ${accordo(schema, 'annullat')}`, paroleErroreRete(errore?.code, schema, { azione: 'annullare' }), { tono: 'errore' }); }
+        ricarica();
+      }));
+      ricarica();
+      ridisegna();
+    } catch (errore) {
+      mod.inCorso = false;
+      mod.erroreRete = paroleErroreRete(errore?.code, schema);
+      /* Una voce sparita sotto le mani non si tiene aperta: l'elenco si rilegge e il dettaglio cade. */
+      if (errore?.code === schema.codiceAssente) { chiudiModulo(); ricarica(); }
+      ridisegna();
+    }
+  }
+
+  function nodiModulo(doc2) {
+    const mod = m.modulo;
+    const titolo = nodo(doc2, 'h2', '', mod.modo === 'crea' ? schema.titoloNuova : schema.titoloModifica);
+    return [titolo, ...costruisciModulo(doc2, { schema, stato: mod, onSalva: salva })];
+  }
+
+  function azioniModulo(doc2) {
+    const mod = m.modulo;
+    const salvaBtn = bottone(doc2, mod.inCorso ? 'Salvo…' : 'Salva', { variante: 'primary', esegui: () => salva() });
+    salvaBtn.disabled = Boolean(mod.inCorso);
+    const annullaBtn = bottone(doc2, 'Annulla', { variante: 'ghost', esegui: () => { chiudiModulo(); ridisegna(); } });
+    annullaBtn.disabled = Boolean(mod.inCorso);
+    return [salvaBtn, annullaBtn];
+  }
+
+  /* ------------------------------------- le azioni ------------------------------------- */
+
+  async function copia(v) {
+    const intera = voceIntera(v);
+    const testo = `${titoloDi(intera)}\n\n${testoDi(schema, intera)}`.trim();
+    /* ⛔ Chi inietta `copia` ha già il SUO messaggio d'esito (`copyText` della app lo mostra da
+       solo): aggiungerne un secondo darebbe due toast per un gesto solo — lo stesso difetto delle
+       due verità a 170 px di distanza. Il messaggio lo scrive chi fa il lavoro. */
+    if (typeof opzioni.copia === 'function') { await opzioni.copia(testo); return; }
+    try {
+      await globalThis.navigator?.clipboard?.writeText?.(testo);
+      avvisa(accordo(schema, 'Copiat'), `«${titoloDi(intera)}» è negli appunti.`);
+    } catch { avvisa(`Non ${accordo(schema, 'copiat')}`, 'Gli appunti non sono disponibili in questa finestra.', { tono: 'errore' }); }
+  }
+
+  function esporta(v) {
+    const intera = voceIntera(v);
+    const nome = `${titoloDi(intera).replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)}.md`;
+    esportaTesto(doc, nome, `# ${titoloDi(intera)}\n\n${testoDi(schema, intera)}`);
+    avvisa(accordo(schema, 'Esportat'), `${nome} è nella cartella dei download.`);
+  }
+
+  function elimina(v) {
+    const intera = voceIntera(v);
+    confermaEliminazione({
+      schema,
+      voce: intera,
+      titolo: titoloDi(intera),
+      servizio,
+      document: doc,
+      avvisa,
+      ricarica,
+      dopo: () => m.voci.delete(String(intera.id)),
+    });
+  }
+
+  /** Lo stato di un'attività: una porta sua, e un annullamento perché uno stato si disfa. */
+  async function cambiaStato(v, nuovo, { conAnnulla = true } = {}) {
+    const intera = voceIntera(v);
+    const prima = intera?.stato;
+    if (!servizio?.cambiaStato || prima === nuovo) return;
+    try {
+      const dati = await servizio.cambiaStato(intera.id, nuovo);
+      const dopo = dati?.[schema.campoRisposta] || null;
+      if (dopo?.id) m.voci.set(String(dopo.id), { stato: 'pronto', voce: dopo });
+      if (conAnnulla && prima) {
+        avvisa(accordo(schema, 'Aggiornat'), `«${titoloDi(intera)}»: ${parolaStato(nuovo).toLocaleLowerCase('it')}.`, azioneAnnulla(async () => {
+          await cambiaStato(intera, prima, { conAnnulla: false });
+          avvisa(`${accordo(schema, 'Rimess')} com’era`, `«${titoloDi(intera)}»: ${parolaStato(prima).toLocaleLowerCase('it')}.`);
+        }));
+      }
+    } catch (errore) {
+      avvisa(`Non ${accordo(schema, 'aggiornat')}`, paroleErroreRete(errore?.code, schema, { azione: 'cambiare stato' }), { tono: 'errore' });
+    }
+    ricarica();
+    ridisegna();
+  }
+
+  /**
+   * Le azioni di una voce, in UN posto solo: il menu «⋯» della scheda, il tasto destro e il
+   * pulsante del dettaglio aprono questo stesso elenco.
+   * ⛔ Regola dell'owner del 10/09: più di due azioni su un oggetto ⇒ menu overflow + tasto destro,
+   *   mai cinque bottoni affiancati.
+   */
+  function vociMenu(v) {
+    if (!servizio) return [];
+    const intera = voceIntera(v);
+    const voci = [
+      { chiave: 'modifica', etichetta: 'Modifica', icona: 'i-edit', aziona: () => apriModulo('modifica', intera) },
+    ];
+    if (schema.risorsa === 'tasks') {
+      for (const stato of STATI_ATTIVITA) {
+        if (stato === intera?.stato) continue;
+        voci.push({ chiave: `stato-${stato}`, etichetta: `Segna «${parolaStato(stato)}»`, icona: stato === 'done' ? 'i-check' : stato === 'doing' ? 'i-clock' : 'i-list', aziona: () => void cambiaStato(intera, stato) });
+      }
+    }
+    voci.push({ chiave: 'copia', etichetta: 'Copia il testo', icona: 'i-copy', aziona: () => void copia(intera) });
+    if (schema.risorsa === 'notes') voci.push({ chiave: 'esporta', etichetta: 'Esporta come Markdown', icona: 'i-download', aziona: () => esporta(intera) });
+    voci.push({ chiave: 'elimina', etichetta: 'Elimina', icona: 'i-trash', pericolo: true, separaPrima: true, aziona: () => elimina(intera) });
+    return voci;
+  }
+
+  function apriMenu(v, dove) {
+    const voci = vociMenu(v);
+    /* Il menu lo disegna `legacy/app.js` (`apriMenuAzioniLibreria`), lo stesso dell'albero dei file,
+       della Libreria e della Ricerca: qui si sa QUALI azioni ha una voce, non come si apre un menu. */
+    if (typeof opzioni.onMenu === 'function' && voci.length) opzioni.onMenu(voci, dove);
+  }
+  collegaTastoDestro(schermo, { trovaVoce: (id) => lista.find((v) => String(v?.id) === String(id)) || null, apriMenu });
+
+  /* ------------------------------ i pezzi che la config usa ------------------------------ */
+
+  const inModulo = (v) => Boolean(m.modulo) && (v?.__bozza === true || String(m.modulo.id) === String(v?.id));
+
+  return {
+    servizio,
+    modulo: m.modulo,
+    inModulo,
+    voceIntera,
+    chiediVoceIntera,
+    letturaDi,
+    modi: m.modi,
+    nodiModulo,
+    azioniModulo,
+    apriModulo,
+    apriMenu,
+    cambiaStato,
+    titoloDi,
+    /** L'elenco che l'impianto riceve: quello vero, più la bozza quando si sta creando. */
+    vociConBozza: () => (m.modulo?.modo === 'crea' ? [{ id: BOZZA, __bozza: true, titolo: '', aggiornataAlle: null }, ...lista] : lista),
+    /** ⛔ Ogni filtro respinge la bozza, «Tutte» compreso: non è una voce, è un modulo aperto. */
+    filtriSenzaBozza: (filtri) => filtri.map((f) => ({ ...f, quando: f.quando ? (v) => !v?.__bozza && f.quando(v) : (v) => !v?.__bozza })),
+    adorno: (v, doc2) => (servizio && !v?.__bozza ? bottoneMenu(doc2, titoloDi(voceIntera(v)), (dove) => apriMenu(v, dove)) : null),
+    /** La riga «scritta da te / da TALOS», solo quando la GET della voce l'ha davvero portata. */
+    origine: (v, doc2) => {
+      const parola = parolaOrigine(voceIntera(v)?.origine, schema);
+      return parola ? nodo(doc2, 'span', 'td-origine', parola) : null;
+    },
+    azioniVoce: (v, doc2) => (servizio ? [
+      bottone(doc2, 'Modifica', { esegui: () => apriModulo('modifica', v) }),
+      bottone(doc2, 'Tutte le azioni', { esegui: (e) => apriMenu(v, { ancoraEl: e?.currentTarget || null }) }),
+    ] : []),
+    /**
+     * Dopo il montaggio: aggancia la selezione al modulo, o chiude il modulo se la selezione è
+     * cambiata sotto (la persona ha aperto un'altra scheda o chiuso il dettaglio).
+     * @returns {boolean} vero se serve un secondo giro di disegno
+     */
+    sincronizza: () => {
+      const st = statoSezione(schermo);
+      if (!st) return false;
+      if (m.selezionaDopo) {
+        const esiste = lista.some((v) => String(v?.id) === m.selezionaDopo);
+        if (esiste) { st.selezione = m.selezionaDopo; m.selezionaDopo = null; return true; }
+      }
+      if (!m.modulo) return false;
+      const voluta = String(m.modulo.id);
+      const corrente = st.selezione === null || st.selezione === undefined ? null : String(st.selezione);
+      if (corrente === voluta) return false;
+      if (m.modulo.appesa) { chiudiModulo({ tieniBozza: true }); return true; }
+      m.modulo.appesa = true;
+      st.selezione = voluta;
+      return true;
+    },
+    /**
+     * Il pulsante primario «Nuova …» nella testata della sezione, dove lo mette il mockup
+     * (`initSection`, riga 6063: `<div class="td-tools">${button(icon('plus')+' '+meta[k].create,
+     * 'new','primary')}…`). La testata è del prodotto e `montaSezione` non la tocca — sostituisce
+     * `.talos-page` — quindi il pulsante ci sta senza toccare l'impianto.
+     * ⛔ Senza sessione o senza rete NON compare: un comando che non può funzionare non si mostra.
+     */
+    montaPulsanteNuova: () => {
+      const topbar = schermo.querySelector('.talos-topbar');
+      if (!topbar) return null;
+      let strumenti = topbar.querySelector('.td-tools');
+      let b = strumenti?.querySelector('[data-nuova]') || null;
+      if (!servizio) { b?.remove(); return null; }
+      if (!strumenti) { strumenti = nodo(doc, 'div', 'td-tools'); topbar.append(strumenti); }
+      if (!b) {
+        b = nodo(doc, 'button', 'talos-button talos-button--primary');
+        b.type = 'button';
+        b.dataset.nuova = '';
+        b.append(icona(doc, 'plus'), nodo(doc, 'span', '', schema.titoloNuova));
+        b.addEventListener('click', () => apriModulo('crea'));
+        strumenti.append(b);
+      }
+      b.disabled = Boolean(m.modulo);
+      return b;
+    },
+    /** «Note / Dettaglio» diventa «Note / Modifica» mentre si scrive, come nel mockup. */
+    parolaTesta: (nome) => {
+      const testa = schermo.querySelector('.td-detail-head > span:first-child');
+      if (!testa) return;
+      /* ⛔ «Nuova voce» era una parola di sistema: chi guarda sta scrivendo una NOTA, non «una
+         voce». Il nome lo porta lo schema, che è lo stesso del pulsante da cui si è arrivati. */
+      if (m.modulo) testa.textContent = `${nome} / ${m.modulo.modo === 'crea' ? schema.titoloNuova : 'Modifica'}`;
+    },
+    notaPiede: () => {
+      if (!m.modulo) return null;
+      if (m.modulo.inCorso) return 'Sto salvando…';
+      return m.modulo.modo === 'crea' ? `Non ancora ${accordo(schema, 'salvat')}` : 'Modifiche non ancora salvate';
+    },
+  };
+}
+
+/**
+ * Il giro completo di una sezione scrivibile: monta, aggancia il modulo, e se qualcosa è cambiato
+ * rimonta una volta sola. ⛔ La ricorsione finisce sempre: al secondo giro la selezione combacia.
+ */
+function montaScrivibile(schermo, scrivi, config, ridisegna) {
+  const quante = montaSezione(schermo, config);
+  scrivi.montaPulsanteNuova();
+  scrivi.parolaTesta(config.nome);
+  if (scrivi.sincronizza()) return ridisegna();
+  return quante;
+}
+
 /* ------------------------------------------------------------------------------------ NOTE */
 
 export function montaNote(schermo, note, opzioni = {}) {
@@ -135,50 +526,81 @@ export function montaNote(schermo, note, opzioni = {}) {
    */
   const { cerca = '', onCopia = null, adesso = new Date() } = opzioni;
   const avvisa = notificatore(opzioni);
-  return montaSezione(schermo, {
+  const lista = Array.isArray(note) ? note : [];
+  const ridisegna = () => montaNote(schermo, note, opzioni);
+  const scrivi = scrittura(schermo, { schema: SCHEMI.note, lista, opzioni, ridisegna });
+  const magazzino = magazzinoScrittura(schermo);
+  return montaScrivibile(schermo, scrivi, {
     chiave: 'note',
     nome: 'Note',
     icona: 'doc',
     famiglia: 'td-note',
     sostantivo: 'nota',
-    voci: Array.isArray(note) ? note : [],
+    voci: scrivi.vociConBozza(),
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: 'Leggo le note…',
     onAggiorna: opzioni.onAggiorna,
     // Una sola famiglia di note sul disco: nessun filtro finto per riempire la riga.
-    filtri: [{ id: 'tutte', etichetta: 'Tutte' }],
+    filtri: scrivi.filtriSenzaBozza([{ id: 'tutte', etichetta: 'Tutte' }]),
     queryIniziale: cerca,
     idDi: (n) => n?.id ?? titoloNota(n),
-    titoloDi: (n) => titoloNota(n),
+    titoloDi: (n) => (n?.__bozza ? 'Nuova nota' : titoloNota(n)),
     quandoDi: (n) => n?.aggiornataAlle ?? n?.quando ?? n?.creataAlle ?? n?.createdAt ?? null,
     cercaIn: (n) => `${n?.titolo ?? ''} ${n?.contenuto ?? ''}`,
-    sommarioBarra: (n, { errore, caricamento }) => (errore ? 'Note non disponibili' : caricamento ? 'Leggo le note…' : sommarioNote(n)),
-    sommarioStato: (visibili, totale) => (visibili === totale ? sommarioNote(totale) : `${sommarioNote(visibili)} su ${sommarioNote(totale)}`),
-    scheda: (n, { doc, icona }) => ({
-      alto: [icona('doc'), nodo(doc, 'span', '', 'Appunto')],
+    sommarioBarra: (_n, { errore, caricamento }) => (errore ? 'Note non disponibili' : caricamento ? 'Leggo le note…' : sommarioNote(lista.length)),
+    /* ⛔ I due sommari contano l'elenco VERO: la bozza è un modulo aperto, non una nota. */
+    sommarioStato: (visibili) => (visibili === lista.length ? sommarioNote(lista.length) : `${sommarioNote(visibili)} su ${sommarioNote(lista.length)}`),
+    scheda: (n, { doc, icona: ic }) => ({
+      alto: [ic('doc'), nodo(doc, 'span', '', 'Appunto')],
       corpo: [nodo(doc, 'p', 'td-excerpt', anteprima(n?.contenuto))],
       basso: [
         nodo(doc, 'span', '', quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || 'senza data'),
         nodo(doc, 'span', '', plurale(conteggioParole(n?.contenuto), 'parola', 'parole')),
       ],
+      adorno: scrivi.adorno(n, doc),
     }),
-    dettaglio: (n, { doc, etichetta }) => [
-      meta(doc, [etichetta('Nota'), nodo(doc, 'span', '', quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || 'data non registrata')]),
-      nodo(doc, 'h2', '', titoloNota(n)),
-      nodo(doc, 'div', 'td-prose', String(n?.contenuto ?? '')),
-    ],
-    azioniDettaglio: (n, { doc }) => [
-      bottone(doc, 'Copia', { esegui: () => onCopia?.(n) }),
-      bottone(doc, 'Esporta', {
-        esegui: () => {
-          esportaTesto(doc, `${titoloNota(n).replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)}.md`, `# ${titoloNota(n)}\n\n${n?.contenuto ?? ''}`);
-          avvisa('Esportata', `${titoloNota(n)} è stata scaricata come file Markdown.`);
-        },
-      }),
-    ],
-    notaPiede: () => 'Le note vivono in .notes-store/',
-    vuoto: { titolo: 'Nessuna nota', testo: 'TALOS scrive una nota quando trova qualcosa che vale la pena ricordare. Le note vivono in .notes-store/ e valgono per tutti i progetti.' },
-  });
+    dettaglio: (n, { doc, etichetta }) => {
+      if (scrivi.inModulo(n)) return scrivi.nodiModulo(doc);
+      scrivi.chiediVoceIntera(n);
+      const intera = scrivi.voceIntera(n);
+      const pezzi = [
+        meta(doc, [etichetta('Nota'), nodo(doc, 'span', '', quandoNota(intera?.aggiornataAlle ?? intera?.creataAlle, adesso) || 'data non registrata'), scrivi.origine(n, doc)]),
+        nodo(doc, 'h2', '', titoloNota(intera)),
+      ];
+      /*
+       * ⛔ ORDINE DELL'OWNER: «le note, se sono markdown, devono essere renderizzate in markdown».
+       *   Il formato NON sta nell'elenco (rapporto backend §6): arriva con la GET della voce, e
+       *   finché non è arrivato il testo si mostra com'è scritto invece di indovinare. È la stessa
+       *   regola della Libreria — un interruttore con una scelta sola non è un interruttore.
+       */
+      pezzi.push(...montaTestoVoce(doc, {
+        testo: intera?.contenuto,
+        formato: intera?.formato,
+        titoloGiaDetto: titoloNota(intera),
+        rendiMarkdown: opzioni.rendiMarkdown,
+        modo: magazzino.modi.get(String(n?.id ?? '')) || null,
+        onModo: (modo) => magazzino.modi.set(String(n?.id ?? ''), modo),
+      }));
+      return pezzi;
+    },
+    azioniDettaglio: (n, { doc }) => {
+      if (scrivi.inModulo(n)) return scrivi.azioniModulo(doc);
+      const azioni = scrivi.azioniVoce(n, doc);
+      /* Senza rete restano le due azioni che vivono nel browser e non promettono niente al server. */
+      if (azioni.length) return azioni;
+      return [
+        bottone(doc, 'Copia', { esegui: () => onCopia?.(n) }),
+        bottone(doc, 'Esporta', {
+          esegui: () => {
+            esportaTesto(doc, `${titoloNota(n).replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)}.md`, `# ${titoloNota(n)}\n\n${n?.contenuto ?? ''}`);
+            avvisa('Esportata', `${titoloNota(n)} è stata scaricata come file Markdown.`);
+          },
+        }),
+      ];
+    },
+    notaPiede: () => scrivi.notaPiede() || 'Le note vivono in .notes-store/',
+    vuoto: { titolo: 'Nessuna nota', testo: 'TALOS scrive una nota quando trova qualcosa che vale la pena ricordare, e da qui le scrivi anche tu. Le note vivono in .notes-store/ e valgono per tutti i progetti.' },
+  }, ridisegna);
 }
 
 /* --------------------------------------------------------------------------------- MEMORIA */
@@ -193,26 +615,30 @@ const GENERI_FILTRO = [
 
 export function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
   const avvisa = notificatore(opzioni);
-  return montaSezione(schermo, {
+  const lista = Array.isArray(memorie) ? memorie : [];
+  const ridisegna = () => aggiornaPaginaMemoria(schermo, memorie, opzioni);
+  const scrivi = scrittura(schermo, { schema: SCHEMI.memory, lista, opzioni, ridisegna });
+  return montaScrivibile(schermo, scrivi, {
     chiave: 'memoria',
     nome: 'Memoria',
     icona: 'brain',
     famiglia: 'td-memory',
     sostantivo: 'ricordo',
-    voci: Array.isArray(memorie) ? memorie : [],
+    voci: scrivi.vociConBozza(),
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: 'Caricamento ricordi…',
     onAggiorna: opzioni.onAggiorna,
-    filtri: GENERI_FILTRO.map(([id, etichetta, genere]) => ({ id, etichetta, quando: genere ? (m) => m?.genere === genere : null })),
+    filtri: scrivi.filtriSenzaBozza(GENERI_FILTRO.map(([id, etichetta, genere]) => ({ id, etichetta, quando: genere ? (m) => m?.genere === genere : null }))),
     idDi: (m) => m?.id,
-    titoloDi: (m) => testiMemoria(m).titolo,
+    titoloDi: (m) => (m?.__bozza ? 'Nuovo ricordo' : testiMemoria(m).titolo),
     quandoDi: (m) => m?.aggiornataAlle ?? null,
     cercaIn: (m) => `${testiMemoria(m).titolo} ${testiMemoria(m).contenuto} ${genereMemoria(m?.genere).testo}`,
-    sommarioBarra: (n, { errore, caricamento }) => (errore ? 'Ricordi non disponibili' : caricamento ? 'Caricamento ricordi…' : `${plurale(n, 'ricordo')} · globali`),
-    scheda: (m, { doc, icona, etichetta }) => {
+    sommarioBarra: (_n, { errore, caricamento }) => (errore ? 'Ricordi non disponibili' : caricamento ? 'Caricamento ricordi…' : `${plurale(lista.length, 'ricordo')} · globali`),
+    sommarioStato: (visibili) => (visibili === lista.length ? plurale(lista.length, 'ricordo') : `${visibili} di ${plurale(lista.length, 'ricordo')}`),
+    scheda: (m, { doc, icona: ic, etichetta }) => {
       const g = genereMemoria(m?.genere);
       const segno = nodo(doc, 'span', 'td-memory-mark');
-      segno.append(icona(g.icona));
+      segno.append(ic(g.icona));
       return {
         /* ⛔ Il genere si dice UNA volta: il segno col simbolo, e l'etichetta col tono. Scriverlo
            anche come testo in mezzo ai due («Regola  [Regola]») era un doppione visto nella foto. */
@@ -220,93 +646,138 @@ export function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
         corpo: [nodo(doc, 'p', 'td-excerpt', anteprima(testiMemoria(m).contenuto))],
         /* Nella scheda la data e basta: l'ora intera sta nel dettaglio e qui si troncava. */
         basso: [nodo(doc, 'span', '', dataBreve(m?.aggiornataAlle) || 'Data non registrata')],
+        adorno: scrivi.adorno(m, doc),
       };
     },
     dettaglio: (m, { doc, etichetta }) => {
-      const t = testiMemoria(m);
-      const g = genereMemoria(m?.genere);
-      const pezzi = [
-        meta(doc, [etichetta(g.testo, g.tono || 'accent'), nodo(doc, 'span', '', t.aggiornata || 'data non registrata')]),
+      if (scrivi.inModulo(m)) return scrivi.nodiModulo(doc);
+      scrivi.chiediVoceIntera(m);
+      const intera = scrivi.voceIntera(m);
+      const t = testiMemoria(intera);
+      const g = genereMemoria(intera?.genere);
+      return [
+        /* ⛔ L'origine era un `h3 Origine` col valore grezzo (`persona`/`modello`) scritto sotto:
+           un nome di campo a schermo. Adesso è una parola, accanto alla data, dove la si legge. */
+        meta(doc, [etichetta(g.testo, g.tono || 'accent'), nodo(doc, 'span', '', t.aggiornata || 'data non registrata'), scrivi.origine(m, doc)]),
         nodo(doc, 'h2', '', t.titolo),
         nodo(doc, 'div', 'td-prose', t.contenuto),
       ];
-      if (m?.origine) pezzi.push(nodo(doc, 'h3', '', 'Origine'), nodo(doc, 'p', 'td-subtle', String(m.origine)));
-      return pezzi;
     },
-    azioniDettaglio: (m, { doc }) => [
-      bottone(doc, 'Copia', {
+    azioniDettaglio: (m, { doc }) => {
+      if (scrivi.inModulo(m)) return scrivi.azioniModulo(doc);
+      const azioni = scrivi.azioniVoce(m, doc);
+      if (azioni.length) return azioni;
+      return [bottone(doc, 'Copia', {
         esegui: async () => {
           const t = testiMemoria(m);
           try { await navigator.clipboard.writeText(`${t.titolo}\n\n${t.contenuto}`); avvisa('Copiato', `«${t.titolo}» è negli appunti.`); }
           catch { avvisa('Copia non riuscita', 'Il browser non ha dato accesso agli appunti.'); }
         },
-      }),
-    ],
-    notaPiede: () => 'La lettura non modifica il ricordo',
-    vuoto: { titolo: 'Nessun ricordo', testo: 'I ricordi sono globali, disponibili alle tue conversazioni. Compariranno qui appena TALOS ne salva uno.' },
-  });
+      })];
+    },
+    notaPiede: () => scrivi.notaPiede() || 'I ricordi valgono per tutte le conversazioni',
+    vuoto: { titolo: 'Nessun ricordo', testo: 'I ricordi sono globali, disponibili alle tue conversazioni. Li salva TALOS quando impara qualcosa di te, e da qui li scrivi anche tu.' },
+  }, ridisegna);
 }
 
 /* -------------------------------------------------------------------------------- ATTIVITA' */
 
 export function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
-  return montaSezione(schermo, {
+  const lista = Array.isArray(attivita) ? attivita : [];
+  const ridisegna = () => aggiornaPaginaAttivita(schermo, attivita, opzioni);
+  const scrivi = scrittura(schermo, { schema: SCHEMI.tasks, lista, opzioni, ridisegna });
+  return montaScrivibile(schermo, scrivi, {
     chiave: 'attivita',
     nome: 'Attività',
     icona: 'check-sq',
     famiglia: 'td-task',
     sostantivo: 'attività',
-    voci: Array.isArray(attivita) ? attivita : [],
+    voci: scrivi.vociConBozza(),
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: 'Caricamento attività…',
     onAggiorna: opzioni.onAggiorna,
-    filtri: [
+    filtri: scrivi.filtriSenzaBozza([
       { id: 'tutte', etichetta: 'Tutte' },
       { id: 'todo', etichetta: 'Da fare', quando: (a) => a?.stato === 'todo' },
       { id: 'doing', etichetta: 'In corso', quando: (a) => a?.stato === 'doing' },
       { id: 'done', etichetta: 'Fatte', quando: (a) => a?.stato === 'done' },
-    ],
+    ]),
     idDi: (a) => a?.id,
-    titoloDi: (a) => testiAttivita(a).titolo,
+    titoloDi: (a) => (a?.__bozza ? 'Nuova attività' : testiAttivita(a).titolo),
     quandoDi: (a) => a?.aggiornataAlle ?? null,
     cercaIn: (a) => `${testiAttivita(a).titolo} ${testiAttivita(a).descrizione} ${statoAttivita(a?.stato).testo}`,
-    sommarioBarra: (n, { errore, caricamento }) => (errore ? 'Attività non disponibili' : caricamento ? 'Caricamento attività…' : riepilogoAttivita(Array.isArray(attivita) ? attivita : [])),
-    scheda: (a, { doc, icona, etichetta }) => {
+    sommarioBarra: (_n, { errore, caricamento }) => (errore ? 'Attività non disponibili' : caricamento ? 'Caricamento attività…' : riepilogoAttivita(lista)),
+    sommarioStato: (visibili) => (visibili === lista.length ? plurale(lista.length, 'attività', 'attività') : `${visibili} di ${plurale(lista.length, 'attività', 'attività')}`),
+    scheda: (a, { doc, icona: ic, etichetta }) => {
       const s = statoAttivita(a?.stato);
       const t = testiAttivita(a);
       /*
-       * ⛔ Il mockup mette qui una CASELLA che spunta l'attività (`td-task-toggle`, `role=checkbox`).
-       *   Sul server `/tasks` è solo GET: una casella premibile prometterebbe una scrittura che non
-       *   esiste. Resta il SEGNO — stesso disegno, nessun ruolo interattivo, `aria-hidden` perché lo
-       *   stato lo dice già l'etichetta accanto al titolo.
+       * ⛔⛔ LA CASELLA TORNA A ESSERE UN COMANDO. Fino all'11/09 qui c'era un SEGNO `aria-hidden`
+       *   e il commento diceva «`/tasks` è solo GET: una casella premibile prometterebbe una
+       *   scrittura che non esiste». Da stanotte quella scrittura esiste
+       *   (`POST …/tasks/:id/stato`), quindi la casella si preme davvero — con il suo toast e il
+       *   suo «Annulla», perché uno stato è la cosa più reversibile che ci sia.
+       * ⛔ `role="checkbox"` e non un bottone qualunque: dice fatta/non fatta, e lo stato in mezzo
+       *   («In corso») si sceglie nel dettaglio, dove ci sono tutte e tre le caselle.
        */
-      const segno = nodo(doc, 'span', 'td-task-toggle');
-      segno.dataset.fatta = String(a?.stato === 'done');
-      segno.setAttribute('aria-hidden', 'true');
-      if (a?.stato === 'done') segno.append(icona('check'));
+      const fatta = a?.stato === 'done';
+      const segno = nodo(doc, 'button', 'td-task-toggle');
+      segno.type = 'button';
+      segno.dataset.fatta = String(fatta);
+      if (scrivi.servizio && !a?.__bozza) {
+        segno.setAttribute('role', 'checkbox');
+        segno.setAttribute('aria-checked', String(fatta));
+        segno.setAttribute('aria-label', fatta ? `Riapri ${t.titolo}` : `Segna fatta ${t.titolo}`);
+        segno.addEventListener('click', (e) => { e.stopPropagation(); void scrivi.cambiaStato(a, fatta ? 'todo' : 'done'); });
+      } else {
+        segno.disabled = true;
+        segno.setAttribute('aria-hidden', 'true');
+        segno.tabIndex = -1;
+      }
+      if (fatta) segno.append(ic('check'));
+      const menu = scrivi.adorno(a, doc);
+      const adorni = nodo(doc, 'span', 'td-task-adorni');
+      adorni.append(segno, ...(menu ? [menu] : []));
       return {
-        dati: { done: String(a?.stato === 'done') },
+        dati: { done: String(fatta), comandabile: String(Boolean(scrivi.servizio)) },
         alto: [etichetta(s.testo, s.tono || ''), ...(a?.priorita === 'high' ? [nodo(doc, 'span', 'td-priority', 'Alta priorità')] : [])],
         corpo: [nodo(doc, 'p', 'td-excerpt', anteprima(t.descrizione, 130) || 'Nessuna descrizione.')],
         basso: [
           nodo(doc, 'span', '', prioritaAttivita(a?.priorita)),
           nodo(doc, 'span', '', dataBreve(a?.aggiornataAlle) || 'Data non registrata'),
         ],
-        adorno: segno,
+        adorno: adorni,
       };
     },
     dettaglio: (a, { doc, etichetta }) => {
-      const s = statoAttivita(a?.stato);
-      const t = testiAttivita(a);
-      return [
-        meta(doc, [etichetta(s.testo, s.tono || ''), nodo(doc, 'span', '', prioritaAttivita(a?.priorita)), nodo(doc, 'span', '', t.aggiornata || 'data non registrata')]),
+      if (scrivi.inModulo(a)) return scrivi.nodiModulo(doc);
+      scrivi.chiediVoceIntera(a);
+      const intera = scrivi.voceIntera(a);
+      const s = statoAttivita(intera?.stato);
+      const t = testiAttivita(intera);
+      const pezzi = [
+        meta(doc, [etichetta(s.testo, s.tono || ''), nodo(doc, 'span', '', prioritaAttivita(intera?.priorita)), nodo(doc, 'span', '', t.aggiornata || 'data non registrata'), scrivi.origine(a, doc)]),
         nodo(doc, 'h2', '', t.titolo),
-        nodo(doc, 'div', 'td-prose', t.descrizione || 'Nessuna descrizione.'),
       ];
+      if (scrivi.servizio) {
+        pezzi.push(nodo(doc, 'h3', '', 'Stato'));
+        pezzi.push(costruisciStatoAttivita(doc, { stato: intera?.stato, onScegli: (nuovo) => void scrivi.cambiaStato(a, nuovo) }));
+      }
+      pezzi.push(nodo(doc, 'h3', '', 'Descrizione'));
+      pezzi.push(nodo(doc, 'div', 'td-prose', t.descrizione || 'Nessuna descrizione.'));
+      return pezzi;
     },
-    notaPiede: () => 'La lettura non modifica lo stato',
-    vuoto: { titolo: 'Nessuna attività', testo: 'Le attività sono globali, disponibili alle tue conversazioni. Vivono in .tasks-store/.' },
-  });
+    azioniDettaglio: (a, { doc }) => {
+      if (scrivi.inModulo(a)) return scrivi.azioniModulo(doc);
+      const azioni = scrivi.azioniVoce(a, doc);
+      return azioni.length ? azioni : null;
+    },
+    /* ⛔ VISTO NELLA FOTO: qui c'era «Le attività vivono in .tasks-store/», e l'introduzione due
+       centimetri più in su dice già la stessa identica frase. Due volte la stessa cosa nella stessa
+       schermata non è ridondanza innocua: è spazio tolto a ciò che non è ancora stato detto. */
+    notaPiede: () => scrivi.notaPiede() || 'Lo stato si cambia da qui e dalla chat',
+    vuoto: { titolo: 'Nessuna attività', testo: 'Le attività sono globali, disponibili alle tue conversazioni. Le apre TALOS mentre lavora, e da qui le apri anche tu. Vivono in .tasks-store/.' },
+  }, ridisegna);
 }
 
 /* --------------------------------------------------------------------------------- LIBRERIA */
