@@ -13230,7 +13230,49 @@ dialog.td-modal:has(.td-theme-studio) {
   overflow: auto;
   border: 1px solid var(--talos-border);
   border-radius: var(--talos-radius-control);
-  background: var(--talos-window-bg);
+  --td-ombra-scorrimento: color-mix(in srgb, var(--talos-border-strong) 60%, transparent);
+  background-color: var(--talos-window-bg);
+  background-image:
+    linear-gradient(
+      to right,
+      var(--talos-window-bg) 34%,
+      transparent),
+    linear-gradient(
+      to left,
+      var(--talos-window-bg) 34%,
+      transparent),
+    linear-gradient(
+      to right,
+      var(--td-ombra-scorrimento),
+      transparent),
+    linear-gradient(
+      to left,
+      var(--td-ombra-scorrimento),
+      transparent);
+  background-position:
+    0 0,
+    100% 0,
+    0 0,
+    100% 0;
+  background-size:
+    32px 100%,
+    32px 100%,
+    16px 100%,
+    16px 100%;
+  background-repeat: no-repeat;
+  background-attachment:
+    local,
+    local,
+    scroll,
+    scroll;
+}
+.td-file-tabella-scorre[data-scorre=no] {
+  background-image: none;
+}
+.td-file-scorri {
+  margin: 10px 0 0;
+  color: var(--talos-muted);
+  font-size: 11px;
 }
 .td-file-tabella {
   border-collapse: collapse;
@@ -13300,6 +13342,130 @@ dialog.td-modal:has(.td-theme-studio) {
   .td-file-tabella td {
     padding: 6px 8px;
   }
+}
+.td-scope .td-detail-body {
+  padding: 28px;
+  scrollbar-gutter: stable;
+}
+.td-scope .td-detail-body h2 {
+  font: 550 28px/1.25 var(--talos-font-display);
+  letter-spacing: -.035em;
+  max-width: 25ch;
+  margin-bottom: 22px;
+  text-wrap: pretty;
+}
+.td-scope .td-detail-body h3 {
+  font-size: 12px;
+  letter-spacing: 0;
+  font-weight: 600;
+  margin: 28px 0 12px;
+  color: var(--talos-text);
+}
+.td-scope .td-detail-meta {
+  font-size: 10px;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+@container dettaglio (max-width: 430px) {
+  .td-scope .td-detail-body {
+    padding: 22px;
+  }
+  .td-scope .td-detail-body h2 {
+    font-size: 24px;
+  }
+}
+.td-scope .td-detail-body .td-prosa-rapporto h2 {
+  font: 550 18px/1.35 var(--talos-font-display);
+  letter-spacing: -.02em;
+  max-width: none;
+  margin: 22px 0 8px;
+  text-wrap: pretty;
+}
+.td-scope .td-detail-body .td-prosa-rapporto h3 {
+  font-size: 15px;
+  font-weight: 550;
+  letter-spacing: -.01em;
+  margin: 20px 0 6px;
+  color: var(--talos-text);
+}
+.td-scope .td-detail-body .td-prosa-rapporto h4 {
+  font-size: 13px;
+  font-weight: 550;
+  margin: 16px 0 6px;
+  color: var(--talos-muted);
+}
+
+/* src/styles/mockup-animazioni.css */
+:root {
+  --tam-entrata: var(--talos-motion-duration-surface-enter, 180ms);
+  --tam-uscita: var(--talos-motion-duration-surface-exit, 150ms);
+  --tam-controllo: var(--talos-motion-duration-control, 160ms);
+  --tam-ease: var(--talos-motion-ease, cubic-bezier(.2, .7, .2, 1));
+}
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --tam-entrata: 0s;
+    --tam-uscita: 0s;
+    --tam-controllo: 0s;
+  }
+}
+:root.interface-motion-off,
+:root.reduce-motion {
+  --tam-entrata: 0s;
+  --tam-uscita: 0s;
+  --tam-controllo: 0s;
+}
+body.reduce-motion {
+  --tam-entrata: 0s;
+  --tam-uscita: 0s;
+  --tam-controllo: 0s;
+}
+@keyframes tam-toast-entra {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.talos-toast-region > .talos-toast {
+  animation: tam-toast-entra var(--tam-entrata) var(--tam-ease) both;
+}
+:root.motion-feedback-off .talos-toast-region > .talos-toast {
+  animation: none;
+}
+.td-progress > i {
+  transition: width var(--tam-entrata) var(--tam-ease);
+}
+:root.motion-surfaces-off .td-progress > i {
+  transition: none;
+}
+:root.td-dragging *,
+:root.td-dragging .talos-shell {
+  transition: none !important;
+}
+@keyframes td-track {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(340%);
+  }
+}
+.td-loading-line::before {
+  animation: td-track 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .td-loading-line::before {
+    animation: none;
+  }
+}
+:root.interface-motion-off .td-loading-line::before,
+:root.reduce-motion .td-loading-line::before {
+  animation: none;
 }
 
 /* src/styles/main.css */

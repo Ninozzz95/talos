@@ -709,22 +709,22 @@ function aggiornaScia(input) {
   input.style.setProperty(VARIABILE_SCIA, `${p}%`);
   return p;
 }
-function aggiornaTutteLeScie(radice = globalThis.document) {
-  if (!radice?.querySelectorAll) return 0;
-  const cursori = radice.querySelectorAll('input[type="range"]');
+function aggiornaTutteLeScie(radice2 = globalThis.document) {
+  if (!radice2?.querySelectorAll) return 0;
+  const cursori = radice2.querySelectorAll('input[type="range"]');
   for (const c of cursori) aggiornaScia(c);
   return cursori.length;
 }
-function collegaScia(radice = globalThis.document) {
-  if (!radice?.addEventListener || radice.__talosSciaCollegata) return false;
-  radice.__talosSciaCollegata = true;
+function collegaScia(radice2 = globalThis.document) {
+  if (!radice2?.addEventListener || radice2.__talosSciaCollegata) return false;
+  radice2.__talosSciaCollegata = true;
   const suEvento = (evento) => {
     const input = evento.target;
     if (input?.type === "range") aggiornaScia(input);
   };
-  radice.addEventListener("input", suEvento, true);
-  radice.addEventListener("change", suEvento, true);
-  aggiornaTutteLeScie(radice.ownerDocument || radice);
+  radice2.addEventListener("input", suEvento, true);
+  radice2.addEventListener("change", suEvento, true);
+  aggiornaTutteLeScie(radice2.ownerDocument || radice2);
   return true;
 }
 var VARIABILE_SCIA;
@@ -2334,10 +2334,10 @@ function primoTesto(el25) {
 }
 function applicaLingua(root, lingua) {
   const d = DIZIONARIO[lingua] || DIZIONARIO[LINGUA_PREDEFINITA];
-  const radice = root.documentElement || root;
-  radice.setAttribute("lang", lingua);
-  const cambiata = impostaLingua(lingua) !== void 0 && lingua !== radice.dataset?.linguaApplicata;
-  if (radice.dataset) radice.dataset.linguaApplicata = lingua;
+  const radice2 = root.documentElement || root;
+  radice2.setAttribute("lang", lingua);
+  const cambiata = impostaLingua(lingua) !== void 0 && lingua !== radice2.dataset?.linguaApplicata;
+  if (radice2.dataset) radice2.dataset.linguaApplicata = lingua;
   let toccati = 0;
   for (const el25 of root.querySelectorAll("[data-t]")) {
     const valore = d[el25.getAttribute("data-t")];
@@ -2355,7 +2355,7 @@ function applicaLingua(root, lingua) {
     el25.placeholder = valore;
     toccati += 1;
   }
-  if (cambiata && typeof radice.dispatchEvent === "function" && typeof CustomEvent === "function") radice.dispatchEvent(new CustomEvent(EVENTO_LINGUA, { detail: { lingua } }));
+  if (cambiata && typeof radice2.dispatchEvent === "function" && typeof CustomEvent === "function") radice2.dispatchEvent(new CustomEvent(EVENTO_LINGUA, { detail: { lingua } }));
   return toccati;
 }
 var LINGUE, LINGUA_PREDEFINITA, EVENTO_LINGUA, DIZIONARI, DIZIONARIO, NOMI_LINGUA, linguaCorrente, indice, regolePlurale;
@@ -3562,6 +3562,9 @@ function statoRicercaApprofondita(stato) {
 function conclusaDavvero(stato) {
   return stato === "done";
 }
+function haRapportoLeggibile(voce) {
+  return conclusaDavvero(voce?.stato) && Boolean(voce?.reportLibraryId);
+}
 function dataOra(iso) {
   const d = iso ? new Date(iso) : null;
   if (!d || !Number.isFinite(d.getTime())) return null;
@@ -3854,9 +3857,25 @@ function barraBilancio(doc, bilancio) {
 function vistaRapporto(doc, voce, lettura, ctx) {
   const pezzi = [];
   const frasi = frasiVoce(voce);
-  if (!frasi.haRapporto) {
+  if (!haRapportoLeggibile(voce)) {
     pezzi.push(nodo4(doc, "p", "td-prose", conclusaDavvero(voce?.stato) ? "Questa ricerca risulta conclusa, ma non ha depositato nessun rapporto." : "Questa ricerca non ha depositato un rapporto."));
     if (conclusaDavvero(voce?.stato)) pezzi.push(nodo4(doc, "p", "td-subtle", frasi.spiegazione));
+    if (frasi.haRapporto) {
+      pezzi.push(nodo4(doc, "h3", "", "Ciò che è stato depositato"));
+      pezzi.push(nodo4(doc, "p", "td-subtle", "Il file che questa ricerca ha lasciato in Libreria. Non è il suo rapporto."));
+      if (lettura?.stato === "pronto") {
+        const deposto = (lettura.prosa || lettura.testo || "").trim();
+        pezzi.push(deposto ? nodo4(doc, "blockquote", "td-allegato", deposto) : nodo4(doc, "p", "td-subtle", "Il file depositato è vuoto."));
+      } else if (lettura?.stato === "errore") {
+        const p = nodo4(doc, "p", "td-subtle", `Il file depositato non si apre: ${lettura.errore}`);
+        p.setAttribute("role", "alert");
+        pezzi.push(p);
+      } else if (!ctx?.puoLeggere) {
+        pezzi.push(nodo4(doc, "p", "td-subtle", "È in Libreria, in questo progetto: da lì si apre e si scarica."));
+      } else {
+        pezzi.push(nodo4(doc, "p", "td-subtle", "Leggo il file depositato…"));
+      }
+    }
     if (voce?.ultimoMessaggio) pezzi.push(nodo4(doc, "p", "td-subtle", "L’ultima cosa che la ricerca ha detto in chat è in «Come è andata». Non è un rapporto."));
     return pezzi;
   }
@@ -4012,8 +4031,10 @@ function vociMenuRicerca(voce, ctx = {}) {
     voci.push({ chiave: "apri-conversazione", etichetta: "Apri la conversazione", icona: "i-eye", aziona: () => ctx.onApriSessione({ id: voce.id }) });
   }
   if (pronto && lettura.prosa) {
-    voci.push({ chiave: "copia", etichetta: "Copia il rapporto", icona: "i-copy", aziona: () => ctx.onCopia?.(lettura.prosa, voce) });
-    voci.push({ chiave: "esporta", etichetta: "Esporta il rapporto", icona: "i-download", aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, "md"), lettura.testo || lettura.prosa, "text/markdown") });
+    const rapporto = haRapportoLeggibile(voce);
+    const cosa = rapporto ? "il rapporto" : "il file depositato";
+    voci.push({ chiave: "copia", etichetta: `Copia ${cosa}`, icona: "i-copy", aziona: () => ctx.onCopia?.(lettura.prosa, voce) });
+    voci.push({ chiave: "esporta", etichetta: `Esporta ${cosa}`, icona: "i-download", aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, "md"), lettura.testo || lettura.prosa, "text/markdown") });
   }
   if (citazioni.length) {
     voci.push({ chiave: "bibtex", etichetta: "Esporta le citazioni (BibTeX)", icona: "i-doc", aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, "bib"), bibtexDaCitazioni(citazioni), "application/x-bibtex") });
@@ -4057,19 +4078,19 @@ function montaDettaglioRicerca(voce, ctx) {
     }
   }
   contatoreIdentificativi += 1;
-  const radice = `td-ric-${contatoreIdentificativi}`;
-  const scelta = magazzino.viste.get(String(voce?.id)) || (voce?.reportLibraryId ? "rapporto" : "andata");
+  const radice2 = `td-ric-${contatoreIdentificativi}`;
+  const scelta = magazzino.viste.get(String(voce?.id)) || (haRapportoLeggibile(voce) ? "rapporto" : "andata");
   const lista = nodo4(doc, "div", "td-segment td-viste");
   lista.setAttribute("role", "tablist");
   lista.setAttribute("aria-label", "Viste della ricerca");
   const pannello = nodo4(doc, "div", "td-vista");
   pannello.setAttribute("role", "tabpanel");
   pannello.tabIndex = 0;
-  pannello.id = `${radice}-pannello`;
+  pannello.id = `${radice2}-pannello`;
   const schede = VISTE.map((vista) => {
     const b = nodo4(doc, "button", "", vista.parola);
     b.type = "button";
-    b.id = `${radice}-${vista.id}`;
+    b.id = `${radice2}-${vista.id}`;
     b.dataset.vista = vista.id;
     b.setAttribute("role", "tab");
     b.setAttribute("aria-controls", pannello.id);
@@ -4084,7 +4105,7 @@ function montaDettaglioRicerca(voce, ctx) {
       b.tabIndex = attiva ? 0 : -1;
       if (attiva && muoviIlFuoco) b.focus({ preventScroll: true });
     }
-    pannello.setAttribute("aria-labelledby", `${radice}-${idVista}`);
+    pannello.setAttribute("aria-labelledby", `${radice2}-${idVista}`);
     pannello.replaceChildren(...contenutoVista(doc, idVista, voce, lettura, { ...ctx.opzioni, puoLeggere: typeof ctx.opzioni?.leggiRapporto === "function" }).filter(Boolean));
   }
   lista.addEventListener("click", (e) => {
@@ -4795,6 +4816,13 @@ function dimensioneLeggibile(byte2) {
   if (kb < 1024) return `${kb.toLocaleString("it-IT", { maximumFractionDigits: 1 })} kB`;
   return `${(kb / 1024).toLocaleString("it-IT", { maximumFractionDigits: 1 })} MB`;
 }
+function conteggioRighe(testo3) {
+  const t2 = String(testo3 ?? "");
+  if (!t2) return 0;
+  const righe = t2.split("\n");
+  if (righe.length > 1 && righe[righe.length - 1] === "") righe.pop();
+  return righe.length;
+}
 function righeCsv(testo3, separatore = ",") {
   const t2 = String(testo3 ?? "");
   const righe = [];
@@ -4845,6 +4873,11 @@ function righeCsv(testo3, separatore = ",") {
   if (!vuota || cella) chiudiRiga();
   return righe;
 }
+function frasiRighe(formato, testo3) {
+  const righe = conteggioRighe(testo3);
+  if (formato !== "tabella") return `${righe.toLocaleString("it-IT")} righe`;
+  return `${Math.max(righe - 1, 0).toLocaleString("it-IT")} righe di dati`;
+}
 function separatoreDi(nome) {
   return String(nome ?? "").toLowerCase().endsWith(".tsv") ? "	" : ",";
 }
@@ -4875,6 +4908,37 @@ function cartaEsterna(doc, frase, { voce, opzioni }) {
     box.append(bottone2(doc, "Apri con l’app del sistema", () => opzioni.onApri(voce)));
   }
   return box;
+}
+function colonneFuori(bordoDestro, destreDelleColonne) {
+  return (Array.isArray(destreDelleColonne) ? destreDelleColonne : []).filter((x) => x > bordoDestro + 1).length;
+}
+function fraseScorrimento(quante) {
+  if (!quante) return "";
+  return quante === 1 ? "Scorri a destra per l’altra colonna." : `Scorri a destra per le altre ${quante.toLocaleString("it-IT")} colonne.`;
+}
+function collegaScorrimento(scorre, tabella, avviso) {
+  if (typeof scorre?.addEventListener !== "function" || typeof scorre.getBoundingClientRect !== "function") return null;
+  let osservatore = null;
+  const celle = () => tabella.querySelectorAll ? [...tabella.querySelectorAll("thead th")] : [];
+  const aggiorna = () => {
+    if (scorre.isConnected === false) {
+      osservatore?.disconnect?.();
+      return;
+    }
+    const bordo = scorre.getBoundingClientRect().right;
+    const fuori = colonneFuori(bordo, celle().map((c) => c.getBoundingClientRect().right));
+    scorre.dataset.scorre = fuori ? "si" : "no";
+    avviso.hidden = fuori === 0;
+    avviso.textContent = fraseScorrimento(fuori);
+  };
+  scorre.addEventListener("scroll", aggiorna, { passive: true });
+  if (typeof globalThis.ResizeObserver === "function") {
+    osservatore = new globalThis.ResizeObserver(aggiorna);
+    osservatore.observe(scorre);
+  } else if (typeof globalThis.requestAnimationFrame === "function") {
+    globalThis.requestAnimationFrame(aggiorna);
+  }
+  return aggiorna;
 }
 function tabellaCsv(doc, testo3, { nome, magazzino, chiave, ridisegna }) {
   const righe = righeCsv(testo3, separatoreDi(nome));
@@ -4907,6 +4971,11 @@ function tabellaCsv(doc, testo3, { nome, magazzino, chiave, ridisegna }) {
   tabella.append(testa, corpo);
   scorre.append(tabella);
   pezzi.push(scorre);
+  const avviso = nodo5(doc, "p", "td-file-scorri");
+  avviso.hidden = true;
+  avviso.setAttribute("role", "status");
+  pezzi.push(avviso);
+  collegaScorrimento(scorre, tabella, avviso);
   const dati = Math.max(righe.length - 1, 0);
   const mostrati = Math.max(quante - 1, 0);
   if (dati > mostrati) {
@@ -4972,9 +5041,9 @@ function montaAnteprimaFile(voce, ctx) {
   const pezzi = [];
   pezzi.push(nodo5(doc, "h3", "", "Contenuto del file"));
   contatore += 1;
-  const radice = `td-file-${contatore}`;
+  const radice2 = `td-file-${contatore}`;
   const pannello = nodo5(doc, "div", "td-vista td-file-vista");
-  pannello.id = `${radice}-pannello`;
+  pannello.id = `${radice2}-pannello`;
   pannello.setAttribute("role", "tabpanel");
   pannello.tabIndex = 0;
   let scelto = magazzino.modi.get(chiave) || magazzino.modoUltimo;
@@ -4988,7 +5057,7 @@ function montaAnteprimaFile(voce, ctx) {
     schede = modi.map((modo) => {
       const b = nodo5(doc, "button", "", PAROLE_MODO.get(modo));
       b.type = "button";
-      b.id = `${radice}-${modo}`;
+      b.id = `${radice2}-${modo}`;
       b.dataset.modo = modo;
       b.setAttribute("role", "tab");
       b.setAttribute("aria-controls", pannello.id);
@@ -5005,7 +5074,7 @@ function montaAnteprimaFile(voce, ctx) {
       b.tabIndex = attiva ? 0 : -1;
       if (attiva && muoviIlFuoco) b.focus({ preventScroll: true });
     }
-    if (schede.length) pannello.setAttribute("aria-labelledby", `${radice}-${modo}`);
+    if (schede.length) pannello.setAttribute("aria-labelledby", `${radice2}-${modo}`);
     else pannello.setAttribute("aria-label", `Contenuto di ${nome}`);
     pannello.replaceChildren(...contenutoModoFile(doc, modo, {
       voce,
@@ -5195,6 +5264,86 @@ var init_progetti = __esm({
   }
 });
 
+// src/components/motion-mockup.js
+function radice(doc) {
+  return (doc || globalThis.document)?.documentElement || null;
+}
+function ridottoDalSistema(finestra = globalThis) {
+  try {
+    return typeof finestra?.matchMedia === "function" && finestra.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+function movimentoSpento({ document: doc = globalThis.document, leva = "", finestra = globalThis } = {}) {
+  if (ridottoDalSistema(finestra)) return true;
+  const html = radice(doc);
+  if (!html) return true;
+  if (html.classList.contains("interface-motion-off")) return true;
+  if (html.classList.contains("reduce-motion")) return true;
+  if (doc?.body?.classList?.contains("reduce-motion")) return true;
+  if (leva && html.classList.contains(leva)) return true;
+  return false;
+}
+function millisecondiDelToken(nome, ripiego = 180, doc = globalThis.document) {
+  const html = radice(doc);
+  if (!html) return ripiego;
+  let grezzo = "";
+  try {
+    grezzo = (doc.defaultView || globalThis).getComputedStyle(html).getPropertyValue(`--talos-motion-duration-${nome}`).trim();
+  } catch {
+    return ripiego;
+  }
+  if (!grezzo) return ripiego;
+  const n = Number.parseFloat(grezzo);
+  if (!Number.isFinite(n)) return ripiego;
+  return grezzo.endsWith("ms") ? n : n * 1e3;
+}
+function easeDelTema(doc = globalThis.document, variabile = "--talos-motion-ease") {
+  const html = radice(doc);
+  if (!html) return "cubic-bezier(.2,.7,.2,1)";
+  try {
+    const v = (doc.defaultView || globalThis).getComputedStyle(html).getPropertyValue(variabile).trim();
+    return v || (variabile.endsWith("exit") ? "ease-in" : "cubic-bezier(.2,.7,.2,1)");
+  } catch {
+    return "cubic-bezier(.2,.7,.2,1)";
+  }
+}
+function motion(elemento, fotogrammi, {
+  token = "surface-enter",
+  fattore = 1,
+  leva = "",
+  document: doc = globalThis.document,
+  ease = ""
+} = {}) {
+  if (!elemento || typeof elemento.animate !== "function") return null;
+  if (movimentoSpento({ document: doc, leva })) return null;
+  const ms = millisecondiDelToken(token, 180, doc) * fattore;
+  if (!(ms > 0)) return null;
+  try {
+    perElemento.get(elemento)?.cancel();
+  } catch {
+  }
+  let animazione = null;
+  try {
+    animazione = elemento.animate(fotogrammi, { duration: ms, easing: ease || easeDelTema(doc), fill: "none" });
+  } catch {
+    return null;
+  }
+  perElemento.set(elemento, animazione);
+  vive.add(animazione);
+  const fine = () => vive.delete(animazione);
+  animazione.finished.then(fine, fine);
+  return animazione;
+}
+var vive, perElemento;
+var init_motion_mockup = __esm({
+  "src/components/motion-mockup.js"() {
+    vive = /* @__PURE__ */ new Set();
+    perElemento = /* @__PURE__ */ new WeakMap();
+  }
+});
+
 // src/components/sezione-elenco-dettaglio.js
 function larghezzaDettaglio(valore) {
   const n = typeof valore === "number" ? valore : Number.parseFloat(valore);
@@ -5255,9 +5404,9 @@ function salvaPreferenze(chiave, valori, storage = globalThis.localStorage) {
     return false;
   }
 }
-function perId(radice, selettore, campo2, valore) {
+function perId(radice2, selettore, campo2, valore) {
   const cercato = String(valore ?? "");
-  return [...radice.querySelectorAll(selettore)].find((el25) => el25.dataset[campo2] === cercato) || null;
+  return [...radice2.querySelectorAll(selettore)].find((el25) => el25.dataset[campo2] === cercato) || null;
 }
 function nodo6(doc, tag2, classe, testo3) {
   const el25 = doc.createElement(tag2);
@@ -5431,7 +5580,7 @@ function applicaLarghezza(stato, valore) {
 }
 function collegaDivisorio(doc, stato) {
   const { divisorio } = stato.nodi;
-  const radice = doc.documentElement;
+  const radice2 = doc.documentElement;
   divisorio.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -5439,10 +5588,10 @@ function collegaDivisorio(doc, stato) {
     const partenza = e.clientX;
     const iniziale = stato.larghezza;
     divisorio.setPointerCapture?.(e.pointerId);
-    radice.classList.add("td-dragging");
+    radice2.classList.add("td-dragging");
     const muovi = (m) => applicaLarghezza(stato, iniziale - (m.clientX - partenza));
     const fine = () => {
-      radice.classList.remove("td-dragging");
+      radice2.classList.remove("td-dragging");
       if (divisorio.hasPointerCapture?.(e.pointerId)) divisorio.releasePointerCapture(e.pointerId);
       divisorio.removeEventListener("pointermove", muovi);
       divisorio.removeEventListener("pointerup", fine);
@@ -5470,7 +5619,84 @@ function collegaDivisorio(doc, stato) {
     salvaPreferenze(stato.config.chiave, stato);
   });
 }
+function fotografaSchede(contenitore) {
+  const mappa = /* @__PURE__ */ new Map();
+  if (!contenitore?.querySelectorAll) return mappa;
+  for (const el25 of contenitore.querySelectorAll("[data-item]")) {
+    try {
+      mappa.set(el25.dataset.item, el25.getBoundingClientRect());
+    } catch {
+    }
+  }
+  return mappa;
+}
+function flipSchede(doc, contenitore, prima) {
+  if (!prima.size || !contenitore?.querySelectorAll) return;
+  if (movimentoSpento({ document: doc, leva: LEVA_SUPERFICI })) return;
+  for (const el25 of contenitore.querySelectorAll("[data-item]")) {
+    let dopo;
+    try {
+      dopo = el25.getBoundingClientRect();
+    } catch {
+      continue;
+    }
+    const a = prima.get(el25.dataset.item);
+    const invisibile = (r) => !r || r.width === 0 && r.height === 0;
+    if (invisibile(dopo) || a && invisibile(a)) continue;
+    if (a) {
+      const dx = a.x - dopo.x;
+      const dy = a.y - dopo.y;
+      if (Math.abs(dx) + Math.abs(dy) > 1) {
+        motion(el25, [{ transform: `translate(${dx}px,${dy}px)` }, { transform: "none" }], { fattore: 1.35, leva: LEVA_SUPERFICI, document: doc });
+      }
+    } else {
+      motion(el25, [{ opacity: 0, transform: "translateY(5px)" }, { opacity: 1, transform: "none" }], { leva: LEVA_SUPERFICI, document: doc });
+    }
+  }
+}
 function disegna(schermo, doc, stato) {
+  const contenitore = stato.nodi?.risultati || null;
+  const dettaglio = stato.nodi?.dettaglio || null;
+  const prima = fotografaSchede(contenitore);
+  const dettaglioEraAperto = Boolean(dettaglio) && !dettaglio.hidden;
+  const eraEspanso = stato.nodi?.spazio?.dataset?.expanded === "true";
+  disegnaCrudo(schermo, doc, stato);
+  flipSchede(doc, contenitore, prima);
+  if (!dettaglio) return;
+  const dettaglioEAperto = !dettaglio.hidden;
+  const oraEspanso = stato.nodi?.spazio?.dataset?.expanded === "true";
+  if (dettaglioEAperto && !dettaglioEraAperto) {
+    motion(dettaglio, [{ opacity: 0, transform: "translateX(14px)" }, { opacity: 1, transform: "none" }], { fattore: 1.25, leva: LEVA_SUPERFICI, document: doc });
+  } else if (dettaglioEAperto && oraEspanso !== eraEspanso) {
+    motion(dettaglio, [{ opacity: 0.65 }, { opacity: 1 }], { leva: LEVA_SUPERFICI, document: doc });
+  }
+}
+function chiudiDettaglioConUscita(schermo, doc, stato, dopoAverChiuso, alTermine = () => {
+}) {
+  const dettaglio = stato.nodi?.dettaglio || null;
+  const finisci = () => {
+    dopoAverChiuso();
+    disegna(schermo, doc, stato);
+    alTermine();
+  };
+  if (!dettaglio || dettaglio.hidden) {
+    finisci();
+    return;
+  }
+  let daDove = { opacity: 1, transform: "none" };
+  try {
+    const cs = (doc.defaultView || globalThis).getComputedStyle(dettaglio);
+    daDove = { opacity: cs.opacity, transform: cs.transform === "none" ? "none" : cs.transform };
+  } catch {
+  }
+  const a = motion(dettaglio, [daDove, { opacity: 0, transform: "translateX(10px)" }], { token: "surface-exit", leva: LEVA_SUPERFICI, document: doc });
+  if (!a) {
+    finisci();
+    return;
+  }
+  a.finished.then(finisci, finisci);
+}
+function disegnaCrudo(schermo, doc, stato) {
   const config = stato.config;
   const tutte = Array.isArray(config.voci) ? config.voci : [];
   const filtrate = filtraVoci(tutte, { query: stato.query, filtro: stato.filtro, filtri: config.filtri, cercaIn: config.cercaIn });
@@ -5561,8 +5787,14 @@ function disegnaScheda(doc, stato, voce) {
   basso.append(...[pezzi.basso].flat().filter(Boolean));
   apri.append(alto, h3, ...[pezzi.corpo].flat().filter(Boolean), basso);
   apri.addEventListener("click", () => {
-    stato.selezione = String(stato.selezione) === id ? null : id;
-    if (stato.selezione === null) stato.espanso = false;
+    if (String(stato.selezione) === id) {
+      chiudiDettaglioConUscita(stato.schermo, doc, stato, () => {
+        stato.selezione = null;
+        stato.espanso = false;
+      });
+      return;
+    }
+    stato.selezione = id;
     disegna(stato.schermo, doc, stato);
   });
   scheda.append(apri);
@@ -5589,10 +5821,18 @@ function disegnaDettaglio(schermo, doc, stato, voce) {
   chiudi.append(icona3(doc, "x"));
   chiudi.addEventListener("click", () => {
     const id = String(config.idDi(voce) ?? "");
-    stato.selezione = null;
-    stato.espanso = false;
-    disegna(schermo, doc, stato);
-    perId(stato.nodi.risultati, ".td-card", "item", id)?.querySelector(".td-card-open")?.focus({ preventScroll: true });
+    chiudiDettaglioConUscita(
+      schermo,
+      doc,
+      stato,
+      () => {
+        stato.selezione = null;
+        stato.espanso = false;
+      },
+      // Il fuoco torna sulla scheda da cui il dettaglio era partito, non in cima alla pagina.
+      // ⛔ DOPO il ridisegno, non prima: la scheda a cui tornare la ricrea `disegna`.
+      () => perId(stato.nodi.risultati, ".td-card", "item", id)?.querySelector(".td-card-open")?.focus({ preventScroll: true })
+    );
   });
   testa.append(espandi, chiudi);
   const corpo = nodo6(doc, "div", "td-detail-body");
@@ -5603,16 +5843,18 @@ function disegnaDettaglio(schermo, doc, stato, voce) {
   if (config.notaPiede) piede.append(nodo6(doc, "span", "td-save-status", config.notaPiede(voce)));
   dettaglio.replaceChildren(testa, corpo, ...azioni.length || config.notaPiede ? [piede] : []);
 }
-var CHIAVE_PREFERENZE, LARGHEZZA_MINIMA, LARGHEZZA_MASSIMA, LARGHEZZA_NORMALE, PASSO_DIVISORIO, STATI2;
+var CHIAVE_PREFERENZE, LARGHEZZA_MINIMA, LARGHEZZA_MASSIMA, LARGHEZZA_NORMALE, PASSO_DIVISORIO, STATI2, LEVA_SUPERFICI;
 var init_sezione_elenco_dettaglio = __esm({
   "src/components/sezione-elenco-dettaglio.js"() {
     init_plurale();
+    init_motion_mockup();
     CHIAVE_PREFERENZE = "talos-harness-sezioni-v1";
     LARGHEZZA_MINIMA = 320;
     LARGHEZZA_MASSIMA = 700;
     LARGHEZZA_NORMALE = 440;
     PASSO_DIVISORIO = 24;
     STATI2 = /* @__PURE__ */ new WeakMap();
+    LEVA_SUPERFICI = "motion-surfaces-off";
   }
 });
 
@@ -6081,9 +6323,9 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     const voci = vociMenuRicerca(voce, {
       lettura: letturaDi(voce),
       onApriSessione: opzioni.onApriSessione,
-      onCopia: (prosa) => {
+      onCopia: (prosa, quale) => {
         Promise.resolve(copia(prosa)).then(
-          () => avvisa("Copiato", "Il testo del rapporto è negli appunti."),
+          () => avvisa("Copiato", haRapportoLeggibile(quale ?? voce) ? "Il testo del rapporto è negli appunti." : "Il testo del file depositato è negli appunti."),
           () => avvisa("Non copiato", "Gli appunti non sono disponibili in questa finestra.", { tono: "errore" })
         );
       },
@@ -6117,14 +6359,18 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
      * ⛔ QUATTRO filtri e non otto. Gli stati sono otto, ma un filtro per ognuno darebbe una riga
      *   di bottoni che nessuno legge, e quattro di essi direbbero sempre zero. Le domande che una
      *   persona si fa davvero sono: cosa sta lavorando, cosa ha prodotto un rapporto, cosa no.
-     *   ⛔ «Col rapporto» guarda il RAPPORTO, non lo stato: è la stessa distinzione che il cancello
-     *   di consegna fa lato server, e l'unica che non può mentire.
+     *   ⛔⛔ CORRETTO L'11/09 SULLA FOTO DEL 4174. Qui c'era scritto «"Col rapporto" guarda il
+     *   RAPPORTO, non lo stato», e guardava `reportLibraryId`: sulla ricerca `d2a453a8` i filtri
+     *   dicevano «Col rapporto 1 · Senza rapporto 0» mentre il timbro della scheda diceva «Senza
+     *   rapporto». La distinzione del cancello di consegna NON è «c'è un file in Libreria»: è
+     *   proprio lo STATO — se il cancello avesse accettato quel file la ricerca sarebbe `done`.
+     *   La regola sta in `haRapportoLeggibile`, una funzione sola per filtro, piede e pannello.
      */
     filtri: [
       { id: "tutte", etichetta: "Tutte" },
       { id: "vive", etichetta: "In corso", quando: (r) => r?.stato === "running" || r?.stato === "paused" },
-      { id: "con-rapporto", etichetta: "Col rapporto", quando: (r) => Boolean(r?.reportLibraryId) },
-      { id: "senza-rapporto", etichetta: "Senza rapporto", quando: (r) => !r?.reportLibraryId && r?.stato !== "running" && r?.stato !== "paused" }
+      { id: "con-rapporto", etichetta: "Col rapporto", quando: (r) => haRapportoLeggibile(r) },
+      { id: "senza-rapporto", etichetta: "Senza rapporto", quando: (r) => !haRapportoLeggibile(r) && r?.stato !== "running" && r?.stato !== "paused" }
     ],
     idDi: (r) => r?.id,
     titoloDi: (r) => frasiVoce(r).domanda,
@@ -6152,7 +6398,11 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
          */
         basso: [
           nodo7(doc, "span", "", f.avviata ? `Avviata ${articoloData(r?.avviataAlle)}${dataBreve(r?.avviataAlle)}` : "Data non registrata"),
-          nodo7(doc, "span", "", r?.stato === "done" ? f.haRapporto ? "" : "Nessun rapporto" : f.haRapporto ? "Col rapporto" : "")
+          /* ⛔ CORRETTO L'11/09: qui «Col rapporto» compariva su ogni ricerca NON conclusa che
+             avesse un file in Libreria — cioè contraddiceva il timbro «Senza rapporto» due
+             centimetri più in alto. Adesso a destra si scrive solo l'anomalia che il timbro non
+             dice già: una conclusa che il rapporto non ce l'ha. */
+          nodo7(doc, "span", "", r?.stato === "done" && !f.haRapporto ? "Nessun rapporto" : "")
         ],
         adorno: (() => {
           const b = nodo7(doc, "button", "td-card-azioni");
@@ -6283,7 +6533,7 @@ function icona4(doc, nome) {
 }
 function apriModale(titolo2, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
   if (!doc?.body) return null;
-  chiudiModale();
+  chiudiModale({ immediata: true });
   const dialogo = nodo8(doc, "dialog", "td-modal");
   if (ampia) dialogo.dataset.ampia = "si";
   const idTitolo = `td-modal-title-${Math.random().toString(36).slice(2, 8)}`;
@@ -6314,21 +6564,35 @@ function apriModale(titolo2, contenuto, { document: doc = globalThis.document, a
   doc.body.append(dialogo);
   if (typeof dialogo.showModal === "function") dialogo.showModal();
   else dialogo.setAttribute("open", "");
+  motion(dialogo, [{ opacity: 0, transform: "translateY(12px) scale(.99)" }, { opacity: 1, transform: "none" }], { leva: "motion-surfaces-off", document: doc });
   aperta = { dialogo, contenuto: corpo, suChiusura, chiudi: () => chiudiModale() };
   const primo = corpo.querySelector("input:not([type=hidden]), textarea, select, button") || chiudiBtn;
   primo.focus?.({ preventScroll: true });
   return aperta;
 }
-function chiudiModale() {
+function chiudiModale({ immediata = false } = {}) {
   const viva = aperta;
   if (!viva) return false;
   aperta = null;
   const { dialogo } = viva;
-  if (typeof dialogo.close === "function" && dialogo.open) dialogo.close();
-  else {
-    dialogo.remove();
-    viva.suChiusura?.();
+  const chiudiDavvero = () => {
+    if (typeof dialogo.close === "function" && dialogo.open) dialogo.close();
+    else {
+      dialogo.remove();
+      viva.suChiusura?.();
+    }
+  };
+  if (immediata) {
+    chiudiDavvero();
+    return true;
   }
+  const uscita = motion(dialogo, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(6px)" }], { token: "surface-exit", leva: "motion-surfaces-off", document: dialogo.ownerDocument || globalThis.document });
+  if (!uscita) {
+    chiudiDavvero();
+    return true;
+  }
+  dialogo.style.pointerEvents = "none";
+  uscita.finished.then(chiudiDavvero, chiudiDavvero);
   return true;
 }
 function confermaModale({
@@ -6359,6 +6623,7 @@ function confermaModale({
 var aperta;
 var init_modale_td = __esm({
   "src/components/modale-td.js"() {
+    init_motion_mockup();
     aperta = null;
   }
 });
@@ -6410,11 +6675,11 @@ function impostaAspetto(id, valore, doc = globalThis.document) {
   return true;
 }
 function aspettoCorrente(doc = globalThis.document) {
-  const radice = doc.documentElement;
+  const radice2 = doc.documentElement;
   const dalControllo = (id) => doc.getElementById(id)?.value || doc.getElementById(`setting-${id}`)?.value || "";
   return {
-    tema: radice.getAttribute("data-talos-theme") || dalControllo("themePresetSelect") || "calm",
-    modo: dalControllo("colorModeSelect") || (radice.getAttribute("data-theme") === "light" ? "light" : "system")
+    tema: radice2.getAttribute("data-talos-theme") || dalControllo("themePresetSelect") || "calm",
+    modo: dalControllo("colorModeSelect") || (radice2.getAttribute("data-theme") === "light" ? "light" : "system")
   };
 }
 function nodo9(doc, tag2, classe, testo3) {
@@ -7062,9 +7327,9 @@ function apriPannelloNotifiche(pannello, campanella, { document: documentObj = g
   (pannello.querySelector(".talos-list-row") || pannello.querySelector("#chiudiNotifiche"))?.focus();
   return chiudi;
 }
-function deveAvvisareFuoriDallaFinestra({ permesso, visibile, notifiche = [], giaAvvisate = [] } = {}) {
+function deveAvvisareFuoriDallaFinestra({ permesso, visibile: visibile2, notifiche = [], giaAvvisate = [] } = {}) {
   if (permesso !== "granted") return [];
-  if (visibile) return [];
+  if (visibile2) return [];
   const viste = giaAvvisate instanceof Set ? giaAvvisate : new Set(giaAvvisate || []);
   return notifiche.filter((n) => n?.sessione?.sessionId && !viste.has(`${n.sessione.sessionId}:${n.stato}`));
 }
@@ -7957,9 +8222,9 @@ function preparaMisuraDialogo(velo, { finestra = globalThis.window, storage = gl
   delete d.dataset.userSized;
   return null;
 }
-function collegaRidimensionamentoDialoghi(radice = globalThis.document, { finestra = globalThis.window, storage = globalThis.localStorage } = {}) {
+function collegaRidimensionamentoDialoghi(radice2 = globalThis.document, { finestra = globalThis.window, storage = globalThis.localStorage } = {}) {
   let collegate = 0;
-  for (const h of radice.querySelectorAll("[data-dialog-resize]")) {
+  for (const h of radice2.querySelectorAll("[data-dialog-resize]")) {
     if (h.dataset.ridimensionaCollegato) continue;
     h.dataset.ridimensionaCollegato = "si";
     const d = h.closest(".talos-dialog");
@@ -9372,8 +9637,8 @@ function aggiornaDiffReview(card, voce) {
     diff.before(avviso);
   }
 }
-function nascondiAzioniFase3(radice) {
-  for (const b of radice?.querySelectorAll('[data-richiede="fase3"]') || []) b.hidden = true;
+function nascondiAzioniFase3(radice2) {
+  for (const b of radice2?.querySelectorAll('[data-richiede="fase3"]') || []) b.hidden = true;
 }
 var init_review = __esm({
   "src/components/review.js"() {
@@ -9917,18 +10182,18 @@ function accorciaPercorso(percorso, massimo = 46) {
   const testo3 = String(percorso ?? "");
   if (testo3.length <= massimo) return testo3;
   const pezzi = testo3.split(/(?<=[\\/])/);
-  const radice = pezzi[0] + (pezzi[1] ?? "");
+  const radice2 = pezzi[0] + (pezzi[1] ?? "");
   let coda = "";
   for (let i = pezzi.length - 1; i > 1; i -= 1) {
     const prova = pezzi[i] + coda;
-    if (radice.length + 1 + prova.length > massimo) break;
+    if (radice2.length + 1 + prova.length > massimo) break;
     coda = prova;
   }
   if (!coda) {
-    const quanti = Math.max(6, massimo - radice.length - 1);
+    const quanti = Math.max(6, massimo - radice2.length - 1);
     coda = testo3.slice(-quanti);
   }
-  return `${radice}…${coda}`;
+  return `${radice2}…${coda}`;
 }
 function nomeShell(enforcement, comando = "") {
   if (enforcement === "git-bash") return "Git Bash";
@@ -10886,8 +11151,8 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     }
     const avvisoCornice = corniceDellaLettura(s);
     const letture = stato.schede.filter((x) => x.tipo !== "viva").length;
-    const vive = stato.schede.length - letture;
-    if (el25.riepilogo) el25.riepilogo.textContent = stato.schede.length === 0 ? t(TESTI3.riepilogoVuoto) : vive === 0 ? TESTI3.riepilogoLetture(letture) : TESTI3.riepilogoMisto(letture, vive);
+    const vive2 = stato.schede.length - letture;
+    if (el25.riepilogo) el25.riepilogo.textContent = stato.schede.length === 0 ? t(TESTI3.riepilogoVuoto) : vive2 === 0 ? TESTI3.riepilogoLetture(letture) : TESTI3.riepilogoMisto(letture, vive2);
     renderizzaSchede();
     const i = indiceAttiva();
     if (el25.indietro) el25.indietro.disabled = i <= 0;
@@ -10958,7 +11223,7 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       el25.nota?.setAttribute("aria-expanded", "false");
     }
     if (el25.editorNota && s) el25.editorNota.dataset.browserId = s.id;
-    if (el25.limiti) el25.limiti.textContent = t(vive > 0 ? TESTI3.limitiVive : TESTI3.limitiLetture);
+    if (el25.limiti) el25.limiti.textContent = t(vive2 > 0 ? TESTI3.limitiVive : TESTI3.limitiLetture);
     const annotabile = paginaAnnotabile(s);
     if (el25.annotazioni) {
       const lista = annotabile ? stato.annotazioni[s.id] || [] : [];
@@ -11031,7 +11296,7 @@ var init_browser = __esm({
     TESTI3 = Object.freeze({
       intestazione: "Letture della sessione",
       riepilogoLetture: (n) => tn("Testo acquisito dall’agente · {n} pagina", "Testo acquisito dall’agente · {n} pagine", n),
-      riepilogoMisto: (letture, vive) => `${tn("{n} lettura dell’agente", "{n} letture dell’agente", letture)} · ${tn("{n} pagina aperta da te", "{n} pagine aperte da te", vive)}`,
+      riepilogoMisto: (letture, vive2) => `${tn("{n} lettura dell’agente", "{n} letture dell’agente", letture)} · ${tn("{n} pagina aperta da te", "{n} pagine aperte da te", vive2)}`,
       riepilogoVuoto: "Nessuna pagina ancora",
       posizioneLettura: (i, n) => t("Lettura {i} di {n}", { i, n }),
       posizioneViva: "Pagina aperta da te · viva dentro TALOS",
@@ -11056,7 +11321,7 @@ var init_browser = __esm({
     oraRoma = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" });
     giornoRoma = new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit" });
     RIGO_STATO = /^\s*HTTP\s+(\d{3})\s*[·|-]\s*(\S+)\s*$/i;
-    $ = (radice, sel) => radice.querySelector(sel);
+    $ = (radice2, sel) => radice2.querySelector(sel);
   }
 });
 
@@ -11075,9 +11340,9 @@ function impostaConteggioNav(voce, conteggio2) {
   }
   badge5.textContent = String(Math.trunc(conteggio2));
 }
-function aggiornaConteggiNav(radice, conteggi) {
+function aggiornaConteggiNav(radice2, conteggi) {
   for (const [chiave, valore] of Object.entries(conteggi || {})) {
-    const voce = radice.querySelector(`.talos-nav-item[data-vaia="${chiave}"], .talos-nav-item[data-conteggio="${chiave}"]`);
+    const voce = radice2.querySelector(`.talos-nav-item[data-vaia="${chiave}"], .talos-nav-item[data-conteggio="${chiave}"]`);
     if (voce) impostaConteggioNav(voce, valore);
   }
 }
@@ -11942,10 +12207,10 @@ function montaConversazioneFiglia(contenitore, {
   const VICINO_AL_FONDO_PX = 24;
   function seguivaIlFondo() {
     const altezza = corpo.scrollHeight;
-    const visibile = corpo.clientHeight;
+    const visibile2 = corpo.clientHeight;
     const dove = corpo.scrollTop;
-    if (!Number.isFinite(altezza) || !Number.isFinite(visibile) || !Number.isFinite(dove)) return false;
-    return altezza - dove - visibile <= VICINO_AL_FONDO_PX;
+    if (!Number.isFinite(altezza) || !Number.isFinite(visibile2) || !Number.isFinite(dove)) return false;
+    return altezza - dove - visibile2 <= VICINO_AL_FONDO_PX;
   }
   function disegna2() {
     const seguiva = seguivaIlFondo();
@@ -12733,9 +12998,9 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
   const annullaFotogramma = typeof finestra?.cancelAnimationFrame === "function" ? (id) => finestra.cancelAnimationFrame(id) : (id) => clearTimeout(id);
   const senzaMoto = finestra?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
   const { decodifica: decodifica2, viaBitmap } = creaDecodificatore(finestra, doc);
-  const radice = doc.createElement("div");
-  radice.className = senzaMoto ? `${CLASSE} ${CLASSE}--senza-moto` : CLASSE;
-  radice.dataset.stato = "apro";
+  const radice2 = doc.createElement("div");
+  radice2.className = senzaMoto ? `${CLASSE} ${CLASSE}--senza-moto` : CLASSE;
+  radice2.dataset.stato = "apro";
   const tela = doc.createElement("canvas");
   tela.className = `${CLASSE}__schermo`;
   tela.setAttribute("tabindex", "0");
@@ -12746,8 +13011,8 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
   const etichetta2 = doc.createElement("p");
   etichetta2.className = `${CLASSE}__stato`;
   etichetta2.setAttribute("role", "status");
-  radice.append(tela, velo, etichetta2);
-  contenitore.replaceChildren(radice);
+  radice2.append(tela, velo, etichetta2);
+  contenitore.replaceChildren(radice2);
   const ascolti = [];
   const ascolta = (nodo10, tipo, mano, opzioni) => {
     nodo10.addEventListener(tipo, mano, opzioni);
@@ -12773,7 +13038,7 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
     const vero = nome === "pronto" && dipinti === 0 ? "carico" : nome;
     corrente = vero;
     const testo3 = dettaglio ? `${testoStato(vero)} — ${dettaglio}` : testoStato(vero);
-    radice.dataset.stato = vero;
+    radice2.dataset.stato = vero;
     etichetta2.dataset.stato = vero;
     etichetta2.textContent = testo3;
     velo.textContent = vero === "pronto" ? "" : testo3;
@@ -12879,10 +13144,10 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
     onGesto?.(gesto);
   }
   function suFuoco() {
-    radice.classList?.add(`${CLASSE}--fuoco`);
+    radice2.classList?.add(`${CLASSE}--fuoco`);
   }
   function suPerditaFuoco() {
-    radice.classList?.remove(`${CLASSE}--fuoco`);
+    radice2.classList?.remove(`${CLASSE}--fuoco`);
   }
   for (const tipo of ["pointerdown", "pointerup", "pointermove"]) ascolta(tela, tipo, suPuntatore);
   ascolta(tela, "wheel", suPuntatore, { passive: false });
@@ -12902,7 +13167,7 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
     ascolti.length = 0;
     contenitore.replaceChildren?.();
   }
-  return { frame: frame2, stato, misura, distruggi, radice, tela };
+  return { frame: frame2, stato, misura, distruggi, radice: radice2, tela };
 }
 var STATI4, CLASSE, TIPI_GESTO, PULSANTI;
 var init_browser_vivo = __esm({
@@ -13180,12 +13445,12 @@ function montaMiglioraPrompt({
     if (testo3 != null) nodo10.textContent = testo3;
     return nodo10;
   };
-  const radice = elemento("section", "talos-migliora");
-  radice.dataset.miglioraPrompt = "";
-  radice.setAttribute("role", "dialog");
-  radice.setAttribute("aria-labelledby", "migliora-prompt-titolo");
-  radice.hidden = true;
-  radice.style.cssText = [
+  const radice2 = elemento("section", "talos-migliora");
+  radice2.dataset.miglioraPrompt = "";
+  radice2.setAttribute("role", "dialog");
+  radice2.setAttribute("aria-labelledby", "migliora-prompt-titolo");
+  radice2.hidden = true;
+  radice2.style.cssText = [
     "display:flex",
     "flex-direction:column",
     "gap:var(--talos-space-control)",
@@ -13328,9 +13593,9 @@ function montaMiglioraPrompt({
   corpo.style.cssText = "display:flex;flex-direction:column;gap:var(--talos-space-sm);flex:1 1 auto;min-height:0;overflow:hidden";
   corpo.append(intestazionePrima, prima, intestazioneDopo, dopo, sintesi, principi);
   risultato.append(corpo, azioni);
-  radice.append(testa, provenienza, scelta, attesa, guasto, risultato);
+  radice2.append(testa, provenienza, scelta, attesa, guasto, risultato);
   chiudiBtn.addEventListener("click", () => chiudi());
-  radice.addEventListener("keydown", (evento) => {
+  radice2.addEventListener("keydown", (evento) => {
     if (evento.key !== "Escape") return;
     evento.preventDefault();
     chiudi();
@@ -13399,14 +13664,14 @@ function montaMiglioraPrompt({
     stato = "scelta";
     esito = null;
     errore = "";
-    radice.hidden = false;
+    radice2.hidden = false;
     disegna2();
     const scelto = bottoniProfondita.find((bottone5) => bottone5.dataset.miglioraProfondita === profondita);
     if (scelto && typeof scelto.focus === "function") scelto.focus();
   }
   function chiudi() {
     giro += 1;
-    radice.hidden = true;
+    radice2.hidden = true;
     stato = "scelta";
     esito = null;
     errore = "";
@@ -13415,11 +13680,11 @@ function montaMiglioraPrompt({
   }
   function distruggi() {
     distrutto = true;
-    radice.remove();
+    radice2.remove();
   }
   disegna2();
   return Object.freeze({
-    elemento: radice,
+    elemento: radice2,
     apri,
     chiudi,
     distruggi,
@@ -13497,9 +13762,9 @@ function etichettaTasto(combo, { apple = suApple() } = {}) {
   const parti = testo3.replace(/⌘/g, "mod ").replace(/\bCtrl\b/gi, "mod").replace(/\bCmd\b/gi, "mod").replace(/\bShift\b/gi, "⇧").split(/[+\s]+/).filter(Boolean);
   return parti.map((p) => p === "mod" ? apple ? "⌘" : "Ctrl" : p).join(apple ? "" : " ");
 }
-function normalizzaTastiScritti(radice = globalThis.document, { apple = suApple() } = {}) {
+function normalizzaTastiScritti(radice2 = globalThis.document, { apple = suApple() } = {}) {
   let cambiati = 0;
-  for (const nodo10 of radice.querySelectorAll("kbd")) {
+  for (const nodo10 of radice2.querySelectorAll("kbd")) {
     const testo3 = (nodo10.textContent || "").trim();
     if (!/⌘|ctrl|cmd|shift/i.test(testo3)) continue;
     const nuovo = etichettaTasto(testo3, { apple });
@@ -16512,18 +16777,18 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return `${nome}\0${normalizzato}`;
       }
       function riassuntoAttrezziDaEventi(eventi2) {
-        const perId2 = /* @__PURE__ */ new Map();
+        const perId3 = /* @__PURE__ */ new Map();
         const ordine = [];
         for (const evento of eventi2 || []) {
           const tipo = evento?.type;
           if (tipo !== "ToolCallStart" && tipo !== "ToolCallArgs" && tipo !== "ToolCallResult") continue;
           const id = evento.toolCallId;
           if (typeof id !== "string" || id === "") continue;
-          if (!perId2.has(id)) {
-            perId2.set(id, { nome: null, argomenti: "" });
+          if (!perId3.has(id)) {
+            perId3.set(id, { nome: null, argomenti: "" });
             ordine.push(id);
           }
-          const voce = perId2.get(id);
+          const voce = perId3.get(id);
           if (tipo === "ToolCallStart") voce.nome = typeof evento.toolCallName === "string" ? evento.toolCallName : voce.nome;
           else if (tipo === "ToolCallArgs" && typeof evento.delta === "string") voce.argomenti += evento.delta;
         }
@@ -16532,7 +16797,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         let chiamate = 0;
         let ripetute = 0;
         for (const id of ordine) {
-          const voce = perId2.get(id);
+          const voce = perId3.get(id);
           if (!voce.nome) continue;
           chiamate += 1;
           const conto = perAttrezzo.get(voce.nome) || { nome: voce.nome, chiamate: 0, ripetute: 0 };
@@ -18769,7 +19034,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
                 caricaPannelloLibreria({ pagina: true });
                 void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
               },
-              onMenu: apriMenuAzioniLibreria
+              onMenu: apriMenuAzioniLibreria,
+              /* 11/09 — il contenuto del file nel dettaglio: la stessa iniezione che la Ricerca ha già
+                 (:5343). Senza, il pannello cade sulla lettura strutturale minima e gli elenchi e i
+                 blocchi di codice di un .md si leggono come paragrafi. */
+              rendiMarkdown: renderizzaMarkdownSemplice
             });
           } else {
             mount.setAttribute("role", voci.length ? "list" : "group");
@@ -21148,19 +21417,19 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         ["chiedi", "Chiedi conferma"],
         ["nega", "Nega sempre"]
       ]);
-      function disegnaPermessiIn(radice) {
-        if (!radice) return;
-        for (const bottone5 of $$("[data-dove-choice]", radice)) {
+      function disegnaPermessiIn(radice2) {
+        if (!radice2) return;
+        for (const bottone5 of $$("[data-dove-choice]", radice2)) {
           const suo = (bottone5.dataset.doveChoice || null) === (state.realSession.doveGiranoIComandi ?? null);
           bottone5.setAttribute("aria-checked", String(suo));
           bottone5.classList.toggle("is-attiva", suo);
         }
-        for (const bottone5 of $$("[data-permission-choice]", radice)) {
+        for (const bottone5 of $$("[data-permission-choice]", radice2)) {
           const suo = bottone5.dataset.permissionChoice === state.permissions;
           bottone5.setAttribute("aria-checked", String(suo));
           bottone5.classList.toggle("is-attiva", suo);
         }
-        const elenco2 = $2("#veloPermessiAttrezzi", radice);
+        const elenco2 = $2("#veloPermessiAttrezzi", radice2);
         if (elenco2) {
           elenco2.textContent = "";
           for (const [attrezzo, descrizione, icona9] of ATTREZZI_COL_CANCELLO) {
@@ -21176,7 +21445,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           uscita.innerHTML = `<span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-terminal"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">uscita dei comandi che lanci tu con !</span><span class="talos-list-row__sub">Chi la legge, dopo che il comando è finito. Il comando non fa mai rispondere TALOS: la risposta arriva al messaggio dopo.</span></span><span class="talos-list-row__aside"><select class="talos-select talos-select--sm" data-uscita-choice aria-label="Chi legge l’uscita dei comandi lanciati con il punto esclamativo"><option value="no"${acceso ? "" : " selected"}>Solo tu — come prima</option><option value="si"${acceso ? " selected" : ""}>Anche il modello · ~2.000 token</option></select></span>`;
           elenco2.append(uscita);
         }
-        const avviso = $2("#veloPermessiAvviso", radice);
+        const avviso = $2("#veloPermessiAvviso", radice2);
         if (avviso) {
           const { aperte, avviso: testo3 } = porteLateraliAperte(state.permessiPerAttrezzo, state.permissions);
           avviso.hidden = !testo3;
@@ -21192,11 +21461,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           }
         }
       }
-      function collegaAzioniPermessi(radice, { dopoLaScelta = () => {
+      function collegaAzioniPermessi(radice2, { dopoLaScelta = () => {
       }, ridisegna = () => {
       } } = {}) {
-        if (!radice) return;
-        $$("[data-dove-choice]", radice).forEach((button2) => {
+        if (!radice2) return;
+        $$("[data-dove-choice]", radice2).forEach((button2) => {
           if (button2.dataset.doveCollegato) return;
           button2.dataset.doveCollegato = "si";
           button2.addEventListener("click", async () => {
@@ -21216,7 +21485,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             }
           });
         });
-        $$("[data-permission-choice]", radice).forEach((button2) => {
+        $$("[data-permission-choice]", radice2).forEach((button2) => {
           if (button2.dataset.permessiCollegati) return;
           button2.dataset.permessiCollegati = "si";
           button2.addEventListener("click", () => {
@@ -21226,9 +21495,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             dopoLaScelta();
           });
         });
-        if (!radice.dataset.permessiCollegati) {
-          radice.dataset.permessiCollegati = "si";
-          radice.addEventListener("change", async (evento) => {
+        if (!radice2.dataset.permessiCollegati) {
+          radice2.dataset.permessiCollegati = "si";
+          radice2.addEventListener("change", async (evento) => {
             const uscita = evento.target?.closest?.("[data-uscita-choice]");
             if (uscita) {
               const sessionId = state.realSession.id;
@@ -21260,7 +21529,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             toast("Permesso per-attrezzo aggiornato", select.value ? `${nomeUmanoAttrezzo2(tool)}: ${select.options[select.selectedIndex].textContent}` : `${nomeUmanoAttrezzo2(tool)}: torna al permesso della sessione`);
             ridisegna();
           });
-          radice.addEventListener("click", (evento) => {
+          radice2.addEventListener("click", (evento) => {
             const bottone5 = evento.target?.closest?.("[data-chiudi-porte-laterali]");
             if (!bottone5) return;
             const quali = String(bottone5.dataset.chiudiPorteLaterali || "").split(",").filter(Boolean);
@@ -21305,11 +21574,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const testo3 = formattaUsageBreve(usage);
         return testo3.includes(" · ") ? testo3.split(" · ")[0] : testo3;
       }
-      async function disegnaAlberoIn(radice) {
-        const nodi = $2("#veloAlberoNodi", radice);
+      async function disegnaAlberoIn(radice2) {
+        const nodi = $2("#veloAlberoNodi", radice2);
         if (!nodi) return;
-        const riassunto = $2("#veloAlberoRiassunto", radice);
-        const titolo2 = $2("#titoloAlbero", radice);
+        const riassunto = $2("#veloAlberoRiassunto", radice2);
+        const titolo2 = $2("#titoloAlbero", radice2);
         if (!state.realSession.id) {
           nodi.replaceChildren(textElement("p", "board-empty", "Nessuna sessione aperta: apri o avvia una sessione per vederne i rami."));
           if (riassunto) riassunto.textContent = "";
@@ -21368,7 +21637,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         } catch {
           figli = [];
         }
-        if (nodi !== $2("#veloAlberoNodi", radice)) return;
+        if (nodi !== $2("#veloAlberoNodi", radice2)) return;
         for (const figlio of figli) {
           nodi.append(nodoAlbero({
             titolo: tronca2(figlio.task || "(compito non registrato)", 52),
@@ -21382,22 +21651,22 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             }
           }));
         }
-        const nota = $2("#veloAlberoNota .talos-scope__text", radice);
+        const nota = $2("#veloAlberoNota .talos-scope__text", radice2);
         if (nota && !rami.length && !figli.length && mia?.forkDa) {
           nota.textContent = "Da questo ramo non ne è nato nessun altro, e non ci sono deleghe. La sessione madre resta intatta: aprirla non tocca ciò che hai fatto qui.";
         } else if (nota && !rami.length && !figli.length) {
           nota.textContent = "Nessun ramo e nessuna delega. Un ramo nasce da «Fork questa sessione»; le deleghe le avvia TALOS da sé quando un sotto-compito è separabile.";
         }
       }
-      function montaSceltaModelloIn(radice) {
-        const mount = $2("#veloModelloMontaggio", radice) || $2("#modelPickerMount", radice);
+      function montaSceltaModelloIn(radice2) {
+        const mount = $2("#veloModelloMontaggio", radice2) || $2("#modelPickerMount", radice2);
         if (!mount) return;
         const picker = creaModelPicker({
           valoreIniziale: state.model || "",
           apriSubito: true,
           sincronizzaSessione: true,
           alSelezionato: () => {
-            if (radice?.id === "veloModello") chiudiVeloMockup("veloModello");
+            if (radice2?.id === "veloModello") chiudiVeloMockup("veloModello");
             else closeEmbeddedDialog(sheetDialog);
           }
         });
@@ -22999,9 +23268,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (t2.ui) return t2.ui;
         const pane = $2("#schermoTerminale .talos-terminal");
         if (!pane) return null;
-        const radice = ROOT();
+        const radice2 = ROOT();
         t2.ui = creaSchedeTerminale(pane, {
-          root: radice.body || radice,
+          root: radice2.body || radice2,
           azioni: {
             seleziona: (id) => attivaSchedaTerminale(id),
             nuova: () => {
@@ -24261,8 +24530,8 @@ ${testo3}` : testo3;
         await renderizzaAlberoReale();
       }
       function fuoriSessioneDisponibile() {
-        const radice = state.realSession.cartellaAssoluta;
-        return typeof radice === "string" && radice.length > 0;
+        const radice2 = state.realSession.cartellaAssoluta;
+        return typeof radice2 === "string" && radice2.length > 0;
       }
       async function caricaFuoriSessione(percorso) {
         const suffix = percorso ? `?path=${encodeURIComponent(percorso)}` : "";
@@ -25164,19 +25433,21 @@ ${testo3}` : testo3;
         function chiudiMenu() {
           menu.remove();
           document.removeEventListener("click", onDocumentClick);
-          document.removeEventListener("keydown", onKeydown);
+          document.removeEventListener("keydown", onKeydown, true);
         }
         function onDocumentClick(event) {
           if (!menu.contains(event.target)) chiudiMenu();
         }
         function onKeydown(event) {
           if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
           chiudiMenu();
           (posizionamento.ancoraEl ?? document.querySelector(".ft-tree .ft-row.ft-selected"))?.focus();
         }
         window.setTimeout(() => {
           document.addEventListener("click", onDocumentClick);
-          document.addEventListener("keydown", onKeydown);
+          document.addEventListener("keydown", onKeydown, true);
         }, 0);
       }
       async function invalidaLivelloGenitoreAlbero(percorsoCompleto) {
@@ -25256,12 +25527,12 @@ ${testo3}` : testo3;
         avviaSessionePendente({ cartellaLibera: percorsoAssoluto, nomeCartella: nome, modello: state.model, effort: state.effort, permessi: "Full access", permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
       }
       function impostaComeRadice(percorsoRelativo, nome) {
-        const radice = state.realSession.cartellaAssoluta;
-        if (!radice) {
+        const radice2 = state.realSession.cartellaAssoluta;
+        if (!radice2) {
           toast("Radice sconosciuta", "Questa sessione non ha ancora dichiarato il proprio percorso — riprova appena parte il primo giro.");
           return;
         }
-        avviaComeNuovaRadice(`${radice.replace(/[/\\]+$/, "")}/${percorsoRelativo}`, nome);
+        avviaComeNuovaRadice(`${radice2.replace(/[/\\]+$/, "")}/${percorsoRelativo}`, nome);
       }
       function usaCartellaFuoriSessioneComeRadice(percorsoAssoluto, nome) {
         avviaComeNuovaRadice(percorsoAssoluto, nome);
@@ -25310,9 +25581,9 @@ ${testo3}` : testo3;
         if (!contenitore) return;
         const demoBadge = $2(".demo-surface-badge", $2('[data-inspector-section="files"]'));
         if (demoBadge) demoBadge.hidden = true;
-        const radice = document.createElement("div");
-        radice.className = "tree-root talos-file-row";
-        radice.append(iconaSvgAlbero("i-files"), textElement("strong", "", nomeRadiceAlberoReale()));
+        const radice2 = document.createElement("div");
+        radice2.className = "tree-root talos-file-row";
+        radice2.append(iconaSvgAlbero("i-files"), textElement("strong", "", nomeRadiceAlberoReale()));
         if (!alberoInAnteprima()) {
           const azioniRadice = document.createElement("button");
           azioniRadice.type = "button";
@@ -25323,22 +25594,22 @@ ${testo3}` : testo3;
             e.stopPropagation();
             apriMenuAzioniFile("", nomeRadiceAlberoReale(), { ancoraEl: azioniRadice }, true, true);
           });
-          radice.appendChild(azioniRadice);
+          radice2.appendChild(azioniRadice);
         }
-        if (!alberoInAnteprima()) radice.addEventListener("contextmenu", (e) => {
+        if (!alberoInAnteprima()) radice2.addEventListener("contextmenu", (e) => {
           e.preventDefault();
           apriMenuAzioniFile("", nomeRadiceAlberoReale(), { x: e.clientX, y: e.clientY }, true, true);
         });
-        if (!alberoInAnteprima()) radice.addEventListener("dragover", (e) => {
+        if (!alberoInAnteprima()) radice2.addEventListener("dragover", (e) => {
           if (!e.dataTransfer.types.includes("text/x-talos-file-path")) return;
           e.preventDefault();
           e.dataTransfer.dropEffect = "move";
-          radice.classList.add("ft-row-drag-over");
+          radice2.classList.add("ft-row-drag-over");
         });
-        if (!alberoInAnteprima()) radice.addEventListener("dragleave", () => radice.classList.remove("ft-row-drag-over"));
-        if (!alberoInAnteprima()) radice.addEventListener("drop", async (e) => {
+        if (!alberoInAnteprima()) radice2.addEventListener("dragleave", () => radice2.classList.remove("ft-row-drag-over"));
+        if (!alberoInAnteprima()) radice2.addEventListener("drop", async (e) => {
           e.preventDefault();
-          radice.classList.remove("ft-row-drag-over");
+          radice2.classList.remove("ft-row-drag-over");
           const percorsoSorgente = e.dataTransfer.getData("text/x-talos-file-path");
           if (!percorsoSorgente) return;
           try {
@@ -25401,10 +25672,10 @@ ${testo3}` : testo3;
           vaultLabel.append(iconaSvgAlbero("i-shield"), textElement("span", "", "Qui il modello può scrivere"));
           const vault = document.createElement("div");
           vault.className = "ft-session-boundary";
-          vault.append(vaultLabel, radice, ul);
+          vault.append(vaultLabel, radice2, ul);
           contenitore.replaceChildren(costruisciZonaFuoriSessione(), vault);
         } else {
-          contenitore.replaceChildren(radice, ul);
+          contenitore.replaceChildren(radice2, ul);
         }
         let voci;
         try {
@@ -26826,9 +27097,9 @@ ${testo3}` : testo3;
       }
       const contatoriLuoghi = { sessione: void 0, quando: 0 };
       async function aggiornaContatoriLuoghi(numeroSessioni) {
-        const radice = $2("#sessionsPanel");
-        if (!radice) return;
-        aggiornaConteggiNav(radice, { board: numeroSessioni });
+        const radice2 = $2("#sessionsPanel");
+        if (!radice2) return;
+        aggiornaConteggiNav(radice2, { board: numeroSessioni });
         const conta = async (percorso, campo2) => {
           try {
             const dati = await apiGet(percorso);
@@ -26843,9 +27114,9 @@ ${testo3}` : testo3;
         contatoriLuoghi.sessione = id;
         contatoriLuoghi.quando = Date.now();
         const [capability, automazioni, progetti] = await Promise.all([conta("/api/v1/tools", "attrezzi"), conta("/api/v1/automations", "items"), conta("/api/v1/projects", "items")]);
-        aggiornaConteggiNav(radice, { capability, automazioni, progetti });
+        aggiornaConteggiNav(radice2, { capability, automazioni, progetti });
         if (!id) {
-          aggiornaConteggiNav(radice, { libreria: null, memoria: null, attivita: null, note: null, ricerca: null, officina: null });
+          aggiornaConteggiNav(radice2, { libreria: null, memoria: null, attivita: null, note: null, ricerca: null, officina: null });
           return;
         }
         const liste = [["libreria", "library", "voci"], ["memoria", "memory", "memorie"], ["attivita", "tasks", "attivita"], ["note", "notes", "note"], ["ricerca", "research", "ricerche"], ["officina", "tool-forge", "strumenti"]];
@@ -26855,7 +27126,7 @@ ${testo3}` : testo3;
         liste.forEach(([chiave], i) => {
           conteggi[chiave] = valori[i];
         });
-        aggiornaConteggiNav(radice, conteggi);
+        aggiornaConteggiNav(radice2, conteggi);
       }
       function contenitoreSessioniReali() {
         let contenitore = $2("#realSessionsBlock");
@@ -27834,11 +28105,11 @@ ${testo3}` : testo3;
         return {
           cartelle: (path) => apiGet(`/api/v1/workspace-browser${path ? `?path=${encodeURIComponent(path)}` : ""}`),
           luoghi: async () => {
-            const [radice, frequenti] = await Promise.all([apiGet("/api/v1/workspace-browser"), apiGet("/api/v1/frequent-dirs").catch(() => ({ items: [] }))]);
-            const rec = Array.isArray(radice?.recommended) ? radice.recommended : [];
+            const [radice2, frequenti] = await Promise.all([apiGet("/api/v1/workspace-browser"), apiGet("/api/v1/frequent-dirs").catch(() => ({ items: [] }))]);
+            const rec = Array.isArray(radice2?.recommended) ? radice2.recommended : [];
             const voce = (x) => ({ nome: x.label || x.etichetta || ultimoSegmento(x.path || x.percorso), path: normalizzaCartella(x.path || x.percorso), projectId: x.projectId ?? null });
             return {
-              radice: radice?.root || null,
+              radice: radice2?.root || null,
               progetti: rec.filter((r) => r.kind === "project").map(voce),
               gruppi: {
                 recenti: (frequenti?.items || []).map(voce),
@@ -28168,11 +28439,11 @@ ${testo3}` : testo3;
       function renderizzaRadiceWorkspacePendente(nomeCartella2) {
         const contenitore = $2("#inspector-files .file-tree");
         if (!contenitore) return;
-        const radice = document.createElement("div");
-        radice.className = "tree-root talos-file-row";
-        radice.append(iconaSvgAlbero("i-files"), textElement("strong", "", nomeCartella2));
+        const radice2 = document.createElement("div");
+        radice2.className = "tree-root talos-file-row";
+        radice2.append(iconaSvgAlbero("i-files"), textElement("strong", "", nomeCartella2));
         contenitore.replaceChildren(
-          radice,
+          radice2,
           textElement("p", "board-empty", "I file appariranno appena inizi la sessione.")
         );
         const demoBadge = $2(".demo-surface-badge", $2('[data-inspector-section="files"]'));
@@ -31728,6 +31999,125 @@ var init_desktop_background = __esm({
   }
 });
 
+// src/components/animazioni-mockup.js
+var animazioni_mockup_exports = {};
+__export(animazioni_mockup_exports, {
+  montaAnimazioniMockup: () => montaAnimazioniMockup
+});
+function perId2(doc, id) {
+  if (!id) return null;
+  try {
+    return doc.getElementById(id);
+  } catch {
+    return null;
+  }
+}
+function giaInMovimento(el25) {
+  try {
+    return typeof el25.getAnimations === "function" && el25.getAnimations().length > 0;
+  } catch {
+    return false;
+  }
+}
+function visibile(el25) {
+  return Boolean(el25) && !el25.hidden && el25.offsetParent !== null;
+}
+function montaAnimazioniMockup(doc = globalThis.document) {
+  if (!doc?.addEventListener) return () => {
+  };
+  if (doc.documentElement?.dataset?.tamMontato === "si") return () => {
+  };
+  if (doc.documentElement?.dataset) doc.documentElement.dataset.tamMontato = "si";
+  let grigliaPrima = null;
+  const suCattura = (e) => {
+    const b = e.target?.closest?.('[data-azione="barra"]');
+    grigliaPrima = null;
+    if (!b) return;
+    const shell = doc.querySelector(".talos-shell");
+    if (!shell) return;
+    try {
+      grigliaPrima = { shell, valore: (doc.defaultView || globalThis).getComputedStyle(shell).gridTemplateColumns };
+    } catch {
+      grigliaPrima = null;
+    }
+  };
+  const suBolla = (e) => {
+    const b = e.target?.closest?.('button, [role="tab"]');
+    if (b && !b.disabled && !b.classList.contains("talos-resizer") && !b.classList.contains("td-divider") && !b.closest(".talos-resizer")) {
+      motion(b, [{ scale: "1" }, { scale: ".985" }, { scale: "1" }], { token: "control", leva: RISCONTRI, document: doc });
+    }
+    if (grigliaPrima && b?.closest?.('[data-azione="barra"]')) {
+      const { shell, valore } = grigliaPrima;
+      grigliaPrima = null;
+      const anima = () => {
+        let dopo = "";
+        try {
+          dopo = (doc.defaultView || globalThis).getComputedStyle(shell).gridTemplateColumns;
+        } catch {
+          return;
+        }
+        if (!dopo || dopo === valore) return;
+        motion(shell, [{ gridTemplateColumns: valore }, { gridTemplateColumns: dopo }], {
+          token: "disclosure",
+          fattore: 1.2,
+          leva: NAV,
+          document: doc
+        });
+      };
+      anima();
+    }
+    if (!b) return;
+    const testata = b.closest(".td-nav-head[data-gruppo], .td-nav-head[aria-controls]");
+    if (testata) {
+      const corpo = perId2(doc, testata.getAttribute("aria-controls"));
+      if (visibile(corpo)) {
+        motion(corpo, [{ opacity: 0.3, transform: "translateY(-4px)" }, { opacity: 1, transform: "none" }], { leva: NAV, document: doc });
+      }
+      return;
+    }
+    const scheda = b.closest("[data-settings-tab]");
+    if (scheda) {
+      const chiave = scheda.dataset.settingsTab;
+      const pannello = doc.querySelector(`[data-settings-panel="${CSS.escape(String(chiave))}"]`);
+      if (visibile(pannello) && !giaInMovimento(pannello)) {
+        motion(pannello, [{ opacity: 0.3, transform: "translateX(5px)" }, { opacity: 1, transform: "none" }], { token: "tab-change", leva: NAV, document: doc });
+      }
+      return;
+    }
+    const tab = b.closest('[role="tab"][aria-controls]');
+    if (tab) {
+      const pannello = perId2(doc, tab.getAttribute("aria-controls"));
+      if (visibile(pannello) && !giaInMovimento(pannello)) {
+        motion(pannello, [{ opacity: 0.4, transform: "translateY(4px)" }, { opacity: 1, transform: "none" }], { token: "tab-change", leva: NAV, document: doc });
+      }
+      return;
+    }
+    const apribile = b.closest("[aria-expanded][aria-controls]");
+    if (apribile && apribile.getAttribute("aria-expanded") === "true") {
+      const pannello = perId2(doc, apribile.getAttribute("aria-controls"));
+      if (visibile(pannello) && !giaInMovimento(pannello)) {
+        motion(pannello, [{ opacity: 0, transform: "translateY(-3px)" }, { opacity: 1, transform: "none" }], { token: "disclosure", leva: SUPERFICI, document: doc });
+      }
+    }
+  };
+  doc.addEventListener("click", suCattura, true);
+  doc.addEventListener("click", suBolla, false);
+  return () => {
+    doc.removeEventListener("click", suCattura, true);
+    doc.removeEventListener("click", suBolla, false);
+    if (doc.documentElement?.dataset) delete doc.documentElement.dataset.tamMontato;
+  };
+}
+var NAV, SUPERFICI, RISCONTRI;
+var init_animazioni_mockup = __esm({
+  "src/components/animazioni-mockup.js"() {
+    init_motion_mockup();
+    NAV = "motion-navigation-off";
+    SUPERFICI = "motion-surfaces-off";
+    RISCONTRI = "motion-feedback-off";
+  }
+});
+
 // src/legacy/frammenti.html
 var frammenti_default = `<!-- Pannello impostazioni + Model Lab del monolite: tutti gli id che app.js cerca. -->
 <section class="legacy-pane">
@@ -32036,8 +32426,8 @@ function battezza(el25, { id, classi = [], dati = {} }) {
   return el25;
 }
 function montaPonteLegacy(documentObj = document) {
-  const radice = documentObj.querySelector(".talos-shell");
-  if (!radice) throw new Error("ponte: la pagina non ha il guscio del mockup (.talos-shell)");
+  const radice2 = documentObj.querySelector(".talos-shell");
+  if (!radice2) throw new Error("ponte: la pagina non ha il guscio del mockup (.talos-shell)");
   if (documentObj.getElementById("talos-legacy")) return;
   const [frammentiNascosti, frammentiVisibili] = frammenti_default.split("<!-- STRATO VISIBILE -->");
   const legacy = documentObj.createElement("div");
@@ -32049,10 +32439,10 @@ function montaPonteLegacy(documentObj = document) {
   strato.id = "talos-legacy-strato";
   strato.innerHTML = frammentiVisibili || "";
   documentObj.body.append(strato);
-  battezza(radice, { id: "app", classi: ["app-shell"] });
+  battezza(radice2, { id: "app", classi: ["app-shell"] });
   documentObj.documentElement.setAttribute("data-vista", "sessione");
   documentObj.documentElement.setAttribute("data-schermo", "chat");
-  const sidebar = uno(radice, ".talos-sidebar");
+  const sidebar = uno(radice2, ".talos-sidebar");
   battezza(sidebar, { id: "sessionsPanel", classi: ["sessions-panel"] });
   battezza(uno(sidebar, ".talos-brand .talos-icon-button"), { id: "notificationsBtn" });
   battezza(uno(sidebar, '.talos-brand [data-azione="barra"]'), { id: "sessionsCollapseBtn" });
@@ -32067,14 +32457,14 @@ function montaPonteLegacy(documentObj = document) {
   fissate.hidden = true;
   battezza(uno(sidebar, ".talos-resizer--sidebar"), { classi: ["panel-resize-handle"], dati: { resize: "sessions" } });
   for (const [vista, id] of Object.entries(VISTA_PER_SCHERMATA)) {
-    const schermata = uno(radice, `#${id}`);
+    const schermata = uno(radice2, `#${id}`);
     battezza(schermata, { classi: ["view-pane"], dati: { view: vista } });
     if (!schermata.hidden) schermata.classList.add("active");
   }
-  for (const tab of radice.querySelectorAll('[data-vistetab] [role="tab"][data-vaia]')) {
+  for (const tab of radice2.querySelectorAll('[data-vistetab] [role="tab"][data-vaia]')) {
     battezza(tab, { classi: ["mode-tab"], dati: { mode: VISTA_PER_VAIA[tab.dataset.vaia] === "diff" ? "diff" : VISTA_PER_VAIA[tab.dataset.vaia] } });
   }
-  const chat = uno(radice, "#schermoChat");
+  const chat = uno(radice2, "#schermoChat");
   battezza(chat, { classi: ["chat-view"] });
   battezza(uno(chat, ".talos-conversation"), { classi: ["conversation"] });
   battezza(uno(chat, ".talos-conversation__column"), { id: "conversation" });
@@ -32108,12 +32498,12 @@ function montaPonteLegacy(documentObj = document) {
   battezza(uno(chat, '.talos-topbar__actions .talos-icon-button[title="Riprendi"]'), { id: "resumeSessionBtn" });
   battezza(uno(chat, ".talos-topbar"), { classi: ["topbar"] });
   battezza(uno(chat, ".talos-topbar__actions"), { classi: ["topbar-right"] });
-  const terminale = uno(radice, "#schermoTerminale");
+  const terminale = uno(radice2, "#schermoTerminale");
   const corpoTerminale = uno(terminale, ".talos-terminal__body");
   battezza(corpoTerminale, { id: "realTerminalMount", classi: ["terminal-window"] });
   if (corpoTerminale) corpoTerminale.replaceChildren();
   battezza(uno(terminale, ".talos-terminal__foot"), { id: "terminalStatusChip" });
-  const inspector = uno(radice, ".talos-inspector");
+  const inspector = uno(radice2, ".talos-inspector");
   battezza(inspector, { id: "inspectorPanel", classi: ["inspector-panel"] });
   battezza(uno(inspector, ".talos-resizer--inspector"), { classi: ["panel-resize-handle"], dati: { resize: "inspector" } });
   battezza(uno(inspector, "#railTabs"), { classi: ["inspector-tabs"] });
@@ -32169,3 +32559,5 @@ montaPonteLegacy(document);
 await Promise.resolve().then(() => (init_app(), app_exports));
 var { initTalosDesktopBackground: initTalosDesktopBackground2 } = await Promise.resolve().then(() => (init_desktop_background(), desktop_background_exports));
 initTalosDesktopBackground2();
+var { montaAnimazioniMockup: montaAnimazioniMockup2 } = await Promise.resolve().then(() => (init_animazioni_mockup(), animazioni_mockup_exports));
+montaAnimazioniMockup2(document);
