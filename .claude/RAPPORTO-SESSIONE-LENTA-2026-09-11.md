@@ -309,7 +309,15 @@ non solo alla fine), poi a pagina ferma e in fondo alla conversazione. Preset `c
 la stessa trappola già in memoria ([[non-consegnare-il-lavoro-a-meta-di-un-altro]]): un
 profilo pulito **non è** lo stato dell'owner. La sonda ora la chiude con «Salta per ora».
 
-### 5.3 ⛔⛔ TROVATO GUARDANDO LE FOTO — un secondo difetto, NON MIO e NON corretto
+### 5.3 ⛔⛔ TROVATO GUARDANDO LE FOTO — un difetto GIÀ NOTO, NON MIO e NON corretto
+
+⛔ **Attribuzione, prima dei numeri: non è una mia scoperta.** È già in memoria, stessa data —
+[[un-confronto-css-per-stringa-sovrastima-le-mancanze]], 11/09: «**una regola su "tutti i
+figli" del pacchetto ha svuotato la chat delle sessioni lunghe**: si prova su un figlio con
+`position` suo e **su una sessione LUNGA**». Quello che segue è una **conferma indipendente con
+i numeri**, arrivata per un'altra strada (le foto di questo giro), più la catena delle altezze
+che quella nota non riporta. La causa è il pacchetto refactor UI dell'owner, già committato
+(coerente col fatto che `public/` sia identico a HEAD).
 
 Nelle foto **la colonna della chat appare vuota**, anche a pagina ferma, anche in fondo. Non
 lo era: il DOM ha 19.469 nodi e 916.907 caratteri. Misurato risalendo la catena dei genitori
@@ -331,13 +339,19 @@ auto-alimenta: `aggiornaSpazioCodaConversazione` mette `padding-bottom: clientHe
 - ⛔ **Non è la mia cura**: succede identico sulla sessione **corta** di riferimento
   (`da4fe957`, 669 righe, primi turni a `top: -8861`), e l'impronta del DOM prima/dopo la cura
   è la stessa (§5.1).
-- ⛔ **Non è il lavoro a metà dell'altro agente**: il server serve `harness-ui/public/`, e
-  `git diff HEAD -- harness-ui/public/` è **vuoto** — il bundle servito è esattamente HEAD.
+- ⛔ **Non è il lavoro NON COMMITTATO dell'altro agente**: il server serve `harness-ui/public/`,
+  e `git diff HEAD -- harness-ui/public/` è **vuoto** — il bundle servito è esattamente HEAD.
   (`frontend/src/legacy/app.js`, `index.template.html`, `avvio.js`, `styles/index.css` sono
-  modificati in questo albero da lui, ma quelle modifiche non sono nel bundle servito.)
-- ⛔ **Non l'ho corretto**: è layout, cioè `app.js` / CSS — non la mia lane oggi.
+  modificati in questo albero da lui, ma quelle modifiche non sono nel bundle servito.) ⇒ la
+  regola CSS incriminata è **già committata**, il che quadra con l'attribuzione al pacchetto.
+- ⛔ **Non l'ho corretto**: è layout, cioè CSS / `app.js` — non la mia lane oggi, ed è già
+  in carico a chi ha trovato la nota di memoria.
 - ⛔ **Non l'ho verificato sul 4174 dell'owner** (non lo tocco): se lì la chat si vede, il
   4174 gira da un albero diverso da questo.
+- ⭐ Quello che questo giro AGGIUNGE alla nota già in memoria: la catena delle altezze qui
+  sopra (dove esattamente collassa: `#schermoChat` 806 → `.talos-conversation` 42, con
+  `flex: 1 1 auto; min-height: 0` che *sembrano* giusti — `public/styles.css:1634`), e il fatto
+  che il padding in coda si **auto-alimenta** (`clientHeight/2` = 21 px su 42).
 
 ⭐ **Conseguenza sulle mie misure: sono CONSERVATIVE.** Con la colonna collassata a 42 px il
 browser non paga il layout e il paint di quasi nessuno dei 19.469 nodi. Su una chat di altezza
@@ -456,18 +470,22 @@ proprio `JSON.parse` quando lo riceve).
 - **I due diff per `app.js`**: scritti e motivati coi numeri, **non applicati né provati** —
   quel file è in mano a un altro agente fino al suo rientro.
 - **Le viewport diverse da 1440×900** (laptop 1024×800, e le altre della matrice desktop).
-- **Il difetto di §5.3 (colonna chat alta 42 px)**: trovato, misurato e attribuito — ma non
-  corretto, non riprodotto sul 4174, e non so da quando c'è. Finché resta, la misura «prima»
-  di §1.4 è un limite INFERIORE al costo vero.
+- **Il difetto di §5.3 (colonna chat alta 42 px)**: misurato e attribuito (regola CSS «su tutti
+  i figli» del pacchetto refactor, già nota in memoria) — ma **non corretto** e **non riprodotto
+  sul 4174**. Finché resta, la misura «prima» di §1.4 è un limite INFERIORE al costo vero:
+  quale sia il costo su un layout sano non l'ho misurato.
+- **Quale sia la regola CSS esatta**: non l'ho isolata. Ho la catena delle altezze, non la
+  riga colpevole — e non l'ho cercata oltre, perché è in carico ad altri.
 
 ---
 
 ## 8. Riepilogo
 
 **Cosa devi fare tu**
-- **§5.3 — la colonna della chat è alta 42 px in questo albero.** Dimmi se sul tuo 4174 la
-  conversazione si vede: se sì, i due alberi divergono; se no, è un difetto aperto e grosso,
-  e va a chi ha `app.js`/CSS.
+- **§5.3 — la colonna della chat è alta 42 px in questo albero**, confermando con i numeri la
+  nota già in memoria sul pacchetto refactor («una regola su tutti i figli ha svuotato la chat
+  delle sessioni lunghe»). Dimmi se sul tuo 4174 la conversazione si vede: se sì, i due alberi
+  divergono; se no, è aperto e grosso, e la catena delle altezze è in §5.3 per chi lo prende.
 - Dire se i due diff di `app.js` (§6) li passo all'agente che ha quel file, o li tengo in coda.
 - Dire se apro lo stesso giro sulle altre cinque sessioni sopra 18k righe o basta questa.
 - Il push: non ho fatto nessun `git add`/`commit`/`push`.

@@ -1038,3 +1038,26 @@ con tetto (oggi 0) + mappa delle cartelle completa (~1.000-1.700) — e contesto
 si riscrive. Risparmio stimato **15.500-19.300 token a messaggio**. **Regola del banco da
 riscrivere**: metrica `pass^3`, colonne `tokenPrimoGiro`/`giriUsati`, corpus `storia` spaccato in
 9 ciechi / 26 instabili, premessa «0 su 35» corretta.
+
+### BC-21 — CRITICO · la ricerca approfondita parte in sola lettura e la sezione non la fa consultare (11/09/2026, sera)
+**Segnalato dall'owner con due foto del 4174.** Sessione «ricerca» (20:56, `glm-4.7-flash`, 11 giri,
+pill **«Solo lettura»**): 9 ricerche web e 14 navigazioni riuscite, poi «Attività non riuscita» e il
+modello che scrive «la sessione è in sola lettura, quindi non posso creare documenti». ⇒ la ricerca
+è partita con un permesso che le VIETA di consegnare il rapporto. Nella sezione «Ricerca
+approfondita» la card dice **«Conclusa»** (falso: nessun rapporto) e in fondo «la consultazione del
+rapporto e delle fonti non è ancora disponibile qui» — cioè la sezione è un elenco senza dentro.
+**Owner:** «il mobile fa già una cosa molto interessante, voglio che la migliori e la renda più
+robusta; voglio un disegno tecnico comparato con i competitor, realmente valido e unico».
+**Stato:** disegno delegato (Opus 5 high, solo documento): riproduzione sui dati veri, causa con
+file:riga, tabella mobile (23 file, 6.254 righe in `mobile/src/lib/research/`) vs Hermes/Claude
+Code/Codex/DeepSeek, fonti web ago-set 2026, architettura, lotti. Documento atteso in
+`.claude/DISEGNO-RICERCA-APPROFONDITA-2026-09-11.md`. ⛔ Nessun codice finché l'owner non approva.
+
+### BC-22 — il cancello `npm run test:componenti` è ROSSO a HEAD (11/09/2026, sera)
+Cinque righe `COMP …: dai dati alla riga del mockup — struttura, parole, pixel` (SettingRow,
+CheckCard, ExtensionList_skills/mcp/plugins) falliscono a ~1 minuto l'una (timeout). L'agente della
+barra l'ha provato con A/B nel worktree rimettendo i quattro file a HEAD: **rosso già prima** del
+porting, quindi non introdotto dai lotti di stasera; rilanciato sulla lane dopo il merge: stesso
+esito, e la corsa non finisce entro 280 s. Sospetto (non provato): il cancello apre le pagine del
+laboratorio, dove `#talosAvvio` senza il `position:fixed` del template è un blocco da 8.697 px che
+copre tutto (trovato dal lotto sezioni). Da capire con un log intero, non a sensazione.
