@@ -38,12 +38,13 @@ import { titoloNota, quandoNota, sommarioNote } from './note.js';
 import { genereMemoria, testiMemoria } from './memoria.js';
 import { statoAttivita, prioritaAttivita, testiAttivita, riepilogoAttivita } from './attivita.js';
 import { tipoVoceLibreria, origineVoceLibreria, testiVoceLibreria, azioniLibreria, indirizzoFileLibreria, creaLibraryRow } from './libreria.js';
+import { magazzinoFileLibreria, montaAnteprimaFile, lettoreFileLibreria } from './libreria-anteprima.js';
 import { riepilogoRicerche } from './ricerca.js';
 /* 11/09 lotto L7 — la Ricerca approfondita ha un dentro: parole degli stati, bilancio, cinque
    viste, menu e esportazioni vivono in un file loro, come `libreria.js` per la Libreria. */
 import {
   frasiVoce, frasiBilancio, bilancioDaRecord, magazzinoRicerche, articoloData,
-  montaDettaglioRicerca, vociMenuRicerca, collegaTastoDestro, scaricaTesto,
+  montaDettaglioRicerca, vociMenuRicerca, collegaTastoDestro, scaricaTesto, haRapportoLeggibile,
 } from './ricerca-dettaglio.js';
 import { frasiProgetto, sommarioProgetti, ultimeSessioni } from './progetti.js';
 import { plurale } from './plurale.js';
@@ -323,6 +324,17 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
    *   Il punto d'innesto è l'iniezione `azioni` che `creaLibraryRow` già accetta: non una riga
    *   nuova dentro la riga della Libreria, che non è mia da riscrivere.
    */
+  /*
+   * ⛔⛔ 11/09/2026 — IL DETTAGLIO NON MOSTRAVA IL FILE. Foto dell'owner sul 4174: nome, tre
+   *   metadati, «Azioni sul file» e un riquadro. Del file, niente. Owner: «il file non viene
+   *   visualizzato come nel mockup, sia renderizzato che in versione testuale».
+   *   Il mockup lo fa in due punti (riga 6078, il `<pre>` del dettaglio; riga 6309 `fileCover`, la
+   *   resa per tipo): qui i due modi stanno su un interruttore, e il come sta in
+   *   `libreria-anteprima.js`. Qui resta la sola COLLA fra i dati e l'impianto, come per le altre.
+   */
+  const magazzinoFile = magazzinoFileLibreria(schermo);
+  const ridisegna = () => aggiornaPaginaLibreria(schermo, voci, opzioni);
+  const leggiFile = typeof opzioni.leggiFile === 'function' ? opzioni.leggiFile : lettoreFileLibreria(sessionId);
   const servizio = servizioVero && {
     ...servizioVero,
     rinomina: async (id, nome) => {
@@ -338,6 +350,15 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       return esito;
     },
   };
+  /*
+   * ⛔ «Apri» è la rotta POST `/library/:voceId/apri` del 10/09, la stessa del menu «⋯»: il
+   *   pannello del contenuto non ne inventa una seconda. E se il server dice di no, l'esito si
+   *   VEDE — un bottone che sembra aver funzionato è peggio di uno che dice perché non ha.
+   */
+  async function apriConSistema(v) {
+    const esito = await servizioVero.apri(v?.id);
+    if (!esito?.ok) avvisa('Non aperto', esito?.motivo || 'Il server non ha risposto.', { tono: 'errore' });
+  }
   return montaSezione(schermo, {
     chiave: 'libreria',
     nome: 'Libreria',
@@ -376,8 +397,23 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       const pezzi = [
         meta(doc, [etichetta(tipo.testo), etichetta(origineVoceLibreria(v?.origine), v?.origine === 'generated' ? 'accent' : ''), nodo(doc, 'span', '', t.aggiornata ? `Aggiornato il ${t.aggiornata}` : 'Data non registrata')]),
         nodo(doc, 'h2', '', t.nome),
-        nodo(doc, 'h3', '', 'Azioni sul file'),
       ];
+      /*
+       * ⛔ IL CONTENUTO STA SOPRA LE AZIONI. Una persona apre un file per LEGGERLO: le cinque cose
+       *   che gli si possono fare vengono dopo aver visto che cos'è. (Nel mockup le azioni stanno
+       *   addirittura nel piede del pannello, sotto tutto — riga 6083.)
+       */
+      pezzi.push(...montaAnteprimaFile(v, {
+        doc,
+        magazzino: magazzinoFile,
+        ridisegna,
+        opzioni: {
+          leggiFile,
+          rendiMarkdown: opzioni.rendiMarkdown,
+          onApri: servizioVero?.apri ? apriConSistema : undefined,
+        },
+      }));
+      pezzi.push(nodo(doc, 'h3', '', 'Azioni sul file'));
       /*
        * ⛔ QUI NON SI RIFA' NIENTE. La riga della Libreria del 10/09 ha cinque azioni dietro un
        *   menu «…» (più il tasto destro), la rinomina in linea, la conferma d'eliminazione con la
@@ -472,9 +508,11 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     const voci = vociMenuRicerca(voce, {
       lettura: letturaDi(voce),
       onApriSessione: opzioni.onApriSessione,
-      onCopia: (prosa) => {
+      onCopia: (prosa, quale) => {
+        /* ⛔ Anche il messaggio d'esito diceva «rapporto» su un file che rapporto non è: la parola
+           si decide in un posto solo, e questo è uno dei quattro posti dov'era sbagliata. */
         Promise.resolve(copia(prosa)).then(
-          () => avvisa('Copiato', 'Il testo del rapporto è negli appunti.'),
+          () => avvisa('Copiato', haRapportoLeggibile(quale ?? voce) ? 'Il testo del rapporto è negli appunti.' : 'Il testo del file depositato è negli appunti.'),
           () => avvisa('Non copiato', 'Gli appunti non sono disponibili in questa finestra.', { tono: 'errore' }),
         );
       },
@@ -522,14 +560,18 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
      * ⛔ QUATTRO filtri e non otto. Gli stati sono otto, ma un filtro per ognuno darebbe una riga
      *   di bottoni che nessuno legge, e quattro di essi direbbero sempre zero. Le domande che una
      *   persona si fa davvero sono: cosa sta lavorando, cosa ha prodotto un rapporto, cosa no.
-     *   ⛔ «Col rapporto» guarda il RAPPORTO, non lo stato: è la stessa distinzione che il cancello
-     *   di consegna fa lato server, e l'unica che non può mentire.
+     *   ⛔⛔ CORRETTO L'11/09 SULLA FOTO DEL 4174. Qui c'era scritto «"Col rapporto" guarda il
+     *   RAPPORTO, non lo stato», e guardava `reportLibraryId`: sulla ricerca `d2a453a8` i filtri
+     *   dicevano «Col rapporto 1 · Senza rapporto 0» mentre il timbro della scheda diceva «Senza
+     *   rapporto». La distinzione del cancello di consegna NON è «c'è un file in Libreria»: è
+     *   proprio lo STATO — se il cancello avesse accettato quel file la ricerca sarebbe `done`.
+     *   La regola sta in `haRapportoLeggibile`, una funzione sola per filtro, piede e pannello.
      */
     filtri: [
       { id: 'tutte', etichetta: 'Tutte' },
       { id: 'vive', etichetta: 'In corso', quando: (r) => r?.stato === 'running' || r?.stato === 'paused' },
-      { id: 'con-rapporto', etichetta: 'Col rapporto', quando: (r) => Boolean(r?.reportLibraryId) },
-      { id: 'senza-rapporto', etichetta: 'Senza rapporto', quando: (r) => !r?.reportLibraryId && r?.stato !== 'running' && r?.stato !== 'paused' },
+      { id: 'con-rapporto', etichetta: 'Col rapporto', quando: (r) => haRapportoLeggibile(r) },
+      { id: 'senza-rapporto', etichetta: 'Senza rapporto', quando: (r) => !haRapportoLeggibile(r) && r?.stato !== 'running' && r?.stato !== 'paused' },
     ],
     idDi: (r) => r?.id,
     titoloDi: (r) => frasiVoce(r).domanda,
@@ -566,7 +608,11 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
          */
         basso: [
           nodo(doc, 'span', '', f.avviata ? `Avviata ${articoloData(r?.avviataAlle)}${dataBreve(r?.avviataAlle)}` : 'Data non registrata'),
-          nodo(doc, 'span', '', r?.stato === 'done' ? (f.haRapporto ? '' : 'Nessun rapporto') : (f.haRapporto ? 'Col rapporto' : '')),
+          /* ⛔ CORRETTO L'11/09: qui «Col rapporto» compariva su ogni ricerca NON conclusa che
+             avesse un file in Libreria — cioè contraddiceva il timbro «Senza rapporto» due
+             centimetri più in alto. Adesso a destra si scrive solo l'anomalia che il timbro non
+             dice già: una conclusa che il rapporto non ce l'ha. */
+          nodo(doc, 'span', '', r?.stato === 'done' && !f.haRapporto ? 'Nessun rapporto' : ''),
         ],
         adorno: (() => {
           /* ⛔ Un solo bottone, non cinque affiancati (owner 10/09): le azioni stanno nel menu, e

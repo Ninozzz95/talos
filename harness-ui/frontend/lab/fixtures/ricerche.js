@@ -159,6 +159,10 @@ export const RAPPORTI = new Map([
   ['lib-rapporto-pieno', documentoRapporto(RECORD_PIENO)],
   ['lib-rapporto-senza-record', RAPPORTO_SENZA_RECORD],
   ['lib-rapporto-illeggibile', '# Ricerca interrotta\n\nIl testo si ferma qui.\n\n```talos-research-report\n{"version":1,"claims":[{"text":"tronc'],
+  /* ⛔ 11/09 — LA RICERCA VERA `d2a453a8`: il file in Libreria c'è, ed è la scusa da 290 byte. Il
+     cancello di consegna l'ha respinta (stato `senza-rapporto`), quindi non è un rapporto: serve a
+     provare che il pannello NON la stampa come tale. */
+  ['lib-scusa-290', SCUSA_290],
 ]);
 
 export const RICERCHE = [
@@ -235,6 +239,30 @@ export const RICERCHE = [
     padreId: null,
     nome: 'Costo di una ricerca su corpus interno',
     ultimoMessaggio: 'Sto ancora raccogliendo: mi mancano i documenti dal sedicesimo in poi.',
+  },
+  {
+    /*
+     * ⛔⛔ LA RICERCA VERA `d2a453a8`, foto dell'owner sul 4174 dell'11/09: stato `senza-rapporto`
+     *   E un `reportLibraryId` vero, perché il file in Libreria esiste — sono i 290 byte di scusa
+     *   del modello. È il caso che faceva dire alla sezione «Col rapporto» nei filtri e nel piede
+     *   della scheda, e al pannello «Rapporto» di stampare la scusa come se fosse il rapporto.
+     *   Sta qui perché senza di lui NESSUNA fixture aveva le due cose insieme: `ric-bloccata` ha
+     *   la scusa come ultimo messaggio, ma `reportLibraryId: null`.
+     */
+    id: 'ric-scusa',
+    domanda: 'Quali capacità separano gli harness agentici desktop nel 2026?',
+    stato: 'senza-rapporto',
+    avviataAlle: '2026-09-11T18:56:46.041Z',
+    conclusaAlle: '2026-09-11T19:00:33.549Z',
+    reportLibraryId: 'lib-scusa-290',
+    motivo: 'Il documento consegnato non è un rapporto: la consegna l’ha respinto.',
+    padreId: 'sessione-madre',
+    nome: 'Harness agentici desktop 2026',
+    /* ⛔ DIVERSO dal file depositato, di proposito: sono due cose diverse — il file sta in
+       Libreria, l'ultimo messaggio è quello che la ricerca ha detto in chat. Con lo stesso testo
+       in tutti e due i posti la schermata sembrava ripetersi (visto nella foto), e la prova non
+       avrebbe mostrato che il pannello li tiene separati. */
+    ultimoMessaggio: 'Ho lasciato quello che avevo in un file: dimmi se vuoi che riprovi a scrivere il rapporto vero.',
   },
   {
     id: 'ric-senza-rapporto',

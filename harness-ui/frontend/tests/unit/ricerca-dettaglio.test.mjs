@@ -5,6 +5,7 @@ import {
   leggiDocumentoRapporto, PERCHE_SENZA_RECORD, bilancioDaRecord, frasiBilancio, verdettoInParole,
   comeOttenuta, dominioRegistrabile, proveDistinte, citazioniDaRecord, bibtexDaCitazioni,
   risDaCitazioni, nomeFileRapporto, vociMenuRicerca, montaDettaglioRicerca, magazzinoRicerche, VISTE,
+  haRapportoLeggibile,
 } from '../../src/components/ricerca-dettaglio.js';
 import { statoRicerca } from '../../src/components/ricerca.js';
 
@@ -454,4 +455,91 @@ test('L7-LETTURA-UNA-VOLTA: il rapporto si chiede una volta sola, anche se la se
   assert.equal(letture, 1, 'tre ridisegni, una sola lettura del file');
   await new Promise((fatto) => setTimeout(fatto, 0));
   assert.equal(magazzino.rapporti.get('lib-9').stato, 'pronto');
+});
+
+/* ---------------- 11/09, foto del 4174: `d2a453a8` — stato senza rapporto MA file depositato --- */
+
+/*
+ * ⛔⛔ IL CASO CHE NESSUNA FIXTURE AVEVA. `L7-SCUSA` qui sopra prova la scusa come ULTIMO
+ *   MESSAGGIO, con `reportLibraryId: null`. La ricerca vera della foto ha le due cose INSIEME:
+ *   stato `senza-rapporto` e un `reportLibraryId` vero, perché il file in Libreria esiste davvero
+ *   — sono i 290 byte di scusa. È da lì che uscivano le tre contraddizioni a schermo.
+ */
+test('L7-DEPOSITATO: con un file in Libreria ma lo stato senza rapporto, decide lo STATO', () => {
+  assert.equal(haRapportoLeggibile({ stato: 'senza-rapporto', reportLibraryId: 'lib-scusa' }), false);
+  assert.equal(haRapportoLeggibile({ stato: 'bloccata-dal-permesso', reportLibraryId: 'lib-x' }), false);
+  assert.equal(haRapportoLeggibile({ stato: 'giri-esauriti', reportLibraryId: 'lib-x' }), false);
+  assert.equal(haRapportoLeggibile({ stato: 'failed', reportLibraryId: 'lib-x' }), false);
+  assert.equal(haRapportoLeggibile({ stato: 'cancelled', reportLibraryId: 'lib-x' }), false);
+  // ⛔ verso contrario: una conclusa col file depositato SÌ, e una conclusa senza file NO
+  assert.equal(haRapportoLeggibile({ stato: 'done', reportLibraryId: 'lib-1' }), true);
+  assert.equal(haRapportoLeggibile({ stato: 'done', reportLibraryId: null }), false);
+});
+
+test('L7-DEPOSITATO: il pannello «Rapporto» dice che un rapporto non c’è e mostra la scusa come ALLEGATO', () => {
+  const doc = documentoFinto();
+  const schermo = nodoFinto('section', doc);
+  const voce = {
+    id: 'ric-scusa',
+    domanda: 'Quali capacità separano gli harness agentici desktop nel 2026?',
+    stato: 'senza-rapporto',
+    avviataAlle: '2026-09-11T18:56:46.041Z',
+    conclusaAlle: '2026-09-11T19:00:33.549Z',
+    reportLibraryId: 'lib-scusa-290',
+    motivo: 'Il documento consegnato non è un rapporto: la consegna l’ha respinto.',
+    nome: 'Harness agentici desktop 2026',
+    ultimoMessaggio: SCUSA,
+  };
+  const magazzino = magazzinoRicerche(schermo);
+  magazzino.rapporti.set('lib-scusa-290', { stato: 'pronto', testo: SCUSA, ...leggiDocumentoRapporto(SCUSA) });
+  const pezzi = montaDettaglioRicerca(voce, { doc, magazzino, ridisegna: () => {}, apriMenu: () => {}, opzioni: { leggiRapporto: async () => SCUSA } });
+
+  // 1. il file c'è, ma la vista che si apre NON è «Rapporto»: lì non c'è un rapporto da leggere
+  const schede = schedeDi(pezzi);
+  assert.equal(schede.find((b) => b.getAttribute('aria-selected') === 'true').dataset.vista, 'andata');
+  // 2. e da nessuna parte compare «Conclusa»
+  assert.ok(!testoDi(pezzi).includes('Conclusa'));
+
+  // 3. aperto il pannello «Rapporto»: dice che non c'è, e la scusa sta sotto il suo nome vero
+  const bottone = schede.find((b) => b.dataset.vista === 'rapporto');
+  const lista = pezzi.find((n) => n.getAttribute?.('role') === 'tablist');
+  lista.scatta('click', { target: { closest: () => bottone } });
+  const pannello = pannelloDi(pezzi);
+  const testo = testoDi([pannello]);
+  assert.ok(testo.includes('non ha depositato un rapporto'), 'il pannello dice che il rapporto non c’è');
+  assert.ok(testo.includes('Ciò che è stato depositato'), 'e il file ha il suo nome vero');
+  /* ⛔ La didascalia del file, non una frase qualunque che contenga «rapporto»: prima questa riga
+     passava grazie alla frase sull'ultimo messaggio, cioè per la ragione sbagliata. */
+  assert.ok(testo.includes('Il file che questa ricerca ha lasciato in Libreria. Non è il suo rapporto.'),
+    'la didascalia dice CHE COS’È il file');
+  /* ⛔ e NON ripete il motivo del server, che sta già sotto il titolo (visto nella foto) */
+  assert.equal(testo.split('la consegna l’ha respinto').length - 1, 0, 'il motivo non si ripete nel pannello');
+  // ⛔ la scusa è un ALLEGATO: sta dentro `.td-allegato`, non nella prosa del rapporto
+  const allegati = pannello.discendenti().filter((n) => n.className === 'td-allegato');
+  assert.equal(allegati.length, 1);
+  assert.ok(allegati[0].textContent.includes('sola lettura'));
+  assert.ok(!pannello.discendenti().some((n) => n.className === 'td-prosa-rapporto'), 'mai resa come prosa del rapporto');
+});
+
+test('L7-DEPOSITATO: verso contrario — una conclusa col record ha il rapporto pieno e nessun «depositato»', () => {
+  const doc = documentoFinto();
+  const schermo = nodoFinto('section', doc);
+  const voce = { id: 'r-done', domanda: 'Una domanda', stato: 'done', reportLibraryId: 'lib-pieno' };
+  const magazzino = magazzinoRicerche(schermo);
+  magazzino.rapporti.set('lib-pieno', { stato: 'pronto', testo: '', ...leggiDocumentoRapporto(documento(RECORD)) });
+  const pezzi = montaDettaglioRicerca(voce, { doc, magazzino, ridisegna: () => {}, apriMenu: () => {}, opzioni: {} });
+  const schede = schedeDi(pezzi);
+  assert.equal(schede.find((b) => b.getAttribute('aria-selected') === 'true').dataset.vista, 'rapporto');
+  const testo = testoDi([pannelloDi(pezzi)]);
+  assert.ok(!testo.includes('Ciò che è stato depositato'));
+  assert.ok(!testo.includes('non ha depositato'));
+});
+
+test('L7-DEPOSITATO: anche il MENU smette di chiamarlo rapporto', () => {
+  const lettura = { stato: 'pronto', prosa: SCUSA, testo: SCUSA, record: null };
+  const senza = vociMenuRicerca({ id: 'r', domanda: 'D', stato: 'senza-rapporto', reportLibraryId: 'lib-scusa-290' }, { lettura });
+  assert.deepEqual(senza.map((v) => v.etichetta), ['Copia il file depositato', 'Esporta il file depositato']);
+  // ⛔ verso contrario: su una conclusa le due voci tornano a chiamarsi col nome del rapporto
+  const con = vociMenuRicerca({ id: 'r', domanda: 'D', stato: 'done', reportLibraryId: 'lib-1' }, { lettura });
+  assert.deepEqual(con.map((v) => v.etichetta), ['Copia il rapporto', 'Esporta il rapporto']);
 });
