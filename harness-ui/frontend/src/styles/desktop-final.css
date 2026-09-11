@@ -41,10 +41,10 @@
   position: relative;
   z-index: 1;
 }
-/* Il testo non legge mai sopra un frame vivo. Il mobile ferma la scena quando
-   compare un thread; sul desktop manteniamo in più il fondo pieno della colonna. */
+/* 12/09 — owner: «la sezione della chat deve essere trasparente». Il fondo pieno della colonna
+   (che qui sopra si voleva «in più» del mobile) è abolito: la scena si vede dietro i messaggi. */
 #schermoChat[data-talos-canvas-motion] .talos-conversation__column {
-  background: var(--talos-background);
+  background: transparent;
 }
 #schermoChat[data-talos-canvas-motion] .talos-conversation--empty .talos-conversation__column,
 #schermoChat[data-talos-canvas-motion] .talos-empty.talos-conversation__column {

@@ -292,10 +292,18 @@ body:is(.background-motion-active, .background-motion-paused):not(.background-mo
  *    14.723 → **7.667** px di scena (−48%) contro **12.882** (−12,5%) con `22px 0`. Una sfumatura
  *    che cancella ciò che deve sfumare non è una sfumatura.
  */
+/*
+ * ⛔ 12/09, 00:0x — OWNER, sulla foto con la scena scoperta: «la sezione della chat deve essere
+ *   TRASPARENTE». Il fondo pieno della colonna (la garanzia «mai sotto il testo» di sopra) è
+ *   ABOLITO per suo ordine: la scena si vede dietro i messaggi, come nel mockup, dove sono le
+ *   bolle a portare il proprio fondo. Resta il velo debole della chat vuota in desktop-final.css.
+ *   La regola resta scritta a `transparent` (e non cancellata) perché chi la cerca la trovi con la
+ *   sua storia; se un giorno il testo non si legge, la cura è sulle BOLLE, non sulla colonna.
+ */
 body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #conversation {
-  background-color: var(--talos-background);
+  background-color: transparent;
   background-clip: content-box;
-  box-shadow: 0 0 22px 0 var(--talos-background);
+  box-shadow: none;
 }
 
 /*
