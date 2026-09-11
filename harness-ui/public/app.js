@@ -1,3 +1,4 @@
+var __defProp = Object.defineProperty;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __esm = (fn, res, err) => function __init() {
   if (err) throw err[0];
@@ -6,6 +7,10 @@ var __esm = (fn, res, err) => function __init() {
   } catch (e) {
     throw err = [e], e;
   }
+};
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
 };
 
 // src/components/provider-card.js
@@ -217,6 +222,21 @@ var init_provider_card = __esm({
 });
 
 // src/components/politiche.js
+function politica(valore) {
+  return PER_VALORE.get(String(valore || "").trim()) || null;
+}
+function nomeUmanoPolitica(valore) {
+  return politica(valore)?.nome || String(valore || "");
+}
+function descrizionePolitica(valore) {
+  return politica(valore)?.descrizione || "";
+}
+function notaPolitica(valore) {
+  return politica(valore)?.nota || "";
+}
+function valoriPolitiche() {
+  return POLITICHE.map((p) => p.valore);
+}
 var POLITICHE, PER_VALORE;
 var init_politiche = __esm({
   "src/components/politiche.js"() {
@@ -251,6 +271,127 @@ var init_politiche = __esm({
       })
     ]);
     PER_VALORE = new Map(POLITICHE.map((p) => [p.valore, p]));
+  }
+});
+
+// src/components/fonti-modelli.js
+function eFonteDiretta(fonte) {
+  return ID_DIRETTI.has(String(fonte || ""));
+}
+function fontiDelSelettore({ openrouter = null, locali = null, diretti = null } = {}) {
+  const fonti = [
+    { id: "openrouter", etichetta: "OpenRouter", conto: contaOppureNull(openrouter), collegato: true },
+    { id: "locali", etichetta: "Locali", conto: contaOppureNull(locali), collegato: true }
+  ];
+  for (const provider of PROVIDER_DIRETTI) {
+    const elenco2 = diretti ? diretti[provider.id] : null;
+    fonti.push({
+      id: provider.id,
+      etichetta: provider.etichetta,
+      conto: contaOppureNull(elenco2),
+      // `collegato` è falso solo quando SAPPIAMO che la chiave manca: prima di leggere non si accusa.
+      collegato: !diretti || Array.isArray(elenco2)
+    });
+  }
+  return fonti;
+}
+function modelliDellaFonte(fonte, { openrouter = null, locali = null, diretti = null } = {}) {
+  if (fonte === "openrouter") return openrouter;
+  if (fonte === "locali") return locali;
+  if (!eFonteDiretta(fonte)) return null;
+  if (!diretti) return null;
+  const elenco2 = diretti[fonte];
+  return Array.isArray(elenco2) ? elenco2 : null;
+}
+function fraseVuotoDiretto(fonte, { diretti = null, errori = {} } = {}) {
+  const etichetta = PROVIDER_DIRETTI.find((p) => p.id === fonte)?.etichetta || fonte;
+  if (errori && errori[fonte]) return `Catalogo ${etichetta} non disponibile: ${errori[fonte]}`;
+  if (!diretti) return `Leggo il catalogo ${etichetta}…`;
+  if (!Array.isArray(diretti[fonte])) return `Collega la chiave ${etichetta} dal pannello Provider per vedere i suoi modelli.`;
+  return `Nessun modello ${etichetta} disponibile con questa chiave.`;
+}
+function contaOppureNull(elenco2) {
+  return Array.isArray(elenco2) ? elenco2.length : null;
+}
+var PROVIDER_DIRETTI, ID_DIRETTI;
+var init_fonti_modelli = __esm({
+  "src/components/fonti-modelli.js"() {
+    PROVIDER_DIRETTI = Object.freeze([
+      Object.freeze({ id: "anthropic", etichetta: "Anthropic" }),
+      Object.freeze({ id: "gemini", etichetta: "Gemini" }),
+      Object.freeze({ id: "openai", etichetta: "OpenAI" })
+    ]);
+    ID_DIRETTI = new Set(PROVIDER_DIRETTI.map((p) => p.id));
+  }
+});
+
+// src/components/avvio-sessione.js
+function statoAvvioSessione({ cartella = null, permesso = "", occupato = false } = {}) {
+  if (occupato) {
+    return {
+      situazione: "occupato",
+      puoAvviare: false,
+      // ⛔ L'unico `disabled` legittimo: c'è una lettura in volo, e premere due volte non aiuta.
+      disabilitato: true,
+      etichetta: "Apro la cartella…",
+      motivo: "Aspetta: sto leggendo la cartella.",
+      rimedioSu: null
+    };
+  }
+  if (!cartella || !cartella.path && !cartella.launchId) {
+    return {
+      situazione: "senza-cartella",
+      puoAvviare: false,
+      disabilitato: false,
+      // Qui «Scegli una cartella» è VERO, ed è un'istruzione: premendolo si va all'albero.
+      etichetta: "Scegli una cartella",
+      motivo: "Scegli la cartella su cui vuoi lavorare.",
+      rimedioSu: "cartella"
+    };
+  }
+  const nome = nomeCartellaScelta(cartella);
+  const autorizzata = Boolean(cartella.projectId);
+  const giaVerificataDalServer = Boolean(cartella.launchId);
+  if (!autorizzata && !giaVerificataDalServer && permesso !== PERMESSO_PER_CARTELLA_LIBERA) {
+    const nomePieno = nomeUmanoPolitica(PERMESSO_PER_CARTELLA_LIBERA);
+    return {
+      situazione: "permesso-insufficiente",
+      puoAvviare: false,
+      disabilitato: false,
+      /* Il bottone dice la cosa che manca, non una cosa falsa — ed è corto perché deve stare
+         dentro il bottone: la frase intera sta nel `motivo`, accanto. */
+      etichetta: `Serve «${nomePieno}»`,
+      motivo: `${nome} è fuori dai progetti già autorizzati: TALOS la accetta solo con «${nomePieno}». Ora è scelto «${nomeUmanoPolitica(permesso)}».`,
+      rimedioSu: "permesso"
+    };
+  }
+  return {
+    situazione: "pronto",
+    puoAvviare: true,
+    disabilitato: false,
+    etichetta: `Continua nella chat — ${nome}`,
+    motivo: motivoQuandoSiPuoPartire({ nome, autorizzata, giaVerificataDalServer, permesso }),
+    rimedioSu: null
+  };
+}
+function nomeCartellaScelta(cartella) {
+  if (!cartella) return "";
+  if (cartella.path) return String(cartella.path).replace(/[\\/]+$/u, "").split(/[\\/]/u).pop() || cartella.path;
+  return cartella.name || "";
+}
+function motivoQuandoSiPuoPartire({ nome, autorizzata, giaVerificataDalServer, permesso }) {
+  const umano = nomeUmanoPolitica(permesso);
+  if (giaVerificataDalServer) {
+    return `${nome} arriva da Esplora file. Con «${umano}» TALOS resterà esattamente in questa cartella.`;
+  }
+  if (autorizzata) return `Con «${umano}» TALOS resterà nella cartella scelta.`;
+  return `«${umano}» consente di usare questa cartella esterna. La scelta sarà verificata di nuovo all’avvio.`;
+}
+var PERMESSO_PER_CARTELLA_LIBERA;
+var init_avvio_sessione = __esm({
+  "src/components/avvio-sessione.js"() {
+    init_politiche();
+    PERMESSO_PER_CARTELLA_LIBERA = "Full access";
   }
 });
 
@@ -5800,7 +5941,7 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
   const removers = [];
   let snapshot = state?.sessionId === sessionId ? structuredClone(state) : null;
   let available = Boolean(snapshot);
-  let epoch = 0, sequence = 0, busy = false, destroyed = false, opened = !root.hidden, timer, requestController, trigger, editingId = null, editingSources = [], settingsDirty = false, versions = [], factsKey = "", versionsKey = "", sourcesKey = "", statusText = "";
+  let epoch = 0, sequence = 0, busy = false, destroyed2 = false, opened = !root.hidden, timer, requestController, trigger, editingId = null, editingSources = [], settingsDirty = false, versions = [], factsKey = "", versionsKey = "", sourcesKey = "", statusText = "";
   const inertBefore = /* @__PURE__ */ new Map();
   const num2 = (value) => number(value) ? new Intl.NumberFormat(linguaCorrenteDiT() === "en" ? "en-US" : "it-IT").format(value) : translate("Non disponibile");
   function element(tag, text, className) {
@@ -5851,12 +5992,12 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
     q("source-detail").hidden = false;
     q("source-text").textContent = translate("Caricamento del contesto…");
     client.readContextSource(requestOptions({ sourceId: ref.recordId })).then(({ source }) => {
-      if (current !== epoch || destroyed) return;
+      if (current !== epoch || destroyed2) return;
       const content = source?.message?.content;
       q("source-text").textContent = typeof content === "string" ? content : JSON.stringify(content, null, 2);
       q("source-id").textContent = source?.id ?? ref.recordId;
     }).catch((error) => {
-      if (current === epoch && !destroyed && error.name !== "AbortError") q("source-text").textContent = translate("Contesto non disponibile. Usa Aggiorna per riprovare.");
+      if (current === epoch && !destroyed2 && error.name !== "AbortError") q("source-text").textContent = translate("Contesto non disponibile. Usa Aggiorna per riprovare.");
     });
   }
   function sourceLinks(parent, refs = []) {
@@ -5931,7 +6072,7 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
     }
   }
   function render4() {
-    if (destroyed) return;
+    if (destroyed2) return;
     const view = descriviContextCompactor(snapshot, { translate });
     const m = view.measurement;
     for (const node of root.querySelectorAll("[data-context-label]")) node.textContent = translate(node.dataset.contextLabel);
@@ -5982,12 +6123,12 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
     root.querySelector("[data-context-close]").setAttribute("aria-label", translate("Chiudi"));
     if (opened && focused?.disabled && root.contains(focused)) q("title").focus({ preventScroll: true });
   }
-  function schedule() {
+  function schedule2() {
     clearTimeout(timer);
-    if (opened && !destroyed && ACTIVE.has(descriviContextCompactor(snapshot).job?.state)) timer = setTimeout(() => refresh(), 1200);
+    if (opened && !destroyed2 && ACTIVE.has(descriviContextCompactor(snapshot).job?.state)) timer = setTimeout(() => refresh(), 1200);
   }
   async function refresh({ quiet = false } = {}) {
-    if (destroyed || busy) return null;
+    if (destroyed2 || busy) return null;
     if (!sessionId) {
       available = false;
       render4();
@@ -5998,7 +6139,7 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
     if (!quiet) say(translate("Caricamento del contesto…"));
     try {
       const [next, history] = await Promise.all([client.getContextState(requestOptions()), client.listContextVersions(requestOptions())]);
-      if (current !== epoch || ticket !== sequence || destroyed) return null;
+      if (current !== epoch || ticket !== sequence || destroyed2) return null;
       if (next?.sessionId !== sessionId || !Array.isArray(history?.versions)) throw new Error("CTX_INVALID_RESPONSE");
       snapshot = structuredClone(next);
       available = true;
@@ -6006,10 +6147,10 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
       render4();
       if (!quiet) say("");
       onState?.(structuredClone(snapshot));
-      schedule();
+      schedule2();
       return snapshot;
     } catch (error) {
-      if (current !== epoch || ticket !== sequence || destroyed || error.name === "AbortError") return null;
+      if (current !== epoch || ticket !== sequence || destroyed2 || error.name === "AbortError") return null;
       available = false;
       render4();
       say(translate(error.code === "CTX_NOT_ENABLED" ? "Context Manager non è ancora attivo per questa conversazione. Nessun messaggio è stato modificato." : "Contesto non disponibile. Usa Aggiorna per riprovare."), error.code !== "CTX_NOT_ENABLED");
@@ -6018,7 +6159,7 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
     }
   }
   async function mutate(action, success) {
-    if (busy || !available || !snapshot || destroyed) return;
+    if (busy || !available || !snapshot || destroyed2) return;
     const current = epoch;
     busy = true;
     clearTimeout(timer);
@@ -6027,15 +6168,15 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
     render4();
     try {
       await action();
-      if (current !== epoch || destroyed) return;
+      if (current !== epoch || destroyed2) return;
       busy = false;
       const refreshed = await refresh({ quiet: true });
-      if (refreshed && current === epoch && !destroyed) {
+      if (refreshed && current === epoch && !destroyed2) {
         success?.();
         render4();
       }
     } catch (error) {
-      if (current !== epoch || destroyed) return;
+      if (current !== epoch || destroyed2) return;
       busy = false;
       if (error.name !== "AbortError") {
         if (error.code === "CTX_NOTHING_TO_COMPACT") say(translate("Non ci sono scambi precedenti da compattare mantenendo intero l’ultimo scambio. Nessun messaggio è stato modificato."));
@@ -6106,7 +6247,7 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
     onClose?.();
   }
   function open() {
-    if (destroyed) return;
+    if (destroyed2) return;
     if (!opened) {
       trigger = doc.activeElement;
       opened = true;
@@ -6128,7 +6269,7 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
     if (event.target === root || event.target.closest("[data-context-close]")) close();
   });
   listen(doc, "keydown", (event) => {
-    if (!opened || destroyed) return;
+    if (!opened || destroyed2) return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
@@ -6159,7 +6300,7 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
       snapshot = structuredClone(next);
       available = true;
       render4();
-      schedule();
+      schedule2();
     },
     setSession(nextSession, nextState = null) {
       ++epoch;
@@ -6183,7 +6324,7 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
     },
     destroy() {
       close();
-      destroyed = true;
+      destroyed2 = true;
       ++epoch;
       requestController?.abort();
       clearTimeout(timer);
@@ -6847,6 +6988,19 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
   }
   return lista.length;
 }
+function improntaDelega(riga) {
+  return `${riga?.sessionId ?? ""}|${riga?.conclusa === true ? 1 : 0}|${riga?.interrotta === true ? 1 : 0}`;
+}
+function schedaAgentiDaRileggere({ elenco: elenco2 = [], sessioneCorrente = null, figli = [] } = {}) {
+  if (!sessioneCorrente) return false;
+  const righe = Array.isArray(elenco2) ? elenco2.filter(Boolean) : [];
+  if (!righe.some((s) => s.sessionId === sessioneCorrente)) return false;
+  const dallaBarra = new Set(righe.filter((s) => s.padreId === sessioneCorrente).map(improntaDelega));
+  const dallaScheda = new Set((Array.isArray(figli) ? figli.filter(Boolean) : []).map(improntaDelega));
+  if (dallaBarra.size !== dallaScheda.size) return true;
+  for (const impronta of dallaBarra) if (!dallaScheda.has(impronta)) return true;
+  return false;
+}
 function statoDelega(a) {
   if (a?.interrotta === true) return "interrotta";
   if (!a?.conclusa) return "in-corso";
@@ -7086,13 +7240,13 @@ var init_review = __esm({
 });
 
 // src/components/intro.js
-function riepilogo({ cartella, modello, politica }) {
-  return `Cartella: ${cartella || "da scegliere"} · Modello: ${modello || "da scegliere"} · Permessi: ${politica || "da scegliere"}`;
+function riepilogo({ cartella, modello, politica: politica2 }) {
+  return `Cartella: ${cartella || "da scegliere"} · Modello: ${modello || "da scegliere"} · Permessi: ${politica2 || "da scegliere"}`;
 }
-function passoConsentito(n, { cartella, modello, politica, confermaPieno }) {
+function passoConsentito(n, { cartella, modello, politica: politica2, confermaPieno }) {
   if (n > 0 && !cartella) return { ok: false, torna: 0, messaggio: "Scegli prima una cartella." };
   if (n > 1 && !modello) return { ok: false, torna: 1, messaggio: "Scegli un modello oppure salta per ora." };
-  if (n === 3 && (!politica || politica === "Full access" && !confermaPieno)) return { ok: false, torna: 2, messaggio: "Scegli cosa può fare da solo." };
+  if (n === 3 && (!politica2 || politica2 === "Full access" && !confermaPieno)) return { ok: false, torna: 2, messaggio: "Scegli cosa può fare da solo." };
   return { ok: true };
 }
 function icona6(d, nome) {
@@ -8545,31 +8699,31 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
       el26.live.replaceChildren();
       return;
     }
-    let frame = el26.live.querySelector("iframe");
-    if (!frame || frame.dataset.browserId !== s.id) {
+    let frame2 = el26.live.querySelector("iframe");
+    if (!frame2 || frame2.dataset.browserId !== s.id) {
       el26.live.replaceChildren();
-      frame = document.createElement("iframe");
-      frame.dataset.browserId = s.id;
-      frame.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups");
-      frame.setAttribute("referrerpolicy", "no-referrer");
-      frame.title = titoloDaLettura(s);
-      frame.addEventListener("load", () => azioni.caricata?.(s.id));
-      frame.src = s.proxata ? `${PROXY_BROWSER}${encodeURIComponent(s.url)}` : s.url;
-      frame.dataset.proxata = String(Boolean(s.proxata));
+      frame2 = document.createElement("iframe");
+      frame2.dataset.browserId = s.id;
+      frame2.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms allow-popups");
+      frame2.setAttribute("referrerpolicy", "no-referrer");
+      frame2.title = titoloDaLettura(s);
+      frame2.addEventListener("load", () => azioni.caricata?.(s.id));
+      frame2.src = s.proxata ? `${PROXY_BROWSER}${encodeURIComponent(s.url)}` : s.url;
+      frame2.dataset.proxata = String(Boolean(s.proxata));
       if (s.tipo !== "viva") {
-        frame.dataset.caricata = "no";
-        frame.addEventListener("load", () => {
-          frame.dataset.caricata = "si";
+        frame2.dataset.caricata = "no";
+        frame2.addEventListener("load", () => {
+          frame2.dataset.caricata = "si";
           mostraAvviso("");
         }, { once: true });
         setTimeout(() => {
-          if (!frame.isConnected || frame.dataset.caricata === "si") return;
+          if (!frame2.isConnected || frame2.dataset.caricata === "si") return;
           stato.modo = "testo";
           mostraAvviso(t("Questo sito non si lascia mostrare dentro TALOS. Qui sotto c’è il testo che ha letto l’agente."));
           renderizza();
         }, 4e3);
       }
-      el26.live.append(frame);
+      el26.live.append(frame2);
     }
   }
   function corniceDellaLettura(s) {
@@ -8708,6 +8862,19 @@ function creaBrowser(schermo, { azioni = {}, modoIniziale = "pagina" } = {}) {
     },
     fuocoSullaScheda() {
       el26.schede?.querySelector('[aria-selected="true"]')?.focus();
+    },
+    /*
+     * ⛔ 11/09/2026 — L'APERTURA VIVE FUORI DA QUI, E PUÒ FALLIRE FUORI DA QUI.
+     *
+     * Chi apre un indirizzo è `azioni.apri`, che sta in `legacy/app.js` e fa una catena
+     * asincrona (incorniciabile → cornice / proxy / browser pilotato). Se quella catena si rompe
+     * PRIMA che una scheda esista, qui dentro non c'è niente da disegnare e la riga d'avviso —
+     * l'unico posto dove questa schermata parla — resterebbe vuota: campo che accetta, schermo
+     * che tace. Con questo, chi apre può dire perché non è nata nessuna scheda.
+     * ⛔ Non è un `toast`: l'avviso appartiene a QUESTA schermata e resta finché serve.
+     */
+    avvisa(testo3) {
+      mostraAvviso(testo3);
     },
     get stato() {
       return stato;
@@ -9225,14 +9392,14 @@ function creaArtefatto({ titolo: titolo2 = "Artefatto", formato = "", src = "", 
   apri.type = "button";
   if (typeof onApri === "function") apri.addEventListener("click", onApri);
   testa.append(apri);
-  const frame = documentObj.createElement("iframe");
-  frame.className = "talos-artifact__frame artifact-card-frame";
-  frame.setAttribute("title", titolo2);
-  frame.setAttribute("sandbox", "allow-scripts");
-  frame.setAttribute("referrerpolicy", "no-referrer");
-  if (src) frame.src = src;
-  card.append(testa, frame);
-  return { card, frame, apri };
+  const frame2 = documentObj.createElement("iframe");
+  frame2.className = "talos-artifact__frame artifact-card-frame";
+  frame2.setAttribute("title", titolo2);
+  frame2.setAttribute("sandbox", "allow-scripts");
+  frame2.setAttribute("referrerpolicy", "no-referrer");
+  if (src) frame2.src = src;
+  card.append(testa, frame2);
+  return { card, frame: frame2, apri };
 }
 function creaAttesa({ etichetta = "Sto pensando…" } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
@@ -9577,6 +9744,7 @@ function montaConversazioneFiglia(contenitore, {
   nota.hidden = true;
   elemento.append(nota);
   const corpo = el23(d, "div", "talos-figlia__corpo");
+  corpo.tabIndex = 0;
   elemento.append(corpo);
   const vuoto = el23(d, "p", "talos-inspector__hint talos-figlia__vuoto", "Nessun evento ancora da questo sotto-agente. Il collegamento è aperto: appena la figlia dice o fa qualcosa, compare qui.");
   corpo.append(vuoto);
@@ -9626,7 +9794,16 @@ function montaConversazioneFiglia(contenitore, {
       vista.esitoMostrato = blocco.esito;
     }
   }
+  const VICINO_AL_FONDO_PX = 24;
+  function seguivaIlFondo() {
+    const altezza = corpo.scrollHeight;
+    const visibile = corpo.clientHeight;
+    const dove = corpo.scrollTop;
+    if (!Number.isFinite(altezza) || !Number.isFinite(visibile) || !Number.isFinite(dove)) return false;
+    return altezza - dove - visibile <= VICINO_AL_FONDO_PX;
+  }
   function disegna() {
+    const seguiva = seguivaIlFondo();
     const ridotto = riduciEventiFiglia(eventi2);
     badge5.textContent = ETICHETTA_STATO_FIGLIA[ridotto.stato];
     const tono = TONO_STATO[ridotto.stato];
@@ -9677,8 +9854,10 @@ function montaConversazioneFiglia(contenitore, {
         aggiornaVistaBlocco(vista, blocco);
       }
     }
+    if (seguiva) corpo.scrollTop = corpo.scrollHeight;
   }
   disegna();
+  contenitore?.classList?.add?.("talos-figlia-ospite");
   contenitore?.append(elemento);
   elemento.focus?.();
   const torna = () => {
@@ -9722,6 +9901,7 @@ function montaConversazioneFiglia(contenitore, {
       chiudiFlusso = null;
       elemento.removeEventListener?.("keydown", suTasto);
       elemento.remove?.();
+      contenitore?.classList?.remove?.("talos-figlia-ospite");
       disegnati.clear();
       if (fuocoPrecedente && fuocoPrecedente.isConnected !== false) fuocoPrecedente.focus?.();
     }
@@ -10500,7 +10680,7 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
     disegna(immagine, fotogramma.metadati);
     immagine?.close?.();
   }
-  function frame(fotogramma) {
+  function frame2(fotogramma) {
     if (distrutto) return false;
     const dati = fotogramma?.dati;
     if (typeof dati !== "string" || dati.length === 0) {
@@ -10577,7 +10757,7 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
     ascolti.length = 0;
     contenitore.replaceChildren?.();
   }
-  return { frame, stato, misura, distruggi, radice, tela };
+  return { frame: frame2, stato, misura, distruggi, radice, tela };
 }
 var STATI4, CLASSE, TIPI_GESTO, PULSANTI;
 var init_browser_vivo = __esm({
@@ -10597,150 +10777,6 @@ var init_browser_vivo = __esm({
       keyup: "tastoSu"
     });
     PULSANTI = Object.freeze(["sinistro", "centrale", "destro"]);
-  }
-});
-
-// src/components/browser-gesti.js
-function gestoPerIlServer(gesto) {
-  if (!gesto || typeof gesto !== "object") return null;
-  const tipo = gesto.tipo;
-  if (GESTI_IGNORATI.includes(tipo)) return null;
-  if (tipo === "su") {
-    if (gesto.dentro === false) return null;
-    return {
-      tipo: "clic",
-      x: Number(gesto.x) || 0,
-      y: Number(gesto.y) || 0,
-      tasto: gesto.pulsante || "sinistro",
-      doppio: Number(gesto.clic) >= 2,
-      modificatori: gesto.tasti || 0
-    };
-  }
-  if (tipo === "rotella") {
-    return {
-      tipo: "rotella",
-      x: Number(gesto.x) || 0,
-      y: Number(gesto.y) || 0,
-      dx: Number(gesto.deltaX) || 0,
-      dy: Number(gesto.deltaY) || 0,
-      modificatori: gesto.tasti || 0
-    };
-  }
-  if (tipo === "tastoGiu") {
-    const chiave = gesto.tasto;
-    if (!chiave) return null;
-    return {
-      tipo: "tasto",
-      chiave,
-      testo: typeof gesto.testo === "string" ? gesto.testo : "",
-      modificatori: gesto.tasti || 0
-    };
-  }
-  return null;
-}
-var GESTI_IGNORATI;
-var init_browser_gesti = __esm({
-  "src/components/browser-gesti.js"() {
-    GESTI_IGNORATI = Object.freeze(["giu", "muovi", "tastoSu"]);
-  }
-});
-
-// src/components/scorciatoie.js
-function suApple(nav = globalThis.navigator) {
-  const p = String(nav?.userAgentData?.platform || nav?.platform || "").toLowerCase();
-  return p.includes("mac") || p.includes("ios") || p.includes("iphone") || p.includes("ipad");
-}
-function etichettaTasto(combo, { apple = suApple() } = {}) {
-  const testo3 = String(combo || "").trim();
-  if (!testo3) return "";
-  const parti = testo3.replace(/⌘/g, "mod ").replace(/\bCtrl\b/gi, "mod").replace(/\bCmd\b/gi, "mod").replace(/\bShift\b/gi, "⇧").split(/[+\s]+/).filter(Boolean);
-  return parti.map((p) => p === "mod" ? apple ? "⌘" : "Ctrl" : p).join(apple ? "" : " ");
-}
-function normalizzaTastiScritti(radice = globalThis.document, { apple = suApple() } = {}) {
-  let cambiati = 0;
-  for (const nodo4 of radice.querySelectorAll("kbd")) {
-    const testo3 = (nodo4.textContent || "").trim();
-    if (!/⌘|ctrl|cmd|shift/i.test(testo3)) continue;
-    const nuovo = etichettaTasto(testo3, { apple });
-    if (nuovo && nuovo !== testo3) {
-      nodo4.textContent = nuovo;
-      cambiati += 1;
-    }
-  }
-  return cambiati;
-}
-function riconosci(evento, { apple = suApple() } = {}) {
-  if (!evento) return null;
-  const mod = apple ? evento.metaKey : evento.ctrlKey;
-  if (!mod || evento.altKey) return null;
-  const tasto = String(evento.key || "").toLowerCase();
-  if (evento.shiftKey) {
-    if (tasto === "m") return "modello";
-    if (tasto === "`" || tasto === "~") return "terminaleNuovo";
-    return null;
-  }
-  if (tasto === "k") return "comandi";
-  if (tasto === "n") return "nuova";
-  if (tasto === ",") return "impostazioni";
-  if (tasto === "/") return "scorciatoie";
-  if (tasto === "`") return "terminale";
-  return null;
-}
-function montaScorciatoie(velo, { apple = suApple(), righe = SCORCIATOIE } = {}) {
-  if (!velo) return 0;
-  const d = velo.ownerDocument;
-  const elenco2 = velo.querySelector("#elencoScorciatoie");
-  const vuoto = velo.querySelector("#scorciatoieVuote");
-  const cerca = velo.querySelector("#cercaScorciatoia");
-  if (!elenco2) return 0;
-  const disegna = (filtro = "") => {
-    const q = String(filtro).trim().toLocaleLowerCase("it");
-    const viste = righe.filter((r) => !q || `${r.nome} ${r.area} ${r.combo}`.toLocaleLowerCase("it").includes(q));
-    elenco2.replaceChildren(...viste.map((r) => {
-      const riga = d.createElement("button");
-      riga.type = "button";
-      riga.className = "talos-list-row";
-      riga.setAttribute("role", "listitem");
-      riga.dataset.scorciatoia = r.id;
-      const testo3 = d.createElement("span");
-      testo3.className = "talos-list-row__text";
-      const titolo2 = d.createElement("span");
-      titolo2.className = "talos-list-row__title";
-      titolo2.textContent = r.nome;
-      const sub = d.createElement("span");
-      sub.className = "talos-list-row__sub";
-      sub.textContent = r.area;
-      testo3.append(titolo2, sub);
-      const aside = d.createElement("span");
-      aside.className = "talos-list-row__aside";
-      const tasto = d.createElement("kbd");
-      tasto.className = "talos-kbd";
-      tasto.textContent = etichettaTasto(r.combo, { apple });
-      aside.append(tasto);
-      riga.append(testo3, aside);
-      return riga;
-    }));
-    if (vuoto) vuoto.hidden = viste.length > 0;
-    return viste.length;
-  };
-  if (cerca && !cerca.dataset.collegato) {
-    cerca.dataset.collegato = "si";
-    cerca.addEventListener("input", () => disegna(cerca.value));
-  }
-  return disegna(cerca?.value || "");
-}
-var SCORCIATOIE;
-var init_scorciatoie = __esm({
-  "src/components/scorciatoie.js"() {
-    SCORCIATOIE = Object.freeze([
-      { id: "comandi", combo: "mod K", area: "Ovunque", nome: "Apri i comandi" },
-      { id: "nuova", combo: "mod N", area: "Ovunque", nome: "Nuova sessione" },
-      { id: "modello", combo: "mod ⇧ M", area: "Chat", nome: "Cambia il modello" },
-      { id: "impostazioni", combo: "mod ,", area: "Ovunque", nome: "Apri le impostazioni" },
-      { id: "scorciatoie", combo: "mod /", area: "Ovunque", nome: "Mostra le scorciatoie" },
-      { id: "terminale", combo: "mod `", area: "Sessione", nome: "Mostra o nascondi il terminale" },
-      { id: "terminaleNuovo", combo: "mod ⇧ `", area: "Sessione", nome: "Nuova scheda del terminale" }
-    ]);
   }
 });
 
@@ -10931,6 +10967,476 @@ var init_chat_foot = __esm({
   "src/components/chat-foot.js"() {
     init_politiche();
     NOME_PERMESSO = Object.freeze(Object.fromEntries(POLITICHE.map((p) => [p.valore, p.nome])));
+  }
+});
+
+// src/components/migliora-prompt.js
+function descriviProfondita(valore) {
+  return PROFONDITA.find((voce) => voce.valore === valore) ?? PROFONDITA.find((voce) => voce.valore === PROFONDITA_PREDEFINITA);
+}
+function anteprimaOriginale(testo3, massimo = 180) {
+  if (typeof testo3 !== "string") return "";
+  const pulito = testo3.trim().replace(/\s+/gu, " ");
+  if (pulito.length <= massimo) return pulito;
+  const tagliato = pulito.slice(0, massimo);
+  const spazio = tagliato.lastIndexOf(" ");
+  return `${(spazio > massimo - 24 ? tagliato.slice(0, spazio) : tagliato).trimEnd()}…`;
+}
+function riassumiEsito(dati) {
+  const promptMigliorato = typeof dati?.promptMigliorato === "string" ? dati.promptMigliorato.trim() : "";
+  if (promptMigliorato === "") return null;
+  const principi = (Array.isArray(dati?.principi) ? dati.principi : []).filter((voce) => typeof voce === "string" && voce.trim() !== "").map((voce) => voce.trim()).slice(0, 8);
+  return {
+    promptMigliorato,
+    promptOriginale: typeof dati?.promptOriginale === "string" ? dati.promptOriginale : "",
+    sintesi: typeof dati?.sintesi === "string" ? dati.sintesi.trim() : "",
+    principi,
+    modello: typeof dati?.modello === "string" ? dati.modello : "",
+    profondita: descriviProfondita(dati?.profondita).valore
+  };
+}
+function etichettaModello(modello) {
+  const nome = nomeModelloUmano(modello);
+  return nome || "il modello di questa chat";
+}
+function fraseProvenienza(modello) {
+  const nome = nomeModelloUmano(modello);
+  return nome ? `Lo riscrive ${nome}, il modello di questa chat.` : "Lo riscrive il modello di questa chat.";
+}
+function messaggioErrore(errore) {
+  const codice = errore?.code ?? errore?.codice ?? null;
+  if (codice === "PROVIDER_KEY_REQUIRED") return "Manca la chiave di OpenRouter. Collegala in Impostazioni → Provider, poi riprova.";
+  if (codice === "RUNTIME_NOT_AVAILABLE") return "Il motore locale di questa chat non è acceso. Avvialo dal Laboratorio modelli, poi riprova.";
+  if (codice === "PROVIDER_RUNTIME_UNAVAILABLE") return "Il modello non ha restituito una riscrittura utilizzabile. Riprova.";
+  if (codice === "QUERY_INVALID") return typeof errore?.message === "string" && errore.message ? errore.message : "Il testo non è utilizzabile così.";
+  return "La riscrittura non è riuscita. Riprova.";
+}
+function montaMiglioraPrompt({
+  chiedi,
+  leggiPrompt,
+  applica: applica2,
+  modello = "",
+  onChiudi = () => {
+  },
+  document: doc = globalThis.document
+} = {}) {
+  if (typeof chiedi !== "function" || typeof leggiPrompt !== "function" || typeof applica2 !== "function") {
+    throw new TypeError("MiglioraPrompt richiede chiedi, leggiPrompt e applica.");
+  }
+  let stato = "scelta";
+  let profondita = PROFONDITA_PREDEFINITA;
+  let esito = null;
+  let errore = "";
+  let giro = 0;
+  let distrutto = false;
+  const elemento = (tag, classe, testo3) => {
+    const nodo4 = doc.createElement(tag);
+    if (classe) nodo4.className = classe;
+    if (testo3 != null) nodo4.textContent = testo3;
+    return nodo4;
+  };
+  const radice = elemento("section", "talos-migliora");
+  radice.dataset.miglioraPrompt = "";
+  radice.setAttribute("role", "dialog");
+  radice.setAttribute("aria-labelledby", "migliora-prompt-titolo");
+  radice.hidden = true;
+  radice.style.cssText = [
+    "display:flex",
+    "flex-direction:column",
+    "gap:var(--talos-space-control)",
+    "width:min(34rem, calc(100vw - 2rem))",
+    "max-height:min(34rem, 80vh)",
+    "overflow:hidden",
+    "padding:var(--talos-space-card)",
+    "border:1px solid var(--talos-border-strong)",
+    "border-radius:var(--talos-radius-card)",
+    "background:var(--talos-card)",
+    "color:var(--talos-text)",
+    "font:inherit",
+    "box-sizing:border-box"
+  ].join(";");
+  const testa = elemento("header");
+  testa.style.cssText = "display:flex;align-items:baseline;gap:var(--talos-space-sm)";
+  const titolo2 = elemento("h2", null, "Migliora il prompt");
+  titolo2.id = "migliora-prompt-titolo";
+  titolo2.style.cssText = "margin:0;font-size:var(--talos-font-size-md);font-weight:600";
+  const chiudiBtn = elemento("button", "talos-button talos-button--ghost talos-button--sm", "Chiudi");
+  chiudiBtn.type = "button";
+  chiudiBtn.style.cssText = "margin-left:auto;color:var(--talos-muted)";
+  chiudiBtn.dataset.miglioraChiudi = "";
+  testa.append(titolo2, chiudiBtn);
+  const provenienza = elemento("p", null, "");
+  provenienza.dataset.miglioraProvenienza = "";
+  provenienza.style.cssText = "margin:0;color:var(--talos-muted);font-size:var(--talos-font-size-xs);line-height:1.5";
+  const scelta = elemento("div");
+  scelta.dataset.miglioraScelta = "";
+  scelta.style.cssText = "display:flex;flex-direction:column;gap:var(--talos-space-sm)";
+  const etichetta = elemento("span", "talos-label", "Quanto riscrivere");
+  etichetta.id = "migliora-prompt-quanto";
+  const linguette = elemento("div", "talos-tabs talos-tabs--pills");
+  const listaLinguette = elemento("div", "talos-tabs__list");
+  listaLinguette.setAttribute("role", "tablist");
+  listaLinguette.setAttribute("aria-labelledby", "migliora-prompt-quanto");
+  const bottoniProfondita = PROFONDITA.map((voce) => {
+    const bottone3 = elemento("button", "talos-tabs__tab", voce.nome);
+    bottone3.type = "button";
+    bottone3.setAttribute("role", "tab");
+    bottone3.dataset.miglioraProfondita = voce.valore;
+    bottone3.addEventListener("click", () => {
+      profondita = voce.valore;
+      disegna();
+    });
+    return bottone3;
+  });
+  listaLinguette.append(...bottoniProfondita);
+  linguette.append(listaLinguette);
+  const spiegazione = elemento("p", null, "");
+  spiegazione.dataset.miglioraSpiegazione = "";
+  spiegazione.style.cssText = "margin:0;color:var(--talos-muted);font-size:var(--talos-font-size-sm);line-height:1.5;max-width:64ch";
+  const avvia = elemento("button", "talos-button talos-button--primary", "Migliora");
+  avvia.type = "button";
+  avvia.dataset.miglioraAvvia = "";
+  avvia.style.alignSelf = "flex-end";
+  avvia.addEventListener("click", () => {
+    void lavora();
+  });
+  scelta.append(etichetta, linguette, spiegazione, avvia);
+  const attesa = elemento("p", null, "");
+  attesa.dataset.miglioraAttesa = "";
+  attesa.setAttribute("role", "status");
+  attesa.setAttribute("aria-live", "polite");
+  attesa.style.cssText = "margin:0;padding:var(--talos-space-lg) 0;text-align:center;color:var(--talos-muted);font-size:var(--talos-font-size-sm)";
+  const guasto = elemento("div");
+  guasto.dataset.miglioraErrore = "";
+  guasto.setAttribute("role", "alert");
+  guasto.style.cssText = "display:flex;flex-direction:column;gap:var(--talos-space-sm);padding:var(--talos-space-control);border:1px solid var(--talos-danger);border-radius:var(--talos-radius-control);color:var(--talos-danger);font-size:var(--talos-font-size-sm)";
+  const guastoTesto = elemento("p", null, "");
+  guastoTesto.style.margin = "0";
+  const riprova = elemento("button", "talos-button talos-button--ghost talos-button--sm", "Riprova");
+  riprova.type = "button";
+  riprova.dataset.miglioraRiprova = "";
+  riprova.style.alignSelf = "flex-start";
+  riprova.addEventListener("click", () => {
+    void lavora();
+  });
+  guasto.append(guastoTesto, riprova);
+  const risultato = elemento("div");
+  risultato.dataset.miglioraEsito = "";
+  risultato.style.cssText = "display:flex;flex-direction:column;gap:var(--talos-space-sm);flex:1 1 auto;min-height:0;overflow:hidden";
+  const stileEtichetta = "font-size:var(--talos-font-size-xs)";
+  const intestazionePrima = elemento("span", "talos-label", "Il tuo testo");
+  intestazionePrima.style.cssText = stileEtichetta;
+  const prima = elemento("p", null, "");
+  prima.dataset.miglioraPrima = "";
+  prima.style.cssText = "margin:0;color:var(--talos-muted);font-size:var(--talos-font-size-sm);line-height:1.5;max-width:72ch";
+  const intestazioneDopo = elemento("span", "talos-label", "");
+  intestazioneDopo.dataset.miglioraIntestazioneDopo = "";
+  intestazioneDopo.style.cssText = stileEtichetta;
+  const dopo = elemento("pre", null, "");
+  dopo.dataset.miglioraDopo = "";
+  dopo.style.cssText = [
+    /*
+     * ⛔ TERZA foto, 11/09: col corpo intero scorrevole «Cosa è cambiato» e le pillole
+     *   finivano sotto la piega — informazione utile nascosta dietro un gesto. ⇒ L'UNICA
+     *   cosa che scorre è il testo riscritto, che è anche l'unica di lunghezza ignota:
+     *   prende lo spazio che avanza (`flex:1`) e scorre dentro di sé. Sintesi, pillole e
+     *   azioni sono sempre a schermo perché hanno una taglia che si conosce.
+     */
+    "margin:0",
+    "flex:1 1 auto",
+    "min-height:5rem",
+    "overflow:auto",
+    "padding:var(--talos-space-control)",
+    "border:1px solid var(--talos-border)",
+    "border-radius:var(--talos-radius-control)",
+    "background:var(--talos-panel-soft)",
+    "color:var(--talos-text)",
+    "font:inherit",
+    "font-size:var(--talos-font-size-sm)",
+    "line-height:1.6",
+    "white-space:pre-wrap",
+    "overflow-wrap:anywhere"
+  ].join(";");
+  const sintesi = elemento("p", null, "");
+  sintesi.dataset.miglioraSintesi = "";
+  sintesi.style.cssText = "margin:0;color:var(--talos-muted);font-size:var(--talos-font-size-xs);line-height:1.5;max-width:72ch";
+  const principi = elemento("div");
+  principi.dataset.miglioraPrincipi = "";
+  principi.style.cssText = "display:flex;flex-wrap:wrap;gap:var(--talos-space-xs)";
+  const azioni = elemento("div");
+  azioni.style.cssText = "display:flex;flex-wrap:wrap;justify-content:flex-end;gap:var(--talos-space-sm);padding-top:var(--talos-space-sm);flex:0 0 auto";
+  const annulla = elemento("button", "talos-button talos-button--ghost talos-button--sm", "Annulla");
+  annulla.type = "button";
+  annulla.dataset.miglioraAnnulla = "";
+  annulla.addEventListener("click", () => chiudi());
+  const aggiungi = elemento("button", "talos-button talos-button--secondary talos-button--sm", "Aggiungi sotto");
+  aggiungi.type = "button";
+  aggiungi.dataset.miglioraAggiungi = "";
+  aggiungi.addEventListener("click", () => decidi("aggiungi"));
+  const sostituisci = elemento("button", "talos-button talos-button--primary talos-button--sm", "Sostituisci");
+  sostituisci.type = "button";
+  sostituisci.dataset.miglioraSostituisci = "";
+  sostituisci.addEventListener("click", () => decidi("sostituisci"));
+  azioni.append(annulla, aggiungi, sostituisci);
+  const corpo = elemento("div");
+  corpo.dataset.miglioraCorpo = "";
+  corpo.style.cssText = "display:flex;flex-direction:column;gap:var(--talos-space-sm);flex:1 1 auto;min-height:0;overflow:hidden";
+  corpo.append(intestazionePrima, prima, intestazioneDopo, dopo, sintesi, principi);
+  risultato.append(corpo, azioni);
+  radice.append(testa, provenienza, scelta, attesa, guasto, risultato);
+  chiudiBtn.addEventListener("click", () => chiudi());
+  radice.addEventListener("keydown", (evento) => {
+    if (evento.key !== "Escape") return;
+    evento.preventDefault();
+    chiudi();
+  });
+  function disegna() {
+    provenienza.textContent = fraseProvenienza(modello);
+    const voce = descriviProfondita(profondita);
+    spiegazione.textContent = voce.spiega;
+    for (const bottone3 of bottoniProfondita) {
+      const attiva = bottone3.dataset.miglioraProfondita === profondita;
+      bottone3.setAttribute("aria-selected", String(attiva));
+    }
+    scelta.hidden = stato !== "scelta";
+    attesa.hidden = stato !== "attesa";
+    guasto.hidden = stato !== "errore";
+    risultato.hidden = stato !== "esito";
+    avvia.disabled = stato === "attesa";
+    if (stato === "attesa") attesa.textContent = `Sto riscrivendo con ${etichettaModello(modello)}…`;
+    if (stato === "errore") guastoTesto.textContent = errore;
+    if (stato === "esito" && esito) {
+      prima.textContent = anteprimaOriginale(esito.promptOriginale);
+      intestazioneDopo.textContent = `Riscritto da ${etichettaModello(esito.modello || modello)}`;
+      dopo.textContent = esito.promptMigliorato;
+      sintesi.textContent = esito.sintesi ? `Cosa è cambiato: ${esito.sintesi}` : "";
+      sintesi.hidden = esito.sintesi === "";
+      principi.replaceChildren(...esito.principi.map((voce2) => elemento("span", "talos-badge talos-badge--sm", voce2)));
+      principi.hidden = esito.principi.length === 0;
+    }
+  }
+  async function lavora() {
+    const testo3 = String(leggiPrompt() ?? "").trim();
+    if (testo3 === "") {
+      stato = "errore";
+      errore = "Scrivi il tuo messaggio nel composer, poi torna qui.";
+      disegna();
+      return;
+    }
+    const mio = ++giro;
+    stato = "attesa";
+    disegna();
+    try {
+      const dati = await chiedi({ prompt: testo3, profondita });
+      if (distrutto || mio !== giro) return;
+      const letto = riassumiEsito(dati);
+      if (!letto) {
+        stato = "errore";
+        errore = messaggioErrore({ code: "PROVIDER_RUNTIME_UNAVAILABLE" });
+      } else {
+        esito = { ...letto, promptOriginale: letto.promptOriginale || testo3 };
+        stato = "esito";
+      }
+    } catch (problema) {
+      if (distrutto || mio !== giro) return;
+      stato = "errore";
+      errore = messaggioErrore(problema);
+    }
+    disegna();
+  }
+  function decidi(modo) {
+    if (!esito) return;
+    applica2({ modo, testo: esito.promptMigliorato });
+    chiudi();
+  }
+  function apri() {
+    giro += 1;
+    stato = "scelta";
+    esito = null;
+    errore = "";
+    radice.hidden = false;
+    disegna();
+    const scelto = bottoniProfondita.find((bottone3) => bottone3.dataset.miglioraProfondita === profondita);
+    if (scelto && typeof scelto.focus === "function") scelto.focus();
+  }
+  function chiudi() {
+    giro += 1;
+    radice.hidden = true;
+    stato = "scelta";
+    esito = null;
+    errore = "";
+    disegna();
+    onChiudi();
+  }
+  function distruggi() {
+    distrutto = true;
+    radice.remove();
+  }
+  disegna();
+  return Object.freeze({
+    elemento: radice,
+    apri,
+    chiudi,
+    distruggi,
+    /** Solo per le prove e per chi orchestra: lo stato dichiarato, mai dedotto dal DOM. */
+    stato: () => ({ fase: stato, profondita, esito, errore, stati: STATI5 })
+  });
+}
+var PROFONDITA, PROFONDITA_PREDEFINITA, STATI5;
+var init_migliora_prompt = __esm({
+  "src/components/migliora-prompt.js"() {
+    init_chat_foot();
+    PROFONDITA = Object.freeze([
+      Object.freeze({ valore: "concisa", nome: "Asciutta", spiega: "Stessa lunghezza. Chiarisce obiettivo e risultato atteso, senza aggiungere sezioni." }),
+      Object.freeze({ valore: "equilibrata", nome: "Equilibrata", spiega: "Un briefing chiaro: obiettivo, risultato atteso, i vincoli che hai già scritto e due o tre verifiche." }),
+      Object.freeze({ valore: "estesa", nome: "Estesa", spiega: "Un briefing completo: ambito, formato della risposta, vincoli, casi limite e criteri di accettazione." })
+    ]);
+    PROFONDITA_PREDEFINITA = "equilibrata";
+    STATI5 = Object.freeze(["scelta", "attesa", "errore", "esito"]);
+  }
+});
+
+// src/components/browser-gesti.js
+function gestoPerIlServer(gesto) {
+  if (!gesto || typeof gesto !== "object") return null;
+  const tipo = gesto.tipo;
+  if (GESTI_IGNORATI.includes(tipo)) return null;
+  if (tipo === "su") {
+    if (gesto.dentro === false) return null;
+    return {
+      tipo: "clic",
+      x: Number(gesto.x) || 0,
+      y: Number(gesto.y) || 0,
+      tasto: gesto.pulsante || "sinistro",
+      doppio: Number(gesto.clic) >= 2,
+      modificatori: gesto.tasti || 0
+    };
+  }
+  if (tipo === "rotella") {
+    return {
+      tipo: "rotella",
+      x: Number(gesto.x) || 0,
+      y: Number(gesto.y) || 0,
+      dx: Number(gesto.deltaX) || 0,
+      dy: Number(gesto.deltaY) || 0,
+      modificatori: gesto.tasti || 0
+    };
+  }
+  if (tipo === "tastoGiu") {
+    const chiave = gesto.tasto;
+    if (!chiave) return null;
+    return {
+      tipo: "tasto",
+      chiave,
+      testo: typeof gesto.testo === "string" ? gesto.testo : "",
+      modificatori: gesto.tasti || 0
+    };
+  }
+  return null;
+}
+var GESTI_IGNORATI;
+var init_browser_gesti = __esm({
+  "src/components/browser-gesti.js"() {
+    GESTI_IGNORATI = Object.freeze(["giu", "muovi", "tastoSu"]);
+  }
+});
+
+// src/components/scorciatoie.js
+function suApple(nav = globalThis.navigator) {
+  const p = String(nav?.userAgentData?.platform || nav?.platform || "").toLowerCase();
+  return p.includes("mac") || p.includes("ios") || p.includes("iphone") || p.includes("ipad");
+}
+function etichettaTasto(combo, { apple = suApple() } = {}) {
+  const testo3 = String(combo || "").trim();
+  if (!testo3) return "";
+  const parti = testo3.replace(/⌘/g, "mod ").replace(/\bCtrl\b/gi, "mod").replace(/\bCmd\b/gi, "mod").replace(/\bShift\b/gi, "⇧").split(/[+\s]+/).filter(Boolean);
+  return parti.map((p) => p === "mod" ? apple ? "⌘" : "Ctrl" : p).join(apple ? "" : " ");
+}
+function normalizzaTastiScritti(radice = globalThis.document, { apple = suApple() } = {}) {
+  let cambiati = 0;
+  for (const nodo4 of radice.querySelectorAll("kbd")) {
+    const testo3 = (nodo4.textContent || "").trim();
+    if (!/⌘|ctrl|cmd|shift/i.test(testo3)) continue;
+    const nuovo = etichettaTasto(testo3, { apple });
+    if (nuovo && nuovo !== testo3) {
+      nodo4.textContent = nuovo;
+      cambiati += 1;
+    }
+  }
+  return cambiati;
+}
+function riconosci(evento, { apple = suApple() } = {}) {
+  if (!evento) return null;
+  const mod = apple ? evento.metaKey : evento.ctrlKey;
+  if (!mod || evento.altKey) return null;
+  const tasto = String(evento.key || "").toLowerCase();
+  if (evento.shiftKey) {
+    if (tasto === "m") return "modello";
+    if (tasto === "`" || tasto === "~") return "terminaleNuovo";
+    return null;
+  }
+  if (tasto === "k") return "comandi";
+  if (tasto === "n") return "nuova";
+  if (tasto === ",") return "impostazioni";
+  if (tasto === "/") return "scorciatoie";
+  if (tasto === "`") return "terminale";
+  return null;
+}
+function montaScorciatoie(velo, { apple = suApple(), righe = SCORCIATOIE } = {}) {
+  if (!velo) return 0;
+  const d = velo.ownerDocument;
+  const elenco2 = velo.querySelector("#elencoScorciatoie");
+  const vuoto = velo.querySelector("#scorciatoieVuote");
+  const cerca = velo.querySelector("#cercaScorciatoia");
+  if (!elenco2) return 0;
+  const disegna = (filtro = "") => {
+    const q = String(filtro).trim().toLocaleLowerCase("it");
+    const viste = righe.filter((r) => !q || `${r.nome} ${r.area} ${r.combo}`.toLocaleLowerCase("it").includes(q));
+    elenco2.replaceChildren(...viste.map((r) => {
+      const riga = d.createElement("button");
+      riga.type = "button";
+      riga.className = "talos-list-row";
+      riga.setAttribute("role", "listitem");
+      riga.dataset.scorciatoia = r.id;
+      const testo3 = d.createElement("span");
+      testo3.className = "talos-list-row__text";
+      const titolo2 = d.createElement("span");
+      titolo2.className = "talos-list-row__title";
+      titolo2.textContent = r.nome;
+      const sub = d.createElement("span");
+      sub.className = "talos-list-row__sub";
+      sub.textContent = r.area;
+      testo3.append(titolo2, sub);
+      const aside = d.createElement("span");
+      aside.className = "talos-list-row__aside";
+      const tasto = d.createElement("kbd");
+      tasto.className = "talos-kbd";
+      tasto.textContent = etichettaTasto(r.combo, { apple });
+      aside.append(tasto);
+      riga.append(testo3, aside);
+      return riga;
+    }));
+    if (vuoto) vuoto.hidden = viste.length > 0;
+    return viste.length;
+  };
+  if (cerca && !cerca.dataset.collegato) {
+    cerca.dataset.collegato = "si";
+    cerca.addEventListener("input", () => disegna(cerca.value));
+  }
+  return disegna(cerca?.value || "");
+}
+var SCORCIATOIE;
+var init_scorciatoie = __esm({
+  "src/components/scorciatoie.js"() {
+    SCORCIATOIE = Object.freeze([
+      { id: "comandi", combo: "mod K", area: "Ovunque", nome: "Apri i comandi" },
+      { id: "nuova", combo: "mod N", area: "Ovunque", nome: "Nuova sessione" },
+      { id: "modello", combo: "mod ⇧ M", area: "Chat", nome: "Cambia il modello" },
+      { id: "impostazioni", combo: "mod ,", area: "Ovunque", nome: "Apri le impostazioni" },
+      { id: "scorciatoie", combo: "mod /", area: "Ovunque", nome: "Mostra le scorciatoie" },
+      { id: "terminale", combo: "mod `", area: "Sessione", nome: "Mostra o nascondi il terminale" },
+      { id: "terminaleNuovo", combo: "mod ⇧ `", area: "Sessione", nome: "Nuova scheda del terminale" }
+    ]);
   }
 });
 
@@ -11919,7 +12425,7 @@ var init_context_client = __esm({
 function createContextMonitor({ client, onState, onError, intervalMs = 1200, setTimeoutFn = setTimeout, clearTimeoutFn = clearTimeout }) {
   let sessionId = null, running = false, snapshot = null, epoch = 0, sequence = 0, pending = null, timer, controller, failures = 0, unavailable = false;
   const active = () => snapshot?.jobs?.some((job) => ACTIVE2.has(job.state));
-  function schedule() {
+  function schedule2() {
     clearTimeoutFn(timer);
     if (sessionId && !unavailable && (running || active())) timer = setTimeoutFn(() => api.refresh(), Math.min(15e3, intervalMs * 2 ** Math.min(failures, 4)));
   }
@@ -11934,7 +12440,7 @@ function createContextMonitor({ client, onState, onError, intervalMs = 1200, set
     },
     setRunning(value) {
       running = value === true;
-      schedule();
+      schedule2();
     },
     update(next) {
       if (!sessionId || next?.sessionId !== sessionId || snapshot && next.revision < snapshot.revision) return;
@@ -11945,7 +12451,7 @@ function createContextMonitor({ client, onState, onError, intervalMs = 1200, set
       failures = 0;
       unavailable = false;
       onState?.(structuredClone(snapshot));
-      schedule();
+      schedule2();
     },
     refresh({ afterPending = false } = {}) {
       if (!sessionId || unavailable) return Promise.resolve(null);
@@ -11976,7 +12482,7 @@ function createContextMonitor({ client, onState, onError, intervalMs = 1200, set
         } finally {
           if (current === epoch && ticket === sequence) {
             pending = null;
-            schedule();
+            schedule2();
           }
         }
       })();
@@ -12290,6 +12796,8 @@ var init_app = __esm({
   "src/legacy/app.js"() {
     init_provider_card();
     init_politiche();
+    init_fonti_modelli();
+    init_avvio_sessione();
     init_session_item();
     init_range_scia();
     init_runtime_modelli();
@@ -12336,6 +12844,7 @@ var init_app = __esm({
     init_cronologia();
     init_frase_cercata();
     init_browser_vivo();
+    init_migliora_prompt();
     init_browser_gesti();
     init_scorciatoie();
     init_chat_foot();
@@ -12836,8 +13345,8 @@ var init_app = __esm({
         streamingScrollTarget = element;
         if (!streamingAutoFollow) return;
         if (streamingScrollFrame !== null) return;
-        const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 0));
-        streamingScrollFrame = schedule(() => {
+        const schedule2 = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 0));
+        streamingScrollFrame = schedule2(() => {
           streamingScrollFrame = null;
           const target = streamingScrollTarget;
           streamingScrollTarget = null;
@@ -13002,8 +13511,8 @@ var init_app = __esm({
       function programmaRenderMessaggioStreaming(messageId) {
         streamingRenderPending.add(messageId);
         if (streamingRenderFrame !== null) return;
-        const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 16));
-        streamingRenderFrame = schedule(flushMessaggiStreaming);
+        const schedule2 = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 16));
+        streamingRenderFrame = schedule2(flushMessaggiStreaming);
       }
       function cancellaRenderMessaggiStreaming() {
         if (streamingRenderFrame !== null) {
@@ -16591,12 +17100,18 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const fonti = document.createElement("div");
         fonti.className = "model-picker-sources";
         fonti.setAttribute("role", "tablist");
+        fonti.setAttribute("aria-label", "Dove cercare il modello");
+        fonti.style.flexWrap = "wrap";
+        fonti.style.flexShrink = "0";
+        fonti.style.rowGap = "2px";
+        listEl.id = `modelPickerLista-${Math.random().toString(36).slice(2, 10)}`;
         panel.append(fonti, searchLabel, listEl, footer);
         wrap.append(trigger, panel);
         let modelliCache = null;
         let modelliLocali = null;
+        let erroreLocali = null;
         let modelliDiretti = null;
-        let erroriDiretti = [];
+        let erroriDiretti = {};
         let fonteScelta = "openrouter";
         let valoreScelto = valoreIniziale;
         let aperto = false;
@@ -16605,8 +17120,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         function aggiornaTriggerLabel() {
           triggerLabel.textContent = valoreScelto || etichettaVuota;
         }
+        function catalogoCorrente() {
+          return modelliDellaFonte(fonteScelta, { openrouter: modelliCache, locali: modelliLocali, diretti: modelliDiretti });
+        }
         function filtraModelli2(query) {
-          const catalogo = fonteScelta === "diretti" ? modelliDiretti : modelliCache;
+          const catalogo = catalogoCorrente();
           if (!catalogo) return [];
           const q = query.trim().toLowerCase();
           if (!q) return catalogo;
@@ -16620,36 +17138,58 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           }
           return [...mappa.entries()].sort((a, b) => a[0].localeCompare(b[0]));
         }
+        function scegliFonte(id) {
+          if (fonteScelta === id) return;
+          fonteScelta = id;
+          renderFonti();
+          renderLista();
+          if (eFonteDiretta(id) && !modelliDiretti) caricaDiretti();
+        }
         function renderFonti() {
-          const voci = [
-            { id: "openrouter", etichetta: "OpenRouter", conto: modelliCache ? modelliCache.length : null },
-            { id: "locali", etichetta: "Locali", conto: modelliLocali ? modelliLocali.length : null },
-            { id: "diretti", etichetta: "Diretti", conto: modelliDiretti?.length ?? null }
-          ];
-          fonti.replaceChildren(...voci.map((voce) => {
+          const voci = fontiDelSelettore({ openrouter: modelliCache, locali: modelliLocali, diretti: modelliDiretti });
+          if (!voci.some((voce) => voce.id === fonteScelta)) fonteScelta = "openrouter";
+          const schede = voci.map((voce) => {
             const bottone3 = document.createElement("button");
             bottone3.type = "button";
             bottone3.className = "model-picker-source";
             bottone3.dataset.pickerSource = voce.id;
             bottone3.setAttribute("role", "tab");
+            bottone3.setAttribute("aria-controls", listEl.id);
             const attiva = voce.id === fonteScelta;
             bottone3.setAttribute("aria-selected", String(attiva));
+            bottone3.tabIndex = attiva ? 0 : -1;
             bottone3.classList.toggle("active", attiva);
+            bottone3.style.flex = "0 0 auto";
             bottone3.append(textElement("span", "", voce.etichetta));
             if (Number.isFinite(voce.conto)) bottone3.append(textElement("span", "model-picker-source-count", String(voce.conto)));
-            bottone3.addEventListener("click", () => {
-              fonteScelta = voce.id;
-              renderFonti();
-              renderLista();
-              if (fonteScelta === "diretti" && !modelliDiretti) caricaDiretti();
-            });
+            if (!voce.collegato) bottone3.title = `${voce.etichetta}: chiave non collegata`;
+            bottone3.addEventListener("click", () => scegliFonte(voce.id));
             return bottone3;
-          }));
+          });
+          fonti.replaceChildren(...schede);
         }
+        fonti.addEventListener("keydown", (event) => {
+          const schede = [...fonti.querySelectorAll('[role="tab"]')];
+          const indice2 = schede.indexOf(document.activeElement);
+          if (indice2 < 0) return;
+          const passo = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+          let prossima = null;
+          if (passo) prossima = schede[(indice2 + passo + schede.length) % schede.length];
+          else if (event.key === "Home") prossima = schede[0];
+          else if (event.key === "End") prossima = schede.at(-1);
+          if (!prossima) return;
+          event.preventDefault();
+          const id = prossima.dataset.pickerSource;
+          scegliFonte(id);
+          fonti.querySelector(`[data-picker-source="${id}"]`)?.focus();
+        });
         function renderListaLocali() {
+          metaSpan.textContent = modelliLocali ? `${modelliLocali.length} modelli · su questo computer` : "Modelli installati";
           const pezzi = [];
           pezzi.push(textElement("p", "model-picker-source-note", "Girano su questo computer, senza rete e senza costo. Si accendono da soli alla prima richiesta."));
-          if (!modelliLocali) {
+          if (erroreLocali) {
+            pezzi.push(textElement("p", "board-empty", `Non riesco a leggere i modelli installati: ${erroreLocali}`));
+          } else if (!modelliLocali) {
             pezzi.push(textElement("p", "board-empty", "Leggo i modelli installati…"));
           } else if (modelliLocali.length === 0) {
             pezzi.push(textElement("p", "board-empty", "Nessun modello installato. Si aggiungono dal Laboratorio modelli."));
@@ -16710,26 +17250,104 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           }
           listEl.replaceChildren(...pezzi);
         }
+        function rigaModello(modello) {
+          const opt = document.createElement("button");
+          opt.type = "button";
+          opt.className = "sheet-option model-picker-option";
+          opt.setAttribute("role", "option");
+          opt.setAttribute("aria-selected", String(modello.id === valoreScelto));
+          if (modello.id === valoreScelto) opt.classList.add("active");
+          const iconWrap = document.createElement("span");
+          iconWrap.className = "sheet-icon";
+          iconWrap.innerHTML = icon("i-brain");
+          const textWrap = document.createElement("span");
+          const dettagli = [];
+          if (modello.alias) dettagli.push("ultima versione");
+          if (modello.contextLength) dettagli.push(`${Math.round(modello.contextLength / 1e3)}k ctx`);
+          if (modello.prezzoPrompt) dettagli.push(`$${(Number(modello.prezzoPrompt) * 1e6).toFixed(2)}/M in`);
+          textWrap.append(
+            textElement("strong", "", modello.nome),
+            textElement("small", "", dettagli.length ? `${modello.id} · ${dettagli.join(" · ")}` : modello.id)
+          );
+          opt.append(iconWrap, textWrap);
+          if (modello.id === valoreScelto) {
+            const checkSpan = document.createElement("span");
+            checkSpan.innerHTML = icon("i-check");
+            opt.appendChild(checkSpan);
+          }
+          opt.addEventListener("click", async () => {
+            const effortAlClick = state.effort;
+            const prossimoEffort = aggiornaModelloPrincipale ? effortCompatibilePerModello(modello, effortAlClick) : effortAlClick;
+            const applicaScelta = () => {
+              valoreScelto = modello.id;
+              if (aggiornaModelloPrincipale) {
+                state.model = modello.id;
+                aggiornaPiedeSidebar();
+                if (state.effort === effortAlClick) state.effort = prossimoEffort;
+              }
+              aggiornaTriggerLabel();
+              if (aggiornaModelloPrincipale) {
+                aggiornaPillolaModello();
+                salvaPreferenzeChatDesktop();
+              }
+              chiudi();
+              alSelezionato?.(modello.id);
+            };
+            if (aggiornaModelloPrincipale && sincronizzaSessione && state.realSession.id) {
+              if (panel.getAttribute("aria-busy") === "true") return;
+              panel.setAttribute("aria-busy", "true");
+              opt.disabled = true;
+              try {
+                await sincronizzaImpostazioniSessione({
+                  modello: modello.id,
+                  reasoning: prossimoEffort ? { effort: prossimoEffort } : null
+                });
+                applicaScelta();
+              } catch {
+                valoreScelto = state.model || "";
+                aggiornaTriggerLabel();
+                renderLista();
+              } finally {
+                panel.removeAttribute("aria-busy");
+                opt.disabled = false;
+              }
+              return;
+            }
+            applicaScelta();
+          });
+          return opt;
+        }
+        function etichettaPiede(catalogo) {
+          if (!catalogo) return eFonteDiretta(fonteScelta) ? "Collegamento diretto" : "";
+          const dove = eFonteDiretta(fonteScelta) ? `${PROVIDER_DIRETTI.find((p) => p.id === fonteScelta)?.etichetta || fonteScelta} · collegamento diretto` : "OpenRouter";
+          return `${catalogo.length} modelli · ${dove}`;
+        }
         function renderLista() {
           if (fonteScelta === "locali") {
             renderListaLocali();
             return;
           }
-          if (fonteScelta === "diretti") metaSpan.textContent = modelliDiretti ? `${modelliDiretti.length} modelli · API dirette` : "Cataloghi diretti";
-          else metaSpan.textContent = modelliCache ? `${modelliCache.length} modelli · OpenRouter` : "";
-          const query = searchInput.value;
-          if (!(fonteScelta === "diretti" ? modelliDiretti : modelliCache)) {
-            listEl.replaceChildren(textElement("p", "board-empty", fonteScelta === "diretti" ? "Leggo i cataloghi dei provider collegati…" : "Carico il catalogo da OpenRouter…"));
+          const diretta = eFonteDiretta(fonteScelta);
+          const catalogo = catalogoCorrente();
+          metaSpan.textContent = etichettaPiede(catalogo);
+          if (!catalogo) {
+            listEl.replaceChildren(textElement("p", "board-empty", diretta ? fraseVuotoDiretto(fonteScelta, { diretti: modelliDiretti, errori: erroriDiretti }) : "Carico il catalogo da OpenRouter…"));
             return;
           }
+          const query = searchInput.value;
           const filtrati = filtraModelli2(query);
           if (filtrati.length === 0) {
-            listEl.replaceChildren(textElement("p", "board-empty", query.trim() ? `Nessun modello corrisponde a "${query.trim()}".` : fonteScelta === "diretti" ? erroriDiretti.join(" · ") || "Collega OpenAI, Anthropic o Gemini dal pannello Provider." : "Nessun modello disponibile."));
+            listEl.replaceChildren(textElement("p", "board-empty", query.trim() ? `Nessun modello corrisponde a "${query.trim()}".` : diretta ? fraseVuotoDiretto(fonteScelta, { diretti: modelliDiretti, errori: erroriDiretti }) : "Nessun modello disponibile."));
             return;
           }
           const cercando = query.trim() !== "";
           const pezzi = [];
-          if (fonteScelta === "diretti" && erroriDiretti.length) pezzi.push(textElement("p", "model-picker-source-note", erroriDiretti.join(" · ")));
+          if (diretta && erroriDiretti[fonteScelta]) pezzi.push(textElement("p", "model-picker-source-note", erroriDiretti[fonteScelta]));
+          if (diretta) {
+            pezzi.push(...filtrati.map(rigaModello));
+            listEl.replaceChildren(...pezzi);
+            return;
+          }
           for (const [provider, modelli] of raggruppaPerProvider(filtrati)) {
             const aprireGruppo = cercando || gruppiAperti.has(provider);
             const header = document.createElement("button");
@@ -16753,122 +17371,72 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             });
             pezzi.push(header);
             if (!aprireGruppo) continue;
-            for (const modello of modelli) {
-              const opt = document.createElement("button");
-              opt.type = "button";
-              opt.className = "sheet-option model-picker-option";
-              opt.setAttribute("role", "option");
-              opt.setAttribute("aria-selected", String(modello.id === valoreScelto));
-              if (modello.id === valoreScelto) opt.classList.add("active");
-              const iconWrap = document.createElement("span");
-              iconWrap.className = "sheet-icon";
-              iconWrap.innerHTML = icon("i-brain");
-              const textWrap = document.createElement("span");
-              const dettagli = [];
-              if (modello.alias) dettagli.push("ultima versione");
-              if (modello.contextLength) dettagli.push(`${Math.round(modello.contextLength / 1e3)}k ctx`);
-              if (modello.prezzoPrompt) dettagli.push(`$${(Number(modello.prezzoPrompt) * 1e6).toFixed(2)}/M in`);
-              textWrap.append(
-                textElement("strong", "", modello.nome),
-                textElement("small", "", dettagli.length ? `${modello.id} · ${dettagli.join(" · ")}` : modello.id)
-              );
-              opt.append(iconWrap, textWrap);
-              if (modello.id === valoreScelto) {
-                const checkSpan = document.createElement("span");
-                checkSpan.innerHTML = icon("i-check");
-                opt.appendChild(checkSpan);
-              }
-              opt.addEventListener("click", async () => {
-                const effortAlClick = state.effort;
-                const prossimoEffort = aggiornaModelloPrincipale ? effortCompatibilePerModello(modello, effortAlClick) : effortAlClick;
-                const applicaScelta = () => {
-                  valoreScelto = modello.id;
-                  if (aggiornaModelloPrincipale) {
-                    state.model = modello.id;
-                    aggiornaPiedeSidebar();
-                    if (state.effort === effortAlClick) state.effort = prossimoEffort;
-                  }
-                  aggiornaTriggerLabel();
-                  if (aggiornaModelloPrincipale) {
-                    aggiornaPillolaModello();
-                    salvaPreferenzeChatDesktop();
-                  }
-                  chiudi();
-                  alSelezionato?.(modello.id);
-                };
-                if (aggiornaModelloPrincipale && sincronizzaSessione && state.realSession.id) {
-                  if (panel.getAttribute("aria-busy") === "true") return;
-                  panel.setAttribute("aria-busy", "true");
-                  opt.disabled = true;
-                  try {
-                    await sincronizzaImpostazioniSessione({
-                      modello: modello.id,
-                      reasoning: prossimoEffort ? { effort: prossimoEffort } : null
-                    });
-                    applicaScelta();
-                  } catch {
-                    valoreScelto = state.model || "";
-                    aggiornaTriggerLabel();
-                    renderLista();
-                  } finally {
-                    panel.removeAttribute("aria-busy");
-                    opt.disabled = false;
-                  }
-                  return;
-                }
-                applicaScelta();
-              });
-              pezzi.push(opt);
-            }
+            pezzi.push(...modelli.map(rigaModello));
           }
           listEl.replaceChildren(...pezzi);
         }
         async function caricaDiretti() {
-          erroriDiretti = [];
+          erroriDiretti = {};
           try {
             const dati = await apiGet("/api/v1/providers");
-            const disponibili = (dati.items || dati.providers || []).filter((p) => ["openai", "anthropic", "gemini"].includes(p.id) && p.keyConfigured);
-            const results = await Promise.all(disponibili.map(async (p) => {
+            const elenco2 = dati.items || dati.providers || [];
+            const conChiave = new Set(elenco2.filter((p) => p.keyConfigured).map((p) => p.id));
+            const perFornitore = {};
+            await Promise.all(PROVIDER_DIRETTI.map(async ({ id, etichetta }) => {
+              if (!conChiave.has(id)) {
+                perFornitore[id] = null;
+                return;
+              }
               try {
-                return (await apiGet(`/api/v1/providers/${p.id}/models`)).modelli;
+                perFornitore[id] = (await apiGet(`/api/v1/providers/${id}/models`)).modelli || [];
               } catch (e) {
-                erroriDiretti.push(`${p.label}: ${e.message}`);
-                return [];
+                perFornitore[id] = [];
+                erroriDiretti[id] = `${etichetta}: ${e.message}`;
               }
             }));
-            modelliDiretti = results.flat();
+            modelliDiretti = perFornitore;
           } catch (e) {
-            erroriDiretti = [e.message];
-            modelliDiretti = [];
+            modelliDiretti = Object.fromEntries(PROVIDER_DIRETTI.map(({ id }) => [id, []]));
+            for (const { id } of PROVIDER_DIRETTI) erroriDiretti[id] = e.message;
           }
           renderFonti();
-          if (fonteScelta === "diretti") renderLista();
+          if (eFonteDiretta(fonteScelta)) renderLista();
+        }
+        function caricaLocali() {
+          return apiGet("/api/v1/local-models").then((locali) => {
+            modelliLocali = Array.isArray(locali?.items) ? locali.items : [];
+            erroreLocali = null;
+          }).catch((e) => {
+            modelliLocali = null;
+            erroreLocali = e?.message || "lettura non riuscita";
+          }).finally(() => {
+            renderFonti();
+            if (fonteScelta === "locali") renderListaLocali();
+          });
         }
         async function carica({ forza = false } = {}) {
-          if (fonteScelta === "diretti") {
-            await caricaDiretti();
+          const localiInVolo = caricaLocali();
+          const direttiInVolo = caricaDiretti();
+          renderFonti();
+          if (eFonteDiretta(fonteScelta)) {
+            await direttiInVolo;
             return;
           }
-          listEl.replaceChildren(textElement("p", "board-empty", "Carico il catalogo da OpenRouter…"));
+          if (fonteScelta === "locali") await localiInVolo;
+          else listEl.replaceChildren(textElement("p", "board-empty", "Carico il catalogo da OpenRouter…"));
           try {
             const dati = await apiGet(`/api/v1/models${forza ? "?forza=1" : ""}`);
             modelliCache = dati.modelli;
             caricato = true;
-            apiGet("/api/v1/local-models").then((locali) => {
-              modelliLocali = Array.isArray(locali?.items) ? locali.items : [];
-              renderFonti();
-              if (fonteScelta === "locali") renderListaLocali();
-            }).catch(() => {
-              modelliLocali = [];
-              renderFonti();
-              if (fonteScelta === "locali") renderListaLocali();
-            });
             metaSpan.textContent = `${dati.modelli.length} modelli${dati.daCache ? " · da cache" : ""}`;
             renderFonti();
             renderLista();
           } catch (error) {
-            listEl.replaceChildren(textElement("p", "board-empty", `Catalogo non disponibile: ${error.message}`));
-            metaSpan.textContent = "";
+            renderFonti();
+            if (fonteScelta === "openrouter") {
+              listEl.replaceChildren(textElement("p", "board-empty", `Catalogo OpenRouter non disponibile: ${error.message}`));
+              metaSpan.textContent = "";
+            }
           }
         }
         function apri() {
@@ -19780,12 +20348,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       function appendArtifactCard(titolo2, id) {
         const src = API(`/api/v1/artifacts/${encodeURIComponent(id)}`);
-        const { card: article, frame } = creaArtefatto({ titolo: titolo2 || "Artefatto", src, onApri: () => window.open(src, "_blank", "noopener") });
+        const { card: article, frame: frame2 } = creaArtefatto({ titolo: titolo2 || "Artefatto", src, onApri: () => window.open(src, "_blank", "noopener") });
         article.classList.add("real-artifact-card");
         nellaChat(article);
         markMotionEnter(article);
         scorriAllaBollaAppesa(article);
-        return { frame };
+        return { frame: frame2 };
       }
       function tronca2(testo3, massimo) {
         const t2 = String(testo3 ?? "");
@@ -20047,12 +20615,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       function motivoRichiestaApprovazione(azione) {
         const perAttrezzo = state.permessiPerAttrezzo || {};
         const regola = azione?.tipo ? perAttrezzo[azione.tipo] : null;
-        const politica = etichettaPermesso(state.permissions);
-        if (regola === "chiedi") return `Chiede perché «${nomeUmanoAttrezzo2(azione.tipo)}» ha il cancello «Chiedi conferma», anche con la sessione su «${politica}».`;
-        if (state.permissions === "On request") return `Chiede perché la sessione è su «${politica}»: ogni azione che cambia qualcosa passa da te.`;
+        const politica2 = etichettaPermesso(state.permissions);
+        if (regola === "chiedi") return `Chiede perché «${nomeUmanoAttrezzo2(azione.tipo)}» ha il cancello «Chiedi conferma», anche con la sessione su «${politica2}».`;
+        if (state.permissions === "On request") return `Chiede perché la sessione è su «${politica2}»: ogni azione che cambia qualcosa passa da te.`;
         const altri = Object.entries(perAttrezzo).filter(([, v]) => v === "chiedi").map(([k]) => nomeUmanoAttrezzo2(k));
         if (altri.length) return `Chiede perché questa sessione ha un canale di approvazione aperto per ${altri.join(" e ")}: finché c'è, il kernel chiede anche per gli altri attrezzi.`;
-        return `Chiede perché questa azione tocca qualcosa fuori dalla sola lettura, e la sessione è su «${politica}».`;
+        return `Chiede perché questa azione tocca qualcosa fuori dalla sola lettura, e la sessione è su «${politica2}».`;
       }
       function appendApprovalCard(requestId, azione) {
         const bersaglio = azione?.percorso || azione?.comando || azione?.question || azione?.title || "";
@@ -20188,10 +20756,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       function codificaFrameClient(tipo, testo3) {
         const corpo = new TextEncoder().encode(testo3);
-        const frame = new Uint8Array(corpo.length + 1);
-        frame[0] = tipo;
-        frame.set(corpo, 1);
-        return frame;
+        const frame2 = new Uint8Array(corpo.length + 1);
+        frame2[0] = tipo;
+        frame2.set(corpo, 1);
+        return frame2;
       }
       function memoriaSchedeTerminale() {
         try {
@@ -20663,8 +21231,21 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             renderizzaBrowser();
           },
           chiudi: (id) => chiudiSchedaBrowser(id),
+          /*
+           * ⛔ 11/09/2026 — `void` INGHIOTTE. Prima questa riga era `void apriPaginaVivaBrowser(url)`:
+           *   qualunque rottura fuori dal `try` interno (un guasto nel disegno, un campo che non c'è)
+           *   diventava una promessa rifiutata che nessuno ascolta — nessuna scheda, nessun avviso,
+           *   nessun rosso in console che la persona possa vedere. È la forma esatta della
+           *   segnalazione «il campo URL non apre niente e non dice niente».
+           *   Ricerca 11/09/2026 (MDN «Window: unhandledrejection event»; blog.openreplay.com «How to
+           *   Handle Uncaught (in promise) TypeError»): una promessa fluttuante è la causa tipica di un
+           *   errore che non arriva a nessuno, e `unhandledrejection` è una rete di sicurezza, non la
+           *   gestione — la gestione si scrive dove la promessa nasce. Qui.
+           */
           apri: (url) => {
-            void apriPaginaVivaBrowser(url);
+            apriPaginaVivaBrowser(url).catch((errore) => {
+              browserUi?.avvisa(messaggioErroreUtente(errore, "Non sono riuscito ad aprire questo indirizzo."));
+            });
           },
           caricata: (id) => {
             const v = state.realSession.browserVive.find((x) => x.id === id);
@@ -20691,9 +21272,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
               pagina.motivoCornice = "Non ho potuto controllare se questa pagina si lascia mostrare qui dentro.";
             }).finally(() => renderizzaBrowser());
           },
+          // ⛔ stesso motivo di `apri` qui sopra: una ricarica che si rompe deve dirlo, non sparire.
           rileggi: (s) => {
             if (s.tipo === "viva") {
-              void apriPaginaVivaBrowser(s.url, s.id);
+              apriPaginaVivaBrowser(s.url, s.id).catch((errore) => {
+                browserUi?.avvisa(messaggioErroreUtente(errore, "Non sono riuscito a ricaricare questa pagina."));
+              });
             } else preparaCommentoNelComposer(`Rileggi la pagina ${s.url} e dimmi cosa è cambiato.`);
           },
           annota: (s, attivo) => {
@@ -21647,8 +22231,17 @@ ${testo3}` : testo3;
          *        `mobile/src/stores/settings.ts:824-829` «the complex renderer ships ON by default»).
          *   ⛔ Chi non lo vuole lo spegne da Aspetto e il timbro rende la scelta definitiva; e per
          *     tornare indietro basta questa riga.
+         *
+         * ⛔⛔⛔ 11/09, SERA — SPENTO DI SERIE, per decisione dell'owner e con un motore nuovo.
+         *   Alle 17 l'owner l'aveva abolito del tutto dopo quattro miei tentativi falliti; alle 19 ha
+         *   consegnato il SUO pacchetto (renderer Canvas a 14 scene, `src/motion/`) e in plan mode ha
+         *   deciso: «spento finché non lo accendi», con la sezione «Sfondo» delle Impostazioni
+         *   VISIBILE, così chi lo vuole lo trova. Nessuno dei concorrenti spedisce uno sfondo animato
+         *   acceso (Hermes: otto skin statiche, letto nel suo codice l'11/09). Chi l'aveva già acceso
+         *   con timbro (`backgroundMotionVersione: 2`) lo tiene: questa riga è solo il valore di chi
+         *   non ha mai scelto.
          */
-        backgroundMotion: true,
+        backgroundMotion: false,
         interfaceMotion: true,
         motionMode: "adaptive",
         motionQuality: "balanced",
@@ -23945,6 +24538,9 @@ ${testo3}` : testo3;
             syncRunComposerState();
           }
         }
+        if (schedaAgentiDaRileggere({ elenco: elenco2, sessioneCorrente: state.realSession.id, figli: state.realSession.figli })) {
+          void caricaFigliSessione();
+        }
         state.sessionSelection.available = new Map(elenco2.map((sessione) => [sessione.sessionId, sessione]));
         void aggiornaContatoriLuoghi(elenco2.length);
         for (const id of [...state.sessionSelection.selected]) {
@@ -24154,6 +24750,10 @@ ${testo3}` : testo3;
           typeaheadTimer: null,
           collapsed: false,
           creatingFolder: false,
+          /* BC-14: l'ultima decisione di `statoAvvioSessione`, così il submit non la ricalcola a modo
+             suo — due copie della stessa regola sono esattamente il difetto che stiamo togliendo. */
+          puoAvviare: false,
+          rimedioSu: "cartella",
           /* ⛔ La cartella del tasto destro: nome sì, percorso no — e non è una mancanza, è il patto. */
           launch
         };
@@ -24305,15 +24905,15 @@ ${testo3}` : testo3;
         permissionSection.appendChild(textElement("span", "sheet-label", "Accesso al workspace"));
         const permissionGrid = document.createElement("div");
         permissionGrid.className = "workspace-chooser-permissions";
-        const permissionCopy = Object.fromEntries(POLITICHE.map((p) => [p.valore, p.nome]));
         const permissionButtons = [];
-        for (const permission of ["Read only", "Workspace write", "On request", "Full access"]) {
+        for (const permission of valoriPolitiche()) {
           const button2 = document.createElement("button");
           button2.type = "button";
           button2.dataset.workspacePermission = permission;
           button2.className = "workspace-chooser-permission";
           button2.setAttribute("aria-pressed", String(permission === local.permission));
-          button2.innerHTML = `${icon("i-shield")}<span><strong>${permission}</strong><small>${permissionCopy[permission]}</small></span>`;
+          button2.title = descrizionePolitica(permission);
+          button2.innerHTML = `${icon("i-shield")}<span><strong>${nomeUmanoPolitica(permission)}</strong><small>${notaPolitica(permission)}</small></span>`;
           button2.addEventListener("click", () => {
             local.permission = permission;
             permissionButtons.forEach((item) => item.setAttribute("aria-pressed", String(item === button2)));
@@ -24325,6 +24925,8 @@ ${testo3}` : testo3;
         const policyGate = document.createElement("p");
         policyGate.className = "workspace-chooser-policy-gate";
         policyGate.dataset.workspacePolicyGate = "true";
+        policyGate.setAttribute("role", "status");
+        policyGate.style.color = "var(--text-2)";
         permissionSection.append(permissionGrid, policyGate);
         right.append(rightHead, modelSection, reasoningSection, plannerSection, permissionSection);
         const columns = document.createElement("div");
@@ -24342,7 +24944,13 @@ ${testo3}` : testo3;
         submit.id = "workspaceChooserSubmit";
         submit.className = "primary-btn compact";
         submit.textContent = "Scegli una cartella";
-        footer.append(cancel, submit);
+        const footerNote = document.createElement("p");
+        footerNote.className = "workspace-chooser-help talos-grow";
+        footerNote.dataset.workspaceSubmitNote = "true";
+        footerNote.setAttribute("role", "status");
+        footerNote.style.marginTop = "0";
+        footerNote.style.color = "var(--text-2)";
+        footer.append(footerNote, cancel, submit);
         form.append(shortcuts, columns, footer);
         function pathKey(path) {
           return String(path || "").replace(/[\\/]+$/, "").toLocaleLowerCase("en-US");
@@ -24395,18 +25003,16 @@ ${testo3}` : testo3;
             selectedPath.textContent = local.selected?.path || (local.selected?.launchId ? `${local.selected.name} · scelta da Windows` : "Nessuna cartella scelta");
           }
           if (local.selected?.path) void chiediRitrattoCartella(local.selected.path);
-          const allowlisted = Boolean(local.selected?.projectId);
-          const ready = !local.busy && Boolean(local.selected) && (allowlisted || local.permission === "Full access");
-          submit.disabled = !ready;
-          const nomeScelto = local.selected?.path ? folderName(local.selected.path) : local.selected?.name ?? "";
-          submit.textContent = local.busy ? "Apro la cartella…" : ready ? `Continua nella chat — ${nomeScelto}` : "Scegli una cartella";
-          if (local.busy) policyGate.textContent = "Attendi che la cartella scelta sia pronta.";
-          else if (!local.selected) policyGate.textContent = "Scegli una cartella per continuare.";
-          else if (allowlisted) policyGate.textContent = `${local.permission}: TALOS resterà nella cartella scelta.`;
-          else if (local.selected?.launchId) {
-            policyGate.textContent = local.permission === "Full access" ? `${nomeScelto} arriva da Esplora file. TALOS resterà esattamente in questa cartella.` : `${nomeScelto} è fuori dai progetti già autorizzati: per usarla scegli Full access. TALOS resterà comunque solo qui dentro.`;
-          } else if (local.permission === "Full access") policyGate.textContent = "Full access consente di usare questa cartella esterna. La scelta sarà verificata di nuovo all’avvio.";
-          else policyGate.textContent = "Questa cartella è esterna ai progetti già autorizzati. Se vuoi usarla, scegli Full access.";
+          const decisione = statoAvvioSessione({ cartella: local.selected, permesso: local.permission, occupato: local.busy });
+          submit.disabled = decisione.disabilitato;
+          submit.textContent = decisione.etichetta;
+          submit.removeAttribute("aria-disabled");
+          submit.setAttribute("aria-describedby", "workspaceChooserSubmitNote");
+          footerNote.id = "workspaceChooserSubmitNote";
+          footerNote.textContent = decisione.motivo;
+          policyGate.textContent = decisione.motivo;
+          local.rimedioSu = decisione.rimedioSu;
+          local.puoAvviare = decisione.puoAvviare;
           const toolsDisabled = local.busy || local.creatingFolder || !local.current;
           newFolderButton.disabled = toolsDisabled;
           refreshFoldersButton.disabled = toolsDisabled;
@@ -24703,8 +25309,14 @@ ${testo3}` : testo3;
           event.preventDefault();
           if (local.busy) return;
           const allowlisted = Boolean(local.selected?.projectId);
-          if (!local.selected || !allowlisted && local.permission !== "Full access") {
-            permissionSection.scrollIntoView({ block: "nearest" });
+          if (!local.puoAvviare) {
+            if (local.rimedioSu === "permesso") {
+              permissionSection.scrollIntoView({ block: "nearest" });
+              permissionButtons.find((b) => b.dataset.workspacePermission === "Full access")?.focus();
+            } else {
+              treeFrame.scrollIntoView({ block: "nearest" });
+              focusRow(local.focusedPath || local.current?.path);
+            }
             return;
           }
           const model = modelPicker.getValore();
@@ -26088,6 +26700,65 @@ ${blocchi.join("\n\n")}` : testa;
         }
         apriMenuAllega($2("#capabilityBtn"));
       });
+      let miglioraPrompt = null;
+      let miglioraPromptModello = null;
+      function pannelloMiglioraPrompt() {
+        const modello = state.model || "";
+        if (miglioraPrompt && miglioraPromptModello === modello) return miglioraPrompt;
+        miglioraPrompt?.distruggi();
+        miglioraPromptModello = modello;
+        miglioraPrompt = montaMiglioraPrompt({
+          modello,
+          /* ⛔ letto ADESSO, non all'apertura: fra l'apertura e il clic su «Riscrivi» si continua a scrivere. */
+          leggiPrompt: () => $2("#composerInput")?.value || "",
+          chiedi: ({ prompt, profondita }) => {
+            const sessione = state.realSession.id;
+            if (!sessione) {
+              const e = new Error("Avvia la chat: la riscrittura usa il modello di questa conversazione.");
+              e.code = "QUERY_INVALID";
+              return Promise.reject(e);
+            }
+            return apiPost(`/api/v1/sessions/${encodeURIComponent(sessione)}/migliora-prompt`, { prompt, profondita });
+          },
+          applica: ({ modo, testo: testo3 }) => {
+            const input = $2("#composerInput");
+            if (!input) return;
+            input.value = modo === "sostituisci" ? testo3 : `${input.value.trimEnd()}
+
+${testo3}`;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+            input.focus();
+          },
+          onChiudi: () => {
+            $2("#miglioraPromptBtn")?.setAttribute("aria-expanded", "false");
+          }
+        });
+        const el26 = miglioraPrompt.elemento;
+        el26.id = "miglioraPromptPannello";
+        el26.style.position = "absolute";
+        el26.style.left = "0";
+        el26.style.bottom = "calc(100% + var(--talos-space-sm))";
+        el26.style.zIndex = "var(--talos-z-menu)";
+        el26.style.boxShadow = "var(--talos-shadow-floating)";
+        $2("#composerForm")?.append(el26);
+        return miglioraPrompt;
+      }
+      $2("#miglioraPromptBtn")?.addEventListener("click", (evento) => {
+        evento.stopPropagation();
+        const bottone3 = $2("#miglioraPromptBtn");
+        const pannello = pannelloMiglioraPrompt();
+        if (bottone3.getAttribute("aria-expanded") === "true") {
+          pannello.chiudi();
+          return;
+        }
+        bottone3.setAttribute("aria-expanded", "true");
+        pannello.apri();
+      });
+      ROOT().addEventListener("click", (evento) => {
+        if (!miglioraPrompt || miglioraPrompt.elemento.hidden) return;
+        if (evento.target.closest?.("#miglioraPromptPannello, #miglioraPromptBtn")) return;
+        miglioraPrompt.chiudi();
+      });
       collegaTerminaleInBasso();
       const ALTEZZA_TERMINALE_CHIAVE = "talos.harness.desktop.terminale-basso.altezza";
       const ALTEZZA_TERMINALE_MIN = 120;
@@ -27143,6 +27814,1523 @@ ${blocchi.join("\n\n")}` : testa;
   }
 });
 
+// src/motion/desktop-scenes.js
+var TALOS_DESKTOP_SCENES;
+var init_desktop_scenes = __esm({
+  "src/motion/desktop-scenes.js"() {
+    (function() {
+      "use strict";
+      const TAU = Math.PI * 2, PHI = (1 + Math.sqrt(5)) / 2, GOLDEN_ANGLE = TAU * (1 - 1 / PHI);
+      const clamp2 = (v, a, b) => Math.max(a, Math.min(b, v));
+      const mix = (a, b, t2) => a + (b - a) * t2;
+      const invLerp = (a, b, v) => clamp2((v - a) / Math.max(1e-9, b - a), 0, 1);
+      function smoothstep(a, b, v) {
+        const t2 = invLerp(a, b, v);
+        return t2 * t2 * (3 - 2 * t2);
+      }
+      function smootherstep(a, b, v) {
+        const t2 = invLerp(a, b, v);
+        return t2 * t2 * t2 * (t2 * (t2 * 6 - 15) + 10);
+      }
+      const fract = (v) => v - Math.floor(v);
+      function wrap(v, m) {
+        const r = v % m;
+        return r < 0 ? r + m : r;
+      }
+      function sceneHash(id) {
+        let h = 2166136261;
+        for (const c of id) {
+          h ^= c.charCodeAt(0);
+          h = Math.imul(h, 16777619);
+        }
+        return h >>> 0;
+      }
+      function random(seed) {
+        let value = seed >>> 0;
+        return () => {
+          value += 1831565813;
+          let r = value;
+          r = Math.imul(r ^ r >>> 15, r | 1);
+          r ^= r + Math.imul(r ^ r >>> 7, r | 61);
+          return ((r ^ r >>> 14) >>> 0) / 4294967296;
+        };
+      }
+      const rngFor = (id, seed, salt = 0) => random((seed ^ sceneHash(id) ^ Math.imul(salt + 1, 2654435769)) >>> 0);
+      function hash01(a, b, c = 0) {
+        let v = (Math.imul(a | 0, 73244475) ^ Math.imul(b | 0, 295559667) ^ Math.imul(c | 0, 3427101)) >>> 0;
+        v = Math.imul(v ^ v >>> 16, 73244475);
+        v = Math.imul(v ^ v >>> 16, 73244475);
+        return ((v ^ v >>> 16) >>> 0) / 4294967296;
+      }
+      function noise1(v, seed = 0) {
+        const i = Math.floor(v), f = fract(v);
+        return mix(hash01(i, seed), hash01(i + 1, seed), f * f * (3 - 2 * f));
+      }
+      function noise2(x, y, seed = 0) {
+        const ix = Math.floor(x), iy = Math.floor(y), fx = fract(x), fy = fract(y), sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+        return mix(mix(hash01(ix, iy, seed), hash01(ix + 1, iy, seed), sx), mix(hash01(ix, iy + 1, seed), hash01(ix + 1, iy + 1, seed), sx), sy);
+      }
+      function fbm2(x, y, seed = 0, octaves = 4) {
+        let s = 0, a = 0.5, f = 1, t2 = 0;
+        for (let o = 0; o < octaves; o++) {
+          s += noise2(x * f, y * f, seed + o * 101) * a;
+          t2 += a;
+          f *= 2.03;
+          a *= 0.5;
+        }
+        return t2 > 0 ? s / t2 : 0;
+      }
+      function makePaletteGeometry(id, seed, input) {
+        const a = input.palette[input.colorMode];
+        return Object.freeze({ id, width: input.viewport.width, height: input.viewport.height, mobile: input.viewport.width < 600, accent: a.accent, secondary: a.secondary, border: a.border_strong, surface: a.surface_elevated, background: a.background, focus: a.focus, info: a.info, success: a.success, warning: a.warning, danger: a.danger, parameters: Object.freeze({ ...input.parameters }), quality: input.effectiveQuality.tier, densityScale: input.effectiveQuality.densityScale, seed });
+      }
+      const alpha = (g, b) => clamp2(b * (0.32 + g.parameters.intensity / 100 * 0.8) * (0.7 + g.parameters.contrast / 100 * 0.46), 6e-3, 0.94);
+      function qCount(g, lo, bal, hi) {
+        const b = g.quality === "high" ? hi : g.quality === "low" ? lo : bal;
+        return Math.max(2, Math.round(b * (g.mobile ? 0.78 : 1) * clamp2(g.densityScale * (0.72 + g.parameters.density / 360), 0.48, 1.38)));
+      }
+      const primitiveCount = (i, lo, bal, hi) => i.effectiveQuality.tier === "high" ? hi : i.effectiveQuality.tier === "low" ? lo : bal;
+      const seconds = (ms) => clamp2(ms / 1e3, 0, 0.05);
+      function linearGradient(c, g, x0, y0, x1, y1, colors = [g.accent, g.secondary]) {
+        const grad = c.createLinearGradient(x0, y0, x1, y1);
+        grad.addColorStop(0, "transparent");
+        colors.forEach((v, i) => grad.addColorStop((i + 1) / (colors.length + 1), v));
+        grad.addColorStop(1, "transparent");
+        return grad;
+      }
+      function radialGradient(c, x, y, r, inner, middle) {
+        const g = c.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, inner);
+        g.addColorStop(0.38, middle);
+        g.addColorStop(1, "transparent");
+        return g;
+      }
+      function strokeLine(c, x0, y0, x1, y1) {
+        c.beginPath();
+        c.moveTo(x0, y0);
+        c.lineTo(x1, y1);
+        c.stroke();
+      }
+      function polyline(c, p, close = false) {
+        if (!p.length) return;
+        c.beginPath();
+        c.moveTo(p[0].x, p[0].y);
+        for (let i = 1; i < p.length; i++) c.lineTo(p[i].x, p[i].y);
+        if (close) c.closePath();
+      }
+      const polygon = (c, p) => polyline(c, p, true);
+      function drawDiamond(c, x, y, r) {
+        c.beginPath();
+        c.moveTo(x, y - r);
+        c.lineTo(x + r, y);
+        c.lineTo(x, y + r);
+        c.lineTo(x - r, y);
+        c.closePath();
+      }
+      const ringPoints = (cx, cy, r, count2, phase = 0, warp = 0) => Array.from({ length: count2 }, (_, i) => {
+        const a = phase + i / count2 * TAU, rr = r * (1 + warp * Math.sin(a * 3 + phase * 0.7));
+        return { x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr };
+      });
+      const defineScene = (d) => Object.freeze(d);
+      const forgeComplexScene = defineScene({ id: "forge", createState: (seed) => ({ seed, time: 0, cycle: 0, impulse: 0 }), prepare: ({ state, input }) => {
+        const base = makePaletteGeometry("forge", state.seed, input), rng = rngFor("forge", state.seed, 101), rankCount = qCount(base, 4, 5, 6), nodes = [], edges = [];
+        for (let rank = 0; rank < rankCount; rank++) {
+          const inRank = rank === 0 || rank === rankCount - 1 ? 2 : Math.round(2 + rng() * 2);
+          for (let local = 0; local < inRank; local++) nodes.push(Object.freeze({ x: base.width * (0.1 + 0.8 * rank / Math.max(1, rankCount - 1)) + (rng() - 0.5) * base.width * 0.035, y: base.height * (0.18 + 0.64 * (local + 1) / (inRank + 1)) + (rng() - 0.5) * base.height * 0.05, rank, heat: rng(), size: 4 + rng() * 7 }));
+        }
+        for (let i = 0; i < nodes.length; i++) {
+          const from = nodes[i], candidates = nodes.map((node, j) => ({ node, i: j })).filter(({ node }) => node.rank === from.rank + 1);
+          candidates.slice(0, 1 + i % 2).forEach(({ i: j }, lane) => edges.push(Object.freeze({ from: i, to: j, bow: (rng() - 0.5) * base.height * 0.16, lane })));
+        }
+        const gears = Object.freeze(Array.from({ length: qCount(base, 2, 3, 4) }, (_, i) => Object.freeze({ x: base.width * (0.16 + i * 0.24 + rng() * 0.08), y: base.height * (0.78 - i % 2 * 0.46), radius: 18 + rng() * 28, teeth: 8 + Math.round(rng() * 7), direction: i % 2 === 0 ? 1 : -1, phase: rng() * TAU }))), rails = Object.freeze(Array.from({ length: qCount(base, 3, 5, 7) }, (_, i) => base.height * (0.13 + 0.74 * (i + 1) / (qCount(base, 3, 5, 7) + 1))));
+        return { geometry: Object.freeze({ ...base, nodes: Object.freeze(nodes), edges: Object.freeze(edges), gears, rails }), primitiveCount: primitiveCount(input, 230, 310, 390) };
+      }, update: ({ state, input, stepMs }) => {
+        const dt = seconds(stepMs) * input.parameters.speed / 100;
+        state.time += dt;
+        state.cycle = (state.cycle + dt * 0.22) % 1;
+        state.impulse = (state.impulse + dt * 0.84) % 1;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.lineJoin = "bevel";
+        c.lineCap = "square";
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.7;
+        c.globalAlpha = alpha(g, 0.14);
+        for (let i = 0; i < g.rails.length; i++) {
+          const y = g.rails[i] + Math.sin(s.time * 2.1 + i) * 0.65;
+          strokeLine(c, g.width * 0.04, y, g.width * 0.96, y);
+          for (let n = 0; n < 14; n++) {
+            const x = g.width * (0.06 + 0.88 * n / 13);
+            strokeLine(c, x, y - 3 - n % 3, x, y + 3 + n % 3);
+          }
+        }
+        const px = g.width * 0.5, pt = g.height * 0.12, pb = g.height * 0.88, pw = g.width * 0.12;
+        c.strokeStyle = g.border;
+        c.lineWidth = 1.1;
+        c.globalAlpha = alpha(g, 0.22);
+        strokeLine(c, px - pw, pt, px - pw, pb);
+        strokeLine(c, px + pw, pt, px + pw, pb);
+        strokeLine(c, px - pw, pt, px + pw, pt);
+        strokeLine(c, px - pw * 1.25, pb, px + pw * 1.25, pb);
+        const ram = g.height * (0.26 + 0.24 * (0.5 + 0.5 * Math.sin(s.time * 0.46)));
+        c.fillStyle = g.accent;
+        c.globalAlpha = alpha(g, 0.16);
+        c.fillRect(px - pw * 0.32, pt, pw * 0.64, ram - pt);
+        c.fillStyle = g.warning;
+        c.globalAlpha = alpha(g, 0.34);
+        c.fillRect(px - pw * 0.52, ram, pw * 1.04, 4);
+        c.strokeStyle = g.secondary;
+        c.globalAlpha = alpha(g, 0.16);
+        for (let r = 0; r < 5; r++) {
+          const x = px - pw * 0.8 + r * pw * 0.4;
+          strokeLine(c, x, pt + 10, x, ram - 8);
+        }
+        for (const gear of g.gears) {
+          c.save();
+          c.translate(gear.x, gear.y);
+          c.rotate(gear.phase + s.time * 0.18 * gear.direction);
+          c.strokeStyle = g.border;
+          c.fillStyle = g.surface;
+          c.lineWidth = 1;
+          c.globalAlpha = alpha(g, 0.18);
+          c.beginPath();
+          c.arc(0, 0, gear.radius * 0.68, 0, TAU);
+          c.fill();
+          c.stroke();
+          for (let t2 = 0; t2 < gear.teeth; t2++) {
+            const a = t2 / gear.teeth * TAU;
+            c.lineWidth = t2 % 2 === 0 ? 2.2 : 1;
+            strokeLine(c, Math.cos(a) * gear.radius * 0.72, Math.sin(a) * gear.radius * 0.72, Math.cos(a) * gear.radius, Math.sin(a) * gear.radius);
+          }
+          c.strokeStyle = g.accent;
+          c.globalAlpha = alpha(g, 0.42);
+          c.lineWidth = 1.3;
+          c.beginPath();
+          c.arc(0, 0, gear.radius * 0.18, 0, TAU);
+          c.stroke();
+          c.restore();
+        }
+        const pe = Math.floor(s.cycle * Math.max(1, g.edges.length));
+        g.edges.forEach((e, i) => {
+          const f = g.nodes[e.from], t2 = g.nodes[e.to], hot = i === pe || i === (pe + 1) % Math.max(1, g.edges.length);
+          c.beginPath();
+          c.moveTo(f.x, f.y);
+          c.bezierCurveTo(f.x + (t2.x - f.x) * 0.34, f.y + e.bow, t2.x - (t2.x - f.x) * 0.2, t2.y - e.bow * 0.45, t2.x, t2.y);
+          c.strokeStyle = hot ? linearGradient(c, g, f.x, f.y, t2.x, t2.y, [g.warning, g.accent, g.secondary]) : g.border;
+          c.globalAlpha = alpha(g, hot ? 0.74 : 0.2);
+          c.lineWidth = hot ? 2.3 : 0.9;
+          c.shadowBlur = hot ? 12 : 0;
+          c.shadowColor = g.accent;
+          c.stroke();
+        });
+        g.nodes.forEach((n, i) => {
+          const beat = 0.5 + 0.5 * Math.sin(s.time * 1.8 + i * 0.7), active = Math.abs(s.cycle - n.rank / Math.max(1, g.nodes.length)) < 0.11;
+          c.fillStyle = active ? g.warning : n.heat > 0.58 ? g.accent : g.secondary;
+          c.strokeStyle = g.border;
+          c.globalAlpha = alpha(g, 0.45 + beat * 0.18);
+          c.shadowBlur = active ? 14 : 4;
+          c.shadowColor = g.accent;
+          drawDiamond(c, n.x, n.y, n.size * (0.8 + beat * 0.22));
+          c.fill();
+          c.stroke();
+          c.shadowBlur = 0;
+        });
+        const wx = g.width * (0.09 + 0.82 * s.impulse), wy = g.height * (0.46 + Math.sin(s.time * 1.7) * 0.08);
+        c.fillStyle = radialGradient(c, wx, wy, 48, g.focus, g.warning);
+        c.globalAlpha = alpha(g, 0.35);
+        c.beginPath();
+        c.arc(wx, wy, 34, 0, TAU);
+        c.fill();
+        c.strokeStyle = g.warning;
+        c.globalAlpha = alpha(g, 0.38);
+        for (let sp = 0; sp < 7; sp++) {
+          const a = hash01(sp, Math.floor(s.time * 4), g.seed) * TAU, l = 8 + hash01(sp, g.seed, 9) * 26;
+          strokeLine(c, wx, wy, wx + Math.cos(a) * l, wy + Math.sin(a) * l);
+        }
+        c.restore();
+      } });
+      const paperComplexScene = defineScene({ id: "paper", createState: (seed) => ({ seed, time: 0, reading: 0, breath: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("paper", state.seed, input), rng = rngFor("paper", state.seed, 211), pageW = b.width * (b.mobile ? 0.84 : 0.68), pageH = b.height * 0.84, pageX = (b.width - pageW) * 0.5, pageY = b.height * 0.075, paragraphs = Array.from({ length: qCount(b, 4, 6, 8) }, (_, i) => ({ x: pageX + pageW * (0.13 + i % 2 * 0.03), y: pageY + pageH * (0.12 + i * 0.105), width: pageW * (0.55 + rng() * 0.22), lines: 3 + Math.floor(rng() * 4), rhythm: 0.72 + rng() * 0.25, emphasis: rng() })), notes = Array.from({ length: qCount(b, 3, 4, 6) }, (_, i) => ({ side: i % 2 === 0 ? -1 : 1, y: pageY + pageH * (0.18 + i * 0.13 + rng() * 0.035), length: pageW * (0.055 + rng() * 0.055), curl: (rng() - 0.5) * 22, phase: rng() * TAU })), fibers = Array.from({ length: qCount(b, 36, 58, 80) }, () => ({ x: pageX + rng() * pageW, y: pageY + rng() * pageH, length: 4 + rng() * 16, angle: (rng() - 0.5) * 0.6, alpha: 0.02 + rng() * 0.04 }));
+        return { geometry: { ...b, pageX, pageY, pageW, pageH, paragraphs, notes, fibers }, primitiveCount: primitiveCount(input, 150, 220, 310) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.reading = (s.reading + dt * 0.055) % 1;
+        s.breath += dt * 0.18;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        const lift = Math.sin(s.breath) * 1.5;
+        c.fillStyle = g.surface;
+        c.globalAlpha = alpha(g, 0.12);
+        c.shadowBlur = 20;
+        c.shadowColor = g.border;
+        c.fillRect(g.pageX, g.pageY + lift, g.pageW, g.pageH);
+        c.shadowBlur = 0;
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.8;
+        c.globalAlpha = alpha(g, 0.26);
+        c.strokeRect(g.pageX, g.pageY + lift, g.pageW, g.pageH);
+        c.fillStyle = g.accent;
+        c.globalAlpha = alpha(g, 0.16);
+        c.fillRect(g.pageX + g.pageW * 0.08, g.pageY + g.pageH * 0.09, 3, g.pageH * 0.22);
+        c.fillStyle = g.secondary;
+        c.globalAlpha = alpha(g, 0.06);
+        c.fillRect(g.pageX + g.pageW * 0.68, g.pageY + g.pageH * 0.1, g.pageW * 0.18, g.pageH * 0.09);
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1;
+        c.globalAlpha = alpha(g, 0.24);
+        const rx = g.pageX + g.pageW * 0.82, ry = g.pageY + g.pageH * 0.17;
+        c.beginPath();
+        c.arc(rx, ry, 14, 0, TAU);
+        c.stroke();
+        strokeLine(c, rx - 21, ry, rx + 21, ry);
+        strokeLine(c, rx, ry - 21, rx, ry + 21);
+        c.strokeStyle = g.border;
+        c.globalAlpha = alpha(g, 0.11);
+        c.beginPath();
+        c.moveTo(g.pageX + g.pageW * 0.72, g.pageY + g.pageH * 0.88);
+        c.quadraticCurveTo(g.pageX + g.pageW * 0.82, g.pageY + g.pageH * 0.81, g.pageX + g.pageW * 0.9, g.pageY + g.pageH * 0.9);
+        c.stroke();
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.5;
+        for (const f of g.fibers) {
+          c.globalAlpha = alpha(g, f.alpha);
+          strokeLine(c, f.x, f.y + lift, f.x + Math.cos(f.angle) * f.length, f.y + lift + Math.sin(f.angle) * f.length);
+        }
+        const left = g.pageX + g.pageW * 0.12;
+        c.strokeStyle = g.secondary;
+        c.globalAlpha = alpha(g, 0.28);
+        c.lineWidth = 1;
+        strokeLine(c, left - 14, g.pageY + g.pageH * 0.08, left - 14, g.pageY + g.pageH * 0.91);
+        for (let t2 = 0; t2 < 18; t2++) {
+          const y2 = g.pageY + g.pageH * (0.1 + t2 * 0.044);
+          c.globalAlpha = alpha(g, t2 % 4 === 0 ? 0.18 : 0.07);
+          strokeLine(c, left, y2, g.pageX + g.pageW * 0.9, y2);
+        }
+        g.paragraphs.forEach((p, i) => {
+          const active = Math.abs(s.reading - i / Math.max(1, g.paragraphs.length)) < 0.08;
+          for (let l = 0; l < p.lines; l++) {
+            const y2 = p.y + lift + l * 8.5, w = p.width * (l === p.lines - 1 ? 0.58 + p.emphasis * 0.25 : 0.93 + Math.sin(l + i) * 0.04);
+            c.fillStyle = active && l === 0 ? g.accent : g.border;
+            c.globalAlpha = alpha(g, active ? 0.5 : 0.24);
+            c.fillRect(p.x, y2, w * p.rhythm, l === 0 && p.emphasis > 0.65 ? 2.4 : 1.15);
+          }
+        });
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1.2;
+        g.notes.forEach((n, i) => {
+          const x2 = n.side < 0 ? g.pageX + g.pageW * 0.055 : g.pageX + g.pageW * 0.945, inside = n.side < 0 ? 1 : -1, sway = Math.sin(s.time * 0.22 + n.phase) * 2;
+          c.globalAlpha = alpha(g, 0.32 + i % 2 * 0.08);
+          c.beginPath();
+          c.moveTo(x2, n.y + sway);
+          c.quadraticCurveTo(x2 + inside * n.length * 0.48, n.y - 7 + n.curl * 0.25, x2 + inside * n.length, n.y + 2 + n.curl * 0.08);
+          c.stroke();
+          c.beginPath();
+          c.arc(x2 + inside * n.length * 1.08, n.y + 2, 2.2 + i % 2, 0, TAU);
+          c.stroke();
+        });
+        const y = g.pageY + g.pageH * (0.11 + s.reading * 0.78);
+        c.fillStyle = radialGradient(c, g.pageX + g.pageW * 0.52, y, g.pageW * 0.34, g.accent, g.secondary);
+        c.globalAlpha = alpha(g, 0.025);
+        c.beginPath();
+        c.arc(g.pageX + g.pageW * 0.52, y, g.pageW * 0.31, 0, TAU);
+        c.fill();
+        c.strokeStyle = g.accent;
+        c.globalAlpha = alpha(g, 0.36);
+        c.lineWidth = 1;
+        const x = g.pageX + g.pageW * 0.86, cy = g.pageY + g.pageH * 0.095;
+        strokeLine(c, x - 8, cy, x + 8, cy);
+        strokeLine(c, x, cy - 8, x, cy + 8);
+        c.beginPath();
+        c.arc(x, cy, 3.2, 0, TAU);
+        c.stroke();
+        c.restore();
+      } });
+      const GLYPHS = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜ0123456789ZXCVBNM∆◇┼⌁⌗<>:;*+";
+      function proceduralGlyph(c, x, y, size, code, slant) {
+        const u = Math.max(0.8, size * 0.075), h = size * 0.34;
+        c.save();
+        c.translate(x, y);
+        c.rotate(slant);
+        const b = Math.imul(code, 1103515245) + 12345 >>> 0;
+        if (b & 1) c.fillRect(-size * 0.24, -h, u, h * 1.75);
+        if (b & 2) c.fillRect(size * 0.13, -h * 0.86, u, h * 1.55);
+        if (b & 4) c.fillRect(-size * 0.22, -h * 0.08, size * 0.42, u);
+        if (b & 8) c.fillRect(-size * 0.16, -h * 0.72, size * 0.31, u);
+        if (b & 16) c.fillRect(-size * 0.1, h * 0.5, size * 0.26, u);
+        if (b & 32) {
+          c.beginPath();
+          c.moveTo(-size * 0.2, h * 0.45);
+          c.lineTo(size * 0.2, -h * 0.65);
+          c.stroke();
+        }
+        c.restore();
+      }
+      const terminalComplexScene = defineScene({ id: "terminal", createState: (seed) => ({ seed, time: 0, mutation: 0, blackout: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("terminal", state.seed, input), rng = rngFor("terminal", state.seed, 313), count2 = qCount(b, 14, 21, 29), cell = clamp2(b.width / count2, 12, b.mobile ? 23 : 29), rows = Math.ceil(b.height / cell) + 3, streams = Array.from({ length: count2 }, (_, i) => ({ x: (i + 0.5) * b.width / count2 + (rng() - 0.5) * cell * 0.4, speed: 3 + rng() * 9, offset: rng() * rows, length: Math.round(5 + rng() * 14), phase: rng() * TAU, bend: (rng() - 0.5) * cell * 1.5, cadence: 0.45 + rng() * 1.6, glyphSeed: Math.floor(rng() * 1e6) })), scars = Array.from({ length: qCount(b, 2, 3, 5) }, () => ({ y: rng() * b.height, width: 0.18 + rng() * 0.6, phase: rng() * TAU }));
+        return { geometry: { ...b, streams, scars, cell, rows }, primitiveCount: primitiveCount(input, 300, 365, 398) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.mutation = (s.mutation + dt * 6.8) % 1e5;
+        s.blackout = (s.blackout + dt * 0.11) % 1;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.lineCap = "square";
+        c.strokeStyle = g.accent;
+        c.lineWidth = 0.35;
+        c.globalAlpha = alpha(g, 0.025);
+        for (let y = 0; y < g.height; y += Math.max(5, g.cell * 0.42)) strokeLine(c, 0, y, g.width, y);
+        const frame2 = Math.floor(s.mutation), canText = typeof c.fillText === "function";
+        if (canText) {
+          c.font = `${Math.floor(g.cell * 0.72)}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+          c.textAlign = "center";
+          c.textBaseline = "middle";
+        }
+        g.streams.forEach((st, i) => {
+          const cad = Math.floor(s.time * st.cadence + st.phase) % 13, sp = cad === 0 ? 0.05 : cad === 1 ? 0.28 : cad === 8 ? 1.7 : 1, head = fract((st.offset + s.time * st.speed * sp) / g.rows) * g.rows, tail = Math.max(5, Math.round(st.length * (0.7 + g.parameters.trails / 150)));
+          for (let t2 = 0; t2 < tail; t2++) {
+            let row = Math.floor(head - t2);
+            while (row < 0) row += g.rows;
+            row %= g.rows;
+            const y = row * g.cell - g.cell * 0.2, decay = 1 - t2 / tail, bend = Math.sin(y / Math.max(1, g.height) * 4.2 + s.time * 0.55 + st.phase) * st.bend * (0.2 + decay * 0.8), x = st.x + bend, gap = hash01(i * 31 + row, frame2 >> 2, g.seed);
+            if (gap < 0.1 && t2 > 1) continue;
+            const glyph = GLYPHS[Math.floor(hash01(st.glyphSeed + row, frame2 >> (t2 === 0 ? 1 : 3), t2) * GLYPHS.length)] ?? "0", flash = t2 === 0, fresh = t2 < 3;
+            c.globalAlpha = alpha(g, flash ? 0.92 : 0.05 + decay * decay * (fresh ? 0.58 : 0.4));
+            c.fillStyle = flash ? g.focus : fresh ? g.secondary : g.accent;
+            c.strokeStyle = c.fillStyle;
+            c.shadowBlur = flash ? 13 : fresh ? 4 : 0;
+            c.shadowColor = g.accent;
+            if (canText && hash01(i, row, g.seed) > 0.36) c.fillText(glyph, x, y);
+            else proceduralGlyph(c, x, y, g.cell * 0.76, glyph.charCodeAt(0) + frame2 + t2 * 17, (hash01(row, i) - 0.5) * 0.18);
+            if (fresh && i % 5 === 2 && t2 === 2) {
+              c.globalAlpha = alpha(g, 0.16);
+              strokeLine(c, x - g.cell * 0.32, y + g.cell * 0.16, x + g.cell * 0.42, y - g.cell * 0.08);
+            }
+          }
+        });
+        g.scars.forEach((scar, i) => {
+          const p = 0.5 + 0.5 * Math.sin(s.time * (0.7 + i * 0.17) + scar.phase), x = g.width * (0.5 - scar.width / 2);
+          c.fillStyle = g.background;
+          c.globalAlpha = alpha(g, 0.025 + p * 0.055);
+          c.fillRect(x, scar.y, g.width * scar.width, 2 + p * 9);
+          c.strokeStyle = i % 2 === 0 ? g.secondary : g.accent;
+          c.globalAlpha = alpha(g, 0.08 + p * 0.12);
+          strokeLine(c, x, scar.y, x + g.width * scar.width, scar.y);
+        });
+        const by = fract(s.time * 0.027 + 0.17) * g.height, glow = c.createRadialGradient(g.width * 0.44, by, 0, g.width * 0.44, by, g.width * 0.35);
+        glow.addColorStop(0, g.accent);
+        glow.addColorStop(0.28, g.secondary);
+        glow.addColorStop(1, "transparent");
+        c.fillStyle = glow;
+        c.globalAlpha = alpha(g, 0.018);
+        c.beginPath();
+        c.arc(g.width * 0.44, by, g.width * 0.34, 0, TAU);
+        c.fill();
+        c.restore();
+      } });
+      const auroraComplexScene = defineScene({ id: "aurora", createState: (seed) => ({ seed, time: 0, magnetic: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("aurora", state.seed, input), rng = rngFor("aurora", state.seed, 419), curtains = Array.from({ length: qCount(b, 5, 7, 10) }, (_, i) => ({ anchor: b.width * (0.05 + 0.9 * i / Math.max(1, qCount(b, 5, 7, 10) - 1)), width: b.width * (0.055 + rng() * 0.07), reach: b.height * (0.42 + rng() * 0.33), phase: rng() * TAU, curl: (rng() - 0.5) * b.width * 0.12, brightness: 0.5 + rng() * 0.5 })), stars = Array.from({ length: qCount(b, 16, 28, 44) }, () => ({ x: rng() * b.width, y: rng() * b.height * 0.58, size: 0.5 + rng() * 1.4, phase: rng() * TAU }));
+        return { geometry: { ...b, curtains, stars, horizon: b.height * 0.72 }, primitiveCount: primitiveCount(input, 170, 255, 350) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.magnetic += dt * 0.14;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.globalCompositeOperation = "lighter";
+        c.fillStyle = g.focus;
+        g.stars.forEach((star, i) => {
+          c.globalAlpha = alpha(g, 0.05 + 0.08 * (0.5 + 0.5 * Math.sin(s.time * 0.3 + star.phase)));
+          c.fillRect(star.x, star.y, star.size, star.size);
+          if (i % 9 === 0) c.fillRect(star.x - star.size * 2, star.y, star.size * 5, 0.45);
+        });
+        g.curtains.forEach((cu, ci) => {
+          const rayCount = g.mobile ? 8 : g.quality === "high" ? 18 : 13;
+          for (let r = 0; r < rayCount; r++) {
+            const u = r / Math.max(1, rayCount - 1), cent = u - 0.5, fold = Math.sin(s.magnetic * 1.8 + cu.phase + cent * 4.5) * cu.width * 0.36, xt = cu.anchor + cent * cu.width + fold, xb = xt + cu.curl * Math.sin(s.magnetic + cu.phase + u * 2.6), yt = g.height * (0.05 + 0.04 * Math.sin(cu.phase + u * 2)), yb = Math.min(g.horizon, yt + cu.reach * (0.82 + 0.18 * Math.sin(s.time * 0.17 + r))), nw = (fbm2(u * 2.4, s.time * 0.03 + ci, g.seed, 3) - 0.5) * cu.width * 0.55, grad = c.createLinearGradient(xt, yt, xb, yb);
+            grad.addColorStop(0, "transparent");
+            grad.addColorStop(0.16, r % 3 === 0 ? g.secondary : g.accent);
+            grad.addColorStop(0.5, r % 4 === 0 ? g.focus : g.accent);
+            grad.addColorStop(1, "transparent");
+            c.strokeStyle = grad;
+            c.lineWidth = mix(0.55, 2.6, cu.brightness * (1 - Math.abs(cent)));
+            c.globalAlpha = alpha(g, 0.08 + cu.brightness * 0.1);
+            c.shadowBlur = 6 + g.parameters.trails * 0.08;
+            c.shadowColor = g.accent;
+            c.beginPath();
+            c.moveTo(xt + nw * 0.2, yt);
+            c.bezierCurveTo(xt + fold * 0.4 + nw, yt + cu.reach * 0.28, xb - fold * 0.2 - nw * 0.4, yt + cu.reach * 0.72, xb, yb);
+            c.stroke();
+          }
+        });
+        c.globalCompositeOperation = "source-over";
+        c.shadowBlur = 0;
+        const h = c.createLinearGradient(0, g.horizon - 60, 0, g.horizon + 35);
+        h.addColorStop(0, "transparent");
+        h.addColorStop(0.55, g.secondary);
+        h.addColorStop(1, "transparent");
+        c.fillStyle = h;
+        c.globalAlpha = alpha(g, 0.035);
+        c.fillRect(0, g.horizon - 60, g.width, 95);
+        c.restore();
+      } });
+      const glacierComplexScene = defineScene({ id: "glacier", createState: (seed) => ({ seed, time: 0, strain: 0, refraction: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("glacier", state.seed, input), rng = rngFor("glacier", state.seed, 521), flowAngle = -0.42 + rng() * 0.84, fissures = Array.from({ length: qCount(b, 5, 8, 11) }, () => ({ x: b.width * (0.08 + rng() * 0.84), y: b.height * (0.1 + rng() * 0.78), length: b.height * (0.12 + rng() * 0.26), angle: flowAngle + Math.PI / 2 + (rng() - 0.5) * 0.55, branches: Array.from({ length: 2 + Math.floor(rng() * 3) }, () => (rng() - 0.5) * 0.85), phase: rng() * TAU })), facets = Array.from({ length: qCount(b, 7, 11, 16) }, (_, i) => ({ cx: b.width * (0.08 + rng() * 0.84), cy: b.height * (0.08 + rng() * 0.84), radius: 24 + rng() * (b.mobile ? 55 : 92), sides: 3 + i % 3, tilt: rng() * TAU, phase: rng() * TAU }));
+        return { geometry: { ...b, fissures, facets, flowAngle }, primitiveCount: primitiveCount(input, 180, 270, 360) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.strain += dt * 0.075;
+        s.refraction += dt * 0.11;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        g.facets.forEach((f, i) => {
+          const sh = Math.sin(s.refraction + f.phase) * 0.035, p = Array.from({ length: f.sides }, (_, side) => {
+            const a = f.tilt + side / f.sides * TAU, st = side % 2 === 0 ? 1.15 : 0.78;
+            return { x: f.cx + Math.cos(a) * f.radius * st + Math.cos(g.flowAngle) * sh * f.radius, y: f.cy + Math.sin(a) * f.radius + Math.sin(g.flowAngle) * sh * f.radius };
+          });
+          c.beginPath();
+          c.moveTo(p[0].x, p[0].y);
+          p.slice(1).forEach((pt) => c.lineTo(pt.x, pt.y));
+          c.closePath();
+          c.fillStyle = i % 3 === 0 ? g.surface : linearGradient(c, g, f.cx - f.radius, f.cy, f.cx + f.radius, f.cy, [g.info, g.accent]);
+          c.strokeStyle = i % 2 === 0 ? g.accent : g.border;
+          c.globalAlpha = alpha(g, 0.035 + i % 4 * 0.017);
+          c.lineWidth = 0.75;
+          c.fill();
+          c.stroke();
+        });
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.6;
+        c.globalAlpha = alpha(g, 0.09);
+        for (let lane = -4; lane <= 4; lane++) {
+          const nx = Math.cos(g.flowAngle + Math.PI / 2), ny = Math.sin(g.flowAngle + Math.PI / 2), cx = g.width * 0.5 + nx * lane * g.width * 0.09, cy = g.height * 0.5 + ny * lane * g.height * 0.09, dx = Math.cos(g.flowAngle) * g.width * 0.65, dy = Math.sin(g.flowAngle) * g.width * 0.65;
+          strokeLine(c, cx - dx, cy - dy, cx + dx, cy + dy);
+        }
+        g.fissures.forEach((f, i) => {
+          const opening = 0.65 + 0.35 * Math.sin(s.strain + f.phase);
+          c.strokeStyle = i % 3 === 0 ? g.secondary : g.accent;
+          c.lineWidth = 1 + opening * 1.1;
+          c.globalAlpha = alpha(g, 0.38 + opening * 0.15);
+          c.shadowBlur = 5;
+          c.shadowColor = g.accent;
+          c.beginPath();
+          c.moveTo(f.x, f.y);
+          for (let seg = 1; seg <= 7; seg++) {
+            const jit = Math.sin(seg * 2.17 + f.phase) * f.length * 0.035;
+            c.lineTo(f.x + Math.cos(f.angle) * f.length * seg / 7 + Math.cos(f.angle + Math.PI / 2) * jit, f.y + Math.sin(f.angle) * f.length * seg / 7 + Math.sin(f.angle + Math.PI / 2) * jit);
+          }
+          c.stroke();
+          c.shadowBlur = 0;
+          f.branches.forEach((b, j) => {
+            const t2 = 0.28 + j * 0.17, bx = f.x + Math.cos(f.angle) * f.length * t2, by = f.y + Math.sin(f.angle) * f.length * t2, ba = f.angle + b;
+            c.globalAlpha = alpha(g, 0.18 + opening * 0.08);
+            c.lineWidth = 0.7;
+            strokeLine(c, bx, by, bx + Math.cos(ba) * f.length * 0.24, by + Math.sin(ba) * f.length * 0.24);
+          });
+        });
+        c.restore();
+      } });
+      const emberComplexScene = defineScene({ id: "ember", createState: (seed) => ({ seed, time: 0, buoyancy: 0, alarm: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("ember", state.seed, input), rng = rngFor("ember", state.seed, 617), plumes = Array.from({ length: qCount(b, 4, 6, 9) }, (_, i) => ({ x: b.width * (0.1 + 0.8 * (i + 0.5) / qCount(b, 4, 6, 9)), base: b.height * (0.78 + rng() * 0.13), width: b.width * (0.04 + rng() * 0.08), height: b.height * (0.28 + rng() * 0.46), phase: rng() * TAU, lean: (rng() - 0.5) * b.width * 0.12, heat: rng() })), sparks = Array.from({ length: qCount(b, 22, 36, 54) }, () => ({ x: rng() * b.width, y: rng() * b.height, speed: 0.25 + rng() * 1.2, drift: (rng() - 0.5) * 34, size: 0.8 + rng() * 2.4, phase: rng() * TAU }));
+        return { geometry: { ...b, plumes, sparks, alarmX: b.width * 0.82, alarmY: b.height * 0.2 }, primitiveCount: primitiveCount(input, 190, 285, 380) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.buoyancy += dt * 0.22;
+        s.alarm = (s.alarm + dt * 0.28) % 1;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.globalCompositeOperation = "lighter";
+        g.plumes.forEach((p) => {
+          const layers = g.mobile ? 3 : g.quality === "high" ? 6 : 4;
+          for (let l = 0; l < layers; l++) {
+            const spread = l / Math.max(1, layers - 1) - 0.5, rise = Math.sin(s.buoyancy * (1.3 + p.heat) + p.phase + l) * p.width * 0.25, x0 = p.x + spread * p.width, y0 = p.base, x1 = p.x + p.lean + spread * p.width * 0.55 + rise, y1 = p.base - p.height, grad = c.createLinearGradient(x0, y0, x1, y1);
+            grad.addColorStop(0, g.warning);
+            grad.addColorStop(0.34, g.danger);
+            grad.addColorStop(0.72, g.accent);
+            grad.addColorStop(1, "transparent");
+            c.strokeStyle = grad;
+            c.lineWidth = 1.2 + l * 1.15;
+            c.globalAlpha = alpha(g, 0.075 + p.heat * 0.075);
+            c.shadowBlur = 8 + l * 2;
+            c.shadowColor = g.danger;
+            c.beginPath();
+            c.moveTo(x0, y0);
+            c.bezierCurveTo(x0 - p.lean * 0.2 + Math.sin(s.time * 0.7 + p.phase) * p.width, p.base - p.height * 0.28, x1 + Math.cos(s.time * 0.43 + p.phase + l) * p.width * 0.8, p.base - p.height * 0.72, x1, y1);
+            c.stroke();
+          }
+        });
+        c.shadowBlur = 4;
+        c.shadowColor = g.warning;
+        g.sparks.forEach((sp, i) => {
+          const life = fract(sp.phase / TAU + s.time * 0.055 * sp.speed), y = g.height - life * g.height * 1.08, x = sp.x + Math.sin(s.time * sp.speed + sp.phase) * sp.drift + Math.sin(life * TAU * 1.7) * 8, hot = hash01(i, Math.floor(s.time * 3), g.seed) > 0.72;
+          c.fillStyle = hot ? g.focus : i % 3 === 0 ? g.warning : g.danger;
+          c.globalAlpha = alpha(g, (1 - life) * 0.42 + 0.08);
+          c.fillRect(x, y, sp.size * (hot ? 1.6 : 1), sp.size * (2 + sp.speed));
+        });
+        c.shadowBlur = 0;
+        g.plumes.slice(0, 3).forEach((p, i) => {
+          const y = p.base - p.height * (0.32 + 0.16 * Math.sin(s.time * 0.18 + i));
+          c.fillStyle = radialGradient(c, p.x, y, p.width * 2.8, g.warning, g.danger);
+          c.globalAlpha = alpha(g, 0.022);
+          c.beginPath();
+          c.arc(p.x, y, p.width * 2.6, 0, TAU);
+          c.fill();
+        });
+        c.strokeStyle = g.warning;
+        c.lineWidth = 1.4;
+        c.globalAlpha = alpha(g, 0.36);
+        for (let r = 0; r < 3; r++) {
+          const rad = 12 + r * 13 + Math.sin(s.alarm * TAU + r) * 2;
+          c.beginPath();
+          c.arc(g.alarmX, g.alarmY, rad, -Math.PI / 2, -Math.PI / 2 + TAU * (0.45 + 0.5 * s.alarm));
+          c.stroke();
+        }
+        c.restore();
+      } });
+      const atlasComplexScene = defineScene({ id: "atlas", createState: (seed) => ({ seed, time: 0, survey: 0, route: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("atlas", state.seed, input), rng = rngFor("atlas", state.seed, 719), peaks = Array.from({ length: qCount(b, 3, 4, 6) }, () => ({ x: b.width * (0.12 + rng() * 0.76), y: b.height * (0.14 + rng() * 0.7), radius: Math.min(b.width, b.height) * (0.08 + rng() * 0.16), elevation: 0.4 + rng() * 0.6, phase: rng() * TAU })), route = Array.from({ length: qCount(b, 5, 7, 9) }, (_, rank) => ({ x: b.width * (0.08 + 0.84 * rank / Math.max(1, qCount(b, 5, 7, 9) - 1)), y: b.height * (0.18 + rng() * 0.64), rank }));
+        return { geometry: { ...b, peaks, route, meridians: qCount(b, 5, 8, 11), parallels: qCount(b, 4, 7, 9) }, primitiveCount: primitiveCount(input, 220, 320, 395) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.survey += dt * 0.045;
+        s.route = (s.route + dt * 0.09) % 1;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.55;
+        c.globalAlpha = alpha(g, 0.11);
+        for (let m = 0; m < g.meridians; m++) {
+          const x = g.width * (m + 1) / (g.meridians + 1);
+          c.beginPath();
+          c.moveTo(x, g.height * 0.05);
+          c.bezierCurveTo(x - g.width * 0.025, g.height * 0.3, x + g.width * 0.025, g.height * 0.68, x, g.height * 0.95);
+          c.stroke();
+        }
+        for (let p = 0; p < g.parallels; p++) {
+          const y = g.height * (p + 1) / (g.parallels + 1);
+          c.beginPath();
+          c.moveTo(g.width * 0.04, y);
+          c.quadraticCurveTo(g.width * 0.5, y + Math.sin(p) * g.height * 0.025, g.width * 0.96, y);
+          c.stroke();
+        }
+        g.peaks.forEach((p, pi) => {
+          const levels = g.mobile ? 5 : g.quality === "high" ? 10 : 7;
+          for (let l = 1; l <= levels; l++) {
+            const r = p.radius * l / levels;
+            c.beginPath();
+            for (let pt = 0; pt <= 28; pt++) {
+              const a2 = pt / 28 * TAU, t3 = 0.82 + (fbm2(Math.cos(a2) * 1.8 + pi * 2, Math.sin(a2) * 1.8 + l * 0.31, g.seed, 3) - 0.5) * 0.42, br = 1 + Math.sin(s.survey + p.phase + l * 0.6) * 8e-3, x = p.x + Math.cos(a2) * r * t3 * br, y = p.y + Math.sin(a2) * r * t3 * 0.72 * br;
+              pt === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+            }
+            c.closePath();
+            c.strokeStyle = l === levels ? g.accent : l % 3 === 0 ? g.secondary : g.border;
+            c.lineWidth = l === levels ? 1.25 : l % 3 === 0 ? 0.9 : 0.6;
+            c.globalAlpha = alpha(g, 0.14 + p.elevation * 0.12);
+            c.stroke();
+          }
+        });
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.8;
+        c.globalAlpha = alpha(g, 0.18);
+        c.strokeRect(g.width * 0.055, g.height * 0.065, g.width * 0.89, g.height * 0.87);
+        for (let t3 = 0; t3 < 12; t3++) {
+          const x = g.width * (0.08 + t3 * 0.075);
+          strokeLine(c, x, g.height * 0.065, x, g.height * (t3 % 3 === 0 ? 0.083 : 0.075));
+        }
+        const grad = c.createLinearGradient(g.width * 0.08, 0, g.width * 0.92, 0);
+        grad.addColorStop(0, g.accent);
+        grad.addColorStop(0.52, g.secondary);
+        grad.addColorStop(1, g.accent);
+        c.strokeStyle = grad;
+        c.lineWidth = 1.35;
+        c.globalAlpha = alpha(g, 0.4);
+        c.setLineDash([7, 6]);
+        c.beginPath();
+        g.route.forEach((p, i) => {
+          if (i === 0) c.moveTo(p.x, p.y);
+          else {
+            const prev = g.route[i - 1];
+            c.quadraticCurveTo((prev.x + p.x) * 0.5, Math.min(prev.y, p.y) - g.height * 0.04, p.x, p.y);
+          }
+        });
+        c.stroke();
+        c.setLineDash([]);
+        g.route.forEach((p, i) => {
+          c.fillStyle = i % 2 === 0 ? g.accent : g.secondary;
+          c.globalAlpha = alpha(g, 0.46);
+          c.beginPath();
+          c.arc(p.x, p.y, 2.5 + i % 3, 0, TAU);
+          c.fill();
+        });
+        const ri = s.route * Math.max(1, g.route.length - 1), ix = Math.min(g.route.length - 2, Math.floor(ri)), t2 = ri - ix, a = g.route[ix], b = g.route[ix + 1], px = mix(a.x, b.x, t2), py = mix(a.y, b.y, t2) - Math.sin(t2 * Math.PI) * g.height * 0.04;
+        c.fillStyle = g.focus;
+        c.shadowBlur = 10;
+        c.shadowColor = g.accent;
+        c.globalAlpha = alpha(g, 0.72);
+        c.beginPath();
+        c.arc(px, py, 3.5, 0, TAU);
+        c.fill();
+        c.shadowBlur = 0;
+        const sx = g.width * (0.1 + 0.8 * ((Math.sin(s.time * 0.08) + 1) / 2));
+        c.strokeStyle = g.secondary;
+        c.globalAlpha = alpha(g, 0.15);
+        c.lineWidth = 0.8;
+        strokeLine(c, sx, g.height * 0.07, sx, g.height * 0.93);
+        c.restore();
+      } });
+      const noirComplexScene = defineScene({ id: "noir", createState: (seed) => ({ seed, time: 0, iris: 0, shutter: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("noir", state.seed, input), rng = rngFor("noir", state.seed, 811), blinds = Array.from({ length: qCount(b, 9, 13, 18) }, (_, i) => ({ y: b.height * i / qCount(b, 9, 13, 18), height: b.height / qCount(b, 9, 13, 18) * (0.55 + rng() * 0.5), tilt: (rng() - 0.5) * 0.08, phase: rng() * TAU })), bc = qCount(b, 6, 8, 10), blades = Array.from({ length: bc }, (_, i) => ({ phase: i / bc * TAU, length: 0.92 + rng() * 0.12, width: 0.42 + rng() * 0.16 }));
+        return { geometry: { ...b, blinds, blades, cx: b.width * 0.64, cy: b.height * 0.46, radius: Math.min(b.width, b.height) * 0.26 }, primitiveCount: primitiveCount(input, 130, 190, 270) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.iris += dt * 0.075;
+        s.shutter += dt * 0.14;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        g.blinds.forEach((b, i) => {
+          const off = Math.sin(s.shutter + b.phase) * g.height * 0.012;
+          c.save();
+          c.translate(g.width * 0.5, b.y + off);
+          c.rotate(b.tilt + Math.sin(s.time * 0.11 + b.phase) * 0.01);
+          c.fillStyle = i % 5 === 0 ? g.secondary : g.surface;
+          c.globalAlpha = alpha(g, i % 5 === 0 ? 0.055 : 0.13);
+          c.fillRect(-g.width * 0.58, -b.height / 2, g.width * 1.16, b.height);
+          c.restore();
+        });
+        c.save();
+        c.translate(g.cx, g.cy);
+        c.rotate(s.iris);
+        g.blades.forEach((b, i) => {
+          c.save();
+          c.rotate(b.phase);
+          c.beginPath();
+          c.moveTo(g.radius * 0.16, -g.radius * 0.08);
+          c.lineTo(g.radius * b.length, -g.radius * b.width);
+          c.lineTo(g.radius * b.length * 0.82, g.radius * b.width * 0.55);
+          c.lineTo(g.radius * 0.2, g.radius * 0.12);
+          c.closePath();
+          c.fillStyle = i % 2 === 0 ? g.surface : g.background;
+          c.strokeStyle = g.accent;
+          c.lineWidth = 0.8;
+          c.globalAlpha = alpha(g, 0.19 + i % 2 * 0.05);
+          c.fill();
+          c.stroke();
+          c.restore();
+        });
+        const ap = g.radius * (0.18 + 0.035 * Math.sin(s.time * 0.4));
+        c.strokeStyle = g.focus;
+        c.globalAlpha = alpha(g, 0.52);
+        c.lineWidth = 1.25;
+        c.beginPath();
+        c.arc(0, 0, ap, 0, TAU);
+        c.stroke();
+        c.restore();
+        c.strokeStyle = g.accent;
+        c.lineWidth = 0.75;
+        const lines = g.mobile ? 12 : g.quality === "high" ? 28 : 20;
+        for (let l = 0; l < lines; l++) {
+          const x = g.width * (0.08 + l / Math.max(1, lines - 1) * 0.34);
+          c.globalAlpha = alpha(g, 0.12 + l % 3 * 0.018);
+          c.beginPath();
+          c.moveTo(x, g.height * 0.12);
+          const bend = Math.sin(s.time * 0.2 + l * 0.42) * g.width * 0.018;
+          c.bezierCurveTo(x + bend, g.height * 0.35, x - bend, g.height * 0.68, x, g.height * 0.88);
+          c.stroke();
+        }
+        c.strokeStyle = g.secondary;
+        c.lineWidth = 1.8;
+        c.globalAlpha = alpha(g, 0.5);
+        const sl = Math.sin(s.time * 0.17) * g.width * 0.025;
+        strokeLine(c, g.width * 0.09 + sl, g.height * 0.8, g.width * 0.42 + sl, g.height * 0.2);
+        c.restore();
+      } });
+      const signalComplexScene = defineScene({ id: "signal", createState: (seed) => ({ seed, time: 0, sync: 0, burst: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("signal", state.seed, input), rng = rngFor("signal", state.seed, 907), cc = qCount(b, 3, 4, 5), channels = Array.from({ length: cc }, (_, i) => ({ y: b.height * (0.19 + i * 0.14), frequency: 1.7 + rng() * 3.7, amplitude: b.height * (0.018 + rng() * 0.04), phase: rng() * TAU, jitter: 0.2 + rng() * 0.8, colorRole: i % 3 })), dropouts = Array.from({ length: qCount(b, 4, 6, 9) }, () => ({ x: rng() * b.width, width: b.width * (0.025 + rng() * 0.1), y: rng() * b.height, height: 2 + rng() * 18, phase: rng() * TAU }));
+        return { geometry: { ...b, channels, dropouts, radarX: b.width * 0.78, radarY: b.height * 0.73, radarR: Math.min(b.width, b.height) * 0.14 }, primitiveCount: primitiveCount(input, 180, 260, 350) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.sync = (s.sync + dt * 0.31) % 1;
+        s.burst += dt * 0.9;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.55;
+        c.globalAlpha = alpha(g, 0.09);
+        const div = g.mobile ? 8 : 12;
+        for (let d = 0; d <= div; d++) {
+          const x = g.width * (0.05 + 0.9 * d / div);
+          strokeLine(c, x, g.height * 0.08, x, g.height * 0.62);
+        }
+        g.channels.forEach((ch, ci) => {
+          c.strokeStyle = ch.colorRole === 0 ? g.accent : ch.colorRole === 1 ? g.secondary : g.info;
+          c.lineWidth = 1 + ci * 0.3;
+          c.globalAlpha = alpha(g, 0.35 - ci * 0.035);
+          c.beginPath();
+          c.moveTo(g.width * 0.04, ch.y);
+          const steps = g.mobile ? 42 : g.quality === "high" ? 110 : 72;
+          for (let st = 1; st <= steps; st++) {
+            const u = st / steps, x = g.width * (0.04 + 0.92 * u), car = Math.sin(u * TAU * ch.frequency + s.time * 1.9 + ch.phase), env = 0.34 + 0.66 * Math.sin(Math.PI * u), mod = Math.sin(u * TAU * (ch.frequency * 0.37 + 0.7) - s.time * 0.7) * 0.35, n = (hash01(st, ci, Math.floor(s.burst * 3)) - 0.5) * ch.jitter, sp = hash01(st * 13, ci, g.seed) > 0.965 ? st % 2 === 0 ? 2.6 : -2.6 : 0;
+            c.lineTo(x, ch.y + ch.amplitude * env * (car + mod + n * 0.45 + sp));
+          }
+          c.stroke();
+        });
+        g.dropouts.forEach((d, i) => {
+          const live = 0.5 + 0.5 * Math.sin(s.time * (0.7 + i * 0.09) + d.phase);
+          c.fillStyle = i % 2 === 0 ? g.background : g.surface;
+          c.globalAlpha = alpha(g, 0.035 + live * 0.09);
+          c.fillRect(d.x, d.y, d.width, d.height * live);
+          if (live > 0.72) {
+            c.strokeStyle = g.secondary;
+            c.globalAlpha = alpha(g, 0.18);
+            strokeLine(c, d.x - 8, d.y, d.x + d.width + 8, d.y);
+          }
+        });
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.7;
+        c.globalAlpha = alpha(g, 0.16);
+        for (let r = 1; r <= 4; r++) {
+          c.beginPath();
+          c.arc(g.radarX, g.radarY, g.radarR * r / 4, 0, TAU);
+          c.stroke();
+        }
+        strokeLine(c, g.radarX - g.radarR, g.radarY, g.radarX + g.radarR, g.radarY);
+        strokeLine(c, g.radarX, g.radarY - g.radarR, g.radarX, g.radarY + g.radarR);
+        const sw = s.time * 0.78;
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1.6;
+        c.globalAlpha = alpha(g, 0.55);
+        strokeLine(c, g.radarX, g.radarY, g.radarX + Math.cos(sw) * g.radarR, g.radarY + Math.sin(sw) * g.radarR);
+        for (let b = 0; b < 4; b++) {
+          const a = hash01(b, g.seed) * TAU, r = g.radarR * (0.2 + hash01(b, 9, g.seed) * 0.72), it = 0.5 + 0.5 * Math.sin(s.time * 2 + b);
+          c.fillStyle = g.secondary;
+          c.globalAlpha = alpha(g, 0.16 + it * 0.32);
+          c.beginPath();
+          c.arc(g.radarX + Math.cos(a) * r, g.radarY + Math.sin(a) * r, 1.5 + it * 1.4, 0, TAU);
+          c.fill();
+        }
+        const sx = g.width * (0.04 + 0.92 * s.sync);
+        c.strokeStyle = g.focus;
+        c.globalAlpha = alpha(g, 0.22);
+        c.lineWidth = 0.9;
+        strokeLine(c, sx, g.height * 0.08, sx, g.height * 0.62);
+        c.restore();
+      } });
+      const violetComplexScene = defineScene({ id: "violet", createState: (seed) => ({ seed, time: 0, phaseA: 0, phaseB: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("violet", state.seed, input), rng = rngFor("violet", state.seed, 1009), nodes = Array.from({ length: qCount(b, 8, 13, 20) }, (_, i) => ({ a: 1.1 + rng() * 2.7, b: 1.4 + rng() * 3.4, radius: 0.18 + rng() * 0.78, weight: 0.3 + rng() * 0.7, phase: rng() * TAU + i * 0.17 }));
+        return { geometry: { ...b, nodes, cx: b.width * 0.5, cy: b.height * 0.5, scaleX: b.width * 0.37, scaleY: b.height * 0.34, lobes: 3 + Math.floor(rng() * 4) }, primitiveCount: primitiveCount(input, 160, 240, 330) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.phaseA += dt * 0.12;
+        s.phaseB -= dt * 0.073;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.globalCompositeOperation = "lighter";
+        const samples = g.mobile ? 80 : g.quality === "high" ? 220 : 150;
+        c.beginPath();
+        for (let sm = 0; sm <= samples; sm++) {
+          const t2 = sm / samples * TAU, r = 0.72 + 0.15 * Math.sin(g.lobes * t2 + s.phaseB * 3) + 0.08 * Math.cos((g.lobes + 2) * t2 - s.phaseA * 5), x = g.cx + Math.sin(t2 * 2.03 + s.phaseA) * g.scaleX * r + Math.sin(t2 * 5.2) * g.scaleX * 0.06, y = g.cy + Math.sin(t2 * 3.01 + s.phaseB) * g.scaleY * r + Math.cos(t2 * 4.1) * g.scaleY * 0.05;
+          sm === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+        }
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1.25;
+        c.globalAlpha = alpha(g, 0.34);
+        c.shadowBlur = 10;
+        c.shadowColor = g.accent;
+        c.stroke();
+        c.shadowBlur = 0;
+        c.beginPath();
+        for (let sm = 0; sm <= Math.round(samples * 0.72); sm++) {
+          const t2 = sm / Math.max(1, Math.round(samples * 0.72)) * TAU, x = g.cx + Math.cos(t2 * 3.17 - s.phaseB) * g.scaleX * 0.56 + Math.sin(t2 * 7.1) * g.scaleX * 0.08, y = g.cy + Math.sin(t2 * 2.11 + s.phaseA) * g.scaleY * 0.6;
+          sm === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+        }
+        c.strokeStyle = g.secondary;
+        c.lineWidth = 0.9;
+        c.globalAlpha = alpha(g, 0.24);
+        c.stroke();
+        g.nodes.forEach((n, i) => {
+          const t2 = n.phase + s.phaseA * n.a + s.phaseB * n.b, x = g.cx + Math.sin(t2 * 2.03) * g.scaleX * n.radius, y = g.cy + Math.sin(t2 * 3.01 + n.phase * 0.3) * g.scaleY * n.radius, p = 0.5 + 0.5 * Math.sin(s.time * (0.35 + n.weight * 0.4) + n.phase);
+          c.fillStyle = i % 3 === 0 ? g.secondary : g.accent;
+          c.globalAlpha = alpha(g, 0.15 + p * 0.28);
+          c.beginPath();
+          c.arc(x, y, 1.5 + n.weight * 3.2, 0, TAU);
+          c.fill();
+          if (i % 4 === 0) {
+            c.strokeStyle = g.focus;
+            c.lineWidth = 0.7;
+            c.globalAlpha = alpha(g, 0.15);
+            c.beginPath();
+            c.arc(x, y, 7 + n.weight * 9 + p * 2, 0, TAU);
+            c.stroke();
+          }
+        });
+        c.strokeStyle = g.info;
+        c.lineWidth = 0.55;
+        c.globalAlpha = alpha(g, 0.11);
+        for (let l = 0; l < Math.min(7, g.nodes.length - 1); l++) {
+          const a = g.nodes[l], b = g.nodes[(l * 3 + 5) % g.nodes.length], ta = a.phase + s.phaseA * a.a, tb = b.phase + s.phaseB * b.b, ax = g.cx + Math.sin(ta * 2.03) * g.scaleX * a.radius, ay = g.cy + Math.sin(ta * 3.01) * g.scaleY * a.radius, bx = g.cx + Math.sin(tb * 2.03) * g.scaleX * b.radius, by = g.cy + Math.sin(tb * 3.01) * g.scaleY * b.radius;
+          c.beginPath();
+          c.moveTo(ax, ay);
+          c.quadraticCurveTo(g.cx + (hash01(l, g.seed) - 0.5) * g.scaleX * 0.3, g.cy + (hash01(l, 7, g.seed) - 0.5) * g.scaleY * 0.3, bx, by);
+          c.stroke();
+        }
+        c.restore();
+      } });
+      const claudiusComplexScene = defineScene({ id: "claudius", createState: (seed) => ({ seed, time: 0, thought: 0, proof: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("claudius", state.seed, input), rng = rngFor("claudius", state.seed, 1103), columnW = b.width * (b.mobile ? 0.74 : 0.56), columnX = (b.width - columnW) * 0.5, blocks = Array.from({ length: qCount(b, 5, 7, 9) }, (_, i) => ({ x: columnX + columnW * (0.02 + rng() * 0.04), y: b.height * (0.1 + i * 0.095 + rng() * 0.015), width: columnW * (0.58 + rng() * 0.36), lines: 2 + Math.floor(rng() * 4), lead: 7 + rng() * 3, voice: rng() })), threads = Array.from({ length: qCount(b, 4, 6, 8) }, (_, i) => ({ fromY: b.height * (0.15 + i * 0.1), toY: b.height * (0.23 + i * 0.1 + rng() * 0.08), side: i % 2 === 0 ? -1 : 1, phase: rng() * TAU, weight: 0.45 + rng() * 0.55 }));
+        return { geometry: { ...b, blocks, threads, columnX, columnW }, primitiveCount: primitiveCount(input, 145, 210, 290) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.thought += dt * 0.075;
+        s.proof = (s.proof + dt * 0.04) % 1;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.fillStyle = g.surface;
+        c.globalAlpha = alpha(g, 0.13);
+        c.fillRect(g.columnX - g.columnW * 0.08, g.height * 0.055, g.columnW * 1.16, g.height * 0.88);
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.65;
+        c.globalAlpha = alpha(g, 0.14);
+        strokeLine(c, g.columnX, g.height * 0.07, g.columnX, g.height * 0.92);
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1.25;
+        c.globalAlpha = alpha(g, 0.28);
+        const qx = g.columnX - g.columnW * 0.08, qy = g.height * 0.16;
+        c.beginPath();
+        c.arc(qx, qy, 12, Math.PI * 0.55, Math.PI * 1.45);
+        c.stroke();
+        c.beginPath();
+        c.arc(qx + 18, qy + 2, 8, Math.PI * 0.55, Math.PI * 1.45);
+        c.stroke();
+        const rx = g.columnX + g.columnW * 1.08, ry = g.height * 0.76;
+        c.beginPath();
+        c.arc(rx, ry, 12, -Math.PI * 0.45, Math.PI * 0.45);
+        c.stroke();
+        c.beginPath();
+        c.arc(rx - 18, ry - 2, 8, -Math.PI * 0.45, Math.PI * 0.45);
+        c.stroke();
+        g.blocks.forEach((b, bi) => {
+          const em = 0.5 + 0.5 * Math.sin(s.thought + b.voice * TAU);
+          for (let l = 0; l < b.lines; l++) {
+            const w = b.width * (l === b.lines - 1 ? 0.55 + b.voice * 0.24 : 0.9 + Math.sin(bi + l) * 0.04);
+            c.fillStyle = b.voice > 0.7 && l === 0 ? g.accent : g.border;
+            c.globalAlpha = alpha(g, 0.22 + em * 0.11);
+            c.fillRect(b.x, b.y + l * b.lead, w, l === 0 && b.voice > 0.72 ? 2.1 : 1.1);
+          }
+          if (b.voice > 0.78) {
+            c.strokeStyle = g.secondary;
+            c.globalAlpha = alpha(g, 0.22);
+            c.beginPath();
+            c.arc(b.x - 9, b.y + 4, 3.5, Math.PI * 0.6, Math.PI * 1.4);
+            c.stroke();
+          }
+        });
+        g.threads.forEach((t2, i) => {
+          const sx = t2.side < 0 ? g.columnX - g.columnW * 0.13 : g.columnX + g.columnW * 1.13, ix = t2.side < 0 ? g.columnX + g.columnW * 0.04 : g.columnX + g.columnW * 0.96, sw = Math.sin(s.time * 0.18 + t2.phase) * g.columnW * 0.018;
+          c.strokeStyle = i % 2 === 0 ? g.accent : g.secondary;
+          c.lineWidth = 0.8 + t2.weight * 0.5;
+          c.globalAlpha = alpha(g, 0.18 + t2.weight * 0.14);
+          c.beginPath();
+          c.moveTo(sx, t2.fromY);
+          c.bezierCurveTo(sx + sw, (t2.fromY + t2.toY) * 0.48, ix - sw, (t2.fromY + t2.toY) * 0.58, ix, t2.toY);
+          c.stroke();
+          c.beginPath();
+          c.arc(sx, t2.fromY, 2 + t2.weight * 2.2, 0, TAU);
+          c.stroke();
+        });
+        const py = g.height * (0.1 + s.proof * 0.78), x0 = g.columnX + g.columnW * 0.83;
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1.4;
+        c.globalAlpha = alpha(g, 0.32);
+        strokeLine(c, x0, py - 5, x0 + 7, py);
+        strokeLine(c, x0 + 7, py, x0, py + 5);
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.55;
+        c.globalAlpha = alpha(g, 0.12);
+        strokeLine(c, g.columnX + g.columnW * 0.36, g.height * 0.89, g.columnX + g.columnW * 0.64, g.height * 0.89);
+        c.restore();
+      } });
+      const basicusComplexScene = defineScene({ id: "basicus", createState: (seed) => ({ seed, time: 0, elevation: 0, ripple: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("basicus", state.seed, input), rng = rngFor("basicus", state.seed, 1201), columns = b.mobile ? 3 : 5, rows = b.mobile ? 5 : 4, gap = b.width * (b.mobile ? 0.025 : 0.018), cw = (b.width * 0.82 - gap * (columns - 1)) / columns, ch = (b.height * 0.58 - gap * (rows - 1)) / rows, modules = [];
+        for (let r = 0; r < rows; r++) for (let col = 0; col < columns; col++) {
+          const ix = r * columns + col;
+          modules.push({ x: b.width * 0.09 + col * (cw + gap), y: b.height * 0.14 + r * (ch + gap), w: cw, h: ch, depth: 0.25 + rng() * 0.75, phase: rng() * TAU, kind: ix % 4 });
+        }
+        return { geometry: { ...b, modules, rippleX: b.width * 0.76, rippleY: b.height * 0.83 }, primitiveCount: primitiveCount(input, 130, 200, 280) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.elevation += dt * 0.28;
+        s.ripple = (s.ripple + dt * 0.17) % 1;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        g.modules.forEach((m) => {
+          const lift = Math.sin(s.elevation + m.phase) * 4 * m.depth, scale = 1 + Math.sin(s.time * 0.12 + m.phase) * 0.015 * m.depth, w = m.w * scale, h = m.h * scale, x = m.x - (w - m.w) / 2, y = m.y + lift - (h - m.h) / 2;
+          c.shadowBlur = 4 + m.depth * 10;
+          c.shadowColor = g.border;
+          c.fillStyle = m.kind === 0 ? g.surface : m.kind === 1 ? g.accent : m.kind === 2 ? g.secondary : g.background;
+          c.globalAlpha = alpha(g, m.kind === 0 || m.kind === 3 ? 0.11 : 0.055 + m.depth * 0.05);
+          c.fillRect(x, y, w, h);
+          c.shadowBlur = 0;
+          c.strokeStyle = m.kind === 1 ? g.accent : g.border;
+          c.lineWidth = m.kind === 1 ? 1.2 : 0.7;
+          c.globalAlpha = alpha(g, 0.16 + m.depth * 0.08);
+          c.strokeRect(x, y, w, h);
+          c.globalAlpha = alpha(g, 0.2);
+          c.strokeStyle = m.kind % 2 === 0 ? g.secondary : g.accent;
+          if (m.kind === 0) {
+            for (let b = 0; b < 3; b++) c.fillRect(x + w * 0.14, y + h * (0.25 + b * 0.2), w * (0.35 + 0.12 * b), 1);
+          } else if (m.kind === 1) {
+            c.beginPath();
+            c.arc(x + w * 0.5, y + h * 0.5, Math.min(w, h) * 0.2, 0, TAU * (0.55 + m.depth * 0.35));
+            c.stroke();
+          } else if (m.kind === 2) {
+            c.fillRect(x + w * 0.18, y + h * 0.62, w * 0.16, -h * 0.28);
+            c.fillRect(x + w * 0.42, y + h * 0.62, w * 0.16, -h * 0.42);
+            c.fillRect(x + w * 0.66, y + h * 0.62, w * 0.16, -h * 0.2);
+          } else {
+            c.beginPath();
+            c.moveTo(x + w * 0.2, y + h * 0.62);
+            c.lineTo(x + w * 0.46, y + h * 0.34);
+            c.lineTo(x + w * 0.8, y + h * 0.55);
+            c.stroke();
+          }
+        });
+        c.strokeStyle = g.secondary;
+        c.lineWidth = 1;
+        c.globalAlpha = alpha(g, 0.22);
+        for (let r = 0; r < 4; r++) {
+          const p = (s.ripple + r * 0.21) % 1, rad = p * Math.min(g.width, g.height) * 0.22;
+          c.globalAlpha = alpha(g, (1 - p) * 0.2);
+          c.beginPath();
+          c.arc(g.rippleX, g.rippleY, rad, 0, TAU);
+          c.stroke();
+        }
+        c.restore();
+      } });
+      const telemetryComplexScene = defineScene({ id: "telemetry", createState: (seed) => ({ seed, time: 0, acquisition: 0, sweep: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("telemetry", state.seed, input), rng = rngFor("telemetry", state.seed, 1301), gauges = Array.from({ length: qCount(b, 2, 3, 4) }, (_, i) => ({ x: b.width * (0.18 + i * 0.2), y: b.height * 0.28, radius: Math.min(b.width, b.height) * (0.055 + rng() * 0.035), minAngle: Math.PI * 0.72, maxAngle: Math.PI * 2.28, phase: rng() * TAU, value: 0.2 + rng() * 0.7 })), strips = Array.from({ length: qCount(b, 2, 3, 4) }, (_, i) => ({ y: b.height * (0.56 + i * 0.1), amplitude: b.height * (0.012 + rng() * 0.02), frequency: 1.4 + rng() * 3.2, phase: rng() * TAU }));
+        return { geometry: { ...b, gauges, strips, rulerY: b.height * 0.82 }, primitiveCount: primitiveCount(input, 210, 310, 395) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.acquisition = (s.acquisition + dt * 0.095) % 1;
+        s.sweep += dt * 0.28;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.strokeStyle = g.accent;
+        c.lineWidth = 0.8;
+        c.globalAlpha = alpha(g, 0.26);
+        strokeLine(c, g.width * 0.05, g.height * 0.09, g.width * 0.95, g.height * 0.09);
+        for (let cell = 0; cell < 10; cell++) {
+          const x2 = g.width * (0.055 + cell * 0.087);
+          c.fillStyle = cell % 3 === 0 ? g.secondary : g.border;
+          c.globalAlpha = alpha(g, cell % 3 === 0 ? 0.28 : 0.13);
+          c.fillRect(x2, g.height * 0.115, g.width * 0.055, 2 + cell % 2 * 2);
+        }
+        g.gauges.forEach((ga, i) => {
+          c.strokeStyle = g.border;
+          c.lineWidth = 0.8;
+          c.globalAlpha = alpha(g, 0.3);
+          c.beginPath();
+          c.arc(ga.x, ga.y, ga.radius, ga.minAngle, ga.maxAngle);
+          c.stroke();
+          for (let t2 = 0; t2 <= 14; t2++) {
+            const a2 = ga.minAngle + (ga.maxAngle - ga.minAngle) * t2 / 14, long = t2 % 4 === 0, r0 = ga.radius * (long ? 0.78 : 0.86), r1 = ga.radius;
+            c.globalAlpha = alpha(g, long ? 0.28 : 0.13);
+            strokeLine(c, ga.x + Math.cos(a2) * r0, ga.y + Math.sin(a2) * r0, ga.x + Math.cos(a2) * r1, ga.y + Math.sin(a2) * r1);
+          }
+          const v = 0.5 + 0.5 * Math.sin(s.time * (0.35 + i * 0.12) + ga.phase) * 0.32 + (ga.value - 0.5) * 0.68, a = ga.minAngle + (ga.maxAngle - ga.minAngle) * Math.max(0.04, Math.min(0.96, v));
+          c.strokeStyle = i % 2 === 0 ? g.accent : g.secondary;
+          c.lineWidth = 1.5;
+          c.globalAlpha = alpha(g, 0.54);
+          strokeLine(c, ga.x, ga.y, ga.x + Math.cos(a) * ga.radius * 0.72, ga.y + Math.sin(a) * ga.radius * 0.72);
+          c.fillStyle = g.focus;
+          c.beginPath();
+          c.arc(ga.x, ga.y, 2.2, 0, TAU);
+          c.fill();
+        });
+        g.strips.forEach((st, si) => {
+          c.strokeStyle = si % 2 === 0 ? g.accent : g.secondary;
+          c.lineWidth = 0.9;
+          c.globalAlpha = alpha(g, 0.4);
+          c.beginPath();
+          c.moveTo(g.width * 0.05, st.y);
+          const samples = g.mobile ? 38 : g.quality === "high" ? 92 : 64;
+          for (let sm = 1; sm <= samples; sm++) {
+            const u = sm / samples, x2 = g.width * (0.05 + 0.9 * u), p = Math.sin((u * st.frequency + s.time * 0.11) * TAU + st.phase), sp = Math.sin((u * 9 + si) * Math.PI) > 0.92 ? 1.9 : 0;
+            c.lineTo(x2, st.y + st.amplitude * (p * 0.65 + sp));
+          }
+          c.stroke();
+          c.strokeStyle = g.border;
+          c.globalAlpha = alpha(g, 0.1);
+          strokeLine(c, g.width * 0.05, st.y, g.width * 0.95, st.y);
+        });
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.65;
+        c.globalAlpha = alpha(g, 0.32);
+        strokeLine(c, g.width * 0.05, g.rulerY, g.width * 0.95, g.rulerY);
+        const ticks = g.mobile ? 30 : 54;
+        for (let t2 = 0; t2 <= ticks; t2++) {
+          const x2 = g.width * (0.05 + 0.9 * t2 / ticks);
+          strokeLine(c, x2, g.rulerY, x2, g.rulerY - (t2 % 5 === 0 ? 13 : 6));
+        }
+        const x = g.width * (0.05 + 0.9 * s.acquisition);
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1;
+        c.globalAlpha = alpha(g, 0.44);
+        strokeLine(c, x, g.height * 0.48, x, g.rulerY + 5);
+        c.fillStyle = g.accent;
+        c.fillRect(x - 2, g.rulerY + 7, 4, 4);
+        for (let m = 0; m < 5; m++) {
+          const on = fract(s.sweep + m * 0.17) < 0.45;
+          c.fillStyle = on ? g.success : g.border;
+          c.globalAlpha = alpha(g, on ? 0.42 : 0.08);
+          c.fillRect(g.width * 0.91, g.height * (0.12 + m * 0.055), g.width * 0.035, 2);
+        }
+        c.restore();
+      } });
+      const calmComplexScene = defineScene({ id: "calm", createState: (seed) => ({ seed, time: 0, breath: 0, drift: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("calm", state.seed, input), rng = rngFor("calm", state.seed, 1409), dust = Array.from({ length: b.mobile ? 9 : input.effectiveQuality.tier === "high" ? 22 : 15 }, () => ({ x: b.width * (0.08 + rng() * 0.84), y: b.height * (0.15 + rng() * 0.7), size: 0.4 + rng() * 1.1, phase: rng() * TAU }));
+        return { geometry: { ...b, dust, horizon: b.height * 0.68, filamentY: b.height * 0.38 }, primitiveCount: primitiveCount(input, 72, 96, 124) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.breath += dt * 0.07;
+        s.drift += dt * 0.025;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        const cx = g.width * (0.5 + Math.sin(s.drift) * 0.015), cy = g.height * (0.5 + Math.cos(s.drift * 0.7) * 0.012), r = Math.max(g.width, g.height) * (0.42 + Math.sin(s.breath) * 0.018), glow = c.createRadialGradient(cx, cy, 0, cx, cy, r);
+        glow.addColorStop(0, g.surface);
+        glow.addColorStop(0.46, g.accent);
+        glow.addColorStop(1, "transparent");
+        c.fillStyle = glow;
+        c.globalAlpha = alpha(g, 0.018);
+        c.beginPath();
+        c.arc(cx, cy, r, 0, TAU);
+        c.fill();
+        const h = g.horizon + Math.sin(s.breath * 1.3) * g.height * 0.012;
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.65;
+        c.globalAlpha = alpha(g, 0.16);
+        strokeLine(c, g.width * 0.12, h, g.width * 0.88, h);
+        c.strokeStyle = g.accent;
+        c.globalAlpha = alpha(g, 0.16);
+        strokeLine(c, g.width * 0.42, h, g.width * 0.58, h);
+        const fy = g.filamentY + Math.sin(s.time * 0.031) * g.height * 0.018;
+        c.strokeStyle = g.accent;
+        c.lineWidth = 0.75;
+        c.globalAlpha = alpha(g, 0.11);
+        c.beginPath();
+        c.moveTo(g.width * 0.22, fy);
+        c.bezierCurveTo(g.width * 0.39, fy - g.height * 0.025, g.width * 0.61, fy + g.height * 0.025, g.width * 0.78, fy);
+        c.stroke();
+        c.fillStyle = g.accent;
+        g.dust.forEach((d, i) => {
+          const f = 0.5 + 0.5 * Math.sin(s.time * (0.07 + i * 2e-3) + d.phase);
+          c.globalAlpha = alpha(g, 0.018 + f * 0.035);
+          c.beginPath();
+          c.arc(d.x, d.y, d.size * 0.55, 0, TAU);
+          c.fill();
+        });
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.45;
+        c.globalAlpha = alpha(g, 0.035);
+        for (let h2 = 0; h2 < 4; h2++) {
+          const y = g.height * (0.2 + h2 * 0.17) + Math.sin(s.time * 0.017 + h2) * 1.5;
+          strokeLine(c, g.width * (0.18 + h2 * 0.015), y, g.width * (0.82 - h2 * 0.015), y);
+        }
+        c.strokeStyle = g.secondary;
+        c.lineWidth = 0.7;
+        c.globalAlpha = alpha(g, 0.12);
+        c.beginPath();
+        c.arc(g.width * 0.82, g.height * 0.22, 8 + Math.sin(s.breath * 0.9) * 1.2, 0, TAU);
+        c.stroke();
+        c.restore();
+      } });
+      window.TalosMobileScenes = Object.freeze([forgeComplexScene, paperComplexScene, terminalComplexScene, auroraComplexScene, glacierComplexScene, emberComplexScene, atlasComplexScene, noirComplexScene, signalComplexScene, violetComplexScene, claudiusComplexScene, basicusComplexScene, telemetryComplexScene, calmComplexScene]);
+    })();
+    TALOS_DESKTOP_SCENES = window.TalosMobileScenes;
+  }
+});
+
+// src/motion/desktop-background.js
+var desktop_background_exports = {};
+__export(desktop_background_exports, {
+  initTalosDesktopBackground: () => initTalosDesktopBackground
+});
+function reducedMotion() {
+  return document.documentElement.classList.contains("reduce-motion") || document.body?.classList.contains("reduce-motion") || Boolean(mediaQuery?.matches);
+}
+function resolveColor(raw, fallback = "#888888") {
+  if (!colorProbe) {
+    colorProbe = document.createElement("span");
+    colorProbe.setAttribute("aria-hidden", "true");
+    colorProbe.style.cssText = "position:fixed;left:-10000px;top:-10000px;visibility:hidden;pointer-events:none;";
+    document.body.append(colorProbe);
+  }
+  colorProbe.style.color = "";
+  colorProbe.style.color = raw || fallback;
+  return getComputedStyle(colorProbe).color || fallback;
+}
+function palette() {
+  const rootStyle = getComputedStyle(document.documentElement);
+  const bodyStyle = document.body ? getComputedStyle(document.body) : rootStyle;
+  const read = (name, fallback) => {
+    const value = rootStyle.getPropertyValue(name).trim() || bodyStyle.getPropertyValue(name).trim();
+    return resolveColor(value, fallback);
+  };
+  return {
+    accent: read("--talos-accent", "#c08b3c"),
+    secondary: read("--talos-secondary", "#8e9095"),
+    border_strong: read("--talos-border-strong", "#4a4b50"),
+    surface_elevated: read("--talos-window-bg", "#34353a"),
+    background: read("--talos-background", "#1e1f22"),
+    focus: read("--talos-ring", "#d8a650"),
+    info: read("--talos-info", "#7f9fc4"),
+    success: read("--talos-success", "#77a884"),
+    warning: read("--talos-warning", "#d8a650"),
+    danger: read("--talos-danger", "#d87d72")
+  };
+}
+function currentConfig() {
+  const root = document.documentElement;
+  const host = document.body;
+  const style = getComputedStyle(root);
+  const theme = root.dataset.talosTheme || "calm";
+  const scene = SCENES.has(root.dataset.talosScene) ? root.dataset.talosScene : SCENES.has(theme) ? theme : DEFAULT_SCENE;
+  const mode = root.dataset.talosMotionMode || "adaptive";
+  const quality = root.dataset.talosMotionQuality || "balanced";
+  const off = mode === "off" || host?.classList.contains("background-motion-off");
+  const running = !off && host?.classList.contains("background-motion-active") && !host?.classList.contains("background-motion-paused");
+  const params = {
+    speed: clamp(cssNumber(style, "--talos-motion-speed", 1, 100), 10, 240),
+    intensity: clamp(cssNumber(style, "--talos-motion-intensity", 0.2, 100), 0, 100),
+    glow: clamp(cssNumber(style, "--talos-motion-glow", 0.1, 100), 0, 100),
+    density: clamp(cssNumber(style, "--talos-motion-density", 1, 100), 25, 150),
+    depth: clamp(cssNumber(style, "--talos-motion-depth", 0.92, 100), 0, 100),
+    trails: clamp(cssNumber(style, "--talos-motion-trails", 0.5, 100), 0, 100),
+    contrast: clamp(cssNumber(style, "--talos-motion-contrast", 0.8, 100), 0, 100),
+    parallax: clamp(cssNumber(style, "--talos-motion-parallax", 0, 100), 0, 100)
+  };
+  return { scene, theme, mode, quality, off, running, parameters: params };
+}
+function tierFor(config, stage) {
+  if (stage.forcedLow || config.mode === "simple" || config.quality === "low") return "low";
+  if (config.quality === "high") return "high";
+  return "balanced";
+}
+function makeInput(stage, config) {
+  const p = palette();
+  return {
+    viewport: { width: stage.width, height: stage.height },
+    palette: { dark: p, light: p },
+    colorMode: document.documentElement.dataset.theme === "light" ? "light" : "dark",
+    parameters: config.parameters,
+    effectiveQuality: {
+      tier: tierFor(config, stage),
+      densityScale: tierFor(config, stage) === "low" ? 0.8 : 1
+    }
+  };
+}
+function chatHasMessages() {
+  const column = document.querySelector("#schermoChat .talos-conversation__column");
+  if (!column) return false;
+  return Boolean(column.querySelector('.talos-turn, [data-c="Turn"], .message, [data-message-id]'));
+}
+function stageVisible(stage) {
+  if (document.hidden || !stage.canvas.isConnected) return false;
+  const rect = stage.canvas.getBoundingClientRect();
+  return rect.width > 1 && rect.height > 1 && !stage.canvas.closest("[hidden]");
+}
+function stageShouldAnimate(stage, config) {
+  if (!stageVisible(stage) || config.off || reducedMotion() || stage.manualPaused || stage.budgetStatic) return false;
+  if (stage.preview) return config.mode !== "off" && config.mode !== "static";
+  return config.running && config.mode !== "static";
+}
+function recordCost(cost) {
+  metrics.costs.push(cost);
+  if (metrics.costs.length > 120) metrics.costs.shift();
+  const sorted = [...metrics.costs].sort((a, b) => a - b);
+  metrics.p95 = sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))] : 0;
+}
+function draw(stage, dt, config) {
+  if (config.off) {
+    stage.context.clearRect(0, 0, stage.width, stage.height);
+    stage.canvas.dataset.sceneStatus = "off";
+    return;
+  }
+  const start = performance.now();
+  try {
+    if (dt > 0) stage.definition.update({ state: stage.state, input: stage.input, stepMs: dt });
+    stage.context.setTransform(stage.dpr, 0, 0, stage.dpr, 0, 0);
+    stage.definition.draw({ context: stage.context, state: stage.state, geometry: stage.geometry });
+    stage.draws += 1;
+    stage.canvas.dataset.scene = stage.scene;
+    stage.canvas.dataset.sceneStatus = stage.budgetStatic ? "budget-static" : reducedMotion() ? "reduced" : stageShouldAnimate(stage, config) ? "animating" : "static";
+  } catch (error) {
+    const message = String(error?.message || error);
+    if (!metrics.errors.includes(message)) metrics.errors.push(message);
+    stage.budgetStatic = true;
+    stage.canvas.dataset.sceneStatus = "error";
+    stage.context.clearRect(0, 0, stage.width, stage.height);
+    return;
+  }
+  const cost = performance.now() - start;
+  stage.lastCost = cost;
+  if (dt > 0) {
+    metrics.frames += 1;
+    recordCost(cost);
+    stage.slowCount = cost > SLOW_FRAME_MS ? stage.slowCount + 1 : Math.max(0, stage.slowCount - 1);
+    if (stage.slowCount >= SLOW_FRAME_LIMIT) {
+      if (!stage.forcedLow) {
+        stage.forcedLow = true;
+        stage.slowCount = 0;
+        prepare(stage, true);
+      } else {
+        stage.budgetStatic = true;
+        stage.canvas.dataset.sceneStatus = "budget-static";
+      }
+    }
+  }
+}
+function prepare(stage, reset = false) {
+  if (!stage.canvas.isConnected) return;
+  const rect = stage.parent.getBoundingClientRect();
+  stage.width = Math.max(1, rect.width);
+  stage.height = Math.max(1, rect.height);
+  let dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR, Math.sqrt(MAX_PIXELS / Math.max(1, stage.width * stage.height)));
+  dpr = Math.max(0.5, dpr);
+  const pixelWidth = Math.max(1, Math.round(stage.width * dpr));
+  const pixelHeight = Math.max(1, Math.round(stage.height * dpr));
+  if (stage.canvas.width !== pixelWidth) stage.canvas.width = pixelWidth;
+  if (stage.canvas.height !== pixelHeight) stage.canvas.height = pixelHeight;
+  stage.dpr = dpr;
+  const config = currentConfig();
+  const definition = SCENES.get(config.scene) || SCENES.get(DEFAULT_SCENE);
+  const changed = stage.definition !== definition || stage.scene !== definition.id;
+  stage.definition = definition;
+  stage.scene = definition.id;
+  if (reset || changed || !stage.state) {
+    stage.state = definition.createState(SEED);
+    stage.slowCount = 0;
+    stage.budgetStatic = false;
+  }
+  stage.input = makeInput(stage, config);
+  stage.geometry = definition.prepare({ state: stage.state, input: stage.input }).geometry;
+  stage.context.setTransform(dpr, 0, 0, dpr, 0, 0);
+  draw(stage, 0, config);
+}
+function frame(now) {
+  raf = 0;
+  if (destroyed) return;
+  const config = currentConfig();
+  const active = [...stages].filter((stage) => stageShouldAnimate(stage, config));
+  if (!active.length) {
+    lastFrame = 0;
+    return;
+  }
+  const elapsed = lastFrame ? now - lastFrame : 1e3 / TARGET_FPS;
+  if (elapsed >= 1e3 / TARGET_FPS - 1) {
+    lastFrame = now;
+    for (const stage of active) draw(stage, Math.min(50, elapsed), config);
+  }
+  raf = requestAnimationFrame(frame);
+}
+function schedule() {
+  if (raf) cancelAnimationFrame(raf);
+  raf = 0;
+  lastFrame = 0;
+  if (!destroyed && [...stages].some((stage) => stageShouldAnimate(stage, currentConfig()))) raf = requestAnimationFrame(frame);
+}
+function refreshAll({ reset = false } = {}) {
+  for (const stage of stages) prepare(stage, reset);
+  schedule();
+}
+function mountStage(parent, { preview = false } = {}) {
+  if (!parent || parent.querySelector(":scope > canvas.talos-motion-canvas")) return null;
+  const canvas = document.createElement("canvas");
+  canvas.className = "talos-motion-canvas";
+  canvas.setAttribute("aria-hidden", "true");
+  canvas.tabIndex = -1;
+  parent.prepend(canvas);
+  const context = canvas.getContext("2d", { alpha: true, desynchronized: true });
+  if (!context) {
+    canvas.remove();
+    return null;
+  }
+  const stage = { parent, canvas, context, preview, state: null, definition: null, scene: "", width: 1, height: 1, dpr: 1, draws: 0, lastCost: 0, slowCount: 0, forcedLow: false, budgetStatic: false, manualPaused: false };
+  stages.add(stage);
+  const resize = new ResizeObserver(() => requestAnimationFrame(() => {
+    if (stages.has(stage)) prepare(stage, false);
+  }));
+  resize.observe(parent);
+  stage.dispose = () => {
+    resize.disconnect();
+    stages.delete(stage);
+    canvas.remove();
+    schedule();
+  };
+  prepare(stage, true);
+  return stage;
+}
+function installPreview() {
+  const appearance = document.querySelector('#setting-panel-appearance [data-settings-group="design"]');
+  if (!appearance || appearance.querySelector("[data-talos-motion-preview]")) return;
+  const panel = document.createElement("section");
+  panel.className = "talos-motion-preview";
+  panel.dataset.talosMotionPreview = "true";
+  panel.innerHTML = '<div class="talos-motion-preview__copy"><span class="talos-eyebrow">Scena del tema</span><strong data-motion-preview-name></strong><small>Anteprima dal renderer Canvas mobile. La conversazione la ferma appena compare un messaggio.</small></div><div class="talos-motion-preview__stage" aria-hidden="true"></div><span class="talos-motion-preview__status" data-motion-preview-status></span>';
+  const themeRow = appearance.querySelector('[data-setting-row="sceneOverrideSelect"]') || appearance.querySelector('[data-setting-row="themePresetSelect"]');
+  if (themeRow) themeRow.insertAdjacentElement("afterend", panel);
+  else appearance.prepend(panel);
+  const stage = mountStage(panel.querySelector(".talos-motion-preview__stage"), { preview: true });
+  const updateLabel = () => {
+    const config = currentConfig();
+    panel.querySelector("[data-motion-preview-name]").textContent = config.scene[0].toUpperCase() + config.scene.slice(1);
+    panel.querySelector("[data-motion-preview-status]").textContent = stage?.canvas.dataset.sceneStatus || "non disponibile";
+  };
+  updateLabel();
+  const interval = window.setInterval(updateLabel, 650);
+  panel._talosDispose = () => window.clearInterval(interval);
+}
+function reviewFrame(id, width = 640, height = 360, atSeconds = 0, overrides = {}) {
+  const definition = SCENES.get(id);
+  if (!definition) throw new Error(`Scena sconosciuta: ${id}`);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  const config = currentConfig();
+  const stage = { width, height, forcedLow: true };
+  const input = makeInput(stage, { ...config, scene: id, parameters: { ...config.parameters, ...overrides } });
+  const state = definition.createState(SEED);
+  const geometry = definition.prepare({ state, input }).geometry;
+  for (let i = 0; i < Math.round(atSeconds * 20); i += 1) definition.update({ state, input, stepMs: 50 });
+  definition.draw({ context, state, geometry });
+  const pixels = context.getImageData(0, 0, width, height).data;
+  let nonzero = 0;
+  let hash = 2166136261;
+  for (let p = 0; p < pixels.length; p += 4) {
+    if (pixels[p + 3]) nonzero += 1;
+    hash = Math.imul(hash ^ pixels[p], 16777619);
+    hash = Math.imul(hash ^ pixels[p + 1], 16777619);
+    hash = Math.imul(hash ^ pixels[p + 2], 16777619);
+    hash = Math.imul(hash ^ pixels[p + 3], 16777619);
+  }
+  return { id, nonzero, hash: hash >>> 0 };
+}
+function initTalosDesktopBackground() {
+  if (window.__talosDesktopMotion?.initialized) return window.__talosDesktopMotion;
+  const chat = document.getElementById("schermoChat");
+  if (!chat) return null;
+  chat.dataset.talosCanvasMotion = "true";
+  document.documentElement.classList.add("talos-final-ui");
+  const mainStage = mountStage(chat, { preview: false });
+  installPreview();
+  const watchTarget = document.documentElement;
+  rootObserver = new MutationObserver((records) => {
+    const relevant = records.some((record) => record.type === "attributes" || record.type === "childList");
+    if (!relevant) return;
+    installPreview();
+    refreshAll({ reset: records.some((record) => record.attributeName?.startsWith("data-talos") || record.attributeName === "data-theme") });
+  });
+  rootObserver.observe(watchTarget, { attributes: true, attributeFilter: ["class", "data-theme", "data-talos-theme", "data-talos-scene", "data-talos-motion-mode", "data-talos-motion-quality", "style"] });
+  if (document.body) rootObserver.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  const conversation = chat.querySelector(".talos-conversation__column");
+  if (conversation) {
+    mutationObserver = new MutationObserver(() => refreshAll({ reset: false }));
+    mutationObserver.observe(conversation, { childList: true, subtree: false });
+  }
+  mediaQuery = matchMedia("(prefers-reduced-motion: reduce)");
+  const mediaHandler = () => refreshAll({ reset: false });
+  mediaQuery.addEventListener?.("change", mediaHandler);
+  document.addEventListener("visibilitychange", schedule);
+  window.addEventListener("pageshow", schedule);
+  window.addEventListener("pagehide", () => {
+    if (raf) cancelAnimationFrame(raf);
+    raf = 0;
+  });
+  const api = Object.freeze({
+    initialized: true,
+    ids: [...SCENES.keys()],
+    refresh: () => refreshAll({ reset: true }),
+    reviewFrame,
+    status: () => ({
+      scene: currentConfig().scene,
+      running: Boolean(raf),
+      reduced: reducedMotion(),
+      chatHasMessages: chatHasMessages(),
+      stages: [...stages].map((stage) => ({ preview: stage.preview, scene: stage.scene, status: stage.canvas.dataset.sceneStatus, draws: stage.draws, cost: Math.round(stage.lastCost * 100) / 100, tier: tierFor(currentConfig(), stage) })),
+      frames: metrics.frames,
+      p95: Math.round(metrics.p95 * 100) / 100,
+      errors: [...metrics.errors]
+    }),
+    destroy: () => {
+      destroyed = true;
+      if (raf) cancelAnimationFrame(raf);
+      rootObserver?.disconnect();
+      mutationObserver?.disconnect();
+      for (const stage of [...stages]) stage.dispose?.();
+      document.querySelector("[data-talos-motion-preview]")?._talosDispose?.();
+      document.querySelector("[data-talos-motion-preview]")?.remove();
+      chat.removeAttribute("data-talos-canvas-motion");
+    }
+  });
+  window.__talosDesktopMotion = api;
+  schedule();
+  return api;
+}
+var SCENES, DEFAULT_SCENE, TARGET_FPS, MAX_PIXELS, MAX_DPR, SLOW_FRAME_MS, SLOW_FRAME_LIMIT, SEED, stages, raf, lastFrame, mutationObserver, rootObserver, mediaQuery, destroyed, colorProbe, metrics, clamp, cssNumber;
+var init_desktop_background = __esm({
+  "src/motion/desktop-background.js"() {
+    init_desktop_scenes();
+    SCENES = new Map(TALOS_DESKTOP_SCENES.map((scene) => [scene.id, scene]));
+    DEFAULT_SCENE = "calm";
+    TARGET_FPS = 30;
+    MAX_PIXELS = 26e5;
+    MAX_DPR = 1.5;
+    SLOW_FRAME_MS = 18;
+    SLOW_FRAME_LIMIT = 12;
+    SEED = 730913;
+    stages = /* @__PURE__ */ new Set();
+    raf = 0;
+    lastFrame = 0;
+    mutationObserver = null;
+    rootObserver = null;
+    mediaQuery = null;
+    destroyed = false;
+    colorProbe = null;
+    metrics = { frames: 0, p95: 0, errors: [], costs: [] };
+    clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    cssNumber = (style, name, fallback, multiplier = 1) => {
+      const raw = Number.parseFloat(style.getPropertyValue(name));
+      return Number.isFinite(raw) ? raw * multiplier : fallback;
+    };
+  }
+});
+
 // src/legacy/frammenti.html
 var frammenti_default = `<!-- Pannello impostazioni + Model Lab del monolite: tutti gli id che app.js cerca. -->
 <section class="legacy-pane">
@@ -27582,3 +29770,5 @@ function montaPonteLegacy(documentObj = document) {
 // src/main.js
 montaPonteLegacy(document);
 await Promise.resolve().then(() => (init_app(), app_exports));
+var { initTalosDesktopBackground: initTalosDesktopBackground2 } = await Promise.resolve().then(() => (init_desktop_background(), desktop_background_exports));
+initTalosDesktopBackground2();

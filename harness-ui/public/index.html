@@ -150,6 +150,14 @@
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 7V5h4v2M6 7l1 12a2 2 0 0 0 2 1.8h6A2 2 0 0 0 17 19L18 7"/><path d="M10 11v6M14 11v6"/></symbol>
   <symbol id="i-robot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M9 4h6"/><circle cx="9" cy="14" r="1.2"/><circle cx="15" cy="14" r="1.2"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <!-- ⭐ 11/09/2026 BC-15 — le SCINTILLE. Nello sprite non c'era: le uniche vicine erano
+       `i-edit` (la matita, che qui vuol dire «modifica questo oggetto» ed è già presa) e
+       `i-bolt` (già del chip del modello). Ricerca 11/09/2026 — informaticsinc.com «Press for
+       Magic: The Iconography of Sparkles in AI Tools»: la scintilla è il segno stabilito per
+       «lo riscrive il modello», e sta accanto al composer in ChatGPT, Gemini e Claude.
+       Due stelle, non tre: a 18 px la terza diventa sporco. Stesso tratto degli altri
+       (`.i`: 24×24, stroke 1.6, estremi tondi), nessun riempimento. -->
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M10 3.5 11.7 8.3 16.5 10 11.7 11.7 10 16.5 8.3 11.7 3.5 10 8.3 8.3Z"/><path d="M17.5 14.5 18.3 16.7 20.5 17.5 18.3 18.3 17.5 20.5 16.7 18.3 14.5 17.5 16.7 16.7Z"/></symbol>
   <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
   <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5m7 7-7-7 7-7"/></symbol>
   <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
@@ -441,6 +449,12 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
           <textarea class="talos-composer__input" id="composerInput" rows="1" placeholder="Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda" aria-label="Messaggio"></textarea>
           <div class="talos-composer__bar">
             <button class="talos-composer__attach" data-c="AttachButton" aria-label="Aggiungi contesto" id="capabilityBtn" title="Aggiungi contesto: file, immagini, screenshot"><svg class="i"><use href="#i-plus"/></svg></button>
+            <!-- ⭐⭐⭐ BC-15, 11/09/2026 — «Migliora il prompt». Sta QUI, accanto al «+», perché le
+                 due cose che si fanno al messaggio PRIMA di mandarlo — aggiungere contesto e
+                 riscriverlo — stanno insieme, a sinistra; a destra restano i due gesti che lo
+                 mandano via (voce e invio). Stessa classe e stessa misura degli altri due
+                 bottoni-icona della barra: nessuna grammatica nuova. -->
+            <button type="button" class="talos-composer__attach" id="miglioraPromptBtn" aria-label="Migliora il prompt" aria-expanded="false" aria-controls="miglioraPromptPannello" title="Riscrivi il tuo messaggio col modello di questa chat"><svg class="i"><use href="#i-sparkles"/></svg></button>
             <button type="button" class="talos-badge talos-badge--lg" data-c="Chip" data-open-sheet="model" title="Cambia modello"><svg class="i i--sm"><use href="#i-bolt"/></svg><span class="talos-chip__label">claude-opus-5</span> <span class="talos-kbd">Ctrl ⇧ M</span></button>
             <button type="button" class="talos-badge talos-badge--lg talos-badge--warning" data-c="Chip" data-open-sheet="permissions" title="Cambia il permesso"><svg class="i i--sm"><use href="#i-shield"/></svg><span class="talos-chip__label">Scrive nel progetto</span></button>
             <span class="talos-badge talos-badge--lg" data-c="Chip" data-runtime-giri>Giri <span class="talos-mono talos-measure">7</span></span>
