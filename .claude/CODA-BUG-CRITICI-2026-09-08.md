@@ -3,6 +3,34 @@
 > Segnalati dall'owner mentre lavoravo, tutti con uno screenshot. Ordinati per gravità.
 > ⛔ Owner: «ispeziona la run reale in 4174, dopo aver sistemato la coda di bug corrente».
 
+## Stato all'11/09/2026, ore 13
+
+| riga | stato |
+|---|---|
+| **BC-01** loop del modello locale | **in corso da altri** — non toccare da qui |
+| **BC-02** stop non immediato | **in corso da altri** — non toccare da qui |
+| **BC-03** scheda Agenti vuota, delega in `C:\` | **in corso da altri** — non toccare da qui |
+| **BC-04** regressione stile nel selettore dei modelli locali | ✅ **CHIUSA** — verificata l'11/09, sezione «✅ CHIUSE» in fondo |
+| **temi** (`temi.css`, `aspetto.css`) | **in corso da altri** — non toccare da qui |
+| **BC-05** reindirizzamento e accodamento, popup sopra il composer | **APERTO** — owner 11/09, mai lavorato |
+| **BC-06** spazio su disco (`projects/`, scratchpad) | **APERTO** — owner 11/09, da delegare, non urgente |
+
+> ⛔ **Un avvertimento su BC-01, BC-02 e BC-03, per chi li sta lavorando adesso.** Il commit
+> `fb120b2a` dell'11/09 mattina ha messo al sicuro il lavoro **PARZIALE** di cinque agenti morti
+> insieme su un limite di sessione, e lo dichiara esso stesso: «QUESTO COMMIT NON CHIUDE NIENTE…
+> nessuno dei cinque ha verificato il proprio lavoro». Dentro ci sono nomi nuovi in
+> `src/kernel/talosHarness.mjs` (`fermaQuandoArrivaLoStop`, `USCITA_FERMATO_SU_RICHIESTA`,
+> `posizioneDelPezzo`, `messaggioIntero`, `vistoUnDelta`) **alcuni dei quali non risultano usati**, e
+> un test `tests/unit/inspector-agenti.test.mjs` il cui esito non è mai stato letto. ⇒ Il codice che
+> si trova in quei file **non è una base verificata**: va riletto, non ereditato.
+>
+> ⛔ **E BC-03 è la prova vivente del motivo per cui esiste questo documento riscritto**: la riga
+> **O-10** («spawno un sotto-agente e non si vede in tab Agenti») è data per `CHIUSO-NON-PROVATO`
+> dal 06/09 in `CODA-UNICA-DEBITI`, e la foto dell'owner dell'08/09 mostra che **non funziona**.
+> Una riga chiusa senza la prova che chiedeva torna indietro, sempre.
+
+Lo stato accertato di tutte le righe PO è in `.claude/STATO-VERO-DELLE-RIGHE-2026-09-11.md`.
+
 ---
 
 ## BC-01 · Il modello LOCALE va in loop: 398 chiamate in un giro solo
@@ -104,9 +132,29 @@ parallelo, due in sequenza, e la cartella ereditata dalla madre.
 
 ---
 
-## BC-04 · Regressione di stile nel selettore dei modelli locali
+## ✅ BC-04 · Regressione di stile nel selettore dei modelli locali — CHIUSA
 
-**Segnalato:** «regressione stile su model picker locali».
+> ⛔ **Spostata fra le chiuse l'11/09/2026.** Era già stata curata **l'08/09 stesso**, e questo
+> documento continuava a dire «in lavorazione»: è esattamente il difetto che l'owner ha segnalato
+> oggi. Le due cure sono vive nel codice di adesso:
+> - `frontend/src/legacy/app.js:5444` — `nomeModelloUmano(valore)`, con l'id intero nel `title`;
+> - `frontend/src/styles/index.css:1080-1082` — la colonna del testo si nomina **per posizione**
+>   (`>span:nth-child(2)`) invece di cadere sulla regola della colonna di coda, che era **la causa
+>   vera**: non la lunghezza del nome.
+>
+> **Prova, 11/09**: quattro giri con foto a **1440×900** e **1024×800**, tema chiaro e scuro. Prima
+> (ricostruito): lista 410 / contenuto 876, con barra di scorrimento orizzontale. Oggi: **410/410** e
+> **397/397**, nessuna barra. Rapporto in `.claude/RAPPORTO-BC04-2026-09-11.md`, foto in
+> `.claude/foto-bc04-2026-09-11/`.
+>
+> ⛔ **Restano aperte due righe diverse**, trovate nello stesso giro e **che nessuno sta lavorando**:
+> **CB-16-bis** — `components/modelli-installati.js:70` fa ancora `modello.name || modello.id`,
+> quindi il Model Lab «Installati» mostra ancora i 102 caratteri: delle **tre** superfici che la coda
+> dei debiti chiedeva, ne risulta curata **una**; e **BH-15** — `components/session-item.js:122`
+> `nomeModello()` fa solo `split('/')`, quindi è **inerte** sugli id `local:`, ed è la funzione che
+> usa `board.js:35`. Due funzioni per lo stesso lavoro: è la causa strutturale della mezza cura.
+
+**Il testo originale della segnalazione:** «regressione stile su model picker locali».
 
 Nella scheda «Locali» del selettore in «Nuova sessione» le righe **sforano orizzontalmente**: il
 nome del modello (l'identificatore interno, 102 caratteri) allarga il contenitore, compare una barra
@@ -115,7 +163,9 @@ come «gli id grezzi a schermo», che qui si manifesta come rottura visiva.
 ⛔ La cura per il nome esiste già e non viene usata: `components/chat-foot.js` esporta
 `nomeModelloUmano()`, chiamata in **un solo posto**.
 
-**Stato:** in lavorazione.
+~~**Stato:** in lavorazione.~~ → ✅ **CHIUSA l'08/09, verificata l'11/09** (vedi il riquadro in testa
+alla sezione). ⛔ La diagnosi originale qui sopra era **sbagliata sulla causa**: non era la lunghezza
+del nome, era la regola CSS della colonna di coda che catturava la colonna del testo.
 
 ---
 

@@ -1,5 +1,69 @@
 # CODA UNICA DEI DEBITI — TALOS Harness Desktop
 
+> ⛔⛔⛔ **11/09/2026 — QUESTO DOCUMENTO DICEVA APERTE QUATTORDICI RIGHE GIÀ CHIUSE.**
+> Owner, oggi: «non voglio assolutamente vedere fasi già fatte in documenti di debiti/implementazioni
+> in corso». Le quattordici righe stanno ora nella sezione «✅ CHIUSE» qui sotto, **non più fra gli
+> aperti**, ognuna con la prova rimisurata oggi. Testo originale conservato: nessuna riga cancellata.
+>
+> ⛔ E il documento **si contraddiceva da solo**: la sua §6 («Aggiunte e smarcature del 07/09»)
+> dichiarava CHIUSE **otto** righe (T03-D2, BH-05, BH-13, BH-14, CB-10, CB-11, CB-14, CB-18-bis) che
+> le tabelle §2.1/§2.2 dello stesso file continuavano a elencare come APERTE, dieci schermate più su. La prima riga di §2.1 — «T03-permessi-D2», il difetto di
+> sicurezza indicato anche come **numero 1 di §7 “L'ordine in cui la farei”** — era chiusa dal
+> **06/09**, cioè il giorno stesso in cui il documento è nato.
+>
+> Lo stato accertato oggi di tutte le righe è in **`.claude/STATO-VERO-DELLE-RIGHE-2026-09-11.md`**.
+
+## ✅ CHIUSE — spostate qui l'11/09/2026, con la prova rimisurata
+
+> Ogni riga è stata riletta **nel codice di oggi**, non copiata da un commit. Le misure fra parentesi
+> sono comandi eseguiti l'11/09/2026 su `HEAD = 128b44e0`, albero pulito.
+
+| id | il debito, com'era scritto | chiusa il | prova, misurata l'11/09 |
+|---|---|---|---|
+| **T03-permessi-D2** | «chiudere il cancello sulla sola *scrittura di un file* NON basta: il modello scrive lo stesso con *comando nel terminale*» — ⛔ era il **numero 1** di §2.1 e di §7 | **06/09**, `fed03a00` | `frontend/src/components/permessi.js` esiste (64 righe nuove nel commit); `app.js:54` importa `porteLateraliAperte` col commento «06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto»; l'avviso è **agibile sul posto** a `app.js:7574`; 44 righe di prova in `frontend/tests/unit/permessi.test.mjs` |
+| **O-40** | «tutti i tooltip custom e stilizzati secondo il tema» — «zero lavoro», 208 tooltip di Windows | **dopo il 06/09** | `frontend/src/components/tooltip.js` esiste (8,7 KB); `grep -c 'title="' frontend/index.template.html` → **0** (il documento ne contava **156**) |
+| **O-39** | «tutte le scrollbar custom e più compatte» — «Zero `::-webkit-scrollbar` che dipinga» | **dopo il 06/09** | `grep -c "::-webkit-scrollbar"` → **12** in `frontend/src/styles/index.css`, **9** nel foglio servito `public/styles.css` |
+| **CB-10** | «nove riferimenti a icone che non esistono» (poi «sono 11») | **07/09** | già dichiarata CADUTA nella §6 di questo stesso documento: 48 simboli nello sprite, 41 nomi usati, **0 usati-e-non-disegnati**. ⚠️ Resta aperto **solo** il debito §6 n. 3: `icon()` (`app.js:1237`) non valida il nome contro lo sprite |
+| **BH-05** = T10-D5 = T10-D9 | «Albero dei rami apre **due UI diverse** che si contraddicono» | **07/09** | §6 di questo documento: una porta sola, `sessionTree` → `veloAlbero` coi dati veri. Riletto oggi: `veloAlbero` compare 6 volte in `bridge/legacy-dom.js` e 11 nel template, senza il ramo che svuotava |
+| **CB-18-bis** | «Approvato e Negato sono resi identici: il tono promesso non esiste» — «zero regole `approval__esito--`» | **07/09** | `grep -c "approval__esito--"` → **3** in `frontend/src/styles/index.css`, **2** nel foglio servito `public/styles.css` |
+| **CB-11** | «la palette viva è in parte in inglese — e ne esiste una seconda, in italiano, che nessuno apre» | **07/09** | `app.js:17623` prende `#veloComandi` e `:17652` lo apre (`apriVeloMockup('veloComandi')`); il blocco è documentato in loco a `:17607` («LA PALETTE ITALIANA ESISTEVA E NESSUNO LA APRIVA») |
+| **BH-13** = T10-D6 | «cappelli dei fogli in inglese», sei stringhe | **07/09** | `grep -c "eyebrow:'Conversation graph'"` → **0**; i cappelli letti oggi sono italiani (`eyebrow: 'Albero workspace'`, righe 7290/7304/7341) |
+| **BH-14** | «Read only / Workspace write in inglese» | **07/09** | `frontend/src/components/politiche.js` esiste e traduce a schermo; il **valore** verso il kernel resta `Read only` byte per byte (riga 24), come la riga chiedeva |
+| **CB-14** | «un solo interruttore in tutta la app non è stilato» | **07/09** | `app.js:15618` — `reasoningInput.className = 'talos-switch'` |
+| **BH-06** = CB-19 | «12 errori CSP per ogni apertura del Terminale» | **08/09**, `511a382c` | `src/http-app.mjs:493` — `.replace("style-src 'self'", () => \`style-src 'self' 'nonce-${nonce}'\`)`, con la spiegazione BH-06 scritta in loco a `:448` («LA CSP SPEGNEVA IL TERMINALE») |
+| **blocco release 1** | «il kernel non è nel repo» | **07/09** | `harness-ui/src/kernel/talosHarness.mjs` **esiste** nel repo, insieme al suo `talosHarness.test.mjs`; i 7 attrezzi di file/shell sono dichiarati alle righe 877-971 |
+| **blocco release — CI** | «CI e release non sanno che il desktop esiste» (§2.5 riga 4) | **07/09** | `grep -c harness-ui .github/workflows/ci.yml` → **18**; `release.yml` → **13** |
+| **blocco release 5** | «controlli morti nella Review» | **07/09** | già dichiarata CHIUSA nella §6: 40 marcati «fase 3», **0 visibili** su chat/review/terminale/browser, misurato col browser |
+| **D-11** | «il 4174 non sa dire CHI ha creato una sessione» — la proposta era marcata «NON implementata — serve il tuo sì» | **10/09**, `40242136` | `origineRichiesta` viaggia come **argomento a parte** in `src/session-registry.mjs:2190, 2305, 3143-3163, 3189-3225`; raccolta lato rotta in `src/http-app.mjs`; 60 righe di prova in `tests/origine-della-richiesta.test.mjs`. La sezione D-11 in fondo a questo documento **non era stata aggiornata** |
+
+### ⛔ Riverificate APERTE l'11/09 — restano dove sono, e nessuno le sta lavorando
+
+- **CB-16-bis** — `frontend/src/components/modelli-installati.js:70` fa ancora
+  `modello.name || modello.id`: il Model Lab «Installati» mostra ancora l'identificatore da 102
+  caratteri. Delle **tre** superfici che §2.2 chiedeva ne risulta curata **una**. (Trovata da chi ha
+  chiuso BC-04, fuori dal suo mandato.)
+- **BH-15** — `frontend/src/components/session-item.js:122` `nomeModello()` fa solo `split('/')`,
+  quindi è **inerte** sugli id `local:`; è la funzione che chiama `board.js:35`. Due funzioni per lo
+  stesso lavoro: è il debito §6 n. 2, ed è **la causa** della mezza cura.
+- **CB-07** — `ultimoBersaglioAttrezzo` **non** è fra i campi azzerati da `nuovaGenerazioneSessione`.
+- **CB-16** — `explanation`/`doctorReference` non compaiono in nessun componente del frontend.
+- **CB-20-bis** — `app.js:14185` guarda ancora solo `EventSource.CLOSED`.
+- **T15-D1/D2** — le due frasi «non è ancora disponibile qui» sono ancora nel template (2 occorrenze).
+- **BH-04** — nel template ci sono **16** `data-t`: «English» continua a coprire quasi solo i menu.
+
+⛔ **Un rosso nuovo, trovato l'11/09 accertando PO-02**: `npm run verify:all` **è rosso**.
+`CTX-UI-USAGE-CLOSED-RELOAD` (`frontend/tests/browser/context-compactor.spec.mjs:138`) non trova
+`[data-runtime-usage]` dopo la ricarica di una sessione conclusa (`components/chat-foot.js:391`), e
+quel file è dentro `playwright.componenti.config.mjs`, che `verify:all` esegue. **E morendo alla riga
+138 il test non eseguiva le asserzioni successive**: un test lungo che muore a metà non prova ciò che
+sta sotto.
+
+⛔ **Quello che resta aperto dei blocchi della release** (§2.5, non spostato): nessuna prova end-to-end
+col modello sulla UI nuova; la lane è **1.846** commit avanti a `main` (erano 1.643, quindi il numero
+è **cresciuto**); nessuna prova da una macchina che non ha mai visto TALOS; gli screenshot del README
+puntano ancora a `../mobile/docs/immagini/`; `public/vendor/floating-ui` e `public/vendor/tanstack`
+non sono caricati da nessun file.
+
 ## ⛔ 08/09/2026 — LA SUITE DI PARITÀ SUL MOCKUP È ROSSA DA PRIMA, e nessuno la guardava
 
 `npx playwright test -c playwright.lab.config.mjs` (le prove ASTRA sul file del mockup, non sul
@@ -61,6 +125,12 @@ pretende che  NON esista, cosi la suite non puo rientrare di soppiatto in un com
 
 **Al netto dei duplicati (24 coppie/terne, §3): 121 righe distinte ancora aperte o parziali.**
 
+> ⛔ **11/09/2026 — QUESTI NUMERI NON SI POSSONO PIÙ CITARE.** Sono contati sul codice del 06/09.
+> Quattordici righe che vi sono dentro sono state chiuse fra il 06 e il 10/09 e stanno ora nella
+> sezione «✅ CHIUSE» in testa. Il totale vero non è stato ricontato: ricontarlo vuol dire rileggere
+> 121 righe nel codice di oggi, che è un lavoro a sé. **Fino ad allora, «121» è una stima alta, non
+> una misura** — e la stessa cautela che il documento chiede per `AUDIT-DECISIONI` vale adesso per sé.
+
 ⛔ Le tre cifre che contano: **77 APERTO** · **17 PARZIALE** · **19 CHIUSO-NON-PROVATO**.
 ⛔ E **41 righe non erano in nessuna tabella di stato** (§5): il 34% della coda vera era invisibile.
 
@@ -72,28 +142,17 @@ pretende che  NON esista, cosi la suite non puo rientrare di soppiatto in un com
 
 | id | frase originale | stato REALE | verifica (`file:riga`) | cosa manca esattamente |
 |---|---|---|---|---|
-| **T03-permessi-D2** | «chiudere il cancello sulla sola *scrittura di un file* NON basta: il modello scrive lo stesso con *comando nel terminale*» | **APERTO** — ⛔ e **mai risalito in nessuna tabella** | `harness-ui/src/config.mjs:273` (`ATTREZZI_CON_PERMESSO_PER_ATTREZZO` = 5 attrezzi); `frontend/src/legacy/app.js:5949-5956` (le 5 righe del foglio); nessuna stringa che avvisi (cercate «anche shell», «due cancelli») | Chi mette «scrivi» su *chiedi* crede di aver chiuso la porta. Serve che il foglio dichiari che `shell` scrive lo stesso, o che chiudere `scrivi` proponga di chiudere anche `shell`. È un difetto di **sicurezza**, non di stile |
-| **O-40** | «tutti i tooltip custom e stilizzati secondo il tema» | **APERTO** — zero lavoro | `frontend/index.template.html`: **156** `title="`, **0** `role="tooltip"`; **52** assegnazioni `title` da JS (`app.js` + `components/*.js`) ⇒ **208 tooltip**, tutti quelli di Windows; nessun `components/tooltip.js` | Componente con Popover API + `position-anchor`, `aria-describedby`, migrazione dei 208 in **un passaggio solo**, `title` nativo tolto dove subentra il nostro |
-| **O-39** | «tutte le scrollbar custom e più compatte» | **APERTO** — zero lavoro | Le sole 7 dichiarazioni sono: `styles/index.css:313-314` e `foglio-monolite.css:333-334` (`scrollbar-width:none` + `::-webkit-scrollbar{display:none}`, servono a **nascondere**) e `index.css:797`, `:1160`, `:1162` (`scrollbar-width:thin`, cioè quella **di sistema** stretta). **Zero** `::-webkit-scrollbar` che dipinga | Blocco unico su `*` coi token del tema (pollice `--talos-border` → `--talos-muted`, 8 px, raggio pieno, niente frecce), le due standard sotto `@supports`, e una prova che conti gli scroller senza barra nostra |
-| **CB-10** | «nove riferimenti a icone che non esistono» | **APERTO — e peggiore del dichiarato: sono 11 nomi, non 5** | `frontend/src/legacy/app.js:1128` — `icon(id)` scrive `<use href="#${id}">` **senza validare**. Lo sprite di `index.template.html` ha 35 simboli; usati e **mancanti**: `i-arrow-left`, `i-chevron`, `i-chevron-right`, `i-edit`, `i-file`, `i-folder-open`, `i-git`, `i-link`, `i-robot`, `i-trash`, `i-web`. La tabella ALIAS esiste (`app.js:9837`) ma la usa **solo** `iconaSvgAlbero` (`:9830`); `icon()` a `:12802` passa `i-chevron`/`i-folder-open` grezzi | Far validare `icon()` contro lo sprite (o disegnare gli 11 simboli), e una prova che fallisca su un nome inesistente |
-| **BH-05** = T10-D5 = T10-D9 | «Albero dei rami apre **due UI diverse** che si contraddicono» | **APERTO** | `frontend/src/bridge/legacy-dom.js:187-189` toglie `data-apre-velo` al pulsante della testata e lo battezza `open-sheet=sessionTree` (grafo vero); `index.template.html:771` (colonna) resta `data-apre-velo="veloAlbero"`, e `legacy-dom.js:240-246` **svuota** quel velo scrivendo «Nessun ramo ancora» | Una porta sola. Oggi la stessa app dichiara sia «tre deleghe» sia «nessun ramo» a dieci centimetri di distanza |
-| **CB-18-bis** | «Approvato e Negato sono resi identici: il tono promesso non esiste» | **APERTO** | `frontend/src/components/conversazione.js:447` scrive `talos-approval__esito--si\|--no`; in tutto il CSS servito esiste **solo** la base `styles/index.css:545` — zero regole `approval__esito--` | Due regole di colore. L'esito di una decisione di sicurezza oggi non ha nessun segnale visivo |
 | **CB-16** | «un errore vero perde per strada il suo motivo e la sua azione» | **APERTO** | `frontend/src/legacy/app.js:11422` e `:13646` — `appendStatusNote('Avvio non riuscito: ' + error.message)`; il server ha già pronti `title`/`explanation`/`action`/`doctorReference` in `src/public-problem.mjs:5-11` | Leggere la busta invece del solo `message`. Davanti al guasto più comune (chiave assente) la persona non ha né motivo né passo successivo |
 | **CB-20-bis** | «il server cade: la barra di stato lo dice, la chat dice il contrario per un minuto» | **APERTO** | `frontend/src/legacy/app.js:11300-11311` — l'avviso scatta solo se `source.readyState === EventSource.CLOSED`; con il server sparito Chrome resta in `CONNECTING` e quel ramo non parte mai. È stata aggiunta `sorveglianza?.segnalaSse(source.readyState)` (`:11307`) ma **non tocca la striscia, il pulsante «Ferma», la riga della sidebar né la colonna** | Quando la sorveglianza dice «il server non risponde», la chat deve smettere di dire «sta scrivendo» |
 | **CB-07** | «il suggerimento del composer sopravvive alla sessione che l'ha generato» | **APERTO** | `frontend/src/legacy/app.js:11315-11371` — `nuovaGenerazioneSessione` azzera ~30 campi di `state.realSession`, **`ultimoBersaglioAttrezzo` non c'è** (definito `:258`, scritto `:10985`, letto `:7725`) | Una riga. Oggi la sessione B propone di rivedere un file toccato dalla sessione A, e col Tab quel testo entra nel campo |
 | **BH-04** | «English traduce solo la barra laterale» | **PARZIALE, ancora quasi tutto aperto** | `frontend/src/components/lingua.js:117-137` traduce `[data-t]` e `[data-ph]`: nel template ci sono **26** `data-t` e **1** `data-ph` su 963 righe, e **0 dei 46 `<h2>`** ha `data-t`. `src/i18n/en.js` ha 70 chiavi | Portare sotto `data-t` i titoli, le spiegazioni e gli stati vuoti delle 13 schermate, o dichiarare che «English» copre solo i menu |
 | **T15-D1 / T15-D2** | «La consultazione del rapporto e delle fonti **non è ancora disponibile qui**» · «La lettura della **definizione completa** non è ancora disponibile qui» | **APERTO** | `frontend/index.template.html:696` e `:723` — le due frasi sono ancora lì, sotto l'elenco stesso | C26 (rapporti riapribili) e C27 (codice dell'attrezzo in sola lettura): sono la ragione d'essere delle due sezioni |
-| **CB-11** | «la palette viva è in parte in inglese — e ne esiste una seconda, in italiano, che nessuno apre» | **APERTO** | Quella che si apre è del monolite: `frontend/src/legacy/frammenti.html:222-225` → «**Session board**», «**Skills, MCP, plugin e gateway**», «**Agents, hooks e doctor**». Quella italiana completa (15 comandi, ricerca, piede con le scorciatoie) è `index.template.html:923` `#veloComandi`: l'unico riferimento in tutto il JS è la mappa di ridimensionamento `components/dialoghi.js:23` | Aprire `#veloComandi` da `openCommandPalette` (`app.js:14443`) e togliere la palette del monolite, oppure tradurre le 3 voci. La traduzione **è già stata fatta** e la persona non la vede |
 
 ### 2.2 · Gravi (rompono una decisione, o mostrano un dato falso)
 
 | id | frase originale | stato REALE | verifica (`file:riga`) | cosa manca |
 |---|---|---|---|---|
-| **BH-13** = T10-D6 | «cappelli dei fogli in inglese» | **APERTO** | `frontend/src/legacy/app.js:6143` `eyebrow:'Conversation graph'`, `:5917` `'Runtime'`, `:5932` `'Safety lens'`, `:5970` `'Environment proof'`, `:5999` `'Capability hub'`, `:6092` `'Control plane'` | Sei stringhe. Il report ne citava tre: sono sei |
-| **BH-14** | «Read only / Workspace write in inglese» | **APERTO** | `frontend/src/legacy/app.js:5938-5939` (le carte del foglio permessi); i valori restano inglesi anche a `:7053`, `:9508`, `:11743`, e il chip li stampa a `:6366` | Separare il **valore** (contratto col server) dall'**etichetta** a schermo |
 | **T17-D7** | «sei pulsanti, cinque inglesi: Agents · Hooks · Skills · Plugins · MCP · Doctor» | **APERTO** | `frontend/index.template.html`: `>Agents<` ×1, `>Hooks<` ×1, `>Skills<` ×1, `>Plugins<` ×1, `>MCP<` ×1 (`>Doctor<` ×2 è accettabile come nome proprio) | Cinque etichette |
-| **CB-14** | «un solo interruttore in tutta la app non è stilato» | **APERTO** | `frontend/src/legacy/app.js:12576-12582` — `reasoningInput` creato senza `class="talos-switch"` né `role="switch"`; la regola che toglie l'aspetto nativo è ambito a una schermata (`styles/index.css:633`, `#schermoImpostazioni input.talos-switch`) | Una classe e un `role`. È l'unico caso in tutta la app: una svista, non una scelta |
-| **BH-06** = CB-19 | «12 errori CSP per ogni apertura del Terminale» | **APERTO** | `harness-ui/src/http-app.mjs:313` — `style-src 'self'` senza `'unsafe-inline'`, hash o nonce per lo `<style>` che xterm inietta a runtime | Un hash o un nonce per quello stile. 15 errori rossi a ogni sessione sono il rumore in cui un errore vero non si vede |
 | **BH-19** | «`GET /api/v1/huggingface/repo` senza `repo` → 503 invece di 400» | **APERTO** | `harness-ui/src/http-app.mjs:2442-2443` — `if (!repo || !hfHubClient?.describeModel || …) code='RUNTIME_NOT_AVAILABLE'`: «manca il parametro» e «l'hub non è configurato» nello stesso ramo | Separare le due guardie (confronta `:2464-2466`, che lo fa giusto) |
 | **BH-07** | «`POST /api/v1/huggingface/download` con `{}` → 500 `INTERNAL_ERROR`» | **APERTO** (non riprovato dal vivo in questo giro) | `harness-ui/src/http-app.mjs:1528-1533` — `localModelTransfer.start(body)` chiamata **senza alcuna validazione del corpo** | Validare `body` e rispondere 400/422 come le altre 9 POST |
 | **BH-16** | «ricerca senza risultati: lista vuota e contatore fermo» | **APERTO** | `frontend/src/legacy/app.js:14733-14738` — nasconde le righe con `item.hidden` e basta: nessuno stato vuoto, nessun aggiornamento del contatore «SESSIONI 74» | Stato vuoto + contatore dei risultati |
@@ -162,11 +221,8 @@ pretende che  NON esista, cosi la suite non puo rientrare di soppiatto in un com
 
 | # | affermazione | stato REALE | verifica |
 |---|---|---|---|
-| 1 | «il kernel non è nel repo» | **APERTO — confermato** | `mobile/scripts/harness-talos/talosHarness.mjs` **non esiste**; la variabile è letta a `harness-ui/src/config.mjs:410-417,497`; `harness-ui/README.md` **non la nomina** |
 | 2 | «nessuna prova end-to-end col modello sulla UI nuova» | **APERTO — confermato** | Nessun giro a pagamento su `acea72a8` |
 | 3 | «la lane è 1.583 commit avanti a `main`» | **APERTO — e cresciuta** | `git rev-list --count main..HEAD` = **1.643**; `HEAD..main` = **50** |
-| 4 | «CI e release non sanno che il desktop esiste» | **APERTO — confermato** | Zero occorrenze di `harness-ui` in `.github/workflows/*.yml`; `VERSION` = `v1.0.0`; `CHANGELOG.md` è del mobile |
-| 5 | «controlli morti nella Review» | **PARZIALE — l'affermazione è in gran parte SBAGLIATA** | `components/review.js:135-138 nascondiAzioniFase3` li nasconde e `app.js:9183` la chiama su `#schermoReview`. **Però**: dei 40 `data-richiede="fase3"` del template, **6 non hanno `hidden` nel markup** e dipendono da quella chiamata a runtime, e uno dei sei — la nota «Scartare ripristina il file dal checkpoint del giro 4» — vive dentro `#schermoChat`, **fuori dal raggio** di `nascondiAzioniFase3` |
 | doc | screenshot del README | **APERTO — confermato** | `harness-ui/README.md:8` punta a `../mobile/docs/immagini/tablet-9-coding-agent.png` |
 | doc | vendor da ripulire | **APERTO — confermato** | `harness-ui/public/vendor/floating-ui` e `.../tanstack` esistono; nessun file del frontend li carica |
 
@@ -383,15 +439,20 @@ la **dettatura vocale** (B29) · il **tema chiaro guardato con l'occhio**.
 
 ## 7 · L'ordine in cui la farei
 
-1. **T03-permessi-D2** — è sicurezza, ed è l'unica riga della coda che può far scrivere un file a
-   chi credeva di aver detto no.
-2. **CB-18-bis · CB-16 · CB-20-bis · CB-07** — quattro cure piccole (due regole CSS, una busta
-   d'errore, un ramo di `readyState`, un campo da azzerare) su cose che **mentono** all'utente.
-3. **CB-10 · BH-05 · BH-13 · BH-14 · T17-D7 · CB-11 · CB-14** — le sette cose che si vedono a
-   colpo d'occhio: icone vuote, due alberi che si contraddicono, undici stringhe inglesi, un
-   interruttore di Chrome, la palette sbagliata.
-4. **O-39 poi O-40** — nell'ordine che l'owner ha già scritto: prima le scrollbar (un blocco di CSS
-   e una prova), poi i tooltip (208 punti, un componente, una migrazione, le prove di a11y).
+> ⛔ **11/09/2026 — QUESTO ORDINE ERA VECCHIO.** I punti 1 e 4 e cinque dei sette del punto 3 sono
+> **già fatti**: T03-permessi-D2 (06/09), CB-18-bis, BH-05, BH-13, BH-14, CB-14, CB-11 (07/09),
+> CB-10 (caduta), O-39 e O-40. Sono nella sezione «✅ CHIUSE» in testa al documento, con la prova.
+> Testo originale conservato qui sotto, barrato nei punti superati.
+
+1. ~~**T03-permessi-D2**~~ — ✅ **già fatta il 06/09** (`fed03a00`), vedi «✅ CHIUSE».
+2. **CB-16 · CB-20-bis · CB-07** — tre cure piccole (una busta d'errore, un ramo di `readyState`,
+   un campo da azzerare) su cose che **mentono** all'utente. ⛔ Riverificate aperte l'11/09:
+   `explanation`/`doctorReference` non compaiono in nessun componente; `app.js:14185` guarda ancora
+   solo `EventSource.CLOSED`; `ultimoBersaglioAttrezzo` non è fra i campi azzerati da
+   `nuovaGenerazioneSessione`. (CB-18-bis, che era in questo punto, è chiusa.)
+3. **T17-D7** — l'unico superstite dei sette «che si vedono a colpo d'occhio»: cinque etichette
+   inglesi nella barra delle capacità. Gli altri sei sono chiusi.
+4. ~~**O-39 poi O-40**~~ — ✅ **entrambe fatte**, vedi «✅ CHIUSE».
 5. **Le 19 righe CHIUSO-NON-PROVATO** — una sessione vera col modello flash le chiude quasi tutte
    insieme: O-10, O-26, O-31, O-34, O-35, O-36, O-37, O-18, T09-D4, T02-D1, T20-D4, e almeno sei
    delle dodici `NV-*`. È anche il blocco 2 della release.
@@ -475,7 +536,16 @@ Va rifatto sul selettore vero, o cade dentro la decisione qui sopra.
 | **O-47 / O-48 / O-49 / O-50** | stop, stato del giro, errore ripetuto, riprendere | **CHIUSE**: stop misurato 4 ms; `runRealeAttivo` guarda il server; `APPROVAL_NOT_PENDING` invece di «Query non valida»; resume provato dal vivo |
 | **fogli legacy** | «capabilities» e «control» erano due indici di cose che hanno già la loro schermata | **CHIUSA il 07/9**: `apriCapabilityDaFoglio()` e `case 'control' → eseguiDoctor()`; tolto anche l'ultimo chiamante (il pulsante «Apri Doctor» dell'errore cartella). 🔁 resta: i due TEMPLATE morti in `app.js` non si cancellano finché il velo `references` non ha un'altra via d'apertura (era lì dentro) |
 
-## D-11 — il 4174 non sa dire CHI ha creato una sessione (10/09/2026)
+## ✅ D-11 — CHIUSO il 10/09/2026 (`40242136`) — il testo dell'indagine resta qui per memoria
+
+> ⛔ **Verificato l'11/09**: la proposta in fondo a questa sezione dice ancora «NON implementata —
+> serve il tuo sì», e **il sì è già stato dato e il codice è dentro**. `origineRichiesta` viaggia
+> come argomento a parte in `src/session-registry.mjs:2190, 2305, 3143-3163, 3189-3225`, la rotta la
+> raccoglie in `src/http-app.mjs`, e `tests/origine-della-richiesta.test.mjs` (60 righe) la prova.
+> La regola che l'indagine ha prodotto — «prima di riavviare il 4174, se c'è qualcosa da spiegare
+> nei suoi log, si copiano» — resta valida e vincolante.
+
+### Il testo originale dell'indagine (10/09/2026)
 
 **Il fatto.** Fra le 16:29 e le 16:33 sono comparse sul 4174 quattro sessioni che non ho avviato io:
 `3c8a5214`, `241e526f`, `6c3091c4`, `39f582b7` — consegna «Add and export a function `sottrai(a, b)`
