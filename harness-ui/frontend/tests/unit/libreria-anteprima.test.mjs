@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   formatoFile, modiFile, serveLettura, righeCsv, separatoreDi, conteggioRighe, frasiRighe,
   dimensioneLeggibile, magazzinoFileLibreria, montaAnteprimaFile, contenutoModoFile,
+  colonneFuori, fraseScorrimento,
 } from '../../src/components/libreria-anteprima.js';
 
 /*
@@ -260,4 +261,20 @@ test('LIB-ATTESA-ED-ERRORE: si dice che si sta leggendo, e perché non si è riu
   // ⛔ senza lettore non si mostra un'attesa che non finirà mai: si dice che manca la sessione
   const senza = contenutoModoFile(doc, 'testo', { ...base, lettura: null, opzioni: {} });
   assert.ok(testoDi(senza).includes('manca la sessione'));
+});
+
+test('LIB-SCORRI: si contano le colonne che sforano DAVVERO, e senza sforo non si dice niente', () => {
+  // riquadro che finisce a 400: due colonne finiscono oltre
+  assert.equal(colonneFuori(400, [120, 260, 395, 520, 660]), 2);
+  /* ⛔ il verso contrario, ed è quello che conta: una tabella che sta tutta dentro NON deve dire
+     «scorri a destra». La tolleranza di un pixel copre l'arrotondamento del bordo. */
+  assert.equal(colonneFuori(400, [120, 260, 400]), 0);
+  assert.equal(colonneFuori(400, [401]), 0, 'un pixel non è una colonna fuori');
+  assert.equal(colonneFuori(400, [402]), 1);
+  assert.equal(colonneFuori(400, []), 0);
+  assert.equal(colonneFuori(400, null), 0);
+  // la frase concorda col numero, e a zero non c'è frase
+  assert.equal(fraseScorrimento(0), '');
+  assert.equal(fraseScorrimento(1), 'Scorri a destra per l’altra colonna.');
+  assert.equal(fraseScorrimento(3), 'Scorri a destra per le altre 3 colonne.');
 });

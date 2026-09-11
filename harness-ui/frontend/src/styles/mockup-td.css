@@ -396,7 +396,40 @@ dialog.td-modal:has(.td-theme-studio) { width: min(1120px, calc(100vw - 40px)); 
 
 /* La tabella: l'intestazione resta visibile mentre si scorre, le celle non vanno a capo (una
    colonna di dati che si spezza in tre righe non si legge come una colonna). */
-.td-file-tabella-scorre { max-height: 52vh; overflow: auto; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-window-bg); }
+/*
+ * ⛔ LA TABELLA CHE SCORRE LO DICE — 12/09/2026, §10.7. Nella foto (csv, scuro, 1440) le ultime
+ *   colonne uscivano dal riquadro e niente lo segnalava: sembrava tagliata, non scorribile.
+ *   Pattern «scroll shadows» di Lea Verou (lea.verou.me, «Pure CSS scrolling shadows with
+ *   background-attachment: local», letto il 12/09/2026): quattro strati di sfondo, due COPERTURE
+ *   del colore del fondo e due OMBRE. Le coperture sono `local` — «the background scrolls with the
+ *   element's contents» (MDN, `background-attachment`, letta il 12/09/2026) — quindi all'inizio
+ *   coprono l'ombra sinistra e scorrendo la scoprono; le ombre sono `scroll`, cioè «fixed relative
+ *   to the element itself... effectively attached to the element's border», e restano ai bordi.
+ * ⛔ NESSUN COLORE NUOVO: l'ombra è un `color-mix` su `--talos-border-strong`, che ogni tema ha
+ *   già e che quindi gira da sola fra chiaro e scuro. Un `rgba(0,0,0,…)` sarebbe invisibile sul
+ *   fondo scuro — l'errore che questo foglio evita da sempre.
+ * ⛔ Nessuna animazione: sono sfondi, non transizioni. (Due regole universali con `!important` le
+ *   spegnerebbero comunque.)
+ */
+.td-file-tabella-scorre {
+  max-height: 52vh; overflow: auto;
+  border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control);
+  --td-ombra-scorrimento: color-mix(in srgb, var(--talos-border-strong) 60%, transparent);
+  background-color: var(--talos-window-bg);
+  background-image:
+    linear-gradient(to right, var(--talos-window-bg) 34%, transparent),
+    linear-gradient(to left, var(--talos-window-bg) 34%, transparent),
+    linear-gradient(to right, var(--td-ombra-scorrimento), transparent),
+    linear-gradient(to left, var(--td-ombra-scorrimento), transparent);
+  background-position: 0 0, 100% 0, 0 0, 100% 0;
+  background-size: 32px 100%, 32px 100%, 16px 100%, 16px 100%;
+  background-repeat: no-repeat;
+  background-attachment: local, local, scroll, scroll;
+}
+/* ⛔ Quando non c'è niente a destra la sfumatura non deve restare accesa: lo dice il componente,
+   che ha MISURATO quante colonne restano fuori, non una regola che lo indovina. */
+.td-file-tabella-scorre[data-scorre="no"] { background-image: none; }
+.td-file-scorri { margin: 10px 0 0; color: var(--talos-muted); font-size: 11px; }
 .td-file-tabella { border-collapse: collapse; width: 100%; font: 12px/1.6 var(--talos-font-mono); }
 .td-file-tabella th, .td-file-tabella td { padding: 7px 11px; text-align: left; border-bottom: 1px solid var(--talos-border); white-space: nowrap; }
 .td-file-tabella tbody tr:last-child td { border-bottom: 0; }
@@ -418,3 +451,58 @@ dialog.td-modal:has(.td-theme-studio) { width: min(1120px, calc(100vw - 40px)); 
   .td-file-tabella { font-size: 11px; }
   .td-file-tabella th, .td-file-tabella td { padding: 6px 8px; }
 }
+
+/* -------------------------------------------------------------------------------------------
+ * IL DETTAGLIO, ALLINEATO AL MOCKUP — 12/09/2026, §10.5 del rapporto della Libreria.
+ *
+ * ⛔ MISURATO, non dedotto: alla stessa larghezza il mockup rendeva `h2` a **28px** con margine
+ *   **22**, meta gap **9** e padding **28**, mentre qui erano 24/18/7/28-24. La causa non era una
+ *   svista sui numeri: il mockup ha DUE strati di regole sul dettaglio — quelle base alle righe
+ *   4074-4078 (che questo foglio aveva portato) e un secondo strato di rifinitura alle righe
+ *   **4290-4293** e **4383**, scoped `.td-scope`, che il porting non aveva preso. Il commento del
+ *   mockup su quel blocco dice perché esiste: «Detail panes: less card-in-card; type and
+ *   whitespace carry structure».
+ *
+ * ⇒ Portato VERBATIM, con lo stesso selettore: `.td-scope` la app ce l'ha già
+ *   (`sezione-elenco-dettaglio.js:221`), quindi è lo stesso strato e non una nostra invenzione.
+ *   Vale per tutte e sei le sezioni — Note, Memoria, Attività, Libreria, Ricerca, Progetti.
+ * ⛔ `.td-scope .td-detail{background:var(--talos-panel)}` NON è qui: `.td-detail` lo ha già,
+ *   identico, e una seconda dichiarazione uguale è solo una cosa in più da tenere allineata.
+ * ⛔ Le regole `[data-kind=note|memoria|ricerca]` del mockup non sono portate: il nostro
+ *   `.td-detail` non scrive `data-kind`, quindi qui sarebbero regole morte. Registrate nel
+ *   rapporto, non inventate.
+ * ------------------------------------------------------------------------------------------- */
+
+.td-scope .td-detail-body { padding: 28px; scrollbar-gutter: stable; }
+.td-scope .td-detail-body h2 { font: 550 28px/1.25 var(--talos-font-display); letter-spacing: -.035em; max-width: 25ch; margin-bottom: 22px; text-wrap: pretty; }
+.td-scope .td-detail-body h3 { font-size: 12px; letter-spacing: 0; font-weight: 600; margin: 28px 0 12px; color: var(--talos-text); }
+.td-scope .td-detail-meta { font-size: 10px; gap: 9px; flex-wrap: wrap; margin-bottom: 10px; }
+
+/* ⛔ Il mockup stringe il dettaglio con una `@media (max-width:760px)`, cioè guardando la
+   FINESTRA. Qui no, e per la ragione già scritta in fondo a questo foglio: il pannello può stare
+   a 320 px dentro uno schermo da 1440 perché il divisorio lo stringe, e una media query non lo
+   vedrebbe mai stretto. Stessi numeri del mockup, domanda fatta al contenitore giusto. */
+@container dettaglio (max-width: 430px) {
+  .td-scope .td-detail-body { padding: 22px; }
+  .td-scope .td-detail-body h2 { font-size: 24px; }
+}
+
+/*
+ * ⛔⛔ REGRESSIONE TROVATA NELLA FOTO, subito dopo l'allineamento qui sopra
+ *   (`app-libreria-chiaro-1024.png`, 12/09): i titoli DENTRO un documento reso prendevano le
+ *   misure dei titoli del PANNELLO. «Nota di rilascio 0.1.20», che è il titolo del file aperto,
+ *   usciva a 28px — **esattamente come il nome del file scritto sopra**, due titoli identici uno
+ *   sull'altro — e «Che cosa cambia» scendeva a 12px grassetto, cioè la misura di un'etichetta.
+ *
+ *   Causa: `.td-scope .td-detail-body h3` pesa (0,3,1) e batte `.td-prosa-rapporto h3` (0,1,1).
+ *   Il blocco di rifinitura del mockup parla dei titoli che il PANNELLO scrive («Contenuto del
+ *   file», «Azioni sul file», «Fonti»); il mockup non aveva documenti resi — stampava i file in un
+ *   `<pre>` — quindi quel caso lì non esisteva e la regola non lo prevede.
+ *
+ * ⇒ La prosa di un documento tiene la SUA scala, quella decisa nel lotto L7: i titoli del
+ *   contenuto stanno sotto il titolo del pannello, mai alla pari. Stessi valori di prima, solo
+ *   con il peso che serve per non farsi scavalcare.
+ */
+.td-scope .td-detail-body .td-prosa-rapporto h2 { font: 550 18px/1.35 var(--talos-font-display); letter-spacing: -.02em; max-width: none; margin: 22px 0 8px; text-wrap: pretty; }
+.td-scope .td-detail-body .td-prosa-rapporto h3 { font-size: 15px; font-weight: 550; letter-spacing: -.01em; margin: 20px 0 6px; color: var(--talos-text); }
+.td-scope .td-detail-body .td-prosa-rapporto h4 { font-size: 13px; font-weight: 550; margin: 16px 0 6px; color: var(--talos-muted); }

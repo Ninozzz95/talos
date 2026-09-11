@@ -260,3 +260,119 @@ rotta lato frontend appena il server ce l'ha.
 Il ripiego del Markdown fino all'aggancio (§10.1) · il giro vero sulla rotta dei byte e su «Apri»
 (§10.2-3) · `.td-detail-body` fuori misura di 4 px in tre punti (§10.5) · il riquadro azioni del
 lotto E (§10.6) · lo scorrimento muto della tabella CSV (§10.7).
+
+---
+
+# Coda — 12/09/2026: §10.5 e §10.7 chiusi
+
+Due righe che il rapporto sopra aveva lasciato aperte, entrambe dentro «tale e quale al mockup».
+Modifiche **additive** su codice già committato: nessun revert.
+
+## A. §10.5 — il dettaglio allineato al mockup
+
+**La causa non erano i numeri: era uno strato di regole mancante.** Il mockup ha **due** blocchi sul
+dettaglio — quelle base alle righe **4074-4078**, che `mockup-td.css` aveva portato, e un secondo
+strato di rifinitura alle righe **4290-4293** e **4383**, scoped `.td-scope`, che il porting non
+aveva preso. Il commento del mockup su quel blocco dice a cosa serve: *«Detail panes: less
+card-in-card; type and whitespace carry structure»*.
+
+`.td-scope` la app ce l'ha già (`sezione-elenco-dettaglio.js:221`): il blocco è portato **verbatim,
+con lo stesso selettore** (`src/styles/mockup-td.css`, in coda).
+
+**Misurato dopo, sulla stessa vista e alla stessa larghezza** (Note, dettaglio aperto, 1440):
+
+| | prima | mockup | adesso |
+|---|---|---|---|
+| `.td-detail-body` padding | `28px 24px` | `28px` | `28px` |
+| `h2` | 24px · mb 18px | **28px · peso 550 · mb 22px · ls −0.98px** | **28px · peso 550 · mb 22px · ls −0.98px** |
+| `h3` | 14px · peso normale | **12px · peso 600** | **12px · peso 600** |
+| `.td-detail-meta` | 11px · gap 7px · mb 20px | **10px · gap 9px · mb 10px** | **10px · gap 9px · mb 10px** |
+
+**Pari al pixel su tutte e quattro le misure.**
+
+**Non portato, e perché:** `.td-scope .td-detail{background:var(--talos-panel)}` — `.td-detail` lo
+ha già identico, e una seconda dichiarazione uguale è solo una cosa in più da tenere allineata; le
+regole `[data-kind=note|memoria|ricerca]` — il nostro `.td-detail` non scrive `data-kind`, sarebbero
+regole morte. La `@media (max-width:760px)` del mockup è portata come `@container dettaglio
+(max-width: 430px)` con gli **stessi numeri** (padding 22, h2 24): il pannello può stare a 320 px
+dentro uno schermo da 1440 perché il divisorio lo stringe, e una media query non lo vedrebbe mai
+stretto — è la ragione già scritta in fondo a quel foglio per le altre regole del dettaglio.
+
+### A.1 Una regressione trovata nella foto, e chiusa
+
+`app-libreria-chiaro-1024.png`, subito dopo l'allineamento: **i titoli dentro un documento reso
+prendevano le misure dei titoli del pannello.** «Nota di rilascio 0.1.20» — il titolo del file
+aperto — usciva a **28px, esattamente come il nome del file scritto sopra**: due titoli identici uno
+sull'altro. E «Che cosa cambia» scendeva a 12px grassetto, la misura di un'etichetta.
+
+Causa: `.td-scope .td-detail-body h3` pesa (0,3,1) e batte `.td-prosa-rapporto h3` (0,1,1). Il blocco
+del mockup parla dei titoli che il **pannello** scrive; il mockup non aveva documenti resi —
+stampava i file in un `<pre>` — quindi quel caso non esisteva e la regola non lo prevede.
+Cura: la prosa di un documento tiene la **sua** scala (18/15/13), quella decisa nel lotto L7, con il
+peso di selettore che serve per non farsi scavalcare. Verificato nella foto rifatta: nome del file
+28 → titolo del documento 18 → sezioni 15.
+
+### A.2 Nessuna sezione regredisce
+
+**48 foto nuove** in `.claude/foto-dettaglio-sei-sezioni-2026-09-12/`: Note · Memoria · Attività ·
+Libreria · Ricerca · Progetti, dettaglio aperto, **affiancate app/mockup**, chiaro e scuro, 1440 e
+1024. Lo script verifica a ogni scatto che il dettaglio sia **davvero aperto** (`.td-detail:not([hidden])
+.td-detail-body`) e raccoglie gli errori di pagina: **nessun errore, dettaglio aperto ovunque**.
+Guardate una per una le viste critiche — nessuna regressione.
+
+**Conseguenza da sapere, non un difetto:** `max-width: 25ch` sull'`h2` è del mockup, e su una
+domanda di ricerca molto lunga il titolo va su cinque righe di 28px (`app-ricerca-scuro-1024.png`).
+È il trattamento che il mockup prescrive; se l'owner lo vuole diverso è una decisione sua, non una
+svista del porting.
+
+## B. §10.7 — la tabella che scorre adesso lo dice
+
+**Ricerca prima di scrivere:** pattern *scroll shadows* di **Lea Verou**, «Pure CSS scrolling shadows
+with `background-attachment: local`» ([lea.verou.me](https://lea.verou.me/blog/2012/04/background-attachment-local/), letto il **12/09/2026**): quattro strati di
+sfondo, due **coperture** del colore del fondo e due **ombre**. La semantica dei valori viene da
+[MDN, `background-attachment`](https://developer.mozilla.org/en-US/docs/Web/CSS/background-attachment) (letta il **12/09/2026**): `local` = «the background scrolls with the
+element's contents», `scroll` = «fixed relative to the element itself... effectively attached to the
+element's border». ⇒ **coperture `local`** (all'inizio coprono l'ombra, scorrendo la scoprono),
+**ombre `scroll`** (restano ai bordi).
+
+* CSS: `src/styles/mockup-td.css`, `.td-file-tabella-scorre`. **Nessun colore nuovo**: l'ombra è
+  `color-mix(in srgb, var(--talos-border-strong) 60%, transparent)`, un token che ogni tema ha già e
+  che quindi gira da sola fra chiaro e scuro — un `rgba(0,0,0,…)` sarebbe invisibile sul fondo scuro.
+* La frase: `src/components/libreria-anteprima.js`, `colonneFuori()` / `fraseScorrimento()` /
+  `collegaScorrimento()`. Si **misura** quante colonne sforano il bordo destro — `ResizeObserver`
+  (il divisorio stringe il pannello) più l'evento `scroll` — perché «scorri a destra» quando a
+  destra non c'è niente è la stessa promessa vuota che questo pannello è nato per togliere.
+
+**Provato dal vivo, nei tre stati** (CSV da 6 colonne, dettaglio a 373 px):
+
+| stato | `data-scorre` | strati di sfondo | `background-attachment` | frase |
+|---|---|---|---|---|
+| all'apertura | `si` | 4 | `local, local, scroll, scroll` | «Scorri a destra per le altre 5 colonne.» |
+| scorsa in fondo | `no` | 0 | — | nascosta |
+| pannello allargato a 933 px (ci sta tutto) | `no` | 0 | — | nascosta |
+
+Più il test puro `LIB-SCORRI`, che morde anche al verso contrario: una tabella tutta dentro conta
+**zero** colonne fuori, e un pixel di arrotondamento non diventa una colonna.
+
+## C. Le prove di questa coda
+
+* `npm run test:unit` → **810 test, 0 rossi** (12 in `libreria-anteprima.test.mjs`).
+* `tests/parity/nessun-errore-a-runtime.spec.mjs` → **3/3 verdi**, banco proprio
+  (`TALOS_LAB_PORT=52730 TALOS_ASPETTO_PORT=52731`). **Mai la 4174.**
+* **104 foto** in tutto: 56 in `foto-libreria-anteprima-2026-09-11/` (rifatte dopo l'allineamento) +
+  48 in `foto-dettaglio-sei-sezioni-2026-09-12/`.
+
+## D. Cosa resta aperto dopo questa coda
+
+Invariati dal rapporto sopra: la riga d'aggancio in `legacy/app.js` (§9), la rotta `/anteprima` per
+il PDF (§4), il giro vero sulla rotta dei byte e su «Apri» (§10.2-3), il riquadro «Azioni sul file»
+del lotto E (§10.6). **Chiusi**: §10.5 e §10.7.
+Aperto **nuovo**, da decidere: il titolo a cinque righe su domande molto lunghe (A.2) — è il
+comportamento del mockup, non un difetto.
+
+### Riepilogo
+
+* **Cosa devi fare tu** — le tre scelte del rapporto sopra restano; in più: tieni o cambi il
+  `max-width: 25ch` sul titolo del dettaglio (è del mockup).
+* **Cosa faccio io** — niente in attesa: le due righe sono chiuse, misurate e fotografate.
+* **Cosa rimane** — §9 · §4 · §10.2-3 · §10.6, e il titolo lungo di A.2.
