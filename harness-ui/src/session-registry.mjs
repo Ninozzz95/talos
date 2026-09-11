@@ -32,6 +32,8 @@ import {
   avviaSessione as avviaSessioneReale,
   compattaSessione as compattaSessioneReale,
   eseguiComandoDiretto as eseguiComandoDirettoReale,
+  // ⭐ L5 (12/09): la lettura di una pagina per la ri-verifica nel tempo — la STESSA di `naviga`, mai una seconda.
+  leggiPaginaPerLaVista,
 } from './agent-service.mjs';
 import {
   approvalRequested, approvalResolved, hookInvoked, queuedMessageDelivered, workspaceChanged, contextEngineEvent,
@@ -1410,6 +1412,13 @@ export function createSessionRegistry({
   elencaFontiFn = elencaFontiReale,
   leggiIstantaneaCacheFn = leggiIstantaneaCacheReale,
   scriviIstantaneaCacheFn = scriviIstantaneaCacheReale,
+  /*
+   * ⭐⭐⭐ L5 (12/09/2026) — IL LETTORE DI PAGINE della ri-verifica nel tempo, iniettabile per lo
+   * stesso motivo di tutte le altre: senza, una prova di `riverificaRicerca` uscirebbe **in
+   * rete** dalla macchina che esegue la suite. Il default è quello vero, lo stesso che usa
+   * l'attrezzo `naviga` (validazione contro gli indirizzi interni già scritta e provata).
+   */
+  leggiPaginaFn = leggiPaginaPerLaVista,
   salvaVoceLibreriaFn = salvaVoceLibreriaReale, leggiVoceLibreriaFn = leggiVoceLibreriaReale, eliminaVoceLibreriaFn = eliminaVoceLibreriaReale,
   /* ⭐⭐⭐⭐ 10/09/2026 — le tre porte nuove del CRUD Libreria lato persona (vedi i metodi
      `scaricaVoceLibreria`/`rinominaVoceLibreria`/`rivelaVoceLibreria`). `eliminaVoceLibreriaFn`
@@ -1539,9 +1548,41 @@ export function createSessionRegistry({
     creaRicercaFn, leggiRicercaFn, aggiornaRicercaFn, eliminaRicercaFn, elencaRicercheFn, leggiRapportoFn,
     // ⭐ L4 — il giornale, il piano, le fonti e l'istantanea della cache: stessa disciplina DI.
     accodaEventoFn, leggiGiornaleFn, leggiPianoFn, statRapportoFn, elencaFontiFn,
-    leggiIstantaneaCacheFn, scriviIstantaneaCacheFn,
+    leggiIstantaneaCacheFn, scriviIstantaneaCacheFn, leggiPaginaFn,
     salvaVoceLibreriaFn, leggiVoceLibreriaFn, eliminaVoceLibreriaFn, randomUUIDFn,
   });
+
+  /**
+   * ⭐⭐⭐ L5 (12/09/2026) — LA FORMA COMUNE di pausa e ripresa, scritta una volta.
+   *
+   * Le due azioni differiscono per una riga (quale funzione dell'orchestratore chiamare) e per
+   * tutto il resto sono identiche: sessione viva? ricerca sul disco? poi l'esito.
+   *
+   * ⛔ Il `presente` letto qui NON è una seconda lettura sprecata: è ciò che separa «questa
+   *   ricerca non esiste» (404) da «esiste, ma non è nello stato per questo» (409, «a request
+   *   conflict with the current state of the target resource» — MDN, letta il 12/09/2026, il
+   *   cui esempio è esattamente un lavoro che non si può avviare perché già in corso). Senza,
+   *   ogni rifiuto dell'orchestratore sarebbe indistinguibile da un id sbagliato.
+   * ⛔ Il testo dell'orchestratore è in inglese perché è scritto per il MODELLO (è la risposta
+   *   degli attrezzi `research_pause`/`research_resume`) e non si tocca: qui viaggia in
+   *   `motivo`, che la rotta mette nel registro diagnostico, non a schermo. Alla persona la
+   *   frase italiana la dà lo `stato` riletto — `motivoDelloStato` la scrive già, in un posto solo.
+   */
+  async function azioneSuRicerca(sessionId, ricercaId, azione) {
+    const voce = sessioni.get(sessionId);
+    if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+    let presente;
+    try {
+      presente = await leggiRicercaFn({ cartella: voce.cartella, id: ricercaId });
+    } catch (errore) {
+      if (errore instanceof ResearchStoreError) return { ok: false, ricerca: null, motivo: errore.message };
+      throw errore;
+    }
+    if (!presente) return { ok: true, ricerca: null, motivo: null };
+    const esito = await azione(voce.cartella, ricercaId);
+    if (!esito?.ok) return { ok: false, ricerca: undefined, motivo: esito?.esito ?? 'azione non riuscita' };
+    return { ok: true, ricerca: undefined, esito: esito.esito, motivo: null };
+  }
 
   /*
    * ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — riprodotto e trovato.
@@ -4256,7 +4297,110 @@ export function createSessionRegistry({
         if (errore instanceof ResearchStoreError) return { ok: true, ricerche: null, errore: errore.message };
         throw errore;
       }
-      return { ok: true, ricerche: esito.ricerche, errore: null };
+      /*
+       * ⭐ L5 (12/09) — `totale` ESCE. Prima la rotta mandava la sola pagina, e la pagina è
+       * tagliata a **20** da `clampNumero(pageSize, 1, 20, 10)` dentro l'orchestratore (è il
+       * tetto del contratto verso il modello, e non lo cambio da qui): con 34 ricerche sul
+       * disco la sezione ne mostrava 20 e **niente diceva che ne mancavano 14**. È la lezione
+       * «il banco non vede CHI MANCA» applicata a una lista: chi costruisce una vista
+       * costruisce anche la riga che dice chi non c'è.
+       */
+      return { ok: true, ricerche: esito.ricerche, totale: esito.totale, errore: null };
+    },
+    /**
+     * ⭐⭐⭐⭐ L5 (12/09/2026) — LA SINGOLA RICERCA, per la sezione.
+     *
+     * Le cinque funzioni qui sotto (`leggiRicerca`, `pausaRicerca`, `riprendiRicerca`,
+     * `riverificaRicerca`, `eliminaRicerca`) sono **passacarte**: guardano che la sessione
+     * esista, prendono la sua cartella, e chiamano la STESSA funzione dell'orchestratore che
+     * chiama l'attrezzo del modello. ⛔ Nessuna logica nuova qui dentro, e il motivo è misurato
+     * in questo repo: due lettori dello stesso file sono due verità, e a schermo si
+     * contraddicono (l'elenco che diceva «Conclusa» e il dettaglio «bloccata dal permesso»).
+     *
+     * ⛔ TRE esiti diversi, e vanno tenuti distinti fino alla rotta:
+     *   `erroreAvvio` + `NOT_FOUND`   la SESSIONE non c'è;
+     *   `ricerca: null`               la sessione c'è, la RICERCA no (404 suo, `RESEARCH_NOT_FOUND`);
+     *   `ok:false` + `motivo`         esistono entrambe, ma lo stato non permette l'azione (409).
+     *   Una risposta che non li distingue manda a cercare nel posto sbagliato — è la stessa
+     *   scelta, e lo stesso commento, delle rotte di Libreria e di Note/Attività/Memoria.
+     * @returns {Promise<{ok:true, ricerca:object|null, errore:string|null}|{erroreAvvio:string, code:string}>}
+     */
+    async leggiRicerca(sessionId, ricercaId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let esito;
+      try {
+        esito = await researchOrchestrator.leggi({ cartella: voce.cartella, id: ricercaId });
+      } catch (errore) {
+        if (errore instanceof ResearchStoreError) return { ok: true, ricerca: null, errore: errore.message };
+        throw errore;
+      }
+      if (!esito.trovata) return { ok: true, ricerca: null, errore: null };
+      const { trovata, ...ricerca } = esito;
+      return { ok: true, ricerca, errore: null };
+    },
+    /**
+     * ⭐⭐⭐ L5 — PAUSA. ⛔ Il 404 lo decide il DISCO, non la mappa delle sessioni vive:
+     * `mettiInPausa` risponde «there is no research with that id» anche a una ricerca che esiste
+     * benissimo su disco ma non sta girando (dopo un riavvio nessuna lo fa). Quella frase è
+     * giusta per il modello — che sta cercando qualcosa da fermare — e sarebbe **falsa** per la
+     * persona, che ha quella riga sotto gli occhi. ⇒ si guarda prima il disco: assente ⇒ 404,
+     * presente ⇒ l'esito dell'orchestratore, e un «no» diventa un conflitto di stato (409).
+     * @returns {Promise<{ok:boolean, ricerca?:object|null, motivo?:string}|{erroreAvvio:string, code:string}>}
+     */
+    async pausaRicerca(sessionId, ricercaId) {
+      return azioneSuRicerca(sessionId, ricercaId, (cartella, id) => researchOrchestrator.mettiInPausa({ cartella, id }));
+    },
+    /** ⭐⭐⭐ L5 §6.6 — RIPRESA. Riparte dal giornale anche dopo un riavvio del server: è `riprendi()` di L4, non una seconda via. */
+    async riprendiRicerca(sessionId, ricercaId) {
+      return azioneSuRicerca(sessionId, ricercaId, (cartella, id) => researchOrchestrator.riprendi({ cartella, id }));
+    },
+    /**
+     * ⭐⭐⭐⭐ L5 §6.8 «+1.1» — «Controlla se le fonti dicono ancora questo».
+     * ⛔ A differenza delle altre quattro, questa **esce in rete**: apre le pagine citate, una
+     *   alla volta, con il lettore validato del kernel. Per questo il suo «non si può» non è un
+     *   errore ma un esito dichiarato, con il motivo (vedi `riverifica` nell'orchestratore).
+     */
+    async riverificaRicerca(sessionId, ricercaId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let esito;
+      try {
+        esito = await researchOrchestrator.riverifica({ cartella: voce.cartella, id: ricercaId });
+      } catch (errore) {
+        if (errore instanceof ResearchStoreError) return { ok: false, ricerca: null, motivo: errore.message };
+        throw errore;
+      }
+      if (!esito.trovata) return { ok: true, ricerca: null, motivo: null };
+      if (!esito.ok) return { ok: false, ricerca: undefined, motivo: esito.motivo };
+      return { ok: true, ricerca: undefined, riverifica: esito.riverifica, motivo: null };
+    },
+    /**
+     * ⭐⭐⭐ L5 — ELIMINAZIONE. Toglie la cartella intera della ricerca **e** la sua voce di
+     * Libreria: è `elimina()` di L4, la stessa che chiama il modello. ⛔ Il record pagato non si
+     * riscrive mai — qui non si riscrive niente, si cancella, e la conferma (con la conseguenza
+     * scritta: «si cancella anche il rapporto in Libreria») è del frontend, prima di bussare.
+     */
+    async eliminaRicerca(sessionId, ricercaId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      let presente;
+      try {
+        presente = await leggiRicercaFn({ cartella: voce.cartella, id: ricercaId });
+      } catch (errore) {
+        if (errore instanceof ResearchStoreError) return { ok: false, ricerca: null, motivo: errore.message };
+        throw errore;
+      }
+      /*
+       * ⛔ `elimina()` dell'orchestratore è IDEMPOTENTE per contratto col modello («There was no
+       *   research with that id — nothing to delete»), e quella proprietà non si tocca. Ma la
+       *   PERSONA sta guardando un elenco che dice che quella ricerca c'è: rispondere «fatto» a
+       *   un id sparito le confermerebbe uno schermo vecchio. Due contratti per due chiamanti,
+       *   nessuno dei due piegato — identico alla DELETE di Note/Attività/Memoria.
+       */
+      if (!presente) return { ok: true, ricerca: null, motivo: null };
+      await researchOrchestrator.elimina({ cartella: voce.cartella, id: ricercaId });
+      return { ok: true, eliminata: { id: ricercaId, titolo: presente.titolo || presente.domanda || null }, motivo: null };
     },
     /**
      * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge, il

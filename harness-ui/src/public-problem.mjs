@@ -27,6 +27,19 @@ const MESSAGES = Object.freeze({
    *   una persona su una schermata.
    */
   SESSION_NOT_READY: { title: 'Sessione non pronta', explanation: 'Questa sessione non puo accettare l’azione richiesta nello stato in cui si trova.', action: 'Se e stata interrotta da un riavvio, avvia una sessione nuova: la conversazione resta leggibile qui.' },
+  /*
+   * ⛔⛔ 12/09, L5 — LA STESSA VORAGINE DI O-49, e per questo sono qui il giorno stesso in cui
+   * nascono i codici. Senza una voce in questa mappa una risposta cade sulla copia di
+   * INTERNAL_ERROR, e a schermo una ricerca cancellata dieci secondi fa diventa «Si è verificato
+   * un problema imprevisto · Apri Doctor, copia il riferimento»: falso due volte — non è
+   * imprevisto, ed è l'unica cosa che Doctor non può spiegare. Misurato interrogando la rotta
+   * vera prima di scrivere queste righe, non dedotto.
+   * ⛔ Nessuna di queste è un guasto: sono tre no diversi, e ognuna dice COSA FARE.
+   */
+  RESEARCH_NOT_FOUND: { title: 'Ricerca non trovata', explanation: 'Questa ricerca approfondita non è più nel progetto: può essere stata eliminata.', action: 'Torna all’elenco delle ricerche: mostra quelle che ci sono adesso.' },
+  RESEARCH_CONFLICT: { title: 'Azione non possibile adesso', explanation: 'Questa ricerca non è nello stato che l’azione richiede — per esempio è già ferma, o è già finita.', action: 'Riapri la scheda della ricerca: dice come sta in questo momento.' },
+  RESEARCH_RECHECK_UNAVAILABLE: { title: 'Controllo delle fonti non possibile', explanation: 'Per ricontrollare le fonti serve un rapporto con i passaggi citati, e questa ricerca non ne ha.', action: 'Le ricerche nuove lo portano: questa si può rifare, oppure lasciarla com’è.' },
+  RESEARCH_INVALID: { title: 'Richiesta non valida', explanation: 'L’identificativo della ricerca non ha una forma ammessa.', action: 'Apri la ricerca dall’elenco invece di comporre l’indirizzo a mano.' },
   INTERNAL_ERROR: { title: 'Operazione non riuscita', explanation: 'Si è verificato un problema imprevisto durante l’operazione.', action: 'Apri Doctor, copia il riferimento e riprova.' },
 });
 

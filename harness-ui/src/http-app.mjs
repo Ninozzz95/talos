@@ -25,6 +25,10 @@ import { fileURLToPath } from 'node:url'; // 11/09: i tre magazzini GLOBALI stan
 import { CARTELLA_NOTE, NoteStoreError, aggiornaNota, creaNota, eliminaNota, formaPubblicaNota, leggiNota } from './notes-store.mjs';
 import { CARTELLA_ATTIVITA, TaskStoreError, aggiornaAttivita, completaAttivita, creaAttivita, eliminaAttivita, formaPubblicaAttivita, leggiAttivita } from './tasks-store.mjs';
 import { CARTELLA_MEMORIA, MemoryStoreError, aggiornaMemoria, creaMemoria, eliminaMemoria, formaPubblicaMemoria, leggiMemoria } from './memory-store.mjs';
+/* ⭐ 12/09, L5 — la STESSA regola che decide se un id può diventare il nome di una cartella
+   (`research-store.mjs`): scriverne una seconda qui vorrebbe dire due difese che divergono
+   proprio sul confine che conta. Qui serve per rispondere 400 invece di far lanciare il magazzino. */
+import { idRicercaValido } from './research-store.mjs';
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
@@ -91,6 +95,19 @@ const API_ERROR_CODES = new Set([
   'TASK_NOT_FOUND',
   'MEMORY_INVALID',
   'MEMORY_NOT_FOUND',
+  /* ⭐⭐⭐⭐ 12/9, L5 — le rotte della Ricerca approfondita. `RESEARCH_INVALID` è il codice che
+     lancia già `research-store.mjs` (`ResearchStoreError`) su un id impossibile: qui si dichiara
+     soltanto, non si inventa un secondo vocabolario. Gli altri tre nascono con queste rotte.
+     ⛔ `RESEARCH_NOT_FOUND` resta DISTINTO da `NOT_FOUND`: «la sessione non c'è» e «la ricerca
+       non c'è» sono due assenze diverse, e una risposta che non le distingue manda a cercare nel
+       posto sbagliato (stessa scelta di Libreria e di Note/Attività/Memoria).
+     ⛔ E `RESEARCH_RECHECK_UNAVAILABLE` è separato da `RESEARCH_CONFLICT` perché dice una cosa
+       che nessun altro codice dice: la ricerca sta benissimo, è il CONTROLLO che non si può
+       ancora fare su di lei. */
+  'RESEARCH_INVALID',
+  'RESEARCH_NOT_FOUND',
+  'RESEARCH_CONFLICT',
+  'RESEARCH_RECHECK_UNAVAILABLE',
   'LIBRARY_NOT_FOUND',
   'LIBRARY_NAME_EMPTY',
   'LIBRARY_TOO_LARGE',
@@ -249,6 +266,19 @@ const STATUS_BY_CODE = Object.freeze({
   TASK_NOT_FOUND: 404,
   MEMORY_INVALID: 400,
   MEMORY_NOT_FOUND: 404,
+  /* ⭐⭐⭐⭐ 12/9, L5 — Ricerca approfondita. `RESEARCH_INVALID` è 400 perché nasce sempre da ciò
+     che ha mandato chi chiede (un id che non è un nome di cartella). I due 409 sono la stessa
+     famiglia semantica: «a request conflict with the current state of the target resource»
+     (MDN, letta il 12/09/2026 — e il suo esempio è proprio un lavoro che non si può avviare
+     perché un altro è in corso).
+     ⛔ NON 501: MDN è esplicita — «501 is the appropriate response when the server does not
+       recognize the request METHOD», ed «è cacheable by default». Un «non ancora disponibile»
+       messo in cache dal browser sopravvivrebbe al giorno in cui diventa disponibile: sarebbe la
+       promessa vuota al contrario. */
+  RESEARCH_INVALID: 400,
+  RESEARCH_NOT_FOUND: 404,
+  RESEARCH_CONFLICT: 409,
+  RESEARCH_RECHECK_UNAVAILABLE: 409,
   /** ⭐ 10/9 — 404 come FILE_NOT_FOUND, ma DISTINTO da NOT_FOUND: «la sessione non c'è» e «la voce non c'è» sono due assenze diverse, e una risposta che non le distingue manda a cercare nel posto sbagliato. */
   LIBRARY_NOT_FOUND: 404,
   /** ⭐ 10/9 — 400: il nome l'ha mandato il chiamante e, tolti i caratteri di percorso, non resta niente. */
@@ -414,6 +444,13 @@ const MESSAGE_BY_CODE = Object.freeze({
   TASK_NOT_FOUND: 'Questa attività non esiste più',
   MEMORY_INVALID: 'Questa memoria non è valida',
   MEMORY_NOT_FOUND: 'Questa memoria non esiste più',
+  /* ⛔ 12/9 — frasi per una PERSONA: dicono che cosa non si può fare e non nominano né il codice
+     né la cartella dietro. Il motivo preciso (in inglese, perché è la risposta scritta per il
+     modello) viaggia a parte in `errore.message`, come per ogni altra famiglia di questo elenco. */
+  RESEARCH_INVALID: 'Richiesta non valida per la ricerca approfondita',
+  RESEARCH_NOT_FOUND: 'Questa ricerca non esiste più',
+  RESEARCH_CONFLICT: 'Questa ricerca non è nello stato giusto per questa azione',
+  RESEARCH_RECHECK_UNAVAILABLE: 'Non si può ancora ricontrollare questa ricerca',
   LIBRARY_NOT_FOUND: 'Questo file della Libreria non esiste più',
   LIBRARY_NAME_EMPTY: 'Serve un nome con almeno una lettera o un numero',
   LIBRARY_TOO_LARGE: 'File troppo grande da scaricare',
@@ -908,6 +945,23 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory$/, metodi: ['GET', 'POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/memory\/([^/]+)$/, metodi: ['GET', 'PATCH', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/research$/, metodi: ['GET'] },
+  /*
+   * ⭐⭐⭐⭐ 12/9, L5 — la Ricerca approfondita smette di essere di sola lettura. Fino a ieri qui
+   * c'era la sola riga sopra, l'elenco: il MODELLO aveva otto attrezzi sulle ricerche
+   * (`research_start/list/read/rename/pause/resume/cancel/delete`) e chi guarda lo schermo non
+   * poteva né aprirne una, né metterla in pausa, né riprenderla, né cancellarla. La sezione lo
+   * scriveva pure, sotto l'elenco: «un pulsante lì sarebbe una promessa che nessuna rotta può
+   * mantenere» (RAPPORTO-PORTING-SEZIONI, 11/09). Adesso la rotta c'è, quindi la promessa si può
+   * fare — owner, 12/09: «sì» alle rotte di scrittura.
+   * ⛔ Due righe e non una, come per Libreria (10/9) e per Note/Attività/Memoria (11/9): la voce
+   *   accetta GET e DELETE, le tre azioni solo POST. Così l'`Allow` del 405 dice il vero su
+   *   OGNUNA invece di dichiarare su entrambe l'unione dei metodi di entrambe.
+   * ⛔ Le tre azioni in UNA riga con l'alternanza (come `/git/(stage|unstage|commit)`) perché
+   *   hanno davvero lo stesso identico insieme di metodi: `['POST']`. Righe separate sarebbero
+   *   tre volte la stessa verità, cioè tre posti da cui può divergere.
+   */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)\/(pausa|ripresa|riverifica)$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)$/, metodi: ['GET', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/children$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/terminals$/, metodi: ['GET', 'POST'] },
@@ -1356,6 +1410,28 @@ function corpoConChiaviAmmesse(body, { ammesse, obbligatorie = [], forma }) {
     throw erroreCorpo(`Corpo non valido: atteso ${forma}${dettaglio}`);
   }
   return oggetto;
+}
+
+/**
+ * ⭐⭐⭐ 12/9, L5 — L'ALLOWLIST VUOTA: un'azione che non prende PARAMETRI.
+ *
+ * `POST …/research/:id/pausa` (e ripresa, e riverifica) dice tutto nell'indirizzo: quale
+ * ricerca, e che cosa farle. Non c'è niente da mandare nel corpo, e `corpoConChiaviAmmesse` non
+ * serve — pretende `chiavi.length > 0`, cioè l'opposto di quello che vogliamo qui.
+ *
+ * ⛔ E allora perché una funzione, invece di ignorare il corpo? Perché un corpo ignorato è un
+ *   corpo che qualcuno un giorno manderà credendo che serva a qualcosa: `{"forza": true}`
+ *   passerebbe in silenzio e la persona penserebbe di aver forzato qualcosa. Un 400 che NOMINA
+ *   la chiave rifiutata è l'unica risposta che non lascia credere.
+ * ⛔ Un corpo assente e `{}` sono entrambi leciti: `leggiCorpoJson` torna già `{}` su un corpo
+ *   vuoto, quindi il caso normale (`fetch` senza body) non paga niente.
+ */
+function requireCorpoSenzaParametri(body) {
+  const oggetto = body && typeof body === 'object' && !Array.isArray(body) ? body : null;
+  const chiavi = oggetto ? Object.keys(oggetto) : [];
+  if (!oggetto || chiavi.length > 0) {
+    throw erroreCorpo(`Corpo non valido: questa azione non prende parametri${chiavi.length > 0 ? ` — chiave non ammessa: ${chiavi.join(', ')}` : ''}`);
+  }
 }
 
 /** ⛔ `undefined` = «non lo cambio» (contratto di ogni `aggiorna*` dei tre magazzini): un campo assente non è un campo svuotato. */
@@ -2723,6 +2799,136 @@ export function createHttpApp({
         const voce = await completaAttivita({ cartella: cartellaAttivita, id: voceId, status: stato });
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ attivita: formaPubblicaAttivita(voce) }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ════════════════════════════════════════════════════════════════════════════════════════
+     * ⭐⭐⭐⭐ 12/09/2026 — L5: LE ROTTE DELLA RICERCA APPROFONDITA (§7 del disegno)
+     * ════════════════════════════════════════════════════════════════════════════════════════
+     *
+     * Fino a ieri di ricerche c'era **una** rotta, l'elenco. Il disegno lo dice con precisione
+     * (§2.5): la sezione «non ha mai avuto un lettore» — `reportLibraryId` non usciva nemmeno,
+     * quindi non aveva letteralmente il modo di sapere dove fosse il rapporto, e sotto l'elenco
+     * c'era scritta a mano la frase «la consultazione del rapporto e delle fonti non è ancora
+     * disponibile qui». Qui si aprono le altre cinque porte: la voce singola, la pausa, la
+     * ripresa, la ri-verifica nel tempo, la cancellazione.
+     *
+     * ⛔ Nessuna logica di ricerca vive in questo file. Ogni rotta chiama UNA funzione del
+     *   registro, che chiama la STESSA dell'orchestratore che chiama l'attrezzo del modello:
+     *   due lettori dello stesso stato sono due verità, e a schermo si contraddicono — è già
+     *   successo in questa stessa sezione (elenco «Conclusa», dettaglio «bloccata dal permesso»).
+     * ⛔ TRE assenze, TRE risposte, e restano distinte fino in fondo:
+     *     la sessione non c'è                → 404 `NOT_FOUND`
+     *     la sessione c'è, la ricerca no     → 404 `RESEARCH_NOT_FOUND`
+     *     ci sono entrambe, lo stato dice no → 409 (`RESEARCH_CONFLICT` / `…RECHECK_UNAVAILABLE`)
+     * ⛔ L'id si valida con `idRicercaValido`, cioè con la STESSA funzione che decide se quell'id
+     *   può diventare il nome di una cartella (`research-store.mjs`). Una seconda regola scritta
+     *   qui sarebbe una seconda difesa che diverge dalla prima proprio sul confine che conta.
+     */
+    const ricercaVoceMatch = sessionRegistry && (method === 'GET' || method === 'DELETE')
+      ? /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)$/.exec(url.pathname)
+      : null;
+    const ricercaAzioneMatch = sessionRegistry && method === 'POST'
+      ? /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)\/(pausa|ripresa|riverifica)$/.exec(url.pathname)
+      : null;
+    if (ricercaVoceMatch || ricercaAzioneMatch) {
+      const combacia = ricercaVoceMatch ?? ricercaAzioneMatch;
+      const nomi = nomiDellaRichiesta(res, method, clock, combacia[1], combacia[2]);
+      if (!nomi) return;
+      const [sessionId, ricercaId] = nomi;
+      const azione = ricercaAzioneMatch ? ricercaAzioneMatch[3] : null;
+      try {
+        requireNoQuery(url);
+        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        if (!idRicercaValido(ricercaId)) {
+          const errore = new Error('id di ricerca non valido');
+          errore.code = 'RESEARCH_INVALID';
+          throw errore;
+        }
+        /* ⛔ Il corpo si legge PRIMA di agire, così una chiave non ammessa è un 400 e non una
+           pausa già avvenuta seguita da un errore: un rifiuto dopo l'effetto non è un rifiuto. */
+        if (azione) requireCorpoSenzaParametri(await leggiCorpoJson(req, MAX_REQUEST_BODY_BYTES));
+
+        if (method === 'DELETE') {
+          const esito = await sessionRegistry.eliminaRicerca(sessionId, ricercaId);
+          if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
+          if (!esito.ok) { const e = new Error(esito.motivo ?? 'ricerca non eliminabile'); e.code = 'RESEARCH_CONFLICT'; throw e; }
+          if (!esito.eliminata) {
+            sendJson(res, 404, errorEnvelope('RESEARCH_NOT_FOUND', clock), method);
+            return;
+          }
+          if (req.aborted || res.destroyed) return;
+          /* ⛔ 200 con la busta standard, non 204: ogni risposta di questa API è `{ok, data, meta}`
+             e una muta sarebbe l'unica eccezione (stessa scelta della DELETE di Note/Attività). */
+          sendJson(res, 200, successEnvelope({ eliminata: true, ...esito.eliminata }, clock), method);
+          return;
+        }
+
+        if (azione === 'riverifica') {
+          const esito = await sessionRegistry.riverificaRicerca(sessionId, ricercaId);
+          if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
+          if (esito.ok && esito.ricerca === null) {
+            sendJson(res, 404, errorEnvelope('RESEARCH_NOT_FOUND', clock), method);
+            return;
+          }
+          if (!esito.ok) {
+            /*
+             * ⛔⛔ IL 409 ONESTO, e non è una scorciatoia. Oggi la ri-verifica può misurare «il
+             *   passaggio citato è ancora in quella pagina?» ma NON «quanta parte della pagina è
+             *   sopravvissuta»: il testo tenuto non è attribuibile a un url (`fonti/<sha256>` è
+             *   indirizzato dal contenuto, e il collettore che scriverebbe l'indice non è
+             *   agganciato). Quando non c'è nemmeno un passaggio da ri-trovare, non resta niente
+             *   da misurare — e allora si dice, col motivo, invece di rispondere «tutto intatto».
+             * ⛔ 409 e non 501: MDN («501 Not Implemented», letta il 12/09/2026) è esplicita —
+             *   501 riguarda il METODO, e «is cacheable by default». Un «non ancora disponibile»
+             *   messo in cache sopravviverebbe al giorno in cui diventa disponibile.
+             */
+            const e = new Error(esito.motivo ?? 'ri-verifica non disponibile');
+            e.code = 'RESEARCH_RECHECK_UNAVAILABLE';
+            throw e;
+          }
+          if (req.aborted || res.destroyed) return;
+          sendJson(res, 200, successEnvelope({ riverifica: esito.riverifica }, clock), method);
+          return;
+        }
+
+        if (azione) {
+          const esito = azione === 'pausa'
+            ? await sessionRegistry.pausaRicerca(sessionId, ricercaId)
+            : await sessionRegistry.riprendiRicerca(sessionId, ricercaId);
+          if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
+          if (esito.ok && esito.ricerca === null) {
+            sendJson(res, 404, errorEnvelope('RESEARCH_NOT_FOUND', clock), method);
+            return;
+          }
+          if (!esito.ok) { const e = new Error(esito.motivo ?? 'azione non possibile'); e.code = 'RESEARCH_CONFLICT'; throw e; }
+        }
+
+        /*
+         * ⛔ La GET del dettaglio E la risposta di pausa/ripresa passano DA QUI, dalla stessa
+         *   lettura. Non è pigrizia: una pausa che rispondesse con la frase dell'orchestratore
+         *   («That research is paused») lascerebbe la sezione a indovinare il nuovo stato, o a
+         *   chiederlo con un secondo giro. Qui la risposta è **la voce aggiornata**, letta dallo
+         *   stesso lettore del dettaglio ⇒ la riga e la scheda non possono divergere.
+         *   E la frase inglese dell'attrezzo (scritta per il MODELLO) non finisce mai in una
+         *   risposta destinata a uno schermo italiano.
+         */
+        const letta = await sessionRegistry.leggiRicerca(sessionId, ricercaId);
+        if ('erroreAvvio' in letta) { const e = new Error(letta.erroreAvvio); e.code = letta.code; throw e; }
+        if (!letta.ricerca) {
+          sendJson(res, 404, errorEnvelope('RESEARCH_NOT_FOUND', clock), method);
+          return;
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ricerca: letta.ricerca, errore: letta.errore ?? null }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -5110,7 +5316,14 @@ export function createHttpApp({
             errore.code = esito.code;
             throw errore;
           }
-          data = { ricerche: esito.ricerche, errore: esito.errore };
+          /*
+           * ⭐ 12/09, L5 — `totale` ESCE, e i quattordici campi della voce c'erano già (L4 li ha
+           * portati da quattro a quattordici, `bilancio` e `proveDistinte` compresi: verificato
+           * in `voceEsposta`, non duplicato qui). Quello che mancava era il numero: la pagina è
+           * tagliata a 20 dall'orchestratore, e senza `totale` una sezione con 34 ricerche ne
+           * mostrava 20 senza che niente dicesse che ne mancavano 14.
+           */
+          data = { ricerche: esito.ricerche, totale: esito.totale ?? esito.ricerche?.length ?? 0, errore: esito.errore };
         } else if (forgeListMatch) {
           requireNoQuery(url);
           let sessionId;
