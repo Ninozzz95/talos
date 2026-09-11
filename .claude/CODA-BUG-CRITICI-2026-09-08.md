@@ -116,3 +116,51 @@ come «gli id grezzi a schermo», che qui si manifesta come rottura visiva.
 `nomeModelloUmano()`, chiamata in **un solo posto**.
 
 **Stato:** in lavorazione.
+
+---
+
+## BC-05 · Reindirizzamento e accodamento «funzionano malissimo» — e la popup sta dal lato sbagliato
+
+**Segnalato dall'owner, 11/09/2026:** «il reindirizzamento e accodamento funziona malissimo, va
+provato dal vivo e reso estremamente robusto. Inoltre la popup di accodamento va messa **sopra** il
+composer, non sotto.»
+
+**Cosa si sa oggi**, senza averlo ancora misurato:
+- il bivio invio/accoda è `.talos-bivio` nel piede della chat (`index.template.html`), con i tre
+  pulsanti «Indirizza ora», «Accoda», e l'annulla;
+- la scelta è una decisione dell'owner del 04/09 (B14/B15: il bivio è esplicito, `Ctrl+Invio`
+  accoda, la coda è a vista) — quindi il comportamento non va semplificato, va reso solido;
+- il reindirizzo passa da `redirectRunButton` e dagli eventi `runRedirect*` (`session-registry.mjs`),
+  e la coda da `codaMessaggi` sulla voce di sessione.
+
+⛔ **Va provato DAL VIVO con un giro vero**, non a tavolino: «funziona malissimo» è un giudizio
+sull'uso, e i difetti di questa famiglia (messaggi che si perdono, coda che non si svuota, bivio che
+non compare o compare quando non serve) si vedono solo usandolo. Quattro-cinque scenari veri, con
+foto DURANTE, e ogni difetto nominato prima di toccare il codice.
+
+⛔ La posizione della popup non è un dettaglio di gusto: sotto il composer è dove l'occhio NON è
+mentre si scrive — e proprio sotto il composer l'owner ha appena fatto togliere tutte le scritte
+perché erano rumore. Va sopra.
+
+**Stato:** APERTO, mai lavorato.
+
+---
+
+## BC-06 · Lo spazio su disco: `projects/` e uno scratchpad da giga (non urgente)
+
+**Segnalato dall'owner, 11/09/2026:** «mi servirebbe ripulire tutte le cartelle in projects che
+occupano spazio; poi ho notato che nello scratchpad ci sono una marea di giga, solo file non
+necessari. Mi raccomando, magari la deleghiamo a un sub agente.»
+
+⛔ **Non urgente, e non da fare a mano.** È esattamente il genere di lavoro dove un errore costa
+caro: in questo progetto un `writeFileSync(dove,'')` ha già distrutto 56 righe e $2,64 di lavoro
+pagato, e una cartella cancellata «perché sembrava temporanea» non si recupera da nessun reflog.
+
+Requisiti quando si farà:
+1. prima si **misura** (quanto occupa cosa, per cartella, ordinato), poi si propone;
+2. si cancella **solo** ciò che è riproducibile (build, cache, `node_modules`, artefatti) e mai ciò
+   che è costato denaro o non è tracciato da git;
+3. l'elenco di ciò che si sta per togliere si mostra all'owner **prima**, con i byte accanto;
+4. lo scratchpad di una sessione viva non si tocca mentre la sessione lavora.
+
+**Stato:** APERTO, da delegare.
