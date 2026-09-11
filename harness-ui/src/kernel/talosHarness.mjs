@@ -366,6 +366,50 @@ export function attesaDelTentativo(tentativo, caso = Math.random) {
  */
 export const RIPETIZIONI_IDENTICHE_MASSIME = 3
 
+/**
+ * ⛔⛔⛔ LA STESSA RETE DI SICUREZZA, PER UNA RISPOSTA GIÀ COMPLETA — 11/09/2026.
+ *
+ * La guardia dentro `consumaFlussoSSE` conta MENTRE il flusso arriva, e appena
+ * vede la terza copia chiude la connessione: è quella la cura, perché la fonte
+ * dice che la valanga è «bounded only by max_tokens or client timeout». Ma il
+ * flusso non è l'unica porta: `chiamaConRitenta` senza `onDelta` legge
+ * `r.json()` in un colpo solo — è la strada che usa TALOS-BANCO — e lì la
+ * valanga arrivava intera al ciclo degli attrezzi. Riprodotto e misurato
+ * (`tests/kernel-loop-locale-e-stop.test.mjs`): 398 chiamate dentro, 398
+ * eseguite.
+ *
+ * ⇒ Stessa soglia, stesso conteggio, stessa scelta: si tiene tutto fino alla
+ * `ripetizioniMassime`-esima copia identica, e da lì in poi si scarta. La firma
+ * è «nome + argomenti», mai l'id (nella valanga misurata gli id erano 398
+ * diversi per 398 richieste identiche).
+ *
+ * ⛔ Scarta ANCHE i buchi di un array sparso (`undefined`): un `for (const c of
+ * chiamate)` su un array con un buco tira fuori `undefined`, e la riga dopo
+ * legge `c.function` — vedi la doc di `posizioneDelPezzo` sotto.
+ */
+export function limitaRipetizioniIdentiche(chiamate, ripetizioniMassime = RIPETIZIONI_IDENTICHE_MASSIME) {
+    const tenute = []
+    const conteggio = new Map()
+    let ripetizione = null
+    for (const c of Array.isArray(chiamate) ? chiamate : []) {
+        if (!c || !c.function) continue
+        const firma = `${c.function.name ?? ''} ${c.function.arguments ?? ''}`
+        const quante = (conteggio.get(firma) ?? 0) + 1
+        conteggio.set(firma, quante)
+        if (quante >= ripetizioniMassime) {
+            ripetizione = {
+                nome: c.function.name,
+                argomenti: c.function.arguments,
+                viste: quante,
+                daScartare: tenute.length,
+            }
+            break
+        }
+        tenute.push(c)
+    }
+    return { toolCalls: tenute, ripetizione }
+}
+
 /** Un valore che nessun `lettore.read()` può mai tornare: così la gara fra lettura e stop non confonde «è arrivato lo stop» con «è arrivato un pezzo». */
 const SENTINELLA_FERMATO = Symbol('fermato-su-richiesta')
 
@@ -379,6 +423,9 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
     let usage = null
     let providerState = null
     let streamCompleted = false
+    /* ⛔ Vedi il ramo `if (!delta)` più sotto: il messaggio completo di llama-server si usa solo se di delta non ne è arrivato NEMMENO UNO. */
+    let messaggioIntero = null
+    let vistoUnDelta = false
     /*
      * ⛔⛔ LO STOP CHE ARRIVA DENTRO LO STREAM — 08/09/2026, owner: «se clicco
      * fermo la conversazione si ferma all'istante», e il «prossimo punto
@@ -404,6 +451,83 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
             else segnaleStop.addEventListener('abort', sveglia, { once: true })
         })
         : null
+
+    /*
+     * ⛔⛔⛔ DOVE FINISCE UN PEZZO — 11/09/2026, il difetto GEMELLO della valanga,
+     * nello stesso assemblatore, misurato con un finto backend locale e non dedotto
+     * (`tests/kernel-loop-locale-e-stop.test.mjs`).
+     *
+     * `pezzo.index ?? 0` dava per buono l'unico contratto che i server locali NON
+     * rispettano. Tre forme, tutte e tre documentate a monte nel 2026, tutte e tre
+     * riprodotte qui prima di toccare una riga:
+     *   · `index` ASSENTE — ollama/ollama #7881, «OpenAI-compatible API tool calls
+     *     have no index». MISURATO: tre attrezzi DIVERSI (`elenca`, `leggi`,
+     *     `cerca`) collassavano tutti sulla posizione 0 e uscivano come UNA
+     *     chiamata di nome «elencaleggicerca», con i tre JSON incollati uno dietro
+     *     l'altro. Non una chiamata sbagliata: tre chiamate distrutte.
+     *   · `index` presente ma SEMPRE 0 — ollama/ollama #15457 e #15497 (2026):
+     *     «all tool call chunks have index: 0 … the second tool call either gets
+     *     merged into the first or silently dropped, causing 100% failure rate on
+     *     any task requiring multiple tool calls in one response». MISURATO: stesso
+     *     collasso, «elencaleggi».
+     *   · `index` che non parte da 0 — BerriAI/litellm #32759 (Bedrock Mantle
+     *     comincia da 1), vercel/ai #18333. MISURATO: `toolCalls[1]` senza
+     *     `toolCalls[0]` lasciava un BUCO nell'array, e un buco arriva fino a
+     *     `for (const c of chiamate)` come `undefined`: la riga dopo legge
+     *     `c.function` e il giro muore con un TypeError che non nomina niente.
+     *
+     * ⇒ L'indice del server smette di essere la posizione nel NOSTRO array e
+     * diventa una CHIAVE. La posizione la decidiamo noi: densa, in ordine di
+     * arrivo, senza buchi per costruzione. È la stessa cura che litellm ha
+     * adottato per lo stesso difetto (PR #14587: «assign sequential indices when
+     * missing … replace default index=0 behavior»).
+     *
+     * ⛔ Le tre regole, in ordine di forza, e si scende solo quando quella sopra
+     * non ha una chiave da leggere:
+     *   1. l'id già visto ⇒ è quella chiamata lì, sempre;
+     *   2. l'indice già visto ⇒ è quella chiamata lì, TRANNE se il pezzo porta un
+     *      id mai visto su una posizione che ha già un id DIVERSO: allora è una
+     *      chiamata nuova che il server ha numerato male (è il caso #15457), e da
+     *      quel momento l'indice punta alla nuova;
+     *   3. né id né indice ⇒ continua l'ULTIMA chiamata aperta, che è la forma
+     *      normale dei frammenti di argomenti. L'unica eccezione è un NOME che
+     *      arriva quando l'ultima chiamata il suo nome ce l'ha già: è l'unico
+     *      segnale rimasto che il server ne ha cominciata un'altra.
+     * ⛔ La 3 è l'euristica più debole delle tre e sta per ultima apposta: ci si
+     * arriva solo quando il server non ha dato NESSUNA chiave. Provata nei due
+     * versi — che separi le chiamate che deve separare, e che NON spezzi un nome
+     * che arriva a frammenti quando l'indice c'è.
+     */
+    const posizionePerChiave = new Map()
+    let ultimaPosizione = -1
+    const apriPosizione = (pezzo, chiavi) => {
+        const posizione = toolCalls.length
+        toolCalls.push({ id: pezzo.id, type: 'function', function: { name: '', arguments: '' } })
+        for (const chiave of chiavi) posizionePerChiave.set(chiave, posizione)
+        ultimaPosizione = posizione
+        return posizione
+    }
+    const posizioneDelPezzo = (pezzo) => {
+        const chiaveId = pezzo.id ? `id:${pezzo.id}` : null
+        if (chiaveId && posizionePerChiave.has(chiaveId)) {
+            ultimaPosizione = posizionePerChiave.get(chiaveId)
+            return ultimaPosizione
+        }
+        const chiaveIndice = Number.isInteger(pezzo.index) ? `indice:${pezzo.index}` : null
+        if (chiaveIndice && posizionePerChiave.has(chiaveIndice)) {
+            const posizione = posizionePerChiave.get(chiaveIndice)
+            if (chiaveId && toolCalls[posizione].id && toolCalls[posizione].id !== pezzo.id) {
+                return apriPosizione(pezzo, [chiaveId, chiaveIndice])
+            }
+            if (chiaveId) posizionePerChiave.set(chiaveId, posizione)
+            ultimaPosizione = posizione
+            return posizione
+        }
+        if (chiaveIndice || chiaveId) return apriPosizione(pezzo, [chiaveIndice, chiaveId].filter(Boolean))
+        if (ultimaPosizione === -1) return apriPosizione(pezzo, [])
+        if (pezzo.function?.name && toolCalls[ultimaPosizione].function.name) return apriPosizione(pezzo, [])
+        return ultimaPosizione
+    }
 
     /* La firma di una chiamata: quello che il modello ha CHIESTO, non il suo id — gli id sono casuali e nella valanga misurata erano 398 diversi per 398 richieste identiche. */
     const conteggioFirme = new Map()
@@ -456,15 +580,36 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
             try { pacchetto = JSON.parse(dati) } catch { continue /* chunk incompleto o rumore, mai un crash su un pezzo malformato */ }
             if (pacchetto.usage) usage = pacchetto.usage
             const delta = pacchetto?.choices?.[0]?.delta
-            if (!delta) continue
+            if (!delta) {
+                /*
+                 * ⛔⛔ IL SERVER CHE MANDA TUTTO IN UN COLPO — crashr/llama-stream,
+                 * letto 11/09/2026: quando la risposta contiene tool call,
+                 * llama-server «typically sends the entire JSON response at once,
+                 * even if `stream: true` was requested» (quel progetto esiste
+                 * apposta per fare da ponte finché llama-server non le manda a
+                 * pezzi davvero). Un fotogramma così non ha `choices[0].delta` ma
+                 * `choices[0].message`, e fino a oggi lo buttavamo via in silenzio:
+                 * la risposta usciva vuota e `chiamaConRitenta` lanciava «flusso SSE
+                 * senza contenuto ne tool_calls» — un errore che dà la colpa al
+                 * flusso invece di leggerlo.
+                 * ⛔ Si tiene da parte, non si usa subito: vale SOLO se di delta non
+                 * ne è arrivato nemmeno uno. Chi manda i delta E POI il messaggio
+                 * completo in coda sta ricapitolando, e sommare le due cose
+                 * raddoppierebbe la risposta.
+                 */
+                const intero = pacchetto?.choices?.[0]?.message
+                if (intero && typeof intero === 'object') messaggioIntero = intero
+                continue
+            }
+            vistoUnDelta = true
             if (delta.talos_provider_state?.version === 1) providerState = delta.talos_provider_state
             if (delta.content) { content += delta.content; onDelta?.({ tipo: 'testo', delta: delta.content }) }
             const ragionamento = delta.reasoning_content ?? delta.reasoning
             if (ragionamento) { reasoning += ragionamento; onDelta?.({ tipo: 'ragionamento', delta: ragionamento }) }
             for (const pezzo of delta.tool_calls ?? []) {
-                const i = pezzo.index ?? 0
-                const eraNuova = !toolCalls[i]
-                if (eraNuova) toolCalls[i] = { id: pezzo.id, type: 'function', function: { name: '', arguments: '' } }
+                const quanteErano = toolCalls.length
+                const i = posizioneDelPezzo(pezzo)
+                const eraNuova = toolCalls.length > quanteErano
                 if (pezzo.id) toolCalls[i].id = pezzo.id
                 if (pezzo.function?.name) toolCalls[i].function.name += pezzo.function.name
                 if (pezzo.function?.arguments) toolCalls[i].function.arguments += pezzo.function.arguments
@@ -507,6 +652,23 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
      * scartate non avranno mai un esito.
      */
     if (ripetizione) toolCalls.length = ripetizione.daScartare
+    /*
+     * ⛔ Il fotogramma «tutto in un colpo» di llama-server (vedi il ramo `if
+     * (!delta)` sopra): nessun delta è mai arrivato, quindi `content`,
+     * `reasoning` e `toolCalls` sono per forza vuoti — non c'è niente da
+     * sommare, si legge il messaggio e basta. La rete di sicurezza contro la
+     * valanga vale anche qui: è la stessa soglia, contata a posteriori invece
+     * che durante, perché un flusso che è già finito non si può più chiudere
+     * prima.
+     */
+    if (!vistoUnDelta && messaggioIntero) {
+        const limite = limitaRipetizioniIdentiche(messaggioIntero.tool_calls, ripetizioniMassime)
+        const sceltaIntera = { role: 'assistant', content: messaggioIntero.content ?? null }
+        if (limite.toolCalls.length > 0) sceltaIntera.tool_calls = limite.toolCalls
+        const ragionamentoIntero = messaggioIntero.reasoning_content ?? messaggioIntero.reasoning
+        if (ragionamentoIntero) sceltaIntera.reasoning_content = ragionamentoIntero
+        return { scelta: sceltaIntera, usage, ...(limite.ripetizione ? { ripetizione: limite.ripetizione } : {}) }
+    }
     const scelta = { role: 'assistant', content: content || null }
     if (toolCalls.length > 0) scelta.tool_calls = toolCalls
     if (reasoning) scelta.reasoning_content = reasoning
@@ -592,7 +754,18 @@ export async function chiamaConRitenta({
             const j = await r.json()
             const scelta = j?.choices?.[0]?.message
             if (!scelta) throw new Error('risposta senza messaggio: ' + JSON.stringify(j).slice(0, 300))
-            return { scelta, usage: j?.usage ?? null, tentativi: tentativo + 1 }
+            /*
+             * ⛔⛔ LA VALANGA NON PASSA SOLO DALLO STREAMING — 11/09/2026. Senza
+             * `onDelta` (è la strada di TALOS-BANCO, e di chiunque chiami questa
+             * funzione per una risposta sola) la rete di sicurezza non esisteva:
+             * misurato, 398 chiamate identiche dentro, 398 eseguite. Stessa
+             * soglia e stessa firma del conteggio dentro il flusso.
+             * ⛔ L'array si sostituisce solo se c'era: un `tool_calls: []` resta
+             * `[]` com'era, nessun campo appare o sparisce per colpa di questa riga.
+             */
+            const limite = limitaRipetizioniIdentiche(scelta.tool_calls, RIPETIZIONI_IDENTICHE_MASSIME)
+            if (Array.isArray(scelta.tool_calls)) scelta.tool_calls = limite.toolCalls
+            return { scelta, usage: j?.usage ?? null, tentativi: tentativo + 1, ...(limite.ripetizione ? { ripetizione: limite.ripetizione } : {}) }
         }
         ultimoStato = r.status
         ultimoTesto = String(await r.text()).slice(0, 300)
@@ -2050,7 +2223,77 @@ export function ambienteSenzaCredenziali() {
  * testa+coda invece di solo testa, cosi' la diagnosi non sparisce sui task con
  * molti test rossi. Vedi `talosHarness.test.mjs` per le sei misure reali.
  */
-function eseguiProva(comando, cartella) {
+/**
+ * ⛔⛔⛔ UCCIDERE UN COMANDO VUOL DIRE UCCIDERE L'ALBERO — 11/09/2026.
+ *
+ * MISURATO prima di scrivere una riga: premuto «Ferma» dopo 3 secondi su un
+ * comando da 45, `talosLavora` è tornato dopo **49,0 s** — cioè 46 secondi DOPO
+ * il clic — e al momento del ritorno c'erano ancora **5** processi vivi con
+ * dentro la nostra sentinella. Lo stop era già immediato verso il modello (lo
+ * stream HTTP si chiude in millisecondi, misurato l'08/09): era il sottoprocesso
+ * a non saperne niente.
+ *
+ * ⛔ E non basta `p.kill()`. Tutti gli spawn di questo file usano `shell: true`
+ * o passano da `wsl.exe`/`adb`, cioè il figlio diretto è la SHELL e il comando
+ * vero è un NIPOTE: «when using `shell: true` … `ChildProcess.kill()` kills the
+ * shell process but not its descendants» (nodejs/node #40438, «be able to kill
+ * all descendent processes for a given process», e #2098). La via che usano i
+ * CLI JavaScript su Windows è `taskkill /T /F` al livello di chi lancia
+ * (pnpm/pnpm #12406, «kill spawned process trees at the run/exec layer
+ * (taskkill /T /F) instead of error-handler pidtree enumeration»): i Job Object
+ * di Windows sarebbero più solidi, ma Node non li raggiunge senza un addon
+ * nativo. Fonti lette 11/09/2026.
+ *
+ * ⛔ Dichiarato, non nascosto: sul ramo WSL2 questo uccide `wsl.exe`, e il
+ * processo dentro la distro Linux può sopravvivergli — chiudere anche quello
+ * vuole un segnale dentro la distro, che è un'altra riga di lavoro.
+ */
+export function uccidiAlberoDelProcesso(processoFiglio, { spawnFn = spawn } = {}) {
+    const pid = processoFiglio?.pid
+    if (!pid) return false
+    const aMano = () => { try { processoFiglio.kill('SIGTERM') } catch { /* era già morto: va bene così */ } }
+    if (process.platform !== 'win32') { aMano(); return true }
+    try {
+        const boia = spawnFn('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true })
+        boia?.on?.('error', aMano) // ⛔ taskkill che non parte non deve lasciare il comando vivo: si ripiega su ciò che si può fare
+    }
+    catch { aMano() }
+    return true
+}
+
+/**
+ * Lega un sottoprocesso al segnale di stop della sessione. Torna la funzione
+ * che scioglie il legame — da chiamare su `close` e su `error`, altrimenti ogni
+ * comando lascia un ascoltatore appeso al segnale per tutta la sessione.
+ */
+function fermaQuandoArrivaLoStop(processoFiglio, segnaleStop, quandoFermato) {
+    if (!segnaleStop) return () => {}
+    const suStop = () => { quandoFermato(); uccidiAlberoDelProcesso(processoFiglio) }
+    if (segnaleStop.aborted) { suStop(); return () => {} }
+    segnaleStop.addEventListener('abort', suStop, { once: true })
+    return () => { try { segnaleStop.removeEventListener('abort', suStop) } catch { /* segnale finto in un test: nessun danno */ } }
+}
+
+/** ⛔ 130 = 128 + SIGINT, il codice che una shell usa da sempre per «l'ha interrotto qualcuno», distinto dal 124 di «tempo scaduto». */
+const USCITA_FERMATO_SU_RICHIESTA = 130
+
+/**
+ * ⛔ La frase che lega i due capi del fermo-durante-un'approvazione: la scrive
+ * `verificaPermessoScrittura` quando il segnale vince la gara con la domanda, e
+ * la rilegge `talosLavora` per dire nel registro DOVE si è fermato. Una costante
+ * e non due stringhe uguali per caso: se cambia qui, cambia in tutti e due.
+ */
+const MOTIVO_FERMATO_CHIEDENDO = 'fermato su richiesta mentre aspettavo la tua approvazione'
+
+/**
+ * ⛔ L'altra meta' della stessa disciplina: la marca che un comando (o una prova)
+ * porta nel suo esito quando e' stato ucciso dallo stop e non e' finito da solo.
+ * La scrivono i tre rami di esecuzione, la rilegge `talosLavora` per dire nel
+ * registro QUALE attrezzo stava girando quando la persona ha premuto «Ferma».
+ */
+const MARCA_FERMATO_MENTRE_GIRAVA = '⛔ Fermato su richiesta:'
+
+function eseguiProva(comando, cartella, { segnaleStop } = {}) {
     return new Promise((risolvi) => {
         const p = spawn(comando, { cwd: cartella, shell: true, windowsHide: true, env: ambienteSenzaCredenziali() })
         let fuori = ''
@@ -2061,12 +2304,20 @@ function eseguiProva(comando, cartella) {
         p.stdout?.on('data', (d) => { fuori += d; insieme += d })
         p.stderr?.on('data', (d) => { errori += d; insieme += d })
         const timer = setTimeout(() => p.kill(), 120_000)
+        /* ⛔ `prova` è il comando più lungo del giro (fino a 120 s): senza questo, premere «Ferma» durante un `npm test` non ferma niente. */
+        let fermatoSuRichiesta = false
+        const sciogli = fermaQuandoArrivaLoStop(p, segnaleStop, () => { fermatoSuRichiesta = true })
         p.on('close', (codice) => {
             clearTimeout(timer)
-            risolvi({ codice, testo: uscitaUtile((insieme || `${fuori}\n${errori}`).trim(), 4_000, 0.25) })
+            sciogli()
+            const uscita = uscitaUtile((insieme || `${fuori}\n${errori}`).trim(), 4_000, 0.25)
+            risolvi(fermatoSuRichiesta
+                ? { codice: USCITA_FERMATO_SU_RICHIESTA, fermatoSuRichiesta: true, testo: `${uscita}\n\n${MARCA_FERMATO_MENTRE_GIRAVA} la prova e stata interrotta mentre girava.`.trim() }
+                : { codice, testo: uscita })
         })
         p.on('error', (e) => {
             clearTimeout(timer)
+            sciogli()
             risolvi({ codice: -1, testo: String(e.message) })
         })
     })
@@ -2121,7 +2372,7 @@ let distroWslCache // undefined = non ancora provata, null = nessuna trovata
  *   comporta byte per byte come prima. Il taglio, l'accorpamento e la decisione di che farne
  *   restano fuori di qui — questa funzione sa solo dire «e' arrivato questo, adesso».
  */
-function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd, onPezzo } = {}) {
+function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd, onPezzo, segnaleStop } = {}) {
     return new Promise((risolvi) => {
         // ⛔ Stesso scrub di ambienteSenzaCredenziali() sopra — questa funzione instrada anche wsl.exe/adb col comando del modello dentro (eseguiComandoSandboxato sotto), difesa in profondità anche se WSLENV non inoltra le variabili Windows per default.
         const p = spawn(programma, argomenti, { windowsHide: true, cwd, env: ambienteSenzaCredenziali() })
@@ -2150,10 +2401,14 @@ function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd, onPezzo }
         p.stdout?.on('data', (d) => { pezziFuori.push(d); pezziInsieme.push(d); avvisa('fuori', d) })
         p.stderr?.on('data', (d) => { pezziErrori.push(d); pezziInsieme.push(d); avvisa('errori', d) })
         const timer = setTimeout(() => p.kill(), timeoutMs)
+        let fermatoSuRichiesta = false
+        const sciogli = fermaQuandoArrivaLoStop(p, segnaleStop, () => { fermatoSuRichiesta = true })
         p.on('close', (codice) => {
             clearTimeout(timer)
+            sciogli()
             risolvi({
-                codice,
+                codice: fermatoSuRichiesta ? USCITA_FERMATO_SU_RICHIESTA : codice,
+                ...(fermatoSuRichiesta ? { fermatoSuRichiesta: true } : {}),
                 fuori: Buffer.concat(pezziFuori).toString('utf8'),
                 errori: Buffer.concat(pezziErrori).toString('utf8'),
                 insieme: Buffer.concat(pezziInsieme).toString('utf8'),
@@ -2161,6 +2416,7 @@ function eseguiComando(programma, argomenti, { timeoutMs = 8_000, cwd, onPezzo }
         })
         p.on('error', () => {
             clearTimeout(timer)
+            sciogli()
             risolvi({ codice: -1, fuori: '', errori: '' })
         })
     })
@@ -2375,7 +2631,7 @@ export function staccaCartellaFinale(testo) {
  *   poterlo scegliere, ora che «dove gira un comando» e' una decisione della sessione e non piu'
  *   una conseguenza di quale programma hai scritto.
  */
-function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false } = {}) {
+function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false, segnaleStop } = {}) {
     return new Promise((risolvi) => {
         /* ⛔ Su Windows la shell qui e' cmd: la coda parla la sua lingua, non quella di bash. */
         const coda = tracciaCartella ? codaCheStampaLaCartella(process.platform === 'win32') : ''
@@ -2407,28 +2663,42 @@ function eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella = false }
          */
         let fermatoDalTempo = false
         const timer = setTimeout(() => { fermatoDalTempo = true; p.kill() }, 120_000)
+        /*
+         * ⛔⛔⛔ 11/09 — E UN COMANDO FERMATO SU RICHIESTA NON È NESSUNA DELLE DUE
+         *   COSE DI SOPRA. Sono tre esiti diversi (finito da solo · tempo scaduto ·
+         *   l'ha fermato l'owner) e devono restare tre, con tre codici diversi:
+         *   chi legge il registro deve poter distinguere «è andato in timeout» da
+         *   «ho premuto Ferma io», che sono due storie completamente diverse.
+         */
+        let fermatoSuRichiesta = false
+        const sciogli = fermaQuandoArrivaLoStop(p, segnaleStop, () => { fermatoSuRichiesta = true })
         p.on('close', (codice) => {
             clearTimeout(timer)
+            sciogli()
             const ripulito = staccaCartellaFinale((insieme || `${fuori}\n${errori}`).trim())
             const uscita = uscitaUtile(ripulito.testo, 4_000, 0.25)
             risolvi({
-                codice: fermatoDalTempo ? 124 : codice, // 124: il codice che `timeout(1)` usa da sempre per «tempo scaduto»
+                codice: fermatoSuRichiesta ? USCITA_FERMATO_SU_RICHIESTA : fermatoDalTempo ? 124 : codice, // 124: il codice che `timeout(1)` usa da sempre per «tempo scaduto»
                 fermatoDalTempo,
-                testo: fermatoDalTempo
-                    ? `${uscita}\n\n⛔ Fermato allo scadere dei 120 secondi: non ha finito da solo.`.trim()
-                    : uscita,
+                ...(fermatoSuRichiesta ? { fermatoSuRichiesta: true } : {}),
+                testo: fermatoSuRichiesta
+                    ? `${uscita}\n\n${MARCA_FERMATO_MENTRE_GIRAVA} il comando e stato interrotto mentre girava.`.trim()
+                    : fermatoDalTempo
+                        ? `${uscita}\n\n⛔ Fermato allo scadere dei 120 secondi: non ha finito da solo.`.trim()
+                        : uscita,
                 enforcement: 'none',
                 cartellaFinale: ripulito.cartella,
             })
         })
         p.on('error', (e) => {
             clearTimeout(timer)
+            sciogli()
             risolvi({ codice: -1, testo: String(e.message), enforcement: 'none' })
         })
     })
 }
 
-export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, tracciaCartella = false, dove = null } = {}) {
+export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, tracciaCartella = false, dove = null, segnaleStop } = {}) {
     if (mobile) {
         const seriale = await risolviSerialeAdbAttivo()
         if (!seriale) {
@@ -2455,7 +2725,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
          */
         const mirrorDevice = percorsoMirrorDevice(cartella)
         const push = await eseguiComando(
-            trovaAdbLocale(), ['-s', seriale, 'push', join(cartella, '.'), mirrorDevice], { timeoutMs: 60_000 },
+            trovaAdbLocale(), ['-s', seriale, 'push', join(cartella, '.'), mirrorDevice], { timeoutMs: 60_000, segnaleStop },
         )
         if (push.codice !== 0) {
             return {
@@ -2466,7 +2736,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
         }
         const comandoConCd = `cd ${JSON.stringify(mirrorDevice)} && ${comando}`
         const { codice, fuori, errori, insieme } = await eseguiComando(
-            trovaAdbLocale(), ['-s', seriale, 'shell', comandoConCd], { timeoutMs: 120_000, onPezzo },
+            trovaAdbLocale(), ['-s', seriale, 'shell', comandoConCd], { timeoutMs: 120_000, onPezzo, segnaleStop },
         )
         return { codice, testo: uscitaUtile((insieme ?? `${fuori}\n${errori}`).trim(), 4_000, 0.25), enforcement: 'adb-shell-on-device' }
     }
@@ -2489,7 +2759,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
      * ⛔ E se la scelta e' `wsl2` ma WSL non c'e', NON si ripiega in silenzio: si dice. Un
      *   ripiego muto e' esattamente il difetto che questa riga chiude.
      */
-    if (dove === 'windows') return eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella })
+    if (dove === 'windows') return eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella, segnaleStop })
     const distro = distroWslPredefinita()
     if (dove === 'wsl2' && !distro) {
         return {
@@ -2500,15 +2770,23 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
     }
     if (distro && (dove === 'wsl2' || (dove === null && await programmaDisponibileInWsl(distro, primoProgramma(comando))))) {
         const percorsoWsl = convertiPercorsoWsl(cartella)
-        const { codice, fuori, errori, insieme } = await eseguiComando(
+        const { codice, fuori, errori, insieme, fermatoSuRichiesta } = await eseguiComando(
             'wsl.exe', ['-d', distro, '--', 'bash', '-lc', `cd ${JSON.stringify(percorsoWsl)} && { ${comando} ; }${tracciaCartella ? codaCheStampaLaCartella(false) : ''}`],
             /* ⛔ Il marcatore non si vede nemmeno nei pezzi che escono mentre escono (D-10B). */
-            { timeoutMs: 120_000, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo).testo })) },
+            { timeoutMs: 120_000, segnaleStop, onPezzo: onPezzo && ((pezzo) => onPezzo({ ...pezzo, testo: staccaCartellaFinale(pezzo.testo).testo })) },
         )
         const ripulito = staccaCartellaFinale((insieme ?? `${fuori}\n${errori}`).trim())
-        return { codice, testo: uscitaUtile(ripulito.testo, 4_000, 0.25), enforcement: 'wsl2', cartellaFinale: ripulito.cartella }
+        const uscitaWsl = uscitaUtile(ripulito.testo, 4_000, 0.25)
+        /* ⛔ Un comando ucciso dallo stop deve DIRLO anche da qui, non solo dal ramo Windows: stessa marca, stesso lettore. */
+        return {
+            codice,
+            ...(fermatoSuRichiesta ? { fermatoSuRichiesta: true } : {}),
+            testo: fermatoSuRichiesta ? `${MARCA_FERMATO_MENTRE_GIRAVA} il comando e stato interrotto mentre girava.\n\n${uscitaWsl}`.trim() : uscitaWsl,
+            enforcement: 'wsl2',
+            cartellaFinale: ripulito.cartella,
+        }
     }
-    return eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella })
+    return eseguiSuWindows(comando, cartella, { onPezzo, tracciaCartella, segnaleStop })
 }
 
 /**
@@ -3840,7 +4118,7 @@ export function creaRicevutaOperazione({
  */
 const ATTREZZI_SEMPRE_DA_CONFERMARE = ['library_context_policy_update']
 
-async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena = CATENA_VUOTA } = {}) {
+async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena = CATENA_VUOTA, segnaleStop } = {}) {
     const override = permessiPerAttrezzo?.[azione.tipo]
     const haOverride = override === 'sempre' || override === 'chiedi' || override === 'nega'
     const sempreDaConfermare = ATTREZZI_SEMPRE_DA_CONFERMARE.includes(azione.tipo)
@@ -3939,6 +4217,27 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
                 : richiestoDalLivello ? 'livello di accesso: su-richiesta' : 'permesso per-attrezzo: chiedi'
         return { consentito: false, via: viaRichiesta, motivo: `l'attrezzo "${azione.tipo}" richiede approvazione (${percheRichiesto}), ma questa sessione non ha un canale di approvazione attivo.` }
     }
+    /*
+     * ⛔⛔⛔ LO STOP MENTRE LA DOMANDA È SULLO SCHERMO — 11/09/2026, misurato:
+     * con un'approvazione in attesa, `talosLavora` era ANCORA APPESO 8 secondi
+     * dopo l'abort, e lo sarebbe rimasto per sempre — `chiediApprovazioneFn`
+     * risolve quando la persona clicca, e la persona ha cliccato «Ferma»
+     * invece di rispondere. Lo stop più immediato del mondo verso il modello
+     * non serve a niente se poi la sessione resta in piedi qui.
+     *
+     * ⇒ La domanda corre in gara col segnale, come già la lettura del flusso.
+     * ⛔ E chi vince cambia la RAGIONE, non solo l'esito: «l'owner non ha
+     * approvato» sarebbe una bugia — l'owner non ha risposto affatto, ha
+     * fermato la sessione. Due cose diverse, due motivi diversi, perché il
+     * registro dica quale delle due è successa.
+     */
+    const FERMATO = Symbol('fermato-mentre-chiedevo')
+    const gara = segnaleStop
+        ? new Promise((risolvi) => {
+            if (segnaleStop.aborted) risolvi(FERMATO)
+            else segnaleStop.addEventListener('abort', () => risolvi(FERMATO), { once: true })
+        })
+        : null
     let approvato = false
     try {
         /*
@@ -3949,11 +4248,15 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
          * `azione` originale intatta per ogni altro chiamante, PARITÀ
          * bit-per-bit già provata altrove per la sua forma.
          */
-        approvato = await chiediApprovazioneFn(trifectaForzaConferma ? { ...azione, trifecta: true } : azione)
+        const domanda = chiediApprovazioneFn(trifectaForzaConferma ? { ...azione, trifecta: true } : azione)
+        approvato = gara ? await Promise.race([domanda, gara]) : await domanda
     }
     catch {
         // ⛔ un cancello che lancia non autorizza in silenzio: stessa disciplina di premessaDellaScrittura sopra.
         approvato = false
+    }
+    if (approvato === FERMATO) {
+        return { consentito: false, via: 'fermato-su-richiesta', motivo: `${MOTIVO_FERMATO_CHIEDENDO} per "${azione.tipo}".` }
     }
     if (!approvato) {
         return { consentito: false, via: viaRichiesta, motivo: 'l\'owner non ha approvato questa azione.' }
@@ -4398,12 +4701,25 @@ async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete,
  *   `disco.scrivi` lo ha già sovrascritto. Chi ascolta può ora costruire un
  *   diff riga-per-riga vero fra `contenutoPrima` e `contenuto`, invece di
  *   inventare righe rosse/verdi senza sapere cosa c'era prima.
- * - `segnaleStop` (AbortSignal) — controllato SOLO fra un giro e l'altro, mai
- *   a metà di una `fetch` già partita (coerente con "un ritenta non si
- *   interrompe a metà"). Un giro fermato così è un esito dedicato
- *   (`fermatoSuRichiesta`), MAI letto come 'concluso': altrimenti un modello
- *   che scrive testo insieme a una tool_call in corso sembrerebbe aver
- *   finito da solo quando invece è stato interrotto.
+ * - `segnaleStop` (AbortSignal) — ⛔⛔ QUESTA RIGA DICEVA IL FALSO fino all'11/09:
+ *   «controllato SOLO fra un giro e l'altro, mai a metà di una `fetch` già
+ *   partita». Era vera quando è stata scritta, ed è esattamente il «prossimo
+ *   punto sicuro» che l'owner ha vietato. Oggi il segnale arriva OVUNQUE, e
+ *   ogni tratto è misurato in `tests/kernel-loop-locale-e-stop.test.mjs`:
+ *     · alla `fetch` verso il modello, composto col timeout da `AbortSignal.any`;
+ *     · in gara con la lettura del flusso SSE, che si chiude in millisecondi;
+ *     · fra un tentativo e l'altro di `chiamaConRitenta` (un 429 non fa
+ *       ripartire una chiamata dopo lo stop);
+ *     · ai SOTTOPROCESSI di `shell` e `prova`, uccisi con tutto l'albero —
+ *       misurato: da 40,1 s a 2,1 s, col nipote morto e non solo la shell;
+ *     · alla domanda di approvazione in attesa, che smette di aspettare una
+ *       risposta che non arriverà mai (misurato: da «appesa per sempre» a 0,0 s);
+ *     · fra un attrezzo e l'altro, con l'esito vero per quelli mai partiti.
+ *   Un giro fermato così è un esito dedicato (`fermatoSuRichiesta`), MAI letto
+ *   come 'concluso': altrimenti un modello che scrive testo insieme a una
+ *   tool_call in corso sembrerebbe aver finito da solo quando invece è stato
+ *   interrotto. ⛔ E l'esito DICE DOVE si è fermato (`puntoDiFermata`), perché
+ *   «interrotto» da solo non è un'informazione azionabile.
  * - `fetchDiRete` — passato fino a `chiamaConRitenta` (che lo accetta già,
  *   vedi LEVA 5), per poter provare l'intero giro con una rete finta invece
  *   che con una chiamata vera.
@@ -4943,6 +5259,17 @@ export async function talosLavora({
     let ultimoAvevaContenuto = false
     /** ⭐ vedi comeFinita più sotto: un fermo su richiesta non è mai 'concluso'. */
     let fermatoSuRichiesta = false
+    /*
+     * ⛔⛔ 11/09 — «il registro deve dire COSA si è fermato». Fin qui l'esito era
+     *   `⛔ interrotto su richiesta.` e basta: vero, e inservibile. Fermarsi
+     *   mentre il modello scrive, fra un attrezzo e l'altro, o mentre una
+     *   domanda aspetta una risposta sono tre cose diverse — e chi rilegge la
+     *   sessione domani deve poterle distinguere senza rifare il giro.
+     * ⛔ Si scrive col `??=`: vince il PRIMO punto raggiunto, non l'ultimo. Chi
+     *   si ferma mentre aspetta un'approvazione passa poi anche dal controllo
+     *   fra un attrezzo e l'altro, e l'ultima scritta cancellerebbe la vera.
+     */
+    let puntoDiFermata = null
     /** ⭐ 08/09/2026 — la valanga di chiamate identiche ha un esito SUO: né 'concluso', né 'fermato' su richiesta di una persona. Vedi comeFinita. */
     let fermatoPerRipetizione = null
     /** ⭐ Stadio A: quante volte questo task ha compattato la conversazione. */
@@ -5012,6 +5339,7 @@ export async function talosLavora({
          */
         if (segnaleStop?.aborted) {
             fermatoSuRichiesta = true
+            puntoDiFermata ??= `prima del giro ${giro + 1}`
             break
         }
         turniUsati = giro + 1
@@ -5091,6 +5419,7 @@ export async function talosLavora({
              */
             if (segnaleStop?.aborted) {
                 fermatoSuRichiesta = true
+                puntoDiFermata ??= `mentre il modello stava rispondendo, al giro ${giro + 1}`
                 break
             }
             throw rotta
@@ -5274,7 +5603,7 @@ export async function talosLavora({
                             contenutoPrima: contenutoPrimaPerApprovazione,
                             contenutoProposto: argomenti.contenuto ?? '',
                         },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     let contenutoRealmenteScritto = null
@@ -5377,7 +5706,7 @@ export async function talosLavora({
                      */
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'prova', comando: comandoProva },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     // ⭐⭐⭐ 29/8 — hoisted per poter passare exitCode come `evidence`
@@ -5389,7 +5718,7 @@ export async function talosLavora({
                     }
                     else {
                         scrittureSenzaProva = 0
-                        p = await eseguiProva(comandoProva, cartella)
+                        p = await eseguiProva(comandoProva, cartella, { segnaleStop })
                         esito = `exit ${p.codice}\n${p.testo}`
                     }
                     // ⭐ FASE D — 'prova' non produce un artefatto testuale: hashContenuto resta null, non un valore inventato.
@@ -5427,7 +5756,7 @@ export async function talosLavora({
                     else {
                         permessoShell = await verificaPermessoScrittura(
                             { tipo: 'shell', comando: argomenti.comando },
-                            { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                            { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                         )
                         if (!permessoShell.consentito) {
                             esito = `REFUSED. ${permessoShell.motivo} The command was not run.`
@@ -5458,6 +5787,8 @@ export async function talosLavora({
                             }
                             p = await eseguiComandoSandboxato(argomenti.comando ?? '', cartella, {
                                 mobile,
+                                segnaleStop, // ⛔ 11/09 — senza questo, «Ferma» premuto durante un comando lungo lo lasciava girare fino in fondo: misurato 46 s di ritardo
+
                                 onPezzo: ({ testo }) => {
                                     accumulato += testo
                                     const ora = Date.now()
@@ -5529,7 +5860,7 @@ export async function talosLavora({
                 else if (nome === 'document_create') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'document_create', formato: argomenti.format },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5588,7 +5919,7 @@ export async function talosLavora({
                 else if (nome === 'generate_image') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'generate_image' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5629,7 +5960,7 @@ export async function talosLavora({
                 else if (nome === 'library_rename') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'library_rename' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5660,7 +5991,7 @@ export async function talosLavora({
                 else if (nome === 'library_delete') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'library_delete' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5691,7 +6022,7 @@ export async function talosLavora({
                 else if (nome === 'library_export') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'library_export' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5723,7 +6054,7 @@ export async function talosLavora({
                 else if (nome === 'library_context_policy_update') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'library_context_policy_update' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5761,7 +6092,7 @@ export async function talosLavora({
                 else if (nome === 'notes_create') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'notes_create' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5792,7 +6123,7 @@ export async function talosLavora({
                 else if (nome === 'notes_update') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'notes_update' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5823,7 +6154,7 @@ export async function talosLavora({
                 else if (nome === 'notes_delete') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'notes_delete' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5860,7 +6191,7 @@ export async function talosLavora({
                 else if (nome === 'tasks_create') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'tasks_create' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5891,7 +6222,7 @@ export async function talosLavora({
                 else if (nome === 'tasks_complete') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'tasks_complete' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5922,7 +6253,7 @@ export async function talosLavora({
                 else if (nome === 'tasks_update') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'tasks_update' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5953,7 +6284,7 @@ export async function talosLavora({
                 else if (nome === 'tasks_delete') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'tasks_delete' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -5989,7 +6320,7 @@ export async function talosLavora({
                 else if (nome === 'memory_write') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'memory_write' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -6020,7 +6351,7 @@ export async function talosLavora({
                 else if (nome === 'memory_update') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'memory_update' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -6051,7 +6382,7 @@ export async function talosLavora({
                 else if (nome === 'memory_delete') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'memory_delete' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -6088,7 +6419,7 @@ export async function talosLavora({
                 else if (nome === 'research_start') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'research_start' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -6119,7 +6450,7 @@ export async function talosLavora({
                 else if (nome === 'research_rename') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'research_rename' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -6150,7 +6481,7 @@ export async function talosLavora({
                 else if (nome === 'research_pause') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'research_pause' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -6181,7 +6512,7 @@ export async function talosLavora({
                 else if (nome === 'research_resume') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'research_resume' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -6212,7 +6543,7 @@ export async function talosLavora({
                 else if (nome === 'research_cancel') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'research_cancel' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -6243,7 +6574,7 @@ export async function talosLavora({
                 else if (nome === 'research_delete') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'research_delete' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -6280,7 +6611,7 @@ export async function talosLavora({
                 else if (nome === 'tool_create') {
                     const permesso = await verificaPermessoScrittura(
                         { tipo: 'tool_create' },
-                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena },
+                        { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
@@ -6642,6 +6973,9 @@ export async function talosLavora({
                 catch { /* notify-only: un ascoltatore che lancia non tocca il verdetto già deciso */ }
             }
 
+            /* ⛔ L'unico posto che produce questa frase e' `verificaPermessoScrittura` quando il segnale vince la gara con la domanda: la costante lega i due capi, non e' una stringa cercata a caso. */
+            if (String(esito).includes(MOTIVO_FERMATO_CHIEDENDO)) puntoDiFermata ??= `mentre aspettavo la tua approvazione per "${nome}"`
+            if (String(esito).includes(MARCA_FERMATO_MENTRE_GIRAVA)) puntoDiFermata ??= `mentre "${nome}" era in corso`
             const contenutoTool = contextHooks ? String(esito) : String(esito).slice(0, 8_000)
             messaggi.push({
                 role: 'tool',
@@ -6661,6 +6995,9 @@ export async function talosLavora({
              * L'esito dice il vero: non è stato eseguito.
              */
             const gia = new Set(messaggi.filter((m) => m.role === 'tool').map((m) => m.tool_call_id))
+            const nomiNonEseguiti = chiamate.filter((c) => !gia.has(c.id)).map((c) => c.function?.name ?? '?')
+            puntoDiFermata ??= `mentre lavoravo con gli attrezzi del giro ${giro + 1}`
+            if (nomiNonEseguiti.length > 0) puntoDiFermata += `; ${nomiNonEseguiti.length} non eseguito/i (${nomiNonEseguiti.join(', ')})`
             for (const c of chiamate) {
                 if (gia.has(c.id)) continue
                 const contenutoFermato = '⛔ fermato su richiesta: questo attrezzo non e stato eseguito.'
@@ -6723,7 +7060,7 @@ export async function talosLavora({
     const comeFinita = fermatoSuRichiesta
         ? {
             esito: 'fermato',
-            detto: '⛔ interrotto su richiesta.',
+            detto: puntoDiFermata ? `⛔ interrotto su richiesta: ${puntoDiFermata}.` : '⛔ interrotto su richiesta.',
         }
         /*
          * ⛔ Un esito SUO, e una frase che una persona capisce senza sapere

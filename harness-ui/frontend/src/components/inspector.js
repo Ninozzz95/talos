@@ -206,13 +206,53 @@ function chevron(d) {
   return svg;
 }
 
+/** Il «…» della card di una delega: apre lo STESSO menu del tasto destro, ancorato al bottone. */
+function bottoneAzioni(d, a, azioni) {
+  const nome = a.taskCorto || a.task || 'delega senza compito';
+  /* ⛔ Le classi sono ESATTAMENTE quelle del «…» della Libreria (`libreria.js`), non un secondo
+     vestito per lo stesso oggetto: zero CSS nuovo, e se il tema cambia cambiano insieme. */
+  const b = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm');
+  b.type = 'button';
+  b.dataset.azione = 'menu';
+  b.setAttribute('aria-haspopup', 'menu');
+  b.setAttribute('aria-label', `Azioni su: ${nome}`);
+  b.title = 'Azioni su questa delega';
+  const svg = d.createElementNS(SVG_NS_INSPECTOR, 'svg');
+  svg.setAttribute('class', 'i');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = d.createElementNS(SVG_NS_INSPECTOR, 'use');
+  use.setAttribute('href', '#i-more');
+  svg.append(use);
+  b.append(svg);
+  /* ⛔ `stopPropagation`: la card intera è cliccabile e apre la conversazione — senza questo, il
+     «…» apriva il menu E la figlia insieme, cioè due risposte a un gesto solo. */
+  b.addEventListener('click', (evento) => {
+    evento.preventDefault();
+    evento.stopPropagation();
+    /* ⛔ Solo `ancora`: il menu si apre ATTACCATO al bottone, non dove stava il puntatore — chi
+       arriva da tastiera non ha un puntatore, e un menu che compare a 0,0 è un menu perduto. */
+    azioni.onMenu(a, { ancora: b });
+  });
+  return b;
+}
+
 export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
   const lista = Array.isArray(agenti) ? agenti : [];
   contenitore.replaceChildren();
   if (!lista.length) {
     const vuoto = el(d, 'div', 'talos-card talos-inspector-card'); vuoto.dataset.c = 'EmptyState';
     const head = el(d, 'div', 'talos-inspector-card__head'); head.appendChild(el(d, 'b', '', 'Sotto-agenti'));
-    vuoto.append(head, el(d, 'p', 'talos-inspector__hint', 'Nessun sotto-agente in questa sessione. Quando ce ne sarà uno, qui compaiono i suoi giri, le sue richieste di permesso e il pulsante per fermarlo.'));
+    /*
+     * ⛔⛔ BC-03 (11/09) — lo stato vuoto prometteva TRE cose che la scheda piena non dà: «i suoi
+     *   giri», «le sue richieste di permesso» e «il pulsante per fermarlo». Misurato sulla scheda
+     *   vera, con due deleghe a schermo: la card mostra il compito, lo stato, l'ora di avvio e le
+     *   chiamate/scritture — i giri stanno un clic più in là (nella conversazione della figlia), le
+     *   richieste di permesso non le mostra nessuno, e fermare era solo sul tasto destro.
+     * ⇒ Due cure, non una: qui le parole dicono quello che si vedrà davvero, e più sotto il
+     *   «pulsante per fermarlo» esiste per davvero (il «…» della card). Una promessa si mantiene o
+     *   si toglie: riscrivere solo la frase avrebbe nascosto il buco invece di chiuderlo.
+     */
+    vuoto.append(head, el(d, 'p', 'talos-inspector__hint', 'Nessun sotto-agente in questa sessione. Quando una delega parte, qui compare con il suo compito, lo stato e quello che ha fatto; da lì si apre la sua conversazione o si ferma.'));
     contenitore.appendChild(vuoto);
     return 0;
   }
@@ -238,6 +278,9 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
       const apri = () => azioni.onApri(a);
       card.addEventListener('click', apri);
       card.addEventListener('keydown', (evento) => {
+        /* ⛔ Solo la card: da quando nella testata c'è il «…», un Invio sul bottone del menu
+           arrivava fin qui e apriva ANCHE la conversazione — due cose per un tasto solo. */
+        if (evento.target && evento.target !== card) return;
         if (evento.key !== 'Enter' && evento.key !== ' ') return;
         evento.preventDefault();
         apri();
@@ -254,6 +297,18 @@ export function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
        uguale per ogni figlia, e a 52 caratteri due deleghe diverse diventano la stessa riga (visto
        nella foto della scheda «Agenti» del giro D2). Il ripiego su `task` regge le figlie vecchie. */
     head.append(el(d, 'b', '', tronca(a.taskCorto || a.task || 'Delega senza compito registrato', 52)), el(d, 'span', `talos-badge talos-badge--sm${statoDelega(a) === 'fallita' ? ' talos-badge--danger' : statoDelega(a) === 'conclusa' ? ' talos-badge--success' : ''}`, etichettaDelega(a)));
+    /*
+     * ⛔⛔ 10/09, owner, regola generale e non un caso: «non mettere i pulsanti uno accanto
+     *   all'altro, usa i tre puntini + dropdown… e anche azioni tasto destro mouse, ragiona sempre
+     *   in questo modo». Qui le azioni sono TRE (apri la conversazione · apri come sessione intera ·
+     *   ferma), e fino a oggi vivevano SOLO sul tasto destro: una scorciatoia che si scopre solo se
+     *   già la conosci non può essere l'unica via — è la stessa frase scritta in `libreria.js`, dove
+     *   la regola è nata.
+     * ⛔ Stesso mattone del resto del progetto, non un secondo linguaggio: bottone ghost piccolo,
+     *   icona `#i-more` dello sprite (mai tre punti tipografici), `aria-haspopup="menu"`, e lo
+     *   STESSO `azioni.onMenu` del tasto destro — una lista sola, due strade per arrivarci.
+     */
+    if (typeof azioni.onMenu === 'function' && a.sessionId) head.append(bottoneAzioni(d, a, azioni));
     if (apribile) head.append(chevron(d));
     card.append(head);
     // ⛔ il server manda `avviataAlle` ed `evidenzaDelega` (scritture, artefatti, chiamate ad attrezzi):
