@@ -461,10 +461,10 @@ function nomeModello(modello) {
   return modello.split("/").pop();
 }
 function el2(documentObj, tag2, className, testo3) {
-  const nodo9 = documentObj.createElement(tag2);
-  if (className) nodo9.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo9.textContent = String(testo3);
-  return nodo9;
+  const nodo10 = documentObj.createElement(tag2);
+  if (className) nodo10.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo10.textContent = String(testo3);
+  return nodo10;
 }
 function nomeLeggibileSessione(taskId) {
   const grezzo = String(taskId || "").trim();
@@ -2329,7 +2329,7 @@ function tn(uno2, molti, n, parametri) {
   return t(forma, { n, ...parametri || {} });
 }
 function primoTesto(el25) {
-  for (const nodo9 of el25.childNodes) if (nodo9.nodeType === 3 && nodo9.data.trim()) return nodo9;
+  for (const nodo10 of el25.childNodes) if (nodo10.nodeType === 3 && nodo10.data.trim()) return nodo10;
   return null;
 }
 function applicaLingua(root, lingua) {
@@ -3074,8 +3074,8 @@ function creaToolListRow(a, { document: doc = globalThis.document, selezionata =
 }
 function scriviDescrizioni(d, a) {
   const nostra = descrizioneAttrezzo(a.nome), doc = d.ownerDocument;
-  const nodo9 = d.querySelector("[data-cap-descrizione]");
-  nodo9.textContent = nostra || a.descrizione || "Descrizione non disponibile";
+  const nodo10 = d.querySelector("[data-cap-descrizione]");
+  nodo10.textContent = nostra || a.descrizione || "Descrizione non disponibile";
   const grezzo = d.querySelector("[data-cap-descrizione-kernel]");
   if (!grezzo) return;
   grezzo.hidden = !nostra || !a.descrizione;
@@ -3442,12 +3442,12 @@ function creaForgeRow(strumento, { document: doc = globalThis.document, selezion
   const aside = el8(doc, "span", "talos-list-row__aside");
   aside.append(el8(doc, "span", "talos-badge" + (stato.tono ? " talos-badge--" + stato.tono : "") + " talos-badge--sm", stato.testo));
   if (!selezionabile) {
-    const bottone4 = el8(doc, "button", "talos-button talos-button--secondary talos-button--sm", salvataggio && salvataggioId === strumento.id ? "Salvataggio…" : stato.azione);
-    bottone4.type = "button";
-    bottone4.disabled = salvataggio || stato.prossimo === null;
-    bottone4.setAttribute("aria-label", stato.azione + " " + t2.titolo);
-    bottone4.addEventListener("click", () => onAbilita?.(strumento, stato.prossimo));
-    aside.append(bottone4);
+    const bottone5 = el8(doc, "button", "talos-button talos-button--secondary talos-button--sm", salvataggio && salvataggioId === strumento.id ? "Salvataggio…" : stato.azione);
+    bottone5.type = "button";
+    bottone5.disabled = salvataggio || stato.prossimo === null;
+    bottone5.setAttribute("aria-label", stato.azione + " " + t2.titolo);
+    bottone5.addEventListener("click", () => onAbilita?.(strumento, stato.prossimo));
+    aside.append(bottone5);
   }
   riga.append(icona2(doc), testo3, aside);
   return riga;
@@ -3536,10 +3536,10 @@ function renderOfficina(schermo, pagina) {
   const badge5 = dettaglio.querySelector("[data-forge-stato-attuale]");
   badge5.className = "talos-badge" + (stato.tono ? " talos-badge--" + stato.tono : "") + " talos-badge--sm";
   badge5.textContent = stato.testo;
-  const bottone4 = dettaglio.querySelector("[data-forge-abilita]");
-  bottone4.textContent = opzioni.salvataggio && opzioni.salvataggioId === scelto.id ? "Salvataggio…" : stato.azione + " questo attrezzo";
-  bottone4.disabled = Boolean(opzioni.salvataggio) || stato.prossimo === null;
-  bottone4.setAttribute("aria-label", stato.azione + " " + t2.titolo);
+  const bottone5 = dettaglio.querySelector("[data-forge-abilita]");
+  bottone5.textContent = opzioni.salvataggio && opzioni.salvataggioId === scelto.id ? "Salvataggio…" : stato.azione + " questo attrezzo";
+  bottone5.disabled = Boolean(opzioni.salvataggio) || stato.prossimo === null;
+  bottone5.setAttribute("aria-label", stato.azione + " " + t2.titolo);
 }
 var ALIAS, PAGINE3;
 var init_officina = __esm({
@@ -4771,6 +4771,359 @@ var init_note = __esm({
   }
 });
 
+// src/components/libreria-anteprima.js
+function formatoFile(nome) {
+  const intero2 = String(nome ?? "").trim().toLowerCase();
+  const pezzo2 = intero2.split(".").pop();
+  if (!pezzo2 || pezzo2 === intero2) return "binario";
+  if (MARKDOWN.has(pezzo2)) return "markdown";
+  if (TABELLA.has(pezzo2)) return "tabella";
+  if (TESTO.has(pezzo2)) return "testo";
+  return "binario";
+}
+function modiFile(formato) {
+  return formato === "testo" ? ["testo"] : ["anteprima", "testo"];
+}
+function serveLettura(formato) {
+  return formato !== "binario";
+}
+function dimensioneLeggibile(byte2) {
+  const n = Number(byte2);
+  if (!Number.isFinite(n) || n < 0) return "";
+  if (n < 1024) return `${n.toLocaleString("it-IT")} byte`;
+  const kb = n / 1024;
+  if (kb < 1024) return `${kb.toLocaleString("it-IT", { maximumFractionDigits: 1 })} kB`;
+  return `${(kb / 1024).toLocaleString("it-IT", { maximumFractionDigits: 1 })} MB`;
+}
+function righeCsv(testo3, separatore = ",") {
+  const t2 = String(testo3 ?? "");
+  const righe = [];
+  let riga = [];
+  let cella = "";
+  let dentroVirgolette = false;
+  let vuota = true;
+  const chiudiCella = () => {
+    riga.push(cella);
+    cella = "";
+  };
+  const chiudiRiga = () => {
+    chiudiCella();
+    righe.push(riga);
+    riga = [];
+    vuota = true;
+  };
+  for (let i = 0; i < t2.length; i += 1) {
+    const c = t2[i];
+    if (dentroVirgolette) {
+      if (c === '"') {
+        if (t2[i + 1] === '"') {
+          cella += '"';
+          i += 1;
+        } else dentroVirgolette = false;
+      } else cella += c;
+      vuota = false;
+      continue;
+    }
+    if (c === '"') {
+      dentroVirgolette = true;
+      vuota = false;
+      continue;
+    }
+    if (c === separatore) {
+      chiudiCella();
+      vuota = false;
+      continue;
+    }
+    if (c === "\r") continue;
+    if (c === "\n") {
+      chiudiRiga();
+      continue;
+    }
+    cella += c;
+    vuota = false;
+  }
+  if (!vuota || cella) chiudiRiga();
+  return righe;
+}
+function separatoreDi(nome) {
+  return String(nome ?? "").toLowerCase().endsWith(".tsv") ? "	" : ",";
+}
+function magazzinoFileLibreria(schermo) {
+  let magazzino = MAGAZZINI2.get(schermo);
+  if (!magazzino) {
+    magazzino = { file: /* @__PURE__ */ new Map(), modi: /* @__PURE__ */ new Map(), tabelleAperte: /* @__PURE__ */ new Set(), modoUltimo: null };
+    MAGAZZINI2.set(schermo, magazzino);
+  }
+  return magazzino;
+}
+function nodo5(doc, tag2, classe, testo3) {
+  const el25 = doc.createElement(tag2);
+  if (classe) el25.className = classe;
+  if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
+  return el25;
+}
+function bottone2(doc, testo3, esegui, variante = "secondary") {
+  const b = nodo5(doc, "button", `talos-button talos-button--${variante} talos-button--sm`, testo3);
+  b.type = "button";
+  b.addEventListener("click", esegui);
+  return b;
+}
+function cartaEsterna(doc, frase, { voce, opzioni }) {
+  const box = nodo5(doc, "div", "td-file-esterno");
+  box.append(nodo5(doc, "p", "", frase));
+  if (typeof opzioni?.onApri === "function") {
+    box.append(bottone2(doc, "Apri con l’app del sistema", () => opzioni.onApri(voce)));
+  }
+  return box;
+}
+function tabellaCsv(doc, testo3, { nome, magazzino, chiave, ridisegna }) {
+  const righe = righeCsv(testo3, separatoreDi(nome));
+  const pezzi = [];
+  if (!righe.length) {
+    pezzi.push(nodo5(doc, "p", "td-subtle", "Il file non ha righe."));
+    return pezzi;
+  }
+  const tutte = magazzino.tabelleAperte.has(chiave);
+  const quante = tutte ? righe.length : Math.min(righe.length, RIGHE_MOSTRATE);
+  const scorre = nodo5(doc, "div", "td-file-tabella-scorre");
+  scorre.tabIndex = 0;
+  scorre.setAttribute("role", "region");
+  scorre.setAttribute("aria-label", `Contenuto di ${nome}`);
+  const tabella = nodo5(doc, "table", "td-file-tabella");
+  const testa = nodo5(doc, "thead");
+  const rigaTesta = nodo5(doc, "tr");
+  for (const cella of righe[0]) {
+    const th = nodo5(doc, "th", "", cella);
+    th.scope = "col";
+    rigaTesta.append(th);
+  }
+  testa.append(rigaTesta);
+  const corpo = nodo5(doc, "tbody");
+  for (let i = 1; i < quante; i += 1) {
+    const tr = nodo5(doc, "tr");
+    for (const cella of righe[i]) tr.append(nodo5(doc, "td", "", cella));
+    corpo.append(tr);
+  }
+  tabella.append(testa, corpo);
+  scorre.append(tabella);
+  pezzi.push(scorre);
+  const dati = Math.max(righe.length - 1, 0);
+  const mostrati = Math.max(quante - 1, 0);
+  if (dati > mostrati) {
+    const apri = bottone2(doc, `Mostra tutte le ${dati.toLocaleString("it-IT")} righe`, () => {
+      magazzino.tabelleAperte.add(chiave);
+      ridisegna?.();
+    });
+    pezzi.push(apri);
+  }
+  return pezzi;
+}
+function contenutoModoFile(doc, modo, contesto2) {
+  const { voce, nome, formato, lettura, opzioni, magazzino, ridisegna } = contesto2;
+  const chiave = String(voce?.id ?? "");
+  if (formato === "binario") {
+    const frase = modo === "anteprima" ? "Questo formato si apre con l’app del sistema: TALOS non lo disegna in questa finestra." : "Il testo di questo formato non si estrae: TALOS sa creare PDF, DOCX e fogli di calcolo, non rileggerne le parole. Il file si apre con l’app del sistema.";
+    return [cartaEsterna(doc, frase, { voce, opzioni })];
+  }
+  if (typeof opzioni?.leggiFile !== "function") {
+    return [nodo5(doc, "p", "td-subtle", "Il contenuto non è leggibile da questa finestra: manca la sessione a cui il file appartiene.")];
+  }
+  if (!lettura || lettura.stato === "caricando") {
+    return [nodo5(doc, "p", "td-subtle", "Leggo il file…")];
+  }
+  if (lettura.stato === "errore") {
+    const box = nodo5(doc, "div", "td-file-esterno");
+    const riga = nodo5(doc, "p", "", `Il file non si è aperto: ${lettura.errore}`);
+    riga.setAttribute("role", "alert");
+    box.append(riga);
+    if (typeof opzioni?.onApri === "function") box.append(bottone2(doc, "Apri con l’app del sistema", () => opzioni.onApri(voce)));
+    return [box];
+  }
+  const testo3 = lettura.testo || "";
+  const tagliato = testo3.length > MASSIMO_CARATTERI;
+  const mostrato = tagliato ? testo3.slice(0, MASSIMO_CARATTERI) : testo3;
+  const pezzi = [];
+  if (modo === "anteprima" && formato === "markdown") {
+    pezzi.push(prosaInNodi(doc, mostrato, opzioni?.rendiMarkdown));
+  } else if (modo === "anteprima" && formato === "tabella") {
+    pezzi.push(...tabellaCsv(doc, mostrato, { nome, magazzino, chiave, ridisegna }));
+  } else {
+    const pre = nodo5(doc, "pre", "td-code td-file-testo", mostrato);
+    pre.tabIndex = 0;
+    pre.setAttribute("role", "region");
+    pre.setAttribute("aria-label", `Testo di ${nome}`);
+    pezzi.push(pre);
+  }
+  if (tagliato) {
+    pezzi.push(nodo5(doc, "p", "td-subtle", `Mostrati i primi ${MASSIMO_CARATTERI.toLocaleString("it-IT")} caratteri di ${testo3.length.toLocaleString("it-IT")}. Il file intero si apre con l’app del sistema.`));
+  }
+  pezzi.push(nodo5(doc, "p", "td-file-misura", `${frasiRighe(formato, testo3)} · ${dimensioneLeggibile(lettura.byte)}`));
+  return pezzi;
+}
+function montaAnteprimaFile(voce, ctx) {
+  const doc = ctx.doc;
+  const magazzino = ctx.magazzino;
+  const opzioni = ctx.opzioni || {};
+  const nome = testiVoceLibreria(voce).nome;
+  const formato = formatoFile(nome);
+  const chiave = String(voce?.id ?? "");
+  const lettura = chiave ? magazzino.file.get(chiave) || null : null;
+  const modi = modiFile(formato);
+  const pezzi = [];
+  pezzi.push(nodo5(doc, "h3", "", "Contenuto del file"));
+  contatore += 1;
+  const radice = `td-file-${contatore}`;
+  const pannello = nodo5(doc, "div", "td-vista td-file-vista");
+  pannello.id = `${radice}-pannello`;
+  pannello.setAttribute("role", "tabpanel");
+  pannello.tabIndex = 0;
+  let scelto = magazzino.modi.get(chiave) || magazzino.modoUltimo;
+  if (!modi.includes(scelto)) scelto = modi[0];
+  let schede = [];
+  let lista = null;
+  if (modi.length > 1) {
+    lista = nodo5(doc, "div", "td-segment td-viste td-file-modi");
+    lista.setAttribute("role", "tablist");
+    lista.setAttribute("aria-label", `Come guardare ${nome}`);
+    schede = modi.map((modo) => {
+      const b = nodo5(doc, "button", "", PAROLE_MODO.get(modo));
+      b.type = "button";
+      b.id = `${radice}-${modo}`;
+      b.dataset.modo = modo;
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-controls", pannello.id);
+      lista.append(b);
+      return b;
+    });
+  }
+  function mostra(modo, muoviIlFuoco = false) {
+    if (chiave) magazzino.modi.set(chiave, modo);
+    magazzino.modoUltimo = modo;
+    for (const b of schede) {
+      const attiva = b.dataset.modo === modo;
+      b.setAttribute("aria-selected", String(attiva));
+      b.tabIndex = attiva ? 0 : -1;
+      if (attiva && muoviIlFuoco) b.focus({ preventScroll: true });
+    }
+    if (schede.length) pannello.setAttribute("aria-labelledby", `${radice}-${modo}`);
+    else pannello.setAttribute("aria-label", `Contenuto di ${nome}`);
+    pannello.replaceChildren(...contenutoModoFile(doc, modo, {
+      voce,
+      nome,
+      formato,
+      lettura,
+      opzioni,
+      magazzino,
+      ridisegna: ctx.ridisegna
+    }).filter(Boolean));
+  }
+  if (lista) {
+    lista.addEventListener("click", (e) => {
+      const b = e.target.closest?.("[data-modo]");
+      if (b) mostra(b.dataset.modo);
+    });
+    lista.addEventListener("keydown", (e) => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+      e.preventDefault();
+      const attuale = schede.findIndex((b) => b.getAttribute("aria-selected") === "true");
+      const prossima = e.key === "Home" ? 0 : e.key === "End" ? schede.length - 1 : (attuale + (e.key === "ArrowRight" ? 1 : -1) + schede.length) % schede.length;
+      mostra(schede[prossima].dataset.modo, true);
+    });
+    pezzi.push(lista);
+  }
+  mostra(scelto);
+  pezzi.push(pannello);
+  if (serveLettura(formato) && chiave && !lettura && typeof opzioni.leggiFile === "function") {
+    magazzino.file.set(chiave, { stato: "caricando" });
+    Promise.resolve().then(() => opzioni.leggiFile(voce)).then((letto) => {
+      const testo3 = typeof letto === "string" ? letto : String(letto?.testo ?? "");
+      const byte2 = Number.isFinite(letto?.byte) ? letto.byte : new TextEncoder().encode(testo3).length;
+      magazzino.file.set(chiave, { stato: "pronto", testo: testo3, byte: byte2 });
+    }).catch((errore) => {
+      magazzino.file.set(chiave, { stato: "errore", errore: errore?.message || "motivo non registrato" });
+    }).then(() => ctx.ridisegna?.());
+  }
+  return pezzi;
+}
+function lettoreFileLibreria(sessionId, rete = globalThis.fetch) {
+  if (!sessionId || typeof rete !== "function") return null;
+  return async (voce) => {
+    const indirizzo = indirizzoFileLibreria(sessionId, voce?.id);
+    if (!indirizzo) throw new Error("questo file non ha un indirizzo");
+    const risposta = await rete(indirizzo);
+    if (!risposta?.ok) throw new Error(`il server ha risposto HTTP ${risposta?.status ?? "—"}`);
+    const buffer = await risposta.arrayBuffer();
+    return { testo: new TextDecoder("utf-8").decode(buffer), byte: buffer.byteLength };
+  };
+}
+var MARKDOWN, TABELLA, TESTO, PAROLE_MODO, MASSIMO_CARATTERI, MAGAZZINI2, RIGHE_MOSTRATE, contatore;
+var init_libreria_anteprima = __esm({
+  "src/components/libreria-anteprima.js"() {
+    init_ricerca_dettaglio();
+    init_libreria();
+    MARKDOWN = /* @__PURE__ */ new Set(["md", "markdown", "mdown", "mkd"]);
+    TABELLA = /* @__PURE__ */ new Set(["csv", "tsv"]);
+    TESTO = /* @__PURE__ */ new Set([
+      "txt",
+      "text",
+      "json",
+      "jsonl",
+      "ndjson",
+      "html",
+      "htm",
+      "xml",
+      "svg",
+      "yml",
+      "yaml",
+      "toml",
+      "ini",
+      "cfg",
+      "conf",
+      "log",
+      "csslog",
+      "css",
+      "scss",
+      "js",
+      "mjs",
+      "cjs",
+      "jsx",
+      "ts",
+      "tsx",
+      "py",
+      "rb",
+      "go",
+      "rs",
+      "java",
+      "kt",
+      "c",
+      "h",
+      "cpp",
+      "hpp",
+      "cs",
+      "php",
+      "sh",
+      "bash",
+      "zsh",
+      "bat",
+      "cmd",
+      "ps1",
+      "sql",
+      "env",
+      "patch",
+      "diff",
+      "gitignore",
+      "properties",
+      "srt",
+      "vtt"
+    ]);
+    PAROLE_MODO = /* @__PURE__ */ new Map([["anteprima", "Anteprima"], ["testo", "Testo"]]);
+    MASSIMO_CARATTERI = 4e5;
+    MAGAZZINI2 = /* @__PURE__ */ new WeakMap();
+    RIGHE_MOSTRATE = 30;
+    contatore = 0;
+  }
+});
+
 // src/components/progetti.js
 function progettoDiSessione(sessione) {
   const task = String(sessione?.taskId || "");
@@ -4906,7 +5259,7 @@ function perId(radice, selettore, campo2, valore) {
   const cercato = String(valore ?? "");
   return [...radice.querySelectorAll(selettore)].find((el25) => el25.dataset[campo2] === cercato) || null;
 }
-function nodo5(doc, tag2, classe, testo3) {
+function nodo6(doc, tag2, classe, testo3) {
   const el25 = doc.createElement(tag2);
   if (classe) el25.className = classe;
   if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
@@ -4922,7 +5275,7 @@ function icona3(doc, nome, classe = "i") {
   return svg;
 }
 function etichetta(doc, testo3, tono = "") {
-  const el25 = nodo5(doc, "span", "td-tag", testo3);
+  const el25 = nodo6(doc, "span", "td-tag", testo3);
   if (tono) el25.dataset.tone = tono;
   return el25;
 }
@@ -4968,63 +5321,63 @@ function costruisciScheletro(schermo, doc, stato) {
   const config = stato.config;
   const pagina = schermo.querySelector(".talos-page");
   const testa = pagina?.querySelector(".talos-page__head");
-  const sezione = nodo5(doc, "div", "td-section td-scope");
+  const sezione = nodo6(doc, "div", "td-section td-scope");
   sezione.dataset.section = config.chiave;
-  const spazio = nodo5(doc, "div", "td-workspace");
+  const spazio = nodo6(doc, "div", "td-workspace");
   spazio.dataset.detail = "false";
   spazio.dataset.expanded = "false";
   spazio.style.setProperty("--td-larghezza-dettaglio", `${stato.larghezza}px`);
-  const master = nodo5(doc, "div", "td-master");
-  const intro = nodo5(doc, "div", "td-intro");
-  const marchio = nodo5(doc, "span", "td-intro-mark");
+  const master = nodo6(doc, "div", "td-master");
+  const intro = nodo6(doc, "div", "td-intro");
+  const marchio = nodo6(doc, "span", "td-intro-mark");
   marchio.append(icona3(doc, config.icona));
-  const testi = nodo5(doc, "div");
-  const h2 = testa?.querySelector("h2") || nodo5(doc, "h2", "", config.titolo || "");
-  const spiegazione = testa?.querySelector('p:not([role="status"]):not([data-note-stato]):not([data-progetti-stato])') || nodo5(doc, "p", "", config.spiegazione || "");
-  const statoRiga = testa?.querySelector('[role="status"], [data-note-stato], [data-progetti-stato], [data-task-esito], [data-library-esito], [data-research-esito], [data-memory-stato]') || nodo5(doc, "p", "talos-page__note", "");
+  const testi = nodo6(doc, "div");
+  const h2 = testa?.querySelector("h2") || nodo6(doc, "h2", "", config.titolo || "");
+  const spiegazione = testa?.querySelector('p:not([role="status"]):not([data-note-stato]):not([data-progetti-stato])') || nodo6(doc, "p", "", config.spiegazione || "");
+  const statoRiga = testa?.querySelector('[role="status"], [data-note-stato], [data-progetti-stato], [data-task-esito], [data-library-esito], [data-research-esito], [data-memory-stato]') || nodo6(doc, "p", "talos-page__note", "");
   if (!statoRiga.getAttribute("role")) statoRiga.setAttribute("role", "status");
   testi.append(h2, spiegazione, statoRiga);
   intro.append(marchio, testi);
-  const barra = nodo5(doc, "div", "td-toolbar");
-  const campo2 = nodo5(doc, "div", "talos-field talos-field--sm td-search");
+  const barra = nodo6(doc, "div", "td-toolbar");
+  const campo2 = nodo6(doc, "div", "talos-field talos-field--sm td-search");
   campo2.append(icona3(doc, "search", "i talos-field__icon"));
-  const cerca = nodo5(doc, "input", "talos-field__input");
+  const cerca = nodo6(doc, "input", "talos-field__input");
   cerca.type = "search";
   cerca.autocomplete = "off";
   cerca.placeholder = "Cerca nel titolo e nel contenuto…";
   cerca.setAttribute("aria-label", `Cerca in ${config.nome}`);
   cerca.value = stato.query;
   campo2.append(cerca);
-  const cresci = nodo5(doc, "span", "talos-grow");
-  const ordine = nodo5(doc, "select", "td-select");
+  const cresci = nodo6(doc, "span", "talos-grow");
+  const ordine = nodo6(doc, "select", "td-select");
   ordine.setAttribute("aria-label", `Ordina ${config.nome}`);
   for (const [valore, testoOpzione] of [["nuovo", "Ultima modifica"], ["titolo", "Titolo A–Z"]]) {
-    const op = nodo5(doc, "option", "", testoOpzione);
+    const op = nodo6(doc, "option", "", testoOpzione);
     op.value = valore;
     ordine.append(op);
   }
   ordine.value = stato.ordine;
-  const segmento = nodo5(doc, "div", "td-segment");
+  const segmento = nodo6(doc, "div", "td-segment");
   segmento.setAttribute("role", "group");
   segmento.setAttribute("aria-label", `Vista ${config.nome}`);
   for (const [vista, nomeIcona, nome] of [["elenco", "list", "Vista elenco"], ["schede", "grid", "Vista schede"]]) {
-    const b = nodo5(doc, "button");
+    const b = nodo6(doc, "button");
     b.type = "button";
     b.dataset.vista = vista;
     b.setAttribute("aria-label", nome);
     b.append(icona3(doc, nomeIcona));
     segmento.append(b);
   }
-  const aggiorna = nodo5(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Aggiorna");
+  const aggiorna = nodo6(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Aggiorna");
   aggiorna.type = "button";
   aggiorna.dataset.aggiorna = "";
   barra.append(campo2, cresci, ordine, segmento, aggiorna);
-  const filtri = nodo5(doc, "div", "td-filters");
+  const filtri = nodo6(doc, "div", "td-filters");
   filtri.setAttribute("role", "group");
   filtri.setAttribute("aria-label", `Filtri ${config.nome}`);
-  const risultati = nodo5(doc, "div", "td-results");
+  const risultati = nodo6(doc, "div", "td-results");
   master.append(intro, barra, filtri, risultati);
-  const divisorio = nodo5(doc, "button", "td-divider");
+  const divisorio = nodo6(doc, "button", "td-divider");
   divisorio.type = "button";
   divisorio.hidden = true;
   divisorio.setAttribute("role", "separator");
@@ -5033,7 +5386,7 @@ function costruisciScheletro(schermo, doc, stato) {
   divisorio.setAttribute("aria-valuemin", String(LARGHEZZA_MINIMA));
   divisorio.setAttribute("aria-valuemax", String(LARGHEZZA_MASSIMA));
   divisorio.setAttribute("aria-valuenow", String(stato.larghezza));
-  const dettaglio = nodo5(doc, "aside", "td-detail");
+  const dettaglio = nodo6(doc, "aside", "td-detail");
   dettaglio.hidden = true;
   dettaglio.setAttribute("aria-label", `Dettaglio ${config.nome}`);
   spazio.append(master, divisorio, dettaglio);
@@ -5139,11 +5492,11 @@ function disegna(schermo, doc, stato) {
   const conteggi = contaPerFiltro(tutte, config.filtri);
   const fuocoFiltro = doc.activeElement?.dataset?.filtro;
   barraFiltri.replaceChildren(...config.filtri.map((f, i) => {
-    const b = nodo5(doc, "button", "td-filter", f.etichetta);
+    const b = nodo6(doc, "button", "td-filter", f.etichetta);
     b.type = "button";
     b.dataset.filtro = f.id;
     b.setAttribute("aria-pressed", String(stato.filtro === f.id));
-    b.append(nodo5(doc, "small", "", String(conteggi[i])));
+    b.append(nodo6(doc, "small", "", String(conteggi[i])));
     return b;
   }));
   if (fuocoFiltro) perId(barraFiltri, ".td-filter", "filtro", fuocoFiltro)?.focus({ preventScroll: true });
@@ -5151,7 +5504,7 @@ function disegna(schermo, doc, stato) {
   if (!visibili.length) {
     risultati.replaceChildren(disegnaVuoto(doc, stato, tutte.length));
   } else {
-    const contenitore = nodo5(doc, "div", stato.vista === "elenco" ? "td-list" : "td-grid");
+    const contenitore = nodo6(doc, "div", stato.vista === "elenco" ? "td-list" : "td-grid");
     for (const voce of visibili) contenitore.append(disegnaScheda(doc, stato, voce));
     risultati.replaceChildren(contenitore);
   }
@@ -5167,14 +5520,14 @@ function disegna(schermo, doc, stato) {
 function disegnaVuoto(doc, stato, quanteInTutto) {
   const config = stato.config;
   const filtrando = Boolean(stato.query) || stato.filtro !== (config.filtri?.[0]?.id || "tutte");
-  const box = nodo5(doc, "div", "td-empty");
-  const arte = nodo5(doc, "div", "td-empty-art");
+  const box = nodo6(doc, "div", "td-empty");
+  const arte = nodo6(doc, "div", "td-empty-art");
   arte.append(disegnoVuoto(doc, config.icona));
-  const titolo2 = nodo5(doc, "h3", "", filtrando ? "Nessun risultato" : config.vuoto?.titolo || "Niente qui");
-  const testo3 = nodo5(doc, "p", "", filtrando ? "Prova un’altra parola o togli il filtro. Quello che hai è ancora qui." : config.stato?.errore || config.vuoto?.testo || "");
+  const titolo2 = nodo6(doc, "h3", "", filtrando ? "Nessun risultato" : config.vuoto?.titolo || "Niente qui");
+  const testo3 = nodo6(doc, "p", "", filtrando ? "Prova un’altra parola o togli il filtro. Quello che hai è ancora qui." : config.stato?.errore || config.vuoto?.testo || "");
   box.append(arte, titolo2, testo3);
   if (filtrando) {
-    const pulisci = nodo5(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Togli i filtri");
+    const pulisci = nodo6(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Togli i filtri");
     pulisci.type = "button";
     pulisci.addEventListener("click", () => {
       stato.query = "";
@@ -5192,19 +5545,19 @@ function disegnaVuoto(doc, stato, quanteInTutto) {
 function disegnaScheda(doc, stato, voce) {
   const config = stato.config;
   const id = String(config.idDi(voce) ?? "");
-  const scheda = nodo5(doc, "article", `td-card ${config.famiglia || ""}`.trim());
+  const scheda = nodo6(doc, "article", `td-card ${config.famiglia || ""}`.trim());
   scheda.dataset.item = id;
   scheda.dataset.selected = String(String(stato.selezione) === id);
   const pezzi = config.scheda(voce, { doc, icona: (n, c) => icona3(doc, n, c), etichetta: (t2, tono) => etichetta(doc, t2, tono) }) || {};
   if (pezzi.dati) for (const [k, v] of Object.entries(pezzi.dati)) scheda.dataset[k] = String(v);
-  const apri = nodo5(doc, "button", "td-card-open");
+  const apri = nodo6(doc, "button", "td-card-open");
   apri.type = "button";
   const titolo2 = String(config.titoloDi(voce) ?? "");
   apri.setAttribute("aria-label", `Apri ${titolo2}`);
-  const alto = nodo5(doc, "div", "td-card-top");
+  const alto = nodo6(doc, "div", "td-card-top");
   alto.append(...[pezzi.alto].flat().filter(Boolean));
-  const h3 = nodo5(doc, "h3", "", titolo2);
-  const basso = nodo5(doc, "div", "td-card-bottom");
+  const h3 = nodo6(doc, "h3", "", titolo2);
+  const basso = nodo6(doc, "div", "td-card-bottom");
   basso.append(...[pezzi.basso].flat().filter(Boolean));
   apri.append(alto, h3, ...[pezzi.corpo].flat().filter(Boolean), basso);
   apri.addEventListener("click", () => {
@@ -5219,9 +5572,9 @@ function disegnaScheda(doc, stato, voce) {
 function disegnaDettaglio(schermo, doc, stato, voce) {
   const config = stato.config;
   const { dettaglio } = stato.nodi;
-  const testa = nodo5(doc, "div", "td-detail-head");
-  testa.append(nodo5(doc, "span", "td-subtle", `${config.nome} / Dettaglio`));
-  const espandi = nodo5(doc, "button", "talos-button talos-button--secondary talos-icon-button");
+  const testa = nodo6(doc, "div", "td-detail-head");
+  testa.append(nodo6(doc, "span", "td-subtle", `${config.nome} / Dettaglio`));
+  const espandi = nodo6(doc, "button", "talos-button talos-button--secondary talos-icon-button");
   espandi.type = "button";
   espandi.setAttribute("aria-label", stato.espanso ? "Affianca all’elenco" : "Espandi il dettaglio");
   espandi.setAttribute("aria-pressed", String(stato.espanso));
@@ -5230,7 +5583,7 @@ function disegnaDettaglio(schermo, doc, stato, voce) {
     stato.espanso = !stato.espanso;
     disegna(schermo, doc, stato);
   });
-  const chiudi = nodo5(doc, "button", "talos-button talos-button--secondary talos-icon-button");
+  const chiudi = nodo6(doc, "button", "talos-button talos-button--secondary talos-icon-button");
   chiudi.type = "button";
   chiudi.setAttribute("aria-label", "Chiudi il dettaglio");
   chiudi.append(icona3(doc, "x"));
@@ -5242,12 +5595,12 @@ function disegnaDettaglio(schermo, doc, stato, voce) {
     perId(stato.nodi.risultati, ".td-card", "item", id)?.querySelector(".td-card-open")?.focus({ preventScroll: true });
   });
   testa.append(espandi, chiudi);
-  const corpo = nodo5(doc, "div", "td-detail-body");
+  const corpo = nodo6(doc, "div", "td-detail-body");
   corpo.append(...[config.dettaglio(voce, { doc, icona: (n, c) => icona3(doc, n, c), etichetta: (t2, tono) => etichetta(doc, t2, tono) })].flat().filter(Boolean));
-  const piede = nodo5(doc, "div", "td-detail-footer");
+  const piede = nodo6(doc, "div", "td-detail-footer");
   const azioni = config.azioniDettaglio ? [config.azioniDettaglio(voce, { doc })].flat().filter(Boolean) : [];
   piede.append(...azioni);
-  if (config.notaPiede) piede.append(nodo5(doc, "span", "td-save-status", config.notaPiede(voce)));
+  if (config.notaPiede) piede.append(nodo6(doc, "span", "td-save-status", config.notaPiede(voce)));
   dettaglio.replaceChildren(testa, corpo, ...azioni.length || config.notaPiede ? [piede] : []);
 }
 var CHIAVE_PREFERENZE, LARGHEZZA_MINIMA, LARGHEZZA_MASSIMA, LARGHEZZA_NORMALE, PASSO_DIVISORIO, STATI2;
@@ -5410,14 +5763,14 @@ function notificatore(opzioni) {
   return typeof opzioni?.notifica === "function" ? opzioni.notifica : () => {
   };
 }
-function nodo6(doc, tag2, classe, testo3) {
+function nodo7(doc, tag2, classe, testo3) {
   const el25 = doc.createElement(tag2);
   if (classe) el25.className = classe;
   if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
   return el25;
 }
-function bottone2(doc, testo3, { variante = "secondary", esegui, pericolo = false } = {}) {
-  const b = nodo6(doc, "button", `talos-button talos-button--${variante} talos-button--sm${pericolo ? " talos-button--danger" : ""}`, testo3);
+function bottone3(doc, testo3, { variante = "secondary", esegui, pericolo = false } = {}) {
+  const b = nodo7(doc, "button", `talos-button talos-button--${variante} talos-button--sm${pericolo ? " talos-button--danger" : ""}`, testo3);
   b.type = "button";
   if (esegui) b.addEventListener("click", esegui);
   return b;
@@ -5439,7 +5792,7 @@ function dataBreve(iso) {
   return d && Number.isFinite(d.getTime()) ? d.toLocaleDateString("it-IT") : "";
 }
 function meta(doc, pezzi) {
-  const riga = nodo6(doc, "div", "td-detail-meta");
+  const riga = nodo7(doc, "div", "td-detail-meta");
   riga.append(...pezzi.filter(Boolean));
   return riga;
 }
@@ -5466,21 +5819,21 @@ function montaNote(schermo, note, opzioni = {}) {
     sommarioBarra: (n, { errore, caricamento }) => errore ? "Note non disponibili" : caricamento ? "Leggo le note…" : sommarioNote(n),
     sommarioStato: (visibili, totale2) => visibili === totale2 ? sommarioNote(totale2) : `${sommarioNote(visibili)} su ${sommarioNote(totale2)}`,
     scheda: (n, { doc, icona: icona9 }) => ({
-      alto: [icona9("doc"), nodo6(doc, "span", "", "Appunto")],
-      corpo: [nodo6(doc, "p", "td-excerpt", anteprima(n?.contenuto))],
+      alto: [icona9("doc"), nodo7(doc, "span", "", "Appunto")],
+      corpo: [nodo7(doc, "p", "td-excerpt", anteprima(n?.contenuto))],
       basso: [
-        nodo6(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || "senza data"),
-        nodo6(doc, "span", "", plurale(conteggioParole(n?.contenuto), "parola", "parole"))
+        nodo7(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || "senza data"),
+        nodo7(doc, "span", "", plurale(conteggioParole(n?.contenuto), "parola", "parole"))
       ]
     }),
     dettaglio: (n, { doc, etichetta: etichetta2 }) => [
-      meta(doc, [etichetta2("Nota"), nodo6(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || "data non registrata")]),
-      nodo6(doc, "h2", "", titoloNota(n)),
-      nodo6(doc, "div", "td-prose", String(n?.contenuto ?? ""))
+      meta(doc, [etichetta2("Nota"), nodo7(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || "data non registrata")]),
+      nodo7(doc, "h2", "", titoloNota(n)),
+      nodo7(doc, "div", "td-prose", String(n?.contenuto ?? ""))
     ],
     azioniDettaglio: (n, { doc }) => [
-      bottone2(doc, "Copia", { esegui: () => onCopia?.(n) }),
-      bottone2(doc, "Esporta", {
+      bottone3(doc, "Copia", { esegui: () => onCopia?.(n) }),
+      bottone3(doc, "Esporta", {
         esegui: () => {
           esportaTesto(doc, `${titoloNota(n).replace(/[\\/:*?"<>|]/g, "-").slice(0, 80)}.md`, `# ${titoloNota(n)}
 
@@ -5513,30 +5866,30 @@ function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
     sommarioBarra: (n, { errore, caricamento }) => errore ? "Ricordi non disponibili" : caricamento ? "Caricamento ricordi…" : `${plurale(n, "ricordo")} · globali`,
     scheda: (m, { doc, icona: icona9, etichetta: etichetta2 }) => {
       const g = genereMemoria(m?.genere);
-      const segno = nodo6(doc, "span", "td-memory-mark");
+      const segno = nodo7(doc, "span", "td-memory-mark");
       segno.append(icona9(g.icona));
       return {
         /* ⛔ Il genere si dice UNA volta: il segno col simbolo, e l'etichetta col tono. Scriverlo
            anche come testo in mezzo ai due («Regola  [Regola]») era un doppione visto nella foto. */
         alto: [segno, etichetta2(g.testo, g.tono || "accent")],
-        corpo: [nodo6(doc, "p", "td-excerpt", anteprima(testiMemoria(m).contenuto))],
+        corpo: [nodo7(doc, "p", "td-excerpt", anteprima(testiMemoria(m).contenuto))],
         /* Nella scheda la data e basta: l'ora intera sta nel dettaglio e qui si troncava. */
-        basso: [nodo6(doc, "span", "", dataBreve(m?.aggiornataAlle) || "Data non registrata")]
+        basso: [nodo7(doc, "span", "", dataBreve(m?.aggiornataAlle) || "Data non registrata")]
       };
     },
     dettaglio: (m, { doc, etichetta: etichetta2 }) => {
       const t2 = testiMemoria(m);
       const g = genereMemoria(m?.genere);
       const pezzi = [
-        meta(doc, [etichetta2(g.testo, g.tono || "accent"), nodo6(doc, "span", "", t2.aggiornata || "data non registrata")]),
-        nodo6(doc, "h2", "", t2.titolo),
-        nodo6(doc, "div", "td-prose", t2.contenuto)
+        meta(doc, [etichetta2(g.testo, g.tono || "accent"), nodo7(doc, "span", "", t2.aggiornata || "data non registrata")]),
+        nodo7(doc, "h2", "", t2.titolo),
+        nodo7(doc, "div", "td-prose", t2.contenuto)
       ];
-      if (m?.origine) pezzi.push(nodo6(doc, "h3", "", "Origine"), nodo6(doc, "p", "td-subtle", String(m.origine)));
+      if (m?.origine) pezzi.push(nodo7(doc, "h3", "", "Origine"), nodo7(doc, "p", "td-subtle", String(m.origine)));
       return pezzi;
     },
     azioniDettaglio: (m, { doc }) => [
-      bottone2(doc, "Copia", {
+      bottone3(doc, "Copia", {
         esegui: async () => {
           const t2 = testiMemoria(m);
           try {
@@ -5579,17 +5932,17 @@ function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
     scheda: (a, { doc, icona: icona9, etichetta: etichetta2 }) => {
       const s = statoAttivita(a?.stato);
       const t2 = testiAttivita(a);
-      const segno = nodo6(doc, "span", "td-task-toggle");
+      const segno = nodo7(doc, "span", "td-task-toggle");
       segno.dataset.fatta = String(a?.stato === "done");
       segno.setAttribute("aria-hidden", "true");
       if (a?.stato === "done") segno.append(icona9("check"));
       return {
         dati: { done: String(a?.stato === "done") },
-        alto: [etichetta2(s.testo, s.tono || ""), ...a?.priorita === "high" ? [nodo6(doc, "span", "td-priority", "Alta priorità")] : []],
-        corpo: [nodo6(doc, "p", "td-excerpt", anteprima(t2.descrizione, 130) || "Nessuna descrizione.")],
+        alto: [etichetta2(s.testo, s.tono || ""), ...a?.priorita === "high" ? [nodo7(doc, "span", "td-priority", "Alta priorità")] : []],
+        corpo: [nodo7(doc, "p", "td-excerpt", anteprima(t2.descrizione, 130) || "Nessuna descrizione.")],
         basso: [
-          nodo6(doc, "span", "", prioritaAttivita(a?.priorita)),
-          nodo6(doc, "span", "", dataBreve(a?.aggiornataAlle) || "Data non registrata")
+          nodo7(doc, "span", "", prioritaAttivita(a?.priorita)),
+          nodo7(doc, "span", "", dataBreve(a?.aggiornataAlle) || "Data non registrata")
         ],
         adorno: segno
       };
@@ -5598,9 +5951,9 @@ function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
       const s = statoAttivita(a?.stato);
       const t2 = testiAttivita(a);
       return [
-        meta(doc, [etichetta2(s.testo, s.tono || ""), nodo6(doc, "span", "", prioritaAttivita(a?.priorita)), nodo6(doc, "span", "", t2.aggiornata || "data non registrata")]),
-        nodo6(doc, "h2", "", t2.titolo),
-        nodo6(doc, "div", "td-prose", t2.descrizione || "Nessuna descrizione.")
+        meta(doc, [etichetta2(s.testo, s.tono || ""), nodo7(doc, "span", "", prioritaAttivita(a?.priorita)), nodo7(doc, "span", "", t2.aggiornata || "data non registrata")]),
+        nodo7(doc, "h2", "", t2.titolo),
+        nodo7(doc, "div", "td-prose", t2.descrizione || "Nessuna descrizione.")
       ];
     },
     notaPiede: () => "La lettura non modifica lo stato",
@@ -5611,6 +5964,9 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
   const avvisa = notificatore(opzioni);
   const sessionId = opzioni.sessionId || "";
   const servizioVero = opzioni.azioni || azioniLibreria({ sessionId });
+  const magazzinoFile = magazzinoFileLibreria(schermo);
+  const ridisegna = () => aggiornaPaginaLibreria(schermo, voci, opzioni);
+  const leggiFile = typeof opzioni.leggiFile === "function" ? opzioni.leggiFile : lettoreFileLibreria(sessionId);
   const servizio = servizioVero && {
     ...servizioVero,
     rinomina: async (id, nome) => {
@@ -5626,6 +5982,10 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       return esito;
     }
   };
+  async function apriConSistema(v) {
+    const esito = await servizioVero.apri(v?.id);
+    if (!esito?.ok) avvisa("Non aperto", esito?.motivo || "Il server non ha risposto.", { tono: "errore" });
+  }
   return montaSezione(schermo, {
     chiave: "libreria",
     nome: "Libreria",
@@ -5649,24 +6009,34 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
     scheda: (v, { doc, icona: icona9, etichetta: etichetta2 }) => {
       const tipo = tipoVoceLibreria(v?.fileType);
       const t2 = testiVoceLibreria(v);
-      const copertina = nodo6(doc, "div", "td-file-preview");
+      const copertina = nodo7(doc, "div", "td-file-preview");
       copertina.dataset.kind = estensioneFile(t2.nome).toLowerCase();
-      copertina.append(nodo6(doc, "strong", "", estensioneFile(t2.nome)), nodo6(doc, "span", "", t2.nome));
+      copertina.append(nodo7(doc, "strong", "", estensioneFile(t2.nome)), nodo7(doc, "span", "", t2.nome));
       return {
-        alto: [icona9(tipo.icona), nodo6(doc, "span", "", tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : "")],
+        alto: [icona9(tipo.icona), nodo7(doc, "span", "", tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : "")],
         corpo: [copertina],
-        basso: [nodo6(doc, "span", "", t2.dataBreve)]
+        basso: [nodo7(doc, "span", "", t2.dataBreve)]
       };
     },
     dettaglio: (v, { doc, etichetta: etichetta2 }) => {
       const t2 = testiVoceLibreria(v);
       const tipo = tipoVoceLibreria(v?.fileType);
       const pezzi = [
-        meta(doc, [etichetta2(tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : ""), nodo6(doc, "span", "", t2.aggiornata ? `Aggiornato il ${t2.aggiornata}` : "Data non registrata")]),
-        nodo6(doc, "h2", "", t2.nome),
-        nodo6(doc, "h3", "", "Azioni sul file")
+        meta(doc, [etichetta2(tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : ""), nodo7(doc, "span", "", t2.aggiornata ? `Aggiornato il ${t2.aggiornata}` : "Data non registrata")]),
+        nodo7(doc, "h2", "", t2.nome)
       ];
-      const ospite = nodo6(doc, "div", "td-riuso-riga");
+      pezzi.push(...montaAnteprimaFile(v, {
+        doc,
+        magazzino: magazzinoFile,
+        ridisegna,
+        opzioni: {
+          leggiFile,
+          rendiMarkdown: opzioni.rendiMarkdown,
+          onApri: servizioVero?.apri ? apriConSistema : void 0
+        }
+      }));
+      pezzi.push(nodo7(doc, "h3", "", "Azioni sul file"));
+      const ospite = nodo7(doc, "div", "td-riuso-riga");
       const riga = creaLibraryRow(v, {
         document: doc,
         aperta: true,
@@ -5679,7 +6049,7 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       ospite.append(riga);
       pezzi.push(ospite);
       const dove = indirizzoFileLibreria(sessionId, v?.id);
-      if (dove) pezzi.push(nodo6(doc, "p", "td-subtle", "Il file vive in .harness-ui-library/, dentro il progetto."));
+      if (dove) pezzi.push(nodo7(doc, "p", "td-subtle", "Il file vive in .harness-ui-library/, dentro il progetto."));
       return pezzi;
     },
     vuoto: { titolo: "Nessun file", testo: "I file caricati o generati dall’agente compaiono qui. Vivono in .harness-ui-library/, dentro il progetto." }
@@ -5771,7 +6141,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       const riga = lettura?.stato === "pronto" && lettura.record ? frasiBilancio(bilancioDaRecord(lettura.record)) : f.spiegazione;
       return {
         alto: [icona9("globe"), etichetta2(f.parola, f.tono)],
-        corpo: [nodo6(doc, "p", "td-excerpt", riga)],
+        corpo: [nodo7(doc, "p", "td-excerpt", riga)],
         /*
          * ⛔ TROVATO NELLA FOTO: «Avviata il 11/09/20…» e «Rapporto disponibi…», tutti e due
          *   troncati. `.td-card-bottom span` taglia con i puntini, e in 250 px di scheda due frasi
@@ -5781,11 +6151,11 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
          *   una cosa che chi guarda vuole sapere.
          */
         basso: [
-          nodo6(doc, "span", "", f.avviata ? `Avviata ${articoloData(r?.avviataAlle)}${dataBreve(r?.avviataAlle)}` : "Data non registrata"),
-          nodo6(doc, "span", "", r?.stato === "done" ? f.haRapporto ? "" : "Nessun rapporto" : f.haRapporto ? "Col rapporto" : "")
+          nodo7(doc, "span", "", f.avviata ? `Avviata ${articoloData(r?.avviataAlle)}${dataBreve(r?.avviataAlle)}` : "Data non registrata"),
+          nodo7(doc, "span", "", r?.stato === "done" ? f.haRapporto ? "" : "Nessun rapporto" : f.haRapporto ? "Col rapporto" : "")
         ],
         adorno: (() => {
-          const b = nodo6(doc, "button", "td-card-azioni");
+          const b = nodo7(doc, "button", "td-card-azioni");
           b.type = "button";
           b.setAttribute("aria-haspopup", "menu");
           b.setAttribute("aria-label", `Azioni su ${f.domanda}`);
@@ -5842,28 +6212,28 @@ function montaProgetti(schermo, progetti, opzioni = {}) {
     cercaIn: (p) => `${p?.nome ?? ""} ${(p?.sessioni || []).map((s) => s?.nome ?? "").join(" ")}`,
     sommarioBarra: (n, { errore, caricamento }) => errore ? "Progetti non disponibili" : caricamento ? "Leggo i progetti…" : sommarioProgetti(n),
     scheda: (p, { doc, icona: icona9 }) => {
-      const chips = nodo6(doc, "div", "td-source-chips");
-      for (const s of ultimeSessioni(p, quanteRecenti)) chips.append(nodo6(doc, "span", "", s?.nome || s?.sessionId || "sessione senza nome"));
+      const chips = nodo7(doc, "div", "td-source-chips");
+      for (const s of ultimeSessioni(p, quanteRecenti)) chips.append(nodo7(doc, "span", "", s?.nome || s?.sessionId || "sessione senza nome"));
       return {
-        alto: [icona9("folder"), nodo6(doc, "span", "", "Cartella di lavoro")],
-        corpo: [nodo6(doc, "p", "td-excerpt", frasiProgetto(p)), chips],
+        alto: [icona9("folder"), nodo7(doc, "span", "", "Cartella di lavoro")],
+        corpo: [nodo7(doc, "p", "td-excerpt", frasiProgetto(p)), chips],
         /* Il conteggio sta già nel corpo (`frasiProgetto`): qui va il QUANDO, che è l'altra metà. */
-        basso: [nodo6(doc, "span", "", p?.ultimaAlle ? `Ultima volta ${new Date(p.ultimaAlle).toLocaleDateString("it-IT")}` : "mai aperta")]
+        basso: [nodo7(doc, "span", "", p?.ultimaAlle ? `Ultima volta ${new Date(p.ultimaAlle).toLocaleDateString("it-IT")}` : "mai aperta")]
       };
     },
     dettaglio: (p, { doc, etichetta: etichetta2 }) => {
       const pezzi = [
-        meta(doc, [etichetta2("Progetto"), nodo6(doc, "span", "", frasiProgetto(p))]),
-        nodo6(doc, "h2", "", p?.nome ?? ""),
-        nodo6(doc, "h3", "", "Sessioni recenti")
+        meta(doc, [etichetta2("Progetto"), nodo7(doc, "span", "", frasiProgetto(p))]),
+        nodo7(doc, "h2", "", p?.nome ?? ""),
+        nodo7(doc, "h3", "", "Sessioni recenti")
       ];
       const recenti = ultimeSessioni(p, quanteRecenti);
-      if (!recenti.length) pezzi.push(nodo6(doc, "p", "td-subtle", "Nessuna sessione ancora in questo progetto."));
+      if (!recenti.length) pezzi.push(nodo7(doc, "p", "td-subtle", "Nessuna sessione ancora in questo progetto."));
       for (const s of recenti) {
-        const riga = nodo6(doc, "div", "td-source");
-        const apri = bottone2(doc, s?.nome || s?.sessionId || "Sessione senza nome", { variante: "ghost", esegui: () => onApriSessione?.(s) });
+        const riga = nodo7(doc, "div", "td-source");
+        const apri = bottone3(doc, s?.nome || s?.sessionId || "Sessione senza nome", { variante: "ghost", esegui: () => onApriSessione?.(s) });
         riga.append(apri);
-        if (s?.avviataAlle) riga.append(nodo6(doc, "span", "", `Avviata il ${new Date(s.avviataAlle).toLocaleString("it-IT")}`));
+        if (s?.avviataAlle) riga.append(nodo7(doc, "span", "", `Avviata il ${new Date(s.avviataAlle).toLocaleString("it-IT")}`));
         pezzi.push(riga);
       }
       return pezzi;
@@ -5878,6 +6248,7 @@ var init_sezioni_adattatori = __esm({
     init_memoria();
     init_attivita();
     init_libreria();
+    init_libreria_anteprima();
     init_ricerca();
     init_ricerca_dettaglio();
     init_progetti();
@@ -5895,7 +6266,7 @@ var init_sezioni_adattatori = __esm({
 });
 
 // src/components/modale-td.js
-function nodo7(doc, tag2, classe, testo3) {
+function nodo8(doc, tag2, classe, testo3) {
   const el25 = doc.createElement(tag2);
   if (classe) el25.className = classe;
   if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
@@ -5913,20 +6284,20 @@ function icona4(doc, nome) {
 function apriModale(titolo2, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
   if (!doc?.body) return null;
   chiudiModale();
-  const dialogo = nodo7(doc, "dialog", "td-modal");
+  const dialogo = nodo8(doc, "dialog", "td-modal");
   if (ampia) dialogo.dataset.ampia = "si";
   const idTitolo = `td-modal-title-${Math.random().toString(36).slice(2, 8)}`;
   dialogo.setAttribute("aria-labelledby", idTitolo);
-  const testa = nodo7(doc, "div", "td-modal-head");
-  const h2 = nodo7(doc, "h2", "", titolo2);
+  const testa = nodo8(doc, "div", "td-modal-head");
+  const h2 = nodo8(doc, "h2", "", titolo2);
   h2.id = idTitolo;
-  const chiudiBtn = nodo7(doc, "button", "talos-button talos-button--ghost talos-icon-button");
+  const chiudiBtn = nodo8(doc, "button", "talos-button talos-button--ghost talos-icon-button");
   chiudiBtn.type = "button";
   chiudiBtn.setAttribute("aria-label", "Chiudi");
   chiudiBtn.append(icona4(doc, "x"));
   chiudiBtn.addEventListener("click", () => chiudiModale());
   testa.append(h2, chiudiBtn);
-  const corpo = nodo7(doc, "div", "td-modal-content");
+  const corpo = nodo8(doc, "div", "td-modal-content");
   for (const pezzo2 of [contenuto].flat().filter(Boolean)) corpo.append(pezzo2);
   dialogo.append(testa, corpo);
   dialogo.addEventListener("click", (e) => {
@@ -5968,14 +6339,14 @@ function confermaModale({
   onConferma,
   document: doc = globalThis.document
 } = {}) {
-  const testo3 = nodo7(doc, "p", "td-prose", domanda);
+  const testo3 = nodo8(doc, "p", "td-prose", domanda);
   const pezzi = [testo3];
-  if (conseguenza) pezzi.push(nodo7(doc, "p", "td-subtle", conseguenza));
-  const piede = nodo7(doc, "div", "td-detail-footer");
-  const annulla = nodo7(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Annulla");
+  if (conseguenza) pezzi.push(nodo8(doc, "p", "td-subtle", conseguenza));
+  const piede = nodo8(doc, "div", "td-detail-footer");
+  const annulla = nodo8(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Annulla");
   annulla.type = "button";
   annulla.addEventListener("click", () => chiudiModale());
-  const conferma = nodo7(doc, "button", "talos-button talos-button--secondary talos-button--danger talos-button--sm", etichettaConferma);
+  const conferma = nodo8(doc, "button", "talos-button talos-button--secondary talos-button--danger talos-button--sm", etichettaConferma);
   conferma.type = "button";
   conferma.addEventListener("click", () => {
     chiudiModale();
@@ -6046,7 +6417,7 @@ function aspettoCorrente(doc = globalThis.document) {
     modo: dalControllo("colorModeSelect") || (radice.getAttribute("data-theme") === "light" ? "light" : "system")
   };
 }
-function nodo8(doc, tag2, classe, testo3) {
+function nodo9(doc, tag2, classe, testo3) {
   const el25 = doc.createElement(tag2);
   if (classe) el25.className = classe;
   if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
@@ -6057,25 +6428,25 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   const semi = leggiSemiTemi(doc);
   let { tema: scelto, modo } = aspettoCorrente(doc);
   if (!temi.some((t2) => t2.id === scelto)) scelto = temi[0]?.id || "calm";
-  const studio = nodo8(doc, "div", "td-theme-studio");
-  const elenco2 = nodo8(doc, "div", "td-theme-list");
+  const studio = nodo9(doc, "div", "td-theme-studio");
+  const elenco2 = nodo9(doc, "div", "td-theme-list");
   elenco2.setAttribute("role", "radiogroup");
   elenco2.setAttribute("aria-label", "Tema dell’interfaccia");
-  const destra = nodo8(doc, "div", "td-theme-display");
-  const titolo2 = nodo8(doc, "h3", "", "");
-  const descrizione = nodo8(doc, "p", "", "");
-  const anteprima3 = nodo8(doc, "div", "td-theme-preview");
-  const didascalia = nodo8(doc, "div", "td-preview-caption");
-  const didascaliaTema = nodo8(doc, "span", "", "");
-  const didascaliaModo = nodo8(doc, "span", "", "");
+  const destra = nodo9(doc, "div", "td-theme-display");
+  const titolo2 = nodo9(doc, "h3", "", "");
+  const descrizione = nodo9(doc, "p", "", "");
+  const anteprima3 = nodo9(doc, "div", "td-theme-preview");
+  const didascalia = nodo9(doc, "div", "td-preview-caption");
+  const didascaliaTema = nodo9(doc, "span", "", "");
+  const didascaliaModo = nodo9(doc, "span", "", "");
   didascalia.append(didascaliaTema, didascaliaModo);
-  const controlli = nodo8(doc, "div", "td-theme-controls");
-  const segmento = nodo8(doc, "div", "td-segment");
+  const controlli = nodo9(doc, "div", "td-theme-controls");
+  const segmento = nodo9(doc, "div", "td-segment");
   segmento.setAttribute("role", "group");
   segmento.setAttribute("aria-label", "Modalità colore");
   const MODI = [["system", "Sistema"], ["light", "Chiaro"], ["dark", "Scuro"]];
   const bottoniModo = MODI.map(([valore, nome]) => {
-    const b = nodo8(doc, "button", "", nome);
+    const b = nodo9(doc, "button", "", nome);
     b.type = "button";
     b.dataset.modo = valore;
     b.addEventListener("click", () => {
@@ -6087,17 +6458,17 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     return b;
   });
   controlli.append(segmento);
-  const dettagli = nodo8(doc, "div", "td-theme-details");
+  const dettagli = nodo9(doc, "div", "td-theme-details");
   const campi = ["Accento", "Fondo", "Raggio delle schede"].map((nome) => {
-    const box = nodo8(doc, "div");
-    box.append(nodo8(doc, "span", "", nome));
-    const valore = nodo8(doc, "strong", "", "—");
+    const box = nodo9(doc, "div");
+    box.append(nodo9(doc, "span", "", nome));
+    const valore = nodo9(doc, "strong", "", "—");
     box.append(valore);
     dettagli.append(box);
     return valore;
   });
-  const azioni = nodo8(doc, "div", "td-theme-actions");
-  const vaiAImpostazioni = nodo8(doc, "button", "td-studio-button", "Tutte le impostazioni dell’aspetto");
+  const azioni = nodo9(doc, "div", "td-theme-actions");
+  const vaiAImpostazioni = nodo9(doc, "button", "td-studio-button", "Tutte le impostazioni dell’aspetto");
   vaiAImpostazioni.type = "button";
   vaiAImpostazioni.addEventListener("click", () => {
     chiudiModale();
@@ -6105,21 +6476,21 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     (doc.getElementById("themePresetSelect") || doc.getElementById("setting-themePresetSelect"))?.focus?.({ preventScroll: false });
   });
   azioni.append(vaiAImpostazioni);
-  const nota = nodo8(doc, "p", "td-theme-note", "Il tema si applica subito, senza chiudere il pannello. La preferenza è di questo browser: le conversazioni e i file non vengono toccati. Lo sfondo animato ha un suo controllo in «Aspetto e movimento».");
+  const nota = nodo9(doc, "p", "td-theme-note", "Il tema si applica subito, senza chiudere il pannello. La preferenza è di questo browser: le conversazioni e i file non vengono toccati. Lo sfondo animato ha un suo controllo in «Aspetto e movimento».");
   destra.append(titolo2, descrizione, anteprima3, didascalia, controlli, dettagli, azioni, nota);
   studio.append(elenco2, destra);
   const scelte = temi.map(({ id, nome }) => {
-    const b = nodo8(doc, "button", "td-theme-choice");
+    const b = nodo9(doc, "button", "td-theme-choice");
     b.type = "button";
     b.setAttribute("role", "radio");
     b.dataset.tema = id;
-    const pallino = nodo8(doc, "span", "td-palette-dot");
+    const pallino = nodo9(doc, "span", "td-palette-dot");
     pallino.setAttribute("aria-hidden", "true");
     const seme = semi.get(id);
     if (seme?.accento) pallino.style.setProperty("--preview-accent", seme.accento);
     const fondo = fondoDelTema(seme, temaChiaro(seme) ? "light" : "dark");
     if (fondo) pallino.style.setProperty("--preview-bg", fondo);
-    const segno = nodo8(doc, "span", "td-theme-segno", "");
+    const segno = nodo9(doc, "span", "td-theme-segno", "");
     b.append(pallino, doc.createTextNode(nome), segno);
     b.addEventListener("click", () => {
       scelto = id;
@@ -6165,11 +6536,11 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   }
   function disegnaAnteprima() {
     anteprima3.replaceChildren();
-    const riga = nodo8(doc, "div", "td-preview-riga");
-    riga.append(nodo8(doc, "span", "td-preview-pallino"), nodo8(doc, "span", "td-preview-barra"));
-    const scheda = nodo8(doc, "div", "td-preview-scheda");
-    const barraLunga = nodo8(doc, "span", "td-preview-barra");
-    const barraCorta = nodo8(doc, "span", "td-preview-barra");
+    const riga = nodo9(doc, "div", "td-preview-riga");
+    riga.append(nodo9(doc, "span", "td-preview-pallino"), nodo9(doc, "span", "td-preview-barra"));
+    const scheda = nodo9(doc, "div", "td-preview-scheda");
+    const barraLunga = nodo9(doc, "span", "td-preview-barra");
+    const barraCorta = nodo9(doc, "span", "td-preview-barra");
     barraCorta.dataset.corta = "si";
     scheda.append(barraLunga, barraCorta);
     anteprima3.append(riga, scheda);
@@ -6187,7 +6558,7 @@ function montaScorciatoiaTemi(schermo, { document: doc = globalThis.document } =
   if (!riga) return null;
   const esistente = schermo.querySelector("[data-td-studio-temi]");
   if (esistente) return esistente;
-  const b = nodo8(doc, "button", "td-studio-button", `Esplora le ${nomiTemi().length} atmosfere`);
+  const b = nodo9(doc, "button", "td-studio-button", `Esplora le ${nomiTemi().length} atmosfere`);
   b.type = "button";
   b.dataset.tdStudioTemi = "";
   b.addEventListener("click", () => apriStudioTemi({ document: doc }));
@@ -6258,10 +6629,10 @@ function selezionaSessioniBoard(sessioni, { stato = "tutte", cartella = "", ordi
   return dati.sort((a, b) => ordine === "nome" ? (a.nome || a.taskId || "").localeCompare(b.nome || b.taskId || "", "it", { numeric: true, sensitivity: "base" }) : ordine === "token" ? confrontoNumero(totale(a), totale(b)) : confrontoNumero(data(a), data(b), ordine === "vecchie"));
 }
 function el13(doc, tag2, classe, testo3) {
-  const nodo9 = doc.createElement(tag2);
-  if (classe) nodo9.className = classe;
-  if (testo3 !== void 0) nodo9.textContent = testo3;
-  return nodo9;
+  const nodo10 = doc.createElement(tag2);
+  if (classe) nodo10.className = classe;
+  if (testo3 !== void 0) nodo10.textContent = testo3;
+  return nodo10;
 }
 function creaRigaBoard(sessione, { document: doc = globalThis.document, metriche = {}, adesso, onApri, onMenu } = {}) {
   const t2 = testiBoard(sessione, metriche, adesso), stato = statoBoard(sessione);
@@ -8429,7 +8800,7 @@ function badge4(d, testo3, tono) {
   b.dataset.c = "Badge";
   return b;
 }
-function bottone3(d, testo3, classe, azione, fn) {
+function bottone4(d, testo3, classe, azione, fn) {
   const b = el19(d, "button", classe, testo3);
   b.type = "button";
   b.dataset.c = "Button";
@@ -8451,7 +8822,7 @@ function creaRigaDownload(dati, { azioni = {}, document: d = globalThis.document
   art.appendChild(testa);
   if (dati.stato === "ready") {
     const piede2 = el19(d, "div", "talos-toolbar");
-    piede2.append(el19(d, "span", "talos-muted", "Disponibile nei modelli installati."), bottone3(d, "Vedi modello", "talos-button talos-button--secondary talos-button--sm", "vediModello", () => azioni.vediModello?.(dati.id)));
+    piede2.append(el19(d, "span", "talos-muted", "Disponibile nei modelli installati."), bottone4(d, "Vedi modello", "talos-button talos-button--secondary talos-button--sm", "vediModello", () => azioni.vediModello?.(dati.id)));
     art.appendChild(piede2);
     return art;
   }
@@ -8461,7 +8832,7 @@ function creaRigaDownload(dati, { azioni = {}, document: d = globalThis.document
     const corpo = el19(d, "div", "talos-check-card__body");
     corpo.append(el19(d, "b", "", dati.errore.titolo), el19(d, "p", "", dati.errore.testo));
     const az = el19(d, "div", "talos-check-card__actions");
-    const dettagli = bottone3(d, "Dettagli", "talos-button talos-button--ghost talos-button--sm", "dettagli", null);
+    const dettagli = bottone4(d, "Dettagli", "talos-button talos-button--ghost talos-button--sm", "dettagli", null);
     dettagli.title = dati.errore.dettagli;
     dettagli.setAttribute("aria-label", `Dettagli: ${dati.errore.dettagli}`);
     dettagli.addEventListener("click", () => {
@@ -8474,8 +8845,8 @@ function creaRigaDownload(dati, { azioni = {}, document: d = globalThis.document
       n.dataset.dettagli = "";
       corpo.insertBefore(n, az);
     });
-    az.append(bottone3(d, "Riprova", "talos-button talos-button--secondary talos-button--sm", "riprovaDownload", () => azioni.riprendi?.(dati.id)), dettagli);
-    if (azioni.annulla) az.appendChild(bottone3(d, "Annulla", "talos-button talos-button--ghost talos-button--sm", "annulla", () => azioni.annulla(dati.id)));
+    az.append(bottone4(d, "Riprova", "talos-button talos-button--secondary talos-button--sm", "riprovaDownload", () => azioni.riprendi?.(dati.id)), dettagli);
+    if (azioni.annulla) az.appendChild(bottone4(d, "Annulla", "talos-button talos-button--ghost talos-button--sm", "annulla", () => azioni.annulla(dati.id)));
     corpo.appendChild(az);
     card.appendChild(corpo);
     art.appendChild(card);
@@ -8498,9 +8869,9 @@ function creaRigaDownload(dati, { azioni = {}, document: d = globalThis.document
   } else if (dati.stato === "verifying") misure.append(d.createTextNode(" · verifica dell'impronta in corso"));
   else if (dati.stato === "paused") misure.append(d.createTextNode(" · in pausa"));
   const cluster = el19(d, "div", "talos-cluster");
-  if (["queued", "running"].includes(dati.stato)) cluster.appendChild(bottone3(d, "Pausa", "talos-button talos-button--secondary talos-button--sm", "pausa", () => azioni.pausa?.(dati.id)));
-  if (dati.stato === "paused") cluster.appendChild(bottone3(d, "Riprendi", "talos-button talos-button--secondary talos-button--sm", "riprendi", () => azioni.riprendi?.(dati.id)));
-  const annulla = bottone3(d, "Annulla", "talos-button talos-button--ghost talos-button--sm", "annulla", () => azioni.annulla?.(dati.id));
+  if (["queued", "running"].includes(dati.stato)) cluster.appendChild(bottone4(d, "Pausa", "talos-button talos-button--secondary talos-button--sm", "pausa", () => azioni.pausa?.(dati.id)));
+  if (dati.stato === "paused") cluster.appendChild(bottone4(d, "Riprendi", "talos-button talos-button--secondary talos-button--sm", "riprendi", () => azioni.riprendi?.(dati.id)));
+  const annulla = bottone4(d, "Annulla", "talos-button talos-button--ghost talos-button--sm", "annulla", () => azioni.annulla?.(dati.id));
   annulla.dataset.apreVelo = "veloAnnullaDownload";
   cluster.appendChild(annulla);
   piede.append(misure, cluster);
@@ -8625,14 +8996,14 @@ function righeFinestra(usage = null, finestra = null, ripartizione = null) {
   return { titoloDestra: finestra ? kilo(finestra) : "finestra non dichiarata", righe };
 }
 function titoloRispostaDaTurno(turno, parole = 5) {
-  const nodo9 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_RISPOSTA_TURNO) : null;
-  const testo3 = typeof nodo9?.textContent === "string" ? nodo9.textContent.trim() : "";
+  const nodo10 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_RISPOSTA_TURNO) : null;
+  const testo3 = typeof nodo10?.textContent === "string" ? nodo10.textContent.trim() : "";
   if (!testo3) return "";
   return testo3.split(/\s+/).slice(0, parole).join(" ");
 }
 function titoloMessaggioUtente(turno, parole = 5) {
-  const nodo9 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_TESTO_UTENTE) : null;
-  const testo3 = typeof nodo9?.textContent === "string" ? nodo9.textContent.trim() : "";
+  const nodo10 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_TESTO_UTENTE) : null;
+  const testo3 = typeof nodo10?.textContent === "string" ? nodo10.textContent.trim() : "";
   if (!testo3) return "";
   return testo3.split(/\s+/).slice(0, parole).join(" ");
 }
@@ -8890,10 +9261,10 @@ var init_inspector = __esm({
 
 // src/components/review.js
 function el21(documentObj, tag2, className, testo3) {
-  const nodo9 = documentObj.createElement(tag2);
-  if (className) nodo9.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo9.textContent = String(testo3);
-  return nodo9;
+  const nodo10 = documentObj.createElement(tag2);
+  if (className) nodo10.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo10.textContent = String(testo3);
+  return nodo10;
 }
 function contaDiff(voceOCode = []) {
   if (voceOCode && !Array.isArray(voceOCode) && Number.isFinite(voceOCode.aggiunte) && Number.isFinite(voceOCode.rimozioni)) {
@@ -9102,7 +9473,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
       disegnaCartelle();
     }
   }
-  function nodo9(path, q) {
+  function nodo10(path, q) {
     const figli = st.figli.get(path);
     const n = d.createElement("div");
     n.setAttribute("role", "treeitem");
@@ -9137,7 +9508,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
     if (Array.isArray(figli) && figli.length && aperto) {
       const g = d.createElement("div");
       g.setAttribute("role", "group");
-      for (const f of figli) if (!q || f.nome.toLocaleLowerCase("it").includes(q) || f.path.toLocaleLowerCase("it").includes(q)) g.append(nodo9(f.path, q));
+      for (const f of figli) if (!q || f.nome.toLocaleLowerCase("it").includes(q) || f.path.toLocaleLowerCase("it").includes(q)) g.append(nodo10(f.path, q));
       n.append(g);
     }
     return n;
@@ -9146,7 +9517,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
     const albero = $2("introAlbero");
     if (!albero || !st.radice) return;
     const q = ($2("introCercaCartella")?.value || "").trim().toLocaleLowerCase("it");
-    albero.replaceChildren(nodo9(st.radice, q));
+    albero.replaceChildren(nodo10(st.radice, q));
     const stato2 = $2("introCartelleStato");
     if (stato2 && !st.caricando.size) stato2.textContent = q ? albero.querySelectorAll("[role=group] [role=treeitem]").length ? "Solo le cartelle già caricate." : "Nessuna cartella corrisponde alla ricerca." : "Le cartelle si leggono aprendole. Doppio clic o freccia destra per entrare.";
     const scelta = $2("introCartellaScelta");
@@ -10735,10 +11106,10 @@ var init_nav_item = __esm({
 
 // src/components/conversazione.js
 function el22(documentObj, tag2, className, testo3) {
-  const nodo9 = documentObj.createElement(tag2);
-  if (className) nodo9.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo9.textContent = String(testo3);
-  return nodo9;
+  const nodo10 = documentObj.createElement(tag2);
+  if (className) nodo10.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo10.textContent = String(testo3);
+  return nodo10;
 }
 function simbolo(documentObj, classe, nome) {
   const svg = documentObj.createElementNS(SVG_NS, "svg");
@@ -10842,7 +11213,7 @@ function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   const gruppo = el22(documentObj, "div", "talos-message__actions message-actions");
   gruppo.setAttribute("role", "group");
   gruppo.setAttribute("aria-label", "Azioni sulla risposta");
-  const bottone4 = (nome, titolo2, icona9) => {
+  const bottone5 = (nome, titolo2, icona9) => {
     const b = el22(documentObj, "button", "talos-button talos-button--ghost talos-icon-button talos-button--sm");
     b.type = "button";
     b.title = titolo2;
@@ -10851,17 +11222,17 @@ function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
     b.append(simbolo(documentObj, "i i--sm", icona9));
     return b;
   };
-  gruppo.append(bottone4("copy", "Copia la risposta", "i-copy"));
+  gruppo.append(bottone5("copy", "Copia la risposta", "i-copy"));
   if (ascolta) {
-    const b = bottone4("listen", "Ascolta la risposta", "i-play");
+    const b = bottone5("listen", "Ascolta la risposta", "i-play");
     b.setAttribute("aria-pressed", "false");
     b.classList.add("assistant-listen-btn");
     gruppo.append(b);
   }
-  gruppo.append(bottone4("ask-again", "Chiedi di nuovo", "i-history"));
+  gruppo.append(bottone5("ask-again", "Chiedi di nuovo", "i-history"));
   return gruppo;
 }
-function dimensioneLeggibile(byte2) {
+function dimensioneLeggibile2(byte2) {
   if (typeof byte2 !== "number") return "";
   const n = byte2;
   if (!Number.isFinite(n) || n < 0) return "";
@@ -10888,7 +11259,7 @@ function creaFileScaricabile({ allegato, percorso, sessionId } = {}, opzioni = {
   scheda.dataset.c = "FileScaricabile";
   const testo3 = el22(d, "div", "talos-file-scaricabile__testo");
   testo3.append(el22(d, "span", "talos-file-scaricabile__nome", nome));
-  const misura = [formato, dimensioneLeggibile(allegato?.byte)].filter(Boolean).join(" · ");
+  const misura = [formato, dimensioneLeggibile2(allegato?.byte)].filter(Boolean).join(" · ");
   if (misura) testo3.append(el22(d, "span", "talos-file-scaricabile__misura", misura));
   scheda.append(testo3);
   if (indirizzo) {
@@ -10934,9 +11305,9 @@ function scriviCodice(parti, testo3, chiuso) {
   }
   pre.scrollLeft = scorrimento;
 }
-function aggiornaBottone(bottone4, chiuso) {
-  bottone4.disabled = !chiuso;
-  bottone4.textContent = chiuso ? "Copia" : "In arrivo…";
+function aggiornaBottone(bottone5, chiuso) {
+  bottone5.disabled = !chiuso;
+  bottone5.textContent = chiuso ? "Copia" : "In arrivo…";
 }
 function creaBloccoCodice({ testo: testo3 = "", linguaggio = "", chiuso = true } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
@@ -10945,9 +11316,9 @@ function creaBloccoCodice({ testo: testo3 = "", linguaggio = "", chiuso = true }
   blocco.dataset.lingua = chiaveLinguaggio(linguaggio);
   const intestazione = el22(documentObj, "div", "code-block-head");
   const nome = el22(documentObj, "span", "code-block-lang", etichetta2 || "testo");
-  const bottone4 = el22(documentObj, "button", "code-block-copy");
-  bottone4.type = "button";
-  intestazione.append(nome, bottone4);
+  const bottone5 = el22(documentObj, "button", "code-block-copy");
+  bottone5.type = "button";
+  intestazione.append(nome, bottone5);
   const pre = el22(documentObj, "pre");
   pre.setAttribute("tabindex", "0");
   pre.setAttribute("role", "group");
@@ -10957,7 +11328,7 @@ function creaBloccoCodice({ testo: testo3 = "", linguaggio = "", chiuso = true }
   const parti = {
     pre,
     code,
-    bottone: bottone4,
+    bottone: bottone5,
     nome,
     chiave: chiaveLinguaggio(linguaggio),
     evidenzia: opzioni.evidenzia || evidenziaConPrism,
@@ -10966,19 +11337,19 @@ function creaBloccoCodice({ testo: testo3 = "", linguaggio = "", chiuso = true }
     chiuso: Boolean(chiuso)
   };
   PARTI_DEL_BLOCCO.set(blocco, parti);
-  bottone4.addEventListener("click", async () => {
+  bottone5.addEventListener("click", async () => {
     if (!parti.chiuso) return;
     await parti.copia(parti.testo);
-    bottone4.textContent = "Copiato";
-    bottone4.classList.add("is-fatto");
+    bottone5.textContent = "Copiato";
+    bottone5.classList.add("is-fatto");
     const attesa = globalThis.setTimeout?.(() => {
-      aggiornaBottone(bottone4, true);
-      bottone4.classList.remove("is-fatto");
+      aggiornaBottone(bottone5, true);
+      bottone5.classList.remove("is-fatto");
     }, 1800);
     attesa?.unref?.();
   });
   if (!parti.chiuso) blocco.classList.add("code-block-in-arrivo");
-  aggiornaBottone(bottone4, parti.chiuso);
+  aggiornaBottone(bottone5, parti.chiuso);
   scriviCodice(parti, parti.testo, parti.chiuso);
   blocco.append(intestazione, pre);
   return blocco;
@@ -11130,15 +11501,15 @@ function creaApprovazione({ badge: badge5 = "Chiede di scrivere", bersaglio = ""
   }
   if (Array.isArray(diff) && diff.length > 0) scheda.append(creaDiff(diff, opzioni));
   const piede = el22(documentObj, "div", "talos-approval__foot sheet-actions");
-  const bottone4 = (classi, testo3, onClick) => {
+  const bottone5 = (classi, testo3, onClick) => {
     const b = el22(documentObj, "button", classi, testo3);
     b.type = "button";
     if (typeof onClick === "function") b.addEventListener("click", onClick);
     return b;
   };
-  const unaVolta = bottone4("talos-button talos-button--primary talos-button--md", "Consenti una volta", onUnaVolta);
-  const sessione = bottone4("talos-button talos-button--secondary", "Per questa sessione", onSessione);
-  const nega = bottone4("talos-button talos-button--ghost talos-button--danger", "Nega", onNega);
+  const unaVolta = bottone5("talos-button talos-button--primary talos-button--md", "Consenti una volta", onUnaVolta);
+  const sessione = bottone5("talos-button talos-button--secondary", "Per questa sessione", onSessione);
+  const nega = bottone5("talos-button talos-button--ghost talos-button--danger", "Nega", onNega);
   piede.append(unaVolta, sessione, nega, el22(documentObj, "span", "talos-grow"), el22(documentObj, "span", "talos-approval__foot-note", nota));
   scheda.append(piede);
   return { scheda, perche: perchéEl, codice: codiceEl, motivo: motivoEl, piede, pulsanti: { unaVolta, sessione, nega } };
@@ -11204,12 +11575,12 @@ function creaAttesa({ etichetta: etichetta2 = "Sto pensando…" } = {}, opzioni 
     svg.append(linea);
   }
   for (const cx of [16, 48, 80]) {
-    const nodo9 = documentObj.createElementNS(SVG_NS, "circle");
-    nodo9.setAttribute("class", "talos-line-loader-node");
-    nodo9.setAttribute("cx", String(cx));
-    nodo9.setAttribute("cy", "8");
-    nodo9.setAttribute("r", "4");
-    svg.append(nodo9);
+    const nodo10 = documentObj.createElementNS(SVG_NS, "circle");
+    nodo10.setAttribute("class", "talos-line-loader-node");
+    nodo10.setAttribute("cx", String(cx));
+    nodo10.setAttribute("cy", "8");
+    nodo10.setAttribute("r", "4");
+    svg.append(nodo10);
   }
   const label = el22(documentObj, "span", "talos-waiting__label run-activity-label", etichetta2);
   const elapsed = el22(documentObj, "span", "talos-mono talos-muted run-activity-elapsed", "0s");
@@ -11462,10 +11833,10 @@ function riduciEventiFiglia(eventi2) {
   return { turni, stato, giri, modello, attrezzi, scartati, motivo };
 }
 function el23(d, tag2, classe, testo3) {
-  const nodo9 = d.createElement(tag2);
-  if (classe) nodo9.className = classe;
-  if (testo3 !== void 0 && testo3 !== null) nodo9.textContent = String(testo3);
-  return nodo9;
+  const nodo10 = d.createElement(tag2);
+  if (classe) nodo10.className = classe;
+  if (testo3 !== void 0 && testo3 !== null) nodo10.textContent = String(testo3);
+  return nodo10;
 }
 function simbolo2(d, classe, nome) {
   const svg = d.createElementNS(SVG_NS2, "svg");
@@ -11525,10 +11896,10 @@ function montaConversazioneFiglia(contenitore, {
   const disegnati = /* @__PURE__ */ new Map();
   const chiaveBlocco = (b) => b.tipo === "attrezzo" ? `a:${b.id}` : b.tipo === "testo" ? `t:${b.id}` : `e:${b.id}`;
   function creaVistaTurno(turno) {
-    const nodo9 = el23(d, "div", "talos-figlia__turno");
-    if (turno.consegna) nodo9.append(creaMessaggioUtente({ testo: turno.consegna, meta: turno.meta }, { document: d }));
-    corpo.append(nodo9);
-    return { elemento: nodo9, blocchi: /* @__PURE__ */ new Map() };
+    const nodo10 = el23(d, "div", "talos-figlia__turno");
+    if (turno.consegna) nodo10.append(creaMessaggioUtente({ testo: turno.consegna, meta: turno.meta }, { document: d }));
+    corpo.append(nodo10);
+    return { elemento: nodo10, blocchi: /* @__PURE__ */ new Map() };
   }
   function creaVistaBlocco(vistaTurno, blocco, gruppo, modello) {
     if (blocco.tipo === "testo") {
@@ -12378,9 +12749,9 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
   radice.append(tela, velo, etichetta2);
   contenitore.replaceChildren(radice);
   const ascolti = [];
-  const ascolta = (nodo9, tipo, mano, opzioni) => {
-    nodo9.addEventListener(tipo, mano, opzioni);
-    ascolti.push([nodo9, tipo, mano, opzioni]);
+  const ascolta = (nodo10, tipo, mano, opzioni) => {
+    nodo10.addEventListener(tipo, mano, opzioni);
+    ascolti.push([nodo10, tipo, mano, opzioni]);
   };
   let corrente = "apro";
   let attesa = null;
@@ -12527,7 +12898,7 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
     inCoda = false;
     prenotato = null;
     attesa = null;
-    for (const [nodo9, tipo, mano, opzioni] of ascolti) nodo9.removeEventListener?.(tipo, mano, opzioni);
+    for (const [nodo10, tipo, mano, opzioni] of ascolti) nodo10.removeEventListener?.(tipo, mano, opzioni);
     ascolti.length = 0;
     contenitore.replaceChildren?.();
   }
@@ -12804,10 +13175,10 @@ function montaMiglioraPrompt({
   let giro = 0;
   let distrutto = false;
   const elemento = (tag2, classe, testo3) => {
-    const nodo9 = doc.createElement(tag2);
-    if (classe) nodo9.className = classe;
-    if (testo3 != null) nodo9.textContent = testo3;
-    return nodo9;
+    const nodo10 = doc.createElement(tag2);
+    if (classe) nodo10.className = classe;
+    if (testo3 != null) nodo10.textContent = testo3;
+    return nodo10;
   };
   const radice = elemento("section", "talos-migliora");
   radice.dataset.miglioraPrompt = "";
@@ -12852,15 +13223,15 @@ function montaMiglioraPrompt({
   listaLinguette.setAttribute("role", "tablist");
   listaLinguette.setAttribute("aria-labelledby", "migliora-prompt-quanto");
   const bottoniProfondita = PROFONDITA.map((voce) => {
-    const bottone4 = elemento("button", "talos-tabs__tab", voce.nome);
-    bottone4.type = "button";
-    bottone4.setAttribute("role", "tab");
-    bottone4.dataset.miglioraProfondita = voce.valore;
-    bottone4.addEventListener("click", () => {
+    const bottone5 = elemento("button", "talos-tabs__tab", voce.nome);
+    bottone5.type = "button";
+    bottone5.setAttribute("role", "tab");
+    bottone5.dataset.miglioraProfondita = voce.valore;
+    bottone5.addEventListener("click", () => {
       profondita = voce.valore;
       disegna2();
     });
-    return bottone4;
+    return bottone5;
   });
   listaLinguette.append(...bottoniProfondita);
   linguette.append(listaLinguette);
@@ -12968,9 +13339,9 @@ function montaMiglioraPrompt({
     provenienza.textContent = fraseProvenienza(modello);
     const voce = descriviProfondita(profondita);
     spiegazione.textContent = voce.spiega;
-    for (const bottone4 of bottoniProfondita) {
-      const attiva = bottone4.dataset.miglioraProfondita === profondita;
-      bottone4.setAttribute("aria-selected", String(attiva));
+    for (const bottone5 of bottoniProfondita) {
+      const attiva = bottone5.dataset.miglioraProfondita === profondita;
+      bottone5.setAttribute("aria-selected", String(attiva));
     }
     scelta.hidden = stato !== "scelta";
     attesa.hidden = stato !== "attesa";
@@ -13030,7 +13401,7 @@ function montaMiglioraPrompt({
     errore = "";
     radice.hidden = false;
     disegna2();
-    const scelto = bottoniProfondita.find((bottone4) => bottone4.dataset.miglioraProfondita === profondita);
+    const scelto = bottoniProfondita.find((bottone5) => bottone5.dataset.miglioraProfondita === profondita);
     if (scelto && typeof scelto.focus === "function") scelto.focus();
   }
   function chiudi() {
@@ -13128,12 +13499,12 @@ function etichettaTasto(combo, { apple = suApple() } = {}) {
 }
 function normalizzaTastiScritti(radice = globalThis.document, { apple = suApple() } = {}) {
   let cambiati = 0;
-  for (const nodo9 of radice.querySelectorAll("kbd")) {
-    const testo3 = (nodo9.textContent || "").trim();
+  for (const nodo10 of radice.querySelectorAll("kbd")) {
+    const testo3 = (nodo10.textContent || "").trim();
     if (!/⌘|ctrl|cmd|shift/i.test(testo3)) continue;
     const nuovo = etichettaTasto(testo3, { apple });
     if (nuovo && nuovo !== testo3) {
-      nodo9.textContent = nuovo;
+      nodo10.textContent = nuovo;
       cambiati += 1;
     }
   }
@@ -13227,8 +13598,8 @@ function migraTitle(elemento) {
   elemento.removeAttribute("title");
   return titolo2.trim();
 }
-function bersaglioDi(nodo9) {
-  let corrente = nodo9;
+function bersaglioDi(nodo10) {
+  let corrente = nodo10;
   while (corrente && corrente.nodeType === 1) {
     if (corrente.hasAttribute?.(ATTRIBUTO) || corrente.hasAttribute?.("title")) return corrente;
     corrente = corrente.parentElement;
@@ -14165,10 +14536,10 @@ var init_context_progress = __esm({
 
 // src/components/stato-vuoto.js
 function el24(documentObj, tag2, className, testo3) {
-  const nodo9 = documentObj.createElement(tag2);
-  if (className) nodo9.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo9.textContent = String(testo3);
-  return nodo9;
+  const nodo10 = documentObj.createElement(tag2);
+  if (className) nodo10.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo10.textContent = String(testo3);
+  return nodo10;
 }
 function simbolo3(documentObj, classe, nome) {
   const svg = documentObj.createElementNS(SVG_NS3, "svg");
@@ -14881,9 +15252,9 @@ var init_app = __esm({
       }
       const motionAnimations = /* @__PURE__ */ new Set();
       let spazioCodaConversazioneUltimo = -1;
-      function scrollerConversazione(nodo9 = $2("#conversation")) {
-        if (!nodo9) return null;
-        return nodo9.closest?.(".talos-conversation") || nodo9;
+      function scrollerConversazione(nodo10 = $2("#conversation")) {
+        if (!nodo10) return null;
+        return nodo10.closest?.(".talos-conversation") || nodo10;
       }
       function aggiornaSpazioCodaConversazione(conversation) {
         if (!conversation) return;
@@ -14981,8 +15352,8 @@ var init_app = __esm({
         let n;
         while (n = walker.nextNode()) nodi.push(n);
         for (let i = nodi.length - 1; i >= 0 && restanti > 0; i -= 1) {
-          const nodo9 = nodi[i];
-          const genitore = nodo9.parentElement;
+          const nodo10 = nodi[i];
+          const genitore = nodo10.parentElement;
           if (!genitore) continue;
           if (genitore.classList.contains("stream-word")) {
             restanti -= 1;
@@ -14990,7 +15361,7 @@ var init_app = __esm({
             continue;
           }
           if (genitore.closest("pre, code, .code-block-head")) continue;
-          const pezzi = nodo9.textContent.split(/(\s+)/).filter((p) => p.length > 0);
+          const pezzi = nodo10.textContent.split(/(\s+)/).filter((p) => p.length > 0);
           if (pezzi.length === 0) continue;
           const nuovi = [];
           let testoPiano = "";
@@ -15016,7 +15387,7 @@ var init_app = __esm({
           if (nuovi.length === 1 && nuovi[0].nodeType === Node.TEXT_NODE) continue;
           const frag = document.createDocumentFragment();
           for (const nuovo of nuovi) frag.appendChild(nuovo);
-          nodo9.replaceWith(frag);
+          nodo10.replaceWith(frag);
         }
       }
       function renderizzaMessaggioStreamingOra(messageId) {
@@ -15561,7 +15932,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       let fuocoPrimaDelCassetto = null;
       function elementiFuoriDalCassetto() {
         const barra = $2(".talos-sidebar");
-        return [...appShell?.children || []].filter((nodo9) => nodo9 !== barra);
+        return [...appShell?.children || []].filter((nodo10) => nodo10 !== barra);
       }
       function cassettoAperto() {
         return document.documentElement.classList.contains("td-drawer-open");
@@ -15572,7 +15943,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (!barra) return;
         fuocoPrimaDelCassetto = ROOT().activeElement || null;
         document.documentElement.classList.add("td-drawer-open");
-        for (const nodo9 of elementiFuoriDalCassetto()) nodo9.inert = true;
+        for (const nodo10 of elementiFuoriDalCassetto()) nodo10.inert = true;
         let velo = $2(".td-scrim");
         if (!velo) {
           velo = document.createElement("button");
@@ -15592,7 +15963,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       function chiudiCassettoBarra({ restituisciFuoco = true } = {}) {
         if (!cassettoAperto()) return;
         document.documentElement.classList.remove("td-drawer-open");
-        for (const nodo9 of elementiFuoriDalCassetto()) nodo9.inert = false;
+        for (const nodo10 of elementiFuoriDalCassetto()) nodo10.inert = false;
         $2(".td-scrim")?.remove();
         $2("#apriCassettoBarra")?.setAttribute("aria-expanded", "false");
         if (restituisciFuoco) (fuocoPrimaDelCassetto?.isConnected ? fuocoPrimaDelCassetto : $2("#apriCassettoBarra"))?.focus?.({ preventScroll: true });
@@ -16032,7 +16403,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           statoRender.prefisso = stabile;
           statoRender.nodiCoda = [];
         } else {
-          for (const nodo9 of statoRender.nodiCoda) nodo9.remove();
+          for (const nodo10 of statoRender.nodiCoda) nodo10.remove();
           statoRender.nodiCoda = [];
           if (stabile.length > statoRender.prefisso.length) {
             const nuovoStabile = renderizzaMarkdownSemplice(stabile.slice(statoRender.prefisso.length));
@@ -16197,8 +16568,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return "Nel prossimo messaggio chiedi un passo solo: il tetto vale per giro, non per sessione.";
       }
       function aggiornaContatoreUsage() {
-        const nodo9 = $2("[data-usage-summary]");
-        if (nodo9) nodo9.textContent = `Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true })}`;
+        const nodo10 = $2("[data-usage-summary]");
+        if (nodo10) nodo10.textContent = `Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true })}`;
       }
       function formattaOraSessione(iso) {
         const data = new Date(iso);
@@ -16287,9 +16658,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return (parole.length > 1 ? parole[0][0] + parole[1][0] : String(row.label || row.id).slice(0, 2)).toUpperCase();
       }
       function segmentoProvider(stato, testo3) {
-        const nodo9 = textElement("span", "provider-seg", SEGNI_PROVIDER[stato] + " " + testo3);
-        nodo9.dataset.seg = stato;
-        return nodo9;
+        const nodo10 = textElement("span", "provider-seg", SEGNI_PROVIDER[stato] + " " + testo3);
+        nodo10.dataset.seg = stato;
+        return nodo10;
       }
       function renderizzaProviderModelLab() {
         const rows = Array.isArray(state.modelLab.providers) ? state.modelLab.providers : [];
@@ -16530,32 +16901,32 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       function nodoVerdettoFit(modelId) {
         const voce = state.modelLab.fit.get(modelId);
-        const nodo9 = document.createElement("p");
-        nodo9.className = "model-lab-fit";
-        nodo9.dataset.modelFit = modelId;
+        const nodo10 = document.createElement("p");
+        nodo10.className = "model-lab-fit";
+        nodo10.dataset.modelFit = modelId;
         if (!voce) {
-          nodo9.hidden = true;
-          return nodo9;
+          nodo10.hidden = true;
+          return nodo10;
         }
         if (voce.inCorso) {
-          nodo9.dataset.fitState = "attesa";
-          nodo9.textContent = "Verifica in corso…";
-          return nodo9;
+          nodo10.dataset.fitState = "attesa";
+          nodo10.textContent = "Verifica in corso…";
+          return nodo10;
         }
         if (voce.errore) {
-          nodo9.dataset.fitState = "bad";
-          nodo9.textContent = `Verifica non riuscita — ${voce.errore}`;
-          return nodo9;
+          nodo10.dataset.fitState = "bad";
+          nodo10.textContent = `Verifica non riuscita — ${voce.errore}`;
+          return nodo10;
         }
         const { classe, testo: testo3 } = descriviFit(voce.esito);
-        nodo9.dataset.fitState = voce.ripiegoChat ? "warn" : classe;
+        nodo10.dataset.fitState = voce.ripiegoChat ? "warn" : classe;
         const prefissoRipiego = voce.ripiegoChat ? voce.esito?.state === "unknown" ? "Va bene per la chat; come agente non verificabile ora" : "Va bene per la chat, non come agente" : "";
-        nodo9.textContent = voce.ripiegoChat ? `${prefissoRipiego} — ${testo3.replace(/^[^—]*— /, "")}` : testo3;
+        nodo10.textContent = voce.ripiegoChat ? `${prefissoRipiego} — ${testo3.replace(/^[^—]*— /, "")}` : testo3;
         const ctx = voce.esito.context;
         if (Number.isFinite(ctx?.availableTokens) && Number.isFinite(ctx?.requestedTokens)) {
-          nodo9.append(textElement("small", "", ` contesto ${ctx.availableTokens.toLocaleString("it-IT")} token su ${ctx.requestedTokens.toLocaleString("it-IT")} richiesti`));
+          nodo10.append(textElement("small", "", ` contesto ${ctx.availableTokens.toLocaleString("it-IT")} token su ${ctx.requestedTokens.toLocaleString("it-IT")} richiesti`));
         }
-        return nodo9;
+        return nodo10;
       }
       async function verificaCompatibilitaModello(modelId) {
         state.modelLab.fit.set(modelId, { inCorso: true });
@@ -16964,7 +17335,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
               void avviaDownloadHf(det, g.file, g.bytes);
             },
             tuttiFile: (det) => riempiVeloFileModello(det),
-            scheda: (det, bottone4) => mostraSchedaModelloHf(det, bottone4)
+            scheda: (det, bottone5) => mostraSchedaModelloHf(det, bottone5)
           }
         });
         return true;
@@ -17016,12 +17387,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const piede = velo.querySelector(".talos-dialog__footer-note");
         if (piede) piede.textContent = `${(detail.files || []).length} file nel repository`;
       }
-      function mostraSchedaModelloHf(detail, bottone4) {
+      function mostraSchedaModelloHf(detail, bottone5) {
         const cont = $2("#hfScheda");
         if (!cont) return;
         const aperto = !cont.hidden;
         cont.hidden = aperto;
-        bottone4?.setAttribute("aria-expanded", String(!aperto));
+        bottone5?.setAttribute("aria-expanded", String(!aperto));
         if (!aperto) cont.replaceChildren(renderizzaModelCardReadme(detail));
       }
       function renderizzaHfDetailModelLab() {
@@ -17147,21 +17518,21 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         corpo.className = "hf-detail-body";
         const attiva = schede.some((s) => s.id === state.modelLab.hfDetailTab) ? state.modelLab.hfDetailTab : "quantizzazioni";
         for (const scheda of schede) {
-          const bottone4 = document.createElement("button");
-          bottone4.type = "button";
-          bottone4.className = "hf-detail-tab";
-          bottone4.dataset.hfDetailTab = scheda.id;
-          bottone4.setAttribute("role", "tab");
+          const bottone5 = document.createElement("button");
+          bottone5.type = "button";
+          bottone5.className = "hf-detail-tab";
+          bottone5.dataset.hfDetailTab = scheda.id;
+          bottone5.setAttribute("role", "tab");
           const selezionata = scheda.id === attiva;
-          bottone4.setAttribute("aria-selected", String(selezionata));
-          bottone4.classList.toggle("active", selezionata);
-          bottone4.append(textElement("span", "", scheda.etichetta));
-          if (Number.isFinite(scheda.conto)) bottone4.append(textElement("span", "hf-detail-tab-count", String(scheda.conto)));
-          bottone4.addEventListener("click", () => {
+          bottone5.setAttribute("aria-selected", String(selezionata));
+          bottone5.classList.toggle("active", selezionata);
+          bottone5.append(textElement("span", "", scheda.etichetta));
+          if (Number.isFinite(scheda.conto)) bottone5.append(textElement("span", "hf-detail-tab-count", String(scheda.conto)));
+          bottone5.addEventListener("click", () => {
             state.modelLab.hfDetailTab = scheda.id;
             renderizzaHfDetailModelLab();
           });
-          barra.append(bottone4);
+          barra.append(bottone5);
           if (selezionata) corpo.append(scheda.nodo);
         }
         card.append(heading, tags, stats, barra, corpo);
@@ -17335,14 +17706,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         });
       }
       async function liberaMemoriaModello() {
-        const bottone4 = $2("#memoriaScarica");
-        if (state.modelLab.unloading || bottone4?.disabled) return;
+        const bottone5 = $2("#memoriaScarica");
+        if (state.modelLab.unloading || bottone5?.disabled) return;
         state.modelLab.unloading = true;
         aggiornaPannelloMemoria();
-        const originale = bottone4?.textContent;
-        if (bottone4) {
-          bottone4.disabled = true;
-          bottone4.textContent = "Liberazione…";
+        const originale = bottone5?.textContent;
+        if (bottone5) {
+          bottone5.disabled = true;
+          bottone5.textContent = "Liberazione…";
         }
         const primaLiberi = state.modelLab.capacity?.memory?.freeBytes;
         try {
@@ -17357,8 +17728,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           toast("Memoria non liberata", error.message || "Il runtime locale non ha risposto.");
         } finally {
           state.modelLab.unloading = false;
-          if (bottone4) {
-            bottone4.textContent = originale || "Libera la memoria del modello";
+          if (bottone5) {
+            bottone5.textContent = originale || "Libera la memoria del modello";
           }
           aggiornaPannelloMemoria();
         }
@@ -17910,15 +18281,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           if (azione) gestisciAzioneProvider(azione);
         });
         $2("#providerTestAll")?.addEventListener("click", async (event) => {
-          const bottone4 = event.currentTarget;
-          bottone4.disabled = true;
-          const prima = bottone4.textContent;
-          bottone4.textContent = "Provo tutti…";
+          const bottone5 = event.currentTarget;
+          bottone5.disabled = true;
+          const prima = bottone5.textContent;
+          bottone5.textContent = "Provo tutti…";
           try {
             await Promise.all((state.modelLab.providers || []).map((row) => provaProviderModelLab(row.id)));
           } finally {
-            bottone4.disabled = false;
-            bottone4.textContent = prima;
+            bottone5.disabled = false;
+            bottone5.textContent = prima;
           }
         });
         caricaCapacitaMacchina();
@@ -18090,24 +18461,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (hook.fidato) {
           statoEl = textElement("span", "status-chip success", "attivo");
         } else {
-          const bottone4 = document.createElement("button");
-          bottone4.type = "button";
-          bottone4.className = "secondary-btn";
-          bottone4.textContent = "Fida";
-          bottone4.addEventListener("click", async () => {
-            bottone4.disabled = true;
-            bottone4.textContent = "Fido…";
+          const bottone5 = document.createElement("button");
+          bottone5.type = "button";
+          bottone5.className = "secondary-btn";
+          bottone5.textContent = "Fida";
+          bottone5.addEventListener("click", async () => {
+            bottone5.disabled = true;
+            bottone5.textContent = "Fido…";
             try {
               await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/hooks/${encodeURIComponent(hook.id)}/trust`, {});
               toast("Hook fidato", hook.id);
               caricaPannelloHooks();
             } catch (error) {
-              bottone4.disabled = false;
-              bottone4.textContent = "Fida";
+              bottone5.disabled = false;
+              bottone5.textContent = "Fida";
               toast("Non riuscito", error.message);
             }
           });
-          statoEl = bottone4;
+          statoEl = bottone5;
         }
         riga.append(iconEl, testo3, statoEl);
         return riga;
@@ -18719,24 +19090,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (server.fidato) {
           statoEl = textElement("span", "status-chip success", "attivo");
         } else {
-          const bottone4 = document.createElement("button");
-          bottone4.type = "button";
-          bottone4.className = "secondary-btn";
-          bottone4.textContent = "Fida";
-          bottone4.addEventListener("click", async () => {
-            bottone4.disabled = true;
-            bottone4.textContent = "Fido…";
+          const bottone5 = document.createElement("button");
+          bottone5.type = "button";
+          bottone5.className = "secondary-btn";
+          bottone5.textContent = "Fida";
+          bottone5.addEventListener("click", async () => {
+            bottone5.disabled = true;
+            bottone5.textContent = "Fido…";
             try {
               await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/mcp/${encodeURIComponent(server.id)}/trust`, {});
               toast("Server MCP fidato", server.id);
               caricaPannelloMcp();
             } catch (error) {
-              bottone4.disabled = false;
-              bottone4.textContent = "Fida";
+              bottone5.disabled = false;
+              bottone5.textContent = "Fida";
               toast("Non riuscito", error.message);
             }
           });
-          statoEl = bottone4;
+          statoEl = bottone5;
         }
         riga.append(iconEl, testo3, statoEl);
         return riga;
@@ -18788,24 +19159,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (plugin.fidato) {
           statoEl = textElement("span", "status-chip success", "attivo");
         } else {
-          const bottone4 = document.createElement("button");
-          bottone4.type = "button";
-          bottone4.className = "secondary-btn";
-          bottone4.textContent = "Fida";
-          bottone4.addEventListener("click", async () => {
-            bottone4.disabled = true;
-            bottone4.textContent = "Fido…";
+          const bottone5 = document.createElement("button");
+          bottone5.type = "button";
+          bottone5.className = "secondary-btn";
+          bottone5.textContent = "Fida";
+          bottone5.addEventListener("click", async () => {
+            bottone5.disabled = true;
+            bottone5.textContent = "Fido…";
             try {
               await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/plugins/${encodeURIComponent(plugin.id)}/trust`, {});
               toast("Plugin fidato", plugin.id);
               caricaPannelloPlugin();
             } catch (error) {
-              bottone4.disabled = false;
-              bottone4.textContent = "Fida";
+              bottone5.disabled = false;
+              bottone5.textContent = "Fida";
               toast("Non riuscito", error.message);
             }
           });
-          statoEl = bottone4;
+          statoEl = bottone5;
         }
         riga.append(iconEl, testo3, statoEl);
         wrapper.append(riga);
@@ -18919,21 +19290,21 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           const voci = fontiDelSelettore({ openrouter: modelliCache, locali: modelliLocali, diretti: modelliDiretti });
           if (!voci.some((voce) => voce.id === fonteScelta)) fonteScelta = "openrouter";
           const schede = voci.map((voce) => {
-            const bottone4 = document.createElement("button");
-            bottone4.type = "button";
-            bottone4.className = "model-picker-source";
-            bottone4.dataset.pickerSource = voce.id;
-            bottone4.setAttribute("role", "tab");
-            bottone4.setAttribute("aria-controls", listEl.id);
+            const bottone5 = document.createElement("button");
+            bottone5.type = "button";
+            bottone5.className = "model-picker-source";
+            bottone5.dataset.pickerSource = voce.id;
+            bottone5.setAttribute("role", "tab");
+            bottone5.setAttribute("aria-controls", listEl.id);
             const attiva = voce.id === fonteScelta;
-            bottone4.setAttribute("aria-selected", String(attiva));
-            bottone4.tabIndex = attiva ? 0 : -1;
-            bottone4.classList.toggle("active", attiva);
-            bottone4.append(textElement("span", "", voce.etichetta));
-            if (Number.isFinite(voce.conto)) bottone4.append(textElement("span", "model-picker-source-count", String(voce.conto)));
-            if (!voce.collegato) bottone4.title = `${voce.etichetta}: chiave non collegata`;
-            bottone4.addEventListener("click", () => scegliFonte(voce.id));
-            return bottone4;
+            bottone5.setAttribute("aria-selected", String(attiva));
+            bottone5.tabIndex = attiva ? 0 : -1;
+            bottone5.classList.toggle("active", attiva);
+            bottone5.append(textElement("span", "", voce.etichetta));
+            if (Number.isFinite(voce.conto)) bottone5.append(textElement("span", "model-picker-source-count", String(voce.conto)));
+            if (!voce.collegato) bottone5.title = `${voce.etichetta}: chiave non collegata`;
+            bottone5.addEventListener("click", () => scegliFonte(voce.id));
+            return bottone5;
           });
           fonti.replaceChildren(...schede);
         }
@@ -19469,11 +19840,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           badge5.textContent = String(notifiche.length);
           badge5.hidden = notifiche.length === 0;
         }
-        const bottone4 = $2("#notificationsBtn");
-        if (bottone4) {
+        const bottone5 = $2("#notificationsBtn");
+        if (bottone5) {
           const nome = nomeCampanella(notifiche.length);
-          bottone4.setAttribute("aria-label", nome);
-          bottone4.title = nome;
+          bottone5.setAttribute("aria-label", nome);
+          bottone5.title = nome;
         }
         avvisaFuoriDallaFinestra(notifiche);
       }
@@ -19502,19 +19873,19 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
       }
       function montaConsensoNotifiche() {
-        const bottone4 = $2("#notificheSistema");
+        const bottone5 = $2("#notificheSistema");
         const stato = $2("#notificheSistemaStato");
-        if (!bottone4 || !stato) return;
+        if (!bottone5 || !stato) return;
         const supportato = typeof Notification !== "undefined";
         const dipingi = () => {
           const s = statoConsensoNotifiche(supportato ? Notification.permission : "default", supportato);
           stato.textContent = s.testo;
-          bottone4.hidden = !s.chiedibile;
+          bottone5.hidden = !s.chiedibile;
         };
         dipingi();
-        if (bottone4.dataset.consensoMontato) return;
-        bottone4.dataset.consensoMontato = "true";
-        bottone4.addEventListener("click", async () => {
+        if (bottone5.dataset.consensoMontato) return;
+        bottone5.dataset.consensoMontato = "true";
+        bottone5.addEventListener("click", async () => {
           if (!supportato) return;
           try {
             await Notification.requestPermission();
@@ -19863,15 +20234,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (tipo === "export") {
           const nome = $2("#esportaNome", velo);
           if (nome) nome.textContent = state.sessioneTarget?.nome || state.session || "questa sessione";
-          for (const bottone4 of $$("[data-export-choice]", velo)) {
-            if (bottone4.dataset.collegato) continue;
-            bottone4.dataset.collegato = "si";
-            bottone4.addEventListener("click", async () => {
+          for (const bottone5 of $$("[data-export-choice]", velo)) {
+            if (bottone5.dataset.collegato) continue;
+            bottone5.dataset.collegato = "si";
+            bottone5.addEventListener("click", async () => {
               const tutti = $$("[data-export-choice]", velo);
               tutti.forEach((b) => {
                 b.disabled = true;
               });
-              const esito = await esportaTrascrizioneSessione(bottone4.dataset.exportChoice);
+              const esito = await esportaTrascrizioneSessione(bottone5.dataset.exportChoice);
               tutti.forEach((b) => {
                 b.disabled = false;
               });
@@ -20779,15 +21150,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       ]);
       function disegnaPermessiIn(radice) {
         if (!radice) return;
-        for (const bottone4 of $$("[data-dove-choice]", radice)) {
-          const suo = (bottone4.dataset.doveChoice || null) === (state.realSession.doveGiranoIComandi ?? null);
-          bottone4.setAttribute("aria-checked", String(suo));
-          bottone4.classList.toggle("is-attiva", suo);
+        for (const bottone5 of $$("[data-dove-choice]", radice)) {
+          const suo = (bottone5.dataset.doveChoice || null) === (state.realSession.doveGiranoIComandi ?? null);
+          bottone5.setAttribute("aria-checked", String(suo));
+          bottone5.classList.toggle("is-attiva", suo);
         }
-        for (const bottone4 of $$("[data-permission-choice]", radice)) {
-          const suo = bottone4.dataset.permissionChoice === state.permissions;
-          bottone4.setAttribute("aria-checked", String(suo));
-          bottone4.classList.toggle("is-attiva", suo);
+        for (const bottone5 of $$("[data-permission-choice]", radice)) {
+          const suo = bottone5.dataset.permissionChoice === state.permissions;
+          bottone5.setAttribute("aria-checked", String(suo));
+          bottone5.classList.toggle("is-attiva", suo);
         }
         const elenco2 = $2("#veloPermessiAttrezzi", radice);
         if (elenco2) {
@@ -20812,12 +21183,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           avviso.textContent = "";
           if (testo3) {
             avviso.append(document.createTextNode(`${testo3} `));
-            const bottone4 = document.createElement("button");
-            bottone4.type = "button";
-            bottone4.className = "talos-button talos-button--sm";
-            bottone4.dataset.chiudiPorteLaterali = aperte.join(",");
-            bottone4.textContent = `Chiudi anche ${aperte.length === 1 ? "quella" : "quelle"}`;
-            avviso.append(bottone4);
+            const bottone5 = document.createElement("button");
+            bottone5.type = "button";
+            bottone5.className = "talos-button talos-button--sm";
+            bottone5.dataset.chiudiPorteLaterali = aperte.join(",");
+            bottone5.textContent = `Chiudi anche ${aperte.length === 1 ? "quella" : "quelle"}`;
+            avviso.append(bottone5);
           }
         }
       }
@@ -20890,9 +21261,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             ridisegna();
           });
           radice.addEventListener("click", (evento) => {
-            const bottone4 = evento.target?.closest?.("[data-chiudi-porte-laterali]");
-            if (!bottone4) return;
-            const quali = String(bottone4.dataset.chiudiPorteLaterali || "").split(",").filter(Boolean);
+            const bottone5 = evento.target?.closest?.("[data-chiudi-porte-laterali]");
+            if (!bottone5) return;
+            const quali = String(bottone5.dataset.chiudiPorteLaterali || "").split(",").filter(Boolean);
             if (!quali.length) return;
             const comeScrivi = state.permessiPerAttrezzo.scrivi === "nega" ? "nega" : "chiedi";
             for (const attrezzo of quali) state.permessiPerAttrezzo[attrezzo] = comeScrivi;
@@ -20903,11 +21274,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
       }
       function nodoAlbero({ titolo: titolo2, sotto, token, giri, stato = "done", qui = false, onApri = null, azione = null }) {
-        const nodo9 = document.createElement("div");
-        nodo9.className = `talos-tree__node${qui ? " talos-tree__node--current" : ""}${onApri ? " talos-tree__node--branch" : ""}`;
-        nodo9.setAttribute("role", "treeitem");
-        nodo9.setAttribute("aria-selected", String(qui));
-        nodo9.setAttribute("aria-level", onApri ? "2" : "1");
+        const nodo10 = document.createElement("div");
+        nodo10.className = `talos-tree__node${qui ? " talos-tree__node--current" : ""}${onApri ? " talos-tree__node--branch" : ""}`;
+        nodo10.setAttribute("role", "treeitem");
+        nodo10.setAttribute("aria-selected", String(qui));
+        nodo10.setAttribute("aria-level", onApri ? "2" : "1");
         const rail = document.createElement("span");
         rail.className = "talos-tree__rail";
         const dot = document.createElement("span");
@@ -20921,13 +21292,13 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (Number.isFinite(giri) && giri > 0) aside.append(textElement("span", "talos-mono talos-muted", `${giri} gir${giri === 1 ? "o" : "i"}`));
         if (qui) aside.append(textElement("span", "talos-badge talos-badge--accent talos-badge--sm", "Qui"));
         else if (onApri) {
-          const bottone4 = textElement("button", "talos-button talos-button--ghost talos-button--sm", azione || "Apri");
-          bottone4.type = "button";
-          bottone4.addEventListener("click", onApri);
-          aside.append(bottone4);
+          const bottone5 = textElement("button", "talos-button talos-button--ghost talos-button--sm", azione || "Apri");
+          bottone5.type = "button";
+          bottone5.addEventListener("click", onApri);
+          aside.append(bottone5);
         }
-        nodo9.append(rail, dot, testo3, aside);
-        return nodo9;
+        nodo10.append(rail, dot, testo3, aside);
+        return nodo10;
       }
       function soloToken(usage) {
         if (!usage) return "";
@@ -23310,10 +23681,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             const osservati = /* @__PURE__ */ new WeakSet();
             const agganciaTutti = () => {
               if (!osservatore) return;
-              for (const nodo9 of [riquadroDaSeguire, document.querySelector("#browserVistaViva"), document.querySelector("#browserLive")]) {
-                if (nodo9 && nodo9.isConnected && !osservati.has(nodo9)) {
-                  osservati.add(nodo9);
-                  osservatore.observe(nodo9);
+              for (const nodo10 of [riquadroDaSeguire, document.querySelector("#browserVistaViva"), document.querySelector("#browserLive")]) {
+                if (nodo10 && nodo10.isConnected && !osservati.has(nodo10)) {
+                  osservati.add(nodo10);
+                  osservatore.observe(nodo10);
                 }
               }
             };
@@ -23937,17 +24308,17 @@ ${testo3}` : testo3;
         return ultimo || percorso;
       }
       function costruisciRigaAdottaFuoriSessione(percorsoAssoluto, nome) {
-        const bottone4 = document.createElement("button");
-        bottone4.type = "button";
-        bottone4.className = "ft-outside-row-adopt";
-        bottone4.setAttribute("aria-label", `Usa "${nome}" come radice — apre una sessione nuova con Full access`);
-        bottone4.title = "Usa come radice (sessione nuova, Full access)";
-        bottone4.append(iconaSvgAlbero("i-check"));
-        bottone4.addEventListener("click", (evento) => {
+        const bottone5 = document.createElement("button");
+        bottone5.type = "button";
+        bottone5.className = "ft-outside-row-adopt";
+        bottone5.setAttribute("aria-label", `Usa "${nome}" come radice — apre una sessione nuova con Full access`);
+        bottone5.title = "Usa come radice (sessione nuova, Full access)";
+        bottone5.append(iconaSvgAlbero("i-check"));
+        bottone5.addEventListener("click", (evento) => {
           evento.stopPropagation();
           usaCartellaFuoriSessioneComeRadice(percorsoAssoluto, nome);
         });
-        return bottone4;
+        return bottone5;
       }
       function costruisciZonaFuoriSessione() {
         const dati = state.realSession.fuoriSessioneDati;
@@ -24745,6 +25116,7 @@ ${testo3}` : testo3;
         menu.className = "ft-actions-menu";
         menu.setAttribute("role", "menu");
         const voci = soloCreazione ? [
+          { etichetta: "Apri in Esplora File", icona: "i-folder-open", azione: () => apriInEsploraFile(percorsoCompleto) },
           { etichetta: "Nuovo file", icona: "i-edit", azione: () => avviaCreaVoce(percorsoCompleto, "file") },
           { etichetta: "Nuova cartella", icona: "i-folder", azione: () => avviaCreaVoce(percorsoCompleto, "cartella") }
         ] : cartella ? [
@@ -24753,6 +25125,7 @@ ${testo3}` : testo3;
           { etichetta: "Rinomina", icona: "i-edit", azione: () => avviaRinominaFile(percorsoCompleto, nome) },
           { etichetta: "Copia", icona: "i-link", azione: () => avviaCopiaFile(percorsoCompleto) },
           { etichetta: "Imposta come radice", icona: "i-folder", azione: () => impostaComeRadice(percorsoCompleto, nome) },
+          { etichetta: "Apri in Esplora File", icona: "i-folder-open", azione: () => apriInEsploraFile(percorsoCompleto) },
           { etichetta: "Rivela in Esplora File", icona: "i-folder-open", azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
           { etichetta: "Elimina", icona: "i-trash", azione: () => avviaEliminaFile(percorsoCompleto, nome, cartella), pericoloso: true }
         ] : [
@@ -24829,7 +25202,7 @@ ${testo3}` : testo3;
         mount.replaceChildren(pre);
       }
       async function rivelaERivelaRigaAlbero(percorsoCompleto) {
-        const trovaNodo = (percorso) => [...document.querySelectorAll("#inspector-files .ft-node")].find((nodo9) => nodo9.dataset.percorso === percorso);
+        const trovaNodo = (percorso) => [...document.querySelectorAll("#inspector-files .ft-node")].find((nodo10) => nodo10.dataset.percorso === percorso);
         const parti = String(percorsoCompleto || "").split("/").filter(Boolean);
         let percorsoPadre = "";
         for (let indice2 = 0; indice2 < Math.max(0, parti.length - 1); indice2 += 1) {
@@ -24901,6 +25274,14 @@ ${testo3}` : testo3;
           toast("Non riuscito", error.message);
         }
       }
+      async function apriInEsploraFile(percorsoCompleto) {
+        try {
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/open`, { percorso: percorsoCompleto });
+          toast("Aperto in Esplora File", percorsoCompleto || nomeRadiceAlberoReale());
+        } catch (error) {
+          toast("Non riuscito", error.message);
+        }
+      }
       async function renderizzaAlberoReale() {
         cancellaRenderAlberoDifferito();
         if (treeRenderInFlight) {
@@ -24932,6 +25313,18 @@ ${testo3}` : testo3;
         const radice = document.createElement("div");
         radice.className = "tree-root talos-file-row";
         radice.append(iconaSvgAlbero("i-files"), textElement("strong", "", nomeRadiceAlberoReale()));
+        if (!alberoInAnteprima()) {
+          const azioniRadice = document.createElement("button");
+          azioniRadice.type = "button";
+          azioniRadice.className = "ft-actions-btn talos-button talos-button--ghost talos-button--sm talos-icon-button";
+          azioniRadice.setAttribute("aria-label", `Azioni su ${nomeRadiceAlberoReale()}`);
+          azioniRadice.appendChild(iconaSvgAlbero("i-more"));
+          azioniRadice.addEventListener("click", (e) => {
+            e.stopPropagation();
+            apriMenuAzioniFile("", nomeRadiceAlberoReale(), { ancoraEl: azioniRadice }, true, true);
+          });
+          radice.appendChild(azioniRadice);
+        }
         if (!alberoInAnteprima()) radice.addEventListener("contextmenu", (e) => {
           e.preventDefault();
           apriMenuAzioniFile("", nomeRadiceAlberoReale(), { x: e.clientX, y: e.clientY }, true, true);
@@ -24977,8 +25370,13 @@ ${testo3}` : testo3;
             if (righe[i - 1]) impostaFocusRigaAlbero(ul, righe[i - 1]);
           } else if (e.key === "ArrowRight") {
             e.preventDefault();
-            if (eCartella && li.getAttribute("aria-expanded") === "false") row.click();
-            else if (righe[i + 1]) impostaFocusRigaAlbero(ul, righe[i + 1]);
+            if (!eCartella) return;
+            if (li.getAttribute("aria-expanded") === "false") {
+              row.click();
+              return;
+            }
+            const primoFiglio = li.querySelector(":scope > ul > .ft-node > .ft-row");
+            if (primoFiglio) impostaFocusRigaAlbero(ul, primoFiglio);
           } else if (e.key === "ArrowLeft") {
             e.preventDefault();
             if (eCartella && li.getAttribute("aria-expanded") === "true") row.click();
@@ -27555,9 +27953,9 @@ ${testo3}` : testo3;
           p.textContent = sottotitolo;
           return [h, p];
         }
-        function segnaEsito(nodo9, esito, testo3) {
-          nodo9.dataset.esito = esito;
-          nodo9.textContent = testo3;
+        function segnaEsito(nodo10, esito, testo3) {
+          nodo10.dataset.esito = esito;
+          nodo10.textContent = testo3;
         }
         async function disegnaProvider() {
           body.replaceChildren(...titolo2("Da dove pensa TALOS", "Serve un accesso a un modello: la chiave di un provider, salvata nel portachiavi di questo computer e mai nel browser, oppure un motore locale sul disco."));
@@ -28477,11 +28875,11 @@ ${blocchi.join("\n\n")}` : testa;
       }
       const sintesiVoceDisponibile = "speechSynthesis" in window;
       let elementoInAscolto = null;
-      function impostaStatoBottoneAscolto(bottone4, inAscolto) {
-        bottone4.classList.toggle("speaking", inAscolto);
-        bottone4.setAttribute("aria-pressed", String(inAscolto));
-        bottone4.setAttribute("aria-label", inAscolto ? "Ferma la lettura" : "Ascolta la risposta");
-        const uso = bottone4.querySelector("use");
+      function impostaStatoBottoneAscolto(bottone5, inAscolto) {
+        bottone5.classList.toggle("speaking", inAscolto);
+        bottone5.setAttribute("aria-pressed", String(inAscolto));
+        bottone5.setAttribute("aria-label", inAscolto ? "Ferma la lettura" : "Ascolta la risposta");
+        const uso = bottone5.querySelector("use");
         if (uso) uso.setAttribute("href", inAscolto ? "#i-stop" : "#i-play");
       }
       function fermaLetturaVoceAlta() {
@@ -28490,22 +28888,22 @@ ${blocchi.join("\n\n")}` : testa;
         if (elementoInAscolto) impostaStatoBottoneAscolto(elementoInAscolto, false);
         elementoInAscolto = null;
       }
-      function leggiVoceAlta(testo3, bottone4) {
+      function leggiVoceAlta(testo3, bottone5) {
         if (!sintesiVoceDisponibile || !testo3.trim()) return;
-        const giàInAscoltoQui = elementoInAscolto === bottone4;
+        const giàInAscoltoQui = elementoInAscolto === bottone5;
         fermaLetturaVoceAlta();
         if (giàInAscoltoQui) return;
         const utterance = new SpeechSynthesisUtterance(testo3);
         utterance.lang = "it-IT";
         utterance.onend = () => {
-          if (elementoInAscolto === bottone4) {
-            impostaStatoBottoneAscolto(bottone4, false);
+          if (elementoInAscolto === bottone5) {
+            impostaStatoBottoneAscolto(bottone5, false);
             elementoInAscolto = null;
           }
         };
         utterance.onerror = utterance.onend;
-        elementoInAscolto = bottone4;
-        impostaStatoBottoneAscolto(bottone4, true);
+        elementoInAscolto = bottone5;
+        impostaStatoBottoneAscolto(bottone5, true);
         window.speechSynthesis.speak(utterance);
       }
       function radiceComandi() {
@@ -28726,13 +29124,13 @@ ${testo3}`;
       }
       $2("#miglioraPromptBtn")?.addEventListener("click", (evento) => {
         evento.stopPropagation();
-        const bottone4 = $2("#miglioraPromptBtn");
+        const bottone5 = $2("#miglioraPromptBtn");
         const pannello = pannelloMiglioraPrompt();
-        if (bottone4.getAttribute("aria-expanded") === "true") {
+        if (bottone5.getAttribute("aria-expanded") === "true") {
           pannello.chiudi();
           return;
         }
-        bottone4.setAttribute("aria-expanded", "true");
+        bottone5.setAttribute("aria-expanded", "true");
         pannello.apri();
       });
       ROOT().addEventListener("click", (evento) => {
@@ -28920,13 +29318,13 @@ ${testo3}`;
         toast(...demoActionCopy[button2.dataset.demoAction] || ["Demo UI · non collegato", "Nessuna azione reale eseguita."]);
       }));
       $2("#settingsSvuotaLocali")?.addEventListener("click", (event) => {
-        const bottone4 = event.currentTarget;
-        if (bottone4.dataset.conferma !== "1") {
-          bottone4.dataset.conferma = "1";
-          bottone4.textContent = "Confermi? Tocca di nuovo per svuotare";
+        const bottone5 = event.currentTarget;
+        if (bottone5.dataset.conferma !== "1") {
+          bottone5.dataset.conferma = "1";
+          bottone5.textContent = "Confermi? Tocca di nuovo per svuotare";
           window.setTimeout(() => {
-            bottone4.dataset.conferma = "";
-            bottone4.textContent = "Svuota le preferenze di questo browser";
+            bottone5.dataset.conferma = "";
+            bottone5.textContent = "Svuota le preferenze di questo browser";
           }, 4e3);
           return;
         }
@@ -29128,10 +29526,10 @@ ${testo3}`;
         syncRunComposerState();
       });
       bivioInvio?.addEventListener("click", (event) => {
-        const bottone4 = event.target.closest("[data-bivio]");
-        if (!bottone4) return;
+        const bottone5 = event.target.closest("[data-bivio]");
+        if (!bottone5) return;
         const testo3 = bivioInvio.dataset.testoInSospeso || composerInput.value.trim();
-        const scelta = bottone4.dataset.bivio;
+        const scelta = bottone5.dataset.bivio;
         if (scelta === "annulla") {
           chiudiBivioInvio({ tornaAlComposer: true });
           return;
@@ -29378,6 +29776,11 @@ ${testo3}`;
         // ⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): esposte per i test dedicati, stesso principio di sopra — internals reali, non un secondo contratto.
         apriVistaTerminaleReale,
         apriFileAlbero,
+        /* ⛔ 11/09 — l'albero dei file si disegna solo dopo un RunStarted vero. Esposto perché i due
+           difetti dell'11/09 (la cartella che non si chiudeva, il tasto destro senza «Apri» sulla
+           radice) si provano sull'albero VERO con le risposte di rete finte, non su una fixture di
+           HTML scritta a mano che non è il componente. Internals reali, non un secondo contratto. */
+        renderizzaAlberoReale,
         scollegaTerminaleReale,
         statoTerminale,
         /* ⭐ 08/9 CB-10 — il risolutore dei simboli e il registro dei nomi non risolti: esposti perché
@@ -31729,9 +32132,9 @@ function montaPonteLegacy(documentObj = document) {
     legacyFiles.dataset.legacyId = legacyFiles.id;
     legacyFiles.removeAttribute("id");
   }
-  for (const nodo9 of legacy.querySelectorAll('[id^="fileTree"]')) {
-    nodo9.dataset.legacyId = nodo9.id;
-    nodo9.removeAttribute("id");
+  for (const nodo10 of legacy.querySelectorAll('[id^="fileTree"]')) {
+    nodo10.dataset.legacyId = nodo10.id;
+    nodo10.removeAttribute("id");
   }
   const alberoCartella = inspector.querySelector("#alberoCartella");
   if (alberoCartella) {
