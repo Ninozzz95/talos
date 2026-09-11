@@ -90,27 +90,45 @@
         background-image:radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--talos-accent, #c08b3c) 10%, transparent), transparent 60%)}
       :root[data-theme="light"] #talosAvvio .avvio-parola{color:#2b2a27}
       #talosAvvio .avvio-marchio{position:absolute;top:50%;left:50%;width:125px;height:125px;transform:translate(-50%,-50%)}
+      /*
+       * ⛔⛔⛔ SEI STRATI HTML, non sei elementi dentro UN SVG — ed è la differenza fra liscio e no.
+       *   Misurato sui pixel dipinti: con gli elementi dentro l'SVG restava **un buco da 209 ms**
+       *   DENTRO la coreografia, anche facendola partire a thread libero, perché il long task del
+       *   boot arriva dopo. Ricerca 11/09/2026 (Lighthouse «Avoid non-composited animations»;
+       *   webperf.tips): «SVG-based animations are not accelerated via the Compositor» — nessun
+       *   `will-change` promuove i figli di un SVG.
+       * ⇒ Ogni pezzo del marchio sta in un `div` suo. Un div con `opacity` animata E `will-change`
+       *   ottiene un layer proprio: l'animazione vive sul compositor e un thread occupato non la
+       *   tocca. Il tracciato non cambia di un numero — cambia CHI lo contiene.
+       * ⛔ Il prezzo, dichiarato: i tratti si accendono in dissolvenza invece di CRESCERE dall'alto
+       *   come nel mobile. La crescita vuole `transform: scaleY` sul singolo tratto, e i due bracci
+       *   obliqui sono ruotati, quindi non si può fare sullo strato che li contiene tutti. Ho scelto
+       *   il liscio: l'owner ha chiesto «smooth», e lo scatto era la cosa che si vedeva.
+       */
+      #talosAvvio .avvio-strato{position:absolute;inset:0;opacity:0;will-change:opacity}
+      #talosAvvio .avvio-strato svg{width:100%;height:100%;display:block}
+      #talosAvvio .avvio-hex{opacity:1}
       #talosAvvio .hex{stroke:var(--talos-accent,#c08b3c);stroke-opacity:.18}
-      #talosAvvio .edge{stroke:var(--talos-accent,#c08b3c);opacity:0;transform:scaleY(0);transform-box:fill-box;transform-origin:center top;will-change:transform,opacity}
+      #talosAvvio .edge{stroke:var(--talos-accent,#c08b3c)}
       #talosAvvio .node{stroke:var(--talos-accent,#c08b3c);fill:var(--talos-accent,#c08b3c);
-        filter:drop-shadow(0 0 9px color-mix(in srgb, var(--talos-accent,#c08b3c) 70%, transparent));will-change:opacity}
-      /* La coreografia del mobile, a metà dei suoi tempi: l'ultimo nodo finisce a ~640 ms, cioè
-         DENTRO il minimo di 650 — la sequenza finisce prima che il velo cominci a dissolversi. */
-      #talosAvvio .node-root{animation:avvioAccendi .4s ease-in-out both}
-      #talosAvvio .edge-main{animation:avvioScorri .4s ease-in-out .06s both}
-      #talosAvvio .node-mid{animation:avvioAccendi .4s ease-in-out .12s both}
-      #talosAvvio .edge-branch{animation:avvioScorri .4s ease-in-out .18s both}
-      #talosAvvio .node-out{animation:avvioAccendi .4s ease-in-out .24s both}
+        filter:drop-shadow(0 0 9px color-mix(in srgb, var(--talos-accent,#c08b3c) 70%, transparent))}
+      /* La coreografia del mobile, ai suoi stessi rapporti: l'ultimo strato finisce a ~640 ms. */
+      #talosAvvio[data-anima="si"] .avvio-s1{animation:avvioAccendi .4s ease-in-out both}
+      #talosAvvio[data-anima="si"] .avvio-s2{animation:avvioAccendi .4s ease-in-out .06s both}
+      #talosAvvio[data-anima="si"] .avvio-s3{animation:avvioAccendi .4s ease-in-out .12s both}
+      #talosAvvio[data-anima="si"] .avvio-s4{animation:avvioAccendi .4s ease-in-out .18s both}
+      #talosAvvio[data-anima="si"] .avvio-s5{animation:avvioAccendi .4s ease-in-out .24s both}
       #talosAvvio .avvio-parola{position:absolute;top:calc(50% + 78px);left:50%;transform:translateX(-50%);
         font-size:1.5rem;font-weight:600;letter-spacing:.35em;padding-left:.35em;color:var(--talos-text,#f3f0e9);
-        animation:avvioParola .3s ease-out .15s both}
+        animation:avvioParola .3s ease-out .15s both;animation-play-state:paused}
+      #talosAvvio[data-anima="si"] .avvio-parola{animation-play-state:running}
       @keyframes avvioScorri{0%,10%{transform:scaleY(0);opacity:0}60%,100%{transform:scaleY(1);opacity:1}}
       @keyframes avvioAccendi{0%,10%{opacity:0}55%,100%{opacity:1}}
       @keyframes avvioParola{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
       /* ⛔ Mirata sui selettori dell'avvio, MAI universale: tre regole universali con `!important`
          sono già state tolte da questo progetto e sono costate sei cure inutili su un componente sano. */
       @media (prefers-reduced-motion: reduce){
-        #talosAvvio .edge,#talosAvvio .node,#talosAvvio .avvio-parola{animation:none;opacity:1;transform:scaleY(1)}
+        #talosAvvio .avvio-strato,#talosAvvio .avvio-parola{animation:none;opacity:1}
         #talosAvvio .avvio-parola{transform:translateX(-50%)}
       }
     </style>
@@ -122,20 +140,14 @@
      Il tracciato è quello del marchio vero (`control-plane/resources/images/logo-short.svg`,
      viewBox 500×500), copiato dal boot logo del mobile senza cambiarne un numero. -->
 <div id="talosAvvio" role="status" aria-live="polite" aria-label="Avvio di TALOS">
-  <svg class="avvio-marchio" viewBox="0 0 500 500" aria-hidden="true">
-    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-      <path class="hex" stroke-width="12" d="M 218 123.5 L 121.9 179 A 21 21 0 0 0 111.5 197 L 111.5 333 A 21 21 0 0 0 121.9 351 L 239.6 419 A 21 21 0 0 0 260.4 419 L 378.1 351 A 21 21 0 0 0 388.5 333 L 388.5 197 A 21 21 0 0 0 378.1 179 L 282 123.5"/>
-      <path class="edge edge-main" stroke-width="9" d="M 250 140 L 250 195"/>
-      <path class="edge edge-branch" stroke-width="9" d="M 250 255 L 250 315"/>
-      <g transform="translate(250, 225) rotate(45)"><path class="edge edge-branch" stroke-width="9" d="M 0 32 L 0 95"/></g>
-      <g transform="translate(250, 225) rotate(-45)"><path class="edge edge-branch" stroke-width="9" d="M 0 32 L 0 95"/></g>
-      <circle class="node node-root" stroke-width="9" cx="250" cy="105" r="22"/>
-      <circle class="node node-mid" stroke-width="9" cx="250" cy="225" r="18"/>
-      <circle class="node node-out" stroke-width="9" cx="250" cy="338" r="14"/>
-      <g transform="translate(250, 225) rotate(45)"><circle class="node node-out" stroke-width="9" cx="0" cy="118" r="14"/></g>
-      <g transform="translate(250, 225) rotate(-45)"><circle class="node node-out" stroke-width="9" cx="0" cy="118" r="14"/></g>
-    </g>
-  </svg>
+  <div class="avvio-marchio">
+    <div class="avvio-strato avvio-hex"><svg viewBox="0 0 500 500" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><path class="hex" stroke-width="12" d="M 218 123.5 L 121.9 179 A 21 21 0 0 0 111.5 197 L 111.5 333 A 21 21 0 0 0 121.9 351 L 239.6 419 A 21 21 0 0 0 260.4 419 L 378.1 351 A 21 21 0 0 0 388.5 333 L 388.5 197 A 21 21 0 0 0 378.1 179 L 282 123.5"/></g></svg></div>
+    <div class="avvio-strato avvio-s1"><svg viewBox="0 0 500 500" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><circle class="node" stroke-width="9" cx="250" cy="105" r="22"/></g></svg></div>
+    <div class="avvio-strato avvio-s2"><svg viewBox="0 0 500 500" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><path class="edge" stroke-width="9" d="M 250 140 L 250 195"/></g></svg></div>
+    <div class="avvio-strato avvio-s3"><svg viewBox="0 0 500 500" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><circle class="node" stroke-width="9" cx="250" cy="225" r="18"/></g></svg></div>
+    <div class="avvio-strato avvio-s4"><svg viewBox="0 0 500 500" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><path class="edge" stroke-width="9" d="M 250 255 L 250 315"/><g transform="translate(250, 225) rotate(45)"><path class="edge" stroke-width="9" d="M 0 32 L 0 95"/></g><g transform="translate(250, 225) rotate(-45)"><path class="edge" stroke-width="9" d="M 0 32 L 0 95"/></g></g></svg></div>
+    <div class="avvio-strato avvio-s5"><svg viewBox="0 0 500 500" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><circle class="node" stroke-width="9" cx="250" cy="338" r="14"/><g transform="translate(250, 225) rotate(45)"><circle class="node" stroke-width="9" cx="0" cy="118" r="14"/></g><g transform="translate(250, 225) rotate(-45)"><circle class="node" stroke-width="9" cx="0" cy="118" r="14"/></g></g></svg></div>
+  </div>
   <span class="avvio-parola talos-orbitron-brand">TALOS</span>
 </div>
 <script data-talos-nonce>
@@ -148,16 +160,36 @@
    *   da ciò che sta coprendo.
    */
   (function () {
-    var MINIMO = 650, MASSIMO = 4000, nato = Date.now(), tolto = false;
+    var MINIMO = 650, MASSIMO = 4000, tolto = false, partita = 0;
+    var velo = document.getElementById('talosAvvio');
+    /*
+     * ⛔ L'accensione comincia quando il thread principale è LIBERO, non al caricamento: le
+     *   animazioni dentro un SVG non sono accelerate e un long task del boot le inchioda (misurato:
+     *   un buco da 128 ms sui pixel dipinti, mentre da sola la stessa animazione non ne ha nessuno).
+     * ⛔ `requestIdleCallback` con un `timeout`: il timeout non è pessimismo, è la garanzia che su
+     *   una macchina sempre occupata l'animazione parta lo stesso invece di non partire mai.
+     */
+    function accendi() {
+      if (partita || !velo) return;
+      partita = Date.now();
+      velo.setAttribute('data-anima', 'si');
+    }
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(accendi, { timeout: 400 });
+    else setTimeout(accendi, 120);
+
     function via() {
       if (tolto) return;
       tolto = true;
-      var velo = document.getElementById('talosAvvio');
       if (!velo) return;
       velo.setAttribute('data-uscita', 'si');
       setTimeout(function () { if (velo.parentNode) velo.parentNode.removeChild(velo); }, 320);
     }
-    function quandoPronta() { setTimeout(via, Math.max(0, MINIMO - (Date.now() - nato))); }
+    /* ⛔ Il minimo si conta da quando l'animazione È PARTITA: contarlo dal caricamento taglierebbe
+       la sequenza a metà proprio nei casi lenti, che sono quelli per cui il velo esiste. */
+    function quandoPronta() {
+      if (!partita) { accendi(); }
+      setTimeout(via, Math.max(0, MINIMO - (Date.now() - partita)));
+    }
     /* La app può chiamarlo appena ha finito il primo disegno: è la via più precisa. */
     window.__talosAvvioPronta = quandoPronta;
     if (document.readyState === 'complete') requestAnimationFrame(quandoPronta);
