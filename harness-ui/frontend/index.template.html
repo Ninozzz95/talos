@@ -6,10 +6,151 @@
     <meta name="color-scheme" content="dark light">
     <link rel="icon" href="data:,">
     <title>TALOS Codice</title>
+    <!--
+      ⭐⭐⭐ 11/09 — LA SCHERMATA D'AVVIO, e perché sta QUI e non in un foglio esterno.
+
+      Owner: «se faccio refresh per un centesimo di secondo compare un placeholder mockup».
+      Misurato prima di scrivere, sul 4174: a **64 ms** ci sono già 3.243 caratteri a schermo, a
+      **161 ms** crollano a 456, e la pagina si stabilizza a **~280 ms**. Quello che si vede in
+      mezzo è lo scheletro del template montato, senza contenuti e senza il tema applicato.
+
+      ⛔ Questo `<style>` è INLINE e viene PRIMA dei fogli esterni apposta: un foglio esterno
+      arriva dopo il primo disegno, cioè dopo il lampo che deve coprire. Ricerca 11/09/2026
+      (openreplay «Preventing FOUC in Modern Frontend Apps»; uxpin «Splash Screen Design 2026»):
+      il CSS critico inline in `<head>` è la difesa vera contro il lampo, e una schermata d'avvio
+      «dura quanto serve, sotto i due secondi, SENZA ritardi artificiali».
+      ⇒ Qui il minimo è 650 ms — non un'attesa inventata: è il tempo che la sequenza del marchio
+      impiega ad accendersi fino all'ultimo nodo. Un avvio tagliato a metà è il difetto che il
+      mobile ha già dovuto correggere una volta («la app si carica prima che la boot animation
+      finisca»); e sopra quel minimo si esce appena la pagina è pronta.
+
+      ⛔ Il disegno NON è inventato: è quello del mobile (`mobile/src/components/brand/
+      TalosBootLogo.vue`), che a sua volta è lo specchio del boot loader del desktop
+      (`control-plane/.../partials/talos-loading-logo`). Dal mobile viene anche la lezione più
+      importante, pagata lì: si anima SOLO `opacity` e `transform`, mai `fill`/`stroke-width`/il
+      raggio di un `drop-shadow` — quelle tre sono pitture che il compositore non sa fare, e su
+      cinque elementi insieme l'animazione non è lenta, è ferma. Il bagliore è un filtro STATICO
+      su uno strato di cui si anima l'opacità.
+      ⛔ E i tratti RESTANO accesi (`both`, e le keyframe finiscono al 100%): il marchio si
+      costruisce e rimane costruito — a toglierlo è la dissolvenza del velo, non l'animazione.
+    -->
+    <script>
+      /*
+       * ⛔⛔⛔ IL PONTE DEL TEMA, e perché senza il velo PEGGIORA il difetto che cura.
+       *
+       * Trovato guardando la prima foto della schermata d'avvio: il velo usciva CHIARO perché
+       * seguiva `prefers-color-scheme`, mentre la app dell'owner è in tema scuro. Cioè al refresh
+       * avrebbe visto un lampo BIANCO prima di una app scura — peggio dello scheletro che stavo
+       * coprendo. Un velo che non conosce il tema non nasconde un difetto: ne aggiunge uno.
+       *
+       * ⇒ Qui si legge la preferenza SALVATA e si stampa `data-theme` sulla radice, con la stessa
+       *   regola di `applicaThemeDesktop` (app.js): `light` esplicito ⇒ chiaro; `dark` ⇒ scuro;
+       *   `system` o assente ⇒ lo decide il sistema. Il velo e la app arrivano così allo stesso
+       *   colore, e quando la app parte non cambia niente sotto gli occhi.
+       * ⛔ Tutto dentro un `try`: una preferenza illeggibile (finestra privata, dati puliti) non
+       *   deve impedire l'avvio — si ripiega sul sistema, che è il default dichiarato.
+       * ⛔ E lo script sta PRIMA dello `<style>` qui sotto: dopo, l'attributo arriverebbe a
+       *   disegno già fatto, che è esattamente il lampo che stiamo togliendo.
+       */
+      (function () {
+        var modo = 'system';
+        try {
+          var grezzo = window.localStorage.getItem('talos.harness.desktop.settings.v1');
+          if (grezzo) { var m = JSON.parse(grezzo); modo = (m && m.appearance && m.appearance.colorMode) || 'system'; }
+        } catch (e) { modo = 'system'; }
+        var chiaro = modo === 'light' || (modo !== 'dark'
+          && typeof window.matchMedia === 'function'
+          && window.matchMedia('(prefers-color-scheme: light)').matches);
+        var radice = document.documentElement;
+        if (chiaro) radice.setAttribute('data-theme', 'light');
+        radice.style.setProperty('color-scheme', chiaro ? 'light' : 'dark');
+      }());
+    </script>
+    <style>
+      #talosAvvio{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;
+        background:radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--talos-accent, #c08b3c) 12%, transparent), transparent 60%), var(--talos-background, #1e1f22);
+        transition:opacity .3s ease}
+      #talosAvvio[data-uscita="si"]{opacity:0;pointer-events:none}
+      /* ⛔ Sull'ATTRIBUTO, non su `prefers-color-scheme`: la scelta salvata batte quella di sistema,
+         come in `applicaThemeDesktop`. Il ponte qui sopra ha già stampato l'attributo. */
+      :root[data-theme="light"] #talosAvvio{background:radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--talos-accent, #c08b3c) 10%, transparent), transparent 60%), var(--talos-background, #ece9e2)}
+      :root[data-theme="light"] #talosAvvio .avvio-parola{color:var(--talos-text,#2b2a27)}
+      #talosAvvio .avvio-marchio{position:absolute;top:50%;left:50%;width:125px;height:125px;transform:translate(-50%,-50%)}
+      #talosAvvio .hex{stroke:var(--talos-accent,#c08b3c);stroke-opacity:.18}
+      #talosAvvio .edge{stroke:var(--talos-accent,#c08b3c);opacity:0;transform:scaleY(0);transform-box:fill-box;transform-origin:center top;will-change:transform,opacity}
+      #talosAvvio .node{stroke:var(--talos-accent,#c08b3c);fill:var(--talos-accent,#c08b3c);
+        filter:drop-shadow(0 0 9px color-mix(in srgb, var(--talos-accent,#c08b3c) 70%, transparent));will-change:opacity}
+      /* La coreografia del mobile, a metà dei suoi tempi: l'ultimo nodo finisce a ~640 ms, cioè
+         DENTRO il minimo di 650 — la sequenza finisce prima che il velo cominci a dissolversi. */
+      #talosAvvio .node-root{animation:avvioAccendi .4s ease-in-out both}
+      #talosAvvio .edge-main{animation:avvioScorri .4s ease-in-out .06s both}
+      #talosAvvio .node-mid{animation:avvioAccendi .4s ease-in-out .12s both}
+      #talosAvvio .edge-branch{animation:avvioScorri .4s ease-in-out .18s both}
+      #talosAvvio .node-out{animation:avvioAccendi .4s ease-in-out .24s both}
+      #talosAvvio .avvio-parola{position:absolute;top:calc(50% + 78px);left:50%;transform:translateX(-50%);
+        font-size:1.5rem;font-weight:600;letter-spacing:.35em;padding-left:.35em;color:var(--talos-text,#f3f0e9);
+        animation:avvioParola .3s ease-out .15s both}
+      @keyframes avvioScorri{0%,10%{transform:scaleY(0);opacity:0}60%,100%{transform:scaleY(1);opacity:1}}
+      @keyframes avvioAccendi{0%,10%{opacity:0}55%,100%{opacity:1}}
+      @keyframes avvioParola{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+      /* ⛔ Mirata sui selettori dell'avvio, MAI universale: tre regole universali con `!important`
+         sono già state tolte da questo progetto e sono costate sei cure inutili su un componente sano. */
+      @media (prefers-reduced-motion: reduce){
+        #talosAvvio .edge,#talosAvvio .node,#talosAvvio .avvio-parola{animation:none;opacity:1;transform:scaleY(1)}
+        #talosAvvio .avvio-parola{transform:translateX(-50%)}
+      }
+    </style>
     <link rel="stylesheet" href="./vendor/xterm/xterm.css">
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
+<!-- ⛔ PRIMO figlio del `body`: deve coprire lo scheletro, quindi deve esistere prima di lui.
+     Il tracciato è quello del marchio vero (`control-plane/resources/images/logo-short.svg`,
+     viewBox 500×500), copiato dal boot logo del mobile senza cambiarne un numero. -->
+<div id="talosAvvio" role="status" aria-live="polite" aria-label="Avvio di TALOS">
+  <svg class="avvio-marchio" viewBox="0 0 500 500" aria-hidden="true">
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path class="hex" stroke-width="12" d="M 218 123.5 L 121.9 179 A 21 21 0 0 0 111.5 197 L 111.5 333 A 21 21 0 0 0 121.9 351 L 239.6 419 A 21 21 0 0 0 260.4 419 L 378.1 351 A 21 21 0 0 0 388.5 333 L 388.5 197 A 21 21 0 0 0 378.1 179 L 282 123.5"/>
+      <path class="edge edge-main" stroke-width="9" d="M 250 140 L 250 195"/>
+      <path class="edge edge-branch" stroke-width="9" d="M 250 255 L 250 315"/>
+      <g transform="translate(250, 225) rotate(45)"><path class="edge edge-branch" stroke-width="9" d="M 0 32 L 0 95"/></g>
+      <g transform="translate(250, 225) rotate(-45)"><path class="edge edge-branch" stroke-width="9" d="M 0 32 L 0 95"/></g>
+      <circle class="node node-root" stroke-width="9" cx="250" cy="105" r="22"/>
+      <circle class="node node-mid" stroke-width="9" cx="250" cy="225" r="18"/>
+      <circle class="node node-out" stroke-width="9" cx="250" cy="338" r="14"/>
+      <g transform="translate(250, 225) rotate(45)"><circle class="node node-out" stroke-width="9" cx="0" cy="118" r="14"/></g>
+      <g transform="translate(250, 225) rotate(-45)"><circle class="node node-out" stroke-width="9" cx="0" cy="118" r="14"/></g>
+    </g>
+  </svg>
+  <span class="avvio-parola talos-orbitron-brand">TALOS</span>
+</div>
+<script>
+  /*
+   * ⛔ Nessun ritardo artificiale (ricerca 11/09/2026, uxpin): si esce appena la pagina è pronta,
+   *   e il minimo di 650 ms serve solo a non tagliare a metà la sequenza del marchio.
+   * ⛔ `MASSIMO` non è pessimismo: senza, una pagina che non arriva mai a `load` (una rete che
+   *   pende, un errore precoce) lascerebbe il velo per sempre, e l'utente guarderebbe un logo
+   *   invece della app. Un velo che copre tutto ha bisogno di una via d'uscita che non dipenda
+   *   da ciò che sta coprendo.
+   */
+  (function () {
+    var MINIMO = 650, MASSIMO = 4000, nato = Date.now(), tolto = false;
+    function via() {
+      if (tolto) return;
+      tolto = true;
+      var velo = document.getElementById('talosAvvio');
+      if (!velo) return;
+      velo.setAttribute('data-uscita', 'si');
+      setTimeout(function () { if (velo.parentNode) velo.parentNode.removeChild(velo); }, 320);
+    }
+    function quandoPronta() { setTimeout(via, Math.max(0, MINIMO - (Date.now() - nato))); }
+    /* La app può chiamarlo appena ha finito il primo disegno: è la via più precisa. */
+    window.__talosAvvioPronta = quandoPronta;
+    if (document.readyState === 'complete') requestAnimationFrame(quandoPronta);
+    else window.addEventListener('load', function () { requestAnimationFrame(quandoPronta); });
+    setTimeout(via, MASSIMO);
+  }());
+</script>
 <svg width="0" height="0" class="talos-sprite" aria-hidden="true">
   <!-- ⛔ 07/9, O-44 — owner: «i loghi sono ancora mockup e non usano quelli veri; vedi mobile,
        lui lo fa alla perfezione». Qui c'era una «A» stilizzata disegnata a mano su una griglia 32×32.
