@@ -789,3 +789,47 @@ Da fare: a tutta larghezza il margine sinistro della colonna tiene conto della b
 larghezza più il suo `left`), così lo spazio a sinistra del testo è uguale a quello a destra. ⛔ Non
 una costante scritta a mano: le due misure esistono già nel CSS della barra e vanno lette da lì, o
 diventano due numeri che divergono al primo ritocco.
+
+### BC-07, seconda parte — COME LO RISOLVONO I BIG, letto nel loro codice (11/09/2026)
+
+Owner: «guarda i big, Claude, Hermes, Codex hanno già pensato a tutto loro, guarda anche DeepSeek
+harness e Qwen, voglio solo i metodi migliori». Fatto sui cloni a commit fissato in
+`%LOCALAPPDATA%\Temp\talos-competitor`, non su un blog.
+
+**Il metodo migliore ce l'ha Hermes, ed è a due passi da noi.**
+`hermes-agent-v21/agent/agent_init.py:986-1008` e `agent/agent_runtime_helpers.py:2365-2430`:
+
+- la cache del prompt **si chiede**, non si spera: marcatori `cache_control` espliciti, con un
+  **TTL scelto** — `5m` o `1h`, da configurazione;
+- il commento accanto al TTL descrive **letteralmente il nostro guasto**: *«1h tier costs 2x on
+  write vs 1.25x for 5m, but **amortizes across long sessions with >5-minute pauses between
+  turns**»*. Le nostre pause fra un messaggio e l'altro sono esattamente quelle, ed è il motivo per
+  cui la cache al primo giro di un invio è **mediana 0%**;
+- il marcatore si mette **sull'ultimo blocco cacheable** (`text`/`tool_use`) — un breakpoint che si
+  sposta in avanti man mano che la conversazione cresce, non un punto fisso in testa;
+- due layout: sui blocchi interni per Anthropic nativo, **sull'envelope del messaggio per
+  OpenRouter e i proxy OpenAI-wire** — che è la nostra strada.
+
+⛔⛔⛔ **E poi la riga che ci riguarda in pieno** (stesso file, doc di `anthropic_prompt_cache_policy`):
+
+> «**Qwen / Alibaba-family** models … **also honour Anthropic-style `cache_control` markers on
+> OpenAI-wire chat completions** … **Without markers these providers serve ZERO cache hits,
+> re-billing the full prompt on every turn.**»
+
+e, nell'elenco dei gateway che implementano il contratto: «MiniMax, **Zhipu GLM**, LiteLLM».
+**Il nostro modello dei giri veri è `z-ai/glm-5.3-flash` — Zhipu GLM.** E in `harness-ui/src/`
+la stringa `cache_control` compare **zero volte**: non mandiamo nessun marcatore.
+
+La loro misura di quanto costa perdere quella politica, sullo stesso modello: **85% di cache share
+contro 2%** — «tens of millions of re-billed input tokens per benchmark run».
+
+⇒ **Ordine delle cure, aggiornato.** La prima non è più tagliare l'elenco dei file: è **chiedere la
+cache**, perché costa poche righe e non toglie niente a nessuno.
+1. `cache_control` sull'envelope del messaggio (layout OpenRouter) con **TTL 1h**, breakpoint
+   sull'ultimo blocco cacheable;
+2. poi l'elenco dei file (~17k token, e si dichiara pure incompleto);
+3. poi non rimandare l'elenco quando è identico all'invio precedente.
+
+⛔ Resta l'A/B da fare prima di cantare vittoria: la cache si misura da
+`prompt_tokens_details.cached_tokens`, che già leggiamo — e adesso, con `tipo:'tempi-giro'` su
+disco, un A/B si legge da sé senza sonde a mano.
