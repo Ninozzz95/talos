@@ -817,6 +817,100 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
  * comportamento di oggi per TALOS-BANCO, che non li passa. Presenti:
  * `stream:true` verso OpenRouter, consumato da `consumaFlussoSSE` sopra.
  */
+/*
+ * ⭐⭐⭐ BC-07/BC-16 (11/09/2026) — IL MARCATORE DI CACHE, NELLA FORMA CHE IL FORNITORE ACCETTA.
+ *
+ * ⛔ PRIMA STESURA SBAGLIATA, e la misura l'ha bocciata in dieci minuti: avevo messo
+ *   `cache_control` alla RADICE della richiesta. Due invii veri sullo stesso 4174, con
+ *   `z-ai/glm-5.3-flash`: `cached_tokens` **0 e 0**. Il marcatore a radice, su questa rotta, è
+ *   ignorato — e se non avessi rimisurato l'avrei dichiarato «fatto».
+ *
+ * ⇒ La forma vera è PER BLOCCO, e vuole il contenuto MULTI-PARTE: un array di parti al posto della
+ *   stringa, con `cache_control` sulla parte da cui far partire la cache. Ricerca 11/09/2026 —
+ *   OpenRouter «Prompt Caching» («prompt caching requires explicit cache_control breakpoints in
+ *   message content blocks»; «to enable prompt caching for Alibaba Qwen, add cache_control to the
+ *   content blocks you want to cache, using the same syntax as Anthropic explicit caching»; il
+ *   default è 5 minuti, `ttl:'1h'` lo estende) e il codice di Hermes, che mette il marcatore
+ *   sull'ULTIMO blocco cacheable (`anthropic_message_convert.py:436-445`).
+ *
+ * ⛔ DUE VINCOLI CHE LA RICERCA HA AGGIUNTO, e che nessuno deve scoprire di nuovo a sue spese:
+ *   1. l'elenco dei modelli con caching esplicito dichiarato da Alibaba (`deepseek-v3.2`,
+ *      `qwen3-max`, `qwen-plus`, `qwen3.6-plus`, `qwen3-coder-plus`, `qwen3-coder-flash`) **NON
+ *      contiene `z-ai/glm-*`**: su GLM il marcatore può non produrre nulla, e va misurato ogni
+ *      volta invece che dato per buono;
+ *   2. c'è un guasto noto a valle (LiteLLM #19923): `remove_cache_control_flag_from_messages_and_tools()`
+ *      **toglie** il marcatore per MiniMax, GLM/ZAI e Xiaomi, perché mancano dall'enum dei modelli
+ *      supportati. ⇒ Un marcatore spedito non è un marcatore arrivato.
+ *   ⭐ Ma su OpenRouter GLM-5 ha restituito **3.200 token dalla cache con il 75% di sconto**
+ *      (China-LLM, «OpenRouter Prompt Caching: Which Discounts Survive»), quindi la strada esiste.
+ *
+ * ⛔ Si tocca SOLO il corpo in uscita, mai i messaggi conservati: la conversazione su disco resta
+ *   fatta di stringhe, e chi la rilegge (resume, fork, banco, i test) non vede nessun formato
+ *   nuovo. E si marca solo il SISTEMA, che è il pezzo grosso e stabile del prefisso — 16.631 token
+ *   su 29.148 misurati, quasi tutto elenco di file.
+ */
+/*
+ * ⭐⭐⭐ BC-17 (11/09/2026) — IL COMANDO ARRIVAVA VUOTO, E NON ERA COLPA DEL MODELLO.
+ *
+ * Owner, con la schermata della sessione «genera un file html di 1000 righe»: nella chat il modello
+ * scrive «il tool `shell` di questo ambiente si è rotto — la stringa comando arriva **vuota** a bash
+ * (`cd "…" && { ; }` → syntax error), anche su un banale `pwd`. Ho provato tre volte». Aveva
+ * ragione, e la causa si legge negli argomenti veri della sua sessione:
+ *
+ *     chiamata 36:  {"command": "grep -o 'id=…' _p2.html …", "descrizione": "…"}   → syntax error
+ *     chiamata 47:  {"command": "grep -o …", "description": "…"}                    → syntax error
+ *     (e nelle sessioni che funzionavano: {"comando": "curl …", "descrizione": "…"})
+ *
+ * ⇒ Il modello a volte manda il nome del campo in INGLESE (`command`/`description`). Noi leggevamo
+ *   solo `comando`, prendevamo `undefined`, e lo consegnavamo a bash dentro l'involucro
+ *   `cd "…" && { … }` — che con la stringa vuota diventa `{ ; }`, cioè un errore di sintassi. Lo
+ *   strumento sembrava «rotto a caso», e il modello ci ha sbattuto **almeno quattro volte in una
+ *   sessione sola**, finendo per inventarsi una strada più lunga (BC-11, «il giro assurdo»).
+ *
+ * ⛔ Che i nomi degli argomenti siano una classe di errore NOTA dei modelli è documentato, non una
+ *   nostra concessione: ToolScan (arXiv:2411.13547) misura «incorrect argument names» come uno dei
+ *   modi tipici in cui una chiamata fallisce, e i modelli «ignorano argomenti richiesti»; la stessa
+ *   letteratura raccomanda una normalizzazione robusta degli argomenti prima dell'uso — JSON dentro
+ *   fence, JSON troncato, argomenti doppio-codificati (ricerca 11/09/2026).
+ * ⇒ Un harness che accetta SOLO il nome che ha scelto lui trasforma un errore di forma in un guasto
+ *   dello strumento. Qui si accetta l'alias, in un posto solo.
+ */
+export function campoConAlias(argomenti, ...nomi) {
+    if (!argomenti || typeof argomenti !== 'object') return undefined
+    for (const nome of nomi) {
+        const valore = argomenti[nome]
+        if (typeof valore === 'string' ? valore.length > 0 : valore !== undefined && valore !== null) return valore
+    }
+    return undefined
+}
+
+/** Il comando di `shell`, comunque il modello l'abbia chiamato. */
+export function comandoDiShell(argomenti) {
+    return campoConAlias(argomenti, 'comando', 'command', 'cmd') ?? ''
+}
+
+export const CARATTERI_MINIMI_PER_CACHE = 16_000
+export function conMarcatoreDiCache(messaggi, marcatore = { type: 'ephemeral', ttl: '1h' }) {
+    if (!Array.isArray(messaggi)) return messaggi
+    const ultimoSistema = messaggi.reduce((trovato, m, i) => (m?.role === 'system' && typeof m.content === 'string' && m.content.length > 0 ? i : trovato), -1)
+    if (ultimoSistema === -1) return messaggi
+    /*
+     * ⛔ SOTTO UNA CERTA TAGLIA IL MARCATORE È SPRECATO, e non è una prudenza: i fornitori
+     *   dichiarano un MINIMO di prefisso sotto il quale non cachano affatto — 1.024 token per
+     *   Claude Sonnet 4.5/4.6, **4.096** per Opus 4.5-4.8 e Haiku 4.5 (OpenRouter, «Prompt
+     *   Caching»/«minimum token requirements», letto l'11/09/2026), e fra le cause di cache miss
+     *   elencano per prima proprio «a prompt below the provider's token minimum».
+     * ⇒ Si usa il minimo più ALTO fra quelli documentati, in caratteri (~4 per token): un
+     *   marcatore che non può essere onorato è solo un formato in più da far attraversare a ogni
+     *   messaggio. Il nostro preambolo vero ne ha 66.523, quindi passa largamente; un preambolo
+     *   corto resta una stringa, come è sempre stato.
+     */
+    if (String(messaggi[ultimoSistema].content).length < CARATTERI_MINIMI_PER_CACHE) return messaggi
+    return messaggi.map((m, i) => (i === ultimoSistema
+        ? { ...m, content: [{ type: 'text', text: m.content, cache_control: { ...marcatore } }] }
+        : m))
+}
+
 export async function chiamaConRitenta({
     modello, chiave, messaggi, attrezzi,
     maxOutputTokens,
@@ -874,7 +968,43 @@ export async function chiamaConRitenta({
             headers: { Authorization: `Bearer ${chiave}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: modello,
-                messages: messaggi,
+                /*
+                 * ⭐⭐⭐ BC-07/BC-16 (11/09/2026) — LA CACHE DEL PROMPT SI CHIEDE, NON SI SPERA.
+                 *
+                 * Misurato sui `.jsonl` di 24 invii veri: al PRIMO giro di ogni invio i token in
+                 * ingresso sono in mediana **29.148** e la cache prende **mediana 0%** (16 invii su
+                 * 24 sotto il 10%); dal secondo giro in poi, dentro lo stesso invio, sale a 87-100%.
+                 * ⇒ La prima risposta — l'unica che la persona sta guardando — ripaga ogni volta
+                 * tutto il preambolo da zero: è il «Ragionamento in corso… 27 s» che l'owner ha
+                 * fotografato, e il «primo token 23,8 s» della sessione `7b21ff93`.
+                 *
+                 * ⛔ Il prefisso NON cambia fra un invio e l'altro (verificato: cinque blocchi di
+                 *   sistema della stessa sessione, UNA sola impronta) — quindi non siamo noi a
+                 *   rompere la cache. È la sua finestra che scade nella pausa fra due messaggi.
+                 *
+                 * ⭐ Il metodo è di Hermes, letto nel suo codice (`agent/agent_init.py:986-1008`):
+                 *   la cache si chiede con un marcatore e un TTL SCELTO, e il commento accanto
+                 *   descrive il nostro caso parola per parola — *«il tier 1h costa 2× in scrittura
+                 *   contro 1,25× del 5m, ma si ammortizza sulle sessioni lunghe con pause di più di
+                 *   5 minuti fra un turno e l'altro»*. Le nostre pause sono esattamente quelle.
+                 * ⛔⛔ E la riga che ci riguarda in pieno (`agent_runtime_helpers.py:2365-2430`):
+                 *   i modelli **Qwen/Alibaba e i gateway Zhipu GLM** onorano `cache_control` sulle
+                 *   chat completions OpenAI-wire, e *«senza marcatori questi fornitori servono ZERO
+                 *   cache hit, rifatturando l'intero prompt a ogni turno»*. Il modello dei nostri
+                 *   giri veri è `z-ai/glm-5.3-flash` — Zhipu GLM — e prima di questa riga la
+                 *   stringa `cache_control` compariva **zero volte** in tutto `harness-ui/src/`.
+                 *
+                 * Ricerca 11/09/2026 prima di scrivere (OpenRouter, «Prompt Caching» e «Prompt
+                 * Caching: sticky routing»): la forma è `{type:'ephemeral', ttl:'1h'}` — il default
+                 * è 5 minuti — e a RADICE della richiesta vale per il caching automatico su tutta
+                 * la conversazione. Un marcatore per singolo blocco vorrebbe invece il contenuto
+                 * multi-parte (un array al posto della stringa in `content`): è la forma più fine,
+                 * ma tocca OGNI messaggio di OGNI giro, e qui si parte dalla leva che costa una
+                 * riga e non può rompere il formato di niente. Se la misura dirà che non basta, il
+                 * passo dopo si farà con i numeri in mano invece che a intuito — e i numeri adesso
+                 * si leggono da soli, dal record `tipo:'tempi-giro'` su disco.
+                 */
+                messages: conMarcatoreDiCache(messaggi),
                 tools: attrezzi,
                 tool_choice: 'auto',
                 ...(maxOutputTokens !== undefined ? { max_tokens: maxOutputTokens } : {}),
@@ -5912,7 +6042,7 @@ export async function talosLavora({
                      * di permesso più alto che lo sblocca — non esiste un
                      * livello che lo sblocca.
                      */
-                    const motivoFloor = comandoSenzaRecupero(argomenti.comando ?? '')
+                    const motivoFloor = comandoSenzaRecupero(comandoDiShell(argomenti))
                     let permessoShell
                     // ⭐⭐⭐ 29/8 — hoisted come in 'prova': `p` nasce due livelli
                     // sotto (dentro l'else dell'else), e `creaRicevutaOperazione`
@@ -5925,7 +6055,7 @@ export async function talosLavora({
                     }
                     else {
                         permessoShell = await verificaPermessoScrittura(
-                            { tipo: 'shell', comando: argomenti.comando },
+                            { tipo: 'shell', comando: comandoDiShell(argomenti) },
                             { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                         )
                         if (!permessoShell.consentito) {
@@ -5955,7 +6085,7 @@ export async function talosLavora({
                                 mandati += delta.length
                                 onGiro?.({ giro, tipo: 'tool-uscita', toolCallId: c.id, delta })
                             }
-                            p = await eseguiComandoSandboxato(argomenti.comando ?? '', cartella, {
+                            p = await eseguiComandoSandboxato(comandoDiShell(argomenti), cartella, {
                                 mobile,
                                 segnaleStop, // ⛔ 11/09 — senza questo, «Ferma» premuto durante un comando lungo lo lasciava girare fino in fondo: misurato 46 s di ritardo
 
@@ -5974,7 +6104,7 @@ export async function talosLavora({
                     ricevutaEmessa = true
                     {
                         const ricevuta = creaRicevutaOperazione({
-                            azione: { tipo: 'shell', comando: argomenti.comando }, toolCallId: c.id, esitoPermesso: permessoShell, contenutoScritto: null,
+                            azione: { tipo: 'shell', comando: comandoDiShell(argomenti) }, toolCallId: c.id, esitoPermesso: permessoShell, contenutoScritto: null,
                             // ⭐ `sandboxEnforcement` è il campo che il ledger permessi §7 chiama
                             // per nome ('adb-shell-on-device' | 'none' | ...): senza `evidence`
                             // questo dato esisteva solo dentro la stringa `esito` per il modello,
@@ -7118,7 +7248,7 @@ export async function talosLavora({
                         ricevuta: creaRicevutaOperazione({
                             azione: nome === 'scrivi' ? { tipo: 'scrivi', percorso: argomenti.percorso }
                                 : nome === 'document_create' ? { tipo: 'document_create' }
-                                    : { tipo: nome, comando: argomenti.comando },
+                                    : { tipo: nome, comando: comandoDiShell(argomenti) },
                             toolCallId: c.id, esitoPermesso: esitoPermessoPerRicevuta, contenutoScritto: null,
                             esecuzioneFallita: true,
                             error: rotta instanceof Error ? rotta.message : String(rotta),
