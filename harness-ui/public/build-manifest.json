@@ -8,8 +8,8 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 1528055,
-      "sha256": "00f8889f34aef1a6b5b76e6e123326ac414b48bb2ac437c39a38b6fce0dc91d4"
+      "bytes": 1528131,
+      "sha256": "52909aef3d7b6aefbb807e90cfccb0696036f250b7879716ce07d1cacf6770ef"
     },
     {
       "path": "asset-manifest.json",
@@ -18,8 +18,8 @@
     },
     {
       "path": "avvio.js",
-      "bytes": 1885,
-      "sha256": "9b1b201606438179457c4bc5a45f89e68be3f0c900fdd58386ff22a091891e50"
+      "bytes": 2301,
+      "sha256": "1276a2cadddc6b090b7066031fba26fa0ab58cb3d8f79c695116d9443739e40e"
     },
     {
       "path": "fonts/instrument-sans-latin-400-normal.woff2",
@@ -73,13 +73,13 @@
     },
     {
       "path": "index.html",
-      "bytes": 349651,
-      "sha256": "118c429a1358a47d04b5f87b1488ddd0e7112674d6b5efa3f437951845938754"
+      "bytes": 351683,
+      "sha256": "5f81519a953c6b5294dd91ec435da7eedddc74c4fc3ac11fe1fde14963acd8b7"
     },
     {
       "path": "styles.css",
-      "bytes": 293898,
-      "sha256": "23fa811551d7adb721a87fe499fbb2e57087a8338f184a807f4bfa7eef0334d2"
+      "bytes": 316007,
+      "sha256": "7af120c0c74a3fa20f9989ffc91e3fe727139d86aa473ee6777ee7a92686a9bf"
     },
     {
       "path": "talos/brand/logo-short.svg",

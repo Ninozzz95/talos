@@ -48,16 +48,33 @@
        *   in piedi il colore — e il colore qui è un valore LETTERALE, senza variabili, perché è
        *   l'unica cosa che deve reggere anche quando nessun foglio è ancora arrivato.
        */
+      /*
+       * ⭐⭐⭐ 11/9 SERA, BC-19 — IL FONDO VIENE DAL TEMA, non da un letterale.
+       *   `#1e1f22` e `#ece9e2` sono i due fondi di `calm`: erano giusti per UN tema su quattordici.
+       *   Con `terminal` salvato il velo dipingeva `#1e1f22` e la app dietro `#020403` — cioè il
+       *   velo che esiste per non far vedere un lampo ne faceva uno suo, allo scoprirsi. Adesso il
+       *   colore è `--talos-background` del tema, che il ponte in `avvio.js` ha già scelto
+       *   stampando `data-talos-theme` PRIMA del primo disegno; i letterali restano come ripiego
+       *   di `var()` per il caso «`styles.css` non è arrivato», che è l'unico in cui il velo deve
+       *   cavarsela da solo.
+       * ⛔ Il colore resta SEPARATO dall'immagine per la ragione scritta qui sopra, e adesso vale
+       *   il doppio: se un giorno `--talos-background` esistesse ma vuoto, la dichiarazione sarebbe
+       *   «invalid at computed-value time» e il fondo tornerebbe trasparente — in una scorciatoia
+       *   si porterebbe via anche il gradiente. Misurato dopo la cura, non dedotto: `backgroundColor`
+       *   del velo nei tre preset e nei due modi (numeri nel rapporto), mai `rgba(0,0,0,0)`.
+       */
       #talosAvvio{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;
-        background-color:#1e1f22;
+        background-color:var(--talos-background, #1e1f22);
         background-image:radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--talos-accent, #c08b3c) 12%, transparent), transparent 60%);
         transition:opacity .3s ease}
       #talosAvvio[data-uscita="si"]{opacity:0;pointer-events:none}
       /* ⛔ Sull'ATTRIBUTO, non su `prefers-color-scheme`: la scelta salvata batte quella di sistema,
-         come in `applicaThemeDesktop`. Il ponte qui sopra ha già stampato l'attributo. */
-      :root[data-theme="light"] #talosAvvio{background-color:#ece9e2;
+         come in `applicaThemeDesktop`. Il ponte qui sopra ha già stampato l'attributo.
+         Resta una regola a parte perché cambia anche la PERCENTUALE del bagliore (10% invece di 12):
+         su carta lo stesso velo d'accento pesa di più. */
+      :root[data-theme="light"] #talosAvvio{background-color:var(--talos-background, #ece9e2);
         background-image:radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--talos-accent, #c08b3c) 10%, transparent), transparent 60%)}
-      :root[data-theme="light"] #talosAvvio .avvio-parola{color:#2b2a27}
+      :root[data-theme="light"] #talosAvvio .avvio-parola{color:var(--talos-text, #2b2a27)}
       #talosAvvio .avvio-marchio{position:absolute;top:50%;left:50%;width:125px;height:125px;transform:translate(-50%,-50%)}
       /*
        * ⛔⛔⛔ SEI STRATI HTML, non sei elementi dentro UN SVG — ed è la differenza fra liscio e no.
@@ -1036,7 +1053,12 @@ Una segnalazione di stallo non termina il processo.</pre>
   <!-- ===================== COLONNA DI DESTRA ===================== -->
   <aside id="inspectorSessione" class="talos-inspector" data-c="Inspector" aria-label="Dettagli della sessione">
     <button class="talos-resizer talos-resizer--inspector" data-ridimensiona="inspector" aria-label="Ridimensiona la colonna dei dettagli" title="Trascina per ridimensionare, doppio click per il valore normale"></button>
-    <div class="talos-inspector__head"><div class="talos-grow"><span class="talos-eyebrow">Sessione</span><h2>W1-02 registro processi</h2></div><button id="chiudiDettagli" class="talos-button talos-button--ghost talos-icon-button talos-inspector-close" aria-label="Chiudi dettagli"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+    <div class="talos-inspector__head"><div class="talos-grow"><span class="talos-eyebrow">Sessione</span><h2>W1-02 registro processi</h2></div><!-- ⛔ 11/9 — `data-close-panel` NON e' decorazione: senza, questo pulsante non aveva NESSUN
+         ascoltatore in tutto il repo (cercato: `chiudiDettagli` compariva solo qui). Sotto i 1240 px
+         la colonna si apre come strato sopra la app e la si chiudeva col velo o con Esc; la X, che
+         e' il gesto che si prova per primo, non faceva niente. Un pulsante di chiusura che non
+         chiude e' peggio di un pulsante assente. `$$('[data-close-panel]')` e' gia' cablato a
+         `closePanels` in `src/legacy/app.js`. --><button id="chiudiDettagli" data-close-panel="inspector" class="talos-button talos-button--ghost talos-icon-button talos-inspector-close" aria-label="Chiudi dettagli"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     <div class="talos-tabs talos-tabs--underline talos-inspector__tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" id="railTabs" aria-label="Sezioni della colonna">
       <button class="talos-tabs__tab" role="tab" aria-selected="true" data-rail="contesto" aria-controls="railContesto">Contesto</button>
       <!-- ⛔ 09/09 — i due `title` sono stati TOLTI. Nella foto del giro con delega il fumetto nativo

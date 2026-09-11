@@ -25,7 +25,19 @@
   pointer-events: none;
   contain: strict;
 }
-#schermoChat[data-talos-canvas-motion] > :not(.talos-motion-canvas) {
+/*
+ * ⛔⛔⛔ 11/09/2026, sera — LA BARRA DI NAVIGAZIONE VA ESCLUSA DA QUESTA REGOLA, e la prova è una chat
+ *   vuota. Questa regola mette `position: relative` su OGNI figlio di `#schermoChat` per tenerlo
+ *   sopra il canvas — compresa `nav.talos-cronologia`, che nel foglio base è `position: absolute`
+ *   (`index.css:548`, sovrapposta a sinistra, larga 36 px). Con la specificità di id + attributo +
+ *   `:not()` vince lei: la barra ENTRA NEL FLUSSO della colonna flex, e con una sessione lunga
+ *   (170 giri = 170 voci) si prende **630 px** dei 900: allo scroller della conversazione restano
+ *   **70 px**, con dentro una colonna da 9.201. La chat sembra vuota. Misurato sul 4174: sessione
+ *   corta 650 px, sessione lunga 70 px, stesso CSS, stesso canvas. Trovato dall'agente della
+ *   sessione lenta nelle sue foto («colonna alta 42 px»), verificato qui.
+ * ⇒ La barra resta `absolute` come nel foglio base; il suo `z-index: 20` è già sopra il canvas (0).
+ */
+#schermoChat[data-talos-canvas-motion] > :not(.talos-motion-canvas):not(.talos-cronologia) {
   position: relative;
   z-index: 1;
 }

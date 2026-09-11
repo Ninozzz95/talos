@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { avviaSessione, compattaSessione, eseguiComandoDiretto } from '../src/agent-service.mjs';
+import { TALOS_SOURCE_TEXT_FORMATS } from '../src/document-generator.mjs';
 import { NoteStoreError } from '../src/notes-store.mjs';
 import { TaskStoreError } from '../src/tasks-store.mjs';
 import { MemoryStoreError } from '../src/memory-store.mjs';
@@ -2987,6 +2988,24 @@ test('⛔⛔⛔ BC-11 un formato BINARIO rifiuta l\'aggiunta PRIMA di scrivere: 
   assert.equal(scritturaTentata, false, 'la scrittura non deve nemmeno essere tentata');
   assert.equal(esito.ok, false);
   assert.match(esito.esito, /binary container/);
+
+  /*
+   * ⛔ 11/9 — IL RIFIUTO SUGGERIVA UN FORMATO CHE RIFIUTA ANCHE LUI. La frase diceva «use a text
+   * format (md, html, txt, …)» e `html` NON è accodabile: non è nei `TALOS_SOURCE_TEXT_FORMATS` e
+   * non è fra i due aggiunti a mano (`md`, `csv`) — `document-generator.mjs` non scrive il `body`
+   * com'è, lo AVVOLGE in un documento intero, e accodarne due dà un file con due `<!doctype html>`.
+   * Il commento sopra `formatoAccodabile` lo diceva già; la frase per il modello no.
+   * ⇒ Qui non si controlla la STRINGA (cambierebbe a ogni riscrittura): si estraggono i formati
+   *   nominati e si chiede che ognuno sia davvero accodabile. Un suggerimento nuovo e sbagliato
+   *   casca allo stesso modo.
+   */
+  const nominati = (esito.esito.match(/\(([^)]*)\)\s*if you need to build it in pieces/) || [, ''])[1]
+    .split(',').map((p) => p.trim()).filter((p) => /^[a-z0-9]+$/.test(p));
+  assert.ok(nominati.length > 0, 'il rifiuto deve nominare almeno un formato che funziona');
+  const accodabili = new Set([...TALOS_SOURCE_TEXT_FORMATS, 'md', 'csv']);
+  for (const formato of nominati) {
+    assert.ok(accodabili.has(formato), `il rifiuto suggerisce «${formato}», che non è accodabile`);
+  }
 });
 
 test('⛔⛔ BC-11 un `mode` scritto male viene DETTO, non indovinato, e non si genera nulla', async () => {

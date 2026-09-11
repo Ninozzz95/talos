@@ -27,21 +27,51 @@
  *   ⇒ lo decide il sistema.
  * ⛔ Dentro un `try`: una preferenza illeggibile (finestra privata, dati puliti) non deve impedire
  *   l'avvio — si ripiega sul sistema, che è il default dichiarato.
+ *
+ * ⭐⭐⭐ 11/9 SERA, BC-19 — IL PONTE PORTA ANCHE IL TEMA, non solo il chiaro/scuro.
+ *
+ * Il velo conosceva DUE cose su quattordici: chiaro o scuro. Il marchio nasceva con l'oro di `calm`
+ * (`#c08b3c`, il ripiego scritto nel `<style>` d'avvio) anche con `terminal` salvato, che è VERDE
+ * (`#63f08e`) — e il fondo era un letterale `#1e1f22` mentre `terminal` dipinge `#020403`. Cioè: il
+ * velo che esiste per NON far vedere un lampo ne produceva uno suo, al cambio di tema, a ogni
+ * ricaricamento. Gli accenti dei quattordici temi stanno in `styles/temi.css` e si accendono con un
+ * attributo sulla radice, quindi basta stamparlo qui: stessa forma consigliata per N temi
+ * (hirejeffgreen.com «Multi-Theme Design System: CSS Variables + Data Attributes», e la ricerca di
+ * ieri in testa a `temi.css`) e stessa regola del FOUC — il valore si scrive nell'head, prima del
+ * primo disegno (CSS-Tricks «Flash of inAccurate coloR Theme (FART)»; timomeh.de «User-defined
+ * color theme in the browser without the initial flash», letti l'11/09/2026).
+ *
+ * ⛔ IL TIMBRO SI RISPETTA, o il ponte diventa la bugia. `legacy/app.js` onora `themePreset` SOLO se
+ *   accanto c'è `themePresetVersione === 2` (`ASPETTO_SCELTA_VERSIONE`): una scelta fatta quando i
+ *   fogli dei temi erano staccati non è una scelta, è un residuo, e l'app la ignora. Un ponte che
+ *   leggesse il tema senza il timbro dipingerebbe il velo di un tema che la app poi butta — cioè
+ *   esattamente il lampo, solo al contrario. La regola è copiata da lì, non reinventata.
+ * ⛔ NON si stampa `data-talos-scene`: è la scena dello sfondo animato, spenta di serie e versionata
+ *   allo stesso modo, e il velo non la usa. Stampare un attributo che non serve è superficie in più
+ *   che un domani diverge.
  */
 (function ponteDelTema() {
+  /* Gli stessi quattordici di `TALOS_THEME_IDS` in `legacy/app.js`: un tema fuori da questa lista
+     `temi.css` non lo conosce, e stamparlo darebbe una radice senza semi. */
+  var TEMI = ['forge', 'paper', 'terminal', 'aurora', 'glacier', 'ember', 'atlas', 'noir', 'signal', 'violet', 'claudius', 'basicus', 'telemetry', 'calm'];
+  var VERSIONE_SCELTA = 2; /* = ASPETTO_SCELTA_VERSIONE in legacy/app.js */
   var modo = 'system';
+  var tema = 'calm';
   try {
     var grezzo = window.localStorage.getItem('talos.harness.desktop.settings.v1');
     if (grezzo) {
       var salvato = JSON.parse(grezzo);
-      modo = (salvato && salvato.appearance && salvato.appearance.colorMode) || 'system';
+      var aspetto = (salvato && salvato.appearance) || {};
+      modo = aspetto.colorMode || 'system';
+      if (aspetto.themePresetVersione === VERSIONE_SCELTA && TEMI.indexOf(aspetto.themePreset) !== -1) tema = aspetto.themePreset;
     }
-  } catch (errore) { modo = 'system'; }
+  } catch (errore) { modo = 'system'; tema = 'calm'; }
   var chiaro = modo === 'light' || (modo !== 'dark'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-color-scheme: light)').matches);
   var radice = document.documentElement;
   if (chiaro) radice.setAttribute('data-theme', 'light');
+  radice.setAttribute('data-talos-theme', tema);
   radice.style.setProperty('color-scheme', chiaro ? 'light' : 'dark');
 }());
 

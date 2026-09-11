@@ -1,18 +1,25 @@
 // src/avvio.js
 (function ponteDelTema() {
+  var TEMI = ["forge", "paper", "terminal", "aurora", "glacier", "ember", "atlas", "noir", "signal", "violet", "claudius", "basicus", "telemetry", "calm"];
+  var VERSIONE_SCELTA = 2;
   var modo = "system";
+  var tema = "calm";
   try {
     var grezzo = window.localStorage.getItem("talos.harness.desktop.settings.v1");
     if (grezzo) {
       var salvato = JSON.parse(grezzo);
-      modo = salvato && salvato.appearance && salvato.appearance.colorMode || "system";
+      var aspetto = salvato && salvato.appearance || {};
+      modo = aspetto.colorMode || "system";
+      if (aspetto.themePresetVersione === VERSIONE_SCELTA && TEMI.indexOf(aspetto.themePreset) !== -1) tema = aspetto.themePreset;
     }
   } catch (errore) {
     modo = "system";
+    tema = "calm";
   }
   var chiaro = modo === "light" || modo !== "dark" && typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: light)").matches;
   var radice = document.documentElement;
   if (chiaro) radice.setAttribute("data-theme", "light");
+  radice.setAttribute("data-talos-theme", tema);
   radice.style.setProperty("color-scheme", chiaro ? "light" : "dark");
 })();
 function vitaDelVelo() {

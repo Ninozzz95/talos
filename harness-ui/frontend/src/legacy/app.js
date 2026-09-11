@@ -1475,13 +1475,45 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     });
   }
 
+  /*
+   * ⭐⭐⭐ 11/9 — LA SOGLIA DELLE DUE COLONNE NON STA PIU' IN QUESTO FILE, e non e' piu' UN numero.
+   *
+   * Riproduzione (misurata a 1100×800 sulla build servita, §2 del rapporto CSS dell'11/9): si preme
+   * «Dettagli» e non succede NIENTE a schermo, mentre la app scrive `inspector-collapsed` sulla
+   * shell e salva `inspectorCollapsed:true` nelle preferenze. Alla riapertura a 1440 la colonna
+   * parte chiusa senza che nessuno l'abbia chiusa.
+   * Causa: qui c'erano TREDICI `window.innerWidth <= 1040` (e `> 1040`), mentre il foglio toglie la
+   * colonna dei dettagli a **1240** (`styles/index.css`, sezione 14) e la barra delle sessioni a
+   * **860**. Due numeri per una decisione sola, e in mezzo una fascia di 200 px dove il pulsante
+   * collassava una colonna gia' invisibile. La barra delle sessioni aveva lo stesso difetto
+   * specchiato, e piu' largo: fra 861 e 1040 px apriva uno strato sopra una barra gia' visibile.
+   *
+   * ⇒ Il numero resta UNO SOLO, nella media query che fa il lavoro. Il foglio vi accende una
+   *   bandierina (`--talos-inspector-flottante` / `--talos-sidebar-flottante`) e qui si legge.
+   *   Una custom property non si puo' usare dentro la condizione di una media query (MDN «Using CSS
+   *   custom properties», letto l'11/09/2026): il verso che regge e' questo — la media query
+   *   dichiara, il JavaScript legge (CSS-Tricks «How to Get All Custom Properties on a Page in
+   *   JavaScript», 11/09/2026).
+   * ⛔ Costo: `getComputedStyle` forza un ricalcolo di stile. Il punto piu' caldo e' `applyPanelWidth`
+   *   durante il trascinamento, e li' la chiamata c'era gia' (legge `--talos-sidebar-w` sulla riga
+   *   dopo): si passa la stessa lettura, non se ne aggiunge una.
+   * ⛔ Ripiego quando la bandierina non c'e' (foglio non caricato, o una pagina di prova senza
+   *   `styles.css`): «non flottante». Non e' un default a caso — senza foglio nessuna regola
+   *   nasconde le colonne, quindi le colonne SONO nella griglia.
+   */
+  const FLAG_FLOTTANTE = { inspector: '--talos-inspector-flottante', sessions: '--talos-sidebar-flottante' };
+  function pannelloFlottante(quale, calcolato = null) {
+    const stile = calcolato || getComputedStyle(document.documentElement);
+    return stile.getPropertyValue(FLAG_FLOTTANTE[quale]).trim() === '1';
+  }
+
   function syncInspectorToggle() {
-    const expanded = window.innerWidth <= 1040 || !appShell.classList.contains('inspector-collapsed');
+    const expanded = pannelloFlottante('inspector') || !appShell.classList.contains('inspector-collapsed');
     desktopInspectorToggle?.setAttribute('aria-expanded', String(expanded));
   }
 
   function toggleDesktopInspector() {
-    if (window.innerWidth <= 1040) {
+    if (pannelloFlottante('inspector')) {
       openPanel('inspector');
       return;
     }
@@ -1494,7 +1526,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   // Owner 24/8: la sidebar sessioni comprimibile quanto l'inspector — stesso
   // schema esatto, un solo pulsante desktop-only, nessuna scorciatoia nuova.
   function syncSessionsToggle() {
-    const expanded = window.innerWidth <= 1040 || !appShell.classList.contains('sessions-collapsed');
+    const expanded = pannelloFlottante('sessions') || !appShell.classList.contains('sessions-collapsed');
     sessionsCollapseBtn?.setAttribute('aria-expanded', String(expanded));
     // 05/9 Fase 2 (owner: «le due sidebar devono essere collassabili»): la barra compressa e' la modalita' a icone del mockup
     if (expanded) document.documentElement.removeAttribute('data-sidebar'); else document.documentElement.setAttribute('data-sidebar', 'icone');
@@ -1510,7 +1542,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function toggleSessionsPanel() {
-    if (window.innerWidth <= 1040) {
+    /* ⛔ La barra delle sessioni ha la SUA soglia (860, `styles/index.css` sezione 14), non quella
+       della colonna dei dettagli: con un numero solo per tutti e due, fra 861 e 1040 px questo
+       pulsante apriva uno strato sopra una barra che era gia' li' e visibile. */
+    if (pannelloFlottante('sessions')) {
       openPanel('sessions');
       return;
     }
@@ -1521,7 +1556,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function openPanel(name) {
-    if (name === 'inspector' && window.innerWidth > 1040) {
+    if (name === 'inspector' && !pannelloFlottante('inspector')) {
       appShell.classList.remove('inspector-collapsed');
       syncInspectorToggle();
       return;
@@ -5359,17 +5394,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   schede a pillola (`.talos-tabs--pills .talos-tabs__list`, `styles/index.css`), quindi è il
      *   suo linguaggio, non uno nuovo. E `flex-shrink:0` sulla striscia perché il pannello non la
      *   comprima di nuovo.
-     * ⛔ DEBITO DICHIARATO: queste righe vanno in `styles/foglio-monolite.css`, accanto a
-     *   `.model-picker-sources`. Oggi non ci vanno perché la corsia degli stili è di un altro
-     *   agente e due mani sullo stesso file rifanno il danno dei «due commit intrecciati».
+     * ✅ 11/9, SERA — DEBITO PAGATO, e le tre righe in linea sono SPARITE da qui. Stanno in
+     *   `styles/foglio-monolite.css:486` (`.model-picker-sources{flex-wrap:wrap; flex-shrink:0;
+     *   row-gap:2px}`), messe dalla corsia degli stili nel pomeriggio. Finché restavano anche qui
+     *   VINCEVANO loro — uno stile in linea pesa 1-0-0-0 e batte qualunque regola del foglio (MDN
+     *   «Specificity», letto l'11/09/2026) — quindi il foglio era scritto e inerte: una regola che
+     *   non si applica non si puo' nemmeno cambiare. Tolte, misurando che il pixel non si muove
+     *   (prova al contrario: rimesse a runtime, stessa geometria).
      */
     const fonti = document.createElement('div');
     fonti.className = 'model-picker-sources';
     fonti.setAttribute('role', 'tablist');
     fonti.setAttribute('aria-label', 'Dove cercare il modello');
-    fonti.style.flexWrap = 'wrap';
-    fonti.style.flexShrink = '0';
-    fonti.style.rowGap = '2px';
     listEl.id = `modelPickerLista-${Math.random().toString(36).slice(2, 10)}`; // serve alle schede per `aria-controls`
     panel.append(fonti, searchLabel, listEl, footer);
     wrap.append(trigger, panel);
@@ -5456,8 +5492,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         bottone.setAttribute('aria-selected', String(attiva));
         bottone.tabIndex = attiva ? 0 : -1; // tabindex mobile: la striscia è UNA fermata sola
         bottone.classList.toggle('active', attiva);
-        // ⛔ Non si stringono: una scheda schiacciata perde l'etichetta invece del posto.
-        bottone.style.flex = '0 0 auto';
+        /* ⛔ Non si stringono: una scheda schiacciata perde l'etichetta invece del posto. La regola
+           (`flex:0 0 auto`) sta in `styles/foglio-monolite.css:487`, su `.model-picker-source`:
+           qui c'era la copia in linea che la scavalcava, tolta l'11/9. */
         bottone.append(textElement('span', '', voce.etichetta));
         if (Number.isFinite(voce.conto)) bottone.append(textElement('span', 'model-picker-source-count', String(voce.conto)));
         // Senza chiave non c'è un conteggio da dare: si dice perché, invece di stampare uno zero falso.
@@ -15971,9 +16008,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     policyGate.dataset.workspacePolicyGate = 'true';
     // Il testo cambia da sotto le dita di chi sceglie: chi non guarda lo schermo deve sentirlo.
     policyGate.setAttribute('role', 'status');
-    // Stessa misura e stesso debito della nota nel piede: 4,21:1 a 9 px nel tema chiaro non basta
-    // per la frase che spiega un blocco. Vedi il commento esteso su `footerNote`.
-    policyGate.style.color = 'var(--text-2)';
+    /* ✅ 11/9, SERA — il `color:var(--text-2)` che stava qui in linea e' nel foglio, su TUTTE le
+       istanze (`styles/foglio-monolite.css:458`, `.workspace-chooser-policy-gate`): 4,21:1 → 9,23:1
+       nel chiaro, 6,37 → 12,82 nello scuro, misurati dalla corsia degli stili. Finche' restava
+       anche qui vinceva lo stile in linea (1-0-0-0) e il foglio era inerte. */
     permissionSection.append(permissionGrid, policyGate);
     right.append(rightHead, modelSection, reasoningSection, plannerSection, permissionSection);
 
@@ -16009,20 +16047,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     footerNote.className = 'workspace-chooser-help talos-grow';
     footerNote.dataset.workspaceSubmitNote = 'true';
     footerNote.setAttribute('role', 'status');
-    footerNote.style.marginTop = '0'; // in una riga centrata il margine di stacco verticale storce
     /*
-     * ⛔ MISURATO, non scelto a occhio: `.workspace-chooser-help` scrive in `--muted` a 9 px, e sul
+     * ⛔ MISURATO, non scelto a occhio: `.workspace-chooser-help` scriveva in `--muted` a 9 px, e sul
      *   fondo del piede quel contrasto è 4,21:1 nel tema chiaro — SOTTO il 4,5:1 che la WCAG 1.4.3
      *   chiede per il testo piccolo (nel tema scuro è 6,39, quindi il difetto è solo di uno dei
      *   due: un'altra ragione per guardarli sempre tutti e due). Qui non è una didascalia
      *   qualunque: è la ragione per cui il bottone non parte — se non si legge, la cura è finta.
      *   `--text-2` misura 9,23 nel chiaro e 12,83 nello scuro: stesso linguaggio (un token del
      *   tema, non un colore inventato), leggibile in tutti e due.
-     * ⛔ DEBITO DICHIARATO per la corsia degli stili: il difetto vero è `--muted` a 9 px nel tema
-     *   chiaro, e riguarda TUTTE le `.workspace-chooser-help` e `.workspace-chooser-policy-gate` di
-     *   questa modale, non solo questa riga. Si cura in `foglio-monolite.css`, non qui.
+     * ✅ 11/9, SERA — DEBITO PAGATO e i due `element.style.*` che stavano qui sono spariti: il
+     *   colore vale per TUTTE le istanze (`styles/foglio-monolite.css:445`) e il `margin-top:0` del
+     *   piede sta sulla regola che lo riguarda (`:444`, `.workspace-chooser-help.talos-grow` — in
+     *   una riga centrata il margine di stacco verticale la fa sembrare storta). Finché restavano
+     *   anche qui, gli stili in linea (1-0-0-0) scavalcavano il foglio e quelle regole erano
+     *   scritte e inerti.
      */
-    footerNote.style.color = 'var(--text-2)';
     footer.append(footerNote, cancel, submit);
     form.append(shortcuts, columns, footer);
 
@@ -18099,7 +18138,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   $$('[data-open-panel]').forEach((button) => button.addEventListener('click', () => {
     if (button.dataset.openPanel === 'sessions' && HOST().classList.contains('talos-embedded')) {
       window.__talosHarnessHostBack?.();
-    } else if (button.classList.contains('desktop-context-toggle') && button.dataset.openPanel === 'inspector' && window.innerWidth > 1040) toggleDesktopInspector();
+    /* ⛔ Niente soglia qui: `toggleDesktopInspector()` decide da se' se collassare la colonna o
+       aprire lo strato (`pannelloFlottante`). Prima la stessa domanda era scritta due volte, e
+       fra 1041 e 1240 px le due risposte non combaciavano. */
+    } else if (button.classList.contains('desktop-context-toggle') && button.dataset.openPanel === 'inspector') toggleDesktopInspector();
     else openPanel(button.dataset.openPanel);
   }));
   $$('[data-close-panel]').forEach((button) => button.addEventListener('click', closePanels));
@@ -18112,7 +18154,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     button.addEventListener('click', () => {
       if (button.dataset.mode === 'chat') {
         setView('chat', { mode: 'chat' });
-        if (window.innerWidth <= 1040) closePanels();
+        /* Solo dove un pannello puo' davvero essere uno strato aperto sopra la chat: se nessuna
+           delle due colonne e' flottante, `closePanels()` non avrebbe niente da chiudere. */
+        if (pannelloFlottante('inspector') || pannelloFlottante('sessions')) closePanels();
       } else if (button.dataset.mode === 'terminal') {
         setView('terminal');
       } else if (button.dataset.mode === 'diff') {
@@ -18648,7 +18692,10 @@ ${testo}`;
     if (!b || b.id || b.dataset.openPanel) return;
     if (b.dataset.azione === 'comandi') openCommandPalette();
     else if (b.dataset.azione === 'comprimi') compactSession();
-    else if (b.dataset.azione === 'dettagli' && window.innerWidth > 1040) toggleDesktopInspector();
+    /* ⛔ 11/9 — qui c'era `&& window.innerWidth > 1040`, e sotto quella misura le TRE copie del
+       pulsante (Terminale, Review, Browser) non facevano NIENTE: nessun ramo le raccoglieva. Ora
+       decide `toggleDesktopInspector()`, che sotto la soglia del foglio apre lo strato. */
+    else if (b.dataset.azione === 'dettagli') toggleDesktopInspector();
   });
   $('#commandPaletteBtn').addEventListener('click', openCommandPalette);
   $('#closeCommand')?.addEventListener('click', () => closeEmbeddedDialog(commandDialog));
@@ -19028,15 +19075,21 @@ ${testo}`;
   }
 
   function onResize() {
-    if (window.innerWidth > 1040) {
+    if (!pannelloFlottante('inspector')) {
       inspectorPanel.classList.remove('open');
       backdrop.classList.remove('show');
     } else {
+      /* Flottante: `inspector-collapsed` non descrive piu' niente — la colonna e' fuori dalla
+         griglia per il foglio, non per il collasso. Si toglie dal DOM, non dalle preferenze:
+         allargando di nuovo, `loadPanelWidths()` la rimette com'era. */
       appShell.classList.remove('inspector-collapsed');
     }
     if (!layoutCompatto()) sessionsPanel.classList.remove('open');
     syncInspectorToggle();
-    if (window.innerWidth > 1040) loadPanelWidths();
+    /* ⛔ Senza soglia qui: i due collassi ricordati hanno soglie DIVERSE, e chi sa distinguerle e'
+       `loadPanelWidths()` (una guardia per pannello). Un'unica guardia esterna col numero della
+       colonna dei dettagli avrebbe impedito di ripristinare la BARRA fra 861 e 1240 px. */
+    loadPanelWidths();
     clampOpenDialogsToViewport();
     riclampaComposerUserSized();
     syncHostLayout();
@@ -19213,8 +19266,11 @@ ${testo}`;
 
   function applyPanelWidth(which, px) {
     const [min, configuredMax] = PANEL_RESIZE_LIMITS[which];
-    const sidebarWidth = parseInt(getComputedStyle(HOST()).getPropertyValue('--talos-sidebar-w'), 10) || PANEL_RESIZE_DEFAULT.sessions;
-    const viewportMax = which === 'inspector' && window.innerWidth > 1040
+    /* Una lettura sola per tutte e due le domande: questa gira a ogni `pointermove` del
+       trascinamento, e le custom property della radice si ereditano fin qui. */
+    const stile = getComputedStyle(HOST());
+    const sidebarWidth = parseInt(stile.getPropertyValue('--talos-sidebar-w'), 10) || PANEL_RESIZE_DEFAULT.sessions;
+    const viewportMax = which === 'inspector' && !pannelloFlottante('inspector', stile)
       ? Math.max(min, window.innerWidth - sidebarWidth - 520)
       : configuredMax;
     const max = Math.min(configuredMax, viewportMax);
@@ -19225,8 +19281,11 @@ ${testo}`;
 
   function loadPanelWidths() {
     const saved = readSavedPanelWidths();
-    if (saved.sessionsCollapsed && window.innerWidth > 1040) appShell.classList.add('sessions-collapsed'); // 05/9 Fase 2: collassi ricordati
-    if (saved.inspectorCollapsed && window.innerWidth > 1040) appShell.classList.add('inspector-collapsed');
+    /* 05/9 Fase 2: collassi ricordati. ⛔ 11/9: una guardia PER PANNELLO — le due colonne spariscono
+       a due misure diverse (860 la barra, 1240 i dettagli), e un numero solo per tutte e due
+       rimetteva `sessions-collapsed` su una barra flottante e lo negava a una barra visibile. */
+    if (saved.sessionsCollapsed && !pannelloFlottante('sessions')) appShell.classList.add('sessions-collapsed');
+    if (saved.inspectorCollapsed && !pannelloFlottante('inspector')) appShell.classList.add('inspector-collapsed');
     syncSessionsToggle();
     syncInspectorToggle();
     for (const which of Object.keys(PANEL_RESIZE_VAR)) {
@@ -19254,7 +19313,9 @@ ${testo}`;
       const panel = which === 'sessions' ? sessionsPanel : inspectorPanel;
 
       handle.addEventListener('pointerdown', (event) => {
-        if (window.innerWidth <= 1040) return;
+        /* ⛔ La soglia e' quella DEL PANNELLO che questa maniglia ridimensiona: una colonna
+           flottante non si trascina, una colonna ancora in griglia si'. */
+        if (pannelloFlottante(which)) return;
         event.preventDefault();
         handle.setPointerCapture(event.pointerId);
         handle.classList.add('dragging');

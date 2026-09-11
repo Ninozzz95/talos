@@ -13838,12 +13838,17 @@ var init_app = __esm({
 ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         });
       }
+      const FLAG_FLOTTANTE = { inspector: "--talos-inspector-flottante", sessions: "--talos-sidebar-flottante" };
+      function pannelloFlottante(quale, calcolato = null) {
+        const stile = calcolato || getComputedStyle(document.documentElement);
+        return stile.getPropertyValue(FLAG_FLOTTANTE[quale]).trim() === "1";
+      }
       function syncInspectorToggle() {
-        const expanded = window.innerWidth <= 1040 || !appShell.classList.contains("inspector-collapsed");
+        const expanded = pannelloFlottante("inspector") || !appShell.classList.contains("inspector-collapsed");
         desktopInspectorToggle?.setAttribute("aria-expanded", String(expanded));
       }
       function toggleDesktopInspector() {
-        if (window.innerWidth <= 1040) {
+        if (pannelloFlottante("inspector")) {
           openPanel("inspector");
           return;
         }
@@ -13853,7 +13858,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         riclampaComposerUserSized();
       }
       function syncSessionsToggle() {
-        const expanded = window.innerWidth <= 1040 || !appShell.classList.contains("sessions-collapsed");
+        const expanded = pannelloFlottante("sessions") || !appShell.classList.contains("sessions-collapsed");
         sessionsCollapseBtn?.setAttribute("aria-expanded", String(expanded));
         if (expanded) document.documentElement.removeAttribute("data-sidebar");
         else document.documentElement.setAttribute("data-sidebar", "icone");
@@ -13868,7 +13873,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
       }
       function toggleSessionsPanel() {
-        if (window.innerWidth <= 1040) {
+        if (pannelloFlottante("sessions")) {
           openPanel("sessions");
           return;
         }
@@ -13878,7 +13883,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         riclampaComposerUserSized();
       }
       function openPanel(name) {
-        if (name === "inspector" && window.innerWidth > 1040) {
+        if (name === "inspector" && !pannelloFlottante("inspector")) {
           appShell.classList.remove("inspector-collapsed");
           syncInspectorToggle();
           return;
@@ -17101,9 +17106,6 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         fonti.className = "model-picker-sources";
         fonti.setAttribute("role", "tablist");
         fonti.setAttribute("aria-label", "Dove cercare il modello");
-        fonti.style.flexWrap = "wrap";
-        fonti.style.flexShrink = "0";
-        fonti.style.rowGap = "2px";
         listEl.id = `modelPickerLista-${Math.random().toString(36).slice(2, 10)}`;
         panel.append(fonti, searchLabel, listEl, footer);
         wrap.append(trigger, panel);
@@ -17159,7 +17161,6 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             bottone3.setAttribute("aria-selected", String(attiva));
             bottone3.tabIndex = attiva ? 0 : -1;
             bottone3.classList.toggle("active", attiva);
-            bottone3.style.flex = "0 0 auto";
             bottone3.append(textElement("span", "", voce.etichetta));
             if (Number.isFinite(voce.conto)) bottone3.append(textElement("span", "model-picker-source-count", String(voce.conto)));
             if (!voce.collegato) bottone3.title = `${voce.etichetta}: chiave non collegata`;
@@ -24926,7 +24927,6 @@ ${testo3}` : testo3;
         policyGate.className = "workspace-chooser-policy-gate";
         policyGate.dataset.workspacePolicyGate = "true";
         policyGate.setAttribute("role", "status");
-        policyGate.style.color = "var(--text-2)";
         permissionSection.append(permissionGrid, policyGate);
         right.append(rightHead, modelSection, reasoningSection, plannerSection, permissionSection);
         const columns = document.createElement("div");
@@ -24948,8 +24948,6 @@ ${testo3}` : testo3;
         footerNote.className = "workspace-chooser-help talos-grow";
         footerNote.dataset.workspaceSubmitNote = "true";
         footerNote.setAttribute("role", "status");
-        footerNote.style.marginTop = "0";
-        footerNote.style.color = "var(--text-2)";
         footer.append(footerNote, cancel, submit);
         form.append(shortcuts, columns, footer);
         function pathKey(path) {
@@ -26656,7 +26654,7 @@ ${blocchi.join("\n\n")}` : testa;
       $$("[data-open-panel]").forEach((button2) => button2.addEventListener("click", () => {
         if (button2.dataset.openPanel === "sessions" && HOST().classList.contains("talos-embedded")) {
           window.__talosHarnessHostBack?.();
-        } else if (button2.classList.contains("desktop-context-toggle") && button2.dataset.openPanel === "inspector" && window.innerWidth > 1040) toggleDesktopInspector();
+        } else if (button2.classList.contains("desktop-context-toggle") && button2.dataset.openPanel === "inspector") toggleDesktopInspector();
         else openPanel(button2.dataset.openPanel);
       }));
       $$("[data-close-panel]").forEach((button2) => button2.addEventListener("click", closePanels));
@@ -26670,7 +26668,7 @@ ${blocchi.join("\n\n")}` : testa;
         button2.addEventListener("click", () => {
           if (button2.dataset.mode === "chat") {
             setView("chat", { mode: "chat" });
-            if (window.innerWidth <= 1040) closePanels();
+            if (pannelloFlottante("inspector") || pannelloFlottante("sessions")) closePanels();
           } else if (button2.dataset.mode === "terminal") {
             setView("terminal");
           } else if (button2.dataset.mode === "diff") {
@@ -27017,7 +27015,7 @@ ${testo3}`;
         if (!b || b.id || b.dataset.openPanel) return;
         if (b.dataset.azione === "comandi") openCommandPalette();
         else if (b.dataset.azione === "comprimi") compactSession();
-        else if (b.dataset.azione === "dettagli" && window.innerWidth > 1040) toggleDesktopInspector();
+        else if (b.dataset.azione === "dettagli") toggleDesktopInspector();
       });
       $2("#commandPaletteBtn").addEventListener("click", openCommandPalette);
       $2("#closeCommand")?.addEventListener("click", () => closeEmbeddedDialog(commandDialog));
@@ -27321,7 +27319,7 @@ ${testo3}`;
         host.classList.toggle("talos-embedded-wide-short", wideShort);
       }
       function onResize() {
-        if (window.innerWidth > 1040) {
+        if (!pannelloFlottante("inspector")) {
           inspectorPanel.classList.remove("open");
           backdrop.classList.remove("show");
         } else {
@@ -27329,7 +27327,7 @@ ${testo3}`;
         }
         if (!layoutCompatto()) sessionsPanel.classList.remove("open");
         syncInspectorToggle();
-        if (window.innerWidth > 1040) loadPanelWidths();
+        loadPanelWidths();
         clampOpenDialogsToViewport();
         riclampaComposerUserSized();
         syncHostLayout();
@@ -27500,8 +27498,9 @@ ${testo3}`;
       }
       function applyPanelWidth(which, px) {
         const [min, configuredMax] = PANEL_RESIZE_LIMITS[which];
-        const sidebarWidth = parseInt(getComputedStyle(HOST()).getPropertyValue("--talos-sidebar-w"), 10) || PANEL_RESIZE_DEFAULT.sessions;
-        const viewportMax = which === "inspector" && window.innerWidth > 1040 ? Math.max(min, window.innerWidth - sidebarWidth - 520) : configuredMax;
+        const stile = getComputedStyle(HOST());
+        const sidebarWidth = parseInt(stile.getPropertyValue("--talos-sidebar-w"), 10) || PANEL_RESIZE_DEFAULT.sessions;
+        const viewportMax = which === "inspector" && !pannelloFlottante("inspector", stile) ? Math.max(min, window.innerWidth - sidebarWidth - 520) : configuredMax;
         const max = Math.min(configuredMax, viewportMax);
         const clamped = Math.min(max, Math.max(min, Math.round(px)));
         HOST().style.setProperty(PANEL_RESIZE_VAR[which], `${clamped}px`);
@@ -27509,8 +27508,8 @@ ${testo3}`;
       }
       function loadPanelWidths() {
         const saved = readSavedPanelWidths();
-        if (saved.sessionsCollapsed && window.innerWidth > 1040) appShell.classList.add("sessions-collapsed");
-        if (saved.inspectorCollapsed && window.innerWidth > 1040) appShell.classList.add("inspector-collapsed");
+        if (saved.sessionsCollapsed && !pannelloFlottante("sessions")) appShell.classList.add("sessions-collapsed");
+        if (saved.inspectorCollapsed && !pannelloFlottante("inspector")) appShell.classList.add("inspector-collapsed");
         syncSessionsToggle();
         syncInspectorToggle();
         for (const which of Object.keys(PANEL_RESIZE_VAR)) {
@@ -27524,7 +27523,7 @@ ${testo3}`;
           if (!PANEL_RESIZE_LIMITS[which]) return;
           const panel = which === "sessions" ? sessionsPanel : inspectorPanel;
           handle.addEventListener("pointerdown", (event) => {
-            if (window.innerWidth <= 1040) return;
+            if (pannelloFlottante(which)) return;
             event.preventDefault();
             handle.setPointerCapture(event.pointerId);
             handle.classList.add("dragging");
