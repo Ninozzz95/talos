@@ -889,6 +889,132 @@ export function comandoDiShell(argomenti) {
     return campoConAlias(argomenti, 'comando', 'command', 'cmd') ?? ''
 }
 
+/*
+ * ⛔⛔⛔ BC-11, 11/09/2026 — LA META' `scrivi`/`leggi` DELLO STESSO DIFETTO, RIMASTA SCOPERTA.
+ *
+ * `comandoDiShell` qui sopra ha curato `shell` (39 giri persi in due sole sessioni). Il conteggio
+ * delle chiavi fuori schema di quelle stesse due sessioni (`8dde6bff` e `37e10d21`, 308 chiamate
+ * ricostruite dai `ToolCallArgs`) dice pero' che `scrivi` sbagliava allo stesso modo:
+ *     scrivi.path 2 · scrivi.content 1 · scrivi.contuto 1 (refuso suo)
+ * e ogni volta `argomenti.percorso` arrivava `undefined`. Il seguito NON era un errore parlante:
+ * `dentro('')` in `kernelPerIlBanco.js:22` restituisce LA RADICE quando il percorso e' vuoto, e
+ * `writeFile` su una cartella da' `EISDIR: illegal operation on a directory`. Cinque `scrivi`
+ * finite cosi'; nel ragionamento del giro dopo si legge «Oops, empty call» — cioe' un giro intero
+ * pagato per INDOVINARE cosa fosse successo.
+ *
+ * ⛔ Che i nomi degli argomenti siano una classe di errore NOTA e' misurato, non una nostra
+ *   concessione: ToolScan (arXiv:2411.13547) elenca «incorrect argument names» fra i modi tipici
+ *   in cui una chiamata fallisce, e succede anche all'implementazione di riferimento del
+ *   fornitore — `anthropics/claude-quickstarts#348` (letto 11/09/2026): «The EditTool20250728
+ *   class expects `new_str` for the insert command, but Claude actually outputs `insert_text`».
+ * ⛔ E c'e' un aggravante NOSTRO, che la letteratura rende esplicito: i nostri campi sono in
+ *   ITALIANO. «Lost in Execution: On the Multilingual Robustness of Tool Calling in LLMs»
+ *   (arXiv:2601.05366, letto 11/09/2026) tiene apposta l'interfaccia in inglese — «function names,
+ *   parameter keys, and tool descriptions are not translated» — perche' la non-corrispondenza fra
+ *   la lingua in cui il modello pensa e quella dell'interfaccia di esecuzione e' essa stessa una
+ *   fonte di guasto misurata. La lingua dei nostri campi NON si cambia (i nomi che riceve il
+ *   modello sono il contratto col kernel: gli alias si AGGIUNGONO, mai si rinomina): il costo si
+ *   assorbe qui, in un posto solo.
+ * ⇒ La forma e' quella di Hermes (`tools/file_tools.py:2747`, PATCH_SCHEMA): «The handler accepts
+ *   BOTH shapes from any model regardless» — lo schema pubblicizza UNA forma, il gestore ne accetta
+ *   piu' d'una. Cosi' non si paga il token in piu' su ogni chiamata (loro hanno misurato ~148
+ *   tok/call per la forma pubblicizzata a tutti) e non si perde il giro.
+ */
+
+/** Gli alias del percorso, in ordine: il nostro nome vince, poi i nomi degli altri harness
+ *  (`path` in Hermes/deepseek/Anthropic, `filePath` in opencode). */
+export const ALIAS_PERCORSO = Object.freeze(['percorso', 'path', 'file_path', 'filePath', 'file', 'filename'])
+
+/** Il percorso di `scrivi`/`leggi`, comunque il modello l'abbia chiamato. `''` = non c'e'. */
+export function percorsoDiFile(argomenti) {
+    return campoConAlias(argomenti, ...ALIAS_PERCORSO) ?? ''
+}
+
+/** Gli alias del contenuto di `scrivi` (`content` in Hermes/opencode, `file_text` in deepseek). */
+export const ALIAS_CONTENUTO = Object.freeze(['contenuto', 'content', 'testo', 'text', 'body', 'file_text'])
+
+/**
+ * Il contenuto di `scrivi`, comunque il modello l'abbia chiamato.
+ *
+ * ⛔ Qui NON si usa `campoConAlias`: quella salta le stringhe VUOTE (giusto per un comando di
+ *   shell, dove '' e' un guasto), e qui `contenuto: ''` e' una richiesta legittima — svuotare un
+ *   file. ⇒ si distingue `undefined` (il campo non e' arrivato: non si scrive niente e si dice
+ *   QUALE campo manca) da `''` (lo ha chiesto lui). Prima di questa riga i due casi collassavano
+ *   in `argomenti.contenuto ?? ''`: una chiamata monca SVUOTAVA il file invece di fallire.
+ */
+export function contenutoDiScrivi(argomenti) {
+    if (!argomenti || typeof argomenti !== 'object') return undefined
+    for (const nome of ALIAS_CONTENUTO) {
+        if (typeof argomenti[nome] === 'string') return argomenti[nome]
+    }
+    return undefined
+}
+
+/*
+ * ⛔⛔ BC-11 — le parole con cui il modello puo' chiedere di AGGIUNGERE invece di riscrivere.
+ * Stesso identico vocabolario gia' in uso per `document_create` (`agent-service.mjs:1048`,
+ * `MODALITA_DOCUMENTO`), riscritto qui e non importato perche' il kernel non dipende dal server
+ * desktop (viaggia anche sul mobile): due copie della stessa TABELLA, mai due grammatiche diverse
+ * — un modello che ha imparato `mode:"append"` da un attrezzo deve trovarlo uguale nell'altro.
+ * ⛔ Se una delle due cambia, `tests/scrivi-percorso-e-modalita.test.mjs` lo dice.
+ */
+export const MODALITA_DI_SCRITTURA = Object.freeze({
+    append: 'accoda', accoda: 'accoda', add: 'accoda',
+    new: 'nuovo', nuovo: 'nuovo', create: 'nuovo', replace: 'nuovo',
+})
+
+/**
+ * `'nuovo'` (riscrive tutto, il default di sempre) · `'accoda'` (aggiunge in coda) · `null` quando
+ * il modello ha scritto un valore che non si capisce — e allora si DICE, non si indovina.
+ */
+export function modalitaDiScrittura(argomenti) {
+    // `append:true` e' la forma che un modello scrive quando l'idea gliel'ha data una FRASE
+    // («call it again to append»), non un nome di enum: si accetta anche quella.
+    if (argomenti?.append === true) return 'accoda'
+    if (argomenti?.append === false) return 'nuovo'
+    const grezza = campoConAlias(argomenti, 'mode', 'modalita', 'modality', 'modalità')
+    if (grezza === undefined) return 'nuovo'
+    return MODALITA_DI_SCRITTURA[String(grezza).trim().toLowerCase()] ?? null
+}
+
+/**
+ * ⛔⛔ BC-11 — QUELLO CHE IL MODELLO LEGGE QUANDO GLI ARGOMENTI NON SONO ARRIVATI.
+ *
+ * Due guasti diversi vogliono due messaggi diversi (stessa disciplina di
+ * [[stringere-una-guardia-crea-un-falso-negativo]]):
+ *  · il modello ha scritto il nome del campo in un modo che non riconosciamo → gli si nomina il
+ *    campo che manca, e la chiamata dopo e' giusta;
+ *  · gli argomenti si sono TRONCATI a meta' stream (3 volte su 308, es. `call_c741309f96da4971…`,
+ *    2.781 caratteri con la stringa non chiusa) — li' il nome non c'entra niente, e dirgli «manca
+ *    percorso» lo manderebbe a cercare un errore che non ha fatto. Il JSON monco diventa `{}`
+ *    poco sopra nel ciclo (llama.cpp #22072: un `{` a meta' rimandato indietro fa HTTP 500 per
+ *    sempre), quindi qui l'unica traccia che resta e' l'id della chiamata.
+ *
+ * ⛔ Il messaggio porta la MOSSA SUCCESSIVA, non solo la diagnosi: e' la forma di cline
+ *   (`sdk-diff-edit-coordinator.ts:401-404`, «Use ${maxBoundaryLine} to append at EOF») e la
+ *   ragione e' misurata — arXiv:2608.26130 «Agents Don't Paginate» (letto 11/09/2026) trova ZERO
+ *   richieste del secondo pezzo su log di produzione: un agente non va a cercare un'istruzione,
+ *   legge quella che ha davanti nell'esito che sta gia' leggendo.
+ */
+export function messaggioArgomentiAssenti(attrezzo, { troncati = false, campo = 'percorso' } = {}) {
+    if (troncati) {
+        return `The arguments of this call arrived INCOMPLETE (the JSON was cut off mid-message), so \`${attrezzo}\` did nothing. `
+            + 'Send the call again. '
+            + (attrezzo === 'scrivi'
+                ? 'If the content is long, send a first part now and add each next part with mode:"append" on the SAME `percorso` — never a second, numbered file.'
+                : 'Nothing was read and nothing changed.')
+    }
+    if (campo === 'contenuto') {
+        return 'Nothing was written: no content was given. `scrivi` needs `contenuto`, the text to write '
+            + '(with mode:"append", only the part to add at the end). To empty the file on purpose, pass contenuto:"".'
+    }
+    return attrezzo === 'scrivi'
+        ? 'Nothing was written: no file path was given. `scrivi` needs `percorso` (the path of the file, relative to the '
+          + 'workspace, e.g. "src/prezzo.mjs") and `contenuto` (the text to write).'
+        : `Nothing was read: no file path was given. \`${attrezzo}\` needs \`percorso\`, the path of the file relative to the `
+          + 'workspace, e.g. "src/prezzo.mjs".'
+}
+
 export const CARATTERI_MINIMI_PER_CACHE = 16_000
 export function conMarcatoreDiCache(messaggi, marcatore = { type: 'ephemeral', ttl: '1h' }) {
     if (!Array.isArray(messaggi)) return messaggi
@@ -1204,11 +1330,64 @@ const ATTREZZI = [
     },
     {
         name: 'scrivi',
-        description: 'Writes one file of the workspace, replacing it entirely. '
-            + 'Read it first: the whole content is required.',
+        /*
+         * ⛔⛔⛔ BC-11, 11/09/2026 — «genera un file html di 1000 righe», e non c'era UN SOLO
+         * attrezzo capace di farlo. Misurato sulle due sessioni vere dell'owner (`8dde6bff`,
+         * `37e10d21`): **119 e 99 chiamate a `shell` su 186 e 122**, cioe' il 64% e l'81% dei
+         * giri spesi nella shell per scrivere UN file — e la strada era obbligata, perche'
+         * `scrivi` pretendeva il file INTERO in una risposta sola. Il modello si e' inventato
+         * `_p2.html`, `_p3.html`, `_p4.html`, `_p5.html`, `_p6core.js`, `_blocco1.html`, e il
+         * passo di «assemblaggio» non e' mai arrivato in fondo. L'ultimo tentativo di rimediare
+         * dalla shell (`cat >> … << 'PARTE2EOF'`, **23.941 caratteri di riga di comando**) e'
+         * morto con «La riga di comando e' troppo lunga».
+         *
+         * ⇒ Due frasi in questa descrizione chiudono le due strade sbagliate, ed e' esattamente
+         *   dove le mettono gli altri:
+         *   · opencode, `packages/opencode/src/tool/shell/prompt.ts:105` e `:205` (l'elenco sta
+         *     nella descrizione della SHELL): «Write files: Use Write (NOT echo >/cat <<EOF)»,
+         *     e `shell/shell.txt`: «DO NOT use it for file operations … use the specialized
+         *     tools for this instead».
+         *   · Hermes, `tools/file_tools.py:2729` (WRITE_FILE_SCHEMA): «Write content to a file,
+         *     completely replacing existing content. **Use this instead of echo/cat heredoc in
+         *     terminal.** … OVERWRITES the entire file — use 'patch' for targeted edits».
+         *   · codex, `core/src/context/legacy_apply_patch_exec_command_warning.rs:29-31`,
+         *     riconosce il modello che prova a scrivere dalla shell e glielo rimanda indietro:
+         *     «Use the apply_patch tool instead of exec_command».
+         *
+         * ⛔ E `mode:"append"` NON e' la soluzione che usano loro, e va detto: **nessuno dei
+         *   nove concorrenti letti ha una modalita' "accoda" sul write**. Tutti risolvono «un
+         *   file piu' lungo di una risposta» con un attrezzo di MODIFICA mirata — `patch`
+         *   (Hermes; la loro doc, letta l'11/09/2026, spiega anche perche': «the patch action is
+         *   preferred for updates — it's more token-efficient than edit because only the changed
+         *   text appears in the tool call»), `Edit` (opencode), `insert` (deepseek
+         *   `tool-str-replace-editor`, cline `insert_line`, e il Text editor tool di Anthropic,
+         *   dove `insert` esiste apposta). TALOS un attrezzo di modifica non ce l'ha — e' PO-12
+         *   in coda, non questa riga. `mode:"append"` e' la meta' di quella funzione che si puo'
+         *   dare oggi a costo quasi zero (l'aggiunta su disco esiste gia' in
+         *   `workspace-files.mjs`), e toglie da sola il motivo per cui nascono gli `_p2`.
+         *
+         * ⛔ Il campo in piu' costa: Hermes ha MISURATO ~148 tok/call per una forma
+         *   pubblicizzata a tutti, e un attrezzo costa 100-300 token di ingresso a chiamata
+         *   (OpenAI, guida al function calling, letta 11/09/2026). Qui si paga un campo
+         *   opzionale con un enum di due valori per togliere una classe intera di giri persi:
+         *   nelle due sessioni misurate erano ~200 chiamate di shell per un file solo.
+         */
+        description: 'Writes one file of the workspace. Use this instead of the shell — never `echo >`, '
+            + '`cat <<EOF` or a redirection: a long heredoc hits the command-line limit and the whole write is lost. '
+            + 'By default it REPLACES the file entirely, so read it first. '
+            + 'For a file longer than one answer, write the first part and then call `scrivi` again on the SAME '
+            + '`percorso` with mode:"append" for each next part — never write numbered files to assemble later.',
         input_schema: {
             type: 'object',
-            properties: { percorso: { type: 'string' }, contenuto: { type: 'string' } },
+            properties: {
+                percorso: { type: 'string', description: 'the file path, relative to the workspace, e.g. "src/prezzo.mjs"' },
+                contenuto: { type: 'string', description: 'the text to write; with mode:"append", only the part to add at the end' },
+                mode: {
+                    type: 'string',
+                    enum: ['create', 'append'],
+                    description: 'omit (or "create") to replace the whole file; "append" adds `contenuto` at the end of that same file, creating it if it does not exist',
+                },
+            },
             required: ['percorso', 'contenuto'],
         },
     },
@@ -1423,7 +1602,43 @@ const ATTREZZI_ESTESI = [
                     description: 'The actual output file format and final filename extension.',
                 },
                 title: { type: 'string', description: 'The document title; it also becomes the file name.' },
-                body: { type: 'string', description: 'Prose content, or exact UTF-8 source text for a code-file format.' },
+                /*
+                 * ⛔⛔ BC-11, 11/09/2026 — DUE COSE CHE IL MODELLO POTEVA SAPERE SOLO SBATTENDOCI.
+                 *
+                 * 1. `mode` esisteva GIA' nel gestore (`agent-service.mjs:1048`, `MODALITA_DOCUMENTO`:
+                 *    `mode`/`modalita`/`modality`/`append:true`) ma NON in questo schema, e uno
+                 *    strumento che non lo nomina, per il modello, non ce l'ha. L'agente che ha
+                 *    scritto l'aggiunta lo ha dichiarato apertamente nel suo rapporto: «non e'
+                 *    raggiungibile finche' lo schema del kernel non nomina `mode`». Il campo era
+                 *    vivo, testato e inarrivabile — e nel frattempo il modello continuava a
+                 *    inventarsi `_p2.html`, `_p3.html`, `_p4.html`, `_p5.html`.
+                 * 2. `format:'html'` non scriveva HTML: `document-generator.mjs` avvolgeva il body e
+                 *    lo passava da `escapeHtml`, cioe' `<section>` finiva sul disco come
+                 *    `&lt;section&gt;`. Ora un body che E' GIA' un documento completo si scrive
+                 *    byte per byte, e questa riga lo DICE — e' l'unico posto in cui il modello puo'
+                 *    leggerlo prima di provarci.
+                 *
+                 * ⛔ L'aggiunta NON vale per tutti i formati, e la frase lo circoscrive invece di
+                 *   promettere: `docx`/`xlsx`/`pptx`/`pdf` sono contenitori binari (zip; il PDF ha
+                 *   la tavola degli offset in fondo) e concatenarne due da' un file corrotto — cioe'
+                 *   una scrittura «riuscita» che distrugge i giri precedenti. `html` oggi resta
+                 *   fuori anche lui (`formatoAccodabile`, `agent-service.mjs:1074`): per una pagina
+                 *   HTML costruita a pezzi la strada e' `scrivi` con mode:"append", e la frase manda
+                 *   li' invece di far scoprire il rifiuto con una chiamata.
+                 */
+                body: {
+                    type: 'string',
+                    description: 'Prose content, or exact UTF-8 source text for a code-file format. '
+                        + 'With format:"html", a body that already starts with "<!doctype html>" or "<html>" is written '
+                        + 'byte for byte, exactly as you wrote it; anything else is wrapped in a minimal page.',
+                },
+                mode: {
+                    type: 'string',
+                    enum: ['create', 'append'],
+                    description: 'omit (or "create") for a new file; "append" adds `body` at the end of the file with '
+                        + 'the same title, instead of creating a second, numbered one. Text formats only '
+                        + '(md, csv, txt and the source formats) — for a long HTML page build it with `scrivi` and mode:"append".',
+                },
                 rows: {
                     type: 'array',
                     items: { type: 'array', items: { type: 'string' } },
@@ -4097,7 +4312,7 @@ export function rischioEffettivo(catena, sicurezzaProssima) {
  * @param {string} contenutoAtteso
  * @returns {Promise<{esito: 'retta'} | {esito: 'smentita', perche: string} | {esito: 'ignota', perche: string}>}
  */
-export async function postcondizioneDiScrivi(disco, percorso, contenutoAtteso) {
+export async function postcondizioneDiScrivi(disco, percorso, contenutoAtteso, modalita = 'nuovo') {
     let riletto
     try {
         riletto = await disco.leggi(percorso)
@@ -4109,6 +4324,30 @@ export async function postcondizioneDiScrivi(disco, percorso, contenutoAtteso) {
         // e rilettura) — dire 'smentita' qui accuserebbe la scrittura di qualcosa
         // che potrebbe essere solo un guasto del controllo stesso.
         return { esito: 'ignota', perche: rotta instanceof Error ? rotta.message : String(rotta) }
+    }
+    /*
+     * ⛔⛔ BC-11, 11/09/2026 — PER UN'AGGIUNTA LA DOMANDA GIUSTA E' UN'ALTRA.
+     *
+     * Con `modalita: 'accoda'` sul disco finisce solo il PEZZO, e il file intero e' «quello che
+     * c'era» + il pezzo. Chiedere l'uguaglianza stretta qui direbbe `smentita` su ogni aggiunta
+     * riuscita — cioe' il cancello accuserebbe la scrittura di un guasto che non c'e'.
+     * ⇒ Si controlla l'unica cosa che questa chiamata ha davvero promesso: che il file ORA
+     *   FINISCA con quel pezzo. E deliberatamente NON si controlla che l'inizio sia identico a
+     *   com'era: fra la lettura di prima e la rilettura di adesso un altro processo puo' avere
+     *   scritto legittimamente (`appendFile` con flag 'a' e' atomica per chiamata, ma non e' un
+     *   lucchetto — su Windows `flock` non esiste, Node.js `fs`, letto 11/09/2026), e accusare
+     *   la NOSTRA aggiunta del lavoro di un altro sarebbe un falso allarme.
+     *
+     * ⛔ E la forma del VALORE DI RITORNO non si tocca: una prima stesura aggiungeva qui un campo
+     *   `riletto` (comodo per far vedere al pannello Review il file vero dopo l'aggiunta), e nove
+     *   prove gia' scritte sono diventate rosse perche' confrontano l'oggetto INTERO con
+     *   `deepEqual`. Un test rosso si ascolta, non si riscrive per farlo passare: il chiamante
+     *   ricostruisce il «dopo» in memoria come ha sempre fatto anche per una scrittura piena, e il
+     *   limite sta scritto li'.
+     */
+    if (modalita === 'accoda') {
+        if (typeof riletto === 'string' && riletto.endsWith(contenutoAtteso)) return { esito: 'retta' }
+        return { esito: 'smentita', perche: 'il file riletto dal disco non finisce con il pezzo appena aggiunto' }
     }
     if (riletto === contenutoAtteso) return { esito: 'retta' }
     return { esito: 'smentita', perche: 'il contenuto riletto dal disco non combacia con quello scritto' }
@@ -5750,11 +5989,27 @@ export async function talosLavora({
          * quello vero di una chiamata senza argomenti, non un successo finto.
          */
         await contextHooks?.captureProviderResponse?.({ response: risposta, giro })
+        /*
+         * ⛔⛔ BC-11, 11/09/2026 — CHI ha mandato un JSON monco si SEGNA, invece di dimenticarlo.
+         *
+         * La sostituzione con `{}` qui sotto resta quella di prima e resta giusta (vedi il blocco
+         * sopra: un `{` a meta' rimandato al provider fa HTTP 500 per sempre), ma cancellava anche
+         * l'unica informazione che distingue due guasti opposti: «il modello ha sbagliato il nome
+         * del campo» e «il messaggio si e' tagliato a meta'». Senza questo insieme, il ramo
+         * dell'attrezzo puo' solo dire «manca `percorso`» — e a chi e' stato tagliato a meta'
+         * quella frase fa cercare un errore che non ha fatto (misurato: 3 troncamenti su 308
+         * chiamate, es. `call_c741309f96da49718f246d6c`, 2.781 caratteri, stringa non chiusa).
+         * Vive un giro solo, come `chiamate`: nessuno stato che sopravviva alla risposta.
+         */
+        const argomentiTroncati = new Set()
         for (const c of risposta.tool_calls ?? []) {
             const grezzi = c.function?.arguments
             if (typeof grezzi !== 'string' || grezzi === '') continue
             try { JSON.parse(grezzi) }
-            catch { c.function.arguments = '{}' }
+            catch {
+                c.function.arguments = '{}'
+                if (c.id) argomentiTroncati.add(c.id)
+            }
         }
         messaggi.push(risposta)
         await contextHooks?.capture?.({ messages: messaggi, reason: 'response' })
@@ -5872,7 +6127,16 @@ export async function talosLavora({
                     esito = await cercaNelProgetto(disco, argomenti)
                 }
                 else if (nome === 'leggi') {
-                    esito = await disco.leggi(argomenti.percorso)
+                    /*
+                     * ⛔ BC-11 — il percorso si legge con gli alias, e se non c'e' NON si chiede al
+                     * disco. `disco.leggi('')` risolve sulla RADICE (`kernelPerIlBanco.js:22`,
+                     * `dentro('')` torna la radice) e `readFile` su una cartella da' `EISDIR`: un
+                     * messaggio che non nomina nessun campo e non dice cosa fare.
+                     */
+                    const percorso = percorsoDiFile(argomenti)
+                    esito = percorso === ''
+                        ? messaggioArgomentiAssenti('leggi', { troncati: argomentiTroncati.has(c.id) })
+                        : await disco.leggi(percorso)
                 }
                 else if (nome === 'scrivi') {
                     /*
@@ -5896,12 +6160,65 @@ export async function talosLavora({
                      * mai scritta: non cambia nessun comportamento per chi
                      * non guarda i due campi nuovi in `azione`.
                      */
-                    const contenutoPrimaPerApprovazione = await disco.leggi(argomenti.percorso).then((t) => t, () => null)
+                    /*
+                     * ⛔⛔⛔ BC-11, 11/09/2026 — I CANCELLI DEGLI ARGOMENTI, PRIMA DI TOCCARE IL DISCO.
+                     *
+                     * Prima di queste righe il ramo leggeva `argomenti.percorso` e `argomenti.contenuto`
+                     * e basta. Con una chiave scritta in inglese (`path`/`content`: 4 volte su 308
+                     * chiamate misurate) o con gli argomenti troncati a meta' stream (3 volte), il
+                     * percorso arrivava `undefined`, `dentro('')` lo risolveva sulla RADICE della
+                     * sessione (`kernelPerIlBanco.js:22`) e il modello si prendeva
+                     * `EISDIR: illegal operation on a directory, open 'C:\Users\…\qwen 3.8 research'`:
+                     * un errore che non nomina nessun campo, non dice cosa fare, e gli e' costato un
+                     * giro intero solo per dedurre cosa fosse successo («Oops, empty call»).
+                     * ⇒ Qui si risponde A PAROLE e non si tocca il disco. Tre domande in ordine,
+                     *   perche' sono tre guasti diversi e meritano tre frasi diverse.
+                     */
+                    const percorso = percorsoDiFile(argomenti)
+                    const contenuto = contenutoDiScrivi(argomenti)
+                    const modalita = modalitaDiScrittura(argomenti)
+                    const accoda = modalita === 'accoda'
+                    const troncati = argomentiTroncati.has(c.id)
+                    if (percorso === '') {
+                        esito = messaggioArgomentiAssenti('scrivi', { troncati })
+                    }
+                    else if (contenuto === undefined) {
+                        esito = messaggioArgomentiAssenti('scrivi', { troncati, campo: 'contenuto' })
+                    }
+                    else if (modalita === null) {
+                        /*
+                         * ⛔ Un valore che non capiamo si DICE, non si indovina, e il messaggio porta
+                         * il valore giusto: e' la forma di cline (`sdk-diff-edit-coordinator.ts:401`,
+                         * «Use ${maxBoundaryLine} to append at EOF») e di deepseek-harness
+                         * (`tool-str-replace-editor/src/index.ts:348`, «It should be within the range
+                         * of lines of the file: [0, ${lines.length}]»). Interpretare «overwrite» come
+                         * «accoda» o viceversa sarebbe una scrittura sbagliata dichiarata riuscita.
+                         */
+                        esito = `"${campoConAlias(argomenti, 'mode', 'modalita', 'modality', 'modalità')}" is not a mode, so nothing was written. `
+                            + `Use mode:"append" to add \`contenuto\` at the end of "${percorso}", or leave mode out to replace the whole file.`
+                    }
+                    else {
+                    const contenutoPrimaPerApprovazione = await disco.leggi(percorso).then((t) => t, () => null)
+                    /*
+                     * ⛔⛔ BC-11 — CHI APPROVA E IL CANCELLO SEMANTICO DEVONO VEDERE IL FILE COME SARA'.
+                     *
+                     * Con `mode:"append"` sul disco va solo il PEZZO, ma il file dopo l'operazione e'
+                     * «quello che c'era» + il pezzo. Mostrare a `verificaPermessoScrittura` e a
+                     * `premessaDellaScrittura` il solo pezzo sarebbe sbagliato in due modi opposti:
+                     * chi approva vedrebbe un diff che cancella tutto il resto, e il cancello
+                     * semantico giudicherebbe un `.ts` come se contenesse SOLO quelle righe —
+                     * respingendo come «riferimento assente» ogni simbolo definito nella parte gia'
+                     * scritta. Cioe' proprio l'uso per cui `append` esiste (un file lungo, un pezzo
+                     * per giro) sarebbe quello che il cancello blocca sempre.
+                     * ⇒ Si proietta il DOPO in memoria — nessuna scrittura in piu': `contenutoPrima`
+                     *   e' la lettura che questo ramo faceva gia' comunque.
+                     */
+                    const contenutoProiettato = accoda ? `${contenutoPrimaPerApprovazione ?? ''}${contenuto}` : contenuto
                     const permesso = await verificaPermessoScrittura(
                         {
-                            tipo: 'scrivi', percorso: argomenti.percorso,
+                            tipo: 'scrivi', percorso,
                             contenutoPrima: contenutoPrimaPerApprovazione,
-                            contenutoProposto: argomenti.contenuto ?? '',
+                            contenutoProposto: contenutoProiettato,
                         },
                         { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
                     )
@@ -5925,7 +6242,7 @@ export async function talosLavora({
                          * il file cambi: dopo sarebbe una diagnosi, non un
                          * cancello.
                          */
-                        const p = await premessaDellaScrittura(cartella, argomenti.percorso, argomenti.contenuto ?? '')
+                        const p = await premessaDellaScrittura(cartella, percorso, contenutoProiettato)
                         if (p.stato === 'assente') {
                             premesseNegate++
                             premessaFuAssente = true
@@ -5933,30 +6250,71 @@ export async function talosLavora({
                                 + `Do not invent it: say plainly that it does not exist.`
                         }
                         else {
-                            await disco.scrivi(argomenti.percorso, argomenti.contenuto ?? '')
-                            onScrittura?.(argomenti.percorso, argomenti.contenuto ?? '', p.esisteva, p.contenutoPrima)
-                            contenutoRealmenteScritto = argomenti.contenuto ?? ''
-                            scrittureSenzaProva++
+                            /*
+                             * ⛔ `modalita` arriva fino al disco: `discoNode.scrivi` la traduce nel
+                             * flag `'a'` di Node (`kernelPerIlBanco.js`), MAI in un
+                             * leggi-concatena-riscrivi — quello perderebbe in silenzio la scrittura
+                             * di chiunque altro sia passato in mezzo (Node.js `fs`, letto
+                             * l'11/09/2026: su Windows `flock` non c'e', e `appendFile`/flag `'a'`
+                             * e' la via per un'aggiunta atomica per singola chiamata). Stessa scelta
+                             * gia' presa in `workspace-files.mjs` per `document_create`.
+                             */
+                            await disco.scrivi(percorso, contenuto, modalita)
                             /*
                              * ⭐⭐⭐ 29/8 — la postcondizione: rilegge DAVVERO il file
                              * appena scritto. Un "written" che il modello riceve deve
                              * essere un fatto controllato, non un'eco di ciò che
                              * `disco.scrivi()` ha dichiarato di fare.
+                             * ⛔ 11/09 — spostata PRIMA di `onScrittura` (che restava dov'era per
+                             * una scrittura piena: la rilettura non emette eventi, quindi l'ordine
+                             * osservabile non cambia) perche' per un'aggiunta il pannello Review
+                             * deve ricevere il file VERO di adesso, non il solo pezzo aggiunto —
+                             * altrimenti il diff direbbe che il file e' stato sostituito dal pezzo.
                              */
-                            const verdetto = await postcondizioneDiScrivi(disco, argomenti.percorso, argomenti.contenuto ?? '')
+                            const verdetto = await postcondizioneDiScrivi(disco, percorso, contenuto, modalita)
+                            /*
+                             * ⛔ DICHIARATO: per un'aggiunta questo e' il «dopo» RICOSTRUITO in
+                             * memoria (quello che c'era + il pezzo), non una rilettura. E' la stessa
+                             * onesta' che il ramo ha sempre avuto per una scrittura piena, dove a
+                             * `onScrittura` va `contenuto` e non il file riletto; e la rilettura VERA
+                             * il suo lavoro lo ha appena fatto, qui sopra, come CANCELLO: se il file
+                             * non finisce col pezzo appena aggiunto, `verdetto.esito` e' 'smentita' e
+                             * il modello legge che la scrittura e' da considerarsi fallita.
+                             * ⛔ Non si estrae il testo riletto da `postcondizioneDiScrivi`: nove
+                             * prove gia' scritte confrontano il suo oggetto di ritorno per intero, e
+                             * un test rosso si ascolta invece di riscriverlo.
+                             */
+                            const contenutoDopo = accoda ? contenutoProiettato : contenuto
+                            onScrittura?.(percorso, contenutoDopo, p.esisteva, p.contenutoPrima)
+                            contenutoRealmenteScritto = contenutoDopo
+                            scrittureSenzaProva++
                             postcondizioneScrivi = verdetto.esito
                             if (verdetto.esito === 'smentita') {
                                 erroreScrivi = verdetto.perche
-                                esito = `"written: ${argomenti.percorso}" was reported, but re-reading the file right after shows DIFFERENT content (${verdetto.perche}). `
-                                    + `Treat this as a FAILED write: check the file directly before doing anything else with it.`
+                                esito = accoda
+                                    ? `"appended to: ${percorso}" was reported, but re-reading the file right after shows it does NOT end with what was just added (${verdetto.perche}). `
+                                        + `Treat this as a FAILED write: check the file directly before doing anything else with it.`
+                                    : `"written: ${percorso}" was reported, but re-reading the file right after shows DIFFERENT content (${verdetto.perche}). `
+                                        + `Treat this as a FAILED write: check the file directly before doing anything else with it.`
                             }
                             else if (verdetto.esito === 'ignota') {
                                 erroreScrivi = verdetto.perche
-                                esito = `written: ${argomenti.percorso} (the verification re-read could not confirm it: ${verdetto.perche}. `
+                                esito = `${accoda ? 'appended to' : 'written'}: ${percorso} (the verification re-read could not confirm it: ${verdetto.perche}. `
                                     + `The write may or may not have landed — check the current content before repeating this call.)`
                             }
                             else {
-                                esito = `written: ${argomenti.percorso}`
+                                /*
+                                 * ⛔ L'esito di un'aggiunta dice quanto e' lungo il file ORA: e' il
+                                 * numero che serve al modello per sapere se deve mandare un altro
+                                 * pezzo, e gli evita di rileggere il file per scoprirlo (stessa leva
+                                 * di Hermes, `file_tools.py:2729`: «The result's verified:true means
+                                 * the on-disk content hash was confirmed — do NOT re-read the file to
+                                 * check the write landed»).
+                                 */
+                                esito = accoda
+                                    ? `appended to: ${percorso} (+${contenuto.length} characters; the file is now ${contenutoDopo.length}). `
+                                        + `Call \`scrivi\` again with mode:"append" on this same path for the next part.`
+                                    : `written: ${percorso}`
                                 /*
                                  * ⭐ IL PROMEMORIA — vedi la doc sopra `SOGLIA_SCRITTURE_SENZA_PROVA`.
                                  * Solo un avviso: non blocca, non esegue niente da solo.
@@ -5976,11 +6334,15 @@ export async function talosLavora({
                      * tentativo di scrittura, consentito o no: un rifiuto è
                      * un fatto verificabile quanto un successo, non meno
                      * degno di un record.
+                     * ⛔ 11/09 — i tre rami degli argomenti mancanti NON arrivano qui, e non e' una
+                     * dimenticanza: li' nessun permesso e' stato chiesto e niente e' stato tentato
+                     * sul disco, quindi una ricevuta sarebbe il record di un'operazione che non c'e'
+                     * stata. Stessa scelta gia' presa per il blocco del pre-hook poche righe sopra.
                      */
                     ricevutaEmessa = true
                     {
                         const ricevuta = creaRicevutaOperazione({
-                            azione: { tipo: 'scrivi', percorso: argomenti.percorso },
+                            azione: { tipo: 'scrivi', percorso },
                             toolCallId: c.id, esitoPermesso: permesso, contenutoScritto: contenutoRealmenteScritto,
                             premessaAssente: premessaFuAssente,
                             postcondizione: postcondizioneScrivi,
@@ -5993,6 +6355,7 @@ export async function talosLavora({
                         // (effect_unknown) non fanno entrare niente di nuovo nel discorso.
                         if (ricevuta.status === 'succeeded') catena = avanzaCatena(catena, SICUREZZA_PER_ATTREZZO.scrivi)
                         onGiro?.({ giro, tipo: 'ricevuta', ricevuta })
+                    }
                     }
                 }
                 else if (nome === 'prova') {
@@ -7246,7 +7609,10 @@ export async function talosLavora({
                     onGiro?.({
                         giro, tipo: 'ricevuta',
                         ricevuta: creaRicevutaOperazione({
-                            azione: nome === 'scrivi' ? { tipo: 'scrivi', percorso: argomenti.percorso }
+                            // ⛔ 11/09 — `percorsoDiFile` e non `argomenti.percorso`: una ricevuta di
+                            // fallimento che dice `percorso: undefined` perche' il modello aveva
+                            // scritto `path` nasconde proprio il caso che la ricevuta serve a spiegare.
+                            azione: nome === 'scrivi' ? { tipo: 'scrivi', percorso: percorsoDiFile(argomenti) }
                                 : nome === 'document_create' ? { tipo: 'document_create' }
                                     : { tipo: nome, comando: comandoDiShell(argomenti) },
                             toolCallId: c.id, esitoPermesso: esitoPermessoPerRicevuta, contenutoScritto: null,

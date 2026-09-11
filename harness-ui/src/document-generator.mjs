@@ -231,7 +231,45 @@ export async function generateTalosDocument(spec) {
     case 'csv':
       return { ...common, bytes: encode(rowsOf(spec).map((row) => row.map(csvField).join(',')).join('\r\n')) };
 
-    case 'html':
+    /*
+     * ⛔⛔⛔ BC-11, 11/09/2026 — `format:'html'` NON POTEVA SCRIVERE UNA PAGINA HTML.
+     *
+     * Riprodotto: `html` non e' nei `TALOS_SOURCE_TEXT_FORMATS` (`:39`), quindi finiva SEMPRE qui,
+     * e qui ogni blocco passa da `escapeHtml`. Un `<section id="x">` scritto dal modello arrivava
+     * sul disco come `&lt;section id="x"&gt;` dentro un `<p>`. ⇒ Per il compito dell'owner
+     * «genera un file html di almeno 1000 righe» non esisteva NESSUN attrezzo capace: restavano
+     * `scrivi` (che allora voleva tutto in una risposta) e la shell (che ha il tetto della riga di
+     * comando, misurato: 23.941 caratteri → «La riga di comando e' troppo lunga»). Il «giro
+     * assurdo» del modello — `_p2.html`, `_p3.html`, `_p4.html`, `_p5.html` — non era una sua
+     * bizzarria: era l'unica strada rimasta.
+     *
+     * ⛔ PERCHE' NON UN CAMPO `raw:true`. Era l'altra forma possibile, ed e' stata scartata per due
+     *   ragioni, non per gusto:
+     *   1. un parametro in piu' e' un parametro che il modello deve SCOPRIRE. arXiv:2608.26130
+     *      «Agents Don't Paginate: First-Chunk Selection for LLM Tool Responses» (letto
+     *      11/09/2026) misura su log di produzione di un middleware MCP **zero** richieste del
+     *      secondo pezzo, pur essendo la paginazione disponibile in tutti i protocolli: un agente
+     *      non va a cercare l'opzione giusta, usa la prima strada che gli riesce. Un `raw:true`
+     *      dimenticato riporta esattamente al difetto di oggi.
+     *   2. avvolgere un documento GIA' COMPLETO non e' mai la risposta giusta: `<!doctype html>`
+     *      dentro un `<p>` dentro un altro `<!doctype html>` non e' un caso limite discutibile, e'
+     *      sempre un file rotto. Non c'e' un falso positivo da temere nella direzione che conta.
+     * ⇒ Nessun campo nuovo: se il `body` E' GIA' un documento, si scrive com'e'; se e' prosa,
+     *   resta avvolto esattamente come prima. E il modello lo sa DALLO SCHEMA, non sbattendoci:
+     *   la descrizione di `format` nel kernel (`talosHarness.mjs`, attrezzo `document_create`) lo
+     *   dice in una riga.
+     *
+     * ⛔ Cosa fanno gli altri, letto nel codice dei cloni: nessuno dei nove ha un generatore che
+     *   riformatta — il loro attrezzo di scrittura mette sul disco i byte che riceve
+     *   (opencode `tool/write.ts`: solo `content` e `filePath`; Hermes `file_tools.py:2729`:
+     *   solo `path` e `content`). L'idea di un «generatore di documenti» che conosce il formato e'
+     *   nostra, ed e' un vantaggio per `docx`/`xlsx`/`pptx`/`pdf`; su `html` era diventata una
+     *   gabbia, perche' l'HTML e' l'unico di quei formati che il modello sa scrivere da solo.
+     */
+    case 'html': {
+      const corpo = spec.body ?? '';
+      // Un BOM o spazi davanti non cambiano la risposta: e' comunque un documento completo.
+      if (/^﻿?\s*<(!doctype\s+html|html[\s>])/i.test(corpo)) return { ...common, bytes: encode(corpo) };
       return {
         ...common,
         bytes: encode([
@@ -239,10 +277,11 @@ export async function generateTalosDocument(spec) {
           '<html><head><meta charset="utf-8">',
           `<title>${escapeHtml(spec.title)}</title></head><body>`,
           `<h1>${escapeHtml(spec.title)}</h1>`,
-          ...(spec.body ?? '').split('\n\n').map((block) => `<p>${escapeHtml(block)}</p>`),
+          ...corpo.split('\n\n').map((block) => `<p>${escapeHtml(block)}</p>`),
           '</body></html>',
         ].join('\n')),
       };
+    }
 
     case 'docx': {
       const { Document, Packer, Paragraph, HeadingLevel } = await import('docx');

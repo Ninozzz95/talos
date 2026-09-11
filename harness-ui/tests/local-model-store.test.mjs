@@ -136,3 +136,119 @@ test('MODEL-STORE-REMOVE-02 senza manifest cancella solo ciò che è suo e non t
     await stat(join(rootDir, 'altro.txt'));
   });
 });
+
+/*
+ * ⭐⭐⭐ BC-13 (11/09/2026) — «i modelli locali devono comparire ISTANTANEI».
+ *
+ * Il principio arriva dal mobile, che ci ha lavorato oggi:
+ * `AVM/mobile/src/lib/models/localCatalogueSignal.ts:1-89` — «un elenco che non
+ * si aggiorna da solo è un elenco che mente finché qualcuno non lo interroga».
+ *
+ * ⛔ Una cache si prova DUE volte: che risponda senza toccare il disco (sotto,
+ *   CACHE-01) e che NON menta quando il disco cambia — dall'interno (02, 03, 04)
+ *   e da FUORI dallo store (05). Provare solo il primo verso è come provare un
+ *   cancello facendo passare chi ha il permesso: un cancello inerte supera quella
+ *   prova esattamente come uno vero.
+ */
+
+/** Avvolge `fs` contando quante volte si legge davvero un manifest dal disco. */
+function contaLetture() {
+  const conteggio = { readFile: 0, readdir: 0 };
+  return {
+    conteggio,
+    fsImpl: {
+      readFile: async (...args) => { conteggio.readFile += 1; return (await import('node:fs/promises')).readFile(...args); },
+      readdir: async (...args) => { conteggio.readdir += 1; return (await import('node:fs/promises')).readdir(...args); },
+    },
+  };
+}
+
+test('BC-13-CACHE-01 la seconda list() risponde senza rileggere un solo manifest', async () => {
+  const spia = contaLetture();
+  await withStore(async (store) => {
+    await store.register({ ...valid, id: 'a-model' });
+    await store.register({ ...valid, id: 'z-model' });
+    await store.list();
+    const dopoIlPrimoGiro = { ...spia.conteggio };
+    const secondo = await store.list();
+    assert.deepEqual(secondo.map(({ id }) => id), ['a-model', 'z-model']);
+    assert.equal(spia.conteggio.readFile, dopoIlPrimoGiro.readFile, 'nessuna readFile in più: la risposta viene dalla cache');
+    assert.equal(spia.conteggio.readdir, dopoIlPrimoGiro.readdir, 'nemmeno la cartella si rilegge');
+  }, { fsImpl: spia.fsImpl });
+});
+
+test('BC-13-CACHE-02 VERSO CONTRARIO: un modello registrato DOPO compare subito', async () => {
+  await withStore(async (store) => {
+    await store.register({ ...valid, id: 'a-model' });
+    assert.deepEqual((await store.list()).map(({ id }) => id), ['a-model']);
+    await store.register({ ...valid, id: 'b-model' });
+    assert.deepEqual((await store.list()).map(({ id }) => id), ['a-model', 'b-model'], 'la cache non deve nascondere un modello nuovo');
+  });
+});
+
+test('BC-13-CACHE-03 VERSO CONTRARIO: un modello rimosso sparisce dall\'elenco', async () => {
+  await withStore(async (store) => {
+    await store.register({ ...valid, id: 'a-model' });
+    await store.register({ ...valid, id: 'b-model' });
+    await store.list();
+    await store.remove('b-model');
+    assert.deepEqual((await store.list()).map(({ id }) => id), ['a-model'], 'la cache non deve resuscitare un modello cancellato');
+  });
+});
+
+test('BC-13-CACHE-04 VERSO CONTRARIO: un nome cambiato arriva nell\'elenco', async () => {
+  await withStore(async (store) => {
+    await store.register(valid);
+    assert.equal((await store.list())[0].name, undefined);
+    await store.rename(valid.id, 'Il mio modello');
+    assert.equal((await store.list())[0].name, 'Il mio modello', 'la cache non deve tenere il nome vecchio');
+  });
+});
+
+test('BC-13-CACHE-05 VERSO CONTRARIO: un manifest scritto da FUORI dallo store viene visto', async () => {
+  await withStore(async (store, rootDir) => {
+    const { writeFile } = await import('node:fs/promises');
+    await store.register({ ...valid, id: 'a-model' });
+    await store.list(); // scalda la cache
+    /*
+     * ⛔ Questo è il caso che il solo contatore interno NON prende: nessuna
+     * scrittura è passata dallo store. Lo prende il mtime della cartella —
+     * misurato l'11/09 su NTFS: una voce NUOVA lo muove sempre.
+     */
+    await writeFile(join(rootDir, 'manifests', 'fuori-model.json'), JSON.stringify({ ...valid, id: 'fuori-model', path: 'fuori-model/x.gguf' }));
+    assert.deepEqual((await store.list()).map(({ id }) => id), ['a-model', 'fuori-model'], 'il disco è l\'unica fonte che non può essere in ritardo');
+  });
+});
+
+test('BC-13-CACHE-06 list({fresco:true}) rilegge il disco anche a cache calda', async () => {
+  const spia = contaLetture();
+  await withStore(async (store) => {
+    await store.register(valid);
+    await store.list();
+    const prima = spia.conteggio.readFile;
+    await store.list({ fresco: true });
+    assert.ok(spia.conteggio.readFile > prima, 'con `fresco` si torna sul disco per davvero');
+  }, { fsImpl: spia.fsImpl });
+});
+
+test('BC-13-CACHE-07 chi riceve l\'elenco può maneggiarlo senza avvelenare il giro dopo', async () => {
+  await withStore(async (store) => {
+    await store.register(valid);
+    const primo = await store.list();
+    primo[0].id = 'manomesso';
+    primo[0].files.push({ path: 'intruso.gguf', bytes: 1, sha256: 'd'.repeat(64) });
+    const secondo = await store.list();
+    assert.equal(secondo[0].id, valid.id, 'la cache non si lascia riscrivere da chi legge');
+    assert.equal(secondo[0].files.length, 1);
+  });
+});
+
+test('BC-13-PAR-01 un manifest corrotto fa fallire list() come prima, anche leggendo in parallelo', async () => {
+  await withStore(async (store, rootDir) => {
+    const { writeFile, mkdir } = await import('node:fs/promises');
+    await mkdir(join(rootDir, 'manifests'), { recursive: true });
+    await store.register(valid);
+    await writeFile(join(rootDir, 'manifests', 'rotto.json'), 'non è JSON');
+    await assert.rejects(store.list(), (error) => error instanceof LocalModelStoreError && error.code === 'MODEL_CORRUPT');
+  });
+});

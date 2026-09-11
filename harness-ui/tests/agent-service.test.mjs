@@ -47,7 +47,15 @@ function talosLavoraFinto({ script, cattura = () => {} }) {
     }
     // ⭐⭐⭐ 28/8 — stesso principio, per onDocumento: il finto passa gli argomenti grezzi COSÌ COME li manderebbe il modello (nessuna forma diversa qui rispetto al kernel vero).
     for (const documento of script.documenti ?? []) {
-      await input.onDocumento?.(documento.argomenti);
+      /*
+       * ⛔ BC-11 (11/09/2026) — il risultato di `onDocumento` torna a chi lo chiede (`raccogli`).
+       *   Il finto lo buttava, e per BC-11 QUELLO È L'OGGETTO DELLA PROVA: l'esito dell'attrezzo è
+       *   l'unico canale con cui l'harness può insegnare al modello la mossa successiva (lo schema
+       *   di document_create vive nel kernel e non nomina `mode`). Chi non passa `raccogli` non
+       *   vede nessuna differenza.
+       */
+      const esitoDocumento = await input.onDocumento?.(documento.argomenti);
+      documento.raccogli?.(esitoDocumento);
     }
     // ⭐⭐⭐ 29/8 — FASE H, stesso principio di onDocumento appena sopra, per onImmagine.
     for (const immagine of script.immagini ?? []) {
@@ -2868,4 +2876,201 @@ test('⛔ D-10F, AL CONTRARIO: senza scelta si passa `null`, cioè il comportame
     eseguiComandoSandboxatoFn: async (c, k, o) => { opzioni = o; return { codice: 0, testo: '', enforcement: 'wsl2' }; },
   });
   assert.equal(opzioni.dove, null, '⛔ chi non sceglie non deve vedere nessun cambiamento');
+});
+
+
+/*
+ * ⛔⛔⛔ BC-11 (11/09/2026) — «MENO GIRI POSSIBILI»: le prove della metà di agent-service.
+ *
+ * I numeri della riproduzione, dalle due sessioni vere dell'owner (`.sessions-store/8dde6bff-*.jsonl`
+ * e `37e10d21-*.jsonl`, compito «genera un file html di almeno 1000 righe»):
+ *   · 119 chiamate `shell` contro 23 `scrivi` nella prima, 99 contro 6 nella seconda;
+ *   · 46 chiamate su 308 col NOME dell'argomento sbagliato (`command`, `path`, `content`, `contuto`);
+ *   · il modello si è inventato `_p2.html`, `_p3.html`, `_p4.html`, `_p5.html`, `_p6core.js`.
+ * Il messaggio di rifiuto di `document_create` diceva letteralmente «offer a different title»: era
+ * l'harness a insegnare quella strada. Qui si prova che ora ne insegna un'altra, e che il verso
+ * contrario (nessun `mode`) è rimasto quello di prima.
+ */
+
+test('⭐⭐⭐ BC-11 document_create mode:"append": la modalità arriva a workspace-files, e l\'esito dice quanto è cresciuto il file', async () => {
+  let specRicevuta = null;
+  let esito = null;
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      documenti: [{ argomenti: { format: 'md', title: 'Lungo', body: 'parte 2', mode: 'append' }, raccogli: (e) => { esito = e; } }],
+    },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'md', fileName: 'Lungo.md', mediaType: 'text/markdown', bytes: new TextEncoder().encode('parte 2') }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: '7 caratteri' }),
+    creaFileWorkspaceFn: async (spec) => { specRicevuta = spec; return { percorso: spec.nome, accodato: true, byteTotali: 4096 }; },
+  });
+
+  assert.equal(specRicevuta.modalita, 'accoda', 'il `mode` del modello deve arrivare fino alla scrittura');
+  assert.equal(esito.ok, true);
+  assert.match(esito.esito, /Appended .* to "Lungo\.md" — it is now 4 KB/);
+});
+
+test('⭐⭐ BC-11 document_create: gli ALIAS del nome della modalità (mode/modalita/append:true) valgono tutti — 46 chiamate su 308 sbagliavano il nome', async () => {
+  for (const argomentiModalita of [{ mode: 'append' }, { modalita: 'accoda' }, { append: true }, { mode: 'APPEND ' }]) {
+    let specRicevuta = null;
+    const talosLavoraFn = talosLavoraFinto({
+      script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, documenti: [{ argomenti: { format: 'md', title: 'L', body: 'x', ...argomentiModalita } }] },
+    });
+    await avviaSessione({
+      cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+      generateTalosDocumentFn: async () => ({ format: 'md', fileName: 'L.md', mediaType: 'text/markdown', bytes: new TextEncoder().encode('x') }),
+      verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
+      creaFileWorkspaceFn: async (spec) => { specRicevuta = spec; return { percorso: spec.nome, accodato: true, byteTotali: 2 }; },
+    });
+    assert.equal(specRicevuta.modalita, 'accoda', `alias non riconosciuto: ${JSON.stringify(argomentiModalita)}`);
+  }
+});
+
+test('⛔⛔⛔ BC-11 AL CONTRARIO — senza `mode` la modalità resta "nuovo": il comportamento di sempre, nessuna aggiunta per distrazione', async () => {
+  let specRicevuta = null;
+  const talosLavoraFn = talosLavoraFinto({
+    script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, documenti: [{ argomenti: { format: 'md', title: 'Nuovo', body: 'x' } }] },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'md', fileName: 'Nuovo.md', mediaType: 'text/markdown', bytes: new TextEncoder().encode('x') }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
+    creaFileWorkspaceFn: async (spec) => { specRicevuta = spec; return { percorso: spec.nome }; },
+  });
+
+  assert.equal(specRicevuta.modalita, 'nuovo');
+});
+
+test('⛔⛔⛔ BC-11 un nome già preso NON insegna più «offer a different title»: insegna mode:"append"', async () => {
+  let esito = null;
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      documenti: [{ argomenti: { format: 'md', title: 'Doppio', body: 'x' }, raccogli: (e) => { esito = e; } }],
+    },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'md', fileName: 'Doppio.md', mediaType: 'text/markdown', bytes: new TextEncoder().encode('x') }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
+    creaFileWorkspaceFn: async () => { throw new WorkspaceFileError('Esiste già un file con questo nome', 'FILE_EXISTS'); },
+  });
+
+  assert.equal(esito.ok, false);
+  assert.match(esito.esito, /mode:"append"/);
+  assert.match(esito.esito, /Do not invent numbered variants/);
+});
+
+test('⛔⛔⛔ BC-11 un formato BINARIO rifiuta l\'aggiunta PRIMA di scrivere: due .docx concatenati sono un file corrotto', async () => {
+  let scritturaTentata = false;
+  let esito = null;
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      documenti: [{ argomenti: { format: 'docx', title: 'Rel', body: 'x', mode: 'append' }, raccogli: (e) => { esito = e; } }],
+    },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'docx', fileName: 'Rel.docx', mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', bytes: new Uint8Array([0x50, 0x4b]) }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
+    creaFileWorkspaceFn: async () => { scritturaTentata = true; return { percorso: 'mai' }; },
+  });
+
+  assert.equal(scritturaTentata, false, 'la scrittura non deve nemmeno essere tentata');
+  assert.equal(esito.ok, false);
+  assert.match(esito.esito, /binary container/);
+});
+
+test('⛔⛔ BC-11 un `mode` scritto male viene DETTO, non indovinato, e non si genera nulla', async () => {
+  let generazioneTentata = false;
+  let esito = null;
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      documenti: [{ argomenti: { format: 'md', title: 'X', body: 'x', mode: 'overwrite' }, raccogli: (e) => { esito = e; } }],
+    },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    generateTalosDocumentFn: async () => { generazioneTentata = true; return { format: 'md', fileName: 'X.md', mediaType: 'text/markdown', bytes: new Uint8Array() }; },
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+  });
+
+  assert.equal(generazioneTentata, false);
+  assert.match(esito.esito, /is not a mode/);
+});
+
+test('⭐⭐ BC-11 l\'esito di una creazione riuscita INSEGNA come allungare il file, invece di lasciarlo scoprire', async () => {
+  let esito = null;
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      documenti: [{ argomenti: { format: 'md', title: 'Lungo', body: 'x' }, raccogli: (e) => { esito = e; } }],
+    },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'md', fileName: 'Lungo.md', mediaType: 'text/markdown', bytes: new TextEncoder().encode('x') }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+  });
+
+  assert.match(esito.esito, /call document_create again with the same title and mode:"append"/);
+});
+
+test('⛔⛔ BC-11 AL CONTRARIO — su un formato NON accodabile l\'esito non suggerisce l\'aggiunta: sarebbe un consiglio che corrompe il file', async () => {
+  let esito = null;
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      documenti: [{ argomenti: { format: 'pdf', title: 'R', body: 'x' }, raccogli: (e) => { esito = e; } }],
+    },
+  });
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'pdf', fileName: 'R.pdf', mediaType: 'application/pdf', bytes: new Uint8Array([1]) }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
+    creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+  });
+
+  assert.doesNotMatch(esito.esito, /mode:"append"/);
+});
+
+test('⛔⛔ BC-11 un pezzo ACCODATO non diventa una voce nuova di Libreria: la Libreria custodisce documenti, non frammenti', async () => {
+  let salvataggiLibreria = 0;
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      documenti: [
+        { argomenti: { format: 'md', title: 'L', body: 'p1' } },
+        { argomenti: { format: 'md', title: 'L', body: 'p2', mode: 'append' } },
+      ],
+    },
+  });
+  let primaChiamata = true;
+
+  await avviaSessione({
+    cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn,
+    generateTalosDocumentFn: async () => ({ format: 'md', fileName: 'L.md', mediaType: 'text/markdown', bytes: new TextEncoder().encode('p') }),
+    verifyTalosDocumentFn: async () => ({ ok: true, detail: 'ok' }),
+    creaFileWorkspaceFn: async ({ nome }) => {
+      const accodato = !primaChiamata; primaChiamata = false;
+      return { percorso: nome, ...(accodato ? { accodato: true, byteTotali: 4 } : {}) };
+    },
+    salvaVoceLibreriaFn: async () => { salvataggiLibreria += 1; return { id: 'v1' }; },
+  });
+
+  assert.equal(salvataggiLibreria, 1, 'una sola voce per un file, non una per pezzo');
 });
