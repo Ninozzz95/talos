@@ -97,7 +97,39 @@ export { discoNode }
  * economicamente fattibile) — ma non e' un motivo per tenere un candidato
  * che il proprio banco non distingue dal rumore.
  */
-const GIRI_MASSIMI = 24
+/*
+ * ⛔⛔⛔ 11/09/2026 — IL TETTO DEI GIRI NON ESISTE PIÙ. Owner, davanti a un giro finito a
+ * 24/24 su un compito di ricerca: «avevamo detto che non c'erano limiti e doveva essere così».
+ *
+ * Misurato sulla sessione `7b21ff93`: 37 chiamate ad attrezzi in 24 giri, e il compito (ricerca
+ * web + paper PDF) si è fermato **prima** di generare il documento. Il tetto non ha protetto da
+ * niente: ha solo tagliato un lavoro che stava andando avanti.
+ *
+ * ⛔ Un tetto sul NUMERO DI GIRI non è una guardia contro il loop: è una guardia contro il
+ *   TEMPO, e colpisce per primo il task lungo ma sano. Le guardie vere sono altre e ci sono già
+ *   tutte — è la difesa a più strati che la ricerca prescrive (FutureAGI «Infinite-Loop Agent
+ *   Failure», Inkog «AI Agent Infinite Loop Detection & Prevention», arXiv:2607.01641 «When
+ *   Agents Do Not Stop», letti l'11/09/2026: *multiple layers of termination conditions* — un
+ *   solo freno fallisce, la difesa a strati no):
+ *     1. lo STOP della persona, immediato (misurato: 1 ms);
+ *     2. la deduplica delle chiamate identiche dentro lo stesso giro — `fermatoPerRipetizione`,
+ *        cioè l'*action deduplication* della ricerca (hash di (attrezzo, argomenti), taglio alla
+ *        k-esima copia): è la guardia che ha portato una valanga da 398 chiamate a 2;
+ *     3. la COMPATTAZIONE periodica, ogni `GIRI_PRIMA_DI_COMPATTARE` giri, che è ciò che rende
+ *        sostenibile un ciclo senza tetto: senza di lei il costo per giro cresce e il contesto
+ *        esplode: con lei torna piatto. ⛔ La sua soglia è già PERIODICA (`giro % N`), mai legata
+ *        a GIRI_MASSIMI — verificato prima di togliere il tetto, non dopo.
+ *
+ * ⭐ `Infinity` e non un numero grande: un numero grande è ancora un tetto, e tornerebbe a
+ *   mordere il giorno in cui un compito è più lungo di quanto chi l'ha scritto immaginava. Il
+ *   parametro resta SOVRASCRIVIBILE (`_giriMassimiInterno`), così il banco può ancora fissarne
+ *   uno per una misura: qui cambia il DEFAULT del prodotto, non la possibilità di limitarlo.
+ *
+ * ⛔ Sotto, il ragionamento del 26/8 che aveva scelto 24: resta perché spiega perché il
+ *   confronto 24 contro 32 non distingueva nulla — cioè perché quel numero non era mai stato
+ *   un valore misurato, ma il meno peggio fra due rumori.
+ */
+const GIRI_MASSIMI = Number.POSITIVE_INFINITY
 
 /*
  * ⭐⭐⭐ FASE K (29/8), piano elegant-spinning-dongarra.md — R2, il
@@ -918,7 +950,16 @@ export async function chiamaConRitenta({
 
 /** Come e' finita la generazione. ⛔ Tre esiti, non due. */
 export function comeSonoFinitiIGiri({ giroRaggiunto, giriMassimi, haRisposto }) {
-    if (giroRaggiunto >= giriMassimi) {
+    /*
+     * ⛔ 11/09/2026 — con il tetto tolto (`GIRI_MASSIMI = Infinity`) questo ramo non scatta più
+     *   da solo, perché nessun numero finito è `>= Infinity`. La guardia esplicita resta comunque:
+     *   `giriMassimi` può ancora arrivare FINITO da chi lo fissa apposta (il pre-loop planner, una
+     *   misura del banco), e in quel caso «giri esauriti» è ancora la diagnosi giusta e va detta.
+     *   Senza `Number.isFinite`, un `giriMassimi` assente (`undefined`) renderebbe il confronto
+     *   `false` per il motivo sbagliato — e un ramo che non scatta per un motivo sbagliato è
+     *   esattamente come nasce un cancello inerte.
+     */
+    if (Number.isFinite(giriMassimi) && giroRaggiunto >= giriMassimi) {
         return {
             esito: 'giri-esauriti',
             detto: `⛔ giri esauriti: ${giriMassimi} su ${giriMassimi} usati senza chiudere il task.`
