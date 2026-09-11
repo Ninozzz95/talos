@@ -36,3 +36,7 @@
 @import './temi.css';
 @import './aspetto.css';
 @import './desktop-final.css'; /* TALOS-DESKTOP-FINAL-UI */
+/* 11/09 — le classi `td-*` del mockup approvato (elenco+dettaglio, modale, studio dei temi).
+   ⛔ In CODA e non in mezzo: legge i token di `temi.css`/`aspetto.css` e non ne ridefinisce nessuno,
+   quindi deve essere valutato dopo di loro (esbuild incolla gli @import sul posto, nell'ordine). */
+@import './mockup-td.css';

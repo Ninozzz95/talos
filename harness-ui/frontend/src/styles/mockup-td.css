@@ -1,0 +1,297 @@
+/*
+ * mockup-td.css — le classi `td-*` del mockup approvato dall'owner l'11/09/2026.
+ *
+ * Fonte, riga per riga: `.claude/refactor-ui-owner-2026-09-11/Talos_Desktop_Final_Mockup_Interattivo.html`
+ *   · blocco `<style id="talos-final-dropin-ui">` righe 3979-4195 (impianto: master/detail, schede,
+ *     filtri, vuoto, modale, toast);
+ *   · blocco `<style id="talos-desktop-refinement">` righe 4195-4391 (rifiniture v2 e theme studio).
+ * I valori numerici sono quelli del mockup: qui non si "interpreta" un disegno approvato.
+ *
+ * ⛔ PERCHE' UN FOGLIO NUOVO, E PERCHE' IN CODA A `main.css`.
+ *   `index.css` (202 KB), `aspetto.css` (34 KB) e `desktop-final.css` (18 KB) sono congelati per
+ *   questo porting: un `@import` in coda e' l'unica riga toccata altrove. L'ordine conta — con
+ *   esbuild un `@import` relativo viene incollato SUL POSTO, quindi l'ultimo vince a parita' di
+ *   specificita' (esbuild CHANGELOG «CSS import ordering»). Questo foglio sta dopo `temi.css` e
+ *   `aspetto.css` perche' LEGGE i token che quelli definiscono e non ne ridefinisce nessuno.
+ *
+ * ⛔ NESSUN COLORE SCRITTO A MANO. Ogni valore cromatico e' un `var(--talos-*)` gia' esistente:
+ *   verificati tutti e 35 i token usati dal mockup contro `src/styles/*.css` prima di scrivere —
+ *   ci sono tutti (accent-border, accent-soft, assistant-text, window-bg, card-subtle,
+ *   border-subtle, shadow-floating, radius-pill, overlay, ring, focus-width, *-soft/*-border dei
+ *   cinque toni, text-on-accent, font-display/mono/ui, space-sm/md, font-size-xs/sm).
+ *   ⇒ i quattordici temi e i due modi colore si applicano da soli, senza una riga in piu'.
+ *
+ * ⛔ NIENTE `[hidden]{display:none!important}` globale (il mockup ce l'ha, riga 3981): in una app
+ *   con 202 KB di CSS gia' scritti una regola universale con `!important` e' esattamente il difetto
+ *   che ha bruciato sei cure il 10/09 («MISURA L'OGGETTO, MAI L'AMBIENTE»). Qui si nasconde solo
+ *   cio' che serve, per selettore.
+ *
+ * Ricerca fatta PRIMA di scrivere, 11/09/2026:
+ *   · UX Patterns Guide «Window Splitter» + Telerik Design System «Splitter accessibility»:
+ *     il divisorio vuole `role="separator"`, `aria-orientation` (descrive la LINEA, non le colonne),
+ *     `aria-valuenow/min/max` e le frecce con passo dichiarato ⇒ `.td-divider` e' un `<button>`
+ *     focalizzabile largo 7 px con la linea disegnata dentro (bersaglio del puntatore > linea).
+ *   · MDN `@media (prefers-reduced-motion)`: il ridotto ferma il tempo, non toglie il disegno.
+ */
+
+/* ---------- 1. IMPIANTO DELLA SEZIONE (mockup 3982-3991) ---------- */
+:root { --td-larghezza-dettaglio: 440px; }
+.td-scope { min-width: 0; min-height: 0; }
+/* `container-type:inline-size` e' quello che fa reagire le colonne alla LARGHEZZA DELLA SEZIONE e
+   non della finestra: con l'inspector aperto la sezione e' stretta anche a 1440 px. */
+.td-section { container-type: inline-size; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.td-subtle { color: var(--talos-muted); font-size: var(--talos-font-size-xs); }
+.td-tools { display: flex; gap: var(--talos-space-sm); align-items: center; margin-left: auto; }
+.td-workspace { flex: 1; display: flex; min-height: 0; overflow: hidden; }
+.td-master { flex: 1; min-width: 0; overflow: auto; padding: 28px; scroll-padding: 20px; overflow-anchor: none; }
+
+/* ---------- 2. INTRO, BARRA, FILTRI (mockup 3992-4011) ---------- */
+.td-intro { display: flex; gap: var(--talos-space-md); align-items: flex-start; margin: 0 0 24px; }
+.td-intro h2 { font-family: var(--talos-font-display); font-weight: 550; font-size: 26px; line-height: 1.25; letter-spacing: -.035em; margin: 0 0 8px; }
+.td-intro p { margin: 0; color: var(--talos-muted); font-size: var(--talos-font-size-sm); line-height: 1.65; max-width: 66ch; }
+.td-intro-mark { display: grid; place-items: center; width: 46px; height: 46px; flex: 0 0 auto; background: var(--talos-panel); box-shadow: inset 0 0 0 1px var(--talos-border); border-radius: var(--talos-radius-card); color: var(--talos-accent-text); }
+.td-intro-mark svg { width: 22px; height: 22px; }
+.td-toolbar { display: flex; align-items: center; gap: var(--talos-space-sm); flex-wrap: wrap; margin-bottom: 14px; }
+/* 220 px e non 170: sotto quella misura il segnaposto si tronca («Cerca nel titolo e …»),
+   e con `flex-wrap` la barra manda a capo il resto invece di strozzare la ricerca. */
+.td-search { flex: 1; min-width: 220px; max-width: 420px; }
+.td-search input { width: 100%; }
+.td-segment { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-panel); }
+.td-segment button { color: var(--talos-muted); background: transparent; border: 0; min-height: 32px; padding: 0 12px; border-radius: calc(var(--talos-radius-control) - 3px); font: inherit; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.td-segment button[aria-pressed="true"], .td-segment button[aria-selected="true"] { background: var(--talos-card); color: var(--talos-text); }
+.td-segment .i { width: 16px; height: 16px; }
+.td-select { min-height: 38px; max-width: 170px; border-radius: var(--talos-radius-control); border: 1px solid var(--talos-border); padding: 0 10px; background: var(--talos-panel); color: var(--talos-text); font: inherit; font-size: 12px; }
+.td-filters { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; margin: 0 0 20px; }
+.td-filter { display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 5px 11px; background: transparent; color: var(--talos-muted); border: 1px solid transparent; border-radius: var(--talos-radius-pill); font: inherit; font-size: 12px; cursor: pointer; }
+.td-filter[aria-pressed="true"] { background: var(--talos-accent-soft); border-color: var(--talos-accent-border); color: var(--talos-accent-text); }
+.td-filter small { color: inherit; opacity: .8; font-variant-numeric: tabular-nums; }
+/* Una sezione con un filtro solo (Note, Progetti) non disegna la riga: `hidden` da solo non basta
+   contro `display:flex`, e un `[hidden]` universale con `!important` qui non si mette. */
+.td-filters[hidden] { display: none; }
+
+/* ---------- 3. LE SCHEDE (mockup 4012-4066 + rifiniture 4210-4222) ---------- */
+.td-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; align-items: start; }
+.td-group-label { margin: 25px 0 13px; display: flex; align-items: center; gap: 8px; color: var(--talos-muted); font-size: 11px; font-weight: 500; letter-spacing: .015em; }
+.td-group-label:first-child { margin-top: 0; }
+.td-card { position: relative; min-width: 0; isolation: isolate; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card); background: var(--talos-panel); transition: border-color var(--talos-motion-duration-control) var(--talos-motion-ease), background-color var(--talos-motion-duration-control) var(--talos-motion-ease); }
+.td-card:hover { border-color: var(--talos-border-strong); }
+.td-card[data-selected="true"] { border-color: var(--talos-accent-border); box-shadow: inset 0 0 0 1px var(--talos-accent-border); }
+.td-card-open { display: flex; flex-direction: column; align-items: stretch; gap: 14px; min-height: 218px; width: 100%; padding: 20px; background: transparent; color: var(--talos-text); border: 0; border-radius: inherit; text-align: left; font-family: inherit; cursor: pointer; overflow: hidden; }
+.td-card-top { display: flex; align-items: center; gap: 7px; font-size: 11px; line-height: 1.4; font-weight: 500; color: var(--talos-muted); padding-right: 24px; min-height: 21px; }
+.td-card-top svg { width: 15px; height: 15px; }
+.td-card h3 { font-family: var(--talos-font-ui); font-size: 16px; letter-spacing: -.02em; font-weight: 600; line-height: 1.42; margin: 0; overflow-wrap: anywhere; text-wrap: pretty; }
+/* `-webkit-line-clamp` a 4 righe: il testo di una nota lo scrive un modello e puo' essere lungo
+   quanto vuole — la scheda ha un'altezza, il contenuto no. */
+.td-excerpt { color: var(--talos-assistant-text); font-size: 13px; line-height: 1.7; margin: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; white-space: pre-line; overflow-wrap: anywhere; }
+.td-card-bottom { display: flex; align-items: center; gap: 10px; justify-content: space-between; margin-top: auto; padding-top: 8px; color: var(--talos-muted); font-size: 11px; min-width: 0; font-variant-numeric: tabular-nums; }
+.td-card-bottom span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-card-azioni { position: absolute; right: 9px; top: 9px; background: transparent; border: 0; border-radius: var(--talos-radius-control); width: 32px; height: 32px; display: grid; place-items: center; color: var(--talos-muted); cursor: pointer; }
+.td-card-azioni:hover { color: var(--talos-text); background: var(--talos-card); }
+.td-card-azioni svg { width: 15px; height: 15px; }
+
+/* Le sette famiglie: ognuna cambia soltanto cio' che la distingue davvero. */
+.td-note .td-card-open { min-height: 250px; }
+.td-note::after { content: ""; position: absolute; right: 0; bottom: 0; width: 17px; height: 17px; clip-path: polygon(100% 0, 0 100%, 100% 100%); background: var(--talos-border); pointer-events: none; }
+.td-memory .td-card-open { min-height: 246px; }
+.td-memory-mark { border: 1px solid var(--talos-border); width: 31px; height: 31px; border-radius: var(--talos-radius-control); display: grid; place-items: center; color: var(--talos-accent-text); flex: none; }
+.td-memory .td-card-top { padding-right: 0; gap: 10px; }
+.td-memory .td-excerpt { padding-left: 12px; border-left: 2px solid var(--talos-accent-border); }
+.td-research { border-top: 3px solid var(--talos-border-strong); }
+.td-research .td-card-open { min-height: 262px; }
+.td-research .td-card-top { color: var(--talos-accent-text); }
+/* ⛔ Il rientro a sinistra c'è SOLO dove c'è il timbro «fatta»: su una attività da fare il
+   mockup disegna una casella da spuntare, ma `/tasks` è solo GET e una casella che non risponde è
+   una promessa. Qui il segno compare quando l'attività è chiusa, e le altre schede non pagano un
+   rientro vuoto. */
+.td-task .td-card-open { min-height: 222px; }
+.td-task[data-done="true"] .td-card-open { padding-left: 52px; }
+.td-task-toggle { position: absolute; top: 22px; left: 18px; width: 21px; height: 21px; border: 1px solid var(--talos-border-strong); background: transparent; border-radius: 6px; color: var(--talos-text-on-accent); display: grid; place-items: center; }
+.td-task-toggle svg { width: 14px; height: 14px; }
+.td-task-toggle[data-fatta="true"] { background: var(--talos-accent); border-color: var(--talos-accent); }
+.td-task[data-done="true"] h3 { text-decoration: line-through; color: var(--talos-muted); }
+.td-progress { height: 3px; border-radius: var(--talos-radius-pill); background: var(--talos-border); overflow: hidden; }
+.td-progress > i { display: block; height: 100%; background: var(--talos-accent); }
+.td-priority { font-size: 10px; color: var(--talos-warning); }
+.td-document .td-card-open { min-height: 218px; }
+.td-file-preview strong { display: block; font-size: 16px; line-height: 1.4; margin-bottom: 9px; color: var(--talos-text); }
+.td-file-preview { height: 122px; overflow: hidden; background: var(--talos-window-bg); border: 1px solid var(--talos-border); border-radius: calc(var(--talos-radius-card) - 3px); padding: 13px; font-size: 10px; line-height: 1.6; white-space: pre-line; color: var(--talos-assistant-text); }
+.td-project .td-card-open { min-height: 210px; }
+.td-source-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.td-source-chips span { font: 10px/1.5 var(--talos-font-ui); color: var(--talos-muted); }
+.td-source-chips span::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 5px; border-radius: 50%; background: var(--talos-border-strong); }
+
+/* Vista ELENCO: stesse schede, tre colonne in griglia. Cio' che non entra in una riga sparisce. */
+.td-list { display: flex; flex-direction: column; gap: 0; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card); overflow: hidden; }
+.td-list .td-card { border: 0; border-bottom: 1px solid var(--talos-border); border-radius: 0; }
+.td-list .td-card:last-child { border-bottom: 0; }
+/* `align-content:center`: la Libreria in riga non ha un estratto (la rotta manda i metadati, non i
+   byte), e senza questo la seconda riga della griglia restava vuota spingendo titolo e data ai due
+   estremi — visto nella foto. */
+.td-list .td-card-open { min-height: 82px; display: grid; grid-template-columns: 128px minmax(0, 1fr) auto; gap: 5px 16px; padding: 16px 48px 16px 18px; align-content: center; }
+.td-list .td-card-top { grid-column: 1; grid-row: 1 / 3; align-self: center; padding-right: 0; }
+.td-list .td-card h3 { grid-column: 2; grid-row: 1; font-size: 14px; }
+.td-list .td-excerpt { grid-column: 2; grid-row: 2; -webkit-line-clamp: 1; max-height: 22px; font-size: 12px; }
+.td-list .td-card-bottom { grid-column: 3; grid-row: 1 / 3; padding-top: 0; }
+.td-list .td-source-chips, .td-list .td-file-preview, .td-list .td-progress { display: none; }
+.td-list .td-task[data-done="true"] .td-card-open { padding-left: 52px; }
+.td-list .td-note::after { display: none; }
+.td-list .td-memory-mark { width: 24px; height: 24px; border: 0; }
+
+/* ---------- 4. IL DIVISORIO (mockup 4068-4070) ---------- */
+.td-divider { flex: 0 0 7px; position: relative; touch-action: none; cursor: col-resize; border: 0; padding: 0; background: transparent; z-index: 2; }
+.td-divider::before { content: ""; position: absolute; inset: 0 3px; background: var(--talos-border); transition: background var(--talos-motion-duration-control); }
+.td-divider:hover::before, .td-divider:focus-visible::before { background: var(--talos-accent); }
+.td-divider[hidden] { display: none; }
+
+/* ---------- 5. IL DETTAGLIO (mockup 4071-4090) ---------- */
+.td-detail { width: clamp(320px, var(--td-larghezza-dettaglio), 62%); flex: 0 0 auto; min-width: 0; display: flex; flex-direction: column; background: var(--talos-panel); overflow: hidden; border-left: 1px solid var(--talos-border); }
+.td-detail[hidden] { display: none; }
+.td-detail-head { flex: 0 0 auto; min-height: 62px; padding: 12px 18px; border-bottom: 1px solid var(--talos-border); display: flex; align-items: center; gap: 8px; }
+.td-detail-head > span:first-child { flex: 1; }
+.td-detail-body { padding: 28px 24px; overflow: auto; flex: 1; min-height: 0; scroll-padding: 20px; }
+.td-detail-body h2 { margin: 0 0 18px; font-size: 24px; line-height: 1.3; font-weight: 550; letter-spacing: -.028em; overflow-wrap: anywhere; }
+.td-detail-body h3 { margin: 24px 0 10px; font-size: 14px; }
+.td-detail-meta { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; color: var(--talos-muted); font-size: 11px; margin: 0 0 20px; }
+.td-prose { white-space: pre-wrap; line-height: 1.85; font-size: 14px; color: var(--talos-assistant-text); overflow-wrap: anywhere; }
+.td-code { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; font-size: 12px; padding: 16px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-window-bg); font-family: var(--talos-font-mono); }
+.td-source { display: block; padding: 14px 0; border-bottom: 1px solid var(--talos-border); color: var(--talos-text); font-size: 13px; }
+.td-source span { display: block; color: var(--talos-muted); font-size: 12px; margin-top: 5px; line-height: 1.5; }
+.td-detail-footer { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 14px 20px; border-top: 1px solid var(--talos-border); }
+.td-detail-footer > .td-save-status { margin-left: auto; }
+.td-save-status { color: var(--talos-muted); font-size: 11px; }
+/*
+ * Il riuso: la riga vera della Libreria (cinque azioni dietro il menu «…», tasto destro, rinomina in
+ * linea, conferma d'eliminazione con la conseguenza scritta, messaggio d'esito) vive DENTRO il
+ * dettaglio invece di essere rifatta.
+ * ⛔ Della riga si tiene ciò che AGISCE e si toglie ciò che RIPETE: icona, nome, sottotitolo e
+ *   badge dicono le stesse cose che il dettaglio ha già scritto sopra, e il bottone «Dettagli» lì
+ *   dentro non ha più niente da aprire. Nascosti per selettore, non rimossi: il nome resta nel DOM
+ *   perché la rinomina in linea lo usa.
+ */
+.td-riuso-riga { margin-top: 8px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); padding: 12px 14px; }
+.td-riuso-riga .talos-list-row { border: 0; display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 0; }
+.td-riuso-riga .talos-list-row__icon,
+.td-riuso-riga .talos-list-row__title,
+.td-riuso-riga .talos-list-row__sub,
+.td-riuso-riga .talos-badge,
+.td-riuso-riga [data-azione="dettagli"] { display: none; }
+.td-riuso-riga .talos-list-row__aside { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* ⛔ MISURATO, non dedotto: il riquadro «Azioni sul file» usciva VUOTO nella foto, e il bottone
+   c'era eccome — `index.css:876` tiene `.talos-list-row__azioni` a `opacity:0` finché il puntatore
+   non passa sulla riga (in una lista lunga è giusto: le azioni non urlano). Nel dettaglio la riga è
+   una sola ed è il motivo per cui sei lì: qui l'opacità torna piena. */
+.td-riuso-riga .talos-list-row__azioni { display: flex; gap: 6px; opacity: 1; }
+.td-workspace[data-expanded="true"] .td-master, .td-workspace[data-expanded="true"] .td-divider { display: none; }
+.td-workspace[data-expanded="true"] .td-detail { width: 100%; border-left: 0; }
+.td-workspace[data-expanded="true"] .td-detail-body { padding-left: max(28px, calc((100% - 780px) / 2)); padding-right: max(28px, calc((100% - 780px) / 2)); }
+
+/* ---------- 6. VUOTO E ETICHETTE (mockup 4091-4104) ---------- */
+.td-empty { min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 32px; }
+.td-empty-art { width: 104px; height: 90px; margin: 0 0 22px; color: var(--talos-muted); }
+.td-empty-art svg { width: 100%; height: 100%; }
+.td-empty-art .accent { stroke: var(--talos-accent); }
+.td-empty h3 { font-size: 20px; letter-spacing: -.02em; margin: 0 0 10px; font-weight: 550; }
+.td-empty p { max-width: 35ch; line-height: 1.6; color: var(--talos-muted); font-size: 13px; margin: 0 0 20px; }
+.td-tag { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--talos-border); border-radius: 6px; padding: 3px 7px; color: var(--talos-muted); font-size: 10px; line-height: 1.35; }
+.td-tag[data-tone="accent"] { color: var(--talos-accent-text); background: var(--talos-accent-soft); border-color: var(--talos-accent-border); }
+.td-tag[data-tone="success"] { color: var(--talos-success); background: var(--talos-success-soft); border-color: var(--talos-success-border); }
+.td-tag[data-tone="warning"] { color: var(--talos-warning); background: var(--talos-warning-soft); border-color: var(--talos-warning-border); }
+.td-tag[data-tone="info"] { color: var(--talos-info); background: var(--talos-info-soft); border-color: var(--talos-info-border); }
+.td-tag[data-tone="danger"] { color: var(--talos-danger); background: var(--talos-danger-soft); border-color: var(--talos-danger-border); }
+
+/* ---------- 7. LA MODALE (mockup 4152-4156) ----------
+ * ⛔ Qui il mockup e' stato CORRETTO, non copiato: usa un `<div class="td-modal-host">` piu'
+ *   `shell.inert`. La app ha gia' due `<dialog>` nativi (`#commandDialog`, `#sheetDialog`), e la
+ *   ricerca dell'11/09/2026 (MDN `<dialog>`; dfm2html «The Modern Modal in 2026»; a11y-collective
+ *   «Mastering Accessible Modals») dice che `showModal()` porta gia' trappola del fuoco, Esc,
+ *   backdrop e ritorno del fuoco al chiamante. ⇒ `.td-modal` E' il `<dialog>`, e il fondo scuro
+ *   e' `::backdrop`: una cosa in meno da tenere allineata.
+ */
+dialog.td-modal { width: min(620px, calc(100vw - 48px)); max-height: calc(100dvh - 48px); padding: 0; display: none; flex-direction: column; overflow: hidden; border: 1px solid var(--talos-border-strong); border-radius: var(--talos-radius-card); background: var(--talos-panel); color: var(--talos-text); box-shadow: var(--talos-shadow-floating); }
+dialog.td-modal[open] { display: flex; }
+dialog.td-modal::backdrop { background: var(--talos-overlay); }
+.td-modal-head { display: flex; gap: 12px; align-items: center; padding: 16px 22px; border-bottom: 1px solid var(--talos-border); }
+.td-modal-head h2 { font-size: 18px; margin: 0; flex: 1; font-weight: 550; }
+.td-modal-content { padding: 24px; overflow: auto; line-height: 1.65; }
+.td-modal-content .td-detail-footer { border-top: 0; padding: 18px 0 0; }
+
+/* ---------- 8. LO STUDIO DEI TEMI (mockup 4332-4350, 4386-4391) ---------- */
+dialog.td-modal:has(.td-theme-studio) { width: min(1120px, calc(100vw - 40px)); }
+.td-theme-studio { display: grid; grid-template-columns: 228px minmax(0, 1fr); gap: 28px; align-items: start; }
+.td-theme-list { display: grid; gap: 3px; align-content: start; max-height: min(650px, 60dvh); overflow: auto; padding: 0 8px 0 0; }
+.td-theme-choice { display: flex; align-items: center; text-align: left; gap: 12px; min-height: 43px; padding: 7px 10px; color: var(--talos-text); background: transparent; border: 1px solid transparent; border-radius: var(--talos-radius-control); font: 12px var(--talos-font-ui); cursor: pointer; }
+.td-theme-choice:hover { background: var(--talos-card); }
+.td-theme-choice[aria-checked="true"] { border-color: var(--talos-accent-border); background: var(--talos-accent-soft); }
+.td-theme-choice > .td-theme-segno { margin-left: auto; color: var(--talos-accent-text); font-size: 12px; }
+/* Il pallino e' MISURATO dal foglio dei temi (i quattro semi di `temi.css`), non riscritto:
+   meta' fondo, meta' accento — cambia da solo se cambia una tavolozza. */
+.td-palette-dot { width: 22px; height: 22px; border-radius: 50%; flex: none; background: var(--preview-bg, var(--talos-card)); border: 1px solid var(--talos-border-strong); position: relative; overflow: hidden; }
+.td-palette-dot::after { content: ""; position: absolute; inset: 11px 0 0; background: var(--preview-accent, var(--talos-accent)); }
+.td-theme-display h3 { font: 550 27px/1.3 var(--talos-font-display); letter-spacing: -.04em; margin: 0 0 7px; }
+.td-theme-display > p { font: 12px/1.8 var(--talos-font-ui); margin: 0 0 17px; color: var(--talos-muted); max-width: 68ch; }
+.td-theme-preview { height: clamp(160px, 22dvh, 250px); position: relative; isolation: isolate; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card); overflow: hidden; background: var(--preview-bg, var(--talos-background)); display: flex; flex-direction: column; justify-content: space-between; padding: 18px; }
+.td-preview-riga { display: flex; align-items: center; gap: 10px; }
+.td-preview-pallino { width: 34px; height: 34px; border-radius: var(--preview-radius, 12px); background: var(--preview-accent); flex: none; }
+.td-preview-barra { height: 8px; border-radius: var(--talos-radius-pill); background: var(--preview-line); flex: 1; }
+.td-preview-barra[data-corta] { flex: 0 0 38%; }
+.td-preview-scheda { border: 1px solid var(--preview-line); border-radius: var(--preview-radius, 12px); padding: 12px 14px; display: grid; gap: 8px; }
+/* ⛔ La didascalia sta FUORI dal riquadro: dentro, su un fondo che cambia con la tavolozza, un
+   testo leggibile richiederebbe di ricalcolare il contrasto per ognuno dei quattordici temi. */
+.td-preview-caption { display: flex; justify-content: space-between; gap: 12px; font-size: 10px; color: var(--talos-muted); margin-top: 8px; }
+.td-theme-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between; margin: 16px 0; }
+.td-theme-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; border-top: 1px solid var(--talos-border); padding-top: 16px; margin-top: 16px; }
+.td-theme-details div { min-width: 0; }
+.td-theme-details span { display: block; color: var(--talos-muted); font-size: 10px; margin-bottom: 5px; }
+.td-theme-details strong { font: 500 11px/1.5 var(--talos-font-mono); color: var(--talos-text); overflow-wrap: anywhere; }
+.td-theme-note { color: var(--talos-muted); font-size: 10px; line-height: 1.8; margin-top: 17px; }
+.td-theme-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
+.td-studio-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 7px 12px; background: var(--talos-card); color: var(--talos-text); border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); font: 500 11px var(--talos-font-ui); cursor: pointer; }
+.td-studio-button[aria-pressed="true"] { background: var(--talos-accent-soft); border-color: var(--talos-accent-border); color: var(--talos-accent-text); }
+/* Il pulsante «Esplora le N atmosfere» nasce SOTTO la riga «Tema TALOS» (come `initAtelier`), e si
+   allinea alla colonna dei controlli: sotto l'etichetta sembrava orfano di un'altra riga. */
+.td-studio-button[data-td-studio-temi] { margin: -6px 0 14px auto; width: fit-content; }
+.td-studio-button.primary { background: var(--talos-accent); color: var(--talos-text-on-accent); border-color: var(--talos-accent); }
+
+/* ---------- 9. FUOCO, MOVIMENTO, CONTRASTO FORZATO (mockup 4188-4194) ---------- */
+.td-card-open:focus-visible, .td-card-azioni:focus-visible, .td-divider:focus-visible, .td-filter:focus-visible, .td-segment button:focus-visible, .td-theme-choice:focus-visible, .td-studio-button:focus-visible { outline: var(--talos-focus-width, 2px) solid var(--talos-ring); outline-offset: 3px; }
+:root.td-dragging *, :root.td-dragging *::before { cursor: col-resize !important; user-select: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .td-scope *, .td-scope *::before, .td-scope *::after, dialog.td-modal * { transition-duration: 0s !important; animation: none !important; scroll-behavior: auto !important; }
+}
+@media (forced-colors: active) {
+  .td-card[data-selected="true"], .td-filter[aria-pressed="true"], .td-theme-choice[aria-checked="true"] { outline: 2px solid Highlight; }
+  .td-task-toggle { border: 1px solid ButtonText; }
+}
+
+/* ---------- 10. LARGHEZZE (mockup 4174-4187) ----------
+ * La soglia e' sulla SEZIONE (container query), non sulla finestra: sotto 850 px di sezione il
+ * dettaglio prende tutto e l'elenco si nasconde — e' la stessa regola che rende utile la vista a
+ * 1024 px con l'inspector aperto. */
+@container (max-width: 850px) {
+  .td-workspace[data-detail="true"] .td-master, .td-workspace[data-detail="true"] .td-divider { display: none; }
+  .td-workspace[data-detail="true"] .td-detail { width: 100%; border-left: 0; }
+  .td-grid { grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); }
+  .td-master { padding: 24px; }
+}
+@container (max-width: 560px) {
+  .td-master { padding: 20px; }
+  .td-grid { grid-template-columns: 1fr; }
+  .td-intro h2 { font-size: 24px; }
+  .td-intro-mark { display: none; }
+  .td-toolbar { gap: 8px; }
+  .td-search { max-width: none; }
+  .td-list .td-card-open { grid-template-columns: 1fr auto; gap: 5px; }
+  .td-list .td-card-top { grid-column: 1 / 3; grid-row: 1; }
+  .td-list .td-card h3 { grid-column: 1 / 3; grid-row: 2; }
+  .td-list .td-excerpt { grid-column: 1 / 3; grid-row: 3; }
+  .td-list .td-card-bottom { grid-column: 1 / 3; grid-row: 4; }
+}
+@media (max-width: 1160px) { .td-theme-studio { grid-template-columns: 185px minmax(0, 1fr); gap: 18px; } }
+@media (max-width: 760px) {
+  .td-theme-studio { grid-template-columns: 1fr; }
+  .td-theme-list { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 165px; padding: 0; }
+  .td-theme-choice { gap: 6px; padding: 6px; font-size: 11px; }
+  .td-palette-dot { width: 16px; height: 16px; }
+  .td-theme-choice > .td-theme-segno { display: none; }
+  .td-theme-details { gap: 7px; }
+}
