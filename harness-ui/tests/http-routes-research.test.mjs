@@ -390,6 +390,75 @@ test('⭐⭐⭐⭐ L5 §6.6 — RIAVVIO E RIPRESA: un registro NUOVO sullo stess
   assert.match(consegna, /0 tokens, 0 searches, 0 pages/, '⛔ quanto è già stato speso si dice: è ciò che impedisce di ripagarlo');
 });
 
+test('⭐⭐⭐⭐ L5, cura 12/09 — PAUSA + RIAVVIO: la ripresa RIESCE, perché lo stato lo dice il GIORNALE e non il registro vivo', async (t) => {
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conRicercaViva(b);
+
+  await chiama(b.base, `/api/v1/sessions/${sessionId}/research/${ricercaId}/pausa`, 'POST');
+  await finoA(async () => {
+    const r = await dettaglio(b, sessionId, ricercaId);
+    return r.giornale.stato === 'paused' ? r : null;
+  }, 'il punto sicuro della pausa');
+
+  /*
+   * ⛔⛔⛔ IL CASO CHE PRIMA VENIVA RIFIUTATO. Il punto sicuro di una pausa conclude il giro
+   *   (`RunFinished`), quindi dopo un riavvio la sessione torna `conclusa: true` e
+   *   `ripristina()` calcola `interrotta: !conclusa` ⇒ **false**. La vecchia guardia leggeva
+   *   quel campo e rispondeva «That research is still running: nothing to resume» — falso, e
+   *   per giunta negato proprio a chi la pausa l'aveva chiesta. Il giornale invece dice
+   *   `paused`, e un riavvio non lo cancella.
+   */
+  const dopo = await b.riavvia();
+  const primaDellaRipresa = b.avvii.length;
+  const ripresa = await chiama(dopo.base, `/api/v1/sessions/${sessionId}/research/${ricercaId}/ripresa`, 'POST');
+  assert.equal(ripresa.status, 200, '⛔ una ricerca messa in pausa DEVE potersi riprendere: è l’unica ragione per cui si mette in pausa');
+
+  const ripartita = b.avvii.slice(primaDellaRipresa).find((i) => i?.task?.ricercaId === ricercaId);
+  assert.ok(ripartita, 'ed è ripartita per davvero, dal giornale');
+  assert.match(ripartita.messaggiIniziali[0].content, new RegExp(DOMANDA.slice(0, 30)), 'la domanda viene dal giornale');
+  const riletta = await dettaglio(b, sessionId, ricercaId);
+  assert.equal(riletta.giornale.stato, 'collecting', '⛔ e il giornale porta `run_resumed`: un secondo riavvio lo vedrebbe');
+});
+
+test('⛔⛔ L5, cura 12/09 — VERSO CONTRARIO: una ricerca che sta DAVVERO girando non si riprende, e lo dice', async (t) => {
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conRicercaViva(b);
+
+  /*
+   * Nessuna pausa, nessun riavvio: il giro è vivo, il giornale dice `collecting`, il registro
+   * dice `interrotta: false`. ⛔ La seconda metà della guardia RESTA e deve restare: un processo
+   * morto a metà giro non lascia nessun evento, quindi l’unico a saperlo è il registro. Le due
+   * fonti non si sostituiscono, si sommano — e senza la metà vecchia questa riga passerebbe.
+   */
+  const prima = b.avvii.length;
+  const ripresa = await chiama(b.base, `/api/v1/sessions/${sessionId}/research/${ricercaId}/ripresa`, 'POST');
+  assert.equal(ripresa.status, 409, '⛔ allargare la guardia non deve far ripartire un giro già in corso: sarebbe pagarlo due volte');
+  assert.equal((await ripresa.json()).error.code, 'RESEARCH_CONFLICT');
+  assert.equal(b.avvii.length, prima, 'e nessuna sessione è stata avviata');
+  assert.equal((await dettaglio(b, sessionId, ricercaId)).stato, 'running');
+});
+
+test('⛔⛔⛔ L5, cura 12/09 — VERSO CONTRARIO: una ricerca ANNULLATA resta rifiutata anche dopo un riavvio', async (t) => {
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conRicercaViva(b);
+
+  await chiama(b.base, `/api/v1/sessions/${sessionId}/research/${ricercaId}`, 'DELETE');
+  // (la DELETE toglie tutto: qui serve invece una ricerca ANNULLATA, cioè con `run_cancelled` nel giornale)
+  const seconda = await conRicercaViva(b);
+  const madre = b.avvii.find((i) => !i?.task?.ricercaId);
+  await madre.onRicercaAnnulla({ id: seconda.ricercaId });
+  await finoA(async () => {
+    const r = await dettaglio(b, sessionId, seconda.ricercaId);
+    return r.stato === 'cancelled' ? r : null;
+  }, 'l’annullamento scritto sul disco');
+
+  const dopo = await b.riavvia();
+  const prima = b.avvii.length;
+  const ripresa = await chiama(dopo.base, `/api/v1/sessions/${sessionId}/research/${seconda.ricercaId}/ripresa`, 'POST');
+  assert.equal(ripresa.status, 409, '⛔ cancellato vuol dire cancellato: una ripresa spenderebbe denaro su un giro che la persona ha chiuso');
+  assert.equal(b.avvii.length, prima);
+});
+
 test('⛔⛔ L5, VERSO CONTRARIO — una ricerca che non sta girando non si mette in pausa: 409, non 404 e non 200', async (t) => {
   const b = await banco(t);
   const { sessionId } = await conRicercaViva(b);
