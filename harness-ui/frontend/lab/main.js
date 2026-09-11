@@ -103,6 +103,22 @@ for (const nodo of [...documento.body.children]) {
 document.documentElement.setAttribute('data-vista', 'sessione');
 document.documentElement.setAttribute('data-schermo', 'chat');
 
+/*
+ * ⛔⛔ 11/09 — IL VELO D'AVVIO SPEGNE ANCHE IL CANCELLO DI PARITÀ, non solo le foto.
+ *
+ *   Il debito era già dichiarato («il cancello di parità apre le stesse pagine: va guardato prima
+ *   di fidarsi del suo verde», rapporto dei lotti C/E/F/G) e qui si chiude: `#talosAvvio` arriva
+ *   col template, ma la regola `#talosAvvio{position:fixed;inset:0}` vive nell'inline <style> di
+ *   `index.template.html` che `lab/index.html` NON ha. Fuori dal `position:fixed` è un blocco alto
+ *   8.697 px dentro un body flex da 900: la shell riceve 0 px e ogni schermata diventa **invisibile**.
+ *   ⇒ `npx playwright test --config=playwright.componenti.config.mjs` cadeva su OGNI componente con
+ *   «element is not visible» allo scatto — misurato oggi su `TaskRow`, che nessuno aveva toccato.
+ *   Toglierlo QUI, una volta, all'ingresso, invece che dentro `mostraSchermo`: le pagine dei
+ *   componenti (`ReportRow`, `TaskRow`, …) non passano da lì.
+ * ⛔ Nessun laboratorio disegna il velo di proposito: l'unica cosa che si perde è un blocco inerte.
+ */
+document.getElementById('talosAvvio')?.remove();
+
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 /*

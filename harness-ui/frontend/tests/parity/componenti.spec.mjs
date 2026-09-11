@@ -74,6 +74,25 @@ test.describe('parità dei componenti ↔ mockup', () => {
       if (comp.nome === 'CatalogoHf') { for (const p of [m.pagina, a.pagina]) await p.evaluate(() => { for (const n of document.querySelectorAll('#schermoModelLab [role=tabpanel]')) n.hidden = n.id !== 'panel-hf'; }); }
       if (comp.nome === 'ModelliInstallati') { for (const p of [m.pagina, a.pagina]) await p.evaluate(() => { for (const n of document.querySelectorAll('#schermoModelLab [role=tabpanel]')) n.hidden = n.id !== 'panel-installati'; }); }
       if (comp.nome === 'NotificationPanel') { for (const p of [m.pagina, a.pagina]) await p.evaluate(() => { const n = document.querySelector('#pannelloNotifiche'); n.hidden = false; n.style.position = 'static'; }); }
+      /*
+       * ⛔ 11/09 L7 — L'UNICA DIVERGENZA DICHIARATA DAL MOCKUP, e perché non si spegne il cancello.
+       *   Il mockup scrive due frasi che sul prodotto sono FALSE: «I rapporti vivono in
+       *   .harness-ui-research/» (lì c'è solo la scheda della ricerca: il rapporto è una voce di
+       *   Libreria, `research-orchestrator.mjs:132`) e «La consultazione del rapporto e delle fonti
+       *   non è ancora disponibile qui» (da stasera si consulta). `index.template.html` le ha
+       *   corrette, e senza questa riga la parità cadrebbe su parole E pixel.
+       *   ⇒ Si applica la STESSA correzione alla copia del mockup, invece di togliere ReportRow dal
+       *   cancello: tutto il resto — struttura, ogni altra parola, i pixel — continua a mordere.
+       *   Motivo e diff in `.claude/RAPPORTO-RICERCA-L7-2026-09-11.md` §4.2.
+       */
+      if (comp.nome === 'ReportRow') {
+        await m.pagina.evaluate(() => {
+          const intro = document.querySelector('#schermoRicerca .talos-page__head p:not([data-research-esito])');
+          if (intro) intro.textContent = 'Ogni ricerca approfondita di questo progetto, col suo rapporto, le affermazioni verificate e le fonti da cui vengono.';
+          const dove = document.querySelector('#schermoRicerca .talos-where');
+          if (dove) dove.textContent = 'Fino a 20 ricerche recenti di questo progetto.';
+        });
+      }
       if (comp.nome === 'Toast') { for (const p of [m.pagina, a.pagina]) await p.evaluate(() => { const r = document.querySelector('#regioneToast'); r.hidden = false; for (const t of r.querySelectorAll('.talos-toast')) t.hidden = false; }); }
       expect(await struttura(a.pagina, comp.selettore), 'struttura').toEqual(await struttura(m.pagina, comp.selettore));
       expect(await testi(a.pagina, comp.selettore), 'parole').toEqual(await testi(m.pagina, comp.selettore));
