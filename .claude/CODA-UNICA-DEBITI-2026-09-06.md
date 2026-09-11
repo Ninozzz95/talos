@@ -1000,3 +1000,20 @@ al cambio pagina, elenco+dettaglio, menu e selezione delle sessioni, toast, them
 (~90 funzioni JS, 344 regole `td-*`). Le 259 «solo mockup non td» restanti sono stati `aria-*`,
 hover/focus e varianti (`data-densita`, `data-sidebar="icone"`) da riverificare UNA volta a merge
 fatto, sul DOM vero, non a confronto di stringhe.
+
+### BC-07, l'A/B (11/09 sera, approvato dall'owner, reasoning basso) — **il marcatore NON prende su GLM**
+Sessione vera su 4174, `z-ai/glm-5.3-flash`, due invii a pochi secondi di distanza, kernel col
+`cache_control {type:'ephemeral', ttl:'1h'}` sull'ultimo blocco di sistema (contenuto multi-parte):
+
+| invio | token dentro | da cache | primo token |
+|---|---|---|---|
+| 1 | 29.743 | **0** | 4.264 ms |
+| 2 | 29.758 | **0** | 4.248 ms |
+
+⇒ Né a radice né per blocco: su questa rotta il marcatore esplicito non produce cache hit. È coerente
+con i due vincoli già dichiarati (l'elenco Alibaba dei modelli con caching esplicito non contiene
+`z-ai/glm-*`; LiteLLM #19923 documenta la rimozione del marcatore per GLM/ZAI). La cache che si vede
+dal secondo giro dello STESSO invio (87-100%) è quindi automatica del fornitore e non governabile da
+noi. Il marcatore resta nel kernel — è innocuo, ~0 byte, e serve ai modelli che lo onorano (Qwen,
+Claude) — ma **la leva per GLM è il PREAMBOLO**: ~17k token di elenco file, dichiarato incompleto.
+Costo dell'A/B: due giri brevi (~$0,01). Registrato con `tempi-giro` su disco, nessuna sonda a mano.
