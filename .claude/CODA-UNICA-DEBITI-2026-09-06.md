@@ -622,3 +622,47 @@ guardare, perché ciò che servirebbe non è stato registrato da nessuno.
 **Questo chiude la domanda «chi è stato» come NON RISPONDIBILE, e conferma il debito.** Non è che
 l'indagine sia stata fatta male: è che il dato non esiste. Cinque piste, una corrispondenza testuale
 esatta, due attori interrogati, e zero modi di sapere quale processo abbia fatto quel `POST`.
+
+---
+
+## BC-07 — LA LATENZA DEI MODELLI API: si indaga e si ottimizza (owner 11/09/2026, non urgente)
+
+Owner: «dobbiamo indagare perché ci sta così tanto a rispondere usando i modelli api. Non è urgente
+ma dobbiamo ottimizzare con tecniche aggiornate dell'ultimo 6 mesi, avanzate: ottimizzazione e
+velocità di domanda e risposta e tempo totale».
+
+**Quello che si vede già, senza aver indagato** (dallo schermo dell'owner e dalle sessioni di oggi,
+non da un'ipotesi): «Ragionamento in corso… **27s**» su una conversazione con **1.113,7k token** e
+cache all'81%. Cioè il primo sospetto è banale e va misurato prima di ogni altra cosa: **il prezzo
+per giro cresce con la conversazione**, e quella sessione ne aveva 1,1 milioni di token. Nella
+sessione `7b21ff93` si legge **primo token 23,8 s** con 950,7k token e cache al 71%.
+
+⇒ Tre domande, in quest'ordine, e ognuna vuole un numero:
+1. **quanto pesa il prefisso**: tempo al primo token in funzione dei token in ingresso, a parità di
+   modello — se è lineare nel prefisso, il collo è la conversazione, non il fornitore;
+2. **quanto prende la cache davvero**: `prompt_tokens_details.cached_tokens` per giro (già letto dal
+   kernel), e cosa la rompe — sappiamo già che un prefisso che cambia la azzera e costa **3,5×**
+   ([[comprimere-l-ingresso-rompe-la-cache]]), e che la cache vale **6×**;
+3. **quanto del tempo è nostro**: fra la richiesta e il primo delta a schermo, quanto è rete,
+   quanto è il fornitore, quanto è il nostro streaming.
+
+⛔ Non toccare niente prima di avere quei tre numeri: qui una cura presa dall'intuito ha già fatto
+danni misurati (spegnere la repo map di aider per «risparmiare» dimezzò i risolti).
+Ricerca obbligatoria sugli ultimi sei mesi prima di scrivere codice (prompt caching, speculative
+decoding, prefix reuse, streaming): fonte + data nel commit.
+
+## BC-08 — LA BARRA DI NAVIGAZIONE DELLA CONVERSAZIONE mostra solo i messaggi dell'owner
+
+Owner 11/09/2026: «la barretta di conversation navigation mostra sempre il messaggio che ho inviato
+io ad ogni segment anziché quello inviato da lui (ed entrambi). Deve includere anche le sue risposte
+e direzionare a quella se cliccato».
+
+Oggi ogni segmento della barra è **un messaggio dell'utente** (è la forma misurata sull'app ChatGPT
+desktop, dove la voce è «Vai al messaggio dell'utente N»). L'owner vuole **entrambi**: le sue
+risposte devono avere il loro segmento, e il clic deve portare **a quella risposta**, non al turno
+che l'ha originata.
+
+Da fare: le voci diventano i turni (utente **e** assistente), il fumetto al passaggio porta le prime
+parole di quel messaggio, e la lente resta com'è. ⛔ Attenzione al numero di voci: con entrambi i
+lati raddoppiano, e la barra ha un tetto di altezza (`min(70vh, 40rem)`) — va deciso cosa succede
+quando le voci non ci stanno, invece di lasciarle schiacciare.
