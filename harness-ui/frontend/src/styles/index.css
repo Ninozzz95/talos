@@ -98,6 +98,20 @@
      ⛔ La modalita a tutta larghezza NON passa di qui: `:root.chat-full-width` mette
      `max-width:none` sulla colonna e `calc(100% - 56px)` sul piede, e continua a farlo. */
   --talos-measure-w:768px;
+  /* ⛔ 11/9, owner (BC-10): «la chat a tutta larghezza collide troppo vicina al navigator della
+     conversazione di sinistra, rendi lo spazio uguale a quello di destra». Misurato sulla build,
+     pagina statica, `chat-full-width` acceso: fra il bordo destro della barra di cronologia e la
+     prima lettera del testo c'erano **-8 px** (cioe' il testo entrava di 8 px DENTRO l'area della
+     barra) contro i **44 px** liberi a destra: 52 px di differenza, a 1920 come a 1440.
+     ⇒ Le tre misure che governano quello spazio vivono QUI, in un posto solo, e le leggono sia la
+     barra sia la conversazione sia il piede. Scriverle di nuovo a mano dove servono vorrebbe dire
+     due numeri che divergono al primo ritocco — ed e' esattamente cosi' che il difetto e' nato.
+     ⛔ `0px` e non `0` quando l'ingombro si annulla: uno zero senza unita' rende invalido tutto il
+     `calc()` che lo contiene, in silenzio (MDN «calc()», letto l'11/09/2026). */
+  --talos-cronologia-x:16px;      /* quanto la barra sta staccata dal bordo sinistro dell'area */
+  --talos-cronologia-w:36px;      /* quanto e' larga, bersaglio del clic compreso */
+  --talos-cronologia-ingombro:calc(var(--talos-cronologia-x) + var(--talos-cronologia-w));
+  --talos-chat-gutter:44px;       /* il respiro della chat: era 44 scritto in tre punti diversi */
   --talos-row-session:66px; --talos-row:44px; --talos-row-pad:12px; --talos-gap:10px;
 }
 :root[data-densita="compatta"]{ --talos-row-session:52px; --talos-row:36px; --talos-row-pad:8px; --talos-gap:6px; }
@@ -531,11 +545,11 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
    voce per messaggio dell'utente, 36x10 px; la linea larga 26-20-14-10-6 secondo la distanza dalla
    voce a fuoco, l'attiva piena e le altre al 50%. */
 .talos-screen{position:relative}
-.talos-cronologia{position:absolute; left:16px; top:50%; transform:translateY(-50%); z-index:20; width:36px; display:flex; align-items:center}
+.talos-cronologia{position:absolute; left:var(--talos-cronologia-x); top:50%; transform:translateY(-50%); z-index:20; width:var(--talos-cronologia-w); display:flex; align-items:center}
 .talos-cronologia[hidden]{display:none}
 .talos-cronologia__lista{display:flex; flex-direction:column; max-height:min(70vh,40rem); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:none; -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 40px,#000 calc(100% - 40px),transparent 100%); mask-image:linear-gradient(to bottom,transparent 0,#000 40px,#000 calc(100% - 40px),transparent 100%)}
 .talos-cronologia__lista::-webkit-scrollbar{display:none}
-.talos-cronologia__voce{display:flex; align-items:center; width:36px; height:10px; flex:none; padding:0; border:0; background:none; cursor:pointer; outline:none}
+.talos-cronologia__voce{display:flex; align-items:center; width:var(--talos-cronologia-w); height:10px; flex:none; padding:0; border:0; background:none; cursor:pointer; outline:none}
 .talos-cronologia__segno{display:flex; align-items:center; width:26px; height:2px}
 /* ⛔ 08/9 — questi sei valori stavano in attributi `style=` nel markup. Un nonce non copre gli
    attributi (`style-src-attr`), e la console mostrava 7 violazioni a ogni caricamento: il rumore in
@@ -568,13 +582,22 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-cronologia__voce:focus-visible .talos-cronologia__linea{background:var(--talos-accent); opacity:1; box-shadow:0 0 0 var(--talos-focus-width) var(--talos-accent-soft)}
 .talos-cronologia__fumetto{position:absolute; left:calc(100% + 8px); transform:translateY(-50%); width:max-content; max-width:min(280px,32vw); padding:8px 10px; border:1px solid var(--talos-border); border-radius:var(--talos-radius-control); background:var(--talos-panel); color:var(--talos-text); box-shadow:var(--talos-shadow-floating); font-size:12.5px; line-height:1.45; pointer-events:none; z-index:21}
 .talos-cronologia__fumetto[hidden]{display:none}
-@media (max-width:1040px){ .talos-cronologia{display:none} }
+/* ⛔ La barra sparisce e il suo ingombro con lei, nella STESSA regola: se lo zero stesse altrove
+   basterebbe spostare una soglia per lasciare 52 px di vuoto al posto di una barra che non c'e'. */
+@media (max-width:1040px){ .talos-cronologia{display:none} :root{--talos-cronologia-ingombro:0px} }
 /* 06/9, owner: «la chat si vede buttata a sinistra». I 44px servono a non far passare il testo
    sotto la barra della cronologia, ma stavano SOLO a sinistra: il centro della conversazione era
    spostato di 22px, e a colonna destra chiusa si vedeva a occhio nudo. Respiro uguale sui due lati:
    la barra continua a stare nel suo, e la colonna torna al centro vero. */
-.talos-conversation{flex:1 1 auto; min-height:0; overflow-y:auto; padding:8px 44px 12px}
-@media (max-width:1040px){ .talos-conversation{padding-left:0} }
+.talos-conversation{flex:1 1 auto; min-height:0; overflow-y:auto; padding:8px var(--talos-chat-gutter) 12px}
+/* ⛔ 11/9 — qui c'era `@media (max-width:1040px){ .talos-conversation{padding-left:0} }`, e sotto
+   i 1040 lasciava 0 a sinistra contro 44 a destra. Misurato a 1024x800: la colonna partiva a x=276,
+   incollata al bordo della lista sessioni, mentre il COMPOSER partiva a x=320 — 44 px piu' in la',
+   cioe' lo stesso disallineamento fra testo e composer che l'owner aveva fatto correggere il 07/9 a
+   1920. La ragione dei 44 a sinistra e' la barra di cronologia, che sotto i 1040 non c'e': ma il
+   modo di toglierne l'ingombro e' `--talos-cronologia-ingombro:0px` (qui sopra), non azzerare il
+   respiro di un lato solo. Costo misurato: la colonna passa da 704 a 660 px; in cambio i due lati
+   valgono 44 e 44, e il composer torna sullo stesso bordo del testo (disallineamento 44 -> 0). */
 /* La conversazione sta al CENTRO dell'area (owner 04/09), non appoggiata a sinistra:
    colonna a larghezza massima, e il piede della chat allineato alla stessa colonna. */
 /* Owner 06/09: «la barra con i segmentini verdi portata all'estrema sinistra, non attaccata alla chat»,
@@ -600,7 +623,7 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
    massima, e il contenuto allineato al bordo SINISTRO come il testo, largo quanto il testo — cioè
    la colonna meno la spina. Così i due bordi coincidono a qualunque larghezza, e non c'è un numero
    magico da tenere aggiornato a mano: le misure vengono dalle stesse variabili. */
-.talos-chat-foot > *{--talos-colonna-chat:min(calc(92px + var(--talos-measure-w)), 100%); --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - 46px)); --talos-larghezza-piede:min(var(--composer-max-w, var(--talos-testo-chat)), 100%); width:var(--talos-larghezza-piede); max-width:none; margin-left:max(-44px, calc((100% - var(--talos-colonna-chat)) / 2 + (var(--talos-testo-chat) - var(--talos-larghezza-piede)) / 2)); margin-right:auto}
+.talos-chat-foot > *{--talos-colonna-chat:min(calc(92px + var(--talos-measure-w)), 100%); --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - 46px)); --talos-larghezza-piede:min(var(--composer-max-w, var(--talos-testo-chat)), 100%); width:var(--talos-larghezza-piede); max-width:none; margin-left:max(calc(-1 * var(--talos-chat-gutter)), calc((100% - var(--talos-colonna-chat)) / 2 + (var(--talos-testo-chat) - var(--talos-larghezza-piede)) / 2)); margin-right:auto}
 /* ⛔ 07/9, owner, precisazione: «il chat composer deve rimanere estensibile oltre la larghezza della
    chat, ma i lati devono essere equidistanti da un bordo rispetto all'altro della chat». Cioè: la
    larghezza resta quella che gli dà il ridimensionamento (`--composer-max-w`), e il CENTRO è quello
@@ -732,6 +755,22 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
  * 736 — cioè «tutta larghezza» RESTRINGEVA. Il respiro si prende dalla colonna, non dal
  * contenitore: così non scende mai sotto la misura normale e cresce ovunque ci sia spazio vero.
  */
+/* ⛔⛔ 11/9, BC-10 — LA CURA, e perche' non e' un semplice `padding-left:96px`.
+ * A sinistra il respiro non parte dal bordo dell'area: parte dal bordo DESTRO della barra di
+ * cronologia, che occupa `--talos-cronologia-ingombro` (16 + 36 = 52 px). Perche' i due lati siano
+ * uguali servono quindi `ingombro + respiro` a sinistra e `respiro` a destra.
+ * ⛔ Ma il respiro NON puo' essere sempre 44: a 1440 con la colonna dei dettagli aperta lo spazio
+ *   utile e' 824 px e la colonna vale gia' 736 — cioe' il 100%. Prendendogli 96+44 diventerebbe
+ *   684, e «tutta larghezza» RESTRINGEREBBE: e' esattamente la regressione curata il 06/9, scritta
+ *   qui sotto tre righe piu' in basso. ⇒ Il respiro e' quel che AVANZA dopo aver garantito alla
+ *   colonna almeno la sua misura normale (`92px + --talos-measure-w`, la stessa della riga della
+ *   colonna), diviso in due parti uguali, col tetto a 44 e il pavimento a 0.
+ * Misurato dopo la cura, pagina statica: 1920 e 1440-dettagli-chiusi -> 44 px per lato (prima -8 e
+ * 44); 1440-dettagli-aperti -> 18 px per lato con la colonna ancora a 736 px, cioe' simmetrica
+ * SENZA aver tolto un pixel di testo; 1024 (barra assente, ingombro 0) -> 44 e 44.
+ */
+:root.chat-full-width{--talos-respiro-pieno:clamp(0px, calc((100% - var(--talos-cronologia-ingombro) - min(calc(92px + var(--talos-measure-w)), calc(100% - 2 * var(--talos-chat-gutter)))) / 2), var(--talos-chat-gutter))}
+:root.chat-full-width .talos-conversation, :root.chat-full-width .talos-chat-foot{padding-left:calc(var(--talos-cronologia-ingombro) + var(--talos-respiro-pieno)); padding-right:var(--talos-respiro-pieno)}
 :root.chat-full-width .talos-conversation__column{max-width:none}
 :root.chat-full-width .talos-chat-foot > *{--talos-colonna-chat:100%; width:calc(100% - 46px); max-width:none; margin-left:0}
 /* ⛔ 07/9, misurato a 1920 px: «a tutta larghezza» allargava la colonna e il composer (1216 e
@@ -747,7 +786,7 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-touched__name{flex:1; min-width:0; font-family:var(--talos-font-mono); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 
 /* ---------- 9. PIEDE DELLA CHAT: striscia (B31), coda (B15), compositore ---------- */
-.talos-chat-foot{flex:none; padding:0 44px 12px}   /* ⛔ 44 come la conversazione: e cosi che le due colonne coincidono */
+.talos-chat-foot{flex:none; padding:0 var(--talos-chat-gutter) 12px}   /* ⛔ lo STESSO respiro della conversazione, dallo stesso token: e cosi che le due colonne coincidono */
 .talos-chat-return{position:relative; height:0}
 .talos-chat-return__button{position:absolute; bottom:12px; left:50%; translate:-50% 0; width:36px; height:36px; min-width:36px; padding:0; border-radius:50%; box-shadow:var(--talos-shadow-card); z-index:3}
 .talos-chat-return__button:is(:hover,:active):not(:disabled){transform:none; background:var(--talos-panel-soft); border-color:var(--talos-border)}
@@ -1221,7 +1260,28 @@ a.talos-button{text-decoration:none}
 .talos-figlia__head{display:flex; align-items:center; gap:8px; margin-bottom:10px}
 .talos-figlia__titolo{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600}
 .talos-figlia__indietro{flex:none}
-.talos-figlia__corpo{display:flex; flex-direction:column; gap:10px}
+/* ⛔⛔⛔ 11/09, owner: «falla scrollare la barra conversazione agenti». MISURATO prima della cura
+   (banco 4178, copia dello store dell'owner, Chrome 1440×900, la figlia vera da 100 righe attrezzo):
+   `.talos-figlia` alta 8.688 px dentro una colonna alta 900, il fondo 7.921 px SOTTO la finestra,
+   `overflow-y:visible` su ogni antenato fino a `body`, e `scrollTop=99999` che lasciava 0.
+   CAUSA: l'unico scorrevole della colonna è `.talos-inspector__body` (cioè `#railAgenti`), e chi
+   apre questa vista lo mette `hidden` e infila il pannello accanto, in un div senza classe.
+   ⛔ `min-height:0` va su OGNI anello della catena, non solo su chi scorre: con il default
+   `min-height:auto` un flex item non scende sotto il suo contenuto e l'`overflow` del figlio non
+   entra mai in gioco (W3C css-flexbox; philipwalton/flexbugs #241, letti l'11/09/2026).
+   Catena: .talos-inspector (ha già min-height:0) → .talos-figlia-ospite → .talos-figlia → __corpo.
+   ⛔ Fuori da un flex-column alto (laboratorio, prove, pagina statica) queste righe sono inerti:
+   `flex` non fa niente a chi non è un flex item, e la vista cresce come prima. */
+.talos-figlia-ospite{flex:1 1 auto; min-height:0; display:flex; flex-direction:column}
+.talos-figlia{flex:1 1 auto; min-height:0; display:flex; flex-direction:column}
+/* ⛔ `overscroll-behavior:contain` (MDN, letto l'11/09/2026): arrivati in fondo alla conversazione
+   della figlia la rotella NON prosegue sulla chat della madre dietro — quello è lo «scroll
+   chaining», e qui vorrebbe dire far scorrere il lavoro di qualcun altro mentre si legge questo.
+   ⛔ Il contenitore che scorre è raggiungibile da tastiera: il `tabindex="0"` lo mette il
+   componente (axe `scrollable-region-focusable`, WCAG 2.1.1) — senza, frecce e PagGiù non hanno
+   dove agire, e questa vista è lunga migliaia di pixel. Il contorno del fuoco è quello del tema. */
+.talos-figlia__corpo{display:flex; flex-direction:column; gap:10px; flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain}
+.talos-figlia__corpo:focus-visible{outline:2px solid var(--talos-accent-border); outline-offset:-2px}
 .talos-figlia__turno{display:flex; flex-direction:column; gap:8px}
 .talos-figlia__vuoto,.talos-figlia__nota{color:var(--talos-muted); font-size:12px; line-height:1.5}
 .talos-figlia__errore{color:var(--talos-danger, var(--talos-text)); font-size:12px; line-height:1.5}
@@ -1842,11 +1902,31 @@ a.talos-button{text-decoration:none}
 .talos-context-menu [role=menuitem]{justify-content:flex-start;width:100%;font-size:var(--talos-font-size-sm)}
 .talos-context-menu__title{padding:var(--talos-space-sm);overflow-wrap:anywhere;font-size:var(--talos-font-size-xs);color:var(--talos-muted)}
 .talos-inspector-close{display:none}
+/* ⛔⛔ 11/9 — QUESTO BLOCCO NON SI E' MAI ACCESO. Era agganciato a `.talos-shell.details-open`, e
+ * `details-open` non la scrive NESSUNA riga di JavaScript: cercata in tutto il repo, compariva solo
+ * in queste quattro righe di CSS. Quello che il JavaScript scrive davvero e' `open` sul PANNELLO
+ * (`legacy/app.js:1527`, `openPanel()`), piu' `show` sul velo — verificato dal vivo a 1024x800 sulla
+ * build servita: dopo il clic l'`<aside>` diventa `talos-inspector inspector-panel open` e il suo
+ * `display` resta `none`, mentre `.overlay-backdrop.show` (z-index 79) prende tutta la pagina. Cioe'
+ * il pulsante Dettagli sfocava la app e non apriva niente.
+ * ⇒ La regola si aggancia a cio' che il JavaScript scrive davvero. Le tre righe di contorno erano
+ *   gia' discendenti dell'`<aside>` (pulsante di chiusura, testata, maniglia di ridimensionamento),
+ *   quindi cambia solo l'ancora.
+ * ⛔ `:root:not([data-vista="pagina"])` perche' nella vista «pagina» la colonna dei dettagli e' tolta
+ *   di proposito (riga con `[data-vista="pagina"] .talos-inspector{display:none}`, specificita' 0-2-1):
+ *   senza quel `:not` la mia regola, piu' specifica, la riaprirebbe li' dentro.
+ * ⛔ RESTA SCOPERTA LA FASCIA 1041-1240 px, e la cura NON e' in questo file: li' il JavaScript prende
+ *   l'altro ramo (`window.innerWidth > 1040` in `legacy/app.js:1481`, `:1521`, `:18599`, `:18796`) e
+ *   scrive `inspector-collapsed` sulla shell invece di `open` sul pannello — misurato a 1100x800: il
+ *   clic collassa una colonna gia' invisibile e salva `inspectorCollapsed:true` nelle preferenze.
+ *   Il CSS non puo' distinguere «chiesto aperto» da «mai toccato», perche' l'assenza di
+ *   `inspector-collapsed` e' anche lo stato di partenza. La soglia del JavaScript deve diventare 1240,
+ *   cioe' la stessa di questa media query. */
 @media(max-width:1240px){
- .talos-shell.details-open .talos-inspector{display:flex;position:fixed;inset:0 0 0 auto;width:min(var(--talos-inspector-w),100vw);z-index:calc(var(--talos-z-app-overlay) - 1);box-shadow:var(--talos-shadow-floating)}
- .talos-shell.details-open .talos-inspector-close{display:inline-flex}
- .talos-shell.details-open .talos-inspector__head{display:flex;align-items:center;gap:var(--talos-space-sm)}
- .talos-shell.details-open .talos-resizer--inspector{display:none}
+ :root:not([data-vista="pagina"]) .talos-inspector.open{display:flex;position:fixed;inset:0 0 0 auto;width:min(var(--talos-inspector-w),100vw);z-index:calc(var(--talos-z-app-overlay) - 1);box-shadow:var(--talos-shadow-floating)}
+ :root:not([data-vista="pagina"]) .talos-inspector.open .talos-inspector-close{display:inline-flex}
+ :root:not([data-vista="pagina"]) .talos-inspector.open .talos-inspector__head{display:flex;align-items:center;gap:var(--talos-space-sm)}
+ :root:not([data-vista="pagina"]) .talos-inspector.open .talos-resizer--inspector{display:none}
 }
 
 /* ⛔ 07/9 — `accent-color` tinge il cursore del SISTEMA: resta la sua forma, la sua altezza e il suo

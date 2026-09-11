@@ -1,5 +1,7 @@
 import {aggiornaProviderList,montaProviderPanel} from '../components/provider-card.js';
-import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica } from '../components/politiche.js';
+import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica, valoriPolitiche } from '../components/politiche.js';
+import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore
+import { statoAvvioSessione } from '../components/avvio-sessione.js'; // BC-14 (11/09): «Avvia» non mente più sul perché è fermo
 import { nomeLeggibileSessione, aggiornaSessionItem } from '../components/session-item.js'; // N1 (10/09): la riga della sessione viva cambia sul posto
 import { collegaScia, aggiornaTutteLeScie } from '../components/range-scia.js';
 import {aggiornaElencoRuntime,montaPannelloRuntime} from '../components/runtime-modelli.js';
@@ -27,7 +29,7 @@ import { aggiornaCosti } from '../components/costi-consumo.js'; // 06/9 D21/D22:
 import { aggiornaContesto, ripartizioneContesto } from '../components/contesto.js'; // 06/9 D26: ripartizione della finestra di contesto
 import { montaHf } from '../components/hf-catalogo.js';
 import { aggiornaCodaDownload, montaCodaDownload, stimaFraLetture } from '../components/download-coda.js'; // 06/9 B6.10: scheda «Download»
-import { aggiornaInspector, processiDagliEventi, titoloMessaggioUtente, titoloRispostaDaTurno } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento
+import { aggiornaInspector, processiDagliEventi, schedaAgentiDaRileggere, titoloMessaggioUtente, titoloRispostaDaTurno } from '../components/inspector.js'; // 06/9 B2: la colonna dei dettagli dice il vero; CB-03: il titolo del giro è la RISPOSTA, non il ragionamento
 import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei file toccati
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaIntro, normalizzaCartella as normalizzaCartellaIntro, ultimoSegmento as ultimoSegmentoIntro } from '../components/intro.js'; // 06/9 B7b: l'Intro del mockup con i dati veri
@@ -46,6 +48,7 @@ import { creaDiffInChat, aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApp
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
 import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo schermo del browser pilotato dal server
+import { montaMiglioraPrompt } from '../components/migliora-prompt.js'; // 11/9 BC-15: «Migliora il prompt», il pannello del composer
 import { gestoPerIlServer } from '../components/browser-gesti.js'; // 07/9: la vista e il server parlano due lingue: qui si traducono
 import { montaScorciatoie, normalizzaTastiScritti, riconosci } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
@@ -5332,16 +5335,59 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * risponde alla domanda vera («dove sono i miei modelli locali?») e
      * dichiara il limite invece di nasconderlo.
      */
+    /*
+     * ⭐⭐⭐ BC-12, 11/09/2026 — «Diretti» NON È PIÙ UNA SCHEDA: sono tre.
+     *
+     * Owner: «diretti deve diventare per provider, quindi una tab dedicata per gemini openai e
+     * anthropic». Il perché, le misure e la ricerca sul codice di Hermes e opencode stanno nella
+     * testata di `components/fonti-modelli.js`: qui c'è solo il montaggio.
+     *
+     * ⛔ Misurato sul banco PRIMA di cambiare (11/09, server mio sulla 4188): la striscia delle
+     *   fonti è larga 410 px a 1440 e 397 a 1024, e le tre schede di allora ne occupavano 271. Le
+     *   cinque di adesso ne vogliono 508: SFONDA di un centinaio di pixel a tutte e due le misure.
+     *
+     * ⛔ PRIMO TENTATIVO SBAGLIATO, tenuto scritto perché è la lezione: avevo messo
+     *   `overflow-x:auto` come fa il sistema di design per le sue liste di schede
+     *   (`.talos-review__schede .talos-tabs__list`). La foto l'ha bocciato subito — in una colonna
+     *   flex un `overflow-x` non `visible` fa diventare `auto` anche `overflow-y`, la striscia si è
+     *   lasciata schiacciare dal pannello e le etichette sono uscite TAGLIATE a metà altezza; e la
+     *   quinta scheda restava comunque fuori, dietro una barra di scorrimento che su Windows non si
+     *   vede finché non ci passi sopra. Una scheda che non si vede non aiuta a scegliere dove
+     *   guardare, che è l'unico motivo per cui le schede esistono.
+     * ⇒ Va a capo. Due righe di schede, tutte e cinque visibili insieme, niente da scoprire
+     *   scorrendo. `flex-wrap:wrap` è la stessa risposta che il sistema di design dà per le sue
+     *   schede a pillola (`.talos-tabs--pills .talos-tabs__list`, `styles/index.css`), quindi è il
+     *   suo linguaggio, non uno nuovo. E `flex-shrink:0` sulla striscia perché il pannello non la
+     *   comprima di nuovo.
+     * ⛔ DEBITO DICHIARATO: queste righe vanno in `styles/foglio-monolite.css`, accanto a
+     *   `.model-picker-sources`. Oggi non ci vanno perché la corsia degli stili è di un altro
+     *   agente e due mani sullo stesso file rifanno il danno dei «due commit intrecciati».
+     */
     const fonti = document.createElement('div');
     fonti.className = 'model-picker-sources';
     fonti.setAttribute('role', 'tablist');
+    fonti.setAttribute('aria-label', 'Dove cercare il modello');
+    fonti.style.flexWrap = 'wrap';
+    fonti.style.flexShrink = '0';
+    fonti.style.rowGap = '2px';
+    listEl.id = `modelPickerLista-${Math.random().toString(36).slice(2, 10)}`; // serve alle schede per `aria-controls`
     panel.append(fonti, searchLabel, listEl, footer);
     wrap.append(trigger, panel);
 
     let modelliCache = null;
     let modelliLocali = null;
+    /* ⛔ BC-13, trovato provando la cura AL VERSO CONTRARIO: col disco illeggibile il vecchio
+       `catch` scriveva `modelliLocali = []`, e la scheda diceva «Nessun modello installato» —
+       cioè dichiarava un FATTO che nessuno aveva accertato. Gli stati sono TRE (non letto ·
+       letto, zero · non leggibile) e vogliono tre frasi: qui vive la terza. */
+    let erroreLocali = null;
+    /*
+     * ⛔ Non più UNA lista piatta e un array di errori: una mappa per fornitore, dove `null`
+     *   significa «chiave non collegata» e `[]` significa «letto, zero modelli». Erano due stati
+     *   indistinguibili e il pannello diceva a tutti la stessa frase.
+     */
     let modelliDiretti = null;
-    let erroriDiretti = [];
+    let erroriDiretti = {};
     let fonteScelta = 'openrouter';
     let valoreScelto = valoreIniziale;
     let aperto = false;
@@ -5352,8 +5398,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       triggerLabel.textContent = valoreScelto || etichettaVuota;
     }
 
+    /** Il catalogo della scheda aperta: `null` finché non è stato letto (≠ «vuoto»). */
+    function catalogoCorrente() {
+      return modelliDellaFonte(fonteScelta, { openrouter: modelliCache, locali: modelliLocali, diretti: modelliDiretti });
+    }
+
     function filtraModelli(query) {
-      const catalogo = fonteScelta === 'diretti' ? modelliDiretti : modelliCache;
+      const catalogo = catalogoCorrente();
       if (!catalogo) return [];
       const q = query.trim().toLowerCase();
       if (!q) return catalogo;
@@ -5369,28 +5420,70 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       return [...mappa.entries()].sort((a, b) => a[0].localeCompare(b[0]));
     }
 
-    /** Ridisegna la striscia delle fonti: conti veri, mai un numero fisso. */
+    /** Porta la scheda scelta a schermo, ridisegnando striscia ed elenco. */
+    function scegliFonte(id) {
+      if (fonteScelta === id) return;
+      fonteScelta = id;
+      renderFonti();
+      renderLista();
+      // Una scheda diretta aperta prima che i cataloghi arrivino se li chiede da sé: apre e legge.
+      if (eFonteDiretta(id) && !modelliDiretti) caricaDiretti();
+    }
+
+    /**
+     * Ridisegna la striscia delle fonti: conti veri, mai un numero fisso.
+     *
+     * ⭐ Tastiera secondo il pattern «Tabs» delle ARIA Authoring Practices (w3.org/WAI/ARIA/apg,
+     *   letto l'11/09/2026): una sola fermata di Tab dentro la striscia (tabindex mobile), le
+     *   frecce ← → scorrono le schede e girano agli estremi, Home/End saltano ai capi. Con tre
+     *   schede si poteva far finta di niente; con cinque, tabulare cinque volte per uscire dalla
+     *   striscia è una tassa che il pattern esiste per togliere.
+     * ⛔ La freccia SPOSTA e SCEGLIE insieme (attivazione automatica): qui cambiare scheda non
+     *   costa niente — sono elenchi già in memoria — e l'APG la consiglia proprio quando il
+     *   contenuto è già pronto.
+     */
     function renderFonti() {
-      const voci = [
-        { id: 'openrouter', etichetta: 'OpenRouter', conto: modelliCache ? modelliCache.length : null },
-        { id: 'locali', etichetta: 'Locali', conto: modelliLocali ? modelliLocali.length : null },
-        { id: 'diretti', etichetta: 'Diretti', conto: modelliDiretti?.length ?? null },
-      ];
-      fonti.replaceChildren(...voci.map((voce) => {
+      const voci = fontiDelSelettore({ openrouter: modelliCache, locali: modelliLocali, diretti: modelliDiretti });
+      if (!voci.some((voce) => voce.id === fonteScelta)) fonteScelta = 'openrouter';
+      const schede = voci.map((voce) => {
         const bottone = document.createElement('button');
         bottone.type = 'button';
         bottone.className = 'model-picker-source';
         bottone.dataset.pickerSource = voce.id;
         bottone.setAttribute('role', 'tab');
+        bottone.setAttribute('aria-controls', listEl.id);
         const attiva = voce.id === fonteScelta;
         bottone.setAttribute('aria-selected', String(attiva));
+        bottone.tabIndex = attiva ? 0 : -1; // tabindex mobile: la striscia è UNA fermata sola
         bottone.classList.toggle('active', attiva);
+        // ⛔ Non si stringono: una scheda schiacciata perde l'etichetta invece del posto.
+        bottone.style.flex = '0 0 auto';
         bottone.append(textElement('span', '', voce.etichetta));
         if (Number.isFinite(voce.conto)) bottone.append(textElement('span', 'model-picker-source-count', String(voce.conto)));
-        bottone.addEventListener('click', () => { fonteScelta = voce.id; renderFonti(); renderLista(); if (fonteScelta === 'diretti' && !modelliDiretti) caricaDiretti(); });
+        // Senza chiave non c'è un conteggio da dare: si dice perché, invece di stampare uno zero falso.
+        if (!voce.collegato) bottone.title = `${voce.etichetta}: chiave non collegata`;
+        bottone.addEventListener('click', () => scegliFonte(voce.id));
         return bottone;
-      }));
+      });
+      fonti.replaceChildren(...schede);
     }
+
+    fonti.addEventListener('keydown', (event) => {
+      const schede = [...fonti.querySelectorAll('[role="tab"]')];
+      const indice = schede.indexOf(document.activeElement);
+      if (indice < 0) return;
+      const passo = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+      let prossima = null;
+      if (passo) prossima = schede[(indice + passo + schede.length) % schede.length];
+      else if (event.key === 'Home') prossima = schede[0];
+      else if (event.key === 'End') prossima = schede.at(-1);
+      if (!prossima) return;
+      event.preventDefault();
+      const id = prossima.dataset.pickerSource;
+      scegliFonte(id);
+      // renderFonti() ha appena rifatto i bottoni: il fuoco va su quello NUOVO, non sul morto.
+      fonti.querySelector(`[data-picker-source="${id}"]`)?.focus();
+    });
 
     /**
      * La scheda «Locali»: cosa c'è sul disco, e perché non si può ancora
@@ -5412,9 +5505,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * lasciarlo scoprire a metà di una risposta.
      */
     function renderListaLocali() {
+      /*
+       * ⛔ Trovato guardando BC-12 dal vivo, e vero anche PRIMA: questa funzione tornava senza
+       *   toccare il piede, così la riga sotto l'elenco continuava a raccontare la scheda che
+       *   avevi lasciato — «71 modelli · OpenAI» sopra due modelli locali. Prima diceva
+       *   «OpenRouter» e passava inosservato; con le schede per fornitore nomina un fornitore
+       *   sbagliato, che è la stessa bugia ma leggibile. Il piede parla della scheda APERTA.
+       */
+      metaSpan.textContent = modelliLocali ? `${modelliLocali.length} modelli · su questo computer` : 'Modelli installati';
       const pezzi = [];
       pezzi.push(textElement('p', 'model-picker-source-note', 'Girano su questo computer, senza rete e senza costo. Si accendono da soli alla prima richiesta.'));
-      if (!modelliLocali) {
+      if (erroreLocali) {
+        // ⛔ «non ho potuto leggere» non è «non ce n'è»: la prima si riprova, la seconda no.
+        pezzi.push(textElement('p', 'board-empty', `Non riesco a leggere i modelli installati: ${erroreLocali}`));
+      } else if (!modelliLocali) {
         pezzi.push(textElement('p', 'board-empty', 'Leggo i modelli installati…'));
       } else if (modelliLocali.length === 0) {
         pezzi.push(textElement('p', 'board-empty', 'Nessun modello installato. Si aggiungono dal Laboratorio modelli.'));
@@ -5502,23 +5606,139 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       listEl.replaceChildren(...pezzi);
     }
 
+    /**
+     * Una riga di modello, uguale in tutte le schede che parlano con la rete.
+     *
+     * ⛔ Prima viveva DENTRO il ciclo dei gruppi di OpenRouter. Le schede dei fornitori diretti non
+     *   hanno gruppi — dentro «Anthropic» tutti i modelli sono di Anthropic, e un'intestazione di
+     *   gruppo sola sopra l'elenco è rumore — quindi servivano le stesse righe fuori da quel ciclo.
+     *   Copiarle sarebbe stata la seconda funzione che fa lo stesso lavoro: il debito che questo
+     *   file ha già pagato (vedi la nota CB-16-bis su `nomeModelloUmano` poco sopra). Estratta.
+     */
+    function rigaModello(modello) {
+      const opt = document.createElement('button');
+      opt.type = 'button';
+      opt.className = 'sheet-option model-picker-option';
+      opt.setAttribute('role', 'option');
+      opt.setAttribute('aria-selected', String(modello.id === valoreScelto));
+      if (modello.id === valoreScelto) opt.classList.add('active');
+      const iconWrap = document.createElement('span');
+      iconWrap.className = 'sheet-icon';
+      iconWrap.innerHTML = icon('i-brain');
+      const textWrap = document.createElement('span');
+      const dettagli = [];
+      if (modello.alias) dettagli.push('ultima versione'); // ⭐ 27/8 — il gruppo è già quello giusto (senza ~), l'informazione "è un alias fluttuante" resta comunque visibile qui
+      if (modello.contextLength) dettagli.push(`${Math.round(modello.contextLength / 1000)}k ctx`);
+      if (modello.prezzoPrompt) dettagli.push(`$${(Number(modello.prezzoPrompt) * 1_000_000).toFixed(2)}/M in`);
+      textWrap.append(
+        textElement('strong', '', modello.nome),
+        textElement('small', '', dettagli.length ? `${modello.id} · ${dettagli.join(' · ')}` : modello.id),
+      );
+      opt.append(iconWrap, textWrap);
+      if (modello.id === valoreScelto) {
+        const checkSpan = document.createElement('span');
+        checkSpan.innerHTML = icon('i-check');
+        opt.appendChild(checkSpan);
+      }
+      opt.addEventListener('click', async () => {
+        const effortAlClick = state.effort;
+        const prossimoEffort = aggiornaModelloPrincipale
+          ? effortCompatibilePerModello(modello, effortAlClick)
+          : effortAlClick;
+        const applicaScelta = () => {
+          valoreScelto = modello.id;
+          if (aggiornaModelloPrincipale) {
+            state.model = modello.id; aggiornaPiedeSidebar(); // 05/9 Fase 2: WorkspaceFooter
+            // Se l'owner ha mosso lo slider mentre il salvataggio era in
+            // corso, la sua scelta più recente è già accodata e vince.
+            if (state.effort === effortAlClick) state.effort = prossimoEffort;
+          }
+          aggiornaTriggerLabel();
+          if (aggiornaModelloPrincipale) {
+            aggiornaPillolaModello();
+            salvaPreferenzeChatDesktop();
+          }
+          chiudi();
+          alSelezionato?.(modello.id);
+        };
+
+        // Su una sessione esistente il server è la fonte di verità. La
+        // pillola non deve promettere un modello che il registro non ha
+        // ancora accettato: mantiene il valore corrente finché la
+        // scrittura durevole non è conclusa e resta aperta su errore.
+        if (aggiornaModelloPrincipale && sincronizzaSessione && state.realSession.id) {
+          if (panel.getAttribute('aria-busy') === 'true') return;
+          panel.setAttribute('aria-busy', 'true');
+          opt.disabled = true;
+          try {
+            await sincronizzaImpostazioniSessione({
+              modello: modello.id,
+              reasoning: prossimoEffort ? { effort: prossimoEffort } : null,
+            });
+            applicaScelta();
+          } catch {
+            valoreScelto = state.model || '';
+            aggiornaTriggerLabel();
+            renderLista();
+          } finally {
+            panel.removeAttribute('aria-busy');
+            opt.disabled = false;
+          }
+          return;
+        }
+        applicaScelta();
+      });
+      return opt;
+    }
+
+    /** La riga del piede: quanti modelli e da dove. Niente numeri quando il catalogo non c'è. */
+    function etichettaPiede(catalogo) {
+      if (!catalogo) return eFonteDiretta(fonteScelta) ? 'Collegamento diretto' : '';
+      const dove = eFonteDiretta(fonteScelta)
+        ? `${PROVIDER_DIRETTI.find((p) => p.id === fonteScelta)?.etichetta || fonteScelta} · collegamento diretto`
+        : 'OpenRouter';
+      return `${catalogo.length} modelli · ${dove}`;
+    }
+
     function renderLista() {
       if (fonteScelta === 'locali') { renderListaLocali(); return; }
-      if (fonteScelta === 'diretti') metaSpan.textContent = modelliDiretti ? `${modelliDiretti.length} modelli · API dirette` : 'Cataloghi diretti';
-      else metaSpan.textContent = modelliCache ? `${modelliCache.length} modelli · OpenRouter` : '';
-      const query = searchInput.value;
-      if (!(fonteScelta === 'diretti' ? modelliDiretti : modelliCache)) {
-        listEl.replaceChildren(textElement('p', 'board-empty', fonteScelta === 'diretti' ? 'Leggo i cataloghi dei provider collegati…' : 'Carico il catalogo da OpenRouter…'));
+      const diretta = eFonteDiretta(fonteScelta);
+      const catalogo = catalogoCorrente();
+      metaSpan.textContent = etichettaPiede(catalogo);
+      if (!catalogo) {
+        /* ⛔ «Non ancora letto» e «vuoto» non sono la stessa cosa, e per un fornitore diretto ci
+           sono TRE motivi diversi per essere vuoto: `fraseVuotoDiretto` li distingue. */
+        listEl.replaceChildren(textElement('p', 'board-empty', diretta
+          ? fraseVuotoDiretto(fonteScelta, { diretti: modelliDiretti, errori: erroriDiretti })
+          : 'Carico il catalogo da OpenRouter…'));
         return;
       }
+      const query = searchInput.value;
       const filtrati = filtraModelli(query);
       if (filtrati.length === 0) {
-        listEl.replaceChildren(textElement('p', 'board-empty', query.trim() ? `Nessun modello corrisponde a "${query.trim()}".` : fonteScelta === 'diretti' ? (erroriDiretti.join(' · ') || 'Collega OpenAI, Anthropic o Gemini dal pannello Provider.') : 'Nessun modello disponibile.'));
+        listEl.replaceChildren(textElement('p', 'board-empty', query.trim()
+          ? `Nessun modello corrisponde a "${query.trim()}".`
+          : diretta
+            ? fraseVuotoDiretto(fonteScelta, { diretti: modelliDiretti, errori: erroriDiretti })
+            : 'Nessun modello disponibile.'));
         return;
       }
       const cercando = query.trim() !== '';
       const pezzi = [];
-      if (fonteScelta === 'diretti' && erroriDiretti.length) pezzi.push(textElement('p', 'model-picker-source-note', erroriDiretti.join(' · ')));
+      // Un errore che riguarda ANCHE una scheda con dei modelli dentro (catalogo parziale) si dice
+      // sopra l'elenco: chi guarda deve sapere che quello che vede potrebbe non essere tutto.
+      if (diretta && erroriDiretti[fonteScelta]) pezzi.push(textElement('p', 'model-picker-source-note', erroriDiretti[fonteScelta]));
+      /*
+       * ⭐ BC-12 — dentro la scheda di un fornitore l'elenco è PIATTO: il gruppo per fornitore è la
+       *   scheda stessa, e ripeterlo dentro sarebbe un solo accordion sopra tutto, cioè un gesto in
+       *   più per niente. Su OpenRouter i gruppi restano: lì il campo `provider` è l'AUTORE del
+       *   modello — 51 famiglie, misurate il 03/9 — che è un asse diverso dalla via d'accesso.
+       */
+      if (diretta) {
+        pezzi.push(...filtrati.map(rigaModello));
+        listEl.replaceChildren(...pezzi);
+        return;
+      }
       for (const [provider, modelli] of raggruppaPerProvider(filtrati)) {
         const aprireGruppo = cercando || gruppiAperti.has(provider);
         const header = document.createElement('button');
@@ -5541,121 +5761,123 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         });
         pezzi.push(header);
         if (!aprireGruppo) continue;
-        for (const modello of modelli) {
-          const opt = document.createElement('button');
-          opt.type = 'button';
-          opt.className = 'sheet-option model-picker-option';
-          opt.setAttribute('role', 'option');
-          opt.setAttribute('aria-selected', String(modello.id === valoreScelto));
-          if (modello.id === valoreScelto) opt.classList.add('active');
-          const iconWrap = document.createElement('span');
-          iconWrap.className = 'sheet-icon';
-          iconWrap.innerHTML = icon('i-brain');
-          const textWrap = document.createElement('span');
-          const dettagli = [];
-          if (modello.alias) dettagli.push('ultima versione'); // ⭐ 27/8 — il gruppo è già quello giusto (senza ~), l'informazione "è un alias fluttuante" resta comunque visibile qui
-          if (modello.contextLength) dettagli.push(`${Math.round(modello.contextLength / 1000)}k ctx`);
-          if (modello.prezzoPrompt) dettagli.push(`$${(Number(modello.prezzoPrompt) * 1_000_000).toFixed(2)}/M in`);
-          textWrap.append(
-            textElement('strong', '', modello.nome),
-            textElement('small', '', dettagli.length ? `${modello.id} · ${dettagli.join(' · ')}` : modello.id),
-          );
-          opt.append(iconWrap, textWrap);
-          if (modello.id === valoreScelto) {
-            const checkSpan = document.createElement('span');
-            checkSpan.innerHTML = icon('i-check');
-            opt.appendChild(checkSpan);
-          }
-          opt.addEventListener('click', async () => {
-            const effortAlClick = state.effort;
-            const prossimoEffort = aggiornaModelloPrincipale
-              ? effortCompatibilePerModello(modello, effortAlClick)
-              : effortAlClick;
-            const applicaScelta = () => {
-              valoreScelto = modello.id;
-              if (aggiornaModelloPrincipale) {
-                state.model = modello.id; aggiornaPiedeSidebar(); // 05/9 Fase 2: WorkspaceFooter
-                // Se l'owner ha mosso lo slider mentre il salvataggio era in
-                // corso, la sua scelta più recente è già accodata e vince.
-                if (state.effort === effortAlClick) state.effort = prossimoEffort;
-              }
-              aggiornaTriggerLabel();
-              if (aggiornaModelloPrincipale) {
-                aggiornaPillolaModello();
-                salvaPreferenzeChatDesktop();
-              }
-              chiudi();
-              alSelezionato?.(modello.id);
-            };
-
-            // Su una sessione esistente il server è la fonte di verità. La
-            // pillola non deve promettere un modello che il registro non ha
-            // ancora accettato: mantiene il valore corrente finché la
-            // scrittura durevole non è conclusa e resta aperta su errore.
-            if (aggiornaModelloPrincipale && sincronizzaSessione && state.realSession.id) {
-              if (panel.getAttribute('aria-busy') === 'true') return;
-              panel.setAttribute('aria-busy', 'true');
-              opt.disabled = true;
-              try {
-                await sincronizzaImpostazioniSessione({
-                  modello: modello.id,
-                  reasoning: prossimoEffort ? { effort: prossimoEffort } : null,
-                });
-                applicaScelta();
-              } catch {
-                valoreScelto = state.model || '';
-                aggiornaTriggerLabel();
-                renderLista();
-              } finally {
-                panel.removeAttribute('aria-busy');
-                opt.disabled = false;
-              }
-              return;
-            }
-            applicaScelta();
-          });
-          pezzi.push(opt);
-        }
+        pezzi.push(...modelli.map(rigaModello));
       }
       listEl.replaceChildren(...pezzi);
     }
 
+    /**
+     * I cataloghi dei tre fornitori con API diretta, uno per scheda.
+     *
+     * ⛔ Prima tornava UNA lista sola, la somma dei tre, e gli errori erano un array di frasi
+     *   appiccicate: da lì non si poteva ricavare né un conteggio per scheda né quale fornitore
+     *   avesse davvero un problema. Ora ogni fornitore ha la sua casella, e le tre risposte
+     *   possibili restano distinte fino allo schermo:
+     *     `null` = chiave non collegata · `[]` = letto, zero modelli · `[…]` = i suoi modelli.
+     * ⛔ Un fornitore che fallisce non porta giù gli altri: `Promise.all` su richieste che non
+     *   lanciano mai (il `catch` è dentro). Se cade la chiamata all'elenco dei provider, allora sì
+     *   che non si sa niente di nessuno — e si dice, senza inventare tre elenchi vuoti.
+     */
     async function caricaDiretti() {
-      erroriDiretti = [];
+      erroriDiretti = {};
       try {
         const dati = await apiGet('/api/v1/providers');
-        const disponibili = (dati.items || dati.providers || []).filter(p => ['openai','anthropic','gemini'].includes(p.id) && p.keyConfigured);
-        const results = await Promise.all(disponibili.map(async p => {
-          try { return (await apiGet(`/api/v1/providers/${p.id}/models`)).modelli; }
-          catch (e) { erroriDiretti.push(`${p.label}: ${e.message}`); return []; }
+        const elenco = dati.items || dati.providers || [];
+        const conChiave = new Set(elenco.filter((p) => p.keyConfigured).map((p) => p.id));
+        const perFornitore = {};
+        await Promise.all(PROVIDER_DIRETTI.map(async ({ id, etichetta }) => {
+          if (!conChiave.has(id)) { perFornitore[id] = null; return; } // niente chiave ≠ zero modelli
+          try { perFornitore[id] = (await apiGet(`/api/v1/providers/${id}/models`)).modelli || []; }
+          catch (e) { perFornitore[id] = []; erroriDiretti[id] = `${etichetta}: ${e.message}`; }
         }));
-        modelliDiretti = results.flat();
-      } catch (e) { erroriDiretti = [e.message]; modelliDiretti = []; }
-      renderFonti(); if (fonteScelta === 'diretti') renderLista();
+        modelliDiretti = perFornitore;
+      } catch (e) {
+        modelliDiretti = Object.fromEntries(PROVIDER_DIRETTI.map(({ id }) => [id, []]));
+        for (const { id } of PROVIDER_DIRETTI) erroriDiretti[id] = e.message;
+      }
+      renderFonti();
+      if (eFonteDiretta(fonteScelta)) renderLista();
     }
 
+    /**
+     * ⭐⭐⭐ BC-13 — i modelli che girano su QUESTO computer si leggono dal disco, non dalla rete.
+     *
+     * Estratta dal corpo di `carica()`, dove viveva DOPO l'`await` del catalogo OpenRouter. La
+     * misura e il perché stanno nel commento di `carica()`, qui sotto.
+     * ⛔ Non lancia mai: chi la chiama la fa partire e va per la sua strada.
+     */
+    function caricaLocali() {
+      return apiGet('/api/v1/local-models')
+        .then((locali) => { modelliLocali = Array.isArray(locali?.items) ? locali.items : []; erroreLocali = null; })
+        .catch((e) => { modelliLocali = null; erroreLocali = e?.message || 'lettura non riuscita'; })
+        .finally(() => { renderFonti(); if (fonteScelta === 'locali') renderListaLocali(); });
+    }
+
+    /*
+     * ⭐⭐⭐ BC-13, 11/09/2026 — I LOCALI NON ASPETTANO LA RETE.
+     *
+     * Prima le due richieste che NON parlano con OpenRouter — `/api/v1/local-models` (il disco) e
+     * `caricaDiretti()` (Anthropic/Gemini/OpenAI) — stavano DENTRO il `try`, DOPO
+     * `await apiGet('/api/v1/models')`. Misurato nella app vera (banco mio su porta privata,
+     * sonda `bc13-prima.mjs`, Playwright, catalogo intercettato):
+     *
+     *   | catalogo OpenRouter    | quando compare il conteggio della scheda «Locali»   |
+     *   | ---------------------- | -------------------------------------------------- |
+     *   | caldo                  | 123 ms                                              |
+     *   | lento (2 s simulati)   | **2.034 ms** — aspettava una chiamata che non usa   |
+     *   | IRRAGGIUNGIBILE        | **mai**, e la striscia delle schede restava VUOTA    |
+     *
+     *   Il terzo caso è il difetto vero, e non è lentezza: è ASSENZA. Si entrava nel `catch`,
+     *   `renderFonti()` non veniva mai chiamata, e i modelli installati su questo computer — che
+     *   non hanno bisogno di rete né per essere elencati né per rispondere — sparivano proprio nel
+     *   momento in cui sono l'unica cosa che funziona.
+     *
+     * ⇒ Le richieste indipendenti partono INSIEME, e la striscia si disegna subito.
+     *   Ricerca 11/09/2026: leapcell.io «Handling Multiple API Requests with Promise.all and
+     *   Promise.allSettled», julesblom.com «Running Promises In Parallel», rishibakshi «How to
+     *   Prevent the Waterfall Effect in Data Fetching» — richieste indipendenti non si mettono in
+     *   fila, e il fallimento di una non spegne i pannelli delle altre: ognuna porta il proprio
+     *   stato d'errore nel proprio riquadro.
+     * ⭐ Il concorrente di riferimento dice la stessa cosa dal lato del prodotto: in Hermes Agent
+     *   il locale è una via a sé — «Hermes con un modello locale via LM Studio, Ollama o llama.cpp
+     *   funziona completamente offline: servono la rete la ricerca web e il browser, non l'agente»
+     *   (hermes-agent.ai/blog/best-local-models-for-hermes-2026 e agentos.guide/best-local-model-
+     *   for-hermes-agent, letti l'11/09/2026). Un elenco locale che muore col catalogo di rete
+     *   rompe esattamente quella promessa.
+     * ⭐ E la stessa forma il MOBILE ce l'ha già: `AVM/mobile/src/stores/chatController.ts:5516`
+     *   chiede tutti i fornitori in parallelo, ognuno col proprio stato d'errore (letto l'11/09/2026
+     *   in sola lettura — nessuna ownership su mobile).
+     */
     async function carica({ forza = false } = {}) {
-      if (fonteScelta === 'diretti') { await caricaDiretti(); return; }
-      listEl.replaceChildren(textElement('p', 'board-empty', 'Carico il catalogo da OpenRouter…'));
+      /*
+       * ⛔ Partono per prime, SEMPRE — anche quando la scheda aperta è quella di un fornitore
+       *   diretto — perché la striscia mostra il conteggio di tutte e cinque le schede, non solo
+       *   di quella aperta.
+       */
+      const localiInVolo = caricaLocali();
+      const direttiInVolo = caricaDiretti();
+      /* La striscia esiste da SUBITO, prima di qualunque risposta: cinque schede senza conteggio
+         sono onestà, una striscia vuota si legge come una app rotta. */
+      renderFonti();
+      if (eFonteDiretta(fonteScelta)) { await direttiInVolo; return; }
+      if (fonteScelta === 'locali') await localiInVolo;
+      else listEl.replaceChildren(textElement('p', 'board-empty', 'Carico il catalogo da OpenRouter…'));
       try {
         const dati = await apiGet(`/api/v1/models${forza ? '?forza=1' : ''}`);
         modelliCache = dati.modelli;
         caricato = true;
-        /*
-         * ⛔ I locali si chiedono a parte e NON bloccano il catalogo: se la
-         * lettura del disco fallisce, la scheda «Locali» resta vuota e lo
-         * dice — ma il selettore continua a funzionare. Una lista che si
-         * spegne per un pannello secondario sarebbe un danno più grande.
-         */
-        apiGet('/api/v1/local-models')
-          .then((locali) => { modelliLocali = Array.isArray(locali?.items) ? locali.items : []; renderFonti(); if (fonteScelta === 'locali') renderListaLocali(); })
-          .catch(() => { modelliLocali = []; renderFonti(); if (fonteScelta === 'locali') renderListaLocali(); });
         metaSpan.textContent = `${dati.modelli.length} modelli${dati.daCache ? ' · da cache' : ''}`;
         renderFonti();
         renderLista();
       } catch (error) {
-        listEl.replaceChildren(textElement('p', 'board-empty', `Catalogo non disponibile: ${error.message}`));
-        metaSpan.textContent = '';
+        /* ⛔ Il guasto è di UNA scheda e va detto DENTRO quella scheda. Prima questa riga
+           sovrascriveva l'elenco qualunque fosse la scheda aperta: con «Locali» davanti agli occhi
+           si leggeva «Catalogo non disponibile», cioè un fornitore accusato al posto di un altro. */
+        renderFonti();
+        if (fonteScelta === 'openrouter') {
+          listEl.replaceChildren(textElement('p', 'board-empty', `Catalogo OpenRouter non disponibile: ${error.message}`));
+          metaSpan.textContent = '';
+        }
       }
     }
 
@@ -10560,7 +10782,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     browserUi = creaBrowser(schermo, { azioni: {
       seleziona: (id) => { state.realSession.browserAttiva = id; renderizzaBrowser(); },
       chiudi: (id) => chiudiSchedaBrowser(id),
-      apri: (url) => { void apriPaginaVivaBrowser(url); },
+      /*
+       * ⛔ 11/09/2026 — `void` INGHIOTTE. Prima questa riga era `void apriPaginaVivaBrowser(url)`:
+       *   qualunque rottura fuori dal `try` interno (un guasto nel disegno, un campo che non c'è)
+       *   diventava una promessa rifiutata che nessuno ascolta — nessuna scheda, nessun avviso,
+       *   nessun rosso in console che la persona possa vedere. È la forma esatta della
+       *   segnalazione «il campo URL non apre niente e non dice niente».
+       *   Ricerca 11/09/2026 (MDN «Window: unhandledrejection event»; blog.openreplay.com «How to
+       *   Handle Uncaught (in promise) TypeError»): una promessa fluttuante è la causa tipica di un
+       *   errore che non arriva a nessuno, e `unhandledrejection` è una rete di sicurezza, non la
+       *   gestione — la gestione si scrive dove la promessa nasce. Qui.
+       */
+      apri: (url) => {
+        apriPaginaVivaBrowser(url).catch((errore) => {
+          browserUi?.avvisa(messaggioErroreUtente(errore, 'Non sono riuscito ad aprire questo indirizzo.'));
+        });
+      },
       caricata: (id) => { const v = state.realSession.browserVive.find((x) => x.id === id); if (v && v.stato === 'caricamento') { v.stato = 'pronta'; renderizzaBrowser(); } },
       /*
        * ⛔ 07/9, O-42 — owner: su github.com la scheda «Pagina» mostrava il rettangolo dell'immagine
@@ -10583,7 +10820,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           .catch(() => { pagina.incorniciabile = false; pagina.motivoCornice = 'Non ho potuto controllare se questa pagina si lascia mostrare qui dentro.'; })
           .finally(() => renderizzaBrowser());
       },
-      rileggi: (s) => { if (s.tipo === 'viva') { void apriPaginaVivaBrowser(s.url, s.id); } else preparaCommentoNelComposer(`Rileggi la pagina ${s.url} e dimmi cosa è cambiato.`); },
+      // ⛔ stesso motivo di `apri` qui sopra: una ricarica che si rompe deve dirlo, non sparire.
+      rileggi: (s) => {
+        if (s.tipo === 'viva') {
+          apriPaginaVivaBrowser(s.url, s.id).catch((errore) => {
+            browserUi?.avvisa(messaggioErroreUtente(errore, 'Non sono riuscito a ricaricare questa pagina.'));
+          });
+        } else preparaCommentoNelComposer(`Rileggi la pagina ${s.url} e dimmi cosa è cambiato.`);
+      },
       annota: (s, attivo) => {
         if (typeof attivo === 'boolean') { state.realSession.browserAnnotaAttivo = attivo; renderizzaBrowser(); return; }
         preparaCommentoNelComposer(`Riguardo alla pagina ${s.url}: `);
@@ -11891,8 +12135,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *        `mobile/src/stores/settings.ts:824-829` «the complex renderer ships ON by default»).
      *   ⛔ Chi non lo vuole lo spegne da Aspetto e il timbro rende la scelta definitiva; e per
      *     tornare indietro basta questa riga.
+     *
+     * ⛔⛔⛔ 11/09, SERA — SPENTO DI SERIE, per decisione dell'owner e con un motore nuovo.
+     *   Alle 17 l'owner l'aveva abolito del tutto dopo quattro miei tentativi falliti; alle 19 ha
+     *   consegnato il SUO pacchetto (renderer Canvas a 14 scene, `src/motion/`) e in plan mode ha
+     *   deciso: «spento finché non lo accendi», con la sezione «Sfondo» delle Impostazioni
+     *   VISIBILE, così chi lo vuole lo trova. Nessuno dei concorrenti spedisce uno sfondo animato
+     *   acceso (Hermes: otto skin statiche, letto nel suo codice l'11/09). Chi l'aveva già acceso
+     *   con timbro (`backgroundMotionVersione: 2`) lo tiene: questa riga è solo il valore di chi
+     *   non ha mai scelto.
      */
-    backgroundMotion: true, interfaceMotion: true, motionMode: 'adaptive',
+    backgroundMotion: false, interfaceMotion: true, motionMode: 'adaptive',
     motionQuality: 'balanced', motionSpeed: 100, motionIntensity: 20,
     motionGlow: 10, motionDensity: 100, motionDepth: 92, motionTrails: 50,
     motionContrast: 80, motionParallax: 20, pauseWhenHidden: true,
@@ -15184,6 +15437,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         syncRunComposerState();
       }
     }
+    /*
+     * ⛔⛔⛔ BC-18, 11/09 — owner con la foto: la barra mostrava la sotto-attività VIVA, annidata
+     * sotto la madre, e la colonna di destra diceva «Nessun sotto-agente in questa sessione».
+     * Stessa verità, due orologi: questo elenco si rilegge ogni 15 s, `…/children` no — e l'unico
+     * suo momento di rilettura durante una delega VIVA era il `ToolCallStart`, cioè l'istante in
+     * cui la figlia non può ancora esistere (gli argomenti della chiamata arrivano DOPO, a pezzi:
+     * misurato sul disco della sessione dell'owner, `_sequenza 33590` e poi 400+ `ToolCallArgs`).
+     * ⇒ Nessun canale nuovo e nessun timer nuovo: lo snapshot che tiene viva la barra fa anche da
+     *   sveglia alla scheda, e solo quando le due viste NON sono d'accordo. La decisione è pura e
+     *   provata a parte (`components/inspector.js`, `schedaAgentiDaRileggere`); qui resta il filo.
+     * ⛔ Stessa forma della riconciliazione O-48 qui sopra: lo stato lo dice il server, e lo dice
+     *   a ogni giro dell'elenco che passa già di qui.
+     */
+    if (schedaAgentiDaRileggere({ elenco, sessioneCorrente: state.realSession.id, figli: state.realSession.figli })) {
+      void caricaFigliSessione();
+    }
     state.sessionSelection.available = new Map(elenco.map((sessione) => [sessione.sessionId, sessione]));
     void aggiornaContatoriLuoghi(elenco.length); // 05/9 Fase 2: NavItem
     for (const id of [...state.sessionSelection.selected]) {
@@ -15488,6 +15757,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       typeaheadTimer: null,
       collapsed: false,
       creatingFolder: false,
+      /* BC-14: l'ultima decisione di `statoAvvioSessione`, così il submit non la ricalcola a modo
+         suo — due copie della stessa regola sono esattamente il difetto che stiamo togliendo. */
+      puoAvviare: false,
+      rimedioSu: 'cartella',
       /* ⛔ La cartella del tasto destro: nome sì, percorso no — e non è una mancanza, è il patto. */
       launch,
     };
@@ -15661,15 +15934,30 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     permissionGrid.className = 'workspace-chooser-permissions';
     // ⛔ 07/9 — era una terza mappa, e diceva «Scrive qui»/«Accesso completo» dove l'intro diceva
     //    «Scrive nel progetto»/«Accesso pieno»: stessa politica, tre nomi. Ora uno solo.
-    const permissionCopy = Object.fromEntries(POLITICHE.map((p) => [p.valore, p.nome]));
+    /*
+     * ⛔⛔ BC-14, 11/09/2026 — IL NOME TECNICO ERA IL TITOLO, E IL NOME UMANO LA DIDASCALIA.
+     *
+     * A schermo si leggeva `<strong>Read only</strong><small>Solo lettura</small>`: il valore
+     * grezzo del kernel, in inglese, in grassetto, proprio dove si decide quanta libertà dare
+     * all'agente. Che fosse davvero così lo prova la segnalazione stessa dell'owner, che quei tasti
+     * li ha chiamati «read only, workspace write e on request» — li ha nominati come glieli
+     * mostravamo noi. La regola del 04/9 («mai nomi tecnici a schermo») era violata qui da sempre.
+     *
+     * ⇒ Titolo = nome umano; didascalia = la nota di rischio, che è la cosa che serve mentre
+     *   scegli; la descrizione intera resta nel suggerimento del puntatore per chi la vuole.
+     * ⛔ Il valore che viaggia verso il kernel NON si tocca: resta `Read only` e compagni, byte per
+     *   byte, in `dataset.workspacePermission` e in `local.permission` (è il contratto, e
+     *   `politiche.js` lo dice a chiare lettere).
+     */
     const permissionButtons = [];
-    for (const permission of ['Read only', 'Workspace write', 'On request', 'Full access']) {
+    for (const permission of valoriPolitiche()) {
       const button = document.createElement('button');
       button.type = 'button';
       button.dataset.workspacePermission = permission;
       button.className = 'workspace-chooser-permission';
       button.setAttribute('aria-pressed', String(permission === local.permission));
-      button.innerHTML = `${icon('i-shield')}<span><strong>${permission}</strong><small>${permissionCopy[permission]}</small></span>`;
+      button.title = descrizionePolitica(permission);
+      button.innerHTML = `${icon('i-shield')}<span><strong>${nomeUmanoPolitica(permission)}</strong><small>${notaPolitica(permission)}</small></span>`;
       button.addEventListener('click', () => {
         local.permission = permission;
         permissionButtons.forEach((item) => item.setAttribute('aria-pressed', String(item === button)));
@@ -15681,6 +15969,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const policyGate = document.createElement('p');
     policyGate.className = 'workspace-chooser-policy-gate';
     policyGate.dataset.workspacePolicyGate = 'true';
+    // Il testo cambia da sotto le dita di chi sceglie: chi non guarda lo schermo deve sentirlo.
+    policyGate.setAttribute('role', 'status');
+    // Stessa misura e stesso debito della nota nel piede: 4,21:1 a 9 px nel tema chiaro non basta
+    // per la frase che spiega un blocco. Vedi il commento esteso su `footerNote`.
+    policyGate.style.color = 'var(--text-2)';
     permissionSection.append(permissionGrid, policyGate);
     right.append(rightHead, modelSection, reasoningSection, plannerSection, permissionSection);
 
@@ -15700,7 +15993,37 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     submit.id = 'workspaceChooserSubmit';
     submit.className = 'primary-btn compact';
     submit.textContent = 'Scegli una cartella';
-    footer.append(cancel, submit);
+    /*
+     * ⛔⛔⛔ BC-14 — LA RAGIONE VERA ERA FUORI DALLO SCHERMO, e il bottone ne diceva una falsa.
+     *
+     * Misurato l'11/09 sul banco (1440×900 e 1024×800): la frase che spiega davvero il blocco vive
+     * in fondo alla colonna destra, che SCORRE, e a quelle due misure sta sotto il bordo —
+     * `dentroLaColonna: false`. Quindi l'unica spiegazione leggibile era quella scritta sul
+     * bottone, che diceva «Scegli una cartella» con la cartella già scelta e mostrata due dita
+     * sopra. Non è una svista di parole: è che la ragione stava in un posto che non si vede.
+     * ⇒ La ragione si ripete QUI, nel piede, accanto al bottone — dove l'occhio è già andato
+     *   perché è lì che si preme. `talos-grow` è l'utility che il sistema di design usa già in
+     *   ogni piede di finestra per la stessa cosa (`index.css`: `flex:1 1 auto; min-width:0`).
+     */
+    const footerNote = document.createElement('p');
+    footerNote.className = 'workspace-chooser-help talos-grow';
+    footerNote.dataset.workspaceSubmitNote = 'true';
+    footerNote.setAttribute('role', 'status');
+    footerNote.style.marginTop = '0'; // in una riga centrata il margine di stacco verticale storce
+    /*
+     * ⛔ MISURATO, non scelto a occhio: `.workspace-chooser-help` scrive in `--muted` a 9 px, e sul
+     *   fondo del piede quel contrasto è 4,21:1 nel tema chiaro — SOTTO il 4,5:1 che la WCAG 1.4.3
+     *   chiede per il testo piccolo (nel tema scuro è 6,39, quindi il difetto è solo di uno dei
+     *   due: un'altra ragione per guardarli sempre tutti e due). Qui non è una didascalia
+     *   qualunque: è la ragione per cui il bottone non parte — se non si legge, la cura è finta.
+     *   `--text-2` misura 9,23 nel chiaro e 12,83 nello scuro: stesso linguaggio (un token del
+     *   tema, non un colore inventato), leggibile in tutti e due.
+     * ⛔ DEBITO DICHIARATO per la corsia degli stili: il difetto vero è `--muted` a 9 px nel tema
+     *   chiaro, e riguarda TUTTE le `.workspace-chooser-help` e `.workspace-chooser-policy-gate` di
+     *   questa modale, non solo questa riga. Si cura in `foglio-monolite.css`, non qui.
+     */
+    footerNote.style.color = 'var(--text-2)';
+    footer.append(footerNote, cancel, submit);
     form.append(shortcuts, columns, footer);
 
     function pathKey(path) {
@@ -15763,32 +16086,39 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        */
       if (local.selected?.path) void chiediRitrattoCartella(local.selected.path);
 
-      const allowlisted = Boolean(local.selected?.projectId);
-      const ready = !local.busy && Boolean(local.selected) && (allowlisted || local.permission === 'Full access');
-      submit.disabled = !ready;
       /*
-       * ⛔ 10/09 — `folderName(path)` non regge la cartella arrivata dal tasto destro: quel
-       *   percorso non esiste nel browser per costruzione. Il nome sì, e basta a chi legge.
+       * ⭐⭐⭐ BC-14 — la decisione sta tutta in `components/avvio-sessione.js`, che è una funzione
+       *   pura e quindi si può provare nei due versi (`tests/unit/avvio-sessione.test.mjs`). Qui
+       *   resta solo il montaggio: una decisione sola, e tre posti che la ripetono d'accordo fra
+       *   loro — il bottone, la nota nel piede, la frase sotto i permessi. Prima erano due catene
+       *   di `if` scritte a mano, e si contraddicevano.
+       *
+       * ⛔ `disabilitato` NON è più `!puoAvviare`: un bottone spento non dice mai perché lo è
+       *   (Smashing Magazine e Adam Silver, letti l'11/09 — vedi la testata del modulo). Resta
+       *   spento solo mentre una cartella si apre. Negli altri casi si preme e PORTA alla cosa che
+       *   manca, invece di lasciare indovinare.
        */
-      const nomeScelto = local.selected?.path ? folderName(local.selected.path) : (local.selected?.name ?? '');
-      submit.textContent = local.busy ? 'Apro la cartella…' : ready ? `Continua nella chat — ${nomeScelto}` : 'Scegli una cartella';
-      if (local.busy) policyGate.textContent = 'Attendi che la cartella scelta sia pronta.';
-      else if (!local.selected) policyGate.textContent = 'Scegli una cartella per continuare.';
-      else if (allowlisted) policyGate.textContent = `${local.permission}: TALOS resterà nella cartella scelta.`;
+      const decisione = statoAvvioSessione({ cartella: local.selected, permesso: local.permission, occupato: local.busy });
+      submit.disabled = decisione.disabilitato;
+      submit.textContent = decisione.etichetta;
       /*
-       * ⛔⛔ 10/09 — LA CARTELLA DEL TASTO DESTRO NON È UN'ESTRANEA, e il testo non deve trattarla
-       *   come tale. Il permesso serve lo stesso — il server lo esige anche qui, e questa modale
-       *   non promuove niente di nascosto (consegna del 01/09: «la selezione non promuove
-       *   silenziosamente i permessi a Full access») — ma chi legge deve capire PERCHÉ glielo si
-       *   chiede per una cartella che ha appena indicato lui in Esplora file.
+       * ⛔ QUI CI AVEVO MESSO `aria-disabled="true"` quando non si può ancora partire, e la prova
+       *   al verso contrario l'ha bocciato subito: Playwright si è rifiutato di cliccare il
+       *   bottone — «element is not enabled» — perché `aria-disabled` lo dichiara NON DISPONIBILE
+       *   nell'albero di accessibilità. Ma questo bottone è disponibile: premendolo porta alla
+       *   cosa che manca. Annunciarlo come spento sarebbe la terza bugia dopo le due che stiamo
+       *   togliendo, e rimetterebbe chi non vede nella condizione di prima (un controllo annunciato
+       *   morto, e nessuna ragione).
+       * ⇒ Niente stato «spento»: il bottone è vivo, e il perché non parte sta nella nota che
+       *   `aria-describedby` gli lega addosso — così lo screen reader la legge insieme al nome.
        */
-      else if (local.selected?.launchId) {
-        policyGate.textContent = local.permission === 'Full access'
-          ? `${nomeScelto} arriva da Esplora file. TALOS resterà esattamente in questa cartella.`
-          : `${nomeScelto} è fuori dai progetti già autorizzati: per usarla scegli Full access. TALOS resterà comunque solo qui dentro.`;
-      }
-      else if (local.permission === 'Full access') policyGate.textContent = 'Full access consente di usare questa cartella esterna. La scelta sarà verificata di nuovo all’avvio.';
-      else policyGate.textContent = 'Questa cartella è esterna ai progetti già autorizzati. Se vuoi usarla, scegli Full access.';
+      submit.removeAttribute('aria-disabled');
+      submit.setAttribute('aria-describedby', 'workspaceChooserSubmitNote');
+      footerNote.id = 'workspaceChooserSubmitNote';
+      footerNote.textContent = decisione.motivo;
+      policyGate.textContent = decisione.motivo;
+      local.rimedioSu = decisione.rimedioSu;
+      local.puoAvviare = decisione.puoAvviare;
       const toolsDisabled = local.busy || local.creatingFolder || !local.current;
       newFolderButton.disabled = toolsDisabled;
       refreshFoldersButton.disabled = toolsDisabled;
@@ -16081,8 +16411,25 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       event.preventDefault();
       if (local.busy) return;
       const allowlisted = Boolean(local.selected?.projectId);
-      if (!local.selected || (!allowlisted && local.permission !== 'Full access')) {
-        permissionSection.scrollIntoView({ block: 'nearest' });
+      /*
+       * ⭐⭐⭐ BC-14 — QUESTO RAMO ERA CODICE MORTO, e conteneva già la cura giusta.
+       *
+       * Lo `scrollIntoView` sui permessi c'era da prima, ma il bottone era `disabled` proprio nei
+       * casi in cui serviva: `submit` non partiva mai, e quindi non ha MAI portato nessuno alla
+       * cosa che mancava. È la lezione «funzione coi test e nessun chiamante», in piccolo.
+       * ⇒ Ora il bottone si preme sempre (tranne mentre una cartella si apre) e questo ramo è la
+       *   strada vera: porta in vista la cosa che manca E ci mette il fuoco sopra, così il gesto
+       *   successivo la risolve. ⛔ Non la risolve LUI: non si alza l'autonomia al posto di chi
+       *   decide (consegna del 01/09, «la selezione non promuove silenziosamente i permessi»).
+       */
+      if (!local.puoAvviare) {
+        if (local.rimedioSu === 'permesso') {
+          permissionSection.scrollIntoView({ block: 'nearest' });
+          permissionButtons.find((b) => b.dataset.workspacePermission === 'Full access')?.focus();
+        } else {
+          treeFrame.scrollIntoView({ block: 'nearest' });
+          focusRow(local.focusedPath || local.current?.path);
+        }
         return;
       }
       const model = modelPicker.getValore();
@@ -17795,6 +18142,91 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const menu = $('#menuAllega');
     if (menu && !menu.hidden) { chiudiMenuAllega(); return; }
     apriMenuAllega($('#capabilityBtn'));
+  });
+
+  /* ══════════════════ BC-15 — «MIGLIORA IL PROMPT», IL PANNELLO DEL COMPOSER ══════════════════
+   *
+   * Il componente (`components/migliora-prompt.js`) e la rotta
+   * (`POST /api/v1/sessions/:id/migliora-prompt`) esistevano già e non erano raggiungibili da
+   * nessun gesto: nel composer non c'era nessun pulsante. Qui il pulsante trova la sua funzione.
+   *
+   * ⛔ Il modello NON si sceglie: è quello della sessione, e il pannello lo DICHIARA (owner 11/09,
+   *   «mai uno a pagamento scelto da te»). Il componente riceve il nome al montaggio, quindi il
+   *   pannello si RIFÀ quando l'owner cambia modello dalla barra — costa un disegno a ogni
+   *   apertura ed è l'unico modo per non mentire sul nome senza mettere le mani in un file che
+   *   oggi non è della mia corsia.
+   *
+   * ⛔ Il pulsante NON si spegne quando manca la sessione. È la stessa scelta presa in questa
+   *   corsia per la modale «Nuova sessione» (BC-14, 11/09): un bottone disabilitato non prende il
+   *   fuoco, non dice mai perché, e l'istruzione che vive solo nel suo stato non è mai stata
+   *   dichiarata (WCAG 3.3.1; Adam Silver «The problem with disabled buttons», Smashing Magazine
+   *   «Usability Pitfalls of Disabled Buttons»). Premendolo senza una chat avviata si riceve il
+   *   motivo, in italiano, invece del silenzio.
+   */
+  let miglioraPrompt = null;
+  let miglioraPromptModello = null;
+
+  function pannelloMiglioraPrompt() {
+    const modello = state.model || '';
+    if (miglioraPrompt && miglioraPromptModello === modello) return miglioraPrompt;
+    miglioraPrompt?.distruggi();
+    miglioraPromptModello = modello;
+    miglioraPrompt = montaMiglioraPrompt({
+      modello,
+      /* ⛔ letto ADESSO, non all'apertura: fra l'apertura e il clic su «Riscrivi» si continua a scrivere. */
+      leggiPrompt: () => $('#composerInput')?.value || '',
+      chiedi: ({ prompt, profondita }) => {
+        const sessione = state.realSession.id;
+        if (!sessione) {
+          /* La rotta è PER SESSIONE: senza, il server risponderebbe 404 — onesto e inutile.
+             Meglio la frase che dice il passo successivo, nel posto dove si sta già guardando. */
+          const e = new Error('Avvia la chat: la riscrittura usa il modello di questa conversazione.');
+          e.code = 'QUERY_INVALID';
+          return Promise.reject(e);
+        }
+        return apiPost(`/api/v1/sessions/${encodeURIComponent(sessione)}/migliora-prompt`, { prompt, profondita });
+      },
+      applica: ({ modo, testo }) => {
+        const input = $('#composerInput');
+        if (!input) return;
+        input.value = modo === 'sostituisci' ? testo : `${input.value.trimEnd()}
+
+${testo}`;
+        /* ⛔ SERVE: da questo evento il composer si ridimensiona, conta i token e accende «Invia».
+           Scrivere `value` e basta lascia una barra che non sa di avere un messaggio. */
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.focus();
+      },
+      onChiudi: () => { $('#miglioraPromptBtn')?.setAttribute('aria-expanded', 'false'); },
+    });
+    const el = miglioraPrompt.elemento;
+    el.id = 'miglioraPromptPannello'; // è il bersaglio di aria-controls del pulsante
+    /* ⛔ Lo stile sta qui e non in un foglio: `src/styles/**` è di un'altra corsia oggi (debito
+       dichiarato). Solo token `--talos-*`, così il pannello segue il tema chiaro e scuro.
+       `.talos-composer` è già `position:relative`: il pannello sale SOPRA la barra, dove l'occhio
+       è già, invece di coprire il messaggio che si sta guardando. */
+    el.style.position = 'absolute';
+    el.style.left = '0';
+    el.style.bottom = 'calc(100% + var(--talos-space-sm))';
+    el.style.zIndex = 'var(--talos-z-menu)';
+    el.style.boxShadow = 'var(--talos-shadow-floating)';
+    $('#composerForm')?.append(el);
+    return miglioraPrompt;
+  }
+
+  $('#miglioraPromptBtn')?.addEventListener('click', (evento) => {
+    evento.stopPropagation();
+    const bottone = $('#miglioraPromptBtn');
+    const pannello = pannelloMiglioraPrompt();
+    if (bottone.getAttribute('aria-expanded') === 'true') { pannello.chiudi(); return; }
+    bottone.setAttribute('aria-expanded', 'true');
+    pannello.apri();
+  });
+  /* Un clic fuori chiude, come per il selettore dei modelli e il menu del «+». */
+  ROOT().addEventListener('click', (evento) => {
+    if (!miglioraPrompt || miglioraPrompt.elemento.hidden) return;
+    if (evento.target.closest?.('#miglioraPromptPannello, #miglioraPromptBtn')) return;
+    miglioraPrompt.chiudi();
   });
   collegaTerminaleInBasso();
 

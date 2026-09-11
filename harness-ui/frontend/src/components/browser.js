@@ -681,6 +681,17 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
       stato = { ...stato, ...nuovo }; if (stato.annotaAttivo && stato.annotazioni && Object.values(stato.annotazioni).flat().length >= MASSIMO_ANNOTAZIONI) stato.annotaAttivo = false; renderizza();
     },
     fuocoSullaScheda() { el.schede?.querySelector('[aria-selected="true"]')?.focus(); },
+    /*
+     * ⛔ 11/09/2026 — L'APERTURA VIVE FUORI DA QUI, E PUÒ FALLIRE FUORI DA QUI.
+     *
+     * Chi apre un indirizzo è `azioni.apri`, che sta in `legacy/app.js` e fa una catena
+     * asincrona (incorniciabile → cornice / proxy / browser pilotato). Se quella catena si rompe
+     * PRIMA che una scheda esista, qui dentro non c'è niente da disegnare e la riga d'avviso —
+     * l'unico posto dove questa schermata parla — resterebbe vuota: campo che accetta, schermo
+     * che tace. Con questo, chi apre può dire perché non è nata nessuna scheda.
+     * ⛔ Non è un `toast`: l'avviso appartiene a QUESTA schermata e resta finché serve.
+     */
+    avvisa(testo) { mostraAvviso(testo); },
     get stato() { return stato; },
   };
 }
