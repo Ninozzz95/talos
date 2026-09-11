@@ -10,10 +10,19 @@ const valido = n => typeof n === 'number' && Number.isFinite(n) && n >= 0;
 const totale = s => { const u = usageDellaSessione(s); return valido(u?.prompt_tokens) && valido(u?.completion_tokens) ? u.prompt_tokens + u.completion_tokens : null; };
 const compatto = n => !valido(n) ? '—' : n >= 1000 ? NUMERO.format(n / 1000) + 'k' : NUMERO.format(n);
 const MOTIVI = {'fine-lavoro':'fine lavoro','giri-finiti':'giri finiti',fermata:'fermata da te',errore:'errore'};
-const STATO = {vivo:['In corso','accent'],attesa:['Aspetta te','warning'],successo:['Conclusa','success'],errore:['Errore','danger'],interrotto:['Interrotta',null],ignoto:['Conclusa · esito non registrato',null]};
+/*
+ * ⛔ 11/09 sera, owner sulla foto del Board: «undefined is not iterable». `statoSessione` (session-item.js)
+ *   restituisce anche `fermata` (errore + motivoChiusura 'fermata', dal 06/9) e `pendente` (la «Nuova»
+ *   in attesa del primo messaggio): due classi che questa mappa non aveva, e la destrutturazione di
+ *   `undefined` faceva cadere TUTTA la pagina invece di una riga. La mappa ora copre ogni classe della
+ *   sorgente, e un ripiego dichiarato tiene in piedi la pagina se domani ne nasce un'altra: la riga dice
+ *   che non la conosce, la pagina resta. Il test `board-stati-completi` prova il verso contrario.
+ */
+const STATO = {vivo:['In corso','accent'],attesa:['Aspetta te','warning'],successo:['Conclusa','success'],errore:['Errore','danger'],fermata:['Fermata da te',null],interrotto:['Interrotta',null],pendente:['Nuova',null],ignoto:['Conclusa · esito non registrato',null]};
+export const CLASSI_STATO_BOARD = Object.keys(STATO);
 export function statoBoard(sessione) {
   const chiave = statoSessione(sessione).classe;
-  const [testo,tono] = STATO[chiave];
+  const [testo,tono] = STATO[chiave] ?? ['Stato non riconosciuto',null];
   return {chiave,testo,tono};
 }
 export function tempoBoard(iso, adesso = new Date()) {

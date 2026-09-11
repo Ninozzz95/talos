@@ -11094,14 +11094,8 @@ body:is(.background-motion-active, .background-motion-paused):not(.background-mo
 }
 body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #conversation {
   background-color: var(--talos-background);
-}
-body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) .talos-conversation:has(#conversation > *) {
-  background-image:
-    radial-gradient(
-      ellipse 96% 86% at 50% 38%,
-      var(--talos-background) 0%,
-      var(--talos-background) 62%,
-      transparent 100%);
+  background-clip: content-box;
+  box-shadow: 0 0 22px 0 var(--talos-background);
 }
 body.background-motion-paused #schermoChat::before,
 body.background-motion-paused #schermoChat::after {
