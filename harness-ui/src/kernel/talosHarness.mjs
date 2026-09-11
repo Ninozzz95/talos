@@ -559,11 +559,73 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
         }
     }
 
+    /*
+     * ⛔⛔⛔ CHI È STATO ANNUNCIATO DEVE ESSERE CHIUSO — 11/09/2026, owner:
+     * «se la UI è avvisata di N attrezzi partiti, deve vedere finire N».
+     *
+     * `tipo:'tool-inizio'` esce appena una chiamata COMINCIA e diventa un
+     * `ToolCallStart` sullo schermo: un indicatore che gira. Ma due strade
+     * portano una chiamata già annunciata a non avere MAI un esito —
+     * MISURATO, non dedotto (`tests/kernel-loop-locale-e-stop.test.mjs`):
+     *   · la valanga ⇒ **4 annunciati, 2 sopravvissuti, 2 indicatori che
+     *     girano per sempre**. Il disallineamento è STRUTTURALE, non una
+     *     svista: la terza copia identica si riconosce solo quando è
+     *     COMPLETA, e a quel punto è già stata annunciata. Nessun riordino
+     *     delle righe qui sotto lo chiude — bisogna DIRLO a chi guarda;
+     *   · lo stop a metà risposta ⇒ **2 annunciati, 2 orfani**: è lo
+     *     spinner permanente dopo un'interruzione.
+     *
+     * ⇒ Un terzo tipo di delta, `tool-annullato`, per ogni chiamata
+     * annunciata che non arriverà mai a un esito. ⛔ E PORTA IL MOTIVO: la
+     * lezione più cara di questo progetto è che una risposta sbagliata data
+     * con sicurezza è peggio di un «non lo so», e un indicatore che sparisce
+     * in silenzio è la versione visiva dello stesso difetto.
+     *
+     * ⭐ Ricerca 11/09/2026 — e NON è un guasto cosmetico:
+     *   · AG-UI, spec primaria via ctx7 (`/ag-ui-protocol/ag-ui`,
+     *     `docs/concepts/messages.mdx` e `docs/sdk/ruby/core/events.mdx`):
+     *     `ToolCallResultEvent` vuole `messageId` + `toolCallId` + `content`,
+     *     e `role` è OPZIONALE. È la forma che `eventoPerEsitoTool` produce
+     *     già ⇒ si chiude un indicatore con un evento che il frontend
+     *     DISEGNA GIÀ, senza inventarne uno nuovo;
+     *   · ag-ui-protocol/ag-ui #1168 e il CHANGELOG di adk-middleware
+     *     nominano il nostro identico guasto — «an orphaned
+     *     pending_tool_calls entry» — e la cura: «a fresh message ID is used
+     *     so the client creates a proper standalone ToolMessage and **closes
+     *     the spinner correctly**»;
+     *   · openclaw #42112 — «persisted orphaned toolCall **poisons session
+     *     replay** and makes chat agent stop responding». Da noi
+     *     `session-registry.mjs:405` PERSISTE questi eventi: un indicatore
+     *     mai chiuso non resta sullo schermo, resta sul DISCO;
+     *   · NousResearch/hermes-agent #34610 dice perché non basta scriverlo:
+     *     lì `hard_stop_after.tool_repetition` era nella configurazione e
+     *     «the runtime had no implementation — silently parsed and
+     *     discarded». Un limite che nessuno misura non esiste ⇒ la prova
+     *     CONTA gli annunciati e i chiusi, non guarda che il codice ci sia.
+     *
+     * ⛔ Additivo per costruzione: chi non passa `onDelta` non riceve niente,
+     * e chi lo passa riceve un `tipo` in più — `agent-service.mjs` lo traduce
+     * in un `toolCallResult`, quindi NESSUNA riga di frontend cambia.
+     */
+    const annullaAnnunciate = (daIndice, motivo) => {
+        for (let j = daIndice; j < toolCalls.length; j += 1) {
+            if (!toolCalls[j]) continue
+            onDelta?.({ tipo: 'tool-annullato', indice: j, toolCallId: toolCalls[j].id, nome: toolCalls[j].function.name, motivo })
+        }
+    }
+
     try {
     for (;;) {
         const letto = abortito ? await Promise.race([lettore.read(), abortito]) : await lettore.read()
         if (letto === SENTINELLA_FERMATO) {
             await lettore.cancel().catch(() => { /* la connessione se ne va comunque: un cancel che lancia non deve coprire il motivo vero, che è lo stop */ })
+            /*
+             * ⛔ Prima di lanciare: nessuna chiamata annunciata resta a girare.
+             * Questo giro non arriverà MAI al ciclo degli attrezzi — l'errore
+             * qui sotto lo interrompe — quindi l'esito non può venire da lì:
+             * o lo diciamo adesso, o non lo dice nessuno.
+             */
+            annullaAnnunciate(0, '⛔ Fermato su richiesta: non riesco a eseguirlo, la sessione e stata interrotta prima. Questo attrezzo non e stato eseguito.')
             const fermata = new Error('⛔ fermato su richiesta mentre il modello stava rispondendo.')
             fermata.fermatoSuRichiesta = true
             throw fermata
@@ -653,7 +715,36 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
      * `tool_result` avvelena la chat per sempre (già imparato), e le copie
      * scartate non avranno mai un esito.
      */
-    if (ripetizione) toolCalls.length = ripetizione.daScartare
+    if (ripetizione) {
+        /*
+         * ⛔ E le copie scartate erano GIÀ STATE ANNUNCIATE: `tool-inizio` esce
+         * quando la chiamata comincia, la ripetizione si riconosce solo quando la
+         * terza copia è completa. Senza questa riga restano **2 indicatori che
+         * girano per sempre** (misurato: 4 annunciati, 2 sopravvissuti).
+         * ⛔ E non spariscono in silenzio: il motivo dice che cosa è successo,
+         * perché «scomparso» e «scartato perché era la terza copia identica»
+         * sono due storie diverse, e solo una delle due è vera.
+         *
+         * ⛔⛔ E LA FRASE NON È LIBERA: `subagent-orchestrator.mjs` classifica
+         * OGNI `ToolCallResult` come riuscito o fallito leggendone il testo, e
+         * `verificabile` si accende su `toolCallsOk > 0`. MISURATO l'11/09 con
+         * `analizzaEvidenzaDelega`: con una frase neutra una delega che ha
+         * prodotto SOLO annulli usciva `toolCallsOk: 2, verificabile: true` —
+         * un lavoro che non ha fatto niente dichiarato verificato. Le parole
+         * «non riesco» la fanno cadere fra i falliti, dove deve stare, e sono
+         * vere: dopo lo stop non possiamo eseguirlo, e una terza copia identica
+         * non si distingue da un ciclo. ⛔ Reggersi sul TESTO resta fragile: la
+         * cura solida è in `subagent-orchestrator.mjs` (non tocca a questa
+         * lane), ed è scritta nel rapporto.
+         */
+        annullaAnnunciate(
+            ripetizione.daScartare,
+            `⛔ Scartato: il modello ha chiesto ${ripetizione.viste} volte di fila la stessa identica cosa`
+            + ` ("${ripetizione.nome}" con gli stessi argomenti) e continuava — non riesco a distinguerlo da un ciclo.`
+            + ' Questo attrezzo non e stato eseguito.',
+        )
+        toolCalls.length = ripetizione.daScartare
+    }
     /*
      * ⛔ Il fotogramma «tutto in un colpo» di llama-server (vedi il ramo `if
      * (!delta)` sopra): nessun delta è mai arrivato, quindi `content`,
