@@ -960,6 +960,11 @@ export function creaResearchOrchestrator({
    *   cancellato, e una ripresa che lo riaprisse spenderebbe denaro su un giro che la persona ha
    *   chiuso». Qui la stessa regola si fa rispettare **prima** di spendere, non dentro il replay.
    *
+   * ⛔⛔ E la GUARDIA fra le due vie legge il GIORNALE, non il registro vivo (cura del 12/09,
+   *   dettaglio per esteso accanto alla riga): una ricerca in pausa sopravvissuta a un riavvio
+   *   torna `conclusa: true` ⇒ `interrotta: false`, e la vecchia guardia la rifiutava con
+   *   «still running» — cioè negava la ripresa proprio a chi la pausa l'aveva chiesta.
+   *
    * ⛔ Niente `cartella` fra gli argomenti: arriva da `voce.cartella`, che dopo un riavvio
    *   `ripristina()` rimette a posto dall'intestazione della sessione. Un parametro nuovo
    *   avrebbe voluto una riga in `session-registry.mjs` fuori dal perimetro di questo lotto.
@@ -980,11 +985,52 @@ export function creaResearchOrchestrator({
       return { ok: true, esito: 'That research is running again, from where it had stopped.' };
     }
 
-    if (!voce.interrotta) return { ok: false, esito: 'That research is still running: nothing to resume.' };
-
-    // Via B — il giornale. Da qui in poi la conversazione non esiste più: esiste il registro.
+    /*
+     * ⛔⛔⛔⭐⭐⭐ 12/09/2026 — IL GIORNALE SI LEGGE **PRIMA** DELLA GUARDIA, e non è un riordino
+     * di comodo: è la cura di un difetto che rifiutava esattamente il caso per cui la pausa
+     * esiste.
+     *
+     * Com'era, e cosa faceva. La guardia chiedeva `voce.interrotta`, cioè un campo del registro
+     * VIVO, e `ripristina()` lo calcola così: `interrotta: !conclusa`. Una ricerca messa in
+     * PAUSA conclude il suo giro (il punto sicuro emette `RunFinished`), quindi dopo un riavvio
+     * torna `conclusa: true` ⇒ `interrotta: false` ⇒ questa riga rispondeva
+     * **«That research is still running: nothing to resume»**. Falsa due volte: non stava
+     * girando — era ferma perché qualcuno l'aveva fermata — e il rifiuto colpiva **l'unico caso
+     * che la pausa serve a creare**.
+     *
+     * ⛔ Perché il registro vivo non può saperlo, per costruzione: `conclusa` dice «quel GIRO è
+     *   finito», non «quella RICERCA è finita». Sono due domande diverse, e la seconda ha una
+     *   risposta sola sul disco — `run_paused` nel giornale, che un riavvio non cancella. In
+     *   produzione il difetto era **mascherato**: dopo un riavvio `messaggiFinali` viene
+     *   ripristinato dal JSONL e la via A prende il comando; si vede solo quando quella manca,
+     *   cioè quando il processo è morto prima di persistere la conversazione — che è, di nuovo,
+     *   proprio il caso disperato.
+     *
+     * ⇒ Adesso lo stato lo dice il GIORNALE. Tre risposte, in quest'ordine, e ognuna per una
+     *   ragione sua:
+     *     1. giornale TERMINALE (`done`/`cancelled`/`failed`) → mai: «cancellato vuol dire
+     *        cancellato» (`run.mjs`), e riaprirlo spenderebbe denaro su un giro chiuso;
+     *     2. né in pausa secondo il giornale, né interrotta secondo il registro → sta davvero
+     *        girando, e non c'è niente da riprendere. ⛔ La seconda metà della condizione RESTA,
+     *        e deve: un processo morto a metà giro non lascia nessun evento («un evento che
+     *        nessuno è vivo per aggiungere è una bugia nel giornale»), quindi lì l'unico a
+     *        saperlo è il registro. Le due fonti non si sostituiscono, si sommano;
+     *     3. nessun giornale → la verità di prima, e nessun `run_started` inventato adesso.
+     *
+     * ⛔ `pause_requested` conta come «in pausa» quanto `paused`: se il processo è morto fra la
+     *   richiesta e il punto sicuro, la persona aveva comunque premuto Pausa — e rifiutarle la
+     *   ripresa perché il giro non ha fatto in tempo a scrivere la seconda riga sarebbe punirla
+     *   per un crash.
+     */
     const { eventi, righeSaltate } = await leggiGiornaleFn({ cartella, id });
     const giro = talosResearchReplay(eventi);
+    const inPausa = Boolean(giro) && (giro.status === 'paused' || giro.status === 'pause_requested');
+    if (giro && talosResearchIsTerminal(giro.status)) {
+      return { ok: false, esito: `That research is ${giro.status} and will not be resumed: start a new one if you need more.` };
+    }
+    if (!inPausa && !voce.interrotta) return { ok: false, esito: 'That research is still running: nothing to resume.' };
+
+    // Via B — dal giornale. Da qui in poi la conversazione non esiste più: esiste il registro.
     if (!giro) {
       /*
        * ⛔ Nessun giornale (una ricerca nata prima dell'11/09) o un giornale che non comincia con
@@ -993,9 +1039,6 @@ export function creaResearchOrchestrator({
        *   un fatto che nessuno ha osservato.
        */
       return { ok: false, esito: 'That research was interrupted by a server restart and has no journal to resume from: start a new one.' };
-    }
-    if (talosResearchIsTerminal(giro.status)) {
-      return { ok: false, esito: `That research is ${giro.status} and will not be resumed: start a new one if you need more.` };
     }
     const recuperato = talosResearchRecover(giro, clock().toISOString());
     const prossimo = talosResearchNextStep(recuperato);

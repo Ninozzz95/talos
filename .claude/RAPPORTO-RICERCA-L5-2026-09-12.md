@@ -432,16 +432,15 @@ Erano **2422** prima di questo lotto. ⛔ `npm run verify:all` **non** è stato 
    cambiarlo da qui avrebbe cambiato anche quello. La sezione non ha ancora una paginazione: se
    l'owner ne vuole una, serve un parametro di query sulla rotta (oggi `requireNoQuery` li rifiuta
    tutti) — **non fatto, non deciso**.
-6. **Trovato per strada, NON mio, non corretto — e va deciso da chi possiede `riprendi()`:** una
+6. **✅ CURATO IL 12/09 SU RICHIESTA DEL COORDINATORE — vedi §7.** Era: una
    ricerca messa in **pausa** e poi sopravvissuta a un riavvio del server viene ripristinata
    `conclusa: true` e quindi `interrotta: false`, e `riprendi()` la rifiuta con
    **«That research is still running: nothing to resume»** — frase falsa, e rifiuto sbagliato: una
    ricerca in pausa deve potersi riprendere, è l'unica ragione per cui si mette in pausa. In
    produzione il caso è **mascherato** dalla via A (dopo un riavvio `messaggiFinali` viene
    ripristinato dal JSONL, quindi si riprende la conversazione), e si scopre solo quando quella
-   manca. La guardia è `research-orchestrator.mjs` `riprendi()`, `if (!voce.interrotta)`: dovrebbe
-   guardare «il giornale dice `paused`», non «la sessione è interrotta». **Segnalato, non toccato**:
-   è oltre «una funzione mancante».
+   manca. La guardia era `if (!voce.interrotta)`; adesso legge il **giornale**, ed è provata nei
+   due versi — compreso il verso che dimostra che il test morde. **Dettaglio in §7.**
 7. **`motivoLettura` arriva dal lettore di pagine e finisce in una risposta di successo** (esempio
    reale: `"unreadable"`). È troncato a 200 caratteri ma **non** passa da `safeDiagnosticDetail`: se
    un giorno quel lettore mettesse un percorso locale nel messaggio d'errore, quel percorso
@@ -454,3 +453,95 @@ Erano **2422** prima di questo lotto. ⛔ `npm run verify:all` **non** è stato 
 10. **`C:\tmp\x` esiste sul disco della macchina** (vuota). È la stessa scoria già dichiarata da L4
     §7.7, viene da `preparaEsecuzioneFinta` di `session-registry.test.mjs`: **non** dai test di
     questo lotto, che usano solo cartelle `mkdtemp`. Verificato dopo la corsa completa.
+
+---
+
+## 7. Cura in più (12/09, su richiesta del coordinatore dopo il commit del lotto) — la guardia di `riprendi()` leggeva il registro VIVO
+
+### 7.1 Il difetto, e perché negava proprio il caso per cui la pausa esiste
+
+Era il punto 6 dei miei «cosa NON ho verificato»: segnalato, non toccato. È stato riaperto e curato.
+
+`riprendi()` decideva fra «si può riprendere» e «sta ancora girando» leggendo **`voce.interrotta`**,
+cioè un campo del registro vivo che `ripristina()` calcola così: `interrotta: !conclusa`.
+
+Ma **una pausa conclude il giro**: il punto sicuro emette `RunFinished`, quindi dopo un riavvio la
+sessione torna `conclusa: true` ⇒ `interrotta: false` ⇒ la guardia rispondeva
+
+> **«That research is still running: nothing to resume.»**
+
+Falso due volte: non stava girando — era ferma perché qualcuno l'aveva fermata — e il rifiuto
+colpiva **l'unico caso che la pausa serve a creare**.
+
+⛔ **La ragione strutturale, non l'errore di battitura:** `conclusa` risponde a «quel GIRO è finito»,
+non a «quella RICERCA è finita». Sono due domande diverse, e la seconda ha una risposta sola —
+`run_paused` nel giornale, che un riavvio non cancella. Il registro vivo **non poteva saperlo per
+costruzione**.
+
+⛔ **Ed era mascherato in produzione:** dopo un riavvio `messaggiFinali` viene ripristinato dal JSONL
+e la **via A** prende il comando. Il difetto si vede solo quando quella manca — cioè quando il
+processo è morto prima di persistere la conversazione, che è di nuovo proprio il caso disperato.
+⇒ È la ragione per cui nessun test lo aveva trovato: tutti passavano dalla via A.
+
+### 7.2 La cura — `src/research-orchestrator.mjs:989-1032`
+
+Il giornale si legge **prima** della guardia (era subito dopo), e lo stato lo dice lui. Tre risposte,
+in quest'ordine:
+
+1. **giornale TERMINALE** (`done`/`cancelled`/`failed`) → mai: «cancellato vuol dire cancellato»
+   (`run.mjs`), e riaprirlo spenderebbe denaro su un giro che la persona ha chiuso;
+2. **né in pausa secondo il giornale, né `interrotta` secondo il registro** → sta davvero girando.
+   ⛔ **La metà vecchia della condizione RESTA, e deve restare**: un processo morto a metà giro non
+   lascia nessun evento («un evento che nessuno è vivo per aggiungere è una bugia nel giornale»),
+   quindi lì l'unico a saperlo è il registro. Le due fonti **non si sostituiscono, si sommano** —
+   ed è il test 7.3.2 a impedire che qualcuno le scambi per ridondanti;
+3. **nessun giornale** → la verità di prima, e nessun `run_started` inventato adesso.
+
+⛔ **`pause_requested` conta come «in pausa» quanto `paused`.** Se il processo è morto fra la
+richiesta e il punto sicuro, la persona aveva comunque premuto Pausa: rifiutarle la ripresa perché il
+giro non ha fatto in tempo a scrivere la seconda riga sarebbe punirla per un crash.
+
+⛔ **Cosa NON ho cambiato, di proposito:** l'ordine delle due vie e il comportamento della **via A**.
+Il controllo di terminalità sta ancora **dopo** la via A, quindi una ricerca `cancelled` la cui
+conversazione è ancora in memoria verrebbe ripresa dalla via A senza passare dal cancello. È la
+stessa asimmetria di prima, non l'ho introdotta io, e curarla è un secondo cambiamento con un suo
+sì: **registrato qui, non fatto** (§7.4).
+
+### 7.3 Le prove, nei due versi — tre test nuovi su server vero
+
+1. **`tests/http-routes-research.test.mjs:393`** — *PAUSA + RIAVVIO: la ripresa RIESCE*. Pausa dalla
+   rotta, attesa del punto sicuro (`giornale.stato === 'paused'`), **registro nuovo sullo stesso
+   disco** con `ripristina()`, `POST …/ripresa` → **200**, la sessione riparte davvero e la consegna
+   porta la domanda **dal giornale**; il giornale torna `collecting` con `run_resumed`.
+2. **`:423`** — *VERSO CONTRARIO: una ricerca che sta DAVVERO girando* → **409**, `RESEARCH_CONFLICT`,
+   **zero sessioni avviate**, stato ancora `running`. È il test che impedisce di «curare» il difetto
+   allargando la guardia fino a far ripagare un giro già in corso.
+3. **`:441`** — *VERSO CONTRARIO: una ricerca ANNULLATA, dopo un riavvio* → **409**, zero avvii.
+   ⛔ Onestà sul valore di questo terzo: con la guardia **vecchia** rispondeva 409 lo stesso (per il
+   motivo sbagliato), quindi **non morde** sul difetto — è una guardia di regressione sul
+   riordino, non una prova della cura.
+
+⭐ **Il test 1 MORDE, ed è stato verificato rimettendo la guardia vecchia**: con
+`if (!voce.interrotta)` al posto di `if (!inPausa && !voce.interrotta)` la suite del file va
+**16 pass / 1 fail**, e il fallimento è esattamente quello («409 !== 200»); ripristinata la cura,
+17/17. ⛔ Non l'ho dedotto: l'ho fatto girare in tutti e due gli stati.
+
+**La suite, una volta alla fine**
+
+```
+node --test tests/*.test.mjs
+ℹ tests 2439   ℹ pass 2439   ℹ fail 0   (32,0 s)
+```
+
+(erano 2436 a fine lotto, 2422 prima del lotto).
+
+### 7.4 Cosa resta aperto dopo questa cura
+
+1. **La via A non passa dal cancello di terminalità** (§7.2): una ricerca `cancelled` ancora viva in
+   memoria si riprenderebbe. Registrato, non fatto — è un cambiamento separato.
+2. **Nessun giro col modello, nessun 4174, nessuno screenshot.** La cura è provata a filo intero dal
+   server vero, con `avviaSessioneFn` finto: non dimostra che una ricerca **vera** messa in pausa e
+   ripresa dopo un riavvio riprenda a lavorare bene — quello resta **L8**.
+3. **Il caso `pause_requested` senza `paused` non è provato sui dati veri**: nel banco il punto sicuro
+   arriva subito, quindi il giornale passa a `paused` prima che io possa riavviare. La riga che lo
+   copre esiste (`inPausa` accetta entrambi) ed è motivata, ma **non ho un test che la percorra**.
