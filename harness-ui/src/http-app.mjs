@@ -11,6 +11,7 @@ import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
 import { getDiagnosticProblem, toPublicProblem } from './public-problem.mjs';
 import { createSseSession } from './http-lifecycle.mjs';
+import { creaReplayCoalescente } from './sse-replay-coalescente.mjs'; // 11/09: il replay di una sessione lunga non si rigioca token per token — vedi la rotta /events
 import { iconaDelDominio } from './favicon-proxy.mjs'; // 10/09: le favicon delle fonti, prese dal server e mai dal browser
 import { creaRegistroAttese, ritornoDaHost, scambiaCodicePerChiave } from './openrouter-oauth.mjs'; // PO-01 10/9: i conti dell'accesso a OpenRouter, puri e provabili senza rete
 
@@ -4687,9 +4688,31 @@ export function createHttpApp({
              * già scelto altrove in questo registro (vedi la doc in testa a
              * session-registry.mjs sulle sessioni mai ripulite).
              */
-            const disiscrivi = sessionRegistry.iscriviti(sessionId, (evento) => {
-              sseSession.send(evento);
-            }, daSequenza);
+            /*
+             * ⭐⭐⭐ 11/09/2026 — IL REPLAY ARRIVA COALESCENTE, IL DAL VIVO NO.
+             *
+             * Owner: «la sessione 8dde6bff quando carica SCATTA e ci sta TANTO». Misurato sul
+             * suo file vero prima di toccare qualunque riga: il server consegna i 34.019 frame
+             * (4,93 MB) in **222 ms** e un EventSource nudo li riceve tutti in **358 ms** —
+             * ma la pagina vera ci mette **20.157 ms** dal clic al primo frame stabile
+             * (20.457 con `--disable-gpu`: la GPU non c'entra), con **15,8 secondi** di main
+             * thread bloccato in 5 long task. Il collo è il NUMERO di eventi, non i byte:
+             * 16.662 `ReasoningMessageContent` + 15.952 `ToolCallArgs`, delta da ~11 caratteri.
+             *
+             * `iscriviti()` rigioca la storia in modo SINCRONO e per intero prima di registrare
+             * l'ascoltatore per il futuro: quindi tutto ciò che passa PRIMA che quella chiamata
+             * ritorni è passato, e si può fondere; tutto ciò che arriva DOPO è il presente e si
+             * consegna com'è — la grana token-per-token mentre il modello scrive È il prodotto.
+             * Sul file dell'owner: **34.019 → 1.391 eventi spediti (−95,9%)**.
+             *
+             * ⛔ La coalescenza sta QUI e non in `iscriviti()`: quello è il canale di TUTTI gli
+             *   iscritti e il contratto di una trentina di test. Questo è un problema di
+             *   trasporto, e si cura al livello di trasporto. Il perché nel dettaglio, con le
+             *   fonti (AG-UI, 11/09/2026), in `sse-replay-coalescente.mjs`.
+             */
+            const replay = creaReplayCoalescente((evento) => { sseSession.send(evento); });
+            const disiscrivi = sessionRegistry.iscriviti(sessionId, replay.ascoltatore, daSequenza);
+            replay.fineReplay();
             /*
              * ⛔⛔⛔ 28/8 — SECONDA metà della stessa cura (setNoDelay sopra
              * è la prima): senza scritture nuove, una connessione può
