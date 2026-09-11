@@ -241,3 +241,23 @@ body.background-motion-paused::after { animation-play-state: paused; }
   inset: 0;
   margin: 0;
 }
+
+/*
+ * ⛔⛔⛔⛔ 11/09/2026 — LE MACCHIE DELLO SFONDO NON SI DISEGNANO PIÙ. Owner, per la terza volta in
+ *   un giorno: «correggi subito questa porcata di sfondo giallognolo nella chat», poi il verde,
+ *   poi «LO LEVI STO GIALLO O NO».
+ *
+ * Non basta spegnerle nel default: chi ha già una preferenza SALVATA e timbrata se le ritrova
+ * addosso, ed è esattamente quello che è successo. Finché lo sfondo non sarà rifatto in modo che
+ * NON passi sotto il testo della conversazione, qui non si disegna niente — per nessuno, con
+ * qualunque preferenza.
+ *
+ * ⛔ Questa regola è mirata sui DUE pseudo-elementi dello sfondo, non universale: le tre regole
+ *   universali con `!important` tolte da questo progetto sono costate sei cure inutili su un
+ *   componente sano, e non se ne aggiunge una quarta.
+ * ⛔ Si toglie il DISEGNO, non la funzione: i token, le scene e i cursori restano tutti, e il
+ *   giorno in cui lo sfondo vivrà dentro la chat rispettando il contrasto (cancello
+ *   `tests/parity/aspetto-non-rende-illeggibile.spec.mjs`) basta togliere questo blocco.
+ */
+body::before,
+body::after { display: none !important; }
