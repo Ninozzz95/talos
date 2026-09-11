@@ -2390,19 +2390,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return 'Nel prossimo messaggio chiedi un passo solo: il tetto vale per giro, non per sessione.';
   }
 
-  /**
-   * Il tetto dei giri, letto dalle parole del kernel («giri esauriti: 24 su
-   * 24 …», comeSonoFinitiIGiri in talosHarness.mjs).
-   * ⛔ È l'UNICA fonte del tetto lato client: `GIRI_MASSIMI` (24) e
-   * `GIRI_MASSIMI_PLANNER` (8) sono `const` NON esportate del kernel, e
-   * `/usage` non le porta — vedi la richiesta al kernel nel resoconto O-02.
+  /*
+   * ⛔⛔⛔ 11/09/2026 — QUI C'ERA `tettoGiriDaMessaggio`, TOLTA CON IL TETTO CHE LEGGEVA.
+   *
+   * Imparava il tetto dalle parole del kernel («giri esauriti: 24 su 24 …») perché `GIRI_MASSIMI`
+   * non è esportato: era la scelta giusta finché un tetto esisteva — meglio leggere un fatto
+   * dichiarato che scrivere una costante gemella destinata a divergere.
+   *
+   * Il tetto non esiste più (`GIRI_MASSIMI = Infinity`, 11/09), e questa funzione non è rimasta
+   * «innocua»: continuava a insegnare «24» a ogni sessione che riapriva una storia vecchia, perché
+   * il `RunError` di allora viene RIGIOCATO dal `.jsonl` a ogni apertura. È così che l'owner ha
+   * visto «Giri 12/24» su una sessione di oggi, col tetto già tolto dal kernel.
+   *
+   * ⇒ Tolta invece che lasciata senza chiamanti: in questo progetto una funzione con i test e
+   *   nessun chiamante è già costata una contesa intera, e un ramo morto che «tanto non scatta»
+   *   è esattamente ciò che torna a scattare.
    */
-  function tettoGiriDaMessaggio(messaggio) {
-    const trovato = /giri esauriti:\s*(\d+)\s+su\s+(\d+)/i.exec(String(messaggio ?? ''));
-    if (!trovato) return null;
-    const tetto = Number(trovato[2]);
-    return Number.isFinite(tetto) && tetto > 0 ? tetto : null;
-  }
 
   /** Ripatcha la riga "Main" del foglio Albero sessione SE è già aperto — non riapre né forza un redraw di tutto il foglio, stesso principio di aggiornaPillolaModello(). */
   function aggiornaContatoreUsage() {
@@ -14084,20 +14087,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          */
         let guida = '';
         if (evento.code === 'giri-esauriti') {
-          const tetto = tettoGiriDaMessaggio(evento.message);
-          if (tetto) {
-            state.realSession.tettoGiriDichiarato = tetto;
-            /*
-             * ⛔ 04/9, trovato dalla corsa `qa-giri-esauriti-diagnosi` (non
-             * dedotto): il contatore mostrava «24 giri» senza il «su 24»
-             * appena imparato. Lo `/usage` con giri=24 arriva PRIMA di
-             * questo RunError, quindi l'ultimo redraw del contatore è già
-             * passato — chi impara un fatto nuovo ridisegna chi lo mostra,
-             * stessa lezione di ApprovalRequested/aggiornaElencoSessioniReali.
-             */
-            aggiornaContatoreUsage();
-            aggiornaComposerUsage(state.realSession.usage);
-          }
+          /*
+           * ⛔⛔⛔ 11/09/2026 — IL TETTO NON SI IMPARA PIÙ, PERCHÉ NON ESISTE PIÙ. Owner, davanti
+           *   alla pill «Giri 12/24» su una sessione aperta oggi: «la pill giri ancora spunta n/24,
+           *   sistemala adesso».
+           *
+           * Il tetto è stato tolto dal kernel (`GIRI_MASSIMI = Infinity`), ma il denominatore
+           * continuava a comparire per una ragione che il codice nuovo da solo non copre: questo
+           * valore è APPICCICATO ALLA SESSIONE. Una sessione che aveva sentito «24 su 24» prima
+           * della cura se lo porta dietro per sempre — anche riaperta oggi, anche dopo il riavvio
+           * del server, perché il RunError vecchio viene RIGIOCATO dal suo `.jsonl` a ogni
+           * apertura. ⇒ Non bastava togliere il tetto a monte: finché questa riga lo impara, la
+           * storia vecchia continua a insegnare al client un numero che non vale più.
+           *
+           * ⛔ E non si «pulisce» la storia: quegli eventi sono veri, sono successi davvero. Si
+           *   smette di DEDURNE una regola per il presente.
+           */
           const riassunto = riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi);
           guida = ` — ${testoDiagnosiGiri(riassunto)}. ${consiglioDaRiassunto(riassunto)}`
             + ' Il prossimo messaggio continuerà questo task nella stessa sessione. Premi «Nuova» per iniziare un task separato.';
