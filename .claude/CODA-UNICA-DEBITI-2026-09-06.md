@@ -953,6 +953,17 @@ body e gli passa `escapeHtml` (`document-generator.mjs:234-245`) — **non può 
 scritta a mano**. Per «genera un file html di 1000 righe» non esisteva NESSUN attrezzo capace.
 Rapporto: `.claude/RAPPORTO-ATTREZZI-MENO-GIRI-2026-09-11.md`.
 
+### BC-11, stato al 11/09 sera (verificato nel kernel, non dal vivo)
+Nel kernel c'è già tutto ciò che il rapporto chiedeva: `percorsoDiFile`/`contenutoDiScrivi` (alias
+`path`/`content`…, `talosHarness.mjs:944-960`), `scrivi` che con percorso vuoto o contenuto assente
+**risponde a parole** senza toccare il disco (`~6620`, `messaggioArgomentiAssenti`, e dice se gli
+argomenti erano troncati), `mode:"append"` nello schema con la regola «mai file numerati da assemblare»
+(`~1425`), `document_create` html verbatim. `kernelPerIlBanco.js:22` (`dentro('')` → radice) resta
+com'è: è il bundle del banco e il ramo `scrivi` ora si ferma prima. **Manca la prova che chiude il
+debito**: lo stesso ordine dell'owner («genera dentro questa cartella un file html di almeno 1000
+righe») con `glm-5.3-flash` su una cartella temporanea, contando i giri e i token — costa qualche
+centesimo, parte col suo sì.
+
 ## BC-19 — il logo del velo d'avvio deve leggere i token del tema
 Owner 11/09/2026 sera: «anche il logo di boot deve essere legato ai token del tema». Oggi il velo
 `#talosAvvio` (`frontend/index.template.html`, `frontend/src/avvio.js`) porta il marchio copiato dal
@@ -1067,3 +1078,11 @@ indietro rispetto alla decisione**, e i timeout a 1 minuto (CheckCard, Extension
 guardare a parte. ⇒ Cura: aggiornare il riferimento dei componenti toccati dalla regola (o insegnare
 al confronto che le azioni nel menu overflow valgono come presenti), lotto a sé, dopo i lotti della
 ricerca approfondita. Non è un difetto della app.
+
+### BC-23 — lo sfondo animato è tagliato o parte da metà schermo (owner, 11/09/2026 sera)
+Foto sul 4174, tema Terminal, sfondo acceso, finestra ~1600×794 CSS (DPR ≈ 1,25): la scena si vede
+solo da y≈490 su 993 in giù e sul bordo destro; la metà alta della chat è vuota. Ipotesi da
+misurare (non da supporre): `prepare()` abbassa il dpr sotto `devicePixelRatio` per il tetto di
+pixel e chi disegna usa l'altro; il containing block di `.talos-motion-canvas` (`inset:0`) non è
+`#schermoChat`; un padding in coda della conversazione pari a `clientHeight/2`. Delegato (Opus 5
+high) con riproduzione a DPR 1 / 1.25 / 2, cura minima provata al contrario, foto chiaro/scuro.
