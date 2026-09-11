@@ -1,0 +1,22 @@
+TALOS Desktop Final UI — installer verification
+Date: 2026-09-11
+
+Target: clean minimal copy reconstructed from the user-provided harness-ui.rar baseline.
+
+PASS — preflight recognized required TALOS structure and anchors.
+PASS — installer copied 5 payload files and patched 3 integration points.
+PASS — installed verification matched payload SHA-256 bytes.
+PASS — rollback restored original main.js, main.css and public/index.html SHA-256 values.
+PASS — payload files that did not exist before install were removed by rollback.
+PASS — second install is idempotent: integration markers remain singletons and patched files are byte-identical after the second application.
+PASS — public index patch was re-tested with regex-based app.js anchor matching.
+
+Canvas verification:
+PASS — 14/14 scene ids rendered non-transparent pixels.
+PASS — 14/14 scene ids produced different hashes at t=0 and t=3s.
+PASS — main Chat scene becomes static when a thread is present.
+PASS — Settings preview remains animated while Chat scene is static.
+PASS — live scene switch Calm -> Forge succeeded with no Canvas exception.
+PASS — Background settings group is visible when the real CSS-hidden rule is overridden by desktop-final.css.
+
+See motion-test-final.json and ui-test-final.json for structured results.

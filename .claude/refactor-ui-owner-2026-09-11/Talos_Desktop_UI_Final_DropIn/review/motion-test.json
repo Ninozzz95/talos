@@ -1,0 +1,255 @@
+{
+  "errors": [],
+  "ids": [
+    "forge",
+    "paper",
+    "terminal",
+    "aurora",
+    "glacier",
+    "ember",
+    "atlas",
+    "noir",
+    "signal",
+    "violet",
+    "claudius",
+    "basicus",
+    "telemetry",
+    "calm"
+  ],
+  "scenes": [
+    {
+      "id": "forge",
+      "nonzero": 19126,
+      "animated": true,
+      "ha": 1023646734,
+      "hb": 916468349
+    },
+    {
+      "id": "paper",
+      "nonzero": 53344,
+      "animated": true,
+      "ha": 1657416694,
+      "hb": 1521200586
+    },
+    {
+      "id": "terminal",
+      "nonzero": 26364,
+      "animated": true,
+      "ha": 3692530340,
+      "hb": 905785777
+    },
+    {
+      "id": "aurora",
+      "nonzero": 34655,
+      "animated": true,
+      "ha": 1629318850,
+      "hb": 1646083105
+    },
+    {
+      "id": "glacier",
+      "nonzero": 14915,
+      "animated": true,
+      "ha": 39434404,
+      "hb": 3557637769
+    },
+    {
+      "id": "ember",
+      "nonzero": 31089,
+      "animated": true,
+      "ha": 1868819589,
+      "hb": 965361848
+    },
+    {
+      "id": "atlas",
+      "nonzero": 5462,
+      "animated": true,
+      "ha": 2435500484,
+      "hb": 682992945
+    },
+    {
+      "id": "noir",
+      "nonzero": 45128,
+      "animated": true,
+      "ha": 2702521911,
+      "hb": 3795953546
+    },
+    {
+      "id": "signal",
+      "nonzero": 4187,
+      "animated": true,
+      "ha": 2193934871,
+      "hb": 1071560527
+    },
+    {
+      "id": "violet",
+      "nonzero": 15855,
+      "animated": true,
+      "ha": 1016614723,
+      "hb": 2535021783
+    },
+    {
+      "id": "claudius",
+      "nonzero": 44450,
+      "animated": true,
+      "ha": 3617384662,
+      "hb": 3062354318
+    },
+    {
+      "id": "basicus",
+      "nonzero": 32701,
+      "animated": true,
+      "ha": 4232950387,
+      "hb": 2149781645
+    },
+    {
+      "id": "telemetry",
+      "nonzero": 4948,
+      "animated": true,
+      "ha": 4286685992,
+      "hb": 2381691891
+    },
+    {
+      "id": "calm",
+      "nonzero": 38347,
+      "animated": true,
+      "ha": 3525281678,
+      "hb": 3131416258
+    }
+  ],
+  "initial": {
+    "scene": "calm",
+    "running": true,
+    "reduced": false,
+    "chatHasMessages": false,
+    "stages": [
+      {
+        "preview": false,
+        "scene": "calm",
+        "status": "animating",
+        "draws": 36,
+        "cost": 0.2,
+        "tier": "balanced"
+      },
+      {
+        "preview": true,
+        "scene": "calm",
+        "status": "animating",
+        "draws": 36,
+        "cost": 0,
+        "tier": "balanced"
+      }
+    ],
+    "frames": 68,
+    "p95": 0.4,
+    "errors": []
+  },
+  "after": {
+    "scene": "calm",
+    "running": true,
+    "reduced": false,
+    "chatHasMessages": false,
+    "stages": [
+      {
+        "preview": false,
+        "scene": "calm",
+        "status": "animating",
+        "draws": 51,
+        "cost": 0.1,
+        "tier": "balanced"
+      },
+      {
+        "preview": true,
+        "scene": "calm",
+        "status": "animating",
+        "draws": 51,
+        "cost": 0.1,
+        "tier": "balanced"
+      }
+    ],
+    "frames": 98,
+    "p95": 0.4,
+    "errors": []
+  },
+  "paused1": {
+    "scene": "calm",
+    "running": true,
+    "reduced": false,
+    "chatHasMessages": true,
+    "stages": [
+      {
+        "preview": false,
+        "scene": "calm",
+        "status": "static",
+        "draws": 52,
+        "cost": 0.2,
+        "tier": "balanced"
+      },
+      {
+        "preview": true,
+        "scene": "calm",
+        "status": "animating",
+        "draws": 56,
+        "cost": 0.1,
+        "tier": "balanced"
+      }
+    ],
+    "frames": 102,
+    "p95": 0.4,
+    "errors": []
+  },
+  "paused2": {
+    "scene": "calm",
+    "running": true,
+    "reduced": false,
+    "chatHasMessages": true,
+    "stages": [
+      {
+        "preview": false,
+        "scene": "calm",
+        "status": "static",
+        "draws": 52,
+        "cost": 0.2,
+        "tier": "balanced"
+      },
+      {
+        "preview": true,
+        "scene": "calm",
+        "status": "animating",
+        "draws": 71,
+        "cost": 0.4,
+        "tier": "balanced"
+      }
+    ],
+    "frames": 117,
+    "p95": 0.4,
+    "errors": []
+  },
+  "switched": {
+    "scene": "forge",
+    "running": true,
+    "reduced": false,
+    "chatHasMessages": true,
+    "stages": [
+      {
+        "preview": false,
+        "scene": "forge",
+        "status": "static",
+        "draws": 53,
+        "cost": 0.8,
+        "tier": "balanced"
+      },
+      {
+        "preview": true,
+        "scene": "forge",
+        "status": "animating",
+        "draws": 78,
+        "cost": 0.3,
+        "tier": "balanced"
+      }
+    ],
+    "frames": 123,
+    "p95": 0.4,
+    "errors": []
+  },
+  "display": "none"
+}

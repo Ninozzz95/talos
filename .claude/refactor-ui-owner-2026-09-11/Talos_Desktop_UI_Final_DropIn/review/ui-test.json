@@ -1,0 +1,44 @@
+{
+  "schermoNote": {
+    "w": 824,
+    "h": 900,
+    "scrollW": 824,
+    "scrollH": 900,
+    "visible": true
+  },
+  "schermoMemoria": {
+    "w": 824,
+    "h": 900,
+    "scrollW": 824,
+    "scrollH": 900,
+    "visible": true
+  },
+  "schermoAttivita": {
+    "w": 824,
+    "h": 900,
+    "scrollW": 824,
+    "scrollH": 900,
+    "visible": true
+  },
+  "schermoRicerca": {
+    "w": 824,
+    "h": 900,
+    "scrollW": 824,
+    "scrollH": 900,
+    "visible": true
+  },
+  "schermoLibreria": {
+    "w": 824,
+    "h": 900,
+    "scrollW": 824,
+    "scrollH": 900,
+    "visible": true
+  },
+  "schermoImpostazioni": {
+    "w": 824,
+    "h": 900,
+    "scrollW": 824,
+    "scrollH": 900,
+    "visible": true
+  }
+}

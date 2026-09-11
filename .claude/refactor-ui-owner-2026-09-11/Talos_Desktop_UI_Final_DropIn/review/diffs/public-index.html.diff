@@ -1,0 +1,17 @@
+--- /mnt/data/Talos_Desktop_Final_DropIn_Work/.talos-final-baseline/public-index.html	2026-09-11 16:36:30.247549891 +0000
++++ /mnt/data/Talos_Desktop_Final_DropIn_Work/public/index.html	2026-09-11 16:36:47.527731171 +0000
+@@ -103,6 +103,7 @@
+     </style>
+     <link rel="stylesheet" href="./vendor/xterm/xterm.css">
+     <link rel="stylesheet" href="./styles.css">
++    <link rel="stylesheet" href="./talos-desktop-final.css" data-talos-final-ui>
+   </head>
+   <body>
+ <!-- ⛔ PRIMO figlio del `body`: deve coprire lo scheletro, quindi deve esistere prima di lui.
+@@ -1270,5 +1271,6 @@
+     <script src="./vendor/xterm/addon-webgl.js"></script>
+     <script src="./vendor/prism/prism.js"></script>
+     <script type="module" src="./app.js"></script>
++    <script type="module" src="./talos-desktop-motion.js" data-talos-final-ui></script>
+   </body>
+ </html>

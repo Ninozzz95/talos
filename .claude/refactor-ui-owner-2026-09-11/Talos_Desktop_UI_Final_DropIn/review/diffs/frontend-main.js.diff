@@ -1,0 +1,10 @@
+--- /mnt/data/Talos_Desktop_Final_DropIn_Work/.talos-final-baseline/frontend-main.js	2026-09-11 16:36:30.226517645 +0000
++++ /mnt/data/Talos_Desktop_Final_DropIn_Work/frontend/src/main.js	2026-09-11 16:36:31.477714199 +0000
+@@ -21,3 +21,7 @@
+ 
+ montaPonteLegacy(document);
+ await import('./legacy/app.js');
++
++/* TALOS-DESKTOP-FINAL-UI */
++const { initTalosDesktopBackground } = await import('./motion/desktop-background.js');
++initTalosDesktopBackground();

@@ -939,3 +939,16 @@ scheda **Agenti** dice «**Nessun sotto-agente in questa sessione.**»
 il buco: «**non verificato: nessun giro reale col modello, quindi la scheda con una figlia VIVA (e
 il "Ferma questa delega") non l'ho mai vista a schermo**». Eccola: con una figlia viva la scheda è
 vuota. ⇒ BC-03 **si riapre**, e la parte che mancava è esattamente quella che non era stata provata.
+
+### BC-11, correzione (11/09, dall'agente «attrezzi: meno giri») — la MIA diagnosi sull'EISDIR era sbagliata
+Il percorso nell'errore `EISDIR … open 'C:\Users\Antonino\Desktop\qwen 3.8 research'` è **completo**,
+spazi inclusi: è la radice della sessione. Manca il NOME DEL FILE. `scrivi` riceveva
+`percorso: undefined` — o per argomenti troncati a metà stream (`talosHarness.mjs:5814` sostituisce il
+JSON monco con `{}`), o perché il modello scrive `"path"` invece di `"percorso"` (misurato: **46
+chiamate su 308 col nome dell'argomento sbagliato** — `command` 39, `path` 2, `content` 1, `contuto` 1)
+— e `kernelPerIlBanco.js:22` (`percorso ? resolve(radice, percorso) : radice`) **restituisce la
+radice** per un percorso vuoto. ⇒ La cura di BC-17 (alias per `shell`) copriva metà del guasto: la
+metà `scrivi` è ancora scoperta. E il difetto più grande: `document_create format:'html'` avvolge il
+body e gli passa `escapeHtml` (`document-generator.mjs:234-245`) — **non può scrivere una pagina HTML
+scritta a mano**. Per «genera un file html di 1000 righe» non esisteva NESSUN attrezzo capace.
+Rapporto: `.claude/RAPPORTO-ATTREZZI-MENO-GIRI-2026-09-11.md`.

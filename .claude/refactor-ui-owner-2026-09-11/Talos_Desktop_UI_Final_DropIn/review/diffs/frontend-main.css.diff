@@ -1,0 +1,7 @@
+--- /mnt/data/Talos_Desktop_Final_DropIn_Work/.talos-final-baseline/frontend-main.css	2026-09-11 16:36:30.238239561 +0000
++++ /mnt/data/Talos_Desktop_Final_DropIn_Work/frontend/src/styles/main.css	2026-09-11 16:36:31.477956250 +0000
+@@ -34,3 +34,4 @@
+  */
+ @import './temi.css';
+ @import './aspetto.css';
++@import './desktop-final.css'; /* TALOS-DESKTOP-FINAL-UI */

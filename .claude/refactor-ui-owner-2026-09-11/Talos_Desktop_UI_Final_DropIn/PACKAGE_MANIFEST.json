@@ -1,0 +1,57 @@
+{
+  "schema": "talos.desktop.final-dropin.v1",
+  "date": "2026-09-11",
+  "target": "user-provided harness-ui.rar baseline",
+  "baseline": {
+    "frontend/src/main.js": "5dce0a786c85e8d8850d2b62e146676bbd48c4151db4d76b47e7392cdd7950d6",
+    "frontend/src/styles/main.css": "0b2e0fd2b99a62ac325c030dec7addfcaaeec7fdd86dc09e00fb642d452ea29a",
+    "frontend/index.template.html": "568d671f7c97ec00be04c392d2a17f04475c3263ba97aca52920a42439207e76",
+    "public/index.html": "adeaf04f651a378e643288df319385bf9d7f7707020bbeba50035ef58f31aeaa"
+  },
+  "scenes": [
+    "forge",
+    "paper",
+    "terminal",
+    "aurora",
+    "glacier",
+    "ember",
+    "atlas",
+    "noir",
+    "signal",
+    "violet",
+    "claudius",
+    "basicus",
+    "telemetry",
+    "calm"
+  ],
+  "integration": {
+    "added_or_updated_payload_files": [
+      "harness-ui/frontend/src/motion/desktop-scenes.js",
+      "harness-ui/frontend/src/motion/desktop-background.js",
+      "harness-ui/frontend/src/styles/desktop-final.css",
+      "harness-ui/public/talos-desktop-motion.js",
+      "harness-ui/public/talos-desktop-final.css"
+    ],
+    "patched_files": [
+      "harness-ui/frontend/src/main.js",
+      "harness-ui/frontend/src/styles/main.css",
+      "harness-ui/public/index.html"
+    ],
+    "backup_root": ".talos/ui-backups/"
+  },
+  "tests": {
+    "canvas_scenes_rendered": "14/14",
+    "canvas_scenes_animated": "14/14",
+    "installer_apply": "pass",
+    "installer_idempotency": "pass",
+    "rollback_sha_restore": "pass",
+    "ui_screen_smoke": "6/6 visible at 1440x900"
+  },
+  "payload_sha256": {
+    "harness-ui/frontend/src/motion/desktop-scenes.js": "ef794e3ea19c331356d6ab997e2ed586a36a54ee98cf7a79e76394942fa72ee3",
+    "harness-ui/frontend/src/motion/desktop-background.js": "c260db7a455fb0472e4f20f6f848830110c2127d8ce12c30836d5b2013bb27eb",
+    "harness-ui/frontend/src/styles/desktop-final.css": "0ae5a4792ea63dacb6b5db98275a444b8d1189cf1a65cf7a5fbac6f10c8bc781",
+    "harness-ui/public/talos-desktop-motion.js": "55951aa5686689e6caa015542650f6063efdbd1f7966f7a0d27f412612548fd4",
+    "harness-ui/public/talos-desktop-final.css": "0ae5a4792ea63dacb6b5db98275a444b8d1189cf1a65cf7a5fbac6f10c8bc781"
+  }
+}
