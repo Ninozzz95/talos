@@ -23,7 +23,7 @@ import { STRUMENTI_FORGIATI } from './fixtures/officina.js';
 import { aggiornaPaginaRicerca } from '../src/components/ricerca.js';
 import { RICERCHE } from './fixtures/ricerca.js';
 import { aggiornaPaginaLibreria } from '../src/components/libreria.js';
-import { LIBRERIA } from './fixtures/libreria.js';
+import { LIBRERIA, LIBRERIA_ANTEPRIMA, leggiFileDiProva } from './fixtures/libreria.js';
 import { aggiornaPaginaAttivita } from '../src/components/attivita.js';
 import { ATTIVITA } from './fixtures/attivita.js';
 import { aggiornaPaginaMemoria } from '../src/components/memoria.js';
@@ -174,6 +174,27 @@ async function montaRicerca({ apri = null, vista = 'rapporto', menu = false, rig
   return schermo;
 }
 
+/*
+ * 11/09 — il CONTENUTO di un file nel dettaglio della Libreria, sui quattro tipi e nei due modi.
+ * ⛔ `leggiFile` è l'iniezione: nel laboratorio il testo arriva dalla fixture, in produzione dalla
+ *   rotta `GET /library/:voceId/file`. Stessa forma, nessuna rete qui dentro.
+ * ⛔ Il modo si sceglie CLICCANDO la scheda «Testo», non impostando uno stato: così la foto prova
+ *   anche che l'interruttore funziona, non solo che il pannello sa disegnarsi.
+ */
+async function montaLibreriaFile({ apri = 'lib-md', modo = 'anteprima' } = {}) {
+  const schermo = mostraSchermo('schermoLibreria', 'libreria');
+  libreriaTd(schermo, LIBRERIA_ANTEPRIMA, {
+    sessionId: 'fx-lab', notifica: notificaDiProva, onMenu: () => {}, leggiFile: leggiFileDiProva,
+  });
+  schermo.querySelector(`.td-card[data-item="${apri}"] .td-card-open`).click();
+  /* Due giri di microtask: uno per la lettura del file, uno per il ridisegno che ne segue. */
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((fatto) => setTimeout(fatto, 0));
+  if (modo) schermo.querySelector(`.td-file-modi [data-modo="${modo}"]`)?.click();
+  return schermo;
+}
+
 const LABORATORI = {
  ProviderCard(){document.querySelector('#veloFornitori [data-c=ProviderCard]').replaceWith(creaProviderCard(PROVIDER_CARD[4],{aperta:true}));},
  RuntimeCard(){document.querySelector('#panel-runtime [data-c=RuntimeCard]').replaceWith(creaRuntimeModello(RUNTIME_MODELLI[0]));},
@@ -285,12 +306,25 @@ const LABORATORI = {
   SezioneRicerca_andata: () => montaRicerca({ apri: 'ric-bloccata', vista: 'andata' }),
   SezioneRicerca_senza_record: () => montaRicerca({ apri: 'ric-senza-record' }),
   SezioneRicerca_menu: () => montaRicerca({ apri: 'ric-conclusa', menu: true }),
+  /* 11/09 — la prova NEI DUE VERSI del difetto della foto del 4174: `ric-conclusa` è `done` col
+     record (il pannello Rapporto è pieno), `ric-scusa` è `senza-rapporto` con un file depositato
+     (il pannello deve dire che un rapporto non c'è e mostrare la scusa solo come allegato). */
+  SezioneRicerca_scusa: () => montaRicerca({ apri: 'ric-scusa', vista: 'rapporto' }),
+  SezioneRicerca_scusa_menu: () => montaRicerca({ apri: 'ric-scusa', vista: 'rapporto', menu: true }),
   SezioneRicerca_elenco: () => montaRicerca({ vista: null, righe: true }),
   SezioneProgetti() {
     const schermo = mostraSchermo('schermoProgetti', 'progetti');
     progettiTd(schermo, PROGETTI, { onApriSessione: () => {} });
     schermo.querySelector('.td-card .td-card-open').click();
   },
+  SezioneLibreria_md: () => montaLibreriaFile({ apri: 'lib-md', modo: 'anteprima' }),
+  SezioneLibreria_md_testo: () => montaLibreriaFile({ apri: 'lib-md', modo: 'testo' }),
+  SezioneLibreria_csv: () => montaLibreriaFile({ apri: 'lib-csv', modo: 'anteprima' }),
+  SezioneLibreria_csv_testo: () => montaLibreriaFile({ apri: 'lib-csv', modo: 'testo' }),
+  SezioneLibreria_pdf: () => montaLibreriaFile({ apri: 'lib-pdf', modo: 'anteprima' }),
+  SezioneLibreria_pdf_testo: () => montaLibreriaFile({ apri: 'lib-pdf', modo: 'testo' }),
+  SezioneLibreria_docx: () => montaLibreriaFile({ apri: 'lib-docx', modo: 'anteprima' }),
+  SezioneLibreria_docx_testo: () => montaLibreriaFile({ apri: 'lib-docx', modo: 'testo' }),
   SezioneLibreria_elenco() {
     /* C-bis: la stessa Libreria in vista RIGHE — la copertina del file sparisce, resta la riga. */
     const schermo = mostraSchermo('schermoLibreria', 'libreria');

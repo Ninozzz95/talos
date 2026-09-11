@@ -15,11 +15,15 @@
  *      cambiata, e nessuna frase viene riscritta una seconda volta in un secondo posto.
  *   2. Niente `innerHTML`: il titolo di una nota e il nome di un file li scrive un modello o il
  *      disco. È la stessa regola già scritta in `note.js` e in `libreria.js`.
- *   3. Niente animazioni in JS (il mockup usa `motion(...)` e `flip(...)`). Il 10/09 sei cure di
- *      fila sono cadute su un componente sano perché `body.reduce-motion *` e
- *      `@media (prefers-reduced-motion) *` spengono OGNI animazione con `!important`: un'animazione
- *      scritta qui sarebbe morta a valle senza dirlo. Il movimento resta quello del CSS
- *      (`transition` sui bordi), che quelle regole sanno spegnere.
+ *   3. ~~Niente animazioni in JS~~ — CORRETTO l'11/09/2026 (sera), e la correzione è il punto.
+ *      Qui c'era scritto: «il mockup usa `motion(...)` e `flip(...)`, ma `body.reduce-motion *` e
+ *      `@media (prefers-reduced-motion) *` spengono OGNI animazione con `!important`, quindi
+ *      un'animazione scritta qui sarebbe morta a valle senza dirlo». Era vero quel giorno; quelle
+ *      due regole universali sono state TOLTE quella stessa notte (aspetto.css:488,
+ *      attesa-shimmer.css:66) perché spegnevano ogni animazione della app, e da allora «movimento
+ *      spento» si esprime azzerando i TOKEN in `legacy/app.js` — una forma che si misura.
+ *      ⇒ `flip(...)`, l'entrata, l'uscita e l'espansione del dettaglio sono qui sotto, e passano
+ *      da `motion-mockup.js`, che quei token li legge. Vedi il blocco «IL MOVIMENTO DEL MOCKUP».
  *
  * ⛔ IL DIVISORIO è un cursore, non una linea decorativa. Ricerca dell'11/09/2026 — UX Patterns
  *   Guide «Window Splitter», Telerik Design System «Splitter accessibility», W3C APG:
@@ -378,7 +382,120 @@ function collegaDivisorio(doc, stato) {
 
 /* ------------------------------------------------------------------------------- il disegno */
 
+/* ───────────────────────────── IL MOVIMENTO DEL MOCKUP (11/09/2026) ─────────────────────────────
+ * ⛔ LA TESTATA DI QUESTO FILE DICEVA «Niente animazioni in JS», e la sua ragione NON VALE PIÙ.
+ *   Diceva: «`body.reduce-motion *` e `@media (prefers-reduced-motion) *` spengono OGNI animazione
+ *   con `!important`: un'animazione scritta qui sarebbe morta a valle senza dirlo». Quelle due
+ *   regole universali sono state TOLTE la notte del 10-11/09 (aspetto.css:488, attesa-shimmer.css:66)
+ *   proprio perché spegnevano ogni animazione della app — e da allora «movimento spento» si esprime
+ *   azzerando i TOKEN (`legacy/app.js`, `applicaMovimento` ~12896), che è una forma che si vede e si
+ *   misura. `motion-mockup.js` legge quei token: spegnere spegne anche queste.
+ *   ⇒ La premessa era vera quando è stata scritta e oggi è falsa. Si riapre, e si scrive perché.
+ *
+ * Le quattro animazioni portate qui, tutte dal mockup (`talos-desktop-study`):
+ *   · `flip(container,change)`  — le schede che si spostano quando l'elenco cambia forma;
+ *   · `selectItem`             — il dettaglio che entra da destra (`surface-enter` × 1.25);
+ *   · `case'expand-detail'`    — il dettaglio che si allarga (opacità .65 → 1);
+ *   · `closeDetail`            — il dettaglio che esce verso destra (`surface-exit`).
+ */
+import { motion, movimentoSpento } from './motion-mockup.js';
+
+const LEVA_SUPERFICI = 'motion-surfaces-off';
+
+/** Dove sta ogni scheda ADESSO. Serve il PRIMA di un riordino: dopo è troppo tardi. */
+function fotografaSchede(contenitore) {
+  const mappa = new Map();
+  if (!contenitore?.querySelectorAll) return mappa;
+  for (const el of contenitore.querySelectorAll('[data-item]')) {
+    try { mappa.set(el.dataset.item, el.getBoundingClientRect()); } catch { /* nodo staccato */ }
+  }
+  return mappa;
+}
+
+/**
+ * Il `flip()` del mockup: chi si è spostato parte da dov'era, chi è appena arrivato entra dal basso.
+ * ⛔ Il PRIMA vuoto vuol dire «primo disegno»: lì il mockup chiama `renderSection` SENZA `flip`, e
+ *   una pagina che si apre con dodici schede che salgono una per una è esattamente il movimento
+ *   gratuito che la regola di stile vieta. Nessuna animazione.
+ */
+function flipSchede(doc, contenitore, prima) {
+  if (!prima.size || !contenitore?.querySelectorAll) return;
+  if (movimentoSpento({ document: doc, leva: LEVA_SUPERFICI })) return;
+  for (const el of contenitore.querySelectorAll('[data-item]')) {
+    let dopo;
+    try { dopo = el.getBoundingClientRect(); } catch { continue; }
+    const a = prima.get(el.dataset.item);
+    /* ⛔ MISURATO nel laboratorio: espandendo il dettaglio la colonna dell'elenco diventa
+       `display:none` (mockup-td.css:184) e `getBoundingClientRect()` torna un rettangolo di zero.
+       Senza questa guardia partivano quattro animazioni da 600 px su schede che NON SI VEDONO —
+       movimento pagato e invisibile, e per giunta uno che il mockup non fa (il suo `expand-detail`
+       chiama `renderSection` SENZA `flip`). Un rettangolo vuoto non è una posizione. */
+    const invisibile = (r) => !r || (r.width === 0 && r.height === 0);
+    if (invisibile(dopo) || (a && invisibile(a))) continue;
+    if (a) {
+      const dx = a.x - dopo.x;
+      const dy = a.y - dopo.y;
+      if (Math.abs(dx) + Math.abs(dy) > 1) {
+        motion(el, [{ transform: `translate(${dx}px,${dy}px)` }, { transform: 'none' }], { fattore: 1.35, leva: LEVA_SUPERFICI, document: doc });
+      }
+    } else {
+      motion(el, [{ opacity: 0, transform: 'translateY(5px)' }, { opacity: 1, transform: 'none' }], { leva: LEVA_SUPERFICI, document: doc });
+    }
+  }
+}
+
+/**
+ * Il disegno con il movimento intorno. Tutti i chiamanti passano di qui, come nel mockup passano
+ * tutti da `flip(...)`: il movimento non è una cosa che si ricorda di aggiungere caso per caso.
+ */
 function disegna(schermo, doc, stato) {
+  const contenitore = stato.nodi?.risultati || null;
+  const dettaglio = stato.nodi?.dettaglio || null;
+  const prima = fotografaSchede(contenitore);
+  const dettaglioEraAperto = Boolean(dettaglio) && !dettaglio.hidden;
+  /* ⛔ Il PRIMA dell'espansione si legge dal DOM, NON da `stato.espanso`: il gestore del pulsante
+     ribalta `stato.espanso` e POI chiama `disegna`, quindi qui dentro il «prima» e il «dopo» dello
+     stato sono già lo stesso valore e il confronto non scatta mai. Trovato misurando: nel
+     laboratorio l'animazione di espansione non compariva in `getAnimations()`, mentre il FLIP sì. */
+  const eraEspanso = stato.nodi?.spazio?.dataset?.expanded === 'true';
+
+  disegnaCrudo(schermo, doc, stato);
+
+  flipSchede(doc, contenitore, prima);
+  if (!dettaglio) return;
+  const dettaglioEAperto = !dettaglio.hidden;
+  const oraEspanso = stato.nodi?.spazio?.dataset?.expanded === 'true';
+  if (dettaglioEAperto && !dettaglioEraAperto) {
+    /* Mockup, `selectItem`: entra da destra, e dura un quarto più di una superficie normale —
+       è la colonna più larga che si apre, non un pannellino. */
+    motion(dettaglio, [{ opacity: 0, transform: 'translateX(14px)' }, { opacity: 1, transform: 'none' }], { fattore: 1.25, leva: LEVA_SUPERFICI, document: doc });
+  } else if (dettaglioEAperto && oraEspanso !== eraEspanso) {
+    /* Mockup, `case'expand-detail'`: NON rientra da destra — la colonna c'era già e ha solo
+       cambiato larghezza. Un velo di opacità dice «guarda qui», e basta. */
+    motion(dettaglio, [{ opacity: 0.65 }, { opacity: 1 }], { leva: LEVA_SUPERFICI, document: doc });
+  }
+}
+
+/**
+ * La chiusura del dettaglio: prima esce, POI sparisce.
+ * Mockup, `closeDetail`: l'uscita parte dallo stato CALCOLATO (opacità e trasformazione correnti),
+ * non da `1/none` — se una entrata è ancora in volo, ripartire da `1` farebbe un salto.
+ */
+function chiudiDettaglioConUscita(schermo, doc, stato, dopoAverChiuso, alTermine = () => {}) {
+  const dettaglio = stato.nodi?.dettaglio || null;
+  const finisci = () => { dopoAverChiuso(); disegna(schermo, doc, stato); alTermine(); };
+  if (!dettaglio || dettaglio.hidden) { finisci(); return; }
+  let daDove = { opacity: 1, transform: 'none' };
+  try {
+    const cs = (doc.defaultView || globalThis).getComputedStyle(dettaglio);
+    daDove = { opacity: cs.opacity, transform: cs.transform === 'none' ? 'none' : cs.transform };
+  } catch { /* si riparte da 1/none: peggio di così è un salto, non un errore */ }
+  const a = motion(dettaglio, [daDove, { opacity: 0, transform: 'translateX(10px)' }], { token: 'surface-exit', leva: LEVA_SUPERFICI, document: doc });
+  if (!a) { finisci(); return; }
+  a.finished.then(finisci, finisci);
+}
+
+function disegnaCrudo(schermo, doc, stato) {
   const config = stato.config;
   const tutte = Array.isArray(config.voci) ? config.voci : [];
   const filtrate = filtraVoci(tutte, { query: stato.query, filtro: stato.filtro, filtri: config.filtri, cercaIn: config.cercaIn });
@@ -493,8 +610,14 @@ function disegnaScheda(doc, stato, voce) {
   basso.append(...[pezzi.basso].flat().filter(Boolean));
   apri.append(alto, h3, ...[pezzi.corpo].flat().filter(Boolean), basso);
   apri.addEventListener('click', () => {
-    stato.selezione = String(stato.selezione) === id ? null : id;
-    if (stato.selezione === null) stato.espanso = false;
+    /* Ripremere la scheda già aperta CHIUDE il dettaglio: chiudere è un'uscita, e le uscite si
+       vedono (mockup, `closeDetail`) — sparire di colpo è l'unico modo per non far capire che
+       cosa è successo. */
+    if (String(stato.selezione) === id) {
+      chiudiDettaglioConUscita(stato.schermo, doc, stato, () => { stato.selezione = null; stato.espanso = false; });
+      return;
+    }
+    stato.selezione = id;
     disegna(stato.schermo, doc, stato);
   });
   scheda.append(apri);
@@ -521,11 +644,13 @@ function disegnaDettaglio(schermo, doc, stato, voce) {
   chiudi.append(icona(doc, 'x'));
   chiudi.addEventListener('click', () => {
     const id = String(config.idDi(voce) ?? '');
-    stato.selezione = null;
-    stato.espanso = false;
-    disegna(schermo, doc, stato);
-    // Il fuoco torna sulla scheda da cui il dettaglio era partito, non in cima alla pagina.
-    perId(stato.nodi.risultati, '.td-card', 'item', id)?.querySelector('.td-card-open')?.focus({ preventScroll: true });
+    chiudiDettaglioConUscita(
+      schermo, doc, stato,
+      () => { stato.selezione = null; stato.espanso = false; },
+      // Il fuoco torna sulla scheda da cui il dettaglio era partito, non in cima alla pagina.
+      // ⛔ DOPO il ridisegno, non prima: la scheda a cui tornare la ricrea `disegna`.
+      () => perId(stato.nodi.risultati, '.td-card', 'item', id)?.querySelector('.td-card-open')?.focus({ preventScroll: true }),
+    );
   });
   testa.append(espandi, chiudi);
 
