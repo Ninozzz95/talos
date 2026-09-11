@@ -53,7 +53,11 @@ export async function buildFrontend({
   await mkdir(output, { recursive: true });
   const result = await esbuild.build({
     absWorkingDir: FRONTEND_ROOT,
-    entryPoints: { app: entryPoint, styles: 'src/styles/main.css' },
+    /* ⛔ `avvio` è un entry a parte e non un pezzo di `app`: deve arrivare PRIMA del primo
+       disegno, mentre `app.js` è il bundle grosso che arriva dopo — è esattamente il lampo
+       che il velo esiste per coprire. E non può stare inline: `ui-untrusted-content` vieta
+       gli script con contenuto in `public/index.html`. */
+    entryPoints: { app: entryPoint, styles: 'src/styles/main.css', avvio: 'src/avvio.js' },
     outdir: output,
     entryNames: '[name]',
     assetNames: 'assets/[name]-[hash]',

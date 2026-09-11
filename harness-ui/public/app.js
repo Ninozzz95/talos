@@ -3012,6 +3012,44 @@ function render2(schermo, p) {
     if (prima.nome === p.scelto && prima.ambito === p.ambito && !select.disabled && !schermo.hidden && doc.activeElement === doc.body) select.focus({ preventScroll: true });
   }
   d.querySelector("[data-cap-permesso-spiega]").textContent = o.salvataggio ? "Salvataggio del permesso…" : a.permessoConfigurabile ? o.ambito ? permessoAttrezzo(a) + ". Vale per le prossime chiamate di questa sessione." : "Apri una sessione per scegliere il permesso." : "Questo attrezzo segue la politica generale della sessione; non ha una scelta separata.";
+  rigaUscitaComandi(d, a, o, doc);
+}
+function rigaUscitaComandi(d, a, o, doc) {
+  let riga = d.querySelector("[data-cap-uscita-riga]");
+  if (a.nome !== "shell") {
+    if (riga) riga.hidden = true;
+    return;
+  }
+  if (!riga) {
+    riga = el6(doc, "div", "");
+    riga.setAttribute("data-cap-uscita-riga", "");
+    const etichetta = el6(doc, "label", "talos-stack", "Chi legge i comandi che lanci tu con !");
+    const menu2 = doc.createElement("select");
+    menu2.className = "talos-select";
+    menu2.setAttribute("data-cap-uscita", "");
+    menu2.setAttribute("aria-label", "Chi legge l’uscita dei comandi lanciati con il punto esclamativo");
+    const no = doc.createElement("option");
+    no.value = "no";
+    no.textContent = "Solo tu — come prima";
+    const si = doc.createElement("option");
+    si.value = "si";
+    si.textContent = "Anche il modello";
+    menu2.append(no, si);
+    menu2.addEventListener("change", () => {
+      PAGINE.get(d.closest("#schermoCapability"))?.opzioni?.onUscitaComandi?.(menu2.value === "si");
+    });
+    etichetta.append(menu2);
+    const spiega = el6(doc, "p", "talos-muted", "");
+    spiega.setAttribute("data-cap-uscita-spiega", "");
+    riga.append(etichetta, spiega);
+    d.append(riga);
+  }
+  riga.hidden = false;
+  const menu = riga.querySelector("[data-cap-uscita]");
+  const acceso = o.comandiNellaConversazione === true;
+  menu.value = acceso ? "si" : "no";
+  menu.disabled = Boolean(o.caricamento || o.salvataggio) || !o.ambito;
+  riga.querySelector("[data-cap-uscita-spiega]").textContent = !o.ambito ? "Apri una sessione per scegliere: la scelta vale per quella sessione." : acceso ? "Comando e uscita entrano nella conversazione al giro dopo (~2.000 token). Il comando non fa mai rispondere TALOS: la risposta arriva al messaggio successivo." : "I comandi che lanci con «!» restano solo sul tuo schermo. Il modello non li vede.";
 }
 var PERMESSI, PAGINE;
 var init_capability = __esm({
@@ -15782,9 +15820,27 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           // C6 (06/9): la finestra del modello scelto, per dire che PERCENTUALE è il totale degli schemi.
           finestraContesto: finestraContestoDelModello(),
           uso: ambitoCapability === state.realSession.id && ambitoCapability ? riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi) : null,
+          /* ⭐ D-10S — sull'attrezzo del terminale il Capability mostra anche l'altra metà della stessa
+             domanda: il modello legge i comandi che lanci TU col `!`? Stesso stato del foglio permessi,
+             stessa rotta — due superfici che raccontano un valore solo, quindi non possono divergere. */
+          comandiNellaConversazione: state.realSession.comandiNellaConversazione === true,
+          onUscitaComandi: salvaUscitaComandiCapability,
           onAggiorna: () => caricaPannelloAttrezzi({ pagina: true }),
           onPermesso: salvaPermessoCapability
         });
+      }
+      async function salvaUscitaComandiCapability(acceso) {
+        const id = state.realSession.id;
+        if (!id || id !== ambitoCapability) return;
+        try {
+          await apiPost(`/api/v1/sessions/${encodeURIComponent(id)}/comandi-nella-conversazione`, { acceso });
+          state.realSession.comandiNellaConversazione = acceso;
+          aggiornaModalitaShell?.(composerInput?.value ?? "");
+          mostraCapability();
+        } catch (errore) {
+          mostraCapability();
+          toast("Scelta non applicata", messaggioErroreUtente(errore, "Riprova, o guarda Doctor se si ripete."));
+        }
       }
       async function salvaPermessoCapability(attrezzo, valore) {
         const id = state.realSession.id, nome = attrezzo.nome;
@@ -17330,6 +17386,18 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
         if (tipo === "permissions") {
           disegnaPermessiIn(velo);
+          (async () => {
+            const sessionId = state.realSession.id;
+            if (!sessionId) return;
+            try {
+              const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/impostazioni-comandi`);
+              if (!dati || state.realSession.id !== sessionId) return;
+              state.realSession.doveGiranoIComandi = dati.dove ?? null;
+              state.realSession.comandiNellaConversazione = dati.comandiNellaConversazione === true;
+              disegnaPermessiIn(velo);
+            } catch {
+            }
+          })();
           collegaAzioniPermessi(velo, {
             dopoLaScelta: () => chiudiVeloMockup("veloPermessi"),
             ridisegna: () => disegnaPermessiIn(velo)
@@ -17865,6 +17933,27 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
                 <option value="nega" ${state.permessiPerAttrezzo[tool] === "nega" ? "selected" : ""}>Nega sempre</option>
               </select>
             </div>`).join("")}
+          ${/*
+           * ⭐⭐⭐ D-10S — L'USCITA DI UN COMANDO `!`: la leggi solo tu, o anche il modello?
+           *
+           * Owner 11/09: qui dentro, nella stessa sezione degli attrezzi. Ha ragione ed è anche
+           * la scelta più onesta: la riga sopra decide se il modello può LANCIARE un comando nel
+           * terminale, questa decide se può LEGGERE quello che lanci tu. Stessa famiglia, stessa
+           * forma (riga + menu) già usata dalle cinque qui sopra — nessun controllo nuovo da
+           * imparare, e niente sesta pillola nel composer (regola dell'owner del 10/09).
+           *
+           * ⛔ Il prezzo si DICE, in una misura che una persona può valutare («~2.000 token»),
+           *   non in gergo. E il default è «Solo tu»: è il comportamento di oggi, quindi chi
+           *   aggiorna non trova il contesto cambiato sotto i piedi.
+           */
+          ""}
+          <div class="sheet-toggle-row">
+            <span><strong>uscita dei comandi che lanci tu con !</strong><small>Chi la legge, dopo che il comando è finito</small></span>
+            <select data-uscita-choice aria-label="Chi legge l'uscita dei comandi lanciati con il punto esclamativo">
+              <option value="no" ${state.realSession.comandiNellaConversazione === true ? "" : "selected"}>Solo tu — come prima</option>
+              <option value="si" ${state.realSession.comandiNellaConversazione === true ? "selected" : ""}>Anche il modello · ~2.000 token</option>
+            </select>
+          </div>
         </div>
         ${(() => {
             const { aperte, avviso } = porteLateraliAperte(state.permessiPerAttrezzo, state.permissions);
@@ -18293,6 +18382,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             riga.innerHTML = `<span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#${icona7}"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">${nomeUmanoAttrezzo2(attrezzo)}</span><span class="talos-list-row__sub">${descrizione}</span></span><span class="talos-list-row__aside"><select class="talos-select talos-select--sm" data-tool-permission-select="${attrezzo}" aria-label="Permesso per ${nomeUmanoAttrezzo2(attrezzo)}">` + SCELTE_PERMESSO_ATTREZZO.map(([valore, nome]) => `<option value="${valore}"${valore === scelto ? " selected" : ""}>${nome}</option>`).join("") + "</select></span>";
             elenco2.append(riga);
           }
+          const uscita = document.createElement("div");
+          uscita.className = "talos-list-row";
+          const acceso = state.realSession.comandiNellaConversazione === true;
+          uscita.innerHTML = `<span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-terminal"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">uscita dei comandi che lanci tu con !</span><span class="talos-list-row__sub">Chi la legge, dopo che il comando è finito. Il comando non fa mai rispondere TALOS: la risposta arriva al messaggio dopo.</span></span><span class="talos-list-row__aside"><select class="talos-select talos-select--sm" data-uscita-choice aria-label="Chi legge l’uscita dei comandi lanciati con il punto esclamativo"><option value="no"${acceso ? "" : " selected"}>Solo tu — come prima</option><option value="si"${acceso ? " selected" : ""}>Anche il modello · ~2.000 token</option></select></span>`;
+          elenco2.append(uscita);
         }
         const avviso = $2("#veloPermessiAvviso", radice);
         if (avviso) {
@@ -18346,7 +18440,29 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         });
         if (!radice.dataset.permessiCollegati) {
           radice.dataset.permessiCollegati = "si";
-          radice.addEventListener("change", (evento) => {
+          radice.addEventListener("change", async (evento) => {
+            const uscita = evento.target?.closest?.("[data-uscita-choice]");
+            if (uscita) {
+              const sessionId = state.realSession.id;
+              const acceso = uscita.value === "si";
+              const prima = state.realSession.comandiNellaConversazione === true;
+              if (!sessionId) {
+                uscita.value = prima ? "si" : "no";
+                toast("Nessuna sessione aperta", "Avvia una sessione: la scelta vale per quella sessione.");
+                return;
+              }
+              try {
+                await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/comandi-nella-conversazione`, { acceso });
+                state.realSession.comandiNellaConversazione = acceso;
+                aggiornaModalitaShell?.(composerInput?.value ?? "");
+                toast("Uscita dei comandi", acceso ? "Da ora il modello legge i comandi che lanci con «!». La risposta arriva al messaggio dopo, non subito." : "I comandi che lanci con «!» restano solo sul tuo schermo.");
+                ridisegna();
+              } catch (errore) {
+                uscita.value = prima ? "si" : "no";
+                toast("Scelta non applicata", messaggioErroreUtente(errore, "Riprova, o guarda Doctor se si ripete."));
+              }
+              return;
+            }
             const select = evento.target?.closest?.("[data-tool-permission-select]");
             if (!select) return;
             const tool = select.dataset.toolPermissionSelect;
@@ -21427,7 +21543,17 @@ ${testo3}` : testo3;
       const MOTION_QUALITY_IDS = ["low", "balanced", "high", "adaptive"];
       const MOTION_PROFILE_IDS = ["preset", "minimal", "expressive", "custom", "off"];
       const MOTION_EASING_IDS = ["precise", "soft", "elastic-light", "linear", "cinematic"];
+      const ASPETTO_SCELTA_VERSIONE = 2;
+      const ASPETTO_CHIAVI_VERSIONATE = ["themePreset", "sceneOverride", "backgroundMotion"];
+      const chiaveVersioneAspetto = (chiave) => `${chiave}Versione`;
       const DESKTOP_APPEARANCE_DEFAULTS = {
+        /* 11/09: 0 = «mai scelto da quando la scelta si vede». `backgroundMotion` è nell'elenco per lo
+           stesso motivo degli altri due: un `true` salvato quando le macchie non dipingevano niente non
+           è una scelta di tenersi un velo giallo dietro la chat — è un residuo. Chi lo vuole lo riaccende
+           da Aspetto, e da quel momento il timbro lo rende definitivo. */
+        themePresetVersione: 0,
+        sceneOverrideVersione: 0,
+        backgroundMotionVersione: 0,
         themePreset: "calm",
         colorMode: "system",
         sceneOverride: "follow-theme",
@@ -21444,6 +21570,32 @@ ${testo3}` : testo3;
         immersiveHeader: false,
         chatFullWidth: false,
         reducedMotion: false,
+        /*
+         * ⛔⛔⛔ 11/09, MATTINA — `backgroundMotion` era stato SPENTO di serie. Owner, guardando la sua
+         *   chat: «correggi subito questa porcata di sfondo giallognolo nella chat». Le due macchie
+         *   stavano su `body::before/::after`, coprivano il viewport intero su OGNI schermata, e
+         *   l'alfa vera dell'accento al centro era **0,176**: dietro la colonna dove si legge.
+         *
+         * ⭐ 11/09, POMERIGGIO — TORNA ACCESO, e non «perché si può»: perché adesso è un'altra cosa, e
+         *   i numeri sono questi (banco su copia costruita, porta 5310 — mai il 4174; confronto pixel a
+         *   pixel scritto a mano, tema chiaro e scuro, 1440×900 e 1024×800):
+         *     · la scena vive in `#schermoChat`, non su `body`. Su Impostazioni, Memoria, Attività e
+         *       Board accendere lo sfondo cambia ora **0 pixel** — prima ne cambiava
+         *       942.179 / 1.025.207 / 1.027.807 / 983.517 (72-79% dello schermo);
+         *     · l'alfa dell'accento passa da 0,176 a **0,081** — il registro visibile delle scene del
+         *       mobile (`sceneTools.ts`: orizzonte 0,082, filamento 0,056);
+         *     · il delta massimo su un canale accendendo lo sfondo passa da **141/255 a 14/255**;
+         *     · sotto il testo della conversazione, campionato in CINQUE punti del gradiente:
+         *       **12,49-13,06:1 in scuro** e **11,15-11,57:1 in chiaro**, contro la soglia WCAG AA di
+         *       4,5:1. L'escursione del fondo lungo tutto il gradiente è **5/255**;
+         *     · il testo riprende il **subpixel antialiasing** su un filo con messaggi (firma 68,1
+         *       contro 68,7 a sfondo spento; prima di oggi era 22,4);
+         *     · e il mobile — la sorgente di verità — lo spedisce ACCESO
+         *       (`mobile/src/motion-v6/defaults.ts:28` `background_enabled: true`,
+         *        `mobile/src/stores/settings.ts:824-829` «the complex renderer ships ON by default»).
+         *   ⛔ Chi non lo vuole lo spegne da Aspetto e il timbro rende la scelta definitiva; e per
+         *     tornare indietro basta questa riga.
+         */
         backgroundMotion: true,
         interfaceMotion: true,
         motionMode: "adaptive",
@@ -21479,20 +21631,20 @@ ${testo3}` : testo3;
         autonomiaScelta: false
       };
       const TALOS_THEME_TOKENS = {
-        forge: { bg: "#201d1a", panel: "#2b2621", accent: "#c08b3c", text: "#f5efe6", muted: "#b5a89a", border: "#4b3e31", radius: "14px", font: "Instrument Sans" },
-        paper: { bg: "#f5f1e8", panel: "#fffdf8", accent: "#9b5b2a", text: "#24211e", muted: "#756e65", border: "#d9d0c3", radius: "10px", font: "Instrument Sans" },
-        terminal: { bg: "#101714", panel: "#16231e", accent: "#67d391", text: "#e5f6ec", muted: "#8ba99a", border: "#2b4a3a", radius: "6px", font: "JetBrains Mono" },
-        aurora: { bg: "#171629", panel: "#24233e", accent: "#a995ff", text: "#f1efff", muted: "#aaa6c8", border: "#44416c", radius: "16px", font: "Instrument Sans" },
-        glacier: { bg: "#111c25", panel: "#1b2a37", accent: "#8fd8f3", text: "#eef9ff", muted: "#9eb7c4", border: "#345064", radius: "14px", font: "Instrument Sans" },
-        ember: { bg: "#211719", panel: "#302022", accent: "#ef8b57", text: "#fff1eb", muted: "#c6a39a", border: "#5b3534", radius: "14px", font: "Instrument Sans" },
-        atlas: { bg: "#151b29", panel: "#202c43", accent: "#74a8ff", text: "#edf4ff", muted: "#a4b2c9", border: "#3a4e75", radius: "12px", font: "Instrument Sans" },
-        noir: { bg: "#0e0e10", panel: "#19191c", accent: "#d4d4d8", text: "#f5f5f5", muted: "#929297", border: "#35353a", radius: "4px", font: "Instrument Sans" },
-        signal: { bg: "#101b1e", panel: "#17272b", accent: "#5ce1e6", text: "#e9ffff", muted: "#91b9bc", border: "#2f555a", radius: "10px", font: "Instrument Sans" },
-        violet: { bg: "#1c1625", panel: "#2a2038", accent: "#d3a6ff", text: "#fbf3ff", muted: "#b5a0c3", border: "#523c68", radius: "18px", font: "Instrument Sans" },
-        claudius: { bg: "#211e1a", panel: "#302b24", accent: "#d2a96d", text: "#f8f1e4", muted: "#b6aa98", border: "#514638", radius: "12px", font: "Instrument Sans" },
-        basicus: { bg: "#202124", panel: "#2b2c30", accent: "#aeb4c0", text: "#f1f3f5", muted: "#9ea4ad", border: "#45484f", radius: "8px", font: "Instrument Sans" },
-        telemetry: { bg: "#101b1d", panel: "#18292b", accent: "#75d0a4", text: "#e7fff2", muted: "#96b8a8", border: "#315448", radius: "10px", font: "JetBrains Mono" },
-        calm: { bg: "#1e1f22", panel: "#25262a", accent: "#c08b3c", text: "#f3f0e9", muted: "#9c9da2", border: "#36373b", radius: "12px", font: "Instrument Sans" }
+        forge: { accento: "#c98b32", fondo: "#080b11", secondario: "#6ad4d4", linea: "#27313e", chiaro: false, raggio: "14px" },
+        paper: { accento: "#a96617", fondo: "#f8fafc", secondario: "#2f6f7d", linea: "#d7dee8", chiaro: true, raggio: "10px" },
+        terminal: { accento: "#63f08e", fondo: "#020403", secondario: "#d6ff72", linea: "#163821", chiaro: false, raggio: "6px" },
+        aurora: { accento: "#42e7c7", fondo: "#071113", secondario: "#ff6bb5", linea: "#233742", chiaro: false, raggio: "16px" },
+        glacier: { accento: "#2367d1", fondo: "#f4f9fb", secondario: "#ef7d30", linea: "#c9d7e3", chiaro: true, raggio: "14px" },
+        ember: { accento: "#ff5c62", fondo: "#10090a", secondario: "#ffbd5c", linea: "#3b2224", chiaro: false, raggio: "14px" },
+        atlas: { accento: "#d49a52", fondo: "#07101f", secondario: "#57d49c", linea: "#243146", chiaro: false, raggio: "12px" },
+        noir: { accento: "#f2f2f2", fondo: "#050505", secondario: "#ff405a", linea: "#333333", chiaro: false, raggio: "4px" },
+        signal: { accento: "#ff6f61", fondo: "#091011", secondario: "#b4f06f", linea: "#213236", chiaro: false, raggio: "10px" },
+        violet: { accento: "#b794f6", fondo: "#0d0a19", secondario: "#6ee7b7", linea: "#2f2848", chiaro: false, raggio: "18px" },
+        claudius: { accento: "#d97757", fondo: "#faf9f5", secondario: "#6a9bcc", linea: "#e8e6dc", chiaro: true, raggio: "12px" },
+        basicus: { accento: "#1976d2", fondo: "#fafafa", secondario: "#9c27b0", linea: "#e0e0e0", chiaro: true, raggio: "8px" },
+        telemetry: { accento: "#6ad4d4", fondo: "#0b0f11", secondario: "#63f08e", linea: "#1f3238", chiaro: false, raggio: "10px" },
+        calm: { accento: "#c08b3c", fondo: "#1e1f22", secondario: "#8e9095", linea: "#36373b", chiaro: false, raggio: "12px" }
       };
       const MOTION_RANGE_DEFS = {
         motionSpeed: [25, 200],
@@ -21523,6 +21675,16 @@ ${testo3}` : testo3;
         safe.themePreset = enumValue(record.themePreset, TALOS_THEME_IDS, safe.themePreset);
         safe.colorMode = enumValue(record.colorMode, COLOR_MODE_IDS, safe.colorMode);
         safe.sceneOverride = enumValue(record.sceneOverride, TALOS_SCENE_IDS, safe.sceneOverride);
+        for (const chiave of ASPETTO_CHIAVI_VERSIONATE) {
+          const timbro = chiaveVersioneAspetto(chiave);
+          const versione = numberValue(record[timbro], [0, 99], 0);
+          if (versione === ASPETTO_SCELTA_VERSIONE) {
+            safe[timbro] = ASPETTO_SCELTA_VERSIONE;
+            continue;
+          }
+          safe[timbro] = 0;
+          safe[chiave] = DESKTOP_APPEARANCE_DEFAULTS[chiave];
+        }
         safe.uiDensity = enumValue(record.uiDensity, ["comoda", "compatta"], safe.uiDensity);
         safe.uiLanguage = enumValue(record.uiLanguage, [...LINGUE], safe.uiLanguage);
         safe.uiFontScale = enumValue(record.uiFontScale, Object.keys(UI_FONT_SCALE_FACTORS), safe.uiFontScale);
@@ -21593,7 +21755,8 @@ ${testo3}` : testo3;
       }
       function aggiornaAspettoDesktop(patch) {
         const documento = leggiImpostazioniDesktop();
-        documento.appearance = normalizzaAspettoDesktop({ ...documento.appearance, ...patch });
+        const timbri = Object.fromEntries(ASPETTO_CHIAVI_VERSIONATE.filter((chiave) => Object.hasOwn(patch, chiave)).map((chiave) => [chiaveVersioneAspetto(chiave), ASPETTO_SCELTA_VERSIONE]));
+        documento.appearance = normalizzaAspettoDesktop({ ...documento.appearance, ...patch, ...timbri });
         salvaImpostazioniDesktop(documento);
         applicaAspettoDesktop(documento.appearance);
       }
@@ -21635,7 +21798,7 @@ ${testo3}` : testo3;
         const requestedTheme = safe.themePreset;
         const scene = safe.sceneOverride === "follow-theme" ? requestedTheme : safe.sceneOverride;
         const mode = resolvedColorMode(safe.colorMode);
-        const theme = TALOS_THEME_TOKENS[requestedTheme] || TALOS_THEME_TOKENS.calm;
+        if (!TALOS_THEME_TOKENS[requestedTheme]) console.warn(`[talos] tema senza semi: ${requestedTheme}`);
         host.dataset.talosTheme = requestedTheme;
         host.dataset.talosColorMode = safe.colorMode;
         host.dataset.talosResolvedColorMode = mode;
@@ -21667,15 +21830,16 @@ ${testo3}` : testo3;
         style.setProperty("--talos-motion-contrast", String(safe.motionContrast / 100));
         style.setProperty("--talos-motion-parallax", String(safe.motionParallax / 100));
         const velocitaSfondo = Math.max(0.1, safe.motionSpeed / 100);
-        style.setProperty("--talos-background-cycle", `${Math.round(36e3 / velocitaSfondo)}ms`);
+        style.setProperty("--talos-background-cycle", `${Math.round(9e4 / velocitaSfondo)}ms`);
         style.setProperty("--talos-background-shift-x", `${Math.round(safe.motionParallax * 0.8)}px`);
         style.setProperty("--talos-background-shift-y", `${Math.round(safe.motionParallax * 0.5)}px`);
         style.setProperty("--talos-motion-duration-scale", String(safe.motionDuration / 100));
         style.setProperty("--talos-motion-ui-intensity", String(safe.motionUiIntensity / 100));
         style.setProperty("--talos-motion-stagger", `${safe.motionStagger}ms`);
         const profilo = { minimal: 0.72, expressive: 1.2, custom: 1, preset: 1, off: 0 }[safe.motionProfile] ?? 1;
-        const scala = safe.motionDuration / 100 * profilo;
-        const durata = (base) => `${Math.max(1, Math.round(base * scala))}ms`;
+        const interfacciaFerma = !safe.interfaceMotion || safe.motionProfile === "off" || safe.reducedMotion;
+        const scala = interfacciaFerma ? 0 : safe.motionDuration / 100 * profilo;
+        const durata = (base) => interfacciaFerma ? "0s" : `${Math.max(1, Math.round(base * scala))}ms`;
         const easing = {
           precise: "cubic-bezier(.2,.7,.2,1)",
           soft: "cubic-bezier(.22,1,.36,1)",
@@ -21701,10 +21865,10 @@ ${testo3}` : testo3;
         host.dataset.talosMotionQuality = safe.motionQuality;
         host.dataset.talosMotionProfile = safe.motionProfile;
         host.dataset.talosMotionEasing = safe.motionEasing;
-        const backgroundOff = !safe.backgroundMotion || safe.motionMode === "off" || safe.reducedMotion;
+        const backgroundOff = !safe.backgroundMotion || safe.motionMode === "off";
         host.classList.toggle("background-motion-off", backgroundOff);
         document.body.classList.toggle("background-motion-off", backgroundOff);
-        host.classList.toggle("interface-motion-off", !safe.interfaceMotion || safe.motionProfile === "off" || safe.reducedMotion);
+        host.classList.toggle("interface-motion-off", interfacciaFerma);
         host.classList.toggle("reduce-motion", safe.reducedMotion);
         document.body.classList.toggle("reduce-motion", safe.reducedMotion);
         for (const key of ["windows", "surfaces", "navigation", "composer", "messages", "feedback"]) host.classList.toggle(`motion-${key}-off`, !safe[`motion${key[0].toUpperCase()}${key.slice(1)}`]);
@@ -21839,7 +22003,7 @@ ${testo3}` : testo3;
       }
       function resettaMotionDesktop() {
         const documento = leggiImpostazioniDesktop();
-        documento.appearance = normalizzaAspettoDesktop({ ...documento.appearance, sceneOverride: DESKTOP_APPEARANCE_DEFAULTS.sceneOverride, ...Object.fromEntries(Object.keys(DESKTOP_APPEARANCE_DEFAULTS).filter((key) => key.startsWith("motion") || ["backgroundMotion", "interfaceMotion", "pauseWhenHidden", "respectDataSaver", "reducedMotion"].includes(key)).map((key) => [key, DESKTOP_APPEARANCE_DEFAULTS[key]])) });
+        documento.appearance = normalizzaAspettoDesktop({ ...documento.appearance, sceneOverride: DESKTOP_APPEARANCE_DEFAULTS.sceneOverride, sceneOverrideVersione: 0, ...Object.fromEntries(Object.keys(DESKTOP_APPEARANCE_DEFAULTS).filter((key) => key.startsWith("motion") || ["backgroundMotion", "interfaceMotion", "pauseWhenHidden", "respectDataSaver", "reducedMotion"].includes(key)).map((key) => [key, DESKTOP_APPEARANCE_DEFAULTS[key]])) });
         salvaImpostazioniDesktop(documento);
         applicaAspettoDesktop(documento.appearance);
       }

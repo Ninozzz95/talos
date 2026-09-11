@@ -21,6 +21,17 @@ const STATIC_ASSETS = Object.freeze({
   '/styles.css': { file: 'styles.css', contentType: 'text/css; charset=utf-8' },
   '/app.js': { file: 'app.js', contentType: 'text/javascript; charset=utf-8' },
   /*
+   * ⭐⭐⭐ 11/09 — la schermata d'avvio. È un file a parte, e non un pezzo di `app.js`, perché deve
+   *   arrivare PRIMA del primo disegno: `app.js` è il bundle grosso, cioè proprio il tempo che il
+   *   velo esiste per coprire.
+   * ⛔ Senza questa riga il server risponde **404** e non lo dice a nessuno: il velo resta a schermo
+   *   per sempre, e sotto c'è la app che nessuno può toccare. Trovato dal vivo, non da un test —
+   *   la pagina non lanciava un solo errore.
+   * ⛔ Questa mappa è cablata apposta: `file` non si costruisce MAI dal `pathname` della richiesta
+   *   (vedi la nota qui sotto su DEC-053), e una voce in più è il solo modo di aggiungere un asset.
+   */
+  '/avvio.js': { file: 'avvio.js', contentType: 'text/javascript; charset=utf-8' },
+  /*
    * ⭐⭐⭐ 26/8, DEC-053 — MAI PIÙ una copia locale sincronizzata a mano
    * (harness-ui-due-copie-divergenti.md era esattamente questo difetto).
    * publicDir ora È mobile/public/harness-ui/: `talos/brand/` è FRATELLO

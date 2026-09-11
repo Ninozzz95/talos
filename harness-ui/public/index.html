@@ -6,10 +6,120 @@
     <meta name="color-scheme" content="dark light">
     <link rel="icon" href="data:,">
     <title>TALOS Codice</title>
+    <!--
+      ⭐⭐⭐ 11/09 — LA SCHERMATA D'AVVIO, e perché sta QUI e non in un foglio esterno.
+
+      Owner: «se faccio refresh per un centesimo di secondo compare un placeholder mockup».
+      Misurato prima di scrivere, sul 4174: a **64 ms** ci sono già 3.243 caratteri a schermo, a
+      **161 ms** crollano a 456, e la pagina si stabilizza a **~280 ms**. Quello che si vede in
+      mezzo è lo scheletro del template montato, senza contenuti e senza il tema applicato.
+
+      ⛔ Questo `<style>` è INLINE e viene PRIMA dei fogli esterni apposta: un foglio esterno
+      arriva dopo il primo disegno, cioè dopo il lampo che deve coprire. Ricerca 11/09/2026
+      (openreplay «Preventing FOUC in Modern Frontend Apps»; uxpin «Splash Screen Design 2026»):
+      il CSS critico inline in `<head>` è la difesa vera contro il lampo, e una schermata d'avvio
+      «dura quanto serve, sotto i due secondi, SENZA ritardi artificiali».
+      ⇒ Qui il minimo è 650 ms — non un'attesa inventata: è il tempo che la sequenza del marchio
+      impiega ad accendersi fino all'ultimo nodo. Un avvio tagliato a metà è il difetto che il
+      mobile ha già dovuto correggere una volta («la app si carica prima che la boot animation
+      finisca»); e sopra quel minimo si esce appena la pagina è pronta.
+
+      ⛔ Il disegno NON è inventato: è quello del mobile (`mobile/src/components/brand/
+      TalosBootLogo.vue`), che a sua volta è lo specchio del boot loader del desktop
+      (`control-plane/.../partials/talos-loading-logo`). Dal mobile viene anche la lezione più
+      importante, pagata lì: si anima SOLO `opacity` e `transform`, mai `fill`/`stroke-width`/il
+      raggio di un `drop-shadow` — quelle tre sono pitture che il compositore non sa fare, e su
+      cinque elementi insieme l'animazione non è lenta, è ferma. Il bagliore è un filtro STATICO
+      su uno strato di cui si anima l'opacità.
+      ⛔ E i tratti RESTANO accesi (`both`, e le keyframe finiscono al 100%): il marchio si
+      costruisce e rimane costruito — a toglierlo è la dissolvenza del velo, non l'animazione.
+    -->
+    <script src="./avvio.js"></script>
+    <style data-talos-nonce>
+      /*
+       * ⛔⛔⛔ COLORE E IMMAGINE SEPARATI, e non è pignoleria: la prima versione scriveva
+       *   `background: radial-gradient(...), var(--talos-background, #1e1f22)` in una scorciatoia
+       *   sola. Sul server di prova funzionava; sul 4174 vero il fondo risultava
+       *   **`rgba(0,0,0,0)` — trasparente**, cioè il velo lasciava vedere lo scheletro che esiste
+       *   per coprire. Misurato, non supposto.
+       * ⇒ Un `var()` che non risolve NON ripiega sul suo fallback se la proprietà esiste ma è
+       *   vuota: rende invalida l'intera dichiarazione («invalid at computed-value time»), e con la
+       *   scorciatoia si porta via anche il colore. Tenuti separati, un'immagine che fallisce lascia
+       *   in piedi il colore — e il colore qui è un valore LETTERALE, senza variabili, perché è
+       *   l'unica cosa che deve reggere anche quando nessun foglio è ancora arrivato.
+       */
+      #talosAvvio{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;
+        background-color:#1e1f22;
+        background-image:radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--talos-accent, #c08b3c) 12%, transparent), transparent 60%);
+        transition:opacity .3s ease}
+      #talosAvvio[data-uscita="si"]{opacity:0;pointer-events:none}
+      /* ⛔ Sull'ATTRIBUTO, non su `prefers-color-scheme`: la scelta salvata batte quella di sistema,
+         come in `applicaThemeDesktop`. Il ponte qui sopra ha già stampato l'attributo. */
+      :root[data-theme="light"] #talosAvvio{background-color:#ece9e2;
+        background-image:radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--talos-accent, #c08b3c) 10%, transparent), transparent 60%)}
+      :root[data-theme="light"] #talosAvvio .avvio-parola{color:#2b2a27}
+      #talosAvvio .avvio-marchio{position:absolute;top:50%;left:50%;width:125px;height:125px;transform:translate(-50%,-50%)}
+      /*
+       * ⛔⛔⛔ SEI STRATI HTML, non sei elementi dentro UN SVG — ed è la differenza fra liscio e no.
+       *   Misurato sui pixel dipinti: con gli elementi dentro l'SVG restava **un buco da 209 ms**
+       *   DENTRO la coreografia, anche facendola partire a thread libero, perché il long task del
+       *   boot arriva dopo. Ricerca 11/09/2026 (Lighthouse «Avoid non-composited animations»;
+       *   webperf.tips): «SVG-based animations are not accelerated via the Compositor» — nessun
+       *   `will-change` promuove i figli di un SVG.
+       * ⇒ Ogni pezzo del marchio sta in un `div` suo. Un div con `opacity` animata E `will-change`
+       *   ottiene un layer proprio: l'animazione vive sul compositor e un thread occupato non la
+       *   tocca. Il tracciato non cambia di un numero — cambia CHI lo contiene.
+       * ⛔ Il prezzo, dichiarato: i tratti si accendono in dissolvenza invece di CRESCERE dall'alto
+       *   come nel mobile. La crescita vuole `transform: scaleY` sul singolo tratto, e i due bracci
+       *   obliqui sono ruotati, quindi non si può fare sullo strato che li contiene tutti. Ho scelto
+       *   il liscio: l'owner ha chiesto «smooth», e lo scatto era la cosa che si vedeva.
+       */
+      #talosAvvio .avvio-strato{position:absolute;inset:0;opacity:0;will-change:opacity}
+      #talosAvvio .avvio-strato svg{width:100%;height:100%;display:block}
+      #talosAvvio .avvio-hex{opacity:1}
+      #talosAvvio .hex{stroke:var(--talos-accent,#c08b3c);stroke-opacity:.18}
+      #talosAvvio .edge{stroke:var(--talos-accent,#c08b3c)}
+      #talosAvvio .node{stroke:var(--talos-accent,#c08b3c);fill:var(--talos-accent,#c08b3c);
+        filter:drop-shadow(0 0 9px color-mix(in srgb, var(--talos-accent,#c08b3c) 70%, transparent))}
+      /* La coreografia del mobile, ai suoi stessi rapporti: l'ultimo strato finisce a ~640 ms. */
+      #talosAvvio[data-anima="si"] .avvio-s1{animation:avvioAccendi .4s ease-in-out both}
+      #talosAvvio[data-anima="si"] .avvio-s2{animation:avvioAccendi .4s ease-in-out .06s both}
+      #talosAvvio[data-anima="si"] .avvio-s3{animation:avvioAccendi .4s ease-in-out .12s both}
+      #talosAvvio[data-anima="si"] .avvio-s4{animation:avvioAccendi .4s ease-in-out .18s both}
+      #talosAvvio[data-anima="si"] .avvio-s5{animation:avvioAccendi .4s ease-in-out .24s both}
+      #talosAvvio .avvio-parola{position:absolute;top:calc(50% + 78px);left:50%;transform:translateX(-50%);
+        font-size:1.5rem;font-weight:600;letter-spacing:.35em;padding-left:.35em;color:var(--talos-text,#f3f0e9);
+        animation:avvioParola .3s ease-out .15s both;animation-play-state:paused}
+      #talosAvvio[data-anima="si"] .avvio-parola{animation-play-state:running}
+      @keyframes avvioScorri{0%,10%{transform:scaleY(0);opacity:0}60%,100%{transform:scaleY(1);opacity:1}}
+      @keyframes avvioAccendi{0%,10%{opacity:0}55%,100%{opacity:1}}
+      @keyframes avvioParola{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+      /* ⛔ Mirata sui selettori dell'avvio, MAI universale: tre regole universali con `!important`
+         sono già state tolte da questo progetto e sono costate sei cure inutili su un componente sano. */
+      @media (prefers-reduced-motion: reduce){
+        #talosAvvio .avvio-strato,#talosAvvio .avvio-parola{animation:none;opacity:1}
+        #talosAvvio .avvio-parola{transform:translateX(-50%)}
+      }
+    </style>
     <link rel="stylesheet" href="./vendor/xterm/xterm.css">
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
+<!-- ⛔ PRIMO figlio del `body`: deve coprire lo scheletro, quindi deve esistere prima di lui.
+     Il tracciato è quello del marchio vero (`control-plane/resources/images/logo-short.svg`,
+     viewBox 500×500), copiato dal boot logo del mobile senza cambiarne un numero. -->
+<div id="talosAvvio" role="status" aria-live="polite" aria-label="Avvio di TALOS">
+  <div class="avvio-marchio">
+    <div class="avvio-strato avvio-hex"><svg viewBox="0 0 500 500" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><path class="hex" stroke-width="12" d="M 218 123.5 L 121.9 179 A 21 21 0 0 0 111.5 197 L 111.5 333 A 21 21 0 0 0 121.9 351 L 239.6 419 A 21 21 0 0 0 260.4 419 L 378.1 351 A 21 21 0 0 0 388.5 333 L 388.5 197 A 21 21 0 0 0 378.1 179 L 282 123.5"/></g></svg></div>
+    <div class="avvio-strato avvio-s1"><svg viewBox="0 0 500 500" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><circle class="node" stroke-width="9" cx="250" cy="105" r="22"/></g></svg></div>
+    <div class="avvio-strato avvio-s2"><svg viewBox="0 0 500 500" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><path class="edge" stroke-width="9" d="M 250 140 L 250 195"/></g></svg></div>
+    <div class="avvio-strato avvio-s3"><svg viewBox="0 0 500 500" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><circle class="node" stroke-width="9" cx="250" cy="225" r="18"/></g></svg></div>
+    <div class="avvio-strato avvio-s4"><svg viewBox="0 0 500 500" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><path class="edge" stroke-width="9" d="M 250 255 L 250 315"/><g transform="translate(250, 225) rotate(45)"><path class="edge" stroke-width="9" d="M 0 32 L 0 95"/></g><g transform="translate(250, 225) rotate(-45)"><path class="edge" stroke-width="9" d="M 0 32 L 0 95"/></g></g></svg></div>
+    <div class="avvio-strato avvio-s5"><svg viewBox="0 0 500 500" aria-hidden="true"><g fill="none" stroke-linecap="round" stroke-linejoin="round"><circle class="node" stroke-width="9" cx="250" cy="338" r="14"/><g transform="translate(250, 225) rotate(45)"><circle class="node" stroke-width="9" cx="0" cy="118" r="14"/></g><g transform="translate(250, 225) rotate(-45)"><circle class="node" stroke-width="9" cx="0" cy="118" r="14"/></g></g></svg></div>
+  </div>
+  <span class="avvio-parola talos-orbitron-brand">TALOS</span>
+</div>
+
 <svg width="0" height="0" class="talos-sprite" aria-hidden="true">
   <!-- ⛔ 07/9, O-44 — owner: «i loghi sono ancora mockup e non usano quelli veri; vedi mobile,
        lui lo fa alla perfezione». Qui c'era una «A» stilizzata disegnata a mano su una griglia 32×32.
@@ -1043,6 +1153,14 @@ export function registraSessione(sessione) {
         <button class="talos-choice" role="radio" aria-checked="true" data-permission-choice="Workspace write"><span class="talos-choice__title">Scrive nel progetto</span><span class="talos-badge talos-badge--warning talos-badge--sm">rischio medio</span><p>Scrive solo dentro la cartella della sessione. Comandi e test passano dal cancello. <span class="talos-choice__hint">Consigliato</span></p></button>
         <button class="talos-choice" role="radio" aria-checked="false" data-permission-choice="On request"><span class="talos-choice__title">Chiede prima</span><span class="talos-badge talos-badge--warning talos-badge--sm">rischio medio</span><p>Ti chiede conferma prima di ogni azione che lascia traccia: scritture, comandi, rete.</p></button>
         <button class="talos-choice" role="radio" aria-checked="false" data-permission-choice="Full access"><span class="talos-choice__title">Accesso pieno</span><span class="talos-badge talos-badge--danger talos-badge--sm">rischio molto alto</span><p>File e rete senza i cancelli ordinari. Solo se sai gia cosa sta per fare.</p></button>
+      </div>
+      <!--
+        ⛔⛔ 11/09 — QUESTO `</div>` MANCAVA, ed era un errore di annidamento, non di stile: il blocco
+        «Dove girano i comandi» stava DENTRO `#veloPermessiScelte`, cioè dentro la griglia delle
+        quattro politiche, e finiva a schermo come loro QUINTA COLONNA. Owner, con la sua schermata:
+        «metti dove girano i comandi a capo in una riga a se stante». Ora la griglia dei permessi si
+        chiude dove finiscono i permessi, e il blocco qui sotto apre la riga sua.
+      -->
       <!--
         ⭐⭐⭐ D-10F — DOVE GIRANO I COMANDI. Misurato il 10/09: `!npm --version` rispondeva con
         l'npm di LINUX, mentre un comando col programma assente in WSL finiva su `cmd`. Due sistemi
@@ -1058,8 +1176,7 @@ export function registraSessione(sessione) {
       <div class="talos-choice-grid" role="radiogroup" aria-label="Dove girano i comandi">
         <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice=""><span class="talos-choice__title">Automatico</span><span class="talos-badge talos-badge--sm">Come prima</span><span class="talos-choice__sub">Sceglie da sé, e può cambiare da un comando all’altro.</span></button>
         <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice="wsl2"><span class="talos-choice__title">Linux (WSL2)</span><span class="talos-badge talos-badge--sm">Consigliato</span><span class="talos-choice__sub">Sempre in Linux. Se WSL non c’è, il comando lo dice invece di ripiegare in silenzio.</span></button>
-        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice="windows"><span class="talos-choice__title">Windows</span><span class="talos-choice__sub">Sempre sul sistema di casa, con i percorsi C: che vedi in Esplora file.</span></button>
-      </div>
+        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice="windows"><span class="talos-choice__title">Windows</span><span class="talos-choice__sub">Sempre sul sistema di casa, con i percorsi C:\ che vedi in Esplora file.</span></button>
       </div>
       <div class="talos-toolbar talos-toolbar--inset"><span class="talos-eyebrow">Per attrezzo</span><!-- ⛔ 07/9 — qui c'erano due schede, «Tutti e 43» e «Hanno un cancello», e non filtravano niente:
              l'elenco mostra i CINQUE attrezzi che hanno un cancello proprio, mai 43. Una promessa vuota

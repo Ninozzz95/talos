@@ -333,3 +333,45 @@ test('D-10S: il comando ! NON fa rispondere il modello — la risposta arriva al
   assert.ok(testo.includes('cd games'), 'e si porta dietro il comando');
   assert.ok(testo.includes('giochi-uno'), 'e quello che il comando ha stampato');
 });
+
+/* ══════════════════════ D-10T — la LETTURA, cioè ciò che sopravvive al refresh ══════════════════════ */
+
+/*
+ * ⛔⛔⛔ Il difetto non era una funzione che manca: era una che MENTE.
+ *   Le due scelte sui comandi vivevano solo nella memoria della pagina. Dopo un refresh i menu
+ *   tornavano al default **mentre il server teneva ancora la scelta vera**: leggevi «Solo tu»
+ *   mentre il modello stava davvero leggendo i tuoi comandi, e lo leggevi nella finestra dove si
+ *   decide la sicurezza.
+ * Ricerca 11/09/2026: è il difetto che openclaw ha chiuso da poco (issue #79247, «Quick Settings
+ * reads stale exec security config instead of the active source of truth») — il server resta
+ * l'autorità, il pannello rilegge quando si apre.
+ */
+test('D-10T: il server SA che cosa hai scelto, anche dopo che la pagina ha dimenticato', async () => {
+  const finta = sessioneControllabile();
+  const registro = registroCon(finta, comandoFinto('x'));
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'c' });
+
+  /* Prima di scegliere: il default, dichiarato. */
+  assert.deepEqual(
+    { dove: registro.impostazioniComandi(sessionId).dove, acceso: registro.impostazioniComandi(sessionId).comandiNellaConversazione },
+    { dove: null, acceso: false },
+  );
+
+  registro.comandiNellaConversazione(sessionId, true);
+  registro.doveGiranoIComandi(sessionId, 'windows');
+
+  /* Dopo: la lettura riporta la scelta VERA — è ciò che il menu deve mostrare al refresh. */
+  const letto = registro.impostazioniComandi(sessionId);
+  assert.equal(letto.comandiNellaConversazione, true, '⛔ se qui torna false, la finestra della sicurezza mente');
+  assert.equal(letto.dove, 'windows');
+  finta.concludi(null);
+  await unTick();
+});
+
+test('D-10T, AL CONTRARIO: una sessione che non esiste non inventa un default', () => {
+  const finta = sessioneControllabile();
+  const registro = registroCon(finta, comandoFinto('x'));
+  const esito = registro.impostazioniComandi('mai-esistita');
+  assert.equal(esito.code, 'NOT_FOUND',
+    '⛔ rispondere «spento» per una sessione che non c’è sarebbe una risposta inventata, non un default');
+});
