@@ -368,3 +368,11 @@ harness-ui/.talos-4198*.log
 *.rar
 *.7z
 *.zip
+
+# ⛔ 11/09/2026 — due cartelle di SCARTO entrate con un `git add -A` di un agente, e già sul remoto:
+# `test-results-context/` (un `trace.zip` di Playwright da 3,5 MB) e `.favicon-cache/` (17 file che
+# il server riscrive da solo). `*.zip` era già qui, ma un file GIÀ TRACCIATO non lo guarda nessun
+# gitignore: serviva anche `git rm --cached`. La storia li conserva — riscriverla vorrebbe un
+# force-push, che non si fa: qui si ferma solo la crescita.
+harness-ui/frontend/test-results-context/
+harness-ui/.favicon-cache/
