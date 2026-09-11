@@ -1638,5 +1638,23 @@ export async function eseguiComandoDiretto({
   const content = `exit ${risultato.codice} [sandbox: ${risultato.enforcement}]\n${risultato.testo}`;
   onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId, content }));
   onEvento(comandoUtenteFinito({ comandoId, codice: risultato.codice, enforcement: risultato.enforcement }));
-  return { ok: true, codice: risultato.codice, enforcement: risultato.enforcement, cartellaFinale: risultato.cartellaFinale ?? null };
+  /*
+   * ⭐⭐⭐ D-10S (11/09) — `comando` e `testo` TORNANO al chiamante, e non è una comodità.
+   *   Finora l'uscita di un comando `!` viveva solo negli eventi: la persona la vedeva, il modello
+   *   no. Chi poi chiedeva «e allora?» parlava di una cosa che per il modello non era mai successa.
+   *   Per cucire il comando nella cronologia della sessione (session-registry, `shell()`) servono
+   *   qui: il testo della domanda e il testo della risposta.
+   * ⛔ Sono campi IN PIÙ: chi legge `ok`/`codice`/`enforcement`/`cartellaFinale` non vede differenza.
+   * ⛔ `risultato.testo` è già passato da `uscitaUtile`, cioè è già tagliato: la cucitura non deve
+   *   ritagliare di nuovo con un'altra regola, o la persona e il modello leggerebbero due cose
+   *   diverse sotto lo stesso nome.
+   */
+  return {
+    ok: true,
+    codice: risultato.codice,
+    enforcement: risultato.enforcement,
+    cartellaFinale: risultato.cartellaFinale ?? null,
+    comando,
+    testo: risultato.testo ?? '',
+  };
 }

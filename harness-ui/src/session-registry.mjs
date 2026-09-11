@@ -212,6 +212,66 @@ export const SOGLIE_STALLO_PREDEFINITE = Object.freeze({
  */
 export const ATTREZZI_CHE_LANCIANO_PROCESSI = Object.freeze(['shell', 'prova']);
 
+/*
+ * ⭐⭐⭐ D-10S (11/09) — QUANTO DI UN COMANDO `!` ENTRA NELLA CONVERSAZIONE.
+ *
+ * Un `!npm test` può stampare centinaia di KB. Il tetto non è un'opinione sullo stile: è ciò che
+ * separa «il modello ha letto l'uscita» da «il prefisso di ogni giro successivo porta per sempre
+ * mezzo megabyte». Il costo si paga a OGNI chiamata del giro, non una volta — il 93% della spesa
+ * di un giro è rileggere il prefisso ([[la-cache-vale-sei-volte-e-non-la-contavamo]], 22/08).
+ *
+ * ⛔ 8.000 caratteri ≈ 2.000 token: la coda di un `npm test` (dove stanno i fallimenti) ci sta
+ *   comoda, un log di build no. E quando si taglia LO SI DICE, col totale vero: un modello che
+ *   legge un'uscita monca senza saperlo conclude sul niente — ed è il difetto peggiore che questo
+ *   banco abbia misurato ([[un-modello-che-non-vede-non-tace-spiega]]).
+ *
+ * ⭐ Si tiene TESTA E CODA, elidendo il mezzo. Non è simmetria estetica: la testa di un log porta
+ *   la configurazione (quale comando, quale cartella, quale versione) e la coda porta l'esito.
+ *   Il mezzo di un `npm test` sono le righe verdi. Ricerca 11/09/2026: è il consenso dichiarato
+ *   per gli harness del 2026 — Codex tronca «preserving the beginning and end of output while
+ *   eliding the middle», e un tetto di ~8.000 caratteri per chiamata è la cifra citata come quella
+ *   che «può risparmiare più token di ogni altra modifica messa insieme» (apidog, WaveSpeed,
+ *   AgentPatterns «Unix CLI as the Native Tool Interface for AI Agents»).
+ *
+ * ⛔⛔ IL PREZZO, dichiarato perché è vero: Hermes Agent fa deliberatamente l'OPPOSTO — col suo `!`
+ *   «nothing enters the conversation … so your context stays clean and the prompt cache is
+ *   untouched» (docs Hermes, letti l'11/09). Ha ragione sul meccanismo: toccare la cronologia tocca
+ *   la cache, e la cache vale SEI VOLTE ([[la-cache-vale-sei-volte-e-non-la-contavamo]]).
+ *   ⇒ Per questo il racconto si APPENDE IN CODA e mai in mezzo: il prefisso già in cache resta
+ *   identico, e si paga solo la parte nuova. Owner 11/09: «esattamente come Claude» — la scelta è
+ *   sua e consapevole, non un effetto collaterale.
+ */
+export const TETTO_RACCONTO_COMANDO = 8_000;
+
+/**
+ * Il comando e la sua uscita, nella forma che il modello legge.
+ *
+ * I nomi dei tag sono quelli di Claude Code (`<bash-input>`, `<bash-stdout>`), verificati l'11/09
+ * sui trascritti sul disco: sono la forma su cui i modelli sono già addestrati, e questo è un
+ * contratto col modello, non testo da mostrare a una persona.
+ */
+export const TESTA_RACCONTO_COMANDO = 2_000;
+
+export function raccontoDelComando({ comando, codice, testo }) {
+  const uscita = String(testo ?? '');
+  if (uscita.length === 0) {
+    return `<bash-input>${String(comando ?? '')}</bash-input>\n`
+      + '<bash-stdout>(nessuna uscita)</bash-stdout>\n'
+      + `<bash-exit>${codice ?? '?'}</bash-exit>`;
+  }
+  let mostrata = uscita;
+  if (uscita.length > TETTO_RACCONTO_COMANDO) {
+    const coda = TETTO_RACCONTO_COMANDO - TESTA_RACCONTO_COMANDO;
+    const tolti = uscita.length - TETTO_RACCONTO_COMANDO;
+    mostrata = `${uscita.slice(0, TESTA_RACCONTO_COMANDO)}\n`
+      + `\n[⛔ tolti ${tolti} caratteri dal MEZZO — l'uscita intera è ${uscita.length} caratteri]\n\n`
+      + uscita.slice(uscita.length - coda);
+  }
+  return `<bash-input>${String(comando ?? '')}</bash-input>\n`
+    + `<bash-stdout>${mostrata}</bash-stdout>\n`
+    + `<bash-exit>${codice ?? '?'}</bash-exit>`;
+}
+
 const MOTIVO_SENZA_ISTANTI = 'nessun istante osservato: gli eventi persistiti non portano un orario, quindi il tempo si conosce solo per una sessione seguita dal vivo da questo processo';
 const MOTIVO_ANCORA_IN_CORSO = 'il processo non ha ancora riportato un esito: la durata finale non esiste ancora';
 const MOTIVO_FINE_NON_OSSERVATA = 'l\'esito è arrivato senza che il suo istante fosse osservato (sessione ripresa a metà)';
@@ -2216,9 +2276,65 @@ export function createSessionRegistry({
       ? versioneGiroRichiesta
       : (voce.versioneGiro ?? 0) + 1;
     voce.versioneGiro = versioneGiro;
-    const messaggiPrimaDelGiro = Array.isArray(messaggiIniziali)
+    /*
+     * ⭐⭐⭐ D-10S (11/09) — I COMANDI `!` ENTRANO NELLA CONVERSAZIONE, come fa Claude Code.
+     *
+     * Prima: `shell()` eseguiva e trasmetteva eventi, e l'uscita era dichiarata EFFIMERA. La
+     * persona la vedeva sullo schermo, il modello no — così «e allora perché fallisce?» subito
+     * dopo un `!npm test` parlava di una cosa che per lui non era mai successa.
+     *
+     * Ricerca 11/09/2026 — Claude Code mette comando e uscita NELLA conversazione, in tag
+     * `<bash-input>`/`<bash-stdout>`/`<bash-stderr>` (verificato sul disco in 8 trascritti, non
+     * riferito); LibraBit «Stop Copy-Pasting Output Into Claude Code» e BSWEN «the ! prefix
+     * explained» descrivono lo stesso comportamento — «adds the command and its full output to the
+     * conversation context» — e avvertono del rovescio: un `!env` ci finirebbe dentro coi segreti.
+     * Teniamo i loro nomi di tag apposta: sono quelli su cui i modelli sono già addestrati.
+     *
+     * ⛔ La cucitura avviene QUI, sincrona, e solo all'avvio di un giro. Non durante il comando:
+     *   `voce.messaggiFinali` viene riscritto alla fine di ogni giro (vedi `.then` più sotto), e
+     *   scrivere lì mentre il modello lavora perderebbe il racconto o lo duplicherebbe.
+     * ⛔ E niente `await` in questa catena: `avviaSessione` emette `RunStarted` come sua prima riga
+     *   e chi chiama conta su quell'evento già nel buffer al ritorno sincrono — un solo tick di
+     *   ritardo qui fa cadere 148 test (misurato il 10/09).
+     *
+     * Due strade, perché la cronologia canonica può non esistere ancora:
+     *  · c'è una cronologia ⇒ i racconti diventano messaggi utente in coda, uno per comando;
+     *  · non c'è (primissimo giro) ⇒ vanno in testa al TASK. Passare `messaggiIniziali` al primo
+     *    giro impedirebbe al runtime di rigenerare il proprio system prompt (vedi il commento qui
+     *    sopra), e quello è un prezzo che non vale un `ls`.
+     */
+    const raccontiInSospeso = Array.isArray(voce.comandiDaRaccontare) ? voce.comandiDaRaccontare : [];
+    const cronologiaDiPartenza = Array.isArray(messaggiIniziali)
       ? messaggiIniziali
       : (Array.isArray(voce.messaggiFinali) ? voce.messaggiFinali : null);
+    let taskEffettivo = task;
+    let messaggiInizialiEffettivi = messaggiIniziali;
+    if (raccontiInSospeso.length > 0) {
+      const comeMessaggi = raccontiInSospeso.map((testo) => ({ role: 'user', content: testo }));
+      if (Array.isArray(cronologiaDiPartenza)) {
+        /*
+         * ⛔⛔ L'ORDINE È QUELLO DEI FATTI, non quello comodo. Trovato da un test che pretendeva il
+         *   racconto subito dopo la cronologia e l'ha trovato in fondo: `resume()` costruisce
+         *   `[...storia, nuovoMessaggioUtente]` PRIMA di arrivare qui, quindi accodare in fondo
+         *   metteva il comando DOPO la domanda che lo riguarda — «e allora?» prima del `npm test`
+         *   a cui si riferisce.
+         * ⇒ Se l'ultimo messaggio è della persona (cioè è la domanda appena scritta), i racconti
+         *   entrano PRIMA di lui. Il prefisso in cache non si tocca lo stesso: quell'ultimo
+         *   messaggio è nuovo, in cache non c'è mai stato.
+         */
+        const ultimo = cronologiaDiPartenza[cronologiaDiPartenza.length - 1];
+        messaggiInizialiEffettivi = ultimo?.role === 'user'
+          ? [...cronologiaDiPartenza.slice(0, -1), ...comeMessaggi, ultimo]
+          : [...cronologiaDiPartenza, ...comeMessaggi];
+      } else {
+        taskEffettivo = `${raccontiInSospeso.join('\n\n')}\n\n${task ?? ''}`;
+      }
+      /* ⛔ Si svuota SOLO dopo averli usati: un racconto consegnato due volte è peggio di uno perso. */
+      voce.comandiDaRaccontare = [];
+    }
+    const messaggiPrimaDelGiro = Array.isArray(messaggiInizialiEffettivi)
+      ? messaggiInizialiEffettivi
+      : cronologiaDiPartenza;
       voce.controller = controller;
       voce.conclusa = false;
       voce.interrotta = false;
@@ -2437,7 +2553,10 @@ export function createSessionRegistry({
        * scelto in partenza NO — `voce.cartella` è quella allargata da
        * cartellaEffettivaPerPermessi, il parametro è ancora quella scelta.
        */
-      cartella: voce.cartella, task, modello: modelloEffettivo, chiave: chiaveEffettiva, comandoProva, messaggiIniziali,
+      /* ⛔ D-10S: `taskEffettivo`/`messaggiInizialiEffettivi`, non i parametri nudi — portano i
+         comandi `!` lanciati dalla persona da quando il modello ha parlato l'ultima volta. Senza
+         racconti in sospeso sono identici ai parametri, bit per bit. */
+      cartella: voce.cartella, task: taskEffettivo, modello: modelloEffettivo, chiave: chiaveEffettiva, comandoProva, messaggiIniziali: messaggiInizialiEffettivi,
       reasoning: reasoningEffettivo ?? undefined,
       // ⭐ 02/09 — l'etichetta del permesso, dichiarata in RunStarted.contesto (vedi agent-service.mjs): è `voce.permessi` letto ADESSO, cioè anche un cambio arrivato da un altro client via POST /settings fra un giro e l'altro.
       permessi: voce.permessi ?? null,
@@ -4081,6 +4200,28 @@ export function createSessionRegistry({
       return { ok: true, dove };
     },
 
+    /**
+     * ⭐ D-10S — i comandi `!` di QUESTA sessione entrano nella conversazione del modello?
+     *
+     * Owner 11/09: «facciamo entrambi con switch scelto da utente, default off». Spento = il
+     * comportamento di sempre e quello di Hermes (niente in cronologia, cache del prompt intatta);
+     * acceso = quello di Claude Code (il modello legge comando e uscita al giro successivo).
+     *
+     * @param {boolean} acceso
+     */
+    comandiNellaConversazione(sessionId, acceso) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      if (typeof acceso !== 'boolean') {
+        return { erroreAvvio: 'Scelta non valida: atteso true o false.', code: 'SCELTA_NON_VALIDA' };
+      }
+      voce.comandiNellaConversazione = acceso;
+      /* ⛔ Spegnendolo si butta anche ciò che era già in attesa: chi spegne non vuole che il giro
+         successivo si porti dietro l'ultimo comando raccontato mentre era ancora acceso. */
+      if (!acceso) voce.comandiDaRaccontare = [];
+      return { ok: true, acceso };
+    },
+
     shell(sessionId, comando) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
@@ -4106,7 +4247,28 @@ export function createSessionRegistry({
         /* ⛔ D-10F — la scelta della sessione, se c'e'. Assente = ripiego automatico, come prima. */
         dove: voce.doveGiranoIComandi ?? null,
       })
-        .then((esito) => { if (esito?.cartellaFinale) voce.cartellaComandi = esito.cartellaFinale; }).catch((errore) => {
+        .then((esito) => {
+          if (esito?.cartellaFinale) voce.cartellaComandi = esito.cartellaFinale;
+          /*
+           * ⭐⭐⭐ D-10S — l'interruttore, e perché il suo default è SPENTO (owner 11/09: «facciamo
+           *   entrambi con switch scelto da utente, default off»).
+           *
+           * I due comportamenti esistono entrambi nel settore e sono opposti per una ragione vera:
+           *  · Claude Code mette comando e uscita nella conversazione — il modello li legge;
+           *  · Hermes Agent NON li mette, apposta: «the prompt cache is untouched».
+           * Spento di default perché è il comportamento di oggi (nessuna sorpresa per chi aggiorna),
+           * perché non spende token a insaputa di nessuno, e perché un `!env` acceso finirebbe nel
+           * contesto coi segreti dentro — il rovescio che la documentazione di Claude Code segnala.
+           *
+           * ⛔ Lo switch vale al MOMENTO DEL COMANDO, non al momento del giro: accenderlo dopo non
+           *   fa comparire a ritroso comandi lanciati mentre era spento. Chi lo accende sa da quando.
+           */
+          if (voce.comandiNellaConversazione === true) {
+            (voce.comandiDaRaccontare ??= []).push(raccontoDelComando({
+              comando, codice: esito?.codice, testo: esito?.testo,
+            }));
+          }
+        }).catch((errore) => {
         /* ⛔ Un comando fallito non è un giro fallito: dirlo con `RunError` spegnerebbe la sessione
            del modello, che magari sta ancora lavorando. Lo dice il suo evento. */
         broadcast(voce, { type: 'ComandoUtenteFinito', comandoId: null, errore: errore instanceof Error ? errore.message : String(errore) });
