@@ -4499,7 +4499,26 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       // C6 (06/9): la finestra del modello scelto, per dire che PERCENTUALE è il totale degli schemi.
       finestraContesto: finestraContestoDelModello(),
       uso: ambitoCapability === state.realSession.id && ambitoCapability ? riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi) : null,
+      /* ⭐ D-10S — sull'attrezzo del terminale il Capability mostra anche l'altra metà della stessa
+         domanda: il modello legge i comandi che lanci TU col `!`? Stesso stato del foglio permessi,
+         stessa rotta — due superfici che raccontano un valore solo, quindi non possono divergere. */
+      comandiNellaConversazione: state.realSession.comandiNellaConversazione === true,
+      onUscitaComandi: salvaUscitaComandiCapability,
       onAggiorna: () => caricaPannelloAttrezzi({ pagina: true }), onPermesso: salvaPermessoCapability });
+  }
+  async function salvaUscitaComandiCapability(acceso) {
+    const id = state.realSession.id;
+    if (!id || id !== ambitoCapability) return;
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(id)}/comandi-nella-conversazione`, { acceso });
+      state.realSession.comandiNellaConversazione = acceso;
+      aggiornaModalitaShell?.(composerInput?.value ?? '');
+      mostraCapability();
+    } catch (errore) {
+      /* ⛔ Si ridisegna dallo stato VERO: il menu non deve restare su una scelta che il server ha rifiutato. */
+      mostraCapability();
+      toast('Scelta non applicata', messaggioErroreUtente(errore, 'Riprova, o guarda Doctor se si ripete.'));
+    }
   }
   async function salvaPermessoCapability(attrezzo, valore) {
     const id = state.realSession.id, nome = attrezzo.nome;
@@ -6981,6 +7000,26 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
                 <option value="nega" ${state.permessiPerAttrezzo[tool] === 'nega' ? 'selected' : ''}>Nega sempre</option>
               </select>
             </div>`).join('')}
+          ${/*
+             * ⭐⭐⭐ D-10S — L'USCITA DI UN COMANDO `!`: la leggi solo tu, o anche il modello?
+             *
+             * Owner 11/09: qui dentro, nella stessa sezione degli attrezzi. Ha ragione ed è anche
+             * la scelta più onesta: la riga sopra decide se il modello può LANCIARE un comando nel
+             * terminale, questa decide se può LEGGERE quello che lanci tu. Stessa famiglia, stessa
+             * forma (riga + menu) già usata dalle cinque qui sopra — nessun controllo nuovo da
+             * imparare, e niente sesta pillola nel composer (regola dell'owner del 10/09).
+             *
+             * ⛔ Il prezzo si DICE, in una misura che una persona può valutare («~2.000 token»),
+             *   non in gergo. E il default è «Solo tu»: è il comportamento di oggi, quindi chi
+             *   aggiorna non trova il contesto cambiato sotto i piedi.
+             */''}
+          <div class="sheet-toggle-row">
+            <span><strong>uscita dei comandi che lanci tu con !</strong><small>Chi la legge, dopo che il comando è finito</small></span>
+            <select data-uscita-choice aria-label="Chi legge l'uscita dei comandi lanciati con il punto esclamativo">
+              <option value="no" ${state.realSession.comandiNellaConversazione === true ? '' : 'selected'}>Solo tu — come prima</option>
+              <option value="si" ${state.realSession.comandiNellaConversazione === true ? 'selected' : ''}>Anche il modello · ~2.000 token</option>
+            </select>
+          </div>
         </div>
         ${(() => {
           /*
@@ -7480,6 +7519,29 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           + '</select></span>';
         elenco.append(riga);
       }
+      /*
+       * ⭐⭐⭐ D-10S — l'altra metà della domanda, e sta qui in fondo all'elenco degli attrezzi.
+       *
+       * Owner 11/09: «io direi metterla nella sezione Per attrezzo». Ha ragione, e la coppia si
+       * legge bene solo vicina: le righe qui sopra dicono se il MODELLO può usare un attrezzo,
+       * questa dice se il modello legge i comandi che lanci TU col `!`.
+       *
+       * ⛔ Stesso markup delle altre cinque (`talos-list-row` + `talos-select`), nessun controllo
+       *   nuovo da imparare, e niente sesta pillola nel composer (regola dell'owner del 10/09).
+       * ⛔ Spento è il default e il comportamento di sempre. Il prezzo si dice in una misura che
+       *   una persona può valutare, non in gergo.
+       */
+      const uscita = document.createElement('div');
+      uscita.className = 'talos-list-row';
+      const acceso = state.realSession.comandiNellaConversazione === true;
+      uscita.innerHTML = '<span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-terminal"/></svg></span>'
+        + '<span class="talos-list-row__text"><span class="talos-list-row__title">uscita dei comandi che lanci tu con !</span>'
+        + '<span class="talos-list-row__sub">Chi la legge, dopo che il comando è finito. Il comando non fa mai rispondere TALOS: la risposta arriva al messaggio dopo.</span></span>'
+        + '<span class="talos-list-row__aside"><select class="talos-select talos-select--sm" data-uscita-choice aria-label="Chi legge l’uscita dei comandi lanciati con il punto esclamativo">'
+        + `<option value="no"${acceso ? '' : ' selected'}>Solo tu — come prima</option>`
+        + `<option value="si"${acceso ? ' selected' : ''}>Anche il modello · ~2.000 token</option>`
+        + '</select></span>';
+      elenco.append(uscita);
     }
     const avviso = $('#veloPermessiAvviso', radice);
     if (avviso) {
@@ -7535,6 +7597,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         }
       });
     });
+    /*
+     * ⭐ D-10S — la scelta «chi legge l'uscita dei comandi !» NON si aggancia qui: sta per DELEGA
+     *   sull'evento `change` della radice, più sotto, perché `disegnaPermessiIn` ricrea quelle
+     *   righe a ogni ridisegno e un listener per elemento sparirebbe al primo cambio di permesso.
+     */
     $$('[data-permission-choice]', radice).forEach((button) => {
       if (button.dataset.permessiCollegati) return;
       button.dataset.permessiCollegati = 'si';
@@ -7556,7 +7623,39 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      */
     if (!radice.dataset.permessiCollegati) {
       radice.dataset.permessiCollegati = 'si';
-      radice.addEventListener('change', (evento) => {
+      radice.addEventListener('change', async (evento) => {
+        /*
+         * ⭐⭐⭐ D-10S — per DELEGA, come il permesso per attrezzo qui sotto, e non a caso:
+         *   `disegnaPermessiIn` RICREA le righe a ogni ridisegno, quindi un listener attaccato al
+         *   singolo `<select>` sparirebbe al primo cambio di permesso. Un ascoltatore sulla radice
+         *   invece vale anche per gli elementi che ancora non esistono.
+         */
+        const uscita = evento.target?.closest?.('[data-uscita-choice]');
+        if (uscita) {
+          const sessionId = state.realSession.id;
+          const acceso = uscita.value === 'si';
+          const prima = state.realSession.comandiNellaConversazione === true;
+          if (!sessionId) {
+            uscita.value = prima ? 'si' : 'no';
+            toast('Nessuna sessione aperta', 'Avvia una sessione: la scelta vale per quella sessione.');
+            return;
+          }
+          try {
+            await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/comandi-nella-conversazione`, { acceso });
+            state.realSession.comandiNellaConversazione = acceso;
+            /* Il composer mostra già bordo e badge quando scrivi `!`: da acceso dice anche che il modello leggerà. */
+            aggiornaModalitaShell?.(composerInput?.value ?? '');
+            toast('Uscita dei comandi', acceso
+              ? 'Da ora il modello legge i comandi che lanci con «!». La risposta arriva al messaggio dopo, non subito.'
+              : 'I comandi che lanci con «!» restano solo sul tuo schermo.');
+            ridisegna();
+          } catch (errore) {
+            /* ⛔ Il menu torna indietro: mostrare la scelta nuova racconterebbe una cosa che il server ha rifiutato. */
+            uscita.value = prima ? 'si' : 'no';
+            toast('Scelta non applicata', messaggioErroreUtente(errore, 'Riprova, o guarda Doctor se si ripete.'));
+          }
+          return;
+        }
         const select = evento.target?.closest?.('[data-tool-permission-select]');
         if (!select) return;
         const tool = select.dataset.toolPermissionSelect;
@@ -11675,7 +11774,42 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   const MOTION_QUALITY_IDS = ['low', 'balanced', 'high', 'adaptive'];
   const MOTION_PROFILE_IDS = ['preset', 'minimal', 'expressive', 'custom', 'off'];
   const MOTION_EASING_IDS = ['precise', 'soft', 'elastic-light', 'linear', 'cinematic'];
+  /*
+   * ⛔⛔⛔ 11/09/2026 — UNA PREFERENZA DORMIENTE CHE SI SVEGLIA, e il fondo dell'owner diventa VERDE.
+   *
+   * Il 10/09 `temi.css` e `aspetto.css` sono stati staccati da `main.css` d'urgenza: appena
+   * importati, l'owner ha visto il fondo dell'app diventare verde mentre lo guardava. La causa non
+   * era nei fogli. È che `themePreset` e `sceneOverride` erano salvati in `localStorage` da tempo e
+   * fino a quel momento **non dipingevano niente**: nessun CSS leggeva `data-talos-theme` né
+   * `data-talos-scene`. Un valore scelto quando non aveva effetto non è una scelta: è un residuo.
+   *
+   * ⛔ MISURATO, non dedotto (banco su porta 5211 con una copia del `public/` — mai il 4174;
+   *   viewport 1440×900 = 1.296.000 pixel, confronto pixel a pixel):
+   *     · con i fogli STACCATI, `sceneOverride:'terminal'` salvato cambia ......... 0 pixel
+   *       e `themePreset:'terminal'` salvato ...................................... 332 pixel (0,03%)
+   *     · con i fogli ATTACCATI e senza questa guardia, gli stessi due valori cambiano
+   *       **639.851 pixel (49,37%)** e **1.295.989 pixel (100,00%)**.
+   *   ⇒ Non è la scena a essere sbagliata: è che un residuo inerte diventa una scelta viva.
+   *
+   * ⇒ LA CURA: la scelta si VERSIONA. Un valore scritto sotto una versione più vecchia di
+   *   `ASPETTO_SCELTA_VERSIONE` viene ignorato e la preferenza riparte dal suo default (tema `calm`,
+   *   scena `follow-theme`, cioè «la scena la decide il tema»). Una scelta fatta da oggi in poi
+   *   porta il timbro della versione corrente, quindi vale e sopravvive al ricaricamento.
+   *   ⛔ Il timbro è PER CHIAVE, non uno solo per tutte e due: scegliere una scena non è confermare
+   *     un tema salvato in un'altra epoca — sarebbe lo stesso difetto, solo rimandato.
+   *
+   * Ricerca 11/09/2026 prima di scrivere — MV3 Extension Dev Hub «Migrating Storage Schema Between
+   * Versions» e Grizzly Peak Software «LocalStorage and SessionStorage Strategies»: `localStorage`
+   * non ha schema né migrazioni native, quindi la versione la dichiara l'applicazione, accanto al
+   * valore o nel nome della chiave, e in lettura si torna SEMPRE a un default esplicito quando la
+   * versione non combacia. È esattamente la forma qui sotto.
+   */
+  const ASPETTO_SCELTA_VERSIONE = 2;
+  /** Le sole preferenze che fino al 10/09/2026 non muovevano un pixel, e che i fogli nuovi svegliano. */
+  const ASPETTO_CHIAVI_VERSIONATE = ['themePreset', 'sceneOverride'];
+  const chiaveVersioneAspetto = (chiave) => `${chiave}Versione`;
   const DESKTOP_APPEARANCE_DEFAULTS = {
+    themePresetVersione: 0, sceneOverrideVersione: 0, // 11/09: 0 = «mai scelto da quando la scelta si vede»
     themePreset: 'calm', colorMode: 'system', sceneOverride: 'follow-theme',
     uiDensity: 'comoda', uiLanguage: 'sistema', // 06/9 B8: densità delle liste (mockup `data-densita`) e lingua dei menu (H21)
     uiFontScale: 'default', chatFontScale: 'xcompact', composerShape: 'standard',
@@ -11728,6 +11862,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     safe.themePreset = enumValue(record.themePreset, TALOS_THEME_IDS, safe.themePreset);
     safe.colorMode = enumValue(record.colorMode, COLOR_MODE_IDS, safe.colorMode);
     safe.sceneOverride = enumValue(record.sceneOverride, TALOS_SCENE_IDS, safe.sceneOverride);
+    /*
+     * ⛔ Il cancello della preferenza dormiente (vedi il blocco su ASPETTO_SCELTA_VERSIONE). Sta QUI
+     *   e non nel lettore di `localStorage` apposta: così vale anche per un documento IMPORTATO da
+     *   file, che può venire da un'esportazione fatta prima che questi fogli esistessero.
+     */
+    for (const chiave of ASPETTO_CHIAVI_VERSIONATE) {
+      const timbro = chiaveVersioneAspetto(chiave);
+      const versione = numberValue(record[timbro], [0, 99], 0);
+      if (versione === ASPETTO_SCELTA_VERSIONE) { safe[timbro] = ASPETTO_SCELTA_VERSIONE; continue; }
+      safe[timbro] = 0;
+      safe[chiave] = DESKTOP_APPEARANCE_DEFAULTS[chiave];
+    }
     safe.uiDensity = enumValue(record.uiDensity, ['comoda', 'compatta'], safe.uiDensity);
     safe.uiLanguage = enumValue(record.uiLanguage, [...LINGUE_MENU], safe.uiLanguage);
     safe.uiFontScale = enumValue(record.uiFontScale, Object.keys(UI_FONT_SCALE_FACTORS), safe.uiFontScale);
@@ -11803,7 +11949,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   function aggiornaAspettoDesktop(patch) {
     const documento = leggiImpostazioniDesktop();
-    documento.appearance = normalizzaAspettoDesktop({ ...documento.appearance, ...patch });
+    /*
+     * ⛔ Il TIMBRO si mette qui, e solo qui: `aggiornaAspettoDesktop` ha un solo chiamante — il
+     *   gestore `change`/`input` dei controlli di Impostazioni — quindi una patch che nomina
+     *   `themePreset` o `sceneOverride` È, per costruzione, una persona che ha appena scelto,
+     *   guardando l'effetto. È questo che distingue una scelta da un residuo.
+     */
+    const timbri = Object.fromEntries(ASPETTO_CHIAVI_VERSIONATE
+      .filter((chiave) => Object.hasOwn(patch, chiave))
+      .map((chiave) => [chiaveVersioneAspetto(chiave), ASPETTO_SCELTA_VERSIONE]));
+    documento.appearance = normalizzaAspettoDesktop({ ...documento.appearance, ...patch, ...timbri });
     salvaImpostazioniDesktop(documento);
     applicaAspettoDesktop(documento.appearance);
   }
@@ -11893,8 +12048,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     style.setProperty('--talos-motion-ui-intensity', String(safe.motionUiIntensity / 100));
     style.setProperty('--talos-motion-stagger', `${safe.motionStagger}ms`);
     const profilo = { minimal: .72, expressive: 1.2, custom: 1, preset: 1, off: 0 }[safe.motionProfile] ?? 1;
-    const scala = (safe.motionDuration / 100) * profilo;
-    const durata = (base) => `${Math.max(1, Math.round(base * scala))}ms`;
+    /*
+     * ⛔ 11/09 — «movimento dell'interfaccia spento» si esprime QUI, sui token, e non piu' con una
+     *   regola CSS universale `* { transition-duration: 0s !important }`. Quella regola aveva la
+     *   stessa forma delle due cancellate la notte del 10-11/09, che spegnevano ogni animazione
+     *   dell'app e sono costate sei cure su un componente sano: da valle non si batte, e non si
+     *   vede. Azzerare la scala spegne chi legge i token e lascia in pace chi non li legge.
+     */
+    const interfacciaFerma = !safe.interfaceMotion || safe.motionProfile === 'off' || safe.reducedMotion;
+    const scala = interfacciaFerma ? 0 : (safe.motionDuration / 100) * profilo;
+    const durata = (base) => (interfacciaFerma ? '0s' : `${Math.max(1, Math.round(base * scala))}ms`);
     const easing = {
       precise: 'cubic-bezier(.2,.7,.2,1)', soft: 'cubic-bezier(.22,1,.36,1)',
       'elastic-light': 'cubic-bezier(.34,1.28,.64,1)', linear: 'linear', cinematic: 'cubic-bezier(.16,1,.3,1)',
@@ -11920,7 +12083,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const backgroundOff = !safe.backgroundMotion || safe.motionMode === 'off' || safe.reducedMotion;
     host.classList.toggle('background-motion-off', backgroundOff);
     document.body.classList.toggle('background-motion-off', backgroundOff);
-    host.classList.toggle('interface-motion-off', !safe.interfaceMotion || safe.motionProfile === 'off' || safe.reducedMotion);
+    host.classList.toggle('interface-motion-off', interfacciaFerma); // 11/09: stessa condizione dei token qui sopra, scritta una volta sola
     host.classList.toggle('reduce-motion', safe.reducedMotion);
     document.body.classList.toggle('reduce-motion', safe.reducedMotion);
     for (const key of ['windows', 'surfaces', 'navigation', 'composer', 'messages', 'feedback']) host.classList.toggle(`motion-${key}-off`, !safe[`motion${key[0].toUpperCase()}${key.slice(1)}`]);
@@ -12032,7 +12195,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
   function resettaMotionDesktop() {
     const documento = leggiImpostazioniDesktop();
-    documento.appearance = normalizzaAspettoDesktop({ ...documento.appearance, sceneOverride: DESKTOP_APPEARANCE_DEFAULTS.sceneOverride, ...Object.fromEntries(Object.keys(DESKTOP_APPEARANCE_DEFAULTS).filter((key) => key.startsWith('motion') || ['backgroundMotion', 'interfaceMotion', 'pauseWhenHidden', 'respectDataSaver', 'reducedMotion'].includes(key)).map((key) => [key, DESKTOP_APPEARANCE_DEFAULTS[key]])) });
+    /* ⛔ 11/09: il timbro torna a 0 insieme al valore — «ripristina» vuol dire «nessuna scelta mia», non «scelta uguale al default». */
+    documento.appearance = normalizzaAspettoDesktop({ ...documento.appearance, sceneOverride: DESKTOP_APPEARANCE_DEFAULTS.sceneOverride, sceneOverrideVersione: 0, ...Object.fromEntries(Object.keys(DESKTOP_APPEARANCE_DEFAULTS).filter((key) => key.startsWith('motion') || ['backgroundMotion', 'interfaceMotion', 'pauseWhenHidden', 'respectDataSaver', 'reducedMotion'].includes(key)).map((key) => [key, DESKTOP_APPEARANCE_DEFAULTS[key]])) });
     salvaImpostazioniDesktop(documento);
     applicaAspettoDesktop(documento.appearance);
   }

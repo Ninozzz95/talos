@@ -8,10 +8,28 @@
 @import './attesa-shimmer.css';
 @import './segnavia-mobile.css'; /* 10/09: il segnavia com'e' nel mobile, piu' piccolo */ /* 10/09: l'attesa si vede sulla riga, il segnavia e' nascosto */ /* il composer dice quando sei in shell libera */ /* D-10B: l'uscita di un comando mentre esce */
 /*
- * ⛔⛔⛔ 10/09, RIPRISTINO IMMEDIATO — `temi.css` e `aspetto.css` sono STACCATI.
- *   Appena importati, l'owner ha visto il fondo dell'app diventare VERDE mentre lo guardava. I due
- *   fogli restano nel repo, non importati, finche' la causa non e' misurata: un server rotto davanti
- *   a chi lo usa si ripara prima e si indaga dopo.
- *   Il lavoro che contengono e' vero e misurato (26 comandi di aspetto su 39 non muovevano un
- *   pixel), quindi non si butta — si riaggancia quando smette di dipingere di suo.
+ * ⭐⭐⭐ 11/09 — `temi.css` e `aspetto.css` SONO TORNATI, e il fondo dell'owner non torna verde.
+ *
+ * Il 10/09 erano stati staccati d'urgenza: appena importati, l'owner ha visto il fondo dell'app
+ * diventare VERDE mentre lo guardava. ⛔ La causa NON era nei fogli, ed e' stata MISURATA invece che
+ * dedotta (banco su porta 5211 con una copia del `public/` — mai il 4174; 1440x900 = 1.296.000 px,
+ * confronto pixel a pixel, soglia 2/255):
+ *   · con i fogli STACCATI, un `sceneOverride:'terminal'` salvato in `localStorage` cambiava
+ *     **0 pixel**, e un `themePreset:'terminal'` salvato ne cambiava **332** (il testo del `<select>`);
+ *   · con i fogli ATTACCATI e nient'altro, gli stessi due valori gia' sul disco cambiano
+ *     **639.851 px (49,37%)** e **1.295.989 px (100,00%)**.
+ * ⇒ Era una PREFERENZA DORMIENTE che si sveglia: una scelta fatta quando non dipingeva niente non e'
+ *   una scelta, e' un residuo. La cura sta in `legacy/app.js` (`ASPETTO_SCELTA_VERSIONE`), non qui:
+ *   la scelta si VERSIONA — un residuo di prima si ignora e si riparte dal tema, una scelta di oggi
+ *   vale e sopravvive al ricaricamento.
+ *
+ * ⛔ L'ORDINE CONTA, ed e' il motivo per cui questi due stanno IN FONDO e non piu' in mezzo.
+ *   `temi.css` vince su `:root` di `index.css` per SPECIFICITA'
+ *   (`:root[data-talos-theme]:not([data-theme="light"])`, cioe' 0-3-0) e non con `!important`, e
+ *   `aspetto.css` legge i token che `temi.css` ha appena definito. Con esbuild un `@import`
+ *   relativo viene incollato sul posto, nell'ordine in cui e' scritto qui, e l'ordine di
+ *   valutazione e' quello che decide chi vince (esbuild CHANGELOG-2021/2023 «CSS import ordering»,
+ *   letto l'11/09/2026 via ctx7): spostarli piu' in alto rimetterebbe `index.css` dopo di loro.
  */
+@import './temi.css';
+@import './aspetto.css';

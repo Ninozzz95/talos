@@ -32,8 +32,14 @@ test('RUNTIME-01: aprire la app non produce nessun errore JavaScript', async ({ 
   await page.addInitScript(() => {
     try { localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })); } catch { /* contesto senza storage: l'intro comparirà, e va bene lo stesso */ }
   });
-  /* ⛔ URL intero: questa config non fissa un `baseURL`, e un percorso relativo non naviga. */
-  await page.goto('http://127.0.0.1:4174/');
+  /*
+   * ⛔ URL intero: questa config non fissa un `baseURL`, e un percorso relativo non naviga.
+   * ⛔ 11/09 — la porta si puo' scegliere da fuori (`TALOS_URL_CANCELLO`). Prima era scritta a mano
+   *   sul **4174**, cioe' il server VIVO dell'owner: lanciare questo cancello apriva una sessione
+   *   sua, ci scriveva nel composer e ci cliccava dentro. Una sonda non tocca mai il 4174 — e un
+   *   cancello che, per girare, deve toccare il server di chi lavora, non si lancia mai.
+   */
+  await page.goto(process.env.TALOS_URL_CANCELLO || 'http://127.0.0.1:4174/');
   await page.waitForTimeout(4000);
 
   /* ⛔ E poi si TOCCA la app: metà degli errori a runtime nasce quando qualcosa viene chiamato, non

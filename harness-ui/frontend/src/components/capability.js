@@ -86,4 +86,43 @@ function render(schermo,p){
  const select=d.querySelector('[data-cap-permesso]');select.value=Object.hasOwn(PERMESSI,a.permesso??'')?a.permesso??'':'';select.disabled=Boolean(o.caricamento||o.salvataggio)||!a.permessoConfigurabile||!o.ambito;
  if(p.focusPermesso&&!o.salvataggio&&!o.caricamento){const prima=p.focusPermesso;p.focusPermesso=null;if(prima.nome===p.scelto&&prima.ambito===p.ambito&&!select.disabled&&!schermo.hidden&&doc.activeElement===doc.body)select.focus({preventScroll:true});}
  d.querySelector('[data-cap-permesso-spiega]').textContent=o.salvataggio?'Salvataggio del permesso…':a.permessoConfigurabile?(o.ambito?permessoAttrezzo(a)+'. Vale per le prossime chiamate di questa sessione.':'Apri una sessione per scegliere il permesso.'):'Questo attrezzo segue la politica generale della sessione; non ha una scelta separata.';
+ rigaUscitaComandi(d,a,o,doc);
+}
+
+/*
+ * ⭐⭐⭐ D-10S — nel Capability, sull'attrezzo del terminale, la seconda meta' della stessa domanda.
+ *
+ * Owner 11/09: «e anche su capability visto che sono collegati». Sono collegati davvero, e la
+ * coppia si legge bene solo stando vicina:
+ *   · il menu qui sopra decide se il MODELLO puo' lanciare un comando;
+ *   · questo decide se il modello legge i comandi che lanci TU, col `!`.
+ * La stessa scelta vive anche nel foglio permessi, sezione «per attrezzo». Non e' un doppione: e'
+ * lo stesso stato di sessione raccontato dove la domanda nasce — e passa per la stessa rotta, per
+ * cui non possono divergere.
+ *
+ * ⛔ Compare SOLO su `shell`: su ogni altro attrezzo non vorrebbe dire niente, e una riga che
+ *   compare ovunque smette di essere letta.
+ * ⛔ Si disabilita senza una sessione aperta, come fa il menu del permesso: la scelta appartiene a
+ *   una sessione, e un controllo che finge di funzionare e' peggio di uno spento.
+ */
+function rigaUscitaComandi(d,a,o,doc){
+ let riga=d.querySelector('[data-cap-uscita-riga]');
+ if(a.nome!=='shell'){if(riga)riga.hidden=true;return;}
+ if(!riga){
+  riga=el(doc,'div','talos-list-row');riga.setAttribute('data-cap-uscita-riga','');
+  const testo=el(doc,'span','');testo.append(el(doc,'strong','','Chi legge i comandi che lanci tu con !'),el(doc,'small','talos-muted','Comando e uscita entrano nella conversazione al giro dopo'));
+  const menu=doc.createElement('select');menu.setAttribute('data-cap-uscita','');
+  menu.setAttribute('aria-label','Chi legge l’uscita dei comandi lanciati con il punto esclamativo');
+  const no=doc.createElement('option');no.value='no';no.textContent='Solo tu — come prima';
+  const si=doc.createElement('option');si.value='si';si.textContent='Anche il modello · ~2.000 token';
+  menu.append(no,si);
+  /* ⛔ `o` e' letto al momento del click, non catturato: le opzioni vengono rifatte a ogni render. */
+  menu.addEventListener('change',()=>{PAGINE.get(d.closest('#schermoCapability'))?.opzioni?.onUscitaComandi?.(menu.value==='si');});
+  riga.append(testo,menu);
+  d.append(riga);
+ }
+ riga.hidden=false;
+ const menu=riga.querySelector('[data-cap-uscita]');
+ menu.value=o.comandiNellaConversazione===true?'si':'no';
+ menu.disabled=Boolean(o.caricamento||o.salvataggio)||!o.ambito;
 }
