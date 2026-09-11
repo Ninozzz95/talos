@@ -34,7 +34,7 @@ import { salvaVoce as salvaVoceLibreriaReale } from './library-store.mjs'; // 06
 import { generateTalosDocument as generateTalosDocumentReale, TALOS_SOURCE_TEXT_FORMATS, verifyTalosDocument as verifyTalosDocumentReale } from './document-generator.mjs';
 import { generaImmagineOpenRouter as generaImmagineOpenRouterReale } from './image-generator.mjs';
 import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspace-context.mjs';
-import { contestoDelProgetto as contestoDelProgettoReale } from './contesto-del-progetto.mjs'; // P-13: l'elenco dei file che il modello riceve
+import { contestoDelProgetto as contestoDelProgettoReale, aggiornamentoInCoda as aggiornamentoInCodaReale } from './contesto-del-progetto.mjs'; // BC-07 (11/09): il preambolo a 4 blocchi, e l'aggiornamento che si APPENDE invece di riscrivere il prefisso
 import { creaFiltroGitignore as creaFiltroGitignoreReale } from './gitignore-elenco.mjs'; // P-13: le regole che decidono cosa NON elencare
 import { creaFileWorkspace as creaFileWorkspaceReale, WorkspaceFileError } from './workspace-files.mjs';
 import { preparaToolMcpPerSessione as preparaToolMcpPerSessioneReale } from './mcp-session.mjs';
@@ -402,6 +402,7 @@ export async function avviaSessione({
   // ⭐ P-13 (10/09) — iniettabili per le prove, come ogni altro *Fn qui: nessun test deve
   // camminare un albero vero per provare l'ordine degli eventi.
   contestoDelProgettoFn = contestoDelProgettoReale,
+  aggiornamentoInCodaFn = aggiornamentoInCodaReale,
   creaFiltroGitignoreFn = creaFiltroGitignoreReale,
   salvaArtefattoFn = salvaArtefattoReale,
   /*
@@ -573,13 +574,47 @@ export async function avviaSessione({
      *   percorsi troncati e 25.163 token invece di ~6.500, con dentro i file di log. Non un
      *   errore visibile: un elenco che sembra funzionare e costa quattro volte tanto.
      */
-    const elencoProgetto = await contestoDelProgettoFn({
+    const preambolo = await contestoDelProgettoFn({
       cartella,
       creaFiltro: (radice) => creaFiltroGitignoreFn({ radice }),
+      /*
+       * ⭐ BC-07 — I TRE VALORI CHE ENTRANO NEL PREAMBOLO e che possono cambiare senza che il
+       *   disco cambi: cartella, permesso del giro, modello. Sono anche la chiave della cache in
+       *   `contesto-del-progetto.mjs`, e per questo il prefisso resta byte-identico fra due
+       *   messaggi consecutivi e cambia SOLO quando uno dei tre cambia davvero.
+       * ⛔ `permessi` e' l'ETICHETTA gia' calcolata per RunStarted.contesto (02/09): la stessa
+       *   che la persona vede nella pillola. Due nomi diversi per lo stesso permesso — uno a
+       *   schermo e uno nel prompt — sarebbero due verita' da tenere allineate a mano.
+       */
+      permesso: permessi ?? null,
+      modello: modello ?? null,
+      piattaforma: process.platform,
     });
-    testoContestoProgetto = elencoProgetto?.testo;
+    testoContestoProgetto = preambolo?.testo;
+
+    /*
+     * ⛔⛔⛔ IL CONTESTO SI APPENDE, NON SI RISCRIVE — e qui sta la differenza fra le due cose.
+     *
+     * Su una sessione FRESCA il kernel mette il preambolo in testa (subito dopo le istruzioni) e
+     * non lo tocca piu'. Su un SEGUITO (`messaggiIniziali` pieno) il kernel lo IGNORA del tutto:
+     * il prefisso e' gia' dentro la conversazione salvata, e riscriverlo la' significherebbe
+     * invalidare tutto cio' che sta dopo — la lookup della cache lavora sul prefisso INTERO fino
+     * al breakpoint, non sul singolo blocco (Claude Platform Docs, «Prompt caching», letto
+     * 11/09/2026: «Cache hits require 100% identical prompt segments»).
+     * ⇒ Se nel frattempo e' cambiato qualcosa (un `WorkspaceChanged` ha invalidato la mappa, un
+     *   `AGENTS.md` e' stato salvato, il permesso del giro e' cambiato), il preambolo nuovo si
+     *   APPENDE IN CODA dichiarando che sostituisce. Se non e' cambiato niente, non si appende
+     *   niente: zero token.
+     * ⛔ Il confronto non tiene nessuno stato in memoria: legge dalla conversazione stessa che
+     *   cosa il modello ha davvero davanti (`preamboloVistoDa`). Una mappa in memoria mentirebbe
+     *   dopo un riavvio del server, e la conversazione salvata no.
+     */
+    if (Array.isArray(messaggiIniziali) && messaggiIniziali.length > 0 && testoContestoProgetto) {
+      const coda = aggiornamentoInCodaFn({ storia: messaggiIniziali, testo: testoContestoProgetto });
+      if (coda) messaggiIniziali = [...messaggiIniziali, { role: 'system', content: coda }];
+    }
   } catch {
-    // ⭐ nessun elenco: si parte esattamente come prima di P-13, zero differenza per la sessione.
+    // ⭐ nessun preambolo: si parte esattamente come prima di BC-07, zero differenza per la sessione.
   }
 
   /*
