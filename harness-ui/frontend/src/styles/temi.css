@@ -1,94 +1,149 @@
 /*
- * ⭐⭐⭐ I QUATTORDICI TEMI, COLLEGATI — owner 10/09/2026: «fai in modo che l'agente colleghi anche
- *   i temi alla UI perché adesso non funzionano».
+ * ⭐⭐⭐ I QUATTORDICI TEMI — 11/09/2026: ALLINEATI AL MOBILE, che e' la sorgente di verita'.
  *
- * ⛔ MISURATO PRIMA DI SCRIVERE, non dedotto: cambiando `Tema TALOS` dalla schermata Impostazioni
- *   e fotografando lo schermo intero (1440×900 = 1.296.000 pixel), fra un tema e l'altro cambiavano
- *   **134 pixel** — cioè il testo dentro il `<select>` che si era appena aperto, e nient'altro.
- *   Causa alla fonte: `applicaThemeDesktop` scrive `data-talos-theme` sulla radice, e nel foglio
- *   costruito (`dist/styles.css`, 240 KB) la stringa `data-talos-theme` compariva **0 volte**.
- *   L'unico posto che la conosceva era `src/styles/tokens.css`, che nessuno importa (né `main.css`
- *   né `src/main.js`) e che descrive il solo tema `calm`. ⇒ Quattordici voci nel menu, zero CSS.
+ * Owner 11/09: «sistemare tutte le incongruenze fra i temi del desktop e quelli del mobile ⭐ il
+ * mobile e' la sorgente di verita': li' funziona tutto alla perfezione».
  *
- * ⇒ Qui i quattordici diventano quattordici. I valori NON sono inventati: sono esattamente quelli
- *   che il progetto ha già in `TALOS_THEME_TOKENS` (`legacy/app.js`, ~riga 11576), che finora
- *   vivevano solo in JavaScript senza nessuno che li leggesse. Il linguaggio visivo resta quello di
- *   Calm — stessi nomi di token, stessa scala, stessa struttura: cambia la PALETTE, non la grammatica.
+ * ⛔ COSA ERA DISALLINEATO, tema per tema. Il desktop aveva quattordici tavolozze scritte a mano
+ *   (venivano da `TALOS_THEME_TOKENS` in `legacy/app.js`); il mobile ha quattordici SEMI —
+ *   `mobile/src/lib/talosThemes.ts:182-425`, campo `preview` — da cui deriva tutto con `color-mix`.
+ *   Confrontati uno per uno (accento desktop -> accento mobile):
+ *     forge     #c08b3c -> #c98b32      paper     #9b5b2a -> #a96617
+ *     terminal  #67d391 -> #63f08e      aurora    #a995ff -> #42e7c7   ⛔ viola contro verde-acqua
+ *     glacier   #8fd8f3 -> #2367d1  ⛔  ember     #ef8b57 -> #ff5c62
+ *     atlas     #74a8ff -> #d49a52  ⛔ azzurro contro bronzo
+ *     noir      #d4d4d8 -> #f2f2f2      signal    #5ce1e6 -> #ff6f61   ⛔ ciano contro corallo
+ *     violet    #d3a6ff -> #b794f6      claudius  #d2a96d -> #d97757
+ *     basicus   #aeb4c0 -> #1976d2  ⛔  telemetry #75d0a4 -> #6ad4d4
+ *     calm      #c08b3c -> #c08b3c   ✔ l'UNICO gia' identico, e infatti e' quello di serie
+ *   ⛔ E quattro temi che sul mobile sono CHIARI (`isLight: true` — paper, glacier, claudius,
+ *     basicus) sul desktop erano scuri: tre su quattro sbagliati.
+ *   ⇒ Tredici temi su quattordici avevano un altro accento, quattro anche un'altra luce. Due
+ *     prodotti che dicono «Aurora» e mostrano due cose diverse.
  *
- * Come è costruito, e perché così:
- *   1. un blocco per tema definisce tre variabili PRIVATE (`--talos-tema-*`): l'accento, il raggio e
- *      il carattere. Vive a specificità (0,2,0) e non tocca nessun token del contratto, quindi non
- *      litiga con `:root[data-theme="light"]` di `index.css`, che ha la stessa specificità;
- *   2. la palette SCURA completa sta in `…:not([data-theme="light"])` — (0,3,0), quindi vince su
- *      `:root` senza dover scrivere un `!important`;
- *   3. i neutri CHIARI sono UNA regola sola per tutti i temi, tinta dall'accento del tema: in chiaro
- *      il tema cambia accento, forma e carattere, non l'intera luce della stanza.
+ * ⇒ QUI i quattordici partono dagli STESSI QUATTRO SEMI del mobile (accento, fondo, secondario,
+ *   linea) e i neutri si derivano con le formule del mobile, verbatim da
+ *   `mobile/src/lib/talosThemes.ts:581-691` — `mixColor(c,amt,t) = color-mix(in srgb, c amt%, t)`:
+ *     SCURO   fondo = isLight ? mix(accento,10,#06080d) : seme;  pannello = mix(fondo,86,#141a24);
+ *             testo = #edf2f7;  tenue = mix(testo,68,fondo);  bordo = mix(linea,74,#111827)
+ *     CHIARO  fondo = isLight ? seme : mix(accento,5,#f8fafc);   pannello = mix(fondo,92,#ffffff);
+ *             testo = #111827;  tenue = mix(testo,68,fondo);  bordo = mix(linea,72,#d7dee8)
+ *
+ * ⛔ TRE COSE NON SONO STATE PORTATE, e non per svista:
+ *   1. `calm` resta ESATTAMENTE com'e'. I suoi quattro semi sono gia' identici a quelli del mobile
+ *      (#1e1f22 / #c08b3c / #8e9095 / #36373b), ma i neutri DERIVATI no (pannello desktop #25262a
+ *      contro #1d1e22 del mobile, testo #f3f0e9 contro #edf2f7). E' il tema di serie, quello che
+ *      l'owner sta guardando adesso, ed e' scritto e approvato a mano: cambiarlo non e' allineare
+ *      due sistemi, e' cambiare il prodotto sotto gli occhi di chi lo usa. Registrato, non fatto.
+ *   2. I CARATTERI per tema. Il mobile dà Manrope ad aurora/atlas/signal, Sora a violet, Source
+ *      Serif 4 a paper/claudius. Sul desktop sono spediti DUE font soli (Instrument Sans e
+ *      JetBrains Mono, verificato in `dist/fonts/`): scrivere quei nomi qui darebbe un ripiego di
+ *      sistema silenzioso, cioe' una regressione travestita da allineamento.
+ *   3. L'ACCENTO IN CHIARO resta scurito dal desktop (sezione 3) invece che preso grezzo come fa il
+ *      mobile: l'accento di un tema scuro su carta non arriva a 3:1, e WCAG 2.2 SC 1.4.11 chiede
+ *      almeno 3:1 per i componenti d'interfaccia. Qui il desktop e' piu' corretto del mobile.
+ *
+ * Come e' costruito, e perche' cosi':
+ *   1. un blocco per tema dichiara i QUATTRO SEMI (`--talos-seme-*`) e il raggio. Vive a
+ *      specificita' (0,2,0) e non tocca nessun token del contratto;
+ *   2. due blocchi derivano i `--talos-tema-*` dai semi, uno per modo, con le formule del mobile;
+ *   3. la palette SCURA completa sta in `…:not([data-theme="light"])` — (0,3,0), quindi vince su
+ *      `:root` di `index.css` senza dover scrivere un `!important`;
+ *   4. la palette CHIARA sta nel gemello `[data-theme="light"]`, e `calm` ne e' escluso.
  *   ⛔ I token derivati (`--talos-card-subtle`, `--talos-border-subtle`, …) non si ripetono qui:
- *     `index.css` li costruisce già con `color-mix` a partire da questi, e si ricalcolano da soli.
+ *     `index.css` li costruisce gia' con `color-mix` a partire da questi, e si ricalcolano da soli.
  *
  * Ricerca 10/09/2026 prima di scrivere — hirejeffgreen.com «Multi-Theme Design System: CSS Variables
  * + Data Attributes» e sprucecss.com «Cracking the Theme Switcher and Dark Mode»: l'attributo sulla
- * radice più i custom properties è la forma consigliata per N temi («themes are data, not code»,
- * «theme switches are instant — pure CSS, no re-renders»), ed è la ragione per cui questi valori
- * stanno in un foglio e non tornano a essere stili in linea scritti dal JS.
+ * radice piu' i custom properties e' la forma consigliata per N temi.
  */
 
-/* ---------- 1. L'identità di ogni tema: accento, forma, carattere ---------- */
-:root[data-talos-theme="forge"]    { --talos-tema-accento:#c08b3c; --talos-tema-fondo:#201d1a; --talos-tema-pannello:#2b2621; --talos-tema-testo:#f5efe6; --talos-tema-tenue:#b5a89a; --talos-tema-bordo:#4b3e31; --talos-radius-card:14px; --talos-radius-control:14px }
-:root[data-talos-theme="paper"]    { --talos-tema-accento:#9b5b2a; --talos-tema-fondo:#f5f1e8; --talos-tema-pannello:#fffdf8; --talos-tema-testo:#24211e; --talos-tema-tenue:#756e65; --talos-tema-bordo:#d9d0c3; --talos-radius-card:10px; --talos-radius-control:10px }
-:root[data-talos-theme="terminal"] { --talos-tema-accento:#67d391; --talos-tema-fondo:#101714; --talos-tema-pannello:#16231e; --talos-tema-testo:#e5f6ec; --talos-tema-tenue:#8ba99a; --talos-tema-bordo:#2b4a3a; --talos-radius-card:6px;  --talos-radius-control:6px;
-  --talos-font-ui:"JetBrains Mono","SFMono-Regular",Consolas,monospace; --talos-font-display:"JetBrains Mono","SFMono-Regular",Consolas,monospace }
-:root[data-talos-theme="aurora"]   { --talos-tema-accento:#a995ff; --talos-tema-fondo:#171629; --talos-tema-pannello:#24233e; --talos-tema-testo:#f1efff; --talos-tema-tenue:#aaa6c8; --talos-tema-bordo:#44416c; --talos-radius-card:16px; --talos-radius-control:16px }
-:root[data-talos-theme="glacier"]  { --talos-tema-accento:#8fd8f3; --talos-tema-fondo:#111c25; --talos-tema-pannello:#1b2a37; --talos-tema-testo:#eef9ff; --talos-tema-tenue:#9eb7c4; --talos-tema-bordo:#345064; --talos-radius-card:14px; --talos-radius-control:14px }
-:root[data-talos-theme="ember"]    { --talos-tema-accento:#ef8b57; --talos-tema-fondo:#211719; --talos-tema-pannello:#302022; --talos-tema-testo:#fff1eb; --talos-tema-tenue:#c6a39a; --talos-tema-bordo:#5b3534; --talos-radius-card:14px; --talos-radius-control:14px }
-:root[data-talos-theme="atlas"]    { --talos-tema-accento:#74a8ff; --talos-tema-fondo:#151b29; --talos-tema-pannello:#202c43; --talos-tema-testo:#edf4ff; --talos-tema-tenue:#a4b2c9; --talos-tema-bordo:#3a4e75; --talos-radius-card:12px; --talos-radius-control:12px }
-:root[data-talos-theme="noir"]     { --talos-tema-accento:#d4d4d8; --talos-tema-fondo:#0e0e10; --talos-tema-pannello:#19191c; --talos-tema-testo:#f5f5f5; --talos-tema-tenue:#929297; --talos-tema-bordo:#35353a; --talos-radius-card:4px;  --talos-radius-control:4px }
-:root[data-talos-theme="signal"]   { --talos-tema-accento:#5ce1e6; --talos-tema-fondo:#101b1e; --talos-tema-pannello:#17272b; --talos-tema-testo:#e9ffff; --talos-tema-tenue:#91b9bc; --talos-tema-bordo:#2f555a; --talos-radius-card:10px; --talos-radius-control:10px }
-:root[data-talos-theme="violet"]   { --talos-tema-accento:#d3a6ff; --talos-tema-fondo:#1c1625; --talos-tema-pannello:#2a2038; --talos-tema-testo:#fbf3ff; --talos-tema-tenue:#b5a0c3; --talos-tema-bordo:#523c68; --talos-radius-card:18px; --talos-radius-control:18px }
-:root[data-talos-theme="claudius"] { --talos-tema-accento:#d2a96d; --talos-tema-fondo:#211e1a; --talos-tema-pannello:#302b24; --talos-tema-testo:#f8f1e4; --talos-tema-tenue:#b6aa98; --talos-tema-bordo:#514638; --talos-radius-card:12px; --talos-radius-control:12px }
-:root[data-talos-theme="basicus"]  { --talos-tema-accento:#aeb4c0; --talos-tema-fondo:#202124; --talos-tema-pannello:#2b2c30; --talos-tema-testo:#f1f3f5; --talos-tema-tenue:#9ea4ad; --talos-tema-bordo:#45484f; --talos-radius-card:8px;  --talos-radius-control:8px }
-:root[data-talos-theme="telemetry"]{ --talos-tema-accento:#75d0a4; --talos-tema-fondo:#101b1d; --talos-tema-pannello:#18292b; --talos-tema-testo:#e7fff2; --talos-tema-tenue:#96b8a8; --talos-tema-bordo:#315448; --talos-radius-card:10px; --talos-radius-control:10px;
-  --talos-font-ui:"JetBrains Mono","SFMono-Regular",Consolas,monospace; --talos-font-display:"JetBrains Mono","SFMono-Regular",Consolas,monospace }
-:root[data-talos-theme="calm"]     { --talos-tema-accento:#c08b3c; --talos-tema-fondo:#1e1f22; --talos-tema-pannello:#25262a; --talos-tema-testo:#f3f0e9; --talos-tema-tenue:#9c9da2; --talos-tema-bordo:#36373b; --talos-radius-card:12px; --talos-radius-control:12px }
+/* ---------- 1. I QUATTRO SEMI DI OGNI TEMA — gli stessi del mobile ----------
+   ⛔ I raggi restano quelli del desktop: il mobile ha una scala a TRE gradini
+   (sharp 0 / balanced 0,5rem / soft 0,75rem) invece di un valore per tema. Allinearli e' un'altra
+   decisione, e cambierebbe la forma di ogni scheda senza che nessuno l'abbia chiesta. Registrato. */
+:root[data-talos-theme="forge"]     { --talos-seme-accento:#c98b32; --talos-seme-fondo:#080b11; --talos-seme-secondario:#6ad4d4; --talos-seme-linea:#27313e; --talos-radius-card:14px; --talos-radius-control:14px; }
+:root[data-talos-theme="paper"]     { --talos-seme-accento:#a96617; --talos-seme-fondo:#f8fafc; --talos-seme-secondario:#2f6f7d; --talos-seme-linea:#d7dee8; --talos-seme-fondo-chiaro:#f8fafc; --talos-seme-fondo-scuro:color-mix(in srgb, #a96617 10%, #06080d); --talos-radius-card:10px; --talos-radius-control:10px; }
+:root[data-talos-theme="terminal"]  { --talos-seme-accento:#63f08e; --talos-seme-fondo:#020403; --talos-seme-secondario:#d6ff72; --talos-seme-linea:#163821; --talos-radius-card:6px; --talos-radius-control:6px;
+  --talos-font-ui:"JetBrains Mono","SFMono-Regular",Consolas,monospace; --talos-font-display:"JetBrains Mono","SFMono-Regular",Consolas,monospace; }
+:root[data-talos-theme="aurora"]    { --talos-seme-accento:#42e7c7; --talos-seme-fondo:#071113; --talos-seme-secondario:#ff6bb5; --talos-seme-linea:#233742; --talos-radius-card:16px; --talos-radius-control:16px; }
+:root[data-talos-theme="glacier"]   { --talos-seme-accento:#2367d1; --talos-seme-fondo:#f4f9fb; --talos-seme-secondario:#ef7d30; --talos-seme-linea:#c9d7e3; --talos-seme-fondo-chiaro:#f4f9fb; --talos-seme-fondo-scuro:color-mix(in srgb, #2367d1 10%, #06080d); --talos-radius-card:14px; --talos-radius-control:14px; }
+:root[data-talos-theme="ember"]     { --talos-seme-accento:#ff5c62; --talos-seme-fondo:#10090a; --talos-seme-secondario:#ffbd5c; --talos-seme-linea:#3b2224; --talos-radius-card:14px; --talos-radius-control:14px; }
+:root[data-talos-theme="atlas"]     { --talos-seme-accento:#d49a52; --talos-seme-fondo:#07101f; --talos-seme-secondario:#57d49c; --talos-seme-linea:#243146; --talos-radius-card:12px; --talos-radius-control:12px; }
+:root[data-talos-theme="noir"]      { --talos-seme-accento:#f2f2f2; --talos-seme-fondo:#050505; --talos-seme-secondario:#ff405a; --talos-seme-linea:#333333; --talos-radius-card:4px; --talos-radius-control:4px; }
+:root[data-talos-theme="signal"]    { --talos-seme-accento:#ff6f61; --talos-seme-fondo:#091011; --talos-seme-secondario:#b4f06f; --talos-seme-linea:#213236; --talos-radius-card:10px; --talos-radius-control:10px; }
+:root[data-talos-theme="violet"]    { --talos-seme-accento:#b794f6; --talos-seme-fondo:#0d0a19; --talos-seme-secondario:#6ee7b7; --talos-seme-linea:#2f2848; --talos-radius-card:18px; --talos-radius-control:18px; }
+:root[data-talos-theme="claudius"]  { --talos-seme-accento:#d97757; --talos-seme-fondo:#faf9f5; --talos-seme-secondario:#6a9bcc; --talos-seme-linea:#e8e6dc; --talos-seme-fondo-chiaro:#faf9f5; --talos-seme-fondo-scuro:color-mix(in srgb, #d97757 10%, #06080d); --talos-radius-card:12px; --talos-radius-control:12px; }
+:root[data-talos-theme="basicus"]   { --talos-seme-accento:#1976d2; --talos-seme-fondo:#fafafa; --talos-seme-secondario:#9c27b0; --talos-seme-linea:#e0e0e0; --talos-seme-fondo-chiaro:#fafafa; --talos-seme-fondo-scuro:color-mix(in srgb, #1976d2 10%, #06080d); --talos-radius-card:8px; --talos-radius-control:8px; }
+:root[data-talos-theme="telemetry"] { --talos-seme-accento:#6ad4d4; --talos-seme-fondo:#0b0f11; --talos-seme-secondario:#63f08e; --talos-seme-linea:#1f3238; --talos-radius-card:10px; --talos-radius-control:10px;
+  --talos-font-ui:"JetBrains Mono","SFMono-Regular",Consolas,monospace; --talos-font-display:"JetBrains Mono","SFMono-Regular",Consolas,monospace; }
+
+/* ⛔ `calm` NON passa dai semi: tiene i suoi `--talos-tema-*` scritti a mano, identici a ieri. */
+:root[data-talos-theme="calm"]     { --talos-seme-accento:#c08b3c; --talos-seme-fondo:#1e1f22; --talos-seme-secondario:#8e9095; --talos-seme-linea:#36373b;
+  --talos-tema-accento:#c08b3c; --talos-tema-fondo:#1e1f22; --talos-tema-pannello:#25262a; --talos-tema-testo:#f3f0e9; --talos-tema-tenue:#9c9da2; --talos-tema-bordo:#36373b;
+  --talos-radius-card:12px; --talos-radius-control:12px }
 
 /* ---------- 1-bis. La SCENA: quale tema dipinge lo sfondo ----------
-   `applicaThemeDesktop` scrive già `data-talos-scene` sulla radice (vale il tema, oppure quello
-   scelto a mano in «Scena»), e nel foglio costruito quell'attributo compariva **0 volte**: cambiare
-   scena non toccava un pixel. Qui la scena porta il suo accento; `aspetto.css` lo usa per le
-   macchie dello sfondo. `follow-theme` non compare apposta: senza una regola sua, `--talos-scena-accento`
-   resta non definito e il ripiego `var(…, var(--talos-accent))` fa seguire il tema. */
-:root[data-talos-scene="forge"]     { --talos-scena-accento:#c08b3c }
-:root[data-talos-scene="paper"]     { --talos-scena-accento:#9b5b2a }
-:root[data-talos-scene="terminal"]  { --talos-scena-accento:#67d391 }
-:root[data-talos-scene="aurora"]    { --talos-scena-accento:#a995ff }
-:root[data-talos-scene="glacier"]   { --talos-scena-accento:#8fd8f3 }
-:root[data-talos-scene="ember"]     { --talos-scena-accento:#ef8b57 }
-:root[data-talos-scene="atlas"]     { --talos-scena-accento:#74a8ff }
-:root[data-talos-scene="noir"]      { --talos-scena-accento:#d4d4d8 }
-:root[data-talos-scene="signal"]    { --talos-scena-accento:#5ce1e6 }
-:root[data-talos-scene="violet"]    { --talos-scena-accento:#d3a6ff }
-:root[data-talos-scene="claudius"]  { --talos-scena-accento:#d2a96d }
-:root[data-talos-scene="basicus"]   { --talos-scena-accento:#aeb4c0 }
-:root[data-talos-scene="telemetry"] { --talos-scena-accento:#75d0a4 }
-:root[data-talos-scene="calm"]      { --talos-scena-accento:#c08b3c }
+   `applicaThemeDesktop` scrive `data-talos-scene` sulla radice (vale il tema, oppure quello scelto
+   a mano in «Scena»); `aspetto.css` usa questo accento per le macchie dello sfondo della chat.
+   `follow-theme` non compare apposta: senza una regola sua, `--talos-scena-accento` resta non
+   definito e il ripiego `var(…, var(--talos-accent))` fa seguire il tema.
+   ⛔ Nel mobile `data-talos-scene` NON esiste: la scena viaggia come proprieta' JS
+   (`scene_override ?? themeId`, `mobile/src/motion-v6/workspaceRuntime.ts:55`) perche' li' la
+   disegna un canvas. Qui la disegna il CSS, quindi le serve un attributo. Stessa semantica —
+   «la scena segue il tema, salvo scelta esplicita» — forma diversa perche' diverso e' il motore. */
+:root[data-talos-scene="forge"]      { --talos-scena-accento:#c98b32 }
+:root[data-talos-scene="paper"]      { --talos-scena-accento:#a96617 }
+:root[data-talos-scene="terminal"]   { --talos-scena-accento:#63f08e }
+:root[data-talos-scene="aurora"]     { --talos-scena-accento:#42e7c7 }
+:root[data-talos-scene="glacier"]    { --talos-scena-accento:#2367d1 }
+:root[data-talos-scene="ember"]      { --talos-scena-accento:#ff5c62 }
+:root[data-talos-scene="atlas"]      { --talos-scena-accento:#d49a52 }
+:root[data-talos-scene="noir"]       { --talos-scena-accento:#f2f2f2 }
+:root[data-talos-scene="signal"]     { --talos-scena-accento:#ff6f61 }
+:root[data-talos-scene="violet"]     { --talos-scena-accento:#b794f6 }
+:root[data-talos-scene="claudius"]   { --talos-scena-accento:#d97757 }
+:root[data-talos-scene="basicus"]    { --talos-scena-accento:#1976d2 }
+:root[data-talos-scene="telemetry"]  { --talos-scena-accento:#6ad4d4 }
+:root[data-talos-scene="calm"]       { --talos-scena-accento:#c08b3c }
+
+/* ---------- 1-ter. DAI SEMI AL TEMA — le formule sono quelle del mobile ----------
+   `mobile/src/lib/talosThemes.ts:581-691`. ⛔ `calm` e' escluso: i suoi `--talos-tema-*` sono
+   scritti a mano nella sezione 1 e devono restare quelli. */
+:root[data-talos-theme]:not([data-talos-theme="calm"]):not([data-theme="light"]) {
+  --talos-tema-accento: var(--talos-seme-accento);
+  --talos-tema-fondo: var(--talos-seme-fondo-scuro, var(--talos-seme-fondo));
+  --talos-tema-pannello: color-mix(in srgb, var(--talos-tema-fondo) 86%, #141a24);
+  --talos-tema-testo: #edf2f7;
+  --talos-tema-tenue: color-mix(in srgb, var(--talos-tema-testo) 68%, var(--talos-tema-fondo));
+  --talos-tema-bordo: color-mix(in srgb, var(--talos-seme-linea) 74%, #111827);
+}
+:root[data-talos-theme]:not([data-talos-theme="calm"])[data-theme="light"] {
+  --talos-tema-accento: var(--talos-seme-accento);
+  --talos-tema-fondo: var(--talos-seme-fondo-chiaro, color-mix(in srgb, var(--talos-seme-accento) 5%, #f8fafc));
+  --talos-tema-pannello: color-mix(in srgb, var(--talos-tema-fondo) 92%, #ffffff);
+  --talos-tema-testo: #111827;
+  --talos-tema-tenue: color-mix(in srgb, var(--talos-tema-testo) 68%, var(--talos-tema-fondo));
+  --talos-tema-bordo: color-mix(in srgb, var(--talos-seme-linea) 72%, #d7dee8);
+}
 
 /* ---------- 2. La palette scura: una regola sola, i valori vengono dal tema ----------
-   ⛔ `:not([data-theme="light"])` non è un vezzo: porta la specificità a (0,3,0) e fa vincere questo
-   blocco su `:root` di `index.css` senza `!important`, lasciando intatto il tema chiaro. */
+   ⛔ `:not([data-theme="light"])` non e' un vezzo: porta la specificita' a (0,3,0) e fa vincere
+   questo blocco su `:root` di `index.css` senza `!important`, lasciando intatto il tema chiaro. */
 :root[data-talos-theme]:not([data-theme="light"]) {
   --talos-background: var(--talos-tema-fondo);
   --talos-panel: var(--talos-tema-pannello);
-  --talos-panel-soft: color-mix(in srgb, var(--talos-tema-pannello) 92%, var(--talos-tema-testo));
-  --talos-card: color-mix(in srgb, var(--talos-tema-pannello) 86%, var(--talos-tema-testo));
-  --talos-window-bg: color-mix(in srgb, var(--talos-tema-fondo) 86%, #000);
+  --talos-panel-soft: color-mix(in srgb, var(--talos-tema-pannello) 74%, #05070b);
+  --talos-card: color-mix(in srgb, var(--talos-tema-pannello) 88%, #05070b);
+  --talos-window-bg: color-mix(in srgb, var(--talos-tema-pannello) 92%, #05070b);
   --talos-text: var(--talos-tema-testo);
   --talos-assistant-text: color-mix(in srgb, var(--talos-tema-testo) 78%, var(--talos-tema-tenue));
   --talos-muted: var(--talos-tema-tenue);
   --talos-border: var(--talos-tema-bordo);
-  --talos-border-strong: color-mix(in srgb, var(--talos-tema-bordo) 62%, var(--talos-tema-testo));
+  --talos-border-strong: color-mix(in srgb, var(--talos-seme-linea, var(--talos-tema-bordo)) 82%, #dce7f5);
   --talos-accent: var(--talos-tema-accento);
   --talos-accent-hover: color-mix(in srgb, var(--talos-tema-accento) 78%, #fff);
-  --talos-accent-soft: color-mix(in srgb, var(--talos-tema-accento) 14%, transparent);
+  --talos-accent-soft: color-mix(in srgb, var(--talos-tema-accento) 18%, var(--talos-tema-fondo));
   --talos-accent-border: color-mix(in srgb, var(--talos-tema-accento) 34%, transparent);
   --talos-accent-text: color-mix(in srgb, var(--talos-tema-accento) 62%, #fff);
   --talos-ring: color-mix(in srgb, var(--talos-tema-accento) 84%, #fff);
@@ -97,35 +152,50 @@
   --talos-measure-measured: var(--talos-tema-testo);
   --talos-measure-estimated: var(--talos-tema-tenue);
 }
+/* ⛔ `calm` tiene i due derivati che aveva prima dell'allineamento: `panel-soft` e `card` li
+   calcolava verso il TESTO, non verso il nero, ed e' la sfumatura che l'owner vede da mesi. */
+:root[data-talos-theme="calm"]:not([data-theme="light"]) {
+  --talos-panel-soft: color-mix(in srgb, var(--talos-tema-pannello) 92%, var(--talos-tema-testo));
+  --talos-card: color-mix(in srgb, var(--talos-tema-pannello) 86%, var(--talos-tema-testo));
+  --talos-window-bg: color-mix(in srgb, var(--talos-tema-fondo) 86%, #000);
+  --talos-border-strong: color-mix(in srgb, var(--talos-tema-bordo) 62%, var(--talos-tema-testo));
+  --talos-accent-soft: color-mix(in srgb, var(--talos-tema-accento) 14%, transparent);
+}
 
-/* ⛔ `paper` è un tema CHIARO anche quando la modalità colore è «scuro»: sono i valori dell'owner
-   (fondo #f5f1e8), non una mia scelta. Senza questa riga le scrollbar e i controlli nativi
-   resterebbero scuri sopra una carta chiara — `color-scheme` è ciò che il browser guarda. */
-:root[data-talos-theme="paper"]:not([data-theme="light"]) { color-scheme: light; --talos-text-on-accent:#fffdf8; --talos-window-bg: color-mix(in srgb, var(--talos-tema-fondo) 90%, #6b6155) }
+/* ⛔ Quattro temi sono CHIARI anche quando la modalita' colore e' «scuro» — non e' vero: sul mobile
+   `isLight` decide solo il RIPIEGO, e in `system` comanda il sistema operativo
+   (`mobile/src/lib/talosThemes.ts:461-475`). Qui, in scuro, un tema chiaro prende il fondo che il
+   mobile calcola per lo scuro (`mix(accento,10,#06080d)`), che e' una regola sua, non una mia
+   invenzione. Resta solo `color-scheme`: senza, le scrollbar e i controlli nativi litigherebbero. */
+:root:is([data-talos-theme="paper"],[data-talos-theme="glacier"],[data-talos-theme="claudius"],[data-talos-theme="basicus"])[data-theme="light"] { color-scheme: light }
 
-/* ---------- 3. Il chiaro: i neutri restano leggibili, il tema porta accento, forma e carattere ----------
-   ⛔ Non si riusa la palette scura schiarita a caso: in chiaro l'accento di un tema scuro (per es.
-   `noir` #d4d4d8) su carta non arriva a 3:1, e WCAG 2.2 SC 1.4.11 «Non-text Contrast» chiede almeno
-   3:1 per i componenti d'interfaccia (W3C WAI, letto il 10/09/2026). Qui l'accento viene scurito
-   verso l'inchiostro finché regge, e i neutri sono quelli di Calm chiaro appena tinti dal tema. */
-/* ⛔ `calm` è ESCLUSO da questa regola, e non per svista: il suo chiaro è già in `index.css`,
-   scritto e approvato a mano dall'owner. Derivarlo di nuovo qui lo cambierebbe (misurato: accento
-   su fondo da 4,37 a 5,82) — cioè toccherei il tema di serie mentre sto solo collegando gli altri
-   tredici. Il tema che c'è già vince sul mio calcolo. */
+/* ---------- 3. Il chiaro: neutri dal tema, accento SCURITO ----------
+   ⛔ I neutri seguono il mobile (sezione 1-ter). L'ACCENTO no, e la ragione e' misurabile: in chiaro
+   l'accento grezzo di un tema scuro (per es. `terminal` #63f08e) su carta non arriva a 3:1, e
+   WCAG 2.2 SC 1.4.11 «Non-text Contrast» chiede almeno 3:1 per i componenti d'interfaccia (W3C WAI,
+   letto il 10/09/2026). Qui viene scurito verso l'inchiostro finche' regge. E' l'unico punto in cui
+   il desktop si allontana dal mobile di proposito, perche' e' piu' corretto.
+   ⛔ `calm` e' ESCLUSO: il suo chiaro sta in `index.css`, scritto e approvato a mano dall'owner.
+   Derivarlo di nuovo qui lo cambierebbe (misurato: accento su fondo da 4,37 a 5,82). */
 :root[data-talos-theme][data-theme="light"]:not([data-talos-theme="calm"]) {
-  --talos-background: color-mix(in srgb, var(--talos-tema-accento) 6%, #ece9e2);
-  --talos-panel: color-mix(in srgb, var(--talos-tema-accento) 3%, #f7f4ee);
-  --talos-panel-soft: color-mix(in srgb, var(--talos-tema-accento) 7%, #e8e4db);
-  --talos-card: color-mix(in srgb, var(--talos-tema-accento) 2%, #ffffff);
-  --talos-window-bg: color-mix(in srgb, var(--talos-tema-accento) 10%, #ded9cf);
-  --talos-border: color-mix(in srgb, var(--talos-tema-accento) 16%, #c8c3b9);
-  --talos-border-strong: color-mix(in srgb, var(--talos-tema-accento) 22%, #949087);
-  --talos-accent: color-mix(in srgb, var(--talos-tema-accento) 46%, #241f19);
-  --talos-accent-hover: color-mix(in srgb, var(--talos-tema-accento) 34%, #241f19);
-  --talos-accent-soft: color-mix(in srgb, var(--talos-tema-accento) 22%, #ffffff);
-  --talos-accent-border: color-mix(in srgb, var(--talos-tema-accento) 55%, #ffffff);
-  --talos-accent-text: color-mix(in srgb, var(--talos-tema-accento) 40%, #1a1712);
-  --talos-ring: color-mix(in srgb, var(--talos-tema-accento) 42%, #241f19);
-  --talos-ring-soft: color-mix(in srgb, var(--talos-tema-accento) 30%, #ffffff);
+  --talos-background: var(--talos-tema-fondo);
+  --talos-panel: var(--talos-tema-pannello);
+  --talos-panel-soft: color-mix(in srgb, var(--talos-tema-fondo) 78%, #ffffff);
+  --talos-card: color-mix(in srgb, var(--talos-tema-pannello) 96%, #ffffff);
+  --talos-window-bg: color-mix(in srgb, var(--talos-tema-pannello) 96%, #ffffff);
+  --talos-text: var(--talos-tema-testo);
+  --talos-assistant-text: color-mix(in srgb, var(--talos-tema-testo) 88%, var(--talos-tema-tenue));
+  --talos-muted: var(--talos-tema-tenue);
+  --talos-border: var(--talos-tema-bordo);
+  --talos-border-strong: color-mix(in srgb, var(--talos-seme-linea) 86%, #9aa7b8);
+  --talos-accent: color-mix(in srgb, var(--talos-seme-accento) 46%, #241f19);
+  --talos-accent-hover: color-mix(in srgb, var(--talos-seme-accento) 34%, #241f19);
+  --talos-accent-soft: color-mix(in srgb, var(--talos-seme-accento) 13%, var(--talos-tema-fondo));
+  --talos-accent-border: color-mix(in srgb, var(--talos-seme-accento) 55%, #ffffff);
+  --talos-accent-text: color-mix(in srgb, var(--talos-seme-accento) 40%, #1a1712);
+  --talos-ring: color-mix(in srgb, var(--talos-seme-accento) 42%, #241f19);
+  --talos-ring-soft: color-mix(in srgb, var(--talos-seme-accento) 30%, #ffffff);
   --talos-text-on-accent: #ffffff;
+  --talos-measure-measured: var(--talos-tema-testo);
+  --talos-measure-estimated: var(--talos-tema-tenue);
 }

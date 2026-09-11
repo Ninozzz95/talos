@@ -883,6 +883,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/shell$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/dove-girano-i-comandi$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/comandi-nella-conversazione$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/impostazioni-comandi$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/approve$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/queue\/annulla$/, metodi: ['POST'] },
@@ -3179,6 +3180,30 @@ export function createHttpApp({
      * ⛔ `SCELTA_NON_VALIDA` è dichiarato in ENTRAMBI gli elenchi qui sopra: D-10F ha insegnato che
      *   un codice dichiarato in uno solo esce come 500 invece che come 400.
      */
+    /*
+     * ⭐ D-10T — la LETTURA delle due scelte sui comandi. Esisteva solo la scrittura, quindi dopo un
+     *   refresh i menu mostravano il default mentre il server teneva la scelta vera: l'interfaccia
+     *   mentiva proprio nella finestra della sicurezza. Il pannello la rilegge quando si apre.
+     */
+    const leggiComandiMatch = method === 'GET' && sessionRegistry
+      && /^\/api\/v1\/sessions\/([^/]+)\/impostazioni-comandi$/.exec(url.pathname);
+    if (leggiComandiMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(leggiComandiMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const esito = sessionRegistry.impostazioniComandi(sessionId);
+        if ('erroreAvvio' in esito) { const e = new Error(esito.erroreAvvio); e.code = esito.code; throw e; }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ dove: esito.dove, comandiNellaConversazione: esito.comandiNellaConversazione }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const conversazioneMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/comandi-nella-conversazione$/.exec(url.pathname);
     if (conversazioneMatch) {

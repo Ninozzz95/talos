@@ -6386,6 +6386,32 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        * (cosi lo stato a schermo e quello vero) e aggancia dopo, una volta sola per radice.
        */
       disegnaPermessiIn(velo);
+      /*
+       * ⭐⭐⭐ D-10T — le due scelte sui comandi si RILEGGONO dal server all'apertura.
+       *
+       * Prima vivevano solo nella memoria della pagina: dopo un refresh i due menu mostravano il
+       * default **mentre il server teneva ancora la scelta vera**. Cioè questa finestra diceva
+       * «Solo tu» mentre il modello leggeva davvero i tuoi comandi — non una funzione che manca,
+       * una che MENTE, proprio dove si decide la sicurezza.
+       * ⛔ Si disegna PRIMA e si ridisegna DOPO la risposta: il foglio si apre subito com'è sempre
+       *   stato, e si corregge da sé quando il server ha parlato. Aspettare la rete per aprire una
+       *   finestra sarebbe un peggioramento pagato per un dettaglio.
+       * ⛔ Se la lettura fallisce non si inventa niente: resta ciò che la pagina aveva, e il
+       *   prossimo click lo scrive comunque sul server, che è l'autorità.
+       */
+      (async () => {
+        const sessionId = state.realSession.id;
+        if (!sessionId) return;
+        try {
+          /* `apiGet` torna già `envelope.data`: qui arrivano i due campi, non la busta. */
+          const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/impostazioni-comandi`);
+          /* ⛔ Se nel frattempo hai cambiato sessione, questa risposta parla di un'ALTRA: si butta. */
+          if (!dati || state.realSession.id !== sessionId) return;
+          state.realSession.doveGiranoIComandi = dati.dove ?? null;
+          state.realSession.comandiNellaConversazione = dati.comandiNellaConversazione === true;
+          disegnaPermessiIn(velo);
+        } catch { /* la pagina resta con ciò che sa: il server resta l'autorità al prossimo click. */ }
+      })();
       collegaAzioniPermessi(velo, {
         dopoLaScelta: () => chiudiVeloMockup('veloPermessi'),
         ridisegna: () => disegnaPermessiIn(velo),
@@ -11820,23 +11846,32 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     composerPlus: 'drawer', messageStyle: 'sections', streamingAnimation: 'fade',
     windowPresentation: 'drawer', immersiveHeader: false, chatFullWidth: false, reducedMotion: false,
     /*
-     * ⛔⛔⛔ 11/09 — `backgroundMotion` PARTE SPENTO. Owner, guardando la sua chat: «correggi subito
-     *   questa porcata di sfondo giallognolo nella chat».
+     * ⛔⛔⛔ 11/09, MATTINA — `backgroundMotion` era stato SPENTO di serie. Owner, guardando la sua
+     *   chat: «correggi subito questa porcata di sfondo giallognolo nella chat». Le due macchie
+     *   stavano su `body::before/::after`, coprivano il viewport intero su OGNI schermata, e
+     *   l'alfa vera dell'accento al centro era **0,176**: dietro la colonna dove si legge.
      *
-     * Le due macchie di `body::before/::after` (aspetto.css) prendono la tinta della SCENA, che col
-     * tema `calm` è oro `#c08b3c`, e con `motionContrast: 80` emergono parecchio: dietro la colonna
-     * della chat diventano un velo giallognolo. Finché nessun CSS leggeva `data-talos-scene` non si
-     * vedevano; da quando i fogli sono riagganciati, si vedono — e il posto dove si vedono di più è
-     * esattamente quello dove si LEGGE.
-     *
-     * Ricerca 11/09/2026 (Eggradients «Gradient UI in 2026: How to Use Gradients Without
-     * Compromising Usability»): «se c'è un'area dietro il testo che cambia continuamente tono, rende
-     * difficile la lettura» — e un gradiente animato fatto male «stanca chi guarda».
-     *
-     * ⇒ Lo sfondo animato resta una funzione vera e completa, ma si ACCENDE da Aspetto, non si
-     *   subisce. Un default che decora la superficie di lettura è una scelta che nessuno ha fatto.
+     * ⭐ 11/09, POMERIGGIO — TORNA ACCESO, e non «perché si può»: perché adesso è un'altra cosa, e
+     *   i numeri sono questi (banco su copia costruita, porta 5310 — mai il 4174; confronto pixel a
+     *   pixel scritto a mano, tema chiaro e scuro, 1440×900 e 1024×800):
+     *     · la scena vive in `#schermoChat`, non su `body`. Su Impostazioni, Memoria, Attività e
+     *       Board accendere lo sfondo cambia ora **0 pixel** — prima ne cambiava
+     *       942.179 / 1.025.207 / 1.027.807 / 983.517 (72-79% dello schermo);
+     *     · l'alfa dell'accento passa da 0,176 a **0,081** — il registro visibile delle scene del
+     *       mobile (`sceneTools.ts`: orizzonte 0,082, filamento 0,056);
+     *     · il delta massimo su un canale accendendo lo sfondo passa da **141/255 a 14/255**;
+     *     · sotto il testo della conversazione, campionato in CINQUE punti del gradiente:
+     *       **12,49-13,06:1 in scuro** e **11,15-11,57:1 in chiaro**, contro la soglia WCAG AA di
+     *       4,5:1. L'escursione del fondo lungo tutto il gradiente è **5/255**;
+     *     · il testo riprende il **subpixel antialiasing** su un filo con messaggi (firma 68,1
+     *       contro 68,7 a sfondo spento; prima di oggi era 22,4);
+     *     · e il mobile — la sorgente di verità — lo spedisce ACCESO
+     *       (`mobile/src/motion-v6/defaults.ts:28` `background_enabled: true`,
+     *        `mobile/src/stores/settings.ts:824-829` «the complex renderer ships ON by default»).
+     *   ⛔ Chi non lo vuole lo spegne da Aspetto e il timbro rende la scelta definitiva; e per
+     *     tornare indietro basta questa riga.
      */
-    backgroundMotion: false, interfaceMotion: true, motionMode: 'adaptive',
+    backgroundMotion: true, interfaceMotion: true, motionMode: 'adaptive',
     motionQuality: 'balanced', motionSpeed: 100, motionIntensity: 20,
     motionGlow: 10, motionDensity: 100, motionDepth: 92, motionTrails: 50,
     motionContrast: 80, motionParallax: 20, pauseWhenHidden: true,
@@ -11849,21 +11884,37 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     model: '', effort: null, showReasoning: false,
     permissions: 'Workspace write', permessiPerAttrezzo: {}, autonomiaScelta: false,
   };
+  /*
+   * ⭐ 11/09/2026 — QUESTA TABELLA NON E' PIU' LA FONTE DELLA TAVOLOZZA, ed e' allineata al MOBILE.
+   *
+   * La tavolozza viva la costruisce `styles/temi.css` con `color-mix`, dai QUATTRO SEMI di ogni
+   * tema — gli stessi del mobile (`mobile/src/lib/talosThemes.ts:182-425`, campo `preview`).
+   * Qui restano i semi, con lo stesso nome che hanno li', perche' il JavaScript non li reinventi:
+   * fino a stamattina questa tabella aveva tredici accenti diversi da quelli del mobile su
+   * quattordici (l'unico che combaciava era `calm`), ed era la sorgente da cui `temi.css` li aveva
+   * copiati. Una tabella stantia e' una trappola per chi la legge dopo.
+   * ⛔ `chiaro` e' l'`isLight` del mobile: paper, glacier, claudius e basicus sono temi CHIARI —
+   *   sul desktop tre di loro erano scuri.
+   * ⛔ `raggio` resta quello del desktop: il mobile ha una scala a tre gradini invece di un valore
+   *   per tema, e allinearla e' un'altra decisione (registrata, non fatta).
+   * ⛔ Il CARATTERE non compare piu' per tema: il mobile dà Manrope, Sora e Source Serif 4 a sei
+   *   temi, e sul desktop sono spediti due font soli — scriverli darebbe un ripiego silenzioso.
+   */
   const TALOS_THEME_TOKENS = {
-    forge: { bg: '#201d1a', panel: '#2b2621', accent: '#c08b3c', text: '#f5efe6', muted: '#b5a89a', border: '#4b3e31', radius: '14px', font: 'Instrument Sans' },
-    paper: { bg: '#f5f1e8', panel: '#fffdf8', accent: '#9b5b2a', text: '#24211e', muted: '#756e65', border: '#d9d0c3', radius: '10px', font: 'Instrument Sans' },
-    terminal: { bg: '#101714', panel: '#16231e', accent: '#67d391', text: '#e5f6ec', muted: '#8ba99a', border: '#2b4a3a', radius: '6px', font: 'JetBrains Mono' },
-    aurora: { bg: '#171629', panel: '#24233e', accent: '#a995ff', text: '#f1efff', muted: '#aaa6c8', border: '#44416c', radius: '16px', font: 'Instrument Sans' },
-    glacier: { bg: '#111c25', panel: '#1b2a37', accent: '#8fd8f3', text: '#eef9ff', muted: '#9eb7c4', border: '#345064', radius: '14px', font: 'Instrument Sans' },
-    ember: { bg: '#211719', panel: '#302022', accent: '#ef8b57', text: '#fff1eb', muted: '#c6a39a', border: '#5b3534', radius: '14px', font: 'Instrument Sans' },
-    atlas: { bg: '#151b29', panel: '#202c43', accent: '#74a8ff', text: '#edf4ff', muted: '#a4b2c9', border: '#3a4e75', radius: '12px', font: 'Instrument Sans' },
-    noir: { bg: '#0e0e10', panel: '#19191c', accent: '#d4d4d8', text: '#f5f5f5', muted: '#929297', border: '#35353a', radius: '4px', font: 'Instrument Sans' },
-    signal: { bg: '#101b1e', panel: '#17272b', accent: '#5ce1e6', text: '#e9ffff', muted: '#91b9bc', border: '#2f555a', radius: '10px', font: 'Instrument Sans' },
-    violet: { bg: '#1c1625', panel: '#2a2038', accent: '#d3a6ff', text: '#fbf3ff', muted: '#b5a0c3', border: '#523c68', radius: '18px', font: 'Instrument Sans' },
-    claudius: { bg: '#211e1a', panel: '#302b24', accent: '#d2a96d', text: '#f8f1e4', muted: '#b6aa98', border: '#514638', radius: '12px', font: 'Instrument Sans' },
-    basicus: { bg: '#202124', panel: '#2b2c30', accent: '#aeb4c0', text: '#f1f3f5', muted: '#9ea4ad', border: '#45484f', radius: '8px', font: 'Instrument Sans' },
-    telemetry: { bg: '#101b1d', panel: '#18292b', accent: '#75d0a4', text: '#e7fff2', muted: '#96b8a8', border: '#315448', radius: '10px', font: 'JetBrains Mono' },
-    calm: { bg: '#1e1f22', panel: '#25262a', accent: '#c08b3c', text: '#f3f0e9', muted: '#9c9da2', border: '#36373b', radius: '12px', font: 'Instrument Sans' },
+    forge: { accento: '#c98b32', fondo: '#080b11', secondario: '#6ad4d4', linea: '#27313e', chiaro: false, raggio: '14px' },
+    paper: { accento: '#a96617', fondo: '#f8fafc', secondario: '#2f6f7d', linea: '#d7dee8', chiaro: true, raggio: '10px' },
+    terminal: { accento: '#63f08e', fondo: '#020403', secondario: '#d6ff72', linea: '#163821', chiaro: false, raggio: '6px' },
+    aurora: { accento: '#42e7c7', fondo: '#071113', secondario: '#ff6bb5', linea: '#233742', chiaro: false, raggio: '16px' },
+    glacier: { accento: '#2367d1', fondo: '#f4f9fb', secondario: '#ef7d30', linea: '#c9d7e3', chiaro: true, raggio: '14px' },
+    ember: { accento: '#ff5c62', fondo: '#10090a', secondario: '#ffbd5c', linea: '#3b2224', chiaro: false, raggio: '14px' },
+    atlas: { accento: '#d49a52', fondo: '#07101f', secondario: '#57d49c', linea: '#243146', chiaro: false, raggio: '12px' },
+    noir: { accento: '#f2f2f2', fondo: '#050505', secondario: '#ff405a', linea: '#333333', chiaro: false, raggio: '4px' },
+    signal: { accento: '#ff6f61', fondo: '#091011', secondario: '#b4f06f', linea: '#213236', chiaro: false, raggio: '10px' },
+    violet: { accento: '#b794f6', fondo: '#0d0a19', secondario: '#6ee7b7', linea: '#2f2848', chiaro: false, raggio: '18px' },
+    claudius: { accento: '#d97757', fondo: '#faf9f5', secondario: '#6a9bcc', linea: '#e8e6dc', chiaro: true, raggio: '12px' },
+    basicus: { accento: '#1976d2', fondo: '#fafafa', secondario: '#9c27b0', linea: '#e0e0e0', chiaro: true, raggio: '8px' },
+    telemetry: { accento: '#6ad4d4', fondo: '#0b0f11', secondario: '#63f08e', linea: '#1f3238', chiaro: false, raggio: '10px' },
+    calm: { accento: '#c08b3c', fondo: '#1e1f22', secondario: '#8e9095', linea: '#36373b', chiaro: false, raggio: '12px' },
   };
   const MOTION_RANGE_DEFS = {
     motionSpeed: [25, 200], motionIntensity: [0, 100], motionGlow: [0, 100],
@@ -12021,7 +12072,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const requestedTheme = safe.themePreset;
     const scene = safe.sceneOverride === 'follow-theme' ? requestedTheme : safe.sceneOverride;
     const mode = resolvedColorMode(safe.colorMode);
-    const theme = TALOS_THEME_TOKENS[requestedTheme] || TALOS_THEME_TOKENS.calm;
+    /* ⛔ La lettura resta come CANCELLO: un tema che finisce nel menu senza semi qui e' un
+       tema che `temi.css` non conosce, e va scoperto subito invece che a schermo. */
+    if (!TALOS_THEME_TOKENS[requestedTheme]) console.warn(`[talos] tema senza semi: ${requestedTheme}`);
     host.dataset.talosTheme = requestedTheme;
     host.dataset.talosColorMode = safe.colorMode;
     host.dataset.talosResolvedColorMode = mode;
@@ -12062,7 +12115,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     style.setProperty('--talos-motion-contrast', String(safe.motionContrast / 100));
     style.setProperty('--talos-motion-parallax', String(safe.motionParallax / 100));
     const velocitaSfondo = Math.max(0.1, safe.motionSpeed / 100);
-    style.setProperty('--talos-background-cycle', `${Math.round(36_000 / velocitaSfondo)}ms`);
+    /*
+     * ⭐ 11/09: il ciclo passa da 36 s a 90 s, e il numero viene dal MOBILE, non da me.
+     *   `mobile/src/motion-v6/scenes/complex/calm.ts` fa avanzare il respiro con
+     *   `breath += dt * 0.07` ⇒ periodo ~90 s (e la deriva con `drift += dt * 0.025`, ~251 s).
+     *   A 36 s la scena del desktop si NOTAVA mentre si legge; a 90 s è ambiente, che è la cosa
+     *   che il mobile ha scelto di essere. `motionSpeed` continua a dividerlo come prima.
+     */
+    style.setProperty('--talos-background-cycle', `${Math.round(90_000 / velocitaSfondo)}ms`);
     style.setProperty('--talos-background-shift-x', `${Math.round(safe.motionParallax * 0.8)}px`);
     style.setProperty('--talos-background-shift-y', `${Math.round(safe.motionParallax * 0.5)}px`);
     style.setProperty('--talos-motion-duration-scale', String(safe.motionDuration / 100));
@@ -12101,7 +12161,18 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     host.dataset.talosMotionQuality = safe.motionQuality;
     host.dataset.talosMotionProfile = safe.motionProfile;
     host.dataset.talosMotionEasing = safe.motionEasing;
-    const backgroundOff = !safe.backgroundMotion || safe.motionMode === 'off' || safe.reducedMotion;
+    /*
+     * ⛔⛔ 11/09 — «RIDUCI IL MOVIMENTO» SPEGNEVA LA SCENA, il `prefers-reduced-motion` del sistema
+     *   la lasciava ferma e VISIBILE: due comportamenti diversi per la stessa identica intenzione,
+     *   e quello sbagliato era il nostro. Trovato provando la leva al verso contrario.
+     *   Il mobile ne ha uno solo — `mobile/src/motion-v6/runtimePolicy.ts:205-217`:
+     *     `else if (environment.prefersReducedMotion) { effectiveMode = 'static' }`
+     *   cioe' **ferma, non spenta**. Togliere la scena cambia la stanza a chi ha chiesto soltanto
+     *   di non vederla muovere (W3C WAI, «prefers-reduced-motion»).
+     * ⇒ `reducedMotion` esce da qui e resta dov'era gia': dentro `animabile`, in
+     *   `avviaBackgroundDesktop()`, che e' esattamente lo stato «presente, ferma».
+     */
+    const backgroundOff = !safe.backgroundMotion || safe.motionMode === 'off';
     host.classList.toggle('background-motion-off', backgroundOff);
     document.body.classList.toggle('background-motion-off', backgroundOff);
     host.classList.toggle('interface-motion-off', interfacciaFerma); // 11/09: stessa condizione dei token qui sopra, scritta una volta sola

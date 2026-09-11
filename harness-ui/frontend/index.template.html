@@ -34,38 +34,7 @@
       ⛔ E i tratti RESTANO accesi (`both`, e le keyframe finiscono al 100%): il marchio si
       costruisce e rimane costruito — a toglierlo è la dissolvenza del velo, non l'animazione.
     -->
-    <script data-talos-nonce>
-      /*
-       * ⛔⛔⛔ IL PONTE DEL TEMA, e perché senza il velo PEGGIORA il difetto che cura.
-       *
-       * Trovato guardando la prima foto della schermata d'avvio: il velo usciva CHIARO perché
-       * seguiva `prefers-color-scheme`, mentre la app dell'owner è in tema scuro. Cioè al refresh
-       * avrebbe visto un lampo BIANCO prima di una app scura — peggio dello scheletro che stavo
-       * coprendo. Un velo che non conosce il tema non nasconde un difetto: ne aggiunge uno.
-       *
-       * ⇒ Qui si legge la preferenza SALVATA e si stampa `data-theme` sulla radice, con la stessa
-       *   regola di `applicaThemeDesktop` (app.js): `light` esplicito ⇒ chiaro; `dark` ⇒ scuro;
-       *   `system` o assente ⇒ lo decide il sistema. Il velo e la app arrivano così allo stesso
-       *   colore, e quando la app parte non cambia niente sotto gli occhi.
-       * ⛔ Tutto dentro un `try`: una preferenza illeggibile (finestra privata, dati puliti) non
-       *   deve impedire l'avvio — si ripiega sul sistema, che è il default dichiarato.
-       * ⛔ E lo script sta PRIMA dello `<style>` qui sotto: dopo, l'attributo arriverebbe a
-       *   disegno già fatto, che è esattamente il lampo che stiamo togliendo.
-       */
-      (function () {
-        var modo = 'system';
-        try {
-          var grezzo = window.localStorage.getItem('talos.harness.desktop.settings.v1');
-          if (grezzo) { var m = JSON.parse(grezzo); modo = (m && m.appearance && m.appearance.colorMode) || 'system'; }
-        } catch (e) { modo = 'system'; }
-        var chiaro = modo === 'light' || (modo !== 'dark'
-          && typeof window.matchMedia === 'function'
-          && window.matchMedia('(prefers-color-scheme: light)').matches);
-        var radice = document.documentElement;
-        if (chiaro) radice.setAttribute('data-theme', 'light');
-        radice.style.setProperty('color-scheme', chiaro ? 'light' : 'dark');
-      }());
-    </script>
+    <script src="./avvio.js"></script>
     <style data-talos-nonce>
       /*
        * ⛔⛔⛔ COLORE E IMMAGINE SEPARATI, e non è pignoleria: la prima versione scriveva
@@ -150,53 +119,7 @@
   </div>
   <span class="avvio-parola talos-orbitron-brand">TALOS</span>
 </div>
-<script data-talos-nonce>
-  /*
-   * ⛔ Nessun ritardo artificiale (ricerca 11/09/2026, uxpin): si esce appena la pagina è pronta,
-   *   e il minimo di 650 ms serve solo a non tagliare a metà la sequenza del marchio.
-   * ⛔ `MASSIMO` non è pessimismo: senza, una pagina che non arriva mai a `load` (una rete che
-   *   pende, un errore precoce) lascerebbe il velo per sempre, e l'utente guarderebbe un logo
-   *   invece della app. Un velo che copre tutto ha bisogno di una via d'uscita che non dipenda
-   *   da ciò che sta coprendo.
-   */
-  (function () {
-    var MINIMO = 650, MASSIMO = 4000, tolto = false, partita = 0;
-    var velo = document.getElementById('talosAvvio');
-    /*
-     * ⛔ L'accensione comincia quando il thread principale è LIBERO, non al caricamento: le
-     *   animazioni dentro un SVG non sono accelerate e un long task del boot le inchioda (misurato:
-     *   un buco da 128 ms sui pixel dipinti, mentre da sola la stessa animazione non ne ha nessuno).
-     * ⛔ `requestIdleCallback` con un `timeout`: il timeout non è pessimismo, è la garanzia che su
-     *   una macchina sempre occupata l'animazione parta lo stesso invece di non partire mai.
-     */
-    function accendi() {
-      if (partita || !velo) return;
-      partita = Date.now();
-      velo.setAttribute('data-anima', 'si');
-    }
-    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(accendi, { timeout: 400 });
-    else setTimeout(accendi, 120);
 
-    function via() {
-      if (tolto) return;
-      tolto = true;
-      if (!velo) return;
-      velo.setAttribute('data-uscita', 'si');
-      setTimeout(function () { if (velo.parentNode) velo.parentNode.removeChild(velo); }, 320);
-    }
-    /* ⛔ Il minimo si conta da quando l'animazione È PARTITA: contarlo dal caricamento taglierebbe
-       la sequenza a metà proprio nei casi lenti, che sono quelli per cui il velo esiste. */
-    function quandoPronta() {
-      if (!partita) { accendi(); }
-      setTimeout(via, Math.max(0, MINIMO - (Date.now() - partita)));
-    }
-    /* La app può chiamarlo appena ha finito il primo disegno: è la via più precisa. */
-    window.__talosAvvioPronta = quandoPronta;
-    if (document.readyState === 'complete') requestAnimationFrame(quandoPronta);
-    else window.addEventListener('load', function () { requestAnimationFrame(quandoPronta); });
-    setTimeout(via, MASSIMO);
-  }());
-</script>
 <svg width="0" height="0" class="talos-sprite" aria-hidden="true">
   <!-- ⛔ 07/9, O-44 — owner: «i loghi sono ancora mockup e non usano quelli veri; vedi mobile,
        lui lo fa alla perfezione». Qui c'era una «A» stilizzata disegnata a mano su una griglia 32×32.

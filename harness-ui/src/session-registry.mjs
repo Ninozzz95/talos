@@ -4222,6 +4222,30 @@ export function createSessionRegistry({
       return { ok: true, acceso };
     },
 
+    /**
+     * ⭐⭐⭐ D-10T (11/09) — LE DUE SCELTE SUI COMANDI, LETTE DAL SERVER.
+     *
+     * Prima non esisteva nessuna lettura: `doveGiranoIComandi` e `comandiNellaConversazione`
+     * vivevano nella voce e il frontend le scriveva solo al click. Dopo un refresh i due menu
+     * tornavano al default **mentre il server teneva ancora la scelta vera** — cioè l'interfaccia
+     * diceva «Solo tu» mentre il modello stava leggendo i comandi. È il difetto peggiore di tutti:
+     * non una funzione che manca, una che MENTE, e proprio nella finestra della sicurezza.
+     *
+     * Ricerca 11/09/2026: è lo stesso difetto che openclaw ha chiuso da poco («Quick Settings
+     * reads stale exec security config instead of the active source of truth», issue #79247) — il
+     * server resta l'autorità e il pannello rilegge quando si apre, invece di fidarsi di ciò che
+     * ha in mano.
+     */
+    impostazioniComandi(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
+      return {
+        ok: true,
+        dove: voce.doveGiranoIComandi ?? null,
+        comandiNellaConversazione: voce.comandiNellaConversazione === true,
+      };
+    },
+
     shell(sessionId, comando) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
