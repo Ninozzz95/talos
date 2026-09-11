@@ -25,8 +25,8 @@ function etichettaOrigineChiave(row = {}) {
   if (row.keyConfigured === true) return "Chiave salvata";
   return row.requiresKey === true ? "Chiave mancante" : "Chiave facoltativa";
 }
-function el(tag, cls, txt) {
-  const n = document.createElement(tag);
+function el(tag2, cls, txt) {
+  const n = document.createElement(tag2);
   if (cls) n.className = cls;
   if (txt != null) n.textContent = txt;
   return n;
@@ -460,11 +460,11 @@ function nomeModello(modello) {
   if (typeof modello !== "string" || modello.trim() === "") return null;
   return modello.split("/").pop();
 }
-function el2(documentObj, tag, className, testo3) {
-  const nodo8 = documentObj.createElement(tag);
-  if (className) nodo8.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo8.textContent = String(testo3);
-  return nodo8;
+function el2(documentObj, tag2, className, testo3) {
+  const nodo9 = documentObj.createElement(tag2);
+  if (className) nodo9.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo9.textContent = String(testo3);
+  return nodo9;
 }
 function nomeLeggibileSessione(taskId) {
   const grezzo = String(taskId || "").trim();
@@ -742,8 +742,8 @@ function datiRuntimeModello(r = {}) {
   const stato = raggiunto ? locale ? r.runtimeState === "ready" ? "Raggiunto" : fasi[r.runtimeState] || "Stato non rilevato" : "Raggiunto" : "Non raggiunto";
   return { nome: nomi[r.runtimeId] || r.runtimeId || "Motore sconosciuto", stato, tono: stato === "Raggiunto" && !errore ? "success" : "warning", modelli: !raggiunto ? "Disponibilità non verificata" : r.modelsError ? "Lettura dei modelli non riuscita" : models.length ? models.length + (models.length === 1 ? " modello disponibile" : " modelli disponibili") : "Nessun modello disponibile", nomi: raggiunto && !r.modelsError ? models.map((m) => m.name || m.id).filter(Boolean) : [], caricamento: raggiunto && r.runtimeId === "llama.cpp" ? r.runtimeState === "ready" ? "Modello caricato da TALOS" : ["stopped", "unavailable"].includes(r.runtimeState) ? "Nessun modello caricato da TALOS" : "Non rilevato" : "Non rilevato", indirizzo: r.baseUrl || "Non esposto dal server", data: typeof r.observedAt === "string" && !Number.isNaN(Date.parse(r.observedAt)) ? new Date(r.observedAt).toLocaleString("it-IT", { timeZone: "Europe/Rome" }) : "Non rilevata", errore };
 }
-function el3(tag, cls, txt) {
-  const n = document.createElement(tag);
+function el3(tag2, cls, txt) {
+  const n = document.createElement(tag2);
   if (cls) n.className = cls;
   if (txt != null) n.textContent = txt;
   return n;
@@ -977,8 +977,8 @@ function filtraModelli(modelli, query = "", provider = "all") {
   const q = String(query).trim().toLocaleLowerCase("it");
   return modelli.filter((m) => (provider === "all" || m.provider === provider) && (!q || [m.nome, m.id, m.provider].some((v) => String(v || "").toLocaleLowerCase("it").includes(q))));
 }
-function el4(tag, cls, txt) {
-  const n = document.createElement(tag);
+function el4(tag2, cls, txt) {
+  const n = document.createElement(tag2);
   if (cls) n.className = cls;
   if (txt != null) n.textContent = String(txt);
   return n;
@@ -1129,8 +1129,8 @@ function normalizzaProvaRicerca(r) {
   if (!oggetto2(r) || typeof r.fonte !== "string" || !r.fonte.trim() || !Number.isInteger(r.risultati) || r.risultati < 0 || !Array.isArray(r.titoli) || !r.titoli.every((t2) => typeof t2 === "string")) throw Error("La risposta della prova di ricerca non è valida.");
   return { fonte: r.fonte, risultati: r.risultati, titoli: [...r.titoli] };
 }
-function nodo(tag, classe, testo3) {
-  const e = document.createElement(tag);
+function nodo(tag2, classe, testo3) {
+  const e = document.createElement(tag2);
   if (classe) e.className = classe;
   if (testo3 != null) e.textContent = testo3;
   return e;
@@ -2329,7 +2329,7 @@ function tn(uno2, molti, n, parametri) {
   return t(forma, { n, ...parametri || {} });
 }
 function primoTesto(el25) {
-  for (const nodo8 of el25.childNodes) if (nodo8.nodeType === 3 && nodo8.data.trim()) return nodo8;
+  for (const nodo9 of el25.childNodes) if (nodo9.nodeType === 3 && nodo9.data.trim()) return nodo9;
   return null;
 }
 function applicaLingua(root, lingua) {
@@ -2402,8 +2402,8 @@ function filtraImpostazioni(campi, query) {
     return termini.every((t2) => contenuto.includes(t2));
   });
 }
-function nodo2(tag, classe, testo3) {
-  const el25 = document.createElement(tag);
+function nodo2(tag2, classe, testo3) {
+  const el25 = document.createElement(tag2);
   if (classe) el25.className = classe;
   if (testo3 != null) el25.textContent = testo3;
   return el25;
@@ -2673,8 +2673,8 @@ function contaGravitaDoctor(voci) {
   for (const v of voci) n[v.gravita]++;
   return n;
 }
-function nodo3(doc, tag, classe, valore) {
-  const e = doc.createElement(tag);
+function nodo3(doc, tag2, classe, valore) {
+  const e = doc.createElement(tag2);
   if (classe) e.className = classe;
   if (valore !== void 0) e.textContent = valore;
   return e;
@@ -2892,8 +2892,8 @@ var init_estensioni = __esm({
   "src/components/estensioni.js"() {
     EVENTI = { pre_tool_call: "Prima di usare un attrezzo", post_tool_call: "Dopo aver usato un attrezzo", session_start: "All’avvio della sessione", session_end: "Alla fine della sessione" };
     ORIGINI = { skills: ".harness-ui-skills/", mcp: ".harness-ui-mcp.json", plugins: ".harness-ui-plugins/", hooks: ".harness-ui-hooks.json" };
-    el5 = (doc, tag, classe, testo3) => {
-      const n = doc.createElement(tag);
+    el5 = (doc, tag2, classe, testo3) => {
+      const n = doc.createElement(tag2);
       if (classe) n.className = classe;
       if (testo3 !== void 0) n.textContent = testo3;
       return n;
@@ -3031,8 +3031,8 @@ function filtraAttrezzi(attrezzi, { query = "", filtro = "tutti" } = {}) {
   const q = String(query).trim().toLocaleLowerCase("it");
   return attrezzi.filter((a) => (filtro === "tutti" || (filtro === "permessi" ? a.permessoConfigurabile === true : filtro === "dipendenze" ? a.dipendenza && a.dipendenza.stato !== "pronta" : false)) && (!q || corrispondeARicerca(a.nome, q) || String(a.descrizione || "").toLocaleLowerCase("it").includes(q)));
 }
-function el6(doc, tag, classe, testo3) {
-  const n = doc.createElement(tag);
+function el6(doc, tag2, classe, testo3) {
+  const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
   return n;
@@ -3074,8 +3074,8 @@ function creaToolListRow(a, { document: doc = globalThis.document, selezionata =
 }
 function scriviDescrizioni(d, a) {
   const nostra = descrizioneAttrezzo(a.nome), doc = d.ownerDocument;
-  const nodo8 = d.querySelector("[data-cap-descrizione]");
-  nodo8.textContent = nostra || a.descrizione || "Descrizione non disponibile";
+  const nodo9 = d.querySelector("[data-cap-descrizione]");
+  nodo9.textContent = nostra || a.descrizione || "Descrizione non disponibile";
   const grezzo = d.querySelector("[data-cap-descrizione-kernel]");
   if (!grezzo) return;
   grezzo.hidden = !nostra || !a.descrizione;
@@ -3256,8 +3256,8 @@ function riepilogoAutomazioni(elenco2) {
   const attive = elenco2.filter((a) => a.attiva === true).length;
   return elenco2.length + " automazion" + (elenco2.length === 1 ? "e" : "i") + " · " + attive + (attive === 1 ? " attiva" : " attive");
 }
-function el7(doc, tag, classe, testo3) {
-  const n = doc.createElement(tag);
+function el7(doc, tag2, classe, testo3) {
+  const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
   return n;
@@ -3411,8 +3411,8 @@ function filtraOfficina(strumenti, { query = "", stato = "tutti" } = {}) {
   const q = String(query).trim().toLocaleLowerCase("it");
   return strumenti.filter((s) => (stato === "tutti" || (stato === "abilitati" ? s.abilitato === true : s.abilitato === false)) && (!q || [s.id, testiToolForgiato(s).titolo, testiToolForgiato(s).descrizione, ...Array.isArray(s.capacita) ? s.capacita : [], ...capacitaToolForgiato(s.capacita)].join(" ").toLocaleLowerCase("it").includes(q)));
 }
-function el8(doc, tag, classe, testo3) {
-  const n = doc.createElement(tag);
+function el8(doc, tag2, classe, testo3) {
+  const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
   return n;
@@ -3551,25 +3551,702 @@ var init_officina = __esm({
   }
 });
 
+// src/components/ricerca-dettaglio.js
+function statoRicercaApprofondita(stato) {
+  return STATI_RICERCA.get(stato) || {
+    parola: "Stato non registrato",
+    tono: "",
+    cosaFare: "Il server non dice a che punto è. Aggiorna la sezione, o riapri la conversazione della ricerca."
+  };
+}
+function conclusaDavvero(stato) {
+  return stato === "done";
+}
+function dataOra(iso) {
+  const d = iso ? new Date(iso) : null;
+  if (!d || !Number.isFinite(d.getTime())) return null;
+  return d.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+function articoloData(iso) {
+  const d = iso ? new Date(iso) : null;
+  const giorno = d && Number.isFinite(d.getTime()) ? d.getDate() : 0;
+  return giorno === 8 || giorno === 11 ? "l’" : "il ";
+}
+function durataUmana(daISO, aISO) {
+  const da = daISO ? Date.parse(daISO) : NaN;
+  const a = aISO ? Date.parse(aISO) : NaN;
+  if (!Number.isFinite(da) || !Number.isFinite(a) || a < da) return null;
+  const secondi = Math.round((a - da) / 1e3);
+  if (secondi < 60) return `${secondi} s`;
+  const minuti = Math.floor(secondi / 60);
+  const resto = secondi % 60;
+  if (minuti < 60) return resto ? `${minuti} min ${resto} s` : `${minuti} min`;
+  const ore = Math.floor(minuti / 60);
+  const minutiResto = minuti % 60;
+  return minutiResto ? `${ore} h ${minutiResto} min` : `${ore} h`;
+}
+function frasiVoce(voce) {
+  const stato = statoRicercaApprofondita(voce?.stato);
+  const grezza = typeof voce?.domanda === "string" && voce.domanda.trim() ? voce.domanda.trim() : typeof voce?.titolo === "string" && voce.titolo.trim() ? voce.titolo.trim() : "";
+  const motivo = typeof voce?.motivo === "string" && voce.motivo.trim() ? voce.motivo.trim() : null;
+  return {
+    domanda: grezza || "Ricerca senza domanda",
+    parola: stato.parola,
+    tono: stato.tono,
+    /* ⛔ Su `done` il motivo non si mostra: il server lo manda solo quando NON è done, e stamparlo
+       lì sarebbe una spiegazione di un guasto che non c'è stato. */
+    spiegazione: conclusaDavvero(voce?.stato) ? stato.cosaFare : motivo || stato.cosaFare,
+    avviata: dataOra(voce?.avviataAlle),
+    conclusa: dataOra(voce?.conclusaAlle),
+    durata: durataUmana(voce?.avviataAlle, voce?.conclusaAlle),
+    haRapporto: Boolean(voce?.reportLibraryId),
+    nome: typeof voce?.nome === "string" && voce.nome.trim() ? voce.nome.trim() : null
+  };
+}
+function leggiDocumentoRapporto(testo3) {
+  const documento = typeof testo3 === "string" ? testo3 : "";
+  const inizio = documento.indexOf(APERTURA_RECORD);
+  if (inizio < 0) {
+    return { prosa: documento.trim(), record: null, perche: documento.trim() ? "senza-record" : "vuoto" };
+  }
+  const da = inizio + APERTURA_RECORD.length;
+  const fine = documento.indexOf(CHIUSURA_RECORD, da);
+  const prosa = documento.slice(0, inizio).trim();
+  if (fine < 0) return { prosa, record: null, perche: "record-troncato" };
+  try {
+    const letto = JSON.parse(documento.slice(da, fine));
+    if (letto?.version !== 1 || !Array.isArray(letto.claims) || !Array.isArray(letto.sources)) {
+      return { prosa, record: null, perche: "record-di-un-altro-formato" };
+    }
+    return { prosa, record: { ...letto, judge: letto.judge ?? null }, perche: null };
+  } catch {
+    return { prosa, record: null, perche: "record-illeggibile" };
+  }
+}
+function bilancioDaRecord(record) {
+  const claims = Array.isArray(record?.claims) ? record.claims : [];
+  const quante = (quale) => claims.filter((c) => c?.checks?.claimSupported === quale).length;
+  return {
+    totale: claims.length,
+    sostenute: quante("yes"),
+    inParte: quante("partial"),
+    contese: quante("contested"),
+    nonSostenute: quante("no"),
+    /* Tutto ciò che non è uno dei quattro verdetti espliciti è «non verificata», compreso un
+       record vecchio che quel campo non ce l'ha: non si conta come sostenuta per distrazione. */
+    nonVerificate: claims.filter((c) => !["yes", "partial", "contested", "no"].includes(c?.checks?.claimSupported)).length
+  };
+}
+function frasiBilancio(bilancio) {
+  if (!bilancio || !bilancio.totale) return "Nessuna affermazione registrata";
+  const pezzi = PEZZI_BILANCIO.filter((p) => bilancio[p.chiave] > 0).map((p) => `${bilancio[p.chiave]} ${p.chiave === "contese" && bilancio[p.chiave] === 1 ? "contesa" : p.parola}`);
+  return pezzi.join(" · ");
+}
+function verdettoInParole(checks) {
+  switch (checks?.claimSupported) {
+    case "yes":
+      return { parola: "sostenuta dalla fonte", tono: "success" };
+    case "partial":
+      return { parola: "sostenuta solo in parte", tono: "warning" };
+    case "no":
+      return { parola: "NON sostenuta dalla fonte", tono: "danger" };
+    case "contested":
+      return { parola: "contesa — le fonti non concordano", tono: "info" };
+    default:
+      return { parola: "non verificata", tono: "" };
+  }
+}
+function comeOttenuta(obtained) {
+  if (obtained === "page") return "pagina letta";
+  if (obtained === "snippet") return "solo estratto dal motore di ricerca";
+  return "origine non registrata";
+}
+function dominioRegistrabile(url) {
+  let host;
+  try {
+    host = new URL(String(url)).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  if (!host) return null;
+  const parti = host.split(".").filter(Boolean);
+  if (parti.length <= 2) return parti.join(".") || null;
+  const ultimiDue = parti.slice(-2).join(".");
+  return parti.slice(-(SUFFISSI_DI_SECONDO_LIVELLO.has(ultimiDue) ? 3 : 2)).join(".");
+}
+function proveDistinte(sources) {
+  const elenco2 = Array.isArray(sources) ? sources : [];
+  const gruppi = /* @__PURE__ */ new Map();
+  elenco2.forEach((fonte, indice2) => {
+    const chiave = dominioRegistrabile(fonte?.url) || `senza-dominio-${indice2}`;
+    if (!gruppi.has(chiave)) gruppi.set(chiave, []);
+    gruppi.get(chiave).push(indice2);
+  });
+  const quanti = gruppi.size;
+  const indirizzi = elenco2.length;
+  const frase = indirizzi === 0 ? "Nessuna fonte registrata" : `${quanti} ${quanti === 1 ? "prova distinta" : "prove distinte"} su ${indirizzi} ${indirizzi === 1 ? "indirizzo" : "indirizzi"}`;
+  return { gruppi: quanti, indirizzi, frase, perIndice: gruppi };
+}
+function gruppoDellaFonte(fonte) {
+  return dominioRegistrabile(fonte?.url) || "indirizzo non leggibile";
+}
+function citazioniDaRecord(record, letteAlle) {
+  const quando = /^\d{4}-\d{2}-\d{2}/.exec(String(letteAlle ?? ""))?.[0] || "";
+  return (Array.isArray(record?.sources) ? record.sources : []).map((fonte) => ({
+    url: String(fonte?.url ?? ""),
+    title: String(fonte?.title ?? ""),
+    publishedAt: typeof fonte?.publishedAt === "string" ? fonte.publishedAt : null,
+    accessedAt: quando
+  }));
+}
+function anno(iso) {
+  if (!iso) return null;
+  return /^(\d{4})/.exec(String(iso).trim())?.[1] || null;
+}
+function bibtexSicuro(testo3) {
+  return String(testo3 ?? "").replace(/[{}\\]/g, "").replace(/\s+/g, " ").trim();
+}
+function risSicuro(testo3) {
+  return String(testo3 ?? "").replace(/\s+/g, " ").trim();
+}
+function chiaviDistinte(citazioni) {
+  const viste = /* @__PURE__ */ new Map();
+  return citazioni.map((c) => {
+    const host = dominioRegistrabile(c.url) || "fonte";
+    const base = `${host.replace(/[^a-z0-9]/gi, "")}${anno(c.publishedAt) ?? ""}`;
+    const quante = viste.get(base) ?? 0;
+    viste.set(base, quante + 1);
+    return quante === 0 ? base : `${base}${String.fromCharCode(97 + quante)}`;
+  });
+}
+function bibtexDaCitazioni(citazioni) {
+  const elenco2 = Array.isArray(citazioni) ? citazioni : [];
+  if (elenco2.length === 0) return "";
+  const chiavi = chiaviDistinte(elenco2);
+  return elenco2.map((c, i) => {
+    const righe = [
+      `  title = {${bibtexSicuro(c.title)}}`,
+      `  url = {${String(c.url ?? "").trim()}}`,
+      `  urldate = {${String(c.accessedAt ?? "").trim()}}`
+    ];
+    const quando = anno(c.publishedAt);
+    if (quando) righe.splice(1, 0, `  year = {${quando}}`);
+    return `@misc{${chiavi[i]},
+${righe.join(",\n")},
+}`;
+  }).join("\n\n");
+}
+function risDaCitazioni(citazioni) {
+  const elenco2 = Array.isArray(citazioni) ? citazioni : [];
+  if (elenco2.length === 0) return "";
+  return elenco2.map((c) => {
+    const righe = ["TY  - ELEC", `TI  - ${risSicuro(c.title)}`, `UR  - ${String(c.url ?? "").trim()}`];
+    const quando = anno(c.publishedAt);
+    if (quando) righe.push(`PY  - ${quando}`);
+    righe.push(`Y2  - ${String(c.accessedAt ?? "").trim().replace(/-/g, "/")}`);
+    righe.push("ER  - ");
+    return righe.join("\n");
+  }).join("\n\n");
+}
+function nomeFileRapporto(domanda, estensione) {
+  const pulito = String(domanda ?? "").normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+  return `${pulito || "ricerca"}.${estensione}`;
+}
+function magazzinoRicerche(schermo) {
+  let magazzino = MAGAZZINI.get(schermo);
+  if (!magazzino) {
+    magazzino = { rapporti: /* @__PURE__ */ new Map(), viste: /* @__PURE__ */ new Map(), collegato: false };
+    MAGAZZINI.set(schermo, magazzino);
+  }
+  return magazzino;
+}
+function nodo4(doc, tag2, classe, testo3) {
+  const el25 = doc.createElement(tag2);
+  if (classe) el25.className = classe;
+  if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
+  return el25;
+}
+function iconaSvg(doc, nome) {
+  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  svg.setAttribute("class", "i");
+  svg.setAttribute("aria-hidden", "true");
+  use.setAttribute("href", `#i-${nome}`);
+  svg.append(use);
+  return svg;
+}
+function tag(doc, testo3, tono) {
+  const el25 = nodo4(doc, "span", "td-tag", testo3);
+  if (tono) el25.dataset.tone = tono;
+  return el25;
+}
+function prosaInNodi(doc, prosa, rendiMarkdown, titoloGiaDetto = "") {
+  const contenitore = nodo4(doc, "div", "td-prosa-rapporto");
+  if (typeof rendiMarkdown === "function") {
+    const reso = rendiMarkdown(String(prosa ?? ""));
+    if (reso) {
+      contenitore.append(reso);
+      return contenitore;
+    }
+  }
+  let paragrafo = [];
+  const chiudi = () => {
+    if (!paragrafo.length) return;
+    contenitore.append(nodo4(doc, "p", "td-prose", paragrafo.join(" ")));
+    paragrafo = [];
+  };
+  const normale = (t2) => String(t2 ?? "").replace(/\s+/g, " ").trim().toLocaleLowerCase("it");
+  let primoTitolo = true;
+  for (const riga of String(prosa ?? "").split("\n")) {
+    const titolo2 = /^(#{1,6})\s+(.*)$/.exec(riga);
+    if (titolo2) {
+      chiudi();
+      if (primoTitolo && titoloGiaDetto && normale(titolo2[2]) === normale(titoloGiaDetto)) {
+        primoTitolo = false;
+        continue;
+      }
+      primoTitolo = false;
+      const livello = Math.min(titolo2[1].length + 1, 4);
+      contenitore.append(nodo4(doc, `h${livello}`, "", titolo2[2]));
+      continue;
+    }
+    if (/^>\s?/.test(riga)) {
+      chiudi();
+      contenitore.append(nodo4(doc, "blockquote", "td-passaggio", riga.replace(/^>\s?/, "")));
+      continue;
+    }
+    if (!riga.trim()) {
+      chiudi();
+      continue;
+    }
+    paragrafo.push(riga);
+  }
+  chiudi();
+  return contenitore;
+}
+function barraBilancio(doc, bilancio) {
+  const blocco = nodo4(doc, "div", "td-bilancio");
+  const barra = nodo4(doc, "div", "td-bilancio-barra");
+  barra.setAttribute("role", "img");
+  barra.setAttribute("aria-label", `Bilancio delle verifiche: ${frasiBilancio(bilancio)}`);
+  for (const pezzo2 of PEZZI_BILANCIO) {
+    const quante = bilancio[pezzo2.chiave] || 0;
+    if (!quante) continue;
+    const fetta = nodo4(doc, "i");
+    fetta.dataset.tone = pezzo2.tono;
+    fetta.style.flexGrow = String(quante);
+    barra.append(fetta);
+  }
+  blocco.append(barra);
+  const voci = nodo4(doc, "div", "td-bilancio-voci");
+  for (const pezzo2 of PEZZI_BILANCIO) {
+    const quante = bilancio[pezzo2.chiave] || 0;
+    if (!quante) continue;
+    const voce = nodo4(doc, "span");
+    const pallino = nodo4(doc, "i");
+    pallino.dataset.tone = pezzo2.tono;
+    voce.append(pallino, doc.createTextNode(`${quante} ${quante === 1 && pezzo2.chiave === "contese" ? "contesa" : pezzo2.parola}`));
+    voci.append(voce);
+  }
+  blocco.append(voci);
+  return blocco;
+}
+function vistaRapporto(doc, voce, lettura, ctx) {
+  const pezzi = [];
+  const frasi = frasiVoce(voce);
+  if (!frasi.haRapporto) {
+    pezzi.push(nodo4(doc, "p", "td-prose", conclusaDavvero(voce?.stato) ? "Questa ricerca risulta conclusa, ma non ha depositato nessun rapporto." : "Questa ricerca non ha depositato un rapporto."));
+    if (conclusaDavvero(voce?.stato)) pezzi.push(nodo4(doc, "p", "td-subtle", frasi.spiegazione));
+    if (voce?.ultimoMessaggio) pezzi.push(nodo4(doc, "p", "td-subtle", "L’ultima cosa che la ricerca ha detto in chat è in «Come è andata». Non è un rapporto."));
+    return pezzi;
+  }
+  if (!lettura && !ctx?.puoLeggere) {
+    pezzi.push(nodo4(doc, "p", "td-prose", "Il rapporto di questa ricerca è depositato in Libreria, in questo progetto."));
+    pezzi.push(nodo4(doc, "p", "td-subtle", "Da questa schermata non si apre ancora: la Libreria lo scarica."));
+    return pezzi;
+  }
+  if (!lettura || lettura.stato === "caricando") {
+    pezzi.push(nodo4(doc, "p", "td-prose", "Leggo il rapporto…"));
+    return pezzi;
+  }
+  if (lettura.stato === "errore") {
+    const p = nodo4(doc, "p", "td-prose", `Il rapporto non si apre: ${lettura.errore}`);
+    p.setAttribute("role", "alert");
+    pezzi.push(p, nodo4(doc, "p", "td-subtle", "Il file vive in Libreria, in questo progetto: da lì si scarica anche se qui non si apre."));
+    return pezzi;
+  }
+  if (!lettura.record) {
+    pezzi.push(nodo4(doc, "p", "td-subtle", PERCHE_SENZA_RECORD.get(lettura.perche) || "Il riepilogo delle verifiche non c’è."));
+  }
+  const testo3 = lettura.record?.summary?.trim() ? lettura.record.summary : lettura.prosa;
+  if (testo3) pezzi.push(prosaInNodi(doc, testo3, ctx?.rendiMarkdown, frasi.domanda));
+  else pezzi.push(nodo4(doc, "p", "td-prose", "Il file del rapporto è vuoto."));
+  return pezzi;
+}
+function vistaAffermazioni(doc, voce, lettura) {
+  if (!lettura?.record) {
+    return [
+      nodo4(doc, "p", "td-prose", "Le affermazioni compaiono quando il rapporto porta con sé il riepilogo delle verifiche: il testo dell’affermazione, il passaggio della fonte da cui viene, e chi l’ha giudicata."),
+      nodo4(doc, "p", "td-subtle", lettura?.record === null && lettura?.perche ? PERCHE_SENZA_RECORD.get(lettura.perche) || "" : "Questa ricerca non ne ha ancora uno.")
+    ];
+  }
+  const { claims = [], sources = [] } = lettura.record;
+  if (!claims.length) return [nodo4(doc, "p", "td-prose", "Il rapporto non registra nessuna affermazione verificata.")];
+  return claims.map((entrata, indice2) => {
+    const verdetto = verdettoInParole(entrata?.checks);
+    const blocco = nodo4(doc, "article", "td-affermazione");
+    const testa = nodo4(doc, "div", "td-affermazione-testa");
+    testa.append(nodo4(doc, "span", "td-affermazione-numero", String(indice2 + 1)), tag(doc, verdetto.parola, verdetto.tono));
+    blocco.append(testa, nodo4(doc, "p", "td-affermazione-testo", entrata?.text || "Affermazione senza testo"));
+    if (entrata?.checks?.supportReason) blocco.append(nodo4(doc, "p", "td-subtle", entrata.checks.supportReason));
+    if (entrata?.passage) blocco.append(nodo4(doc, "blockquote", "td-passaggio", entrata.passage));
+    else blocco.append(nodo4(doc, "p", "td-subtle", "Il passaggio citato non è stato ritrovato nel testo della fonte."));
+    const fonte = sources[(entrata?.sourceIndex ?? 0) - 1];
+    const piede = nodo4(doc, "div", "td-affermazione-piede");
+    if (fonte) {
+      const link = nodo4(doc, "a", "", fonte.title || fonte.url);
+      link.href = fonte.url || "#";
+      link.target = "_blank";
+      link.rel = "noreferrer noopener";
+      piede.append(link, nodo4(doc, "span", "td-subtle", comeOttenuta(fonte.obtained)));
+    } else {
+      piede.append(nodo4(doc, "span", "td-subtle", "Fonte citata ma mai raccolta."));
+    }
+    if (entrata?.checks?.judge) piede.append(nodo4(doc, "span", "td-subtle", `giudicata da ${entrata.checks.judge}`));
+    blocco.append(piede);
+    for (const contraria of Array.isArray(entrata?.checks?.opposing) ? entrata.checks.opposing : []) {
+      const box = nodo4(doc, "div", "td-contraria");
+      box.append(nodo4(doc, "span", "td-subtle", "Una fonte dice il contrario"));
+      if (contraria?.passage) box.append(nodo4(doc, "blockquote", "td-passaggio", contraria.passage));
+      const link = nodo4(doc, "a", "", contraria?.title || contraria?.url || "fonte senza titolo");
+      link.href = contraria?.url || "#";
+      link.target = "_blank";
+      link.rel = "noreferrer noopener";
+      box.append(link);
+      blocco.append(box);
+    }
+    return blocco;
+  });
+}
+function vistaFonti(doc, voce, lettura) {
+  if (!lettura?.record) {
+    return [nodo4(doc, "p", "td-prose", "Le fonti compaiono quando il rapporto porta con sé il riepilogo delle verifiche: indirizzo, data dichiarata, se la pagina è stata letta per intero, e a quale gruppo di prove appartiene.")];
+  }
+  const fonti = Array.isArray(lettura.record.sources) ? lettura.record.sources : [];
+  if (!fonti.length) return [nodo4(doc, "p", "td-prose", "Il rapporto non registra nessuna fonte.")];
+  const prove = proveDistinte(fonti);
+  const pezzi = [nodo4(doc, "p", "td-subtle", prove.gruppi < prove.indirizzi ? `${prove.frase}: due pagine dello stesso dominio non fanno due prove.` : `${prove.frase}: ogni fonte viene da un dominio diverso.`)];
+  for (const fonte of fonti) {
+    const riga = nodo4(doc, "div", "td-source");
+    const link = nodo4(doc, "a", "", fonte.title || fonte.url || "fonte senza titolo");
+    link.href = fonte.url || "#";
+    link.target = "_blank";
+    link.rel = "noreferrer noopener";
+    riga.append(link);
+    riga.append(nodo4(doc, "span", "", fonte.url || "indirizzo non registrato"));
+    const dettagli = [
+      fonte.publishedAt ? `data dichiarata: ${fonte.publishedAt}` : "data non dichiarata",
+      comeOttenuta(fonte.obtained),
+      `gruppo di prove: ${gruppoDellaFonte(fonte)}`
+    ].join(" · ");
+    riga.append(nodo4(doc, "span", "", dettagli));
+    pezzi.push(riga);
+  }
+  return pezzi;
+}
+function vistaPiano(doc) {
+  return [
+    nodo4(doc, "p", "td-prose", "Il piano arriva con il motore nuovo."),
+    nodo4(doc, "p", "td-subtle", "Quando una ricerca dichiarerà le sue linee di indagine, le troverai qui con quanto ognuna ha portato — e su una ricerca in corso sarà il posto dove approvarle o cambiarle prima che parta.")
+  ];
+}
+function vistaAndata(doc, voce, ctx) {
+  const frasi = frasiVoce(voce);
+  const pezzi = [];
+  const righe = nodo4(doc, "dl", "td-andata");
+  const riga = (etichetta2, valore) => {
+    if (!valore) return;
+    righe.append(nodo4(doc, "dt", "", etichetta2), nodo4(doc, "dd", "", valore));
+  };
+  riga("Stato", frasi.parola);
+  if (conclusaDavvero(voce?.stato)) riga("Cosa è successo", frasi.spiegazione);
+  riga("Avviata", frasi.avviata || "data non registrata");
+  riga("Finita", frasi.conclusa || (voce?.stato === "running" ? "non ancora" : "non registrata"));
+  riga("Durata", frasi.durata || null);
+  riga("Nome della conversazione", frasi.nome);
+  pezzi.push(righe);
+  if (voce?.ultimoMessaggio) {
+    pezzi.push(nodo4(doc, "h3", "", "Ultimo messaggio della ricerca"));
+    pezzi.push(nodo4(doc, "p", "td-subtle", "È l’ultima cosa che la ricerca ha detto in chat, non il suo rapporto."));
+    pezzi.push(nodo4(doc, "blockquote", "td-allegato", String(voce.ultimoMessaggio)));
+  }
+  if (voce?.padreId && typeof ctx?.onApriSessione === "function") {
+    pezzi.push(nodo4(doc, "h3", "", "Da dove è partita"));
+    const b = nodo4(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Apri la conversazione da cui è partita");
+    b.type = "button";
+    b.addEventListener("click", () => ctx.onApriSessione({ id: voce.padreId }));
+    pezzi.push(b);
+  }
+  return pezzi;
+}
+function contenutoVista(doc, id, voce, lettura, ctx) {
+  switch (id) {
+    case "affermazioni":
+      return vistaAffermazioni(doc, voce, lettura);
+    case "fonti":
+      return vistaFonti(doc, voce, lettura);
+    case "piano":
+      return vistaPiano(doc);
+    case "andata":
+      return vistaAndata(doc, voce, ctx);
+    default:
+      return vistaRapporto(doc, voce, lettura, ctx);
+  }
+}
+function vociMenuRicerca(voce, ctx = {}) {
+  const lettura = ctx.lettura || null;
+  const pronto = lettura?.stato === "pronto";
+  const citazioni = pronto && lettura.record ? citazioniDaRecord(lettura.record, voce?.conclusaAlle || voce?.avviataAlle) : [];
+  const voci = [];
+  if (typeof ctx.onApriSessione === "function" && voce?.id) {
+    voci.push({ chiave: "apri-conversazione", etichetta: "Apri la conversazione", icona: "i-eye", aziona: () => ctx.onApriSessione({ id: voce.id }) });
+  }
+  if (pronto && lettura.prosa) {
+    voci.push({ chiave: "copia", etichetta: "Copia il rapporto", icona: "i-copy", aziona: () => ctx.onCopia?.(lettura.prosa, voce) });
+    voci.push({ chiave: "esporta", etichetta: "Esporta il rapporto", icona: "i-download", aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, "md"), lettura.testo || lettura.prosa, "text/markdown") });
+  }
+  if (citazioni.length) {
+    voci.push({ chiave: "bibtex", etichetta: "Esporta le citazioni (BibTeX)", icona: "i-doc", aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, "bib"), bibtexDaCitazioni(citazioni), "application/x-bibtex") });
+    voci.push({ chiave: "ris", etichetta: "Esporta le citazioni (RIS)", icona: "i-doc", aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, "ris"), risDaCitazioni(citazioni), "application/x-research-info-systems") });
+  }
+  return voci;
+}
+function montaDettaglioRicerca(voce, ctx) {
+  const doc = ctx.doc;
+  const frasi = frasiVoce(voce);
+  const magazzino = ctx.magazzino;
+  const chiave = String(voce?.reportLibraryId ?? "");
+  const lettura = chiave ? magazzino.rapporti.get(chiave) || null : null;
+  const pezzi = [];
+  const meta2 = nodo4(doc, "div", "td-detail-meta");
+  meta2.append(tag(doc, frasi.parola, frasi.tono));
+  if (frasi.avviata) meta2.append(nodo4(doc, "span", "", `avviata ${articoloData(voce?.avviataAlle)}${frasi.avviata}`));
+  if (frasi.durata) meta2.append(nodo4(doc, "span", "", `durata ${frasi.durata}`));
+  const strumenti = nodo4(doc, "span", "td-tools");
+  const menu = nodo4(doc, "button", "talos-button talos-button--secondary talos-icon-button");
+  menu.type = "button";
+  menu.setAttribute("aria-haspopup", "menu");
+  menu.setAttribute("aria-label", `Azioni su ${frasi.domanda}`);
+  menu.append(iconaSvg(doc, "more"));
+  menu.addEventListener("click", (e) => {
+    e.stopPropagation();
+    ctx.apriMenu?.(voce, { ancoraEl: menu });
+  });
+  strumenti.append(menu);
+  meta2.append(strumenti);
+  pezzi.push(meta2, nodo4(doc, "h2", "", frasi.domanda));
+  if (!conclusaDavvero(voce?.stato)) pezzi.push(nodo4(doc, "p", "td-subtle", frasi.spiegazione));
+  if (lettura?.stato === "pronto" && lettura.record) {
+    const bilancio = bilancioDaRecord(lettura.record);
+    if (bilancio.totale) {
+      pezzi.push(barraBilancio(doc, bilancio));
+      const sotto = nodo4(doc, "p", "td-subtle");
+      const prove = proveDistinte(lettura.record.sources);
+      sotto.textContent = lettura.record.judge ? `Verificate da ${lettura.record.judge}, mai dal modello che ha scritto il rapporto · ${prove.frase}` : `Verifica non eseguita: nessun giudice indipendente era disponibile · ${prove.frase}`;
+      pezzi.push(sotto);
+    }
+  }
+  contatoreIdentificativi += 1;
+  const radice = `td-ric-${contatoreIdentificativi}`;
+  const scelta = magazzino.viste.get(String(voce?.id)) || (voce?.reportLibraryId ? "rapporto" : "andata");
+  const lista = nodo4(doc, "div", "td-segment td-viste");
+  lista.setAttribute("role", "tablist");
+  lista.setAttribute("aria-label", "Viste della ricerca");
+  const pannello = nodo4(doc, "div", "td-vista");
+  pannello.setAttribute("role", "tabpanel");
+  pannello.tabIndex = 0;
+  pannello.id = `${radice}-pannello`;
+  const schede = VISTE.map((vista) => {
+    const b = nodo4(doc, "button", "", vista.parola);
+    b.type = "button";
+    b.id = `${radice}-${vista.id}`;
+    b.dataset.vista = vista.id;
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-controls", pannello.id);
+    lista.append(b);
+    return b;
+  });
+  function mostra(idVista, muoviIlFuoco = false) {
+    magazzino.viste.set(String(voce?.id), idVista);
+    for (const b of schede) {
+      const attiva = b.dataset.vista === idVista;
+      b.setAttribute("aria-selected", String(attiva));
+      b.tabIndex = attiva ? 0 : -1;
+      if (attiva && muoviIlFuoco) b.focus({ preventScroll: true });
+    }
+    pannello.setAttribute("aria-labelledby", `${radice}-${idVista}`);
+    pannello.replaceChildren(...contenutoVista(doc, idVista, voce, lettura, { ...ctx.opzioni, puoLeggere: typeof ctx.opzioni?.leggiRapporto === "function" }).filter(Boolean));
+  }
+  lista.addEventListener("click", (e) => {
+    const b = e.target.closest?.("[data-vista]");
+    if (b) mostra(b.dataset.vista);
+  });
+  lista.addEventListener("keydown", (e) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const attuale = schede.findIndex((b) => b.getAttribute("aria-selected") === "true");
+    const prossima = e.key === "Home" ? 0 : e.key === "End" ? schede.length - 1 : (attuale + (e.key === "ArrowRight" ? 1 : -1) + schede.length) % schede.length;
+    mostra(schede[prossima].dataset.vista, true);
+  });
+  mostra(VISTE.some((v) => v.id === scelta) ? scelta : "rapporto");
+  pezzi.push(lista, pannello);
+  if (chiave && !lettura && typeof ctx.opzioni?.leggiRapporto === "function") {
+    magazzino.rapporti.set(chiave, { stato: "caricando" });
+    Promise.resolve().then(() => ctx.opzioni.leggiRapporto(voce)).then((testo3) => {
+      const letto = leggiDocumentoRapporto(testo3);
+      magazzino.rapporti.set(chiave, { stato: "pronto", testo: String(testo3 ?? ""), ...letto });
+    }).catch((errore) => {
+      magazzino.rapporti.set(chiave, { stato: "errore", errore: errore?.message || "motivo non registrato" });
+    }).then(() => ctx.ridisegna?.());
+  }
+  return pezzi;
+}
+function collegaTastoDestro(schermo, { trovaVoce, apriMenu }) {
+  const magazzino = magazzinoRicerche(schermo);
+  if (magazzino.collegato) return false;
+  magazzino.collegato = true;
+  schermo.addEventListener("contextmenu", (e) => {
+    const scheda = e.target.closest?.(".td-card[data-item]");
+    if (!scheda) return;
+    const voce = trovaVoce(scheda.dataset.item);
+    if (!voce) return;
+    e.preventDefault();
+    apriMenu(voce, { x: e.clientX, y: e.clientY });
+  });
+  return true;
+}
+function scaricaTesto(doc, nome, testo3, mime = "text/markdown") {
+  const url = URL.createObjectURL(new Blob([testo3], { type: mime }));
+  const a = doc.createElement("a");
+  a.href = url;
+  a.download = nome;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 5e3);
+}
+var STATI_RICERCA, APERTURA_RECORD, CHIUSURA_RECORD, PERCHE_SENZA_RECORD, PEZZI_BILANCIO, SUFFISSI_DI_SECONDO_LIVELLO, MAGAZZINI, VISTE, contatoreIdentificativi;
+var init_ricerca_dettaglio = __esm({
+  "src/components/ricerca-dettaglio.js"() {
+    STATI_RICERCA = /* @__PURE__ */ new Map([
+      ["running", { parola: "In corso", tono: "info", cosaFare: "Sta cercando e leggendo. Il rapporto compare appena lo deposita." }],
+      ["paused", { parola: "In pausa", tono: "warning", cosaFare: "È ferma a metà. Riprendila dalla conversazione della ricerca." }],
+      /* ⛔ Questa frase la legge SOLO la scheda dell'elenco: nel dettaglio, su una conclusa, al suo
+         posto va il bilancio. Quindi dice cosa fare DA LÌ — «qui sotto» in una scheda non è un posto. */
+      ["done", { parola: "Conclusa", tono: "success", cosaFare: "Aprila per leggere il rapporto e il bilancio delle verifiche." }],
+      /* ⛔ «Annullata» e non «Interrotta»: è la parola che la sezione usa da sempre e che il filtro
+         del prodotto porta al plurale. Una parola sola per uno stato solo — due sinonimi in due
+         schermate sono la prima crepa da cui una UI comincia a divergere. */
+      ["cancelled", { parola: "Annullata", tono: "", cosaFare: "È stata fermata prima del rapporto. Quello che aveva raccolto resta nelle Fonti." }],
+      ["failed", { parola: "Non riuscita", tono: "danger", cosaFare: "Si è fermata su un errore. Riavviala dalla chat con la stessa domanda." }],
+      /* I tre stati nuovi del cancello di consegna. */
+      ["senza-rapporto", { parola: "Senza rapporto", tono: "warning", cosaFare: "È arrivata in fondo senza depositare un rapporto. Quello che ha raccolto resta nelle Fonti; per averne uno, riavviala." }],
+      ["bloccata-dal-permesso", { parola: "Bloccata", tono: "danger", cosaFare: "La sessione era in sola lettura e non ha potuto consegnare. Riprendila con il permesso giusto." }],
+      ["giri-esauriti", { parola: "Giri esauriti", tono: "warning", cosaFare: "Ha finito i giri a disposizione prima di concludere. Riavviala con una domanda più stretta." }]
+    ]);
+    APERTURA_RECORD = "```talos-research-report";
+    CHIUSURA_RECORD = "```";
+    PERCHE_SENZA_RECORD = /* @__PURE__ */ new Map([
+      ["vuoto", "Il file del rapporto è vuoto."],
+      ["senza-record", "Questo rapporto non porta con sé il riepilogo delle verifiche: sotto c’è il testo così com’è stato scritto."],
+      ["record-troncato", "Il riepilogo delle verifiche è troncato a metà: il bilancio non si può ricavare. Sotto c’è il testo così com’è."],
+      ["record-di-un-altro-formato", "Il riepilogo delle verifiche è in un formato che questa versione non legge. Sotto c’è il testo così com’è."],
+      ["record-illeggibile", "Il riepilogo delle verifiche non si rilegge. Ciò che è stato raccolto resta nelle Fonti."]
+    ]);
+    PEZZI_BILANCIO = [
+      { chiave: "sostenute", parola: "sostenute", tono: "success" },
+      { chiave: "inParte", parola: "in parte", tono: "warning" },
+      { chiave: "contese", parola: "contese", tono: "info" },
+      { chiave: "nonSostenute", parola: "non sostenute", tono: "danger" },
+      { chiave: "nonVerificate", parola: "non verificate", tono: "muted" }
+    ];
+    SUFFISSI_DI_SECONDO_LIVELLO = /* @__PURE__ */ new Set([
+      "co.uk",
+      "org.uk",
+      "ac.uk",
+      "gov.uk",
+      "me.uk",
+      "net.uk",
+      "sch.uk",
+      "com.au",
+      "net.au",
+      "org.au",
+      "edu.au",
+      "gov.au",
+      "co.jp",
+      "or.jp",
+      "ne.jp",
+      "ac.jp",
+      "go.jp",
+      "com.br",
+      "net.br",
+      "org.br",
+      "gov.br",
+      "co.nz",
+      "net.nz",
+      "org.nz",
+      "govt.nz",
+      "co.in",
+      "net.in",
+      "org.in",
+      "gov.in",
+      "com.cn",
+      "net.cn",
+      "org.cn",
+      "gov.cn",
+      "co.za",
+      "org.za",
+      "gov.za",
+      "com.mx",
+      "com.ar",
+      "com.tr",
+      "com.sg",
+      "com.hk",
+      "com.tw",
+      "gov.it",
+      "edu.it"
+    ]);
+    MAGAZZINI = /* @__PURE__ */ new WeakMap();
+    VISTE = [
+      { id: "rapporto", parola: "Rapporto" },
+      { id: "affermazioni", parola: "Affermazioni" },
+      { id: "fonti", parola: "Fonti" },
+      { id: "piano", parola: "Piano" },
+      { id: "andata", parola: "Come è andata" }
+    ];
+    contatoreIdentificativi = 0;
+  }
+});
+
 // src/components/ricerca.js
 function statoRicerca(stato) {
-  return STATI.get(stato) || { testo: "Stato non registrato", tono: "" };
+  const s = statoRicercaApprofondita(stato);
+  return { testo: s.parola, tono: s.tono };
 }
 function testiRicerca(ricerca) {
-  const titolo2 = typeof ricerca?.titolo === "string" && ricerca.titolo.trim() ? ricerca.titolo : "Ricerca senza titolo";
+  const scritta = [ricerca?.domanda, ricerca?.titolo].find((v) => typeof v === "string" && v.trim());
+  const titolo2 = scritta ? scritta.trim() : "Ricerca senza titolo";
   const data = typeof ricerca?.avviataAlle === "string" ? new Date(ricerca.avviataAlle) : null, valida2 = data && Number.isFinite(data.getTime());
-  return { titolo: titolo2, avviata: valida2 ? data.toLocaleString("it-IT") : null, dataBreve: valida2 ? "Avviata il " + data.toLocaleDateString("it-IT") : "Data non registrata" };
+  return { titolo: titolo2, avviata: valida2 ? data.toLocaleString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : null, dataBreve: valida2 ? "Avviata " + articoloData(ricerca?.avviataAlle) + data.toLocaleDateString("it-IT") : "Data non registrata" };
 }
 function riepilogoRicerche(ricerche) {
   return ricerche.length + (ricerche.length === 1 ? " ricerca elencata" : " ricerche elencate");
 }
-function el9(doc, tag, classe, testo3) {
-  const n = doc.createElement(tag);
+function el9(doc, tag2, classe, testo3) {
+  const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
   return n;
 }
-function creaReportRow(ricerca, { document: doc = globalThis.document, aperta: aperta2 = false, onEspandi } = {}) {
+function creaReportRow(ricerca, { document: doc = globalThis.document, aperta: aperta2 = false, onEspandi, onApriRapporto } = {}) {
   const t2 = testiRicerca(ricerca), stato = statoRicerca(ricerca?.stato);
   const riga = el9(doc, "div", "talos-list-row");
   riga.dataset.c = "ReportRow";
@@ -3586,15 +4263,16 @@ function creaReportRow(ricerca, { document: doc = globalThis.document, aperta: a
   testo3.append(titolo2, sotto);
   const aside = el9(doc, "span", "talos-list-row__aside");
   aside.append(el9(doc, "span", "talos-badge" + (stato.tono ? " talos-badge--" + stato.tono : ""), stato.testo));
-  const apri = el9(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Apri rapporto");
+  const apri = el9(doc, "button", "talos-button talos-button--ghost talos-button--sm", "Apri il rapporto");
   apri.type = "button";
-  apri.hidden = true;
-  apri.dataset.richiede = "fase3";
+  apri.hidden = !(ricerca?.reportLibraryId && typeof onApriRapporto === "function");
+  apri.setAttribute("aria-label", "Apri il rapporto di " + t2.titolo);
+  apri.addEventListener("click", () => onApriRapporto?.(ricerca));
   const dettagli = el9(doc, "button", "talos-button talos-button--ghost talos-button--sm");
   dettagli.type = "button";
   function mostra() {
     riga.dataset.aperta = String(aperta2);
-    sotto.textContent = aperta2 && t2.avviata ? "Avviata il " + t2.avviata : t2.dataBreve;
+    sotto.textContent = aperta2 && t2.avviata ? "Avviata " + articoloData(ricerca?.avviataAlle) + t2.avviata : t2.dataBreve;
     dettagli.textContent = aperta2 ? "Chiudi" : "Dettagli";
     dettagli.setAttribute("aria-expanded", String(aperta2));
     dettagli.setAttribute("aria-label", (aperta2 ? "Chiudi i dettagli di " : "Dettagli di ") + t2.titolo);
@@ -3609,10 +4287,9 @@ function creaReportRow(ricerca, { document: doc = globalThis.document, aperta: a
   riga.append(icona9, testo3, aside);
   return riga;
 }
-var STATI;
 var init_ricerca = __esm({
   "src/components/ricerca.js"() {
-    STATI = /* @__PURE__ */ new Map([["running", { testo: "In corso", tono: "info" }], ["paused", { testo: "In pausa", tono: "warning" }], ["done", { testo: "Conclusa", tono: "success" }], ["cancelled", { testo: "Annullata", tono: "" }], ["failed", { testo: "Non riuscita", tono: "danger" }]]);
+    init_ricerca_dettaglio();
   }
 });
 
@@ -3681,8 +4358,8 @@ function azioniLibreria({ sessionId, fetch: rete = globalThis.fetch } = {}) {
     apri: (id) => manda(base(id) + "/apri", { method: "POST" })
   };
 }
-function el10(doc, tag, classe, testo3) {
-  const n = doc.createElement(tag);
+function el10(doc, tag2, classe, testo3) {
+  const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
   return n;
@@ -3919,7 +4596,7 @@ var init_libreria = __esm({
 
 // src/components/attivita.js
 function statoAttivita(stato) {
-  return STATI2.get(stato) || { testo: "Stato non registrato", icona: "list", tono: null };
+  return STATI.get(stato) || { testo: "Stato non registrato", icona: "list", tono: null };
 }
 function prioritaAttivita(priorita) {
   return PRIORITA.get(priorita) || "Priorità non registrata";
@@ -3935,8 +4612,8 @@ function riepilogoAttivita(attivita) {
   const aperte = attivita.filter((a) => a?.stato === "todo" || a?.stato === "doing").length, fatte = attivita.filter((a) => a?.stato === "done").length, ignote = attivita.length - aperte - fatte;
   return aperte + " apert" + (aperte === 1 ? "a" : "e") + " · " + fatte + " fatt" + (fatte === 1 ? "a" : "e") + (ignote ? " · " + ignote + (ignote === 1 ? " stato non registrato" : " stati non registrati") : "");
 }
-function el11(doc, tag, classe, testo3) {
-  const n = doc.createElement(tag);
+function el11(doc, tag2, classe, testo3) {
+  const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
   return n;
@@ -3984,11 +4661,11 @@ function creaTaskRow(a, { document: doc = globalThis.document, aperta: aperta2 =
   riga.append(segna, icona9, testo3, aside);
   return riga;
 }
-var STATI2, PRIORITA;
+var STATI, PRIORITA;
 var init_attivita = __esm({
   "src/components/attivita.js"() {
     init_plurale();
-    STATI2 = /* @__PURE__ */ new Map([
+    STATI = /* @__PURE__ */ new Map([
       ["todo", { testo: "Da fare", icona: "list", tono: null }],
       ["doing", { testo: "In corso", icona: "clock", tono: "info" }],
       ["done", { testo: "Fatta", icona: "check", tono: "success" }]
@@ -4007,8 +4684,8 @@ function testiMemoria(memoria) {
   const data = typeof memoria?.aggiornataAlle === "string" ? new Date(memoria.aggiornataAlle) : null;
   return { titolo: typeof memoria?.titolo === "string" && memoria.titolo.trim() ? memoria.titolo : "Ricordo senza titolo", contenuto, anteprima: compatto3.length > 80 ? compatto3.slice(0, 80) + "…" : compatto3, aggiornata: data && Number.isFinite(data.getTime()) ? data.toLocaleString("it-IT") : null };
 }
-function el12(doc, tag, classe, testo3) {
-  const n = doc.createElement(tag);
+function el12(doc, tag2, classe, testo3) {
+  const n = doc.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 !== void 0) n.textContent = testo3;
   return n;
@@ -4229,8 +4906,8 @@ function perId(radice, selettore, campo2, valore) {
   const cercato = String(valore ?? "");
   return [...radice.querySelectorAll(selettore)].find((el25) => el25.dataset[campo2] === cercato) || null;
 }
-function nodo4(doc, tag, classe, testo3) {
-  const el25 = doc.createElement(tag);
+function nodo5(doc, tag2, classe, testo3) {
+  const el25 = doc.createElement(tag2);
   if (classe) el25.className = classe;
   if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
   return el25;
@@ -4245,7 +4922,7 @@ function icona3(doc, nome, classe = "i") {
   return svg;
 }
 function etichetta(doc, testo3, tono = "") {
-  const el25 = nodo4(doc, "span", "td-tag", testo3);
+  const el25 = nodo5(doc, "span", "td-tag", testo3);
   if (tono) el25.dataset.tone = tono;
   return el25;
 }
@@ -4276,11 +4953,11 @@ function disegnoVuoto(doc, nomeIcona) {
 function montaSezione(schermo, config) {
   if (!schermo) return 0;
   const doc = schermo.ownerDocument || globalThis.document;
-  let stato = STATI3.get(schermo);
+  let stato = STATI2.get(schermo);
   if (!stato) {
     const pref = leggiPreferenze(config.chiave);
     stato = { ...pref, query: String(config.queryIniziale || ""), filtro: config.filtri?.[0]?.id || "tutte", selezione: null, espanso: false, config, schermo };
-    STATI3.set(schermo, stato);
+    STATI2.set(schermo, stato);
     costruisciScheletro(schermo, doc, stato);
   }
   stato.config = config;
@@ -4291,63 +4968,63 @@ function costruisciScheletro(schermo, doc, stato) {
   const config = stato.config;
   const pagina = schermo.querySelector(".talos-page");
   const testa = pagina?.querySelector(".talos-page__head");
-  const sezione = nodo4(doc, "div", "td-section td-scope");
+  const sezione = nodo5(doc, "div", "td-section td-scope");
   sezione.dataset.section = config.chiave;
-  const spazio = nodo4(doc, "div", "td-workspace");
+  const spazio = nodo5(doc, "div", "td-workspace");
   spazio.dataset.detail = "false";
   spazio.dataset.expanded = "false";
   spazio.style.setProperty("--td-larghezza-dettaglio", `${stato.larghezza}px`);
-  const master = nodo4(doc, "div", "td-master");
-  const intro = nodo4(doc, "div", "td-intro");
-  const marchio = nodo4(doc, "span", "td-intro-mark");
+  const master = nodo5(doc, "div", "td-master");
+  const intro = nodo5(doc, "div", "td-intro");
+  const marchio = nodo5(doc, "span", "td-intro-mark");
   marchio.append(icona3(doc, config.icona));
-  const testi = nodo4(doc, "div");
-  const h2 = testa?.querySelector("h2") || nodo4(doc, "h2", "", config.titolo || "");
-  const spiegazione = testa?.querySelector('p:not([role="status"]):not([data-note-stato]):not([data-progetti-stato])') || nodo4(doc, "p", "", config.spiegazione || "");
-  const statoRiga = testa?.querySelector('[role="status"], [data-note-stato], [data-progetti-stato], [data-task-esito], [data-library-esito], [data-research-esito], [data-memory-stato]') || nodo4(doc, "p", "talos-page__note", "");
+  const testi = nodo5(doc, "div");
+  const h2 = testa?.querySelector("h2") || nodo5(doc, "h2", "", config.titolo || "");
+  const spiegazione = testa?.querySelector('p:not([role="status"]):not([data-note-stato]):not([data-progetti-stato])') || nodo5(doc, "p", "", config.spiegazione || "");
+  const statoRiga = testa?.querySelector('[role="status"], [data-note-stato], [data-progetti-stato], [data-task-esito], [data-library-esito], [data-research-esito], [data-memory-stato]') || nodo5(doc, "p", "talos-page__note", "");
   if (!statoRiga.getAttribute("role")) statoRiga.setAttribute("role", "status");
   testi.append(h2, spiegazione, statoRiga);
   intro.append(marchio, testi);
-  const barra = nodo4(doc, "div", "td-toolbar");
-  const campo2 = nodo4(doc, "div", "talos-field talos-field--sm td-search");
+  const barra = nodo5(doc, "div", "td-toolbar");
+  const campo2 = nodo5(doc, "div", "talos-field talos-field--sm td-search");
   campo2.append(icona3(doc, "search", "i talos-field__icon"));
-  const cerca = nodo4(doc, "input", "talos-field__input");
+  const cerca = nodo5(doc, "input", "talos-field__input");
   cerca.type = "search";
   cerca.autocomplete = "off";
   cerca.placeholder = "Cerca nel titolo e nel contenuto…";
   cerca.setAttribute("aria-label", `Cerca in ${config.nome}`);
   cerca.value = stato.query;
   campo2.append(cerca);
-  const cresci = nodo4(doc, "span", "talos-grow");
-  const ordine = nodo4(doc, "select", "td-select");
+  const cresci = nodo5(doc, "span", "talos-grow");
+  const ordine = nodo5(doc, "select", "td-select");
   ordine.setAttribute("aria-label", `Ordina ${config.nome}`);
   for (const [valore, testoOpzione] of [["nuovo", "Ultima modifica"], ["titolo", "Titolo A–Z"]]) {
-    const op = nodo4(doc, "option", "", testoOpzione);
+    const op = nodo5(doc, "option", "", testoOpzione);
     op.value = valore;
     ordine.append(op);
   }
   ordine.value = stato.ordine;
-  const segmento = nodo4(doc, "div", "td-segment");
+  const segmento = nodo5(doc, "div", "td-segment");
   segmento.setAttribute("role", "group");
   segmento.setAttribute("aria-label", `Vista ${config.nome}`);
   for (const [vista, nomeIcona, nome] of [["elenco", "list", "Vista elenco"], ["schede", "grid", "Vista schede"]]) {
-    const b = nodo4(doc, "button");
+    const b = nodo5(doc, "button");
     b.type = "button";
     b.dataset.vista = vista;
     b.setAttribute("aria-label", nome);
     b.append(icona3(doc, nomeIcona));
     segmento.append(b);
   }
-  const aggiorna = nodo4(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Aggiorna");
+  const aggiorna = nodo5(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Aggiorna");
   aggiorna.type = "button";
   aggiorna.dataset.aggiorna = "";
   barra.append(campo2, cresci, ordine, segmento, aggiorna);
-  const filtri = nodo4(doc, "div", "td-filters");
+  const filtri = nodo5(doc, "div", "td-filters");
   filtri.setAttribute("role", "group");
   filtri.setAttribute("aria-label", `Filtri ${config.nome}`);
-  const risultati = nodo4(doc, "div", "td-results");
+  const risultati = nodo5(doc, "div", "td-results");
   master.append(intro, barra, filtri, risultati);
-  const divisorio = nodo4(doc, "button", "td-divider");
+  const divisorio = nodo5(doc, "button", "td-divider");
   divisorio.type = "button";
   divisorio.hidden = true;
   divisorio.setAttribute("role", "separator");
@@ -4356,7 +5033,7 @@ function costruisciScheletro(schermo, doc, stato) {
   divisorio.setAttribute("aria-valuemin", String(LARGHEZZA_MINIMA));
   divisorio.setAttribute("aria-valuemax", String(LARGHEZZA_MASSIMA));
   divisorio.setAttribute("aria-valuenow", String(stato.larghezza));
-  const dettaglio = nodo4(doc, "aside", "td-detail");
+  const dettaglio = nodo5(doc, "aside", "td-detail");
   dettaglio.hidden = true;
   dettaglio.setAttribute("aria-label", `Dettaglio ${config.nome}`);
   spazio.append(master, divisorio, dettaglio);
@@ -4462,11 +5139,11 @@ function disegna(schermo, doc, stato) {
   const conteggi = contaPerFiltro(tutte, config.filtri);
   const fuocoFiltro = doc.activeElement?.dataset?.filtro;
   barraFiltri.replaceChildren(...config.filtri.map((f, i) => {
-    const b = nodo4(doc, "button", "td-filter", f.etichetta);
+    const b = nodo5(doc, "button", "td-filter", f.etichetta);
     b.type = "button";
     b.dataset.filtro = f.id;
     b.setAttribute("aria-pressed", String(stato.filtro === f.id));
-    b.append(nodo4(doc, "small", "", String(conteggi[i])));
+    b.append(nodo5(doc, "small", "", String(conteggi[i])));
     return b;
   }));
   if (fuocoFiltro) perId(barraFiltri, ".td-filter", "filtro", fuocoFiltro)?.focus({ preventScroll: true });
@@ -4474,7 +5151,7 @@ function disegna(schermo, doc, stato) {
   if (!visibili.length) {
     risultati.replaceChildren(disegnaVuoto(doc, stato, tutte.length));
   } else {
-    const contenitore = nodo4(doc, "div", stato.vista === "elenco" ? "td-list" : "td-grid");
+    const contenitore = nodo5(doc, "div", stato.vista === "elenco" ? "td-list" : "td-grid");
     for (const voce of visibili) contenitore.append(disegnaScheda(doc, stato, voce));
     risultati.replaceChildren(contenitore);
   }
@@ -4490,14 +5167,14 @@ function disegna(schermo, doc, stato) {
 function disegnaVuoto(doc, stato, quanteInTutto) {
   const config = stato.config;
   const filtrando = Boolean(stato.query) || stato.filtro !== (config.filtri?.[0]?.id || "tutte");
-  const box = nodo4(doc, "div", "td-empty");
-  const arte = nodo4(doc, "div", "td-empty-art");
+  const box = nodo5(doc, "div", "td-empty");
+  const arte = nodo5(doc, "div", "td-empty-art");
   arte.append(disegnoVuoto(doc, config.icona));
-  const titolo2 = nodo4(doc, "h3", "", filtrando ? "Nessun risultato" : config.vuoto?.titolo || "Niente qui");
-  const testo3 = nodo4(doc, "p", "", filtrando ? "Prova un’altra parola o togli il filtro. Quello che hai è ancora qui." : config.stato?.errore || config.vuoto?.testo || "");
+  const titolo2 = nodo5(doc, "h3", "", filtrando ? "Nessun risultato" : config.vuoto?.titolo || "Niente qui");
+  const testo3 = nodo5(doc, "p", "", filtrando ? "Prova un’altra parola o togli il filtro. Quello che hai è ancora qui." : config.stato?.errore || config.vuoto?.testo || "");
   box.append(arte, titolo2, testo3);
   if (filtrando) {
-    const pulisci = nodo4(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Togli i filtri");
+    const pulisci = nodo5(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Togli i filtri");
     pulisci.type = "button";
     pulisci.addEventListener("click", () => {
       stato.query = "";
@@ -4515,19 +5192,19 @@ function disegnaVuoto(doc, stato, quanteInTutto) {
 function disegnaScheda(doc, stato, voce) {
   const config = stato.config;
   const id = String(config.idDi(voce) ?? "");
-  const scheda = nodo4(doc, "article", `td-card ${config.famiglia || ""}`.trim());
+  const scheda = nodo5(doc, "article", `td-card ${config.famiglia || ""}`.trim());
   scheda.dataset.item = id;
   scheda.dataset.selected = String(String(stato.selezione) === id);
   const pezzi = config.scheda(voce, { doc, icona: (n, c) => icona3(doc, n, c), etichetta: (t2, tono) => etichetta(doc, t2, tono) }) || {};
   if (pezzi.dati) for (const [k, v] of Object.entries(pezzi.dati)) scheda.dataset[k] = String(v);
-  const apri = nodo4(doc, "button", "td-card-open");
+  const apri = nodo5(doc, "button", "td-card-open");
   apri.type = "button";
   const titolo2 = String(config.titoloDi(voce) ?? "");
   apri.setAttribute("aria-label", `Apri ${titolo2}`);
-  const alto = nodo4(doc, "div", "td-card-top");
+  const alto = nodo5(doc, "div", "td-card-top");
   alto.append(...[pezzi.alto].flat().filter(Boolean));
-  const h3 = nodo4(doc, "h3", "", titolo2);
-  const basso = nodo4(doc, "div", "td-card-bottom");
+  const h3 = nodo5(doc, "h3", "", titolo2);
+  const basso = nodo5(doc, "div", "td-card-bottom");
   basso.append(...[pezzi.basso].flat().filter(Boolean));
   apri.append(alto, h3, ...[pezzi.corpo].flat().filter(Boolean), basso);
   apri.addEventListener("click", () => {
@@ -4542,9 +5219,9 @@ function disegnaScheda(doc, stato, voce) {
 function disegnaDettaglio(schermo, doc, stato, voce) {
   const config = stato.config;
   const { dettaglio } = stato.nodi;
-  const testa = nodo4(doc, "div", "td-detail-head");
-  testa.append(nodo4(doc, "span", "td-subtle", `${config.nome} / Dettaglio`));
-  const espandi = nodo4(doc, "button", "talos-button talos-button--secondary talos-icon-button");
+  const testa = nodo5(doc, "div", "td-detail-head");
+  testa.append(nodo5(doc, "span", "td-subtle", `${config.nome} / Dettaglio`));
+  const espandi = nodo5(doc, "button", "talos-button talos-button--secondary talos-icon-button");
   espandi.type = "button";
   espandi.setAttribute("aria-label", stato.espanso ? "Affianca all’elenco" : "Espandi il dettaglio");
   espandi.setAttribute("aria-pressed", String(stato.espanso));
@@ -4553,7 +5230,7 @@ function disegnaDettaglio(schermo, doc, stato, voce) {
     stato.espanso = !stato.espanso;
     disegna(schermo, doc, stato);
   });
-  const chiudi = nodo4(doc, "button", "talos-button talos-button--secondary talos-icon-button");
+  const chiudi = nodo5(doc, "button", "talos-button talos-button--secondary talos-icon-button");
   chiudi.type = "button";
   chiudi.setAttribute("aria-label", "Chiudi il dettaglio");
   chiudi.append(icona3(doc, "x"));
@@ -4565,15 +5242,15 @@ function disegnaDettaglio(schermo, doc, stato, voce) {
     perId(stato.nodi.risultati, ".td-card", "item", id)?.querySelector(".td-card-open")?.focus({ preventScroll: true });
   });
   testa.append(espandi, chiudi);
-  const corpo = nodo4(doc, "div", "td-detail-body");
+  const corpo = nodo5(doc, "div", "td-detail-body");
   corpo.append(...[config.dettaglio(voce, { doc, icona: (n, c) => icona3(doc, n, c), etichetta: (t2, tono) => etichetta(doc, t2, tono) })].flat().filter(Boolean));
-  const piede = nodo4(doc, "div", "td-detail-footer");
+  const piede = nodo5(doc, "div", "td-detail-footer");
   const azioni = config.azioniDettaglio ? [config.azioniDettaglio(voce, { doc })].flat().filter(Boolean) : [];
   piede.append(...azioni);
-  if (config.notaPiede) piede.append(nodo4(doc, "span", "td-save-status", config.notaPiede(voce)));
+  if (config.notaPiede) piede.append(nodo5(doc, "span", "td-save-status", config.notaPiede(voce)));
   dettaglio.replaceChildren(testa, corpo, ...azioni.length || config.notaPiede ? [piede] : []);
 }
-var CHIAVE_PREFERENZE, LARGHEZZA_MINIMA, LARGHEZZA_MASSIMA, LARGHEZZA_NORMALE, PASSO_DIVISORIO, STATI3;
+var CHIAVE_PREFERENZE, LARGHEZZA_MINIMA, LARGHEZZA_MASSIMA, LARGHEZZA_NORMALE, PASSO_DIVISORIO, STATI2;
 var init_sezione_elenco_dettaglio = __esm({
   "src/components/sezione-elenco-dettaglio.js"() {
     init_plurale();
@@ -4582,7 +5259,7 @@ var init_sezione_elenco_dettaglio = __esm({
     LARGHEZZA_MASSIMA = 700;
     LARGHEZZA_NORMALE = 440;
     PASSO_DIVISORIO = 24;
-    STATI3 = /* @__PURE__ */ new WeakMap();
+    STATI2 = /* @__PURE__ */ new WeakMap();
   }
 });
 
@@ -4733,14 +5410,14 @@ function notificatore(opzioni) {
   return typeof opzioni?.notifica === "function" ? opzioni.notifica : () => {
   };
 }
-function nodo5(doc, tag, classe, testo3) {
-  const el25 = doc.createElement(tag);
+function nodo6(doc, tag2, classe, testo3) {
+  const el25 = doc.createElement(tag2);
   if (classe) el25.className = classe;
   if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
   return el25;
 }
 function bottone2(doc, testo3, { variante = "secondary", esegui, pericolo = false } = {}) {
-  const b = nodo5(doc, "button", `talos-button talos-button--${variante} talos-button--sm${pericolo ? " talos-button--danger" : ""}`, testo3);
+  const b = nodo6(doc, "button", `talos-button talos-button--${variante} talos-button--sm${pericolo ? " talos-button--danger" : ""}`, testo3);
   b.type = "button";
   if (esegui) b.addEventListener("click", esegui);
   return b;
@@ -4762,7 +5439,7 @@ function dataBreve(iso) {
   return d && Number.isFinite(d.getTime()) ? d.toLocaleDateString("it-IT") : "";
 }
 function meta(doc, pezzi) {
-  const riga = nodo5(doc, "div", "td-detail-meta");
+  const riga = nodo6(doc, "div", "td-detail-meta");
   riga.append(...pezzi.filter(Boolean));
   return riga;
 }
@@ -4789,17 +5466,17 @@ function montaNote(schermo, note, opzioni = {}) {
     sommarioBarra: (n, { errore, caricamento }) => errore ? "Note non disponibili" : caricamento ? "Leggo le note…" : sommarioNote(n),
     sommarioStato: (visibili, totale2) => visibili === totale2 ? sommarioNote(totale2) : `${sommarioNote(visibili)} su ${sommarioNote(totale2)}`,
     scheda: (n, { doc, icona: icona9 }) => ({
-      alto: [icona9("doc"), nodo5(doc, "span", "", "Appunto")],
-      corpo: [nodo5(doc, "p", "td-excerpt", anteprima(n?.contenuto))],
+      alto: [icona9("doc"), nodo6(doc, "span", "", "Appunto")],
+      corpo: [nodo6(doc, "p", "td-excerpt", anteprima(n?.contenuto))],
       basso: [
-        nodo5(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || "senza data"),
-        nodo5(doc, "span", "", plurale(conteggioParole(n?.contenuto), "parola", "parole"))
+        nodo6(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || "senza data"),
+        nodo6(doc, "span", "", plurale(conteggioParole(n?.contenuto), "parola", "parole"))
       ]
     }),
     dettaglio: (n, { doc, etichetta: etichetta2 }) => [
-      meta(doc, [etichetta2("Nota"), nodo5(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || "data non registrata")]),
-      nodo5(doc, "h2", "", titoloNota(n)),
-      nodo5(doc, "div", "td-prose", String(n?.contenuto ?? ""))
+      meta(doc, [etichetta2("Nota"), nodo6(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || "data non registrata")]),
+      nodo6(doc, "h2", "", titoloNota(n)),
+      nodo6(doc, "div", "td-prose", String(n?.contenuto ?? ""))
     ],
     azioniDettaglio: (n, { doc }) => [
       bottone2(doc, "Copia", { esegui: () => onCopia?.(n) }),
@@ -4836,26 +5513,26 @@ function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
     sommarioBarra: (n, { errore, caricamento }) => errore ? "Ricordi non disponibili" : caricamento ? "Caricamento ricordi…" : `${plurale(n, "ricordo")} · globali`,
     scheda: (m, { doc, icona: icona9, etichetta: etichetta2 }) => {
       const g = genereMemoria(m?.genere);
-      const segno = nodo5(doc, "span", "td-memory-mark");
+      const segno = nodo6(doc, "span", "td-memory-mark");
       segno.append(icona9(g.icona));
       return {
         /* ⛔ Il genere si dice UNA volta: il segno col simbolo, e l'etichetta col tono. Scriverlo
            anche come testo in mezzo ai due («Regola  [Regola]») era un doppione visto nella foto. */
         alto: [segno, etichetta2(g.testo, g.tono || "accent")],
-        corpo: [nodo5(doc, "p", "td-excerpt", anteprima(testiMemoria(m).contenuto))],
+        corpo: [nodo6(doc, "p", "td-excerpt", anteprima(testiMemoria(m).contenuto))],
         /* Nella scheda la data e basta: l'ora intera sta nel dettaglio e qui si troncava. */
-        basso: [nodo5(doc, "span", "", dataBreve(m?.aggiornataAlle) || "Data non registrata")]
+        basso: [nodo6(doc, "span", "", dataBreve(m?.aggiornataAlle) || "Data non registrata")]
       };
     },
     dettaglio: (m, { doc, etichetta: etichetta2 }) => {
       const t2 = testiMemoria(m);
       const g = genereMemoria(m?.genere);
       const pezzi = [
-        meta(doc, [etichetta2(g.testo, g.tono || "accent"), nodo5(doc, "span", "", t2.aggiornata || "data non registrata")]),
-        nodo5(doc, "h2", "", t2.titolo),
-        nodo5(doc, "div", "td-prose", t2.contenuto)
+        meta(doc, [etichetta2(g.testo, g.tono || "accent"), nodo6(doc, "span", "", t2.aggiornata || "data non registrata")]),
+        nodo6(doc, "h2", "", t2.titolo),
+        nodo6(doc, "div", "td-prose", t2.contenuto)
       ];
-      if (m?.origine) pezzi.push(nodo5(doc, "h3", "", "Origine"), nodo5(doc, "p", "td-subtle", String(m.origine)));
+      if (m?.origine) pezzi.push(nodo6(doc, "h3", "", "Origine"), nodo6(doc, "p", "td-subtle", String(m.origine)));
       return pezzi;
     },
     azioniDettaglio: (m, { doc }) => [
@@ -4902,17 +5579,17 @@ function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
     scheda: (a, { doc, icona: icona9, etichetta: etichetta2 }) => {
       const s = statoAttivita(a?.stato);
       const t2 = testiAttivita(a);
-      const segno = nodo5(doc, "span", "td-task-toggle");
+      const segno = nodo6(doc, "span", "td-task-toggle");
       segno.dataset.fatta = String(a?.stato === "done");
       segno.setAttribute("aria-hidden", "true");
       if (a?.stato === "done") segno.append(icona9("check"));
       return {
         dati: { done: String(a?.stato === "done") },
-        alto: [etichetta2(s.testo, s.tono || ""), ...a?.priorita === "high" ? [nodo5(doc, "span", "td-priority", "Alta priorità")] : []],
-        corpo: [nodo5(doc, "p", "td-excerpt", anteprima(t2.descrizione, 130) || "Nessuna descrizione.")],
+        alto: [etichetta2(s.testo, s.tono || ""), ...a?.priorita === "high" ? [nodo6(doc, "span", "td-priority", "Alta priorità")] : []],
+        corpo: [nodo6(doc, "p", "td-excerpt", anteprima(t2.descrizione, 130) || "Nessuna descrizione.")],
         basso: [
-          nodo5(doc, "span", "", prioritaAttivita(a?.priorita)),
-          nodo5(doc, "span", "", dataBreve(a?.aggiornataAlle) || "Data non registrata")
+          nodo6(doc, "span", "", prioritaAttivita(a?.priorita)),
+          nodo6(doc, "span", "", dataBreve(a?.aggiornataAlle) || "Data non registrata")
         ],
         adorno: segno
       };
@@ -4921,9 +5598,9 @@ function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
       const s = statoAttivita(a?.stato);
       const t2 = testiAttivita(a);
       return [
-        meta(doc, [etichetta2(s.testo, s.tono || ""), nodo5(doc, "span", "", prioritaAttivita(a?.priorita)), nodo5(doc, "span", "", t2.aggiornata || "data non registrata")]),
-        nodo5(doc, "h2", "", t2.titolo),
-        nodo5(doc, "div", "td-prose", t2.descrizione || "Nessuna descrizione.")
+        meta(doc, [etichetta2(s.testo, s.tono || ""), nodo6(doc, "span", "", prioritaAttivita(a?.priorita)), nodo6(doc, "span", "", t2.aggiornata || "data non registrata")]),
+        nodo6(doc, "h2", "", t2.titolo),
+        nodo6(doc, "div", "td-prose", t2.descrizione || "Nessuna descrizione.")
       ];
     },
     notaPiede: () => "La lettura non modifica lo stato",
@@ -4972,24 +5649,24 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
     scheda: (v, { doc, icona: icona9, etichetta: etichetta2 }) => {
       const tipo = tipoVoceLibreria(v?.fileType);
       const t2 = testiVoceLibreria(v);
-      const copertina = nodo5(doc, "div", "td-file-preview");
+      const copertina = nodo6(doc, "div", "td-file-preview");
       copertina.dataset.kind = estensioneFile(t2.nome).toLowerCase();
-      copertina.append(nodo5(doc, "strong", "", estensioneFile(t2.nome)), nodo5(doc, "span", "", t2.nome));
+      copertina.append(nodo6(doc, "strong", "", estensioneFile(t2.nome)), nodo6(doc, "span", "", t2.nome));
       return {
-        alto: [icona9(tipo.icona), nodo5(doc, "span", "", tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : "")],
+        alto: [icona9(tipo.icona), nodo6(doc, "span", "", tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : "")],
         corpo: [copertina],
-        basso: [nodo5(doc, "span", "", t2.dataBreve)]
+        basso: [nodo6(doc, "span", "", t2.dataBreve)]
       };
     },
     dettaglio: (v, { doc, etichetta: etichetta2 }) => {
       const t2 = testiVoceLibreria(v);
       const tipo = tipoVoceLibreria(v?.fileType);
       const pezzi = [
-        meta(doc, [etichetta2(tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : ""), nodo5(doc, "span", "", t2.aggiornata ? `Aggiornato il ${t2.aggiornata}` : "Data non registrata")]),
-        nodo5(doc, "h2", "", t2.nome),
-        nodo5(doc, "h3", "", "Azioni sul file")
+        meta(doc, [etichetta2(tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : ""), nodo6(doc, "span", "", t2.aggiornata ? `Aggiornato il ${t2.aggiornata}` : "Data non registrata")]),
+        nodo6(doc, "h2", "", t2.nome),
+        nodo6(doc, "h3", "", "Azioni sul file")
       ];
-      const ospite = nodo5(doc, "div", "td-riuso-riga");
+      const ospite = nodo6(doc, "div", "td-riuso-riga");
       const riga = creaLibraryRow(v, {
         document: doc,
         aperta: true,
@@ -5002,13 +5679,57 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       ospite.append(riga);
       pezzi.push(ospite);
       const dove = indirizzoFileLibreria(sessionId, v?.id);
-      if (dove) pezzi.push(nodo5(doc, "p", "td-subtle", "Il file vive in .harness-ui-library/, dentro il progetto."));
+      if (dove) pezzi.push(nodo6(doc, "p", "td-subtle", "Il file vive in .harness-ui-library/, dentro il progetto."));
       return pezzi;
     },
     vuoto: { titolo: "Nessun file", testo: "I file caricati o generati dall’agente compaiono qui. Vivono in .harness-ui-library/, dentro il progetto." }
   });
 }
+function copiatore(opzioni) {
+  if (typeof opzioni?.copia === "function") return opzioni.copia;
+  return (testo3) => globalThis.navigator?.clipboard?.writeText?.(testo3);
+}
 function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
+  const elenco2 = Array.isArray(ricerche) ? ricerche : [];
+  const magazzino = magazzinoRicerche(schermo);
+  const avvisa = notificatore(opzioni);
+  const copia = copiatore(opzioni);
+  const ridisegna = () => aggiornaPaginaRicerca(schermo, ricerche, opzioni);
+  const trovaVoce = (id) => elenco2.find((r) => String(r?.id) === String(id)) || null;
+  const leggiRapporto = typeof opzioni.leggiRapporto === "function" ? opzioni.leggiRapporto : opzioni.sessionId ? async (voce) => {
+    const indirizzo = indirizzoFileLibreria(opzioni.sessionId, voce?.reportLibraryId);
+    if (!indirizzo) throw new Error("questa ricerca non ha un rapporto in Libreria");
+    const risposta = await fetch(indirizzo);
+    if (!risposta.ok) throw new Error(`il file non si apre (${risposta.status})`);
+    return risposta.text();
+  } : null;
+  function letturaDi(voce) {
+    const chiave = String(voce?.reportLibraryId ?? "");
+    return chiave ? magazzino.rapporti.get(chiave) || null : null;
+  }
+  function apriMenu(voce, dove) {
+    const voci = vociMenuRicerca(voce, {
+      lettura: letturaDi(voce),
+      onApriSessione: opzioni.onApriSessione,
+      onCopia: (prosa) => {
+        Promise.resolve(copia(prosa)).then(
+          () => avvisa("Copiato", "Il testo del rapporto è negli appunti."),
+          () => avvisa("Non copiato", "Gli appunti non sono disponibili in questa finestra.", { tono: "errore" })
+        );
+      },
+      onEsporta: (nome, testo3, mime) => {
+        scaricaTesto(schermo.ownerDocument || globalThis.document, nome, testo3, mime);
+        avvisa("Esportato", `${nome} è nella cartella dei download.`);
+      }
+    });
+    if (typeof opzioni.onMenu === "function" && voci.length) opzioni.onMenu(voci, dove);
+  }
+  collegaTastoDestro(schermo, { trovaVoce, apriMenu });
+  const spiegazioneVera = "Ogni ricerca approfondita di questo progetto, col suo rapporto, le affermazioni verificate e le fonti da cui vengono.";
+  for (const p of schermo.querySelectorAll(".talos-page__head p, .td-intro p")) {
+    if (p.getAttribute("role") === "status" || p.hasAttribute("data-research-esito")) continue;
+    if (p.textContent.includes(".harness-ui-research") || p.textContent.includes("non è ancora disponibile")) p.textContent = spiegazioneVera;
+  }
   return montaSezione(schermo, {
     chiave: "ricerca",
     nome: "Ricerca",
@@ -5018,45 +5739,86 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
        la riga di stato non può dire «5 rapporti». Il rapporto è ciò che una ricerca PRODUCE. */
     sostantivo: "ricerca",
     pluraleEsplicito: "ricerche",
-    voci: Array.isArray(ricerche) ? ricerche : [],
+    voci: elenco2,
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: "Caricamento ricerche…",
     onAggiorna: opzioni.onAggiorna,
+    /*
+     * ⛔ QUATTRO filtri e non otto. Gli stati sono otto, ma un filtro per ognuno darebbe una riga
+     *   di bottoni che nessuno legge, e quattro di essi direbbero sempre zero. Le domande che una
+     *   persona si fa davvero sono: cosa sta lavorando, cosa ha prodotto un rapporto, cosa no.
+     *   ⛔ «Col rapporto» guarda il RAPPORTO, non lo stato: è la stessa distinzione che il cancello
+     *   di consegna fa lato server, e l'unica che non può mentire.
+     */
     filtri: [
       { id: "tutte", etichetta: "Tutte" },
-      { id: "running", etichetta: "In corso", quando: (r) => r?.stato === "running" },
-      { id: "paused", etichetta: "In pausa", quando: (r) => r?.stato === "paused" },
-      { id: "done", etichetta: "Concluse", quando: (r) => r?.stato === "done" },
-      { id: "cancelled", etichetta: "Annullate", quando: (r) => r?.stato === "cancelled" },
-      { id: "failed", etichetta: "Non riuscite", quando: (r) => r?.stato === "failed" }
+      { id: "vive", etichetta: "In corso", quando: (r) => r?.stato === "running" || r?.stato === "paused" },
+      { id: "con-rapporto", etichetta: "Col rapporto", quando: (r) => Boolean(r?.reportLibraryId) },
+      { id: "senza-rapporto", etichetta: "Senza rapporto", quando: (r) => !r?.reportLibraryId && r?.stato !== "running" && r?.stato !== "paused" }
     ],
     idDi: (r) => r?.id,
-    titoloDi: (r) => testiRicerca(r).titolo,
-    quandoDi: (r) => r?.avviataAlle ?? null,
-    cercaIn: (r) => `${testiRicerca(r).titolo} ${statoRicerca(r?.stato).testo}`,
-    sommarioBarra: (n, { errore, caricamento }) => errore ? "Ricerche non disponibili" : caricamento ? "Caricamento ricerche…" : riepilogoRicerche(Array.isArray(ricerche) ? ricerche : []),
+    titoloDi: (r) => frasiVoce(r).domanda,
+    /* Una ricerca finita si ordina per quando è FINITA; una viva non è ancora finita e vale l'avvio. */
+    quandoDi: (r) => r?.conclusaAlle ?? r?.avviataAlle ?? null,
+    cercaIn: (r) => {
+      const f = frasiVoce(r);
+      return `${f.domanda} ${f.parola} ${f.nome || ""}`;
+    },
+    sommarioBarra: (n, { errore, caricamento }) => errore ? "Ricerche non disponibili" : caricamento ? "Caricamento ricerche…" : riepilogoRicerche(elenco2),
     scheda: (r, { doc, icona: icona9, etichetta: etichetta2 }) => {
-      const s = statoRicerca(r?.stato);
+      const f = frasiVoce(r);
+      const lettura = letturaDi(r);
+      const riga = lettura?.stato === "pronto" && lettura.record ? frasiBilancio(bilancioDaRecord(lettura.record)) : f.spiegazione;
       return {
-        alto: [icona9("globe"), nodo5(doc, "span", "", "Dossier"), etichetta2(s.testo, s.tono)],
-        corpo: [nodo5(doc, "p", "td-excerpt", FRASI_RICERCA.get(r?.stato) || "Stato non registrato: il server non dice a che punto è.")],
-        basso: [nodo5(doc, "span", "", testiRicerca(r).avviata ? `Avviata il ${testiRicerca(r).avviata}` : "Data non registrata")]
+        alto: [icona9("globe"), etichetta2(f.parola, f.tono)],
+        corpo: [nodo6(doc, "p", "td-excerpt", riga)],
+        /*
+         * ⛔ TROVATO NELLA FOTO: «Avviata il 11/09/20…» e «Rapporto disponibi…», tutti e due
+         *   troncati. `.td-card-bottom span` taglia con i puntini, e in 250 px di scheda due frasi
+         *   lunghe non ci stanno. ⇒ a destra si scrive solo quando AGGIUNGE qualcosa: su una
+         *   conclusa col rapporto lo dice già il timbro, mentre «Conclusa senza rapporto» è
+         *   un'anomalia che deve saltare all'occhio, e un rapporto su una ricerca non conclusa è
+         *   una cosa che chi guarda vuole sapere.
+         */
+        basso: [
+          nodo6(doc, "span", "", f.avviata ? `Avviata ${articoloData(r?.avviataAlle)}${dataBreve(r?.avviataAlle)}` : "Data non registrata"),
+          nodo6(doc, "span", "", r?.stato === "done" ? f.haRapporto ? "" : "Nessun rapporto" : f.haRapporto ? "Col rapporto" : "")
+        ],
+        adorno: (() => {
+          const b = nodo6(doc, "button", "td-card-azioni");
+          b.type = "button";
+          b.setAttribute("aria-haspopup", "menu");
+          b.setAttribute("aria-label", `Azioni su ${f.domanda}`);
+          const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+          const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+          svg.setAttribute("class", "i");
+          svg.setAttribute("aria-hidden", "true");
+          use.setAttribute("href", "#i-more");
+          svg.append(use);
+          b.append(svg);
+          b.addEventListener("click", (e) => {
+            e.stopPropagation();
+            apriMenu(r, { ancoraEl: b });
+          });
+          return b;
+        })()
       };
     },
-    dettaglio: (r, { doc, etichetta: etichetta2 }) => {
-      const s = statoRicerca(r?.stato);
-      const t2 = testiRicerca(r);
-      return [
-        meta(doc, [etichetta2(s.testo, s.tono), nodo5(doc, "span", "", t2.avviata || "data non registrata")]),
-        nodo5(doc, "h2", "", t2.titolo),
-        /* ⛔ Il mockup mostra qui piano, rapporto e «fonti illustrate»: sono dati suoi, inventati.
-           La rotta vera manda i soli metadati, e lo stato «Conclusa» non certifica le fonti. Si
-           dice cosa manca invece di riempire lo spazio. */
-        nodo5(doc, "p", "td-prose", "Di questa ricerca il server manda per ora soltanto titolo, stato e data di avvio. Il rapporto, quando c’è, è una voce della Libreria; le fonti restano nella conversazione della ricerca. Da qui non si consultano ancora."),
-        nodo5(doc, "p", "td-subtle", "Lo stato «Conclusa» non certifica le fonti del rapporto.")
-      ];
-    },
-    vuoto: { titolo: "Nessuna ricerca", testo: "Le ricerche approfondite di questo progetto compaiono qui, fino a venti fra le più recenti." }
+    dettaglio: (r, { doc }) => montaDettaglioRicerca(r, {
+      doc,
+      magazzino,
+      ridisegna,
+      apriMenu,
+      opzioni: {
+        leggiRapporto,
+        onApriSessione: opzioni.onApriSessione,
+        rendiMarkdown: opzioni.rendiMarkdown
+      }
+    }),
+    vuoto: {
+      titolo: "Nessuna ricerca",
+      testo: "Chiedi in chat di avviare una ricerca approfondita: comparirà qui mentre lavora, e ci resterà col suo rapporto."
+    }
   });
 }
 function montaProgetti(schermo, progetti, opzioni = {}) {
@@ -5080,28 +5842,28 @@ function montaProgetti(schermo, progetti, opzioni = {}) {
     cercaIn: (p) => `${p?.nome ?? ""} ${(p?.sessioni || []).map((s) => s?.nome ?? "").join(" ")}`,
     sommarioBarra: (n, { errore, caricamento }) => errore ? "Progetti non disponibili" : caricamento ? "Leggo i progetti…" : sommarioProgetti(n),
     scheda: (p, { doc, icona: icona9 }) => {
-      const chips = nodo5(doc, "div", "td-source-chips");
-      for (const s of ultimeSessioni(p, quanteRecenti)) chips.append(nodo5(doc, "span", "", s?.nome || s?.sessionId || "sessione senza nome"));
+      const chips = nodo6(doc, "div", "td-source-chips");
+      for (const s of ultimeSessioni(p, quanteRecenti)) chips.append(nodo6(doc, "span", "", s?.nome || s?.sessionId || "sessione senza nome"));
       return {
-        alto: [icona9("folder"), nodo5(doc, "span", "", "Cartella di lavoro")],
-        corpo: [nodo5(doc, "p", "td-excerpt", frasiProgetto(p)), chips],
+        alto: [icona9("folder"), nodo6(doc, "span", "", "Cartella di lavoro")],
+        corpo: [nodo6(doc, "p", "td-excerpt", frasiProgetto(p)), chips],
         /* Il conteggio sta già nel corpo (`frasiProgetto`): qui va il QUANDO, che è l'altra metà. */
-        basso: [nodo5(doc, "span", "", p?.ultimaAlle ? `Ultima volta ${new Date(p.ultimaAlle).toLocaleDateString("it-IT")}` : "mai aperta")]
+        basso: [nodo6(doc, "span", "", p?.ultimaAlle ? `Ultima volta ${new Date(p.ultimaAlle).toLocaleDateString("it-IT")}` : "mai aperta")]
       };
     },
     dettaglio: (p, { doc, etichetta: etichetta2 }) => {
       const pezzi = [
-        meta(doc, [etichetta2("Progetto"), nodo5(doc, "span", "", frasiProgetto(p))]),
-        nodo5(doc, "h2", "", p?.nome ?? ""),
-        nodo5(doc, "h3", "", "Sessioni recenti")
+        meta(doc, [etichetta2("Progetto"), nodo6(doc, "span", "", frasiProgetto(p))]),
+        nodo6(doc, "h2", "", p?.nome ?? ""),
+        nodo6(doc, "h3", "", "Sessioni recenti")
       ];
       const recenti = ultimeSessioni(p, quanteRecenti);
-      if (!recenti.length) pezzi.push(nodo5(doc, "p", "td-subtle", "Nessuna sessione ancora in questo progetto."));
+      if (!recenti.length) pezzi.push(nodo6(doc, "p", "td-subtle", "Nessuna sessione ancora in questo progetto."));
       for (const s of recenti) {
-        const riga = nodo5(doc, "div", "td-source");
+        const riga = nodo6(doc, "div", "td-source");
         const apri = bottone2(doc, s?.nome || s?.sessionId || "Sessione senza nome", { variante: "ghost", esegui: () => onApriSessione?.(s) });
         riga.append(apri);
-        if (s?.avviataAlle) riga.append(nodo5(doc, "span", "", `Avviata il ${new Date(s.avviataAlle).toLocaleString("it-IT")}`));
+        if (s?.avviataAlle) riga.append(nodo6(doc, "span", "", `Avviata il ${new Date(s.avviataAlle).toLocaleString("it-IT")}`));
         pezzi.push(riga);
       }
       return pezzi;
@@ -5109,7 +5871,7 @@ function montaProgetti(schermo, progetti, opzioni = {}) {
     vuoto: { titolo: "Nessun progetto", testo: "Un progetto nasce quando apri una sessione su una cartella. Comparirà qui." }
   });
 }
-var GENERI_FILTRO, FRASI_RICERCA;
+var GENERI_FILTRO;
 var init_sezioni_adattatori = __esm({
   "src/components/sezioni-adattatori.js"() {
     init_note();
@@ -5117,6 +5879,7 @@ var init_sezioni_adattatori = __esm({
     init_attivita();
     init_libreria();
     init_ricerca();
+    init_ricerca_dettaglio();
     init_progetti();
     init_plurale();
     init_sezione_elenco_dettaglio();
@@ -5128,23 +5891,12 @@ var init_sezioni_adattatori = __esm({
       ["procedure", "Procedure", "procedure"],
       ["policy_note", "Regole", "policy_note"]
     ];
-    FRASI_RICERCA = /* @__PURE__ */ new Map([
-      ["running", "Il rapporto si sta scrivendo."],
-      ["paused", "Ferma: riparte da dove si era interrotta."],
-      /* 11/09 sera (disegno BC-21): il rapporto NON sta in `.harness-ui-research/` — lì c'è solo la scheda
-         della ricerca; il testo è una voce di Libreria (`reportLibraryId`, `research-orchestrator.mjs:132`).
-         E «done» oggi non prova che ci sia un rapporto vero: la ricerca di stasera è «done» con 290 byte
-         di scusa del modello. La frase dice il posto giusto e non promette più di quanto il server sappia. */
-      ["done", "Conclusa: il rapporto, se è stato scritto, sta in Libreria."],
-      ["cancelled", "Interrotta prima di arrivare a un rapporto."],
-      ["failed", "Non è arrivata a un rapporto."]
-    ]);
   }
 });
 
 // src/components/modale-td.js
-function nodo6(doc, tag, classe, testo3) {
-  const el25 = doc.createElement(tag);
+function nodo7(doc, tag2, classe, testo3) {
+  const el25 = doc.createElement(tag2);
   if (classe) el25.className = classe;
   if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
   return el25;
@@ -5161,20 +5913,20 @@ function icona4(doc, nome) {
 function apriModale(titolo2, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
   if (!doc?.body) return null;
   chiudiModale();
-  const dialogo = nodo6(doc, "dialog", "td-modal");
+  const dialogo = nodo7(doc, "dialog", "td-modal");
   if (ampia) dialogo.dataset.ampia = "si";
   const idTitolo = `td-modal-title-${Math.random().toString(36).slice(2, 8)}`;
   dialogo.setAttribute("aria-labelledby", idTitolo);
-  const testa = nodo6(doc, "div", "td-modal-head");
-  const h2 = nodo6(doc, "h2", "", titolo2);
+  const testa = nodo7(doc, "div", "td-modal-head");
+  const h2 = nodo7(doc, "h2", "", titolo2);
   h2.id = idTitolo;
-  const chiudiBtn = nodo6(doc, "button", "talos-button talos-button--ghost talos-icon-button");
+  const chiudiBtn = nodo7(doc, "button", "talos-button talos-button--ghost talos-icon-button");
   chiudiBtn.type = "button";
   chiudiBtn.setAttribute("aria-label", "Chiudi");
   chiudiBtn.append(icona4(doc, "x"));
   chiudiBtn.addEventListener("click", () => chiudiModale());
   testa.append(h2, chiudiBtn);
-  const corpo = nodo6(doc, "div", "td-modal-content");
+  const corpo = nodo7(doc, "div", "td-modal-content");
   for (const pezzo2 of [contenuto].flat().filter(Boolean)) corpo.append(pezzo2);
   dialogo.append(testa, corpo);
   dialogo.addEventListener("click", (e) => {
@@ -5216,14 +5968,14 @@ function confermaModale({
   onConferma,
   document: doc = globalThis.document
 } = {}) {
-  const testo3 = nodo6(doc, "p", "td-prose", domanda);
+  const testo3 = nodo7(doc, "p", "td-prose", domanda);
   const pezzi = [testo3];
-  if (conseguenza) pezzi.push(nodo6(doc, "p", "td-subtle", conseguenza));
-  const piede = nodo6(doc, "div", "td-detail-footer");
-  const annulla = nodo6(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Annulla");
+  if (conseguenza) pezzi.push(nodo7(doc, "p", "td-subtle", conseguenza));
+  const piede = nodo7(doc, "div", "td-detail-footer");
+  const annulla = nodo7(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Annulla");
   annulla.type = "button";
   annulla.addEventListener("click", () => chiudiModale());
-  const conferma = nodo6(doc, "button", "talos-button talos-button--secondary talos-button--danger talos-button--sm", etichettaConferma);
+  const conferma = nodo7(doc, "button", "talos-button talos-button--secondary talos-button--danger talos-button--sm", etichettaConferma);
   conferma.type = "button";
   conferma.addEventListener("click", () => {
     chiudiModale();
@@ -5294,8 +6046,8 @@ function aspettoCorrente(doc = globalThis.document) {
     modo: dalControllo("colorModeSelect") || (radice.getAttribute("data-theme") === "light" ? "light" : "system")
   };
 }
-function nodo7(doc, tag, classe, testo3) {
-  const el25 = doc.createElement(tag);
+function nodo8(doc, tag2, classe, testo3) {
+  const el25 = doc.createElement(tag2);
   if (classe) el25.className = classe;
   if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
   return el25;
@@ -5305,25 +6057,25 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   const semi = leggiSemiTemi(doc);
   let { tema: scelto, modo } = aspettoCorrente(doc);
   if (!temi.some((t2) => t2.id === scelto)) scelto = temi[0]?.id || "calm";
-  const studio = nodo7(doc, "div", "td-theme-studio");
-  const elenco2 = nodo7(doc, "div", "td-theme-list");
+  const studio = nodo8(doc, "div", "td-theme-studio");
+  const elenco2 = nodo8(doc, "div", "td-theme-list");
   elenco2.setAttribute("role", "radiogroup");
   elenco2.setAttribute("aria-label", "Tema dell’interfaccia");
-  const destra = nodo7(doc, "div", "td-theme-display");
-  const titolo2 = nodo7(doc, "h3", "", "");
-  const descrizione = nodo7(doc, "p", "", "");
-  const anteprima3 = nodo7(doc, "div", "td-theme-preview");
-  const didascalia = nodo7(doc, "div", "td-preview-caption");
-  const didascaliaTema = nodo7(doc, "span", "", "");
-  const didascaliaModo = nodo7(doc, "span", "", "");
+  const destra = nodo8(doc, "div", "td-theme-display");
+  const titolo2 = nodo8(doc, "h3", "", "");
+  const descrizione = nodo8(doc, "p", "", "");
+  const anteprima3 = nodo8(doc, "div", "td-theme-preview");
+  const didascalia = nodo8(doc, "div", "td-preview-caption");
+  const didascaliaTema = nodo8(doc, "span", "", "");
+  const didascaliaModo = nodo8(doc, "span", "", "");
   didascalia.append(didascaliaTema, didascaliaModo);
-  const controlli = nodo7(doc, "div", "td-theme-controls");
-  const segmento = nodo7(doc, "div", "td-segment");
+  const controlli = nodo8(doc, "div", "td-theme-controls");
+  const segmento = nodo8(doc, "div", "td-segment");
   segmento.setAttribute("role", "group");
   segmento.setAttribute("aria-label", "Modalità colore");
   const MODI = [["system", "Sistema"], ["light", "Chiaro"], ["dark", "Scuro"]];
   const bottoniModo = MODI.map(([valore, nome]) => {
-    const b = nodo7(doc, "button", "", nome);
+    const b = nodo8(doc, "button", "", nome);
     b.type = "button";
     b.dataset.modo = valore;
     b.addEventListener("click", () => {
@@ -5335,17 +6087,17 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     return b;
   });
   controlli.append(segmento);
-  const dettagli = nodo7(doc, "div", "td-theme-details");
+  const dettagli = nodo8(doc, "div", "td-theme-details");
   const campi = ["Accento", "Fondo", "Raggio delle schede"].map((nome) => {
-    const box = nodo7(doc, "div");
-    box.append(nodo7(doc, "span", "", nome));
-    const valore = nodo7(doc, "strong", "", "—");
+    const box = nodo8(doc, "div");
+    box.append(nodo8(doc, "span", "", nome));
+    const valore = nodo8(doc, "strong", "", "—");
     box.append(valore);
     dettagli.append(box);
     return valore;
   });
-  const azioni = nodo7(doc, "div", "td-theme-actions");
-  const vaiAImpostazioni = nodo7(doc, "button", "td-studio-button", "Tutte le impostazioni dell’aspetto");
+  const azioni = nodo8(doc, "div", "td-theme-actions");
+  const vaiAImpostazioni = nodo8(doc, "button", "td-studio-button", "Tutte le impostazioni dell’aspetto");
   vaiAImpostazioni.type = "button";
   vaiAImpostazioni.addEventListener("click", () => {
     chiudiModale();
@@ -5353,21 +6105,21 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     (doc.getElementById("themePresetSelect") || doc.getElementById("setting-themePresetSelect"))?.focus?.({ preventScroll: false });
   });
   azioni.append(vaiAImpostazioni);
-  const nota = nodo7(doc, "p", "td-theme-note", "Il tema si applica subito, senza chiudere il pannello. La preferenza è di questo browser: le conversazioni e i file non vengono toccati. Lo sfondo animato ha un suo controllo in «Aspetto e movimento».");
+  const nota = nodo8(doc, "p", "td-theme-note", "Il tema si applica subito, senza chiudere il pannello. La preferenza è di questo browser: le conversazioni e i file non vengono toccati. Lo sfondo animato ha un suo controllo in «Aspetto e movimento».");
   destra.append(titolo2, descrizione, anteprima3, didascalia, controlli, dettagli, azioni, nota);
   studio.append(elenco2, destra);
   const scelte = temi.map(({ id, nome }) => {
-    const b = nodo7(doc, "button", "td-theme-choice");
+    const b = nodo8(doc, "button", "td-theme-choice");
     b.type = "button";
     b.setAttribute("role", "radio");
     b.dataset.tema = id;
-    const pallino = nodo7(doc, "span", "td-palette-dot");
+    const pallino = nodo8(doc, "span", "td-palette-dot");
     pallino.setAttribute("aria-hidden", "true");
     const seme = semi.get(id);
     if (seme?.accento) pallino.style.setProperty("--preview-accent", seme.accento);
     const fondo = fondoDelTema(seme, temaChiaro(seme) ? "light" : "dark");
     if (fondo) pallino.style.setProperty("--preview-bg", fondo);
-    const segno = nodo7(doc, "span", "td-theme-segno", "");
+    const segno = nodo8(doc, "span", "td-theme-segno", "");
     b.append(pallino, doc.createTextNode(nome), segno);
     b.addEventListener("click", () => {
       scelto = id;
@@ -5413,11 +6165,11 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   }
   function disegnaAnteprima() {
     anteprima3.replaceChildren();
-    const riga = nodo7(doc, "div", "td-preview-riga");
-    riga.append(nodo7(doc, "span", "td-preview-pallino"), nodo7(doc, "span", "td-preview-barra"));
-    const scheda = nodo7(doc, "div", "td-preview-scheda");
-    const barraLunga = nodo7(doc, "span", "td-preview-barra");
-    const barraCorta = nodo7(doc, "span", "td-preview-barra");
+    const riga = nodo8(doc, "div", "td-preview-riga");
+    riga.append(nodo8(doc, "span", "td-preview-pallino"), nodo8(doc, "span", "td-preview-barra"));
+    const scheda = nodo8(doc, "div", "td-preview-scheda");
+    const barraLunga = nodo8(doc, "span", "td-preview-barra");
+    const barraCorta = nodo8(doc, "span", "td-preview-barra");
     barraCorta.dataset.corta = "si";
     scheda.append(barraLunga, barraCorta);
     anteprima3.append(riga, scheda);
@@ -5435,7 +6187,7 @@ function montaScorciatoiaTemi(schermo, { document: doc = globalThis.document } =
   if (!riga) return null;
   const esistente = schermo.querySelector("[data-td-studio-temi]");
   if (esistente) return esistente;
-  const b = nodo7(doc, "button", "td-studio-button", `Esplora le ${nomiTemi().length} atmosfere`);
+  const b = nodo8(doc, "button", "td-studio-button", `Esplora le ${nomiTemi().length} atmosfere`);
   b.type = "button";
   b.dataset.tdStudioTemi = "";
   b.addEventListener("click", () => apriStudioTemi({ document: doc }));
@@ -5505,11 +6257,11 @@ function selezionaSessioniBoard(sessioni, { stato = "tutte", cartella = "", ordi
   const data = (s) => Number.isFinite(Date.parse(s.avviataAlle)) ? Date.parse(s.avviataAlle) : null;
   return dati.sort((a, b) => ordine === "nome" ? (a.nome || a.taskId || "").localeCompare(b.nome || b.taskId || "", "it", { numeric: true, sensitivity: "base" }) : ordine === "token" ? confrontoNumero(totale(a), totale(b)) : confrontoNumero(data(a), data(b), ordine === "vecchie"));
 }
-function el13(doc, tag, classe, testo3) {
-  const nodo8 = doc.createElement(tag);
-  if (classe) nodo8.className = classe;
-  if (testo3 !== void 0) nodo8.textContent = testo3;
-  return nodo8;
+function el13(doc, tag2, classe, testo3) {
+  const nodo9 = doc.createElement(tag2);
+  if (classe) nodo9.className = classe;
+  if (testo3 !== void 0) nodo9.textContent = testo3;
+  return nodo9;
 }
 function creaRigaBoard(sessione, { document: doc = globalThis.document, metriche = {}, adesso, onApri, onMenu } = {}) {
   const t2 = testiBoard(sessione, metriche, adesso), stato = statoBoard(sessione);
@@ -5600,10 +6352,10 @@ function creaTabellaBoard(sessioni, opzioni = {}) {
   return card;
 }
 function aggiornaBoard(schermo, sessioni, opzioni = {}) {
-  let vista = VISTE.get(schermo);
+  let vista = VISTE2.get(schermo);
   if (!vista) {
     vista = { sessioni: [], opzioni: {}, stato: "tutte", cartella: "", ordine: "recenti" };
-    VISTE.set(schermo, vista);
+    VISTE2.set(schermo, vista);
     const tabs = [...schermo.querySelectorAll("[data-board-stato]")];
     for (const tab of tabs) {
       tab.addEventListener("click", () => {
@@ -5669,7 +6421,7 @@ function renderBoard(schermo, vista) {
   schermo.querySelector('[data-c="DataTable"]').replaceWith(tabella);
   if (attivo) [...tabella.querySelectorAll("[data-board-session-id]")].find((n) => n.dataset.boardSessionId === attivo)?.querySelector("button").focus({ preventScroll: true });
 }
-var NUMERO2, valido, totale, compatto, MOTIVI, STATO, VISTE;
+var NUMERO2, valido, totale, compatto, MOTIVI, STATO, VISTE2;
 var init_board = __esm({
   "src/components/board.js"() {
     init_session_item();
@@ -5684,7 +6436,7 @@ var init_board = __esm({
     compatto = (n) => !valido(n) ? "—" : n >= 1e3 ? NUMERO2.format(n / 1e3) + "k" : NUMERO2.format(n);
     MOTIVI = { "fine-lavoro": "fine lavoro", "giri-finiti": "giri finiti", fermata: "fermata da te", errore: "errore" };
     STATO = { vivo: ["In corso", "accent"], attesa: ["Aspetta te", "warning"], successo: ["Conclusa", "success"], errore: ["Errore", "danger"], interrotto: ["Interrotta", null], ignoto: ["Conclusa · esito non registrato", null] };
-    VISTE = /* @__PURE__ */ new WeakMap();
+    VISTE2 = /* @__PURE__ */ new WeakMap();
   }
 });
 
@@ -5816,10 +6568,10 @@ function aggiornaStatoConnessione(barra, stato, { tentativi = 0 } = {}) {
   if (riprova) riprova.hidden = stato !== "caduto";
   barra.dataset.connessione = stato;
 }
-var STATI4, TESTI, RITMO;
+var STATI3, TESTI, RITMO;
 var init_connessione = __esm({
   "src/components/connessione.js"() {
-    STATI4 = Object.freeze(["collegato", "riconnessione", "caduto", "ricollegato"]);
+    STATI3 = Object.freeze(["collegato", "riconnessione", "caduto", "ricollegato"]);
     TESTI = Object.freeze({
       collegato: "",
       riconnessione: (n) => `Connessione persa · riprovo${n > 1 ? ` (${n})` : "…"}`,
@@ -5851,8 +6603,8 @@ function nomeCampanella(quante) {
   if (quante === 0) return "Notifiche: nessuna";
   return `Notifiche: ${quante === 1 ? "1 cosa aspetta" : `${quante} cose aspettano`} te`;
 }
-function el14(documentObj, tag, classe, testo3) {
-  const n = documentObj.createElement(tag);
+function el14(documentObj, tag2, classe, testo3) {
+  const n = documentObj.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 != null) n.textContent = testo3;
   return n;
@@ -6032,8 +6784,8 @@ function filtraInstallati(modelli = [], { query = "", stato = "tutti", runtime =
     return [m.name, m.id, m.repo].some((v) => String(v || "").toLowerCase().includes(q));
   });
 }
-function el15(documentObj, tag, classe, testo3) {
-  const n = documentObj.createElement(tag);
+function el15(documentObj, tag2, classe, testo3) {
+  const n = documentObj.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 != null) n.textContent = testo3;
   return n;
@@ -6358,8 +7110,8 @@ function datiRepoHf(item = {}) {
     gated: Boolean(item.gated)
   };
 }
-function el16(d, tag, classe, testo3) {
-  const n = d.createElement(tag);
+function el16(d, tag2, classe, testo3) {
+  const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 != null) n.textContent = testo3;
   return n;
@@ -6699,8 +7451,8 @@ function riepilogoConsumo(sessioni = []) {
   }
   return totali;
 }
-function el17(d, tag, classe, testo3) {
-  const n = d.createElement(tag);
+function el17(d, tag2, classe, testo3) {
+  const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 != null) n.textContent = testo3;
   return n;
@@ -6961,8 +7713,8 @@ function montaContextCompactor(root, { client, sessionId, state = null, document
   let epoch = 0, sequence = 0, busy = false, destroyed2 = false, opened = !root.hidden, timer, requestController, trigger, editingId = null, editingSources = [], settingsDirty = false, versions = [], factsKey = "", versionsKey = "", sourcesKey = "", statusText = "";
   const inertBefore = /* @__PURE__ */ new Map();
   const num2 = (value) => number(value) ? new Intl.NumberFormat(linguaCorrenteDiT() === "en" ? "en-US" : "it-IT").format(value) : translate("Non disponibile");
-  function element(tag, text, className) {
-    const node = doc.createElement(tag);
+  function element(tag2, text, className) {
+    const node = doc.createElement(tag2);
     if (text != null) node.textContent = text;
     if (className) node.className = className;
     return node;
@@ -7502,8 +8254,8 @@ function frasiRipartizione(r) {
   const fonte = r.fonteFinestra === "profilo" ? " · finestra del profilo di questa chat" : r.fonteFinestra === "catalogo" ? " · finestra del catalogo del modello" : "";
   return `${base}${quota}${fonte}${mancanti} (stima)`;
 }
-function el18(d, tag, classe, testo3) {
-  const n = d.createElement(tag);
+function el18(d, tag2, classe, testo3) {
+  const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 != null) n.textContent = testo3;
   return n;
@@ -7665,8 +8417,8 @@ function contaStati(items = []) {
   }
   return c;
 }
-function el19(d, tag, classe, testo3) {
-  const n = d.createElement(tag);
+function el19(d, tag2, classe, testo3) {
+  const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 != null) n.textContent = testo3;
   return n;
@@ -7872,14 +8624,14 @@ function righeFinestra(usage = null, finestra = null, ripartizione = null) {
   return { titoloDestra: finestra ? kilo(finestra) : "finestra non dichiarata", righe };
 }
 function titoloRispostaDaTurno(turno, parole = 5) {
-  const nodo8 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_RISPOSTA_TURNO) : null;
-  const testo3 = typeof nodo8?.textContent === "string" ? nodo8.textContent.trim() : "";
+  const nodo9 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_RISPOSTA_TURNO) : null;
+  const testo3 = typeof nodo9?.textContent === "string" ? nodo9.textContent.trim() : "";
   if (!testo3) return "";
   return testo3.split(/\s+/).slice(0, parole).join(" ");
 }
 function titoloMessaggioUtente(turno, parole = 5) {
-  const nodo8 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_TESTO_UTENTE) : null;
-  const testo3 = typeof nodo8?.textContent === "string" ? nodo8.textContent.trim() : "";
+  const nodo9 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_TESTO_UTENTE) : null;
+  const testo3 = typeof nodo9?.textContent === "string" ? nodo9.textContent.trim() : "";
   if (!testo3) return "";
   return testo3.split(/\s+/).slice(0, parole).join(" ");
 }
@@ -7900,8 +8652,8 @@ function datiProcesso(p = {}) {
   const fermo = Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= 6e4 ? `Nessuna uscita da ${Math.round(p.fermoDaMs / 1e3)} secondi. Il processo è vivo: potrebbe aspettare un input. TALOS non lo ferma da solo.` : null;
   return { comando: p.comando || "—", stato: p.stato || "ok", chi, misura, fermo };
 }
-function el20(d, tag, classe, testo3) {
-  const n = d.createElement(tag);
+function el20(d, tag2, classe, testo3) {
+  const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 != null) n.textContent = testo3;
   return n;
@@ -8136,11 +8888,11 @@ var init_inspector = __esm({
 });
 
 // src/components/review.js
-function el21(documentObj, tag, className, testo3) {
-  const nodo8 = documentObj.createElement(tag);
-  if (className) nodo8.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo8.textContent = String(testo3);
-  return nodo8;
+function el21(documentObj, tag2, className, testo3) {
+  const nodo9 = documentObj.createElement(tag2);
+  if (className) nodo9.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo9.textContent = String(testo3);
+  return nodo9;
 }
 function contaDiff(voceOCode = []) {
   if (voceOCode && !Array.isArray(voceOCode) && Number.isFinite(voceOCode.aggiunte) && Number.isFinite(voceOCode.rimozioni)) {
@@ -8349,7 +9101,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
       disegnaCartelle();
     }
   }
-  function nodo8(path, q) {
+  function nodo9(path, q) {
     const figli = st.figli.get(path);
     const n = d.createElement("div");
     n.setAttribute("role", "treeitem");
@@ -8384,7 +9136,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
     if (Array.isArray(figli) && figli.length && aperto) {
       const g = d.createElement("div");
       g.setAttribute("role", "group");
-      for (const f of figli) if (!q || f.nome.toLocaleLowerCase("it").includes(q) || f.path.toLocaleLowerCase("it").includes(q)) g.append(nodo8(f.path, q));
+      for (const f of figli) if (!q || f.nome.toLocaleLowerCase("it").includes(q) || f.path.toLocaleLowerCase("it").includes(q)) g.append(nodo9(f.path, q));
       n.append(g);
     }
     return n;
@@ -8393,7 +9145,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
     const albero = $2("introAlbero");
     if (!albero || !st.radice) return;
     const q = ($2("introCercaCartella")?.value || "").trim().toLocaleLowerCase("it");
-    albero.replaceChildren(nodo8(st.radice, q));
+    albero.replaceChildren(nodo9(st.radice, q));
     const stato2 = $2("introCartelleStato");
     if (stato2 && !st.caricando.size) stato2.textContent = q ? albero.querySelectorAll("[role=group] [role=treeitem]").length ? "Solo le cartelle già caricate." : "Nessuna cartella corrisponde alla ricerca." : "Le cartelle si leggono aprendole. Doppio clic o freccia destra per entrare.";
     const scelta = $2("introCartellaScelta");
@@ -9255,8 +10007,8 @@ function sembraHtml(grezzo) {
   const t2 = String(grezzo || "");
   if (!t2.trim()) return false;
   if (/<!DOCTYPE\s+html/i.test(t2) || /<html[\s>]/i.test(t2)) return true;
-  const tag = t2.match(/<\/?(div|p|span|a|li|ul|ol|table|section|article|nav|header|footer|meta|script|style|h[1-6])\b/gi) || [];
-  return tag.length >= 4;
+  const tag2 = t2.match(/<\/?(div|p|span|a|li|ul|ol|table|section|article|nav|header|footer|meta|script|style|h[1-6])\b/gi) || [];
+  return tag2.length >= 4;
 }
 function decodifica(testo3) {
   return testo3.replace(/&#x([0-9a-f]+);/gi, (_, n) => {
@@ -9981,11 +10733,11 @@ var init_nav_item = __esm({
 });
 
 // src/components/conversazione.js
-function el22(documentObj, tag, className, testo3) {
-  const nodo8 = documentObj.createElement(tag);
-  if (className) nodo8.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo8.textContent = String(testo3);
-  return nodo8;
+function el22(documentObj, tag2, className, testo3) {
+  const nodo9 = documentObj.createElement(tag2);
+  if (className) nodo9.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo9.textContent = String(testo3);
+  return nodo9;
 }
 function simbolo(documentObj, classe, nome) {
   const svg = documentObj.createElementNS(SVG_NS, "svg");
@@ -10451,12 +11203,12 @@ function creaAttesa({ etichetta: etichetta2 = "Sto pensando…" } = {}, opzioni 
     svg.append(linea);
   }
   for (const cx of [16, 48, 80]) {
-    const nodo8 = documentObj.createElementNS(SVG_NS, "circle");
-    nodo8.setAttribute("class", "talos-line-loader-node");
-    nodo8.setAttribute("cx", String(cx));
-    nodo8.setAttribute("cy", "8");
-    nodo8.setAttribute("r", "4");
-    svg.append(nodo8);
+    const nodo9 = documentObj.createElementNS(SVG_NS, "circle");
+    nodo9.setAttribute("class", "talos-line-loader-node");
+    nodo9.setAttribute("cx", String(cx));
+    nodo9.setAttribute("cy", "8");
+    nodo9.setAttribute("r", "4");
+    svg.append(nodo9);
   }
   const label = el22(documentObj, "span", "talos-waiting__label run-activity-label", etichetta2);
   const elapsed = el22(documentObj, "span", "talos-mono talos-muted run-activity-elapsed", "0s");
@@ -10708,11 +11460,11 @@ function riduciEventiFiglia(eventi2) {
   }
   return { turni, stato, giri, modello, attrezzi, scartati, motivo };
 }
-function el23(d, tag, classe, testo3) {
-  const nodo8 = d.createElement(tag);
-  if (classe) nodo8.className = classe;
-  if (testo3 !== void 0 && testo3 !== null) nodo8.textContent = String(testo3);
-  return nodo8;
+function el23(d, tag2, classe, testo3) {
+  const nodo9 = d.createElement(tag2);
+  if (classe) nodo9.className = classe;
+  if (testo3 !== void 0 && testo3 !== null) nodo9.textContent = String(testo3);
+  return nodo9;
 }
 function simbolo2(d, classe, nome) {
   const svg = d.createElementNS(SVG_NS2, "svg");
@@ -10772,10 +11524,10 @@ function montaConversazioneFiglia(contenitore, {
   const disegnati = /* @__PURE__ */ new Map();
   const chiaveBlocco = (b) => b.tipo === "attrezzo" ? `a:${b.id}` : b.tipo === "testo" ? `t:${b.id}` : `e:${b.id}`;
   function creaVistaTurno(turno) {
-    const nodo8 = el23(d, "div", "talos-figlia__turno");
-    if (turno.consegna) nodo8.append(creaMessaggioUtente({ testo: turno.consegna, meta: turno.meta }, { document: d }));
-    corpo.append(nodo8);
-    return { elemento: nodo8, blocchi: /* @__PURE__ */ new Map() };
+    const nodo9 = el23(d, "div", "talos-figlia__turno");
+    if (turno.consegna) nodo9.append(creaMessaggioUtente({ testo: turno.consegna, meta: turno.meta }, { document: d }));
+    corpo.append(nodo9);
+    return { elemento: nodo9, blocchi: /* @__PURE__ */ new Map() };
   }
   function creaVistaBlocco(vistaTurno, blocco, gruppo, modello) {
     if (blocco.tipo === "testo") {
@@ -11625,9 +12377,9 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
   radice.append(tela, velo, etichetta2);
   contenitore.replaceChildren(radice);
   const ascolti = [];
-  const ascolta = (nodo8, tipo, mano, opzioni) => {
-    nodo8.addEventListener(tipo, mano, opzioni);
-    ascolti.push([nodo8, tipo, mano, opzioni]);
+  const ascolta = (nodo9, tipo, mano, opzioni) => {
+    nodo9.addEventListener(tipo, mano, opzioni);
+    ascolti.push([nodo9, tipo, mano, opzioni]);
   };
   let corrente = "apro";
   let attesa = null;
@@ -11645,7 +12397,7 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
     }
   }
   function applicaStato(nome, dettaglio = "") {
-    if (!STATI5.includes(nome)) return corrente;
+    if (!STATI4.includes(nome)) return corrente;
     const vero = nome === "pronto" && dipinti === 0 ? "carico" : nome;
     corrente = vero;
     const testo3 = dettaglio ? `${testoStato(vero)} — ${dettaglio}` : testoStato(vero);
@@ -11774,17 +12526,17 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
     inCoda = false;
     prenotato = null;
     attesa = null;
-    for (const [nodo8, tipo, mano, opzioni] of ascolti) nodo8.removeEventListener?.(tipo, mano, opzioni);
+    for (const [nodo9, tipo, mano, opzioni] of ascolti) nodo9.removeEventListener?.(tipo, mano, opzioni);
     ascolti.length = 0;
     contenitore.replaceChildren?.();
   }
   return { frame: frame2, stato, misura, distruggi, radice, tela };
 }
-var STATI5, CLASSE, TIPI_GESTO, PULSANTI;
+var STATI4, CLASSE, TIPI_GESTO, PULSANTI;
 var init_browser_vivo = __esm({
   "src/components/browser-vivo.js"() {
     init_lingua();
-    STATI5 = Object.freeze(["apro", "carico", "fermo", "errore", "pronto"]);
+    STATI4 = Object.freeze(["apro", "carico", "fermo", "errore", "pronto"]);
     CLASSE = "talos-vistaviva";
     TIPI_GESTO = Object.freeze({
       pointerdown: "giu",
@@ -12050,11 +12802,11 @@ function montaMiglioraPrompt({
   let errore = "";
   let giro = 0;
   let distrutto = false;
-  const elemento = (tag, classe, testo3) => {
-    const nodo8 = doc.createElement(tag);
-    if (classe) nodo8.className = classe;
-    if (testo3 != null) nodo8.textContent = testo3;
-    return nodo8;
+  const elemento = (tag2, classe, testo3) => {
+    const nodo9 = doc.createElement(tag2);
+    if (classe) nodo9.className = classe;
+    if (testo3 != null) nodo9.textContent = testo3;
+    return nodo9;
   };
   const radice = elemento("section", "talos-migliora");
   radice.dataset.miglioraPrompt = "";
@@ -12300,10 +13052,10 @@ function montaMiglioraPrompt({
     chiudi,
     distruggi,
     /** Solo per le prove e per chi orchestra: lo stato dichiarato, mai dedotto dal DOM. */
-    stato: () => ({ fase: stato, profondita, esito, errore, stati: STATI6 })
+    stato: () => ({ fase: stato, profondita, esito, errore, stati: STATI5 })
   });
 }
-var PROFONDITA, PROFONDITA_PREDEFINITA, STATI6;
+var PROFONDITA, PROFONDITA_PREDEFINITA, STATI5;
 var init_migliora_prompt = __esm({
   "src/components/migliora-prompt.js"() {
     init_chat_foot();
@@ -12313,7 +13065,7 @@ var init_migliora_prompt = __esm({
       Object.freeze({ valore: "estesa", nome: "Estesa", spiega: "Un briefing completo: ambito, formato della risposta, vincoli, casi limite e criteri di accettazione." })
     ]);
     PROFONDITA_PREDEFINITA = "equilibrata";
-    STATI6 = Object.freeze(["scelta", "attesa", "errore", "esito"]);
+    STATI5 = Object.freeze(["scelta", "attesa", "errore", "esito"]);
   }
 });
 
@@ -12375,12 +13127,12 @@ function etichettaTasto(combo, { apple = suApple() } = {}) {
 }
 function normalizzaTastiScritti(radice = globalThis.document, { apple = suApple() } = {}) {
   let cambiati = 0;
-  for (const nodo8 of radice.querySelectorAll("kbd")) {
-    const testo3 = (nodo8.textContent || "").trim();
+  for (const nodo9 of radice.querySelectorAll("kbd")) {
+    const testo3 = (nodo9.textContent || "").trim();
     if (!/⌘|ctrl|cmd|shift/i.test(testo3)) continue;
     const nuovo = etichettaTasto(testo3, { apple });
     if (nuovo && nuovo !== testo3) {
-      nodo8.textContent = nuovo;
+      nodo9.textContent = nuovo;
       cambiati += 1;
     }
   }
@@ -12466,16 +13218,16 @@ function migraTitle(elemento) {
   if (!elemento || typeof elemento.getAttribute !== "function") return "";
   const gia = elemento.getAttribute(ATTRIBUTO);
   if (gia) return gia;
-  const tag = String(elemento.tagName || "").toLowerCase();
-  if (tag === "iframe" || elemento.ownerSVGElement || tag === "svg") return "";
+  const tag2 = String(elemento.tagName || "").toLowerCase();
+  if (tag2 === "iframe" || elemento.ownerSVGElement || tag2 === "svg") return "";
   const titolo2 = elemento.getAttribute("title");
   if (!titolo2 || !titolo2.trim()) return "";
   elemento.setAttribute(ATTRIBUTO, titolo2.trim());
   elemento.removeAttribute("title");
   return titolo2.trim();
 }
-function bersaglioDi(nodo8) {
-  let corrente = nodo8;
+function bersaglioDi(nodo9) {
+  let corrente = nodo9;
   while (corrente && corrente.nodeType === 1) {
     if (corrente.hasAttribute?.(ATTRIBUTO) || corrente.hasAttribute?.("title")) return corrente;
     corrente = corrente.parentElement;
@@ -13411,11 +14163,11 @@ var init_context_progress = __esm({
 });
 
 // src/components/stato-vuoto.js
-function el24(documentObj, tag, className, testo3) {
-  const nodo8 = documentObj.createElement(tag);
-  if (className) nodo8.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo8.textContent = String(testo3);
-  return nodo8;
+function el24(documentObj, tag2, className, testo3) {
+  const nodo9 = documentObj.createElement(tag2);
+  if (className) nodo9.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo9.textContent = String(testo3);
+  return nodo9;
 }
 function simbolo3(documentObj, classe, nome) {
   const svg = documentObj.createElementNS(SVG_NS3, "svg");
@@ -14128,9 +14880,9 @@ var init_app = __esm({
       }
       const motionAnimations = /* @__PURE__ */ new Set();
       let spazioCodaConversazioneUltimo = -1;
-      function scrollerConversazione(nodo8 = $2("#conversation")) {
-        if (!nodo8) return null;
-        return nodo8.closest?.(".talos-conversation") || nodo8;
+      function scrollerConversazione(nodo9 = $2("#conversation")) {
+        if (!nodo9) return null;
+        return nodo9.closest?.(".talos-conversation") || nodo9;
       }
       function aggiornaSpazioCodaConversazione(conversation) {
         if (!conversation) return;
@@ -14228,8 +14980,8 @@ var init_app = __esm({
         let n;
         while (n = walker.nextNode()) nodi.push(n);
         for (let i = nodi.length - 1; i >= 0 && restanti > 0; i -= 1) {
-          const nodo8 = nodi[i];
-          const genitore = nodo8.parentElement;
+          const nodo9 = nodi[i];
+          const genitore = nodo9.parentElement;
           if (!genitore) continue;
           if (genitore.classList.contains("stream-word")) {
             restanti -= 1;
@@ -14237,7 +14989,7 @@ var init_app = __esm({
             continue;
           }
           if (genitore.closest("pre, code, .code-block-head")) continue;
-          const pezzi = nodo8.textContent.split(/(\s+)/).filter((p) => p.length > 0);
+          const pezzi = nodo9.textContent.split(/(\s+)/).filter((p) => p.length > 0);
           if (pezzi.length === 0) continue;
           const nuovi = [];
           let testoPiano = "";
@@ -14263,7 +15015,7 @@ var init_app = __esm({
           if (nuovi.length === 1 && nuovi[0].nodeType === Node.TEXT_NODE) continue;
           const frag = document.createDocumentFragment();
           for (const nuovo of nuovi) frag.appendChild(nuovo);
-          nodo8.replaceWith(frag);
+          nodo9.replaceWith(frag);
         }
       }
       function renderizzaMessaggioStreamingOra(messageId) {
@@ -14808,7 +15560,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       let fuocoPrimaDelCassetto = null;
       function elementiFuoriDalCassetto() {
         const barra = $2(".talos-sidebar");
-        return [...appShell?.children || []].filter((nodo8) => nodo8 !== barra);
+        return [...appShell?.children || []].filter((nodo9) => nodo9 !== barra);
       }
       function cassettoAperto() {
         return document.documentElement.classList.contains("td-drawer-open");
@@ -14819,7 +15571,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (!barra) return;
         fuocoPrimaDelCassetto = ROOT().activeElement || null;
         document.documentElement.classList.add("td-drawer-open");
-        for (const nodo8 of elementiFuoriDalCassetto()) nodo8.inert = true;
+        for (const nodo9 of elementiFuoriDalCassetto()) nodo9.inert = true;
         let velo = $2(".td-scrim");
         if (!velo) {
           velo = document.createElement("button");
@@ -14839,7 +15591,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       function chiudiCassettoBarra({ restituisciFuoco = true } = {}) {
         if (!cassettoAperto()) return;
         document.documentElement.classList.remove("td-drawer-open");
-        for (const nodo8 of elementiFuoriDalCassetto()) nodo8.inert = false;
+        for (const nodo9 of elementiFuoriDalCassetto()) nodo9.inert = false;
         $2(".td-scrim")?.remove();
         $2("#apriCassettoBarra")?.setAttribute("aria-expanded", "false");
         if (restituisciFuoco) (fuocoPrimaDelCassetto?.isConnected ? fuocoPrimaDelCassetto : $2("#apriCassettoBarra"))?.focus?.({ preventScroll: true });
@@ -15279,7 +16031,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           statoRender.prefisso = stabile;
           statoRender.nodiCoda = [];
         } else {
-          for (const nodo8 of statoRender.nodiCoda) nodo8.remove();
+          for (const nodo9 of statoRender.nodiCoda) nodo9.remove();
           statoRender.nodiCoda = [];
           if (stabile.length > statoRender.prefisso.length) {
             const nuovoStabile = renderizzaMarkdownSemplice(stabile.slice(statoRender.prefisso.length));
@@ -15444,8 +16196,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return "Nel prossimo messaggio chiedi un passo solo: il tetto vale per giro, non per sessione.";
       }
       function aggiornaContatoreUsage() {
-        const nodo8 = $2("[data-usage-summary]");
-        if (nodo8) nodo8.textContent = `Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true })}`;
+        const nodo9 = $2("[data-usage-summary]");
+        if (nodo9) nodo9.textContent = `Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true })}`;
       }
       function formattaOraSessione(iso) {
         const data = new Date(iso);
@@ -15534,9 +16286,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return (parole.length > 1 ? parole[0][0] + parole[1][0] : String(row.label || row.id).slice(0, 2)).toUpperCase();
       }
       function segmentoProvider(stato, testo3) {
-        const nodo8 = textElement("span", "provider-seg", SEGNI_PROVIDER[stato] + " " + testo3);
-        nodo8.dataset.seg = stato;
-        return nodo8;
+        const nodo9 = textElement("span", "provider-seg", SEGNI_PROVIDER[stato] + " " + testo3);
+        nodo9.dataset.seg = stato;
+        return nodo9;
       }
       function renderizzaProviderModelLab() {
         const rows = Array.isArray(state.modelLab.providers) ? state.modelLab.providers : [];
@@ -15777,32 +16529,32 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       function nodoVerdettoFit(modelId) {
         const voce = state.modelLab.fit.get(modelId);
-        const nodo8 = document.createElement("p");
-        nodo8.className = "model-lab-fit";
-        nodo8.dataset.modelFit = modelId;
+        const nodo9 = document.createElement("p");
+        nodo9.className = "model-lab-fit";
+        nodo9.dataset.modelFit = modelId;
         if (!voce) {
-          nodo8.hidden = true;
-          return nodo8;
+          nodo9.hidden = true;
+          return nodo9;
         }
         if (voce.inCorso) {
-          nodo8.dataset.fitState = "attesa";
-          nodo8.textContent = "Verifica in corso…";
-          return nodo8;
+          nodo9.dataset.fitState = "attesa";
+          nodo9.textContent = "Verifica in corso…";
+          return nodo9;
         }
         if (voce.errore) {
-          nodo8.dataset.fitState = "bad";
-          nodo8.textContent = `Verifica non riuscita — ${voce.errore}`;
-          return nodo8;
+          nodo9.dataset.fitState = "bad";
+          nodo9.textContent = `Verifica non riuscita — ${voce.errore}`;
+          return nodo9;
         }
         const { classe, testo: testo3 } = descriviFit(voce.esito);
-        nodo8.dataset.fitState = voce.ripiegoChat ? "warn" : classe;
+        nodo9.dataset.fitState = voce.ripiegoChat ? "warn" : classe;
         const prefissoRipiego = voce.ripiegoChat ? voce.esito?.state === "unknown" ? "Va bene per la chat; come agente non verificabile ora" : "Va bene per la chat, non come agente" : "";
-        nodo8.textContent = voce.ripiegoChat ? `${prefissoRipiego} — ${testo3.replace(/^[^—]*— /, "")}` : testo3;
+        nodo9.textContent = voce.ripiegoChat ? `${prefissoRipiego} — ${testo3.replace(/^[^—]*— /, "")}` : testo3;
         const ctx = voce.esito.context;
         if (Number.isFinite(ctx?.availableTokens) && Number.isFinite(ctx?.requestedTokens)) {
-          nodo8.append(textElement("small", "", ` contesto ${ctx.availableTokens.toLocaleString("it-IT")} token su ${ctx.requestedTokens.toLocaleString("it-IT")} richiesti`));
+          nodo9.append(textElement("small", "", ` contesto ${ctx.availableTokens.toLocaleString("it-IT")} token su ${ctx.requestedTokens.toLocaleString("it-IT")} richiesti`));
         }
-        return nodo8;
+        return nodo9;
       }
       async function verificaCompatibilitaModello(modelId) {
         state.modelLab.fit.set(modelId, { inCorso: true });
@@ -17813,7 +18565,22 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const attuale = () => generazioniRicerca.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === "ricerca" && !mount.hidden : mount === $2("#researchListMount", sheetBody));
         function mostra(ricerche, { errore = null, caricamento = false } = {}) {
           if (pagina) {
-            aggiornaPaginaRicerca(mount, ricerche, { errore, caricamento, onAggiorna: () => caricaPannelloRicerca({ pagina: true }) });
+            aggiornaPaginaRicerca(mount, ricerche, {
+              errore,
+              caricamento,
+              onAggiorna: () => caricaPannelloRicerca({ pagina: true }),
+              /* 11/09 L7 (BC-21) — la sezione CONSULTA la ricerca: con `sessionId` il rapporto si legge dalla
+                 rotta che esiste già (`GET /library/:voceId/file`), il menu è lo stesso dell'albero e della
+                 Libreria, «Apri la conversazione» passa alla sessione figlia, la prosa passa dal render della
+                 chat e non da un secondo motore. Senza queste righe niente si rompe: il dettaglio degrada
+                 dichiarando che il rapporto è in Libreria. */
+              sessionId,
+              notifica: toast,
+              copia: (testo3) => copyText(testo3, "Rapporto copiato"),
+              onMenu: apriMenuAzioniLibreria,
+              onApriSessione: ({ id }) => passaASessione(id),
+              rendiMarkdown: renderizzaMarkdownSemplice
+            });
           } else {
             mount.setAttribute("role", ricerche.length ? "list" : "group");
             mount.replaceChildren(...ricerche.map(rigaRicerca));
@@ -17843,7 +18610,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
       }
       function rigaRicerca(ricerca) {
-        return creaReportRow(ricerca);
+        return creaReportRow(ricerca, { onApriRapporto: () => {
+          setView("ricerca");
+          caricaPannelloRicerca({ pagina: true });
+        } });
       }
       const generazioniForge = /* @__PURE__ */ new WeakMap();
       const pannelliForge = /* @__PURE__ */ new Set();
@@ -18716,16 +19486,16 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           giaAvvisate: notificheDiSistemaMandate
         });
         for (const n of daMandare) {
-          const { titolo: titolo2, corpo, tag } = testoNotificaSistema(n);
+          const { titolo: titolo2, corpo, tag: tag2 } = testoNotificaSistema(n);
           try {
-            const avviso = new Notification(titolo2, { body: corpo, tag, silent: false });
+            const avviso = new Notification(titolo2, { body: corpo, tag: tag2, silent: false });
             avviso.addEventListener("click", () => {
               window.focus();
               segnaNotificaVista(n.sessione);
               passaASessione(n.sessione.sessionId, n.sessione.taskId || n.sessione.sessionId, n.sessione.nome || n.sessione.taskId, normalizzaModelloSessione(n.sessione), n.sessione);
               avviso.close();
             });
-            notificheDiSistemaMandate.add(tag);
+            notificheDiSistemaMandate.add(tag2);
           } catch {
           }
         }
@@ -18916,7 +19686,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           const markdown = formato === "markdown";
           const testo3 = markdown ? costruisciTrascrizioneMarkdown(esportato) : JSON.stringify(esportato, null, 2);
           if (!testo3 || !testo3.trim()) throw new Error("Esportazione vuota: nessun contenuto da scrivere.");
-          scaricaTesto(testo3, `talos-sessione-${id}.${markdown ? "md" : "json"}`, markdown ? "text/markdown" : "application/json");
+          scaricaTesto2(testo3, `talos-sessione-${id}.${markdown ? "md" : "json"}`, markdown ? "text/markdown" : "application/json");
           toast("Sessione esportata", markdown ? "Trascrizione Markdown pronta." : "JSON pronto.");
           return { ok: true };
         } catch (error) {
@@ -20132,11 +20902,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
       }
       function nodoAlbero({ titolo: titolo2, sotto, token, giri, stato = "done", qui = false, onApri = null, azione = null }) {
-        const nodo8 = document.createElement("div");
-        nodo8.className = `talos-tree__node${qui ? " talos-tree__node--current" : ""}${onApri ? " talos-tree__node--branch" : ""}`;
-        nodo8.setAttribute("role", "treeitem");
-        nodo8.setAttribute("aria-selected", String(qui));
-        nodo8.setAttribute("aria-level", onApri ? "2" : "1");
+        const nodo9 = document.createElement("div");
+        nodo9.className = `talos-tree__node${qui ? " talos-tree__node--current" : ""}${onApri ? " talos-tree__node--branch" : ""}`;
+        nodo9.setAttribute("role", "treeitem");
+        nodo9.setAttribute("aria-selected", String(qui));
+        nodo9.setAttribute("aria-level", onApri ? "2" : "1");
         const rail = document.createElement("span");
         rail.className = "talos-tree__rail";
         const dot = document.createElement("span");
@@ -20155,8 +20925,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           bottone4.addEventListener("click", onApri);
           aside.append(bottone4);
         }
-        nodo8.append(rail, dot, testo3, aside);
-        return nodo8;
+        nodo9.append(rail, dot, testo3, aside);
+        return nodo9;
       }
       function soloToken(usage) {
         if (!usage) return "";
@@ -20346,7 +21116,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
               const isMarkdown = formato === "markdown";
               const testo3 = isMarkdown ? costruisciTrascrizioneMarkdown(esportato) : JSON.stringify(esportato, null, 2);
               if (!testo3 || !testo3.trim()) throw new Error("Esportazione vuota: nessun contenuto da scrivere.");
-              scaricaTesto(testo3, `talos-sessione-${state.realSession.id}.${isMarkdown ? "md" : "json"}`, isMarkdown ? "text/markdown" : "application/json");
+              scaricaTesto2(testo3, `talos-sessione-${state.realSession.id}.${isMarkdown ? "md" : "json"}`, isMarkdown ? "text/markdown" : "application/json");
               closeEmbeddedDialog(sheetDialog);
               toast("Sessione esportata", isMarkdown ? "Trascrizione Markdown pronta." : "JSON pronto.");
             } catch (error) {
@@ -20526,12 +21296,21 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (state.realSession.messageElements.size > 0) return { cosa: "TALOS sta scrivendo", dettaglio: "" };
         return { cosa: "TALOS sta lavorando", dettaglio: "" };
       }
+      let fondoInVistaRicordato = null;
+      let fondoInVistaRicordatoA = 0;
       function fondoConversazioneInVista() {
+        if (fondoInVistaRicordato !== null && performance.now() - fondoInVistaRicordatoA < 250) return fondoInVistaRicordato;
         const c = scrollerConversazione();
         if (!c) return true;
         const colonna = $2("#conversation");
         const coda = colonna ? parseFloat(getComputedStyle(colonna).paddingBottom) || 0 : 0;
-        return fondoInVista({ scrollHeight: c.scrollHeight, scrollTop: c.scrollTop, clientHeight: c.clientHeight, coda });
+        const valore = fondoInVista({ scrollHeight: c.scrollHeight, scrollTop: c.scrollTop, clientHeight: c.clientHeight, coda });
+        fondoInVistaRicordato = valore;
+        fondoInVistaRicordatoA = performance.now();
+        window.requestAnimationFrame(() => {
+          fondoInVistaRicordato = null;
+        });
+        return valore;
       }
       ROOT().addEventListener("talos-vai-in-fondo", () => {
         const sc = scrollerConversazione();
@@ -21584,13 +22363,16 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (nome === "naviga") return "Navigazione completata";
         return riassuntoEsitoAttrezzo(nome, riassuntoAttrezzo(nome, argomenti), testoEsito);
       }
-      function renderizzaArgomentiAttrezzo(contenitore, jsonGrezzo) {
+      function renderizzaArgomentiAttrezzo(contenitore, jsonGrezzo, argomentiGiaParsati = void 0) {
         contenitore.replaceChildren();
         let argomenti;
-        try {
-          argomenti = JSON.parse(jsonGrezzo);
-        } catch {
-          argomenti = null;
+        if (argomentiGiaParsati !== void 0) argomenti = argomentiGiaParsati;
+        else {
+          try {
+            argomenti = JSON.parse(jsonGrezzo);
+          } catch {
+            argomenti = null;
+          }
         }
         if (!argomenti || typeof argomenti !== "object") {
           const pre = document.createElement("pre");
@@ -22527,10 +23309,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             const osservati = /* @__PURE__ */ new WeakSet();
             const agganciaTutti = () => {
               if (!osservatore) return;
-              for (const nodo8 of [riquadroDaSeguire, document.querySelector("#browserVistaViva"), document.querySelector("#browserLive")]) {
-                if (nodo8 && nodo8.isConnected && !osservati.has(nodo8)) {
-                  osservati.add(nodo8);
-                  osservatore.observe(nodo8);
+              for (const nodo9 of [riquadroDaSeguire, document.querySelector("#browserVistaViva"), document.querySelector("#browserLive")]) {
+                if (nodo9 && nodo9.isConnected && !osservati.has(nodo9)) {
+                  osservati.add(nodo9);
+                  osservatore.observe(nodo9);
                 }
               }
             };
@@ -22903,7 +23685,7 @@ ${f}`;
         }
         return righe.join("\n");
       }
-      function scaricaTesto(testo3, nomeFile, mime) {
+      function scaricaTesto2(testo3, nomeFile, mime) {
         const blob = new Blob([testo3], { type: mime });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
@@ -24042,7 +24824,7 @@ ${testo3}` : testo3;
         mount.replaceChildren(pre);
       }
       async function rivelaERivelaRigaAlbero(percorsoCompleto) {
-        const trovaNodo = (percorso) => [...document.querySelectorAll("#inspector-files .ft-node")].find((nodo8) => nodo8.dataset.percorso === percorso);
+        const trovaNodo = (percorso) => [...document.querySelectorAll("#inspector-files .ft-node")].find((nodo9) => nodo9.dataset.percorso === percorso);
         const parti = String(percorsoCompleto || "").split("/").filter(Boolean);
         let percorsoPadre = "";
         for (let indice2 = 0; indice2 < Math.max(0, parti.length - 1); indice2 += 1) {
@@ -24413,6 +25195,41 @@ ${testo3}` : testo3;
         }
         state.realSession.usageSessione = totale2;
       }
+      const argomentiAttrezzoInAttesa = /* @__PURE__ */ new Set();
+      let frameArgomentiAttrezzo = null;
+      function aggiornaVistaArgomentiAttrezzo(info) {
+        argomentiAttrezzoInAttesa.delete(info);
+        if (!info) return;
+        let argomentiParsati = null;
+        try {
+          argomentiParsati = JSON.parse(info.argomenti);
+        } catch {
+        }
+        if (argomentiParsati) info.argomentiParsati = argomentiParsati;
+        if (info.comandoDellaPersona) {
+          if (info.summaryText) info.summaryText.textContent = "In corso…";
+          return;
+        }
+        if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
+        if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati);
+        if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti, argomentiParsati);
+      }
+      function chiediDisegnoArgomentiAttrezzo(info) {
+        argomentiAttrezzoInAttesa.add(info);
+        if (frameArgomentiAttrezzo !== null) return;
+        const generazione = state.realSession.generation;
+        frameArgomentiAttrezzo = window.requestAnimationFrame(() => {
+          frameArgomentiAttrezzo = null;
+          if (generazione !== state.realSession.generation) {
+            argomentiAttrezzoInAttesa.clear();
+            return;
+          }
+          for (const voce of [...argomentiAttrezzoInAttesa]) aggiornaVistaArgomentiAttrezzo(voce);
+        });
+      }
+      function disegnaArgomentiSeInAttesa(info) {
+        if (info && argomentiAttrezzoInAttesa.has(info)) aggiornaVistaArgomentiAttrezzo(info);
+      }
       function handleRealEvent(evento, generation) {
         if (generation !== state.realSession.generation) return;
         if (evento.type === "CUSTOM" && evento.name === "talos.context") {
@@ -24631,22 +25448,17 @@ ${testo3}` : testo3;
             const info = state.realSession.toolCallNomi.get(evento.toolCallId);
             if (info) {
               info.argomenti += evento.delta;
-              let argomentiParsati = null;
-              try {
-                argomentiParsati = JSON.parse(info.argomenti);
-              } catch {
-              }
-              if (argomentiParsati) info.argomentiParsati = argomentiParsati;
-              if (info.comandoDellaPersona) {
-                if (info.summaryText) info.summaryText.textContent = "In corso…";
+              if (state.realSession.deferHistoricalRendering) {
+                chiediDisegnoArgomentiAttrezzo(info);
                 break;
               }
-              if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
-              if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = bersaglioAttrezzoNudo(info.nome, argomentiParsati);
-              if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti);
+              aggiornaVistaArgomentiAttrezzo(info);
             }
             break;
           }
+          /* ⇧ il corpo che stava qui è diventato `aggiornaVistaArgomentiAttrezzo`, poco sopra: identico
+             riga per riga, solo chiamato una volta per fotogramma durante un replay invece che a ogni
+             delta. Il segnaposto qui sotto non esiste più. */
           /*
            * ⛔⛔⛔ D-10B — L'USCITA DI UN COMANDO, MENTRE ESCE.
            *
@@ -24665,6 +25477,7 @@ ${testo3}` : testo3;
            */
           case "ToolCallOutput": {
             const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+            disegnaArgomentiSeInAttesa(info);
             if (!info?.detail || typeof evento.delta !== "string" || !evento.delta) break;
             if (!info.uscitaViva) {
               const pre = document.createElement("pre");
@@ -24684,6 +25497,7 @@ ${testo3}` : testo3;
           }
           case "ToolCallResult": {
             const info = state.realSession.toolCallNomi.get(evento.toolCallId);
+            disegnaArgomentiSeInAttesa(info);
             if (info?.uscitaViva) {
               info.uscitaViva.parentElement?.remove();
               info.uscitaViva = null;
@@ -25338,7 +26152,7 @@ ${testo3}` : testo3;
           toast("Esportazione non riuscita", "Nessuna trascrizione si è lasciata leggere. Apri Doctor e riprova.");
           return;
         }
-        scaricaTesto(pezzi.join("\n\n---\n\n"), `talos-sessioni-${pezzi.length}.md`, "text/markdown");
+        scaricaTesto2(pezzi.join("\n\n---\n\n"), `talos-sessioni-${pezzi.length}.md`, "text/markdown");
         toast("Trascrizioni esportate", fallite.length === 0 ? `${pezzi.length} session${pezzi.length === 1 ? "e" : "i"} in un file Markdown.` : `${pezzi.length} nel file; ${fallite.length} non si è lasciata leggere.`);
       }
       function copiaIdentificativiSelezionati() {
@@ -25419,7 +26233,16 @@ ${testo3}` : testo3;
           conversation.classList.remove("is-restoring");
           inFondo();
         };
-        const osservatore = new MutationObserver(inFondo);
+        let fondoChiesto = false;
+        const chiediFondo = () => {
+          if (fondoChiesto || smesso) return;
+          fondoChiesto = true;
+          window.requestAnimationFrame(() => {
+            fondoChiesto = false;
+            inFondo();
+          });
+        };
+        const osservatore = new MutationObserver(chiediFondo);
         osservatore.observe(conversation, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class", "style"] });
         const scroller = scrollerConversazione(conversation);
         const smetti = () => {
@@ -25436,7 +26259,14 @@ ${testo3}` : testo3;
           if (distanza > 40) smetti();
         }
         scroller?.addEventListener("scroll", suScroll, { passive: true });
+        let visteUltime = -1;
+        let ultimoEventoNuovo = performance.now();
         const fermaSeFinito = window.setInterval(() => {
+          const viste = state.realSession.sequenzeViste?.size ?? 0;
+          if (viste !== visteUltime) {
+            visteUltime = viste;
+            ultimoEventoNuovo = performance.now();
+          }
           if (generation !== state.realSession.generation || state.realSession.eventoTerminaleVisto) {
             osservatore.disconnect();
             window.clearInterval(fermaSeFinito);
@@ -25447,9 +26277,17 @@ ${testo3}` : testo3;
             }
           }
         }, 200);
-        window.setTimeout(() => {
-          if (!smesso) scopri();
-        }, 8e3);
+        const inizioRipristino = performance.now();
+        const reteDiSicurezza = () => {
+          if (smesso) return;
+          const fermoDa = performance.now() - ultimoEventoNuovo;
+          if (fermoDa < 1e3 && performance.now() - inizioRipristino < 2e4) {
+            window.setTimeout(reteDiSicurezza, 500);
+            return;
+          }
+          scopri();
+        };
+        window.setTimeout(reteDiSicurezza, 8e3);
         window.setTimeout(smetti, 3e4);
       }
       function passaASessione(sessionId, taskId, nome, modello, impostazioniSessione = null) {
@@ -26712,9 +27550,9 @@ ${testo3}` : testo3;
           p.textContent = sottotitolo;
           return [h, p];
         }
-        function segnaEsito(nodo8, esito, testo3) {
-          nodo8.dataset.esito = esito;
-          nodo8.textContent = testo3;
+        function segnaEsito(nodo9, esito, testo3) {
+          nodo9.dataset.esito = esito;
+          nodo9.textContent = testo3;
         }
         async function disegnaProvider() {
           body.replaceChildren(...titolo2("Da dove pensa TALOS", "Serve un accesso a un modello: la chiave di un provider, salvata nel portachiavi di questo computer e mai nel browser, oppure un motore locale sul disco."));
@@ -27558,7 +28396,7 @@ ${blocchi.join("\n\n")}` : testa;
           worktree: "wt/auth-61c",
           note: "Interactive TALOS frontend mockup export"
         };
-        scaricaTesto(JSON.stringify(payload, null, 2), "talos-session-export.json", "application/json");
+        scaricaTesto2(JSON.stringify(payload, null, 2), "talos-session-export.json", "application/json");
         toast("Sessione esportata", "JSON pronto.");
       }
       async function shareSession() {
@@ -30886,9 +31724,9 @@ function montaPonteLegacy(documentObj = document) {
     legacyFiles.dataset.legacyId = legacyFiles.id;
     legacyFiles.removeAttribute("id");
   }
-  for (const nodo8 of legacy.querySelectorAll('[id^="fileTree"]')) {
-    nodo8.dataset.legacyId = nodo8.id;
-    nodo8.removeAttribute("id");
+  for (const nodo9 of legacy.querySelectorAll('[id^="fileTree"]')) {
+    nodo9.dataset.legacyId = nodo9.id;
+    nodo9.removeAttribute("id");
   }
   const alberoCartella = inspector.querySelector("#alberoCartella");
   if (alberoCartella) {

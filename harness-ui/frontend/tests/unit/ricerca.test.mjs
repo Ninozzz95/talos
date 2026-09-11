@@ -11,7 +11,10 @@ test('RICERCA-SEMANTICA: conclusa non significa fonti verificate',()=>{
 });
 test('RICERCA-TITOLO-DATA: titolo intero, data valida completa, metadati mancanti espliciti',()=>{
  const titolo='Confronto dettagliato dei permessi, delle autorizzazioni e del recupero dopo una ricerca interrotta';const t=testiRicerca({titolo,avviataAlle:'2026-09-04T16:42:00Z'});
- assert.equal(t.titolo,titolo);assert.equal(t.avviata,new Date('2026-09-04T16:42:00Z').toLocaleString('it-IT'));assert.match(t.dataBreve,/04\/09\/2026/);
+ assert.equal(t.titolo,titolo);/* 11/09 (L7): la data non porta più i SECONDI — «04/09/2026, 18:42:00» in una riga di elenco è un
+    numero che non dice niente. La pretesa segue la forma nuova, dichiarata campo per campo. */
+ assert.equal(t.avviata,new Date('2026-09-04T16:42:00Z').toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}));
+ assert.ok(!/d{2}:d{2}:d{2}/.test(t.avviata),'niente secondi');assert.match(t.dataBreve,/04\/09\/2026/);
  assert.deepEqual(testiRicerca({titolo:' ',avviataAlle:'non-data'}),{titolo:'Ricerca senza titolo',avviata:null,dataBreve:'Data non registrata'});
 });
 test('RICERCA-FILTRO: titolo completo, stato leggibile, stato reale e ordine conservato',()=>{

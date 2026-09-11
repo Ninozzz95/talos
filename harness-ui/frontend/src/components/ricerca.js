@@ -1,10 +1,22 @@
 /** ReportRow del mockup: metadati GET /research. WAI Tabs/Disclosure, 05/09/2026. */
-const STATI=new Map([['running',{testo:'In corso',tono:'info'}],['paused',{testo:'In pausa',tono:'warning'}],['done',{testo:'Conclusa',tono:'success'}],['cancelled',{testo:'Annullata',tono:''}],['failed',{testo:'Non riuscita',tono:'danger'}]]);
-export function statoRicerca(stato){return STATI.get(stato)||{testo:'Stato non registrato',tono:''};}
+import {statoRicercaApprofondita,articoloData} from './ricerca-dettaglio.js';
+/*
+ * ⛔ 11/09, lotto L7 — QUI NON C'E' PIU' UNA SECONDA TABELLA DI STATI.
+ *   Ne esisteva una di cinque voci; la rotta adesso ne manda otto (i tre del cancello di consegna:
+ *   `senza-rapporto`, `bloccata-dal-permesso`, `giri-esauriti`). Con due tabelle, questa riga
+ *   avrebbe detto «Stato non registrato» proprio sui tre stati nati per dire la verità — e nessun
+ *   test sarebbe diventato rosso. Le parole stanno in un posto solo, `ricerca-dettaglio.js`.
+ */
+export function statoRicerca(stato){const s=statoRicercaApprofondita(stato);return {testo:s.parola,tono:s.tono};}
 export function testiRicerca(ricerca){
- const titolo=typeof ricerca?.titolo==='string'&&ricerca.titolo.trim()?ricerca.titolo:'Ricerca senza titolo';
+ /* ⛔ 11/09: la rotta manda `domanda`; fino a ieri mandava `titolo`. Si leggono ENTRAMBI, o il
+    giorno del cambio tutta la cronologia diventa «Ricerca senza titolo» e nessun test se ne accorge. */
+ const scritta=[ricerca?.domanda,ricerca?.titolo].find(v=>typeof v==='string'&&v.trim());
+ const titolo=scritta?scritta.trim():'Ricerca senza titolo';
  const data=typeof ricerca?.avviataAlle==='string'?new Date(ricerca.avviataAlle):null,valida=data&&Number.isFinite(data.getTime());
- return {titolo,avviata:valida?data.toLocaleString('it-IT'):null,dataBreve:valida?'Avviata il '+data.toLocaleDateString('it-IT'):'Data non registrata'};
+ /* ⛔ «Avviata l'11/09», non «il 11»: l'articolo si elide davanti a otto e undici. La regola sta
+    in `articoloData`, in un posto solo, e vale anche per le schede della sezione. */
+ return {titolo,avviata:valida?data.toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):null,dataBreve:valida?'Avviata '+articoloData(ricerca?.avviataAlle)+data.toLocaleDateString('it-IT'):'Data non registrata'};
 }
 export function riepilogoRicerche(ricerche){return ricerche.length+(ricerche.length===1?' ricerca elencata':' ricerche elencate');}
 export function filtraRicerche(ricerche,{query='',stato='tutte'}={}){
@@ -12,15 +24,24 @@ export function filtraRicerche(ricerche,{query='',stato='tutte'}={}){
  return ricerche.filter(r=>(stato==='tutte'||r?.stato===stato)&&(!q||[testiRicerca(r).titolo,statoRicerca(r?.stato).testo].join(' ').toLocaleLowerCase('it').includes(q)));
 }
 function el(doc,tag,classe,testo){const n=doc.createElement(tag);if(classe)n.className=classe;if(testo!==undefined)n.textContent=testo;return n;}
-export function creaReportRow(ricerca,{document:doc=globalThis.document,aperta=false,onEspandi}={}){
+export function creaReportRow(ricerca,{document:doc=globalThis.document,aperta=false,onEspandi,onApriRapporto}={}){
  const t=testiRicerca(ricerca),stato=statoRicerca(ricerca?.stato);
  const riga=el(doc,'div','talos-list-row');riga.dataset.c='ReportRow';riga.dataset.researchId=ricerca?.id||'';riga.setAttribute('role','listitem');
  const icona=el(doc,'span','talos-list-row__icon'),svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),use=doc.createElementNS('http://www.w3.org/2000/svg','use');svg.setAttribute('class','i');svg.setAttribute('aria-hidden','true');use.setAttribute('href','#i-globe');svg.append(use);icona.append(svg);
  const testo=el(doc,'span','talos-list-row__text'),titolo=el(doc,'span','talos-list-row__title',t.titolo),sotto=el(doc,'span','talos-list-row__sub');titolo.title=t.titolo;testo.append(titolo,sotto);
  const aside=el(doc,'span','talos-list-row__aside');aside.append(el(doc,'span','talos-badge'+(stato.tono?' talos-badge--'+stato.tono:''),stato.testo));
- const apri=el(doc,'button','talos-button talos-button--ghost talos-button--sm','Apri rapporto');apri.type='button';apri.hidden=true;apri.dataset.richiede='fase3';
+ /*
+  * ⛔ 11/09, lotto L7 — il pulsante non è più `hidden` «in attesa della fase 3»: esiste quando c'è
+  *   davvero un rapporto da aprire (`reportLibraryId`) e quando qualcuno sa dove portarci
+  *   (`onApriRapporto`). Senza una delle due non compare: un bottone spento da diciotto giorni e
+  *   un bottone che promette una schermata che non si apre sono lo stesso difetto.
+  */
+ const apri=el(doc,'button','talos-button talos-button--ghost talos-button--sm','Apri il rapporto');apri.type='button';
+ apri.hidden=!(ricerca?.reportLibraryId&&typeof onApriRapporto==='function');
+ apri.setAttribute('aria-label','Apri il rapporto di '+t.titolo);
+ apri.addEventListener('click',()=>onApriRapporto?.(ricerca));
  const dettagli=el(doc,'button','talos-button talos-button--ghost talos-button--sm');dettagli.type='button';
- function mostra(){riga.dataset.aperta=String(aperta);sotto.textContent=aperta&&t.avviata?'Avviata il '+t.avviata:t.dataBreve;dettagli.textContent=aperta?'Chiudi':'Dettagli';dettagli.setAttribute('aria-expanded',String(aperta));dettagli.setAttribute('aria-label',(aperta?'Chiudi i dettagli di ':'Dettagli di ')+t.titolo);}
+ function mostra(){riga.dataset.aperta=String(aperta);sotto.textContent=aperta&&t.avviata?'Avviata '+articoloData(ricerca?.avviataAlle)+t.avviata:t.dataBreve;dettagli.textContent=aperta?'Chiudi':'Dettagli';dettagli.setAttribute('aria-expanded',String(aperta));dettagli.setAttribute('aria-label',(aperta?'Chiudi i dettagli di ':'Dettagli di ')+t.titolo);}
  dettagli.addEventListener('click',()=>{aperta=!aperta;mostra();onEspandi?.(aperta);});mostra();aside.append(apri,dettagli);riga.append(icona,testo,aside);return riga;
 }
 const PAGINE=new WeakMap();
