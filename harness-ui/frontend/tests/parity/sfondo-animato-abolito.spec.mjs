@@ -1,4 +1,12 @@
 /*
+ * ⛔⛔⛔ FUORI DAL `testMatch` DALLE 19 DELL'11/09/2026 — l'abolizione che questo cancello presidiava
+ *   è rientrata: l'owner ha consegnato il suo pacchetto di refactor UI, con lo sfondo animato
+ *   rifatto come renderer Canvas a 14 scene e la sezione «Sfondo» delle Impostazioni riaccesa
+ *   apposta. «L'ho abolito perché hai fallito quattro volte: eccezione, lo applichi tu.»
+ *   Non si cancella: se quel pacchetto dovesse essere tolto, torna qui e torna nel testMatch.
+ */
+
+/*
  * ⛔⛔⛔⛔ LO SFONDO ANIMATO NON SI DISEGNA, E NESSUNO PUÒ RIACCENDERLO SENZA ACCORGERSENE.
  *
  * Owner, 11/09/2026, dopo tre tentativi falliti nello stesso giorno: «SFONDO ANIMATO ABOLITO,

@@ -21,3 +21,7 @@ import { montaPonteLegacy } from './bridge/legacy-dom.js';
 
 montaPonteLegacy(document);
 await import('./legacy/app.js');
+
+/* TALOS-DESKTOP-FINAL-UI */
+const { initTalosDesktopBackground } = await import('./motion/desktop-background.js');
+initTalosDesktopBackground();

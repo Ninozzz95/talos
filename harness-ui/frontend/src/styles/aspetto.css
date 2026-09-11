@@ -484,42 +484,21 @@ body.background-motion-paused #schermoChat::after { animation-play-state: paused
   margin: 0;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════════════════════
- * ⛔⛔⛔⛔ 11/09/2026 — LO SFONDO ANIMATO È ABOLITO. Owner, dopo il terzo giro fallito:
- *   «SFONDO ANIMATO ABOLITO, NASCONDI DALLE IMPOSTAZIONI E SPEGNI COMPLETAMENTE GLI SFONDI ANIMATI
- *   DALLA UI, CI ANDREMO SUCCESSIVAMENTE, MI SONO ROTTO IL CAZZO».
- *
- * Questa riga vince su TUTTO il foglio qui sopra, che resta intero e non si cancella: descrive un
- * lavoro misurato (la curva del mobile, le alfe, i cancelli di leggibilità) che servirà quando si
- * tornerà a questa funzione. Ma oggi non si disegna: la scena non compare, in nessun tema, con
- * nessuna preferenza salvata, nemmeno se le classi del body dicono il contrario.
- *
- * ⛔ Spegnere QUI e non nel JavaScript è deliberato: le classi `background-motion-*` continuano ad
- *   arrivare dalle preferenze di chi le aveva già salvate, e una cura che vivesse solo nel codice
- *   che le scrive lascerebbe accesa la scena a chiunque abbia quello stato sul disco. Una regola
- *   universale con `!important` su questi due pseudo-elementi non si batte da valle: è la stessa
- *   forma che in questo progetto aveva già spento OGNI animazione dell'app, e qui la si usa apposta.
- * ═══════════════════════════════════════════════════════════════════════════════════════════════ */
-#schermoChat::before,
-#schermoChat::after,
-body::before,
-body::after {
-  display: none !important;
-  content: none !important;
-  animation: none !important;
-}
-/* E il velo di leggibilità non serve più: senza scena dietro, dipingerebbe un'ellisse di fondo
-   sopra il fondo — invisibile, ma un ridipinto in più a ogni scorrimento. */
-body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) .talos-conversation:has(#conversation > *) {
-  background-image: none !important;
-}
-
 /*
- * ⛔ E la sezione «Sfondo e risorse» sparisce dalle Impostazioni. Owner, stesso messaggio:
- *   «NASCONDI DALLE IMPOSTAZIONI». Un comando che non governa più niente è peggio di un comando
- *   assente: promette una cosa e non la fa — è esattamente la classe di difetto che questo
- *   progetto ha già pagato («ventisei comandi su trentanove: ZERO pixel»).
- * ⛔ Nascosta, non cancellata: quando la funzione tornerà, il markup e i campi sono ancora lì, e
- *   basta togliere questa regola. La riga del debito dice a che condizioni si toglie.
+ * ⛔ 11/09/2026, sera — L'ABOLIZIONE È RIENTRATA, e il perché va detto tutto.
+ *
+ * Alle 17 l'owner aveva abolito lo sfondo animato («SPEGNI COMPLETAMENTE») dopo che io avevo
+ * fallito quattro volte a renderlo presentabile — striscia gialla, rettangoli, velo che copriva
+ * la scena. Qui sotto stavano due regole universali con `!important` che spegnevano i due
+ * pseudo-elementi e nascondevano la sezione «Sfondo» delle Impostazioni.
+ *
+ * Alle 19 l'owner ha consegnato il SUO pacchetto (`.claude/refactor-ui-owner-2026-09-11/`): lo
+ * sfondo non è più un `::before` con gradienti, è un renderer Canvas a 14 scene
+ * (`src/motion/desktop-background.js`), con la sezione Impostazioni riaccesa apposta da
+ * `desktop-final.css`. «L'ho abolito perché hai fallito quattro volte: eccezione, lo applichi tu.»
+ * ⇒ Le due regole sono TOLTE, non commentate: con `!important` avrebbero vinto in silenzio sul
+ *   suo CSS, e il cancello `tests/parity/sfondo-animato-abolito.spec.mjs` esce dalla suite con
+ *   la ragione scritta in testa. Il resto di questo foglio — la scena a `::before`, i veli —
+ *   resta inerte finché nessun JS aggiunge `background-motion-*` al body: il renderer nuovo non
+ *   passa da quelle classi.
  */
-[data-settings-group="sfondo"] { display: none !important; }

@@ -55,7 +55,7 @@ export default defineConfig({
   //    la sua prova AL CONTRARIO falliva e un cancello inerte da' una sicurezza falsa; ora ne ha
   //    DUE che mordono (velo verde riconosciuto, colonna scoperchiata riconosciuta), verificate
   //    nei due versi — vedi la testata di quel file.
-  testMatch: ['componenti.spec.mjs', 'veli-sani-morde.spec.mjs', 'review-testata.spec.mjs', 'context-compactor.spec.mjs', 'nessun-errore-a-runtime.spec.mjs', 'sfondo-animato-abolito.spec.mjs'],
+  testMatch: ['componenti.spec.mjs', 'veli-sani-morde.spec.mjs', 'review-testata.spec.mjs', 'context-compactor.spec.mjs', 'nessun-errore-a-runtime.spec.mjs'],
   timeout: 60_000,
   fullyParallel: false,
   forbidOnly: true,
