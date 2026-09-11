@@ -5154,6 +5154,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
           },
           onMenu: apriMenuAzioniLibreria,
+          /* 11/09 — il contenuto del file nel dettaglio: la stessa iniezione che la Ricerca ha già
+             (:5343). Senza, il pannello cade sulla lettura strutturale minima e gli elenchi e i
+             blocchi di codice di un .md si leggono come paragrafi. */
+          rendiMarkdown: renderizzaMarkdownSemplice,
         });
       } else {
         mount.setAttribute('role', voci.length ? 'list' : 'group');
@@ -13130,11 +13134,33 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     row.focus();
   }
 
+  /*
+   * ⛔⛔⛔ 11/09/2026, owner dal vivo sulla foto dell'albero: «nel file tree posso espandere ma non
+   *   comprimere le cartelle».
+   *
+   * La CAUSA non stava qui dentro: il codice diceva già la cosa giusta (`aria-expanded`,
+   * `ft-open`, `treeOpen`) e continuava a dirla anche chiudendo. Mancava chi TRADUCEVA quello
+   * stato in pixel: le due regole `.ft-node > ul{display:none}` / `.ft-node.ft-open > ul{display:block}`
+   * vivevano nel foglio del monolite e NON sono arrivate nel foglio spedito oggi
+   * (`frontend/src/styles/*` → `public/styles.css`: zero occorrenze di `.ft-node`; l'unica copia
+   * superstite è in `dist/styles.css`, un build vecchio che non serve più nessuno). Senza quelle
+   * due righe la `<ul>` dei figli resta a schermo per sempre: l'albero si apriva, si «chiudeva»
+   * nello stato, e non cambiava di un pixel.
+   *
+   * ⇒ La cura NON rimette una terza copia di quelle regole in un foglio che un prossimo cutover
+   *   può perdere di nuovo in silenzio: lo stato aperto/chiuso lo porta l'attributo `hidden` sulla
+   *   `<ul>` dei figli, cioè il DOM stesso. È anche la forma del mockup approvato
+   *   (`public/index.html`, `<div role="group" hidden>`), ed è quella che regge senza CSS: la
+   *   regola `[hidden]{display:none}` sta nel foglio dell'USER AGENT, non nel nostro.
+   * ⭐ Effetto secondario voluto: `righeVisibiliAlbero` filtra per `offsetParent !== null`, quindi
+   *   da oggi le frecce su/giù saltano davvero i sottoalberi chiusi invece di attraversarli.
+   */
   async function apriCartellaAlbero(li, iconEl, childUl, percorsoCompleto, profondita) {
     state.realSession.treeOpen.add(percorsoCompleto);
     salvaImpostazioniAlbero();
     li.classList.add('ft-open');
     li.setAttribute('aria-expanded', 'true');
+    childUl.hidden = false;
     iconEl.classList.add('ft-open');
     iconEl.replaceChildren(iconaSvgAlbero('i-folder-open'));
     if (childUl.childElementCount > 0) return; // già caricata in questa sessione
@@ -13157,6 +13183,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   function chiudiCartellaAlbero(li, iconEl) {
     li.classList.remove('ft-open');
     li.setAttribute('aria-expanded', 'false');
+    /* ⛔ La `<ul>` si ritrova da `li`, non si chiede a chi chiama: `rivelaERivelaRigaAlbero` e il
+       gestore del clic la conoscono, ma un terzo chiamante domani no — e un parametro dimenticato
+       qui vorrebbe dire «chiusa nello stato, aperta a schermo», cioè esattamente il difetto curato. */
+    const childUl = li.querySelector(':scope > ul');
+    if (childUl) childUl.hidden = true;
     iconEl.classList.remove('ft-open');
     iconEl.replaceChildren(iconaSvgAlbero('i-folder'));
     state.realSession.treeOpen.delete(li.dataset.percorso);
@@ -13299,6 +13330,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
     const childUl = document.createElement('ul');
     childUl.setAttribute('role', 'group');
+    /* ⛔ Nasce CHIUSA, come dice `aria-expanded="false"` due righe sopra: prima l'attributo diceva
+       una cosa e i pixel un'altra. `apriCartellaAlbero` la scopre, `chiudiCartellaAlbero` la richiude. */
+    childUl.hidden = true;
     li.appendChild(childUl);
     row.addEventListener('click', () => {
       if (li.classList.contains('ft-open')) chiudiCartellaAlbero(li, icon);
@@ -13403,8 +13437,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     menu.className = 'ft-actions-menu';
     menu.setAttribute('role', 'menu');
 
-    // ⭐ 28/8 — tasto destro sulla RADICE dell'albero: nessuna rinomina/copia/elimina ha senso lì, solo creare.
+    /*
+     * ⭐ 28/8 — tasto destro sulla RADICE dell'albero: nessuna rinomina/copia/elimina ha senso lì.
+     * ⭐⭐⭐ 11/09 — ma «Apri in Esplora File» sì, ed è la voce che l'owner ha chiesto per primo: sta
+     *   IN TESTA, come nel menu di Esplora file stesso, perché è l'unica azione che non crea niente.
+     *   Stessa etichetta parola per parola della gemella sulle cartelle: due righe dello stesso menu
+     *   che dicono la stessa cosa in due modi sono già un difetto.
+     */
     const voci = soloCreazione ? [
+      { etichetta: 'Apri in Esplora File', icona: 'i-folder-open', azione: () => apriInEsploraFile(percorsoCompleto) },
       { etichetta: 'Nuovo file', icona: 'i-edit', azione: () => avviaCreaVoce(percorsoCompleto, 'file') },
       { etichetta: 'Nuova cartella', icona: 'i-folder', azione: () => avviaCreaVoce(percorsoCompleto, 'cartella') },
     ] : cartella ? [
@@ -13413,6 +13454,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       { etichetta: 'Rinomina', icona: 'i-edit', azione: () => avviaRinominaFile(percorsoCompleto, nome) },
       { etichetta: 'Copia', icona: 'i-link', azione: () => avviaCopiaFile(percorsoCompleto) },
       { etichetta: 'Imposta come radice', icona: 'i-folder', azione: () => impostaComeRadice(percorsoCompleto, nome) },
+      { etichetta: 'Apri in Esplora File', icona: 'i-folder-open', azione: () => apriInEsploraFile(percorsoCompleto) },
       { etichetta: 'Rivela in Esplora File', icona: 'i-folder-open', azione: () => rivelaFileInEsploraFile(percorsoCompleto) },
       { etichetta: 'Elimina', icona: 'i-trash', azione: () => avviaEliminaFile(percorsoCompleto, nome, cartella), pericoloso: true },
     ] : [
@@ -13451,11 +13493,25 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     function chiudiMenu() {
       menu.remove();
       document.removeEventListener('click', onDocumentClick);
-      document.removeEventListener('keydown', onKeydown);
+      document.removeEventListener('keydown', onKeydown, true); // stesso `true` della registrazione, o non si stacca
     }
     function onDocumentClick(event) { if (!menu.contains(event.target)) chiudiMenu(); }
     function onKeydown(event) {
       if (event.key !== 'Escape') return;
+      /*
+       * ⛔⛔ 11/09/2026, MISURATO SUL BANCO provando questo menu, non ipotizzato: con una sessione
+       *   viva, Esc chiudeva il menu del tasto destro **e** apriva il velo «fermo il giro?» — due
+       *   strati smontati da un tasto solo, e il secondo chiede di interrompere del lavoro pagato.
+       *   La catena di Esc della app (B16) è registrata all'avvio, quindi in fase di BOLLA gira
+       *   PRIMA di questa e uno `stopPropagation` qui arriverebbe troppo tardi.
+       * ⇒ Fase di CATTURA (terzo argomento `true`) e stop: lo stesso identico rimedio già adottato
+       *   l'11/09 per il menu della riga di sessione (vedi `onKeydown` di quel menu). ⛔ La cura
+       *   NON è un'eccezione dentro la catena B16: due menu che si chiudono in due modi diversi
+       *   divergono al primo cambiamento, e la regola WAI-ARIA APG è una sola — si smonta lo strato
+       *   più interno, e solo quello.
+       */
+      event.preventDefault();
+      event.stopPropagation();
       chiudiMenu();
       // ⭐ Dal tasto destro non c'è un bottone "···" a cui tornare — la riga stessa (già selezionata all'apertura) riceve il focus.
       (posizionamento.ancoraEl ?? document.querySelector('.ft-tree .ft-row.ft-selected'))?.focus();
@@ -13463,7 +13519,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     /* ⛔ setTimeout(...,0): STESSO difetto già trovato e corretto stanotte sul model-picker — il click che apre QUESTO menu è ancora in bubbling verso document quando la funzione ritorna; registrare subito chiuderebbe il menu nello stesso istante in cui si apre. */
     window.setTimeout(() => {
       document.addEventListener('click', onDocumentClick);
-      document.addEventListener('keydown', onKeydown);
+      document.addEventListener('keydown', onKeydown, true);
     }, 0);
   }
 
@@ -13637,6 +13693,28 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
   }
 
+  /*
+   * ⛔⛔⛔ 11/09/2026, owner dal vivo sulla foto dell'albero: «se faccio tasto destro sulla ROOT deve
+   *   poter spuntare "Apri", cioè devo poterla aprire su Windows». Non c'era: il tasto destro sulla
+   *   radice offriva solo «Nuovo file» e «Nuova cartella», e le cartelle avevano «Rivela» ma non
+   *   «Apri».
+   * ⛔ Non una seconda strada: stessa `apiPost`, stessa famiglia di rotte (`/tree/*`), stessa forma
+   *   di corpo `{percorso}` e stesso modo di dire che è andata male delle sorelle qui sopra. La sola
+   *   differenza è che `percorso` può essere la stringa VUOTA — la radice — e il server la accetta
+   *   solo per QUESTA azione (`workspace-files.mjs`, `ammettiRadice`).
+   * ⛔ «Apri» e «Rivela» restano due voci diverse perché sono due cose diverse su Windows: questa
+   *   apre la cartella, quella apre la cartella GENITORE con l'elemento evidenziato — e sulla radice
+   *   il genitore è già fuori dal workspace.
+   */
+  async function apriInEsploraFile(percorsoCompleto) {
+    try {
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tree/open`, { percorso: percorsoCompleto });
+      toast('Aperto in Esplora File', percorsoCompleto || nomeRadiceAlberoReale());
+    } catch (error) {
+      toast('Non riuscito', error.message);
+    }
+  }
+
   /**
    * Una sola ricostruzione del tree può essere in volo. Le invalidazioni che
    * arrivano durante la lettura non aprono fetch concorrenti: chiedono al
@@ -13693,6 +13771,26 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const radice = document.createElement('div');
     radice.className = 'tree-root talos-file-row'; // 06/9 B2: la radice come riga del mockup
     radice.append(iconaSvgAlbero('i-files'), textElement('strong', '', nomeRadiceAlberoReale()));
+    /*
+     * ⛔⛔ 11/09 — la radice aveva le sue azioni SOLO col tasto destro. Tre cose non andavano:
+     *   il menu era invisibile a chi non prova il tasto destro, era irraggiungibile da tastiera, e
+     *   ogni ALTRA riga dell'albero ha già il suo «···». La regola dell'owner del 10/09 vale anche
+     *   qui — più di due azioni su un oggetto ⇒ un menu overflow PIÙ il tasto destro, mai i bottoni
+     *   in fila — e da oggi le azioni della radice sono tre. Stesso bottone, stessa classe, stesso
+     *   menu delle righe: non una seconda implementazione.
+     */
+    if (!alberoInAnteprima()) {
+      const azioniRadice = document.createElement('button');
+      azioniRadice.type = 'button';
+      azioniRadice.className = 'ft-actions-btn talos-button talos-button--ghost talos-button--sm talos-icon-button';
+      azioniRadice.setAttribute('aria-label', `Azioni su ${nomeRadiceAlberoReale()}`);
+      azioniRadice.appendChild(iconaSvgAlbero('i-more'));
+      azioniRadice.addEventListener('click', (e) => {
+        e.stopPropagation();
+        apriMenuAzioniFile('', nomeRadiceAlberoReale(), { ancoraEl: azioniRadice }, true, true);
+      });
+      radice.appendChild(azioniRadice);
+    }
     // ⭐⭐⭐ 28/8, owner: "comandi crud in generale" — creare un file/una cartella senza dover prima cliccare col destro su una cartella esistente: la radice stessa accetta lo stesso menu, ridotto alle due sole voci di creazione (percorsoBase '').
     if (!alberoInAnteprima()) radice.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -13738,8 +13836,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       else if (e.key === 'ArrowUp') { e.preventDefault(); if (righe[i - 1]) impostaFocusRigaAlbero(ul, righe[i - 1]); }
       else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        if (eCartella && li.getAttribute('aria-expanded') === 'false') row.click();
-        else if (righe[i + 1]) impostaFocusRigaAlbero(ul, righe[i + 1]);
+        /*
+         * ⛔ 11/09 — W3C ARIA Authoring Practices Guide, pattern «Tree View», sezione Keyboard
+         *   Interaction (w3.org/WAI/ARIA/apg/patterns/treeview/, letta 11/09/2026): freccia destra
+         *   «When focus is on a closed node, opens the node; focus does not move» · «When focus is
+         *   on a open node, moves focus to the first child node» · «When focus is on an end node,
+         *   does nothing». L'ultimo dei tre mancava: su un FILE la freccia destra scendeva alla riga
+         *   dopo, cioè faceva il lavoro della freccia giù. Su una cartella APERTA la riga dopo È il
+         *   primo figlio, ma lo si chiede al sottoalbero invece di dedurlo dall'ordine visivo.
+         */
+        if (!eCartella) return;
+        if (li.getAttribute('aria-expanded') === 'false') { row.click(); return; }
+        const primoFiglio = li.querySelector(':scope > ul > .ft-node > .ft-row');
+        if (primoFiglio) impostaFocusRigaAlbero(ul, primoFiglio);
       } else if (e.key === 'ArrowLeft') {
         e.preventDefault();
         if (eCartella && li.getAttribute('aria-expanded') === 'true') row.click();
@@ -19862,6 +19971,11 @@ ${testo}`;
     // ⭐ 28/8 — Terminale REALE (LEDGER-TERMINALE-REALE.md): esposte per i test dedicati, stesso principio di sopra — internals reali, non un secondo contratto.
     apriVistaTerminaleReale,
     apriFileAlbero,
+    /* ⛔ 11/09 — l'albero dei file si disegna solo dopo un RunStarted vero. Esposto perché i due
+       difetti dell'11/09 (la cartella che non si chiudeva, il tasto destro senza «Apri» sulla
+       radice) si provano sull'albero VERO con le risposte di rete finte, non su una fixture di
+       HTML scritta a mano che non è il componente. Internals reali, non un secondo contratto. */
+    renderizzaAlberoReale,
     scollegaTerminaleReale,
     statoTerminale,
     /* ⭐ 08/9 CB-10 — il risolutore dei simboli e il registro dei nomi non risolti: esposti perché

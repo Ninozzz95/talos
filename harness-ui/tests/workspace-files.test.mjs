@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import test from 'node:test';
 
 import {
+  apriInEsploraFile,
   copiaFile,
   creaFileWorkspace,
   DIMENSIONE_MASSIMA_CREAZIONE,
@@ -775,6 +776,144 @@ test('⛔⛔ BC-11 una modalita scritta male viene DETTA, non indovinata', async
       (e) => { assert.match(e.message, /"nuovo".*"accoda"/s); return true; },
     );
     assert.ok(!existsSync(join(radice, 'x.txt')));
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+
+/*
+ * XXXX 11/09/2026 - «APRI IN ESPLORA FILE» SULLA RADICE. Owner, dal vivo sulla foto dell'albero:
+ *   «se faccio tasto destro sulla ROOT deve poter spuntare "Apri", cioe' devo poterla aprire su
+ *   Windows». Prima non si poteva: `risolviPercorsoEsistente` respingeva la stringa vuota E il
+ *   percorso che coincide con la radice, per TUTTE le azioni indistintamente.
+ *
+ * Queste prove misurano le due meta' che contano:
+ *   - che la radice e le cartelle ora si aprano, con UN solo argomento argv e senza `/select`;
+ *   - che la deroga valga SOLO per questa azione: rinomina, elimina e copia devono continuare a
+ *     dire di no alla radice. Una deroga che si allarga in silenzio e' peggio del difetto che cura.
+ * Verificato anche fuori dai finti, su Windows vero (11/09): due finestre di Esplora file aperte
+ * davvero, una sulla radice e una sulla sottocartella, in 140 e 144 ms - contate con
+ * `Shell.Application.Windows()` prima e dopo, e richiuse.
+ */
+test('apriInEsploraFile: la RADICE (percorso vuoto) si apre - UN argomento argv, nessun /select', async () => {
+  const radice = sessioneVera();
+  try {
+    let visto = null;
+    const esito = await apriInEsploraFile({ cartella: radice, percorso: '' }, {
+      platform: 'win32',
+      execFileFn: (comando, argomenti, opzioni, callback) => { visto = { comando, argomenti, opzioni }; callback(null); },
+    });
+    assert.deepEqual(esito, { aperto: true });
+    assert.equal(visto.comando, 'explorer.exe');
+    assert.equal(visto.argomenti.length, 1, 'un solo argomento: niente stringa di comando, niente shell');
+    assert.equal(realpathSync(visto.argomenti[0]), realpathSync(radice));
+    assert.equal(visto.argomenti[0].includes('/select'), false, 'apri NON e rivela: /select aprirebbe il GENITORE del workspace');
+    assert.equal(typeof visto.opzioni, 'object', 'se qui arriva una FUNZIONE, il richiamo e finito nel posto sbagliato (difetto 10/09)');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('apriInEsploraFile: una CARTELLA dentro il workspace si apre, e anche un file', async () => {
+  const radice = sessioneVera();
+  try {
+    for (const percorso of ['sub', 'a.txt']) {
+      let visto = null;
+      // eslint-disable-next-line no-await-in-loop -- due casi in fila, non c'e' niente da parallelizzare
+      const esito = await apriInEsploraFile({ cartella: radice, percorso }, {
+        platform: 'win32',
+        execFileFn: (comando, argomenti, opzioni, callback) => { visto = argomenti; callback(null); },
+      });
+      assert.deepEqual(esito, { aperto: true }, percorso + ' doveva aprirsi');
+      assert.equal(realpathSync(visto[0]), realpathSync(join(radice, percorso)));
+    }
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('apriInEsploraFile AL CONTRARIO: fuori dal workspace non si apre NIENTE, e explorer non viene mai chiamato', async () => {
+  const radice = sessioneVera();
+  const fuori = mkdtempSync(join(tmpdir(), 'talos-fuori-'));
+  writeFileSync(join(fuori, 'segreto.txt'), 'non deve uscire');
+  try {
+    let chiamate = 0;
+    const spia = (comando, argomenti, opzioni, callback) => { chiamate += 1; callback(null); };
+    const casi = [
+      ['risalita', '..'],
+      ['risalita doppia', '../..'],
+      ['risalita con nome', '../' + basename(fuori) + '/segreto.txt'],
+      ['percorso assoluto altrove', join(fuori, 'segreto.txt')],
+      ['percorso assoluto di sistema', process.platform === 'win32' ? 'C:\\Windows' : '/etc'],
+      ['byte nullo', 'a.txt\u0000'],
+      ['non e una stringa', 42],
+    ];
+    for (const [nome, percorso] of casi) {
+      // eslint-disable-next-line no-await-in-loop -- l'elenco dei casi si legge meglio in fila
+      await assert.rejects(
+        () => apriInEsploraFile({ cartella: radice, percorso }, { platform: 'win32', execFileFn: spia }),
+        (e) => e instanceof WorkspaceFileError,
+        nome + ': doveva essere RESPINTO',
+      );
+    }
+    assert.equal(chiamate, 0, 'nessun caso respinto deve essere arrivato a explorer.exe');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+    rmSync(fuori, { recursive: true, force: true });
+  }
+});
+
+test('apriInEsploraFile AL CONTRARIO: un COLLEGAMENTO che punta fuori viene canonicalizzato e respinto', async (t) => {
+  const radice = sessioneVera();
+  const fuori = mkdtempSync(join(tmpdir(), 'talos-fuori-'));
+  writeFileSync(join(fuori, 'segreto.txt'), 'non deve uscire');
+  try {
+    try {
+      symlinkSync(fuori, join(radice, 'scorciatoia'), 'junction');
+    } catch {
+      t.skip('questo sistema non permette di creare collegamenti senza privilegi: il caso resta NON verificato qui');
+      return;
+    }
+    let chiamate = 0;
+    await assert.rejects(
+      () => apriInEsploraFile({ cartella: radice, percorso: 'scorciatoia' }, { platform: 'win32', execFileFn: (a, b, c, cb) => { chiamate += 1; cb(null); } }),
+      (e) => e instanceof WorkspaceFileError,
+      'il collegamento porta FUORI: realpath lo scopre e isPathInside lo respinge',
+    );
+    assert.equal(chiamate, 0);
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+    rmSync(fuori, { recursive: true, force: true });
+  }
+});
+
+test('apriInEsploraFile AL CONTRARIO: fuori da Windows si DICHIARA, non finge', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      () => apriInEsploraFile({ cartella: radice, percorso: '' }, { platform: 'linux', execFileFn: () => { throw new Error('non deve essere chiamato'); } }),
+      (e) => e.code === 'PLATFORM_UNSUPPORTED',
+    );
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('LA DEROGA NON SI E ALLARGATA: rinomina, elimina, copia e le altre dicono ancora di NO alla radice', async () => {
+  const radice = sessioneVera();
+  try {
+    for (const [nome, chiama] of [
+      ['rinomina', () => rinominaFile({ cartella: radice, percorso: '', nuovoNome: 'altro' })],
+      ['elimina', () => eliminaFile({ cartella: radice, percorso: '' })],
+      ['copia', () => copiaFile({ cartella: radice, percorso: '' })],
+      ['leggi', () => leggiContenutoFile({ cartella: radice, percorso: '' })],
+      ['rivela', () => rivelaInEsploraFile({ cartella: radice, percorso: '' }, { platform: 'win32', execFileFn: (a, b, c, cb) => cb(null) })],
+      ['apri col programma', () => apriFileConProgrammaPredefinito({ cartella: radice, percorso: '' }, { platform: 'win32', execFileFn: (a, b, c, cb) => cb(null) })],
+    ]) {
+      // eslint-disable-next-line no-await-in-loop -- l'elenco si legge meglio in fila
+      await assert.rejects(chiama, (e) => e instanceof WorkspaceFileError, nome + ': la radice NON e un bersaglio valido per questa azione');
+    }
   } finally {
     rmSync(radice, { recursive: true, force: true });
   }

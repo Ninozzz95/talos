@@ -38,19 +38,35 @@ export class WorkspaceFileError extends Error {
 /** ⛔ 512 KB: un'anteprima, non un editor — file più grandi si dichiarano troppo grandi invece di essere troncati in silenzio. */
 const DIMENSIONE_MASSIMA_ANTEPRIMA = 512 * 1024;
 
-function risolviPercorsoEsistente(cartella, percorso, { realpathSyncFn = realpathSync } = {}) {
-  if (typeof percorso !== 'string' || percorso.length === 0 || percorso.includes('\0') || isAbsolute(percorso)) {
+/*
+ * ⛔⛔ 11/09/2026 — `ammettiRadice` nasce dall'unica azione che sulla RADICE ha senso: «Apri in
+ *   Esplora file» (owner, dal vivo: «se faccio tasto destro sulla ROOT deve poter spuntare "Apri",
+ *   cioè devo poterla aprire su Windows»). Tutte le altre — rinomina, elimina, copia, sposta —
+ *   restano vietate sulla radice, ed è per questo che il divieto NON è stato tolto ma reso una
+ *   scelta di chi chiama: il valore di default è ancora `false`, quindi nessuna chiamata già
+ *   scritta cambia comportamento.
+ * ⛔ Quello che NON si allenta mai: `realpath` prima del confronto (un collegamento simbolico che
+ *   punta fuori viene canonicalizzato e respinto da `isPathInside`), niente percorsi assoluti,
+ *   niente `\0`. Un `..` che risale sopra la radice cade su `isPathInside`, esattamente come prima.
+ */
+function risolviPercorsoEsistente(cartella, percorso, { realpathSyncFn = realpathSync } = {}, ammettiRadice = false) {
+  const vuoto = percorso === '';
+  if (typeof percorso !== 'string' || percorso.includes('\0') || isAbsolute(percorso) || (vuoto && !ammettiRadice)) {
     throw new WorkspaceFileError('Percorso non valido');
   }
   const radiceReale = realpathSyncFn(cartella);
   let reale;
   try {
-    reale = realpathSyncFn(join(cartella, percorso));
+    reale = vuoto ? radiceReale : realpathSyncFn(join(cartella, percorso));
   } catch {
     throw new WorkspaceFileError('File non trovato', 'FILE_NOT_FOUND');
   }
-  if (!isPathInside(radiceReale, reale) || reale === radiceReale) {
-    // ⛔ reale === radiceReale: nessuna delle azioni di questo file ha senso sulla RADICE della sessione stessa (rinominarla/eliminarla è un disastro diverso, fuori scope qui)
+  // ⛔ `isPathInside` dice `true` anche quando i due percorsi COINCIDONO (`relative()` torna ''): il confine vale comunque, ed è il controllo sotto a decidere se la radice stessa è ammessa.
+  if (!isPathInside(radiceReale, reale)) {
+    throw new WorkspaceFileError('Percorso fuori dalla cartella della sessione');
+  }
+  if (reale === radiceReale && !ammettiRadice) {
+    // ⛔ nessuna delle azioni che passano di qui con `ammettiRadice=false` ha senso sulla RADICE della sessione stessa (rinominarla/eliminarla è un disastro diverso, fuori scope qui)
     throw new WorkspaceFileError('Percorso fuori dalla cartella della sessione, o è la radice stessa');
   }
   return { radiceReale, reale };
@@ -467,6 +483,72 @@ export async function creaVoceWorkspace({ cartella, percorsoBase, nome, tipo }, 
  *   che con un nome contenente `&` o `"` sarebbe un'iniezione.
  * ⛔ E come la sorella: fuori da Windows non finge, dichiara che non è disponibile.
  */
+/*
+ * ⛔⛔ 11/09/2026 — L'UNICA PORTA verso `explorer.exe`, estratta dalle tre azioni che la usavano con
+ *   lo stesso identico preambolo copiato tre volte. Non è un riordino estetico: il difetto del
+ *   10/09 (il richiamo finito nel posto delle OPZIONI, la promessa mai risolta, la richiesta HTTP
+ *   appesa per sempre) viveva in DUE copie e andava curato in due posti. «Una difesa copiata è una
+ *   difesa che un giorno diverge» — qui la forma del richiamo, la politica di processo e la regola
+ *   «un codice d'uscita non-zero non è un guasto» stanno scritte una volta sola.
+ * ⛔ Gli argomenti restano ARGOMENTI (`execFile`, mai una shell): un nome con `&`, `"` o uno spazio
+ *   non può diventare un comando.
+ */
+function lanciaExplorer(argomenti, cartella, deps) {
+  const politica = (comando, args, opzioni, callback) => EXPLORER_PROCESS_POLICY.execFile(comando, args, {
+    ...opzioni,
+    cwd: opzioni?.cwd ?? cartella,
+  }, callback);
+  const grezza = deps.execFileFn ?? politica;
+  /* Chi inietta un finto a tre parametri continua a funzionare: l'ultimo argomento è il richiamo. */
+  const execFileFn = (comando, args, opzioni, callback) => (
+    grezza.length <= 3
+      ? grezza(comando, args, callback)
+      : grezza(comando, args, opzioni, callback)
+  );
+  return new Promise((ok, no) => {
+    execFileFn('explorer.exe', argomenti, {}, (errore) => {
+      if (errore && errore.code === 'ENOENT') { no(errore); return; }
+      ok(); // ⛔ explorer.exe esce con codici non-zero anche quando ha funzionato: è noto, e non è un guasto
+    });
+  });
+}
+
+/*
+ * ⛔⛔⛔ 11/09/2026 — «APRI IN ESPLORA FILE», owner dal vivo sulla foto dell'albero: «se faccio tasto
+ *   destro sulla ROOT deve poter spuntare "Apri", cioè devo poterla aprire su Windows».
+ *
+ * Questa è la sorella di `apriFileConProgrammaPredefinito` che sa dire di sì anche a una CARTELLA e
+ * alla RADICE della sessione (`percorso: ''`). Perché non si è semplicemente allargata quella:
+ *  · la Libreria la usa per i FILE e il suo rifiuto su una cartella è un contratto provato
+ *    («⛔ APRI, AL CONTRARIO: una cartella non si apre col programma») — un rifiuto che passa a un sì
+ *    non è un allargamento, è un'altra funzione;
+ *  · qui invece «aprire» una cartella ha un significato Windows preciso e diverso.
+ * ⛔ Ma la PORTA è la stessa (`lanciaExplorer`) e la DIFESA è la stessa (`risolviPercorsoEsistente`,
+ *   con l'unica deroga dichiarata: la radice è ammessa) — mai una seconda validazione da tenere
+ *   allineata alla prima.
+ *
+ * Ricerca 11/09/2026, PRIMA di scrivere (WebSearch esaurito per la sessione ⇒ fonti primarie via
+ * WebFetch, dichiarato nel rapporto):
+ *  · Microsoft Learn, «Launching Applications (ShellExecute, ShellExecuteEx, SHELLEXECUTEINFO)»
+ *    (learn.microsoft.com/en-us/windows/win32/shell/launch, pagina datata 2025-07-02, letta
+ *    11/09/2026): il verbo predefinito di un oggetto della Shell è `open`, e vale per «file or
+ *    folder objects» — cioè aprire una CARTELLA è la stessa operazione di aprire un file, con un
+ *    gestore diverso (la finestra di Esplora file invece del programma associato all'estensione).
+ *    ⇒ `explorer.exe <cartella>` è la stessa porta già in uso per i file, senza `/select`.
+ *  · Stessa pagina: `/select` non compare fra i verbi — è lo switch di Explorer che apre la
+ *    cartella GENITORE con l'elemento evidenziato. ⇒ sulla radice sarebbe la cosa sbagliata: aprirebbe
+ *    il genitore del workspace, cioè un posto FUORI dal workspace. «Apri» e «Rivela» restano due
+ *    azioni diverse, e questa è quella che l'owner ha chiesto.
+ */
+export async function apriInEsploraFile({ cartella, percorso }, deps = {}) {
+  const { reale } = risolviPercorsoEsistente(cartella, percorso, deps, true);
+  if ((deps.platform ?? process.platform) !== 'win32') {
+    throw new WorkspaceFileError('Disponibile solo su Windows', 'PLATFORM_UNSUPPORTED');
+  }
+  await lanciaExplorer([reale], cartella, deps);
+  return { aperto: true };
+}
+
 export async function apriFileConProgrammaPredefinito({ cartella, percorso }, deps = {}) {
   const { reale } = risolviPercorsoEsistente(cartella, percorso, deps);
   if ((deps.platform ?? process.platform) !== 'win32') {
@@ -488,23 +570,7 @@ export async function apriFileConProgrammaPredefinito({ cartella, percorso }, de
    *   cioè con la forma sbagliata — un finto che non imita il vero misura il finto. Ora il wrapper
    *   accetta entrambe le forme, e una prova nuova chiama con QUATTRO argomenti come fa il codice.
    */
-  const politica = (comando, argomenti, opzioni, callback) => EXPLORER_PROCESS_POLICY.execFile(comando, argomenti, {
-    ...opzioni,
-    cwd: opzioni?.cwd ?? cartella,
-  }, callback);
-  const grezza = deps.execFileFn ?? politica;
-  /* Chi inietta un finto a tre parametri continua a funzionare: l'ultimo argomento è il richiamo. */
-  const execFileFn = (comando, argomenti, opzioni, callback) => (
-    grezza.length <= 3
-      ? grezza(comando, argomenti, callback)
-      : grezza(comando, argomenti, opzioni, callback)
-  );
-  await new Promise((ok, no) => {
-    execFileFn('explorer.exe', [reale], {}, (errore) => {
-      if (errore && errore.code === 'ENOENT') { no(errore); return; }
-      ok(); // ⛔ explorer.exe esce con codici non-zero anche quando ha funzionato: è noto, e non è un guasto
-    });
-  });
+  await lanciaExplorer([reale], cartella, deps);
   return { aperto: true };
 }
 
@@ -513,23 +579,9 @@ export async function rivelaInEsploraFile({ cartella, percorso }, deps = {}) {
   if ((deps.platform ?? process.platform) !== 'win32') {
     throw new WorkspaceFileError('Disponibile solo su Windows', 'PLATFORM_UNSUPPORTED');
   }
-  /* ⛔ Stesso wrapper della funzione qui sopra, e per lo stesso motivo: chiamato con tre argomenti
-     il richiamo finiva nel posto delle opzioni e la promessa non si risolveva mai. Vedi là la storia. */
-  const politica = (comando, argomenti, opzioni, callback) => EXPLORER_PROCESS_POLICY.execFile(comando, argomenti, {
-    ...opzioni,
-    cwd: opzioni?.cwd ?? cartella,
-  }, callback);
-  const grezza = deps.execFileFn ?? politica;
-  const execFileFn = (comando, argomenti, opzioni, callback) => (
-    grezza.length <= 3
-      ? grezza(comando, argomenti, callback)
-      : grezza(comando, argomenti, opzioni, callback)
-  );
-  await new Promise((ok, no) => {
-    execFileFn('explorer.exe', [`/select,${reale}`], {}, (errore) => {
-      if (errore && errore.code === 'ENOENT') { no(errore); return; }
-      ok(); // qualunque altro codice di uscita: comportamento noto di explorer.exe, non un fallimento
-    });
-  });
+  /* ⛔ Stessa porta della sorella qui sopra (`lanciaExplorer`), e per lo stesso motivo: chiamato con
+     tre argomenti il richiamo finiva nel posto delle opzioni e la promessa non si risolveva mai.
+     Vedi là la storia — e ora quella cura vive in UN posto solo, non in tre copie. */
+  await lanciaExplorer([`/select,${reale}`], cartella, deps);
   return { rivelato: true };
 }
