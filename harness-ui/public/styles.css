@@ -11044,5 +11044,9 @@ body.background-motion-paused::after {
   inset: 0;
   margin: 0;
 }
+body::before,
+body::after {
+  display: none !important;
+}
 
 /* src/styles/main.css */
