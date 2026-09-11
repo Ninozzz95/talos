@@ -1096,7 +1096,7 @@ export async function avviaSessione({
              sopra) ammette `TALOS_SOURCE_TEXT_FORMATS` più `md` e `csv`, e `html` non è in nessuno
              dei due. Il commento sopra lo diceva già, questa riga no: il suggerimento mandava il
              modello dritto sull'errore che stava rifiutando. */
-          + 'Send the whole document in one call, or use a text format (md, txt, or a source format) if you need to build it in pieces.',
+          + 'Send the whole document in one call, or use a text format (md, csv, txt, or a source format) if you need to build it in pieces.',
       };
     }
 
