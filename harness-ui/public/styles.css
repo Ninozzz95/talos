@@ -10660,20 +10660,8 @@ dialog.command-dialog .tool-chips .status-chip,
 }
 
 /* src/styles/sessioni-vive.css */
-.talos-session-item[data-novita=si] {
-  position: relative;
-}
-.talos-session-item[data-novita=si]::before {
-  content: "";
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  margin-top: -3px;
-  border-radius: 999px;
-  background: var(--talos-accent);
-  box-shadow: 0 0 0 3px var(--talos-accent-soft, transparent);
+.talos-session-item[data-novita=si] .talos-dot {
+  box-shadow: 0 0 0 3px var(--talos-accent-soft, transparent), 0 0 0 4px var(--talos-accent);
 }
 
 /* src/styles/attesa-shimmer.css */

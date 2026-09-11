@@ -15,16 +15,14 @@
  * ⛔ Niente animazione che continua: un pulsare infinito nella barra laterale è la cosa che si
  *   guarda invece di leggere. Qui compare e basta.
  */
-.talos-session-item[data-novita='si'] { position: relative; }
-.talos-session-item[data-novita='si']::before {
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 50%;
-  width: 6px;
-  height: 6px;
-  margin-top: -3px;
-  border-radius: 999px;
-  background: var(--talos-accent);
-  box-shadow: 0 0 0 3px var(--talos-accent-soft, transparent);
+/*
+ * ⛔ 11/09 sera, owner sulla foto: «c'è un puntino strano in più». Il segnale era un SECONDO
+ *   cerchietto a `left:4px`, che dopo il porting della barra (involucro `.td-session-row`, riga con
+ *   padding e bordo suoi) finiva fuori dalla riga, sul bordo, e non si capiva cosa fosse. Un segnale
+ *   in un posto solo: la novità è un ALONE sul pallino di stato che la riga ha già (`.talos-dot`),
+ *   niente da aggiungere e niente che sporga. Stessa durata di prima (SEGNALE_NOVITA_MS), niente
+ *   animazione infinita.
+ */
+.talos-session-item[data-novita='si'] .talos-dot {
+  box-shadow: 0 0 0 3px var(--talos-accent-soft, transparent), 0 0 0 4px var(--talos-accent);
 }

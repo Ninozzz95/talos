@@ -964,6 +964,17 @@ debito**: lo stesso ordine dell'owner («genera dentro questa cartella un file h
 righe») con `glm-5.3-flash` su una cartella temporanea, contando i giri e i token — costa qualche
 centesimo, parte col suo sì.
 
+### BC-11 ✅ CHIUSO dal vivo (11/09, 23:27-23:35, giro accordato dall'owner)
+Stesso ordine («genera dentro questa cartella un file html di almeno 1000 righe: un simulatore di
+tokenizer…»), `glm-5.3-flash`, cartella temporanea: **concluso in 451 s**, `simulatore-tokenizer.html`
+**2.238 righe / 60.144 byte** scritto con **4 chiamate di `scrivi`** (1 create + 3 append), più
+`package.json` e uno `smoke-test.mjs` che il modello ha voluto lanciare (2 shell). **39 giri**, zero
+EISDIR, zero «riga di comando troppo lunga», zero percorsi vuoti, zero rifiuti. Token: 714.985 dentro
+di cui **627.008 dalla cache (87,7 %)**, 60.047 fuori — su glm-5.3-flash la cache del prefisso PRENDE
+(su glm-4.7-flash era 0). Prima: 13 giri e non finito, poi 170 giri fermati a mano. Sessione
+`1da2d212` nello store del 4174. Resta da dire al modello quanto può scrivere in un colpo (oggi lo
+scopre da solo, ma senza sbatterci): dettaglio minore, non riapre il debito.
+
 ## BC-19 — il logo del velo d'avvio deve leggere i token del tema
 Owner 11/09/2026 sera: «anche il logo di boot deve essere legato ai token del tema». Oggi il velo
 `#talosAvvio` (`frontend/index.template.html`, `frontend/src/avvio.js`) porta il marchio copiato dal
