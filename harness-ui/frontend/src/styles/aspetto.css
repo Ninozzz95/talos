@@ -261,8 +261,41 @@ body:is(.background-motion-active, .background-motion-paused):not(.background-mo
  * between the image and text, **or use a solid background for the text area**»*. Fra le due si
  * sceglie la seconda, che è l'unica che non ha un numero da azzeccare.
  */
+/*
+ * ⛔⛔⛔ 11/09/2026, SERA — LE DUE RIGHE CHE SEGUONO NASCONO DALLA FOTO DELL'OWNER: «lo sfondo
+ *   animato viene o tagliato o parte da molto sotto». Riprodotto sul banco e MISURATO, non dedotto
+ *   (rapporto `.claude/RAPPORTO-SFONDO-TAGLIATO-2026-09-11.md`).
+ *
+ * 1) `background-clip: content-box` — LA CODA DELLA COLONNA NON È TESTO, E NON VA COPERTA.
+ *    `.talos-conversation__column` porta `padding-bottom: var(--stream-follow-space)`
+ *    (`index.css:614`), che `aggiornaSpazioCodaConversazione` mette a **metà dell'altezza
+ *    visibile** appena c'è un messaggio (`legacy/app.js:704-712`). Misurato a 1600×794: colonna
+ *    alta **442 px** di cui **297 di padding vuoto** — cioè metà schermo di fondo OPACO sotto
+ *    l'ultima riga, dove non c'è un solo glifo da proteggere. Il fondo si ferma al contenuto e la
+ *    scena riprende esattamente dove il testo finisce: **43.789 → 131.635 px** di scena visibile
+ *    (×3,0) con due messaggi; su una conversazione che riempie lo schermo non cambia niente
+ *    (14.723 → 14.723), perché lì la coda sta fuori dalla finestra. MDN «background-clip»
+ *    (letto l'11/09/2026): *«content-box — The background is painted within (clipped to) the
+ *    content box»*; ⛔ e il `background` ABBREVIATO lo riazzera a `border-box`, per questo qui è
+ *    la longhand `background-color` e non `background`.
+ *
+ * 2) `box-shadow` — È QUESTO L'UNICO LAVORO CHE FACEVA IL VELO SULLO SCROLLER, ed è locale.
+ *    La colonna opaca, senza sfumatura, si stacca dalla scena come un rettangolo a spigoli vivi
+ *    (visibile nelle foto: i glifi tagliati netti a x=44 e x=780). Un'ombra ESTERNA si disegna
+ *    fuori dal border box — è la «knockout» di CSS Backgrounds 3 §6.1.1, e MDN «box-shadow»
+ *    (letto l'11/09/2026) descrive il blur come *«a color transition the length of the blur
+ *    distance … perpendicular to and centered on the shadow's edge»* — quindi NON può aggiungere
+ *    un pixel sopra il testo: la garanzia «mai sotto il testo» resta strutturale, e l'ho
+ *    riverificata (0 px di scena dentro i rettangoli dei glifi, prima e dopo).
+ *    ⛔ `22px 0` e non `40px 18px`: lo spazio da sfumare è il margine da 44 px della conversazione
+ *    (`index.css:592`), e 40+18 se lo mangia tutto — misurato su una conversazione piena,
+ *    14.723 → **7.667** px di scena (−48%) contro **12.882** (−12,5%) con `22px 0`. Una sfumatura
+ *    che cancella ciò che deve sfumare non è una sfumatura.
+ */
 body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) #conversation {
   background-color: var(--talos-background);
+  background-clip: content-box;
+  box-shadow: 0 0 22px 0 var(--talos-background);
 }
 
 /*
@@ -324,14 +357,39 @@ body:is(.background-motion-active, .background-motion-paused):not(.background-mo
  * ⛔ `at 50% 38%` e non `at center`: la conversazione è più alta che larga e il testo si addensa in
  *   alto — un'ellisse centrata sul centro geometrico lascerebbe scoperta la prima riga.
  */
-body:is(.background-motion-active, .background-motion-paused):not(.background-motion-off) .talos-conversation:has(#conversation > *) {
-  background-image: radial-gradient(
-    ellipse 96% 86% at 50% 38%,
-    var(--talos-background) 0%,
-    var(--talos-background) 62%,
-    transparent 100%
-  );
-}
+/*
+ * ⛔⛔⛔⛔ 11/09/2026, SERA — QUESTA REGOLA È STATA TOLTA, ED È LA CAUSA DELLA FOTO DELL'OWNER
+ *   («lo sfondo animato viene o tagliato o parte da molto sotto»). Il testo sopra resta perché
+ *   spiega il PROBLEMA giusto — il bordo netto della colonna — ma la forma era sbagliata, e i
+ *   numeri lo dicono invece di discuterlo.
+ *
+ *     body:is(…) .talos-conversation:has(#conversation > *) {
+ *       background-image: radial-gradient(ellipse 96% 86% at 50% 38%,
+ *         var(--talos-background) 0%, var(--talos-background) 62%, transparent 100%);
+ *     }
+ *
+ * ⛔ In `radial-gradient` le due percentuali dopo `ellipse` sono i RAGGI, non i diametri, e ognuna
+ *   si risolve sulla dimensione corrispondente della scatola — MDN «radial-gradient», letto
+ *   l'11/09/2026: *«The first value represents the horizontal radius and the second is the vertical
+ *   radius. Percentage values are relative to the corresponding dimension of the gradient box.»*
+ *   ⇒ raggio verticale `86%` con lo stop pieno a `62%` = **0,533 × altezza** di parte piena, sopra
+ *   un centro a `38%`: il fondo OPACO arriva al **91,3%** dell'altezza dello scroller, e la
+ *   sfumatura ha solo l'**8,7%** finale per esistere. Non era «pieno al centro e sfumato ai bordi»:
+ *   era un MURO con una finestrella negli angoli in basso. Anche all'estremo sinistro della prima
+ *   riga la copertura calcolata è **83%**.
+ * ⭐ Misurato sul banco (chat con due messaggi, 1600×794, DPR 1,25, scena `terminal`, cursori al
+ *   massimo), confrontando la stessa schermata col bitmap del canvas pieno e svuotato:
+ *     con la regola   → la scena compare dalla riga **646 su 993** (65% dello schermo), 9.814 px;
+ *     senza la regola → dalla riga **75** (subito sotto la testata), 43.789 px.
+ *   È esattamente la frase dell'owner, in numeri.
+ * ⛔ E toglierla non tocca la garanzia «la scena non passa mai sotto il testo»: chi la regge è la
+ *   colonna opaca `#conversation` qui sopra, non questo velo — lo diceva già il commento della
+ *   seconda stesura («questo strato può solo AGGIUNGERE opacità sopra ciò che la colonna già
+ *   copre»). Riverificato a pixel: **0** px di scena dentro i rettangoli dei glifi, prima e dopo.
+ * ⛔ Il lavoro utile che faceva — smussare il bordo della colonna — è ora un `box-shadow` sulla
+ *   colonna stessa: sta attaccato all'oggetto da proteggere invece che alla finestra, quindi
+ *   sfuma 22 px e basta, e sotto l'ultima riga non c'è più niente da sfumare.
+ */
 
 /* Ferma ma presente: è ciò che chiedono `motionMode: static`, «metti in pausa quando la finestra non
    si vede», «rispetta il risparmio dati» e la pausa mentre si scorre.

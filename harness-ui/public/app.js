@@ -24550,6 +24550,7 @@ ${testo3}` : testo3;
         salvaImpostazioniAlbero();
         li.classList.add("ft-open");
         li.setAttribute("aria-expanded", "true");
+        childUl.hidden = false;
         iconEl.classList.add("ft-open");
         iconEl.replaceChildren(iconaSvgAlbero("i-folder-open"));
         if (childUl.childElementCount > 0) return;
@@ -24570,6 +24571,8 @@ ${testo3}` : testo3;
       function chiudiCartellaAlbero(li, iconEl) {
         li.classList.remove("ft-open");
         li.setAttribute("aria-expanded", "false");
+        const childUl = li.querySelector(":scope > ul");
+        if (childUl) childUl.hidden = true;
         iconEl.classList.remove("ft-open");
         iconEl.replaceChildren(iconaSvgAlbero("i-folder"));
         state.realSession.treeOpen.delete(li.dataset.percorso);
@@ -24667,6 +24670,7 @@ ${testo3}` : testo3;
         }
         const childUl = document.createElement("ul");
         childUl.setAttribute("role", "group");
+        childUl.hidden = true;
         li.appendChild(childUl);
         row.addEventListener("click", () => {
           if (li.classList.contains("ft-open")) chiudiCartellaAlbero(li, icon2);
