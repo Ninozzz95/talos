@@ -1023,13 +1023,77 @@ export async function avviaSessione({
    * grezzi dentro un evento SSE/JSON, che li corromperebbe comunque
    * (non sono UTF-8 valido).
    */
+  /*
+   * ⛔⛔⛔ BC-11 (11/09/2026) — «MODE» LO SCRIVE IL MODELLO, E LO SCRIVE COME GLI PARE.
+   *
+   * Il kernel consegna `argomenti` VERBATIM a questo callback (talosHarness.mjs:6175,
+   * `onDocumento(argomenti)`; il commento alla riga 5069 lo dichiara: «`argomenti` passa SEMPRE
+   * verbatim»), quindi una chiave che lo schema non nomina arriva qui intatta. È l'unico posto in
+   * cui la modalità può essere letta senza toccare il kernel.
+   *
+   * ⛔ Perché tre nomi e non uno: misurato sulle due sessioni di BC-11, il modello ha sbagliato il
+   *   nome dell'argomento **46 volte su 308 chiamate** — `shell.command` invece di `comando` 39
+   *   volte (30 nella sessione `8dde6bff`, 9 nella `37e10d21`), `scrivi.path` 2, `scrivi.content`
+   *   1, `scrivi.contuto` 1 (un refuso suo). Ogni volta il campo arrivava `undefined` e il giro era
+   *   perso. Non è un difetto del nostro modello: anthropics/claude-quickstarts#348 (letto
+   *   11/09/2026) documenta la stessa cosa sull'implementazione di riferimento del fornitore — «the
+   *   class expects `new_str`… but Claude actually outputs `insert_text`. This causes insert
+   *   commands to fail». ⇒ Si accettano gli alias, in UN posto solo. Stessa scelta di hermes-agent
+   *   v0.21, che sul suo `patch` accetta entrambe le forme e ne pubblicizza una sola
+   *   (`tools/file_tools.py:2747`, PATCH_SCHEMA: «The handler accepts BOTH shapes from any model
+   *   regardless»).
+   * ⛔ E `append:true` come booleano è la terza forma perché è quella che un modello scrive quando
+   *   l'idea gliel'ha data la frase «call it again to append», non un nome di enum.
+   */
+  const MODALITA_DOCUMENTO = { append: 'accoda', accoda: 'accoda', add: 'accoda', new: 'nuovo', nuovo: 'nuovo', create: 'nuovo', replace: 'nuovo' };
+  const modalitaDelDocumento = (argomenti) => {
+    if (argomenti?.append === true) return 'accoda';
+    const grezza = argomenti?.mode ?? argomenti?.modalita ?? argomenti?.modality;
+    if (grezza === undefined || grezza === null || grezza === '') return 'nuovo';
+    return MODALITA_DOCUMENTO[String(grezza).trim().toLowerCase()] ?? null; // null = detto male: si risponde a parole, non si indovina
+  };
+  /*
+   * ⛔ I formati BINARI non si accodano, e non è una prudenza: un `.docx`/`.xlsx`/`.pptx` è uno zip
+   *   e un `.pdf` ha un trailer con la tavola degli offset in fondo — concatenare due file di
+   *   questi tipi produce un file che si APRE come corrotto, cioè il peggiore degli esiti: una
+   *   scrittura «riuscita» che ha distrutto il lavoro dei giri precedenti. L'insieme è lo stesso
+   *   `testuale` già usato più sotto per decidere cosa mostrare in chat: una definizione sola.
+   */
+  /*
+   * ⛔⛔ E `html` NON è accodabile, contro ogni aspettativa — l'ho verificato nel generatore prima
+   *   di scriverlo, non dedotto: `document-generator.mjs:234-245` non scrive `body` così com'è, lo
+   *   AVVOLGE (`<!doctype html>`, `<html><head>…`, un `<h1>` col titolo, ogni blocco separato da
+   *   riga vuota dentro un `<p>`, poi `</body></html>`) e lo passa da `escapeHtml`. Accodare un
+   *   secondo documento completo a uno che finisce con `</body></html>` produce un file con due
+   *   doctype: una scrittura «riuscita» che rompe il risultato. I formati sorgente
+   *   (`TALOS_SOURCE_TEXT_FORMATS`) passano invece VERBATIM (`document-generator.mjs:223-225`), e
+   *   `md`/`csv` sono testo piatto — quelli sì.
+   * ⛔ Che `format:'html'` non sappia scrivere una pagina scritta a mano è un difetto a parte, più
+   *   grande di questo, e sta nel rapporto: NON è questa funzione a poterlo curare.
+   */
+  const formatoAccodabile = (formato) => TALOS_SOURCE_TEXT_FORMATS.includes(formato) || ['md', 'csv'].includes(formato);
+
   const onDocumento = async (argomenti) => {
+    const modalita = modalitaDelDocumento(argomenti);
+    if (modalita === null) {
+      return {
+        ok: false,
+        esito: `"${argomenti?.mode ?? argomenti?.modalita}" is not a mode. Use mode:"append" to add to the end of an existing file, or leave mode out to create a new one.`,
+      };
+    }
     let documento;
     try {
       documento = await generateTalosDocumentFn(argomenti);
     } catch (errore) {
       const dettaglio = errore instanceof Error ? errore.message : String(errore);
       return { ok: false, esito: `The document was not created: ${dettaglio}` };
+    }
+    if (modalita === 'accoda' && !formatoAccodabile(documento.format)) {
+      return {
+        ok: false,
+        esito: `A .${documento.format} file cannot be appended to: it is a binary container, and joining two of them produces a corrupt file. `
+          + 'Send the whole document in one call, or use a text format (md, html, txt, or a source format) if you need to build it in pieces.',
+      };
     }
 
     const controllo = await verifyTalosDocumentFn(documento);
@@ -1042,12 +1106,35 @@ export async function avviaSessione({
 
     let salvato;
     try {
-      salvato = await creaFileWorkspaceFn({ cartella: cartellaPerCreare, nome: documento.fileName, bytes: documento.bytes });
+      salvato = await creaFileWorkspaceFn({ cartella: cartellaPerCreare, nome: documento.fileName, bytes: documento.bytes, modalita });
     } catch (errore) {
       const dettaglio = errore instanceof WorkspaceFileError ? errore.message : (errore instanceof Error ? errore.message : String(errore));
+      /*
+       * ⛔⛔⛔ BC-11 — ERA QUESTO MESSAGGIO A INSEGNARE `_p2.html`.
+       *
+       * Fino all'11/09/2026 un nome già preso rispondeva «Do not silently retry with the same name
+       * — offer a different title, or ask»: cioè l'harness stesso diceva al modello di inventarsi un
+       * NOME DIVERSO. Nelle due sessioni di BC-11 il modello ha fatto esattamente questo di sua
+       * iniziativa — `_p2.html`, `_p3.html`, `_p4.html`, `_p5.html`, `_p6core.js` e poi un passo di
+       * «assemblaggio» che non è mai arrivato in fondo.
+       * ⇒ Un rifiuto deve nominare la STRADA GIUSTA, non solo vietarne una. È la forma che usa
+       *   cline nell'errore del suo `insert_line` (`sdk-diff-edit-coordinator.ts:401`, letto
+       *   11/09/2026): non dice solo che il valore è fuori intervallo, dice «Use N to append at
+       *   EOF» — il messaggio porta la mossa successiva.
+       * ⛔ Il ramo `FILE_EXISTS` è distinto dagli altri perché è l'unico con una strada giusta da
+       *   nominare: un tetto superato o un contenuto mancante vogliono altro, e il loro messaggio
+       *   (scritto in `workspace-files.mjs`) lo dice già.
+       */
+      if (errore instanceof WorkspaceFileError && errore.code === 'FILE_EXISTS') {
+        return {
+          ok: false,
+          esito: `"${documento.fileName}" already exists. To ADD to it, call document_create again with the same title and mode:"append" — the new body goes at the end of that same file. `
+            + 'To make a separate file instead, use a different title. Do not invent numbered variants of the same name.',
+        };
+      }
       return {
         ok: false,
-        esito: `"${documento.fileName}" was created and checked, but it could not be saved to the workspace: ${dettaglio}. Do not silently retry with the same name — offer a different title, or ask.`,
+        esito: `"${documento.fileName}" was created and checked, but it could not be saved to the workspace: ${dettaglio}`,
       };
     }
 
@@ -1061,10 +1148,18 @@ export async function avviaSessione({
      * ⛔ Vale per TUTTI i formati, non solo i binari: anche un `.md` generato si scarica con un clic,
      *   ed è la differenza fra «te lo mostro» e «te lo do».
      */
+    /*
+     * ⛔ BC-11 — `esisteva` era scritto `false` a mano, e la ragione stava nel commento sopra
+     *   («creaFileWorkspaceFn rifiuta un nome già esistente, quindi ogni successo qui È per
+     *   costruzione un file nuovo»). Con `mode:"append"` quella costruzione non vale più: un
+     *   successo può ora atterrare su un file che c'era. Si legge dall'esito VERO della scrittura
+     *   (`salvato.accodato`), mai da una costanza che non è più vera — un pannello Review che dice
+     *   «nuovo» su un file cresciuto è la stessa classe di bugia che questo file rifiuta altrove.
+     */
     onEvento(eventoPerScrittura({
       percorso: percorsoNellAlbero(salvato.percorso),
       contenuto: valore,
-      esisteva: false,
+      esisteva: salvato.accodato === true,
       allegato: { nome: documento.fileName, formato: documento.format, byte: documento.bytes.byteLength },
     }));
 
@@ -1076,24 +1171,57 @@ export async function avviaSessione({
      * ⛔ I binari viaggiano in base64 (`salvaVoce` lo prevede): un `docx` dentro un campo di testo
      *   non è UTF-8 valido e si corromperebbe.
      */
-    try {
-      await salvaVoceLibreriaFn({
-        cartella,
-        nome: documento.fileName,
-        mediaType: documento.mediaType,
-        origine: 'generated',
-        ...(testuale
-          ? { testo: new TextDecoder('utf-8').decode(documento.bytes) }
-          : { base64: Buffer.from(documento.bytes).toString('base64') }),
-      });
-    } catch (errore) {
-      console.error('[documenti] copia in Libreria non riuscita:', errore instanceof Error ? errore.message : errore);
+    /*
+     * ⛔ BC-11 — una AGGIUNTA non è una voce nuova di Libreria. Copiare in Libreria anche i pezzi
+     *   accodati produrrebbe N voci con lo stesso nome per UN file (e `salvaVoce` le terrebbe
+     *   tutte): la Libreria custodisce documenti, non frammenti. Il file intero resta nel
+     *   workspace, che è dove il modello e la persona lo vedono; la copia durevole si fa quando il
+     *   documento NASCE. ⇒ Se un giorno servirà la copia del file completo, vorrà rileggere il
+     *   file dal disco — non concatenare i pezzi qui, che sarebbe un secondo stato da tenere
+     *   allineato.
+     */
+    if (salvato.accodato !== true) {
+      try {
+        await salvaVoceLibreriaFn({
+          cartella,
+          nome: documento.fileName,
+          mediaType: documento.mediaType,
+          origine: 'generated',
+          ...(testuale
+            ? { testo: new TextDecoder('utf-8').decode(documento.bytes) }
+            : { base64: Buffer.from(documento.bytes).toString('base64') }),
+        });
+      } catch (errore) {
+        console.error('[documenti] copia in Libreria non riuscita:', errore instanceof Error ? errore.message : errore);
+      }
     }
 
     const dimensione = Math.max(1, Math.round(documento.bytes.byteLength / 1024));
+    /*
+     * ⛔⛔ BC-11 — L'ESITO DICE LA MOSSA SUCCESSIVA, ed è la parte che fa risparmiare i giri.
+     *   Lo schema di `document_create` vive nel kernel e non nomina `mode` (fuori dalla mia lane:
+     *   vedi il rapporto), quindi l'UNICO canale per far sapere al modello che l'aggiunta esiste è
+     *   il risultato dell'attrezzo — che il modello legge per intero, a ogni giro. È la stessa
+     *   scelta di hermes-agent v0.21 (`tools/file_tools.py:2729`), che nella risposta di
+     *   `write_file` mette «The result's verified:true means the on-disk content hash was
+     *   confirmed — do NOT re-read the file to check the write landed»: una riga nell'esito che
+     *   toglie un giro di verifica a ogni scrittura.
+     * ⛔ Solo per i formati accodabili: suggerire l'aggiunta su un `.docx` sarebbe un consiglio che
+     *   porta a un file corrotto.
+     */
+    const comeContinuare = formatoAccodabile(documento.format)
+      ? ' To make it longer, call document_create again with the same title and mode:"append" instead of writing a second file.'
+      : '';
+    if (salvato.accodato === true) {
+      const totale = Math.max(1, Math.round((salvato.byteTotali ?? documento.bytes.byteLength) / 1024));
+      return {
+        ok: true,
+        esito: `Appended ${dimensione} KB to "${documento.fileName}" — it is now ${totale} KB. Checked by reopening it: ${controllo.detail}.${comeContinuare}`,
+      };
+    }
     return {
       ok: true,
-      esito: `Created "${documento.fileName}" (${dimensione} KB) in the workspace. Checked by reopening it: ${controllo.detail}.`,
+      esito: `Created "${documento.fileName}" (${dimensione} KB) in the workspace. Checked by reopening it: ${controllo.detail}.${comeContinuare}`,
     };
   };
 

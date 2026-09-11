@@ -7,6 +7,7 @@ import test from 'node:test';
 import {
   copiaFile,
   creaFileWorkspace,
+  DIMENSIONE_MASSIMA_CREAZIONE,
   creaVoceWorkspace,
   eliminaFile,
   leggiContenutoFile,
@@ -647,5 +648,134 @@ test('⛔ APRI, AL CONTRARIO: una cartella non si apre col programma, e fuori da
     );
   } finally {
     rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+/*
+ * ⛔⛔⛔ BC-11 (11/09/2026) — le prove della cura «meno giri possibili».
+ *
+ * Riproduzione, prima di curare: `creaFileWorkspace` accettava 41.943.040 byte in 12 ms senza un
+ * controllo, e con `bytes: undefined` rilanciava il `TypeError` di Node
+ * (`ERR_INVALID_ARG_TYPE: The "data" argument must be of type string…`) — un errore di sistema
+ * operativo consegnato a un modello che non può agirci sopra. Owner BC-11: «ogni attrezzo deve DIRE
+ * al modello i suoi limiti quando li supera».
+ *
+ * ⛔ Ogni cura è provata ANCHE AL VERSO CONTRARIO: che il caso legittimo continui a passare, e che
+ *   il file già sul disco non venga toccato quando la chiamata viene rifiutata.
+ */
+
+test('⛔⛔⛔ BC-11 creaFileWorkspace: contenuto MANCANTE → messaggio a parole, mai ERR_INVALID_ARG_TYPE di Node', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      creaFileWorkspace({ cartella: radice, nome: 'senza-corpo.txt', bytes: undefined }),
+      (e) => {
+        assert.ok(e instanceof WorkspaceFileError, 'deve essere un errore NOSTRO, non un TypeError di Node');
+        assert.equal(e.code, 'CONTENT_INVALID');
+        assert.match(e.message, /Contenuto mancante/);
+        assert.doesNotMatch(e.message, /ERR_INVALID_ARG_TYPE|argument must be of type/);
+        return true;
+      },
+    );
+    assert.ok(!existsSync(join(radice, 'senza-corpo.txt')), 'nessun file a metà');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ BC-11 creaFileWorkspace: oltre il tetto → il tetto è DICHIARATO nel messaggio', async () => {
+  const radice = sessioneVera();
+  try {
+    const troppo = Buffer.alloc(DIMENSIONE_MASSIMA_CREAZIONE + 1);
+    await assert.rejects(
+      creaFileWorkspace({ cartella: radice, nome: 'enorme.txt', bytes: troppo }),
+      (e) => {
+        assert.equal(e.code, 'CONTENT_TOO_LARGE');
+        assert.match(e.message, new RegExp(`tetto ${DIMENSIONE_MASSIMA_CREAZIONE / 1024 / 1024} MB`));
+        assert.match(e.message, /in più pezzi/, 'il messaggio deve nominare la strada giusta, non solo il divieto');
+        return true;
+      },
+    );
+    assert.ok(!existsSync(join(radice, 'enorme.txt')));
+    // ⭐ AL CONTRARIO: un byte SOTTO il tetto passa — il tetto non è un divieto travestito.
+    const { percorso } = await creaFileWorkspace({ cartella: radice, nome: 'giusto.txt', bytes: Buffer.alloc(1024) });
+    assert.equal(percorso, 'giusto.txt');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐⭐ BC-11 creaFileWorkspace modalita "accoda": il secondo pezzo va in CODA allo stesso file, non in un file nuovo', async () => {
+  const radice = sessioneVera();
+  try {
+    const primo = await creaFileWorkspace({ cartella: radice, nome: 'lungo.md', bytes: 'parte 1\n', modalita: 'accoda' });
+    assert.equal(primo.accodato, false, 'il file non c\'era: è stato creato, non accodato');
+    const secondo = await creaFileWorkspace({ cartella: radice, nome: 'lungo.md', bytes: 'parte 2\n', modalita: 'accoda' });
+    assert.equal(secondo.accodato, true);
+    assert.equal(secondo.byteTotali, 16);
+    assert.equal(readFileSync(join(radice, 'lungo.md'), 'utf8'), 'parte 1\nparte 2\n');
+    // ⛔ e NIENTE `lungo_p2.md`: è esattamente il file inventato che BC-11 è venuto a togliere di mezzo
+    assert.ok(!existsSync(join(radice, 'lungo_p2.md')));
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔⛔ BC-11 AL CONTRARIO — senza modalita "accoda" un nome già preso resta RIFIUTATO: l\'aggiunta non è mai un ripiego automatico', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      creaFileWorkspace({ cartella: radice, nome: 'a.txt', bytes: 'in coda' }),
+      (e) => { assert.equal(e.code, 'FILE_EXISTS'); return true; },
+    );
+    assert.equal(readFileSync(join(radice, 'a.txt'), 'utf8'), 'contenuto di a', 'il file di prima è intatto');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔⛔ BC-11 accodare a una CARTELLA: risposta a parole, mai EISDIR del sistema operativo', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      creaFileWorkspace({ cartella: radice, nome: 'sub', bytes: 'x', modalita: 'accoda' }),
+      (e) => {
+        assert.ok(e instanceof WorkspaceFileError);
+        assert.equal(e.code, 'NOT_A_FILE');
+        assert.doesNotMatch(e.message, /EISDIR/);
+        return true;
+      },
+    );
+    assert.ok(existsSync(join(radice, 'sub', 'b.txt')), 'la cartella e il suo contenuto sono intatti');
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ BC-11 accodando si guarda il TOTALE contro il tetto, non solo il pezzo', async () => {
+  const radice = sessioneVera();
+  try {
+    await creaFileWorkspace({ cartella: radice, nome: 'grosso.txt', bytes: Buffer.alloc(DIMENSIONE_MASSIMA_CREAZIONE - 10), modalita: 'accoda' });
+    await assert.rejects(
+      creaFileWorkspace({ cartella: radice, nome: 'grosso.txt', bytes: Buffer.alloc(100), modalita: 'accoda' }),
+      (e) => { assert.equal(e.code, 'CONTENT_TOO_LARGE'); return true; },
+    );
+    // ⭐ AL CONTRARIO: il file non è cresciuto di un byte
+    assert.equal(readFileSync(join(radice, 'grosso.txt')).length, DIMENSIONE_MASSIMA_CREAZIONE - 10);
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ BC-11 una modalita scritta male viene DETTA, non indovinata', async () => {
+  const radice = sessioneVera();
+  try {
+    await assert.rejects(
+      creaFileWorkspace({ cartella: radice, nome: 'x.txt', bytes: 'x', modalita: 'sovrascrivi' }),
+      (e) => { assert.match(e.message, /"nuovo".*"accoda"/s); return true; },
+    );
+    assert.ok(!existsSync(join(radice, 'x.txt')));
+  } finally {
+    rmSync(radice, { recursive: true, force: true });
   }
 });

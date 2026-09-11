@@ -175,6 +175,46 @@ export async function eliminaFile({ cartella, percorso }, deps = {}) {
   return { eliminato: true };
 }
 
+/*
+ * ⛔⛔⛔ BC-11, 11/09/2026 — IL TETTO DI UNA SCRITTURA SI DICHIARA, non lo si scopre sbattendoci.
+ *
+ * Misurato sulla sessione `8dde6bff` dell'owner («genera un file html di almeno 1000 righe»):
+ * `creaFileWorkspace` accettava **41.943.040 byte in 12 ms senza un solo controllo**, e con
+ * `bytes: undefined` non rispondeva niente di utile — rilanciava il `TypeError` di Node
+ * (`ERR_INVALID_ARG_TYPE: The "data" argument must be of type string or an instance of Buffer…`),
+ * cioè un errore di sistema operativo consegnato a un modello che non ha modo di agirci sopra.
+ * ⇒ Regola dell'owner per BC-11: «ogni attrezzo deve DIRE al modello i suoi limiti quando li
+ *   supera, invece di restituire un errore di sistema operativo».
+ *
+ * ⛔ Perché 32 MB e non di più: è la stessa taglia d'ordine dello scarico (64 MB, qui sopra) ma
+ *   dimezzata, perché QUESTI byte hanno attraversato una risposta del modello — nessun documento
+ *   generato da un giro è legittimamente più grande, e un numero più alto non proteggerebbe da
+ *   niente. È un tetto DICHIARATO nel messaggio, non una soglia muta.
+ *
+ * Ricerca 11/09/2026, prima di scrivere (regola owner: si cerca PRIMA, soprattutto quando sembra
+ * ovvio — quello che manca non è la soluzione, sono i vincoli):
+ *  · Anthropic, «Text editor tool» (platform.claude.com, letto 11/09/2026): i comandi sono
+ *    `view`/`create`/`str_replace`/`insert`/`undo_edit` — `insert` esiste APPOSTA per aggiungere
+ *    testo dopo una riga, cioè per non dover riscrivere un file intero a ogni aggiunta.
+ *  · anthropics/claude-quickstarts#348 (letto 11/09/2026): «The `EditTool20250728` class expects
+ *    `new_str` for the insert command, but Claude actually outputs `insert_text`. This causes
+ *    insert commands to fail» ⇒ il nome sbagliato di un argomento è una classe di errore REALE
+ *    anche nell'implementazione di riferimento del fornitore, non una stranezza del nostro
+ *    modello: un attrezzo che accetta un solo nome trasforma un errore di forma in un guasto.
+ *  · Nous Research, hermes-agent v0.21, `tools/file_tools.py:2729` (WRITE_FILE_SCHEMA): «Use this
+ *    instead of echo/cat heredoc in terminal… OVERWRITES the entire file — use 'patch' for
+ *    targeted edits», e `registry.register(…, max_result_size_chars=100_000)` — il tetto è un dato
+ *    dichiarato accanto all'attrezzo, non un comportamento scoperto a valle.
+ *  · cline, `apps/vscode/src/sdk/sdk-diff-edit-coordinator.ts:401` — l'errore stesso insegna il
+ *    valore giusto: «insert_line must be a positive one-based boundary line in the range 1-N.
+ *    **Use N to append at EOF.**»
+ *  · Node.js `fs` (nodejs.org, letto 11/09/2026): `appendFile` usa il flag `'a'`; su Windows
+ *    `flock` non c'è, e `writeFile` con `'w'` / `appendFile` con `'a'` sono la via per una
+ *    scrittura o un'aggiunta atomica per singola chiamata. ⇒ qui si accoda con `appendFile`, MAI
+ *    leggendo-concatenando-riscrivendo (che perderebbe la scrittura di chiunque altro in mezzo).
+ */
+export const DIMENSIONE_MASSIMA_CREAZIONE = 32 * 1024 * 1024;
+
 /**
  * "Crea" — scrive BYTE nuovi alla radice del workspace (`document_create`,
  * piano elegant-spinning-dongarra.md, 28/8). Diversa dalle altre azioni
@@ -186,8 +226,26 @@ export async function eliminaFile({ cartella, percorso }, deps = {}) {
  * deliberatamente stretto (radice del workspace, non un percorso
  * arbitrario) — un generatore di documenti scrive dove l'utente lo
  * vede subito nell'albero, non in una sottocartella indovinata.
+ *
+ * ⛔⛔⛔ BC-11 — `modalita` è la seconda metà della cura, e nasce da un numero: nella sessione
+ *   `8dde6bff` il modello ha speso **119 chiamate `shell` contro 23 `scrivi`** (e nella `37e10d21`
+ *   **99 contro 6**) per scrivere UN file, perché nessun attrezzo sa AGGIUNGERE: un file più lungo
+ *   di una risposta obbligava a inventarsi `_p2.html`, `_p3.html`, `_p4.html`, `_p5.html` e poi un
+ *   passo di «assemblaggio» — cioè almeno due giri in più per ogni pezzo.
+ *  · `'nuovo'` (default): ESATTAMENTE il comportamento di sempre — un nome già preso viene
+ *    rifiutato, mai sovrascritto in silenzio (prova `workspace-files.test.mjs:240`, che resta vera).
+ *  · `'accoda'`: aggiunge in coda se il file c'è, lo crea se non c'è. È un'OPZIONE ESPLICITA di chi
+ *    chiama, non un ripiego automatico: una sovrascrittura involontaria e un'aggiunta involontaria
+ *    sono due danni diversi, e nessuno dei due deve poter succedere per distrazione.
+ * ⛔ Accodare a una CARTELLA è esattamente il guasto che BC-11 è venuto a curare (`EISDIR:
+ *   illegal operation on a directory`): qui si guarda cosa c'è PRIMA e si risponde a parole.
+ *
+ * @param {{cartella:string, nome:string, bytes:Uint8Array|Buffer|string, modalita?:'nuovo'|'accoda'}} input
  */
-export async function creaFileWorkspace({ cartella, nome, bytes }, deps = {}) {
+export async function creaFileWorkspace({ cartella, nome, bytes, modalita = 'nuovo' }, deps = {}) {
+  if (modalita !== 'nuovo' && modalita !== 'accoda') {
+    throw new WorkspaceFileError('Modalità non valida: "nuovo" (rifiuta un nome già preso) o "accoda" (aggiunge in coda)');
+  }
   if (
     typeof nome !== 'string' || nome.length === 0 || nome.length > 255
     || nome.includes('/') || nome.includes('\\') || nome.includes('\0')
@@ -195,14 +253,55 @@ export async function creaFileWorkspace({ cartella, nome, bytes }, deps = {}) {
   ) {
     throw new WorkspaceFileError('Nome file non valido — un nome, non un percorso');
   }
+  /*
+   * ⛔ BC-11 — il TIPO prima del tetto, e detto a parole. Senza questo controllo `fsp.writeFile`
+   *   lancia `ERR_INVALID_ARG_TYPE` (riprodotto l'11/09/2026), che per chi legge il risultato
+   *   dell'attrezzo è indistinguibile da un guasto del disco.
+   */
+  const byteValidi = typeof bytes === 'string' || ArrayBuffer.isView(bytes) || bytes instanceof ArrayBuffer;
+  if (!byteValidi) {
+    throw new WorkspaceFileError(
+      'Contenuto mancante o non valido: servono byte o testo, e ne è arrivato '
+      + `${bytes === undefined ? 'nessuno' : typeof bytes}. Rimanda la chiamata con il contenuto.`,
+      'CONTENT_INVALID',
+    );
+  }
+  const dimensione = typeof bytes === 'string' ? Buffer.byteLength(bytes, 'utf8') : bytes.byteLength;
+  if (dimensione > DIMENSIONE_MASSIMA_CREAZIONE) {
+    throw new WorkspaceFileError(
+      `Contenuto troppo grande (${Math.round(dimensione / 1024 / 1024)} MB, tetto `
+      + `${DIMENSIONE_MASSIMA_CREAZIONE / 1024 / 1024} MB). Scrivilo in più pezzi, aggiungendo ogni pezzo in coda.`,
+      'CONTENT_TOO_LARGE',
+    );
+  }
   const radiceReale = (deps.realpathSyncFn ?? realpathSync)(cartella);
   const destinazione = join(radiceReale, nome);
   if (!isPathInside(radiceReale, destinazione)) throw new WorkspaceFileError('Destinazione fuori dalla cartella del workspace');
   const accessFn = deps.accessFn ?? fsp.access;
   const esisteGia = await accessFn(destinazione).then(() => true, () => false);
-  if (esisteGia) throw new WorkspaceFileError('Esiste già un file con questo nome', 'FILE_EXISTS');
+  if (esisteGia && modalita === 'nuovo') throw new WorkspaceFileError('Esiste già un file con questo nome', 'FILE_EXISTS');
+  if (esisteGia) {
+    /*
+     * ⛔ La domanda «è un file?» si fa PRIMA di aprire: `appendFile` su una cartella darebbe
+     *   `EISDIR` — lo stesso errore di sistema operativo che l'owner ha visto cinque volte nella
+     *   sessione `8dde6bff` e che nessuno poteva leggere.
+     */
+    const stat = await (deps.statFn ?? fsp.stat)(destinazione);
+    if (!stat.isFile()) throw new WorkspaceFileError('Esiste già una cartella con questo nome: non ci si può accodare', 'NOT_A_FILE');
+    if (stat.size + dimensione > DIMENSIONE_MASSIMA_CREAZIONE) {
+      throw new WorkspaceFileError(
+        `Il file arriverebbe a ${Math.round((stat.size + dimensione) / 1024 / 1024)} MB, oltre il tetto di `
+        + `${DIMENSIONE_MASSIMA_CREAZIONE / 1024 / 1024} MB.`,
+        'CONTENT_TOO_LARGE',
+      );
+    }
+    // ⛔ `appendFile` (flag 'a'), MAI leggi-concatena-riscrivi: quest'ultima perderebbe in silenzio
+    //    ciò che qualcun altro ha scritto fra la lettura e la riscrittura.
+    await (deps.appendFileFn ?? fsp.appendFile)(destinazione, bytes);
+    return { percorso: nome, accodato: true, byteTotali: stat.size + dimensione };
+  }
   await (deps.writeFileFn ?? fsp.writeFile)(destinazione, bytes);
-  return { percorso: nome };
+  return { percorso: nome, ...(modalita === 'accoda' ? { accodato: false, byteTotali: dimensione } : {}) };
 }
 
 /**

@@ -39,9 +39,33 @@ function discoNode(o) {
     async leggi(percorso) {
       return readFile(dentro(percorso), "utf8");
     },
-    async scrivi(percorso, testo) {
+    /*
+     * ⛔⛔⛔ BC-11, 11/09/2026 — `modalita` E' IL TERZO ARGOMENTO, ED E' OPZIONALE APPOSTA.
+     *
+     * `'nuovo'` (assente, o qualunque altro valore) e' il comportamento di sempre, byte per byte:
+     * `writeFile` con il flag implicito `'w'`. `'accoda'` aggiunge in coda con il flag `'a'`.
+     *
+     * ⛔ MAI leggi-concatena-riscrivi: perderebbe in silenzio la scrittura di chiunque sia passato
+     *   in mezzo. Node.js `fs` (letto 11/09/2026): su Windows `flock` non esiste, e una `write` con
+     *   flag `'a'` e' la via per un'aggiunta atomica per singola chiamata. E' la stessa scelta gia'
+     *   presa in `harness-ui/src/workspace-files.mjs` per `document_create`.
+     *
+     * ⛔ Un percorso VUOTO non e' piu' la radice, ed e' il bug EISDIR di BC-11 chiuso alla fonte:
+     *   `dentro('')` torna la radice — legittimo per `elenca('')`, mai per una SCRITTURA, dove
+     *   produceva `EISDIR: illegal operation on a directory` su una cartella. Il kernel lo ferma
+     *   gia' prima con un messaggio che nomina il campo mancante; questa e' la seconda rete, per
+     *   chiunque altro usi `discoNode` (il banco incluso).
+     *
+     * ⛔⛔ Questo file e' un BUNDLE rigenerato dal repo del kernel dell'owner: una rigenerazione che
+     *   non porti anche questa modifica farebbe sparire l'aggiunta MENTRE lo schema di `scrivi`
+     *   continua a prometterla — una bugia allo strumento, la cosa peggiore fra tutte. Per questo
+     *   `harness-ui/tests/scrivi-percorso-e-modalita.test.mjs` prova `discoNode` DIRETTAMENTE: se il
+     *   terzo argomento sparisce, la suite diventa rossa invece di mentire in silenzio.
+     */
+    async scrivi(percorso, testo, modalita = "nuovo") {
+      if (!percorso) throw new Error("scrivi: percorso vuoto — una scrittura senza nome di file finirebbe sulla radice della sessione");
       await mkdir(dirname(dentro(percorso)), { recursive: true });
-      await writeFile(dentro(percorso), testo, "utf8");
+      await writeFile(dentro(percorso), testo, modalita === "accoda" ? { encoding: "utf8", flag: "a" } : "utf8");
     }
   };
 }
