@@ -1,0 +1,302 @@
+{
+  "esiti": [
+    {
+      "nome": "oggi-light-1440x900",
+      "tema": "light",
+      "larghezza": 1440,
+      "altezza": 900,
+      "errori": [
+        "SecurityError: Failed to read the 'localStorage' property from 'Window': The document is sandboxed and lacks the 'allow-same-origin' flag."
+      ],
+      "lista": {
+        "clientWidth": 410,
+        "scrollWidth": 410,
+        "overflowX": "auto",
+        "left": 882.296875,
+        "right": 1291.984375
+      },
+      "barraOrizzontale": false,
+      "righe": [
+        {
+          "nomeAschermo": "nvidia Nemotron Cascade 2 · 30B (3B attivi) · Q4_0",
+          "titleCompleto": "bartowski-nvidia_Nemotron-Cascade-2-30B-A3B-GGUF-931b595fc71b-nvidia-Nemotron-Cascade-2-30B-A3B-Q4-0-gguf",
+          "rigaLarghezza": 409.6875,
+          "rigaDestra": 1291.984375,
+          "fuoriDallaLista": 0,
+          "testoScrollWidth": 346,
+          "testoClientWidth": 346,
+          "strongScroll": 346,
+          "strongClient": 346,
+          "strongTroncato": false,
+          "smallScroll": 346,
+          "smallClient": 346,
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis",
+          "textAlign": "left",
+          "flex": "1 1 auto"
+        },
+        {
+          "nomeAschermo": "gemma 3 · 4b · Q4_K_M",
+          "titleCompleto": "unsloth-gemma-3-4b-it-GGUF-gemma-3-4b-it-Q4_K_M-gguf",
+          "rigaLarghezza": 409.6875,
+          "rigaDestra": 1291.984375,
+          "fuoriDallaLista": 0,
+          "testoScrollWidth": 346,
+          "testoClientWidth": 346,
+          "strongScroll": 346,
+          "strongClient": 346,
+          "strongTroncato": false,
+          "smallScroll": 346,
+          "smallClient": 346,
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis",
+          "textAlign": "left",
+          "flex": "1 1 auto"
+        },
+        {
+          "nomeAschermo": "LFM2 · 1.2B · Q8_0",
+          "titleCompleto": "LiquidAI-LFM2-1.2B-GGUF-LFM2-1.2B-Q8_0-gguf",
+          "rigaLarghezza": 409.6875,
+          "rigaDestra": 1291.984375,
+          "fuoriDallaLista": 0,
+          "testoScrollWidth": 346,
+          "testoClientWidth": 346,
+          "strongScroll": 346,
+          "strongClient": 346,
+          "strongTroncato": false,
+          "smallScroll": 346,
+          "smallClient": 346,
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis",
+          "textAlign": "left",
+          "flex": "1 1 auto"
+        }
+      ]
+    },
+    {
+      "nome": "oggi-light-1024x800",
+      "tema": "light",
+      "larghezza": 1024,
+      "altezza": 800,
+      "errori": [
+        "SecurityError: Failed to read the 'localStorage' property from 'Window': The document is sandboxed and lacks the 'allow-same-origin' flag."
+      ],
+      "lista": {
+        "clientWidth": 397,
+        "scrollWidth": 397,
+        "overflowX": "auto",
+        "left": 572.59375,
+        "right": 970
+      },
+      "barraOrizzontale": false,
+      "righe": [
+        {
+          "nomeAschermo": "nvidia Nemotron Cascade 2 · 30B (3B attivi) · Q4_0",
+          "titleCompleto": "bartowski-nvidia_Nemotron-Cascade-2-30B-A3B-GGUF-931b595fc71b-nvidia-Nemotron-Cascade-2-30B-A3B-Q4-0-gguf",
+          "rigaLarghezza": 397.40625,
+          "rigaDestra": 970,
+          "fuoriDallaLista": 0,
+          "testoScrollWidth": 333,
+          "testoClientWidth": 333,
+          "strongScroll": 333,
+          "strongClient": 333,
+          "strongTroncato": false,
+          "smallScroll": 333,
+          "smallClient": 333,
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis",
+          "textAlign": "left",
+          "flex": "1 1 auto"
+        },
+        {
+          "nomeAschermo": "gemma 3 · 4b · Q4_K_M",
+          "titleCompleto": "unsloth-gemma-3-4b-it-GGUF-gemma-3-4b-it-Q4_K_M-gguf",
+          "rigaLarghezza": 397.40625,
+          "rigaDestra": 970,
+          "fuoriDallaLista": 0,
+          "testoScrollWidth": 333,
+          "testoClientWidth": 333,
+          "strongScroll": 333,
+          "strongClient": 333,
+          "strongTroncato": false,
+          "smallScroll": 333,
+          "smallClient": 333,
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis",
+          "textAlign": "left",
+          "flex": "1 1 auto"
+        },
+        {
+          "nomeAschermo": "LFM2 · 1.2B · Q8_0",
+          "titleCompleto": "LiquidAI-LFM2-1.2B-GGUF-LFM2-1.2B-Q8_0-gguf",
+          "rigaLarghezza": 397.40625,
+          "rigaDestra": 970,
+          "fuoriDallaLista": 0,
+          "testoScrollWidth": 333,
+          "testoClientWidth": 333,
+          "strongScroll": 333,
+          "strongClient": 333,
+          "strongTroncato": false,
+          "smallScroll": 333,
+          "smallClient": 333,
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis",
+          "textAlign": "left",
+          "flex": "1 1 auto"
+        }
+      ]
+    },
+    {
+      "nome": "oggi-dark-1440x900",
+      "tema": "dark",
+      "larghezza": 1440,
+      "altezza": 900,
+      "errori": [
+        "SecurityError: Failed to read the 'localStorage' property from 'Window': The document is sandboxed and lacks the 'allow-same-origin' flag."
+      ],
+      "lista": {
+        "clientWidth": 410,
+        "scrollWidth": 410,
+        "overflowX": "auto",
+        "left": 882.296875,
+        "right": 1291.984375
+      },
+      "barraOrizzontale": false,
+      "righe": [
+        {
+          "nomeAschermo": "nvidia Nemotron Cascade 2 · 30B (3B attivi) · Q4_0",
+          "titleCompleto": "bartowski-nvidia_Nemotron-Cascade-2-30B-A3B-GGUF-931b595fc71b-nvidia-Nemotron-Cascade-2-30B-A3B-Q4-0-gguf",
+          "rigaLarghezza": 409.6875,
+          "rigaDestra": 1291.984375,
+          "fuoriDallaLista": 0,
+          "testoScrollWidth": 346,
+          "testoClientWidth": 346,
+          "strongScroll": 346,
+          "strongClient": 346,
+          "strongTroncato": false,
+          "smallScroll": 346,
+          "smallClient": 346,
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis",
+          "textAlign": "left",
+          "flex": "1 1 auto"
+        },
+        {
+          "nomeAschermo": "gemma 3 · 4b · Q4_K_M",
+          "titleCompleto": "unsloth-gemma-3-4b-it-GGUF-gemma-3-4b-it-Q4_K_M-gguf",
+          "rigaLarghezza": 409.6875,
+          "rigaDestra": 1291.984375,
+          "fuoriDallaLista": 0,
+          "testoScrollWidth": 346,
+          "testoClientWidth": 346,
+          "strongScroll": 346,
+          "strongClient": 346,
+          "strongTroncato": false,
+          "smallScroll": 346,
+          "smallClient": 346,
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis",
+          "textAlign": "left",
+          "flex": "1 1 auto"
+        },
+        {
+          "nomeAschermo": "LFM2 · 1.2B · Q8_0",
+          "titleCompleto": "LiquidAI-LFM2-1.2B-GGUF-LFM2-1.2B-Q8_0-gguf",
+          "rigaLarghezza": 409.6875,
+          "rigaDestra": 1291.984375,
+          "fuoriDallaLista": 0,
+          "testoScrollWidth": 346,
+          "testoClientWidth": 346,
+          "strongScroll": 346,
+          "strongClient": 346,
+          "strongTroncato": false,
+          "smallScroll": 346,
+          "smallClient": 346,
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis",
+          "textAlign": "left",
+          "flex": "1 1 auto"
+        }
+      ]
+    },
+    {
+      "nome": "oggi-dark-1024x800",
+      "tema": "dark",
+      "larghezza": 1024,
+      "altezza": 800,
+      "errori": [
+        "SecurityError: Failed to read the 'localStorage' property from 'Window': The document is sandboxed and lacks the 'allow-same-origin' flag."
+      ],
+      "lista": {
+        "clientWidth": 397,
+        "scrollWidth": 397,
+        "overflowX": "auto",
+        "left": 572.59375,
+        "right": 970
+      },
+      "barraOrizzontale": false,
+      "righe": [
+        {
+          "nomeAschermo": "nvidia Nemotron Cascade 2 · 30B (3B attivi) · Q4_0",
+          "titleCompleto": "bartowski-nvidia_Nemotron-Cascade-2-30B-A3B-GGUF-931b595fc71b-nvidia-Nemotron-Cascade-2-30B-A3B-Q4-0-gguf",
+          "rigaLarghezza": 397.40625,
+          "rigaDestra": 970,
+          "fuoriDallaLista": 0,
+          "testoScrollWidth": 333,
+          "testoClientWidth": 333,
+          "strongScroll": 333,
+          "strongClient": 333,
+          "strongTroncato": false,
+          "smallScroll": 333,
+          "smallClient": 333,
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis",
+          "textAlign": "left",
+          "flex": "1 1 auto"
+        },
+        {
+          "nomeAschermo": "gemma 3 · 4b · Q4_K_M",
+          "titleCompleto": "unsloth-gemma-3-4b-it-GGUF-gemma-3-4b-it-Q4_K_M-gguf",
+          "rigaLarghezza": 397.40625,
+          "rigaDestra": 970,
+          "fuoriDallaLista": 0,
+          "testoScrollWidth": 333,
+          "testoClientWidth": 333,
+          "strongScroll": 333,
+          "strongClient": 333,
+          "strongTroncato": false,
+          "smallScroll": 333,
+          "smallClient": 333,
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis",
+          "textAlign": "left",
+          "flex": "1 1 auto"
+        },
+        {
+          "nomeAschermo": "LFM2 · 1.2B · Q8_0",
+          "titleCompleto": "LiquidAI-LFM2-1.2B-GGUF-LFM2-1.2B-Q8_0-gguf",
+          "rigaLarghezza": 397.40625,
+          "rigaDestra": 970,
+          "fuoriDallaLista": 0,
+          "testoScrollWidth": 333,
+          "testoClientWidth": 333,
+          "strongScroll": 333,
+          "strongClient": 333,
+          "strongTroncato": false,
+          "smallScroll": 333,
+          "smallClient": 333,
+          "whiteSpace": "nowrap",
+          "textOverflow": "ellipsis",
+          "textAlign": "left",
+          "flex": "1 1 auto"
+        }
+      ]
+    }
+  ],
+  "endpointMancanti": [
+    "/api/v1/tools",
+    "/api/v1/providers",
+    "/api/v1/automations",
+    "/api/v1/workspace-info"
+  ]
+}

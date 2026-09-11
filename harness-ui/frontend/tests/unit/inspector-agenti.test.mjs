@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import { disegnaAgenti } from '../../src/components/inspector.js';
 
@@ -235,4 +236,53 @@ test('BC-03: lo stato vuoto non promette giri e permessi che la scheda piena non
   assert.doesNotMatch(testo, /richieste di permesso/, '⛔ nessuno le mostra: prometterle è mentire in anticipo');
   assert.doesNotMatch(testo, /i suoi giri/, '⛔ i giri stanno nella conversazione della figlia, non in questa scheda');
   assert.match(testo, /si ferma/, 'e ciò che resta promesso — aprire e fermare — la card lo fa davvero');
+});
+
+/*
+ * ⛔⛔⛔ BC-03, secondo giro (11/09/2026) — LA STESSA FRASE VIVEVA IN DUE COPIE, E UNA ERA RIMASTA
+ *   VECCHIA.
+ *
+ * Misurato sul server isolato (store seminato, `frontend/dist` fresco, 1440×900, tema chiaro e
+ * scuro): la scheda «Agenti» di una sessione senza deleghe mostrava ancora la promessa smentita
+ * — «qui compaiono i suoi giri, le sue richieste di permesso e il pulsante per fermarlo» — perché
+ * lo stato vuoto È SCRITTO DUE VOLTE: in `src/components/inspector.js` (che `disegnaAgenti` usa) e
+ * come markup statico in `index.template.html` dentro `#railAgenti`. La cura di stamattina aveva
+ * corretto la prima e lasciato la seconda: quella statica è ciò che si legge al PRIMO disegno della
+ * pagina, prima che il JS riscriva la colonna, e è ciò che resta se il JS non arriva mai.
+ *
+ * ⭐ Ricerca 11/09/2026 (dev.to/jkettmann «Don't duplicate your data», en.wikipedia.org/wiki/
+ *   Single_source_of_truth): un dato tenuto in due posti non resta allineato dalla disciplina —
+ *   diverge, e diverge in silenzio. Qui non si può togliere la copia statica (il template è il
+ *   mockup, ed è ciò che si vede al primo pixel) ⇒ la si LEGA: se le due frasi divergono di nuovo,
+ *   questa prova diventa rossa invece di lasciarlo scoprire a una foto.
+ */
+const TEMPLATE_AGENTI = readFileSync(new URL('../../index.template.html', import.meta.url), 'utf8');
+
+/** Il testo dello stato vuoto scritto a mano nel template, dentro `#railAgenti`. */
+export function statoVuotoDelTemplate(html) {
+  const pannello = /<div class="talos-inspector__body" id="railAgenti"[^>]*>([\s\S]*?)<\/div>\s*<div class="talos-inspector__body"/.exec(html)
+    || /id="railAgenti"[^>]*>([\s\S]*?)<div class="talos-inspector__body"/.exec(html);
+  const dentro = pannello ? pannello[1] : html;
+  const p = /<p class="talos-inspector__hint">([^<]*)<\/p>/.exec(dentro);
+  return p ? p[1].trim() : null;
+}
+
+test('BC-03: lo stato vuoto del TEMPLATE dice la stessa cosa di quello che disegna il JS', () => {
+  const d = documentoFinto();
+  const contenitore = d.createElement('div');
+  disegnaAgenti(d, contenitore, []);
+  const dalJs = contenitore.figli[0].textContent.replace('Sotto-agenti', '').trim();
+  const dalTemplate = statoVuotoDelTemplate(TEMPLATE_AGENTI);
+  assert.ok(dalTemplate, 'lo stato vuoto statico deve esistere: è il primo pixel che si vede');
+  assert.equal(dalTemplate, dalJs, '⛔ due copie della stessa frase: se divergono, la pagina promette una cosa al primo disegno e qualcosa di diverso al secondo');
+});
+
+test('BC-03, AL CONTRARIO: la guardia MORDE su una frase divergente', () => {
+  const finto = TEMPLATE_AGENTI.replace(/<div class="talos-inspector__body" id="railAgenti"/, '<div class="talos-inspector__body" id="railAgenti"')
+    .replace(statoVuotoDelTemplate(TEMPLATE_AGENTI), 'Qui compaiono i suoi giri e le sue richieste di permesso.');
+  assert.equal(statoVuotoDelTemplate(finto), 'Qui compaiono i suoi giri e le sue richieste di permesso.', 'il lettore legge davvero il template, non una costante scritta qui');
+});
+
+test('BC-03, AL CONTRARIO: la promessa smentita non è rimasta da nessuna parte nel template', () => {
+  assert.doesNotMatch(TEMPLATE_AGENTI, /richieste di permesso/, '⛔ nessuno le mostra: prometterle è mentire in anticipo, anche in un attributo');
 });

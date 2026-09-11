@@ -53,6 +53,8 @@ import { readFile } from 'node:fs/promises'
 import { request as richiestaHttp } from 'node:http'
 import { request as richiestaHttps } from 'node:https'
 import { basename, dirname, join, resolve, sep } from 'node:path'
+/* ⛔ Vedi `dormi` in `chiamaConRitenta`: l'attesa fra un ritenta e l'altro deve poter essere SVEGLIATA dallo stop, e `Promise.race` non basta — il timer perdente resta pendente. */
+import { setTimeout as dormiConSegnale } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { imageMessageContent } from '../chat-image-attachments.mjs'
 import { discoNode, fontiDaDisco, cancelloSemantico, libreriaStandard }
@@ -697,7 +699,31 @@ export async function chiamaConRitenta({
     maxOutputTokens,
     tentativiMassimi = 4,
     fetchDiRete = fetch,
-    dormi = (ms) => new Promise((ok) => setTimeout(ok, ms)),
+    /*
+     * ⛔⛔⛔ L'ATTESA FRA UN RITENTA E L'ALTRO ERA L'ULTIMO «PUNTO SICURO» —
+     * 11/09/2026, misurato PRIMA di toccare una riga (sonda su un finto
+     * fornitore che risponde 429): premuto «Ferma» durante l'attesa, il giro
+     * tornava **733 ms** dopo il clic sulla prima, **1.480 ms** sulla seconda
+     * e **2.979 ms** sulla terza. Lo stop arrivava ovunque tranne qui, e qui
+     * l'attesa cresce apposta (500·2^n + fino al 50%): il caso peggiore era
+     * anche il più lento.
+     *
+     * ⛔ La cura NON è `Promise.race` contro il segnale: «although the promise
+     * returned by Promise.race() will be fulfilled as soon as the first of the
+     * given promises is settled, the other promises are not cancelled and will
+     * keep on running» — il timer perdente resterebbe pendente fino a tre
+     * secondi, e in un processo CLI tiene in vita Node dopo la fine del giro.
+     * `timers/promises` accetta invece un `AbortSignal`: «when the AbortSignal
+     * is triggered the timer is cleared and the promise immediately rejects
+     * with an AbortError» — il timer si CANCELLA, non si abbandona.
+     * (Node.js docs, `timers/promises`; Better Stack, «A Complete Guide to
+     * Timeouts in Node.js» — letti 11/09/2026.)
+     *
+     * ⛔ Resta iniettabile, e il secondo argomento è ADDITIVO: chi passa un
+     * `dormi` finto di un test (`(ms) => …`) lo ignora e si comporta come
+     * prima, byte per byte. Nessun chiamante di oggi deve cambiare.
+     */
+    dormi = (ms, segnale) => dormiConSegnale(ms, undefined, segnale ? { signal: segnale } : undefined),
     caso = Math.random,
     onDelta,
     reasoning,
@@ -771,7 +797,19 @@ export async function chiamaConRitenta({
         ultimoTesto = String(await r.text()).slice(0, 300)
         /* ⛔ Un 401 o un 400 non migliorano ritentando: si lancia subito. */
         if (!siRitenta(r.status)) break
-        if (tentativo < tentativiMassimi - 1) await dormi(attesaDelTentativo(tentativo, caso))
+        if (tentativo < tentativiMassimi - 1) {
+            /*
+             * ⛔ Lo stop che sveglia l'attesa la fa RIFIUTARE (`AbortError`), e
+             * va bene così: non è qui che si decide il motivo del fermo. Il
+             * controllo in cima al giro successivo — `if (segnaleStop?.aborted)`
+             * — è l'unico posto che lancia «fermato su richiesta prima di
+             * chiamare il modello», e ci si arriva subito. Ingoiare l'errore
+             * qui tiene UNA sola frase per UN solo esito, invece di due che
+             * dicono la stessa cosa con parole diverse.
+             */
+            try { await dormi(attesaDelTentativo(tentativo, caso), segnaleStop) }
+            catch { /* lo stop ha cancellato il timer: il giro dopo dirà perché ci fermiamo */ }
+        }
     }
     const e = new Error(`HTTP ${ultimoStato} dopo ${tentativiMassimi} tentativi: ${ultimoTesto}`)
     e.stato = ultimoStato

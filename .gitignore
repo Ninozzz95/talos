@@ -359,3 +359,12 @@ harness-ui/.talos-4198*.log
 # Resta fuori solo il file delle preferenze PERSONALI, che è di chi sta alla tastiera e non della
 # squadra (dichiarato più sopra, `.claude/settings.local.json`).
 # ══════════════════════════════════════════════════════════════════════════
+
+# ⛔ 11/09/2026 — gli ARCHIVI non entrano nel repo.
+# Un `harness-ui.rar` da 445 MB era finito in un commit con un `git add` di cartella, e il remoto
+# l'ha respinto col pre-receive hook: il push diceva prima «unexpected disconnect» e poi
+# «Everything up-to-date», cioè sembrava riuscito e non lo era. Il file resta sul disco: qui si
+# dice solo che non è roba da versionare.
+*.rar
+*.7z
+*.zip
