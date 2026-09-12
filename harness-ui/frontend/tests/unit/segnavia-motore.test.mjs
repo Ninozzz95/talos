@@ -212,38 +212,27 @@ test('SEGNAVIA, AL CONTRARIO: il ripiego JavaScript muove ANCHE il raggio', () =
  */
 import { creaAttesa } from '../../src/components/conversazione.js';
 
-test('SEGNAVIA: geometria identica a quella del mobile, resa piccola', () => {
+test('ORB (12/09, owner): la bolla d’attesa monta l’orb del mobile — cerchio, marchio corto, anello che ruota — e non più il segnavia', () => {
   const creati = [];
   const finto = {
-    createElementNS: (_ns, tag) => {
-      const attr = new Map();
-      const nodo = { tag, attr, figli: [], setAttribute: (k, v) => attr.set(k, String(v)), getAttribute: (k) => attr.get(k) ?? null, append: (...x) => nodo.figli.push(...x), querySelector: () => null, querySelectorAll: () => [] };
-      creati.push(nodo);
-      return nodo;
-    },
+    createElementNS: (_ns, tag) => { const n = { tag, setAttribute() {}, getAttribute: () => null, append() {} }; creati.push(n); return n; },
     createElement: (tag) => {
-      const n = { tag, className: '', dataset: {}, children: [], setAttribute() {}, getAttribute: () => null, append: (...x) => n.children.push(...x), appendChild: (x) => n.children.push(x), querySelector: () => null, querySelectorAll: () => [], insertBefore() {} };
+      const n = { tag, className: '', dataset: {}, children: [], attr: new Map(), setAttribute(k, v) { n.attr.set(k, String(v)); }, getAttribute: (k) => n.attr.get(k) ?? null, append: (...x) => n.children.push(...x), appendChild: (x) => n.children.push(x) };
+      creati.push(n);
       return n;
     },
     createTextNode: (t) => ({ t }),
   };
-  creaAttesa({ etichetta: 'x' }, { document: finto });
-  const svg = creati.find((n) => n.tag === 'svg');
-  assert.equal(svg.getAttribute('viewBox'), '0 0 96 16', "il viewBox e quello del mobile");
-  assert.equal(svg.getAttribute('width'), '36', '⛔ owner: «piccolo»');
-  assert.equal(svg.getAttribute('height'), '6');
-
-  const linee = creati.filter((n) => n.tag === 'line');
-  assert.equal(linee.length, 2, 'traccia e sweep, come nel mobile');
-  for (const l of linee) {
-    assert.deepEqual([l.getAttribute('x1'), l.getAttribute('y1'), l.getAttribute('x2'), l.getAttribute('y2')], ['4', '8', '92', '8'],
-      'la linea va da 4 a 92 su y=8: sono gli 88 px su cui sono calcolati i ritardi dei nodi');
-  }
-  const nodi = creati.filter((n) => n.tag === 'circle');
-  assert.deepEqual(nodi.map((n) => n.getAttribute('cx')), ['16', '48', '80'], 'i tre nodi stanno dove li mette il mobile');
-  assert.deepEqual(nodi.map((n) => n.getAttribute('r')), ['4', '4', '4'], 'raggio 4, come il mobile');
-
-  /* ⛔ AL CONTRARIO: niente SMIL. Se un `<animate>` ricomparisse, tornerebbero due motori sullo
-     stesso attributo — ed e' il difetto che ha fatto perdere una serata. */
-  assert.equal(creati.filter((n) => n.tag === 'animate').length, 0, "⛔ il movimento e del CSS, come nel mobile");
+  const { blocco } = creaAttesa({ etichetta: 'x' }, { document: finto });
+  const orb = creati.find((n) => typeof n.className === 'string' && /talos-orb/.test(n.className));
+  assert.ok(orb, 'esiste lo span .talos-orb');
+  assert.match(orb.className, /working/, 'durante l’attesa lavora: l’anello gira');
+  assert.equal(orb.getAttribute('aria-hidden'), 'true');
+  const marchio = orb.children.find((c) => /talos-short-logo/.test(c.className));
+  assert.ok(marchio, 'dentro: .talos-short-logo');
+  assert.ok(marchio.children.some((c) => /talos-short-logo-mark/.test(c.className)), 'e il marchio corto .talos-short-logo-mark');
+  /* ⛔ AL CONTRARIO: niente più segnavia SVG nella bolla d’attesa, niente SMIL. */
+  assert.equal(creati.filter((n) => n.tag === 'svg' || n.tag === 'animate' || n.tag === 'circle').length, 0, 'il segnavia a tre nodi non si monta più');
+  const riga = blocco.children.find((c) => /talos-waiting__row/.test(c.className));
+  assert.equal(riga.children[0], orb, 'l’orb sta al posto del segnavia, primo nella riga');
 });

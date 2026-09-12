@@ -55,3 +55,21 @@
   22%, 82%  { fill: var(--talos-accent); }
   100%      { fill: transparent; }
 }
+
+/*
+ * ⭐ 12/09, owner: «il mobile ha introdotto un nuovo logo animato di caricamento… mettilo al posto del
+ *   segnavia». È l'ORB dei messaggi Calm del mobile: regole copiate da
+ *   `mobile/src/components/chat/talosCalmMessages.css` (`.talos-orb`, `.talos-orb.working::after`,
+ *   `@keyframes talos-orb-spin`) e `mobile/src/style.css` (`.talos-short-logo`, `.talos-short-logo-mark`),
+ *   lette il 12/09 (commit 4ccbed1f, ramo `lane/voce-personale`). Il marchio corto è lo stesso file
+ *   (`/talos/brand/logo-short.svg`, già servito da `static-files.mjs`). 1,5 s è il numero del mobile
+ *   (`TALOS_CALM_SPECS.orb`); con «riduci le animazioni» l'anello sta fermo, come là.
+ */
+.talos-orb{ position: relative; width: 2.25rem; height: 2.25rem; flex: none; border: 1px solid var(--talos-accent-soft, color-mix(in srgb, var(--talos-accent) 35%, transparent)); border-radius: 50%; display: grid; place-items: center; color: var(--talos-accent); }
+.talos-orb .talos-short-logo{ width: 1.2rem; height: 1.2rem; }
+.talos-orb.working::after{ content: ''; position: absolute; inset: -3px; border: 1px solid transparent; border-top-color: var(--talos-accent); border-radius: 50%; animation: talos-orb-spin 1500ms linear infinite; }
+.talos-short-logo{ display: inline-flex; width: 3rem; height: 3rem; flex: 0 0 auto; align-items: center; justify-content: center; color: var(--talos-accent); overflow: hidden; }
+.talos-short-logo-mark{ display: block; width: 92%; height: 92%; background: currentColor; mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; -webkit-mask: url('/talos/brand/logo-short.svg') center / contain no-repeat; }
+@keyframes talos-orb-spin{ to { transform: rotate(360deg); } }
+body.reduce-motion .talos-orb.working::after{ animation: none; }
+@media (prefers-reduced-motion: reduce){ .talos-orb.working::after{ animation: none; } }
