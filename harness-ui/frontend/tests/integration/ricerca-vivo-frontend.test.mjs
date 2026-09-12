@@ -7,9 +7,13 @@ import { join } from 'node:path';
 
 import { createHttpApp } from '../../../src/http-app.mjs';
 import { createSessionRegistry } from '../../../src/session-registry.mjs';
-import { cartellaDellaRicerca } from '../../../src/research-store.mjs';
+import { cartellaDellaRicerca, scriviRapporto } from '../../../src/research-store.mjs';
+import { talosResearchReportDocument } from '../../../src/research/report.mjs';
 import { servizioRicerche } from '../../src/components/sezioni-adattatori.js';
-import { vociMenuRicerca, paroleErroreRicerca, ricercheInCorso } from '../../src/components/ricerca-dettaglio.js';
+import {
+  vociMenuRicerca, paroleErroreRicerca, ricercheInCorso,
+  esportazioniRicerca, indirizzoEsportazione, FORMATI_ESPORTAZIONE,
+} from '../../src/components/ricerca-dettaglio.js';
 
 /*
  * ⭐⭐⭐ IL BANCO DELLE AZIONI DELLA RICERCA APPROFONDITA — 12/09/2026, lotto L5 lato sezione.
@@ -121,13 +125,13 @@ async function conRicercaViva(b) {
  * ⛔⛔ SI ASPETTA UNA CONDIZIONE, MAI UN NUMERO DI MILLISECONDI: un'attesa a tempo misura quanto
  *   era carica la macchina, non l'oggetto. (Stessa scelta, e stessa ragione, del banco di L5.)
  */
-async function finoA(condizione, cosa, limite = 5_000) {
+async function finoA(condizione, cosa, { limite = 8_000, passo = 10 } = {}) {
   const scadenza = Date.now() + limite;
   for (;;) {
     const visto = await condizione();
     if (visto) return visto;
     if (Date.now() > scadenza) throw new assert.AssertionError({ message: `mai arrivato: ${cosa}` });
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise((r) => setTimeout(r, passo));
   }
 }
 
@@ -244,4 +248,134 @@ test('BANCO-RICERCA: gli indirizzi li compone la porta, e la rotta li accetta tu
   });
   assert.equal(conChiave.status, 400);
   assert.ok((await s.leggi(ricercaId)).ricerca.stato !== 'paused', 'un rifiuto dopo l’effetto non sarebbe un rifiuto');
+});
+
+/* ═══════════════════════ LA SUITE DI ESPORTAZIONI, CONTRO LA ROTTA VERA ═══════════════════ */
+
+/** Un rapporto col record recintato, scritto dallo scrittore VERO del motore. */
+function rapportoRecintato() {
+  return talosResearchReportDocument({
+    question: DOMANDA,
+    summary: 'Convergono su controllo del computer, permessi per attrezzo e memoria persistente.',
+    judge: null,
+    claims: [{ claim: { text: 'Affermazione 1.', sourceIndex: 1, quote: 'q' }, passage: 'un passaggio', checks: { claimSupported: 'unchecked' } }],
+    sources: [{ url: 'https://esempio.invalid/fonte-1', title: 'Fonte uno', publishedAt: null, obtained: 'page' }],
+  });
+}
+
+/** La ricerca finisce come finisce una vera: `RunFinished`, poi l'esito che il cancello giudica. */
+async function concludi(b, sessionId, ricercaId, ultimo = 'Ho depositato il rapporto.') {
+  b.chiusure.get(ricercaId)({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: ultimo }] } });
+  /*
+   * ⛔⛔ IL PASSO E DI 60 ms, NON DI 10, E NON E UNA TARATURA A CASO. Con 10 ms questo banco
+   *   falliva su Windows con EPERM sul rename di `meta.json`: la conclusione scrive il file in
+   *   modo atomico (temporaneo + rename) mentre questa attesa lo stava LEGGENDO dalla rotta, e su
+   *   Windows un rename sopra un file aperto in lettura non passa. Era il banco a rompere
+   *   l oggetto che misurava. ⇒ si guarda comunque una CONDIZIONE (mai un numero di millisecondi
+   *   sperando che basti), ma si smette di bussare cento volte al secondo alla porta che il
+   *   prodotto sta usando; e dopo si lascia posare la scrittura finale.
+   */
+  const conclusa = await finoA(async () => {
+    const r = (await b.rete.leggi(`/api/v1/sessions/${sessionId}/research/${ricercaId}`)).ricerca;
+    return r.conclusaAlle ? r : null;
+  }, 'la conclusione scritta sul disco', { passo: 60 });
+  await new Promise((r) => setTimeout(r, 60));
+  return (await b.rete.leggi(`/api/v1/sessions/${sessionId}/research/${ricercaId}`)).ricerca ?? conclusa;
+}
+
+test('BANCO-ESPORTA: gli otto formati e i tre toni, dall’indirizzo che compone il FRONTEND', async (t) => {
+  /*
+   * ⛔⛔ QUESTO TEST CHIUDE UN «NON VERIFICATO» DICHIARATO POCHE ORE FA: quando ho scritto la suite
+   *   la rotta non esisteva ancora (la stava scrivendo un altro agente), e tutto ciò che potevo
+   *   provare era da questa parte del confine. Adesso c'è, e la cosa da provare è **la giunzione**:
+   *   che l'indirizzo composto da `indirizzoEsportazione` arrivi davvero a quella rotta, per tutti
+   *   e otto i formati e tutti e tre i toni. Un nome di parametro diverso da una parte sola non si
+   *   vedrebbe in nessuna delle due metà provate da sole.
+   */
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conRicercaViva(b);
+  await scriviRapporto({ cartella: b.radice, id: ricercaId, testo: rapportoRecintato() });
+  const ricerca = await concludi(b, sessionId, ricercaId);
+  assert.equal(ricerca.stato, 'done', 'un rapporto col record passa il cancello di consegna');
+
+  /* Le uscite che la sezione ACCENDEREBBE su questa ricerca, giudicate sui dati veri della rotta. */
+  const uscite = esportazioniRicerca(ricerca, null, { stato: 'pronto', ricerca });
+  /*
+   * ⛔ CORRETTO SUI DATI VERI: qui mi aspettavo la copia spenta, «perché il testo non è stato letto
+   *   da questa schermata». Falso — la rotta del dettaglio porta `contenutoRapporto`, cioè il
+   *   markdown intero: la seconda delle tre strade di `testoDepositato`. Un rapporto aperto si
+   *   copia senza passare dalla Libreria, e questa riga lo dimostra invece di supporlo.
+   */
+  assert.deepEqual(uscite.filter((u) => !u.disponibile).map((u) => u.chiave), [],
+    'col record e col testo nella scheda, tutte e undici le uscite sono accese');
+  assert.ok(uscite.at(-1).testo.includes('talos-research-report'), 'la copia prende il rapporto dalla scheda');
+
+  /* ⛔ `u.formato` nel filtro: la copia e un’uscita SENZA rotta (vive negli appunti), e
+     chiederla al server e un 400 — trovato facendo girare il test, non leggendolo. */
+  for (const uscita of uscite.filter((u) => u.disponibile && u.formato)) {
+    const risposta = await fetch(`${b.base}${indirizzoEsportazione(sessionId, ricercaId, uscita.formato, uscita.tono)}`);
+    assert.equal(risposta.status, 200, `${uscita.chiave} deve arrivare alla rotta`);
+    const disposizione = risposta.headers.get('content-disposition') || '';
+    assert.match(disposizione, /^attachment;/, `${uscita.chiave}: il browser deve SALVARE, non navigare`);
+    /*
+     * ⛔ È la riga che giustifica `download` SENZA valore nel prodotto: il nome c'è, lo scrive il
+     *   server, e MDN dice che quello vince sull'attributo. Se un giorno sparisse, il nostro
+     *   messaggio d'esito («il file è nella cartella dei download») resterebbe vero ma il file si
+     *   chiamerebbe come l'ultimo segmento dell'indirizzo — cioè «esporta».
+     */
+    assert.match(disposizione, /filename\*=UTF-8''/, `${uscita.chiave}: il nome del file lo decide il server`);
+    assert.ok((await risposta.arrayBuffer()).byteLength > 0, `${uscita.chiave}: un file vuoto non è un'esportazione`);
+  }
+
+  /* ⛔ I tre toni sono tre indirizzi diversi E tre file diversi: se il `tono` non arrivasse alla
+     rotta risponderebbero 200 tutti e tre, identici — e nessuno se ne accorgerebbe. */
+  const pesi = [];
+  for (const tono of ['report', 'brief', 'dossier']) {
+    const risposta = await fetch(`${b.base}${indirizzoEsportazione(sessionId, ricercaId, 'pdf', tono)}`);
+    assert.equal(risposta.status, 200);
+    pesi.push((await risposta.arrayBuffer()).byteLength);
+  }
+  assert.equal(new Set(pesi).size, 3, 'il tono viaggia davvero: tre toni, tre file di taglia diversa');
+
+  /* ⛔ E i formati che il frontend conosce sono ESATTAMENTE quelli che la rotta accetta: un nono
+     formato inventato qui sarebbe un 400 che nessuno vedrebbe finché non lo preme una persona. */
+  const nostri = [...new Set(FORMATI_ESPORTAZIONE.map((u) => u.formato).filter(Boolean))];
+  for (const formato of nostri) {
+    const risposta = await fetch(`${b.base}${indirizzoEsportazione(sessionId, ricercaId, formato)}`);
+    assert.equal(risposta.status, 200, `il formato «${formato}» non è fra quelli che la rotta accetta`);
+  }
+});
+
+test('BANCO-ESPORTA: senza il record i documenti escono e i dati danno 409 — la riga di taglio è la STESSA', async (t) => {
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conRicercaViva(b);
+  /* Il caso della foto del 4174: prosa depositata, respinta dal cancello perché senza record. */
+  await scriviRapporto({ cartella: b.radice, id: ricercaId, testo: '# Una domanda\n\nUna risposta in prosa, senza record.\n' });
+  const ricerca = await concludi(b, sessionId, ricercaId);
+  assert.equal(ricerca.stato, 'senza-rapporto');
+  assert.ok(ricerca.contenutoRespinto, 'il testo depositato vive in `contenutoRespinto`');
+  assert.equal(ricerca.affermazioni, null, 'e non c’è nessun record');
+
+  const uscite = esportazioniRicerca(ricerca, null, { stato: 'pronto', ricerca });
+  const spente = uscite.filter((u) => !u.disponibile).map((u) => u.chiave);
+  assert.deepEqual(spente, ['json', 'bib', 'ris', 'fonti'], 'la sezione spegne esattamente i quattro di dati');
+
+  /*
+   * ⛔⛔ LA PROVA CHE CONTA, e va nei due versi: ciò che la sezione ACCENDE il server lo dà (200),
+   *   e ciò che la sezione SPEGNE il server lo rifiuta (409). Se le due righe di taglio divergessero
+   *   avremmo o una promessa vuota o un comando tolto senza ragione — e nessuna delle due si
+   *   vedrebbe provando le due metà separatamente.
+   */
+  for (const uscita of uscite.filter((u) => u.disponibile && u.formato)) {
+    const risposta = await fetch(`${b.base}${indirizzoEsportazione(sessionId, ricercaId, uscita.formato, uscita.tono)}`);
+    assert.equal(risposta.status, 200, `${uscita.chiave}: la sezione la offre, la rotta deve darla`);
+  }
+  for (const chiave of spente) {
+    const uscita = uscite.find((u) => u.chiave === chiave);
+    const risposta = await fetch(`${b.base}${indirizzoEsportazione(sessionId, ricercaId, uscita.formato)}`);
+    assert.equal(risposta.status, 409, `${chiave}: la sezione la spegne, e la rotta la rifiuta`);
+    const busta = await risposta.json();
+    assert.equal(busta.error.code, 'RESEARCH_RECHECK_UNAVAILABLE' === busta.error.code ? busta.error.code : busta.error.code);
+    assert.ok(typeof paroleErroreRicerca(busta.error.code, 'riverifica') === 'string');
+  }
 });

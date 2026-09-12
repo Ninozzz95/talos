@@ -1029,6 +1029,12 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     const chiave = String(voce?.reportLibraryId ?? '');
     return chiave ? magazzino.rapporti.get(chiave) || null : null;
   }
+  /* ⛔ 12/09 (foto del 4174): la scheda del dettaglio è la SECONDA strada per arrivare al testo di
+     una ricerca — è lì che vive `contenutoRespinto`, cioè quello che il cancello di consegna ha
+     rifiutato e che in Libreria non arriva mai. Il menu e il pannello la devono vedere. */
+  function dettaglioDi(voce) {
+    return magazzino.dettagli.get(String(voce?.id ?? '')) || null;
+  }
 
   /* ------------------------------------ L5 (12/09): le quattro azioni di scrittura ------------ */
 
@@ -1189,9 +1195,30 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
    *   copro: se il record sparisse fra l'apertura del pannello e il clic, il browser aprirebbe la
    *   busta JSON invece di scaricare. Dichiarato nel rapporto, non nascosto.
    */
-  function esportazioni(voce) {
+  async function esportazioni(voce) {
     const doc = schermo.ownerDocument || globalThis.document;
-    const elenco = esportazioniRicerca(voce, letturaDi(voce));
+    /*
+     * ⛔⛔ LA SCHEDA SI LEGGE PRIMA DI APRIRE IL PANNELLO, e non è un'ottimizzazione al contrario.
+     *   Dal tasto destro su una scheda dell'elenco il dettaglio non è mai stato chiesto: senza
+     *   questa riga il pannello elencherebbe undici uscite giudicate su ciò che l'ELENCO sa, e
+     *   l'elenco non porta né `contenutoRespinto` né le affermazioni ⇒ su una ricerca respinta
+     *   spegnerebbe tutto tranne la copia, cioè rifarebbe il difetto della foto un livello più in
+     *   basso. Il menu può permettersi di essere approssimativo (dice solo «c'è qualcosa»); un
+     *   elenco di undici righe con i motivi accanto no.
+     * ⛔ Una volta sola: il magazzino tiene la scheda, e il secondo clic non richiede niente.
+     */
+    const id = String(voce?.id ?? '');
+    if (id && !dettaglioDi(voce) && typeof leggiDettaglio === 'function') {
+      magazzino.dettagli.set(id, { stato: 'caricando' });
+      try {
+        const ricerca = await leggiDettaglio(voce);
+        magazzino.dettagli.set(id, ricerca ? { stato: 'pronto', ricerca } : { stato: 'errore', errore: 'scheda non disponibile' });
+      } catch (errore) {
+        magazzino.dettagli.set(id, { stato: 'errore', errore: errore?.message || 'motivo non registrato' });
+      }
+      ridisegna();
+    }
+    const elenco = esportazioniRicerca(voce, letturaDi(voce), dettaglioDi(voce));
     apriModale('Esporta la ricerca', montaPannelloEsportazioni(doc, elenco, {
       onScegli: (uscita) => { chiudiModale(); esegui(voce, uscita); },
     }), { document: doc });
@@ -1224,6 +1251,7 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   function apriMenu(voce, dove) {
     const voci = vociMenuRicerca(voce, {
       lettura: letturaDi(voce),
+      dettaglio: dettaglioDi(voce),
       /* La suite vuole la rotta, cioè la sessione: senza, il menu resta quello di ieri. */
       onEsportazioni: opzioni.sessionId ? esportazioni : null,
       onApriSessione: opzioni.onApriSessione,

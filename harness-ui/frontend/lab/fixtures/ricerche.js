@@ -165,7 +165,46 @@ export const RAPPORTI = new Map([
   ['lib-scusa-290', SCUSA_290],
 ]);
 
+/*
+ * ⛔⛔ LA RICERCA L8 `3029dea2`, dalla foto del 4174 del 12/09 (`scratchpad/l8/dark-ricerca-menu.png`):
+ *   stato `senza-rapporto`, **niente in Libreria** (`reportLibraryId: null`, perché il cancello di
+ *   consegna ha respinto), e 8.953 byte di rapporto in prosa vivi nella cartella della ricerca —
+ *   che arrivano solo dalla rotta del dettaglio, come `contenutoRespinto`. Su questa riga il menu
+ *   mostrava DUE voci sole. È il caso peggiore che questa sezione deve saper disegnare, quindi sta
+ *   nel laboratorio con i suoi dati veri e non con un'approssimazione comoda.
+ */
+export const PROSA_RESPINTA_L8 = [
+  '# Come stanno evolvendo gli harness agentici desktop nel 2026',
+  '',
+  'Nel 2026 la distanza fra gli harness desktop non si misura più sul modello che usano, ma su tre',
+  'capacità che quasi tutti dichiarano e pochi hanno per intero: il controllo del computer con',
+  'approvazioni esplicite, una memoria che sopravvive alla sessione, e una verifica delle fonti che',
+  'resta consultabile dopo la corsa.',
+  '',
+  '## Il controllo del computer',
+  '',
+  'Chi lo espone lo fa con permessi per attrezzo e non per sessione: la differenza si vede quando',
+  'una corsa lunga chiede la stessa cosa per la decima volta e nessuno se ne accorge più.',
+  '',
+  '## Cosa resta da capire',
+  '',
+  'Nessuno dei tre sistemi confrontati conserva il passaggio da cui una citazione viene: si conserva',
+  'l\u2019indirizzo, e un indirizzo non dice se la pagina di oggi dice ancora quella cosa.',
+].join('\n');
+
 export const RICERCHE = [
+  {
+    id: 'ric-respinta-lunga',
+    domanda: 'Come stanno evolvendo gli harness agentici desktop nel 2026?',
+    stato: 'senza-rapporto',
+    avviataAlle: '2026-09-12T08:14:00.000Z',
+    conclusaAlle: '2026-09-12T08:31:12.000Z',
+    reportLibraryId: null,
+    motivo: 'La ricerca \u00e8 finita ma il rapporto non \u00e8 leggibile: non porta il riepilogo delle verifiche.',
+    padreId: 'sessione-madre',
+    nome: 'Harness agentici desktop (L8)',
+    ultimoMessaggio: 'Non posso creare documenti in questa sessione: ti lascio qui sotto il testo completo.',
+  },
   {
     id: 'ric-viva',
     domanda: 'Quali interfacce di approvazione usano gli agenti che eseguono comandi sul computer di chi li usa?',
@@ -394,7 +433,24 @@ export const DETTAGLI_RICERCA = new Map([
     spesa: { tokens: 2600, searches: 2, pages: 4 },
     giornale: { eventi: 8, righeSaltate: 0, stato: 'collecting' },
   }],
+  ['ric-respinta-lunga', {
+    /* ⛔ `contenutoRespinto` valorizzato e `contenutoRapporto: null`: è esattamente ciò che la
+       rotta manda su una consegna respinta (L5 §4.2), ed è la sola strada per quel testo. */
+    contenutoRapporto: null,
+    contenutoRespinto: PROSA_RESPINTA_L8,
+    /* ⛔ `null`, non `[]`: «non c'è un record», che è il motivo per cui JSON/BibTeX/RIS/Fonti
+       restano spenti. `[]` direbbe «record presente, nessuna affermazione» — un'altra cosa. */
+    affermazioni: null,
+    piano: [],
+    passi: [],
+    spesa: { tokens: 9400, searches: 3, pages: 6 },
+    giornale: { eventi: 17, righeSaltate: 0, stato: 'done' },
+  }],
   ['ric-conclusa', {
+    /* La scheda di una conclusa VERA: il rapporto c'è, e il record pure. */
+    contenutoRapporto: null,
+    contenutoRespinto: null,
+    affermazioni: [{ numero: 1, testo: 'Gli harness convergono sul controllo del computer.', verdettoUmano: 'sostenuta dalla fonte' }],
     piano: [
       { id: 'b1', question: 'Quali capacità separano gli harness desktop nel 2026?', estimate: { tokens: 4200, searches: 2, pages: 4 } },
       { id: 'b2', question: 'Chi espone il controllo del computer e con quali permessi?', estimate: { tokens: 3100, searches: 1, pages: 3 } },

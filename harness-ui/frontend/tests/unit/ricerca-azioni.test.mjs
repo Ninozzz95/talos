@@ -5,6 +5,7 @@ import {
   vociMenuRicerca, montaDettaglioRicerca, magazzinoRicerche, montaEsitoRiverifica, frasiRiverifica,
   statoFonteRiverifica, governoRicercheVive, ricercheInCorso, INTERVALLO_RICERCHE_VIVE, frasiSpesa,
   frasePassaggi, esportazioniRicerca, montaPannelloEsportazioni, indirizzoEsportazione, FORMATI_ESPORTAZIONE,
+  testoDepositato, haQualcosaDaEsportare, recordDisponibile,
 } from '../../src/components/ricerca-dettaglio.js';
 
 /*
@@ -398,15 +399,86 @@ test('L5-ESPORTA: undici uscite, sempre tutte — quelle che non si possono fare
   assert.deepEqual(senzaRecord.filter((u) => u.avvertenza).map((u) => u.chiave), ['md', 'pdf-report', 'pdf-brief', 'pdf-dossier', 'docx', 'html']);
   for (const u of senzaRecord.filter((x) => !x.disponibile)) assert.ok(u.motivo.includes('riepilogo delle verifiche'));
 
-  /* ⛔ SENZA RAPPORTO: niente si esporta, e il motivo e' UNO SOLO, quello vero. */
-  const senzaRapporto = esportazioniRicerca({ id: 'r', stato: 'senza-rapporto', reportLibraryId: 'lib-1' }, { stato: 'pronto', prosa: 'x', record: null });
-  assert.deepEqual(spente(senzaRapporto), ['md', 'pdf-report', 'pdf-brief', 'pdf-dossier', 'docx', 'html', 'json', 'bib', 'ris', 'fonti']);
-  assert.equal(senzaRapporto.at(-1).disponibile, true, 'il testo depositato si copia comunque: esiste');
+  /*
+   * ⛔⛔ CORRETTO IL 12/09 DOPO LA SECONDA FOTO SUL 4174. Qui c'era scritto che su una ricerca
+   *   `senza-rapporto` non si esporta NIENTE, e la riga sotto lo pretendeva. Era falso, e la foto
+   *   della ricerca L8 `3029dea2` lo ha mostrato: 8.953 byte di rapporto in prosa depositati e
+   *   respinti dal cancello, e il menu con due voci sole. Il contratto della rotta dice che
+   *   md/html/pdf escono COMUNQUE e che il 409 riguarda solo i quattro di dati.
+   *   ⇒ la premessa si riapre, e si scrive perche'.
+   */
+  const respintaConProsa = esportazioniRicerca(
+    { id: 'r', stato: 'senza-rapporto', reportLibraryId: null, ultimoMessaggio: 'Non posso creare documenti.' },
+    null,
+    { stato: 'pronto', ricerca: { contenutoRapporto: null, contenutoRespinto: 'Il rapporto vero, 8953 byte.', affermazioni: null } },
+  );
+  assert.deepEqual(spente(respintaConProsa), ['json', 'bib', 'ris', 'fonti'], 'i documenti escono, i dati no');
+  assert.equal(respintaConProsa.find((u) => u.chiave === 'md').avvertenza, 'esce senza le verifiche');
+  assert.equal(respintaConProsa.at(-1).testo, 'Il rapporto vero, 8953 byte.', 'si copia la PROSA, non l’ultima frase in chat');
 
-  /* ⛔ RECORD IGNOTO (rapporto non ancora letto) non e' record ASSENTE: non si spegne niente. */
+  /* ⛔ RECORD IGNOTO (rapporto non ancora letto) non e' record ASSENTE: non si spegne niente, e
+     nemmeno i documenti — il file e' sul disco del SERVER, che questa schermata l'abbia letto o no. */
   const nonLetto = esportazioniRicerca(CONCLUSA, null);
-  assert.deepEqual(spente(nonLetto), ['copia'], 'solo la copia, perche il testo davvero non ce l’abbiamo');
+  assert.deepEqual(spente(nonLetto), ['copia'], 'solo la copia, perche il testo davvero non ce l’abbiamo in mano');
   assert.equal(nonLetto.find((u) => u.chiave === 'json').disponibile, true, 'decide il server, non un’ipotesi');
+
+  /* ⛔ IL VERSO CONTRARIO: senza NIENTE su cui lavorare non si accende una riga sola. */
+  const vuota = esportazioniRicerca({ id: 'r', stato: 'failed', reportLibraryId: null }, null, { stato: 'pronto', ricerca: { contenutoRapporto: null, contenutoRespinto: null, affermazioni: null } });
+  assert.equal(vuota.filter((u) => u.disponibile).length, 0);
+  assert.ok(vuota[0].motivo.includes('non ha depositato nessun testo'));
+
+  /* ⛔ E col SOLO ultimo messaggio: si copia, ma non si impagina. Due assenze, due frasi. */
+  const soloChat = esportazioniRicerca({ id: 'r', stato: 'failed', reportLibraryId: null, ultimoMessaggio: 'Mi fermo qui.' }, null, { stato: 'pronto', ricerca: { contenutoRapporto: null, contenutoRespinto: null, affermazioni: null } });
+  assert.deepEqual(soloChat.filter((u) => u.disponibile).map((u) => u.chiave), ['copia']);
+  assert.ok(soloChat[0].motivo.includes('ultima frase detta in chat'));
+});
+
+test('L5-ESPORTA: le TRE strade per arrivare al testo, e l’ordine di verità fra loro', () => {
+  const respinto = { stato: 'pronto', ricerca: { contenutoRapporto: null, contenutoRespinto: 'PROSA RESPINTA', affermazioni: null } };
+  /* 1. il rapporto accettato vince su tutto */
+  assert.deepEqual(
+    testoDepositato({ id: 'r', stato: 'done', reportLibraryId: 'lib-1', ultimoMessaggio: 'chat' }, { stato: 'pronto', prosa: 'RAPPORTO', record: {} }, respinto),
+    { testo: 'RAPPORTO', genere: 'rapporto', nome: 'il rapporto', suDisco: true },
+  );
+  /* 2. il testo respinto vince sull'ultima frase di chat — ed e' la cura della foto */
+  const r2 = testoDepositato({ id: 'r', stato: 'senza-rapporto', reportLibraryId: null, ultimoMessaggio: 'chat' }, null, respinto);
+  assert.equal(r2.testo, 'PROSA RESPINTA');
+  assert.equal(r2.nome, 'il file depositato');
+  assert.equal(r2.suDisco, true);
+  /* 3. l'ultima frase e' l'ultima spiaggia, e si dichiara per quello che e' */
+  const r3 = testoDepositato({ id: 'r', stato: 'failed', reportLibraryId: null, ultimoMessaggio: 'chat' }, null, null);
+  assert.deepEqual(r3, { testo: 'chat', genere: 'ultimo', nome: 'l’ultimo messaggio', suDisco: false });
+  /* ⛔ IL VERSO CONTRARIO: senza niente, niente — e mai una stringa vuota spacciata per testo. */
+  assert.deepEqual(testoDepositato({ id: 'r', stato: 'failed' }, null, null), { testo: '', genere: null, nome: null, suDisco: false });
+  assert.equal(haQualcosaDaEsportare({ id: 'r', stato: 'failed' }, null, null), false);
+  assert.equal(haQualcosaDaEsportare({ id: 'r', stato: 'senza-rapporto' }, null, respinto), true);
+
+  /* ⛔ `affermazioni: null` e `affermazioni: []` NON si leggono uguali: il primo e' «non c'e' un
+     record», il secondo «record presente, nessuna affermazione». Confonderli spegnerebbe le
+     esportazioni di dati su una ricerca che le ha. */
+  assert.equal(recordDisponibile(null, { stato: 'pronto', ricerca: { affermazioni: null } }), false);
+  assert.equal(recordDisponibile(null, { stato: 'pronto', ricerca: { affermazioni: [] } }), true);
+  assert.equal(recordDisponibile(null, null), null, 'non lo sappiamo: non si spegne niente');
+});
+
+test('L5-ESPORTA: il MENU della ricerca L8 — con la prosa respinta compaiono Copia ed Esporta…', () => {
+  /*
+   * ⛔⛔ LA FOTO (`scratchpad/l8/dark-ricerca-menu.png`): su `3029dea2` il menu aveva due voci
+   *   sole, e sul disco c'erano 8.953 byte. Questo test e' quella schermata, ricostruita dai dati
+   *   veri che le due rotte mandano.
+   */
+  const voce = { id: '3029dea2', domanda: 'Una domanda', stato: 'senza-rapporto', reportLibraryId: null, ultimoMessaggio: 'Non posso creare documenti.' };
+  const dettaglio = { stato: 'pronto', ricerca: { contenutoRapporto: null, contenutoRespinto: 'Il rapporto in prosa, 8953 byte.', affermazioni: null } };
+  const voci = vociMenuRicerca(voce, { dettaglio, onApriSessione: () => {}, onEsportazioni: () => {}, onElimina: () => {} });
+  assert.deepEqual(chiavi(voci), ['apri-conversazione', 'copia', 'esporta-suite', 'elimina']);
+  assert.equal(voci[1].etichetta, 'Copia il file depositato', 'col suo nome vero: non è un rapporto');
+  /* ⛔ IL VERSO CONTRARIO, due volte. Senza la scheda del dettaglio resta l'ultima frase di chat,
+     e il menu lo DICE invece di promettere un rapporto; senza nemmeno quella, nessuna delle due. */
+  const senzaScheda = vociMenuRicerca(voce, { onApriSessione: () => {}, onEsportazioni: () => {}, onElimina: () => {} });
+  assert.deepEqual(chiavi(senzaScheda), ['apri-conversazione', 'copia', 'esporta-suite', 'elimina']);
+  assert.equal(senzaScheda[1].etichetta, 'Copia l’ultimo messaggio');
+  const nuda = { id: 'r', domanda: 'D', stato: 'failed', reportLibraryId: null };
+  assert.deepEqual(chiavi(vociMenuRicerca(nuda, { onApriSessione: () => {}, onEsportazioni: () => {}, onElimina: () => {} })), ['apri-conversazione', 'elimina']);
 });
 
 test('L5-ESPORTA: l’indirizzo della rotta lo scrive UNA funzione, e il tono viaggia solo dove serve', () => {
@@ -462,8 +534,9 @@ test('L5-ESPORTA: nel menu «⋯» le tre uscite del browser lasciano il posto a
   const senzaSuite = vociMenuRicerca(CONCLUSA, { lettura });
   assert.deepEqual(chiavi(senzaSuite), ['copia', 'esporta', 'bibtex', 'ris']);
   // ⛔ E su una ricerca SENZA rapporto la suite non compare nemmeno con l’iniezione: la rotta non ha niente da dare.
+  /* ⛔ CORRETTO IL 12/09 (foto del 4174): qui pretendevo che su una consegna RESPINTA la suite
+     non comparisse. Era la stessa premessa falsa che ha prodotto il menu a due voci — la rotta
+     md/html/pdf li da' comunque. Adesso compare, e con le uscite giuste. */
   const respinta = { id: 'r', domanda: 'D', stato: 'senza-rapporto', reportLibraryId: 'lib-scusa' };
-  const voci = chiavi(vociMenuRicerca(respinta, { lettura, onEsportazioni: () => {} }));
-  assert.ok(!voci.includes('esporta-suite'), 'la rotta non ha niente da dare su una consegna respinta');
-  assert.ok(voci.includes('esporta'), 'e resta l’unica via per tirare fuori il testo depositato');
+  assert.deepEqual(chiavi(vociMenuRicerca(respinta, { lettura, onEsportazioni: () => {} })), ['copia', 'esporta-suite']);
 });
