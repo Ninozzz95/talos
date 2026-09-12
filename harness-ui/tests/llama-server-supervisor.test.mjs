@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor, decidiTipoKvCache, leggiNglDalFitter, percorsoFitter, supportaSpeculativaNgram } from '../src/llama-server-supervisor.mjs';
 
 function childProcess() {
   const child = new EventEmitter();
@@ -42,7 +42,17 @@ test('starts llama-server on loopback without shell and reaches ready after heal
   assert.equal(Object.hasOwn(status, 'modelPath'), false);
 
   child.stderr.emit('data', Buffer.from('ready\n'));
-  assert.deepEqual(logs, [{ stream: 'stderr', text: 'ready\n' }]);
+  /*
+   * ⭐ BC-13 — l'avvio DICHIARA le leve che ha scelto, prima di accendere il
+   * motore: una leva accesa in silenzio è una leva che nessuno può smentire.
+   * Qui non c'è offload e il binario non esiste, quindi entrambe le
+   * dichiarazioni devono dire «no» — ed è l'esatto comportamento di prima.
+   */
+  assert.deepEqual(logs.map((riga) => riga.text), [
+    '[talos] KV cache q8_0 — nessun offload sul dispositivo: la KV cache non entra nella scelta\n',
+    '[talos] decodifica speculativa a n-grammi: non offerta da questo binario\n',
+    'ready\n',
+  ]);
 });
 
 /*
@@ -167,4 +177,215 @@ test('rejects a relative model path before spawning anything', async () => {
   const supervisor = createLlamaServerSupervisor({ binaryPath: 'llama-server.exe', spawnImpl: () => { spawned = true; return childProcess(); } });
   await assert.rejects(supervisor.start({ modelPath: 'models/model.gguf', port: 18083 }), (error) => error.code === 'RUNTIME_INVALID');
   assert.equal(spawned, false);
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * BC-13 — LE LEVE DI VELOCITÀ. Owner 12/09/2026: «dobbiamo rendere il motore
+ * di llm locale estremamente rapido e meglio dei competitor».
+ *
+ * ⛔ Ogni leva è provata NEI DUE VERSI: si accende quando il binario dice di
+ * saperla fare, e NON si accende quando dice di no. Un cancello che non
+ * respinge nulla supera la prova positiva esattamente come uno vero.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+const AIUTO_CON_NGRAM = [
+  '--spec-draft-model, -md, --model-draft FNAME    draft model for speculative decoding (default: unused)',
+  '--spec-type none,draft-simple,draft-eagle3,draft-mtp,ngram-simple,ngram-map-k,ngram-mod,ngram-cache',
+  '                                        comma-separated list of types of speculative decoding to use',
+].join('\n');
+
+/* Un binario più vecchio: la decodifica speculativa c'è, ma solo col modello
+ * draft. È il caso in cui passare `--spec-type` lo farebbe MORIRE all'avvio. */
+const AIUTO_SENZA_NGRAM = [
+  '-md,   --model-draft FNAME              draft model for speculative decoding (default: unused)',
+  '--draft-max, --draft, --draft-n N       number of tokens to draft for speculative decoding (default: 16)',
+].join('\n');
+
+function sondaFinta({ aiuto = AIUTO_CON_NGRAM, fitF16 = '-c 16384 -ngl -1', fitQ8 = '-c 16384 -ngl -1' } = {}) {
+  const chiamate = [];
+  const sonda = (eseguibile, argomenti) => {
+    chiamate.push({ eseguibile, argomenti });
+    if (argomenti.includes('--help')) return aiuto;
+    return argomenti.includes('q8_0') ? fitQ8 : fitF16;
+  };
+  sonda.chiamate = chiamate;
+  return sonda;
+}
+
+test('leggiNglDalFitter riconosce «ci sta tutto» e un offload solo parziale', () => {
+  assert.equal(leggiNglDalFitter('-c 16384 -ngl -1'), 'tutto');
+  assert.equal(leggiNglDalFitter('-c 16384 -ngl all'), 'tutto');
+  assert.equal(leggiNglDalFitter('-c 16384 -ngl 56'), 56);
+  // ⛔ Il verso contrario: un'uscita che non parla di livelli non è «tutto».
+  assert.equal(leggiNglDalFitter('-c 16384'), null);
+  assert.equal(leggiNglDalFitter(''), null);
+  assert.equal(leggiNglDalFitter(undefined), null);
+});
+
+test('decidiTipoKvCache sceglie f16 solo quando il fitter dichiara che entra TUTTO', () => {
+  // MISURATO 12/09 su Qwen3-4B-Q4_K_M a 16.384 token: prompt 2.849 ms con f16
+  // contro 3.964 ms con q8_0 — il primo token arriva 1,1 s prima.
+  assert.equal(decidiTipoKvCache({ nglConF16: 'tutto' }).tipo, 'f16');
+  // ⛔ Verso contrario 1 — stesso modello a 131.072 token: con f16 il fitter
+  // risponde 24 livelli, con q8_0 risponde «tutto». Lì f16 sarebbe un disastro.
+  assert.equal(decidiTipoKvCache({ nglConF16: 24, nglConQ8: 'tutto' }).tipo, 'q8_0');
+  // ⛔ Verso contrario 2 — non entra in nessuno dei due modi: resta q8_0.
+  assert.equal(decidiTipoKvCache({ nglConF16: 24, nglConQ8: 40 }).tipo, 'q8_0');
+  // ⛔ Verso contrario 3 — il fitter non risponde: si torna al comportamento
+  // di ieri, mai a una scommessa.
+  assert.equal(decidiTipoKvCache({ nglConF16: null }).tipo, 'q8_0');
+  assert.equal(decidiTipoKvCache({}).tipo, 'q8_0');
+  // Ogni scelta porta il suo perché: un log senza motivo non è verificabile.
+  assert.match(decidiTipoKvCache({ nglConF16: 'tutto' }).perche, /TUTTI i livelli/u);
+});
+
+test('supportaSpeculativaNgram legge il --help del binario e non lo suppone', () => {
+  assert.equal(supportaSpeculativaNgram(AIUTO_CON_NGRAM), true);
+  // ⛔ Verso contrario: qui `--spec-type` non esiste proprio.
+  assert.equal(supportaSpeculativaNgram(AIUTO_SENZA_NGRAM), false);
+  assert.equal(supportaSpeculativaNgram(''), false);
+  assert.equal(supportaSpeculativaNgram(null), false);
+});
+
+test('percorsoFitter cerca llama-fit-params accanto al server, con la stessa estensione', () => {
+  assert.equal(percorsoFitter('C:\\r\\b10517-vulkan\\llama-server.exe'), 'C:\\r\\b10517-vulkan\\llama-fit-params.exe');
+  // ⛔ Il separatore lo decide il sistema che esegue: si prova il NOME, non
+  // la forma del percorso, altrimenti il test parla di Windows e non di noi.
+  assert.match(percorsoFitter('/opt/llama/llama-server'), /llama-fit-params$/u);
+  assert.equal(percorsoFitter('/opt/altro/motore.exe'), null);
+});
+
+test('con GPU e un binario moderno accende KV f16 e la speculativa a n-grammi', async () => {
+  const child = childProcess();
+  let spawnCall;
+  const sonda = sondaFinta();
+  const supervisor = createLlamaServerSupervisor({
+    binaryPath: 'C:\\talos\\llama-server.exe',
+    spawnImpl: (...args) => { spawnCall = args; return child; },
+    fetchImpl: async () => ({ status: 200, ok: true }),
+    portAllocator: async () => 18090,
+    pollIntervalMs: 1,
+    gpuLayers: 99,
+    sondaBinario: sonda,
+  });
+  await supervisor.start({ modelPath: 'C:\\models\\model.gguf', contextLength: 16384 });
+  const argv = spawnCall[1];
+  assert.deepEqual(argv.slice(argv.indexOf('-fa')), [
+    '-fa', '1', '--cache-type-k', 'f16', '--cache-type-v', 'f16',
+    '--spec-type', 'ngram-mod',
+    '--jinja', '--metrics', '--props',
+  ]);
+  // ⛔ Il fitter va interrogato sul MODELLO e sul CONTESTO veri, non a vuoto:
+  // la risposta cambia con entrambi.
+  const alFitter = sonda.chiamate.find((c) => c.eseguibile.includes('fit-params'));
+  assert.deepEqual(alFitter.argomenti, ['-m', 'C:\\models\\model.gguf', '-c', '16384', '-fa', '1']);
+  // Con «ci sta tutto» la seconda domanda (quella su q8_0) non si fa nemmeno.
+  assert.equal(sonda.chiamate.filter((c) => c.argomenti.includes('q8_0')).length, 0);
+});
+
+test('se il binario non offre --spec-type la leva NON si accende, e la KV resta quantizzata se non entra', async () => {
+  const child = childProcess();
+  let spawnCall;
+  const sonda = sondaFinta({ aiuto: AIUTO_SENZA_NGRAM, fitF16: '-c 131072 -ngl 24', fitQ8: '-c 131072 -ngl -1' });
+  const supervisor = createLlamaServerSupervisor({
+    binaryPath: 'C:\\talos\\llama-server.exe',
+    spawnImpl: (...args) => { spawnCall = args; return child; },
+    fetchImpl: async () => ({ status: 200, ok: true }),
+    portAllocator: async () => 18091,
+    pollIntervalMs: 1,
+    gpuLayers: 99,
+    sondaBinario: sonda,
+  });
+  await supervisor.start({ modelPath: 'C:\\models\\grande.gguf', contextLength: 131072 });
+  const argv = spawnCall[1];
+  assert.deepEqual(argv.slice(argv.indexOf('-fa')), [
+    '-fa', '1', '--cache-type-k', 'q8_0', '--cache-type-v', 'q8_0',
+    '--jinja', '--metrics', '--props',
+  ]);
+  assert.equal(argv.includes('--spec-type'), false);
+});
+
+test('le risposte del binario si pagano una volta sola: il secondo avvio non ri-sonda', async () => {
+  const sonda = sondaFinta();
+  const supervisor = createLlamaServerSupervisor({
+    binaryPath: 'C:\\talos\\llama-server.exe',
+    spawnImpl: () => childProcess(),
+    fetchImpl: async () => ({ status: 200, ok: true }),
+    portAllocator: async () => 18092,
+    pollIntervalMs: 1,
+    gpuLayers: 99,
+    sondaBinario: sonda,
+  });
+  await supervisor.start({ modelPath: 'C:\\models\\model.gguf', contextLength: 8192 });
+  await supervisor.stop();
+  const dopoIlPrimo = sonda.chiamate.length;
+  await supervisor.start({ modelPath: 'C:\\models\\model.gguf', contextLength: 8192 });
+  assert.equal(sonda.chiamate.length, dopoIlPrimo);
+});
+
+/*
+ * ⛔⛔⛔ BC-13 — MISURATO 12/09: il 27B dell'owner muore in 4,9 s con
+ * «ErrorOutOfDeviceMemory», e il supervisore aspettava 245 s (15 s + 15 s/GB)
+ * prima di dire «timeout». Quattro minuti buttati, e un messaggio che manda a
+ * cercare un modello troppo grande invece del motivo vero, che il motore
+ * aveva già scritto.
+ */
+test('un motore che si chiude da solo viene dichiarato SUBITO, con le sue ultime righe', async () => {
+  const child = childProcess();
+  const supervisor = createLlamaServerSupervisor({
+    binaryPath: 'C:\\talos\\llama-server.exe',
+    spawnImpl: () => child,
+    fetchImpl: async () => ({ ok: false, status: 503 }),
+    portAllocator: async () => 18093,
+    pollIntervalMs: 1,
+    // ⛔ Se il difetto tornasse, questo test impiegherebbe un'ora: è la prova
+    // che l'attesa NON viene consumata.
+    healthTimeoutMs: 3_600_000,
+    sondaBinario: () => null,
+  });
+  const iniziato = Date.now();
+  const avvio = supervisor.start({ modelPath: 'C:\\models\\enorme.gguf' });
+  /*
+   * ⛔ Il motore muore DOPO che il supervisore si è agganciato ai suoi canali.
+   * Emettere `close` prima dell'aggancio proverebbe un'altra cosa (un evento
+   * perso), e questo test è passato una volta per quel motivo sbagliato:
+   * `start()` cede il controllo sull'allocazione della porta, quindi il
+   * figlio non esiste ancora quando la riga dopo la chiamata viene eseguita.
+   */
+  setTimeout(() => {
+    child.stderr.emit('data', Buffer.from('ggml_vulkan: vk::Device::allocateMemory: ErrorOutOfDeviceMemory\n'));
+    child.emit('close', 1, null);
+  }, 20);
+  await assert.rejects(avvio, (error) => {
+    assert.equal(error.code, 'RUNTIME_PROCESS_FAILED');
+    assert.match(error.message, /ErrorOutOfDeviceMemory/u);
+    assert.match(error.message, /si è chiuso/u);
+    return true;
+  });
+  assert.ok(Date.now() - iniziato < 5_000, 'non deve consumare l attesa di salute');
+});
+
+/*
+ * ⛔ L'interruttore esiste per un difetto APERTO a monte
+ * (ggml-org/llama.cpp#25819, «stuck-loop escape for ngram-mod (WIP)», aperto
+ * il 17/07/2026). Se un giorno morde, si spegne da un posto solo — e questa
+ * prova garantisce che spegnerlo spenga davvero, anche su un binario che la
+ * leva la offre eccome.
+ */
+test('speculativaNgram: off spegne la leva anche se il binario la offre', async () => {
+  let spawnCall;
+  const supervisor = createLlamaServerSupervisor({
+    binaryPath: 'C:\\talos\\llama-server.exe',
+    spawnImpl: (...args) => { spawnCall = args; return childProcess(); },
+    fetchImpl: async () => ({ status: 200, ok: true }),
+    portAllocator: async () => 18094,
+    pollIntervalMs: 1,
+    gpuLayers: 99,
+    sondaBinario: sondaFinta(),
+    speculativaNgram: 'off',
+  });
+  await supervisor.start({ modelPath: 'C:\\models\\model.gguf', contextLength: 16384 });
+  assert.equal(spawnCall[1].includes('--spec-type'), false);
+  // ⛔ E spegne SOLO quella: la scelta della KV cache resta quella misurata.
+  assert.equal(spawnCall[1].includes('f16'), true);
 });

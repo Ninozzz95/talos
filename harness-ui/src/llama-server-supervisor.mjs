@@ -1,7 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
-import { dirname, isAbsolute } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { createProcessPolicy } from './process-policy.mjs';
 import { statSync } from 'node:fs';
 
@@ -32,6 +33,153 @@ export function attesaSaluteMs(byteModello, base = DEFAULT_TIMEOUT_MS) {
   return Math.round(base + gb * ATTESA_PER_GIGABYTE_MS);
 }
 const DEFAULT_POLL_MS = 100;
+
+/*
+ * ⭐⭐⭐ BC-13, 12/09/2026 — LE LEVE DI VELOCITÀ NON SI SCRIVONO A MANO: SI
+ * CHIEDONO AL BINARIO.
+ *
+ * Owner 12/09: «bisogna fare una ricerca delle ultime tecnologie e metodi
+ * all'avanguardia, dobbiamo rendere il motore di llm locale estremamente
+ * rapido e meglio dei competitor». E vincolo dell'11/09, che vale su tutto
+ * quello che segue: «NESSUN MODELLO PREDEFINITO: motore ottimizzato a
+ * livello UNIVERSALE, non forziamo nulla, sarà l'utente a decidere».
+ *
+ * ⇒ Nessuna delle due leve qui sotto nomina un modello, una scheda o un
+ * numero magico: ognuna fa una DOMANDA al binario che l'utente ha, e usa la
+ * risposta. Se il binario non sa rispondere, si resta esattamente al
+ * comportamento di prima.
+ */
+const TIMEOUT_SONDA_MS = 30_000;
+
+/**
+ * Il fitter ufficiale di llama.cpp (`llama-fit-params`, lo stesso codice che
+ * il server usa con `--fit on`) stampa su stdout gli argomenti che ENTRANO
+ * nella memoria del dispositivo, per esempio `-c 16384 -ngl -1` oppure
+ * `-c 16384 -ngl 56`.
+ *
+ * ⛔ `-1` (o `all`) è l'unico esito che dice «ci sta TUTTO». Un numero è già
+ * una resa parziale: qualche livello resterebbe fuori dalla scheda.
+ */
+export function leggiNglDalFitter(stdout) {
+  if (typeof stdout !== 'string') return null;
+  const trovato = /-ngl\s+(-?\d+|all|auto)/u.exec(stdout);
+  if (!trovato) return null;
+  const valore = trovato[1];
+  if (valore === 'all' || valore === '-1') return 'tutto';
+  if (valore === 'auto') return null;
+  const numero = Number(valore);
+  return Number.isInteger(numero) ? numero : null;
+}
+
+/**
+ * ⭐⭐⭐ MISURATO 12/09/2026 sul banco (Qwen3-4B-Q4_K_M, RX 9070 XT Vulkan,
+ * preambolo di 11.065 token, 3 ripetizioni, mediane):
+ *
+ *   KV cache q8_0 (quello che passavamo SEMPRE): prompt 3.964 ms · gen 127,6 t/s
+ *   KV cache f16 (il predefinito del binario):   prompt 2.849 ms · gen 117,5 t/s
+ *
+ * Cioè: quantizzare la KV cache costa **+39% sul tempo al primo token** e
+ * regala +8,6% in generazione. Su un preambolo d'agente da 11.000 token il
+ * primo token è quello che la persona aspetta — 1,1 secondi in più, ogni
+ * volta che la cache non prende. Sul compito «ricopia» la forbice è ancora
+ * più larga: 4.212 ms contro 2.969 (−29,5%), e il turno successivo 289 ms
+ * contro 179 (−38,1%).
+ *
+ * ⛔ La misura del 03/09 che aveva introdotto q8_0 («+408% in elaborazione
+ * del prompt») era stata presa sul modello giocattolo da 0,6B Q2_K, dove la
+ * KV cache è minuscola: su un modello vero il verso si ROVESCIA. Non è che
+ * quella misura fosse sbagliata — è che non parlava di questo caso.
+ *
+ * ⛔ E q8_0 NON è inutile: dimezza la cache. Sullo stesso 4B a 131.072 token
+ * di contesto il fitter risponde `-ngl 24` con f16 (24 livelli su GPU, il
+ * resto sul processore = disastro) e `-ngl -1` con q8_0 (tutto sulla
+ * scheda). ⇒ La scelta NON è una preferenza, è una MISURA che cambia da
+ * modello a modello e da contesto a contesto.
+ *
+ * ⇒ Regola universale: f16 se con f16 ci sta tutto; altrimenti q8_0.
+ *   Se non si riesce a chiedere, q8_0 — cioè il comportamento di ieri.
+ *
+ * @returns {{tipo: 'f16'|'q8_0', perche: string}}
+ */
+export function decidiTipoKvCache({ nglConF16, nglConQ8 } = {}) {
+  if (nglConF16 === 'tutto') {
+    return { tipo: 'f16', perche: 'con KV f16 il fitter del binario dichiara che TUTTI i livelli entrano nel dispositivo' };
+  }
+  if (nglConF16 === null || nglConF16 === undefined) {
+    return { tipo: 'q8_0', perche: 'il fitter del binario non ha risposto: si resta sulla KV quantizzata di prima' };
+  }
+  if (nglConQ8 === 'tutto') {
+    return { tipo: 'q8_0', perche: `con KV f16 entrerebbero solo ${nglConF16} livelli, con q8_0 entrano tutti` };
+  }
+  return { tipo: 'q8_0', perche: `con KV f16 entrerebbero solo ${nglConF16} livelli: la cache dimezzata ne fa entrare di più` };
+}
+
+/**
+ * ⭐⭐⭐ MISURATO 12/09/2026, stesso banco, compito «ricopia alla lettera un
+ * passaggio del contesto» — cioè il lavoro vero di un agente: rimettere
+ * fuori un risultato d'attrezzo, riscrivere un file che ha appena letto.
+ * Generazione, mediane su 3 ripetizioni:
+ *
+ *   senza                        123,5 token/s
+ *   --spec-type ngram-simple     158,4 token/s   (+28%)
+ *   --spec-type ngram-cache      202,3 token/s   (+64%)
+ *   --spec-type ngram-mod        353,2 token/s   (+186%, cioè 2,9×)
+ *   ngram-mod + KV f16           445,5 token/s   (+261% sulla riga di oggi)
+ *
+ * ⭐ Perché conta più di quanto sembri: la decodifica speculativa classica
+ * vuole un SECONDO modello (il «draft»). LM Studio la offre solo così — la
+ * sua documentazione dice che «relies on the collaboration of two models»
+ * (lmstudio.ai/docs/app/advanced/speculative-decoding, letta il 12/09/2026);
+ * Ollama non la offre affatto (docs.ollama.com/faq, 12/09/2026). Le varianti
+ * `ngram-*` di llama.cpp NON vogliono nessun secondo modello: pescano i
+ * candidati dal contesto già presente. ⇒ È l'unica forma compatibile col
+ * vincolo «nessun modello predefinito», e vale per un GGUF qualunque.
+ *
+ * ⛔ IL VERSO CONTRARIO, misurato e non supposto: quando nel contesto non
+ * c'è niente da pescare la leva COSTA. Prima chiamata di un server appena
+ * acceso, caso peggiore osservato 110,7 token/s contro 123,7 (−10,5%); sul
+ * compito «riassumi» (testo nuovo) prima chiamata 124,7 contro 127,6
+ * (−2,3%). Il costo si paga una volta e si ripaga dalla seconda chiamata in
+ * poi: nella stessa sessione la mediana sale a 353. Un harness fa decine di
+ * chiamate per giro, non una.
+ *
+ * ⛔ Si accende SOLO se questo binario la offre davvero: `--spec-type` è
+ * comparso da poco e un binario più vecchio morirebbe all'avvio con
+ * «unknown argument». Non si suppone: si legge il suo `--help`.
+ */
+export function supportaSpeculativaNgram(testoAiuto) {
+  if (typeof testoAiuto !== 'string' || testoAiuto === '') return false;
+  const riga = /--spec-type[^\n]*/u.exec(testoAiuto);
+  return Boolean(riga && riga[0].includes('ngram-mod'));
+}
+
+/**
+ * Sonda sincrona e volutamente povera: un eseguibile ACCANTO al binario del
+ * server, nessuna shell, un tetto di tempo, e un `catch` che non nasconde
+ * niente perché chi chiama tratta `null` come «non lo so».
+ */
+function creaSondaBinario(spawnSyncImpl = spawnSync) {
+  return function sonda(eseguibile, argomenti, timeoutMs = TIMEOUT_SONDA_MS) {
+    try {
+      const esito = spawnSyncImpl(eseguibile, argomenti, {
+        shell: false, windowsHide: true, encoding: 'utf8', timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024,
+      });
+      if (!esito || esito.error) return null;
+      return `${esito.stdout ?? ''}\n${esito.stderr ?? ''}`;
+    } catch {
+      return null;
+    }
+  };
+}
+
+/** `llama-fit-params` sta nella stessa cartella di `llama-server`, con la stessa estensione. */
+export function percorsoFitter(binaryPath) {
+  if (typeof binaryPath !== 'string' || binaryPath.trim() === '') return null;
+  const nome = basename(binaryPath);
+  const sostituito = nome.replace(/llama-server/iu, 'llama-fit-params');
+  if (sostituito === nome) return null;
+  return join(dirname(binaryPath), sostituito);
+}
 
 export class LlamaServerSupervisorError extends Error {
   constructor(message, code = 'RUNTIME_FAILED') {
@@ -73,12 +221,64 @@ export function createLlamaServerSupervisor({
    */
   gpuLayers = 0,
   pollIntervalMs = DEFAULT_POLL_MS,
+  /**
+   * ⭐ BC-13 — come si INTERROGA il binario (il suo `--help`, il suo fitter).
+   * Iniettabile perché nessun test debba avviare un processo vero, e perché
+   * la prova al verso contrario («il binario NON offre la leva») si possa
+   * scrivere senza procurarsi un binario vecchio.
+   */
+  sondaBinario = creaSondaBinario(),
+  /**
+   * ⛔ L'interruttore della speculativa, e il motivo per cui esiste: il
+   * difetto aperto ggml-org/llama.cpp#25819 — «server : add stuck-loop escape
+   * for ngram-mod (WIP)», aperto il 17/07/2026 e ancora aperto al 12/09/2026
+   * — descrive un ciclo che non esce quando la verifica dei candidati
+   * fallisce ripetutamente. Sul banco del 12/09 non si è mai presentato (3
+   * ripetizioni × 2 compiti × 2 modelli di cache, uscite identiche byte per
+   * byte alla riga senza speculativa su 3 domande su 3), ma un difetto
+   * aperto a monte si spegne da UN posto, non riscrivendo il codice.
+   * `'auto'` = si accende se il binario la offre; `'off'` = mai.
+   */
+  speculativaNgram = 'auto',
 } = {}) {
   if (typeof binaryPath !== 'string' || binaryPath.trim() === '') throw new LlamaServerSupervisorError('binaryPath is required', 'RUNTIME_MISCONFIGURED');
   const processPolicy = createProcessPolicy({ allowedExecutables: [binaryPath], spawnFn: spawnImpl });
   let current = null;
   let state = 'unavailable';
   const listeners = new Set();
+  /* Le risposte del binario non cambiano fra un avvio e l'altro: si pagano
+   * una volta sola. Il fitter dipende anche dal modello e dal contesto. */
+  let aiutoDelBinario;
+  const leveMemorizzate = new Map();
+
+  function speculativaDisponibile() {
+    if (speculativaNgram === 'off') return false;
+    if (aiutoDelBinario === undefined) aiutoDelBinario = sondaBinario(binaryPath, ['--help'], 10_000);
+    return supportaSpeculativaNgram(aiutoDelBinario ?? '');
+  }
+
+  /**
+   * ⛔ Si chiede al fitter SOLO quando stiamo davvero offloadando: su una
+   * build senza backend la domanda «ci sta nella scheda?» non ha oggetto, e
+   * nessuno dei due argomenti verrebbe passato comunque.
+   */
+  function leveVelocita(modelPath, contextLength) {
+    const chiave = `${modelPath}|${contextLength ?? ''}`;
+    if (leveMemorizzate.has(chiave)) return leveMemorizzate.get(chiave);
+    const fitter = percorsoFitter(binaryPath);
+    const contesto = Number.isInteger(contextLength) && contextLength > 0 ? ['-c', String(contextLength)] : [];
+    let kv = { tipo: 'q8_0', perche: 'il fitter del binario non è stato trovato: si resta sulla KV quantizzata di prima' };
+    if (fitter) {
+      const conF16 = leggiNglDalFitter(sondaBinario(fitter, ['-m', modelPath, ...contesto, '-fa', '1']) ?? '');
+      const conQ8 = conF16 === 'tutto'
+        ? null
+        : leggiNglDalFitter(sondaBinario(fitter, ['-m', modelPath, ...contesto, '-fa', '1', '-ctk', 'q8_0', '-ctv', 'q8_0']) ?? '');
+      kv = decidiTipoKvCache({ nglConF16: conF16, nglConQ8: conQ8 });
+    }
+    const leve = { kv, speculativa: speculativaDisponibile() };
+    leveMemorizzate.set(chiave, leve);
+    return leve;
+  }
 
   function status() {
     if (!current) return { state, runtimeId: 'llama.cpp', observedAt: now().toISOString() };
@@ -123,7 +323,22 @@ export function createLlamaServerSupervisor({
     entry.child.once('close', onClose);
     entry.child.once('error', onError);
     entry.child.stdout?.on('data', (chunk) => emitLog('stdout', chunk));
-    entry.child.stderr?.on('data', (chunk) => emitLog('stderr', chunk));
+    entry.child.stderr?.on('data', (chunk) => {
+      /*
+       * ⛔ BC-13 — le ultime righe si TENGONO, non solo si trasmettono. Sono
+       * l'unica cosa che spiega perché un motore non è partito, e finora
+       * uscivano solo verso chi si era iscritto ai log: chi riceveva
+       * l'eccezione leggeva «timeout» e andava a cercare un guasto che non
+       * c'era.
+       */
+      const testo = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+      for (const riga of testo.split('\n')) {
+        if (riga.trim() === '') continue;
+        entry.ultimeRighe.push(riga.trim());
+        if (entry.ultimeRighe.length > 12) entry.ultimeRighe.shift();
+      }
+      emitLog('stderr', chunk);
+    });
   }
 
   async function health() {
@@ -179,9 +394,22 @@ export function createLlamaServerSupervisor({
       startedAt: now().toISOString(),
       failure: null,
       closed: false,
+      ultimeRighe: [],
     };
     current = entry;
     state = 'loading';
+    /*
+     * ⛔ Le domande al binario si fanno PRIMA di accenderlo, e il loro esito
+     * si dice ad alta voce: una leva che si accende in silenzio è una leva
+     * che nessuno può smentire. Misurato 12/09: il fitter risponde in 0,34 s
+     * su un modello da 2,3 GB e in 3,9 s su uno da 15,3 GB; `--help` in
+     * meno di 0,3 s; e si pagano una volta sola per (modello, contesto).
+     */
+    const leve = Number.isInteger(gpuLayers) && gpuLayers > 0
+      ? leveVelocita(modelPath, contextLength)
+      : { kv: { tipo: 'q8_0', perche: 'nessun offload sul dispositivo: la KV cache non entra nella scelta' }, speculativa: speculativaDisponibile() };
+    emitLog('stderr', `[talos] KV cache ${leve.kv.tipo} — ${leve.kv.perche}\n`);
+    emitLog('stderr', `[talos] decodifica speculativa a n-grammi: ${leve.speculativa ? 'accesa (--spec-type ngram-mod)' : 'non offerta da questo binario'}\n`);
     try {
       entry.child = processPolicy.spawn(binaryPath, [
         '-m', modelPath,
@@ -299,7 +527,32 @@ export function createLlamaServerSupervisor({
          * sopra: solo se c'è davvero un backend GPU, mai su una build
          * CPU-only dove l'offload è zero.
          */
-        ...(Number.isInteger(gpuLayers) && gpuLayers > 0 ? ['-fa', '1', '--cache-type-k', 'q8_0', '--cache-type-v', 'q8_0'] : []),
+        /*
+         * ⭐⭐⭐ BC-13, 12/09/2026 — il TIPO della KV cache non è più fisso.
+         * Fino a ieri qui c'era sempre `q8_0`; misurato sul banco, su un
+         * modello vero costa il 39% del tempo al primo token. Ora lo decide
+         * `decidiTipoKvCache` chiedendo al fitter del binario se con la
+         * cache piena (f16) i livelli entrano ancora tutti nel dispositivo.
+         * Vedi il commento della funzione per i numeri.
+         *
+         * ⛔ `-fa 1` resta SEMPRE: la quantizzazione della KV cache lo
+         * richiede per definizione (senza, llama.cpp dequantizza a ogni
+         * passo), e con f16 non fa danno — il binario ha comunque `-fa auto`
+         * come predefinito, quindi lo stiamo solo dichiarando.
+         * ⛔ K e V restano SIMMETRICI: una coppia asimmetrica ripiega su un
+         * percorso lento (ggml-org/llama.cpp discussions #22411).
+         */
+        ...(Number.isInteger(gpuLayers) && gpuLayers > 0
+          ? ['-fa', '1', '--cache-type-k', leve.kv.tipo, '--cache-type-v', leve.kv.tipo]
+          : []),
+        /*
+         * ⭐⭐⭐ BC-13 — decodifica speculativa a n-grammi, SENZA modello draft.
+         * Misure e verso contrario nel commento di `supportaSpeculativaNgram`.
+         * Si accende solo se questo binario la offre: un binario più vecchio
+         * morirebbe all'avvio con «unknown argument», e un motore che non
+         * parte è infinitamente più lento di uno lento.
+         */
+        ...(leve.speculativa ? ['--spec-type', 'ngram-mod'] : []),
         '--jinja',
         '--metrics',
         '--props',
@@ -317,6 +570,30 @@ export function createLlamaServerSupervisor({
       const deadline = Date.now() + attesa;
       while (Date.now() < deadline) {
         if (entry.failure) throw new LlamaServerSupervisorError(`llama-server failed: ${entry.failure.message}`, 'RUNTIME_PROCESS_FAILED');
+        /*
+         * ⛔⛔⛔ BC-13, 12/09/2026 — UN PROCESSO GIÀ MORTO NON DIVENTA PRONTO,
+         * e aspettarlo è tempo rubato alla persona.
+         *
+         * MISURATO, non dedotto: il 27B dell'owner (15,3 GB) su questa
+         * macchina muore in **4,9 secondi** con «ggml_vulkan:
+         * vk::Device::allocateMemory: ErrorOutOfDeviceMemory». Il ciclo qui
+         * sotto guardava solo `entry.failure` — che si popola solo se lo
+         * SPAWN fallisce, non se il processo esce da solo — e continuava a
+         * bussare a una porta chiusa per `15 s + 15 s/GB`, cioè **245
+         * secondi**, per poi dire «non è diventato pronto entro 245 s».
+         *
+         * ⇒ Quattro minuti di attesa e un messaggio che manda a cercare un
+         * modello «troppo grande» o un'attesa «troppo corta», mentre il
+         * motore aveva già detto esattamente cosa non andava. Ora si guarda
+         * anche `closed`, e l'errore PORTA le ultime righe del motore.
+         */
+        if (entry.closed) {
+          const detto = entry.ultimeRighe.slice(-4).join(' | ');
+          throw new LlamaServerSupervisorError(
+            `llama-server si è chiuso dopo ${Math.round((Date.now() - (deadline - attesa)) / 1000)} s senza mai diventare pronto${detto ? `: ${detto}` : ''}`,
+            'RUNTIME_PROCESS_FAILED',
+          );
+        }
         const result = await health();
         if (result.ok) {
           entry.state = 'ready';
