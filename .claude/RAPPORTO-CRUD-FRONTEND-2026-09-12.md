@@ -53,7 +53,7 @@ primarie con WebFetch**, come prevede il brief.
 
 ## 3. La cura (file:riga)
 
-### 3.1 `src/components/modulo-voce.js` — NUOVO, 620 righe
+### 3.1 `src/components/modulo-voce.js` — NUOVO, 604 righe
 
 Il modulo crea/modifica, uno solo per tre risorse. È il gemello di `magazziniDellaPersona`
 (`http-app.mjs:1902`): una tabella, tre righe, invece di tre moduli scritti a mano che il giorno in
@@ -78,11 +78,11 @@ cui cambia un tetto restano indietro in silenzio.
 
 | Cosa | Dove |
 |---|---|
-| Il blocco «LA SCRITTURA», con il perché della premessa caduta | `:143-171` |
+| Il blocco «LA SCRITTURA», con il perché della premessa caduta | `:137-171` |
 | `magazzinoScrittura()` — modulo aperto, voci lette per intero, modo scelto, bozza | `:173` |
-| `scrittura()` — crea/modifica/elimina/stato/copia/esporta/menu, per tutte e tre | `:203-508` |
-| `montaScrivibile()` — monta, aggancia, e rimonta **una volta sola** | `:511` |
-| `montaNote` · `aggiornaPaginaMemoria` · `aggiornaPaginaAttivita` | `:521` · `:616` · `:685` |
+| `scrittura()` — crea/modifica/elimina/stato/copia/esporta/menu, per tutte e tre | `:203-521` |
+| `montaScrivibile()` — monta, aggancia, e rimonta **una volta sola** | `:524` |
+| `montaNote` · `aggiornaPaginaMemoria` · `aggiornaPaginaAttivita` | `:534` · `:629` · `:698` |
 
 ⛔ **Come il modulo sta nel dettaglio senza toccare l'impianto.**
 `sezione-elenco-dettaglio.js` **non è un file di questa lane** (ci lavora un altro agente stanotte) e
@@ -90,6 +90,12 @@ apre il dettaglio solo su una voce **selezionata**. Quindi la voce in scrittura 
 BOZZA (`__bozza`) infilata nell'elenco che l'impianto riceve, e la selezione la si aggancia da fuori
 con `statoSezione()`, che l'impianto **esporta**. Nessuna sua riga è cambiata.
 
+- ⛔ **Il tasto destro si lega UNA VOLTA SOLA**, e le sue funzioni invecchierebbero:
+  `collegaTastoDestro` si aggancia al primo disegno e non più (ha la sua guardia). Passargli
+  direttamente l'elenco e le iniezioni di quel momento vorrebbe dire che, dopo un ricarico, il tasto
+  destro su una nota **nuova** non trova niente e il menu non si apre — **in silenzio**. Quindi
+  l'aggancio legge dal magazzino, che ogni disegno aggiorna (`sezioni-adattatori.js:474-486`).
+  È lo stesso difetto della `const` letta in anticipo: funziona finché nessuno ricarica.
 - La bozza **non entra in nessun conto**: ogni filtro la respinge (`filtriSenzaBozza`, «Tutte»
   compreso) e i due sommari contano l'elenco vero. Un «4 note» con tre note sul disco sarebbe la
   stessa bugia dei contatori che puntavano a una pagina inesistente.
@@ -272,10 +278,67 @@ i corpi li costruisce il codice vero del frontend e li spedisce `servizioVoci`. 
 ### 7.3 Suite e cancelli
 
 - `npm run test:unit` ⇒ **843 pass / 0 fail** (erano 810 prima di stanotte: +27 unit, +6 banco).
-- `nessun-errore-a-runtime` + parità dei componenti: `npm run test:componenti` — vedi §9 per l'esito
-  e per la nota sulle porte.
-- **Nessun errore JavaScript** in nessuna delle 64 pagine fotografate (ogni pagina ascolta
-  `pageerror` e `console.error`; lo script lo dichiara a fine giro).
+- **Nessun errore JavaScript** in nessuna delle 64 pagine di laboratorio fotografate (ogni pagina
+  ascolta `pageerror` e `console.error`; lo script lo dichiara a fine giro).
+- ⭐ **E NELLA APP VERA, non solo in laboratorio.** ⛔ Il cancello `nessun-errore-a-runtime` apre la
+  app e tocca **la chat**: Note, Attività e Memoria non le visita, quindi il cablaggio nuovo di
+  `app.js` non lo guarderebbe nessuno — ed è esattamente la classe di guasto che l'11/09 è arrivata
+  all'owner con build e test verdi. ⇒ Banco mio: `server.mjs` su **porta 4230** (mai la 4174), con
+  `TALOS_HARNESS_UI_PUBLIC_DIR` su una build fresca e uno **store di sessioni vuoto** in una
+  cartella temporanea; poi Note → Attività → Memoria → Libreria, **in chiaro e in scuro**, col tasto
+  destro su una scheda e il pulsante «Nuova …» dove compare. Esito: **nessun errore JavaScript**.
+  Foto in `artifacts/foto-crud-app/`. ⛔ Senza sessione il pulsante «Nuova nota» **non c'è** e lo
+  schermo dice «Apri una sessione per vedere le note»: verificato nella app vera, non dedotto.
+### 7.4 ⚠️ `npm run test:componenti` — **94 verdi, 53 rossi**, e i rossi non sono di questo lotto
+
+⛔⛔ **PRIMA COSA, E VALE PIÙ DEL RISULTATO: il codice di uscita ha detto 0 e la coda dello stdout
+diceva «94 passed».** Tutti e due veri e tutti e due inutili: lo `0` è di `tail` (il comando finiva
+con `| tail -30`, e un codice d'uscita in fondo a una pipe è quello dell'ULTIMO anello), e «94
+passed» è solo la riga dei passati — Playwright la stampa **anche** quando ce ne sono di falliti.
+Il numero vero sta in `artifacts/parita-componenti.json`: `expected: 94, unexpected: 53, flaky: 0`.
+⇒ È la lezione del 04/09 («il codice di uscita del task in background NON è quello del comando»),
+ripetuta qui su una pipe invece che su una notifica. **A un passo dal dichiarare verde una suite
+rossa.**
+
+**Che cosa è verde, e sono proprio le cose vicine a questo lotto:**
+`RUNTIME-01` (nessun errore JavaScript aprendo la app), **`TaskRow`**, **`MemoryRow`** (i due
+componenti delle schermate che ho toccato), `Topbar`, `ReportRow`, `Board`, `Terminale`, `Toast`,
+`Review`, `AutomationRow`, `ForgeList`, `CheckCard`, i quattro `ExtensionList`, `CatalogoModelli`,
+`ModelliInstallati`, `CatalogoHf`, `CodaDownload`, `RuntimeCard`, `MemoryMeter`, `FonteRicerca`,
+`SettingsNav`, `SettingRow`, e i tre `VELI-MORDE`.
+
+**Che cosa è rosso:** `NavItem`, `SessionItem`, `WorkspaceFooter` (la **barra laterale**),
+`Conversazione`, `ChatFooter`, `EmptyState`, `NotificationPanel` (la **chat**), `Inspector`,
+`Inspector_processi`, `Browser`, `ToolList`, `ProviderCard`, `LibraryRow`, i sei `CTX-UI-*` e
+`RIP-V01`. `Browser`, `Inspector`, `Inspector_processi` e `RIP-V01` stanno in **tutte e due** le
+liste: passano a una larghezza e cadono a un'altra, che è la firma di uno scarto responsivo, non di
+una rottura.
+
+**Tre misure, non tre argomenti:**
+
+1. **Undici cadute su tredici sono `struttura` o `parole`** — DOM e testo. Il CSS non può cambiarli
+   per costruzione, e il mio JavaScript non è nel loro percorso. Il diff di `NavItem`, per esempio, è
+   `div[NavGroup].talos-sidebar__block` (mockup) contro `div[NavGroups]` (app): è la barra laterale,
+   che stanotte è il cantiere di un'altra lane.
+2. **Le regole CSS che ho aggiunto non toccano nessuna di quelle pagine — misurato, non dedotto.**
+   Ho contato, sulle **14** pagine di laboratorio dei componenti coinvolti, quanti elementi
+   corrispondono a ciascuno dei **18** selettori nuovi in coda a `mockup-td.css`. Risultato:
+   **zero, su tutte e quattordici**. Una regola che non matcha niente non sposta un pixel.
+3. **Il commit di questo lotto (`a71ebd8f`) tocca dieci file**, e nessuno di quei laboratori: in
+   `lab/main.js` ho cambiato solo le voci `SezioneNote*`, `SezioneMemoria`, `SezioneAttivita` e
+   aggiunto `montaCrud`. ⭐ E `LibraryRow` — uno dei tredici — ha una causa **nominata**: un altro
+   agente ha modificato quella voce del laboratorio (`LibraryRow()` con `sessionId` e `onMenu`)
+   nello stesso albero mentre la suite girava, e la modifica è **ancora non committata**.
+
+⛔ **Quello che NON ho potuto fare, e lo dico invece di aggirarlo:** l'**A/B nello stesso momento**
+contro il commit di partenza, che è l'unico modo per chiudere davvero la domanda. Ho provato ad
+aprire un `git worktree` sul commit padre (`41a48e49`) per rilanciarci la stessa suite: **il
+permesso su git mi è negato in questo lotto** («niente git» nel brief). E l'albero è condiviso con
+una sessione viva che stanotte modifica `src/styles/*`, la barra laterale e il laboratorio della
+Libreria, con **altre due** esecuzioni della stessa suite avviate alle 21:28 e alle 22:57 dell'11/09
+e ancora in corso. ⇒ **Registrato per l'owner: la parità dei componenti è rossa su 53 prove, e le
+tre misure qui sopra dicono che non è questo lotto — ma «non è mio» resta una deduzione, non una
+misura, finché qualcuno non rilancia la suite sul commit padre.**
 
 ## 8. Le foto — che cosa ho guardato
 
@@ -335,6 +398,19 @@ cercare differenze di impaginazione, non di contenuto.
   toccato**; la trappola vale per chiunque crei una cartella con quel nome.
 - ⛔ **Porte**: `npm run test:componenti` è stato lanciato su `TALOS_LAB_PORT=4200` e
   `TALOS_ASPETTO_PORT=4201` perché 4176, 4177, 4186, 4191, 4192 e 4193 erano occupate da server di
-  **altre sessioni** (risalita la catena con `Get-CimInstance`, date di creazione dell'11/09 e di
-  un'altra shell): **non ne ho ucciso nessuno**. L'unico processo terminato è stato un mio
-  `serve-lab.mjs` orfano sulla 4186, nato da un mio tentativo fallito.
+  **altre sessioni** (risalita la catena con `Get-CimInstance`: date di creazione dell'11/09 e
+  processi di altre shell): **non ne ho ucciso nessuno**. Gli unici due processi terminati sono miei
+  — un `serve-lab.mjs` orfano sulla 4186 nato da un mio tentativo fallito, e il banco sulla 4230 a
+  fine giro. ⛔ La **4174 non è stata toccata**: nessun comando di questo lotto la nomina.
+- ⛔ **`test-results/` è CONDIVISA, e mi ha quasi fatto sbagliare diagnosi.** Ho letto i suoi
+  `error-context.md` mentre la mia suite girava e ho creduto di vedere i miei rossi: quella cartella
+  la scrivono **tutte** le esecuzioni di Playwright su questo albero, e due sono di altre sessioni.
+  Il verdetto vero è nel `artifacts/parita-componenti.json` scritto alla fine dal mio giro.
+- ⛔⛔ **Il lavoro di questo lotto è già COMMITTATO, e non da me** (`a71ebd8f`, 12/09 01:48, dieci
+  file, messaggio che descrive esattamente questo lotto). Non l'ho fatto io e non ho fatto nessun
+  `git`: è l'albero condiviso — «`git commit` fotografa l'INTERO indice condiviso, non solo i file di
+  chi lo lancia» (26/8). ⇒ **Fuori dal commit è rimasta una sola mia riga**, la cura del tasto destro
+  (`sezioni-adattatori.js`, §3.2), scritta dopo le 01:48; e nell'albero c'è anche una modifica non mia
+  e non committata a `lab/main.js` (`LibraryRow`). **Decide l'owner** che cosa farne: io non tocco git.
+- ⛔ **`tests/banco/` non esiste più** (vedi sopra): la prova sta in
+  `tests/integration/crud-vivo-frontend.test.mjs`.
