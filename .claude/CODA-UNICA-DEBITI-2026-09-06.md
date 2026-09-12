@@ -1258,3 +1258,9 @@ colore, sfondo acceso/spento, scena, intensità, contrasto, velocità/densità e
 scena — nello studio, con le stesse chiavi di salvataggio; densità liste, dimensione, testo chat,
 composer restano in Impostazioni; per ciò che passa nello studio, in Impostazioni un rimando. Delegato (in corso, con confronto testa
 a testa e i 14 temi provati uno per uno).
+
+### BC-34 — le esportazioni HTML/PDF/DOCX della ricerca stampano il Markdown grezzo (12/09, foto sul 4174)
+Prova degli otto formati sul 4174 riavviato: md/html/pdf/docx 200 con intestazioni giuste,
+json/bib/ris/fonti 409 onesto senza record — ma l'HTML mostra «# », «## », «**…**», «- » letterali e
+gli elenchi schiacciati. In cura nel modulo delle esportazioni (renderer server-side riusato da
+document-generator o minimo senza dipendenze; il record recintato non si stampa come prosa).
