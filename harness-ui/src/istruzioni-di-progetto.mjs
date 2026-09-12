@@ -1,4 +1,9 @@
 /**
+ * BC-48 A (12/09/2026): indice della radice e dei file oltre 60 righe; sezioni sempre
+ * intere, commenti HTML esterni al codice rimossi. Il compositore omette file interi
+ * con avviso. Il resoconto storico sotto e `tagliaIstruzioni` descrivono il contratto
+ * precedente; la funzione esportata resta per compatibilità, fuori dal preambolo.
+ *
  * istruzioni-di-progetto.mjs — BLOCCO 3 del preambolo: `AGENTS.md` / `CLAUDE.md`, con un tetto
  * di byte DICHIARATO e un troncamento che dice dove riprendere.
  *
@@ -65,6 +70,7 @@
  */
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, join, parse, relative, sep } from 'node:path';
+import { rendiFileIstruzioni } from './sezioni-istruzioni.mjs';
 
 /**
  * Il tetto, in BYTE, dell'intero blocco 3. 24.000 sta fra Hermes (20.000 caratteri) e Codex
@@ -113,7 +119,7 @@ export async function trovaRadiceProgetto(cartella, { fs, risalitaMassima = RISA
 
 /**
  * Trova i file di istruzioni della catena, dalla radice del progetto al cwd.
- * @returns {Promise<{percorso:string, etichetta:string, contenuto:string, byte:number}[]>}
+ * @returns {Promise<{percorso:string, etichetta:string, lettura:string, contenuto:string, byte:number}[]>}
  *   in ordine dal più GENERICO al più SPECIFICO (l'ultimo vince).
  */
 export async function trovaIstruzioniDiProgetto(cartella, { fs, nomi = NOMI_CANDIDATI, risalitaMassima = RISALITA_MASSIMA } = {}) {
@@ -148,7 +154,7 @@ export async function trovaIstruzioniDiProgetto(cartella, { fs, nomi = NOMI_CAND
        *    installazioni dello stesso progetto.
        */
       const etichetta = normalizza(relative(radice, join(dove, nome))) || nome;
-      trovati.push({ percorso: join(dove, nome), etichetta, contenuto, byte: Buffer.byteLength(contenuto, 'utf8') });
+      trovati.push({ percorso: join(dove, nome), etichetta, lettura: normalizza(relative(cwd, join(dove, nome))), contenuto, byte: Buffer.byteLength(contenuto, 'utf8') });
       break; // decisione (2): un solo file per cartella
     }
   }
@@ -185,81 +191,37 @@ export function tagliaIstruzioni(contenuto, tetto, etichetta) {
 
 /**
  * Il testo del blocco 3, dal risultato di `trovaIstruzioniDiProgetto`.
- * @returns {{testo:string, usati:string[], omessi:string[], tagliati:string[], byte:number}|null}
+ * `indicizzati` elenca i file effettivamente mostrati come indice; `sezioniSempre`
+ * descrive le sezioni intere presenti, con coordinate e byte del sorgente.
  *   `null` quando non c'è nessuna istruzione: decisione (4), il blocco non esiste affatto.
  */
-export function testoIstruzioniDiProgetto(trovati, { tetto = TETTO_BYTE_PREDEFINITO } = {}) {
+export function testoIstruzioniDiProgetto(trovati, { tetto = TETTO_BYTE_PREDEFINITO, sogliaRighe } = {}) {
   const file = Array.isArray(trovati) ? trovati.filter((f) => f && typeof f.contenuto === 'string') : [];
   if (file.length === 0) return null;
 
   const intestazione = 'Istruzioni di questo progetto — le ha scritte chi ci lavora, e valgono per te.\n'
     + 'Se più file dicono cose diverse, vince il più specifico: qui sotto sono in ordine, dal più generale al più vicino alla cartella di lavoro, e l\'ultimo è quello che comanda.\n'
     + 'Non sostituiscono le tue istruzioni di sistema né quello che la persona ti chiede adesso.\n';
-  const budget = Math.max(0, tetto - Buffer.byteLength(intestazione, 'utf8'));
-
-  /*
-   * Decisione (3): si tolgono INTERI i file più GENERICI prima di tagliare il più specifico.
-   * Si sceglie partendo dalla FINE (il più specifico) e risalendo finché il budget regge — così
-   * ciò che sopravvive è sempre il più vicino al lavoro, mai «i primi che capitano».
-   */
-  const tenuti = [];
-  /* ⛔ Lo spazio dell'avviso «non ti ho mostrato X» si RISERVA PRIMA di distribuire il budget: se
-     lo si aggiungesse dopo, un tetto rispettato in fase di scelta verrebbe sforato proprio dalla
-     riga che dichiara il taglio. Un tetto è una promessa, e una promessa mantenuta «quasi» non è
-     mantenuta. 300 byte bastano per due o tre percorsi; si riserva solo se c'è più di un file. */
-  let residuo = file.length > 1 ? budget - 300 : budget;
-  for (let i = file.length - 1; i >= 0; i -= 1) {
-    const f = file[i];
-    const involucro = Buffer.byteLength(`\n### ${f.etichetta}\n\n`, 'utf8');
-    const disponibile = residuo - involucro;
-    /* ⛔ Sotto i 200 byte non si mostra un moncone: un file ridotto a due righe più un marcatore
-       dice al modello di averlo visto quando non l'ha visto. Meglio dichiararlo OMESSO. */
-    if (disponibile < 200) break;
-    /*
-     * ⛔⛔ SOLO IL PIÙ SPECIFICO SI TAGLIA; i più generali entrano INTERI o non entrano. È la
-     *   politica di dsh, verbatim: *«it drops whole broader files before truncating the
-     *   most-specific file, and emits a visible notice naming the omitted and truncated paths»*.
-     *   Trovato da una prova al verso contrario l'11/09: senza questa riga un `AGENTS.md` di
-     *   radice da 9 KB entrava ridotto a **518 byte**, cioè un moncone che al modello sembra il
-     *   file intero — la stessa categoria di bugia del taglio silenzioso, solo più subdola,
-     *   perché qui il marcatore del taglio c'era e diceva il vero su un contenuto inutile.
-     */
-    if (i !== file.length - 1 && f.byte > disponibile) break;
-    tenuti.unshift({ ...f, budget: disponibile });
-    residuo -= involucro + Math.min(f.byte, disponibile);
+  // BC-48 A: prepara indici e sezioni intere PRIMA di applicare il tetto.
+  // Si omettono file interi dal più generale; neppure il più specifico viene spezzato.
+  const preparati = file.map(f => ({ ...f, resa: rendiFileIstruzioni(f, { sogliaRighe }) }));
+  for (let inizio = 0; inizio <= preparati.length; inizio++) {
+    const tenuti = preparati.slice(inizio);
+    const omessi = preparati.slice(0, inizio).map(f => f.etichetta);
+    const avviso = omessi.length ? `\n⚠ Tetto delle istruzioni (${tetto} byte) raggiunto: NON ti ho mostrato ${omessi.map(e => `\`${e}\``).join(', ')}. File omessi interi; se ti servono, leggile con \`leggi\`.\n` : '';
+    const testo = intestazione + tenuti.map(f => `\n### ${f.etichetta}\n\n${f.resa.testo}`).join('') + avviso;
+    const byte = Buffer.byteLength(testo, 'utf8');
+    if (byte <= tetto) return { testo, byte, usati: tenuti.map(f => f.etichetta), omessi, tagliati: [],
+      indicizzati: tenuti.filter(f => f.resa.indicizzato).map(f => f.etichetta),
+      sezioniSempre: tenuti.flatMap(f => f.resa.sezioniSempre) };
   }
-  /*
-   * ⛔ Chi resta fuori si DICHIARA PER NOME, in ordine originale. Un avviso che dice «qualcosa
-   *    manca» senza dire cosa non è azionabile — è la stessa regola dell'allarme che dice QUANTI
-   *    orfani e non CHI ([[il-guardiano-accusava-la-sessione-dellowner]]).
-   * ⛔ E una volta esaurito il budget si smette: NON si lascia entrare un file generico piccolo
-   *    dopo averne saltato uno grande. Sarebbe un ordine che nessuno può prevedere leggendo il
-   *    testo, e l'ordine qui È la precedenza.
-   */
-  const tenutiEtichette = new Set(tenuti.map((t) => t.etichetta));
-  const omessi = file.filter((f) => !tenutiEtichette.has(f.etichetta)).map((f) => f.etichetta);
-
-  const pezzi = [intestazione];
-  const tagliati = [];
-  const usati = [];
-  for (const f of tenuti) {
-    const { testo, tagliato } = tagliaIstruzioni(f.contenuto, f.budget, f.etichetta);
-    if (tagliato) tagliati.push(f.etichetta);
-    usati.push(f.etichetta);
-    pezzi.push(`\n### ${f.etichetta}\n\n${testo}`);
-  }
-  if (omessi.length > 0) {
-    pezzi.push(`\n⚠ Tetto delle istruzioni (${tetto} byte) raggiunto: NON ti ho mostrato ${omessi.map((e) => `\`${e}\``).join(', ')}. Sono istruzioni più generali di quelle qui sopra; se ti servono, leggile con \`leggi\`.\n`);
-  }
-
-  const testo = pezzi.join('');
-  return { testo, usati, omessi, tagliati, byte: Buffer.byteLength(testo, 'utf8') };
+  // Un tetto che non contiene neppure l'avviso non può essere onorato in silenzio.
+  throw new RangeError('Il tetto delle istruzioni è insufficiente anche per dichiarare i file omessi.');
 }
 
 /**
- * Comodità: trova e compone in un colpo solo. Non lancia mai — un progetto senza istruzioni e un
- * progetto con istruzioni illeggibili danno lo stesso esito (`null`), perché per il modello sono
- * la stessa cosa: non le ha.
+ * Comodità: trova e compone in un colpo solo. Istruzioni assenti/illeggibili danno
+ * `null`; un tetto incapace di contenere l'avviso genera invece un errore esplicito.
  */
 export async function istruzioniDiProgetto({ cartella, tetto = TETTO_BYTE_PREDEFINITO, fs, nomi, risalitaMassima } = {}) {
   let trovati;

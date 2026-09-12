@@ -143,7 +143,7 @@ test('BC-07: quando i file cambiano davvero, il preambolo si rifà — per TUTTI
 // BLOCCO 3 — le istruzioni di progetto: il tetto, il taglio, e l'assenza
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
-test('BC-07, AL CONTRARIO: un AGENTS.md da 200 KB viene TAGLIATO al tetto, e il testo lo DICHIARA', async () => {
+test('BC48-A-BC07: un AGENTS.md da 200 KB senza sezioni è omesso intero e dichiarato', async () => {
   const enorme = `# Inizio riconoscibile\n${'riga di riempimento che serve solo a fare volume\n'.repeat(4500)}# Fine riconoscibile\n`;
   assert.ok(Buffer.byteLength(enorme, 'utf8') > 200_000, `il file di prova deve superare i 200 KB (è ${Buffer.byteLength(enorme, 'utf8')})`);
   const base = await progettoFinto({ 'AGENTS.md': enorme, 'src/uno.mjs': '' });
@@ -152,14 +152,12 @@ test('BC-07, AL CONTRARIO: un AGENTS.md da 200 KB viene TAGLIATO al tetto, e il 
     const esito = testoIstruzioniDiProgetto(trovati, { tetto: TETTO_BYTE_PREDEFINITO });
     assert.ok(esito, 'un file enorme non deve far sparire il blocco');
     assert.ok(esito.byte <= TETTO_BYTE_PREDEFINITO, `⛔ il tetto è una promessa: ${esito.byte} byte contro ${TETTO_BYTE_PREDEFINITO}`);
-    assert.deepEqual(esito.tagliati, ['AGENTS.md']);
-    /* ⛔ Il taglio si DICHIARA, e dice DOVE riprendere: un taglio silenzioso è il difetto che
-       questo progetto ha già pagato sulla propria memoria (200 righe / 25.000 byte, senza avviso). */
-    assert.match(esito.testo, /è stato TAGLIATO/);
-    assert.match(esito.testo, /leggi il file intero con `leggi`/);
-    /* Testa 70% e coda 20%: l'inizio e la FINE del file devono esserci entrambi. */
-    assert.ok(esito.testo.includes('# Inizio riconoscibile'), 'la testa');
-    assert.ok(esito.testo.includes('# Fine riconoscibile'), 'la coda');
+    assert.deepEqual(esito.tagliati, []);
+    assert.deepEqual(esito.omessi, ['AGENTS.md']);
+    assert.match(esito.testo, /⚠ Tetto delle istruzioni/);
+    assert.match(esito.testo, /leggile con `leggi`/);
+    assert.ok(!esito.testo.includes('# Inizio riconoscibile'), 'nessuna testa isolata');
+    assert.ok(!esito.testo.includes('# Fine riconoscibile'), 'nessuna coda isolata');
   } finally { await rm(base, { recursive: true, force: true }); }
 });
 

@@ -237,7 +237,7 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
     testo,
     blocchi: {
       scheda: scheda ? { byte: Buffer.byteLength(scheda.testo, 'utf8') } : null,
-      istruzioni: istruzioni ? { byte: istruzioni.byte, usati: istruzioni.usati, omessi: istruzioni.omessi, tagliati: istruzioni.tagliati } : null,
+      istruzioni: istruzioni ? { byte: istruzioni.byte, usati: istruzioni.usati, omessi: istruzioni.omessi, tagliati: istruzioni.tagliati, indicizzati: istruzioni.indicizzati, sezioniSempre: istruzioni.sezioniSempre } : null,
       mappa: resaMappa
         ? {
           cartelle: mappa.cartelle.filter((c) => c.livello <= resaMappa.profonditaUsata).length,

@@ -1,5 +1,23 @@
 // AVM owns canonical messages. The existing pinned SDK adapter owns wire formats.
 import { ID_NATIVI_SDK } from './provider-registry.mjs';
+import { creaIniettoreSezioni } from './sezioni-istruzioni.mjs';
+
+// BC-48 A: gli originali ricevono soltanto nuovi messaggi, prima di archivio e misura.
+export function collegaSezioniAiContextHooks({ contextHooks, file, cartella, radice } = {}) {
+  if (!contextHooks) return contextHooks;
+  const inietta = creaIniettoreSezioni({ file, cartella, radice });
+  return {
+    ...contextHooks,
+    async capture(input) {
+      inietta(input.messages);
+      return contextHooks.capture?.(input);
+    },
+    async prepare(input) {
+      inietta(input.messages);
+      return contextHooks.prepare(input);
+    },
+  };
+}
 
 const fail = (code, message, extra = {}) => { throw Object.assign(new Error(message), { code, ...extra }); };
 const clone = value => structuredClone(value);
