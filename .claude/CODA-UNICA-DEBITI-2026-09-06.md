@@ -1238,3 +1238,12 @@ Constraint Tax» (arXiv:2605.26128v1, 20/05/2026), «Constraint Tax in Open-Weig
    dal perimetro di questo lotto).
 ⛔ Il giro vero di conferma lo lancia l'OWNER: nessun test dimostra che glm-5.3-flash riempia
 davvero `affermazioni` e `fonti`. Cosa guardare è elencato nel §7 del rapporto.
+
+### PO-14 ✅ APPROVATA TUTTA (owner, 12/09: «approvo tutto») — ordine di esecuzione
+P-A record unico + test di parità → P-B cache DeepSeek → P-C LM Studio in chat (lotto 1, delegato) →
+P-D Z.AI diretto a due porte → P-E models.dev catalogo → P-F fallback_models + ausiliario → P-G gli
+undici «una riga» su wire OpenAI (Groq · Cerebras · Mistral · Together · Fireworks · DeepInfra ·
+Novita · Nebius · xAI · Ollama Cloud · HuggingFace) → P-H pool di chiavi + fallback → P-I Kimi ·
+MiniMax · Qwen → P-J wire Anthropic Messages verso terzi → P-K Azure/Bedrock/Vertex → P-L provider
+come processo esterno. Approvato anche il secondo giro di conferma di L8 (dopo il riavvio del 4174
+col backend delle cure).
