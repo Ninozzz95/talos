@@ -18,13 +18,20 @@ export function etichettaOrigineChiave(row={}){
  if(row.keyConfigured===true)return 'Chiave salvata';
  return row.requiresKey===true?'Chiave mancante':'Chiave facoltativa';
 }
+export function statoChiavePool(chiave={}){
+ const cause={traffico:'Troppo traffico',credenziale:'Credenziale rifiutata',credito:'Credito non disponibile',rete:'Collegamento interrotto','timeout-fornitore':'Tempo massimo superato','guasto-fornitore':'Servizio non raggiungibile','flusso-interrotto':'Risposta interrotta'};
+ if(chiave.stato!=='in-panchina')return 'Disponibile';
+ const data=Number.isFinite(chiave.inPanchinaFino)?new Date(chiave.inPanchinaFino):null;
+ const istante=data&&!Number.isNaN(data.getTime())?data.toLocaleString('it-IT',{dateStyle:'short',timeStyle:'medium'}):null;
+ return (istante?'In panchina fino a '+istante:'In panchina')+' · '+(cause[chiave.causa]||'Accesso da verificare');
+}
 function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!=null)n.textContent=txt;return n;}
 function campo(label,tipo,key,row,valore=''){const wrap=el('label','talos-stack talos-provider__field');wrap.append(el('span','talos-muted',label));const input=el('input','talos-field__input');input.type=tipo;input.dataset[key]=row.id;input.autocomplete='off';input.value=valore;if(tipo==='password'){input.spellcheck=false;input.placeholder=row.keyConfigured?'Incolla una nuova chiave':'Incolla la chiave';}if(tipo==='number'){input.min='5';input.max='300';input.step='1';}wrap.append(input);return wrap;}
 function button(action,label,tone='secondary'){const b=el('button','talos-button talos-button--'+tone+' talos-button--sm',label);b.type='button';b.dataset.c='Button';b.dataset.providerAction=action;return b;}
 /** Il simbolo di un'icona dello sprite. Il file non aveva icone: nasce qui, minimo. */
 function simboloProvider(nome){const NS='http://www.w3.org/2000/svg';const svg=document.createElementNS(NS,'svg');svg.setAttribute('class','i i--sm');svg.setAttribute('aria-hidden','true');const use=document.createElementNS(NS,'use');use.setAttribute('href','#'+nome);svg.append(use);return svg;}
 
-export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onMenu=null}={}){
+export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onMenu=null,onAzionePool=null}={}){
  const d=statoProvider(row,prova),busy=occupato||d.occupato,card=el('article','talos-card talos-provider');card.dataset.c='ProviderCard';card.dataset.providerId=row.id;card.setAttribute('aria-busy',String(busy));if(prova)card.dataset.provaEsito=prova.esito;
  const head=el('button','talos-provider__head');head.type='button';head.dataset.providerToggle=row.id;head.setAttribute('aria-expanded',String(aperta));head.setAttribute('aria-controls','provider-body-'+row.id);
  const title=el('strong','talos-provider__name',row.label||row.id),marks=el('span','talos-cluster');head.append(title,marks);
@@ -38,7 +45,37 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   *   saperlo servire: un pulsante che apre un flusso inesistente è peggio di nessun pulsante.
   */
  const conAccesso=row.supportsOAuth===true;
- const campoChiave=campo(row.keyConfigured?'Sostituisci la chiave':row.requiresKey?'Chiave API':'Chiave API (facoltativa)','password','providerKey',row);
+ const pool=Array.isArray(row.pool)?row.pool:[],poolCollegato=typeof onAzionePool==='function';
+ if(pool.length){
+  const elenco=el('ul','talos-stack');elenco.setAttribute('aria-label','Chiavi di '+(row.label||row.id));
+  Object.assign(elenco.style,{gridColumn:'1 / -1',margin:'0',padding:'0',listStyle:'none'});
+  for(const [i,chiave]of pool.entries()){
+   const riga=el('li','talos-cluster'),testo=el('div','talos-stack'),impronta=/^[a-f0-9]{64}$/u.test(chiave.impronta||'')?chiave.impronta.slice(0,12):'';
+   Object.assign(riga.style,{flexWrap:'nowrap',justifyContent:'space-between',alignItems:'flex-start'});
+   Object.assign(testo.style,{gap:'4px',minWidth:'0',flex:'1'});
+   testo.append(el('strong','',`Chiave ${i+1}${impronta?' · '+impronta:''}`),el('span','talos-muted',statoChiavePool(chiave)));
+   if(chiave.origine==='ambiente')testo.append(el('span','talos-muted','Impostata fuori da TALOS'));
+   riga.append(testo);
+   if(poolCollegato&&chiave.origine!=='ambiente'){
+    const rimuovi=el('button','talos-button talos-button--ghost talos-button--sm','Rimuovi');rimuovi.type='button';
+    rimuovi.setAttribute('aria-label',`Rimuovi chiave ${i+1}`);
+    const aziona=async()=>{
+     rimuovi.disabled=true;
+     try{await onAzionePool({azione:'rimuovi',provider:row.id,impronta:chiave.impronta});}
+     catch{const feedback=body.querySelector('[data-provider-feedback]');if(feedback){feedback.textContent='La chiave non è stata rimossa. Aggiorna il pannello e riprova.';feedback.hidden=false;}}
+     finally{rimuovi.disabled=busy;}
+    };
+    if(typeof onMenu==='function'){
+     rimuovi.textContent='⋯';rimuovi.setAttribute('aria-label',`Azioni per chiave ${i+1}`);rimuovi.setAttribute('aria-haspopup','menu');
+     rimuovi.addEventListener('click',()=>onMenu([{chiave:'rimuovi',etichetta:'Rimuovi',pericolo:true,aziona}],{ancora:rimuovi}));
+    }else rimuovi.addEventListener('click',aziona);
+    riga.append(rimuovi);
+   }
+   elenco.append(riga);
+  }
+  body.append(elenco);
+ }
+ const campoChiave=campo(poolCollegato?'Aggiungi una chiave':row.keyConfigured?'Sostituisci la prima chiave':row.requiresKey?'Chiave di accesso':'Chiave di accesso (facoltativa)','password','providerKey',row);
  if(conAccesso){
   const accedi=button('oauth-start',row.origineChiave==='accesso'?'Rifai l\u2019accesso':'Accedi con '+(row.label||row.id),'primary');
   accedi.classList.add('talos-provider__accedi');
@@ -61,13 +98,24 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   *   e vivono nel menu «⋯», nascoste ma presenti nel DOM: la regia delegata su
   *   `[data-provider-action]` (app.js:4068) le trova al `.click()` senza sapere del menu.
   */
- const actions=el('div','talos-cluster');actions.append(button('save-key','Salva chiave','primary'));
+ const actions=el('div','talos-cluster');
+ const salva=button('save-key',poolCollegato?'Aggiungi chiave':'Salva chiave','primary');
+ if(poolCollegato){
+  delete salva.dataset.providerAction;
+  salva.addEventListener('click',async()=>{
+   const input=campoChiave.querySelector('input');salva.disabled=true;
+   try{await onAzionePool({azione:'aggiungi',provider:row.id,key:input.value});input.value='';}
+   catch{const feedback=body.querySelector('[data-provider-feedback]');if(feedback){feedback.textContent='La chiave non è stata aggiunta. Controlla il collegamento e riprova.';feedback.hidden=false;}}
+   finally{salva.disabled=busy;}
+  });
+ }
+ actions.append(salva);
  const nascoste=[];
  const aggiungiNascosto=(b)=>{b.hidden=true;nascoste.push(b);return b;};
  const vociMenu=[{chiave:'test',etichetta:'Prova collegamento',icona:'i-play',elemento:aggiungiNascosto(button('test','Prova collegamento'))}];
  if(d.tempo)vociMenu.push({chiave:'save-runtime',etichetta:row.supportsEndpoint?'Salva collegamento':'Salva tempo massimo',icona:'i-clock',elemento:aggiungiNascosto(button('save-runtime',row.supportsEndpoint?'Salva collegamento':'Salva tempo massimo'))});
  if(row.supportsEndpoint&&row.endpointConfigured)vociMenu.push({chiave:'reset-runtime',etichetta:'Ripristina indirizzo',icona:'i-history',elemento:aggiungiNascosto(button('reset-runtime','Ripristina indirizzo'))});
- if(row.keyConfigured)vociMenu.push({chiave:'remove-key',etichetta:'Rimuovi chiave',icona:'i-trash',pericolo:true,separaPrima:true,elemento:aggiungiNascosto(button('remove-key','Rimuovi chiave','ghost talos-button--danger'))});
+ if(row.keyConfigured&&!poolCollegato)vociMenu.push({chiave:'remove-key',etichetta:pool.length>1?'Rimuovi tutte le chiavi':'Rimuovi chiave',icona:'i-trash',pericolo:true,separaPrima:true,elemento:aggiungiNascosto(button('remove-key',pool.length>1?'Rimuovi tutte le chiavi':'Rimuovi chiave','ghost talos-button--danger'))});
  if(typeof onMenu==='function'&&vociMenu.length){
   const tre=el('button','talos-button talos-button--ghost talos-icon-button talos-button--sm');tre.type='button';
   tre.setAttribute('aria-label','Altre azioni per '+(row.label||row.id));tre.setAttribute('aria-haspopup','menu');
@@ -85,12 +133,12 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  for(const control of body.querySelectorAll('input,button'))control.disabled=busy;
  }card.append(body);return card;
 }
-export function aggiornaProviderList(lista,rows,{aperte=new Set(),prove=new Map(),occupati=new Set(),caricamento=false,errore=null,onMenu=null}={}){
+export function aggiornaProviderList(lista,rows,{aperte=new Set(),prove=new Map(),occupati=new Set(),caricamento=false,errore=null,onMenu=null,onAzionePool=null}={}){
  if(!lista)return;lista.className='talos-provider-list';lista.setAttribute('aria-busy',String(caricamento));
  if(errore||!rows.length){const p=el('p','talos-muted',errore?errore.message||String(errore):caricamento?'Leggo gli accessi…':'Nessun fornitore dichiarato dal server.');p.dataset.c='EmptyState';if(errore)p.setAttribute('role','alert');lista.replaceChildren(p);return;}
  const focus=document.activeElement,focusId=focus?.closest('[data-provider-id]')?.dataset.providerId;
  const old=new Map([...lista.querySelectorAll('[data-provider-id]')].map(n=>[n.dataset.providerId,n]));
- const cards=rows.map(row=>{const op={aperta:aperte.has(row.id),prova:prove.get(row.id)||null,occupato:occupati.has(row.id)||caricamento},signature=JSON.stringify([row,op]),precedente=old.get(row.id);if(precedente?.dataset.providerSignature===signature&&!precedente.dataset.providerReset)return precedente;const card=creaProviderCard(row,{...op,onMenu});card.dataset.providerSignature=signature;
+ const cards=rows.map(row=>{const op={aperta:aperte.has(row.id),prova:prove.get(row.id)||null,occupato:occupati.has(row.id)||caricamento},signature=JSON.stringify([row,op,typeof onAzionePool==='function']),precedente=old.get(row.id);if(precedente?.dataset.providerSignature===signature&&!precedente.dataset.providerReset)return precedente;const card=creaProviderCard(row,{...op,onMenu,onAzionePool});card.dataset.providerSignature=signature;
  if(precedente&&!precedente.dataset.providerReset){for(const input of card.querySelectorAll('input')){const attr=[...input.attributes].find(a=>a.name.startsWith('data-provider-'));const prima=precedente.querySelector('['+attr.name+']');if(prima){prima.disabled=input.disabled;prima.className=input.className;prima.placeholder=input.placeholder;input.replaceWith(prima);}}}
  const feedback=precedente?.querySelector('[data-provider-feedback]'),target=card.querySelector('[data-provider-feedback]');if(feedback&&target)target.replaceWith(feedback);return card;});lista.replaceChildren(...cards);
  if(focusId){if(focus.isConnected&&!focus.disabled)focus.focus({preventScroll:true});else cards.find(n=>n.dataset.providerId===focusId)?.querySelector('[data-provider-toggle]')?.focus({preventScroll:true});}

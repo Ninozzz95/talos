@@ -76,6 +76,43 @@ function portaInVistaFonteSelettore(evento) {
 }
 if (typeof document !== 'undefined') document.addEventListener('focusin', portaInVistaFonteSelettore);
 
+/** I dati arrivano dal registro pubblico: nessuna capacità inventata dal selettore. */
+export function opzioniFallback(fornitori=[], {usaAttrezzi=true}={}) {
+  return fornitori.filter(p=>p.keyConfigured===true).flatMap(p=>(p.modelliDiRiserva||[])
+    .filter(m=>!usaAttrezzi||m.toolCalling===true)
+    .map(m=>({provider:p.id,model:m.id,etichetta:`${p.label||p.id} · ${m.nome||m.id}`})));
+}
+
+/** Scelta opzionale riusabile nella modale e nella pillola; onChange collega la sessione. */
+export function creaSceltaFallback({fornitori=[],valore=[],usaAttrezzi=true,onChange=null}={}) {
+  const wrap=document.createElement('fieldset');wrap.className='talos-card talos-card--pad talos-stack';Object.assign(wrap.style,{minWidth:'0',margin:'16px 0 0',gap:'12px'});
+  const legend=document.createElement('legend');legend.textContent='Se non risponde, continua con…';wrap.append(legend);
+  const selezione=valore.map(({provider,model})=>({provider,model}));
+  const scelte=opzioniFallback(fornitori,{usaAttrezzi});
+  const lista=document.createElement('ol');lista.className='talos-stack';
+  const select=document.createElement('select');select.className='talos-field__input';select.setAttribute('aria-label','Fornitore e modello con cui continuare');
+  Object.assign(select.style,{flex:'1',minWidth:'0'});select.disabled=typeof onChange!=='function';
+  const vuota=document.createElement('option');vuota.value='';vuota.textContent='Nessuno';select.append(vuota);
+  for(const [i,o]of scelte.entries()){const option=document.createElement('option');option.value=String(i);option.textContent=o.etichetta;select.append(option);}
+  const aggiungi=document.createElement('button');aggiungi.type='button';aggiungi.className='talos-button talos-button--secondary talos-button--sm';aggiungi.textContent='Aggiungi';
+  const notifica=()=>onChange?.(selezione.map(v=>({...v})));
+  function disegna(){
+    lista.replaceChildren(...selezione.map((v,i)=>{
+      const li=document.createElement('li');li.className='talos-cluster';
+      const label=document.createElement('span');label.textContent=scelte.find(o=>o.provider===v.provider&&o.model===v.model)?.etichetta||'Scelta non disponibile: rimuovila e scegline un’altra';
+      const rimuovi=document.createElement('button');rimuovi.type='button';rimuovi.className='talos-button talos-button--ghost talos-button--sm';rimuovi.textContent='Rimuovi';rimuovi.setAttribute('aria-label','Rimuovi '+label.textContent);rimuovi.disabled=typeof onChange!=='function';
+      rimuovi.addEventListener('click',()=>{selezione.splice(i,1);notifica();disegna();select.focus();});li.append(label,rimuovi);return li;
+    }));
+    for(const [i,option]of [...select.options].slice(1).entries())option.disabled=selezione.some(v=>v.provider===scelte[i].provider&&v.model===scelte[i].model);
+    aggiungi.disabled=typeof onChange!=='function'||!scelte.length||select.value===''||selezione.length>=8;
+  }
+  select.addEventListener('change',disegna);
+  aggiungi.addEventListener('click',()=>{const scelta=scelte[Number(select.value)];if(!scelta||select.value===''||selezione.length>=8||selezione.some(v=>v.provider===scelta.provider&&v.model===scelta.model))return;selezione.push({provider:scelta.provider,model:scelta.model});select.value='';notifica();disegna();select.focus();});
+  const nota=document.createElement('p');nota.className='talos-muted';nota.textContent=typeof onChange!=='function'?'La scelta non è ancora collegata a questa sessione.':'Il cambio viene annunciato in chat. La conversazione continua con i fornitori scelti, nell’ordine indicato.';
+  const azioni=document.createElement('div');azioni.className='talos-cluster';azioni.append(select,aggiungi);
+  wrap.append(lista,azioni,nota);disegna();return wrap;
+}
+
 export const PROVIDER_DIRETTI = Object.freeze([
   Object.freeze({ id: 'anthropic', etichetta: 'Anthropic' }),
   Object.freeze({ id: 'gemini', etichetta: 'Gemini' }),

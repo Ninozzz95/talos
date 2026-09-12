@@ -154,3 +154,34 @@ test('PROVIDER-HTTP-08 (P-C, verso contrario) senza runtime locale configurato s
   assert.equal(risposta.status, 404);
   assert.equal((await risposta.json()).error.code, 'REPORT_UNAVAILABLE');
 });
+
+test('PROVIDER-HTTP-PH pool: /keys aggiunge una seconda chiave, /keys/remove la toglie per impronta, e nessun segreto esce', async (t) => {
+  const conti = new Map();
+  const keyring = {
+    get: (service, account) => conti.get(`${service}\u0000${account}`) ?? null,
+    set: (service, account, value) => { conti.set(`${service}\u0000${account}`, value); },
+    remove: (service, account) => { conti.delete(`${service}\u0000${account}`); },
+  };
+  const store = createProviderCredentialStore({ env: {}, keyring });
+  const base = await listen(t, store);
+  const prima = await request(base, '/api/v1/providers/openai/keys', { key: 'sk-pool-prima-segreta' });
+  assert.equal(prima.status, 200);
+  const seconda = await request(base, '/api/v1/providers/openai/keys', { key: 'sk-pool-seconda-segreta', priorita: 5 });
+  const testoSeconda = await seconda.text();
+  assert.equal(seconda.status, 200);
+  assert.doesNotMatch(testoSeconda, /sk-pool-/);
+  const voceSeconda = JSON.parse(testoSeconda).data;
+  assert.match(voceSeconda.impronta, /^[a-f0-9]{64}$/);
+  assert.equal(voceSeconda.stato, 'disponibile');
+  const elenco = await (await request(base, '/api/v1/providers')).text();
+  assert.doesNotMatch(elenco, /sk-pool-/);
+  assert.equal(JSON.parse(elenco).data.items.find((row) => row.id === 'openai').pool.length, 2);
+  const corpoSbagliato = await request(base, '/api/v1/providers/openai/keys/remove', { impronta: 'non-una-impronta' });
+  assert.equal(corpoSbagliato.status, 400);
+  const rimossa = await request(base, '/api/v1/providers/openai/keys/remove', { impronta: voceSeconda.impronta });
+  assert.equal(rimossa.status, 200);
+  assert.deepEqual((await rimossa.json()).data.pool.length, 1);
+  assert.equal(store.hasKey('openai'), true);
+  const nonTrovata = await request(base, '/api/v1/providers/openai/keys/remove', { impronta: voceSeconda.impronta });
+  assert.equal(nonTrovata.status, 404);
+});

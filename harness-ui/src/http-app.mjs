@@ -1,3 +1,4 @@
+import { validaFallbackProviders } from './model-destination.mjs';
 import { randomBytes, randomUUID } from 'node:crypto'; // 08/9, BH-06: il nonce CSP del documento, nuovo a ogni risposta
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { nomiPerContentDisposition } from './workspace-files.mjs'; // PO-05: le due forme del nome per Content-Disposition (RFC 6266)
@@ -135,6 +136,7 @@ const API_ERROR_CODES = new Set([
   'WORKSPACE_NOT_AVAILABLE',
   'WORKSPACE_ALREADY_EXISTS',
   'PROVIDER_INVALID', 'PROVIDER_KEY_REQUIRED', 'PROVIDER_KEY_INVALID', 'PROVIDER_STORE_UNAVAILABLE', 'PROVIDER_RUNTIME_INVALID', 'PROVIDER_RUNTIME_UNAVAILABLE',
+  'PROVIDER_POOL_FULL', 'PROVIDER_KEY_NOT_FOUND', 'PROVIDER_FALLBACK_INVALID', 'PROVIDER_FALLBACK_TOOLS_UNSUPPORTED', // P-H (12/09): pool di chiavi e riserve — senza questa riga il codice vero cadeva nel 500 di fondo
   // ⭐ 04/9, R-03 — fonte della ricerca web (search-source-store.mjs, duckduckgo-search.mjs).
   'SEARCH_SOURCE_INVALID', 'SEARCH_KEY_REQUIRED', 'SEARCH_KEY_INVALID', 'SEARCH_ENDPOINT_INVALID', 'SEARCH_STORE_UNAVAILABLE', 'SEARCH_NOT_READY', 'SEARCH_BLOCKED', 'SEARCH_UNREACHABLE', 'SEARCH_FAILED',
   // ⭐ 04/9, W1-10 — token di loopback della shell Electron: /api/* senza il cookie talos_token.
@@ -325,6 +327,10 @@ const STATUS_BY_CODE = Object.freeze({
   PROVIDER_INVALID: 422,
   PROVIDER_KEY_REQUIRED: 422,
   PROVIDER_KEY_INVALID: 422,
+  PROVIDER_POOL_FULL: 422,
+  PROVIDER_KEY_NOT_FOUND: 404,
+  PROVIDER_FALLBACK_INVALID: 422,
+  PROVIDER_FALLBACK_TOOLS_UNSUPPORTED: 422,
   PROVIDER_STORE_UNAVAILABLE: 503,
   PROVIDER_RUNTIME_INVALID: 422,
   PROVIDER_RUNTIME_UNAVAILABLE: 503,
@@ -1013,7 +1019,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/terminals$/, metodi: ['GET', 'POST'] },
   { schema: /^\/api\/v1\/search-source(?:\/(key|key\/remove|test))?$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/providers\/([^/]+)\/test$/, metodi: ['POST'] },
-  { schema: /^\/api\/v1\/providers\/([^/]+)\/key(?:\/(remove))?$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/providers\/([^/]+)\/(key|keys)(?:\/(remove))?$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/providers\/([^/]+)\/runtime(?:\/(reset))?$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/automations\/([^/]+)\/toggle$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/automations\/([^/]+)\/elimina$/, metodi: ['POST'] },
@@ -1197,10 +1203,15 @@ function leggiCorpoJson(req, limiteByte = MAX_REQUEST_BODY_BYTES) {
  * assente o `'desktop'` è il comportamento di SEMPRE, `'mobile'` è l'unico
  * valore che cambia qualcosa (vedi session-registry.avvia).
  */
+function requireFallbackProviders(value) {
+  try { return validaFallbackProviders(value, { usaAttrezzi: true }); }
+  catch (errore) { throw Object.assign(new Error(errore?.message || 'Controlla i fornitori con cui continuare.'), { code: Object.hasOwn(STATUS_BY_CODE, errore?.code) ? errore.code : 'QUERY_INVALID' }); }
+}
+
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
   // ⭐⭐⭐ 29/8 — FASE K: modelloPlanner riusa la STESSA validazione di modello (modelloRichiestaValido) — è lo stesso formato OpenRouter, mai un secondo validatore.
-  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'provider', 'runtimeId', 'modelId', 'fallbackConsent'];
+  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'provider', 'runtimeId', 'modelId', 'fallbackConsent', 'fallbackProviders'];
   const soloAmmesse = chiavi.length > 0 && chiavi.length <= chiaviAmmesse.length && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
   if (
     !soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0
@@ -1247,6 +1258,7 @@ function requireTaskIdBody(body) {
     permessiPerAttrezzo: 'permessiPerAttrezzo' in body && body.permessiPerAttrezzo !== undefined ? body.permessiPerAttrezzo : null,
     provider: body.provider ?? 'cloud', runtimeId: body.runtimeId ?? null, modelId: body.modelId ?? null,
     fallbackConsent: body.fallbackConsent === true,
+    ...('fallbackProviders' in body ? { fallbackProviders: requireFallbackProviders(body.fallbackProviders) } : {}),
   };
 }
 
@@ -1311,7 +1323,7 @@ function requireHuggingFaceDownloadBody(body) {
 
 function requireCustomTaskBody(body) {
   // ⭐⭐⭐ 29/8 — FASE K: stesso principio di requireTaskIdBody, modelloPlanner riusa modelloRichiestaValido.
-  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo'];
+  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'fallbackProviders'];
   const chiavi = Object.keys(body ?? {});
   const haCartellaId = 'cartellaId' in body && body.cartellaId !== undefined;
   const haCartellaLibera = 'cartellaLibera' in body && body.cartellaLibera !== undefined;
@@ -1359,6 +1371,7 @@ function requireCustomTaskBody(body) {
     ...(haCartellaLibera ? { cartellaLibera: body.cartellaLibera } : {}),
     ...(haWorkspaceLaunchId ? { workspaceLaunchId: body.workspaceLaunchId } : {}),
     consegna: body.consegna,
+    ...('fallbackProviders' in body ? { fallbackProviders: requireFallbackProviders(body.fallbackProviders) } : {}),
     comandoProva: 'comandoProva' in body ? body.comandoProva : undefined,
     modello: 'modello' in body ? body.modello : null,
     modelloPlanner: 'modelloPlanner' in body && body.modelloPlanner !== undefined ? body.modelloPlanner : null,
@@ -1536,7 +1549,7 @@ function requireMemoriaBody(body, { creazione }) {
 
 /** Allowlist stretta per le preferenze che appartengono alla sessione. */
 function requireSessionSettingsBody(body) {
-  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo'];
+  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo', 'fallbackProviders'];
   const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
   if (chiavi.length === 0 || chiavi.some((chiave) => !ammesse.includes(chiave))) {
     const errore = new Error('Corpo non valido: attesa almeno una preferenza di sessione riconosciuta');
@@ -1568,7 +1581,7 @@ function requireSessionSettingsBody(body) {
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
-  return Object.fromEntries(chiavi.map((chiave) => [chiave, body[chiave]]));
+  return Object.fromEntries(chiavi.map((chiave) => [chiave, chiave === 'fallbackProviders' ? requireFallbackProviders(body[chiave]) : body[chiave]]));
 }
 
 /** ⭐ 27/8 — {percorso}, per elimina/rivela: la validazione FINE del percorso resta in workspace-files.mjs, qui solo la forma. */
@@ -3192,8 +3205,9 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const { taskId, modello, modelloPlanner, reasoning, mobile, permessi, permessiPerAttrezzo, provider, runtimeId, modelId, fallbackConsent } = requireTaskIdBody(corpo);
+        const { taskId, modello, modelloPlanner, reasoning, mobile, permessi, permessiPerAttrezzo, provider, runtimeId, modelId, fallbackConsent, fallbackProviders } = requireTaskIdBody(corpo);
         const opzioniSessione = {
+          ...(fallbackProviders !== undefined ? { fallbackProviders } : {}),
           modelloScelto: modello, modelloPlannerScelto: modelloPlanner, reasoningScelto: reasoning, mobile,
           permessiScelto: permessi, permessiPerAttrezzoScelto: permessiPerAttrezzo,
         };
@@ -3290,7 +3304,7 @@ export function createHttpApp({
       return;
     }
 
-    const providerKeyMatch = /^\/api\/v1\/providers\/([^/]+)\/key(?:\/(remove))?$/.exec(url.pathname);
+    const providerKeyMatch = /^\/api\/v1\/providers\/([^/]+)\/(key|keys)(?:\/(remove))?$/.exec(url.pathname);
     const providerRuntimeMatch = /^\/api\/v1\/providers\/([^/]+)\/runtime(?:\/(reset))?$/.exec(url.pathname);
     if (method === 'POST' && (providerKeyMatch || providerRuntimeMatch)) {
       try {
@@ -3300,14 +3314,25 @@ export function createHttpApp({
         const body = await leggiCorpoJson(req, 16 * 1024);
         let data;
         if (providerKeyMatch) {
-          const remove = providerKeyMatch[2] === 'remove';
+          const remove = providerKeyMatch[3] === 'remove';
+          const pool = providerKeyMatch[2] === 'keys'; // P-H: /keys agisce sul pool (per impronta), /key resta la chiave singola di sempre
           const keys = Object.keys(body || {});
           if (remove) {
-            if (keys.length !== 0) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
-            data = providerStore.clearKey(provider);
+            if (pool) {
+              if (keys.length !== 1 || keys[0] !== 'impronta' || !/^[a-f0-9]{64}$/.test(body.impronta)) throw Object.assign(new Error('Corpo non valido'), { code: 'QUERY_INVALID' });
+              data = providerStore.rimuoviChiave(provider, body.impronta);
+            } else {
+              if (keys.length !== 0) throw Object.assign(new Error('Corpo non valido'), { code: 'QUERY_INVALID' });
+              data = providerStore.clearKey(provider);
+            }
           } else {
-            if (keys.length !== 1 || keys[0] !== 'key') { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
-            data = providerStore.setKey(provider, body.key);
+            if (pool) {
+              if (!keys.includes('key') || keys.some(k => !['key','priorita'].includes(k))) throw Object.assign(new Error('Corpo non valido'), { code: 'QUERY_INVALID' });
+              data = providerStore.aggiungiChiave(provider, body.key, { priorita: body.priorita });
+            } else {
+              if (keys.length !== 1 || keys[0] !== 'key') throw Object.assign(new Error('Corpo non valido'), { code: 'QUERY_INVALID' });
+              data = providerStore.setKey(provider, body.key);
+            }
           }
         } else {
           const reset = providerRuntimeMatch[2] === 'reset';

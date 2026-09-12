@@ -14,7 +14,9 @@ import { statSync } from 'node:fs';
 import { createParser } from 'eventsource-parser';
 import { eseguiFlowForgeLocale, FORGE_PREFISSO_NOME_TOOL, validaManifestForgeLocale } from './forge-contract.mjs';
 import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
-import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO } from './model-destination.mjs';
+import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO, validaFallbackProviders } from './model-destination.mjs';
+import { REGISTRO_FORNITORI } from './provider-registry.mjs';
+import { classificaErroreDiCorsa } from './research-orchestrator.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
 import { preparaRichiestaCompatibile, OpenAiCompatibleRuntimeError } from './openai-compatible-runtime.mjs'; // P-D (12/09): Z.AI accetta solo alcuni livelli di ragionamento
@@ -487,7 +489,7 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
  * solleva l'errore con il motivo vero. Partire e prendersi un 404 farebbe
  * sembrare rotta una credenziale che è buona.
  */
-export function creaFetchMultiProvider(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null } = {}) {
+function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null, instradaOpenRouter = false } = {}) {
   if (!dipendenze) return fetchDiRete;
   return async function fetchMultiProvider(url, opzioni = {}) {
     let corpo = null;
@@ -538,7 +540,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, { risolvi = risolviD
       corpo = { ...corpo, messages: stripNativeMetadata(corpo.messages) };
       opzioni = { ...opzioni, body: JSON.stringify(corpo) };
     }
-    if (destinazione.fonte === 'openrouter') return fetchDiRete(url, opzioni);
+    if (destinazione.fonte === 'openrouter' && !instradaOpenRouter) return fetchDiRete(url, opzioni);
     if (destinazione.fonte === 'openai' && corpo.reasoning) {
       const { reasoning, ...resto } = corpo;
       corpo = { ...resto, ...(typeof reasoning.effort === 'string' ? { reasoning_effort: reasoning.effort } : {}) };
@@ -574,6 +576,167 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, { risolvi = risolviD
       body: corpoRiscritto,
     }), destinazione.fonte);
   };
+}
+
+function erroreFornitorePubblico(classificazione, stato = null) {
+  const messaggi = {
+    traffico: 'Troppo traffico presso il fornitore.', credenziale: 'Credenziale rifiutata dal fornitore.',
+    credito: 'Credito non disponibile presso il fornitore.', rete: 'Connessione con il fornitore interrotta.',
+    'timeout-fornitore': 'Il fornitore ha superato il tempo massimo.', 'guasto-fornitore': 'Il fornitore non risponde.',
+    'flusso-interrotto': 'La risposta del fornitore si è interrotta.',
+  };
+  const e = new Error(messaggi[classificazione.classe] ?? 'Il fornitore non ha accettato la richiesta.');
+  return Object.assign(e, { code: 'PROVIDER_REQUEST_ERROR', stato, ...classificazione, limitatoDalFornitore: classificazione.classe === 'traffico' });
+}
+
+function classificaGuasto(error, stato = null) {
+  // BC-44 rimane l'unica tabella. Si normalizzano solo i campi strutturati del trasporto.
+  const codice = String(error?.code ?? error?.cause?.code ?? '');
+  const messaggio = `${codice} ${error?.name ?? ''} ${error?.message ?? ''} ${error?.cause?.message ?? ''} ${stato ? `HTTP ${stato}` : ''}`;
+  const esito = classificaErroreDiCorsa({ codice, messaggio });
+  if (esito.classe !== 'ignoto' || !(stato >= 500 && stato <= 599)) return esito;
+  return classificaErroreDiCorsa({ messaggio: 'upstream error' });
+}
+
+function consumoPubblico(usage) {
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return null;
+  const risultato = {};
+  const copiaNumeri = (da, campi) => Object.fromEntries(campi.filter(k => typeof da?.[k] === 'number' && Number.isFinite(da[k]) && da[k] >= 0).map(k => [k, da[k]]));
+  Object.assign(risultato, copiaNumeri(usage, ['prompt_tokens','completion_tokens','total_tokens','input_tokens','output_tokens','cost','cache_read_input_tokens','cache_creation_input_tokens','prompt_cache_hit_tokens','prompt_cache_miss_tokens']));
+  for (const [campo, campi] of Object.entries({prompt_tokens_details:['cached_tokens','cache_write_tokens'],completion_tokens_details:['reasoning_tokens']})) {
+    const v = copiaNumeri(usage[campo], campi); if (Object.keys(v).length) risultato[campo] = v;
+  }
+  if (typeof usage.cache_discount === 'number' && Number.isFinite(usage.cache_discount)) risultato.cache_discount = usage.cache_discount;
+  return Object.keys(risultato).length ? risultato : null;
+}
+
+/** P-H: la fetch conosce la chiave; il kernel resta proprietario dei ritentativi.
+ * eseguiConFallback avvolge UNA chiamata del kernel, mai il ciclo degli attrezzi.
+ * I callback del cambio e del consumo devono essere durabili prima della nuova chiamata.
+ */
+export function creaFetchMultiProvider(fetchDiRete = fetch, {
+  risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null,
+  providerStore = null, fallbackProviders = [], onCambioFornitore = null, onConsumoFornitore = null,
+  modelloSessione = null,
+} = {}) {
+  const catena = validaFallbackProviders(fallbackProviders);
+  if (!providerStore && !catena.length) return creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso });
+  if (!dipendenze || (catena.length && (!providerStore || typeof onCambioFornitore !== 'function' || typeof onConsumoFornitore !== 'function'))) {
+    throw new OwnerRuntimeUnavailableError('Per continuare con un altro fornitore occorrono accessi, avvisi in chat e registrazione dei consumi.', 'PROVIDER_FALLBACK_NOT_CONNECTED');
+  }
+  let effettivo = null, indice = -1, occupato = false;
+
+  async function invia(url, opzioni = {}, contesto = {}) {
+    let corpo;
+    try { corpo = typeof opzioni.body === 'string' ? JSON.parse(opzioni.body) : null; } catch { /* altre fetch intatte */ }
+    if (!corpo || typeof corpo.model !== 'string' || !String(url).includes('/chat/completions')) return fetchDiRete(url, opzioni);
+    opzioni.signal?.throwIfAborted();
+    const { fonte } = separaFonteModello(corpo.model);
+    const record = REGISTRO_FORNITORI[fonte];
+    const scelta = record.credenziale ? providerStore?.scegliChiave(fonte) : null;
+    if (providerStore && !scelta && record.chiaveObbligatoria) {
+      if (!providerStore.hasKey(fonte)) throw new OwnerRuntimeUnavailableError('Manca la chiave del fornitore scelto.', 'PROVIDER_KEY_MISSING');
+      const panchina = providerStore.elencaPool(fonte).find(v => v.causa);
+      const classificazione = classificaErroreDiCorsa({ messaggio: ({traffico:'HTTP 429',credenziale:'HTTP 401',credito:'insufficient credit',rete:'network', 'timeout-fornitore':'timeout', 'guasto-fornitore':'upstream error', 'flusso-interrotto':'unexpected eof'})[panchina?.causa] ?? '' });
+      contesto.errore = erroreFornitorePubblico(classificazione, classificazione.classe === 'traffico' ? 429 : classificazione.transitorio ? 503 : 401);
+      return new Response(contesto.errore.message, { status: contesto.errore.stato });
+    }
+    contesto.errore = null;
+    contesto.scelta = scelta; contesto.fonte = fonte;
+    const segnala = async (classificazione, headers, stato) => {
+      contesto.errore = erroreFornitorePubblico(classificazione, stato);
+      if (scelta) providerStore.mettiInPanchina(fonte, scelta.impronta, { classe: classificazione.classe, headers });
+      if (classificazione.classe === 'credenziale' && typeof onAvviso === 'function') {
+        await onAvviso(`Una chiave di ${record.etichetta} è stata rifiutata: controlla Fornitori e accessi.`);
+      }
+    };
+    const rete = async (target, init) => {
+      try {
+        const timeout = providerStore?.getRuntime(fonte)?.timeoutSeconds;
+        const signal = timeout ? AbortSignal.any([...(init.signal ? [init.signal] : []), AbortSignal.timeout(timeout * 1000)]) : init.signal;
+        const response = await fetchDiRete(target, { ...init, signal });
+        if (response.ok) return response;
+        // Il corpo originale non viene mai restituito al logger/kernel: può contenere la chiave.
+        let testo = '';
+        try { testo = (await response.text()).slice(0, 16_384); } catch { /* lo stato resta disponibile */ }
+        const classificazione = classificaGuasto({ message: testo }, response.status);
+        await segnala(classificazione, response.headers, response.status);
+        return new Response(JSON.stringify({ error: { message: contesto.errore.message } }), { status: response.status, headers: { 'Content-Type': 'application/json' } });
+      } catch (error) {
+        if (opzioni.signal?.aborted && opzioni.signal.reason?.name !== 'TimeoutError') throw opzioni.signal.reason;
+        const classificazione = classificaGuasto(error);
+        await segnala(classificazione, null, classificazione.transitorio ? 503 : null);
+        if (!classificazione.transitorio) throw contesto.errore;
+        return new Response(contesto.errore.message, { status: 503 });
+      }
+    };
+    const instradata = creaFetchInstradata(rete, { risolvi, dipendenze: {
+      ...dipendenze, leggiChiave: p => p === fonte && scelta ? scelta.chiave : dipendenze.leggiChiave(p),
+    }, onAvviso, instradaOpenRouter: true });
+    try { return await instradata(url, opzioni); }
+    catch (error) {
+      // Gli SDK nativi lanciano sugli HTTP non riusciti: ricondurli alla stessa
+      // risposta permette al kernel di esaurire il proprio budget anche qui.
+      if (contesto.errore?.stato) return new Response(contesto.errore.message, { status: contesto.errore.stato });
+      if (contesto.errore) throw contesto.errore;
+      throw error;
+    }
+  }
+
+  const fetchMultiProvider = (url, opzioni) => invia(url, opzioni);
+  fetchMultiProvider.eseguiConFallback = async (chiama, opzioni = {}) => {
+    if (modelloSessione && JSON.stringify(separaFonteModello(opzioni.modello)) !== JSON.stringify(separaFonteModello(modelloSessione))) {
+      return chiama({ fetchDiRete: fetchMultiProvider });
+    }
+    if (occupato) throw new OwnerRuntimeUnavailableError('Una chiamata di questa sessione è già in corso.', 'PROVIDER_FALLBACK_BUSY');
+    occupato = true;
+    try {
+      const iniziale = separaFonteModello(opzioni.modello);
+      let destinazione = effettivo ?? { provider: iniziale.fonte, model: iniziale.modelloRemoto };
+      const usaAttrezzi = Boolean(opzioni.attrezzi?.length || opzioni.messaggi?.some(m => m.role === 'tool' || m.tool_calls?.length));
+      while (true) {
+        opzioni.segnaleStop?.throwIfAborted();
+        const contesto = {};
+        let rispostaInterrotta = false;
+        const fetchTentativo = (url, init) => invia(url, init, contesto);
+        let risultato;
+        try {
+          risultato = await chiama({
+            modello: `${destinazione.provider}:${destinazione.model}`, fetchDiRete: fetchTentativo,
+            ...(opzioni.onDelta ? { onDelta: (...args) => { rispostaInterrotta = true; return opzioni.onDelta(...args); } } : {}),
+          });
+        } catch (error) {
+          if (opzioni.segnaleStop?.aborted || error?.fermatoSuRichiesta || error?.name === 'AbortError') throw error;
+          const classificazione = contesto.errore ?? classificaGuasto(error, error?.stato ?? error?.statusCode);
+          const pulito = erroreFornitorePubblico(classificazione, error?.stato ?? contesto.errore?.stato);
+          if (!contesto.errore && contesto.scelta) providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, { classe: classificazione.classe });
+          if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage: null, costoDichiarato: null, esito: classificazione.classe === 'traffico' ? 'traffico' : 'interrotto' });
+          if (!classificazione.transitorio) throw pulito;
+          let prossima = null;
+          while (++indice < catena.length) {
+            const candidata = catena[indice];
+            if (candidata.provider === destinazione.provider || !providerStore.scegliChiave(candidata.provider)) continue;
+            try { validaFallbackProviders([candidata], { usaAttrezzi }); } catch { continue; }
+            prossima = candidata; break;
+          }
+          if (!prossima) throw pulito;
+          const messaggio = classificazione.classe === 'traffico'
+            ? `Il fornitore ${REGISTRO_FORNITORI[destinazione.provider].etichetta} limita il traffico: continuo con ${REGISTRO_FORNITORI[prossima.provider].etichetta} · modello ${prossima.model}`
+            : `Il fornitore ${REGISTRO_FORNITORI[destinazione.provider].etichetta} non risponde: continuo con ${REGISTRO_FORNITORI[prossima.provider].etichetta} · modello ${prossima.model}`;
+          await onCambioFornitore({ tipo: 'cambio-fornitore', precedente: destinazione, effettivo: prossima, classe: classificazione.classe, rispostaInterrotta, messaggio });
+          opzioni.segnaleStop?.throwIfAborted();
+          destinazione = prossima; effettivo = prossima;
+          continue;
+        }
+        // Un errore nel deposito della prova non deve provocare un'altra chiamata pagabile.
+        const usage = consumoPubblico(risultato?.usage);
+        const costoDichiarato = typeof usage?.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0 ? usage.cost : null;
+        if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, usage, costoDichiarato, esito: 'completato' });
+        return { ...risultato, usage, fornitoreEffettivo: destinazione.provider, modelloEffettivo: destinazione.model };
+      }
+    } finally { occupato = false; }
+  };
+  return fetchMultiProvider;
 }
 
 /**
@@ -651,6 +814,7 @@ export function createOwnerRuntimeAdapter({
    * sempre, byte per byte: chi non le passa non cambia di una virgola.
    */
   destinazioneModelloDeps = null,
+  providerStore = null,
   resolveImagesFn = null,
 } = {}) {
   const specifier = normalizzaModuloPath(modulePath);
@@ -762,6 +926,13 @@ export function createOwnerRuntimeAdapter({
       };
     },
     async talosLavora(input) {
+      const fallbackProviders = validaFallbackProviders(input?.fallbackProviders ?? []);
+      if (fallbackProviders.length) {
+        const runtime = await carica();
+        if (runtime.SUPPORTA_FALLBACK_FORNITORI !== 1) {
+          throw new OwnerRuntimeUnavailableError('Il motore di questa installazione non collega ancora il cambio di fornitore alla conversazione.', 'PROVIDER_FALLBACK_CONTRACT_REQUIRED');
+        }
+      }
       const fetchOriginale = typeof input?.fetchDiRete === 'function' ? input.fetchDiRete : fetch;
       const fetchConDescrizione = creaFetchConDescrizioneComando(fetchOriginale);
       const fetchResiliente = creaFetchOpenRouterResiliente(fetchConDescrizione, {
@@ -779,8 +950,11 @@ export function createOwnerRuntimeAdapter({
        * dentro avrebbe fatto ritentare su OpenRouter una chiamata già
        * dirottata altrove.
        */
-      const fetchInstradata = creaFetchMultiProvider(fetchResiliente, { dipendenze: destinazioneModelloDeps });
-      const fetchConImmagini = async (url, init = {}) => {
+      const fetchInstradata = creaFetchMultiProvider(fetchResiliente, {
+        dipendenze: destinazioneModelloDeps, providerStore, fallbackProviders, modelloSessione: input?.modello,
+        onAvviso: input?.onAvviso, onCambioFornitore: input?.onCambioFornitore, onConsumoFornitore: input?.onConsumoFornitore,
+      });
+      const fetchConImmagini = async (url, init = {}, successiva = fetchInstradata) => {
         if (input?.contextHooks && String(url).includes('/chat/completions') && typeof init.body === 'string') {
           let body;
           try { body = JSON.parse(init.body); } catch { /* Preserve the existing malformed-body path. */ }
@@ -789,10 +963,10 @@ export function createOwnerRuntimeAdapter({
             init = { ...init, body: JSON.stringify({ ...body, plugins: [...plugins, { id: 'context-compression', enabled: false }] }) };
           }
         }
-        if (!resolveImagesFn || !String(url).includes('/chat/completions') || typeof init.body !== 'string') return fetchInstradata(url, init);
+        if (!resolveImagesFn || !String(url).includes('/chat/completions') || typeof init.body !== 'string') return successiva(url, init);
         let body;
-        try { body = JSON.parse(init.body); } catch { return fetchInstradata(url, init); }
-        if (!Array.isArray(body.messages)) return fetchInstradata(url, init);
+        try { body = JSON.parse(init.body); } catch { return successiva(url, init); }
+        if (!Array.isArray(body.messages)) return successiva(url, init);
         const hasImages = body.messages.some(m => Array.isArray(m.content) && m.content.some(p => p?.type === 'image_url'));
         if (hasImages) {
           const capability = await Promise.resolve(modelCapabilityFn(body.model)).catch(() => null);
@@ -801,8 +975,13 @@ export function createOwnerRuntimeAdapter({
           }
         }
         const messages = await resolveImagesFn(body.messages);
-        return fetchInstradata(url, { ...init, body: JSON.stringify({ ...body, messages }) });
+        return successiva(url, { ...init, body: JSON.stringify({ ...body, messages }) });
       };
+      if (fetchInstradata.eseguiConFallback) {
+        // Anche il tentativo passato al kernel deve conservare il risolutore delle immagini.
+        fetchConImmagini.eseguiConFallback = (chiama, opzioni) => fetchInstradata.eseguiConFallback(aggiunte =>
+          chiama({ ...aggiunte, fetchDiRete: (url, init) => fetchConImmagini(url, init, aggiunte.fetchDiRete) }), opzioni);
+      }
       return richiama('talosLavora', { ...input, fetchDiRete: fetchConImmagini });
     },
     /** One bounded summary request through the same provider adapters as chat. */

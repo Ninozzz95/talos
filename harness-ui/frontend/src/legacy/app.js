@@ -1,3 +1,4 @@
+import {creaSceltaFallback} from '../components/fonti-modelli.js';
 import { colonnaConversazione, scorrevoleConversazione } from '../bridge/conversazione-dom.js';
 import {aggiornaProviderList,montaProviderPanel} from '../components/provider-card.js';
 import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica, valoriPolitiche } from '../components/politiche.js';
@@ -2832,7 +2833,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           : (conChiave > 0 ? `${conChiave} con chiave · nessuno ancora provato` : 'Nessun accesso configurato');
       }
     }
-    aggiornaProviderList($('#providerList'),rows,{aperte:state.modelLab.providerAperti,prove:state.modelLab.provePr,occupati:state.modelLab.providerOccupati,caricamento:state.modelLab.loadingProviders,errore:state.modelLab.providerError,
+    aggiornaProviderList($('#providerList'),rows,{onAzionePool:async ({azione,provider,key,impronta})=>{
+      const base='/api/v1/providers/'+encodeURIComponent(provider);
+      await apiPost(base+(azione==='aggiungi'?'/keys':'/keys/remove'),azione==='aggiungi'?{key}:{impronta});
+      await caricaProviderModelLab();
+    },aperte:state.modelLab.providerAperti,prove:state.modelLab.provePr,occupati:state.modelLab.providerOccupati,caricamento:state.modelLab.loadingProviders,errore:state.modelLab.providerError,
       /* ⛔ 10/09 — le azioni di un fornitore non stanno più in fila: qui si passa chi sa aprire
          il menu condiviso `.ft-actions-menu`, lo stesso della Libreria e dell'albero dei file.
          `posizionamento` arriva come {ancora} dal clic sui «⋯» e come {x,y} dal tasto destro. */
@@ -7622,6 +7627,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         });
         reasoningRow.append(reasoningLabel, reasoningToggle);
         mount.replaceChildren(picker.elemento, effortPicker.elemento, reasoningRow);
+        montaFallbackIn(mount,state.fallbackProviders||[],scegliFallbackCorrente);
         aggiornaVisibilitaRagionamento();
       }
     }
@@ -8569,6 +8575,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     });
     riga.append(etichetta, interruttore);
     mount.replaceChildren(picker.elemento, effortPicker.elemento, riga);
+    montaFallbackIn(mount,state.fallbackProviders||[],scegliFallbackCorrente);
   }
 
   /**
@@ -15665,6 +15672,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   }
 
   function applicaImpostazioniSessione(sessione) {
+    state.fallbackProviders=structuredClone(sessione?.fallbackProviders||[]);
     const reasoning = sessione?.reasoning && typeof sessione.reasoning === 'object' ? sessione.reasoning : null;
     state.model = normalizzaModelloSessione(sessione);
     state.effort = typeof reasoning?.effort === 'string' ? reasoning.effort : null;
@@ -16708,7 +16716,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   e l'albero resta sotto, aperto, per cambiare idea. (Regola dell'owner del 04/09: si
    *   rispetta il sistema di design che il progetto ha gia'.)
    */
+  function montaFallbackIn(mount, valore, onChange) {
+    const posto=textElement('div','talos-stack','Leggo i fornitori con cui continuare…');mount.append(posto);
+    apiGet('/api/v1/providers').then(dati=>{
+      if(posto.isConnected)posto.replaceChildren(creaSceltaFallback({fornitori:dati.items||[],valore,usaAttrezzi:true,onChange}));
+    }).catch(()=>{if(posto.isConnected)posto.textContent='Le riserve non sono disponibili: riapri la scelta del modello.';});
+  }
+  async function scegliFallbackCorrente(valore) {
+    await sincronizzaImpostazioniSessione({fallbackProviders:valore});
+    state.fallbackProviders=valore;
+    if(state.pendingCustomSession)state.pendingCustomSession.fallbackProviders=valore;
+  }
+
   function creaWorkspaceChooser({ launch = null } = {}) {
+    let fallbackProviders=[];
     const form = document.createElement('form');
     form.className = 'workspace-chooser';
     form.id = 'workspaceChooser';
@@ -16946,6 +16967,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        anche qui vinceva lo stile in linea (1-0-0-0) e il foglio era inerte. */
     permissionSection.append(permissionGrid, policyGate);
     right.append(rightHead, modelSection, reasoningSection, plannerSection, permissionSection);
+    montaFallbackIn(right,[],valore=>{fallbackProviders=valore;});
 
     const columns = document.createElement('div');
     columns.className = 'workspace-chooser-columns';
@@ -17417,6 +17439,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         modello: model,
         effort,
         modelloPlanner: planner,
+        fallbackProviders,
         permessi: local.permission,
         permessiPerAttrezzo: { ...state.permessiPerAttrezzo },
       };
@@ -17926,9 +17949,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     conversation.closest('.talos-conversation')?.classList.remove('talos-conversation--empty');
   }
 
-  function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
+  function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, fallbackProviders=[] }) {
     nuovaGenerazioneSessione();
-    state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo };
+    state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, fallbackProviders };
+    state.fallbackProviders=fallbackProviders;
     state.realSession.previewProjectId = cartellaId || null;
     state.realSession.previewWorkspaceName = nomeCartella;
     state.realSession.treeWorkspaceKey = cartellaId
@@ -17983,7 +18007,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     return String(testo || '').replace(/\s+/g, ' ').trim().slice(0, 80);
   }
 
-  async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, immagini = [] }) {
+  async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, immagini = [], fallbackProviders=state.fallbackProviders||[] }) {
     iniziaMisuraLatenza('primo messaggio della sessione');
     const generation = nuovaGenerazioneSessione();
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna, immagini };
@@ -18053,6 +18077,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         corpo.permessiPerAttrezzo = permessiPerAttrezzoEffettivi;
       }
       segnaTappaLatenza('postInviata');
+      if(fallbackProviders.length)corpo.fallbackProviders=fallbackProviders;
       const data = await apiPost('/api/v1/sessions/custom', corpo);
       segnaTappaLatenza('postRisposta');
       sessionId = data.sessionId;
