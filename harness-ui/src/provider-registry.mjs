@@ -343,7 +343,8 @@ export const REGISTRO_FORNITORI = congela({
     endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
     profili: congela({
       'openai-chat': congela({ stato: 'dichiarato', versione: 'v4' }),
-      'anthropic-messages': congela({ stato: 'in preparazione', baseUrl: 'https://api.z.ai/api/anthropic', lotto: 'P-J' }),
+      // P-J — scelta esplicita della porta, senza cambiare la destinazione OpenAI esistente.
+      'anthropic-messages': congela({ stato: 'dichiarato', baseUrl: 'https://api.z.ai/api/anthropic', fornitoreId: 'zai-anthropic', lotto: 'P-J' }),
     }),
     streaming: 'dichiarato',
     toolCalling: 'dichiarato',
@@ -1115,6 +1116,85 @@ export const REGISTRO_FORNITORI = congela({
     credenziale: true,
     esecuzione: 'collegato',
   }),
+
+  // P-J — INIZIO porte Anthropic terze. Fonti consultate il 12/09/2026.
+  // L'AI SDK aggiunge /messages: /v1 fa parte della base, diversamente dall'SDK Python.
+  'zai-anthropic': congela({
+    id: 'zai-anthropic',
+    etichetta: 'Z.AI (porta Anthropic)',
+    descrizione: 'Modelli GLM tramite la porta del piano di programmazione Z.AI.',
+    paginaChiavi: 'https://z.ai/manage-apikey/apikey-list',
+    wire: 'anthropic-messages',
+    baseUrl: 'https://api.z.ai/api/anthropic/v1',
+    fonte: 'https://docs.z.ai/devpack/tool/others', data: '2026-09-12',
+    indirizzoModificabile: true,
+    envIndirizzo: congela(['ZAI_ANTHROPIC_BASE_URL']),
+    // La guida ufficiale usa ANTHROPIC_AUTH_TOKEN: Bearer, senza ereditare segreti Anthropic.
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['ZAI_ANTHROPIC_API_KEY']) }),
+    chiaveObbligatoria: true, formaIdModello: 'nome', oauth: null,
+    endpoint: congela({ chat: '/messages', modelli: null }),
+    streaming: 'dichiarato', toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: null,
+      letturaUsage: congela(['cache_read_input_tokens', 'prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela(['cache_creation_input_tokens', 'prompt_tokens_details.cache_write_tokens']),
+      inclusiNelTotale: false, scontoDichiarato: null,
+      etichetta: 'Cache: senza conteggi nella risposta, non misurato.',
+      fonte: 'https://docs.z.ai/devpack/tool/others', data: '2026-09-12',
+    }),
+    // Nessun GET modelli documentato su questa porta: riserva esplicita, mai GET inventato.
+    catalogo: congela({ fonte: 'fornitore', forma: 'anthropic-data', percorso: null, inUI: true }),
+    prezzi: congela({ fonte: 'https://docs.z.ai/devpack/overview', data: '2026-09-12', nota: 'Accesso legato al piano; costo della chiamata non misurato.' }),
+    ragionamento: congela({ livelli: congela(['high', 'max']), fonte: 'https://docs.z.ai/devpack/latest-model', data: '2026-09-12' }),
+    modelliDiRiserva: congela([
+      congela({ id: 'glm-5.3-flash', nome: 'GLM 5.3 Flash', toolCalling: true, fonte: 'https://docs.z.ai/devpack/latest-model', data: '2026-09-12' }),
+      congela({ id: 'glm-5.3', nome: 'GLM 5.3', toolCalling: true, fonte: 'https://docs.z.ai/devpack/latest-model', data: '2026-09-12' }),
+    ]),
+    modelloAusiliario: null, motivoAusiliario: 'Nessun modello ausiliario qualificato per questa porta.',
+    modelsDevId: 'zai-coding-plan',
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({
+      attiva: false, auth: 'bearer', percorso: null, urlAssoluto: null, conta: () => null,
+      // La sonda ordinaria non genera. La richiesta minima richiede consentiGenerazione: true.
+      richiestaMinima: congela({ percorso: '/messages', corpo: congela({ model: 'glm-5.3-flash', max_tokens: 1, stream: false, messages: congela([congela({ role: 'user', content: '.' })]) }) }),
+      fonte: 'https://code.claude.com/docs/en/llm-gateway-connect', data: '2026-09-12',
+    }),
+    destinazioneChat: true, credenziale: true, esecuzione: 'collegato',
+  }),
+  // 12/09, review: P-I ha già `minimax` sul wire OpenAI (documentato come supportato): questa è la SECONDA porta, come `zai-anthropic`.
+  'minimax-anthropic': congela({
+    id: 'minimax-anthropic', etichetta: 'MiniMax (porta Anthropic)',
+    descrizione: 'Modelli MiniMax tramite la porta compatibile Anthropic (accesso internazionale).',
+    paginaChiavi: 'https://platform.minimax.io/user-center/basic-information/interface-key',
+    wire: 'anthropic-messages', baseUrl: 'https://api.minimax.io/anthropic/v1',
+    fonte: 'https://platform.minimax.io/docs/api-reference/text-anthropic-api', data: '2026-09-12',
+    indirizzoModificabile: true, envIndirizzo: congela(['MINIMAX_BASE_URL']),
+    auth: congela({ tipo: 'header', header: 'x-api-key', nomeVariabile: congela(['MINIMAX_API_KEY']) }),
+    chiaveObbligatoria: true, formaIdModello: 'nome', oauth: null,
+    endpoint: congela({ chat: '/messages', modelli: '/models' }),
+    streaming: 'dichiarato', toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: 'cache_control',
+      letturaUsage: congela(['cache_read_input_tokens', 'prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela(['cache_creation_input_tokens', 'prompt_tokens_details.cache_write_tokens']),
+      inclusiNelTotale: false, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata; senza conteggi nella risposta, non misurato.',
+      fonte: 'https://platform.minimax.io/docs/api-reference/anthropic-api-compatible-cache', data: '2026-09-12',
+    }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'anthropic-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://platform.minimax.io/docs/guides/pricing-paygo', data: '2026-09-12', valuta: 'USD', unita: 'milione di token' }),
+    modelliDiRiserva: congela([
+      congela({ id: 'MiniMax-M2.5', nome: 'MiniMax M2.5', toolCalling: true, fonte: 'https://platform.minimax.io/docs/api-reference/text-anthropic-api', data: '2026-09-12' }),
+      congela({ id: 'MiniMax-M3', nome: 'MiniMax M3', toolCalling: true, fonte: 'https://platform.minimax.io/docs/api-reference/text-anthropic-api', data: '2026-09-12' }),
+    ]),
+    // Minimo a pari merito in/out; lettura cache più economica di M3/M2.7 (fonte prezzi sopra).
+    modelloAusiliario: 'MiniMax-M2.5', modelsDevId: 'minimax',
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'x-api-key', percorso: '/models', urlAssoluto: null, conta: c => c?.data?.length, richiedeCatalogoValido: true,
+      fonte: 'https://platform.minimax.io/docs/api-reference/models/anthropic/list-models', data: '2026-09-12' }),
+    destinazioneChat: true, credenziale: true, esecuzione: 'collegato',
+  }),
+  // P-J — FINE porte Anthropic terze.
 
   // ── Il motore locale llama-server — nessuna credenziale su disco, mai ───────────────────────
   local: congela({

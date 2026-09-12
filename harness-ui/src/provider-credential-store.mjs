@@ -89,7 +89,8 @@ export function leggiScadenzaFornitore(provider, { headers, resetAt } = {}, ora 
   if (resetAt != null) aggiungi(istanteAssoluto(resetAt));
   const retry = h.get('retry-after');
   if (retry != null) aggiungi(/^\d+$/u.test(retry) ? ora + Number(retry) * 1000 : /^[A-Za-z]{3}, /u.test(retry) ? Date.parse(retry) : null);
-  const prefisso = provider === 'openai' ? 'x-ratelimit-' : provider === 'anthropic' ? 'anthropic-ratelimit-' : null;
+  // P-J — le scadenze seguono il wire anche per Z.AI e MiniMax, nello stesso pool P-H.
+  const prefisso = provider === 'openai' ? 'x-ratelimit-' : REGISTRO_FORNITORI[provider]?.wire === 'anthropic-messages' ? 'anthropic-ratelimit-' : null;
   if (prefisso) for (const dimensione of ['requests', 'tokens', 'project-tokens', 'input-tokens', 'output-tokens']) {
     const reset = h.get(provider === 'openai' ? `${prefisso}reset-${dimensione}` : `${prefisso}${dimensione}-reset`);
     const remaining = h.get(provider === 'openai' ? `${prefisso}remaining-${dimensione}` : `${prefisso}${dimensione}-remaining`);

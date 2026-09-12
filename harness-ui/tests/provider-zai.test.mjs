@@ -15,14 +15,16 @@ const prepara = (body) => runtime.preparaRichiestaCompatibile('zai', body);
 const modello = 'glm-5.3-flash';
 const deps = (store) => ({ leggiChiave: store.getKey, leggiRuntime: store.getRuntime });
 
-test('PD-01 — record Z.AI valido, listino datato e secondo profilo inattivo', () => {
+test('PD-01 — record Z.AI valido, listino datato e seconda porta esplicita P-J', () => {
   const r = REGISTRO_FORNITORI.zai;
   assert.ok(r);
   assert.equal(verificaRegistro({ zai: r }), true);
   assert.equal(r.etichetta, 'Z.AI');
   assert.equal(r.baseUrl, 'https://api.z.ai/api/paas/v4');
   assert.equal(r.wire, 'openai-chat');
-  assert.equal(r.profili['anthropic-messages'].stato, 'in preparazione');
+  // P-J — il wire di zai resta OpenAI; la seconda porta è un record selezionabile distinto.
+  assert.equal(r.profili['anthropic-messages'].stato, 'dichiarato');
+  assert.equal(r.profili['anthropic-messages'].fornitoreId, 'zai-anthropic');
   assert.equal(r.profili['anthropic-messages'].lotto, 'P-J');
   assert.equal(r.prezzi.data, '2026-09-12');
   assert.deepEqual(r.modelliNoti.map(m => m.id), ['glm-5.3-flash', 'glm-5.3', 'glm-5.2', 'glm-5', 'glm-4.6']);

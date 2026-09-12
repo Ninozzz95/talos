@@ -58,6 +58,9 @@ const RISERVE_PUBBLICHE = {
   // P-I: proiezione indipendente del GET pubblico del 12/09/2026, impronta nella fixture.
   ...Object.fromEntries(Object.entries(JSON.parse(leggi('tests/fixtures/provider-pi-models-dev-2026-09-12.json')).fornitori)
     .map(([id, p]) => [id, Object.fromEntries(Object.entries(p.models).map(([id, m]) => [id, m.tool_call]))])),
+  // P-J — proiezione indipendente del catalogo pubblico, fonte/data/impronta nella fixture.
+  ...Object.fromEntries(Object.entries(JSON.parse(leggi('tests/fixtures/provider-pj-models-dev-2026-09-12.json')).fornitori)
+    .map(([id, p]) => [id, Object.fromEntries(Object.entries(p.models).map(([id, m]) => [id, m.tool_call]))])),
   // P-G: proiezione indipendente del GET, stessa impronta pubblica del 12/09/2026.
   ...Object.fromEntries(Object.entries(JSON.parse(leggi('tests/fixtures/provider-pg-models-dev-2026-09-12.json')).fornitori)
     .map(([id, p]) => [id, Object.fromEntries(Object.entries(p.models).map(([id, m]) => [id, m.tool_call]))])),
@@ -269,7 +272,8 @@ test('PAR-04 — motori locali e SDK nativi: due liste che erano scritte a mano 
   /* ⛔ Verso contrario: un motore che il registro non dichiara non esiste per il runtime. */
   assert.rejects(runtime.listModels('motore-finto'), { code: 'RUNTIME_INVALID' });
 
-  stessiId(ID_NATIVI_SDK, ['openai', 'anthropic', 'gemini'], 'ID_NATIVI_SDK');
+  // P-J — cinque fornitori, sempre tre SDK: entrambe le nuove porte riusano Anthropic.
+  stessiId(ID_NATIVI_SDK, ['openai', 'anthropic', 'gemini', 'zai-anthropic', 'minimax-anthropic'], 'ID_NATIVI_SDK');
   assert.rejects(
     nativeProviderResponse({ provider: 'deepseek', model: 'x', apiKey: 'k', body: { messages: [] } }),
     /Provider nativo non riconosciuto/u,
@@ -367,8 +371,11 @@ test('SONDA-01 (verso contrario) — chi dichiara di non essere sondabile NON vi
   assert.equal(esitoAcceso.modelli, 1);
   assert.equal(chiamate, 1);
 
-  /* ⛔ Tutti i nostri sono sondabili: se un giorno non lo saranno, questa riga lo dira. */
-  for (const id of ID_CON_CREDENZIALE) assert.equal(SONDE_PROVIDER[id].attiva, true, `${id}: sonda spenta senza che nessuno lo abbia dichiarato`);
+  // P-J — la porta Z.AI dichiara ora il caso previsto; nessuna esclusione implicita.
+  for (const id of ID_CON_CREDENZIALE) assert.equal(SONDE_PROVIDER[id].attiva, REGISTRO_FORNITORI[id].sonda.attiva !== false, `${id}: stato della sonda diverso dal registro`);
+  const prima = chiamate;
+  assert.equal((await createProviderProbe(deps).prova('zai-anthropic')).esito, 'non-sondabile');
+  assert.equal(chiamate, prima);
 });
 
 test('PAR-08 (verso contrario) — un fornitore aggiunto al registro e a NESSUN altro posto fa rosso', () => {
