@@ -968,41 +968,25 @@ export function creaAttesa({ etichetta = 'Sto pensando…' } = {}, opzioni = {})
   blocco.setAttribute('aria-live', 'polite');
   blocco.setAttribute('aria-atomic', 'true');
   const riga = el(documentObj, 'div', 'talos-waiting__row');
-  const svg = documentObj.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('class', 'talos-line-loader');
-  svg.setAttribute('viewBox', '0 0 96 16');
   /*
-   * ⛔⛔ 10/09, owner: «identico a quello che c'e' gia' nel mobile, e piccolo».
-   *   Identico vuol dire IDENTICO: stessa geometria di `mobile/src/components/brand/
-   *   TalosLineLoader.vue` (viewBox 96x16, traccia + sweep da x=4 a x=92, tre nodi a 16/48/80 con
-   *   r=4) e stesse animazioni CSS di `mobile/src/style.css` (`talosLineSweep`, `talosLineNodeFill`,
-   *   ritardi 0 / 0,36 / 0,73 su `nth-of-type(1)(2)(3)`). Il mobile lo rende a 96x16; qui a 36x6,
-   *   che e' «piccolo» come chiesto.
-   * ⛔ Via SMIL e via il motore JS di riserva: erano due cure a un problema che non esisteva — il
-   *   segnavia non si muoveva perche' `body.reduce-motion *` e `@media (prefers-reduced-motion)
-   *   { * }` spegnevano ogni animazione dell'app con `!important`. Tolte quelle, l'animazione CSS
-   *   del mobile funziona, ed e' quella che l'owner vuole vedere. Meno codice, e lo stesso
-   *   disegno di un componente gia' provato su un altro prodotto.
+   * ⭐ 12/09, owner: «il mobile ha introdotto un nuovo logo animato di caricamento… mettilo al posto
+   *   del segnavia con i pallini e la linea». È l'ORB della testata dei messaggi Calm del mobile
+   *   (`mobile/src/components/chat/TalosMobileAssistantHeader.vue` + `talosCalmMessages.css`,
+   *   commit 4ccbed1f del 12/09 sul ramo `lane/voce-personale`): un cerchio col marchio corto dentro
+   *   e, mentre lavora (`.working`), un anello che ruota in 1,5 s. Stessa struttura e stesse classi
+   *   del mobile; il CSS sta in `segnavia-mobile.css`. Il segnavia a tre nodi (10/09) resta nel CSS e
+   *   in `animaSegnavia` per chi lo usa ancora, ma la bolla d'attesa non lo monta più.
    */
-  svg.setAttribute('width', '36');
-  svg.setAttribute('height', '6');
-  svg.setAttribute('aria-hidden', 'true');
-  for (const classe of ['talos-line-loader-track', 'talos-line-loader-sweep']) {
-    const linea = documentObj.createElementNS(SVG_NS, 'line');
-    linea.setAttribute('class', classe);
-    linea.setAttribute('x1', '4'); linea.setAttribute('y1', '8'); linea.setAttribute('x2', '92'); linea.setAttribute('y2', '8');
-    svg.append(linea);
-  }
-  for (const cx of [16, 48, 80]) {
-    const nodo = documentObj.createElementNS(SVG_NS, 'circle');
-    nodo.setAttribute('class', 'talos-line-loader-node');
-    nodo.setAttribute('cx', String(cx)); nodo.setAttribute('cy', '8'); nodo.setAttribute('r', '4');
-    svg.append(nodo);
-  }
+  const orb = el(documentObj, 'span', 'talos-orb working');
+  orb.setAttribute('aria-hidden', 'true');
+  orb.setAttribute('data-testid', 'talos-assistant-orb');
+  const marchio = el(documentObj, 'span', 'talos-short-logo');
+  marchio.append(el(documentObj, 'span', 'talos-short-logo-mark'));
+  orb.append(marchio);
   const label = el(documentObj, 'span', 'talos-waiting__label run-activity-label', etichetta);
   const elapsed = el(documentObj, 'span', 'talos-mono talos-muted run-activity-elapsed', '0s');
   elapsed.setAttribute('aria-hidden', 'true');
-  riga.append(svg, label, elapsed);
+  riga.append(orb, label, elapsed);
   /*
    * ⛔ 06/9, owner: «skeleton loader non ci deve essere». Le tre barre grigie promettevano una forma
    * (tre righe di testo) che la risposta vera non ha, e con «riduci le animazioni» acceso non luccicavano
