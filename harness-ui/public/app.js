@@ -275,6 +275,9 @@ var init_politiche = __esm({
 });
 
 // src/components/fonti-modelli.js
+function senzaChiave(fonte) {
+  return PROVIDER_DIRETTI.some((p) => p.id === fonte && p.senzaChiave === true);
+}
 function eFonteDiretta(fonte) {
   return ID_DIRETTI.has(String(fonte || ""));
 }
@@ -307,7 +310,9 @@ function fraseVuotoDiretto(fonte, { diretti = null, errori = {} } = {}) {
   const etichetta2 = PROVIDER_DIRETTI.find((p) => p.id === fonte)?.etichetta || fonte;
   if (errori && errori[fonte]) return `Catalogo ${etichetta2} non disponibile: ${errori[fonte]}`;
   if (!diretti) return `Leggo il catalogo ${etichetta2}…`;
-  if (!Array.isArray(diretti[fonte])) return `Collega la chiave ${etichetta2} dal pannello Provider per vedere i suoi modelli.`;
+  if (!Array.isArray(diretti[fonte])) {
+    return senzaChiave(fonte) ? `${etichetta2} non risponde su questo computer: avvialo e ricarica.` : `Collega la chiave ${etichetta2} dal pannello Provider per vedere i suoi modelli.`;
+  }
   return `Nessun modello ${etichetta2} disponibile con questa chiave.`;
 }
 function contaOppureNull(elenco2) {
@@ -319,7 +324,8 @@ var init_fonti_modelli = __esm({
     PROVIDER_DIRETTI = Object.freeze([
       Object.freeze({ id: "anthropic", etichetta: "Anthropic" }),
       Object.freeze({ id: "gemini", etichetta: "Gemini" }),
-      Object.freeze({ id: "openai", etichetta: "OpenAI" })
+      Object.freeze({ id: "openai", etichetta: "OpenAI" }),
+      Object.freeze({ id: "lmstudio", etichetta: "LM Studio", senzaChiave: true })
     ]);
     ID_DIRETTI = new Set(PROVIDER_DIRETTI.map((p) => p.id));
   }
@@ -351,26 +357,13 @@ function statoAvvioSessione({ cartella = null, permesso = "", occupato = false }
   }
   const nome = nomeCartellaScelta(cartella);
   const autorizzata = Boolean(cartella.projectId);
-  const giaVerificataDalServer = Boolean(cartella.launchId);
-  if (!autorizzata && !giaVerificataDalServer && permesso !== PERMESSO_PER_CARTELLA_LIBERA) {
-    const nomePieno = nomeUmanoPolitica(PERMESSO_PER_CARTELLA_LIBERA);
-    return {
-      situazione: "permesso-insufficiente",
-      puoAvviare: false,
-      disabilitato: false,
-      /* Il bottone dice la cosa che manca, non una cosa falsa — ed è corto perché deve stare
-         dentro il bottone: la frase intera sta nel `motivo`, accanto. */
-      etichetta: `Serve «${nomePieno}»`,
-      motivo: `${nome} è fuori dai progetti già autorizzati: TALOS la accetta solo con «${nomePieno}». Ora è scelto «${nomeUmanoPolitica(permesso)}».`,
-      rimedioSu: "permesso"
-    };
-  }
+  const daEsploraFile = Boolean(cartella.launchId);
   return {
     situazione: "pronto",
     puoAvviare: true,
     disabilitato: false,
     etichetta: `Continua nella chat — ${nome}`,
-    motivo: motivoQuandoSiPuoPartire({ nome, autorizzata, giaVerificataDalServer, permesso }),
+    motivo: motivoQuandoSiPuoPartire({ nome, autorizzata, daEsploraFile, permesso }),
     rimedioSu: null
   };
 }
@@ -379,19 +372,28 @@ function nomeCartellaScelta(cartella) {
   if (cartella.path) return String(cartella.path).replace(/[\\/]+$/u, "").split(/[\\/]/u).pop() || cartella.path;
   return cartella.name || "";
 }
-function motivoQuandoSiPuoPartire({ nome, autorizzata, giaVerificataDalServer, permesso }) {
+function motivoQuandoSiPuoPartire({ nome, autorizzata, daEsploraFile, permesso }) {
   const umano = nomeUmanoPolitica(permesso);
-  if (giaVerificataDalServer) {
-    return `${nome} arriva da Esplora file. Con «${umano}» TALOS resterà esattamente in questa cartella.`;
-  }
-  if (autorizzata) return `Con «${umano}» TALOS resterà nella cartella scelta.`;
-  return `«${umano}» consente di usare questa cartella esterna. La scelta sarà verificata di nuovo all’avvio.`;
+  const coda = autorizzata ? "" : daEsploraFile ? ` ${nome} arriva da Esplora file.` : ` ${nome} non è fra i progetti già autorizzati: la cartella viene verificata all’avvio.`;
+  return `${cosaFaraDentro(permesso, nome, umano)}${coda}`;
 }
-var PERMESSO_PER_CARTELLA_LIBERA;
+function cosaFaraDentro(permesso, nome, umano) {
+  switch (permesso) {
+    case "Read only":
+      return `Con «${umano}» TALOS legge ${nome} e non ci scrive niente.`;
+    case "On request":
+      return `Con «${umano}» TALOS resterà nella cartella scelta e chiederà conferma prima di ogni scrittura.`;
+    case "Full access":
+      return `Con «${umano}» TALOS lavora in ${nome} senza i cancelli ordinari su file e rete.`;
+    case "Workspace write":
+      return `Con «${umano}» TALOS resterà nella cartella scelta: scrive solo dentro ${nome}.`;
+    default:
+      return `Permesso scelto: «${umano}». TALOS resterà nella cartella scelta.`;
+  }
+}
 var init_avvio_sessione = __esm({
   "src/components/avvio-sessione.js"() {
     init_politiche();
-    PERMESSO_PER_CARTELLA_LIBERA = "Full access";
   }
 });
 
@@ -4628,12 +4630,12 @@ function creaReportRow(ricerca, { document: doc = globalThis.document, aperta: a
   riga.dataset.c = "ReportRow";
   riga.dataset.researchId = ricerca?.id || "";
   riga.setAttribute("role", "listitem");
-  const icona9 = el9(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona10 = el9(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg.setAttribute("class", "i");
   svg.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-globe");
   svg.append(use);
-  icona9.append(svg);
+  icona10.append(svg);
   const testo3 = el9(doc, "span", "talos-list-row__text"), titolo2 = el9(doc, "span", "talos-list-row__title", t2.titolo), sotto = el9(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.titolo;
   testo3.append(titolo2, sotto);
@@ -4660,7 +4662,7 @@ function creaReportRow(ricerca, { document: doc = globalThis.document, aperta: a
   });
   mostra();
   aside.append(apri, dettagli);
-  riga.append(icona9, testo3, aside);
+  riga.append(icona10, testo3, aside);
   return riga;
 }
 var init_ricerca = __esm({
@@ -4746,12 +4748,12 @@ function creaLibraryRow(voce, { document: doc = globalThis.document, aperta: ape
   riga.dataset.c = "LibraryRow";
   riga.dataset.libraryId = id;
   riga.setAttribute("role", "listitem");
-  const icona9 = el10(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona10 = el10(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg.setAttribute("class", "i");
   svg.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + tipo.icona);
   svg.append(use);
-  icona9.append(svg);
+  icona10.append(svg);
   const testo3 = el10(doc, "span", "talos-list-row__text"), titolo2 = el10(doc, "span", "talos-list-row__title", t2.nome), sotto = el10(doc, "span", "talos-list-row__sub");
   const aside = el10(doc, "span", "talos-list-row__aside");
   aside.append(el10(doc, "span", "talos-badge" + (voce?.origine === "generated" ? " talos-badge--accent" : ""), origine));
@@ -4957,7 +4959,7 @@ function creaLibraryRow(voce, { document: doc = globalThis.document, aperta: ape
   mostra();
   testo3.append(titolo2, forma, sotto, messaggio);
   aside.append(gruppo, conferma, dettagli);
-  riga.append(icona9, testo3, aside);
+  riga.append(icona10, testo3, aside);
   return riga;
 }
 var TIPI, ORIGINI2, NON_ANCORA;
@@ -5007,12 +5009,12 @@ function creaTaskRow(a, { document: doc = globalThis.document, aperta: aperta2 =
   segna.setAttribute("role", "checkbox");
   segna.setAttribute("aria-checked", String(a?.stato === "done"));
   segna.setAttribute("aria-label", "Segna come fatta");
-  const icona9 = el11(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona10 = el11(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg.setAttribute("class", "i");
   svg.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + s.icona);
   svg.append(use);
-  icona9.append(svg);
+  icona10.append(svg);
   const testo3 = el11(doc, "span", "talos-list-row__text"), titolo2 = el11(doc, "span", "talos-list-row__title", t2.titolo), sotto = el11(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.titolo;
   testo3.append(titolo2, sotto);
@@ -5034,7 +5036,7 @@ function creaTaskRow(a, { document: doc = globalThis.document, aperta: aperta2 =
   });
   mostra();
   aside.append(leggi);
-  riga.append(segna, icona9, testo3, aside);
+  riga.append(segna, icona10, testo3, aside);
   return riga;
 }
 var STATI, PRIORITA;
@@ -5072,12 +5074,12 @@ function creaMemoryRow(memoria, { document: doc = globalThis.document, aperta: a
   riga.dataset.c = "MemoryRow";
   riga.setAttribute("role", "listitem");
   riga.dataset.memoryId = memoria?.id || "";
-  const icona9 = el12(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  const icona10 = el12(doc, "span", "talos-list-row__icon"), svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg"), use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
   svg.setAttribute("class", "i");
   svg.setAttribute("aria-hidden", "true");
   use.setAttribute("href", "#i-" + g.icona);
   svg.append(use);
-  icona9.append(svg);
+  icona10.append(svg);
   const testo3 = el12(doc, "span", "talos-list-row__text"), titolo2 = el12(doc, "span", "talos-list-row__title", t2.titolo), sotto = el12(doc, "span", "talos-list-row__sub");
   titolo2.title = t2.titolo;
   testo3.append(titolo2, sotto);
@@ -5103,7 +5105,7 @@ function creaMemoryRow(memoria, { document: doc = globalThis.document, aperta: a
   });
   mostra();
   aside.append(leggi, correggi);
-  riga.append(icona9, testo3, aside);
+  riga.append(icona10, testo3, aside);
   return riga;
 }
 var GENERI;
@@ -7553,14 +7555,14 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
     quandoDi: (v) => v?.aggiornatoIl ?? null,
     cercaIn: (v) => `${testiVoceLibreria(v).nome} ${tipoVoceLibreria(v?.fileType).testo} ${origineVoceLibreria(v?.origine)}`,
     sommarioBarra: (n, { errore, caricamento }) => errore ? "Libreria non disponibile" : caricamento ? "Caricamento Libreria…" : `${plurale(n, "file")} · Token non disponibili`,
-    scheda: (v, { doc, icona: icona9, etichetta: etichetta2 }) => {
+    scheda: (v, { doc, icona: icona10, etichetta: etichetta2 }) => {
       const tipo = tipoVoceLibreria(v?.fileType);
       const t2 = testiVoceLibreria(v);
       const copertina = nodo9(doc, "div", "td-file-preview");
       copertina.dataset.kind = estensioneFile(t2.nome).toLowerCase();
       copertina.append(nodo9(doc, "strong", "", estensioneFile(t2.nome)), nodo9(doc, "span", "", t2.nome));
       return {
-        alto: [icona9(tipo.icona), nodo9(doc, "span", "", tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : "")],
+        alto: [icona10(tipo.icona), nodo9(doc, "span", "", tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : "")],
         corpo: [copertina],
         basso: [nodo9(doc, "span", "", t2.dataBreve)]
       };
@@ -7828,12 +7830,12 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       return `${f.domanda} ${f.parola} ${f.nome || ""}`;
     },
     sommarioBarra: (n, { errore, caricamento }) => errore ? "Ricerche non disponibili" : caricamento ? "Caricamento ricerche…" : riepilogoRicerche(elenco2),
-    scheda: (r, { doc, icona: icona9, etichetta: etichetta2 }) => {
+    scheda: (r, { doc, icona: icona10, etichetta: etichetta2 }) => {
       const f = frasiVoce(r);
       const lettura = letturaDi(r);
       const riga = lettura?.stato === "pronto" && lettura.record ? frasiBilancio(bilancioDaRecord(lettura.record)) : f.spiegazione;
       return {
-        alto: [icona9("globe"), etichetta2(f.parola, f.tono)],
+        alto: [icona10("globe"), etichetta2(f.parola, f.tono)],
         corpo: [nodo9(doc, "p", "td-excerpt", riga)],
         /*
          * ⛔ TROVATO NELLA FOTO: «Avviata il 11/09/20…» e «Rapporto disponibi…», tutti e due
@@ -7911,11 +7913,11 @@ function montaProgetti(schermo, progetti, opzioni = {}) {
     quandoDi: (p) => Number.isFinite(p?.ultimaAlle) && p.ultimaAlle > 0 ? new Date(p.ultimaAlle) : null,
     cercaIn: (p) => `${p?.nome ?? ""} ${(p?.sessioni || []).map((s) => s?.nome ?? "").join(" ")}`,
     sommarioBarra: (n, { errore, caricamento }) => errore ? "Progetti non disponibili" : caricamento ? "Leggo i progetti…" : sommarioProgetti(n),
-    scheda: (p, { doc, icona: icona9 }) => {
+    scheda: (p, { doc, icona: icona10 }) => {
       const chips = nodo9(doc, "div", "td-source-chips");
       for (const s of ultimeSessioni(p, quanteRecenti)) chips.append(nodo9(doc, "span", "", s?.nome || s?.sessionId || "sessione senza nome"));
       return {
-        alto: [icona9("folder"), nodo9(doc, "span", "", "Cartella di lavoro")],
+        alto: [icona10("folder"), nodo9(doc, "span", "", "Cartella di lavoro")],
         corpo: [nodo9(doc, "p", "td-excerpt", frasiProgetto(p)), chips],
         /* Il conteggio sta già nel corpo (`frasiProgetto`): qui va il QUANDO, che è l'altra metà. */
         basso: [nodo9(doc, "span", "", p?.ultimaAlle ? `Ultima volta ${new Date(p.ultimaAlle).toLocaleDateString("it-IT")}` : "mai aperta")]
@@ -8152,10 +8154,1179 @@ var init_markdown = __esm({
   }
 });
 
+// src/motion/desktop-scenes.js
+var desktop_scenes_exports = {};
+__export(desktop_scenes_exports, {
+  TALOS_DESKTOP_SCENES: () => TALOS_DESKTOP_SCENES
+});
+var TALOS_DESKTOP_SCENES;
+var init_desktop_scenes = __esm({
+  "src/motion/desktop-scenes.js"() {
+    (function() {
+      "use strict";
+      const TAU = Math.PI * 2, PHI = (1 + Math.sqrt(5)) / 2, GOLDEN_ANGLE = TAU * (1 - 1 / PHI);
+      const clamp2 = (v, a, b) => Math.max(a, Math.min(b, v));
+      const mix = (a, b, t2) => a + (b - a) * t2;
+      const invLerp = (a, b, v) => clamp2((v - a) / Math.max(1e-9, b - a), 0, 1);
+      function smoothstep(a, b, v) {
+        const t2 = invLerp(a, b, v);
+        return t2 * t2 * (3 - 2 * t2);
+      }
+      function smootherstep(a, b, v) {
+        const t2 = invLerp(a, b, v);
+        return t2 * t2 * t2 * (t2 * (t2 * 6 - 15) + 10);
+      }
+      const fract = (v) => v - Math.floor(v);
+      function wrap(v, m) {
+        const r = v % m;
+        return r < 0 ? r + m : r;
+      }
+      function sceneHash(id) {
+        let h = 2166136261;
+        for (const c of id) {
+          h ^= c.charCodeAt(0);
+          h = Math.imul(h, 16777619);
+        }
+        return h >>> 0;
+      }
+      function random(seed) {
+        let value = seed >>> 0;
+        return () => {
+          value += 1831565813;
+          let r = value;
+          r = Math.imul(r ^ r >>> 15, r | 1);
+          r ^= r + Math.imul(r ^ r >>> 7, r | 61);
+          return ((r ^ r >>> 14) >>> 0) / 4294967296;
+        };
+      }
+      const rngFor = (id, seed, salt = 0) => random((seed ^ sceneHash(id) ^ Math.imul(salt + 1, 2654435769)) >>> 0);
+      function hash01(a, b, c = 0) {
+        let v = (Math.imul(a | 0, 73244475) ^ Math.imul(b | 0, 295559667) ^ Math.imul(c | 0, 3427101)) >>> 0;
+        v = Math.imul(v ^ v >>> 16, 73244475);
+        v = Math.imul(v ^ v >>> 16, 73244475);
+        return ((v ^ v >>> 16) >>> 0) / 4294967296;
+      }
+      function noise1(v, seed = 0) {
+        const i = Math.floor(v), f = fract(v);
+        return mix(hash01(i, seed), hash01(i + 1, seed), f * f * (3 - 2 * f));
+      }
+      function noise2(x, y, seed = 0) {
+        const ix = Math.floor(x), iy = Math.floor(y), fx = fract(x), fy = fract(y), sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+        return mix(mix(hash01(ix, iy, seed), hash01(ix + 1, iy, seed), sx), mix(hash01(ix, iy + 1, seed), hash01(ix + 1, iy + 1, seed), sx), sy);
+      }
+      function fbm2(x, y, seed = 0, octaves = 4) {
+        let s = 0, a = 0.5, f = 1, t2 = 0;
+        for (let o = 0; o < octaves; o++) {
+          s += noise2(x * f, y * f, seed + o * 101) * a;
+          t2 += a;
+          f *= 2.03;
+          a *= 0.5;
+        }
+        return t2 > 0 ? s / t2 : 0;
+      }
+      function makePaletteGeometry(id, seed, input) {
+        const a = input.palette[input.colorMode];
+        return Object.freeze({ id, width: input.viewport.width, height: input.viewport.height, mobile: input.viewport.width < 600, accent: a.accent, secondary: a.secondary, border: a.border_strong, surface: a.surface_elevated, background: a.background, focus: a.focus, info: a.info, success: a.success, warning: a.warning, danger: a.danger, parameters: Object.freeze({ ...input.parameters }), quality: input.effectiveQuality.tier, densityScale: input.effectiveQuality.densityScale, seed });
+      }
+      const alpha = (g, b) => clamp2(b * (0.32 + g.parameters.intensity / 100 * 0.8) * (0.7 + g.parameters.contrast / 100 * 0.46), 6e-3, 0.94);
+      function qCount(g, lo, bal, hi) {
+        const b = g.quality === "high" ? hi : g.quality === "low" ? lo : bal;
+        return Math.max(2, Math.round(b * (g.mobile ? 0.78 : 1) * clamp2(g.densityScale * (0.72 + g.parameters.density / 360), 0.48, 1.38)));
+      }
+      const primitiveCount = (i, lo, bal, hi) => i.effectiveQuality.tier === "high" ? hi : i.effectiveQuality.tier === "low" ? lo : bal;
+      const seconds = (ms) => clamp2(ms / 1e3, 0, 0.05);
+      function linearGradient(c, g, x0, y0, x1, y1, colors = [g.accent, g.secondary]) {
+        const grad = c.createLinearGradient(x0, y0, x1, y1);
+        grad.addColorStop(0, "transparent");
+        colors.forEach((v, i) => grad.addColorStop((i + 1) / (colors.length + 1), v));
+        grad.addColorStop(1, "transparent");
+        return grad;
+      }
+      function radialGradient(c, x, y, r, inner, middle) {
+        const g = c.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, inner);
+        g.addColorStop(0.38, middle);
+        g.addColorStop(1, "transparent");
+        return g;
+      }
+      function strokeLine(c, x0, y0, x1, y1) {
+        c.beginPath();
+        c.moveTo(x0, y0);
+        c.lineTo(x1, y1);
+        c.stroke();
+      }
+      function polyline(c, p, close = false) {
+        if (!p.length) return;
+        c.beginPath();
+        c.moveTo(p[0].x, p[0].y);
+        for (let i = 1; i < p.length; i++) c.lineTo(p[i].x, p[i].y);
+        if (close) c.closePath();
+      }
+      const polygon = (c, p) => polyline(c, p, true);
+      function drawDiamond(c, x, y, r) {
+        c.beginPath();
+        c.moveTo(x, y - r);
+        c.lineTo(x + r, y);
+        c.lineTo(x, y + r);
+        c.lineTo(x - r, y);
+        c.closePath();
+      }
+      const ringPoints = (cx, cy, r, count2, phase = 0, warp = 0) => Array.from({ length: count2 }, (_, i) => {
+        const a = phase + i / count2 * TAU, rr = r * (1 + warp * Math.sin(a * 3 + phase * 0.7));
+        return { x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr };
+      });
+      const defineScene = (d) => Object.freeze(d);
+      const forgeComplexScene = defineScene({ id: "forge", createState: (seed) => ({ seed, time: 0, cycle: 0, impulse: 0 }), prepare: ({ state, input }) => {
+        const base = makePaletteGeometry("forge", state.seed, input), rng = rngFor("forge", state.seed, 101), rankCount = qCount(base, 4, 5, 6), nodes = [], edges = [];
+        for (let rank = 0; rank < rankCount; rank++) {
+          const inRank = rank === 0 || rank === rankCount - 1 ? 2 : Math.round(2 + rng() * 2);
+          for (let local = 0; local < inRank; local++) nodes.push(Object.freeze({ x: base.width * (0.1 + 0.8 * rank / Math.max(1, rankCount - 1)) + (rng() - 0.5) * base.width * 0.035, y: base.height * (0.18 + 0.64 * (local + 1) / (inRank + 1)) + (rng() - 0.5) * base.height * 0.05, rank, heat: rng(), size: 4 + rng() * 7 }));
+        }
+        for (let i = 0; i < nodes.length; i++) {
+          const from = nodes[i], candidates = nodes.map((node, j) => ({ node, i: j })).filter(({ node }) => node.rank === from.rank + 1);
+          candidates.slice(0, 1 + i % 2).forEach(({ i: j }, lane) => edges.push(Object.freeze({ from: i, to: j, bow: (rng() - 0.5) * base.height * 0.16, lane })));
+        }
+        const gears = Object.freeze(Array.from({ length: qCount(base, 2, 3, 4) }, (_, i) => Object.freeze({ x: base.width * (0.16 + i * 0.24 + rng() * 0.08), y: base.height * (0.78 - i % 2 * 0.46), radius: 18 + rng() * 28, teeth: 8 + Math.round(rng() * 7), direction: i % 2 === 0 ? 1 : -1, phase: rng() * TAU }))), rails = Object.freeze(Array.from({ length: qCount(base, 3, 5, 7) }, (_, i) => base.height * (0.13 + 0.74 * (i + 1) / (qCount(base, 3, 5, 7) + 1))));
+        return { geometry: Object.freeze({ ...base, nodes: Object.freeze(nodes), edges: Object.freeze(edges), gears, rails }), primitiveCount: primitiveCount(input, 230, 310, 390) };
+      }, update: ({ state, input, stepMs }) => {
+        const dt = seconds(stepMs) * input.parameters.speed / 100;
+        state.time += dt;
+        state.cycle = (state.cycle + dt * 0.22) % 1;
+        state.impulse = (state.impulse + dt * 0.84) % 1;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.lineJoin = "bevel";
+        c.lineCap = "square";
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.7;
+        c.globalAlpha = alpha(g, 0.14);
+        for (let i = 0; i < g.rails.length; i++) {
+          const y = g.rails[i] + Math.sin(s.time * 2.1 + i) * 0.65;
+          strokeLine(c, g.width * 0.04, y, g.width * 0.96, y);
+          for (let n = 0; n < 14; n++) {
+            const x = g.width * (0.06 + 0.88 * n / 13);
+            strokeLine(c, x, y - 3 - n % 3, x, y + 3 + n % 3);
+          }
+        }
+        const px = g.width * 0.5, pt = g.height * 0.12, pb = g.height * 0.88, pw = g.width * 0.12;
+        c.strokeStyle = g.border;
+        c.lineWidth = 1.1;
+        c.globalAlpha = alpha(g, 0.22);
+        strokeLine(c, px - pw, pt, px - pw, pb);
+        strokeLine(c, px + pw, pt, px + pw, pb);
+        strokeLine(c, px - pw, pt, px + pw, pt);
+        strokeLine(c, px - pw * 1.25, pb, px + pw * 1.25, pb);
+        const ram = g.height * (0.26 + 0.24 * (0.5 + 0.5 * Math.sin(s.time * 0.46)));
+        c.fillStyle = g.accent;
+        c.globalAlpha = alpha(g, 0.16);
+        c.fillRect(px - pw * 0.32, pt, pw * 0.64, ram - pt);
+        c.fillStyle = g.warning;
+        c.globalAlpha = alpha(g, 0.34);
+        c.fillRect(px - pw * 0.52, ram, pw * 1.04, 4);
+        c.strokeStyle = g.secondary;
+        c.globalAlpha = alpha(g, 0.16);
+        for (let r = 0; r < 5; r++) {
+          const x = px - pw * 0.8 + r * pw * 0.4;
+          strokeLine(c, x, pt + 10, x, ram - 8);
+        }
+        for (const gear of g.gears) {
+          c.save();
+          c.translate(gear.x, gear.y);
+          c.rotate(gear.phase + s.time * 0.18 * gear.direction);
+          c.strokeStyle = g.border;
+          c.fillStyle = g.surface;
+          c.lineWidth = 1;
+          c.globalAlpha = alpha(g, 0.18);
+          c.beginPath();
+          c.arc(0, 0, gear.radius * 0.68, 0, TAU);
+          c.fill();
+          c.stroke();
+          for (let t2 = 0; t2 < gear.teeth; t2++) {
+            const a = t2 / gear.teeth * TAU;
+            c.lineWidth = t2 % 2 === 0 ? 2.2 : 1;
+            strokeLine(c, Math.cos(a) * gear.radius * 0.72, Math.sin(a) * gear.radius * 0.72, Math.cos(a) * gear.radius, Math.sin(a) * gear.radius);
+          }
+          c.strokeStyle = g.accent;
+          c.globalAlpha = alpha(g, 0.42);
+          c.lineWidth = 1.3;
+          c.beginPath();
+          c.arc(0, 0, gear.radius * 0.18, 0, TAU);
+          c.stroke();
+          c.restore();
+        }
+        const pe = Math.floor(s.cycle * Math.max(1, g.edges.length));
+        g.edges.forEach((e, i) => {
+          const f = g.nodes[e.from], t2 = g.nodes[e.to], hot = i === pe || i === (pe + 1) % Math.max(1, g.edges.length);
+          c.beginPath();
+          c.moveTo(f.x, f.y);
+          c.bezierCurveTo(f.x + (t2.x - f.x) * 0.34, f.y + e.bow, t2.x - (t2.x - f.x) * 0.2, t2.y - e.bow * 0.45, t2.x, t2.y);
+          c.strokeStyle = hot ? linearGradient(c, g, f.x, f.y, t2.x, t2.y, [g.warning, g.accent, g.secondary]) : g.border;
+          c.globalAlpha = alpha(g, hot ? 0.74 : 0.2);
+          c.lineWidth = hot ? 2.3 : 0.9;
+          c.shadowBlur = hot ? 12 : 0;
+          c.shadowColor = g.accent;
+          c.stroke();
+        });
+        g.nodes.forEach((n, i) => {
+          const beat = 0.5 + 0.5 * Math.sin(s.time * 1.8 + i * 0.7), active = Math.abs(s.cycle - n.rank / Math.max(1, g.nodes.length)) < 0.11;
+          c.fillStyle = active ? g.warning : n.heat > 0.58 ? g.accent : g.secondary;
+          c.strokeStyle = g.border;
+          c.globalAlpha = alpha(g, 0.45 + beat * 0.18);
+          c.shadowBlur = active ? 14 : 4;
+          c.shadowColor = g.accent;
+          drawDiamond(c, n.x, n.y, n.size * (0.8 + beat * 0.22));
+          c.fill();
+          c.stroke();
+          c.shadowBlur = 0;
+        });
+        const wx = g.width * (0.09 + 0.82 * s.impulse), wy = g.height * (0.46 + Math.sin(s.time * 1.7) * 0.08);
+        c.fillStyle = radialGradient(c, wx, wy, 48, g.focus, g.warning);
+        c.globalAlpha = alpha(g, 0.35);
+        c.beginPath();
+        c.arc(wx, wy, 34, 0, TAU);
+        c.fill();
+        c.strokeStyle = g.warning;
+        c.globalAlpha = alpha(g, 0.38);
+        for (let sp = 0; sp < 7; sp++) {
+          const a = hash01(sp, Math.floor(s.time * 4), g.seed) * TAU, l = 8 + hash01(sp, g.seed, 9) * 26;
+          strokeLine(c, wx, wy, wx + Math.cos(a) * l, wy + Math.sin(a) * l);
+        }
+        c.restore();
+      } });
+      const paperComplexScene = defineScene({ id: "paper", createState: (seed) => ({ seed, time: 0, reading: 0, breath: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("paper", state.seed, input), rng = rngFor("paper", state.seed, 211), pageW = b.width * (b.mobile ? 0.84 : 0.68), pageH = b.height * 0.84, pageX = (b.width - pageW) * 0.5, pageY = b.height * 0.075, paragraphs = Array.from({ length: qCount(b, 4, 6, 8) }, (_, i) => ({ x: pageX + pageW * (0.13 + i % 2 * 0.03), y: pageY + pageH * (0.12 + i * 0.105), width: pageW * (0.55 + rng() * 0.22), lines: 3 + Math.floor(rng() * 4), rhythm: 0.72 + rng() * 0.25, emphasis: rng() })), notes = Array.from({ length: qCount(b, 3, 4, 6) }, (_, i) => ({ side: i % 2 === 0 ? -1 : 1, y: pageY + pageH * (0.18 + i * 0.13 + rng() * 0.035), length: pageW * (0.055 + rng() * 0.055), curl: (rng() - 0.5) * 22, phase: rng() * TAU })), fibers = Array.from({ length: qCount(b, 36, 58, 80) }, () => ({ x: pageX + rng() * pageW, y: pageY + rng() * pageH, length: 4 + rng() * 16, angle: (rng() - 0.5) * 0.6, alpha: 0.02 + rng() * 0.04 }));
+        return { geometry: { ...b, pageX, pageY, pageW, pageH, paragraphs, notes, fibers }, primitiveCount: primitiveCount(input, 150, 220, 310) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.reading = (s.reading + dt * 0.055) % 1;
+        s.breath += dt * 0.18;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        const lift = Math.sin(s.breath) * 1.5;
+        c.fillStyle = g.surface;
+        c.globalAlpha = alpha(g, 0.12);
+        c.shadowBlur = 20;
+        c.shadowColor = g.border;
+        c.fillRect(g.pageX, g.pageY + lift, g.pageW, g.pageH);
+        c.shadowBlur = 0;
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.8;
+        c.globalAlpha = alpha(g, 0.26);
+        c.strokeRect(g.pageX, g.pageY + lift, g.pageW, g.pageH);
+        c.fillStyle = g.accent;
+        c.globalAlpha = alpha(g, 0.16);
+        c.fillRect(g.pageX + g.pageW * 0.08, g.pageY + g.pageH * 0.09, 3, g.pageH * 0.22);
+        c.fillStyle = g.secondary;
+        c.globalAlpha = alpha(g, 0.06);
+        c.fillRect(g.pageX + g.pageW * 0.68, g.pageY + g.pageH * 0.1, g.pageW * 0.18, g.pageH * 0.09);
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1;
+        c.globalAlpha = alpha(g, 0.24);
+        const rx = g.pageX + g.pageW * 0.82, ry = g.pageY + g.pageH * 0.17;
+        c.beginPath();
+        c.arc(rx, ry, 14, 0, TAU);
+        c.stroke();
+        strokeLine(c, rx - 21, ry, rx + 21, ry);
+        strokeLine(c, rx, ry - 21, rx, ry + 21);
+        c.strokeStyle = g.border;
+        c.globalAlpha = alpha(g, 0.11);
+        c.beginPath();
+        c.moveTo(g.pageX + g.pageW * 0.72, g.pageY + g.pageH * 0.88);
+        c.quadraticCurveTo(g.pageX + g.pageW * 0.82, g.pageY + g.pageH * 0.81, g.pageX + g.pageW * 0.9, g.pageY + g.pageH * 0.9);
+        c.stroke();
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.5;
+        for (const f of g.fibers) {
+          c.globalAlpha = alpha(g, f.alpha);
+          strokeLine(c, f.x, f.y + lift, f.x + Math.cos(f.angle) * f.length, f.y + lift + Math.sin(f.angle) * f.length);
+        }
+        const left = g.pageX + g.pageW * 0.12;
+        c.strokeStyle = g.secondary;
+        c.globalAlpha = alpha(g, 0.28);
+        c.lineWidth = 1;
+        strokeLine(c, left - 14, g.pageY + g.pageH * 0.08, left - 14, g.pageY + g.pageH * 0.91);
+        for (let t2 = 0; t2 < 18; t2++) {
+          const y2 = g.pageY + g.pageH * (0.1 + t2 * 0.044);
+          c.globalAlpha = alpha(g, t2 % 4 === 0 ? 0.18 : 0.07);
+          strokeLine(c, left, y2, g.pageX + g.pageW * 0.9, y2);
+        }
+        g.paragraphs.forEach((p, i) => {
+          const active = Math.abs(s.reading - i / Math.max(1, g.paragraphs.length)) < 0.08;
+          for (let l = 0; l < p.lines; l++) {
+            const y2 = p.y + lift + l * 8.5, w = p.width * (l === p.lines - 1 ? 0.58 + p.emphasis * 0.25 : 0.93 + Math.sin(l + i) * 0.04);
+            c.fillStyle = active && l === 0 ? g.accent : g.border;
+            c.globalAlpha = alpha(g, active ? 0.5 : 0.24);
+            c.fillRect(p.x, y2, w * p.rhythm, l === 0 && p.emphasis > 0.65 ? 2.4 : 1.15);
+          }
+        });
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1.2;
+        g.notes.forEach((n, i) => {
+          const x2 = n.side < 0 ? g.pageX + g.pageW * 0.055 : g.pageX + g.pageW * 0.945, inside = n.side < 0 ? 1 : -1, sway = Math.sin(s.time * 0.22 + n.phase) * 2;
+          c.globalAlpha = alpha(g, 0.32 + i % 2 * 0.08);
+          c.beginPath();
+          c.moveTo(x2, n.y + sway);
+          c.quadraticCurveTo(x2 + inside * n.length * 0.48, n.y - 7 + n.curl * 0.25, x2 + inside * n.length, n.y + 2 + n.curl * 0.08);
+          c.stroke();
+          c.beginPath();
+          c.arc(x2 + inside * n.length * 1.08, n.y + 2, 2.2 + i % 2, 0, TAU);
+          c.stroke();
+        });
+        const y = g.pageY + g.pageH * (0.11 + s.reading * 0.78);
+        c.fillStyle = radialGradient(c, g.pageX + g.pageW * 0.52, y, g.pageW * 0.34, g.accent, g.secondary);
+        c.globalAlpha = alpha(g, 0.025);
+        c.beginPath();
+        c.arc(g.pageX + g.pageW * 0.52, y, g.pageW * 0.31, 0, TAU);
+        c.fill();
+        c.strokeStyle = g.accent;
+        c.globalAlpha = alpha(g, 0.36);
+        c.lineWidth = 1;
+        const x = g.pageX + g.pageW * 0.86, cy = g.pageY + g.pageH * 0.095;
+        strokeLine(c, x - 8, cy, x + 8, cy);
+        strokeLine(c, x, cy - 8, x, cy + 8);
+        c.beginPath();
+        c.arc(x, cy, 3.2, 0, TAU);
+        c.stroke();
+        c.restore();
+      } });
+      const GLYPHS = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜ0123456789ZXCVBNM∆◇┼⌁⌗<>:;*+";
+      function proceduralGlyph(c, x, y, size, code, slant) {
+        const u = Math.max(0.8, size * 0.075), h = size * 0.34;
+        c.save();
+        c.translate(x, y);
+        c.rotate(slant);
+        const b = Math.imul(code, 1103515245) + 12345 >>> 0;
+        if (b & 1) c.fillRect(-size * 0.24, -h, u, h * 1.75);
+        if (b & 2) c.fillRect(size * 0.13, -h * 0.86, u, h * 1.55);
+        if (b & 4) c.fillRect(-size * 0.22, -h * 0.08, size * 0.42, u);
+        if (b & 8) c.fillRect(-size * 0.16, -h * 0.72, size * 0.31, u);
+        if (b & 16) c.fillRect(-size * 0.1, h * 0.5, size * 0.26, u);
+        if (b & 32) {
+          c.beginPath();
+          c.moveTo(-size * 0.2, h * 0.45);
+          c.lineTo(size * 0.2, -h * 0.65);
+          c.stroke();
+        }
+        c.restore();
+      }
+      const terminalComplexScene = defineScene({ id: "terminal", createState: (seed) => ({ seed, time: 0, mutation: 0, blackout: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("terminal", state.seed, input), rng = rngFor("terminal", state.seed, 313), count2 = qCount(b, 14, 21, 29), cell = clamp2(b.width / count2, 12, b.mobile ? 23 : 29), rows = Math.ceil(b.height / cell) + 3, streams = Array.from({ length: count2 }, (_, i) => ({ x: (i + 0.5) * b.width / count2 + (rng() - 0.5) * cell * 0.4, speed: 3 + rng() * 9, offset: rng() * rows, length: Math.round(5 + rng() * 14), phase: rng() * TAU, bend: (rng() - 0.5) * cell * 1.5, cadence: 0.45 + rng() * 1.6, glyphSeed: Math.floor(rng() * 1e6) })), scars = Array.from({ length: qCount(b, 2, 3, 5) }, () => ({ y: rng() * b.height, width: 0.18 + rng() * 0.6, phase: rng() * TAU }));
+        return { geometry: { ...b, streams, scars, cell, rows }, primitiveCount: primitiveCount(input, 300, 365, 398) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.mutation = (s.mutation + dt * 6.8) % 1e5;
+        s.blackout = (s.blackout + dt * 0.11) % 1;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.lineCap = "square";
+        c.strokeStyle = g.accent;
+        c.lineWidth = 0.35;
+        c.globalAlpha = alpha(g, 0.025);
+        for (let y = 0; y < g.height; y += Math.max(5, g.cell * 0.42)) strokeLine(c, 0, y, g.width, y);
+        const frame2 = Math.floor(s.mutation), canText = typeof c.fillText === "function";
+        if (canText) {
+          c.font = `${Math.floor(g.cell * 0.72)}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+          c.textAlign = "center";
+          c.textBaseline = "middle";
+        }
+        g.streams.forEach((st, i) => {
+          const cad = Math.floor(s.time * st.cadence + st.phase) % 13, sp = cad === 0 ? 0.05 : cad === 1 ? 0.28 : cad === 8 ? 1.7 : 1, head = fract((st.offset + s.time * st.speed * sp) / g.rows) * g.rows, tail = Math.max(5, Math.round(st.length * (0.7 + g.parameters.trails / 150)));
+          for (let t2 = 0; t2 < tail; t2++) {
+            let row = Math.floor(head - t2);
+            while (row < 0) row += g.rows;
+            row %= g.rows;
+            const y = row * g.cell - g.cell * 0.2, decay = 1 - t2 / tail, bend = Math.sin(y / Math.max(1, g.height) * 4.2 + s.time * 0.55 + st.phase) * st.bend * (0.2 + decay * 0.8), x = st.x + bend, gap = hash01(i * 31 + row, frame2 >> 2, g.seed);
+            if (gap < 0.1 && t2 > 1) continue;
+            const glyph = GLYPHS[Math.floor(hash01(st.glyphSeed + row, frame2 >> (t2 === 0 ? 1 : 3), t2) * GLYPHS.length)] ?? "0", flash = t2 === 0, fresh = t2 < 3;
+            c.globalAlpha = alpha(g, flash ? 0.92 : 0.05 + decay * decay * (fresh ? 0.58 : 0.4));
+            c.fillStyle = flash ? g.focus : fresh ? g.secondary : g.accent;
+            c.strokeStyle = c.fillStyle;
+            c.shadowBlur = flash ? 13 : fresh ? 4 : 0;
+            c.shadowColor = g.accent;
+            if (canText && hash01(i, row, g.seed) > 0.36) c.fillText(glyph, x, y);
+            else proceduralGlyph(c, x, y, g.cell * 0.76, glyph.charCodeAt(0) + frame2 + t2 * 17, (hash01(row, i) - 0.5) * 0.18);
+            if (fresh && i % 5 === 2 && t2 === 2) {
+              c.globalAlpha = alpha(g, 0.16);
+              strokeLine(c, x - g.cell * 0.32, y + g.cell * 0.16, x + g.cell * 0.42, y - g.cell * 0.08);
+            }
+          }
+        });
+        g.scars.forEach((scar, i) => {
+          const p = 0.5 + 0.5 * Math.sin(s.time * (0.7 + i * 0.17) + scar.phase), x = g.width * (0.5 - scar.width / 2);
+          c.fillStyle = g.background;
+          c.globalAlpha = alpha(g, 0.025 + p * 0.055);
+          c.fillRect(x, scar.y, g.width * scar.width, 2 + p * 9);
+          c.strokeStyle = i % 2 === 0 ? g.secondary : g.accent;
+          c.globalAlpha = alpha(g, 0.08 + p * 0.12);
+          strokeLine(c, x, scar.y, x + g.width * scar.width, scar.y);
+        });
+        const by = fract(s.time * 0.027 + 0.17) * g.height, glow = c.createRadialGradient(g.width * 0.44, by, 0, g.width * 0.44, by, g.width * 0.35);
+        glow.addColorStop(0, g.accent);
+        glow.addColorStop(0.28, g.secondary);
+        glow.addColorStop(1, "transparent");
+        c.fillStyle = glow;
+        c.globalAlpha = alpha(g, 0.018);
+        c.beginPath();
+        c.arc(g.width * 0.44, by, g.width * 0.34, 0, TAU);
+        c.fill();
+        c.restore();
+      } });
+      const auroraComplexScene = defineScene({ id: "aurora", createState: (seed) => ({ seed, time: 0, magnetic: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("aurora", state.seed, input), rng = rngFor("aurora", state.seed, 419), curtains = Array.from({ length: qCount(b, 5, 7, 10) }, (_, i) => ({ anchor: b.width * (0.05 + 0.9 * i / Math.max(1, qCount(b, 5, 7, 10) - 1)), width: b.width * (0.055 + rng() * 0.07), reach: b.height * (0.42 + rng() * 0.33), phase: rng() * TAU, curl: (rng() - 0.5) * b.width * 0.12, brightness: 0.5 + rng() * 0.5 })), stars = Array.from({ length: qCount(b, 16, 28, 44) }, () => ({ x: rng() * b.width, y: rng() * b.height * 0.58, size: 0.5 + rng() * 1.4, phase: rng() * TAU }));
+        return { geometry: { ...b, curtains, stars, horizon: b.height * 0.72 }, primitiveCount: primitiveCount(input, 170, 255, 350) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.magnetic += dt * 0.14;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.globalCompositeOperation = "lighter";
+        c.fillStyle = g.focus;
+        g.stars.forEach((star, i) => {
+          c.globalAlpha = alpha(g, 0.05 + 0.08 * (0.5 + 0.5 * Math.sin(s.time * 0.3 + star.phase)));
+          c.fillRect(star.x, star.y, star.size, star.size);
+          if (i % 9 === 0) c.fillRect(star.x - star.size * 2, star.y, star.size * 5, 0.45);
+        });
+        g.curtains.forEach((cu, ci) => {
+          const rayCount = g.mobile ? 8 : g.quality === "high" ? 18 : 13;
+          for (let r = 0; r < rayCount; r++) {
+            const u = r / Math.max(1, rayCount - 1), cent = u - 0.5, fold = Math.sin(s.magnetic * 1.8 + cu.phase + cent * 4.5) * cu.width * 0.36, xt = cu.anchor + cent * cu.width + fold, xb = xt + cu.curl * Math.sin(s.magnetic + cu.phase + u * 2.6), yt = g.height * (0.05 + 0.04 * Math.sin(cu.phase + u * 2)), yb = Math.min(g.horizon, yt + cu.reach * (0.82 + 0.18 * Math.sin(s.time * 0.17 + r))), nw = (fbm2(u * 2.4, s.time * 0.03 + ci, g.seed, 3) - 0.5) * cu.width * 0.55, grad = c.createLinearGradient(xt, yt, xb, yb);
+            grad.addColorStop(0, "transparent");
+            grad.addColorStop(0.16, r % 3 === 0 ? g.secondary : g.accent);
+            grad.addColorStop(0.5, r % 4 === 0 ? g.focus : g.accent);
+            grad.addColorStop(1, "transparent");
+            c.strokeStyle = grad;
+            c.lineWidth = mix(0.55, 2.6, cu.brightness * (1 - Math.abs(cent)));
+            c.globalAlpha = alpha(g, 0.08 + cu.brightness * 0.1);
+            c.shadowBlur = 6 + g.parameters.trails * 0.08;
+            c.shadowColor = g.accent;
+            c.beginPath();
+            c.moveTo(xt + nw * 0.2, yt);
+            c.bezierCurveTo(xt + fold * 0.4 + nw, yt + cu.reach * 0.28, xb - fold * 0.2 - nw * 0.4, yt + cu.reach * 0.72, xb, yb);
+            c.stroke();
+          }
+        });
+        c.globalCompositeOperation = "source-over";
+        c.shadowBlur = 0;
+        const h = c.createLinearGradient(0, g.horizon - 60, 0, g.horizon + 35);
+        h.addColorStop(0, "transparent");
+        h.addColorStop(0.55, g.secondary);
+        h.addColorStop(1, "transparent");
+        c.fillStyle = h;
+        c.globalAlpha = alpha(g, 0.035);
+        c.fillRect(0, g.horizon - 60, g.width, 95);
+        c.restore();
+      } });
+      const glacierComplexScene = defineScene({ id: "glacier", createState: (seed) => ({ seed, time: 0, strain: 0, refraction: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("glacier", state.seed, input), rng = rngFor("glacier", state.seed, 521), flowAngle = -0.42 + rng() * 0.84, fissures = Array.from({ length: qCount(b, 5, 8, 11) }, () => ({ x: b.width * (0.08 + rng() * 0.84), y: b.height * (0.1 + rng() * 0.78), length: b.height * (0.12 + rng() * 0.26), angle: flowAngle + Math.PI / 2 + (rng() - 0.5) * 0.55, branches: Array.from({ length: 2 + Math.floor(rng() * 3) }, () => (rng() - 0.5) * 0.85), phase: rng() * TAU })), facets = Array.from({ length: qCount(b, 7, 11, 16) }, (_, i) => ({ cx: b.width * (0.08 + rng() * 0.84), cy: b.height * (0.08 + rng() * 0.84), radius: 24 + rng() * (b.mobile ? 55 : 92), sides: 3 + i % 3, tilt: rng() * TAU, phase: rng() * TAU }));
+        return { geometry: { ...b, fissures, facets, flowAngle }, primitiveCount: primitiveCount(input, 180, 270, 360) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.strain += dt * 0.075;
+        s.refraction += dt * 0.11;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        g.facets.forEach((f, i) => {
+          const sh = Math.sin(s.refraction + f.phase) * 0.035, p = Array.from({ length: f.sides }, (_, side) => {
+            const a = f.tilt + side / f.sides * TAU, st = side % 2 === 0 ? 1.15 : 0.78;
+            return { x: f.cx + Math.cos(a) * f.radius * st + Math.cos(g.flowAngle) * sh * f.radius, y: f.cy + Math.sin(a) * f.radius + Math.sin(g.flowAngle) * sh * f.radius };
+          });
+          c.beginPath();
+          c.moveTo(p[0].x, p[0].y);
+          p.slice(1).forEach((pt) => c.lineTo(pt.x, pt.y));
+          c.closePath();
+          c.fillStyle = i % 3 === 0 ? g.surface : linearGradient(c, g, f.cx - f.radius, f.cy, f.cx + f.radius, f.cy, [g.info, g.accent]);
+          c.strokeStyle = i % 2 === 0 ? g.accent : g.border;
+          c.globalAlpha = alpha(g, 0.035 + i % 4 * 0.017);
+          c.lineWidth = 0.75;
+          c.fill();
+          c.stroke();
+        });
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.6;
+        c.globalAlpha = alpha(g, 0.09);
+        for (let lane = -4; lane <= 4; lane++) {
+          const nx = Math.cos(g.flowAngle + Math.PI / 2), ny = Math.sin(g.flowAngle + Math.PI / 2), cx = g.width * 0.5 + nx * lane * g.width * 0.09, cy = g.height * 0.5 + ny * lane * g.height * 0.09, dx = Math.cos(g.flowAngle) * g.width * 0.65, dy = Math.sin(g.flowAngle) * g.width * 0.65;
+          strokeLine(c, cx - dx, cy - dy, cx + dx, cy + dy);
+        }
+        g.fissures.forEach((f, i) => {
+          const opening = 0.65 + 0.35 * Math.sin(s.strain + f.phase);
+          c.strokeStyle = i % 3 === 0 ? g.secondary : g.accent;
+          c.lineWidth = 1 + opening * 1.1;
+          c.globalAlpha = alpha(g, 0.38 + opening * 0.15);
+          c.shadowBlur = 5;
+          c.shadowColor = g.accent;
+          c.beginPath();
+          c.moveTo(f.x, f.y);
+          for (let seg = 1; seg <= 7; seg++) {
+            const jit = Math.sin(seg * 2.17 + f.phase) * f.length * 0.035;
+            c.lineTo(f.x + Math.cos(f.angle) * f.length * seg / 7 + Math.cos(f.angle + Math.PI / 2) * jit, f.y + Math.sin(f.angle) * f.length * seg / 7 + Math.sin(f.angle + Math.PI / 2) * jit);
+          }
+          c.stroke();
+          c.shadowBlur = 0;
+          f.branches.forEach((b, j) => {
+            const t2 = 0.28 + j * 0.17, bx = f.x + Math.cos(f.angle) * f.length * t2, by = f.y + Math.sin(f.angle) * f.length * t2, ba = f.angle + b;
+            c.globalAlpha = alpha(g, 0.18 + opening * 0.08);
+            c.lineWidth = 0.7;
+            strokeLine(c, bx, by, bx + Math.cos(ba) * f.length * 0.24, by + Math.sin(ba) * f.length * 0.24);
+          });
+        });
+        c.restore();
+      } });
+      const emberComplexScene = defineScene({ id: "ember", createState: (seed) => ({ seed, time: 0, buoyancy: 0, alarm: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("ember", state.seed, input), rng = rngFor("ember", state.seed, 617), plumes = Array.from({ length: qCount(b, 4, 6, 9) }, (_, i) => ({ x: b.width * (0.1 + 0.8 * (i + 0.5) / qCount(b, 4, 6, 9)), base: b.height * (0.78 + rng() * 0.13), width: b.width * (0.04 + rng() * 0.08), height: b.height * (0.28 + rng() * 0.46), phase: rng() * TAU, lean: (rng() - 0.5) * b.width * 0.12, heat: rng() })), sparks = Array.from({ length: qCount(b, 22, 36, 54) }, () => ({ x: rng() * b.width, y: rng() * b.height, speed: 0.25 + rng() * 1.2, drift: (rng() - 0.5) * 34, size: 0.8 + rng() * 2.4, phase: rng() * TAU }));
+        return { geometry: { ...b, plumes, sparks, alarmX: b.width * 0.82, alarmY: b.height * 0.2 }, primitiveCount: primitiveCount(input, 190, 285, 380) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.buoyancy += dt * 0.22;
+        s.alarm = (s.alarm + dt * 0.28) % 1;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.globalCompositeOperation = "lighter";
+        g.plumes.forEach((p) => {
+          const layers = g.mobile ? 3 : g.quality === "high" ? 6 : 4;
+          for (let l = 0; l < layers; l++) {
+            const spread = l / Math.max(1, layers - 1) - 0.5, rise = Math.sin(s.buoyancy * (1.3 + p.heat) + p.phase + l) * p.width * 0.25, x0 = p.x + spread * p.width, y0 = p.base, x1 = p.x + p.lean + spread * p.width * 0.55 + rise, y1 = p.base - p.height, grad = c.createLinearGradient(x0, y0, x1, y1);
+            grad.addColorStop(0, g.warning);
+            grad.addColorStop(0.34, g.danger);
+            grad.addColorStop(0.72, g.accent);
+            grad.addColorStop(1, "transparent");
+            c.strokeStyle = grad;
+            c.lineWidth = 1.2 + l * 1.15;
+            c.globalAlpha = alpha(g, 0.075 + p.heat * 0.075);
+            c.shadowBlur = 8 + l * 2;
+            c.shadowColor = g.danger;
+            c.beginPath();
+            c.moveTo(x0, y0);
+            c.bezierCurveTo(x0 - p.lean * 0.2 + Math.sin(s.time * 0.7 + p.phase) * p.width, p.base - p.height * 0.28, x1 + Math.cos(s.time * 0.43 + p.phase + l) * p.width * 0.8, p.base - p.height * 0.72, x1, y1);
+            c.stroke();
+          }
+        });
+        c.shadowBlur = 4;
+        c.shadowColor = g.warning;
+        g.sparks.forEach((sp, i) => {
+          const life = fract(sp.phase / TAU + s.time * 0.055 * sp.speed), y = g.height - life * g.height * 1.08, x = sp.x + Math.sin(s.time * sp.speed + sp.phase) * sp.drift + Math.sin(life * TAU * 1.7) * 8, hot = hash01(i, Math.floor(s.time * 3), g.seed) > 0.72;
+          c.fillStyle = hot ? g.focus : i % 3 === 0 ? g.warning : g.danger;
+          c.globalAlpha = alpha(g, (1 - life) * 0.42 + 0.08);
+          c.fillRect(x, y, sp.size * (hot ? 1.6 : 1), sp.size * (2 + sp.speed));
+        });
+        c.shadowBlur = 0;
+        g.plumes.slice(0, 3).forEach((p, i) => {
+          const y = p.base - p.height * (0.32 + 0.16 * Math.sin(s.time * 0.18 + i));
+          c.fillStyle = radialGradient(c, p.x, y, p.width * 2.8, g.warning, g.danger);
+          c.globalAlpha = alpha(g, 0.022);
+          c.beginPath();
+          c.arc(p.x, y, p.width * 2.6, 0, TAU);
+          c.fill();
+        });
+        c.strokeStyle = g.warning;
+        c.lineWidth = 1.4;
+        c.globalAlpha = alpha(g, 0.36);
+        for (let r = 0; r < 3; r++) {
+          const rad = 12 + r * 13 + Math.sin(s.alarm * TAU + r) * 2;
+          c.beginPath();
+          c.arc(g.alarmX, g.alarmY, rad, -Math.PI / 2, -Math.PI / 2 + TAU * (0.45 + 0.5 * s.alarm));
+          c.stroke();
+        }
+        c.restore();
+      } });
+      const atlasComplexScene = defineScene({ id: "atlas", createState: (seed) => ({ seed, time: 0, survey: 0, route: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("atlas", state.seed, input), rng = rngFor("atlas", state.seed, 719), peaks = Array.from({ length: qCount(b, 3, 4, 6) }, () => ({ x: b.width * (0.12 + rng() * 0.76), y: b.height * (0.14 + rng() * 0.7), radius: Math.min(b.width, b.height) * (0.08 + rng() * 0.16), elevation: 0.4 + rng() * 0.6, phase: rng() * TAU })), route = Array.from({ length: qCount(b, 5, 7, 9) }, (_, rank) => ({ x: b.width * (0.08 + 0.84 * rank / Math.max(1, qCount(b, 5, 7, 9) - 1)), y: b.height * (0.18 + rng() * 0.64), rank }));
+        return { geometry: { ...b, peaks, route, meridians: qCount(b, 5, 8, 11), parallels: qCount(b, 4, 7, 9) }, primitiveCount: primitiveCount(input, 220, 320, 395) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.survey += dt * 0.045;
+        s.route = (s.route + dt * 0.09) % 1;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.55;
+        c.globalAlpha = alpha(g, 0.11);
+        for (let m = 0; m < g.meridians; m++) {
+          const x = g.width * (m + 1) / (g.meridians + 1);
+          c.beginPath();
+          c.moveTo(x, g.height * 0.05);
+          c.bezierCurveTo(x - g.width * 0.025, g.height * 0.3, x + g.width * 0.025, g.height * 0.68, x, g.height * 0.95);
+          c.stroke();
+        }
+        for (let p = 0; p < g.parallels; p++) {
+          const y = g.height * (p + 1) / (g.parallels + 1);
+          c.beginPath();
+          c.moveTo(g.width * 0.04, y);
+          c.quadraticCurveTo(g.width * 0.5, y + Math.sin(p) * g.height * 0.025, g.width * 0.96, y);
+          c.stroke();
+        }
+        g.peaks.forEach((p, pi) => {
+          const levels = g.mobile ? 5 : g.quality === "high" ? 10 : 7;
+          for (let l = 1; l <= levels; l++) {
+            const r = p.radius * l / levels;
+            c.beginPath();
+            for (let pt = 0; pt <= 28; pt++) {
+              const a2 = pt / 28 * TAU, t3 = 0.82 + (fbm2(Math.cos(a2) * 1.8 + pi * 2, Math.sin(a2) * 1.8 + l * 0.31, g.seed, 3) - 0.5) * 0.42, br = 1 + Math.sin(s.survey + p.phase + l * 0.6) * 8e-3, x = p.x + Math.cos(a2) * r * t3 * br, y = p.y + Math.sin(a2) * r * t3 * 0.72 * br;
+              pt === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+            }
+            c.closePath();
+            c.strokeStyle = l === levels ? g.accent : l % 3 === 0 ? g.secondary : g.border;
+            c.lineWidth = l === levels ? 1.25 : l % 3 === 0 ? 0.9 : 0.6;
+            c.globalAlpha = alpha(g, 0.14 + p.elevation * 0.12);
+            c.stroke();
+          }
+        });
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.8;
+        c.globalAlpha = alpha(g, 0.18);
+        c.strokeRect(g.width * 0.055, g.height * 0.065, g.width * 0.89, g.height * 0.87);
+        for (let t3 = 0; t3 < 12; t3++) {
+          const x = g.width * (0.08 + t3 * 0.075);
+          strokeLine(c, x, g.height * 0.065, x, g.height * (t3 % 3 === 0 ? 0.083 : 0.075));
+        }
+        const grad = c.createLinearGradient(g.width * 0.08, 0, g.width * 0.92, 0);
+        grad.addColorStop(0, g.accent);
+        grad.addColorStop(0.52, g.secondary);
+        grad.addColorStop(1, g.accent);
+        c.strokeStyle = grad;
+        c.lineWidth = 1.35;
+        c.globalAlpha = alpha(g, 0.4);
+        c.setLineDash([7, 6]);
+        c.beginPath();
+        g.route.forEach((p, i) => {
+          if (i === 0) c.moveTo(p.x, p.y);
+          else {
+            const prev = g.route[i - 1];
+            c.quadraticCurveTo((prev.x + p.x) * 0.5, Math.min(prev.y, p.y) - g.height * 0.04, p.x, p.y);
+          }
+        });
+        c.stroke();
+        c.setLineDash([]);
+        g.route.forEach((p, i) => {
+          c.fillStyle = i % 2 === 0 ? g.accent : g.secondary;
+          c.globalAlpha = alpha(g, 0.46);
+          c.beginPath();
+          c.arc(p.x, p.y, 2.5 + i % 3, 0, TAU);
+          c.fill();
+        });
+        const ri = s.route * Math.max(1, g.route.length - 1), ix = Math.min(g.route.length - 2, Math.floor(ri)), t2 = ri - ix, a = g.route[ix], b = g.route[ix + 1], px = mix(a.x, b.x, t2), py = mix(a.y, b.y, t2) - Math.sin(t2 * Math.PI) * g.height * 0.04;
+        c.fillStyle = g.focus;
+        c.shadowBlur = 10;
+        c.shadowColor = g.accent;
+        c.globalAlpha = alpha(g, 0.72);
+        c.beginPath();
+        c.arc(px, py, 3.5, 0, TAU);
+        c.fill();
+        c.shadowBlur = 0;
+        const sx = g.width * (0.1 + 0.8 * ((Math.sin(s.time * 0.08) + 1) / 2));
+        c.strokeStyle = g.secondary;
+        c.globalAlpha = alpha(g, 0.15);
+        c.lineWidth = 0.8;
+        strokeLine(c, sx, g.height * 0.07, sx, g.height * 0.93);
+        c.restore();
+      } });
+      const noirComplexScene = defineScene({ id: "noir", createState: (seed) => ({ seed, time: 0, iris: 0, shutter: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("noir", state.seed, input), rng = rngFor("noir", state.seed, 811), blinds = Array.from({ length: qCount(b, 9, 13, 18) }, (_, i) => ({ y: b.height * i / qCount(b, 9, 13, 18), height: b.height / qCount(b, 9, 13, 18) * (0.55 + rng() * 0.5), tilt: (rng() - 0.5) * 0.08, phase: rng() * TAU })), bc = qCount(b, 6, 8, 10), blades = Array.from({ length: bc }, (_, i) => ({ phase: i / bc * TAU, length: 0.92 + rng() * 0.12, width: 0.42 + rng() * 0.16 }));
+        return { geometry: { ...b, blinds, blades, cx: b.width * 0.64, cy: b.height * 0.46, radius: Math.min(b.width, b.height) * 0.26 }, primitiveCount: primitiveCount(input, 130, 190, 270) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.iris += dt * 0.075;
+        s.shutter += dt * 0.14;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        g.blinds.forEach((b, i) => {
+          const off = Math.sin(s.shutter + b.phase) * g.height * 0.012;
+          c.save();
+          c.translate(g.width * 0.5, b.y + off);
+          c.rotate(b.tilt + Math.sin(s.time * 0.11 + b.phase) * 0.01);
+          c.fillStyle = i % 5 === 0 ? g.secondary : g.surface;
+          c.globalAlpha = alpha(g, i % 5 === 0 ? 0.055 : 0.13);
+          c.fillRect(-g.width * 0.58, -b.height / 2, g.width * 1.16, b.height);
+          c.restore();
+        });
+        c.save();
+        c.translate(g.cx, g.cy);
+        c.rotate(s.iris);
+        g.blades.forEach((b, i) => {
+          c.save();
+          c.rotate(b.phase);
+          c.beginPath();
+          c.moveTo(g.radius * 0.16, -g.radius * 0.08);
+          c.lineTo(g.radius * b.length, -g.radius * b.width);
+          c.lineTo(g.radius * b.length * 0.82, g.radius * b.width * 0.55);
+          c.lineTo(g.radius * 0.2, g.radius * 0.12);
+          c.closePath();
+          c.fillStyle = i % 2 === 0 ? g.surface : g.background;
+          c.strokeStyle = g.accent;
+          c.lineWidth = 0.8;
+          c.globalAlpha = alpha(g, 0.19 + i % 2 * 0.05);
+          c.fill();
+          c.stroke();
+          c.restore();
+        });
+        const ap = g.radius * (0.18 + 0.035 * Math.sin(s.time * 0.4));
+        c.strokeStyle = g.focus;
+        c.globalAlpha = alpha(g, 0.52);
+        c.lineWidth = 1.25;
+        c.beginPath();
+        c.arc(0, 0, ap, 0, TAU);
+        c.stroke();
+        c.restore();
+        c.strokeStyle = g.accent;
+        c.lineWidth = 0.75;
+        const lines = g.mobile ? 12 : g.quality === "high" ? 28 : 20;
+        for (let l = 0; l < lines; l++) {
+          const x = g.width * (0.08 + l / Math.max(1, lines - 1) * 0.34);
+          c.globalAlpha = alpha(g, 0.12 + l % 3 * 0.018);
+          c.beginPath();
+          c.moveTo(x, g.height * 0.12);
+          const bend = Math.sin(s.time * 0.2 + l * 0.42) * g.width * 0.018;
+          c.bezierCurveTo(x + bend, g.height * 0.35, x - bend, g.height * 0.68, x, g.height * 0.88);
+          c.stroke();
+        }
+        c.strokeStyle = g.secondary;
+        c.lineWidth = 1.8;
+        c.globalAlpha = alpha(g, 0.5);
+        const sl = Math.sin(s.time * 0.17) * g.width * 0.025;
+        strokeLine(c, g.width * 0.09 + sl, g.height * 0.8, g.width * 0.42 + sl, g.height * 0.2);
+        c.restore();
+      } });
+      const signalComplexScene = defineScene({ id: "signal", createState: (seed) => ({ seed, time: 0, sync: 0, burst: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("signal", state.seed, input), rng = rngFor("signal", state.seed, 907), cc = qCount(b, 3, 4, 5), channels = Array.from({ length: cc }, (_, i) => ({ y: b.height * (0.19 + i * 0.14), frequency: 1.7 + rng() * 3.7, amplitude: b.height * (0.018 + rng() * 0.04), phase: rng() * TAU, jitter: 0.2 + rng() * 0.8, colorRole: i % 3 })), dropouts = Array.from({ length: qCount(b, 4, 6, 9) }, () => ({ x: rng() * b.width, width: b.width * (0.025 + rng() * 0.1), y: rng() * b.height, height: 2 + rng() * 18, phase: rng() * TAU }));
+        return { geometry: { ...b, channels, dropouts, radarX: b.width * 0.78, radarY: b.height * 0.73, radarR: Math.min(b.width, b.height) * 0.14 }, primitiveCount: primitiveCount(input, 180, 260, 350) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.sync = (s.sync + dt * 0.31) % 1;
+        s.burst += dt * 0.9;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.55;
+        c.globalAlpha = alpha(g, 0.09);
+        const div = g.mobile ? 8 : 12;
+        for (let d = 0; d <= div; d++) {
+          const x = g.width * (0.05 + 0.9 * d / div);
+          strokeLine(c, x, g.height * 0.08, x, g.height * 0.62);
+        }
+        g.channels.forEach((ch, ci) => {
+          c.strokeStyle = ch.colorRole === 0 ? g.accent : ch.colorRole === 1 ? g.secondary : g.info;
+          c.lineWidth = 1 + ci * 0.3;
+          c.globalAlpha = alpha(g, 0.35 - ci * 0.035);
+          c.beginPath();
+          c.moveTo(g.width * 0.04, ch.y);
+          const steps = g.mobile ? 42 : g.quality === "high" ? 110 : 72;
+          for (let st = 1; st <= steps; st++) {
+            const u = st / steps, x = g.width * (0.04 + 0.92 * u), car = Math.sin(u * TAU * ch.frequency + s.time * 1.9 + ch.phase), env = 0.34 + 0.66 * Math.sin(Math.PI * u), mod = Math.sin(u * TAU * (ch.frequency * 0.37 + 0.7) - s.time * 0.7) * 0.35, n = (hash01(st, ci, Math.floor(s.burst * 3)) - 0.5) * ch.jitter, sp = hash01(st * 13, ci, g.seed) > 0.965 ? st % 2 === 0 ? 2.6 : -2.6 : 0;
+            c.lineTo(x, ch.y + ch.amplitude * env * (car + mod + n * 0.45 + sp));
+          }
+          c.stroke();
+        });
+        g.dropouts.forEach((d, i) => {
+          const live = 0.5 + 0.5 * Math.sin(s.time * (0.7 + i * 0.09) + d.phase);
+          c.fillStyle = i % 2 === 0 ? g.background : g.surface;
+          c.globalAlpha = alpha(g, 0.035 + live * 0.09);
+          c.fillRect(d.x, d.y, d.width, d.height * live);
+          if (live > 0.72) {
+            c.strokeStyle = g.secondary;
+            c.globalAlpha = alpha(g, 0.18);
+            strokeLine(c, d.x - 8, d.y, d.x + d.width + 8, d.y);
+          }
+        });
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.7;
+        c.globalAlpha = alpha(g, 0.16);
+        for (let r = 1; r <= 4; r++) {
+          c.beginPath();
+          c.arc(g.radarX, g.radarY, g.radarR * r / 4, 0, TAU);
+          c.stroke();
+        }
+        strokeLine(c, g.radarX - g.radarR, g.radarY, g.radarX + g.radarR, g.radarY);
+        strokeLine(c, g.radarX, g.radarY - g.radarR, g.radarX, g.radarY + g.radarR);
+        const sw = s.time * 0.78;
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1.6;
+        c.globalAlpha = alpha(g, 0.55);
+        strokeLine(c, g.radarX, g.radarY, g.radarX + Math.cos(sw) * g.radarR, g.radarY + Math.sin(sw) * g.radarR);
+        for (let b = 0; b < 4; b++) {
+          const a = hash01(b, g.seed) * TAU, r = g.radarR * (0.2 + hash01(b, 9, g.seed) * 0.72), it = 0.5 + 0.5 * Math.sin(s.time * 2 + b);
+          c.fillStyle = g.secondary;
+          c.globalAlpha = alpha(g, 0.16 + it * 0.32);
+          c.beginPath();
+          c.arc(g.radarX + Math.cos(a) * r, g.radarY + Math.sin(a) * r, 1.5 + it * 1.4, 0, TAU);
+          c.fill();
+        }
+        const sx = g.width * (0.04 + 0.92 * s.sync);
+        c.strokeStyle = g.focus;
+        c.globalAlpha = alpha(g, 0.22);
+        c.lineWidth = 0.9;
+        strokeLine(c, sx, g.height * 0.08, sx, g.height * 0.62);
+        c.restore();
+      } });
+      const violetComplexScene = defineScene({ id: "violet", createState: (seed) => ({ seed, time: 0, phaseA: 0, phaseB: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("violet", state.seed, input), rng = rngFor("violet", state.seed, 1009), nodes = Array.from({ length: qCount(b, 8, 13, 20) }, (_, i) => ({ a: 1.1 + rng() * 2.7, b: 1.4 + rng() * 3.4, radius: 0.18 + rng() * 0.78, weight: 0.3 + rng() * 0.7, phase: rng() * TAU + i * 0.17 }));
+        return { geometry: { ...b, nodes, cx: b.width * 0.5, cy: b.height * 0.5, scaleX: b.width * 0.37, scaleY: b.height * 0.34, lobes: 3 + Math.floor(rng() * 4) }, primitiveCount: primitiveCount(input, 160, 240, 330) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.phaseA += dt * 0.12;
+        s.phaseB -= dt * 0.073;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.globalCompositeOperation = "lighter";
+        const samples = g.mobile ? 80 : g.quality === "high" ? 220 : 150;
+        c.beginPath();
+        for (let sm = 0; sm <= samples; sm++) {
+          const t2 = sm / samples * TAU, r = 0.72 + 0.15 * Math.sin(g.lobes * t2 + s.phaseB * 3) + 0.08 * Math.cos((g.lobes + 2) * t2 - s.phaseA * 5), x = g.cx + Math.sin(t2 * 2.03 + s.phaseA) * g.scaleX * r + Math.sin(t2 * 5.2) * g.scaleX * 0.06, y = g.cy + Math.sin(t2 * 3.01 + s.phaseB) * g.scaleY * r + Math.cos(t2 * 4.1) * g.scaleY * 0.05;
+          sm === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+        }
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1.25;
+        c.globalAlpha = alpha(g, 0.34);
+        c.shadowBlur = 10;
+        c.shadowColor = g.accent;
+        c.stroke();
+        c.shadowBlur = 0;
+        c.beginPath();
+        for (let sm = 0; sm <= Math.round(samples * 0.72); sm++) {
+          const t2 = sm / Math.max(1, Math.round(samples * 0.72)) * TAU, x = g.cx + Math.cos(t2 * 3.17 - s.phaseB) * g.scaleX * 0.56 + Math.sin(t2 * 7.1) * g.scaleX * 0.08, y = g.cy + Math.sin(t2 * 2.11 + s.phaseA) * g.scaleY * 0.6;
+          sm === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
+        }
+        c.strokeStyle = g.secondary;
+        c.lineWidth = 0.9;
+        c.globalAlpha = alpha(g, 0.24);
+        c.stroke();
+        g.nodes.forEach((n, i) => {
+          const t2 = n.phase + s.phaseA * n.a + s.phaseB * n.b, x = g.cx + Math.sin(t2 * 2.03) * g.scaleX * n.radius, y = g.cy + Math.sin(t2 * 3.01 + n.phase * 0.3) * g.scaleY * n.radius, p = 0.5 + 0.5 * Math.sin(s.time * (0.35 + n.weight * 0.4) + n.phase);
+          c.fillStyle = i % 3 === 0 ? g.secondary : g.accent;
+          c.globalAlpha = alpha(g, 0.15 + p * 0.28);
+          c.beginPath();
+          c.arc(x, y, 1.5 + n.weight * 3.2, 0, TAU);
+          c.fill();
+          if (i % 4 === 0) {
+            c.strokeStyle = g.focus;
+            c.lineWidth = 0.7;
+            c.globalAlpha = alpha(g, 0.15);
+            c.beginPath();
+            c.arc(x, y, 7 + n.weight * 9 + p * 2, 0, TAU);
+            c.stroke();
+          }
+        });
+        c.strokeStyle = g.info;
+        c.lineWidth = 0.55;
+        c.globalAlpha = alpha(g, 0.11);
+        for (let l = 0; l < Math.min(7, g.nodes.length - 1); l++) {
+          const a = g.nodes[l], b = g.nodes[(l * 3 + 5) % g.nodes.length], ta = a.phase + s.phaseA * a.a, tb = b.phase + s.phaseB * b.b, ax = g.cx + Math.sin(ta * 2.03) * g.scaleX * a.radius, ay = g.cy + Math.sin(ta * 3.01) * g.scaleY * a.radius, bx = g.cx + Math.sin(tb * 2.03) * g.scaleX * b.radius, by = g.cy + Math.sin(tb * 3.01) * g.scaleY * b.radius;
+          c.beginPath();
+          c.moveTo(ax, ay);
+          c.quadraticCurveTo(g.cx + (hash01(l, g.seed) - 0.5) * g.scaleX * 0.3, g.cy + (hash01(l, 7, g.seed) - 0.5) * g.scaleY * 0.3, bx, by);
+          c.stroke();
+        }
+        c.restore();
+      } });
+      const claudiusComplexScene = defineScene({ id: "claudius", createState: (seed) => ({ seed, time: 0, thought: 0, proof: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("claudius", state.seed, input), rng = rngFor("claudius", state.seed, 1103), columnW = b.width * (b.mobile ? 0.74 : 0.56), columnX = (b.width - columnW) * 0.5, blocks = Array.from({ length: qCount(b, 5, 7, 9) }, (_, i) => ({ x: columnX + columnW * (0.02 + rng() * 0.04), y: b.height * (0.1 + i * 0.095 + rng() * 0.015), width: columnW * (0.58 + rng() * 0.36), lines: 2 + Math.floor(rng() * 4), lead: 7 + rng() * 3, voice: rng() })), threads = Array.from({ length: qCount(b, 4, 6, 8) }, (_, i) => ({ fromY: b.height * (0.15 + i * 0.1), toY: b.height * (0.23 + i * 0.1 + rng() * 0.08), side: i % 2 === 0 ? -1 : 1, phase: rng() * TAU, weight: 0.45 + rng() * 0.55 }));
+        return { geometry: { ...b, blocks, threads, columnX, columnW }, primitiveCount: primitiveCount(input, 145, 210, 290) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.thought += dt * 0.075;
+        s.proof = (s.proof + dt * 0.04) % 1;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.fillStyle = g.surface;
+        c.globalAlpha = alpha(g, 0.13);
+        c.fillRect(g.columnX - g.columnW * 0.08, g.height * 0.055, g.columnW * 1.16, g.height * 0.88);
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.65;
+        c.globalAlpha = alpha(g, 0.14);
+        strokeLine(c, g.columnX, g.height * 0.07, g.columnX, g.height * 0.92);
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1.25;
+        c.globalAlpha = alpha(g, 0.28);
+        const qx = g.columnX - g.columnW * 0.08, qy = g.height * 0.16;
+        c.beginPath();
+        c.arc(qx, qy, 12, Math.PI * 0.55, Math.PI * 1.45);
+        c.stroke();
+        c.beginPath();
+        c.arc(qx + 18, qy + 2, 8, Math.PI * 0.55, Math.PI * 1.45);
+        c.stroke();
+        const rx = g.columnX + g.columnW * 1.08, ry = g.height * 0.76;
+        c.beginPath();
+        c.arc(rx, ry, 12, -Math.PI * 0.45, Math.PI * 0.45);
+        c.stroke();
+        c.beginPath();
+        c.arc(rx - 18, ry - 2, 8, -Math.PI * 0.45, Math.PI * 0.45);
+        c.stroke();
+        g.blocks.forEach((b, bi) => {
+          const em = 0.5 + 0.5 * Math.sin(s.thought + b.voice * TAU);
+          for (let l = 0; l < b.lines; l++) {
+            const w = b.width * (l === b.lines - 1 ? 0.55 + b.voice * 0.24 : 0.9 + Math.sin(bi + l) * 0.04);
+            c.fillStyle = b.voice > 0.7 && l === 0 ? g.accent : g.border;
+            c.globalAlpha = alpha(g, 0.22 + em * 0.11);
+            c.fillRect(b.x, b.y + l * b.lead, w, l === 0 && b.voice > 0.72 ? 2.1 : 1.1);
+          }
+          if (b.voice > 0.78) {
+            c.strokeStyle = g.secondary;
+            c.globalAlpha = alpha(g, 0.22);
+            c.beginPath();
+            c.arc(b.x - 9, b.y + 4, 3.5, Math.PI * 0.6, Math.PI * 1.4);
+            c.stroke();
+          }
+        });
+        g.threads.forEach((t2, i) => {
+          const sx = t2.side < 0 ? g.columnX - g.columnW * 0.13 : g.columnX + g.columnW * 1.13, ix = t2.side < 0 ? g.columnX + g.columnW * 0.04 : g.columnX + g.columnW * 0.96, sw = Math.sin(s.time * 0.18 + t2.phase) * g.columnW * 0.018;
+          c.strokeStyle = i % 2 === 0 ? g.accent : g.secondary;
+          c.lineWidth = 0.8 + t2.weight * 0.5;
+          c.globalAlpha = alpha(g, 0.18 + t2.weight * 0.14);
+          c.beginPath();
+          c.moveTo(sx, t2.fromY);
+          c.bezierCurveTo(sx + sw, (t2.fromY + t2.toY) * 0.48, ix - sw, (t2.fromY + t2.toY) * 0.58, ix, t2.toY);
+          c.stroke();
+          c.beginPath();
+          c.arc(sx, t2.fromY, 2 + t2.weight * 2.2, 0, TAU);
+          c.stroke();
+        });
+        const py = g.height * (0.1 + s.proof * 0.78), x0 = g.columnX + g.columnW * 0.83;
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1.4;
+        c.globalAlpha = alpha(g, 0.32);
+        strokeLine(c, x0, py - 5, x0 + 7, py);
+        strokeLine(c, x0 + 7, py, x0, py + 5);
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.55;
+        c.globalAlpha = alpha(g, 0.12);
+        strokeLine(c, g.columnX + g.columnW * 0.36, g.height * 0.89, g.columnX + g.columnW * 0.64, g.height * 0.89);
+        c.restore();
+      } });
+      const basicusComplexScene = defineScene({ id: "basicus", createState: (seed) => ({ seed, time: 0, elevation: 0, ripple: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("basicus", state.seed, input), rng = rngFor("basicus", state.seed, 1201), columns = b.mobile ? 3 : 5, rows = b.mobile ? 5 : 4, gap = b.width * (b.mobile ? 0.025 : 0.018), cw = (b.width * 0.82 - gap * (columns - 1)) / columns, ch = (b.height * 0.58 - gap * (rows - 1)) / rows, modules = [];
+        for (let r = 0; r < rows; r++) for (let col = 0; col < columns; col++) {
+          const ix = r * columns + col;
+          modules.push({ x: b.width * 0.09 + col * (cw + gap), y: b.height * 0.14 + r * (ch + gap), w: cw, h: ch, depth: 0.25 + rng() * 0.75, phase: rng() * TAU, kind: ix % 4 });
+        }
+        return { geometry: { ...b, modules, rippleX: b.width * 0.76, rippleY: b.height * 0.83 }, primitiveCount: primitiveCount(input, 130, 200, 280) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.elevation += dt * 0.28;
+        s.ripple = (s.ripple + dt * 0.17) % 1;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        g.modules.forEach((m) => {
+          const lift = Math.sin(s.elevation + m.phase) * 4 * m.depth, scale = 1 + Math.sin(s.time * 0.12 + m.phase) * 0.015 * m.depth, w = m.w * scale, h = m.h * scale, x = m.x - (w - m.w) / 2, y = m.y + lift - (h - m.h) / 2;
+          c.shadowBlur = 4 + m.depth * 10;
+          c.shadowColor = g.border;
+          c.fillStyle = m.kind === 0 ? g.surface : m.kind === 1 ? g.accent : m.kind === 2 ? g.secondary : g.background;
+          c.globalAlpha = alpha(g, m.kind === 0 || m.kind === 3 ? 0.11 : 0.055 + m.depth * 0.05);
+          c.fillRect(x, y, w, h);
+          c.shadowBlur = 0;
+          c.strokeStyle = m.kind === 1 ? g.accent : g.border;
+          c.lineWidth = m.kind === 1 ? 1.2 : 0.7;
+          c.globalAlpha = alpha(g, 0.16 + m.depth * 0.08);
+          c.strokeRect(x, y, w, h);
+          c.globalAlpha = alpha(g, 0.2);
+          c.strokeStyle = m.kind % 2 === 0 ? g.secondary : g.accent;
+          if (m.kind === 0) {
+            for (let b = 0; b < 3; b++) c.fillRect(x + w * 0.14, y + h * (0.25 + b * 0.2), w * (0.35 + 0.12 * b), 1);
+          } else if (m.kind === 1) {
+            c.beginPath();
+            c.arc(x + w * 0.5, y + h * 0.5, Math.min(w, h) * 0.2, 0, TAU * (0.55 + m.depth * 0.35));
+            c.stroke();
+          } else if (m.kind === 2) {
+            c.fillRect(x + w * 0.18, y + h * 0.62, w * 0.16, -h * 0.28);
+            c.fillRect(x + w * 0.42, y + h * 0.62, w * 0.16, -h * 0.42);
+            c.fillRect(x + w * 0.66, y + h * 0.62, w * 0.16, -h * 0.2);
+          } else {
+            c.beginPath();
+            c.moveTo(x + w * 0.2, y + h * 0.62);
+            c.lineTo(x + w * 0.46, y + h * 0.34);
+            c.lineTo(x + w * 0.8, y + h * 0.55);
+            c.stroke();
+          }
+        });
+        c.strokeStyle = g.secondary;
+        c.lineWidth = 1;
+        c.globalAlpha = alpha(g, 0.22);
+        for (let r = 0; r < 4; r++) {
+          const p = (s.ripple + r * 0.21) % 1, rad = p * Math.min(g.width, g.height) * 0.22;
+          c.globalAlpha = alpha(g, (1 - p) * 0.2);
+          c.beginPath();
+          c.arc(g.rippleX, g.rippleY, rad, 0, TAU);
+          c.stroke();
+        }
+        c.restore();
+      } });
+      const telemetryComplexScene = defineScene({ id: "telemetry", createState: (seed) => ({ seed, time: 0, acquisition: 0, sweep: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("telemetry", state.seed, input), rng = rngFor("telemetry", state.seed, 1301), gauges = Array.from({ length: qCount(b, 2, 3, 4) }, (_, i) => ({ x: b.width * (0.18 + i * 0.2), y: b.height * 0.28, radius: Math.min(b.width, b.height) * (0.055 + rng() * 0.035), minAngle: Math.PI * 0.72, maxAngle: Math.PI * 2.28, phase: rng() * TAU, value: 0.2 + rng() * 0.7 })), strips = Array.from({ length: qCount(b, 2, 3, 4) }, (_, i) => ({ y: b.height * (0.56 + i * 0.1), amplitude: b.height * (0.012 + rng() * 0.02), frequency: 1.4 + rng() * 3.2, phase: rng() * TAU }));
+        return { geometry: { ...b, gauges, strips, rulerY: b.height * 0.82 }, primitiveCount: primitiveCount(input, 210, 310, 395) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.acquisition = (s.acquisition + dt * 0.095) % 1;
+        s.sweep += dt * 0.28;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        c.strokeStyle = g.accent;
+        c.lineWidth = 0.8;
+        c.globalAlpha = alpha(g, 0.26);
+        strokeLine(c, g.width * 0.05, g.height * 0.09, g.width * 0.95, g.height * 0.09);
+        for (let cell = 0; cell < 10; cell++) {
+          const x2 = g.width * (0.055 + cell * 0.087);
+          c.fillStyle = cell % 3 === 0 ? g.secondary : g.border;
+          c.globalAlpha = alpha(g, cell % 3 === 0 ? 0.28 : 0.13);
+          c.fillRect(x2, g.height * 0.115, g.width * 0.055, 2 + cell % 2 * 2);
+        }
+        g.gauges.forEach((ga, i) => {
+          c.strokeStyle = g.border;
+          c.lineWidth = 0.8;
+          c.globalAlpha = alpha(g, 0.3);
+          c.beginPath();
+          c.arc(ga.x, ga.y, ga.radius, ga.minAngle, ga.maxAngle);
+          c.stroke();
+          for (let t2 = 0; t2 <= 14; t2++) {
+            const a2 = ga.minAngle + (ga.maxAngle - ga.minAngle) * t2 / 14, long = t2 % 4 === 0, r0 = ga.radius * (long ? 0.78 : 0.86), r1 = ga.radius;
+            c.globalAlpha = alpha(g, long ? 0.28 : 0.13);
+            strokeLine(c, ga.x + Math.cos(a2) * r0, ga.y + Math.sin(a2) * r0, ga.x + Math.cos(a2) * r1, ga.y + Math.sin(a2) * r1);
+          }
+          const v = 0.5 + 0.5 * Math.sin(s.time * (0.35 + i * 0.12) + ga.phase) * 0.32 + (ga.value - 0.5) * 0.68, a = ga.minAngle + (ga.maxAngle - ga.minAngle) * Math.max(0.04, Math.min(0.96, v));
+          c.strokeStyle = i % 2 === 0 ? g.accent : g.secondary;
+          c.lineWidth = 1.5;
+          c.globalAlpha = alpha(g, 0.54);
+          strokeLine(c, ga.x, ga.y, ga.x + Math.cos(a) * ga.radius * 0.72, ga.y + Math.sin(a) * ga.radius * 0.72);
+          c.fillStyle = g.focus;
+          c.beginPath();
+          c.arc(ga.x, ga.y, 2.2, 0, TAU);
+          c.fill();
+        });
+        g.strips.forEach((st, si) => {
+          c.strokeStyle = si % 2 === 0 ? g.accent : g.secondary;
+          c.lineWidth = 0.9;
+          c.globalAlpha = alpha(g, 0.4);
+          c.beginPath();
+          c.moveTo(g.width * 0.05, st.y);
+          const samples = g.mobile ? 38 : g.quality === "high" ? 92 : 64;
+          for (let sm = 1; sm <= samples; sm++) {
+            const u = sm / samples, x2 = g.width * (0.05 + 0.9 * u), p = Math.sin((u * st.frequency + s.time * 0.11) * TAU + st.phase), sp = Math.sin((u * 9 + si) * Math.PI) > 0.92 ? 1.9 : 0;
+            c.lineTo(x2, st.y + st.amplitude * (p * 0.65 + sp));
+          }
+          c.stroke();
+          c.strokeStyle = g.border;
+          c.globalAlpha = alpha(g, 0.1);
+          strokeLine(c, g.width * 0.05, st.y, g.width * 0.95, st.y);
+        });
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.65;
+        c.globalAlpha = alpha(g, 0.32);
+        strokeLine(c, g.width * 0.05, g.rulerY, g.width * 0.95, g.rulerY);
+        const ticks = g.mobile ? 30 : 54;
+        for (let t2 = 0; t2 <= ticks; t2++) {
+          const x2 = g.width * (0.05 + 0.9 * t2 / ticks);
+          strokeLine(c, x2, g.rulerY, x2, g.rulerY - (t2 % 5 === 0 ? 13 : 6));
+        }
+        const x = g.width * (0.05 + 0.9 * s.acquisition);
+        c.strokeStyle = g.accent;
+        c.lineWidth = 1;
+        c.globalAlpha = alpha(g, 0.44);
+        strokeLine(c, x, g.height * 0.48, x, g.rulerY + 5);
+        c.fillStyle = g.accent;
+        c.fillRect(x - 2, g.rulerY + 7, 4, 4);
+        for (let m = 0; m < 5; m++) {
+          const on = fract(s.sweep + m * 0.17) < 0.45;
+          c.fillStyle = on ? g.success : g.border;
+          c.globalAlpha = alpha(g, on ? 0.42 : 0.08);
+          c.fillRect(g.width * 0.91, g.height * (0.12 + m * 0.055), g.width * 0.035, 2);
+        }
+        c.restore();
+      } });
+      const calmComplexScene = defineScene({ id: "calm", createState: (seed) => ({ seed, time: 0, breath: 0, drift: 0 }), prepare: ({ state, input }) => {
+        const b = makePaletteGeometry("calm", state.seed, input), rng = rngFor("calm", state.seed, 1409), dust = Array.from({ length: b.mobile ? 9 : input.effectiveQuality.tier === "high" ? 22 : 15 }, () => ({ x: b.width * (0.08 + rng() * 0.84), y: b.height * (0.15 + rng() * 0.7), size: 0.4 + rng() * 1.1, phase: rng() * TAU }));
+        return { geometry: { ...b, dust, horizon: b.height * 0.68, filamentY: b.height * 0.38 }, primitiveCount: primitiveCount(input, 72, 96, 124) };
+      }, update: ({ state: s, input: i, stepMs }) => {
+        const dt = seconds(stepMs) * i.parameters.speed / 100;
+        s.time += dt;
+        s.breath += dt * 0.07;
+        s.drift += dt * 0.025;
+      }, draw: ({ context: c, state: s, geometry: g }) => {
+        c.save();
+        c.clearRect(0, 0, g.width, g.height);
+        const cx = g.width * (0.5 + Math.sin(s.drift) * 0.015), cy = g.height * (0.5 + Math.cos(s.drift * 0.7) * 0.012), r = Math.max(g.width, g.height) * (0.42 + Math.sin(s.breath) * 0.018), glow = c.createRadialGradient(cx, cy, 0, cx, cy, r);
+        glow.addColorStop(0, g.surface);
+        glow.addColorStop(0.46, g.accent);
+        glow.addColorStop(1, "transparent");
+        c.fillStyle = glow;
+        c.globalAlpha = alpha(g, 0.018);
+        c.beginPath();
+        c.arc(cx, cy, r, 0, TAU);
+        c.fill();
+        const h = g.horizon + Math.sin(s.breath * 1.3) * g.height * 0.012;
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.65;
+        c.globalAlpha = alpha(g, 0.16);
+        strokeLine(c, g.width * 0.12, h, g.width * 0.88, h);
+        c.strokeStyle = g.accent;
+        c.globalAlpha = alpha(g, 0.16);
+        strokeLine(c, g.width * 0.42, h, g.width * 0.58, h);
+        const fy = g.filamentY + Math.sin(s.time * 0.031) * g.height * 0.018;
+        c.strokeStyle = g.accent;
+        c.lineWidth = 0.75;
+        c.globalAlpha = alpha(g, 0.11);
+        c.beginPath();
+        c.moveTo(g.width * 0.22, fy);
+        c.bezierCurveTo(g.width * 0.39, fy - g.height * 0.025, g.width * 0.61, fy + g.height * 0.025, g.width * 0.78, fy);
+        c.stroke();
+        c.fillStyle = g.accent;
+        g.dust.forEach((d, i) => {
+          const f = 0.5 + 0.5 * Math.sin(s.time * (0.07 + i * 2e-3) + d.phase);
+          c.globalAlpha = alpha(g, 0.018 + f * 0.035);
+          c.beginPath();
+          c.arc(d.x, d.y, d.size * 0.55, 0, TAU);
+          c.fill();
+        });
+        c.strokeStyle = g.border;
+        c.lineWidth = 0.45;
+        c.globalAlpha = alpha(g, 0.035);
+        for (let h2 = 0; h2 < 4; h2++) {
+          const y = g.height * (0.2 + h2 * 0.17) + Math.sin(s.time * 0.017 + h2) * 1.5;
+          strokeLine(c, g.width * (0.18 + h2 * 0.015), y, g.width * (0.82 - h2 * 0.015), y);
+        }
+        c.strokeStyle = g.secondary;
+        c.lineWidth = 0.7;
+        c.globalAlpha = alpha(g, 0.12);
+        c.beginPath();
+        c.arc(g.width * 0.82, g.height * 0.22, 8 + Math.sin(s.breath * 0.9) * 1.2, 0, TAU);
+        c.stroke();
+        c.restore();
+      } });
+      window.TalosMobileScenes = Object.freeze([forgeComplexScene, paperComplexScene, terminalComplexScene, auroraComplexScene, glacierComplexScene, emberComplexScene, atlasComplexScene, noirComplexScene, signalComplexScene, violetComplexScene, claudiusComplexScene, basicusComplexScene, telemetryComplexScene, calmComplexScene]);
+    })();
+    TALOS_DESKTOP_SCENES = window.TalosMobileScenes;
+  }
+});
+
 // src/components/theme-studio.js
 function nomiTemi(campi = CAMPI_IMPOSTAZIONI) {
   const campo2 = campi.find((c) => c.id === "themePresetSelect");
   return (campo2?.opzioni || []).map(([id, nome]) => ({ id, nome }));
+}
+function conCalmPrimo(temi) {
+  const i = temi.findIndex((t2) => t2.id === "calm");
+  return i <= 0 ? temi.slice() : [temi[i], ...temi.slice(0, i), ...temi.slice(i + 1)];
 }
 function leggiSemiTemi(doc = globalThis.document) {
   const semi = /* @__PURE__ */ new Map();
@@ -8189,6 +9360,31 @@ function fondoDelTema(seme, modo) {
 function temaChiaro(seme) {
   return Boolean(seme?.fondoChiaro);
 }
+function descrizioneTema(id, semi) {
+  const scheda = DESCRIZIONI_TEMI[id];
+  if (scheda) return scheda;
+  return {
+    scena: id,
+    materiale: temaChiaro(semi) ? "Tavolozza chiara" : "Tavolozza scura",
+    testo: "Questa tavolozza non ha ancora una descrizione scritta. I colori qui sotto sono quelli veri, letti dal foglio dei temi."
+  };
+}
+function centraNellElenco(contenitore, voce) {
+  if (!contenitore || !voce || typeof voce.getBoundingClientRect !== "function") return 0;
+  const c = contenitore.getBoundingClientRect();
+  const v = voce.getBoundingClientRect();
+  if (!c.height || !v.height) return 0;
+  const spostamento = v.top - c.top - (c.height - v.height) / 2;
+  const prima = contenitore.scrollTop;
+  contenitore.scrollTop = Math.max(0, prima + spostamento);
+  return contenitore.scrollTop - prima;
+}
+function campoDi(id, campi = CAMPI_IMPOSTAZIONI) {
+  return campi.find((c) => c.id === id) || null;
+}
+function titoloStudio(id, campi = CAMPI_IMPOSTAZIONI) {
+  return TITOLI_STUDIO[id] || campoDi(id, campi)?.titolo || id;
+}
 function impostaAspetto(id, valore, doc = globalThis.document) {
   const controllo = doc.getElementById(id) || doc.getElementById(`setting-${id}`);
   if (!controllo) return false;
@@ -8198,6 +9394,11 @@ function impostaAspetto(id, valore, doc = globalThis.document) {
   controllo.dispatchEvent(new Event(evento, { bubbles: true }));
   return true;
 }
+function valoreAspetto(id, doc = globalThis.document) {
+  const controllo = doc.getElementById(id) || doc.getElementById(`setting-${id}`);
+  if (!controllo) return null;
+  return controllo.type === "checkbox" ? Boolean(controllo.checked) : String(controllo.value ?? "");
+}
 function aspettoCorrente(doc = globalThis.document) {
   const radice2 = doc.documentElement;
   const dalControllo = (id) => doc.getElementById(id)?.value || doc.getElementById(`setting-${id}`)?.value || "";
@@ -8206,14 +9407,274 @@ function aspettoCorrente(doc = globalThis.document) {
     modo: dalControllo("colorModeSelect") || (radice2.getAttribute("data-theme") === "light" ? "light" : "system")
   };
 }
+function scenaPerAspetto({ tema, scena }, disponibili) {
+  const esiste = (id) => disponibili ? disponibili.has?.(id) ?? disponibili.includes?.(id) : Boolean(id);
+  if (scena && scena !== "follow-theme" && esiste(scena)) return scena;
+  if (tema && esiste(tema)) return tema;
+  return "calm";
+}
+function parametriScena(stile) {
+  const fuori = {};
+  for (const [nome, [proprieta, ripiego, min, max]] of Object.entries(PARAMETRI_SCENA)) {
+    const grezzo = Number.parseFloat(stile?.getPropertyValue?.(proprieta) ?? "");
+    fuori[nome] = limita((Number.isFinite(grezzo) ? grezzo : ripiego) * 100, min, max);
+  }
+  return fuori;
+}
+function statoAnteprima({ ridotto = false, modo = "adaptive", pausa = false, nascosto = false } = {}) {
+  if (ridotto) return "reduced";
+  if (modo === "off" || modo === "static") return "renderer-fermo";
+  if (pausa) return "paused";
+  if (nascosto) return "static";
+  return "animating";
+}
+async function caricaScene() {
+  if (sceneCaricate) return sceneCaricate;
+  const gia = globalThis.TalosMobileScenes;
+  if (Array.isArray(gia) && gia.length) {
+    sceneCaricate = new Map(gia.map((s) => [s.id, s]));
+    return sceneCaricate;
+  }
+  try {
+    const modulo = await Promise.resolve().then(() => (init_desktop_scenes(), desktop_scenes_exports));
+    sceneCaricate = new Map((modulo.TALOS_DESKTOP_SCENES || []).map((s) => [s.id, s]));
+  } catch {
+    sceneCaricate = /* @__PURE__ */ new Map();
+  }
+  return sceneCaricate;
+}
+function movimentoRidotto(doc = globalThis.document) {
+  if (doc?.documentElement?.classList?.contains("reduce-motion")) return true;
+  if (doc?.body?.classList?.contains("reduce-motion")) return true;
+  return Boolean(globalThis.matchMedia?.(RIDOTTO_QUERY)?.matches);
+}
+function risolviColore(grezzo, doc = globalThis.document, ripiego = "") {
+  const valore = String(grezzo || "").trim();
+  if (!valore) return ripiego;
+  if (!doc?.body || !doc.createElement) return ripiego || valore;
+  if (!sondaColore || !sondaColore.isConnected || sondaColore.ownerDocument !== doc) {
+    sondaColore = doc.createElement("span");
+    sondaColore.setAttribute("aria-hidden", "true");
+    sondaColore.style.cssText = "position:fixed;left:-10000px;top:-10000px;visibility:hidden;pointer-events:none;";
+    doc.body.append(sondaColore);
+  }
+  sondaColore.style.color = "";
+  sondaColore.style.color = valore;
+  if (!sondaColore.style.color) return ripiego || valore;
+  const calcolato = (doc.defaultView || globalThis).getComputedStyle?.(sondaColore)?.color || "";
+  return normalizzaColore(calcolato, doc) || ripiego || valore;
+}
+function normalizzaColore(calcolato, doc = globalThis.document) {
+  const valore = String(calcolato || "").trim();
+  if (!valore) return "";
+  try {
+    if (!telaColore) {
+      telaColore = doc.createElement("canvas");
+      telaColore.width = 1;
+      telaColore.height = 1;
+    }
+    const ctx = telaColore.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return valore;
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillStyle = "#000";
+    ctx.fillStyle = valore;
+    ctx.fillRect(0, 0, 1, 1);
+    const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+    return a === 255 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${Math.round(a / 255 * 100) / 100})`;
+  } catch {
+    return valore;
+  }
+}
+function creaAnteprimaScena(contenitore, { document: doc = globalThis.document, scene = /* @__PURE__ */ new Map(), seme = SEME_SCENA } = {}) {
+  if (!contenitore) return null;
+  let catalogo = scene;
+  const canvas = doc.createElement("canvas");
+  canvas.className = "td-preview-canvas";
+  canvas.setAttribute("aria-hidden", "true");
+  const contesto2 = canvas.getContext?.("2d", { alpha: true });
+  if (!contesto2) return null;
+  contenitore.prepend(canvas);
+  const colore = (grezzo, ripiego) => risolviColore(grezzo, doc, ripiego);
+  const statoLocale = { definizione: null, scena: "", dati: null, geometria: null, ingresso: null, larghezza: 1, altezza: 1, dpr: 1, pausa: false, viva: true };
+  let raf2 = 0;
+  let ultimo = 0;
+  function tavolozza() {
+    const vista = doc.defaultView || globalThis;
+    const stileRadice = vista.getComputedStyle?.(doc.documentElement);
+    const fuori = {};
+    for (const [ruolo, [proprieta, ripiego]] of Object.entries(RUOLI_PALETTE)) {
+      fuori[ruolo] = colore(stileRadice?.getPropertyValue?.(proprieta)?.trim(), ripiego);
+    }
+    return fuori;
+  }
+  function ingressoScena() {
+    const vista = doc.defaultView || globalThis;
+    const stileRadice = vista.getComputedStyle?.(doc.documentElement);
+    const tav = tavolozza();
+    return {
+      viewport: { width: statoLocale.larghezza, height: statoLocale.altezza },
+      palette: { dark: tav, light: tav },
+      colorMode: doc.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark",
+      parameters: parametriScena(stileRadice),
+      effectiveQuality: { tier: "balanced", densityScale: 1 }
+    };
+  }
+  function misura() {
+    const rettangolo = contenitore.getBoundingClientRect?.() || { width: 0, height: 0 };
+    statoLocale.larghezza = Math.max(1, rettangolo.width);
+    statoLocale.altezza = Math.max(1, rettangolo.height);
+    const dpr = Math.max(0.5, Math.min((doc.defaultView || globalThis).devicePixelRatio || 1, DPR_MASSIMO));
+    statoLocale.dpr = dpr;
+    const larghezzaPixel = Math.max(1, Math.round(statoLocale.larghezza * dpr));
+    const altezzaPixel = Math.max(1, Math.round(statoLocale.altezza * dpr));
+    if (canvas.width !== larghezzaPixel) canvas.width = larghezzaPixel;
+    if (canvas.height !== altezzaPixel) canvas.height = altezzaPixel;
+  }
+  function disegna2(passoMs) {
+    if (!statoLocale.definizione) return;
+    try {
+      if (passoMs > 0) statoLocale.definizione.update({ state: statoLocale.dati, input: statoLocale.ingresso, stepMs: passoMs });
+      contesto2.setTransform(statoLocale.dpr, 0, 0, statoLocale.dpr, 0, 0);
+      statoLocale.definizione.draw({ context: contesto2, state: statoLocale.dati, geometry: statoLocale.geometria });
+      canvas.dataset.sceneStatus = statoAttuale();
+      canvas.dataset.scene = statoLocale.scena;
+    } catch {
+      statoLocale.definizione = null;
+      contesto2.clearRect(0, 0, statoLocale.larghezza, statoLocale.altezza);
+      canvas.dataset.sceneStatus = "error";
+    }
+  }
+  function statoAttuale() {
+    if (!statoLocale.definizione) return "assente";
+    return statoAnteprima({
+      ridotto: movimentoRidotto(doc),
+      modo: doc.documentElement.getAttribute("data-talos-motion-mode") || "adaptive",
+      pausa: statoLocale.pausa,
+      nascosto: Boolean(doc.hidden)
+    });
+  }
+  function deveAnimare() {
+    return statoAttuale() === "animating";
+  }
+  function giro(ora) {
+    raf2 = 0;
+    if (!statoLocale.viva) return;
+    if (!deveAnimare()) {
+      ultimo = 0;
+      return;
+    }
+    const trascorso = ultimo ? ora - ultimo : 1e3 / FPS_ANTEPRIMA;
+    if (trascorso >= 1e3 / FPS_ANTEPRIMA - 1) {
+      ultimo = ora;
+      disegna2(Math.min(50, trascorso));
+    }
+    raf2 = (doc.defaultView || globalThis).requestAnimationFrame(giro);
+  }
+  function programma() {
+    const vista = doc.defaultView || globalThis;
+    if (raf2) vista.cancelAnimationFrame(raf2);
+    raf2 = 0;
+    ultimo = 0;
+    if (statoLocale.viva && deveAnimare()) raf2 = vista.requestAnimationFrame(giro);
+  }
+  function aggiorna({ scena } = {}) {
+    if (!statoLocale.viva) return statoAttuale();
+    misura();
+    const definizione = catalogo.get?.(scena) || null;
+    const cambiata = definizione !== statoLocale.definizione;
+    statoLocale.definizione = definizione;
+    statoLocale.scena = definizione ? scena : "";
+    if (!definizione) {
+      contesto2.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.dataset.sceneStatus = "assente";
+      return "assente";
+    }
+    if (cambiata || !statoLocale.dati) statoLocale.dati = definizione.createState(seme);
+    statoLocale.ingresso = ingressoScena();
+    statoLocale.geometria = definizione.prepare({ state: statoLocale.dati, input: statoLocale.ingresso }).geometry;
+    disegna2(0);
+    programma();
+    return statoAttuale();
+  }
+  const suVisibilita = () => {
+    if (!doc.hidden) {
+      disegna2(0);
+      programma();
+    } else programma();
+  };
+  doc.addEventListener?.("visibilitychange", suVisibilita);
+  let osservatore = null;
+  const Osserva = (doc.defaultView || globalThis).ResizeObserver;
+  if (typeof Osserva === "function") {
+    osservatore = new Osserva(() => {
+      if (statoLocale.viva && statoLocale.definizione) aggiorna({ scena: statoLocale.scena });
+    });
+    osservatore.observe(contenitore);
+  }
+  return {
+    canvas,
+    aggiorna,
+    impostaScene(mappa) {
+      catalogo = mappa || /* @__PURE__ */ new Map();
+    },
+    stato: statoAttuale,
+    inPausa: () => statoLocale.pausa,
+    alterna() {
+      statoLocale.pausa = !statoLocale.pausa;
+      disegna2(0);
+      programma();
+      return statoLocale.pausa;
+    },
+    ferma() {
+      statoLocale.viva = false;
+      const finestra = doc.defaultView || globalThis;
+      if (raf2) finestra.cancelAnimationFrame(raf2);
+      raf2 = 0;
+      osservatore?.disconnect();
+      doc.removeEventListener?.("visibilitychange", suVisibilita);
+      canvas.remove();
+    }
+  };
+}
 function nodo10(doc, tag2, classe, testo3) {
   const el25 = doc.createElement(tag2);
   if (classe) el25.className = classe;
   if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
   return el25;
 }
+function icona5(doc, nome) {
+  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  svg.setAttribute("class", "i");
+  svg.setAttribute("aria-hidden", "true");
+  use.setAttribute("href", `#i-${nome}`);
+  svg.append(use);
+  return svg;
+}
+function miniConversazione(doc) {
+  const scena = nodo10(doc, "div", "td-mini");
+  scena.setAttribute("inert", "");
+  scena.setAttribute("aria-hidden", "true");
+  const risposta = nodo10(doc, "div", "td-mini-riga");
+  risposta.append(nodo10(doc, "span", "td-mini-avatar"));
+  const bollaRisposta = nodo10(doc, "div", "td-mini-bolla td-mini-bolla--assistente");
+  bollaRisposta.append(
+    nodo10(doc, "span", "td-mini-linea", "Ho letto il repository: sono 104 file sotto harness-ui."),
+    nodo10(doc, "span", "td-mini-linea td-mini-linea--corta")
+  );
+  risposta.append(bollaRisposta);
+  const domanda = nodo10(doc, "div", "td-mini-riga td-mini-riga--utente");
+  domanda.append(nodo10(doc, "div", "td-mini-bolla td-mini-bolla--utente", "Riassumi il progetto"));
+  const composer = nodo10(doc, "div", "td-mini-composer");
+  composer.append(nodo10(doc, "span", "td-mini-placeholder", "Scrivi a TALOS"));
+  const invio = nodo10(doc, "span", "td-mini-invio");
+  invio.append(icona5(doc, "send"));
+  composer.append(invio);
+  scena.append(risposta, domanda, composer);
+  return scena;
+}
 function apriStudioTemi({ document: doc = globalThis.document } = {}) {
-  const temi = nomiTemi();
+  const temi = conCalmPrimo(nomiTemi());
   const semi = leggiSemiTemi(doc);
   let { tema: scelto, modo } = aspettoCorrente(doc);
   if (!temi.some((t2) => t2.id === scelto)) scelto = temi[0]?.id || "calm";
@@ -8222,13 +9683,19 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   elenco2.setAttribute("role", "radiogroup");
   elenco2.setAttribute("aria-label", "Tema dell’interfaccia");
   const destra = nodo10(doc, "div", "td-theme-display");
+  const testa = nodo10(doc, "div", "td-theme-testa");
   const titolo2 = nodo10(doc, "h3", "", "");
   const descrizione = nodo10(doc, "p", "", "");
+  testa.append(titolo2, descrizione);
   const anteprima3 = nodo10(doc, "div", "td-theme-preview");
+  const mini = miniConversazione(doc);
   const didascalia = nodo10(doc, "div", "td-preview-caption");
-  const didascaliaTema = nodo10(doc, "span", "", "");
-  const didascaliaModo = nodo10(doc, "span", "", "");
-  didascalia.append(didascaliaTema, didascaliaModo);
+  const didascaliaScena = nodo10(doc, "span", "", "");
+  const didascaliaStato = nodo10(doc, "span", "", "");
+  didascalia.append(didascaliaScena, didascaliaStato);
+  anteprima3.append(mini, didascalia);
+  const mensola = nodo10(doc, "div", "td-theme-mensola");
+  mensola.append(anteprima3);
   const controlli = nodo10(doc, "div", "td-theme-controls");
   const segmento = nodo10(doc, "div", "td-segment");
   segmento.setAttribute("role", "group");
@@ -8246,9 +9713,100 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     segmento.append(b);
     return b;
   });
-  controlli.append(segmento);
+  const pausa = nodo10(doc, "button", "td-studio-button", "Ferma anteprima");
+  pausa.type = "button";
+  pausa.addEventListener("click", () => {
+    vista?.alterna();
+    aggiorna();
+  });
+  controlli.append(segmento, pausa);
+  const cursori = [];
+  const interruttori = [];
+  const selettori = [];
+  function rigaControllo(id, { compatta = false } = {}) {
+    const campo2 = campoDi(id);
+    if (!campo2) return null;
+    const riga = nodo10(doc, "div", compatta ? "td-studio-riga td-studio-riga--compatta" : "td-studio-riga");
+    riga.dataset.studioControllo = id;
+    const etichetta2 = nodo10(doc, "label", "td-studio-etichetta", titoloStudio(id));
+    const idLocale = `td-studio-${id}`;
+    etichetta2.htmlFor = idLocale;
+    riga.append(etichetta2);
+    if (campo2.tipo === "checkbox") {
+      const box = doc.createElement("input");
+      box.type = "checkbox";
+      box.id = idLocale;
+      box.className = "talos-switch";
+      box.setAttribute("role", "switch");
+      box.addEventListener("change", () => {
+        impostaAspetto(id, box.checked, doc);
+        aggiorna();
+      });
+      riga.append(box);
+      interruttori.push({ id, elemento: box });
+    } else if (campo2.tipo === "select") {
+      const select = doc.createElement("select");
+      select.id = idLocale;
+      select.className = "talos-select";
+      for (const [valore, nome] of campo2.opzioni || []) {
+        const op = nodo10(doc, "option", "", nome);
+        op.value = valore;
+        select.append(op);
+      }
+      select.addEventListener("change", () => {
+        impostaAspetto(id, select.value, doc);
+        aggiorna();
+      });
+      riga.append(select);
+      selettori.push({ id, elemento: select });
+    } else {
+      const contenitore = nodo10(doc, "div", "td-studio-cursore");
+      const cursore = doc.createElement("input");
+      cursore.type = "range";
+      cursore.id = idLocale;
+      cursore.min = String(campo2.min ?? 0);
+      cursore.max = String(campo2.max ?? 100);
+      const uscita = doc.createElement("output");
+      uscita.htmlFor = idLocale;
+      uscita.className = "talos-mono";
+      cursore.addEventListener("input", () => {
+        uscita.value = cursore.value;
+        uscita.textContent = cursore.value + (campo2.unita || "");
+        impostaAspetto(id, cursore.value, doc);
+        aggiorna({ soloNumeri: true });
+      });
+      contenitore.append(cursore, uscita);
+      riga.append(contenitore);
+      cursori.push({ id, elemento: cursore, uscita, unita: campo2.unita || "" });
+    }
+    return riga;
+  }
+  function gruppo(titoloGruppo, ids, { compatta = false } = {}) {
+    const sezione = nodo10(doc, "section", "td-studio-gruppo");
+    sezione.append(nodo10(doc, "h4", "", titoloGruppo));
+    const righe = nodo10(doc, "div", compatta ? "td-studio-righe td-studio-righe--due" : "td-studio-righe");
+    for (const id of ids) {
+      const riga = rigaControllo(id, { compatta });
+      if (riga) righe.append(riga);
+    }
+    sezione.append(righe);
+    return sezione;
+  }
+  const gruppoSfondo = gruppo("Sfondo animato", ["backgroundMotionToggle", "sceneOverrideSelect", "motionModeSelect", "motionQualitySelect"], { compatta: true });
+  const gruppoCursori = gruppo("La scena, cursore per cursore", CURSORI_SCENA, { compatta: true });
+  const ripristina = nodo10(doc, "button", "td-studio-button", "Ripristina i valori del movimento");
+  ripristina.type = "button";
+  ripristina.addEventListener("click", () => {
+    const vero = doc.getElementById("resetMotionButton");
+    if (vero) {
+      vero.click();
+      leggiDaiControlliVeri();
+      aggiorna();
+    }
+  });
+  gruppoCursori.append(ripristina);
   const dettagli = nodo10(doc, "div", "td-theme-details");
-  const campi = ["Accento", "Fondo", "Raggio delle schede"].map((nome) => {
+  const datiTema = ["Materiale", "Accento applicato", "Raggio delle schede"].map((nome) => {
     const box = nodo10(doc, "div");
     box.append(nodo10(doc, "span", "", nome));
     const valore = nodo10(doc, "strong", "", "—");
@@ -8256,17 +9814,19 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     dettagli.append(box);
     return valore;
   });
+  const nota = nodo10(doc, "p", "td-theme-note", "La scena resta fuori dal testo: qui puoi esplorarla in movimento. Il tema si applica subito, senza chiudere il pannello e senza spostare la selezione.");
+  const approfondimento = nodo10(doc, "details", "td-theme-note");
+  approfondimento.append(nodo10(doc, "summary", "", "Porting, qualità e accessibilità"));
+  approfondimento.append(nodo10(doc, "p", "", "14 composizioni Canvas portate dal mobile 355dc8e; la tavolozza è quella del desktop, letta dal foglio dei temi. L’anteprima è indipendente dall’accensione dello sfondo nella Chat. Con «Riduci movimento» il tempo si ferma e resta il fotogramma a colori; fuori vista il disegno si sospende. Un tetto di trenta fotogrammi al secondo e di pixel contiene il costo, senza dichiarare prestazioni del dispositivo."));
   const azioni = nodo10(doc, "div", "td-theme-actions");
   const vaiAImpostazioni = nodo10(doc, "button", "td-studio-button", "Tutte le impostazioni dell’aspetto");
   vaiAImpostazioni.type = "button";
   vaiAImpostazioni.addEventListener("click", () => {
     chiudiModale();
     doc.getElementById("setting-tab-appearance")?.click();
-    (doc.getElementById("themePresetSelect") || doc.getElementById("setting-themePresetSelect"))?.focus?.({ preventScroll: false });
   });
   azioni.append(vaiAImpostazioni);
-  const nota = nodo10(doc, "p", "td-theme-note", "Il tema si applica subito, senza chiudere il pannello. La preferenza è di questo browser: le conversazioni e i file non vengono toccati. Lo sfondo animato ha un suo controllo in «Aspetto e movimento».");
-  destra.append(titolo2, descrizione, anteprima3, didascalia, controlli, dettagli, azioni, nota);
+  destra.append(testa, mensola, controlli, gruppoSfondo, gruppoCursori, dettagli, nota, approfondimento, azioni);
   studio.append(elenco2, destra);
   const scelte = temi.map(({ id, nome }) => {
     const b = nodo10(doc, "button", "td-theme-choice");
@@ -8298,63 +9858,131 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     const prossimo = e.key === "Home" ? 0 : e.key === "End" ? scelte.length - 1 : (i + passo + scelte.length) % scelte.length;
     scelte[prossimo].bottone.click();
   });
-  function aggiorna() {
+  let vista = null;
+  let scene = /* @__PURE__ */ new Map();
+  function leggiDaiControlliVeri() {
+    for (const { id, elemento } of interruttori) elemento.checked = Boolean(valoreAspetto(id, doc));
+    for (const { id, elemento } of selettori) {
+      const v = valoreAspetto(id, doc);
+      if (v !== null) elemento.value = v;
+    }
+    for (const { id, elemento, uscita, unita } of cursori) {
+      const v = valoreAspetto(id, doc);
+      if (v !== null) elemento.value = v;
+      uscita.value = elemento.value;
+      uscita.textContent = elemento.value + unita;
+    }
+  }
+  function aggiorna({ soloNumeri = false } = {}) {
     const seme = semi.get(scelto);
     const nome = temi.find((t2) => t2.id === scelto)?.nome || scelto;
+    const scheda = descrizioneTema(scelto, seme);
     const modoDisegnato = modo !== "system" ? modo : doc.documentElement.getAttribute("data-theme") === "light" || globalThis.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "light" : "dark";
-    titolo2.textContent = nome;
-    descrizione.textContent = temaChiaro(seme) ? "Tavolozza chiara: nasce su carta e resta leggibile anche quando il sistema è in scuro." : "Tavolozza scura: fondo profondo e un accento solo, quello che guida l’occhio.";
-    for (const s of scelte) {
-      const attivo = s.id === scelto;
-      s.bottone.setAttribute("aria-checked", String(attivo));
-      s.bottone.tabIndex = attivo ? 0 : -1;
-      s.segno.textContent = attivo ? "✓" : "";
+    if (!soloNumeri) {
+      titolo2.textContent = nome;
+      descrizione.textContent = scheda.testo;
+      for (const s of scelte) {
+        const attivo = s.id === scelto;
+        s.bottone.setAttribute("aria-checked", String(attivo));
+        s.bottone.tabIndex = attivo ? 0 : -1;
+        s.segno.textContent = attivo ? "✓" : "";
+      }
+      for (const b of bottoniModo) b.setAttribute("aria-pressed", String(b.dataset.modo === modo));
+      leggiDaiControlliVeri();
     }
-    for (const b of bottoniModo) b.setAttribute("aria-pressed", String(b.dataset.modo === modo));
     const fondo = fondoDelTema(seme, modoDisegnato);
-    anteprima3.style.setProperty("--preview-bg", fondo || "var(--talos-background)");
-    anteprima3.style.setProperty("--preview-accent", seme?.accento || "var(--talos-accent)");
-    anteprima3.style.setProperty("--preview-line", seme?.linea || "var(--talos-border)");
-    if (seme?.raggio) anteprima3.style.setProperty("--preview-radius", seme.raggio);
-    didascaliaTema.textContent = nome;
-    didascaliaModo.textContent = modo === "system" ? "Segue il sistema" : modo === "light" ? "Chiaro" : "Scuro";
-    campi[0].textContent = seme?.accento || "non dichiarato";
-    campi[1].textContent = fondo || "non dichiarato";
-    campi[2].textContent = seme?.raggio || "non dichiarato";
-    disegnaAnteprima();
-  }
-  function disegnaAnteprima() {
-    anteprima3.replaceChildren();
-    const riga = nodo10(doc, "div", "td-preview-riga");
-    riga.append(nodo10(doc, "span", "td-preview-pallino"), nodo10(doc, "span", "td-preview-barra"));
-    const scheda = nodo10(doc, "div", "td-preview-scheda");
-    const barraLunga = nodo10(doc, "span", "td-preview-barra");
-    const barraCorta = nodo10(doc, "span", "td-preview-barra");
-    barraCorta.dataset.corta = "si";
-    scheda.append(barraLunga, barraCorta);
-    anteprima3.append(riga, scheda);
+    const stileRadice = (doc.defaultView || globalThis).getComputedStyle?.(doc.documentElement);
+    const applicato = (proprieta) => stileRadice?.getPropertyValue?.(proprieta)?.trim() || "";
+    datiTema[0].textContent = scheda.materiale;
+    datiTema[1].textContent = risolviColore(applicato("--talos-accent"), doc, seme?.accento || "") || "non dichiarato";
+    datiTema[2].textContent = applicato("--talos-radius-card") || seme?.raggio || "non dichiarato";
+    const scenaAttiva = scenaPerAspetto({ tema: scelto, scena: valoreAspetto("sceneOverrideSelect", doc) || "follow-theme" }, scene);
+    const stato = vista?.aggiorna({ scena: scenaAttiva }) || "assente";
+    didascaliaScena.textContent = scene.has(scenaAttiva) ? DESCRIZIONI_TEMI[scenaAttiva]?.scena || scenaAttiva : scheda.scena;
+    didascaliaStato.textContent = TESTO_STATO[stato] || stato;
+    pausa.textContent = vista?.inPausa() ? "Riprendi anteprima" : "Ferma anteprima";
+    pausa.disabled = stato === "reduced" || stato === "assente" || stato === "renderer-fermo";
+    anteprima3.dataset.stato = stato;
+    void fondo;
   }
   aggiorna();
-  const modale = apriModale("Temi e atmosfere", studio, { document: doc, ampia: true });
-  const scelta = scelte.find((s) => s.id === scelto)?.bottone;
-  scelta?.focus({ preventScroll: true });
-  scelta?.scrollIntoView?.({ block: "center" });
+  let osservatoreRadice = null;
+  const modale = apriModale("Temi e atmosfere", studio, {
+    document: doc,
+    ampia: true,
+    /* ⛔ Il canvas muore con la modale: un `requestAnimationFrame` che sopravvive a una finestra
+       chiusa è lavoro pagato dalla stessa GPU per disegnare qualcosa che nessuno vede. */
+    suChiusura: () => {
+      osservatoreRadice?.disconnect();
+      vista?.ferma();
+      vista = null;
+    }
+  });
+  const Osservatore = (doc.defaultView || globalThis).MutationObserver;
+  if (typeof Osservatore === "function") {
+    osservatoreRadice = new Osservatore(() => {
+      const corrente = aspettoCorrente(doc);
+      if (temi.some((t2) => t2.id === corrente.tema)) scelto = corrente.tema;
+      modo = corrente.modo;
+      aggiorna();
+    });
+    osservatoreRadice.observe(doc.documentElement, { attributes: true, attributeFilter: ["data-talos-theme", "data-theme", "data-talos-scene", "data-talos-motion-mode", "class", "style"] });
+  }
+  vista = creaAnteprimaScena(anteprima3, { document: doc });
+  caricaScene().then((mappa) => {
+    scene = mappa;
+    vista?.impostaScene(mappa);
+    aggiorna();
+  }).catch(() => {
+    aggiorna();
+  });
+  const sceltaBottone = scelte.find((s) => s.id === scelto)?.bottone;
+  sceltaBottone?.focus({ preventScroll: true });
+  centraNellElenco(elenco2, sceltaBottone);
   return modale;
+}
+function migraRigheImpostazioni(schermo, { document: doc = globalThis.document } = {}) {
+  if (!schermo) return 0;
+  let migrate = 0;
+  for (const id of CONTROLLI_MIGRATI) {
+    const riga = schermo.querySelector(`[data-setting-row="${id}"]`);
+    if (!riga || riga.dataset.tdMigrata === "si") {
+      if (riga) migrate += 1;
+      continue;
+    }
+    riga.dataset.tdMigrata = "si";
+    migrate += 1;
+  }
+  const anteprimaPacchetto = schermo.querySelector("[data-talos-motion-preview]");
+  if (anteprimaPacchetto) anteprimaPacchetto.dataset.tdMigrata = "si";
+  return migrate;
 }
 function montaScorciatoiaTemi(schermo, { document: doc = globalThis.document } = {}) {
   if (!schermo) return null;
   const riga = schermo.querySelector('[data-setting-row="themePresetSelect"]');
   if (!riga) return null;
+  migraRigheImpostazioni(schermo, { document: doc });
   const esistente = schermo.querySelector("[data-td-studio-temi]");
-  if (esistente) return esistente;
-  const b = nodo10(doc, "button", "td-studio-button", `Esplora le ${nomiTemi().length} atmosfere`);
-  b.type = "button";
-  b.dataset.tdStudioTemi = "";
-  b.addEventListener("click", () => apriStudioTemi({ document: doc }));
-  riga.after(b);
-  return b;
+  if (esistente) {
+    riga.before(esistente);
+    return esistente;
+  }
+  const scheda = nodo10(doc, "section", "td-studio-rimando");
+  scheda.dataset.tdStudioTemi = "";
+  const copia = nodo10(doc, "div", "td-studio-rimando__copia");
+  copia.append(nodo10(doc, "h3", "", "Temi e atmosfere"));
+  copia.append(nodo10(doc, "p", "", `Le ${nomiTemi().length} atmosfere, il modo chiaro e scuro, lo sfondo animato e i suoi cursori si scelgono guardandoli, in un pannello solo.`));
+  const nomi2 = CONTROLLI_MIGRATI.map((id) => titoloStudio(id)).filter(Boolean);
+  copia.append(nodo10(doc, "p", "td-studio-rimando__elenco", `Qui dentro: ${nomi2.slice(0, -1).join(", ")} e ${nomi2.at(-1)}.`));
+  const apri = nodo10(doc, "button", "td-studio-button primary", "Apri Temi e atmosfere");
+  apri.type = "button";
+  apri.prepend(icona5(doc, "image"));
+  apri.addEventListener("click", () => apriStudioTemi({ document: doc }));
+  scheda.append(copia, apri);
+  riga.before(scheda);
+  return scheda;
 }
-var SEMI, REGOLA_TEMA;
+var SEMI, REGOLA_TEMA, DESCRIZIONI_TEMI, CONTROLLI_MIGRATI, CURSORI_SCENA, TITOLI_STUDIO, RUOLI_PALETTE, PARAMETRI_SCENA, limita, TESTO_STATO, sceneCaricate, RIDOTTO_QUERY, sondaColore, telaColore, FPS_ANTEPRIMA, DPR_MASSIMO, SEME_SCENA;
 var init_theme_studio = __esm({
   "src/components/theme-studio.js"() {
     init_impostazioni_campi();
@@ -8368,6 +9996,91 @@ var init_theme_studio = __esm({
       raggio: "--talos-radius-card"
     });
     REGOLA_TEMA = /^:root\[data-talos-theme=["']?([a-z]+)["']?\]$/i;
+    DESCRIZIONI_TEMI = Object.freeze({
+      calm: { scena: "Orizzonte e filamento", materiale: "Grafite / bronzo", testo: "Un campo quasi immobile, un orizzonte e un solo filamento di bronzo. Il vuoto resta parte della composizione." },
+      forge: { scena: "Forgia e impulsi", materiale: "Acciaio / rame", testo: "Guide meccaniche, ingranaggi e un grafo diretto attraversato da impulsi. La composizione originale del mobile, nello spazio desktop." },
+      paper: { scena: "Pagina e marginalia", materiale: "Carta / inchiostro", testo: "Fibre, registri tipografici e annotazioni marginali. La luce attraversa la pagina senza trasformarla in una griglia decorativa." },
+      terminal: { scena: "Manoscritto al fosforo", materiale: "Fosforo / nero", testo: "Flussi di glifi a cadenza indipendente, tracce e fosforo. Non una pioggia uniforme: ogni colonna ha il proprio ritmo." },
+      aurora: { scena: "Tende magnetiche", materiale: "Notte / luce fredda", testo: "Raggi verticali, pieghe magnetiche e stelle sparse. Il colore proviene dalla palette attiva, non da un’immagine fissa." },
+      glacier: { scena: "Ghiaccio e rifrazione", materiale: "Ghiaccio / cobalto", testo: "Faccette traslucide e crepacci direzionali: il movimento è una lenta rifrazione, non una rotazione di particelle." },
+      ember: { scena: "Convezione e braci", materiale: "Carbone / brace", testo: "Colonne di calore, braci in risalita e aloni diffusi. Uno sfondo vivo, contenuto ai margini della lettura." },
+      atlas: { scena: "Rilievi e rotte", materiale: "Blu profondo / rame", testo: "Curve di livello, una griglia cartografica e un percorso fra punti rilevati. L’insieme mantiene una lettura topografica." },
+      noir: { scena: "Diaframma e luce radente", materiale: "Nero / argento", testo: "Lamelle, tagli di luce e un diaframma fotografico. Contrasto netto e pochi segni, senza aggiungere cromie al tema." },
+      signal: { scena: "Portanti e acquisizione", materiale: "Grafite / corallo", testo: "Tracce indipendenti, brevi interruzioni e scansione radar. Sono motivi visivi, non misure di rete o del modello." },
+      violet: { scena: "Orbita parametrica", materiale: "Indaco / ametista", testo: "Una curva continua, orbite non coincidenti e nodi sparsi. Il dettaglio si sviluppa senza riempire tutto lo spazio." },
+      claudius: { scena: "Manoscritto annotato", materiale: "Carta calda / argilla", testo: "Masse tipografiche, parentesi editoriali e fili di annotazione. Il ritmo è quello di una pagina riletta con attenzione." },
+      basicus: { scena: "Moduli e propagazione", materiale: "Neutro / blu", testo: "Moduli geometrici e un’onda che ne attraversa i confini. Una composizione spaziale, non un secondo pannello di controlli." },
+      telemetry: { scena: "Strumenti e registri", materiale: "Grafite / ciano", testo: "Quadranti, righelli e cursori sottili. Le forme sono decorative: non rappresentano statistiche del dispositivo." }
+    });
+    CONTROLLI_MIGRATI = Object.freeze([
+      "themePresetSelect",
+      "colorModeSelect",
+      "backgroundMotionToggle",
+      "sceneOverrideSelect",
+      "motionModeSelect",
+      "motionQualitySelect",
+      "motionSpeedRange",
+      "motionIntensityRange",
+      "motionGlowRange",
+      "motionDensityRange",
+      "motionDepthRange",
+      "motionTrailsRange",
+      "motionContrastRange",
+      "motionParallaxRange"
+    ]);
+    CURSORI_SCENA = Object.freeze([
+      "motionIntensityRange",
+      "motionContrastRange",
+      "motionSpeedRange",
+      "motionDensityRange",
+      "motionGlowRange",
+      "motionDepthRange",
+      "motionTrailsRange",
+      "motionParallaxRange"
+    ]);
+    TITOLI_STUDIO = Object.freeze({
+      backgroundMotionToggle: "Attivo dietro la chat",
+      sceneOverrideSelect: "Scena",
+      motionModeSelect: "Modo di disegno"
+    });
+    RUOLI_PALETTE = Object.freeze({
+      accent: ["--talos-accent", "#c08b3c"],
+      secondary: ["--talos-secondary", "#8e9095"],
+      border_strong: ["--talos-border-strong", "#4a4b50"],
+      surface_elevated: ["--talos-window-bg", "#34353a"],
+      background: ["--talos-background", "#1e1f22"],
+      focus: ["--talos-ring", "#d8a650"],
+      info: ["--talos-info", "#7f9fc4"],
+      success: ["--talos-success", "#77a884"],
+      warning: ["--talos-warning", "#d8a650"],
+      danger: ["--talos-danger", "#d87d72"]
+    });
+    PARAMETRI_SCENA = Object.freeze({
+      speed: ["--talos-motion-speed", 1, 10, 240],
+      intensity: ["--talos-motion-intensity", 0.2, 0, 100],
+      glow: ["--talos-motion-glow", 0.1, 0, 100],
+      density: ["--talos-motion-density", 1, 25, 150],
+      depth: ["--talos-motion-depth", 0.92, 0, 100],
+      trails: ["--talos-motion-trails", 0.5, 0, 100],
+      contrast: ["--talos-motion-contrast", 0.8, 0, 100],
+      parallax: ["--talos-motion-parallax", 0, 0, 100]
+    });
+    limita = (v, min, max) => Math.max(min, Math.min(max, v));
+    TESTO_STATO = Object.freeze({
+      reduced: "Movimento ridotto",
+      "renderer-fermo": "Renderer fermo",
+      paused: "Fotogramma fermo",
+      static: "Fermo",
+      animating: "Anteprima animata",
+      assente: "Scena non disponibile"
+    });
+    sceneCaricate = null;
+    RIDOTTO_QUERY = "(prefers-reduced-motion: reduce)";
+    sondaColore = null;
+    telaColore = null;
+    FPS_ANTEPRIMA = 30;
+    DPR_MASSIMO = 1.5;
+    SEME_SCENA = 730913;
   }
 });
 
@@ -8770,7 +10483,7 @@ function el14(documentObj, tag2, classe, testo3) {
   if (testo3 != null) n.textContent = testo3;
   return n;
 }
-function icona5(documentObj, nome) {
+function icona6(documentObj, nome) {
   const svg = documentObj.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", "i");
   svg.setAttribute("aria-hidden", "true");
@@ -8795,7 +10508,7 @@ function aggiornaPannelloNotifiche(pannello, notifiche = [], { ora = () => "", d
     b.dataset.notifica = stato;
     if (sessione?.sessionId) b.dataset.sessionId = sessione.sessionId;
     const ic = el14(documentObj, "span", "talos-list-row__icon");
-    ic.appendChild(icona5(documentObj, GLIFI_NOTIFICA[stato] || "i-bell"));
+    ic.appendChild(icona6(documentObj, GLIFI_NOTIFICA[stato] || "i-bell"));
     const testo3 = el14(documentObj, "span", "talos-list-row__text");
     testo3.append(
       el14(documentObj, "span", "talos-list-row__title", sessione?.nome || sessione?.taskId || "Sessione"),
@@ -8810,7 +10523,7 @@ function aggiornaPannelloNotifiche(pannello, notifiche = [], { ora = () => "", d
     tutte = el14(documentObj, "button", "talos-button talos-button--ghost talos-button--sm");
     tutte.type = "button";
     tutte.dataset.azione = "segna-tutte";
-    tutte.append(icona5(documentObj, "i-check"), documentObj.createTextNode(" Segna tutte come viste"));
+    tutte.append(icona6(documentObj, "i-check"), documentObj.createTextNode(" Segna tutte come viste"));
     pannello.appendChild(tutte);
   }
   if (sistema) pannello.appendChild(sistema);
@@ -8951,7 +10664,7 @@ function el15(documentObj, tag2, classe, testo3) {
   if (testo3 != null) n.textContent = testo3;
   return n;
 }
-function icona6(documentObj, nome, classe = "i") {
+function icona7(documentObj, nome, classe = "i") {
   const svg = documentObj.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", classe);
   svg.setAttribute("aria-hidden", "true");
@@ -8974,7 +10687,7 @@ function creaRigaInstallata(dati, { selezionato = false, seleziona, document: do
   b.dataset.installedState = dati.stato;
   b.setAttribute("aria-pressed", String(Boolean(selezionato)));
   const ic = el15(documentObj, "span", "talos-list-row__icon");
-  ic.appendChild(icona6(documentObj, "i-bolt"));
+  ic.appendChild(icona7(documentObj, "i-bolt"));
   const testo3 = el15(documentObj, "span", "talos-list-row__text");
   const sub = el15(documentObj, "span", "talos-list-row__sub", dati.sotto);
   if (dati.sottoDue) {
@@ -9277,7 +10990,7 @@ function el16(d, tag2, classe, testo3) {
   if (testo3 != null) n.textContent = testo3;
   return n;
 }
-function icona7(d, nome, classe = "i") {
+function icona8(d, nome, classe = "i") {
   const svg = d.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", classe);
   svg.setAttribute("aria-hidden", "true");
@@ -9299,7 +11012,7 @@ function creaRigaHf(dati, { selezionato = false, seleziona, document: d = global
   b.dataset.author = dati.autore;
   b.setAttribute("aria-pressed", String(Boolean(selezionato)));
   const ic = el16(d, "span", "talos-list-row__icon");
-  ic.appendChild(icona7(d, "i-files"));
+  ic.appendChild(icona8(d, "i-files"));
   const testo3 = el16(d, "span", "talos-list-row__text");
   const sub = el16(d, "span", "talos-list-row__sub", dati.sub1);
   sub.appendChild(d.createElement("br"));
@@ -11179,7 +12892,7 @@ function passoConsentito(n, { cartella, modello, politica: politica2, confermaPi
   if (n === 3 && (!politica2 || politica2 === "Full access" && !confermaPieno)) return { ok: false, torna: 2, messaggio: "Scegli cosa può fare da solo." };
   return { ok: true };
 }
-function icona8(d, nome) {
+function icona9(d, nome) {
   const s = d.createElementNS("http://www.w3.org/2000/svg", "svg");
   const u = d.createElementNS(s.namespaceURI, "use");
   s.setAttribute("class", "i");
@@ -11277,11 +12990,11 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
     const puoAvereFigli = figli === void 0 || Array.isArray(figli) && figli.length > 0;
     if (puoAvereFigli) {
       n.setAttribute("aria-expanded", String(aperto));
-      const c = icona8(d, "chev");
+      const c = icona9(d, "chev");
       c.classList.add("talos-file-chevron");
       r.append(c);
     }
-    r.append(icona8(d, "folder"));
+    r.append(icona9(d, "folder"));
     const label = d.createElement("span");
     label.className = "talos-file-row__name";
     label.textContent = ultimoSegmento(path);
@@ -11364,7 +13077,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
       b.className = "talos-button talos-button--secondary talos-button--sm";
       b.dataset.introCartella = v.path;
       b.title = v.path;
-      b.append(icona8(d, "folder"), d.createTextNode(v.nome));
+      b.append(icona9(d, "folder"), d.createTextNode(v.nome));
       return b;
     }));
     if (!voci.length) sc.appendChild(Object.assign(d.createElement("span"), { className: "talos-muted", textContent: "Nessuna cartella qui." }));
@@ -13002,13 +14715,13 @@ function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   const gruppo = el22(documentObj, "div", "talos-message__actions message-actions");
   gruppo.setAttribute("role", "group");
   gruppo.setAttribute("aria-label", "Azioni sulla risposta");
-  const bottone5 = (nome, titolo2, icona9) => {
+  const bottone5 = (nome, titolo2, icona10) => {
     const b = el22(documentObj, "button", "talos-button talos-button--ghost talos-icon-button talos-button--sm");
     b.type = "button";
     b.title = titolo2;
     b.setAttribute("aria-label", titolo2);
     b.dataset.messageAction = nome;
-    b.append(simbolo(documentObj, "i i--sm", icona9));
+    b.append(simbolo(documentObj, "i i--sm", icona10));
     return b;
   };
   gruppo.append(bottone5("copy", "Copia la risposta", "i-copy"));
@@ -13186,12 +14899,12 @@ function creaRigaAttrezzo({ attrezzo = "", nome = "", dettaglio = "", esito = nu
   const documentObj = opzioni.document || globalThis.document;
   const riga = el22(documentObj, "div", "talos-tool-row");
   riga.setAttribute("data-c", "ToolRow");
-  const icona9 = el22(documentObj, "span", "talos-tool-row__icon");
-  icona9.append(simbolo(documentObj, "i", iconaAttrezzo(attrezzo)));
+  const icona10 = el22(documentObj, "span", "talos-tool-row__icon");
+  icona10.append(simbolo(documentObj, "i", iconaAttrezzo(attrezzo)));
   const summaryText = el22(documentObj, "span", "talos-tool-row__name tool-note-summary-text", nome);
   const dettaglioEl = el22(documentObj, "span", "talos-tool-row__detail", dettaglio);
   const pallino = el22(documentObj, "span", "talos-dot");
-  riga.append(icona9, summaryText, dettaglioEl, pallino);
+  riga.append(icona10, summaryText, dettaglioEl, pallino);
   impostaEsitoRiga(riga, esito);
   let corpo = null;
   if (conDettaglio) {
@@ -14069,13 +15782,13 @@ function marchioDelSito(documentObj, url, classe) {
   }
   segno.textContent = dominio.charAt(0).toUpperCase();
   segno.title = dominio;
-  const icona9 = documentObj.createElement("img");
-  icona9.className = `${classe}__icona`;
-  icona9.src = `/api/v1/favicon?dominio=${encodeURIComponent(dominio)}`;
-  icona9.alt = "";
-  icona9.loading = "lazy";
-  icona9.addEventListener?.("error", () => icona9.remove?.());
-  segno.append(icona9);
+  const icona10 = documentObj.createElement("img");
+  icona10.className = `${classe}__icona`;
+  icona10.src = `/api/v1/favicon?dominio=${encodeURIComponent(dominio)}`;
+  icona10.alt = "";
+  icona10.loading = "lazy";
+  icona10.addEventListener?.("error", () => icona10.remove?.());
+  segno.append(icona10);
   return segno;
 }
 function creaPillolaFonti(letti, { document: doc, marchiMax = 3, onApri } = {}) {
@@ -16374,11 +18087,11 @@ function creaStatoVuoto(dati = {}, opzioni = {}) {
       const riga = el24(documentObj, "button", "talos-list-row");
       riga.type = "button";
       riga.setAttribute("data-c", "ListRow");
-      const icona9 = el24(documentObj, "span", "talos-list-row__icon");
-      icona9.append(simbolo3(documentObj, "i", s.icona || "i-bolt"));
+      const icona10 = el24(documentObj, "span", "talos-list-row__icon");
+      icona10.append(simbolo3(documentObj, "i", s.icona || "i-bolt"));
       const testo3 = el24(documentObj, "span", "talos-list-row__text");
       testo3.append(el24(documentObj, "span", "talos-list-row__title", s.titolo), el24(documentObj, "span", "talos-list-row__sub", s.sub || ""));
-      riga.append(icona9, testo3, el24(documentObj, "span", "talos-kbd", "↵"));
+      riga.append(icona10, testo3, el24(documentObj, "span", "talos-kbd", "↵"));
       if (typeof opzioni.onSuggerimento === "function") riga.addEventListener("click", () => opzioni.onSuggerimento(s));
       lista.append(riga);
     }
@@ -21266,7 +22979,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           try {
             const dati = await apiGet("/api/v1/providers");
             const elenco2 = dati.items || dati.providers || [];
-            const conChiave = new Set(elenco2.filter((p) => p.keyConfigured).map((p) => p.id));
+            const conChiave = new Set(elenco2.filter((p) => p.keyConfigured || senzaChiave(p.id)).map((p) => p.id));
             const perFornitore = {};
             await Promise.all(PROVIDER_DIRETTI.map(async ({ id, etichetta: etichetta2 }) => {
               if (!conChiave.has(id)) {
@@ -22192,13 +23905,13 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             riga.setAttribute("aria-selected", String(indice2 === 0));
             riga.tabIndex = -1;
             riga.dataset.riferimento = percorso;
-            const icona9 = document.createElement("span");
-            icona9.className = "talos-list-row__icon";
-            icona9.append(iconaSvgAlbero("i-doc"));
+            const icona10 = document.createElement("span");
+            icona10.className = "talos-list-row__icon";
+            icona10.append(iconaSvgAlbero("i-doc"));
             const testo3 = document.createElement("span");
             testo3.className = "talos-list-row__text";
             testo3.append(textElement("span", "talos-list-row__title", percorso), textElement("span", "talos-list-row__sub", origine));
-            riga.append(icona9, testo3, textElement("span", "talos-list-row__aside talos-mono", "@"));
+            riga.append(icona10, testo3, textElement("span", "talos-list-row__aside talos-mono", "@"));
             riga.addEventListener("click", () => aggiungi(percorso));
             elenco2.append(riga);
           });
@@ -22909,11 +24622,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const elenco2 = $2("#veloPermessiAttrezzi", radice2);
         if (elenco2) {
           elenco2.textContent = "";
-          for (const [attrezzo, descrizione, icona9] of ATTREZZI_COL_CANCELLO) {
+          for (const [attrezzo, descrizione, icona10] of ATTREZZI_COL_CANCELLO) {
             const riga = document.createElement("div");
             riga.className = "talos-list-row";
             const scelto = state.permessiPerAttrezzo[attrezzo] || "";
-            riga.innerHTML = `<span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#${icona9}"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">${nomeUmanoAttrezzo2(attrezzo)}</span><span class="talos-list-row__sub">${descrizione}</span></span><span class="talos-list-row__aside"><select class="talos-select talos-select--sm" data-tool-permission-select="${attrezzo}" aria-label="Permesso per ${nomeUmanoAttrezzo2(attrezzo)}">` + SCELTE_PERMESSO_ATTREZZO.map(([valore, nome]) => `<option value="${valore}"${valore === scelto ? " selected" : ""}>${nome}</option>`).join("") + "</select></span>";
+            riga.innerHTML = `<span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#${icona10}"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title">${nomeUmanoAttrezzo2(attrezzo)}</span><span class="talos-list-row__sub">${descrizione}</span></span><span class="talos-list-row__aside"><select class="talos-select talos-select--sm" data-tool-permission-select="${attrezzo}" aria-label="Permesso per ${nomeUmanoAttrezzo2(attrezzo)}">` + SCELTE_PERMESSO_ATTREZZO.map(([valore, nome]) => `<option value="${valore}"${valore === scelto ? " selected" : ""}>${nome}</option>`).join("") + "</select></span>";
             elenco2.append(riga);
           }
           const uscita = document.createElement("div");
@@ -31960,1167 +33673,6 @@ ${testo3}`;
   }
 });
 
-// src/motion/desktop-scenes.js
-var TALOS_DESKTOP_SCENES;
-var init_desktop_scenes = __esm({
-  "src/motion/desktop-scenes.js"() {
-    (function() {
-      "use strict";
-      const TAU = Math.PI * 2, PHI = (1 + Math.sqrt(5)) / 2, GOLDEN_ANGLE = TAU * (1 - 1 / PHI);
-      const clamp2 = (v, a, b) => Math.max(a, Math.min(b, v));
-      const mix = (a, b, t2) => a + (b - a) * t2;
-      const invLerp = (a, b, v) => clamp2((v - a) / Math.max(1e-9, b - a), 0, 1);
-      function smoothstep(a, b, v) {
-        const t2 = invLerp(a, b, v);
-        return t2 * t2 * (3 - 2 * t2);
-      }
-      function smootherstep(a, b, v) {
-        const t2 = invLerp(a, b, v);
-        return t2 * t2 * t2 * (t2 * (t2 * 6 - 15) + 10);
-      }
-      const fract = (v) => v - Math.floor(v);
-      function wrap(v, m) {
-        const r = v % m;
-        return r < 0 ? r + m : r;
-      }
-      function sceneHash(id) {
-        let h = 2166136261;
-        for (const c of id) {
-          h ^= c.charCodeAt(0);
-          h = Math.imul(h, 16777619);
-        }
-        return h >>> 0;
-      }
-      function random(seed) {
-        let value = seed >>> 0;
-        return () => {
-          value += 1831565813;
-          let r = value;
-          r = Math.imul(r ^ r >>> 15, r | 1);
-          r ^= r + Math.imul(r ^ r >>> 7, r | 61);
-          return ((r ^ r >>> 14) >>> 0) / 4294967296;
-        };
-      }
-      const rngFor = (id, seed, salt = 0) => random((seed ^ sceneHash(id) ^ Math.imul(salt + 1, 2654435769)) >>> 0);
-      function hash01(a, b, c = 0) {
-        let v = (Math.imul(a | 0, 73244475) ^ Math.imul(b | 0, 295559667) ^ Math.imul(c | 0, 3427101)) >>> 0;
-        v = Math.imul(v ^ v >>> 16, 73244475);
-        v = Math.imul(v ^ v >>> 16, 73244475);
-        return ((v ^ v >>> 16) >>> 0) / 4294967296;
-      }
-      function noise1(v, seed = 0) {
-        const i = Math.floor(v), f = fract(v);
-        return mix(hash01(i, seed), hash01(i + 1, seed), f * f * (3 - 2 * f));
-      }
-      function noise2(x, y, seed = 0) {
-        const ix = Math.floor(x), iy = Math.floor(y), fx = fract(x), fy = fract(y), sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
-        return mix(mix(hash01(ix, iy, seed), hash01(ix + 1, iy, seed), sx), mix(hash01(ix, iy + 1, seed), hash01(ix + 1, iy + 1, seed), sx), sy);
-      }
-      function fbm2(x, y, seed = 0, octaves = 4) {
-        let s = 0, a = 0.5, f = 1, t2 = 0;
-        for (let o = 0; o < octaves; o++) {
-          s += noise2(x * f, y * f, seed + o * 101) * a;
-          t2 += a;
-          f *= 2.03;
-          a *= 0.5;
-        }
-        return t2 > 0 ? s / t2 : 0;
-      }
-      function makePaletteGeometry(id, seed, input) {
-        const a = input.palette[input.colorMode];
-        return Object.freeze({ id, width: input.viewport.width, height: input.viewport.height, mobile: input.viewport.width < 600, accent: a.accent, secondary: a.secondary, border: a.border_strong, surface: a.surface_elevated, background: a.background, focus: a.focus, info: a.info, success: a.success, warning: a.warning, danger: a.danger, parameters: Object.freeze({ ...input.parameters }), quality: input.effectiveQuality.tier, densityScale: input.effectiveQuality.densityScale, seed });
-      }
-      const alpha = (g, b) => clamp2(b * (0.32 + g.parameters.intensity / 100 * 0.8) * (0.7 + g.parameters.contrast / 100 * 0.46), 6e-3, 0.94);
-      function qCount(g, lo, bal, hi) {
-        const b = g.quality === "high" ? hi : g.quality === "low" ? lo : bal;
-        return Math.max(2, Math.round(b * (g.mobile ? 0.78 : 1) * clamp2(g.densityScale * (0.72 + g.parameters.density / 360), 0.48, 1.38)));
-      }
-      const primitiveCount = (i, lo, bal, hi) => i.effectiveQuality.tier === "high" ? hi : i.effectiveQuality.tier === "low" ? lo : bal;
-      const seconds = (ms) => clamp2(ms / 1e3, 0, 0.05);
-      function linearGradient(c, g, x0, y0, x1, y1, colors = [g.accent, g.secondary]) {
-        const grad = c.createLinearGradient(x0, y0, x1, y1);
-        grad.addColorStop(0, "transparent");
-        colors.forEach((v, i) => grad.addColorStop((i + 1) / (colors.length + 1), v));
-        grad.addColorStop(1, "transparent");
-        return grad;
-      }
-      function radialGradient(c, x, y, r, inner, middle) {
-        const g = c.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0, inner);
-        g.addColorStop(0.38, middle);
-        g.addColorStop(1, "transparent");
-        return g;
-      }
-      function strokeLine(c, x0, y0, x1, y1) {
-        c.beginPath();
-        c.moveTo(x0, y0);
-        c.lineTo(x1, y1);
-        c.stroke();
-      }
-      function polyline(c, p, close = false) {
-        if (!p.length) return;
-        c.beginPath();
-        c.moveTo(p[0].x, p[0].y);
-        for (let i = 1; i < p.length; i++) c.lineTo(p[i].x, p[i].y);
-        if (close) c.closePath();
-      }
-      const polygon = (c, p) => polyline(c, p, true);
-      function drawDiamond(c, x, y, r) {
-        c.beginPath();
-        c.moveTo(x, y - r);
-        c.lineTo(x + r, y);
-        c.lineTo(x, y + r);
-        c.lineTo(x - r, y);
-        c.closePath();
-      }
-      const ringPoints = (cx, cy, r, count2, phase = 0, warp = 0) => Array.from({ length: count2 }, (_, i) => {
-        const a = phase + i / count2 * TAU, rr = r * (1 + warp * Math.sin(a * 3 + phase * 0.7));
-        return { x: cx + Math.cos(a) * rr, y: cy + Math.sin(a) * rr };
-      });
-      const defineScene = (d) => Object.freeze(d);
-      const forgeComplexScene = defineScene({ id: "forge", createState: (seed) => ({ seed, time: 0, cycle: 0, impulse: 0 }), prepare: ({ state, input }) => {
-        const base = makePaletteGeometry("forge", state.seed, input), rng = rngFor("forge", state.seed, 101), rankCount = qCount(base, 4, 5, 6), nodes = [], edges = [];
-        for (let rank = 0; rank < rankCount; rank++) {
-          const inRank = rank === 0 || rank === rankCount - 1 ? 2 : Math.round(2 + rng() * 2);
-          for (let local = 0; local < inRank; local++) nodes.push(Object.freeze({ x: base.width * (0.1 + 0.8 * rank / Math.max(1, rankCount - 1)) + (rng() - 0.5) * base.width * 0.035, y: base.height * (0.18 + 0.64 * (local + 1) / (inRank + 1)) + (rng() - 0.5) * base.height * 0.05, rank, heat: rng(), size: 4 + rng() * 7 }));
-        }
-        for (let i = 0; i < nodes.length; i++) {
-          const from = nodes[i], candidates = nodes.map((node, j) => ({ node, i: j })).filter(({ node }) => node.rank === from.rank + 1);
-          candidates.slice(0, 1 + i % 2).forEach(({ i: j }, lane) => edges.push(Object.freeze({ from: i, to: j, bow: (rng() - 0.5) * base.height * 0.16, lane })));
-        }
-        const gears = Object.freeze(Array.from({ length: qCount(base, 2, 3, 4) }, (_, i) => Object.freeze({ x: base.width * (0.16 + i * 0.24 + rng() * 0.08), y: base.height * (0.78 - i % 2 * 0.46), radius: 18 + rng() * 28, teeth: 8 + Math.round(rng() * 7), direction: i % 2 === 0 ? 1 : -1, phase: rng() * TAU }))), rails = Object.freeze(Array.from({ length: qCount(base, 3, 5, 7) }, (_, i) => base.height * (0.13 + 0.74 * (i + 1) / (qCount(base, 3, 5, 7) + 1))));
-        return { geometry: Object.freeze({ ...base, nodes: Object.freeze(nodes), edges: Object.freeze(edges), gears, rails }), primitiveCount: primitiveCount(input, 230, 310, 390) };
-      }, update: ({ state, input, stepMs }) => {
-        const dt = seconds(stepMs) * input.parameters.speed / 100;
-        state.time += dt;
-        state.cycle = (state.cycle + dt * 0.22) % 1;
-        state.impulse = (state.impulse + dt * 0.84) % 1;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        c.lineJoin = "bevel";
-        c.lineCap = "square";
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.7;
-        c.globalAlpha = alpha(g, 0.14);
-        for (let i = 0; i < g.rails.length; i++) {
-          const y = g.rails[i] + Math.sin(s.time * 2.1 + i) * 0.65;
-          strokeLine(c, g.width * 0.04, y, g.width * 0.96, y);
-          for (let n = 0; n < 14; n++) {
-            const x = g.width * (0.06 + 0.88 * n / 13);
-            strokeLine(c, x, y - 3 - n % 3, x, y + 3 + n % 3);
-          }
-        }
-        const px = g.width * 0.5, pt = g.height * 0.12, pb = g.height * 0.88, pw = g.width * 0.12;
-        c.strokeStyle = g.border;
-        c.lineWidth = 1.1;
-        c.globalAlpha = alpha(g, 0.22);
-        strokeLine(c, px - pw, pt, px - pw, pb);
-        strokeLine(c, px + pw, pt, px + pw, pb);
-        strokeLine(c, px - pw, pt, px + pw, pt);
-        strokeLine(c, px - pw * 1.25, pb, px + pw * 1.25, pb);
-        const ram = g.height * (0.26 + 0.24 * (0.5 + 0.5 * Math.sin(s.time * 0.46)));
-        c.fillStyle = g.accent;
-        c.globalAlpha = alpha(g, 0.16);
-        c.fillRect(px - pw * 0.32, pt, pw * 0.64, ram - pt);
-        c.fillStyle = g.warning;
-        c.globalAlpha = alpha(g, 0.34);
-        c.fillRect(px - pw * 0.52, ram, pw * 1.04, 4);
-        c.strokeStyle = g.secondary;
-        c.globalAlpha = alpha(g, 0.16);
-        for (let r = 0; r < 5; r++) {
-          const x = px - pw * 0.8 + r * pw * 0.4;
-          strokeLine(c, x, pt + 10, x, ram - 8);
-        }
-        for (const gear of g.gears) {
-          c.save();
-          c.translate(gear.x, gear.y);
-          c.rotate(gear.phase + s.time * 0.18 * gear.direction);
-          c.strokeStyle = g.border;
-          c.fillStyle = g.surface;
-          c.lineWidth = 1;
-          c.globalAlpha = alpha(g, 0.18);
-          c.beginPath();
-          c.arc(0, 0, gear.radius * 0.68, 0, TAU);
-          c.fill();
-          c.stroke();
-          for (let t2 = 0; t2 < gear.teeth; t2++) {
-            const a = t2 / gear.teeth * TAU;
-            c.lineWidth = t2 % 2 === 0 ? 2.2 : 1;
-            strokeLine(c, Math.cos(a) * gear.radius * 0.72, Math.sin(a) * gear.radius * 0.72, Math.cos(a) * gear.radius, Math.sin(a) * gear.radius);
-          }
-          c.strokeStyle = g.accent;
-          c.globalAlpha = alpha(g, 0.42);
-          c.lineWidth = 1.3;
-          c.beginPath();
-          c.arc(0, 0, gear.radius * 0.18, 0, TAU);
-          c.stroke();
-          c.restore();
-        }
-        const pe = Math.floor(s.cycle * Math.max(1, g.edges.length));
-        g.edges.forEach((e, i) => {
-          const f = g.nodes[e.from], t2 = g.nodes[e.to], hot = i === pe || i === (pe + 1) % Math.max(1, g.edges.length);
-          c.beginPath();
-          c.moveTo(f.x, f.y);
-          c.bezierCurveTo(f.x + (t2.x - f.x) * 0.34, f.y + e.bow, t2.x - (t2.x - f.x) * 0.2, t2.y - e.bow * 0.45, t2.x, t2.y);
-          c.strokeStyle = hot ? linearGradient(c, g, f.x, f.y, t2.x, t2.y, [g.warning, g.accent, g.secondary]) : g.border;
-          c.globalAlpha = alpha(g, hot ? 0.74 : 0.2);
-          c.lineWidth = hot ? 2.3 : 0.9;
-          c.shadowBlur = hot ? 12 : 0;
-          c.shadowColor = g.accent;
-          c.stroke();
-        });
-        g.nodes.forEach((n, i) => {
-          const beat = 0.5 + 0.5 * Math.sin(s.time * 1.8 + i * 0.7), active = Math.abs(s.cycle - n.rank / Math.max(1, g.nodes.length)) < 0.11;
-          c.fillStyle = active ? g.warning : n.heat > 0.58 ? g.accent : g.secondary;
-          c.strokeStyle = g.border;
-          c.globalAlpha = alpha(g, 0.45 + beat * 0.18);
-          c.shadowBlur = active ? 14 : 4;
-          c.shadowColor = g.accent;
-          drawDiamond(c, n.x, n.y, n.size * (0.8 + beat * 0.22));
-          c.fill();
-          c.stroke();
-          c.shadowBlur = 0;
-        });
-        const wx = g.width * (0.09 + 0.82 * s.impulse), wy = g.height * (0.46 + Math.sin(s.time * 1.7) * 0.08);
-        c.fillStyle = radialGradient(c, wx, wy, 48, g.focus, g.warning);
-        c.globalAlpha = alpha(g, 0.35);
-        c.beginPath();
-        c.arc(wx, wy, 34, 0, TAU);
-        c.fill();
-        c.strokeStyle = g.warning;
-        c.globalAlpha = alpha(g, 0.38);
-        for (let sp = 0; sp < 7; sp++) {
-          const a = hash01(sp, Math.floor(s.time * 4), g.seed) * TAU, l = 8 + hash01(sp, g.seed, 9) * 26;
-          strokeLine(c, wx, wy, wx + Math.cos(a) * l, wy + Math.sin(a) * l);
-        }
-        c.restore();
-      } });
-      const paperComplexScene = defineScene({ id: "paper", createState: (seed) => ({ seed, time: 0, reading: 0, breath: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("paper", state.seed, input), rng = rngFor("paper", state.seed, 211), pageW = b.width * (b.mobile ? 0.84 : 0.68), pageH = b.height * 0.84, pageX = (b.width - pageW) * 0.5, pageY = b.height * 0.075, paragraphs = Array.from({ length: qCount(b, 4, 6, 8) }, (_, i) => ({ x: pageX + pageW * (0.13 + i % 2 * 0.03), y: pageY + pageH * (0.12 + i * 0.105), width: pageW * (0.55 + rng() * 0.22), lines: 3 + Math.floor(rng() * 4), rhythm: 0.72 + rng() * 0.25, emphasis: rng() })), notes = Array.from({ length: qCount(b, 3, 4, 6) }, (_, i) => ({ side: i % 2 === 0 ? -1 : 1, y: pageY + pageH * (0.18 + i * 0.13 + rng() * 0.035), length: pageW * (0.055 + rng() * 0.055), curl: (rng() - 0.5) * 22, phase: rng() * TAU })), fibers = Array.from({ length: qCount(b, 36, 58, 80) }, () => ({ x: pageX + rng() * pageW, y: pageY + rng() * pageH, length: 4 + rng() * 16, angle: (rng() - 0.5) * 0.6, alpha: 0.02 + rng() * 0.04 }));
-        return { geometry: { ...b, pageX, pageY, pageW, pageH, paragraphs, notes, fibers }, primitiveCount: primitiveCount(input, 150, 220, 310) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.reading = (s.reading + dt * 0.055) % 1;
-        s.breath += dt * 0.18;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        const lift = Math.sin(s.breath) * 1.5;
-        c.fillStyle = g.surface;
-        c.globalAlpha = alpha(g, 0.12);
-        c.shadowBlur = 20;
-        c.shadowColor = g.border;
-        c.fillRect(g.pageX, g.pageY + lift, g.pageW, g.pageH);
-        c.shadowBlur = 0;
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.8;
-        c.globalAlpha = alpha(g, 0.26);
-        c.strokeRect(g.pageX, g.pageY + lift, g.pageW, g.pageH);
-        c.fillStyle = g.accent;
-        c.globalAlpha = alpha(g, 0.16);
-        c.fillRect(g.pageX + g.pageW * 0.08, g.pageY + g.pageH * 0.09, 3, g.pageH * 0.22);
-        c.fillStyle = g.secondary;
-        c.globalAlpha = alpha(g, 0.06);
-        c.fillRect(g.pageX + g.pageW * 0.68, g.pageY + g.pageH * 0.1, g.pageW * 0.18, g.pageH * 0.09);
-        c.strokeStyle = g.accent;
-        c.lineWidth = 1;
-        c.globalAlpha = alpha(g, 0.24);
-        const rx = g.pageX + g.pageW * 0.82, ry = g.pageY + g.pageH * 0.17;
-        c.beginPath();
-        c.arc(rx, ry, 14, 0, TAU);
-        c.stroke();
-        strokeLine(c, rx - 21, ry, rx + 21, ry);
-        strokeLine(c, rx, ry - 21, rx, ry + 21);
-        c.strokeStyle = g.border;
-        c.globalAlpha = alpha(g, 0.11);
-        c.beginPath();
-        c.moveTo(g.pageX + g.pageW * 0.72, g.pageY + g.pageH * 0.88);
-        c.quadraticCurveTo(g.pageX + g.pageW * 0.82, g.pageY + g.pageH * 0.81, g.pageX + g.pageW * 0.9, g.pageY + g.pageH * 0.9);
-        c.stroke();
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.5;
-        for (const f of g.fibers) {
-          c.globalAlpha = alpha(g, f.alpha);
-          strokeLine(c, f.x, f.y + lift, f.x + Math.cos(f.angle) * f.length, f.y + lift + Math.sin(f.angle) * f.length);
-        }
-        const left = g.pageX + g.pageW * 0.12;
-        c.strokeStyle = g.secondary;
-        c.globalAlpha = alpha(g, 0.28);
-        c.lineWidth = 1;
-        strokeLine(c, left - 14, g.pageY + g.pageH * 0.08, left - 14, g.pageY + g.pageH * 0.91);
-        for (let t2 = 0; t2 < 18; t2++) {
-          const y2 = g.pageY + g.pageH * (0.1 + t2 * 0.044);
-          c.globalAlpha = alpha(g, t2 % 4 === 0 ? 0.18 : 0.07);
-          strokeLine(c, left, y2, g.pageX + g.pageW * 0.9, y2);
-        }
-        g.paragraphs.forEach((p, i) => {
-          const active = Math.abs(s.reading - i / Math.max(1, g.paragraphs.length)) < 0.08;
-          for (let l = 0; l < p.lines; l++) {
-            const y2 = p.y + lift + l * 8.5, w = p.width * (l === p.lines - 1 ? 0.58 + p.emphasis * 0.25 : 0.93 + Math.sin(l + i) * 0.04);
-            c.fillStyle = active && l === 0 ? g.accent : g.border;
-            c.globalAlpha = alpha(g, active ? 0.5 : 0.24);
-            c.fillRect(p.x, y2, w * p.rhythm, l === 0 && p.emphasis > 0.65 ? 2.4 : 1.15);
-          }
-        });
-        c.strokeStyle = g.accent;
-        c.lineWidth = 1.2;
-        g.notes.forEach((n, i) => {
-          const x2 = n.side < 0 ? g.pageX + g.pageW * 0.055 : g.pageX + g.pageW * 0.945, inside = n.side < 0 ? 1 : -1, sway = Math.sin(s.time * 0.22 + n.phase) * 2;
-          c.globalAlpha = alpha(g, 0.32 + i % 2 * 0.08);
-          c.beginPath();
-          c.moveTo(x2, n.y + sway);
-          c.quadraticCurveTo(x2 + inside * n.length * 0.48, n.y - 7 + n.curl * 0.25, x2 + inside * n.length, n.y + 2 + n.curl * 0.08);
-          c.stroke();
-          c.beginPath();
-          c.arc(x2 + inside * n.length * 1.08, n.y + 2, 2.2 + i % 2, 0, TAU);
-          c.stroke();
-        });
-        const y = g.pageY + g.pageH * (0.11 + s.reading * 0.78);
-        c.fillStyle = radialGradient(c, g.pageX + g.pageW * 0.52, y, g.pageW * 0.34, g.accent, g.secondary);
-        c.globalAlpha = alpha(g, 0.025);
-        c.beginPath();
-        c.arc(g.pageX + g.pageW * 0.52, y, g.pageW * 0.31, 0, TAU);
-        c.fill();
-        c.strokeStyle = g.accent;
-        c.globalAlpha = alpha(g, 0.36);
-        c.lineWidth = 1;
-        const x = g.pageX + g.pageW * 0.86, cy = g.pageY + g.pageH * 0.095;
-        strokeLine(c, x - 8, cy, x + 8, cy);
-        strokeLine(c, x, cy - 8, x, cy + 8);
-        c.beginPath();
-        c.arc(x, cy, 3.2, 0, TAU);
-        c.stroke();
-        c.restore();
-      } });
-      const GLYPHS = "ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜ0123456789ZXCVBNM∆◇┼⌁⌗<>:;*+";
-      function proceduralGlyph(c, x, y, size, code, slant) {
-        const u = Math.max(0.8, size * 0.075), h = size * 0.34;
-        c.save();
-        c.translate(x, y);
-        c.rotate(slant);
-        const b = Math.imul(code, 1103515245) + 12345 >>> 0;
-        if (b & 1) c.fillRect(-size * 0.24, -h, u, h * 1.75);
-        if (b & 2) c.fillRect(size * 0.13, -h * 0.86, u, h * 1.55);
-        if (b & 4) c.fillRect(-size * 0.22, -h * 0.08, size * 0.42, u);
-        if (b & 8) c.fillRect(-size * 0.16, -h * 0.72, size * 0.31, u);
-        if (b & 16) c.fillRect(-size * 0.1, h * 0.5, size * 0.26, u);
-        if (b & 32) {
-          c.beginPath();
-          c.moveTo(-size * 0.2, h * 0.45);
-          c.lineTo(size * 0.2, -h * 0.65);
-          c.stroke();
-        }
-        c.restore();
-      }
-      const terminalComplexScene = defineScene({ id: "terminal", createState: (seed) => ({ seed, time: 0, mutation: 0, blackout: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("terminal", state.seed, input), rng = rngFor("terminal", state.seed, 313), count2 = qCount(b, 14, 21, 29), cell = clamp2(b.width / count2, 12, b.mobile ? 23 : 29), rows = Math.ceil(b.height / cell) + 3, streams = Array.from({ length: count2 }, (_, i) => ({ x: (i + 0.5) * b.width / count2 + (rng() - 0.5) * cell * 0.4, speed: 3 + rng() * 9, offset: rng() * rows, length: Math.round(5 + rng() * 14), phase: rng() * TAU, bend: (rng() - 0.5) * cell * 1.5, cadence: 0.45 + rng() * 1.6, glyphSeed: Math.floor(rng() * 1e6) })), scars = Array.from({ length: qCount(b, 2, 3, 5) }, () => ({ y: rng() * b.height, width: 0.18 + rng() * 0.6, phase: rng() * TAU }));
-        return { geometry: { ...b, streams, scars, cell, rows }, primitiveCount: primitiveCount(input, 300, 365, 398) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.mutation = (s.mutation + dt * 6.8) % 1e5;
-        s.blackout = (s.blackout + dt * 0.11) % 1;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        c.lineCap = "square";
-        c.strokeStyle = g.accent;
-        c.lineWidth = 0.35;
-        c.globalAlpha = alpha(g, 0.025);
-        for (let y = 0; y < g.height; y += Math.max(5, g.cell * 0.42)) strokeLine(c, 0, y, g.width, y);
-        const frame2 = Math.floor(s.mutation), canText = typeof c.fillText === "function";
-        if (canText) {
-          c.font = `${Math.floor(g.cell * 0.72)}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
-          c.textAlign = "center";
-          c.textBaseline = "middle";
-        }
-        g.streams.forEach((st, i) => {
-          const cad = Math.floor(s.time * st.cadence + st.phase) % 13, sp = cad === 0 ? 0.05 : cad === 1 ? 0.28 : cad === 8 ? 1.7 : 1, head = fract((st.offset + s.time * st.speed * sp) / g.rows) * g.rows, tail = Math.max(5, Math.round(st.length * (0.7 + g.parameters.trails / 150)));
-          for (let t2 = 0; t2 < tail; t2++) {
-            let row = Math.floor(head - t2);
-            while (row < 0) row += g.rows;
-            row %= g.rows;
-            const y = row * g.cell - g.cell * 0.2, decay = 1 - t2 / tail, bend = Math.sin(y / Math.max(1, g.height) * 4.2 + s.time * 0.55 + st.phase) * st.bend * (0.2 + decay * 0.8), x = st.x + bend, gap = hash01(i * 31 + row, frame2 >> 2, g.seed);
-            if (gap < 0.1 && t2 > 1) continue;
-            const glyph = GLYPHS[Math.floor(hash01(st.glyphSeed + row, frame2 >> (t2 === 0 ? 1 : 3), t2) * GLYPHS.length)] ?? "0", flash = t2 === 0, fresh = t2 < 3;
-            c.globalAlpha = alpha(g, flash ? 0.92 : 0.05 + decay * decay * (fresh ? 0.58 : 0.4));
-            c.fillStyle = flash ? g.focus : fresh ? g.secondary : g.accent;
-            c.strokeStyle = c.fillStyle;
-            c.shadowBlur = flash ? 13 : fresh ? 4 : 0;
-            c.shadowColor = g.accent;
-            if (canText && hash01(i, row, g.seed) > 0.36) c.fillText(glyph, x, y);
-            else proceduralGlyph(c, x, y, g.cell * 0.76, glyph.charCodeAt(0) + frame2 + t2 * 17, (hash01(row, i) - 0.5) * 0.18);
-            if (fresh && i % 5 === 2 && t2 === 2) {
-              c.globalAlpha = alpha(g, 0.16);
-              strokeLine(c, x - g.cell * 0.32, y + g.cell * 0.16, x + g.cell * 0.42, y - g.cell * 0.08);
-            }
-          }
-        });
-        g.scars.forEach((scar, i) => {
-          const p = 0.5 + 0.5 * Math.sin(s.time * (0.7 + i * 0.17) + scar.phase), x = g.width * (0.5 - scar.width / 2);
-          c.fillStyle = g.background;
-          c.globalAlpha = alpha(g, 0.025 + p * 0.055);
-          c.fillRect(x, scar.y, g.width * scar.width, 2 + p * 9);
-          c.strokeStyle = i % 2 === 0 ? g.secondary : g.accent;
-          c.globalAlpha = alpha(g, 0.08 + p * 0.12);
-          strokeLine(c, x, scar.y, x + g.width * scar.width, scar.y);
-        });
-        const by = fract(s.time * 0.027 + 0.17) * g.height, glow = c.createRadialGradient(g.width * 0.44, by, 0, g.width * 0.44, by, g.width * 0.35);
-        glow.addColorStop(0, g.accent);
-        glow.addColorStop(0.28, g.secondary);
-        glow.addColorStop(1, "transparent");
-        c.fillStyle = glow;
-        c.globalAlpha = alpha(g, 0.018);
-        c.beginPath();
-        c.arc(g.width * 0.44, by, g.width * 0.34, 0, TAU);
-        c.fill();
-        c.restore();
-      } });
-      const auroraComplexScene = defineScene({ id: "aurora", createState: (seed) => ({ seed, time: 0, magnetic: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("aurora", state.seed, input), rng = rngFor("aurora", state.seed, 419), curtains = Array.from({ length: qCount(b, 5, 7, 10) }, (_, i) => ({ anchor: b.width * (0.05 + 0.9 * i / Math.max(1, qCount(b, 5, 7, 10) - 1)), width: b.width * (0.055 + rng() * 0.07), reach: b.height * (0.42 + rng() * 0.33), phase: rng() * TAU, curl: (rng() - 0.5) * b.width * 0.12, brightness: 0.5 + rng() * 0.5 })), stars = Array.from({ length: qCount(b, 16, 28, 44) }, () => ({ x: rng() * b.width, y: rng() * b.height * 0.58, size: 0.5 + rng() * 1.4, phase: rng() * TAU }));
-        return { geometry: { ...b, curtains, stars, horizon: b.height * 0.72 }, primitiveCount: primitiveCount(input, 170, 255, 350) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.magnetic += dt * 0.14;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        c.globalCompositeOperation = "lighter";
-        c.fillStyle = g.focus;
-        g.stars.forEach((star, i) => {
-          c.globalAlpha = alpha(g, 0.05 + 0.08 * (0.5 + 0.5 * Math.sin(s.time * 0.3 + star.phase)));
-          c.fillRect(star.x, star.y, star.size, star.size);
-          if (i % 9 === 0) c.fillRect(star.x - star.size * 2, star.y, star.size * 5, 0.45);
-        });
-        g.curtains.forEach((cu, ci) => {
-          const rayCount = g.mobile ? 8 : g.quality === "high" ? 18 : 13;
-          for (let r = 0; r < rayCount; r++) {
-            const u = r / Math.max(1, rayCount - 1), cent = u - 0.5, fold = Math.sin(s.magnetic * 1.8 + cu.phase + cent * 4.5) * cu.width * 0.36, xt = cu.anchor + cent * cu.width + fold, xb = xt + cu.curl * Math.sin(s.magnetic + cu.phase + u * 2.6), yt = g.height * (0.05 + 0.04 * Math.sin(cu.phase + u * 2)), yb = Math.min(g.horizon, yt + cu.reach * (0.82 + 0.18 * Math.sin(s.time * 0.17 + r))), nw = (fbm2(u * 2.4, s.time * 0.03 + ci, g.seed, 3) - 0.5) * cu.width * 0.55, grad = c.createLinearGradient(xt, yt, xb, yb);
-            grad.addColorStop(0, "transparent");
-            grad.addColorStop(0.16, r % 3 === 0 ? g.secondary : g.accent);
-            grad.addColorStop(0.5, r % 4 === 0 ? g.focus : g.accent);
-            grad.addColorStop(1, "transparent");
-            c.strokeStyle = grad;
-            c.lineWidth = mix(0.55, 2.6, cu.brightness * (1 - Math.abs(cent)));
-            c.globalAlpha = alpha(g, 0.08 + cu.brightness * 0.1);
-            c.shadowBlur = 6 + g.parameters.trails * 0.08;
-            c.shadowColor = g.accent;
-            c.beginPath();
-            c.moveTo(xt + nw * 0.2, yt);
-            c.bezierCurveTo(xt + fold * 0.4 + nw, yt + cu.reach * 0.28, xb - fold * 0.2 - nw * 0.4, yt + cu.reach * 0.72, xb, yb);
-            c.stroke();
-          }
-        });
-        c.globalCompositeOperation = "source-over";
-        c.shadowBlur = 0;
-        const h = c.createLinearGradient(0, g.horizon - 60, 0, g.horizon + 35);
-        h.addColorStop(0, "transparent");
-        h.addColorStop(0.55, g.secondary);
-        h.addColorStop(1, "transparent");
-        c.fillStyle = h;
-        c.globalAlpha = alpha(g, 0.035);
-        c.fillRect(0, g.horizon - 60, g.width, 95);
-        c.restore();
-      } });
-      const glacierComplexScene = defineScene({ id: "glacier", createState: (seed) => ({ seed, time: 0, strain: 0, refraction: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("glacier", state.seed, input), rng = rngFor("glacier", state.seed, 521), flowAngle = -0.42 + rng() * 0.84, fissures = Array.from({ length: qCount(b, 5, 8, 11) }, () => ({ x: b.width * (0.08 + rng() * 0.84), y: b.height * (0.1 + rng() * 0.78), length: b.height * (0.12 + rng() * 0.26), angle: flowAngle + Math.PI / 2 + (rng() - 0.5) * 0.55, branches: Array.from({ length: 2 + Math.floor(rng() * 3) }, () => (rng() - 0.5) * 0.85), phase: rng() * TAU })), facets = Array.from({ length: qCount(b, 7, 11, 16) }, (_, i) => ({ cx: b.width * (0.08 + rng() * 0.84), cy: b.height * (0.08 + rng() * 0.84), radius: 24 + rng() * (b.mobile ? 55 : 92), sides: 3 + i % 3, tilt: rng() * TAU, phase: rng() * TAU }));
-        return { geometry: { ...b, fissures, facets, flowAngle }, primitiveCount: primitiveCount(input, 180, 270, 360) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.strain += dt * 0.075;
-        s.refraction += dt * 0.11;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        g.facets.forEach((f, i) => {
-          const sh = Math.sin(s.refraction + f.phase) * 0.035, p = Array.from({ length: f.sides }, (_, side) => {
-            const a = f.tilt + side / f.sides * TAU, st = side % 2 === 0 ? 1.15 : 0.78;
-            return { x: f.cx + Math.cos(a) * f.radius * st + Math.cos(g.flowAngle) * sh * f.radius, y: f.cy + Math.sin(a) * f.radius + Math.sin(g.flowAngle) * sh * f.radius };
-          });
-          c.beginPath();
-          c.moveTo(p[0].x, p[0].y);
-          p.slice(1).forEach((pt) => c.lineTo(pt.x, pt.y));
-          c.closePath();
-          c.fillStyle = i % 3 === 0 ? g.surface : linearGradient(c, g, f.cx - f.radius, f.cy, f.cx + f.radius, f.cy, [g.info, g.accent]);
-          c.strokeStyle = i % 2 === 0 ? g.accent : g.border;
-          c.globalAlpha = alpha(g, 0.035 + i % 4 * 0.017);
-          c.lineWidth = 0.75;
-          c.fill();
-          c.stroke();
-        });
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.6;
-        c.globalAlpha = alpha(g, 0.09);
-        for (let lane = -4; lane <= 4; lane++) {
-          const nx = Math.cos(g.flowAngle + Math.PI / 2), ny = Math.sin(g.flowAngle + Math.PI / 2), cx = g.width * 0.5 + nx * lane * g.width * 0.09, cy = g.height * 0.5 + ny * lane * g.height * 0.09, dx = Math.cos(g.flowAngle) * g.width * 0.65, dy = Math.sin(g.flowAngle) * g.width * 0.65;
-          strokeLine(c, cx - dx, cy - dy, cx + dx, cy + dy);
-        }
-        g.fissures.forEach((f, i) => {
-          const opening = 0.65 + 0.35 * Math.sin(s.strain + f.phase);
-          c.strokeStyle = i % 3 === 0 ? g.secondary : g.accent;
-          c.lineWidth = 1 + opening * 1.1;
-          c.globalAlpha = alpha(g, 0.38 + opening * 0.15);
-          c.shadowBlur = 5;
-          c.shadowColor = g.accent;
-          c.beginPath();
-          c.moveTo(f.x, f.y);
-          for (let seg = 1; seg <= 7; seg++) {
-            const jit = Math.sin(seg * 2.17 + f.phase) * f.length * 0.035;
-            c.lineTo(f.x + Math.cos(f.angle) * f.length * seg / 7 + Math.cos(f.angle + Math.PI / 2) * jit, f.y + Math.sin(f.angle) * f.length * seg / 7 + Math.sin(f.angle + Math.PI / 2) * jit);
-          }
-          c.stroke();
-          c.shadowBlur = 0;
-          f.branches.forEach((b, j) => {
-            const t2 = 0.28 + j * 0.17, bx = f.x + Math.cos(f.angle) * f.length * t2, by = f.y + Math.sin(f.angle) * f.length * t2, ba = f.angle + b;
-            c.globalAlpha = alpha(g, 0.18 + opening * 0.08);
-            c.lineWidth = 0.7;
-            strokeLine(c, bx, by, bx + Math.cos(ba) * f.length * 0.24, by + Math.sin(ba) * f.length * 0.24);
-          });
-        });
-        c.restore();
-      } });
-      const emberComplexScene = defineScene({ id: "ember", createState: (seed) => ({ seed, time: 0, buoyancy: 0, alarm: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("ember", state.seed, input), rng = rngFor("ember", state.seed, 617), plumes = Array.from({ length: qCount(b, 4, 6, 9) }, (_, i) => ({ x: b.width * (0.1 + 0.8 * (i + 0.5) / qCount(b, 4, 6, 9)), base: b.height * (0.78 + rng() * 0.13), width: b.width * (0.04 + rng() * 0.08), height: b.height * (0.28 + rng() * 0.46), phase: rng() * TAU, lean: (rng() - 0.5) * b.width * 0.12, heat: rng() })), sparks = Array.from({ length: qCount(b, 22, 36, 54) }, () => ({ x: rng() * b.width, y: rng() * b.height, speed: 0.25 + rng() * 1.2, drift: (rng() - 0.5) * 34, size: 0.8 + rng() * 2.4, phase: rng() * TAU }));
-        return { geometry: { ...b, plumes, sparks, alarmX: b.width * 0.82, alarmY: b.height * 0.2 }, primitiveCount: primitiveCount(input, 190, 285, 380) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.buoyancy += dt * 0.22;
-        s.alarm = (s.alarm + dt * 0.28) % 1;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        c.globalCompositeOperation = "lighter";
-        g.plumes.forEach((p) => {
-          const layers = g.mobile ? 3 : g.quality === "high" ? 6 : 4;
-          for (let l = 0; l < layers; l++) {
-            const spread = l / Math.max(1, layers - 1) - 0.5, rise = Math.sin(s.buoyancy * (1.3 + p.heat) + p.phase + l) * p.width * 0.25, x0 = p.x + spread * p.width, y0 = p.base, x1 = p.x + p.lean + spread * p.width * 0.55 + rise, y1 = p.base - p.height, grad = c.createLinearGradient(x0, y0, x1, y1);
-            grad.addColorStop(0, g.warning);
-            grad.addColorStop(0.34, g.danger);
-            grad.addColorStop(0.72, g.accent);
-            grad.addColorStop(1, "transparent");
-            c.strokeStyle = grad;
-            c.lineWidth = 1.2 + l * 1.15;
-            c.globalAlpha = alpha(g, 0.075 + p.heat * 0.075);
-            c.shadowBlur = 8 + l * 2;
-            c.shadowColor = g.danger;
-            c.beginPath();
-            c.moveTo(x0, y0);
-            c.bezierCurveTo(x0 - p.lean * 0.2 + Math.sin(s.time * 0.7 + p.phase) * p.width, p.base - p.height * 0.28, x1 + Math.cos(s.time * 0.43 + p.phase + l) * p.width * 0.8, p.base - p.height * 0.72, x1, y1);
-            c.stroke();
-          }
-        });
-        c.shadowBlur = 4;
-        c.shadowColor = g.warning;
-        g.sparks.forEach((sp, i) => {
-          const life = fract(sp.phase / TAU + s.time * 0.055 * sp.speed), y = g.height - life * g.height * 1.08, x = sp.x + Math.sin(s.time * sp.speed + sp.phase) * sp.drift + Math.sin(life * TAU * 1.7) * 8, hot = hash01(i, Math.floor(s.time * 3), g.seed) > 0.72;
-          c.fillStyle = hot ? g.focus : i % 3 === 0 ? g.warning : g.danger;
-          c.globalAlpha = alpha(g, (1 - life) * 0.42 + 0.08);
-          c.fillRect(x, y, sp.size * (hot ? 1.6 : 1), sp.size * (2 + sp.speed));
-        });
-        c.shadowBlur = 0;
-        g.plumes.slice(0, 3).forEach((p, i) => {
-          const y = p.base - p.height * (0.32 + 0.16 * Math.sin(s.time * 0.18 + i));
-          c.fillStyle = radialGradient(c, p.x, y, p.width * 2.8, g.warning, g.danger);
-          c.globalAlpha = alpha(g, 0.022);
-          c.beginPath();
-          c.arc(p.x, y, p.width * 2.6, 0, TAU);
-          c.fill();
-        });
-        c.strokeStyle = g.warning;
-        c.lineWidth = 1.4;
-        c.globalAlpha = alpha(g, 0.36);
-        for (let r = 0; r < 3; r++) {
-          const rad = 12 + r * 13 + Math.sin(s.alarm * TAU + r) * 2;
-          c.beginPath();
-          c.arc(g.alarmX, g.alarmY, rad, -Math.PI / 2, -Math.PI / 2 + TAU * (0.45 + 0.5 * s.alarm));
-          c.stroke();
-        }
-        c.restore();
-      } });
-      const atlasComplexScene = defineScene({ id: "atlas", createState: (seed) => ({ seed, time: 0, survey: 0, route: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("atlas", state.seed, input), rng = rngFor("atlas", state.seed, 719), peaks = Array.from({ length: qCount(b, 3, 4, 6) }, () => ({ x: b.width * (0.12 + rng() * 0.76), y: b.height * (0.14 + rng() * 0.7), radius: Math.min(b.width, b.height) * (0.08 + rng() * 0.16), elevation: 0.4 + rng() * 0.6, phase: rng() * TAU })), route = Array.from({ length: qCount(b, 5, 7, 9) }, (_, rank) => ({ x: b.width * (0.08 + 0.84 * rank / Math.max(1, qCount(b, 5, 7, 9) - 1)), y: b.height * (0.18 + rng() * 0.64), rank }));
-        return { geometry: { ...b, peaks, route, meridians: qCount(b, 5, 8, 11), parallels: qCount(b, 4, 7, 9) }, primitiveCount: primitiveCount(input, 220, 320, 395) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.survey += dt * 0.045;
-        s.route = (s.route + dt * 0.09) % 1;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.55;
-        c.globalAlpha = alpha(g, 0.11);
-        for (let m = 0; m < g.meridians; m++) {
-          const x = g.width * (m + 1) / (g.meridians + 1);
-          c.beginPath();
-          c.moveTo(x, g.height * 0.05);
-          c.bezierCurveTo(x - g.width * 0.025, g.height * 0.3, x + g.width * 0.025, g.height * 0.68, x, g.height * 0.95);
-          c.stroke();
-        }
-        for (let p = 0; p < g.parallels; p++) {
-          const y = g.height * (p + 1) / (g.parallels + 1);
-          c.beginPath();
-          c.moveTo(g.width * 0.04, y);
-          c.quadraticCurveTo(g.width * 0.5, y + Math.sin(p) * g.height * 0.025, g.width * 0.96, y);
-          c.stroke();
-        }
-        g.peaks.forEach((p, pi) => {
-          const levels = g.mobile ? 5 : g.quality === "high" ? 10 : 7;
-          for (let l = 1; l <= levels; l++) {
-            const r = p.radius * l / levels;
-            c.beginPath();
-            for (let pt = 0; pt <= 28; pt++) {
-              const a2 = pt / 28 * TAU, t3 = 0.82 + (fbm2(Math.cos(a2) * 1.8 + pi * 2, Math.sin(a2) * 1.8 + l * 0.31, g.seed, 3) - 0.5) * 0.42, br = 1 + Math.sin(s.survey + p.phase + l * 0.6) * 8e-3, x = p.x + Math.cos(a2) * r * t3 * br, y = p.y + Math.sin(a2) * r * t3 * 0.72 * br;
-              pt === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
-            }
-            c.closePath();
-            c.strokeStyle = l === levels ? g.accent : l % 3 === 0 ? g.secondary : g.border;
-            c.lineWidth = l === levels ? 1.25 : l % 3 === 0 ? 0.9 : 0.6;
-            c.globalAlpha = alpha(g, 0.14 + p.elevation * 0.12);
-            c.stroke();
-          }
-        });
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.8;
-        c.globalAlpha = alpha(g, 0.18);
-        c.strokeRect(g.width * 0.055, g.height * 0.065, g.width * 0.89, g.height * 0.87);
-        for (let t3 = 0; t3 < 12; t3++) {
-          const x = g.width * (0.08 + t3 * 0.075);
-          strokeLine(c, x, g.height * 0.065, x, g.height * (t3 % 3 === 0 ? 0.083 : 0.075));
-        }
-        const grad = c.createLinearGradient(g.width * 0.08, 0, g.width * 0.92, 0);
-        grad.addColorStop(0, g.accent);
-        grad.addColorStop(0.52, g.secondary);
-        grad.addColorStop(1, g.accent);
-        c.strokeStyle = grad;
-        c.lineWidth = 1.35;
-        c.globalAlpha = alpha(g, 0.4);
-        c.setLineDash([7, 6]);
-        c.beginPath();
-        g.route.forEach((p, i) => {
-          if (i === 0) c.moveTo(p.x, p.y);
-          else {
-            const prev = g.route[i - 1];
-            c.quadraticCurveTo((prev.x + p.x) * 0.5, Math.min(prev.y, p.y) - g.height * 0.04, p.x, p.y);
-          }
-        });
-        c.stroke();
-        c.setLineDash([]);
-        g.route.forEach((p, i) => {
-          c.fillStyle = i % 2 === 0 ? g.accent : g.secondary;
-          c.globalAlpha = alpha(g, 0.46);
-          c.beginPath();
-          c.arc(p.x, p.y, 2.5 + i % 3, 0, TAU);
-          c.fill();
-        });
-        const ri = s.route * Math.max(1, g.route.length - 1), ix = Math.min(g.route.length - 2, Math.floor(ri)), t2 = ri - ix, a = g.route[ix], b = g.route[ix + 1], px = mix(a.x, b.x, t2), py = mix(a.y, b.y, t2) - Math.sin(t2 * Math.PI) * g.height * 0.04;
-        c.fillStyle = g.focus;
-        c.shadowBlur = 10;
-        c.shadowColor = g.accent;
-        c.globalAlpha = alpha(g, 0.72);
-        c.beginPath();
-        c.arc(px, py, 3.5, 0, TAU);
-        c.fill();
-        c.shadowBlur = 0;
-        const sx = g.width * (0.1 + 0.8 * ((Math.sin(s.time * 0.08) + 1) / 2));
-        c.strokeStyle = g.secondary;
-        c.globalAlpha = alpha(g, 0.15);
-        c.lineWidth = 0.8;
-        strokeLine(c, sx, g.height * 0.07, sx, g.height * 0.93);
-        c.restore();
-      } });
-      const noirComplexScene = defineScene({ id: "noir", createState: (seed) => ({ seed, time: 0, iris: 0, shutter: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("noir", state.seed, input), rng = rngFor("noir", state.seed, 811), blinds = Array.from({ length: qCount(b, 9, 13, 18) }, (_, i) => ({ y: b.height * i / qCount(b, 9, 13, 18), height: b.height / qCount(b, 9, 13, 18) * (0.55 + rng() * 0.5), tilt: (rng() - 0.5) * 0.08, phase: rng() * TAU })), bc = qCount(b, 6, 8, 10), blades = Array.from({ length: bc }, (_, i) => ({ phase: i / bc * TAU, length: 0.92 + rng() * 0.12, width: 0.42 + rng() * 0.16 }));
-        return { geometry: { ...b, blinds, blades, cx: b.width * 0.64, cy: b.height * 0.46, radius: Math.min(b.width, b.height) * 0.26 }, primitiveCount: primitiveCount(input, 130, 190, 270) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.iris += dt * 0.075;
-        s.shutter += dt * 0.14;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        g.blinds.forEach((b, i) => {
-          const off = Math.sin(s.shutter + b.phase) * g.height * 0.012;
-          c.save();
-          c.translate(g.width * 0.5, b.y + off);
-          c.rotate(b.tilt + Math.sin(s.time * 0.11 + b.phase) * 0.01);
-          c.fillStyle = i % 5 === 0 ? g.secondary : g.surface;
-          c.globalAlpha = alpha(g, i % 5 === 0 ? 0.055 : 0.13);
-          c.fillRect(-g.width * 0.58, -b.height / 2, g.width * 1.16, b.height);
-          c.restore();
-        });
-        c.save();
-        c.translate(g.cx, g.cy);
-        c.rotate(s.iris);
-        g.blades.forEach((b, i) => {
-          c.save();
-          c.rotate(b.phase);
-          c.beginPath();
-          c.moveTo(g.radius * 0.16, -g.radius * 0.08);
-          c.lineTo(g.radius * b.length, -g.radius * b.width);
-          c.lineTo(g.radius * b.length * 0.82, g.radius * b.width * 0.55);
-          c.lineTo(g.radius * 0.2, g.radius * 0.12);
-          c.closePath();
-          c.fillStyle = i % 2 === 0 ? g.surface : g.background;
-          c.strokeStyle = g.accent;
-          c.lineWidth = 0.8;
-          c.globalAlpha = alpha(g, 0.19 + i % 2 * 0.05);
-          c.fill();
-          c.stroke();
-          c.restore();
-        });
-        const ap = g.radius * (0.18 + 0.035 * Math.sin(s.time * 0.4));
-        c.strokeStyle = g.focus;
-        c.globalAlpha = alpha(g, 0.52);
-        c.lineWidth = 1.25;
-        c.beginPath();
-        c.arc(0, 0, ap, 0, TAU);
-        c.stroke();
-        c.restore();
-        c.strokeStyle = g.accent;
-        c.lineWidth = 0.75;
-        const lines = g.mobile ? 12 : g.quality === "high" ? 28 : 20;
-        for (let l = 0; l < lines; l++) {
-          const x = g.width * (0.08 + l / Math.max(1, lines - 1) * 0.34);
-          c.globalAlpha = alpha(g, 0.12 + l % 3 * 0.018);
-          c.beginPath();
-          c.moveTo(x, g.height * 0.12);
-          const bend = Math.sin(s.time * 0.2 + l * 0.42) * g.width * 0.018;
-          c.bezierCurveTo(x + bend, g.height * 0.35, x - bend, g.height * 0.68, x, g.height * 0.88);
-          c.stroke();
-        }
-        c.strokeStyle = g.secondary;
-        c.lineWidth = 1.8;
-        c.globalAlpha = alpha(g, 0.5);
-        const sl = Math.sin(s.time * 0.17) * g.width * 0.025;
-        strokeLine(c, g.width * 0.09 + sl, g.height * 0.8, g.width * 0.42 + sl, g.height * 0.2);
-        c.restore();
-      } });
-      const signalComplexScene = defineScene({ id: "signal", createState: (seed) => ({ seed, time: 0, sync: 0, burst: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("signal", state.seed, input), rng = rngFor("signal", state.seed, 907), cc = qCount(b, 3, 4, 5), channels = Array.from({ length: cc }, (_, i) => ({ y: b.height * (0.19 + i * 0.14), frequency: 1.7 + rng() * 3.7, amplitude: b.height * (0.018 + rng() * 0.04), phase: rng() * TAU, jitter: 0.2 + rng() * 0.8, colorRole: i % 3 })), dropouts = Array.from({ length: qCount(b, 4, 6, 9) }, () => ({ x: rng() * b.width, width: b.width * (0.025 + rng() * 0.1), y: rng() * b.height, height: 2 + rng() * 18, phase: rng() * TAU }));
-        return { geometry: { ...b, channels, dropouts, radarX: b.width * 0.78, radarY: b.height * 0.73, radarR: Math.min(b.width, b.height) * 0.14 }, primitiveCount: primitiveCount(input, 180, 260, 350) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.sync = (s.sync + dt * 0.31) % 1;
-        s.burst += dt * 0.9;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.55;
-        c.globalAlpha = alpha(g, 0.09);
-        const div = g.mobile ? 8 : 12;
-        for (let d = 0; d <= div; d++) {
-          const x = g.width * (0.05 + 0.9 * d / div);
-          strokeLine(c, x, g.height * 0.08, x, g.height * 0.62);
-        }
-        g.channels.forEach((ch, ci) => {
-          c.strokeStyle = ch.colorRole === 0 ? g.accent : ch.colorRole === 1 ? g.secondary : g.info;
-          c.lineWidth = 1 + ci * 0.3;
-          c.globalAlpha = alpha(g, 0.35 - ci * 0.035);
-          c.beginPath();
-          c.moveTo(g.width * 0.04, ch.y);
-          const steps = g.mobile ? 42 : g.quality === "high" ? 110 : 72;
-          for (let st = 1; st <= steps; st++) {
-            const u = st / steps, x = g.width * (0.04 + 0.92 * u), car = Math.sin(u * TAU * ch.frequency + s.time * 1.9 + ch.phase), env = 0.34 + 0.66 * Math.sin(Math.PI * u), mod = Math.sin(u * TAU * (ch.frequency * 0.37 + 0.7) - s.time * 0.7) * 0.35, n = (hash01(st, ci, Math.floor(s.burst * 3)) - 0.5) * ch.jitter, sp = hash01(st * 13, ci, g.seed) > 0.965 ? st % 2 === 0 ? 2.6 : -2.6 : 0;
-            c.lineTo(x, ch.y + ch.amplitude * env * (car + mod + n * 0.45 + sp));
-          }
-          c.stroke();
-        });
-        g.dropouts.forEach((d, i) => {
-          const live = 0.5 + 0.5 * Math.sin(s.time * (0.7 + i * 0.09) + d.phase);
-          c.fillStyle = i % 2 === 0 ? g.background : g.surface;
-          c.globalAlpha = alpha(g, 0.035 + live * 0.09);
-          c.fillRect(d.x, d.y, d.width, d.height * live);
-          if (live > 0.72) {
-            c.strokeStyle = g.secondary;
-            c.globalAlpha = alpha(g, 0.18);
-            strokeLine(c, d.x - 8, d.y, d.x + d.width + 8, d.y);
-          }
-        });
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.7;
-        c.globalAlpha = alpha(g, 0.16);
-        for (let r = 1; r <= 4; r++) {
-          c.beginPath();
-          c.arc(g.radarX, g.radarY, g.radarR * r / 4, 0, TAU);
-          c.stroke();
-        }
-        strokeLine(c, g.radarX - g.radarR, g.radarY, g.radarX + g.radarR, g.radarY);
-        strokeLine(c, g.radarX, g.radarY - g.radarR, g.radarX, g.radarY + g.radarR);
-        const sw = s.time * 0.78;
-        c.strokeStyle = g.accent;
-        c.lineWidth = 1.6;
-        c.globalAlpha = alpha(g, 0.55);
-        strokeLine(c, g.radarX, g.radarY, g.radarX + Math.cos(sw) * g.radarR, g.radarY + Math.sin(sw) * g.radarR);
-        for (let b = 0; b < 4; b++) {
-          const a = hash01(b, g.seed) * TAU, r = g.radarR * (0.2 + hash01(b, 9, g.seed) * 0.72), it = 0.5 + 0.5 * Math.sin(s.time * 2 + b);
-          c.fillStyle = g.secondary;
-          c.globalAlpha = alpha(g, 0.16 + it * 0.32);
-          c.beginPath();
-          c.arc(g.radarX + Math.cos(a) * r, g.radarY + Math.sin(a) * r, 1.5 + it * 1.4, 0, TAU);
-          c.fill();
-        }
-        const sx = g.width * (0.04 + 0.92 * s.sync);
-        c.strokeStyle = g.focus;
-        c.globalAlpha = alpha(g, 0.22);
-        c.lineWidth = 0.9;
-        strokeLine(c, sx, g.height * 0.08, sx, g.height * 0.62);
-        c.restore();
-      } });
-      const violetComplexScene = defineScene({ id: "violet", createState: (seed) => ({ seed, time: 0, phaseA: 0, phaseB: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("violet", state.seed, input), rng = rngFor("violet", state.seed, 1009), nodes = Array.from({ length: qCount(b, 8, 13, 20) }, (_, i) => ({ a: 1.1 + rng() * 2.7, b: 1.4 + rng() * 3.4, radius: 0.18 + rng() * 0.78, weight: 0.3 + rng() * 0.7, phase: rng() * TAU + i * 0.17 }));
-        return { geometry: { ...b, nodes, cx: b.width * 0.5, cy: b.height * 0.5, scaleX: b.width * 0.37, scaleY: b.height * 0.34, lobes: 3 + Math.floor(rng() * 4) }, primitiveCount: primitiveCount(input, 160, 240, 330) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.phaseA += dt * 0.12;
-        s.phaseB -= dt * 0.073;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        c.globalCompositeOperation = "lighter";
-        const samples = g.mobile ? 80 : g.quality === "high" ? 220 : 150;
-        c.beginPath();
-        for (let sm = 0; sm <= samples; sm++) {
-          const t2 = sm / samples * TAU, r = 0.72 + 0.15 * Math.sin(g.lobes * t2 + s.phaseB * 3) + 0.08 * Math.cos((g.lobes + 2) * t2 - s.phaseA * 5), x = g.cx + Math.sin(t2 * 2.03 + s.phaseA) * g.scaleX * r + Math.sin(t2 * 5.2) * g.scaleX * 0.06, y = g.cy + Math.sin(t2 * 3.01 + s.phaseB) * g.scaleY * r + Math.cos(t2 * 4.1) * g.scaleY * 0.05;
-          sm === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
-        }
-        c.strokeStyle = g.accent;
-        c.lineWidth = 1.25;
-        c.globalAlpha = alpha(g, 0.34);
-        c.shadowBlur = 10;
-        c.shadowColor = g.accent;
-        c.stroke();
-        c.shadowBlur = 0;
-        c.beginPath();
-        for (let sm = 0; sm <= Math.round(samples * 0.72); sm++) {
-          const t2 = sm / Math.max(1, Math.round(samples * 0.72)) * TAU, x = g.cx + Math.cos(t2 * 3.17 - s.phaseB) * g.scaleX * 0.56 + Math.sin(t2 * 7.1) * g.scaleX * 0.08, y = g.cy + Math.sin(t2 * 2.11 + s.phaseA) * g.scaleY * 0.6;
-          sm === 0 ? c.moveTo(x, y) : c.lineTo(x, y);
-        }
-        c.strokeStyle = g.secondary;
-        c.lineWidth = 0.9;
-        c.globalAlpha = alpha(g, 0.24);
-        c.stroke();
-        g.nodes.forEach((n, i) => {
-          const t2 = n.phase + s.phaseA * n.a + s.phaseB * n.b, x = g.cx + Math.sin(t2 * 2.03) * g.scaleX * n.radius, y = g.cy + Math.sin(t2 * 3.01 + n.phase * 0.3) * g.scaleY * n.radius, p = 0.5 + 0.5 * Math.sin(s.time * (0.35 + n.weight * 0.4) + n.phase);
-          c.fillStyle = i % 3 === 0 ? g.secondary : g.accent;
-          c.globalAlpha = alpha(g, 0.15 + p * 0.28);
-          c.beginPath();
-          c.arc(x, y, 1.5 + n.weight * 3.2, 0, TAU);
-          c.fill();
-          if (i % 4 === 0) {
-            c.strokeStyle = g.focus;
-            c.lineWidth = 0.7;
-            c.globalAlpha = alpha(g, 0.15);
-            c.beginPath();
-            c.arc(x, y, 7 + n.weight * 9 + p * 2, 0, TAU);
-            c.stroke();
-          }
-        });
-        c.strokeStyle = g.info;
-        c.lineWidth = 0.55;
-        c.globalAlpha = alpha(g, 0.11);
-        for (let l = 0; l < Math.min(7, g.nodes.length - 1); l++) {
-          const a = g.nodes[l], b = g.nodes[(l * 3 + 5) % g.nodes.length], ta = a.phase + s.phaseA * a.a, tb = b.phase + s.phaseB * b.b, ax = g.cx + Math.sin(ta * 2.03) * g.scaleX * a.radius, ay = g.cy + Math.sin(ta * 3.01) * g.scaleY * a.radius, bx = g.cx + Math.sin(tb * 2.03) * g.scaleX * b.radius, by = g.cy + Math.sin(tb * 3.01) * g.scaleY * b.radius;
-          c.beginPath();
-          c.moveTo(ax, ay);
-          c.quadraticCurveTo(g.cx + (hash01(l, g.seed) - 0.5) * g.scaleX * 0.3, g.cy + (hash01(l, 7, g.seed) - 0.5) * g.scaleY * 0.3, bx, by);
-          c.stroke();
-        }
-        c.restore();
-      } });
-      const claudiusComplexScene = defineScene({ id: "claudius", createState: (seed) => ({ seed, time: 0, thought: 0, proof: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("claudius", state.seed, input), rng = rngFor("claudius", state.seed, 1103), columnW = b.width * (b.mobile ? 0.74 : 0.56), columnX = (b.width - columnW) * 0.5, blocks = Array.from({ length: qCount(b, 5, 7, 9) }, (_, i) => ({ x: columnX + columnW * (0.02 + rng() * 0.04), y: b.height * (0.1 + i * 0.095 + rng() * 0.015), width: columnW * (0.58 + rng() * 0.36), lines: 2 + Math.floor(rng() * 4), lead: 7 + rng() * 3, voice: rng() })), threads = Array.from({ length: qCount(b, 4, 6, 8) }, (_, i) => ({ fromY: b.height * (0.15 + i * 0.1), toY: b.height * (0.23 + i * 0.1 + rng() * 0.08), side: i % 2 === 0 ? -1 : 1, phase: rng() * TAU, weight: 0.45 + rng() * 0.55 }));
-        return { geometry: { ...b, blocks, threads, columnX, columnW }, primitiveCount: primitiveCount(input, 145, 210, 290) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.thought += dt * 0.075;
-        s.proof = (s.proof + dt * 0.04) % 1;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        c.fillStyle = g.surface;
-        c.globalAlpha = alpha(g, 0.13);
-        c.fillRect(g.columnX - g.columnW * 0.08, g.height * 0.055, g.columnW * 1.16, g.height * 0.88);
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.65;
-        c.globalAlpha = alpha(g, 0.14);
-        strokeLine(c, g.columnX, g.height * 0.07, g.columnX, g.height * 0.92);
-        c.strokeStyle = g.accent;
-        c.lineWidth = 1.25;
-        c.globalAlpha = alpha(g, 0.28);
-        const qx = g.columnX - g.columnW * 0.08, qy = g.height * 0.16;
-        c.beginPath();
-        c.arc(qx, qy, 12, Math.PI * 0.55, Math.PI * 1.45);
-        c.stroke();
-        c.beginPath();
-        c.arc(qx + 18, qy + 2, 8, Math.PI * 0.55, Math.PI * 1.45);
-        c.stroke();
-        const rx = g.columnX + g.columnW * 1.08, ry = g.height * 0.76;
-        c.beginPath();
-        c.arc(rx, ry, 12, -Math.PI * 0.45, Math.PI * 0.45);
-        c.stroke();
-        c.beginPath();
-        c.arc(rx - 18, ry - 2, 8, -Math.PI * 0.45, Math.PI * 0.45);
-        c.stroke();
-        g.blocks.forEach((b, bi) => {
-          const em = 0.5 + 0.5 * Math.sin(s.thought + b.voice * TAU);
-          for (let l = 0; l < b.lines; l++) {
-            const w = b.width * (l === b.lines - 1 ? 0.55 + b.voice * 0.24 : 0.9 + Math.sin(bi + l) * 0.04);
-            c.fillStyle = b.voice > 0.7 && l === 0 ? g.accent : g.border;
-            c.globalAlpha = alpha(g, 0.22 + em * 0.11);
-            c.fillRect(b.x, b.y + l * b.lead, w, l === 0 && b.voice > 0.72 ? 2.1 : 1.1);
-          }
-          if (b.voice > 0.78) {
-            c.strokeStyle = g.secondary;
-            c.globalAlpha = alpha(g, 0.22);
-            c.beginPath();
-            c.arc(b.x - 9, b.y + 4, 3.5, Math.PI * 0.6, Math.PI * 1.4);
-            c.stroke();
-          }
-        });
-        g.threads.forEach((t2, i) => {
-          const sx = t2.side < 0 ? g.columnX - g.columnW * 0.13 : g.columnX + g.columnW * 1.13, ix = t2.side < 0 ? g.columnX + g.columnW * 0.04 : g.columnX + g.columnW * 0.96, sw = Math.sin(s.time * 0.18 + t2.phase) * g.columnW * 0.018;
-          c.strokeStyle = i % 2 === 0 ? g.accent : g.secondary;
-          c.lineWidth = 0.8 + t2.weight * 0.5;
-          c.globalAlpha = alpha(g, 0.18 + t2.weight * 0.14);
-          c.beginPath();
-          c.moveTo(sx, t2.fromY);
-          c.bezierCurveTo(sx + sw, (t2.fromY + t2.toY) * 0.48, ix - sw, (t2.fromY + t2.toY) * 0.58, ix, t2.toY);
-          c.stroke();
-          c.beginPath();
-          c.arc(sx, t2.fromY, 2 + t2.weight * 2.2, 0, TAU);
-          c.stroke();
-        });
-        const py = g.height * (0.1 + s.proof * 0.78), x0 = g.columnX + g.columnW * 0.83;
-        c.strokeStyle = g.accent;
-        c.lineWidth = 1.4;
-        c.globalAlpha = alpha(g, 0.32);
-        strokeLine(c, x0, py - 5, x0 + 7, py);
-        strokeLine(c, x0 + 7, py, x0, py + 5);
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.55;
-        c.globalAlpha = alpha(g, 0.12);
-        strokeLine(c, g.columnX + g.columnW * 0.36, g.height * 0.89, g.columnX + g.columnW * 0.64, g.height * 0.89);
-        c.restore();
-      } });
-      const basicusComplexScene = defineScene({ id: "basicus", createState: (seed) => ({ seed, time: 0, elevation: 0, ripple: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("basicus", state.seed, input), rng = rngFor("basicus", state.seed, 1201), columns = b.mobile ? 3 : 5, rows = b.mobile ? 5 : 4, gap = b.width * (b.mobile ? 0.025 : 0.018), cw = (b.width * 0.82 - gap * (columns - 1)) / columns, ch = (b.height * 0.58 - gap * (rows - 1)) / rows, modules = [];
-        for (let r = 0; r < rows; r++) for (let col = 0; col < columns; col++) {
-          const ix = r * columns + col;
-          modules.push({ x: b.width * 0.09 + col * (cw + gap), y: b.height * 0.14 + r * (ch + gap), w: cw, h: ch, depth: 0.25 + rng() * 0.75, phase: rng() * TAU, kind: ix % 4 });
-        }
-        return { geometry: { ...b, modules, rippleX: b.width * 0.76, rippleY: b.height * 0.83 }, primitiveCount: primitiveCount(input, 130, 200, 280) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.elevation += dt * 0.28;
-        s.ripple = (s.ripple + dt * 0.17) % 1;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        g.modules.forEach((m) => {
-          const lift = Math.sin(s.elevation + m.phase) * 4 * m.depth, scale = 1 + Math.sin(s.time * 0.12 + m.phase) * 0.015 * m.depth, w = m.w * scale, h = m.h * scale, x = m.x - (w - m.w) / 2, y = m.y + lift - (h - m.h) / 2;
-          c.shadowBlur = 4 + m.depth * 10;
-          c.shadowColor = g.border;
-          c.fillStyle = m.kind === 0 ? g.surface : m.kind === 1 ? g.accent : m.kind === 2 ? g.secondary : g.background;
-          c.globalAlpha = alpha(g, m.kind === 0 || m.kind === 3 ? 0.11 : 0.055 + m.depth * 0.05);
-          c.fillRect(x, y, w, h);
-          c.shadowBlur = 0;
-          c.strokeStyle = m.kind === 1 ? g.accent : g.border;
-          c.lineWidth = m.kind === 1 ? 1.2 : 0.7;
-          c.globalAlpha = alpha(g, 0.16 + m.depth * 0.08);
-          c.strokeRect(x, y, w, h);
-          c.globalAlpha = alpha(g, 0.2);
-          c.strokeStyle = m.kind % 2 === 0 ? g.secondary : g.accent;
-          if (m.kind === 0) {
-            for (let b = 0; b < 3; b++) c.fillRect(x + w * 0.14, y + h * (0.25 + b * 0.2), w * (0.35 + 0.12 * b), 1);
-          } else if (m.kind === 1) {
-            c.beginPath();
-            c.arc(x + w * 0.5, y + h * 0.5, Math.min(w, h) * 0.2, 0, TAU * (0.55 + m.depth * 0.35));
-            c.stroke();
-          } else if (m.kind === 2) {
-            c.fillRect(x + w * 0.18, y + h * 0.62, w * 0.16, -h * 0.28);
-            c.fillRect(x + w * 0.42, y + h * 0.62, w * 0.16, -h * 0.42);
-            c.fillRect(x + w * 0.66, y + h * 0.62, w * 0.16, -h * 0.2);
-          } else {
-            c.beginPath();
-            c.moveTo(x + w * 0.2, y + h * 0.62);
-            c.lineTo(x + w * 0.46, y + h * 0.34);
-            c.lineTo(x + w * 0.8, y + h * 0.55);
-            c.stroke();
-          }
-        });
-        c.strokeStyle = g.secondary;
-        c.lineWidth = 1;
-        c.globalAlpha = alpha(g, 0.22);
-        for (let r = 0; r < 4; r++) {
-          const p = (s.ripple + r * 0.21) % 1, rad = p * Math.min(g.width, g.height) * 0.22;
-          c.globalAlpha = alpha(g, (1 - p) * 0.2);
-          c.beginPath();
-          c.arc(g.rippleX, g.rippleY, rad, 0, TAU);
-          c.stroke();
-        }
-        c.restore();
-      } });
-      const telemetryComplexScene = defineScene({ id: "telemetry", createState: (seed) => ({ seed, time: 0, acquisition: 0, sweep: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("telemetry", state.seed, input), rng = rngFor("telemetry", state.seed, 1301), gauges = Array.from({ length: qCount(b, 2, 3, 4) }, (_, i) => ({ x: b.width * (0.18 + i * 0.2), y: b.height * 0.28, radius: Math.min(b.width, b.height) * (0.055 + rng() * 0.035), minAngle: Math.PI * 0.72, maxAngle: Math.PI * 2.28, phase: rng() * TAU, value: 0.2 + rng() * 0.7 })), strips = Array.from({ length: qCount(b, 2, 3, 4) }, (_, i) => ({ y: b.height * (0.56 + i * 0.1), amplitude: b.height * (0.012 + rng() * 0.02), frequency: 1.4 + rng() * 3.2, phase: rng() * TAU }));
-        return { geometry: { ...b, gauges, strips, rulerY: b.height * 0.82 }, primitiveCount: primitiveCount(input, 210, 310, 395) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.acquisition = (s.acquisition + dt * 0.095) % 1;
-        s.sweep += dt * 0.28;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        c.strokeStyle = g.accent;
-        c.lineWidth = 0.8;
-        c.globalAlpha = alpha(g, 0.26);
-        strokeLine(c, g.width * 0.05, g.height * 0.09, g.width * 0.95, g.height * 0.09);
-        for (let cell = 0; cell < 10; cell++) {
-          const x2 = g.width * (0.055 + cell * 0.087);
-          c.fillStyle = cell % 3 === 0 ? g.secondary : g.border;
-          c.globalAlpha = alpha(g, cell % 3 === 0 ? 0.28 : 0.13);
-          c.fillRect(x2, g.height * 0.115, g.width * 0.055, 2 + cell % 2 * 2);
-        }
-        g.gauges.forEach((ga, i) => {
-          c.strokeStyle = g.border;
-          c.lineWidth = 0.8;
-          c.globalAlpha = alpha(g, 0.3);
-          c.beginPath();
-          c.arc(ga.x, ga.y, ga.radius, ga.minAngle, ga.maxAngle);
-          c.stroke();
-          for (let t2 = 0; t2 <= 14; t2++) {
-            const a2 = ga.minAngle + (ga.maxAngle - ga.minAngle) * t2 / 14, long = t2 % 4 === 0, r0 = ga.radius * (long ? 0.78 : 0.86), r1 = ga.radius;
-            c.globalAlpha = alpha(g, long ? 0.28 : 0.13);
-            strokeLine(c, ga.x + Math.cos(a2) * r0, ga.y + Math.sin(a2) * r0, ga.x + Math.cos(a2) * r1, ga.y + Math.sin(a2) * r1);
-          }
-          const v = 0.5 + 0.5 * Math.sin(s.time * (0.35 + i * 0.12) + ga.phase) * 0.32 + (ga.value - 0.5) * 0.68, a = ga.minAngle + (ga.maxAngle - ga.minAngle) * Math.max(0.04, Math.min(0.96, v));
-          c.strokeStyle = i % 2 === 0 ? g.accent : g.secondary;
-          c.lineWidth = 1.5;
-          c.globalAlpha = alpha(g, 0.54);
-          strokeLine(c, ga.x, ga.y, ga.x + Math.cos(a) * ga.radius * 0.72, ga.y + Math.sin(a) * ga.radius * 0.72);
-          c.fillStyle = g.focus;
-          c.beginPath();
-          c.arc(ga.x, ga.y, 2.2, 0, TAU);
-          c.fill();
-        });
-        g.strips.forEach((st, si) => {
-          c.strokeStyle = si % 2 === 0 ? g.accent : g.secondary;
-          c.lineWidth = 0.9;
-          c.globalAlpha = alpha(g, 0.4);
-          c.beginPath();
-          c.moveTo(g.width * 0.05, st.y);
-          const samples = g.mobile ? 38 : g.quality === "high" ? 92 : 64;
-          for (let sm = 1; sm <= samples; sm++) {
-            const u = sm / samples, x2 = g.width * (0.05 + 0.9 * u), p = Math.sin((u * st.frequency + s.time * 0.11) * TAU + st.phase), sp = Math.sin((u * 9 + si) * Math.PI) > 0.92 ? 1.9 : 0;
-            c.lineTo(x2, st.y + st.amplitude * (p * 0.65 + sp));
-          }
-          c.stroke();
-          c.strokeStyle = g.border;
-          c.globalAlpha = alpha(g, 0.1);
-          strokeLine(c, g.width * 0.05, st.y, g.width * 0.95, st.y);
-        });
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.65;
-        c.globalAlpha = alpha(g, 0.32);
-        strokeLine(c, g.width * 0.05, g.rulerY, g.width * 0.95, g.rulerY);
-        const ticks = g.mobile ? 30 : 54;
-        for (let t2 = 0; t2 <= ticks; t2++) {
-          const x2 = g.width * (0.05 + 0.9 * t2 / ticks);
-          strokeLine(c, x2, g.rulerY, x2, g.rulerY - (t2 % 5 === 0 ? 13 : 6));
-        }
-        const x = g.width * (0.05 + 0.9 * s.acquisition);
-        c.strokeStyle = g.accent;
-        c.lineWidth = 1;
-        c.globalAlpha = alpha(g, 0.44);
-        strokeLine(c, x, g.height * 0.48, x, g.rulerY + 5);
-        c.fillStyle = g.accent;
-        c.fillRect(x - 2, g.rulerY + 7, 4, 4);
-        for (let m = 0; m < 5; m++) {
-          const on = fract(s.sweep + m * 0.17) < 0.45;
-          c.fillStyle = on ? g.success : g.border;
-          c.globalAlpha = alpha(g, on ? 0.42 : 0.08);
-          c.fillRect(g.width * 0.91, g.height * (0.12 + m * 0.055), g.width * 0.035, 2);
-        }
-        c.restore();
-      } });
-      const calmComplexScene = defineScene({ id: "calm", createState: (seed) => ({ seed, time: 0, breath: 0, drift: 0 }), prepare: ({ state, input }) => {
-        const b = makePaletteGeometry("calm", state.seed, input), rng = rngFor("calm", state.seed, 1409), dust = Array.from({ length: b.mobile ? 9 : input.effectiveQuality.tier === "high" ? 22 : 15 }, () => ({ x: b.width * (0.08 + rng() * 0.84), y: b.height * (0.15 + rng() * 0.7), size: 0.4 + rng() * 1.1, phase: rng() * TAU }));
-        return { geometry: { ...b, dust, horizon: b.height * 0.68, filamentY: b.height * 0.38 }, primitiveCount: primitiveCount(input, 72, 96, 124) };
-      }, update: ({ state: s, input: i, stepMs }) => {
-        const dt = seconds(stepMs) * i.parameters.speed / 100;
-        s.time += dt;
-        s.breath += dt * 0.07;
-        s.drift += dt * 0.025;
-      }, draw: ({ context: c, state: s, geometry: g }) => {
-        c.save();
-        c.clearRect(0, 0, g.width, g.height);
-        const cx = g.width * (0.5 + Math.sin(s.drift) * 0.015), cy = g.height * (0.5 + Math.cos(s.drift * 0.7) * 0.012), r = Math.max(g.width, g.height) * (0.42 + Math.sin(s.breath) * 0.018), glow = c.createRadialGradient(cx, cy, 0, cx, cy, r);
-        glow.addColorStop(0, g.surface);
-        glow.addColorStop(0.46, g.accent);
-        glow.addColorStop(1, "transparent");
-        c.fillStyle = glow;
-        c.globalAlpha = alpha(g, 0.018);
-        c.beginPath();
-        c.arc(cx, cy, r, 0, TAU);
-        c.fill();
-        const h = g.horizon + Math.sin(s.breath * 1.3) * g.height * 0.012;
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.65;
-        c.globalAlpha = alpha(g, 0.16);
-        strokeLine(c, g.width * 0.12, h, g.width * 0.88, h);
-        c.strokeStyle = g.accent;
-        c.globalAlpha = alpha(g, 0.16);
-        strokeLine(c, g.width * 0.42, h, g.width * 0.58, h);
-        const fy = g.filamentY + Math.sin(s.time * 0.031) * g.height * 0.018;
-        c.strokeStyle = g.accent;
-        c.lineWidth = 0.75;
-        c.globalAlpha = alpha(g, 0.11);
-        c.beginPath();
-        c.moveTo(g.width * 0.22, fy);
-        c.bezierCurveTo(g.width * 0.39, fy - g.height * 0.025, g.width * 0.61, fy + g.height * 0.025, g.width * 0.78, fy);
-        c.stroke();
-        c.fillStyle = g.accent;
-        g.dust.forEach((d, i) => {
-          const f = 0.5 + 0.5 * Math.sin(s.time * (0.07 + i * 2e-3) + d.phase);
-          c.globalAlpha = alpha(g, 0.018 + f * 0.035);
-          c.beginPath();
-          c.arc(d.x, d.y, d.size * 0.55, 0, TAU);
-          c.fill();
-        });
-        c.strokeStyle = g.border;
-        c.lineWidth = 0.45;
-        c.globalAlpha = alpha(g, 0.035);
-        for (let h2 = 0; h2 < 4; h2++) {
-          const y = g.height * (0.2 + h2 * 0.17) + Math.sin(s.time * 0.017 + h2) * 1.5;
-          strokeLine(c, g.width * (0.18 + h2 * 0.015), y, g.width * (0.82 - h2 * 0.015), y);
-        }
-        c.strokeStyle = g.secondary;
-        c.lineWidth = 0.7;
-        c.globalAlpha = alpha(g, 0.12);
-        c.beginPath();
-        c.arc(g.width * 0.82, g.height * 0.22, 8 + Math.sin(s.breath * 0.9) * 1.2, 0, TAU);
-        c.stroke();
-        c.restore();
-      } });
-      window.TalosMobileScenes = Object.freeze([forgeComplexScene, paperComplexScene, terminalComplexScene, auroraComplexScene, glacierComplexScene, emberComplexScene, atlasComplexScene, noirComplexScene, signalComplexScene, violetComplexScene, claudiusComplexScene, basicusComplexScene, telemetryComplexScene, calmComplexScene]);
-    })();
-    TALOS_DESKTOP_SCENES = window.TalosMobileScenes;
-  }
-});
-
 // src/motion/desktop-background.js
 var desktop_background_exports = {};
 __export(desktop_background_exports, {
@@ -33341,26 +33893,6 @@ function mountStage(parent, { preview = false } = {}) {
   prepare(stage, true);
   return stage;
 }
-function installPreview() {
-  const appearance = document.querySelector('#setting-panel-appearance [data-settings-group="design"]');
-  if (!appearance || appearance.querySelector("[data-talos-motion-preview]")) return;
-  const panel = document.createElement("section");
-  panel.className = "talos-motion-preview";
-  panel.dataset.talosMotionPreview = "true";
-  panel.innerHTML = '<div class="talos-motion-preview__copy"><span class="talos-eyebrow">Scena del tema</span><strong data-motion-preview-name></strong><small>Anteprima dal renderer Canvas del pacchetto. Si muove anche dietro i messaggi, finché è accesa.</small></div><div class="talos-motion-preview__stage" aria-hidden="true"></div><span class="talos-motion-preview__status" data-motion-preview-status></span>';
-  const themeRow = appearance.querySelector('[data-setting-row="sceneOverrideSelect"]') || appearance.querySelector('[data-setting-row="themePresetSelect"]');
-  if (themeRow) themeRow.insertAdjacentElement("afterend", panel);
-  else appearance.prepend(panel);
-  const stage = mountStage(panel.querySelector(".talos-motion-preview__stage"), { preview: true });
-  const updateLabel = () => {
-    const config = currentConfig();
-    panel.querySelector("[data-motion-preview-name]").textContent = config.scene[0].toUpperCase() + config.scene.slice(1);
-    panel.querySelector("[data-motion-preview-status]").textContent = stage?.canvas.dataset.sceneStatus || "non disponibile";
-  };
-  updateLabel();
-  const interval = window.setInterval(updateLabel, 650);
-  panel._talosDispose = () => window.clearInterval(interval);
-}
 function reviewFrame(id, width = 640, height = 360, atSeconds = 0, overrides = {}) {
   const definition = SCENES.get(id);
   if (!definition) throw new Error(`Scena sconosciuta: ${id}`);
@@ -33394,12 +33926,10 @@ function initTalosDesktopBackground() {
   chat.dataset.talosCanvasMotion = "true";
   document.documentElement.classList.add("talos-final-ui");
   const mainStage = mountStage(chat, { preview: false });
-  installPreview();
   const watchTarget = document.documentElement;
   rootObserver = new MutationObserver((records) => {
     const relevant = records.some((record) => record.type === "attributes" || record.type === "childList");
     if (!relevant) return;
-    installPreview();
     refreshAll({ reset: records.some((record) => record.attributeName?.startsWith("data-talos") || record.attributeName === "data-theme") });
   });
   rootObserver.observe(watchTarget, { attributes: true, attributeFilter: ["class", "data-theme", "data-talos-theme", "data-talos-scene", "data-talos-motion-mode", "data-talos-motion-quality", "style"] });
