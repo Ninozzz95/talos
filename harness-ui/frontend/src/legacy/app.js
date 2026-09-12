@@ -422,7 +422,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
 
   const appShell = $('#app');
   const views = $$('.view-pane');
-  const chatConversation = $('.conversation');
+  const chatConversation = scorrevoleConversazione(colonnaConversazione(ROOT()));
   const mobileViewButtons = $$('[data-mobile-view]');
   const modeTabs = $$('.mode-tab');
   const backdrop = $('#overlayBackdrop');
@@ -699,9 +699,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
    * faceva niente, e il bersaglio «a metà» era calcolato su un'altezza che non era quella visibile.
    * Una funzione sola risponde «chi scorre», e tutti la usano: mai due idee dello stesso elemento.
    */
-  function scrollerConversazione(nodo = $('#conversation')) {
-    if (!nodo) return null;
-    return nodo.closest?.('.talos-conversation') || nodo;
+  function scrollerConversazione(nodo = colonnaConversazione(ROOT())) {
+    return scorrevoleConversazione(nodo);
   }
 
   function aggiornaSpazioCodaConversazione(conversation) {
@@ -745,7 +744,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   }
 
   /**
-   * Aggiorna streamingAutoFollow ad ogni scroll reale di #conversation.
+   * Aggiorna streamingAutoFollow ad ogni scroll reale dello scorrevole della chat.
    * Confronta lo scrollTop reale con l'ultimo bersaglio che abbiamo
    * scritto NOI (streamingLastTargetTop): se combaciano (entro
    * un'epsilon) lo scroll è stato nostro o l'utente non si è mosso — si
@@ -1329,8 +1328,9 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     if (!scroller) return;
     const distanza = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
     if (distanza <= CONVERSAZIONE_FONDO_SOGLIA_PX) { scroller.scrollTop = scroller.scrollHeight; return; } // già in fondo: nessuna animazione
-    const ridotto = document.body.classList.contains('reduce-motion');
-    scroller.scrollTo({ top: scroller.scrollHeight, behavior: ridotto ? 'auto' : 'smooth' });
+    // BC-43: anche il sistema può chiedere movimento ridotto; 'auto' dipende dal CSS.
+    const ridotto = movimentoRidottoDalSistema() || document.body.classList.contains('reduce-motion');
+    scroller.scrollTo({ top: scroller.scrollHeight, behavior: ridotto ? 'instant' : 'smooth' });
   }
 
   /* ─────────────────────────── I SIMBOLI DELLE ICONE (CB-10) ───────────────────────────
@@ -10325,7 +10325,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if ($('#conversation')?.classList.contains('is-restoring')) return;
       // 06/9 (owner): se il fondo è già in vista non c'è niente da raggiungere — nessuna animazione.
       if (fondoConversazioneInVista()) return;
-      article.scrollIntoView({ behavior: document.body.classList.contains('reduce-motion') ? 'auto' : 'smooth', block: 'end' });
+      const scorrevole = scrollerConversazione();
+      if (!scorrevole || !article.isConnected) return;
+      const top = scorrevole.scrollTop + article.getBoundingClientRect().bottom
+        - scorrevole.getBoundingClientRect().top - scorrevole.clientTop - scorrevole.clientHeight;
+      const ridotto = movimentoRidottoDalSistema() || document.body.classList.contains('reduce-motion');
+      scorrevole.scrollTo({ top, behavior: ridotto ? 'instant' : 'smooth' });
     }, 40);
     return { article, summaryText, detail, dettaglio: riga.dettaglio }; // 05/9 Fase 2: anche il dettaglio mono della riga
   }
@@ -14262,7 +14267,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         aggiornaContatoreUsage();
         aggiornaPiedeChatDaStato();
       }
-      aggiornaSeparatoreContesto($('#conversation'), [value], { sessionId: state.realSession.id, onOpen: () => compactSession() });
+      aggiornaSeparatoreContesto(colonnaConversazione(ROOT()), [value], { sessionId: state.realSession.id, onOpen: () => compactSession() });
       void contextMonitor?.refresh();
       if (contextCompactor && !$('#veloContesto')?.hidden) void contextCompactor.refresh({ quiet: true });
       return;
@@ -20436,7 +20441,7 @@ ${testo}`;
       requestAnimationFrame(() => { inCoda = false; aggiornaPiedeChatDaStato(); });
     }, { passive: true });
   })();
-  collegaNavigazioneSpina($('#conversation'));
+  collegaNavigazioneSpina(colonnaConversazione(ROOT()));
   collegaCronologia($('#schermoChat .talos-cronologia'), $('#conversation')); // 06/9: barra a sinistra, lente, fumetto, clic che porta al messaggio // 06/9: la spina dei giri si naviga, come una barra di cronologia della conversazione
   collegaTooltip(document); // 06/9 O-40: un ascoltatore solo, delegato — vale anche per ciò che nasce dopo
   normalizzaTastiScritti(ROOT()); // 06/9 audit: «⌘N» nella palette su Windows

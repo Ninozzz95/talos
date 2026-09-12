@@ -26,6 +26,8 @@
  * SystemNote per gli eventi di ciclo, ApprovalCard per il consenso.
  */
 
+import { scorrevoleConversazione } from '../bridge/conversazione-dom.js';
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function el(documentObj, tag, className, testo) {
@@ -92,7 +94,7 @@ export function aggiungiGiroAllaSpine(spine, { n, tick = 1, tono = null } = {}) 
  * Collega la navigazione della spina: un clic su un tick porta al suo giro, e il tick del giro che si sta
  * guardando resta acceso mentre si scorre — la stessa cosa che fa una barra di cronologia della conversazione.
  * Idempotente: si può chiamare a ogni disegno.
- * @param {Element} conversazione il contenitore che scorre (`#conversation`)
+ * @param {Element} conversazione la colonna dei messaggi (`#conversation`)
  * @returns {() => void} per staccare l'osservatore
  */
 export function collegaNavigazioneSpina(conversazione) {
@@ -100,13 +102,17 @@ export function collegaNavigazioneSpina(conversazione) {
   conversazione.dataset.spinaCollegata = 'si';
   const documentObj = conversazione.ownerDocument;
   const finestra = documentObj.defaultView || globalThis;
+  const scorrevole = scorrevoleConversazione(conversazione);
   conversazione.addEventListener('click', (evento) => {
     const tick = evento.target.closest?.('.talos-turn-spine__tick');
     if (!tick) return;
     const turno = tick.closest('.talos-turn');
     if (!turno) return;
-    const ridotto = finestra.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
-    turno.scrollIntoView({ behavior: ridotto ? 'auto' : 'smooth', block: 'start' });
+    const ridotto = finestra.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+      || documentObj.body?.classList.contains('reduce-motion');
+    const top = scorrevole.scrollTop + turno.getBoundingClientRect().top
+      - scorrevole.getBoundingClientRect().top - (scorrevole.clientTop || 0);
+    scorrevole.scrollTo({ top, behavior: ridotto ? 'instant' : 'smooth' });
   });
   if (typeof finestra.IntersectionObserver !== 'function') return () => {};
   const osservatore = new finestra.IntersectionObserver((voci) => {
@@ -115,7 +121,7 @@ export function collegaNavigazioneSpina(conversazione) {
       if (!spina) continue;
       for (const t of spina.querySelectorAll('.talos-turn-spine__tick')) t.classList.toggle('talos-turn-spine__tick--visibile', voce.isIntersecting);
     }
-  }, { root: conversazione, threshold: 0.35 });
+  }, { root: scorrevole, threshold: 0.35 });
   const guarda = () => { for (const turno of conversazione.querySelectorAll('.talos-turn')) osservatore.observe(turno); };
   guarda();
   const mutazioni = new finestra.MutationObserver(guarda);
