@@ -173,12 +173,15 @@ function opzioniFallback(fornitori = [], { usaAttrezzi = true } = {}) {
   return fornitori.filter((p) => p.keyConfigured === true).flatMap((p) => (p.modelliDiRiserva || []).filter((m) => !usaAttrezzi || m.toolCalling === true).map((m) => ({ provider: p.id, model: m.id, etichetta: `${p.label || p.id} · ${m.nome || m.id}` })));
 }
 function creaSceltaFallback({ fornitori = [], valore = [], usaAttrezzi = true, onChange = null } = {}) {
-  const wrap = document.createElement("fieldset");
-  wrap.className = "talos-card talos-card--pad talos-stack";
-  Object.assign(wrap.style, { minWidth: "0", margin: "16px 0 0", gap: "12px" });
-  const legend = document.createElement("legend");
-  legend.textContent = "Se non risponde, continua con…";
-  wrap.append(legend);
+  const wrap = document.createElement("div");
+  wrap.className = "talos-stack talos-scelta-riserve";
+  wrap.setAttribute("role", "group");
+  wrap.setAttribute("aria-label", "Se non risponde, continua con…");
+  Object.assign(wrap.style, { minWidth: "0", margin: "16px 0 0", gap: "8px" });
+  const etichetta2 = document.createElement("span");
+  etichetta2.className = "sheet-label";
+  etichetta2.textContent = "Se non risponde, continua con…";
+  wrap.append(etichetta2);
   const selezione = valore.map(({ provider, model }) => ({ provider, model }));
   const scelte = opzioniFallback(fornitori, { usaAttrezzi });
   const lista = document.createElement("ol");
@@ -204,6 +207,7 @@ function creaSceltaFallback({ fornitori = [], valore = [], usaAttrezzi = true, o
   aggiungi.textContent = "Aggiungi";
   const notifica = () => onChange?.(selezione.map((v) => ({ ...v })));
   function disegna2() {
+    lista.hidden = selezione.length === 0;
     lista.replaceChildren(...selezione.map((v, i) => {
       const li = document.createElement("li");
       li.className = "talos-cluster";
@@ -237,8 +241,8 @@ function creaSceltaFallback({ fornitori = [], valore = [], usaAttrezzi = true, o
     disegna2();
     select.focus();
   });
-  const nota = document.createElement("p");
-  nota.className = "talos-muted";
+  const nota = document.createElement("small");
+  nota.className = "workspace-chooser-help talos-muted";
   nota.textContent = typeof onChange !== "function" ? "La scelta non è ancora collegata a questa sessione." : "Il cambio viene annunciato in chat. La conversazione continua con i fornitori scelti, nell’ordine indicato.";
   const azioni = document.createElement("div");
   azioni.className = "talos-cluster";
