@@ -70,8 +70,8 @@ Proposta dell'owner registrata («magari mettere il preambolo come tool»): la f
 | 12 | Pre-release: tabella di marcia con ricerca dell'ultimo mese, prove da utente nuovo, UX | io + Astra | al trigger (coda chiusa) |
 | 13 | A/B del banco sul preambolo (~$5, 210 giri) | io | ⏸ «alla fine» |
 | — | **BC-49** deposito del rapporto a pezzi | Astra | ✅ **VERIFICATA DAL VIVO sul 4174** (corsa `0925407d`, 14:59-15:28): 5 parti (3.766 · 2.607 · 2.720 · 3.368 · 3.766 byte, tutte sotto 4.096), nessuna caduta del fornitore, `done` in 29 min con giudice `glm-4.7-flash`: 17 affermazioni, 5 sostenute · 4 in parte · 1 contesa · 7 non sostenute · 0 non verificate, 10 prove distinte su 11 indirizzi; 24 giri, 439k token dentro, 317k dalla cache; rapporto 39.597 byte in Libreria. Visto nei due temi |
-| — | **BC-50** la striscia delle schede dei fornitori oltre sei (con molte chiavi collegate): scorrimento o raggruppamento, mai schiacciata | Astra | 🔜 |
-| — | **BC-51** l'elenco delle ricerche proietta `giudice: null` mentre il dettaglio e il record lo portano (`glm-4.7-flash`): una proiezione sola | Astra | 🔜 |
+| — | **BC-50** striscia delle schede dei fornitori oltre sei | Astra | ✅ `74db6ff7`: una riga che scorre con ombre ai capi, schede mai compresse, focus in vista (141 → 45 px a 1024); 14/14 |
+| — | **BC-51** giudice nell'elenco delle ricerche | Astra | ✅ `74db6ff7`: stessa proiezione del dettaglio, nessuna seconda lettura; 66/66 (sul 4174 dopo il riavvio con P-H) |
 | — | Aperti minori senza data: BC-12 foto sul 4174, 27B da misurare a VRAM libera, `.non-rinominato`, mockup-to-template distruttivo, `<br>` nei .md, HEAD 404, fase3 Review, easing freccia, h2 25ch, «Rivela»→«Mostra», icona Browser, campi elenco note/attività/memoria, nome/timbro sovrapposti nelle righe Libreria | decidi tu | ⏸ |
 | — | Fine lavoro: eliminare `.harness-ui-research`, `.harness-ui-library` sul Desktop e `harness-ui/scratch-l9/` | io, al tuo sì | promemoria |
 
