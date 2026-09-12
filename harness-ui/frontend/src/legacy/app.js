@@ -1,6 +1,7 @@
+import { colonnaConversazione, scorrevoleConversazione } from '../bridge/conversazione-dom.js';
 import {aggiornaProviderList,montaProviderPanel} from '../components/provider-card.js';
 import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica, valoriPolitiche } from '../components/politiche.js';
-import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
+import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave, aggiornaTestoModelloSelettore } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
 import { statoAvvioSessione } from '../components/avvio-sessione.js'; // BC-14 (11/09): «Avvia» non mente più sul perché è fermo
 import { nomeLeggibileSessione, identitaSessione, aggiornaSessionItem } from '../components/session-item.js'; // N1 (10/09): la riga della sessione viva cambia sul posto · BC-36/37 (12/09): nome e permesso da UNA fonte sola
 import { collegaScia, aggiornaTutteLeScie } from '../components/range-scia.js';
@@ -6019,14 +6020,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       iconWrap.className = 'sheet-icon';
       iconWrap.innerHTML = icon('i-brain');
       const textWrap = document.createElement('span');
-      const dettagli = [];
-      if (modello.alias) dettagli.push('ultima versione'); // ⭐ 27/8 — il gruppo è già quello giusto (senza ~), l'informazione "è un alias fluttuante" resta comunque visibile qui
-      if (modello.contextLength) dettagli.push(`${Math.round(modello.contextLength / 1000)}k ctx`);
-      if (modello.prezzoPrompt) dettagli.push(`$${(Number(modello.prezzoPrompt) * 1_000_000).toFixed(2)}/M in`);
-      textWrap.append(
-        textElement('strong', '', modello.nome),
-        textElement('small', '', dettagli.length ? `${modello.id} · ${dettagli.join(' · ')}` : modello.id),
-      );
+      if (modello.catalogo?.fonte === 'models.dev') {
+        /* P-E (12/09, Astra): i diretti arrivano da models.dev con contesto, prezzo per milione e capacità già in italiano. */
+        aggiornaTestoModelloSelettore(textWrap, modello);
+      } else {
+        const dettagli = [];
+        if (modello.alias) dettagli.push('ultima versione'); // ⭐ 27/8 — il gruppo è già quello giusto (senza ~), l'informazione "è un alias fluttuante" resta comunque visibile qui
+        if (modello.contextLength) dettagli.push(`${Math.round(modello.contextLength / 1000)}k ctx`);
+        if (modello.prezzoPrompt) dettagli.push(`$${(Number(modello.prezzoPrompt) * 1_000_000).toFixed(2)}/M in`);
+        textWrap.append(
+          textElement('strong', '', modello.nome),
+          textElement('small', '', dettagli.length ? `${modello.id} · ${dettagli.join(' · ')}` : modello.id),
+        );
+      }
       opt.append(iconWrap, textWrap);
       if (modello.id === valoreScelto) {
         const checkSpan = document.createElement('span');
