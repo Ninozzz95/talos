@@ -44,10 +44,19 @@ Parole sue, in ordine, e cosa cambia nella coda:
 
 ⇒ **Ordine di lavoro dal 12/09, ore 11:** L9 (in corso) → BC-13 · BC-12/14 #2 · BC-08 · BC-10 (in parallelo, file disgiunti) → L10 → BC-35 → P-D…P-L → PO-13 → A/B.
 
-### In corso adesso (2 agenti)
+### In corso adesso (aggiornato 12/09, ore 12:15)
+
 | id | cosa | stato |
 |---|---|---|
-| **L9** | il motore della ricerca DENTRO la corsa: piano a rami, collettore con cache/budget nel giornale, spesa vera, verifica a tre livelli con giudice ≠ autore, contraria, prove distinte, bilancio vero | 🏃 |
+| BC-13 | motore locale rapido: ricerca, misura di base, cure nel supervisore | 🏃 |
+| BC-12/14 #2 | cartella libera con qualunque permesso | 🏃 |
+| BC-08 + BC-10 | barra della conversazione a due lati, margine a tutta larghezza | 🏃 |
+| RELEASE | ricerca sullo stato dell'arte per la prima release desktop (Windows, guscio come Hermes, browser anche) → piano decisionale | 🏃 |
+
+### Fermi dal 12/09 mattina
+| id | cosa | stato |
+|---|---|---|
+| **L9** | il motore della ricerca DENTRO la corsa: piano a rami, collettore con cache/budget nel giornale, spesa vera, verifica a tre livelli con giudice ≠ autore, contraria, bilancio vero | 🔧 codice chiuso il 12/09, 2888/2888 con modello finto; **manca il giro vero sul 4174** (costa: chiedere). Debiti lasciati da L9: giudice di default povero (solo il modello predefinito ⇒ spesso `judge:null`: serve la scelta del giudice nelle Impostazioni); `talosResearchProgressOf` può dire «10 di 4»; `synthesis.mjs` senza chiamanti; 3 rossi preesistenti in `src/kernel/talosHarness.test.mjs` (un test indietro a una cura del 10/09, due misurano l'ambiente); `kernel:controlla` divergente; stima +15…+35 % token per corsa da confermare |
 | **BC-33** | Temi e atmosfere: anteprima VIVA, tutti i cursori di tema/animazione nella modale, confronto testa a testa, 14 temi | ✅ 12/09 `ad4a9121` + `7107417f`, visto sul 4174 nei due temi (aperti: ordine dell'elenco Calm ultimo/primo; la ricerca delle Impostazioni conta le 14 migrate; la riga «Scena del tema» delle Impostazioni è ora doppia con lo studio) |
 
 ### Chiusi l'11-12/09, verificati sul 4174 (chiaro e scuro)
