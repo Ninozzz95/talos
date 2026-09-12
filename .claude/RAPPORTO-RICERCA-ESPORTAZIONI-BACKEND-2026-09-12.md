@@ -6,8 +6,11 @@ esportazioni **COMPLETA**».
 ⛔ Nessun giro col modello, nessuna richiesta alla 4174, nessun `git`, nessuno screenshot.
 ⛔ Nessun file di `frontend/`, di `src/kernel/` o di `src/research-orchestrator.mjs` toccato.
 ⛔ Nessuna deviazione dall'elenco dei file: due file nuovi in `src/research/`, due nel `tests/`,
-tre punti in `src/http-app.mjs`. `src/research-store.mjs` **non** è stato toccato — e in §6.2 c'è
-scritto perché avrebbe potuto esserlo.
+tre punti in `src/http-app.mjs`.
+
+⭐ **Aggiunto il 12/09, su ordine del coordinatore dopo la consegna del lotto**: la cura del
+difetto §6.2 (`src/research-store.mjs` + il suo test), che bloccava il secondo giro vero di L8.
+Sta in **§8**, e §6.2 resta com'era scritto — la diagnosi non si riscrive a posteriori.
 
 ---
 
@@ -263,12 +266,9 @@ di test.
   gara, e la vince chi ha il disco più lento.
 - **La cura** sta in `src/research-store.mjs` — un ritento limitato sul `rename` per `EPERM`/`EBUSY`,
   qualche decina di millisecondi, con l'errore rilanciato se non passa. Quattro righe.
-- 🔜 **Non l'ho fatta**: `research-store.mjs` non è nel mio lotto, e una modifica alla scrittura di
-  **ogni** ricerca non si infila dentro un lotto sulle esportazioni. Decide l'owner.
-- **Nel frattempo** il mio banco ha smesso di essere la causa più probabile: cede il giro al loop
-  finché la scrittura non ha avuto il suo turno, e poi chiede ogni 60 ms invece che ogni 10. La
-  spiegazione per esteso è nel test, sopra `concludi`. ⛔ `tests/http-routes-research.test.mjs`
-  (L5, non mio) usa ancora i 10 ms ed è la corsa in cui la gara si è vista la seconda volta.
+- ✅ **CURATO il 12/09**, su ordine del coordinatore («blocca il secondo giro vero di L8»): vedi
+  **§8**. Il ripiego di banco (60 ms invece di 10) è stato **tolto**: la cadenza che rompeva è
+  tornata a 10 ms ed è adesso la prova che la cura regge.
 
 ---
 
@@ -294,3 +294,119 @@ di test.
   file del workspace ne ha uno, 64 MB, ma lì i byte vengono dal disco: qui si generano).
 - ⛔ **La Libreria non c'entra**: un'esportazione **non** viene depositata da nessuna parte, esce e
   basta. Era fuori dal lotto.
+
+---
+
+## 8. LA CURA DEL DIFETTO 6.2 — il rename che ritenta (12/09/2026, seconda consegna)
+
+> Ordine del coordinatore dopo il commit del lotto: «il difetto 2 lo curi tu, ora, perché blocca
+> il secondo giro vero di L8». Solo `src/research-store.mjs` e il suo test.
+
+### 8.1 La riproduzione, prima di qualunque riga
+
+Sei righe, disco vero, deterministica:
+
+```js
+const h = fs.openSync(meta, 'r');   // un LETTORE qualunque, in SOLA lettura
+fs.renameSync(tmp, meta);           // → EPERM: operation not permitted, rename
+```
+
+Senza il lettore aperto lo **stesso** rename riesce. ⇒ non è il disco, non è un permesso: è la
+contesa. Su Windows `MoveFileExW` non sostituisce una destinazione che qualcun altro tiene aperta,
+e libuv apre i file **senza** `FILE_SHARE_DELETE` — anche in sola lettura.
+
+⛔ Misurato anche il caso gemello: `rename` di un file **su una cartella esistente** dà lo stesso
+`EPERM`. È il motivo per cui il ritento deve avere una fine: lo stesso codice esce sia da una
+contesa che passerà, sia da un'operazione che non riuscirà mai.
+
+### 8.2 Ricerca web PRIMA di scrivere — fonte + data
+
+| # | fonte | cosa ha cambiato |
+|---|---|---|
+| **S5** | **graceful-fs, `polyfills.js`** (isaacs) — <https://raw.githubusercontent.com/isaacs/node-graceful-fs/main/polyfills.js>, letto il 12/09/2026 | I tre codici da ritentare: **`EACCES`, `EPERM`, `EBUSY`** — «on Windows, A/V software can lock the directory, causing this to fail with an EACCES or EPERM if the directory contains newly created files». ⛔ **Il vincolo che non conoscevo e che ha cambiato il codice**: si aspetta con `setTimeout` e **mai** con un ciclo stretto, perché «Windows scheduling gives CPU to a busy looping process, which can cause the program causing the lock contention to be **starved of CPU** by node, so the contention doesn't resolve» — un ritento che gira a vuoto **impedisce** al lettore di chiudere il suo handle: la cura diventerebbe la causa. ⛔ **E una cosa che NON si copia**: graceful-fs, prima di ogni ritento, controlla che la destinazione non esista e in tal caso si ferma — serve al caso di npm, dove la destinazione *non deve* esserci; qui la destinazione esiste **sempre** (stiamo sostituendo `meta.json`), e copiarlo avrebbe fatto uscire ogni ritento al primo giro. ⛔ La sua finestra è di **60 secondi** (per «Parity bit9, [which] may lock files for up to a minute»): qui sarebbero 60 s di schermo fermo dentro una richiesta HTTP |
+| **S6** | **MoveFileExW / `MOVEFILE_REPLACE_EXISTING`** — <https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw>, riletta il 12/09/2026 | Sostituisce «provided that security requirements regarding access control lists (ACLs) are met»; «to delete or rename a file, you must have either delete permission on the file or delete child permission in the parent directory». ⛔ **Va detto quello che NON dice**: la pagina non nomina gli handle aperti né l'errore che ne esce. Il legame «lettore aperto ⇒ EPERM» non viene da lei — viene dalla riproduzione di §8.1 e dal test che la esegue su disco vero |
+| **S7** | **Node, `fs.rename` / `fsPromises.rename`** — <https://nodejs.org/docs/latest/api/fs.html> | ⚠️ Lettura **NON riuscita**: la pagina è tornata troncata da `WebFetch` due volte e le sezioni dei due metodi non si sono lette alla lettera. Segnato come lettura mancata, non come lettura fatta |
+
+### 8.3 Il codice
+
+**`src/research-store.mjs`**
+
+| dove | cosa |
+|---|---|
+| `:222-272` | il blocco che spiega il difetto, la riproduzione e le tre fonti |
+| `:273-277` | le costanti: **10 tentativi**, attesa iniziale **20 ms**, tetto **200 ms**, i **tre** codici di contesa |
+| `:279` | `SUFFISSO_NON_RINOMINATO` — il nome dichiarato, esportato perché il test lo nomini invece di ricopiarlo |
+| `:292-311` | **`rinominaConRitento`** — esportata e provabile da sola; `attendiFn` e `tentativiRename` iniettabili |
+| `:313-363` | `scriviAtomico`, ora in **due** `try` separati |
+
+**Le attese**: 20, 40, 80, 160, poi 200 fisso — nove attese su dieci tentativi, **1,3 s** in tutto.
+Sotto i 2 s per costruzione, e il test lo somma invece di crederci.
+
+**Le tre decisioni che non erano scontate:**
+
+1. **Un codice che non è di contesa non si ritenta nemmeno una volta.** Aspettare 1,3 s per un
+   `ENOSPC` è tempo rubato a chi guarda lo schermo.
+2. **Il `try` si divide in due.** Se fallisce la **scrittura**, il temporaneo si pulisce come prima:
+   byte a metà, e da byte a metà non si salva niente. Se fallisce il **rename**, no — vedi (3).
+3. ⛔⛔ **Il temporaneo non si butta più quando il rename fallisce, e questo è un CAMBIO DI
+   CONTRATTO dichiarato.** Prima c'era un `rm`, col motivo scritto accanto: «una cartella di
+   ricerca piena di `.tmp-` è il segno di un guasto inghiottito». Il motivo era buono, la
+   conclusione no: a quel punto la scrittura è **riuscita** — i byte sono interi sul disco — ed è
+   solo il rename a non essere passato. Cancellarli butta lavoro **già pagato** per tenere pulita
+   una cartella, che è lo scambio esatto che il vincolo di quel file vieta.
+   ⇒ Il file resta accanto come **`<nome>.non-rinominato`**: dichiarato, riconoscibile, e **uno
+   solo** (un secondo guasto sovrascrive quello di prima invece di accumulare UUID). Se anche il
+   parcheggio fallisce, si tiene il nome casuale e **lo si dice** — un catch di recupero che copre
+   l'errore vero è il difetto che questo repo ha già pagato.
+   ⛔ L'errore originale si **arricchisce** (`code`, `errno`, `path`, pila intatti) invece di essere
+   sostituito: un chiamante che filtra sul codice deve continuare a vederlo.
+
+### 8.4 Le prove — `tests/ricerca-giornale-e-ripresa.test.mjs`, **40 verdi**
+
+⛔ Niente attese a tempo: l'handle si chiude **dentro `attendiFn`**, cioè al tentativo che sceglie
+il test. Il disco è vero, l'EPERM è vero, il momento è deterministico.
+
+| # | test | cosa morde |
+|---|---|---|
+| 1 | un LETTORE con l'handle aperto → **si ritenta, e passa** | il verso che deve funzionare: `openSync` vero, EPERM vero, e alla seconda attesa il lettore chiude. Attese misurate `[20, 40]`, contenuto arrivato, **nessuna scoria** |
+| 2 | **al contrario** — la contesa che NON passa | `code` ancora `EPERM`, messaggio che dice dove sono i byte, file vecchio intatto, contenuto nuovo leggibile in `meta.json.non-rinominato` |
+| 3 | **al contrario** — rename **impossibile** (destinazione = una cartella) | stesso `EPERM`, ma dopo i tentativi **finisce**: un ritento senza fine sarebbe un blocco, non una cura. E i byte restano |
+| 4 | **al contrario** — `ENOSPC` | **zero** attese: si rilancia subito |
+| 5 | le attese crescono, si fermano a 200, e sommano **1300 ms** | il tetto è provato, non promesso |
+| 6 | ⭐ **il difetto vero**: una ricerca che conclude **mentre qualcuno la legge** | `creaRicerca` → `terminata: null` → un lettore tiene aperto `meta.json` → `aggiornaRicerca(terminata:'done')` → la voce è **`done`**. Prima di oggi: EPERM, eccezione fuori da `onConclusioneRicerca`, e la ricerca restava `running` per sempre |
+| 7 | il test L4 esistente, **aggiornato** | l'assertion `readdirSync === ['pagato.txt']` cambiava significato: adesso chiede che il contenuto nuovo **ci sia**. Il commento dice cosa c'era prima e perché è cambiato — non è stato riscritto di nascosto. ⭐ È anche l'unico posto che esercita il **ripiego** (il `renameFn` iniettato fallisce sempre, quindi fallisce pure il parcheggio: resta il nome casuale, e il messaggio lo nomina) |
+
+**E la prova end-to-end**: i **60 ms** di ripiego che avevo messo in
+`tests/http-routes-research-esportazioni.test.mjs` sono tornati a **10 ms**, cioè alla cadenza che
+rompeva. Il workaround è diventato la prova.
+
+### 8.5 Le corse
+
+- `tests/ricerca-giornale-e-ripresa.test.mjs` → **40/40**.
+- I sei file della Ricerca insieme (store, orchestratore, rotte L5, rotte esportazioni, i 22 di
+  `tests/research/`) → **456 test, quattro corse di fila, zero rossi**, col polling a 10 ms.
+- Suite intera `node --test tests/*.test.mjs tests/research/*.test.mjs` → **2814 test**, una rossa:
+  `PROVIDER-STORE-01` in `tests/provider-credential-store.test.mjs`, che si aspetta sette provider
+  e ne trova otto (`lmstudio`). ⛔ **Non è mia**: `git status` mostra `provider-credential-store.mjs`,
+  `provider-probe.mjs`, `config.mjs`, `model-destination.mjs`, `openai-compatible-runtime.mjs` e due
+  file nuovi (`provider-registry.mjs`, `usage-cache.mjs`) modificati da **un altro agente** in
+  questo worktree condiviso, col loro test non ancora aggiornato. Nessuno dei miei file la tocca.
+
+### 8.6 Cosa NON ho verificato, di questa cura
+
+- ⛔ **Niente su un filesystem che non sia NTFS locale.** La contesa riprodotta è quella di
+  Windows; su Linux/macOS `rename(2)` sostituisce anche con la destinazione aperta, quindi lì il
+  ritento non scatta **mai** — il che vuol dire che su quelle piattaforme questo codice è provato
+  solo nel verso «riesce al primo colpo».
+- ⛔ **Nessun antivirus vero.** Il caso di graceful-fs (A/V che blocca per decine di secondi) non è
+  riproducibile qui, e la nostra finestra di 1,3 s **non basterebbe**: se un giorno l'EPERM
+  ricomparirà su una macchina con un antivirus aggressivo, la finestra va allargata — ma allargarla
+  adesso costerebbe secondi di schermo fermo a tutti per un caso mai visto.
+- ⛔ **Gli altri chiamanti di `scriviAtomico` non sono stati riprovati uno per uno**: il rapporto,
+  il piano, le fonti e l'istantanea della cache passano tutti da qui e beneficiano del ritento, ma
+  la contesa l'ho riprodotta solo su `meta.json` — che è quella che stava rompendo.
+- ⛔ **Nessun giro vero di L8**: la cura è provata dal magazzino e dalle rotte, non da una ricerca
+  vera col modello. È il giro che il coordinatore ha in mano.
+- ⛔ **`.non-rinominato` non lo raccoglie nessuno**: se il rename fallisce davvero, il file resta lì
+  e nessuna schermata lo mostra. Oggi è un file che salva i byte per chi va a guardare la cartella,
+  non una funzione di ripristino.
