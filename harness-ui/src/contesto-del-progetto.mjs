@@ -249,6 +249,11 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
              nel tetto di token (`tagliataInProfondita`). Un booleano solo li confonderebbe. */
           troncata: mappa.troncato,
           tagliataInProfondita: resaMappa.tagliataInProfondita,
+          /* ⛔ BC-40 (12/09) — TERZO modo, ed è quello NORMALE da oggi: la mappa si ferma alla
+             profondità predefinita (2) perché così è stata disegnata, non perché un tetto abbia
+             morso. Campo AGGIUNTO, mai sostituito: chi leggeva `troncata`/`tagliataInProfondita`
+             continua a leggere esattamente quello che leggeva prima. */
+          ridottaPerDisegno: Boolean(mappa.fermatoInProfondita),
           profondita: resaMappa.profonditaUsata,
           profonditaPiena: mappa.profonditaRaggiunta,
           token: resaMappa.token,

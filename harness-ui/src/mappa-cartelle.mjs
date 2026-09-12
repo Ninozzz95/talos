@@ -84,12 +84,46 @@ export { CARTELLE_ESCLUSE_PREDEFINITE } from './elenco-profondo.mjs';
 import { CARTELLE_ESCLUSE_PREDEFINITE } from './elenco-profondo.mjs';
 
 /**
- * Profondità massima della mappa. 8 come `elenco-profondo.mjs`: i percorsi dei task del corpus
- * `storia` stanno a 4-6, e una mappa che si ferma a 3 li lascerebbe fuori — che è il difetto
- * misurato l'11/09 sullo spazio vero (`contestoDelProgetto` su `AVM/mobile` si ferma a 1500
- * percorsi/profondità 3 mentre i file dei task stanno a 4-6).
+ * Profondità massima della mappa.
+ *
+ * ⛔⛔⛔ BC-40, 12/09/2026 — ERA 8, ED ERA UN CONTO CHE NON TORNAVA. Owner, dopo la lentezza del
+ * primo messaggio: «ci deve essere un metodo migliore, magari mettere il preambolo come tool o
+ * qualcosa del genere». Il TEMPO era già stato curato il 12/09 (`TEMPO_MASSIMO_MAPPA_MS`); qui si
+ * curano i TOKEN e la FORMA. Misurato lo stesso giorno con lo stimatore del prodotto
+ * (`costo-elenco.mjs`, metodo «stimato»), filtro `.gitignore` vero, sui tre spazi reali:
+ *
+ *   spazio               OGGI (camminata 8) → resa       NATIVA a 2      camminata    token
+ *   ──────────────────   ─────────────────────────────   ───────────   ───────────   ────────────
+ *   harness-ui/          55 cart., resa a prof 5,  374   29 cart., 229   22 → 5 ms    −39%
+ *   AVM-harness-desktop  2.000 cart. (TETTO), resa 4,  3.689   124, 825  507 → 19 ms  −78%
+ *   Desktop              2.000 cart. (TETTO), resa 2,    911    84, 841  434 → 12 ms   −8%
+ *
+ * ⇒ Tre fatti, e nessuno è un'opinione:
+ *   (a) sui due spazi grandi la camminata a 8 leggeva **2.000 cartelle** e il tetto di token ne
+ *       rendeva 571 e 84: si pagava il disco per buttare via il risultato;
+ *   (b) la profondità che il tetto di token SCEGLIEVA DA SOLA era già 2 su `Desktop` e 4 sul repo
+ *       — cioè 2 non è una perdita inventata a tavolino, è dove il tetto arrivava comunque;
+ *   (c) il costo scende di 25-36× in tempo di camminata e di 4,5× in token sul caso peggiore.
+ *
+ * ⛔ E la profondità 2 NON è una legge: `profonditaMax` resta un parametro. Il corpus `storia` ha
+ *    i file a 4-6 ([[talos-non-vede-i-file-del-corpus-storia]]) e una mappa a 2 non li nomina —
+ *    ma una mappa a 8 **nemmeno**, perché il tetto di token la tagliava a 4 prima di partire. La
+ *    differenza non la fa la profondità: la fanno `elenca` (che da BC-40 scende in una cartella
+ *    PRECISA) e `cerca`. Questa è la metà «up front» dell'ibrido che Anthropic raccomanda
+ *    («Effective context engineering for AI agents», 29/09/2025: *«retrieving some data up front
+ *    for speed, and pursuing further autonomous exploration at its discretion»*), tenuta al
+ *    minimo — ed è la stessa forma della *progressive disclosure* delle Agent Skills (Anthropic,
+ *    16/10/2025: *«Like a well-organized manual that starts with a table of contents, then
+ *    specific chapters, and finally a detailed appendix»*). La mappa è l'indice; `elenca` è il
+ *    capitolo; `leggi` è la pagina.
+ *
+ * ⛔⛔ IL RISCHIO, dichiarato e non minimizzato: un modello che vede meno può concludere che una
+ *    cartella NON ESISTA — è successo, con questa frase esatta: «0 — la cartella `harness-ui/src`
+ *    non esiste» quando ne conteneva 104 ([[un-modello-che-non-vede-non-tace-spiega]]). ⇒ Per
+ *    questo una mappa ridotta DEVE dirlo (`fermatoInProfondita` → `testoMappaCartelle`) e DEVE
+ *    dire come scendere. Una mappa corta che si spaccia per intera sarebbe peggio di una lunga.
  */
-export const PROFONDITA_MAPPA_PREDEFINITA = 8;
+export const PROFONDITA_MAPPA_PREDEFINITA = 2;
 
 /**
  * Tetto sulle CARTELLE, non sui file. 2.000: misurato l'11/09, `AVM-harness-desktop` intero ne ha
@@ -151,7 +185,15 @@ const ordinaVoci = (voci) => [...voci].sort((a, b) => {
  * @param {() => number} [input.orologio] — iniettabile per le prove (default `performance.now`)
  * @returns {Promise<{cartelle: {percorso:string, livello:number, file:number}[], fileTotali:number,
  *   troncato:boolean, motivoTroncamento:'cartelle'|'tempo'|null, msImpiegati:number,
- *   profonditaRaggiunta:number, illeggibili:number}>}
+ *   profonditaRaggiunta:number, illeggibili:number, fermatoInProfondita:boolean}>}
+ *
+ * ⛔⛔ BC-40 — `fermatoInProfondita` è il campo che rende ONESTA la profondità ridotta, ed è nato
+ *   da un difetto che la cura stava per introdurre: con `profonditaMax` a 2 il camminatore finisce
+ *   senza `troncato`, e `testoMappaCartelle` scriveva **«albero COMPLETO»** su un albero che
+ *   continuava sotto. Cioè la riduzione avrebbe prodotto esattamente la bugia che questo modulo
+ *   esiste per non dire (decisione 2). Qui invece si REGISTRA che c'erano figli e non sono stati
+ *   guardati — `troncato` resta quello che è sempre stato (mi sono FERMATO), questo è un'altra
+ *   cosa (ho SCELTO di non scendere), e il testo le dice separate.
  */
 export async function costruisciMappaCartelle({
   radice,
@@ -183,6 +225,8 @@ export async function costruisciMappaCartelle({
   let motivoTroncamento = null;
   let profonditaRaggiunta = 0;
   let illeggibili = 0;
+  /* BC-40: true appena una cartella TENUTA resta fuori perche' `profonditaMax` non la copre. */
+  let fermatoInProfondita = false;
   const budgetMs = Number.isFinite(tempoMassimoMs) ? Math.max(0, tempoMassimoMs) : Infinity;
   const partenza = orologio();
 
@@ -252,7 +296,14 @@ export async function costruisciMappaCartelle({
       radiceFile = fileQui;
     }
 
-    if (corrente.livello + 1 > profondita) continue; // i figli starebbero fuori dalla profondità chiesta
+    if (corrente.livello + 1 > profondita) {
+      /* ⛔ BC-40 — NON un `continue` muto. Se questa cartella ha figli TENUTI (gia' passati dalle
+         esclusioni e dal filtro `.gitignore`) e la profondita' chiesta non li copre, l'albero
+         continua sotto e la mappa NON e' completa: si segna, e il testo lo dichiara. Senza questa
+         riga una mappa a profondita' 2 direbbe «albero COMPLETO» di un albero profondo sei. */
+      if (figli.length > 0) fermatoInProfondita = true;
+      continue;
+    }
     for (const figlio of figli) {
       /*
        * ⛔⛔ IL TETTO SMETTE DI ACCODARE, NON DI CAMMINARE — trovato da una prova al verso
@@ -281,7 +332,7 @@ export async function costruisciMappaCartelle({
      stesso confronto per unità di codice di `elenco-profondo.mjs` — mai `localeCompare`. */
   cartelle.sort(confrontaCartelle);
 
-  return { cartelle, radiceFile, fileTotali, troncato, motivoTroncamento, msImpiegati: Math.round(orologio() - partenza), profonditaRaggiunta, illeggibili };
+  return { cartelle, radiceFile, fileTotali, troncato, motivoTroncamento, msImpiegati: Math.round(orologio() - partenza), profonditaRaggiunta, illeggibili, fermatoInProfondita };
 }
 
 /**
@@ -324,9 +375,31 @@ export function testoMappaCartelle(mappa, { radice = '' } = {}) {
     return `Struttura di «${nome}»: nessuna sottocartella, ${mappa?.radiceFile ?? 0} file nella cartella principale.`;
   }
 
+  /* ⛔⛔ BC-40 — DUE modi di NON essere completa, e non sono la stessa cosa:
+       · `troncato` .............. mi sono FERMATO (tetto sulle cartelle, o tetto in tempo): non
+                                   so nemmeno io che cosa mi sia rimasto fuori;
+       · `fermatoInProfondita` ... ho SCELTO di non scendere sotto la profondità dichiarata: so
+                                   per certo che sotto c'è altro, e so esattamente dove.
+     Un booleano solo li confonderebbe, e la seconda è l'unica che il modello può RIPARARE da sé,
+     con `elenca`. ⛔ «albero COMPLETO» si dice solo quando nessuna delle due è vera. */
+  const ridotta = Boolean(mappa?.fermatoInProfondita);
   const righe = [];
-  righe.push(`Struttura di «${nome}» — ${voci.length} cartelle${mappa.troncato ? '' : ', albero COMPLETO'}. Fra parentesi quanti file contiene ognuna (i propri, non quelli delle sottocartelle).`);
-  righe.push('I singoli file non sono elencati: usa `cerca` per trovarli per nome o per contenuto, e `elenca` per vedere cosa c\'è in una cartella precisa.');
+  /*
+   * ⛔⛔⛔ BC-40 — LA DICHIARAZIONE STA NELL'INTESTAZIONE, NON IN UN BLOCCO A PARTE, e non è
+   *   una scelta di stile: MISURATA. La prima stesura metteva un paragrafo di avviso in testa
+   *   («ti do i primi N livelli… non concludere mai che…»): **167 token**, cioè PIÙ dei 145 che
+   *   la riduzione da profondità 5 a 2 risparmiava su `harness-ui/`. Il preambolo passava da
+   *   3.963 a 3.985 token: la cura peggiorava il caso normale per curare quello patologico,
+   *   che è esattamente il difetto che l'11/09 aveva fatto nascere il tetto in token.
+   * ⇒ La dichiarazione costa mezza riga qui, e il promemoria VERO — «non dire che non esiste» —
+   *   sta in fondo, dopo l'elenco, che è dove il modello guarda per ultimo prima di rispondere
+   *   ([[il-promemoria-dove-guarda-per-ultimo]]: non riscrivere la regola, SPOSTARLA).
+   */
+  const coda = ridotta
+    ? `, primi ${mappa.profonditaRaggiunta} livelli soltanto (⚠ MAPPA INCOMPLETA PER SCELTA: fin qui è tutto vero, sotto ci sono altre cartelle che non ho elencato)`
+    : mappa.troncato ? '' : ', albero COMPLETO';
+  righe.push(`Struttura di «${nome}» — ${voci.length} cartelle${coda}. Fra parentesi quanti file contiene ognuna (i propri, non quelli delle sottocartelle).`);
+  righe.push('I singoli file non sono elencati: usa `cerca` per trovarli per nome o per contenuto, e `elenca` con `percorso` per aprire una cartella precisa (es. `elenca {"percorso":"src"}`).');
   if (mappa.troncato && mappa.motivoTroncamento === 'tempo') {
     righe.push(`⚠ MAPPA INCOMPLETA — questa cartella è grande e leggerla tutta avrebbe fatto aspettare: mi sono fermato dopo ${voci.length} cartelle (profondità ${mappa.profonditaRaggiunta}). Quelle elencate sono vere; le altre non le ho guardate: cercale con \`cerca\` o \`elenca\` prima di dire che mancano.`);
   } else if (mappa.troncato) {
@@ -341,9 +414,9 @@ export function testoMappaCartelle(mappa, { radice = '' } = {}) {
     const foglia = voce.percorso.slice(voce.percorso.lastIndexOf('/') + 1);
     righe.push(`${'  '.repeat(voce.livello)}${foglia}/ (${voce.file})`);
   }
-  if (mappa.troncato) {
+  if (mappa.troncato || ridotta) {
     righe.push('');
-    righe.push('⚠ Fine di una mappa INCOMPLETA: se una cartella non compare qui sopra non vuol dire che non esista — cercala prima di dire che manca.');
+    righe.push('⚠ Fine di una mappa INCOMPLETA. ⛔ Se una cartella non compare qui sopra NON vuol dire che non esista: aprila con `elenca {"percorso":"…"}` o cercala con `cerca` prima di dire che manca.');
   }
   return righe.join('\n');
 }
@@ -363,7 +436,25 @@ export function testoMappaCartelle(mappa, { radice = '' } = {}) {
  *    e' TUTTO, sotto non l'ho guardato» — una verita' chiusa, su cui il modello puo' ragionare — e
  *    «ne ho mostrate le prime N», che sembra intero e non lo e'. E si DICHIARA.
  */
-export const TETTO_TOKEN_MAPPA_PREDEFINITO = 4000;
+/*
+ * ⛔⛔ BC-40, 12/09/2026 — ERA 4.000, e con la profondità predefinita a 8 era il numero giusto:
+ *   serviva a non far esplodere l'albero patologico. Con la profondità predefinita a 2 quel tetto
+ *   non morde più su NIENTE — misurato il 12/09 sui tre spazi veri, camminata nativa a 2:
+ *   `harness-ui/` 229 token, `AVM-harness-desktop` 825, `Desktop` 841. Un tetto che non morde mai
+ *   non è una guardia: è una riga morta, ed è il difetto che il 27/8 ha lasciato il cancello
+ *   semantico inerte per mesi ([[il-cancello-semantico-era-spento-da-sempre]]).
+ * ⇒ 1.200: sopra tutti e tre (il più grosso misurato è 841, quindi c'è il 43% di margine per una
+ *   cartella più larga di qualunque cosa abbiamo), e sotto l'albero patologico — dove morde e
+ *   scende a profondità 1, dichiarandolo.
+ * ⛔ SCARTATO 800 (la proposta di partenza), e si scrive perché: a 800 token il tetto taglia a
+ *   profondità 1 sia `AVM-harness-desktop` (825) sia `Desktop` (841), e a profondità 1 sul repo
+ *   **`harness-ui/src` non compare** — cioè proprio la cartella su cui il modello aveva detto
+ *   «non esiste». Risparmiare 640 token riaprendo quel buco non è un affare.
+ * ⛔ E il confronto esterno dice lo stesso ordine di grandezza: aider, «Repository map» (letto
+ *   12/09/2026, <https://aider.chat/docs/repomap.html>), *«The token budget is influenced by the
+ *   --map-tokens switch, which defaults to 1k tokens»*.
+ */
+export const TETTO_TOKEN_MAPPA_PREDEFINITO = 1200;
 
 /**
  * Rende la mappa dentro un tetto di token, togliendo un livello di profondita' alla volta.
@@ -381,8 +472,12 @@ export function mappaEntroIlTetto(mappa, { radice = '', tettoToken = TETTO_TOKEN
   for (let profondita = profonditaPiena; profondita >= 1; profondita -= 1) {
     const tagliata = profondita < profonditaPiena;
     const voci = tagliata ? mappa.cartelle.filter((c) => c.livello <= profondita) : mappa.cartelle;
+    /* ⛔ BC-40 — un taglio in profondita' deciso dal TETTO e' la stessa cosa, per chi legge, di
+       una profondita' scelta in partenza: sotto c'e' altro e non l'ho guardato. Va nello stesso
+       campo (`fermatoInProfondita`), non in `troncato`: `troncato` vuol dire «mi sono fermato e
+       non so cosa mi manca», e qui invece si sa esattamente. */
     const testo = testoMappaCartelle(
-      { ...mappa, cartelle: voci, troncato: Boolean(mappa.troncato) || tagliata, profonditaRaggiunta: profondita },
+      { ...mappa, cartelle: voci, troncato: Boolean(mappa.troncato), fermatoInProfondita: Boolean(mappa.fermatoInProfondita) || tagliata, profonditaRaggiunta: profondita },
       { radice },
     );
     const token = conta(testo);
