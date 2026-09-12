@@ -19,10 +19,10 @@
  *
  * ## Cosa fa, e cosa NON fa
  *
- * Chiede l'ELENCO DEI MODELLI al provider, con la credenziale salvata. È la
- * chiamata più economica che dimostri l'autenticazione: non genera token, non
- * costa nulla su nessuno dei provider qui elencati, e la risposta dice anche
- * quanti modelli quella chiave può vedere — che è l'altra metà della domanda.
+ * La sonda ordinaria chiede l'ELENCO DEI MODELLI, quando documentato, senza
+ * generare token. P-J: quando manca, lo dichiara; la sonda minima di generazione
+ * si può eseguire solo passando consentiGenerazione: true. Può consumare quota
+ * o credito e non viene attivata dalla rotta HTTP ordinaria.
  *
  * ⛔ Non prova che una GENERAZIONE riuscirà: una chiave valida può avere
  * credito esaurito o un modello negato. Prova che il provider ci riconosce, e
@@ -32,7 +32,7 @@
  * viaggia nell'intestazione, e di ritorno va solo l'esito.
  */
 
-import { ID_CON_CREDENZIALE, REGISTRO_FORNITORI } from './provider-registry.mjs';
+import { ID_CON_CREDENZIALE, REGISTRO_FORNITORI, catalogoDiRiservaPer } from './provider-registry.mjs';
 
 /**
  * Come si chiede l'elenco dei modelli a ciascuno.
@@ -57,6 +57,8 @@ export const SONDE_PROVIDER = Object.freeze(Object.fromEntries(ID_CON_CREDENZIAL
     conta: sonda.conta,
     ...(sonda.dallaRadice ? { dallaRadice: true } : {}),
     ...(sonda.catalogoPubblico ? { catalogoPubblico: true } : {}),
+    // P-J — descrizione della sonda minima, mai un'autorizzazione implicita a generare.
+    ...(sonda.richiestaMinima ? { richiestaMinima: sonda.richiestaMinima } : {}),
   })];
 })));
 
@@ -130,7 +132,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     throw new ProviderProbeError('probe dependencies are invalid', 'PROVIDER_PROBE_MISCONFIGURED');
   }
 
-  async function prova(provider) {
+  async function prova(provider, { consentiGenerazione = false } = {}) { // P-J: opzione solo esplicita.
     const sonda = sonde[provider];
     if (!sonda) throw new ProviderProbeError(`unknown provider ${provider}`, 'PROVIDER_INVALID');
     const record = REGISTRO_FORNITORI[provider];
@@ -141,7 +143,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
      *   Una sonda che parte comunque su un `/models` che risponde 401 per progetto restituirebbe
      *   «credenziale rifiutata» su una chiave buona.
      */
-    if (sonda.attiva === false) {
+    if (sonda.attiva === false && !sonda.richiestaMinima) {
       return { provider, esito: 'non-sondabile', motivo: 'Questo fornitore non espone un elenco modelli su cui provare la credenziale.', modelli: null, millisecondi: null };
     }
 
@@ -156,10 +158,17 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
       return { provider, esito: 'non-provabile', motivo: `Nessuna chiave salvata per ${etichetta}.`, modelli: null, millisecondi: null };
     }
 
+    // P-J — l'azione ordinaria resta senza generazione. Solo il chiamante che dichiara
+    // il consenso può eseguire il POST minimo della sonda, separato dalle chat del kernel.
+    const minima = sonda.richiestaMinima;
+    if (minima && consentiGenerazione !== true) {
+      return { provider, esito: 'non-sondabile', motivo: `${etichetta}: non è documentato un elenco modelli per verificare la chiave. La prova minima richiede una generazione con limite di un token e può consumare credito o quota; occorre richiederla esplicitamente.`, modelli: null, millisecondi: null };
+    }
+
     const runtime = leggiRuntime(provider) || {};
     let url;
     try {
-      url = urlDellaSonda(sonda, runtime.endpoint);
+      url = urlDellaSonda(minima ?? sonda, runtime.endpoint);
     } catch (errore) {
       return { provider, esito: 'non-provabile', motivo: `Manca l'indirizzo di ${etichetta}.`, modelli: null, millisecondi: null, codice: errore.code };
     }
@@ -167,6 +176,9 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     const intestazioni = { Accept: 'application/json' };
     if (sonda.auth === 'bearer' || (sonda.auth === 'bearer-facoltativo' && chiave)) intestazioni.Authorization = `Bearer ${chiave}`;
     if (sonda.auth === 'x-api-key') { intestazioni['x-api-key'] = chiave; intestazioni['anthropic-version'] = '2023-06-01'; }
+    // P-J — versione anche per la porta Anthropic autenticata con Bearer.
+    if (record?.wire === 'anthropic-messages') intestazioni['anthropic-version'] = '2023-06-01';
+    if (minima) intestazioni['Content-Type'] = 'application/json';
     if (sonda.auth === 'query') url += `${url.includes('?') ? '&' : '?'}key=${encodeURIComponent(chiave)}`;
 
     const secondi = Number.isFinite(runtime.timeoutSeconds) && runtime.timeoutSeconds > 0 ? runtime.timeoutSeconds : 60;
@@ -177,7 +189,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     const partito = orologio();
     let risposta;
     try {
-      risposta = await fetchImpl(url, { method: 'GET', headers: intestazioni, signal: stop, redirect: 'error' });
+      risposta = await fetchImpl(url, { method: minima ? 'POST' : 'GET', ...(minima ? { body: JSON.stringify(minima.corpo) } : {}), headers: intestazioni, signal: stop, redirect: 'error' }); // P-J
     } catch (errore) {
       return {
         provider,
@@ -193,12 +205,20 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     }
     if (!risposta.ok) {
       const motivo = risposta.status === 404
-        ? `${etichetta}: elenco modelli non trovato (HTTP 404). La validità della chiave non è verificata da questa risposta.`
+        ? `${etichetta}: ${minima ? 'endpoint di verifica' : 'elenco modelli'} non trovato (HTTP 404). La validità della chiave non è verificata da questa risposta.`
         : `${etichetta} ha risposto HTTP ${risposta.status}.`;
       return { provider, esito: 'errore', motivo, modelli: null, millisecondi, httpStatus: risposta.status };
     }
     let corpo = null;
     try { corpo = await risposta.json(); } catch { corpo = null; }
+    // P-J — 200 senza una risposta Messages riconoscibile non verifica la chiave.
+    if (minima) {
+      const valida = corpo?.type === 'message' && corpo.role === 'assistant' && typeof corpo.id === 'string'
+        && Array.isArray(corpo.content) && typeof corpo.usage?.input_tokens === 'number' && Number.isFinite(corpo.usage.input_tokens);
+      return { provider, esito: valida ? 'collegato' : 'errore',
+        motivo: valida ? `${etichetta}: richiesta minima di generazione riuscita; elenco modelli non verificato.` : `${etichetta}: risposta HTTP ${risposta.status} senza un messaggio valido; credenziale non verificata.`,
+        modelli: null, millisecondi, httpStatus: risposta.status };
+    }
     let catalogoValido = true;
     if (record?.catalogo.forma === 'dashscope-output') {
       try { paginaDashScope(corpo); } catch { catalogoValido = false; }
@@ -230,9 +250,22 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     const etichetta = record.etichetta;
     const key = leggiChiave(provider);
     if (!key) throw new ProviderProbeError(`Inserisci la chiave ${etichetta} nel pannello Provider.`, 'PROVIDER_KEY_MISSING');
+    // P-J — nessun catalogo remoto documentato: nessuna generazione o GET sostitutivo.
+    if (record.sonda.richiestaMinima) {
+      const riserva = catalogoDiRiservaPer(provider);
+      return { provider, fonte: 'documentazione', credenzialeVerificata: false,
+        avviso: `${etichetta}: elenco dalla documentazione del ${record.data}; accesso ai modelli non verificato.`,
+        modelli: riserva.modelli };
+    }
     const runtime = leggiRuntime(provider);
+    // P-J — il wire governa auth/paginazione anche quando il nome non è «anthropic».
+    const catalogoAnthropic = record.wire === 'anthropic-messages';
     const headers = { Accept: 'application/json' };
-    if (provider === 'anthropic') { headers['x-api-key'] = key; headers['anthropic-version'] = '2023-06-01'; }
+    if (catalogoAnthropic) {
+      if (record.auth.tipo === 'bearer') headers.Authorization = `Bearer ${key}`;
+      else headers[record.auth.header] = key;
+      headers['anthropic-version'] = '2023-06-01';
+    }
     else if (provider === 'gemini') headers['x-goog-api-key'] = key;
     else headers.Authorization = `Bearer ${key}`;
     const signal = AbortSignal.timeout(Math.min(runtime.timeoutSeconds || 30, 30) * 1000);
@@ -243,7 +276,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
       const url = new URL(urlDellaSonda(SONDE_PROVIDER[provider], runtime.endpoint));
       if (dashscope) url.searchParams.set('page_no', String(numeroPagina));
       if (provider === 'gemini') { url.searchParams.set('pageSize', '1000'); if (cursor) url.searchParams.set('pageToken', cursor); }
-      if (provider === 'anthropic') { url.searchParams.set('limit', '1000'); if (cursor) url.searchParams.set('after_id', cursor); }
+      if (catalogoAnthropic) { url.searchParams.set('limit', '1000'); if (cursor) url.searchParams.set('after_id', cursor); }
       let response;
       try { response = await fetchImpl(url.toString(), { headers, signal, redirect: 'error' }); }
       catch { throw new ProviderProbeError(`Catalogo ${etichetta} non raggiungibile.`, 'CATALOG_UNREACHABLE'); }
@@ -272,9 +305,9 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
       }
       const page = provider === 'gemini' ? data?.models : data?.data;
       if (!Array.isArray(page) || page.some(row => !row || typeof (provider === 'gemini' ? row.name : row.id) !== 'string')) throw new ProviderProbeError(`Catalogo ${etichetta} non valido.`, 'CATALOG_UPSTREAM_ERROR');
-      if (provider === 'anthropic' && data.has_more === true && (typeof data.last_id !== 'string' || !data.last_id)) throw new ProviderProbeError('Paginazione del catalogo incompleta.', 'CATALOG_UPSTREAM_ERROR');
+      if (catalogoAnthropic && data.has_more === true && (typeof data.last_id !== 'string' || !data.last_id)) throw new ProviderProbeError('Paginazione del catalogo incompleta.', 'CATALOG_UPSTREAM_ERROR');
       rows.push(...page);
-      cursor = provider === 'gemini' ? data.nextPageToken : provider === 'anthropic' && data.has_more ? data.last_id : null;
+      cursor = provider === 'gemini' ? data.nextPageToken : catalogoAnthropic && data.has_more ? data.last_id : null;
       if (cursor && (cursors.has(cursor) || cursors.size >= 20)) throw new ProviderProbeError('Paginazione del catalogo non valida.', 'CATALOG_UPSTREAM_ERROR');
       cursors.add(cursor);
     } while (cursor);

@@ -277,6 +277,7 @@ test('PE-10 — mappa completa; non esiste non è un registro rotto né un model
     groq: 'groq', cerebras: 'cerebras', mistral: 'mistral', together: 'togetherai', fireworks: 'fireworks-ai',
     deepinfra: 'deepinfra', novita: 'novita-ai', nebius: 'nebius', xai: 'xai', 'ollama-cloud': 'ollama-cloud',
     kimi: 'moonshotai', minimax: 'minimax', qwen: 'alibaba',
+    'zai-anthropic': 'zai-coding-plan', 'minimax-anthropic': 'minimax', // P-J: le porte Anthropic (12/09)
   });
   const { catalogo } = await banco(t, { fetchFn: async () => assert.fail('nessun fetch senza mappa') });
   for (const id of ['ollama', 'local', 'inesistente', '__proto__']) {

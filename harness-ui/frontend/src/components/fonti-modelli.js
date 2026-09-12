@@ -137,6 +137,9 @@ export const PROVIDER_DIRETTI = Object.freeze([
   Object.freeze({ id: 'kimi', etichetta: 'Kimi', soloSeCollegato: true }),
   Object.freeze({ id: 'minimax', etichetta: 'MiniMax', soloSeCollegato: true }),
   Object.freeze({ id: 'qwen', etichetta: 'Qwen', soloSeCollegato: true }),
+  // P-J — porte distinte, nomi umani; nessuna disponibilità senza collegamento.
+  Object.freeze({ id: 'zai-anthropic', etichetta: 'Z.AI (porta Anthropic)', soloSeCollegato: true }),
+  Object.freeze({ id: 'minimax-anthropic', etichetta: 'MiniMax (porta Anthropic)', soloSeCollegato: true }),
 ]);
 
 /** Vero se quel fornitore si legge senza collegare nessuna chiave (i motori locali). */

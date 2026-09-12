@@ -30,6 +30,18 @@ test('PI-UI-01 — Kimi, MiniMax e Qwen: nomi umani, conteggi e visibilità solo
   }
 });
 
+// P-J — le nuove porte sono scelte umane, con il medesimo stato di collegamento.
+test('PJ-UI-01 — Z.AI porta Anthropic e MiniMax: etichette e disponibilità', () => {
+  const diretti = { 'zai-anthropic': modelli('zai-anthropic', 2), 'minimax-anthropic': modelli('minimax-anthropic', 1) };
+  const fonti = fontiDelSelettore({ diretti });
+  for (const [id, nome] of [['zai-anthropic', 'Z.AI (porta Anthropic)'], ['minimax-anthropic', 'MiniMax (porta Anthropic)']]) {
+    assert.equal(PROVIDER_DIRETTI.find(p => p.id === id)?.etichetta, nome);
+    assert.equal(fonti.find(p => p.id === id)?.etichetta, nome);
+    assert.equal(modelliDellaFonte(id, { diretti }), diretti[id]);
+    assert.equal(fontiDelSelettore({ diretti: {} }).some(p => p.id === id), false);
+  }
+});
+
 test('⛔ LA RICHIESTA DELL’OWNER: ogni fornitore è una scheda di PRIMO livello', () => {
   const fonti = fontiDelSelettore({
     openrouter: modelli('openrouter', 444),

@@ -37,7 +37,7 @@ async function ascolta(t, handler) {
 }
 
 test('PI-01 — ventitré record, tre contratti internazionali completi, chiavi e modelli distinti', () => {
-  assert.equal(ID_FORNITORI.length, 23);
+  assert.equal(ID_FORNITORI.length, 25 /* 12/09, review: P-J aggiunge zai-anthropic e minimax-anthropic */);
   for (const [id, [nome, base, variabile, catalogo, ausiliario]] of Object.entries(ATTESI)) {
     const r = REGISTRO_FORNITORI[id];
     assert.ok(r, id);
