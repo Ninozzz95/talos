@@ -1,4 +1,5 @@
 import { createServer } from 'node:net';
+import { spawnSync } from 'node:child_process';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -7,7 +8,22 @@ export function risolviPercorsi({ appPath, isPackaged = false, resourcesPath, ha
   if (harnessDir && !isAbsolute(harnessDir)) throw new Error('Il percorso dichiarato deve essere assoluto.');
   if (isPackaged && !harnessDir && !isAbsolute(resourcesPath ?? '')) throw new Error('Percorso risorse assente.');
   const root = harnessDir || (isPackaged ? join(resourcesPath, 'harness-ui') : dirname(appPath));
-  return Object.freeze({ root: resolve(root), server: join(root, 'server.mjs'), bootstrap: join(appPath, 'child-bootstrap.mjs') });
+  const localRuntime = isPackaged && !harnessDir ? Object.freeze({
+    cpu: join(resourcesPath, 'local-runtime', 'cpu', 'llama-server.exe'),
+    vulkan: join(resourcesPath, 'local-runtime', 'vulkan', 'llama-server.exe'),
+  }) : undefined;
+  return Object.freeze({ root: resolve(root), server: join(root, 'server.mjs'), bootstrap: join(appPath, 'child-bootstrap.mjs'), localRuntime });
+}
+
+export function scegliMotoreLocale({ percorsi, env = process.env, sonda = spawnSync }) {
+  if (env.TALOS_LLAMA_SERVER_PATH?.trim()) return env.TALOS_LLAMA_SERVER_PATH;
+  if (!percorsi.localRuntime) return undefined;
+  for (const variante of ['vulkan', 'cpu']) {
+    const file = percorsi.localRuntime[variante];
+    const esito = sonda(file, ['--version'], { windowsHide: true, shell: false, timeout: 15000, stdio: 'ignore' });
+    if (!esito.error && esito.status === 0) return file;
+  }
+  throw new Error('Il motore locale incluso non si avvia. Reinstallare TALOS e consultare il registro.');
 }
 
 function portaValida(port) { return Number.isInteger(port) && port >= 1024 && port <= 65535 && port !== 4174; }

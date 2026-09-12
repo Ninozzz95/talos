@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { mkdirSync, mkdtempSync, copyFileSync, symlinkSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, copyFileSync, symlinkSync, readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
@@ -49,6 +49,9 @@ test('R01-BACKEND — Electron Node, redirect, cookie, rifiuto anonimo, PTY real
   const cookie = ingresso.headers.get('set-cookie');
   assert.match(cookie, /HttpOnly/); assert.match(cookie, /SameSite=Strict/);
   assert.equal((await fetch(base + '/api/v1/health', { headers: { cookie } })).status, 200);
+  // R-02 (server.mjs, percorsoDatiDesktop): i negozi del backend nascono nella cartella dati del guscio, non accanto a server.mjs (prima della cura .workspace-launch-token finiva dentro harness-ui/).
+  assert.ok(existsSync(join(dataDir, '.workspace-launch-token')), 'il token di lancio deve stare nella cartella dati');
+  assert.deepEqual(readdirSync(runtime).filter(n => n.startsWith('.')), [], 'nessun negozio accanto a server.mjs');
   const anonimo = new WebSocket(base.replace('http:', 'ws:') + '/api/v1/terminal/ws?id=r01-anonimo', { origin: base });
   const rifiuto = await new Promise(resolve => {
     anonimo.on('unexpected-response', (_, res) => { res.resume(); anonimo.terminate(); resolve(res.statusCode); });

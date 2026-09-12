@@ -46,10 +46,18 @@ import { WebSocket } from 'ws'; // 07/9: il canale di controllo verso il Chromiu
 import { creaGestoreBrowserVivo } from './src/browser-sessione-viva.mjs'; // 07/9: il Chromium di sistema pilotato dal server
 import { createLocalRuntimeProbe } from './src/local-runtime-probe.mjs';
 import { readGgufHeader } from './src/gguf-header.mjs';
-import { join, parse } from 'node:path';
+import { join, parse, isAbsolute } from 'node:path';
 
 /** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
 const ALIAS_LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
+
+// Proposta R-02: preservare il default sorgente e rispettare il profilo desktop.
+function percorsoDatiDesktop(relativo) {
+  const cartella = process.env.TALOS_DESKTOP_DATA_DIR;
+  if (!cartella) return fileURLToPath(new URL(relativo, import.meta.url));
+  if (!isAbsolute(cartella)) throw new Error('TALOS_DESKTOP_DATA_DIR deve essere assoluto.');
+  return join(cartella, relativo);
+}
 
 async function startServer() {
   const config = loadConfig(process.env, import.meta.url);
@@ -67,7 +75,7 @@ async function startServer() {
   const providerStore = createProviderCredentialStore({
     env: process.env,
     keyring: providerKeyring,
-    runtimeFile: fileURLToPath(new URL('.provider-runtime.json', import.meta.url)),
+    runtimeFile: percorsoDatiDesktop('.provider-runtime.json'),
   });
   providerStore.loadFromKeyring();
 
@@ -83,7 +91,7 @@ async function startServer() {
   const searchSourceStore = createSearchSourceStore({
     env: process.env,
     keyring: providerKeyring,
-    file: fileURLToPath(new URL('.search-source.json', import.meta.url)),
+    file: percorsoDatiDesktop('.search-source.json'),
   });
   const trasportoSenzaChiave = creaTrasportoSenzaChiave();
   const ricercaWebFn = () => searchSourceStore.perKernel({ trasportoSenzaChiave, sentinellaDuckDuckGo: ENDPOINT_SENTINELLA_DUCKDUCKGO });
@@ -152,7 +160,7 @@ async function startServer() {
   let supervisoreLocale = null;
   let contextRuntime = null;
 
-  const chatImageStore = createChatImageStore({ rootDir: fileURLToPath(new URL('.chat-images/', import.meta.url)) });
+  const chatImageStore = createChatImageStore({ rootDir: percorsoDatiDesktop('.chat-images/') });
   const readModelCapabilities = async modelId => {
     try {
       const { modelli } = await modelCatalog.ottieni();
@@ -212,7 +220,7 @@ async function startServer() {
     taskCatalogError = error;
     console.warn(`[runtime-owner] catalogo task non disponibile: ${error.message}`);
   }
-  const localModelStore = createLocalModelStore({ rootDir: fileURLToPath(new URL('.local-models/', import.meta.url)) });
+  const localModelStore = createLocalModelStore({ rootDir: percorsoDatiDesktop('.local-models/') });
   /*
    * ⭐ 12/09, P-C — il motore locale si sonda all'INDIRIZZO che la persona ha scelto nel pannello
    *   Provider, lo stesso con cui la chat lo chiamerà: sondare un indirizzo e chiamarne un altro
@@ -226,9 +234,9 @@ async function startServer() {
     }])),
   });
   const hfHubClient = createHfHubClient({ token: config.hfToken });
-  const localModelTransfer = createHfDirectTransfer({ rootDir: fileURLToPath(new URL('.local-models/', import.meta.url)), modelStore: localModelStore, hubClient: hfHubClient });
-  const generatedImageStore = createGeneratedImageStore({ rootDir: fileURLToPath(new URL('.generated-images/', import.meta.url)) });
-  const workspaceLaunchStore = createWorkspaceLaunchStore({ credentialFile: fileURLToPath(new URL('.workspace-launch-token', import.meta.url)) });
+  const localModelTransfer = createHfDirectTransfer({ rootDir: percorsoDatiDesktop('.local-models/'), modelStore: localModelStore, hubClient: hfHubClient });
+  const generatedImageStore = createGeneratedImageStore({ rootDir: percorsoDatiDesktop('.generated-images/') });
+  const workspaceLaunchStore = createWorkspaceLaunchStore({ credentialFile: percorsoDatiDesktop('.workspace-launch-token') });
   const localRuntimes = {
     ollama: {
       detect: () => compatibleRuntime.detect('ollama'), listModels: () => compatibleRuntime.listModels('ollama'),
@@ -301,7 +309,7 @@ async function startServer() {
         const manifest = await localModelStore.inspect(modelId);
         if (!manifest || manifest.state !== 'ready') { const error = new Error('Modello locale non pronto'); error.code = 'MODEL_NOT_FOUND'; throw error; }
         const file = manifest.files[0];
-        const radiceModelli = fileURLToPath(new URL('.local-models/', import.meta.url));
+        const radiceModelli = percorsoDatiDesktop('.local-models/');
         const modelPath = join(radiceModelli, manifest.path, file.path);
         let contextLength = Number.isInteger(opzioni.contextLength) && opzioni.contextLength > 0 ? opzioni.contextLength : null;
         if (contextLength === null) {
@@ -371,7 +379,7 @@ async function startServer() {
        * da `load` poche righe sopra — un solo posto da cambiare se un
        * giorno la cartella si sposta.
        */
-      readHeader: (percorsoRelativo) => readGgufHeader(join(fileURLToPath(new URL('.local-models/', import.meta.url)), percorsoRelativo)),
+      readHeader: (percorsoRelativo) => readGgufHeader(join(percorsoDatiDesktop('.local-models/'), percorsoRelativo)),
       measureMachine: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
     });
   }
@@ -423,6 +431,14 @@ async function startServer() {
      * ricerca sui tre concorrenti che fanno la stessa cosa.
      */
     cartellaStore: config.cartellaStore,
+    // R-02: nel prodotto installato i negozi vivono nella cartella dati del guscio (TALOS_DESKTOP_DATA_DIR); da sorgente restano accanto a server.mjs, come i default del registro.
+    cartellaTrustHook: percorsoDatiDesktop('.hooks-trust/'),
+    cartellaTrustMcp: percorsoDatiDesktop('.mcp-trust/'),
+    cartellaTrustPlugin: percorsoDatiDesktop('.plugin-trust/'),
+    cartellaNote: percorsoDatiDesktop('.notes-store/'),
+    cartellaAttivita: percorsoDatiDesktop('.tasks-store/'),
+    cartellaMemoria: percorsoDatiDesktop('.memory-store/'),
+    cartellaForge: percorsoDatiDesktop('.tool-forge-store/'),
     /*
      * ⭐⭐⭐ O-01 (04/9) — il Capability hub («+» del composer) elenca gli
      * attrezzi VERI chiedendoli al kernel, invece dei sette scritti a mano nel
@@ -497,7 +513,7 @@ async function startServer() {
    * prossimo giro.
    */
   const automationStore = createAutomationStore({
-    cartella: fileURLToPath(new URL('.automations/', import.meta.url)),
+    cartella: percorsoDatiDesktop('.automations/'),
   });
   const automationScheduler = createAutomationScheduler({
     store: automationStore,
@@ -611,7 +627,7 @@ async function startServer() {
     custodisciChiaveOpenRouter: async (chiave) => { providerStore.setKey('openrouter', chiave); },
     contextService: contextRuntime?.service,
     // ⭐ 10/09: le favicon delle fonti, prese dal server una volta sola e tenute qui accanto alle sessioni.
-    cartellaFavicon: fileURLToPath(new URL('.favicon-cache/', import.meta.url)),
+    cartellaFavicon: percorsoDatiDesktop('.favicon-cache/'),
     chatImageStore,
     staticHandler: createStaticHandler(config.publicDir),
     sessionRegistry,
