@@ -714,7 +714,25 @@ import { resolve } from 'node:path'
  * tetto è un contenitore: non si toglie una funzione decisa dall'owner per
  * farcela stare.
  */
-const DEFAULT_MAXIMUM_BYTES = 634_000
+/*
+ * ⛔ JS 634.000 → 640.000, il 2026-09-12 pomeriggio, batch B1 pre-rilascio.
+ *
+ * Misurato: **636.279** byte, in locale E nella CI della v0.1.28 (run
+ * 34693726888, «TALOS_INITIAL_CHUNK_BUDGET_EXCEEDED: 636279 exceeds 634000»).
+ * I 4.670 byte in più sono il lotto B1: il cancello degli errori in lingua
+ * umana (27 codici + ripiego, `erroreLeggibile.ts`, importato dal renderer
+ * della chat), la regola del consenso sull'invio (`consensoImmagini.ts`,
+ * nel controller), l'avviso del ponte in Codice, le chiavi i18n nuove.
+ *
+ * ⛔ La lezione, prima del numero: il cancello locale era ROSSO da mezza
+ * giornata e non l'ho visto, perché filtravo l'uscita di `npm run build`
+ * con `grep error` e questo messaggio dice EXCEEDED. Il tag v0.1.28 è
+ * uscito sul repo pubblico con la CI rossa. ⇒ Un cancello si legge dal
+ * codice di uscita, mai da un grep sull'uscita.
+ *
+ * ⇒ 640.000: 3.721 byte di margine, non 391.
+ */
+const DEFAULT_MAXIMUM_BYTES = 640_000
 /*
  * ⛔ CSS 220.000 → 222.000, il 2026-09-11, sezione 1 del refactor UI (U-1).
  *

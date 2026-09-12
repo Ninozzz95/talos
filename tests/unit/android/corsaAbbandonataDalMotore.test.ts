@@ -1,6 +1,16 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+
+/**
+ * ⛔ La citazione si verifica solo dove il sottomodulo e' stato scaricato
+ * (il job `android` e il workflow `release`, con `submodules: recursive`).
+ * Il job `test` di ci.yml NON lo scarica — il 12/09/2026 (run 34693724886)
+ * questo caso e' uscito rosso su ENOENT, cioe' «non ho potuto guardare»,
+ * che non e' «ho guardato ed e' falso». Un sottomodulo assente salta il
+ * caso e lo dice; la prova vera resta dove il file c'e'.
+ */
+const SOTTOMODULO_ABB_07 = resolve(process.cwd(), 'third_party/llama.cpp/include/llama.h')
 
 /**
  * ⭐⭐⭐ UNA CORSA CHE IL MOTORE HA MOLLATO VENIVA REGISTRATA COME PROVA.
@@ -113,10 +123,8 @@ describe('MOTORE CHE MOLLA — non e una prova, e un guasto', () => {
      * ⛔ La fonte del contratto va citata: senza, «2 vuol dire aborted» e'
      * un'opinione. E' scritta nel sottomodulo pinnato, non in un blog.
      */
-    it('ABB-07 il contratto di llama_decode e citato alla fonte', () => {
-        const riga = readFileSync(resolve(
-            process.cwd(), 'third_party/llama.cpp/include/llama.h',
-        ), 'utf8')
+    it.skipIf(!existsSync(SOTTOMODULO_ABB_07))('ABB-07 il contratto di llama_decode e citato alla fonte', () => {
+        const riga = readFileSync(SOTTOMODULO_ABB_07, 'utf8')
         expect(riga).toContain('2 - aborted')
     })
 })

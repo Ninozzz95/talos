@@ -1,6 +1,16 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+
+/**
+ * ⛔ La citazione si verifica solo dove il sottomodulo e' stato scaricato
+ * (il job `android` e il workflow `release`, con `submodules: recursive`).
+ * Il job `test` di ci.yml NON lo scarica — il 12/09/2026 (run 34693724886)
+ * questo caso e' uscito rosso su ENOENT, cioe' «non ho potuto guardare»,
+ * che non e' «ho guardato ed e' falso». Un sottomodulo assente salta il
+ * caso e lo dice; la prova vera resta dove il file c'e'.
+ */
+const SOTTOMODULO_RAG_07 = resolve(process.cwd(), 'third_party/llama.cpp/common/parsers/lfm2.cpp')
 
 /**
  * ⭐⭐⭐ «QUESTO MODELLO RAGIONA» E «NON PUOI FARNE A MENO» SONO DUE COSE.
@@ -98,12 +108,10 @@ describe('RAGIONAMENTO — si chiede al template, non a una tabella di nomi', ()
      * ⛔ La fonte del perche' upstream non basta va citata, con riga: senza,
      * «supports_thinking dice un'altra cosa» e' un'opinione.
      */
-    it('RAG-07 la ragione per cui la funzione upstream non risponde e citata alla fonte', () => {
+    it.skipIf(!existsSync(SOTTOMODULO_RAG_07))('RAG-07 la ragione per cui la funzione upstream non risponde e citata alla fonte', () => {
         expect(conSpiegazione).toContain('lfm2.cpp:39')
         expect(conSpiegazione).toContain('chat-diff-analyzer.cpp')
-        const parser = readFileSync(resolve(
-            process.cwd(), 'third_party/llama.cpp/common/parsers/lfm2.cpp',
-        ), 'utf8')
+        const parser = readFileSync(SOTTOMODULO_RAG_07, 'utf8')
         // ⛔ Se upstream un giorno lo rendesse condizionale, questa prova cade
         // ed e' giusto che cada: la premessa della sonda sarebbe cambiata.
         expect(parser).toContain('data.supports_thinking = true;')
