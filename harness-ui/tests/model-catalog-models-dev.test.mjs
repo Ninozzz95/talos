@@ -276,6 +276,7 @@ test('PE-10 — mappa completa; non esiste non è un registro rotto né un model
     ollama: null, lmstudio: 'lmstudio', huggingface: 'huggingface', local: null,
     groq: 'groq', cerebras: 'cerebras', mistral: 'mistral', together: 'togetherai', fireworks: 'fireworks-ai',
     deepinfra: 'deepinfra', novita: 'novita-ai', nebius: 'nebius', xai: 'xai', 'ollama-cloud': 'ollama-cloud',
+    kimi: 'moonshotai', minimax: 'minimax', qwen: 'alibaba',
   });
   const { catalogo } = await banco(t, { fetchFn: async () => assert.fail('nessun fetch senza mappa') });
   for (const id of ['ollama', 'local', 'inesistente', '__proto__']) {

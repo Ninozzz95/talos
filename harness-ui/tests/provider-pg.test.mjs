@@ -43,8 +43,8 @@ async function ascolta(t, handler) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
-test('PG-01 — undici percorsi chat, venti record unici e tutte le proiezioni coerenti', () => {
-  assert.equal(ID_FORNITORI.length, 20, 'Hugging Face riusa il record esistente');
+test('PG-01 — undici percorsi chat P-G, ventitré record unici dopo P-I e tutte le proiezioni coerenti', () => {
+  assert.equal(ID_FORNITORI.length, 23, 'Hugging Face riusa il record; P-I aggiunge tre fornitori');
   for (const [id, [nome, base, variabile, modelsDevId]] of Object.entries(ATTESI)) {
     const r = REGISTRO_FORNITORI[id];
     assert.ok(r, id);

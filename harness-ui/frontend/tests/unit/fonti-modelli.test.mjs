@@ -13,6 +13,23 @@ import {
 
 const modelli = (provider, n) => Array.from({ length: n }, (_, i) => ({ id: `${provider}:m${i}`, nome: `m${i}`, provider }));
 
+test('PI-UI-01 — Kimi, MiniMax e Qwen: nomi umani, conteggi e visibilità solo dopo collegamento', () => {
+  const attesi = { kimi: 'Kimi', minimax: 'MiniMax', qwen: 'Qwen' };
+  const vuote = fontiDelSelettore({});
+  for (const [id, nome] of Object.entries(attesi)) {
+    assert.equal(PROVIDER_DIRETTI.filter(p => p.id === id).length, 1);
+    assert.equal(PROVIDER_DIRETTI.find(p => p.id === id).etichetta, nome);
+    assert.equal(eFonteDiretta(id), true);
+    assert.equal(vuote.some(f => f.id === id), false);
+    const diretti = { [id]: modelli(id, 2) };
+    const fonte = fontiDelSelettore({ diretti }).find(f => f.id === id);
+    assert.equal(fonte.etichetta, nome);
+    assert.equal(fonte.conto, 2);
+    assert.equal(modelliDellaFonte(id, { diretti }), diretti[id]);
+    assert.ok(fraseVuotoDiretto(id).includes(nome));
+  }
+});
+
 test('⛔ LA RICHIESTA DELL’OWNER: ogni fornitore è una scheda di PRIMO livello', () => {
   const fonti = fontiDelSelettore({
     openrouter: modelli('openrouter', 444),

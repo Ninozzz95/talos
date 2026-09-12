@@ -76,6 +76,9 @@ function preparaProfiloCompatibile(record, corpo) {
   const profilo = record.richiestaCompatibile;
   const id = corpo.model.startsWith(`${record.id}:`) ? corpo.model.slice(record.id.length + 1) : corpo.model;
   const modello = Object.hasOwn(profilo.modelli, id) ? profilo.modelli[id] : null;
+  if (['thinking', 'enable_thinking'].includes(profilo.ragionamento)) {
+    return modello ? preparaControlloThinking(record, modello, corpo) : { corpo, avvisi: [] };
+  }
   const risultato = { ...corpo };
   const avvisi = [];
 
@@ -111,6 +114,72 @@ function preparaProfiloCompatibile(record, corpo) {
     && !modello.livelliRagionamento.includes(risultato.reasoning_effort)) {
     delete risultato.reasoning_effort;
     avvisi.push(`${record.etichetta}: il livello di ragionamento richiesto non è documentato per questo modello; non inviato.`);
+  }
+  return { corpo: risultato, avvisi };
+}
+
+/** P-I: controllo binario solo per modelli documentati; non inventa livelli di profondità. */
+function preparaControlloThinking(record, modello, corpo) {
+  const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  const invalida = () => fail(`${record.etichetta}: opzioni di ragionamento non valide o discordanti.`);
+  if (corpo.extra_body !== undefined && !oggetto(corpo.extra_body)) invalida();
+  const risultato = { ...corpo };
+  for (const [k, v] of Object.entries(corpo.extra_body ?? {})) {
+    // L'involucro SDK non può riscrivere destinazione, contenuto o prototipo.
+    if (['model', 'messages', 'extra_body', '__proto__', 'constructor', 'prototype'].includes(k)) invalida();
+    if (Object.hasOwn(corpo, k) && JSON.stringify(corpo[k]) !== JSON.stringify(v)) invalida();
+    risultato[k] = v;
+  }
+  delete risultato.extra_body;
+  const { reasoning, reasoning_effort, thinking, enable_thinking } = risultato;
+  const qwen = record.richiestaCompatibile.ragionamento === 'enable_thinking';
+  if (reasoning !== undefined && !oggetto(reasoning)) invalida();
+  if (reasoning?.enabled !== undefined && typeof reasoning.enabled !== 'boolean') invalida();
+  const livelli = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'default'];
+  for (const effort of [reasoning?.effort, reasoning_effort]) if (effort !== undefined && !livelli.includes(effort)) invalida();
+  if (reasoning?.effort !== undefined && reasoning_effort !== undefined && reasoning.effort !== reasoning_effort) invalida();
+  if (enable_thinking !== undefined && (!qwen || typeof enable_thinking !== 'boolean')) invalida();
+  if (thinking !== undefined) {
+    const tipi = qwen ? ['enabled', 'disabled'] : [modello.thinking.attivo ?? 'adaptive', 'disabled'];
+    if (!oggetto(thinking) || !tipi.includes(thinking.type)
+      || Object.keys(thinking).some(k => !['type', 'keep'].includes(k))
+      || (thinking.keep !== undefined && (qwen || modello.thinking.attivo !== 'enabled' || ![null, 'all'].includes(thinking.keep)))
+      || (modello.thinking.conserva && thinking.keep !== undefined && thinking.keep !== modello.thinking.conserva)) invalida();
+  }
+  const effort = reasoning_effort ?? reasoning?.effort;
+  const preferenze = [reasoning?.enabled, effort === undefined ? undefined : effort !== 'none',
+    thinking === undefined ? undefined : thinking.type !== 'disabled', enable_thinking].filter(v => v !== undefined);
+  if (new Set(preferenze).size > 1) invalida();
+  const avvisi = [];
+  let attivo = preferenze[0];
+  delete risultato.reasoning;
+  delete risultato.reasoning_effort;
+  delete risultato.thinking;
+  delete risultato.enable_thinking;
+  if ((effort !== undefined && effort !== 'none') || Object.keys(reasoning ?? {}).some(k => !['enabled', 'effort'].includes(k))) {
+    avvisi.push(`${record.etichetta}: questo modello espone solo l'attivazione del ragionamento; il livello richiesto non viene inviato.`);
+  }
+  if (attivo === false && !modello.thinking.disattivabile) {
+    attivo = true;
+    avvisi.push(`${record.etichetta}: questo modello non consente di disattivare il ragionamento; resta attivo.`);
+  }
+  if (attivo !== undefined) {
+    if (qwen) risultato.enable_thinking = attivo;
+    else if (modello.thinking.attivo !== null) risultato.thinking = { ...(thinking ?? {}),
+      type: attivo ? modello.thinking.attivo : 'disabled',
+      ...(attivo && modello.thinking.conserva ? { keep: modello.thinking.conserva } : {}) };
+  }
+  const thinkingEffettivo = attivo ?? modello.thinking.predefinito;
+  if (modello.thinking.soloStreaming && thinkingEffettivo && risultato.stream !== true) {
+    fail(`${record.etichetta}: questo modello richiede lo streaming quando il ragionamento è attivo.`);
+  }
+  if ((modello.sceltaObbligata === false && risultato.tool_choice === 'required')
+    || (modello.sceltaForzataConThinking === false && thinkingEffettivo && oggetto(risultato.tool_choice))) {
+    fail(`${record.etichetta}: la scelta forzata dello strumento non è compatibile con questo modello e la modalità richiesta.`);
+  }
+  if (modello.temperaturaServer && Object.hasOwn(risultato, 'temperature')) {
+    delete risultato.temperature;
+    avvisi.push(`${record.etichetta}: la temperatura è gestita dal modello; il valore richiesto non viene inviato.`);
   }
   return { corpo: risultato, avvisi };
 }

@@ -1,0 +1,293 @@
+{
+  "fonte": "https://models.dev/api.json",
+  "data": "2026-09-12",
+  "sha256": "741add06396feae1e65041984505273e9192fc095b6ac13df5c3471d9ff2ffc9",
+  "fornitori": {
+    "moonshotai": {
+      "id": "moonshotai",
+      "name": "Moonshot AI",
+      "env": [
+        "MOONSHOT_API_KEY"
+      ],
+      "api": "https://api.moonshot.ai/v1",
+      "models": {
+        "kimi-k2.6": {
+          "id": "kimi-k2.6",
+          "name": "Kimi K2.6",
+          "description": "Multimodal Kimi workhorse for agent loops, coding tasks, and visual context",
+          "family": "kimi-k2",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "toggle"
+            }
+          ],
+          "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "structured_output": true,
+          "temperature": true,
+          "knowledge": "2025-01",
+          "release_date": "2026-04-21",
+          "last_updated": "2026-04-21",
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": true,
+          "limit": {
+            "context": 262144,
+            "output": 262144
+          },
+          "cost": {
+            "input": 0.95,
+            "output": 4,
+            "cache_read": 0.16
+          }
+        },
+        "kimi-k2.7-code": {
+          "id": "kimi-k2.7-code",
+          "name": "Kimi K2.7 Code",
+          "description": "Coding-focused Kimi model, stronger on long-horizon repo work with less overthinking",
+          "family": "kimi-k2",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [],
+          "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "structured_output": true,
+          "temperature": false,
+          "knowledge": "2025-01",
+          "release_date": "2026-06-12",
+          "last_updated": "2026-06-12",
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": true,
+          "limit": {
+            "context": 262144,
+            "output": 262144
+          },
+          "cost": {
+            "input": 0.95,
+            "output": 4,
+            "cache_read": 0.19
+          }
+        }
+      }
+    },
+    "minimax": {
+      "id": "minimax",
+      "name": "MiniMax (minimax.io)",
+      "env": [
+        "MINIMAX_API_KEY"
+      ],
+      "api": "https://api.minimax.io/anthropic/v1",
+      "models": {
+        "MiniMax-M3": {
+          "id": "MiniMax-M3",
+          "name": "MiniMax-M3",
+          "description": "MiniMax multimodal model for long-context coding, perception, and agent planning",
+          "family": "minimax",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "toggle"
+            }
+          ],
+          "tool_call": true,
+          "temperature": true,
+          "release_date": "2026-06-01",
+          "last_updated": "2026-06-25",
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": true,
+          "limit": {
+            "context": 1048576,
+            "output": 512000
+          },
+          "cost": {
+            "input": 0.3,
+            "output": 1.2,
+            "cache_read": 0.06,
+            "tiers": [
+              {
+                "input": 0.6,
+                "output": 2.4,
+                "cache_read": 0.12,
+                "tier": {
+                  "type": "context",
+                  "size": 512000
+                }
+              }
+            ],
+            "context_over_200k": {
+              "input": 0.6,
+              "output": 2.4,
+              "cache_read": 0.12
+            }
+          }
+        },
+        "MiniMax-M2.5": {
+          "id": "MiniMax-M2.5",
+          "name": "MiniMax-M2.5",
+          "description": "Prior MiniMax coding model for agent workflows, office edits, and automation",
+          "family": "minimax",
+          "attachment": false,
+          "reasoning": true,
+          "reasoning_options": [],
+          "tool_call": true,
+          "temperature": true,
+          "release_date": "2026-02-12",
+          "last_updated": "2026-02-12",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": true,
+          "limit": {
+            "context": 204800,
+            "output": 131072
+          },
+          "cost": {
+            "input": 0.3,
+            "output": 1.2,
+            "cache_read": 0.03,
+            "cache_write": 0.375
+          }
+        }
+      }
+    },
+    "alibaba": {
+      "id": "alibaba",
+      "name": "Alibaba",
+      "env": [
+        "DASHSCOPE_API_KEY"
+      ],
+      "api": "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      "models": {
+        "qwen-flash": {
+          "id": "qwen-flash",
+          "name": "Qwen Flash",
+          "description": "Efficient Qwen model for fast chat, extraction, and high-volume workloads",
+          "family": "qwen",
+          "attachment": false,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "toggle"
+            },
+            {
+              "type": "budget_tokens"
+            }
+          ],
+          "tool_call": true,
+          "temperature": true,
+          "knowledge": "2024-04",
+          "release_date": "2025-07-28",
+          "last_updated": "2025-07-28",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 1000000,
+            "output": 32768
+          },
+          "cost": {
+            "input": 0.05,
+            "output": 0.4
+          }
+        },
+        "qwen3.8-flash": {
+          "id": "qwen3.8-flash",
+          "name": "Qwen3.8 Flash",
+          "description": "Qwen vision-language model for visual reasoning, documents, and agent tasks",
+          "family": "qwen",
+          "attachment": true,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "toggle"
+            },
+            {
+              "type": "effort",
+              "values": [
+                "low",
+                "medium",
+                "xhigh"
+              ]
+            },
+            {
+              "type": "budget_tokens",
+              "max": 262144
+            }
+          ],
+          "tool_call": true,
+          "interleaved": {
+            "field": "reasoning_content"
+          },
+          "structured_output": true,
+          "release_date": "2026-08-26",
+          "last_updated": "2026-08-26",
+          "modalities": {
+            "input": [
+              "text",
+              "image",
+              "video"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 1000000,
+            "output": 131072
+          },
+          "cost": {
+            "input": 0.15,
+            "output": 0.47,
+            "cache_read": 0.016,
+            "cache_write": 0.2
+          }
+        }
+      }
+    }
+  }
+}

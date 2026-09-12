@@ -134,6 +134,9 @@ export const PROVIDER_DIRETTI = Object.freeze([
   Object.freeze({ id: 'xai', etichetta: 'xAI', soloSeCollegato: true }),
   Object.freeze({ id: 'ollama-cloud', etichetta: 'Ollama Cloud', soloSeCollegato: true }),
   Object.freeze({ id: 'huggingface', etichetta: 'Hugging Face', soloSeCollegato: true }),
+  Object.freeze({ id: 'kimi', etichetta: 'Kimi', soloSeCollegato: true }),
+  Object.freeze({ id: 'minimax', etichetta: 'MiniMax', soloSeCollegato: true }),
+  Object.freeze({ id: 'qwen', etichetta: 'Qwen', soloSeCollegato: true }),
 ]);
 
 /** Vero se quel fornitore si legge senza collegare nessuna chiave (i motori locali). */

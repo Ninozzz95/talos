@@ -194,6 +194,125 @@ export const REGISTRO_FORNITORI = congela({
     esecuzione: 'collegato',
   }),
 
+  // P-I, 12/09/2026 — API internazionali dirette. Dossier e impronta models.dev nel rapporto P-I.
+  kimi: congela({
+    id: 'kimi', etichetta: 'Kimi',
+    descrizione: 'Modelli Kimi, collegamento diretto internazionale.',
+    paginaChiavi: 'https://platform.moonshot.ai/console/api-keys',
+    modelliDiRiserva: congela([
+      congela({ id: 'kimi-k2.6', nome: 'Kimi K2.6', toolCalling: true,
+        fonte: 'https://platform.kimi.ai/docs/guide/kimi-k2-6-quickstart', data: '2026-09-12' }),
+      congela({ id: 'kimi-k2.7-code', nome: 'Kimi K2.7 Code', toolCalling: true,
+        fonte: 'https://platform.kimi.ai/docs/api/models-overview', data: '2026-09-12' }),
+    ]),
+    modelloAusiliario: 'kimi-k2.6', modelsDevId: 'moonshotai',
+    wire: 'openai-chat', baseUrl: 'https://api.moonshot.ai/v1',
+    // Cina: https://api.moonshot.cn/v1; nessun secondo record o cambio implicito di regione.
+    indirizzoModificabile: true, envIndirizzo: congela(['MOONSHOT_BASE_URL']),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['MOONSHOT_API_KEY', 'KIMI_API_KEY']) }),
+    chiaveObbligatoria: true, formaIdModello: 'nome', oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato', toolCalling: 'dichiarato',
+    cache: congela({ marcatore: null, letturaUsage: congela(['cached_tokens']),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata nella risposta; senza conteggio: non misurato.',
+      fonte: 'https://platform.kimi.ai/docs/api/chat', data: '2026-09-12' }),
+    richiestaCompatibile: congela({ limiteUscita: null, ragionamento: 'thinking',
+      modelli: congela({
+        'kimi-k2.6': congela({ livelliRagionamento: congela([]), temperaturaServer: true, sceltaObbligata: false, sceltaForzataConThinking: false,
+          thinking: congela({ attivo: 'enabled', disattivabile: true, predefinito: true }) }),
+        'kimi-k2.7-code': congela({ livelliRagionamento: congela([]), temperaturaServer: true, sceltaObbligata: false, sceltaForzataConThinking: false,
+          thinking: congela({ attivo: 'enabled', disattivabile: false, predefinito: true, conserva: 'all' }) }),
+      }), fonte: 'https://platform.kimi.ai/docs/api/models-overview', data: '2026-09-12' }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: c => c?.data?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true, credenziale: true, esecuzione: 'collegato',
+  }),
+
+  minimax: congela({
+    id: 'minimax', etichetta: 'MiniMax',
+    descrizione: 'Modelli MiniMax, collegamento diretto internazionale.',
+    paginaChiavi: 'https://platform.minimax.io/user-center/basic-information/interface-key',
+    modelliDiRiserva: congela([
+      congela({ id: 'MiniMax-M3', nome: 'MiniMax M3', toolCalling: true,
+        fonte: 'https://platform.minimax.io/docs/api-reference/text-openai-api', data: '2026-09-12' }),
+      congela({ id: 'MiniMax-M2.5', nome: 'MiniMax M2.5', toolCalling: true,
+        fonte: 'https://platform.minimax.io/docs/api-reference/text-openai-api', data: '2026-09-12' }),
+    ]),
+    // Minimo ingresso/uscita condiviso con M3; M2.5 ha un prezzo di lettura cache inferiore.
+    modelloAusiliario: 'MiniMax-M2.5', modelsDevId: 'minimax',
+    // Anthropic raccomandato upstream; OpenAI è un percorso ufficialmente supportato.
+    wire: 'openai-chat', baseUrl: 'https://api.minimax.io/v1',
+    indirizzoModificabile: true, envIndirizzo: congela(['MINIMAX_BASE_URL']),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['MINIMAX_API_KEY']) }),
+    chiaveObbligatoria: true, formaIdModello: 'nome', oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato', toolCalling: 'dichiarato',
+    cache: congela({ marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata nella risposta; senza conteggio: non misurato.',
+      fonte: 'https://platform.minimax.io/docs/api-reference/text-prompt-caching', data: '2026-09-12' }),
+    richiestaCompatibile: congela({ limiteUscita: null, ragionamento: 'thinking',
+      modelli: congela({
+        'MiniMax-M3': congela({ livelliRagionamento: congela([]),
+          thinking: congela({ attivo: 'adaptive', disattivabile: true, predefinito: true }) }),
+        'MiniMax-M2.7': congela({ livelliRagionamento: congela([]),
+          thinking: congela({ attivo: null, disattivabile: false, predefinito: true }) }),
+        'MiniMax-M2.5': congela({ livelliRagionamento: congela([]),
+          thinking: congela({ attivo: null, disattivabile: false, predefinito: true }) }),
+      }), fonte: 'https://platform.minimax.io/docs/api-reference/text-openai-api', data: '2026-09-12' }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: c => c?.data?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true, credenziale: true, esecuzione: 'collegato',
+  }),
+
+  qwen: congela({
+    id: 'qwen', etichetta: 'Qwen',
+    descrizione: 'Modelli Qwen, collegamento diretto internazionale.',
+    paginaChiavi: 'https://modelstudio.console.alibabacloud.com/',
+    modelliDiRiserva: congela([
+      congela({ id: 'qwen-flash', nome: 'Qwen Flash', toolCalling: true,
+        fonte: 'https://www.alibabacloud.com/help/en/model-studio/qwen-function-calling', data: '2026-09-12' }),
+      congela({ id: 'qwen3.8-flash', nome: 'Qwen 3.8 Flash', toolCalling: true,
+        fonte: 'https://www.alibabacloud.com/help/en/model-studio/qwen3-8-flash', data: '2026-09-12' }),
+    ]),
+    // Turbo escluso: discordanza sul supporto agli strumenti tra scheda ufficiale e catalogo.
+    modelloAusiliario: 'qwen-flash', modelsDevId: 'alibaba',
+    wire: 'openai-chat', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    // Cina: https://dashscope.aliyuncs.com/compatible-mode/v1; anche i domini workspace sono modificabili.
+    indirizzoModificabile: true, envIndirizzo: congela(['DASHSCOPE_BASE_URL']),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['DASHSCOPE_API_KEY']) }),
+    chiaveObbligatoria: true, formaIdModello: 'nome', oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/api/v1/models' }),
+    streaming: 'dichiarato', toolCalling: 'dichiarato',
+    cache: congela({ marcatore: 'cache_control', letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela(['prompt_tokens_details.cache_creation_input_tokens']), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata nella risposta; senza conteggio: non misurato.',
+      fonte: 'https://www.alibabacloud.com/help/en/model-studio/context-cache', data: '2026-09-12' }),
+    richiestaCompatibile: congela({ limiteUscita: null, ragionamento: 'enable_thinking',
+      modelli: congela({
+        'qwen-flash': congela({ livelliRagionamento: congela([]), sceltaForzataConThinking: false,
+          thinking: congela({ attivo: true, disattivabile: true, predefinito: false }) }),
+        'qwen3.8-flash': congela({ livelliRagionamento: congela([]), sceltaForzataConThinking: false,
+          thinking: congela({ attivo: true, disattivabile: true, predefinito: true }) }),
+        'qwen3-32b': congela({ livelliRagionamento: congela([]), sceltaForzataConThinking: false,
+          thinking: congela({ attivo: true, disattivabile: true, predefinito: true, soloStreaming: true }) }),
+      }), fonte: 'https://www.alibabacloud.com/help/en/model-studio/deep-thinking', data: '2026-09-12' }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'dashscope-output', percorso: '/api/v1/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    // Il catalogo nativo è relativo all'origine, non alla base del wire OpenAI.
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/api/v1/models', dallaRadice: true, urlAssoluto: null,
+      conta: c => c?.output?.models?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true, credenziale: true, esecuzione: 'collegato',
+  }),
+
   // P-D — API diretta, contratto v4. Fonti ufficiali e snapshot: 12/09/2026.
   // docs.z.ai/api-reference/llm/chat-completion e guides/overview/pricing.
   zai: congela({
@@ -1079,19 +1198,37 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
     if (record.sonda?.attiva === true && !record.sonda.percorso && !record.sonda.urlAssoluto) {
       throw new ProviderRegistryError(`${dove}: sonda attiva senza un indirizzo da chiamare`);
     }
+    if (record.sonda?.dallaRadice !== undefined && (record.sonda.dallaRadice !== true
+      || !/^\/(?!\/)/u.test(record.sonda.percorso ?? '') || /[\\\s]/u.test(record.sonda.percorso)
+      || record.sonda.urlAssoluto)) {
+      throw new ProviderRegistryError(`${dove}: percorso della sonda relativo all'origine non valido`);
+    }
     if (record.richiestaCompatibile !== undefined) {
       const p = record.richiestaCompatibile;
-      if (!p || ![null, 'max_completion_tokens'].includes(p.limiteUscita) || ![null, 'effort'].includes(p.ragionamento)
+      if (!p || ![null, 'max_completion_tokens'].includes(p.limiteUscita) || ![null, 'effort', 'thinking', 'enable_thinking'].includes(p.ragionamento)
         || !p.modelli || typeof p.modelli !== 'object' || Array.isArray(p.modelli)
         || typeof p.fonte !== 'string' || !p.fonte.startsWith('https://') || !/^\d{4}-\d{2}-\d{2}$/u.test(p.data ?? '')) {
         throw new ProviderRegistryError(`${dove}: profilo di compatibilità senza contratto o fonte datata`);
       }
       for (const m of Object.values(p.modelli)) {
-        if (!m || !Array.isArray(m.livelliRagionamento) || !m.livelliRagionamento.length
+        if (!m || !Array.isArray(m.livelliRagionamento) || (!m.livelliRagionamento.length && !m.thinking)
           || new Set(m.livelliRagionamento).size !== m.livelliRagionamento.length
           || m.livelliRagionamento.some(l => !['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'default'].includes(l))
           || (m.strumentiConFormato !== undefined && typeof m.strumentiConFormato !== 'boolean')) {
           throw new ProviderRegistryError(`${dove}: particolarità del modello non valide`);
+        }
+        if (['thinking', 'enable_thinking'].includes(p.ragionamento)) {
+          const t = m.thinking;
+          if (!t || m.livelliRagionamento.length || typeof t.disattivabile !== 'boolean' || typeof t.predefinito !== 'boolean'
+            || (p.ragionamento === 'enable_thinking' ? t.attivo !== true : ![null, 'enabled', 'adaptive'].includes(t.attivo))
+            || (t.attivo === null && t.disattivabile) || (!t.disattivabile && !t.predefinito)
+            || (t.conserva !== undefined && (t.conserva !== 'all' || t.attivo !== 'enabled'))
+            || (t.soloStreaming !== undefined && typeof t.soloStreaming !== 'boolean')
+            || ['temperaturaServer', 'sceltaObbligata', 'sceltaForzataConThinking'].some(k => m[k] !== undefined && typeof m[k] !== 'boolean')) {
+            throw new ProviderRegistryError(`${dove}: controllo del ragionamento non valido`);
+          }
+        } else if (m.thinking !== undefined) {
+          throw new ProviderRegistryError(`${dove}: controllo del ragionamento senza formato`);
         }
       }
     }
