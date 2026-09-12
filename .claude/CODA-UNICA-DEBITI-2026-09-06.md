@@ -1152,3 +1152,23 @@ citazione «> …» esce letterale col «>». L'ordine dell'owner è «le note m
 markdown»: recinti (monospazio, con la lingua) e citazioni vanno resi, in un posto solo (la stessa
 funzione serve alla chat: verificare che lì i recinti passino da un'altra via e non duplicare).
 Lotto piccolo, dopo BC-22.
+
+### BC-22 ✅ CHIUSO (12/09, notte) — una causa sola, undici volte
+Il riferimento `mockup/talos-mockup.html` è del 07/09; fra l'8 e l'11/09 l'owner ha ordinato
+cambiamenti che la app ha fatto e il mockup no (menu ⋯, barra a gruppi, piede del composer, browser
+che torna alla pagina). Nove rossi erano questo: riferimento aggiornato DENTRO la prova (blocco «IL
+RIFERIMENTO SI AGGIORNA», ogni riga con l'ordine e la data; nessuna tolleranza allargata: 10 su 11 a
+zero pixel); uno il laboratorio del Browser che caricava example.org in una cornice viva; uno
+(`NotificationPanel`) rasterizzazione (scala di grigi vs subpixel), non disegno. Tre difetti per
+strada: pill statica del Terminale svuotata dal laboratorio; riga Libreria senza azioni; `context-
+compactor.spec` 6/6 in timeout per il velo d'avvio (ora 6 verdi in 10 s). Conteggio: COMP 26/37 →
+**37/37** a 1440, **111/111** su tre viewport; `test:componenti` intero **146 passati, 1 fallito**
+(RIP-V01, sotto). Residuo `Browser` 122 px (0,012 %): mappamondo nel mockup, foglio nella app per
+una scheda di lettura — decide l'owner. **Debito**: rigenerare `mockup/talos-mockup.html` dal mockup
+interattivo dell'11/09, così il riferimento non vive dentro la prova.
+
+### BC-30 — Review: a 1280×800 le azioni della testata coprono le schede di 20 px (12/09, dal cancello)
+`RIP-V01` rosso solo a 1280: `azioni.left − schede.right` = +59,77 a 1440 · **−20,23 a 1280** · +21,77
+a 1024, identico nel mockup e nella app: impaginazione a quella larghezza già nel disegno, non una
+regressione. Da curare nella testata Review (a capo delle azioni o menu ⋯ sotto i 1300 px), poi
+foto a 1280.
