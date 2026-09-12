@@ -265,6 +265,7 @@ function fontiDelSelettore({ openrouter = null, locali = null, diretti = null } 
   ];
   for (const provider of PROVIDER_DIRETTI) {
     const elenco2 = diretti ? diretti[provider.id] : null;
+    if (provider.id === "esterno" && !elenco2?.some((m) => m.id === "esterno:predefinito")) continue;
     if (provider.soloSeCollegato && !Array.isArray(elenco2)) continue;
     fonti.push({
       id: provider.id,
@@ -287,6 +288,7 @@ function modelliDellaFonte(fonte, { openrouter = null, locali = null, diretti = 
 function fraseVuotoDiretto(fonte, { diretti = null, errori = {} } = {}) {
   const etichetta2 = PROVIDER_DIRETTI.find((p) => p.id === fonte)?.etichetta || fonte;
   if (errori && errori[fonte]) return `Catalogo ${etichetta2} non disponibile: ${errori[fonte]}`;
+  if (fonte === "esterno") return "Configura l'agente esterno in Fornitori e accessi";
   if (!diretti) return `Leggo il catalogo ${etichetta2}…`;
   if (!Array.isArray(diretti[fonte])) {
     return senzaChiave(fonte) ? `${etichetta2} non risponde su questo computer: avvialo e ricarica.` : `Collega la chiave ${etichetta2} dal pannello Provider per vedere i suoi modelli.`;
@@ -370,10 +372,54 @@ var init_fonti_modelli = __esm({
       // P-K — inizio
       Object.freeze({ id: "azure", etichetta: "Azure AI Foundry", soloSeCollegato: true }),
       Object.freeze({ id: "bedrock", etichetta: "Amazon Bedrock", soloSeCollegato: true }),
-      Object.freeze({ id: "vertex", etichetta: "Google Vertex AI", soloSeCollegato: true })
+      Object.freeze({ id: "vertex", etichetta: "Google Vertex AI", soloSeCollegato: true }),
       // P-K — fine
+      Object.freeze({ id: "esterno", etichetta: "Agente esterno", senzaChiave: true, soloSeCollegato: true })
+      // P-L-bis
     ]);
     ID_DIRETTI = new Set(PROVIDER_DIRETTI.map((p) => p.id));
+  }
+});
+
+// src/components/consumo-sessione.js
+function sommaUsage(a, b) {
+  if (!a || typeof a !== "object") return b && typeof b === "object" ? { ...b } : null;
+  if (!b || typeof b !== "object") return { ...a };
+  const somma = (chiave) => {
+    const x = numero(a[chiave]);
+    const y = numero(b[chiave]);
+    if (x === null && y === null) return null;
+    return (x ?? 0) + (y ?? 0);
+  };
+  const risultato = { ...a, ...b };
+  for (const chiave of ["prompt_tokens", "completion_tokens", "cached_tokens", "giri"]) {
+    const valore = somma(chiave);
+    if (valore === null) delete risultato[chiave];
+    else risultato[chiave] = valore;
+  }
+  if (numero(b.tokens_per_second) === null && numero(a.tokens_per_second) !== null) risultato.tokens_per_second = a.tokens_per_second;
+  return risultato;
+}
+function usageDellaSessione(sessione) {
+  if (!sessione || typeof sessione !== "object") return null;
+  if (sessione.usageSessione && typeof sessione.usageSessione === "object") return sessione.usageSessione;
+  return sessione.usage && typeof sessione.usage === "object" ? sessione.usage : null;
+}
+function esecuzioniDellaSessione(sessione) {
+  const u = sessione?.usageSessione;
+  return u && Number.isFinite(Number(u.esecuzioni)) ? Number(u.esecuzioni) : null;
+}
+function testoRiusoCache(misura) {
+  const p = misura?.percentuale;
+  const giri = misura?.giriMisurati;
+  if (!Number.isFinite(p) || p < 0 || p > 100 || !Number.isSafeInteger(giri) || giri <= 0) return "non misurato";
+  const numero6 = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 0 });
+  return `${numero6.format(p)} % · su ${numero6.format(giri)} ${giri === 1 ? "giro" : "giri"}`;
+}
+var numero;
+var init_consumo_sessione = __esm({
+  "src/components/consumo-sessione.js"() {
+    numero = (valore) => Number.isFinite(Number(valore)) ? Number(valore) : null;
   }
 });
 
@@ -430,7 +476,7 @@ function righeAmbiente(contesto2 = null) {
     ["Repo annidati", annidati === null ? "—" : annidati === 0 ? "nessuno" : `${annidati} · fiducia separata`]
   ];
 }
-function righeFinestra(usage = null, finestra = null, ripartizione = null) {
+function righeFinestra(usage = null, finestra = null, ripartizione = null, cacheSessione = null) {
   const u = usage || {};
   const usati = Number.isFinite(u.prompt_tokens) ? u.prompt_tokens + (Number.isFinite(u.completion_tokens) ? u.completion_tokens : 0) : null;
   const righe = [];
@@ -449,6 +495,7 @@ function righeFinestra(usage = null, finestra = null, ripartizione = null) {
   if (usati === null) righe.push(["Conversazione", "—"]);
   else aggiungi("Conversazione", usati, "");
   righe.push(["Libera", finestra && usati !== null ? `${kilo(Math.max(0, finestra - occupati))} · ${numPercento.format(Math.max(0, Math.round((100 - percentoOccupato) * 10) / 10))}%` : "—"]);
+  righe.push(["Riusato dalla cache", testoRiusoCache(cacheSessione)]);
   return { titoloDestra: finestra ? kilo(finestra) : "finestra non dichiarata", righe };
 }
 function titoloRispostaDaTurno(turno, parole = 5) {
@@ -630,7 +677,7 @@ function aggiornaInspector(inspector, dati = {}, { document: d = globalThis.docu
   const cards = inspector.querySelectorAll('#railContesto [data-c="InspectorCard"], #railContesto [data-c="TurnIndex"]');
   const [ambiente, finestra, indice2] = cards;
   riempiCard(d, ambiente, righeAmbiente(dati.contesto));
-  const f = righeFinestra(dati.usage, dati.finestra, dati.ripartizione);
+  const f = righeFinestra(dati.usage, dati.finestra, dati.ripartizione, dati.cacheSessione);
   if (finestra) {
     const testa = finestra.querySelector(".talos-inspector-card__head span");
     if (testa) testa.textContent = f.titoloDestra;
@@ -706,6 +753,7 @@ function processiDagliEventi(eventi2 = [], { adesso = Date.now(), nomiComando = 
 var num, numPercento, SELETTORE_RISPOSTA_TURNO, SELETTORE_TESTO_UTENTE, SVG_NS_INSPECTOR;
 var init_inspector = __esm({
   "src/components/inspector.js"() {
+    init_consumo_sessione();
     init_plurale();
     num = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
     numPercento = new Intl.NumberFormat("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -1015,12 +1063,18 @@ var init_conversazione_dom = __esm({
 });
 
 // src/components/provider-card.js
+function etichettaIndirizzo(row = {}) {
+  if (!row.supportsEndpoint) return null;
+  if (row.endpointConfigured) return "Indirizzo personalizzato";
+  return row.endpoint ? "Indirizzo predefinito" : "Indirizzo da impostare";
+}
 function statoProvider(row = {}, prova = null) {
   const esito = prova?.esito, labels = { "in-corso": "Prova in corso…", "non-autorizzato": "Credenziale rifiutata", irraggiungibile: "Non raggiungibile", "non-provabile": "Da configurare", errore: "Prova non riuscita" };
   const conteggio2 = Number.isInteger(prova?.modelli) && prova.modelli >= 0 ? " · " + prova.modelli + " modelli" : "";
-  return { chiave: etichettaOrigineChiave(row), tempo: row.id !== "huggingface", prova: !prova ? "Mai provato" : esito === "collegato" ? row.id === "huggingface" ? "Profilo raggiunto" : "Servizio raggiunto" + conteggio2 : labels[esito] || "Prova non riuscita", tono: esito === "collegato" ? "success" : ["non-autorizzato", "irraggiungibile", "errore"].includes(esito) ? "danger" : "warning", occupato: esito === "in-corso" };
+  return { chiave: etichettaOrigineChiave(row), tempo: row.id !== "huggingface", prova: !prova ? "Mai provato" : esito === "collegato" ? row.id === "esterno" ? "Agente raggiunto" : row.id === "huggingface" ? "Profilo raggiunto" : "Servizio raggiunto" + conteggio2 : labels[esito] || "Prova non riuscita", tono: esito === "collegato" ? "success" : ["non-autorizzato", "irraggiungibile", "errore"].includes(esito) ? "danger" : "warning", occupato: esito === "in-corso" };
 }
 function etichettaOrigineChiave(row = {}) {
+  if (row.id === "esterno") return row.agente ? "Agente configurato" : "Agente da configurare";
   if (row.origineChiave === "ambiente") return "Chiave dall’ambiente";
   if (row.origineChiave === "accesso") return "Accesso fatto";
   if (row.keyConfigured === true) return "Chiave salvata";
@@ -1058,6 +1112,77 @@ function campo(label, tipo, key, row, valore = "") {
   }
   wrap.append(input);
   return wrap;
+}
+function multiriga(label, key, row, valore = "") {
+  const wrap = el3("label", "talos-stack talos-provider__field");
+  wrap.style.gridColumn = "1 / -1";
+  const input = el3("textarea", "talos-field__input");
+  input.dataset[key] = row.id;
+  input.value = valore;
+  input.rows = 3;
+  input.spellcheck = false;
+  input.autocomplete = "off";
+  Object.assign(input.style, { width: "100%", minWidth: "0", height: "auto", minHeight: "88px", boxSizing: "border-box", resize: "vertical", font: "inherit", lineHeight: "1.4", padding: "10px 12px" });
+  wrap.append(el3("span", "talos-muted", label), input);
+  return wrap;
+}
+function leggiCollegamentoProvider(row, card) {
+  const valore = (s) => card.querySelector(s)?.value ?? "";
+  const righe = (s) => valore(s).split(/\r?\n/u).map((v) => v.trim()).filter(Boolean);
+  if (row.id === "esterno") return { agente: {
+    comando: valore("[data-provider-comando]").trim(),
+    argomenti: valore("[data-provider-argomenti]").split(/\r?\n/u).filter((v) => v !== ""),
+    cwd: valore("[data-provider-cwd]").trim(),
+    variabiliAmbiente: righe("[data-provider-variabili]"),
+    timeoutMs: Number(valore("[data-provider-tempo-agente]")) * 1e3
+  } };
+  return {
+    endpoint: valore("[data-provider-endpoint]").trim(),
+    timeoutSeconds: Number(valore("[data-provider-timeout]") || 60),
+    ...CLOUD_CONFIGURABILI.has(row.id) ? { modelli: righe("[data-provider-modelli]").map((id) => {
+      const nome = row.modelli?.find((m) => m.id === id)?.nome;
+      return { id, ...nome ? { nome } : {} };
+    }) } : {}
+  };
+}
+async function salvaCollegamentoProvider(row, card, { fetchImpl = globalThis.fetch, baseUrl = globalThis.window?.__talosHarnessApiBase || "" } = {}) {
+  let risposta;
+  try {
+    risposta = await fetchImpl(`${baseUrl}/api/v1/providers/${encodeURIComponent(row.id)}/runtime`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(leggiCollegamentoProvider(row, card))
+    });
+  } catch {
+    throw new Error("Collegamento non salvato: il server locale non risponde.");
+  }
+  let esito;
+  try {
+    esito = await risposta.json();
+  } catch {
+    throw new Error("Collegamento non salvato: risposta locale non valida.");
+  }
+  if (!risposta.ok || esito?.ok !== true || !esito.data || typeof esito.data !== "object") throw new Error("Collegamento non salvato. Controlla i campi e riprova.");
+  return esito.data;
+}
+function aggiungiCampiAgente(body, row) {
+  const a = row.agente || {};
+  body.append(
+    campo("Comando", "text", "providerComando", row, a.comando || ""),
+    campo("Cartella di lavoro", "text", "providerCwd", row, a.cwd || ""),
+    multiriga("Argomenti (uno per riga)", "providerArgomenti", row, (a.argomenti || []).join("\n")),
+    multiriga("Variabili d'ambiente da passare (solo i nomi)", "providerVariabili", row, (a.variabiliAmbiente || []).join("\n"))
+  );
+  const tempo = campo("Tempo massimo (secondi)", "number", "providerTempoAgente", row, String((a.timeoutMs ?? 18e4) / 1e3));
+  const input = tempo.querySelector("input");
+  input.min = "0.05";
+  input.max = "3600";
+  input.step = "0.001";
+  body.append(tempo);
+  const nota = el3("p", "talos-muted", "Indica percorsi assoluti. Passa le credenziali tramite i nomi delle variabili, senza incollarne i valori. Salva il collegamento prima di provarlo.");
+  nota.style.gridColumn = "1 / -1";
+  body.append(nota);
 }
 function button(action, label, tone = "secondary") {
   const b = el3("button", "talos-button talos-button--" + tone + " talos-button--sm", label);
@@ -1139,6 +1264,7 @@ function aggiungiCampiCloud(body, row) {
   });
 }
 function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato = false, onMenu = null, onAzionePool = null } = {}) {
+  const esterno = row.id === "esterno", configurazionePropria = esterno || CLOUD_CONFIGURABILI.has(row.id);
   const d = statoProvider(row, prova), busy = occupato || d.occupato, card = el3("article", "talos-card talos-provider");
   card.dataset.c = "ProviderCard";
   card.dataset.providerId = row.id;
@@ -1151,7 +1277,7 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
   head.setAttribute("aria-controls", "provider-body-" + row.id);
   const title = el3("strong", "talos-provider__name", row.label || row.id), marks = el3("span", "talos-cluster");
   head.append(title, marks);
-  for (const [txt, tone] of [[d.chiave, row.keyConfigured ? "success" : ""], [row.supportsEndpoint ? row.endpointConfigured ? "Indirizzo personalizzato" : "Indirizzo predefinito" : null, ""], [d.prova, d.tono]]) if (txt) {
+  for (const [txt, tone] of [[d.chiave, row.keyConfigured ? "success" : ""], [etichettaIndirizzo(row), row.supportsEndpoint && !row.endpointConfigured && !row.endpoint ? "warning" : ""], [d.prova, d.tono]]) if (txt) {
     const badge5 = el3("span", "talos-badge talos-badge--sm" + (tone ? " talos-badge--" + tone : ""), txt);
     badge5.dataset.c = "Badge";
     marks.append(badge5);
@@ -1219,10 +1345,17 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
       riassunto.textContent = "Oppure incolla una chiave";
       oppure.append(riassunto, campoChiave);
       body.append(oppure);
-    } else body.append(campoChiave);
+    } else if (!esterno) body.append(campoChiave);
     if (row.supportsEndpoint) body.append(campo("Indirizzo del servizio", "url", "providerEndpoint", row, row.endpoint || ""));
     aggiungiCampiCloud(body, row);
-    if (d.tempo) body.append(campo("Tempo massimo (secondi)", "number", "providerTimeout", row, String(row.timeoutSeconds ?? 60)));
+    if (CLOUD_CONFIGURABILI.has(row.id)) {
+      body.append(multiriga("Modelli configurati (uno per riga)", "providerModelli", row, (row.modelli || []).map((m) => m.id).join("\n")));
+      const nota = el3("p", "talos-muted", "Indica i nomi delle distribuzioni o dei modelli abilitati. Questa lista non verifica l’accesso né il supporto agli strumenti.");
+      nota.style.gridColumn = "1 / -1";
+      body.append(nota);
+    }
+    if (esterno) aggiungiCampiAgente(body, row);
+    if (d.tempo && !esterno) body.append(campo("Tempo massimo (secondi)", "number", "providerTimeout", row, String(row.timeoutSeconds ?? 60)));
     const actions = el3("div", "talos-cluster");
     const salva = button("save-key", poolCollegato ? "Aggiungi chiave" : "Salva chiave", "primary");
     if (poolCollegato) {
@@ -1244,7 +1377,7 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
         }
       });
     }
-    actions.append(salva);
+    if (!esterno) actions.append(salva);
     const nascoste = [];
     const aggiungiNascosto = (b) => {
       b.hidden = true;
@@ -1252,10 +1385,45 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
       return b;
     };
     const vociMenu = [{ chiave: "test", etichetta: "Prova collegamento", icona: "i-play", elemento: aggiungiNascosto(button("test", "Prova collegamento")) }];
-    if (d.tempo) vociMenu.push({ chiave: "save-runtime", etichetta: row.supportsEndpoint ? "Salva collegamento" : "Salva tempo massimo", icona: "i-clock", elemento: aggiungiNascosto(button("save-runtime", row.supportsEndpoint ? "Salva collegamento" : "Salva tempo massimo")) });
+    if (d.tempo) vociMenu.push({ chiave: "save-runtime", etichetta: row.supportsEndpoint || esterno ? "Salva collegamento" : "Salva tempo massimo", icona: "i-clock", elemento: aggiungiNascosto(button("save-runtime", row.supportsEndpoint || esterno ? "Salva collegamento" : "Salva tempo massimo")) });
     if (row.supportsEndpoint && row.endpointConfigured) vociMenu.push({ chiave: "reset-runtime", etichetta: "Ripristina indirizzo", icona: "i-history", elemento: aggiungiNascosto(button("reset-runtime", "Ripristina indirizzo")) });
     if (row.keyConfigured && !poolCollegato) vociMenu.push({ chiave: "remove-key", etichetta: pool.length > 1 ? "Rimuovi tutte le chiavi" : "Rimuovi chiave", icona: "i-trash", pericolo: true, separaPrima: true, elemento: aggiungiNascosto(button("remove-key", pool.length > 1 ? "Rimuovi tutte le chiavi" : "Rimuovi chiave", "ghost talos-button--danger")) });
-    if (typeof onMenu === "function" && vociMenu.length) {
+    if (configurazionePropria) {
+      const salvaRuntime = vociMenu.find((v) => v.chiave === "save-runtime").elemento;
+      salvaRuntime.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (card.dataset.salvataggioCollegamento === "in-corso") return;
+        const controlli = [...body.querySelectorAll("input,textarea,button")], prima = controlli.map((c) => c.disabled);
+        card.dataset.salvataggioCollegamento = "in-corso";
+        card.setAttribute("aria-busy", "true");
+        controlli.forEach((c) => {
+          c.disabled = true;
+        });
+        const feedback2 = body.querySelector("[data-provider-feedback]");
+        try {
+          await salvaCollegamentoProvider(row, card);
+          feedback2.textContent = "Collegamento salvato.";
+          feedback2.setAttribute("role", "status");
+          document.getElementById("providerRefresh")?.click();
+        } catch {
+          feedback2.textContent = "Collegamento non salvato. Controlla i campi e il server locale, poi riprova.";
+          feedback2.setAttribute("role", "alert");
+        } finally {
+          feedback2.hidden = false;
+          delete card.dataset.salvataggioCollegamento;
+          card.setAttribute("aria-busy", String(busy));
+          controlli.forEach((c, i) => {
+            c.disabled = prima[i];
+          });
+        }
+      });
+    }
+    if (esterno) {
+      for (const v of vociMenu) {
+        v.elemento.hidden = false;
+      }
+    }
+    if (!esterno && typeof onMenu === "function" && vociMenu.length) {
       const tre = el3("button", "talos-button talos-button--ghost talos-icon-button talos-button--sm");
       tre.type = "button";
       tre.setAttribute("aria-label", "Altre azioni per " + (row.label || row.id));
@@ -1272,7 +1440,7 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
     actions.append(...nascoste);
     body.append(actions);
     if (prova && prova.esito !== "in-corso") {
-      const note = el3("p", "talos-muted", prova.esito === "collegato" ? row.id === "openrouter" ? "Il catalogo risponde. La validità della chiave richiede una verifica dedicata." : "La verifica del servizio non esegue un modello." : prova.motivo || d.prova);
+      const note = el3("p", "talos-muted", prova.esito === "collegato" ? esterno ? "Agente inizializzato e chiuso. Nessun messaggio inviato." : row.id === "openrouter" ? "Il catalogo risponde. La validità della chiave richiede una verifica dedicata." : "La verifica del servizio non esegue un modello." : prova.motivo || d.prova);
       note.dataset.provaEsito = prova.esito;
       if (Number.isFinite(prova.millisecondi)) note.append(document.createTextNode(" · " + prova.millisecondi + " ms"));
       body.append(note);
@@ -1282,7 +1450,7 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
     feedback.setAttribute("role", "status");
     feedback.hidden = true;
     body.append(feedback);
-    for (const control of body.querySelectorAll("input,button")) control.disabled = busy;
+    for (const control of body.querySelectorAll("input,textarea,button")) control.disabled = busy;
   }
   card.append(body);
   return card;
@@ -1302,11 +1470,11 @@ function aggiornaProviderList(lista, rows, { aperte = /* @__PURE__ */ new Set(),
   const old = new Map([...lista.querySelectorAll("[data-provider-id]")].map((n) => [n.dataset.providerId, n]));
   const cards = rows.map((row) => {
     const op = { aperta: aperte.has(row.id), prova: prove.get(row.id) || null, occupato: occupati.has(row.id) || caricamento }, signature = JSON.stringify([row, op, typeof onAzionePool === "function"]), precedente = old.get(row.id);
-    if (precedente?.dataset.providerSignature === signature && !precedente.dataset.providerReset) return precedente;
+    if (precedente?.dataset.salvataggioCollegamento === "in-corso" || precedente?.dataset.providerSignature === signature && !precedente.dataset.providerReset) return precedente;
     const card = creaProviderCard(row, { ...op, onMenu, onAzionePool });
     card.dataset.providerSignature = signature;
     if (precedente && !precedente.dataset.providerReset) {
-      for (const input of card.querySelectorAll("input")) {
+      for (const input of card.querySelectorAll("input,textarea")) {
         const attr = [...input.attributes].find((a) => a.name.startsWith("data-provider-"));
         const prima = precedente.querySelector("[" + attr.name + "]");
         if (prima) {
@@ -1349,8 +1517,10 @@ function montaProviderPanel(panel) {
     test.before(refresh);
   }
 }
+var CLOUD_CONFIGURABILI;
 var init_provider_card = __esm({
   "src/components/provider-card.js"() {
+    CLOUD_CONFIGURABILI = /* @__PURE__ */ new Set(["azure", "vertex", "bedrock"]);
   }
 });
 
@@ -1470,41 +1640,6 @@ function cosaFaraDentro(permesso, nome, umano) {
 var init_avvio_sessione = __esm({
   "src/components/avvio-sessione.js"() {
     init_politiche();
-  }
-});
-
-// src/components/consumo-sessione.js
-function sommaUsage(a, b) {
-  if (!a || typeof a !== "object") return b && typeof b === "object" ? { ...b } : null;
-  if (!b || typeof b !== "object") return { ...a };
-  const somma = (chiave) => {
-    const x = numero(a[chiave]);
-    const y = numero(b[chiave]);
-    if (x === null && y === null) return null;
-    return (x ?? 0) + (y ?? 0);
-  };
-  const risultato = { ...a, ...b };
-  for (const chiave of ["prompt_tokens", "completion_tokens", "cached_tokens", "giri"]) {
-    const valore = somma(chiave);
-    if (valore === null) delete risultato[chiave];
-    else risultato[chiave] = valore;
-  }
-  if (numero(b.tokens_per_second) === null && numero(a.tokens_per_second) !== null) risultato.tokens_per_second = a.tokens_per_second;
-  return risultato;
-}
-function usageDellaSessione(sessione) {
-  if (!sessione || typeof sessione !== "object") return null;
-  if (sessione.usageSessione && typeof sessione.usageSessione === "object") return sessione.usageSessione;
-  return sessione.usage && typeof sessione.usage === "object" ? sessione.usage : null;
-}
-function esecuzioniDellaSessione(sessione) {
-  const u = sessione?.usageSessione;
-  return u && Number.isFinite(Number(u.esecuzioni)) ? Number(u.esecuzioni) : null;
-}
-var numero;
-var init_consumo_sessione = __esm({
-  "src/components/consumo-sessione.js"() {
-    numero = (valore) => Number.isFinite(Number(valore)) ? Number(valore) : null;
   }
 });
 
@@ -12569,7 +12704,7 @@ function riempiTabella(tabella, righe, etichettaDi, { document: d = globalThis.d
     return tr;
   }));
 }
-function aggiornaCosti(pannello, sessioni = [], { document: d = globalThis.document, oggi = /* @__PURE__ */ new Date() } = {}) {
+function aggiornaCosti(pannello, sessioni = [], { document: d = globalThis.document, oggi = /* @__PURE__ */ new Date(), sessioneId = null } = {}) {
   if (!pannello) return null;
   const tot = riepilogoConsumo(sessioni);
   const riepilogo2 = pannello.querySelector("#costiRiepilogo");
@@ -12583,6 +12718,10 @@ function aggiornaCosti(pannello, sessioni = [], { document: d = globalThis.docum
     if (tot.senzaToken) voci.push(badge3(d, `${NUM.format(tot.senzaToken)} senza token registrati`, "warning"));
     if (tot.senzaModello) voci.push(badge3(d, `${NUM.format(tot.senzaModello)} senza modello`, "warning"));
     if (tot.senzaData) voci.push(badge3(d, `${NUM.format(tot.senzaData)} senza data`, "warning"));
+    const aperta2 = sessioneId ? sessioni.find((s) => s.sessionId === sessioneId) : null;
+    const cache = el18(d, "p", "talos-muted", `Sessione aperta · Riusato dalla cache · ${testoRiusoCache(aperta2?.cacheSessione)}`);
+    cache.dataset.cacheSessione = "";
+    voci.push(cache);
     riepilogo2.replaceChildren(...voci);
   }
   riempiTabella(pannello.querySelector("#costiPerGiorno"), consumoPerGiorno(sessioni), (r) => giornoUmano(r.chiave, oggi), { document: d });
@@ -19088,6 +19227,7 @@ var init_app = __esm({
            * riportato consumo — mai uno zero fabbricato.
            */
           usageSessione: null,
+          cacheSessione: null,
           eventiUsageContesto: /* @__PURE__ */ new Map(),
           cachePromptPrecedenti: 0,
           /** La somma dei totali degli invii GIÀ CHIUSI (fino all'ultimo `RunStarted`). */
@@ -21930,7 +22070,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (!pannello) return;
         try {
           const sessioni = (await apiGet("/api/v1/sessions"))?.items || [];
-          aggiornaCosti(pannello, sessioni);
+          aggiornaCosti(pannello, sessioni, { sessioneId: state.realSession.id });
         } catch {
           const nota = $2("#costiNota");
           if (nota) nota.textContent = "Le sessioni non si leggono adesso: il server locale non risponde.";
@@ -25864,6 +26004,37 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         }
         apriMenuAzioniLibreria(voci, dove?.ancora ? { ancoraEl: dove.ancora } : { x: dove?.x ?? 0, y: dove?.y ?? 0 });
       }
+      let richiestaCacheSessione = null;
+      function caricaCacheSessioneDalRegistro() {
+        const sessionId = state.realSession.id;
+        const generation = state.realSession.generation;
+        if (!sessionId) {
+          state.realSession.cacheSessione = null;
+          return;
+        }
+        if (richiestaCacheSessione?.sessionId === sessionId && richiestaCacheSessione.generation === generation) {
+          richiestaCacheSessione.ancora = true;
+          return;
+        }
+        const richiesta = { sessionId, generation, ancora: true };
+        richiestaCacheSessione = richiesta;
+        void (async () => {
+          do {
+            richiesta.ancora = false;
+            let misura = null;
+            try {
+              const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/metrics`);
+              misura = dati?.cacheSessione ?? null;
+            } catch {
+            }
+            if (richiestaCacheSessione !== richiesta || state.realSession.id !== sessionId || state.realSession.generation !== generation) return;
+            state.realSession.cacheSessione = misura;
+            aggiornaInspectorDaStato();
+          } while (richiesta.ancora);
+        })().finally(() => {
+          if (richiestaCacheSessione === richiesta) richiestaCacheSessione = null;
+        });
+      }
       function aggiornaInspectorDaStato() {
         const inspector = $2("#inspectorSessione") || $2(".talos-inspector");
         if (!inspector) return;
@@ -25882,6 +26053,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           titolo: state.realSession.id ? state.session || "Sessione" : "Nessuna sessione aperta",
           contesto: state.realSession.contesto || null,
           usage: finestra.perInspector.usage,
+          cacheSessione: state.realSession.id ? state.realSession.cacheSessione : null,
           /*
            * ⛔ Il NUMERO, non il descrittore: `righeFinestra` fa aritmetica su questo valore
            * (`finestra - occupati`), e un oggetto le fa produrre NaN — a schermo «Libera — · 100,0%»,
@@ -29675,6 +29847,7 @@ ${testo3}` : testo3;
           if (state.realSession.sequenzeViste.has(evento._sequenza)) return;
           state.realSession.sequenzeViste.add(evento._sequenza);
         }
+        if (evento.type === "CUSTOM" && evento.name === "consumo-fornitore" || ["RunStarted", "RunFinished", "RunError"].includes(evento.type)) caricaCacheSessioneDalRegistro();
         if (evento.type === "ToolCallStart") state.realSession.eventiAttrezzi.push({ type: "ToolCallStart", toolCallId: evento.toolCallId, toolCallName: evento.toolCallName, ricevutoA: Date.now(), giro: state.realSession.runCount || null });
         else if (evento.type === "ToolCallArgs") state.realSession.eventiAttrezzi.push({ type: "ToolCallArgs", toolCallId: evento.toolCallId, delta: evento.delta });
         else if (evento.type === "ToolCallResult") state.realSession.eventiAttrezzi.push({ type: "ToolCallResult", toolCallId: evento.toolCallId, ricevutoA: Date.now(), errore: Boolean(evento.isError || evento.error) });
@@ -30231,6 +30404,8 @@ ${testo3}` : testo3;
           state.realSession.attesaBubble = null;
           state.realSession.usage = null;
           state.realSession.usageSessione = null;
+          state.realSession.cacheSessione = null;
+          richiestaCacheSessione = null;
           state.realSession.eventiUsageContesto = /* @__PURE__ */ new Map();
           state.realSession.cachePromptPrecedenti = 0;
           state.realSession.usageEsecuzioniPrecedenti = null;
