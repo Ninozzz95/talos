@@ -19,11 +19,30 @@
 > verifica dal vivo o un aggancio · 🏃 in corso (agente) · 🔜 approvato, non iniziato · ⏸ aperto, in
 > attesa di una decisione · ❌ non iniziato.
 
+### ⛔ DECISIONI DELL'OWNER — 12/09/2026, ore 11 (sulla tabella qui sopra)
+
+Parole sue, in ordine, e cosa cambia nella coda:
+
+| voce | parole dell'owner | conseguenza |
+|---|---|---|
+| **BC-13** | «importante, bisogna fare una ricerca delle ultime tecnologie e metodi all'avanguardia, dobbiamo rendere il motore di llm locale estremamente rapido e meglio dei competitor» | **RIDEFINITA**: non più «elenco dei modelli locali istantaneo» ma **velocità del motore locale del desktop** (`llama-server-supervisor.mjs`, llama.cpp b10517): ricerca web sullo stato dell'arte, misura di base su questa macchina, confronto coi concorrenti, cure misurate. Priorità **1** |
+| **BC-15** | «io lo vedo e funziona già, manca verifica dal vivo» | resta aperta SOLO la verifica con un giro vero (costa: si chiede) |
+| **BC-12 / BC-14** | «importante anche questo: il pulsante dice serve accesso pieno» | **secondo giro**: la cura di BC-14 dice il vero (il server rifiuta una cartella libera senza «Accesso pieno», `session-registry.mjs:3291`) ma la regola stessa è quella che l'owner non vuole: una cartella scelta a mano deve poter partire con «Scrive nel progetto»/«Chiede prima»/«Solo lettura». Priorità **2** |
+| **BC-10** | «sì, in modalità chat a tutta larghezza» | confermata: margine sinistro pari al destro con la barra di navigazione, solo a tutta larghezza. Priorità **4** |
+| **BC-08** | «importante» | barra di navigazione con anche le risposte del modello. Priorità **3** |
+| **PO-13** | «da valutare in seguito» | ⏸ |
+| **PO-14 P-D…P-L** | «ok ma diamo la precedenza alle cose più importanti» | dopo BC-13/12/14/08/10 |
+| **L10** | «ok, aggiungi anche questo: modalità piano con ricerca strategica a regola d'arte» | **ALLARGATA**: non solo il pulsante di approvazione del piano, ma una **modalità piano** della ricerca approfondita — ricerca strategica preliminare (stato dell'arte: come lo fanno i sistemi di deep research nel 2026), piano a rami proposto e approvato dalla persona, poi la corsa. Dopo L9 |
+| **BC-35** | «ok» | DOCX con titoli di Word + elenchi annidati nel Markdown server. Dopo L9 (stessi file di `src/research/`) |
+| **A/B del banco** | «alla fine» | ⏸ ultimo |
+
+⇒ **Ordine di lavoro dal 12/09, ore 11:** L9 (in corso) → BC-13 · BC-12/14 #2 · BC-08 · BC-10 (in parallelo, file disgiunti) → L10 → BC-35 → P-D…P-L → PO-13 → A/B.
+
 ### In corso adesso (2 agenti)
 | id | cosa | stato |
 |---|---|---|
 | **L9** | il motore della ricerca DENTRO la corsa: piano a rami, collettore con cache/budget nel giornale, spesa vera, verifica a tre livelli con giudice ≠ autore, contraria, prove distinte, bilancio vero | 🏃 |
-| **BC-33** | Temi e atmosfere: anteprima VIVA (token del preset + scena animata), tutti i cursori di tema/animazione nella modale, confronto testa a testa, 14 temi | 🏃 |
+| **BC-33** | Temi e atmosfere: anteprima VIVA, tutti i cursori di tema/animazione nella modale, confronto testa a testa, 14 temi | ✅ 12/09 `ad4a9121` + `7107417f`, visto sul 4174 nei due temi (aperti: ordine dell'elenco Calm ultimo/primo; la ricerca delle Impostazioni conta le 14 migrate; la riga «Scena del tema» delle Impostazioni è ora doppia con lo studio) |
 
 ### Chiusi l'11-12/09, verificati sul 4174 (chiaro e scuro)
 | id | cosa | prova |
