@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto,
+  descrizioneModelloSelettore, aggiornaTestoModelloSelettore,
 } from '../../src/components/fonti-modelli.js';
 
 /*
@@ -33,7 +34,58 @@ test('⛔ LA RICHIESTA DELL’OWNER: ogni fornitore è una scheda di PRIMO livel
   assert.equal(eFonteDiretta('diretti'), false);
   /* ⛔ L'elenco vero lo presidia `tests/provider-registry-parita.test.mjs` contro il registro del
      server: qui si prova la STRISCIA, non chi ci sta dentro. */
-  assert.deepEqual(PROVIDER_DIRETTI.map((p) => p.id), ['anthropic', 'gemini', 'openai', 'lmstudio', 'zai']);
+  assert.deepEqual(PROVIDER_DIRETTI.map((p) => p.id), ['anthropic', 'gemini', 'openai', 'lmstudio', 'zai', 'deepseek']);
+});
+
+test('PE-UI-01 — DeepSeek compare con una chiave collegata e conserva gli id di scelta', () => {
+  assert.equal(fontiDelSelettore().some(f => f.id === 'deepseek'), false);
+  const dati = { diretti: { deepseek: [{ id: 'deepseek:modello', nome: 'Modello' }] } };
+  assert.equal(fontiDelSelettore(dati).find(f => f.id === 'deepseek').etichetta, 'DeepSeek');
+  assert.equal(modelliDellaFonte('deepseek', dati)[0].id, 'deepseek:modello');
+});
+
+test('PE-UI-02 — contesto, prezzi di ingresso/uscita/cache e data in italiano, senza id tecnici', () => {
+  const testo = descrizioneModelloSelettore({
+    id: 'deepseek:id-tecnico', contextLength: 128000,
+    prezzoPrompt: 0.0000012, prezzoCompletion: 0.0000034, prezzoCacheRead: 0, prezzoCacheWrite: null,
+    catalogo: { aggiornatoAlle: '2026-09-12T10:00:00Z', fallbackRete: true, etaCacheMs: 7200000 },
+  });
+  assert.match(testo, /Contesto: 128\.000 token/);
+  assert.match(testo, /Ingresso: 1,2 USD\/M token/);
+  assert.match(testo, /Uscita: 3,4 USD\/M token/);
+  assert.match(testo, /Rilettura: 0 USD\/M token/);
+  assert.match(testo, /Memorizzazione: non disponibile/);
+  assert.match(testo, /12\/09\/2026/);
+  assert.match(testo, /copia salvata.*7\.200 secondi/iu);
+  assert.doesNotMatch(testo, /deepseek:|id-tecnico|ctx|cache_read|models\.dev/);
+});
+
+test('PE-UI-03 — valori assenti o invalidi non si trasformano in prezzi zero', () => {
+  for (const prezzoPrompt of [null, undefined, '', false, -1, NaN]) {
+    assert.match(descrizioneModelloSelettore({ prezzoPrompt }), /Ingresso: non disponibile/);
+  }
+  const testo = descrizioneModelloSelettore({});
+  assert.match(testo, /Contesto: non disponibile/);
+  assert.doesNotMatch(testo, /0 USD|1970|NaN|undefined|null/);
+});
+
+test('PE-UI-04 — fasce e capacità dichiarate: nessuna capacità negativa dedotta da un dato assente', () => {
+  const testo = descrizioneModelloSelettore({ capacita: { toolCall: true, reasoning: false }, prezziPerMilione: { tiers: [{ tier: { type: 'context', size: 200000 } }] } });
+  assert.match(testo, /Strumenti: sì/);
+  assert.match(testo, /Ragionamento: no/);
+  assert.match(testo, /Prezzi variabili con il contesto/);
+  assert.match(descrizioneModelloSelettore({}), /Strumenti: non disponibile/);
+});
+
+test('PE-UI-05 — renderer: testo sicuro, nome umano, id di selezione e oggetto immutati', () => {
+  const mount = { ownerDocument: { createElement: tag => ({ tag, textContent: '' }) }, replaceChildren(...nodes) { this.nodes = nodes; } };
+  const modello = Object.freeze({ id: 'zai:id-tecnico', nome: '<img src=x onerror=alert(1)>', prezzoPrompt: 0 });
+  aggiornaTestoModelloSelettore(mount, modello);
+  assert.equal(mount.nodes[0].tag, 'strong');
+  assert.equal(mount.nodes[0].textContent, modello.nome);
+  assert.equal(mount.nodes[1].tag, 'small');
+  assert.doesNotMatch(mount.nodes[1].textContent, /id-tecnico/);
+  assert.equal(modello.id, 'zai:id-tecnico');
 });
 
 test('PD-UI — Z.AI compare quando collegato, con nome umano e modelli selezionabili', () => {

@@ -412,6 +412,19 @@ function parseCartellaStore(raw, moduleUrl) {
   return fileURLToPath(new URL('.sessions-store/', moduleUrl));
 }
 
+// P-E: un mirror del catalogo pubblico può cambiare; non può contenere credenziali.
+function parseModelsDevUrl(raw) {
+  if (raw === undefined || raw === '') return 'https://models.dev/api.json';
+  try {
+    if (typeof raw !== 'string') throw new Error();
+    const url = new URL(raw.trim());
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) throw new Error();
+    return url.href;
+  } catch {
+    fail('TALOS_HARNESS_UI_MODELS_DEV_URL deve essere un indirizzo HTTP(S) senza credenziali o frammenti');
+  }
+}
+
 /*
  * ⛔⛔⛔ 07/9 — IL KERNEL ORA VIVE NEL REPO, e questa funzione è il motivo per cui prima non
  * bastava averlo. Senza `TALOS_OWNER_RUNTIME_MODULE` questa tornava `undefined`: il server partiva,
@@ -547,6 +560,7 @@ export function loadConfig(
     chiaveApi: typeof env.OPENROUTER_API_KEY === 'string' ? env.OPENROUTER_API_KEY : undefined,
     hfToken: typeof env.HF_TOKEN === 'string' && env.HF_TOKEN.trim() ? env.HF_TOKEN.trim() : undefined,
     cartellaStore: parseCartellaStore(env.TALOS_HARNESS_UI_SESSIONS_DIR, moduleUrl),
+    modelsDevUrl: parseModelsDevUrl(env.TALOS_HARNESS_UI_MODELS_DEV_URL),
     llamaServerPath: parseLlamaServerPath(env.TALOS_LLAMA_SERVER_PATH, moduleUrl),
     ownerRuntimeModule: parseOwnerRuntimeModule(env.TALOS_OWNER_RUNTIME_MODULE, moduleUrl),
     ricercaWeb: parseRicercaWeb(env),

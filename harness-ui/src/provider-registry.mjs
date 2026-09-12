@@ -89,6 +89,7 @@ export const REGISTRO_FORNITORI = congela({
   // ── OpenAI — wire Responses, non chat/completions ──────────────────────────────────────────
   openai: congela({
     id: 'openai',
+    modelsDevId: 'openai',
     etichetta: 'OpenAI',
     descrizione: 'API diretta OpenAI, sul wire Responses.',
     paginaChiavi: 'https://platform.openai.com/api-keys',
@@ -122,6 +123,7 @@ export const REGISTRO_FORNITORI = congela({
   // ── DeepSeek — la cache che già paghiamo (vedi usage-cache.mjs) ─────────────────────────────
   deepseek: congela({
     id: 'deepseek',
+    modelsDevId: 'deepseek',
     etichetta: 'DeepSeek',
     descrizione: 'API diretta DeepSeek, wire OpenAI.',
     paginaChiavi: 'https://platform.deepseek.com/api_keys',
@@ -155,7 +157,7 @@ export const REGISTRO_FORNITORI = congela({
       inclusiNelTotale: true,
       scontoDichiarato: null,
     }),
-    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: false }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
     prezzi: congela({ fonte: 'nessuna' }),
     limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
     sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null, conta: (c) => c?.data?.length }),
@@ -174,6 +176,7 @@ export const REGISTRO_FORNITORI = congela({
   // docs.z.ai/api-reference/llm/chat-completion e guides/overview/pricing.
   zai: congela({
     id: 'zai',
+    modelsDevId: 'zai',
     etichetta: 'Z.AI',
     descrizione: 'Modelli GLM tramite API diretta Z.AI.',
     paginaChiavi: 'https://z.ai/manage-apikey/apikey-list',
@@ -240,6 +243,7 @@ export const REGISTRO_FORNITORI = congela({
   // ── Anthropic ──────────────────────────────────────────────────────────────────────────────
   anthropic: congela({
     id: 'anthropic',
+    modelsDevId: 'anthropic',
     etichetta: 'Anthropic',
     descrizione: 'API diretta Anthropic, wire Messages.',
     paginaChiavi: 'https://console.anthropic.com/settings/keys',
@@ -279,6 +283,7 @@ export const REGISTRO_FORNITORI = congela({
   // ── Gemini ─────────────────────────────────────────────────────────────────────────────────
   gemini: congela({
     id: 'gemini',
+    modelsDevId: 'google',
     etichetta: 'Google Gemini',
     descrizione: 'API diretta Google AI Studio.',
     paginaChiavi: 'https://aistudio.google.com/app/apikey',
@@ -320,6 +325,7 @@ export const REGISTRO_FORNITORI = congela({
   // ── OpenRouter — l'aggregatore, e l'unico che oggi porta anche i PREZZI ────────────────────
   openrouter: congela({
     id: 'openrouter',
+    modelsDevId: 'openrouter',
     etichetta: 'OpenRouter',
     descrizione: 'Aggregatore: centinaia di modelli dietro una sola chiave.',
     paginaChiavi: 'https://openrouter.ai/keys',
@@ -355,6 +361,7 @@ export const REGISTRO_FORNITORI = congela({
   // ── Ollama — in casa, senza account ────────────────────────────────────────────────────────
   ollama: congela({
     id: 'ollama',
+    modelsDevId: null, // Ollama Cloud è un servizio diverso dal runtime locale.
     etichetta: 'Ollama Local',
     descrizione: 'Motore locale Ollama su questo computer.',
     paginaChiavi: 'https://ollama.com/download',
@@ -383,6 +390,7 @@ export const REGISTRO_FORNITORI = congela({
   // ── LM Studio — P-C: scoperto e sondato da sempre, e fino a oggi non sceglibile in chat ─────
   lmstudio: congela({
     id: 'lmstudio',
+    modelsDevId: 'lmstudio', // Metadati pubblici: l'elenco installato resta del runtime.
     etichetta: 'LM Studio',
     descrizione: 'Motore locale LM Studio su questo computer.',
     paginaChiavi: 'https://lmstudio.ai/download',
@@ -422,6 +430,7 @@ export const REGISTRO_FORNITORI = congela({
   // ── Hugging Face — NON è una destinazione di chat, e il record lo dice ──────────────────────
   huggingface: congela({
     id: 'huggingface',
+    modelsDevId: 'huggingface', // Inference Providers non abilita la chat nel nostro record download.
     etichetta: 'Hugging Face',
     descrizione: 'Catalogo e scaricamento dei modelli, non una destinazione di chat.',
     paginaChiavi: 'https://huggingface.co/settings/tokens',
@@ -454,6 +463,7 @@ export const REGISTRO_FORNITORI = congela({
   // ── Il motore locale llama-server — nessuna credenziale su disco, mai ───────────────────────
   local: congela({
     id: 'local',
+    modelsDevId: null,
     etichetta: 'Motore locale (llama.cpp)',
     descrizione: 'Il supervisore llama-server di questo computer.',
     paginaChiavi: null,
