@@ -14,6 +14,8 @@ import { createHash } from 'node:crypto';
 import { ID_CON_CREDENZIALE, REGISTRO_FORNITORI } from './provider-registry.mjs';
 // P-K
 import { normalizzaRuntimeCloud } from './provider-auth-cloud.mjs';
+// P-K-bis/P-L-bis: preferenze pubbliche, separate dall'universo del portachiavi.
+import { validaRuntimeAgenteEsterno } from './acp-agent.mjs';
 
 /*
  * ⛔⛔ 12/09 — P-A: QUESTE DUE COSTANTI ERANO IL PRIMO DEI TREDICI ELENCHI PARALLELI.
@@ -108,7 +110,7 @@ const MESSAGE_BY_CODE = Object.freeze({
   PROVIDER_KEY_REQUIRED: 'Inserisci una chiave prima di salvarla',
   PROVIDER_KEY_INVALID: 'La chiave inserita non è valida',
   PROVIDER_STORE_UNAVAILABLE: 'Il portachiavi del computer non è disponibile: controlla Doctor',
-  PROVIDER_RUNTIME_INVALID: 'Controlla indirizzo e tempo massimo del provider',
+  PROVIDER_RUNTIME_INVALID: 'Controlla i campi del collegamento: indirizzo, modelli, comando e tempo massimo',
   PROVIDER_RUNTIME_UNAVAILABLE: 'Non è stato possibile salvare le preferenze del provider: controlla Doctor',
   PROVIDER_POOL_FULL: 'Sono già presenti otto chiavi per questo fornitore',
   PROVIDER_KEY_NOT_FOUND: 'La chiave non è più presente: aggiorna il pannello',
@@ -171,7 +173,33 @@ function isRecord(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-function readRuntimePreferences(runtimeFile, runtimes, logger) {
+// P-K-bis: soltanto identità, mai dichiarazioni di capacità o valori di credenziali.
+function normalizzaModelli(provider, value, segreti = []) {
+  const invalido = () => { throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID'); };
+  if (!REGISTRO_FORNITORI[provider]?.cloud || !Array.isArray(value) || value.length > 50) invalido();
+  const visti = new Set();
+  return value.map(m => {
+    if (!isRecord(m) || Object.keys(m).some(k => !['id', 'nome'].includes(k))
+      || typeof m.id !== 'string' || m.id.length > 200 || !/^[a-zA-Z0-9][a-zA-Z0-9._/:@-]*$/u.test(m.id)
+      || m.id.includes('://') || m.id.split('/').some(p => !p || p === '.' || p === '..')
+      || (provider === 'azure' && !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(m.id))
+      || PROVIDER_IDS.some(p => m.id.startsWith(`${p}:`)) || visti.has(m.id)
+      || (Object.hasOwn(m, 'nome') && (typeof m.nome !== 'string' || !m.nome.trim() || m.nome.length > 120 || /[\p{Cc}\p{Cf}<>]/u.test(m.nome)))
+      || segreti.some(s => s && [m.id, m.nome ?? ''].some(v => v.includes(s)))) invalido();
+    visti.add(m.id);
+    return { id: m.id, ...(m.nome === undefined ? {} : { nome: m.nome.trim() }) };
+  });
+}
+function normalizzaAgente(value, env, segreti = []) {
+  try {
+    const agente = validaRuntimeAgenteEsterno(value, { env });
+    if (segreti.some(s => s && [agente.comando, agente.cwd, ...agente.argomenti].some(v => v.includes(s)))) throw new Error('credenziale');
+    return agente;
+  }
+  catch { throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID'); }
+}
+
+function readRuntimePreferences(runtimeFile, runtimes, logger, env, segreti) {
   if (typeof runtimeFile !== 'string' || runtimeFile.trim() === '' || !existsSync(runtimeFile)) return;
   let parsed;
   try {
@@ -181,19 +209,29 @@ function readRuntimePreferences(runtimeFile, runtimes, logger) {
     noSecretLogger(logger, 'Preferenze provider ignorate: file non leggibile');
     return;
   }
-  for (const provider of PROVIDER_IDS) {
+  for (const provider of [...PROVIDER_IDS, 'esterno']) {
+    if (provider === 'esterno') {
+      const row = parsed.providers.esterno;
+      if (row === undefined) continue;
+      try {
+        if (!isRecord(row) || Object.keys(row).some(k => k !== 'agente')) throw new Error('schema');
+        runtimes.set(provider, { agente: normalizzaAgente(row.agente, env, segreti) });
+      } catch { noSecretLogger(logger, 'Preferenza agente esterno ignorata: valore non valido'); }
+      continue;
+    }
     const definition = PROVIDER_DEFINITIONS[provider];
     if (!definition.supportsTimeout) continue;
     const row = parsed.providers[provider];
     if (!isRecord(row)) continue;
     try {
       const timeout = normalizeTimeout(row.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS);
+      const extra = Object.hasOwn(row, 'modelli') ? { modelli: normalizzaModelli(provider, row.modelli, segreti) } : {};
       if (!definition.supportsEndpoint || row.endpointConfigured === false) {
-        runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: timeout });
+        runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: timeout, ...extra });
         continue;
       }
       const endpoint = normalizeProviderEndpoint(provider, row.endpoint);
-      runtimes.set(provider, { endpoint, endpointConfigured: true, timeoutSeconds: timeout });
+      runtimes.set(provider, { endpoint, endpointConfigured: true, timeoutSeconds: timeout, ...extra });
     } catch {
       noSecretLogger(logger, `Preferenza provider ${provider} ignorata: valore non valido`);
     }
@@ -204,12 +242,14 @@ function writeRuntimePreferences(runtimeFile, runtimes) {
   if (typeof runtimeFile !== 'string' || runtimeFile.trim() === '') return;
   const providers = {};
   for (const [provider, value] of runtimes.entries()) {
+    if (provider === 'esterno') { providers.esterno = { agente: value.agente }; continue; }
     const definition = PROVIDER_DEFINITIONS[provider];
     if (!definition?.supportsTimeout) continue;
     providers[provider] = {
       endpoint: definition.supportsEndpoint && value.endpointConfigured ? value.endpoint : null,
       endpointConfigured: definition.supportsEndpoint && value.endpointConfigured === true,
       timeoutSeconds: value.timeoutSeconds,
+      ...(value.modelli ? { modelli: value.modelli } : {}),
     };
   }
   const temporary = `${runtimeFile}.tmp`;
@@ -256,7 +296,8 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
       }
     }
   }
-  readRuntimePreferences(runtimeFile, runtimes, logger);
+  const segretiRuntime = () => [...pools.values()].flat().map(v => v.chiave);
+  readRuntimePreferences(runtimeFile, runtimes, logger, env, segretiRuntime());
 
   function requireProvider(provider) { return definitionFor(provider); }
   function righe(provider) { requireProvider(provider); return [...(pools.get(provider) || [])].sort((a,b) => a.priorita - b.priorita); }
@@ -381,18 +422,35 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     return { loaded, available: true };
   }
   function getRuntime(provider) {
+    if (provider === 'esterno') return { provider, agente: structuredClone(runtimes.get(provider)?.agente ?? null) };
     const definition = requireProvider(provider);
     const saved = runtimes.get(provider);
     const endpoint = saved?.endpoint ?? definition.defaultEndpoint;
     // P-K — campi non segreti derivati dalla stessa preferenza anche dopo riavvio.
     const cloud = REGISTRO_FORNITORI[provider].cloud && endpoint ? normalizzaRuntimeCloud(provider, { endpoint }) : null;
-    return { provider, endpoint, endpointConfigured: saved?.endpointConfigured === true, timeoutSeconds: saved?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS, ...(cloud ?? {}) };
+    return { provider, endpoint, endpointConfigured: saved?.endpointConfigured === true, timeoutSeconds: saved?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS, ...(cloud ?? {}),
+      ...(REGISTRO_FORNITORI[provider].cloud ? { modelli: structuredClone(saved?.modelli ?? []) } : {}) };
     // P-K — fine
   }
-  function setRuntime(provider, { endpoint, timeoutSeconds = DEFAULT_TIMEOUT_SECONDS } = {}) {
+  function setRuntime(provider, value = {}) {
+    // P-K-bis: la whitelist vale anche fuori da HTTP; validare tutto prima di scrivere.
+    if (!isRecord(value) || Object.keys(value).some(k => !(provider === 'esterno' ? ['agente'] : ['endpoint', 'timeoutSeconds', 'modelli']).includes(k))) {
+      throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
+    }
+    if (provider === 'esterno') {
+      const previous = runtimes.get(provider);
+      const agente = normalizzaAgente(value.agente, env, segretiRuntime());
+      runtimes.set(provider, { agente });
+      try { writeRuntimePreferences(runtimeFile, runtimes); }
+      catch (error) { if (previous) runtimes.set(provider, previous); else runtimes.delete(provider); throw error; }
+      return getRuntime(provider);
+    }
+    const { endpoint, timeoutSeconds = (REGISTRO_FORNITORI[provider]?.cloud ? runtimes.get(provider)?.timeoutSeconds : null) ?? DEFAULT_TIMEOUT_SECONDS } = value;
     const definition = requireProvider(provider);
     const timeout = normalizeTimeout(timeoutSeconds);
     const previous = runtimes.get(provider);
+    const extra = Object.hasOwn(value, 'modelli') ? { modelli: normalizzaModelli(provider, value.modelli, segretiRuntime()) }
+      : previous?.modelli ? { modelli: previous.modelli } : {};
     if (!definition.supportsEndpoint) {
       if (!definition.supportsTimeout) throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
       runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: timeout });
@@ -400,8 +458,9 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
       catch (error) { if (previous) runtimes.set(provider, previous); else runtimes.delete(provider); throw error; }
       return getRuntime(provider);
     }
-    const normalized = normalizeProviderEndpoint(provider, endpoint);
-    runtimes.set(provider, { endpoint: normalized, endpointConfigured: true, timeoutSeconds: timeout });
+    const parzialeCloud = REGISTRO_FORNITORI[provider].cloud && !Object.hasOwn(value, 'endpoint');
+    const normalized = parzialeCloud ? previous?.endpoint ?? null : normalizeProviderEndpoint(provider, endpoint);
+    runtimes.set(provider, { endpoint: normalized, endpointConfigured: parzialeCloud ? previous?.endpointConfigured === true : true, timeoutSeconds: timeout, ...extra });
     try { writeRuntimePreferences(runtimeFile, runtimes); }
     catch (error) { if (previous) runtimes.set(provider, previous); else runtimes.delete(provider); throw error; }
     return getRuntime(provider);
@@ -410,7 +469,7 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
     const definition = requireProvider(provider);
     if (!definition.supportsEndpoint) throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
     const current = runtimes.get(provider);
-    runtimes.set(provider, { endpoint: null, endpointConfigured: false, timeoutSeconds: current?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS });
+    runtimes.set(provider, { ...current, endpoint: null, endpointConfigured: false, timeoutSeconds: current?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS });
     try { writeRuntimePreferences(runtimeFile, runtimes); }
     catch (error) { if (current) runtimes.set(provider, current); else runtimes.delete(provider); throw error; }
     return getRuntime(provider);
@@ -432,6 +491,7 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
         timeoutSeconds: runtime.timeoutSeconds,
         // P-K — schema e aiuto per i soli campi pubblici del pannello.
         ...(REGISTRO_FORNITORI[provider].cloud ? { cloud: REGISTRO_FORNITORI[provider].cloud,
+          modelli: runtime.modelli,
           regione: runtime.regione ?? null, progetto: runtime.progetto ?? null,
           endpointRisorsa: runtime.endpointRisorsa ?? null, versioneApi: runtime.versioneApi ?? 'v1' } : {}),
         // P-K — fine
@@ -450,7 +510,10 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
          */
         origineChiave: daPortachiavi.has(provider) ? 'custodia' : (hasKey(provider) ? 'ambiente' : null),
       };
-    });
+    }).concat({ id: 'esterno', label: REGISTRO_FORNITORI.esterno.etichetta, requiresKey: false,
+      keyConfigured: false, pool: [], modelliDiRiserva: [], supportsEndpoint: false, supportsOAuth: false,
+      origineChiave: null, execution: getRuntime('esterno').agente ? 'configurato' : 'da configurare',
+      agente: getRuntime('esterno').agente });
   }
 
   return Object.freeze({ getKey, getKeySync: getKey, hasKey, setKey, clearKey, loadFromKeyring, getRuntime, setRuntime, resetEndpoint, listPublic,

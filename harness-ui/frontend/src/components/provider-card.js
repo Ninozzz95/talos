@@ -4,7 +4,7 @@ export function etichettaIndirizzo(row={}){if(!row.supportsEndpoint)return null;
 export function statoProvider(row={},prova=null){
  const esito=prova?.esito,labels={'in-corso':'Prova in corso…','non-autorizzato':'Credenziale rifiutata',irraggiungibile:'Non raggiungibile','non-provabile':'Da configurare',errore:'Prova non riuscita'};
  const conteggio=Number.isInteger(prova?.modelli)&&prova.modelli>=0?' · '+prova.modelli+' modelli':'';
- return {chiave:etichettaOrigineChiave(row),tempo:row.id!=='huggingface',prova:!prova?'Mai provato':esito==='collegato'?(row.id==='huggingface'?'Profilo raggiunto':'Servizio raggiunto'+conteggio):labels[esito]||'Prova non riuscita',tono:esito==='collegato'?'success':['non-autorizzato','irraggiungibile','errore'].includes(esito)?'danger':'warning',occupato:esito==='in-corso'};
+ return {chiave:etichettaOrigineChiave(row),tempo:row.id!=='huggingface',prova:!prova?'Mai provato':esito==='collegato'?(row.id==='esterno'?'Agente raggiunto':row.id==='huggingface'?'Profilo raggiunto':'Servizio raggiunto'+conteggio):labels[esito]||'Prova non riuscita',tono:esito==='collegato'?'success':['non-autorizzato','irraggiungibile','errore'].includes(esito)?'danger':'warning',occupato:esito==='in-corso'};
 }
 /*
  * ⛔ PO-01 — «Chiave salvata» non basta più: da quando esiste l'accesso, una chiave può arrivare
@@ -15,6 +15,7 @@ export function statoProvider(row={},prova=null){
  *   essere usata e nessuno capisce perché.
  */
 export function etichettaOrigineChiave(row={}){
+ if(row.id==='esterno')return row.agente?'Agente configurato':'Agente da configurare';
  if(row.origineChiave==='ambiente')return 'Chiave dall\u2019ambiente';
  if(row.origineChiave==='accesso')return 'Accesso fatto';
  if(row.keyConfigured===true)return 'Chiave salvata';
@@ -29,6 +30,45 @@ export function statoChiavePool(chiave={}){
 }
 function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!=null)n.textContent=txt;return n;}
 function campo(label,tipo,key,row,valore=''){const wrap=el('label','talos-stack talos-provider__field');wrap.append(el('span','talos-muted',label));const input=el('input','talos-field__input');input.type=tipo;input.dataset[key]=row.id;input.autocomplete='off';input.value=valore;if(tipo==='password'){input.spellcheck=false;input.placeholder=row.keyConfigured?'Incolla una nuova chiave':'Incolla la chiave';}if(tipo==='number'){input.min='5';input.max='300';input.step='1';}wrap.append(input);return wrap;}
+// P-K-bis/P-L-bis: identità esplicite e configurazione non segreta del processo.
+const CLOUD_CONFIGURABILI=new Set(['azure','vertex','bedrock']);
+function multiriga(label,key,row,valore=''){
+ const wrap=el('label','talos-stack talos-provider__field');wrap.style.gridColumn='1 / -1';
+ const input=el('textarea','talos-field__input');input.dataset[key]=row.id;input.value=valore;input.rows=3;input.spellcheck=false;input.autocomplete='off';
+ Object.assign(input.style,{width:'100%',minWidth:'0',height:'auto',minHeight:'88px',boxSizing:'border-box',resize:'vertical',font:'inherit',lineHeight:'1.4',padding:'10px 12px'});
+ wrap.append(el('span','talos-muted',label),input);return wrap;
+}
+export function leggiCollegamentoProvider(row,card){
+ const valore=s=>card.querySelector(s)?.value??'';
+ const righe=s=>valore(s).split(/\r?\n/u).map(v=>v.trim()).filter(Boolean);
+ if(row.id==='esterno')return {agente:{comando:valore('[data-provider-comando]').trim(),
+  argomenti:valore('[data-provider-argomenti]').split(/\r?\n/u).filter(v=>v!==''),cwd:valore('[data-provider-cwd]').trim(),
+  variabiliAmbiente:righe('[data-provider-variabili]'),timeoutMs:Number(valore('[data-provider-tempo-agente]'))*1000}};
+ return {endpoint:valore('[data-provider-endpoint]').trim(),timeoutSeconds:Number(valore('[data-provider-timeout]')||60),
+  ...(CLOUD_CONFIGURABILI.has(row.id)?{modelli:righe('[data-provider-modelli]').map(id=>{
+   const nome=row.modelli?.find(m=>m.id===id)?.nome;return {id,...(nome?{nome}:{})};
+  })}:{})};
+}
+/** Stesso envelope della regia; il salvataggio non invia segreti né ritenta scritture. */
+export async function salvaCollegamentoProvider(row,card,{fetchImpl=globalThis.fetch,baseUrl=globalThis.window?.__talosHarnessApiBase||''}={}){
+ let risposta;
+ try{risposta=await fetchImpl(`${baseUrl}/api/v1/providers/${encodeURIComponent(row.id)}/runtime`,{
+  method:'POST',credentials:'same-origin',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify(leggiCollegamentoProvider(row,card))});}
+ catch{throw new Error('Collegamento non salvato: il server locale non risponde.');}
+ let esito;try{esito=await risposta.json();}catch{throw new Error('Collegamento non salvato: risposta locale non valida.');}
+ if(!risposta.ok||esito?.ok!==true||!esito.data||typeof esito.data!=='object')throw new Error('Collegamento non salvato. Controlla i campi e riprova.');
+ return esito.data;
+}
+function aggiungiCampiAgente(body,row){
+ const a=row.agente||{};
+ body.append(campo('Comando','text','providerComando',row,a.comando||''),campo('Cartella di lavoro','text','providerCwd',row,a.cwd||''),
+  multiriga('Argomenti (uno per riga)','providerArgomenti',row,(a.argomenti||[]).join('\n')),
+  multiriga("Variabili d'ambiente da passare (solo i nomi)",'providerVariabili',row,(a.variabiliAmbiente||[]).join('\n')));
+ const tempo=campo('Tempo massimo (secondi)','number','providerTempoAgente',row,String((a.timeoutMs??180000)/1000));
+ const input=tempo.querySelector('input');input.min='0.05';input.max='3600';input.step='0.001';body.append(tempo);
+ const nota=el('p','talos-muted','Indica percorsi assoluti. Passa le credenziali tramite i nomi delle variabili, senza incollarne i valori. Salva il collegamento prima di provarlo.');
+ nota.style.gridColumn='1 / -1';body.append(nota);
+}
 function button(action,label,tone='secondary'){const b=el('button','talos-button talos-button--'+tone+' talos-button--sm',label);b.type='button';b.dataset.c='Button';b.dataset.providerAction=action;return b;}
 /** Il simbolo di un'icona dello sprite. Il file non aveva icone: nasce qui, minimo. */
 function simboloProvider(nome){const NS='http://www.w3.org/2000/svg';const svg=document.createElementNS(NS,'svg');svg.setAttribute('class','i i--sm');svg.setAttribute('aria-hidden','true');const use=document.createElementNS(NS,'use');use.setAttribute('href','#'+nome);svg.append(use);return svg;}
@@ -83,6 +123,7 @@ function aggiungiCampiCloud(body,row){
 // P-K — fine
 
 export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onMenu=null,onAzionePool=null}={}){
+ const esterno=row.id==='esterno',configurazionePropria=esterno||CLOUD_CONFIGURABILI.has(row.id);
  const d=statoProvider(row,prova),busy=occupato||d.occupato,card=el('article','talos-card talos-provider');card.dataset.c='ProviderCard';card.dataset.providerId=row.id;card.setAttribute('aria-busy',String(busy));if(prova)card.dataset.provaEsito=prova.esito;
  const head=el('button','talos-provider__head');head.type='button';head.dataset.providerToggle=row.id;head.setAttribute('aria-expanded',String(aperta));head.setAttribute('aria-controls','provider-body-'+row.id);
  const title=el('strong','talos-provider__name',row.label||row.id),marks=el('span','talos-cluster');head.append(title,marks);
@@ -140,12 +181,17 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   const oppure=document.createElement('details');oppure.className='talos-provider__oppure';
   const riassunto=document.createElement('summary');riassunto.textContent='Oppure incolla una chiave';
   oppure.append(riassunto,campoChiave);body.append(oppure);
- }else body.append(campoChiave);
+ }else if(!esterno)body.append(campoChiave);
  if(row.supportsEndpoint)body.append(campo('Indirizzo del servizio','url','providerEndpoint',row,row.endpoint||''));
  // P-K — campi collegati all'input salvato dalla regia esistente.
  aggiungiCampiCloud(body,row);
+ if(CLOUD_CONFIGURABILI.has(row.id)){
+  body.append(multiriga('Modelli configurati (uno per riga)','providerModelli',row,(row.modelli||[]).map(m=>m.id).join('\n')));
+  const nota=el('p','talos-muted','Indica i nomi delle distribuzioni o dei modelli abilitati. Questa lista non verifica l’accesso né il supporto agli strumenti.');nota.style.gridColumn='1 / -1';body.append(nota);
+ }
+ if(esterno)aggiungiCampiAgente(body,row);
  // P-K — fine
- if(d.tempo)body.append(campo('Tempo massimo (secondi)','number','providerTimeout',row,String(row.timeoutSeconds??60)));
+ if(d.tempo&&!esterno)body.append(campo('Tempo massimo (secondi)','number','providerTimeout',row,String(row.timeoutSeconds??60)));
  /*
   * ⛔ Una sola azione a vista: salvare la chiave appena incollata. Le altre sono azioni su
   *   qualcosa di GIÀ configurato — si fanno una volta ogni tanto, non mentre stai configurando —
@@ -163,14 +209,29 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
    finally{salva.disabled=busy;}
   });
  }
- actions.append(salva);
+ if(!esterno)actions.append(salva);
  const nascoste=[];
  const aggiungiNascosto=(b)=>{b.hidden=true;nascoste.push(b);return b;};
  const vociMenu=[{chiave:'test',etichetta:'Prova collegamento',icona:'i-play',elemento:aggiungiNascosto(button('test','Prova collegamento'))}];
- if(d.tempo)vociMenu.push({chiave:'save-runtime',etichetta:row.supportsEndpoint?'Salva collegamento':'Salva tempo massimo',icona:'i-clock',elemento:aggiungiNascosto(button('save-runtime',row.supportsEndpoint?'Salva collegamento':'Salva tempo massimo'))});
+ if(d.tempo)vociMenu.push({chiave:'save-runtime',etichetta:row.supportsEndpoint||esterno?'Salva collegamento':'Salva tempo massimo',icona:'i-clock',elemento:aggiungiNascosto(button('save-runtime',row.supportsEndpoint||esterno?'Salva collegamento':'Salva tempo massimo'))});
  if(row.supportsEndpoint&&row.endpointConfigured)vociMenu.push({chiave:'reset-runtime',etichetta:'Ripristina indirizzo',icona:'i-history',elemento:aggiungiNascosto(button('reset-runtime','Ripristina indirizzo'))});
  if(row.keyConfigured&&!poolCollegato)vociMenu.push({chiave:'remove-key',etichetta:pool.length>1?'Rimuovi tutte le chiavi':'Rimuovi chiave',icona:'i-trash',pericolo:true,separaPrima:true,elemento:aggiungiNascosto(button('remove-key',pool.length>1?'Rimuovi tutte le chiavi':'Rimuovi chiave','ghost talos-button--danger'))});
- if(typeof onMenu==='function'&&vociMenu.length){
+ if(configurazionePropria){
+  const salvaRuntime=vociMenu.find(v=>v.chiave==='save-runtime').elemento;
+  salvaRuntime.addEventListener('click',async e=>{
+   e.stopPropagation();if(card.dataset.salvataggioCollegamento==='in-corso')return;
+   const controlli=[...body.querySelectorAll('input,textarea,button')],prima=controlli.map(c=>c.disabled);
+   card.dataset.salvataggioCollegamento='in-corso';card.setAttribute('aria-busy','true');controlli.forEach(c=>{c.disabled=true;});
+   const feedback=body.querySelector('[data-provider-feedback]');
+   try{await salvaCollegamentoProvider(row,card);feedback.textContent='Collegamento salvato.';feedback.setAttribute('role','status');
+    // Aggiorna lo stato pubblico con il gesto già collegato dalla regia legacy.
+    document.getElementById('providerRefresh')?.click();
+   }catch{feedback.textContent='Collegamento non salvato. Controlla i campi e il server locale, poi riprova.';feedback.setAttribute('role','alert');}
+   finally{feedback.hidden=false;delete card.dataset.salvataggioCollegamento;card.setAttribute('aria-busy',String(busy));controlli.forEach((c,i)=>{c.disabled=prima[i];});}
+  });
+ }
+ if(esterno){for(const v of vociMenu){v.elemento.hidden=false;} }
+ if(!esterno&&typeof onMenu==='function'&&vociMenu.length){
   const tre=el('button','talos-button talos-button--ghost talos-icon-button talos-button--sm');tre.type='button';
   tre.setAttribute('aria-label','Altre azioni per '+(row.label||row.id));tre.setAttribute('aria-haspopup','menu');
   tre.append(simboloProvider('i-more'));
@@ -182,9 +243,9 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  }
  actions.append(...nascoste);
  body.append(actions);
- if(prova&&prova.esito!=='in-corso'){const note=el('p','talos-muted',prova.esito==='collegato'?(row.id==='openrouter'?'Il catalogo risponde. La validità della chiave richiede una verifica dedicata.':'La verifica del servizio non esegue un modello.'):(prova.motivo||d.prova));note.dataset.provaEsito=prova.esito;if(Number.isFinite(prova.millisecondi))note.append(document.createTextNode(' · '+prova.millisecondi+' ms'));body.append(note);}
+ if(prova&&prova.esito!=='in-corso'){const note=el('p','talos-muted',prova.esito==='collegato'?(esterno?'Agente inizializzato e chiuso. Nessun messaggio inviato.':row.id==='openrouter'?'Il catalogo risponde. La validità della chiave richiede una verifica dedicata.':'La verifica del servizio non esegue un modello.'):(prova.motivo||d.prova));note.dataset.provaEsito=prova.esito;if(Number.isFinite(prova.millisecondi))note.append(document.createTextNode(' · '+prova.millisecondi+' ms'));body.append(note);}
  const feedback=el('p','talos-muted');feedback.dataset.providerFeedback=row.id;feedback.setAttribute('role','status');feedback.hidden=true;body.append(feedback);
- for(const control of body.querySelectorAll('input,button'))control.disabled=busy;
+ for(const control of body.querySelectorAll('input,textarea,button'))control.disabled=busy;
  }card.append(body);return card;
 }
 export function aggiornaProviderList(lista,rows,{aperte=new Set(),prove=new Map(),occupati=new Set(),caricamento=false,errore=null,onMenu=null,onAzionePool=null}={}){
@@ -192,8 +253,8 @@ export function aggiornaProviderList(lista,rows,{aperte=new Set(),prove=new Map(
  if(errore||!rows.length){const p=el('p','talos-muted',errore?errore.message||String(errore):caricamento?'Leggo gli accessi…':'Nessun fornitore dichiarato dal server.');p.dataset.c='EmptyState';if(errore)p.setAttribute('role','alert');lista.replaceChildren(p);return;}
  const focus=document.activeElement,focusId=focus?.closest('[data-provider-id]')?.dataset.providerId;
  const old=new Map([...lista.querySelectorAll('[data-provider-id]')].map(n=>[n.dataset.providerId,n]));
- const cards=rows.map(row=>{const op={aperta:aperte.has(row.id),prova:prove.get(row.id)||null,occupato:occupati.has(row.id)||caricamento},signature=JSON.stringify([row,op,typeof onAzionePool==='function']),precedente=old.get(row.id);if(precedente?.dataset.providerSignature===signature&&!precedente.dataset.providerReset)return precedente;const card=creaProviderCard(row,{...op,onMenu,onAzionePool});card.dataset.providerSignature=signature;
- if(precedente&&!precedente.dataset.providerReset){for(const input of card.querySelectorAll('input')){const attr=[...input.attributes].find(a=>a.name.startsWith('data-provider-'));const prima=precedente.querySelector('['+attr.name+']');if(prima){prima.disabled=input.disabled;prima.className=input.className;prima.placeholder=input.placeholder;input.replaceWith(prima);}}}
+ const cards=rows.map(row=>{const op={aperta:aperte.has(row.id),prova:prove.get(row.id)||null,occupato:occupati.has(row.id)||caricamento},signature=JSON.stringify([row,op,typeof onAzionePool==='function']),precedente=old.get(row.id);if(precedente?.dataset.salvataggioCollegamento==='in-corso'||precedente?.dataset.providerSignature===signature&&!precedente.dataset.providerReset)return precedente;const card=creaProviderCard(row,{...op,onMenu,onAzionePool});card.dataset.providerSignature=signature;
+ if(precedente&&!precedente.dataset.providerReset){for(const input of card.querySelectorAll('input,textarea')){const attr=[...input.attributes].find(a=>a.name.startsWith('data-provider-'));const prima=precedente.querySelector('['+attr.name+']');if(prima){prima.disabled=input.disabled;prima.className=input.className;prima.placeholder=input.placeholder;input.replaceWith(prima);}}}
  const feedback=precedente?.querySelector('[data-provider-feedback]'),target=card.querySelector('[data-provider-feedback]');if(feedback&&target)target.replaceWith(feedback);return card;});lista.replaceChildren(...cards);
  if(focusId){if(focus.isConnected&&!focus.disabled)focus.focus({preventScroll:true});else cards.find(n=>n.dataset.providerId===focusId)?.querySelector('[data-provider-toggle]')?.focus({preventScroll:true});}
 }

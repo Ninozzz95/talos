@@ -99,7 +99,7 @@ export const REGISTRO_FORNITORI = congela({
     endpoint: congela({ chat: '/chat/completions', modelli: null }),
     streaming: 'dichiarato', toolCalling: 'ignoto',
     cache: congela({ marcatore: null, letturaUsage: congela([]), scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null }),
-    catalogo: congela({ fonte: 'processo-esterno', forma: null, percorso: null, inUI: false }),
+    catalogo: congela({ fonte: 'processo-esterno', forma: null, percorso: null, inUI: true }),
     prezzi: congela({ fonte: 'nessuna' }),
     limiti: congela({ timeoutPredefinitoSecondi: 180, tempoMassimoModificabile: false }),
     sonda: congela({ attiva: false, auth: 'nessuna', percorso: null, urlAssoluto: null, conta: () => null }),

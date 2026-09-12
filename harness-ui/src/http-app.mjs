@@ -80,6 +80,7 @@ const API_ERROR_CODES = new Set([
   'AUTOMATION_INVALID',
   'CATALOG_UNREACHABLE',
   'CATALOG_UPSTREAM_ERROR',
+  'CATALOG_CONFIGURATION_REQUIRED', // P-K-bis/P-L-bis: configurazione mancante, non guasto interno.
   'INTERNAL_ERROR',
   /* ⭐ 27/8 — le quattro azioni sul file dell'albero (owner: rinomina, apri, rivela in Esplora File, elimina), vedi workspace-files.mjs. */
   'FILE_NOT_FOUND',
@@ -255,6 +256,7 @@ const STATUS_BY_CODE = Object.freeze({
   /** ⭐ 27/8 — il catalogo modelli dipende da OpenRouter: quando è irraggiungibile o risponde male non è colpa del client. */
   CATALOG_UNREACHABLE: 503,
   CATALOG_UPSTREAM_ERROR: 503,
+  CATALOG_CONFIGURATION_REQUIRED: 422,
   INTERNAL_ERROR: 500,
   FILE_NOT_FOUND: 404,
   /** ⭐ 27/8 — stesso status di PAYLOAD_LIMIT: un'anteprima troppo grande è la stessa famiglia di "contenuto oltre il limite". */
@@ -442,6 +444,7 @@ const MESSAGE_BY_CODE = Object.freeze({
   AUTOMATION_INVALID: 'Parametri automazione non validi',
   CATALOG_UNREACHABLE: 'Catalogo modelli non raggiungibile',
   CATALOG_UPSTREAM_ERROR: 'Catalogo modelli non disponibile',
+  CATALOG_CONFIGURATION_REQUIRED: "Configura i modelli o l'agente esterno in Fornitori e accessi",
   INTERNAL_ERROR: 'Errore interno',
   FILE_NOT_FOUND: 'File non trovato',
   FILE_TOO_LARGE: 'File troppo grande per l\'anteprima',
@@ -2389,7 +2392,7 @@ export function createHttpApp({
           sendJson(res, 200, successEnvelope({ provider: fornitoreId, modelli }, clock), method);
           return;
         }
-        if (catalogoFornitoriFn) {
+        if (catalogoFornitoriFn && record?.wire !== 'acp') { // P-L-bis: catalogo dell'agente dalla sonda locale.
           sendJson(res, 200, successEnvelope(await catalogoFornitoriFn(fornitoreId), clock), method);
           return;
         }
@@ -3311,7 +3314,9 @@ export function createHttpApp({
         requireNoQuery(url);
         if (!providerStore) { const error = new Error('Portachiavi provider non configurato'); error.code = 'PROVIDER_STORE_UNAVAILABLE'; throw error; }
         const provider = decodeURIComponent((providerKeyMatch || providerRuntimeMatch)[1]);
-        const body = await leggiCorpoJson(req, 16 * 1024);
+        // P-K-bis: cinquanta modelli validi; P-L-bis: argomenti del processo entro schema.
+        const limiteRuntime = provider === 'esterno' ? 1024 * 1024 : REGISTRO_FORNITORI[provider]?.cloud ? 64 * 1024 : 16 * 1024;
+        const body = await leggiCorpoJson(req, providerRuntimeMatch ? limiteRuntime : 16 * 1024);
         let data;
         if (providerKeyMatch) {
           const remove = providerKeyMatch[3] === 'remove';
@@ -3341,10 +3346,19 @@ export function createHttpApp({
             if (keys.length !== 0) { const error = new Error('Corpo non valido'); error.code = 'QUERY_INVALID'; throw error; }
             data = providerStore.resetEndpoint(provider);
           } else {
-            if (keys.some((key) => !['endpoint', 'timeoutSeconds'].includes(key)) || typeof body.endpoint !== 'string' || !Object.hasOwn(body, 'timeoutSeconds')) {
+            // P-K-bis: whitelist rigorosa e campi separati per agente e collegamenti cloud.
+            const agente = provider === 'esterno';
+            const cloud = Boolean(REGISTRO_FORNITORI[provider]?.cloud);
+            const ammessi = agente ? ['agente'] : cloud ? ['endpoint', 'timeoutSeconds', 'modelli'] : ['endpoint', 'timeoutSeconds'];
+            if (!body || typeof body !== 'object' || Array.isArray(body) || !keys.length
+              || keys.some(key => !ammessi.includes(key))
+              || (agente ? !Object.hasOwn(body, 'agente') : cloud
+                ? (Object.hasOwn(body, 'endpoint') && typeof body.endpoint !== 'string')
+                : typeof body.endpoint !== 'string' || !Object.hasOwn(body, 'timeoutSeconds'))) {
               const error = new Error('Corpo runtime non valido'); error.code = 'QUERY_INVALID'; throw error;
             }
-            data = providerStore.setRuntime(provider, { endpoint: body.endpoint, timeoutSeconds: body.timeoutSeconds });
+            data = providerStore.setRuntime(provider, body);
+            // P-K-bis — fine
           }
         }
         sendJson(res, 200, successEnvelope(data, clock), method);
