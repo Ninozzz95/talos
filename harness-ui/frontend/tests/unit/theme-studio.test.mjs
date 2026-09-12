@@ -275,3 +275,20 @@ test('STUDIO-SCENE: in un ambiente senza il pacchetto lo studio resta aperto e l
   assert.equal(scene.size, 0, 'in Node non c’è nessuna scena, e va bene così');
   assert.equal(TESTO_STATO.assente, 'Scena non disponibile');
 });
+
+/* 12/09, visto sul 4174: centrare la voce scelta scorreva anche il corpo della modale. */
+test('THEME-STUDIO · centraNellElenco scorre solo il contenitore dato, e senza misure non fa niente', async () => {
+  const { centraNellElenco } = await import('../../src/components/theme-studio.js');
+  const rect = (top, height) => ({ top, height });
+  const contenitore = { scrollTop: 0, getBoundingClientRect: () => rect(100, 300) };
+  const voce = { getBoundingClientRect: () => rect(700, 40) };
+  assert.equal(centraNellElenco(contenitore, voce), 470); // 600 sotto il bordo, meno (300-40)/2
+  assert.equal(contenitore.scrollTop, 470);
+  // al contrario: voce già sopra il centro → si torna indietro, mai sotto zero
+  const c2 = { scrollTop: 10, getBoundingClientRect: () => rect(100, 300) };
+  assert.equal(centraNellElenco(c2, { getBoundingClientRect: () => rect(100, 40) }), -10);
+  assert.equal(c2.scrollTop, 0);
+  // senza misure (Node, jsdom senza layout) non si tocca niente
+  assert.equal(centraNellElenco({ scrollTop: 5, getBoundingClientRect: () => rect(0, 0) }, voce), 0);
+  assert.equal(centraNellElenco(null, voce), 0);
+});

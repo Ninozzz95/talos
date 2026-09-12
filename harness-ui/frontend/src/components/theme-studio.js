@@ -219,6 +219,20 @@ export const TITOLI_STUDIO = Object.freeze({
   motionModeSelect: 'Modo di disegno',
 });
 
+/**
+ * Centra una voce dentro il SUO contenitore scorrevole, senza toccare gli antenati.
+ * Torna quanto ha spostato (0 se non c'è niente da fare o mancano le misure, come in Node).
+ */
+export function centraNellElenco(contenitore, voce) {
+  if (!contenitore || !voce || typeof voce.getBoundingClientRect !== 'function') return 0;
+  const c = contenitore.getBoundingClientRect(); const v = voce.getBoundingClientRect();
+  if (!c.height || !v.height) return 0;
+  const spostamento = (v.top - c.top) - (c.height - v.height) / 2;
+  const prima = contenitore.scrollTop;
+  contenitore.scrollTop = Math.max(0, prima + spostamento);
+  return contenitore.scrollTop - prima;
+}
+
 /** La scheda del contratto per un id di controllo: titolo, opzioni, minimo e massimo. */
 export function campoDi(id, campi = CAMPI_IMPOSTAZIONI) {
   return campi.find((c) => c.id === id) || null;
@@ -956,7 +970,11 @@ export function apriStudioTemi({ document: doc = globalThis.document } = {}) {
    */
   const sceltaBottone = scelte.find((s) => s.id === scelto)?.bottone;
   sceltaBottone?.focus({ preventScroll: true });
-  sceltaBottone?.scrollIntoView?.({ block: 'center' });
+  /* ⛔ 12/09, VISTO SUL 4174: `scrollIntoView({block:'center'})` scorre TUTTI gli antenati che
+     possono scorrere, quindi anche il corpo della modale — con «Calm» (ultimo dell'elenco) il corpo
+     partiva già scorso di 242 px e titolo e descrizione del tema erano sotto la mensola prima di
+     qualunque clic. Qui si scorre SOLO l'elenco, a mano: la voce scelta al centro, il resto fermo. */
+  centraNellElenco(elenco, sceltaBottone);
   return modale;
 }
 
@@ -1016,7 +1034,9 @@ export function montaScorciatoiaTemi(schermo, { document: doc = globalThis.docum
      delle Impostazioni conta ancora fra i risultati le preferenze migrate (legge il contratto, non
      il DOM), e questa è la sola frase a schermo che le nomina tutte. Scritta come una frase, non
      come un elenco tecnico. */
-  const nomi = CONTROLLI_MIGRATI.map((id) => campoDi(id)?.titolo).filter(Boolean);
+  /* ⛔ 12/09, visto sul 4174: la scheda scriveva «Renderer», cioè il nome tecnico che lo studio
+     stesso ha già riscritto in «Modo di disegno» (TITOLI_STUDIO). Stesso nome nei due posti. */
+  const nomi = CONTROLLI_MIGRATI.map((id) => titoloStudio(id)).filter(Boolean);
   copia.append(nodo(doc, 'p', 'td-studio-rimando__elenco', `Qui dentro: ${nomi.slice(0, -1).join(', ')} e ${nomi.at(-1)}.`));
   const apri = nodo(doc, 'button', 'td-studio-button primary', 'Apri Temi e atmosfere');
   apri.type = 'button';
