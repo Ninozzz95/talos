@@ -85,8 +85,10 @@ export function opzioniFallback(fornitori=[], {usaAttrezzi=true}={}) {
 
 /** Scelta opzionale riusabile nella modale e nella pillola; onChange collega la sessione. */
 export function creaSceltaFallback({fornitori=[],valore=[],usaAttrezzi=true,onChange=null}={}) {
-  const wrap=document.createElement('fieldset');wrap.className='talos-card talos-card--pad talos-stack';Object.assign(wrap.style,{minWidth:'0',margin:'16px 0 0',gap:'12px'});
-  const legend=document.createElement('legend');legend.textContent='Se non risponde, continua con…';wrap.append(legend);
+  // 12/09, review P-H: stesso linguaggio dei gruppi «Planner opzionale» / «Accesso al workspace»
+  // (etichetta `sheet-label` + controllo + aiuto), niente fieldset con la legenda sul bordo.
+  const wrap=document.createElement('div');wrap.className='talos-stack talos-scelta-riserve';wrap.setAttribute('role','group');wrap.setAttribute('aria-label','Se non risponde, continua con…');Object.assign(wrap.style,{minWidth:'0',margin:'16px 0 0',gap:'8px'});
+  const etichetta=document.createElement('span');etichetta.className='sheet-label';etichetta.textContent='Se non risponde, continua con…';wrap.append(etichetta);
   const selezione=valore.map(({provider,model})=>({provider,model}));
   const scelte=opzioniFallback(fornitori,{usaAttrezzi});
   const lista=document.createElement('ol');lista.className='talos-stack';
@@ -97,6 +99,7 @@ export function creaSceltaFallback({fornitori=[],valore=[],usaAttrezzi=true,onCh
   const aggiungi=document.createElement('button');aggiungi.type='button';aggiungi.className='talos-button talos-button--secondary talos-button--sm';aggiungi.textContent='Aggiungi';
   const notifica=()=>onChange?.(selezione.map(v=>({...v})));
   function disegna(){
+    lista.hidden=selezione.length===0;
     lista.replaceChildren(...selezione.map((v,i)=>{
       const li=document.createElement('li');li.className='talos-cluster';
       const label=document.createElement('span');label.textContent=scelte.find(o=>o.provider===v.provider&&o.model===v.model)?.etichetta||'Scelta non disponibile: rimuovila e scegline un’altra';
@@ -108,7 +111,7 @@ export function creaSceltaFallback({fornitori=[],valore=[],usaAttrezzi=true,onCh
   }
   select.addEventListener('change',disegna);
   aggiungi.addEventListener('click',()=>{const scelta=scelte[Number(select.value)];if(!scelta||select.value===''||selezione.length>=8||selezione.some(v=>v.provider===scelta.provider&&v.model===scelta.model))return;selezione.push({provider:scelta.provider,model:scelta.model});select.value='';notifica();disegna();select.focus();});
-  const nota=document.createElement('p');nota.className='talos-muted';nota.textContent=typeof onChange!=='function'?'La scelta non è ancora collegata a questa sessione.':'Il cambio viene annunciato in chat. La conversazione continua con i fornitori scelti, nell’ordine indicato.';
+  const nota=document.createElement('small');nota.className='workspace-chooser-help talos-muted';nota.textContent=typeof onChange!=='function'?'La scelta non è ancora collegata a questa sessione.':'Il cambio viene annunciato in chat. La conversazione continua con i fornitori scelti, nell’ordine indicato.';
   const azioni=document.createElement('div');azioni.className='talos-cluster';azioni.append(select,aggiungi);
   wrap.append(lista,azioni,nota);disegna();return wrap;
 }
