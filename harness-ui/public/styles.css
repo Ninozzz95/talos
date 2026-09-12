@@ -13998,6 +13998,52 @@ details.td-theme-note p {
     font-size: 21px;
   }
 }
+.model-picker-sources {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  padding-bottom: 6px;
+  scroll-padding-inline: 6px;
+  scroll-behavior: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--talos-muted) var(--surface-elevated);
+  background:
+    linear-gradient(
+      to right,
+      var(--surface-elevated) 70%,
+      transparent) left center / 28px 100% local no-repeat,
+    linear-gradient(
+      to left,
+      var(--surface-elevated) 70%,
+      transparent) right center / 28px 100% local no-repeat,
+    linear-gradient(
+      to right,
+      color-mix(in srgb, var(--talos-text) 28%, transparent),
+      transparent) left center / 12px 100% scroll no-repeat,
+    linear-gradient(
+      to left,
+      color-mix(in srgb, var(--talos-text) 28%, transparent),
+      transparent) right center / 12px 100% scroll no-repeat;
+  background-color: var(--surface-elevated);
+}
+.model-picker-source {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .model-picker-sources {
+    scroll-behavior: auto;
+  }
+  .model-picker-source {
+    animation: none;
+    transition: none;
+  }
+}
 
 /* src/styles/mockup-animazioni.css */
 :root {

@@ -1062,6 +1062,11 @@ var init_catalogo_modelli = __esm({
 });
 
 // src/components/fonti-modelli.js
+function portaInVistaFonteSelettore(evento) {
+  const scheda = evento.target;
+  if (!scheda?.matches?.('.model-picker-source[role="tab"]') || !scheda.parentElement?.matches('.model-picker-sources[role="tablist"]')) return;
+  scheda.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant", container: "nearest" });
+}
 function senzaChiave(fonte) {
   return PROVIDER_DIRETTI.some((p) => p.id === fonte && p.senzaChiave === true);
 }
@@ -1153,6 +1158,7 @@ var PROVIDER_DIRETTI, ID_DIRETTI;
 var init_fonti_modelli = __esm({
   "src/components/fonti-modelli.js"() {
     init_catalogo_modelli();
+    if (typeof document !== "undefined") document.addEventListener("focusin", portaInVistaFonteSelettore);
     PROVIDER_DIRETTI = Object.freeze([
       Object.freeze({ id: "anthropic", etichetta: "Anthropic" }),
       Object.freeze({ id: "gemini", etichetta: "Gemini" }),
