@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
+import { PDFArray, PDFDocument, PDFName, PDFRawStream, decodePDFRawStream } from 'pdf-lib';
+
 import { createHttpApp } from '../src/http-app.mjs';
 import { createSessionRegistry as createSessionRegistryReale } from '../src/session-registry.mjs';
 import { scriviRapporto } from '../src/research-store.mjs';
@@ -486,3 +488,271 @@ test('⛔⛔ VERSO CONTRARIO — una domanda che È un percorso non produce un n
   // E un formato che non esiste non produce un nome: non c'è un ripiego silenzioso.
   assert.throws(() => nomeSicuroDiEsportazione('x', 'exe'), /unknown export format/);
 });
+
+/* ─────────── 4. IL MARKDOWN SI RENDE — il difetto trovato da una FOTO (12/09/2026) ─────────── */
+
+/*
+ * ⛔⛔⛔ COSA SI VEDEVA, e perché nessun test lo aveva visto.
+ *
+ * L'esportazione HTML di una ricerca vera (L8, sul 4174) mostrava il corpo del rapporto COSÌ:
+ *
+ *     # Agentic Desktop Harness Evolution…
+ *     ## Executive Summary
+ *     ### Market Growth Trajectory - Current market size: $7.8B - Projected market size…
+ *     **Key Components:** - Hierarchical multi-agent system - Two-tier agent hierarchy…
+ *
+ * cancelletti e asterischi LETTERALI, ogni elenco schiacciato in un paragrafo. I test di ieri
+ * dicevano «200, Content-Type giusto, il corpo si rilegge» — tutto vero, e tutto insufficiente:
+ * è il difetto «integro ≠ bello» che il rapporto di ieri aveva **dichiarato** in «cosa NON ho
+ * verificato». L'ha trovato una foto.
+ *
+ * ⇒ Qui le prove sono NEGATIVE per costruzione: un marcatore che sopravvive è rosso. Cercare
+ *   `<h2>` non basterebbe — la pagina rotta avrebbe potuto contenere entrambi.
+ */
+
+/** Un rapporto depositato ma respinto dal cancello: prosa Markdown vera, senza record. */
+const PROSA_MARKDOWN = `# Agentic Desktop Harness Evolution
+
+## Executive Summary
+
+This report investigates **agent-based** harnesses and \`computer control\`.
+
+### Market Growth Trajectory
+- Current market size: $7.8B
+- Projected market size by 2030: $52B (566% growth)
+
+**Key Components:**
+1. Hierarchical multi-agent system
+2. Two-tier agent hierarchy: HostAgent + AppAgents
+
+> Una citazione dal rapporto.
+
+| Harness | Quota |
+|---|---:|
+| TALOS | 12% |
+
+Vedi [la fonte](https://esempio.invalid/x). Un <script>alert(1)</script> letterale.
+
+## 2. Desktop Agent Architecture and Control
+
+### UFO Architecture
+- Hierarchical multi-agent system optimized for Windows desktop automation
+- Hybrid control detection pipeline fusing UI Automation with vision-based parsing
+- Unified GUI-API action layer coordinated through MCP servers
+- Speculative multi-action planning reducing per-step LLM overhead
+
+### Computer Use Capabilities
+- Graphical user interface interaction through automated agents
+- Web and desktop app automation across multiple platforms
+- Complex UI automation handling dynamic interfaces beyond traditional RPA limitations
+
+## 3. Mobile Integration and Platform-Specific Approaches
+
+### Apple AppIntents
+- Transforming iOS into a native AI agent platform
+- Bridging mobile apps with AI agent capabilities
+- Enabling on-device AI processing and response
+
+### Android Accessibility
+- Screen reading and gesture synthesis for agent control
+- Foreground service constraints and battery governance
+
+## 4. Evaluation
+
+Le metodologie di valutazione restano il punto **piu' debole** di tutto il campo.`;
+
+/* ⛔ Il testo e' lungo APPOSTA: un rapporto di una pagina sola non direbbe niente su cosa
+   succede a un titolo che cade a cavallo di un'interruzione di pagina, che e' la ragione per
+   cui il PDF passa da un motore di flusso e non da coordinate. */
+
+/*
+ * ⛔ IL TESTO DI UN PDF, DAVVERO — e non era gratis.
+ *
+ * `pdf-lib` non ha un estrattore di testo, e pdfmake incorpora i font in SOTTOINSIEME: nel flusso
+ * di contenuto non ci sono lettere ma ID DI GLIFO (`[<00010002…>] TJ`). Un controllo sui byte
+ * grezzi non vedrebbe mai un `## ` né quando c'è né quando non c'è — cioè sarebbe un test che
+ * passa per costruzione, la cosa che questo repo ha già pagato più volte.
+ * ⇒ Si legge la CMap `ToUnicode` del font (glifo → carattere) e si traducono i gruppi esadecimali.
+ * ⛔ Provato AL CONTRARIO su un artefatto vero: sul PDF ROTTO del 12/09 questo lettore trova
+ *   `## ` (verificato prima di scrivere la cura); su quello curato no.
+ * ⛔ È approssimativo per costruzione (niente ordine di riga, niente spazi da kerning): serve a
+ *   dire SE una sequenza c'è, non a ricostruire il documento.
+ */
+function cmapDiFont(fontDict) {
+  const mappa = new Map();
+  const tu = fontDict?.lookup?.(PDFName.of('ToUnicode'));
+  if (!(tu instanceof PDFRawStream)) return mappa;
+  const esa = (valore) => String.fromCodePoint(...(valore.match(/.{1,4}/g) ?? []).map((h) => parseInt(h, 16)));
+  const testo = Buffer.from(decodePDFRawStream(tu).decode()).toString('latin1');
+  for (const blocco of testo.matchAll(/beginbfchar([\s\S]*?)endbfchar/g)) {
+    for (const coppia of blocco[1].matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]*)>/g)) {
+      mappa.set(parseInt(coppia[1], 16), coppia[2] ? esa(coppia[2]) : '');
+    }
+  }
+  for (const blocco of testo.matchAll(/beginbfrange([\s\S]*?)endbfrange/g)) {
+    let corpo = blocco[1];
+    const formaArray = /<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*\[([^\]]*)\]/g;
+    for (const riga of corpo.matchAll(formaArray)) {
+      const da = parseInt(riga[1], 16);
+      [...riga[3].matchAll(/<([0-9a-fA-F]*)>/g)].forEach((m, i) => mappa.set(da + i, m[1] ? esa(m[1]) : ''));
+    }
+    /* ⛔ Le forme ad ARRAY si tolgono PRIMA di cercare quelle a INTERVALLO: tre voci consecutive
+       dentro un array sembrano un intervallo, e la rilettura sbagliata sovrascriveva tutta la
+       mappa — il testo usciva cifrato. Trovato provando, non ragionandoci. */
+    corpo = corpo.replace(formaArray, ' ');
+    for (const riga of corpo.matchAll(/<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>\s*<([0-9a-fA-F]+)>/g)) {
+      const da = parseInt(riga[1], 16);
+      const a = parseInt(riga[2], 16);
+      const base = parseInt(riga[3], 16);
+      for (let c = da; c <= a && c - da < 65536; c += 1) mappa.set(c, String.fromCodePoint(base + (c - da)));
+    }
+  }
+  return mappa;
+}
+
+function testoDelPdf(pdf) {
+  const pezzi = [];
+  for (const pagina of pdf.getPages()) {
+    const fonts = pagina.node.Resources()?.lookup?.(PDFName.of('Font'));
+    const cmaps = new Map();
+    if (fonts?.keys) for (const chiave of fonts.keys()) cmaps.set(chiave.asString(), cmapDiFont(fonts.lookup(chiave)));
+    const contenuti = pagina.node.Contents();
+    const flussi = contenuti instanceof PDFArray ? contenuti.asArray().map((r) => pdf.context.lookup(r)) : [contenuti];
+    for (const flusso of flussi) {
+      if (!(flusso instanceof PDFRawStream)) continue;
+      const grezzo = Buffer.from(decodePDFRawStream(flusso).decode()).toString('latin1');
+      let corrente = new Map();
+      for (const pezzo of grezzo.matchAll(/\/(F\d+)\s+[\d.]+\s+Tf|\[([^\]]*)\]\s*TJ|(<[0-9a-fA-F]+>)\s*Tj/g)) {
+        if (pezzo[1]) { corrente = cmaps.get(`/${pezzo[1]}`) ?? new Map(); continue; }
+        for (const gruppo of (pezzo[2] ?? pezzo[3] ?? '').matchAll(/<([0-9a-fA-F]+)>/g)) {
+          pezzi.push((gruppo[1].match(/.{1,4}/g) ?? []).map((c) => corrente.get(parseInt(c, 16)) ?? '').join(''));
+        }
+      }
+    }
+  }
+  return pezzi.join('');
+}
+
+/** Una ricerca conclusa che ha depositato PROSA MARKDOWN, respinta dal cancello. */
+async function conProsaMarkdown(b) {
+  const { sessionId, ricercaId } = await conRicercaViva(b);
+  await scriviRapporto({ cartella: b.radice, id: ricercaId, testo: PROSA_MARKDOWN });
+  const scheda = await concludi(b, sessionId, ricercaId, PROSA_MARKDOWN);
+  assert.equal(scheda.stato, 'senza-rapporto', 'è il caso della foto: prosa vera, nessun record');
+  return { sessionId, ricercaId };
+}
+
+test('⭐⭐⭐⭐ 12/09 — l\'HTML RENDE il Markdown: titoli, elenchi, grassetto, tabella, citazione, link', async (t) => {
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conProsaMarkdown(b);
+
+  const risposta = await esporta(b, sessionId, ricercaId, 'formato=html');
+  assert.equal(risposta.status, 200);
+  const html = await risposta.text();
+
+  assert.match(html, /<h2>Agentic Desktop Harness Evolution<\/h2>/);
+  assert.match(html, /<h3>Executive Summary<\/h3>/);
+  assert.match(html, /<strong>agent-based<\/strong>/);
+  assert.match(html, /<code>computer control<\/code>/);
+  assert.match(html, /<ul><li>Current market size: \$7\.8B<\/li>/);
+  assert.match(html, /<ol><li>Hierarchical multi-agent system<\/li>/);
+  assert.match(html, /<blockquote>Una citazione dal rapporto\.<\/blockquote>/);
+  assert.match(html, /<table>/);
+  assert.match(html, /<a href="https:\/\/esempio\.invalid\/x"/);
+  // ⛔ E il vestito degli elementi nuovi c'è: un `<ul>` senza CSS è un elenco senza rientro.
+  assert.match(html, /ul, ol \{/);
+  assert.match(html, /table \{ border-collapse/);
+});
+
+test('⛔⛔⛔ 12/09, AL CONTRARIO — nell\'HTML non sopravvive NESSUN marcatore: è la foto che si nega', async (t) => {
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conProsaMarkdown(b);
+  const html = await (await esporta(b, sessionId, ricercaId, 'formato=html')).text();
+  // Solo il CORPO: il `<style>` della pagina contiene legittimamente `*`, `#` e `--`.
+  const corpo = html.slice(html.indexOf('<body>')).replace(/<pre>[\s\S]*?<\/pre>/g, '');
+
+  assert.doesNotMatch(corpo, /(^|>|\s)#{1,6}\s/, '⛔ «# Agentic Desktop…» e «## Executive Summary» LETTERALI: era questo');
+  assert.doesNotMatch(corpo, /\*\*/, '⛔ «**Key Components:**» letterale: era questo');
+  assert.doesNotMatch(corpo, /^\s*-\s\w/m, '⛔ e gli elenchi non sono più trattini dentro un paragrafo');
+  assert.doesNotMatch(corpo, /\|\s*---/, '⛔ né una tabella stampata come righe di barre');
+  // ⛔ E il recinto ```talos-research-report NON si stampa: si usa, non si mostra.
+  assert.doesNotMatch(html, /talos-research-report/, 'il record recintato non è prosa da leggere');
+});
+
+test('⛔⛔⛔ 12/09, AL CONTRARIO — un `<script>` nel rapporto esce ESCAPATO, non vivo', async (t) => {
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conProsaMarkdown(b);
+  const html = await (await esporta(b, sessionId, ricercaId, 'formato=html')).text();
+  const corpo = html.slice(html.indexOf('<body>'));
+
+  assert.doesNotMatch(corpo, /<script/i, '⛔ il file si apre con file:// da un browser vero');
+  assert.match(corpo, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/, 'si legge, ma è testo');
+});
+
+test('⭐⭐⭐⭐ 12/09 — il PDF ha titoli VERI: più pagine, e nel testo estratto nessun «## »', async (t) => {
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conProsaMarkdown(b);
+
+  const risposta = await esporta(b, sessionId, ricercaId, 'formato=pdf');
+  assert.equal(risposta.status, 200);
+  const pdf = await PDFDocument.load(new Uint8Array(await risposta.arrayBuffer()));
+  assert.ok(pdf.getPageCount() > 1, 'copertina più il rapporto impaginato');
+
+  const testo = testoDelPdf(pdf);
+  assert.ok(testo.length > 200, `il lettore di testo deve leggere qualcosa (ne ha letti ${testo.length}): se legge zero, le due righe sotto passerebbero per costruzione`);
+  assert.equal(testo.includes('## '), false, '⛔ era «## Executive Summary» dentro il PDF');
+  assert.equal(testo.includes('**'), false, '⛔ ed era «**Key Components:**»');
+  assert.ok(testo.includes('Executive Summary'), 'il titolo c\'è — come titolo, non come marcatore');
+  assert.equal(testo.includes('talos-research-report'), false, 'e il record recintato non finisce impaginato');
+});
+
+test('⭐⭐⭐ 12/09 — il DOCX porta prosa, non marcatori', async (t) => {
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conProsaMarkdown(b);
+
+  const risposta = await esporta(b, sessionId, ricercaId, 'formato=docx');
+  const { default: JSZip } = await import('jszip');
+  const xml = await (await JSZip.loadAsync(new Uint8Array(await risposta.arrayBuffer()))).file('word/document.xml').async('string');
+
+  assert.equal(xml.includes('## '), false, '⛔ un `.docx` con «## Executive Summary» dentro è lo stesso difetto, scritto in Word');
+  assert.equal(xml.includes('**'), false);
+  assert.match(xml, /Executive Summary/);
+  assert.match(xml, /•/, 'e gli elenchi hanno un punto vero');
+  assert.equal(xml.includes('talos-research-report'), false);
+});
+
+test('⭐⭐ 12/09 — anche la SINTESI di un rapporto VERO si rende, e il passaggio resta VERBATIM', async (t) => {
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conRicercaViva(b);
+  await scriviRapporto({
+    cartella: b.radice,
+    id: ricercaId,
+    testo: talosResearchReportDocument({
+      question: DOMANDA,
+      summary: '## In breve\n\nConvergono su **controllo del computer**.\n\n- permessi per attrezzo\n- memoria persistente',
+      judge: null,
+      claims: [{
+        claim: { text: 'Il **mercato** cresce.', sourceIndex: 1, quote: 'q' },
+        // ⛔ Il passaggio porta degli asterischi che c'erano DAVVERO nella pagina.
+        passage: 'la crescita **misurata** è del 566%',
+        checks: { claimSupported: 'yes' },
+      }],
+      sources: [{ url: 'https://esempio1.invalid/fonte', title: 'Fonte 1', publishedAt: null, obtained: 'page' }],
+    }),
+  });
+  await concludi(b, sessionId, ricercaId);
+
+  const html = await (await esporta(b, sessionId, ricercaId, 'formato=html')).text();
+  assert.match(html, /<h3>In breve<\/h3>/, 'la sintesi è Markdown come il resto: la scrive lo stesso modello');
+  assert.match(html, /<strong>controllo del computer<\/strong>/);
+  assert.match(html, /<ul><li>permessi per attrezzo<\/li>/);
+  assert.match(html, /<h3>1\. Il <strong>mercato<\/strong> cresce\.<\/h3>/, 'e il testo di un\'affermazione pure');
+
+  /*
+   * ⛔⛔ IL PASSAGGIO NON SI RENDE MAI. È la PROVA: il testo com'è nella fonte. Un asterisco
+   *   dentro una citazione è un asterisco che c'era davvero, e trasformarlo in corsivo vorrebbe
+   *   dire modificare l'unica cosa che il rapporto conserva perché non sia modificabile.
+   */
+  assert.match(html, /<blockquote>la crescita \*\*misurata\*\* è del 566%<\/blockquote>/);
+});
+

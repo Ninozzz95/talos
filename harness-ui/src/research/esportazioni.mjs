@@ -2,6 +2,13 @@ import { talosSafeFileStem } from '../document-filename.mjs'
 import { talosResearchBibtex, talosResearchRis } from './citations.mjs'
 import { talosResearchParseReport } from './report.mjs'
 import {
+    escapeHtml,
+    inlineInHtml,
+    markdownInBlocchiReport,
+    markdownInHtml,
+    markdownInTestoSemplice,
+} from './markdown-server.mjs'
+import {
     TALOS_RESEARCH_PDF_DEFAULT_TONE,
     TALOS_RESEARCH_PDF_TONES,
     talosResearchPdfSpec,
@@ -144,12 +151,6 @@ export function nomeSicuroDiEsportazione(domanda, formato) {
 }
 
 const CODIFICA = new TextEncoder()
-
-function escapeHtml(valore) {
-    return String(valore ?? '')
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-}
 
 /** La sola data, dall'ISO: è ciò che una citazione vuole, e l'ora non aggiunge niente. */
 function soloLaData(iso) {
@@ -311,11 +312,20 @@ function testoHtml(ricerca, record) {
 
     if (!record) {
         corpo.push(`<p class="avviso">⛔ ${escapeHtml(DICITURA_SENZA_VERIFICHE)}</p>`)
-        for (const blocco of senzaIlRecinto(prosa ?? '').split(/\n{2,}/)) {
-            if (blocco.trim()) corpo.push(`<p>${escapeHtml(blocco.trim())}</p>`)
-        }
+        /*
+         * ⛔⛔⛔ 12/09, IL DIFETTO VISTO IN FOTO: qui c'era
+         *   `senzaIlRecinto(prosa).split(/\n{2,}/).map(b => \`<p>${escapeHtml(b)}</p>\`)`.
+         *   Cioe': il rapporto spezzato sulle righe VUOTE e ogni pezzo escapato dentro un `<p>`.
+         *   A schermo uscivano `# Agentic Desktop Harness…`, `## Executive Summary`,
+         *   `**Key Components:**` LETTERALI, e ogni elenco schiacciato in un paragrafo solo —
+         *   perche' un elenco e' separato da UN a capo, non da due.
+         * ⛔ `livelloMinimo: 2`: la pagina ha gia' il suo `<h1>` (la domanda). Due `<h1>` in una
+         *   pagina sono due titoli, cioe' nessuno.
+         */
+        corpo.push(markdownInHtml(senzaIlRecinto(prosa ?? ''), { livelloMinimo: 2 }))
     } else {
-        corpo.push(`<p class="sintesi">${escapeHtml(record.summary)}</p>`)
+        /* ⛔ Anche la SINTESI e' Markdown: e' scritta dallo stesso modello che scrive il rapporto. */
+        corpo.push(`<div class="sintesi">${markdownInHtml(record.summary, { livelloMinimo: 2 })}</div>`)
         if (b) {
             corpo.push('<ul class="bilancio">',
                 `<li><b>${b.totali}</b> affermazioni</li>`,
@@ -334,8 +344,14 @@ function testoHtml(ricerca, record) {
            `talosResearchSupportLabel` che scrive la prosa: due frasari sono due verdetti. */
         for (const a of ricerca.affermazioni ?? []) {
             corpo.push('<article>',
-                `<h3>${a.numero}. ${escapeHtml(a.testo)}</h3>`,
+                /* ⛔ Il TESTO dell'affermazione passa dall'inline (un `**` scritto dal modello e'
+                   enfasi); il PASSAGGIO no — vedi sotto. */
+                `<h3>${a.numero}. ${inlineInHtml(a.testo)}</h3>`,
                 `<p class="verdetto v-${escapeHtml(a.verdetto)}">Esito: ${escapeHtml(a.verdettoUmano)}${a.motivoVerdetto ? ` — ${escapeHtml(a.motivoVerdetto)}` : ''}</p>`,
+                /* ⛔⛔ IL PASSAGGIO NON SI RENDE MAI: e' la PROVA, cioe' il testo com'e' nella
+                   fonte. Un asterisco dentro una citazione e' un asterisco che c'era davvero, e
+                   trasformarlo in corsivo vorrebbe dire modificare l'unica cosa che il rapporto
+                   conserva perche' non sia modificabile. Escapato, mai reso. */
                 a.passaggio
                     ? `<blockquote>${escapeHtml(a.passaggio)}</blockquote>`
                     : '<p class="assente">Il passaggio citato non è stato ritrovato nel testo della fonte.</p>',
@@ -366,6 +382,26 @@ main { max-width: 46rem; margin: 0 auto; }
 h1 { font-size:1.7rem; line-height:1.25; margin:0 0 4px; }
 h2 { font-size:1.15rem; margin:36px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--bordo); }
 h3 { font-size:1rem; margin:0 0 6px; }
+/* ⛔ 12/09, difetto visto NELLA FOTO in entrambi i temi: col colore tenue e un corpo piu'
+   piccolo del testo, un h4 si leggeva come una didascalia ed era piu' DEBOLE di un grassetto
+   di paragrafo che stava sotto di lui. Gerarchia invertita: un titolo di sezione non puo'
+   pesare meno di una riga qualunque della sezione. */
+h4, h5, h6 { font-size:1rem; font-weight:600; margin:22px 0 6px; color:var(--inchiostro); }
+/* ⛔ 12/09: da qui in giu' sono gli elementi che il Markdown RESO puo' produrre e che prima non
+   potevano esistere, perche' il rapporto usciva come paragrafi di testo grezzo. */
+ul, ol { padding-left:1.4rem; margin:10px 0; }
+li { margin:4px 0; }
+hr { border:0; border-top:1px solid var(--bordo); margin:24px 0; }
+code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.9em;
+  background:var(--pannello); border:1px solid var(--bordo); border-radius:4px; padding:1px 5px; }
+pre { background:var(--pannello); border:1px solid var(--bordo); border-radius:8px;
+  padding:12px 14px; overflow-x:auto; }
+pre code { background:none; border:0; padding:0; font-size:.85rem; }
+a { color:inherit; text-decoration:underline; text-underline-offset:2px; }
+.tabella { overflow-x:auto; margin:14px 0; }
+table { border-collapse:collapse; width:100%; font-size:.9rem; }
+th, td { border-bottom:1px solid var(--bordo); padding:7px 10px; }
+th { border-bottom:2px solid var(--tenue); font-weight:600; }
 .meta, .quando, .fonte, .url { color:var(--tenue); font-size:.85rem; }
 .sintesi { font-size:1.05rem; }
 .avviso { background:var(--pannello); border-left:4px solid var(--allarme); padding:12px 14px; border-radius:0 6px 6px 0; }
@@ -407,13 +443,23 @@ function specPdf(ricerca, record, tono) {
     const sintetico = {
         version: 1,
         question: ricerca.domanda ?? 'Ricerca approfondita',
-        summary: senzaIlRecinto(prosaDisponibile(ricerca) ?? ''),
+        /* ⛔ La sintesi del record sintetico resta VUOTA: la prosa entra qui sotto come BLOCCHI
+           impaginati, non come un paragrafo unico lungo cinque pagine col `##` dentro. */
+        summary: '',
         judge: null,
         claims: [],
         sources: [],
     }
     const spec = talosResearchPdfSpec(sintetico, tono, opzioni)
-    return { ...spec, blocks: [spec.blocks[0], { t: 'note', x: DICITURA_SENZA_VERIFICHE }, ...spec.blocks.slice(1)] }
+    return {
+        ...spec,
+        blocks: [
+            spec.blocks[0],
+            { t: 'note', x: DICITURA_SENZA_VERIFICHE },
+            /* ⛔ `livelloMinimo: 2`: la copertina porta gia' il titolo della ricerca. */
+            ...markdownInBlocchiReport(senzaIlRecinto(prosaDisponibile(ricerca) ?? ''), { livelloMinimo: 2 }),
+        ],
+    }
 }
 
 /* ─────────────────────────────────────── la porta sola ──────────────────────────────────── */
@@ -498,7 +544,9 @@ export async function costruisciEsportazione({ ricerca, formato, tono }, deps = 
         }
         case 'docx': {
             const genera = deps.generaDocumentoFn ?? (await import('../document-generator.mjs')).generateTalosDocument
-            const prosa = senzaIlRecinto(prosaDisponibile(ricerca) ?? '')
+            /* ⛔ 12/09: `markdownInTestoSemplice` e non il Markdown grezzo. Un `.docx` con
+               `## Executive Summary` dentro e' lo stesso difetto dell'HTML, scritto in Word. */
+            const prosa = markdownInTestoSemplice(senzaIlRecinto(prosaDisponibile(ricerca) ?? ''))
             const documento = await genera({
                 format: 'docx',
                 title: ricerca.domanda ?? 'Ricerca approfondita',

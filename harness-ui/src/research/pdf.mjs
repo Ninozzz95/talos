@@ -1,4 +1,5 @@
 import { talosResearchSupportLabel } from './report.mjs'
+import { inlineInTestoSemplice, markdownInBlocchiReport, runsDiMarkdown } from './markdown-server.mjs'
 
 /*
  * PORTO di AVM/mobile/src/lib/research/researchPdf.ts (246 righe, letto per intero il
@@ -41,6 +42,19 @@ import { talosResearchSupportLabel } from './report.mjs'
  * ⛔ Portarlo «fedele» qui avrebbe importato il difetto su un record scritto da `report.mjs`,
  *   che è 1-based per costruzione. Qui si usa `- 1`, e il test lo morde con un record vero.
  *   ⛔ Il difetto resta APERTO sul mobile: non ho ownership lì, si segnala e non si corregge.
+ *
+ * ═════════════════════════════════════════════════════════════════════════════════════
+ * ⛔⛔ LA SECONDA DIVERGENZA, 12/09: IL MARKDOWN SI RENDE.
+ * ═════════════════════════════════════════════════════════════════════════════════════
+ *
+ * `researchPdf.ts` mette la sintesi in un blocco solo (`{t:'p', x: report.summary}`) e il
+ * testo di ogni affermazione dentro un titolo, così com'è. Ma quel testo lo scrive un modello,
+ * e un modello scrive **Markdown**: nel PDF di una ricerca vera (L8, 12/09) uscivano
+ * `## Executive Summary` e `**Key Components:**` LETTERALI, come nell'HTML.
+ * ⇒ Qui la sintesi passa da `markdownInBlocchiReport` (titoli, elenchi, tabelle veri) e il
+ *   testo delle affermazioni da `runsDiMarkdown` / `inlineInTestoSemplice`.
+ * ⛔ Il PASSAGGIO no, mai: è la PROVA, cioè il testo com'è nella fonte. Renderlo vorrebbe dire
+ *   modificare l'unica cosa che il rapporto conserva perché non sia modificabile.
  */
 
 /**
@@ -145,14 +159,14 @@ function rapportoCompleto(report, options) {
     const blocks = [
         copertina(report, options),
         { t: 'h', lvl: 1, x: 'In breve' },
-        { t: 'p', x: report.summary },
+        ...markdownInBlocchiReport(report.summary, { livelloMinimo: 2 }),
         bilancio(report),
         nota(report),
         { t: 'pb' },
         { t: 'h', lvl: 1, x: 'Le affermazioni, una per una' },
     ]
     report.claims.forEach((claim, index) => {
-        blocks.push({ t: 'h', lvl: 3, x: `${index + 1}. ${claim.text}` })
+        blocks.push({ t: 'h', lvl: 3, x: `${index + 1}. ${inlineInTestoSemplice(claim.text)}` })
         blocks.push({ t: 'p', x: `Verdetto: ${verdetto(claim)} — fonte: ${fonteDi(report, claim.sourceIndex)}` })
         // Il passaggio è la prova. Senza, «sostenuta» è una parola che chiede fiducia invece
         // di darla.
@@ -193,20 +207,20 @@ function sintesi(report, options) {
     const blocks = [
         { t: 'h', lvl: 1, x: titolo || report.question },
         ...(titolo ? [{ t: 'note', x: report.question }] : []),
-        { t: 'p', x: report.summary },
+        ...markdownInBlocchiReport(report.summary, { livelloMinimo: 3 }),
         bilancio(report),
     ]
     if (regge.length > 0) {
         blocks.push({ t: 'h', lvl: 2, x: 'Quello che regge' })
         // Quattro, non tutte: una sintesi che riporta trenta punti non è una sintesi, è il
         // rapporto senza le prove.
-        blocks.push({ t: 'list', items: regge.slice(0, 4).map((claim) => claim.text) })
+        blocks.push({ t: 'list', items: regge.slice(0, 4).map((claim) => runsDiMarkdown(claim.text)) })
     }
     if (nonRegge.length > 0) {
         blocks.push({ t: 'h', lvl: 2, x: 'Quello che NON regge' })
         blocks.push({
             t: 'list',
-            items: nonRegge.slice(0, 4).map((claim) => `${claim.text} — ${verdetto(claim)}`),
+            items: nonRegge.slice(0, 4).map((claim) => `${inlineInTestoSemplice(claim.text)} — ${verdetto(claim)}`),
         })
     }
     if (tally.unverified > 0) {
@@ -230,7 +244,7 @@ function dossier(report, options) {
             align: ['r', 'l', 'l', 'l'],
             rows: report.claims.map((claim, index) => [
                 String(index + 1),
-                claim.text,
+                runsDiMarkdown(claim.text),
                 verdetto(claim),
                 fonteDi(report, claim.sourceIndex),
             ]),
@@ -259,7 +273,7 @@ export function talosResearchPdfSpec(report, tone, options = {}) {
     const blocks = (report.claims?.length ?? 0) === 0
         ? [
             copertina(report, options),
-            { t: 'p', x: report.summary },
+            ...markdownInBlocchiReport(report.summary, { livelloMinimo: 2 }),
             { t: 'note', x: 'Questa ricerca non ha prodotto affermazioni verificabili.' },
         ]
         : tone === 'brief'
