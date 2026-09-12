@@ -160,6 +160,7 @@ async function startServer() {
     } catch { return null; }
   };
   const ownerRuntime = createOwnerRuntimeAdapter({
+    providerStore,
     resolveImagesFn: messages => chatImageStore.resolveMessages(messages),
     modulePath: config.ownerRuntimeModule,
     openRouterRuntimeFn: () => providerStore.getRuntime('openrouter'),

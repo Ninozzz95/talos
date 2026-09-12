@@ -1089,7 +1089,15 @@ export function conMarcatoreDiCache(messaggi, marcatore = { type: 'ephemeral', t
         : m))
 }
 
-export async function chiamaConRitenta({
+export const SUPPORTA_FALLBACK_FORNITORI = 1;
+export async function chiamaConRitenta(opzioni) {
+    const esegui = opzioni.fetchDiRete?.eseguiConFallback;
+    return typeof esegui === 'function'
+        ? esegui(aggiunte => chiamaConRitentaBase({ ...opzioni, ...aggiunte }), opzioni)
+        : chiamaConRitentaBase(opzioni);
+}
+
+async function chiamaConRitentaBase({
     modello, chiave, messaggi, attrezzi,
     maxOutputTokens,
     tentativiMassimi = 4,

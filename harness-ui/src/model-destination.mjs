@@ -71,6 +71,26 @@ export function separaFonteModello(modello) {
   return { fonte: 'openrouter', modelloRemoto: modello };
 }
 
+/** Lista di sessione: solo identificatori, mai indirizzi, chiavi o capacità dichiarate dal client. */
+export function validaFallbackProviders(lista = [], { usaAttrezzi = false } = {}) {
+  const invalida = () => { throw new ModelDestinationError('Controlla i fornitori e i modelli scelti per continuare la sessione.', 'PROVIDER_FALLBACK_INVALID'); };
+  if (!Array.isArray(lista) || lista.length > 8) invalida();
+  const viste = new Set();
+  return lista.map(voce => {
+    if (!voce || typeof voce !== 'object' || Array.isArray(voce) || Object.keys(voce).some(k => !['provider', 'model'].includes(k))) invalida();
+    const { provider, model } = voce;
+    const record = Object.hasOwn(REGISTRO_FORNITORI, provider) ? REGISTRO_FORNITORI[provider] : null;
+    if (!record?.destinazioneChat || !record.credenziale || typeof model !== 'string' || model.length > 200 || !/^[a-zA-Z0-9][a-zA-Z0-9._/:@-]*$/u.test(model) || model.includes('://') || FONTI_MODELLO.some(p => model.startsWith(`${p}:`))) invalida();
+    const id = `${provider}:${model}`;
+    if (viste.has(id)) invalida();
+    viste.add(id);
+    if (usaAttrezzi && record.modelliDiRiserva?.find(m => m.id === model)?.toolCalling !== true) {
+      throw new ModelDestinationError('Il modello di riserva non dichiara il supporto agli attrezzi della sessione.', 'PROVIDER_FALLBACK_TOOLS_UNSUPPORTED');
+    }
+    return Object.freeze({ provider, model });
+  });
+}
+
 /**
  * Chi parla `POST {base}{percorso}` con Bearer: il corpo non si tocca.
  * ⛔ `wire: 'locale'` sta qui dentro perché il supervisore espone lo stesso protocollo — ma esce

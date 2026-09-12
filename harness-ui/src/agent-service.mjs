@@ -238,6 +238,7 @@ export async function avviaSessione({
    */
   cartellaCreazioni = null,
   onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, mobile = false,
+  fallbackProviders = [], onCambioFornitore: depositaCambioFornitore,
   /*
    * ⛔⛔⛔ 02/09 — LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md, §6/§7.
    * L'etichetta del permesso della sessione ("Read only"/"Workspace
@@ -1746,6 +1747,27 @@ export async function avviaSessione({
       // consegna: un contenuto stabile messo DOPO uno variabile non viene mai riusato dalla cache.
       contestoDelProgetto: testoContestoProgetto,
       onGiro, onScrittura, onDelta, reasoning, contextHooks,
+      fallbackProviders,
+      onAvviso: async messaggio => {
+        const messageId = randomUUID();
+        await onEvento(textMessageStart({ messageId, role: 'assistant' }), { durable: true });
+        await onEvento(textMessageContent({ messageId, delta: messaggio }), { durable: true });
+        await onEvento(textMessageEnd({ messageId }), { durable: true });
+      },
+      onCambioFornitore: async evento => {
+        if (typeof depositaCambioFornitore !== 'function') throw new Error('Il cambio non è collegato alla sessione.');
+        for (const messageId of messaggiTestoPerGiro.values()) await onEvento(textMessageEnd({ messageId }), { durable: true });
+        for (const messageId of messaggiRagionamentoPerGiro.values()) await onEvento(reasoningMessageEnd({ messageId }), { durable: true });
+        for (const ids of toolCallIdStreamatiPerGiro.values()) for (const toolCallId of ids) await onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId, content: 'Richiesta interrotta prima dell’esecuzione.' }), { durable: true });
+        messaggiTestoPerGiro.clear(); messaggiRagionamentoPerGiro.clear(); toolCallIdStreamatiPerGiro.clear();
+        const messageId = randomUUID();
+        await onEvento(textMessageStart({ messageId, role: 'assistant' }), { durable: true });
+        await onEvento(textMessageContent({ messageId, delta: evento.messaggio }), { durable: true });
+        await onEvento(textMessageEnd({ messageId }), { durable: true });
+        await onEvento({ type: 'CUSTOM', name: 'cambio-fornitore', value: evento }, { durable: true });
+        await depositaCambioFornitore(evento);
+      },
+      onConsumoFornitore: async evento => onEvento({ type: 'CUSTOM', name: 'consumo-fornitore', value: evento }, { durable: true }),
       strumentiEstesi, ricercaWeb, richiediRicercaFn, onArtefatto, onDocumento, onImmagine, modelloPlanner,
       // ⭐ L9 (12/09/2026) — inoltrati SENZA logica propria, come tutto il resto in questo file:
       // la cache della corsa e la finestra della pagina le costruisce `research-orchestrator.mjs`

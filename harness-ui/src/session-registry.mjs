@@ -1,3 +1,4 @@
+import { validaFallbackProviders } from './model-destination.mjs';
 import { contextUsageFromEvents } from '../../context-engine/src/usage.mjs';
 
 /**
@@ -2435,7 +2436,7 @@ export function createSessionRegistry({
      * di `avvia()` più sotto.
      */
     cartellaGiaScelta = false,
-    provider = 'cloud', runtimeId = null, modelId = null, fallbackConsent = false,
+    provider = 'cloud', runtimeId = null, modelId = null, fallbackConsent = false, fallbackProviders,
     /*
      * ⭐⭐⭐ 29/8 — FASE K, R2 planner costoso + editor economico. Stessa
      * disciplina esatta di `modelloRichiesta` una riga sopra: un
@@ -2531,6 +2532,7 @@ export function createSessionRegistry({
       avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
       modelloPlanner: modelloPlannerEffettivo,
       reasoning: reasoningEffettivo, mobile, permessi: permessiEffettivi,
+      fallbackProviders: validaFallbackProviders(fallbackProviders ?? voceEsistente?.fallbackProviders ?? [], { usaAttrezzi: true }),
       permessiPerAttrezzo: permessiPerAttrezzoEffettivi, approvazionePendente: null,
         reindirizzamentoPendente: null,
         redirectAnnullati: new Set(),
@@ -2642,6 +2644,7 @@ export function createSessionRegistry({
             tipo: 'intestazione', schema: SCHEMA_SESSIONE, sessionId, taskId, cartella, task, comandoProva, forkDa,
             avviataAlle: voce.avviataAlle, modello: voce.modello, modelloPlanner: voce.modelloPlanner,
             reasoning: voce.reasoning, mobile: voce.mobile, permessi: voce.permessi,
+            fallbackProviders: voce.fallbackProviders,
             permessiPerAttrezzo: voce.permessiPerAttrezzo, padreId: voce.padreId, profonditaDelega: voce.profonditaDelega,
             provider: voce.provider, runtimeId: voce.runtimeId, modelId: voce.modelId, fallbackConsent: voce.fallbackConsent,
             // ⭐⭐⭐ 03/9 — persistita: senza questa, un ripristino dopo un riavvio perderebbe la distinzione e allargherebbe una cartella già scelta esattamente (stesso bug appena corretto, ma dopo un riavvio invece che subito).
@@ -2900,6 +2903,21 @@ export function createSessionRegistry({
        */
       cartellaCreazioni: voce.cartellaBase ?? voce.cartella,
       reasoning: reasoningEffettivo ?? undefined,
+      fallbackProviders: voce.fallbackProviders,
+      onCambioFornitore: async evento => {
+        if (!cartellaStore) throw new Error('La registrazione della conversazione non è disponibile.');
+        const modelloSuccessivo = evento.effettivo.provider + ':' + evento.effettivo.model;
+        const posizione = voce.fallbackProviders.findIndex(v => v.provider === evento.effettivo.provider && v.model === evento.effettivo.model);
+        if (posizione < 0) throw new Error('Il fornitore non appartiene alle riserve della sessione.');
+        const rimanenti = voce.fallbackProviders.slice(posizione + 1);
+        await registraRigaFn({ cartellaStore, sessionId, durable: true, record: {
+          tipo: 'impostazioni-sessione',
+          modello: modelloSuccessivo,
+          modelloPlanner: voce.modelloPlanner, reasoning: voce.reasoning, permessi: voce.permessi,
+          permessiPerAttrezzo: voce.permessiPerAttrezzo, fallbackProviders: rimanenti,
+        } });
+        voce.modello = modelloSuccessivo; voce.fallbackProviders = rimanenti;
+      },
       // ⭐ 02/09 — l'etichetta del permesso, dichiarata in RunStarted.contesto (vedi agent-service.mjs): è `voce.permessi` letto ADESSO, cioè anche un cambio arrivato da un altro client via POST /settings fra un giro e l'altro.
       permessi: voce.permessi ?? null,
       segnaleStop: controller.signal,
@@ -2983,7 +3001,7 @@ export function createSessionRegistry({
         { sessionId, sessionNome: voce.nome ?? null, ...voceLib },
         depsLib,
       ),
-      onEvento: (evento) => broadcast(voce, evento),
+      onEvento: (evento, opzioni) => broadcast(voce, evento, opzioni),
     };
     const esecuzione = providerEffettivo === 'local'
       ? eseguiRuntimeLocale({ voce, task, messaggiIniziali, runtimeId: runtimeIdEffettivo, modelId: voce.modelId, reasoning: reasoningEffettivo, sessionId })
@@ -3344,6 +3362,7 @@ export function createSessionRegistry({
           avviataAlle: intestazione.avviataAlle, messaggiFinali: messaggiFinaliRecord?.messaggiFinali ?? null,
           messaggiPendente: Array.isArray(checkpointRecord?.messaggi) ? checkpointRecord.messaggi : null,
           modello: impostazioni.modello, modelloPlanner: impostazioni.modelloPlanner, reasoning: impostazioni.reasoning,
+          fallbackProviders: validaFallbackProviders(impostazioni.fallbackProviders ?? [], { usaAttrezzi: true }),
           // Sessioni nate PRIMA della riga nome-sessione (o mai rinominate): per un compito libero il client ha sempre usato il primo messaggio come titolo (titoloDalPrimoMessaggio, 80 caratteri) — stesso valore, ricavato dall'intestazione invece che perso. Un task del corpus resta col suo taskId, come prima.
           nome: nomeRecord?.nome ?? (typeof intestazione.taskId === 'string' && intestazione.taskId.startsWith('libero:') && typeof intestazione.task?.consegnaCorta === 'string' && intestazione.task.consegnaCorta.trim() ? intestazione.task.consegnaCorta.replace(/\s+/g, ' ').trim().slice(0, 80) : null),
           mobile: intestazione.mobile, permessi: impostazioni.permessi, permessiPerAttrezzo: impostazioni.permessiPerAttrezzo,
@@ -3479,7 +3498,7 @@ export function createSessionRegistry({
     avvia(taskId, {
       modelloScelto = null, modelloPlannerScelto = null, reasoningScelto = null, mobile = false,
       permessiScelto = null, permessiPerAttrezzoScelto = null,
-      provider = 'cloud', runtimeId = null, modelId = null, fallbackConsent = false,
+      provider = 'cloud', runtimeId = null, modelId = null, fallbackConsent = false, fallbackProviders,
     } = {},
     /*
      * ⭐ D-11 — ARGOMENTO A PARTE, e non per stile: l'origine non è una scelta di chi avvia la
@@ -3501,7 +3520,7 @@ export function createSessionRegistry({
         permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto,
         // ⭐⭐⭐ 04/9 — W0-08: la cartella di un task del catalogo non è MAI un punto di partenza "stretto" da cui allargarsi — è sempre la copia usa-e-getta preparata da task-catalog.mjs. Vedi la doc qui sopra.
         cartellaGiaScelta: true,
-        provider, runtimeId, modelId, fallbackConsent,
+        provider, runtimeId, modelId, fallbackConsent, fallbackProviders,
         origineRichiesta, // ⭐ D-11
       });
     },
@@ -3560,7 +3579,7 @@ export function createSessionRegistry({
      */
     avviaLibero({
       cartellaId, cartellaLibera, workspaceLaunchId, consegna, comandoProva, immagini = [],
-      modello: modelloScelto = null, modelloPlanner: modelloPlannerScelto = null, reasoning: reasoningScelto = null, mobile = false,
+      modello: modelloScelto = null, modelloPlanner: modelloPlannerScelto = null, reasoning: reasoningScelto = null, mobile = false, fallbackProviders = [],
       permessi: permessiScelto = null, permessiPerAttrezzo: permessiPerAttrezzoScelto = null,
     },
     origineRichiesta = null) { // ⭐ D-11, argomento a parte: vedi la doc su `avvia`
@@ -3600,7 +3619,7 @@ export function createSessionRegistry({
         // Non si rinomina perché è scritto nei .jsonl già su disco e la mappa dei nomi umani
         // lo traduce già in «Compito libero · cartella scelta a mano» (componenti-sidebar).
         taskId: workspaceLaunchId ? 'libero:workspace-launch' : (cartellaLibera ? 'libero:full-access' : `libero:${cartellaId}`), cartella: preparato.cartella, task: preparato.task,
-        comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, modelloPlannerRichiesta: modelloPlannerScelto, reasoningRichiesto: reasoningScelto, mobile,
+        comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, modelloPlannerRichiesta: modelloPlannerScelto, reasoningRichiesto: reasoningScelto, mobile, fallbackProviders,
         permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto,
         // ⭐⭐⭐ 03/9 — cartellaLibera/workspaceLaunchId: la persona ha scelto ESATTAMENTE questa cartella, mai un invito ad allargarla oltre — cartellaId (allowlist) resta l'unico caso che allarga.
         // ⭐ 12/09 (BC-14): questa riga è ORA l'unico confine dell'ambito, e vale per tutti e quattro i permessi — prima la frase qui sopra diceva «"Full access" è il cancello obbligato per poterla scegliere», cancello che non esiste più.
@@ -3828,13 +3847,14 @@ export function createSessionRegistry({
     async aggiornaImpostazioni(sessionId, patch) {
       const voce = sessioni.get(sessionId);
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
-      const chiaviAmmesse = new Set(['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo']);
+      const chiaviAmmesse = new Set(['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo', 'fallbackProviders']);
       const chiavi = patch && typeof patch === 'object' && !Array.isArray(patch) ? Object.keys(patch) : [];
       if (chiavi.length === 0 || chiavi.some((chiave) => !chiaviAmmesse.has(chiave))) {
         return { erroreAvvio: 'Nessuna impostazione valida da aggiornare', code: 'QUERY_INVALID' };
       }
 
       const prossimo = {
+        fallbackProviders: validaFallbackProviders(patch.fallbackProviders ?? voce.fallbackProviders ?? [], { usaAttrezzi: true }),
         modello: Object.hasOwn(patch, 'modello') ? patch.modello : voce.modello,
         modelloPlanner: Object.hasOwn(patch, 'modelloPlanner') ? patch.modelloPlanner : voce.modelloPlanner,
         reasoning: Object.hasOwn(patch, 'reasoning') ? patch.reasoning : voce.reasoning,
@@ -3880,6 +3900,7 @@ export function createSessionRegistry({
       if (cartellaStore) await registraRigaFn({ cartellaStore, sessionId, record });
 
       voce.modello = prossimo.modello;
+      voce.fallbackProviders = prossimo.fallbackProviders;
       voce.modelloPlanner = prossimo.modelloPlanner;
       voce.reasoning = prossimo.reasoning;
       voce.permessi = prossimo.permessi;
@@ -5246,6 +5267,7 @@ export function createSessionRegistry({
           permessiPerAttrezzo: voce.permessiPerAttrezzo ?? null,
           provider: voce.provider ?? 'cloud', runtimeId: voce.runtimeId ?? null, modelId: voce.modelId ?? voce.modello ?? null,
           fallbackProvider: voce.fallbackProvider ?? null,
+          fallbackProviders: voce.fallbackProviders ?? [], // P-H (12/09): le riserve ancora da usare; i consumi per fornitore stanno negli eventi CUSTOM della sessione, non qui (l'elenco si legge a ogni giro)
           /*
            * ⛔⛔⛔ 08/09/2026 — senza questi due campi la barra a sinistra NON PUÒ sapere che una
            * sessione è una figlia: mostra le deleghe sciolte accanto alla madre, come tre lavori
@@ -5388,6 +5410,7 @@ export function createSessionRegistry({
         interrotta: voce.interrotta ?? false,
         forkDa: voce.forkDa,
         modello: voce.modello ?? null,
+        fallbackProviders: voce.fallbackProviders ?? [],
         eventi: voce.eventi,
       };
     },
