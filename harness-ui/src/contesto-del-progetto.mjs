@@ -27,9 +27,9 @@
  * ════ COS'È ADESSO — QUATTRO BLOCCHI, IN ORDINE DI STABILITÀ ═════════════════════════════════
  *
  *   1. Istruzioni del kernel .... in `talosHarness.mjs` (`ISTRUZIONI`), 97 token, non si tocca
- *   2. Scheda di lavoro ......... `scheda-di-lavoro.mjs`   — dove sei, permesso, modello, verifica
- *   3. Istruzioni di progetto ... `istruzioni-di-progetto.mjs` — AGENTS.md/CLAUDE.md, tetto in byte
- *   4. Mappa delle CARTELLE ..... `mappa-cartelle.mjs`     — completa, `.gitignore` rispettato
+ *   2. Istruzioni di progetto ... `istruzioni-di-progetto.mjs` — AGENTS.md/CLAUDE.md, tetto in byte
+ *   3. Mappa delle CARTELLE ..... `mappa-cartelle.mjs`     — stabile nella finestra SWR
+ *   4. Scheda di lavoro ......... `scheda-di-lavoro.mjs`   — stato git, permesso, modello, verifica
  *
  * I blocchi 2-4 li compone questo file, in quest'ordine, e il kernel li mette **subito dopo il
  * blocco 1 e PRIMA della consegna**. L'ordine non è una preferenza: è il vincolo della cache.
@@ -111,7 +111,7 @@ const cache = new Map();
 const chiaveDi = (cartella, permesso, modello) => `${cartella}|${permesso ?? ''}|${modello ?? ''}`;
 
 /**
- * Le due frasi con cui un preambolo comincia, in testa o in coda. Servono a RITROVARLO dentro una
+ * Le frasi della scheda e dell'aggiornamento. Servono a RITROVARLO dentro una
  * conversazione già iniziata — cioè a rispondere alla domanda «che cosa ha già visto questo
  * modello?» **senza tenere nessuno stato in memoria**.
  *
@@ -134,11 +134,11 @@ export const INIZIO_AGGIORNAMENTO = 'Aggiornamento del contesto del progetto:';
  * @param {string} input.cartella
  * @param {(radice: string) => Promise<Function|null>} [input.creaFiltro] — il filtro `.gitignore`,
  *   iniettato: questo modulo non deve sapere come si leggono quelle regole.
- * @param {string|null} [input.permesso] — l'etichetta del permesso del giro (entra nel blocco 2)
- * @param {string|null} [input.modello] — il modello del giro (entra nel blocco 2)
+ * @param {string|null} [input.permesso] — l'etichetta del permesso del giro (entra nella scheda finale)
+ * @param {string|null} [input.modello] — il modello del giro (entra nella scheda finale)
  * @param {string|null} [input.piattaforma]
- * @param {number} [input.tettoIstruzioni] — il tetto in byte del blocco 3
- * @param {boolean} [input.statoVolatile=true] — se falso, il blocco 2 non porta lo stato di git
+ * @param {number} [input.tettoIstruzioni] — il tetto in byte delle istruzioni
+ * @param {boolean} [input.statoVolatile=true] — se falso, la scheda non porta lo stato di git
  * @param {object} [input.contatore] — il contatore di token, se ce n'è uno vero
  * @param {number} [input.finestra] — la finestra del modello, per dire quanto pesa
  * @param {object} [input.deps] — `{fs, adesso, eseguiGit}` per le prove
@@ -211,14 +211,12 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
   if (!mappaHaSostanza && !istruzioni) return null;
 
   /*
-   * ⛔ LA SCHEDA C'E' SEMPRE, anche se la sua costruzione e' fallita. Non per bellezza: la prima
-   *   riga del preambolo e' l'unico modo che ha `preamboloVistoDa()` di RITROVARLO dentro una
-   *   conversazione salvata, e senza di lei un aggiornamento in coda non saprebbe se c'e'
-   *   qualcosa da sostituire. Il ripiego dice il vero — la cartella e nient'altro — invece di
-   *   inventare uno stato di git che non abbiamo potuto leggere.
+   * BC-48 C — istruzioni e mappa precedono la scheda: un cambiamento di git non sposta
+   * il primo byte diverso davanti ai blocchi stabili. Il marcatore resta al kernel;
+   * il riordino da solo non garantisce un hit sui fornitori che cercano confini di blocco.
+   * La scheda conserva un ripiego riconoscibile anche quando non si riesce a costruirla.
    */
   const pezzi = [];
-  pezzi.push(scheda?.testo ?? `${INIZIO_SCHEDA}non sono riuscito a leggere lo stato di questa cartella; quello che segue e' comunque vero.`);
   if (istruzioni?.testo) pezzi.push(istruzioni.testo);
   /*
    * ⛔ IL TETTO DELLA MAPPA E' IN TOKEN, non in cartelle — misurato l'11/09 e non negoziabile:
@@ -229,6 +227,7 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
    */
   const resaMappa = mappaHaSostanza ? mappaEntroIlTetto(mappa, { radice: cartella, tettoToken: tettoTokenMappa }) : null;
   if (resaMappa) pezzi.push(resaMappa.testo);
+  pezzi.push(scheda?.testo ?? `${INIZIO_SCHEDA}non sono riuscito a leggere lo stato di questa cartella; quello che precede e' comunque vero.`);
   /* Doppio a-capo fra i blocchi: sono tre cose diverse, e un modello che legge un muro di testo
      senza confini le mescola. Costa 2 byte per blocco. */
   const testo = pezzi.join('\n\n');
@@ -353,6 +352,10 @@ export function preamboloVistoDa(storia) {
       return taglio >= 0 ? m.content.slice(taglio + 2) : null;
     }
     if (m.content.startsWith(INIZIO_SCHEDA)) return m.content;
+    // BC-48 C: i preamboli nuovi iniziano col blocco stabile; quelli salvati prima restano validi.
+    const inizioStabile = m.content.startsWith('Istruzioni di questo progetto — ')
+      || m.content.startsWith('Struttura di «');
+    if (inizioStabile && m.content.includes(`\n\n${INIZIO_SCHEDA}`)) return m.content;
   }
   return null;
 }

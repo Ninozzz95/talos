@@ -78,3 +78,11 @@ export function esecuzioniDellaSessione(sessione) {
   const u = sessione?.usageSessione;
   return u && Number.isFinite(Number(u.esecuzioni)) ? Number(u.esecuzioni) : null;
 }
+
+/** BC-48 C — stessa misura e stesse parole nell'inspector e nei costi. Mai null → 0. */
+export function testoRiusoCache(misura) {
+  const p = misura?.percentuale; const giri = misura?.giriMisurati;
+  if (!Number.isFinite(p) || p < 0 || p > 100 || !Number.isSafeInteger(giri) || giri <= 0) return 'non misurato';
+  const numero = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
+  return `${numero.format(p)} % · su ${numero.format(giri)} ${giri === 1 ? 'giro' : 'giri'}`;
+}

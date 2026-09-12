@@ -238,3 +238,58 @@ export function tokenNonDaCache(usage, wire) {
 export function percorsiDiCacheDichiarati() {
   return Object.fromEntries(Object.keys(REGISTRO_FORNITORI).map((id) => [id, percorsi(id, 'letturaUsage')]));
 }
+
+/**
+ * BC-48 C — ingresso completo di UNA chiamata, comprese letture e scritture di cache.
+ * Il `prompt_tokens` pubblico è già completo, anche quando arriva dall'adapter Anthropic.
+ * Solo `input_tokens` sul wire nativo Anthropic esclude letture e scritture: si aggiungono
+ * usando il contratto del registro, senza sommare due alias della stessa misura.
+ */
+export function tokenIngressoDaUsage(usage, wire) {
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return null;
+  const pubblico = conteggio(usage.prompt_tokens);
+  if (pubblico !== null) return pubblico;
+  const ingresso = conteggio(usage.input_tokens);
+  if (ingresso === null) return null;
+  const record = fornitore(wire);
+  const inclusi = record ? record.cache?.inclusiNelTotale !== false : wire !== 'anthropic-messages';
+  if (inclusi) return ingresso;
+  const letti = tokenDaCache(usage, wire);
+  const scritti = tokenScrittiInCache(usage, wire);
+  if (letti === null || scritti === null) return null;
+  return ingresso + letti + scritti;
+}
+
+/**
+ * Proiezione additiva della sessione dai SOLI CUSTOM `consumo-fornitore` durabili (P-H).
+ * `/usage` è cumulativo dentro un invio: non si somma a questi eventi per chiamata.
+ * Senza P-H si dichiara assenza di misura, anche nei log storici. I giri senza ingresso
+ * valido o senza letture dichiarate non entrano né al numeratore né al denominatore.
+ * `_sequenza` identifica l'evento nel log di questa sessione: un replay non lo duplica.
+ */
+export function cacheSessioneDaEventi(eventi) {
+  let tokenIngresso = 0; let letti = 0; let giriMisurati = 0; let giriNonMisurati = 0;
+  const viste = new Set();
+  for (const evento of Array.isArray(eventi) ? eventi : []) {
+    if (evento?.type !== 'CUSTOM' || evento.name !== 'consumo-fornitore') continue;
+    if (Number.isSafeInteger(evento._sequenza)) {
+      if (viste.has(evento._sequenza)) continue;
+      viste.add(evento._sequenza);
+    }
+    const { usage, provider } = evento.value && typeof evento.value === 'object' ? evento.value : {};
+    const ingresso = tokenIngressoDaUsage(usage, provider);
+    const cache = tokenDaCache(usage, provider);
+    if (!Number.isSafeInteger(ingresso) || ingresso <= 0 || !Number.isSafeInteger(cache) || cache < 0 || cache > ingresso) {
+      giriNonMisurati += 1;
+      continue;
+    }
+    tokenIngresso += ingresso; letti += cache; giriMisurati += 1;
+  }
+  const misurato = giriMisurati > 0 && Number.isSafeInteger(tokenIngresso) && Number.isSafeInteger(letti);
+  return {
+    percentuale: misurato ? letti / tokenIngresso * 100 : null,
+    tokenIngresso: misurato ? tokenIngresso : null,
+    tokenDaCache: misurato ? letti : null,
+    giriMisurati, giriNonMisurati, fonte: 'consumo-fornitore',
+  };
+}

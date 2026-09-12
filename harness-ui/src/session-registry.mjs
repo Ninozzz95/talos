@@ -1,4 +1,5 @@
 import { validaFallbackProviders } from './model-destination.mjs';
+import { cacheSessioneDaEventi } from './usage-cache.mjs';
 import { contextUsageFromEvents } from '../../context-engine/src/usage.mjs';
 
 /**
@@ -4185,7 +4186,7 @@ export function createSessionRegistry({
       const chiusura = interrotta && metriche.chiusura && metriche.chiusura.motivo === null
         ? { ...metriche.chiusura, motivoAssente: MOTIVO_CHIUSURA_INTERROTTA }
         : metriche.chiusura;
-      return { ok: true, ...metriche, chiusura, interrotta };
+      return { ok: true, ...metriche, chiusura, interrotta, cacheSessione: cacheSessioneDaEventi(voce.eventi) };
     },
 
     async elencaServerMcp(sessionId) {
@@ -5345,6 +5346,7 @@ export function createSessionRegistry({
            * vedevano. Vedi il blocco di testa di `usageSessioneDaEventi`.
            */
           usageSessione: usageSessioneDaEventi(voce.eventi),
+          cacheSessione: cacheSessioneDaEventi(voce.eventi),
         }))
         .sort((a, b) => b.avviataAlle.localeCompare(a.avviataAlle));
     },
@@ -5411,6 +5413,7 @@ export function createSessionRegistry({
         forkDa: voce.forkDa,
         modello: voce.modello ?? null,
         fallbackProviders: voce.fallbackProviders ?? [],
+        cacheSessione: cacheSessioneDaEventi(voce.eventi),
         eventi: voce.eventi,
       };
     },
