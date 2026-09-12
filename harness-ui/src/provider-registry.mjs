@@ -69,6 +69,9 @@ export const WIRE = Object.freeze([
   'anthropic-messages',   // POST {base}/messages — oggi via SDK fissato nel lock
   'gemini',               // :generateContent — oggi via SDK fissato nel lock
   'locale',               // il supervisore llama-server: la chiave vive solo lì dentro
+  // P-L · protocollo v1 su processo stdio; ponte OpenAI nel confine Fetch.
+  'acp',
+  // P-L · fine wire.
 ]);
 
 /** Gli schemi di autenticazione riconosciuti. */
@@ -86,6 +89,25 @@ const congela = (valore) => Object.freeze(valore);
  * nel pannello Provider e nel prefisso ammesso dalla regex del modello, quindi si cambia apposta.
  */
 export const REGISTRO_FORNITORI = congela({
+  // P-L · fonte e data: https://agentclientprotocol.com/protocol/v1/initialization, 12/09/2026.
+  esterno: congela({
+    id: 'esterno', etichetta: 'Agente esterno', descrizione: 'Un agente installato su questo computer.',
+    modelliDiRiserva: null, modelloAusiliario: null, modelsDevId: null, paginaChiavi: null,
+    wire: 'acp', baseUrl: null, indirizzoModificabile: false, envIndirizzo: congela([]),
+    auth: congela({ tipo: 'keyless', header: null, nomeVariabile: congela([]) }),
+    chiaveObbligatoria: false, formaIdModello: 'nome', oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: null }),
+    streaming: 'dichiarato', toolCalling: 'ignoto',
+    cache: congela({ marcatore: null, letturaUsage: congela([]), scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null }),
+    catalogo: congela({ fonte: 'processo-esterno', forma: null, percorso: null, inUI: false }),
+    prezzi: congela({ fonte: 'nessuna' }),
+    limiti: congela({ timeoutPredefinitoSecondi: 180, tempoMassimoModificabile: false }),
+    sonda: congela({ attiva: false, auth: 'nessuna', percorso: null, urlAssoluto: null, conta: () => null }),
+    runtime: congela({ variabile: 'TALOS_AGENTE_ESTERNO', protocolVersion: 1,
+      campi: congela(['comando', 'argomenti', 'cwd', 'variabiliAmbiente', 'timeoutMs']) }),
+    destinazioneChat: true, credenziale: false, esecuzione: 'da configurare sul computer',
+  }),
+  // P-L · fine record.
   // ── OpenAI — wire Responses, non chat/completions ──────────────────────────────────────────
   openai: congela({
     id: 'openai',
@@ -1336,9 +1358,11 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
     if (typeof record.cache?.inclusiNelTotale !== 'boolean') throw new ProviderRegistryError(`${dove}: cache.inclusiNelTotale deve dire se il totale li comprende`);
     if (record.credenziale === true && record.auth.tipo === 'effimera') throw new ProviderRegistryError(`${dove}: una credenziale effimera non può stare nel portachiavi`);
     /* ⛔ Una destinazione di chat DEVE sapere dove bussare, tranne il locale (lo sa il supervisore). */
-    if (record.destinazioneChat === true && record.wire !== 'locale' && (typeof record.baseUrl !== 'string' || !record.endpoint?.chat)) {
+    // P-L · entrambi i processi hanno un proprietario locale, senza base URL pubblica.
+    if (record.destinazioneChat === true && !['locale', 'acp'].includes(record.wire) && (typeof record.baseUrl !== 'string' || !record.endpoint?.chat)) {
       throw new ProviderRegistryError(`${dove}: destinazione di chat senza indirizzo o senza endpoint`);
     }
+    // P-L · fine controllo destinazione.
     if (record.sonda?.attiva === true && !record.sonda.percorso && !record.sonda.urlAssoluto) {
       throw new ProviderRegistryError(`${dove}: sonda attiva senza un indirizzo da chiamare`);
     }

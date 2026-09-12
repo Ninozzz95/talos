@@ -125,6 +125,15 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
   }
   const { fonte, modelloRemoto } = separaFonteModello(modello);
 
+  // P-L · nessuna chiave, nessun endpoint scelto dal browser e nessun ripiego remoto.
+  if (REGISTRO_FORNITORI[fonte]?.wire === 'acp') {
+    let runtime = null;
+    try { runtime = leggiRuntime(fonte); }
+    catch (e) { if (e?.code !== 'PROVIDER_INVALID') throw e; }
+    return { fonte, modelloRemoto, esterno: true, runtime };
+  }
+  // P-L · fine destinazione agente esterno.
+
   if (!COMPATIBILI_OPENAI.includes(fonte) && !NATIVI.includes(fonte)) throw new ModelDestinationError(`Fonte del modello non riconosciuta: ${fonte}`, 'MODEL_DESTINATION_INVALID');
 
   if (fonte === 'local') {

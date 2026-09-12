@@ -43,8 +43,14 @@ async function ascolta(t, handler) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
-test('PG-01 — undici percorsi chat P-G, ventotto record unici dopo P-I, P-J e P-K, e tutte le proiezioni coerenti', () => {
-  assert.equal(ID_FORNITORI.length, 28, 'Hugging Face riusa il record; P-I: Kimi, MiniMax, Qwen; P-J: zai-anthropic, minimax-anthropic; P-K: azure, bedrock, vertex');
+test('PG-01 — undici percorsi chat P-G, ventinove record unici dopo P-I, P-J, P-K e P-L, e tutte le proiezioni coerenti', () => {
+  assert.equal(ID_FORNITORI.length, 29, 'Hugging Face riusa il record; P-I: Kimi, MiniMax, Qwen; P-J: zai-anthropic, minimax-anthropic; P-K: azure, bedrock, vertex; P-L: esterno');
+  // P-L · le nuove lane possono aggiungere record: restano obbligatori tutti i venti originali.
+  const originali = ['openai', 'deepseek', 'zai', 'anthropic', 'gemini', 'openrouter', 'ollama', 'lmstudio', 'local', ...Object.keys(ATTESI)];
+  assert.equal(new Set(originali).size, 20, 'Hugging Face riusa il record esistente');
+  assert.ok(originali.every(id => ID_FORNITORI.includes(id)));
+  assert.equal(new Set(ID_FORNITORI).size, ID_FORNITORI.length);
+  // P-L · fine parità additiva.
   for (const [id, [nome, base, variabile, modelsDevId]] of Object.entries(ATTESI)) {
     const r = REGISTRO_FORNITORI[id];
     assert.ok(r, id);
