@@ -12581,6 +12581,12 @@ body.background-motion-paused #schermoChat::after {
   color: var(--talos-assistant-text);
   overflow-wrap: anywhere;
 }
+.td-percorso {
+  font-family: var(--talos-font-mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  color: var(--talos-text);
+}
 .td-code {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
