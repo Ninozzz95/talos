@@ -33,7 +33,18 @@ test('⛔ LA RICHIESTA DELL’OWNER: ogni fornitore è una scheda di PRIMO livel
   assert.equal(eFonteDiretta('diretti'), false);
   /* ⛔ L'elenco vero lo presidia `tests/provider-registry-parita.test.mjs` contro il registro del
      server: qui si prova la STRISCIA, non chi ci sta dentro. */
-  assert.deepEqual(PROVIDER_DIRETTI.map((p) => p.id), ['anthropic', 'gemini', 'openai', 'lmstudio']);
+  assert.deepEqual(PROVIDER_DIRETTI.map((p) => p.id), ['anthropic', 'gemini', 'openai', 'lmstudio', 'zai']);
+});
+
+test('PD-UI — Z.AI compare quando collegato, con nome umano e modelli selezionabili', () => {
+  assert.equal(fontiDelSelettore().some(f => f.id === 'zai'), false);
+  assert.equal(fontiDelSelettore({ diretti: { zai: null } }).some(f => f.id === 'zai'), false);
+  const cataloghi = { diretti: { zai: [{ id: 'zai:glm-5.3-flash', nome: 'GLM-5.3-Flash' }] } };
+  const fonti = fontiDelSelettore(cataloghi);
+  assert.deepEqual(fonti.find(f => f.id === 'zai'), { id: 'zai', etichetta: 'Z.AI', conto: 1, collegato: true });
+  assert.equal(fonti.length, 7, 'P-D aggiunge la settima fonte solo se collegata');
+  assert.equal(modelliDellaFonte('zai', cataloghi)[0].id, 'zai:glm-5.3-flash');
+  assert.match(fraseVuotoDiretto('zai', { diretti: { zai: null } }), /Collega la chiave Z\.AI/u);
 });
 
 test('⛔ TRE STATI, NON UNO: «non ancora letto», «chiave non collegata» e «zero modelli» si distinguono', () => {

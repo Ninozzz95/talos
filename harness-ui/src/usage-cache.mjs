@@ -111,6 +111,7 @@ function valoreAlPercorso(oggetto, percorso) {
 
 /** Un conteggio di token valido: intero, finito, non negativo. Tutto il resto è «non dichiarato». */
 function conteggio(valore) {
+  if (typeof valore !== 'number' && (typeof valore !== 'string' || valore.trim() === '')) return null;
   const numero = Number(valore);
   return Number.isFinite(numero) && numero >= 0 ? Math.trunc(numero) : null;
 }
