@@ -566,6 +566,24 @@ function nomeDallaDomanda(domanda) {
   return `${(spazio > 40 ? tagliato.slice(0, spazio) : tagliato).trimEnd()}…`;
 }
 
+/**
+ * ⭐⭐⭐ BC-44 — quanto si aspetta prima di riprendere da soli, UNA volta.
+ *
+ * ⛔ Non è «un backoff» con l'articolo indeterminativo: il backoff a più tentativi esiste già, e
+ *   sta dentro `chiamaConRitenta` (500·2^n + jitter, quattro tentativi). Quello copre la singola
+ *   chiamata; questo copre la CORSA, e di tentativi ne ha uno solo — quindi non c'è niente da
+ *   raddoppiare, c'è da scegliere UN'attesa.
+ * ⛔ Venti secondi, e il numero ha una ragione misurabile: l'ultimo tentativo del backoff del
+ *   kernel cade intorno ai 4 s dal primo (0,5+1+2 più jitter), quindi un'attesa più corta
+ *   ripartirebbe dentro la stessa finestra che ha appena fallito quattro volte. Venti la
+ *   scavalca con margine e resta sotto la soglia in cui una persona davanti allo schermo
+ *   comincia a chiedersi se sia morto tutto.
+ * ⛔ Non è misurata su un guasto vero del fornitore: è aritmetica sul backoff che abbiamo. Se
+ *   un giorno la si vorrà tarare, il dato da raccogliere è la durata dei guasti veri, non
+ *   l'opinione di chi scrive questa riga.
+ */
+export const ATTESA_RIPRESA_AUTOMATICA_MS = 20_000;
+
 const PROMPT_RIPRESA = 'Continue the research from where you left off, using web_search and naviga as needed, then write the final report as your last message.';
 
 /**
@@ -689,6 +707,191 @@ function statoVivo(voceRicerca, voceSessione) {
   return voceSessione.conclusa ? 'paused' : 'running';
 }
 
+/* ══════════════ BC-44 (12/09/2026) — TRANSITORIO NON È FALLITO ══════════════
+ *
+ * Il fatto che l'ha fatta nascere, misurato e non dedotto: la ricerca `dec896c0` del 12/09 ha
+ * lavorato **16 giri, 32 attrezzi, 67 testi tenuti, 134.464 token dalla cache**, ha scritto
+ * «Poi deposito.» — e a quel punto il fornitore ha chiuso:
+ *
+ *     {"type":"RunError","message":"Upstream idle timeout exceeded","code":"internal-error"}
+ *
+ * ⇒ `terminata:'failed'`, e `POST …/research/:id/ripresa` rispondeva **409**: venti minuti
+ *   pagati che il giornale conserva per intero e che nessuno poteva riprendere.
+ *
+ * ## Le fonti, lette il 12/09/2026 (ricerca PRIMA di scrivere, obbligo owner)
+ *
+ * ⛔ **OpenRouter, «Errors»** — il vincolo che non conoscevo, e che decide tutto:
+ *     «If an attempt fails before any tokens reach you, OpenRouter automatically tries a backup
+ *      provider. The `200 OK` has already been sent by then, so the status stays `200` even when
+ *      every provider fails.»
+ *     «a `200 OK` whose JSON body holds only an `error` object and no `choices`; check the body
+ *      for an `error` field even on a `200`.»
+ *   ⇒ Il ritentativo del kernel (`chiamaConRitenta`, `siRitenta(stato)`) **non può** coprire
+ *     questa classe: decide sullo STATO HTTP, e qui lo stato è 200. Non è una dimenticanza del
+ *     kernel — è una cura che sta a valle del punto in cui l'errore nasce. Per questo la ripresa
+ *     va messa al livello della RICERCA, dove c'è il giornale, e non al livello della chiamata.
+ *
+ * ⛔ **Hermes Agent v0.21 (Nous Research)**, letto nel suo codice — `agent/error_classifier.py`
+ *   e `docs/session-lifecycle.md`. Due cose, entrambe copiate qui nella forma, non nel testo:
+ *     1. un classificatore CENTRALE con un campo `retryable` esplicito, che «replaces scattered
+ *        inline string-matching», e un ordine di precedenza dichiarato (billing prima di
+ *        rate-limit, SSL prima di disconnect, disconnect prima del catch-all);
+ *     2. `resume_pending` (recupero MORBIDO: «preserves the existing session_id — the user
+ *        continues on the same transcript») tenuto separato da `suspended` («hard force-wipe
+ *        signal»), con un `resume_reason` che dice PERCHÉ la ripresa è stata segnata.
+ *        ⇒ Qui: un `failed` transitorio è `resume_pending`, un `failed` non transitorio resta
+ *        quello che era. E il perché si scrive: `motivoErrore.classe`.
+ *   ⛔ Hermes annota anche il nostro caso alla lettera: un disconnect su un modello che ragiona è
+ *     «the upstream proxy idle-killing a long thinking stream», non un contesto pieno — e la cura
+ *     sbagliata (comprimere) «silently delete[s] conversation history on a phantom
+ *     context-length error». Per questo `contesto` qui NON è transitorio.
+ *
+ * ⛔ **Anthropic, «How we built our multi-agent research system»**: «When errors occur, we can't
+ *   just restart from the beginning: restarts are expensive and frustrating for users. Instead,
+ *   we built systems that can resume from where the agent was when the errors occurred», e
+ *   «deterministic safeguards like retry logic and regular checkpoints». Il nostro checkpoint
+ *   esiste già ed è il giornale: mancava solo il permesso di rientrarci.
+ *
+ * ## ⛔ DOVE DIVERGO DA HERMES, e perché
+ *
+ * Hermes manda `unknown` a `retryable=True`. Qui `ignoto` è **NON transitorio**, e non è una
+ * svista: là si ritenta LA STESSA CHIAMATA (costo: una chiamata), qui si riapre UNA RICERCA che
+ * può spendere venti minuti e centinaia di migliaia di token. Costi diversi ⇒ default diversi.
+ * Un guasto deterministico dichiarato «riprendibile» farebbe ripagare un fallimento garantito.
+ * ⇒ Si riprende solo ciò che si è RICONOSCIUTO. Quello che non si riconosce si comporta
+ *   esattamente come ieri: nessuna regressione possibile da questa riga.
+ *
+ * ⛔ E il `code` da solo NON basta: `agent-service.mjs` marca `internal-error` OGNI guasto del
+ *   servizio — il nostro caso incluso. Il codice si guarda per primo quando dice qualcosa
+ *   (`CTX_*`, gli esiti del task), e per il resto si legge il MESSAGGIO, che è l'unica cosa che
+ *   il fornitore ha davvero detto.
+ */
+
+/** Le classi che si riprendono. ⛔ Elenco chiuso: chi non è qui dentro NON è transitorio. */
+const CLASSI_TRANSITORIE = new Set(['rete', 'timeout-fornitore', 'traffico', 'guasto-fornitore', 'flusso-interrotto']);
+
+/** La mezza frase italiana di ogni classe — il pezzo variabile di `motivoDelloStato`. */
+const CLAUSOLA_DI_CLASSE = new Map([
+  ['rete', 'la connessione con il fornitore del modello è caduta'],
+  ['timeout-fornitore', 'il fornitore del modello ha chiuso la connessione mentre lavorava'],
+  ['traffico', 'il fornitore del modello ha rifiutato per troppo traffico'],
+  ['guasto-fornitore', 'il fornitore del modello ha risposto con un guasto suo'],
+  ['flusso-interrotto', 'la risposta del modello si è interrotta a metà'],
+]);
+
+/* Gli esiti del TASK: non sono guasti, e hanno già il loro stato. */
+const CODICI_ESITO_DEL_TASK = new Map([['fermato', 'fermato'], ['giri-esauriti', 'giri-esauriti'], ['premesse-negate', 'premesse-negate']]);
+
+/*
+ * ⛔ L'ORDINE È LA CURA, non l'elenco. Le prime due famiglie sono NON transitorie e vanno
+ *   guardate PRIMA delle transitorie, perché le loro frasi contengono le parole delle altre:
+ *   «you have exceeded your current quota» porta dentro «exceeded», «insufficient credits …
+ *   rate limit» porta dentro «rate limit». Chi legge per primo vince, quindi legge per primo
+ *   chi non si deve ritentare. (È la stessa precedenza di Hermes: billing prima di rate_limit.)
+ */
+const SEGNI_CREDITO = ['insufficient credit', 'insufficient_quota', 'insufficient balance', 'credit balance', 'payment required', 'exceeded your current quota', 'out of funds', 'billing'];
+const SEGNI_CREDENZIALE = ['unauthorized', 'invalid api key', 'no auth credentials', 'authentication', 'forbidden', 'http 401', 'http 403'];
+const SEGNI_CONTESTO = ['context length', 'context_length', 'maximum context', 'too many tokens', 'prompt is too long', 'reduce the length'];
+const SEGNI_RICHIESTA = ['invalid request', 'bad request', 'model not found', 'is not a valid model', 'no endpoints found', 'http 400', 'http 404'];
+const SEGNI_TRAFFICO = ['rate limit', 'rate-limit', 'too many requests', 'http 429', 'temporarily rate-limited'];
+const SEGNI_TIMEOUT = ['idle timeout', 'timeout', 'timed out', 'deadline exceeded', 'http 408', 'http 504', 'http 524'];
+const SEGNI_GUASTO = ['bad gateway', 'service unavailable', 'gateway timeout', 'overloaded', 'at capacity', 'over capacity', 'internal server error', 'upstream error', 'provider returned error', 'http 500', 'http 502', 'http 503'];
+const SEGNI_RETE = ['econnreset', 'econnrefused', 'etimedout', 'enotfound', 'eai_again', 'epipe', 'fetch failed', 'socket hang up', 'connection reset', 'connection refused', 'network', 'terminated'];
+const SEGNI_FLUSSO = ['flusso sse', 'unexpected eof', 'premature close', 'stream ended', 'incomplete chunked'];
+
+/**
+ * ⭐⭐⭐ BC-44 — LA TABELLA, in una funzione pura che un test può mordere da sola.
+ *
+ * @param {{codice?: string|null, messaggio?: string|null}} errore
+ * @returns {{classe: string, transitorio: boolean}}
+ */
+export function classificaErroreDiCorsa({ codice = null, messaggio = null } = {}) {
+  const c = typeof codice === 'string' ? codice.trim() : '';
+  const m = typeof messaggio === 'string' ? messaggio.toLowerCase() : '';
+  const dentro = (segni) => segni.some((s) => m.includes(s));
+  const esito = (classe) => ({ classe, transitorio: CLASSI_TRANSITORIE.has(classe) });
+
+  // 1. Il codice, quando dice davvero qualcosa. `internal-error` NON dice niente: è il default.
+  if (CODICI_ESITO_DEL_TASK.has(c)) return esito(CODICI_ESITO_DEL_TASK.get(c));
+  if (c.startsWith('CTX_')) return esito('contesto');
+  /*
+   * ⛔ `fermatoSuRichiesta` arriva come messaggio, non come codice: il kernel lancia «⛔ fermato
+   *   su richiesta …» e `agent-service` lo marca `internal-error` come tutto il resto. Uno stop
+   *   voluto non si riprende da solo, mai — sarebbe ripartire contro chi ha premuto Ferma.
+   */
+  if (m.includes('fermato su richiesta')) return esito('fermato');
+
+  // 2. Le NON transitorie che contengono le parole delle transitorie: prima loro (vedi sopra).
+  if (dentro(SEGNI_CREDITO)) return esito('credito');
+  if (dentro(SEGNI_CREDENZIALE)) return esito('credenziale');
+  if (dentro(SEGNI_CONTESTO)) return esito('contesto');
+  if (dentro(SEGNI_RICHIESTA)) return esito('richiesta-non-valida');
+
+  // 3. Le transitorie.
+  if (dentro(SEGNI_TRAFFICO)) return esito('traffico');
+  if (dentro(SEGNI_TIMEOUT)) return esito('timeout-fornitore');
+  if (dentro(SEGNI_GUASTO)) return esito('guasto-fornitore');
+  if (dentro(SEGNI_RETE)) return esito('rete');
+  if (dentro(SEGNI_FLUSSO)) return esito('flusso-interrotto');
+
+  // 4. Non riconosciuto ⇒ si comporta come ieri. Vedi «DOVE DIVERGO DA HERMES».
+  return esito('ignoto');
+}
+
+/**
+ * ⭐⭐⭐⭐ BC-44 — LA PROVA C'ERA GIÀ, E NESSUNO LA LEGGEVA.
+ *
+ * ⛔ Il difetto che questa funzione chiude è più grande di quello che sembra. La cura scritta in
+ *   `onConclusioneRicerca` vale **da oggi in avanti**: ogni ricerca caduta PRIMA — compresa
+ *   `dec896c0`, quella che ha fatto nascere BC-44, coi suoi venti minuti pagati — avrebbe avuto
+ *   `motivoErrore: null` per sempre, e sarebbe rimasta non riprendibile. Una cura che non cura
+ *   il caso che l'ha fatta scrivere.
+ *
+ * ⇒ Ma il fatto è registrato lo stesso, e lo era da sempre: nel `.jsonl` della SESSIONE c'è
+ *     {"type":"RunError","message":"Upstream idle timeout exceeded","code":"internal-error"}
+ *   e `ripristina()` rimette quegli eventi in `voce.eventi` a ogni avvio del server. Non serve
+ *   leggere un altro file: basta guardare quello che il registro ha già in mano.
+ *
+ * ⛔ Si scandisce ALL'INDIETRO e ci si ferma al primo `RunStarted`: gli eventi di una sessione
+ *   sono la storia di TUTTI i suoi giri, e un `RunError` di tre giri fa non dice niente sul giro
+ *   che è appena caduto. Senza questa fermata, una ricerca ripresa e poi conclusa bene si
+ *   porterebbe dietro il motivo della sua prima caduta.
+ * ⛔ E non si scrive niente sul disco: la deduzione vive nella LETTURA, come la correzione degli
+ *   stati di `elenca()`. Ciò che è costato denaro non si riscrive per far quadrare un campo.
+ *
+ * @returns {{codice: string|null, messaggio: string|null}|null}
+ */
+function ultimaCadutaDegliEventi(eventi) {
+  if (!Array.isArray(eventi)) return null;
+  for (let i = eventi.length - 1; i >= 0; i -= 1) {
+    const e = eventi[i];
+    if (e?.type === 'RunStarted') return null;
+    if (e?.type === 'RunFinished') return null;
+    if (e?.type === 'RunError') {
+      return {
+        codice: typeof e.code === 'string' ? e.code : null,
+        messaggio: typeof e.message === 'string' ? e.message : null,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * La causa della caduta di una ricerca `failed`: quella REGISTRATA se c'è, altrimenti quella
+ * DEDOTTA dagli eventi della sessione. `null` quando non c'è né l'una né l'altra.
+ *
+ * ⛔ `registrata` prima di `dedotta`, sempre: la prima l'ha scritta chi era presente alla
+ *   conclusione, la seconda è una rilettura. Quando ci sono entrambe non possono che coincidere
+ *   — ma l'ordine va comunque dichiarato, perché il giorno in cui divergessero vince il testimone.
+ */
+function causaDellaCaduta(record, voceSessione) {
+  if (record?.motivoErrore) return record.motivoErrore;
+  const grezza = ultimaCadutaDegliEventi(voceSessione?.eventi);
+  if (!grezza) return null;
+  return { ...classificaErroreDiCorsa(grezza), codice: grezza.codice, messaggio: grezza.messaggio, dedotta: true };
+}
+
 /**
  * ⭐⭐⭐ L2 §6.5 — LA FRASE UMANA. Non un codice tradotto dal frontend: il motivo lo dice il
  * server, in una frase sola, e in italiano.
@@ -699,7 +902,16 @@ function statoVivo(voceRicerca, voceSessione) {
  *   lettura e non ha potuto depositare il rapporto» è il prodotto che ammette il proprio
  *   errore; «ricerca fallita» sarebbe farlo pagare all'owner.
  */
-function motivoDelloStato(stato, dettaglio = null) {
+function motivoDelloStato(stato, dettaglio = null, motivoErrore = null) {
+  /*
+   * ⭐⭐⭐ BC-44 — quando la caduta è transitoria la frase cambia, e cambia in due punti: dice
+   *   CHI è caduto (mai «la ricerca non ce l'ha fatta»: non è stata lei) e dice che si riprende.
+   *   ⛔ La frase NON nomina il codice né il messaggio del fornitore: «Upstream idle timeout
+   *     exceeded» a schermo sarebbe un nome tecnico, e quelli non entrano nella UI.
+   */
+  if (stato === 'failed' && motivoErrore?.transitorio === true && CLAUSOLA_DI_CLASSE.has(motivoErrore.classe)) {
+    return `La ricerca si è interrotta a metà: ${CLAUSOLA_DI_CLASSE.get(motivoErrore.classe)}. Il lavoro già fatto è conservato e può riprendere da lì.`;
+  }
   switch (stato) {
     case 'bloccata-dal-permesso':
       return 'La sessione era in sola lettura e non ha potuto depositare il rapporto: il lavoro è stato fatto, la consegna no.';
@@ -837,6 +1049,20 @@ export function creaResearchOrchestrator({
    *   di una che ammette di non poter guardare.
    */
   leggiPaginaFn = null,
+  /*
+   * ⭐⭐⭐⭐ BC-44 (12/09/2026) — le due porte della ripresa automatica, iniettabili come tutto
+   * il resto e per una ragione precisa, non per abitudine:
+   *
+   * `dormiFn`           l'attesa fra la caduta e il secondo tentativo. ⛔ Iniettabile perché un
+   *                     test che aspettasse davvero venti secondi non è un test: misurerebbe
+   *                     l'orologio. Il default non trattiene il processo (`unref`): una ricerca
+   *                     caduta non deve tenere in piedi un server che sta chiudendo.
+   * `ripresaAutomatica` l'interruttore. `true` di serie; a `false` il comportamento è quello di
+   *                     ieri byte per byte — la classificazione e la ripresa A MANO restano,
+   *                     perché quelle non spendono niente da sole.
+   */
+  dormiFn = (ms) => new Promise((risolvi) => { const t = setTimeout(risolvi, ms); t.unref?.(); }),
+  ripresaAutomatica = true,
   clock = () => new Date(),
 }) {
   /*
@@ -1383,7 +1609,13 @@ export function creaResearchOrchestrator({
      * bugia. Troncato: è una frase da mostrare, non un documento da custodire.
      */
     const ultimoMessaggio = (ultimoMessaggioDelModello(messaggi) ?? '').slice(0, 2_000) || null;
-    const comune = { conclusaAlle: clock().toISOString(), ultimoMessaggio };
+    /*
+     * ⭐⭐⭐ BC-44 — `motivoErrore: null` sta in `comune`, cioè si AZZERA su ogni conclusione che
+     *   non sia un `failed`. Senza, una ricerca caduta per un timeout e poi ripresa fino a
+     *   `done` si porterebbe dietro per sempre il motivo di una caduta che è già stata curata —
+     *   e la sezione mostrerebbe «riprendibile» su un rapporto consegnato.
+     */
+    const comune = { conclusaAlle: clock().toISOString(), ultimoMessaggio, motivoErrore: null };
     /*
      * ⭐ L6 — una conclusione è un punto sicuro come la pausa, e vale ANCHE per i guasti:
      * `bloccata-dal-permesso` e `giri-esauriti` sono proprio i casi che si riprendono, e chi
@@ -1454,7 +1686,81 @@ export function creaResearchOrchestrator({
       await aggiornaRicercaFn({ cartella, id, terminata: 'giri-esauriti', ...comune });
       return;
     }
-    await aggiornaRicercaFn({ cartella, id, terminata: 'failed', ...comune });
+    /*
+     * ⭐⭐⭐⭐ BC-44 (12/09/2026) — L'ULTIMO RAMO SMETTE DI ESSERE MUTO.
+     *
+     * Fino a ieri qui si scriveva `failed` e basta, e da lì in poi nessuno poteva più sapere se
+     * quella corsa fosse caduta per un guasto di rete di dieci secondi o per un guasto vero. La
+     * riga `{"type":"RunError","message":"Upstream idle timeout exceeded","code":"internal-error"}`
+     * era già sul disco della SESSIONE, e la ricerca non la leggeva: due file, nessun ponte.
+     *
+     * ⛔ Il codice si legge PRIMA del messaggio solo quando dice davvero qualcosa: `internal-error`
+     *   è il default di `agent-service.mjs` per ogni guasto del servizio, quindi lì decide la
+     *   frase del fornitore. `comeFinita` entra al suo posto quando la corsa è tornata con un
+     *   esito invece che con un'eccezione (`fermato`), perché quello È il codice di quel caso.
+     */
+    const caduta = classificaErroreDiCorsa({
+      codice: typeof risultato?.codiceErrore === 'string' && risultato.codiceErrore
+        ? risultato.codiceErrore
+        : (risultato?.esito?.comeFinita ?? null),
+      messaggio: typeof risultato?.erroreInterno === 'string' ? risultato.erroreInterno : null,
+    });
+    const motivoErrore = {
+      classe: caduta.classe,
+      transitorio: caduta.transitorio,
+      codice: typeof risultato?.codiceErrore === 'string' ? risultato.codiceErrore : null,
+      // ⛔ Troncato: è una diagnosi da rileggere, non un documento da custodire — e un fornitore può rispondere con una pagina HTML intera.
+      messaggio: typeof risultato?.erroreInterno === 'string' ? risultato.erroreInterno.slice(0, 500) : null,
+    };
+    await aggiornaRicercaFn({ cartella, id, terminata: 'failed', ...comune, motivoErrore });
+    /*
+     * ⛔⛔ L'ORDINE NON È DI COMODO: lo stato onesto si scrive PRIMA di aspettare. Se il processo
+     *   muore durante l'attesa, sul disco resta un `failed` con la sua causa — cioè una ricerca
+     *   che una persona può riprendere a mano. Se aspettassimo prima di scrivere, un crash nel
+     *   mezzo lascerebbe una ricerca senza stato e senza motivo.
+     */
+    if (caduta.transitorio) await riprendiDaSolaUnaVolta({ cartella, id, caduta });
+  }
+
+  /*
+   * ⭐⭐⭐⭐ BC-44 — LA RIPRESA AUTOMATICA, e i quattro cancelli che la tengono onesta.
+   *
+   * Perché esiste: Anthropic, «How we built our multi-agent research system» (letta 12/09/2026)
+   * — «we can't just restart from the beginning: restarts are expensive and frustrating for
+   * users … we built systems that can resume from where the agent was when the errors occurred»,
+   * con «deterministic safeguards like retry logic and regular checkpoints». Il checkpoint qui è
+   * il giornale; questa funzione è il «retry logic» che finora mancava del tutto.
+   *
+   * ⛔ E perché è così stretta: riprendere COSTA. Non è ritentare una chiamata — è riaprire una
+   *   corsa che può spendere venti minuti. Quindi quattro cancelli, e ognuno toglie un caso in
+   *   cui la ripresa sarebbe uno spreco o una prepotenza:
+   *     1. **transitoria** (deciso da chi chiama): un guasto deterministico si ripeterebbe uguale;
+   *     2. **c'è lavoro da salvare** — almeno un `step_finished` nel giornale. Una corsa caduta
+   *        al primo respiro non ha niente da riprendere: ripartire non salverebbe nulla e
+   *        spenderebbe il doppio;
+   *     3. **UNA SOLA VOLTA** — e il tetto è per RICERCA, non per giro: si guarda tutto il
+   *        giornale, non solo dopo l'ultimo `run_started`. È il più stretto dei due letture
+   *        possibili, scelto apposta: se due riprese automatiche non bastano, la terza è una
+   *        decisione di una persona, non di un timer;
+   *     4. **lo stato si rilegge DOPO l'attesa**: in quei secondi qualcuno può aver annullato,
+   *        eliminato o ripreso a mano quella ricerca, e ripartirci sopra sarebbe scrivere
+   *        addosso a una scelta appena presa.
+   *
+   * ⛔ La riga nel giornale la scrive `riprendi()` e porta `auto:true` e la `causa`: senza, un
+   *   giornale rigiocato direbbe che a riprendere è stata una persona — e il cancello (3), che
+   *   quella riga la legge, non avrebbe più nessun tetto da far rispettare.
+   */
+  async function riprendiDaSolaUnaVolta({ cartella, id, caduta }) {
+    if (!ripresaAutomatica) return false;
+    let eventi = [];
+    try { ({ eventi } = await leggiGiornaleFn({ cartella, id })); } catch { return false; }
+    if (!eventi.some((e) => e?.kind === 'step_finished')) return false;
+    if (eventi.some((e) => e?.kind === 'run_resumed' && e.auto === true)) return false;
+    try { await dormiFn(ATTESA_RIPRESA_AUTOMATICA_MS); } catch { return false; }
+    const adesso = await leggiRicercaFn({ cartella, id });
+    if (!adesso || adesso.terminata !== 'failed') return false;
+    const esito = await riprendi({ id, automatica: caduta.classe });
+    return Boolean(esito?.ok);
   }
 
   /*
@@ -1732,13 +2038,64 @@ export function creaResearchOrchestrator({
    *   `ripristina()` rimette a posto dall'intestazione della sessione. Un parametro nuovo
    *   avrebbe voluto una riga in `session-registry.mjs` fuori dal perimetro di questo lotto.
    */
-  async function riprendi({ id }) {
+  /*
+   * ⭐⭐⭐⭐ BC-44 — le due righe che riaprono una corsa, e perché sono DUE.
+   *
+   * `terminata: null` rimette la ricerca fra le vive: `statoVivo()` legge PRIMA `terminata`, e
+   * senza questa riga una ricerca ripresa continuerebbe a mostrarsi `failed` mentre gira davvero
+   * — lo schermo direbbe il contrario del disco.
+   * ⛔ `motivoErrore: null` insieme, e non dopo: il motivo di una caduta superata è una frase che
+   *   non descrive più niente. Se la corsa ricadrà, `onConclusioneRicerca` ne scriverà una nuova.
+   * ⛔ Vale per ENTRAMBE le vie (conversazione in memoria e giornale): la via A non ci passava, e
+   *   una ripresa dalla memoria dopo un errore transitorio avrebbe lasciato `failed` per sempre.
+   */
+  async function riapriLaMetadata(cartella, id) {
+    try { await aggiornaRicercaFn({ cartella, id, terminata: null, motivoErrore: null }); }
+    catch { /* la metadata potrebbe essere stata eliminata mentre riprendevamo: la corsa riparte comunque, ed è il giornale la prova di ciò che è stato fatto. */ }
+  }
+
+  async function riprendi({ id, automatica = null }) {
     const voce = sessioni.get(id);
     if (!voce) return { ok: false, esito: 'There is no research with that id. Call research_list to see the current ones.' };
     const cartella = voce.cartella;
+    /* ⛔ `auto` e `causa` solo quando la ripresa è davvero automatica: una riga che dicesse `auto:false` su ogni ripresa a mano sarebbe rumore, e il cancello della ripresa automatica legge proprio `auto === true`. */
+    const rigaDiRipresa = automatica ? { kind: 'run_resumed', auto: true, causa: automatica } : { kind: 'run_resumed' };
+
+    /*
+     * ⭐⭐⭐⭐ BC-44 — IL CANCELLO NUOVO, e sta PRIMA dei due vecchi perché risponde a una domanda
+     * che quelli non sanno nemmeno porsi: «questa corsa è finita, e come?».
+     *
+     * Il caso vero (ricerca `dec896c0`, 12/09): `terminata:'failed'`, la sessione in memoria c'è
+     * ancora ed è `conclusa` ma NON `interrotta` (quel campo lo scrive solo `ripristina()`, cioè
+     * solo dopo un riavvio) ⇒ la guardia «né in pausa né interrotta» concludeva **«That research
+     * is still running: nothing to resume»**. Falsa due volte: non stava girando, ed era caduta
+     * un minuto prima. Da lì il 409 della rotta.
+     *
+     * ⛔ Si legge il DISCO e non il registro vivo, per la stessa ragione già imparata sulla
+     *   pausa: `conclusa` dice «quel GIRO è finito», non «quella RICERCA è finita». La seconda ha
+     *   una risposta sola, e sta in `meta.json`.
+     * ⛔ Questo cancello AGGIUNGE un permesso, non ne toglie nessuno, ed è scritto in due pezzi
+     *   apposta per garantirlo:
+     *     · `done`/`cancelled` diventano un NO esplicito. Non è una restrizione nuova: il
+     *       giornale li rifiutava già da terminale (`run_finished`/`run_cancelled`) sulla via B.
+     *       Quello che cambia è che adesso il no vale anche sulla **via A** — dove non c'era
+     *       nessun controllo e una ricerca già consegnata poteva ripartire. Buco preesistente,
+     *       chiuso qui perché è la stessa domanda.
+     *     · gli altri (`senza-rapporto`, `bloccata-dal-permesso`, `giri-esauriti`) NON si
+     *       toccano: restano esattamente com'erano, e la guardia più sotto decide per loro.
+     * ⛔ Un `failed` SENZA causa registrata — cioè ogni ricerca caduta prima di oggi — si
+     *   comporta come ieri: `motivoErrore` assente ⇒ nessun permesso nuovo.
+     */
+    const record = await leggiRicercaFn({ cartella, id });
+    /* ⛔ La causa REGISTRATA se c'è, altrimenti quella DEDOTTA dal `RunError` che la sessione ha già in `voce.eventi`: senza la seconda, la cura non curerebbe nessuna delle ricerche già cadute — compresa quella che l'ha fatta scrivere. */
+    const cadutaRiprendibile = record?.terminata === 'failed' && causaDellaCaduta(record, voce)?.transitorio === true;
+    if (record?.terminata === 'done' || record?.terminata === 'cancelled') {
+      return { ok: false, esito: `That research is ${record.terminata} and will not be resumed: start a new one if you need more.` };
+    }
 
     if (voce.messaggiFinali) {
-      await registra(cartella, id, { kind: 'run_resumed' });
+      await riapriLaMetadata(cartella, id);
+      await registra(cartella, id, rigaDiRipresa);
       avviaESeguiFn({
         sessionId: id, taskId: voce.taskId, cartella, task: voce.task, comandoProva: voce.comandoProva,
         messaggiIniziali: [...voce.messaggiFinali, { role: 'user', content: PROMPT_RIPRESA }],
@@ -1791,7 +2148,15 @@ export function creaResearchOrchestrator({
     if (giro && talosResearchIsTerminal(giro.status)) {
       return { ok: false, esito: `That research is ${giro.status} and will not be resumed: start a new one if you need more.` };
     }
-    if (!inPausa && !voce.interrotta) return { ok: false, esito: 'That research is still running: nothing to resume.' };
+    /*
+     * ⭐⭐⭐⭐ BC-44 — la TERZA fonte, e si SOMMA alle due, non le sostituisce.
+     *   · il giornale sa che era in pausa;
+     *   · il registro vivo sa che il processo è morto a metà giro (nessun evento da scrivere);
+     *   · la METADATA sa che la corsa è finita con un guasto, e con quale — è l'unica delle tre
+     *     che poteva rispondere per la ricerca `dec896c0`, dove il giro era finito in modo
+     *     ordinato (RunError ⇒ `conclusa:true`) e nessuna delle altre due vedeva niente.
+     */
+    if (!inPausa && !voce.interrotta && !cadutaRiprendibile) return { ok: false, esito: 'That research is still running: nothing to resume.' };
 
     // Via B — dal giornale. Da qui in poi la conversazione non esiste più: esiste il registro.
     if (!giro) {
@@ -1810,7 +2175,8 @@ export function creaResearchOrchestrator({
     const fonti = await elencaFontiFn({ cartella, id });
     const ripristinateDallaCache = await ripristinaCacheFetch({ cartella, id });
 
-    await registra(cartella, id, { kind: 'run_resumed' });
+    await riapriLaMetadata(cartella, id);
+    await registra(cartella, id, rigaDiRipresa);
     if (prossimo) {
       /*
        * ⛔ Il passo che era IN VOLO quando il processo è morto viene ri-annunciato come iniziato:
@@ -2020,6 +2386,8 @@ export function creaResearchOrchestrator({
    */
   function voceEsposta(r, stato, letto = null) {
     const domanda = r.domanda ?? null;
+    /* ⭐ BC-44 — la causa registrata, o quella dedotta dagli eventi della sessione (vedi `causaDellaCaduta`). */
+    const caduta = stato === 'failed' ? causaDellaCaduta(r, sessioni.get(r.id)) : null;
     return {
       id: r.id,
       domanda,
@@ -2030,7 +2398,7 @@ export function creaResearchOrchestrator({
       avviataAlle: r.avviataAlle ?? null,
       conclusaAlle: r.conclusaAlle ?? null,
       reportLibraryId: r.reportLibraryId ?? null,
-      motivo: stato === 'done' ? null : motivoDelloStato(stato, r.motivoDettaglio ?? null),
+      motivo: stato === 'done' ? null : motivoDelloStato(stato, r.motivoDettaglio ?? null, caduta),
       padreId: r.padreId ?? null,
       ultimoMessaggio: r.ultimoMessaggio ?? null,
       /*
@@ -2073,6 +2441,36 @@ export function creaResearchOrchestrator({
        *   raccontare una scelta che nessuno ha fatto.
        */
       modelloGiudice: r.modelloGiudice ?? null,
+      /*
+       * ⭐⭐⭐⭐ BC-44 (12/09/2026) — DICIASSETTESIMO e DICIOTTESIMO campo, additivi come tutti gli
+       * altri: nessuno dei sedici cambia nome, tipo o significato.
+       *
+       * `riprendibile`  — «se premo Riprendi adesso, il server accetta?». È una domanda sola, e
+       *                   la risposta la dà QUI il server, non il frontend indovinandola dallo
+       *                   stato: fino a ieri la sezione offriva «Riprendi» su OGNI `failed` e il
+       *                   server rispondeva 409 con «non è nello stato giusto» — un pulsante che
+       *                   promette ciò che nessuna rotta può mantenere.
+       * `motivoErrore`  — `{classe, transitorio}`, o `null`. ⛔ Il `messaggio` grezzo del
+       *                   fornitore e il suo `codice` restano sul DISCO (`meta.json`) e NON
+       *                   escono di qui: sono diagnosi, e a schermo sarebbero nomi tecnici. La
+       *                   frase per una persona è già in `motivo`, composta in un posto solo.
+       *
+       * ⛔ I DUE `failed` NON SONO LO STESSO STATO, e la distinzione è tutta in `r.terminata`:
+       *     · `terminata` assente e stato `failed` ⇒ è `statoVivo` che l'ha DEDOTTO da una
+       *       sessione che non c'è più (riavvio del server). Quella si riprende dal giornale, e
+       *       si riprendeva già prima di BC-44 (L4 §6.6, via B);
+       *     · `terminata === 'failed'` ⇒ la corsa è finita davvero, e allora decide la causa.
+       *   Confondere i due avrebbe tolto la ripresa proprio al caso per cui il giornale esiste.
+       * ⛔ `bloccata-dal-permesso` e `giri-esauriti` NON sono qui dentro: il giornale li tiene
+       *   riprendibili apposta (vedi la nota sui tre rami di guasto in `onConclusioneRicerca`),
+       *   ma `riprendi()` oggi non li accetta e aprirli è una riga a parte, con la sua verifica.
+       *   Dichiarato, non dimenticato.
+       */
+      riprendibile: stato === 'paused'
+        || (stato === 'failed' && (r.terminata !== 'failed' || caduta?.transitorio === true)),
+      motivoErrore: caduta
+        ? { classe: caduta.classe ?? 'ignoto', transitorio: caduta.transitorio === true }
+        : null,
     };
   }
 

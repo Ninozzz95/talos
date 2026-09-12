@@ -279,8 +279,12 @@ test('⭐⭐⭐⭐ L5 — ELENCO: i campi del contratto c\'erano già, quello ch
   assert.equal(dati.ricerche.length, 1);
   assert.deepEqual(
     Object.keys(dati.ricerche[0]).sort(),
-    ['avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'id', 'modello', 'modelloGiudice', 'motivo', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'stato', 'titolo', 'ultimoMessaggio'],
+    ['avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'id', 'modello', 'modelloGiudice', 'motivo', 'motivoErrore', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'riprendibile', 'stato', 'titolo', 'ultimoMessaggio'],
     /*
+     * ⭐ BC-44 (12/09/2026): DICIOTTO — `riprendibile` («il server accetterebbe Riprendi adesso?»)
+     *   e `motivoErrore` (`{classe, transitorio}`, o `null`). ⛔ Il messaggio grezzo del fornitore
+     *   e il suo codice NON escono dalla rotta: restano su `meta.json` per la diagnosi.
+     *
      * ⛔ Il contratto a SEDICI campi: quattordici di L4, `modello` (L8) e `modelloGiudice`
      *   (L9, 12/09/2026) — chi è stato SCELTO a giudicare questa corsa, che è un fatto diverso
      *   da chi ha giudicato davvero (quello sta nel record del rapporto, campo `giudice`).
@@ -609,4 +613,64 @@ test('⭐⭐⭐ L5 — DELETE: la cartella intera sparisce dal disco, e un secon
   const seconda = await chiama(b.base, `/api/v1/sessions/${sessionId}/research/${ricercaId}`, 'DELETE');
   assert.equal(seconda.status, 404, '⛔ il magazzino resta idempotente per il MODELLO; alla persona che guarda un elenco vecchio si dice che non c\'è più');
   assert.equal((await seconda.json()).error.code, 'RESEARCH_NOT_FOUND');
+});
+
+/* ══════════ BC-44 (12/09/2026) — LA ROTTA SMETTE DI RISPONDERE 409 A CHI NON HA SBAGLIATO ══════════
+ *
+ * Il giro vero: ricerca `dec896c0`, 16 giri, 32 attrezzi, 67 testi tenuti, e poi
+ *   {"type":"RunError","message":"Upstream idle timeout exceeded","code":"internal-error"}
+ * ⇒ `failed`, e questa rotta rispondeva **409 RESEARCH_CONFLICT**. Venti minuti pagati, il
+ * giornale intero sul disco, e nessuna porta per rientrarci.
+ *
+ * ⛔ Nei DUE VERSI, e sulla rotta VERA: una caduta del fornitore adesso apre, una caduta che si
+ *   ripeterebbe identica continua a chiudere. Un permesso provato in un verso solo è un permesso
+ *   di cui non si conosce il bordo.
+ */
+
+/** La conclusione di una corsa caduta sul fornitore, nella forma che `agent-service.mjs` produce. */
+const CADUTA_DEL_FORNITORE = { ok: false, esito: null, erroreInterno: 'Upstream idle timeout exceeded', codiceErrore: 'internal-error' };
+
+test('⭐⭐⭐⭐ BC-44 — una ricerca caduta sul FORNITORE si riprende dalla rotta (era 409), e la voce lo dice prima', async (t) => {
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conRicercaViva(b);
+
+  b.chiusure.get(ricercaId)(CADUTA_DEL_FORNITORE);
+  const caduta = await finoA(async () => {
+    const r = await dettaglio(b, sessionId, ricercaId);
+    return r.stato === 'failed' ? r : null;
+  }, 'la conclusione con la caduta del fornitore');
+
+  assert.equal(caduta.riprendibile, true, '⛔ la voce dice al frontend che il pulsante può esistere: fino a ieri lo offriva e la rotta rispondeva 409');
+  assert.deepEqual(caduta.motivoErrore, { classe: 'timeout-fornitore', transitorio: true });
+  assert.match(caduta.motivo, /^La ricerca si è interrotta a metà/);
+  assert.doesNotMatch(caduta.motivo, /Upstream|internal-error/, '⛔ niente nomi tecnici a schermo: il messaggio grezzo resta su meta.json');
+
+  const prima = b.avvii.length;
+  const ripresa = await chiama(b.base, `/api/v1/sessions/${sessionId}/research/${ricercaId}/ripresa`, 'POST');
+  assert.equal(ripresa.status, 200, '⛔ ERA 409 — «non è nello stato giusto» su venti minuti di lavoro pagato e intatto');
+  const voce = (await ripresa.json()).data.ricerca;
+  assert.equal(voce.stato, 'running', '⛔ e la risposta è la voce RILETTA: riga e scheda non possono divergere');
+  assert.equal(voce.riprendibile, false, 'quella che sta girando non si riprende: il menu si richiude da solo');
+  assert.equal(voce.motivoErrore, null, 'il motivo di una caduta superata non descrive più niente');
+  assert.ok(b.avvii.length > prima, 'ed è ripartita davvero');
+});
+
+test('⛔⛔⛔ BC-44, VERSO CONTRARIO — una caduta che si ripeterebbe identica resta 409, col motivo', async (t) => {
+  const b = await banco(t);
+  const { sessionId, ricercaId } = await conRicercaViva(b);
+
+  b.chiusure.get(ricercaId)({ ok: false, esito: null, erroreInterno: 'HTTP 401: no auth credentials found', codiceErrore: 'internal-error' });
+  const caduta = await finoA(async () => {
+    const r = await dettaglio(b, sessionId, ricercaId);
+    return r.stato === 'failed' ? r : null;
+  }, 'la conclusione con una credenziale rifiutata');
+
+  assert.equal(caduta.riprendibile, false, '⛔ una chiave sbagliata resta sbagliata al secondo tentativo: il pulsante non deve nemmeno comparire');
+  assert.deepEqual(caduta.motivoErrore, { classe: 'credenziale', transitorio: false });
+
+  const prima = b.avvii.length;
+  const ripresa = await chiama(b.base, `/api/v1/sessions/${sessionId}/research/${ricercaId}/ripresa`, 'POST');
+  assert.equal(ripresa.status, 409, '⛔ allargare un permesso non deve aprirlo a tutti: qui il 409 è la risposta giusta');
+  assert.equal((await ripresa.json()).error.code, 'RESEARCH_CONFLICT');
+  assert.equal(b.avvii.length, prima, 'e niente è ripartito');
 });

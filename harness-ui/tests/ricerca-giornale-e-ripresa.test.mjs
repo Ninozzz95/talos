@@ -12,7 +12,7 @@ import {
   rinominaConRitento, scriviAtomico, scriviFonte, scriviIstantaneaCache, scriviPiano, scriviRapporto,
   statRapporto, SUFFISSO_NON_RINOMINATO,
 } from '../src/research-store.mjs';
-import { creaResearchOrchestrator, rileggiRapportoRecintato } from '../src/research-orchestrator.mjs';
+import { classificaErroreDiCorsa, creaResearchOrchestrator, rileggiRapportoRecintato } from '../src/research-orchestrator.mjs';
 import { talosResearchReportDocument } from '../src/research/report.mjs';
 import { talosResearchReplay, talosResearchSpent } from '../src/research/run.mjs';
 
@@ -832,4 +832,288 @@ test('⭐⭐⭐⭐ L4 — IL GIRO INTERO SU DISCO: avvio → deposito → conclu
   assert.equal(readFileSync(percorsoMeta(cartella, id), 'utf8').includes('"terminata": "done"'), true);
   assert.equal(readFileSync(percorsoGiornale(cartella, id), 'utf8').includes(NOME_GIORNALE), false, 'il giornale porta fatti, non il proprio nome');
   assert.ok(NOME_META && CARTELLA_RICERCA);
+});
+
+/* ══════════ 7. BC-44 (12/09/2026) — TRANSITORIO NON È FALLITO ══════════
+ *
+ * Il fatto: ricerca `dec896c0`, 16 giri, 32 attrezzi, 67 testi tenuti, «Poi deposito.» — e poi
+ *   {"type":"RunError","message":"Upstream idle timeout exceeded","code":"internal-error"}
+ * ⇒ `terminata:'failed'`, e `POST …/ripresa` rispondeva 409. Venti minuti pagati, il giornale
+ * intatto, e nessuna via per rientrarci.
+ *
+ * ⛔ Ogni prova qui sotto è nei DUE VERSI: una che si riprende E una che continua a NON
+ *   riprendersi. Un permesso nuovo provato in un verso solo è un permesso che non si sa dove
+ *   finisce.
+ */
+
+/** La conclusione VERA di una corsa caduta sul fornitore: `esito:null`, il messaggio del fornitore. */
+function cadutaDelFornitore(messaggio = 'Upstream idle timeout exceeded', codice = 'internal-error') {
+  return { threadId: 't', runId: 'r', ok: false, esito: null, erroreInterno: messaggio, codiceErrore: codice };
+}
+
+/** Una ricerca già a metà strada: piano, un passo pagato, un passo in volo. */
+async function ricercaAMetaStrada(cartella, id) {
+  const rami = [{ id: 'b1', question: 'r1', estimate: { tokens: 10, searches: 1, pages: 1 } }, { id: 'b2', question: 'r2', estimate: { tokens: 10, searches: 1, pages: 1 } }];
+  await scriviPiano({ cartella, id, piano: rami });
+  await accodaEvento({ cartella, id, evento: { kind: 'plan_approved', at: 'b', branches: rami } });
+  await accodaEvento({ cartella, id, evento: { kind: 'step_started', at: 'c', stepId: 'b1:search', branchId: 'b1', stepKind: 'search' } });
+  await accodaEvento({ cartella, id, evento: { kind: 'step_finished', at: 'd', stepId: 'b1:search', spend: { tokens: 4_213, searches: 3, pages: 5 }, resultRef: 'fonti/aa.txt' } });
+  await accodaEvento({ cartella, id, evento: { kind: 'step_started', at: 'e', stepId: 'b2:search', branchId: 'b2', stepKind: 'search' } });
+  await scriviFonte({ cartella, id, testo: 'il testo della pagina già letta' });
+}
+
+/** La voce di sessione come la lascia una corsa caduta col RunError: conclusa, MAI `interrotta`. */
+function voceDopoLaCaduta(cartella, id) {
+  return {
+    cartella, conclusa: true, messaggiFinali: null,
+    taskId: 'ricerca', task: { consegna: 'La consegna originale, con le regole del deposito.', ricercaId: id },
+    forkDa: null, controller: { abort() {} },
+  };
+}
+
+test('⭐⭐⭐⭐ BC-44 — LA TABELLA: cosa si riprende e cosa no, e l ordine che la tiene onesta', () => {
+  const classe = (messaggio, codice) => classificaErroreDiCorsa({ codice, messaggio });
+
+  // ── Transitorie: il fornitore o la rete, non la ricerca.
+  assert.deepEqual(classe('Upstream idle timeout exceeded', 'internal-error'), { classe: 'timeout-fornitore', transitorio: true }, '⛔ IL CASO VERO del 12/09, verbatim dal `.jsonl` della sessione');
+  assert.equal(classe('HTTP 429 dopo 4 tentativi: rate limit exceeded', 'internal-error').transitorio, true);
+  assert.equal(classe('HTTP 503 dopo 4 tentativi: service unavailable', 'internal-error').classe, 'guasto-fornitore');
+  assert.equal(classe('fetch failed', 'internal-error').classe, 'rete');
+  assert.equal(classe('flusso SSE senza contenuto ne tool_calls', 'internal-error').classe, 'flusso-interrotto');
+
+  // ── NON transitorie: ritentare le riprodurrebbe identiche, e costerebbe due volte.
+  assert.deepEqual(classe('HTTP 401: no auth credentials found', 'internal-error'), { classe: 'credenziale', transitorio: false });
+  assert.deepEqual(classe('This endpoint maximum context length is 131072 tokens', 'internal-error'), { classe: 'contesto', transitorio: false });
+  assert.deepEqual(classe(null, 'CTX_TRUNCATED_SUMMARY'), { classe: 'contesto', transitorio: false });
+  assert.deepEqual(classe('⛔ fermato su richiesta mentre il modello stava rispondendo.', 'internal-error'), { classe: 'fermato', transitorio: false });
+  assert.deepEqual(classe(null, 'giri-esauriti'), { classe: 'giri-esauriti', transitorio: false });
+
+  /*
+   * ⛔⛔ L'ORDINE È LA CURA, e queste due righe sono la prova che morde: entrambe le frasi
+   *   contengono le parole di una classe transitoria, ed entrambe NON si devono riprendere.
+   *   È la stessa precedenza di Hermes (`agent/error_classifier.py`: billing prima di
+   *   rate_limit) — con l'ordine sbagliato, una ricerca ripartirebbe su un conto vuoto.
+   */
+  assert.equal(classe('insufficient credits: you have been rate limited until you top up', 'internal-error').classe, 'credito');
+  assert.equal(classe('unauthorized: the upstream provider is overloaded', 'internal-error').classe, 'credenziale');
+
+  /*
+   * ⛔ IGNOTO = NON transitorio, e DIVERGE da Hermes apposta (là `unknown → retryable=True`).
+   *   Là si ritenta una chiamata; qui si riaprirebbe una corsa da venti minuti. Costi diversi,
+   *   default diversi: si riprende solo ciò che si è RICONOSCIUTO.
+   */
+  assert.deepEqual(classe('qualcosa che non abbiamo mai visto', 'internal-error'), { classe: 'ignoto', transitorio: false });
+  assert.deepEqual(classe(null, null), { classe: 'ignoto', transitorio: false }, 'e senza niente in mano non si inventa un permesso');
+});
+
+test('⭐⭐⭐⭐ BC-44 — una corsa caduta sul FORNITORE registra la causa, lo dice in italiano, e si dichiara riprendibile', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  const sessioni = new Map();
+  const { orch, avviati } = orchestratoreSuDisco(cartella, sessioni, { ripresaAutomatica: false });
+  const { id } = await orch.avvia({ cartella, question: 'Come stanno evolvendo gli harness?', depth: 'deep' });
+  await ricercaAMetaStrada(cartella, id);
+
+  await avviati[0].onConclusioneFn(cadutaDelFornitore());
+
+  const suDisco = await leggiRicerca({ cartella, id });
+  assert.equal(suDisco.terminata, 'failed', 'lo stato resta `failed`: il contratto non cambia, cresce');
+  assert.deepEqual(suDisco.motivoErrore, {
+    classe: 'timeout-fornitore', transitorio: true,
+    codice: 'internal-error', messaggio: 'Upstream idle timeout exceeded',
+  }, '⛔ la frase grezza del fornitore resta SUL DISCO: è la diagnosi, e senza di lei «failed» non dice niente');
+
+  sessioni.set(id, voceDopoLaCaduta(cartella, id));
+  const { ricerche } = await orch.elenca({ cartella });
+  assert.equal(ricerche[0].riprendibile, true, '⛔ è il server a dire che il pulsante può esistere, non il frontend a indovinarlo');
+  assert.deepEqual(ricerche[0].motivoErrore, { classe: 'timeout-fornitore', transitorio: true }, '⛔ e il messaggio grezzo NON esce: a schermo sarebbe un nome tecnico');
+  assert.equal(ricerche[0].motivo, 'La ricerca si è interrotta a metà: il fornitore del modello ha chiuso la connessione mentre lavorava. Il lavoro già fatto è conservato e può riprendere da lì.');
+  assert.doesNotMatch(ricerche[0].motivo, /Upstream|timeout|internal-error/, '⛔ la frase per una persona non nomina il guasto tecnico');
+});
+
+test('⭐⭐⭐⭐ BC-44 — LA RIPRESA ACCETTA quella caduta, riparte dal giornale e NON ripaga i passi già fatti', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  const sessioni = new Map();
+  const { orch, avviati } = orchestratoreSuDisco(cartella, sessioni, { ripresaAutomatica: false });
+  const { id } = await orch.avvia({ cartella, question: 'Come stanno evolvendo gli harness?', depth: 'deep' });
+  await ricercaAMetaStrada(cartella, id);
+  await avviati[0].onConclusioneFn(cadutaDelFornitore());
+  sessioni.set(id, voceDopoLaCaduta(cartella, id));
+
+  const spesaPrima = talosResearchSpent(talosResearchReplay((await leggiGiornale({ cartella, id })).eventi));
+  const esito = await orch.riprendi({ id });
+  assert.equal(esito.ok, true, '⛔ prima d oggi: «That research is still running: nothing to resume» ⇒ 409. Falsa due volte.');
+  assert.match(esito.esito, /from its journal/);
+  assert.equal(avviati.length, 2, 'la corsa riparte davvero');
+
+  const consegna = avviati[1].messaggiIniziali[0].content;
+  assert.match(consegna, /4213 tokens, 3 searches, 5 pages/, '⛔ quello che è già stato pagato si DICE al modello: è l unica cosa che gli impedisce di ripagarlo');
+  assert.match(consegna, /Steps already completed: b1:search/);
+  assert.match(consegna, /Resume from this step: b2:search/);
+  assert.match(consegna, /1 source text\(s\) were already fetched/);
+
+  const dopo = await leggiRicerca({ cartella, id });
+  assert.equal(dopo.terminata, null, '⛔ la metadata si riapre: senza, `statoVivo` direbbe `failed` su una ricerca che sta girando');
+  assert.equal(dopo.motivoErrore, null, 'e il motivo di una caduta superata non descrive più niente');
+
+  const { eventi } = await leggiGiornale({ cartella, id });
+  assert.equal(eventi.filter((e) => e.kind === 'run_resumed').length, 1);
+  assert.equal(eventi.find((e) => e.kind === 'run_resumed').auto, undefined, '⛔ una ripresa CHIESTA non si marca `auto`: il tetto della ripresa automatica legge proprio quella riga');
+  assert.deepEqual(talosResearchSpent(talosResearchReplay(eventi)), spesaPrima, '⛔ riprendere non ri-annuncia una spesa: i 4.213 token restano 4.213');
+});
+
+test('⛔⛔⛔ BC-44, VERSO CONTRARIO — una caduta NON transitoria resta ferma, e lo dice', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  const sessioni = new Map();
+  const { orch, avviati } = orchestratoreSuDisco(cartella, sessioni, { ripresaAutomatica: false });
+  const { id } = await orch.avvia({ cartella, question: 'Come stanno evolvendo gli harness?', depth: 'deep' });
+  await ricercaAMetaStrada(cartella, id);
+  await avviati[0].onConclusioneFn(cadutaDelFornitore('HTTP 401: no auth credentials found'));
+  sessioni.set(id, voceDopoLaCaduta(cartella, id));
+
+  assert.equal((await leggiRicerca({ cartella, id })).motivoErrore.transitorio, false);
+  const { ricerche } = await orch.elenca({ cartella });
+  assert.equal(ricerche[0].riprendibile, false, '⛔ il pulsante non deve nemmeno comparire: una chiave sbagliata resta sbagliata al secondo tentativo');
+  assert.equal(ricerche[0].motivo, 'La ricerca non è arrivata in fondo.', 'la frase di sempre, per la causa di sempre');
+
+  const esito = await orch.riprendi({ id });
+  assert.equal(esito.ok, false, '⇒ la rotta risponde ancora 409');
+  assert.match(esito.esito, /still running: nothing to resume/);
+  assert.equal(avviati.length, 1, '⛔ e soprattutto: non è ripartita');
+});
+
+test('⛔⛔ BC-44, VERSO CONTRARIO — una ricerca caduta PRIMA di oggi (nessun `motivoErrore`) si comporta come ieri', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  await creaRicerca({ cartella, id: 'ric-viva', domanda: 'x' });
+  await accodaEvento({ cartella, id: 'ric-viva', evento: { kind: 'run_started', at: 'a', id: 'ric-viva', sessionId: 'ric-viva', question: 'x', depth: 'deep', engine: 'device' } });
+  await aggiornaRicerca({ cartella, id: 'ric-viva', terminata: 'failed' });
+  const sessioni = new Map([['ric-viva', voceDopoLaCaduta(cartella, 'ric-viva')]]);
+  const { orch, avviati } = orchestratoreSuDisco(cartella, sessioni);
+  assert.equal((await orch.elenca({ cartella })).ricerche[0].riprendibile, false);
+  const esito = await orch.riprendi({ id: 'ric-viva' });
+  assert.equal(esito.ok, false, '⛔ nessuna regressione possibile: senza una causa registrata, nessun permesso nuovo');
+  assert.equal(avviati.length, 0);
+});
+
+test('⛔⛔⛔ BC-44, VERSO CONTRARIO — una ricerca CONSEGNATA non riparte, nemmeno con la conversazione ancora in memoria', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  await creaRicerca({ cartella, id: 'ric-viva', domanda: 'x' });
+  await aggiornaRicerca({ cartella, id: 'ric-viva', terminata: 'done', reportLibraryId: 'lib-1' });
+  const voce = { ...voceDopoLaCaduta(cartella, 'ric-viva'), messaggiFinali: [{ role: 'assistant', content: 'fatto' }] };
+  const { orch, avviati } = orchestratoreSuDisco(cartella, new Map([['ric-viva', voce]]));
+  const esito = await orch.riprendi({ id: 'ric-viva' });
+  assert.equal(esito.ok, false, '⛔ buco PREESISTENTE chiuso qui: la via A (conversazione in memoria) non guardava lo stato, e una ricerca già consegnata poteva ripartire');
+  assert.match(esito.esito, /is done and will not be resumed/);
+  assert.equal(avviati.length, 0);
+});
+
+test('⭐⭐⭐⭐ BC-44 — LA RIPRESA AUTOMATICA: una volta sola, dichiarata nel giornale, e mai due', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  const sessioni = new Map();
+  let attese = 0;
+  const { orch, avviati } = orchestratoreSuDisco(cartella, sessioni, { dormiFn: async () => { attese += 1; } });
+  const { id } = await orch.avvia({ cartella, question: 'Come stanno evolvendo gli harness?', depth: 'deep' });
+  await ricercaAMetaStrada(cartella, id);
+  sessioni.set(id, voceDopoLaCaduta(cartella, id));
+
+  await avviati[0].onConclusioneFn(cadutaDelFornitore());
+  assert.equal(attese, 1, '⛔ si aspetta PRIMA di ritentare: ripartire nello stesso istante ricadrebbe nella finestra che ha appena fallito');
+  assert.equal(avviati.length, 2, 'la ricerca è ripartita da sola');
+  const primo = await leggiGiornale({ cartella, id });
+  const auto = primo.eventi.filter((e) => e.kind === 'run_resumed' && e.auto === true);
+  assert.equal(auto.length, 1);
+  assert.equal(auto[0].causa, 'timeout-fornitore', '⛔ il giornale dice CHE È STATA AUTOMATICA e PERCHÉ: senza, un giornale rigiocato attribuirebbe a una persona una spesa decisa da un timer');
+  assert.equal((await leggiRicerca({ cartella, id })).terminata, null);
+
+  // ── E la seconda caduta NON fa ripartire niente: il tetto è uno, per ricerca.
+  await avviati[1].onConclusioneFn(cadutaDelFornitore());
+  assert.equal(attese, 1, '⛔ non si aspetta nemmeno: il cancello si chiude PRIMA di bruciare venti secondi');
+  assert.equal(avviati.length, 2, '⛔ se due riprese automatiche non bastano, la terza la decide una persona');
+  assert.equal((await leggiRicerca({ cartella, id })).terminata, 'failed');
+  assert.equal((await orch.elenca({ cartella })).ricerche[0].riprendibile, true, 'a mano si può ancora: è il timer ad avere un tetto, non la persona');
+});
+
+test('⛔⛔⛔ BC-44, VERSO CONTRARIO — la ripresa automatica NON scatta senza lavoro da salvare, né su una causa non transitoria', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  const sessioni = new Map();
+  const { orch, avviati } = orchestratoreSuDisco(cartella, sessioni, { dormiFn: async () => {} });
+  const { id } = await orch.avvia({ cartella, question: 'Come stanno evolvendo gli harness?', depth: 'deep' });
+  sessioni.set(id, voceDopoLaCaduta(cartella, id));
+
+  // Nessun `step_finished`: caduta al primo respiro.
+  await avviati[0].onConclusioneFn(cadutaDelFornitore());
+  assert.equal(avviati.length, 1, '⛔ ripartire non salverebbe niente e spenderebbe il doppio');
+
+  // Con lavoro fatto, ma per una causa che si ripeterebbe identica.
+  await ricercaAMetaStrada(cartella, id);
+  await avviati[0].onConclusioneFn(cadutaDelFornitore('HTTP 402: insufficient credits'));
+  assert.equal(avviati.length, 1, '⛔ e un conto vuoto non si riempie ritentando');
+  assert.equal((await leggiRicerca({ cartella, id })).motivoErrore.classe, 'credito');
+});
+
+test('⭐⭐⭐⭐ BC-44 — LA CAUSA DEDOTTA: una ricerca caduta PRIMA della cura si riprende lo stesso, perché il `RunError` è negli eventi della sessione', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+
+  /*
+   * ⛔ È esattamente la forma su disco della ricerca `dec896c0` del 12/09: `terminata:'failed'`,
+   *   NESSUN `motivoErrore` (la cura non esisteva ancora), e la sola prova del guasto nel
+   *   `.jsonl` della sessione. Senza la deduzione, la cura non curerebbe il caso che l'ha fatta
+   *   scrivere — e i venti minuti pagati resterebbero persi.
+   */
+  await creaRicerca({ cartella, id: 'ric-viva', domanda: 'Come stanno evolvendo gli harness?' });
+  await accodaEvento({ cartella, id: 'ric-viva', evento: { kind: 'run_started', at: 'a', id: 'ric-viva', sessionId: 'ric-viva', question: 'Come stanno evolvendo gli harness?', depth: 'deep', engine: 'device' } });
+  await ricercaAMetaStrada(cartella, 'ric-viva');
+  await aggiornaRicerca({ cartella, id: 'ric-viva', terminata: 'failed' });
+
+  const voce = {
+    ...voceDopoLaCaduta(cartella, 'ric-viva'),
+    eventi: [
+      { type: 'RunStarted', threadId: 't', runId: 'r' },
+      { type: 'ToolCallResult', content: 'una pagina letta' },
+      { type: 'RunError', message: 'Upstream idle timeout exceeded', code: 'internal-error' },
+    ],
+  };
+  const { orch, avviati } = orchestratoreSuDisco(cartella, new Map([['ric-viva', voce]]), { ripresaAutomatica: false });
+
+  const riga = (await orch.elenca({ cartella })).ricerche[0];
+  assert.equal(riga.riprendibile, true, '⛔ la prova c\'era già, e nessuno la leggeva');
+  assert.deepEqual(riga.motivoErrore, { classe: 'timeout-fornitore', transitorio: true });
+
+  const esito = await orch.riprendi({ id: 'ric-viva' });
+  assert.equal(esito.ok, true);
+  assert.equal(avviati.length, 1, 'ed è ripartita dal giornale, senza ripagare i passi fatti');
+  assert.match(avviati[0].messaggiIniziali[0].content, /4213 tokens, 3 searches, 5 pages/);
+  assert.equal((await leggiRicerca({ cartella, id: 'ric-viva' })).terminata, null);
+});
+
+test('⛔⛔⛔ BC-44, VERSO CONTRARIO — il `RunError` di un giro PRECEDENTE non conta: si legge solo l\'ultimo giro', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  await creaRicerca({ cartella, id: 'ric-viva', domanda: 'x' });
+  await accodaEvento({ cartella, id: 'ric-viva', evento: { kind: 'run_started', at: 'a', id: 'ric-viva', sessionId: 'ric-viva', question: 'x', depth: 'deep', engine: 'device' } });
+  await ricercaAMetaStrada(cartella, 'ric-viva');
+  await aggiornaRicerca({ cartella, id: 'ric-viva', terminata: 'failed' });
+
+  const voce = {
+    ...voceDopoLaCaduta(cartella, 'ric-viva'),
+    eventi: [
+      { type: 'RunStarted', threadId: 't', runId: 'r1' },
+      { type: 'RunError', message: 'Upstream idle timeout exceeded', code: 'internal-error' },
+      // ── Il giro DOPO: ripreso, e caduto per un motivo che non si ritenta.
+      { type: 'RunStarted', threadId: 't', runId: 'r2' },
+      { type: 'RunError', message: 'HTTP 401: no auth credentials found', code: 'internal-error' },
+    ],
+  };
+  const { orch, avviati } = orchestratoreSuDisco(cartella, new Map([['ric-viva', voce]]), { ripresaAutomatica: false });
+  assert.deepEqual((await orch.elenca({ cartella })).ricerche[0].motivoErrore, { classe: 'credenziale', transitorio: false }, '⛔ un `RunError` di tre giri fa non dice niente sul giro appena caduto');
+  assert.equal((await orch.elenca({ cartella })).ricerche[0].riprendibile, false);
+  assert.equal((await orch.riprendi({ id: 'ric-viva' })).ok, false);
+  assert.equal(avviati.length, 0);
 });

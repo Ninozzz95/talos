@@ -3096,7 +3096,8 @@ export function createSessionRegistry({
        * sessione non deve restare silenziosamente a metà.
        */
       // ⛔⛔⛔ FASE C — AL CONTRARIO: se questa sessione è una figlia, il padre non deve restare appeso in eterno anche quando QUESTO ramo raro (mai atteso) scatta.
-      onConclusioneFn?.({ ok: false, esito: null, erroreInterno: errore instanceof Error ? errore.message : String(errore) });
+      // ⭐ BC-44 (12/09) — `codiceErrore` anche su questo ramo raro, per la stessa ragione dell'altro (agent-service.mjs): chi conclude deve poter dire PERCHÉ, e la stessa forma in tutti e due i punti evita che uno dei due diventi il caso speciale che nessuno ricorda.
+      onConclusioneFn?.({ ok: false, esito: null, erroreInterno: errore instanceof Error ? errore.message : String(errore), codiceErrore: typeof errore?.code === 'string' ? errore.code : 'internal-error' });
       if (!voce.conclusa) {
         broadcast(voce, {
           type: 'RunError',

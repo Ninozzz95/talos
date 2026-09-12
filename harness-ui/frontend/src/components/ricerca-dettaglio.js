@@ -86,6 +86,35 @@ export function statoRicercaApprofondita(stato) {
   };
 }
 
+/**
+ * ⭐⭐⭐⭐ BC-44 (12/09/2026) — «NON RIUSCITA» DICEVA LA COSA SBAGLIATA A CHI L'AVEVA PAGATA.
+ *
+ * Il fatto: la ricerca `dec896c0` ha lavorato sedici giri, tenuto 67 testi, scritto «Poi
+ * deposito.», e il fornitore del modello ha chiuso la connessione. Questa tabella la timbrava
+ * **«Non riuscita · Si è fermata su un errore. Riavviala dalla chat con la stessa domanda»** —
+ * cioè consigliava di **ripagare venti minuti di lavoro** che stavano interi sul disco.
+ *
+ * ⛔ Non è un errore di parole: la ricerca NON ha fallito, è stata interrotta, e le due cose
+ *   portano a due gesti diversi (rifarla / riprenderla). Da qui la coppia separata.
+ * ⛔ Chi decide è il SERVER, con `riprendibile` + `motivoErrore.transitorio`: qui non si
+ *   indovina niente da una stringa. Su una voce vecchia (senza quei campi) si cade sulla
+ *   tabella di sempre — nessuna schermata cambia per le ricerche di ieri.
+ * ⛔ E la parola non nomina il guasto tecnico («Upstream idle timeout exceeded» non è una cosa
+ *   da leggere a schermo): la frase precisa arriva dal server in `motivo`, già in italiano, e
+ *   `frasiVoce` la preferisce al `cosaFare` generico come fa per ogni altro stato.
+ */
+export const INTERROTTA_DAL_FORNITORE = Object.freeze({
+  parola: 'Interrotta dal fornitore',
+  tono: 'warning',
+  cosaFare: 'Si è fermata a metà per un problema passeggero, non per un suo errore. Quello che aveva già raccolto è conservato: riprendila dal menu ⋯.',
+});
+
+/** Lo stato di UNA VOCE — cioè con quello che il server dice di lei, non il solo nome dello stato. */
+export function statoDellaVoce(voce) {
+  if (voce?.stato === 'failed' && voce?.motivoErrore?.transitorio === true) return INTERROTTA_DAL_FORNITORE;
+  return statoRicercaApprofondita(voce?.stato);
+}
+
 /** Solo `done` può dire «Conclusa»: la regola sta in una funzione, così un test può morderla. */
 export function conclusaDavvero(stato) { return stato === 'done'; }
 
@@ -139,7 +168,24 @@ export function haRapportoLeggibile(voce) {
  *   risponde **409** e la frase lo dice. Meglio un no onesto e raro che un'assenza muta.
  */
 export function puoMettereInPausa(voce) { return voce?.stato === 'running'; }
-export function puoRiprendere(voce) { return voce?.stato === 'paused' || voce?.stato === 'failed'; }
+/*
+ * ⭐⭐⭐⭐ BC-44 (12/09/2026) — ADESSO LA RISPOSTA LA DÀ IL SERVER, e non è una raffinatezza.
+ *
+ * Questa riga offriva «Riprendi» su OGNI `failed`, col ragionamento — giusto allora — che un
+ * riavvio del server si presenta proprio così. Ma il server, su metà di quei casi, rispondeva
+ * **409 «non è nello stato giusto»**: un pulsante che promette ciò che nessuna rotta può
+ * mantenere, esattamente ciò che questo file dichiara di non voler fare («una voce del menu
+ * esiste solo se può davvero fare qualcosa»).
+ *
+ * ⇒ Da oggi la voce esposta porta `riprendibile`, che è la STESSA condizione che il cancello di
+ *   `riprendi()` fa rispettare — una domanda, una risposta, un posto solo. ⛔ Quando il campo
+ *   non c'è (una risposta di ieri, una pagina aperta durante un aggiornamento del server) si
+ *   cade sulla regola di prima: un menu in meno sarebbe peggio di un 409 raro.
+ */
+export function puoRiprendere(voce) {
+  if (typeof voce?.riprendibile === 'boolean') return voce.riprendibile;
+  return voce?.stato === 'paused' || voce?.stato === 'failed';
+}
 
 /*
  * ⛔ La ri-verifica vuole un rapporto CON i passaggi citati: senza, non c'è niente da ritrovare
@@ -233,7 +279,8 @@ export function durataUmana(daISO, aISO) {
  *   l'archivio il giorno del cambio.
  */
 export function frasiVoce(voce) {
-  const stato = statoRicercaApprofondita(voce?.stato);
+  /* ⭐ BC-44 — `statoDellaVoce` e non `statoRicercaApprofondita`: una caduta transitoria ha una parola sua («Interrotta dal fornitore»), e la decide il server. */
+  const stato = statoDellaVoce(voce);
   const grezza = typeof voce?.domanda === 'string' && voce.domanda.trim()
     ? voce.domanda.trim()
     : (typeof voce?.titolo === 'string' && voce.titolo.trim() ? voce.titolo.trim() : '');
