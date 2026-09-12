@@ -13,6 +13,355 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
+// src/components/catalogo-modelli.js
+function normalizzaCatalogoModelli(d) {
+  if (!oggetto(d) || !Array.isArray(d.modelli) || typeof d.daCache !== "boolean" || typeof d.aggiornatoAlle !== "string" || Number.isNaN(Date.parse(d.aggiornatoAlle)) || !d.modelli.every((m) => oggetto(m) && typeof m.id === "string" && m.id && typeof m.nome === "string" && typeof m.provider === "string" && ["inputModalities", "outputModalities", "supportedParameters"].every((k) => Array.isArray(m[k]) && m[k].every((v) => typeof v === "string")))) throw Error("La risposta del catalogo non è valida.");
+  return d;
+}
+function prezzoPerMilione(value) {
+  if (value == null || typeof value === "boolean" || typeof value === "object" || String(value).trim() === "") return "Non dichiarato";
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? new Intl.NumberFormat("it-IT", { maximumFractionDigits: 6 }).format(n * 1e6) + " USD" : "Non dichiarato";
+}
+function filtraModelli(modelli, query = "", provider = "all") {
+  const q = String(query).trim().toLocaleLowerCase("it");
+  return modelli.filter((m) => (provider === "all" || m.provider === provider) && (!q || [m.nome, m.id, m.provider].some((v) => String(v || "").toLocaleLowerCase("it").includes(q))));
+}
+function el(tag2, cls, txt) {
+  const n = document.createElement(tag2);
+  if (cls) n.className = cls;
+  if (txt != null) n.textContent = String(txt);
+  return n;
+}
+function kv(k, v, id) {
+  const row = el("div", "talos-kv"), val = el("span", "talos-kv__v", v);
+  if (id) val.id = id;
+  row.append(el("span", "talos-kv__k", k), val);
+  return row;
+}
+function contesto(n) {
+  return Number.isFinite(n) && n > 0 ? new Intl.NumberFormat("it-IT").format(n) + " token" : "Non dichiarato";
+}
+function creaRigaCatalogo(m, { selezionato = false, seleziona } = {}) {
+  const b = el("button", "talos-list-row");
+  b.type = "button";
+  b.dataset.c = "ListRow";
+  b.dataset.catalog = m.id;
+  b.dataset.provider = m.provider;
+  b.setAttribute("aria-pressed", String(selezionato));
+  const icon = el("span", "talos-list-row__icon");
+  icon.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-globe"></use></svg>';
+  const text = el("span", "talos-list-row__text");
+  text.append(el("span", "talos-list-row__title", m.nome), el("span", "talos-list-row__sub", m.provider + " · " + contesto(m.contextLength)));
+  b.append(icon, text);
+  b.addEventListener("click", () => seleziona?.(m));
+  return b;
+}
+function aggiornaDettaglioCatalogo(mount, m, { fornitori } = {}) {
+  mount.replaceChildren();
+  if (!m) {
+    mount.append(el("p", "talos-muted", "Seleziona un modello per vedere capacità, contesto e prezzi."));
+    return;
+  }
+  const nome = el("h3", "", m.nome);
+  nome.id = "catalogoNome";
+  const id = el("code", "talos-mono", m.id);
+  id.id = "catalogoId";
+  const desc = el("p", "talos-detail__desc", m.description || "Il fornitore non ha fornito una descrizione.");
+  desc.id = "catalogoDescrizione";
+  mount.append(nome, id, desc, kv("Fornitore", m.provider, "catalogoProvider"), kv("Ingresso", elenco(m.inputModalities), "catalogoIngresso"), kv("Risposta", elenco(m.outputModalities), "catalogoUscita"), kv("Parametri supportati", elenco(m.supportedParameters), "catalogoParametri"), kv("Contesto", contesto(m.contextLength), "catalogoContesto"));
+  const alias = el("p", "talos-muted", "Alias: può cambiare versione nel tempo.");
+  alias.id = "catalogoAlias";
+  alias.hidden = !m.alias;
+  mount.append(alias, el("hr", "talos-lab__rule"), el("h3", "", "Costo per milione di token"), kv("In ingresso", prezzoPerMilione(m.prezzoPrompt), "catalogoPrezzoInput"), kv("In uscita", prezzoPerMilione(m.prezzoCompletion), "catalogoPrezzoOutput"), el("p", "talos-muted", "Prezzi dichiarati da OpenRouter. Non sono una stima del costo della sessione."));
+  const raw = el("details", "talos-lab__space");
+  raw.append(el("summary", "", "Valori originali per token (USD)"));
+  raw.append(kv("Ingresso", m.prezzoPrompt ?? "Non dichiarato", "catalogoPrezzoInputRaw"), kv("Uscita", m.prezzoCompletion ?? "Non dichiarato", "catalogoPrezzoOutputRaw"));
+  mount.append(raw);
+  const stato = el("p", "talos-muted", "L’elenco dei modelli non verifica le credenziali del tuo account.");
+  stato.id = "catalogoStato";
+  mount.append(stato);
+  const use = el("button", "talos-button talos-button--primary talos-button--block", "Usa nella sessione");
+  use.id = "catalogoAzione";
+  use.type = "button";
+  use.dataset.richiede = "fase3";
+  use.hidden = true;
+  mount.append(use);
+  const access = el("button", "talos-button talos-button--ghost talos-button--sm", "Fornitori e accessi");
+  access.type = "button";
+  access.dataset.c = "Button";
+  access.dataset.apreVelo = "veloFornitori";
+  access.addEventListener("click", (event) => {
+    if (fornitori) {
+      event.stopPropagation();
+      fornitori();
+    }
+  });
+  mount.append(access);
+}
+function aggiornaCatalogoModelli(panel, dati, { query = "", provider = "all", selezionato = null, limite = 120, caricamento = false, errore = "", seleziona, altri, fornitori } = {}) {
+  const list = panel.querySelector("[data-catalog-list]"), detail = panel.querySelector("[data-catalog-detail]"), count2 = panel.querySelector("[data-catalog-count]"), more = panel.querySelector("[data-catalog-more]"), vuoto = panel.querySelector("#vuotoCatalogo"), refresh = panel.querySelector("[data-catalog-refresh]");
+  if (!list || !detail) return null;
+  const attivo = document.activeElement, focusId = list.contains(attivo) ? attivo.dataset.catalog : null, scroll = list.scrollTop;
+  const filtered = dati ? filtraModelli(normalizzaCatalogoModelli(dati).modelli, query, provider) : [];
+  const selected = filtered.find((m) => m.id === selezionato?.id) || filtered[0] || null;
+  list.replaceChildren();
+  if (vuoto) vuoto.hidden = true;
+  more.hidden = true;
+  refresh.disabled = caricamento;
+  panel.setAttribute("aria-busy", String(caricamento));
+  if (errore) {
+    const p = el("p", "talos-card talos-card--pad", errore);
+    p.setAttribute("role", "alert");
+    list.append(p);
+    count2.textContent = "Catalogo non disponibile";
+    aggiornaDettaglioCatalogo(detail, null);
+    return null;
+  }
+  count2.textContent = caricamento ? "Aggiornamento del catalogo…" : dati ? filtered.length + " di " + dati.modelli.length + " modelli · OpenRouter · " + (dati.daCache ? "copia salvata · " : "") + new Date(dati.aggiornatoAlle).toLocaleString("it-IT", { timeZone: "Europe/Rome" }) : "Catalogo non caricato";
+  if (!dati) {
+    list.append(el("p", "talos-card--pad talos-muted", caricamento ? "Caricamento…" : "Apri questa sezione per caricare il catalogo."));
+  } else if (!filtered.length) {
+    const p = el("p", "talos-card--pad talos-muted", dati.modelli.length ? "Nessun modello corrisponde ai filtri." : "Il catalogo osservato è vuoto.");
+    list.append(p);
+  } else for (const m of filtered.slice(0, limite)) list.append(creaRigaCatalogo(m, { selezionato: m.id === selected?.id, seleziona }));
+  more.hidden = filtered.length <= limite;
+  more.onclick = () => altri?.();
+  aggiornaDettaglioCatalogo(detail, selected, { fornitori });
+  list.scrollTop = scroll;
+  if (focusId && document.activeElement === document.body && !panel.hidden) {
+    const nuovo = [...list.querySelectorAll("[data-catalog]")].find((b) => b.dataset.catalog === focusId);
+    nuovo?.focus({ preventScroll: true });
+  }
+  return selected;
+}
+function montaCatalogoModelli(originale, canonico) {
+  if (!originale || !canonico || originale.dataset.catalogMounted) return;
+  originale.replaceChildren(...canonico.children);
+  originale.dataset.catalogMounted = "true";
+  originale.dataset.catalogPanel = "";
+  const ids = { cercaCatalogo: "modelLabSearch", filtroFornitore: "modelLabProviderFilter", listaCatalogo: "modelLabCatalogList" };
+  for (const [prima, dopo] of Object.entries(ids)) {
+    const n = originale.querySelector("#" + prima);
+    if (!n) continue;
+    for (const label of originale.querySelectorAll('label[for="' + prima + '"]')) label.htmlFor = dopo;
+    n.id = dopo;
+  }
+  originale.querySelector("[data-catalog-detail]").id = "modelLabModelDetail";
+  originale.querySelector("[data-catalog-count]").id = "modelLabCatalogCount";
+  originale.querySelector("[data-catalog-refresh]").id = "modelLabRefreshButton";
+  originale.querySelector("#modelLabProviderFilter").replaceChildren(new Option("Tutti i fornitori", "all"));
+  originale.querySelector("[data-catalog-list]").replaceChildren();
+  aggiornaDettaglioCatalogo(originale.querySelector("[data-catalog-detail]"), null);
+}
+var oggetto, PAROLE, elenco;
+var init_catalogo_modelli = __esm({
+  "src/components/catalogo-modelli.js"() {
+    oggetto = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+    PAROLE = { text: "Testo", image: "Immagini", audio: "Audio", video: "Video", file: "File", tools: "Attrezzi", tool_choice: "Scelta attrezzi", temperature: "Creatività", top_p: "Varietà", max_tokens: "Limite risposta", response_format: "Formato risposta", reasoning: "Ragionamento", include_reasoning: "Mostra ragionamento" };
+    elenco = (v) => v?.length ? v.map((x) => PAROLE[x] || x).join(", ") : "Non dichiarato";
+  }
+});
+
+// src/components/fonti-modelli.js
+function portaInVistaFonteSelettore(evento) {
+  const scheda = evento.target;
+  if (!scheda?.matches?.('.model-picker-source[role="tab"]') || !scheda.parentElement?.matches('.model-picker-sources[role="tablist"]')) return;
+  scheda.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant", container: "nearest" });
+}
+function opzioniFallback(fornitori = [], { usaAttrezzi = true } = {}) {
+  return fornitori.filter((p) => p.keyConfigured === true).flatMap((p) => (p.modelliDiRiserva || []).filter((m) => !usaAttrezzi || m.toolCalling === true).map((m) => ({ provider: p.id, model: m.id, etichetta: `${p.label || p.id} · ${m.nome || m.id}` })));
+}
+function creaSceltaFallback({ fornitori = [], valore = [], usaAttrezzi = true, onChange = null } = {}) {
+  const wrap = document.createElement("fieldset");
+  wrap.className = "talos-card talos-card--pad talos-stack";
+  Object.assign(wrap.style, { minWidth: "0", margin: "16px 0 0", gap: "12px" });
+  const legend = document.createElement("legend");
+  legend.textContent = "Se non risponde, continua con…";
+  wrap.append(legend);
+  const selezione = valore.map(({ provider, model }) => ({ provider, model }));
+  const scelte = opzioniFallback(fornitori, { usaAttrezzi });
+  const lista = document.createElement("ol");
+  lista.className = "talos-stack";
+  const select = document.createElement("select");
+  select.className = "talos-field__input";
+  select.setAttribute("aria-label", "Fornitore e modello con cui continuare");
+  Object.assign(select.style, { flex: "1", minWidth: "0" });
+  select.disabled = typeof onChange !== "function";
+  const vuota = document.createElement("option");
+  vuota.value = "";
+  vuota.textContent = "Nessuno";
+  select.append(vuota);
+  for (const [i, o] of scelte.entries()) {
+    const option = document.createElement("option");
+    option.value = String(i);
+    option.textContent = o.etichetta;
+    select.append(option);
+  }
+  const aggiungi = document.createElement("button");
+  aggiungi.type = "button";
+  aggiungi.className = "talos-button talos-button--secondary talos-button--sm";
+  aggiungi.textContent = "Aggiungi";
+  const notifica = () => onChange?.(selezione.map((v) => ({ ...v })));
+  function disegna2() {
+    lista.replaceChildren(...selezione.map((v, i) => {
+      const li = document.createElement("li");
+      li.className = "talos-cluster";
+      const label = document.createElement("span");
+      label.textContent = scelte.find((o) => o.provider === v.provider && o.model === v.model)?.etichetta || "Scelta non disponibile: rimuovila e scegline un’altra";
+      const rimuovi = document.createElement("button");
+      rimuovi.type = "button";
+      rimuovi.className = "talos-button talos-button--ghost talos-button--sm";
+      rimuovi.textContent = "Rimuovi";
+      rimuovi.setAttribute("aria-label", "Rimuovi " + label.textContent);
+      rimuovi.disabled = typeof onChange !== "function";
+      rimuovi.addEventListener("click", () => {
+        selezione.splice(i, 1);
+        notifica();
+        disegna2();
+        select.focus();
+      });
+      li.append(label, rimuovi);
+      return li;
+    }));
+    for (const [i, option] of [...select.options].slice(1).entries()) option.disabled = selezione.some((v) => v.provider === scelte[i].provider && v.model === scelte[i].model);
+    aggiungi.disabled = typeof onChange !== "function" || !scelte.length || select.value === "" || selezione.length >= 8;
+  }
+  select.addEventListener("change", disegna2);
+  aggiungi.addEventListener("click", () => {
+    const scelta = scelte[Number(select.value)];
+    if (!scelta || select.value === "" || selezione.length >= 8 || selezione.some((v) => v.provider === scelta.provider && v.model === scelta.model)) return;
+    selezione.push({ provider: scelta.provider, model: scelta.model });
+    select.value = "";
+    notifica();
+    disegna2();
+    select.focus();
+  });
+  const nota = document.createElement("p");
+  nota.className = "talos-muted";
+  nota.textContent = typeof onChange !== "function" ? "La scelta non è ancora collegata a questa sessione." : "Il cambio viene annunciato in chat. La conversazione continua con i fornitori scelti, nell’ordine indicato.";
+  const azioni = document.createElement("div");
+  azioni.className = "talos-cluster";
+  azioni.append(select, aggiungi);
+  wrap.append(lista, azioni, nota);
+  disegna2();
+  return wrap;
+}
+function senzaChiave(fonte) {
+  return PROVIDER_DIRETTI.some((p) => p.id === fonte && p.senzaChiave === true);
+}
+function eFonteDiretta(fonte) {
+  return ID_DIRETTI.has(String(fonte || ""));
+}
+function fontiDelSelettore({ openrouter = null, locali = null, diretti = null } = {}) {
+  const etichetta2 = (nome, modelli) => modelli?.some((m) => m.catalogo?.fonte === "riserva") ? `${nome} · elenco di riserva` : nome;
+  const fonti = [
+    { id: "openrouter", etichetta: etichetta2("OpenRouter", openrouter), conto: contaOppureNull(openrouter), collegato: true },
+    { id: "locali", etichetta: "Locali", conto: contaOppureNull(locali), collegato: true }
+  ];
+  for (const provider of PROVIDER_DIRETTI) {
+    const elenco2 = diretti ? diretti[provider.id] : null;
+    if (provider.soloSeCollegato && !Array.isArray(elenco2)) continue;
+    fonti.push({
+      id: provider.id,
+      etichetta: etichetta2(provider.etichetta, elenco2),
+      conto: contaOppureNull(elenco2),
+      // `collegato` è falso solo quando SAPPIAMO che la chiave manca: prima di leggere non si accusa.
+      collegato: !diretti || Array.isArray(elenco2)
+    });
+  }
+  return fonti;
+}
+function modelliDellaFonte(fonte, { openrouter = null, locali = null, diretti = null } = {}) {
+  if (fonte === "openrouter") return openrouter;
+  if (fonte === "locali") return locali;
+  if (!eFonteDiretta(fonte)) return null;
+  if (!diretti) return null;
+  const elenco2 = diretti[fonte];
+  return Array.isArray(elenco2) ? elenco2 : null;
+}
+function fraseVuotoDiretto(fonte, { diretti = null, errori = {} } = {}) {
+  const etichetta2 = PROVIDER_DIRETTI.find((p) => p.id === fonte)?.etichetta || fonte;
+  if (errori && errori[fonte]) return `Catalogo ${etichetta2} non disponibile: ${errori[fonte]}`;
+  if (!diretti) return `Leggo il catalogo ${etichetta2}…`;
+  if (!Array.isArray(diretti[fonte])) {
+    return senzaChiave(fonte) ? `${etichetta2} non risponde su questo computer: avvialo e ricarica.` : `Collega la chiave ${etichetta2} dal pannello Provider per vedere i suoi modelli.`;
+  }
+  return `Nessun modello ${etichetta2} disponibile con questa chiave.`;
+}
+function contaOppureNull(elenco2) {
+  return Array.isArray(elenco2) ? elenco2.length : null;
+}
+function descrizioneModelloSelettore(modello = {}) {
+  const numero6 = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 0, useGrouping: true });
+  const prezzo = (valore) => {
+    const testo3 = prezzoPerMilione(valore);
+    return testo3 === "Non dichiarato" ? "non disponibile" : `${testo3}/M token`;
+  };
+  const capacita = (valore) => valore === true ? "sì" : valore === false ? "no" : "non disponibile";
+  const dettagli = [
+    `Contesto: ${Number.isFinite(modello.contextLength) && modello.contextLength > 0 ? `${numero6.format(modello.contextLength)} token` : "non disponibile"}`,
+    `Ingresso: ${prezzo(modello.prezzoPrompt)}`,
+    `Uscita: ${prezzo(modello.prezzoCompletion)}`,
+    `Rilettura: ${prezzo(modello.prezzoCacheRead)}`,
+    `Memorizzazione: ${prezzo(modello.prezzoCacheWrite)}`,
+    `Strumenti: ${capacita(modello.capacita?.toolCall)}`,
+    `Ragionamento: ${capacita(modello.capacita?.reasoning)}`
+  ];
+  if (modello.alias) dettagli.unshift("Ultima versione");
+  if (modello.prezziPerMilione?.tiers?.length || modello.prezziPerMilione?.context_over_200k) dettagli.push("Prezzi variabili con il contesto");
+  if (modello.catalogo?.fonte === "riserva") {
+    const data2 = modello.catalogo.dataRiserva;
+    const parti = typeof data2 === "string" && /^(\d{4})-(\d{2})-(\d{2})$/u.exec(data2);
+    dettagli.unshift(`Catalogo non raggiungibile: elenco di riserva${parti ? ` del ${parti[3]}/${parti[2]}/${parti[1]}` : ""}`);
+    if (modello.catalogo.avvisi?.some((a) => a.codice === "CATALOG_CACHE_CORRUPT")) dettagli.push("Copia danneggiata rifiutata");
+    return dettagli.join(" · ");
+  }
+  const data = modello.catalogo?.aggiornatoAlle;
+  dettagli.push(typeof data === "string" && Number.isFinite(Date.parse(data)) ? `Dati del ${new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome" }).format(new Date(data))}` : "Data del catalogo non disponibile");
+  if (modello.catalogo?.fallbackRete) {
+    const etaMs = modello.catalogo.etaCacheMs;
+    dettagli.push(`Copia salvata: ${Number.isFinite(etaMs) && etaMs >= 0 ? `${numero6.format(Math.floor(etaMs / 1e3))} secondi al caricamento` : "età non disponibile"}`);
+  }
+  if (modello.catalogo?.avvisi?.some((a) => a.codice === "CATALOG_CACHE_CORRUPT")) dettagli.push("Copia danneggiata rifiutata");
+  if (modello.catalogo?.avvisi?.some((a) => a.codice === "CATALOG_CACHE_WRITE_FAILED")) dettagli.push("Salvataggio del catalogo non disponibile");
+  return dettagli.join(" · ");
+}
+function aggiornaTestoModelloSelettore(contenitore, modello) {
+  const nome = contenitore.ownerDocument.createElement("strong");
+  nome.textContent = modello.nome || "Nome non disponibile";
+  const dettagli = contenitore.ownerDocument.createElement("small");
+  dettagli.textContent = descrizioneModelloSelettore(modello);
+  contenitore.replaceChildren(nome, dettagli);
+}
+var PROVIDER_DIRETTI, ID_DIRETTI;
+var init_fonti_modelli = __esm({
+  "src/components/fonti-modelli.js"() {
+    init_catalogo_modelli();
+    if (typeof document !== "undefined") document.addEventListener("focusin", portaInVistaFonteSelettore);
+    PROVIDER_DIRETTI = Object.freeze([
+      Object.freeze({ id: "anthropic", etichetta: "Anthropic" }),
+      Object.freeze({ id: "gemini", etichetta: "Gemini" }),
+      Object.freeze({ id: "openai", etichetta: "OpenAI" }),
+      Object.freeze({ id: "lmstudio", etichetta: "LM Studio", senzaChiave: true }),
+      Object.freeze({ id: "zai", etichetta: "Z.AI", soloSeCollegato: true }),
+      Object.freeze({ id: "deepseek", etichetta: "DeepSeek", soloSeCollegato: true }),
+      Object.freeze({ id: "groq", etichetta: "Groq", soloSeCollegato: true }),
+      Object.freeze({ id: "cerebras", etichetta: "Cerebras", soloSeCollegato: true }),
+      Object.freeze({ id: "mistral", etichetta: "Mistral", soloSeCollegato: true }),
+      Object.freeze({ id: "together", etichetta: "Together", soloSeCollegato: true }),
+      Object.freeze({ id: "fireworks", etichetta: "Fireworks", soloSeCollegato: true }),
+      Object.freeze({ id: "deepinfra", etichetta: "DeepInfra", soloSeCollegato: true }),
+      Object.freeze({ id: "novita", etichetta: "Novita", soloSeCollegato: true }),
+      Object.freeze({ id: "nebius", etichetta: "Nebius", soloSeCollegato: true }),
+      Object.freeze({ id: "xai", etichetta: "xAI", soloSeCollegato: true }),
+      Object.freeze({ id: "ollama-cloud", etichetta: "Ollama Cloud", soloSeCollegato: true }),
+      Object.freeze({ id: "huggingface", etichetta: "Hugging Face", soloSeCollegato: true })
+    ]);
+    ID_DIRETTI = new Set(PROVIDER_DIRETTI.map((p) => p.id));
+  }
+});
+
 // src/components/plurale.js
 function parola(quanti, chiave, plurale2) {
   const forme = FORME[chiave] || [chiave, plurale2 ?? `${chiave}i`];
@@ -116,15 +465,15 @@ function datiProcesso(p = {}) {
   const fermo = Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= 6e4 ? `Nessuna uscita da ${Math.round(p.fermoDaMs / 1e3)} secondi. Il processo è vivo: potrebbe aspettare un input. TALOS non lo ferma da solo.` : null;
   return { comando: p.comando || "—", stato: p.stato || "ok", chi, misura, fermo };
 }
-function el(d, tag2, classe, testo3) {
+function el2(d, tag2, classe, testo3) {
   const n = d.createElement(tag2);
   if (classe) n.className = classe;
   if (testo3 != null) n.textContent = testo3;
   return n;
 }
-function kv(d, k, v, classeV = "") {
-  const r = el(d, "div", "talos-kv");
-  r.append(el(d, "span", "talos-kv__k", k), el(d, "span", `talos-kv__v${classeV ? ` ${classeV}` : ""}`, v));
+function kv2(d, k, v, classeV = "") {
+  const r = el2(d, "div", "talos-kv");
+  r.append(el2(d, "span", "talos-kv__k", k), el2(d, "span", `talos-kv__v${classeV ? ` ${classeV}` : ""}`, v));
   return r;
 }
 function chevron(d) {
@@ -138,7 +487,7 @@ function chevron(d) {
 }
 function bottoneAzioni(d, a, azioni) {
   const nome = a.taskCorto || a.task || "delega senza compito";
-  const b = el(d, "button", "talos-button talos-button--ghost talos-button--sm");
+  const b = el2(d, "button", "talos-button talos-button--ghost talos-button--sm");
   b.type = "button";
   b.dataset.azione = "menu";
   b.setAttribute("aria-haspopup", "menu");
@@ -162,16 +511,16 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
   const lista = Array.isArray(agenti) ? agenti : [];
   contenitore.replaceChildren();
   if (!lista.length) {
-    const vuoto = el(d, "div", "talos-card talos-inspector-card");
+    const vuoto = el2(d, "div", "talos-card talos-inspector-card");
     vuoto.dataset.c = "EmptyState";
-    const head = el(d, "div", "talos-inspector-card__head");
-    head.appendChild(el(d, "b", "", "Sotto-agenti"));
-    vuoto.append(head, el(d, "p", "talos-inspector__hint", "Nessun sotto-agente in questa sessione. Quando una delega parte, qui compare con il suo compito, lo stato e quello che ha fatto; da lì si apre la sua conversazione o si ferma."));
+    const head = el2(d, "div", "talos-inspector-card__head");
+    head.appendChild(el2(d, "b", "", "Sotto-agenti"));
+    vuoto.append(head, el2(d, "p", "talos-inspector__hint", "Nessun sotto-agente in questa sessione. Quando una delega parte, qui compare con il suo compito, lo stato e quello che ha fatto; da lì si apre la sua conversazione o si ferma."));
     contenitore.appendChild(vuoto);
     return 0;
   }
   for (const a of lista) {
-    const card = el(d, "div", "talos-card talos-inspector-card");
+    const card = el2(d, "div", "talos-card talos-inspector-card");
     card.dataset.c = "AgentRow";
     card.dataset.stato = statoDelega(a);
     if (a.sessionId) card.dataset.sessioneFiglia = a.sessionId;
@@ -196,8 +545,8 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
         });
       }
     }
-    const head = el(d, "div", "talos-inspector-card__head");
-    head.append(el(d, "b", "", tronca(a.taskCorto || a.task || "Delega senza compito registrato", 52)), el(d, "span", `talos-badge talos-badge--sm${statoDelega(a) === "fallita" ? " talos-badge--danger" : statoDelega(a) === "conclusa" ? " talos-badge--success" : ""}`, etichettaDelega(a)));
+    const head = el2(d, "div", "talos-inspector-card__head");
+    head.append(el2(d, "b", "", tronca(a.taskCorto || a.task || "Delega senza compito registrato", 52)), el2(d, "span", `talos-badge talos-badge--sm${statoDelega(a) === "fallita" ? " talos-badge--danger" : statoDelega(a) === "conclusa" ? " talos-badge--success" : ""}`, etichettaDelega(a)));
     if (typeof azioni.onMenu === "function" && a.sessionId) head.append(bottoneAzioni(d, a, azioni));
     if (apribile) head.append(chevron(d));
     card.append(head);
@@ -206,13 +555,13 @@ function disegnaAgenti(d, contenitore, agenti, azioni = {}) {
     if (a.avviataAlle) righe.push(["Avviata", oraBreve(a.avviataAlle)]);
     if (ev) righe.push(["Ha fatto", `${plurale(Number(ev.toolCalls || 0), "chiamata")} · ${plurale(Number(ev.scritture || 0), "scrittura", "scritture")}`]);
     for (const [k, v] of righe) {
-      const kv4 = el(d, "div", "talos-kv");
-      kv4.append(el(d, "span", "talos-kv__k", k), el(d, "span", "talos-kv__v talos-mono", v));
+      const kv4 = el2(d, "div", "talos-kv");
+      kv4.append(el2(d, "span", "talos-kv__k", k), el2(d, "span", "talos-kv__v talos-mono", v));
       card.append(kv4);
     }
     const collisioni = Array.isArray(a.collisioni) ? a.collisioni : [];
     if (collisioni.length) {
-      const nota = el(d, "p", "talos-inspector__hint talos-inspector__hint--danger");
+      const nota = el2(d, "p", "talos-inspector__hint talos-inspector__hint--danger");
       const file = [...new Set(collisioni.map((c) => c.percorso))];
       nota.textContent = file.length === 1 ? `Anche un'altra delega ha scritto ${file[0]}: l'ultima scrittura ha coperto la precedente. Riaprilo prima di fidarti.` : `Anche altre deleghe hanno scritto questi file: ${file.join(", ")}. L'ultima scrittura ha coperto le precedenti.`;
       card.append(nota);
@@ -256,7 +605,7 @@ function riempiCard(d, card, righe, { classiValore = () => "" } = {}) {
   for (const n of [...card.querySelectorAll(".talos-kv")]) n.remove();
   for (const r of righe) {
     card.appendChild(d.createTextNode("\n"));
-    card.appendChild(kv(d, r[0], r[1], classiValore(r)));
+    card.appendChild(kv2(d, r[0], r[1], classiValore(r)));
   }
 }
 function aggiornaInspector(inspector, dati = {}, { document: d = globalThis.document } = {}) {
@@ -284,25 +633,25 @@ function aggiornaInspector(inspector, dati = {}, { document: d = globalThis.docu
     processi.replaceChildren();
     const lista = Array.isArray(dati.processi) ? dati.processi : [];
     if (!lista.length) {
-      const vuoto = el(d, "div", "talos-card talos-inspector-card");
+      const vuoto = el2(d, "div", "talos-card talos-inspector-card");
       vuoto.dataset.c = "EmptyState";
-      const head = el(d, "div", "talos-inspector-card__head");
-      head.appendChild(el(d, "b", "", "Processi"));
-      vuoto.append(head, el(d, "p", "talos-inspector__hint", "Nessun comando eseguito in questa sessione. Quando l'agente o tu lanciate un comando, qui compaiono comando, durata e uscita."));
+      const head = el2(d, "div", "talos-inspector-card__head");
+      head.appendChild(el2(d, "b", "", "Processi"));
+      vuoto.append(head, el2(d, "p", "talos-inspector__hint", "Nessun comando eseguito in questa sessione. Quando l'agente o tu lanciate un comando, qui compaiono comando, durata e uscita."));
       processi.appendChild(vuoto);
     }
     for (const p of lista) {
       const dp = datiProcesso(p);
-      const card = el(d, "div", "talos-card talos-process");
+      const card = el2(d, "div", "talos-card talos-process");
       card.dataset.c = "ProcessRow";
       card.dataset.stato = dp.stato;
-      card.appendChild(el(d, "div", "talos-process__cmd", dp.comando));
-      const meta2 = el(d, "div", "talos-process__meta");
-      if (dp.stato === "in-corso") meta2.appendChild(el(d, "span", "talos-badge talos-badge--accent talos-badge--sm", "In corso"));
-      else meta2.appendChild(el(d, "span", `talos-dot talos-dot--${dp.stato === "errore" ? "danger" : "success"}`));
-      meta2.append(el(d, "span", "", dp.chi), el(d, "span", "talos-grow"), el(d, "span", "talos-mono talos-measure", dp.misura));
+      card.appendChild(el2(d, "div", "talos-process__cmd", dp.comando));
+      const meta2 = el2(d, "div", "talos-process__meta");
+      if (dp.stato === "in-corso") meta2.appendChild(el2(d, "span", "talos-badge talos-badge--accent talos-badge--sm", "In corso"));
+      else meta2.appendChild(el2(d, "span", `talos-dot talos-dot--${dp.stato === "errore" ? "danger" : "success"}`));
+      meta2.append(el2(d, "span", "", dp.chi), el2(d, "span", "talos-grow"), el2(d, "span", "talos-mono talos-measure", dp.misura));
       card.appendChild(meta2);
-      if (dp.fermo) card.appendChild(el(d, "div", "talos-process__stall", dp.fermo));
+      if (dp.fermo) card.appendChild(el2(d, "div", "talos-process__stall", dp.fermo));
       processi.appendChild(d.createTextNode("\n"));
       processi.appendChild(card);
     }
@@ -662,16 +1011,23 @@ function etichettaOrigineChiave(row = {}) {
   if (row.keyConfigured === true) return "Chiave salvata";
   return row.requiresKey === true ? "Chiave mancante" : "Chiave facoltativa";
 }
-function el2(tag2, cls, txt) {
+function statoChiavePool(chiave = {}) {
+  const cause = { traffico: "Troppo traffico", credenziale: "Credenziale rifiutata", credito: "Credito non disponibile", rete: "Collegamento interrotto", "timeout-fornitore": "Tempo massimo superato", "guasto-fornitore": "Servizio non raggiungibile", "flusso-interrotto": "Risposta interrotta" };
+  if (chiave.stato !== "in-panchina") return "Disponibile";
+  const data = Number.isFinite(chiave.inPanchinaFino) ? new Date(chiave.inPanchinaFino) : null;
+  const istante = data && !Number.isNaN(data.getTime()) ? data.toLocaleString("it-IT", { dateStyle: "short", timeStyle: "medium" }) : null;
+  return (istante ? "In panchina fino a " + istante : "In panchina") + " · " + (cause[chiave.causa] || "Accesso da verificare");
+}
+function el3(tag2, cls, txt) {
   const n = document.createElement(tag2);
   if (cls) n.className = cls;
   if (txt != null) n.textContent = txt;
   return n;
 }
 function campo(label, tipo, key, row, valore = "") {
-  const wrap = el2("label", "talos-stack talos-provider__field");
-  wrap.append(el2("span", "talos-muted", label));
-  const input = el2("input", "talos-field__input");
+  const wrap = el3("label", "talos-stack talos-provider__field");
+  wrap.append(el3("span", "talos-muted", label));
+  const input = el3("input", "talos-field__input");
   input.type = tipo;
   input.dataset[key] = row.id;
   input.autocomplete = "off";
@@ -689,7 +1045,7 @@ function campo(label, tipo, key, row, valore = "") {
   return wrap;
 }
 function button(action, label, tone = "secondary") {
-  const b = el2("button", "talos-button talos-button--" + tone + " talos-button--sm", label);
+  const b = el3("button", "talos-button talos-button--" + tone + " talos-button--sm", label);
   b.type = "button";
   b.dataset.c = "Button";
   b.dataset.providerAction = action;
@@ -705,37 +1061,79 @@ function simboloProvider(nome) {
   svg.append(use);
   return svg;
 }
-function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato = false, onMenu = null } = {}) {
-  const d = statoProvider(row, prova), busy = occupato || d.occupato, card = el2("article", "talos-card talos-provider");
+function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato = false, onMenu = null, onAzionePool = null } = {}) {
+  const d = statoProvider(row, prova), busy = occupato || d.occupato, card = el3("article", "talos-card talos-provider");
   card.dataset.c = "ProviderCard";
   card.dataset.providerId = row.id;
   card.setAttribute("aria-busy", String(busy));
   if (prova) card.dataset.provaEsito = prova.esito;
-  const head = el2("button", "talos-provider__head");
+  const head = el3("button", "talos-provider__head");
   head.type = "button";
   head.dataset.providerToggle = row.id;
   head.setAttribute("aria-expanded", String(aperta2));
   head.setAttribute("aria-controls", "provider-body-" + row.id);
-  const title = el2("strong", "talos-provider__name", row.label || row.id), marks = el2("span", "talos-cluster");
+  const title = el3("strong", "talos-provider__name", row.label || row.id), marks = el3("span", "talos-cluster");
   head.append(title, marks);
   for (const [txt, tone] of [[d.chiave, row.keyConfigured ? "success" : ""], [row.supportsEndpoint ? row.endpointConfigured ? "Indirizzo personalizzato" : "Indirizzo predefinito" : null, ""], [d.prova, d.tono]]) if (txt) {
-    const badge5 = el2("span", "talos-badge talos-badge--sm" + (tone ? " talos-badge--" + tone : ""), txt);
+    const badge5 = el3("span", "talos-badge talos-badge--sm" + (tone ? " talos-badge--" + tone : ""), txt);
     badge5.dataset.c = "Badge";
     marks.append(badge5);
   }
   card.append(head);
-  const body = el2("div", "talos-provider__body");
+  const body = el3("div", "talos-provider__body");
   body.id = "provider-body-" + row.id;
   body.hidden = !aperta2;
   {
     const conAccesso = row.supportsOAuth === true;
-    const campoChiave = campo(row.keyConfigured ? "Sostituisci la chiave" : row.requiresKey ? "Chiave API" : "Chiave API (facoltativa)", "password", "providerKey", row);
+    const pool = Array.isArray(row.pool) ? row.pool : [], poolCollegato = typeof onAzionePool === "function";
+    if (pool.length) {
+      const elenco2 = el3("ul", "talos-stack");
+      elenco2.setAttribute("aria-label", "Chiavi di " + (row.label || row.id));
+      Object.assign(elenco2.style, { gridColumn: "1 / -1", margin: "0", padding: "0", listStyle: "none" });
+      for (const [i, chiave] of pool.entries()) {
+        const riga = el3("li", "talos-cluster"), testo3 = el3("div", "talos-stack"), impronta = /^[a-f0-9]{64}$/u.test(chiave.impronta || "") ? chiave.impronta.slice(0, 12) : "";
+        Object.assign(riga.style, { flexWrap: "nowrap", justifyContent: "space-between", alignItems: "flex-start" });
+        Object.assign(testo3.style, { gap: "4px", minWidth: "0", flex: "1" });
+        testo3.append(el3("strong", "", `Chiave ${i + 1}${impronta ? " · " + impronta : ""}`), el3("span", "talos-muted", statoChiavePool(chiave)));
+        if (chiave.origine === "ambiente") testo3.append(el3("span", "talos-muted", "Impostata fuori da TALOS"));
+        riga.append(testo3);
+        if (poolCollegato && chiave.origine !== "ambiente") {
+          const rimuovi = el3("button", "talos-button talos-button--ghost talos-button--sm", "Rimuovi");
+          rimuovi.type = "button";
+          rimuovi.setAttribute("aria-label", `Rimuovi chiave ${i + 1}`);
+          const aziona = async () => {
+            rimuovi.disabled = true;
+            try {
+              await onAzionePool({ azione: "rimuovi", provider: row.id, impronta: chiave.impronta });
+            } catch {
+              const feedback2 = body.querySelector("[data-provider-feedback]");
+              if (feedback2) {
+                feedback2.textContent = "La chiave non è stata rimossa. Aggiorna il pannello e riprova.";
+                feedback2.hidden = false;
+              }
+            } finally {
+              rimuovi.disabled = busy;
+            }
+          };
+          if (typeof onMenu === "function") {
+            rimuovi.textContent = "⋯";
+            rimuovi.setAttribute("aria-label", `Azioni per chiave ${i + 1}`);
+            rimuovi.setAttribute("aria-haspopup", "menu");
+            rimuovi.addEventListener("click", () => onMenu([{ chiave: "rimuovi", etichetta: "Rimuovi", pericolo: true, aziona }], { ancora: rimuovi }));
+          } else rimuovi.addEventListener("click", aziona);
+          riga.append(rimuovi);
+        }
+        elenco2.append(riga);
+      }
+      body.append(elenco2);
+    }
+    const campoChiave = campo(poolCollegato ? "Aggiungi una chiave" : row.keyConfigured ? "Sostituisci la prima chiave" : row.requiresKey ? "Chiave di accesso" : "Chiave di accesso (facoltativa)", "password", "providerKey", row);
     if (conAccesso) {
       const accedi = button("oauth-start", row.origineChiave === "accesso" ? "Rifai l’accesso" : "Accedi con " + (row.label || row.id), "primary");
       accedi.classList.add("talos-provider__accedi");
-      const riga = el2("div", "talos-provider__accesso");
+      const riga = el3("div", "talos-provider__accesso");
       riga.append(accedi);
-      const nota = el2("p", "talos-muted", row.origineChiave === "ambiente" ? "Adesso vale la chiave impostata fuori da TALOS: finché c’è, l’accesso non viene usato." : "Si apre il sito del fornitore: la password non passa da TALOS, e alla fine torna una chiave.");
+      const nota = el3("p", "talos-muted", row.origineChiave === "ambiente" ? "Adesso vale la chiave impostata fuori da TALOS: finché c’è, l’accesso non viene usato." : "Si apre il sito del fornitore: la password non passa da TALOS, e alla fine torna una chiave.");
       riga.append(nota);
       body.append(riga);
       const oppure = document.createElement("details");
@@ -747,8 +1145,28 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
     } else body.append(campoChiave);
     if (row.supportsEndpoint) body.append(campo("Indirizzo del servizio", "url", "providerEndpoint", row, row.endpoint || ""));
     if (d.tempo) body.append(campo("Tempo massimo (secondi)", "number", "providerTimeout", row, String(row.timeoutSeconds ?? 60)));
-    const actions = el2("div", "talos-cluster");
-    actions.append(button("save-key", "Salva chiave", "primary"));
+    const actions = el3("div", "talos-cluster");
+    const salva = button("save-key", poolCollegato ? "Aggiungi chiave" : "Salva chiave", "primary");
+    if (poolCollegato) {
+      delete salva.dataset.providerAction;
+      salva.addEventListener("click", async () => {
+        const input = campoChiave.querySelector("input");
+        salva.disabled = true;
+        try {
+          await onAzionePool({ azione: "aggiungi", provider: row.id, key: input.value });
+          input.value = "";
+        } catch {
+          const feedback2 = body.querySelector("[data-provider-feedback]");
+          if (feedback2) {
+            feedback2.textContent = "La chiave non è stata aggiunta. Controlla il collegamento e riprova.";
+            feedback2.hidden = false;
+          }
+        } finally {
+          salva.disabled = busy;
+        }
+      });
+    }
+    actions.append(salva);
     const nascoste = [];
     const aggiungiNascosto = (b) => {
       b.hidden = true;
@@ -758,9 +1176,9 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
     const vociMenu = [{ chiave: "test", etichetta: "Prova collegamento", icona: "i-play", elemento: aggiungiNascosto(button("test", "Prova collegamento")) }];
     if (d.tempo) vociMenu.push({ chiave: "save-runtime", etichetta: row.supportsEndpoint ? "Salva collegamento" : "Salva tempo massimo", icona: "i-clock", elemento: aggiungiNascosto(button("save-runtime", row.supportsEndpoint ? "Salva collegamento" : "Salva tempo massimo")) });
     if (row.supportsEndpoint && row.endpointConfigured) vociMenu.push({ chiave: "reset-runtime", etichetta: "Ripristina indirizzo", icona: "i-history", elemento: aggiungiNascosto(button("reset-runtime", "Ripristina indirizzo")) });
-    if (row.keyConfigured) vociMenu.push({ chiave: "remove-key", etichetta: "Rimuovi chiave", icona: "i-trash", pericolo: true, separaPrima: true, elemento: aggiungiNascosto(button("remove-key", "Rimuovi chiave", "ghost talos-button--danger")) });
+    if (row.keyConfigured && !poolCollegato) vociMenu.push({ chiave: "remove-key", etichetta: pool.length > 1 ? "Rimuovi tutte le chiavi" : "Rimuovi chiave", icona: "i-trash", pericolo: true, separaPrima: true, elemento: aggiungiNascosto(button("remove-key", pool.length > 1 ? "Rimuovi tutte le chiavi" : "Rimuovi chiave", "ghost talos-button--danger")) });
     if (typeof onMenu === "function" && vociMenu.length) {
-      const tre = el2("button", "talos-button talos-button--ghost talos-icon-button talos-button--sm");
+      const tre = el3("button", "talos-button talos-button--ghost talos-icon-button talos-button--sm");
       tre.type = "button";
       tre.setAttribute("aria-label", "Altre azioni per " + (row.label || row.id));
       tre.setAttribute("aria-haspopup", "menu");
@@ -776,12 +1194,12 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
     actions.append(...nascoste);
     body.append(actions);
     if (prova && prova.esito !== "in-corso") {
-      const note = el2("p", "talos-muted", prova.esito === "collegato" ? row.id === "openrouter" ? "Il catalogo risponde. La validità della chiave richiede una verifica dedicata." : "La verifica del servizio non esegue un modello." : prova.motivo || d.prova);
+      const note = el3("p", "talos-muted", prova.esito === "collegato" ? row.id === "openrouter" ? "Il catalogo risponde. La validità della chiave richiede una verifica dedicata." : "La verifica del servizio non esegue un modello." : prova.motivo || d.prova);
       note.dataset.provaEsito = prova.esito;
       if (Number.isFinite(prova.millisecondi)) note.append(document.createTextNode(" · " + prova.millisecondi + " ms"));
       body.append(note);
     }
-    const feedback = el2("p", "talos-muted");
+    const feedback = el3("p", "talos-muted");
     feedback.dataset.providerFeedback = row.id;
     feedback.setAttribute("role", "status");
     feedback.hidden = true;
@@ -791,12 +1209,12 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
   card.append(body);
   return card;
 }
-function aggiornaProviderList(lista, rows, { aperte = /* @__PURE__ */ new Set(), prove = /* @__PURE__ */ new Map(), occupati = /* @__PURE__ */ new Set(), caricamento = false, errore = null, onMenu = null } = {}) {
+function aggiornaProviderList(lista, rows, { aperte = /* @__PURE__ */ new Set(), prove = /* @__PURE__ */ new Map(), occupati = /* @__PURE__ */ new Set(), caricamento = false, errore = null, onMenu = null, onAzionePool = null } = {}) {
   if (!lista) return;
   lista.className = "talos-provider-list";
   lista.setAttribute("aria-busy", String(caricamento));
   if (errore || !rows.length) {
-    const p = el2("p", "talos-muted", errore ? errore.message || String(errore) : caricamento ? "Leggo gli accessi…" : "Nessun fornitore dichiarato dal server.");
+    const p = el3("p", "talos-muted", errore ? errore.message || String(errore) : caricamento ? "Leggo gli accessi…" : "Nessun fornitore dichiarato dal server.");
     p.dataset.c = "EmptyState";
     if (errore) p.setAttribute("role", "alert");
     lista.replaceChildren(p);
@@ -805,9 +1223,9 @@ function aggiornaProviderList(lista, rows, { aperte = /* @__PURE__ */ new Set(),
   const focus = document.activeElement, focusId = focus?.closest("[data-provider-id]")?.dataset.providerId;
   const old = new Map([...lista.querySelectorAll("[data-provider-id]")].map((n) => [n.dataset.providerId, n]));
   const cards = rows.map((row) => {
-    const op = { aperta: aperte.has(row.id), prova: prove.get(row.id) || null, occupato: occupati.has(row.id) || caricamento }, signature = JSON.stringify([row, op]), precedente = old.get(row.id);
+    const op = { aperta: aperte.has(row.id), prova: prove.get(row.id) || null, occupato: occupati.has(row.id) || caricamento }, signature = JSON.stringify([row, op, typeof onAzionePool === "function"]), precedente = old.get(row.id);
     if (precedente?.dataset.providerSignature === signature && !precedente.dataset.providerReset) return precedente;
-    const card = creaProviderCard(row, { ...op, onMenu });
+    const card = creaProviderCard(row, { ...op, onMenu, onAzionePool });
     card.dataset.providerSignature = signature;
     if (precedente && !precedente.dataset.providerReset) {
       for (const input of card.querySelectorAll("input")) {
@@ -908,277 +1326,6 @@ var init_politiche = __esm({
       })
     ]);
     PER_VALORE = new Map(POLITICHE.map((p) => [p.valore, p]));
-  }
-});
-
-// src/components/catalogo-modelli.js
-function normalizzaCatalogoModelli(d) {
-  if (!oggetto(d) || !Array.isArray(d.modelli) || typeof d.daCache !== "boolean" || typeof d.aggiornatoAlle !== "string" || Number.isNaN(Date.parse(d.aggiornatoAlle)) || !d.modelli.every((m) => oggetto(m) && typeof m.id === "string" && m.id && typeof m.nome === "string" && typeof m.provider === "string" && ["inputModalities", "outputModalities", "supportedParameters"].every((k) => Array.isArray(m[k]) && m[k].every((v) => typeof v === "string")))) throw Error("La risposta del catalogo non è valida.");
-  return d;
-}
-function prezzoPerMilione(value) {
-  if (value == null || typeof value === "boolean" || typeof value === "object" || String(value).trim() === "") return "Non dichiarato";
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? new Intl.NumberFormat("it-IT", { maximumFractionDigits: 6 }).format(n * 1e6) + " USD" : "Non dichiarato";
-}
-function filtraModelli(modelli, query = "", provider = "all") {
-  const q = String(query).trim().toLocaleLowerCase("it");
-  return modelli.filter((m) => (provider === "all" || m.provider === provider) && (!q || [m.nome, m.id, m.provider].some((v) => String(v || "").toLocaleLowerCase("it").includes(q))));
-}
-function el3(tag2, cls, txt) {
-  const n = document.createElement(tag2);
-  if (cls) n.className = cls;
-  if (txt != null) n.textContent = String(txt);
-  return n;
-}
-function kv2(k, v, id) {
-  const row = el3("div", "talos-kv"), val = el3("span", "talos-kv__v", v);
-  if (id) val.id = id;
-  row.append(el3("span", "talos-kv__k", k), val);
-  return row;
-}
-function contesto(n) {
-  return Number.isFinite(n) && n > 0 ? new Intl.NumberFormat("it-IT").format(n) + " token" : "Non dichiarato";
-}
-function creaRigaCatalogo(m, { selezionato = false, seleziona } = {}) {
-  const b = el3("button", "talos-list-row");
-  b.type = "button";
-  b.dataset.c = "ListRow";
-  b.dataset.catalog = m.id;
-  b.dataset.provider = m.provider;
-  b.setAttribute("aria-pressed", String(selezionato));
-  const icon = el3("span", "talos-list-row__icon");
-  icon.innerHTML = '<svg class="i" aria-hidden="true"><use href="#i-globe"></use></svg>';
-  const text = el3("span", "talos-list-row__text");
-  text.append(el3("span", "talos-list-row__title", m.nome), el3("span", "talos-list-row__sub", m.provider + " · " + contesto(m.contextLength)));
-  b.append(icon, text);
-  b.addEventListener("click", () => seleziona?.(m));
-  return b;
-}
-function aggiornaDettaglioCatalogo(mount, m, { fornitori } = {}) {
-  mount.replaceChildren();
-  if (!m) {
-    mount.append(el3("p", "talos-muted", "Seleziona un modello per vedere capacità, contesto e prezzi."));
-    return;
-  }
-  const nome = el3("h3", "", m.nome);
-  nome.id = "catalogoNome";
-  const id = el3("code", "talos-mono", m.id);
-  id.id = "catalogoId";
-  const desc = el3("p", "talos-detail__desc", m.description || "Il fornitore non ha fornito una descrizione.");
-  desc.id = "catalogoDescrizione";
-  mount.append(nome, id, desc, kv2("Fornitore", m.provider, "catalogoProvider"), kv2("Ingresso", elenco(m.inputModalities), "catalogoIngresso"), kv2("Risposta", elenco(m.outputModalities), "catalogoUscita"), kv2("Parametri supportati", elenco(m.supportedParameters), "catalogoParametri"), kv2("Contesto", contesto(m.contextLength), "catalogoContesto"));
-  const alias = el3("p", "talos-muted", "Alias: può cambiare versione nel tempo.");
-  alias.id = "catalogoAlias";
-  alias.hidden = !m.alias;
-  mount.append(alias, el3("hr", "talos-lab__rule"), el3("h3", "", "Costo per milione di token"), kv2("In ingresso", prezzoPerMilione(m.prezzoPrompt), "catalogoPrezzoInput"), kv2("In uscita", prezzoPerMilione(m.prezzoCompletion), "catalogoPrezzoOutput"), el3("p", "talos-muted", "Prezzi dichiarati da OpenRouter. Non sono una stima del costo della sessione."));
-  const raw = el3("details", "talos-lab__space");
-  raw.append(el3("summary", "", "Valori originali per token (USD)"));
-  raw.append(kv2("Ingresso", m.prezzoPrompt ?? "Non dichiarato", "catalogoPrezzoInputRaw"), kv2("Uscita", m.prezzoCompletion ?? "Non dichiarato", "catalogoPrezzoOutputRaw"));
-  mount.append(raw);
-  const stato = el3("p", "talos-muted", "L’elenco dei modelli non verifica le credenziali del tuo account.");
-  stato.id = "catalogoStato";
-  mount.append(stato);
-  const use = el3("button", "talos-button talos-button--primary talos-button--block", "Usa nella sessione");
-  use.id = "catalogoAzione";
-  use.type = "button";
-  use.dataset.richiede = "fase3";
-  use.hidden = true;
-  mount.append(use);
-  const access = el3("button", "talos-button talos-button--ghost talos-button--sm", "Fornitori e accessi");
-  access.type = "button";
-  access.dataset.c = "Button";
-  access.dataset.apreVelo = "veloFornitori";
-  access.addEventListener("click", (event) => {
-    if (fornitori) {
-      event.stopPropagation();
-      fornitori();
-    }
-  });
-  mount.append(access);
-}
-function aggiornaCatalogoModelli(panel, dati, { query = "", provider = "all", selezionato = null, limite = 120, caricamento = false, errore = "", seleziona, altri, fornitori } = {}) {
-  const list = panel.querySelector("[data-catalog-list]"), detail = panel.querySelector("[data-catalog-detail]"), count2 = panel.querySelector("[data-catalog-count]"), more = panel.querySelector("[data-catalog-more]"), vuoto = panel.querySelector("#vuotoCatalogo"), refresh = panel.querySelector("[data-catalog-refresh]");
-  if (!list || !detail) return null;
-  const attivo = document.activeElement, focusId = list.contains(attivo) ? attivo.dataset.catalog : null, scroll = list.scrollTop;
-  const filtered = dati ? filtraModelli(normalizzaCatalogoModelli(dati).modelli, query, provider) : [];
-  const selected = filtered.find((m) => m.id === selezionato?.id) || filtered[0] || null;
-  list.replaceChildren();
-  if (vuoto) vuoto.hidden = true;
-  more.hidden = true;
-  refresh.disabled = caricamento;
-  panel.setAttribute("aria-busy", String(caricamento));
-  if (errore) {
-    const p = el3("p", "talos-card talos-card--pad", errore);
-    p.setAttribute("role", "alert");
-    list.append(p);
-    count2.textContent = "Catalogo non disponibile";
-    aggiornaDettaglioCatalogo(detail, null);
-    return null;
-  }
-  count2.textContent = caricamento ? "Aggiornamento del catalogo…" : dati ? filtered.length + " di " + dati.modelli.length + " modelli · OpenRouter · " + (dati.daCache ? "copia salvata · " : "") + new Date(dati.aggiornatoAlle).toLocaleString("it-IT", { timeZone: "Europe/Rome" }) : "Catalogo non caricato";
-  if (!dati) {
-    list.append(el3("p", "talos-card--pad talos-muted", caricamento ? "Caricamento…" : "Apri questa sezione per caricare il catalogo."));
-  } else if (!filtered.length) {
-    const p = el3("p", "talos-card--pad talos-muted", dati.modelli.length ? "Nessun modello corrisponde ai filtri." : "Il catalogo osservato è vuoto.");
-    list.append(p);
-  } else for (const m of filtered.slice(0, limite)) list.append(creaRigaCatalogo(m, { selezionato: m.id === selected?.id, seleziona }));
-  more.hidden = filtered.length <= limite;
-  more.onclick = () => altri?.();
-  aggiornaDettaglioCatalogo(detail, selected, { fornitori });
-  list.scrollTop = scroll;
-  if (focusId && document.activeElement === document.body && !panel.hidden) {
-    const nuovo = [...list.querySelectorAll("[data-catalog]")].find((b) => b.dataset.catalog === focusId);
-    nuovo?.focus({ preventScroll: true });
-  }
-  return selected;
-}
-function montaCatalogoModelli(originale, canonico) {
-  if (!originale || !canonico || originale.dataset.catalogMounted) return;
-  originale.replaceChildren(...canonico.children);
-  originale.dataset.catalogMounted = "true";
-  originale.dataset.catalogPanel = "";
-  const ids = { cercaCatalogo: "modelLabSearch", filtroFornitore: "modelLabProviderFilter", listaCatalogo: "modelLabCatalogList" };
-  for (const [prima, dopo] of Object.entries(ids)) {
-    const n = originale.querySelector("#" + prima);
-    if (!n) continue;
-    for (const label of originale.querySelectorAll('label[for="' + prima + '"]')) label.htmlFor = dopo;
-    n.id = dopo;
-  }
-  originale.querySelector("[data-catalog-detail]").id = "modelLabModelDetail";
-  originale.querySelector("[data-catalog-count]").id = "modelLabCatalogCount";
-  originale.querySelector("[data-catalog-refresh]").id = "modelLabRefreshButton";
-  originale.querySelector("#modelLabProviderFilter").replaceChildren(new Option("Tutti i fornitori", "all"));
-  originale.querySelector("[data-catalog-list]").replaceChildren();
-  aggiornaDettaglioCatalogo(originale.querySelector("[data-catalog-detail]"), null);
-}
-var oggetto, PAROLE, elenco;
-var init_catalogo_modelli = __esm({
-  "src/components/catalogo-modelli.js"() {
-    oggetto = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
-    PAROLE = { text: "Testo", image: "Immagini", audio: "Audio", video: "Video", file: "File", tools: "Attrezzi", tool_choice: "Scelta attrezzi", temperature: "Creatività", top_p: "Varietà", max_tokens: "Limite risposta", response_format: "Formato risposta", reasoning: "Ragionamento", include_reasoning: "Mostra ragionamento" };
-    elenco = (v) => v?.length ? v.map((x) => PAROLE[x] || x).join(", ") : "Non dichiarato";
-  }
-});
-
-// src/components/fonti-modelli.js
-function portaInVistaFonteSelettore(evento) {
-  const scheda = evento.target;
-  if (!scheda?.matches?.('.model-picker-source[role="tab"]') || !scheda.parentElement?.matches('.model-picker-sources[role="tablist"]')) return;
-  scheda.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant", container: "nearest" });
-}
-function senzaChiave(fonte) {
-  return PROVIDER_DIRETTI.some((p) => p.id === fonte && p.senzaChiave === true);
-}
-function eFonteDiretta(fonte) {
-  return ID_DIRETTI.has(String(fonte || ""));
-}
-function fontiDelSelettore({ openrouter = null, locali = null, diretti = null } = {}) {
-  const etichetta2 = (nome, modelli) => modelli?.some((m) => m.catalogo?.fonte === "riserva") ? `${nome} · elenco di riserva` : nome;
-  const fonti = [
-    { id: "openrouter", etichetta: etichetta2("OpenRouter", openrouter), conto: contaOppureNull(openrouter), collegato: true },
-    { id: "locali", etichetta: "Locali", conto: contaOppureNull(locali), collegato: true }
-  ];
-  for (const provider of PROVIDER_DIRETTI) {
-    const elenco2 = diretti ? diretti[provider.id] : null;
-    if (provider.soloSeCollegato && !Array.isArray(elenco2)) continue;
-    fonti.push({
-      id: provider.id,
-      etichetta: etichetta2(provider.etichetta, elenco2),
-      conto: contaOppureNull(elenco2),
-      // `collegato` è falso solo quando SAPPIAMO che la chiave manca: prima di leggere non si accusa.
-      collegato: !diretti || Array.isArray(elenco2)
-    });
-  }
-  return fonti;
-}
-function modelliDellaFonte(fonte, { openrouter = null, locali = null, diretti = null } = {}) {
-  if (fonte === "openrouter") return openrouter;
-  if (fonte === "locali") return locali;
-  if (!eFonteDiretta(fonte)) return null;
-  if (!diretti) return null;
-  const elenco2 = diretti[fonte];
-  return Array.isArray(elenco2) ? elenco2 : null;
-}
-function fraseVuotoDiretto(fonte, { diretti = null, errori = {} } = {}) {
-  const etichetta2 = PROVIDER_DIRETTI.find((p) => p.id === fonte)?.etichetta || fonte;
-  if (errori && errori[fonte]) return `Catalogo ${etichetta2} non disponibile: ${errori[fonte]}`;
-  if (!diretti) return `Leggo il catalogo ${etichetta2}…`;
-  if (!Array.isArray(diretti[fonte])) {
-    return senzaChiave(fonte) ? `${etichetta2} non risponde su questo computer: avvialo e ricarica.` : `Collega la chiave ${etichetta2} dal pannello Provider per vedere i suoi modelli.`;
-  }
-  return `Nessun modello ${etichetta2} disponibile con questa chiave.`;
-}
-function contaOppureNull(elenco2) {
-  return Array.isArray(elenco2) ? elenco2.length : null;
-}
-function descrizioneModelloSelettore(modello = {}) {
-  const numero6 = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 0, useGrouping: true });
-  const prezzo = (valore) => {
-    const testo3 = prezzoPerMilione(valore);
-    return testo3 === "Non dichiarato" ? "non disponibile" : `${testo3}/M token`;
-  };
-  const capacita = (valore) => valore === true ? "sì" : valore === false ? "no" : "non disponibile";
-  const dettagli = [
-    `Contesto: ${Number.isFinite(modello.contextLength) && modello.contextLength > 0 ? `${numero6.format(modello.contextLength)} token` : "non disponibile"}`,
-    `Ingresso: ${prezzo(modello.prezzoPrompt)}`,
-    `Uscita: ${prezzo(modello.prezzoCompletion)}`,
-    `Rilettura: ${prezzo(modello.prezzoCacheRead)}`,
-    `Memorizzazione: ${prezzo(modello.prezzoCacheWrite)}`,
-    `Strumenti: ${capacita(modello.capacita?.toolCall)}`,
-    `Ragionamento: ${capacita(modello.capacita?.reasoning)}`
-  ];
-  if (modello.alias) dettagli.unshift("Ultima versione");
-  if (modello.prezziPerMilione?.tiers?.length || modello.prezziPerMilione?.context_over_200k) dettagli.push("Prezzi variabili con il contesto");
-  if (modello.catalogo?.fonte === "riserva") {
-    const data2 = modello.catalogo.dataRiserva;
-    const parti = typeof data2 === "string" && /^(\d{4})-(\d{2})-(\d{2})$/u.exec(data2);
-    dettagli.unshift(`Catalogo non raggiungibile: elenco di riserva${parti ? ` del ${parti[3]}/${parti[2]}/${parti[1]}` : ""}`);
-    if (modello.catalogo.avvisi?.some((a) => a.codice === "CATALOG_CACHE_CORRUPT")) dettagli.push("Copia danneggiata rifiutata");
-    return dettagli.join(" · ");
-  }
-  const data = modello.catalogo?.aggiornatoAlle;
-  dettagli.push(typeof data === "string" && Number.isFinite(Date.parse(data)) ? `Dati del ${new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome" }).format(new Date(data))}` : "Data del catalogo non disponibile");
-  if (modello.catalogo?.fallbackRete) {
-    const etaMs = modello.catalogo.etaCacheMs;
-    dettagli.push(`Copia salvata: ${Number.isFinite(etaMs) && etaMs >= 0 ? `${numero6.format(Math.floor(etaMs / 1e3))} secondi al caricamento` : "età non disponibile"}`);
-  }
-  if (modello.catalogo?.avvisi?.some((a) => a.codice === "CATALOG_CACHE_CORRUPT")) dettagli.push("Copia danneggiata rifiutata");
-  if (modello.catalogo?.avvisi?.some((a) => a.codice === "CATALOG_CACHE_WRITE_FAILED")) dettagli.push("Salvataggio del catalogo non disponibile");
-  return dettagli.join(" · ");
-}
-function aggiornaTestoModelloSelettore(contenitore, modello) {
-  const nome = contenitore.ownerDocument.createElement("strong");
-  nome.textContent = modello.nome || "Nome non disponibile";
-  const dettagli = contenitore.ownerDocument.createElement("small");
-  dettagli.textContent = descrizioneModelloSelettore(modello);
-  contenitore.replaceChildren(nome, dettagli);
-}
-var PROVIDER_DIRETTI, ID_DIRETTI;
-var init_fonti_modelli = __esm({
-  "src/components/fonti-modelli.js"() {
-    init_catalogo_modelli();
-    if (typeof document !== "undefined") document.addEventListener("focusin", portaInVistaFonteSelettore);
-    PROVIDER_DIRETTI = Object.freeze([
-      Object.freeze({ id: "anthropic", etichetta: "Anthropic" }),
-      Object.freeze({ id: "gemini", etichetta: "Gemini" }),
-      Object.freeze({ id: "openai", etichetta: "OpenAI" }),
-      Object.freeze({ id: "lmstudio", etichetta: "LM Studio", senzaChiave: true }),
-      Object.freeze({ id: "zai", etichetta: "Z.AI", soloSeCollegato: true }),
-      Object.freeze({ id: "deepseek", etichetta: "DeepSeek", soloSeCollegato: true }),
-      Object.freeze({ id: "groq", etichetta: "Groq", soloSeCollegato: true }),
-      Object.freeze({ id: "cerebras", etichetta: "Cerebras", soloSeCollegato: true }),
-      Object.freeze({ id: "mistral", etichetta: "Mistral", soloSeCollegato: true }),
-      Object.freeze({ id: "together", etichetta: "Together", soloSeCollegato: true }),
-      Object.freeze({ id: "fireworks", etichetta: "Fireworks", soloSeCollegato: true }),
-      Object.freeze({ id: "deepinfra", etichetta: "DeepInfra", soloSeCollegato: true }),
-      Object.freeze({ id: "novita", etichetta: "Novita", soloSeCollegato: true }),
-      Object.freeze({ id: "nebius", etichetta: "Nebius", soloSeCollegato: true }),
-      Object.freeze({ id: "xai", etichetta: "xAI", soloSeCollegato: true }),
-      Object.freeze({ id: "ollama-cloud", etichetta: "Ollama Cloud", soloSeCollegato: true }),
-      Object.freeze({ id: "huggingface", etichetta: "Hugging Face", soloSeCollegato: true })
-    ]);
-    ID_DIRETTI = new Set(PROVIDER_DIRETTI.map((p) => p.id));
   }
 });
 
@@ -18510,6 +18657,7 @@ var init_workspace_footer = __esm({
 var app_exports = {};
 var init_app = __esm({
   "src/legacy/app.js"() {
+    init_fonti_modelli();
     init_conversazione_dom();
     init_provider_card();
     init_politiche();
@@ -20365,6 +20513,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           }
         }
         aggiornaProviderList($2("#providerList"), rows, {
+          onAzionePool: async ({ azione, provider, key, impronta }) => {
+            const base = "/api/v1/providers/" + encodeURIComponent(provider);
+            await apiPost(base + (azione === "aggiungi" ? "/keys" : "/keys/remove"), azione === "aggiungi" ? { key } : { impronta });
+            await caricaProviderModelLab();
+          },
           aperte: state.modelLab.providerAperti,
           prove: state.modelLab.provePr,
           occupati: state.modelLab.providerOccupati,
@@ -24412,6 +24565,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             });
             reasoningRow.append(reasoningLabel, reasoningToggle);
             mount.replaceChildren(picker.elemento, effortPicker.elemento, reasoningRow);
+            montaFallbackIn(mount, state.fallbackProviders || [], scegliFallbackCorrente);
             aggiornaVisibilitaRagionamento();
           }
         }
@@ -25200,6 +25354,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         });
         riga.append(etichetta2, interruttore);
         mount.replaceChildren(picker.elemento, effortPicker.elemento, riga);
+        montaFallbackIn(mount, state.fallbackProviders || [], scegliFallbackCorrente);
       }
       function apriCapabilityDaFoglio() {
         dismissTransientLayers();
@@ -30267,6 +30422,7 @@ ${testo3}` : testo3;
         return richiesta;
       }
       function applicaImpostazioniSessione(sessione) {
+        state.fallbackProviders = structuredClone(sessione?.fallbackProviders || []);
         const reasoning = sessione?.reasoning && typeof sessione.reasoning === "object" ? sessione.reasoning : null;
         state.model = normalizzaModelloSessione(sessione);
         state.effort = typeof reasoning?.effort === "string" ? reasoning.effort : null;
@@ -30926,7 +31082,22 @@ ${testo3}` : testo3;
         });
         sheetBody.replaceChildren(form);
       }
+      function montaFallbackIn(mount, valore, onChange) {
+        const posto = textElement("div", "talos-stack", "Leggo i fornitori con cui continuare…");
+        mount.append(posto);
+        apiGet("/api/v1/providers").then((dati) => {
+          if (posto.isConnected) posto.replaceChildren(creaSceltaFallback({ fornitori: dati.items || [], valore, usaAttrezzi: true, onChange }));
+        }).catch(() => {
+          if (posto.isConnected) posto.textContent = "Le riserve non sono disponibili: riapri la scelta del modello.";
+        });
+      }
+      async function scegliFallbackCorrente(valore) {
+        await sincronizzaImpostazioniSessione({ fallbackProviders: valore });
+        state.fallbackProviders = valore;
+        if (state.pendingCustomSession) state.pendingCustomSession.fallbackProviders = valore;
+      }
       function creaWorkspaceChooser({ launch = null } = {}) {
+        let fallbackProviders = [];
         const form = document.createElement("form");
         form.className = "workspace-chooser";
         form.id = "workspaceChooser";
@@ -31121,6 +31292,9 @@ ${testo3}` : testo3;
         policyGate.setAttribute("role", "status");
         permissionSection.append(permissionGrid, policyGate);
         right.append(rightHead, modelSection, reasoningSection, plannerSection, permissionSection);
+        montaFallbackIn(right, [], (valore) => {
+          fallbackProviders = valore;
+        });
         const columns = document.createElement("div");
         columns.className = "workspace-chooser-columns";
         columns.append(left, right);
@@ -31521,6 +31695,7 @@ ${testo3}` : testo3;
             modello: model,
             effort,
             modelloPlanner: planner,
+            fallbackProviders,
             permessi: local.permission,
             permessiPerAttrezzo: { ...state.permessiPerAttrezzo }
           };
@@ -32020,9 +32195,10 @@ ${testo3}` : testo3;
         conversation.classList.remove("talos-empty");
         conversation.closest(".talos-conversation")?.classList.remove("talos-conversation--empty");
       }
-      function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo }) {
+      function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, fallbackProviders = [] }) {
         nuovaGenerazioneSessione();
-        state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo };
+        state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, fallbackProviders };
+        state.fallbackProviders = fallbackProviders;
         state.realSession.previewProjectId = cartellaId || null;
         state.realSession.previewWorkspaceName = nomeCartella2;
         state.realSession.treeWorkspaceKey = cartellaId ? `project:${cartellaId}` : workspaceLaunchId ? `launch:${workspaceLaunchId}` : `path:${cartellaLibera || nomeCartella2}`;
@@ -32052,7 +32228,7 @@ ${testo3}` : testo3;
       function titoloDalPrimoMessaggio(testo3) {
         return String(testo3 || "").replace(/\s+/g, " ").trim().slice(0, 80);
       }
-      async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, immagini = [] }) {
+      async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, immagini = [], fallbackProviders = state.fallbackProviders || [] }) {
         iniziaMisuraLatenza("primo messaggio della sessione");
         const generation = nuovaGenerazioneSessione();
         const taskSintetico = { id: `libero:${nomeCartella2}`, consegna, immagini };
@@ -32086,6 +32262,7 @@ ${testo3}` : testo3;
             corpo.permessiPerAttrezzo = permessiPerAttrezzoEffettivi;
           }
           segnaTappaLatenza("postInviata");
+          if (fallbackProviders.length) corpo.fallbackProviders = fallbackProviders;
           const data = await apiPost("/api/v1/sessions/custom", corpo);
           segnaTappaLatenza("postRisposta");
           sessionId = data.sessionId;
