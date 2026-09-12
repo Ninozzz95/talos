@@ -2519,6 +2519,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       research_resume: 'ripresa di una ricerca',
       research_cancel: 'annullamento di una ricerca',
       research_delete: 'eliminazione di una ricerca',
+      research_deposit: 'consegna del rapporto di ricerca', // 12/09: L8. ⛔ Copia della mappa di nomi-attrezzi.js: debito, la mappa deve vivere in UN posto solo
     };
     return UMANI[nome] || String(nome ?? '');
   }

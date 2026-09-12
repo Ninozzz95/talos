@@ -67,6 +67,7 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   research_resume: 'ripresa di una ricerca',
   research_cancel: 'annullamento di una ricerca',
   research_delete: 'eliminazione di una ricerca',
+  research_deposit: 'consegna del rapporto di ricerca', // 12/09: visto «research_deposit…» a schermo nel giro L8 — un nome tecnico in UI viola la regola del 04/09
 });
 
 /**
@@ -170,6 +171,7 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   research_resume: 'Riprende una ricerca in pausa da dove si era fermata.',
   research_cancel: 'Ferma una ricerca per sempre. Quello che ha raccolto resta leggibile.',
   research_delete: 'Cancella una ricerca e il suo rapporto, per sempre.',
+  research_deposit: 'Deposita il rapporto della ricerca, con le affermazioni e le fonti, nel posto della ricerca.',
   tool_create: 'Costruisce un attrezzo nuovo, descritto a parole, che TALOS potrà chiamare da qui in avanti.',
 });
 
