@@ -1765,6 +1765,72 @@ a.talos-button{text-decoration:none}
   #schermoReview .talos-review__copy-label{display:none}
 }
 
+/* ==================== BC-30 — LE AZIONI NON COPRONO PIÙ LE SCHEDE ====================
+   MISURATO PRIMA, non supposto (12/09/2026, mockup e app insieme, stessi numeri da entrambe le
+   parti). `azioni.left − schede.right` sulla testata Review, al variare della LARGHEZZA DEL
+   CONTENITORE (non della finestra: a 1280 la colonna dei dettagli è aperta e il contenitore vale
+   664 px, a 1024 è chiusa e ne vale 748):
+     contenitore 664 → −20,23    704 → −0,23    744 → +19,77    784 → +39,77    824 → +59,77
+   La causa è di costruzione: la testata è una griglia `minmax(0,1fr) auto minmax(0,1fr)` e la
+   colonna delle azioni può diventare più STRETTA del suo contenuto (`min` è 0). Con
+   `justify-self:end` ciò che non ci sta sborda a SINISTRA, cioè sopra le schede centrate.
+   Aritmetica della griglia: colonna = (contenitore − 36 di padding − 344,5 di schede − 24 di gap)/2,
+   e le quattro azioni ne chiedono 162 ⇒ sotto ~712 px di contenitore la Review si sovrappone.
+   ⛔ Non si può curare allargando la colonna: le due colonne laterali DEVONO restare uguali, o le
+   schede non sono più al centro vero (è un'altra asserzione dello stesso cancello). ⇒ si stringe
+   ciò che sta dentro, e il modo è quello che l'owner ha già ordinato il 10/09: più di due azioni
+   non si affiancano, si raccolgono sotto «⋯».
+   Fonti lette il 12/09/2026:
+   · Fluent 2, Toolbar → usage: «A toolbar will grow to fit its parent container but will never wrap
+     onto a second line. In cases where there are more options than can fit, use the overflow
+     utility… Use a text label along with the toolbar item icon in the overflow menu.»
+     https://fluent2.microsoft.design/components/web/react/core/toolbar/usage
+   · MDN, CSS container queries (`container-type:inline-size`): la soglia si legge dal CONTENITORE,
+     ed è l'unica misura che qui sia monotona — la finestra non lo è.
+     https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_queries
+   · W3C WAI APG, pattern «Toolbar»: un bottone che apre un elenco è ammesso in una toolbar.
+     https://www.w3.org/WAI/ARIA/apg/patterns/toolbar/
+   ⛔ Non è un `role="menu"`: quel ruolo promette frecce, roving tabindex e chiusura gestita, e qui
+   non c'è codice che li dia. È una DIVULGAZIONE di bottoni veri — `popover` + `popovertarget`,
+   zero JavaScript, Esc e clic fuori li dà il browser, e il fuoco passa coi Tab. Stessa coppia
+   Popover API + ancoraggio CSS già in uso per i suggerimenti (O-40, `.talos-tip`), verificata sul
+   Chrome vero dell'owner.
+   ⛔ La soglia è 760 px e non 712: 712 è il punto esatto in cui SI ROMPE, e una soglia messa sul
+   punto di rottura si rompe di nuovo appena le schede cambiano parola o carattere. 760 tiene 48 px
+   di margine e mette 1024 (contenitore 748) e 1280 (664) nello stesso stato — sotto una certa
+   larghezza si raccoglie, sopra no, senza il paradosso «finestra più stretta, barra più piena».
+   Sopra la soglia `display:contents`: il contenitore sparisce dal layout e i tre bottoni restano
+   figli della barra, nello stesso ordine e negli stessi pixel di prima. */
+.talos-topbar .talos-topbar__raccolte{display:contents}
+.talos-topbar .talos-topbar__raccolta-nome{display:none}
+.talos-topbar .talos-topbar__altre{display:none}
+@container (max-width:760px){
+  /* Chiuso: il browser lo toglie dal flusso. Aperto: prende l'aspetto degli altri menu della app
+     (stessi valori di `.talos-menu`) e si àncora sotto «⋯», allineato al suo bordo destro. */
+  .talos-topbar .talos-topbar__raccolte{display:none}
+  .talos-topbar .talos-topbar__raccolte:popover-open{
+    display:flex; flex-direction:column; gap:2px;
+    position:fixed; inset:auto; margin:6px 0 0; z-index:60;
+    min-width:14rem; padding:6px;
+    border:1px solid var(--talos-border-strong); border-radius:12px;
+    background:var(--talos-panel); box-shadow:var(--talos-shadow-card);
+    position-anchor:--talos-azioni-raccolte;
+    position-area:block-end span-inline-start;
+    position-try-fallbacks:flip-block;
+  }
+  /* Dentro l'elenco il bottone smette di essere un quadrato muto: icona a sinistra, nome per esteso
+     accanto — è la riga del Fluent 2 citata sopra, ed è anche ciò che rende l'elenco leggibile a chi
+     non riconosce le icone. */
+  .talos-topbar .talos-topbar__raccolte .talos-button{width:100%; min-width:0; justify-content:flex-start; gap:8px; padding:0 10px; border-color:transparent; background:transparent}
+  .talos-topbar .talos-topbar__raccolte .talos-button:hover{background:var(--talos-card)}
+  /* ⛔ Trovato PROVANDO, non leggendo: «Comandi» restava invisibile anche DENTRO l'elenco, perché
+     la regola che lo nasconde sotto gli 820 px di contenitore vale per tutta la testata. Nascondere
+     una voce nel menu fatto apposta per ospitarla è peggio che non averlo: qui lo spazio c'è. */
+  .talos-topbar .talos-topbar__raccolte:popover-open [data-azione="comandi"]{display:inline-flex}
+  .talos-topbar .talos-topbar__raccolta-nome{display:inline}
+  .talos-topbar .talos-topbar__altre{display:inline-flex; anchor-name:--talos-azioni-raccolte}
+}
+
 .talos-topbar [data-vistetab]{flex-wrap:nowrap}
 #veloComandi .talos-dialog__body{display:flex;flex-direction:column;overflow:hidden}
 #veloComandi .talos-dialog__field{flex:none}
@@ -2516,7 +2582,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
              riga, e l'altezza fissa di 60px la spingeva fuori dal bordo di sopra. Stessa forma per tutte. -->
         <div class="talos-topbar__title"><h1>W1-02 registro processi</h1><span class="talos-topbar__path" title="~/Desktop/projects/AVM-harness-desktop · 3 file modificati · +112 −2">AVM-harness-desktop · 3 file modificati · +112 −2</span></div>
         <div class="talos-tabs"><div class="talos-tabs__list" role="tablist" data-vistetab><button class="talos-tabs__tab" role="tab" data-vaia="chat" aria-selected="false" data-t="chat">Chat</button><button class="talos-tabs__tab" role="tab" data-vaia="terminale" aria-selected="false" data-t="terminale">Terminale <span class="talos-tabs__count">2</span></button><button class="talos-tabs__tab" role="tab" data-vaia="review" aria-selected="true" data-t="review">Review <span class="talos-tabs__count">3</span></button><button class="talos-tabs__tab" role="tab" data-vaia="browser" aria-controls="schermoBrowser" aria-selected="false" data-t="browser">Browser</button></div></div>
-        <div class="talos-topbar__actions"><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-apre-velo="veloAlbero" title="Albero dei rami" aria-label="Albero dei rami"><svg class="i"><use href="#i-branch"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-azione="comandi" title="Comandi (Ctrl K)" aria-label="Comandi (Ctrl K)"><svg class="i"><use href="#i-command"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-azione="comprimi" title="Context Manager" aria-label="Context Manager"><svg class="i"><use href="#i-grid"/></svg></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-azione="dettagli" title="Mostra o nascondi i dettagli" aria-label="Mostra o nascondi i dettagli" aria-expanded="true"><svg class="i"><use href="#i-layout"/></svg></button><button class="talos-button talos-button--secondary talos-button--sm" id="copyAllDiffs" title="Copia tutti i diff negli appunti" aria-label="Copia i diff"><svg class="i i--sm" aria-hidden="true"><use href="#i-copy"/></svg><span class="talos-review__copy-label">Copia i diff</span></button><button class="talos-button talos-button--secondary talos-button--sm" data-richiede="fase3" hidden>Accetta tutto</button><button class="talos-button talos-button--ghost talos-button--sm talos-button--danger" data-richiede="fase3" hidden>Scarta tutto</button></div>
+        <div class="talos-topbar__actions"><div class="talos-topbar__raccolte" id="azioniRaccolteReview" data-c="Menu" popover role="group" aria-label="Altre azioni"><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-apre-velo="veloAlbero" title="Albero dei rami" aria-label="Albero dei rami"><svg class="i"><use href="#i-branch"/></svg><span class="talos-topbar__raccolta-nome">Albero dei rami</span></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-azione="comandi" title="Comandi (Ctrl K)" aria-label="Comandi (Ctrl K)"><svg class="i"><use href="#i-command"/></svg><span class="talos-topbar__raccolta-nome">Comandi (Ctrl K)</span></button><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-azione="comprimi" title="Context Manager" aria-label="Context Manager"><svg class="i"><use href="#i-grid"/></svg><span class="talos-topbar__raccolta-nome">Context Manager</span></button></div><button class="talos-button talos-button--secondary talos-icon-button" data-c="IconButton" data-azione="dettagli" title="Mostra o nascondi i dettagli" aria-label="Mostra o nascondi i dettagli" aria-expanded="true"><svg class="i"><use href="#i-layout"/></svg></button><button class="talos-button talos-button--secondary talos-button--sm" id="copyAllDiffs" title="Copia tutti i diff negli appunti" aria-label="Copia i diff"><svg class="i i--sm" aria-hidden="true"><use href="#i-copy"/></svg><span class="talos-review__copy-label">Copia i diff</span></button><button class="talos-button talos-button--secondary talos-icon-button talos-topbar__altre" data-c="IconButton" id="altreAzioniReview" popovertarget="azioniRaccolteReview" title="Altre azioni" aria-label="Altre azioni"><svg class="i"><use href="#i-more"/></svg></button><button class="talos-button talos-button--secondary talos-button--sm" data-richiede="fase3" hidden>Accetta tutto</button><button class="talos-button talos-button--ghost talos-button--sm talos-button--danger" data-richiede="fase3" hidden>Scarta tutto</button></div>
 
       </div>
       <div class="talos-review talos-review--schede" data-c="ReviewPane">

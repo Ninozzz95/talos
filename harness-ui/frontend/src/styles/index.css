@@ -902,13 +902,40 @@ a.talos-button{text-decoration:none}
    scarico insegnerebbe solo a cliccare «sì» senza leggere. */
 .talos-list-row__conferma{display:flex; align-items:center; gap:6px}
 .talos-list-row__conferma-testo{font-size:12px; color:var(--talos-danger)}
-.assistant-copy .md-table-wrap{margin:12px 0; overflow-x:auto; overscroll-behavior-x:contain}
-.assistant-copy .md-table{border-collapse:collapse; width:100%; font-size:13px; font-variant-numeric:tabular-nums}
-.assistant-copy .md-table th{text-align:left; padding:7px 12px 7px 0; border-bottom:1px solid var(--talos-border-strong); color:var(--talos-muted); font-weight:600; white-space:nowrap}
-.assistant-copy .md-table td{padding:7px 12px 7px 0; border-bottom:1px solid var(--talos-border-subtle); vertical-align:top; color:var(--talos-assistant-text)}
-.assistant-copy .md-table tr:last-child td{border-bottom:0}
-.assistant-copy .md-table th:last-child, .assistant-copy .md-table td:last-child{padding-right:0}
-.assistant-copy .md-table code{font-size:12px}
+/* ⛔ 12/09 (BC-29) — l'ambito `.assistant-copy` è caduto per la stessa ragione del blocco di codice
+   qui sotto: `md-table`/`md-table-wrap` li scrive UNA funzione sola (`components/markdown.js`), e
+   fuori dalla chat — nel dettaglio di una nota, di un file della Libreria, di un rapporto — la
+   tabella arrivava nuda, coi bordi di serie del browser e senza allineamento delle cifre. */
+.md-table-wrap{margin:12px 0; overflow-x:auto; overscroll-behavior-x:contain}
+.md-table{border-collapse:collapse; width:100%; font-size:13px; font-variant-numeric:tabular-nums}
+.md-table th{text-align:left; padding:7px 12px 7px 0; border-bottom:1px solid var(--talos-border-strong); color:var(--talos-muted); font-weight:600; white-space:nowrap}
+.md-table td{padding:7px 12px 7px 0; border-bottom:1px solid var(--talos-border-subtle); vertical-align:top; color:var(--talos-assistant-text)}
+.md-table tr:last-child td{border-bottom:0}
+.md-table th:last-child, .md-table td:last-child{padding-right:0}
+.md-table code{font-size:12px}
+/* ⛔⛔ 12/09 (BC-29) — LA CITAZIONE. Owner, sulla foto di una nota: il «>» si vedeva a schermo.
+   Non era un difetto delle note: `renderizzaMarkdown` non ha mai avuto un ramo per `>`, quindi la
+   riga finiva dentro un paragrafo — in chat come nel dettaglio.
+   ⛔ Il vestito NON è nuovo: è quello che TALOS usa già per un passaggio citato, `.td-passaggio`
+   (`mockup-td.css`, il dettaglio della Ricerca) — filetto di 2px in `--talos-accent-border`, nessun
+   fondo, nessuna virgoletta disegnata. Due aspetti diversi per la stessa cosa, a seconda di chi
+   l'ha resa, sarebbero stati il difetto peggiore dei due. I token sono quelli dei temi: chiaro e
+   scuro vengono da soli.
+   ⛔ Il secondo livello si distingue col TONO del filetto, non con un rientro più profondo: dentro
+   il dettaglio di una nota la colonna è stretta e ogni rientro toglie misura al testo. */
+.md-quote{margin:10px 0; padding:8px 0 8px 13px; border-left:2px solid var(--talos-accent-border); color:var(--talos-assistant-text); font-size:13px; line-height:1.7}
+.md-quote > :first-child{margin-top:0}
+/* ⛔ `:last-child` e non `p:last-child`: guardando la prima foto, con una citazione ANNIDATA in
+   fondo il filetto esterno proseguiva per una quarantina di pixel sotto l'ultima riga — il margine
+   della citazione interna sommato al padding di quella esterna. */
+.md-quote > :last-child{margin-bottom:0}
+.md-quote .md-quote{border-left-color:var(--talos-border-strong); color:var(--talos-muted)}
+/* Il chip del codice INLINE: nella chat lo dà `.talos-message code` (riga 682), nel dettaglio di una
+   nota/file/rapporto non lo dava nessuno — `` `npm run build` `` usciva come prosa. Stessi valori,
+   così la stessa riga di Markdown si legge uguale nelle due superfici.
+   ⛔ `:not(pre) > code`: dentro un `<pre>` il chip riporta le strisce del 09/09 (css-tricks,
+   «Styling Code In and Out of Blocks»). */
+.td-prosa-rapporto :not(pre) > code{font-family:var(--talos-font-mono); font-size:12.5px; color:var(--talos-text); background:var(--talos-panel-soft); padding:1px 5px; border-radius:5px}
 /* ⛔⛔⛔ 09/09/2026 — I BLOCCHI DI CODICE ERANO STRISCE, e la causa non era il markup.
    Owner con lo screenshot: «i blocchi di codice appaiono frammentati in strisce come codice inline,
    separati dalla barra lingua/Copia».
@@ -940,7 +967,21 @@ a.talos-button{text-decoration:none}
    ⛔ Queste regole stavano in `src/styles/foglio-monolite.css`, che vince per specificità su ciò che
    il mockup dichiara: due fonti per lo stesso elemento, e chi avesse cambiato il mockup non avrebbe
    visto cambiare niente. Vivono qui, da dove si rigenera `src/styles/index.css`. */
-:is(.assistant-copy, .talos-message__body--comando) .code-block{
+/* ⛔⛔ 12/09/2026 (BC-29) — QUESTE 44 REGOLE ERANO AMBITE ALLA SOLA BOLLA DELLA CHAT.
+   Il prefisso `:is(.assistant-copy, .talos-message__body--comando)` stava su ognuna: il render
+   Markdown è UNO SOLO (`components/markdown.js`) e lo usano anche il dettaglio delle Note, della
+   Libreria e della Ricerca (iniettato come `rendiMarkdown`), ma là dentro il markup del blocco
+   arrivava giusto e NUDO — niente fondo, niente bordo, niente monospazio. Nella foto dell'owner un
+   recinto ```…``` in una nota usciva come righe di testo normale: il renderer aveva ragione, il
+   foglio no.
+   ⇒ Il prefisso è tolto: `.code-block` lo produce UNA funzione sola (`creaBloccoCodice`), quindi
+     ambire all'antenato non proteggeva niente e nascondeva il blocco in tre superfici su quattro.
+   ⛔ `.code-block pre > code` e non `pre code`: con l'antenato via, `.code-block pre code` pesa
+     (0,1,1) esattamente come `.talos-message code{background;padding;border-radius}` (riga 682) —
+     un pareggio che decide l'ORDINE dei file, cioè il contrario di una regola che regge. Il figlio
+     diretto porta a (0,1,2) e vince per peso, che è la cosa che quella riga deve fare: spegnere il
+     chip del codice inline dentro il `<pre>`, o tornano le strisce del 09/09. */
+.code-block{
   /* I toni del codice stanno QUI e non su :root: sono l'unico posto che li usa, e averli sul blocco
      li rende leggibili accanto alle regole che li consumano. */
   --codice-fondo:var(--talos-window-bg);
@@ -959,47 +1000,47 @@ a.talos-button{text-decoration:none}
 /* Calm chiaro: --talos-secondary è grigio e gli altri quattro toni scendono sotto 4,5:1 sul fondo del
    codice (misurato: 3,9-4,1). Qui stanno i valori che passano — string 5,17 · number 5,06 ·
    function 4,96 · symbol 4,84 · comment 4,75. */
-:root[data-theme="light"] :is(.assistant-copy, .talos-message__body--comando) .code-block{
+:root[data-theme="light"] .code-block{
   --codice-commento:#5a5c62; --codice-stringa:#2a6142; --codice-numero:#7a4f0f;
   --codice-funzione:#2d5c8a; --codice-simbolo:#2f6459;
 }
-:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-head{
+.code-block .code-block-head{
   display:flex; align-items:center; gap:8px; min-height:32px; padding:5px 8px 5px 14px;
   border-bottom:1px solid var(--talos-border-subtle); background:var(--codice-testa);
 }
-:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-lang{flex:1; min-width:0; font-family:var(--talos-font-mono); font-size:11.5px; letter-spacing:.01em; color:var(--talos-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-copy{flex:none; border:1px solid transparent; border-radius:8px; padding:3px 9px; background:transparent; color:var(--talos-muted); font:inherit; font-size:11.5px; cursor:pointer; transition:color var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease), background var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease), border-color var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease)}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-copy:hover{color:var(--talos-text); background:var(--talos-accent-soft); border-color:var(--talos-accent-border)}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-copy:focus-visible{outline:2px solid var(--talos-accent-border); outline-offset:2px}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-copy.is-fatto{color:var(--talos-success, var(--talos-text)); border-color:transparent; background:transparent}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .code-block-copy[disabled]{opacity:.55; cursor:default}
+.code-block .code-block-lang{flex:1; min-width:0; font-family:var(--talos-font-mono); font-size:11.5px; letter-spacing:.01em; color:var(--talos-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.code-block .code-block-copy{flex:none; border:1px solid transparent; border-radius:8px; padding:3px 9px; background:transparent; color:var(--talos-muted); font:inherit; font-size:11.5px; cursor:pointer; transition:color var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease), background var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease), border-color var(--talos-motion-duration-fast,.12s) var(--talos-motion-ease)}
+.code-block .code-block-copy:hover{color:var(--talos-text); background:var(--talos-accent-soft); border-color:var(--talos-accent-border)}
+.code-block .code-block-copy:focus-visible{outline:2px solid var(--talos-accent-border); outline-offset:2px}
+.code-block .code-block-copy.is-fatto{color:var(--talos-success, var(--talos-text)); border-color:transparent; background:transparent}
+.code-block .code-block-copy[disabled]{opacity:.55; cursor:default}
 /* Il <pre> è la regione che scorre: prende il fuoco da tastiera (axe) e non si ridipinge il fondo,
    che il contenitore ha già messo. */
-:is(.assistant-copy, .talos-message__body--comando) .code-block > pre{
+.code-block > pre{
   margin:0; padding:12px 14px; overflow-x:auto; overscroll-behavior-x:contain;
   background:none; border:0; border-radius:0;
 }
-:is(.assistant-copy, .talos-message__body--comando) .code-block > pre:focus-visible{outline:2px solid var(--talos-accent-border); outline-offset:-2px}
+.code-block > pre:focus-visible{outline:2px solid var(--talos-accent-border); outline-offset:-2px}
 /* ⛔ La riga che toglie le strisce: dentro un <pre> il <code> è un BLOCCO senza fondo né padding
    propri — altrimenti ogni riga si dipinge il suo rettangolo (css-tricks, letto 09/09/2026). */
-:is(.assistant-copy, .talos-message__body--comando) .code-block pre code{
+.code-block pre > code{
   display:block; background:none; padding:0; border-radius:0;
   font-family:var(--talos-font-mono); font-size:12.5px; line-height:1.65;
   color:var(--talos-assistant-text);
   white-space:pre; word-break:normal; word-wrap:normal; tab-size:2; hyphens:none;
 }
-:is(.assistant-copy, .talos-message__body--comando) .code-block pre code .token{background:none}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .token.comment,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.prolog,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.doctype,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.cdata{color:var(--codice-commento); font-style:italic}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .token.punctuation{color:var(--codice-punteggiatura)}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .token.keyword,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.atrule,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.rule,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.important,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.selector{color:var(--codice-parola); font-weight:600}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .token.string,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.char,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.attr-value,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.regex,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.url{color:var(--codice-stringa)}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .token.number,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.boolean,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.constant,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.symbol,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.inserted{color:var(--codice-numero)}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .token.function,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.class-name,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.builtin{color:var(--codice-funzione)}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .token.tag,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.attr-name,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.property,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.variable,:is(.assistant-copy, .talos-message__body--comando) .code-block .token.operator{color:var(--codice-simbolo)}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .token.deleted{color:var(--talos-danger)}
-:is(.assistant-copy, .talos-message__body--comando) .code-block .token.namespace{opacity:.75}
+.code-block pre > code .token{background:none}
+.code-block .token.comment,.code-block .token.prolog,.code-block .token.doctype,.code-block .token.cdata{color:var(--codice-commento); font-style:italic}
+.code-block .token.punctuation{color:var(--codice-punteggiatura)}
+.code-block .token.keyword,.code-block .token.atrule,.code-block .token.rule,.code-block .token.important,.code-block .token.selector{color:var(--codice-parola); font-weight:600}
+.code-block .token.string,.code-block .token.char,.code-block .token.attr-value,.code-block .token.regex,.code-block .token.url{color:var(--codice-stringa)}
+.code-block .token.number,.code-block .token.boolean,.code-block .token.constant,.code-block .token.symbol,.code-block .token.inserted{color:var(--codice-numero)}
+.code-block .token.function,.code-block .token.class-name,.code-block .token.builtin{color:var(--codice-funzione)}
+.code-block .token.tag,.code-block .token.attr-name,.code-block .token.property,.code-block .token.variable,.code-block .token.operator{color:var(--codice-simbolo)}
+.code-block .token.deleted{color:var(--talos-danger)}
+.code-block .token.namespace{opacity:.75}
 /* mentre il blocco arriva ancora dal modello: il bordo lo dice, senza animazioni che distraggono */
-:is(.assistant-copy, .talos-message__body--comando) .code-block-in-arrivo{border-color:var(--talos-accent-border)}
+.code-block-in-arrivo{border-color:var(--talos-accent-border)}
 /* 06/9, owner: «la pagina del browser va renderizzata in HTML vero: se no che browser è?».
    La lettura dell'agente ora si apre come PAGINA; il testo che ha letto il modello resta un modo a
    parte, perché e' quello che ha davvero visto lui. Due pulsanti, non un menù: sono due, e la scelta
@@ -1890,6 +1931,72 @@ a.talos-button{text-decoration:none}
 @container (max-width:1000px){
   #schermoReview #copyAllDiffs{width:36px; min-width:36px; padding:0; flex:none}
   #schermoReview .talos-review__copy-label{display:none}
+}
+
+/* ==================== BC-30 — LE AZIONI NON COPRONO PIÙ LE SCHEDE ====================
+   MISURATO PRIMA, non supposto (12/09/2026, mockup e app insieme, stessi numeri da entrambe le
+   parti). `azioni.left − schede.right` sulla testata Review, al variare della LARGHEZZA DEL
+   CONTENITORE (non della finestra: a 1280 la colonna dei dettagli è aperta e il contenitore vale
+   664 px, a 1024 è chiusa e ne vale 748):
+     contenitore 664 → −20,23    704 → −0,23    744 → +19,77    784 → +39,77    824 → +59,77
+   La causa è di costruzione: la testata è una griglia `minmax(0,1fr) auto minmax(0,1fr)` e la
+   colonna delle azioni può diventare più STRETTA del suo contenuto (`min` è 0). Con
+   `justify-self:end` ciò che non ci sta sborda a SINISTRA, cioè sopra le schede centrate.
+   Aritmetica della griglia: colonna = (contenitore − 36 di padding − 344,5 di schede − 24 di gap)/2,
+   e le quattro azioni ne chiedono 162 ⇒ sotto ~712 px di contenitore la Review si sovrappone.
+   ⛔ Non si può curare allargando la colonna: le due colonne laterali DEVONO restare uguali, o le
+   schede non sono più al centro vero (è un'altra asserzione dello stesso cancello). ⇒ si stringe
+   ciò che sta dentro, e il modo è quello che l'owner ha già ordinato il 10/09: più di due azioni
+   non si affiancano, si raccolgono sotto «⋯».
+   Fonti lette il 12/09/2026:
+   · Fluent 2, Toolbar → usage: «A toolbar will grow to fit its parent container but will never wrap
+     onto a second line. In cases where there are more options than can fit, use the overflow
+     utility… Use a text label along with the toolbar item icon in the overflow menu.»
+     https://fluent2.microsoft.design/components/web/react/core/toolbar/usage
+   · MDN, CSS container queries (`container-type:inline-size`): la soglia si legge dal CONTENITORE,
+     ed è l'unica misura che qui sia monotona — la finestra non lo è.
+     https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_containment/Container_queries
+   · W3C WAI APG, pattern «Toolbar»: un bottone che apre un elenco è ammesso in una toolbar.
+     https://www.w3.org/WAI/ARIA/apg/patterns/toolbar/
+   ⛔ Non è un `role="menu"`: quel ruolo promette frecce, roving tabindex e chiusura gestita, e qui
+   non c'è codice che li dia. È una DIVULGAZIONE di bottoni veri — `popover` + `popovertarget`,
+   zero JavaScript, Esc e clic fuori li dà il browser, e il fuoco passa coi Tab. Stessa coppia
+   Popover API + ancoraggio CSS già in uso per i suggerimenti (O-40, `.talos-tip`), verificata sul
+   Chrome vero dell'owner.
+   ⛔ La soglia è 760 px e non 712: 712 è il punto esatto in cui SI ROMPE, e una soglia messa sul
+   punto di rottura si rompe di nuovo appena le schede cambiano parola o carattere. 760 tiene 48 px
+   di margine e mette 1024 (contenitore 748) e 1280 (664) nello stesso stato — sotto una certa
+   larghezza si raccoglie, sopra no, senza il paradosso «finestra più stretta, barra più piena».
+   Sopra la soglia `display:contents`: il contenitore sparisce dal layout e i tre bottoni restano
+   figli della barra, nello stesso ordine e negli stessi pixel di prima. */
+.talos-topbar .talos-topbar__raccolte{display:contents}
+.talos-topbar .talos-topbar__raccolta-nome{display:none}
+.talos-topbar .talos-topbar__altre{display:none}
+@container (max-width:760px){
+  /* Chiuso: il browser lo toglie dal flusso. Aperto: prende l'aspetto degli altri menu della app
+     (stessi valori di `.talos-menu`) e si àncora sotto «⋯», allineato al suo bordo destro. */
+  .talos-topbar .talos-topbar__raccolte{display:none}
+  .talos-topbar .talos-topbar__raccolte:popover-open{
+    display:flex; flex-direction:column; gap:2px;
+    position:fixed; inset:auto; margin:6px 0 0; z-index:60;
+    min-width:14rem; padding:6px;
+    border:1px solid var(--talos-border-strong); border-radius:12px;
+    background:var(--talos-panel); box-shadow:var(--talos-shadow-card);
+    position-anchor:--talos-azioni-raccolte;
+    position-area:block-end span-inline-start;
+    position-try-fallbacks:flip-block;
+  }
+  /* Dentro l'elenco il bottone smette di essere un quadrato muto: icona a sinistra, nome per esteso
+     accanto — è la riga del Fluent 2 citata sopra, ed è anche ciò che rende l'elenco leggibile a chi
+     non riconosce le icone. */
+  .talos-topbar .talos-topbar__raccolte .talos-button{width:100%; min-width:0; justify-content:flex-start; gap:8px; padding:0 10px; border-color:transparent; background:transparent}
+  .talos-topbar .talos-topbar__raccolte .talos-button:hover{background:var(--talos-card)}
+  /* ⛔ Trovato PROVANDO, non leggendo: «Comandi» restava invisibile anche DENTRO l'elenco, perché
+     la regola che lo nasconde sotto gli 820 px di contenitore vale per tutta la testata. Nascondere
+     una voce nel menu fatto apposta per ospitarla è peggio che non averlo: qui lo spazio c'è. */
+  .talos-topbar .talos-topbar__raccolte:popover-open [data-azione="comandi"]{display:inline-flex}
+  .talos-topbar .talos-topbar__raccolta-nome{display:inline}
+  .talos-topbar .talos-topbar__altre{display:inline-flex; anchor-name:--talos-azioni-raccolte}
 }
 
 .talos-topbar [data-vistetab]{flex-wrap:nowrap}
