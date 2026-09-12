@@ -29,6 +29,11 @@ import { CARTELLA_MEMORIA, MemoryStoreError, aggiornaMemoria, creaMemoria, elimi
    (`research-store.mjs`): scriverne una seconda qui vorrebbe dire due difese che divergono
    proprio sul confine che conta. Qui serve per rispondere 400 invece di far lanciare il magazzino. */
 import { idRicercaValido } from './research-store.mjs';
+/* ⭐⭐⭐⭐ 12/09, owner: «la ricerca approfondita deve avere una suite di esportazioni COMPLETA».
+   ⛔ Il modulo è UNO e non conosce HTTP: qui si importa solo la porta (`costruisciEsportazione`) e
+   l'elenco dei formati, che serve a scrivere il motivo di un 400 senza ricopiarlo. Nessun formato,
+   nessuna estensione e nessun `Content-Type` sono scritti in questo file. */
+import { FORMATI_ESPORTAZIONE, costruisciEsportazione } from './research/esportazioni.mjs';
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
@@ -782,6 +787,29 @@ function parseTreeQuery(url) {
 }
 
 /*
+ * ⛔⛔ 12/9 — LE DUE SOLE CHIAVI DELL'ESPORTAZIONE DELLA RICERCA: `formato` e `tono`.
+ *
+ * Stessa forma delle sorelle di questo file (`parseTreeQuery`, `parseModelsQuery`): allowlist
+ * chiusa, niente ripetizioni, tetto sulla lunghezza. ⛔ E la VALIDAZIONE DEL VALORE non è qui:
+ * i formati ammessi li conosce `esportazioni.mjs`, che è anche l'unico che sa costruirli — due
+ * elenchi in due file sono due elenchi che divergono il giorno in cui se ne aggiunge uno.
+ * Qui si controlla solo la FORMA della query, come per l'albero del workspace.
+ */
+function parseEsportaRicercaQuery(url) {
+  const allowed = new Set(['formato', 'tono']);
+  const query = {};
+  for (const [key, value] of url.searchParams) {
+    if (!allowed.has(key) || Object.hasOwn(query, key) || value.length > 1024) {
+      const error = new Error('Query non valida');
+      error.code = value.length > 1024 ? 'PAYLOAD_LIMIT' : 'QUERY_INVALID';
+      throw error;
+    }
+    query[key] = value;
+  }
+  return query;
+}
+
+/*
  * ⛔⛔⛔ 08/9, trovato scavando BH-07 — UN CODICE SENZA STATO FACEVA SCHIANTARE LA RISPOSTA.
  * `API_ERROR_CODES` e `STATUS_BY_CODE` sono due elenchi separati, e QUINDICI codici stanno nel
  * primo e non nel secondo: tutta la famiglia HF_HUB_, HF_REDIRECT_, HF_RESOLVE_INVALID,
@@ -961,6 +989,13 @@ const ROTTE_API = Object.freeze([
    *   tre volte la stessa verità, cioè tre posti da cui può divergere.
    */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)\/(pausa|ripresa|riverifica)$/, metodi: ['POST'] },
+  /*
+   * ⭐⭐⭐⭐ 12/9 — L'ESPORTAZIONE. Riga SUA, e `['GET']` soltanto: scaricare un file non cambia
+   * niente sul disco, e metterla insieme alle tre azioni (`['POST']`) farebbe dire all'`Allow`
+   * che una ricerca si esporta con una POST. ⛔ È anche l'unica rotta di questa famiglia che
+   * ACCETTA una query (`?formato=…&tono=…`): tutte le altre passano da `requireNoQuery`.
+   */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)\/esporta$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)$/, metodi: ['GET', 'DELETE'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tool-forge$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/children$/, metodi: ['GET'] },
@@ -2929,6 +2964,88 @@ export function createHttpApp({
         }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ricerca: letta.ricerca, errore: letta.errore ?? null }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * ════════════════════════════════════════════════════════════════════════════════════════
+     * ⭐⭐⭐⭐ 12/09/2026 — L'ESPORTAZIONE DELLA RICERCA APPROFONDITA
+     * ════════════════════════════════════════════════════════════════════════════════════════
+     *
+     * Owner 12/09: «la ricerca approfondita deve avere una suite di esportazioni COMPLETA».
+     * Cosa c'era: tre formati (Markdown, BibTeX, RIS) costruiti **nel browser** e salvati con un
+     * `<a download>`. Da qui ne escono otto, dal server, tutti dallo stesso modulo.
+     *
+     * ⛔ QUESTA ROTTA È UN PASSACARTE, e più delle sue vicine: legge la scheda con la STESSA
+     *   `leggiRicerca` della GET del dettaglio, la passa a `costruisciEsportazione`, e spedisce i
+     *   byte. Nessun formato, nessuna estensione e nessun tipo di contenuto sono scritti qui:
+     *   stanno nell'inventario di `esportazioni.mjs`, che è anche l'unico che sa costruirli.
+     * ⛔ NON passa da `sendJson`, e non può: un `.pdf` e un `.docx` dentro un JSON andrebbero
+     *   ricodificati, cioè spediti due volte o corrotti. Stessa forma di risposta binaria già
+     *   usata per `GET …/sessions/:id/file` e per le immagini di chat — `attachment`, `nosniff`,
+     *   `no-store`, CSP che nega tutto: un allegato non deve poter essere interpretato come una
+     *   pagina della nostra origine, e l'`html` esportato è HTML per davvero.
+     * ⛔ `Content-Disposition` porta ENTRAMBE le forme del nome (RFC 6266, riletta il
+     *   12/09/2026): `filename` è il ripiego ASCII, `filename*` la versione UTF-8, e quando ci
+     *   sono tutti e due vince `filename*`. Il nome lo costruisce `esportazioni.mjs` dalla
+     *   DOMANDA della ricerca — mai da qualcosa che il chiamante possa scrivere.
+     * ⛔ QUATTRO stati, e restano distinti: la sessione non c'è → 404 `NOT_FOUND`; la ricerca no
+     *   → 404 `RESEARCH_NOT_FOUND`; un formato o un tono che non esistono → 400
+     *   `RESEARCH_INVALID`; la ricerca c'è ma non ha il record che quel formato richiede → 409
+     *   `RESEARCH_CONFLICT`, col motivo. ⛔ Il 409 e non un file vuoto: un `.bib` di zero voci
+     *   consegnato in silenzio è il segno di verifica falso che tutto il disegno toglie.
+     */
+    const ricercaEsportaMatch = sessionRegistry && method === 'GET'
+      ? /^\/api\/v1\/sessions\/([^/]+)\/research\/([^/]+)\/esporta$/.exec(url.pathname)
+      : null;
+    if (ricercaEsportaMatch) {
+      const nomi = nomiDellaRichiesta(res, method, clock, ricercaEsportaMatch[1], ricercaEsportaMatch[2]);
+      if (!nomi) return;
+      const [sessionId, ricercaId] = nomi;
+      try {
+        /* ⛔ La query si legge PRIMA di toccare il disco: una chiave inventata è un 400, non una
+           lettura già fatta seguita da un errore. */
+        const query = parseEsportaRicercaQuery(url);
+        if (typeof sessionRegistry.esiste !== 'function' || !sessionRegistry.esiste(sessionId)) {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        if (!idRicercaValido(ricercaId)) {
+          const errore = new Error('id di ricerca non valido');
+          errore.code = 'RESEARCH_INVALID';
+          throw errore;
+        }
+        if (query.formato === undefined) {
+          const errore = new Error(`the "formato" query parameter is required — one of: ${FORMATI_ESPORTAZIONE.join(', ')}`);
+          errore.code = 'RESEARCH_INVALID';
+          throw errore;
+        }
+        const letta = await sessionRegistry.leggiRicerca(sessionId, ricercaId);
+        if ('erroreAvvio' in letta) { const e = new Error(letta.erroreAvvio); e.code = letta.code; throw e; }
+        if (!letta.ricerca) {
+          sendJson(res, 404, errorEnvelope('RESEARCH_NOT_FOUND', clock), method);
+          return;
+        }
+        const file = await costruisciEsportazione({
+          ricerca: letta.ricerca,
+          formato: query.formato,
+          tono: query.tono,
+        });
+        if (req.aborted || res.destroyed) return;
+        const nomiFile = nomiPerContentDisposition(file.nomeFile);
+        res.writeHead(200, {
+          'Content-Type': file.mediaType,
+          'Content-Length': file.bytes.byteLength,
+          'Content-Disposition': `attachment; filename="${nomiFile.ascii}"; filename*=UTF-8''${nomiFile.utf8}`,
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'private, no-store',
+          'Content-Security-Policy': "default-src 'none'; sandbox",
+        });
+        res.end(file.bytes);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
