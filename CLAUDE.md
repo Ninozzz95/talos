@@ -20,6 +20,8 @@ non un import**: non pesa sul contesto finché non serve.
 
 @.claude/MEMORIA-BANCO.md
 
+@.claude/MEMORIA-SETTEMBRE-2026.md
+
 ⛔ Perché esistono: `MEMORY.md` ha due tetti **compilati dentro claude.exe** —
 **200 righe** e **25 KB** — e oltre quelli il contenuto viene tagliato **in
 silenzio**, senza avviso in sessione. Nessuna impostazione li alza (verificato
