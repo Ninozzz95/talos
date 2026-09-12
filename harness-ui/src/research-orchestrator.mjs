@@ -83,7 +83,7 @@ import { talosResearchFetchCache } from './research/fetch-cache.mjs';
  *   `research-store.mjs` e niente altro, e `research-store.mjs` continua a non importare nulla
  *   da `src/research/`. Il motore vive qui, nel direttore — non nel cancello di sicurezza.
  */
-import { talosResearchParseReport, talosResearchSupportLabel } from './research/report.mjs';
+import { talosResearchParseReport, talosResearchReportDocument, talosResearchSupportLabel } from './research/report.mjs';
 /*
  * ⭐⭐⭐ L5 (12/09/2026) — IL MOTORE DELLA RI-VERIFICA NEL TEMPO, agganciato per la prima volta.
  *
@@ -216,6 +216,196 @@ function proveDistinteDelRecord(record) {
   return distinte.size;
 }
 
+/**
+ * ⭐⭐⭐⭐ L8 (12/09/2026) — IL RECORD LO SCRIVE IL SERVER, E IL MODELLO PORTA I PEZZI.
+ *
+ * ⛔ Il guasto, dal giro vero del 12/09 (ricerca `3029dea2`, 18 giri, 5 minuti, 265.670 token
+ *   di ingresso): la consegna chiedeva al modello di chiudere il rapporto con un blocco
+ *   recintato ```talos-research-report contenente una riga di JSON. `glm-4.7-flash` ha scritto
+ *   un rapporto in prosa da 8.953 byte — buono, con numeri e sedici URL — e ha ignorato il
+ *   recinto. Il cancello di consegna, giustamente, ha risposto `senza-rapporto` («il rapporto
+ *   non porta il record verificabile», `meta.json:motivoDettaglio`): motivo onesto, ma il
+ *   lavoro pagato è perso lo stesso.
+ *
+ * ⛔ Perché la cura NON è insistere nella consegna. Ricerca del 12/09/2026, fonti primarie:
+ *   - «When Lower Privileges Suffice» (arXiv:2606.20023, 18/06/2026, già citata in L1):
+ *     «prompt-level controls provide only **limited mitigation**». Una forma che vive solo
+ *     nella consegna è un controllo a livello di prompt, e il 12/09 non ha retto.
+ *   - «The Constraint Tax: Measuring Validity-Correctness Tradeoffs in Structured Outputs for
+ *     Small Language Models» (arXiv:2605.26128v1, 20/05/2026): «hard answer-only schema
+ *     decoding raises schema validity from 61.5% to 100.0%, **but lowers answer accuracy from
+ *     19.7% to 11.0%**». ⇒ ⛔ IL VINCOLO CHE NON CONOSCEVO: costringere un modello piccolo a
+ *     produrre tutto dentro una forma rigida NON è gratis — si paga in qualità della risposta.
+ *     Per questo `testo` resta PROSA LIBERA e non viene mai riscritto da noi: la forma rigida
+ *     si applica allo SCHELETRO (chi afferma cosa, su quale fonte, con quale passaggio), mai
+ *     al ragionamento.
+ *   - «Constraint Tax in Open-Weight LLMs: An Empirical Study of Tool Calling Suppression Under
+ *     Structured Output Constraints» (arXiv:2606.25605v1, 24/06/2026): «when Tool Calling and
+ *     JSON Schema constraints are simultaneously enabled, multiple open-weight models cease
+ *     invoking tools despite maintaining high schema compliance». ⇒ niente `response_format`
+ *     imposto sopra agli attrezzi: la struttura vive negli ARGOMENTI dell'attrezzo — il canale
+ *     che il modello usa già — e non in un secondo vincolo sopra la generazione.
+ *   - «PHREEQC-MCQ-200» (arXiv:2607.00436v1, 01/07/2026): «the gains are not monotonic:
+ *     tool-augmented agents also lose items they answered correctly without tools». ⇒ ogni
+ *     tolleranza qui sotto (un elenco arrivato come stringa JSON, una fonte indicata per numero
+ *     invece che per URL, un passaggio mancante) esiste perché la strada nuova non deve poter
+ *     perdere un deposito che la vecchia avrebbe accettato.
+ *
+ * ⇒ La forma di oggi: il modello passa `testo` (la prosa), `affermazioni` e `fonti`; QUESTA
+ *   funzione costruisce il documento con `talosResearchReportDocument` — lo stesso scrittore
+ *   che il cancello rilegge, mai un secondo che possa divergere («scritti entrambi da un
+ *   oggetto solo così che non possano divergere», testa di `report.mjs`).
+ *
+ * ⛔ `judge: null` e `claimSupported: 'unchecked'` NON sono argomenti: li mette il server, e il
+ *   modello non ha modo di toccarli. È la stessa regola di prima («un modello non timbra sé
+ *   stesso») resa IMPOSSIBILE da violare invece che raccomandata.
+ *
+ * ⛔ Il `summary` del record è il `testo` del modello VERBATIM. Conseguenza dichiarata: il
+ *   documento finale può portare due elenchi di fonti, quello scritto dal modello dentro la sua
+ *   prosa e quello generato sotto. Preferito a riscrivere la prosa: ciò che il modello ha
+ *   scritto non si tocca, e un elenco in più si legge — una prosa riscritta no.
+ *
+ * @param {{domanda?: string|null, testo: unknown, affermazioni: unknown, fonti: unknown}} input
+ * @returns {{ok: true, documento: string, affermazioni: number, fonti: number, senzaPassaggio: number}
+ *          |{ok: false, motivo: string}}
+ */
+export function componiRapportoRicerca({ domanda = null, testo, affermazioni, fonti }) {
+  if (typeof testo !== 'string' || testo.trim().length === 0) {
+    return { ok: false, motivo: '`testo` is missing: it must carry the full report as Markdown prose.' };
+  }
+  const elencoAffermazioni = comeElenco(affermazioni);
+  const elencoFonti = comeElenco(fonti);
+  if (elencoAffermazioni === null) return { ok: false, motivo: '`affermazioni` must be an array of {testo, fonte, passaggio} objects.' };
+  if (elencoFonti === null) return { ok: false, motivo: '`fonti` must be an array of {url, titolo} objects.' };
+  if (elencoAffermazioni.length === 0) return { ok: false, motivo: '`affermazioni` is empty: a report with no claims cannot be verified, and is rejected.' };
+  if (elencoFonti.length === 0) return { ok: false, motivo: '`fonti` is empty: list every http(s) URL you actually used, with its title.' };
+
+  const sources = [];
+  for (let i = 0; i < elencoFonti.length; i += 1) {
+    const f = elencoFonti[i];
+    const url = typeof f?.url === 'string' ? f.url.trim() : '';
+    if (!/^https?:\/\//i.test(url)) {
+      return { ok: false, motivo: `\`fonti[${i}].url\` is not a full http(s) URL${url ? ` (got "${url}")` : ' — it is missing'}. Every source needs the address you actually opened.` };
+    }
+    const titolo = typeof f?.titolo === 'string' && f.titolo.trim()
+      ? f.titolo.trim()
+      : typeof f?.title === 'string' && f.title.trim() ? f.title.trim() : url;
+    const data = typeof f?.dataDichiarata === 'string' && f.dataDichiarata.trim() ? f.dataDichiarata.trim() : null;
+    /*
+     * ⛔ `obtained` NON si indovina. `report.mjs` lo stampa come «pagina letta» / «solo estratto
+     *   dal motore di ricerca», e `ledger.mjs:154` ci conta sopra le pagine davvero aperte:
+     *   metterlo a `'page'` per default dichiarerebbe letta ogni pagina che nessuno ha aperto.
+     *   Lo dichiara il modello con `letta`, che è l'unico che lo sa; assente ⇒ `'snippet'`, cioè
+     *   l'ipotesi che promette MENO.
+     */
+    sources.push({ url, title: titolo, publishedAt: data, obtained: f?.letta === true ? 'page' : 'snippet', text: '' });
+  }
+
+  const indicePerUrl = new Map();
+  sources.forEach((s, i) => {
+    indicePerUrl.set(s.url, i + 1);
+    indicePerUrl.set(s.url.replace(/\/+$/, ''), i + 1);
+  });
+
+  const claims = [];
+  let senzaPassaggio = 0;
+  for (let i = 0; i < elencoAffermazioni.length; i += 1) {
+    const a = elencoAffermazioni[i];
+    const testoAffermazione = typeof a?.testo === 'string' ? a.testo.trim()
+      : typeof a?.text === 'string' ? a.text.trim() : '';
+    if (!testoAffermazione) {
+      return { ok: false, motivo: `\`affermazioni[${i}].testo\` is missing: every claim needs the sentence it asserts.` };
+    }
+    const fonteGrezza = a?.fonte ?? a?.source ?? a?.sourceIndex;
+    let indice = null;
+    if (typeof fonteGrezza === 'number' && Number.isInteger(fonteGrezza)) indice = fonteGrezza;
+    else if (typeof fonteGrezza === 'string' && fonteGrezza.trim()) {
+      const pulita = fonteGrezza.trim();
+      indice = indicePerUrl.get(pulita) ?? indicePerUrl.get(pulita.replace(/\/+$/, '')) ?? null;
+      if (indice === null && /^\d+$/.test(pulita)) indice = Number(pulita);
+    }
+    if (indice === null) {
+      return {
+        ok: false,
+        motivo: `\`affermazioni[${i}].fonte\` is missing or matches no URL in \`fonti\`${typeof fonteGrezza === 'string' ? ` (got "${fonteGrezza.trim()}")` : ''}. Use the exact URL, spelled the same way as in \`fonti\`.`,
+      };
+    }
+    if (indice < 1 || indice > sources.length) {
+      return { ok: false, motivo: `\`affermazioni[${i}].fonte\` points to source ${indice}, but \`fonti\` lists ${sources.length}. Sources are numbered from 1.` };
+    }
+    /*
+     * ⛔ Un passaggio mancante NON fa cadere il deposito, e si conta. `report.mjs` tratta un
+     *   `passage` vuoto come «non ci è mai stato trovato» e lo scrive in chiaro nella prosa;
+     *   `proveDistinte` non lo conta. Rifiutare qui butterebbe un rapporto intero per una
+     *   citazione — l'errore che «PHREEQC-MCQ-200» chiama «perdere item che si sarebbero presi
+     *   senza l'attrezzo». Il numero torna al modello nella risposta, così lo sa.
+     */
+    const passaggio = typeof a?.passaggio === 'string' ? a.passaggio.trim()
+      : typeof a?.passage === 'string' ? a.passage.trim() : '';
+    if (!passaggio) senzaPassaggio += 1;
+    claims.push({
+      claim: { text: testoAffermazione, sourceIndex: indice, quote: passaggio, quotePresent: 'unchecked' },
+      passage: passaggio,
+      checks: {
+        resolved: sources[indice - 1].obtained,
+        /*
+         * ⛔ `false`, non `true`: nessuno ha confrontato questo passaggio col testo della
+         *   pagina. `fidelity.mjs:96` conta le affermazioni con `resolved === 'page' &&
+         *   quotePresent` — un `true` qui sarebbe una verifica mai avvenuta.
+         */
+        quotePresent: false,
+        quoteSpan: null,
+        claimSupported: 'unchecked',
+        /*
+         * ⛔ IN ITALIANO, e non è un dettaglio: `report.mjs` stampa questa frase nella PROSA
+         *   («Esito: non verificata — …»), cioè la legge una persona, e tutto il resto di quel
+         *   documento è italiano. Trovato guardando l'artefatto vero prodotto dalla cura, non
+         *   da un test: nessuna asserzione poteva vederlo.
+         */
+        supportReason: 'depositata dal modello che ha scritto il rapporto: nessun giudice indipendente l\'ha ancora controllata.',
+        judge: null,
+        judgedAt: null,
+      },
+    });
+  }
+
+  const intestazione = typeof domanda === 'string' && domanda.trim() ? domanda.trim() : intestazioneDalTesto(testo);
+  const documento = talosResearchReportDocument({
+    question: intestazione,
+    summary: testo.trim(),
+    judge: null,
+    claims,
+    sources,
+  });
+  return { ok: true, documento, affermazioni: claims.length, fonti: sources.length, senzaPassaggio };
+}
+
+/**
+ * Un elenco, anche quando arriva come stringa JSON. `null` = non è un elenco e non lo diventa.
+ *
+ * ⛔ La tolleranza è misurata, non generosa: un modello che stringhifica un array è un caso
+ *   visto in natura, e rifiutarlo costerebbe un rapporto intero. Tutto il resto (un oggetto
+ *   solo, un numero, `undefined`) resta un errore che si dice a parole.
+ */
+function comeElenco(valore) {
+  if (Array.isArray(valore)) return valore;
+  if (typeof valore === 'string' && valore.trim().startsWith('[')) {
+    try {
+      const letto = JSON.parse(valore);
+      return Array.isArray(letto) ? letto : null;
+    } catch { return null; }
+  }
+  return null;
+}
+
+/** Il titolo del rapporto quando il server non conosce la domanda (ricerche vecchie, riprese). */
+function intestazioneDalTesto(testo) {
+  const righe = String(testo).split('\n').map((r) => r.trim());
+  const titolo = righe.find((r) => r.startsWith('# '));
+  if (titolo) return titolo.slice(2).trim();
+  return righe.find((r) => r.length > 0) ?? '';
+}
+
 function promptRicerca(question, depth) {
   const guida = depth === 'quick'
     ? 'Keep this brief: a couple of searches are enough — do not over-investigate.'
@@ -239,25 +429,28 @@ function promptRicerca(question, depth) {
      *   è dichiarata qui e controllata da `rileggiRapportoMinimo` — mai un cancello che chiede
      *   una forma che nessuno ha detto.
      */
-    'When you are done investigating, call the tool `research_deposit` with the complete report in `testo`: a Markdown document with a "# " title, your findings as prose, and a "## Sources" section listing the full http(s) URLs you actually opened.',
+    'When you are done investigating, call the tool `research_deposit` ONCE, with three arguments.',
     /*
-     * ⭐⭐⭐ L4 — LA CONSEGNA CHIEDE IL RECORD, perché il cancello adesso lo pretende.
+     * ⭐⭐⭐⭐ L8 (12/09/2026) — LA CONSEGNA NON CHIEDE PIÙ UN RECINTO, CHIEDE TRE ARGOMENTI.
      *
-     * ⛔ Se il cancello chiede una forma e la consegna non la dichiara, il cancello è una
-     *   trappola, non una difesa — è scritto così in L2 e vale ancora. Quindi qui c'è la forma
-     *   ESATTA, campo per campo, con un esempio che si può copiare.
+     * ⛔ Cosa c'era prima, e perché è caduto: le tre righe qui sopra dettavano il blocco
+     *   ```talos-research-report campo per campo, con un esempio copiabile. Il 12/09
+     *   `glm-4.7-flash` ha letto quella consegna, ha scritto un rapporto in prosa da 8.953 byte
+     *   e non ha messo il recinto: il cancello ha risposto `senza-rapporto` e cinque minuti di
+     *   ricerca sono rimasti senza consegna. Non era una consegna poco chiara — era una forma
+     *   affidata alla prosa, cioè un controllo a livello di prompt («limited mitigation»,
+     *   arXiv:2606.20023).
      *
-     * ⛔⛔ E `claimSupported` è `"unchecked"`, `judge` è `null`, **per ordine**: il record porta
-     *   verdetti solo quando a darli è stato un giudice INDIPENDENTE (`report.mjs`: «Verifica
-     *   eseguita da: … — mai dal modello che ha scritto il rapporto»). Un modello che si
-     *   timbra da solo «sostenuta dalla fonte» produrrebbe esattamente il segno di verifica
-     *   falso che tutto questo disegno esiste per togliere. Il bilancio dirà «N non
-     *   verificate», che è la verità di oggi; i verdetti veri arrivano con la ri-verifica.
+     * ⇒ Adesso la forma sta negli ARGOMENTI dell'attrezzo, dove uno schema la dichiara e il
+     *   server la costruisce. Qui resta il PERCHÉ, che uno schema non può dire: ogni
+     *   affermazione porta la sua fonte e il passaggio verbatim, e i verdetti non li dà chi
+     *   scrive. ⛔ `judge` e `claimSupported` non sono nemmeno più argomenti: non c'è più nulla
+     *   da raccomandare, perché non c'è più nulla che il modello possa timbrare.
      */
-    'The document MUST end with a machine-readable record, fenced exactly like this, on its own lines: ```talos-research-report then one line of JSON then ```.',
-    'That JSON is: {"version":1,"question":"<the question>","summary":"<2-4 sentences>","judge":null,"claims":[{"text":"<one claim>","sourceIndex":1,"passage":"<the exact sentence you read in that source, copied verbatim, or \\"\\" if you could not find it>","checks":{"claimSupported":"unchecked"}}],"sources":[{"url":"<full http(s) url>","title":"<page title>","publishedAt":null,"obtained":"page"}]}.',
-    '`sourceIndex` is 1-based into `sources`. Use "obtained":"snippet" when you only saw a search-result snippet instead of the page. Never invent a passage: an empty string is the honest answer, and it is counted as such.',
-    'Do NOT set `judge` or change `claimSupported`: you are not allowed to mark your own claims as verified — an independent check happens later.',
+    '`testo`: the full report as Markdown prose — a "# " title, your findings, and a "## Sources" section. This is what the person reads, and it is never rewritten.',
+    '`affermazioni`: one entry per factual claim that matters, each with `testo` (the claim), `fonte` (the exact http(s) URL it rests on, spelled as in `fonti`) and `passaggio` (the sentence you actually read in that source, copied VERBATIM — never reworded, never invented; "" is the honest answer if you cannot find it, and it is counted as such).',
+    '`fonti`: one entry per source, with `url` (full http(s)), `titolo`, `dataDichiarata` (the date the source itself declares, or omit it) and `letta`: true only if you opened the page, false if you only saw a search-result snippet.',
+    'The server builds the verifiable record from those three and saves it with your text: you do not have to write any JSON, and you cannot mark your own claims as verified — an independent check happens later.',
     'That deposited document IS the permanent report. Your chat message is not the report and is never saved as one — after depositing, just tell the user in one or two lines that the report is ready.',
     'Note any real uncertainty instead of guessing, and never deposit a report without sources.',
     'You cannot write files, run shell commands or create documents in this project: `research_deposit` is the one and only thing you are allowed to write, and it is all you need.',
@@ -826,10 +1019,43 @@ export function creaResearchOrchestrator({
    * finale — solo una sessione VERA, con un modello VERO, l'ha
    * mostrato.
    */
-  async function avvia({ cartella, question, depth, padreId = null }) {
+  /*
+   * ⭐⭐⭐⭐ L8 (12/09/2026) — LA FIGLIA EREDITA IL MODELLO DELLA MADRE.
+   *
+   * Il guasto, misurato sul giro vero e non dedotto: la chat `c8e9b07b` girava con
+   * `z-ai/glm-5.3-flash`, ha chiamato `research_start`, e la figlia `3029dea2` è partita con
+   * `z-ai/glm-4.7-flash` — il modello di serie del server (`config.mjs:25`,
+   * `MODELLI_AMMESSI[0]`). Le due intestazioni nello store lo dicono alla lettera
+   * (`.sessions-store/<id>.jsonl`, riga 1, campo `modello`). `avvia()` non passava nessun
+   * modello, quindi `avviaESegui` ricadeva sul default: `modelloEffettivo = modelIdEffettivo ||
+   * modelloRichiesta || voceEsistente?.modello || modello` (`session-registry.mjs`), e i primi
+   * tre erano tutti assenti.
+   *
+   * ⛔ Tre conseguenze, tutte e tre vere insieme:
+   *   1. la regola dell'owner «giri reali SOLO con glm-5.3-flash» era violata DAL PRODOTTO, non
+   *      da chi lo usa: nessuna schermata permetteva di scegliere il modello della ricerca;
+   *   2. la cache non poteva prendere. OpenRouter, «Prompt Caching» (letto 12/09/2026):
+   *      «Sticky routing is tracked at the account level, **per model**, and per conversation» —
+   *      un modello diverso è un'altra chiave di cache, e infatti il giro ha misurato
+   *      **265.670 token dentro con `cached_tokens: 0`**;
+   *   3. il rapporto lo scriveva un modello che la persona non ha scelto — cioè la ricerca
+   *      approfondita, la parte più cara del prodotto, girava sul modello più economico
+   *      proprio dove la qualità conta di più.
+   *
+   * ⛔ La cura è UN PASSAGGIO DI PARAMETRO, ed è per questo che nessun test la vedeva: non
+   *   c'era nessun ramo sbagliato da far scattare, c'era un argomento assente. Un test che
+   *   monta l'orchestratore e guarda cosa arriva ad `avviaESeguiFn` è l'unico che morde.
+   *
+   * ⛔⛔ E il modello NON si eredita quando la madre gira su un runtime LOCALE: lì
+   *   `voce.modello` è l'id di un GGUF sul disco (`modelId`), non un modello di OpenRouter, e
+   *   la figlia parte comunque `provider:'cloud'` (questa funzione non passa né `provider` né
+   *   `runtimeId`). Passarglielo trasformerebbe l'eredità in un guasto garantito alla prima
+   *   chiamata. Il filtro sta in `session-registry.mjs`, dove il provider si conosce.
+   */
+  async function avvia({ cartella, question, depth, padreId = null, modello = null, reasoning = null }) {
     const id = randomUUIDFn();
     const nome = nomeDallaDomanda(question);
-    await creaRicercaFn({ cartella, id, domanda: question, profondita: depth || 'deep', padreId, nome });
+    await creaRicercaFn({ cartella, id, domanda: question, profondita: depth || 'deep', padreId, nome, modello });
     /*
      * ⭐⭐⭐ L4 — LA PRIMA RIGA DEL GIORNALE, e l'ordine conta.
      *
@@ -860,7 +1086,21 @@ export function creaResearchOrchestrator({
        *   perso alla prima ripresa, e il deposito avrebbe smesso di funzionare proprio nel caso
        *   in cui la ricerca è più lunga.
        */
-      task: { consegna: promptRicerca(question, depth), ricercaId: id },
+      /*
+       * ⭐ L8 — `ricercaDomanda` viaggia accanto a `ricercaId`, e per la stessa ragione: il
+       *   kernel deve poter mettere la DOMANDA dentro il record del rapporto
+       *   (`record.question`, il campo che il cancello legge come `intestazione`) senza
+       *   chiederla al modello, che potrebbe riscriverla. Dentro `task` perché `task` è
+       *   persistito nell'intestazione della sessione e sopravvive a un riavvio e a un resume.
+       */
+      task: { consegna: promptRicerca(question, depth), ricercaId: id, ricercaDomanda: question },
+      /*
+       * ⭐⭐⭐ L8 — il modello e il reasoning della MADRE. `null` = «non passato», e
+       * `avviaESegui` ricade sul default esattamente come prima: l'eredità è additiva, non
+       * cambia il comportamento di chi non la usa (TALOS-BANCO, i test, le riprese).
+       */
+      modelloRichiesta: modello ?? null,
+      reasoningRichiesto: reasoning ?? null,
       /*
        * ⛔⛔⛔ L1 §6.3 — `'Research'`, non più `'Read only'` scritto a mano.
        *
@@ -1284,6 +1524,17 @@ export function creaResearchOrchestrator({
        */
       bilancio: letto?.bilancio ?? null,
       proveDistinte: letto?.proveDistinte ?? 0,
+      /*
+       * ⭐⭐⭐ L8 (12/09/2026) — CON CHE COSA È STATA FATTA. Tredicesimo campo, additivo.
+       *
+       * `null` per ogni ricerca nata prima di oggi — e `null` è la risposta giusta: quelle
+       * corse un modello ce l'hanno avuto, ma nessuno l'ha registrato, e scrivere qui quello
+       * di oggi sarebbe attribuire a ieri una scelta di adesso. Il campo esiste perché il
+       * 12/09 una ricerca è girata su un modello diverso da quello della chat che l'aveva
+       * ordinata e dalla sezione non si poteva vedere: due ricerche fatte con due modelli
+       * diversi non sono confrontabili, e la riga deve dirlo.
+       */
+      modello: r.modello ?? null,
     };
   }
 

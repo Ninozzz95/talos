@@ -315,7 +315,7 @@ export async function leggiRicerca({ cartella, id }, deps = {}) {
  * mappatura ricerca→sessione, un solo spazio di identità, mai
  * disallineabile).
  */
-export async function creaRicerca({ cartella, id, domanda, profondita, padreId = null, nome = null }, deps = {}) {
+export async function creaRicerca({ cartella, id, domanda, profondita, padreId = null, nome = null, modello = null }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   if (typeof id !== 'string' || id.length === 0) {
@@ -359,6 +359,20 @@ export async function creaRicerca({ cartella, id, domanda, profondita, padreId =
      */
     padreId: typeof padreId === 'string' && padreId.length > 0 ? padreId : null,
     nome: typeof nome === 'string' && nome.trim().length > 0 ? nome.trim() : null,
+    /*
+     * ⭐⭐⭐ L8 (12/09/2026) — CON QUALE MODELLO È STATA FATTA. Scritto qui e non dedotto.
+     *
+     * Il 12/09 la ricerca `3029dea2` è partita con `z-ai/glm-4.7-flash` mentre la chat che
+     * l'aveva ordinata girava con `z-ai/glm-5.3-flash` (intestazioni delle due sessioni nello
+     * store: `modello` riga 1 di ciascun `.jsonl`). Nessuno poteva accorgersene dalla sezione,
+     * perché la voce della ricerca non diceva con che cosa fosse stata fatta — e due ricerche
+     * fatte con due modelli diversi non sono confrontabili.
+     *
+     * ⛔ `null` per ogni voce nata prima di oggi: onesto, mai il modello di oggi attribuito a
+     *   una corsa di ieri. E sulla METADATA, non solo sulla voce di sessione, perché la voce
+     *   di sessione vive in memoria e la sezione legge dal disco anche dopo un riavvio.
+     */
+    modello: typeof modello === 'string' && modello.trim().length > 0 ? modello.trim() : null,
   };
   // ⛔ L4 — atomica anche alla nascita: una voce scritta a metà è una ricerca che l'elenco non
   //   vede più, e la sessione che la esegue sta già spendendo denaro.

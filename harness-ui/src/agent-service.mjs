@@ -341,6 +341,14 @@ export async function avviaSessione({
   onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
   onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
   /*
+   * ⭐⭐⭐⭐ L8 (12/09/2026) — il compositore del record del rapporto della ricerca
+   * approfondita. Inoltrato SENZA logica propria, come tutto il resto in questo file: lo
+   * costruisce `research-orchestrator.componiRapportoRicerca` (che usa `src/research/report.mjs`)
+   * e lo usa il kernel dentro `research_deposit`. Assente ⇒ il deposito scrive il testo così
+   * com'è, cioè il comportamento di prima di oggi.
+   */
+  componiRapportoRicercaFn,
+  /*
    * ⭐⭐⭐ 29/8 — FASE E, seconda meta'. Stesso principio di
    * `hookFn`/`onDelega`/`codaMessaggiFn` sopra: inoltrato SENZA logica
    * propria — la scoperta/trust/connessione vive tutta in
@@ -1730,6 +1738,7 @@ export async function avviaSessione({
       onMemoriaCerca, onMemoriaScrivi, onMemoriaAggiorna, onMemoriaElimina,
       onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
       onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
+      componiRapportoRicercaFn,
       onForgeCrea, toolForge, eseguiToolForgeFn,
     });
     onEvento(esitoInEventoFinale({ threadId, runId, esito }));

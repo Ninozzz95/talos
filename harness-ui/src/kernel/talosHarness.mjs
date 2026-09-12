@@ -2342,21 +2342,85 @@ const ATTREZZI_ESTESI = [
      *   consegna (`research-store.rileggiRapportoMinimo`) controlla esattamente queste tre cose:
      *   un cancello che chiede una forma mai dichiarata è una trappola, non una difesa.
      */
+    /*
+     * ⭐⭐⭐⭐ L8 (12/09/2026) — IL DEPOSITO È STRUTTURATO: il modello porta i pezzi, il record
+     * lo scrive il server.
+     *
+     * ⛔ Cosa faceva la versione di ieri, misurato e non dedotto: lo schema aveva UN campo
+     *   (`testo`) e la descrizione — come la consegna — chiedeva al modello di chiudere quel
+     *   testo con un blocco recintato ```talos-research-report. Il 12/09 la ricerca `3029dea2`
+     *   ha depositato 8.953 byte di prosa buona SENZA il recinto, e il cancello di consegna ha
+     *   scritto `senza-rapporto`: cinque minuti e 265.670 token di ingresso senza consegna.
+     *
+     * ⛔ La cura non è insistere. «When Lower Privileges Suffice» (arXiv:2606.20023,
+     *   18/06/2026): «prompt-level controls provide only limited mitigation» — e una forma
+     *   dichiarata solo a parole È un controllo a livello di prompt. Un campo che lo schema
+     *   NOMINA, invece, il modello lo vede: è la stessa lezione già pagata l'11/09 su
+     *   `document_create`/`mode` — «uno strumento che non nomina un campo, per il modello, non
+     *   ce l'ha».
+     *
+     * ⛔⛔ E il vincolo che NON conoscevo, trovato cercando prima di scrivere: «The Constraint
+     *   Tax» (arXiv:2605.26128v1, 20/05/2026) misura che una forma rigida imposta a un modello
+     *   piccolo porta la validità dal 61,5% al 100% MA l'accuratezza dal 19,7% all'11,0%. ⇒ la
+     *   struttura si mette sullo SCHELETRO (chi afferma cosa, su quale fonte, con quale
+     *   passaggio) e mai sulla prosa: `testo` resta libero, e nessuno lo riscrive.
+     *
+     * ⛔ Zero parametri di percorso, come prima e per la stessa ragione: il percorso lo
+     *   costruisce il dispatch da `task.ricercaId` (dato del SERVER, non del modello). Un
+     *   attrezzo che chiedesse «dove» riaprirebbe il buco che il livello `'ricerca'` chiude —
+     *   «Agent Safety Is Action Alignment» (arXiv:2606.28739, 27/06/2026): il minimo privilegio
+     *   si impone «outside the model at the action boundary».
+     *
+     * ⛔ `judge` e `claimSupported` NON compaiono: un modello non timbra sé stesso, e adesso
+     *   non ha nemmeno il campo con cui provarci (`report.mjs`: «mai dal modello che ha scritto
+     *   il rapporto»). Prima era una raccomandazione nella consegna; adesso è una superficie
+     *   che non esiste.
+     */
     {
         name: 'research_deposit',
         description: 'Deposit the final report of THIS deep research. Call it once, when the '
-            + 'investigation is over: the text you pass here is the permanent report — the one the '
+            + 'investigation is over: what you pass here is the permanent report — the one the '
             + 'user will read and the one that gets saved. Your chat message is not the report and '
-            + 'is never saved as one. Write proper Markdown: a "# " title, the findings as prose, '
-            + 'and a "## Sources" section listing the full http(s) URLs you actually opened. A '
-            + 'deposit without a title, without findings or without at least one source is rejected '
-            + 'and the research is recorded as having produced no report.',
+            + 'is never saved as one. Pass three things: `testo` (the report as Markdown prose), '
+            + '`affermazioni` (one entry per factual claim, each carrying the source URL it rests '
+            + 'on and the verbatim passage you read there) and `fonti` (one entry per source). The '
+            + 'server builds the verifiable record from them and saves it together with your text: '
+            + 'you never write JSON yourself. A deposit whose claims carry no source, or whose '
+            + 'sources are not full http(s) URLs, is refused and nothing is written — you are told '
+            + 'exactly what was wrong so you can call it again.',
         input_schema: {
             type: 'object',
             properties: {
-                testo: { type: 'string', description: 'The complete report, as Markdown. Self-contained: do not refer to earlier messages.' },
+                testo: { type: 'string', description: 'The complete report, as Markdown: a "# " title, the findings as prose, and a "## Sources" section. Self-contained: do not refer to earlier messages.' },
+                affermazioni: {
+                    type: 'array',
+                    description: 'The factual claims the report rests on. Every claim carries the source it comes from and the passage that supports it.',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            testo: { type: 'string', description: 'The claim itself, in one sentence.' },
+                            fonte: { type: 'string', description: 'The full http(s) URL this claim rests on, spelled exactly as in `fonti`.' },
+                            passaggio: { type: 'string', description: 'The sentence you actually read in that source, copied VERBATIM. Never reword it and never invent it: an empty string is the honest answer, and it is counted as such.' },
+                        },
+                        required: ['testo', 'fonte', 'passaggio'],
+                    },
+                },
+                fonti: {
+                    type: 'array',
+                    description: 'Every source you actually used, in the order you want them numbered.',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            url: { type: 'string', description: 'The full http(s) URL.' },
+                            titolo: { type: 'string', description: 'The title of the page.' },
+                            dataDichiarata: { type: 'string', description: 'The date the source itself declares, if it declares one. Omit it otherwise: never today\'s date, never a guess.' },
+                            letta: { type: 'boolean', description: 'true only if you opened the page; false if you only saw a search-result snippet.' },
+                        },
+                        required: ['url', 'titolo'],
+                    },
+                },
             },
-            required: ['testo'],
+            required: ['testo', 'affermazioni', 'fonti'],
         },
     },
     /*
@@ -5811,6 +5875,23 @@ export async function talosLavora({
     onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
     onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
     /*
+     * ⭐⭐⭐⭐ L8 (12/09/2026) — IL COMPOSITORE DEL RECORD DEL RAPPORTO, iniettato.
+     *
+     * `({domanda, testo, affermazioni, fonti}) => {ok:true, documento, affermazioni, fonti,
+     * senzaPassaggio} | {ok:false, motivo}`. Lo implementa
+     * `research-orchestrator.componiRapportoRicerca`, che usa `src/research/report.mjs` — lo
+     * STESSO scrittore che il cancello di consegna rilegge.
+     *
+     * ⛔ Iniettato e non importato, per la regola che tiene insieme le due copie di questo
+     *   kernel: `talosHarness.mjs` è condiviso col mobile e non importa nulla da
+     *   `src/research/`. Un `import` qui legherebbe il kernel a un albero che il mobile non ha,
+     *   e `npm run kernel:controlla` non potrebbe più confrontare le due copie.
+     *
+     * ⛔ ASSENTE ⇒ comportamento bit-per-bit di ieri: `research_deposit` scrive `testo` così
+     *   com'è. TALOS-BANCO e i test del kernel non lo passano mai, e per loro non cambia niente.
+     */
+    componiRapportoRicercaFn,
+    /*
      * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge.
      * `onForgeCrea` è il `(spec) => {ok,esito}` di `tool_create`, stesso
      * contratto degli altri mutanti. `toolForge`/`eseguiToolForgeFn`
@@ -7736,6 +7817,42 @@ export async function talosLavora({
                     )
                     esitoPermessoPerRicevuta = permesso
                     const testoRapporto = typeof argomenti.testo === 'string' ? argomenti.testo : ''
+                    /*
+                     * ⭐⭐⭐⭐ L8 (12/09/2026) — TRE STRADE, e quale si prende lo decide CIÒ CHE È
+                     * ARRIVATO, mai un'euristica sul testo.
+                     *
+                     *   1. `affermazioni`/`fonti` presenti  → il server compone il record con
+                     *      `componiRapportoRicercaFn` (→ `research-orchestrator.componiRapportoRicerca`,
+                     *      che usa `report.mjs`, lo stesso scrittore che il cancello rilegge).
+                     *      ⛔ Argomenti mal formati ⇒ RISPOSTA A PAROLE e NESSUN FILE: mai un
+                     *        deposito a metà, e il modello sa cosa correggere per il giro dopo.
+                     *   2. nessuno dei due → si scrive `testo` com'è, ESATTAMENTE come prima di
+                     *      oggi. È la compatibilità all'indietro: un rapporto che porta già il
+                     *      recinto dentro la prosa continua a passare il cancello, e un rapporto
+                     *      senza recinto continua a essere depositato invece che perso — sarà il
+                     *      cancello a dire `senza-rapporto`, come il 12/09.
+                     *   3. il composto non è disponibile (nessuna funzione iniettata: il banco, i
+                     *      test del kernel) → strada 2, dicendolo. ⛔ Mai un secondo scrittore del
+                     *      recinto dentro il kernel: «scritti entrambi da un oggetto solo così che
+                     *      non possano divergere» (`report.mjs`), e un recinto scritto in due posti
+                     *      diverge in silenzio.
+                     *
+                     * ⛔ Il kernel NON conosce la forma del record: non la valida, non la scrive,
+                     *   non la legge. Sa solo che una funzione gliene restituisce il documento o
+                     *   un motivo. È la stessa disciplina di `onDocumento`/`onRicerca*`: nessun
+                     *   file di `src/research/` entra in questo kernel, che è condiviso col mobile.
+                     */
+                    const strutturato = argomenti.affermazioni !== undefined || argomenti.fonti !== undefined
+                    let composto = null
+                    if (strutturato && typeof componiRapportoRicercaFn === 'function') {
+                        composto = componiRapportoRicercaFn({
+                            domanda: typeof task?.ricercaDomanda === 'string' ? task.ricercaDomanda : null,
+                            testo: testoRapporto,
+                            affermazioni: argomenti.affermazioni,
+                            fonti: argomenti.fonti,
+                        })
+                    }
+                    const testoDaScrivere = composto?.ok ? composto.documento : testoRapporto
                     let rapportoScritto = null
                     if (!permesso.consentito) {
                         esito = `REFUSED. ${permesso.motivo} No report was deposited.`
@@ -7747,18 +7864,59 @@ export async function talosLavora({
                     else if (!testoRapporto.trim()) {
                         esito = 'REFUSED. Empty report: nothing was deposited. Write the full report text in `testo`.'
                     }
+                    /*
+                     * ⛔⛔ IL RIFIUTO A PAROLE, E NESSUN FILE. Un argomento mal formato non è un
+                     *   guasto del modello da punire con la perdita del lavoro: è una cosa che si
+                     *   dice e si corregge al giro dopo. ⛔ Ma non si scrive un deposito a metà —
+                     *   un rapporto senza le fonti delle sue affermazioni è esattamente il
+                     *   «Cited but Not Verified» (arXiv:2605.06635) che questo disegno esiste per
+                     *   togliere. Il motivo arriva dal compositore e NOMINA l'indice e il campo.
+                     */
+                    else if (composto && composto.ok === false) {
+                        esito = `REFUSED. ${composto.motivo} Nothing was written: call research_deposit again with that fixed — everything you already found is still valid.`
+                    }
                     else {
                         try {
-                            await disco.scrivi(percorsoRelativo, testoRapporto)
-                            rapportoScritto = testoRapporto
+                            await disco.scrivi(percorsoRelativo, testoDaScrivere)
+                            rapportoScritto = testoDaScrivere
                             /*
                              * ⛔ Il messaggio dice DOVE e QUANTO, non «fatto»: il modello deve poter
                              * distinguere un deposito riuscito da uno che non è mai avvenuto, senza
                              * ri-chiamare l'attrezzo. E dice esplicitamente di non ripeterlo: la
                              * ripetizione identica è il modo in cui i giri si esauriscono.
                              */
-                            esito = `deposited: the report is saved as ${percorsoRelativo} (${Buffer.byteLength(testoRapporto, 'utf8')} bytes). `
-                                + 'This is now the permanent report for this research. Do not deposit it again; finish with a short message for the user.'
+                            esito = `deposited: the report is saved as ${percorsoRelativo} (${Buffer.byteLength(testoDaScrivere, 'utf8')} bytes). `
+                            /*
+                             * ⭐ L8 — la riga che dice COSA È STATO REGISTRATO, e quante affermazioni
+                             *   sono rimaste senza passaggio. È l'unico posto in cui il modello può
+                             *   accorgersi di aver consegnato una bibliografia invece di prove: il
+                             *   numero glielo diciamo, non glielo facciamo indovinare.
+                             */
+                            if (composto?.ok) {
+                                esito += `It carries the verifiable record: ${composto.affermazioni} claim(s) over ${composto.fonti} source(s)`
+                                    + (composto.senzaPassaggio > 0
+                                        ? `, of which ${composto.senzaPassaggio} without a verbatim passage — those count as unproven. `
+                                        : ', each with a verbatim passage. ')
+                            }
+                            /*
+                             * ⛔ E QUANDO IL RECORD NON C'È LO DICE, invece di lasciar credere che
+                             *   sia andato tutto bene. È il caso esatto del 12/09: il file c'è, la
+                             *   prosa è buona, e il cancello di consegna lo respingerà. Dirlo qui è
+                             *   l'unico momento in cui il modello può ancora rimediare.
+                             *
+                             * ⛔ L'UNICA riga di questo kernel che nomina il recinto, ed è una
+                             *   SPIA PER UN MESSAGGIO, mai un parser e mai uno scrittore. Se un
+                             *   giorno `report.mjs` cambiasse il recinto, la conseguenza qui
+                             *   sarebbe un avviso di troppo — non un file sbagliato, non un
+                             *   record letto male. Il confine fra «questo kernel non conosce la
+                             *   forma del record» e «la riconosce a vista» sta esattamente qui, e
+                             *   sta da questa parte apposta.
+                             */
+                            else if (!testoDaScrivere.includes('```talos-research-report')) {
+                                esito += 'It carries NO verifiable record, so it will not count as delivered: '
+                                    + 'call research_deposit once more with `affermazioni` and `fonti` filled in. '
+                            }
+                            esito += 'This is now the permanent report for this research. Do not deposit the same thing again; finish with a short message for the user.'
                         }
                         catch (rotto) {
                             esito = `research_deposit failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
@@ -7770,7 +7928,15 @@ export async function talosLavora({
                             // ⭐ `contenutoScritto` VERO, a differenza di document_create/generate_image: qui il contenuto lo abbiamo in mano, quindi l'hash di integrità della ricevuta è reale invece che `null`.
                             azione: { tipo: 'research_deposit', percorso: percorsoAssoluto }, toolCallId: c.id,
                             esitoPermesso: permesso, contenutoScritto: rapportoScritto,
-                            esecuzioneFallita: permesso.consentito && idBuono && testoRapporto.trim().length > 0 && rapportoScritto === null,
+                            /*
+                             * ⛔ L8 — un rifiuto degli ARGOMENTI non è un'esecuzione fallita.
+                             *   `esecuzioneFallita` dice «il permesso c'era, il deposito doveva
+                             *   avvenire, e non è avvenuto»: un argomento mal formato è invece un
+                             *   deposito che non doveva avvenire, e marcarlo come guasto
+                             *   sporcherebbe la catena delle ricevute con un allarme falso.
+                             */
+                            esecuzioneFallita: permesso.consentito && idBuono && testoRapporto.trim().length > 0
+                                && !(composto && composto.ok === false) && rapportoScritto === null,
                             firma, catena,
                         })
                         if (ricevuta.status === 'succeeded') catena = avanzaCatena(catena, SICUREZZA_PER_ATTREZZO.research_deposit)

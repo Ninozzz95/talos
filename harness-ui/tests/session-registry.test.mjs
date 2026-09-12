@@ -5045,6 +5045,77 @@ test('⭐⭐⭐⭐ research FILO INTERO: onRicercaAvvia avvia DAVVERO una second
   assert.equal(letta.ultimoMessaggio, 'Il rapporto è pronto.', 'l\'ultima frase resta, come allegato');
 });
 
+/*
+ * ⭐⭐⭐⭐ L8 (12/09/2026) — LA FIGLIA EREDITA IL MODELLO DELLA MADRE, e questo è il test che il
+ * guasto vero avrebbe fatto scattare.
+ *
+ * ⛔ Il fatto, non una deduzione: il 12/09 la chat `c8e9b07b` girava `z-ai/glm-5.3-flash`, ha
+ *   chiamato `research_start`, e la figlia `3029dea2` è partita `z-ai/glm-4.7-flash` (le due
+ *   intestazioni nello store, campo `modello`). 265.670 token di ingresso con `cached_tokens:0`
+ *   — OpenRouter, «Prompt Caching» (letto 12/09/2026): «Sticky routing is tracked at the account
+ *   level, **per model**, and per conversation».
+ * ⛔ Nessuno dei 2439 test lo vedeva perché non c'era un ramo sbagliato da far scattare: c'era
+ *   un ARGOMENTO ASSENTE. Solo un test che guarda cosa arriva al runtime della FIGLIA morde.
+ */
+test('⭐⭐⭐⭐ L8 FILO INTERO — la ricerca eredita il modello E il reasoning della chat che l\'ha ordinata (mai il default del server)', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto-vero', nome: 'progetto-vero' }],
+    modello: 'z-ai/glm-4.7-flash', chiave: 'k', ...storeRicercaFinto(),
+  });
+  registro.avviaLibero({ cartellaId: '0', consegna: 'avvia una ricerca', modello: 'z-ai/glm-5.3-flash', reasoning: 'medium' });
+  assert.equal(finta.ultimoInput.modello, 'z-ai/glm-5.3-flash', 'la madre gira col modello scelto');
+
+  const { id } = await finta.ultimoInput.onRicercaAvvia({ question: 'Come stanno evolvendo gli harness agentici desktop?', depth: 'deep' });
+  assert.ok(id);
+  assert.equal(finta.chiamate, 2, 'la ricerca è una SECONDA sessione');
+  assert.equal(finta.ultimoInput.modello, 'z-ai/glm-5.3-flash',
+    'LA RIGA DEL 12/09: la figlia girava col modello di serie mentre la madre era su un altro — adesso eredita');
+  assert.equal(finta.ultimoInput.reasoning, 'medium', 'e il reasoning con lui: una ricerca che ragiona meno della chat che l\'ha ordinata è un\'altra ricerca');
+  assert.equal(finta.ultimoInput.task.ricercaDomanda, 'Come stanno evolvendo gli harness agentici desktop?',
+    'la DOMANDA viaggia nel task come l\'id: il record del rapporto la prende da lì, mai dal modello che potrebbe riscriverla');
+  assert.equal(typeof finta.ultimoInput.componiRapportoRicercaFn, 'function',
+    'e il compositore del record arriva al kernel: senza, `research_deposit` scriverebbe la prosa nuda e il cancello la respingerebbe');
+});
+
+test('⛔⛔ L8 AL CONTRARIO — una madre SENZA modello scelto non impone niente: la ricerca usa il default del server, esattamente come prima', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta,
+    modello: 'z-ai/glm-4.7-flash', chiave: 'k', ...storeRicercaFinto(),
+  });
+  registro.avvia('task-vero');
+  await finta.ultimoInput.onRicercaAvvia({ question: 'x', depth: 'quick' });
+  assert.equal(finta.ultimoInput.modello, 'z-ai/glm-4.7-flash', 'nessun modello inventato: l\'eredità è additiva, non un default nuovo');
+});
+
+/*
+ * ⛔⛔⛔ L8 — E NON SI EREDITA DA UN RUNTIME LOCALE. Su una madre `provider:'local'`,
+ *   `voce.modello` è l'id di un GGUF sul disco; la figlia parte comunque `provider:'cloud'`
+ *   (l'orchestratore non passa né `provider` né `runtimeId`). Ereditarlo sarebbe un guasto
+ *   garantito alla prima chiamata a OpenRouter — cioè una cura che rompe un caso che prima
+ *   funzionava. Il verso contrario di un'eredità è la sua ECCEZIONE, e va provato come tale.
+ */
+test('⛔⛔⛔ L8 VERSO CONTRARIO — una madre su runtime LOCALE non passa il suo modelId alla ricerca (che gira in cloud): il default del server, non un GGUF', async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto-vero', nome: 'progetto-vero' }],
+    modello: 'z-ai/glm-4.7-flash', chiave: 'k',
+    localRuntimes: { llama: { id: 'llama' } },
+    ...storeRicercaFinto(),
+  });
+  registro.avviaLibero({
+    cartellaId: '0', consegna: 'avvia una ricerca',
+    provider: 'local', runtimeId: 'llama', modelId: 'gemma-3n-E4B-it-Q4_K_M.gguf',
+  });
+  await finta.ultimoInput.onRicercaAvvia({ question: 'x', depth: 'quick' });
+  assert.notEqual(finta.ultimoInput.modello, 'gemma-3n-E4B-it-Q4_K_M.gguf',
+    'un id di GGUF passato a OpenRouter è un 400 garantito: l\'eredità vale dove ha senso, e dove non ne ha tace');
+  assert.equal(finta.ultimoInput.modello, 'z-ai/glm-4.7-flash');
+});
+
 test('⭐⭐⭐ research_pause FILO INTERO: onRicercaPausa abortisce DAVVERO il controller della ricerca (segnaleStop.aborted)', async () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', ...storeRicercaFinto() });

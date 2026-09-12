@@ -99,7 +99,7 @@ import {
   elencaFonti as elencaFontiReale,
   leggiIstantaneaCache as leggiIstantaneaCacheReale, scriviIstantaneaCache as scriviIstantaneaCacheReale,
 } from './research-store.mjs';
-import { creaResearchOrchestrator } from './research-orchestrator.mjs';
+import { componiRapportoRicerca, creaResearchOrchestrator } from './research-orchestrator.mjs';
 import {
   elencaToolForgiati as elencaToolForgiatiReale, abilitaToolForgiato as abilitaToolForgiatoReale, ToolForgeStoreError,
 } from './tool-forge-store.mjs';
@@ -2774,7 +2774,36 @@ export function createSessionRegistry({
      *   più sopra in avviaESegui), ma `sessionId` è il parametro chiuso in chiusura, cioè
      *   quello che non può essere stato riscritto da nessuno nel frattempo.
      */
-    const onRicercaAvvia = (argomenti) => researchOrchestrator.avvia({ cartella: voce.cartella, question: argomenti?.question, depth: argomenti?.depth, padreId: sessionId });
+    /*
+     * ⭐⭐⭐⭐ L8 (12/09/2026) — LA FIGLIA EREDITA IL MODELLO DELLA MADRE.
+     *
+     * Il 12/09 la chat `c8e9b07b` girava con `z-ai/glm-5.3-flash`, ha chiamato `research_start`,
+     * e la ricerca `3029dea2` è partita con `z-ai/glm-4.7-flash` — il modello di serie del
+     * server. Le due intestazioni nello store lo dicono alla lettera. Conseguenze misurate:
+     * 265.670 token di ingresso con `cached_tokens: 0` (OpenRouter, «Prompt Caching», letto
+     * 12/09/2026: «Sticky routing is tracked at the account level, **per model**, and per
+     * conversation» — un altro modello è un'altra chiave di cache), e la regola dell'owner
+     * «giri reali solo con glm-5.3-flash» violata dal PRODOTTO, non da chi lo usa.
+     *
+     * ⛔ `voce.modello` e non il parametro chiuso in chiusura: il modello di una sessione si
+     *   cambia dalla barra a sessione viva (`aggiornaImpostazioni`, più sotto, scrive
+     *   `voce.modello`). Va letto ADESSO, quando la ricerca parte — stessa disciplina già
+     *   documentata per `voce.cartella` due righe sopra.
+     *
+     * ⛔⛔ E NON si eredita da una madre su runtime LOCALE: lì `voce.modello` è l'id di un GGUF
+     *   sul disco, mentre la figlia parte comunque `provider:'cloud'` (l'orchestratore non passa
+     *   né `provider` né `runtimeId`). Passarglielo sarebbe un guasto garantito alla prima
+     *   chiamata: `null` ⇒ la figlia usa il default del server, cioè esattamente ciò che
+     *   succedeva prima di questa riga. L'eredità vale dove ha senso, e dove non ne ha tace.
+     */
+    const onRicercaAvvia = (argomenti) => researchOrchestrator.avvia({
+      cartella: voce.cartella,
+      question: argomenti?.question,
+      depth: argomenti?.depth,
+      padreId: sessionId,
+      modello: voce.provider === 'local' ? null : (voce.modello ?? null),
+      reasoning: voce.provider === 'local' ? null : (voce.reasoning ?? null),
+    });
     const onRicercaLeggi = (argomenti) => researchOrchestrator.leggi({ cartella: voce.cartella, id: argomenti?.id });
     const onRicercaRinomina = (argomenti) => researchOrchestrator.rinomina({ cartella: voce.cartella, id: argomenti?.id, title: argomenti?.title ?? null });
     const onRicercaPausa = (argomenti) => researchOrchestrator.mettiInPausa({ id: argomenti?.id });
@@ -2844,6 +2873,13 @@ export function createSessionRegistry({
       // ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research, gli 8 thin delegate costruiti appena sopra.
       onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
       onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
+      /*
+       * ⭐⭐⭐⭐ L8 (12/09/2026) — il compositore del record del rapporto. Non è un callback di
+       * sessione (è puro): si passa sempre, ed è il kernel a usarlo solo dentro
+       * `research_deposit`. Sta qui e non fra gli `onRicerca*` perché non delega niente
+       * all'orchestratore di QUESTA sessione — scrive il documento e basta.
+       */
+      componiRapportoRicercaFn: componiRapportoRicerca,
       // ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge, GLOBALE come cartellaMemoria: agent-service.mjs costruisce onForgeCrea/toolForge/eseguiToolForgeFn da qui.
       cartellaForge,
       onEvento: (evento) => broadcast(voce, evento),
