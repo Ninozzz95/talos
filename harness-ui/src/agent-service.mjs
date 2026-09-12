@@ -349,6 +349,15 @@ export async function avviaSessione({
    */
   componiRapportoRicercaFn,
   /*
+   * ⭐⭐⭐⭐ L9 (12/09/2026) — la ricerca approfondita: la cache della corsa e la finestra di
+   * pagina. Inoltrati SENZA logica propria, come `componiRapportoRicercaFn` qui sopra: chi li
+   * costruisce è `research-orchestrator.mjs`, chi li usa è il kernel dentro `web_search` e
+   * `naviga`. Assenti (ogni sessione che non è una ricerca, il banco, i test) ⇒ comportamento
+   * bit-per-bit di ieri.
+   */
+  cacheWeb,
+  onPaginaLetta,
+  /*
    * ⭐⭐⭐ 29/8 — FASE E, seconda meta'. Stesso principio di
    * `hookFn`/`onDelega`/`codaMessaggiFn` sopra: inoltrato SENZA logica
    * propria — la scoperta/trust/connessione vive tutta in
@@ -1729,6 +1738,10 @@ export async function avviaSessione({
       contestoDelProgetto: testoContestoProgetto,
       onGiro, onScrittura, onDelta, reasoning, contextHooks,
       strumentiEstesi, ricercaWeb, richiediRicercaFn, onArtefatto, onDocumento, onImmagine, modelloPlanner,
+      // ⭐ L9 (12/09/2026) — inoltrati SENZA logica propria, come tutto il resto in questo file:
+      // la cache della corsa e la finestra della pagina le costruisce `research-orchestrator.mjs`
+      // («raccolta viva»). Assenti ⇒ il kernel si comporta esattamente come ieri.
+      cacheWeb, onPaginaLetta,
       livelloAccesso, chiediApprovazioneFn, hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, codaMessaggiFn,
       firma, toolMcp, chiamaToolMcpFn, skillsDisponibili, caricaSkillFn, toolPlugin, eseguiToolPluginFn,
       onLibreriaLista, onLibreriaCerca, onLibreriaLeggi, onLibreriaOrigine,
@@ -1819,6 +1832,45 @@ export async function compattaSessione({
     modello, chiave, messaggi: richiesta, attrezzi: [], fetchDiRete,
   });
   return compattaConversazioneFn(messaggiFinali, chiamaModello);
+}
+
+/**
+ * ⭐⭐⭐⭐ L9 (12/09/2026) — UNA DOMANDA SOLA A UN MODELLO, senza attrezzi e senza giro.
+ *
+ * ⛔⛔ A che cosa serve, e perché non poteva vivere altrove: il GIUDICE della ricerca
+ *   approfondita. `verification.mjs` chiede una funzione `ask(affermazione, passaggio) =>
+ *   Promise<string>` e non sa niente di fornitori, chiavi o ritentativi — è puro apposta. Chi
+ *   quelle cose le sa è questo file, che le sa già per `compattaSessione` qui sopra.
+ *
+ * ⛔ Nessuna seconda implementazione del trasporto: `chiamaConRitenta` è LA STESSA funzione del
+ *   kernel che ogni giro usa — stesso backoff, stesso rispetto del segnale di stop, stesso
+ *   `fetchDiRete` iniettabile per provare senza rete. Scriverne una qui accanto vorrebbe dire
+ *   due politiche di ritentativo che divergono al primo 429.
+ *
+ * ⛔ `attrezzi: []` non è un dettaglio: un giudice che potesse chiamare attrezzi potrebbe
+ *   andare a CERCARE conferme, e il suo compito è l'opposto — dire se quel passaggio, DA SOLO,
+ *   sostiene l'affermazione. È la riga portante di `talosResearchJudgePrompt` («non usare altro:
+ *   né quello che sai, né quello che ti sembra probabile»), e qui è resa impossibile da violare.
+ *
+ * ⛔ Torna una STRINGA, vuota quando il modello non ha detto niente: chi la interpreta è
+ *   `talosResearchParseVerdict`, che su una risposta illeggibile risponde `unchecked` col motivo.
+ *   Un lancio qui diventerebbe «il giudice non ha risposto» sull'affermazione, che è comunque
+ *   onesto — ma una stringa vuota è più vicina al fatto.
+ *
+ * @param {object} input
+ * @param {string} input.modello
+ * @param {string} input.chiave
+ * @param {string} input.prompt
+ * @param {AbortSignal} [input.segnaleStop]
+ * @param {typeof fetch} [input.fetchDiRete] — SOLO per test
+ * @returns {Promise<string>}
+ */
+export async function chiediAlModelloUnaVolta({ modello, chiave, prompt, segnaleStop, fetchDiRete = fetch }) {
+  const { scelta } = await chiamaConRitenta({
+    modello, chiave, messaggi: [{ role: 'user', content: String(prompt ?? '') }], attrezzi: [],
+    fetchDiRete, ...(segnaleStop ? { segnaleStop } : {}),
+  });
+  return String(scelta?.content ?? '').trim();
 }
 
 /**

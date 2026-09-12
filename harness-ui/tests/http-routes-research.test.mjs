@@ -279,9 +279,11 @@ test('⭐⭐⭐⭐ L5 — ELENCO: i campi del contratto c\'erano già, quello ch
   assert.equal(dati.ricerche.length, 1);
   assert.deepEqual(
     Object.keys(dati.ricerche[0]).sort(),
-    ['avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'id', 'modello', 'motivo', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'stato', 'titolo', 'ultimoMessaggio'],
+    ['avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'id', 'modello', 'modelloGiudice', 'motivo', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'stato', 'titolo', 'ultimoMessaggio'],
     /*
-     * ⛔ Il contratto a QUINDICI campi: quattordici di L4 più `modello` (L8, 12/09/2026).
+     * ⛔ Il contratto a SEDICI campi: quattordici di L4, `modello` (L8) e `modelloGiudice`
+     *   (L9, 12/09/2026) — chi è stato SCELTO a giudicare questa corsa, che è un fatto diverso
+     *   da chi ha giudicato davvero (quello sta nel record del rapporto, campo `giudice`).
      *   Il test è diventato ROSSO quando è cresciuto, che è esattamente il suo mestiere — una
      *   crescita che scivola dentro in silenzio è un frontend che si rompe più tardi, altrove.
      */
@@ -319,8 +321,27 @@ test('⭐⭐⭐⭐ L5 — DETTAGLIO: piano, passi, spesa, giornale, e le afferma
   assert.equal(ricerca.fonti[0].ottenuta, 'page');
   assert.equal(ricerca.giudice, null);
 
-  assert.deepEqual(ricerca.piano, [], '⛔ nessun passo di raccolta è agganciato: `[]` onesto, mai un piano finto');
-  assert.deepEqual(ricerca.passi, []);
+  /*
+   * ⭐⭐⭐⭐ L9 (12/09/2026) — QUESTA RIGA DICEVA IL VERO IERI, E OGGI DIREBBE IL FALSO.
+   *
+   * L5 asseriva `piano: []` con la glossa «nessun passo di raccolta è agganciato: `[]` onesto,
+   * mai un piano finto». Era esatto: `plan.mjs` era portato e non chiamato da nessuno. Da L9
+   * `avvia()` costruisce il piano PRIMA che la figlia parli, lo scrive su disco e lo mette nel
+   * giornale — quindi qui ci sono quattro rami (profondità `deep`), ognuno con la sua stima.
+   *
+   * ⛔ `passi: []` invece resta vero IN QUESTA PROVA, e va detto perché: la figlia è finta e
+   *   non ha chiamato né `web_search` né `naviga`. I passi nascono dalle chiamate vere degli
+   *   attrezzi (`raccolta-viva.mjs`), non dall'avvio — e un passo scritto all'avvio sarebbe
+   *   lavoro dichiarato che nessuno ha fatto.
+   * ⛔ `spesa` a zero per la stessa ragione, e `costoAtteso` invece NON è zero: è il «costo
+   *   detto prima» (§6.8, +1.5), e il divario fra i due è esso stesso una misura.
+   */
+  assert.equal(ricerca.piano.length, 4, 'L9 — profondità `deep`: quattro linee di indagine, dal motore portato');
+  assert.deepEqual(ricerca.piano.map((r) => r.id), ['b1', 'b2', 'b3', 'b4']);
+  assert.ok(ricerca.piano.every((r) => typeof r.question === 'string' && r.question.length > 0));
+  assert.ok(ricerca.costoAtteso.searches > 0 && ricerca.costoAtteso.pages > 0 && ricerca.costoAtteso.tokens > 0,
+    '⛔ il costo si dice PRIMA: una corsa che costa ~15× una chat non si scopre dopo');
+  assert.deepEqual(ricerca.passi, [], '⛔ la figlia finta non ha cercato niente: nessun passo inventato per riempire la scheda');
   assert.equal(ricerca.giornale.righeSaltate, 0);
   assert.equal(ricerca.giornale.stato, 'done', 'il giornale è stato rigiocato: `run_started` → `run_finished`');
   assert.ok(ricerca.giornale.eventi >= 2, 'e gli eventi si contano: «si è caricato» e «si è caricato per intero» non sono la stessa frase');

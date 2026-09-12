@@ -168,6 +168,24 @@ export const NOME_GIORNALE = 'giornale.jsonl';
 export const NOME_PIANO = 'piano.json';
 /** La cartella del testo TENUTO delle fonti, indirizzato dal contenuto. */
 export const CARTELLA_FONTI = 'fonti';
+/**
+ * ⭐⭐⭐ L9 (12/09/2026) — L'INDICE url → `fonti/<sha256>.txt`, e perché serve un file in più.
+ *
+ * `fonti/` è indirizzata dal CONTENUTO: è la proprietà che rende impossibile sovrascrivere una
+ * pagina già pagata, ed è quella che vogliamo tenere. Ma un'impronta non dice da quale indirizzo
+ * quel testo venga, e la verifica ha esattamente quella domanda: «l'affermazione cita
+ * <https://…>: dov'è il testo di quella pagina?». Finché il processo vive la risposta sta in
+ * memoria; dopo un riavvio non c'è più — e una ricerca ripresa consegnerebbe affermazioni «non
+ * verificate» per un motivo che non è vero (il testo c'è, non si sa solo di chi sia).
+ *
+ * ⛔ Non si mette l'URL nel NOME del file: un indirizzo non è un nome di file (lunghezza,
+ *   caratteri vietati su Windows, due indirizzi che normalizzano uguale) e si perderebbe
+ *   l'indirizzamento per contenuto. Un indice a parte costa una scrittura atomica e non tocca
+ *   niente di ciò che già funziona.
+ * ⛔ E l'indice è un RISPARMIO, non una prova: se manca, la verifica lo dice invece di
+ *   inventare — mai il contrario.
+ */
+export const NOME_INDICE_FONTI = 'indice-fonti.json';
 
 /**
  * ⭐ Il numero di formato vive sulla VOCE, non su un file a parte, e serve a una cosa sola: dire
@@ -199,6 +217,10 @@ export function percorsoPiano(cartella, id) {
 
 export function cartellaDelleFonti(cartella, id) {
   return join(cartella, CARTELLA_RICERCA, id, CARTELLA_FONTI);
+}
+
+export function percorsoIndiceFonti(cartella, id) {
+  return join(cartella, CARTELLA_RICERCA, id, NOME_INDICE_FONTI);
 }
 
 /**
@@ -440,7 +462,7 @@ export async function leggiRicerca({ cartella, id }, deps = {}) {
  * mappatura ricerca→sessione, un solo spazio di identità, mai
  * disallineabile).
  */
-export async function creaRicerca({ cartella, id, domanda, profondita, padreId = null, nome = null, modello = null }, deps = {}) {
+export async function creaRicerca({ cartella, id, domanda, profondita, padreId = null, nome = null, modello = null, modelloGiudice = null }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   if (typeof id !== 'string' || id.length === 0) {
@@ -498,6 +520,24 @@ export async function creaRicerca({ cartella, id, domanda, profondita, padreId =
      *   di sessione vive in memoria e la sezione legge dal disco anche dopo un riavvio.
      */
     modello: typeof modello === 'string' && modello.trim().length > 0 ? modello.trim() : null,
+    /*
+     * ⭐⭐⭐ L9 (12/09/2026) — CHI GIUDICHERÀ, scelto alla NASCITA e non al deposito.
+     *
+     * ⛔ Perché qui e non dopo: la scelta del giudice è «chiunque tranne l'autore»
+     *   (`verification.mjs:talosResearchPickJudge`), e l'autore è il modello di QUESTA corsa.
+     *   Deciderlo al momento del deposito vorrebbe dire rileggere quale modello fosse
+     *   configurato allora — cioè un'altra ora, un'altra impostazione, un altro giudice, e un
+     *   rapporto che non sa dire chi l'ha controllato. Scritto alla nascita, sopravvive a un
+     *   riavvio come tutto il resto della metadata.
+     * ⛔ `null` è una risposta VERA e frequente: nessun altro modello ammesso oltre all'autore.
+     *   Allora il rapporto esce con `judge: null` e lo DICE («nessun giudice indipendente
+     *   disponibile: l'autore non può verificare sé stesso»), invece di far timbrare al modello
+     *   le proprie affermazioni. La misura che lo vieta è vecchia e netta: Panickssery, Bowman
+     *   e Feng, «LLM Evaluators Recognize and Favor Their Own Generations» (arXiv:2404.13076,
+     *   15/04/2024, letta il 12/09/2026) — «a linear correlation between self-recognition
+     *   capability and the strength of self-preference bias».
+     */
+    modelloGiudice: typeof modelloGiudice === 'string' && modelloGiudice.trim().length > 0 ? modelloGiudice.trim() : null,
   };
   // ⛔ L4 — atomica anche alla nascita: una voce scritta a metà è una ricerca che l'elenco non
   //   vede più, e la sessione che la esegue sta già spendendo denaro.
@@ -964,6 +1004,37 @@ export async function leggiFonte({ cartella, id, ref }, deps = {}) {
     return await readFileFn(percorso, 'utf8');
   } catch {
     return null;
+  }
+}
+
+/**
+ * ⭐⭐⭐ L9 — L'INDICE delle fonti tenute: url → ref, più ciò che la fonte dichiara di sé.
+ *
+ * ⛔ Si riscrive per intero e in modo ATOMICO, mai in append: è una mappa, non un registro, e
+ *   una mappa scritta a pezzi può finire con due voci per lo stesso indirizzo che si
+ *   contraddicono. Il registro solo-append è il giornale, e ha un altro mestiere.
+ * ⛔ Una voce nuova NON cancella una vecchia con lo stesso url a meno che non sia più FORTE:
+ *   `page` batte `snippet`, e mai il contrario — una prova più debole non deve poter
+ *   sostituire una più forte (`raccolta-viva.mjs` fa la stessa scelta in memoria).
+ *
+ * @param {{cartella: string, id: string, voci: readonly object[]}} input
+ */
+export async function scriviIndiceFonti({ cartella, id, voci }, deps = {}) {
+  if (!idRicercaValido(id)) throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
+  const elenco = Array.isArray(voci) ? voci : [];
+  await scriviAtomico(percorsoIndiceFonti(cartella, id), JSON.stringify(elenco, null, 2), deps);
+  return percorsoIndiceFonti(cartella, id);
+}
+
+/** @returns {Promise<readonly object[]>} — `[]` se non c'è o è illeggibile: un indice assente non è un guasto. */
+export async function leggiIndiceFonti({ cartella, id }, deps = {}) {
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  if (!idRicercaValido(id)) return [];
+  try {
+    const letto = JSON.parse(await readFileFn(percorsoIndiceFonti(cartella, id), 'utf8'));
+    return Array.isArray(letto) ? letto : [];
+  } catch {
+    return [];
   }
 }
 

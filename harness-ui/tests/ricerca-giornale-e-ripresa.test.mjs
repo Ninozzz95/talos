@@ -619,7 +619,16 @@ test('⭐⭐⭐⭐ L4 §6.6 — LA RIPRESA DOPO UN RIAVVIO: un registro NUOVO, s
   assert.match(consegna, /Steps already completed: b1:search/);
   assert.match(consegna, /Resume from this step: b2:search \(search\), which was in flight when the process died/, '⛔ riparte dal passo DOPO l\'ultimo committato');
   assert.match(consegna, /Lines of inquiry still open: «r2»/);
-  assert.match(consegna, /1 source page\(s\) were already fetched/);
+  /*
+   * ⭐ L9 (12/09/2026) — «source text(s)», non più «source page(s)»: UNA PAROLA, e su una misura.
+   *
+   * Da oggi in `fonti/` finiscono anche gli ESTRATTI dei risultati di ricerca, non solo le
+   * pagine aperte — una fonte vista e mai aperta è comunque una prova, e senza di lei la
+   * verifica direbbe «la fonte citata non esiste fra quelle raccolte» per un fatto che invece è
+   * vero («l'ha vista solo dall'elenco»). ⇒ il conteggio è di TESTI TENUTI, e chiamarli «pagine»
+   * sarebbe un numero gonfiato detto a un modello che ci conta sopra per non ripagarle.
+   */
+  assert.match(consegna, /1 source text\(s\) were already fetched/);
   assert.match(consegna, /La consegna originale, con le regole del deposito\./, '⛔ senza le regole del deposito, una ricerca ripresa consegnerebbe qualcosa che il cancello respinge');
 
   // E il giornale registra la ripresa: un altro riavvio la vedrebbe.
@@ -805,7 +814,19 @@ test('⭐⭐⭐⭐ L4 — IL GIRO INTERO SU DISCO: avvio → deposito → conclu
 
   // La forma su disco è quella di §6.2, e non c'è nient'altro.
   const dentro = readdirSync(cartellaDellaRicerca(cartella, id)).sort();
-  assert.deepEqual(dentro, ['cache.json', 'giornale.jsonl', 'meta.json', 'rapporto.md'], '⛔ nessun `.tmp-` rimasto: un temporaneo superstite è il segno di un guasto inghiottito');
+  /*
+   * ⭐ L9 (12/09/2026) — `piano.json` È UN FILE IN PIÙ, ED È VOLUTO.
+   *
+   * Da oggi `avvia()` costruisce il piano (rami per profondità) prima ancora che la figlia
+   * parli, lo registra nel giornale (`plan_proposed` + `plan_approved`) e lo scrive qui: è la
+   * forma che §6.2 disegna da sempre e che fino a ieri restava vuota. ⛔ L'asserzione resta
+   * ESATTA (`deepEqual`, non «contiene»): il punto del controllo non è quanti file ci sono, è
+   * che non ne resti nessuno che nessuno ha voluto — un `.tmp-` superstite è il segno di un
+   * guasto inghiottito, e quello si vede solo con un elenco chiuso.
+   * ⛔ `fonti/` NON c'è in questa prova, e è corretto: qui nessuno ha aperto una pagina (la
+   *   figlia è finta). La cartella nasce alla prima fonte tenuta, non all'avvio.
+   */
+  assert.deepEqual(dentro, ['cache.json', 'giornale.jsonl', 'meta.json', 'piano.json', 'rapporto.md'], '⛔ nessun `.tmp-` rimasto: un temporaneo superstite è il segno di un guasto inghiottito');
   assert.ok(await statRapporto({ cartella, id }));
   assert.equal(existsSync(percorsoRapporto(cartella, id)), true);
   assert.equal(readFileSync(percorsoMeta(cartella, id), 'utf8').includes('"terminata": "done"'), true);

@@ -61,10 +61,40 @@
  * mai un filesystem — stessa disciplina di tutte le altre `*Fn` di questo modulo.
  */
 import {
-  accodaEvento, elencaFonti, leggiGiornale, leggiIstantaneaCache, leggiPiano, leggiRapporto,
-  rileggiRapportoMinimo, scriviIstantaneaCache, statRapporto,
+  accodaEvento, elencaFonti, leggiFonte, leggiGiornale, leggiIndiceFonti, leggiIstantaneaCache,
+  leggiPiano, leggiRapporto, rileggiRapportoMinimo, scriviFonte, scriviIndiceFonti,
+  scriviIstantaneaCache, scriviPiano, statRapporto,
 } from './research-store.mjs';
 import { talosResearchFetchCache } from './research/fetch-cache.mjs';
+/*
+ * ⭐⭐⭐⭐ L9 (12/09/2026) — IL MOTORE PORTATO COMINCIA A LAVORARE DENTRO LA CORSA.
+ *
+ * L4 aveva agganciato tre file su venti (`report`, `run`, `verification` per il solo bilancio),
+ * L5 un quarto (`recheck`). Il resto — il piano, il collettore, il giudizio vero, la contraria,
+ * l'indipendenza, la fedeltà — restava «portato e provato, mai chiamato»: giornale con tre
+ * eventi, `Piano` e `Speso` vuoti, e 38 affermazioni su 38 marcate «non verificate» sul giro
+ * vero del 12/09 (`CODA-UNICA-DEBITI`, voce «L8 #2 ✅ CHIUDE»).
+ *
+ *   `plan.mjs`         i rami per profondità (2/4/6) e il COSTO ATTESO, detto PRIMA di partire;
+ *   `raccolta-viva.mjs` il ponte per cui `web_search`/`naviga` della figlia diventano passi del
+ *                      giornale, spesa contata, cache che prende e fonti tenute su disco;
+ *   `verification.mjs` i tre livelli veri, col giudice che NON è l'autore;
+ *   `opposing.mjs`     la contraria cercata apposta;
+ *   `independence.mjs` le prove distinte, contate a gruppi e non a URL;
+ *   `fidelity.mjs`     il punteggio, con la data — «un punteggio senza data è una promessa che
+ *                      scade in silenzio».
+ *
+ * ⛔ Nessuno di questi entra nel kernel, oggi come ieri: il kernel riceve UNA porta
+ *   (`cacheWeb`, la stessa firma di `fetch-cache.around`) e una funzione (`onPaginaLetta`), e
+ *   non importa una sola riga di `src/research/`.
+ */
+import { talosResearchFidelity } from './research/fidelity.mjs';
+import { talosResearchIndependentSources } from './research/independence.mjs';
+import { talosResearchOpposingPrompt } from './research/opposing.mjs';
+import {
+  TALOS_RESEARCH_DEPTHS, talosResearchPlanCost, talosResearchPlanFor, talosResearchPlanTotals,
+} from './research/plan.mjs';
+import { creaRaccoltaViva } from './research/raccolta-viva.mjs';
 /*
  * ⭐⭐⭐ L4 (11/09/2026) — IL MOTORE PORTATO DAL MOBILE ENTRA IN SCENA.
  *
@@ -112,7 +142,10 @@ import {
   talosResearchIsTerminal, talosResearchNextStep, talosResearchRecover,
   talosResearchReplay, talosResearchSpent, talosResearchWorkLeft,
 } from './research/run.mjs';
-import { talosResearchVerifiedStanding } from './research/verification.mjs';
+import {
+  talosResearchJudgePrompt, talosResearchPickJudge, talosResearchVerifiedStanding,
+  talosResearchVerify,
+} from './research/verification.mjs';
 
 /**
  * ⭐⭐⭐ L4 §6.5 — IL CANCELLO DI CONSEGNA, SUL RECORD VERO.
@@ -265,11 +298,28 @@ function proveDistinteDelRecord(record) {
  *   prosa e quello generato sotto. Preferito a riscrivere la prosa: ciò che il modello ha
  *   scritto non si tocca, e un elenco in più si legge — una prosa riscritta no.
  *
- * @param {{domanda?: string|null, testo: unknown, affermazioni: unknown, fonti: unknown}} input
- * @returns {{ok: true, documento: string, affermazioni: number, fonti: number, senzaPassaggio: number}
+ * ⭐⭐⭐⭐ L9 (12/09/2026) — DUE AGGIUNTE, ENTRAMBE ADDITIVE.
+ *
+ * 1. `testiPerUrl` — il testo TENUTO delle pagine, per indirizzo. Serve a riempire
+ *    `source.text`, che è l'unica cosa contro cui `talosResearchLocate` può dire se un
+ *    passaggio citato esiste davvero. Senza (ogni chiamante di ieri, il banco, i test del
+ *    kernel) il comportamento è **identico byte per byte**: `text: ''`, nessuna verifica
+ *    possibile, `unchecked` dichiarato — che è quello che succedeva prima di oggi.
+ *    ⛔ Non cambia il DOCUMENTO: `report.mjs` scrive di una fonte solo url, titolo, data e
+ *      `obtained`. Il testo serve a chi verifica, non a chi legge.
+ * 2. Il ritorno porta anche `intestazione`, `claims` e `sources` — i pezzi già costruiti qui.
+ *    ⛔ Perché: la verifica ha bisogno esattamente di quelli, e ricostruirli fuori vorrebbe dire
+ *      un SECONDO interprete degli argomenti del modello (la tolleranza sugli elenchi
+ *      stringhificati, la fonte indicata per URL o per numero, il passaggio assente contato e
+ *      non rifiutato). Due interpreti dello stesso argomento divergono al primo caso limite;
+ *      questo repo l'ha già pagato («due lettori sono due verità»).
+ *
+ * @param {{domanda?: string|null, testo: unknown, affermazioni: unknown, fonti: unknown, testiPerUrl?: Map<string,string>|null}} input
+ * @returns {{ok: true, documento: string, affermazioni: number, fonti: number, senzaPassaggio: number,
+ *            intestazione: string, claims: object[], sources: object[]}
  *          |{ok: false, motivo: string}}
  */
-export function componiRapportoRicerca({ domanda = null, testo, affermazioni, fonti }) {
+export function componiRapportoRicerca({ domanda = null, testo, affermazioni, fonti, testiPerUrl = null }) {
   if (typeof testo !== 'string' || testo.trim().length === 0) {
     return { ok: false, motivo: '`testo` is missing: it must carry the full report as Markdown prose.' };
   }
@@ -298,7 +348,16 @@ export function componiRapportoRicerca({ domanda = null, testo, affermazioni, fo
      *   Lo dichiara il modello con `letta`, che è l'unico che lo sa; assente ⇒ `'snippet'`, cioè
      *   l'ipotesi che promette MENO.
      */
-    sources.push({ url, title: titolo, publishedAt: data, obtained: f?.letta === true ? 'page' : 'snippet', text: '' });
+    /*
+     * ⛔ L9 — il testo si cerca con l'indirizzo COM'È e senza barra finale, le stesse due forme
+     *   con cui `indicePerUrl` qui sotto risolve le citazioni: un url che combacia per le
+     *   affermazioni e non per il testo produrrebbe «il passaggio non è nel testo della fonte»
+     *   su una pagina che abbiamo in mano — il motivo giusto per il fatto sbagliato.
+     */
+    const tenuto = testiPerUrl
+      ? (testiPerUrl.get(url) ?? testiPerUrl.get(url.replace(/\/+$/, '')) ?? '')
+      : '';
+    sources.push({ url, title: titolo, publishedAt: data, obtained: f?.letta === true ? 'page' : 'snippet', text: tenuto });
   }
 
   const indicePerUrl = new Map();
@@ -377,7 +436,11 @@ export function componiRapportoRicerca({ domanda = null, testo, affermazioni, fo
     claims,
     sources,
   });
-  return { ok: true, documento, affermazioni: claims.length, fonti: sources.length, senzaPassaggio };
+  return {
+    ok: true, documento, affermazioni: claims.length, fonti: sources.length, senzaPassaggio,
+    // ⭐ L9 — i pezzi, per chi deve verificarli. Vedi la doc sopra: un solo interprete.
+    intestazione, claims, sources,
+  };
 }
 
 /**
@@ -406,15 +469,45 @@ function intestazioneDalTesto(testo) {
   return righe.find((r) => r.length > 0) ?? '';
 }
 
-function promptRicerca(question, depth) {
+/**
+ * ⭐⭐⭐⭐ L9 — LA CONSEGNA PORTA IL PIANO, e questo è ciò che rende il piano una cosa vera.
+ *
+ * ⛔ Prima di oggi il piano non esisteva affatto nella corsa: `plan.mjs` era portato, provato e
+ *   mai chiamato, e la figlia riceveva una guida generica («search from a few different
+ *   angles»). Un piano che nessuno legge non è un piano: è una decorazione nella scheda.
+ *
+ * ⛔ Le linee si NUMERANO nella consegna, e l'ordine non è estetico: il giornale attribuisce la
+ *   k-esima ricerca al k-esimo ramo (`raccolta-viva.mjs`, «l'attribuzione al ramo»). Dire alla
+ *   figlia di seguirle in ordine è ciò che rende quell'attribuzione onesta invece che casuale.
+ *   ⇒ Se un giorno qualcuno toglie l'elenco da qui, deve togliere anche quella convenzione là.
+ *
+ * ⛔ Restano DEFAULT, non gabbie: la consegna dice esplicitamente che una linea può essere
+ *   saltata o allargata se ciò che si trova lo chiede. Il motore del mobile dice la stessa cosa
+ *   («Default, non gabbie: il piano resta modificabile»), e un piano che il modello non può
+ *   disobbedire trasformerebbe una ricerca in uno scraper.
+ */
+function promptRicerca(question, depth, piano = []) {
   const guida = depth === 'quick'
     ? 'Keep this brief: a couple of searches are enough — do not over-investigate.'
     : depth === 'exhaustive'
       ? 'Be exhaustive: search from many different angles, cross-check the claims that matter, and go deep before writing.'
       : 'Do a thorough pass: search from a few different angles before writing the report.';
+  /*
+   * ⛔ Un blocco con gli a-capo VERI, non righe fuse dal `join(' ')` finale: un elenco numerato
+   *   schiacciato su una riga sola è esattamente la forma che un modello legge come prosa e non
+   *   come lista di compiti. È l'unico pezzo multilinea di questa consegna, ed è voluto.
+   */
+  const linee = Array.isArray(piano) && piano.length > 0
+    ? [[
+      `Your plan has ${piano.length} lines of inquiry. Work through them IN THIS ORDER, one web_search each, then open the pages that matter:`,
+      ...piano.map((ramo, i) => `  ${i + 1}. ${ramo.question}`),
+      'Skip or widen a line if what you find asks for it — this is a default, not a cage — but do not reorder it: the journal tracks your progress by that order.',
+    ].join('\n')]
+    : [];
   return [
     `Research this question thoroughly using web_search and naviga: "${question}"`,
     guida,
+    ...linee,
     /*
      * ⛔⛔⛔ L2 (11/09/2026) — QUESTA FRASE È CAMBIATA, ed è il cuore della cura.
      *
@@ -500,7 +593,14 @@ function consegnaDiRipresa({ giro, prossimo, rimasti, speso, fonti, task }) {
   if (fatti.length > 0) righe.push(`Steps already completed: ${fatti.map((p) => p.id).join(', ')}.`);
   if (prossimo) righe.push(`Resume from this step: ${prossimo.id} (${prossimo.kind}), which was ${prossimo.state === 'interrupted' ? 'in flight when the process died' : 'never started'}.`);
   if (rimasti.length > 0) righe.push(`Lines of inquiry still open: ${rimasti.map((r) => `«${r.question}»`).join(' · ')}.`);
-  if (fonti.length > 0) righe.push(`${fonti.length} source page(s) were already fetched and kept on disk; their text is available without paying for them again.`);
+  /*
+   * ⛔ L9 — «source text(s)» e non «source page(s)», ed è una parola cambiata su una misura:
+   *   da oggi in `fonti/` finiscono anche gli ESTRATTI dei risultati di ricerca (una fonte vista
+   *   ma non aperta è comunque una prova, e senza di lei la verifica direbbe «la fonte citata non
+   *   esiste fra quelle raccolte»). Il conteggio è quindi di testi tenuti, non di pagine aperte —
+   *   e chiamarli «pagine» sarebbe un numero gonfiato detto a un modello che ci conta sopra.
+   */
+  if (fonti.length > 0) righe.push(`${fonti.length} source text(s) were already fetched and kept on disk; they are available without paying for them again.`);
   if (!prossimo && rimasti.length === 0 && fatti.length === 0) {
     /*
      * ⛔ Il caso di oggi, e si dichiara invece di nasconderlo: il giornale registra il ciclo di
@@ -681,6 +781,46 @@ export function creaResearchOrchestrator({
   scriviIstantaneaCacheFn = scriviIstantaneaCache,
   creaCacheFetchFn = talosResearchFetchCache,
   /*
+   * ⭐⭐⭐⭐ L9 (12/09/2026) — LE PORTE NUOVE, e perché sono tutte iniettabili come le altre.
+   *
+   * Le quattro del DISCO (`scriviPianoFn`, `scriviFonteFn`, `leggiFonteFn`, e le due
+   * dell'indice) per la ragione di sempre, già pagata: senza, un test di questo modulo
+   * scriverebbe nel filesystem VERO della macchina che lo esegue — «misuravo l'ambiente invece
+   * dell'oggetto», lezione del 10/09, trovata dal vivo proprio in L4.
+   *
+   * ⛔⛔ Le due del MODELLO (`pianificaFn`, `chiediAlModelloFn`) sono `null` per default, e il
+   *   `null` è un comportamento dichiarato, non un buco:
+   *     - senza `pianificaFn` il piano è quello DETERMINISTICO di `plan.mjs` (rami per
+   *       profondità, facce ordinate). È già un piano vero e non costa un token;
+   *     - senza `chiediAlModelloFn` NON C'È GIUDICE: le affermazioni escono `unchecked` col
+   *       motivo scritto («nessun giudice indipendente disponibile: l'autore non può verificare
+   *       sé stesso») e il rapporto porta `judge: null`. ⛔ Mai il ripiego opposto — far
+   *       timbrare al modello le proprie affermazioni — che è il guasto misurato da
+   *       Panickssery/Bowman/Feng (arXiv:2404.13076): «a linear correlation between
+   *       self-recognition capability and the strength of self-preference bias».
+   *   ⇒ i test di questo file girano con modello e rete FINTI, sempre, e il giro vero lo lancia
+   *     l'owner sul 4174.
+   */
+  scriviPianoFn = scriviPiano,
+  scriviFonteFn = scriviFonte,
+  leggiFonteFn = leggiFonte,
+  scriviIndiceFontiFn = scriviIndiceFonti,
+  leggiIndiceFontiFn = leggiIndiceFonti,
+  pianificaFn = null,
+  chiediAlModelloFn = null,
+  /*
+   * I modelli che potrebbero fare da giudice, nell'ordine in cui vale la pena interpellarli.
+   * ⛔ La scelta NON si fa qui: la fa `talosResearchPickJudge`, che è «chiunque tranne
+   *   l'autore» e ha i suoi test. Questa funzione dice solo CHI c'è.
+   */
+  modelliGiudiceFn = () => [],
+  /*
+   * Il prezzo pubblicato del modello, quando lo si è ottenuto. ⛔ `null` = non lo sappiamo, e
+   * allora il costo si dice in LAVORO (ricerche, pagine, token) e mai in denaro: «denaro solo se
+   * un prezzo pubblicato è stato ottenuto» (§6.8, +1.5).
+   */
+  prezzoFn = () => null,
+  /*
    * ⭐⭐⭐ L5 (12/09/2026) — LA LETTURA DI UNA PAGINA, per la ri-verifica nel tempo.
    *
    * `leggiPaginaFn(url) => Promise<{url, stato, corpo}>`. Il default è **null**, e non è
@@ -771,6 +911,26 @@ export function creaResearchOrchestrator({
     } catch {
       rientrate = 0; // un'istantanea illeggibile costa una ri-lettura delle pagine, mai la ripresa.
     }
+    /*
+     * ⭐⭐⭐⭐ L9 — LA RACCOLTA SI RIMONTA QUI, e con lei il piano e l'indice delle fonti.
+     *
+     * ⛔ Senza queste tre righe una ricerca RIPRESA tornerebbe esattamente allo stato di ieri:
+     *   nessun passo nel giornale, nessuna spesa contata, nessun testo ritrovabile per la
+     *   verifica. Cioè la cura funzionerebbe solo finché il server non si riavvia — e una
+     *   ricerca lunga è proprio quella che il server riavviato interrompe.
+     * ⛔ Il piano si rilegge dal DISCO (`piano.json`), non si ricalcola: ricalcolarlo darebbe
+     *   rami con lo stesso id ma, se un giorno il pianificatore col modello sarà acceso, con
+     *   domande diverse — e i passi già a registro punterebbero a linee che non esistono più.
+     */
+    const pianoSuDisco = await leggiPianoFn({ cartella, id });
+    if (Array.isArray(pianoSuDisco) && pianoSuDisco.length > 0) pianiDelleRicerche.set(id, pianoSuDisco);
+    const indice = await leggiIndiceFontiFn({ cartella, id });
+    const mappa = new Map();
+    for (const voce of Array.isArray(indice) ? indice : []) {
+      if (typeof voce?.url === 'string') mappa.set(voce.url, voce);
+    }
+    indiciDelleFonti.set(id, mappa);
+    montaRaccolta({ cartella, id, cache });
     return rientrate;
   }
 
@@ -787,6 +947,159 @@ export function creaResearchOrchestrator({
     try {
       await accodaEventoFn({ cartella, id, evento: { at: clock().toISOString(), ...evento } });
     } catch { /* vedi sopra: un giornale che non si scrive non deve fermare una corsa già pagata. */ }
+  }
+
+  /*
+   * ⭐⭐⭐⭐ L9 — LA RACCOLTA DI UNA CORSA, e le due mappe che la tengono in piedi.
+   *
+   * `raccolteDelleRicerche` è l'oggetto che il kernel riceve come `cacheWeb`: tutto ciò che la
+   * figlia cerca e apre passa di lì, e diventa un passo del giornale (vedi
+   * `src/research/raccolta-viva.mjs`). Vive quanto la corsa, esattamente come
+   * `cacheDelleRicerche`.
+   *
+   * `pianiDelleRicerche` tiene il piano APPROVATO in memoria, per l'attribuzione dei passi ai
+   * rami. ⛔ Non è la fonte della verità: quella è `piano.json` su disco, ed è da lì che
+   * `leggi()` e una ripresa lo rileggono. La copia in memoria esiste perché la raccolta deve
+   * poterlo consultare a ogni ricerca senza una lettura di file per chiamata.
+   *
+   * `indiciDelleFonti` accumula l'indice url → `fonti/<sha256>.txt` e lo riscrive intero a ogni
+   * fonte nuova. ⛔ Riscrittura atomica di tutta la mappa e non append: è una mappa, non un
+   * registro, e due voci contraddittorie per lo stesso indirizzo sarebbero peggio di nessuna.
+   */
+  const raccolteDelleRicerche = new Map();
+  const pianiDelleRicerche = new Map();
+  const indiciDelleFonti = new Map();
+
+  /**
+   * @param {{cartella: string, id: string, cache: object}} input
+   * @returns {object} la raccolta viva di quella corsa
+   */
+  function montaRaccolta({ cartella, id, cache }) {
+    const raccolta = creaRaccoltaViva({
+      cache,
+      registra: (evento) => registra(cartella, id, evento),
+      tieniFonte: (testo) => scriviFonteFn({ cartella, id, testo }),
+      annotaFonte: async (voce) => {
+        const indice = indiciDelleFonti.get(id) ?? new Map();
+        const gia = indice.get(voce.url);
+        // ⛔ Una pagina APERTA non si lascia sostituire dal suo estratto: una prova più debole
+        //   non deve poter cancellare una più forte (stessa regola, in memoria, in raccolta-viva).
+        if (gia?.ottenuta === 'page' && voce.ottenuta !== 'page') return;
+        indice.set(voce.url, voce);
+        indiciDelleFonti.set(id, indice);
+        await scriviIndiceFontiFn({ cartella, id, voci: [...indice.values()] });
+      },
+      piano: () => pianiDelleRicerche.get(id) ?? [],
+    });
+    raccolteDelleRicerche.set(id, raccolta);
+    return raccolta;
+  }
+
+  /**
+   * ⭐ La porta che `session-registry.mjs` passa al kernel. `null` per ogni sessione che NON è
+   * una ricerca — e allora il kernel si comporta bit-per-bit come ieri: nessuna cache, nessun
+   * budget, nessun passo nel giornale. È la garanzia che TALOS-BANCO non veda cambiare un byte.
+   */
+  function raccoltaDellaRicerca(id) {
+    return raccolteDelleRicerche.get(id) ?? null;
+  }
+
+  /**
+   * ⭐⭐⭐⭐ L9 §6.8 (+1.5) — IL PIANO, E IL COSTO DETTO PRIMA.
+   *
+   * Tre passi, in quest'ordine, e ognuno ha una ragione che non è l'ordine alfabetico:
+   *   1. `talosResearchPlanFor` dà i rami per PROFONDITÀ — 2 per «rapida», 4 per «approfondita»,
+   *      6 per «esaustiva» — ognuno la stessa domanda vista da una faccia diversa, con la sua
+   *      stima di ricerche/pagine/token. ⛔ Deterministico: non costa un token, e un piano che
+   *      costa prima ancora di aver cercato qualcosa è il primo posto dove una corsa si allunga.
+   *   2. `pianificaFn`, SE c'è, può riformulare le domande dei rami col modello. ⛔ Può cambiare
+   *      solo il TESTO: il numero dei rami resta quello della profondità (la persona ha scelto
+   *      quello) e le stime restano quelle calcolate — un modello che si stima da solo il costo
+   *      è un modello che dichiara quello che gli conviene. Un guasto qui NON ferma la corsa: si
+   *      tiene il piano deterministico e si va avanti.
+   *   3. Il giornale registra `plan_proposed` e poi `plan_approved`, e il piano approvato va su
+   *      disco. ⛔⛔ L'approvazione oggi è AUTOMATICA e lo dice (`auto: true` nell'evento): il
+   *      pulsante con cui una persona toglie, aggiunge o riformula un ramo prima che parta è un
+   *      lotto di UI a parte, e non è questo. Scriverlo qui come se ci fosse sarebbe la bugia
+   *      che §6.5 esiste per togliere — due eventi distinti, invece, lasciano il posto già
+   *      pronto: quando il pulsante ci sarà, `plan_approved` arriverà da lui e `auto` sparirà.
+   *
+   * @returns {Promise<readonly object[]>}
+   */
+  async function costruisciPiano({ question, depth }) {
+    /*
+     * ⛔ La profondità si normalizza QUI e contro la tabella vera: `talosResearchPlanFor` legge
+     *   `TALOS_RESEARCH_DEPTHS[depth]` e su una parola sconosciuta esploderebbe DENTRO `avvia`,
+     *   cioè farebbe fallire l'avvio di una ricerca per una stringa arrivata da una rotta. Il
+     *   ripiego è `deep`, che è anche il default del prodotto.
+     */
+    const profondita = Object.hasOwn(TALOS_RESEARCH_DEPTHS, depth) ? depth : 'deep';
+    const base = talosResearchPlanFor(question, profondita);
+    if (typeof pianificaFn !== 'function') return base;
+    try {
+      const proposto = await pianificaFn({ question, depth: profondita, piano: base });
+      if (!Array.isArray(proposto) || proposto.length === 0) return base;
+      return base.map((ramo, i) => {
+        const testo = typeof proposto[i] === 'string' ? proposto[i].trim()
+          : typeof proposto[i]?.question === 'string' ? proposto[i].question.trim() : '';
+        return testo ? { ...ramo, question: testo } : ramo;
+      });
+    } catch {
+      /*
+       * ⛔ Il piano deterministico è un ripiego COMPLETO, non degradato: è quello che il mobile
+       *   usa da sempre. Un pianificatore che cade costa una riformulazione, mai una corsa.
+       */
+      return base;
+    }
+  }
+
+  /**
+   * Il costo ATTESO, in parole, prima di partire.
+   *
+   * ⛔ Lavoro sempre, denaro SOLO se un prezzo pubblicato è stato ottenuto (§6.8, +1.5). Un
+   *   «≈ 0,02 $» stampato su un prezzo indovinato è peggio di nessuna cifra: chi lo legge
+   *   decide con quello.
+   * ⛔ E si dice che è una STIMA, con la parola. La spesa vera si conta dai passi e si mostra
+   *   accanto — «il divario stimato/speso è esso stesso una misura».
+   */
+  function costoDetto(piano) {
+    const totali = talosResearchPlanTotals(piano);
+    let prezzo = null;
+    try { prezzo = prezzoFn(); } catch { prezzo = null; }
+    const costo = talosResearchPlanCost(totali, prezzo);
+    const denaro = costo?.known
+      ? ` ≈ ${costo.amount.toFixed(4)} ${costo.currency} at the published price`
+      : '';
+    return {
+      totali,
+      costo,
+      frase: `Planned: ${piano.length} lines of inquiry, an estimated ${totali.searches} search(es), `
+        + `${totali.pages} page(s) and ~${totali.tokens} tokens${denaro}. `
+        + 'Those are estimates made before starting; what is actually spent is counted step by step and shown next to them.',
+    };
+  }
+
+  /**
+   * ⭐⭐⭐ L9 — IL TESTO TENUTO, PER INDIRIZZO, anche dopo un riavvio.
+   *
+   * Prima la memoria della corsa (gratis, e più fresca); poi il disco, via
+   * `indice-fonti.json` + `fonti/<sha256>.txt`. ⛔ L'ordine conta: una corsa viva ha in memoria
+   * anche le fonti che l'indice non ha ancora ricevuto (una scrittura fallita, un disco pieno),
+   * e chiedere prima al disco le perderebbe.
+   * ⛔ Se non c'è niente da nessuna parte la mappa è VUOTA, e la verifica lo dirà con il motivo
+   *   giusto («il passaggio non è nel testo della fonte») invece di inventare un verdetto.
+   */
+  async function testiTenutiPerUrl({ cartella, id }) {
+    const mappa = new Map();
+    const indice = await leggiIndiceFontiFn({ cartella, id });
+    for (const voce of Array.isArray(indice) ? indice : []) {
+      if (typeof voce?.url !== 'string' || typeof voce?.ref !== 'string') continue;
+      const testo = await leggiFonteFn({ cartella, id, ref: voce.ref });
+      if (typeof testo === 'string' && testo.length > 0) mappa.set(voce.url, testo);
+    }
+    const viva = raccolteDelleRicerche.get(id);
+    if (viva) for (const [url, testo] of viva.testiPerUrl()) mappa.set(url, testo);
+    return mappa;
   }
 
   /**
@@ -809,6 +1122,157 @@ export function creaResearchOrchestrator({
    *
    * @returns {Promise<{stato:'done'|'senza-rapporto', motivoDettaglio:string|null, contenutoRapporto:string|null, letto:object|null}>}
    */
+  /**
+   * ⭐⭐⭐⭐ L9 §6.8 (+1.2 · +1.3) — LA VERIFICA VERA, PRIMA DEL DEPOSITO.
+   *
+   * ═══════════════════════════════════════════════════════════════════════════
+   * Che cosa cambia rispetto a ieri, in una riga
+   * ═══════════════════════════════════════════════════════════════════════════
+   * L8 aveva tolto al modello la possibilità di timbrare sé stesso: `judge: null` e
+   * `claimSupported: 'unchecked'` non erano più argomenti dell'attrezzo, li metteva il server.
+   * Giusto, e a metà: il risultato era che **nessuno** timbrava, e il giro vero del 12/09 è
+   * uscito con 38 affermazioni su 38 «non verificate». `unchecked` onesto è meglio di un
+   * verdetto falso, ma non è il prodotto — il prodotto è il verdetto VERO.
+   *
+   * ⇒ Qui, fra il «il modello ha chiamato `research_deposit`» e il «il file è sul disco», i tre
+   *   livelli girano davvero:
+   *     L1  la fonte citata esiste fra quelle raccolte, e com'è stata ottenuta (pagina/estratto);
+   *     L2  il passaggio citato si RITROVA nel testo tenuto della pagina — `talosResearchLocate`,
+   *         nessuna frase simile, nessuna approssimazione gentile: «un verificatore che
+   *         gentilmente trova un'approssimazione è un verificatore che fabbrica attribuzioni»;
+   *     L3  un GIUDICE, che non è l'autore, dice se quel passaggio da solo sostiene
+   *         l'affermazione; e se ha detto sì o in parte, si va a CERCARE la contraria.
+   *
+   * ⛔⛔ IL GIUDICE NON È L'AUTORE, ed è la ragione per cui un `modelloGiudice` sta sulla
+   *   metadata fin dalla nascita della ricerca. Misura, non opinione: Panickssery, Bowman e
+   *   Feng, «LLM Evaluators Recognize and Favor Their Own Generations» (arXiv:2404.13076,
+   *   15/04/2024, letta il 12/09/2026) — gli LLM riconoscono i propri testi, e «a linear
+   *   correlation between self-recognition capability and the strength of self-preference bias».
+   *   ⛔ Se non c'è nessun altro modello, `judge: null` e **lo dice**: `talosResearchVerify`
+   *     scrive il motivo per esteso, e il bilancio conta quelle affermazioni fra le «non
+   *     verificate» — mai fra le sostenute.
+   *
+   * ⛔ E il passaggio dichiarato NON è una prova finché non lo si ritrova: «even the best models
+   *   lack complete citation support 50% of the time» (Gao et al., arXiv:2305.14627, benchmark
+   *   ALCE, letta il 12/09/2026). È metà delle citazioni: esattamente il motivo per cui il testo
+   *   delle pagine si TIENE, e per cui questo controllo non è un lusso.
+   *
+   * ⛔ Un guasto della verifica NON butta il deposito. Se il giudice non risponde, se il disco
+   *   non dà il testo, se qualsiasi cosa cade: si torna al documento **senza verdetti**, che è
+   *   ciò che sarebbe stato depositato ieri. Perdere il rapporto pagato per far fallire il suo
+   *   controllo sarebbe il guasto introdotto dalla cura, cioè il peggiore.
+   *
+   * @returns {Promise<object>} lo stesso contratto di `componiRapportoRicerca`, più `bilancio`,
+   *   `giudice`, `proveDistinte` e `fedelta` quando la verifica è girata.
+   */
+  async function componiRapporto({ cartella, id, domanda, testo, affermazioni, fonti }) {
+    /*
+     * ⛔ Il testo tenuto si cerca solo se abbiamo un id di ricerca: `research_deposit` fuori da
+     *   una ricerca non esiste (il kernel lo rifiuta a monte), ma questa funzione è anche il
+     *   `componiRapportoRicercaFn` di una sessione qualunque — e un id assente deve dare
+     *   esattamente il comportamento di ieri, non un errore.
+     */
+    let testiPerUrl = null;
+    if (typeof id === 'string' && id.length > 0 && typeof cartella === 'string' && cartella.length > 0) {
+      try { testiPerUrl = await testiTenutiPerUrl({ cartella, id }); } catch { testiPerUrl = null; }
+    }
+    const composto = componiRapportoRicerca({ domanda, testo, affermazioni, fonti, testiPerUrl });
+    if (!composto.ok) return composto;
+    if (!testiPerUrl) return composto;
+
+    let record = null;
+    try { record = await leggiRicercaFn({ cartella, id }); } catch { record = null; }
+    const modelloGiudice = typeof record?.modelloGiudice === 'string' && record.modelloGiudice.trim()
+      ? record.modelloGiudice.trim() : null;
+    /*
+     * ⛔ La DOPPIA condizione, e nessuna delle due è ridondante: serve un modello giudice
+     *   scelto alla nascita (che è già «diverso dall'autore» per costruzione, via
+     *   `talosResearchPickJudge`) E una porta per parlargli. Senza la seconda il giudice
+     *   esisterebbe sulla carta e ogni chiamata cadrebbe, cioè `unchecked` con un motivo
+     *   sbagliato («il giudice non ha risposto» invece di «non ce n'era uno»).
+     */
+    const giudice = modelloGiudice && typeof chiediAlModelloFn === 'function'
+      ? { id: modelloGiudice, provider: 'openrouter', model: modelloGiudice }
+      : null;
+
+    const passo = 'verifica:verify';
+    await registra(cartella, id, { kind: 'step_started', stepId: passo, branchId: 'verifica', stepKind: 'verify' });
+    let caratteri = 0;
+    /** @param {string} prompt */
+    const chiedi = async (prompt) => {
+      caratteri += prompt.length;
+      const risposta = await chiediAlModelloFn({ modello: modelloGiudice, prompt, scopo: 'giudice-ricerca' });
+      const detto = typeof risposta === 'string' ? risposta : String(risposta ?? '');
+      caratteri += detto.length;
+      return detto;
+    };
+
+    let verificati = null;
+    try {
+      verificati = await talosResearchVerify({
+        judge: giudice,
+        ask: (claim, passaggio) => chiedi(talosResearchJudgePrompt(claim, passaggio)),
+        /*
+         * ⭐ §6.8 (+1.3) — LA CONTRARIA SI CERCA APPOSTA, e solo dove ha senso cercarla:
+         * `talosResearchVerify` la chiede soltanto dopo un «sì» o un «in parte», perché
+         * «la contesa è disaccordo: senza un accordo prima non c'è niente con cui essere in
+         * disaccordo». ⛔ Senza giudice non si chiede: `askOpposing` resta `undefined`, e il
+         * modulo salta il giro invece di pagarlo per niente.
+         */
+        ...(giudice ? { askOpposing: (claim, passaggio) => chiedi(talosResearchOpposingPrompt(claim, passaggio)) } : {}),
+        at: () => clock().toISOString(),
+      }, composto.claims.map((c) => c.claim), composto.sources);
+    } catch {
+      verificati = null;
+    }
+
+    if (!verificati) {
+      await registra(cartella, id, {
+        kind: 'step_failed', stepId: passo, error: 'la verifica non è girata: il rapporto è stato depositato senza verdetti',
+      });
+      return composto;
+    }
+
+    /*
+     * ⭐ §6.8 (+1.2) — LE PROVE SI CONTANO A GRUPPI, NON A URL. «7 prove distinte su 14
+     * indirizzi» dice una cosa che «14 fonti» non dice, e la regola sta in un posto solo
+     * (`independence.mjs`), pubblicata e verificabile.
+     */
+    const origini = composto.sources.map((s) => ({ url: s.url }));
+    const indipendenza = talosResearchIndependentSources(origini);
+    const fedelta = talosResearchFidelity({ claims: verificati, sources: origini });
+    const bilancio = talosResearchVerifiedStanding(verificati);
+
+    const documento = talosResearchReportDocument({
+      question: composto.intestazione,
+      summary: String(testo).trim(),
+      // ⛔ Il nome del giudice nel rapporto, così il lettore lo possa PESARE: un giudice su un
+      //   fornitore diverso e uno sullo stesso fornitore non valgono uguale, e il rapporto deve
+      //   dire quale dei due è stato.
+      judge: giudice?.id ?? null,
+      claims: verificati,
+      sources: composto.sources,
+    });
+
+    await registra(cartella, id, {
+      kind: 'step_finished', stepId: passo,
+      // ⛔ La spesa della verifica è VERA e va contata: è la parte del costo che nessun
+      //   concorrente ha, e nasconderla farebbe sembrare gratis la cosa che ci distingue.
+      spend: { searches: 0, pages: 0, tokens: Math.ceil(caratteri / 4) },
+      resultRef: null,
+    });
+
+    return {
+      ...composto,
+      documento,
+      bilancio,
+      giudice: giudice?.id ?? null,
+      proveDistinte: indipendenza.independent,
+      fedelta,
+      verificate: verificati.filter((v) => v.checks.judge !== null).length,
+    };
+  }
+
   async function giudicaRapporto({ cartella, record }) {
     const id = record.id;
     const chiave = `${cartella}::${id}`;
@@ -1055,7 +1519,26 @@ export function creaResearchOrchestrator({
   async function avvia({ cartella, question, depth, padreId = null, modello = null, reasoning = null }) {
     const id = randomUUIDFn();
     const nome = nomeDallaDomanda(question);
-    await creaRicercaFn({ cartella, id, domanda: question, profondita: depth || 'deep', padreId, nome, modello });
+    /*
+     * ⭐⭐⭐⭐ L9 — IL GIUDICE SI SCEGLIE ADESSO, prima ancora che la corsa parta.
+     *
+     * ⛔ «Chiunque tranne l'autore», e l'autore è il modello di QUESTA corsa: la scelta è di
+     *   `talosResearchPickJudge`, qui si dice solo chi era disponibile. Il perché è misurato e
+     *   vecchio: Panickssery, Bowman e Feng, «LLM Evaluators Recognize and Favor Their Own
+     *   Generations» (arXiv:2404.13076, 15/04/2024, letta il 12/09/2026) — gli LLM riconoscono
+     *   i propri testi e li premiano, con «a linear correlation between self-recognition
+     *   capability and the strength of self-preference bias».
+     * ⛔ `null` è una risposta vera e va scritta come tale: nessun altro modello ammesso ⇒
+     *   nessun giudizio, e il rapporto lo dichiara. Mai l'autore che timbra sé stesso.
+     */
+    const autore = { id: modello ?? 'autore', provider: 'openrouter', model: modello ?? '' };
+    let candidati = [];
+    try { candidati = modelliGiudiceFn({ autore }) ?? []; } catch { candidati = []; }
+    const giudiceScelto = talosResearchPickJudge(autore, candidati);
+    await creaRicercaFn({
+      cartella, id, domanda: question, profondita: depth || 'deep', padreId, nome, modello,
+      modelloGiudice: giudiceScelto?.model ?? giudiceScelto?.id ?? null,
+    });
     /*
      * ⭐⭐⭐ L4 — LA PRIMA RIGA DEL GIORNALE, e l'ordine conta.
      *
@@ -1072,7 +1555,28 @@ export function creaResearchOrchestrator({
       kind: 'run_started', id, sessionId: id, question, depth: depth || 'deep', engine: 'device',
     });
     // ⭐ L6 — la cache di QUESTA corsa nasce qui e vive finché la corsa vive (vedi `cacheDelleRicerche`).
-    cacheDelleRicerche.set(id, creaCacheFetchFn());
+    const cache = creaCacheFetchFn();
+    cacheDelleRicerche.set(id, cache);
+    /*
+     * ⭐⭐⭐⭐ L9 — IL PIANO, PRIMA CHE LA FIGLIA PARLI.
+     *
+     * ⛔ L'ordine è quello e non un altro: piano → `plan_proposed` → `piano.json` →
+     *   `plan_approved` → consegna → `avviaESegui`. La consegna PORTA le linee d'indagine
+     *   (vedi `promptRicerca`), quindi il piano dev'essere pronto prima che la sessione
+     *   esista; e il giornale deve avere i due eventi prima che un passo possa arrivarci,
+     *   altrimenti il replay vedrebbe un `step_started` su un giro ancora in `planning`.
+     * ⛔ `plan_approved` porta `auto: true` — il campo non esiste in `run.mjs` e non gli serve
+     *   (l'`apply` ignora ciò che non conosce, per costruzione), ma chi rilegge il giornale
+     *   deve poter distinguere «approvato da una persona» da «approvato perché il pulsante non
+     *   c'è ancora». È un DEBITO DICHIARATO, non un silenzio.
+     */
+    const piano = await costruisciPiano({ question, depth });
+    pianiDelleRicerche.set(id, piano);
+    montaRaccolta({ cartella, id, cache });
+    await registra(cartella, id, { kind: 'plan_proposed', branches: piano });
+    try { await scriviPianoFn({ cartella, id, piano }); } catch { /* come il giornale: il piano su disco è una prova, non una condizione per lavorare. */ }
+    await registra(cartella, id, { kind: 'plan_approved', branches: piano, auto: true });
+    const costo = costoDetto(piano);
     avviaESeguiFn({
       sessionId: id, cartella, taskId: 'ricerca',
       /*
@@ -1093,7 +1597,7 @@ export function creaResearchOrchestrator({
        *   chiederla al modello, che potrebbe riscriverla. Dentro `task` perché `task` è
        *   persistito nell'intestazione della sessione e sopravvive a un riavvio e a un resume.
        */
-      task: { consegna: promptRicerca(question, depth), ricercaId: id, ricercaDomanda: question },
+      task: { consegna: promptRicerca(question, depth, piano), ricercaId: id, ricercaDomanda: question },
       /*
        * ⭐⭐⭐ L8 — il modello e il reasoning della MADRE. `null` = «non passato», e
        * `avviaESegui` ricade sul default esattamente come prima: l'eredità è additiva, non
@@ -1139,8 +1643,19 @@ export function creaResearchOrchestrator({
     if (voceSessione && !voceSessione.nome) voceSessione.nome = nome;
     return {
       ok: true,
-      esito: `Started the research «${question}» (id ${id}). It runs in the background and keeps going even if the app is closed.`,
+      /*
+       * ⭐⭐⭐⭐ L9 §6.8 (+1.5) — IL COSTO SI DICE PRIMA, a chi ha chiesto la ricerca.
+       *
+       * ⛔ Non è cortesia: una corsa multi-agente costa «about 15× more tokens than chats»
+       *   (Anthropic, «How we built our multi-agent research system», letta il 12/09/2026), e
+       *   un ordine di grandezza scoperto dopo non è una misura — è un conto. La frase dice
+       *   LAVORO (ricerche, pagine, token) e dice denaro **solo** se un prezzo pubblicato è
+       *   stato ottenuto; e dice, con la parola, che sono stime.
+       */
+      esito: `Started the research «${question}» (id ${id}). It runs in the background and keeps going even if the app is closed. ${costo.frase}`,
       id,
+      piano,
+      costoAtteso: costo.totali,
     };
   }
 
@@ -1535,6 +2050,21 @@ export function creaResearchOrchestrator({
        * diversi non sono confrontabili, e la riga deve dirlo.
        */
       modello: r.modello ?? null,
+      /*
+       * ⭐⭐⭐⭐ L9 (12/09/2026) — SEDICESIMO CAMPO: `modelloGiudice`. Additivo come gli altri tre.
+       *
+       * ⛔ Perché una riga in elenco deve dirlo, e non basta il `giudice` che esce da `leggi()`:
+       *   sono due fatti DIVERSI. `giudice` (nel record del rapporto) è chi ha giudicato DAVVERO
+       *   quella corsa; questo è chi era stato SCELTO alla partenza. Coincidono quando tutto va
+       *   bene, e quando divergono è esattamente il caso che si vuole vedere — un giudice
+       *   designato che non ha mai risposto lascia `giudice: null` e affermazioni non
+       *   verificate, e senza questo campo la sezione non potrebbe distinguerlo da «non c'era
+       *   nessun altro modello».
+       * ⛔ `null` per ogni ricerca nata prima di oggi, e `null` è la risposta giusta: quelle
+       *   corse non hanno mai avuto un giudice designato, e attribuirgliene uno adesso sarebbe
+       *   raccontare una scelta che nessuno ha fatto.
+       */
+      modelloGiudice: r.modelloGiudice ?? null,
     };
   }
 
@@ -1683,9 +2213,38 @@ export function creaResearchOrchestrator({
       piano: Array.isArray(pianoSuDisco) ? pianoSuDisco : (giro?.plan ?? []),
       passi: giro?.steps ?? [],
       spesa: giro ? talosResearchSpent(giro) : null,
+      /*
+       * ⭐⭐⭐⭐ L9 §6.8 (+1.5) — LO STIMATO, ACCANTO ALLO SPESO.
+       *
+       * ⛔ `null` — mai zeri — quando non c'è un piano: una ricerca vecchia non ha mai avuto
+       *   una stima, e «0 ricerche attese» direbbe che era gratis. Il divario fra questi due
+       *   numeri È una misura («il divario stimato/speso è esso stesso una misura», §6.8), e
+       *   una misura fatta contro uno zero inventato non misura niente.
+       * ⛔ Si ricalcola dal piano invece di salvarlo: il piano su disco è il fatto, la somma è
+       *   aritmetica su di lui — un totale salvato a parte è un secondo numero che può
+       *   divergere dal primo.
+       */
+      costoAtteso: Array.isArray(pianoSuDisco) && pianoSuDisco.length > 0
+        ? talosResearchPlanTotals(pianoSuDisco)
+        : (giro?.plan?.length ? talosResearchPlanTotals(giro.plan) : null),
       giornale: giro ? { eventi: eventi.length, righeSaltate, stato: giro.status } : null,
     };
   }
 
-  return Object.freeze({ avvia, mettiInPausa, annulla, riprendi, rinomina, elimina, elenca, leggi, riverifica });
+  /*
+   * ⭐⭐⭐⭐ L9 — DUE METODI NUOVI, e nessuno dei nove di prima cambia.
+   *
+   * `componiRapporto`      — quello che il kernel chiama da `research_deposit`: compone il
+   *                          record E lo verifica, prima che il file esista. Sostituisce
+   *                          l'uso diretto della funzione pura `componiRapportoRicerca`, che
+   *                          resta esportata e invariata per chi non ha una ricerca intorno
+   *                          (il banco, i test del kernel).
+   * `raccoltaDellaRicerca` — la porta `cacheWeb` di quella corsa, o `null`. `session-registry`
+   *                          la chiede per la sessione che sta per partire e la passa al
+   *                          kernel; per ogni altra sessione è `null`, cioè il kernel di ieri.
+   */
+  return Object.freeze({
+    avvia, mettiInPausa, annulla, riprendi, rinomina, elimina, elenca, leggi, riverifica,
+    componiRapporto, raccoltaDellaRicerca,
+  });
 }
