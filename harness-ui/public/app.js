@@ -461,10 +461,10 @@ function nomeModello(modello) {
   return modello.split("/").pop();
 }
 function el2(documentObj, tag2, className, testo3) {
-  const nodo10 = documentObj.createElement(tag2);
-  if (className) nodo10.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo10.textContent = String(testo3);
-  return nodo10;
+  const nodo11 = documentObj.createElement(tag2);
+  if (className) nodo11.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo11.textContent = String(testo3);
+  return nodo11;
 }
 function nomeLeggibileSessione(taskId) {
   const grezzo = String(taskId || "").trim();
@@ -2329,7 +2329,7 @@ function tn(uno2, molti, n, parametri) {
   return t(forma, { n, ...parametri || {} });
 }
 function primoTesto(el25) {
-  for (const nodo10 of el25.childNodes) if (nodo10.nodeType === 3 && nodo10.data.trim()) return nodo10;
+  for (const nodo11 of el25.childNodes) if (nodo11.nodeType === 3 && nodo11.data.trim()) return nodo11;
   return null;
 }
 function applicaLingua(root, lingua) {
@@ -3074,8 +3074,8 @@ function creaToolListRow(a, { document: doc = globalThis.document, selezionata =
 }
 function scriviDescrizioni(d, a) {
   const nostra = descrizioneAttrezzo(a.nome), doc = d.ownerDocument;
-  const nodo10 = d.querySelector("[data-cap-descrizione]");
-  nodo10.textContent = nostra || a.descrizione || "Descrizione non disponibile";
+  const nodo11 = d.querySelector("[data-cap-descrizione]");
+  nodo11.textContent = nostra || a.descrizione || "Descrizione non disponibile";
   const grezzo = d.querySelector("[data-cap-descrizione-kernel]");
   if (!grezzo) return;
   grezzo.hidden = !nostra || !a.descrizione;
@@ -5466,6 +5466,9 @@ function montaSezione(schermo, config) {
   disegna(schermo, doc, stato);
   return stato.ultimeVisibili ?? 0;
 }
+function statoSezione(schermo) {
+  return STATI2.get(schermo) || null;
+}
 function costruisciScheletro(schermo, doc, stato) {
   const config = stato.config;
   const pagina = schermo.querySelector(".talos-page");
@@ -5993,6 +5996,538 @@ var init_toast = __esm({
   }
 });
 
+// src/components/modale-td.js
+function nodo7(doc, tag2, classe, testo3) {
+  const el25 = doc.createElement(tag2);
+  if (classe) el25.className = classe;
+  if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
+  return el25;
+}
+function icona4(doc, nome) {
+  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  svg.setAttribute("class", "i");
+  svg.setAttribute("aria-hidden", "true");
+  use.setAttribute("href", `#i-${nome}`);
+  svg.append(use);
+  return svg;
+}
+function apriModale(titolo2, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
+  if (!doc?.body) return null;
+  chiudiModale({ immediata: true });
+  const dialogo = nodo7(doc, "dialog", "td-modal");
+  if (ampia) dialogo.dataset.ampia = "si";
+  const idTitolo = `td-modal-title-${Math.random().toString(36).slice(2, 8)}`;
+  dialogo.setAttribute("aria-labelledby", idTitolo);
+  const testa = nodo7(doc, "div", "td-modal-head");
+  const h2 = nodo7(doc, "h2", "", titolo2);
+  h2.id = idTitolo;
+  const chiudiBtn = nodo7(doc, "button", "talos-button talos-button--ghost talos-icon-button");
+  chiudiBtn.type = "button";
+  chiudiBtn.setAttribute("aria-label", "Chiudi");
+  chiudiBtn.append(icona4(doc, "x"));
+  chiudiBtn.addEventListener("click", () => chiudiModale());
+  testa.append(h2, chiudiBtn);
+  const corpo = nodo7(doc, "div", "td-modal-content");
+  for (const pezzo2 of [contenuto].flat().filter(Boolean)) corpo.append(pezzo2);
+  dialogo.append(testa, corpo);
+  dialogo.addEventListener("click", (e) => {
+    if (e.target === dialogo) chiudiModale();
+  });
+  dialogo.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") e.stopPropagation();
+  });
+  dialogo.addEventListener("close", () => {
+    if (aperta?.dialogo === dialogo) aperta = null;
+    dialogo.remove();
+    suChiusura?.();
+  });
+  doc.body.append(dialogo);
+  if (typeof dialogo.showModal === "function") dialogo.showModal();
+  else dialogo.setAttribute("open", "");
+  motion(dialogo, [{ opacity: 0, transform: "translateY(12px) scale(.99)" }, { opacity: 1, transform: "none" }], { leva: "motion-surfaces-off", document: doc });
+  aperta = { dialogo, contenuto: corpo, suChiusura, chiudi: () => chiudiModale() };
+  const primo = corpo.querySelector("input:not([type=hidden]), textarea, select, button") || chiudiBtn;
+  primo.focus?.({ preventScroll: true });
+  return aperta;
+}
+function chiudiModale({ immediata = false } = {}) {
+  const viva = aperta;
+  if (!viva) return false;
+  aperta = null;
+  const { dialogo } = viva;
+  const chiudiDavvero = () => {
+    if (typeof dialogo.close === "function" && dialogo.open) dialogo.close();
+    else {
+      dialogo.remove();
+      viva.suChiusura?.();
+    }
+  };
+  if (immediata) {
+    chiudiDavvero();
+    return true;
+  }
+  const uscita = motion(dialogo, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(6px)" }], { token: "surface-exit", leva: "motion-surfaces-off", document: dialogo.ownerDocument || globalThis.document });
+  if (!uscita) {
+    chiudiDavvero();
+    return true;
+  }
+  dialogo.style.pointerEvents = "none";
+  uscita.finished.then(chiudiDavvero, chiudiDavvero);
+  return true;
+}
+function confermaModale({
+  titolo: titolo2 = "Confermi?",
+  domanda,
+  conseguenza = "",
+  etichettaConferma = "Elimina",
+  onConferma,
+  document: doc = globalThis.document
+} = {}) {
+  const testo3 = nodo7(doc, "p", "td-prose", domanda);
+  const pezzi = [testo3];
+  if (conseguenza) pezzi.push(nodo7(doc, "p", "td-subtle", conseguenza));
+  const piede = nodo7(doc, "div", "td-detail-footer");
+  const annulla = nodo7(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Annulla");
+  annulla.type = "button";
+  annulla.addEventListener("click", () => chiudiModale());
+  const conferma = nodo7(doc, "button", "talos-button talos-button--secondary talos-button--danger talos-button--sm", etichettaConferma);
+  conferma.type = "button";
+  conferma.addEventListener("click", () => {
+    chiudiModale();
+    onConferma?.();
+  });
+  piede.append(annulla, conferma);
+  pezzi.push(piede);
+  return apriModale(titolo2, pezzi, { document: doc });
+}
+var aperta;
+var init_modale_td = __esm({
+  "src/components/modale-td.js"() {
+    init_motion_mockup();
+    aperta = null;
+  }
+});
+
+// src/components/modulo-voce.js
+function parolaStato(stato) {
+  return PAROLE_STATO.get(stato) || "Stato non registrato";
+}
+function accordo(schema, radice2) {
+  return `${radice2}${schema?.genere === "m" ? "o" : "a"}`;
+}
+function parolaOrigine(origine, schema = null) {
+  if (origine === "persona") return `${accordo(schema, "Scritt")} da te`;
+  if (origine === "modello") return `${accordo(schema, "Scritt")} da TALOS`;
+  return "";
+}
+function valoriIniziali(schema, voce = null) {
+  const valori = {};
+  for (const campo2 of schema.campi) {
+    if (campo2.tipo === "scelta") {
+      const attuale = voce?.[campo2.nome];
+      const ammesso = campo2.scelte.some(([valore]) => valore === attuale);
+      valori[campo2.nome] = ammesso ? attuale : campo2.preimpostato;
+    } else {
+      const attuale = voce?.[campo2.nome];
+      valori[campo2.nome] = typeof attuale === "string" ? attuale : "";
+    }
+  }
+  return valori;
+}
+function validaValori(schema, valori) {
+  const errori = {};
+  for (const campo2 of schema.campi) {
+    if (campo2.tipo === "scelta") {
+      const scelto = valori?.[campo2.nome];
+      if (!campo2.scelte.some(([valore]) => valore === scelto)) errori[campo2.nome] = "Scegli una delle voci in elenco.";
+      continue;
+    }
+    const testo3 = typeof valori?.[campo2.nome] === "string" ? valori[campo2.nome] : "";
+    if (campo2.obbligatorio && testo3.trim().length === 0) {
+      errori[campo2.nome] = campo2.nome === "titolo" ? `Serve un titolo: è così che ritrovi ${schema.articolo}${schema.articolo.endsWith("’") ? "" : " "}${schema.sostantivo}.` : "Serve un testo: qui non si salva una voce vuota.";
+      continue;
+    }
+    if (testo3.length > campo2.max) {
+      errori[campo2.nome] = `${campo2.etichetta} può arrivare a ${numero3(campo2.max)} caratteri: qui ce ne sono ${numero3(testo3.length)}.`;
+    }
+  }
+  return { ok: Object.keys(errori).length === 0, errori };
+}
+function corpoCreazione(schema, valori) {
+  const corpo = {};
+  for (const campo2 of schema.campi) {
+    const valore = valori?.[campo2.nome];
+    if (campo2.tipo === "scelta") {
+      if (valore !== SCELTA_AUTOMATICA) corpo[campo2.nome] = valore;
+      continue;
+    }
+    const testo3 = typeof valore === "string" ? valore : "";
+    if (!campo2.obbligatorio && testo3.trim().length === 0) continue;
+    corpo[campo2.nome] = testo3;
+  }
+  return corpo;
+}
+function corpoModifica(schema, valori, voce) {
+  const iniziali = valoriIniziali(schema, voce);
+  const corpo = {};
+  for (const campo2 of schema.campi) {
+    const adesso = valori?.[campo2.nome];
+    if (adesso === iniziali[campo2.nome]) continue;
+    if (campo2.tipo === "scelta") {
+      corpo[campo2.nome] = adesso === SCELTA_AUTOMATICA ? campo2.nome === "formato" ? null : campo2.preimpostato : adesso;
+      continue;
+    }
+    corpo[campo2.nome] = typeof adesso === "string" ? adesso : "";
+  }
+  return { corpo, cambiato: Object.keys(corpo).length > 0 };
+}
+function paroleErroreRete(codice, schema, { azione = "salvare" } = {}) {
+  if (codice === schema.codiceAssente) return `Questa voce non c’è più: qualcuno l’ha eliminata mentre era aperta. Ho ricaricato l’elenco.`;
+  if (codice === "NOT_FOUND") return "La sessione non è più aperta: riapri una conversazione e riprova.";
+  if (codice === "PAYLOAD_LIMIT") return "Il testo è troppo lungo per essere spedito: accorcialo e riprova.";
+  if (codice === "QUERY_INVALID" || codice === schema.codiceInvalido) return "Il server ha rifiutato questi valori: controlla i campi qui sopra. (Il motivo preciso resta nel registro diagnostico: la busta pubblica non lo porta.)";
+  return `Non sono riuscito a ${azione}: riprova fra un momento.`;
+}
+function servizioVoci({ schema, sessionId, rete } = {}) {
+  if (!schema || !sessionId || typeof rete?.post !== "function" || typeof rete?.patch !== "function" || typeof rete?.elimina !== "function") return null;
+  const base = `/api/v1/sessions/${encodeURIComponent(sessionId)}/${schema.risorsa}`;
+  const voceUrl = (id) => `${base}/${encodeURIComponent(String(id ?? ""))}`;
+  return {
+    schema,
+    crea: (corpo) => rete.post(base, corpo),
+    leggi: typeof rete.leggi === "function" ? (id) => rete.leggi(voceUrl(id)) : null,
+    modifica: (id, corpo) => rete.patch(voceUrl(id), corpo),
+    elimina: (id) => rete.elimina(voceUrl(id)),
+    /* Lo stato ha la SUA porta: `PATCH {stato}` è un 400 apposta, perché marcare fatta non è
+       modificare (contratto §3, e lo stesso confine che ha l'attrezzo del modello). */
+    cambiaStato: (id, stato) => rete.post(`${voceUrl(id)}/stato`, { stato })
+  };
+}
+function nodo8(doc, tag2, classe, testo3) {
+  const el25 = doc.createElement(tag2);
+  if (classe) el25.className = classe;
+  if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
+  return el25;
+}
+function mostraConteggio(lunghezza, massimo) {
+  return Number(lunghezza) >= Number(massimo) * 0.9;
+}
+function fraseConteggio(lunghezza, massimo) {
+  const n = Number(lunghezza) || 0;
+  return `${numero3(n)} ${n === 1 ? "carattere" : "caratteri"} su ${numero3(massimo)}`;
+}
+function costruisciModulo(doc, {
+  schema,
+  stato,
+  onCambia = () => {
+  },
+  onSalva = () => {
+  }
+}) {
+  contatore2 += 1;
+  const radice2 = `td-modulo-${contatore2}`;
+  const modulo = nodo8(doc, "form", `td-modulo td-modulo--${schema.chiave}`);
+  modulo.noValidate = true;
+  modulo.addEventListener("submit", (e) => {
+    e.preventDefault?.();
+    onSalva();
+  });
+  for (const campo2 of schema.campi) {
+    const idCampo = `${radice2}-${campo2.nome}`;
+    const errore = stato.errori?.[campo2.nome] || "";
+    const etichetta2 = nodo8(doc, "label", "td-field-label", campo2.etichetta);
+    etichetta2.setAttribute("for", idCampo);
+    modulo.append(etichetta2);
+    let controllo;
+    if (campo2.tipo === "scelta") {
+      controllo = nodo8(doc, "select", "td-edit-scelta");
+      for (const [valore, parola2] of campo2.scelte) {
+        const op = nodo8(doc, "option", "", parola2);
+        op.value = valore;
+        controllo.append(op);
+      }
+      controllo.value = stato.valori[campo2.nome];
+    } else {
+      controllo = nodo8(doc, campo2.tipo === "riga" ? "input" : "textarea", campo2.tipo === "riga" ? "td-edit-title" : "td-edit-body");
+      if (campo2.tipo === "riga") controllo.type = "text";
+      controllo.value = stato.valori[campo2.nome];
+      controllo.placeholder = campo2.invito || "";
+      if (campo2.obbligatorio) controllo.setAttribute("aria-required", "true");
+    }
+    controllo.id = idCampo;
+    controllo.name = campo2.nome;
+    const sotto = nodo8(doc, "p", "td-field-sotto");
+    const messaggio = nodo8(doc, "span", "td-field-errore", errore);
+    messaggio.id = `${idCampo}-errore`;
+    messaggio.hidden = !errore;
+    messaggio.setAttribute("role", "alert");
+    const conteggio2 = nodo8(doc, "span", "td-field-conta", campo2.max ? fraseConteggio(String(stato.valori[campo2.nome] ?? "").length, campo2.max) : "");
+    conteggio2.hidden = !campo2.max || !mostraConteggio(String(stato.valori[campo2.nome] ?? "").length, campo2.max);
+    const aiuto = campo2.aiuto ? nodo8(doc, "span", "td-field-aiuto", campo2.aiuto) : null;
+    if (aiuto) aiuto.id = `${idCampo}-aiuto`;
+    sotto.append(messaggio, conteggio2, ...aiuto ? [aiuto] : []);
+    const descritto = [errore ? messaggio.id : "", aiuto ? aiuto.id : ""].filter(Boolean).join(" ");
+    if (descritto) controllo.setAttribute("aria-describedby", descritto);
+    if (errore) {
+      controllo.setAttribute("aria-invalid", "true");
+      controllo.setAttribute("aria-errormessage", messaggio.id);
+    }
+    controllo.addEventListener("input", () => {
+      stato.valori[campo2.nome] = controllo.value;
+      if (campo2.max) {
+        conteggio2.textContent = fraseConteggio(controllo.value.length, campo2.max);
+        conteggio2.hidden = !mostraConteggio(controllo.value.length, campo2.max);
+      }
+      if (stato.errori?.[campo2.nome]) {
+        const ancora = validaValori(schema, stato.valori).errori[campo2.nome];
+        if (!ancora) {
+          delete stato.errori[campo2.nome];
+          messaggio.hidden = true;
+          messaggio.textContent = "";
+          controllo.removeAttribute("aria-invalid");
+          controllo.removeAttribute("aria-errormessage");
+        }
+      }
+      onCambia();
+    });
+    controllo.addEventListener("change", () => {
+      stato.valori[campo2.nome] = controllo.value;
+      onCambia();
+    });
+    modulo.append(controllo, sotto);
+  }
+  if (stato.erroreRete) {
+    const avviso = nodo8(doc, "p", "td-modulo-errore", stato.erroreRete);
+    avviso.setAttribute("role", "alert");
+    modulo.append(avviso);
+  }
+  return [modulo];
+}
+function montaTestoVoce(doc, {
+  testo: testo3,
+  formato,
+  titoloGiaDetto = "",
+  rendiMarkdown = null,
+  modo = null,
+  onModo = () => {
+  }
+}) {
+  const prosa = String(testo3 ?? "");
+  if (formato !== "markdown") {
+    return [nodo8(doc, "div", "td-prose", prosa)];
+  }
+  contatore2 += 1;
+  const radice2 = `td-voce-${contatore2}`;
+  const pannello = nodo8(doc, "div", "td-vista td-voce-vista");
+  pannello.id = `${radice2}-pannello`;
+  pannello.setAttribute("role", "tabpanel");
+  pannello.tabIndex = 0;
+  const modi = ["anteprima", "testo"];
+  let scelto = modi.includes(modo) ? modo : "anteprima";
+  const lista = nodo8(doc, "div", "td-segment td-viste td-voce-modi");
+  lista.setAttribute("role", "tablist");
+  lista.setAttribute("aria-label", "Come guardare il testo");
+  const schede = modi.map((m) => {
+    const b = nodo8(doc, "button", "", PAROLE_MODO2.get(m));
+    b.type = "button";
+    b.id = `${radice2}-${m}`;
+    b.dataset.modo = m;
+    b.setAttribute("role", "tab");
+    b.setAttribute("aria-controls", pannello.id);
+    lista.append(b);
+    return b;
+  });
+  function mostra(m, muoviIlFuoco = false) {
+    scelto = m;
+    for (const b of schede) {
+      const attiva = b.dataset.modo === m;
+      b.setAttribute("aria-selected", String(attiva));
+      b.tabIndex = attiva ? 0 : -1;
+      if (attiva && muoviIlFuoco) b.focus?.({ preventScroll: true });
+    }
+    pannello.setAttribute("aria-labelledby", `${radice2}-${m}`);
+    if (m === "anteprima") pannello.replaceChildren(prosaInNodi(doc, prosa, rendiMarkdown, titoloGiaDetto));
+    else {
+      const pre = nodo8(doc, "pre", "td-code td-voce-testo", prosa);
+      pre.tabIndex = 0;
+      pre.setAttribute("role", "region");
+      pre.setAttribute("aria-label", "Testo come è stato scritto");
+      pannello.replaceChildren(pre);
+    }
+    onModo(m);
+  }
+  lista.addEventListener("click", (e) => {
+    const b = e.target.closest?.("[data-modo]");
+    if (b) mostra(b.dataset.modo);
+  });
+  lista.addEventListener("keydown", (e) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const attuale = schede.findIndex((b) => b.getAttribute("aria-selected") === "true");
+    const prossima = e.key === "Home" ? 0 : e.key === "End" ? schede.length - 1 : (attuale + (e.key === "ArrowRight" ? 1 : -1) + schede.length) % schede.length;
+    mostra(schede[prossima].dataset.modo, true);
+  });
+  mostra(scelto);
+  return [lista, pannello];
+}
+function costruisciStatoAttivita(doc, { stato, inCorso = false, onScegli = () => {
+} }) {
+  const gruppo = nodo8(doc, "div", "td-segment td-stati-attivita");
+  gruppo.setAttribute("role", "radiogroup");
+  gruppo.setAttribute("aria-label", "Stato dell’attività");
+  const bottoni = STATI_ATTIVITA.map((valore) => {
+    const b = nodo8(doc, "button", "", parolaStato(valore));
+    b.type = "button";
+    b.dataset.stato = valore;
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", String(valore === stato));
+    b.setAttribute("aria-selected", String(valore === stato));
+    b.tabIndex = valore === stato ? 0 : -1;
+    b.disabled = Boolean(inCorso);
+    b.addEventListener("click", () => {
+      if (valore !== stato) onScegli(valore);
+    });
+    gruppo.append(b);
+    return b;
+  });
+  gruppo.addEventListener("keydown", (e) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
+    e.preventDefault();
+    const attuale = bottoni.findIndex((b) => b.dataset.stato === stato);
+    const prossima = e.key === "Home" ? 0 : e.key === "End" ? bottoni.length - 1 : (attuale + (e.key === "ArrowRight" ? 1 : -1) + bottoni.length) % bottoni.length;
+    bottoni[prossima].focus?.({ preventScroll: true });
+    onScegli(bottoni[prossima].dataset.stato);
+  });
+  return gruppo;
+}
+function confermaEliminazione({
+  schema,
+  voce,
+  titolo: titolo2,
+  servizio,
+  document: doc = globalThis.document,
+  avvisa = () => {
+  },
+  ricarica = () => {
+  },
+  dopo = () => {
+  }
+}) {
+  const articolo = `${schema.articolo}${schema.articolo.endsWith("’") ? "" : " "}${schema.sostantivo}`;
+  return confermaModale({
+    document: doc,
+    titolo: `Elimino ${articolo}?`,
+    domanda: `«${titolo2}» viene ${accordo(schema, "cancellat")} dal disco.`,
+    conseguenza: "Non c’è un cestino: l’eliminazione è definitiva, e nemmeno TALOS potrà rileggere questo testo.",
+    etichettaConferma: `Elimina ${articolo}`,
+    onConferma: async () => {
+      try {
+        await servizio.elimina(voce?.id);
+        avvisa(accordo(schema, "Eliminat"), `«${titolo2}» non c’è più.`);
+        dopo();
+      } catch (errore) {
+        avvisa(`Non ${accordo(schema, "eliminat")}`, paroleErroreRete(errore?.code, schema, { azione: "eliminare" }), { tono: "errore" });
+      }
+      ricarica();
+    }
+  });
+}
+var SCELTA_AUTOMATICA, SCHEMI, PAROLE_STATO, STATI_ATTIVITA, numero3, contatore2, PAROLE_MODO2;
+var init_modulo_voce = __esm({
+  "src/components/modulo-voce.js"() {
+    init_ricerca_dettaglio();
+    init_modale_td();
+    SCELTA_AUTOMATICA = "auto";
+    SCHEMI = Object.freeze({
+      note: Object.freeze({
+        chiave: "note",
+        risorsa: "notes",
+        campoRisposta: "nota",
+        sostantivo: "nota",
+        articolo: "la",
+        genere: "f",
+        titoloNuova: "Nuova nota",
+        titoloModifica: "Modifica la nota",
+        codiceAssente: "NOTE_NOT_FOUND",
+        codiceInvalido: "NOTE_INVALID",
+        campi: Object.freeze([
+          { nome: "titolo", etichetta: "Titolo", tipo: "riga", max: 120, obbligatorio: true, invito: "Dai un nome a questa nota…" },
+          { nome: "contenuto", etichetta: "Contenuto", tipo: "testo", max: 8e3, obbligatorio: true, invito: "Scrivi qui. I titoli con il cancelletto e gli elenchi col trattino diventano Markdown." },
+          {
+            nome: "formato",
+            etichetta: "Come si legge",
+            tipo: "scelta",
+            preimpostato: SCELTA_AUTOMATICA,
+            scelte: Object.freeze([
+              [SCELTA_AUTOMATICA, "Riconoscilo dal testo"],
+              ["markdown", "Markdown"],
+              ["testo", "Testo semplice"]
+            ]),
+            aiuto: "Lasciando «Riconoscilo dal testo» la nota cambia da sola quando il contenuto cambia."
+          }
+        ])
+      }),
+      tasks: Object.freeze({
+        chiave: "attivita",
+        risorsa: "tasks",
+        campoRisposta: "attivita",
+        sostantivo: "attività",
+        articolo: "l’",
+        genere: "f",
+        titoloNuova: "Nuova attività",
+        titoloModifica: "Modifica l’attività",
+        codiceAssente: "TASK_NOT_FOUND",
+        codiceInvalido: "TASK_INVALID",
+        campi: Object.freeze([
+          { nome: "titolo", etichetta: "Titolo", tipo: "riga", max: 200, obbligatorio: true, invito: "Che cosa c’è da fare…" },
+          { nome: "descrizione", etichetta: "Descrizione", tipo: "testo", max: 2e3, obbligatorio: false, invito: "Facoltativa: i dettagli che servono per farla." },
+          {
+            nome: "priorita",
+            etichetta: "Priorità",
+            tipo: "scelta",
+            preimpostato: "normal",
+            scelte: Object.freeze([["low", "Bassa"], ["normal", "Normale"], ["high", "Alta"]])
+          }
+        ])
+      }),
+      memory: Object.freeze({
+        chiave: "memoria",
+        risorsa: "memory",
+        campoRisposta: "memoria",
+        sostantivo: "ricordo",
+        articolo: "il",
+        genere: "m",
+        titoloNuova: "Nuovo ricordo",
+        titoloModifica: "Modifica il ricordo",
+        codiceAssente: "MEMORY_NOT_FOUND",
+        codiceInvalido: "MEMORY_INVALID",
+        campi: Object.freeze([
+          { nome: "titolo", etichetta: "Titolo", tipo: "riga", max: 80, obbligatorio: true, invito: "Come si chiama questo ricordo…" },
+          { nome: "contenuto", etichetta: "Contenuto", tipo: "testo", max: 600, obbligatorio: true, invito: "Quello che TALOS deve ricordare di te." },
+          {
+            nome: "genere",
+            etichetta: "Tipo",
+            tipo: "scelta",
+            preimpostato: "preference",
+            scelte: Object.freeze([
+              ["preference", "Preferenza"],
+              ["project_fact", "Fatto"],
+              ["procedure", "Procedura"],
+              ["policy_note", "Regola"]
+            ])
+          }
+        ])
+      })
+    });
+    PAROLE_STATO = /* @__PURE__ */ new Map([["todo", "Da fare"], ["doing", "In corso"], ["done", "Fatta"]]);
+    STATI_ATTIVITA = Object.freeze(["todo", "doing", "done"]);
+    numero3 = (n) => Number(n).toLocaleString("it-IT");
+    contatore2 = 0;
+    PAROLE_MODO2 = /* @__PURE__ */ new Map([["anteprima", "Anteprima"], ["testo", "Testo"]]);
+  }
+});
+
 // src/components/sezioni-adattatori.js
 function anteprima(testo3, quanti = 240) {
   const pulito = String(testo3 ?? "").replace(/^#+\s*/gm, "").replace(/\n{3,}/g, "\n\n").trim();
@@ -6005,14 +6540,14 @@ function notificatore(opzioni) {
   return typeof opzioni?.notifica === "function" ? opzioni.notifica : () => {
   };
 }
-function nodo7(doc, tag2, classe, testo3) {
+function nodo9(doc, tag2, classe, testo3) {
   const el25 = doc.createElement(tag2);
   if (classe) el25.className = classe;
   if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
   return el25;
 }
 function bottone3(doc, testo3, { variante = "secondary", esegui, pericolo = false } = {}) {
-  const b = nodo7(doc, "button", `talos-button talos-button--${variante} talos-button--sm${pericolo ? " talos-button--danger" : ""}`, testo3);
+  const b = nodo9(doc, "button", `talos-button talos-button--${variante} talos-button--sm${pericolo ? " talos-button--danger" : ""}`, testo3);
   b.type = "button";
   if (esegui) b.addEventListener("click", esegui);
   return b;
@@ -6034,104 +6569,481 @@ function dataBreve(iso) {
   return d && Number.isFinite(d.getTime()) ? d.toLocaleDateString("it-IT") : "";
 }
 function meta(doc, pezzi) {
-  const riga = nodo7(doc, "div", "td-detail-meta");
+  const riga = nodo9(doc, "div", "td-detail-meta");
   riga.append(...pezzi.filter(Boolean));
   return riga;
+}
+function magazzinoScrittura(schermo) {
+  let m = SCRITTURE.get(schermo);
+  if (!m) {
+    m = { modulo: null, bozza: null, voci: /* @__PURE__ */ new Map(), modi: /* @__PURE__ */ new Map(), selezionaDopo: null, contesto: null };
+    SCRITTURE.set(schermo, m);
+  }
+  return m;
+}
+function testoDi(schema, voce) {
+  const campo2 = schema.campi.find((c) => c.tipo === "testo");
+  return String(voce?.[campo2.nome] ?? "");
+}
+function bottoneMenu(doc, titolo2, apri) {
+  const b = nodo9(doc, "button", "td-card-azioni");
+  b.type = "button";
+  b.setAttribute("aria-haspopup", "menu");
+  b.setAttribute("aria-label", `Azioni su ${titolo2}`);
+  b.append(icona3(doc, "more"));
+  b.addEventListener("click", (e) => {
+    e.stopPropagation();
+    apri({ ancoraEl: b });
+  });
+  return b;
+}
+function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
+  const doc = schermo.ownerDocument || globalThis.document;
+  const m = magazzinoScrittura(schermo);
+  const avvisa = notificatore(opzioni);
+  const servizio = opzioni.servizio || servizioVoci({ schema, sessionId: opzioni.sessionId, rete: opzioni.rete });
+  const ricarica = () => {
+    (opzioni.onCambiata || opzioni.onAggiorna)?.();
+  };
+  const titoloDi = (v) => String(v?.titolo ?? "").trim() || `${schema.sostantivo.charAt(0).toUpperCase()}${schema.sostantivo.slice(1)} senza titolo`;
+  function letturaDi(id) {
+    return m.voci.get(String(id ?? "")) || null;
+  }
+  function voceIntera(v) {
+    const letta = letturaDi(v?.id)?.voce;
+    return letta ? { ...v, ...letta } : v;
+  }
+  function chiediVoceIntera(v) {
+    const id = String(v?.id ?? "");
+    if (!id || !servizio?.leggi || m.voci.has(id)) return;
+    m.voci.set(id, { stato: "caricando" });
+    Promise.resolve().then(() => servizio.leggi(id)).then((dati) => {
+      m.voci.set(id, { stato: "pronto", voce: dati?.[schema.campoRisposta] || null });
+    }).catch((errore) => {
+      m.voci.set(id, { stato: "errore", errore: errore?.message || "motivo non registrato" });
+    }).then(() => ridisegna());
+  }
+  function apriModulo(modo, voce = null) {
+    const valori = modo === "crea" ? m.bozza || valoriIniziali(schema) : valoriIniziali(schema, voceIntera(voce));
+    m.modulo = { modo, id: modo === "crea" ? BOZZA : String(voce?.id ?? ""), originale: modo === "crea" ? null : voceIntera(voce), valori, errori: {}, inCorso: false, erroreRete: null, appesa: false };
+    ridisegna();
+  }
+  function chiudiModulo({ tieniBozza = false } = {}) {
+    if (m.modulo?.modo === "crea") m.bozza = tieniBozza ? m.modulo.valori : null;
+    m.modulo = null;
+  }
+  async function salva() {
+    const mod = m.modulo;
+    if (!mod || mod.inCorso) return;
+    const esito = validaValori(schema, mod.valori);
+    mod.errori = esito.errori;
+    mod.erroreRete = null;
+    if (!esito.ok) {
+      ridisegna();
+      return;
+    }
+    if (!servizio) {
+      mod.erroreRete = "Manca la sessione: riapri una conversazione e riprova.";
+      ridisegna();
+      return;
+    }
+    mod.inCorso = true;
+    ridisegna();
+    try {
+      if (mod.modo === "crea") {
+        const dati2 = await servizio.crea(corpoCreazione(schema, mod.valori));
+        const nata = dati2?.[schema.campoRisposta] || null;
+        m.bozza = null;
+        chiudiModulo();
+        m.selezionaDopo = nata?.id ? String(nata.id) : null;
+        if (nata?.id) m.voci.set(String(nata.id), { stato: "pronto", voce: nata });
+        if (dati2?.duplicato) {
+          avvisa("Esiste già", `«${titoloDi(nata)}» era già fra i ricordi: ho aperto quello, e il testo che avevi scritto non l’ha sostituito.`);
+        } else {
+          avvisa(accordo(schema, "Salvat"), `«${titoloDi(nata)}» è fra le voci di ${schema.chiave === "note" ? "Note" : schema.chiave === "attivita" ? "Attività" : "Memoria"}.`, azioneAnnulla(async () => {
+            try {
+              await servizio.elimina(nata?.id);
+              avvisa(accordo(schema, "Annullat"), `«${titoloDi(nata)}» non è mai ${accordo(schema, "stat")} ${accordo(schema, "salvat")}.`);
+            } catch (errore) {
+              avvisa(`Non ${accordo(schema, "annullat")}`, paroleErroreRete(errore?.code, schema, { azione: "annullare" }), { tono: "errore" });
+            }
+            ricarica();
+          }));
+        }
+        ricarica();
+        ridisegna();
+        return;
+      }
+      const { corpo, cambiato } = corpoModifica(schema, mod.valori, mod.originale);
+      if (!cambiato) {
+        chiudiModulo();
+        ridisegna();
+        return;
+      }
+      const prima = mod.originale;
+      const dati = await servizio.modifica(mod.id, corpo);
+      const dopo = dati?.[schema.campoRisposta] || null;
+      if (dopo?.id) m.voci.set(String(dopo.id), { stato: "pronto", voce: dopo });
+      const indietro = corpoModifica(schema, valoriIniziali(schema, prima), dopo).corpo;
+      chiudiModulo();
+      avvisa(accordo(schema, "Modificat"), `«${titoloDi(dopo)}» è ${accordo(schema, "aggiornat")}.`, azioneAnnulla(async () => {
+        try {
+          const tornata = await servizio.modifica(mod.id, indietro);
+          if (tornata?.[schema.campoRisposta]?.id) m.voci.set(String(mod.id), { stato: "pronto", voce: tornata[schema.campoRisposta] });
+          avvisa(`${accordo(schema, "Rimess")} com’era`, `«${titoloDi(prima)}» è ${accordo(schema, "tornat")} al testo di prima.`);
+        } catch (errore) {
+          avvisa(`Non ${accordo(schema, "annullat")}`, paroleErroreRete(errore?.code, schema, { azione: "annullare" }), { tono: "errore" });
+        }
+        ricarica();
+      }));
+      ricarica();
+      ridisegna();
+    } catch (errore) {
+      mod.inCorso = false;
+      mod.erroreRete = paroleErroreRete(errore?.code, schema);
+      if (errore?.code === schema.codiceAssente) {
+        chiudiModulo();
+        ricarica();
+      }
+      ridisegna();
+    }
+  }
+  function nodiModulo(doc2) {
+    const mod = m.modulo;
+    const titolo2 = nodo9(doc2, "h2", "", mod.modo === "crea" ? schema.titoloNuova : schema.titoloModifica);
+    return [titolo2, ...costruisciModulo(doc2, { schema, stato: mod, onSalva: salva })];
+  }
+  function azioniModulo(doc2) {
+    const mod = m.modulo;
+    const salvaBtn = bottone3(doc2, mod.inCorso ? "Salvo…" : "Salva", { variante: "primary", esegui: () => salva() });
+    salvaBtn.disabled = Boolean(mod.inCorso);
+    const annullaBtn = bottone3(doc2, "Annulla", { variante: "ghost", esegui: () => {
+      chiudiModulo();
+      ridisegna();
+    } });
+    annullaBtn.disabled = Boolean(mod.inCorso);
+    return [salvaBtn, annullaBtn];
+  }
+  async function copia(v) {
+    const intera = voceIntera(v);
+    const testo3 = `${titoloDi(intera)}
+
+${testoDi(schema, intera)}`.trim();
+    if (typeof opzioni.copia === "function") {
+      await opzioni.copia(testo3);
+      return;
+    }
+    try {
+      await globalThis.navigator?.clipboard?.writeText?.(testo3);
+      avvisa(accordo(schema, "Copiat"), `«${titoloDi(intera)}» è negli appunti.`);
+    } catch {
+      avvisa(`Non ${accordo(schema, "copiat")}`, "Gli appunti non sono disponibili in questa finestra.", { tono: "errore" });
+    }
+  }
+  function esporta(v) {
+    const intera = voceIntera(v);
+    const nome = `${titoloDi(intera).replace(/[\\/:*?"<>|]/g, "-").slice(0, 80)}.md`;
+    esportaTesto(doc, nome, `# ${titoloDi(intera)}
+
+${testoDi(schema, intera)}`);
+    avvisa(accordo(schema, "Esportat"), `${nome} è nella cartella dei download.`);
+  }
+  function elimina(v) {
+    const intera = voceIntera(v);
+    confermaEliminazione({
+      schema,
+      voce: intera,
+      titolo: titoloDi(intera),
+      servizio,
+      document: doc,
+      avvisa,
+      ricarica,
+      dopo: () => m.voci.delete(String(intera.id))
+    });
+  }
+  async function cambiaStato(v, nuovo, { conAnnulla = true } = {}) {
+    const intera = voceIntera(v);
+    const prima = intera?.stato;
+    if (!servizio?.cambiaStato || prima === nuovo) return;
+    try {
+      const dati = await servizio.cambiaStato(intera.id, nuovo);
+      const dopo = dati?.[schema.campoRisposta] || null;
+      if (dopo?.id) m.voci.set(String(dopo.id), { stato: "pronto", voce: dopo });
+      if (conAnnulla && prima) {
+        avvisa(accordo(schema, "Aggiornat"), `«${titoloDi(intera)}»: ${parolaStato(nuovo).toLocaleLowerCase("it")}.`, azioneAnnulla(async () => {
+          await cambiaStato(intera, prima, { conAnnulla: false });
+          avvisa(`${accordo(schema, "Rimess")} com’era`, `«${titoloDi(intera)}»: ${parolaStato(prima).toLocaleLowerCase("it")}.`);
+        }));
+      }
+    } catch (errore) {
+      avvisa(`Non ${accordo(schema, "aggiornat")}`, paroleErroreRete(errore?.code, schema, { azione: "cambiare stato" }), { tono: "errore" });
+    }
+    ricarica();
+    ridisegna();
+  }
+  function vociMenu(v) {
+    if (!servizio) return [];
+    const intera = voceIntera(v);
+    const voci = [
+      { chiave: "modifica", etichetta: "Modifica", icona: "i-edit", aziona: () => apriModulo("modifica", intera) }
+    ];
+    if (schema.risorsa === "tasks") {
+      for (const stato of STATI_ATTIVITA) {
+        if (stato === intera?.stato) continue;
+        voci.push({ chiave: `stato-${stato}`, etichetta: `Segna «${parolaStato(stato)}»`, icona: stato === "done" ? "i-check" : stato === "doing" ? "i-clock" : "i-list", aziona: () => void cambiaStato(intera, stato) });
+      }
+    }
+    voci.push({ chiave: "copia", etichetta: "Copia il testo", icona: "i-copy", aziona: () => void copia(intera) });
+    if (schema.risorsa === "notes") voci.push({ chiave: "esporta", etichetta: "Esporta come Markdown", icona: "i-download", aziona: () => esporta(intera) });
+    voci.push({ chiave: "elimina", etichetta: "Elimina", icona: "i-trash", pericolo: true, separaPrima: true, aziona: () => elimina(intera) });
+    return voci;
+  }
+  function apriMenu(v, dove) {
+    const voci = vociMenu(v);
+    if (typeof opzioni.onMenu === "function" && voci.length) opzioni.onMenu(voci, dove);
+  }
+  m.contesto = { trovaVoce: (id) => lista.find((v) => String(v?.id) === String(id)) || null, apriMenu };
+  collegaTastoDestro(schermo, {
+    trovaVoce: (id) => m.contesto.trovaVoce(id),
+    apriMenu: (voce, dove) => m.contesto.apriMenu(voce, dove)
+  });
+  const inModulo = (v) => Boolean(m.modulo) && (v?.__bozza === true || String(m.modulo.id) === String(v?.id));
+  return {
+    servizio,
+    modulo: m.modulo,
+    inModulo,
+    voceIntera,
+    chiediVoceIntera,
+    letturaDi,
+    modi: m.modi,
+    nodiModulo,
+    azioniModulo,
+    apriModulo,
+    apriMenu,
+    cambiaStato,
+    titoloDi,
+    /** L'elenco che l'impianto riceve: quello vero, più la bozza quando si sta creando. */
+    vociConBozza: () => m.modulo?.modo === "crea" ? [{ id: BOZZA, __bozza: true, titolo: "", aggiornataAlle: null }, ...lista] : lista,
+    /** ⛔ Ogni filtro respinge la bozza, «Tutte» compreso: non è una voce, è un modulo aperto. */
+    filtriSenzaBozza: (filtri) => filtri.map((f) => ({ ...f, quando: f.quando ? (v) => !v?.__bozza && f.quando(v) : (v) => !v?.__bozza })),
+    adorno: (v, doc2) => servizio && !v?.__bozza ? bottoneMenu(doc2, titoloDi(voceIntera(v)), (dove) => apriMenu(v, dove)) : null,
+    /** La riga «scritta da te / da TALOS», solo quando la GET della voce l'ha davvero portata. */
+    origine: (v, doc2) => {
+      const parola2 = parolaOrigine(voceIntera(v)?.origine, schema);
+      return parola2 ? nodo9(doc2, "span", "td-origine", parola2) : null;
+    },
+    azioniVoce: (v, doc2) => servizio ? [
+      bottone3(doc2, "Modifica", { esegui: () => apriModulo("modifica", v) }),
+      bottone3(doc2, "Tutte le azioni", { esegui: (e) => apriMenu(v, { ancoraEl: e?.currentTarget || null }) })
+    ] : [],
+    /**
+     * Dopo il montaggio: aggancia la selezione al modulo, o chiude il modulo se la selezione è
+     * cambiata sotto (la persona ha aperto un'altra scheda o chiuso il dettaglio).
+     * @returns {boolean} vero se serve un secondo giro di disegno
+     */
+    sincronizza: () => {
+      const st = statoSezione(schermo);
+      if (!st) return false;
+      if (m.selezionaDopo) {
+        const esiste = lista.some((v) => String(v?.id) === m.selezionaDopo);
+        if (esiste) {
+          st.selezione = m.selezionaDopo;
+          m.selezionaDopo = null;
+          return true;
+        }
+      }
+      if (!m.modulo) return false;
+      const voluta = String(m.modulo.id);
+      const corrente = st.selezione === null || st.selezione === void 0 ? null : String(st.selezione);
+      if (corrente === voluta) return false;
+      if (m.modulo.appesa) {
+        chiudiModulo({ tieniBozza: true });
+        return true;
+      }
+      m.modulo.appesa = true;
+      st.selezione = voluta;
+      return true;
+    },
+    /**
+     * Il pulsante primario «Nuova …» nella testata della sezione, dove lo mette il mockup
+     * (`initSection`, riga 6063: `<div class="td-tools">${button(icon('plus')+' '+meta[k].create,
+     * 'new','primary')}…`). La testata è del prodotto e `montaSezione` non la tocca — sostituisce
+     * `.talos-page` — quindi il pulsante ci sta senza toccare l'impianto.
+     * ⛔ Senza sessione o senza rete NON compare: un comando che non può funzionare non si mostra.
+     */
+    montaPulsanteNuova: () => {
+      const topbar = schermo.querySelector(".talos-topbar");
+      if (!topbar) return null;
+      let strumenti = topbar.querySelector(".td-tools");
+      let b = strumenti?.querySelector("[data-nuova]") || null;
+      if (!servizio) {
+        b?.remove();
+        return null;
+      }
+      if (!strumenti) {
+        strumenti = nodo9(doc, "div", "td-tools");
+        topbar.append(strumenti);
+      }
+      if (!b) {
+        b = nodo9(doc, "button", "talos-button talos-button--primary");
+        b.type = "button";
+        b.dataset.nuova = "";
+        b.append(icona3(doc, "plus"), nodo9(doc, "span", "", schema.titoloNuova));
+        b.addEventListener("click", () => apriModulo("crea"));
+        strumenti.append(b);
+      }
+      b.disabled = Boolean(m.modulo);
+      return b;
+    },
+    /** «Note / Dettaglio» diventa «Note / Modifica» mentre si scrive, come nel mockup. */
+    parolaTesta: (nome) => {
+      const testa = schermo.querySelector(".td-detail-head > span:first-child");
+      if (!testa) return;
+      if (m.modulo) testa.textContent = `${nome} / ${m.modulo.modo === "crea" ? schema.titoloNuova : "Modifica"}`;
+    },
+    notaPiede: () => {
+      if (!m.modulo) return null;
+      if (m.modulo.inCorso) return "Sto salvando…";
+      return m.modulo.modo === "crea" ? `Non ancora ${accordo(schema, "salvat")}` : "Modifiche non ancora salvate";
+    }
+  };
+}
+function montaScrivibile(schermo, scrivi2, config, ridisegna) {
+  const quante = montaSezione(schermo, config);
+  scrivi2.montaPulsanteNuova();
+  scrivi2.parolaTesta(config.nome);
+  if (scrivi2.sincronizza()) return ridisegna();
+  return quante;
 }
 function montaNote(schermo, note, opzioni = {}) {
   const { cerca = "", onCopia = null, adesso = /* @__PURE__ */ new Date() } = opzioni;
   const avvisa = notificatore(opzioni);
-  return montaSezione(schermo, {
+  const lista = Array.isArray(note) ? note : [];
+  const ridisegna = () => montaNote(schermo, note, opzioni);
+  const scrivi2 = scrittura(schermo, { schema: SCHEMI.note, lista, opzioni, ridisegna });
+  const magazzino = magazzinoScrittura(schermo);
+  return montaScrivibile(schermo, scrivi2, {
     chiave: "note",
     nome: "Note",
     icona: "doc",
     famiglia: "td-note",
     sostantivo: "nota",
-    voci: Array.isArray(note) ? note : [],
+    voci: scrivi2.vociConBozza(),
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: "Leggo le note…",
     onAggiorna: opzioni.onAggiorna,
     // Una sola famiglia di note sul disco: nessun filtro finto per riempire la riga.
-    filtri: [{ id: "tutte", etichetta: "Tutte" }],
+    filtri: scrivi2.filtriSenzaBozza([{ id: "tutte", etichetta: "Tutte" }]),
     queryIniziale: cerca,
     idDi: (n) => n?.id ?? titoloNota(n),
-    titoloDi: (n) => titoloNota(n),
+    titoloDi: (n) => n?.__bozza ? "Nuova nota" : titoloNota(n),
     quandoDi: (n) => n?.aggiornataAlle ?? n?.quando ?? n?.creataAlle ?? n?.createdAt ?? null,
     cercaIn: (n) => `${n?.titolo ?? ""} ${n?.contenuto ?? ""}`,
-    sommarioBarra: (n, { errore, caricamento }) => errore ? "Note non disponibili" : caricamento ? "Leggo le note…" : sommarioNote(n),
-    sommarioStato: (visibili, totale2) => visibili === totale2 ? sommarioNote(totale2) : `${sommarioNote(visibili)} su ${sommarioNote(totale2)}`,
-    scheda: (n, { doc, icona: icona9 }) => ({
-      alto: [icona9("doc"), nodo7(doc, "span", "", "Appunto")],
-      corpo: [nodo7(doc, "p", "td-excerpt", anteprima(n?.contenuto))],
+    sommarioBarra: (_n, { errore, caricamento }) => errore ? "Note non disponibili" : caricamento ? "Leggo le note…" : sommarioNote(lista.length),
+    /* ⛔ I due sommari contano l'elenco VERO: la bozza è un modulo aperto, non una nota. */
+    sommarioStato: (visibili) => visibili === lista.length ? sommarioNote(lista.length) : `${sommarioNote(visibili)} su ${sommarioNote(lista.length)}`,
+    scheda: (n, { doc, icona: ic }) => ({
+      alto: [ic("doc"), nodo9(doc, "span", "", "Appunto")],
+      corpo: [nodo9(doc, "p", "td-excerpt", anteprima(n?.contenuto))],
       basso: [
-        nodo7(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || "senza data"),
-        nodo7(doc, "span", "", plurale(conteggioParole(n?.contenuto), "parola", "parole"))
-      ]
+        nodo9(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || "senza data"),
+        nodo9(doc, "span", "", plurale(conteggioParole(n?.contenuto), "parola", "parole"))
+      ],
+      adorno: scrivi2.adorno(n, doc)
     }),
-    dettaglio: (n, { doc, etichetta: etichetta2 }) => [
-      meta(doc, [etichetta2("Nota"), nodo7(doc, "span", "", quandoNota(n?.aggiornataAlle ?? n?.creataAlle, adesso) || "data non registrata")]),
-      nodo7(doc, "h2", "", titoloNota(n)),
-      nodo7(doc, "div", "td-prose", String(n?.contenuto ?? ""))
-    ],
-    azioniDettaglio: (n, { doc }) => [
-      bottone3(doc, "Copia", { esegui: () => onCopia?.(n) }),
-      bottone3(doc, "Esporta", {
-        esegui: () => {
-          esportaTesto(doc, `${titoloNota(n).replace(/[\\/:*?"<>|]/g, "-").slice(0, 80)}.md`, `# ${titoloNota(n)}
+    dettaglio: (n, { doc, etichetta: etichetta2 }) => {
+      if (scrivi2.inModulo(n)) return scrivi2.nodiModulo(doc);
+      scrivi2.chiediVoceIntera(n);
+      const intera = scrivi2.voceIntera(n);
+      const pezzi = [
+        meta(doc, [etichetta2("Nota"), nodo9(doc, "span", "", quandoNota(intera?.aggiornataAlle ?? intera?.creataAlle, adesso) || "data non registrata"), scrivi2.origine(n, doc)]),
+        nodo9(doc, "h2", "", titoloNota(intera))
+      ];
+      pezzi.push(...montaTestoVoce(doc, {
+        testo: intera?.contenuto,
+        formato: intera?.formato,
+        titoloGiaDetto: titoloNota(intera),
+        rendiMarkdown: opzioni.rendiMarkdown,
+        modo: magazzino.modi.get(String(n?.id ?? "")) || null,
+        onModo: (modo) => magazzino.modi.set(String(n?.id ?? ""), modo)
+      }));
+      return pezzi;
+    },
+    azioniDettaglio: (n, { doc }) => {
+      if (scrivi2.inModulo(n)) return scrivi2.azioniModulo(doc);
+      const azioni = scrivi2.azioniVoce(n, doc);
+      if (azioni.length) return azioni;
+      return [
+        bottone3(doc, "Copia", { esegui: () => onCopia?.(n) }),
+        bottone3(doc, "Esporta", {
+          esegui: () => {
+            esportaTesto(doc, `${titoloNota(n).replace(/[\\/:*?"<>|]/g, "-").slice(0, 80)}.md`, `# ${titoloNota(n)}
 
 ${n?.contenuto ?? ""}`);
-          avvisa("Esportata", `${titoloNota(n)} è stata scaricata come file Markdown.`);
-        }
-      })
-    ],
-    notaPiede: () => "Le note vivono in .notes-store/",
-    vuoto: { titolo: "Nessuna nota", testo: "TALOS scrive una nota quando trova qualcosa che vale la pena ricordare. Le note vivono in .notes-store/ e valgono per tutti i progetti." }
-  });
+            avvisa("Esportata", `${titoloNota(n)} è stata scaricata come file Markdown.`);
+          }
+        })
+      ];
+    },
+    notaPiede: () => scrivi2.notaPiede() || "Le note vivono in .notes-store/",
+    vuoto: { titolo: "Nessuna nota", testo: "TALOS scrive una nota quando trova qualcosa che vale la pena ricordare, e da qui le scrivi anche tu. Le note vivono in .notes-store/ e valgono per tutti i progetti." }
+  }, ridisegna);
 }
 function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
   const avvisa = notificatore(opzioni);
-  return montaSezione(schermo, {
+  const lista = Array.isArray(memorie) ? memorie : [];
+  const ridisegna = () => aggiornaPaginaMemoria(schermo, memorie, opzioni);
+  const scrivi2 = scrittura(schermo, { schema: SCHEMI.memory, lista, opzioni, ridisegna });
+  return montaScrivibile(schermo, scrivi2, {
     chiave: "memoria",
     nome: "Memoria",
     icona: "brain",
     famiglia: "td-memory",
     sostantivo: "ricordo",
-    voci: Array.isArray(memorie) ? memorie : [],
+    voci: scrivi2.vociConBozza(),
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: "Caricamento ricordi…",
     onAggiorna: opzioni.onAggiorna,
-    filtri: GENERI_FILTRO.map(([id, etichetta2, genere]) => ({ id, etichetta: etichetta2, quando: genere ? (m) => m?.genere === genere : null })),
+    filtri: scrivi2.filtriSenzaBozza(GENERI_FILTRO.map(([id, etichetta2, genere]) => ({ id, etichetta: etichetta2, quando: genere ? (m) => m?.genere === genere : null }))),
     idDi: (m) => m?.id,
-    titoloDi: (m) => testiMemoria(m).titolo,
+    titoloDi: (m) => m?.__bozza ? "Nuovo ricordo" : testiMemoria(m).titolo,
     quandoDi: (m) => m?.aggiornataAlle ?? null,
     cercaIn: (m) => `${testiMemoria(m).titolo} ${testiMemoria(m).contenuto} ${genereMemoria(m?.genere).testo}`,
-    sommarioBarra: (n, { errore, caricamento }) => errore ? "Ricordi non disponibili" : caricamento ? "Caricamento ricordi…" : `${plurale(n, "ricordo")} · globali`,
-    scheda: (m, { doc, icona: icona9, etichetta: etichetta2 }) => {
+    sommarioBarra: (_n, { errore, caricamento }) => errore ? "Ricordi non disponibili" : caricamento ? "Caricamento ricordi…" : `${plurale(lista.length, "ricordo")} · globali`,
+    sommarioStato: (visibili) => visibili === lista.length ? plurale(lista.length, "ricordo") : `${visibili} di ${plurale(lista.length, "ricordo")}`,
+    scheda: (m, { doc, icona: ic, etichetta: etichetta2 }) => {
       const g = genereMemoria(m?.genere);
-      const segno = nodo7(doc, "span", "td-memory-mark");
-      segno.append(icona9(g.icona));
+      const segno = nodo9(doc, "span", "td-memory-mark");
+      segno.append(ic(g.icona));
       return {
         /* ⛔ Il genere si dice UNA volta: il segno col simbolo, e l'etichetta col tono. Scriverlo
            anche come testo in mezzo ai due («Regola  [Regola]») era un doppione visto nella foto. */
         alto: [segno, etichetta2(g.testo, g.tono || "accent")],
-        corpo: [nodo7(doc, "p", "td-excerpt", anteprima(testiMemoria(m).contenuto))],
+        corpo: [nodo9(doc, "p", "td-excerpt", anteprima(testiMemoria(m).contenuto))],
         /* Nella scheda la data e basta: l'ora intera sta nel dettaglio e qui si troncava. */
-        basso: [nodo7(doc, "span", "", dataBreve(m?.aggiornataAlle) || "Data non registrata")]
+        basso: [nodo9(doc, "span", "", dataBreve(m?.aggiornataAlle) || "Data non registrata")],
+        adorno: scrivi2.adorno(m, doc)
       };
     },
     dettaglio: (m, { doc, etichetta: etichetta2 }) => {
-      const t2 = testiMemoria(m);
-      const g = genereMemoria(m?.genere);
-      const pezzi = [
-        meta(doc, [etichetta2(g.testo, g.tono || "accent"), nodo7(doc, "span", "", t2.aggiornata || "data non registrata")]),
-        nodo7(doc, "h2", "", t2.titolo),
-        nodo7(doc, "div", "td-prose", t2.contenuto)
+      if (scrivi2.inModulo(m)) return scrivi2.nodiModulo(doc);
+      scrivi2.chiediVoceIntera(m);
+      const intera = scrivi2.voceIntera(m);
+      const t2 = testiMemoria(intera);
+      const g = genereMemoria(intera?.genere);
+      return [
+        /* ⛔ L'origine era un `h3 Origine` col valore grezzo (`persona`/`modello`) scritto sotto:
+           un nome di campo a schermo. Adesso è una parola, accanto alla data, dove la si legge. */
+        meta(doc, [etichetta2(g.testo, g.tono || "accent"), nodo9(doc, "span", "", t2.aggiornata || "data non registrata"), scrivi2.origine(m, doc)]),
+        nodo9(doc, "h2", "", t2.titolo),
+        nodo9(doc, "div", "td-prose", t2.contenuto)
       ];
-      if (m?.origine) pezzi.push(nodo7(doc, "h3", "", "Origine"), nodo7(doc, "p", "td-subtle", String(m.origine)));
-      return pezzi;
     },
-    azioniDettaglio: (m, { doc }) => [
-      bottone3(doc, "Copia", {
+    azioniDettaglio: (m, { doc }) => {
+      if (scrivi2.inModulo(m)) return scrivi2.azioniModulo(doc);
+      const azioni = scrivi2.azioniVoce(m, doc);
+      if (azioni.length) return azioni;
+      return [bottone3(doc, "Copia", {
         esegui: async () => {
           const t2 = testiMemoria(m);
           try {
@@ -6143,64 +7055,102 @@ ${t2.contenuto}`);
             avvisa("Copia non riuscita", "Il browser non ha dato accesso agli appunti.");
           }
         }
-      })
-    ],
-    notaPiede: () => "La lettura non modifica il ricordo",
-    vuoto: { titolo: "Nessun ricordo", testo: "I ricordi sono globali, disponibili alle tue conversazioni. Compariranno qui appena TALOS ne salva uno." }
-  });
+      })];
+    },
+    notaPiede: () => scrivi2.notaPiede() || "I ricordi valgono per tutte le conversazioni",
+    vuoto: { titolo: "Nessun ricordo", testo: "I ricordi sono globali, disponibili alle tue conversazioni. Li salva TALOS quando impara qualcosa di te, e da qui li scrivi anche tu." }
+  }, ridisegna);
 }
 function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
-  return montaSezione(schermo, {
+  const lista = Array.isArray(attivita) ? attivita : [];
+  const ridisegna = () => aggiornaPaginaAttivita(schermo, attivita, opzioni);
+  const scrivi2 = scrittura(schermo, { schema: SCHEMI.tasks, lista, opzioni, ridisegna });
+  return montaScrivibile(schermo, scrivi2, {
     chiave: "attivita",
     nome: "Attività",
     icona: "check-sq",
     famiglia: "td-task",
     sostantivo: "attività",
-    voci: Array.isArray(attivita) ? attivita : [],
+    voci: scrivi2.vociConBozza(),
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: "Caricamento attività…",
     onAggiorna: opzioni.onAggiorna,
-    filtri: [
+    filtri: scrivi2.filtriSenzaBozza([
       { id: "tutte", etichetta: "Tutte" },
       { id: "todo", etichetta: "Da fare", quando: (a) => a?.stato === "todo" },
       { id: "doing", etichetta: "In corso", quando: (a) => a?.stato === "doing" },
       { id: "done", etichetta: "Fatte", quando: (a) => a?.stato === "done" }
-    ],
+    ]),
     idDi: (a) => a?.id,
-    titoloDi: (a) => testiAttivita(a).titolo,
+    titoloDi: (a) => a?.__bozza ? "Nuova attività" : testiAttivita(a).titolo,
     quandoDi: (a) => a?.aggiornataAlle ?? null,
     cercaIn: (a) => `${testiAttivita(a).titolo} ${testiAttivita(a).descrizione} ${statoAttivita(a?.stato).testo}`,
-    sommarioBarra: (n, { errore, caricamento }) => errore ? "Attività non disponibili" : caricamento ? "Caricamento attività…" : riepilogoAttivita(Array.isArray(attivita) ? attivita : []),
-    scheda: (a, { doc, icona: icona9, etichetta: etichetta2 }) => {
+    sommarioBarra: (_n, { errore, caricamento }) => errore ? "Attività non disponibili" : caricamento ? "Caricamento attività…" : riepilogoAttivita(lista),
+    sommarioStato: (visibili) => visibili === lista.length ? plurale(lista.length, "attività", "attività") : `${visibili} di ${plurale(lista.length, "attività", "attività")}`,
+    scheda: (a, { doc, icona: ic, etichetta: etichetta2 }) => {
       const s = statoAttivita(a?.stato);
       const t2 = testiAttivita(a);
-      const segno = nodo7(doc, "span", "td-task-toggle");
-      segno.dataset.fatta = String(a?.stato === "done");
-      segno.setAttribute("aria-hidden", "true");
-      if (a?.stato === "done") segno.append(icona9("check"));
+      const fatta = a?.stato === "done";
+      const segno = nodo9(doc, "button", "td-task-toggle");
+      segno.type = "button";
+      segno.dataset.fatta = String(fatta);
+      if (scrivi2.servizio && !a?.__bozza) {
+        segno.setAttribute("role", "checkbox");
+        segno.setAttribute("aria-checked", String(fatta));
+        segno.setAttribute("aria-label", fatta ? `Riapri ${t2.titolo}` : `Segna fatta ${t2.titolo}`);
+        segno.addEventListener("click", (e) => {
+          e.stopPropagation();
+          void scrivi2.cambiaStato(a, fatta ? "todo" : "done");
+        });
+      } else {
+        segno.disabled = true;
+        segno.setAttribute("aria-hidden", "true");
+        segno.tabIndex = -1;
+      }
+      if (fatta) segno.append(ic("check"));
+      const menu = scrivi2.adorno(a, doc);
+      const adorni = nodo9(doc, "span", "td-task-adorni");
+      adorni.append(segno, ...menu ? [menu] : []);
       return {
-        dati: { done: String(a?.stato === "done") },
-        alto: [etichetta2(s.testo, s.tono || ""), ...a?.priorita === "high" ? [nodo7(doc, "span", "td-priority", "Alta priorità")] : []],
-        corpo: [nodo7(doc, "p", "td-excerpt", anteprima(t2.descrizione, 130) || "Nessuna descrizione.")],
+        dati: { done: String(fatta), comandabile: String(Boolean(scrivi2.servizio)) },
+        alto: [etichetta2(s.testo, s.tono || ""), ...a?.priorita === "high" ? [nodo9(doc, "span", "td-priority", "Alta priorità")] : []],
+        corpo: [nodo9(doc, "p", "td-excerpt", anteprima(t2.descrizione, 130) || "Nessuna descrizione.")],
         basso: [
-          nodo7(doc, "span", "", prioritaAttivita(a?.priorita)),
-          nodo7(doc, "span", "", dataBreve(a?.aggiornataAlle) || "Data non registrata")
+          nodo9(doc, "span", "", prioritaAttivita(a?.priorita)),
+          nodo9(doc, "span", "", dataBreve(a?.aggiornataAlle) || "Data non registrata")
         ],
-        adorno: segno
+        adorno: adorni
       };
     },
     dettaglio: (a, { doc, etichetta: etichetta2 }) => {
-      const s = statoAttivita(a?.stato);
-      const t2 = testiAttivita(a);
-      return [
-        meta(doc, [etichetta2(s.testo, s.tono || ""), nodo7(doc, "span", "", prioritaAttivita(a?.priorita)), nodo7(doc, "span", "", t2.aggiornata || "data non registrata")]),
-        nodo7(doc, "h2", "", t2.titolo),
-        nodo7(doc, "div", "td-prose", t2.descrizione || "Nessuna descrizione.")
+      if (scrivi2.inModulo(a)) return scrivi2.nodiModulo(doc);
+      scrivi2.chiediVoceIntera(a);
+      const intera = scrivi2.voceIntera(a);
+      const s = statoAttivita(intera?.stato);
+      const t2 = testiAttivita(intera);
+      const pezzi = [
+        meta(doc, [etichetta2(s.testo, s.tono || ""), nodo9(doc, "span", "", prioritaAttivita(intera?.priorita)), nodo9(doc, "span", "", t2.aggiornata || "data non registrata"), scrivi2.origine(a, doc)]),
+        nodo9(doc, "h2", "", t2.titolo)
       ];
+      if (scrivi2.servizio) {
+        pezzi.push(nodo9(doc, "h3", "", "Stato"));
+        pezzi.push(costruisciStatoAttivita(doc, { stato: intera?.stato, onScegli: (nuovo) => void scrivi2.cambiaStato(a, nuovo) }));
+      }
+      pezzi.push(nodo9(doc, "h3", "", "Descrizione"));
+      pezzi.push(nodo9(doc, "div", "td-prose", t2.descrizione || "Nessuna descrizione."));
+      return pezzi;
     },
-    notaPiede: () => "La lettura non modifica lo stato",
-    vuoto: { titolo: "Nessuna attività", testo: "Le attività sono globali, disponibili alle tue conversazioni. Vivono in .tasks-store/." }
-  });
+    azioniDettaglio: (a, { doc }) => {
+      if (scrivi2.inModulo(a)) return scrivi2.azioniModulo(doc);
+      const azioni = scrivi2.azioniVoce(a, doc);
+      return azioni.length ? azioni : null;
+    },
+    /* ⛔ VISTO NELLA FOTO: qui c'era «Le attività vivono in .tasks-store/», e l'introduzione due
+       centimetri più in su dice già la stessa identica frase. Due volte la stessa cosa nella stessa
+       schermata non è ridondanza innocua: è spazio tolto a ciò che non è ancora stato detto. */
+    notaPiede: () => scrivi2.notaPiede() || "Lo stato si cambia da qui e dalla chat",
+    vuoto: { titolo: "Nessuna attività", testo: "Le attività sono globali, disponibili alle tue conversazioni. Le apre TALOS mentre lavora, e da qui le apri anche tu. Vivono in .tasks-store/." }
+  }, ridisegna);
 }
 function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
   const avvisa = notificatore(opzioni);
@@ -6251,21 +7201,21 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
     scheda: (v, { doc, icona: icona9, etichetta: etichetta2 }) => {
       const tipo = tipoVoceLibreria(v?.fileType);
       const t2 = testiVoceLibreria(v);
-      const copertina = nodo7(doc, "div", "td-file-preview");
+      const copertina = nodo9(doc, "div", "td-file-preview");
       copertina.dataset.kind = estensioneFile(t2.nome).toLowerCase();
-      copertina.append(nodo7(doc, "strong", "", estensioneFile(t2.nome)), nodo7(doc, "span", "", t2.nome));
+      copertina.append(nodo9(doc, "strong", "", estensioneFile(t2.nome)), nodo9(doc, "span", "", t2.nome));
       return {
-        alto: [icona9(tipo.icona), nodo7(doc, "span", "", tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : "")],
+        alto: [icona9(tipo.icona), nodo9(doc, "span", "", tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : "")],
         corpo: [copertina],
-        basso: [nodo7(doc, "span", "", t2.dataBreve)]
+        basso: [nodo9(doc, "span", "", t2.dataBreve)]
       };
     },
     dettaglio: (v, { doc, etichetta: etichetta2 }) => {
       const t2 = testiVoceLibreria(v);
       const tipo = tipoVoceLibreria(v?.fileType);
       const pezzi = [
-        meta(doc, [etichetta2(tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : ""), nodo7(doc, "span", "", t2.aggiornata ? `Aggiornato il ${t2.aggiornata}` : "Data non registrata")]),
-        nodo7(doc, "h2", "", t2.nome)
+        meta(doc, [etichetta2(tipo.testo), etichetta2(origineVoceLibreria(v?.origine), v?.origine === "generated" ? "accent" : ""), nodo9(doc, "span", "", t2.aggiornata ? `Aggiornato il ${t2.aggiornata}` : "Data non registrata")]),
+        nodo9(doc, "h2", "", t2.nome)
       ];
       pezzi.push(...montaAnteprimaFile(v, {
         doc,
@@ -6277,8 +7227,8 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
           onApri: servizioVero?.apri ? apriConSistema : void 0
         }
       }));
-      pezzi.push(nodo7(doc, "h3", "", "Azioni sul file"));
-      const ospite = nodo7(doc, "div", "td-riuso-riga");
+      pezzi.push(nodo9(doc, "h3", "", "Azioni sul file"));
+      const ospite = nodo9(doc, "div", "td-riuso-riga");
       const riga = creaLibraryRow(v, {
         document: doc,
         aperta: true,
@@ -6291,7 +7241,7 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       ospite.append(riga);
       pezzi.push(ospite);
       const dove = indirizzoFileLibreria(sessionId, v?.id);
-      if (dove) pezzi.push(nodo7(doc, "p", "td-subtle", "Il file vive in .harness-ui-library/, dentro il progetto."));
+      if (dove) pezzi.push(nodo9(doc, "p", "td-subtle", "Il file vive in .harness-ui-library/, dentro il progetto."));
       return pezzi;
     },
     vuoto: { titolo: "Nessun file", testo: "I file caricati o generati dall’agente compaiono qui. Vivono in .harness-ui-library/, dentro il progetto." }
@@ -6387,7 +7337,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       const riga = lettura?.stato === "pronto" && lettura.record ? frasiBilancio(bilancioDaRecord(lettura.record)) : f.spiegazione;
       return {
         alto: [icona9("globe"), etichetta2(f.parola, f.tono)],
-        corpo: [nodo7(doc, "p", "td-excerpt", riga)],
+        corpo: [nodo9(doc, "p", "td-excerpt", riga)],
         /*
          * ⛔ TROVATO NELLA FOTO: «Avviata il 11/09/20…» e «Rapporto disponibi…», tutti e due
          *   troncati. `.td-card-bottom span` taglia con i puntini, e in 250 px di scheda due frasi
@@ -6397,15 +7347,15 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
          *   una cosa che chi guarda vuole sapere.
          */
         basso: [
-          nodo7(doc, "span", "", f.avviata ? `Avviata ${articoloData(r?.avviataAlle)}${dataBreve(r?.avviataAlle)}` : "Data non registrata"),
+          nodo9(doc, "span", "", f.avviata ? `Avviata ${articoloData(r?.avviataAlle)}${dataBreve(r?.avviataAlle)}` : "Data non registrata"),
           /* ⛔ CORRETTO L'11/09: qui «Col rapporto» compariva su ogni ricerca NON conclusa che
              avesse un file in Libreria — cioè contraddiceva il timbro «Senza rapporto» due
              centimetri più in alto. Adesso a destra si scrive solo l'anomalia che il timbro non
              dice già: una conclusa che il rapporto non ce l'ha. */
-          nodo7(doc, "span", "", r?.stato === "done" && !f.haRapporto ? "Nessun rapporto" : "")
+          nodo9(doc, "span", "", r?.stato === "done" && !f.haRapporto ? "Nessun rapporto" : "")
         ],
         adorno: (() => {
-          const b = nodo7(doc, "button", "td-card-azioni");
+          const b = nodo9(doc, "button", "td-card-azioni");
           b.type = "button";
           b.setAttribute("aria-haspopup", "menu");
           b.setAttribute("aria-label", `Azioni su ${f.domanda}`);
@@ -6462,28 +7412,28 @@ function montaProgetti(schermo, progetti, opzioni = {}) {
     cercaIn: (p) => `${p?.nome ?? ""} ${(p?.sessioni || []).map((s) => s?.nome ?? "").join(" ")}`,
     sommarioBarra: (n, { errore, caricamento }) => errore ? "Progetti non disponibili" : caricamento ? "Leggo i progetti…" : sommarioProgetti(n),
     scheda: (p, { doc, icona: icona9 }) => {
-      const chips = nodo7(doc, "div", "td-source-chips");
-      for (const s of ultimeSessioni(p, quanteRecenti)) chips.append(nodo7(doc, "span", "", s?.nome || s?.sessionId || "sessione senza nome"));
+      const chips = nodo9(doc, "div", "td-source-chips");
+      for (const s of ultimeSessioni(p, quanteRecenti)) chips.append(nodo9(doc, "span", "", s?.nome || s?.sessionId || "sessione senza nome"));
       return {
-        alto: [icona9("folder"), nodo7(doc, "span", "", "Cartella di lavoro")],
-        corpo: [nodo7(doc, "p", "td-excerpt", frasiProgetto(p)), chips],
+        alto: [icona9("folder"), nodo9(doc, "span", "", "Cartella di lavoro")],
+        corpo: [nodo9(doc, "p", "td-excerpt", frasiProgetto(p)), chips],
         /* Il conteggio sta già nel corpo (`frasiProgetto`): qui va il QUANDO, che è l'altra metà. */
-        basso: [nodo7(doc, "span", "", p?.ultimaAlle ? `Ultima volta ${new Date(p.ultimaAlle).toLocaleDateString("it-IT")}` : "mai aperta")]
+        basso: [nodo9(doc, "span", "", p?.ultimaAlle ? `Ultima volta ${new Date(p.ultimaAlle).toLocaleDateString("it-IT")}` : "mai aperta")]
       };
     },
     dettaglio: (p, { doc, etichetta: etichetta2 }) => {
       const pezzi = [
-        meta(doc, [etichetta2("Progetto"), nodo7(doc, "span", "", frasiProgetto(p))]),
-        nodo7(doc, "h2", "", p?.nome ?? ""),
-        nodo7(doc, "h3", "", "Sessioni recenti")
+        meta(doc, [etichetta2("Progetto"), nodo9(doc, "span", "", frasiProgetto(p))]),
+        nodo9(doc, "h2", "", p?.nome ?? ""),
+        nodo9(doc, "h3", "", "Sessioni recenti")
       ];
       const recenti = ultimeSessioni(p, quanteRecenti);
-      if (!recenti.length) pezzi.push(nodo7(doc, "p", "td-subtle", "Nessuna sessione ancora in questo progetto."));
+      if (!recenti.length) pezzi.push(nodo9(doc, "p", "td-subtle", "Nessuna sessione ancora in questo progetto."));
       for (const s of recenti) {
-        const riga = nodo7(doc, "div", "td-source");
+        const riga = nodo9(doc, "div", "td-source");
         const apri = bottone3(doc, s?.nome || s?.sessionId || "Sessione senza nome", { variante: "ghost", esegui: () => onApriSessione?.(s) });
         riga.append(apri);
-        if (s?.avviataAlle) riga.append(nodo7(doc, "span", "", `Avviata il ${new Date(s.avviataAlle).toLocaleString("it-IT")}`));
+        if (s?.avviataAlle) riga.append(nodo9(doc, "span", "", `Avviata il ${new Date(s.avviataAlle).toLocaleString("it-IT")}`));
         pezzi.push(riga);
       }
       return pezzi;
@@ -6491,7 +7441,7 @@ function montaProgetti(schermo, progetti, opzioni = {}) {
     vuoto: { titolo: "Nessun progetto", testo: "Un progetto nasce quando apri una sessione su una cartella. Comparirà qui." }
   });
 }
-var GENERI_FILTRO;
+var BOZZA, SCRITTURE, GENERI_FILTRO;
 var init_sezioni_adattatori = __esm({
   "src/components/sezioni-adattatori.js"() {
     init_note();
@@ -6505,6 +7455,9 @@ var init_sezioni_adattatori = __esm({
     init_plurale();
     init_sezione_elenco_dettaglio();
     init_toast();
+    init_modulo_voce();
+    BOZZA = "__nuova__";
+    SCRITTURE = /* @__PURE__ */ new WeakMap();
     GENERI_FILTRO = [
       ["tutti", "Tutte", null],
       ["preference", "Preferenze", "preference"],
@@ -6512,119 +7465,6 @@ var init_sezioni_adattatori = __esm({
       ["procedure", "Procedure", "procedure"],
       ["policy_note", "Regole", "policy_note"]
     ];
-  }
-});
-
-// src/components/modale-td.js
-function nodo8(doc, tag2, classe, testo3) {
-  const el25 = doc.createElement(tag2);
-  if (classe) el25.className = classe;
-  if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
-  return el25;
-}
-function icona4(doc, nome) {
-  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-  const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
-  use.setAttribute("href", `#i-${nome}`);
-  svg.append(use);
-  return svg;
-}
-function apriModale(titolo2, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
-  if (!doc?.body) return null;
-  chiudiModale({ immediata: true });
-  const dialogo = nodo8(doc, "dialog", "td-modal");
-  if (ampia) dialogo.dataset.ampia = "si";
-  const idTitolo = `td-modal-title-${Math.random().toString(36).slice(2, 8)}`;
-  dialogo.setAttribute("aria-labelledby", idTitolo);
-  const testa = nodo8(doc, "div", "td-modal-head");
-  const h2 = nodo8(doc, "h2", "", titolo2);
-  h2.id = idTitolo;
-  const chiudiBtn = nodo8(doc, "button", "talos-button talos-button--ghost talos-icon-button");
-  chiudiBtn.type = "button";
-  chiudiBtn.setAttribute("aria-label", "Chiudi");
-  chiudiBtn.append(icona4(doc, "x"));
-  chiudiBtn.addEventListener("click", () => chiudiModale());
-  testa.append(h2, chiudiBtn);
-  const corpo = nodo8(doc, "div", "td-modal-content");
-  for (const pezzo2 of [contenuto].flat().filter(Boolean)) corpo.append(pezzo2);
-  dialogo.append(testa, corpo);
-  dialogo.addEventListener("click", (e) => {
-    if (e.target === dialogo) chiudiModale();
-  });
-  dialogo.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") e.stopPropagation();
-  });
-  dialogo.addEventListener("close", () => {
-    if (aperta?.dialogo === dialogo) aperta = null;
-    dialogo.remove();
-    suChiusura?.();
-  });
-  doc.body.append(dialogo);
-  if (typeof dialogo.showModal === "function") dialogo.showModal();
-  else dialogo.setAttribute("open", "");
-  motion(dialogo, [{ opacity: 0, transform: "translateY(12px) scale(.99)" }, { opacity: 1, transform: "none" }], { leva: "motion-surfaces-off", document: doc });
-  aperta = { dialogo, contenuto: corpo, suChiusura, chiudi: () => chiudiModale() };
-  const primo = corpo.querySelector("input:not([type=hidden]), textarea, select, button") || chiudiBtn;
-  primo.focus?.({ preventScroll: true });
-  return aperta;
-}
-function chiudiModale({ immediata = false } = {}) {
-  const viva = aperta;
-  if (!viva) return false;
-  aperta = null;
-  const { dialogo } = viva;
-  const chiudiDavvero = () => {
-    if (typeof dialogo.close === "function" && dialogo.open) dialogo.close();
-    else {
-      dialogo.remove();
-      viva.suChiusura?.();
-    }
-  };
-  if (immediata) {
-    chiudiDavvero();
-    return true;
-  }
-  const uscita = motion(dialogo, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(6px)" }], { token: "surface-exit", leva: "motion-surfaces-off", document: dialogo.ownerDocument || globalThis.document });
-  if (!uscita) {
-    chiudiDavvero();
-    return true;
-  }
-  dialogo.style.pointerEvents = "none";
-  uscita.finished.then(chiudiDavvero, chiudiDavvero);
-  return true;
-}
-function confermaModale({
-  titolo: titolo2 = "Confermi?",
-  domanda,
-  conseguenza = "",
-  etichettaConferma = "Elimina",
-  onConferma,
-  document: doc = globalThis.document
-} = {}) {
-  const testo3 = nodo8(doc, "p", "td-prose", domanda);
-  const pezzi = [testo3];
-  if (conseguenza) pezzi.push(nodo8(doc, "p", "td-subtle", conseguenza));
-  const piede = nodo8(doc, "div", "td-detail-footer");
-  const annulla = nodo8(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Annulla");
-  annulla.type = "button";
-  annulla.addEventListener("click", () => chiudiModale());
-  const conferma = nodo8(doc, "button", "talos-button talos-button--secondary talos-button--danger talos-button--sm", etichettaConferma);
-  conferma.type = "button";
-  conferma.addEventListener("click", () => {
-    chiudiModale();
-    onConferma?.();
-  });
-  piede.append(annulla, conferma);
-  pezzi.push(piede);
-  return apriModale(titolo2, pezzi, { document: doc });
-}
-var aperta;
-var init_modale_td = __esm({
-  "src/components/modale-td.js"() {
-    init_motion_mockup();
-    aperta = null;
   }
 });
 
@@ -6682,7 +7522,7 @@ function aspettoCorrente(doc = globalThis.document) {
     modo: dalControllo("colorModeSelect") || (radice2.getAttribute("data-theme") === "light" ? "light" : "system")
   };
 }
-function nodo9(doc, tag2, classe, testo3) {
+function nodo10(doc, tag2, classe, testo3) {
   const el25 = doc.createElement(tag2);
   if (classe) el25.className = classe;
   if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
@@ -6693,25 +7533,25 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   const semi = leggiSemiTemi(doc);
   let { tema: scelto, modo } = aspettoCorrente(doc);
   if (!temi.some((t2) => t2.id === scelto)) scelto = temi[0]?.id || "calm";
-  const studio = nodo9(doc, "div", "td-theme-studio");
-  const elenco2 = nodo9(doc, "div", "td-theme-list");
+  const studio = nodo10(doc, "div", "td-theme-studio");
+  const elenco2 = nodo10(doc, "div", "td-theme-list");
   elenco2.setAttribute("role", "radiogroup");
   elenco2.setAttribute("aria-label", "Tema dell’interfaccia");
-  const destra = nodo9(doc, "div", "td-theme-display");
-  const titolo2 = nodo9(doc, "h3", "", "");
-  const descrizione = nodo9(doc, "p", "", "");
-  const anteprima3 = nodo9(doc, "div", "td-theme-preview");
-  const didascalia = nodo9(doc, "div", "td-preview-caption");
-  const didascaliaTema = nodo9(doc, "span", "", "");
-  const didascaliaModo = nodo9(doc, "span", "", "");
+  const destra = nodo10(doc, "div", "td-theme-display");
+  const titolo2 = nodo10(doc, "h3", "", "");
+  const descrizione = nodo10(doc, "p", "", "");
+  const anteprima3 = nodo10(doc, "div", "td-theme-preview");
+  const didascalia = nodo10(doc, "div", "td-preview-caption");
+  const didascaliaTema = nodo10(doc, "span", "", "");
+  const didascaliaModo = nodo10(doc, "span", "", "");
   didascalia.append(didascaliaTema, didascaliaModo);
-  const controlli = nodo9(doc, "div", "td-theme-controls");
-  const segmento = nodo9(doc, "div", "td-segment");
+  const controlli = nodo10(doc, "div", "td-theme-controls");
+  const segmento = nodo10(doc, "div", "td-segment");
   segmento.setAttribute("role", "group");
   segmento.setAttribute("aria-label", "Modalità colore");
   const MODI = [["system", "Sistema"], ["light", "Chiaro"], ["dark", "Scuro"]];
   const bottoniModo = MODI.map(([valore, nome]) => {
-    const b = nodo9(doc, "button", "", nome);
+    const b = nodo10(doc, "button", "", nome);
     b.type = "button";
     b.dataset.modo = valore;
     b.addEventListener("click", () => {
@@ -6723,17 +7563,17 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     return b;
   });
   controlli.append(segmento);
-  const dettagli = nodo9(doc, "div", "td-theme-details");
+  const dettagli = nodo10(doc, "div", "td-theme-details");
   const campi = ["Accento", "Fondo", "Raggio delle schede"].map((nome) => {
-    const box = nodo9(doc, "div");
-    box.append(nodo9(doc, "span", "", nome));
-    const valore = nodo9(doc, "strong", "", "—");
+    const box = nodo10(doc, "div");
+    box.append(nodo10(doc, "span", "", nome));
+    const valore = nodo10(doc, "strong", "", "—");
     box.append(valore);
     dettagli.append(box);
     return valore;
   });
-  const azioni = nodo9(doc, "div", "td-theme-actions");
-  const vaiAImpostazioni = nodo9(doc, "button", "td-studio-button", "Tutte le impostazioni dell’aspetto");
+  const azioni = nodo10(doc, "div", "td-theme-actions");
+  const vaiAImpostazioni = nodo10(doc, "button", "td-studio-button", "Tutte le impostazioni dell’aspetto");
   vaiAImpostazioni.type = "button";
   vaiAImpostazioni.addEventListener("click", () => {
     chiudiModale();
@@ -6741,21 +7581,21 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
     (doc.getElementById("themePresetSelect") || doc.getElementById("setting-themePresetSelect"))?.focus?.({ preventScroll: false });
   });
   azioni.append(vaiAImpostazioni);
-  const nota = nodo9(doc, "p", "td-theme-note", "Il tema si applica subito, senza chiudere il pannello. La preferenza è di questo browser: le conversazioni e i file non vengono toccati. Lo sfondo animato ha un suo controllo in «Aspetto e movimento».");
+  const nota = nodo10(doc, "p", "td-theme-note", "Il tema si applica subito, senza chiudere il pannello. La preferenza è di questo browser: le conversazioni e i file non vengono toccati. Lo sfondo animato ha un suo controllo in «Aspetto e movimento».");
   destra.append(titolo2, descrizione, anteprima3, didascalia, controlli, dettagli, azioni, nota);
   studio.append(elenco2, destra);
   const scelte = temi.map(({ id, nome }) => {
-    const b = nodo9(doc, "button", "td-theme-choice");
+    const b = nodo10(doc, "button", "td-theme-choice");
     b.type = "button";
     b.setAttribute("role", "radio");
     b.dataset.tema = id;
-    const pallino = nodo9(doc, "span", "td-palette-dot");
+    const pallino = nodo10(doc, "span", "td-palette-dot");
     pallino.setAttribute("aria-hidden", "true");
     const seme = semi.get(id);
     if (seme?.accento) pallino.style.setProperty("--preview-accent", seme.accento);
     const fondo = fondoDelTema(seme, temaChiaro(seme) ? "light" : "dark");
     if (fondo) pallino.style.setProperty("--preview-bg", fondo);
-    const segno = nodo9(doc, "span", "td-theme-segno", "");
+    const segno = nodo10(doc, "span", "td-theme-segno", "");
     b.append(pallino, doc.createTextNode(nome), segno);
     b.addEventListener("click", () => {
       scelto = id;
@@ -6801,11 +7641,11 @@ function apriStudioTemi({ document: doc = globalThis.document } = {}) {
   }
   function disegnaAnteprima() {
     anteprima3.replaceChildren();
-    const riga = nodo9(doc, "div", "td-preview-riga");
-    riga.append(nodo9(doc, "span", "td-preview-pallino"), nodo9(doc, "span", "td-preview-barra"));
-    const scheda = nodo9(doc, "div", "td-preview-scheda");
-    const barraLunga = nodo9(doc, "span", "td-preview-barra");
-    const barraCorta = nodo9(doc, "span", "td-preview-barra");
+    const riga = nodo10(doc, "div", "td-preview-riga");
+    riga.append(nodo10(doc, "span", "td-preview-pallino"), nodo10(doc, "span", "td-preview-barra"));
+    const scheda = nodo10(doc, "div", "td-preview-scheda");
+    const barraLunga = nodo10(doc, "span", "td-preview-barra");
+    const barraCorta = nodo10(doc, "span", "td-preview-barra");
     barraCorta.dataset.corta = "si";
     scheda.append(barraLunga, barraCorta);
     anteprima3.append(riga, scheda);
@@ -6823,7 +7663,7 @@ function montaScorciatoiaTemi(schermo, { document: doc = globalThis.document } =
   if (!riga) return null;
   const esistente = schermo.querySelector("[data-td-studio-temi]");
   if (esistente) return esistente;
-  const b = nodo9(doc, "button", "td-studio-button", `Esplora le ${nomiTemi().length} atmosfere`);
+  const b = nodo10(doc, "button", "td-studio-button", `Esplora le ${nomiTemi().length} atmosfere`);
   b.type = "button";
   b.dataset.tdStudioTemi = "";
   b.addEventListener("click", () => apriStudioTemi({ document: doc }));
@@ -6894,10 +7734,10 @@ function selezionaSessioniBoard(sessioni, { stato = "tutte", cartella = "", ordi
   return dati.sort((a, b) => ordine === "nome" ? (a.nome || a.taskId || "").localeCompare(b.nome || b.taskId || "", "it", { numeric: true, sensitivity: "base" }) : ordine === "token" ? confrontoNumero(totale(a), totale(b)) : confrontoNumero(data(a), data(b), ordine === "vecchie"));
 }
 function el13(doc, tag2, classe, testo3) {
-  const nodo10 = doc.createElement(tag2);
-  if (classe) nodo10.className = classe;
-  if (testo3 !== void 0) nodo10.textContent = testo3;
-  return nodo10;
+  const nodo11 = doc.createElement(tag2);
+  if (classe) nodo11.className = classe;
+  if (testo3 !== void 0) nodo11.textContent = testo3;
+  return nodo11;
 }
 function creaRigaBoard(sessione, { document: doc = globalThis.document, metriche = {}, adesso, onApri, onMenu } = {}) {
   const t2 = testiBoard(sessione, metriche, adesso), stato = statoBoard(sessione);
@@ -7360,12 +8200,12 @@ var init_notifiche = __esm({
 function gb(bytes) {
   const n = Number(bytes);
   if (!Number.isFinite(n) || n < 0) return "—";
-  return `${numero3.format(n / GB)} GB`;
+  return `${numero4.format(n / GB)} GB`;
 }
 function contestoK(token) {
   const n = Number(token);
   if (!Number.isFinite(n) || n <= 0) return null;
-  return n >= 1e6 ? `${numero3.format(n / 1e6)}M token` : `${Math.round(n / 1024)}k token`;
+  return n >= 1e6 ? `${numero4.format(n / 1e6)}M token` : `${Math.round(n / 1024)}k token`;
 }
 function verdettoEntra(fit, runtime = {}) {
   const esito = fit?.esito;
@@ -7613,11 +8453,11 @@ function montaInstallati(originale, canonico, { document: documentObj = globalTh
   }
   aggiornaDettaglioInstallato(originale.querySelector('[data-c="DetailPanel"]'), null, { document: documentObj });
 }
-var GB, numero3, STATI_INSTALLATO;
+var GB, numero4, STATI_INSTALLATO;
 var init_modelli_installati = __esm({
   "src/components/modelli-installati.js"() {
     GB = 1024 ** 3;
-    numero3 = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
+    numero4 = new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 });
     STATI_INSTALLATO = Object.freeze({
       caricato: { etichetta: "Caricato", tono: "accent" },
       disco: { etichetta: "Sul disco", tono: "" },
@@ -7656,7 +8496,7 @@ function conteggio(n) {
   if (!Number.isFinite(v) || v < 0) return null;
   if (v >= 1e6) return `${new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 }).format(v / 1e6)} M`;
   if (v >= 1e3) return `${new Intl.NumberFormat("it-IT", { maximumFractionDigits: 1 }).format(v / 1e3)} k`;
-  return numero4.format(v);
+  return numero5.format(v);
 }
 function gruppiVarianti(files = []) {
   const gruppi = /* @__PURE__ */ new Map();
@@ -7982,7 +8822,7 @@ function montaHf(originale, canonico) {
   const altri = originale.querySelector("#modelLabHfNextButtonControl");
   if (altri) altri.hidden = true;
 }
-var BIT_PER_PESO, SUFFISSO, PAVIMENTO_CONSIGLIO, GLOSSE, numero4, TIPI2;
+var BIT_PER_PESO, SUFFISSO, PAVIMENTO_CONSIGLIO, GLOSSE, numero5, TIPI2;
 var init_hf_catalogo = __esm({
   "src/components/hf-catalogo.js"() {
     init_modelli_installati();
@@ -8031,7 +8871,7 @@ var init_hf_catalogo = __esm({
       [/^(IQ1|TQ1)/u, "1 bit · sperimentale, spesso inservibile"],
       [/^MXFP4$/u, "4 bit a blocchi · formato nuovo"]
     ];
-    numero4 = new Intl.NumberFormat("it-IT");
+    numero5 = new Intl.NumberFormat("it-IT");
     TIPI2 = { "text-generation": "Conversazione e codice", "text2text-generation": "Testo", "image-text-to-text": "Immagini e testo", "automatic-speech-recognition": "Voce", "feature-extraction": "Embedding" };
   }
 });
@@ -9261,14 +10101,14 @@ function righeFinestra(usage = null, finestra = null, ripartizione = null) {
   return { titoloDestra: finestra ? kilo(finestra) : "finestra non dichiarata", righe };
 }
 function titoloRispostaDaTurno(turno, parole = 5) {
-  const nodo10 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_RISPOSTA_TURNO) : null;
-  const testo3 = typeof nodo10?.textContent === "string" ? nodo10.textContent.trim() : "";
+  const nodo11 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_RISPOSTA_TURNO) : null;
+  const testo3 = typeof nodo11?.textContent === "string" ? nodo11.textContent.trim() : "";
   if (!testo3) return "";
   return testo3.split(/\s+/).slice(0, parole).join(" ");
 }
 function titoloMessaggioUtente(turno, parole = 5) {
-  const nodo10 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_TESTO_UTENTE) : null;
-  const testo3 = typeof nodo10?.textContent === "string" ? nodo10.textContent.trim() : "";
+  const nodo11 = turno && typeof turno.querySelector === "function" ? turno.querySelector(SELETTORE_TESTO_UTENTE) : null;
+  const testo3 = typeof nodo11?.textContent === "string" ? nodo11.textContent.trim() : "";
   if (!testo3) return "";
   return testo3.split(/\s+/).slice(0, parole).join(" ");
 }
@@ -9526,10 +10366,10 @@ var init_inspector = __esm({
 
 // src/components/review.js
 function el21(documentObj, tag2, className, testo3) {
-  const nodo10 = documentObj.createElement(tag2);
-  if (className) nodo10.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo10.textContent = String(testo3);
-  return nodo10;
+  const nodo11 = documentObj.createElement(tag2);
+  if (className) nodo11.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo11.textContent = String(testo3);
+  return nodo11;
 }
 function contaDiff(voceOCode = []) {
   if (voceOCode && !Array.isArray(voceOCode) && Number.isFinite(voceOCode.aggiunte) && Number.isFinite(voceOCode.rimozioni)) {
@@ -9738,7 +10578,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
       disegnaCartelle();
     }
   }
-  function nodo10(path, q) {
+  function nodo11(path, q) {
     const figli = st.figli.get(path);
     const n = d.createElement("div");
     n.setAttribute("role", "treeitem");
@@ -9773,7 +10613,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
     if (Array.isArray(figli) && figli.length && aperto) {
       const g = d.createElement("div");
       g.setAttribute("role", "group");
-      for (const f of figli) if (!q || f.nome.toLocaleLowerCase("it").includes(q) || f.path.toLocaleLowerCase("it").includes(q)) g.append(nodo10(f.path, q));
+      for (const f of figli) if (!q || f.nome.toLocaleLowerCase("it").includes(q) || f.path.toLocaleLowerCase("it").includes(q)) g.append(nodo11(f.path, q));
       n.append(g);
     }
     return n;
@@ -9782,7 +10622,7 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
     const albero = $2("introAlbero");
     if (!albero || !st.radice) return;
     const q = ($2("introCercaCartella")?.value || "").trim().toLocaleLowerCase("it");
-    albero.replaceChildren(nodo10(st.radice, q));
+    albero.replaceChildren(nodo11(st.radice, q));
     const stato2 = $2("introCartelleStato");
     if (stato2 && !st.caricando.size) stato2.textContent = q ? albero.querySelectorAll("[role=group] [role=treeitem]").length ? "Solo le cartelle già caricate." : "Nessuna cartella corrisponde alla ricerca." : "Le cartelle si leggono aprendole. Doppio clic o freccia destra per entrare.";
     const scelta = $2("introCartellaScelta");
@@ -11371,10 +12211,10 @@ var init_nav_item = __esm({
 
 // src/components/conversazione.js
 function el22(documentObj, tag2, className, testo3) {
-  const nodo10 = documentObj.createElement(tag2);
-  if (className) nodo10.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo10.textContent = String(testo3);
-  return nodo10;
+  const nodo11 = documentObj.createElement(tag2);
+  if (className) nodo11.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo11.textContent = String(testo3);
+  return nodo11;
 }
 function simbolo(documentObj, classe, nome) {
   const svg = documentObj.createElementNS(SVG_NS, "svg");
@@ -11840,12 +12680,12 @@ function creaAttesa({ etichetta: etichetta2 = "Sto pensando…" } = {}, opzioni 
     svg.append(linea);
   }
   for (const cx of [16, 48, 80]) {
-    const nodo10 = documentObj.createElementNS(SVG_NS, "circle");
-    nodo10.setAttribute("class", "talos-line-loader-node");
-    nodo10.setAttribute("cx", String(cx));
-    nodo10.setAttribute("cy", "8");
-    nodo10.setAttribute("r", "4");
-    svg.append(nodo10);
+    const nodo11 = documentObj.createElementNS(SVG_NS, "circle");
+    nodo11.setAttribute("class", "talos-line-loader-node");
+    nodo11.setAttribute("cx", String(cx));
+    nodo11.setAttribute("cy", "8");
+    nodo11.setAttribute("r", "4");
+    svg.append(nodo11);
   }
   const label = el22(documentObj, "span", "talos-waiting__label run-activity-label", etichetta2);
   const elapsed = el22(documentObj, "span", "talos-mono talos-muted run-activity-elapsed", "0s");
@@ -12098,10 +12938,10 @@ function riduciEventiFiglia(eventi2) {
   return { turni, stato, giri, modello, attrezzi, scartati, motivo };
 }
 function el23(d, tag2, classe, testo3) {
-  const nodo10 = d.createElement(tag2);
-  if (classe) nodo10.className = classe;
-  if (testo3 !== void 0 && testo3 !== null) nodo10.textContent = String(testo3);
-  return nodo10;
+  const nodo11 = d.createElement(tag2);
+  if (classe) nodo11.className = classe;
+  if (testo3 !== void 0 && testo3 !== null) nodo11.textContent = String(testo3);
+  return nodo11;
 }
 function simbolo2(d, classe, nome) {
   const svg = d.createElementNS(SVG_NS2, "svg");
@@ -12161,10 +13001,10 @@ function montaConversazioneFiglia(contenitore, {
   const disegnati = /* @__PURE__ */ new Map();
   const chiaveBlocco = (b) => b.tipo === "attrezzo" ? `a:${b.id}` : b.tipo === "testo" ? `t:${b.id}` : `e:${b.id}`;
   function creaVistaTurno(turno) {
-    const nodo10 = el23(d, "div", "talos-figlia__turno");
-    if (turno.consegna) nodo10.append(creaMessaggioUtente({ testo: turno.consegna, meta: turno.meta }, { document: d }));
-    corpo.append(nodo10);
-    return { elemento: nodo10, blocchi: /* @__PURE__ */ new Map() };
+    const nodo11 = el23(d, "div", "talos-figlia__turno");
+    if (turno.consegna) nodo11.append(creaMessaggioUtente({ testo: turno.consegna, meta: turno.meta }, { document: d }));
+    corpo.append(nodo11);
+    return { elemento: nodo11, blocchi: /* @__PURE__ */ new Map() };
   }
   function creaVistaBlocco(vistaTurno, blocco, gruppo, modello) {
     if (blocco.tipo === "testo") {
@@ -13014,9 +13854,9 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
   radice2.append(tela, velo, etichetta2);
   contenitore.replaceChildren(radice2);
   const ascolti = [];
-  const ascolta = (nodo10, tipo, mano, opzioni) => {
-    nodo10.addEventListener(tipo, mano, opzioni);
-    ascolti.push([nodo10, tipo, mano, opzioni]);
+  const ascolta = (nodo11, tipo, mano, opzioni) => {
+    nodo11.addEventListener(tipo, mano, opzioni);
+    ascolti.push([nodo11, tipo, mano, opzioni]);
   };
   let corrente = "apro";
   let attesa = null;
@@ -13163,7 +14003,7 @@ function creaVistaViva(contenitore, { onGesto, onErrore, documento = globalThis.
     inCoda = false;
     prenotato = null;
     attesa = null;
-    for (const [nodo10, tipo, mano, opzioni] of ascolti) nodo10.removeEventListener?.(tipo, mano, opzioni);
+    for (const [nodo11, tipo, mano, opzioni] of ascolti) nodo11.removeEventListener?.(tipo, mano, opzioni);
     ascolti.length = 0;
     contenitore.replaceChildren?.();
   }
@@ -13440,10 +14280,10 @@ function montaMiglioraPrompt({
   let giro = 0;
   let distrutto = false;
   const elemento = (tag2, classe, testo3) => {
-    const nodo10 = doc.createElement(tag2);
-    if (classe) nodo10.className = classe;
-    if (testo3 != null) nodo10.textContent = testo3;
-    return nodo10;
+    const nodo11 = doc.createElement(tag2);
+    if (classe) nodo11.className = classe;
+    if (testo3 != null) nodo11.textContent = testo3;
+    return nodo11;
   };
   const radice2 = elemento("section", "talos-migliora");
   radice2.dataset.miglioraPrompt = "";
@@ -13764,12 +14604,12 @@ function etichettaTasto(combo, { apple = suApple() } = {}) {
 }
 function normalizzaTastiScritti(radice2 = globalThis.document, { apple = suApple() } = {}) {
   let cambiati = 0;
-  for (const nodo10 of radice2.querySelectorAll("kbd")) {
-    const testo3 = (nodo10.textContent || "").trim();
+  for (const nodo11 of radice2.querySelectorAll("kbd")) {
+    const testo3 = (nodo11.textContent || "").trim();
     if (!/⌘|ctrl|cmd|shift/i.test(testo3)) continue;
     const nuovo = etichettaTasto(testo3, { apple });
     if (nuovo && nuovo !== testo3) {
-      nodo10.textContent = nuovo;
+      nodo11.textContent = nuovo;
       cambiati += 1;
     }
   }
@@ -13863,8 +14703,8 @@ function migraTitle(elemento) {
   elemento.removeAttribute("title");
   return titolo2.trim();
 }
-function bersaglioDi(nodo10) {
-  let corrente = nodo10;
+function bersaglioDi(nodo11) {
+  let corrente = nodo11;
   while (corrente && corrente.nodeType === 1) {
     if (corrente.hasAttribute?.(ATTRIBUTO) || corrente.hasAttribute?.("title")) return corrente;
     corrente = corrente.parentElement;
@@ -14801,10 +15641,10 @@ var init_context_progress = __esm({
 
 // src/components/stato-vuoto.js
 function el24(documentObj, tag2, className, testo3) {
-  const nodo10 = documentObj.createElement(tag2);
-  if (className) nodo10.className = className;
-  if (testo3 !== void 0 && testo3 !== null) nodo10.textContent = String(testo3);
-  return nodo10;
+  const nodo11 = documentObj.createElement(tag2);
+  if (className) nodo11.className = className;
+  if (testo3 !== void 0 && testo3 !== null) nodo11.textContent = String(testo3);
+  return nodo11;
 }
 function simbolo3(documentObj, classe, nome) {
   const svg = documentObj.createElementNS(SVG_NS3, "svg");
@@ -15517,9 +16357,9 @@ var init_app = __esm({
       }
       const motionAnimations = /* @__PURE__ */ new Set();
       let spazioCodaConversazioneUltimo = -1;
-      function scrollerConversazione(nodo10 = $2("#conversation")) {
-        if (!nodo10) return null;
-        return nodo10.closest?.(".talos-conversation") || nodo10;
+      function scrollerConversazione(nodo11 = $2("#conversation")) {
+        if (!nodo11) return null;
+        return nodo11.closest?.(".talos-conversation") || nodo11;
       }
       function aggiornaSpazioCodaConversazione(conversation) {
         if (!conversation) return;
@@ -15617,8 +16457,8 @@ var init_app = __esm({
         let n;
         while (n = walker.nextNode()) nodi.push(n);
         for (let i = nodi.length - 1; i >= 0 && restanti > 0; i -= 1) {
-          const nodo10 = nodi[i];
-          const genitore = nodo10.parentElement;
+          const nodo11 = nodi[i];
+          const genitore = nodo11.parentElement;
           if (!genitore) continue;
           if (genitore.classList.contains("stream-word")) {
             restanti -= 1;
@@ -15626,7 +16466,7 @@ var init_app = __esm({
             continue;
           }
           if (genitore.closest("pre, code, .code-block-head")) continue;
-          const pezzi = nodo10.textContent.split(/(\s+)/).filter((p) => p.length > 0);
+          const pezzi = nodo11.textContent.split(/(\s+)/).filter((p) => p.length > 0);
           if (pezzi.length === 0) continue;
           const nuovi = [];
           let testoPiano = "";
@@ -15652,7 +16492,7 @@ var init_app = __esm({
           if (nuovi.length === 1 && nuovi[0].nodeType === Node.TEXT_NODE) continue;
           const frag = document.createDocumentFragment();
           for (const nuovo of nuovi) frag.appendChild(nuovo);
-          nodo10.replaceWith(frag);
+          nodo11.replaceWith(frag);
         }
       }
       function renderizzaMessaggioStreamingOra(messageId) {
@@ -16106,6 +16946,7 @@ var init_app = __esm({
       function disegnaPaginaNote() {
         const schermo = $2("#schermoNote");
         if (!schermo) return;
+        const id = state.realSession.id;
         const cerca = $2("#cercaNota", schermo)?.value || "";
         montaNote(schermo, noteCaricate, {
           cerca,
@@ -16114,7 +16955,22 @@ var init_app = __esm({
           onAggiorna: () => void caricaPaginaNote(),
           onCopia: (nota) => copyText(`${nota?.titolo || ""}
 
-${nota?.contenuto || ""}`.trim(), "Nota copiata")
+${nota?.contenuto || ""}`.trim(), "Nota copiata"),
+          /*
+           * ⭐ 12/09 — il CRUD della persona. Le stesse quattro iniezioni che la Libreria ha dal 10/09:
+           *   la sessione (senza, nessun indirizzo esiste e i comandi non compaiono), la rete, il menu
+           *   della app e il ricarico dopo una scrittura. `rendiMarkdown` è quella della chat: una
+           *   nota Markdown si legge resa, che è l'ordine dell'owner dell'11/09.
+           */
+          sessionId: id,
+          rete: reteVociDellaPersona(),
+          onMenu: apriMenuAzioniLibreria,
+          onCambiata: () => {
+            void caricaPaginaNote();
+            void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+          },
+          copia: (testo3) => copyText(testo3, "Nota copiata"),
+          rendiMarkdown: renderizzaMarkdownSemplice
         });
       }
       const FLAG_FLOTTANTE = { inspector: "--talos-inspector-flottante", sessions: "--talos-sidebar-flottante" };
@@ -16197,7 +17053,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       let fuocoPrimaDelCassetto = null;
       function elementiFuoriDalCassetto() {
         const barra = $2(".talos-sidebar");
-        return [...appShell?.children || []].filter((nodo10) => nodo10 !== barra);
+        return [...appShell?.children || []].filter((nodo11) => nodo11 !== barra);
       }
       function cassettoAperto() {
         return document.documentElement.classList.contains("td-drawer-open");
@@ -16208,7 +17064,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (!barra) return;
         fuocoPrimaDelCassetto = ROOT().activeElement || null;
         document.documentElement.classList.add("td-drawer-open");
-        for (const nodo10 of elementiFuoriDalCassetto()) nodo10.inert = true;
+        for (const nodo11 of elementiFuoriDalCassetto()) nodo11.inert = true;
         let velo = $2(".td-scrim");
         if (!velo) {
           velo = document.createElement("button");
@@ -16220,7 +17076,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
         $2("#apriCassettoBarra")?.setAttribute("aria-expanded", "true");
         if (!movimentoRidottoDalSistema() && !HOST().classList.contains("interface-motion-off") && typeof barra.animate === "function") {
-          const durata = motionMilliseconds("--talos-motion-duration-surface-enter", 180);
+          const durata = motionMilliseconds("--talos-motion-duration-surface-enter", 180) * 1.3;
           if (durata > 0) barra.animate([{ transform: "translateX(-100%)" }, { transform: "none" }], { duration: durata, easing: getComputedStyle(HOST()).getPropertyValue("--talos-motion-ease").trim() || "cubic-bezier(.2,.7,.2,1)" });
         }
         (barra.querySelector("[data-vaia]") || barra).focus?.({ preventScroll: true });
@@ -16228,7 +17084,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       function chiudiCassettoBarra({ restituisciFuoco = true } = {}) {
         if (!cassettoAperto()) return;
         document.documentElement.classList.remove("td-drawer-open");
-        for (const nodo10 of elementiFuoriDalCassetto()) nodo10.inert = false;
+        for (const nodo11 of elementiFuoriDalCassetto()) nodo11.inert = false;
         $2(".td-scrim")?.remove();
         $2("#apriCassettoBarra")?.setAttribute("aria-expanded", "false");
         if (restituisciFuoco) (fuocoPrimaDelCassetto?.isConnected ? fuocoPrimaDelCassetto : $2("#apriCassettoBarra"))?.focus?.({ preventScroll: true });
@@ -16668,7 +17524,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           statoRender.prefisso = stabile;
           statoRender.nodiCoda = [];
         } else {
-          for (const nodo10 of statoRender.nodiCoda) nodo10.remove();
+          for (const nodo11 of statoRender.nodiCoda) nodo11.remove();
           statoRender.nodiCoda = [];
           if (stabile.length > statoRender.prefisso.length) {
             const nuovoStabile = renderizzaMarkdownSemplice(stabile.slice(statoRender.prefisso.length));
@@ -16833,8 +17689,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return "Nel prossimo messaggio chiedi un passo solo: il tetto vale per giro, non per sessione.";
       }
       function aggiornaContatoreUsage() {
-        const nodo10 = $2("[data-usage-summary]");
-        if (nodo10) nodo10.textContent = `Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true })}`;
+        const nodo11 = $2("[data-usage-summary]");
+        if (nodo11) nodo11.textContent = `Main · ${formattaUsageBreve(state.realSession.usageSessione || state.realSession.usage, { live: true })}`;
       }
       function formattaOraSessione(iso) {
         const data = new Date(iso);
@@ -16909,8 +17765,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         if (value >= 1e3) return `${Math.round(value / 1e3)}k token`;
         return `${Math.round(value)} token`;
       }
-      function formattaContoModelLab(numero5) {
-        const value = Number(numero5);
+      function formattaContoModelLab(numero6) {
+        const value = Number(numero6);
         if (!Number.isFinite(value) || value < 0) return null;
         return new Intl.NumberFormat("it-IT", { notation: "compact", maximumFractionDigits: 1 }).format(value);
       }
@@ -16923,9 +17779,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return (parole.length > 1 ? parole[0][0] + parole[1][0] : String(row.label || row.id).slice(0, 2)).toUpperCase();
       }
       function segmentoProvider(stato, testo3) {
-        const nodo10 = textElement("span", "provider-seg", SEGNI_PROVIDER[stato] + " " + testo3);
-        nodo10.dataset.seg = stato;
-        return nodo10;
+        const nodo11 = textElement("span", "provider-seg", SEGNI_PROVIDER[stato] + " " + testo3);
+        nodo11.dataset.seg = stato;
+        return nodo11;
       }
       function renderizzaProviderModelLab() {
         const rows = Array.isArray(state.modelLab.providers) ? state.modelLab.providers : [];
@@ -17166,32 +18022,32 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
       }
       function nodoVerdettoFit(modelId) {
         const voce = state.modelLab.fit.get(modelId);
-        const nodo10 = document.createElement("p");
-        nodo10.className = "model-lab-fit";
-        nodo10.dataset.modelFit = modelId;
+        const nodo11 = document.createElement("p");
+        nodo11.className = "model-lab-fit";
+        nodo11.dataset.modelFit = modelId;
         if (!voce) {
-          nodo10.hidden = true;
-          return nodo10;
+          nodo11.hidden = true;
+          return nodo11;
         }
         if (voce.inCorso) {
-          nodo10.dataset.fitState = "attesa";
-          nodo10.textContent = "Verifica in corso…";
-          return nodo10;
+          nodo11.dataset.fitState = "attesa";
+          nodo11.textContent = "Verifica in corso…";
+          return nodo11;
         }
         if (voce.errore) {
-          nodo10.dataset.fitState = "bad";
-          nodo10.textContent = `Verifica non riuscita — ${voce.errore}`;
-          return nodo10;
+          nodo11.dataset.fitState = "bad";
+          nodo11.textContent = `Verifica non riuscita — ${voce.errore}`;
+          return nodo11;
         }
         const { classe, testo: testo3 } = descriviFit(voce.esito);
-        nodo10.dataset.fitState = voce.ripiegoChat ? "warn" : classe;
+        nodo11.dataset.fitState = voce.ripiegoChat ? "warn" : classe;
         const prefissoRipiego = voce.ripiegoChat ? voce.esito?.state === "unknown" ? "Va bene per la chat; come agente non verificabile ora" : "Va bene per la chat, non come agente" : "";
-        nodo10.textContent = voce.ripiegoChat ? `${prefissoRipiego} — ${testo3.replace(/^[^—]*— /, "")}` : testo3;
+        nodo11.textContent = voce.ripiegoChat ? `${prefissoRipiego} — ${testo3.replace(/^[^—]*— /, "")}` : testo3;
         const ctx = voce.esito.context;
         if (Number.isFinite(ctx?.availableTokens) && Number.isFinite(ctx?.requestedTokens)) {
-          nodo10.append(textElement("small", "", ` contesto ${ctx.availableTokens.toLocaleString("it-IT")} token su ${ctx.requestedTokens.toLocaleString("it-IT")} richiesti`));
+          nodo11.append(textElement("small", "", ` contesto ${ctx.availableTokens.toLocaleString("it-IT")} token su ${ctx.requestedTokens.toLocaleString("it-IT")} richiesti`));
         }
-        return nodo10;
+        return nodo11;
       }
       async function verificaCompatibilitaModello(modelId) {
         state.modelLab.fit.set(modelId, { inCorso: true });
@@ -18586,6 +19442,36 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
         return envelope.data;
       }
+      async function apiScrivi(metodo, pathname, body) {
+        const response = await fetchSorvegliata(API(pathname), {
+          method: metodo,
+          headers: { Accept: "application/json", ...body === void 0 ? {} : { "Content-Type": "application/json" } },
+          ...body === void 0 ? {} : { body: JSON.stringify(body) }
+        });
+        let envelope;
+        try {
+          envelope = await response.json();
+        } catch {
+          const error = new Error("Risposta locale non valida");
+          error.code = "INTERNAL_ERROR";
+          throw error;
+        }
+        if (!response.ok || !envelope?.ok) {
+          const error = new Error(envelope?.error?.message || "Richiesta locale non riuscita");
+          error.code = envelope?.error?.code || "INTERNAL_ERROR";
+          throw error;
+        }
+        return envelope.data;
+      }
+      function apiPatch(pathname, body) {
+        return apiScrivi("PATCH", pathname, body);
+      }
+      function apiDelete(pathname) {
+        return apiScrivi("DELETE", pathname);
+      }
+      function reteVociDellaPersona() {
+        return { post: apiPost, patch: apiPatch, elimina: apiDelete, leggi: apiGet };
+      }
       function riassuntoDoctor(risultato) {
         const voci = controlliDoctor(risultato), n = contaGravitaDoctor(voci), problemi = n.warning + n.danger;
         return { badge: problemi ? problemi + " da rivedere" : "Nessun problema rilevato", dettaglio: voci.filter((v) => v.gravita === "danger" || v.gravita === "warning").map((v) => v.titolo + ": " + v.righe.join(" ")).join(" · ") || "Controlli disponibili completati; leggi le note per le verifiche non eseguite." };
@@ -19122,7 +20008,20 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const attuale = () => generazioniAttivita.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === "attivita" && !mount.hidden : mount === $2("#tasksListMount", sheetBody));
         function mostra(attivita, { errore = null, caricamento = false } = {}) {
           if (pagina) {
-            aggiornaPaginaAttivita(mount, attivita, { errore, caricamento, onAggiorna: () => caricaPannelloAttivita({ pagina: true }) });
+            aggiornaPaginaAttivita(mount, attivita, {
+              errore,
+              caricamento,
+              sessionId,
+              notifica: toast,
+              onAggiorna: () => caricaPannelloAttivita({ pagina: true }),
+              rete: reteVociDellaPersona(),
+              onMenu: apriMenuAzioniLibreria,
+              onCambiata: () => {
+                caricaPannelloAttivita({ pagina: true });
+                void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+              },
+              copia: (testo3) => copyText(testo3, "Attività copiata")
+            });
           } else {
             mount.setAttribute("role", attivita.length ? "list" : "group");
             mount.replaceChildren(...attivita.map(rigaAttivita));
@@ -19164,7 +20063,20 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         const attuale = () => generazioniMemoria.get(mount) === generation && state.realSession.id === sessionId && (pagina ? state.view === "memoria" && !mount.hidden : mount === $2("#memoryListMount", sheetBody));
         function mostra(memorie, { errore = null, caricamento = false } = {}) {
           if (pagina) {
-            aggiornaPaginaMemoria(mount, memorie, { errore, caricamento, onAggiorna: () => caricaPannelloMemoria({ pagina: true }) });
+            aggiornaPaginaMemoria(mount, memorie, {
+              errore,
+              caricamento,
+              sessionId,
+              notifica: toast,
+              onAggiorna: () => caricaPannelloMemoria({ pagina: true }),
+              rete: reteVociDellaPersona(),
+              onMenu: apriMenuAzioniLibreria,
+              onCambiata: () => {
+                caricaPannelloMemoria({ pagina: true });
+                void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
+              },
+              copia: (testo3) => copyText(testo3, "Ricordo copiato")
+            });
           } else {
             mount.setAttribute("role", memorie.length ? "list" : "group");
             mount.replaceChildren(...memorie.map(rigaMemoria));
@@ -21543,11 +22455,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         }
       }
       function nodoAlbero({ titolo: titolo2, sotto, token, giri, stato = "done", qui = false, onApri = null, azione = null }) {
-        const nodo10 = document.createElement("div");
-        nodo10.className = `talos-tree__node${qui ? " talos-tree__node--current" : ""}${onApri ? " talos-tree__node--branch" : ""}`;
-        nodo10.setAttribute("role", "treeitem");
-        nodo10.setAttribute("aria-selected", String(qui));
-        nodo10.setAttribute("aria-level", onApri ? "2" : "1");
+        const nodo11 = document.createElement("div");
+        nodo11.className = `talos-tree__node${qui ? " talos-tree__node--current" : ""}${onApri ? " talos-tree__node--branch" : ""}`;
+        nodo11.setAttribute("role", "treeitem");
+        nodo11.setAttribute("aria-selected", String(qui));
+        nodo11.setAttribute("aria-level", onApri ? "2" : "1");
         const rail = document.createElement("span");
         rail.className = "talos-tree__rail";
         const dot = document.createElement("span");
@@ -21566,8 +22478,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           bottone5.addEventListener("click", onApri);
           aside.append(bottone5);
         }
-        nodo10.append(rail, dot, testo3, aside);
-        return nodo10;
+        nodo11.append(rail, dot, testo3, aside);
+        return nodo11;
       }
       function soloToken(usage) {
         if (!usage) return "";
@@ -21996,15 +22908,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
           const numeri = [...t2.querySelectorAll(".talos-turn-spine__n")].map((n) => Number(n.textContent)).filter(Number.isFinite);
           if (t2.dataset.turno === "utente") {
             const titolo2 = titoloMessaggioUtente(t2);
-            for (const numero5 of numeri) giri.push({ numero: numero5, titolo: titolo2.length > 32 ? `${titolo2.slice(0, 31)}…` : titolo2 || "Messaggio", tu: true, inCorso: false });
+            for (const numero6 of numeri) giri.push({ numero: numero6, titolo: titolo2.length > 32 ? `${titolo2.slice(0, 31)}…` : titolo2 || "Messaggio", tu: true, inCorso: false });
             continue;
           }
           const gruppi = [...t2.querySelectorAll('[data-c="ActivityBundle"]:not(.real-reasoning-note)')];
           const risposta = titoloRispostaDaTurno(t2);
-          numeri.forEach((numero5, i) => {
+          numeri.forEach((numero6, i) => {
             const g = gruppi[i];
             const riassunto = g?.querySelector(".tool-note-summary-text")?.textContent?.trim() || i === numeri.length - 1 && risposta || "Risposta";
-            giri.push({ numero: numero5, titolo: riassunto.length > 32 ? `${riassunto.slice(0, 31)}…` : riassunto, attrezzi: g ? g.querySelectorAll('[data-c="ToolRow"]').length : 0, inCorso: false });
+            giri.push({ numero: numero6, titolo: riassunto.length > 32 ? `${riassunto.slice(0, 31)}…` : riassunto, attrezzi: g ? g.querySelectorAll('[data-c="ToolRow"]').length : 0, inCorso: false });
           });
         }
         if (attivo && giri.length && !giri[giri.length - 1].tu) {
@@ -23950,10 +24862,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
             const osservati = /* @__PURE__ */ new WeakSet();
             const agganciaTutti = () => {
               if (!osservatore) return;
-              for (const nodo10 of [riquadroDaSeguire, document.querySelector("#browserVistaViva"), document.querySelector("#browserLive")]) {
-                if (nodo10 && nodo10.isConnected && !osservati.has(nodo10)) {
-                  osservati.add(nodo10);
-                  osservatore.observe(nodo10);
+              for (const nodo11 of [riquadroDaSeguire, document.querySelector("#browserVistaViva"), document.querySelector("#browserLive")]) {
+                if (nodo11 && nodo11.isConnected && !osservati.has(nodo11)) {
+                  osservati.add(nodo11);
+                  osservatore.observe(nodo11);
                 }
               }
             };
@@ -24166,10 +25078,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata")
         return righe;
       }
       function formattaRigheConNumero(righe) {
-        let numero5 = 0;
+        let numero6 = 0;
         return righe.map(([tipo, testo3]) => {
-          if (tipo !== "del") numero5 += 1;
-          const colNumero = tipo === "del" ? "".padStart(4) : String(numero5).padStart(4);
+          if (tipo !== "del") numero6 += 1;
+          const colNumero = tipo === "del" ? "".padStart(4) : String(numero6).padStart(4);
           const marcatore = tipo === "add" ? "+" : tipo === "del" ? "-" : " ";
           return [tipo, `${colNumero} ${marcatore} ${testo3}`];
         });
@@ -25473,7 +26385,7 @@ ${testo3}` : testo3;
         mount.replaceChildren(pre);
       }
       async function rivelaERivelaRigaAlbero(percorsoCompleto) {
-        const trovaNodo = (percorso) => [...document.querySelectorAll("#inspector-files .ft-node")].find((nodo10) => nodo10.dataset.percorso === percorso);
+        const trovaNodo = (percorso) => [...document.querySelectorAll("#inspector-files .ft-node")].find((nodo11) => nodo11.dataset.percorso === percorso);
         const parti = String(percorsoCompleto || "").split("/").filter(Boolean);
         let percorsoPadre = "";
         for (let indice2 = 0; indice2 < Math.max(0, parti.length - 1); indice2 += 1) {
@@ -26258,9 +27170,9 @@ ${testo3}` : testo3;
           case "StateDelta": {
             const recupero = Array.isArray(evento.delta) ? evento.delta.find((patch) => patch?.path === "/recuperoCronologia") : null;
             if (recupero) {
-              const numero5 = recupero.value?.chiamate;
-              if (Number.isSafeInteger(numero5) && numero5 > 0) {
-                appendStatusNote(`${numero5 === 1 ? "1 chiamata incompleta è stata conservata" : `${numero5} chiamate incomplete sono state conservate`} come nota nello storico. I messaggi originali sono intatti. Puoi continuare questa conversazione.`, false, { meta: "Storico recuperato" });
+              const numero6 = recupero.value?.chiamate;
+              if (Number.isSafeInteger(numero6) && numero6 > 0) {
+                appendStatusNote(`${numero6 === 1 ? "1 chiamata incompleta è stata conservata" : `${numero6} chiamate incomplete sono state conservate`} come nota nello storico. I messaggi originali sono intatti. Puoi continuare questa conversazione.`, false, { meta: "Storico recuperato" });
               }
               break;
             }
@@ -28224,9 +29136,9 @@ ${testo3}` : testo3;
           p.textContent = sottotitolo;
           return [h, p];
         }
-        function segnaEsito(nodo10, esito, testo3) {
-          nodo10.dataset.esito = esito;
-          nodo10.textContent = testo3;
+        function segnaEsito(nodo11, esito, testo3) {
+          nodo11.dataset.esito = esito;
+          nodo11.textContent = testo3;
         }
         async function disegnaProvider() {
           body.replaceChildren(...titolo2("Da dove pensa TALOS", "Serve un accesso a un modello: la chiave di un provider, salvata nel portachiavi di questo computer e mai nel browser, oppure un motore locale sul disco."));
@@ -32522,9 +33434,9 @@ function montaPonteLegacy(documentObj = document) {
     legacyFiles.dataset.legacyId = legacyFiles.id;
     legacyFiles.removeAttribute("id");
   }
-  for (const nodo10 of legacy.querySelectorAll('[id^="fileTree"]')) {
-    nodo10.dataset.legacyId = nodo10.id;
-    nodo10.removeAttribute("id");
+  for (const nodo11 of legacy.querySelectorAll('[id^="fileTree"]')) {
+    nodo11.dataset.legacyId = nodo11.id;
+    nodo11.removeAttribute("id");
   }
   const alberoCartella = inspector.querySelector("#alberoCartella");
   if (alberoCartella) {
