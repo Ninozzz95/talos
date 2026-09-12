@@ -644,7 +644,8 @@ async function startServer() {
     provaRicercaWebFn,
     token: config.token, // ⭐ 04/9, W1-10 — cancello a token per la shell Electron
     catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
-    catalogoFornitoriFn: (id, opts) => providerModelCatalog.ottieni(id, opts),
+    // P-K (12/09) — i cataloghi cloud dipendono dal collegamento dell'owner: Bedrock si legge dalla sonda, Azure/Vertex dichiarano che serve una configurazione.
+    catalogoFornitoriFn: (id, opts) => ['azure', 'bedrock', 'vertex'].includes(id) ? providerProbe.elencaModelli(id) : providerModelCatalog.ottieni(id, opts),
     capacitaMacchinaFn: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
     localRuntimes,
     runtimeBootstrapFn: async () => {

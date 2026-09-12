@@ -43,8 +43,8 @@ async function ascolta(t, handler) {
   return `http://127.0.0.1:${server.address().port}`;
 }
 
-test('PG-01 — undici percorsi chat P-G, venticinque record unici dopo P-I e P-J, e tutte le proiezioni coerenti', () => {
-  assert.equal(ID_FORNITORI.length, 25, 'Hugging Face riusa il record; P-I aggiunge Kimi, MiniMax, Qwen; P-J aggiunge le porte Anthropic zai-anthropic e minimax-anthropic');
+test('PG-01 — undici percorsi chat P-G, ventotto record unici dopo P-I, P-J e P-K, e tutte le proiezioni coerenti', () => {
+  assert.equal(ID_FORNITORI.length, 28, 'Hugging Face riusa il record; P-I: Kimi, MiniMax, Qwen; P-J: zai-anthropic, minimax-anthropic; P-K: azure, bedrock, vertex');
   for (const [id, [nome, base, variabile, modelsDevId]] of Object.entries(ATTESI)) {
     const r = REGISTRO_FORNITORI[id];
     assert.ok(r, id);

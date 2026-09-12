@@ -140,6 +140,11 @@ export const PROVIDER_DIRETTI = Object.freeze([
   // P-J — porte distinte, nomi umani; nessuna disponibilità senza collegamento.
   Object.freeze({ id: 'zai-anthropic', etichetta: 'Z.AI (porta Anthropic)', soloSeCollegato: true }),
   Object.freeze({ id: 'minimax-anthropic', etichetta: 'MiniMax (porta Anthropic)', soloSeCollegato: true }),
+  // P-K — inizio
+  Object.freeze({ id: 'azure', etichetta: 'Azure AI Foundry', soloSeCollegato: true }),
+  Object.freeze({ id: 'bedrock', etichetta: 'Amazon Bedrock', soloSeCollegato: true }),
+  Object.freeze({ id: 'vertex', etichetta: 'Google Vertex AI', soloSeCollegato: true }),
+  // P-K — fine
 ]);
 
 /** Vero se quel fornitore si legge senza collegare nessuna chiave (i motori locali). */

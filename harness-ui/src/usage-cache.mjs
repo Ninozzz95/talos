@@ -199,13 +199,16 @@ export function scontoDaCache(corpo, wire) {
 export function normalizzaUsage(usage, wire) {
   if (!usage || typeof usage !== 'object') return usage;
   const letti = tokenDaCache(usage, wire);
-  if (letti === null) return usage;
+  // P-K — una scrittura Bedrock può essere dichiarata senza una lettura della cache.
+  const soloScritturaCloud = fornitore(wire)?.cloud && tokenScrittiInCache(usage, wire) !== null;
+  if (letti === null && !soloScritturaCloud) return usage;
   const gia = conteggio(valoreAlPercorso(usage, 'prompt_tokens_details.cached_tokens'));
   const scritti = tokenScrittiInCache(usage, wire);
   const giaScritti = conteggio(valoreAlPercorso(usage, 'prompt_tokens_details.cache_write_tokens'));
   if (gia === letti && (scritti === null || giaScritti === scritti)) return usage;
   const dettagli = { ...(usage.prompt_tokens_details && typeof usage.prompt_tokens_details === 'object' ? usage.prompt_tokens_details : {}) };
-  dettagli.cached_tokens = letti;
+  if (letti !== null) dettagli.cached_tokens = letti;
+  // P-K — fine
   if (scritti !== null) dettagli.cache_write_tokens = scritti;
   return { ...usage, prompt_tokens_details: dettagli };
 }

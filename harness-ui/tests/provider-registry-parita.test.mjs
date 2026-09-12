@@ -85,6 +85,15 @@ function verificaRiservePubbliche(registro, catalogo) {
 test('PF-PAR-01 — riserve non vuote per ogni chat remota; locali e download dichiarano null', () => {
   for (const r of Object.values(REGISTRO_FORNITORI)) {
     if (r.destinazioneChat && r.catalogo.fonte === 'fornitore') {
+      // P-K — nessuna distribuzione dell'owner inventata per superare il cancello.
+      if (r.cloud) {
+        assert.ok(r.catalogo.riservaConfigurazione?.trim(), r.id);
+        assert.deepEqual(r.modelliDiRiserva, []);
+        assert.equal(r.modelloAusiliario, null);
+        assert.equal(r.modelsDevId, null);
+        continue;
+      }
+      // P-K — fine
       assert.ok(r.modelliDiRiserva?.length > 0, r.id);
       assert.ok(Object.isFrozen(r.modelliDiRiserva));
       for (const m of r.modelliDiRiserva) {
@@ -239,7 +248,11 @@ test('PAR-03 — destinazioni di chat: il prefisso, il router e la regex dicono 
   stessiId(FONTI_MODELLO, ID_DESTINAZIONE_CHAT, 'FONTI_MODELLO');
   const deps = {
     leggiChiave: () => 'k',
-    leggiRuntime: (fonte) => ({ endpoint: REGISTRO_FORNITORI[fonte]?.baseUrl ?? 'https://esempio.test/v1' }),
+    // P-K — risorsa e progetto sono necessari, nessun endpoint fittizio nel registro.
+    leggiRuntime: (fonte) => ({ endpoint: REGISTRO_FORNITORI[fonte]?.cloud
+      ? fonte === 'vertex' ? 'https://esempio.test/v1/projects/progetto-test/locations/europe-west1/endpoints/openapi' : 'https://esempio.test/openai/v1'
+      : REGISTRO_FORNITORI[fonte]?.baseUrl ?? 'https://esempio.test/v1' }),
+    // P-K — fine
     localePronto: () => true,
   };
   for (const id of ID_DESTINAZIONE_CHAT) {
@@ -371,7 +384,7 @@ test('SONDA-01 (verso contrario) — chi dichiara di non essere sondabile NON vi
   assert.equal(esitoAcceso.modelli, 1);
   assert.equal(chiamate, 1);
 
-  // P-J — la porta Z.AI dichiara ora il caso previsto; nessuna esclusione implicita.
+  // P-J/P-K — lo stato della sonda si legge dal registro (Z.AI porta Anthropic e Vertex la dichiarano spenta); nessuna esclusione scritta a mano.
   for (const id of ID_CON_CREDENZIALE) assert.equal(SONDE_PROVIDER[id].attiva, REGISTRO_FORNITORI[id].sonda.attiva !== false, `${id}: stato della sonda diverso dal registro`);
   const prima = chiamate;
   assert.equal((await createProviderProbe(deps).prova('zai-anthropic')).esito, 'non-sondabile');

@@ -30,6 +30,9 @@ function fail(message, code = 'RUNTIME_INVALID') {
  */
 export function preparaRichiestaCompatibile(provider, corpo) {
   const record = REGISTRO_FORNITORI[provider];
+  // P-K — il corpo HTTP usa reasoning_effort, non l'involucro del router.
+  if (record?.cloud) return preparaRichiestaCloud(record, corpo);
+  // P-K — fine
   if (record?.richiestaCompatibile) return preparaProfiloCompatibile(record, corpo);
   if (record?.ragionamento?.formato !== 'thinking') return { corpo, avvisi: [] };
   const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -68,6 +71,25 @@ export function preparaRichiestaCompatibile(provider, corpo) {
   }
   return { corpo: risultato, avvisi };
 }
+
+// P-K — OpenAI v1 ufficiale: nessuna deduzione di famiglia dal nome della distribuzione Azure.
+function preparaRichiestaCloud(record, corpo) {
+  const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  if (!oggetto(corpo) || typeof corpo.model !== 'string' || !corpo.model.trim()) fail(`Richiesta ${record.etichetta} non valida.`);
+  const risultato = { ...corpo }, avvisi = [];
+  if (corpo.reasoning !== undefined) {
+    if (!oggetto(corpo.reasoning)) fail(`Opzioni di ragionamento ${record.etichetta} non valide.`);
+    delete risultato.reasoning;
+    if (corpo.reasoning.effort !== undefined) {
+      if (corpo.reasoning_effort !== undefined && corpo.reasoning_effort !== corpo.reasoning.effort) fail(`Opzioni di ragionamento ${record.etichetta} in conflitto.`);
+      risultato.reasoning_effort = corpo.reasoning.effort;
+    }
+    if (Object.keys(corpo.reasoning).some(k => k !== 'effort')) avvisi.push(`${record.etichetta}: queste opzioni di ragionamento non sono previste dal collegamento.`);
+  }
+  // I limiti di generazione restano quelli chiesti; compatibilità finale dipendente dal modello.
+  return { corpo: risultato, avvisi };
+}
+// P-K — fine
 
 /** P-G, 12/09/2026: sole differenze documentate nel record, senza confronti sui fornitori. */
 function preparaProfiloCompatibile(record, corpo) {

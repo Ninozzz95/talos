@@ -1195,6 +1195,70 @@ export const REGISTRO_FORNITORI = congela({
     destinazioneChat: true, credenziale: true, esecuzione: 'collegato',
   }),
   // P-J — FINE porte Anthropic terze.
+  // P-K — inizio: contratti ufficiali e fonti consultati il 12/09/2026, nessuna chiamata cloud.
+  azure: congela({
+    id: 'azure', etichetta: 'Azure AI Foundry', descrizione: 'Modelli della propria risorsa Azure.',
+    paginaChiavi: 'https://ai.azure.com', wire: 'openai-chat', baseUrl: '', indirizzoModificabile: true,
+    envIndirizzo: congela(['AZURE_OPENAI_ENDPOINT', 'AZURE_FOUNDRY_BASE_URL']),
+    auth: congela({ tipo: 'header', header: 'api-key', nomeVariabile: congela(['AZURE_OPENAI_API_KEY', 'AZURE_FOUNDRY_API_KEY']) }),
+    chiaveObbligatoria: true, formaIdModello: 'nome', oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    cloud: congela({ tipo: 'azure', versione: 'v1', campi: congela(['endpointRisorsa', 'versioneApi']),
+      fonte: 'https://learn.microsoft.com/en-us/azure/foundry/openai/api-version-lifecycle', data: '2026-09-12',
+      nota: 'Scegli il nome della distribuzione presente nella tua risorsa. Un modello nel catalogo non è una distribuzione.' }),
+    streaming: 'dichiarato', toolCalling: 'dichiarato',
+    cache: congela({ marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']), scritturaUsage: congela([]),
+      inclusiNelTotale: true, scontoDichiarato: null, etichetta: 'Cache senza conteggio: non misurato.',
+      fonte: 'https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/prompt-caching', data: '2026-09-12' }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true,
+      riservaConfigurazione: 'I nomi delle distribuzioni appartengono alla risorsa: nessuna riserva universale.' }),
+    modelliDiRiserva: congela([]), modelloAusiliario: null, modelsDevId: null,
+    prezzi: congela({ fonte: 'nessuna' }), limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'header', percorso: '/models', urlAssoluto: null, conta: c => c?.data?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true, credenziale: true, esecuzione: 'collegato',
+  }),
+  bedrock: congela({
+    id: 'bedrock', etichetta: 'Amazon Bedrock', descrizione: 'Modelli disponibili nella regione scelta.',
+    paginaChiavi: 'https://console.aws.amazon.com/bedrock', wire: 'openai-chat', baseUrl: '', indirizzoModificabile: true,
+    envIndirizzo: congela(['BEDROCK_OPENAI_BASE_URL']),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['AWS_BEARER_TOKEN_BEDROCK']) }),
+    chiaveObbligatoria: true, formaIdModello: 'nome', oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    cloud: congela({ tipo: 'bedrock', versione: 'v1', campi: congela(['regione']),
+      fonte: 'https://docs.aws.amazon.com/bedrock/latest/userguide/inference-chat-completions-mantle.html', data: '2026-09-12',
+      nota: 'Usa una chiave di Amazon Bedrock. I modelli disponibili dipendono dalla regione e dagli accessi.' }),
+    streaming: 'dichiarato', toolCalling: 'dichiarato',
+    cache: congela({ marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens', 'cacheReadInputTokens']),
+      scritturaUsage: congela(['prompt_tokens_details.cache_write_tokens', 'cacheWriteInputTokens']), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache senza conteggio: non misurato.', fonte: 'https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_TokenUsage.html', data: '2026-09-12' }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true,
+      riservaConfigurazione: 'Elenco limitato ai modelli compatibili restituiti dalla regione scelta.' }),
+    modelliDiRiserva: congela([]), modelloAusiliario: null, modelsDevId: null,
+    prezzi: congela({ fonte: 'nessuna' }), limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null, conta: c => c?.data?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true, credenziale: true, esecuzione: 'collegato',
+  }),
+  vertex: congela({
+    id: 'vertex', etichetta: 'Google Vertex AI', descrizione: 'Modelli del progetto e della regione scelti.',
+    paginaChiavi: 'https://console.cloud.google.com/vertex-ai', wire: 'openai-chat', baseUrl: '', indirizzoModificabile: true,
+    envIndirizzo: congela(['VERTEX_OPENAI_BASE_URL']),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['VERTEX_ACCESS_TOKEN']) }),
+    chiaveObbligatoria: true, formaIdModello: 'vendor/nome', oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: null }),
+    cloud: congela({ tipo: 'vertex', versione: 'v1', campi: congela(['progetto', 'regione']),
+      fonte: 'https://docs.cloud.google.com/vertex-ai/generative-ai/docs/samples/generativeaionvertexai-gemini-chat-completions-non-streaming', data: '2026-09-12',
+      nota: 'Inserisci un accesso temporaneo già ottenuto da Google. Alla scadenza va sostituito; il rinnovo automatico non è collegato. Il catalogo non è verificabile da questo collegamento.' }),
+    streaming: 'dichiarato', toolCalling: 'dichiarato',
+    cache: congela({ marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']), scritturaUsage: congela([]), inclusiNelTotale: true,
+      scontoDichiarato: null, etichetta: 'Cache senza conteggio: non misurato.', fonte: 'https://docs.cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library', data: '2026-09-12' }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'configurazione', percorso: null, inUI: true,
+      riservaConfigurazione: 'Nessun catalogo OpenAI documentato; scegliere il modello abilitato nel progetto.' }),
+    modelliDiRiserva: congela([]), modelloAusiliario: null, modelsDevId: null,
+    prezzi: congela({ fonte: 'nessuna' }), limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: false, auth: 'bearer', percorso: null, urlAssoluto: null, conta: () => null }),
+    destinazioneChat: true, credenziale: true, esecuzione: 'collegato',
+  }),
+  // P-K — fine
 
   // ── Il motore locale llama-server — nessuna credenziale su disco, mai ───────────────────────
   local: congela({
@@ -1316,7 +1380,12 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
       if (!Object.hasOwn(record, campo)) throw new ProviderRegistryError(`${dove}: ${campo} deve essere dichiarato`);
     }
     if (record.destinazioneChat && record.catalogo?.fonte === 'fornitore') {
-      if (!Array.isArray(record.modelliDiRiserva) || !record.modelliDiRiserva.length) throw new ProviderRegistryError(`${dove}: riserva remota vuota`);
+      // P-K — una distribuzione/abilitazione dell'owner non si inventa come riserva pubblica.
+      const riservaCloud = record.cloud?.tipo === record.id && ['azure', 'bedrock', 'vertex'].includes(record.id)
+        && typeof record.catalogo.riservaConfigurazione === 'string' && record.catalogo.riservaConfigurazione.trim().length > 0;
+      if (!Array.isArray(record.modelliDiRiserva) || (!record.modelliDiRiserva.length && !riservaCloud)) throw new ProviderRegistryError(`${dove}: riserva remota vuota`);
+      if (riservaCloud && (record.modelliDiRiserva.length || record.modelloAusiliario !== null || record.modelsDevId !== null)) throw new ProviderRegistryError(`${dove}: catalogo cloud confuso con una riserva pubblica`);
+      // P-K — fine
       const riserveViste = new Set();
       for (const m of record.modelliDiRiserva) {
         if (!m || typeof m.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/u.test(m.id) || riserveViste.has(m.id)

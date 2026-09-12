@@ -33,6 +33,8 @@
  */
 
 import { ID_CON_CREDENZIALE, REGISTRO_FORNITORI, catalogoDiRiservaPer } from './provider-registry.mjs';
+// P-K
+import { destinazioneCloud } from './provider-auth-cloud.mjs';
 
 /**
  * Come si chiede l'elenco dei modelli a ciascuno.
@@ -167,8 +169,15 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
 
     const runtime = leggiRuntime(provider) || {};
     let url;
+    // P-K — la costruzione è condivisa con il trasporto, compresa l'eventuale scadenza.
+    let cloud;
+    if (record?.cloud) {
+      try { cloud = destinazioneCloud(provider, runtime, chiave, null, { catalogo: true }); }
+      catch (errore) { return { provider, esito: 'non-provabile', motivo: errore.message, codice: errore.code, modelli: null, millisecondi: null }; }
+    }
+    // P-K — fine
     try {
-      url = urlDellaSonda(minima ?? sonda, runtime.endpoint);
+      url = cloud?.url ?? urlDellaSonda(minima ?? sonda, runtime.endpoint); // P-J (richiesta minima) + P-K (indirizzo cloud)
     } catch (errore) {
       return { provider, esito: 'non-provabile', motivo: `Manca l'indirizzo di ${etichetta}.`, modelli: null, millisecondi: null, codice: errore.code };
     }
@@ -180,6 +189,9 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     if (record?.wire === 'anthropic-messages') intestazioni['anthropic-version'] = '2023-06-01';
     if (minima) intestazioni['Content-Type'] = 'application/json';
     if (sonda.auth === 'query') url += `${url.includes('?') ? '&' : '?'}key=${encodeURIComponent(chiave)}`;
+    // P-K — una chiave Azure e un token Entra usano intestazioni diverse.
+    if (cloud) { for (const key of Object.keys(intestazioni)) delete intestazioni[key]; Object.assign(intestazioni, { Accept: 'application/json' }, cloud.headers); }
+    // P-K — fine
 
     const secondi = Number.isFinite(runtime.timeoutSeconds) && runtime.timeoutSeconds > 0 ? runtime.timeoutSeconds : 60;
     // ⛔ Il tempo massimo è quello che la persona ha impostato per questo
@@ -201,6 +213,11 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     }
     const millisecondi = Math.round(orologio() - partito);
     if (risposta.status === 401 || risposta.status === 403) {
+      // P-K — un 403 non dimostra una chiave errata; può essere il permesso del progetto/modello.
+      if (record?.cloud) return { provider, esito: 'non-autorizzato', motivo: risposta.status === 401
+        ? `${etichetta}: credenziale non accettata (HTTP 401).`
+        : `${etichetta}: accesso negato (HTTP 403); controlla i permessi.`, modelli: null, millisecondi, httpStatus: risposta.status };
+      // P-K — fine
       return { provider, esito: 'non-autorizzato', motivo: `${etichetta} ha rifiutato la credenziale (HTTP ${risposta.status}).`, modelli: null, millisecondi, httpStatus: risposta.status };
     }
     if (!risposta.ok) {
@@ -260,6 +277,13 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     const runtime = leggiRuntime(provider);
     // P-J — il wire governa auth/paginazione anche quando il nome non è «anthropic».
     const catalogoAnthropic = record.wire === 'anthropic-messages';
+    // P-K — il catalogo Azure elenca modelli base, non i nomi delle distribuzioni dell'owner.
+    // Vertex non documenta GET /models sul percorso compatibile: non si inventa una sonda.
+    if (record.cloud && provider !== 'bedrock') throw new ProviderProbeError(provider === 'azure'
+      ? 'Azure AI Foundry: indica il nome della distribuzione configurata nella tua risorsa; il catalogo dei modelli non elenca le tue distribuzioni.'
+      : 'Google Vertex AI: indica un modello abilitato nel progetto; il catalogo non è disponibile da questo collegamento.', 'CATALOG_CONFIGURATION_REQUIRED');
+    const cloud = record.cloud ? destinazioneCloud(provider, runtime, key, null, { catalogo: true }) : null;
+    // P-K — fine
     const headers = { Accept: 'application/json' };
     if (catalogoAnthropic) {
       if (record.auth.tipo === 'bearer') headers.Authorization = `Bearer ${key}`;
@@ -268,12 +292,14 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     }
     else if (provider === 'gemini') headers['x-goog-api-key'] = key;
     else headers.Authorization = `Bearer ${key}`;
+    // P-K
+    if (cloud) Object.assign(headers, cloud.headers);
     const signal = AbortSignal.timeout(Math.min(runtime.timeoutSeconds || 30, 30) * 1000);
     const rows = []; const cursors = new Set(); let cursor;
     const dashscope = record.catalogo.forma === 'dashscope-output';
     let numeroPagina = 1; let totaleAtteso;
     do {
-      const url = new URL(urlDellaSonda(SONDE_PROVIDER[provider], runtime.endpoint));
+      const url = new URL(cloud?.url ?? urlDellaSonda(SONDE_PROVIDER[provider], runtime.endpoint));
       if (dashscope) url.searchParams.set('page_no', String(numeroPagina));
       if (provider === 'gemini') { url.searchParams.set('pageSize', '1000'); if (cursor) url.searchParams.set('pageToken', cursor); }
       if (catalogoAnthropic) { url.searchParams.set('limit', '1000'); if (cursor) url.searchParams.set('after_id', cursor); }
