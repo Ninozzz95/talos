@@ -215,42 +215,109 @@ dialog.td-modal::backdrop { background: var(--talos-overlay); }
 .td-modal-content { padding: 24px; overflow: auto; line-height: 1.65; }
 .td-modal-content .td-detail-footer { border-top: 0; padding: 18px 0 0; }
 
-/* ---------- 8. LO STUDIO DEI TEMI (mockup 4332-4350, 4386-4391) ---------- */
-dialog.td-modal:has(.td-theme-studio) { width: min(1120px, calc(100vw - 40px)); }
+/* ---------- 8. LO STUDIO DEI TEMI (mockup 4332-4381) ----------
+ * 12/09/2026 — rifatta dopo la foto dell'owner («l'anteprima non è dal vivo come sul mockup») e
+ * dopo l'ordine di portare qui i cursori dell'animazione. Misure prese riga per riga dal mockup:
+ * la modale 1120 px, la colonna dei temi 228 px, il divario 28, la voce alta 43, il pallino 22,
+ * il titolo 27/1.3 a -.04em, il riquadro `clamp(210px, 32vh, 355px)` (mockup 4376). */
+dialog.td-modal:has(.td-theme-studio) { width: min(1120px, calc(100vw - 40px)); max-height: calc(100dvh - 48px); }
 .td-theme-studio { display: grid; grid-template-columns: 228px minmax(0, 1fr); gap: 28px; align-items: start; }
-.td-theme-list { display: grid; gap: 3px; align-content: start; max-height: min(650px, 60dvh); overflow: auto; padding: 0 8px 0 0; }
+.td-theme-list { display: grid; gap: 3px; align-content: start; max-height: min(650px, 70dvh); overflow: auto; padding: 0 8px 0 0; position: sticky; top: 0; }
 .td-theme-choice { display: flex; align-items: center; text-align: left; gap: 12px; min-height: 43px; padding: 7px 10px; color: var(--talos-text); background: transparent; border: 1px solid transparent; border-radius: var(--talos-radius-control); font: 12px var(--talos-font-ui); cursor: pointer; }
 .td-theme-choice:hover { background: var(--talos-card); }
 .td-theme-choice[aria-checked="true"] { border-color: var(--talos-accent-border); background: var(--talos-accent-soft); }
 .td-theme-choice > .td-theme-segno { margin-left: auto; color: var(--talos-accent-text); font-size: 12px; }
-/* Il pallino e' MISURATO dal foglio dei temi (i quattro semi di `temi.css`), non riscritto:
-   meta' fondo, meta' accento — cambia da solo se cambia una tavolozza. */
+/* Il pallino e' MISURATO dal foglio dei temi (i semi di `temi.css`), non riscritto: meta' fondo,
+   meta' accento — cambia da solo se cambia una tavolozza. */
 .td-palette-dot { width: 22px; height: 22px; border-radius: 50%; flex: none; background: var(--preview-bg, var(--talos-card)); border: 1px solid var(--talos-border-strong); position: relative; overflow: hidden; }
 .td-palette-dot::after { content: ""; position: absolute; inset: 11px 0 0; background: var(--preview-accent, var(--talos-accent)); }
+.td-theme-display { min-width: 0; }
 .td-theme-display h3 { font: 550 27px/1.3 var(--talos-font-display); letter-spacing: -.04em; margin: 0 0 7px; }
-.td-theme-display > p { font: 12px/1.8 var(--talos-font-ui); margin: 0 0 17px; color: var(--talos-muted); max-width: 68ch; }
-.td-theme-preview { height: clamp(160px, 22dvh, 250px); position: relative; isolation: isolate; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card); overflow: hidden; background: var(--preview-bg, var(--talos-background)); display: flex; flex-direction: column; justify-content: space-between; padding: 18px; }
-.td-preview-riga { display: flex; align-items: center; gap: 10px; }
-.td-preview-pallino { width: 34px; height: 34px; border-radius: var(--preview-radius, 12px); background: var(--preview-accent); flex: none; }
-.td-preview-barra { height: 8px; border-radius: var(--talos-radius-pill); background: var(--preview-line); flex: 1; }
-.td-preview-barra[data-corta] { flex: 0 0 38%; }
-.td-preview-scheda { border: 1px solid var(--preview-line); border-radius: var(--preview-radius, 12px); padding: 12px 14px; display: grid; gap: 8px; }
-/* ⛔ La didascalia sta FUORI dal riquadro: dentro, su un fondo che cambia con la tavolozza, un
-   testo leggibile richiederebbe di ricalcolare il contrasto per ognuno dei quattordici temi. */
-.td-preview-caption { display: flex; justify-content: space-between; gap: 12px; font-size: 10px; color: var(--talos-muted); margin-top: 8px; }
+.td-theme-display > .td-theme-testa > p { font: 12px/1.8 var(--talos-font-ui); margin: 0 0 17px; color: var(--talos-muted); max-width: 68ch; }
+
+/* --- L'ANTEPRIMA VIVA -----------------------------------------------------------------------
+ * Tre strati nello stesso riquadro: la scena Canvas del pacchetto in fondo, la mini-conversazione
+ * coi token veri sopra, la didascalia in alto. `isolation` tiene il contesto di sovrapposizione
+ * dentro il riquadro; `--preview-bg` è il fondo del tema, perché il canvas è trasparente e con un
+ * tema chiaro si vedrebbe il fondo scuro della modale.
+ * Sticky: i cursori stanno sotto, e trascinarne uno senza vedere l'effetto non è un'anteprima. */
+.td-theme-preview { position: relative; height: clamp(210px, 32vh, 355px); isolation: isolate; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card); overflow: hidden; background: var(--talos-background); }
+.td-preview-canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; pointer-events: none; }
+.td-preview-caption { position: absolute; bottom: 14px; left: 18px; right: 18px; z-index: 2; display: flex; justify-content: space-between; gap: 12px; font: 10px var(--talos-font-ui); color: var(--talos-muted); pointer-events: none; }
+.td-preview-caption > span { background: var(--talos-background); padding: 3px 6px; border-radius: 3px; }
+
+/* La mini-conversazione: non è nel mockup (là il riquadro mostra la sola scena e accanto offre
+   «Prova nella chat vuota», che qui porterebbe alla Chat VERA dell'owner). Risponde alla stessa
+   domanda dentro il riquadro, e usa solo token: cambia col tema senza una riga di colore scritta. */
+.td-mini { position: absolute; inset: 0; z-index: 1; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; padding: 14px 18px 38px; font: 11px/1.5 var(--talos-font-ui); }
+.td-mini-riga { display: flex; align-items: flex-start; gap: 8px; }
+.td-mini-riga--utente { justify-content: flex-end; }
+.td-mini-avatar { width: 18px; height: 18px; border-radius: 50%; flex: none; background: var(--talos-accent); opacity: .9; }
+.td-mini-bolla { max-width: 74%; padding: 8px 11px; border-radius: var(--talos-radius-card); display: grid; gap: 6px; }
+.td-mini-bolla--assistente { background: var(--talos-card); border: 1px solid var(--talos-border); color: var(--talos-text); }
+.td-mini-bolla--utente { background: var(--talos-accent-soft); border: 1px solid var(--talos-accent-border); color: var(--talos-accent-text); }
+.td-mini-linea { color: inherit; }
+/* La seconda riga è una barra, non testo finto: una frase inventata si legge come una risposta vera. */
+.td-mini-linea--corta { height: 6px; width: 46%; border-radius: var(--talos-radius-pill, 999px); background: var(--talos-border-strong); opacity: .55; }
+.td-mini-composer { display: flex; align-items: center; gap: 8px; margin-top: 2px; padding: 7px 7px 7px 12px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-panel); }
+.td-mini-placeholder { flex: 1; color: var(--talos-muted); }
+.td-mini-invio { width: 24px; height: 24px; border-radius: var(--talos-radius-control); flex: none; display: grid; place-items: center; background: var(--talos-accent); color: var(--talos-text-on-accent); }
+.td-mini-invio .i { width: 13px; height: 13px; }
+
+/* ⛔ VISTO NELLA FOTO DEL FONDO: con l'anteprima `position:sticky` da sola, il titolo «La scena,
+   cursore per cursore» scorreva SOTTO il riquadro e si vedeva tagliato a metà — il riquadro è
+   dipinto con `--talos-background`, la modale con `--talos-panel`, e fra i due c'è un millimetro
+   di fondo trasparente. La mensola qui sotto è opaca del colore della modale e si prende anche lo
+   spazio sopra e sotto: quello che scorre sparisce, invece di affiorare. */
+.td-theme-mensola { position: sticky; top: -24px; z-index: 3; background: var(--talos-panel); padding: 24px 0 12px; }
+/* ⛔ VISTO NELLA FOTO DELLA APP VERA: col margine negativo che riportava la mensola al suo posto,
+   la sua fascia opaca copriva l'ULTIMA RIGA della descrizione già da fermi («…non da un'immagine
+   fissa» tagliato a metà). La fascia deve coprire i 24 px di margine della modale — è l'unico modo
+   perché il testo che scorre sparisca invece di affiorare sopra il riquadro — quindi il margine
+   negativo va tolto e lo spazio sopra l'anteprima lo dà la mensola: 24 px invece dei 17 del mockup.
+   Sette pixel dichiarati contro un testo tagliato: è lo scambio giusto. */
+.td-theme-display > .td-theme-testa > p { margin-bottom: 0; }
+
+/* --- I CONTROLLI CHE PRIMA STAVANO NELLE IMPOSTAZIONI ---------------------------------------- */
 .td-theme-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between; margin: 16px 0; }
+.td-studio-gruppo { border-top: 1px solid var(--talos-border); padding-top: 16px; margin-top: 16px; }
+.td-studio-gruppo h4 { margin: 0 0 12px; font: 500 12px var(--talos-font-ui); color: var(--talos-text); }
+.td-studio-righe { display: grid; gap: 10px; }
+.td-studio-righe--due { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 24px; }
+.td-studio-riga { display: flex; align-items: center; gap: 12px; min-height: 32px; }
+.td-studio-etichetta { flex: 0 0 auto; min-width: 116px; color: var(--talos-muted); font: 11px var(--talos-font-ui); }
+.td-studio-riga .talos-select { flex: 1; min-width: 0; }
+.td-studio-riga input[type="checkbox"] { margin-left: auto; }
+.td-studio-cursore { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.td-studio-cursore input[type="range"] { flex: 1; min-width: 0; accent-color: var(--talos-accent); }
+.td-studio-cursore output { flex: 0 0 auto; min-width: 4ch; text-align: right; color: var(--talos-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.td-studio-gruppo > .td-studio-button { margin-top: 14px; }
+
 .td-theme-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; border-top: 1px solid var(--talos-border); padding-top: 16px; margin-top: 16px; }
 .td-theme-details div { min-width: 0; }
 .td-theme-details span { display: block; color: var(--talos-muted); font-size: 10px; margin-bottom: 5px; }
 .td-theme-details strong { font: 500 11px/1.5 var(--talos-font-mono); color: var(--talos-text); overflow-wrap: anywhere; }
 .td-theme-note { color: var(--talos-muted); font-size: 10px; line-height: 1.8; margin-top: 17px; }
+details.td-theme-note { border-top: 1px solid var(--talos-border); padding-top: 10px; }
+details.td-theme-note summary { cursor: pointer; color: var(--talos-text); font-size: 11px; }
+details.td-theme-note p { margin: 8px 0 0; }
 .td-theme-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
 .td-studio-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 7px 12px; background: var(--talos-card); color: var(--talos-text); border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); font: 500 11px var(--talos-font-ui); cursor: pointer; }
 .td-studio-button[aria-pressed="true"] { background: var(--talos-accent-soft); border-color: var(--talos-accent-border); color: var(--talos-accent-text); }
-/* Il pulsante «Esplora le N atmosfere» nasce SOTTO la riga «Tema TALOS» (come `initAtelier`), e si
-   allinea alla colonna dei controlli: sotto l'etichetta sembrava orfano di un'altra riga. */
-.td-studio-button[data-td-studio-temi] { margin: -6px 0 14px auto; width: fit-content; }
 .td-studio-button.primary { background: var(--talos-accent); color: var(--talos-text-on-accent); border-color: var(--talos-accent); }
+.td-studio-button[disabled] { opacity: .5; cursor: default; }
+.td-studio-button .i { width: 15px; height: 15px; }
+
+/* --- IL RIMANDO NELLE IMPOSTAZIONI -----------------------------------------------------------
+ * 12/09: quattordici righe sparse diventano una scheda sola. Le righe restano nel documento
+ * (i loro controlli portano la preferenza fino a `localStorage`) ma non si disegnano più: una
+ * preferenza ha UN posto, e da oggi quel posto è lo studio. */
+.talos-setting[data-td-migrata="si"], [data-talos-motion-preview][data-td-migrata="si"] { display: none !important; }
+.td-studio-rimando { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 16px 18px; margin: 4px 0 16px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-card); background: var(--talos-card); }
+.td-studio-rimando__copia { flex: 1; min-width: 220px; }
+.td-studio-rimando h3 { margin: 0 0 4px; font: 550 15px/1.3 var(--talos-font-display); letter-spacing: -.02em; color: var(--talos-text); }
+.td-studio-rimando p { margin: 0; font: 12px/1.7 var(--talos-font-ui); color: var(--talos-muted); max-width: 64ch; }
+.td-studio-rimando__elenco { margin-top: 6px !important; font-size: 10px !important; opacity: .8; }
 
 /* ---------- 9. FUOCO, MOVIMENTO, CONTRASTO FORZATO (mockup 4188-4194) ---------- */
 .td-card-open:focus-visible, .td-card-azioni:focus-visible, .td-divider:focus-visible, .td-filter:focus-visible, .td-segment button:focus-visible, .td-theme-choice:focus-visible, .td-studio-button:focus-visible { outline: var(--talos-focus-width, 2px) solid var(--talos-ring); outline-offset: 3px; }
@@ -289,11 +356,16 @@ dialog.td-modal:has(.td-theme-studio) { width: min(1120px, calc(100vw - 40px)); 
 @media (max-width: 1160px) { .td-theme-studio { grid-template-columns: 185px minmax(0, 1fr); gap: 18px; } }
 @media (max-width: 760px) {
   .td-theme-studio { grid-template-columns: 1fr; }
-  .td-theme-list { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 165px; padding: 0; }
+  .td-theme-list { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 165px; padding: 0; position: static; }
   .td-theme-choice { gap: 6px; padding: 6px; font-size: 11px; }
   .td-palette-dot { width: 16px; height: 16px; }
   .td-theme-choice > .td-theme-segno { display: none; }
   .td-theme-details { gap: 7px; }
+  .td-theme-controls { gap: 10px; }
+  .td-studio-righe--due { grid-template-columns: 1fr; }
+  .td-studio-riga { flex-wrap: wrap; }
+  .td-studio-etichetta { min-width: 0; }
+  dialog.td-modal:has(.td-theme-studio) { width: calc(100vw - 16px); }
 }
 
 /* ---------------------------------------------------------------------------------------------

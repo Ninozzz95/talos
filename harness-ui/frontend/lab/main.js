@@ -163,6 +163,53 @@ function mostraSchermo(id, nome) {
   document.documentElement.setAttribute('data-schermo', nome);
   return document.getElementById(id);
 }
+/*
+ * 12/09 — L'ASPETTO NEL LABORATORIO. Lo studio dei temi non salva niente da sé: muove i controlli
+ * veri delle Impostazioni e lascia che sia `legacy/app.js` a dipingere la radice. Qui il monolite
+ * non c'è, quindi scegliere un tema non cambierebbe un pixel e ogni foto uscirebbe «Calm».
+ * ⇒ questa è la sola regia che manca: gli stessi attributi che `applicaAspettoDesktop` stampa
+ *   sulla radice, e nient'altro. ⛔ NESSUN COLORE: i colori li dà `styles/temi.css` attraverso
+ *   `data-talos-theme`. Se un giorno questa funzione contenesse un `#`, sarebbe il difetto che
+ *   `theme-studio.js` esiste per evitare.
+ */
+const VAR_MOVIMENTO = {
+  motionSpeedRange: '--talos-motion-speed', motionIntensityRange: '--talos-motion-intensity',
+  motionGlowRange: '--talos-motion-glow', motionDensityRange: '--talos-motion-density',
+  motionDepthRange: '--talos-motion-depth', motionTrailsRange: '--talos-motion-trails',
+  motionContrastRange: '--talos-motion-contrast', motionParallaxRange: '--talos-motion-parallax',
+};
+function dipingiAspettoLaboratorio() {
+  const radice = document.documentElement;
+  const leggi = (id) => document.getElementById(id) || document.getElementById('setting-' + id);
+  const tema = leggi('themePresetSelect')?.value || 'calm';
+  const modo = leggi('colorModeSelect')?.value || 'system';
+  const scena = leggi('sceneOverrideSelect')?.value || 'follow-theme';
+  radice.setAttribute('data-talos-theme', tema);
+  radice.setAttribute('data-talos-scene', scena === 'follow-theme' ? tema : scena);
+  const sistemaChiaro = matchMedia('(prefers-color-scheme: light)').matches;
+  const chiaro = modo === 'light' || (modo === 'system' && sistemaChiaro);
+  if (chiaro) radice.setAttribute('data-theme', 'light'); else radice.removeAttribute('data-theme');
+  radice.setAttribute('data-talos-motion-mode', leggi('motionModeSelect')?.value || 'adaptive');
+  radice.setAttribute('data-talos-motion-quality', leggi('motionQualitySelect')?.value || 'balanced');
+  const acceso = Boolean(leggi('backgroundMotionToggle')?.checked);
+  document.body.classList.toggle('background-motion-active', acceso);
+  document.body.classList.toggle('background-motion-off', !acceso);
+  document.body.classList.toggle('reduce-motion', Boolean(leggi('reducedMotionToggle')?.checked));
+  for (const [id, proprieta] of Object.entries(VAR_MOVIMENTO)) {
+    const valore = Number(leggi(id)?.value);
+    if (Number.isFinite(valore)) radice.style.setProperty(proprieta, String(valore / 100));
+  }
+}
+function montaAspettoLaboratorio(schermo) {
+  montaImpostazioni(schermo, IMPOSTAZIONI);
+  for (const campo of schermo.querySelectorAll('.talos-setting select, .talos-setting input')) {
+    campo.addEventListener(campo.type === 'range' ? 'input' : 'change', dipingiAspettoLaboratorio);
+  }
+  dipingiAspettoLaboratorio();
+  montaScorciatoiaTemi(schermo);
+  return schermo;
+}
+
 /* La pila dei toast vera della app, per far vedere l'annullamento del lotto E senza il monolite. */
 function notificaDiProva(titolo, messaggio, opzioni = {}) {
   const regione = document.querySelector('#regioneToast');
@@ -507,12 +554,13 @@ const LABORATORI = {
     schermo.querySelector('[data-vista="elenco"]').click();
   },
   ThemeStudio() {
-    mostraSchermo('schermoImpostazioni', 'impostazioni');
+    const schermo = mostraSchermo('schermoImpostazioni', 'impostazioni');
+    montaAspettoLaboratorio(schermo);
     apriStudioTemi();
   },
   ScorciatoiaTemi() {
     const schermo = mostraSchermo('schermoImpostazioni', 'impostazioni');
-    montaScorciatoiaTemi(schermo);
+    montaAspettoLaboratorio(schermo);
   },
   ModaleConferma() {
     mostraSchermo('schermoImpostazioni', 'impostazioni');
