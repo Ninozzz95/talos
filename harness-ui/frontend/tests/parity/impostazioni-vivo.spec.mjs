@@ -1,4 +1,20 @@
 import {CAMPI_IMPOSTAZIONI} from '../../src/components/impostazioni-campi.js';
+import {CONTROLLI_MIGRATI} from '../../src/components/theme-studio.js';
+/*
+ * ⛔ 12/09/2026 — QUATTORDICI PREFERENZE HANNO CAMBIATO POSTO, e questo file le cercava dove non
+ *   stanno piu'. Ordine dell'owner: «vorrei anche i diversi slider TUTTI nella modale anziche' nelle
+ *   impostazioni», poi ristretto a «gli slider relativi dell'animazione e del tema». Tema, modo
+ *   colore, sfondo animato, scena, modo di disegno, qualita' e gli otto cursori della scena si
+ *   scelgono nello studio «Temi e atmosfere»; nelle Impostazioni resta UN rimando.
+ *   ⇒ i controlli VERI non sono spariti (sono loro a portare la preferenza fino a `localStorage`):
+ *     sono nascosti, e lo studio li muove. Quindi la persistenza si prova esattamente come prima,
+ *     mentre il GESTO che cambia il valore ora si fa nella modale.
+ *   ⛔ `aprireStudio` qui sotto e' la sola aggiunta: chi vuole toccare una di quelle quattordici
+ *     passa di li', come una persona.
+ */
+const MIGRATI = new Set(CONTROLLI_MIGRATI);
+async function aprireStudio(page){const s=page.locator('#schermoImpostazioni');await s.getByRole('tab',{name:'Aspetto e movimento',exact:true}).click();if(!(await page.locator('dialog.td-modal').count()))await s.getByRole('button',{name:'Apri Temi e atmosfere',exact:true}).click();await expect(page.locator('dialog.td-modal .td-theme-studio')).toBeVisible();return page.locator('dialog.td-modal');}
+async function chiudereStudio(page){if(await page.locator('dialog.td-modal').count()){await page.keyboard.press('Escape');await expect(page.locator('dialog.td-modal')).toHaveCount(0);}}
 import {test,expect} from '@playwright/test';import {mkdir} from 'node:fs/promises';import path from 'node:path';
 const APP='http://127.0.0.1:4177',ORIG='http://127.0.0.1:4179',FOTO=path.resolve('artifacts/astra-fase2/Impostazioni');
 async function foto(page,n,info){await mkdir(FOTO,{recursive:true});await page.screenshot({path:path.join(FOTO,n+'-'+info.project.use.viewport.width+'.png'),animations:'disabled'});}
@@ -11,14 +27,29 @@ test('SET-PERSISTENZA: ritrovo la mia preferenza dopo aver ricaricato',async({pa
 
 test('SET-COPERTURA38 e SET-SLIDER-NOME: cambio le preferenze con controlli riconoscibili e le ritrovo',async({page})=>{
  await pronta(page,APP);const s=page.locator('#schermoImpostazioni');await expect(s.locator('[data-setting-row]')).toHaveCount(38);
- for(const c of CAMPI_IMPOSTAZIONI){await s.locator('[data-settings-tab='+c.sezione+']').click();const el=s.locator('#'+c.id);await expect(page.locator('#'+c.id)).toHaveCount(1);await expect(el).toHaveAccessibleName(c.titolo);if(c.tipo==='select'){await expect(el.locator('option')).toHaveCount(c.opzioni.length);const prima=await el.inputValue();await el.selectOption(c.opzioni.find(([v])=>v!==prima)[0]);}else if(c.tipo==='checkbox'){await el.setChecked(!(await el.isChecked()));}else {await el.focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowRight');await expect(el).toHaveValue(String(c.min+1));}}
+ // ⛔ le 14 migrate esistono ancora nel documento (e' li' che vive la preferenza) ma non si disegnano
+ await expect(s.locator('[data-setting-row][data-td-migrata="si"]')).toHaveCount(MIGRATI.size);
+ for(const c of CAMPI_IMPOSTAZIONI.filter(c=>!MIGRATI.has(c.id))){await s.locator('[data-settings-tab='+c.sezione+']').click();const el=s.locator('#'+c.id);await expect(page.locator('#'+c.id)).toHaveCount(1);await expect(el).toHaveAccessibleName(c.titolo);if(c.tipo==='select'){await expect(el.locator('option')).toHaveCount(c.opzioni.length);const prima=await el.inputValue();await el.selectOption(c.opzioni.find(([v])=>v!==prima)[0]);}else if(c.tipo==='checkbox'){await el.setChecked(!(await el.isChecked()));}else {await el.focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowRight');await expect(el).toHaveValue(String(c.min+1));}}
+ // le 14 migrate si toccano DOVE STANNO ORA, e muovono il controllo vero che resta la fonte del salvataggio
+ const studio=await aprireStudio(page);
+ for(const c of CAMPI_IMPOSTAZIONI.filter(c=>MIGRATI.has(c.id))){
+  if(c.id==='themePresetSelect'){await studio.locator('[data-tema="noir"]').click();await expect(page.locator('#'+c.id)).toHaveValue('noir');continue;}
+  if(c.id==='colorModeSelect'){await studio.locator('.td-segment button[data-modo="dark"]').click();await expect(page.locator('#'+c.id)).toHaveValue('dark');continue;}
+  const el=studio.locator('#td-studio-'+c.id);
+  if(c.tipo==='select'){const prima=await el.inputValue();const dopo=c.opzioni.find(([v])=>v!==prima)[0];await el.selectOption(dopo);await expect(page.locator('#'+c.id)).toHaveValue(dopo);}
+  else if(c.tipo==='checkbox'){const prima=await el.isChecked();await el.setChecked(!prima);await expect(page.locator('#'+c.id)).toBeChecked({checked:!prima});}
+  else {await el.focus();await page.keyboard.press('Home');await page.keyboard.press('ArrowRight');await expect(el).toHaveValue(String(c.min+1));await expect(page.locator('#'+c.id)).toHaveValue(String(c.min+1));}}
+ await chiudereStudio(page);
  const letti=await s.locator('[data-setting-row] input,[data-setting-row] select').evaluateAll(ns=>ns.map(n=>({id:n.id,value:n.type==='checkbox'?n.checked:n.value})));
  await page.reload();await page.getByRole('button',{name:/^Impostazioni(?: \(Ctrl ,\))?$/}).click();
  for(const n of letti){const el=s.locator('#'+n.id);if(typeof n.value==='boolean')await expect(el).toBeChecked({checked:n.value});else await expect(el).toHaveValue(n.value);}
 });
 test('SET-RICERCA e SET-TASTIERA: trovo una preferenza e cambio sezione senza mouse',async({page},info)=>{
  await pronta(page,APP);const s=page.locator('#schermoImpostazioni'),q=s.getByRole('textbox',{name:'Cerca un’impostazione'});
- await q.fill('bilanciata');await expect(s.locator('[data-setting-row]:visible')).toHaveCount(1);await expect(s.getByRole('combobox',{name:'Qualità',exact:true})).toBeVisible();await foto(page,'app-ricerca',info);
+ /* ⛔ 12/09: prima si cercava «bilanciata» → «Qualità», che dal 12/09 sta nello studio e nelle
+    Impostazioni non si disegna piu'. Si cerca una preferenza rimasta qui: «elastica» trova
+    «Curva», e resta una sola riga come prima. */
+ await q.fill('elastica');await expect(s.locator('[data-setting-row]:visible')).toHaveCount(1);await expect(s.getByRole('combobox',{name:'Curva',exact:true})).toBeVisible();await foto(page,'app-ricerca',info);
  await q.fill('zz-preferenza-assente');await expect(s.locator('[data-settings-results]')).toContainText('Nessuna preferenza');await expect(s.locator('[data-setting-row]:visible')).toHaveCount(0);await q.fill('');
  const prima=s.getByRole('tab',{name:'Aspetto e movimento',exact:true});await prima.focus();await page.keyboard.press('ArrowDown');await expect(s.getByRole('tab',{name:'Chat e composer',exact:true})).toBeFocused();await expect(s.getByRole('tabpanel',{name:'Chat e composer',exact:true})).toBeVisible();
  await page.keyboard.press('End');await expect(s.getByRole('tab',{name:'Account, Doctor e backup'})).toBeFocused();await page.keyboard.press('Home');await expect(prima).toBeFocused();await expect(prima).toHaveAttribute('aria-selected','true');
@@ -29,8 +60,14 @@ test('SET-RIEPILOGO-INTEGRO: leggo i dati e raggiungo Doctor',async({page},info)
  await s.getByRole('button',{name:'Doctor',exact:true}).click();await expect(page.locator('#schermoDoctor [data-doctor-esito]')).toContainText('controll');
 });
 test('SET-MOVIMENTO: regolo un cursore e ripristino il movimento senza perdere il tema',async({page},info)=>{
- await pronta(page,APP);const s=page.locator('#schermoImpostazioni');const tema=s.getByRole('combobox',{name:'Tema TALOS',exact:true});await tema.selectOption('noir');const velocita=s.getByRole('slider',{name:'Velocità',exact:true});await velocita.focus();await page.keyboard.press('End');await expect(velocita).toHaveValue('200');await expect(s.locator('#motionSpeedOutput')).toHaveText('200');await foto(page,'app-movimento',info);
- await s.getByRole('button',{name:'Ripristina movimento',exact:true}).click();await expect(velocita).toHaveValue('100');await expect(s.locator('#motionSpeedOutput')).toHaveText('100');await expect(tema).toHaveValue('noir');await foto(page,'app-animazioni',info);
+ /* ⛔ 12/09: tema e cursori si regolano nello studio. La verifica NON cambia soggetto — si
+    controlla sempre il controllo vero (`#themePresetSelect`, `#motionSpeedRange`), che e' dove la
+    preferenza vive e da dove riparte dopo un ricaricamento. */
+ await pronta(page,APP);const studio=await aprireStudio(page);
+ await studio.locator('[data-tema="noir"]').click();await expect(page.locator('#themePresetSelect')).toHaveValue('noir');
+ const velocita=studio.locator('#td-studio-motionSpeedRange');await velocita.focus();await page.keyboard.press('End');await expect(velocita).toHaveValue('200');await expect(page.locator('#motionSpeedRange')).toHaveValue('200');await foto(page,'app-movimento',info);
+ await studio.getByRole('button',{name:'Ripristina i valori del movimento',exact:true}).click();await expect(velocita).toHaveValue('100');await expect(page.locator('#motionSpeedRange')).toHaveValue('100');await expect(page.locator('#themePresetSelect')).toHaveValue('noir');await foto(page,'app-animazioni',info);
+ await chiudereStudio(page);
 });
 
 test('SET-RACCORDO-ATTRIBUTI: le mie preferenze raggiungono il disegno della chat',async({page})=>{
