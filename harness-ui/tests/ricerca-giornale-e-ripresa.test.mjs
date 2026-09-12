@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -9,7 +9,8 @@ import {
   accodaEvento, aggiornaRicerca, cartellaDellaRicerca, creaRicerca, elencaFonti, elencaRicerche,
   eliminaRicerca, leggiFonte, leggiGiornale, leggiIstantaneaCache, leggiPiano, leggiRapporto,
   leggiRicerca, migraRicerca, percorsoGiornale, percorsoMeta, percorsoRapporto, percorsoVoceLegacy,
-  scriviAtomico, scriviFonte, scriviIstantaneaCache, scriviPiano, scriviRapporto, statRapporto,
+  rinominaConRitento, scriviAtomico, scriviFonte, scriviIstantaneaCache, scriviPiano, scriviRapporto,
+  statRapporto, SUFFISSO_NON_RINOMINATO,
 } from '../src/research-store.mjs';
 import { creaResearchOrchestrator, rileggiRapportoRecintato } from '../src/research-orchestrator.mjs';
 import { talosResearchReportDocument } from '../src/research/report.mjs';
@@ -163,7 +164,25 @@ test('⛔⛔⛔ L4, IL VINCOLO — un crash FRA il temporaneo e il rename lascia
     '⛔ il guasto si RILANCIA: un errore inghiottito qui direbbe «salvato» su una cosa mai salvata',
   );
   assert.equal(readFileSync(percorso, 'utf8'), 'IL LAVORO GIÀ PAGATO', '⛔ ciò che è costato denaro non si sovrascrive mai — nemmeno con un guasto');
-  assert.deepEqual(readdirSync(cartella), ['pagato.txt'], 'e il temporaneo è stato pulito');
+  /*
+   * ⛔⛔ CONTRATTO CAMBIATO il 12/09/2026, e non di nascosto: qui prima c'era
+   *   `assert.deepEqual(readdirSync(cartella), ['pagato.txt'], 'e il temporaneo è stato pulito')`.
+   *   Il motivo di allora era buono («una cartella piena di `.tmp-` è il segno di un guasto
+   *   inghiottito») ma la conclusione no: a questo punto la SCRITTURA è riuscita — i byte nuovi
+   *   sono interi sul disco — ed è solo il rename ad aver fallito. Buttarli è buttare lavoro già
+   *   pagato per tenere pulita una cartella. ⇒ restano, con un nome DICHIARATO e uno solo.
+   * ⛔ Qui il nome dichiarato NON arriva, ed è giusto così: `renameFn` è iniettato e fallisce
+   *   SEMPRE, quindi fallisce anche il parcheggio sotto `.non-rinominato`. È il ripiego scritto
+   *   accanto al codice — si tiene il nome casuale e lo si dice nel messaggio — e questo test è
+   *   il solo posto che lo esercita. L'invariante che conta non è il NOME: è che i byte ci siano.
+   */
+  const rimasti = readdirSync(cartella).filter((nome) => nome !== 'pagato.txt');
+  assert.equal(rimasti.length, 1, '⛔ uno solo, e non zero: il nuovo contenuto non si butta');
+  assert.equal(readFileSync(join(cartella, rimasti[0]), 'utf8'), 'la scrittura che non arriverà mai');
+  // ⛔ `crash` è lo STESSO oggetto che il codice arricchisce: il messaggio deve dire dove sono
+  //    finiti i byte, altrimenti chi legge il log non ha modo di ritrovarli.
+  assert.match(crash.message, /NON è perso/);
+  assert.match(crash.message, /\.tmp-/, 'e nomina il file per esteso, non «da qualche parte»');
 });
 
 test('⛔⛔⛔ L4 — lo stesso vincolo sulla VOCE: se il rename fallisce, `meta.json` resta quello di prima', async (t) => {
@@ -175,6 +194,159 @@ test('⛔⛔⛔ L4 — lo stesso vincolo sulla VOCE: se il rename fallisce, `met
   const riletta = await leggiRicerca({ cartella, id: 'ric-1' });
   assert.equal(riletta.terminata, 'done', 'lo stato di prima è ancora leggibile');
   assert.equal(riletta.reportLibraryId, 'lib-1');
+});
+
+/* ───────────── 2-bis. IL RITENTO DEL RENAME — la contesa di Windows (12/09/2026) ───────────── */
+
+/*
+ * ⛔⛔⛔ IL DIFETTO CHE QUESTI TEST PRESIDIANO, riprodotto e non dedotto.
+ *
+ * Un LETTORE che tiene aperto `meta.json` fa fallire il `rename` che lo sostituisce:
+ *
+ *   const h = openSync(meta, 'r'); renameSync(tmp, meta);  →  EPERM
+ *   senza il lettore, lo stesso rename RIESCE.
+ *
+ * Su Windows `MoveFileExW` non sostituisce una destinazione che qualcun altro tiene aperta, e
+ * libuv apre i file senza `FILE_SHARE_DELETE`. In produzione il lettore è **la sezione Ricerca**,
+ * che interroga elenco e scheda mentre la ricerca gira: alla conclusione `onConclusioneRicerca`
+ * esplodeva e la voce restava `running` sul disco per sempre.
+ *
+ * ⛔ I due versi, e servono entrambi:
+ *   (a) la contesa PASSA  → il rename riesce dentro i tentativi, e nessuno se ne accorge;
+ *   (b) la contesa NON passa (o è un altro guasto) → si rilancia, e il contenuto nuovo NON si perde.
+ * ⛔ Niente attese a tempo: l'handle si chiude DENTRO `attendiFn`, cioè esattamente al tentativo
+ *   che scegliamo noi. Il disco è vero, l'EPERM è vero, il momento è deterministico.
+ */
+
+test('⭐⭐⭐⭐ 12/09 — un LETTORE con l\'handle aperto fa fallire il rename: si ritenta, e passa', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  const percorso = join(cartella, 'meta.json');
+  await scriviAtomico(percorso, '{"stato":"running"}');
+
+  const handle = openSync(percorso, 'r');
+  let chiuso = false;
+  const attese = [];
+  await scriviAtomico(percorso, '{"stato":"done"}', {
+    attendiFn: async (ms) => {
+      attese.push(ms);
+      // Alla seconda attesa il lettore chiude: è il momento in cui la contesa finisce davvero.
+      if (attese.length === 2 && !chiuso) { closeSync(handle); chiuso = true; }
+    },
+  });
+  if (!chiuso) closeSync(handle);
+
+  assert.equal(readFileSync(percorso, 'utf8'), '{"stato":"done"}', '⛔ la scrittura è arrivata: è questo che prima non succedeva');
+  assert.deepEqual(attese, [20, 40], '⛔ e ci sono voluti due ritenti: una cura che non si conta non si sa se è servita');
+  assert.deepEqual(readdirSync(cartella), ['meta.json'], 'nessuna scoria: la strada felice resta pulita');
+});
+
+test('⛔⛔ AL CONTRARIO — la contesa che NON passa: si rilancia, e il contenuto nuovo resta accanto', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  const percorso = join(cartella, 'meta.json');
+  await scriviAtomico(percorso, '{"stato":"running"}');
+
+  const handle = openSync(percorso, 'r');
+  t.after(() => { try { closeSync(handle); } catch { /* già chiuso */ } });
+  const attese = [];
+  await assert.rejects(
+    () => scriviAtomico(percorso, '{"stato":"done"}', { attendiFn: async (ms) => { attese.push(ms); }, tentativiRename: 4 }),
+    (errore) => {
+      assert.equal(errore.code, 'EPERM', '⛔ il codice VERO sopravvive: un chiamante che filtra sul codice deve continuare a vederlo');
+      assert.match(errore.message, /NON è perso/, 'e il messaggio dice dove sono finiti i byte');
+      return true;
+    },
+  );
+  assert.equal(attese.length, 3, 'quattro tentativi, tre attese');
+  assert.equal(readFileSync(percorso, 'utf8'), '{"stato":"running"}', '⛔ il file vecchio è ancora intatto');
+  assert.equal(
+    readFileSync(join(cartella, `meta.json${SUFFISSO_NON_RINOMINATO}`), 'utf8'), '{"stato":"done"}',
+    '⛔ e il nuovo è accanto, con un nome dichiarato — non buttato',
+  );
+});
+
+test('⛔⛔ AL CONTRARIO — un rename IMPOSSIBILE (destinazione = una cartella) rilancia dopo i tentativi', async (t) => {
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  // Una CARTELLA al posto del file: su Windows il rename ci sbatte con EPERM, cioè con lo stesso
+  // codice della contesa — è il caso in cui ritentare non serve a niente e deve finire.
+  const percorso = join(cartella, 'occupato');
+  mkdirSync(percorso, { recursive: true });
+
+  const attese = [];
+  await assert.rejects(
+    () => scriviAtomico(percorso, 'contenuto che non entrerà mai', { attendiFn: async (ms) => { attese.push(ms); }, tentativiRename: 3 }),
+    (errore) => {
+      assert.ok(['EPERM', 'EISDIR', 'EACCES', 'ENOTEMPTY'].includes(errore.code), `codice inatteso: ${errore.code}`);
+      return true;
+    },
+  );
+  assert.equal(attese.length, 2, '⛔ tre tentativi e poi basta: un ritento senza fine è un blocco, non una cura');
+  assert.equal(
+    readFileSync(join(cartella, `occupato${SUFFISSO_NON_RINOMINATO}`), 'utf8'), 'contenuto che non entrerà mai',
+    'e anche qui i byte non si buttano',
+  );
+});
+
+test('⛔ un guasto che NON è contesa non si ritenta nemmeno una volta', async () => {
+  /* Aspettare 1,3 secondi per un disco pieno è tempo rubato a chi sta guardando lo schermo. */
+  const attese = [];
+  const pieno = Object.assign(new Error('no space left on device'), { code: 'ENOSPC' });
+  await assert.rejects(
+    () => rinominaConRitento('a', 'b', { renameFn: async () => { throw pieno; }, attendiFn: async (ms) => { attese.push(ms); } }),
+    /no space left/,
+  );
+  assert.deepEqual(attese, [], '⛔ nessuna attesa: si rilancia subito');
+});
+
+test('⭐⭐ le attese crescono, si fermano a 200 ms, e in tutto stanno SOTTO i 2 secondi', async () => {
+  /*
+   * ⛔ Il tetto non è un gusto: questa scrittura sta DENTRO la conclusione di una ricerca e dentro
+   *   una richiesta HTTP. graceful-fs ritenta per 60 secondi (pensati per un antivirus che blocca
+   *   un file per un minuto): qui sarebbero 60 secondi di schermo fermo.
+   * ⛔ E le attese passano da `setTimeout`, mai da un ciclo stretto — graceful-fs lo dice e il
+   *   motivo è che «Windows scheduling gives CPU to a busy looping process», cioè un ciclo a vuoto
+   *   affamerebbe proprio il processo che tiene il file aperto: la cura diventerebbe la causa.
+   */
+  const attese = [];
+  const conteso = Object.assign(new Error('bloccato'), { code: 'EBUSY' });
+  await assert.rejects(
+    () => rinominaConRitento('a', 'b', { renameFn: async () => { throw conteso; }, attendiFn: async (ms) => { attese.push(ms); } }),
+    /bloccato/,
+  );
+  assert.deepEqual(attese, [20, 40, 80, 160, 200, 200, 200, 200, 200], 'dieci tentativi, nove attese');
+  assert.equal(attese.reduce((somma, ms) => somma + ms, 0), 1300);
+  assert.ok(attese.reduce((somma, ms) => somma + ms, 0) < 2000, '⛔ sotto i due secondi, sempre');
+});
+
+test('⭐⭐⭐⭐ 12/09, IL DIFETTO VERO — una ricerca che conclude MENTRE qualcuno la legge non resta «running»', async (t) => {
+  /*
+   * È il giro che falliva in produzione, ridotto ai suoi tre pezzi: una voce `running` sul disco,
+   * un lettore che tiene aperto `meta.json` (la sezione Ricerca), e la conclusione che scrive.
+   * Prima di oggi: EPERM da `aggiornaRicerca`, eccezione fuori da `onConclusioneRicerca`, e la
+   * ricerca conclusa e pagata restava `running` **per sempre**.
+   */
+  const cartella = cartellaVera();
+  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  await creaRicerca({ cartella, id: 'ric-contesa', domanda: 'chi tiene aperto il file' });
+  assert.equal((await leggiRicerca({ cartella, id: 'ric-contesa' })).terminata, null, 'parte «in corso»');
+
+  const handle = openSync(percorsoMeta(cartella, 'ric-contesa'), 'r');
+  let chiuso = false;
+  await aggiornaRicerca(
+    { cartella, id: 'ric-contesa', terminata: 'done', reportLibraryId: 'lib-1' },
+    { attendiFn: async () => { if (!chiuso) { closeSync(handle); chiuso = true; } } },
+  );
+  if (!chiuso) closeSync(handle);
+
+  const riletta = await leggiRicerca({ cartella, id: 'ric-contesa' });
+  assert.equal(riletta.terminata, 'done', '⛔ la conclusione è arrivata sul disco nonostante il lettore aperto');
+  assert.equal(riletta.reportLibraryId, 'lib-1');
+  assert.deepEqual(
+    readdirSync(cartellaDellaRicerca(cartella, 'ric-contesa')).filter((n) => n.includes('.tmp-') || n.endsWith(SUFFISSO_NON_RINOMINATO)),
+    [], 'e non ha lasciato scorie',
+  );
 });
 
 /* ─────────────────────────── 3. IL GIORNALE ─────────────────────────── */

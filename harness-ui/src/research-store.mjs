@@ -219,21 +219,146 @@ export function cartellaDelleFonti(cartella, id) {
  *   un crash del SISTEMA (non del processo) la voce di directory potrebbe non essere ancora
  *   durevole. Il file vecchio resta comunque intatto: nessuna perdita di ciò che era già pagato.
  */
+/*
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ * ⛔⛔⛔ 12/09/2026 — SU WINDOWS UN LETTORE FA FALLIRE IL RENAME. IL RITENTO.
+ * ════════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Il difetto, **riprodotto** (non dedotto) eseguendo la suite intera e poi isolato in sei righe:
+ *
+ *   const h = fs.openSync(meta, 'r');       // un LETTORE qualunque, in sola lettura
+ *   fs.renameSync(tmp, meta);               // → EPERM: operation not permitted, rename
+ *
+ * Senza il lettore aperto, lo stesso rename **riesce**. ⇒ non è il disco, non è un permesso:
+ * è la contesa. Su Windows `MoveFileExW` non può sostituire una destinazione che qualcun altro
+ * tiene aperta, e libuv apre i file **senza** `FILE_SHARE_DELETE`.
+ *
+ * ⛔ E chi era il lettore, in produzione? **La sezione Ricerca**, che interroga l'elenco e la
+ *   scheda **mentre** la ricerca gira. Quando la ricerca finiva, `onConclusioneRicerca` chiamava
+ *   `aggiornaRicerca` → qui → EPERM → l'eccezione usciva e la voce restava **`running` sul disco
+ *   per sempre**: una ricerca conclusa e pagata che a schermo non finiva mai. Visto in due corse
+ *   su tre della suite intera; mai eseguendo il file da solo (è una gara, e la vince chi ha il
+ *   disco più lento).
+ *
+ * ── Ricerca web PRIMA di scrivere (fonte + data) ────────────────────────────────────────────
+ *  · **graceful-fs, `polyfills.js`** (isaacs) — letto il 12/09/2026. È il pattern di riferimento,
+ *    quello che npm usa da anni: ritenta il `rename` su **`EACCES`, `EPERM`, `EBUSY`**, perché
+ *    «on Windows, A/V software can lock the directory, causing this to fail with an EACCES or
+ *    EPERM if the directory contains newly created files».
+ *    ⛔ **Il vincolo che non conoscevo e che ha cambiato il codice**: si aspetta con `setTimeout`
+ *      e mai con un ciclo stretto, perché «Windows scheduling gives CPU to a busy looping
+ *      process, which can cause the program causing the lock contention to be **starved of CPU**
+ *      by node, so the contention doesn't resolve». Un ritento che gira a vuoto **impedisce** al
+ *      lettore di chiudere il suo handle: la cura diventerebbe la causa.
+ *    ⛔ **E una cosa di graceful-fs che NON si copia**: prima di ogni ritento lui controlla che la
+ *      destinazione non esista e, se esiste, si ferma. Serve al caso di npm, dove la
+ *      destinazione **non deve** esserci. Qui la destinazione esiste **sempre** (stiamo
+ *      sostituendo `meta.json`): copiarlo farebbe uscire ogni ritento al primo giro, cioè non
+ *      ritentare affatto.
+ *    ⛔ La sua finestra è di **60 secondi** (pensata per Parity bit9, che «may lock files for up
+ *      to a minute»). Qui no: questa scrittura sta **dentro una richiesta HTTP** e dentro la
+ *      conclusione di una ricerca. Dieci tentativi, attese 20→200 ms, **1,3 s** in tutto.
+ *  · **MoveFileExW / `MOVEFILE_REPLACE_EXISTING`** — <https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw>,
+ *    riletta il 12/09/2026: sostituisce «provided that security requirements regarding access
+ *    control lists (ACLs) are met», e «to delete or rename a file, you must have either delete
+ *    permission on the file or delete child permission in the parent directory». ⛔ **Va detto
+ *    quello che NON dice**: la pagina non nomina gli handle aperti né l'errore che ne esce. Il
+ *    legame «lettore aperto ⇒ EPERM» qui non viene da lei: viene dalla **riproduzione** qui
+ *    sopra e dal test che la esegue su disco vero.
+ *  · **Node, `fs.rename`/`fsPromises.rename`** — <https://nodejs.org/docs/latest/api/fs.html>:
+ *    ⚠️ lettura **NON riuscita**. La pagina è tornata troncata da `WebFetch` due volte e le
+ *    sezioni dei due metodi non si sono lette alla lettera. Segnato come lettura mancata, non
+ *    come lettura fatta: il comportamento su cui poggia questo codice è **misurato**, non citato.
+ */
+const RENAME_TENTATIVI = 10;
+const RENAME_ATTESA_INIZIALE_MS = 20;
+const RENAME_ATTESA_MASSIMA_MS = 200;
+/** ⛔ I tre di graceful-fs, e nessuno in più: un `ENOSPC` o un `EROFS` ritentati sono 1,3 s buttati. */
+const CODICI_DI_CONTESA = new Set(['EPERM', 'EBUSY', 'EACCES']);
+/** Il nome DICHIARATO che prende un temporaneo quando il rename non riesce mai. Vedi `scriviAtomico`. */
+export const SUFFISSO_NON_RINOMINATO = '.non-rinominato';
+
+/**
+ * Il `rename`, ritentato finché la contesa non passa.
+ *
+ * ⛔ Torna **quanti ritenti sono serviti** invece di `undefined`: una cura che non si può contare
+ *   è una cura di cui nessuno saprà mai se è servita. Il test se ne serve, e domani una sonda
+ *   potrà dirlo all'owner.
+ * ⛔ Un codice che non è di contesa **non si ritenta**: si rilancia subito. Aspettare 1,3 secondi
+ *   per un disco pieno è tempo rubato a chi sta guardando lo schermo.
+ *
+ * @returns {Promise<number>} quanti ritenti sono serviti (0 = è andata al primo colpo)
+ */
+export async function rinominaConRitento(temporaneo, percorso, deps = {}) {
+  const renameFn = deps.renameFn ?? fsp.rename;
+  // ⛔ `setTimeout`, MAI un ciclo stretto: vedi graceful-fs sopra — un ciclo affamerebbe di CPU
+  //   proprio il processo che tiene il file aperto, e la contesa non si scioglierebbe mai.
+  const attendiFn = deps.attendiFn ?? ((ms) => new Promise((risolvi) => { setTimeout(risolvi, ms); }));
+  const tentativi = Number.isSafeInteger(deps.tentativiRename) && deps.tentativiRename > 0
+    ? deps.tentativiRename
+    : RENAME_TENTATIVI;
+
+  for (let tentativo = 0; ; tentativo += 1) {
+    try {
+      await renameFn(temporaneo, percorso);
+      return tentativo;
+    } catch (errore) {
+      if (!CODICI_DI_CONTESA.has(errore?.code) || tentativo >= tentativi - 1) throw errore;
+      // 20, 40, 80, 160, poi 200 fisso: 1,3 s in tutto su dieci tentativi.
+      await attendiFn(Math.min(RENAME_ATTESA_INIZIALE_MS * (2 ** tentativo), RENAME_ATTESA_MASSIMA_MS));
+    }
+  }
+}
+
 export async function scriviAtomico(percorso, contenuto, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
-  const renameFn = deps.renameFn ?? fsp.rename;
   const rmFn = deps.rmFn ?? fsp.rm;
+  const renameFn = deps.renameFn ?? fsp.rename;
   const randomUUIDFn = deps.randomUUIDFn ?? randomUUID;
   await mkdirFn(dirname(percorso), { recursive: true });
   const temporaneo = `${percorso}.tmp-${process.pid}-${randomUUIDFn()}`;
+
   try {
     await writeFileFn(temporaneo, contenuto, { encoding: 'utf8', flush: true });
-    await renameFn(temporaneo, percorso);
   } catch (errore) {
-    try { await rmFn(temporaneo, { force: true }); } catch { /* il temporaneo può non essere mai nato: pulire è un di più, non una condizione. */ }
+    /* ⛔ Qui il temporaneo SI PULISCE, ed è l'unico caso in cui è giusto: una scrittura fallita
+       lascia byte a metà, e dei byte a metà non si salva niente. */
+    try { await rmFn(temporaneo, { force: true }); } catch { /* può non essere mai nato: pulire è un di più, non una condizione. */ }
     throw errore;
   }
+
+  try {
+    await rinominaConRitento(temporaneo, percorso, { ...deps, renameFn });
+  } catch (errore) {
+    /*
+     * ⛔⛔⛔ QUI IL TEMPORANEO NON SI BUTTA PIÙ, ed è un cambio di contratto voluto (12/09).
+     *
+     * Fino a stamattina questo ramo faceva `rm` del temporaneo, col motivo scritto accanto: «una
+     * cartella di ricerca piena di `.tmp-` è il segno di un guasto inghiottito». Il motivo era
+     * buono, la conclusione no: a questo punto la scrittura è **riuscita** — i byte sono interi e
+     * già sul disco — ed è solo il rename a non essere passato. Cancellarli butta lavoro **già
+     * pagato** per tenere pulita una cartella, che è esattamente lo scambio che il vincolo di
+     * questo file vieta («ciò che è costato denaro non si sovrascrive mai»).
+     * ⛔ E la cura al disordine non è buttare: è **dare un nome**. Il file resta accanto come
+     *   `<nome>.non-rinominato` — dichiarato, riconoscibile, e **uno solo**: un secondo guasto
+     *   sovrascrive quello di prima invece di accumulare scorie con un UUID diverso ogni volta.
+     * ⛔ Se anche il parcheggio fallisce (la cartella intera è bloccata) non si lancia da qui: si
+     *   tiene il nome casuale e lo si **dice**. Un errore di recupero che copre l'errore vero è
+     *   il difetto che questo repo ha già pagato («il catch giusto nasconde il bug sbagliato»).
+     */
+    let dove = temporaneo;
+    try {
+      await renameFn(temporaneo, `${percorso}${SUFFISSO_NON_RINOMINATO}`);
+      dove = `${percorso}${SUFFISSO_NON_RINOMINATO}`;
+    } catch { /* resta col nome casuale, e il messaggio qui sotto lo dice per esteso. */ }
+    /* ⛔ Si ARRICCHISCE l'errore originale invece di crearne uno nuovo: `code`, `errno`, `path` e
+       la pila appartengono al guasto vero, e un chiamante che filtra sul codice deve continuare
+       a vederlo. */
+    errore.message = `${errore.message} — il file vecchio è intatto e il nuovo contenuto NON è perso: sta in ${dove}`;
+    throw errore;
+  }
+
   return percorso;
 }
 
