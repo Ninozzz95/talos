@@ -24,19 +24,28 @@
  *
  * ## Che cosa il SERVER chiede davvero — misurato nel codice, non supposto
  *
- * `harness-ui/src/session-registry.mjs:3291` (`avviaLibero`):
- *     if (cartellaLibera && permessiScelto !== 'Full access') → QUERY_INVALID
- * Il cancello nomina UNA sola forma: `cartellaLibera`, il percorso libero. Quindi:
+ * ⛔⛔⛔ 12/09/2026 — SECONDO GIRO, owner: «il pulsante dice serve accesso pieno». La cura dell'11
+ * diceva il vero su un cancello che NON DOVEVA ESISTERE. Il cancello (`session-registry.mjs`,
+ * `avviaLibero`: `cartellaLibera && permessi !== 'Full access'` → QUERY_INVALID) è stato tolto
+ * nello stesso lotto di questo file, e il perché sta per esteso nella doc di `avviaLibero`:
+ * l'ambito di una cartella scelta a mano lo tiene `cartellaGiaScelta:true`, non il permesso, e il
+ * cancello quindi non restringeva niente — obbligava al livello di accesso PIÙ ALTO chi voleva
+ * lavorare in una cartella scelta a mano.
  *
- *  · cartella dell'allowlist (`cartellaId`)  → QUALSIASI permesso. Il frontend faceva bene.
- *  · percorso libero (`cartellaLibera`)      → SOLO «Accesso pieno». Il blocco è VERO: si tiene,
- *      e si dice perché — non lo si aggira inventando un permesso al posto della persona.
- *  · cartella dal tasto destro di Windows (`workspaceLaunchId`) → il server NON chiede niente, e
- *      lo prova due volte con i suoi test verdi: `tests/session-registry.test.mjs:928` e
- *      `tests/http-routes-workspace-launch.test.mjs:106` avviano con `permessi: 'Workspace write'`
- *      e si aspettano successo (200, permesso registrato).
- *      ⛔ Il frontend la bloccava lo stesso: un blocco FALSO, su una combinazione che il server ha
- *        un test verde per accettare. È il secondo difetto, e non era nella segnalazione.
+ * ⇒ Da oggi, tutte e tre le forme si comportano allo stesso modo:
+ *
+ *  · cartella dell'allowlist (`cartellaId`)  → qualsiasi permesso.
+ *  · percorso scelto a mano (`cartellaLibera`) → qualsiasi permesso. Il permesso vale DENTRO
+ *      quella cartella: «Solo lettura» non scrive, «Chiede prima» chiede, «Scrive nel progetto»
+ *      scrive solo lì.
+ *  · cartella dal tasto destro di Windows (`workspaceLaunchId`) → qualsiasi permesso, come è
+ *      sempre stato (`tests/session-registry.test.mjs:928`, `tests/http-routes-workspace-launch.test.mjs:106`).
+ *
+ * ⇒ La situazione `permesso-insufficiente` non esiste più: non c'è più nessun permesso che questa
+ *   modale debba pretendere. Resta il fatto — vero e utile — che una cartella possa essere fuori
+ *   dai progetti già autorizzati: si DICE, perché chi avvia sappia dove finirà il lavoro, ma non
+ *   blocca niente. È la separazione che lo stato dell'arte tiene sempre distinta (ricerca 12/09,
+ *   fonti nel rapporto): «di questa cartella mi fido» e «quanto può fare l'agente» sono due assi.
  *
  * ## Perché un modulo a parte, e non tre righe dentro `app.js`
  *
@@ -65,8 +74,12 @@
 
 import { nomeUmanoPolitica } from './politiche.js';
 
-/** Il permesso che il server esige per un percorso scelto a mano. Valore del kernel, mai a schermo. */
-export const PERMESSO_PER_CARTELLA_LIBERA = 'Full access';
+/*
+ * ⛔ 12/09 — qui viveva `PERMESSO_PER_CARTELLA_LIBERA = 'Full access'`, il permesso che il server
+ * esigeva per un percorso scelto a mano. Il server non lo esige più (vedi la testata): la costante
+ * è stata tolta invece di restare inerte, perché una costante che nomina un requisito morto è il
+ * modo più veloce per farlo tornare.
+ */
 
 /**
  * @typedef {object} CartellaScelta
@@ -78,7 +91,7 @@ export const PERMESSO_PER_CARTELLA_LIBERA = 'Full access';
 
 /**
  * @typedef {object} StatoAvvio
- * @property {'pronto'|'occupato'|'senza-cartella'|'permesso-insufficiente'} situazione
+ * @property {'pronto'|'occupato'|'senza-cartella'} situazione
  * @property {boolean} puoAvviare vero solo se il form può essere spedito adesso
  * @property {boolean} disabilitato vero SOLO mentre una cartella si sta aprendo (vedi testata)
  * @property {string} etichetta il testo del bottone: dice sempre il vero
@@ -119,31 +132,23 @@ export function statoAvvioSessione({ cartella = null, permesso = '', occupato = 
 
   const nome = nomeCartellaScelta(cartella);
   const autorizzata = Boolean(cartella.projectId);
-  // ⛔ Il tasto destro di Windows NON è un percorso libero: il server lo tratta a parte e non gli
-  //   chiede nessun permesso particolare (vedi la testata). Metterlo qui insieme all'allowlist non
-  //   allarga niente — toglie un blocco che il server non ha mai chiesto.
-  const giaVerificataDalServer = Boolean(cartella.launchId);
+  // Il tasto destro di Windows non è un percorso digitato: la cartella l'ha scelta la persona da
+  // Esplora file, e il server la risolve da un identificatore monouso suo.
+  const daEsploraFile = Boolean(cartella.launchId);
 
-  if (!autorizzata && !giaVerificataDalServer && permesso !== PERMESSO_PER_CARTELLA_LIBERA) {
-    const nomePieno = nomeUmanoPolitica(PERMESSO_PER_CARTELLA_LIBERA);
-    return {
-      situazione: 'permesso-insufficiente',
-      puoAvviare: false,
-      disabilitato: false,
-      /* Il bottone dice la cosa che manca, non una cosa falsa — ed è corto perché deve stare
-         dentro il bottone: la frase intera sta nel `motivo`, accanto. */
-      etichetta: `Serve «${nomePieno}»`,
-      motivo: `${nome} è fuori dai progetti già autorizzati: TALOS la accetta solo con «${nomePieno}». Ora è scelto «${nomeUmanoPolitica(permesso)}».`,
-      rimedioSu: 'permesso',
-    };
-  }
-
+  /*
+   * ⛔ 12/09 — QUI c'era l'unico ramo che poteva rispondere «non si può partire» con una cartella
+   *   scelta: `permesso !== 'Full access'` → `situazione: 'permesso-insufficiente'`, etichetta
+   *   «Serve «Accesso pieno»». È la frase che l'owner ha segnalato. Il cancello che la rendeva
+   *   VERA non c'è più nel server, quindi il ramo è sparito: con una cartella scelta si parte
+   *   sempre, con tutti e quattro i permessi.
+   */
   return {
     situazione: 'pronto',
     puoAvviare: true,
     disabilitato: false,
     etichetta: `Continua nella chat — ${nome}`,
-    motivo: motivoQuandoSiPuoPartire({ nome, autorizzata, giaVerificataDalServer, permesso }),
+    motivo: motivoQuandoSiPuoPartire({ nome, autorizzata, daEsploraFile, permesso }),
     rimedioSu: null,
   };
 }
@@ -156,14 +161,43 @@ export function nomeCartellaScelta(cartella) {
 }
 
 /**
- * La frase che si legge quando si PUÒ partire. Dice sempre due cose: che cosa può fare TALOS, e
- * fin dove. ⛔ Mai il valore tecnico del kernel a schermo: solo il nome umano di `politiche.js`.
+ * La frase che si legge accanto al bottone. Dice sempre due cose: che cosa farà TALOS, e fin dove.
+ * ⛔ Mai il valore tecnico del kernel a schermo: solo il nome umano di `politiche.js`.
+ *
+ * ⭐ 12/09 — prima c'era una frase per PROVENIENZA della cartella (albero / Esplora file /
+ * allowlist) e il permesso ci compariva solo come nome. Adesso che il permesso decide davvero per
+ * tutte e tre le provenienze, la frase la comanda LUI — «Scrive nel progetto» e «Solo lettura»
+ * sulla stessa cartella promettono due cose opposte, e chi legge deve poterle distinguere senza
+ * tornare su per rileggere quale tasto è acceso. La provenienza resta, in coda, dove è ancora
+ * un'informazione e non più un verdetto.
  */
-function motivoQuandoSiPuoPartire({ nome, autorizzata, giaVerificataDalServer, permesso }) {
+function motivoQuandoSiPuoPartire({ nome, autorizzata, daEsploraFile, permesso }) {
   const umano = nomeUmanoPolitica(permesso);
-  if (giaVerificataDalServer) {
-    return `${nome} arriva da Esplora file. Con «${umano}» TALOS resterà esattamente in questa cartella.`;
+  /* ⛔ La coda NON ripete il nome della cartella: la prima frase l'ha già detto, e nella foto del
+     12/09 la riga del piede lo diceva due volte in undici parole («…scrive solo dentro X. X non è
+     fra i progetti…»). Il soggetto è già stabilito: qui basta il pronome. */
+  const coda = autorizzata
+    ? ''
+    : daEsploraFile
+      ? ' Arriva da Esplora file.'
+      : ' Non è fra i progetti già autorizzati: viene verificata all’avvio.';
+  return `${cosaFaraDentro(permesso, nome, umano)}${coda}`;
+}
+
+/** Una riga per permesso: il verbo che conta, e il confine. Nessuna promette più di quel che fa. */
+function cosaFaraDentro(permesso, nome, umano) {
+  switch (permesso) {
+    case 'Read only':
+      return `Con «${umano}» TALOS legge ${nome} e non ci scrive niente.`;
+    case 'On request':
+      return `Con «${umano}» TALOS resterà nella cartella scelta e chiederà conferma prima di ogni scrittura.`;
+    case 'Full access':
+      return `Con «${umano}» TALOS lavora in ${nome} senza i cancelli ordinari su file e rete.`;
+    case 'Workspace write':
+      return `Con «${umano}» TALOS resterà nella cartella scelta: scrive solo dentro ${nome}.`;
+    default:
+      // ⛔ Un permesso che non conosciamo non si racconta: si nomina e basta (stessa disciplina di
+      //   `nomeUmanoPolitica`, che in quel caso torna il valore grezzo invece di inventare).
+      return `Permesso scelto: «${umano}». TALOS resterà nella cartella scelta.`;
   }
-  if (autorizzata) return `Con «${umano}» TALOS resterà nella cartella scelta.`;
-  return `«${umano}» consente di usare questa cartella esterna. La scelta sarà verificata di nuovo all’avvio.`;
 }

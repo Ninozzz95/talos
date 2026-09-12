@@ -12458,8 +12458,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const bottone = document.createElement('button');
     bottone.type = 'button';
     bottone.className = 'ft-outside-row-adopt';
-    bottone.setAttribute('aria-label', `Usa "${nome}" come radice — apre una sessione nuova con Full access`);
-    bottone.title = 'Usa come radice (sessione nuova, Full access)';
+    bottone.setAttribute('aria-label', `Usa "${nome}" come radice — apre una sessione nuova su questa cartella`);
+    bottone.title = 'Usa come radice (sessione nuova)';
     bottone.append(iconaSvgAlbero('i-check'));
     bottone.addEventListener('click', (evento) => {
       evento.stopPropagation();
@@ -13632,10 +13632,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * cambia di conseguenza, MAI in silenzio — `impostaPermesso` mostra
    * sempre il suo stesso toast "Policy aggiornata".
    */
-  /** Il nucleo comune: apre una sessione NUOVA su un percorso ASSOLUTO, sempre Full access. Condiviso da impostaComeRadice (dentro l'albero) e usaCartellaFuoriSessioneComeRadice (fuori). */
+  /** Il nucleo comune: apre una sessione NUOVA su un percorso ASSOLUTO col permesso che la pillola mostra. Condiviso da impostaComeRadice (dentro l'albero) e usaCartellaFuoriSessioneComeRadice (fuori). */
   function avviaComeNuovaRadice(percorsoAssoluto, nome) {
-    impostaPermesso('Full access', `Full access · nuova radice: ${nome}`);
-    avviaSessionePendente({ cartellaLibera: percorsoAssoluto, nomeCartella: nome, modello: state.model, effort: state.effort, permessi: 'Full access', permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
+    // ⛔ 12/09 BC-14: non si alza più il permesso al posto della persona. Serviva solo a superare il
+    // cancello del server, che non c'è più; una promozione silenziosa ad «Accesso pieno» è esattamente
+    // ciò che la consegna del 01/09 vieta («la selezione non promuove silenziosamente i permessi»).
+    avviaSessionePendente({ cartellaLibera: percorsoAssoluto, nomeCartella: nome, modello: state.model, effort: state.effort, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
   }
 
   function impostaComeRadice(percorsoRelativo, nome) {
@@ -17249,10 +17251,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        *   decide (consegna del 01/09, «la selezione non promuove silenziosamente i permessi»).
        */
       if (!local.puoAvviare) {
-        if (local.rimedioSu === 'permesso') {
-          permissionSection.scrollIntoView({ block: 'nearest' });
-          permissionButtons.find((b) => b.dataset.workspacePermission === 'Full access')?.focus();
-        } else {
+        /* 12/09 BC-14: `rimedioSu: 'permesso'` non esiste più (nessun permesso è «insufficiente» per
+           una cartella scelta a mano): l'unico rimedio che resta è la cartella. */
+        {
           treeFrame.scrollIntoView({ block: 'nearest' });
           focusRow(local.focusedPath || local.current?.path);
         }
@@ -18267,15 +18268,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
        * la foto (`modello || state.model` in startCustomSession). Le
        * pillole sono l'unica cosa che l'owner vede: al momento dell'invio
        * la fonte di verità è `state`, non la foto. `modelloPlanner` non ha
-       * una pillola e resta quello della modale. Una cartella fuori
-       * elenco richiede Full access (lo esige il server): se la pillola è
-       * stata spostata altrove, il messaggio resta nel composer e si dice
-       * cosa manca, invece di spedire un permesso che la pillola non mostra.
+       * una pillola e resta quello della modale.
+       * ⛔ 12/09 BC-14: qui c'era un secondo cancello sul permesso di una cartella scelta a mano
+       * («Serve Full access» in un toast). Il server non lo chiede più (session-registry.mjs,
+       * avviaLibero): l'ambito lo tiene `cartellaGiaScelta`, non il permesso. E il toast diceva
+       * «Full access» a schermo, cioè il nome del kernel (regola owner 04/09). Tolto: si spedisce
+       * `state.permissions`, che è quello che la pillola mostra — la riga qui sotto lo fa già.
        */
-      if (cartellaLibera && state.permissions !== 'Full access') {
-        toast('Serve Full access', `${nomeCartella} è fuori dall'elenco delle cartelle: per avviarla serve Full access. Cambia il permesso dalla pillola e invia di nuovo.`);
-        return false;
-      }
       state.pendingCustomSession = null;
       startCustomSession({
         cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna: value, immagini,

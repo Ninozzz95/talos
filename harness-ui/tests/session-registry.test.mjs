@@ -1099,7 +1099,20 @@ test('⛔⛔⛔ W0-08 — RIPRODOTTO E CORRETTO: avvia(taskId, {permessiScelto:"
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
-test('⛔⛔⛔ AL CONTRARIO — avviaLibero() con cartellaLibera ma SENZA permesso "Full access" è rifiutato, avviaSessione MAI chiamato', () => {
+/*
+ * ⛔⛔⛔ 12/09 — BC-14, owner: "il pulsante dice serve accesso pieno".
+ *
+ * Questa prova diceva il CONTRARIO fino a oggi: `cartellaLibera` con un permesso diverso da
+ * "Full access" era rifiutata con QUERY_INVALID. Il cancello nasceva il 28/8 (commit 6c37f8d5)
+ * dalla forma di allora della UI — il campo "percorso a piacere" compariva solo scegliendo
+ * "Full access" — non da un requisito di sicurezza: l'ambito di una cartella scelta a mano lo
+ * tiene `cartellaGiaScelta:true` (le due prove qui sotto), non il permesso. L'unico effetto era
+ * obbligare al livello di accesso PIÙ ALTO chi voleva lavorare in una cartella scelta a mano.
+ *
+ * ⇒ Invertita: parte, e il permesso scelto vale DENTRO quella cartella. Le tre prove seguono i
+ * tre livelli che il kernel distingue (`livelloAccesso`, session-registry.mjs).
+ */
+test('⭐⭐⭐ BC-14 — avviaLibero() con cartellaLibera e "Workspace write" PARTE, sulla cartella esatta e senza livello di accesso allargato', () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
@@ -1108,8 +1121,41 @@ test('⛔⛔⛔ AL CONTRARIO — avviaLibero() con cartellaLibera ma SENZA perme
 
   const risultato = registro.avviaLibero({ cartellaLibera: '/tmp/qualunque', consegna: 'fai qualcosa', permessi: 'Workspace write' });
 
-  assert.equal(risultato.code, 'QUERY_INVALID');
-  assert.equal(finta.chiamate, 0, 'un client HTTP diretto non deve MAI aggirare il cancello del permesso passando dal frontend');
+  assert.ok(risultato.sessionId, 'una cartella scelta a mano non richiede più il permesso più alto per partire');
+  assert.equal(finta.chiamate, 1);
+  assert.equal(finta.ultimoInput.cartella, '/tmp/qualunque', 'l\'ambito è ESATTAMENTE la cartella scelta: il permesso non la sposta');
+  assert.equal(finta.ultimoInput.livelloAccesso, undefined, '"Workspace write" è il default del kernel: nessun livello speciale, scrive solo dentro la cartella della sessione');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔⛔ AL CONTRARIO — cartellaLibera con "Read only": parte, ma il kernel riceve livelloAccesso "lettura" (nessuna scrittura)', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [], modello: 'm', chiave: 'k',
+  });
+
+  const risultato = registro.avviaLibero({ cartellaLibera: '/tmp/qualunque', consegna: 'fai qualcosa', permessi: 'Read only' });
+
+  assert.ok(risultato.sessionId);
+  assert.equal(finta.ultimoInput.cartella, '/tmp/qualunque');
+  assert.equal(finta.ultimoInput.livelloAccesso, 'lettura', 'il permesso scelto deve arrivare al kernel: "Solo lettura" su una cartella scelta a mano NON deve poter scrivere');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔⛔⛔ AL CONTRARIO — cartellaLibera con "On request": parte, e il kernel riceve livelloAccesso "su-richiesta" (chiede prima)', () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta,
+    cartelleProgetto: [], modello: 'm', chiave: 'k',
+  });
+
+  const risultato = registro.avviaLibero({ cartellaLibera: '/tmp/qualunque', consegna: 'fai qualcosa', permessi: 'On request' });
+
+  assert.ok(risultato.sessionId);
+  assert.equal(finta.ultimoInput.livelloAccesso, 'su-richiesta', '"Chiede prima" su una cartella scelta a mano deve continuare a chiedere');
+  assert.equal(typeof finta.ultimoInput.chiediApprovazioneFn, 'function', 'senza la funzione di approvazione il kernel non avrebbe nessuno a cui chiedere');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
 test('⛔⛔⭐⭐⭐ AL CONTRARIO — avviaLibero() con cartellaLibera resta SEMPRE sulla cartella esatta scelta, "Full access" e tutto', () => {
