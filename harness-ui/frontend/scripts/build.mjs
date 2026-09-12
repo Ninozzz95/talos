@@ -69,7 +69,7 @@ export async function buildFrontend({
     target: ['chrome120'],
     charset: 'utf8',
     legalComments: 'none',
-    external: ['./fonts/*'],
+    external: ['./fonts/*', '/talos/*'], // 12/09: il marchio corto (/talos/brand/logo-short.svg) lo serve static-files.mjs, esbuild non deve risolverlo
     metafile: true,
     sourcemap: false,
     minify: false,
