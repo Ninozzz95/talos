@@ -187,6 +187,51 @@ export function nomeLeggibileSessione(taskId) {
 }
 
 /**
+ * ⛔⛔⛔ BC-36 + BC-37 (12/09/2026) — L'IDENTITÀ DI UNA SESSIONE APERTA HA UNA FONTE SOLA.
+ *
+ * I due difetti che l'hanno fatta nascere, misurati sul banco (porta 4196, copia dello store):
+ *   · **BC-37** — la STESSA sessione `dbf70964` aperta due volte portava due nomi. Con l'elenco già
+ *     in memoria: «Rispondi solo: uno.». Con l'elenco ancora per strada: «Sessione senza nome»
+ *     («Compito libero · cartella scelta a mano» quando il chiamante passa anche il `taskId`) — e
+ *     **restava così anche 6 secondi dopo**, cioè non si correggeva mai. Il nome dipendeva da quale
+ *     dato arrivava prima, non dalla sessione.
+ *   · **BC-36** — la testata del turno diceva «Compito libero · harness-ui · **Accesso pieno**» e il
+ *     chip del composer, sullo stesso schermo, «**Scrive nel progetto**»: chi apriva la sessione col
+ *     solo id non passava nessuna impostazione, e il chip cadeva sul DEFAULT invece che sul permesso
+ *     vero della sessione.
+ *
+ * ⇒ Una funzione PURA, qui accanto a `nomeLeggibileSessione`, che dichiara la precedenza **una volta
+ *   sola** e dice anche DA DOVE viene la risposta (`fonte`). L'ordine è lo stesso che `creaSessionItem`
+ *   usa già per la riga nella barra — è il punto: la testata e la barra non possono più dire due cose
+ *   diverse sulla stessa sessione.
+ *
+ * ⛔ `fonte: 'ripiego'` non è un nome: è la dichiarazione che nessuno ha ancora detto come si chiama
+ *   questa sessione. Chi chiama deve andare a CHIEDERLO (l'elenco del server), non tenerselo.
+ *
+ * @param {object} input
+ * @param {string|null} [input.nome] il nome che il chiamante ha già a schermo (scelto dall'owner)
+ * @param {object|null} [input.impostazioni] la riga di sessione passata dal chiamante
+ * @param {object|null} [input.dallElenco] la riga dello stesso id in `GET /api/v1/sessions`
+ * @param {string|null} [input.taskId] ultimo appiglio, quando non c'è nessuna riga
+ * @returns {{nome:string, fonte:'esplicito'|'nome-salvato'|'compito-delega'|'ripiego', contratto:object|null}}
+ */
+export function identitaSessione({ nome = null, impostazioni = null, dallElenco = null, taskId = null } = {}) {
+  const pulito = (v) => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
+  const contratto = impostazioni || dallElenco || null;
+  const esplicito = pulito(nome);
+  if (esplicito) return { nome: esplicito, fonte: 'esplicito', contratto };
+  const salvato = pulito(impostazioni?.nome) || pulito(dallElenco?.nome);
+  if (salvato) return { nome: salvato, fonte: 'nome-salvato', contratto };
+  const delega = pulito(impostazioni?.taskDelega) || pulito(dallElenco?.taskDelega);
+  if (delega) return { nome: delega, fonte: 'compito-delega', contratto };
+  return {
+    nome: nomeLeggibileSessione(pulito(taskId) || pulito(impostazioni?.taskId) || pulito(dallElenco?.taskId)),
+    fonte: 'ripiego',
+    contratto,
+  };
+}
+
+/**
  * Riordina l'elenco piatto di `GET /api/v1/sessions` in un ALBERO DI DELEGA: ogni figlia subito
  * sotto la sua madre, e una profondità con cui indentarla.
  *

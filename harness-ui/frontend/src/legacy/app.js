@@ -2,7 +2,7 @@ import {aggiornaProviderList,montaProviderPanel} from '../components/provider-ca
 import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica, valoriPolitiche } from '../components/politiche.js';
 import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
 import { statoAvvioSessione } from '../components/avvio-sessione.js'; // BC-14 (11/09): «Avvia» non mente più sul perché è fermo
-import { nomeLeggibileSessione, aggiornaSessionItem } from '../components/session-item.js'; // N1 (10/09): la riga della sessione viva cambia sul posto
+import { nomeLeggibileSessione, identitaSessione, aggiornaSessionItem } from '../components/session-item.js'; // N1 (10/09): la riga della sessione viva cambia sul posto · BC-36/37 (12/09): nome e permesso da UNA fonte sola
 import { collegaScia, aggiornaTutteLeScie } from '../components/range-scia.js';
 import {aggiornaElencoRuntime,montaPannelloRuntime} from '../components/runtime-modelli.js';
 import {normalizzaCapacita,aggiornaMisuraMemoria,montaMisuraMemoria} from '../components/misura-memoria.js';
@@ -655,6 +655,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
   let treeRenderTimer = null;
   let treeRenderInFlight = null;
   let treeRenderNeedsRerun = false;
+  /* ⛔ BC-42 — «l'albero ha qualcosa da rileggere, ma nessuno lo sta guardando». Vedi `programmaRenderAlberoReale`. */
+  let alberoDaRidisegnare = false;
   let sessionListRefreshTimer = null;
 
   if (HOST().classList.contains('talos-embedded')) {
@@ -1000,7 +1002,39 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
     treeRenderTimer = null;
   }
 
+  /** ⛔ BC-42 — la scheda File è davvero a vista? (l'ispettore mostra una sezione per volta, `hidden` sulle altre) */
+  function schedaFileAVista() {
+    const sezione = $('[data-inspector-section="files"]');
+    return Boolean(sezione) && !sezione.hidden;
+  }
+
+  /*
+   * ⛔⛔⛔ BC-42 (12/09) — `GET …/tree?percorso=` PRENDEVA 400 A OGNI APERTURA DI SESSIONE, e il 400
+   *   finiva in console («Failed to load resource … 400»), cioè rendeva ROSSO `RUNTIME-01` su
+   *   qualunque banco.
+   *
+   * ⛔ La diagnosi che girava («parte col parametro vuoto») è SMENTITA, misurata sul banco: con la
+   *   cartella al suo posto `?percorso=` e `/tree` senza parametro rispondono **200 tutti e due**
+   *   (verificato con curl, 51 voci). Il 400 arriva quando la cartella della sessione **non esiste
+   *   più**: `workspace-tree.mjs:52` fa `realpathSync(cartella)`, ENOENT, e il `catch` di riga 59
+   *   traduce OGNI guasto in `WorkspaceTreeError('Percorso non leggibile')`, il cui `code` è scritto
+   *   a mano `QUERY_INVALID` (riga 33) ⇒ 400 «Query non valida». Sul disco dell'owner sono tre
+   *   sessioni su 27 (`C:\…\Desktop\qwen 3.8 research`, cancellata).
+   *
+   * ⇒ La cura NON è cambiare la query (non cambierebbe niente) e non è toccare server o rotta: è non
+   *   mandare, a ogni apertura di sessione, la richiesta di un pannello che **nessuno sta guardando**.
+   *   Misurato PRIMA: la scheda File è `hidden` (a vista c'è «Contesto») e il replay chiedeva la
+   *   radice **due volte**. Quando la persona apre la scheda, l'albero si legge — lì la richiesta ha
+   *   un senso, e se la cartella è sparita il pannello lo dice.
+   * ⛔ Nessuna lettura perduta: ciò che si sarebbe ridisegnato resta segnato in `alberoDaRidisegnare`,
+   *   e la scheda File lo onora appena viene aperta.
+   */
   function programmaRenderAlberoReale() {
+    if (!schedaFileAVista()) {
+      alberoDaRidisegnare = true;
+      cancellaRenderAlberoDifferito();
+      return;
+    }
     const generation = state.realSession.generation;
     cancellaRenderAlberoDifferito();
     treeRenderTimer = window.setTimeout(() => {
@@ -5078,6 +5112,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
           },
           onMenu: apriMenuAzioniLibreria,
+          /* ⭐ BC-38 (12/09) — «da quale sessione»: il nome VIVO, non quello congelato nel meta.
+             `available` è la stessa mappa che disegna la barra, riscritta a ogni giro dell'elenco.
+             Stessa precedenza della riga nella barra: nome scelto → compito della delega → ripiego. */
+          nomeSessione: (id) => {
+            const s = state.sessionSelection.available?.get?.(id);
+            return s ? (s.nome || s.taskDelega || nomeLeggibileSessione(s.taskId)) : null;
+          },
+          onApriSessione: ({ id }) => passaASessione(id),
+          copia: (testo) => copyText(testo, 'Percorso copiato'),
           /* 11/09 — il contenuto del file nel dettaglio: la stessa iniezione che la Ricerca ha già
              (:5343). Senza, il pannello cade sulla lettura strutturale minima e gli elenchi e i
              blocchi di codice di un .md si leggono come paragrafi. */
@@ -9350,8 +9393,11 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      * e risolve esattamente lo scenario riportato (l'unico in cui la tab
      * viene aperta prima che un giro sia mai partito).
      */
+    /* ⛔ BC-42 (12/09): `alberoDaRidisegnare` è l'altra metà della cura — mentre la scheda era chiusa
+       il replay o una scrittura possono aver chiesto un ridisegno, e senza questo termine la scheda si
+       aprirebbe su un albero vecchio invece che su uno assente. Vedi `programmaRenderAlberoReale`. */
     if (button.dataset.inspectorTab === 'files' && (state.realSession.id || state.realSession.previewProjectId)
-      && !state.realSession.treeCache.has('')) {
+      && (alberoDaRidisegnare || !state.realSession.treeCache.has(''))) {
       renderizzaAlberoReale();
     }
   }
@@ -9522,6 +9568,32 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!tick) return;
     if (Number.isFinite(attrezzi)) tick.dataset.tick = String(Math.min(5, Math.max(1, attrezzi)));
     if (tono !== undefined) impostaTonoUltimoTick(ultimo.querySelector('.talos-turn-spine'), tono);
+  }
+  /**
+   * ⛔⛔⛔ BC-41 (12/09) — UNA SESSIONE CONCLUSA SI RIDISEGNAVA CON DECINE DI GIRI «IN CORSO».
+   *
+   * Misurato sul banco (porta 4196, copia dello store dell'owner, sessione `bb8aeba9` conclusa):
+   * **34 turni, 50 tick, 16 col tono `current`** — cioè un terzo dell'indice dei giri dichiarava un
+   * lavoro ancora in corso su una sessione finita ore prima. Su un'altra sessione vera del rapporto
+   * dell'11/09 erano 21 su 56.
+   *
+   * La causa: `aggiornaTickGiro()` qui sopra guarda **`conversation.lastElementChild`**, cioè
+   * l'ULTIMO turno. Dal vivo basta — il giro che finisce è sempre l'ultimo. Nel REPLAY no: ogni
+   * turno nasce col suo tick `current`, e quando il `RunFinished` di quel giro arriva, in fondo alla
+   * chat c'è già un altro turno. Il tick del turno vecchio non lo tocca più nessuno.
+   *
+   * ⇒ Un evento TERMINALE non spegne «l'ultimo giro»: spegne **tutti i giri**, perché dopo di lui non
+   *   ce n'è nessuno in corso. La cura a valle della barra (`cronologia.js`: «in corso» vale solo per
+   *   l'ultimo turno) resta e continua a coprire ciò che vede lei; questa vale per la CHAT e per
+   *   l'indice dei giri, che quella riga non tocca.
+   * ⛔ Toglie SOLO `--current`: un tick già segnato `danger`/`warning` (un errore, un'approvazione)
+   *   conserva il suo tono — quello è un esito, non uno stato «sta lavorando».
+   */
+  function spegniGiriInCorso(conversation) {
+    if (!conversation) return 0;
+    const correnti = conversation.querySelectorAll('.talos-turn-spine__tick--current');
+    for (const tick of correnti) tick.classList.remove('talos-turn-spine__tick--current');
+    return correnti.length;
   }
 
   function appendRealTaskStart(task, contesto = null) {
@@ -13701,6 +13773,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * massimo un secondo passaggio con lo stato più recente.
    */
   async function renderizzaAlberoReale() {
+    alberoDaRidisegnare = false; // ⛔ BC-42: il debito è saldato qui, dove l'albero si rilegge davvero
     cancellaRenderAlberoDifferito();
     if (treeRenderInFlight) {
       treeRenderNeedsRerun = true;
@@ -13868,8 +13941,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     let voci;
     try {
       voci = await caricaLivelloAlbero('');
-    } catch {
-      ul.appendChild(textElement('li', 'ft-loading', 'Albero non disponibile.'));
+    } catch (errore) {
+      /*
+       * ⛔ BC-42 (12/09) — «Albero non disponibile.» diceva che qualcosa non va, non COSA. Sul disco
+       *   dell'owner tre sessioni su 27 puntano a una cartella cancellata, e il server risponde 400
+       *   «Query non valida» (workspace-tree.mjs traduce ogni guasto in `QUERY_INVALID`): parlare di
+       *   una query a chi ha spostato una cartella non aiuta nessuno. Qui si dice il fatto, e cosa
+       *   farci — senza inventare quando la causa è un'altra.
+       */
+      const sparita = errore?.code === 'QUERY_INVALID';
+      const dove = state.realSession.cartellaAssoluta;
+      ul.appendChild(textElement('li', 'ft-loading', sparita
+        ? `Questa cartella non si legge più${dove ? ` (${dove})` : ''}: è stata spostata o cancellata. Apri una sessione nuova sulla cartella giusta.`
+        : 'I file non si sono caricati. Premi «Aggiorna» per riprovare.'));
       return;
     }
     if (generation !== state.realSession.generation) return;
@@ -14910,6 +14994,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         else nascondiAttesaRisposta(); // rete di sicurezza: un giro che chiude senza aver mai prodotto testo/tool-call (raro, non impossibile) non deve lasciare la ruota a girare per sempre
         chiudiBatchTool(); // 30/8 — fine turno: un batch di tool-call aperto non resta orfano fino al prossimo giro
         aggiornaTickGiro({ tono: null }); // 05/9 Fase 2: il giro non e' piu' current
+        spegniGiriInCorso($('#conversation')); // ⛔ BC-41: e nemmeno gli altri — nel replay l'ultimo turno non e' quello che ha appena finito
         state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
         syncRunComposerState();
         mostraSuggerimentoComposer(suggerimentoDaUltimoAttrezzo()); // ⭐ 3/9 — item 10: dopo syncRunComposerState, cosi' se c'e' un redirect pendente runRealeAttivo() lo vede ancora attivo e non propone niente
@@ -15005,6 +15090,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         const spiegazione = spiegaErrore(evento.message, evento.code);
         if (guida) spiegazione.rimedi = [guida.replace(/^\s*—\s*/, ''), ...spiegazione.rimedi];
         appendStatusNote('', true, { spiegazione });
+        spegniGiriInCorso($('#conversation')); // ⛔ BC-41: anche un giro FALLITO e' un giro finito — `appendStatusNote` segna `danger` solo sull'ultimo turno
         state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
         syncRunComposerState();
         break;
@@ -15877,7 +15963,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       toggleSessionSelection(sessionId, !state.sessionSelection.selected.has(sessionId));
       return;
     }
-    const contrattoSessione = impostazioniSessione || { modello };
+    /*
+     * ⛔⛔⛔ BC-36 (12/09) — IL CHIP DEL PERMESSO MENTIVA, e la causa era questa riga.
+     *   `impostazioniSessione` è null per chi apre una sessione col solo id (la sezione Sessioni,
+     *   `:5295`; l'albero dei rami, `:8469`; una notifica; una sonda): il contratto diventava
+     *   `{modello}` e `applicaImpostazioniSessione` cadeva sul DEFAULT «Workspace write».
+     *   Misurato sul banco: testata del turno «… · Accesso pieno», chip «Scrive nel progetto».
+     * ⇒ Prima di inventare un default si legge l'elenco che il client HA GIÀ in memoria — la stessa
+     *   mappa che disegna la barra, e la stessa fonte da cui BC-37 prende il nome.
+     */
+    const dallElencoSubito = state.sessionSelection.available?.get?.(sessionId) ?? null;
+    const contrattoSessione = impostazioniSessione || dallElencoSubito || { modello };
     if (sessionId === state.realSession.id) {
       applicaImpostazioniSessione(contrattoSessione);
       setView('chat');
@@ -15934,9 +16030,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   che disegna la barra (`state.sessionSelection.available`, riscritto a ogni giro dell'elenco).
      *   Non è una chiamata in più: è leggere ciò che avevamo già.
      */
-    const dallElenco = state.sessionSelection.available?.get?.(sessionId) ?? null;
-    state.session = nome || impostazioniSessione?.taskDelega || dallElenco?.nome || dallElenco?.taskDelega
-      || nomeLeggibileSessione(taskId || dallElenco?.taskId); // ⭐ un nome scelto dall'owner vince su tutto
+    /*
+     * ⛔⛔⛔ BC-37 (12/09) — LA STESSA SESSIONE APERTA DUE VOLTE PORTAVA DUE NOMI.
+     *   Misurato sul banco su `dbf70964`: con l'elenco già in memoria «Rispondi solo: uno.»; con
+     *   l'elenco ancora per strada «Sessione senza nome», **e restava così anche dopo 6 secondi**.
+     *   Il `||` di prima non era sbagliato riga per riga: era senza una FONTE dichiarata, e senza
+     *   nessuno che andasse a chiedere il nome quando nessuna riga era ancora arrivata.
+     * ⇒ La precedenza vive in `identitaSessione` (session-item.js), accanto a quella che la BARRA usa
+     *   per la sua riga: la testata e la barra non possono più dire due cose diverse. E quando la
+     *   fonte è `ripiego` — cioè nessuno sa ancora come si chiama — si va a CHIEDERLO, sotto.
+     */
+    const dallElenco = dallElencoSubito;
+    const identita = identitaSessione({ nome, impostazioni: impostazioniSessione, dallElenco, taskId });
+    state.session = identita.nome; // ⭐ un nome scelto dall'owner vince su tutto
     applicaImpostazioniSessione(contrattoSessione);
     sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     /* ⛔ 27/8, trovato dalla pipeline QA visiva: solo sessionTitle veniva aggiornato — la card "Session topology" nel Context Rail e la voce "Main" nel foglio Albero sessione restavano al titolo demo ("Refactor auth flow") per sempre. Ogni elemento con lo stesso attributo resta sincronizzato. */
@@ -15947,7 +16053,33 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     void caricaFigliSessione(); // 06/9: la scheda «Agenti» della colonna si riempie dalle deleghe vere
     if (state.realSession.deferHistoricalRendering) mantieniFondoDuranteRipristino(generation);
     aggiornaSottotitoloSessione(); // W1-12 — con una sessione aperta il sottotitolo non dice «premi Nuova»
-    aggiornaElencoSessioniReali();
+    /*
+     * ⛔⛔ BC-36/BC-37 — QUANDO NON SI SA, SI CHIEDE (e non si tiene il ripiego).
+     *   `aggiornaElencoSessioniReali()` era già qui, e già faceva la domanda giusta al server: solo,
+     *   nessuno ne leggeva la risposta per la sessione che si stava aprendo. Senza questa coda il nome
+     *   di ripiego e il permesso di default restavano a schermo per sempre — misurato: 6 s dopo,
+     *   ancora «Sessione senza nome».
+     * ⛔ Due guardie prima di scrivere: la generazione (un'altra sessione aperta nel frattempo) e
+     *   l'id (mai il nome di una sessione che non è più quella a schermo). Stessa disciplina delle
+     *   altre code asincrone di questo file.
+     */
+    const identitaDaConfermare = identita.fonte === 'ripiego' || identita.contratto === null;
+    const giroElenco = aggiornaElencoSessioniReali();
+    if (identitaDaConfermare) {
+      void Promise.resolve(giroElenco).then(() => {
+        if (generation !== state.realSession.generation || sessionId !== state.realSession.id) return;
+        const riga = state.sessionSelection.available?.get?.(sessionId) ?? null;
+        if (!riga) return; // il server non la conosce: si resta al ripiego, senza inventare
+        const confermata = identitaSessione({ nome, impostazioni: impostazioniSessione, dallElenco: riga, taskId });
+        if (confermata.nome !== state.session) {
+          state.session = confermata.nome;
+          sessionTitle.textContent = state.session;
+          $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+        }
+        if (identita.contratto === null) applicaImpostazioniSessione(riga); // il permesso VERO, non il default
+        aggiornaSottotitoloSessione();
+      }).catch(() => { /* l'elenco fallito ha già la sua strada: qui non si aggiunge un secondo errore */ });
+    }
     void aggiornaSchedaCapability(); // O-01 — attrezzi/MCP/ricerca/browser sono per-sessione: la scheda segue, non resta al valore di prima
   }
 
