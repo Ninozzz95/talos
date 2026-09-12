@@ -292,3 +292,17 @@ test('THEME-STUDIO · centraNellElenco scorre solo il contenitore dato, e senza 
   assert.equal(centraNellElenco({ scrollTop: 5, getBoundingClientRect: () => rect(0, 0) }, voce), 0);
   assert.equal(centraNellElenco(null, voce), 0);
 });
+
+/* 12/09, owner: «calm primo». L'elenco dello studio mette Calm in testa senza toccare il contratto. */
+test('THEME-STUDIO · conCalmPrimo mette Calm in testa e lascia gli altri nell’ordine del contratto', async () => {
+  const { conCalmPrimo, nomiTemi } = await import('../../src/components/theme-studio.js');
+  const dal = nomiTemi();
+  assert.equal(dal.at(-1)?.id, 'calm', 'nel contratto Calm è ultimo: se cambia, questo test va riletto');
+  const ordinati = conCalmPrimo(dal);
+  assert.equal(ordinati[0].id, 'calm');
+  assert.deepEqual(ordinati.slice(1).map((t) => t.id), dal.slice(0, -1).map((t) => t.id));
+  assert.equal(ordinati.length, dal.length);
+  // al contrario: senza Calm, o con Calm già primo, l'elenco non cambia
+  assert.deepEqual(conCalmPrimo([{ id: 'a' }, { id: 'b' }]), [{ id: 'a' }, { id: 'b' }]);
+  assert.deepEqual(conCalmPrimo([{ id: 'calm' }, { id: 'b' }]), [{ id: 'calm' }, { id: 'b' }]);
+});

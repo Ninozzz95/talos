@@ -316,13 +316,15 @@ export function initTalosDesktopBackground() {
   chat.dataset.talosCanvasMotion = 'true';
   document.documentElement.classList.add('talos-final-ui');
   const mainStage = mountStage(chat, { preview: false });
-  installPreview();
+  /* ⛔ 12/09, owner: la riga «Scena del tema» delle Impostazioni (installPreview) NON si monta più.
+     Da BC-33 lo studio «Temi e atmosfere» mostra la stessa scena DAL VIVO, con i cursori accanto: due
+     anteprime dello stesso sfondo in due posti erano una doppia risposta, e questa restava vuota con
+     lo sfondo spento. La funzione resta (il laboratorio e i test la conoscono), ma nessuno la chiama. */
 
   const watchTarget = document.documentElement;
   rootObserver = new MutationObserver((records) => {
     const relevant = records.some((record) => record.type === 'attributes' || record.type === 'childList');
     if (!relevant) return;
-    installPreview();
     refreshAll({ reset: records.some((record) => record.attributeName?.startsWith('data-talos') || record.attributeName === 'data-theme') });
   });
   rootObserver.observe(watchTarget, { attributes: true, attributeFilter: ['class', 'data-theme', 'data-talos-theme', 'data-talos-scene', 'data-talos-motion-mode', 'data-talos-motion-quality', 'style'] });
