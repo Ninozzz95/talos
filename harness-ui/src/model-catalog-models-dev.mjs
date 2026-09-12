@@ -7,7 +7,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { fornitore } from './provider-registry.mjs';
+import { fornitore, catalogoDiRiservaPer } from './provider-registry.mjs';
 
 export const MODELS_DEV_SCHEMA_REVISION = 'e7a74d6dc7ce56d1a9dda94c18fcf185248d77b4';
 const URL_PREDEFINITO = 'https://models.dev/api.json';
@@ -254,13 +254,23 @@ export function createProviderModelCatalog({ catalogo, chiaveConfigurata } = {})
     if (record.chiaveObbligatoria && (typeof chiaveConfigurata !== 'function' || await chiaveConfigurata(id) !== true)) {
       throw new ModelsDevCatalogError(`Collega la chiave ${record.etichetta} dal pannello Provider.`, 'PROVIDER_KEY_REQUIRED');
     }
+    let dati;
     try {
-      const dati = await catalogo.ottieni(id, opzioni);
-      if (!dati.disponibile) throw new ModelsDevCatalogError(dati.motivo);
-      return { ...dati, credenzialeVerificata: false };
+      dati = await catalogo.ottieni(id, opzioni);
     } catch (errore) {
-      throw new ModelsDevCatalogError(errore instanceof ModelsDevCatalogError ? errore.message : 'Catalogo non disponibile.', 'CATALOG_UPSTREAM_ERROR');
+      // Il catalogo stesso preferisce già la copia valida, anche vecchia. Qui non ne ha una.
+      const riserva = catalogoDiRiservaPer(id);
+      if (!riserva) throw new ModelsDevCatalogError('Catalogo non disponibile.', 'CATALOG_UPSTREAM_ERROR');
+      if (errore instanceof ModelsDevCatalogError && errore.code === 'CATALOG_CACHE_CORRUPT') {
+        const avviso = { codice: 'CATALOG_CACHE_CORRUPT', messaggio: 'Copia danneggiata rifiutata: viene usato l’elenco di riserva.' };
+        riserva.avvisi.push(avviso);
+        for (const m of riserva.modelli) m.catalogo.avvisi.push({ ...avviso });
+      }
+      return { ...riserva, credenzialeVerificata: false };
     }
+    // Un catalogo raggiunto che non pubblica quel fornitore non è un guasto di rete.
+    if (!dati.disponibile) throw new ModelsDevCatalogError(dati.motivo, 'CATALOG_UPSTREAM_ERROR');
+    return { ...dati, credenzialeVerificata: false };
   }
   return Object.freeze({ ottieni });
 }

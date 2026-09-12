@@ -37,6 +37,35 @@ test('⛔ LA RICHIESTA DELL’OWNER: ogni fornitore è una scheda di PRIMO livel
   assert.deepEqual(PROVIDER_DIRETTI.map((p) => p.id), ['anthropic', 'gemini', 'openai', 'lmstudio', 'zai', 'deepseek']);
 });
 
+test('PF-UI-01 — riserva riconoscibile nelle schede reali, ritorno al catalogo senza etichetta', () => {
+  const riserva = [{ id: 'deepseek:modello', nome: 'Nome umano', catalogo: { fonte: 'riserva' } }];
+  const dati = { openrouter: riserva, diretti: { deepseek: riserva } };
+  for (const id of ['openrouter', 'deepseek']) {
+    assert.match(fontiDelSelettore(dati).find(f => f.id === id).etichetta, /elenco di riserva/);
+    assert.equal(modelliDellaFonte(id, dati)[0].id, riserva[0].id);
+  }
+  const su = fontiDelSelettore({ openrouter: [{ nome: 'Vivo' }], diretti: { deepseek: [{ nome: 'Vivo' }] } });
+  assert.equal(su.find(f => f.id === 'openrouter').etichetta, 'OpenRouter');
+  assert.equal(su.find(f => f.id === 'deepseek').etichetta, 'DeepSeek');
+});
+
+test('PF-UI-02 — motivo umano datato, nessun prezzo, contesto o età di copia inventati', () => {
+  const testo = descrizioneModelloSelettore({ catalogo: { fonte: 'riserva', dataRiserva: '2026-09-12',
+    motivo: 'catalogo non raggiungibile: elenco di riserva del 12/09/2026' }, capacita: { toolCall: true } });
+  assert.match(testo, /elenco di riserva del 12\/09\/2026/);
+  assert.match(testo, /Catalogo non raggiungibile/);
+  assert.match(testo, /Strumenti: sì/);
+  assert.doesNotMatch(testo, /models\.dev|fallback|0 USD|secondi|Copia salvata|Data del catalogo non disponibile/);
+});
+
+test('PF-UI-03 — il renderer usa testo sicuro anche per i motivi di riserva', () => {
+  const mount = { ownerDocument: { createElement: tag => ({ tag, textContent: '' }) }, replaceChildren(...nodes) { this.nodes = nodes; } };
+  aggiornaTestoModelloSelettore(mount, { nome: 'Nome umano', catalogo: { fonte: 'riserva',
+    dataRiserva: '2026-09-12', motivo: '<script>segreto-tecnico</script>' } });
+  assert.match(mount.nodes[1].textContent, /elenco di riserva/);
+  assert.doesNotMatch(mount.nodes[1].textContent, /script|segreto-tecnico/);
+});
+
 test('PE-UI-01 — DeepSeek compare con una chiave collegata e conserva gli id di scelta', () => {
   assert.equal(fontiDelSelettore().some(f => f.id === 'deepseek'), false);
   const dati = { diretti: { deepseek: [{ id: 'deepseek:modello', nome: 'Modello' }] } };

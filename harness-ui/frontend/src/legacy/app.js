@@ -6020,7 +6020,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       iconWrap.className = 'sheet-icon';
       iconWrap.innerHTML = icon('i-brain');
       const textWrap = document.createElement('span');
-      if (modello.catalogo?.fonte === 'models.dev') {
+      if (['models.dev', 'riserva'].includes(modello.catalogo?.fonte)) { // P-F (12/09): anche l'elenco di riserva porta il suo motivo sotto ogni modello
         /* P-E (12/09, Astra): i diretti arrivano da models.dev con contesto, prezzo per milione e capacità già in italiano. */
         aggiornaTestoModelloSelettore(textWrap, modello);
       } else {

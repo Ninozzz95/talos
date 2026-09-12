@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { ModelCatalogError, createModelCatalog } from '../src/model-catalog.mjs';
+import { createModelCatalog } from '../src/model-catalog.mjs';
+import { createHttpApp } from '../src/http-app.mjs';
 
 const MODELLO_GREZZO_1 = {
   id: 'deepseek/deepseek-chat', name: 'DeepSeek: Chat', context_length: 64000,
@@ -69,27 +70,28 @@ test('⭐ forzaAggiornamento:true richiama fetchFn anche dentro il TTL', async (
   assert.equal(chiamate, 2);
 });
 
-test('⛔ un errore di rete diventa ModelCatalogError CATALOG_UNREACHABLE, mai un catalogo vuoto silenzioso', async () => {
+test('PF-OR-01 — rete assente senza copia: riserva con motivo, senza dettagli riservati', async () => {
   const catalogo = createModelCatalog({ fetchFn: async () => { throw new Error('ECONNREFUSED'); } });
-  await assert.rejects(catalogo.ottieni(), (error) => {
-    assert.ok(error instanceof ModelCatalogError);
-    assert.equal(error.code, 'CATALOG_UNREACHABLE');
-    return true;
-  });
+  const r = await catalogo.ottieni();
+  assert.equal(r.fonte, 'riserva');
+  assert.equal(r.motivo, 'catalogo non raggiungibile: elenco di riserva del 12/09/2026');
+  assert.ok(r.modelli.length > 0);
+  assert.deepEqual(r.modelliDiRiserva, r.modelli);
+  assert.equal(r.daCache, false);
+  assert.equal(r.aggiornatoAlle, null);
+  assert.ok(r.modelli.every(m => !m.id.startsWith('openrouter:') && m.capacita.toolCall));
+  assert.doesNotMatch(JSON.stringify(r), /ECONNREFUSED/);
 });
 
-test('⛔ status non-ok diventa ModelCatalogError CATALOG_UPSTREAM_ERROR', async () => {
+test('PF-OR-02 — HTTP non-ok senza copia restituisce riserva', async () => {
   const catalogo = createModelCatalog({ fetchFn: fetchFinto({}, { ok: false, status: 503 }) });
-  await assert.rejects(catalogo.ottieni(), (error) => {
-    assert.ok(error instanceof ModelCatalogError);
-    assert.equal(error.code, 'CATALOG_UPSTREAM_ERROR');
-    return true;
-  });
+  assert.equal((await catalogo.ottieni()).fonte, 'riserva');
 });
 
-test('⛔ un formato inatteso (senza data[]) diventa ModelCatalogError, non un crash', async () => {
-  const catalogo = createModelCatalog({ fetchFn: fetchFinto({ ops: true }) });
-  await assert.rejects(catalogo.ottieni(), ModelCatalogError);
+test('PF-OR-03 — JSON e formato inattesi restituiscono riserva, mai un crash', async () => {
+  for (const fetchFn of [fetchFinto({ ops: true }), async () => new Response('{rotto')]) {
+    assert.equal((await createModelCatalog({ fetchFn }).ottieni()).fonte, 'riserva');
+  }
 });
 
 test('⭐⭐ dopo un errore, il prossimo ottieni() riprova davvero — nessuna cache di errore', async () => {
@@ -101,10 +103,55 @@ test('⭐⭐ dopo un errore, il prossimo ottieni() riprova davvero — nessuna c
   };
   const catalogo = createModelCatalog({ fetchFn });
 
-  await assert.rejects(catalogo.ottieni());
+  assert.equal((await catalogo.ottieni()).fonte, 'riserva');
   const seconda = await catalogo.ottieni();
   assert.equal(chiamate, 2);
   assert.equal(seconda.modelli.length, 1);
+  assert.notEqual(seconda.fonte, 'riserva');
+  assert.equal(seconda.modelliDiRiserva, undefined);
+});
+
+test('PF-OR-04 — rete assente con copia: conserva i modelli veri e misura la loro età', async () => {
+  let ora = 1000, disponibile = true;
+  const catalogo = createModelCatalog({ ttlMs: 1, clock: () => new Date(ora), fetchFn: async () => {
+    if (!disponibile) throw new Error('rete con dettagli riservati');
+    return Response.json({ data: [MODELLO_GREZZO_1] });
+  } });
+  await catalogo.ottieni(); disponibile = false; ora += 5000;
+  const copia = await catalogo.ottieni();
+  assert.equal(copia.daCache, true);
+  assert.equal(copia.fonte, 'openrouter');
+  assert.equal(copia.fallbackRete, true);
+  assert.equal(copia.etaCacheMs, 5000);
+  assert.equal(copia.modelli[0].id, MODELLO_GREZZO_1.id);
+  assert.equal(copia.modelliDiRiserva, undefined);
+  assert.doesNotMatch(JSON.stringify(copia), /dettagli riservati/);
+  disponibile = true;
+  const vivo = await catalogo.ottieni();
+  assert.equal(vivo.daCache, false);
+  assert.notEqual(vivo.fallbackRete, true);
+});
+
+test('PF-OR-05 — rotta HTTP reale in memoria: riserva e recupero senza aprire porte', async () => {
+  let disponibile = false;
+  const modelCatalog = createModelCatalog({ fetchFn: async () => {
+    if (!disponibile) throw new Error('rete');
+    return Response.json({ data: [MODELLO_GREZZO_1] });
+  } });
+  const app = createHttpApp({ staticHandler: async () => null, catalogoModelliFn: modelCatalog.ottieni });
+  const richiesta = () => new Promise(resolve => {
+    let status;
+    app({ method: 'GET', url: '/api/v1/models', headers: {} }, {
+      writeHead(codice) { status = codice; }, end(corpo) { resolve({ status, corpo: JSON.parse(corpo.toString()) }); },
+    });
+  });
+  const giu = await richiesta();
+  assert.equal(giu.status, 200);
+  assert.equal(giu.corpo.data.fonte, 'riserva');
+  disponibile = true;
+  const su = await richiesta();
+  assert.equal(su.status, 200);
+  assert.notEqual(su.corpo.data.fonte, 'riserva');
 });
 
 /*

@@ -89,6 +89,17 @@ export const REGISTRO_FORNITORI = congela({
   // ── OpenAI — wire Responses, non chat/completions ──────────────────────────────────────────
   openai: congela({
     id: 'openai',
+    // P-F, fonti e strumenti verificati il 12/09/2026; parità con models.dev nel test.
+    modelliDiRiserva: congela([
+      // 12/09/2026 — https://developers.openai.com/api/docs/models/gpt-5-nano
+      congela({ id: 'gpt-5-nano', nome: 'GPT-5 Nano', toolCalling: true,
+        fonte: 'https://developers.openai.com/api/docs/models/gpt-5-nano', data: '2026-09-12' }),
+      // 12/09/2026 — https://developers.openai.com/api/docs/models/gpt-5-mini
+      congela({ id: 'gpt-5-mini', nome: 'GPT-5 Mini', toolCalling: true,
+        fonte: 'https://developers.openai.com/api/docs/models/gpt-5-mini', data: '2026-09-12' }),
+    ]),
+    // 12/09/2026 — Nano: 0,05/0,40 USD per milione ingresso/uscita; fonte prezzi nelle schede ufficiali.
+    modelloAusiliario: 'gpt-5-nano',
     modelsDevId: 'openai',
     etichetta: 'OpenAI',
     descrizione: 'API diretta OpenAI, sul wire Responses.',
@@ -123,6 +134,17 @@ export const REGISTRO_FORNITORI = congela({
   // ── DeepSeek — la cache che già paghiamo (vedi usage-cache.mjs) ─────────────────────────────
   deepseek: congela({
     id: 'deepseek',
+    // P-F, fonti e strumenti verificati il 12/09/2026; parità con models.dev nel test.
+    modelliDiRiserva: congela([
+      // 12/09/2026 — https://api-docs.deepseek.com/quick_start/pricing/
+      congela({ id: 'deepseek-flash', nome: 'DeepSeek V4.1 Flash', toolCalling: true,
+        fonte: 'https://api-docs.deepseek.com/quick_start/pricing/', data: '2026-09-12' }),
+      // 12/09/2026 — https://api-docs.deepseek.com/quick_start/pricing/
+      congela({ id: 'deepseek-v4-pro', nome: 'DeepSeek V4 Pro', toolCalling: true,
+        fonte: 'https://api-docs.deepseek.com/quick_start/pricing/', data: '2026-09-12' }),
+    ]),
+    // 12/09/2026 — Flash costa meno di Pro sia al picco sia fuori picco; fonte nella tabella ufficiale.
+    modelloAusiliario: 'deepseek-flash',
     modelsDevId: 'deepseek',
     etichetta: 'DeepSeek',
     descrizione: 'API diretta DeepSeek, wire OpenAI.',
@@ -176,6 +198,17 @@ export const REGISTRO_FORNITORI = congela({
   // docs.z.ai/api-reference/llm/chat-completion e guides/overview/pricing.
   zai: congela({
     id: 'zai',
+    // P-F, fonti e strumenti verificati il 12/09/2026; parità con models.dev nel test.
+    modelliDiRiserva: congela([
+      // 12/09/2026 — https://docs.z.ai/guides/llm/glm-4.7
+      congela({ id: 'glm-4.7-flash', nome: 'GLM 4.7 Flash', toolCalling: true,
+        fonte: 'https://docs.z.ai/guides/llm/glm-4.7', data: '2026-09-12' }),
+      // 12/09/2026 — https://docs.z.ai/guides/llm/glm-4.7
+      congela({ id: 'glm-4.7', nome: 'GLM 4.7', toolCalling: true,
+        fonte: 'https://docs.z.ai/guides/llm/glm-4.7', data: '2026-09-12' }),
+    ]),
+    // 12/09/2026 — Flash: minimo gratuito a pari merito; https://docs.z.ai/guides/overview/pricing.
+    modelloAusiliario: 'glm-4.7-flash',
     modelsDevId: 'zai',
     etichetta: 'Z.AI',
     descrizione: 'Modelli GLM tramite API diretta Z.AI.',
@@ -243,6 +276,17 @@ export const REGISTRO_FORNITORI = congela({
   // ── Anthropic ──────────────────────────────────────────────────────────────────────────────
   anthropic: congela({
     id: 'anthropic',
+    // P-F, fonti e strumenti verificati il 12/09/2026; parità con models.dev nel test.
+    modelliDiRiserva: congela([
+      // 12/09/2026 — https://platform.claude.com/docs/en/models/overview
+      congela({ id: 'claude-haiku-4-5-20251001', nome: 'Claude Haiku 4.5', toolCalling: true,
+        fonte: 'https://platform.claude.com/docs/en/models/overview', data: '2026-09-12' }),
+      // 12/09/2026 — https://platform.claude.com/docs/en/models/overview
+      congela({ id: 'claude-sonnet-5', nome: 'Claude Sonnet 5', toolCalling: true,
+        fonte: 'https://platform.claude.com/docs/en/models/overview', data: '2026-09-12' }),
+    ]),
+    // 12/09/2026 — Haiku: 1/5 USD per milione ingresso/uscita, minimo tra i modelli correnti della fonte.
+    modelloAusiliario: 'claude-haiku-4-5-20251001',
     modelsDevId: 'anthropic',
     etichetta: 'Anthropic',
     descrizione: 'API diretta Anthropic, wire Messages.',
@@ -283,6 +327,17 @@ export const REGISTRO_FORNITORI = congela({
   // ── Gemini ─────────────────────────────────────────────────────────────────────────────────
   gemini: congela({
     id: 'gemini',
+    // P-F, fonti e strumenti verificati il 12/09/2026; parità con models.dev nel test.
+    modelliDiRiserva: congela([
+      // 12/09/2026 — https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-lite
+      congela({ id: 'gemini-2.5-flash-lite', nome: 'Gemini 2.5 Flash-Lite', toolCalling: true,
+        fonte: 'https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-lite', data: '2026-09-12' }),
+      // 12/09/2026 — https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite
+      congela({ id: 'gemini-3.1-flash-lite', nome: 'Gemini 3.1 Flash-Lite', toolCalling: true,
+        fonte: 'https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite', data: '2026-09-12' }),
+    ]),
+    // 12/09/2026 — 2.5: 0,10/0,40 USD per milione sul piano standard; https://ai.google.dev/gemini-api/docs/pricing.
+    modelloAusiliario: 'gemini-2.5-flash-lite',
     modelsDevId: 'google',
     etichetta: 'Google Gemini',
     descrizione: 'API diretta Google AI Studio.',
@@ -325,6 +380,17 @@ export const REGISTRO_FORNITORI = congela({
   // ── OpenRouter — l'aggregatore, e l'unico che oggi porta anche i PREZZI ────────────────────
   openrouter: congela({
     id: 'openrouter',
+    // P-F, fonti e strumenti verificati il 12/09/2026; parità con models.dev nel test.
+    modelliDiRiserva: congela([
+      // 12/09/2026 — https://openrouter.ai/api/v1/models
+      congela({ id: 'liquid/lfm-2.5-2.6b:free', nome: 'LiquidAI LFM 2.5 2.6B (gratuito)', toolCalling: true,
+        fonte: 'https://openrouter.ai/api/v1/models', data: '2026-09-12' }),
+      // 12/09/2026 — https://openrouter.ai/api/v1/models
+      congela({ id: 'openai/gpt-5-nano', nome: 'OpenAI GPT-5 Nano', toolCalling: true,
+        fonte: 'https://openrouter.ai/api/v1/models', data: '2026-09-12' }),
+    ]),
+    // 12/09/2026 — LFM: 0/0, minimo a pari merito tra SKU gratuiti; https://openrouter.ai/liquid/lfm-2.5-2.6b:free.
+    modelloAusiliario: 'liquid/lfm-2.5-2.6b:free',
     modelsDevId: 'openrouter',
     etichetta: 'OpenRouter',
     descrizione: 'Aggregatore: centinaia di modelli dietro una sola chiave.',
@@ -361,6 +427,9 @@ export const REGISTRO_FORNITORI = congela({
   // ── Ollama — in casa, senza account ────────────────────────────────────────────────────────
   ollama: congela({
     id: 'ollama',
+    // P-F, 12/09/2026: scoperta locale, nessuna inferenza sui modelli installati.
+    modelliDiRiserva: null,
+    modelloAusiliario: null,
     modelsDevId: null, // Ollama Cloud è un servizio diverso dal runtime locale.
     etichetta: 'Ollama Local',
     descrizione: 'Motore locale Ollama su questo computer.',
@@ -390,6 +459,9 @@ export const REGISTRO_FORNITORI = congela({
   // ── LM Studio — P-C: scoperto e sondato da sempre, e fino a oggi non sceglibile in chat ─────
   lmstudio: congela({
     id: 'lmstudio',
+    // P-F, 12/09/2026: scoperta locale, nessuna inferenza sui modelli installati.
+    modelliDiRiserva: null,
+    modelloAusiliario: null,
     modelsDevId: 'lmstudio', // Metadati pubblici: l'elenco installato resta del runtime.
     etichetta: 'LM Studio',
     descrizione: 'Motore locale LM Studio su questo computer.',
@@ -430,6 +502,9 @@ export const REGISTRO_FORNITORI = congela({
   // ── Hugging Face — NON è una destinazione di chat, e il record lo dice ──────────────────────
   huggingface: congela({
     id: 'huggingface',
+    // P-F, 12/09/2026: solo download, nessuna destinazione chat.
+    modelliDiRiserva: null,
+    modelloAusiliario: null,
     modelsDevId: 'huggingface', // Inference Providers non abilita la chat nel nostro record download.
     etichetta: 'Hugging Face',
     descrizione: 'Catalogo e scaricamento dei modelli, non una destinazione di chat.',
@@ -463,6 +538,9 @@ export const REGISTRO_FORNITORI = congela({
   // ── Il motore locale llama-server — nessuna credenziale su disco, mai ───────────────────────
   local: congela({
     id: 'local',
+    // P-F, 12/09/2026: scoperta locale, nessuna inferenza sui modelli installati.
+    modelliDiRiserva: null,
+    modelloAusiliario: null,
     modelsDevId: null,
     etichetta: 'Motore locale (llama.cpp)',
     descrizione: 'Il supervisore llama-server di questo computer.',
@@ -539,6 +617,24 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
     if (record.sonda?.attiva === true && !record.sonda.percorso && !record.sonda.urlAssoluto) {
       throw new ProviderRegistryError(`${dove}: sonda attiva senza un indirizzo da chiamare`);
     }
+    for (const campo of ['modelliDiRiserva', 'modelloAusiliario']) {
+      if (!Object.hasOwn(record, campo)) throw new ProviderRegistryError(`${dove}: ${campo} deve essere dichiarato`);
+    }
+    if (record.destinazioneChat && record.catalogo?.fonte === 'fornitore') {
+      if (!Array.isArray(record.modelliDiRiserva) || !record.modelliDiRiserva.length) throw new ProviderRegistryError(`${dove}: riserva remota vuota`);
+      const riserveViste = new Set();
+      for (const m of record.modelliDiRiserva) {
+        if (!m || typeof m.id !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$/u.test(m.id) || riserveViste.has(m.id)
+          || typeof m.nome !== 'string' || !m.nome.trim() || m.toolCalling !== true
+          || typeof m.fonte !== 'string' || !m.fonte.startsWith('https://') || !/^\d{4}-\d{2}-\d{2}$/u.test(m.data ?? '')) {
+          throw new ProviderRegistryError(`${dove}: riserva senza identità, strumenti o fonte datata`);
+        }
+        riserveViste.add(m.id);
+      }
+      if (record.modelloAusiliario !== null && !riserveViste.has(record.modelloAusiliario)) throw new ProviderRegistryError(`${dove}: ausiliario fuori dalla riserva dichiarata`);
+    } else if (record.modelliDiRiserva !== null || record.modelloAusiliario !== null) {
+      throw new ProviderRegistryError(`${dove}: locali e download devono dichiarare riserva e ausiliario null`);
+    }
     if (record.modelliNoti !== undefined) {
       if (!Array.isArray(record.modelliNoti)) throw new ProviderRegistryError(`${dove}: modelliNoti deve essere una lista`);
       const modelliVisti = new Set();
@@ -562,6 +658,35 @@ export const ID_FORNITORI = Object.freeze(Object.keys(REGISTRO_FORNITORI));
 /** @returns {object|null} il record, o `null` se l'id non esiste. ⛔ Mai un ripiego inventato. */
 export function fornitore(id) {
   return Object.hasOwn(REGISTRO_FORNITORI, id) ? REGISTRO_FORNITORI[id] : null;
+}
+
+/** Id upstream, senza prefisso di destinazione; nessuna selezione o chiamata implicita.
+ * La compattazione futura deve qualificare questo esatto modello dal vivo: CTX_NATIVE_UNQUALIFIED.
+ */
+export function modelloAusiliarioPer(fornitoreId) {
+  return fornitore(fornitoreId)?.modelloAusiliario ?? null;
+}
+
+/** Proiezione del solo registro nel contratto del selettore: nessun prezzo o limite inventato. */
+export function catalogoDiRiservaPer(fornitoreId) {
+  const record = fornitore(fornitoreId);
+  if (!record?.modelliDiRiserva?.length) return null;
+  const dataRiserva = record.modelliDiRiserva.map(m => m.data).sort().at(-1);
+  const [anno, mese, giorno] = dataRiserva.split('-');
+  const motivo = `catalogo non raggiungibile: elenco di riserva del ${giorno}/${mese}/${anno}`;
+  const metadati = { fonte: 'riserva', motivo, dataRiserva, aggiornatoAlle: null,
+    verificatoAlle: null, etaCacheMs: null, daCache: false, fallbackRete: true, avvisi: [] };
+  const modelli = record.modelliDiRiserva.map(m => ({
+    id: record.id === 'openrouter' ? m.id : `${record.id}:${m.id}`,
+    modelId: m.id, provider: record.id === 'openrouter' ? m.id.split('/')[0] : record.id,
+    nome: m.nome, alias: false, contextLength: null, maxOutputTokens: null, maxInputTokens: null,
+    contestoVerificato: false, prezzoPrompt: null, prezzoCompletion: null, prezzoCacheRead: null, prezzoCacheWrite: null,
+    capacita: { toolCall: true, reasoning: null }, reasoning: null,
+    inputModalities: null, outputModalities: null, supportedParameters: ['tools'],
+    fonteDichiarazione: m.fonte, dataDichiarazione: m.data, catalogo: structuredClone(metadati),
+  }));
+  return { provider: record.id, modelsDevId: record.modelsDevId, disponibile: true,
+    modelli, modelliDiRiserva: modelli, ...metadati };
 }
 
 /** Gli id che soddisfano un predicato, nell'ordine del registro. */
