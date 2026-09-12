@@ -1144,3 +1144,11 @@ aveva solo i 4 «File di prova» delle 23:36. Cercato: nessuna sessione con `lib
 Il Cestino di Windows contiene `.harness-ui-research` (eliminata 20:56:46) e `.harness-ui-library`
 (21:00:33) provenienti dal Desktop: un `fs.rm` di Node NON passa dal Cestino, quindi è stata una
 cancellazione da Esplora file, non del codice. Sono ripristinabili dal Cestino (decide l'owner).
+
+### BC-29 — il render Markdown della chat non rende i blocchi di codice né le citazioni (12/09/2026, foto del 4174)
+Nel dettaglio di una nota in Anteprima (`renderizzaMarkdownSemplice` iniettata dal CRUD frontend):
+titoli, grassetto ed elenchi numerati resi; il recinto ```…``` esce come righe di testo normale e la
+citazione «> …» esce letterale col «>». L'ordine dell'owner è «le note markdown renderizzate in
+markdown»: recinti (monospazio, con la lingua) e citazioni vanno resi, in un posto solo (la stessa
+funzione serve alla chat: verificare che lì i recinti passino da un'altra via e non duplicare).
+Lotto piccolo, dopo BC-22.
