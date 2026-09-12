@@ -99,8 +99,20 @@ test('P-13: l’elenco scade da sé, se nessuno dice che i file sono cambiati', 
   const subito = await contestoDelProgetto({ cartella: 'radice', deps: { ...deps, adesso: () => 1_000_000 + VALIDITA_MS - 1 } });
   assert.equal(subito.riusato, true, 'un istante prima della scadenza vale ancora');
 
+  /*
+   * ⛔ 12/09/2026: la scadenza non fa più ASPETTARE (owner: «quasi un minuto al primo messaggio»;
+   *   misurato: 34 s per ricamminare la cartella Desktop a ogni invio dopo cinque minuti). Scaduta
+   *   per età, la voce si serve subito come `stantio` e si RICOSTRUISCE in sottofondo: il senso
+   *   di questo test — «senza scadenza un segnale perso lascerebbe l'elenco falso per sempre» —
+   *   resta, e si prova sul messaggio DOPO, che vede la ricostruzione (vedi anche
+   *   `tests/mappa-tempo-e-cache-stantia.test.mjs`).
+   */
   const dopo = await contestoDelProgetto({ cartella: 'radice', deps: { ...deps, adesso: () => 1_000_000 + VALIDITA_MS + 1 } });
-  assert.equal(dopo.riusato, false, '⛔ senza scadenza un segnale perso lascerebbe l’elenco falso per sempre');
+  assert.equal(dopo.riusato, true, 'scaduta per età si serve SUBITO, senza far aspettare');
+  assert.equal(dopo.stantio, true, 'e lo dice');
+  await new Promise((r) => setTimeout(r, 50));
+  const rinnovato = await contestoDelProgetto({ cartella: 'radice', deps: { ...deps, adesso: () => 1_000_000 + VALIDITA_MS + 2 } });
+  assert.equal(rinnovato.stantio, undefined, '⛔ senza ricostruzione un segnale perso lascerebbe l’elenco falso per sempre: il rinnovo in sottofondo è avvenuto');
 });
 
 /*

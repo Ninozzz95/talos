@@ -87,6 +87,24 @@ import { costoElenco } from './costo-elenco.mjs';
  */
 export const VALIDITA_MS = 5 * 60 * 1000;
 
+/**
+ * ⛔⛔⛔ 12/09/2026 — LA CACHE SERVE SUBITO E SI RINNOVA DOPO (stale-while-revalidate).
+ * Owner: «i modelli OpenRouter sono estremamente lenti al primo messaggio, quasi un minuto».
+ * Misurato: su `Desktop` il preambolo costa 34.356 ms da costruire, e con una validità di cinque
+ * minuti OGNI messaggio mandato dopo una pausa lo ripagava per intero (record `tempi-giro` della
+ * sessione 78247740: 41,8 s · 34,3 s · 39,9 s al primo token, tre invii di fila). Una persona che
+ * legge la risposta, pensa, e riscrive dopo sei minuti non deve aspettare che il disco venga
+ * ricamminato: riceve la mappa di prima — che è anche il prefisso IDENTICO su cui prende la cache
+ * del fornitore — e la mappa nuova si costruisce in sottofondo per il messaggio dopo.
+ * ⛔ Non è «cache per sempre»: `segnalaFileCambiati` continua a buttarla quando la cartella cambia
+ *   (WorkspaceChanged), e in quel caso la ricostruzione è sincrona ma ora ha il tetto in tempo
+ *   di `mappa-cartelle.mjs`. Ciò che cambia è solo il caso «scaduta per età»: prima faceva
+ *   aspettare, ora no. È la forma di HTTP `stale-while-revalidate` (RFC 5861, §3).
+ * ⭐ Il rinnovo in sottofondo è UNO per chiave (`rinnovo` sulla voce): dieci messaggi in fila su
+ *   una cache scaduta fanno partire una sola camminata, non dieci.
+ */
+export const RINNOVA_IN_SOTTOFONDO = true;
+
 /** La memoria dei preamboli già costruiti, per `cartella|permesso|modello`. */
 const cache = new Map();
 
@@ -144,7 +162,24 @@ export async function contestoDelProgetto({
        preambolo a ogni giro e nessuno se ne accorgerebbe. */
     return { ...voce.esito, riusato: true };
   }
+  if (voce && RINNOVA_IN_SOTTOFONDO) {
+    /* Scaduta per età: si serve quella di prima SUBITO e si rinnova dopo (vedi la nota in testa).
+       `stantio` lo dice a chi legge il registro; il testo è byte-identico al precedente. */
+    if (!voce.rinnovo) {
+      voce.rinnovo = costruisciPreambolo({ cartella, creaFiltro, permesso, modello, piattaforma, tettoIstruzioni, tettoTokenMappa, statoVolatile, contatore, finestra, deps, chiave, rinnovo: true })
+        .catch(() => null)
+        .finally(() => { const attuale = cache.get(chiave); if (attuale) attuale.rinnovo = null; });
+    }
+    return { ...voce.esito, riusato: true, stantio: true };
+  }
 
+  return costruisciPreambolo({ cartella, creaFiltro, permesso, modello, piattaforma, tettoIstruzioni, tettoTokenMappa, statoVolatile, contatore, finestra, deps, chiave });
+}
+
+/** La costruzione vera, separata dalla lettura della cache perché il rinnovo in sottofondo la chiama da solo. */
+async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, piattaforma, tettoIstruzioni, tettoTokenMappa, statoVolatile, contatore, finestra, deps, chiave, rinnovo = false }) {
+  const adesso = deps.adesso ?? (() => Date.now());
+  const ora = adesso();
   const filtro = await filtroGitignore(creaFiltro, cartella);
 
   /*
@@ -224,7 +259,11 @@ export async function contestoDelProgetto({
     costo,
     riusato: false,
   };
-  cache.set(chiave, { quando: ora, esito });
+  /* ⛔ Un rinnovo in sottofondo che finisce DOPO un `segnalaFileCambiati` non deve resuscitare
+     una voce buttata: si scrive solo se la chiave è ancora quella attesa o se non c'è niente. */
+  const precedente = cache.get(chiave);
+  if (rinnovo && !precedente) return esito; // buttata da segnalaFileCambiati mentre si ricostruiva: la cartella e' cambiata, questa mappa e' gia' vecchia
+  cache.set(chiave, { quando: ora, esito, rinnovo: precedente?.rinnovo ?? null });
   return esito;
 }
 

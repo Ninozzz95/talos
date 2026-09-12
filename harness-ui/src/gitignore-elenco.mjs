@@ -122,6 +122,16 @@ export const FONTI_IMPLICITE = Object.freeze(['.git/info/exclude']);
 /** Tetti di sicurezza della scoperta dei file annidati. Dichiarati, non nascosti. */
 const PROFONDITA_MASSIMA = 24;
 const CARTELLE_MASSIME = 5000;
+/**
+ * ⛔⛔⛔ 12/09/2026 — IL TETTO IN TEMPO. Owner: «quasi un minuto al primo messaggio». Misurato
+ * sulla cartella `Desktop` (che non e' un repo ma contiene decine di repo): questa raccolta
+ * legge 288 `.gitignore` per 6.002 regole in **12.342 ms**, prima ancora di elencare una cartella;
+ * sul repo `AVM-harness-desktop` 57 file, 969 regole, 1.593 ms. I tetti in cartelle (5.000) e in
+ * profondita' (24) non mordevano in tempo. Oltre il budget la raccolta si ferma e lo dichiara
+ * (`filtro.incompleto`): le regole non lette non nascondono niente — la direzione dell'errore
+ * resta «tengo di piu'», come per un file illeggibile.
+ */
+export const TEMPO_MASSIMO_RACCOLTA_MS = 1500;
 /** ⛔ Quanti livelli si puo' RISALIRE cercando la radice del repo, per non finire su `C:\`. */
 const RISALITA_MASSIMA = 64;
 
@@ -314,11 +324,21 @@ export function compilaRegole(righe, { base = '' } = {}) {
 function creaGiudice(regole) {
   const memoria = new Map();
 
-  /** Se la regola vive in una sottocartella, vale solo la' dentro: torna il resto, o null. */
-  function porzioneApplicabile(regola, percorso) {
-    if (regola.base === '') return percorso;
-    const prefisso = `${regola.base}/`;
-    return percorso.startsWith(prefisso) ? percorso.slice(prefisso.length) : null;
+  /*
+   * ⛔ 12/09/2026 — LE REGOLE SI INDICIZZANO PER BASE, non si scorrono tutte. Con 6.002 regole
+   *   (Desktop) ogni percorso nuovo costava 0,265 ms, e una mappa che conta i file di migliaia di
+   *   cartelle ne chiede decine di migliaia: secondi interi spesi a confrontare `a/b/c` con regole
+   *   che vivono in `progetti/x/y/` e non possono riguardarlo. Una regola con base `B` puo' matchare
+   *   solo un percorso che inizia con `B/`: quindi per un percorso si guardano SOLO le regole della
+   *   radice e dei suoi antenati. L'ordine resta quello di prima — le basi dalla piu' corta alla piu'
+   *   lunga, e dentro ogni base l'ordine di inserimento — cioe' «piu' si scende piu' si vince»
+   *   [G punto 9] e «l'ultima che matcha decide» [G punto 2] valgono identici: due basi diverse
+   *   sullo stesso ramo sono sempre una antenata dell'altra, e la raccolta le aggiunge in ampiezza.
+   */
+  const perBase = new Map();
+  for (const regola of regole) {
+    const gruppo = perBase.get(regola.base);
+    if (gruppo) gruppo.push(regola); else perBase.set(regola.base, [regola]);
   }
 
   /** L'ultima regola che matcha decide [G punto 2]. */
@@ -328,12 +348,19 @@ function creaGiudice(regole) {
     if (gia !== undefined) return gia;
 
     let esito = NESSUNA;
-    for (const regola of regole) {
-      if (regola.soloDirectory && !eDirectory) continue; // [G punto 5]
-      const porzione = porzioneApplicabile(regola, percorso);
-      if (porzione === null || porzione === '') continue;
-      if (!regola.regex.test(porzione)) continue;
-      esito = regola.negata ? INCLUSO : ESCLUSO;
+    /* Le basi candidate: '' e ogni antenato del percorso, dalla radice in giu'. */
+    const basi = [''];
+    for (let i = percorso.indexOf('/'); i !== -1; i = percorso.indexOf('/', i + 1)) basi.push(percorso.slice(0, i));
+    for (const base of basi) {
+      const gruppo = perBase.get(base);
+      if (!gruppo) continue;
+      const porzione = base === '' ? percorso : percorso.slice(base.length + 1);
+      if (porzione === '') continue;
+      for (const regola of gruppo) {
+        if (regola.soloDirectory && !eDirectory) continue; // [G punto 5]
+        if (!regola.regex.test(porzione)) continue;
+        esito = regola.negata ? INCLUSO : ESCLUSO;
+      }
     }
     memoria.set(chiave, esito);
     return esito;
@@ -467,9 +494,14 @@ export async function creaFiltroGitignore({
   profonditaMassima = PROFONDITA_MASSIMA,
   cartelleMassime = CARTELLE_MASSIME,
   risalitaMassima = RISALITA_MASSIMA,
+  tempoMassimoMs = TEMPO_MASSIMO_RACCOLTA_MS,
+  orologio = () => performance.now(),
 } = {}) {
   const regole = [];
   const fonti = [];
+  const avvioMs = orologio();
+  const budgetMs = Number.isFinite(tempoMassimoMs) ? Math.max(0, tempoMassimoMs) : Infinity;
+  let incompleto = false;
 
   const aggiungi = (righe, base, etichetta) => {
     const prima = regole.length;
@@ -529,6 +561,7 @@ export async function creaFiltroGitignore({
   let visitate = 0;
 
   while (coda.length > 0 && visitate < cartelleMassime) {
+    if (orologio() - avvioMs > budgetMs) { incompleto = true; break; } // tetto in tempo (12/09): si dichiara, non si nasconde
     const base = coda.shift();
     visitate += 1;
 
@@ -565,5 +598,7 @@ export async function creaFiltroGitignore({
   filtro.fonti = fonti;
   filtro.radiceRepo = radiceRepo;
   filtro.prefissoLavoro = prefissoLavoro;
+  filtro.incompleto = incompleto || visitate >= cartelleMassime;
+  filtro.msRaccolta = Math.round(orologio() - avvioMs);
   return filtro;
 }

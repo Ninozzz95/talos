@@ -98,6 +98,30 @@ export const PROFONDITA_MAPPA_PREDEFINITA = 8;
  */
 export const TETTO_CARTELLE_PREDEFINITO = 2000;
 
+/**
+ * ⛔⛔⛔ 12/09/2026 — IL TETTO CHE MANCAVA ERA IL TEMPO. Owner: «i modelli OpenRouter sono
+ * estremamente lenti al primo messaggio, quasi un minuto». Misurato sui record `tempi-giro`: lo
+ * stesso `glm-5.3-flash` risponde in 2,4 s sulla cartella `harness-ui`, in 4,2 s su
+ * `AVM-harness-desktop`, in **34-42 s** sulla cartella `Desktop` — a OGNI invio distanziato più
+ * di cinque minuti. E `contestoDelProgetto` da sola, su `Desktop`, costa **34.356 ms** per una
+ * mappa che poi il tetto di token riduce a 998 token: trentaquattro secondi NOSTRI, spesi a
+ * camminare `projects/` (decine di repo) prima ancora di chiamare il fornitore. Il tetto sulle
+ * cartelle (2.000) non mordeva in tempo: su Windows ogni `readdir` costa millisecondi, e duemila
+ * cartelle sono decine di secondi.
+ * ⇒ Un tetto in TEMPO, dichiarato nel testo come gli altri due: ciò che si è letto entro il
+ *   budget è vero e completo per quelle cartelle (camminata in ampiezza: sopravvive ciò che sta
+ *   vicino alla radice); il resto «non l'ho guardato», e il modello ha `cerca`/`elenca` per
+ *   scendere dove serve — è la forma «just in time» che Anthropic raccomanda («maintain
+ *   lightweight identifiers… load data at runtime», Effective context engineering for AI agents,
+ *   29/09/2025) e che Claude Code applica (il suo `/doctor` TOGLIE dal contesto «directory
+ *   layouts» perché il modello li ricava con gli strumenti — docs «How Claude remembers your
+ *   project», letta il 12/09/2026).
+ * ⛔ 2.000 ms: sopra i 258 ms di `harness-ui/`, sotto i 3.438 ms di `AVM-harness-desktop` (che
+ *   viene quindi tagliato in tempo: è il repo intero con worktree e `scratchpad/`, il caso
+ *   patologico dichiarato l'11/09), e un ordine di grandezza sotto il primo token del modello.
+ */
+export const TEMPO_MASSIMO_MAPPA_MS = 2000;
+
 const insiemeMinuscolo = (valore, predefinito) => {
   const grezzo = valore === undefined || valore === null ? predefinito : valore;
   const voci = grezzo instanceof Set ? [...grezzo] : Array.isArray(grezzo) ? grezzo : [grezzo];
@@ -122,13 +146,19 @@ const ordinaVoci = (voci) => [...voci].sort((a, b) => {
  * @param {object} [input.fs] — `{readdir, realpath, stat}`, iniettabile come negli altri moduli
  * @param {(percorsoRelativo: string, info?: {cartella: boolean}) => boolean} [input.filtro]
  *   GIÀ COSTRUITO (vedi decisione 4). true = tieni.
+ * @param {number} [input.tempoMassimoMs=2000] — il tetto in TEMPO (12/09): oltre, si smette di
+ *   accodare e lo si dichiara. `Infinity` per le prove che vogliono l'albero intero.
+ * @param {() => number} [input.orologio] — iniettabile per le prove (default `performance.now`)
  * @returns {Promise<{cartelle: {percorso:string, livello:number, file:number}[], fileTotali:number,
- *   troncato:boolean, profonditaRaggiunta:number, illeggibili:number}>}
+ *   troncato:boolean, motivoTroncamento:'cartelle'|'tempo'|null, msImpiegati:number,
+ *   profonditaRaggiunta:number, illeggibili:number}>}
  */
 export async function costruisciMappaCartelle({
   radice,
   profonditaMax = PROFONDITA_MAPPA_PREDEFINITA,
   tettoCartelle = TETTO_CARTELLE_PREDEFINITO,
+  tempoMassimoMs = TEMPO_MASSIMO_MAPPA_MS,
+  orologio = () => performance.now(),
   escludiCartelle,
   fs,
   filtro,
@@ -150,8 +180,11 @@ export async function costruisciMappaCartelle({
   let radiceFile = 0;
   let fileTotali = 0;
   let troncato = false;
+  let motivoTroncamento = null;
   let profonditaRaggiunta = 0;
   let illeggibili = 0;
+  const budgetMs = Number.isFinite(tempoMassimoMs) ? Math.max(0, tempoMassimoMs) : Infinity;
+  const partenza = orologio();
 
   const radiceReale = await disco.realpath(radice).catch(() => radice);
   /* Ampiezza, come `elenco-profondo.mjs`: se il tetto morde, ciò che sopravvive è la roba vicina
@@ -159,6 +192,10 @@ export async function costruisciMappaCartelle({
   const coda = [{ assoluto: radice, relativo: '', livello: 0, antenati: [radiceReale] }];
 
   while (coda.length > 0) {
+    /* ⛔ Il tetto in tempo si guarda PRIMA di leggere la prossima cartella, non dopo: una lettura
+       già iniziata si finisce (i suoi file vanno contati e la sua riga scritta), quella dopo no.
+       Stessa disciplina del tetto sulle cartelle: si smette di camminare, non si butta il fatto. */
+    if (orologio() - partenza > budgetMs) { troncato = true; motivoTroncamento = 'tempo'; break; }
     const corrente = coda.shift();
     let voci;
     try {
@@ -172,7 +209,12 @@ export async function costruisciMappaCartelle({
 
     let fileQui = 0;
     const figli = [];
+    let contate = 0;
     for (const voce of ordinaVoci(voci)) {
+      /* ⛔ 12/09: una cartella sola puo' avere migliaia di voci (la radice di `Desktop`), e ognuna
+         passa dal filtro: il tetto in tempo si guarda anche QUI, ogni 256 voci, o una cartella
+         enorme lo scavalca da sola. Le voci gia' contate restano; il testo dichiara il taglio. */
+      if ((contate++ & 255) === 255 && orologio() - partenza > budgetMs) { troncato = true; motivoTroncamento = 'tempo'; break; }
       const nome = typeof voce === 'string' ? voce : voce.name;
       const relativo = corrente.relativo ? `${corrente.relativo}/${nome}` : nome;
       const assoluto = join(corrente.assoluto, nome);
@@ -189,7 +231,7 @@ export async function costruisciMappaCartelle({
       if (eCartella) {
         if (escluse.has(nome.toLowerCase())) continue;
         if (!tieni(relativo, true)) continue;
-        figli.push({ nome, relativo, assoluto });
+        figli.push({ nome, relativo, assoluto, collegamento: Boolean(voce.isSymbolicLink?.()) });
         continue;
       }
       /* ⛔ Il conteggio passa dallo STESSO filtro dei file: se non lo facesse, `src/ (104)`
@@ -222,8 +264,12 @@ export async function costruisciMappaCartelle({
        * ⇒ Chi è già in coda si finisce di visitare (i suoi file vanno contati, e la sua riga
        *   scritta); ciò che non entra non entra, e il testo lo DICHIARA.
        */
-      if (cartelle.length + coda.length >= tetto) { troncato = true; break; }
-      const reale = await disco.realpath(figlio.assoluto).catch(() => figlio.assoluto);
+      if (cartelle.length + coda.length >= tetto) { troncato = true; motivoTroncamento = 'cartelle'; break; }
+      /* ⛔ 12/09: `realpath` era una chiamata di sistema PER OGNI cartella, e serve solo a chi può
+         girare in tondo — un collegamento simbolico o una giunzione. Una cartella vera ha come
+         percorso reale il suo percorso: si prende senza chiedere al disco. Su `Desktop` erano
+         migliaia di chiamate in più per non scoprire niente. */
+      const reale = figlio.collegamento ? await disco.realpath(figlio.assoluto).catch(() => figlio.assoluto) : figlio.assoluto;
       if (corrente.antenati.includes(reale)) continue; // ciclo: si torna su un ANTENATO del cammino
       coda.push({ assoluto: figlio.assoluto, relativo: figlio.relativo, livello: corrente.livello + 1, antenati: [...corrente.antenati, reale] });
     }
@@ -235,7 +281,7 @@ export async function costruisciMappaCartelle({
      stesso confronto per unità di codice di `elenco-profondo.mjs` — mai `localeCompare`. */
   cartelle.sort(confrontaCartelle);
 
-  return { cartelle, radiceFile, fileTotali, troncato, profonditaRaggiunta, illeggibili };
+  return { cartelle, radiceFile, fileTotali, troncato, motivoTroncamento, msImpiegati: Math.round(orologio() - partenza), profonditaRaggiunta, illeggibili };
 }
 
 /**
@@ -281,7 +327,9 @@ export function testoMappaCartelle(mappa, { radice = '' } = {}) {
   const righe = [];
   righe.push(`Struttura di «${nome}» — ${voci.length} cartelle${mappa.troncato ? '' : ', albero COMPLETO'}. Fra parentesi quanti file contiene ognuna (i propri, non quelli delle sottocartelle).`);
   righe.push('I singoli file non sono elencati: usa `cerca` per trovarli per nome o per contenuto, e `elenca` per vedere cosa c\'è in una cartella precisa.');
-  if (mappa.troncato) {
+  if (mappa.troncato && mappa.motivoTroncamento === 'tempo') {
+    righe.push(`⚠ MAPPA INCOMPLETA — questa cartella è grande e leggerla tutta avrebbe fatto aspettare: mi sono fermato dopo ${voci.length} cartelle (profondità ${mappa.profonditaRaggiunta}). Quelle elencate sono vere; le altre non le ho guardate: cercale con \`cerca\` o \`elenca\` prima di dire che mancano.`);
+  } else if (mappa.troncato) {
     righe.push(`⚠ MAPPA INCOMPLETA — mi sono fermato a ${voci.length} cartelle (profondità ${mappa.profonditaRaggiunta}): più in basso l'albero continua e non l'ho guardato.`);
   }
   if (mappa.illeggibili > 0) {
