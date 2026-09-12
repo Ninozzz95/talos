@@ -44,6 +44,10 @@ Parole sue, in ordine, e cosa cambia nella coda:
 
 ⇒ **Ordine di lavoro dal 12/09, ore 11:** L9 (in corso) → BC-13 · BC-12/14 #2 · BC-08 · BC-10 (in parallelo, file disgiunti) → L10 → BC-35 → P-D…P-L → PO-13 → A/B.
 
+**BC-39 — 12/09, ore 13: «i modelli OpenRouter sono estremamente lenti al primo messaggio, quasi un minuto» (owner). ✅ CAUSA TROVATA E CURATA NEL CODICE (`5ccb3692`), da verificare sul 4174 dopo il riavvio.**
+Non era il fornitore né i token: `tempi-giro` diceva 2,4 s su `harness-ui`, 4,2 s su `AVM-harness-desktop`, **34-42 s su `Desktop`** a ogni invio dopo cinque minuti; invio minimo su Desktop: 37,5 s con 3.856 token. Da soli: `contestoDelProgetto` su Desktop **34.356 ms** (raccolta di 288 `.gitignore` = 12.342 ms; giudice che scorre 6.002 regole per ogni file contato; `realpath` per ogni cartella; cache di 5 minuti che fa aspettare la ricostruzione). Cure: tetti in tempo (1,5 s raccolta, 2 s mappa) dichiarati al modello; regole indicizzate per base (0,265 → 0,002 ms); `realpath` solo sui collegamenti; cache stale-while-revalidate. Dopo: **Desktop 1.594 ms, repo intero 1.278 ms, harness-ui 293 ms**, mappa identica al byte. Fonti: Anthropic «Effective context engineering» (29/09/2025), docs Claude Code (il `/doctor` toglie i «directory layouts»), aider repomap, RFC 5861.
+Proposta dell'owner registrata («magari mettere il preambolo come tool»): la forma «just in time» — mappa minima nel preambolo e `elenca`/`cerca` per scendere — è la direzione che le fonti confermano; oggi la mappa pesa 998-7.234 token e il taglio in profondità a 4.000 token esiste già. **BC-40 (nuovo, da decidere):** ridurre la mappa del preambolo alla profondità 2 e lasciare il resto agli attrezzi; misurare prima/dopo sui token del primo giro e sul tempo.
+
 ### In corso adesso (aggiornato 12/09, ore 12:15)
 
 | id | cosa | stato |
