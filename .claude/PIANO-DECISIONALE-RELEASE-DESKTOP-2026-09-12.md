@@ -222,6 +222,22 @@ un nuovo repo? io avevo pensato un monorepo».
 
 ---
 
+## 5 · Le risposte definitive dell'owner (12/09/2026, ore 17:40)
+
+| # | decisione | risposta dell'owner (verbatim) | conseguenza |
+|---|---|---|---|
+| 1 | guscio Electron come prodotto | «confermo» | R-01 parte: il laboratorio del 04/09 diventa `harness-ui/desktop/`, Electron 44.3.0 |
+| 2 | pratica di firma | «non ho una partita IVA o azienda» | **nessuna firma, per ora**: ogni release esce non firmata, con l'avviso SmartScreen scritto nella pagina di download e nel README, attestazione di provenienza GitHub e SHA256 nelle note. Si riapre solo se nasce una persona giuridica |
+| 3 | v0.1 non firmata con avviso | «ok» | come sopra |
+| 4 | licenza | «sì, tutto desktop + mobile» | **AGPL-3.0-only su tutto il monorepo pubblico**, desktop e mobile |
+| 5 | telemetria zero, dichiarata | «ok» | nessuna telemetria; scritto nel README e nelle note |
+| 6 | via alle righe di lavoro | «sì, concordo: sistemiamo i difetti e facciamo un installer con la stessa interfaccia e stile Calm di default, un pacchetto all in one che deve essere più painless possibile per l'utente, UI moderna ed efficace» | R-01…R-06 partono appena la coda dei difetti è chiusa; **requisiti nuovi**: (a) **pacchetto «all in one»**: nessun prerequisito da installare (niente Node a parte: è dentro Electron; motore locale `llama-server` CPU e Vulkan dentro il pacchetto, non scaricato dopo — corregge D6: i MODELLI GGUF restano fuori e si scaricano dall'app con un clic, perché pesano gigabyte); (b) **installazione il più indolore possibile**: installer a un clic (NSIS per utente, senza domande, senza amministratore), primo avvio con l'intro già esistente, tema **Calm di serie**, stessa interfaccia della app nel browser; (c) **UI moderna ed efficace**: l'installer e la prima schermata seguono il linguaggio visivo del mockup (frontend-design), non la finestra grigia di NSIS di serie — si valuta l'installer a un clic di electron-builder con grafica propria, e si fotografa il percorso da utente nuovo |
+| 7 | repo | (consigliato, non contraddetto) | monorepo pubblico nuovo con storia appiattita; questo repo resta privato per lo sviluppo |
+
+⇒ Le righe R-01…R-06 diventano lotti per Astra con review e verifica mie, in quest'ordine, appena la coda dei difetti di oggi è chiusa: R-01 guscio → R-02 installer all-in-one a un clic (peso misurato, motore locale incluso, modelli dall'app) → R-04 CI Windows con attestazione → R-06 misure (peso, RAM, avvio) → R-05 monorepo pubblico AGPL-3.0 → R-03 modelli dall'app (download con impronta) → poi R-08 pre-release al trigger.
+
+---
+
 ## Cosa devi fare tu · Cosa faccio io · Cosa rimane
 
 **Cosa devi fare tu:** le sei risposte qui sopra, quando vuoi; nessuna blocca la coda di oggi.
