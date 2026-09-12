@@ -3,6 +3,9 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 
+import { ID_NATIVI_SDK } from './provider-registry.mjs';
+import { tokenDaCache, tokenScrittiInCache } from './usage-cache.mjs';
+
 // Only this adapter knows the SDK message format. The kernel owns tool execution.
 export function stripNativeMetadata(messages) {
   return messages.map(({ talos_provider_state, ...message }) => message);
@@ -36,12 +39,34 @@ export function toNativeMessages(messages, { provider, model }) {
   });
 }
 
-function canonicalUsage(usage = {}) {
+/*
+ * ⛔⛔ 12/09 — P-B: QUESTO LETTORE CONOSCEVA UN NOME SOLO.
+ *
+ * `usage.inputTokenDetails?.cacheReadTokens` è il nome che l'AI SDK espone quando l'adattatore
+ * fissato nel lock mappa il campo nativo. Quando NON lo mappa — ed è ❓ non verificato che lo
+ * faccia per `cachedContentTokenCount` di Gemini (§7.8 dell'inventario) — qui usciva `undefined`,
+ * che a valle diventa zero: «non dichiarato» scritto come «nessuno», che è la lezione del 22/8.
+ *
+ * ⇒ Prima si chiede all'SDK, poi si chiede al fornitore con TUTTI i nomi che quel wire può usare
+ *   (`usage-cache.mjs`, alimentato dal record). Un nome in più non fa mai danno; uno in meno fa
+ *   sparire il 93% del costo dal pannello.
+ */
+function canonicalUsage(usage = {}, provider) {
+  const dallSdk = Number.isFinite(usage.inputTokenDetails?.cacheReadTokens) ? usage.inputTokenDetails.cacheReadTokens : null;
+  const letti = dallSdk ?? tokenDaCache(usage, provider);
+  const scritti = Number.isFinite(usage.inputTokenDetails?.cacheWriteTokens)
+    ? usage.inputTokenDetails.cacheWriteTokens
+    : tokenScrittiInCache(usage, provider);
   return {
     prompt_tokens: usage.inputTokens,
     completion_tokens: usage.outputTokens,
     total_tokens: usage.totalTokens,
-    prompt_tokens_details: { cached_tokens: usage.inputTokenDetails?.cacheReadTokens },
+    prompt_tokens_details: {
+      /* ⛔ `undefined` e non `null` quando non si sa: è la forma che questo campo ha sempre avuto,
+         e i lettori a valle distinguono già «assente» da «zero». */
+      cached_tokens: letti ?? undefined,
+      ...(scritti !== null && scritti !== undefined ? { cache_write_tokens: scritti } : {}),
+    },
     completion_tokens_details: { reasoning_tokens: usage.outputTokenDetails?.reasoningTokens },
   };
 }
@@ -68,8 +93,11 @@ function responseMessage(response, provider, model, finishReason) {
 
 export async function nativeProviderResponse({ provider, model, apiKey, baseURL, body, fetchFn = fetch, signal }) {
   signal?.throwIfAborted();
+  /* ⛔ 12/09 — P-A: la mappa resta (un pacchetto npm non si deriva da un dato), ma il registro
+     dichiara CHI passa di qui: se le due divergono, si ferma subito invece di costruire un client
+     per un fornitore che il resto del sistema instrada altrove. Il test di parità le confronta. */
   const factory = {anthropic: createAnthropic, gemini: createGoogleGenerativeAI, openai: createOpenAI}[provider];
-  if (!factory) throw new Error('Provider nativo non riconosciuto.');
+  if (!factory || !ID_NATIVI_SDK.includes(provider)) throw new Error('Provider nativo non riconosciuto.');
   const client = factory({ apiKey, ...(baseURL ? { baseURL } : {}), fetch: fetchFn });
   const languageModel = provider === 'openai' ? client.responses(model) : client.chat(model);
   const tools = Object.fromEntries((body.tools ?? []).map(t => [t.function.name, { description: t.function.description, inputSchema: jsonSchema(t.function.parameters) }]));
@@ -93,7 +121,7 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
   };
   if (!body.stream) {
     const result = await generateText(common);
-    return Response.json({ choices: [{ index: 0, message: responseMessage(result.response, provider, model, result.finishReason), finish_reason: result.finishReason === 'tool-calls' ? 'tool_calls' : result.finishReason }], usage: canonicalUsage(result.usage) });
+    return Response.json({ choices: [{ index: 0, message: responseMessage(result.response, provider, model, result.finishReason), finish_reason: result.finishReason === 'tool-calls' ? 'tool_calls' : result.finishReason }], usage: canonicalUsage(result.usage, provider) });
   }
   const abort = new AbortController();
   const combinedSignal = signal ? AbortSignal.any([signal, abort.signal]) : abort.signal;
@@ -121,7 +149,7 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
           if (part.type === 'tool-call' && part.invalid) throw part.error ?? new Error('Argomenti dello strumento non validi.');
           if (part.type === 'finish') {
             const message = responseMessage(await result.response, provider, model, part.finishReason);
-            emit(message.talos_provider_state ? { talos_provider_state: message.talos_provider_state } : {}, { usage: canonicalUsage(part.totalUsage) }, part.finishReason);
+            emit(message.talos_provider_state ? { talos_provider_state: message.talos_provider_state } : {}, { usage: canonicalUsage(part.totalUsage, provider) }, part.finishReason);
             controller.enqueue(encoder.encode('data: [DONE]\n\n')); completed = true; controller.close(); return;
           }
         }

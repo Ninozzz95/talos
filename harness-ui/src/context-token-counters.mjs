@@ -1,9 +1,13 @@
 import { createHash } from 'node:crypto';
 import { buildPreparedProviderRequest } from './context-provider-adapter.mjs';
 import { adattaRichiestaConDescrizioneComando, normalizzaReasoningPerModello } from './runtime-owner-adapter.mjs';
+import { ID_NATIVI_SDK, REGISTRO_FORNITORI } from './provider-registry.mjs';
 
 const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
-const defaults = { openai: 'https://api.openai.com/v1', anthropic: 'https://api.anthropic.com/v1', gemini: 'https://generativelanguage.googleapis.com/v1beta' };
+/* ⛔ 12/09 — P-A: era il decimo dei tredici elenchi, tre indirizzi ricopiati a mano. Se uno
+   divergeva da quello del portachiavi, il conteggio dei token veniva chiesto a un endpoint diverso
+   da quello che poi risponde davvero — e nessuno se ne sarebbe accorto, perche il numero c'era. */
+const defaults = Object.fromEntries(Object.values(REGISTRO_FORNITORI).filter((r) => r.catalogo?.inUI === true && r.catalogo?.fonte === 'fornitore').map((r) => [r.id, r.baseUrl]));
 const pick = (body, keys) => Object.fromEntries(keys.filter(key => body[key] !== undefined).map(key => [key, body[key]]));
 
 /** Reuse desktop transforms before public SDK serialization. Profiles for chat
@@ -29,7 +33,7 @@ export async function buildPreparedDesktopContextRequest({ messages, tools = [],
     requestOptions.reasoning = normalizzaReasoningPerModello({ effort: 'low' }, capability);
   }
   const compiled = await buildPreparedProviderRequest({ messages: preparedMessages, tools: preparedTools, model, signal, requestOptions });
-  if (!['openai', 'anthropic', 'gemini'].includes(model.provider) && !preparedTools.length) compiled.body.tools = [];
+  if (!ID_NATIVI_SDK.includes(model.provider) && !preparedTools.length) compiled.body.tools = [];
   if (model.provider === 'openrouter') {
     compiled.body.plugins = [{ id: 'context-compression', enabled: false }];
     if (!chat) compiled.body.transforms = [];

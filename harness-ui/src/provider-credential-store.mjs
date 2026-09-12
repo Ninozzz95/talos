@@ -10,19 +10,40 @@
 
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 
-export const PROVIDER_IDS = Object.freeze([
-  'openai', 'deepseek', 'anthropic', 'gemini', 'openrouter', 'ollama', 'huggingface',
-]);
+import { ID_CON_CREDENZIALE, REGISTRO_FORNITORI } from './provider-registry.mjs';
 
-export const PROVIDER_DEFINITIONS = Object.freeze({
-  openai: Object.freeze({ id: 'openai', label: 'OpenAI', keyEnv: ['OPENAI_API_KEY'], defaultEndpoint: 'https://api.openai.com/v1', supportsEndpoint: true, supportsTimeout: true, requiresKey: true, execution: 'collegato' }),
-  deepseek: Object.freeze({ id: 'deepseek', label: 'DeepSeek', keyEnv: ['DEEPSEEK_API_KEY'], defaultEndpoint: 'https://api.deepseek.com', supportsEndpoint: true, supportsTimeout: true, requiresKey: true, execution: 'in preparazione' }),
-  anthropic: Object.freeze({ id: 'anthropic', label: 'Anthropic', keyEnv: ['ANTHROPIC_API_KEY'], defaultEndpoint: 'https://api.anthropic.com/v1', supportsEndpoint: false, supportsTimeout: true, requiresKey: true, execution: 'collegato' }),
-  gemini: Object.freeze({ id: 'gemini', label: 'Google Gemini', keyEnv: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'], defaultEndpoint: 'https://generativelanguage.googleapis.com/v1beta', supportsEndpoint: false, supportsTimeout: true, requiresKey: true, execution: 'collegato' }),
-  openrouter: Object.freeze({ id: 'openrouter', label: 'OpenRouter', keyEnv: ['OPENROUTER_API_KEY'], defaultEndpoint: 'https://openrouter.ai/api/v1', supportsEndpoint: true, supportsTimeout: true, requiresKey: true, execution: 'collegato' }),
-  ollama: Object.freeze({ id: 'ollama', label: 'Ollama Local', keyEnv: ['OLLAMA_API_KEY'], defaultEndpoint: 'http://127.0.0.1:11434', endpointEnv: ['OLLAMA_BASE_URL'], supportsEndpoint: true, supportsTimeout: true, requiresKey: false, execution: 'runtime locale' }),
-  huggingface: Object.freeze({ id: 'huggingface', label: 'Hugging Face', keyEnv: ['HF_TOKEN', 'HUGGINGFACE_HUB_TOKEN'], defaultEndpoint: null, supportsEndpoint: false, supportsTimeout: false, requiresKey: false, execution: 'catalogo e download' }),
-});
+/*
+ * ⛔⛔ 12/09 — P-A: QUESTE DUE COSTANTI ERANO IL PRIMO DEI TREDICI ELENCHI PARALLELI.
+ *
+ * Erano scritte a mano, e dicevano cose che altri file smentivano: `deepseek` con
+ * `execution: 'in preparazione'` mentre `model-destination.mjs` lo instradava da sempre, e
+ * `lmstudio` assente benché fosse già sondato e caricabile. Adesso sono una PROIEZIONE del
+ * registro: aggiungere un fornitore qui non è più possibile, e non deve esserlo.
+ *
+ * ⛔ I nomi dei campi restano quelli di prima (`label`, `keyEnv`, `supportsEndpoint`…): questa è
+ *   la forma che la rotta `/api/v1/providers` e il componente `provider-card.js` già leggono, e
+ *   il registro non è una scusa per rompere un contratto verso il browser. La traduzione avviene
+ *   QUI, in un posto solo, e il test di parità la presidia.
+ */
+export const PROVIDER_IDS = ID_CON_CREDENZIALE;
+
+export const PROVIDER_DEFINITIONS = Object.freeze(Object.fromEntries(PROVIDER_IDS.map((id) => {
+  const record = REGISTRO_FORNITORI[id];
+  return [id, Object.freeze({
+    id,
+    label: record.etichetta,
+    keyEnv: record.auth.nomeVariabile,
+    defaultEndpoint: record.baseUrl,
+    ...(record.envIndirizzo.length ? { endpointEnv: record.envIndirizzo } : {}),
+    supportsEndpoint: record.indirizzoModificabile === true,
+    supportsTimeout: record.limiti.tempoMassimoModificabile === true,
+    requiresKey: record.chiaveObbligatoria === true,
+    execution: record.esecuzione,
+    /* ⛔ La guardia della UI: il pulsante «Accedi con …» esiste solo dove il record dichiara un
+       flusso. Prima era un `provider === 'openrouter'` scritto dentro `listPublic()`. */
+    supportsOAuth: Boolean(record.oauth),
+  })];
+})));
 
 const KEYRING_SERVICE = 'talos-harness-provider';
 const DEFAULT_TIMEOUT_SECONDS = 60;
@@ -250,7 +271,7 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
          *   server sa servire il flusso. Un pulsante che apre un accesso inesistente è peggio di
          *   nessun pulsante.
          */
-        supportsOAuth: provider === 'openrouter',
+        supportsOAuth: definition.supportsOAuth === true,
         /*
          * ⛔ Da DOVE viene la chiave in uso. Il portachiavi VINCE sull'ambiente (l'ambiente semina
          *   la mappa alla partenza, `loadFromKeyring` la sovrascrive), e questo campo lo dice

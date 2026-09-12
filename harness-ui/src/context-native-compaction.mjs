@@ -1,12 +1,20 @@
 import { buildPreparedProviderRequest } from './context-provider-adapter.mjs';
+import { tokenDaCache } from './usage-cache.mjs';
 
 const protocols = { openai: 'openai.responses.compact@2026-09-08', anthropic: 'anthropic.messages@2023-06-01/compact-2026-01-12' };
 const defaults = { openai: 'https://api.openai.com/v1', anthropic: 'https://api.anthropic.com/v1' };
 const fail = (code, message, usage) => { throw Object.assign(new Error(message), { code, ...(usage !== undefined ? { usage } : {}) }); };
-const usageOf = response => {
+/*
+ * ⛔ 12/09 — P-B: leggeva `input_tokens_details.cached_tokens` e basta, cioe la forma del solo wire
+ *   Responses. La compattazione gira anche su Anthropic (`protocols` qui sopra ne ha due), dove il
+ *   campo si chiama `cache_read_input_tokens`: su quel wire il conto tornava sempre vuoto.
+ *   Adesso i nomi li dice il record del fornitore, e la funzione e una sola per tutto il repo.
+ */
+const usageOf = (response, provider) => {
   const usage = {}; const source = response?.usage;
   for (const [from, to] of [['input_tokens', 'inputTokens'], ['output_tokens', 'outputTokens'], ['total_tokens', 'totalTokens']]) if (Number.isSafeInteger(source?.[from]) && source[from] >= 0) usage[to] = source[from];
-  if (Number.isSafeInteger(source?.input_tokens_details?.cached_tokens)) usage.cachedTokens = source.input_tokens_details.cached_tokens;
+  const cached = tokenDaCache(source, provider);
+  if (cached !== null) usage.cachedTokens = cached;
   return usage;
 };
 
@@ -49,7 +57,7 @@ export function createNativeCompactionAdapter({ fetchFn, resolveProfile, verifyE
       catch { signal?.throwIfAborted(); fail('CTX_NATIVE_NETWORK', 'Native compaction could not reach the selected provider.'); }
       let result;
       try { result = await response.json(); } catch { fail('CTX_NATIVE_RESPONSE_INVALID', 'Native compaction returned invalid JSON.'); }
-      const usage = usageOf(result);
+      const usage = usageOf(result, model.provider);
       if (signal?.aborted) { try { signal.throwIfAborted(); } catch (error) { error.usage = usage; throw error; } }
       if (!response.ok) fail([401, 403].includes(response.status) ? 'CTX_NATIVE_AUTH' : 'CTX_NATIVE_HTTP', `Native compaction failed with HTTP ${response.status}.`, usage);
       if (model.provider === 'openai') {

@@ -12,19 +12,28 @@ import {
 
 const modelli = (provider, n) => Array.from({ length: n }, (_, i) => ({ id: `${provider}:m${i}`, nome: `m${i}`, provider }));
 
-test('⛔ LA RICHIESTA DELL’OWNER: cinque schede, e i tre fornitori sono di PRIMO livello', () => {
+test('⛔ LA RICHIESTA DELL’OWNER: ogni fornitore è una scheda di PRIMO livello', () => {
   const fonti = fontiDelSelettore({
     openrouter: modelli('openrouter', 444),
     locali: modelli('locale', 2),
-    diretti: { anthropic: modelli('anthropic', 11), gemini: modelli('gemini', 31), openai: modelli('openai', 71) },
+    diretti: { anthropic: modelli('anthropic', 11), gemini: modelli('gemini', 31), openai: modelli('openai', 71), lmstudio: modelli('lmstudio', 3) },
   });
-  assert.deepEqual(fonti.map((f) => f.id), ['openrouter', 'locali', 'anthropic', 'gemini', 'openai']);
-  assert.deepEqual(fonti.map((f) => f.etichetta), ['OpenRouter', 'Locali', 'Anthropic', 'Gemini', 'OpenAI']);
-  assert.deepEqual(fonti.map((f) => f.conto), [444, 2, 11, 31, 71], 'ogni scheda porta il SUO conteggio, non la somma');
+  /*
+   * ⭐ 12/09, P-C — LA SESTA SCHEDA È LM STUDIO, e sei è il tetto dichiarato in BC-12 (Apple HIG
+   *   via eleken.co: «oltre sei l'utente si perde»). Ci siamo dentro, al limite: la settima non si
+   *   aggiunge senza ripensare la striscia. ⛔ Il numero nel titolo di questa prova era «cinque» e
+   *   diventava falso a ogni fornitore nuovo: un titolo che conta è un titolo che invecchia.
+   */
+  assert.deepEqual(fonti.map((f) => f.id), ['openrouter', 'locali', 'anthropic', 'gemini', 'openai', 'lmstudio']);
+  assert.deepEqual(fonti.map((f) => f.etichetta), ['OpenRouter', 'Locali', 'Anthropic', 'Gemini', 'OpenAI', 'LM Studio']);
+  assert.ok(fonti.length <= 6, 'oltre sei schede la striscia smette di aiutare');
+  assert.deepEqual(fonti.map((f) => f.conto), [444, 2, 11, 31, 71, 3], 'ogni scheda porta il SUO conteggio, non la somma');
   // ⛔ AL CONTRARIO: la scheda ombrello non deve esistere più da nessuna parte.
   assert.equal(fonti.some((f) => f.id === 'diretti'), false);
   assert.equal(eFonteDiretta('diretti'), false);
-  assert.deepEqual(PROVIDER_DIRETTI.map((p) => p.id), ['anthropic', 'gemini', 'openai']);
+  /* ⛔ L'elenco vero lo presidia `tests/provider-registry-parita.test.mjs` contro il registro del
+     server: qui si prova la STRISCIA, non chi ci sta dentro. */
+  assert.deepEqual(PROVIDER_DIRETTI.map((p) => p.id), ['anthropic', 'gemini', 'openai', 'lmstudio']);
 });
 
 test('⛔ TRE STATI, NON UNO: «non ancora letto», «chiave non collegata» e «zero modelli» si distinguono', () => {

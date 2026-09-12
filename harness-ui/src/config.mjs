@@ -9,6 +9,8 @@ import { createPrivateKey } from 'node:crypto';
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { ID_DESTINAZIONE_CHAT } from './provider-registry.mjs';
+
 export const DEFAULT_HOST = '127.0.0.1';
 export const DEFAULT_PORT = 4174;
 
@@ -183,7 +185,15 @@ function parseModello(raw) {
  * ⛔ Senza prefisso NIENTE cambia: resta esattamente il formato di prima, e
  * nessuna sessione salvata si comporta diversamente.
  */
-const FONTI_AMMESSE_MODELLO = 'local|ollama|openai|deepseek|openrouter|anthropic|gemini';
+/*
+ * ⛔⛔ 12/09 — P-A: QUESTA STRINGA ERA UNA COPIA DI `FONTI_MODELLO` DENTRO UNA REGEX.
+ *   Il settimo dei tredici elenchi paralleli, e il piu subdolo: una fonte aggiunta a
+ *   `model-destination.mjs` e non qui veniva respinta con un 400 su /api/v1/sessions **prima** di
+ *   arrivare all'instradamento — cioe il fornitore risultava «non riconosciuto» in un file che non
+ *   parla di fornitori. Adesso la costruisce il registro, e non puo piu divergere.
+ * ⛔ Gli id sono validati dal registro (`^[a-z][a-z0-9-]{0,31}$`): nessun carattere da citare.
+ */
+const FONTI_AMMESSE_MODELLO = ID_DESTINAZIONE_CHAT.join('|');
 /** Il formato OpenRouter di sempre: `vendor/nome`, con `~` e `:variante`. INVARIATO. */
 const FORMA_OPENROUTER = '~?[a-z0-9](?:[a-z0-9._-]{0,63}[a-z0-9])?\/[a-z0-9](?:[a-z0-9._:-]{0,63}[a-z0-9])?';
 /**
@@ -453,7 +463,7 @@ function parseContextTrial(env) {
   if (trial.sessionIds.some(id => typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,256}$/u.test(id)) || new Set(trial.sessionIds).size !== trial.sessionIds.length) fail('Identità delle chat di prova non valide o duplicate.');
   const models = new Set();
   for (const profile of trial.models) {
-    if (!profile || Array.isArray(profile) || Object.keys(profile).some(key => !['provider', 'model', 'windowTokens', 'responseReserve'].includes(key)) || !['local', 'ollama', 'openrouter', 'openai', 'anthropic', 'gemini', 'deepseek'].includes(profile.provider) || typeof profile.model !== 'string' || !profile.model.trim() || !Number.isSafeInteger(profile.windowTokens) || !Number.isSafeInteger(profile.responseReserve) || profile.responseReserve < 1 || profile.responseReserve >= profile.windowTokens) fail('Profilo modello del trial non valido: indicare finestra e riserva, senza credenziali.');
+    if (!profile || Array.isArray(profile) || Object.keys(profile).some(key => !['provider', 'model', 'windowTokens', 'responseReserve'].includes(key)) || !ID_DESTINAZIONE_CHAT.includes(profile.provider) || typeof profile.model !== 'string' || !profile.model.trim() || !Number.isSafeInteger(profile.windowTokens) || !Number.isSafeInteger(profile.responseReserve) || profile.responseReserve < 1 || profile.responseReserve >= profile.windowTokens) fail('Profilo modello del trial non valido: indicare finestra e riserva, senza credenziali.');
     const id = `${profile.provider}:${profile.model}`;
     if (models.has(id)) fail('Profilo modello duplicato nel trial.');
     models.add(id); Object.freeze(profile);

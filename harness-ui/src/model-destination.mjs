@@ -35,6 +35,8 @@
  * continua a funzionare identico, senza migrare una sola sessione salvata.
  */
 
+import { ID_DESTINAZIONE_CHAT, ID_NATIVI_SDK, REGISTRO_FORNITORI, idPerWire } from './provider-registry.mjs';
+
 export class ModelDestinationError extends Error {
   constructor(message, code = 'MODEL_DESTINATION_INVALID') {
     super(message);
@@ -43,8 +45,14 @@ export class ModelDestinationError extends Error {
   }
 }
 
-/** Le fonti riconosciute nel prefisso. ⛔ Tutto il resto è un id OpenRouter. */
-export const FONTI_MODELLO = Object.freeze(['local', 'ollama', 'openai', 'deepseek', 'openrouter', 'anthropic', 'gemini']);
+/**
+ * Le fonti riconosciute nel prefisso. ⛔ Tutto il resto è un id OpenRouter.
+ *
+ * ⛔ 12/09 — P-A: era un array scritto a mano, e `config.mjs:186` ne teneva una **copia dentro una
+ *   stringa di regex**. Adesso tutte e due si derivano dal registro: aggiungere `lmstudio` è stata
+ *   una riga di dato, non sette modifiche sparse (P-C).
+ */
+export const FONTI_MODELLO = ID_DESTINAZIONE_CHAT;
 
 /**
  * Spacca `fonte:modello`. ⛔ Solo sul PRIMO due punti, e solo se ciò che sta
@@ -63,15 +71,22 @@ export function separaFonteModello(modello) {
   return { fonte: 'openrouter', modelloRemoto: modello };
 }
 
-/** Chi parla `POST {base}/chat/completions` con Bearer: il corpo non si tocca. */
-const COMPATIBILI_OPENAI = Object.freeze(['openrouter', 'deepseek', 'ollama', 'local']);
+/**
+ * Chi parla `POST {base}{percorso}` con Bearer: il corpo non si tocca.
+ * ⛔ `wire: 'locale'` sta qui dentro perché il supervisore espone lo stesso protocollo — ma esce
+ *   prima, sulla sua strada: la sua chiave non deve passare da questo file.
+ */
+const COMPATIBILI_OPENAI = Object.freeze([...idPerWire('openai-chat'), ...idPerWire('locale')]);
 
 /**
  * Chi NON lo parla, e cosa gli servirebbe. ⛔ Il messaggio dice la cosa vera —
  * la credenziale può essere ottima, manca la traduzione dalla nostra parte —
  * perché un errore che sembra colpa della chiave manda a rigenerarne una buona.
+ *
+ * ⛔ Sono i tre wire serviti dagli SDK fissati nel lock (`native-provider-adapter.mjs`): il
+ *   registro li nomina uno per uno, così «nativo» smette di essere una lista da ricordare.
  */
-const NATIVI = Object.freeze(['anthropic', 'gemini', 'openai']);
+const NATIVI = ID_NATIVI_SDK;
 
 /**
  * @param {string} modello id, con o senza prefisso di fonte
@@ -109,7 +124,7 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
     if (typeof localePronto !== 'function' || !localePronto()) {
       throw new ModelDestinationError('Il motore locale non è acceso: caricalo dal Laboratorio modelli prima di usarlo in chat.', 'LOCAL_RUNTIME_NOT_READY');
     }
-    return { fonte, modelloRemoto, locale: true, percorso: '/v1/chat/completions' };
+    return { fonte, modelloRemoto, locale: true, percorso: REGISTRO_FORNITORI[fonte].endpoint.chat };
   }
 
   const runtime = leggiRuntime(fonte) || {};
@@ -118,18 +133,22 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
 
   const chiave = leggiChiave(fonte);
   /*
-   * ⛔ Ollama gira in casa e non ha account: pretendere una chiave lo
-   * escluderebbe per una regola che non lo riguarda. Gli altri sì, e senza si
-   * dice CHE COSA manca invece di partire e prendersi un 401.
+   * ⛔ Ollama e LM Studio girano in casa e non hanno account: pretendere una
+   * chiave li escluderebbe per una regola che non li riguarda. Gli altri sì, e
+   * senza si dice CHE COSA manca invece di partire e prendersi un 401.
+   * ⛔ 12/09 — la domanda non è più «è ollama?»: è `chiaveObbligatoria` sul record. Erano due
+   *   verità diverse (`requiresKey` nel portachiavi diceva già `false` per Ollama, e qui c'era un
+   *   confronto per nome), e ora è una sola.
    */
-  if (fonte !== 'ollama' && (typeof chiave !== 'string' || chiave.trim() === '')) {
+  const record = REGISTRO_FORNITORI[fonte];
+  if (record.chiaveObbligatoria === true && (typeof chiave !== 'string' || chiave.trim() === '')) {
     throw new ModelDestinationError(`Manca la chiave per ${fonte}: inseriscila in Laboratorio modelli → Provider.`, 'PROVIDER_KEY_MISSING');
   }
 
   if (NATIVI.includes(fonte)) return { fonte, modelloRemoto, native: true, baseURL: base, apiKey: chiave };
   const headers = { 'Content-Type': 'application/json' };
   if (chiave) headers.Authorization = `Bearer ${chiave}`;
-  // ⛔ Ollama espone il protocollo OpenAI sotto /v1, il suo indirizzo base no.
-  const percorso = fonte === 'ollama' ? '/v1/chat/completions' : '/chat/completions';
-  return { fonte, modelloRemoto, url: `${base}${percorso}`, headers };
+  /* ⛔ Ollama e LM Studio espongono il protocollo OpenAI sotto /v1, il loro indirizzo base no:
+     è il record a dire dove bussare (`endpoint.chat`), non un `if` sul nome. */
+  return { fonte, modelloRemoto, url: `${base}${record.endpoint.chat}`, headers };
 }

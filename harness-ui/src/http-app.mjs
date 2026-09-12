@@ -7,6 +7,7 @@ import { proxyPagina } from './browser-proxy.mjs';
 import { leggiPaginaPerLaVista } from './agent-service.mjs';
 import { ritrattoCartella } from './workspace-info.mjs'; // 06/9 F9/F10/F19-F21: cosa c'e' dentro la cartella, PRIMA di darla a un agente // 06/9: gli occhi del modello sulla pagina dove navighi TU // 06/9: il proxy locale per annotare gli elementi
 import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
+import { ID_CATALOGO_IN_UI, REGISTRO_FORNITORI } from './provider-registry.mjs'; // 12/09, P-A: le rotte del catalogo per fornitore si costruiscono dal registro, non da una terna ricopiata due volte
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
 import { getDiagnosticProblem, toPublicProblem } from './public-problem.mjs';
@@ -862,10 +863,20 @@ function normalizeError(error) {
  * ⛔ HEAD non compare mai in `metodi`: lo aggiunge `metodiAmmessiPerRotta` a ogni rotta
  * che accetta GET, perché a servirlo è `send()`, non una riga della catena.
  */
+/*
+ * ⛔⛔ 12/09 — P-A: `/^\/api\/v1\/providers\/(openai|anthropic|gemini)\/models$/` era scritta
+ *   DUE VOLTE in questo file (nell'inventario delle rotte e nella catena che risponde), e una
+ *   terza volta come allowlist dentro `provider-probe.mjs`. Tre copie della stessa terna: se una
+ *   sola fosse rimasta indietro, la rotta sarebbe esistita per il 405 e non per il 200 — o
+ *   viceversa. Adesso è UNA costante, costruita dal registro.
+ * ⛔ Gli id del registro sono validati contro `^[a-z][a-z0-9-]{0,31}$`: nessun carattere da citare.
+ */
+const ROTTA_MODELLI_FORNITORE = new RegExp(`^/api/v1/providers/(${ID_CATALOGO_IN_UI.join('|')})/models$`, 'u');
+
 const ROTTE_API = Object.freeze([
   { schema: '/api/v1/chat-images', metodi: ['POST'] },
   { schema: /^\/api\/v1\/chat-images\/[a-f0-9]{64}$/, metodi: ['GET'] },
-  { schema: /^\/api\/v1\/providers\/(openai|anthropic|gemini)\/models$/, metodi: ['GET'] },
+  { schema: ROTTA_MODELLI_FORNITORE, metodi: ['GET'] },
   // ⭐ 10/09: le favicon delle fonti, servite dal server perché il browser non bussi ai siti citati.
   { schema: '/api/v1/favicon', metodi: ['GET'] },
   { schema: '/api/v1/health', metodi: ['GET'] },
@@ -2325,9 +2336,47 @@ export function createHttpApp({
       return;
     }
 
-    const nativeModelsMatch = url.pathname.match(/^\/api\/v1\/providers\/(openai|anthropic|gemini)\/models$/);
-    if (method === 'GET' && nativeModelsMatch && providerProbe) {
-      try { requireNoQuery(url); sendJson(res, 200, successEnvelope(await providerProbe.elencaModelli(nativeModelsMatch[1]), clock), method); }
+    const nativeModelsMatch = url.pathname.match(ROTTA_MODELLI_FORNITORE);
+    if (method === 'GET' && nativeModelsMatch && (providerProbe || localRuntimes)) {
+      const fornitoreId = nativeModelsMatch[1];
+      try {
+        requireNoQuery(url);
+        /*
+         * ⭐⭐⭐ 12/09 — P-C: LM STUDIO ARRIVA IN CHAT RIUSANDO CIÒ CHE C'ERA GIÀ.
+         *
+         * Il suo catalogo NON si chiede al fornitore come per OpenAI/Anthropic/Gemini: lo dà il
+         * runtime locale che lo sonda, lo carica e lo scarica da sempre
+         * (`openai-compatible-runtime.mjs`). Il record lo dichiara — `catalogo.fonte:
+         * 'runtime-locale'` — quindi qui non c'è un `if (id === 'lmstudio')`, c'è la domanda al
+         * registro. ⛔ Il prefisso `lmstudio:` viene messo QUI e solo qui: è la convenzione di
+         * `model-destination.mjs`, e il fornitore non deve mai vederla.
+         * ⭐ Le capacità viaggiano OSSERVATE, non indovinate: `trained_for_tool_use`, `vision` e
+         *   `reasoning.allowed_options` li dichiara LM Studio per ogni modello caricato — è la
+         *   ragione per cui questo fornitore vale più di una riga in più nel selettore. Un modello
+         *   senza quel dato resta `ignoto`, mai `false`.
+         */
+        const record = REGISTRO_FORNITORI[fornitoreId];
+        if (record?.catalogo?.fonte === 'runtime-locale') {
+          const runtime = localRuntimes?.[fornitoreId];
+          if (!runtime || typeof runtime.listModels !== 'function') { const errore = new Error('Motore locale non configurato su questo server.'); errore.code = 'REPORT_UNAVAILABLE'; throw errore; }
+          const stato = (c) => (c && c.state === 'observed' ? (c.value === true ? 'osservato-si' : 'osservato-no') : 'ignoto');
+          const modelli = (await runtime.listModels()).map((m) => ({
+            id: `${fornitoreId}:${m.id}`,
+            nome: m.name || m.id,
+            provider: fornitoreId,
+            contextLength: m.context?.state === 'observed' ? m.context.value : null,
+            contestoVerificato: m.verifiedContext === true,
+            capacita: { visione: stato(m.capabilities?.vision), toolUse: stato(m.capabilities?.toolUse), reasoning: stato(m.capabilities?.reasoning) },
+            ...(m.capabilities?.vision?.state === 'observed' ? { inputModalities: m.capabilities.vision.value ? ['text', 'image'] : ['text'] } : {}),
+            quantizzazione: m.quantization ?? null,
+            osservatoAlle: m.observedAt ?? null,
+          }));
+          sendJson(res, 200, successEnvelope({ provider: fornitoreId, modelli }, clock), method);
+          return;
+        }
+        if (!providerProbe) { const errore = new Error('Sonda provider non configurata.'); errore.code = 'REPORT_UNAVAILABLE'; throw errore; }
+        sendJson(res, 200, successEnvelope(await providerProbe.elencaModelli(fornitoreId), clock), method);
+      }
       catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
       return;
     }

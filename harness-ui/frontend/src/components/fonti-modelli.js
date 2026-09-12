@@ -24,7 +24,8 @@
  *   il posto dove questa app fa scegliere «da dove»; il gruppo richiudibile resta per l'AUTORE del
  *   modello dentro OpenRouter, che è un asse diverso (51 famiglie: quelle non sono schede).
  * ⭐ Il tetto delle schede (Apple HIG via eleken.co, già citato in `app.js` il 03/9): oltre sei
- *   l'utente si perde. Qui sono CINQUE — OpenRouter · Locali · Anthropic · Gemini · OpenAI.
+ *   l'utente si perde. Dal 12/09 (P-C) sono SEI — OpenRouter · Locali · Anthropic · Gemini ·
+ *   OpenAI · LM Studio: siamo AL limite, e la settima non si aggiunge senza ripensare la striscia.
  *
  * ## I tre stati di un fornitore diretto, che prima erano uno solo
  *
@@ -41,12 +42,33 @@
  *   domanda insieme alla risposta.
  */
 
-/** I tre fornitori con API diretta, nell'ordine in cui si presentano. Gli id sono quelli del server. */
+/**
+ * I fornitori con un catalogo proprio, nell'ordine in cui si presentano. Gli id sono quelli del
+ * server, cioe quelli del registro.
+ *
+ * ⛔⛔ 12/09 — QUESTO ELENCO E UNA COPIA, E LO SI DICE. Il frontend si impacchetta a parte e non
+ *   puo importare `src/provider-registry.mjs`, che e codice di server: quei nomi vivono quindi in
+ *   due posti. ⇒ `tests/provider-registry-parita.test.mjs` importa **questo file** e il registro e
+ *   fallisce se divergono, in tutti e due i versi. E' lo stesso contratto che Hermes presidia in
+ *   `hermes_cli/provider_catalog.py:35` — «l'unione delle schede della GUI e uguale all'universo
+ *   del picker» — nato li perche prima «ogni provider aggiunto dopo che quelle liste sono state
+ *   scritte spariva in silenzio dalla GUI». Senza il test, questa riga e' la prossima bugia.
+ *
+ * ⭐ 12/09, P-C — LM Studio entra qui: e' scoperto, sondato, caricabile e scaricabile dal 90% del
+ *   lavoro gia' fatto, e finalmente ha una scheda dove i suoi modelli si scelgono. ⛔ Non chiede
+ *   una chiave: `caricaDiretti` non deve pretenderla, o la scheda resterebbe vuota per sempre.
+ */
 export const PROVIDER_DIRETTI = Object.freeze([
   Object.freeze({ id: 'anthropic', etichetta: 'Anthropic' }),
   Object.freeze({ id: 'gemini', etichetta: 'Gemini' }),
   Object.freeze({ id: 'openai', etichetta: 'OpenAI' }),
+  Object.freeze({ id: 'lmstudio', etichetta: 'LM Studio', senzaChiave: true }),
 ]);
+
+/** Vero se quel fornitore si legge senza collegare nessuna chiave (i motori locali). */
+export function senzaChiave(fonte) {
+  return PROVIDER_DIRETTI.some((p) => p.id === fonte && p.senzaChiave === true);
+}
 
 const ID_DIRETTI = new Set(PROVIDER_DIRETTI.map((p) => p.id));
 
@@ -115,7 +137,13 @@ export function fraseVuotoDiretto(fonte, { diretti = null, errori = {} } = {}) {
   const etichetta = PROVIDER_DIRETTI.find((p) => p.id === fonte)?.etichetta || fonte;
   if (errori && errori[fonte]) return `Catalogo ${etichetta} non disponibile: ${errori[fonte]}`;
   if (!diretti) return `Leggo il catalogo ${etichetta}…`;
-  if (!Array.isArray(diretti[fonte])) return `Collega la chiave ${etichetta} dal pannello Provider per vedere i suoi modelli.`;
+  if (!Array.isArray(diretti[fonte])) {
+    /* ⛔ Un motore locale non ha una chiave da collegare: dirgli di collegarla manderebbe la
+       persona a cercare una pagina che non esiste. Il passo successivo e' un altro: accenderlo. */
+    return senzaChiave(fonte)
+      ? `${etichetta} non risponde su questo computer: avvialo e ricarica.`
+      : `Collega la chiave ${etichetta} dal pannello Provider per vedere i suoi modelli.`;
+  }
   return `Nessun modello ${etichetta} disponibile con questa chiave.`;
 }
 
