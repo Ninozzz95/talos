@@ -1,0 +1,23 @@
+{
+  "schema": "talos.desktop.ci-smoke.v1",
+  "data": "2026-09-12T21:09:38.9479035Z",
+  "completato": false,
+  "installer": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\claude\\wt-astra-r04\\harness-ui\\desktop\\dist\\TALOS-Setup-0.1.0.exe",
+  "installerByte": 152074299,
+  "installerSha256": "e835c7dbc0707bc7167121dabffcee6d8775c2ec0c033e9dba6904c023c5a0de",
+  "installazione": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\claude\\wt-astra-r04\\harness-ui\\desktop\\.prove\\installazione TALOS R04",
+  "overrideDestinazione": true,
+  "dati": "C:\\Users\\Antonino\\AppData\\Local\\Temp\\talos-r04-3d20c71d80304f63a754989f2f22f559\\dati",
+  "sistema": "Microsoft Windows NT 10.0.26200.0",
+  "powershell": "7.6.5",
+  "installazioneMs": 42318,
+  "app": {
+    "completato": false,
+    "errore": "electronApplication.firstWindow: Target page, context or browser has been closed"
+  },
+  "durataMs": 110888,
+  "errori": [
+    "Smoke Electron fallito: vedere app nel rapporto.",
+    "Disinstallazione incompleta: TALOS.exe presente."
+  ]
+}

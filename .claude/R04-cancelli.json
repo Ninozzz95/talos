@@ -1,0 +1,27 @@
+[
+  {
+    "cancello": "server",
+    "codice": 1,
+    "secondi": 69
+  },
+  {
+    "cancello": "kernel",
+    "codice": 1,
+    "secondi": 2
+  },
+  {
+    "cancello": "kernel-controlla",
+    "codice": 0,
+    "secondi": 0
+  },
+  {
+    "cancello": "frontend",
+    "codice": 1,
+    "secondi": 7
+  },
+  {
+    "cancello": "guscio",
+    "codice": 1,
+    "secondi": 12
+  }
+]

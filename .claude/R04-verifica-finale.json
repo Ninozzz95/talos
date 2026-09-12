@@ -1,0 +1,24 @@
+{
+  "data": "2026-09-12T21:32:33.750Z",
+  "base": "5c3cb15cd056b6adf374cf059a1c043b361477b7",
+  "detached": true,
+  "apkInvariato": true,
+  "prime378RigheInvariate": true,
+  "permessiInvariati": true,
+  "diffCheck": 0,
+  "fileTracciatiModificati": [
+    ".github/workflows/release.yml",
+    "harness-ui/desktop/README.md"
+  ],
+  "actionlint": {
+    "invocazione": "npx --yes github-actionlint@1.7.12 .github/workflows/release.yml",
+    "versione": "1.7.12",
+    "codice": 0
+  },
+  "testPuri": {
+    "totale": 33,
+    "passati": 33,
+    "falliti": 0,
+    "durataMs": 18108.8227
+  }
+}

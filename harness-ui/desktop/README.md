@@ -1,4 +1,4 @@
-# TALOS Desktop 0.1.0 — R-02
+# TALOS Desktop 0.1.0 - R-02 / R-04
 
 Guscio Electron 44.3.0 della stessa interfaccia web TALOS, tema Calm di serie.
 Il servizio locale usa `process.execPath` con `ELECTRON_RUN_AS_NODE=1`: nessun
@@ -6,12 +6,16 @@ Node separato dal PATH nell'avvio del prodotto. Il pacchetto comprende backend,
 interfaccia costruita, kernel, context-engine e motore llama.cpp b10517 CPU/Vulkan.
 I modelli GGUF non sono inclusi: il loro download dall'app appartiene a R-03.
 
-**Stato: lotto non ancora accettato.** Lo staging e la cartella creata da
-electron-builder sono provati. Il backend impacchettato risponde con cookie,
-esegue il PTY e rileva il motore incluso. Restano aperti il percorso dati del
-backend, il crash GPU preesistente e la build EXE/ZIP (cache NSIS assente, rete
-aggiuntiva da autorizzare). Non distribuire questa copia come release conclusa.
-Rapporto: [R-02](../.claude/RAPPORTO-R02-INSTALLER-2026-09-13.md).
+**Stato R-04 (13/09/2026): workflow implementato e provato in locale; il job su GitHub
+non è ancora stato lanciato.** EXE e ZIP costruiti sulla macchina dell'owner; lo smoke
+dell'installato (`scripts/ci-smoke.ps1`) è verde fuori dalla sandbox di Codex: installazione
+silenziosa, avvio dell'exe installato, salute 401 senza cookie e 200 con cookie, chiusura
+senza orfani, disinstallazione senza residui, dati utente conservati (numeri in
+`LEDGER-R02.md`, sezione «Integrazione», e nel [rapporto R-04](../../.claude/RAPPORTO-R04-CI-WINDOWS-2026-09-13.md)).
+Nella sandbox di Codex lo stesso smoke era rosso per il crash del processo GPU: era
+l'ambiente, non il pacchetto. Il job resta bloccato dai cancelli di regressione elencati nel
+rapporto (test del kernel rossi preesistenti) finché i loro proprietari non li chiudono.
+Non distribuire questa copia come release conclusa.
 
 ## Requisiti e installazione prevista
 
@@ -82,8 +86,9 @@ verificate sotto `ELECTRON_BUILDER_CACHE` (default `.cache-r02/builder`):
 - `nsis@1.2.1/nsis-bundle-3.12.tar.gz`;
 - `7zip@1.0.0/7zip-win-x64.tar.gz`.
 
-Solo dopo autorizzazione dei download dei tool ufficiali builder, impostare
-`TALOS_R02_BUILDER_NETWORK=1` prima di `npm run dist`. `publish:null` e
+Per i download dei tool ufficiali già previsti da R-04, impostare
+`TALOS_R02_BUILDER_NETWORK=1` prima di `npm run dist`; il job lo fa esplicitamente.
+`publish:null` e
 `publish:never` impediscono la pubblicazione. Non ci sono aggiornamenti automatici.
 
 Per controllare localmente la cartella del programma, senza i tool NSIS/ZIP:
@@ -96,8 +101,8 @@ node --test tests/pacchetto.spec.mjs
 ```
 
 Il gate confronta tutti gli hash del manifest prima dell'avvio e prova i percorsi
-reali, cookie, PTY e rilevamento del motore. Il sottotest `R02-DATI` resta rosso
-finché il backend scrive fuori da `userData`.
+reali, cookie, PTY e rilevamento del motore. Il sottotest `R02-DATI` verifica che
+il backend non scriva fuori da `userData`; passa sulla base provata da R-04.
 
 Il test dell'installer **installa e disinstalla davvero**, solo su richiesta:
 
@@ -119,18 +124,85 @@ Registro, geometria della finestra e sessioni del guscio sono in
 `%APPDATA%\TALOS` (`app.getPath('userData')`); il menu permette di aprire il registro.
 Per prove isolate si può impostare `TALOS_DESKTOP_DATA_DIR` a un percorso assoluto.
 
-**Limite da risolvere prima del rilascio:** il backend esistente mantiene ancora
-modelli, immagini, automazioni, cache favicon e alcuni file di configurazione
-accanto a `resources/harness-ui/server.mjs`. La prova ha misurato la creazione di
-`.workspace-launch-token` lì. Questi dati non hanno ancora la garanzia di
-conservazione del profilo: la correzione proposta per il backend è nel rapporto,
-non applicata perché fuori dal perimetro R-02.
+La base R-04 contiene già `percorsoDatiDesktop` nel backend: modelli, immagini,
+automazioni, favicon, configurazioni, token workspace e store della sessione
+seguono `TALOS_DESKTOP_DATA_DIR`. La prova del backend confezionato verifica
+zero scritture persistenti fuori dal profilo. R-04 non modifica quel codice;
+la migrazione di eventuali dati di versioni precedenti richiede una prova distinta.
 
 Per disinstallare: chiudere TALOS anche dal vassoio, aprire **Impostazioni → App →
 App installate → TALOS → Disinstalla** (su Windows 10: **App e funzionalità**).
 In alternativa avviare `Uninstall TALOS.exe` nella cartella del programma.
 `deleteAppDataOnUninstall:false` conserva il profilo utente. Rimuoverlo manualmente
 solo se si vogliono eliminare anche registro, impostazioni e sessioni.
+
+## Come nasce una release
+
+L'owner crea e pubblica il tag **`desktop-vX.Y.Z`** sul commit verificato:
+`X.Y.Z` deve coincidere con `version` in `package.json` e `package-lock.json`
+desktop. La versione attuale richiede `desktop-v0.1.0`. Il job `desktop` di
+`.github/workflows/release.yml` gira su `windows-latest` (Server 2025 x64), con
+PowerShell e Node 24; il job `apk` riguarda soltanto i tag mobile `v*`.
+Nel runner crea un ramo locale sullo stesso commit del tag, richiesto dai test
+server, e verifica che lo SHA resti identico. Non crea commit aggiuntivi.
+
+Il job installa dai lock backend, frontend, desktop e context-engine, costruisce
+il frontend in `public/`, esegue test server/kernel, controllo kernel, unità
+frontend e test puri/Playwright Electron del guscio. Poi esegue `npm run dist`
+con lo staging R-02 a inclusioni e i download upstream verificati, installa
+silenziosamente l'EXE, lo avvia con dati temporanei, verifica `/api/v1/health`
+con cookie e dopo reload, chiude e disinstalla controllando i processi residui.
+Un errore interrompe la pubblicazione. Le cache accelerano i download; non
+sostituiscono i lock né le verifiche SHA256 di llama.cpp.
+
+La release allega esattamente:
+
+- `TALOS-Setup-X.Y.Z.exe`: installer NSIS per utente, non firmato;
+- `TALOS-X.Y.Z-win.zip`: programma completo da estrarre;
+- `SHA256SUMS.txt`: SHA256 dei due file, riportati anche nelle note.
+
+`actions/attest` v4 produce la provenienza di EXE e ZIP, collegata al commit e
+al workflow. Usa il token temporaneo GitHub e i permessi `contents: write`,
+`id-token: write`, `attestations: write`, `artifact-metadata: write` già presenti;
+il desktop non richiede segreti configurati o riferimenti a un repository fisso.
+Non è una firma Authenticode: l'avviso SmartScreen descritto sopra rimane.
+Nessun auto-update, telemetria o modello GGUF viene aggiunto da questa release.
+
+Dalla cartella dei download, sostituendo la versione e il repository con quelli
+della release scelta:
+
+```powershell
+Get-FileHash -Algorithm SHA256 .\TALOS-Setup-0.1.0.exe
+Get-FileHash -Algorithm SHA256 .\TALOS-0.1.0-win.zip
+Get-Content .\SHA256SUMS.txt
+# Confrontare gli hash anche con quelli nelle note della release.
+gh attestation verify .\TALOS-Setup-0.1.0.exe --repo OWNER/REPOSITORY
+gh attestation verify .\TALOS-0.1.0-win.zip --repo OWNER/REPOSITORY
+```
+
+Lo smoke è riusabile in locale, da `harness-ui/desktop`, dopo aver costruito il
+pacchetto e installato le dipendenze di sviluppo desktop/frontend. PowerShell 7:
+
+```powershell
+pwsh -NoProfile -File scripts/ci-smoke.ps1 -Installer dist/TALOS-Setup-0.1.0.exe
+```
+
+Non avviarlo durante una prova R-02 o con un'installazione TALOS esistente:
+lo script rifiuta cartelle, collegamenti e registrazioni preesistenti. Il default
+R-02 è `%LOCALAPPDATA%\Programs\talos-desktop`, non `Programs\TALOS`.
+`-InstallDir C:\percorso\temporaneo\TALOS` prova una destinazione alternativa
+con `/D` e la dichiara nel rapporto; GitHub usa il default senza override.
+`TALOS_DESKTOP_DATA_DIR` viene isolato automaticamente e conservato per diagnosi.
+Lo script disinstalla anche quando l'avvio fallisce; un cleanup forzato resta un
+errore. Il risultato è `.prove/R04-ci-smoke.json` (oppure `-ReportPath`).
+
+Pesi, SHA e tempi compaiono nel riepilogo del job; il rapporto smoke è conservato
+come artefatto separato anche in caso di errore, senza token o cookie utilizzabili.
+Limite del job: 45 minuti; smoke: 8 minuti; conservazione artefatti: 14 giorni.
+La prova su Server 2025 non certifica da sola Windows 10 1809, SmartScreen,
+GPU/Vulkan o i limiti R-01/R-02 elencati sopra. Prima del tag, l'owner deve chiudere
+quei limiti e i cancelli rimasti rossi: R-04 automatizza il rilascio e non corregge
+il backend. Le prove effettive sono nel [rapporto R-04](../../.claude/RAPPORTO-R04-CI-WINDOWS-2026-09-13.md).
 
 ## Avvio da sorgente
 
@@ -165,9 +237,8 @@ prima del primo avvio: Electron scarica il binario al primo utilizzo.
 - Override dichiarato: `TALOS_DESKTOP_HARNESS_DIR`, percorso assoluto.
 - Profilo finestra, registro e sessioni: `app.getPath('userData')`; override assoluto
   `TALOS_DESKTOP_DATA_DIR`. La posizione esatta del registro è visibile dal menu.
-- I test copiano il backend senza modificarlo sotto `.prove/`, per isolare anche
-  gli store che il server esistente crea accanto al proprio file. La completa
-  rilocazione di questi store resta un passaggio del backend prima dell'installer.
+- I test copiano il backend senza modificarlo sotto `.prove/` e verificano che
+  gli store seguano il profilo di prova senza comparire accanto a `server.mjs`.
 - Porta scelta dal sistema, esplicita nel figlio, sempre diversa da 4174.
   Il backend attuale rifiuta 0: il guscio prenota una porta con `listen(0)`, la
   rilascia e avvia il server. Una collisione produce un errore e un nuovo tentativo.
