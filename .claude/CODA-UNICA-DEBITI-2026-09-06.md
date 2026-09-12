@@ -62,8 +62,8 @@ Proposta dell'owner registrata («magari mettere il preambolo come tool»): la f
 | 4 | consegna `public/`, riavvio 4174, foto due temi, push del blocco | io | dopo 1-3 |
 | 5 | L10 modalità piano della ricerca con ricerca strategica (approvazione del piano dalla sezione) | Astra via `codex exec`, review mia | 🔜 |
 | 6 | BC-35 DOCX con titoli di Word + elenchi annidati nel Markdown server | Astra via `codex exec` (primo lotto: 188k token, ~1 h) | ✅ committata, 47/47 rilanciati da me; manca solo l'apertura in Word e il riavvio del 4174 |
-| 7 | BC-43 chiamanti di `$('#conversation')` che si aspettano lo scorrevole | Astra | 🔜 |
-| 8 | PO-14 P-D…P-L fornitori | Astra, uno per volta | **P-D ✅ · P-E ✅** committate (Z.AI diretto; catalogo models.dev con cache ETag; manca l'aggancio nella riga del selettore in `app.js`, dopo BC-43; entrambe da vedere sul 4174 dopo il riavvio). Prossimi: P-F fallback, P-G wire «una riga», P-H pool chiavi, P-I Kimi/MiniMax/Qwen, P-J wire Anthropic (seconda porta Z.AI), P-K Azure/Bedrock/Vertex, P-L provider esterno |
+| 7 | BC-43 chiamanti dello scorrevole della chat | Astra | ✅ committata `81b5177a`: 33 risoluzioni censite, modulo `bridge/conversazione-dom.js`, ritorno in fondo e scroll sullo scorrevole (0 → 2161), spina 12/12 → 2/12 visibili, reduced-motion rispettato; 997/997. Da vedere sul 4174 |
+| 8 | PO-14 P-D…P-L fornitori | Astra, uno per volta | **P-D ✅ · P-E ✅** (Z.AI diretto; catalogo models.dev con cache ETag, rotta e selettore agganciati `8c205dcd`; da vedere sul 4174 con una chiave). Prossimi: P-F fallback, P-G wire «una riga», P-H pool chiavi, P-I Kimi/MiniMax/Qwen, P-J wire Anthropic, P-K Azure/Bedrock/Vertex, P-L provider esterno |
 | 9 | PO-15 TALOS delega a un agente esterno da CLI | Astra + kernel (io) | 🔜 nuovo |
 | 10 | PO-13 proposta GPT-Live-1 | — | ⏸ «in seguito» |
 | 11 | Release desktop: righe R-01…R-06 del piano (guscio, installer, CI Windows, monorepo pubblico AGPL-3.0, misure) | Astra + io | 🔜 al tuo sì sulle sei domande |
