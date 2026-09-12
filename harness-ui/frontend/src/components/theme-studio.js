@@ -94,6 +94,17 @@ export function nomiTemi(campi = CAMPI_IMPOSTAZIONI) {
   return (campo?.opzioni || []).map(([id, nome]) => ({ id, nome }));
 }
 
+/**
+ * L'ordine dell'ELENCO dello studio: Calm per primo, come nel mockup (owner 12/09: «calm primo»).
+ * ⛔ Non si riordina il contratto: il `<select>` delle Impostazioni resta com'è (è nascosto dalla
+ *   migrazione, e la sua chiave salvata non cambia). Si riordina SOLO ciò che la persona guarda,
+ *   e in modo stabile: Calm in testa, gli altri nell'ordine di sempre.
+ */
+export function conCalmPrimo(temi) {
+  const i = temi.findIndex((t) => t.id === 'calm');
+  return i <= 0 ? temi.slice() : [temi[i], ...temi.slice(0, i), ...temi.slice(i + 1)];
+}
+
 const REGOLA_TEMA = /^:root\[data-talos-theme=["']?([a-z]+)["']?\]$/i;
 
 /**
@@ -663,7 +674,7 @@ function miniConversazione(doc) {
 /* ------------------------------------------------------------------------- la modale vera */
 
 export function apriStudioTemi({ document: doc = globalThis.document } = {}) {
-  const temi = nomiTemi();
+  const temi = conCalmPrimo(nomiTemi());
   const semi = leggiSemiTemi(doc);
   let { tema: scelto, modo } = aspettoCorrente(doc);
   if (!temi.some((t) => t.id === scelto)) scelto = temi[0]?.id || 'calm';
