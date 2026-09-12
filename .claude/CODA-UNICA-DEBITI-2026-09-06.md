@@ -1247,3 +1247,13 @@ Novita · Nebius · xAI · Ollama Cloud · HuggingFace) → P-H pool di chiavi +
 MiniMax · Qwen → P-J wire Anthropic Messages verso terzi → P-K Azure/Bedrock/Vertex → P-L provider
 come processo esterno. Approvato anche il secondo giro di conferma di L8 (dopo il riavvio del 4174
 col backend delle cure).
+
+### BC-33 — «Temi e atmosfere»: anteprima DAL VIVO e tutti i cursori dentro la modale (owner, 12/09/2026)
+Foto dell'owner: lo studio (lotto F) ha un'anteprima statica (pallino e barre, scura anche con
+Paper) mentre nel mockup è viva. Ordini: (1) anteprima disegnata coi token del preset scelto, con la
+mini-conversazione del mockup e la scena animata del tema (renderer del pacchetto), che cambia al
+cambio di preset; (2) «i diversi slider TUTTI nella modale anziché nelle impostazioni, più semplice e
+UX friendly»: sfondo acceso/spento, scena, intensità, contrasto, velocità/densità, modo colore,
+densità, dimensione, testo chat, forma del composer, animazioni — nello studio, con le stesse chiavi
+di salvataggio; in Impostazioni un rimando, non un doppione. Delegato (in corso, con confronto testa
+a testa e i 14 temi provati uno per uno).
