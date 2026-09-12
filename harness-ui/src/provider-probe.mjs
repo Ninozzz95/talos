@@ -55,6 +55,7 @@ export const SONDE_PROVIDER = Object.freeze(Object.fromEntries(ID_CON_CREDENZIAL
     auth: sonda.auth,
     attiva: sonda.attiva !== false,
     conta: sonda.conta,
+    ...(sonda.dallaRadice ? { dallaRadice: true } : {}),
     ...(sonda.catalogoPubblico ? { catalogoPubblico: true } : {}),
   })];
 })));
@@ -95,7 +96,22 @@ function urlDellaSonda(sonda, endpoint) {
   if (typeof endpoint !== 'string' || endpoint.trim() === '') {
     throw new ProviderProbeError('provider endpoint is missing', 'PROVIDER_RUNTIME_INVALID');
   }
+  if (sonda.dallaRadice) return new URL(sonda.percorso, endpoint).toString();
   return `${endpoint.replace(/\/+$/u, '')}${sonda.percorso}`;
+}
+
+/** P-I: catalogo nativo DashScope v1; HTTP 200 non basta se il corpo dichiara un errore. */
+function paginaDashScope(corpo, numero = 1) {
+  const p = corpo?.output;
+  if (corpo?.success !== true || !p || !Number.isSafeInteger(p.total) || p.total < 0
+    || p.page_no !== numero || !Number.isSafeInteger(p.page_size) || p.page_size < 1
+    || !Array.isArray(p.models) || p.models.length > p.page_size || p.models.length > p.total
+    || (p.total > 0 && !p.models.length)
+    || p.models.some(m => !m || typeof m.model !== 'string' || !m.model.trim())
+    || new Set(p.models.map(m => m.model)).size !== p.models.length) {
+    throw new ProviderProbeError('Qwen: pagina del catalogo non valida o incompleta.', 'CATALOG_UPSTREAM_ERROR');
+  }
+  return p;
 }
 
 /**
@@ -183,7 +199,13 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     }
     let corpo = null;
     try { corpo = await risposta.json(); } catch { corpo = null; }
-    if (record?.sonda.richiedeCatalogoValido && (!Array.isArray(corpo?.data) || corpo.data.some(m => !m || typeof m.id !== 'string' || !m.id.trim()))) {
+    let catalogoValido = true;
+    if (record?.catalogo.forma === 'dashscope-output') {
+      try { paginaDashScope(corpo); } catch { catalogoValido = false; }
+    } else if (record?.sonda.richiedeCatalogoValido) {
+      catalogoValido = Array.isArray(corpo?.data) && corpo.data.every(m => m && typeof m.id === 'string' && m.id.trim());
+    }
+    if (!catalogoValido) {
       return { provider, esito: 'errore', motivo: `${etichetta}: risposta HTTP ${risposta.status} senza un elenco modelli valido; credenziale non verificata.`, modelli: null, millisecondi, httpStatus: risposta.status };
     }
     const modelli = Number(sonda.conta(corpo));
@@ -194,7 +216,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
       motivo: sonda.catalogoPubblico
         ? `${etichetta}: catalogo pubblico raggiunto, ${modelli} modelli visibili; chiave non verificata. La generazione non è stata provata.`
         : Number.isFinite(modelli) && modelli >= 0
-        ? `${etichetta}: catalogo raggiunto, ${modelli} modelli visibili. La generazione non è stata provata.`
+        ? `${etichetta}: catalogo raggiunto, ${modelli} modelli visibili${record?.catalogo.forma === 'dashscope-output' ? ' nella prima pagina' : ''}. La generazione non è stata provata.`
         : `${etichetta}: credenziale accettata.`,
       modelli: Number.isFinite(modelli) ? modelli : null,
       millisecondi,
@@ -215,8 +237,11 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     else headers.Authorization = `Bearer ${key}`;
     const signal = AbortSignal.timeout(Math.min(runtime.timeoutSeconds || 30, 30) * 1000);
     const rows = []; const cursors = new Set(); let cursor;
+    const dashscope = record.catalogo.forma === 'dashscope-output';
+    let numeroPagina = 1; let totaleAtteso;
     do {
       const url = new URL(urlDellaSonda(SONDE_PROVIDER[provider], runtime.endpoint));
+      if (dashscope) url.searchParams.set('page_no', String(numeroPagina));
       if (provider === 'gemini') { url.searchParams.set('pageSize', '1000'); if (cursor) url.searchParams.set('pageToken', cursor); }
       if (provider === 'anthropic') { url.searchParams.set('limit', '1000'); if (cursor) url.searchParams.set('after_id', cursor); }
       let response;
@@ -232,6 +257,19 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
       let data;
       try { data = await response.json(); }
       catch { throw new ProviderProbeError(`Catalogo ${etichetta} non valido.`, 'CATALOG_UPSTREAM_ERROR'); }
+      if (dashscope) {
+        const pagina = paginaDashScope(data, numeroPagina);
+        if ((totaleAtteso !== undefined && totaleAtteso !== pagina.total)
+          || rows.length + pagina.models.length > pagina.total
+          || pagina.models.some(m => rows.some(r => r.id === m.model))) {
+          throw new ProviderProbeError('Qwen: paginazione del catalogo incoerente.', 'CATALOG_UPSTREAM_ERROR');
+        }
+        totaleAtteso = pagina.total;
+        rows.push(...pagina.models.map(m => ({ id: m.model, display_name: m.name })));
+        cursor = rows.length < totaleAtteso ? ++numeroPagina : null;
+        if (cursor > 20) throw new ProviderProbeError('Qwen: catalogo incompleto dopo venti pagine.', 'CATALOG_UPSTREAM_ERROR');
+        continue;
+      }
       const page = provider === 'gemini' ? data?.models : data?.data;
       if (!Array.isArray(page) || page.some(row => !row || typeof (provider === 'gemini' ? row.name : row.id) !== 'string')) throw new ProviderProbeError(`Catalogo ${etichetta} non valido.`, 'CATALOG_UPSTREAM_ERROR');
       if (provider === 'anthropic' && data.has_more === true && (typeof data.last_id !== 'string' || !data.last_id)) throw new ProviderProbeError('Paginazione del catalogo incompleta.', 'CATALOG_UPSTREAM_ERROR');

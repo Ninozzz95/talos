@@ -55,6 +55,9 @@ const leggi = (relativo) => readFileSync(fileURLToPath(new URL(relativo, RADICE)
 // SHA-256 completo: f8c50427f9a7e5bd44ec1079a3db1899781b486e2b4e4da5f462ac6789ce19ee.
 // Solo fatti id/tool_call; non si costruisce la fixture a partire dal registro sotto prova.
 const RISERVE_PUBBLICHE = {
+  // P-I: proiezione indipendente del GET pubblico del 12/09/2026, impronta nella fixture.
+  ...Object.fromEntries(Object.entries(JSON.parse(leggi('tests/fixtures/provider-pi-models-dev-2026-09-12.json')).fornitori)
+    .map(([id, p]) => [id, Object.fromEntries(Object.entries(p.models).map(([id, m]) => [id, m.tool_call]))])),
   // P-G: proiezione indipendente del GET, stessa impronta pubblica del 12/09/2026.
   ...Object.fromEntries(Object.entries(JSON.parse(leggi('tests/fixtures/provider-pg-models-dev-2026-09-12.json')).fornitori)
     .map(([id, p]) => [id, Object.fromEntries(Object.entries(p.models).map(([id, m]) => [id, m.tool_call]))])),
