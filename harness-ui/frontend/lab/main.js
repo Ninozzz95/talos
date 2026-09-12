@@ -277,7 +277,15 @@ const LABORATORI = {
   AutomationRow() { aggiornaPaginaAutomazioni(document.querySelector('#schermoAutomazioni'), AUTOMAZIONI, { adesso: ADESSO_AUTOMAZIONI }); },
   ForgeList() { aggiornaPaginaOfficina(document.querySelector('#schermoOfficina'), STRUMENTI_FORGIATI); },
   ReportRow() { aggiornaPaginaRicerca(document.querySelector('#schermoRicerca'), RICERCHE); },
-  LibraryRow() { aggiornaPaginaLibreria(document.querySelector('#schermoLibreria'), LIBRERIA); },
+  /*
+   * ⛔ 12/09 — SENZA `sessionId` LA RIGA NON È QUELLA DELLA APP. `azioniLibreria()` torna `null`
+   *   senza sessione, e senza servizio la riga non disegna NESSUNA azione: il laboratorio mostrava
+   *   un gruppo azioni vuoto, cioè una riga che nel prodotto non esiste. Col `sessionId` (e un
+   *   `onMenu` finto, come le altre pagine di Libreria qui sotto) torna la riga vera: un bottone
+   *   solo, «⋯», più le quattro azioni pronte per il menu — la forma decisa dall'owner il 10/09
+   *   («non mettere i pulsanti uno accanto all'altro, usa i tre puntini + dropdown»).
+   */
+  LibraryRow() { aggiornaPaginaLibreria(document.querySelector('#schermoLibreria'), LIBRERIA, { sessionId: 'fx-lab', onMenu: () => {} }); },
   TaskRow() { aggiornaPaginaAttivita(document.querySelector('#schermoAttivita'), ATTIVITA); },
   MemoryRow() { aggiornaPaginaMemoria(document.getElementById('schermoMemoria'), MEMORIE); },
   Board() {
