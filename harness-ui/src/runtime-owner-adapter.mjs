@@ -15,6 +15,7 @@ import { createParser } from 'eventsource-parser';
 import { eseguiFlowForgeLocale, FORGE_PREFISSO_NOME_TOOL, validaManifestForgeLocale } from './forge-contract.mjs';
 import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
 import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO } from './model-destination.mjs';
+import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
@@ -557,12 +558,50 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, { risolvi = risolviD
       }
       return dipendenze.chiamaLocale(destinazione.percorso, { ...opzioni, headers: { 'Content-Type': 'application/json' }, body: corpoRiscritto });
     }
-    return fetchDiRete(destinazione.url, {
+    return conCacheDichiarata(await fetchDiRete(destinazione.url, {
       ...opzioni,
       headers: { ...destinazione.headers },
       body: corpoRiscritto,
-    });
+    }), destinazione.fonte);
   };
+}
+
+/**
+ * ⭐⭐⭐ 12/09 — P-B: LA CACHE CHE IL FORNITORE DICHIARA CON UN ALTRO NOME.
+ *
+ * DeepSeek chiama i token letti dalla cache `prompt_cache_hit_tokens`, Kimi li mette in
+ * `usage.cached_tokens` al primo livello, OpenRouter aggiunge un `cache_discount` che è **denaro**.
+ * Chi legge a valle conosce il solo nome canonico `prompt_tokens_details.cached_tokens`: su quei
+ * fornitori riporterebbe zero — e «zero da cache» su un agente che rilegge lo stesso prefisso 24
+ * volte non è un dettaglio del pannello costi, è **non sapere quanto stiamo spendendo**
+ * (misurato il 22/8: 87 token dentro per ogni 1 fuori, il 93% del costo).
+ *
+ * ⛔ Si aggiunge il nome canonico, NON si toglie niente: i campi nativi restano dove sono, e chi
+ *   già li conosce (il kernel ne legge tre) continua a leggerli. Se non c'è niente da dichiarare
+ *   la risposta torna **identica**, senza essere nemmeno letta.
+ * ⛔ SOLO le risposte JSON non in streaming. Una risposta SSE si lascia passare intatta: riscrivere
+ *   un flusso che non abbiamo prodotto, per un campo che il kernel sa già leggere in tre forme,
+ *   costerebbe più del difetto che cura. ⇒ Sul giro in streaming il valore resta quello che il
+ *   kernel estrae; qui si coprono compattazione, banco e ogni chiamata `stream:false`.
+ *   Dichiarato come NON coperto nel rapporto, non risolto in silenzio.
+ */
+async function conCacheDichiarata(risposta, fonte) {
+  try {
+    if (!risposta?.ok) return risposta;
+    const tipo = risposta.headers?.get?.('content-type') ?? '';
+    if (!tipo.includes('json')) return risposta; // un `text/event-stream` esce di qui senza essere toccato
+    const testo = await risposta.clone().text();
+    const corpo = JSON.parse(testo);
+    const normalizzato = normalizzaUsage(corpo?.usage, fonte);
+    const sconto = scontoDaCache(corpo, fonte);
+    if (normalizzato === corpo?.usage && sconto === null) return risposta;
+    const nuovo = { ...corpo, usage: { ...normalizzato, ...(sconto !== null ? { cache_discount: sconto } : {}) } };
+    return new Response(JSON.stringify(nuovo), { status: risposta.status, statusText: risposta.statusText, headers: risposta.headers });
+  } catch {
+    /* ⛔ Una misura che non si scrive non rompe un giro: se il corpo non è quello che credevamo,
+       passa com'era. È la stessa disciplina di `persistiTempiDelGiro`. */
+    return risposta;
+  }
 }
 
 /**

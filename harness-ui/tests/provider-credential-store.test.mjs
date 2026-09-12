@@ -32,7 +32,12 @@ test('NATIVE-STORE-01 adapter collegati e credenziale configurata sono stati dis
 test('PROVIDER-STORE-01 bootstrap ambiente e lista pubblica non espongono i segreti', () => {
   const secret = 'sk-openrouter-private';
   const store = createProviderCredentialStore({ env: { OPENROUTER_API_KEY: `  ${secret}  ` } });
-  assert.deepEqual(PROVIDER_IDS, ['openai', 'deepseek', 'anthropic', 'gemini', 'openrouter', 'ollama', 'huggingface']);
+  /* ⛔ 12/09 — P-A/P-C: l'elenco non e piu scritto qui ne in `provider-credential-store.mjs`: lo
+     deriva `provider-registry.mjs` (`ID_CON_CREDENZIALE`). `lmstudio` entra perche il suo record
+     dichiara `credenziale: true` — chiave FACOLTATIVA, come Ollama. L'invariante «i sette sono
+     sempre gli stessi ovunque» vive adesso in `tests/provider-registry-parita.test.mjs`, che li
+     conta in OGNI superficie: qui resta la fotografia, li c'e il cancello. */
+  assert.deepEqual(PROVIDER_IDS, ['openai', 'deepseek', 'anthropic', 'gemini', 'openrouter', 'ollama', 'lmstudio', 'huggingface']);
   assert.equal(store.getKey('openrouter'), secret);
   const publicRows = store.listPublic();
   assert.equal(publicRows.find((row) => row.id === 'openrouter').keyConfigured, true);

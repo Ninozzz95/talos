@@ -32,6 +32,8 @@
  * viaggia nell'intestazione, e di ritorno va solo l'esito.
  */
 
+import { ID_CON_CREDENZIALE, REGISTRO_FORNITORI } from './provider-registry.mjs';
+
 /**
  * Come si chiede l'elenco dei modelli a ciascuno.
  *
@@ -40,19 +42,44 @@
  * dice come si autentica QUEL provider — sono tre schemi diversi (Bearer,
  * `x-api-key`, chiave in query), e confonderli è il modo tipico di ottenere
  * un 401 che sembra «chiave sbagliata» quando è «intestazione sbagliata».
+ *
+ * ⛔⛔ 12/09 — P-A: la tabella era GIÀ la forma giusta, e per questo non si riscrive: le si toglie
+ *   il suo elenco e le si dà quello del registro (§6c dell'inventario). Il commento qui sopra
+ *   prometteva «il posto dove scriverlo è uno solo» — era vero dentro questo file, e falso nel
+ *   repo: gli stessi sette nomi stavano in altri dodici posti. Adesso la promessa è mantenuta.
  */
-export const SONDE_PROVIDER = Object.freeze({
-  openai: Object.freeze({ percorso: '/models', auth: 'bearer', conta: (c) => c?.data?.length }),
-  deepseek: Object.freeze({ percorso: '/models', auth: 'bearer', conta: (c) => c?.data?.length }),
-  openrouter: Object.freeze({ percorso: '/models', auth: 'bearer', conta: (c) => c?.data?.length }),
-  anthropic: Object.freeze({ percorso: '/models', auth: 'x-api-key', conta: (c) => c?.data?.length }),
-  gemini: Object.freeze({ percorso: '/models', auth: 'query', conta: (c) => c?.models?.length }),
-  ollama: Object.freeze({ percorso: '/api/tags', auth: 'nessuna', conta: (c) => c?.models?.length }),
-  huggingface: Object.freeze({ urlAssoluto: 'https://huggingface.co/api/whoami-v2', auth: 'bearer-facoltativo', conta: () => null }),
-});
+export const SONDE_PROVIDER = Object.freeze(Object.fromEntries(ID_CON_CREDENZIALE.map((id) => {
+  const sonda = REGISTRO_FORNITORI[id].sonda;
+  return [id, Object.freeze({
+    ...(sonda.urlAssoluto ? { urlAssoluto: sonda.urlAssoluto } : { percorso: sonda.percorso }),
+    auth: sonda.auth,
+    attiva: sonda.attiva !== false,
+    conta: sonda.conta,
+  })];
+})));
 
-/** Gli esiti che la UI sa disegnare. Nessun altro valore esce da qui. */
-export const ESITI_SONDA = Object.freeze(['collegato', 'non-autorizzato', 'irraggiungibile', 'non-provabile', 'errore']);
+/**
+ * Gli esiti che la UI sa disegnare. Nessun altro valore esce da qui.
+ *
+ * ⛔ `non-sondabile` è il sesto, aggiunto il 12/09 col registro: è il fornitore il cui elenco
+ *   modelli risponde 401 **anche con una chiave buona** (in Hermes è il caso Xiaomi MiMo,
+ *   `supports_health_check=False`). Senza quello stato la sonda **accuserebbe una chiave valida**
+ *   — cioè esattamente il difetto contro cui questa sonda è nata. Oggi nessuno dei nostri lo
+ *   dichiara: la riga esiste perché il primo che lo farà non debba inventarsi uno stato.
+ */
+export const ESITI_SONDA = Object.freeze(['collegato', 'non-autorizzato', 'irraggiungibile', 'non-provabile', 'non-sondabile', 'errore']);
+
+/**
+ * I fornitori il cui catalogo si chiede **a loro**, e che hanno una scheda propria nel selettore.
+ *
+ * ⛔ Era un array letterale dentro la funzione — `['openai','anthropic','gemini']`, il terzo dei
+ *   tredici elenchi. Adesso è il registro a dirlo: `catalogo.inUI` (ha una scheda) più
+ *   `catalogo.fonte === 'fornitore'` (il catalogo arriva dalla sua API, non da un motore locale —
+ *   LM Studio ha la scheda ma il suo elenco lo dà il runtime che lo carica e lo scarica già).
+ */
+export const CATALOGHI_DIRETTI = Object.freeze(
+  Object.values(REGISTRO_FORNITORI).filter((r) => r.catalogo?.inUI === true && r.catalogo?.fonte === 'fornitore').map((r) => r.id),
+);
 
 export class ProviderProbeError extends Error {
   constructor(message, code = 'PROVIDER_PROBE_FAILED') {
@@ -76,15 +103,28 @@ function urlDellaSonda(sonda, endpoint) {
  * @param {(provider: string) => {endpoint: string|null, timeoutSeconds: number}} deps.leggiRuntime
  * @param {typeof fetch} [deps.fetchImpl]
  * @param {() => number} [deps.orologio] millisecondi monotoni, per la latenza
+ * @param {Record<string,object>} [deps.sonde] la tabella delle sonde. ⛔ Iniettabile per UNA
+ *   ragione sola: lo stato `non-sondabile` deve poter essere provato PRIMA che esista un
+ *   fornitore che lo dichiara — una guardia che nessuno sa far scattare è una guardia che nessuno
+ *   sa se funziona. In produzione resta sempre quella del registro.
  */
-export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fetch, orologio = () => performance.now() } = {}) {
+export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fetch, orologio = () => performance.now(), sonde = SONDE_PROVIDER } = {}) {
   if (typeof leggiChiave !== 'function' || typeof leggiRuntime !== 'function') {
     throw new ProviderProbeError('probe dependencies are invalid', 'PROVIDER_PROBE_MISCONFIGURED');
   }
 
   async function prova(provider) {
-    const sonda = SONDE_PROVIDER[provider];
+    const sonda = sonde[provider];
     if (!sonda) throw new ProviderProbeError(`unknown provider ${provider}`, 'PROVIDER_INVALID');
+
+    /*
+     * ⛔ Chi dichiara di non essere sondabile NON viene chiamato: zero richieste, e lo si dice.
+     *   Una sonda che parte comunque su un `/models` che risponde 401 per progetto restituirebbe
+     *   «credenziale rifiutata» su una chiave buona.
+     */
+    if (sonda.attiva === false) {
+      return { provider, esito: 'non-sondabile', motivo: 'Questo fornitore non espone un elenco modelli su cui provare la credenziale.', modelli: null, millisecondi: null };
+    }
 
     const chiave = leggiChiave(provider);
     /*
@@ -150,7 +190,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
   }
 
   async function elencaModelli(provider) {
-    if (!['openai', 'anthropic', 'gemini'].includes(provider)) throw new ProviderProbeError('Catalogo diretto non disponibile.', 'PROVIDER_INVALID');
+    if (!CATALOGHI_DIRETTI.includes(provider)) throw new ProviderProbeError('Catalogo diretto non disponibile.', 'PROVIDER_INVALID');
     const key = leggiChiave(provider);
     if (!key) throw new ProviderProbeError('Inserisci la chiave nel pannello Provider.', 'PROVIDER_KEY_MISSING');
     const runtime = leggiRuntime(provider);

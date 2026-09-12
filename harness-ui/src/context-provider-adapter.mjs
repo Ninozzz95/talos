@@ -1,4 +1,6 @@
 // AVM owns canonical messages. The existing pinned SDK adapter owns wire formats.
+import { ID_NATIVI_SDK } from './provider-registry.mjs';
+
 const fail = (code, message, extra = {}) => { throw Object.assign(new Error(message), { code, ...extra }); };
 const clone = value => structuredClone(value);
 const identity = value => value && typeof value.provider === 'string' && value.provider && typeof value.model === 'string' && value.model;
@@ -95,7 +97,7 @@ export async function buildPreparedProviderRequest({ messages, tools = [], model
     if (requestOptions[key] !== undefined && (!Number.isSafeInteger(requestOptions[key]) || requestOptions[key] < 1 || (Number.isSafeInteger(model.responseReserve) && requestOptions[key] > model.responseReserve))) fail('CTX_PROVIDER_CONTEXT_INVALID', 'The output token limit must fit the reserved model budget.');
   }
   const prepared = prepareProviderContext({ messages, provider: model.provider, model: model.model });
-  if (!['openai', 'anthropic', 'gemini'].includes(model.provider)) {
+  if (!ID_NATIVI_SDK.includes(model.provider)) {
     return { body: { model: model.model, messages: prepared.messages.map(({ talos_provider_state, ...message }) => message), ...(tools.length ? { tools: clone(tools) } : {}), ...clone(requestOptions) }, headers: {} };
   }
   const { nativeProviderResponse } = await import('./native-provider-adapter.mjs');

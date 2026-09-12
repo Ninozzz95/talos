@@ -109,45 +109,38 @@ async function conRicercaViva(b, domanda = DOMANDA) {
   return { sessionId: avvio.sessionId, ricercaId: esito.id };
 }
 
-/** ⛔ Si aspetta una CONDIZIONE, mai un numero di millisecondi. Il PASSO fra una domanda e
- *  l'altra invece è una scelta di banco, e qui vale 60 ms: vedi `concludi`. */
-async function finoA(condizione, cosa, passo = 60, limite = 8_000) {
+/** ⛔ Si aspetta una CONDIZIONE, mai un numero di millisecondi. */
+async function finoA(condizione, cosa, limite = 8_000) {
   const scadenza = Date.now() + limite;
   for (;;) {
     const ultimo = await condizione();
     if (ultimo) return ultimo;
     if (Date.now() > scadenza) throw new assert.AssertionError({ message: `mai arrivato: ${cosa}` });
-    await new Promise((risolvi) => setTimeout(risolvi, passo));
+    await new Promise((risolvi) => setTimeout(risolvi, 10));
   }
 }
 
 /*
- * ⛔⛔⛔ TROVATO PER STRADA, E NON È UN DIFETTO DEL BANCO: SU WINDOWS UN LETTORE FA FALLIRE LA
- * SCRITTURA ATOMICA DEL MAGAZZINO.
+ * ⛔⛔⛔ QUESTI 10 ms SONO UNA PROVA, NON UNA SVISTA — e per un giorno sono stati 60.
  *
- * La prima stesura interrogava `GET …/research/:id` ogni **10 ms** (copiato da
- * `http-routes-research.test.mjs`). Sotto il carico della suite intera, una corsa su alcune è
- * morta così:
+ * La prima stesura interrogava `GET …/research/:id` ogni 10 ms (copiato da
+ * `http-routes-research.test.mjs`). Sotto il carico della suite intera, due corse su tre sono
+ * morte così:
  *
  *   EPERM: operation not permitted, rename '…/meta.json.tmp-…' -> '…/meta.json'
- *     at scriviAtomico (src/research-store.mjs:232)  ← dentro onConclusioneRicerca
+ *     at scriviAtomico (src/research-store.mjs)  ← dentro onConclusioneRicerca
  *
- * ⛔ Non è il LETTORE a fallire: è lo SCRITTORE. Su Windows `MoveFileEx` su una destinazione che
- *   qualcuno ha aperta non riesce, e `scriviAtomico` **non ritenta** — il `catch` pulisce il
- *   temporaneo e rilancia (per scelta dichiarata: «un errore inghiottito qui vorrebbe dire
- *   "salvato" su una voce mai salvata»). ⇒ La conclusione della ricerca esplode e la voce resta
- *   `running` sul disco per sempre.
- * ⛔⛔ E il lettore concorrente NON è un'invenzione del test: la sezione Ricerca del frontend
- *   interroga l'elenco e la scheda **mentre** una ricerca gira. È un APERTO del prodotto,
- *   registrato nel rapporto di questo lotto e NON curato qui: la cura sta in `research-store.mjs`
- *   (un ritento limitato sul `rename` per `EPERM`/`EBUSY`), che non è nel mio lotto.
- * ⇒ Qui il banco smette di essere la causa più probabile: si cede il giro al loop finché la
- *   scrittura non ha avuto il suo turno, e poi si chiede ogni 60 ms invece che ogni 10.
+ * ⛔ Non falliva il LETTORE: falliva lo SCRITTORE. Su Windows `MoveFileExW` non sostituisce una
+ *   destinazione che qualcun altro tiene aperta, e `scriviAtomico` non ritentava ⇒ la conclusione
+ *   della ricerca esplodeva e la voce restava **`running` sul disco per sempre**.
+ * ⛔⛔ E il lettore concorrente non era un'invenzione del banco: la sezione Ricerca interroga
+ *   elenco e scheda **mentre** la ricerca gira. Era un difetto di PRODOTTO.
+ * ⇒ Curato il 12/09 in `research-store.mjs` (`rinominaConRitento`: ritento su EPERM/EBUSY/EACCES,
+ *   attese 20→200 ms con `setTimeout`, 1,3 s in tutto, e il temporaneo che non si butta più).
+ *   I 60 ms di ripiego sono tornati a 10: è la cadenza che rompeva, e adesso non rompe.
  */
 async function concludi(b, sessionId, ricercaId, ultimo = 'Ho depositato il rapporto.') {
   b.chiusure.get(ricercaId)({ ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'assistant', content: ultimo }] } });
-  // ⛔ Nessuna attesa a tempo: si restituisce il controllo al loop, che è dove la scrittura vive.
-  for (let giro = 0; giro < 20; giro += 1) await new Promise((risolvi) => setImmediate(risolvi));
   return finoA(async () => {
     const r = (await (await chiama(b.base, `/api/v1/sessions/${sessionId}/research/${ricercaId}`)).json()).data.ricerca;
     return r.conclusaAlle ? r : null;

@@ -127,3 +127,42 @@ test('OPENAI-RUNTIME-NO-SECRETS-01 token server-side non compare nel risultato',
   const result = await runtime.detect('lmstudio');
   assert.equal(JSON.stringify(result).includes('token'), false);
 });
+
+test('RUNTIME-ENDPOINT-VIVO — l’indirizzo scelto nel pannello vale ADESSO, non quello dell’avvio', async () => {
+  /*
+   * ⛔⛔ 12/09, P-C — perché non basta leggerlo una volta.
+   *
+   * La chat risolve l'indirizzo di LM Studio a OGNI richiesta (`model-destination.mjs` chiede al
+   * portachiavi). Il catalogo, prima di oggi, lo fotografava alla nascita del server. Se la
+   * persona cambiava porta nel pannello, la scheda elencava i modelli di un motore e la chat ne
+   * chiamava un altro — **senza un errore da nessuna parte**: è la forma di guasto silenzioso
+   * contro cui esiste la regola «instradare con parametri diversi da quelli provati renderebbe la
+   * prova una bugia».
+   */
+  const chiamate = [];
+  let porta = 1234;
+  const runtime = createOpenAiCompatibleRuntime({
+    fetchImpl: async (url) => { chiamate.push(String(url)); return Response.json({ models: [] }); },
+    endpoints: { lmstudio: () => ({ baseUrl: `http://127.0.0.1:${porta}` }) },
+  });
+  await runtime.listModels('lmstudio');
+  porta = 4321; // la persona cambia porta a server acceso
+  await runtime.listModels('lmstudio');
+  assert.deepEqual(chiamate, ['http://127.0.0.1:1234/api/v1/models', 'http://127.0.0.1:4321/api/v1/models']);
+
+  /* ⛔ Verso contrario 1: un override che LANCIA non spegne il motore — si torna al registro. */
+  const conRotto = createOpenAiCompatibleRuntime({
+    fetchImpl: async (url) => { chiamate.push(String(url)); return Response.json({ models: [] }); },
+    endpoints: { lmstudio: () => { throw new Error('portachiavi non disponibile'); } },
+  });
+  await conRotto.listModels('lmstudio');
+  assert.equal(chiamate.at(-1), 'http://127.0.0.1:1234/api/v1/models', 'senza override valido vale l’indirizzo del registro');
+
+  /* ⛔ Verso contrario 2: la forma vecchia (un oggetto, non una funzione) continua a valere. */
+  const conOggetto = createOpenAiCompatibleRuntime({
+    fetchImpl: async (url) => { chiamate.push(String(url)); return Response.json({ models: [] }); },
+    endpoints: { ollama: { baseUrl: 'http://altro.test:11434' } },
+  });
+  await conOggetto.listModels('ollama');
+  assert.equal(chiamate.at(-1), 'http://altro.test:11434/api/tags');
+});

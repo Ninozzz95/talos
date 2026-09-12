@@ -22,6 +22,7 @@ import { creaGestoreTerminaleWs } from './src/terminal-ws.mjs';
 import { misuraCapacitaMacchina } from './src/machine-capacity.mjs';
 import { createLocalModelStore } from './src/local-model-store.mjs';
 import { createOpenAiCompatibleRuntime } from './src/openai-compatible-runtime.mjs';
+import { ID_MOTORI_LOCALI_OPENAI } from './src/provider-registry.mjs'; // 12/09, P-C: i motori locali li nomina il registro, non due letterali
 import { createHfHubClient } from './src/hf-hub-client.mjs';
 import { createHfDirectTransfer } from './src/hf-direct-transfer.mjs';
 import { fetchAllowedHfImage } from './src/hf-image-proxy.mjs';
@@ -206,7 +207,18 @@ async function startServer() {
     console.warn(`[runtime-owner] catalogo task non disponibile: ${error.message}`);
   }
   const localModelStore = createLocalModelStore({ rootDir: fileURLToPath(new URL('.local-models/', import.meta.url)) });
-  const compatibleRuntime = createOpenAiCompatibleRuntime();
+  /*
+   * ⭐ 12/09, P-C — il motore locale si sonda all'INDIRIZZO che la persona ha scelto nel pannello
+   *   Provider, lo stesso con cui la chat lo chiamerà: sondare un indirizzo e chiamarne un altro
+   *   renderebbe la prova una bugia (è la stessa ragione già scritta per `destinazioneModelloDeps`).
+   *   ⛔ Si passa una FUNZIONE, non un valore: l'indirizzo può cambiare a server acceso.
+   */
+  const compatibleRuntime = createOpenAiCompatibleRuntime({
+    endpoints: Object.fromEntries(ID_MOTORI_LOCALI_OPENAI.map((id) => [id, () => {
+      try { const scelto = providerStore.getRuntime(id)?.endpoint; return scelto ? { baseUrl: scelto } : {}; }
+      catch { return {}; }
+    }])),
+  });
   const hfHubClient = createHfHubClient({ token: config.hfToken });
   const localModelTransfer = createHfDirectTransfer({ rootDir: fileURLToPath(new URL('.local-models/', import.meta.url)), modelStore: localModelStore, hubClient: hfHubClient });
   const generatedImageStore = createGeneratedImageStore({ rootDir: fileURLToPath(new URL('.generated-images/', import.meta.url)) });

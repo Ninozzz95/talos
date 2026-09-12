@@ -1,9 +1,13 @@
+import { ID_MOTORI_LOCALI_OPENAI, REGISTRO_FORNITORI } from './provider-registry.mjs';
 import { createStreamPartitioner } from './stream-partition.mjs';
 
-const PROVIDERS = Object.freeze({
-  ollama: { baseUrl: 'http://127.0.0.1:11434', listPath: '/api/tags' },
-  lmstudio: { baseUrl: 'http://127.0.0.1:1234', listPath: '/api/v1/models' },
-});
+/*
+ * ⛔ 12/09 — P-A: l'ottavo dei tredici elenchi. Era l'UNICO posto del repo che conoscesse
+ *   `lmstudio`, e proprio per questo LM Studio era scoperto, sondato, caricabile e scaricabile —
+ *   e non sceglibile in chat. Adesso i due motori locali su wire OpenAI li nomina il registro.
+ */
+const PROVIDERS = Object.freeze(Object.fromEntries(ID_MOTORI_LOCALI_OPENAI
+  .map((id) => [id, Object.freeze({ baseUrl: REGISTRO_FORNITORI[id].baseUrl, listPath: REGISTRO_FORNITORI[id].catalogo.percorso })])));
 
 export class OpenAiCompatibleRuntimeError extends Error {
   constructor(message, code = 'RUNTIME_FAILED') {
@@ -99,14 +103,22 @@ export function createOpenAiCompatibleRuntime({
   endpoints = {},
 } = {}) {
   const activeRequests = new Map();
-  const configs = Object.freeze({
-    ollama: { ...PROVIDERS.ollama, ...(endpoints.ollama ?? {}) },
-    lmstudio: { ...PROVIDERS.lmstudio, ...(endpoints.lmstudio ?? {}) },
-  });
-
+  /*
+   * ⛔ 12/09 — L'INDIRIZZO SI RILEGGE A OGNI CHIAMATA, e non si fotografa all'avvio.
+   *
+   *   `endpoints[id]` può essere un oggetto (com'era) oppure una FUNZIONE che lo torna adesso. La
+   *   differenza conta: chi cambia l'indirizzo di LM Studio nel pannello Provider a server acceso
+   *   lo cambia per la chat (`model-destination.mjs` legge il portachiavi a ogni richiesta) — se
+   *   il catalogo restasse sull'indirizzo di partenza, la scheda elencherebbe i modelli di un
+   *   motore e la chat ne chiamerebbe un altro, senza un errore da nessuna parte.
+   *   ⛔ Un override che lancia non spegne il motore: si torna al valore del registro.
+   */
   function config(provider) {
-    if (!Object.hasOwn(configs, provider)) fail(`unknown local provider: ${provider}`);
-    return configs[provider];
+    if (!Object.hasOwn(PROVIDERS, provider)) fail(`unknown local provider: ${provider}`);
+    const override = endpoints[provider];
+    let scelto = override;
+    if (typeof override === 'function') { try { scelto = override(); } catch { scelto = null; } }
+    return { ...PROVIDERS[provider], ...(scelto && typeof scelto === 'object' ? scelto : {}) };
   }
 
   async function request(provider, path, options = {}) {
