@@ -34,7 +34,12 @@ test('⛔ LA RICHIESTA DELL’OWNER: ogni fornitore è una scheda di PRIMO livel
   assert.equal(eFonteDiretta('diretti'), false);
   /* ⛔ L'elenco vero lo presidia `tests/provider-registry-parita.test.mjs` contro il registro del
      server: qui si prova la STRISCIA, non chi ci sta dentro. */
-  assert.deepEqual(PROVIDER_DIRETTI.map((p) => p.id), ['anthropic', 'gemini', 'openai', 'lmstudio', 'zai', 'deepseek']);
+  /* P-G (12/09): undici fornitori «una riga ciascuno» in coda ai sei di prima; l'ordine dei sei non cambia.
+     La STRISCIA resta sotto le sei schede perché compaiono solo i fornitori con la chiave collegata (soloSeCollegato). */
+  const ids = PROVIDER_DIRETTI.map((p) => p.id);
+  assert.deepEqual(ids.slice(0, 6), ['anthropic', 'gemini', 'openai', 'lmstudio', 'zai', 'deepseek']);
+  for (const nuovo of ['groq', 'cerebras', 'mistral', 'together', 'fireworks', 'deepinfra', 'novita', 'nebius', 'xai', 'ollama-cloud', 'huggingface']) assert.ok(ids.includes(nuovo), `manca ${nuovo}`);
+  assert.ok(PROVIDER_DIRETTI.slice(6).every((p) => p.soloSeCollegato === true), 'i fornitori nuovi compaiono solo con la chiave collegata');
 });
 
 test('PF-UI-01 — riserva riconoscibile nelle schede reali, ritorno al catalogo senza etichetta', () => {

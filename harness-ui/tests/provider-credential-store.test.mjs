@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { ID_CON_CREDENZIALE } from '../src/provider-registry.mjs';
 
 import {
   PROVIDER_IDS,
@@ -37,7 +38,8 @@ test('PROVIDER-STORE-01 bootstrap ambiente e lista pubblica non espongono i segr
      dichiara `credenziale: true` — chiave FACOLTATIVA, come Ollama. L'invariante «i sette sono
      sempre gli stessi ovunque» vive adesso in `tests/provider-registry-parita.test.mjs`, che li
      conta in OGNI superficie: qui resta la fotografia, li c'e il cancello. */
-  assert.deepEqual(PROVIDER_IDS, ['openai', 'deepseek', 'anthropic', 'gemini', 'openrouter', 'ollama', 'lmstudio', 'huggingface']);
+  assert.deepEqual(PROVIDER_IDS, ID_CON_CREDENZIALE);
+  assert.ok(PROVIDER_IDS.includes('zai'), 'PG-REG-ZAI: la fotografia obsoleta ometteva Z.AI già prima di P-G');
   assert.equal(store.getKey('openrouter'), secret);
   const publicRows = store.listPublic();
   assert.equal(publicRows.find((row) => row.id === 'openrouter').keyConfigured, true);

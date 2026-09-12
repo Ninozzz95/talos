@@ -499,40 +499,502 @@ export const REGISTRO_FORNITORI = congela({
     esecuzione: 'runtime locale',
   }),
 
-  // ── Hugging Face — NON è una destinazione di chat, e il record lo dice ──────────────────────
-  huggingface: congela({
-    id: 'huggingface',
-    // P-F, 12/09/2026: solo download, nessuna destinazione chat.
-    modelliDiRiserva: null,
+  // P-G, 12/09/2026 — Groq. Fonte HTTP: https://console.groq.com/docs/api-reference
+  groq: congela({
+    id: 'groq',
+    modelliDiRiserva: congela([
+      congela({ id: 'openai/gpt-oss-20b', nome: 'GPT OSS 20B', toolCalling: true,
+        fonte: 'https://console.groq.com/docs/tool-use/overview', data: '2026-09-12' }),
+    ]),
     modelloAusiliario: null,
-    modelsDevId: 'huggingface', // Inference Providers non abilita la chat nel nostro record download.
-    etichetta: 'Hugging Face',
-    descrizione: 'Catalogo e scaricamento dei modelli, non una destinazione di chat.',
-    paginaChiavi: 'https://huggingface.co/settings/tokens',
-    /*
-     * ⛔ `wire: null` è ammesso SOLO qui, e solo perché `destinazioneChat` è falso. Un `wire`
-     *   sconosciuto su una destinazione di chat è un errore, non un ripiego silenzioso su OpenRouter.
-     */
-    wire: null,
-    baseUrl: null,
-    indirizzoModificabile: false,
+    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    modelsDevId: 'groq',
+    etichetta: 'Groq',
+    descrizione: 'Modelli tramite Groq.',
+    paginaChiavi: 'https://console.groq.com/keys',
+    wire: 'openai-chat',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    indirizzoModificabile: true,
     envIndirizzo: congela([]),
-    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['HF_TOKEN', 'HUGGINGFACE_HUB_TOKEN']) }),
-    chiaveObbligatoria: false,
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['GROQ_API_KEY']) }),
+    chiaveObbligatoria: true,
     formaIdModello: 'vendor/nome',
     oauth: null,
-    endpoint: congela({ chat: null, modelli: null }),
-    streaming: 'ignoto',
-    toolCalling: 'ignoto',
-    cache: congela({ marcatore: null, letturaUsage: congela([]), scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null }),
-    catalogo: congela({ fonte: 'nessuna', forma: null, percorso: null, inUI: false }),
-    prezzi: congela({ fonte: 'nessuna' }),
-    /* ⛔ Niente tempo massimo: non c'è una chiamata di inferenza su cui misurarlo. */
-    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: false }),
-    sonda: congela({ attiva: true, auth: 'bearer-facoltativo', percorso: null, urlAssoluto: 'https://huggingface.co/api/whoami-v2', conta: () => null }),
-    destinazioneChat: false,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      fonte: 'https://console.groq.com/docs/prompt-caching', data: '2026-09-12',
+    }),
+    richiestaCompatibile: congela({
+      limiteUscita: 'max_completion_tokens', ragionamento: 'effort',
+      modelli: congela({
+        'openai/gpt-oss-20b': congela({ livelliRagionamento: congela(['low', 'medium', 'high']), }),
+        'openai/gpt-oss-120b': congela({ livelliRagionamento: congela(['low', 'medium', 'high']), }),
+      }),
+      fonte: 'https://console.groq.com/docs/api-reference', data: '2026-09-12',
+    }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true,
     credenziale: true,
-    esecuzione: 'catalogo e download',
+    esecuzione: 'collegato',
+  }),
+
+  // P-G, 12/09/2026 — Cerebras. Fonte HTTP: https://inference-docs.cerebras.ai/api-reference/chat-completions
+  cerebras: congela({
+    id: 'cerebras',
+    modelliDiRiserva: congela([
+      congela({ id: 'gpt-oss-120b', nome: 'GPT OSS 120B', toolCalling: true,
+        fonte: 'https://inference-docs.cerebras.ai/capabilities/tool-use', data: '2026-09-12' }),
+    ]),
+    modelloAusiliario: null,
+    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    modelsDevId: 'cerebras',
+    etichetta: 'Cerebras',
+    descrizione: 'Modelli tramite Cerebras.',
+    paginaChiavi: 'https://cloud.cerebras.ai/platform',
+    wire: 'openai-chat',
+    baseUrl: 'https://api.cerebras.ai/v1',
+    indirizzoModificabile: true,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['CEREBRAS_API_KEY']) }),
+    chiaveObbligatoria: true,
+    formaIdModello: 'nome',
+    oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      fonte: 'https://inference-docs.cerebras.ai/capabilities/prompt-caching', data: '2026-09-12',
+    }),
+    richiestaCompatibile: congela({
+      limiteUscita: 'max_completion_tokens', ragionamento: 'effort',
+      modelli: congela({
+        'gpt-oss-120b': congela({ livelliRagionamento: congela(['low', 'medium', 'high']), strumentiConFormato: false, fonte: 'https://inference-docs.cerebras.ai/resources/openai', }),
+        'qwen-3.8-27b': congela({ livelliRagionamento: congela(['none', 'low', 'medium', 'high']), }),
+      }),
+      fonte: 'https://inference-docs.cerebras.ai/api-reference/chat-completions', data: '2026-09-12',
+    }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true,
+    credenziale: true,
+    esecuzione: 'collegato',
+  }),
+
+  // P-G, 12/09/2026 — Mistral. Fonte HTTP: https://docs.mistral.ai/api/endpoint/chat
+  mistral: congela({
+    id: 'mistral',
+    modelliDiRiserva: congela([
+      congela({ id: 'mistral-small-latest', nome: 'Mistral Small', toolCalling: true,
+        fonte: 'https://docs.mistral.ai/studio/conversations/function-calling', data: '2026-09-12' }),
+    ]),
+    modelloAusiliario: null,
+    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    modelsDevId: 'mistral',
+    etichetta: 'Mistral',
+    descrizione: 'Modelli tramite Mistral.',
+    paginaChiavi: 'https://console.mistral.ai/api-keys',
+    wire: 'openai-chat',
+    baseUrl: 'https://api.mistral.ai/v1',
+    indirizzoModificabile: true,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['MISTRAL_API_KEY']) }),
+    chiaveObbligatoria: true,
+    formaIdModello: 'nome',
+    oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: 'prompt_cache_key', letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      fonte: 'https://docs.mistral.ai/studio/conversations/advanced/prompt-caching', data: '2026-09-12',
+    }),
+    richiestaCompatibile: congela({
+      limiteUscita: null, ragionamento: 'effort',
+      modelli: congela({}),
+      fonte: 'https://docs.mistral.ai/api/endpoint/chat', data: '2026-09-12',
+    }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true,
+    credenziale: true,
+    esecuzione: 'collegato',
+  }),
+
+  // P-G, 12/09/2026 — Together. Fonte HTTP: https://docs.together.ai/docs/inference/openai-compatibility
+  together: congela({
+    id: 'together',
+    modelliDiRiserva: congela([
+      congela({ id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', nome: 'Llama 3.3 70B', toolCalling: true,
+        fonte: 'https://docs.together.ai/docs/serverless/models', data: '2026-09-12' }),
+    ]),
+    modelloAusiliario: null,
+    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    modelsDevId: 'togetherai',
+    etichetta: 'Together',
+    descrizione: 'Modelli tramite Together.',
+    paginaChiavi: 'https://api.together.ai/settings/api-keys',
+    wire: 'openai-chat',
+    baseUrl: 'https://api.together.ai/v1',
+    indirizzoModificabile: true,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['TOGETHER_API_KEY']) }),
+    chiaveObbligatoria: true,
+    formaIdModello: 'vendor/nome',
+    oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: null, letturaUsage: congela(['cached_tokens', 'prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      fonte: 'https://docs.together.ai/docs/inference/openai-compatibility', data: '2026-09-12',
+    }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true,
+    credenziale: true,
+    esecuzione: 'collegato',
+  }),
+
+  // P-G, 12/09/2026 — Fireworks. Fonte HTTP: https://docs.fireworks.ai/api-reference/post-chatcompletions
+  // GET /inference/v1/models non trovato nella documentazione: il 401 senza chiave non ne prova il funzionamento. Il 404 deve restare esplicito.
+  fireworks: congela({
+    id: 'fireworks',
+    modelliDiRiserva: congela([
+      congela({ id: 'accounts/fireworks/models/gpt-oss-120b', nome: 'GPT OSS 120B', toolCalling: true,
+        fonte: 'https://fireworks.ai/models/fireworks/gpt-oss-120b', data: '2026-09-12' }),
+    ]),
+    modelloAusiliario: null,
+    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    modelsDevId: 'fireworks-ai',
+    etichetta: 'Fireworks',
+    descrizione: 'Modelli tramite Fireworks.',
+    paginaChiavi: 'https://app.fireworks.ai/settings/users/api-keys',
+    wire: 'openai-chat',
+    baseUrl: 'https://api.fireworks.ai/inference/v1',
+    indirizzoModificabile: true,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['FIREWORKS_API_KEY']) }),
+    chiaveObbligatoria: true,
+    formaIdModello: 'vendor/nome',
+    oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      fonte: 'https://docs.fireworks.ai/api-reference/post-chatcompletions', data: '2026-09-12',
+    }),
+    richiestaCompatibile: congela({
+      limiteUscita: null, ragionamento: 'effort',
+      modelli: congela({}),
+      fonte: 'https://docs.fireworks.ai/api-reference/post-chatcompletions', data: '2026-09-12',
+    }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true,
+    credenziale: true,
+    esecuzione: 'collegato',
+  }),
+
+  // P-G, 12/09/2026 — DeepInfra. Fonte HTTP: https://docs.deepinfra.com/chat/overview
+  deepinfra: congela({
+    id: 'deepinfra',
+    modelliDiRiserva: congela([
+      congela({ id: 'openai/gpt-oss-20b', nome: 'GPT OSS 20B', toolCalling: true,
+        fonte: 'https://deepinfra.com/openai/gpt-oss-20b', data: '2026-09-12' }),
+    ]),
+    modelloAusiliario: null,
+    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    modelsDevId: 'deepinfra',
+    etichetta: 'DeepInfra',
+    descrizione: 'Modelli tramite DeepInfra.',
+    paginaChiavi: 'https://deepinfra.com/dash/api_keys',
+    wire: 'openai-chat',
+    baseUrl: 'https://api.deepinfra.com/v1/openai',
+    indirizzoModificabile: true,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['DEEPINFRA_API_KEY', 'DEEPINFRA_TOKEN']) }),
+    chiaveObbligatoria: true,
+    formaIdModello: 'vendor/nome',
+    oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      fonte: 'https://docs.deepinfra.com/chat/prompt-caching', data: '2026-09-12',
+    }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true, catalogoPubblico: true }),
+    destinazioneChat: true,
+    credenziale: true,
+    esecuzione: 'collegato',
+  }),
+
+  // P-G, 12/09/2026 — Novita. Fonte HTTP: https://docs.novita.ai/api-reference/model-apis-llm-create-chat-completion
+  // La documentazione HTTP usa /openai/v1; alcuni esempi SDK e models.dev indicano /openai. Qui si segue il riferimento HTTP, senza aggiungere un secondo /v1.
+  novita: congela({
+    id: 'novita',
+    modelliDiRiserva: congela([
+      congela({ id: 'qwen/qwen3-coder-30b-a3b-instruct', nome: 'Qwen3 Coder 30B', toolCalling: true,
+        fonte: 'https://novita.ai/models/model-detail/qwen-qwen3-coder-30b-a3b-instruct', data: '2026-09-12' }),
+    ]),
+    modelloAusiliario: null,
+    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    modelsDevId: 'novita-ai',
+    etichetta: 'Novita',
+    descrizione: 'Modelli tramite Novita.',
+    paginaChiavi: 'https://novita.ai/settings/key-management',
+    wire: 'openai-chat',
+    baseUrl: 'https://api.novita.ai/openai/v1',
+    indirizzoModificabile: true,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['NOVITA_API_KEY']) }),
+    chiaveObbligatoria: true,
+    formaIdModello: 'vendor/nome',
+    oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      fonte: 'https://docs.novita.ai/guides/llm-prompt-cache', data: '2026-09-12',
+    }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true, catalogoPubblico: true }),
+    destinazioneChat: true,
+    credenziale: true,
+    esecuzione: 'collegato',
+  }),
+
+  // P-G, 12/09/2026 — Nebius. Fonte HTTP: https://docs.tokenfactory.nebius.com/api-reference/inference/create-chat-completion
+  nebius: congela({
+    id: 'nebius',
+    modelliDiRiserva: congela([
+      congela({ id: 'openai/gpt-oss-120b', nome: 'GPT OSS 120B', toolCalling: true,
+        fonte: 'https://nebius.com/services/token-factory', data: '2026-09-12' }),
+    ]),
+    modelloAusiliario: null,
+    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    modelsDevId: 'nebius',
+    etichetta: 'Nebius',
+    descrizione: 'Modelli tramite Nebius.',
+    paginaChiavi: 'https://tokenfactory.nebius.com',
+    wire: 'openai-chat',
+    baseUrl: 'https://api.tokenfactory.nebius.com/v1',
+    indirizzoModificabile: true,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['NEBIUS_API_KEY']) }),
+    chiaveObbligatoria: true,
+    formaIdModello: 'vendor/nome',
+    oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      fonte: 'https://docs.tokenfactory.nebius.com/api-reference/inference/create-chat-completion', data: '2026-09-12',
+    }),
+    richiestaCompatibile: congela({
+      limiteUscita: null, ragionamento: 'effort',
+      modelli: congela({}),
+      fonte: 'https://docs.tokenfactory.nebius.com/api-reference/inference/create-chat-completion', data: '2026-09-12',
+    }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true,
+    credenziale: true,
+    esecuzione: 'collegato',
+  }),
+
+  // P-G, 12/09/2026 — xAI. Fonte HTTP: https://docs.x.ai/developers/rest-api-reference/inference/chat-completions
+  xai: congela({
+    id: 'xai',
+    modelliDiRiserva: congela([
+      congela({ id: 'grok-4.3', nome: 'Grok 4.3', toolCalling: true,
+        fonte: 'https://docs.x.ai/developers/models/grok-4.3', data: '2026-09-12' }),
+    ]),
+    modelloAusiliario: null,
+    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    modelsDevId: 'xai',
+    etichetta: 'xAI',
+    descrizione: 'Modelli tramite xAI.',
+    paginaChiavi: 'https://console.x.ai',
+    wire: 'openai-chat',
+    baseUrl: 'https://api.x.ai/v1',
+    indirizzoModificabile: true,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['XAI_API_KEY']) }),
+    chiaveObbligatoria: true,
+    formaIdModello: 'nome',
+    oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: null, letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Cache dichiarata dal fornitore; senza conteggio: non misurato.',
+      fonte: 'https://docs.x.ai/developers/rest-api-reference/inference/chat-completions', data: '2026-09-12',
+    }),
+    richiestaCompatibile: congela({
+      limiteUscita: 'max_completion_tokens', ragionamento: 'effort',
+      modelli: congela({
+        'grok-4.3': congela({ livelliRagionamento: congela(['none', 'low', 'medium', 'high', 'xhigh']), fonte: 'https://docs.x.ai/developers/models/grok-4.3', }),
+        'grok-4.6': congela({ livelliRagionamento: congela(['low', 'medium', 'high', 'xhigh']), fonte: 'https://docs.x.ai/developers/models/grok-4.6', }),
+      }),
+      fonte: 'https://docs.x.ai/developers/rest-api-reference/inference/chat-completions', data: '2026-09-12',
+    }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true,
+    credenziale: true,
+    esecuzione: 'collegato',
+  }),
+
+  // P-G, 12/09/2026 — Ollama Cloud. Fonte HTTP: https://docs.ollama.com/api/openai-compatibility
+  'ollama-cloud': congela({
+    id: 'ollama-cloud',
+    modelliDiRiserva: congela([
+      congela({ id: 'gpt-oss:20b', nome: 'GPT OSS 20B', toolCalling: true,
+        fonte: 'https://ollama.com/library/gpt-oss', data: '2026-09-12' }),
+    ]),
+    modelloAusiliario: null,
+    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    modelsDevId: 'ollama-cloud',
+    etichetta: 'Ollama Cloud',
+    descrizione: 'Modelli tramite Ollama Cloud.',
+    paginaChiavi: 'https://ollama.com/settings/keys',
+    wire: 'openai-chat',
+    baseUrl: 'https://ollama.com/v1',
+    indirizzoModificabile: true,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['OLLAMA_API_KEY']) }),
+    chiaveObbligatoria: true,
+    formaIdModello: 'nome',
+    oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: null, letturaUsage: congela([]),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Conteggio della cache non documentato; senza dati: non misurato.',
+      fonte: 'https://docs.ollama.com/api/openai-compatibility', data: '2026-09-12',
+    }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true, catalogoPubblico: true }),
+    destinazioneChat: true,
+    credenziale: true,
+    esecuzione: 'collegato',
+  }),
+
+  // P-G, 12/09/2026 — Hugging Face. Fonte HTTP: https://huggingface.co/docs/inference-providers/tasks/chat-completion
+  // Lo stesso account del portachiavi resta disponibile per i download. La chiave è obbligatoria per l'inferenza, non per scaricare modelli pubblici.
+  huggingface: congela({
+    id: 'huggingface',
+    modelliDiRiserva: congela([
+      congela({ id: 'openai/gpt-oss-20b', nome: 'GPT OSS 20B', toolCalling: true,
+        fonte: 'https://huggingface.co/openai/gpt-oss-20b', data: '2026-09-12' }),
+    ]),
+    modelloAusiliario: null,
+    motivoAusiliario: 'Nessun modello ausiliario qualificato per questo fornitore.',
+    modelsDevId: 'huggingface',
+    etichetta: 'Hugging Face',
+    descrizione: 'Inferenza, catalogo e scaricamento dei modelli Hugging Face.',
+    paginaChiavi: 'https://huggingface.co/settings/tokens',
+    wire: 'openai-chat',
+    baseUrl: 'https://router.huggingface.co/v1',
+    indirizzoModificabile: true,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['HF_TOKEN', 'HUGGINGFACE_HUB_TOKEN']) }),
+    chiaveObbligatoria: true,
+    formaIdModello: 'vendor/nome',
+    oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: null, letturaUsage: congela([]),
+      scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
+      etichetta: 'Conteggio della cache non documentato; senza dati: non misurato.',
+      fonte: 'https://huggingface.co/docs/inference-providers/tasks/chat-completion', data: '2026-09-12',
+    }),
+    richiestaCompatibile: congela({
+      limiteUscita: null, ragionamento: 'effort',
+      modelli: congela({}),
+      fonte: 'https://huggingface.co/docs/inference-providers/tasks/chat-completion', data: '2026-09-12',
+    }),
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true }),
+    prezzi: congela({ fonte: 'https://models.dev/api.json', data: '2026-09-12' }),
+    // Tempo massimo applicativo già adottato; non è una misura o una promessa del fornitore.
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null,
+      conta: (c) => c?.data?.length, richiedeCatalogoValido: true, catalogoPubblico: true }),
+    destinazioneChat: true,
+    credenziale: true,
+    esecuzione: 'collegato',
   }),
 
   // ── Il motore locale llama-server — nessuna credenziale su disco, mai ───────────────────────
@@ -616,6 +1078,22 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
     }
     if (record.sonda?.attiva === true && !record.sonda.percorso && !record.sonda.urlAssoluto) {
       throw new ProviderRegistryError(`${dove}: sonda attiva senza un indirizzo da chiamare`);
+    }
+    if (record.richiestaCompatibile !== undefined) {
+      const p = record.richiestaCompatibile;
+      if (!p || ![null, 'max_completion_tokens'].includes(p.limiteUscita) || ![null, 'effort'].includes(p.ragionamento)
+        || !p.modelli || typeof p.modelli !== 'object' || Array.isArray(p.modelli)
+        || typeof p.fonte !== 'string' || !p.fonte.startsWith('https://') || !/^\d{4}-\d{2}-\d{2}$/u.test(p.data ?? '')) {
+        throw new ProviderRegistryError(`${dove}: profilo di compatibilità senza contratto o fonte datata`);
+      }
+      for (const m of Object.values(p.modelli)) {
+        if (!m || !Array.isArray(m.livelliRagionamento) || !m.livelliRagionamento.length
+          || new Set(m.livelliRagionamento).size !== m.livelliRagionamento.length
+          || m.livelliRagionamento.some(l => !['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'default'].includes(l))
+          || (m.strumentiConFormato !== undefined && typeof m.strumentiConFormato !== 'boolean')) {
+          throw new ProviderRegistryError(`${dove}: particolarità del modello non valide`);
+        }
+      }
     }
     for (const campo of ['modelliDiRiserva', 'modelloAusiliario']) {
       if (!Object.hasOwn(record, campo)) throw new ProviderRegistryError(`${dove}: ${campo} deve essere dichiarato`);

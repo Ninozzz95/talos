@@ -274,6 +274,8 @@ test('PE-10 — mappa completa; non esiste non è un registro rotto né un model
   assert.deepEqual(Object.fromEntries(Object.entries(REGISTRO_FORNITORI).map(([id, r]) => [id, r.modelsDevId])), {
     openai: 'openai', deepseek: 'deepseek', zai: 'zai', anthropic: 'anthropic', gemini: 'google', openrouter: 'openrouter',
     ollama: null, lmstudio: 'lmstudio', huggingface: 'huggingface', local: null,
+    groq: 'groq', cerebras: 'cerebras', mistral: 'mistral', together: 'togetherai', fireworks: 'fireworks-ai',
+    deepinfra: 'deepinfra', novita: 'novita-ai', nebius: 'nebius', xai: 'xai', 'ollama-cloud': 'ollama-cloud',
   });
   const { catalogo } = await banco(t, { fetchFn: async () => assert.fail('nessun fetch senza mappa') });
   for (const id of ['ollama', 'local', 'inesistente', '__proto__']) {
@@ -359,13 +361,16 @@ test('PE-16b — scrittura disco fallita: dati vivi utilizzabili, persistenza di
   assert.ok(r.avvisi.some(a => a.codice === 'CATALOG_CACHE_WRITE_FAILED'));
 });
 
-test('PE-17 — elenco pubblico locale non diventa installato e Hugging Face non diventa destinazione chat', async t => {
+test('PE-17 / PG-REG-HF-CATALOGO — locali non diventano installati; Hugging Face chat richiede la chiave', async t => {
   const { catalogo } = await banco(t);
   const rotta = createProviderModelCatalog({ catalogo, chiaveConfigurata: () => true });
-  for (const id of ['lmstudio', 'ollama', 'local', 'huggingface', 'openrouter']) {
+  for (const id of ['lmstudio', 'ollama', 'local', 'openrouter']) {
     await assert.rejects(rotta.ottieni(id), e => e.code === 'REPORT_UNAVAILABLE');
   }
   assert.equal((await catalogo.ottieni('lmstudio')).modelli[0].contestoVerificato, false);
+  assert.equal((await rotta.ottieni('huggingface')).provider, 'huggingface');
+  const senzaChiave = createProviderModelCatalog({ catalogo, chiaveConfigurata: () => false });
+  await assert.rejects(senzaChiave.ottieni('huggingface'), { code: 'PROVIDER_KEY_REQUIRED' });
 });
 
 test('PE-18 — fornitore mappato assente dalla fonte: indisponibilità esplicita e chiave non accusata', async t => {

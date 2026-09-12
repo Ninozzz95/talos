@@ -55,6 +55,7 @@ export const SONDE_PROVIDER = Object.freeze(Object.fromEntries(ID_CON_CREDENZIAL
     auth: sonda.auth,
     attiva: sonda.attiva !== false,
     conta: sonda.conta,
+    ...(sonda.catalogoPubblico ? { catalogoPubblico: true } : {}),
   })];
 })));
 
@@ -189,7 +190,10 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     return {
       provider,
       esito: 'collegato',
-      motivo: Number.isFinite(modelli) && modelli >= 0
+      ...(sonda.catalogoPubblico ? { credenzialeVerificata: false } : {}),
+      motivo: sonda.catalogoPubblico
+        ? `${etichetta}: catalogo pubblico raggiunto, ${modelli} modelli visibili; chiave non verificata. La generazione non è stata provata.`
+        : Number.isFinite(modelli) && modelli >= 0
         ? `${etichetta}: catalogo raggiunto, ${modelli} modelli visibili. La generazione non è stata provata.`
         : `${etichetta}: credenziale accettata.`,
       modelli: Number.isFinite(modelli) ? modelli : null,
