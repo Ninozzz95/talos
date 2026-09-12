@@ -50,6 +50,28 @@ Proposta dell'owner registrata («magari mettere il preambolo come tool»): la f
 
 **BC-44 (nuovo) — la ripresa non accetta una ricerca `failed` per errore del FORNITORE.** Giro vero L9 del 12/09 (ricerca `dec896c0`): motore acceso (16 giri, 32 attrezzi, 67 fonti tenute, piano e passi nel giornale, 134k token dalla cache), a un passo dal deposito il fornitore ha chiuso la connessione (`RunError: Upstream idle timeout exceeded`) ⇒ `failed`, e `POST …/ripresa` risponde 409 RESEARCH_CONFLICT. Venti minuti di lavoro pagato che il giornale conserva e nessuno può riprendere. Da fare: `failed` per errore di rete/fornitore ⇒ ripresa permessa dal giornale (L9 la prova già in test), con il motivo dichiarato; e la verifica (giudice) non è mai stata provata dal vivo: resta da rifare il giro.
 
+**PO-15 (nuovo, 12/09 ore 13, owner: «segna che anche TALOS dovrà avere la capacità di farlo, segnalo come implementazione futura») — TALOS delega a un agente esterno da riga di comando (Astra/Codex, e per estensione Claude Code, Hermes).** Verificato oggi: `codex exec` (CLI 0.153.4, accesso ChatGPT) risponde non interattivo in 12 s («Codex, basato su GPT-6»), accetta prompt da file/stdin, sandbox `read-only|workspace-write|full-auto`, `resume --last` per i seguiti, uscita anche in JSONL. Forma prevista: un attrezzo «delega esterna» (nome umano a schermo) che avvia la CLI in una cartella/worktree con permesso della sessione, registra stdout/JSONL nel giornale come un sotto-agente (scheda Agenti, D2 delega), esito nel deposito; permessi: mai oltre quelli della sessione; niente segreti in riga di comando. Ordine: dopo la coda attuale, prima di PO-13.
+
+### 📋 TABELLA DI MARCIA — riscritta il 12/09 ore 13 (ordine di lavoro)
+
+| # | voce | chi | stato |
+|---|---|---|---|
+| 1 | BC-40 mappa minima nel preambolo + attrezzi | agente già lanciato (ripreso 13:01) | 🏃 |
+| 2 | BC-36/37/41/42 chip permesso · nome doppio · giri «in corso» nel replay · `tree?percorso=` vuoto + aggancio BC-38 in `app.js` | agente già lanciato (ripreso) | 🏃 |
+| 3 | BC-44 ripresa di una ricerca fermata dal fornitore (+ giudice L9 dal vivo) | agente già lanciato (ripreso) | 🏃 |
+| 4 | consegna `public/`, riavvio 4174, foto due temi, push del blocco | io | dopo 1-3 |
+| 5 | L10 modalità piano della ricerca con ricerca strategica (approvazione del piano dalla sezione) | Astra via `codex exec`, review mia | 🔜 |
+| 6 | BC-35 DOCX con titoli di Word + elenchi annidati nel Markdown server | Astra | 🔜 |
+| 7 | BC-43 chiamanti di `$('#conversation')` che si aspettano lo scorrevole | Astra | 🔜 |
+| 8 | PO-14 P-D…P-L fornitori (Z.AI due porte, models.dev, fallback, wire OpenAI «una riga», pool chiavi, Kimi/MiniMax/Qwen, wire Anthropic, Azure/Bedrock/Vertex, provider esterno) | Astra, uno per volta | 🔜 |
+| 9 | PO-15 TALOS delega a un agente esterno da CLI | Astra + kernel (io) | 🔜 nuovo |
+| 10 | PO-13 proposta GPT-Live-1 | — | ⏸ «in seguito» |
+| 11 | Release desktop: righe R-01…R-06 del piano (guscio, installer, CI Windows, monorepo pubblico AGPL-3.0, misure) | Astra + io | 🔜 al tuo sì sulle sei domande |
+| 12 | Pre-release: tabella di marcia con ricerca dell'ultimo mese, prove da utente nuovo, UX | io + Astra | al trigger (coda chiusa) |
+| 13 | A/B del banco sul preambolo (~$5, 210 giri) | io | ⏸ «alla fine» |
+| — | Aperti minori senza data: BC-12 foto sul 4174, 27B da misurare a VRAM libera, `.non-rinominato`, mockup-to-template distruttivo, `<br>` nei .md, HEAD 404, fase3 Review, easing freccia, h2 25ch, «Rivela»→«Mostra», icona Browser, campi elenco note/attività/memoria, nome/timbro sovrapposti nelle righe Libreria | decidi tu | ⏸ |
+| — | Fine lavoro: eliminare `.harness-ui-research`, `.harness-ui-library` sul Desktop e `harness-ui/scratch-l9/` | io, al tuo sì | promemoria |
+
 ### In corso adesso (aggiornato 12/09, ore 12:15)
 
 | id | cosa | stato |
