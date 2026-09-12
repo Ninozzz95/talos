@@ -2433,6 +2433,9 @@ export function creaResearchOrchestrator({
        */
       bilancio: letto?.bilancio ?? null,
       proveDistinte: letto?.proveDistinte ?? 0,
+      // BC-51: stesso record già letto per il bilancio, in elenco e dettaglio.
+      // Il modello designato non prova che abbia effettivamente giudicato.
+      giudice: letto?.record?.judge ?? null,
       /*
        * ⭐⭐⭐ L8 (12/09/2026) — CON CHE COSA È STATA FATTA. Tredicesimo campo, additivo.
        *
@@ -2632,8 +2635,6 @@ export function creaResearchOrchestrator({
         }))
         : null,
       sintesi: letto?.record?.summary ?? null,
-      /* ⛔ Chi era disponibile a giudicare la CORSA — un fatto suo, mai dedotto dalle affermazioni (`report.mjs` lo spiega: dedurlo mente su una corsa con un giudice buono e citazioni tutte fallite). */
-      giudice: letto?.record?.judge ?? null,
       piano: Array.isArray(pianoSuDisco) ? pianoSuDisco : (giro?.plan ?? []),
       passi: giro?.steps ?? [],
       spesa: giro ? talosResearchSpent(giro) : null,

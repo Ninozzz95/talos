@@ -23,10 +23,13 @@
  *   dell'arte, non un gusto. Qui diventano SCHEDE perché la striscia delle fonti esiste già ed è
  *   il posto dove questa app fa scegliere «da dove»; il gruppo richiudibile resta per l'AUTORE del
  *   modello dentro OpenRouter, che è un asse diverso (51 famiglie: quelle non sono schede).
- * ⭐ Il tetto delle schede (Apple HIG via eleken.co, già citato in `app.js` il 03/9): oltre sei
- *   l'utente si perde. Dal 12/09 (P-C) sono SEI — OpenRouter · Locali · Anthropic · Gemini ·
- *   OpenAI · LM Studio. P-D aggiunge Z.AI su richiesta esplicita, solo quando collegato;
- *   il layout con sette fonti resta da verificare nella UI completa.
+ * BC-50, 12/09/2026: nessun tetto artificiale ai fornitori collegati. Apple HIG «Tab views»
+ *   raccomanda un'altra presentazione oltre sei; Material «Tabs» ammette una riga scorrevole.
+ *   Misurati 8/12 fornitori: a 1024 nella nuova sessione quattro righe occupavano 141 px,
+ *   lasciando 54,5 px ai modelli. Ora la striscia scorre senza comprimere le schede, con ombre ai capi
+ *   e barra visibile (`mockup-td.css`). Frecce/Home/End e tabindex mobile restano quelli del
+ *   picker condiviso; il focus porta in vista anche l'ultima fonte. Nessun gruppo «Altri».
+ *   Fonti, misure e limiti: `.claude/RAPPORTO-BC50-BC51-2026-09-12.md` nell'harness.
  *
  * ## I tre stati di un fornitore diretto, che prima erano uno solo
  *
@@ -60,6 +63,18 @@
  *   una chiave: `caricaDiretti` non deve pretenderla, o la scheda resterebbe vuota per sempre.
  */
 import { prezzoPerMilione } from './catalogo-modelli.js';
+
+/** BC-50: il picker ricrea i pulsanti a ogni scelta. Il roving tabindex resta nel chiamante;
+ * qui il nuovo pulsante focalizzato viene anche portato in vista, senza animazione.
+ * In Chromium 151 il solo focus() lasciava Home fuori dalla striscia (BC50-03 del banco).
+ * Un listener delegato del modulo serve entrambi i picker, anche dopo rimozione/rimontaggio. */
+function portaInVistaFonteSelettore(evento) {
+  const scheda = evento.target;
+  if (!scheda?.matches?.('.model-picker-source[role="tab"]')
+    || !scheda.parentElement?.matches('.model-picker-sources[role="tablist"]')) return;
+  scheda.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant', container: 'nearest' });
+}
+if (typeof document !== 'undefined') document.addEventListener('focusin', portaInVistaFonteSelettore);
 
 export const PROVIDER_DIRETTI = Object.freeze([
   Object.freeze({ id: 'anthropic', etichetta: 'Anthropic' }),

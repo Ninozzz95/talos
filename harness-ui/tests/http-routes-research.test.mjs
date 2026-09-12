@@ -31,11 +31,11 @@ import { talosResearchReportDocument } from '../src/research/report.mjs';
 const DOMANDA = 'Come stanno evolvendo gli harness agentici desktop nel 2026';
 
 /** Un rapporto col record recintato, scritto dallo scrittore VERO del motore (mai una stringa a mano). */
-function rapportoRecintato({ passaggio = 'gli harness convergono sul controllo del computer', fonti = 1 } = {}) {
+function rapportoRecintato({ passaggio = 'gli harness convergono sul controllo del computer', fonti = 1, giudice = null } = {}) {
   return talosResearchReportDocument({
     question: DOMANDA,
     summary: 'Convergono su controllo del computer, permessi per attrezzo e memoria persistente.',
-    judge: null,
+    judge: giudice,
     claims: Array.from({ length: fonti }, (_v, i) => ({
       claim: { text: `Affermazione ${i + 1}.`, sourceIndex: i + 1, quote: 'q' },
       passage: passaggio,
@@ -267,7 +267,7 @@ test('⛔⛔ L5 — corpo con una chiave non ammessa: 400, e la chiave viene NOM
 
 /* ─────────────────────── 3. ELENCO E DETTAGLIO — IL CONTRATTO ─────────────────────── */
 
-test('⭐⭐⭐⭐ L5 — ELENCO: i campi del contratto c\'erano già, quello che mancava era `totale` (e da L8 sono quindici: c\'è anche `modello`)', async (t) => {
+test('⭐⭐⭐⭐ L5 — ELENCO: totale e diciannove campi del contratto, incluso il giudice effettivo BC-51', async (t) => {
   const b = await banco(t);
   const { sessionId, ricercaId } = await conRicercaViva(b);
 
@@ -279,9 +279,10 @@ test('⭐⭐⭐⭐ L5 — ELENCO: i campi del contratto c\'erano già, quello ch
   assert.equal(dati.ricerche.length, 1);
   assert.deepEqual(
     Object.keys(dati.ricerche[0]).sort(),
-    ['avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'id', 'modello', 'modelloGiudice', 'motivo', 'motivoErrore', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'riprendibile', 'stato', 'titolo', 'ultimoMessaggio'],
+    ['avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'giudice', 'id', 'modello', 'modelloGiudice', 'motivo', 'motivoErrore', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'riprendibile', 'stato', 'titolo', 'ultimoMessaggio'],
     /*
-     * ⭐ BC-44 (12/09/2026): DICIOTTO — `riprendibile` («il server accetterebbe Riprendi adesso?»)
+     * BC-51 (12/09/2026): DICIANNOVE — aggiunto `giudice` ai diciotto di BC-44.
+     * BC-44: `riprendibile` («il server accetterebbe Riprendi adesso?»)
      *   e `motivoErrore` (`{classe, transitorio}`, o `null`). ⛔ Il messaggio grezzo del fornitore
      *   e il suo codice NON escono dalla rotta: restano su `meta.json` per la diagnosi.
      *
@@ -296,6 +297,25 @@ test('⭐⭐⭐⭐ L5 — ELENCO: i campi del contratto c\'erano già, quello ch
   assert.equal(dati.ricerche[0].id, ricercaId);
   assert.equal(dati.ricerche[0].padreId, sessionId, '§6.6 — la ricerca è figlia della chat che l\'ha ordinata');
   assert.equal(dati.ricerche[0].bilancio, null, '⛔ `null` e «tutto a zero» non sono la stessa cosa su una ricerca mai misurata');
+  assert.equal(dati.ricerche[0].giudice, null);
+});
+
+test('BC51-HTTP — elenco e dettaglio espongono lo stesso giudice con record, null senza rapporto', async (t) => {
+  for (const giudice of ['glm-4.7-flash', null]) {
+    const b = await banco(t);
+    const { sessionId, ricercaId } = await conRicercaViva(b);
+    if (giudice) await scriviRapporto({ cartella: b.radice, id: ricercaId, testo: rapportoRecintato({ giudice }) });
+    await concludi(b, sessionId, ricercaId);
+    const risposta = await chiama(b.base, `/api/v1/sessions/${sessionId}/research`);
+    assert.equal(risposta.status, 200);
+    const elenco = (await risposta.json()).data.ricerche.find(r => r.id === ricercaId);
+    const voce = await dettaglio(b, sessionId, ricercaId);
+    assert.equal(elenco.giudice, giudice);
+    assert.equal(voce.giudice, giudice);
+    assert.equal(elenco.stato, giudice ? 'done' : 'failed');
+    assert.equal(elenco.stato, voce.stato);
+    assert.deepEqual(elenco.bilancio, voce.bilancio);
+  }
 });
 
 test('⭐⭐⭐⭐ L5 — DETTAGLIO: piano, passi, spesa, giornale, e le affermazioni GIÀ STRUTTURATE (non un markdown da ri-parsare)', async (t) => {

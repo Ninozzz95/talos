@@ -19,15 +19,9 @@ test('⛔ LA RICHIESTA DELL’OWNER: ogni fornitore è una scheda di PRIMO livel
     locali: modelli('locale', 2),
     diretti: { anthropic: modelli('anthropic', 11), gemini: modelli('gemini', 31), openai: modelli('openai', 71), lmstudio: modelli('lmstudio', 3) },
   });
-  /*
-   * ⭐ 12/09, P-C — LA SESTA SCHEDA È LM STUDIO, e sei è il tetto dichiarato in BC-12 (Apple HIG
-   *   via eleken.co: «oltre sei l'utente si perde»). Ci siamo dentro, al limite: la settima non si
-   *   aggiunge senza ripensare la striscia. ⛔ Il numero nel titolo di questa prova era «cinque» e
-   *   diventava falso a ogni fornitore nuovo: un titolo che conta è un titolo che invecchia.
-   */
+  // BC50-01: questi cataloghi producono sei fonti; non è un limite del selettore.
   assert.deepEqual(fonti.map((f) => f.id), ['openrouter', 'locali', 'anthropic', 'gemini', 'openai', 'lmstudio']);
   assert.deepEqual(fonti.map((f) => f.etichetta), ['OpenRouter', 'Locali', 'Anthropic', 'Gemini', 'OpenAI', 'LM Studio']);
-  assert.ok(fonti.length <= 6, 'oltre sei schede la striscia smette di aiutare');
   assert.deepEqual(fonti.map((f) => f.conto), [444, 2, 11, 31, 71, 3], 'ogni scheda porta il SUO conteggio, non la somma');
   // ⛔ AL CONTRARIO: la scheda ombrello non deve esistere più da nessuna parte.
   assert.equal(fonti.some((f) => f.id === 'diretti'), false);
@@ -35,11 +29,27 @@ test('⛔ LA RICHIESTA DELL’OWNER: ogni fornitore è una scheda di PRIMO livel
   /* ⛔ L'elenco vero lo presidia `tests/provider-registry-parita.test.mjs` contro il registro del
      server: qui si prova la STRISCIA, non chi ci sta dentro. */
   /* P-G (12/09): undici fornitori «una riga ciascuno» in coda ai sei di prima; l'ordine dei sei non cambia.
-     La STRISCIA resta sotto le sei schede perché compaiono solo i fornitori con la chiave collegata (soloSeCollegato). */
+     BC-50: oltre sei la striscia scorre; nessun fornitore collegato viene omesso. */
   const ids = PROVIDER_DIRETTI.map((p) => p.id);
   assert.deepEqual(ids.slice(0, 6), ['anthropic', 'gemini', 'openai', 'lmstudio', 'zai', 'deepseek']);
   for (const nuovo of ['groq', 'cerebras', 'mistral', 'together', 'fireworks', 'deepinfra', 'novita', 'nebius', 'xai', 'ollama-cloud', 'huggingface']) assert.ok(ids.includes(nuovo), `manca ${nuovo}`);
   assert.ok(PROVIDER_DIRETTI.slice(6).every((p) => p.soloSeCollegato === true), 'i fornitori nuovi compaiono solo con la chiave collegata');
+});
+
+test('BC50-01 — 8, 12 e 19 fonti restano ordinate, distinte e raggiungibili senza tetto fittizio', () => {
+  for (const numero of [8, 12, 19]) {
+    const collegati = PROVIDER_DIRETTI.slice(0, numero - 2);
+    const diretti = Object.fromEntries(collegati.map((p, i) => [p.id, modelli(p.id, i + 1)]));
+    const fonti = fontiDelSelettore({ openrouter: [], locali: [], diretti });
+    assert.equal(fonti.length, numero);
+    assert.deepEqual(fonti.map(f => f.id), ['openrouter', 'locali', ...collegati.map(p => p.id)]);
+    assert.equal(new Set(fonti.map(f => f.id)).size, numero);
+    for (const [i, fonte] of fonti.slice(2).entries()) {
+      assert.equal(fonte.collegato, true);
+      assert.equal(fonte.conto, i + 1);
+      assert.equal(modelliDellaFonte(fonte.id, { diretti }), diretti[fonte.id]);
+    }
+  }
 });
 
 test('PF-UI-01 — riserva riconoscibile nelle schede reali, ritorno al catalogo senza etichetta', () => {
