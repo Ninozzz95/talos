@@ -14,6 +14,16 @@ async function mount(page) {
   await page.setContent(template.replace(/<script\b[^>]*>[\s\S]*?<\/script>/g, ''));
   await page.addScriptTag({ content: bundle });
   await page.evaluate(() => {
+    /*
+     * ⛔ 12/09 BC-22 — IL VELO D'AVVIO COPRE ANCHE QUESTA PROVA. `#talosAvvio` arriva col template
+     *   e, con `position:fixed;inset:0`, sta sopra il bottone `#ctx-open` appeso qui sotto: il clic
+     *   non arriva mai e tutte e sei le prove morivano in TIMEOUT a 60 s («waiting for element to be
+     *   visible, enabled and stable», 122 tentativi). È lo stesso difetto curato l'11/09 in
+     *   `lab/main.js` (commit `6a86658f`) per il laboratorio dei componenti: lì il velo si toglieva,
+     *   qui no, perché questa prova costruisce la sua pagina da sé con `setContent`.
+     * ⛔ Nessuna prova disegna il velo di proposito: l'unica cosa che si perde è un blocco inerte.
+     */
+    document.getElementById('talosAvvio')?.remove();
     document.querySelectorAll('.overlay-layer').forEach(n => { n.hidden = true; });
     const trigger = document.createElement('button'); trigger.id = 'ctx-open'; trigger.textContent = 'Compatta'; document.body.prepend(trigger);
     window.ctxState = { sessionId: 'chat-a', revision: 1, settings: { auto: true }, facts: [], jobs: [], activeVersion: null };
