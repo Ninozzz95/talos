@@ -5781,6 +5781,35 @@ export async function talosLavora({
      */
     strumentiEstesi, // array di nomi da ATTREZZI_ESTESI da offrire, es. ['web_search','artifact_create']
     ricercaWeb, // {provider, apiKey?, endpoint?} — usato solo se 'web_search' è in strumentiEstesi
+    /*
+     * ⭐⭐⭐⭐ L9 (12/09/2026) — DUE PARAMETRI, ENTRAMBI OPZIONALI, per la ricerca approfondita.
+     *
+     * `cacheWeb`      — un oggetto con `around(descrittore, produttore)`: la stessa firma della
+     *                   cache di `src/research/fetch-cache.mjs`. `web_search` e `naviga` gli
+     *                   passano attraverso, così una pagina già aperta in questa corsa non si
+     *                   ripaga. ⛔ Il kernel NON sa e non deve sapere che cosa ci sia dietro:
+     *                   nella ricerca approfondita è la «raccolta viva», che ne approfitta per
+     *                   scrivere i passi nel giornale e contare la spesa — ma qui dentro è solo
+     *                   una funzione che dice `{value, fromCache}`.
+     * `onPaginaLetta` — `(url, corpo) => Promise<string|null>`: che cosa mostrare al modello di
+     *                   quella pagina. `null` ⇒ il taglio di sempre (`uscitaUtile`).
+     *
+     * ⛔⛔ PERCHÉ UNA FUNZIONE E NON IL BUDGET DIRETTAMENTE. Il diff §7-B del rapporto L6
+     *   proponeva di importare `talosResearchPageBudget` QUI. Non si fa, ed è una regola scritta
+     *   in questo stesso file trenta righe sopra `research_deposit`: «nessun file di
+     *   `src/research/` entra in questo kernel, che è condiviso col mobile». Il budget si calcola
+     *   dove vive (`research-orchestrator` → `raccolta-viva`), e qui arriva già il testo da
+     *   mostrare. Stesso effetto, un import in meno, e il confine resta dov'è.
+     *
+     * ⛔⛔⛔ ASSENTI ⇒ COMPORTAMENTO BIT-PER-BIT DI IERI. Nessuna chiamata in più, nessuna
+     *   stringa cambiata, nessun byte diverso nell'uscita degli attrezzi — che è la condizione
+     *   perché TALOS-BANCO (che non li passa) non veda cambiare un esito, e perché la cache del
+     *   prompt del fornitore non si azzeri. Per la stessa ragione `fromCache` NON entra mai
+     *   nell'`esito`: due byte diversi fra una pagina servita dalla cache e una riaperta
+     *   spezzerebbero il prefisso esatto su cui la cache del fornitore si regge.
+     */
+    cacheWeb,
+    onPaginaLetta,
     onArtefatto, // (titolo, html) => {id} | Promise<{id}> — usato solo se 'artifact_create' è in strumentiEstesi
     // (spec) => {ok, esito} — usato solo se 'document_create' è in strumentiEstesi. `spec` è {format,title,body?,rows?,slides?,report?} così come li ha mandati il modello, invariati. `ok:false` porta `esito` come messaggio onesto (mai un successo inventato); `ok:true` porta `esito` come RIGA da mostrare al modello (chi implementa decide cosa dire — dimensione, verifica, dove è finito).
     onDocumento,
@@ -6275,7 +6304,16 @@ export async function talosLavora({
         const esitoPlanner = await talosLavora({
             cartella, task, modello: modelloPlanner, chiave, comandoProva, fetchDiRete,
             strumentiEstesi: attrezziEstesiSicuriPerLettura.length ? attrezziEstesiSicuriPerLettura : undefined,
-            ricercaWeb, richiediRicercaFn,
+            /*
+             * ⭐ L9 — `cacheWeb` INOLTRATO al planner, e non è un dettaglio: il planner cerca
+             * sulla stessa domanda su cui cercherà il giro vero. Senza, le sue ricerche
+             * starebbero fuori dalla cache della corsa e le stesse pagine si pagherebbero due
+             * volte — il diff §7-B del rapporto L6 lo segnala come «da non dimenticare».
+             * ⛔ `onPaginaLetta` NON si inoltra: il planner non ha `naviga` (la sua lista è
+             *   filtrata a `web_search`/`time_now`), quindi passarglielo sarebbe un parametro
+             *   che nessun ramo può leggere.
+             */
+            ricercaWeb, richiediRicercaFn, cacheWeb,
             livelloAccesso: 'lettura',
             orologioFn, mobile, segnaleStop,
             _giriMassimiInterno: GIRI_MASSIMI_PLANNER,
@@ -7000,8 +7038,25 @@ export async function talosLavora({
                 }
                 else if (nome === 'naviga') {
                     try {
-                        const pagina = await leggiPaginaSicura(argomenti.url ?? '')
-                        esito = `HTTP ${pagina.stato} · ${pagina.url}\n${uscitaUtile(pagina.corpo, 4_000, 0.25)}`
+                        /*
+                         * ⭐ L9 §7-B — la pagina passa dalla cache della corsa, quando ce n'è una.
+                         * ⛔ `letta.fromCache` non entra in `esito`: byte identici fra una pagina
+                         *   riaperta e una servita dalla cache, o il prefisso esatto su cui si regge
+                         *   la cache del prompt del fornitore si azzera a ogni giro.
+                         */
+                        const chiedi = () => leggiPaginaSicura(argomenti.url ?? '')
+                        const letta = cacheWeb
+                            ? await cacheWeb.around({ kind: 'extract', url: argomenti.url ?? '', provider: 'naviga' }, chiedi)
+                            : { value: await chiedi(), fromCache: false }
+                        const pagina = letta.value
+                        /*
+                         * ⛔ Il ripiego è il taglio di sempre, e la condizione è `typeof === 'string'`
+                         *   e non la verità: una finestra VUOTA («questa pagina non ha testo») è una
+                         *   risposta legittima, e `?? uscitaUtile(...)` la scambierebbe per «non lo so»
+                         *   rimettendo dentro il corpo intero.
+                         */
+                        const mostrata = onPaginaLetta ? await onPaginaLetta(pagina.url, pagina.corpo) : null
+                        esito = `HTTP ${pagina.stato} · ${pagina.url}\n${typeof mostrata === 'string' ? mostrata : uscitaUtile(pagina.corpo, 4_000, 0.25)}`
                     }
                     catch (bloccato) {
                         // ⛔ Un rifiuto della policy NON è un errore di rete: il modello deve
@@ -7016,10 +7071,18 @@ export async function talosLavora({
                     }
                     else {
                         try {
-                            const risultati = await eseguiRicercaWeb(
+                            // ⭐ L9 §7-C — stessa porta di `naviga`: due rami della stessa ricerca che
+                            // partono dalla stessa domanda la pagano una volta sola.
+                            const cerca = () => eseguiRicercaWeb(
                                 argomenti.query ?? '', argomenti.maxResults, ricercaWeb,
                                 ...(richiediRicercaFn ? [richiediRicercaFn] : []),
                             )
+                            const risultati = cacheWeb
+                                ? (await cacheWeb.around({
+                                    kind: 'search', query: argomenti.query ?? '',
+                                    limit: argomenti.maxResults, provider: ricercaWeb?.provider,
+                                }, cerca)).value
+                                : await cerca()
                             esito = formattaRisultatiRicerca(argomenti.query ?? '', risultati)
                         }
                         catch (bloccato) {
@@ -7845,12 +7908,42 @@ export async function talosLavora({
                     const strutturato = argomenti.affermazioni !== undefined || argomenti.fonti !== undefined
                     let composto = null
                     if (strutturato && typeof componiRapportoRicercaFn === 'function') {
-                        composto = componiRapportoRicercaFn({
-                            domanda: typeof task?.ricercaDomanda === 'string' ? task.ricercaDomanda : null,
-                            testo: testoRapporto,
-                            affermazioni: argomenti.affermazioni,
-                            fonti: argomenti.fonti,
-                        })
+                        /*
+                         * ⭐⭐⭐⭐ L9 (12/09/2026) — DUE CAMBIAMENTI MINIMI, e nessuno dei due è
+                         * cosmetico.
+                         *
+                         * `await` — il compositore adesso può VERIFICARE prima di consegnare (il
+                         *   giudice è un altro modello, quindi è I/O). ⛔ `await` su un valore che
+                         *   non è una promessa lo restituisce tale e quale: chi inietta una
+                         *   funzione sincrona (il banco, i test del kernel, `componiRapportoRicerca`
+                         *   puro) non cambia comportamento di un byte.
+                         * `id` — l'id della ricerca, che questo ramo ha già in mano e che il modello
+                         *   non vede mai. Serve al compositore per ritrovare il TESTO TENUTO delle
+                         *   pagine di questa corsa: senza, non c'è niente contro cui confrontare un
+                         *   passaggio citato, e ogni affermazione resterebbe «non verificata» — che
+                         *   è esattamente com'è finito il giro vero del 12/09.
+                         * ⛔ Resta vero che il kernel non conosce la forma del record: riceve un
+                         *   documento o un motivo, e non legge né scrive il recinto.
+                         */
+                        try {
+                            composto = await componiRapportoRicercaFn({
+                                id: idBuono ? ricercaId : null,
+                                domanda: typeof task?.ricercaDomanda === 'string' ? task.ricercaDomanda : null,
+                                testo: testoRapporto,
+                                affermazioni: argomenti.affermazioni,
+                                fonti: argomenti.fonti,
+                            })
+                        }
+                        catch {
+                            /*
+                             * ⛔ Da oggi il compositore può fare I/O (legge il testo tenuto, parla col
+                             *   giudice): può quindi FALLIRE, e prima non poteva. Un guasto lì NON deve
+                             *   portarsi via il rapporto pagato — si ricade sulla strada 2 (si scrive
+                             *   `testo` com'è), che è il comportamento di prima di L8. `null` è proprio
+                             *   ciò che quella strada legge.
+                             */
+                            composto = null
+                        }
                     }
                     const testoDaScrivere = composto?.ok ? composto.documento : testoRapporto
                     let rapportoScritto = null
@@ -7897,6 +7990,20 @@ export async function talosLavora({
                                     + (composto.senzaPassaggio > 0
                                         ? `, of which ${composto.senzaPassaggio} without a verbatim passage — those count as unproven. `
                                         : ', each with a verbatim passage. ')
+                                /*
+                                 * ⭐⭐⭐⭐ L9 — L'ESITO DELLA VERIFICA TORNA AL MODELLO, e il verdetto
+                                 * NON è suo: l'ha dato un altro modello, sul passaggio ritagliato dalla
+                                 * pagina tenuta. Dirglielo qui è l'unico momento in cui può ancora
+                                 * accorgersi di aver citato qualcosa che nella pagina non c'è.
+                                 * ⛔ La riga compare solo quando la verifica è girata davvero: chi
+                                 *   inietta il compositore puro (il banco, i test del kernel) non
+                                 *   riceve `bilancio` e questo `esito` resta identico a ieri.
+                                 */
+                                if (composto.bilancio) {
+                                    const b = composto.bilancio
+                                    esito += `An independent check ran before saving${composto.giudice ? ` (judge: ${composto.giudice}, never the model that wrote it)` : ' (no independent judge was available, so nothing was rubber-stamped)'}: `
+                                        + `${b.supported} supported, ${b.partial} partly, ${b.unsupported} NOT supported, ${b.contested} contested, ${b.unchecked} unverified. `
+                                }
                             }
                             /*
                              * ⛔ E QUANDO IL RECORD NON C'È LO DICE, invece di lasciar credere che

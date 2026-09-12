@@ -34,6 +34,8 @@ import {
   eseguiComandoDiretto as eseguiComandoDirettoReale,
   // ⭐ L5 (12/09): la lettura di una pagina per la ri-verifica nel tempo — la STESSA di `naviga`, mai una seconda.
   leggiPaginaPerLaVista,
+  // ⭐ L9 (12/09): una domanda sola a un modello, senza attrezzi — è come si interpella il GIUDICE.
+  chiediAlModelloUnaVolta as chiediAlModelloUnaVoltaReale,
 } from './agent-service.mjs';
 import {
   approvalRequested, approvalResolved, hookInvoked, queuedMessageDelivered, workspaceChanged, contextEngineEvent,
@@ -98,8 +100,11 @@ import {
   leggiPiano as leggiPianoReale, statRapporto as statRapportoReale,
   elencaFonti as elencaFontiReale,
   leggiIstantaneaCache as leggiIstantaneaCacheReale, scriviIstantaneaCache as scriviIstantaneaCacheReale,
+  // ⭐ L9 (12/09) — il piano su disco, il testo TENUTO delle fonti e l'indice url → ref.
+  scriviPiano as scriviPianoReale, scriviFonte as scriviFonteReale, leggiFonte as leggiFonteReale,
+  scriviIndiceFonti as scriviIndiceFontiReale, leggiIndiceFonti as leggiIndiceFontiReale,
 } from './research-store.mjs';
-import { componiRapportoRicerca, creaResearchOrchestrator } from './research-orchestrator.mjs';
+import { creaResearchOrchestrator } from './research-orchestrator.mjs';
 import {
   elencaToolForgiati as elencaToolForgiatiReale, abilitaToolForgiato as abilitaToolForgiatoReale, ToolForgeStoreError,
 } from './tool-forge-store.mjs';
@@ -1419,6 +1424,34 @@ export function createSessionRegistry({
    * l'attrezzo `naviga` (validazione contro gli indirizzi interni già scritta e provata).
    */
   leggiPaginaFn = leggiPaginaPerLaVista,
+  /*
+   * ⭐⭐⭐⭐ L9 (12/09/2026) — LE CINQUE PORTE DEL DISCO E LE DUE DEL MODELLO.
+   *
+   * Le cinque del disco (piano, fonte, indice) per la ragione già pagata di L4: con i default
+   * reali un test scriverebbe nel filesystem VERO della macchina che lo esegue.
+   *
+   * ⛔⛔ Le due del modello sono il GIUDICE della ricerca approfondita, e vanno lette insieme:
+   *   `chiediAlModelloFn`  — una domanda sola, senza attrezzi (`agent-service`), con la chiave
+   *                          LETTA AL MOMENTO (`chiaveFn`) come ogni altra chiamata;
+   *   `modelliGiudiceFn`   — CHI potrebbe giudicare. La scelta la fa `talosResearchPickJudge`
+   *                          («chiunque tranne l'autore»), mai questa funzione.
+   * ⛔ Il default di `modelliGiudiceFn` guarda `modello` — il modello predefinito del server —
+   *   e basta: è l'unico che questo registro conosce senza inventarsi un catalogo. Se la ricerca
+   *   gira su quel modello, `talosResearchPickJudge` non trova nessun altro e risponde `null`:
+   *   allora il rapporto esce con `judge: null` e lo DICE. ⛔ Mai il ripiego opposto — l'autore
+   *   che timbra sé stesso — misurato da Panickssery/Bowman/Feng (arXiv:2404.13076): gli LLM
+   *   riconoscono i propri testi e li premiano.
+   * ⛔ DEBITO DICHIARATO, non nascosto: finché la persona non può scegliere un modello giudice
+   *   dalle Impostazioni, una ricerca avviata sul modello predefinito non avrà mai un giudice.
+   *   È un lotto di UI, non di motore, e il motore è già pronto a riceverlo.
+   */
+  scriviPianoFn = scriviPianoReale,
+  scriviFonteFn = scriviFonteReale,
+  leggiFonteFn = leggiFonteReale,
+  scriviIndiceFontiFn = scriviIndiceFontiReale,
+  leggiIndiceFontiFn = leggiIndiceFontiReale,
+  chiediAlModelloUnaVoltaFn = chiediAlModelloUnaVoltaReale,
+  modelliGiudiceFn = null,
   salvaVoceLibreriaFn = salvaVoceLibreriaReale, leggiVoceLibreriaFn = leggiVoceLibreriaReale, eliminaVoceLibreriaFn = eliminaVoceLibreriaReale,
   /* ⭐⭐⭐⭐ 10/09/2026 — le tre porte nuove del CRUD Libreria lato persona (vedi i metodi
      `scaricaVoceLibreria`/`rinominaVoceLibreria`/`rivelaVoceLibreria`). `eliminaVoceLibreriaFn`
@@ -1549,6 +1582,30 @@ export function createSessionRegistry({
     // ⭐ L4 — il giornale, il piano, le fonti e l'istantanea della cache: stessa disciplina DI.
     accodaEventoFn, leggiGiornaleFn, leggiPianoFn, statRapportoFn, elencaFontiFn,
     leggiIstantaneaCacheFn, scriviIstantaneaCacheFn, leggiPaginaFn,
+    /*
+     * ⭐⭐⭐⭐ L9 (12/09/2026) — il piano, le fonti tenute, l'indice, e il GIUDICE.
+     *
+     * ⛔ `chiediAlModelloFn` porta la chiave LETTA AL MOMENTO (`chiaveFn`), come ogni altra
+     *   chiamata di questo registro: una chiave cambiata dalle Impostazioni vale dal giro dopo,
+     *   senza riavvio. Senza chiave la chiamata fallirebbe, e `talosResearchVerify` scrive
+     *   «leggiudice non ha risposto» sull'affermazione — onesto, e diverso da «non ce n'era uno».
+     */
+    scriviPianoFn, scriviFonteFn, leggiFonteFn, scriviIndiceFontiFn, leggiIndiceFontiFn,
+    chiediAlModelloFn: ({ modello: modelloGiudice, prompt }) => chiediAlModelloUnaVoltaFn({
+      modello: modelloGiudice,
+      chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave,
+      prompt,
+    }),
+    /*
+     * ⛔ Il default è «il modello predefinito del server, e nient'altro»: l'unico che questo
+     *   registro conosce di sicuro. `talosResearchPickJudge` lo scarta da solo quando è anche
+     *   l'autore, e allora non c'è giudice — detto, mai aggirato.
+     */
+    modelliGiudiceFn: typeof modelliGiudiceFn === 'function'
+      ? modelliGiudiceFn
+      : () => (typeof modello === 'string' && modello
+        ? [{ id: modello, provider: 'openrouter', model: modello }]
+        : []),
     salvaVoceLibreriaFn, leggiVoceLibreriaFn, eliminaVoceLibreriaFn, randomUUIDFn,
   });
 
@@ -2879,7 +2936,34 @@ export function createSessionRegistry({
        * `research_deposit`. Sta qui e non fra gli `onRicerca*` perché non delega niente
        * all'orchestratore di QUESTA sessione — scrive il documento e basta.
        */
-      componiRapportoRicercaFn: componiRapportoRicerca,
+      /*
+       * ⭐⭐⭐⭐ L9 (12/09/2026) — NON PIÙ LA FUNZIONE PURA: il metodo dell'orchestratore.
+       *
+       * ⛔ La funzione pura (`componiRapportoRicerca`) resta esportata e invariata — compone il
+       *   record e basta. Ma comporre non è più tutto ciò che deve succedere prima che il file
+       *   esista: fra il «il modello ha chiamato research_deposit» e il «il rapporto è sul disco»
+       *   ci va la VERIFICA — il passaggio ritrovato nel testo tenuto, il giudice che non è
+       *   l'autore, la contraria cercata apposta. Quella ha bisogno del disco della ricerca e di
+       *   una chiamata al modello, cioè di cose che una funzione pura non può avere.
+       * ⛔ `cartella` la mette il registro (è la sessione a saperla), `id` lo mette il KERNEL da
+       *   `task.ricercaId` — un dato del server che il modello non vede mai. Nessuno dei due
+       *   arriva dagli argomenti dell'attrezzo, ed è la stessa difesa del percorso di deposito.
+       */
+      componiRapportoRicercaFn: (arg) => researchOrchestrator.componiRapporto({ ...arg, cartella: voce.cartella }),
+      /*
+       * ⭐⭐⭐⭐ L9 — LA RACCOLTA DI QUESTA CORSA, se questa sessione È una ricerca.
+       *
+       * ⛔⛔ `null` per OGNI altra sessione, ed è la riga che tiene il rischio a zero: senza
+       *   questi due il kernel si comporta bit-per-bit come ieri (`talosHarness.mjs`, doc di
+       *   `cacheWeb`). TALOS-BANCO non passa di qui e non può vedere un byte diverso.
+       * ⛔ Si chiede AL MOMENTO del giro e non si tiene in una variabile: una ricerca RIPRESA
+       *   rimonta la sua raccolta dentro `riprendi()`, e una copia catturata prima punterebbe
+       *   all'oggetto di una vita precedente.
+       */
+      cacheWeb: researchOrchestrator.raccoltaDellaRicerca(sessionId) ?? undefined,
+      onPaginaLetta: researchOrchestrator.raccoltaDellaRicerca(sessionId)
+        ? ((url, corpo) => researchOrchestrator.raccoltaDellaRicerca(sessionId)?.paginaLetta(url, corpo) ?? null)
+        : undefined,
       // ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge, GLOBALE come cartellaMemoria: agent-service.mjs costruisce onForgeCrea/toolForge/eseguiToolForgeFn da qui.
       cartellaForge,
       onEvento: (evento) => broadcast(voce, evento),

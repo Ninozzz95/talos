@@ -696,7 +696,27 @@ test('AL CONTRARIO — conclusione senza NESSUN testo assistente e senza rapport
  * confrontabili: la riga deve dire con che cosa è stata fatta, o quel confronto è cieco.
  * ⛔ Additivo come gli altri due: nessuno dei quattordici cambia nome, tipo o significato.
  */
-test('⭐⭐⭐ CONTRATTO §6.4 — ogni voce di elenca() porta i quindici campi che la sezione legge (dodici di L2 + bilancio, proveDistinte, e `modello` da L8)', async () => {
+/*
+ * ⭐⭐⭐⭐ L9 (12/09/2026) — SEDICESIMO CAMPO: `modelloGiudice`.
+ *
+ * Perché è cresciuto di nuovo, e perché proprio questo. Da L9 la verifica gira DAVVERO prima
+ * del deposito, e il verdetto lo dà un modello che non è l'autore — la misura che lo impone è
+ * Panickssery, Bowman e Feng, «LLM Evaluators Recognize and Favor Their Own Generations»
+ * (arXiv:2404.13076, 15/04/2024): gli LLM riconoscono i propri testi e li premiano, con «a
+ * linear correlation between self-recognition capability and the strength of self-preference
+ * bias».
+ *
+ * ⛔ Ma «chi è stato SCELTO a giudicare» e «chi ha giudicato DAVVERO» sono due fatti diversi:
+ *   il secondo esce da `leggi()` come `giudice` (sta nel record del rapporto), il primo vive
+ *   sulla metadata fin dalla nascita della ricerca ed è questo. Quando divergono — un giudice
+ *   designato che non ha mai risposto — è esattamente il caso che la sezione deve poter
+ *   mostrare, e senza questo campo sarebbe indistinguibile da «non c'era nessun altro modello».
+ *
+ * ⛔ Additivo come i tre prima: nessuno dei quindici cambia nome, tipo o significato. E il
+ *   `deepEqual` sulle chiavi resta, perché la prossima crescita debba passare da qui invece di
+ *   scivolare dentro in silenzio.
+ */
+test('⭐⭐⭐ CONTRATTO §6.4 — ogni voce di elenca() porta i sedici campi che la sezione legge (dodici di L2 + bilancio, proveDistinte, `modello` da L8, `modelloGiudice` da L9)', async () => {
   const sessioni = new Map();
   const { orch, store, conclusione } = conclusioneDiProva(sessioni);
   const { id } = await orch.avvia({ cartella: '/p', question: 'Quanto costa il caching?', depth: 'deep', padreId: 'madre-1', modello: 'z-ai/glm-5.3-flash' });
@@ -707,8 +727,9 @@ test('⭐⭐⭐ CONTRATTO §6.4 — ogni voce di elenca() porta i quindici campi
   assert.equal(ricerche.length, 1);
   const v = ricerche[0];
   assert.deepEqual(Object.keys(v).sort(), [
-    'avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'id', 'modello', 'motivo', 'nome',
-    'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'stato', 'titolo', 'ultimoMessaggio',
+    'avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'id', 'modello', 'modelloGiudice',
+    'motivo', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'stato',
+    'titolo', 'ultimoMessaggio',
   ], 'il contratto è esattamente questo: il frontend ci sta scrivendo sopra');
   assert.equal(v.modello, 'z-ai/glm-5.3-flash', 'la riga dice con che cosa la ricerca è stata fatta — il 12/09 non lo diceva, e la figlia girava su un altro modello');
   assert.deepEqual(v.bilancio, { totali: 2, sostenute: 0, inParte: 0, nonSostenute: 0, contese: 0, nonVerificate: 2 },
@@ -737,6 +758,7 @@ test('CONTRATTO — una voce vecchia (nata senza padreId/nome/conclusaAlle) non 
   assert.equal(v.conclusaAlle, null, 'mai una data inventata per un campo che non esisteva');
   assert.equal(v.ultimoMessaggio, null);
   assert.equal(v.modello, null, 'L8 — `null` onesto: quella corsa un modello ce l\'ha avuto, ma nessuno l\'ha registrato, e attribuirle quello di oggi sarebbe inventare una scelta');
+  assert.equal(v.modelloGiudice, null, 'L9 — stessa onestà: una ricerca di ieri non ha mai avuto un giudice designato, e dargliene uno adesso sarebbe raccontare una scelta che nessuno ha fatto');
   assert.equal(v.nome, 'Una domanda di ieri');
   assert.equal(v.stato, 'cancelled');
   assert.match(v.motivo, /fermata per sempre/);
