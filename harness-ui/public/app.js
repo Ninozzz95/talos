@@ -16098,33 +16098,16 @@ function creaAttesa({ etichetta: etichetta2 = "Sto pensando…" } = {}, opzioni 
   blocco.setAttribute("aria-live", "polite");
   blocco.setAttribute("aria-atomic", "true");
   const riga = el22(documentObj, "div", "talos-waiting__row");
-  const svg = documentObj.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("class", "talos-line-loader");
-  svg.setAttribute("viewBox", "0 0 96 16");
-  svg.setAttribute("width", "36");
-  svg.setAttribute("height", "6");
-  svg.setAttribute("aria-hidden", "true");
-  for (const classe of ["talos-line-loader-track", "talos-line-loader-sweep"]) {
-    const linea = documentObj.createElementNS(SVG_NS, "line");
-    linea.setAttribute("class", classe);
-    linea.setAttribute("x1", "4");
-    linea.setAttribute("y1", "8");
-    linea.setAttribute("x2", "92");
-    linea.setAttribute("y2", "8");
-    svg.append(linea);
-  }
-  for (const cx of [16, 48, 80]) {
-    const nodo11 = documentObj.createElementNS(SVG_NS, "circle");
-    nodo11.setAttribute("class", "talos-line-loader-node");
-    nodo11.setAttribute("cx", String(cx));
-    nodo11.setAttribute("cy", "8");
-    nodo11.setAttribute("r", "4");
-    svg.append(nodo11);
-  }
+  const orb = el22(documentObj, "span", "talos-orb working");
+  orb.setAttribute("aria-hidden", "true");
+  orb.setAttribute("data-testid", "talos-assistant-orb");
+  const marchio = el22(documentObj, "span", "talos-short-logo");
+  marchio.append(el22(documentObj, "span", "talos-short-logo-mark"));
+  orb.append(marchio);
   const label = el22(documentObj, "span", "talos-waiting__label run-activity-label", etichetta2);
   const elapsed = el22(documentObj, "span", "talos-mono talos-muted run-activity-elapsed", "0s");
   elapsed.setAttribute("aria-hidden", "true");
-  riga.append(svg, label, elapsed);
+  riga.append(orb, label, elapsed);
   blocco.append(riga);
   return { blocco, label, elapsed, fermaMotore: () => {
   } };
