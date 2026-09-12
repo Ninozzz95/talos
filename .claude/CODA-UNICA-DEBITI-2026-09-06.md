@@ -26,7 +26,7 @@ Parole sue, in ordine, e cosa cambia nella coda:
 | voce | parole dell'owner | conseguenza |
 |---|---|---|
 | **BC-13** | «importante, bisogna fare una ricerca delle ultime tecnologie e metodi all'avanguardia, dobbiamo rendere il motore di llm locale estremamente rapido e meglio dei competitor» | **RIDEFINITA**: non più «elenco dei modelli locali istantaneo» ma **velocità del motore locale del desktop** (`llama-server-supervisor.mjs`, llama.cpp b10517): ricerca web sullo stato dell'arte, misura di base su questa macchina, confronto coi concorrenti, cure misurate. Priorità **1** |
-| **BC-15** | «io lo vedo e funziona già, manca verifica dal vivo» | resta aperta SOLO la verifica con un giro vero (costa: si chiede) |
+| **BC-15** | «io lo vedo e funziona già, manca verifica dal vivo» · poi «SI» al giro | ✅ **verificata dal vivo il 12/09 sul 4174** con glm-5.3-flash, sessione `dbf70964`, chiaro e scuro: pannello, «Sto riscrivendo…» fotografato DURANTE, esito in 48 s / 32 s con principi applicati, «Sostituisci» che riempie il composer (1.303 / 1.338 caratteri) e accende Invia, zero errori JS, unica POST quella della rotta. Foto in scratchpad `bc15/` |
 | **BC-12 / BC-14** | «importante anche questo: il pulsante dice serve accesso pieno» | **secondo giro**: la cura di BC-14 dice il vero (il server rifiuta una cartella libera senza «Accesso pieno», `session-registry.mjs:3291`) ma la regola stessa è quella che l'owner non vuole: una cartella scelta a mano deve poter partire con «Scrive nel progetto»/«Chiede prima»/«Solo lettura». Priorità **2** |
 | **BC-10** | «sì, in modalità chat a tutta larghezza» | confermata: margine sinistro pari al destro con la barra di navigazione, solo a tutta larghezza. Priorità **4** |
 | **BC-08** | «importante» | barra di navigazione con anche le risposte del modello. Priorità **3** |
@@ -35,6 +35,12 @@ Parole sue, in ordine, e cosa cambia nella coda:
 | **L10** | «ok, aggiungi anche questo: modalità piano con ricerca strategica a regola d'arte» | **ALLARGATA**: non solo il pulsante di approvazione del piano, ma una **modalità piano** della ricerca approfondita — ricerca strategica preliminare (stato dell'arte: come lo fanno i sistemi di deep research nel 2026), piano a rami proposto e approvato dalla persona, poi la corsa. Dopo L9 |
 | **BC-35** | «ok» | DOCX con titoli di Word + elenchi annidati nel Markdown server. Dopo L9 (stessi file di `src/research/`) |
 | **A/B del banco** | «alla fine» | ⏸ ultimo |
+
+**Decisioni successive (12/09, ore 11:40):** «calm primo» ⇒ fatto (`conCalmPrimo`, solo l'elenco dello studio, non il contratto); riga «Scena del tema» delle Impostazioni ⇒ tolta su mio consiglio (doppia con lo studio, vuota a sfondo spento).
+
+**Trovati nel taccuino durante il giro BC-15 (nuovi, aperti):**
+- **BC-36** — il chip del composer dice «Scrive nel progetto» mentre la testata della stessa sessione dice «Accesso pieno» (sessione `dbf70964`, foto `bc15/dark-3-esito.png`): il chip mostra un valore predefinito, non il permesso della sessione aperta.
+- **BC-37** — la stessa sessione aperta due volte con `passaASessione` mostra due nomi diversi in testata: «Rispondi solo: uno.» e «Compito libero · cartella scelta a mano» (foto `bc15/dark-3-esito.png` e `light-3-esito.png`). Il nome dipende da quale dato arriva prima, non dalla sessione.
 
 ⇒ **Ordine di lavoro dal 12/09, ore 11:** L9 (in corso) → BC-13 · BC-12/14 #2 · BC-08 · BC-10 (in parallelo, file disgiunti) → L10 → BC-35 → P-D…P-L → PO-13 → A/B.
 
