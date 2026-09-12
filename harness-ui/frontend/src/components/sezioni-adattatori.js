@@ -35,7 +35,15 @@
  *   `DELETE` per voce e `POST …/tasks/:id/stato`.
  *   ⇒ La premessa era vera quando è stata scritta e oggi è falsa: si riapre, e si scrive perché.
  *   Note, Attività e Memoria hanno il CRUD completo (ordine dell'owner dell'11/09, «non
- *   negotiable»); Ricerca e Progetti no, perché per loro quelle rotte non esistono ancora.
+ *   negotiable»).
+ *
+ * ⛔⛔ 12/09/2026, SECONDA VOLTA NELLO STESSO GIORNO: qui sotto c'era scritto «Ricerca e Progetti
+ *   no, perché per loro quelle rotte non esistono ancora», e per la **Ricerca** non vale più —
+ *   il lotto L5 ha aperto `GET`/`DELETE` sulla voce e `POST` su pausa, ripresa e ri-verifica
+ *   (`.claude/RAPPORTO-RICERCA-L5-2026-09-12.md` §3), approvate dall'owner. Una premessa vera
+ *   quando è stata scritta e falsa oggi si riapre e si scrive perché — è successo due volte in
+ *   dodici ore, ed è il segno che una frase «non può esistere» va datata, mai lasciata sospesa.
+ *   **Progetti** resta di sola lettura: per quello le rotte non ci sono davvero.
  */
 import { titoloNota, quandoNota, sommarioNote } from './note.js';
 import { genereMemoria, testiMemoria } from './memoria.js';
@@ -48,10 +56,18 @@ import { riepilogoRicerche } from './ricerca.js';
 import {
   frasiVoce, frasiBilancio, bilancioDaRecord, magazzinoRicerche, articoloData,
   montaDettaglioRicerca, vociMenuRicerca, collegaTastoDestro, scaricaTesto, haRapportoLeggibile,
+  /* 12/09 lotto L5 — le azioni di scrittura: quando esistono, come si chiamano le rotte, come si
+     dice a una persona che il server ha detto di no, e l'orologio delle ricerche vive. */
+  paroleErroreRicerca, governoRicercheVive, frasiRiverifica,
+  /* 12/09 L5-bis — la suite di esportazioni: le nove uscite, la loro disponibilità, il pannello. */
+  esportazioniRicerca, montaPannelloEsportazioni, indirizzoEsportazione,
 } from './ricerca-dettaglio.js';
 import { frasiProgetto, sommarioProgetti, ultimeSessioni } from './progetti.js';
 import { plurale } from './plurale.js';
 import { montaSezione, statoSezione, icona } from './sezione-elenco-dettaglio.js';
+/* 12/09 L5 — l'eliminazione di una ricerca è irreversibile: la stessa modale di conferma che usano
+   la Libreria e le tre sezioni scrivibili, mai un `confirm()` del browser né una seconda modale. */
+import { apriModale, chiudiModale, confermaModale } from './modale-td.js';
 import { azioneAnnulla } from './toast.js';
 /* 12/09 lotto CRUD — il modulo crea/modifica, la validazione, le parole e la porta di rete stanno
    in un file loro: uno solo per Note, Attività e Memoria, come `magazziniDellaPersona` lato server. */
@@ -960,6 +976,32 @@ function copiatore(opzioni) {
   return (testo) => globalThis.navigator?.clipboard?.writeText?.(testo);
 }
 
+/**
+ * ⭐⭐⭐ L5 (12/09/2026) — LA PORTA DI RETE DELLA RICERCA APPROFONDITA.
+ *
+ * ⛔ La forma delle rotte sta QUI, una volta sola, come `servizioVoci` per Note/Attività/Memoria:
+ *   nessun indirizzo ricostruito dentro un gestore di click. `rete` sono le funzioni della app
+ *   (`apiPost`/`apiDelete`/`apiGet`), che aprono già la busta `{ok,data}` e lanciano un `Error`
+ *   con `.code` — e il `.code` è l'unica parte VERA che esce da un 400/404/409, perché il
+ *   messaggio lo riscrive `public-problem.mjs`.
+ * ⛔ Senza sessione o senza rete torna `null`, e le quattro voci di menu non si disegnano: un
+ *   comando che non può funzionare non si mostra.
+ * ⛔ Le tre azioni mandano il corpo `{}`: la rotta rifiuta con 400 QUALUNQUE chiave (allowlist
+ *   vuota, `http-app.mjs:1416-1436`), e `{}` è la forma che il contratto dichiara lecita.
+ */
+export function servizioRicerche({ sessionId, rete } = {}) {
+  if (!sessionId || typeof rete?.post !== 'function' || typeof rete?.elimina !== 'function') return null;
+  const base = `/api/v1/sessions/${encodeURIComponent(sessionId)}/research`;
+  const voceUrl = (id) => `${base}/${encodeURIComponent(String(id ?? ''))}`;
+  return {
+    leggi: typeof rete.leggi === 'function' ? (id) => rete.leggi(voceUrl(id)) : null,
+    pausa: (id) => rete.post(`${voceUrl(id)}/pausa`, {}),
+    ripresa: (id) => rete.post(`${voceUrl(id)}/ripresa`, {}),
+    riverifica: (id) => rete.post(`${voceUrl(id)}/riverifica`, {}),
+    elimina: (id) => rete.elimina(voceUrl(id)),
+  };
+}
+
 export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   const elenco = Array.isArray(ricerche) ? ricerche : [];
   const magazzino = magazzinoRicerche(schermo);
@@ -988,10 +1030,207 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     return chiave ? magazzino.rapporti.get(chiave) || null : null;
   }
 
+  /* ------------------------------------ L5 (12/09): le quattro azioni di scrittura ------------ */
+
+  const servizio = servizioRicerche({ sessionId: opzioni.sessionId, rete: opzioni.rete });
+  /* ⛔ Il dettaglio si legge dalla rotta di L5 quando c'è, e si può scavalcare (test, laboratorio):
+     stessa iniezione di `leggiRapporto`, così il banco non finge una rete. */
+  const leggiDettaglio = typeof opzioni.leggiDettaglio === 'function' ? opzioni.leggiDettaglio
+    : (servizio?.leggi ? async (voce) => (await servizio.leggi(voce?.id))?.ricerca ?? null : null);
+
+  /**
+   * Ricarica l'elenco. `onAggiorna` è la via vera (la app rifà la GET); `ridisegna` è il ripiego
+   * per il laboratorio e per i test, dove nessuno ricarica niente.
+   * ⛔ Si fa SEMPRE, anche dopo un errore: uno schermo che mostra lo stato di prima di un rifiuto
+   *   è la stessa bugia che questo lotto sta togliendo.
+   */
+  function ricarica() {
+    if (typeof opzioni.onAggiorna === 'function') opzioni.onAggiorna();
+    else ridisegna();
+  }
+
+  /**
+   * ⛔⛔ LA RISPOSTA DELL'AZIONE È LA VOCE AGGIORNATA (contratto L5 §4.3), e si scrive **subito**
+   *   nella riga che la persona sta guardando invece di aspettare il giro di ricarica: senza,
+   *   fra il «fatto» del messaggio e il ridisegno c'è una finestra in cui il timbro dice ancora
+   *   lo stato vecchio. Il ricaricamento resta, ed è quello che comanda.
+   * ⛔ Si scrive nello STESSO oggetto che l'elenco tiene (`Object.assign`): una copia nuova non
+   *   sarebbe quella che `montaSezione` ridisegna.
+   */
+  function aggiornaVoceInElenco(aggiornata) {
+    if (!aggiornata?.id) return;
+    const vecchia = trovaVoce(aggiornata.id);
+    if (vecchia) Object.assign(vecchia, aggiornata);
+    /* La scheda intera appena letta vale anche come dettaglio: niente seconda GET. */
+    magazzino.dettagli.set(String(aggiornata.id), { stato: 'pronto', ricerca: aggiornata });
+  }
+
+  function guasto(errore, azione) {
+    avvisa('Non riuscito', paroleErroreRicerca(errore?.code, azione), { tono: 'errore' });
+  }
+
+  /*
+   * ⛔⛔⛔ LA PAUSA È UNA RICHIESTA, NON UN FATTO — contratto L5 §4.3, verbatim: «Il frontend non
+   *   deve promettere "in pausa" sulla risposta: deve mostrare ciò che la voce dice». Il passaggio
+   *   a «in pausa» avviene al punto sicuro, perché in mezzo c'è del denaro. ⇒ il messaggio dice
+   *   quello che lo `stato` della voce dice DAVVERO, e sono due frasi diverse.
+   */
+  async function pausa(voce) {
+    try {
+      const dati = await servizio.pausa(voce?.id);
+      aggiornaVoceInElenco(dati?.ricerca);
+      avvisa(dati?.ricerca?.stato === 'paused' ? 'In pausa' : 'Pausa chiesta',
+        dati?.ricerca?.stato === 'paused'
+          ? 'La ricerca è ferma: riprendila quando vuoi, dallo stesso menu.'
+          : 'La ricerca si fermerà al primo punto sicuro: fin lì il lavoro già pagato non si butta.');
+    } catch (errore) { guasto(errore, 'pausa'); }
+    ricarica();
+  }
+
+  async function riprendi(voce) {
+    try {
+      const dati = await servizio.ripresa(voce?.id);
+      aggiornaVoceInElenco(dati?.ricerca);
+      avvisa('Ripresa', 'La ricerca riparte dal punto in cui si era fermata, non da capo.');
+    } catch (errore) { guasto(errore, 'ripresa'); }
+    ricarica();
+  }
+
+  /*
+   * ⛔⛔ LA RI-VERIFICA ESCE IN RETE e può durare: apre fino a venti pagine, una alla volta. Quindi
+   *   si dichiara PRIMA («sto rileggendo…»), si apre la vista Fonti dove l'esito comparirà, e si
+   *   ridisegna subito — altrimenti la persona preme e non succede niente per mezzo minuto.
+   * ⛔ L'esito NON è persistito dal server (rapporto L5 §6.2): vive qui, nel magazzino dello
+   *   schermo, e sparisce alla prossima apertura. Detto qui perché nessuno lo scambi per un dato
+   *   salvato — «l'esito dell'ultima ri-verifica con la data» è ancora da fare.
+   */
+  async function riverifica(voce) {
+    const id = String(voce?.id);
+    magazzino.viste.set(id, 'fonti');
+    magazzino.riverifiche.set(id, { stato: 'in-corso' });
+    ridisegna();
+    /*
+     * ⛔⛔ TROVATO GUARDANDO LE FOTO (12/09, `riverifica-dark-1440` e `riverifica_no-light-1440`):
+     *   il toast ripeteva PAROLA PER PAROLA la frase che il pannello aveva appena scritto, e per
+     *   giunta ci finiva sopra — il messaggio copriva l'esito che annunciava. Due volte la stessa
+     *   cosa non è il doppio dell'informazione: è metà dello schermo in meno.
+     * ⇒ Il messaggio si manda SOLO quando quella ricerca non è quella aperta nel dettaglio, cioè
+     *   quando l'azione è partita dal tasto destro su una scheda e l'esito non si vedrebbe da
+     *   nessuna parte. Quando il pannello c'è, l'annuncio lo fa lui: è un `role="status"`, che
+     *   WCAG 2.2 SC 4.1.3 considera proprio l'annuncio dell'esito di un'azione.
+     */
+    const aperta = String(statoSezione(schermo)?.selezione ?? '') === id;
+    try {
+      const dati = await servizio.riverifica(id);
+      magazzino.riverifiche.set(id, { stato: 'pronto', esito: dati?.riverifica || null });
+      if (!aperta) avvisa('Fonti rilette', frasiRiverifica(dati?.riverifica));
+    } catch (errore) {
+      const parole = paroleErroreRicerca(errore?.code, 'riverifica');
+      magazzino.riverifiche.set(id, { stato: 'errore', errore: parole });
+      if (!aperta) avvisa('Non riuscito', parole, { tono: 'errore' });
+    }
+    ridisegna();
+  }
+
+  /*
+   * ⛔⛔⛔ L'ELIMINAZIONE È IRREVERSIBILE, E LA CONSEGUENZA È DOPPIA. NN/g «Confirmation Dialogs
+   *   Can Prevent User Errors» (letta il 12/09/2026): la conferma serve alle azioni con
+   *   conseguenze gravi, deve dire con precisione che cosa sta per succedere, e i pulsanti devono
+   *   nominare l'azione invece di rispondere «sì/no».
+   * ⛔ «e il rapporto in Libreria» non è una frase di colore: `elimina()` dell'orchestratore
+   *   cancella PRIMA la voce di Libreria e poi la cartella della ricerca
+   *   (`research-orchestrator.mjs:1083-1094`). Verificato nel codice, non dedotto dal nome.
+   * ⛔ Niente toast con «Annulla», e non per dimenticanza: l'annullamento sostituisce la conferma
+   *   quando l'azione si può disfare, e questa no — non c'è un cestino, e il rapporto se n'è
+   *   andato con la cartella.
+   */
+  function elimina(voce) {
+    const titolo = frasiVoce(voce).domanda;
+    /* ⛔ VISTO NELLA FOTO (`elimina-light-1024`): una domanda lunga occupava tre righe della modale
+       e spingeva la conseguenza — la riga che conta — sotto il bordo dell'attenzione. Si cita
+       quanto basta a riconoscere quale ricerca è, non tutto il testo. */
+    const citato = titolo.length > 110 ? `${titolo.slice(0, 110).trimEnd()}…` : titolo;
+    confermaModale({
+      document: schermo.ownerDocument || globalThis.document,
+      titolo: 'Elimino la ricerca?',
+      domanda: `«${citato}» viene cancellata dal disco insieme al suo rapporto in Libreria.`,
+      conseguenza: 'Non c’è un cestino: spariscono anche le fonti raccolte e il giornale di bordo, e nessuno potrà più rileggerli.',
+      etichettaConferma: 'Elimina la ricerca',
+      onConferma: async () => {
+        try {
+          await servizio.elimina(voce?.id);
+          const dove = elenco.findIndex((r) => String(r?.id) === String(voce?.id));
+          if (dove >= 0) elenco.splice(dove, 1);
+          /* ⛔ Il dettaglio aperto era QUELLO: lasciarlo aperto mostrerebbe una scheda di una cosa
+             che non esiste più. Si chiude, e l'elenco torna quello vero. */
+          const st = statoSezione(schermo);
+          if (st && String(st.selezione) === String(voce?.id)) st.selezione = null;
+          magazzino.dettagli.delete(String(voce?.id));
+          magazzino.riverifiche.delete(String(voce?.id));
+          avvisa('Eliminata', `«${titolo}» non c’è più.`);
+        } catch (errore) { guasto(errore, 'elimina'); }
+        ricarica();
+      },
+    });
+  }
+
+  /*
+   * ⭐⭐⭐ LA SUITE DI ESPORTAZIONI — ordine dell'owner del 12/09: «completa».
+   *
+   * ⛔ SI APRE UN LINK, NON SI FA UN `fetch`: la rotta risponde con `Content-Disposition:
+   *   attachment`, cioè dice già al browser di salvare invece di navigare (MDN, letta il
+   *   12/09/2026). Passare da `fetch` + `Blob` vorrebbe dire tenere in memoria un PDF intero per
+   *   riottenere ciò che il browser fa da solo, e perdere la barra dei download.
+   * ⛔ `download` SENZA valore, e non è una dimenticanza: quando l'intestazione porta un `filename`
+   *   quello **vince** sull'attributo (MDN, stesso giorno) ⇒ un nome messo qui sarebbe ignorato dal
+   *   server e creduto da noi. Il nome lo decide chi scrive il file.
+   * ⛔ IL 409 NON SI RAGGIUNGE quasi mai, perché le uscite che il server rifiuterebbe sono già
+   *   SPENTE nel pannello, con scritto il motivo (`esportazioniRicerca`). Resta un caso che non
+   *   copro: se il record sparisse fra l'apertura del pannello e il clic, il browser aprirebbe la
+   *   busta JSON invece di scaricare. Dichiarato nel rapporto, non nascosto.
+   */
+  function esportazioni(voce) {
+    const doc = schermo.ownerDocument || globalThis.document;
+    const elenco = esportazioniRicerca(voce, letturaDi(voce));
+    apriModale('Esporta la ricerca', montaPannelloEsportazioni(doc, elenco, {
+      onScegli: (uscita) => { chiudiModale(); esegui(voce, uscita); },
+    }), { document: doc });
+  }
+
+  function esegui(voce, uscita) {
+    if (uscita.chiave === 'copia') {
+      Promise.resolve(copia(uscita.testo)).then(
+        () => avvisa('Copiato', 'Il testo del rapporto è negli appunti.'),
+        () => avvisa('Non copiato', 'Gli appunti non sono disponibili in questa finestra.', { tono: 'errore' }),
+      );
+      return;
+    }
+    const doc = schermo.ownerDocument || globalThis.document;
+    const a = doc.createElement('a');
+    a.href = indirizzoEsportazione(opzioni.sessionId, voce?.id, uscita.formato, uscita.tono);
+    a.download = '';
+    a.rel = 'noopener';
+    doc.body?.append(a);
+    a.click();
+    a.remove();
+    /*
+     * ⛔ Il messaggio nomina il FORMATO, non un nome di file: quello lo sceglie il server (vedi
+     *   sopra), e annunciarne uno diverso da quello salvato è una bugia gratuita. L'azione si
+     *   chiama come la riga che è stata premuta, dall'inizio alla fine.
+     */
+    avvisa('Esportato', `${uscita.etichetta}: il file è nella cartella dei download.`);
+  }
+
   function apriMenu(voce, dove) {
     const voci = vociMenuRicerca(voce, {
       lettura: letturaDi(voce),
+      /* La suite vuole la rotta, cioè la sessione: senza, il menu resta quello di ieri. */
+      onEsportazioni: opzioni.sessionId ? esportazioni : null,
       onApriSessione: opzioni.onApriSessione,
+      onPausa: servizio ? pausa : null,
+      onRiprendi: servizio ? riprendi : null,
+      onRiverifica: servizio ? riverifica : null,
+      onElimina: servizio ? elimina : null,
       onCopia: (prosa, quale) => {
         /* ⛔ Anche il messaggio d'esito diceva «rapporto» su un file che rapporto non è: la parola
            si decide in un posto solo, e questo è uno dei quattro posti dov'era sbagliata. */
@@ -1027,7 +1266,7 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     if (p.textContent.includes('.harness-ui-research') || p.textContent.includes('non è ancora disponibile')) p.textContent = spiegazioneVera;
   }
 
-  return montaSezione(schermo, {
+  const visibili = montaSezione(schermo, {
     chiave: 'ricerca',
     nome: 'Ricerca',
     icona: 'globe',
@@ -1124,6 +1363,7 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       apriMenu,
       opzioni: {
         leggiRapporto,
+        leggiDettaglio,
         onApriSessione: opzioni.onApriSessione,
         rendiMarkdown: opzioni.rendiMarkdown,
       },
@@ -1133,6 +1373,18 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       testo: 'Chiedi in chat di avviare una ricerca approfondita: comparirà qui mentre lavora, e ci resterà col suo rapporto.',
     },
   });
+
+  /*
+   * ⭐⭐⭐ 12/09 — LA SCHEDA CHE RESTAVA «IN CORSO». Dopo aver disegnato, si guarda se qualcosa può
+   *   ancora cambiare da solo: se sì, fra trenta secondi si richiede l'elenco; se no, l'orologio
+   *   si spegne. ⛔ Dopo `montaSezione` e non prima: `governoRicercheVive` cancella il timer
+   *   precedente a ogni giro, e un disegno che finisse in eccezione lascerebbe un orologio armato
+   *   su dati che nessuno ha mostrato.
+   * ⛔ `onAggiorna` e non `ridisegna`: ridisegnare gli STESSI dati non cambierebbe niente e
+   *   ripartirebbe il timer all'infinito — il punto è richiedere l'elenco al server.
+   */
+  governoRicercheVive(schermo, { elenco, aggiorna: opzioni.onAggiorna });
+  return visibili;
 }
 
 /* --------------------------------------------------------------------------------- PROGETTI */
