@@ -23,6 +23,9 @@ import { preparaRichiestaCompatibile, OpenAiCompatibleRuntimeError } from './ope
 // P-L · ponte locale senza listener, sessione esterna posseduta dalla Response.
 import { rispostaAgenteAcp } from './acp-agent.mjs';
 // P-L · fine import instradamento.
+// BC-48 A · sezioni di progetto nel canale degli originali, prima della richiesta.
+import { trovaIstruzioniDiProgetto, trovaRadiceProgetto } from './istruzioni-di-progetto.mjs';
+import { collegaSezioniAiContextHooks } from './context-provider-adapter.mjs';
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
 const RICHIESTA_DI_RIASSUNTO = 'Riassumi la conversazione mantenendo decisioni, file e risultati utili al lavoro.';
@@ -1021,7 +1024,18 @@ export function createOwnerRuntimeAdapter({
         fetchConImmagini.eseguiConFallback = (chiama, opzioni) => fetchInstradata.eseguiConFallback(aggiunte =>
           chiama({ ...aggiunte, fetchDiRete: (url, init) => fetchConImmagini(url, init, aggiunte.fetchDiRete) }), opzioni);
       }
-      return richiama('talosLavora', { ...input, fetchDiRete: fetchConImmagini });
+      // BC-48 A: lo stesso confine di fetchConImmagini, ma PRIMA della serializzazione:
+      // una modifica soltanto del body non resterebbe nello storico della sessione.
+      // Gli hook legacy non vengono inventati: ciò disabiliterebbe la loro compattazione.
+      let contextHooks = input?.contextHooks;
+      if (contextHooks && input?.cartella && !input?.mobile) {
+        const [file, radice] = await Promise.all([
+          trovaIstruzioniDiProgetto(input.cartella), trovaRadiceProgetto(input.cartella),
+        ]);
+        contextHooks = collegaSezioniAiContextHooks({ contextHooks, file, cartella: input.cartella, radice: radice ?? input.cartella });
+      }
+      return richiama('talosLavora', { ...input, contextHooks, fetchDiRete: fetchConImmagini });
+      // BC-48 A · fine collegamento.
     },
     /** One bounded summary request through the same provider adapters as chat. */
     async callContextModel({ provider, model, messages, maxOutputTokens, signal, fetchDiRete = fetch }) {
