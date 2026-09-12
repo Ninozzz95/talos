@@ -3925,18 +3925,21 @@ function barraBilancio(doc, bilancio) {
   blocco.append(voci);
   return blocco;
 }
-function vistaRapporto(doc, voce, lettura, ctx) {
+function vistaRapporto(doc, voce, lettura, ctx, dettaglio) {
   const pezzi = [];
   const frasi = frasiVoce(voce);
+  const deposito = testoDepositato(voce, lettura, dettaglio);
   if (!haRapportoLeggibile(voce)) {
-    pezzi.push(nodo4(doc, "p", "td-prose", conclusaDavvero(voce?.stato) ? "Questa ricerca risulta conclusa, ma non ha depositato nessun rapporto." : "Questa ricerca non ha depositato un rapporto."));
+    const respinto = deposito.genere === "respinto";
+    pezzi.push(nodo4(doc, "p", "td-prose", respinto ? "Quello che questa ricerca ha depositato non ha superato il controllo di consegna: qui sotto c’è per intero." : conclusaDavvero(voce?.stato) ? "Questa ricerca risulta conclusa, ma non ha depositato nessun rapporto." : "Questa ricerca non ha depositato un rapporto."));
     if (conclusaDavvero(voce?.stato)) pezzi.push(nodo4(doc, "p", "td-subtle", frasi.spiegazione));
-    if (frasi.haRapporto) {
+    if (frasi.haRapporto || deposito.genere === "respinto") {
       pezzi.push(nodo4(doc, "h3", "", "Ciò che è stato depositato"));
-      pezzi.push(nodo4(doc, "p", "td-subtle", "Il file che questa ricerca ha lasciato in Libreria. Non è il suo rapporto."));
-      if (lettura?.stato === "pronto") {
-        const deposto = (lettura.prosa || lettura.testo || "").trim();
-        pezzi.push(deposto ? nodo4(doc, "blockquote", "td-allegato", deposto) : nodo4(doc, "p", "td-subtle", "Il file depositato è vuoto."));
+      pezzi.push(nodo4(doc, "p", "td-subtle", frasi.haRapporto ? "Il file che questa ricerca ha lasciato in Libreria. Non è il suo rapporto." : "Il testo che questa ricerca ha scritto, tenuto nella sua cartella. Non è il suo rapporto."));
+      if (deposito.genere === "respinto") {
+        pezzi.push(nodo4(doc, "blockquote", "td-allegato", deposito.testo));
+      } else if (lettura?.stato === "pronto") {
+        pezzi.push(nodo4(doc, "p", "td-subtle", "Il file depositato è vuoto."));
       } else if (lettura?.stato === "errore") {
         const p = nodo4(doc, "p", "td-subtle", `Il file depositato non si apre: ${lettura.errore}`);
         p.setAttribute("role", "alert");
@@ -4018,16 +4021,45 @@ function vistaAffermazioni(doc, voce, lettura) {
     return blocco;
   });
 }
-function esportazioniRicerca(voce, lettura = null) {
-  const haRapporto = haRapportoLeggibile(voce);
+function testoDepositato(voce, lettura = null, dettaglio = null) {
+  const ricerca = dettaglio?.stato === "pronto" ? dettaglio.ricerca : null;
   const letto = lettura?.stato === "pronto";
-  const senzaRecord = letto && !lettura.record;
+  const daLibreria = letto ? String(lettura.prosa || lettura.testo || "").trim() : "";
+  const accettato = String(ricerca?.contenutoRapporto ?? "").trim();
+  const respinto = String(ricerca?.contenutoRespinto ?? "").trim();
+  const ultimo = String(voce?.ultimoMessaggio ?? "").trim();
+  if (haRapportoLeggibile(voce) && (daLibreria || accettato)) {
+    return { testo: daLibreria || accettato, genere: "rapporto", nome: "il rapporto", suDisco: true };
+  }
+  if (respinto || daLibreria) {
+    return { testo: respinto || daLibreria, genere: "respinto", nome: "il file depositato", suDisco: true };
+  }
+  if (ultimo) return { testo: ultimo, genere: "ultimo", nome: "l’ultimo messaggio", suDisco: false };
+  return { testo: "", genere: null, nome: null, suDisco: false };
+}
+function serverHaTestoDaImpaginare(voce, lettura = null, dettaglio = null) {
+  return haRapportoLeggibile(voce) || testoDepositato(voce, lettura, dettaglio).genere === "respinto";
+}
+function haQualcosaDaEsportare(voce, lettura = null, dettaglio = null) {
+  return serverHaTestoDaImpaginare(voce, lettura, dettaglio) || Boolean(testoDepositato(voce, lettura, dettaglio).testo);
+}
+function recordDisponibile(lettura = null, dettaglio = null) {
+  const ricerca = dettaglio?.stato === "pronto" ? dettaglio.ricerca : null;
+  if (lettura?.stato === "pronto") return Boolean(lettura.record);
+  if (ricerca) return Array.isArray(ricerca.affermazioni);
+  return null;
+}
+function esportazioniRicerca(voce, lettura = null, dettaglio = null) {
+  const deposito = testoDepositato(voce, lettura, dettaglio);
+  const impaginabile = serverHaTestoDaImpaginare(voce, lettura, dettaglio);
+  const senzaRecord = recordDisponibile(lettura, dettaglio) === false;
   return FORMATI_ESPORTAZIONE.map((uscita) => {
     if (uscita.chiave === "copia") {
-      const testo3 = letto ? lettura.prosa || lettura.testo || "" : "";
-      return { ...uscita, disponibile: Boolean(testo3), motivo: testo3 ? null : MOTIVI_ESPORTAZIONE.senzaTesto, testo: testo3 };
+      return { ...uscita, disponibile: Boolean(deposito.testo), motivo: deposito.testo ? null : MOTIVI_ESPORTAZIONE.senzaTesto, testo: deposito.testo };
     }
-    if (!haRapporto) return { ...uscita, disponibile: false, motivo: MOTIVI_ESPORTAZIONE.senzaRapporto };
+    if (!impaginabile) {
+      return { ...uscita, disponibile: false, motivo: deposito.testo ? MOTIVI_ESPORTAZIONE.soloUltimoMessaggio : MOTIVI_ESPORTAZIONE.senzaRapporto };
+    }
     if (uscita.vuoleRecord && senzaRecord) return { ...uscita, disponibile: false, motivo: MOTIVI_ESPORTAZIONE.senzaRecord };
     const avvertenza = senzaRecord ? "esce senza le verifiche" : null;
     return { ...uscita, disponibile: true, motivo: null, avvertenza };
@@ -4256,7 +4288,7 @@ function contenutoVista(doc, id, voce, lettura, ctx, dettaglio) {
     case "andata":
       return vistaAndata(doc, voce, ctx, dettaglio);
     default:
-      return vistaRapporto(doc, voce, lettura, ctx);
+      return vistaRapporto(doc, voce, lettura, ctx, dettaglio);
   }
 }
 function vociMenuRicerca(voce, ctx = {}) {
@@ -4267,12 +4299,11 @@ function vociMenuRicerca(voce, ctx = {}) {
   if (typeof ctx.onApriSessione === "function" && voce?.id) {
     voci.push({ chiave: "apri-conversazione", etichetta: "Apri la conversazione", icona: "i-eye", aziona: () => ctx.onApriSessione({ id: voce.id }) });
   }
-  const suite = typeof ctx.onEsportazioni === "function" && haRapportoLeggibile(voce);
-  if (pronto && lettura.prosa) {
-    const rapporto = haRapportoLeggibile(voce);
-    const cosa = rapporto ? "il rapporto" : "il file depositato";
-    voci.push({ chiave: "copia", etichetta: `Copia ${cosa}`, icona: "i-copy", aziona: () => ctx.onCopia?.(lettura.prosa, voce) });
-    if (!suite) voci.push({ chiave: "esporta", etichetta: `Esporta ${cosa}`, icona: "i-download", aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, "md"), lettura.testo || lettura.prosa, "text/markdown") });
+  const deposito = testoDepositato(voce, lettura, ctx.dettaglio);
+  const suite = typeof ctx.onEsportazioni === "function" && haQualcosaDaEsportare(voce, lettura, ctx.dettaglio);
+  if (deposito.testo) {
+    voci.push({ chiave: "copia", etichetta: `Copia ${deposito.nome}`, icona: "i-copy", aziona: () => ctx.onCopia?.(deposito.testo, voce) });
+    if (!suite && deposito.suDisco) voci.push({ chiave: "esporta", etichetta: `Esporta ${deposito.nome}`, icona: "i-download", aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, "md"), deposito.testo, "text/markdown") });
   }
   if (suite) {
     voci.push({ chiave: "esporta-suite", etichetta: "Esporta…", icona: "i-download", aziona: () => ctx.onEsportazioni(voce) });
@@ -4547,9 +4578,12 @@ var init_ricerca_dettaglio = __esm({
       { id: "appunti", parola: "Senza file" }
     ];
     MOTIVI_ESPORTAZIONE = {
-      senzaRapporto: "Questa ricerca non ha depositato un rapporto: non c’è niente da esportare.",
-      senzaRecord: "Il rapporto non porta con sé il riepilogo delle verifiche: senza quello non ci sono affermazioni né fonti da estrarre.",
-      senzaTesto: "Il testo del rapporto non è ancora stato letto da questa schermata."
+      senzaRapporto: "Questa ricerca non ha depositato nessun testo: non c’è niente da esportare.",
+      senzaRecord: "Il testo non porta con sé il riepilogo delle verifiche: senza quello non ci sono affermazioni né fonti da estrarre.",
+      senzaTesto: "Il testo del rapporto non è ancora stato letto da questa schermata.",
+      /* ⛔ L'ultima frase detta in chat non è un documento, e un PDF che la impagina sarebbe un
+         documento che finge di essere un rapporto. Si può copiare: è quello che vale. */
+      soloUltimoMessaggio: "Di questa ricerca resta solo l’ultima frase detta in chat: si può copiare, ma non è un documento da impaginare."
     };
     PASSI_RICERCA = /* @__PURE__ */ new Map([
       ["search", "Ricerca sul web"],
@@ -7602,6 +7636,9 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     const chiave = String(voce?.reportLibraryId ?? "");
     return chiave ? magazzino.rapporti.get(chiave) || null : null;
   }
+  function dettaglioDi(voce) {
+    return magazzino.dettagli.get(String(voce?.id ?? "")) || null;
+  }
   const servizio = servizioRicerche({ sessionId: opzioni.sessionId, rete: opzioni.rete });
   const leggiDettaglio = typeof opzioni.leggiDettaglio === "function" ? opzioni.leggiDettaglio : servizio?.leggi ? async (voce) => (await servizio.leggi(voce?.id))?.ricerca ?? null : null;
   function ricarica() {
@@ -7683,9 +7720,20 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       }
     });
   }
-  function esportazioni(voce) {
+  async function esportazioni(voce) {
     const doc = schermo.ownerDocument || globalThis.document;
-    const elenco3 = esportazioniRicerca(voce, letturaDi(voce));
+    const id = String(voce?.id ?? "");
+    if (id && !dettaglioDi(voce) && typeof leggiDettaglio === "function") {
+      magazzino.dettagli.set(id, { stato: "caricando" });
+      try {
+        const ricerca = await leggiDettaglio(voce);
+        magazzino.dettagli.set(id, ricerca ? { stato: "pronto", ricerca } : { stato: "errore", errore: "scheda non disponibile" });
+      } catch (errore) {
+        magazzino.dettagli.set(id, { stato: "errore", errore: errore?.message || "motivo non registrato" });
+      }
+      ridisegna();
+    }
+    const elenco3 = esportazioniRicerca(voce, letturaDi(voce), dettaglioDi(voce));
     apriModale("Esporta la ricerca", montaPannelloEsportazioni(doc, elenco3, {
       onScegli: (uscita) => {
         chiudiModale();
@@ -7714,6 +7762,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   function apriMenu(voce, dove) {
     const voci = vociMenuRicerca(voce, {
       lettura: letturaDi(voce),
+      dettaglio: dettaglioDi(voce),
       /* La suite vuole la rotta, cioè la sessione: senza, il menu resta quello di ieri. */
       onEsportazioni: opzioni.sessionId ? esportazioni : null,
       onApriSessione: opzioni.onApriSessione,
