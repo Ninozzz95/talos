@@ -2185,6 +2185,7 @@ var init_en = __esm({
         "eliminazione di una memoria": "deleting a memory",
         "eliminazione di una nota": "deleting a note",
         "eliminazione di una ricerca": "deleting a research",
+        "consegna del rapporto di ricerca": "delivering the research report",
         "eliminazione di un’attività": "deleting a task",
         "esecuzione dei test": "running the tests",
         "generazione di un’immagine": "generating an image",
@@ -2970,7 +2971,9 @@ var init_nomi_attrezzi = __esm({
       research_pause: "pausa di una ricerca",
       research_resume: "ripresa di una ricerca",
       research_cancel: "annullamento di una ricerca",
-      research_delete: "eliminazione di una ricerca"
+      research_delete: "eliminazione di una ricerca",
+      research_deposit: "consegna del rapporto di ricerca"
+      // 12/09: visto «research_deposit…» a schermo nel giro L8 — un nome tecnico in UI viola la regola del 04/09
     });
     DESCRIZIONI_ATTREZZI = Object.freeze({
       elenca: "Guarda quali file ci sono nella cartella del progetto, ai primi livelli.",
@@ -3015,6 +3018,7 @@ var init_nomi_attrezzi = __esm({
       research_resume: "Riprende una ricerca in pausa da dove si era fermata.",
       research_cancel: "Ferma una ricerca per sempre. Quello che ha raccolto resta leggibile.",
       research_delete: "Cancella una ricerca e il suo rapporto, per sempre.",
+      research_deposit: "Deposita il rapporto della ricerca, con le affermazioni e le fonti, nel posto della ricerca.",
       tool_create: "Costruisce un attrezzo nuovo, descritto a parole, che TALOS potrà chiamare da qui in avanti."
     });
   }
@@ -3565,6 +3569,23 @@ function conclusaDavvero(stato) {
 function haRapportoLeggibile(voce) {
   return conclusaDavvero(voce?.stato) && Boolean(voce?.reportLibraryId);
 }
+function puoMettereInPausa(voce) {
+  return voce?.stato === "running";
+}
+function puoRiprendere(voce) {
+  return voce?.stato === "paused" || voce?.stato === "failed";
+}
+function puoRicontrollareLeFonti(voce) {
+  return haRapportoLeggibile(voce);
+}
+function paroleErroreRicerca(codice, azione) {
+  const quale = AZIONI_RICERCA.get(azione) || { verbo: "fare questo", conflitto: "Questa ricerca non è nello stato giusto per questa azione." };
+  if (codice === "RESEARCH_NOT_FOUND") return "Questa ricerca non c’è più: qualcuno l’ha eliminata mentre era aperta. Aggiorna l’elenco.";
+  if (codice === "RESEARCH_CONFLICT" || codice === "RESEARCH_RECHECK_UNAVAILABLE") return quale.conflitto;
+  if (codice === "NOT_FOUND") return "La sessione non è più aperta: riapri una conversazione e riprova.";
+  if (codice === "RESEARCH_INVALID" || codice === "QUERY_INVALID") return "Il server ha rifiutato la richiesta. Riapri la ricerca dall’elenco e riprova.";
+  return `Non sono riuscito a ${quale.verbo}: riprova fra un momento.`;
+}
 function dataOra(iso) {
   const d = iso ? new Date(iso) : null;
   if (!d || !Number.isFinite(d.getTime())) return null;
@@ -3758,10 +3779,60 @@ function nomeFileRapporto(domanda, estensione) {
 function magazzinoRicerche(schermo) {
   let magazzino = MAGAZZINI.get(schermo);
   if (!magazzino) {
-    magazzino = { rapporti: /* @__PURE__ */ new Map(), viste: /* @__PURE__ */ new Map(), collegato: false };
+    magazzino = {
+      rapporti: /* @__PURE__ */ new Map(),
+      viste: /* @__PURE__ */ new Map(),
+      collegato: false,
+      /* L5 (12/09): la scheda intera letta da `GET …/research/:id` (piano, passi, spesa, giornale)
+         e l'esito dell'ultima ri-verifica, che il server NON persiste (rapporto L5 §6.2). */
+      dettagli: /* @__PURE__ */ new Map(),
+      riverifiche: /* @__PURE__ */ new Map(),
+      orologio: null
+    };
     MAGAZZINI.set(schermo, magazzino);
   }
+  if (!magazzino.dettagli) magazzino.dettagli = /* @__PURE__ */ new Map();
+  if (!magazzino.riverifiche) magazzino.riverifiche = /* @__PURE__ */ new Map();
   return magazzino;
+}
+function ricercheInCorso(elenco2) {
+  return (Array.isArray(elenco2) ? elenco2 : []).filter((r) => r?.stato === "running");
+}
+function governoRicercheVive(schermo, {
+  elenco: elenco2,
+  aggiorna,
+  intervallo = INTERVALLO_RICERCHE_VIVE,
+  avvia = setTimeout,
+  ferma = clearTimeout
+} = {}) {
+  const magazzino = magazzinoRicerche(schermo);
+  if (magazzino.orologio) {
+    ferma(magazzino.orologio);
+    magazzino.orologio = null;
+  }
+  const vive2 = ricercheInCorso(elenco2).length;
+  if (!vive2 || typeof aggiorna !== "function" || schermo?.hidden === true) return { vive: vive2, acceso: false };
+  magazzino.orologio = avvia(() => {
+    magazzino.orologio = null;
+    aggiorna();
+  }, intervallo);
+  return { vive: vive2, acceso: true };
+}
+function statoFonteRiverifica(stato) {
+  return STATI_FONTE_RIVERIFICA.get(stato) || { parola: "esito non registrato", tono: "", spiega: "Il server non dice com’è andata su questa fonte." };
+}
+function frasiRiverifica(riverifica) {
+  const b = riverifica?.bilancio || {};
+  const fonti = Number(b.fonti) || 0;
+  if (!fonti) return "Nessuna fonte da ricontrollare in questo rapporto.";
+  const pezzi = [];
+  if (b.passaggiPersi > 0) pezzi.push(`${b.passaggiPersi} ${b.passaggiPersi === 1 ? "passaggio non si ritrova più" : "passaggi non si ritrovano più"}`);
+  if (b.passaggiRitrovati > 0) pezzi.push(`${b.passaggiRitrovati} ancora al loro posto`);
+  if (b.cambiate > 0) pezzi.push(`${b.cambiate} ${b.cambiate === 1 ? "pagina cambiata" : "pagine cambiate"}`);
+  if (b.irraggiungibili > 0) pezzi.push(`${b.irraggiungibili} ${b.irraggiungibili === 1 ? "non si apre" : "non si aprono"}`);
+  if (b.nonMisurabili > 0) pezzi.push(`${b.nonMisurabili} non confrontabili`);
+  const testa = `${fonti} ${fonti === 1 ? "fonte riletta" : "fonti rilette"}`;
+  return pezzi.length ? `${testa}: ${pezzi.join(" · ")}` : testa;
 }
 function nodo4(doc, tag2, classe, testo3) {
   const el25 = doc.createElement(tag2);
@@ -3947,14 +4018,126 @@ function vistaAffermazioni(doc, voce, lettura) {
     return blocco;
   });
 }
-function vistaFonti(doc, voce, lettura) {
+function esportazioniRicerca(voce, lettura = null) {
+  const haRapporto = haRapportoLeggibile(voce);
+  const letto = lettura?.stato === "pronto";
+  const senzaRecord = letto && !lettura.record;
+  return FORMATI_ESPORTAZIONE.map((uscita) => {
+    if (uscita.chiave === "copia") {
+      const testo3 = letto ? lettura.prosa || lettura.testo || "" : "";
+      return { ...uscita, disponibile: Boolean(testo3), motivo: testo3 ? null : MOTIVI_ESPORTAZIONE.senzaTesto, testo: testo3 };
+    }
+    if (!haRapporto) return { ...uscita, disponibile: false, motivo: MOTIVI_ESPORTAZIONE.senzaRapporto };
+    if (uscita.vuoleRecord && senzaRecord) return { ...uscita, disponibile: false, motivo: MOTIVI_ESPORTAZIONE.senzaRecord };
+    const avvertenza = senzaRecord ? "esce senza le verifiche" : null;
+    return { ...uscita, disponibile: true, motivo: null, avvertenza };
+  });
+}
+function indirizzoEsportazione(sessionId, ricercaId, formato, tono = null) {
+  const base = `/api/v1/sessions/${encodeURIComponent(String(sessionId ?? ""))}/research/${encodeURIComponent(String(ricercaId ?? ""))}/esporta`;
+  const query = new URLSearchParams({ formato: String(formato) });
+  if (tono) query.set("tono", tono);
+  return `${base}?${query.toString()}`;
+}
+function montaPannelloEsportazioni(doc, elenco2, { onScegli } = {}) {
+  const pezzi = [];
+  for (const gruppo of GRUPPI_ESPORTAZIONE) {
+    const dentro = elenco2.filter((u) => u.gruppo === gruppo.id);
+    if (!dentro.length) continue;
+    pezzi.push(nodo4(doc, "h3", "td-esporta-gruppo", gruppo.parola));
+    const motiviDistinti = [...new Set(dentro.filter((u) => !u.disponibile).map((u) => u.motivo))];
+    const motivoDiGruppo = motiviDistinti.length === 1 ? motiviDistinti[0] : null;
+    if (motivoDiGruppo) pezzi.push(nodo4(doc, "p", "td-esporta-motivo", motivoDiGruppo));
+    const avvertenzeDistinte = [...new Set(dentro.filter((u) => u.disponibile).map((u) => u.avvertenza ?? null))];
+    const avvertenzaDiGruppo = avvertenzeDistinte.length === 1 && avvertenzeDistinte[0] ? avvertenzeDistinte[0] : null;
+    if (avvertenzaDiGruppo) pezzi.push(nodo4(doc, "p", "td-esporta-motivo", `Il rapporto non porta il riepilogo delle verifiche: questi file ${avvertenzaDiGruppo === "esce senza le verifiche" ? "escono senza di esse" : avvertenzaDiGruppo}.`));
+    for (const uscita of dentro) {
+      const riga = nodo4(doc, "button", "td-esporta-voce");
+      riga.type = "button";
+      riga.dataset.uscita = uscita.chiave;
+      riga.append(iconaSvg(doc, uscita.gruppo === "appunti" ? "copy" : "download"));
+      const testi = nodo4(doc, "span", "td-esporta-testi");
+      const titolo2 = nodo4(doc, "span", "td-esporta-nome", uscita.etichetta);
+      if (uscita.avvertenza && !avvertenzaDiGruppo) titolo2.append(tag(doc, uscita.avvertenza, "warning"));
+      testi.append(titolo2, nodo4(doc, "span", "td-esporta-nota", uscita.disponibile || motivoDiGruppo ? uscita.spiega : uscita.motivo));
+      riga.append(testi);
+      if (uscita.disponibile) {
+        riga.addEventListener("click", () => onScegli?.(uscita));
+      } else {
+        riga.setAttribute("aria-disabled", "true");
+        riga.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+      }
+      pezzi.push(riga);
+    }
+  }
+  return pezzi;
+}
+function frasePassaggi(ritrovati, persi) {
+  const ok = Number(ritrovati) || 0;
+  const persiN = Number(persi) || 0;
+  const totale2 = ok + persiN;
+  if (!totale2) return null;
+  if (!persiN) {
+    return ok === 1 ? "Il passaggio citato è ancora in questa pagina." : `Tutti i ${ok} passaggi citati sono ancora in questa pagina.`;
+  }
+  if (!ok) {
+    return totale2 === 1 ? "Il passaggio citato non si ritrova più in questa pagina." : `Nessuno dei ${totale2} passaggi citati si ritrova più in questa pagina.`;
+  }
+  return persiN === 1 ? `1 dei ${totale2} passaggi citati non si ritrova più in questa pagina.` : `${persiN} dei ${totale2} passaggi citati non si ritrovano più in questa pagina.`;
+}
+function montaEsitoRiverifica(doc, stato) {
+  const blocco = nodo4(doc, "div", "td-riverifica");
+  if (stato?.stato === "in-corso") {
+    blocco.setAttribute("role", "status");
+    blocco.append(nodo4(doc, "p", "td-subtle", "Sto rileggendo le pagine citate, una alla volta…"));
+    return blocco;
+  }
+  if (stato?.stato === "errore") {
+    blocco.setAttribute("role", "alert");
+    blocco.append(nodo4(doc, "p", "td-subtle", stato.errore));
+    return blocco;
+  }
+  const esito = stato?.esito;
+  if (!esito) return null;
+  blocco.setAttribute("role", "status");
+  const testa = nodo4(doc, "div", "td-riverifica-testa");
+  testa.append(nodo4(doc, "strong", "", "Le fonti, rilette adesso"));
+  const quando = dataOra(esito.fattaAlle);
+  if (quando) testa.append(nodo4(doc, "span", "td-subtle", `controllate ${articoloData(esito.fattaAlle)}${quando}`));
+  blocco.append(testa, nodo4(doc, "p", "td-prose", frasiRiverifica(esito)));
+  if (esito.avvertenza) blocco.append(nodo4(doc, "p", "td-subtle", esito.avvertenza));
+  if (esito.troncata) blocco.append(nodo4(doc, "p", "td-subtle", `Rilette le prime ${esito.fonti?.length ?? 0} fonti su ${esito.fontiTotali}: le altre non sono state guardate.`));
+  for (const fonte of Array.isArray(esito.fonti) ? esito.fonti : []) {
+    const parole = statoFonteRiverifica(fonte?.stato);
+    const riga = nodo4(doc, "div", "td-riverifica-fonte");
+    const alto = nodo4(doc, "div", "td-riverifica-riga");
+    alto.append(tag(doc, parole.parola, parole.tono));
+    const link = nodo4(doc, "a", "", fonte?.titolo || fonte?.url || "fonte senza titolo");
+    link.href = fonte?.url || "#";
+    link.target = "_blank";
+    link.rel = "noreferrer noopener";
+    alto.append(link);
+    riga.append(alto, nodo4(doc, "span", "td-subtle", parole.spiega));
+    if (fonte?.stato !== "irraggiungibile") {
+      const frase = frasePassaggi(fonte?.passaggiRitrovati, fonte?.passaggiPersi);
+      if (frase) riga.append(nodo4(doc, "span", "td-subtle", frase));
+    }
+    blocco.append(riga);
+  }
+  return blocco;
+}
+function vistaFonti(doc, voce, lettura, ctx) {
+  const esito = ctx?.riverifica ? montaEsitoRiverifica(doc, ctx.riverifica) : null;
   if (!lettura?.record) {
-    return [nodo4(doc, "p", "td-prose", "Le fonti compaiono quando il rapporto porta con sé il riepilogo delle verifiche: indirizzo, data dichiarata, se la pagina è stata letta per intero, e a quale gruppo di prove appartiene.")];
+    return [esito, nodo4(doc, "p", "td-prose", "Le fonti compaiono quando il rapporto porta con sé il riepilogo delle verifiche: indirizzo, data dichiarata, se la pagina è stata letta per intero, e a quale gruppo di prove appartiene.")];
   }
   const fonti = Array.isArray(lettura.record.sources) ? lettura.record.sources : [];
-  if (!fonti.length) return [nodo4(doc, "p", "td-prose", "Il rapporto non registra nessuna fonte.")];
+  if (!fonti.length) return [esito, nodo4(doc, "p", "td-prose", "Il rapporto non registra nessuna fonte.")];
   const prove = proveDistinte(fonti);
-  const pezzi = [nodo4(doc, "p", "td-subtle", prove.gruppi < prove.indirizzi ? `${prove.frase}: due pagine dello stesso dominio non fanno due prove.` : `${prove.frase}: ogni fonte viene da un dominio diverso.`)];
+  const pezzi = [esito, nodo4(doc, "p", "td-subtle", prove.gruppi < prove.indirizzi ? `${prove.frase}: due pagine dello stesso dominio non fanno due prove.` : `${prove.frase}: ogni fonte viene da un dominio diverso.`)];
   for (const fonte of fonti) {
     const riga = nodo4(doc, "div", "td-source");
     const link = nodo4(doc, "a", "", fonte.title || fonte.url || "fonte senza titolo");
@@ -3973,14 +4156,56 @@ function vistaFonti(doc, voce, lettura) {
   }
   return pezzi;
 }
-function vistaPiano(doc) {
-  return [
-    nodo4(doc, "p", "td-prose", "Il piano arriva con il motore nuovo."),
-    nodo4(doc, "p", "td-subtle", "Quando una ricerca dichiarerà le sue linee di indagine, le troverai qui con quanto ognuna ha portato — e su una ricerca in corso sarà il posto dove approvarle o cambiarle prima che parta.")
-  ];
+function frasiSpesa(spesa) {
+  if (!spesa) return null;
+  const pezzi = [];
+  const token = Number(spesa.tokens) || 0;
+  if (token) pezzi.push(`${token >= 1e3 ? `${(token / 1e3).toFixed(1).replace(".", ",")}k` : token} token`);
+  if (spesa.searches) pezzi.push(`${spesa.searches} ${spesa.searches === 1 ? "ricerca sul web" : "ricerche sul web"}`);
+  if (spesa.pages) pezzi.push(`${spesa.pages} ${spesa.pages === 1 ? "pagina aperta" : "pagine aperte"}`);
+  return pezzi.length ? pezzi.join(" · ") : null;
 }
-function vistaAndata(doc, voce, ctx) {
+function vistaPiano(doc, dettaglio) {
+  const ricerca = dettaglio?.stato === "pronto" ? dettaglio.ricerca : null;
+  const piano = Array.isArray(ricerca?.piano) ? ricerca.piano : [];
+  const passi = Array.isArray(ricerca?.passi) ? ricerca.passi : [];
+  if (!piano.length && !passi.length) {
+    return [
+      nodo4(doc, "p", "td-prose", ricerca ? "Questa ricerca non ha dichiarato nessuna linea di indagine." : "Il piano arriva con il motore nuovo."),
+      nodo4(doc, "p", "td-subtle", "Quando una ricerca dichiarerà le sue linee di indagine, le troverai qui con quanto ognuna ha portato — e su una ricerca in corso sarà il posto dove approvarle o cambiarle prima che parta.")
+    ];
+  }
+  const pezzi = [];
+  if (piano.length) {
+    pezzi.push(nodo4(doc, "h3", "", "Linee di indagine"));
+    for (const linea of piano) {
+      const riga = nodo4(doc, "div", "td-source");
+      riga.append(nodo4(doc, "strong", "", linea?.question || linea?.domanda || "linea senza domanda"));
+      const previsto = frasiSpesa(linea?.estimate);
+      if (previsto) riga.append(nodo4(doc, "span", "", `previsti ${previsto}`));
+      pezzi.push(riga);
+    }
+  }
+  if (passi.length) {
+    pezzi.push(nodo4(doc, "h3", "", "Passi compiuti"));
+    for (const passo of passi) {
+      const riga = nodo4(doc, "div", "td-source");
+      const alto = nodo4(doc, "div", "td-riverifica-riga");
+      const esito = ESITI_PASSO.get(passo?.state) || { parola: "stato non registrato", tono: "" };
+      alto.append(tag(doc, esito.parola, esito.tono));
+      alto.append(nodo4(doc, "strong", "", PASSI_RICERCA.get(passo?.kind) || "Passo della ricerca"));
+      riga.append(alto);
+      const dettagli = [frasiSpesa(passo?.spend), passo?.error ? `si è fermato: ${passo.error}` : null].filter(Boolean);
+      if (passo?.attempts > 1) dettagli.push(`${passo.attempts} tentativi`);
+      if (dettagli.length) riga.append(nodo4(doc, "span", "", dettagli.join(" · ")));
+      pezzi.push(riga);
+    }
+  }
+  return pezzi;
+}
+function vistaAndata(doc, voce, ctx, dettaglio) {
   const frasi = frasiVoce(voce);
+  const ricerca = dettaglio?.stato === "pronto" ? dettaglio.ricerca : null;
   const pezzi = [];
   const righe = nodo4(doc, "dl", "td-andata");
   const riga = (etichetta2, valore) => {
@@ -3993,6 +4218,18 @@ function vistaAndata(doc, voce, ctx) {
   riga("Finita", frasi.conclusa || (voce?.stato === "running" ? "non ancora" : "non registrata"));
   riga("Durata", frasi.durata || null);
   riga("Nome della conversazione", frasi.nome);
+  if (ricerca) {
+    riga("Speso", frasiSpesa(ricerca.spesa) || "niente di misurato");
+    if (ricerca.giornale) {
+      const eventi2 = Number(ricerca.giornale.eventi) || 0;
+      riga("Giornale di bordo", `${eventi2} ${eventi2 === 1 ? "passaggio registrato" : "passaggi registrati"}`);
+      if (ricerca.giornale.righeSaltate > 0) {
+        riga("Attenzione", `${ricerca.giornale.righeSaltate} righe del giornale non si rileggono: quello che segue è parziale.`);
+      }
+    } else {
+      riga("Giornale di bordo", "non ne ha uno: è stata avviata prima che le ricerche lo tenessero, e non si può riprendere da dove si era fermata");
+    }
+  }
   pezzi.push(righe);
   if (voce?.ultimoMessaggio) {
     pezzi.push(nodo4(doc, "h3", "", "Ultimo messaggio della ricerca"));
@@ -4008,16 +4245,16 @@ function vistaAndata(doc, voce, ctx) {
   }
   return pezzi;
 }
-function contenutoVista(doc, id, voce, lettura, ctx) {
+function contenutoVista(doc, id, voce, lettura, ctx, dettaglio) {
   switch (id) {
     case "affermazioni":
       return vistaAffermazioni(doc, voce, lettura);
     case "fonti":
-      return vistaFonti(doc, voce, lettura);
+      return vistaFonti(doc, voce, lettura, ctx);
     case "piano":
-      return vistaPiano(doc);
+      return vistaPiano(doc, dettaglio);
     case "andata":
-      return vistaAndata(doc, voce, ctx);
+      return vistaAndata(doc, voce, ctx, dettaglio);
     default:
       return vistaRapporto(doc, voce, lettura, ctx);
   }
@@ -4030,15 +4267,35 @@ function vociMenuRicerca(voce, ctx = {}) {
   if (typeof ctx.onApriSessione === "function" && voce?.id) {
     voci.push({ chiave: "apri-conversazione", etichetta: "Apri la conversazione", icona: "i-eye", aziona: () => ctx.onApriSessione({ id: voce.id }) });
   }
+  const suite = typeof ctx.onEsportazioni === "function" && haRapportoLeggibile(voce);
   if (pronto && lettura.prosa) {
     const rapporto = haRapportoLeggibile(voce);
     const cosa = rapporto ? "il rapporto" : "il file depositato";
     voci.push({ chiave: "copia", etichetta: `Copia ${cosa}`, icona: "i-copy", aziona: () => ctx.onCopia?.(lettura.prosa, voce) });
-    voci.push({ chiave: "esporta", etichetta: `Esporta ${cosa}`, icona: "i-download", aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, "md"), lettura.testo || lettura.prosa, "text/markdown") });
+    if (!suite) voci.push({ chiave: "esporta", etichetta: `Esporta ${cosa}`, icona: "i-download", aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, "md"), lettura.testo || lettura.prosa, "text/markdown") });
   }
-  if (citazioni.length) {
+  if (suite) {
+    voci.push({ chiave: "esporta-suite", etichetta: "Esporta…", icona: "i-download", aziona: () => ctx.onEsportazioni(voce) });
+  } else if (citazioni.length) {
     voci.push({ chiave: "bibtex", etichetta: "Esporta le citazioni (BibTeX)", icona: "i-doc", aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, "bib"), bibtexDaCitazioni(citazioni), "application/x-bibtex") });
     voci.push({ chiave: "ris", etichetta: "Esporta le citazioni (RIS)", icona: "i-doc", aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, "ris"), risDaCitazioni(citazioni), "application/x-research-info-systems") });
+  }
+  const scrivibili = [];
+  if (typeof ctx.onPausa === "function" && puoMettereInPausa(voce)) {
+    scrivibili.push({ chiave: "pausa", etichetta: "Metti in pausa", icona: "i-stop", aziona: () => ctx.onPausa(voce) });
+  }
+  if (typeof ctx.onRiprendi === "function" && puoRiprendere(voce)) {
+    scrivibili.push({ chiave: "ripresa", etichetta: "Riprendi", icona: "i-play", aziona: () => ctx.onRiprendi(voce) });
+  }
+  if (typeof ctx.onRiverifica === "function" && puoRicontrollareLeFonti(voce)) {
+    scrivibili.push({ chiave: "riverifica", etichetta: "Controlla se le fonti dicono ancora questo", icona: "i-history", aziona: () => ctx.onRiverifica(voce) });
+  }
+  if (scrivibili.length) {
+    scrivibili[0].separaPrima = true;
+    voci.push(...scrivibili);
+  }
+  if (typeof ctx.onElimina === "function" && voce?.id) {
+    voci.push({ chiave: "elimina", etichetta: "Elimina la ricerca", icona: "i-trash", pericolo: true, separaPrima: true, aziona: () => ctx.onElimina(voce) });
   }
   return voci;
 }
@@ -4048,6 +4305,8 @@ function montaDettaglioRicerca(voce, ctx) {
   const magazzino = ctx.magazzino;
   const chiave = String(voce?.reportLibraryId ?? "");
   const lettura = chiave ? magazzino.rapporti.get(chiave) || null : null;
+  const dettaglio = magazzino.dettagli.get(String(voce?.id)) || null;
+  const riverifica = magazzino.riverifiche.get(String(voce?.id)) || null;
   const pezzi = [];
   const meta2 = nodo4(doc, "div", "td-detail-meta");
   meta2.append(tag(doc, frasi.parola, frasi.tono));
@@ -4106,7 +4365,11 @@ function montaDettaglioRicerca(voce, ctx) {
       if (attiva && muoviIlFuoco) b.focus({ preventScroll: true });
     }
     pannello.setAttribute("aria-labelledby", `${radice2}-${idVista}`);
-    pannello.replaceChildren(...contenutoVista(doc, idVista, voce, lettura, { ...ctx.opzioni, puoLeggere: typeof ctx.opzioni?.leggiRapporto === "function" }).filter(Boolean));
+    pannello.replaceChildren(...contenutoVista(doc, idVista, voce, lettura, {
+      ...ctx.opzioni,
+      riverifica,
+      puoLeggere: typeof ctx.opzioni?.leggiRapporto === "function"
+    }, dettaglio).filter(Boolean));
   }
   lista.addEventListener("click", (e) => {
     const b = e.target.closest?.("[data-vista]");
@@ -4128,6 +4391,15 @@ function montaDettaglioRicerca(voce, ctx) {
       magazzino.rapporti.set(chiave, { stato: "pronto", testo: String(testo3 ?? ""), ...letto });
     }).catch((errore) => {
       magazzino.rapporti.set(chiave, { stato: "errore", errore: errore?.message || "motivo non registrato" });
+    }).then(() => ctx.ridisegna?.());
+  }
+  const idRicerca = String(voce?.id ?? "");
+  if (idRicerca && !dettaglio && typeof ctx.opzioni?.leggiDettaglio === "function") {
+    magazzino.dettagli.set(idRicerca, { stato: "caricando" });
+    Promise.resolve().then(() => ctx.opzioni.leggiDettaglio(voce)).then((ricerca) => {
+      magazzino.dettagli.set(idRicerca, ricerca ? { stato: "pronto", ricerca } : { stato: "errore", errore: "scheda non disponibile" });
+    }).catch((errore) => {
+      magazzino.dettagli.set(idRicerca, { stato: "errore", errore: errore?.message || "motivo non registrato" });
     }).then(() => ctx.ridisegna?.());
   }
   return pezzi;
@@ -4154,7 +4426,7 @@ function scaricaTesto(doc, nome, testo3, mime = "text/markdown") {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 5e3);
 }
-var STATI_RICERCA, APERTURA_RECORD, CHIUSURA_RECORD, PERCHE_SENZA_RECORD, PEZZI_BILANCIO, SUFFISSI_DI_SECONDO_LIVELLO, MAGAZZINI, VISTE, contatoreIdentificativi;
+var STATI_RICERCA, AZIONI_RICERCA, APERTURA_RECORD, CHIUSURA_RECORD, PERCHE_SENZA_RECORD, PEZZI_BILANCIO, SUFFISSI_DI_SECONDO_LIVELLO, MAGAZZINI, INTERVALLO_RICERCHE_VIVE, STATI_FONTE_RIVERIFICA, VISTE, FORMATI_ESPORTAZIONE, GRUPPI_ESPORTAZIONE, MOTIVI_ESPORTAZIONE, PASSI_RICERCA, ESITI_PASSO, contatoreIdentificativi;
 var init_ricerca_dettaglio = __esm({
   "src/components/ricerca-dettaglio.js"() {
     STATI_RICERCA = /* @__PURE__ */ new Map([
@@ -4172,6 +4444,12 @@ var init_ricerca_dettaglio = __esm({
       ["senza-rapporto", { parola: "Senza rapporto", tono: "warning", cosaFare: "È arrivata in fondo senza depositare un rapporto. Quello che ha raccolto resta nelle Fonti; per averne uno, riavviala." }],
       ["bloccata-dal-permesso", { parola: "Bloccata", tono: "danger", cosaFare: "La sessione era in sola lettura e non ha potuto consegnare. Riprendila con il permesso giusto." }],
       ["giri-esauriti", { parola: "Giri esauriti", tono: "warning", cosaFare: "Ha finito i giri a disposizione prima di concludere. Riavviala con una domanda più stretta." }]
+    ]);
+    AZIONI_RICERCA = /* @__PURE__ */ new Map([
+      ["pausa", { verbo: "mettere in pausa", conflitto: "Non sta girando in questo momento: si può mettere in pausa solo una ricerca in corso." }],
+      ["ripresa", { verbo: "riprendere", conflitto: "Non c’è niente da riprendere: o sta ancora girando, o è già arrivata alla fine." }],
+      ["riverifica", { verbo: "ricontrollare le fonti", conflitto: "Non si può ancora ricontrollare: per rileggere le pagine servono i passaggi citati, e il rapporto di questa ricerca non li porta." }],
+      ["elimina", { verbo: "eliminare", conflitto: "Non si può eliminare adesso." }]
     ]);
     APERTURA_RECORD = "```talos-research-report";
     CHIUSURA_RECORD = "```";
@@ -4236,6 +4514,13 @@ var init_ricerca_dettaglio = __esm({
       "edu.it"
     ]);
     MAGAZZINI = /* @__PURE__ */ new WeakMap();
+    INTERVALLO_RICERCHE_VIVE = 3e4;
+    STATI_FONTE_RIVERIFICA = /* @__PURE__ */ new Map([
+      ["intatta", { parola: "intatta", tono: "success", spiega: "Il testo su cui il rapporto si appoggia è ancora lì." }],
+      ["cambiata", { parola: "cambiata", tono: "warning", spiega: "La pagina risponde, ma non dice più quello su cui il rapporto si appoggiava." }],
+      ["irraggiungibile", { parola: "non si apre", tono: "danger", spiega: "La pagina non si è potuta leggere adesso: non vuol dire che sia cambiata, vuol dire che non lo sappiamo." }],
+      ["non-misurabile", { parola: "non confrontabile", tono: "", spiega: "Di questa fonte non era stato tenuto il testo: quanta parte sia sopravvissuta non si può dire." }]
+    ]);
     VISTE = [
       { id: "rapporto", parola: "Rapporto" },
       { id: "affermazioni", parola: "Affermazioni" },
@@ -4243,6 +4528,42 @@ var init_ricerca_dettaglio = __esm({
       { id: "piano", parola: "Piano" },
       { id: "andata", parola: "Come è andata" }
     ];
+    FORMATI_ESPORTAZIONE = [
+      { chiave: "md", formato: "md", gruppo: "documenti", etichetta: "Markdown", spiega: "Il rapporto come testo, con i titoli e le citazioni." },
+      { chiave: "pdf-report", formato: "pdf", tono: "report", gruppo: "documenti", etichetta: "PDF — rapporto", spiega: "Tutto: risposta, affermazioni verificate e fonti." },
+      { chiave: "pdf-brief", formato: "pdf", tono: "brief", gruppo: "documenti", etichetta: "PDF — sintesi", spiega: "Solo la risposta e il bilancio delle verifiche, per chi ha due minuti." },
+      { chiave: "pdf-dossier", formato: "pdf", tono: "dossier", gruppo: "documenti", etichetta: "PDF — dossier", spiega: "Il rapporto più i passaggi citati per esteso, fonte per fonte." },
+      { chiave: "docx", formato: "docx", gruppo: "documenti", etichetta: "Word", spiega: "Un documento .docx da riaprire e modificare." },
+      { chiave: "html", formato: "html", gruppo: "documenti", etichetta: "Pagina HTML", spiega: "Una pagina sola, da aprire in un browser o allegare a una mail." },
+      { chiave: "json", formato: "json", gruppo: "dati", vuoleRecord: true, etichetta: "Record JSON", spiega: "Affermazioni, verdetti e fonti come dati, per un altro programma." },
+      { chiave: "bib", formato: "bib", gruppo: "dati", vuoleRecord: true, etichetta: "BibTeX", spiega: "Le fonti per un gestore di bibliografia." },
+      { chiave: "ris", formato: "ris", gruppo: "dati", vuoleRecord: true, etichetta: "RIS", spiega: "Le fonti per Zotero, Mendeley, EndNote." },
+      { chiave: "fonti", formato: "fonti", gruppo: "dati", vuoleRecord: true, etichetta: "Elenco delle fonti", spiega: "Solo indirizzi, titoli e date dichiarate." },
+      { chiave: "copia", gruppo: "appunti", etichetta: "Copia il testo negli appunti", spiega: "Senza scrivere nessun file." }
+    ];
+    GRUPPI_ESPORTAZIONE = [
+      { id: "documenti", parola: "Da leggere" },
+      { id: "dati", parola: "Dati e citazioni" },
+      { id: "appunti", parola: "Senza file" }
+    ];
+    MOTIVI_ESPORTAZIONE = {
+      senzaRapporto: "Questa ricerca non ha depositato un rapporto: non c’è niente da esportare.",
+      senzaRecord: "Il rapporto non porta con sé il riepilogo delle verifiche: senza quello non ci sono affermazioni né fonti da estrarre.",
+      senzaTesto: "Il testo del rapporto non è ancora stato letto da questa schermata."
+    };
+    PASSI_RICERCA = /* @__PURE__ */ new Map([
+      ["search", "Ricerca sul web"],
+      ["read", "Lettura di una pagina"],
+      ["synthesise", "Scrittura della sintesi"],
+      ["verify", "Verifica delle affermazioni"]
+    ]);
+    ESITI_PASSO = /* @__PURE__ */ new Map([
+      ["pending", { parola: "da fare", tono: "" }],
+      ["running", { parola: "in corso", tono: "info" }],
+      ["done", { parola: "fatto", tono: "success" }],
+      ["failed", { parola: "non riuscito", tono: "danger" }],
+      ["interrupted", { parola: "interrotto a metà", tono: "warning" }]
+    ]);
     contatoreIdentificativi = 0;
   }
 });
@@ -5861,6 +6182,119 @@ var init_sezione_elenco_dettaglio = __esm({
   }
 });
 
+// src/components/modale-td.js
+function nodo7(doc, tag2, classe, testo3) {
+  const el25 = doc.createElement(tag2);
+  if (classe) el25.className = classe;
+  if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
+  return el25;
+}
+function icona4(doc, nome) {
+  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
+  svg.setAttribute("class", "i");
+  svg.setAttribute("aria-hidden", "true");
+  use.setAttribute("href", `#i-${nome}`);
+  svg.append(use);
+  return svg;
+}
+function apriModale(titolo2, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
+  if (!doc?.body) return null;
+  chiudiModale({ immediata: true });
+  const dialogo = nodo7(doc, "dialog", "td-modal");
+  if (ampia) dialogo.dataset.ampia = "si";
+  const idTitolo = `td-modal-title-${Math.random().toString(36).slice(2, 8)}`;
+  dialogo.setAttribute("aria-labelledby", idTitolo);
+  const testa = nodo7(doc, "div", "td-modal-head");
+  const h2 = nodo7(doc, "h2", "", titolo2);
+  h2.id = idTitolo;
+  const chiudiBtn = nodo7(doc, "button", "talos-button talos-button--ghost talos-icon-button");
+  chiudiBtn.type = "button";
+  chiudiBtn.setAttribute("aria-label", "Chiudi");
+  chiudiBtn.append(icona4(doc, "x"));
+  chiudiBtn.addEventListener("click", () => chiudiModale());
+  testa.append(h2, chiudiBtn);
+  const corpo = nodo7(doc, "div", "td-modal-content");
+  for (const pezzo2 of [contenuto].flat().filter(Boolean)) corpo.append(pezzo2);
+  dialogo.append(testa, corpo);
+  dialogo.addEventListener("click", (e) => {
+    if (e.target === dialogo) chiudiModale();
+  });
+  dialogo.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") e.stopPropagation();
+  });
+  dialogo.addEventListener("close", () => {
+    if (aperta?.dialogo === dialogo) aperta = null;
+    dialogo.remove();
+    suChiusura?.();
+  });
+  doc.body.append(dialogo);
+  if (typeof dialogo.showModal === "function") dialogo.showModal();
+  else dialogo.setAttribute("open", "");
+  motion(dialogo, [{ opacity: 0, transform: "translateY(12px) scale(.99)" }, { opacity: 1, transform: "none" }], { leva: "motion-surfaces-off", document: doc });
+  aperta = { dialogo, contenuto: corpo, suChiusura, chiudi: () => chiudiModale() };
+  const primo = corpo.querySelector("input:not([type=hidden]), textarea, select, button") || chiudiBtn;
+  primo.focus?.({ preventScroll: true });
+  return aperta;
+}
+function chiudiModale({ immediata = false } = {}) {
+  const viva = aperta;
+  if (!viva) return false;
+  aperta = null;
+  const { dialogo } = viva;
+  const chiudiDavvero = () => {
+    if (typeof dialogo.close === "function" && dialogo.open) dialogo.close();
+    else {
+      dialogo.remove();
+      viva.suChiusura?.();
+    }
+  };
+  if (immediata) {
+    chiudiDavvero();
+    return true;
+  }
+  const uscita = motion(dialogo, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(6px)" }], { token: "surface-exit", leva: "motion-surfaces-off", document: dialogo.ownerDocument || globalThis.document });
+  if (!uscita) {
+    chiudiDavvero();
+    return true;
+  }
+  dialogo.style.pointerEvents = "none";
+  uscita.finished.then(chiudiDavvero, chiudiDavvero);
+  return true;
+}
+function confermaModale({
+  titolo: titolo2 = "Confermi?",
+  domanda,
+  conseguenza = "",
+  etichettaConferma = "Elimina",
+  onConferma,
+  document: doc = globalThis.document
+} = {}) {
+  const testo3 = nodo7(doc, "p", "td-prose", domanda);
+  const pezzi = [testo3];
+  if (conseguenza) pezzi.push(nodo7(doc, "p", "td-subtle", conseguenza));
+  const piede = nodo7(doc, "div", "td-detail-footer");
+  const annulla = nodo7(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Annulla");
+  annulla.type = "button";
+  annulla.addEventListener("click", () => chiudiModale());
+  const conferma = nodo7(doc, "button", "talos-button talos-button--secondary talos-button--danger talos-button--sm", etichettaConferma);
+  conferma.type = "button";
+  conferma.addEventListener("click", () => {
+    chiudiModale();
+    onConferma?.();
+  });
+  piede.append(annulla, conferma);
+  pezzi.push(piede);
+  return apriModale(titolo2, pezzi, { document: doc });
+}
+var aperta;
+var init_modale_td = __esm({
+  "src/components/modale-td.js"() {
+    init_motion_mockup();
+    aperta = null;
+  }
+});
+
 // src/components/toast.js
 function tonoDaTitolo(titolo2 = "") {
   const t2 = String(titolo2).toLowerCase();
@@ -5993,119 +6427,6 @@ var init_toast = __esm({
     });
     MASSIMO_IN_PILA = 3;
     DURATA_CON_ANNULLA = 11e3;
-  }
-});
-
-// src/components/modale-td.js
-function nodo7(doc, tag2, classe, testo3) {
-  const el25 = doc.createElement(tag2);
-  if (classe) el25.className = classe;
-  if (testo3 !== void 0 && testo3 !== null) el25.textContent = String(testo3);
-  return el25;
-}
-function icona4(doc, nome) {
-  const svg = doc.createElementNS("http://www.w3.org/2000/svg", "svg");
-  const use = doc.createElementNS("http://www.w3.org/2000/svg", "use");
-  svg.setAttribute("class", "i");
-  svg.setAttribute("aria-hidden", "true");
-  use.setAttribute("href", `#i-${nome}`);
-  svg.append(use);
-  return svg;
-}
-function apriModale(titolo2, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
-  if (!doc?.body) return null;
-  chiudiModale({ immediata: true });
-  const dialogo = nodo7(doc, "dialog", "td-modal");
-  if (ampia) dialogo.dataset.ampia = "si";
-  const idTitolo = `td-modal-title-${Math.random().toString(36).slice(2, 8)}`;
-  dialogo.setAttribute("aria-labelledby", idTitolo);
-  const testa = nodo7(doc, "div", "td-modal-head");
-  const h2 = nodo7(doc, "h2", "", titolo2);
-  h2.id = idTitolo;
-  const chiudiBtn = nodo7(doc, "button", "talos-button talos-button--ghost talos-icon-button");
-  chiudiBtn.type = "button";
-  chiudiBtn.setAttribute("aria-label", "Chiudi");
-  chiudiBtn.append(icona4(doc, "x"));
-  chiudiBtn.addEventListener("click", () => chiudiModale());
-  testa.append(h2, chiudiBtn);
-  const corpo = nodo7(doc, "div", "td-modal-content");
-  for (const pezzo2 of [contenuto].flat().filter(Boolean)) corpo.append(pezzo2);
-  dialogo.append(testa, corpo);
-  dialogo.addEventListener("click", (e) => {
-    if (e.target === dialogo) chiudiModale();
-  });
-  dialogo.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") e.stopPropagation();
-  });
-  dialogo.addEventListener("close", () => {
-    if (aperta?.dialogo === dialogo) aperta = null;
-    dialogo.remove();
-    suChiusura?.();
-  });
-  doc.body.append(dialogo);
-  if (typeof dialogo.showModal === "function") dialogo.showModal();
-  else dialogo.setAttribute("open", "");
-  motion(dialogo, [{ opacity: 0, transform: "translateY(12px) scale(.99)" }, { opacity: 1, transform: "none" }], { leva: "motion-surfaces-off", document: doc });
-  aperta = { dialogo, contenuto: corpo, suChiusura, chiudi: () => chiudiModale() };
-  const primo = corpo.querySelector("input:not([type=hidden]), textarea, select, button") || chiudiBtn;
-  primo.focus?.({ preventScroll: true });
-  return aperta;
-}
-function chiudiModale({ immediata = false } = {}) {
-  const viva = aperta;
-  if (!viva) return false;
-  aperta = null;
-  const { dialogo } = viva;
-  const chiudiDavvero = () => {
-    if (typeof dialogo.close === "function" && dialogo.open) dialogo.close();
-    else {
-      dialogo.remove();
-      viva.suChiusura?.();
-    }
-  };
-  if (immediata) {
-    chiudiDavvero();
-    return true;
-  }
-  const uscita = motion(dialogo, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(6px)" }], { token: "surface-exit", leva: "motion-surfaces-off", document: dialogo.ownerDocument || globalThis.document });
-  if (!uscita) {
-    chiudiDavvero();
-    return true;
-  }
-  dialogo.style.pointerEvents = "none";
-  uscita.finished.then(chiudiDavvero, chiudiDavvero);
-  return true;
-}
-function confermaModale({
-  titolo: titolo2 = "Confermi?",
-  domanda,
-  conseguenza = "",
-  etichettaConferma = "Elimina",
-  onConferma,
-  document: doc = globalThis.document
-} = {}) {
-  const testo3 = nodo7(doc, "p", "td-prose", domanda);
-  const pezzi = [testo3];
-  if (conseguenza) pezzi.push(nodo7(doc, "p", "td-subtle", conseguenza));
-  const piede = nodo7(doc, "div", "td-detail-footer");
-  const annulla = nodo7(doc, "button", "talos-button talos-button--secondary talos-button--sm", "Annulla");
-  annulla.type = "button";
-  annulla.addEventListener("click", () => chiudiModale());
-  const conferma = nodo7(doc, "button", "talos-button talos-button--secondary talos-button--danger talos-button--sm", etichettaConferma);
-  conferma.type = "button";
-  conferma.addEventListener("click", () => {
-    chiudiModale();
-    onConferma?.();
-  });
-  piede.append(annulla, conferma);
-  pezzi.push(piede);
-  return apriModale(titolo2, pezzi, { document: doc });
-}
-var aperta;
-var init_modale_td = __esm({
-  "src/components/modale-td.js"() {
-    init_motion_mockup();
-    aperta = null;
   }
 });
 
@@ -7251,6 +7572,18 @@ function copiatore(opzioni) {
   if (typeof opzioni?.copia === "function") return opzioni.copia;
   return (testo3) => globalThis.navigator?.clipboard?.writeText?.(testo3);
 }
+function servizioRicerche({ sessionId, rete } = {}) {
+  if (!sessionId || typeof rete?.post !== "function" || typeof rete?.elimina !== "function") return null;
+  const base = `/api/v1/sessions/${encodeURIComponent(sessionId)}/research`;
+  const voceUrl = (id) => `${base}/${encodeURIComponent(String(id ?? ""))}`;
+  return {
+    leggi: typeof rete.leggi === "function" ? (id) => rete.leggi(voceUrl(id)) : null,
+    pausa: (id) => rete.post(`${voceUrl(id)}/pausa`, {}),
+    ripresa: (id) => rete.post(`${voceUrl(id)}/ripresa`, {}),
+    riverifica: (id) => rete.post(`${voceUrl(id)}/riverifica`, {}),
+    elimina: (id) => rete.elimina(voceUrl(id))
+  };
+}
 function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   const elenco2 = Array.isArray(ricerche) ? ricerche : [];
   const magazzino = magazzinoRicerche(schermo);
@@ -7269,10 +7602,125 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     const chiave = String(voce?.reportLibraryId ?? "");
     return chiave ? magazzino.rapporti.get(chiave) || null : null;
   }
+  const servizio = servizioRicerche({ sessionId: opzioni.sessionId, rete: opzioni.rete });
+  const leggiDettaglio = typeof opzioni.leggiDettaglio === "function" ? opzioni.leggiDettaglio : servizio?.leggi ? async (voce) => (await servizio.leggi(voce?.id))?.ricerca ?? null : null;
+  function ricarica() {
+    if (typeof opzioni.onAggiorna === "function") opzioni.onAggiorna();
+    else ridisegna();
+  }
+  function aggiornaVoceInElenco(aggiornata) {
+    if (!aggiornata?.id) return;
+    const vecchia = trovaVoce(aggiornata.id);
+    if (vecchia) Object.assign(vecchia, aggiornata);
+    magazzino.dettagli.set(String(aggiornata.id), { stato: "pronto", ricerca: aggiornata });
+  }
+  function guasto(errore, azione) {
+    avvisa("Non riuscito", paroleErroreRicerca(errore?.code, azione), { tono: "errore" });
+  }
+  async function pausa(voce) {
+    try {
+      const dati = await servizio.pausa(voce?.id);
+      aggiornaVoceInElenco(dati?.ricerca);
+      avvisa(
+        dati?.ricerca?.stato === "paused" ? "In pausa" : "Pausa chiesta",
+        dati?.ricerca?.stato === "paused" ? "La ricerca è ferma: riprendila quando vuoi, dallo stesso menu." : "La ricerca si fermerà al primo punto sicuro: fin lì il lavoro già pagato non si butta."
+      );
+    } catch (errore) {
+      guasto(errore, "pausa");
+    }
+    ricarica();
+  }
+  async function riprendi(voce) {
+    try {
+      const dati = await servizio.ripresa(voce?.id);
+      aggiornaVoceInElenco(dati?.ricerca);
+      avvisa("Ripresa", "La ricerca riparte dal punto in cui si era fermata, non da capo.");
+    } catch (errore) {
+      guasto(errore, "ripresa");
+    }
+    ricarica();
+  }
+  async function riverifica(voce) {
+    const id = String(voce?.id);
+    magazzino.viste.set(id, "fonti");
+    magazzino.riverifiche.set(id, { stato: "in-corso" });
+    ridisegna();
+    const aperta2 = String(statoSezione(schermo)?.selezione ?? "") === id;
+    try {
+      const dati = await servizio.riverifica(id);
+      magazzino.riverifiche.set(id, { stato: "pronto", esito: dati?.riverifica || null });
+      if (!aperta2) avvisa("Fonti rilette", frasiRiverifica(dati?.riverifica));
+    } catch (errore) {
+      const parole = paroleErroreRicerca(errore?.code, "riverifica");
+      magazzino.riverifiche.set(id, { stato: "errore", errore: parole });
+      if (!aperta2) avvisa("Non riuscito", parole, { tono: "errore" });
+    }
+    ridisegna();
+  }
+  function elimina(voce) {
+    const titolo2 = frasiVoce(voce).domanda;
+    const citato = titolo2.length > 110 ? `${titolo2.slice(0, 110).trimEnd()}…` : titolo2;
+    confermaModale({
+      document: schermo.ownerDocument || globalThis.document,
+      titolo: "Elimino la ricerca?",
+      domanda: `«${citato}» viene cancellata dal disco insieme al suo rapporto in Libreria.`,
+      conseguenza: "Non c’è un cestino: spariscono anche le fonti raccolte e il giornale di bordo, e nessuno potrà più rileggerli.",
+      etichettaConferma: "Elimina la ricerca",
+      onConferma: async () => {
+        try {
+          await servizio.elimina(voce?.id);
+          const dove = elenco2.findIndex((r) => String(r?.id) === String(voce?.id));
+          if (dove >= 0) elenco2.splice(dove, 1);
+          const st = statoSezione(schermo);
+          if (st && String(st.selezione) === String(voce?.id)) st.selezione = null;
+          magazzino.dettagli.delete(String(voce?.id));
+          magazzino.riverifiche.delete(String(voce?.id));
+          avvisa("Eliminata", `«${titolo2}» non c’è più.`);
+        } catch (errore) {
+          guasto(errore, "elimina");
+        }
+        ricarica();
+      }
+    });
+  }
+  function esportazioni(voce) {
+    const doc = schermo.ownerDocument || globalThis.document;
+    const elenco3 = esportazioniRicerca(voce, letturaDi(voce));
+    apriModale("Esporta la ricerca", montaPannelloEsportazioni(doc, elenco3, {
+      onScegli: (uscita) => {
+        chiudiModale();
+        esegui(voce, uscita);
+      }
+    }), { document: doc });
+  }
+  function esegui(voce, uscita) {
+    if (uscita.chiave === "copia") {
+      Promise.resolve(copia(uscita.testo)).then(
+        () => avvisa("Copiato", "Il testo del rapporto è negli appunti."),
+        () => avvisa("Non copiato", "Gli appunti non sono disponibili in questa finestra.", { tono: "errore" })
+      );
+      return;
+    }
+    const doc = schermo.ownerDocument || globalThis.document;
+    const a = doc.createElement("a");
+    a.href = indirizzoEsportazione(opzioni.sessionId, voce?.id, uscita.formato, uscita.tono);
+    a.download = "";
+    a.rel = "noopener";
+    doc.body?.append(a);
+    a.click();
+    a.remove();
+    avvisa("Esportato", `${uscita.etichetta}: il file è nella cartella dei download.`);
+  }
   function apriMenu(voce, dove) {
     const voci = vociMenuRicerca(voce, {
       lettura: letturaDi(voce),
+      /* La suite vuole la rotta, cioè la sessione: senza, il menu resta quello di ieri. */
+      onEsportazioni: opzioni.sessionId ? esportazioni : null,
       onApriSessione: opzioni.onApriSessione,
+      onPausa: servizio ? pausa : null,
+      onRiprendi: servizio ? riprendi : null,
+      onRiverifica: servizio ? riverifica : null,
+      onElimina: servizio ? elimina : null,
       onCopia: (prosa, quale) => {
         Promise.resolve(copia(prosa)).then(
           () => avvisa("Copiato", haRapportoLeggibile(quale ?? voce) ? "Il testo del rapporto è negli appunti." : "Il testo del file depositato è negli appunti."),
@@ -7292,7 +7740,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
     if (p.getAttribute("role") === "status" || p.hasAttribute("data-research-esito")) continue;
     if (p.textContent.includes(".harness-ui-research") || p.textContent.includes("non è ancora disponibile")) p.textContent = spiegazioneVera;
   }
-  return montaSezione(schermo, {
+  const visibili = montaSezione(schermo, {
     chiave: "ricerca",
     nome: "Ricerca",
     icona: "globe",
@@ -7381,6 +7829,7 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       apriMenu,
       opzioni: {
         leggiRapporto,
+        leggiDettaglio,
         onApriSessione: opzioni.onApriSessione,
         rendiMarkdown: opzioni.rendiMarkdown
       }
@@ -7390,6 +7839,8 @@ function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
       testo: "Chiedi in chat di avviare una ricerca approfondita: comparirà qui mentre lavora, e ci resterà col suo rapporto."
     }
   });
+  governoRicercheVive(schermo, { elenco: elenco2, aggiorna: opzioni.onAggiorna });
+  return visibili;
 }
 function montaProgetti(schermo, progetti, opzioni = {}) {
   const { onApriSessione = null, quanteRecenti = 3 } = opzioni;
@@ -7454,6 +7905,7 @@ var init_sezioni_adattatori = __esm({
     init_progetti();
     init_plurale();
     init_sezione_elenco_dettaglio();
+    init_modale_td();
     init_toast();
     init_modulo_voce();
     BOZZA = "__nuova__";
@@ -17666,7 +18118,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           research_pause: "pausa di una ricerca",
           research_resume: "ripresa di una ricerca",
           research_cancel: "annullamento di una ricerca",
-          research_delete: "eliminazione di una ricerca"
+          research_delete: "eliminazione di una ricerca",
+          research_deposit: "consegna del rapporto di ricerca"
+          // 12/09: L8. ⛔ Copia della mappa di nomi-attrezzi.js: debito, la mappa deve vivere in UN posto solo
         };
         return UMANI[nome] || String(nome ?? "");
       }
@@ -20184,7 +20638,13 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
               copia: (testo3) => copyText(testo3, "Rapporto copiato"),
               onMenu: apriMenuAzioniLibreria,
               onApriSessione: ({ id }) => passaASessione(id),
-              rendiMarkdown: renderizzaMarkdownSemplice
+              rendiMarkdown: renderizzaMarkdownSemplice,
+              /* ⭐ 12/09 L5 — le rotte di scrittura della Ricerca approfondita esistono (voce singola,
+                 pausa, ripresa, ri-verifica, eliminazione): la sezione riceve le STESSE funzioni di rete
+                 delle tre sezioni scrivibili, e la forma degli indirizzi la conosce solo l'adattatore
+                 (`servizioRicerche`). Senza questa riga il menu resta quello di ieri — consultazione
+                 soltanto — e niente si rompe. */
+              rete: reteVociDellaPersona()
             });
           } else {
             mount.setAttribute("role", ricerche.length ? "list" : "group");
@@ -20213,6 +20673,10 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         } catch (error) {
           if (attuale()) mostra([], { errore: "Ricerche non disponibili: " + error.message });
         }
+      }
+      function rileggiRicercheSeAperte() {
+        if (state.view !== "ricerca") return;
+        void caricaPannelloRicerca({ pagina: true });
       }
       function rigaRicerca(ricerca) {
         return creaReportRow(ricerca, { onApriRapporto: () => {
@@ -27308,6 +27772,7 @@ ${testo3}` : testo3;
             syncRunComposerState();
             mostraSuggerimentoComposer(suggerimentoDaUltimoAttrezzo());
             programmaAggiornamentoElencoSessioniReali();
+            rileggiRicercheSeAperte();
             break;
           }
           case "ApprovalRequested": {
