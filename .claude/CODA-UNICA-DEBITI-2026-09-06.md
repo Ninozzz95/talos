@@ -1172,3 +1172,31 @@ interattivo dell'11/09, così il riferimento non vive dentro la prova.
 a 1024, identico nel mockup e nella app: impaginazione a quella larghezza già nel disegno, non una
 regressione. Da curare nella testata Review (a capo delle azioni o menu ⋯ sotto i 1300 px), poi
 foto a 1280.
+
+### L8 (12/09, 08:02-08:09) — la verifica vera della ricerca approfondita: NON chiude, e dice perché
+Madre `c8e9b07b` (glm-5.3-flash, Desktop) → `research_start` → figlia `3029dea2` col permesso nuovo
+**«Research»** (L1 funziona: nessun REFUSED), 18 giri, 5 min, 265.670 token dentro / 7.288 fuori,
+**cache 0**. Il rapporto è stato depositato (`.harness-ui-research/3029dea2…/rapporto.md`, 8.953 byte,
+prosa buona con numeri) ma **senza il blocco ```talos-research-report** ⇒ cancello di consegna →
+`senza-rapporto`, motivo onesto a schermo («il rapporto non porta il record verificabile»). Tre
+difetti veri, trovati dal giro e non dai 2439 test:
+1. **La figlia gira con `glm-4.7-flash`** (il modello di serie), non con quello della madre
+   (`glm-5.3-flash`): `research_start` non passa il modello ⇒ cache 0 (su 4.7 non prende) e la regola
+   dell'owner «giri reali solo con glm-5.3-flash» violata dal prodotto. Cura: la figlia eredita il
+   modello della madre (o quello scelto nella sezione).
+2. **Il record recintato affidato alla prosa del modello non arriva**: un modello flash produce il
+   rapporto e ignora il JSON. Cura: `research_deposit` prende argomenti STRUTTURATI
+   (`testo`, `affermazioni[{testo, fonte, passaggio}]`, `fonti[{url, titolo}]`) e il record lo scrive il
+   SERVER con `src/research/report.mjs` — mai un fence lasciato al modello.
+3. **La sezione non si aggiorna da sola** quando la figlia finisce: la card resta «In corso» finché
+   non si preme Aggiorna (foto `fine-Rapporto.png`). Cura: ricaricare l'elenco al `RunFinished` di
+   una figlia con `permessi: Research`.
+Più: `giornale` 3 eventi, `passi 0`, `spesa 0` — il collettore non è agganciato (noto, L4 §): Piano e
+Fonti restano vuoti finché non lo è.
+
+### BC-31 — «research_deposit…» a schermo (owner, 12/09, foto della chat della ricerca L8)
+Un attrezzo nuovo del kernel senza nome umano: regola del 04/09 violata. Curato subito (nome umano
+«consegna del rapporto di ricerca» + descrizione) e cancello `nomi-attrezzi-copertura.test.mjs`:
+ogni attrezzo dichiarato dal kernel deve avere il suo nome umano, altrimenti rosso il test e non lo
+schermo. ⛔ Debito trovato per strada: la mappa dei nomi vive in DUE posti (`nomi-attrezzi.js` e una
+copia in `legacy/app.js` ~2514) — «mappa in UN posto solo» era la regola; da unificare.
