@@ -116,6 +116,7 @@ import {
 import type { TalosMobileProviderModel } from '@/lib/chat/providerContracts'
 import { TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH } from '@/lib/chat/promptEnhancerDepth'
 import { talosHarnessUiApiBase } from '@/lib/harness/harnessUiApiBase'
+import { avvisaSePonteStaccato, leggiStatoPonteCodice } from '@/lib/harness/avvisoPonteCodice'
 import { useTalosMobileToasts } from '@/stores/toasts'
 
 const TALOS_HARNESS_UI_BASE = '/harness-ui'
@@ -786,8 +787,15 @@ async function mountMockup(): Promise<void> {
         // coperto più sotto, ma riaprire una sessione ESISTENTE senza scrivere
         // nulla non passava mai da lì: restava silenzioso fino al primo
         // errore di rete grezzo).
-        serverPronto.then((esito) => {
-            if (!esito.ok) toasts.push({ message: t('harness.bridgeNotConnected'), durationMs: 6000 })
+        serverPronto.then(async (esito) => {
+            if (esito.ok) return
+            // ⛔ Seen on the Pad (12/09/2026): with the bridge OFF this toast stacked
+            // under the entry warning, and its advice («close and reopen TALOS»)
+            // is wrong for that case — the entry warning already says what to
+            // switch on. One snackbar at a time (Material, snackbars & toasts,
+            // read 12/09/2026): this one only when the bridge is NOT the reason.
+            if ((await leggiStatoPonteCodice()) === 'staccato') return
+            toasts.push({ message: t('harness.bridgeNotConnected'), durationMs: 6000 })
         })
         const html = await fetch(harnessUiAssetUrl('index.html'), { cache: 'no-cache' }).then((response) => {
             if (!response.ok) throw new Error(`harness-ui index.html: ${response.status}`)
@@ -892,6 +900,14 @@ async function mountMockup(): Promise<void> {
 onMounted(async () => {
     mounted = true
     if (!available) { loading.value = false; return }
+    /*
+     * ⭐ 12/9, owner: avvisare all'INGRESSO se il telefono non è collegato —
+     * il terminale della sessione passa da `TalosPonteAdb`, lo stesso ponte di
+     * Impostazioni → Controllo del telefono. Il latch dentro il modulo fa sì
+     * che lista → sessione resti UN avviso solo, e `void` perché un avviso non
+     * deve rallentare il montaggio di niente.
+     */
+    void avvisaSePonteStaccato({ router, toasts, t, sezioneDisponibile: available })
     void caricaModelliCodice()
     void attachKeyboardBridge()
     await resolveSession()

@@ -59,8 +59,62 @@ final class TalosLlamaNative {
         String directory = context == null ? "" : context.getApplicationInfo().nativeLibraryDir;
         String openClCacheDir = context == null ? ""
                 : new java.io.File(context.getCodeCacheDir(), "ggml-opencl-cache").getAbsolutePath();
+        preparaHexagon(directory);
         nativeInit(directory == null ? "" : directory, openClCacheDir);
         prepared = true;
+    }
+
+    /**
+     * ⭐⭐⭐ DOVE IL DSP CERCA I SUOI SKEL — la riga senza cui l'NPU non parte.
+     *
+     * Gli skel {@code libggml-htp-vNN.so} **non sono backend ggml**: non passano
+     * da {@code ggml_backend_load()} e non li apre il linker di Android. Li
+     * carica il DSP attraverso FastRPC, e l'URI che il backend costruisce porta
+     * un **percorso nudo** — nessuna cartella dentro
+     * ({@code ggml-hexagon.cpp:1716}):
+     *
+     * <pre>file:///libggml-htp-v79.so?htp_iface_skel_handle_invoke&amp;_modver=1.0</pre>
+     *
+     * A risolverlo e' {@code libcdsprpc.so}, che guarda **soltanto** dentro
+     * {@code ADSP_LIBRARY_PATH}. Gli script di upstream nel nostro stesso
+     * albero la impostano tutti ({@code scripts/snapdragon/adb/run-*.sh});
+     * dentro un'app Android non la imposta nessuno.
+     *
+     * ⛔ QUI e non dopo: si scrive **prima** di {@code nativeInit}, che e' il
+     * punto in cui {@code ggml_backend_load_all_from_path} apre
+     * {@code libggml-hexagon.so} e con lui, a catena, {@code libcdsprpc.so}.
+     * Scriverla dopo vorrebbe dire scriverla per il caricamento successivo.
+     *
+     * ⛔ La cartella e' la STESSA gia' passata a ggml
+     * ({@code ApplicationInfo.nativeLibraryDir}): con
+     * {@code useLegacyPackaging = true} gli skel sono estratti li' vere al
+     * momento dell'installazione, e non serve nessun estrattore.
+     *
+     * ⛔ Le quattro cartelle di sistema restano in coda, separate da
+     * **punto e virgola** e non da due punti — e' il separatore che FastRPC
+     * vuole (fonte: guida al delegate Hexagon di TensorFlow Lite, letta il
+     * 10/09/2026). Senza di quelle, uno skel di sistema che servisse al DSP non
+     * verrebbe piu' trovato perche' abbiamo ristretto il suo campo visivo.
+     *
+     * ⛔ Un fallimento qui NON e' fatale: l'NPU semplicemente non si accendera',
+     * e CPU e GPU continuano come prima. {@code Os.setenv} esiste dall'API 21,
+     * sotto il nostro minSdk 26.
+     */
+    private static void preparaHexagon(String nativeLibraryDir) {
+        if (nativeLibraryDir == null || nativeLibraryDir.isEmpty()) return;
+        try {
+            android.system.Os.setenv("ADSP_LIBRARY_PATH",
+                    nativeLibraryDir
+                            + ";/system/lib/rfsa/adsp"
+                            + ";/system/vendor/lib/rfsa/adsp"
+                            + ";/vendor/lib/rfsa/adsp"
+                            + ";/dsp",
+                    true);
+        } catch (android.system.ErrnoException rifiutata) {
+            // Si dice, e si va avanti: senza NPU l'app funziona, in silenzio no.
+            android.util.Log.w("TalosLlama",
+                    "ADSP_LIBRARY_PATH non impostata: l'NPU Hexagon restera' spenta", rifiutata);
+        }
     }
 
     private static native void nativeInit(String nativeLibraryDir, String openClCacheDir);
@@ -235,9 +289,61 @@ final class TalosLlamaNative {
      *     modello non la regge il contesto si crea in f16 e
      *     {@link #nativeKvCacheType} dice quale ha vinto.
      */
+    /**
+     * ⭐⭐⭐ COME i pesi entrano in memoria — le due manopole che mancavano.
+     *
+     * @param loadMode {@code "default"} (o vuoto) = come si è sempre fatto,
+     *     cioè il predefinito di llama.cpp, cioè {@code auto}. Altrimenti uno
+     *     dei nomi di upstream: {@code auto} · {@code none} · {@code mmap} ·
+     *     {@code mlock} · {@code mmap+mlock} · {@code dio}.
+     *     ⛔ {@code mlock} da solo NON accende la mmap — legge il file intero
+     *     in RAM; è {@code mmap+mlock} che mappa e poi inchioda. La lista non è
+     *     ricopiata qui a mano: la riconosce {@code llama_load_mode_from_str()}
+     *     di upstream, e un nome sconosciuto FA FALLIRE l'apertura
+     *     ({@link TalosLlamaEngine.FailureStage#LOAD_MODE}) invece di caricare
+     *     in silenzio come sempre — una manopola che non morde è peggio di una
+     *     manopola che non c'è.
+     * @param weightRepack tri-stato: {@code -1} = non chiesto, si tiene il
+     *     predefinito di upstream (acceso) · {@code 0} = spento · {@code 1} =
+     *     acceso. È una manopola SEPARATA da {@code loadMode}, non una sua
+     *     conseguenza — verificato nel submodule, il campo è
+     *     {@code llama_model_params.use_extra_bufts}. ⛔ Ma i due si
+     *     incrociano: i tensori ripacchettati non passano dalla strada veloce
+     *     della mmap, quindi il repack rende conveniente spegnere la mmap.
+     * @implNote ⛔ Cambiare queste due vuol dire RICARICARE i pesi: agiscono
+     *     su {@code llama_model_params}, non sul contesto, quindi
+     *     {@link TalosLlamaEngine#reopenContext} non le vede. È la stessa cosa
+     *     che PocketPal scrive sotto i suoi interruttori.
+     */
+    /**
+     * ⭐⭐⭐ 2026-09-10 — DOVE, e non solo quanto: la produzione può nominare
+     * il bersaglio.
+     *
+     * @param backendName vuoto (o {@code null}) = nessuna richiesta, cioè
+     *     esattamente come si è sempre fatto: {@code gpuLayers} dice quanti
+     *     strati spostare e llama.cpp sceglie da sé dove. Altrimenti il nome
+     *     di un registry come lo dichiara ggml — {@code OpenCL},
+     *     {@code Vulkan}, {@code HTP} — oppure {@code none}/{@code cpu} per
+     *     dire «nessun offload» ad alta voce.
+     * @param deviceName vuoto = accettato solo se quel registry espone UN
+     *     solo dispositivo di offload; altrimenti il nome esatto.
+     * @implNote ⛔ Perché serviva in produzione e non solo nella ricerca: con
+     *     due acceleratori compilati insieme — la direzione decisa dall'owner
+     *     il 2026-09-10, in cui l'utente sceglie fra CPU, GPU e Hexagon —
+     *     «sposta tutti gli strati» senza un nome è una lotteria decisa
+     *     dall'ordine di caricamento delle {@code .so}. E nominare è anche
+     *     l'unico modo perché {@link #nativeRuntimeSnapshot} possa dire QUALE
+     *     motore sta girando: senza nome, {@code backendDevice} resta vuoto e
+     *     «in uso» torna a essere una deduzione.
+     * @implNote ⛔ Un nome che non si risolve fa FALLIRE l'apertura, non un
+     *     ripiego silenzioso sulla CPU: «backend selezionabile non equivale a
+     *     backend realmente utilizzato» è il difetto che si sta togliendo di
+     *     mezzo, non uno da ereditare.
+     */
     static native long nativeOpen(String modelPath, int threads, int contextTokens, int gpuLayers,
                                   boolean deterministic, int threadsBatch, int microBatch,
-                                  String kvType);
+                                  String kvType, String loadMode, int weightRepack,
+                                  String backendName, String deviceName);
 
     /**
      * ⛔ SOLO RICERCA — l'apertura che dice DOVE, non solo quanto.
@@ -282,10 +388,38 @@ final class TalosLlamaNative {
      * applicato, invece di un metodo nativo per ogni campo (il piano
      * sorgente del programma MAX PERFORMANCE lo chiede esplicitamente).
      *
-     * Forma: {@code {"schema":1,"backendDevice":string|null,
+     * Forma: {@code {"schema":3,"backendDevice":string|null,
      * "gpuLayersEffective":int,"flashAttnEffective":string,
      * "kvCacheType":string,"contextTokens":int,"threads":int,
-     * "threadsBatch":int,"microBatch":int}}.
+     * "threadsBatch":int,"microBatch":int,"loadMode":string,
+     * "weightRepack":boolean,"mmapSupported":boolean,
+     * "mlockSupported":boolean,"offloadDevices":int,
+     * "threadPoolSplit":boolean}}.
+     *
+     * ⛔ Lo schema sale a ogni gruppo di campi nuovi: il 2 quando sono
+     * arrivate le manopole di caricamento, il 3 (2026-09-10) con
+     * {@code offloadDevices} e {@code threadPoolSplit}. Chi legge una
+     * snapshot vecchia non deve poter confondere «campo assente» con
+     * «zero».
+     *
+     * ⛔ {@code offloadDevices} è quanti acceleratori il registro ggml ha
+     * DAVVERO caricato in questa build. Zero rende certa la risposta a
+     * «dove sta girando»: nessuna richiesta di offload poteva essere
+     * onorata. Diverso da zero senza un {@code backendDevice} nominato
+     * significa «non lo so», e «non lo so» non si scrive «CPU».
+     *
+     * ⛔ {@code threadPoolSplit} è «due insiemi di thread veri», non «i due
+     * numeri erano diversi»: si crea UN pool solo quando i numeri
+     * coincidono, e nessun pool esterno se la creazione fallisce.
+     *
+     * ⛔ {@code loadMode} è la modalità RICHIESTA al caricatore. Per ogni
+     * valore esplicito è anche quella applicata; per {@code auto} no —
+     * l'header pubblico di llama.cpp non espone se AUTO abbia poi scelto
+     * la mmap, lo scrive solo in una riga di log. Il buco è dichiarato
+     * invece di essere riempito con una copia della logica di upstream,
+     * che al primo aggiornamento del submodule mentirebbe con l'aria di
+     * essere precisa. {@code mmapSupported}/{@code mlockSupported} sono
+     * risposte della libreria e servono a leggere quell'{@code auto}.
      *
      * ⛔ {@code gpuLayersEffective} NON è un conteggio per-strato reale
      * dell'offload (quello richiede instrumentation del graph placement di
@@ -332,6 +466,31 @@ final class TalosLlamaNative {
      * piu' lento dei successivi.
      */
     static native int nativeOpensSinceStart();
+
+    /**
+     * A che punto e' il caricamento del modello, in millesimi.
+     *
+     * ⛔ {@code -1} significa **«nessun caricamento in corso»**, non «zero per
+     * cento»: sono due stati diversi, e confonderli fa comparire una barra a
+     * zero quando non sta caricando niente.
+     *
+     * ⛔ Si INTERROGA da un altro thread mentre {@code nativeOpen} e' fermo
+     * dentro il caricamento: e' lo stesso schema di
+     * {@link #nativeTokensProduced(long)}, e per lo stesso motivo — una
+     * callback per tensore attraverserebbe il confine JNI 601 volte per un
+     * modello da 2,8 GiB.
+     */
+    static native int nativeLoadProgressPermille();
+
+    /**
+     * Ferma il caricamento in corso.
+     *
+     * ⛔ Non lascia niente a meta': il motore torna {@code 0} da
+     * {@code nativeOpen} e libera tutto lui. L'unico modo di distinguere
+     * «fermato da chi usa l'app» da «non ce l'ha fatta» e'
+     * {@link #nativeLastOpenError()}, che dice {@code load-cancelled}.
+     */
+    static native void nativeCancelLoad();
 
     /**
      * {@code [threads, threadsBatch, microBatch]} del contesto aperto, o
@@ -460,6 +619,30 @@ final class TalosLlamaNative {
 
     /** Token prodotti finora. Interrogabile da un altro thread durante la generazione. */
     static native int nativeTokensProduced(long handle);
+
+    /**
+     * ⛔⛔ Vero se l'ULTIMA corsa e' stata mollata dal MOTORE, non fermata da noi.
+     *
+     * `llama_decode` torna 2 = aborted in due casi che si somigliano solo nel
+     * numero: lo Stop della persona, e un backend che abbandona il grafo a meta'
+     * risposta. L'11/09/2026, sondando l'NPU sul Pad:
+     *
+     * <pre>
+     *   graph_compute: ggml_backend_sched_graph_compute_async failed with error 1
+     *   llama_decode: failed to decode, ret = 2
+     * </pre>
+     *
+     * La corsa e' stata registrata **VALID**: cioe' come prova che quel motore
+     * funziona su questo telefono.
+     *
+     * ⛔⛔ Armato e rimisurato lo stesso giorno, questo flag ha **smentito** il
+     * sospetto: non si alza mai, e lo stesso `ret = 2` compare anche sulla CPU
+     * 40 ms prima del verdetto — e' lo stop del banco a fine corsa. Resta
+     * perche' senza di lui le due interruzioni sono indistinguibili.
+     *
+     * ⛔ Si legge subito dopo la corsa: la successiva lo azzera.
+     */
+    static native boolean nativeEngineAborted(long handle);
 
     /**
      * Il testo prodotto finora, interrogabile mentre la generazione è in corso.

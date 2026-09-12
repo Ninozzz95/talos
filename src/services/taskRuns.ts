@@ -68,6 +68,16 @@ export type TalosTaskScheduleOutcome =
      * poterla distinguere da un errore.
      */
     | { ok: false, reason: 'locked' }
+    /**
+     * U-17 — l'attivita' e' IN PAUSA: la ricorrenza c'e', e non deve partire.
+     *
+     * ⛔ Non e' `refused` e non e' `unsupported`: e' una decisione della
+     * persona, l'unica delle tre che si annulla da sola quando lei preme
+     * «Riprendi». Metterla insieme a un guasto vorrebbe dire che l'interfaccia
+     * non puo' distinguere «l'ho fermata io» da «non ha funzionato», ed e'
+     * esattamente la distinzione per cui esiste la pausa.
+     */
+    | { ok: false, reason: 'paused' }
     | { ok: false, reason: 'unsupported' | 'refused' }
 
 /**
@@ -85,12 +95,38 @@ export async function talosScheduleAutonomousTask(
         title?: string
         nextRunAtMillis: number
         onlyIfChanged?: boolean
+        /** U-17 — la ricorrenza e' scritta, ma per ora non deve partire. */
+        paused?: boolean
     },
     appLockEnabled: boolean,
     bridge: TalosTaskRunPlugin = plugin,
 ): Promise<TalosTaskScheduleOutcome> {
     if (!talosAutonomousTasksAreSupported()) return { ok: false, reason: 'unsupported' }
     if (appLockEnabled) return { ok: false, reason: 'locked' }
+    /*
+     * ⛔ IN PAUSA NON BASTA NON PROGRAMMARE: BISOGNA DISDIRE.
+     *
+     * Il lavoro che dorme e' gia' registrato nel sistema — `setPersisted(true)`,
+     * quindi sopravvive anche a un riavvio del telefono — e uscire di qui senza
+     * fare niente lo lascerebbe partire lo stesso, alla sua ora, con la persona
+     * convinta di averlo fermato. Una pausa che non ferma e' peggio di nessuna
+     * pausa.
+     *
+     * E si disdice perche' `JobScheduler` non ha una pausa: il suo lato pubblico
+     * e' programmare, accodare, disdire e chiedere cosa c'e' in attesa, e
+     * «cancel() cancella il lavoro indicato; se sta girando viene fermato
+     * subito» (developer.android.com/reference/android/app/job/JobScheduler,
+     * letto il 12/09/2026). Fermare e riprendere si scrive quindi come
+     * disdire e riprogrammare, e il posto dove quella coppia vive e' questo —
+     * non il lato nativo, che non sa perche' un lavoro non c'e' piu'.
+     *
+     * `await` e non un `void`: chi chiama deve poter sapere che quando questa
+     * funzione risponde, la disdetta e' stata chiesta davvero.
+     */
+    if (task.paused === true) {
+        await talosCancelAutonomousTask(task.id, bridge)
+        return { ok: false, reason: 'paused' }
+    }
     try {
         const esito = await bridge.schedule(task)
         return esito.scheduled

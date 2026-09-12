@@ -88,12 +88,55 @@ export function talosPesoDegliAttrezzi(
 }
 
 /**
- * ⛔ 3,7 byte per token, MISURATO su questi schemi il 2026-08-09 (38.386 byte =
- * 10.375 token). Non è la media dell'inglese: è la media di **questo** testo,
- * che è pieno di `_` e di nomi composti, e per la domanda «sfondo i 10k token?»
- * conta solo questa.
+ * ⛔⛔ CARATTERI PER TOKEN — RIMISURATO il 2026-09-10, ed era sbagliato.
+ *
+ * Valeva **3,7** dal 2026-08-09. Rimisurato oggi sul testo esatto che
+ * {@link talosPesoDegliAttrezzi} conta — i **69** attrezzi veri, `name` +
+ * `description` + lo schema serializzato, presi da `toolset.offer` con tutto
+ * acceso e tutti i permessi a `allow` — con i **tokenizer ufficiali** dei due
+ * modelli, non a stima:
+ *
+ * | | caratteri | token | car./token |
+ * |---|---|---|---|
+ * | Gemma 3 (`@lenml/tokenizer-gemma3`) | 48.888 | 11.831 | **4,13** |
+ * | Qwen 3 (`@lenml/tokenizer-qwen3`) | 48.888 | 11.503 | **4,25** |
+ *
+ * ⇒ Con 3,7 la stima era **13.213 token contro 11.831 veri: +11,7%**. Sbaglia
+ * in sicurezza (la soglia dei 10k scatta prima del dovuto), ma è comunque un
+ * numero che entra in una decisione, e un numero sbagliato non si tiene.
+ *
+ * Si tiene il valore **più basso** dei due tokenizer, arrotondato per difetto:
+ * dà la stima di token più **alta**, cioè continua a sbagliare dalla parte
+ * dell'apertura a gradi invece che contro.
+ *
+ * ## ⛔ Come si RIMISURA — perché un numero così invecchia
+ *
+ * Invecchia a ogni attrezzo aggiunto e a ogni modello nuovo. Si rifà così,
+ * senza dispositivo, in due passi:
+ *
+ *  1. un vitest che costruisce il toolset vero (`tests/unit/tools/pesoDegliSchemi.test.ts`
+ *     è il seme già pronto), chiama `talosPesoDegliAttrezzi` e scrive su un
+ *     file la STESSA concatenazione che quella funzione conta;
+ *  2. uno script Node che rilegge il file e conta con `@lenml/tokenizer-gemma3`
+ *     e `@lenml/tokenizer-qwen3` (`t.encode(testo).length`, meno
+ *     `t.encode('').length` che è l'overhead dei token speciali).
+ *
+ * ⛔ NON si contano i byte al posto dei token: in questo progetto quell'errore
+ * è già costato un fattore **3,9×** ([[il-giro-vero-trova-quattro-difetti-che-le-fixture-non-vedono]]).
+ *
+ * ⛔ E ciò che questa misura NON dice: il tokenizer di **Claude** non è né
+ * Gemma né Qwen, e questa costante decide solo sul ramo Anthropic. Il rapporto
+ * vero per quel tokenizer resta non misurato qui. Oggi non cambia nulla —
+ * `tools.length >= 10` è già vero con 69 attrezzi e decide da solo — ma chi un
+ * giorno spedisse meno di dieci attrezzi pesanti deve saperlo.
+ *
+ * ⛔ Il nome dice «BYTE» ma la grandezza contata da `talosPesoDegliAttrezzi` è
+ * `String.length`, cioè **unità UTF-16**. Per l'ASCII di questi schemi le due
+ * cose coincidono, e il nome resta com'è perché è esportato; ma chi un giorno
+ * ci mettesse una descrizione con accenti o emoji conterebbe meno di quanto
+ * pesa sul filo. Il nome onesto sarebbe `TALOS_CARATTERI_PER_TOKEN`.
  */
-export const TALOS_BYTE_PER_TOKEN = 3.7
+export const TALOS_BYTE_PER_TOKEN = 4.1
 const BYTE_PER_TOKEN = TALOS_BYTE_PER_TOKEN
 
 /** Le due soglie della documentazione Anthropic, in una funzione sola. */

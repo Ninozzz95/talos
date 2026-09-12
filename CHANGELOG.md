@@ -6,6 +6,93 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.28
+
+The interface has been rebuilt on one calm, consistent design across the
+whole app — the sidebar, every station (Notes, Tasks, Memory, Library,
+Research) and the motion that ties them together — and each station now
+lets you create, open, edit and delete its things from the app itself.
+
+### One sidebar, everywhere
+
+The sidebar is the same on every screen: search, the eight sections,
+recent chats, then Diagnostics and Settings. On a tablet it stays open
+beside the content instead of sliding in; on a phone it slides in with a
+spring that settles in about half a second and follows the "Transition
+duration" slider in Settings (measured on a tablet: 525 ms at the default
+setting, 961 ms at double). Models moved from Settings into the sidebar.
+Each station opens with its own icon and title in the header, and a back
+arrow only once you are inside it.
+
+### Notes, Tasks, Memory: complete, not read-only
+
+- Notes can be pinned, edited, exported as text and deleted. Markdown
+  renders as text, not as symbols.
+- Tasks have the states To do, In progress, Scheduled and Done, a
+  checkbox that completes in one tap, a checklist you can tick inside the
+  task, an edit screen, export, and a real pause for scheduled tasks: a
+  paused task does not run until you resume it.
+- Memory filters by type (Preference, Project fact, Procedure, Policy
+  note) plus a "To review" shelf for what the model proposed and you have
+  not confirmed. Each memory can be edited, paused, exported and deleted,
+  and shows where it came from.
+- Writing a note, a task or a memory yourself no longer rings the
+  notification bell. Only things the model did do.
+
+### Library: real previews, and adding a file no longer sends it anywhere
+
+Files in the Library show what they are: images as thumbnails, PDFs
+rendered from their first page on the device, text files as a typographic
+preview. Adding an image to the Library used to quietly queue it for your
+next chat message and ask the "this image leaves your phone" question at
+the wrong moment; adding is now just adding. The question is asked when
+you actually send an image to a remote model — including images that were
+already in your Library — and "No" keeps the message on the phone.
+
+### Research: a report is only "done" when it holds up
+
+A research now ends in one of four honest states: concluded with a
+readable report; blocked by a permission; stopped before the report was
+written; or finished with a report that cannot be read back. A run that
+stopped because a step failed says so, with the step's own error, instead
+of guessing. Cards use singular labels, say whether sources were already
+gathered, and update the moment a run finishes — no reopen needed. A quick
+research measured on a tablet with GLM 5.3 Flash writing and a local
+Qwen3-4B checking citations: 3 min 21 s, 8 sources, 26 claims verified.
+
+### Codice tells you when the phone bridge is off
+
+Entering Codice with the phone bridge switched off now shows one message
+saying what does not work (the terminal and session commands), the two
+steps to switch it back on, and a button that opens Settings → Phone
+control. It appears once per visit and closes by itself when the bridge
+comes back.
+
+### Errors in plain words
+
+Every error the chat can show now leads with a sentence about what
+happened and what to do; the technical code stays small, underneath, for
+diagnostics. Local models no longer show "unknown" in the model picker.
+
+### Plain words in the model picker and error cards
+
+Local models in the picker say "On this device" instead of showing the file
+path, a status nobody translated is omitted rather than printed raw, and an
+error card for a local model names the model, not its path, and suggests
+what to do with a local model rather than "check the provider".
+
+### Fixed
+
+- Row menus inside a station could open invisibly behind the sheet.
+- Tapping the dimmed area beside the sidebar did not close it.
+- A stopped research showed a running timer next to "Stopped".
+- The sessions list in Codice showed a raw label instead of "Last 30
+  days".
+- The "listen" action under a message had no accessible name.
+- Research plan chips read "5p" and "10 / 3m"; they now say "5 pages" and "10 pages · 3 min".
+- Codice's empty session and status strip spoke English inside an Italian app.
+- On a phone, the Codice bridge warning was drawn underneath the station.
+
 ## v0.1.27
 
 The "+" menu is less cluttered: it no longer shows a second copy of the

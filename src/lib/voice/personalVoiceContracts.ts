@@ -62,6 +62,25 @@ export interface TalosPersonalVoiceStatus {
     installed: boolean
     /** `installed` AND at least one compatible saved profile exists. */
     ready: boolean
+    /**
+     * Gli id dei profili che il router NATIVO di produzione ha dichiarato
+     * usabili adesso (`TalosVoiceAvailabilityResolver.forProfile`), non
+     * «quanti» ce ne sono.
+     *
+     * ⛔ Esiste perche' `ready` risponde a «esiste ALMENO un profilo
+     * pronto DA QUALCHE PARTE», mai «quello SCELTO e' pronto»: con due
+     * profili di cui uno solo compatibile, la preferenza salvata poteva
+     * puntare all'altro e `ready` diceva comunque `true`. Il nativo poi
+     * accettava la richiesta (il file del profilo esiste davvero) e
+     * falliva DOPO, a meta' sintesi — in chat «la riproduzione fallisce»,
+     * nell'anteprima silenzio. Il ripiego onesto sul sistema si decide
+     * qui, PRIMA di dire una parola.
+     *
+     * Assente quando il modello non e' installato (allora `ready` e' gia'
+     * `false` e non c'e' niente da distinguere) o quando il ponte nativo
+     * non ha risposto.
+     */
+    compatibleProfileIds?: readonly string[]
     active: boolean
     failure?: string
     engineBuild?: string

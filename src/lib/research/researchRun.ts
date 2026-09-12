@@ -466,6 +466,55 @@ export function talosResearchStepIdFor(branchId: string, kind: TalosResearchStep
 }
 
 /**
+ * Whether a step actually PRODUCED something, as opposed to merely finishing.
+ *
+ * `done` says the step stopped without an error; `resultRef` says it left a
+ * payload in the vault. They are not the same fact, and the gap between them is
+ * where the screens started disagreeing: a step can be marked done and have
+ * nothing behind it, and a screen that reads only the state will promise the
+ * reader a file that is not there.
+ *
+ * ⛔ Misurato sul Pad il 12/09/2026 (foto RC12). Questa e' la stessa regola che
+ * il controller applica gia' per rileggere le fonti dal vault
+ * (`chatController.ts`: `kind === 'search' && state === 'done' && resultRef`) —
+ * scritta qui una volta perche' le schermate la leggano invece di ricopiarla.
+ */
+export function talosResearchStepProduced(step: TalosResearchStep): boolean {
+    return step.state === 'done' && typeof step.resultRef === 'string' && step.resultRef.trim().length > 0
+}
+
+/**
+ * Whether the sources of ONE line of enquiry are on disk.
+ *
+ * The report page prints «Fonti raccolte» next to a line; this is the sentence
+ * behind that claim, so the line stops being able to say it on its own.
+ */
+export function talosResearchSourcesGatheredFor(run: TalosResearchRun, branchId: string): boolean {
+    const step = run.steps.find((candidate) => candidate.id === talosResearchStepIdFor(branchId, 'search'))
+    return step ? talosResearchStepProduced(step) : false
+}
+
+/**
+ * Whether ANY sources have been gathered for this run.
+ *
+ * ⛔ Il difetto che chiude (Pad, 12/09/2026, foto RC12): la scheda del dossier
+ * deduceva la raccolta dall'ELENCO DEL RAPPORTO. Una corsa con tutte le linee
+ * `b*:search` concluse e la sintesi caduta non ha un rapporto — quindi non ha
+ * un elenco — e la scheda ne concludeva «Fonti ancora da raccogliere», mentre
+ * la pagina del rapporto diceva «Fonti raccolte» sulle stesse identiche linee.
+ * Due letture dello stesso giornale, e quella della scheda era falsa: le fonti
+ * erano state pagate e scritte.
+ *
+ * ⇒ Si guarda il giornale, non l'artefatto che il giornale non ha prodotto. E'
+ * lo stato vuoto che dichiara «niente» mentre il dato esiste (NN/g, «Designing
+ * Empty States in Complex Applications», letto 12/09/2026): non una sfumatura
+ * di testo, un messaggio di stato del sistema sbagliato.
+ */
+export function talosResearchSourcesGathered(run: TalosResearchRun): boolean {
+    return run.steps.some((step) => step.kind === 'search' && talosResearchStepProduced(step))
+}
+
+/**
  * What still has to happen, from the PLAN rather than from the journal.
  *
  * The two answer different questions and both are needed. The journal records

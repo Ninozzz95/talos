@@ -391,7 +391,9 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
         priority: 'normal',
         created_at: '2026-07-23T09:00:00.000Z',
     })
-    expect(task).toMatchObject({ id: 'task-1', status: 'todo', run_id: 'run-42' })
+    // U-17: nasce VIVA. `paused: true` alla nascita sarebbe un'attività che
+    // non parte e nessuno ha fermato.
+    expect(task).toMatchObject({ id: 'task-1', status: 'todo', run_id: 'run-42', paused: false })
     await repository.createTask({
         id: 'task-2',
         title: 'Second task',
@@ -403,6 +405,22 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
     expect((await repository.listTasks()).map((entry) => entry.id)).toEqual(['task-2', 'task-1'])
     const doing = await repository.setTaskStatus('task-1', 'doing')
     expect(doing.status).toBe('doing')
+    /*
+     * U-17 — la pausa va e torna, e NON tocca la ricorrenza.
+     *
+     * Il giro completo sta qui, nel contratto condiviso, perché deve valere
+     * identico sul deposito vero e su quello in memoria: una pausa che
+     * sopravvive in SQLite e si perde nel ripiego sarebbe una funzione che
+     * smette di funzionare a seconda di dove gira l'app.
+     */
+    const inPausa = await repository.updateTask('task-1', { paused: true })
+    expect(inPausa.paused).toBe(true)
+    expect((await repository.listTasks()).find((row) => row.id === 'task-1')?.paused).toBe(true)
+    // ⛔ Al verso contrario: una patch che NON parla di pausa la lascia dov'è.
+    const soloTitolo = await repository.updateTask('task-1', { title: 'Verify the EV claim, again' })
+    expect(soloTitolo.paused).toBe(true)
+    const ripresa = await repository.updateTask('task-1', { paused: false })
+    expect(ripresa.paused).toBe(false)
     await repository.deleteTask('task-2')
     expect((await repository.listTasks()).map((entry) => entry.id)).toEqual(['task-1'])
     await expect(repository.setTaskStatus('task-2', 'done')).rejects.toThrow('TALOS_TASK_NOT_FOUND')
@@ -421,6 +439,56 @@ export async function exerciseChatRepositoryContract(repository: TalosChatReposi
         created_at: '2026-07-23T09:10:01.000Z',
     })
     expect((await repository.listNotes()).map((entry) => entry.id)).toEqual(['note-2', 'note-1'])
+
+    /*
+     * U-10 — «In evidenza», e le due garanzie che la rendono utile.
+     *
+     * (1) Una nota in evidenza sta in CIMA, anche se è la più vecchia: è
+     *     esattamente il motivo per cui qualcuno la mette in evidenza.
+     * (2) ⛔ Mettere la puntina NON sposta `updated_at`. La lista si ordina su
+     *     quella data: toccarla farebbe risalire una nota di marzo fingendo che
+     *     sia stata riscritta oggi, e il gruppo «non in evidenza» si
+     *     riordinerebbe tutto quando la puntina viene tolta.
+     *
+     * Provato QUI, nel contratto, e non su una sola implementazione: SQLite fa
+     * `ORDER BY pinned DESC` e la copia in memoria ordina in JavaScript, cioè
+     * due codici diversi per la stessa promessa.
+     */
+    expect(note.pinned).toBe(false)
+    const pinned = await repository.updateNote({ id: 'note-1', pinned: true })
+    expect(pinned.pinned).toBe(true)
+    expect(pinned.updated_at).toBe(note.updated_at)
+    expect(pinned.title).toBe('Field observation')
+    expect((await repository.listNotes()).map((entry) => entry.id)).toEqual(['note-1', 'note-2'])
+
+    // Al verso contrario: tolta la puntina, l'ordine per data torna quello di
+    // prima. Se `updated_at` si fosse mossa, questa riga fallirebbe.
+    const unpinned = await repository.updateNote({ id: 'note-1', pinned: false })
+    expect(unpinned.pinned).toBe(false)
+    expect(unpinned.updated_at).toBe(note.updated_at)
+    expect((await repository.listNotes()).map((entry) => entry.id)).toEqual(['note-2', 'note-1'])
+
+    // Riscrivere il TESTO invece la sposta: è una modifica vera.
+    const rewritten = await repository.updateNote({ id: 'note-1', content: 'Corretto.' })
+    expect(rewritten.content).toBe('Corretto.')
+    expect(rewritten.updated_at).not.toBe(note.updated_at)
+
+    /*
+     * Il ripristino da backup passa la riga esportata per intero a
+     * `createNote`: senza `pinned` in ingresso, riportava indietro le note e
+     * buttava via quali erano in evidenza — una perdita silenziosa.
+     */
+    const restored = await repository.createNote({
+        id: 'note-restored',
+        title: 'Restored note',
+        content: 'Came back from a backup.',
+        pinned: true,
+        created_at: '2026-07-23T09:09:00.000Z',
+    })
+    expect(restored.pinned).toBe(true)
+    expect((await repository.listNotes())[0]?.id).toBe('note-restored')
+    await repository.deleteNote('note-restored')
+
     await repository.deleteNote('note-2')
     expect((await repository.listNotes()).map((entry) => entry.id)).toEqual(['note-1'])
     await expect(repository.deleteNote('note-2')).rejects.toThrow('TALOS_NOTE_NOT_FOUND')

@@ -70,10 +70,47 @@ public final class TalosLocalProfile {
      */
     public final double decodeTokPerSec;
 
+    /**
+     * ⭐⭐⭐ D-53 — LE DUE MISURE CHE MANCAVANO, e senza le quali «chi vince»
+     * cambia a seconda della domanda.
+     *
+     * Banco sul Pad dell'owner, 11/09/2026, otto modelli: chi vince la
+     * LETTURA del prompt perde la SCRITTURA su sette modelli su otto
+     * (`LFM2.5`: NPU legge a 1.621 t/s ma scrive a 15,4; la GPU legge a 445 e
+     * scrive a 25,9). Con `ttftMs` solo — misurato su UN prompt fisso da
+     * 2.637 token — il selettore trattava la lettura come un costo costante,
+     * e un costo costante non distingue una domanda di dieci token da un
+     * contesto di tremila.
+     *
+     * `prefillTokPerSec` e' la lettura come VELOCITA' (token nuovi al secondo
+     * nel prefill del sondaggio), cosi' `Prefill(p, prompt) = prompt / pp` per
+     * qualunque prompt. `openMs` e' quanto e' costato aprire il modello su
+     * questo motore — su GPU sono decine di secondi di caricamento dei buffer
+     * (§5 del ledger), sull'NPU tre.
+     *
+     * ⛔ `-1` vale «non misurato»: i profili scritti prima di oggi non li
+     * hanno, e leggerli come zero farebbe sembrare infinita la lettura e
+     * gratis l'apertura. Chi decide torna al metro vecchio quando mancano.
+     *
+     * ⛔ Nessun nome di modello entra in questa decisione: e' la stessa
+     * formula per qualunque GGUF, con i numeri di QUEL file su QUESTO telefono
+     * — e' cio' che «motore universale» vuol dire.
+     */
+    public final double prefillTokPerSec;
+    public final long openMs;
+
     public TalosLocalProfile(TalosLocalProfileIdentity identity, String backendRegistry,
                               String backendDevice, TalosBackendChoice.Outcome outcome,
                               long ttftMs, long measuredAtMs, Level qualificationLevel,
                               double decodeTokPerSec) {
+        this(identity, backendRegistry, backendDevice, outcome, ttftMs, measuredAtMs,
+                qualificationLevel, decodeTokPerSec, -1, -1);
+    }
+
+    public TalosLocalProfile(TalosLocalProfileIdentity identity, String backendRegistry,
+                              String backendDevice, TalosBackendChoice.Outcome outcome,
+                              long ttftMs, long measuredAtMs, Level qualificationLevel,
+                              double decodeTokPerSec, double prefillTokPerSec, long openMs) {
         this.identity = identity;
         this.backendRegistry = backendRegistry == null ? "" : backendRegistry;
         this.backendDevice = backendDevice;
@@ -82,6 +119,8 @@ public final class TalosLocalProfile {
         this.measuredAtMs = measuredAtMs;
         this.qualificationLevel = qualificationLevel == null ? Level.Q1 : qualificationLevel;
         this.decodeTokPerSec = decodeTokPerSec;
+        this.prefillTokPerSec = prefillTokPerSec;
+        this.openMs = openMs;
     }
 
     /** Stessa identità, stesso backend, stesso dispositivo — la stessa prova, misurata di nuovo. */

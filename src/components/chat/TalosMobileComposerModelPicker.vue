@@ -109,11 +109,34 @@ function capabilityValue(profile: TalosMobileModelProfileView, key: string): unk
     return profile.capabilities?.[key]
 }
 
-function compatibilityLabel(profile: TalosMobileModelProfileView): string {
+/**
+ * ⛔ «unknown» NON è un'informazione: è un campo che non abbiamo.
+ *
+ * Owner 2026-09-11 dal Pad: nel selettore, sotto ogni modello LOCALE, la riga
+ * diceva «unknown - testo». Quell'«unknown» è il valore letterale di
+ * `chat_compatibility`, che `localAdapter.ts` scrive così per costruzione
+ * (riga ~2090: `chatCompatibility: 'unknown' as const`) — un GGUF sul telefono
+ * non viene interrogato su quali API di chat supporti, quindi non lo sappiamo
+ * e non possiamo saperlo senza aprirlo.
+ *
+ * Il difetto era il ramo finale: `typeof value === 'string' ? value : …`
+ * stampava la stringa GREZZA, e siccome «unknown» È una stringa non arrivava
+ * mai alla traduzione — a schermo finiva la parola inglese del protocollo.
+ *
+ * ⇒ Un campo mancante si OMETTE, non si riempie con un segnaposto: «unknown
+ * and missing metadata should be treated the same for display purposes», e i
+ * campi senza valore si lasciano vuoti invece di scriverci «unknown»/«N/D»
+ * (prassi metadati W3C, letta 12/09/2026). Vale anche per un valore che non
+ * riconosciamo: un'etichetta che non sappiamo tradurre è gergo di protocollo,
+ * non una parola per chi legge.
+ *
+ * `null` = questa riga non ha niente da dire su questo punto.
+ */
+function compatibilityLabel(profile: TalosMobileModelProfileView): string | null {
     const value = capabilityValue(profile, 'chat_compatibility')
     if (value === 'supported') return t('chat.compatibilitySupported')
     if (value === 'unsupported') return t('chat.compatibilityUnsupported')
-    return typeof value === 'string' ? value : t('common.unknown').toLocaleLowerCase()
+    return null
 }
 
 function contextLabel(profile: TalosMobileModelProfileView): string | null {
@@ -134,10 +157,52 @@ function modalityLabel(profile: TalosMobileModelProfileView): string | null {
     return localized.length ? localized.join(' + ') : null
 }
 
-function statusLabel(status: string): string {
+/**
+ * La terza riga di un modello: solo i pezzi che esistono davvero.
+ *
+ * ⛔ Si compone qui e non nel template perché i separatori erano attaccati ai
+ * pezzi che SEGUONO (` - {{ contextLabel }}`): con il primo pezzo assente la
+ * riga sarebbe cominciata con un trattino, e con tutti e tre assenti sarebbe
+ * rimasto uno `<span>` vuoto che occupa comunque una riga di altezza sotto ogni
+ * modello. Un separatore è una relazione fra due cose: senza le due cose non
+ * esiste.
+ *
+ * `null` = niente da dire, e allora la riga non si disegna affatto.
+ */
+/**
+ * The second line: the provider's model id — except for a LOCAL model, whose
+ * "id" is the file path on the device (`/storage/emulated/0/…/x.gguf`, seen on
+ * the Pad 12/09/2026). A path is not information for the person: the name is
+ * already on the first line, so the second says where it lives.
+ */
+function modelLine(profile: TalosMobileModelProfileView): string {
+    return profile.provider === 'local' ? t('chat.localModelLine') : profile.model
+}
+
+function detailLabel(profile: TalosMobileModelProfileView): string | null {
+    const parts = [compatibilityLabel(profile), contextLabel(profile), modalityLabel(profile)]
+        .filter((part): part is string => typeof part === 'string' && part.trim() !== '')
+    // Lo stesso separatore della riga sopra (`modello - stato`): due righe
+    // adiacenti che elencano cose dello stesso oggetto si leggono come una sola
+    // se le si punteggia allo stesso modo.
+    return parts.length ? parts.join(' - ') : null
+}
+
+/**
+ * A status we cannot say in words is omitted, like the compatibility above:
+ * on the Pad (12/09/2026) every local model read «untested» — the protocol's
+ * word, never translated. `null` = nothing to say.
+ */
+function statusLabel(status: string): string | null {
     if (status === 'enabled') return t('chat.statusEnabled')
     if (status === 'disabled') return t('chat.statusDisabled')
-    return status
+    if (status === 'untested') return t('chat.statusUntested')
+    return null
+}
+
+/** Second line of a model row: where it lives, then its status — only the parts that exist. */
+function secondLine(profile: TalosMobileModelProfileView): string {
+    return [modelLine(profile), statusLabel(profile.status)].filter((part): part is string => !!part).join(' - ')
 }
 
 function routingIsSelectable(profile: TalosMobileRoutingProfileView): boolean {
@@ -272,7 +337,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     <span class="flex min-w-0 flex-1 flex-col">
                         <span class="truncate font-medium text-[var(--talos-text,var(--foreground))]">{{ profile.name }}</span>
                         <span class="truncate text-2xs text-[var(--talos-muted,var(--muted-foreground))]">
-                            {{ $t('chat.routeLaneStatus', { count: profile.lane_count, status: statusLabel(profile.status) }) }}
+                            {{ $t('chat.routeLaneStatus', { count: profile.lane_count, status: statusLabel(profile.status) ?? profile.status }) }}
                         </span>
                     </span>
                     <Check
@@ -392,13 +457,13 @@ function onListKeydown(event: KeyboardEvent): void {
                     <span class="flex min-w-0 flex-1 flex-col">
                         <span class="truncate font-medium text-[var(--talos-text,var(--foreground))]">{{ profile.display_name }}</span>
                         <span class="truncate font-mono text-2xs text-[var(--talos-muted,var(--muted-foreground))]">
-                            {{ profile.model }} - {{ statusLabel(profile.status) }}
+                            {{ secondLine(profile) }}
                         </span>
-                        <span class="truncate text-2xs text-[var(--talos-muted,var(--muted-foreground))]">
-                            {{ compatibilityLabel(profile) }}
-                            <template v-if="contextLabel(profile)"> - {{ contextLabel(profile) }}</template>
-                            <template v-if="modalityLabel(profile)"> - {{ modalityLabel(profile) }}</template>
-                        </span>
+                        <span
+                            v-if="detailLabel(profile)"
+                            data-testid="talos-mobile-model-option-detail"
+                            class="truncate text-2xs text-[var(--talos-muted,var(--muted-foreground))]"
+                        >{{ detailLabel(profile) }}</span>
                     </span>
                     <Check
                         v-if="profile.id === selectedModelProfileId"

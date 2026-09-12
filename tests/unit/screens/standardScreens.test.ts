@@ -104,12 +104,26 @@ describe('standard tab screens (verbatim desktop parity, step-1 empty states)', 
      * verificare, non con un rifiuto.
      */
 
-    it('context: Library header + Context Vault section chrome + local-first empty state', () => {
+    /**
+     * ⛔ «No files yet» non c'e' piu', e non e' una regressione: e' U-20.
+     * L'intro lunga e' sparita dalla pagina su decisione dell'owner
+     * (12/09/2026) — diceva in tre righe come funziona la Libreria, ogni volta,
+     * a chi la Libreria l'aveva gia' aperta. Al suo posto c'e' lo stato vuoto
+     * del mockup, che e' un invito ad agire e non una spiegazione.
+     *
+     * L'INTENTO del test resta intero, ed e' quello che conta: la stazione si
+     * NOMINA da sola, e' LOCAL-FIRST (nessun indirizzo di server nella pagina),
+     * e una Libreria vuota lo DICE invece di mostrare uno spazio bianco.
+     */
+    it('context: the station names itself, stays local-first, and says when it is empty', () => {
         const w = mount(ContextScreen)
         expect(w.get('[data-testid="mobile-screen-title"]').text()).toBe('Library')
-        expect(w.get('[data-testid="mobile-screen-eyebrow"]').text()).toContain('Context Vault')
-        expect(w.text()).toContain('Context Vault')
-        expect(w.text()).toContain('No files yet')
+        // Il titolo della pagina, quello del mockup: dentro il foglio della
+        // stazione e' l'unico visibile, perche' li' l'intestazione di
+        // `TalosMobileScreen` si nasconde da sola.
+        expect(w.get('h1.text-3xl').text()).toBe('Library')
+        expect(w.text()).toContain('Documents, images and saved pages.')
+        expect(w.get('[data-testid="talos-library-empty"]').text()).toContain('Nothing here yet')
         expect(w.text()).not.toContain('/api/talos/context-sets')
     })
 })

@@ -97,6 +97,12 @@ function boundedTemplateCapabilities(
         supportsTools: value.supportsTools,
         supportsToolCalls: value.supportsToolCalls,
         supportsSystemRole: value.supportsSystemRole,
+        // ⛔ `=== true` e non `?? false`: qui arriva anche un oggetto letto da
+        // un ponte piu' vecchio, e «non lo so» vale «non vincolabile».
+        grammarForTools: value.grammarForTools === true,
+        // ⛔ Stessa regola: un ponte che non lo dichiara non sta promettendo
+        // un interruttore che non c'e'.
+        thinkingCanBeDisabled: value.thinkingCanBeDisabled === true,
     }
 }
 

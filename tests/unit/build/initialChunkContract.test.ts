@@ -59,6 +59,11 @@ function createFixture(options: FixtureOptions = {}): string {
     // ⭐ Il motore vocale entra al primo TOCCO, non al primo disegno: è la
     // riga che ha portato il grafo d'avvio da 600.982 byte a 599.943.
     const speechKey = 'src/services/speech.ts'
+    /*
+     * La riga delle misure sotto una risposta locale: esiste solo dopo che un
+     * modello locale ha generato qualcosa, mai al primo disegno della chat.
+     */
+    const localMetricsRowKey = 'src/components/chat/TalosMobileLocalMetricsRow.vue'
     const documentGeneratorKey = 'src/lib/documents/documentGenerator.ts'
     const launcherIconDialogKey = 'src/components/talos/settings/TalosLauncherIconDialog.vue'
     const chatScreenKey = 'src/screens/ChatScreen.vue'
@@ -149,6 +154,7 @@ function createFixture(options: FixtureOptions = {}): string {
                 toolConsentKey,
                 chatMediaKey,
                 speechKey,
+                localMetricsRowKey,
                 ...(documentsAreDynamic ? [documentGeneratorKey] : []),
                 ...(launcherIconDialogIsDynamic ? [launcherIconDialogKey] : []),
                 chatScreenKey,
@@ -221,6 +227,10 @@ function createFixture(options: FixtureOptions = {}): string {
         },
         [speechKey]: {
             file: 'assets/speech.js',
+            isDynamicEntry: true,
+        },
+        [localMetricsRowKey]: {
+            file: 'assets/local-metrics-row.js',
             isDynamicEntry: true,
         },
         [documentGeneratorKey]: {
@@ -340,6 +350,7 @@ function createFixture(options: FixtureOptions = {}): string {
     writeFileSync(join(root, 'assets', 'welcome-easter-egg.js'), 'g'.repeat(64))
     writeFileSync(join(root, 'assets', 'welcome-title.js'), 'v'.repeat(64))
     writeFileSync(join(root, 'assets', 'workspace-background.js'), 'b'.repeat(64))
+    writeFileSync(join(root, 'assets', 'local-metrics-row.js'), 'n'.repeat(64))
     return root
 }
 

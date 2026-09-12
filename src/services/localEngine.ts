@@ -5,6 +5,8 @@ import {
 } from '@/lib/models/localContextPolicy'
 import type { TalosModelShape } from '@/lib/models/fit'
 import { talosPrefixesToEvict } from '@/lib/models/prefixCache'
+import { talosLocalBackendPlan } from '@/lib/models/localBackendPlan'
+import { talosStoredLocalBackendPreference } from '@/lib/models/localBackendPreferenceStore'
 import { talosT } from '@/i18n'
 import { useTalosMobileToasts } from '@/stores/toasts'
 
@@ -78,6 +80,43 @@ export interface TalosLocalTemplateCapabilities {
     supportsTools: boolean
     supportsToolCalls: boolean
     supportsSystemRole: boolean
+    /**
+     * ⭐⭐⭐ Se una GRAMMATICA potra' tenere le chiamate di questo modello.
+     *
+     * ⛔ NON e' `supportsToolCalls`, ed e' il punto: due modelli possono
+     * entrambi «supportare gli strumenti» e comportarsi in modo opposto.
+     * Misurato sul Pad l'11/09/2026 — alla domanda «Come ti chiami»,
+     * `Llama-3.2-3B` ha emesso `{"name":"tool_details","parameters":{"names":
+     * "['library_list', …]"}}`: due chiamate al posto di un nome, e `names`
+     * come **stringa** dove lo schema vuole un array. Nel log,
+     * `grammatica: no`.
+     *
+     * In `common/chat.cpp` ci sono handler dedicati per gemma4, lfm2,
+     * qwen3-coder e altri dodici, ognuno con la propria grammatica; per Llama
+     * 3.x non ce n'e' nessuno, e senza grammatica quel valore sbagliato **puo'**
+     * nascere. Con una, non potrebbe.
+     *
+     * ⛔ `false` vuol dire «non vincolabile», e comprende «non lo so»: chi
+     * decide qualcosa su questo campo deve trattare l'incertezza come il caso
+     * peggiore, non come un permesso.
+     *
+     * ⛔ Assente su un ponte piu' vecchio = `false`, per la stessa ragione.
+     */
+    grammarForTools: boolean
+    /**
+     * ⭐⭐⭐ Se il ragionamento di questo modello si puo' SPEGNERE.
+     *
+     * ⛔ Non e' «questo modello ragiona»: quello lo dicono gia' altri campi, e
+     * per LFM2 il parser di llama.cpp lo mette a vero senza guardare niente.
+     * Questo dice se l'interruttore esiste davvero su QUESTO file, e la
+     * risposta si ottiene applicando il template due volte e confrontando i
+     * due prompt — mai da un elenco di nomi di modello.
+     *
+     * Misurato sul Pad l'11/09/2026: su `LFM2.5-2.6B-Q4_0` fra «primo token del
+     * motore» (3,1 s) e «prima parola» (10,7 s) ci sono ~130 token di
+     * ragionamento. La chat chiedeva gia' di spegnerlo, e non e' servito.
+     */
+    thinkingCanBeDisabled: boolean
 }
 
 /** The wire strategy chosen after inspecting the embedded GGUF template. */
@@ -154,6 +193,19 @@ interface TalosLlamaPlugin {
         kvCacheType?: string
         /** La build di llama.cpp: cio' che invalida un prefisso congelato. */
         engineBuild?: string
+        /**
+         * ⛔⛔ Quanti acceleratori il registro ggml ha DAVVERO caricato in
+         * questa build. Assente su un ponte più vecchio, e assente non è zero:
+         * zero è un fatto («nessuna richiesta di offload poteva essere
+         * onorata»), assente è «non lo so».
+         */
+        offloadDevices?: number
+        /** Due insiemi di thread VERI, o uno solo condiviso. Assente = ponte più vecchio. */
+        threadPoolSplit?: boolean
+        /** Il dispositivo risolto, quando un bersaglio era stato nominato. */
+        backendDevice?: string
+        /** Gli strati chiesti, già azzerati dal nativo se nessun acceleratore esiste. */
+        gpuLayersEffective?: number
     }>
     deleteInstalled(options: { path: string }): Promise<{ deleted: boolean }>
     /**
@@ -175,6 +227,18 @@ interface TalosLlamaPlugin {
         cpuInconclusive?: boolean
         probedGpu?: boolean
         gpuInconclusive?: boolean
+        /**
+         * ⛔⛔ IL TERZO MOTORE — il nativo li mandava dall'11/09/2026 e da
+         * questa parte del ponte nessuno li leggeva.
+         *
+         * `runQualification` scrive `probedNpu` e `npuInconclusive` nella
+         * risposta da quando l'NPU è nel sondaggio. Il tipo qui sotto non li
+         * nominava, quindi la scheda a schermo continuava a raccontare una
+         * corsa a due — e una corsa dell'NPU non abbastanza stabile per
+         * fidarsene spariva senza lasciare traccia.
+         */
+        probedNpu?: boolean
+        npuInconclusive?: boolean
         decisionBackend?: string
         decisionReason?: string
     }>
@@ -190,6 +254,9 @@ interface TalosLlamaPlugin {
             ttftMs: number
             /** -1 = non misurato (righe scritte prima di questo campo). */
             decodeTokPerSec: number
+            /** D-53: -1 o assente = non misurato (profili scritti prima dell'11/09/2026). */
+            prefillTokPerSec?: number
+            openMs?: number
             qualificationLevel: 'Q0' | 'Q1' | 'Q2'
             measuredAtMs: number
         }>
@@ -221,6 +288,68 @@ interface TalosLlamaPlugin {
         deterministic?: boolean
         /** `q8_0` per la cache leggera. Chiedere non e' ottenere: vedi `open`. */
         kvCacheType?: string
+        /**
+         * ⭐⭐⭐ COME i pesi entrano in memoria. Assente = come si è sempre
+         * fatto (`auto`), e resta il predefinito finché non c'è la misura:
+         * `.claude/TACCUINO-VELOCITA-LOCALE-2026-09-10.md`.
+         *
+         * ⛔ Cambiarla RICARICA i pesi. Agisce su `llama_model_params`, non sul
+         * contesto, quindi la strada veloce che riusa i gigabyte già in memoria
+         * non la vedrebbe: il ponte se ne accorge e riapre per intero. Chiederla
+         * a metà conversazione costa quanto la prima apertura.
+         */
+        loadMode?: TalosLocalLoadMode
+        /**
+         * ⭐⭐⭐ Il ripacchettamento dei pesi. Assente = il predefinito di
+         * llama.cpp (acceso), e assente NON è `true`: solo così il predefinito
+         * resta quello di upstream anche se upstream lo cambia.
+         *
+         * È una manopola SEPARATA da `loadMode` — verificato nel submodule, è
+         * il campo `llama_model_params.use_extra_bufts` (`include/llama.h:338`)
+         * e il flag `-nr/--no-repack` (`common/arg.cpp:2413-2416`). ⛔ Ma i due
+         * si incrociano: i tensori ripacchettati finiscono in un buffer «extra»
+         * che non è quello di default, quindi non passano dalla strada veloce
+         * della mmap. ⇒ Il repack accelera il prefill e conviene **quando la
+         * mmap è spenta** — la stessa cosa che PocketPal scrive sotto il suo
+         * interruttore.
+         *
+         * ⛔ Riguarda il nostro catalogo più di quanto sembri: llama.cpp
+         * ripacchetta anche **Q4_K** e **Q2_K**, non solo Q4_0 — cioè i
+         * `*-Q4_K_M.gguf` che scarichiamo di default.
+         */
+        weightRepack?: boolean
+        /**
+         * ⭐⭐⭐ DOVE far girare il modello, per NOME — la scelta dell'utente.
+         *
+         * Owner 2026-09-10: «LA SCELTA RESTA ALL UTENTE, SCEGLIE SEMPRE LUI,
+         * CPU GPU O HEXAGON, DI DEFAULT SCEGLIAMO QUELLO PIU VELOCE (DI SOLITO
+         * GPU)». Il nome è quello che ggml dichiara di sé — `OpenCL`,
+         * `Vulkan`, `HTP` — e la traduzione da «famiglia» a nome vive in
+         * `lib/models/localBackendChoice.ts`, non qui.
+         *
+         * ⛔ Assente = nessuna richiesta = come si è sempre fatto: `gpuLayers`
+         * dice QUANTI strati e llama.cpp sceglie DOVE. `none`/`cpu` dicono
+         * «nessun offload» ad alta voce, che non è la stessa cosa di tacere.
+         *
+         * ⛔ Nominare è l'unico modo perché il motore possa poi DIRE quale
+         * dispositivo ha preso (`backendDevice`): senza nome quel campo resta
+         * vuoto e «quale motore sta girando» torna a essere una deduzione. E
+         * un nome che non si risolve fa FALLIRE l'apertura invece di ripiegare
+         * in silenzio sulla CPU — la differenza fra «selezionabile» e
+         * «realmente utilizzato».
+         *
+         * ⛔ Cambiarlo RICARICA i pesi, come `loadMode`: il bersaglio vive in
+         * `llama_model_params.devices`, cioè in dove i tensori sono stati
+         * allocati, e la strada veloce che riusa i gigabyte non lo vedrebbe.
+         * Il ponte se ne accorge da solo e riapre per intero.
+         */
+        backend?: string
+        /**
+         * Il dispositivo esatto dentro quel registry. Assente = accettato solo
+         * se il registry ne espone UNO solo; con due, il motore rifiuta invece
+         * di sorteggiare.
+         */
+        device?: string
     }): Promise<TalosLocalEngineOpenResult>
     generate(options: {
         prompt: string
@@ -276,6 +405,20 @@ interface TalosLlamaPlugin {
         totalBytes: number
     }>
     lastTimings(): Promise<{ timings: string }>
+    /**
+     * Quali `libggml-*.so` entrano davvero, e per gli altri l'errore.
+     * Vedi il cappello su `talosProbeBackendLoad`.
+     */
+    probeBackendLoad(): Promise<{ report: string, ms: number }>
+    /** Il formato dei pesi, letto dall'intestazione GGUF. Vedi `talosLocalModelQuantisation`. */
+    modelFormat(options: { path: string }): Promise<{ format: string }>
+    /**
+     * A che punto e' il caricamento del modello. `loading: false` = non sta
+     * caricando niente, e in quel caso `permille` vale -1.
+     */
+    loadProgress(): Promise<{ permille: number, loading: boolean }>
+    /** Ferma il caricamento in corso. Vedi `talosCancelLocalModelLoad`. */
+    cancelLoad(): Promise<{ ok: boolean }>
     /** Il fabbisogno e la forma, letti senza caricare i pesi. */
     planPrompt(options: {
         path: string
@@ -350,9 +493,43 @@ export interface TalosLocalEngineTurn {
 
 const plugin = registerPlugin<TalosLlamaPlugin>('TalosLlama')
 
+/**
+ * ⭐⭐⭐ COME i pesi entrano in memoria — i nomi sono quelli di llama.cpp.
+ *
+ * `'default'` vuol dire «non toccare», cioè il predefinito della libreria
+ * (`auto`), cioè ciò che TALOS ha sempre fatto. Gli altri sono i nomi esatti
+ * che `llama_load_mode_from_str()` riconosce — deliberatamente gli stessi, per
+ * non avere due vocabolari per la stessa cosa.
+ *
+ * ⛔ `'mlock'` da solo NON accende la mmap: legge il file intero in RAM
+ * (caricamento più lento, memoria piena subito). È `'mmap+mlock'` che mappa e
+ * poi inchioda le pagine. Fonte: discussione upstream
+ * ggml-org/llama.cpp#27912, 28/08/2026, e `src/llama-model-loader.cpp:554` nel
+ * submodule pinnato.
+ *
+ * ⛔ NIENTE DI TUTTO QUESTO VA A SCHERMO COSÌ COM'È. Sono nomi di libreria: se
+ * un giorno la scelta arriva in Impostazioni, l'utente legge una frase in
+ * inglese che dice l'effetto — come fa PocketPal, *"Force system to keep model
+ * in RAM rather than swapping or compressing"* — non la parola `mlock`.
+ */
+export type TalosLocalLoadMode =
+    | 'default'
+    | 'auto'
+    | 'none'
+    | 'mmap'
+    | 'mlock'
+    | 'mmap+mlock'
+    | 'dio'
+
 export type TalosLocalEngineOpenStage =
     | 'path'
     | 'model-load'
+    /**
+     * ⛔ NON e' un errore: e' chi ha premuto «annulla» mentre il modello si
+     * apriva. Ha uno stadio suo perche' a schermo deve diventare una frase
+     * diversa — «l'hai fermato tu» non e' «non ce l'ha fatta».
+     */
+    | 'load-cancelled'
     | 'context'
     | 'sampler'
     | 'template'
@@ -430,6 +607,68 @@ type TalosLocalEngineOpenOptions = {
      * motore ripiega in f16 e lo dichiara.
      */
     kvCacheType?: string
+    /**
+     * ⭐⭐⭐ COME i pesi entrano in memoria. Assente = come si è sempre
+     * fatto (`auto`), e resta il predefinito finché non c'è la misura:
+     * `.claude/TACCUINO-VELOCITA-LOCALE-2026-09-10.md`.
+     *
+     * ⛔ Cambiarla RICARICA i pesi. Agisce su `llama_model_params`, non sul
+     * contesto, quindi la strada veloce che riusa i gigabyte già in memoria
+     * non la vedrebbe: il ponte se ne accorge e riapre per intero. Chiederla
+     * a metà conversazione costa quanto la prima apertura.
+     */
+    loadMode?: TalosLocalLoadMode
+    /**
+     * ⭐⭐⭐ Il ripacchettamento dei pesi. Assente = il predefinito di
+     * llama.cpp (acceso), e assente NON è `true`: solo così il predefinito
+     * resta quello di upstream anche se upstream lo cambia.
+     *
+     * È una manopola SEPARATA da `loadMode` — verificato nel submodule, è
+     * il campo `llama_model_params.use_extra_bufts` (`include/llama.h:338`)
+     * e il flag `-nr/--no-repack` (`common/arg.cpp:2413-2416`). ⛔ Ma i due
+     * si incrociano: i tensori ripacchettati finiscono in un buffer «extra»
+     * che non è quello di default, quindi non passano dalla strada veloce
+     * della mmap. ⇒ Il repack accelera il prefill e conviene **quando la
+     * mmap è spenta** — la stessa cosa che PocketPal scrive sotto il suo
+     * interruttore.
+     *
+     * ⛔ Riguarda il nostro catalogo più di quanto sembri: llama.cpp
+     * ripacchetta anche **Q4_K** e **Q2_K**, non solo Q4_0 — cioè i
+     * `*-Q4_K_M.gguf` che scarichiamo di default.
+     */
+    weightRepack?: boolean
+    /**
+     * ⭐⭐⭐ DOVE far girare il modello, per NOME — la scelta dell'utente.
+     *
+     * Owner 2026-09-10: «LA SCELTA RESTA ALL UTENTE, SCEGLIE SEMPRE LUI,
+     * CPU GPU O HEXAGON, DI DEFAULT SCEGLIAMO QUELLO PIU VELOCE (DI SOLITO
+     * GPU)». Il nome è quello che ggml dichiara di sé — `OpenCL`,
+     * `Vulkan`, `HTP` — e la traduzione da «famiglia» a nome vive in
+     * `lib/models/localBackendChoice.ts`, non qui.
+     *
+     * ⛔ Assente = nessuna richiesta = come si è sempre fatto: `gpuLayers`
+     * dice QUANTI strati e llama.cpp sceglie DOVE. `none`/`cpu` dicono
+     * «nessun offload» ad alta voce, che non è la stessa cosa di tacere.
+     *
+     * ⛔ Nominare è l'unico modo perché il motore possa poi DIRE quale
+     * dispositivo ha preso (`backendDevice`): senza nome quel campo resta
+     * vuoto e «quale motore sta girando» torna a essere una deduzione. E
+     * un nome che non si risolve fa FALLIRE l'apertura invece di ripiegare
+     * in silenzio sulla CPU — la differenza fra «selezionabile» e
+     * «realmente utilizzato».
+     *
+     * ⛔ Cambiarlo RICARICA i pesi, come `loadMode`: il bersaglio vive in
+     * `llama_model_params.devices`, cioè in dove i tensori sono stati
+     * allocati, e la strada veloce che riusa i gigabyte non lo vedrebbe.
+     * Il ponte se ne accorge da solo e riapre per intero.
+     */
+    backend?: string
+    /**
+     * Il dispositivo esatto dentro quel registry. Assente = accettato solo
+     * se il registry ne espone UNO solo; con due, il motore rifiuta invece
+     * di sorteggiare.
+     */
+    device?: string
 }
 
 function recordOf(value: unknown): Record<string, unknown> | null {
@@ -445,12 +684,38 @@ function openStageOf(error: unknown): TalosLocalEngineOpenStage {
     if (
         stage === 'path'
         || stage === 'model-load'
+        || stage === 'load-cancelled'
         || stage === 'context'
         || stage === 'sampler'
         || stage === 'template'
         || stage === 'generation'
         || stage === 'unknown'
     ) return stage
+    /*
+     * ⛔ `load-mode` — il motore rifiuta una modalità di caricamento che non
+     * conosce — arriva qui come `unknown`, e la perdita di dettaglio è
+     * DELIBERATA, non una dimenticanza.
+     *
+     * Allargare `TalosLocalEngineOpenStage` costringerebbe a toccare la mappa
+     * `LOCAL_OPEN_FAILURE` in `src/lib/chat/providers/localAdapter.ts`, che
+     * elenca un messaggio per ogni stadio ed è di un'altra area di lavoro. Il
+     * comportamento comunque non cambia di niente: `unknown` non viene
+     * riprovato (`talosShouldRetryLocalOpen`) — che è esattamente quello che
+     * serve, perché riaprire con meno contesto non rende comprensibile un nome
+     * sbagliato — e all'utente arriva lo stesso messaggio generico.
+     *
+     * E il caso è quasi irraggiungibile da qui: `TalosLocalLoadMode` è
+     * un'unione CHIUSA, quindi un nome sbagliato scritto in TypeScript non
+     * compila nemmeno. Il cancello nativo esiste per le altre porte — il banco
+     * di prova e i test su dispositivo — dove la stringa non passa da questo
+     * tipo.
+     *
+     * 🔜 DEBITO DICHIARATO: quando `localAdapter.ts` potrà essere toccato,
+     * aggiungere `'load-mode'` all'unione qui sopra, una voce a
+     * `LOCAL_OPEN_FAILURE` e la stringa (in inglese) che dice all'utente che la
+     * modalità di caricamento richiesta non è supportata.
+     */
+    if (stage === 'load-mode') return 'unknown'
 
     const code = typeof failure?.code === 'string'
         ? failure.code
@@ -534,13 +799,16 @@ export interface TalosLocalBackendQualification {
     cpuInconclusive: boolean
     probedGpu: boolean
     gpuInconclusive: boolean
+    probedNpu: boolean
+    npuInconclusive: boolean
     decisionBackend: string | null
     decisionReason: string | null
 }
 
 const TALOS_LOCAL_BACKEND_QUALIFICATION_UNAVAILABLE: TalosLocalBackendQualification = Object.freeze({
     ran: false, reason: null, probedCpu: false, cpuInconclusive: false,
-    probedGpu: false, gpuInconclusive: false, decisionBackend: null, decisionReason: null,
+    probedGpu: false, gpuInconclusive: false, probedNpu: false, npuInconclusive: false,
+    decisionBackend: null, decisionReason: null,
 })
 
 /**
@@ -562,6 +830,8 @@ export async function talosQualifyLocalBackend(path: string): Promise<TalosLocal
             cpuInconclusive: result.cpuInconclusive === true,
             probedGpu: result.probedGpu === true,
             gpuInconclusive: result.gpuInconclusive === true,
+            probedNpu: result.probedNpu === true,
+            npuInconclusive: result.npuInconclusive === true,
             decisionBackend: typeof result.decisionBackend === 'string' ? result.decisionBackend : null,
             decisionReason: typeof result.decisionReason === 'string' ? result.decisionReason : null,
         }
@@ -572,6 +842,27 @@ export async function talosQualifyLocalBackend(path: string): Promise<TalosLocal
 
 /** Feedback for the consent sheet's background run; the sheet closes immediately. */
 export async function talosRunProbe(path: string, running?: number): Promise<void> {
+    /*
+     * ⛔⛔⛔ IL SONDAGGIO ASPETTA IL RISCALDAMENTO — 2026-09-10, la cura dei 32 s.
+     *
+     * Le due cose partono nello stesso respiro alla prima scelta di un modello
+     * locale, e dall'altra parte del ponte finiscono sullo STESSO
+     * `Executors.newSingleThreadExecutor()` (`TalosLlamaPlugin`, riga 1303):
+     * `qualifyBackend` ci fa girare due aperture piene del modello e due
+     * generazioni vere, `localPerformanceProfiles` — che il riscaldamento
+     * interroga prima di aprire — ci fa girare uno sha256 di tutto il file.
+     * Chi arriva secondo aspetta il primo per intero.
+     *
+     * ⇒ L'ordine non è indifferente, ed è deciso da chi sta aspettando: il
+     * riscaldamento è il tempo che una PERSONA sta guardando adesso, il
+     * sondaggio è una misura che nessuno ha chiesto di aspettare (lo dice già
+     * la modale: «non blocca la chat»). Prima il primo, poi il secondo — e
+     * senza toccare né il Java né il grafo d'avvio.
+     *
+     * ⛔ `.catch`: un riscaldamento fallito non deve impedire il sondaggio.
+     * Sono due lavori indipendenti che qui si mettono solo in fila.
+     */
+    if (talosWarmInFlight) await talosWarmInFlight.catch(() => undefined)
     const toasts = useTalosMobileToasts()
     const runningId = running ?? toasts.push({ message: talosT('privacyPermissions.localEngineProbe.running') })
     try {
@@ -604,7 +895,16 @@ function templateCapabilitiesOf(raw: unknown): TalosLocalTemplateCapabilities | 
         || typeof supportsToolCalls !== 'boolean'
         || typeof supportsSystemRole !== 'boolean'
     ) return null
-    return { supportsTools, supportsToolCalls, supportsSystemRole }
+    // ⛔ Un ponte piu' vecchio non manda questo campo, e la sua assenza NON fa
+    // fallire la lettura: le altre tre capability sono utili anche da sole.
+    // Ma vale `false`, mai «probabilmente si'» — vedi il tipo.
+    const grammarForTools = record.grammarForTools === true
+    // ⛔ Assente = no: un ponte piu' vecchio non promette un interruttore.
+    const thinkingCanBeDisabled = record.thinkingCanBeDisabled === true
+    return {
+        supportsTools, supportsToolCalls, supportsSystemRole,
+        grammarForTools, thinkingCanBeDisabled,
+    }
 }
 
 /**
@@ -663,9 +963,33 @@ export function talosKvBytesPerElement(type: string | null | undefined): number 
     return TALOS_KV_BYTES_PER_ELEMENT[type ?? ''] ?? TALOS_KV_BYTES_PER_ELEMENT.f16!
 }
 
+/**
+ * ⛔⛔ PERCHÉ `kvHeads = 0` RESTA UN RIFIUTO, e `layers` non è la profondità.
+ *
+ * Il 2026-09-10 questa funzione tornava `null` su `LFM2.5-2.6B` — un modello
+ * IBRIDO, 30 blocchi di cui solo alcuni con cache KV — e da lì
+ * `decidiPrefisso()` usciva muto: nessun prefisso congelato, **31 s** al
+ * primo token contro i **3,1** di gemma3, e 0 token riusati su 2.847.
+ *
+ * ⛔ La cura NON è ammorbidire questo cancello. Lo zero arrivava dal ponte,
+ * perché `llama_model_n_head_kv()` risponde per lo **strato 0** — che su LFM2 è
+ * una convoluzione ricorrente. È stato curato **alla fonte**
+ * (`talos_llama_jni.cpp`, `talos_geometria_kv_di()`): il nativo ora conta gli
+ * strati che hanno davvero una cache leggendo l'array per-strato del GGUF, e
+ * manda `layers = quegli strati`, `kvHeads = le loro teste`.
+ *
+ * ⇒ Uno zero che arrivasse ancora qui vorrebbe dire una cosa sola e vera:
+ * **nessuno** strato ha una cache KV, cioè un modello interamente ricorrente
+ * (Mamba, RWKV). Lì l'aritmetica «byte per token» non descrive la memoria, e
+ * farla passare con un ripiego a 1 renderebbe il tetto del contesto quasi
+ * infinito — la direzione d'errore che fa aprire modelli che non ci stanno.
+ * Chi passasse di qui a «sistemare lo zero» sta guardando il sintomo.
+ */
 export function talosModelShapeOf(raw: unknown, kvCacheType?: string | null): TalosModelShape | null {
     if (raw === null || typeof raw !== 'object') return null
     const record = raw as Record<string, unknown>
+    // ⛔ Gli strati CON CACHE, non i blocchi del modello: su un ibrido sono
+    // meno, e il ponte manda già il conteggio giusto (vedi la nota qui sopra).
     const layers = positiveOf(record.layers)
     const kvHeads = positiveOf(record.kvHeads)
     const headDim = positiveOf(record.headDim)
@@ -688,6 +1012,55 @@ export function talosModelShapeOf(raw: unknown, kvCacheType?: string | null): Ta
         // invece che su quello ottenuto vuol dire promettere una conversazione
         // che poi non entra in memoria.
         kvBytesPerElement: talosKvBytesPerElement(kvCacheType),
+    }
+}
+
+/**
+ * ⭐⭐⭐ DOVE sta girando il modello aperto adesso — i fatti grezzi, non una
+ * conclusione.
+ *
+ * ⛔ Questa funzione non decide niente e non traduce niente: raccoglie i tre
+ * campi che il nativo dichiara e li passa a chi sa leggerli
+ * (`talosLocalBackendInUse`, `lib/models/localBackendChoice.ts`). Tenere la
+ * lettura separata dall'interpretazione è ciò che permette di provare la
+ * seconda senza un telefono.
+ *
+ * ⛔ `offloadDevices: null` significa «questo ponte non lo dichiara», MAI
+ * «zero»: un ponte più vecchio che rispondesse zero farebbe concludere «gira
+ * su CPU» con la stessa faccia di una certezza. È la stessa disciplina del
+ * tri-stato di `weightRepack`.
+ *
+ * Non solleva mai: un ponte assente o una build web tornano tutti «non lo so».
+ */
+export async function talosLocalEngineBackendFacts(): Promise<{
+    backendDevice: string | null
+    gpuLayersEffective: number
+    offloadDevices: number | null
+    threadPoolSplit: boolean | null
+}> {
+    try {
+        const stato = await plugin.available()
+        return {
+            backendDevice: typeof stato.backendDevice === 'string' && stato.backendDevice !== ''
+                ? stato.backendDevice
+                : null,
+            gpuLayersEffective: typeof stato.gpuLayersEffective === 'number'
+                && Number.isFinite(stato.gpuLayersEffective)
+                ? stato.gpuLayersEffective
+                : 0,
+            offloadDevices: typeof stato.offloadDevices === 'number'
+                && Number.isFinite(stato.offloadDevices) && stato.offloadDevices >= 0
+                ? stato.offloadDevices
+                : null,
+            threadPoolSplit: typeof stato.threadPoolSplit === 'boolean'
+                ? stato.threadPoolSplit
+                : null,
+        }
+    } catch {
+        return {
+            backendDevice: null, gpuLayersEffective: 0,
+            offloadDevices: null, threadPoolSplit: null,
+        }
     }
 }
 
@@ -749,22 +1122,185 @@ export async function talosLocalEngineOpenWithFallback(
  * fosse mai partito. È un'ottimizzazione silenziosa, non una promessa —
  * stesso principio già in uso per il congelamento del prefisso.
  */
-let talosWarmInFlight: Promise<void> | null = null
+let talosWarmInFlight: Promise<TalosLocalWarmOutcome> | null = null
 
-export async function talosWarmLocalModel(path: string): Promise<void> {
+/**
+ * Le sole opzioni di apertura che il riscaldamento chiede: DOVE.
+ *
+ * ⛔ Non tocca contesto, thread né cache — il riscaldamento apre col
+ * predefinito da sempre, e allargare qui la superficie sarebbe un'altra
+ * decisione, non questa. Il bersaglio invece non è rimandabile: cambiarlo dopo
+ * costa una rilettura dei pesi, cioè tutto il vantaggio che il riscaldamento
+ * esiste per regalare.
+ *
+ * ⛔ Non solleva mai, come tutto il resto di questo percorso: un ponte più
+ * vecchio o una lettura storta valgono «nessuna richiesta», cioè il
+ * comportamento di prima.
+ */
+/**
+ * ⛔⛔⛔ QUANTO SI ASPETTA LE MISURE — 2026-09-10, la diagnosi dei 32 secondi.
+ *
+ * Sembra una manopola e non lo è: è il confine oltre il quale questo
+ * riscaldamento smette di essere un'ottimizzazione e diventa il ritardo che
+ * doveva togliere.
+ *
+ * ## Cosa costa DAVVERO `talosLocalPerformanceProfiles`, letto dall'altra parte
+ *
+ * `TalosLlamaPlugin.localPerformanceProfiles` (righe 1352-1382) gira su
+ * `qualificationWorker`, e la PRIMA cosa che fa è `sha256Del(path)` — che apre
+ * il GGUF e lo legge **tutto**, a blocchi da 64 KB, senza nessuna cache (righe
+ * 1755-1767). Per `LFM2.5-2.6B-Q4_0` sono **1,6 GB letti dal disco per sapere
+ * DOVE aprire**, prima ancora di cominciare ad aprire.
+ *
+ * ⛔ E `qualificationWorker` è `Executors.newSingleThreadExecutor()` (riga
+ * 1303) — **lo stesso** su cui `qualifyBackend` fa girare il sondaggio GPU,
+ * cioè due aperture piene del modello e due generazioni vere, fino a
+ * `MAX_PROBE_ATTEMPTS` tentativi ciascuna. Alla PRIMA scelta di un modello
+ * locale le due cose partono insieme (`chatController.selectModel` apre la
+ * modale del consenso e accende il riscaldamento nello stesso respiro): se la
+ * persona dice «sì, verifica», il riscaldamento resta **in coda dietro il
+ * sondaggio**, e il suo `open()` non parte affatto. È così che il modello
+ * risultava freddo due minuti dopo essere stato scelto.
+ *
+ * ## Perché un tetto e non «aspetta e basta»
+ *
+ * Questo riscaldamento esiste per nascondere l'apertura. Se scoprire DOVE
+ * aprire costa più che aprire, l'ottimizzazione si è mangiata da sola. Il
+ * tetto non è «rinuncia»: è «apri comunque, col piano che si può fare con i
+ * fatti che si hanno già» — e i fatti che restano sono esattamente quelli che
+ * contano di più, perché la scelta MANUALE della persona non passa di qui
+ * (vive nelle Preferences, non sul ponte nativo) e non si perde mai.
+ *
+ * ⛔ Il numero è una PAZIENZA, non una misura del telefono: 1,5 s è il tempo
+ * oltre il quale l'attesa smette di essere un dettaglio del ponte e comincia a
+ * essere un pezzo dei secondi che stiamo cercando di togliere. Va rimisurato
+ * il giorno in cui il lato nativo ricorderà lo sha invece di rifarlo — quella
+ * sì sarebbe la cura vera, e sta in Java.
+ */
+const TALOS_WARM_PROFILES_BUDGET_MS = 1_500
+
+/** Il valore, o `null` se non è arrivato entro il tetto. Non annulla niente: smette di aspettare. */
+async function entroIlTetto<T>(lavoro: Promise<T>, tettoMs: number): Promise<T | null> {
+    let sveglia: ReturnType<typeof setTimeout> | undefined
+    try {
+        return await Promise.race([
+            lavoro,
+            new Promise<null>((risolvi) => { sveglia = setTimeout(() => risolvi(null), tettoMs) }),
+        ])
+    } finally {
+        if (sveglia !== undefined) clearTimeout(sveglia)
+    }
+}
+
+/** Cosa si chiederà al motore, e se lo si è deciso senza le misure. */
+export interface TalosWarmBackendPlan {
+    options: { gpuLayers?: number, backend?: string }
+    /**
+     * Vero quando il piano è stato fatto SENZA i profili misurati — perché non
+     * potevano cambiarlo, o perché non sono arrivati in tempo. Non è un
+     * dettaglio interno: è la differenza fra «CPU perché l'ha vinta» e «CPU
+     * perché non ho aspettato», e chi legge lo stato deve poterle distinguere.
+     */
+    withoutMeasuredProfiles: boolean
+}
+
+async function backendDelRiscaldamento(
+    path: string,
+    status: TalosLocalEngineStatus,
+): Promise<TalosWarmBackendPlan> {
+    try {
+        const [preferenza, fatti] = await Promise.all([
+            talosStoredLocalBackendPreference(),
+            talosLocalEngineBackendFacts(),
+        ])
+        /*
+         * ⭐ La domanda cara si fa solo se la sua risposta può cambiare
+         * qualcosa. `talosDecideLocalBackend` legge `profiles` SOLO dopo il
+         * primo cancello: con una scelta manuale valida esce alla prima riga e
+         * i profili non li guarda mai (`localBackendChoice.ts`, righe
+         * 258-265). ⇒ In quel caso leggere 1,6 GB dal disco per ottenere un
+         * elenco che nessuno leggerà è puro ritardo, e non chiederlo non è
+         * un'approssimazione: è la stessa risposta, senza il costo.
+         */
+        const misureNonServono = preferenza.mode === 'manual' && preferenza.manual !== null
+        const profili = misureNonServono
+            ? []
+            : await entroIlTetto(talosLocalPerformanceProfiles(path), TALOS_WARM_PROFILES_BUDGET_MS)
+        return {
+            options: talosLocalBackendPlan({
+                preference: preferenza,
+                backends: status.backends,
+                offloadDevices: fatti.offloadDevices,
+                profiles: profili ?? [],
+                // Si sta per aprire comunque: nessun candidato è già attivo, quindi
+                // nessuno merita lo sconto sul costo di transizione (CR-12).
+                activeRegistry: null,
+            }).options,
+            withoutMeasuredProfiles: profili === null,
+        }
+    } catch {
+        return { options: {}, withoutMeasuredProfiles: true }
+    }
+}
+
+/**
+ * ⛔⛔ COM'E' ANDATA — 2026-09-10.
+ *
+ * Prima tornava `void`, e `void` era il difetto: fra «l'ho aperto in 31
+ * secondi», «era gia' aperto», «su questa build non c'e' motore» e «ci ho
+ * provato e non ce l'ho fatta» chi chiamava non poteva distinguere niente, e
+ * infatti nessuno ha mai potuto dire perche' il modello risultasse freddo. Il
+ * contratto si ALLARGA: chi non lo legge si comporta esattamente come prima
+ * (nessun errore esce ancora da qui), chi lo legge puo' finalmente dirlo a chi
+ * sta aspettando.
+ *
+ * `ms` e' il tempo dell'APERTURA e nient'altro — non il tempo alla prima
+ * parola. Tenerli separati e' meta' dell'ordine dell'owner del 10/09: confusi
+ * insieme fanno sembrare lento il motore quando e' lento il disco.
+ */
+export type TalosLocalWarmOutcome =
+    | { opened: true, ms: number, withoutMeasuredProfiles: boolean }
+    | { opened: false, why: 'already-open' | 'engine-absent' | 'failed' }
+
+export async function talosWarmLocalModel(path: string): Promise<TalosLocalWarmOutcome> {
     if (talosWarmInFlight) await talosWarmInFlight.catch(() => undefined)
-    const eseguito = (async () => {
+    const eseguito = (async (): Promise<TalosLocalWarmOutcome> => {
+        const inizio = Date.now()
         try {
             const status = await talosLocalEngineStatus()
-            if (!status.available || status.loadedPath === path) return
-            await talosLocalEngineOpenWithFallback(path)
+            if (!status.available) return { opened: false, why: 'engine-absent' }
+            if (status.loadedPath === path) return { opened: false, why: 'already-open' }
+            /*
+             * ⛔⛔ IL RISCALDAMENTO DECIDE DOVE, altrimenti decide per tutti.
+             *
+             * Questa apertura arriva PRIMA del primo messaggio, e
+             * `ensureLoaded` in `localAdapter.ts` torna subito se il modello
+             * chiesto è già quello aperto. ⇒ Se qui non si chiedesse il
+             * backend, la scelta della persona non verrebbe mai applicata:
+             * l'aggancio nell'adattatore esisterebbe e nessun percorso
+             * predefinito lo attraverserebbe — la forma esatta del difetto che
+             * questo lavoro chiude (`la-gpu-non-e-spedita-non-e-scelta-non-e-usata`).
+             *
+             * La politica non vive qui: è la stessa funzione pura che chiama
+             * l'adattatore, `talosLocalBackendPlan`.
+             */
+            const piano = await backendDelRiscaldamento(path, status)
+            await talosLocalEngineOpenWithFallback(path, piano.options)
+            return {
+                opened: true,
+                ms: Date.now() - inizio,
+                withoutMeasuredProfiles: piano.withoutMeasuredProfiles,
+            }
         } catch {
-            // Vedi sopra: un'ottimizzazione, non una promessa.
+            // Vedi sopra: un'ottimizzazione, non una promessa. Ma adesso lo
+            // DICE invece di tacere: il primo messaggio riaprira' comunque, e
+            // chi aspetta ha il diritto di sapere che l'anticipo e' saltato.
+            return { opened: false, why: 'failed' }
         }
     })()
     talosWarmInFlight = eseguito
     try {
-        await eseguito
+        return await eseguito
     } finally {
         if (talosWarmInFlight === eseguito) talosWarmInFlight = null
     }
@@ -1059,14 +1595,210 @@ export async function talosMeasureThreadTuning(
 export async function talosFreezePrefix(path: string, prefixPrompt?: string): Promise<{
     bytes: number
     ms: number
+    /**
+     * ⛔⛔ DUE GUASTI DIVERSI, e per mesi uscivano dalla stessa porta.
+     *
+     * Fino al 2026-09-10 questa funzione rispondeva `bytes: 0` sia quando il
+     * **motore** rifiutava di scrivere, sia quando il **ponte** esplodeva — e
+     * chi chiamava non aveva modo di distinguerli, quindi diceva alla persona
+     * la frase piu' prudente delle due, cioe' quella sbagliata meta' delle
+     * volte.
+     *
+     * Non sono la stessa cosa, e alla fonte sono proprio due strade:
+     * `llama_state_seq_save_file` **torna 0** quando il salvataggio non
+     * riesce, e il wrapper C **cattura da se'** qualunque eccezione prima di
+     * tornare quello zero (`llama-context.cpp:4098-4106`, letto nel nostro
+     * submodule pinnato il 2026-09-10). ⇒ Uno zero che arriva fin qui e' una
+     * risposta del motore; un'eccezione che arriva fin qui **non lo e'**: e'
+     * il ponte, il plugin o l'argomento.
+     *
+     *   - `'written'`        il file c'e'
+     *   - `'engine-refused'` il motore ha detto di no, e lo ha detto lui
+     *   - `'bridge-failed'`  la chiamata non e' mai arrivata a una risposta
+     */
+    reason: 'written' | 'engine-refused' | 'bridge-failed'
 }> {
     try {
         const esito = await plugin.saveState(
             prefixPrompt === undefined ? { path } : { path, prefixPrompt },
         )
-        return { bytes: esito.saved ? esito.bytes : 0, ms: esito.ms }
+        const bytes = esito.saved ? esito.bytes : 0
+        return { bytes, ms: esito.ms, reason: bytes > 0 ? 'written' : 'engine-refused' }
     } catch {
-        return { bytes: 0, ms: 0 }
+        // ⛔ Si continua a NON sollevare: chi chiama la invoca con `void` a
+        // risposta gia' consegnata, e una promessa rifiutata senza gestore in
+        // una WebView e' un errore non gestito a schermo. Cambia solo che
+        // adesso il guasto ha un NOME invece di travestirsi da rifiuto.
+        return { bytes: 0, ms: 0, reason: 'bridge-failed' }
+    }
+}
+
+/**
+ * ⭐⭐⭐ QUALI MOTORI ENTRANO DAVVERO — e per gli altri PERCHÉ no.
+ *
+ * ## Il fatto che l'ha resa necessaria
+ *
+ * Misurato sul Pad il 2026-09-10: **trenta strati su trenta assegnati alla
+ * CPU**, con **3,2 MB** di `libggml-opencl.so` dentro il pacchetto installato
+ * che nessuno eseguiva. Il driver di sistema c'è ed è pubblico, la nostra
+ * libreria lo cerca — e nel logcat non compariva **nessuna** riga di
+ * registrazione, né di successo né di errore.
+ *
+ * ⛔ Non poteva comparire: `ggml_backend_load_all_from_path` sceglie
+ * `silent = true` sotto `NDEBUG`, e la nostra è una build di rilascio. Il
+ * fallimento è **muto per costruzione**, ed è un problema noto upstream con
+ * `GGML_BACKEND_DL` — https://github.com/ggml-org/llama.cpp/issues/22547 e
+ * https://github.com/ggml-org/llama.cpp/discussions/12821 (letti il 2026-09-10).
+ *
+ * ## Cosa risponde, e cosa NON risponde
+ *
+ * Risponde a: *questa libreria entra su questo telefono, sì o no, e se no con
+ * quale errore.* **Non** risponde a «la GPU è più veloce»: quello lo dice il
+ * sondaggio, che è un'altra cosa e costa batteria.
+ *
+ * ⛔ Ha un EFFETTO: caricare una libreria registra il suo backend. Per questo
+ * non gira da sola e non sta in nessun percorso automatico — si chiama quando
+ * una persona lo chiede.
+ *
+ * `null` quando il ponte non risponde o il rapporto è illeggibile: «non lo so»,
+ * che non è «nessun motore».
+ */
+export async function talosProbeBackendLoad(): Promise<{
+    directory: string
+    attempts: Array<{ library: string, loaded: boolean, registry?: string, deviceCount?: number }>
+    registriesBefore?: number
+    registriesAfter?: number
+    error?: string
+    ms: number
+} | null> {
+    try {
+        const esito = await plugin.probeBackendLoad()
+        const letto: unknown = JSON.parse(esito.report)
+        if (letto === null || typeof letto !== 'object') return null
+        const record = letto as Record<string, unknown>
+        if (!Array.isArray(record.attempts)) return null
+        return {
+            directory: typeof record.directory === 'string' ? record.directory : '',
+            attempts: record.attempts as Array<{ library: string, loaded: boolean }>,
+            ...(typeof record.registriesBefore === 'number' ? { registriesBefore: record.registriesBefore } : {}),
+            ...(typeof record.registriesAfter === 'number' ? { registriesAfter: record.registriesAfter } : {}),
+            ...(typeof record.error === 'string' ? { error: record.error } : {}),
+            ms: esito.ms,
+        }
+    } catch {
+        return null
+    }
+}
+
+/**
+ * ⭐⭐⭐ IN CHE FORMATO SONO I PESI DI QUESTO MODELLO — `Q4_0`, `Q4_K_M`…
+ *
+ * ## Perche' esiste, con il numero che l'ha resa necessaria
+ *
+ * Misurato sul Pad l'11/09/2026. Stesso modello, stesso giorno, stesso
+ * telefono; cambia solo il formato:
+ *
+ * ```
+ *   Qwen3-4B  Q4_0     NPU  lettura 1126 t/s
+ *   Qwen3-4B  Q4_K_M   NPU  lettura   55,7      ← venti volte piu' piano
+ *                      GPU  lettura  206
+ * ```
+ *
+ * L'NPU ha kernel nativi solo per alcuni formati; su tutto il resto ricade
+ * operazione per operazione, e il rimbalzo costa piu' del calcolo. ⇒ Accendere
+ * l'NPU su un Q4_K_M rende l'app **quattro volte piu' lenta** di non averla.
+ *
+ * ## ⛔ Dal FILE, mai dal nome del file
+ *
+ * `Qwen3-4B-Instruct-2507-Q4_K_M.gguf` lo dice nel nome, ed e' una coincidenza
+ * di convenzione: chi rinomina un file cambierebbe il motore su cui gira. Qui
+ * si legge `general.file_type` dall'intestazione GGUF, che e' il modello a
+ * dichiarare di se'.
+ *
+ * ## Il cache, e perche' e' per percorso
+ *
+ * La risposta non cambia finche' il file non cambia, e il percorso di un GGUF
+ * porta gia' la revisione dentro. Una lettura per modello per avvio: il costo
+ * e' un `open` e qualche kilobyte, ma ripeterla a ogni messaggio sarebbe un
+ * costo a ogni messaggio.
+ *
+ * @returns `null` quando non si e' potuto leggere — e `null` **non e'** un
+ *     formato: chi decide deve trattarlo come «non lo so», che per l'NPU
+ *     significa no.
+ */
+const formatiLetti = new Map<string, string | null>()
+
+export async function talosLocalModelQuantisation(path: string): Promise<string | null> {
+    if (!path) return null
+    const gia = formatiLetti.get(path)
+    if (gia !== undefined) return gia
+    let esito: string | null = null
+    try {
+        const risposta = await plugin.modelFormat({ path })
+        const letto: unknown = JSON.parse(risposta.format)
+        if (letto !== null && typeof letto === 'object') {
+            const tipo = (letto as Record<string, unknown>).fileType
+            if (typeof tipo === 'number' && tipo >= 0) {
+                const { talosQuantisationOfFileType } = await import('@/lib/models/gguf')
+                esito = talosQuantisationOfFileType(tipo)
+            }
+        }
+    } catch {
+        esito = null
+    }
+    formatiLetti.set(path, esito)
+    return esito
+}
+
+/**
+ * ⭐⭐⭐ A CHE PUNTO E' IL CARICAMENTO — i 50 secondi che nessun numero diceva.
+ *
+ * Misurato sul Pad il 10/09 (ledger §44): sul primo messaggio di una chat
+ * nuova, `gemma-4-E2B-it-Q4_0` sulla GPU costa **76 secondi** alla prima
+ * parola, e **50** sono i soli tensori che si spostano dal file ai buffer.
+ * In quei 50 secondi il telefono mostrava tre puntini e nient'altro, e la riga
+ * dei numeri sotto la risposta ne dichiarava **24,2** — perche' il suo orologio
+ * parte a modello gia' aperto.
+ *
+ * ⛔ Si CHIEDE, non arriva. Chi disegna la barra la chiama a intervalli; il
+ * nativo tiene un contatore atomico che il thread del caricamento aggiorna a
+ * ogni tensore. Una callback per tensore attraverserebbe il confine JNI 601
+ * volte per un modello da 2,8 GiB — e' scritto in testa al JNI, e vale qui.
+ *
+ * ⛔ `null` non e' zero e non e' un errore: e' **«non lo so»**, cioe' il ponte
+ * non ha risposto. Chi disegna deve lasciare la barra com'era, non riportarla
+ * a zero: un progresso che torna indietro sembra un caricamento ricominciato.
+ */
+export async function talosLocalModelLoadProgress(): Promise<number | null> {
+    try {
+        const esito = await plugin.loadProgress()
+        if (!esito.loading) return null
+        const permille = Number(esito.permille)
+        if (!Number.isFinite(permille) || permille < 0) return null
+        return Math.min(1, permille / 1000)
+    } catch {
+        return null
+    }
+}
+
+/**
+ * Ferma il caricamento in corso.
+ *
+ * ⛔ Chi stava aprendo riceve lo stesso `0` di un errore qualunque: la
+ * differenza sta in `lastOpenError`, che dice `load-cancelled`. A schermo
+ * restano due frasi diverse, perche' «l'hai fermato tu» non e' «non ce l'ha
+ * fatta» — e una persona che ha appena premuto annulla non deve leggere che
+ * qualcosa e' andato storto.
+ *
+ * ⛔ Premerlo quando non sta caricando niente non fa danni: il flag si azzera
+ * all'inizio di ogni apertura, quindi non puo' uccidere quella successiva.
+ */
+export async function talosCancelLocalModelLoad(): Promise<boolean> {
+    try {
+        const esito = await plugin.cancelLoad()
+        return esito.ok === true
+    } catch {
+        return false
     }
 }
 
@@ -1172,6 +1904,10 @@ export interface TalosLocalPerformanceProfile {
     ttftMs: number
     /** `null` quando non misurato — mai 0, che sarebbe una velocità infinita. */
     decodeTokPerSec: number | null
+    /** D-53: token letti al secondo nel prefill del sondaggio. `null` = non misurato. */
+    prefillTokPerSec: number | null
+    /** D-53: quanto e' costato aprire su questo motore. `null` = non misurato. */
+    openMs: number | null
     qualificationLevel: 'Q0' | 'Q1' | 'Q2'
     measuredAtMs: number
 }
@@ -1196,6 +1932,12 @@ export async function talosLocalPerformanceProfiles(
             outcome: p.outcome,
             ttftMs: p.ttftMs,
             decodeTokPerSec: p.decodeTokPerSec >= 0 ? p.decodeTokPerSec : null,
+            // D-53: stessa regola del decode — assente o non positivo vale «non
+            // misurato», mai zero: zero token/s in lettura sarebbe un prefill
+            // infinito, zero ms di apertura un'apertura gratis.
+            prefillTokPerSec: typeof p.prefillTokPerSec === 'number' && p.prefillTokPerSec > 0
+                ? p.prefillTokPerSec : null,
+            openMs: typeof p.openMs === 'number' && p.openMs >= 0 ? p.openMs : null,
             qualificationLevel: p.qualificationLevel,
             measuredAtMs: p.measuredAtMs,
         }))

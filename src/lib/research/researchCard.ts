@@ -1,5 +1,12 @@
 import type { TalosResearchRun, TalosResearchStatus } from '@/lib/research/researchRun'
-import { talosResearchIsResting, talosResearchIsTerminal, talosResearchProgressOf } from '@/lib/research/researchRun'
+import {
+    talosResearchIsResting,
+    talosResearchIsTerminal,
+    talosResearchProgressOf,
+    talosResearchSourcesGathered,
+    talosResearchWorkLeft,
+} from '@/lib/research/researchRun'
+import type { TalosResearchCompletion } from '@/lib/research/researchCompletion'
 
 /**
  * What a research looks like from the outside, before you open it.
@@ -20,8 +27,19 @@ import { talosResearchIsResting, talosResearchIsTerminal, talosResearchProgressO
  * a summary you cannot test.
  */
 
-/** The buckets the filter offers. One run is in exactly one. */
-export type TalosResearchBucket = 'running' | 'paused' | 'unfinished' | 'cancelled' | 'done' | 'failed'
+/**
+ * The buckets the filter offers. One run is in exactly one.
+ *
+ * ⛔ MB-1 (12/09/2026) — i sei secchi si ESTENDONO con tre, non si rinominano:
+ * il desktop porta questo file tale e quale (§1.6 del disegno) e un nome
+ * cambiato qui e' un nome rotto la'. I tre nuovi sono raffinamenti di `done`:
+ * una corsa che il giornale dichiara conclusa ma il cui artefatto non regge non
+ * e' conclusa, e dire in che modo non lo e' e' l'informazione che decide la
+ * mossa successiva.
+ */
+export type TalosResearchBucket =
+    | 'running' | 'paused' | 'unfinished' | 'cancelled' | 'done' | 'failed'
+    | 'senza-rapporto' | 'bloccata-dal-permesso' | 'giri-esauriti'
 
 export interface TalosResearchStanding {
     readonly total: number
@@ -59,6 +77,83 @@ export interface TalosResearchCard {
     readonly failedSteps: number
     /** Present only once the report has been read; the list does not wait for it. */
     readonly standing: TalosResearchStanding | null
+    /**
+     * Come e' finita davvero, quando l'artefatto e' stato guardato. (MB-1)
+     *
+     * `null` = non ancora guardato. Tenuto sulla scheda accanto al secchio e non
+     * dedotto da esso, perche' sono due fatti: il secchio dice dove va nel
+     * filtro, questo dice PERCHE' — e una scheda che mostra una diagnosi deve
+     * poter dire di non averne ancora una.
+     */
+    readonly completion: TalosResearchCompletion | null
+    /** Quante linee di indagine il piano prevede. Zero finché il piano non c'è. */
+    readonly branches: number
+    /**
+     * Se le fonti sono già state raccolte — dal GIORNALE, non dal rapporto.
+     *
+     * ⛔ Due fatti diversi che la scheda confondeva (Pad, 12/09/2026, foto RC12):
+     * `report` dice se c'è un rapporto da rileggere, questo dice se qualcuno ha
+     * già pagato e scritto delle fonti. Una corsa che ha finito di raccogliere e
+     * si è fermata sulla sintesi ha il secondo e non il primo — e la scheda,
+     * leggendo solo il primo, annunciava «Fonti ancora da raccogliere» su un
+     * lavoro già fatto.
+     */
+    readonly sourcesGathered: boolean
+    /** La prima linea del piano, che è ciò che la scheda mostra finché non c'è un rapporto. */
+    readonly firstBranch: string | null
+    /**
+     * Cosa dice il rapporto, quando è già stato letto. `null` = non ancora.
+     *
+     * Sta accanto a `standing` e non dentro, perché sono due domande diverse:
+     * quello è il BILANCIO (quante reggono), questo è l'ANTEPRIMA (che cosa
+     * c'è dentro). La scheda del mockup mostra tutte e due.
+     */
+    readonly report: TalosResearchCardReport | null
+}
+
+/** Una fonte come la scheda la mostra: un nome e da dove viene. */
+export interface TalosResearchSourceBrief {
+    readonly title: string
+    /** Una pagina del web, o un materiale senza indirizzo. Decide l'icona. */
+    readonly web: boolean
+}
+
+export interface TalosResearchCardReport {
+    /** La prima affermazione: l'unica riga di sostanza che entra in una scheda. */
+    readonly firstClaim: string | null
+    readonly claims: number
+    readonly sources: readonly TalosResearchSourceBrief[]
+}
+
+/**
+ * Che cosa ha da dire questa scheda, in una riga.
+ *
+ * Una funzione sola perché la scheda e la riga dell'elenco devono raccontare la
+ * stessa cosa nello stesso ordine: due copie di questa scala di priorità sono
+ * il modo in cui la griglia e l'elenco cominciano a dire due cose diverse della
+ * stessa ricerca.
+ *
+ * L'ordine è una scala di urgenza, non di ricchezza:
+ *  1. si sta fermando — un tocco appena dato aspetta una risposta;
+ *  2. sta lavorando — quanto manca;
+ *  3. ⛔ MB-1: è finita e NON regge — è la cosa che va detta prima del bilancio,
+ *     perché un bilancio calcolato su un rapporto che non si rilegge non esiste;
+ *  4. il bilancio — quanto tiene, che è il differenziatore del prodotto;
+ *  5. lo stato, quando non c'è altro.
+ */
+export type TalosResearchCardVoice =
+    | { readonly kind: 'pausing' }
+    | { readonly kind: 'running' }
+    | { readonly kind: 'incomplete', readonly bucket: TalosResearchBucket }
+    | { readonly kind: 'standing' }
+    | { readonly kind: 'state' }
+
+export function talosResearchCardVoice(card: TalosResearchCard): TalosResearchCardVoice {
+    if (card.status === 'pause_requested') return { kind: 'pausing' }
+    if (card.bucket === 'running') return { kind: 'running' }
+    if (talosResearchBucketIsIncomplete(card.bucket)) return { kind: 'incomplete', bucket: card.bucket }
+    if (card.standing && card.standing.total > 0) return { kind: 'standing' }
+    return { kind: 'state' }
 }
 
 /**
@@ -73,10 +168,49 @@ export interface TalosResearchCard {
 export function talosResearchBucketOf(
     run: TalosResearchRun,
     isRunning: boolean,
+    /**
+     * Come e' finita davvero, guardando l'artefatto. (MB-1)
+     *
+     * Opzionale, e non per pigrizia: leggere il rapporto costa un accesso al
+     * disco e la lista non lo aspetta — le righe compaiono subito e il verdetto
+     * arriva dietro. Assente vuol dire «non ancora guardato», che e' diverso da
+     * «guardato e non regge», e i due non devono somigliarsi.
+     *
+     * ⛔ Nessuno riscrive niente: la corsa su disco resta `done`, qui si decide
+     * solo come RACCONTARLA. Cio' che e' costato denaro non si sovrascrive.
+     */
+    completion?: TalosResearchCompletion | null,
 ): TalosResearchBucket {
     if (isRunning) return 'running'
     if (run.status === 'failed') return 'failed'
-    if (run.status === 'done') return 'done'
+    if (run.status === 'done') {
+        if (completion && completion !== 'con-rapporto') return completion
+        return 'done'
+    }
+    // Una corsa che NON e' terminale ma che ha gia' finito di raccogliere: e' il
+    // caso nuovo, quello in cui il cancello di MB-1 ha trattenuto
+    // `run_finished`. Dire «interrotta» qui nasconderebbe l'unica cosa che si
+    // sa — perche' si e' fermata.
+    //
+    // ⛔ Il verdetto vale SOLO quando non resta lavoro di raccolta: una corsa
+    // uccisa alla seconda linea su sei non ha un rapporto perche' non e' ancora
+    // arrivata a scriverlo, e chiamarla «giri esauriti» sarebbe una diagnosi
+    // inventata su una corsa sana. Interrotta e' la parola giusta, li'.
+    //
+    // ⛔ E nemmeno quando un passo e' FALLITO: misurato sul Pad il 12/09/2026,
+    // la sintesi e' caduta su un `HTTP 401 User not found` di OpenRouter (la
+    // chiave ruotata) e la scheda diceva «Riprendi: i giri sono finiti» — una
+    // diagnosi inventata su un errore del provider, che la chat nello stesso
+    // minuto raccontava per nome. Un passo `failed` porta gia' la sua causa
+    // (`step.error`, mostrata nel rapporto): il verdetto sull'artefatto non
+    // deve coprirla. Il 401 di OpenRouter con quel testo e' la chiave, non
+    // il modello: github.com/anomalyco/opencode/issues/2245 (letto 12/09/2026).
+    if (completion && completion !== 'con-rapporto'
+        && !talosResearchIsResting(run.status)
+        && talosResearchWorkLeft(run).length === 0
+        && !run.steps.some((step) => step.state === 'failed')) {
+        return completion
+    }
     // Cancelled is a DECISION, like pausing, and for the same reason it does
     // not belong with the runs the phone killed. Worse than untidy: those are
     // filed as "interrupted", which promises they can be carried on — and a
@@ -97,9 +231,17 @@ export function talosResearchBucketOf(
 
 export function talosResearchCardOf(
     run: TalosResearchRun,
-    options: { isRunning: boolean; standing?: TalosResearchStanding | null },
+    options: {
+        isRunning: boolean
+        standing?: TalosResearchStanding | null
+        /** MB-1: l'esito misurato sull'artefatto, quando e' gia' stato letto. */
+        completion?: TalosResearchCompletion | null
+        /** L'anteprima del rapporto, quando e' gia' stato letto. */
+        report?: TalosResearchCardReport | null
+    },
 ): TalosResearchCard {
     const progress = talosResearchProgressOf(run)
+    const completion = options.completion ?? null
     return {
         id: run.id,
         question: run.title ?? run.question,
@@ -107,13 +249,53 @@ export function talosResearchCardOf(
         renamed: run.title !== null,
         startedAt: run.startedAt,
         updatedAt: run.updatedAt,
-        bucket: talosResearchBucketOf(run, options.isRunning),
+        bucket: talosResearchBucketOf(run, options.isRunning, completion),
         status: run.status,
         done: progress.done,
         total: progress.total,
         failedSteps: run.steps.filter((step) => step.state === 'failed').length,
         standing: options.standing ?? null,
+        completion,
+        branches: run.plan.length,
+        sourcesGathered: talosResearchSourcesGathered(run),
+        firstBranch: run.plan[0]?.question ?? null,
+        report: options.report ?? null,
     }
+}
+
+/**
+ * L'anteprima che la scheda mostra, ricavata dal record del rapporto.
+ *
+ * Il taglio a due fonti e' del mockup e non e' arbitrario: una scheda che
+ * elenca dodici fonti non e' un'anteprima, e' l'indice del dossier con la
+ * grafica sbagliata. Il numero intero resta nel piede.
+ */
+export function talosResearchCardReportOf(record: {
+    readonly claims: readonly { readonly text: string }[]
+    readonly sources: readonly { readonly title: string, readonly url: string }[]
+}): TalosResearchCardReport {
+    return {
+        firstClaim: record.claims[0]?.text ?? null,
+        claims: record.claims.length,
+        sources: record.sources.map((source) => ({
+            title: source.title,
+            // Un indirizzo vero, non una stringa vuota: e' la differenza fra
+            // una pagina aperta sul web e un materiale interno al dossier, e
+            // decide quale delle due icone dice la verita'.
+            web: source.url.trim().length > 0,
+        })),
+    }
+}
+
+/**
+ * I tre secchi che dicono «conclusa, ma non regge». (MB-1)
+ *
+ * Una funzione invece di tre confronti sparsi: la lista, il filtro e la pagina
+ * del rapporto devono concordare su che cosa conta come incompleto, e tre copie
+ * dello stesso `includes` sono il modo in cui smettono di concordare.
+ */
+export function talosResearchBucketIsIncomplete(bucket: TalosResearchBucket): boolean {
+    return bucket === 'senza-rapporto' || bucket === 'bloccata-dal-permesso' || bucket === 'giri-esauriti'
 }
 
 /**
@@ -146,6 +328,10 @@ export function talosResearchSolidity(standing: TalosResearchStanding | null): n
  */
 export function talosResearchNeedsAttention(card: TalosResearchCard): boolean {
     if (card.failedSteps > 0) return true
+    // ⛔ MB-1: «conclusa» senza un artefatto che si rilegge e' il caso che
+    // merita di piu' un secondo sguardo, ed era l'unico che passava inosservato
+    // — perche' senza bilancio la scheda non aveva niente da segnalare.
+    if (talosResearchBucketIsIncomplete(card.bucket)) return true
     if (!card.standing) return false
     if (card.standing.unsupported > 0) return true
     // ⛔ Anche UNA contesa merita un secondo sguardo: vuol dire che su quel
@@ -166,6 +352,26 @@ export function talosResearchNeedsAttention(card: TalosResearchCard): boolean {
 export function talosResearchReportRefOf(run: TalosResearchRun): string | null {
     const synthesis = run.steps.find((step) => step.kind === 'synthesise' && step.state === 'done')
     return synthesis?.resultRef ?? null
+}
+
+/**
+ * L'impronta di ciò da cui il VERDETTO dipende. (MB-1)
+ *
+ * ⛔ Misurato sul Pad il 12/09/2026 (foto RE5/RE6): una corsa conclusa col suo
+ * rapporto — 26 affermazioni, «Il rapporto è pronto» — compariva nella stazione
+ * come «Senza conclusione», e il filtro la contava lì. Dopo aver riaperto l'app
+ * la stessa scheda diceva «Conclusa». Il verdetto era stato misurato DURANTE la
+ * sintesi, quando il rapporto non esisteva ancora, e messo in cache per id: id
+ * uguale, verdetto mai più guardato. Ricaricare l'app svuotava la cache, ed è
+ * per questo che il secondo sguardo diceva il vero.
+ *
+ * ⇒ Una lettura si tiene finché vale, e vale finché la corsa è la stessa CORSA,
+ * non finché ha lo stesso nome. Qui dentro c'è tutto ciò che può cambiare il
+ * verdetto: lo stato, l'ultimo movimento del giornale e il rapporto su disco.
+ * Una chiave che non li contiene è una cache che non scade mai.
+ */
+export function talosResearchVerdictKey(run: TalosResearchRun): string {
+    return [run.id, run.status, run.updatedAt, talosResearchReportRefOf(run) ?? ''].join('|')
 }
 
 /** The filter, applied. `all` is a bucket the UI offers and the data never has. */

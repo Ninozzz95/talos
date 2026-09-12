@@ -639,8 +639,8 @@ export const TALOS_EN_MESSAGES = {
          * dialog.
          */
         localEngineProbe: {
-            title: 'On-device GPU check',
-            purpose: 'A short, real generation on CPU and GPU, to find out whether this phone speeds up local models on its GPU. Costs battery and a bit of heat, runs once and remembers the answer, and never starts on its own.',
+            title: 'Which engine is fastest here',
+            purpose: 'A short, real generation on every engine this phone has — CPU, GPU and Hexagon — to find out which one answers local models fastest. Costs battery and a bit of heat, runs once and remembers the answer, and never starts on its own.',
             /**
              * ⛔⛔ MISURATO sul Pad il 21/8, a larghezza telefono (1080px):
              * `declined` era una frase intera ficcata nel badge di stato —
@@ -659,17 +659,17 @@ export const TALOS_EN_MESSAGES = {
             runNow: 'Run it now',
             running: 'Running…',
             noModel: 'Download a local model first — there is nothing to check yet.',
-            /** `{backend}` is already the human word ('CPU' or 'GPU'), decided by `talosBackendLabel`. */
-            resultRan: 'Done. This phone answers local models fastest on the {backend}.',
+            /** `{backend}` is already the human word ('CPU', 'GPU' or 'Hexagon'), decided by `BACKEND_LABEL`. */
+            resultRan: 'Done. On this phone, local models run fastest on {backend}.',
             resultInconclusive: 'That run was not steady enough to trust — you can try again.',
             resultNotRun: {
                 hot: 'Skipped — the phone is too warm right now. Try again once it has cooled down.',
                 alreadyProven: 'Nothing to check — already measured on this phone.',
             },
             modal: {
-                title: 'Check this phone’s GPU?',
-                body: 'TALOS can run a short, real generation on CPU and GPU to see whether this phone answers local models faster on its GPU. It costs battery and a bit of heat, and only happens once — the answer is kept. It never runs on its own after this.',
-                yes: 'Yes, check now',
+                title: 'Try this phone’s engines?',
+                body: 'TALOS can run a short, real generation on every engine this phone has — CPU, GPU and Hexagon — to see which one answers local models fastest. It costs battery and a bit of heat, and only happens once — the answer is kept. It never runs on its own after this.',
+                yes: 'Yes, try now',
                 no: 'Not now',
                 dontAskAgain: 'Don’t ask again',
                 dontAskAgainHint: 'You can still run it any time from Settings → Privacy and permissions.',
@@ -801,6 +801,11 @@ export const TALOS_EN_MESSAGES = {
         selectCallableModel: 'Select a callable model before improving the prompt.',
         writePromptFirst: 'Write a prompt first — Improve prompt rewrites your draft.',
         processing: 'Processing',
+        /** See the note in `it.ts`. */
+        localLoadingModel: 'Opening the model on your phone… {percent}%',
+        localLoadingModelStarting: 'Opening the model on your phone…',
+        localLoadingCancel: 'Cancel',
+        localLoadingCancelling: 'Stopping…',
         removeFailedFiles: 'Remove files that could not be added before sending',
         improvingPrompt: 'Improving prompt',
         stopResponse: 'Stop response',
@@ -893,6 +898,8 @@ export const TALOS_EN_MESSAGES = {
         effortXhigh: 'Extra high',
         effortMax: 'Max',
         compatibilitySupported: 'supported',
+        localModelLine: 'On this device',
+        statusUntested: 'not tried yet',
         compatibilityUnsupported: 'unsupported',
         statusEnabled: 'enabled',
         statusDisabled: 'disabled',
@@ -974,6 +981,45 @@ export const TALOS_EN_MESSAGES = {
         reusePrompt: 'Reuse prompt',
         reasoningLive: 'Reasoning…',
         reasoningWithTime: 'Reasoning · {time}',
+        /*
+         * ⛔ HUMAN WORDS, never the engine's own vocabulary. «TTFT», «pp/tg»,
+         * `ttft_ms` belong in the log; under someone's answer they say
+         * nothing. Owner, explicitly: no internal names on screen, ever.
+         *
+         * ⛔ And no unit inside the message: the number arrives already
+         * carrying its unit, because 8417 ms and 8.4 s are the same fact and
+         * only one of the two reads as a wait.
+         */
+        localSpeedLabel: 'Speed of this answer on this phone',
+        localSpeedFirstToken: '{value} to first token',
+        localSpeedEngineFirstToken: '{value} to the engine’s first token',
+        localSpeedTokensPerSecond: '{value} tokens/sec',
+        localSpeedMsPerToken: '{value} ms per token',
+        localSpeedMilliseconds: '{value} ms',
+        localSpeedSeconds: '{value} s',
+        localSpeedPromptDetail: 'Prompt: {tokens} tokens read in {time}',
+        // Solo con «Mostra dettagli tecnici» acceso. ⛔ Mai i nomi interni:
+        // niente `partialTrimRefused`, niente `seq_rm`, niente «KV».
+        localSpeedPromptReuse: '{reused} of {total} prompt tokens reused',
+        localSpeedCacheReset: 'cache reset by the engine',
+        /*
+         * ⭐⭐⭐ PERCHÉ l'inizio della richiesta era pronto — o perché no.
+         * Vedi `it.ts` per la ragione per esteso. ⛔ «request opening», mai
+         * «prefix», «cache», «KV» o «frozen»: nomi interni, non parole di chi
+         * legge. E nessuna di queste frasi chiede di fare qualcosa, perché non
+         * c'è niente da fare.
+         */
+        localSpeedOpeningReused: 'instructions already in memory: it did not re-read them',
+        localSpeedOpeningNotReused: 'instructions in memory, but the model re-read them anyway',
+        localSpeedOpeningPreparing: 'setting the instructions aside: the next message will start sooner',
+        localSpeedOpeningEngineRefused: 'could not set the instructions aside last time: the model refused, retrying',
+        localSpeedOpeningSaveFailed: 'could not set the instructions aside last time: saving was interrupted, retrying',
+        localSpeedOpeningUnknownShape: 'cannot set the instructions aside: this model does not say how it is built',
+        localSpeedOpeningTooShort: 'no need to set the instructions aside: there are so few that re-reading costs less',
+        localSpeedOpeningNoSpace: 'cannot set the instructions aside: not enough space on the phone',
+        localSpeedOpeningTooLarge: 'cannot set the instructions aside: they would take too much space',
+        localSpeedOpeningUnavailable: 'cannot set the instructions aside: I cannot tell where they end',
+        localSpeedOpeningCheckFailed: 'cannot tell whether the instructions were set aside: the check did not complete',
         receivingResponse: 'Receiving response',
         nextAction: 'Next action',
         validationFault: 'Validation fault',
@@ -1063,6 +1109,26 @@ export const TALOS_EN_MESSAGES = {
         updateProviderCredential: 'Update the provider credential in Settings, then retry.',
         checkProviderHealth: 'Check provider health and retry the message.',
         checkModelConnection: 'Check the selected model and connection, then retry.',
+        // §40: "check your connection" said about a model that runs on the phone
+        // and never touches the network. The right remedy is a different one.
+        checkLocalModel: 'This model runs on the phone and does not use the network. Try another local model, or close other apps and retry.',
+        // The sentences that stand in for an internal code that reached the
+        // message slot. They say what happened; the code stays small.
+        faultNoChatTemplate: 'This model does not carry the instructions for how to talk to it, so TALOS cannot shape the question.',
+        faultNoChatTemplateNext: 'Pick another local model from the picker: conversation-ready builds usually have "instruct" or "it" in the name.',
+        faultProviderRefused: 'The model service refused the request without saying why.',
+        faultProviderKeyMissing: 'This model has no provider key.',
+        faultProviderCatalogMissing: 'This provider’s model catalog has not been loaded yet.',
+        faultModelMismatch: 'The chosen model does not belong to the selected provider.',
+        faultModelMissing: 'No model is chosen for this conversation.',
+        faultPickModelAgain: 'Pick a model again from the composer picker, then retry.',
+        faultImageUnsupported: 'This model does not read images.',
+        faultGenericValidator: 'TALOS stopped this send: something in the request was not in order.',
+        faultGenericPolicy: 'TALOS stopped before going ahead: a required permission was missing.',
+        faultGenericProvider: 'The model service did not finish the reply.',
+        faultGenericNetwork: 'TALOS could not reach the model service.',
+        faultGenericWorker: 'A piece of background work stopped before finishing.',
+        faultGenericSystem: 'TALOS could not finish this reply.',
         storageHiccup: 'Something went wrong while saving this reply on the device.',
         storageHiccupNext: 'What TALOS did is in place — check the Library. If the message looks incomplete, send it again.',
         authorizationLapsed: 'The permission you gave was for the previous send.',
@@ -1128,6 +1194,7 @@ export const TALOS_EN_MESSAGES = {
             today: 'Today',
             yesterday: 'Yesterday',
             week: 'Last 7 days',
+            last30: 'Last 30 days',
         },
         newSession: 'New',
         newSessionAria: 'New Code session',
@@ -1141,6 +1208,15 @@ export const TALOS_EN_MESSAGES = {
         // "ADB"/"bridge"/"plugin": "terminal" and "TALOS" are the same
         // vocabulary the README already uses for this exact feature.
         bridgeNotConnected: "Code couldn't start its terminal on this phone. Close and reopen TALOS — that usually fixes it.",
+        // ⭐ 12/9 — the notice shown on entering Code when the phone connection
+        // is down. Same vocabulary rule `bridgeNotConnected` set on 3/9: no
+        // "adb", no "bridge", no "plugin". The two steps are the real ones —
+        // "Wireless debugging" under developer options is verbatim from
+        // `ponte.pairBody`, and Phone control is where both the automatic
+        // reconnect and the six-digit pairing already live.
+        bridgeOffline: 'TALOS is not connected to this phone, so Code cannot run the session terminal or its commands. Turn on "Wireless debugging" in developer options, then reconnect from Settings → Phone control.',
+        bridgeOfflineAction: 'Settings',
+        bridgeMissing: 'This copy of TALOS does not carry the phone connection, so Code cannot start its terminal.',
         unknownTitle: 'Session not found',
         unknownSession: 'This session no longer exists. Go back to Code and choose one from the list.',
         unknownBack: 'Back to Code',
@@ -1750,6 +1826,32 @@ export const TALOS_EN_MESSAGES = {
         categoryProductivity: 'productivity',
     },
     models: {
+        /**
+         * ⛔⛔ L'APERTURA DEL MODELLO LOCALE, DETTA — owner 10/09/2026:
+         * «PocketPal carica il modello locale appena clicchi per
+         * selezionarlo, cosa importantissima, la dobbiamo fare anche noi
+         * anche con uno spinner o background».
+         *
+         * ⛔ Nessun nome tecnico qui dentro: niente «warm», niente
+         * «backend», niente percorsi, niente motore. La persona ha toccato
+         * il nome di un modello e sta aspettando quello.
+         *
+         * ⛔ Ogni frase che dice «non ora» dice ANCHE cosa succedera' lo
+         * stesso, perche' «non caricato» da solo si legge come un guasto.
+         */
+        localWarm: {
+            loading: 'Loading {model}… this can take a while the first time.',
+            ready: '{model} is ready.',
+            /** ⛔ Il tempo dell'APERTURA, non quello alla prima parola: due misure diverse. */
+            readySlow: '{model} is ready — it took {seconds} seconds to load.',
+            skipped: {
+                'too-warm': 'Holding off on loading {model} — the phone is too warm right now. It will load when you send your first message.',
+                'low-memory': 'Holding off on loading {model} — this phone is short on free memory right now. It will load when you send your first message.',
+                'unknown-heat': 'Holding off on loading {model} — this phone will not say how warm it is, so TALOS is not loading it in the background. It will load when you send your first message.',
+                'unknown-memory': 'Holding off on loading {model} — this phone will not say how much memory is free, so TALOS is not loading it in the background. It will load when you send your first message.',
+            },
+            failed: 'Could not load {model} ahead of time. It will load when you send your first message.',
+        },
         // La capienza: owner 2026-08-04, «come etichetta che vedo sempre».
         // Non un filtro che nasconde — nascondere toglie anche il motivo
         // per liberare memoria.
@@ -1927,6 +2029,8 @@ export const TALOS_EN_MESSAGES = {
         localModelsUnreadable: 'TALOS cannot read the local models folder, so it cannot tell whether any models are there. Downloading another one will not help.',
         localModelOpenPath: 'The local model file is no longer available. Return to Local models and download it again.',
         localModelOpenLoad: 'This file cannot be opened as a compatible GGUF model. Delete it and download a supported variant.',
+        /** See the note in `it.ts`. */
+        localModelOpenCancelled: 'I stopped opening the model. Send your message again whenever you want to retry.',
         localModelOpenContext: 'The model does not fit in available memory even with a smaller context. Close other apps or choose a smaller model.',
         localModelOpenSampler: 'The local engine cannot prepare this model. Choose another compatible variant.',
         localModelOpenUnknown: 'TALOS could not open the local model. Restart the app or choose another model.',
@@ -1953,6 +2057,19 @@ export const TALOS_EN_MESSAGES = {
         privilegedBridge: 'The bridge that lets TALOS act on the phone is no longer running: this happens after every restart. Start it from Settings → Phone control.',
     },
     library: {
+        /* U-20 — the page head, from the "Talos Calm Finale" mockup. */
+        subtitle: 'Documents, images and saved pages.',
+        viewLabel: 'Library view',
+        sortLabel: 'Sort',
+        /* Two different absences, two different sentences: only one can be undone. */
+        emptyTitle: 'Nothing here yet',
+        emptyBody: 'Whatever you upload or save from a chat stays here, ready to reuse in any conversation.',
+        noMatchesTitle: 'No results',
+        clearFilters: 'Show everything',
+        /* A place that will fill in, not a glyph that will be replaced. */
+        thumbnailLoading: 'Preparing the preview',
+        openSavedCopyOf: 'Open the saved copy of {title}',
+        openHostInBrowser: 'Open {host} in the browser',
         pdfNonSiApre: 'TALOS could not open this PDF.',
         pdfPrecedente: 'Previous page',
         pdfSuccessiva: 'Next page',
@@ -2004,7 +2121,7 @@ export const TALOS_EN_MESSAGES = {
         sourceCountOne: '1 source',
         sourceCountMany: '{count} sources',
         options: 'Library options',
-        uploadFiles: 'Upload files',
+        addFile: 'Add file',
         selectFiles: 'Select files',
         newFolder: 'New folder',
         grid: 'Grid',
@@ -2019,6 +2136,9 @@ export const TALOS_EN_MESSAGES = {
         searchLibrary: 'Search the Library',
         retryLibrary: 'Retry Library',
         loadingLibrary: 'Loading Library',
+        /* ⛔ Retired with U-20: the long intro no longer sits in the page.
+           Kept, without callers, so the translation is not lost if the owner
+           wants it in Doctor or in settings. See the Italian note. */
         emptyLong: 'No files yet. Anything you upload or save from a chat lives here, ready to reuse in any conversation.',
         noMatchQuery: 'No files match “{query}”.',
         noLinks: 'No links yet. Results TALOS finds and pages it reads are saved here, with addresses you can open again.',
@@ -2133,14 +2253,15 @@ export const TALOS_EN_MESSAGES = {
         itemMissing: 'This memory is gone.',
         searchPlaceholder: 'Search memories',
         title: 'Memory',
+        subtitle: 'The things you choose to carry into your next conversations.',
         explanation: 'Memories are stored on this device and always injected as untrusted disclosed context — they can never override system or security rules.',
         newMemory: 'New memory',
         memoryTitle: 'Memory title',
-        titlePlaceholder: 'Title',
         memoryContent: 'Memory content',
         content: 'What should TALOS remember?',
+        fieldTitle: 'Title',
+        fieldContent: 'Content',
         kind: 'Memory kind',
-        scope: 'Memory scope',
         global: 'Global',
         project: 'Project',
         thisChat: 'This chat',
@@ -2148,22 +2269,57 @@ export const TALOS_EN_MESSAGES = {
         projectFact: 'Project fact',
         procedure: 'Procedure',
         policyNote: 'Policy note',
+        kindReview: 'Needs review',
+        kindMissing: 'The model suggested this memory and it has no kind yet — pick one before saving it.',
         save: 'Save memory',
-        saved: 'Memory saved as untrusted context.',
-        deleted: 'Memory deleted.',
-        empty: 'No memories yet — save what TALOS should remember across chats.',
+        empty: 'The things that matter, when you choose them.',
+        emptyBody: 'Add a preference, a reference or a procedure.',
+        noMatches: 'Nothing matches, for now.',
+        noMatchesBody: 'Try another word, or clear the filter.',
+        clearFilters: 'Clear filters',
+        count: '{count} memory | {count} memories',
+        viewLabel: 'How memories are shown',
+        viewList: 'List',
+        viewGrid: 'Cards',
+        filterLabel: 'Filter memories',
+        filterAll: 'All',
+        filterReview: 'Needs review',
+        sortLabel: 'Sort memories',
+        sortRecent: 'Most recent',
+        sortTitle: 'Title',
+        sortKind: 'Kind',
         deleteTitle: 'Delete memory?',
         deleteDescription: 'This permanently removes “{title}” from this device.',
-        projectId: 'Project id',
         projectScoped: 'Project · {id}',
         chatScope: 'Chat',
-        used: 'Used {time}',
-        disableNamed: 'Disable memory {title}',
-        enableNamed: 'Enable memory {title}',
+        open: 'Open the memory',
+        edit: 'Edit',
+        editTitle: 'Edit memory',
+        actionsFor: 'Actions for {title}',
+        activate: 'Turn on',
+        pause: 'Pause',
+        exportText: 'Export text',
+        exportCopied: 'Memory copied to the clipboard',
+        exportFailed: 'The memory could not be exported.',
         deleteNamed: 'Delete memory {title}',
-        statusActive: 'active',
-        statusDisabled: 'disabled',
-        displayNameTitle: 'Display name',
+        stateActive: 'On',
+        statePaused: 'Paused',
+        stateReview: 'Needs review',
+        scopeLabel: 'Scope',
+        stateLabel: 'State',
+        originLabel: 'Source',
+        originUser: 'Content provided by the user',
+        originExternal: 'Content gathered from outside',
+        toggleTitle: 'Use in your next conversations',
+        toggleNamed: 'Use “{title}” in your next conversations',
+        toggleOn: 'TALOS reads it again in every new conversation.',
+        toggleOff: 'TALOS does not read it until you turn it back on.',
+        toggleReview: 'Suggested by the model — turning it on approves it.',
+        hintPreference: 'How you prefer to work',
+        hintProjectFact: 'A reference to remember',
+        hintProcedure: 'A way of working',
+        hintPolicyNote: 'A boundary to keep in mind',
+        hintReview: 'Suggested by the model, waiting for a yes',
     },
     localModels: {
             tabsLabel: 'Models: where to look',
@@ -2232,6 +2388,19 @@ export const TALOS_EN_MESSAGES = {
         copyPath: 'Copy the path',
         pathCopied: 'Path copied.',
         pathCopyRefused: 'The clipboard would not take the path. Try again, or read it from the models folder.',
+        /**
+         * ⛔ A CHE PUNTO E' QUESTO MODELLO — 2026-09-10.
+         *
+         * Tre parole sulla riga del file, per la domanda che finora non aveva
+         * risposta da nessuna parte: quale modello e' DAVVERO in memoria
+         * adesso. ⛔ Nessun nome tecnico: chi legge vuole sapere se puo'
+         * scrivere subito, non come si chiama il motore.
+         */
+        warmBadge: {
+            opening: 'Loading…',
+            ready: 'Ready',
+            notLoaded: 'Not loaded yet',
+        },
         installedTitle: 'On this device',
         installedCount: '{count} model | {count} models',
         installedSearch: 'Search the models you downloaded',
@@ -2437,6 +2606,21 @@ export const TALOS_EN_MESSAGES = {
         reasonNotAModel: 'Not a model: this is a support file used to quantise one. It cannot be run.',
         reasonNoDevice: 'This phone has not been measured yet.',
         recheck: 'Check again',
+        backendChoiceTitle: 'Where the model runs',
+        backendChoiceBody: 'You choose which part of the phone a local model works on. On automatic, TALOS picks the fastest one it has measured here.',
+        backendUnavailable: 'not here',
+        /** See the note in `it.ts`. */
+        backendWrongFormat: 'not for this format',
+        backendInUse: 'now running on {backend}',
+        backendInUseOn: 'now running on {backend} · {device}',
+        backendSaveFailed: 'The choice was not saved: try again.',
+        backendNeedsReload: 'The choice applies the next time the model opens.',
+        backendName: {
+            auto: 'Automatico',
+            cpu: 'CPU',
+            gpu: 'GPU',
+            hexagon: 'Hexagon',
+        },
         engineReady: 'Local engine on board · backends: {backends}',
         engineMissing: 'No local engine in this build: models can be downloaded but not run.',
         ramFree: 'free memory',
@@ -2461,18 +2645,58 @@ export const TALOS_EN_MESSAGES = {
         task: 'Task',
     },
     notes: {
-        noMatches: 'No note matches that search.',
+        subtitle: 'Ideas, before they turn into a plan.',
+        noMatches: 'Nothing matches, for now.',
+        noMatchesBody: 'Try another word, or clear the filter.',
+        clearFilters: 'Clear filters',
         viewLabel: 'How notes are shown',
+        viewList: 'List',
+        viewGrid: 'Cards',
+        deleteTitle: 'Delete this note?',
+        deleteDescription: '“{title}” goes from this device, and cannot be brought back.',
         // The note may have been deleted elsewhere, or the address hand-typed.
         itemMissing: 'This note is gone.',
         searchPlaceholder: 'Search notes',
+        // U-12: no longer a banner over the list. It stays as the long
+        // description of the note footer, where the short line says the same
+        // thing in three words. The prompt-side discipline is unchanged.
         intro: 'Notes are stored on this device and treated as untrusted disclosed context — they can never carry instructions.',
         title: 'Note title',
         content: 'Note content',
+        fieldTitle: 'Title',
+        fieldContent: 'Content',
         add: 'New note',
-        empty: 'No notes yet — capture the first one above.',
-        untrusted: 'untrusted',
+        save: 'Save note',
+        edit: 'Edit',
+        editTitle: 'Edit note',
+        empty: 'A place for the next idea.',
+        emptyBody: 'A sentence, a list, a thought to pick up later.',
         deleteNamed: 'Delete note {title}',
+        actionsFor: 'Actions for {title}',
+        open: 'Open the note',
+        count: '{count} note | {count} notes',
+        filterLabel: 'Filter notes',
+        filterAll: 'All',
+        filterPinned: 'Pinned',
+        filterChecklist: 'Checklists',
+        sortLabel: 'Sort notes',
+        sortRecent: 'Most recent',
+        sortTitle: 'Title',
+        kindNote: 'Note',
+        kindThought: 'Thought',
+        kindChecklist: 'Checklist',
+        kicker: 'Personal note',
+        checkProgress: '{done}/{total} done',
+        checkMore: '{count} more items',
+        checkState: '{done} of {total} items ticked',
+        pinOn: 'Pin this note',
+        pinOff: 'Unpin this note',
+        pinNamed: 'Pinned: {title}',
+        userProvided: 'Content you provided',
+        modifiedOn: 'Edited on {date}',
+        exportText: 'Export text',
+        exportCopied: 'Note copied to the clipboard',
+        exportFailed: 'The note could not be exported.',
     },
     toolPermissions: {
         allAtOnce: 'Decide everything at once',
@@ -2537,33 +2761,86 @@ export const TALOS_EN_MESSAGES = {
         },
     },
     tasks: {
+        subtitle: 'One step at a time, with a clear next move.',
         itemMissing: 'This task is gone.',
         searchPlaceholder: 'Search tasks',
         intro: 'Run-linked tasks, stored on this device — fully functional offline.',
         title: 'Task title',
         description: 'Task description',
         descriptionOptional: 'Task description (optional)',
+        descriptionPlaceholder: 'What you want to finish. Write “- [ ] step” to turn a line into a check.',
+        fieldTitle: 'Title',
+        fieldDescription: 'Description',
+        noDescription: 'No description.',
         runIdOptional: 'Optional run ID',
         runIdLabel: 'run_id',
         selectedOne: '1 task selected',
         selected: '{count} tasks selected',
         cancelSelection: 'Cancel selection',
+        count: '{count} task | {count} tasks',
+        filterLabel: 'Filter tasks',
         filterAll: 'All',
+        filterTodo: 'To do',
+        filterDoing: 'In progress',
+        filterScheduled: 'Scheduled',
+        filterDone: 'Done',
+        clearFilters: 'Clear filters',
         emptyFiltered: 'No task of this kind — the others are still there.',
-        viewGrid: 'Switch to grid',
-        viewList: 'Switch to list',
+        noMatches: 'Nothing matches, for now.',
+        noMatchesBody: 'Try another word, or drop the filter.',
+        viewLabel: 'How tasks are shown',
+        viewGrid: 'Cards',
+        viewList: 'List',
+        sortLabel: 'Sort tasks',
+        sortPriority: 'Priority',
+        sortRecent: 'Most recent',
+        sortTitle: 'Title',
         markDone: 'Mark as done',
+        markDoing: 'Mark as in progress',
         reopen: 'Move back to not started',
+        completeNamed: 'Complete: {title}',
         actionsNamed: 'Actions for {title}',
         deleteSelected: 'Delete selected',
         deleteSelectedDescriptionOne: 'This task will be deleted from the device. This cannot be undone.',
         deleteSelectedDescriptionMany: '{count} tasks will be deleted from the device. This cannot be undone.',
+        deleteTitle: 'Delete this task?',
+        deleteDescription: '“{title}” disappears from this device, and cannot be recovered.',
         runIdPlaceholder: 'run_id (optional)',
         add: 'New task',
-        empty: 'No tasks yet — add the first one above.',
+        edit: 'Edit',
+        editTitle: 'Edit task',
+        save: 'Save task',
+        empty: 'Room for the next step.',
+        emptyBody: 'Give a name to what you want to finish.',
         noRun: 'none',
         cycleNamed: 'Cycle status of {title}',
         deleteNamed: 'Delete task {title}',
+        checkState: '{done} of {total} checks done',
+        pause: 'Pause',
+        resume: 'Resume',
+        scheduleNone: 'Not scheduled',
+        scheduleEvery: 'Every {minutes} minutes',
+        scheduleDaily: 'Every day',
+        scheduleWeekly: 'Every week',
+        propertyStatus: 'Status',
+        propertyPriority: 'Priority',
+        propertyRecurrence: 'Recurrence',
+        recurrenceRuns: 'TALOS runs it on its own at the time you picked.',
+        recurrenceSetWithEdit: 'You can set it with Edit.',
+        instructionLabel: 'Instruction',
+        instructionNone: 'No instruction',
+        notifyOnlyIfChanged: 'It tells you only when the result changes.',
+        notifyAlways: 'It tells you on every run.',
+        pausedFoot: 'Paused: it will not run until you resume it.',
+        scheduledFoot: 'Repeats on its own, even with the app closed.',
+        localFoot: 'Stored on this device.',
+        exportText: 'Export text',
+        exportCopied: 'Task copied to the clipboard',
+        exportFailed: 'The task could not be exported.',
+        priorityHigh: 'High priority',
+        priorityLow: 'Low',
+        priorityNormal: 'Normal',
+        priorityHighShort: 'High',
         schedule: {
             section: 'Schedule',
             enable: 'Let it repeat on its own',
@@ -2597,6 +2874,13 @@ export const TALOS_EN_MESSAGES = {
             todo: 'to do',
             doing: 'doing',
             done: 'done',
+        },
+        state: {
+            todo: 'To do',
+            doing: 'In progress',
+            scheduled: 'Scheduled',
+            paused: 'Paused',
+            done: 'Done',
         },
     },
     chats: {
@@ -2936,6 +3220,12 @@ export const TALOS_EN_MESSAGES = {
         showTechnicalDetailAria: 'Show technical detail in errors',
         technicalDetailBody: 'Adds the internal code beside the message when something fails, and records how long each send took. Useful when reporting a problem, noise otherwise. What TALOS tells you happened does not change either way.',
         recentIssues: 'Recent issues',
+        backendLoadTitle: 'Which engines actually load',
+        backendLoadBody: 'Tries the engine libraries shipped with the app one by one and says which ones load on this phone. It does not measure speed and does not drain the battery: it only asks whether they load.',
+        backendLoadRun: 'Ask',
+        backendLoadRunning: 'Asking…',
+        backendLoadResult: '{entrati} engines out of {provati} load on this phone',
+        backendLoadNone: 'No answer: the probe could not reply',
         localParityTitle: 'Local model parity',
         localParityBody: 'Runs real, effect-free checks for text, false calls, a diagnostic tool round-trip, hidden protocol and Stop. It does not read memory, files, network or device data.',
         localParityRun: 'Verify',
@@ -2945,6 +3235,12 @@ export const TALOS_EN_MESSAGES = {
         localParityIncomplete: 'Incomplete: {passed} of {total} checks',
         localParityError: 'The check did not finish ({code}).',
         localParityTransportLabel: 'Tool transport',
+        /** See the note in `it.ts`. */
+        localParityGrammarHeld: 'This model’s tool requests can be held in check.',
+        /** See the note in `it.ts`. */
+        localParityGrammarLoose: 'This model’s tool requests CANNOT be held in check: it may ask to open files or pages you never asked for. Every action still goes through your permission.',
+        localParityThinkingOptional: 'This model’s reasoning can be turned off: with it off, it answers straight away instead of thinking out loud first.',
+        localParityThinkingAlways: 'This model always reasons before answering, and it cannot be turned off: part of your wait goes there.',
         localParityTransport: {
             'native-template': 'native GGUF template',
             'prompt-json-v1': 'prompt JSON v1',
@@ -3123,6 +3419,8 @@ export const TALOS_EN_MESSAGES = {
             failed: 'Did not work out',
             interrupted: 'Stopped halfway',
         },
+        /** A step that finished and left nothing behind: it ran, it did not produce. */
+        sectionNothingSaved: 'No sources saved',
         stepState: {
             pending: 'pending',
             running: 'running',
@@ -3133,7 +3431,9 @@ export const TALOS_EN_MESSAGES = {
         openChat: 'Talk about it in a chat',
         openingChat: 'Opening the chat…',
         stepSaved: 'saved',
-        howItWasBuilt: 'How it was built',
+        // ⛔ `howItWasBuilt` lived here and said what `registroTitolo` says. One
+        // page, two identical headings (Pad, 12/09/2026): the key goes with the
+        // section, so the duplicate cannot come back unnoticed.
         runningSince: 'Running for {elapsed}',
         endedAfter: 'Took {elapsed}',
         sectionsDone: '{done} of {total} sections',
@@ -3148,7 +3448,72 @@ export const TALOS_EN_MESSAGES = {
             unfinished: 'Interrupted',
             done: 'Finished',
             failed: 'Failed',
+            'senza-rapporto': 'No readable report',
+            'bloccata-dal-permesso': 'Blocked by a permission',
+            'giri-esauriti': 'Never concluded',
         },
+        /**
+         * The same states, said of ONE research — the pill on a card or a row.
+         *
+         * English does not inflect these, so the words come out identical to the
+         * filter's. The block exists anyway, and deliberately: Italian DOES
+         * inflect them («Interrotte» over a single dossier, measured on the Pad
+         * on 12/09/2026), and a seam that exists in one catalogue only is a seam
+         * the next screen forgets. No `all`: that is a filter, never a state one
+         * research is in.
+         */
+        bucketOne: {
+            cancelled: 'Cancelled',
+            paused: 'Paused',
+            running: 'Running',
+            unfinished: 'Interrupted',
+            done: 'Finished',
+            failed: 'Failed',
+            'senza-rapporto': 'No readable report',
+            'bloccata-dal-permesso': 'Blocked by a permission',
+            'giri-esauriti': 'Never concluded',
+        },
+        completion: {
+            'senza-rapporto': {
+                what: 'The report was written, but it cannot be read back.',
+                do: 'Resume: the report has to be written again.',
+            },
+            'bloccata-dal-permesso': {
+                what: 'It stopped on a refused permission, without writing the report.',
+                do: 'Resume with the right permissions.',
+            },
+            'giri-esauriti': {
+                what: 'It stopped before it got to writing the report.',
+                do: 'Resume: it ran out of turns.',
+            },
+        },
+        subtitle: 'One question. A dossier to dig into.',
+        dossierType: 'Dossier',
+        countLabel: '{count} dossiers',
+        planPages: '{count} pages',
+        depthChip: '{sources} pages · {minutes} min',
+        countFiltered: '{count} matching dossiers',
+        fromReport: 'From the report',
+        fromPlan: 'From the plan',
+        planPending: 'The lines of enquiry have not been drawn up yet.',
+        sourcesPending: 'Sources not gathered yet',
+        /** Gathered and on disk, but no report lists them yet. */
+        sourcesGathered: 'Sources gathered, not in the report yet',
+        sourcesOne: '1 source',
+        sourcesMany: '{count} sources',
+        claimsOne: '1 finding',
+        claimsMany: '{count} findings',
+        branchesOne: '1 line of enquiry',
+        branchesMany: '{count} lines of enquiry',
+        openSource: 'Open the source {title}',
+        viewLabel: 'How to show the researches',
+        viewList: 'List',
+        viewGrid: 'Cards',
+        sortLabel: 'Sort the researches',
+        sortRecent: 'Most recent',
+        sortTitle: 'By title',
+        clearFilters: 'Clear the filters',
+        noMatchesBody: 'Try other words, or go back to looking at them all.',
         showAsGrid: 'Show as grid',
         showAsList: 'Show as list',
         emptyTitle: 'No research yet.',
@@ -3384,6 +3749,8 @@ export const TALOS_EN_MESSAGES = {
         expandHarnessSessions: 'Expand Code sessions',
     },
     shell: {
+        searchTalos: 'Search Talos',
+        newChatOrSession: 'New chat or session',
         sidebarDescription: 'Chats, tools and settings',
         allChats: 'All chats',
         recentChats: 'Recent chats',

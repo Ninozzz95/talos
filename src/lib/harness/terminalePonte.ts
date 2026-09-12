@@ -8,6 +8,25 @@ import { getProviderEndpoint } from '@/services/providerEndpointStore'
  * "procedi in ordine" punto 1. La chiave non lascia mai questo processo se
  * non verso il plugin nativo: nessuna scrittura su disco, nessun log.
  *
+ * ⛔⛔⛔ 10/9 — QUELLA FRASE ERA VERA DI NOI E FALSA DEL SISTEMA, ed è
+ * costata all'owner una chiave ruotata. La chiave non veniva scritta né
+ * loggata da nessuna riga di questo repo — e compariva lo stesso nel
+ * logcat di una build di rilascio, a ogni avvio:
+ *
+ *     I adbd: adbd service requested 'shell,v2,raw:LD_LIBRARY_PATH=…
+ *             OPENROUTER_API_KEY=sk-or-… node …'
+ *
+ * A stamparla era `adbd`, che registra OGNI comando che gli viene chiesto
+ * di eseguire (AOSP `daemon/shell_service.cpp`, verificato alla fonte il
+ * 2026-09-10). Il segreto non veniva loggato: veniva **consegnato come
+ * riga di comando**, e la riga di comando è pubblica per costruzione.
+ *
+ * ⇒ Curato in `TalosPonteSegreti.kt` — l'ambiente qui sotto viaggia ora
+ * sullo **stdin** del processo remoto, mai più come token `VAR=valore`.
+ * L'interfaccia di questo file non cambia (`ambiente` resta una mappa);
+ * cambia il canale, un livello più in basso. La catena intera, processo
+ * per processo, è disegnata lì.
+ *
  * ⛔ Il plugin nativo `TalosTerminal` esiste SOLO in una build di debug
  * (stesso meccanismo di `talosHarnessUiAvailable()` — la classe Kotlin non
  * compila affatto in release). `talosTerminaleDisponibile()` è la stessa

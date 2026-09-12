@@ -224,4 +224,150 @@ public class TalosBackendChoiceTest {
         assertEquals("a proven GPU moves every layer, not a partial offload",
                 -1, TalosBackendChoice.gpuLayers(gpu));
     }
+
+    /**
+     * ⭐⭐⭐ I NUMERI VERI DELL'11/09/2026, e il difetto che raccontano.
+     *
+     * Sondaggio sul Pad dell'owner, `Llama-3.2-3B-Instruct-Q4_0`, i tre motori
+     * tutti giudicati CORRETTI dallo stesso giro:
+     *
+     * <pre>
+     *   cpu      ttft 36.530 ms
+     *   opencl   ttft  6.003 ms
+     *   hexagon  ttft  2.002 ms
+     * </pre>
+     *
+     * ⛔ L'automatico sceglieva **la GPU**: l'elenco dei candidati conteneva
+     * `VULKAN` e `OPENCL` e basta, quindi il motore tre volte piu' veloce non
+     * era scartato — era invisibile. Owner: «con automatico dovrebbe farlo
+     * automaticamente».
+     */
+    @Test
+    public void ilPiuVeloceDeiTreVinceEDall11SettembreSonoTre() {
+        TalosBackendChoice.Decision decision = TalosBackendChoice.choose(DRIVER, "none",
+                new TalosBackendChoice.Evidence[] {
+                    proven(TalosBackendChoice.CPU, DRIVER, 36_530),
+                    proven(TalosBackendChoice.OPENCL, DRIVER, 6_003),
+                    proven(TalosBackendChoice.HEXAGON, DRIVER, 2_002),
+                }, true);
+
+        assertEquals(TalosBackendChoice.HEXAGON, decision.backend);
+        assertEquals("faster", decision.reason);
+    }
+
+    /**
+     * ⛔⛔ AL CONTRARIO — e questo e' il caso di DUE MODELLI SU TRE del nostro
+     * catalogo (14 Q4_K_M contro 7 Q4_0).
+     *
+     * Stessa evidenza, stesso telefono, stesso istante: cambia solo il formato
+     * dei pesi del file che si sta per aprire. Sul Q4_K_M l'NPU misura 55,7
+     * t/s in lettura contro i 206 della GPU — scegliere il numero vinto su un
+     * Q4_0 renderebbe l'app quattro volte piu' lenta.
+     */
+    @Test
+    public void senzaIlPermessoDelFormatoLNpuNonPartecipa() {
+        TalosBackendChoice.Evidence[] evidenza = new TalosBackendChoice.Evidence[] {
+            proven(TalosBackendChoice.CPU, DRIVER, 36_530),
+            proven(TalosBackendChoice.OPENCL, DRIVER, 6_003),
+            proven(TalosBackendChoice.HEXAGON, DRIVER, 2_002),
+        };
+
+        assertEquals("il formato sbagliato non la scarta dopo: non la fa entrare",
+                TalosBackendChoice.OPENCL,
+                TalosBackendChoice.choose(DRIVER, "none", evidenza, false).backend);
+    }
+
+    /**
+     * ⛔ E il predefinito della variante a tre argomenti e' NO. Un chiamante che
+     * non sa che file sta aprendo non puo' autorizzare l'NPU per distrazione.
+     */
+    @Test
+    public void laVarianteCortaNonAutorizzaLNpu() {
+        TalosBackendChoice.Decision decision = TalosBackendChoice.choose(DRIVER, "none",
+                new TalosBackendChoice.Evidence[] {
+                    proven(TalosBackendChoice.CPU, DRIVER, 36_530),
+                    proven(TalosBackendChoice.HEXAGON, DRIVER, 2_002),
+                });
+
+        assertEquals(TalosBackendChoice.CPU, decision.backend);
+        assertEquals("unproven", decision.reason);
+    }
+
+    /**
+     * ⛔ Un'NPU che ha FALLITO resta fuori anche col permesso del formato: il
+     * permesso dice «questo file e' per lei», non «e' andata bene».
+     */
+    @Test
+    public void ilPermessoDelFormatoNonSostituisceLaProva() {
+        TalosBackendChoice.Decision decision = TalosBackendChoice.choose(DRIVER, "none",
+                new TalosBackendChoice.Evidence[] {
+                    proven(TalosBackendChoice.CPU, DRIVER, 36_530),
+                    proven(TalosBackendChoice.OPENCL, DRIVER, 6_003),
+                    failed(TalosBackendChoice.HEXAGON, DRIVER),
+                }, true);
+
+        assertEquals(TalosBackendChoice.OPENCL, decision.backend);
+    }
+
+    /**
+     * ⭐⭐⭐ CHIEDERE «QUANTI» SENZA DIRE «DOVE» E' UN SORTEGGIO CON UN'ETICHETTA.
+     *
+     * Con OpenCL e HTP entrambi registrati — da oggi, su questo Pad — gli
+     * strati a -1 senza un nome finiscono dove decide l'ordine di caricamento
+     * delle librerie native.
+     *
+     * ⛔ I nomi sono quelli del MOTORE (`ggml_backend_reg_name`), non le nostre
+     * famiglie: se qualcuno qui scrivesse `hexagon` invece di `HTP`,
+     * l'apertura fallirebbe e la chat cadrebbe sulla CPU.
+     */
+    @Test
+    public void unaDecisioneNominaIlRegistryDelMotore() {
+        TalosBackendChoice.Decision npu = TalosBackendChoice.choose(DRIVER, "none",
+                new TalosBackendChoice.Evidence[] {
+                    proven(TalosBackendChoice.CPU, DRIVER, 36_530),
+                    proven(TalosBackendChoice.HEXAGON, DRIVER, 2_002),
+                }, true);
+        assertEquals("HTP", TalosBackendChoice.registryOf(npu));
+
+        TalosBackendChoice.Decision gpu = TalosBackendChoice.choose(DRIVER, "none",
+                new TalosBackendChoice.Evidence[] {
+                    proven(TalosBackendChoice.CPU, DRIVER, 43_200),
+                    proven(TalosBackendChoice.OPENCL, DRIVER, 11_000),
+                });
+        assertEquals("OpenCL", TalosBackendChoice.registryOf(gpu));
+
+        // ⛔ Vuoto vuol dire «nessuna richiesta» dall'altra parte del ponte, che
+        // e' la cosa giusta: con zero strati non c'e' niente da nominare.
+        TalosBackendChoice.Decision cpu = TalosBackendChoice.choose(
+                DRIVER, "none", new TalosBackendChoice.Evidence[0]);
+        assertEquals("", TalosBackendChoice.registryOf(cpu));
+    }
+
+    /**
+     * ⛔⛔ IL SECONDO NUMERO SOPRAVVIVE, e le prove vecchie non diventano guaste.
+     *
+     * Sette modelli su otto cambiano vincitore fra lettura e scrittura: senza
+     * questo campo la decisione non potra' mai tenerne conto (D-53). Ma una
+     * riga scritta prima dell'11/09/2026 non ce l'ha, e leggerla come zero
+     * token al secondo la farebbe sembrare rotta invece che vecchia.
+     */
+    @Test
+    public void laScritturaSiRegistraEZeroVuolDireNonMisurata() {
+        TalosBackendChoice.Evidence misurata = new TalosBackendChoice.Evidence(
+                TalosBackendChoice.HEXAGON, DRIVER, TalosBackendChoice.Outcome.CORRECT,
+                2_002, 19.96);
+        assertEquals(19.96, misurata.tokensPerSecond, 0.001);
+
+        TalosBackendChoice.Evidence vecchia = new TalosBackendChoice.Evidence(
+                TalosBackendChoice.HEXAGON, DRIVER, TalosBackendChoice.Outcome.CORRECT, 2_002);
+        assertEquals("assente vuol dire non misurata, non lentissima",
+                0, vecchia.tokensPerSecond, 0.001);
+        assertEquals("e non le toglie il diritto di essere scelta",
+                TalosBackendChoice.HEXAGON,
+                TalosBackendChoice.choose(DRIVER, "none",
+                        new TalosBackendChoice.Evidence[] {
+                            proven(TalosBackendChoice.CPU, DRIVER, 36_530),
+                            vecchia,
+                        }, true).backend);
+    }
 }

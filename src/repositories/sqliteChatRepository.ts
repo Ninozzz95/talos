@@ -133,6 +133,13 @@ function parseTask(row: TalosSqlRow): TalosLocalTask {
         schedule_json: nullableString(row, 'schedule_json'),
         instruction: nullableString(row, 'instruction'),
         last_run_at: nullableString(row, 'last_run_at'),
+        // U-17 — SQLite non ha booleani: la colonna e' `INTEGER NOT NULL
+        // DEFAULT 0`, come `talos_notes.pinned`. `Number(...) === 1` e non
+        // `Boolean(...)`: uno `'0'` di ritorno da un driver che stringa i
+        // numeri e' vero in JavaScript, e sarebbe una pausa che si accende da
+        // sola — cioe' un'attivita' che smette di partire senza che nessuno
+        // l'abbia chiesto.
+        paused: Number(row.paused ?? 0) === 1,
         created_at: requiredString(row, 'created_at'),
         updated_at: requiredString(row, 'updated_at'),
     }
@@ -147,6 +154,11 @@ function parseNote(row: TalosSqlRow): TalosLocalNote {
         // A8 — `NULL` (riga nata prima della colonna) cade su `external`:
         // il predefinito prudente non regala fiducia.
         content_origin: talosContentOrigin(row.content_origin),
+        // U-10 — SQLite non ha booleani: la colonna è `INTEGER NOT NULL
+        // DEFAULT 0`. `Number(...) === 1` e non `Boolean(...)` perché un
+        // `'0'` di ritorno da un driver che stringa i numeri è vero in
+        // JavaScript, e sarebbe un pin che si accende da solo.
+        pinned: Number(row.pinned ?? 0) === 1,
         created_at: requiredString(row, 'created_at'),
         updated_at: requiredString(row, 'updated_at'),
     }
@@ -1046,6 +1058,9 @@ export function createSqliteChatRepository(
                 // pianificazione il cui momento e' gia' passato parte comunque
                 // la prima volta, e questo `null` e' come fa a saperlo.
                 last_run_at: null,
+                // U-17 — un'attivita' nasce viva. La pausa e' una decisione che
+                // si prende dopo, su una ricorrenza che si e' vista girare.
+                paused: false,
                 created_at: input.created_at,
                 updated_at: input.created_at,
             }
@@ -1053,18 +1068,19 @@ export function createSqliteChatRepository(
                 await database.run(
                     `INSERT INTO talos_tasks
                         (id, title, description, run_id, priority, status, content_origin,
-                         schedule_json, instruction, last_run_at, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                         schedule_json, instruction, last_run_at, paused, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                     [task.id, task.title, task.description, task.run_id, task.priority, task.status,
                         task.content_origin,
-                     task.schedule_json, task.instruction, task.last_run_at, task.created_at, task.updated_at],
+                     task.schedule_json, task.instruction, task.last_run_at, task.paused ? 1 : 0,
+                     task.created_at, task.updated_at],
                 )
             })
             return task
         },
         async listTasks() {
             const rows = await (await db()).query(
-                `SELECT id, title, description, run_id, priority, status, content_origin, schedule_json, instruction, last_run_at, created_at, updated_at
+                `SELECT id, title, description, run_id, priority, status, content_origin, schedule_json, instruction, last_run_at, paused, created_at, updated_at
                  FROM talos_tasks ORDER BY updated_at DESC, id DESC`,
             )
             return rows.map((row) => parseTask(row as TalosSqlRow))
@@ -1079,7 +1095,7 @@ export function createSqliteChatRepository(
                 )
             })
             const rows = await (await db()).query(
-                `SELECT id, title, description, run_id, priority, status, content_origin, schedule_json, instruction, last_run_at, created_at, updated_at
+                `SELECT id, title, description, run_id, priority, status, content_origin, schedule_json, instruction, last_run_at, paused, created_at, updated_at
                  FROM talos_tasks WHERE id = ? LIMIT 1`,
                 [taskId],
             )
@@ -1115,6 +1131,13 @@ export function createSqliteChatRepository(
                 colonne.push('instruction = ?')
                 valori.push(patch.instruction)
             }
+            if (patch.paused !== undefined) {
+                colonne.push('paused = ?')
+                // In colonna va un intero, non un booleano: SQLite non ne ha
+                // uno, e lasciar convertire il driver significa non sapere che
+                // cosa ci finisce dentro.
+                valori.push(patch.paused ? 1 : 0)
+            }
 
             await transaction(async (database) => {
                 const exists = await database.query('SELECT id FROM talos_tasks WHERE id = ? LIMIT 1', [taskId])
@@ -1128,7 +1151,7 @@ export function createSqliteChatRepository(
                 )
             })
             const rows = await (await db()).query(
-                `SELECT id, title, description, run_id, priority, status, content_origin, schedule_json, instruction, last_run_at, created_at, updated_at
+                `SELECT id, title, description, run_id, priority, status, content_origin, schedule_json, instruction, last_run_at, paused, created_at, updated_at
                  FROM talos_tasks WHERE id = ? LIMIT 1`,
                 [taskId],
             )
@@ -1149,16 +1172,17 @@ export function createSqliteChatRepository(
                 content: input.content,
                 trust_level: 'untrusted',
                 content_origin: input.content_origin ?? TALOS_CONTENT_ORIGIN_FALLBACK,
+                pinned: input.pinned === true,
                 created_at: input.created_at,
                 updated_at: input.created_at,
             }
             await transaction(async (database) => {
                 await database.run(
                     `INSERT INTO talos_notes
-                        (id, title, content, trust_level, content_origin, created_at, updated_at)
-                     VALUES (?, ?, ?, 'untrusted', ?, ?, ?)`,
+                        (id, title, content, trust_level, content_origin, pinned, created_at, updated_at)
+                     VALUES (?, ?, ?, 'untrusted', ?, ?, ?, ?)`,
                     [note.id, note.title, note.content, note.content_origin,
-                        note.created_at, note.updated_at],
+                        note.pinned ? 1 : 0, note.created_at, note.updated_at],
                 )
             })
             return note
@@ -1288,16 +1312,21 @@ export function createSqliteChatRepository(
             })
         },
         async listNotes() {
+            // U-10 — `pinned DESC` PRIMA della data: le note in evidenza stanno
+            // in cima, e dentro ciascuno dei due gruppi si resta ordinati per
+            // ultima modifica. Ordinare qui e non nella schermata perché la
+            // stessa lista la leggono anche i tool della chat e il backup, e
+            // un ordine che vale solo per chi guarda non è un ordine.
             const rows = await (await db()).query(
-                `SELECT id, title, content, trust_level, content_origin, created_at, updated_at
-                 FROM talos_notes ORDER BY updated_at DESC, id DESC`,
+                `SELECT id, title, content, trust_level, content_origin, pinned, created_at, updated_at
+                 FROM talos_notes ORDER BY pinned DESC, updated_at DESC, id DESC`,
             )
             return rows.map((row) => parseNote(row as TalosSqlRow))
         },
         async updateNote(input: UpdateNoteInput) {
             return transaction(async (database) => {
                 const rows = await database.query(
-                    `SELECT id, title, content, trust_level, content_origin, created_at, updated_at
+                    `SELECT id, title, content, trust_level, content_origin, pinned, created_at, updated_at
                      FROM talos_notes WHERE id = ? LIMIT 1`,
                     [input.id],
                 )
@@ -1314,15 +1343,29 @@ export function createSqliteChatRepository(
                  */
                 const title = input.title ?? current.title
                 const content = input.content ?? current.content
+                const pinned = input.pinned ?? current.pinned
+                /*
+                 * ⛔ U-10 — mettere in evidenza NON è modificare la nota.
+                 *
+                 * L'elenco si ordina su `updated_at`, quindi toccarla qui
+                 * farebbe risalire in cima una nota di marzo solo perché
+                 * qualcuno le ha messo la puntina — e il gruppo «non in
+                 * evidenza» si riordinerebbe tutto togliendola. Il testo non è
+                 * cambiato: la data di modifica non deve dire che lo è.
+                 *
+                 * La data si muove solo se si è toccato davvero qualcosa da
+                 * leggere: titolo o corpo.
+                 */
+                const rewrote = input.title !== undefined || input.content !== undefined
                 // La data di modifica la mette il deposito, non chi scrive:
                 // l'elenco si ordina su questa, e una data fornita da fuori
                 // potrebbe tenere una nota in cima per sempre.
-                const updatedAt = new Date().toISOString()
+                const updatedAt = rewrote ? new Date().toISOString() : current.updated_at
                 await database.run(
-                    'UPDATE talos_notes SET title = ?, content = ?, updated_at = ? WHERE id = ?',
-                    [title, content, updatedAt, input.id],
+                    'UPDATE talos_notes SET title = ?, content = ?, pinned = ?, updated_at = ? WHERE id = ?',
+                    [title, content, pinned ? 1 : 0, updatedAt, input.id],
                 )
-                return { ...current, title, content, updated_at: updatedAt }
+                return { ...current, title, content, pinned, updated_at: updatedAt }
             })
         },
         async deleteNote(noteId: string) {

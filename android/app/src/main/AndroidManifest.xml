@@ -792,6 +792,79 @@
             </intent-filter>
         </service>
 
+    <!--
+        ⭐⭐⭐ LA RIGA PER CUI LA GPU NON HA MAI GIRATO — trovata il 2026-09-10.
+
+        ## Il difetto, misurato sul Pad
+
+        Trenta strati su trenta assegnati alla CPU, con 3,2 MB di
+        `libggml-opencl.so` dentro il pacchetto installato che nessuno eseguiva.
+        Il driver di sistema c'è (`/vendor/lib64/libOpenCL.so`, 87.504 byte) ed è
+        elencato in `/vendor/etc/public.libraries.txt`. Eppure, chiamando la
+        sonda di caricamento, il linker ha detto esattamente perché:
+
+            load_backend: failed to load .../libggml-opencl.so:
+              dlopen failed: library "libOpenCL.so" not found:
+              needed by .../libggml-opencl.so in namespace clns-9
+
+        ⛔ Non «non c'è»: **non è raggiungibile dal namespace dell'app**.
+
+        ## Perché, e da quando
+
+        Da **Android 12** un'app che carica una libreria nativa fornita dal
+        sistema o dal vendor deve **dichiararla qui**: senza, il linker non la
+        collega al namespace del classloader, per quanto pubblica sia. È lo
+        stesso muro che ha fermato il delegate GPU di TensorFlow Lite
+        (https://github.com/tensorflow/tensorflow/issues/48001) e OpenCV
+        (https://forum.opencv.org/t/cannot-access-system-vendor-lib64-libopencl-so-when-using-opencl-on-android/24160),
+        entrambi letti il 2026-09-10.
+
+        ## `required="false"`, e non è prudenza generica
+
+        Un telefono senza OpenCL deve poter **installare** TALOS e girare su CPU:
+        `required="true"` lo escluderebbe dallo store e dall'installazione. E i
+        nomi sono più d'uno perché il driver cambia nome col produttore —
+        Adreno e Mali usano `libOpenCL.so`, i Tensor di Google
+        `libOpenCL-pixel.so`, PowerVR `libPVROCL.so`. Dichiararli tutti come non
+        obbligatori costa niente e non promette niente: chi non c'è, non entra.
+
+        ⛔ Questa riga NON accende la GPU da sola. Rende la libreria
+        *caricabile*; poi restano il sondaggio che la qualifica e la scelta che
+        la chiede. Vedi §32-§34 del ledger: erano cinque difetti, questo è il
+        primo.
+
+        ⛔ Quando arriverà Hexagon servirà lo stesso trattamento per
+        `libcdsprpc.so` e `libadsprpc.so` (già pubbliche su questo telefono, già
+        verificate). Non si dichiarano adesso: una dichiarazione senza un motivo
+        è una promessa che non manteniamo.
+    -->
+    <uses-native-library android:name="libOpenCL.so" android:required="false" />
+    <uses-native-library android:name="libOpenCL-pixel.so" android:required="false" />
+    <uses-native-library android:name="libPVROCL.so" android:required="false" />
+
+    <!--
+        ⛔⛔⛔ L'NPU HEXAGON PASSA DA QUI, e senza queste due righe non parte.
+        Stessa lezione che il 10/09 ha acceso la GPU: da Android 12 una libreria
+        di sistema o del vendore va DICHIARATA nel manifesto, per quanto pubblica
+        sia, o il linker non la aggancia allo spazio dei nomi dell'app. La GPU
+        moriva con «dlopen failed: library "libOpenCL.so" not found ... in
+        namespace clns-9» e bastava una riga.
+
+        `libcdsprpc.so` e' il ponte FastRPC verso il cDSP: lo apre
+        `libggml-hexagon.so` a runtime, per nome. `libadsprpc.so` e' lo stesso
+        ponte verso l'aDSP — non lo usiamo, ma alcune ROM lo mettono al posto
+        dell'altro, e chiederlo non costa niente.
+
+        ⛔ Verificato su questo Pad il 10/09/2026, non dedotto: entrambe sono
+        nella lista pubblica del vendore, letta a schermo in logcat all'avvio —
+        `InitVendorPublicLibraries: ... libadsprpc.so:libcdsprpc.so ...`
+
+        `required="false"`: un telefono senza cDSP deve installare l'app lo
+        stesso e semplicemente non avere l'NPU.
+    -->
+    <uses-native-library android:name="libcdsprpc.so" android:required="false" />
+    <uses-native-library android:name="libadsprpc.so" android:required="false" />
+
 </application>
 
     <!-- Permissions -->

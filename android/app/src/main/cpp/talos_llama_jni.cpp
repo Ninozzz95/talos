@@ -39,6 +39,9 @@
 
 #include <sys/auxv.h>
 #include <asm/hwcap.h>  // P2-2 — bit HWCAP*, lo snapshot di ricerca KleidiAI (vedi commento sotto)
+// `__system_property_get` — l'interruttore di `log.tag.TalosLlama`, vedi
+// `talos_log_debug_acceso()`. Disponibile dall'API 21, sotto il nostro minSdk 26.
+#include <sys/system_properties.h>
 
 #include "llama.h"
 #include "common.h"  // P2-1 — common_context_can_seq_rm/common_context_seq_rm_type
@@ -75,6 +78,12 @@ const char * llama_build_info(void);
 #define TALOS_TAG "TalosLlama"
 #define TALOS_LOGI(...) __android_log_print(ANDROID_LOG_INFO, TALOS_TAG, __VA_ARGS__)
 #define TALOS_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, TALOS_TAG, __VA_ARGS__)
+/**
+ * ⛔ DEBUG e non INFO, e il chiamante deve comunque chiedere il permesso a
+ * `talos_log_debug_acceso()`: qui sotto passa contenuto di una persona, e
+ * `-s TalosLlama:V` da solo NON basta a giustificarlo. Vedi D-45.
+ */
+#define TALOS_LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, TALOS_TAG, __VA_ARGS__)
 
 namespace {
 
@@ -89,6 +98,45 @@ struct talos_session {
     // Letti dal thread del campionatore mentre la generazione gira sull'altro.
     std::atomic<int>  produced{0};
     std::atomic<bool> cancelled{false};
+    /**
+     * ⛔⛔⛔ QUANDO L'INTERRUZIONE NON L'ABBIAMO CHIESTA NOI — misurato l'11/09/2026.
+     *
+     * `llama_decode` torna **2 = aborted** (contratto upstream,
+     * `include/llama.h:987`), e per tutta la vita di questo file abbiamo
+     * trattato quel 2 come una fine pulita. È giusto quando l'abort è il nostro:
+     * lo Stop della persona passa esattamente di lì.
+     *
+     * ⛔ Sul Pad, durante un sondaggio sull'NPU, il log ha detto:
+     *
+     * <pre>
+     *   graph_compute: ggml_backend_sched_graph_compute_async failed with error 1
+     *   process_ubatch: failed to compute graph, compute status: 1
+     *   llama_decode: failed to decode, ret = 2
+     * </pre>
+     *
+     * `compute status 1` è `GGML_STATUS_ABORTED`. La corsa è stata registrata
+     * **VALID** — cioè come prova che quel motore funziona su questo telefono —
+     * e io ne ho concluso che il backend avesse mollato il grafo a metà
+     * risposta.
+     *
+     * ⛔⛔ **Era una conclusione senza misura, e questo flag l'ha smentita.**
+     * Armato e rimisurato l'11/09: non si alza mai, e lo stesso `ret = 2`
+     * compare **anche sulla CPU**, 40 ms prima del suo verdetto. È lo stop del
+     * banco alla fine di una corsa a budget, su tutti e tre i motori. L'NPU non
+     * c'entrava: sembrava sua solo perché avevo guardato un log dove c'era lei.
+     *
+     * ⇒ Il flag resta, e non perché serviva a incolpare: serve a **poter
+     * distinguere**. Senza, «il motore ha mollato» e «l'abbiamo fermato noi»
+     * hanno lo stesso aspetto, e la prima non deve mai finire scritta come
+     * prova che quel motore funziona. Vero **solo** se il 2 è arrivato mentre
+     * {@code cancelled} era falso.
+     *
+     * ⛔ Vive qui e non dentro `tempi` di proposito: quella struttura si assegna
+     * per aggregato e ha già perso un membro in silenzio una volta
+     * (`una-costante-travestita-da-misura`). Un atomico a sé non si può
+     * dimenticare in un inizializzatore.
+     */
+    std::atomic<bool> abortita_dal_motore{false};
 
     /**
      * I token che il contesto ha GIÀ elaborato, nell'ordine in cui li ha visti.
@@ -113,6 +161,38 @@ struct talos_session {
     std::vector<llama_token> cached;
 
     /**
+     * ⛔⛔⛔ D-45 — QUANDO RIUSARE LA KV DA' RISPOSTE SBAGLIATE, e si smette.
+     *
+     * Misurato sul Pad il 2026-09-10, `gemma-4-E2B-it-Q4_0` sulla GPU
+     * (`GPUOpenCL Adreno 830`), cinque volte:
+     *
+     *   - quattro turni con la KV riusata (da file E dalla cache viva):
+     *     risposta **vuota**, con numeri splendidi — 490 ms, 2.802 token su
+     *     2.836 riusati;
+     *   - un quinto turno: `2.802 riusati su 2.808` e in uscita
+     *     `model 원: ? 어 (Translation **Model 어 (Translation ) ) )`.
+     *
+     * ⛔ Lo stesso modello, stesso file, stesso codice, **sulla CPU risponde
+     * bene**: «Sto bene, grazie. Come posso assisterti oggi?» in 288 ms con
+     * 2.802 token riusati. Non e' il modello e non e' il file del prefisso: e'
+     * il riuso della KV su un contesto scaricato sulla GPU.
+     *
+     * ⛔ Il sospetto e' la finestra scorrevole — gemma-4 apre **due** cache
+     * (`llama_kv_cache_iswa`, 3 strati non-SWA + 12 SWA) e su OpenCL la
+     * potatura parziale non torna quella che il modello si aspetta. LFM2.5,
+     * che finestra scorrevole non ne ha, sulla stessa GPU non sbaglia.
+     *
+     * ⇒ Finche' non c'e' la causa provata, su questa combinazione **non si
+     * riusa niente**: si ripaga il prefill. Costa 19 secondi; una risposta
+     * sbagliata costa la fiducia, e quella non si misura.
+     *
+     * ⛔ Non e' un ripiego silenzioso: la riga a schermo continua a dire quanti
+     * token sono stati riusati, e dira' **zero**. Vederlo e chiedersi perche'
+     * e' esattamente il comportamento giusto.
+     */
+    bool riuso_kv_vietato = false;
+
+    /**
      * ⛔⛔ SOLO RICERCA — P2-1 blocco A. Presente SOLO se un chiamante di
      * ricerca l'ha costruito esplicitamente dopo l'apertura (mai da
      * `nativeOpen`, il percorso di produzione — vedi
@@ -135,6 +215,29 @@ struct talos_session {
      * una conversazione che poi non entra in memoria.
      */
     std::string kv_type = "f16";
+
+    /**
+     * ⛔⛔ Quanti strati hanno una cache KV, e con quante teste — la geometria
+     * VERA, non quella dello strato 0.
+     *
+     * Su un transformer coincidono con `llama_model_n_layer` e
+     * `llama_model_n_head_kv` e questi due campi non cambiano niente. Su un
+     * IBRIDO — LFM2, dove 30 strati si dividono fra convoluzioni ricorrenti
+     * senza KV e attenzione GQA — l'API pubblica risponde per lo strato 0 e
+     * quindi **zero**, e uno zero qui e' quello che faceva scartare l'intera
+     * forma del modello a valle: nessun tetto di contesto, e soprattutto
+     * nessun prefisso congelato ⇒ 31 s al primo token invece di 3,1.
+     *
+     * Il perche' per esteso, con le righe del sorgente e il dump del Pad, sta
+     * su `talos_geometria_kv_di()`. Riempiti UNA VOLTA all'apertura: la
+     * geometria e' un fatto del file, non cambia finche' il modello e' aperto,
+     * e rileggerla a ogni interrogazione di stato sarebbe una lettura di disco
+     * per una risposta che non puo' essere diversa.
+     *
+     * Zero vuol dire «non misurata»: chi legge ripiega sull'API pubblica.
+     */
+    int64_t kv_layers = 0;
+    int64_t kv_heads  = 0;
 
     /**
      * ⭐⭐⭐ B1 — «gpuLayersEffective»/«flashAttnEffective» esistevano solo
@@ -167,6 +270,26 @@ struct talos_session {
     std::string backend_target_effective;
 
     /**
+     * ⭐⭐⭐ Due pool di thread VERI, o uno solo condiviso.
+     *
+     * ⛔ Non è la stessa domanda di «`n_threads` è diverso da
+     * `n_threads_batch`». Chiedere due numeri diversi è una richiesta; averli
+     * su due pool separati è un fatto, e i due si separano in due casi reali:
+     * i numeri arrivano uguali (allora `ggml_threadpool_params_match` è vero
+     * e si crea UN pool solo, di proposito), oppure la creazione del pool
+     * esterno fallisce e il contesto resta su quello interno di llama.cpp.
+     *
+     * ⇒ È la disciplina «SCELTO non è IN USO» applicata ai thread, la stessa
+     * per cui esistono `gpu_layers_effective` e `flash_attn_effective`.
+     * Falso NON vuol dire «i due numeri non sono stati onorati»: llama.cpp
+     * cambia comunque `n_threads` fra prefill e generazione
+     * (`src/llama-context.cpp:2478`, letto nel sottomodulo il 2026-09-10).
+     * Vuol dire che non ci sono due insiemi di thread distinti, quindi
+     * nessuna affinity separata è possibile.
+     */
+    bool thread_pool_split = false;
+
+    /**
      * Flash Attention, la modalità con cui il contesto è stato DAVVERO
      * creato - letta da `ctx_params.flash_attn_type` dopo che
      * `llama_init_from_model` è tornato, non dedotta dai rami che l'hanno
@@ -174,6 +297,45 @@ struct talos_session {
      * (`nativeReopenContext`), quindi si aggiorna anche lì.
      */
     std::string flash_attn_effective = "auto";
+
+    /**
+     * ⭐⭐⭐ COME i pesi sono entrati in memoria — mmap, mlock, o niente.
+     *
+     * Col nome di upstream (`llama_load_mode_name`, `src/llama.cpp:49`) invece
+     * che con uno nostro: due vocabolari per la stessa cosa sono un modo lento
+     * di sbagliare.
+     *
+     * ⛔ E' la modalita' RICHIESTA, non quella RISOLTA, e la differenza esiste
+     * per un valore solo — `auto`. Cercata prima di scrivere questo campo una
+     * via pubblica per sapere se AUTO abbia poi scelto mmap oppure no: non
+     * c'e'. Upstream quella decisione la prende dentro `load_tensors`
+     * (`src/llama-model.cpp:1292-1300`) e la scrive soltanto in una riga di
+     * log (`:1303-1308`), senza esporla nell'header. Stessa forma del buco
+     * gia' dichiarato per `gpu_layers_effective` qui sopra.
+     *
+     * ⛔ E il buco si DICHIARA, non si riempie ricopiando qui la logica di
+     * upstream: una copia oggi identica diverge al primo aggiornamento del
+     * submodule, e allora mentirebbe con l'aria di essere precisa. Cio' che si
+     * puo' dire con certezza sta nei due campi qui sotto, che sono risposte
+     * della libreria e non nostre deduzioni.
+     */
+    std::string load_mode_effective = "auto";
+
+    /**
+     * Se questa build supporta mmap e mlock — chiesto a `llama_supports_mmap()`
+     * e `llama_supports_mlock()` (`include/llama.h:550-551`), non dedotto dal
+     * sistema operativo. Sono i due fatti che rendono leggibile un `auto`:
+     * senza supporto a mmap, `auto` non puo' che essere degenerato in `none`.
+     */
+    bool mmap_supported = false;
+    bool mlock_supported = false;
+
+    /**
+     * Il ripacchettamento dei pesi, come e' finito davvero in
+     * `llama_model_params.use_extra_bufts`. Manopola SEPARATA da
+     * `load_mode` — il perche' sta per esteso in `talos_apri_modello`.
+     */
+    bool weight_repack_effective = true;
 
     /**
      * Il testo prodotto finora, e il lucchetto che lo rende leggibile da fuori.
@@ -605,6 +767,10 @@ void talos_avvia_threadpool(talos_session * session, llama_context * ctx,
     session->threadpool         = pool;
     session->threadpool_batch   = pool_batch != nullptr ? pool_batch : pool;
     session->threadpool_free_fn = libera_fn;
+    // ⛔ Si registra DUE POOL SEPARATI, non «i due numeri erano diversi»: è la
+    // sola forma della domanda a cui la risposta non possa essere smentita
+    // dallo stato reale del processo. Vedi il campo nella struttura.
+    session->thread_pool_split  = pool_batch != nullptr;
     TALOS_LOGI("thread pool esterno agganciato: %d gen / %d prefill%s, affinity gen=%s prefill=%s",
                nt, nt_batch, pool_batch != nullptr ? "" : " (condiviso)",
                affinitaDecodeApplicata ? "esplicita" : "default",
@@ -686,7 +852,167 @@ std::atomic<int> g_open_count{0};
  */
 std::atomic<int> g_context_rebuild_count{0};
 
+/**
+ * ⛔⛔⛔ I CINQUANTA SECONDI CHE NESSUN NUMERO DICHIARAVA — misurati sul Pad
+ * il 2026-09-10, ledger §44.
+ *
+ * Aprire `gemma-4-E2B-it-Q4_0` (2,82 GiB) sulla GPU costa **50 secondi** solo
+ * per portare i tensori dal file ai buffer OpenCL. In quei 50 secondi il
+ * telefono non dice niente: la riga sotto la risposta parte a modello gia'
+ * aperto e dichiara 24,2 s su 76 reali. Il numero e' esatto, la domanda a cui
+ * risponde non e' quella che si fa chi aspetta.
+ *
+ * ⛔ Il progresso NON e' una callback verso Java: e' un contatore che Java
+ * INTERROGA, esattamente come `nativeTokensProduced`. Il motivo sta scritto
+ * in testa a questo file — attraversare il confine JNI a ogni tensore costa
+ * piu' del lavoro che si sta misurando, e qui i tensori sono 601.
+ *
+ * ⛔ `-1` non e' «zero per cento»: e' **«nessun caricamento in corso»**. Sono
+ * due stati diversi e confonderli farebbe comparire una barra a zero ogni
+ * volta che non sta caricando niente.
+ */
+std::atomic<int> g_carico_permille{-1};
+
+/** Chi preme «annulla» scrive qui; la callback qui sotto lo legge. */
+std::atomic<bool> g_carico_annullato{false};
+
+/**
+ * ⛔ IL VERSO E' AL CONTRARIO DI QUELLO CHE SEMBRA: **`false` ANNULLA**.
+ *
+ * Verificato nel sottomodulo pinnato, non dedotto e non preso dal web — una
+ * ricerca fatta oggi (10/09/2026) sosteneva l'opposto, cioe' che «true
+ * cancella»:
+ *
+ *   - `include/llama.h:325` — «If the provided progress_callback returns true,
+ *     model loading continues.»
+ *   - `src/llama-model-loader.cpp:1549` — `if (!progress_callback(...)) return false;`
+ *   - `tests/test-model-load-cancel.cpp` — ritorna `progress > 0.50`, cioe'
+ *     **false** al primo tensore, ed e' cosi' che il test annulla.
+ *
+ * ⇒ Quando la fonte e la ricerca si contraddicono, vince il sorgente che
+ * compiliamo.
+ */
+static bool talos_progresso_carico(float frazione, void * /*dati*/) {
+    int permille = (int) (frazione * 1000.0f + 0.5f);
+    if (permille < 0) permille = 0;
+    if (permille > 1000) permille = 1000;
+    g_carico_permille.store(permille, std::memory_order_relaxed);
+    return !g_carico_annullato.load(std::memory_order_relaxed);
+}
+
 std::once_flag g_init_once;
+
+/**
+ * ⛔⛔ IL LIVELLO DEBUG DI llama.cpp È SPENTO DI SERIE — e si riaccende senza
+ * ricompilare.
+ *
+ * ## Il fatto, misurato leggendo il sorgente il 2026-09-10
+ *
+ * `adb logcat -s TalosLlama:V` durante una generazione era pieno di
+ * `Grammar still awaiting trigger after token 424 (' se')`. Non e' una riga
+ * ogni tanto: `llama_grammar_accept_impl` la scrive **a ogni token accettato**
+ * (`src/llama-grammar.cpp:1438` del sottomodulo pinnato), cioe' una riga per
+ * token generato, per tutta la durata della risposta.
+ *
+ * Due danni distinti, e il secondo e' il piu' caro:
+ *  1. un lavoro per token su un motore che ne fa ~21 al secondo — formattazione
+ *     `vsnprintf` due volte (`src/llama-impl.cpp:78-88`, il buffer da 128 byte
+ *     e il riallocato) piu' una scrittura sul socket di logd;
+ *  2. **il buffer di logcat che si allaga**: a ~60 byte per riga e 21 token al
+ *     secondo sono ~1,3 KB/s solo da questa riga, e su un buffer `main` da 256
+ *     KB (il default AOSP) l'intera finestra si ricicla in circa **tre
+ *     minuti**. Il 2026-09-10 questo ha cancellato dal buffer la riga di
+ *     caricamento che serviva a diagnosticare LFM2.
+ *
+ * ⛔ NON e' misurato sul dispositivo quanto costi in millisecondi per token:
+ * il Pad e' dell'owner e non e' mio da toccare. Le due cifre qui sopra sono
+ * aritmetica su fatti leggibili (una riga per token, la sua lunghezza, il
+ * default del buffer), non una stima di tempo.
+ *
+ * ## Perche' non si tocca il sorgente di llama.cpp
+ *
+ * Quella riga e' upstream, e patchare il sottomodulo pinnato significa
+ * riportare la patch a ogni aggiornamento. Il varco giusto e' qui: questo
+ * ponte e' l'**unico** consumatore dei log della libreria
+ * (`llama_log_set(talos_log_bridge, nullptr)`), quindi filtrare qui spegne
+ * ogni riga di livello DEBUG di TUTTA llama.cpp, non solo questa.
+ *
+ * ## Come si riaccende
+ *
+ * `log.tag.TalosLlama` — la proprieta' standard di Android per il livello di
+ * un tag, la stessa che legge `__android_log_is_loggable`:
+ *
+ *     adb shell setprop log.tag.TalosLlama D   # poi riavvia l'app
+ *
+ * Non una proprieta' inventata da noi: `V`/`D` accendono, tutto il resto (e
+ * l'assenza, che e' il caso di serie) lascia spento. Letta UNA VOLTA
+ * all'inizializzazione con `__system_property_get` invece che a ogni riga,
+ * perche' rileggerla per token rimetterebbe un costo per token per evitarne un
+ * altro. ⛔ `__android_log_is_loggable` sarebbe la via idiomatica, ma l'NDK la
+ * dichiara `__INTRODUCED_IN(30)` e il nostro `minSdk` e' **26**
+ * (`android/variables.gradle:22`): non si linkerebbe sui telefoni che
+ * sosteniamo.
+ *
+ * ⛔ DEBUG si distingue a mano invece di lasciarlo cadere nel `default`: li'
+ * finiscono anche `GGML_LOG_LEVEL_NONE` e `..._CONT`, che sono la stampa
+ * ordinaria e la continuazione di riga di upstream — spegnerle insieme al
+ * DEBUG toglierebbe messaggi che non c'entrano niente con questo difetto.
+ */
+/**
+ * ⛔ SOLO DIAGNOSI — una manopola di sistema per provare una cura SUL PAD senza
+ * ricompilare, letta una volta all'apertura del contesto.
+ *
+ * `setprop talos.esperimento.<nome> <valore>` via adb. Sul telefono di una
+ * persona la proprieta' non esiste e questa funzione torna la stringa vuota:
+ * nessun comportamento cambia. Un esperimento che passa diventa una regola
+ * scritta nel codice, e la proprieta' resta per il prossimo.
+ *
+ * Nata per D-45 (11/09/2026): «GPU + finestra scorrevole + riuso della KV =
+ * risposte in coreano». La cura candidata e' `swa_full` — la cache SWA a
+ * dimensione piena invece dell'anello da `n_swa + n_ubatch` celle — e si prova
+ * solo cosi': stessa build, stessa chat, proprieta' accesa e spenta.
+ */
+static std::string talos_esperimento(const char * nome) {
+    char valore[PROP_VALUE_MAX] = {0};
+    const std::string chiave = std::string("talos.esperimento.") + nome;
+    if (__system_property_get(chiave.c_str(), valore) <= 0) return {};
+    return valore;
+}
+
+/**
+ * D-45 — le due manopole dell'esperimento, applicate a `ctx_params` PRIMA di
+ * creare il contesto. Vale sia per la prima apertura sia per la ricostruzione
+ * del contesto (stessa regola in due posti, o la seconda apertura perde cio'
+ * che la prima aveva).
+ *
+ * @return vero se la cache SWA sara' a dimensione piena: chi calcola il
+ *     divieto di riuso deve saperlo.
+ */
+static bool talos_applica_esperimenti(llama_context_params & ctx_params,
+                                      const llama_model * model, bool fuori_dalla_cpu) {
+    const int32_t finestra = llama_model_n_swa(model);
+    bool swa_piena = false;
+    if (fuori_dalla_cpu && finestra > 0 && talos_esperimento("swa_full") == "1") {
+        ctx_params.swa_full = true;
+        swa_piena = true;
+        TALOS_LOGI("ESPERIMENTO D-45: swa_full acceso (finestra %d, cache SWA a dimensione piena)",
+                   finestra);
+    }
+    if (talos_esperimento("fa") == "off") {
+        ctx_params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED;
+        TALOS_LOGI("ESPERIMENTO D-45: Flash Attention spenta a mano");
+    }
+    return swa_piena;
+}
+
+static bool talos_log_debug_acceso() {
+    static const bool acceso = [] {
+        char valore[PROP_VALUE_MAX] = {0};
+        if (__system_property_get("log.tag." TALOS_TAG, valore) <= 0) return false;
+        return valore[0] == 'V' || valore[0] == 'D';
+    }();
+    return acceso;
+}
 
 void talos_log_bridge(ggml_log_level level, const char * text, void * /*user*/) {
     if (text == nullptr) return;
@@ -700,6 +1026,13 @@ void talos_log_bridge(ggml_log_level level, const char * text, void * /*user*/) 
         case GGML_LOG_LEVEL_ERROR: priority = ANDROID_LOG_ERROR; break;
         case GGML_LOG_LEVEL_WARN:  priority = ANDROID_LOG_WARN;  break;
         case GGML_LOG_LEVEL_INFO:  priority = ANDROID_LOG_INFO;  break;
+        case GGML_LOG_LEVEL_DEBUG:
+            // Il filtro sta PRIMA di `__android_log_print` e non dentro il
+            // livello di logcat: `-s TalosLlama:V` chiede a logd di mostrarle,
+            // ma la riga a quel punto e' gia' stata formattata e gia' scritta.
+            if (!talos_log_debug_acceso()) return;
+            priority = ANDROID_LOG_DEBUG;
+            break;
         default:                   priority = ANDROID_LOG_DEBUG; break;
     }
     __android_log_print(priority, TALOS_TAG, "%s", text);
@@ -842,8 +1175,7 @@ std::string talos_apply_chat_template(common_chat_templates * templates, JNIEnv 
     inputs.add_generation_prompt = true;
     const std::string messages = jstring_to_utf8(env, messagesJson);
     try {
-        inputs.messages = common_chat_msgs_parse_oaicompat(
-                nlohmann::ordered_json::parse(messages));
+        inputs.messages = common_chat_msgs_parse_oaicompat(common_json::parse(messages));
     } catch (const std::exception &) {
         // Anche il testo dell'eccezione di un parser può citare il frammento
         // rifiutato: il codice stabile basta, la conversazione non va in log.
@@ -854,7 +1186,7 @@ std::string talos_apply_chat_template(common_chat_templates * templates, JNIEnv 
     const std::string tools = jstring_to_utf8(env, toolsJson);
     if (!tools.empty()) {
         try {
-            inputs.tools = common_chat_tools_parse_oaicompat(nlohmann::ordered_json::parse(tools));
+            inputs.tools = common_chat_tools_parse_oaicompat(common_json::parse(tools));
             inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
         } catch (const std::exception &) {
             // Un tool illeggibile non spegne il conteggio: si procede senza,
@@ -886,6 +1218,100 @@ std::string talos_apply_chat_template(common_chat_templates * templates, JNIEnv 
 }
 
 /**
+ * ⛔ Vero se, DANDOGLI ATTREZZI, llama.cpp produce una grammatica per questo
+ * template. Vedi il perche' esteso su `grammarForTools`.
+ *
+ * ⛔ Un fallimento qui e' «non lo so», e «non lo so» si scrive **false**: chi
+ * legge deve poter distinguere «vincolabile» da tutto il resto, e promuovere
+ * un'eccezione a «si'» sarebbe la bugia comoda.
+ */
+static bool talos_template_produce_grammatica(common_chat_templates * templates) {
+    try {
+        common_chat_templates_inputs inputs;
+        inputs.use_jinja = true;
+        inputs.add_generation_prompt = true;
+        common_chat_msg messaggio;
+        messaggio.role = "user";
+        messaggio.content = "ciao";
+        inputs.messages = { messaggio };
+        // Un attrezzo finto, con uno schema minimo: senza attrezzi nessun
+        // handler costruisce una grammatica, e la risposta sarebbe sempre no.
+        common_chat_tool attrezzo;
+        attrezzo.name = "talos_probe";
+        attrezzo.description = "probe";
+        attrezzo.parameters = R"({"type":"object","properties":{"a":{"type":"string"}},"required":["a"]})";
+        inputs.tools = { attrezzo };
+        return !common_chat_templates_apply(templates, inputs).grammar.empty();
+    } catch (const std::exception &) {
+        return false;
+    }
+}
+
+/**
+ * ⭐⭐⭐ SE IL RAGIONAMENTO DI QUESTO MODELLO SI PUO' SPEGNERE — chiesto al
+ * template, non a una tabella di nomi.
+ *
+ * ## Il fatto, misurato sul Pad l'11/09/2026
+ *
+ * `LFM2.5-2.6B-Q4_0` in chat: **10,7 s alla prima parola** contro **3,1 s al
+ * primo token del motore**. I 7,6 secondi in mezzo non sono nostri e non sono
+ * lentezza: sono ~130 token di ragionamento in inglese che il modello scrive
+ * prima di rispondere, e che noi separiamo correttamente dalla risposta.
+ *
+ * ⛔ E la chat chiedeva gia' `enable_thinking = false` — il ragionamento nella
+ * nostra interfaccia nasce spento. Non e' servito a niente.
+ *
+ * ## Perche' la domanda non ha una risposta sola
+ *
+ * `common_chat_templates_support_enable_thinking()` esiste upstream, ma
+ * risponde a una domanda diversa: legge `params.supports_thinking`, e il
+ * parser LFM2 lo mette a `true` **incondizionatamente**
+ * (`common/parsers/lfm2.cpp:39`). Dice «questo modello ragiona», non «lo
+ * puoi spegnere».
+ *
+ * La bandierina arriva fino al Jinja — `common_chat_template_direct_apply_impl`
+ * la inietta nel contesto (`chat.cpp:910`) — quindi se il template la LEGGE,
+ * il prompt cambia; se la ignora, resta identico byte per byte.
+ *
+ * ⇒ ⭐ La prova e' il CONFRONTO, ed e' la stessa che usa upstream per
+ * analizzare i template (`common/chat-diff-analyzer.cpp:541-543`: applica due
+ * volte e confronta le varianti). Due applicazioni, stesso messaggio, sola
+ * differenza `enable_thinking`: se i due prompt sono diversi, l'interruttore
+ * esiste davvero su QUESTO file.
+ *
+ * ⛔ Niente elenchi di nomi di modello: `nothing-hardcoded-must-adapt`. Un
+ * modello nuovo di Hugging Face risponde da solo, il giorno che entra nel
+ * telefono.
+ *
+ * ⛔ In dubbio, NO: un template che lancia, uno che non si applica, un errore
+ * qualunque valgono «non spegnibile». Promettere un interruttore che non c'e'
+ * e' peggio che non offrirlo.
+ */
+static bool talos_template_spegne_il_ragionamento(common_chat_templates * templates) {
+    try {
+        const auto prompt_con = [&](bool pensa) {
+            common_chat_templates_inputs inputs;
+            inputs.use_jinja = true;
+            inputs.add_generation_prompt = true;
+            common_chat_msg messaggio;
+            messaggio.role = "user";
+            messaggio.content = "ciao";
+            inputs.messages = { messaggio };
+            inputs.enable_thinking = pensa;
+            return common_chat_templates_apply(templates, inputs).prompt;
+        };
+        const std::string acceso = prompt_con(true);
+        const std::string spento = prompt_con(false);
+        // ⛔ Due prompt vuoti sono uguali fra loro e non provano niente: un
+        // template che non si applica direbbe «spegnibile» per silenzio.
+        if (acceso.empty() || spento.empty()) return false;
+        return acceso != spento;
+    } catch (const std::exception &) {
+        return false;
+    }
+}
+
+/**
  * La mappa delle capability del Jinja DEL GGUF, non una classificazione
  * indovinata dal nome del modello. Il template può contenere IP, istruzioni o
  * testo dell'utente: qui attraversano il confine soltanto tre booleani stabili.
@@ -905,6 +1331,50 @@ std::string talos_template_capabilities_json(common_chat_templates * templates) 
         out["supportsTools"] = value_of("supports_tools");
         out["supportsToolCalls"] = value_of("supports_tool_calls");
         out["supportsSystemRole"] = value_of("supports_system_role");
+
+        /*
+         * ⭐⭐⭐ SE UNA GRAMMATICA POTRA' TENERE LE CHIAMATE — il quarto booleano,
+         * e senza di lui non si vedeva la differenza fra due modelli che
+         * «supportano gli strumenti».
+         *
+         * ## Il fatto, misurato sul Pad l'11/09/2026
+         *
+         * Alla domanda «Come ti chiami», `Llama-3.2-3B-Instruct-Q4_0` ha
+         * risposto cosi' — testo grezzo, dalla riga di diagnosi:
+         *
+         *   {"name": "tool_details", "parameters": {"names": "['library_list', …]"}}
+         *   {"name": "library_list", "parameters": {}}
+         *
+         * Due chiamate a strumenti al posto di un nome, e `names` come
+         * **stringa** dove il nostro schema vuole un array. Nel log:
+         * `formato di chat: peg-native (tool: 5, grammatica: no)`.
+         *
+         * ⛔ In `common/chat.cpp` del sottomodulo pinnato ci sono handler
+         * dedicati per gemma4, lfm2, qwen3-coder, gpt-oss, ministral, kimi,
+         * deepseek e altri: ognuno costruisce **la propria grammatica**. Per
+         * Llama 3.x non ce n'e' nessuno, si cade sul percorso nativo, e
+         * `params.grammar` resta vuota. Senza grammatica quel valore sbagliato
+         * **puo'** nascere; con una, non potrebbe.
+         *
+         * ## Perche' si applica il template invece di dedurlo dal nome
+         *
+         * ⛔ Un elenco di modelli «buoni» scritto a mano invecchia al primo
+         * aggiornamento del sottomodulo — un handler nuovo lo smentirebbe in
+         * silenzio. Qui si CHIEDE: si applica il template con **un attrezzo
+         * finto**, e si guarda se llama.cpp ha prodotto una grammatica. E' la
+         * stessa domanda che il motore si fara' davvero, posta prima.
+         *
+         * ⛔ L'attrezzo finto non tocca niente e non esce da qui: serve solo
+         * perche' senza attrezzi nessun handler produce una grammatica, e la
+         * risposta sarebbe «no» per tutti.
+         */
+        out["grammarForTools"] = talos_template_produce_grammatica(templates);
+        /*
+         * ⛔ Il quinto booleano. Senza, «questo modello ragiona» e «questo
+         * modello ragiona e non puoi farne a meno» sono la stessa riga — e
+         * sono sette secondi di differenza per messaggio.
+         */
+        out["thinkingCanBeDisabled"] = talos_template_spegne_il_ragionamento(templates);
         return out.dump();
     } catch (const std::exception &) {
         TALOS_LOGE("capability del template non leggibili");
@@ -1682,17 +2152,39 @@ Java_ai_talos_TalosLlamaNative_nativeSetAffinityFamilyForResearch(
  * `gpuLayers` richiesto - esplicito o «auto» - può aver spostato niente:
  * non c'è nessun posto dove spostarlo.
  */
-static bool talos_esiste_dispositivo_offload() {
+/**
+ * ⛔ QUANTI, non «ce n'è almeno uno» — e la differenza serve a chi legge.
+ *
+ * Zero è un fatto forte: significa che in QUESTA build nessuna richiesta di
+ * offload può essere stata onorata, quindi «gira su CPU» si sa per
+ * costruzione invece di doverlo dedurre. Uno o più significa che un bersaglio
+ * esiste, e allora — se nessuno lo ha NOMINATO — dove siano finiti gli strati
+ * resta una cosa che l'header pubblico di llama.cpp non dice: verificato il
+ * 2026-09-10, `include/llama.h` non espone nessuna funzione che leghi un
+ * tensore al dispositivo che lo ospita, solo una riga di log
+ * (`src/llama-model.cpp:1678`).
+ *
+ * ⇒ Il conteggio è ciò che permette al lato TS di distinguere «CPU per
+ * costruzione» da «non lo so», invece di scrivere «CPU» in tutti e due i
+ * casi. Un «non lo so» scritto come «CPU» è esattamente il difetto che questa
+ * campagna sta togliendo di mezzo.
+ */
+static int talos_conta_dispositivi_offload() {
+    int quanti = 0;
     for (size_t reg_index = 0; reg_index < ggml_backend_reg_count(); reg_index += 1) {
         ggml_backend_reg_t reg = ggml_backend_reg_get(reg_index);
         if (reg == nullptr) continue;
         for (size_t dev_index = 0; dev_index < ggml_backend_reg_dev_count(reg); dev_index += 1) {
             ggml_backend_dev_t device = ggml_backend_reg_dev_get(reg, dev_index);
             if (device == nullptr) continue;
-            if (ggml_backend_dev_type(device) != GGML_BACKEND_DEVICE_TYPE_CPU) return true;
+            if (ggml_backend_dev_type(device) != GGML_BACKEND_DEVICE_TYPE_CPU) quanti += 1;
         }
     }
-    return false;
+    return quanti;
+}
+
+static bool talos_esiste_dispositivo_offload() {
+    return talos_conta_dispositivi_offload() > 0;
 }
 
 static bool talos_risolvi_bersaglio(const std::string & backend,
@@ -1859,13 +2351,271 @@ static bool talos_bersaglio_e_opencl(int gpuLayers, const std::string & backendR
     return false;
 }
 
+/**
+ * ⭐⭐⭐ COME i pesi entrano in memoria — la manopola che non esisteva.
+ *
+ * ## Il fatto, e perche' e' un buco e non una svista
+ *
+ * `llama_model_params.load_mode` decide se i pesi vengano **mappati** dal file
+ * (mmap), **letti e basta** (none), **inchiodati** in RAM (mlock), o le
+ * combinazioni. Fino a oggi TALOS non lo toccava: restava il predefinito di
+ * upstream, `LLAMA_LOAD_MODE_AUTO` (`third_party/llama.cpp/src/llama-model.cpp:2488`).
+ * ⛔ Non era una scelta — era l'ASSENZA di una scelta, e le due cose si
+ * distinguono solo quando qualcuno prova a cambiarla e scopre che non si puo'.
+ *
+ * ## ⛔ L'API E' CAMBIATA: `use_mmap`/`use_mlock` NON esistono piu'
+ *
+ * Chi cerca quei due booleani in questo file non li trova, e non perche' li
+ * abbiamo dimenticati: nel llama.cpp pinnato (`third_party/llama.cpp`, commit
+ * `dc72703`, 20/08/2026) sono stati fusi in un enum unico, `llama_load_mode`
+ * (`include/llama.h:206-211`). Upstream li tiene solo come alias deprecati
+ * sulla riga di comando e lo dice a voce alta: *"DEPRECATED: --mlock is
+ * deprecated. use --load-mode mlock instead"* (`common/arg.cpp:2640-2660`,
+ * letto nel submodule il 2026-09-10). ⇒ Chi arriva qui con in testa i vecchi
+ * nomi sta leggendo documentazione vecchia di un anno.
+ *
+ * ## La differenza che conta fra `mlock` e `mmap+mlock`
+ *
+ * Non sono gradazioni della stessa cosa: **`mlock` da solo NON accende mmap**,
+ * legge il file intero in RAM — caricamento piu' lento, RAM piena subito —
+ * mentre `mmap+mlock` mappa (istantaneo) e poi inchioda le pagine mappate.
+ * Fonte: discussione upstream ggml-org/llama.cpp#27912, 28/08/2026, dove sta
+ * anche la traduzione dei vecchi flag (*"`--load-mode mlock` is the closest
+ * replacement for the old `--no-mmap --mlock`"*). Verificabile qui senza
+ * fidarsi di nessuno: `src/llama-model-loader.cpp:554` accende `use_mmap`
+ * solo per `MMAP`, `MMAP_MLOCK` e `AUTO`.
+ *
+ * ## Che cosa fa AUTO davvero — cioe' che cosa facciamo noi oggi
+ *
+ * Tre passaggi, non uno. Il caricatore parte da `use_mmap = true`
+ * (`llama-model-loader.cpp:554`); lo spegne se la piattaforma non regge mmap
+ * (`:817`); e poi, **solo** se la modalita' e' AUTO, `llama-model.cpp:1292`
+ * lo rispegne se anche un solo dispositivo del bersaglio dichiara
+ * `props.caps.mmap_support == false`. ⇒ AUTO vuol dire «mmap, tranne dove non
+ * si puo'» — e non vuol dire mlock **mai**. Oggi, su TALOS, nessuno inchioda
+ * niente in RAM: il sistema puo' comprimere o buttare fuori le pagine dei pesi
+ * fra un messaggio e l'altro, e rileggerle costa alla prima parola.
+ *
+ * ## ⛔ IL PREDEFINITO NON SI DECIDE QUI, E NON SI DECIDE OGGI
+ *
+ * Vuoto e `default` significano entrambi **«non toccare»**, cioe' AUTO, cioe'
+ * esattamente cio' che TALOS ha sempre fatto. La manopola diventa
+ * raggiungibile; il comportamento non cambia di un millesimo finche' non c'e'
+ * la MISURA — la matrice `auto/none/mmap/mmap+mlock` × CPU/GPU × Q4_0/Q4_K_M
+ * sul Pad vero, che sta girando adesso e finira' in
+ * `.claude/TACCUINO-VELOCITA-LOCALE-2026-09-10.md`. Un predefinito scelto a
+ * tavolino sarebbe una previsione su dispositivi che non abbiamo mai visto, ed
+ * e' la stessa classe di errore per cui e' stato tolto
+ * `TALOS_LOCAL_MAX_CONTEXT_TOKENS` (vedi il commento lungo in
+ * `src/lib/models/localContextPolicy.ts`, owner 2026-08-05: «TALOS e' dinamico
+ * e adattabile a ogni modello — una cosa scritta a mano non potrebbe mai
+ * esistere»).
+ * ⇒ Quando il numero arriva, si cambia **UNA RIGA SOLA**, e non e' in questo
+ * file: e' il predefinito di `loadMode` in `TalosLlamaPlugin.open()`. Questa
+ * funzione deve continuare a voler dire «come oggi».
+ *
+ * ## I nomi accettati NON sono scritti a mano qui
+ *
+ * Li riconosce `llama_load_mode_from_str()` di upstream (`src/llama.cpp:67`):
+ * se domani upstream ne aggiunge uno, lo accettiamo senza toccare questo file.
+ * ⛔ Quella funzione LANCIA su una stringa sconosciuta — ed e' l'unico motivo
+ * del `try/catch`: un nome sbagliato non deve far morire il processo, deve
+ * tornare «non l'ho capito» a chi ha chiesto.
+ *
+ * @return false SOLO se una richiesta c'era ed era incomprensibile.
+ */
+static bool talos_modalita_caricamento(const std::string & richiesta,
+                                       llama_load_mode & modalita,
+                                       bool & imposta) {
+    imposta = false;
+    if (richiesta.empty() || richiesta == "default") return true;
+    try {
+        modalita = llama_load_mode_from_str(richiesta.c_str());
+        imposta = true;
+        return true;
+    } catch (const std::exception &) {
+        return false;
+    }
+}
+
+/**
+ * ⛔⛔⛔ LA KV DI UN IBRIDO — quanti strati ce l'hanno DAVVERO, e con quante teste.
+ *
+ * ## Il difetto, misurato sul Pad il 2026-09-10
+ *
+ * Con `LFM2.5-2.6B-Q4_0` la chat metteva **31 s** al primo token e riusava **0
+ * token su 2.847**; con gemma3 (transformer puro) **3,1 s** e **2.933 su
+ * 3.257**. La differenza: gemma ha un prefisso congelato su disco, LFM2 no —
+ * e non ce l'ha perche' `congelaSePossibile()` esce muto quando la forma del
+ * modello e' nulla, e la forma era nulla perche' `kvHeads` valeva **0**.
+ *
+ * ## Perche' valeva zero — provato alla fonte, non dedotto
+ *
+ * LFM2 e' **ibrido**: alcuni strati sono convoluzioni ricorrenti senza KV, gli
+ * altri sono attenzione GQA. Il GGUF lo dichiara con un array PER-STRATO.
+ * Letto dal logcat del Pad al caricamento vero (2026-09-10, 16:08):
+ *
+ *     lfm2.block_count             u32         = 30
+ *     lfm2.attention.head_count    u32         = 32
+ *     lfm2.attention.head_count_kv arr[i32,30] = [0, 0, 8, 0, 0, 8, 0, 0, 0, 8, 0, 0, ...]
+ *
+ * Lo stesso dump sta in un'issue upstream su LFM2-2.6B:
+ * https://github.com/ggml-org/llama.cpp/issues/16278 (letto il 2026-09-10).
+ *
+ * E llama.cpp usa proprio quell'array per decidere chi e' ricorrente —
+ * `src/models/lfm2.cpp:9-11` del sottomodulo pinnato (letto il 2026-09-10):
+ *
+ *     for (uint32_t il = 0; il < hparams.n_layer(); ++il) {
+ *         hparams.is_recr_impl[il] = hparams.n_head_kv(il) == 0;
+ *     }
+ *
+ * Ma l'API pubblica NON prende uno strato: `llama_model_n_head_kv(model)` e'
+ * `hparams.n_head_kv()` (`src/llama-model.cpp:2545`) e la firma ha il valore
+ * predefinito `il = 0` (`src/llama-hparams.h:342`), cioe' **legge lo strato 0**.
+ * Su LFM2 lo strato 0 e' convoluzionale ⇒ l'API risponde **0**. Non e' un bug
+ * di upstream: e' una domanda che su un ibrido non ha una risposta sola.
+ *
+ * ⛔ E non e' aggirabile coi metadati del modello gia' aperto:
+ * `llama_model_meta_val_str` non legge gli array — l'header lo dice
+ * (`include/llama.h`, «GGUF array values are not supported by these
+ * functions») e la ragione sta in `src/llama-model.cpp:1090-1092`, dove
+ * `gguf_kv` viene riempita **saltando** ogni chiave di tipo ARRAY.
+ *
+ * ⛔ Nessuna API pubblica dice «quanti strati hanno la KV»: cercata
+ * nell'header pinnato (nessun accessore per-strato in tutto `include/llama.h`)
+ * e online il 2026-09-10 — upstream la geometria per-strato la tiene
+ * internamente (`llama_memory_hybrid` + `layer_filter_cb`), non la espone.
+ * ⇒ La sola strada che «chiede al modello» invece di tabellare per
+ * architettura e' rileggere l'array dal GGUF con l'API pubblica di `gguf.h`.
+ *
+ * ## Cosa restituisce, e da che parte sbaglia
+ *
+ * `strati` = quanti strati hanno `head_count_kv > 0`; `teste` = il **massimo**
+ * fra quei valori. Il massimo e non la media: se un giorno un ibrido avesse
+ * strati di attenzione disuguali, il massimo SOVRASTIMA la cache, e
+ * sovrastimare abbassa il tetto del contesto — l'errore innocuo dei due.
+ * Sottostimare lo alzerebbe, e farebbe aprire modelli che non ci stanno.
+ *
+ * ⛔ Quello che questo conteggio NON copre: lo stato degli strati ricorrenti.
+ * Su LFM2 e' `n_embd * (shortconv.l_cache - 1)` per strato
+ * (`src/llama-hparams.cpp:187-189`), cioe' con `l_cache = 3` e `n_embd = 2048`
+ * circa 4096 elementi per strato — **costante nel contesto, non per token**.
+ * Contarlo dentro un «byte per token» lo moltiplicherebbe per il contesto e
+ * gonfierebbe la stima invece di correggerla. Resta fuori di proposito, ed e'
+ * un addendo fisso di ordine centinaia di KB, non misurato sul dispositivo.
+ *
+ * @param strati_totali quanti strati ha il modello — usato quando il file NON
+ *     dichiara un array per-strato (allora la KV ce l'hanno tutti).
+ * @param teste_uniformi le teste KV quando sono uguali ovunque; `<= 0` fa
+ *     ripiegare su `teste_totali` (un file senza `head_count_kv` e' MHA, ed e'
+ *     esattamente cio' che fa upstream in `src/llama-model.cpp:1182`:
+ *     `hparams.n_head_kv_arr = hparams.n_head_arr` prima di riprovare la chiave).
+ */
+struct talos_geometria_kv {
+    int64_t strati = 0;
+    int64_t teste  = 0;
+    /** Il file dichiara la KV strato per strato: cioe' il modello e' ibrido. */
+    bool    per_strato = false;
+};
+
+/** Un elemento di un array numerico dei metadati, qualunque larghezza abbia. */
+static int64_t talos_gguf_elemento(const gguf_context * gguf, int64_t indice, size_t j) {
+    const enum gguf_type tipo = gguf_get_arr_type(gguf, indice);
+    // ⛔ `gguf_get_arr_data` ASSERISCE su un array di stringhe
+    // (`ggml/src/gguf.cpp`, letto il 2026-09-10): qui morirebbe il processo,
+    // non tornerebbe un errore. Si controlla prima di chiedere.
+    if (tipo == GGUF_TYPE_STRING || tipo == GGUF_TYPE_ARRAY) return -1;
+    const void * dati = gguf_get_arr_data(gguf, indice);
+    if (dati == nullptr) return -1;
+    switch (tipo) {
+        case GGUF_TYPE_UINT8:  return (int64_t) ((const uint8_t  *) dati)[j];
+        case GGUF_TYPE_INT8:   return (int64_t) ((const int8_t   *) dati)[j];
+        case GGUF_TYPE_UINT16: return (int64_t) ((const uint16_t *) dati)[j];
+        case GGUF_TYPE_INT16:  return (int64_t) ((const int16_t  *) dati)[j];
+        case GGUF_TYPE_UINT32: return (int64_t) ((const uint32_t *) dati)[j];
+        case GGUF_TYPE_INT32:  return (int64_t) ((const int32_t  *) dati)[j];
+        case GGUF_TYPE_UINT64: return (int64_t) ((const uint64_t *) dati)[j];
+        case GGUF_TYPE_INT64:  return (int64_t) ((const int64_t  *) dati)[j];
+        default:               return -1;
+    }
+}
+
+static talos_geometria_kv talos_geometria_kv_di(const gguf_context * gguf,
+                                                const std::string & architettura,
+                                                int64_t strati_totali,
+                                                int64_t teste_uniformi,
+                                                int64_t teste_totali) {
+    talos_geometria_kv geometria;
+    geometria.strati = strati_totali;
+    geometria.teste  = teste_uniformi > 0 ? teste_uniformi : teste_totali;
+
+    if (gguf == nullptr || architettura.empty()) return geometria;
+
+    const std::string chiave = architettura + ".attention.head_count_kv";
+    const int64_t indice = gguf_find_key(gguf, chiave.c_str());
+    if (indice < 0) return geometria;
+    if (gguf_get_kv_type(gguf, indice) != GGUF_TYPE_ARRAY) return geometria;
+
+    const size_t quanti = gguf_get_arr_n(gguf, indice);
+    if (quanti == 0) return geometria;
+
+    int64_t conStato = 0;
+    int64_t massimo  = 0;
+    for (size_t j = 0; j < quanti; ++j) {
+        const int64_t teste = talos_gguf_elemento(gguf, indice, j);
+        // Un tipo che non sappiamo leggere non e' «zero teste»: e' «non lo so»,
+        // e su «non lo so» si tiene la risposta uniforme invece di inventare
+        // una geometria piu' piccola — che alzerebbe il tetto del contesto.
+        if (teste < 0) return geometria;
+        if (teste > 0) { conStato++; massimo = std::max(massimo, teste); }
+    }
+
+    geometria.per_strato = true;
+    geometria.strati     = conStato;
+    geometria.teste      = massimo;
+    return geometria;
+}
+
+/**
+ * La stessa domanda, partendo dal percorso: apre i soli metadati e li chiude.
+ *
+ * `gguf_init_from_file` con `no_alloc` legge intestazione e chiavi, nessun
+ * tensore — la stessa lettura che `nativeArchitectureOf` fa gia' da mesi su
+ * ogni file del selettore. Costa una volta per apertura, accanto a secondi di
+ * caricamento dei pesi.
+ */
+static talos_geometria_kv talos_geometria_kv_dal_file(const std::string & path,
+                                                      int64_t strati_totali,
+                                                      int64_t teste_uniformi,
+                                                      int64_t teste_totali) {
+    talos_geometria_kv geometria;
+    geometria.strati = strati_totali;
+    geometria.teste  = teste_uniformi > 0 ? teste_uniformi : teste_totali;
+    if (path.empty()) return geometria;
+
+    gguf_init_params params = { /*.no_alloc =*/ true, /*.ctx =*/ nullptr };
+    gguf_context * gguf = gguf_init_from_file(path.c_str(), params);
+    if (gguf == nullptr) return geometria;
+
+    std::string architettura;
+    const int64_t chiave = gguf_find_key(gguf, "general.architecture");
+    if (chiave >= 0) architettura = gguf_get_val_str(gguf, chiave);
+
+    geometria = talos_geometria_kv_di(gguf, architettura, strati_totali,
+                                      teste_uniformi, teste_totali);
+    gguf_free(gguf);
+    return geometria;
+}
+
 static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
                                 jint threads, jint contextTokens, jint gpuLayers,
                                 jboolean deterministic, jint threadsBatch,
                                 jint microBatch, jstring kvType,
                                 const std::string & backendRichiesto,
                                 const std::string & deviceRichiesto,
-                                const std::string & faRichiesta) {
+                                const std::string & faRichiesta,
+                                const std::string & caricamentoRichiesto,
+                                jint ripacchettamento) {
     talos_last_open_error.clear();
     const std::string path = jstring_to_utf8(env, modelPath);
     if (path.empty()) {
@@ -1876,6 +2626,83 @@ static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
 
     llama_model_params model_params = llama_model_default_params();
     model_params.n_gpu_layers = gpuLayers;
+
+    /*
+     * La modalita' di caricamento, se qualcuno l'ha chiesta. Il perche' per
+     * esteso — API cambiata, che cosa fa AUTO, perche' il predefinito e' in
+     * attesa di una misura — sta su `talos_modalita_caricamento()`.
+     *
+     * ⛔ Un nome sconosciuto FA FALLIRE l'apertura, e non e' severita' fine a
+     * se stessa: la strada alternativa sarebbe ignorarlo e caricare come
+     * sempre, cioe' far credere a chi misura di aver misurato `mmap` mentre
+     * misurava `auto`. E' esattamente il difetto «misurato-ma-non-usato» che
+     * questo file ha gia' pagato una volta (vedi B1, `gpu_layers_effective`):
+     * una manopola che non morde e' peggio di una manopola che non c'e'.
+     */
+    llama_load_mode modalitaCarico = LLAMA_LOAD_MODE_AUTO;
+    bool imponiCarico = false;
+    if (!talos_modalita_caricamento(caricamentoRichiesto, modalitaCarico, imponiCarico)) {
+        talos_last_open_error = "load-mode";
+        TALOS_LOGE("modalita' di caricamento sconosciuta: %s", caricamentoRichiesto.c_str());
+        return 0;
+    }
+    if (imponiCarico) {
+        model_params.load_mode = modalitaCarico;
+        TALOS_LOGI("modalita' di caricamento richiesta: %s",
+                   llama_load_mode_name(modalitaCarico));
+    }
+
+    /**
+     * ⭐⭐⭐ IL RIPACCHETTAMENTO DEI PESI — ed e' una manopola SEPARATA.
+     *
+     * ## La domanda era lecita, la risposta e' nel codice
+     *
+     * Era ragionevole aspettarsi che il repack fosse una CONSEGUENZA di
+     * `load_mode`. **Non lo e'.** Ha un campo suo,
+     * `llama_model_params.use_extra_bufts` (`include/llama.h:338`, dove il
+     * commento di upstream dice testualmente *"use extra buffer types (used
+     * for weight repacking)"*), predefinito `true`
+     * (`src/llama-model.cpp:2496`), e sulla riga di comando e' il flag
+     * `-nr/--no-repack`, che scrive `params.no_extra_bufts = !value`
+     * (`common/arg.cpp:2413-2416`, letto nel submodule il 2026-09-10).
+     * ⇒ Due manopole, non una. Riportato perche' TROVATO, non perche' atteso.
+     *
+     * ## ⛔ Ma NON sono indipendenti, e questo e' il fatto che serve sapere
+     *
+     * I tensori ripacchettati finiscono in un buffer «extra»
+     * (`make_cpu_buft_list`, `llama-model.cpp:948`), e la strada veloce — quella
+     * che mappa il file direttamente dentro il buffer del backend — pretende
+     * `is_default_buft` (`llama-model.cpp:1608`). Un buffer extra NON e' quello
+     * di default ⇒ per quei tensori la mmap non serve a niente: vanno letti e
+     * trasformati comunque, e la memoria la si paga due volte (la mappa piu' la
+     * copia ripacchettata). E' per questo che upstream, quando i due si
+     * incrociano, avvisa da solo: *"tensor overrides to CPU are used with mmap
+     * enabled - consider using --load-mode none for better performance"*
+     * (`llama-model-loader.cpp:1186-1190`).
+     * ⇒ Che e' la stessa cosa, detta al contrario, che PocketPal scrive
+     * all'utente sotto il suo interruttore: il repack conviene **quando la
+     * mmap e' spenta**.
+     *
+     * ## Perche' ci riguarda piu' di quanto sembri
+     *
+     * Non e' un caso di nicchia da Q4_0 su server ARM. Il nostro llama.cpp
+     * ripacchetta anche **Q4_K** e **Q2_K** (`ggml/src/ggml-cpu/repack.cpp`,
+     * `repack_q4_K_to_q4_K_8_bl` e vicini) — cioe' il formato dominante del
+     * nostro catalogo, i `*-Q4_K_M.gguf`.
+     *
+     * ## Perche' TRI-STATO e non un booleano
+     *
+     * `-1` vuol dire «non l'ho chiesto», e non e' la stessa cosa di «l'ho
+     * chiesto acceso»: solo cosi' il predefinito resta quello di upstream
+     * anche il giorno in cui upstream lo cambia. Un booleano ci costringerebbe
+     * a scrivere `true` da qualche parte, cioe' a scolpire oggi una scelta
+     * altrui.
+     */
+    if (ripacchettamento >= 0) {
+        model_params.use_extra_bufts = ripacchettamento != 0;
+        TALOS_LOGI("ripacchettamento dei pesi richiesto: %s",
+                   model_params.use_extra_bufts ? "acceso" : "spento");
+    }
 
     /**
      * ⛔ IL VETTORE VIVE FINO AL CARICAMENTO, e non un'istruzione di meno.
@@ -1901,10 +2728,30 @@ static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
         }
     }
 
+    /*
+     * ⛔ Armata QUI e non in cima alla funzione: fra i due punti ci sono
+     * quattro rami che possono uscire con `return 0`, e ognuno lascerebbe il
+     * contatore a un valore che dice «sto caricando» mentre nessuno carica.
+     */
+    g_carico_permille.store(0, std::memory_order_relaxed);
+    g_carico_annullato.store(false, std::memory_order_relaxed);
+    model_params.progress_callback = talos_progresso_carico;
+    model_params.progress_callback_user_data = nullptr;
+
     llama_model * model = llama_model_load_from_file(path.c_str(), model_params);
+
+    // ⛔ `exchange` e non `load` + `store`: chi preme annulla lo fa da un altro
+    // thread, e fra le due operazioni separate ci starebbe una pressione che
+    // resterebbe accesa per il caricamento SUCCESSIVO.
+    const bool annullato = g_carico_annullato.exchange(false, std::memory_order_relaxed);
+    g_carico_permille.store(-1, std::memory_order_relaxed);
+
     if (model == nullptr) {
-        talos_last_open_error = "model-load";
-        TALOS_LOGE("modello non caricato: %s", path.c_str());
+        // ⛔ Annullato e fallito NON sono la stessa cosa, e a schermo diventano
+        // due frasi diverse: «l'hai fermato tu» non e' «non ce l'ha fatta».
+        talos_last_open_error = annullato ? "load-cancelled" : "model-load";
+        TALOS_LOGE("modello non caricato (%s): %s",
+                   annullato ? "annullato da chi usa l'app" : "errore", path.c_str());
         return 0;
     }
 
@@ -2065,6 +2912,7 @@ static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
         }
     }
 
+    const bool swa_piena = talos_applica_esperimenti(ctx_params, model, gpuLayers != 0);
     llama_context * ctx = llama_init_from_model(model, ctx_params);
     if (ctx == nullptr && vuoleLeggera) {
         // Il collaudo ha risposto no. Non è un guasto: è il modo in cui si
@@ -2132,6 +2980,55 @@ static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
     // contesto ci sta deve sapere quanto pesa un token davvero, e dopo un
     // ripiego silenzioso i due numeri sarebbero diversi.
     session->kv_type = ctx_params.type_k == GGML_TYPE_Q8_0 ? "q8_0" : "f16";
+
+    /*
+     * ⛔ D-45 — vedi il cappello su `riuso_kv_vietato`. La condizione e' la
+     * congiunzione MISURATA: scaricato fuori dalla CPU **e** finestra
+     * scorrevole. Nessuna delle due da sola ha mai sbagliato sul Pad, e
+     * vietare su una sola pagherebbe il prefill dove non serve.
+     */
+    {
+        const int32_t finestra = llama_model_n_swa(model);
+        // D-45: con la cache SWA a dimensione piena (esperimento) il riuso si
+        // RIAPRE, apposta — e' l'unico modo di misurare se la cura funziona.
+        session->riuso_kv_vietato = gpuLayers != 0 && finestra > 0 && !swa_piena;
+        if (session->riuso_kv_vietato) {
+            TALOS_LOGI("riuso della KV VIETATO: finestra scorrevole %d e %d strati fuori "
+                       "dalla CPU (D-45: su questa combinazione il riuso ha dato "
+                       "risposte vuote o senza senso)",
+                       (int) finestra, (int) gpuLayers);
+        }
+    }
+    /*
+     * ⛔⛔ La geometria della KV, chiesta al FILE e non allo strato 0.
+     *
+     * Si legge qui e non a ogni `nativeModelShape` perche' e' un fatto
+     * immutabile del modello aperto, e perche' una lettura di metadati dentro
+     * una funzione di stato la renderebbe cara proprio dove viene chiamata
+     * spesso. `llama_model_n_head(model)` entra come ultimo ripiego: quando un
+     * file non dichiara `head_count_kv` upstream fa esattamente questo
+     * (`src/llama-model.cpp:1182`, `n_head_kv_arr = n_head_arr`, letto il
+     * 2026-09-10) — e per LFM2 vale 32 perche' quella chiave e' uno **scalare**
+     * (letto sul Pad: `lfm2.attention.head_count u32 = 32`), quindi
+     * `get_key_or_arr` la replica su tutti gli strati
+     * (`src/llama-model-loader.cpp:479-484`): su questo modello non c'e'
+     * nessuna divisione per zero mascherata dentro `headDim`.
+     */
+    const talos_geometria_kv geometriaKv = talos_geometria_kv_dal_file(
+        path,
+        (int64_t) llama_model_n_layer(model),
+        (int64_t) llama_model_n_head_kv(model),
+        (int64_t) llama_model_n_head(model));
+    session->kv_layers = geometriaKv.strati;
+    session->kv_heads  = geometriaKv.teste;
+    if (geometriaKv.per_strato) {
+        // Una riga sola, e solo per gli ibridi: e' il numero che nessuna API
+        // pubblica sa dire, e senza vederlo una diagnosi sul contesto di LFM2
+        // ripartirebbe da capo ogni volta.
+        TALOS_LOGI("KV per-strato: %lld strati su %d hanno cache, %lld teste",
+                   (long long) geometriaKv.strati, llama_model_n_layer(model),
+                   (long long) geometriaKv.teste);
+    }
     // B1: il modello e il contesto sono aperti a questo punto - se
     // gpuLayers!=0 era richiesto e un vero acceleratore e' registrato in
     // questa build, llama_model_load_from_file sarebbe FALLITO invece di
@@ -2162,6 +3059,19 @@ static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
     bool haBersaglioEffettivo = !dispositivi.empty() && dispositivi.front() != nullptr;
     session->backend_target_effective = haBersaglioEffettivo ? bersaglioScelto : "";
     session->flash_attn_effective = llama_flash_attn_type_name(ctx_params.flash_attn_type);
+    /*
+     * ⛔ Letti da `model_params`, non dalle variabili dei rami che l'hanno
+     * riempito: e' la stessa disciplina di `flash_attn_effective` qui sopra —
+     * si dichiara cio' che e' stato PASSATO alla libreria, non cio' che si
+     * credeva di passare. Se domani un ramo nuovo tocca `model_params` e si
+     * dimentica di aggiornare una variabile locale, questi campi restano veri.
+     * Il limite di `load_mode_effective` — `auto` non dice se mmap sia poi
+     * stata scelta — sta dichiarato sul campo, nella struttura della sessione.
+     */
+    session->load_mode_effective     = llama_load_mode_name(model_params.load_mode);
+    session->weight_repack_effective = model_params.use_extra_bufts;
+    session->mmap_supported          = llama_supports_mmap();
+    session->mlock_supported         = llama_supports_mlock();
 
     // Armata QUI e non nei parametri del contesto: la callback ha bisogno
     // dell'indirizzo della sessione, che un istante fa non esisteva ancora.
@@ -2192,20 +3102,58 @@ static jlong talos_apri_modello(JNIEnv * env, jstring modelPath,
 }
 
 /**
- * L'apertura di PRODUZIONE. Passa tre richieste vuote, e vuoto qui significa
- * «come si è sempre fatto»: nessuna lista di dispositivi, nessuna Flash
- * Attention imposta. ⛔ Non è una convenzione da ricordare — è l'unico modo in
- * cui questa funzione può chiamare quella sotto, quindi non esiste una strada
- * per cui la ricerca cambi il comportamento di chi usa l'app.
+ * L'apertura di PRODUZIONE.
+ *
+ * ## ⭐⭐⭐ 2026-09-10 — la produzione può NOMINARE il bersaglio
+ *
+ * Fino a oggi questa porta passava richieste VUOTE, e vuoto significa «come
+ * si è sempre fatto»: nessuna lista di dispositivi, quindi `gpuLayers` che
+ * dice *quanti* strati spostare e nessuno che dica *dove*. Con un solo
+ * acceleratore compilato nell'APK la differenza non si vedeva. Diventa
+ * decisiva appena ce ne sono due — ed è la direzione in cui questo progetto
+ * sta andando: l'owner ha deciso il 2026-09-10 che l'utente sceglie fra
+ * **CPU, GPU e Hexagon**, quindi OpenCL e HTP possono convivere nello stesso
+ * artefatto.
+ *
+ * ⛔ Con due acceleratori registrati, «sposta tutti gli strati» senza un nome
+ * è una lotteria decisa dall'ordine di caricamento delle `.so` — sta scritto
+ * per esteso in `TalosBackendInventory.java`, e questa è la porta da cui
+ * quella lotteria entrerebbe in produzione.
+ *
+ * ⇒ Nominare ha un secondo effetto, ed è quello che serviva davvero:
+ * `talos_risolvi_bersaglio()` risolve un dispositivo VERO, quindi
+ * `backend_target_effective` smette di essere vuoto e la snapshot può dire
+ * **quale** motore sta girando invece di lasciarlo dedurre. E un nome che non
+ * si risolve fa FALLIRE l'apertura invece di ripiegare in silenzio sulla CPU
+ * — che è precisamente il difetto («backend selezionabile non equivale a
+ * backend realmente utilizzato») che stiamo togliendo di mezzo.
+ *
+ * ⛔ Vuoto resta «come si è sempre fatto». Chi non nomina niente attraversa
+ * questa funzione senza toccare né la lista dei dispositivi né la Flash
+ * Attention, esattamente come prima.
+ *
+ * @param backendName vuoto = nessuna richiesta · `none`/`cpu` = nessun
+ *     offload, detto ad alta voce · altrimenti il nome di un registry come
+ *     lo dichiara ggml (`OpenCL`, `Vulkan`, `HTP`).
+ * @param deviceName vuoto = accettato solo se il registry espone UN solo
+ *     dispositivo di offload; altrimenti il nome esatto.
  */
 JNIEXPORT jlong JNICALL
 Java_ai_talos_TalosLlamaNative_nativeOpen(JNIEnv * env, jclass, jstring modelPath,
                                           jint threads, jint contextTokens, jint gpuLayers,
                                           jboolean deterministic, jint threadsBatch,
-                                          jint microBatch, jstring kvType) {
+                                          jint microBatch, jstring kvType,
+                                          jstring loadMode, jint weightRepack,
+                                          jstring backendName, jstring deviceName) {
     return talos_apri_modello(env, modelPath, threads, contextTokens, gpuLayers,
                               deterministic, threadsBatch, microBatch, kvType,
-                              std::string(), std::string(), std::string());
+                              jstring_to_utf8(env, backendName),
+                              jstring_to_utf8(env, deviceName),
+                              /* Flash Attention: resta SOLO RICERCA. La decide
+                               * `AUTO` in produzione, e il perché sta su
+                               * `talos_modalita_fa()`. */
+                              std::string(),
+                              jstring_to_utf8(env, loadMode), weightRepack);
 }
 
 /**
@@ -2232,7 +3180,16 @@ Java_ai_talos_TalosLlamaNative_nativeOpenTargeted(JNIEnv * env, jclass, jstring 
                               deterministic, threadsBatch, microBatch, kvType,
                               jstring_to_utf8(env, backendName),
                               jstring_to_utf8(env, deviceName),
-                              jstring_to_utf8(env, flashAttentionMode));
+                              jstring_to_utf8(env, flashAttentionMode),
+                              /*
+                               * ⛔ Firma NON toccata, e di proposito: nove
+                               * `androidTest` chiamano questa funzione, e
+                               * allargarla li spegnerebbe tutti in una volta.
+                               * Vuoto e `-1` valgono «come oggi», cioe' AUTO
+                               * col repack di upstream — il riferimento contro
+                               * cui la matrice del taccuino si misura.
+                               */
+                              std::string(), -1);
 }
 
 /**
@@ -2389,6 +3346,25 @@ Java_ai_talos_TalosLlamaNative_nativeTokensProduced(JNIEnv *, jclass, jlong hand
 }
 
 /**
+ * ⛔⛔ Se l'ULTIMA corsa e' stata mollata dal motore, e non fermata da noi.
+ *
+ * Vedi {@code talos_session::abortita_dal_motore}: `llama_decode` torna 2 sia
+ * quando la persona preme Stop sia quando il backend abbandona il grafo, e
+ * queste due cose non possono contare allo stesso modo. Chi misura deve poter
+ * rifiutare una corsa del secondo tipo invece di registrarla come prova che
+ * quel motore funziona.
+ *
+ * ⛔ Si legge DOPO la corsa e prima della successiva: la prossima `run` lo
+ * azzera.
+ */
+JNIEXPORT jboolean JNICALL
+Java_ai_talos_TalosLlamaNative_nativeEngineAborted(JNIEnv *, jclass, jlong handle) {
+    talos_session * session = as_session(handle);
+    return session != nullptr
+            && session->abortita_dal_motore.load(std::memory_order_relaxed);
+}
+
+/**
  * Formatta una conversazione col template DEL MODELLO.
  *
  * Non è rifinitura: ogni famiglia di modelli è stata addestrata su una
@@ -2420,8 +3396,7 @@ Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlo
     inputs.add_generation_prompt = true;
     const std::string messages = jstring_to_utf8(env, messagesJson);
     try {
-        inputs.messages = common_chat_msgs_parse_oaicompat(
-                nlohmann::ordered_json::parse(messages));
+        inputs.messages = common_chat_msgs_parse_oaicompat(common_json::parse(messages));
     } catch (const std::exception &) {
         // Anche il testo dell'eccezione di un parser può citare il frammento
         // rifiutato: il codice stabile basta, la conversazione non va in log.
@@ -2446,7 +3421,7 @@ Java_ai_talos_TalosLlamaNative_nativeApplyChatTemplate(JNIEnv * env, jclass, jlo
     const std::string tools = jstring_to_utf8(env, toolsJson);
     if (!tools.empty()) {
         try {
-            inputs.tools = common_chat_tools_parse_oaicompat(nlohmann::ordered_json::parse(tools));
+            inputs.tools = common_chat_tools_parse_oaicompat(common_json::parse(tools));
             inputs.tool_choice = COMMON_CHAT_TOOL_CHOICE_AUTO;
         } catch (const std::exception & failure) {
             TALOS_LOGE("tool non interpretabili, procedo senza: %s", failure.what());
@@ -2846,11 +3821,36 @@ Java_ai_talos_TalosLlamaNative_nativeArchitectureOf(JNIEnv * env, jclass, jstrin
         const int64_t indice = gguf_find_key(gguf, chiaveStrati.c_str());
         if (indice >= 0) strati = (int64_t) gguf_get_val_u32(gguf, indice);
     }
+    /*
+     * ⭐⭐⭐ IL FORMATO DEI PESI, e serve PRIMA di aprire il modello.
+     *
+     * Misurato sul Pad l'11/09/2026 — stesso modello, stesso giorno, cambia
+     * solo questo numero:
+     *
+     *   Qwen3-4B  Q4_0    (ftype 2)   NPU  lettura 1126 t/s
+     *   Qwen3-4B  Q4_K_M  (ftype 15)  NPU  lettura   55,7      ← venti volte piu' piano
+     *                                 GPU  lettura  206
+     *
+     * ⛔ Va letto QUI e non a modello aperto: la scelta del motore si fa prima
+     * dell'apertura, e aprire per sapere dove aprire sarebbe pagare i pesi due
+     * volte — lo stesso difetto che il ledger ha gia' registrato una volta
+     * («il modello veniva aperto DUE volte»).
+     *
+     * ⛔ `-1` quando la chiave manca: non e' zero, che e' `F32` ed e' un
+     * formato vero. Chi legge deve poter distinguere «non dichiarato» da «non
+     * quantizzato».
+     */
+    int64_t ftype = -1;
+    {
+        const int64_t indice = gguf_find_key(gguf, "general.file_type");
+        if (indice >= 0) ftype = (int64_t) gguf_get_val_u32(gguf, indice);
+    }
     gguf_free(gguf);
 
     char json[256];
-    snprintf(json, sizeof(json), "{\"architecture\":\"%s\",\"layers\":%lld}",
-             architettura.c_str(), (long long) strati);
+    snprintf(json, sizeof(json),
+             "{\"architecture\":\"%s\",\"layers\":%lld,\"fileType\":%lld}",
+             architettura.c_str(), (long long) strati, (long long) ftype);
     return env->NewStringUTF(json);
 }
 
@@ -2904,9 +3904,31 @@ static talos_forma_gguf talos_forma_dai_metadati(const std::string & path) {
     if (chiave >= 0) architettura = gguf_get_val_str(gguf, chiave);
 
     if (!architettura.empty()) {
-        forma.layers         = talos_gguf_intero(gguf, architettura + ".block_count");
-        forma.kvHeads        = talos_gguf_intero(gguf, architettura + ".attention.head_count_kv");
         forma.trainedContext = talos_gguf_intero(gguf, architettura + ".context_length");
+
+        /*
+         * ⛔⛔ LO STESSO DIFETTO, UNA SECONDA VOLTA — e da qui passa il
+         * `planPrompt`, cioe' la scelta del contesto PRIMA di caricare i pesi.
+         *
+         * `talos_gguf_intero()` sceglie sul tipo della chiave e cade nel
+         * `default: return 0` appena il tipo e' ARRAY. Su LFM2
+         * `attention.head_count_kv` **e'** un array (`arr[i32,30]`, letto sul
+         * Pad il 2026-09-10) ⇒ `kvHeads` usciva 0 esattamente come dall'altra
+         * strada, e per la stessa ragione: una domanda per-strato a cui si
+         * rispondeva con un numero solo.
+         *
+         * `layers` qui vuol dire la stessa cosa che vuol dire in
+         * `nativeModelShape`: gli strati **che hanno la cache**. Su un
+         * transformer e' `block_count`; su un ibrido e' il conteggio dei
+         * `head_count_kv > 0`.
+         */
+        const int64_t blocchi = talos_gguf_intero(gguf, architettura + ".block_count");
+        const talos_geometria_kv geometria = talos_geometria_kv_di(
+            gguf, architettura, blocchi,
+            talos_gguf_intero(gguf, architettura + ".attention.head_count_kv"),
+            talos_gguf_intero(gguf, architettura + ".attention.head_count"));
+        forma.layers  = geometria.strati;
+        forma.kvHeads = geometria.teste;
 
         // La testa: dichiarata quando c'e', altrimenti dedotta come fa il
         // lettore ufficiale. Zero resta zero — «non misurabile» e' un esito.
@@ -3083,6 +4105,9 @@ Java_ai_talos_TalosLlamaNative_nativeReopenContext(JNIEnv * env, jclass, jlong h
         ctx_params.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
     }
 
+    // D-45: stessa regola della prima apertura, o il contesto ricostruito
+    // perderebbe la cache SWA piena mentre il divieto di riuso resta sollevato.
+    talos_applica_esperimenti(ctx_params, session->model, session->gpu_layers_effective != 0);
     llama_context * nuovo = llama_init_from_model(session->model, ctx_params);
     if (nuovo == nullptr && vuoleLeggera) {
         ctx_params.type_k = GGML_TYPE_F16;
@@ -3178,6 +4203,35 @@ Java_ai_talos_TalosLlamaNative_nativeOpensSinceStart(JNIEnv *, jclass) {
     return (jint) g_open_count.load(std::memory_order_relaxed);
 }
 
+/**
+ * A che punto e' il caricamento, in millesimi. **`-1` = nessun caricamento in
+ * corso**, e non e' lo stesso di `0`.
+ *
+ * ⛔ Si INTERROGA, non arriva da sola: vedi il commento su `g_carico_permille`.
+ * Chi la chiama lo fa da un thread diverso da quello che carica — ed e' il
+ * motivo per cui il valore e' atomico e non un `float` qualunque.
+ */
+JNIEXPORT jint JNICALL
+Java_ai_talos_TalosLlamaNative_nativeLoadProgressPermille(JNIEnv *, jclass) {
+    return (jint) g_carico_permille.load(std::memory_order_relaxed);
+}
+
+/**
+ * Ferma il caricamento in corso, se ce n'e' uno.
+ *
+ * ⛔ Non interrompe a meta' un tensore e non lascia il modello mezzo aperto:
+ * `llama_model_load_from_file` torna `nullptr` e libera tutto lui, come per un
+ * errore qualunque (`src/llama.cpp:314`, «-2 on cancellation»). L'unica
+ * differenza che resta e' `nativeLastOpenError`, che dice `load-cancelled`.
+ *
+ * ⛔ Chiamarla quando non sta caricando niente non e' un errore: il flag viene
+ * azzerato all'inizio di ogni apertura, quindi non puo' avvelenare la prossima.
+ */
+JNIEXPORT void JNICALL
+Java_ai_talos_TalosLlamaNative_nativeCancelLoad(JNIEnv *, jclass) {
+    g_carico_annullato.store(true, std::memory_order_relaxed);
+}
+
 JNIEXPORT jstring JNICALL
 Java_ai_talos_TalosLlamaNative_nativeKvCacheType(JNIEnv * env, jclass, jlong handle) {
     std::lock_guard<std::mutex> serratura(g_motore);
@@ -3204,7 +4258,18 @@ Java_ai_talos_TalosLlamaNative_nativeRuntimeSnapshot(JNIEnv * env, jclass, jlong
     if (session == nullptr || session->ctx == nullptr) return nullptr;
 
     nlohmann::ordered_json out;
-    out["schema"] = 1;
+    /*
+     * ⛔ SCHEMA 3 — e il numero sale ogni volta che nascono campi nuovi, per
+     * la ragione che lo schema 1 aveva già scritto: chi legge una snapshot
+     * vecchia non deve poter confondere «campo assente» con «zero».
+     *
+     * Lo schema 2 aveva aggiunto le quattro manopole di caricamento. Il 3
+     * aggiunge i due fatti che rispondono a «e allora dove sta girando
+     * DAVVERO?»: `offloadDevices` (quanti acceleratori esistono in questa
+     * build — zero rende la risposta certa) e `threadPoolSplit` (due insiemi
+     * di thread veri, o uno solo).
+     */
+    out["schema"] = 3;
     out["backendDevice"] = session->backend_target_effective.empty()
         ? nullptr : nlohmann::ordered_json(session->backend_target_effective);
     out["gpuLayersEffective"] = session->gpu_layers_effective;
@@ -3214,6 +4279,36 @@ Java_ai_talos_TalosLlamaNative_nativeRuntimeSnapshot(JNIEnv * env, jclass, jlong
     out["threads"] = llama_n_threads(session->ctx);
     out["threadsBatch"] = llama_n_threads_batch(session->ctx);
     out["microBatch"] = (uint32_t) llama_n_ubatch(session->ctx);
+    /*
+     * Le manopole di CARICAMENTO. Stanno nella snapshot e non in un metodo
+     * JNI dedicato per la stessa ragione delle altre (§4.5 del piano
+     * sorgente): un varco solo, versionato.
+     *
+     * ⛔ `loadMode` e' la modalita' RICHIESTA al caricatore. Per ogni valore
+     * esplicito e' anche quella applicata; per `auto` no, e il limite e'
+     * dichiarato sul campo della sessione invece di essere nascosto qui.
+     * `mmapSupported`/`mlockSupported` servono a leggerlo: un `auto` su una
+     * build senza mmap non puo' che essere degenerato in `none`.
+     */
+    out["loadMode"] = session->load_mode_effective;
+    out["weightRepack"] = session->weight_repack_effective;
+    out["mmapSupported"] = session->mmap_supported;
+    out["mlockSupported"] = session->mlock_supported;
+    /*
+     * ⛔⛔ SCELTO non è IN USO — i due fatti che permettono di distinguerli.
+     *
+     * `offloadDevices` è chiesto ADESSO al registro dei backend, non
+     * memorizzato all'apertura: i backend sono `.so` caricati a runtime e il
+     * registro è la sola fonte che sa quanti ne siano davvero entrati. Zero
+     * significa che nessuna richiesta di offload può essere stata onorata in
+     * questa build, e allora «gira su CPU» è un fatto, non una deduzione.
+     *
+     * `threadPoolSplit` è la stessa domanda posta ai thread: due insiemi
+     * distinti, o uno solo condiviso. Vedi il campo nella struttura della
+     * sessione per il perché non coincide con «i due numeri erano diversi».
+     */
+    out["offloadDevices"] = talos_conta_dispositivi_offload();
+    out["threadPoolSplit"] = session->thread_pool_split;
     return env->NewStringUTF(out.dump().c_str());
 }
 
@@ -3240,6 +4335,31 @@ Java_ai_talos_TalosLlamaNative_nativeRuntimeSnapshot(JNIEnv * env, jclass, jlong
  * attraversato l'intestazione per costruire il modello. Chiedere a lui costa
  * cinque accessi a campi già in memoria, e soprattutto risponde con ciò che il
  * motore *userà davvero*, non con ciò che un secondo lettore avrebbe dedotto.
+ *
+ * ## ⛔⛔ `layers` sono gli strati CHE HANNO LA KV, non tutti gli strati
+ *
+ * Su un transformer sono la stessa cosa e questa distinzione non si vede. Su un
+ * IBRIDO no: `LFM2.5-2.6B` ha **30** blocchi, e solo quelli con
+ * `head_count_kv > 0` allocano una cache — gli altri sono convoluzioni
+ * ricorrenti con uno stato piccolo e **costante nel contesto**. Riportare 30 qui
+ * moltiplicherebbe per cinque il costo per token e taglierebbe il contesto
+ * offerto; riportare `llama_model_n_head_kv()` — che risponde per lo **strato
+ * 0**, ricorrente ⇒ **0** — faceva scartare tutta la forma a valle, e con lei il
+ * prefisso congelato: **31 s** al primo token invece di **3,1**, misurati sul
+ * Pad il 2026-09-10.
+ *
+ * ⇒ Gli unici tre lettori di `layers` in tutta l'app lo usano ESCLUSIVAMENTE
+ * dentro `layers × kvHeads × headDim × 2 × byteElemento`
+ * (`lib/models/fit.ts:166` e `:170`, `lib/models/engineDiagnostics.ts:130`):
+ * il numero che serve li' e' quello degli strati con cache, e nessun lettore
+ * chiede «quanto e' profondo il modello». Il conteggio lo fa
+ * `talos_geometria_kv_di()`, che legge l'array per-strato dal GGUF — un fatto
+ * chiesto al file, mai una tabella per architettura.
+ *
+ * ⛔ Un modello INTERAMENTE ricorrente (Mamba, RWKV) conta zero strati con KV, e
+ * la forma resta scartata come oggi. È voluto: li' l'aritmetica «byte per
+ * token» non descrive la memoria, e farla tornare zero renderebbe il tetto del
+ * contesto **infinito**. «Non lo so» e' l'unica risposta prudente.
  *
  * ## L'ordine, e perché long
  *
@@ -3276,9 +4396,20 @@ Java_ai_talos_TalosLlamaNative_nativeModelShape(JNIEnv * env, jclass, jlong hand
     // a valle. Passa come zero e chi legge lo riconosce come «non misurabile».
     const jlong headDim = heads > 0 ? (jlong) (embedding / heads) : 0;
 
+    // Misurata all'apertura leggendo l'array per-strato del GGUF; zero vuol
+    // dire «non misurata», e solo allora si ripiega sull'API pubblica — che su
+    // un transformer da' la stessa risposta e su un ibrido darebbe quella dello
+    // strato 0.
+    const jlong strati = session->kv_layers > 0
+        ? (jlong) session->kv_layers
+        : (jlong) llama_model_n_layer(model);
+    const jlong testeKv = session->kv_heads > 0
+        ? (jlong) session->kv_heads
+        : (jlong) llama_model_n_head_kv(model);
+
     const jlong values[5] = {
-        (jlong) llama_model_n_layer(model),
-        (jlong) llama_model_n_head_kv(model),
+        strati,
+        testeKv,
         headDim,
         (jlong) llama_model_n_ctx_train(model),
         (jlong) llama_model_size(model),
@@ -3514,12 +4645,32 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
 
     session->produced.store(0, std::memory_order_relaxed);
     session->cancelled.store(false, std::memory_order_relaxed);
+    // Azzerato con gli altri: una corsa non eredita il guasto di quella prima.
+    session->abortita_dal_motore.store(false, std::memory_order_relaxed);
     {
         // Azzerato QUI e non a fine generazione: chi guarda deve vedere la
         // risposta nuova crescere da zero, non la coda di quella prima.
         std::lock_guard<std::mutex> guard(session->text_lock);
         session->text.clear();
         session->text_drained = 0;
+    }
+    /*
+     * ⛔⛔⛔ LA SPIA DEL TAGLIO RIFIUTATO SI SPEGNE QUI, a ogni giro.
+     *
+     * `session->tempi` NON viene azzerato all'ingresso, di proposito: finché
+     * questa generazione non pubblica i suoi tempi, chi interroga vede ancora
+     * quelli del giro PRECEDENTE, che è meglio di un blocco vuoto. Ma per una
+     * SPIA quella regola si rovescia: un rifiuto avvenuto ieri resterebbe acceso
+     * per sempre, e una spia che non si spegne più non dice niente —
+     * esattamente come una che non si accende mai.
+     *
+     * ⛔ Ed è il motivo per cui l'undicesimo valore delle due pubblicazioni più
+     * sotto NON può essere `session->tempi.taglio_rifiutato` riletto: rileggerlo
+     * sembrerebbe «conservare» e invece renderebbe la spia appiccicosa.
+     */
+    {
+        std::lock_guard<std::mutex> guard(session->tempi_lock);
+        session->tempi.taglio_rifiutato = false;
     }
     /**
      * ⭐ LE DUE MODALITÀ, dichiarate invece che sottintese.
@@ -3619,12 +4770,83 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
      * senza dirlo a nessuno.
      */
     llama_memory_t memoria = llama_get_memory(session->ctx);
-    size_t riusati = reusePrefix ? talos_prefisso_comune(session->cached, tokens) : 0;
+    /*
+     * ⛔⛔⛔ LA VERITÀ DI QUESTO GIRO STA IN UNA LOCALE, e prima non stava da
+     * nessuna parte.
+     *
+     * ## Il difetto che questa riga chiude — vissuto indisturbato dal giorno uno
+     *
+     * Le due pubblicazioni dei tempi più sotto sono INIZIALIZZAZIONI AGGREGATE
+     * (`session->tempi = { ... }`) ed elencavano DIECI valori per UNDICI membri.
+     * Non è un elenco «incompleto» che il compilatore completa a caso: lo
+     * standard dice esattamente cosa succede al membro lasciato fuori. C++17
+     * (`set(CMAKE_CXX_STANDARD 17)`, `cpp/CMakeLists.txt:14`), N4659
+     * [dcl.init.aggr]/8, letto il 2026-09-10:
+     *
+     *     «If there are fewer initializer-clauses in the list than there are
+     *      elements in a non-union aggregate, then each element not explicitly
+     *      initialized is initialized as follows: If the element has a default
+     *      member initializer, the element is initialized from that
+     *      initializer.»
+     *
+     * ⇒ `taglio_rifiutato` ha `= false` come default member initializer, quindi
+     * il `true` scritto qui sotto veniva **riazzerato** poche righe dopo, nella
+     * STESSA chiamata. `"partialTrimRefused"` nel JSON di `nativeLastTimings`
+     * non diceva «non è successo»: era `false` SEMPRE, per costruzione. Una
+     * spia scritta e cancellata tre righe dopo.
+     *
+     * ## Perché nessuno se n'è accorto
+     *
+     * Perché nessuno poteva. Il compilatore tace di proposito:
+     * `-Wmissing-field-initializers` NON scatta quando il membro mancante ha un
+     * default member initializer — per clang non c'è niente di «missing», il
+     * valore c'è (llvm/llvm-project#147582, letto il 2026-09-10) — e il nostro
+     * `CMakeLists.txt` non accende comunque né `-Wall` né `-Wextra`. In build di
+     * rilascio il JNI non scrive in logcat, quindi nemmeno il `TALOS_LOGI` qui
+     * sotto poteva smentire il JSON. E `false` è un valore PLAUSIBILE: nessun
+     * controllo si insospettisce davanti a una risposta ragionevole.
+     *
+     * ⛔ Questa è la forma di difetto peggiore che esista in una diagnosi: non
+     * uno strumento rotto che tace, ma uno che risponde sempre la stessa cosa
+     * con l'aria di aver misurato. Il 2026-09-10 stava per essere usato come
+     * PROVA che la cache funzionasse, e avrebbe fatto concludere il contrario
+     * del vero.
+     */
+    bool taglio_rifiutato = false;
+    // ⛔ D-45: il divieto passa DA QUI, l'unico punto in cui il riuso nasce.
+    // Metterlo nei chiamanti vorrebbe dire ricordarselo in ognuno.
+    size_t riusati = (reusePrefix && !session->riuso_kv_vietato)
+            ? talos_prefisso_comune(session->cached, tokens)
+            : 0;
     if (reusePrefix) {
         if (riusati < session->cached.size()
             && !llama_memory_seq_rm(memoria, 0, (llama_pos) riusati, -1)) {
             TALOS_LOGI("taglio parziale rifiutato: si riparte da zero");
-            session->tempi.taglio_rifiutato = true;
+            taglio_rifiutato = true;
+            /*
+             * ⛔ SOTTO CHIAVE, e prima non lo era — era l'unica delle quattro
+             * scritture di `session->tempi` a farne a meno.
+             *
+             * Non è simmetria per bellezza: la disciplina dei lock dichiarata
+             * su `g_motore` mette `nativeLastTimings` fra le VEDETTE, cioè fra
+             * chi NON prende la serratura del motore proprio per poter
+             * rispondere MENTRE la generazione va avanti. ⇒ Un altro thread
+             * legge `session->tempi` esattamente mentre questa riga lo scrive.
+             * Due accessi non sincronizzati allo stesso oggetto, uno in
+             * scrittura: è una data race, e in C++ una data race è
+             * comportamento indefinito anche su un `bool` — non «un valore
+             * vecchio», proprio indefinito.
+             *
+             * ⭐ E la si scrive QUI, non solo alla fine, perché è adesso che
+             * serve: dopo un rifiuto il prefill ricalcola l'intero prompt da
+             * zero — su LFM2.5 sono 2.934 token — ed è durante quell'attesa che
+             * qualcuno chiede «perché ci mette tanto?». Una spia che si accende
+             * solo a cose finite arriva dopo la domanda.
+             */
+            {
+                std::lock_guard<std::mutex> guard(session->tempi_lock);
+                session->tempi.taglio_rifiutato = true;
+            }
             llama_memory_clear(memoria, true);
             riusati = 0;
         }
@@ -3658,7 +4880,12 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
                 llama_memory_clear(memoria, true);
                 session->cached.clear();
             }
-            TALOS_LOGI("prefill interrotto a %zu/%d token", fed, wanted);
+            if (!session->cancelled.load(std::memory_order_relaxed)) {
+                session->abortita_dal_motore.store(true, std::memory_order_relaxed);
+            }
+            TALOS_LOGI("prefill interrotto a %zu/%d token (chiesto da noi: %s)",
+                       fed, wanted,
+                       session->cancelled.load(std::memory_order_relaxed) ? "si" : "NO");
             // Anche un lavoro interrotto lascia la sua traccia: «quanto ci ha
             // messo a fermarsi» è una domanda legittima, e un blocco di tempi
             // vuoto la renderebbe senza risposta.
@@ -3668,6 +4895,13 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
                     tempo_tokenizzazione, tempo_prefisso, talos_da(avvio), -1,
                     talos_da(avvio), wanted, (int) riusati, (int) (fed - riusati), 0,
                     reusePrefix == JNI_TRUE,
+                    // ⛔ UNDICESIMO. `talos_cronometro` ha UNDICI membri: se
+                    // questa lista ne elenca dieci, [dcl.init.aggr]/8 rimette
+                    // l'ultimo al suo `= false` e la spia si spegne in silenzio
+                    // — nessun avviso del compilatore, nessun errore, un valore
+                    // plausibile. Chi aggiunge un membro allunga ENTRAMBE le
+                    // pubblicazioni, o ne perde uno allo stesso modo.
+                    taglio_rifiutato,
                 };
             }
             return env->NewStringUTF("");
@@ -3768,7 +5002,14 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
                 llama_memory_clear(memoria, true);
                 session->cached.clear();
             }
-            if (esito == 2) break;
+            if (esito == 2) {
+                if (!session->cancelled.load(std::memory_order_relaxed)) {
+                    session->abortita_dal_motore.store(true, std::memory_order_relaxed);
+                    TALOS_LOGE("generazione ABORTITA DAL MOTORE dopo %d token, "
+                               "nessuno aveva chiesto lo stop", produced);
+                }
+                break;
+            }
             TALOS_LOGE("decode fallito dopo %d token", produced);
             return nullptr;
         }
@@ -3791,7 +5032,42 @@ Java_ai_talos_TalosLlamaNative_nativeGenerate(JNIEnv * env, jclass, jlong handle
             wanted - (int) riusati,
             session->produced.load(std::memory_order_relaxed),
             reusePrefix == JNI_TRUE,
+            // ⛔ UNDICESIMO — stessa ragione dell'altra pubblicazione: senza,
+            // [dcl.init.aggr]/8 lo riporta al suo `= false` e la diagnosi che
+            // esce da `nativeLastTimings` mente sempre nello stesso verso.
+            taglio_rifiutato,
         };
+    }
+
+    /*
+     * ⛔ D-45 — la riga che dice COSA E' USCITO, e perche' e' spenta di serie.
+     *
+     * Il 10/09 `gemma-4-E2B-it-Q4_0` ha risposto **vuoto** dal secondo turno in
+     * poi, quattro volte di fila, con numeri ottimi (490 ms al primo token,
+     * 2.802 token riusati). Il prefisso congelato e' scagionato — succede anche
+     * con la cache viva — e su `LFM2.5-2.6B` non succede. Per sapere se il
+     * modello non genera niente o se qualcuno scarta cio' che genera serve il
+     * testo grezzo, e oggi **nessun log lo stampa**: il ponte JS usa
+     * `console.info`, che a logcat non arriva.
+     *
+     * ⛔ SPENTA DI SERIE, e non per prudenza generica: qui dentro c'e' la
+     * conversazione di una persona, e logcat lo legge `adbd`, che registra
+     * tutto ([[il-segreto-passa-da-adbd-e-adbd-logga]]). Si accende a mano, da
+     * chi ha gia' il telefono in mano:
+     *
+     *     adb shell setprop log.tag.TalosLlama D
+     *
+     * ⛔ E si stampa la LUNGHEZZA sempre che il livello sia acceso, il testo
+     * solo troncato: la lunghezza da sola distingue gia' «zero caratteri» da
+     * «caratteri che qualcuno scarta dopo», che e' la domanda di D-45.
+     */
+    if (talos_log_debug_acceso()) {
+        std::string assaggio = answer.substr(0, 200);
+        for (char & c : assaggio) {
+            if (c == '\n' || c == '\r' || c == '\t') c = ' ';
+        }
+        TALOS_LOGD("uscita grezza: %zu caratteri, primi %zu: <<%s>>",
+                   answer.size(), assaggio.size(), assaggio.c_str());
     }
 
     return env->NewStringUTF(answer.c_str());
@@ -4039,6 +5315,17 @@ Java_ai_talos_TalosLlamaNative_nativeTrimAndSaveState(JNIEnv * env, jclass, jlon
     std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr || session->ctx == nullptr) return 0;
+    /*
+     * ⛔ D-45 — non si congela uno stato che non si potra' riusare, e
+     * soprattutto non si scrive su disco una KV nata dalla combinazione che
+     * ha prodotto risposte senza senso: quel file sopravvivrebbe al divieto e
+     * verrebbe riletto piu' avanti su un contesto sano.
+     */
+    if (session->riuso_kv_vietato) {
+        TALOS_LOGI("pota e congela: saltato, il riuso della KV e' vietato su questa "
+                   "combinazione (D-45)");
+        return 0;
+    }
     const std::string prefisso = jstring_to_utf8(env, prefissoJ);
     if (prefisso.empty() || session->cached.empty()) return 0;
 
@@ -4069,13 +5356,136 @@ Java_ai_talos_TalosLlamaNative_nativeTrimAndSaveState(JNIEnv * env, jclass, jlon
     // turno dopo risponderebbe a partire da uno stato che nessuno ha chiesto.
     llama_memory_t memoria = llama_get_memory(session->ctx);
     if (!llama_memory_seq_rm(memoria, 0, (llama_pos) quanti, -1)) {
-        // Non tutti i tipi di cache sanno potare a meta'. Si azzera: perdere il
-        // riuso e' un rallentamento, tenere una KV incoerente e' una risposta
-        // sbagliata.
-        TALOS_LOGE("pota e congela: potatura rifiutata, azzero");
+        /*
+         * ⛔⛔⛔ D-KV-2 — QUI, PRIMA, CI ARRENDEVAMO. E arrendersi qui voleva
+         * dire che su un modello ibrido il prefisso congelato **non poteva
+         * nascere**, mai: la prova sul Pad del 2026-09-10 e' che in tutto il
+         * telefono esisteva **un solo** file `.prefix`, e stava nella cartella
+         * del transformer.
+         *
+         * ## Perche' la potatura viene rifiutata, e perche' NON e' un difetto
+         *
+         * Un'architettura ricorrente/ibrida (LFM2.5: 18 strati a convoluzione
+         * ricorrente senza KV + 6 GQA) porta uno stato **che rotola**, non una
+         * tabella indirizzabile per posizione: «togli tutto dopo il token N»
+         * non e' un'operazione che esista. Upstream lo dichiara e propone come
+         * strada le **istantanee ai confini naturali** — testuale, *«save
+         * recurrent state snapshots at natural boundaries (e.g. after system
+         * message)»* —
+         * https://github.com/ggml-org/llama.cpp/discussions/19264 (letto il
+         * 2026-09-10), con https://github.com/ggml-org/llama.cpp/issues/24055
+         * (letto il 2026-09-10) sullo stesso difetto visto da fuori.
+         *
+         * ## ⛔ E il flag che avevo scelto era quello sbagliato
+         *
+         * `LLAMA_STATE_SEQ_FLAGS_PARTIAL_ONLY` serve al rollback della
+         * decodifica speculativa, non a congelare un prefisso: su un ibrido
+         * scrive SOLO la parte ricorrente e **butta via la KV di attenzione**
+         * (`llama-memory-hybrid.cpp:190-195`, letto nel nostro submodule
+         * pinnato il 2026-09-10). Per un prefisso serve lo stato **intero**,
+         * cioe' `flags = 0` — che e' gia' quello che `llama_state_seq_save_file`
+         * usa (`llama-context.cpp:3166`).
+         *
+         * ⇒ Non serviva un flag nuovo. Serviva **non potare**.
+         *
+         * ## La cura: si ricostruisce il confine invece di ritagliarlo
+         *
+         * Il prefisso e' un PREFISSO del prompt. Se non si puo' tornare
+         * indietro fino a lui, ci si arriva **in avanti**: memoria pulita, si
+         * decodificano i soli token del prefisso, e si fotografa li'. Lo stato
+         * che ne esce e' esattamente quello che serve.
+         *
+         * ⛔ Costa un prefill in piu', UNA VOLTA per combinazione (modello,
+         * contesto, tipo di cache, ragionamento). Non lo paga chi scrive: questa
+         * funzione e' chiamata a risposta gia' consegnata
+         * (`localAdapter.ts:1558`, `void congelaSePossibile(...)`), quindi il
+         * lavoro avviene mentre la persona legge. Da li' in poi ogni turno parte
+         * dal prefisso ripristinato.
+         *
+         * ⭐ E il turno dopo non tocca `llama_memory_seq_rm` nemmeno di
+         * striscio: la cache ripristinata contiene ESATTAMENTE il prefisso,
+         * quindi in `nativeGenerate` `riusati == session->cached.size()`, la
+         * condizione `riusati < session->cached.size()` e' falsa, e il ramo che
+         * gli ibridi rifiutano non viene mai preso.
+         */
+        /*
+         * ⛔⛔⛔ `quanti`, NON `token_prefisso.size()` — e la prima volta l'ho
+         * sbagliato, con la prova sul Pad a smentirmi in dieci minuti.
+         *
+         * ## Cosa e' successo davvero, il 2026-09-10 alle 16:44
+         *
+         * Ricostruivo il prefisso decodificando **tutti** i token del testo
+         * dato. Il file nasceva — 2.787 token, 46 MB, primo `.prefix` di LFM2
+         * mai scritto — e il turno dopo il telefono diceva:
+         *
+         *     prefisso congelato: 2787 token ripristinati … (46068016 byte)
+         *     taglio parziale rifiutato: si riparte da zero
+         *     prompt: 2853 token, 0 riusati, 2853 nuovi
+         *
+         * Ripristinato **e** buttato via nello stesso respiro.
+         *
+         * ## Perche', ed era gia' scritto sopra questa funzione
+         *
+         * Il rendering del **solo sistema** non e' un prefisso del prompt
+         * completo: il template chiude col marcatore dell'assistente
+         * (`<|im_start|>assistant`), che nel prompt vero in quel punto non c'e'
+         * — li' c'e' il turno dell'utente. ⇒ Gli ultimi token del testo dato
+         * **divergono**.
+         *
+         * Congelandoli tutti, la cache ripristinata (2.787) risultava piu'
+         * lunga del prefisso davvero comune, quindi al turno dopo
+         * `riusati < session->cached.size()` tornava VERO, si chiedeva un
+         * taglio parziale, e un ibrido lo rifiuta: azzerato tutto.
+         *
+         * ⭐ `quanti` e' esattamente quel confine — lo calcola
+         * `talos_prefisso_comune` venti righe sopra, contro la cache del turno
+         * vero. Congelare fin li' e non oltre e' cio' che rende la cache
+         * ripristinata **identica** al proprio prefisso comune: al turno dopo
+         * `riusati == session->cached.size()`, la condizione e' falsa, e il ramo
+         * che gli ibridi rifiutano non viene mai preso.
+         *
+         * ⛔ Il commento in testa a questa funzione lo diceva gia', per il
+         * taglio. Vale identico per la ricostruzione, e non l'avevo letto fino
+         * in fondo.
+         */
+        token_prefisso.resize(quanti);
+        TALOS_LOGI("pota e congela: potatura rifiutata (cache non potabile a meta'), "
+                   "ricostruisco il prefisso in avanti: %zu token comuni su %d dati",
+                   quanti, voluti);
         llama_memory_clear(memoria, true);
         session->cached.clear();
-        return 0;
+
+        const int passo = (int) llama_n_batch(session->ctx);
+        for (size_t fed = 0; fed < token_prefisso.size(); ) {
+            const int pezzo = std::min((size_t) passo, token_prefisso.size() - fed);
+            llama_batch b = llama_batch_get_one(token_prefisso.data() + fed, (int32_t) pezzo);
+            if (llama_decode(session->ctx, b) != 0) {
+                /*
+                 * ⛔ Un prefill fallito a meta' lascia dentro gli ubatch gia'
+                 * elaborati. Non si puo' tornare indietro (e' proprio il motivo
+                 * per cui siamo in questo ramo), quindi si azzera: perdere il
+                 * riuso e' un rallentamento, tenere una KV incoerente e' una
+                 * risposta sbagliata.
+                 */
+                TALOS_LOGE("pota e congela: prefill del prefisso fallito a %zu/%zu",
+                           fed, token_prefisso.size());
+                llama_memory_clear(memoria, true);
+                session->cached.clear();
+                return 0;
+            }
+            fed += (size_t) pezzo;
+        }
+        session->cached = token_prefisso;
+        const size_t scritti_avanti = llama_state_seq_save_file(
+                session->ctx, path.c_str(), /* seq_id */ 0,
+                session->cached.data(), session->cached.size());
+        if (scritti_avanti == 0) {
+            TALOS_LOGE("pota e congela: ricostruito ma scrittura fallita su %s", path.c_str());
+            return 0;
+        }
+        TALOS_LOGI("pota e congela: prefisso RICOSTRUITO, %zu token, %zu byte su %s",
+                   session->cached.size(), scritti_avanti, path.c_str());
+        return (jlong) scritti_avanti;
     }
     session->cached.resize((size_t) quanti);
 
@@ -4110,23 +5520,83 @@ Java_ai_talos_TalosLlamaNative_nativeLoadState(JNIEnv * env, jclass, jlong handl
     std::lock_guard<std::mutex> serratura(g_motore);
     talos_session * session = as_session(handle);
     if (session == nullptr || session->ctx == nullptr) return 0;
+    // ⛔ D-45: stesso divieto del congelamento, dall'altro verso. Zero token
+    // ripristinati e' l'esito corretto qui, non un guasto.
+    if (session->riuso_kv_vietato) {
+        TALOS_LOGI("prefisso congelato: NON ripristinato, il riuso della KV e' vietato "
+                   "su questa combinazione (D-45)");
+        return 0;
+    }
     const std::string path = jstring_to_utf8(env, pathJ);
     if (path.empty()) return 0;
 
     const size_t capienza = (size_t) llama_n_ctx(session->ctx);
+
+    /*
+     * ⛔⛔⛔ D-KV-1 — PRIMA SI GUARDA SENZA TOCCARE, e per mesi non l'abbiamo
+     * fatto. Misurato sul Pad il 2026-09-10: era la causa della lentezza di
+     * LFM2.5 (33,9 s alla prima parola, 0 token riusati su 2.841 al SECONDO
+     * messaggio della stessa chat, contro 3,1 s e 2.933 su 3.257 di gemma3).
+     *
+     * ## I tre casi che trattavamo come uno solo
+     *
+     *   - il file **non esiste**            -> il contesto e' INTATTO
+     *   - l'intestazione non e' leggibile   -> il contesto e' INTATTO
+     *   - `state_seq_read_data` fallisce    -> la memoria e' modificata A META'
+     *
+     * Solo il terzo giustifica un azzeramento. I primi due sono la condizione
+     * **normale**: la prima volta, dopo ogni cambio di modello, di contesto o di
+     * tipo di cache. E su un modello **ibrido** sono TUTTI I TURNI, perche' il
+     * file non riesce a nascere (`nativeTrimAndSaveState` vuole un taglio
+     * parziale che un ibrido rifiuta) — quindi buttavamo via, a ogni singolo
+     * messaggio, una cache buona per un file che non e' mai esistito.
+     *
+     * ⛔ Che per i ricorrenti il riuso parziale NON sia una API pronta, ma una
+     * proposta con istantanee «ai confini naturali», e' dichiarato upstream:
+     * https://github.com/ggml-org/llama.cpp/discussions/19264 (letto il
+     * 2026-09-10). Vedi anche
+     * https://github.com/ggml-org/llama.cpp/issues/24055 (letto il 2026-09-10).
+     *
+     * ## Che il contesto sia intatto non e' un'ipotesi: e' scritto nel sorgente
+     *
+     * Se il file manca, `llama_file` **lancia** alla costruzione
+     * (`llama-mmap.cpp:89`) e il wrapper C **cattura e torna 0**
+     * (`llama-context.cpp:4110-4117`) **prima** di arrivare a
+     * `state_seq_read_data`. Letto nel nostro submodule pinnato il 2026-09-10,
+     * non dedotto.
+     *
+     * ## La sonda che non tocca esisteva gia', ed e' documentata
+     *
+     * `include/llama.h:888`, testuale: *«If tokens_out is NULL, only the token
+     * count is reported through n_token_count_out and no state is loaded»*.
+     * ⇒ Con `tokens_out = nullptr` si leggono magic, versione e conteggio, e
+     * **non si carica niente**. Se questa fallisce, si esce senza aver toccato
+     * un byte del contesto. Avevamo l'attrezzo giusto in casa e usavamo l'altro.
+     */
+    size_t quanti_sonda = 0;
+    if (llama_state_seq_load_file(session->ctx, path.c_str(), /* dest_seq_id */ 0,
+                                  /* tokens_out */ nullptr, capienza, &quanti_sonda) == 0
+        || quanti_sonda == 0 || quanti_sonda > capienza) {
+        // ⛔ NIENTE azzeramento: il contesto non e' stato toccato, e cio' che
+        // c'e' dentro puo' ancora servire al prefisso comune di questo turno.
+        TALOS_LOGI("prefisso congelato: %s assente o illeggibile, si tiene la cache viva (%zu token)",
+                   path.c_str(), session->cached.size());
+        return 0;
+    }
+
     std::vector<llama_token> token(capienza);
     size_t quanti = 0;
     const size_t letti = llama_state_seq_load_file(
             session->ctx, path.c_str(), /* dest_seq_id */ 0,
             token.data(), capienza, &quanti);
     if (letti == 0 || quanti == 0) {
-        // Non e' un guasto: un file che non c'e' o che non combacia col
-        // contesto e' la condizione normale la prima volta, e dopo ogni
-        // cambio. Si torna a calcolare, che e' cio' che si faceva prima.
-        TALOS_LOGI("prefisso congelato: %s non utilizzabile, si ricalcola", path.c_str());
-        // ⛔ Un caricamento fallito puo' aver lasciato la sequenza a meta'.
-        // Ripartire da una cache mezza scritta darebbe un prefisso comune
-        // calcolato su token che il contesto non ha davvero.
+        // ⛔ QUI si azzera, e adesso e' giustificato: la sonda ha appena detto
+        // che il file c'e' ed e' leggibile, quindi un fallimento a questo punto
+        // e' avvenuto DENTRO `state_seq_read_data`, cioe' con la memoria gia'
+        // modificata a meta'. Ripartire da una cache mezza scritta darebbe un
+        // prefisso comune calcolato su token che il contesto non ha davvero.
+        TALOS_LOGE("prefisso congelato: %s leggibile ma il ripristino e' fallito, azzero",
+                   path.c_str());
         llama_memory_clear(llama_get_memory(session->ctx), true);
         session->cached.clear();
         return 0;

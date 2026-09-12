@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, provide, ref } from 'vue'
-import { ArrowLeft, X } from '@lucide/vue'
+import { computed, defineAsyncComponent, onMounted, provide, ref, type Component } from 'vue'
+import { ArrowLeft, Menu, X } from '@lucide/vue'
 import { TALOS_SHEET_CONTEXT_KEY } from '@/lib/sheetContext'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
 import { useTalosI18n } from '@/i18n'
@@ -50,6 +50,22 @@ const props = withDefaults(defineProps<{
      * a schermo due volte nello stesso giorno.
      */
     hideAppActions?: boolean
+    /**
+     * U-7 (owner 11/09/2026) — la topbar del mockup «Talos Calm Finale»
+     * (`renderTopbar`, `src/app.js:945`): sulla RADICE di una stazione niente
+     * freccia — icona + titolo, con ☰ sul telefono e niente sul tablet, dove
+     * la sidebar e' fissa (U-5). La freccia resta solo dentro (pagina figlia
+     * o sotto-vista). Alla chat si torna dalla sidebar o col Back di sistema.
+     */
+    icon?: Component | null
+    hideMenu?: boolean
+    /**
+     * Sul tablet dentro Impostazioni la sidebar fissa non c'e' (le categorie
+     * prendono il suo posto) e il ☰ nemmeno: senza questo la radice non
+     * avrebbe NESSUNA via visibile per tornare alla chat. Qui la freccia
+     * «Torna alla chat» resta.
+     */
+    rootBack?: boolean
     /** Il nome del posto dove si torna, per dirlo invece di farlo indovinare. */
     parentTitle?: string
     /** The embedded station owns its internal scrollports; the shell must not
@@ -65,7 +81,7 @@ const props = withDefaults(defineProps<{
     presentation: 'fullscreen',
     parentBack: null,
 })
-const emit = defineEmits<{ close: [] }>()
+const emit = defineEmits<{ close: [], openMenu: [] }>()
 
 const { subView } = useTalosSheetNav()
 const { t } = useTalosI18n()
@@ -120,6 +136,37 @@ const backLabel = computed(() => {
 
 const entered = ref(false)
 const root = ref<HTMLElement | null>(null)
+
+/**
+ * U-14 — LA STAZIONE SALE DA SOTTO, come il foglio del mockup.
+ *
+ * Misurato sul mockup l'11/09/2026 aprendo il pannello «+» e il menu di una
+ * riga (`app.js:2071`, `Motion.upgradeDialog`):
+ *
+ *     DIALOG.overlay motion-sheet | dur=440 ease=linear fr=33
+ *       {"transform":"translateY(550px)"} -> {"transform":"translateY(0px)"}
+ *
+ * Cioe' il foglio arriva da `min(la sua altezza, 550px)`, con una molla in 33
+ * fotogrammi. Fino a oggi la stazione saliva di `translate-y-6` — **24 px** —
+ * e a schermo quella non e' una superficie che arriva: e' una superficie gia'
+ * li' che si aggiusta. La distanza e' l'intera informazione del movimento.
+ *
+ * Il valore sta in `--talos-motion-sheet-rise` (blocco U-14 di `style.css`),
+ * `min(88dvh, 550px)`: 88dvh e' l'altezza vera di questa stazione, 550px e' il
+ * tetto del mockup.
+ *
+ * ⛔ Solo nella forma a cassetto. A schermo intero la superficie COPRE la
+ * finestra: farla scendere di mezzo schermo scoprirebbe la chat dietro per
+ * mezzo secondo, che e' il contrario di cio' che una stazione a schermo intero
+ * promette. La' resta il gesto corto.
+ */
+const sheetTransform = computed(() => {
+    if (entered.value) return 'translateY(0)'
+    return props.presentation === 'fullscreen'
+        ? 'translateY(1.5rem)'
+        : 'translateY(var(--talos-motion-sheet-rise, 1.5rem))'
+})
+
 onMounted(() => {
     requestAnimationFrame(() => { entered.value = true })
     // SF-critic F3 #3: modal semantics need at least initial focus + Escape.
@@ -160,14 +207,16 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
                 presentation === 'fullscreen'
                     ? 'h-[100dvh] max-h-none rounded-none border-0'
                     : 'h-[88dvh] max-h-[900px] rounded-t-2xl border-t',
-                entered ? 'translate-y-0' : 'translate-y-6',
                 sceneBackground || hideChrome ? 'talos-mobile-tool-sheet-scene' : '',
             ]"
+            :style="{ transform: sheetTransform }"
         >
             <!-- Owner 2026-07-24: ONE contextual back. When a station pushes a
                  sub-view, the header shows the subsection title and Back returns
                  to the station (not a second in-body arrow). -->
-            <header v-if="!hideChrome" class="talos-mobile-tool-sheet-header flex shrink-0 items-center gap-2 border-b border-[var(--talos-border)] bg-transparent px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+            <!-- U-7: la barra del mockup — `.topbar`: min 4rem, fondo `--talos-header`,
+                 bordo sotto; `.top-title`: icona + titolo, non un titolo centrato. -->
+            <header v-if="!hideChrome" class="talos-mobile-tool-sheet-header flex min-h-16 shrink-0 items-center gap-1 border-b border-[var(--talos-border)] bg-[var(--talos-header)] px-2 py-1 pt-[max(0.25rem,env(safe-area-inset-top))]">
                 <!--
                     Owner 2026-08-04, provato sul telefono: «il pulsante
                     indietro in alto a sinistra fa chiudere tutto».
@@ -186,18 +235,33 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
                     parte e' peggio di uno che non c'e'.
                 -->
                 <button
+                    v-if="subView || parentBack || rootBack"
                     type="button"
                     data-testid="talos-sheet-back"
                     :data-back-target="subView ? 'subview' : (parentBack ? 'parent' : 'chat')"
                     :aria-label="backLabel"
-                    class="talos-pressable inline-flex min-h-touch min-w-touch items-center justify-center rounded-md text-[var(--talos-muted)]"
+                    class="talos-pressable inline-flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-muted)]"
                     @click="goBack"
                 >
                     <ArrowLeft class="h-4 w-4" aria-hidden="true" />
                 </button>
-                <div class="min-w-0 flex-1">
-                    <p class="talos-title truncate text-md font-semibold text-[var(--talos-text)]">{{ subView ? subView.title : title }}</p>
-                    <p v-if="!subView && description" class="truncate text-2xs text-[var(--talos-muted)]">{{ description }}</p>
+                <!-- U-7: sulla radice della stazione, il ☰ del mockup (solo telefono). -->
+                <button
+                    v-else-if="!hideMenu"
+                    type="button"
+                    data-testid="talos-sheet-menu"
+                    :aria-label="t('navigation.openMenu')"
+                    class="talos-pressable inline-flex min-h-touch min-w-touch items-center justify-center rounded-full text-[var(--talos-text)]"
+                    @click="emit('openMenu')"
+                >
+                    <Menu class="size-5" aria-hidden="true" />
+                </button>
+                <div class="flex min-w-0 flex-1 items-center gap-2 px-1">
+                    <component :is="icon" v-if="icon && !subView" class="size-5 shrink-0 text-[var(--talos-muted)]" aria-hidden="true" />
+                    <div class="min-w-0">
+                        <p class="talos-title truncate text-sm font-medium text-[var(--talos-text)]">{{ subView ? subView.title : title }}</p>
+                        <p v-if="!subView && description" class="truncate text-2xs text-[var(--talos-muted)]">{{ description }}</p>
+                    </div>
                 </div>
                 <template v-if="!hideAppActions">
                     <TalosMobileNotificationBell />
@@ -231,12 +295,25 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
 
 <style>
 .talos-mobile-tool-sheet-backdrop {
-    transition: opacity var(--talos-motion-duration-surface-enter, 250ms) var(--talos-motion-ease, ease-out);
+    /* U-14: il velo del mockup dura 220 ms (`--motion-time`). Il token del
+       motore resta come secondo ripiego, per il fotogramma prima che i token
+       `calm` siano scritti. */
+    transition: opacity var(--talos-motion-calm-veil, var(--talos-motion-duration-surface-enter, 220ms)) var(--talos-motion-ease, ease-out);
 }
 
+/*
+ * U-14: la superficie ha la durata di una FINESTRA, non di un menu.
+ *
+ * `surface-enter` (intento `menu-open`, base 150 ms) resta giusta per il velo,
+ * che e' solo un'opacita'. La superficie invece ora percorre l'intera altezza
+ * del foglio: con 150 ms quella distanza diventa uno scatto. L'intento giusto
+ * e' `window-open` — una stazione E' una finestra — categoria Finestre, base
+ * 320 ms. Il valore di serie 440 ms e' quello misurato sul mockup.
+ */
 .talos-mobile-tool-sheet-surface {
     background: var(--talos-window-bg);
-    transition: transform var(--talos-motion-duration-surface-enter, 250ms) var(--talos-motion-ease, ease-out);
+    transition: transform var(--talos-motion-calm-sheet, var(--talos-motion-duration-window-open, 440ms)) var(--talos-motion-ease, ease-out);
+    will-change: transform;
 }
 
 .talos-mobile-tool-sheet-scene {
@@ -248,21 +325,59 @@ provide(TALOS_SHEET_CONTEXT_KEY, true)
     backdrop-filter: none;
 }
 
-.station-leave-active {
+/*
+ * U-14 — LA STAZIONE ESCE SCENDENDO, e non svanisce.
+ *
+ * Misurato sul mockup chiudendo il foglio (`app.js:2092`, `Motion.dismiss`):
+ *
+ *     DIALOG.overlay motion-sheet | dur=210 ease=cubic-bezier(0.3, 0, 0.8, 0.15)
+ *       {"opacity":"1","transform":"none"} -> {"opacity":1,"transform":"translateY(871px)"}
+ *
+ * ⛔ Si guardi l'opacita': resta **1**. Il foglio del mockup non si dissolve,
+ * se ne va. A dissolversi e' il velo dietro, e basta. La differenza si vede: un
+ * pannello che sbiadisce sul posto non dice dov'e' andato, uno che scende dice
+ * che e' tornato da dove era venuto — e che lo stesso gesto lo riporta su.
+ *
+ * Percio' qui l'uscita e' divisa in due bersagli invece di essere una sola
+ * regola sulla radice: il velo perde opacita', la superficie trasla. La radice
+ * non tocca piu' la propria opacita' — se lo facesse, sfumerebbe anche il
+ * foglio e le due cose tornerebbero indistinguibili.
+ */
+.station-leave-active .talos-mobile-tool-sheet-backdrop,
+.station-leave-active .talos-mobile-tool-sheet-surface {
     transition:
-        opacity var(--talos-motion-duration-surface-exit, 200ms) var(--talos-motion-ease-exit, ease-in),
-        transform var(--talos-motion-duration-surface-exit, 200ms) var(--talos-motion-ease-exit, ease-in);
+        opacity var(--talos-motion-calm-sheet-exit, var(--talos-motion-duration-window-close, 210ms)) var(--talos-motion-ease-exit, var(--talos-motion-calm-ease-exit)),
+        transform var(--talos-motion-calm-sheet-exit, var(--talos-motion-duration-window-close, 210ms)) var(--talos-motion-ease-exit, var(--talos-motion-calm-ease-exit));
 }
 
-.station-leave-to {
+.station-leave-to .talos-mobile-tool-sheet-backdrop {
     opacity: 0;
-    transform: translateY(var(--talos-motion-tab-change-x, 1rem));
 }
 
+.station-leave-to .talos-mobile-tool-sheet-surface {
+    transform: translateY(var(--talos-motion-sheet-rise, 1rem));
+}
+
+/*
+ * La durata dell'uscita resta dichiarata anche sulla radice: e' lei a reggere
+ * il nodo in vita finche' i due figli hanno finito. Senza, Vue lo staccherebbe
+ * al primo fotogramma e non si vedrebbe niente.
+ */
+.station-leave-active {
+    transition: opacity var(--talos-motion-calm-sheet-exit, var(--talos-motion-duration-surface-exit, 210ms)) var(--talos-motion-ease-exit, ease-in);
+}
+
+/*
+ * Al verso contrario: niente entrata, niente uscita, e lo stato finale
+ * identico a quello a riposo. Con durata 0 la trasformazione si assesta nello
+ * stesso fotogramma, quindi il foglio e' gia' al suo posto quando compare.
+ */
 @media (prefers-reduced-motion: reduce) {
     .talos-mobile-tool-sheet-backdrop,
     .talos-mobile-tool-sheet-surface,
-    .station-leave-active {
+    .station-leave-active,
+    .station-leave-active .talos-mobile-tool-sheet-backdrop,
+    .station-leave-active .talos-mobile-tool-sheet-surface {
         transition-duration: 0ms;
     }
 }

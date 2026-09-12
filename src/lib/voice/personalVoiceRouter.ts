@@ -55,6 +55,32 @@ export function resolveTalosVoiceRoute(
     if (!status.ready) {
         return { engine: 'system', profileId: null, fellBack: true, fallbackReason: 'notReady' }
     }
+    /**
+     * ⛔⛔⛔ La QUINTA regola, dichiarata nel tipo `fallbackReason` fin dal
+     * primo giorno e MAI prodotta da nessuna riga (verificato 11/09 con un
+     * grep su tutto `src/`: `'profileIncompatible'` compariva solo nella
+     * propria definizione). `status.ready` risponde a «esiste ALMENO un
+     * profilo compatibile», non a «quello scelto lo e'»: con due profili e
+     * uno solo compatibile, una preferenza che punta all'altro passava di
+     * qui come `'personal'`.
+     *
+     * Cosa succedeva dopo, ed e' esattamente il difetto segnalato: il
+     * nativo TROVA il file del profilo (esiste), quindi `speak()` risolve
+     * `accepted: true` — il chiamante non ha piu' un ripiego pulito — e
+     * solo a valle il router di produzione Kotlin
+     * (`TalosVoiceEngineRouter.select`) lancia `no verified voice
+     * backend`, che arriva in chat come `talosNeuralVoiceError`: «la
+     * riproduzione fallisce» invece del silenzioso ripiego di sistema che
+     * il blueprint promette.
+     *
+     * ⛔ Il controllo e' condizionato alla PRESENZA del campo, non al suo
+     * contenuto: un chiamante che non sa elencare i profili (o un ponte
+     * che non ha risposto) non deve veder sparire la propria voce per un
+     * elenco vuoto che significa «non lo so», non «nessuno».
+     */
+    if (status.compatibleProfileIds && !status.compatibleProfileIds.includes(personalProfileId)) {
+        return { engine: 'system', profileId: null, fellBack: true, fallbackReason: 'profileIncompatible' }
+    }
     return { engine: 'personal', profileId: personalProfileId, fellBack: false }
 }
 

@@ -19,12 +19,24 @@
  * places where our evidence work is actually visible.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { talosResearchIsResting, talosResearchIsTerminal, talosResearchSpent } from '@/lib/research/researchRun'
-import { talosResearchReportRefOf } from '@/lib/research/researchCard'
+import {
+    talosResearchIsResting,
+    talosResearchIsTerminal,
+    talosResearchSourcesGatheredFor,
+    talosResearchSpent,
+    type TalosResearchStepKind,
+} from '@/lib/research/researchRun'
+import {
+    talosResearchBucketIsIncomplete,
+    talosResearchBucketOf,
+} from '@/lib/research/researchCard'
+import TalosResearchStatusPill from '@/components/talos/research/TalosResearchStatusPill.vue'
+import { talosResearchBucketOneKey } from '@/components/talos/research/researchPresentation'
 import {
     talosResearchDuration,
     talosResearchElapsedSeconds,
     talosResearchOutline,
+    type TalosResearchSection,
 } from '@/lib/research/researchOutline'
 import { talosResearchNarration, talosResearchStepTitle } from '@/lib/research/researchNarration'
 import { talosPublishedOn } from '@/lib/publishedDate'
@@ -64,7 +76,7 @@ const { t, locale } = useTalosI18n()
 
 const runId = computed(() => String(route.params.id ?? ''))
 const view = useTalosResearchRun(() => runId.value)
-const { run, report, loading, missing, reportUnreadable } = view
+const { run, report, loading, missing, reportUnreadable, completion } = view
 
 const section = ref<string>(talosRememberedView('research-report') ?? 'claims')
 function chooseSection(next: string): void {
@@ -99,8 +111,13 @@ watch(runId, (id) => {
          * sources, judged — and it appeared the moment the page was reopened
          * from the list. The engine had done its job; only the screen was
          * behind. Watching a thing has to include noticing that it arrived.
+         *
+         * ⛔ 12/09/2026 — la condizione era «non ho un rapporto e adesso ce n'è
+         * uno», e lasciava fuori il caso gemello: la corsa si FERMA e il
+         * verdetto misurato prima resta a schermo. Ora la domanda la fa il
+         * composable, che sa su quale versione della corsa aveva misurato.
          */
-        if (!view.report.value && talosResearchReportRefOf(progress.run)) void view.reload()
+        void view.ensureFresh(progress.run)
     })
 }, { immediate: true })
 
@@ -108,6 +125,46 @@ onBeforeUnmount(() => unwatch?.())
 
 const isRunning = computed(() => controller.research.registry.isRunning(runId.value))
 const current = computed(() => liveRun.value?.run ?? run.value)
+
+/**
+ * ⛔ MB-1 — «conclusa, ma non regge», e in che modo.
+ *
+ * Passa da `talosResearchBucketOf` invece di guardare `completion` da solo, e
+ * non e' un giro inutile: e' li' che vive la regola su QUANDO un verdetto
+ * sull'artefatto ha senso. Una corsa uccisa alla seconda linea su sei non ha un
+ * rapporto perche' non ci e' ancora arrivata, e stampare «si e' fermata prima
+ * di scrivere il rapporto» su una ricerca sana sarebbe una diagnosi inventata.
+ */
+const statoIncompleto = computed(() => {
+    const attuale = current.value
+    if (!attuale) return null
+    const secchio = talosResearchBucketOf(attuale, isRunning.value, completion.value)
+    return talosResearchBucketIsIncomplete(secchio) ? secchio : null
+})
+
+/**
+ * Il nome dello stato, al SINGOLARE.
+ *
+ * Questa pagina parla di una ricerca sola, quindi prende la parola dal blocco
+ * che descrive un oggetto (`research.bucketOne.*`) e non da quello che conta un
+ * insieme (`research.buckets.*`, i filtri della stazione) — lo stesso taglio
+ * fatto sulla scheda e sulla riga dopo le foto del Pad del 12/09/2026.
+ */
+const etichettaStatoIncompleto = computed(() => (statoIncompleto.value === null
+    ? ''
+    : t(talosResearchBucketOneKey(statoIncompleto.value))))
+
+/**
+ * Se l'invito a riprendere e' vero.
+ *
+ * Una corsa che il giornale dichiara terminale non si riapre — il motore
+ * rifiuta `run_resumed` da li' — quindi scriverle accanto «Riprendi» sarebbe un
+ * invito a premere qualcosa che non esiste.
+ */
+const puoRiprendere = computed(() => {
+    const attuale = current.value
+    return attuale !== null && !isRunning.value && !talosResearchIsTerminal(attuale.status)
+})
 
 const standing = computed<TalosResearchStanding | null>(() => (report.value
     ? talosResearchVerifiedStanding(report.value.claims.map((claim) => ({
@@ -200,6 +257,26 @@ const heading = computed(() => current.value?.title ?? current.value?.question ?
 const renamed = computed(() => Boolean(current.value?.title))
 const outline = computed(() => (current.value ? talosResearchOutline(current.value) : []))
 const sectionsDone = computed(() => outline.value.filter((entry) => entry.state === 'done').length)
+
+/**
+ * «Fonti raccolte» si dice solo se le fonti ci sono.
+ *
+ * ⛔ La stessa funzione che decide la frase sulla scheda del dossier
+ * (`talosResearchSourcesGathered`, in `researchRun.ts`): qui per una linea
+ * sola, li' per tutta la corsa. Erano due letture dello stesso giornale, e sul
+ * Pad il 12/09/2026 (foto RC12) dicevano il contrario l'una dell'altra — questa
+ * pagina «Fonti raccolte», la scheda «Fonti ancora da raccogliere».
+ *
+ * Un passo concluso senza il suo `resultRef` ha girato e non ha prodotto: lo
+ * dice, invece di prendersi la parola di chi ha prodotto davvero.
+ */
+function etichettaSezione(entry: TalosResearchSection): string {
+    const attuale = current.value
+    if (entry.state === 'done' && attuale && !talosResearchSourcesGatheredFor(attuale, entry.id)) {
+        return t('research.sectionNothingSaved')
+    }
+    return t(`research.sectionState.${entry.state}`)
+}
 const ended = computed(() => talosResearchIsTerminal(current.value?.status ?? 'planning'))
 const resting = computed(() => talosResearchIsResting(current.value?.status ?? 'planning'))
 const say = computed(() => (current.value
@@ -228,6 +305,11 @@ onBeforeUnmount(stopClock)
 const elapsed = computed(() => (current.value
     ? talosResearchDuration(talosResearchElapsedSeconds(current.value, nowIso.value))
     : null))
+// Mostrato solo se conclusa o davvero in corso: una corsa ferma su un passo
+// fallito leggeva «Ferma. · In corso da 10 min 11 s» sul Pad (12/09/2026).
+// Una condizione sola, usata anche dal separatore: con due copie il «·»
+// restava da solo in testa alla riga (misurato sulla v54).
+const showElapsed = computed(() => elapsed.value !== null && (ended.value || isRunning.value))
 
 const balance = computed(() => standing.value
     ?? { total: 0, supported: 0, partial: 0, unsupported: 0, unchecked: 0, contested: 0 })
@@ -320,6 +402,16 @@ const durataLavoro = computed(() => talosResearchDuration(registro.value.summary
  * the synthesis had in fact produced one. But it printed `b1:search` and a `●`,
  * which are useful to exactly one reader, and he wrote them. Owner, same day:
  * closed, at the bottom, in words.
+ *
+ * ⛔ 12/09/2026 (Pad, foto RC13) — NON e' piu' una sezione sua. Il registro
+ * REGISTRO-01 porta lo stesso titolo, «Come e' stato costruito», e la pagina ne
+ * mostrava due: una in alto coi numeri e una in fondo che, chiusa com'e', si
+ * legge come un titolo senza niente sotto. Due intestazioni identiche nella
+ * stessa pagina che non coprono sezioni parallele confondono la navigazione
+ * (W3C WAI, «Headings», SC 2.4.6; TPGi, «Heading off confusion», letti
+ * 12/09/2026). ⇒ Ne resta UNA, quella coi numeri, e questi due fatti — il nome
+ * leggibile del passo e se ha lasciato qualcosa — si trasferiscono li' dentro
+ * invece di morire con la sezione.
  */
 const record = computed(() => steps.value.map((step) => ({
     id: step.id,
@@ -327,6 +419,26 @@ const record = computed(() => steps.value.map((step) => ({
     saved: Boolean(step.resultRef),
     title: current.value ? talosResearchStepTitle(current.value, step) : null,
 })))
+
+/** Il record per id, perche' il registro lo interroga riga per riga. */
+const recordPerId = computed(() => new Map(record.value.map((voce) => [voce.id, voce])))
+
+/**
+ * Il nome del passo: quello leggibile se c'e', il tipo altrimenti.
+ *
+ * «Fonti su "quanto costa una pagina"» dice di piu' di «ricerca», ed e' cio' che
+ * la sezione tolta sapeva dire. Il tipo resta come ripiego: un passo di una
+ * corsa non ancora caricata non ha un ramo da cui prendere la domanda.
+ */
+function nomePasso(id: string, kind: TalosResearchStepKind): string {
+    const voce = recordPerId.value.get(id)
+    return voce?.title ? t(voce.title.key, voce.title.params) : t(`research.registroTipo.${kind}`)
+}
+
+/** Se il passo ha lasciato qualcosa sul disco: «ha girato» non e' «ha prodotto». */
+function passoSalvato(id: string): boolean {
+    return recordPerId.value.get(id)?.saved ?? false
+}
 
 /**
  * WHY a branch failed, not just how many did.
@@ -713,13 +825,13 @@ function openSource(index: number): void {
                     >{{ t(say.key, say.params) }}</p>
 
                     <p data-testid="talos-research-meta" class="mt-1 flex flex-wrap items-baseline gap-x-2 text-2xs leading-5 text-[var(--talos-muted)]">
-                        <span v-if="elapsed" data-testid="talos-research-elapsed">
+                        <span v-if="showElapsed && elapsed" data-testid="talos-research-elapsed">
                             {{ ended ? t('research.endedAfter', { elapsed }) : t('research.runningSince', { elapsed }) }}
                         </span>
                         <!-- The separator is its own element so the flex gap
                              falls on BOTH sides of it. Glued to the text it
                              read «1 min 14 s  ·2 di 2 sezioni» on the tablet. -->
-                        <span v-if="elapsed && outline.length" aria-hidden="true">·</span>
+                        <span v-if="showElapsed && outline.length" aria-hidden="true">·</span>
                         <span v-if="outline.length">{{ t('research.sectionsDone', { done: sectionsDone, total: outline.length }) }}</span>
                         <span v-if="fonti" aria-hidden="true">·</span>
                         <span v-if="fonti" data-testid="talos-research-meta-fonti">{{ t('research.metaFonti', { count: fonti }) }}</span>
@@ -894,12 +1006,16 @@ function openSource(index: number): void {
                             class="flex items-baseline justify-between gap-3 border-t border-[var(--talos-border)] pt-1 text-2xs leading-5"
                         >
                             <span class="min-w-0 flex-1 text-[var(--talos-text)]">
-                                {{ t(`research.registroTipo.${passo.kind}`) }}
+                                {{ nomePasso(passo.id, passo.kind) }}
                                 <span v-if="passo.attempts > 1" class="text-[var(--talos-muted)]">· {{ t('research.registroTentativi', { attempts: passo.attempts }) }}</span>
                                 <span v-if="passo.error" class="block break-words text-[var(--talos-danger)]">{{ passo.error }}</span>
                             </span>
                             <span class="shrink-0 tabular-nums text-[var(--talos-muted)]">
                                 {{ passo.duration ?? t('research.registroInCorso') }}
+                                <!-- Ha lasciato qualcosa, o ha solo girato: e' la
+                                     riga che nel 2026-08-03 chiuse una caccia di
+                                     ore, e resta anche senza la sua sezione. -->
+                                <template v-if="passoSalvato(passo.id)"> · {{ t('research.stepSaved') }}</template>
                             </span>
                         </li>
                     </ol>
@@ -940,9 +1056,10 @@ function openSource(index: number): void {
                             <span class="min-w-0 flex-1 text-sm leading-5 text-[var(--talos-text)]">{{ entry.question }}</span>
                         </p>
                         <p
+                            data-testid="talos-research-outline-state"
                             class="mt-1 text-2xs"
                             :class="entry.state === 'failed' ? 'text-[var(--talos-danger)]' : 'text-[var(--talos-muted)]'"
-                        >{{ t(`research.sectionState.${entry.state}`) }}</p>
+                        >{{ etichettaSezione(entry) }}</p>
                     </div>
                 </section>
 
@@ -953,7 +1070,33 @@ function openSource(index: number): void {
                     {{ t('research.balanceEmpty') }}
                 </p>
 
-                <p v-if="reportUnreadable" data-testid="talos-research-unreadable" class="rounded-xl border border-[var(--talos-border)] p-3 text-sm text-[var(--talos-muted)]">
+                <!-- ⛔ MB-1 — la pagina dice PERCHE' non c'e' un rapporto.
+                     Prima c'era una riga sola, «il rapporto non si riesce a
+                     rileggere», e copriva tre situazioni diverse: un file
+                     illeggibile, una corsa fermata da un permesso e una che al
+                     rapporto non e' mai arrivata. Sono tre riparazioni diverse,
+                     quindi sono tre frasi diverse — e quella che si puo'
+                     riprendere lo dice. -->
+                <div
+                    v-if="statoIncompleto"
+                    data-testid="talos-research-incomplete"
+                    :data-completion="statoIncompleto"
+                    class="flex flex-col gap-2 rounded-xl border border-[var(--talos-warning-border)] bg-[var(--talos-warning-soft)] p-3"
+                >
+                    <TalosResearchStatusPill
+                        :bucket="statoIncompleto"
+                        :label="etichettaStatoIncompleto"
+                        test-id="talos-research-incomplete-status"
+                    />
+                    <p class="text-sm leading-6 text-[var(--talos-text)]">
+                        {{ t(`research.completion.${statoIncompleto}.what`) }}
+                    </p>
+                    <p v-if="puoRiprendere" data-testid="talos-research-incomplete-todo" class="text-sm font-medium leading-6 text-[var(--talos-warning)]">
+                        {{ t(`research.completion.${statoIncompleto}.do`) }}
+                    </p>
+                </div>
+
+                <p v-else-if="reportUnreadable" data-testid="talos-research-unreadable" class="rounded-xl border border-[var(--talos-border)] p-3 text-sm text-[var(--talos-muted)]">
                     {{ t('research.reportUnreadable') }}
                 </p>
 
@@ -1162,39 +1305,20 @@ function openSource(index: number): void {
                 </template>
 
                 <!--
-                    The record, closed and last.
+                    ⛔ Qui c'era la SECONDA «Come è stato costruito» (Pad,
+                    12/09/2026, foto RC13): un `<details>` chiuso in fondo alla
+                    pagina, con lo stesso identico titolo della sezione del
+                    registro che sta in alto coi numeri. Chiuso com'era, si
+                    leggeva come un titolo senza niente sotto — e due
+                    intestazioni identiche nella stessa pagina confondono la
+                    navigazione (W3C WAI «Headings», SC 2.4.6).
 
-                    It stays, and for a reason worth stating: on 2026-08-03 the
-                    page could only say «conclusa senza scrivere il rapporto»
-                    while the record showed the synthesis had produced one, and
-                    that line is what ended an hours-long hunt. But it is
-                    evidence, not content — owner, same day: closed, at the
-                    bottom, and in words rather than `b1:search`.
-
-                    The visual research puts the same shape at the centre of the
-                    chosen direction: plan and record openable, never dominant,
-                    the way GitHub Actions keeps a workflow's log.
+                    Non è stato buttato: il nome leggibile del passo e il
+                    «salvato» — la riga che il 2026-08-03 chiuse una caccia di
+                    ore — sono ora dentro l'elenco del registro, che si apre
+                    dallo stesso posto dei numeri. Vedi `nomePasso` e
+                    `passoSalvato`.
                 -->
-                <details v-if="record.length" data-testid="talos-research-activity" class="rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)]">
-                    <summary class="talos-pressable min-h-touch cursor-pointer list-none px-3 py-3 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
-                        {{ t('research.howItWasBuilt') }}
-                    </summary>
-                    <ul class="flex flex-col gap-2 px-3 pb-3">
-                        <li
-                            v-for="entry in record"
-                            :key="entry.id"
-                            data-testid="talos-research-activity-step"
-                            class="flex items-baseline justify-between gap-3 text-2xs leading-5"
-                        >
-                            <span class="min-w-0 flex-1 text-[var(--talos-text)]">{{ entry.title ? t(entry.title.key, entry.title.params) : entry.id }}</span>
-                            <!-- Whether the step left something behind is the
-                                 difference between "it ran" and "it produced". -->
-                            <span class="shrink-0" :class="entry.state === 'failed' ? 'text-[var(--talos-danger)]' : 'text-[var(--talos-muted)]'">
-                                {{ t(`research.stepState.${entry.state}`) }}<template v-if="entry.saved"> · {{ t('research.stepSaved') }}</template>
-                            </span>
-                        </li>
-                    </ul>
-                </details>
 
                 <p v-if="error" role="alert" data-testid="talos-research-report-error" class="rounded-xl border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
                     {{ error }}

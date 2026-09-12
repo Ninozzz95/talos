@@ -57,6 +57,9 @@ import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/Talo
 import { deleteCodiceSession, listCodiceSessions, renameCodiceSession } from '@/lib/harness/codiceSessions'
 import { fetchTalosHarnessSessionsStatus, type TalosHarnessSessionStatus } from '@/lib/harness/harnessUiSessionStatus'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
+import { avvisaSePonteStaccato } from '@/lib/harness/avvisoPonteCodice'
+import { talosHarnessUiAvailable } from '@/services/harnessUi'
+import { useTalosMobileToasts } from '@/stores/toasts'
 import { talosChatDateBuckets } from '@/lib/chat/chatDateBuckets'
 import { chatRowBucketTitle, chatRowWhenInBucket } from '@/lib/chat/chatRowTime'
 import { talosRelativeTime } from '@/lib/relativeTime'
@@ -66,6 +69,7 @@ withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 const router = useRouter()
 const route = useRoute()
 const { t, locale } = useTalosI18n()
+const toasts = useTalosMobileToasts()
 
 const sessions = ref<TalosLocalChatSession[]>([])
 const loading = ref(true)
@@ -121,6 +125,15 @@ function statusBadge(session: TalosLocalChatSession, bucket: string): TalosHarne
 }
 
 onMounted(refresh)
+/*
+ * ⭐ 12/9 — l'avviso del collegamento vale per la SEZIONE, non per la singola
+ * sessione: chi apre la lista è già dentro Codice. Lo stesso latch che vive nel
+ * modulo impedisce il doppione quando, sul tablet, questa lista incorporata e la
+ * schermata instradata montano nello stesso istante.
+ */
+onMounted(() => {
+    void avvisaSePonteStaccato({ router, toasts, t, sezioneDisponibile: talosHarnessUiAvailable() })
+})
 /**
  * The list stays mounted across `harness` ↔ `harness-session/:id` on the
  * tablet rail (TalosTabletSidebar.vue never unmounts it, same panel slot) —

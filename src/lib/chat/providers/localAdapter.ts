@@ -1,3 +1,5 @@
+import { normalizzaAritmetica } from '@/lib/chat/aritmeticaItaliana'
+import { talosStimaTokenDiRisposta } from '@/lib/models/localProfileSelector'
 import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
 import type {
     TalosMobileCompletionInput,
@@ -16,10 +18,14 @@ import {
     talosKvBytesPerElement,
     talosLocalEngineCancel,
     talosLocalEngineGenerate,
+    talosLocalEngineBackendFacts,
     talosLocalEngineOpen,
     talosLocalEngineOpenWithFallback,
     talosLocalEngineStatus,
+    talosLocalPerformanceProfiles,
+    talosLocalModelQuantisation,
     talosLocalEngineTimings,
+    type TalosLocalEngineTimings,
     talosLocalInstalledModels,
     talosFreezePrefix,
     talosThawPrefix,
@@ -27,11 +33,17 @@ import {
     type TalosLocalTemplateCapabilities,
     type TalosLocalToolTransport,
 } from '@/services/localEngine'
-import { talosLocalTrace, talosNewLocalTraceId } from '@/lib/chat/providers/localTrace'
+import {
+    talosLocalTrace,
+    talosNewLocalTraceId,
+    talosRegistraMisuraLocale,
+} from '@/lib/chat/providers/localTrace'
 import {
     talosPrefixCacheFileName,
+    talosPrefixOutcomeOf,
     talosShouldFreezePrefix,
     type TalosPrefixIdentity,
+    type TalosPrefixOutcome,
 } from '@/lib/models/prefixCache'
 import { talosMeasureDevice } from '@/services/deviceCapacity'
 import { type TalosModelShape, talosMaxContextFor } from '@/lib/models/fit'
@@ -39,6 +51,12 @@ import { talosKvBytesPerTokenOf } from '@/lib/models/engineDiagnostics'
 import { talosEngineTuning } from '@/lib/models/engineTuning'
 import type { TalosTuningKey } from '@/lib/models/tuningProfile'
 import { talosStoredTuning } from '@/services/tuningProfileStore'
+import { talosLocalBackendInUse } from '@/lib/models/localBackendChoice'
+import {
+    type TalosLocalBackendPlan,
+    talosLocalBackendPlan,
+} from '@/lib/models/localBackendPlan'
+import { talosStoredLocalBackendPreference } from '@/lib/models/localBackendPreferenceStore'
 import { TALOS_APP_BUILD } from '@/lib/appBuild'
 import {
     TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
@@ -54,6 +72,7 @@ import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/think
 import { talosTrattieniLeChiamate } from '@/lib/chat/trattieniLeChiamate'
 import { talosModelSupportsToolCalling } from '@/lib/chat/modelToolCapabilities'
 import {
+    talosAttrezziInOrdineDiRivelazione,
     talosLocalToolTransportOf,
     talosProjectLocalToolConversation,
 } from '@/lib/chat/localToolPromptProtocol'
@@ -176,10 +195,20 @@ export function conversationOf(input: TalosMobileCompletionInput): TalosLocalCha
                 function: { name: call.name, arguments: call.arguments },
             }))
             : undefined
-        if (content === '' && !toolCalls?.length) continue
+        /*
+         * ⭐ Ciò che la persona ha scritto, come il MODELLO lo deve leggere.
+         *
+         * Solo i turni `user`, e solo `numero · operatore · numero`: vedi
+         * `aritmeticaItaliana.ts` per la misura (cinque modelli locali su sette
+         * rispondono 56 a «7 x 8» e sbagliano «sette per otto») e per tutto ciò
+         * che volutamente NON si tocca. Il testo salvato nella chat e mostrato
+         * sullo schermo non passa di qui.
+         */
+        const letto = turn.role === 'user' ? normalizzaAritmetica(content) : content
+        if (letto === '' && !toolCalls?.length) continue
         turns.push({
             role: turn.role,
-            ...(content !== '' ? { content } : {}),
+            ...(letto !== '' ? { content: letto } : {}),
             ...(toolCalls?.length ? { tool_calls: toolCalls } : {}),
         })
     }
@@ -238,6 +267,7 @@ function alternati(messaggi: TalosLocalChatMessage[]): TalosLocalChatMessage[] {
 const LOCAL_OPEN_FAILURE = {
     path: ['TALOS_LOCAL_MODEL_OPEN_PATH', 'models.localModelOpenPath'],
     'model-load': ['TALOS_LOCAL_MODEL_OPEN_LOAD', 'models.localModelOpenLoad'],
+    'load-cancelled': ['TALOS_LOCAL_MODEL_OPEN_CANCELLED', 'models.localModelOpenCancelled'],
     context: ['TALOS_LOCAL_MODEL_OPEN_CONTEXT', 'models.localModelOpenContext'],
     sampler: ['TALOS_LOCAL_MODEL_OPEN_SAMPLER', 'models.localModelOpenSampler'],
     template: ['TALOS_LOCAL_MODEL_OPEN_UNKNOWN', 'models.localModelOpenUnknown'],
@@ -357,6 +387,155 @@ async function talosTuningFor(
         // Il microbatch non si misura: cambiarlo richiede riaprire il modello,
         // quindi non entra nella griglia e resta quello derivato.
         microBatch: derivato.microBatch,
+    }
+}
+
+/**
+ * ⭐⭐⭐ DOVE aprire questo modello — la direttiva dell'owner, agganciata.
+ *
+ * Owner 2026-09-10: «LA SCELTA RESTA ALL UTENTE, SCEGLIE SEMPRE LUI, CPU GPU O
+ * HEXAGON, DI DEFAULT SCEGLIAMO QUELLO PIU VELOCE (DI SOLITO GPU)».
+ *
+ * ⛔ Fino a oggi quella decisione esisteva (`lib/models/localBackendChoice.ts`)
+ * e **non la chiamava nessuno**: zero import in tutto `src/`. Questa funzione è
+ * il punto in cui entra nel percorso di apertura vero — quello che ogni
+ * messaggio attraversa — e la politica NON vive qui: qui si raccolgono i fatti
+ * e si chiama `talosLocalBackendPlan`, che è puro e provabile senza telefono.
+ *
+ * I fatti sono tre, e nessuno è un'ipotesi:
+ *  - **cosa ha chiesto la persona**, dalla preferenza salvata (`auto` finché
+ *    non sceglie: la schermata che scrive quella chiave è la fase successiva);
+ *  - **cosa c'è su questo telefono**, dai registry che il motore dichiara di sé
+ *    (`available().backends`) e da quanti bersagli di offload ha registrato;
+ *  - **cosa dice la misura**, dai profili già raccolti per QUESTO modello.
+ *
+ * ⛔ `activeRegistry: null` apposta: si arriva qui solo quando si sta per
+ * aprire davvero, quindi il costo di transizione (CR-12) si paga comunque e
+ * nessun candidato è «gratis».
+ *
+ * ⛔ Non solleva mai. Un ponte più vecchio che non conosce queste porte, o una
+ * lettura che va storta, valgono «nessuna richiesta» — cioè il comportamento
+ * di sempre — e mai un'apertura che fallisce per colpa di una diagnosi.
+ */
+/**
+ * D-53 — la forma del lavoro che sta per essere chiesto: quanti token leggere,
+ * quanti scriverne. Vedi `TalosWorkShape` in `localProfileSelector.ts`.
+ */
+interface TalosFormaDelLavoro {
+    promptTokens: number | null
+    expectedOutputTokens: number
+}
+
+async function backendDiApertura(
+    path: string,
+    /** I registry dichiarati dal motore, già letti da chi sta per aprire. */
+    backends: string,
+    traceId?: string,
+    lavoro?: TalosFormaDelLavoro,
+): Promise<TalosLocalBackendPlan | null> {
+    try {
+        /*
+         * ⛔ Il formato dei pesi entra QUI, insieme agli altri tre: e' la
+         * quarta cosa che decide dove il modello girera'. Misurato l'11/09 —
+         * `Qwen3-4B` in Q4_0 legge a 1.126 t/s sull'NPU, lo stesso modello in
+         * Q4_K_M a 55,7. La lettura e' in cache per percorso: una volta per
+         * modello, non a ogni messaggio.
+         */
+        const [preferenza, fatti, profili, formato] = await Promise.all([
+            talosStoredLocalBackendPreference(),
+            talosLocalEngineBackendFacts(),
+            talosLocalPerformanceProfiles(path),
+            talosLocalModelQuantisation(path),
+        ])
+        const piano = talosLocalBackendPlan({
+            preference: preferenza,
+            backends,
+            offloadDevices: fatti.offloadDevices,
+            profiles: profili,
+            activeRegistry: null,
+            /*
+             * D-53 — non più `MAX_TOKENS` fisso: un'attesa di 1.024 token
+             * diceva al selettore che ogni risposta è lunga, e premiava sempre
+             * chi scrive veloce anche quando la domanda era «quanto fa 7 x 8»
+             * con tremila token di istruzioni davanti — dove conta chi legge.
+             * Chi chiama porta la stima dalla conversazione; senza, il
+             * pavimento è il valore di sempre.
+             */
+            expectedOutputTokens: lavoro?.expectedOutputTokens ?? MAX_TOKENS,
+            ...(lavoro?.promptTokens !== null && lavoro?.promptTokens !== undefined
+                ? { promptTokens: lavoro.promptTokens } : {}),
+            quantisation: formato,
+        })
+        /*
+         * ⛔ Si TRACCIA la decisione, sempre — anche quando è «non chiedo
+         * niente». Senza questa riga «su cosa sta girando» tornerebbe a essere
+         * una deduzione da fare a posteriori, che è il difetto di partenza:
+         * `.claude/LEDGER-VELOCITA-MOTORE-LOCALE-2026-09-10.md` §9.
+         */
+        if (traceId) {
+            /*
+             * ⛔ I NUMERI con cui ha deciso, non solo il verdetto. L'11/09 alle
+             * 21:00 il trace diceva `kind=cpu reason=fastest source=measured` su
+             * Llama-3.2-3B e la chat ha aspettato 23 s: senza i profili accanto
+             * era una deduzione da fare dopo, cioe' il difetto di partenza.
+             */
+            for (const p of profili) {
+                talosLocalTrace(
+                    traceId,
+                    `backend_profile registry=${p.backendRegistry} device=${p.backendDevice ?? '-'}`
+                    + ` outcome=${p.outcome} ttft=${p.ttftMs} tg=${p.decodeTokPerSec ?? '-'}`
+                    + ` pp=${p.prefillTokPerSec ?? '-'} open=${p.openMs ?? '-'}`,
+                )
+            }
+            talosLocalTrace(
+                traceId,
+                `backend_work prompt=${lavoro?.promptTokens ?? '-'} out=${lavoro?.expectedOutputTokens ?? MAX_TOKENS} quant=${formato ?? '-'}`,
+            )
+            talosLocalTrace(
+                traceId,
+                `backend_decided kind=${piano.decision.kind}`
+                + ` reason=${piano.decision.reason}`
+                + ` source=${piano.decision.source}`
+                + ` requested=${piano.decision.requested ?? 'none'}`,
+            )
+        }
+        return piano
+    } catch {
+        // Vedi sopra: una diagnosi che non riesce non deve impedire di aprire.
+        return null
+    }
+}
+
+/**
+ * ⛔⛔ SCELTO non è IN USO — e questa riga è l'unico modo di saperlo.
+ *
+ * La ricerca dell'owner lo nomina per PocketPal: «backend selezionabile non
+ * equivale a backend realmente utilizzato». Si sceglie Hexagon, si gira su CPU,
+ * e niente lo dice. ⇒ Dopo ogni apertura si CHIEDE al motore che cosa ha
+ * risolto, e lo si scrive accanto a ciò che gli era stato chiesto.
+ *
+ * ⛔ `actual=unknown` non è un guasto ed è la risposta più frequente oggi:
+ * quando nessun bersaglio viene nominato, llama.cpp distribuisce gli strati da
+ * sé e **non espone dove siano finiti** (verificato sull'header pubblico del
+ * sottomodulo il 2026-09-10: nessuna funzione in `include/llama.h` dice su
+ * quale dispositivo un tensore sia stato allocato). Un buco dichiarato vale
+ * più di una deduzione scritta come se fosse una misura.
+ */
+async function dichiaraCosaGiraDavvero(
+    piano: TalosLocalBackendPlan,
+    traceId: string,
+): Promise<void> {
+    try {
+        const inUso = talosLocalBackendInUse(piano.decision.kind, await talosLocalEngineBackendFacts())
+        talosLocalTrace(
+            traceId,
+            `backend_in_use requested=${inUso.requested}`
+            + ` actual=${inUso.actual ?? 'unknown'}`
+            + ` fellBack=${inUso.fellBack}`
+            + ` reason=${inUso.reason}`,
+        )
+    } catch {
+        // Una riga di diario che non si riesce a scrivere non ferma una chat.
     }
 }
 
@@ -659,7 +838,6 @@ async function prefissoCongelatoDi(
     system: string | undefined,
     tools: readonly unknown[] | undefined,
     status: TalosLocalEngineStatus,
-    contextTokens: number,
     pensa: boolean,
 ): Promise<TalosPrefissoCongelato | null> {
     const [file, prompt] = await Promise.all([
@@ -671,7 +849,6 @@ async function prefissoCongelatoDi(
         modelPath,
         modelBytes: file.bytes,
         modelModifiedAt: file.modifiedAt,
-        contextTokens,
         // Quella OTTENUTA, mai quella chiesta: la cache è allocata su questa.
         kvCacheType: status.kvCacheType ?? 'f16',
         /**
@@ -715,7 +892,6 @@ async function prefissoCongelatoDiProiettato(
     tools: readonly unknown[] | undefined,
     locale: string | null | undefined,
     status: TalosLocalEngineStatus,
-    contextTokens: number,
     pensa: boolean,
 ): Promise<TalosPrefissoCongelato | null> {
     const [file, prompt] = await Promise.all([
@@ -727,7 +903,6 @@ async function prefissoCongelatoDiProiettato(
         modelPath,
         modelBytes: file.bytes,
         modelModifiedAt: file.modifiedAt,
-        contextTokens,
         kvCacheType: status.kvCacheType ?? 'f16',
         engineBuild: status.engineBuild ?? TALOS_APP_BUILD,
         prefixText: prompt,
@@ -739,62 +914,168 @@ async function prefissoCongelatoDiProiettato(
     }
 }
 
-/** Le impronte gia' scritte in questa sessione: evita di riscrivere un GB. */
+/**
+ * Le impronte per cui un file esiste ED e' valido, in questa sessione.
+ *
+ * ⛔ Ci si entra in DUE modi, e il secondo e' nuovo: dopo una scrittura
+ * riuscita (come prima), e quando `talosThawPrefix` di questo turno ha
+ * restituito token — cioe' il file era gia' sul disco da una sessione
+ * precedente e il motore l'ha riletto. Senza il secondo, il primo messaggio
+ * dopo ogni riavvio dell'app riscriveva da capo quasi un gigabyte gia'
+ * presente, e per giunta si sarebbe raccontato «in preparazione» a una cosa
+ * che era gia' pronta.
+ */
 const GIA_CONGELATI = new Set<string>()
 
 /**
- * Congela, se ne vale la pena e se c'e' spazio.
+ * ⛔ COM'E' ANDATA L'ULTIMA SCRITTURA, per impronta.
  *
- * Il verdetto lo da' `talosShouldFreezePrefix`, non questa funzione: qui si
- * scrive o non si scrive. Tre no possibili — prefisso corto, file troppo
- * grande, spazio insufficiente — e ognuno e' una ragione che vale la pena
- * mostrare, non un silenzio.
+ * La scrittura avviene per forza DOPO la risposta (vedi `run()`), quindi il suo
+ * esito non puo' stare nella riga di quel messaggio. Restava percio' l'unico
+ * pezzo davvero muto: un salvataggio che fallisce ogni volta avrebbe detto «in
+ * preparazione, pronto dal prossimo messaggio» all'infinito, cioe' una promessa
+ * mai mantenuta — che e' peggio del silenzio.
  *
- * ⛔ Non solleva mai, ed e' deliberato: una risposta gia' consegnata non puo'
- * fallire perche' una cache non si e' scritta.
+ * ⇒ Si ricorda qui, per PERCORSO (non un flag globale: il guasto di un modello
+ * non deve accusare l'altro), e il turno dopo lo dice a chi legge, con le parole
+ * «la volta scorsa» dentro la frase.
  */
-async function congelaSePossibile(
-    congelato: TalosPrefissoCongelato,
+const SCRITTURE_FALLITE = new Map<string, 'engine-refused' | 'save-failed'>()
+
+/**
+ * ⭐⭐⭐ IL VERDETTO, che prima non usciva da qui.
+ *
+ * ## Il difetto: quattro `return` muti
+ *
+ * Questa funzione era la meta' alta di `congelaSePossibile`, che aveva quattro
+ * uscite senza una parola — gia' congelato, forma ignota, verdetto negativo,
+ * `catch` vuoto — e per giunta buttava il `reason` che
+ * `talosShouldFreezePrefix` aveva appena calcolato («zero lettori», grep del
+ * 2026-09-10). Sul Pad, LFM2.5-2.6B-Q4_0 usciva dalla terza (`!shape`) a ogni
+ * turno: **31 s** alla prima parola, **0 token su 2.847** riusati, e nessun
+ * posto dove vederlo. La quarta rendeva un GUASTO indistinguibile da una
+ * SCELTA.
+ *
+ * ## ⛔ Perche' qui la decisione e' onesta sul TURNO
+ *
+ * Il costo vero e' la scrittura (~1 GB), non la decisione: la decisione e' due
+ * conti e una misura del dispositivo. Separandole, la decisione si puo' prendere
+ * **prima** di scrivere — cioe' mentre le misure di QUESTA risposta si stanno
+ * componendo — e la riga sotto la risposta parla di quella risposta, non del
+ * turno precedente. Solo i due esiti della scrittura arrivano in ritardo di un
+ * messaggio, e le loro frasi dicono «la volta scorsa».
+ *
+ * ⛔ Non solleva MAI: una risposta gia' consegnata non puo' cadere perche' una
+ * cache non si e' potuta decidere. Ma il fallimento ora e' un esito, non un
+ * silenzio.
+ */
+async function decidiPrefisso(
+    congelato: TalosPrefissoCongelato | null,
+    rilettiTokens: number,
     promptTokens: number,
     shape: TalosModelShape | null,
-): Promise<void> {
+): Promise<TalosPrefixOutcome> {
+    if (!congelato) return 'unavailable'
+    // Il caso BUONO si dice, non si tace: qui il motore ha davvero riusato.
+    if (rilettiTokens > 0) return 'reused'
+    const fallita = SCRITTURE_FALLITE.get(congelato.percorso)
+    if (fallita) return fallita
+    // Il file c'e' (scritto o riletto prima d'ora) ma stavolta non e' servito:
+    // e' un'informazione, non un pareggio con «non c'e'».
+    if (GIA_CONGELATI.has(congelato.percorso)) return 'not-reused'
+    if (!shape) return 'unknown-shape'
     try {
-        if (GIA_CONGELATI.has(congelato.percorso)) return
-        if (!shape) return
         // ⛔ La stessa aritmetica del Doctor, non una seconda: due conti sulla
         // KV che divergono sono due schermate che si contraddicono, e nessun
         // modo di sapere quale mente.
         const perToken = talosKvBytesPerTokenOf(shape)
         const device = await talosMeasureDevice()
-        const verdetto = talosShouldFreezePrefix({
+        return talosPrefixOutcomeOf(talosShouldFreezePrefix({
             // Il prefisso e' una parte del prompt, mai piu' lungo di lui: il
             // conto vero lo fa il tokenizzatore dall'altra parte del ponte, ma
             // per decidere se vale la pena basta questo limite superiore.
             tokens: promptTokens,
             kvBytesPerToken: perToken,
             freeBytes: device?.freeStorageBytes ?? 0,
-        })
-        if (!verdetto.freeze) return
-        const esito = await talosFreezePrefix(congelato.percorso, congelato.prompt)
-        if (esito.bytes > 0) {
-            GIA_CONGELATI.add(congelato.percorso)
-            /*
-             * ⛔ Lo sfratto SUBITO DOPO aver scritto, non prima e non a parte.
-             *
-             * Prima sarebbe inutile — il file che sta per nascere non e' ancora
-             * contato. A parte, in un lavoro periodico, vorrebbe dire che fra
-             * una pulizia e l'altra il disco puo' crescere senza limite, che e'
-             * esattamente il difetto che questo esiste per chiudere.
-             *
-             * Qui invece il numero di file non puo' superare il tetto per piu'
-             * del tempo di una cancellazione: si scrive uno, si toglie
-             * l'eccesso.
-             */
-            await talosEvictPrefixes()
-        }
+        }))
     } catch {
-        // Vedi sopra: e' un'ottimizzazione, non una promessa.
+        return 'check-failed'
     }
+}
+
+/** I soli esiti che chiedono di provare a scrivere. Gli altri sono dei no. */
+const ESITI_CHE_SCRIVONO: ReadonlySet<TalosPrefixOutcome> = new Set<TalosPrefixOutcome>([
+    'preparing',
+    // ⛔ Si RIPROVA dopo un fallimento — com'era prima di questa modifica: un
+    // disco che si libera o un motore che si riprende devono poter guarire da
+    // soli. La differenza e' che ora la persona vede che si sta riprovando.
+    'engine-refused',
+    'save-failed',
+])
+
+/**
+ * La meta' bassa: si scrive, e com'e' andata SI REGISTRA.
+ *
+ * ⛔ FINO AL 2026-09-10 «il motore non ha scritto» e «il ponte e' esploso» si
+ * vedevano uguali da qui, e dicevamo `engine-refused` a entrambi — cioe' la
+ * frase sbagliata meta' delle volte. Adesso `talosFreezePrefix` li **nomina**
+ * (`reason: 'written' | 'engine-refused' | 'bridge-failed'`), perche' alla fonte
+ * sono due strade diverse: `llama_state_seq_save_file` torna 0 quando rifiuta, e
+ * il wrapper C cattura da se' le proprie eccezioni prima di tornare quello zero
+ * (`llama-context.cpp:4098-4106`). Il `catch` qui sotto resta per lo sfratto e
+ * per qualunque cosa di nuovo passi da questa strada.
+ *
+ * ⛔ Non solleva mai — e' chiamata con `void`, e una promessa rifiutata senza
+ * gestore in una WebView e' un errore non gestito a schermo. Resta vero cio' che
+ * valeva prima: un congelamento fallito non fa cadere una risposta consegnata.
+ */
+async function scriviPrefisso(
+    congelato: TalosPrefissoCongelato,
+    esito: TalosPrefixOutcome,
+): Promise<void> {
+    if (!ESITI_CHE_SCRIVONO.has(esito)) return
+    let scritto = false
+    try {
+        const risultato = await talosFreezePrefix(congelato.percorso, congelato.prompt)
+        scritto = risultato.bytes > 0
+        if (!scritto) {
+            // ⛔ Il motivo lo dice CHI CI HA PROVATO, non chi guarda il numero
+            // di byte: uno zero non sa dire se il no e' arrivato dal motore o
+            // se la domanda non e' mai arrivata a una risposta.
+            SCRITTURE_FALLITE.set(
+                congelato.percorso,
+                risultato.reason === 'bridge-failed' ? 'save-failed' : 'engine-refused',
+            )
+            return
+        }
+        GIA_CONGELATI.add(congelato.percorso)
+        SCRITTURE_FALLITE.delete(congelato.percorso)
+        /*
+         * ⛔ Lo sfratto SUBITO DOPO aver scritto, non prima e non a parte.
+         *
+         * Prima sarebbe inutile — il file che sta per nascere non e' ancora
+         * contato. A parte, in un lavoro periodico, vorrebbe dire che fra
+         * una pulizia e l'altra il disco puo' crescere senza limite, che e'
+         * esattamente il difetto che questo esiste per chiudere.
+         *
+         * Qui invece il numero di file non puo' superare il tetto per piu'
+         * del tempo di una cancellazione: si scrive uno, si toglie
+         * l'eccesso.
+         */
+        await talosEvictPrefixes()
+    } catch {
+        // ⛔ Non piu' un silenzio: l'esito si registra e il messaggio dopo lo
+        // dice. E si registra SOLO se il prefisso non era stato scritto — uno
+        // sfratto che inciampa non e' un salvataggio fallito, e dirlo sarebbe
+        // accusare la cosa sbagliata.
+        if (!scritto) SCRITTURE_FALLITE.set(congelato.percorso, 'save-failed')
+    }
+}
+
+/** Solo per i test: riporta la memoria dei prefissi a inizio sessione. */
+export function talosScordaStatoPrefissi(): void {
+    GIA_CONGELATI.clear()
+    SCRITTURE_FALLITE.clear()
 }
 
 async function ensureLoaded(
@@ -803,20 +1084,31 @@ async function ensureLoaded(
         contextTokens: TALOS_LOCAL_DEFAULT_CONTEXT_TOKENS,
         kvCacheType: 'f16',
     },
+    traceId?: string,
+    lavoro?: TalosFormaDelLavoro,
 ): Promise<TalosLocalEngineStatus> {
     const status = await talosLocalEngineStatus()
     if (!status.available) throw new Error('TALOS_LOCAL_ENGINE_UNAVAILABLE')
     if (status.loadedPath === path) return status
+    const pianoBackend = await backendDiApertura(path, status.backends, traceId, lavoro)
     try {
         await talosLocalEngineOpenWithFallback(path, {
             contextTokens: piano.contextTokens,
             kvCacheType: piano.kvCacheType,
             ...(await talosTuningFor(path)),
+            /*
+             * ⛔ DOVE far girare il modello — e va CHIESTO qui, all'unica
+             * apertura che ogni messaggio attraversa. Ultimo nello spread
+             * apposta: la scelta della persona non si lascia sovrascrivere da
+             * nessuna manopola che arrivi prima.
+             */
+            ...(pianoBackend?.options ?? {}),
         })
     } catch (error) {
         if (error instanceof TalosLocalEngineOpenError) throw actionableOpenFailure(error)
         throw error
     }
+    if (pianoBackend && traceId) await dichiaraCosaGiraDavvero(pianoBackend, traceId)
     // Richiesto di nuovo perché la risposta di prima descriveva la memoria
     // com'era: senza modello aperto non c'era nessuna forma da dichiarare.
     return talosLocalEngineStatus()
@@ -998,6 +1290,104 @@ async function pianoDiApertura(
  * separato dal resto della generazione è un pezzo che si dimentica di
  * collegare.
  */
+/**
+ * ⭐⭐⭐ FASE 2 — da cinque numeri grezzi ai tre che si leggono sotto la
+ * risposta.
+ *
+ * ⛔ RICERCA PRIMA (2026-09-10, ggml-org/llama.cpp discussioni #2260 e
+ * #14115): i token al secondo si leggono SOLO sulla fase di generazione —
+ * `eval time` — mai sul totale, perché il totale contiene il prefill, che è
+ * un lavoro diverso e a un'altra velocità. E `ms per token` è per identità
+ * `1000 / token-al-secondo`, la stessa relazione che si vede nella riga di
+ * PocketPal (103 ms/token ↔ 9,69 token/s).
+ *
+ * ⛔⛔ `producedTokens - 1`, non `producedTokens`. Il cronometro nativo
+ * (`talos_cronometro`) segna `primo_token_ms` QUANDO il primo token è già
+ * uscito: nella finestra `totale − primo_token` sono passati i token
+ * successivi, che sono uno di meno. Dividere per tutti gonfierebbe la
+ * velocità, e la gonfierebbe tanto più quanto la risposta è corta — cioè
+ * proprio dove il numero si nota.
+ *
+ * ⛔ E un solo token prodotto NON dà una velocità: `null`, non zero. La
+ * riga poi non compare. «Uno stato mancante e uno stato zero sono due cose
+ * diverse»: uno zero qui direbbe «il motore è fermo», che è falso.
+ */
+function registraMisureDellaGenerazione(
+    traceId: string,
+    tempi: TalosLocalEngineTimings | null,
+    generazione: { tokens?: number } | undefined,
+    inizioGenerazione: number,
+    primoTokenVisibileMs: number | null,
+    /**
+     * ⛔ Obbligatorio, non opzionale: se avesse un valore predefinito, chi
+     * aggiunge una strada nuova potrebbe dimenticare di passarlo e la riga
+     * tornerebbe muta senza che niente protesti — cioe' il difetto di partenza,
+     * riaperto dalla porta di servizio.
+     */
+    esitoPrefisso: TalosPrefixOutcome,
+): void {
+    const numero = (valore: unknown): number | null =>
+        typeof valore === 'number' && Number.isFinite(valore) && valore >= 0 ? valore : null
+
+    const prodotti = numero(tempi?.producedTokens) ?? numero(generazione?.tokens)
+    /*
+     * La finestra della sola generazione. Prima il cronometro nativo, che la
+     * misura DENTRO il motore; il ripiego dal lato adattatore serve quando il
+     * ponte nativo non manda i tempi (un APK più vecchio): meno preciso,
+     * perché ci passa dentro anche il ponte JS, ma è una misura vera e non
+     * una stima.
+     */
+    const msGenerazione = tempi !== null
+        && numero(tempi.totalMs) !== null
+        && numero(tempi.firstTokenMs) !== null
+        && tempi.totalMs > tempi.firstTokenMs
+        ? tempi.totalMs - tempi.firstTokenMs
+        : primoTokenVisibileMs !== null
+            ? Date.now() - inizioGenerazione - primoTokenVisibileMs
+            : null
+
+    const tokensPerSecond = prodotti !== null && prodotti >= 2 && msGenerazione !== null && msGenerazione > 0
+        ? ((prodotti - 1) * 1000) / msGenerazione
+        : null
+
+    talosRegistraMisuraLocale({
+        traceId,
+        finishedAt: Date.now(),
+        firstVisibleMs: primoTokenVisibileMs,
+        tokensPerSecond,
+        msPerToken: tokensPerSecond !== null && tokensPerSecond > 0 ? 1000 / tokensPerSecond : null,
+        producedTokens: prodotti,
+        promptTokens: numero(tempi?.promptTokens),
+        prefillMs: numero(tempi?.prefillMs),
+        engineFirstTokenMs: numero(tempi?.firstTokenMs),
+        /*
+         * ⛔ Il riuso della cache KV, portato fino a dove si può leggere.
+         *
+         * Fin qui questi due numeri arrivavano dal JNI e si fermavano nel
+         * tipo: nessuna schermata li mostrava, e in una build di RILASCIO il
+         * JNI non scrive in logcat (controllo positivo sul Pad, 2026-09-10:
+         * zero righe `TalosLlama|ggml|llama_` in tutto il buffer). ⇒ Erano
+         * misurati e invisibili, cioè come non misurati.
+         *
+         * ⛔ `numero()` rende `null` — non `0` — quando il campo manca: un
+         * ponte nativo più vecchio non manda `reusedTokens`, e «ignoto» non è
+         * «niente riusato». Lo zero VERO, quello del primo turno, passa
+         * invece intatto ed è un dato che vogliamo vedere.
+         */
+        reusedTokens: numero(tempi?.reusedTokens),
+        /*
+         * ⛔ Tre stati, non due: `true` rifiutato, `false` non è successo,
+         * `null` il motore non l'ha detto. Un `=== true` schiaccerebbe gli
+         * ultimi due in uno, ed è proprio la distinzione che serve — «CIECO
+         * non è FALLITO».
+         */
+        partialTrimRefused: typeof tempi?.partialTrimRefused === 'boolean'
+            ? tempi.partialTrimRefused
+            : null,
+        prefixOutcome: esitoPrefisso,
+    })
+}
+
 async function run(
     input: TalosMobileCompletionInput,
     onChunk?: (text: string) => void,
@@ -1050,13 +1440,101 @@ async function runBody(
      * decide se questo modello può chiamare qualcosa, e non qui.
      */
     talosLocalTrace(traceId, 'template_project_start')
-    const offered = talosModelSupportsToolCalling(input.model) ? input.tools : undefined
-    const wireTools = offered?.length ? talosToolsForLocalEngine(offered) : undefined
+    /*
+     * ⛔⛔⛔ SENZA GRAMMATICA NON SI DANNO ATTREZZI — owner 11/09, «approvo».
+     *
+     * ## Il fatto, misurato sul Pad l'11/09/2026
+     *
+     * Alla domanda **«Come ti chiami»**, `Llama-3.2-3B-Instruct-Q4_0` ha
+     * prodotto — testo grezzo, dalla riga di diagnosi del JNI:
+     *
+     *     {"name": "tool_details", "parameters": {"names": "['library_list', …]"}}
+     *     {"name": "library_list", "parameters": {}}
+     *
+     * Due chiamate a strumenti al posto di un nome, `names` come **stringa**
+     * dove lo schema vuole un array, sei documenti della Libreria scaricati e
+     * una richiesta di aprire una pagina web. Nel log della stessa generazione:
+     * `formato di chat: peg-native (tool: 5, grammatica: no)`.
+     *
+     * ## Perche' non e' colpa del prompt, e perche' non basta chiederlo meglio
+     *
+     * L'istruzione contraria c'e' gia', testuale: «Do not call any tool for
+     * plain conversation, greetings, or explanations». Il modello la legge e la
+     * ignora. [When2Call, arXiv 2504.18851](https://arxiv.org/pdf/2504.18851)
+     * misura che «quando NON chiamare» e' un problema **diverso** da «come
+     * chiamare» e che sui modelli piccoli le istruzioni non bastano; la cura
+     * che funziona e' l'addestramento, che in un'app non si fa.
+     *
+     * In `common/chat.cpp` del sottomodulo ci sono handler dedicati per gemma4,
+     * lfm2, qwen3-coder e altri undici, ognuno con la **propria grammatica**.
+     * Per Llama 3.x non ce n'e' nessuno: si cade sul percorso nativo e
+     * `params.grammar` resta vuota. ⛔ Verificato anche sull'upstream di oggi
+     * (pin 451b89b, 11/09): la lista e' identica, aggiornare non lo cura.
+     *
+     * ## ⇒ La regola, e cosa costa
+     *
+     * Se nessuna grammatica puo' tenere le chiamate di questo modello, **gli
+     * attrezzi non si offrono**. Il modello risponde invece di inventare, e il
+     * prompt si accorcia di tutto il catalogo — che e' anche il guadagno di
+     * velocita' piu' grosso rimasto, perche' il prefill e' il collo di
+     * bottiglia (§44).
+     *
+     * ⛔ Il costo, dichiarato: su quel modello gli attrezzi **si perdono**. Non
+     * in silenzio — la Diagnostica lo dice a parole («Le richieste di questo
+     * modello agli strumenti NON si possono tenere a freno»), e la scheda di
+     * consenso semplicemente non compare perche' non c'e' niente da
+     * autorizzare.
+     *
+     * ⛔ E `false` comprende «non lo so»: un ponte piu' vecchio che non manda
+     * il campo vale non-vincolabile. Sbagliare in un verso costa gli attrezzi
+     * su un modello che li reggeva; nell'altro costa una risposta inventata e
+     * tre giri di inferenza.
+     */
     const template = await trasportoToolDi(input.model.id)
+    /*
+     * ⛔⛔ SOLO SUL TRASPORTO NATIVO, e il confine e' l'evidenza.
+     *
+     * Il difetto misurato sta li': `peg-native` con `grammatica: no`, cioe' un
+     * template che llama.cpp rende nativamente e che nessuna grammatica
+     * vincola. `prompt-json-v1` e' un'altra cosa — non si e' MAI appoggiato a
+     * una grammatica di llama.cpp, ha un protocollo suo, una diagnosi di
+     * parita' sua e cure sue gia' misurate (la chiamata scritta come prosa).
+     *
+     * ⛔ Spegnerlo qui sarebbe allargare la cura oltre la misura: non ho **una
+     * sola** osservazione che dica che quel percorso sbaglia. Il costo di
+     * sbagliare in quel verso e' togliere gli attrezzi a modelli che li
+     * reggevano — cioe' rompere qualcosa che funziona per curare qualcos'altro.
+     */
+    const senzaGrammatica = template.transport === 'native-template'
+        && template.capabilities?.grammarForTools !== true
+    const offered = talosModelSupportsToolCalling(input.model) && !senzaGrammatica
+        ? input.tools
+        : undefined
+    talosLocalTrace(traceId, senzaGrammatica ? 'tools_withheld_no_grammar' : 'tools_offered')
+    const conversazione = conversationOf(input)
+    /*
+     * ⛔⛔⛔ PREFISSO-STABILE-02 — il riordino si fa QUI, una volta sola.
+     *
+     * `talosAttrezziInOrdineDiRivelazione` accoda gli attrezzi svelati invece
+     * di lasciarli inserire in mezzo all'elenco (misurato il 2026-09-10: solo
+     * il 72,3% del blocco attrezzi restava prefisso comune fra un messaggio e
+     * il successivo — e quel blocco sta davanti a tutta la conversazione).
+     *
+     * ⛔ Deve stare qui e non dentro il projector: `wireTools` va a DUE
+     * chiamanti — la generazione, poco sotto, e `prefissoCongelatoDiProiettato`,
+     * che proietta una conversazione finta (sistema + segnaposto) senza nessuna
+     * chiamata a `tool_details`. Se il riordino dipendesse dalla conversazione
+     * *dentro* il projector, i due uscirebbero in ordini diversi e il prefisso
+     * congelato su disco smetterebbe di combaciare con quello vero. Riordinato
+     * una volta all'ingresso, entrambi ricevono lo stesso identico array (CR-09).
+     */
+    const wireTools = offered?.length
+        ? talosAttrezziInOrdineDiRivelazione(talosToolsForLocalEngine(offered), conversazione)
+        : undefined
     const projection = talosProjectLocalToolConversation({
         transport: template.transport,
         capabilities: template.capabilities,
-        turns: conversationOf(input),
+        turns: conversazione,
         tools: wireTools,
         locale: input.locale,
     })
@@ -1088,8 +1566,25 @@ async function runBody(
      */
     const pensa = input.thinking !== false
     const anticipo = await talosLocalEnginePlanPrompt(input.model.id, turns, tools, pensa)
+    /*
+     * D-53 — cosa sta per essere chiesto al motore, in due numeri: i token da
+     * leggere (già contati dal piano) e quelli che ci si aspetta di scrivere
+     * (la mediana delle ultime risposte in QUESTA chat). Sono i due termini
+     * che, insieme all'apertura, dicono quale motore finisce prima — per
+     * qualunque modello, senza conoscerne il nome.
+     */
+    const lavoro: TalosFormaDelLavoro = {
+        promptTokens: anticipo?.promptTokens ?? null,
+        expectedOutputTokens: talosStimaTokenDiRisposta(
+            input.turns
+                .filter((turn) => turn.role === 'assistant' && typeof turn.content === 'string')
+                .map((turn) => turn.content as string),
+            256,
+            MAX_TOKENS,
+        ),
+    }
     talosLocalTrace(traceId, 'native_open_start')
-    const status = await ensureLoaded(input.model.id, await pianoDiApertura(anticipo))
+    const status = await ensureLoaded(input.model.id, await pianoDiApertura(anticipo), traceId, lavoro)
     // ⛔ Un evento onesto, non un tempo di ricarica garantito: `ensureLoaded`
     // può non fare nulla se il modello era già aperto - e allora la durata
     // fra i due eventi è quella che DICE che non ha ricaricato niente,
@@ -1128,6 +1623,17 @@ async function runBody(
                 // tornare ai quattro thread di prima significherebbe che una
                 // conversazione lunga diventa più lenta man mano che cresce.
                 ...(await talosTuningFor(input.model.id)),
+                /*
+                 * ⛔⛔ E anche il bersaglio, per la stessa ragione — anzi per
+                 * una più dura. Il ponte confronta `backendName`/`deviceName`
+                 * dentro la guardia delle manopole di carico
+                 * (`TalosLlamaPlugin.open`): riaprire senza nominarlo NON è
+                 * «lascia com'era», è chiedere un'apertura diversa, che
+                 * rilegge i pesi e li rimette sulla CPU. Una conversazione che
+                 * cresce spegnerebbe l'acceleratore a metà strada, in
+                 * silenzio.
+                 */
+                ...((await backendDiApertura(input.model.id, status.backends, traceId, lavoro))?.options ?? {}),
             })
         } catch (error) {
             if (error instanceof TalosLocalEngineOpenError) throw actionableOpenFailure(error)
@@ -1166,13 +1672,32 @@ async function runBody(
     // below calls (CR-09) — never a second version of it.
     const congelato = template.transport === 'native-template' || !wireTools?.length
         ? await prefissoCongelatoDi(
-            input.model.id, input.system, tools, status, plan.contextTokens, pensa,
+            input.model.id, input.system, tools, status, pensa,
         )
         : await prefissoCongelatoDiProiettato(
             input.model.id, template.transport, template.capabilities,
-            input.system, wireTools, input.locale, status, plan.contextTokens, pensa,
+            input.system, wireTools, input.locale, status, pensa,
         )
-    if (congelato) await talosThawPrefix(congelato.percorso)
+    /*
+     * ⛔ Il risultato della rilettura non si butta piu'.
+     *
+     * `await talosThawPrefix(...)` scartava il proprio esito: era la quinta via
+     * muta, e la piu' preziosa — `restoredTokens > 0` e' la PROVA che l'inizio
+     * della richiesta era pronto e che il motore l'ha davvero riusato, cioe' il
+     * caso BUONO, quello che l'owner ha chiesto di dire invece di tacere.
+     */
+    const riletti = congelato ? (await talosThawPrefix(congelato.percorso)).tokens : 0
+    if (congelato && riletti > 0) {
+        GIA_CONGELATI.add(congelato.percorso)
+        SCRITTURE_FALLITE.delete(congelato.percorso)
+    }
+    /*
+     * ⛔ Dichiarato prima del `try` perche' serve DOPO: chi scrive il prefisso
+     * (in fondo a `run()`) usa la stessa decisione che la riga a schermo ha
+     * gia' mostrato. Due decisioni separate sarebbero due risposte diverse alla
+     * stessa domanda, e nessun modo di sapere quale delle due si sta leggendo.
+     */
+    let esitoPrefisso: TalosPrefixOutcome = 'unavailable'
 
     let generation
     try {
@@ -1214,6 +1739,23 @@ async function runBody(
         // annegherebbe fra decine di eventi per una risposta lunga - la
         // stessa disciplina di `talosTrattieniLeChiamate` un livello sopra.
         let primoTokenVisibileTracciato = false
+        /**
+         * ⭐⭐⭐ FASE 2 — il cronometro che finisce SOTTO la risposta.
+         *
+         * Parte QUI e non a `adapter_start`: fra i due c'è l'apertura del
+         * modello, che a freddo vale secondi interi ed è un costo una-tantum,
+         * non la velocità del modello. La ricerca lo dice esplicitamente —
+         * ggml-org/llama.cpp, discussione #14115 (letta il 2026-09-10, «TTFT
+         * … excluding sampling time», caricamento del modello escluso): il
+         * tempo al primo token non contiene l'apertura. Quel caricamento resta
+         * misurato da `native_open_start`/`native_open_done`: non si perde, si
+         * tiene separato.
+         *
+         * `Date.now()` e non `performance.now()`: `finishedAt` deve stare sulla
+         * stessa scala di `created_at` del messaggio, che è un orario vero.
+         */
+        const inizioGenerazione = Date.now()
+        let primoTokenVisibileMs: number | null = null
         talosLocalTrace(traceId, 'generate_start')
         generation = await talosLocalEngineGenerate(
             plan.prompt,
@@ -1224,6 +1766,17 @@ async function runBody(
                     if (visibile) {
                         if (!primoTokenVisibileTracciato) {
                             primoTokenVisibileTracciato = true
+                            /*
+                             * ⛔⛔ QUI, e non al primo delta nativo: `visibile`
+                             * è testo della RISPOSTA — il ragionamento è già
+                             * uscito da `separatore` su un altro canale, e il
+                             * protocollo delle chiamate è già trattenuto. È il
+                             * primo istante in cui una persona ha qualcosa da
+                             * leggere, che è la sola cosa che «tempo al primo
+                             * token» può onestamente voler dire su un modello
+                             * che ragiona per quaranta secondi.
+                             */
+                            primoTokenVisibileMs = Date.now() - inizioGenerazione
                             talosLocalTrace(traceId, 'first_visible_token')
                         }
                         onChunk?.(visibile)
@@ -1257,6 +1810,28 @@ async function runBody(
          */
         const tempi = await talosLocalEngineTimings()
         if (tempi) talosLocalTrace(traceId, `native_timings ${JSON.stringify(tempi)}`)
+        /*
+         * ⭐⭐⭐ QUI e non dopo la consegna, ed e' la scelta dichiarata sul
+         * ritardo.
+         *
+         * `congelaSePossibile` era chiamata con `void` a risposta gia'
+         * consegnata: il suo verdetto sarebbe arrivato a schermo un messaggio
+         * dopo, e chi legge non avrebbe avuto modo di saperlo. L'aggancio
+         * migliore era separare la DECISIONE dalla SCRITTURA: la decisione
+         * costa due conti e una misura del dispositivo (millisecondi), la
+         * scrittura costa quasi un gigabyte. Cosi' la decisione si prende ora —
+         * il testo e' gia' tutto uscito da `onChunk`, nessuno sta aspettando
+         * una parola — e finisce nelle misure di QUESTA risposta.
+         *
+         * ⛔ Cio' che resta in ritardo di un turno e' solo com'e' andata la
+         * scrittura, che per costruzione avviene dopo. I suoi due esiti portano
+         * «la volta scorsa» dentro la frase: il ritardo si dichiara a chi
+         * legge, non si nasconde.
+         */
+        esitoPrefisso = await decidiPrefisso(congelato, riletti, plan.promptTokens, status.shape)
+        registraMisureDellaGenerazione(
+            traceId, tempi, generation, inizioGenerazione, primoTokenVisibileMs, esitoPrefisso,
+        )
     } catch (error) {
         talosLocalTrace(traceId, `error ${error instanceof Error ? error.message : String(error)}`)
         if (error instanceof TalosLocalEngineGenerationError) {
@@ -1279,8 +1854,13 @@ async function runBody(
      * `void`: congelare è un'ottimizzazione, e una risposta consegnata non deve
      * aspettare che una cache si scriva. Se fallisce, la prossima volta si
      * calcola — cioè si fa quello che si faceva prima.
+     *
+     * ⛔ E il `void` non è più un silenzio: la DECISIONE è già stata presa e
+     * mostrata sopra (nelle misure di questa risposta), e l'esito della sola
+     * scrittura viene registrato in `SCRITTURE_FALLITE` e detto al messaggio
+     * dopo, con le parole «la volta scorsa» dentro la frase.
      */
-    if (congelato) void congelaSePossibile(congelato, plan.promptTokens, status.shape)
+    if (congelato) void scriviPrefisso(congelato, esitoPrefisso)
 
     /*
      * ⭐ La seconda lettura: la chiamata che il modello ha scritto a parole.

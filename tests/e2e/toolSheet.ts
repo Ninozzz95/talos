@@ -31,7 +31,14 @@ export async function closeToolSheet(page: Page): Promise<void> {
         if (open === 0) return
         // A refusal here is the race itself, and the wait below is what
         // establishes the outcome either way.
-        await page.locator(BACK).first().click({ timeout: 5_000 }).catch(() => {})
+        // U-7 (2026-09-11): a station ROOT has no back arrow any more — the
+        // mockup gives it the phone menu button instead, and the way back to
+        // the chat is the system Back. Inside a station the arrow is still there.
+        if (await page.locator(BACK).count() > 0) {
+            await page.locator(BACK).first().click({ timeout: 5_000 }).catch(() => {})
+        } else {
+            await page.goBack().catch(() => {})
+        }
         await page.waitForFunction(
             ([selector, before]) => document.querySelectorAll(selector as string).length < (before as number),
             [SHEET, open] as const,

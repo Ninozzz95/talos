@@ -28,6 +28,25 @@ public final class TalosLlamaEngine implements AutoCloseable {
         MODEL_LOAD("model-load"),
         CONTEXT("context"),
         SAMPLER("sampler"),
+        /**
+         * Una modalità di caricamento che llama.cpp non riconosce. ⛔ Fallire
+         * qui è una scelta: ignorare il nome sbagliato e caricare come sempre
+         * farebbe credere a chi misura di aver misurato {@code mmap} mentre
+         * misurava {@code auto}.
+         */
+        LOAD_MODE("load-mode"),
+        /**
+         * ⛔ Chi ha premuto «annulla» mentre il modello si apriva. NON e' un
+         * errore, ed e' per questo che ha uno stadio suo: aprire
+         * `gemma-4-E2B-it-Q4_0` costa 50 secondi di soli pesi (ledger §44), e
+         * chi si stanca di aspettare deve leggere «l'hai fermato tu», non
+         * «non ce l'ha fatta».
+         *
+         * ⛔ Il motore torna comunque `0` da `nativeOpen` e libera tutto lui
+         * ({@code src/llama.cpp:314}, «-2 on cancellation»): l'unica traccia
+         * della differenza e' questa parola.
+         */
+        LOAD_CANCELLED("load-cancelled"),
         TEMPLATE("template"),
         GENERATION("generation"),
         UNKNOWN("unknown");
@@ -253,15 +272,73 @@ public final class TalosLlamaEngine implements AutoCloseable {
                        threadsBatch, microBatch, "f16");
     }
 
-    /** Opens a model while preserving the native stage when construction fails. */
+    /**
+     * Il contratto senza le manopole di CARICAMENTO: resta perché il banco di
+     * prova e i test su dispositivo misurano apposta la configurazione di
+     * riferimento, che è «come si è sempre fatto». {@code "default"} e
+     * {@code -1} vogliono dire esattamente quello.
+     */
     public static OpenAttempt tryOpen(android.content.Context context, String modelPath,
                                       int threads, int contextTokens, int gpuLayers,
                                       boolean deterministic, int threadsBatch, int microBatch,
                                       String kvType) {
+        return tryOpen(context, modelPath, threads, contextTokens, gpuLayers, deterministic,
+                       threadsBatch, microBatch, kvType, "default", -1);
+    }
+
+    /**
+     * ⭐⭐⭐ Come sopra, dicendo anche COME i pesi devono entrare in memoria.
+     *
+     * @param loadMode {@code "default"} = come oggi (il predefinito di
+     *     llama.cpp, cioè {@code auto}); altrimenti {@code auto} ·
+     *     {@code none} · {@code mmap} · {@code mlock} · {@code mmap+mlock} ·
+     *     {@code dio}. Un nome sconosciuto non viene ignorato: l'apertura
+     *     fallisce con {@link FailureStage#LOAD_MODE}.
+     * @param weightRepack {@code -1} = non chiesto · {@code 0} = spento ·
+     *     {@code 1} = acceso. Manopola separata da {@code loadMode}.
+     * @implNote ⛔ Entrambe agiscono sul MODELLO, non sul contesto: cambiarle
+     *     richiede di ricaricare i pesi, e {@link #reopenContext} — che i pesi
+     *     li riusa apposta — non le vede. Chi chiama deve accorgersene, e
+     *     {@link TalosLlamaPlugin} lo fa confrontandole prima di prendere la
+     *     strada veloce.
+     */
+    public static OpenAttempt tryOpen(android.content.Context context, String modelPath,
+                                      int threads, int contextTokens, int gpuLayers,
+                                      boolean deterministic, int threadsBatch, int microBatch,
+                                      String kvType, String loadMode, int weightRepack) {
+        return tryOpen(context, modelPath, threads, contextTokens, gpuLayers, deterministic,
+                       threadsBatch, microBatch, kvType, loadMode, weightRepack, "", "");
+    }
+
+    /**
+     * ⭐⭐⭐ Come sopra, dicendo anche DOVE — quale motore, per nome.
+     *
+     * ⛔ Le forme più corte qui sopra restano e passano {@code ""}: vuoto vuol
+     * dire «nessuna richiesta», cioè il comportamento di sempre, ed è ciò che
+     * il banco di prova e i nove {@code androidTest} vogliono continuare a
+     * misurare. Allargare le firme vecchie li spegnerebbe tutti in una volta.
+     *
+     * @param backendName vuoto = nessuna richiesta · {@code none}/{@code cpu}
+     *     = nessun offload, detto ad alta voce · altrimenti il nome di un
+     *     registry ggml ({@code OpenCL}, {@code Vulkan}, {@code HTP}).
+     * @param deviceName vuoto = accettato solo se quel registry espone un solo
+     *     dispositivo di offload; altrimenti il nome esatto.
+     * @implNote ⛔ Un nome che non si risolve NON ripiega: l'apertura
+     *     fallisce, e {@link FailureStage} lo dice. È la differenza fra
+     *     «backend selezionabile» e «backend realmente utilizzato».
+     */
+    public static OpenAttempt tryOpen(android.content.Context context, String modelPath,
+                                      int threads, int contextTokens, int gpuLayers,
+                                      boolean deterministic, int threadsBatch, int microBatch,
+                                      String kvType, String loadMode, int weightRepack,
+                                      String backendName, String deviceName) {
         if (!TalosLlamaNative.AVAILABLE) return OpenAttempt.failure(FailureStage.UNKNOWN);
         TalosLlamaNative.ensureReady(context);
         long handle = TalosLlamaNative.nativeOpen(modelPath, threads, contextTokens, gpuLayers,
-                                                  deterministic, threadsBatch, microBatch, kvType);
+                                                  deterministic, threadsBatch, microBatch, kvType,
+                                                  loadMode, weightRepack,
+                                                  backendName == null ? "" : backendName,
+                                                  deviceName == null ? "" : deviceName);
         if (handle == 0) {
             return OpenAttempt.failure(FailureStage.fromWire(TalosLlamaNative.nativeLastOpenError()));
         }
@@ -476,6 +553,22 @@ public final class TalosLlamaEngine implements AutoCloseable {
 
     public int tokensProduced() {
         return TalosLlamaNative.nativeTokensProduced(handle);
+    }
+
+    /**
+     * ⛔⛔ Vero se l'ULTIMA corsa e' stata mollata dal motore invece che fermata
+     * da chi la guardava.
+     *
+     * Si legge subito dopo che {@code run()} e' tornata, prima della corsa
+     * successiva — che azzera il flag. Vedi
+     * {@link TalosLlamaNative#nativeEngineAborted(long)}: il sospetto che l'ha
+     * fatto nascere era sbagliato, ed e' stato questo flag a dimostrarlo.
+     *
+     * ⛔ Vedetta come {@link #tokensProduced()}: legge un atomico e basta,
+     * quindi non passa da {@code soloAttore}.
+     */
+    public boolean engineAborted() {
+        return TalosLlamaNative.nativeEngineAborted(handle);
     }
 
     /**

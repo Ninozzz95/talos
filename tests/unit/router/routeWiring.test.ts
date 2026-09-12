@@ -50,11 +50,21 @@ describe('router wiring', () => {
             // Memoria e Attività hanno la loro pagina di creazione dal
             // 2026-08-06, quando il FAB della sidebar è diventato un ventaglio
             // che deve poter cominciare CIASCUNA delle cinque cose.
-            'memory', 'memory-new', 'memory-item',
-            'tasks', 'task-new', 'task-item',
+            // U-19 (12/09/2026): `/memory/:id/edit` riusa il modulo di
+            // creazione. Sta in fondo ai tre perché il suo genitore è la
+            // MEMORIA, non l'elenco — si torna a quella che si stava leggendo.
+            'memory', 'memory-new', 'memory-item', 'memory-edit',
+            // U-13 (12/09/2026): `/tasks/:id/edit` riusa il modulo di
+            // creazione. Sta in fondo ai tre perche' il suo genitore e'
+            // l'ATTIVITA', non l'elenco — si torna a quella che si stava
+            // guardando, come per la nota.
+            'tasks', 'task-new', 'task-item', 'task-edit',
             // `/notes/new` PRIMA di `/notes/:id`: al contrario il parametro si
             // mangia «new» e il FAB aprirebbe una nota che non esiste.
-            'notes', 'note-new', 'note-item',
+            // U-11 (11/09/2026): `/notes/:id/edit` riusa il modulo di
+            // creazione. Sta in fondo ai tre perché il suo genitore è la NOTA,
+            // non l'elenco — si torna a quello che si stava leggendo.
+            'notes', 'note-new', 'note-item', 'note-edit',
             'doctor',
             'research', 'research-new', 'research-report', 'research-claim', 'research-source',
             'context', 'harness', 'harness-session',
@@ -77,9 +87,23 @@ describe('router wiring', () => {
          */
         for (const [figlio, genitore] of [
             ['memory-item', 'memory'], ['task-item', 'tasks'], ['note-item', 'notes'], ['note-new', 'notes'],
+            // La correzione torna alla NOTA, e si porta dietro il suo `:id`:
+            // un genitore che vuole un parametro che non abbiamo non sarebbe
+            // una destinazione.
+            ['note-edit', 'note-item'],
+            // U-19: la correzione di una memoria torna alla MEMORIA, come
+            // quella di una nota torna alla nota.
+            ['memory-edit', 'memory-item'],
+            // U-13: idem per l'attivita'.
+            ['task-edit', 'task-item'],
         ] as const) {
+            // I genitori che sono una PAGINA di dettaglio vogliono il loro
+            // `:id`; le stazioni no. Scritto come regola e non come elenco di
+            // nomi, o ogni nuova correzione dovrebbe ricordarsi di aggiungersi
+            // qui — ed è esattamente il genere di riga che nessuno aggiorna.
+            const atteso = genitore.endsWith('-item') ? { id: 'x1' } : {}
             expect(talosMobileParentRoute(figlio, { id: 'x1' }))
-                .toEqual({ name: genitore, params: {} })
+                .toEqual({ name: genitore, params: atteso })
         }
         const contracted = TALOS_MOBILE_ROUTES.filter((route) => SCREEN_CONTRACT[route.name])
         const components = await Promise.all(contracted.map((route) => route.component()))

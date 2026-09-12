@@ -139,7 +139,14 @@ export function createStationFacades(deps: TalosStationFacadesDeps) {
          * cioè cambiare identità alla nota e perderne la data di nascita. Il
          * campo `updated_at` esisteva dall'inizio e non si muoveva mai.
          */
-        update: (input: { id: string; title?: string; content?: string }) =>
+        /**
+         * U-10 — l'evidenza passa da qui e non da un metodo suo.
+         *
+         * `pinned` da sola non è una riscrittura: il deposito lo sa e lascia
+         * ferma `updated_at`, così mettere la puntina non fa risalire in cima
+         * al gruppo una nota di marzo.
+         */
+        update: (input: { id: string; title?: string; content?: string; pinned?: boolean }) =>
             deps.repository.updateNote(input),
         remove: (noteId: string) => deps.repository.deleteNote(noteId),
     }

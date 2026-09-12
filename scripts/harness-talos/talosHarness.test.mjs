@@ -1181,8 +1181,8 @@ describe('primoProgramma — il primo token di un comando', () => {
 describe('convertiPercorsoWsl — il percorso Windows nel mount WSL2', () => {
     it('⭐ il caso reale, misurato il 27/8 su questa macchina', () => {
         assert.equal(
-            convertiPercorsoWsl('C:\\Users\\utente\\AppData\\Local\\Temp\\banco-iva-XTnAO2'),
-            '/mnt/c/Users/utente/AppData/Local/Temp/banco-iva-XTnAO2',
+            convertiPercorsoWsl('D:\\Lavoro\\utente\\AppData\\Local\\Temp\\banco-iva-XTnAO2'),
+            '/mnt/d/Lavoro/utente/AppData/Local/Temp/banco-iva-XTnAO2',
         )
     })
 
@@ -1191,8 +1191,8 @@ describe('convertiPercorsoWsl — il percorso Windows nel mount WSL2', () => {
     })
 
     it('⛔ e AL CONTRARIO: il resto del percorso NON perde le maiuscole — solo la lettera di unità cambia', () => {
-        const risultato = convertiPercorsoWsl('C:\\Users\\utente\\Progetti')
-        assert.equal(risultato, '/mnt/c/Users/utente/Progetti',
+        const risultato = convertiPercorsoWsl('D:\\Lavoro\\utente\\Progetti')
+        assert.equal(risultato, '/mnt/d/Lavoro/utente/Progetti',
             'un percorso minuscolizzato per intero punterebbe a una cartella che non esiste su un filesystem case-sensitive')
     })
 })

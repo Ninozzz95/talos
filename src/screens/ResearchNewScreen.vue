@@ -285,7 +285,7 @@ async function start(): Promise<void> {
                          stringe, e una linguetta che continua a promettere 80
                          fonti mentre il piano sotto ne fa 6 e' una
                          contraddizione visibile nella stessa schermata. -->
-                    <span class="font-mono text-2xs opacity-70">{{ sourcesFor(profile) }} / {{ profile.minutes }}m</span>
+                    <span class="font-mono text-2xs opacity-70">{{ t('research.depthChip', { sources: sourcesFor(profile), minutes: profile.minutes }) }}</span>
                 </Button>
             </div>
 
@@ -300,7 +300,7 @@ async function start(): Promise<void> {
                         class="min-h-touch flex-1 rounded-lg border border-[var(--talos-border)] bg-[var(--talos-background)] px-3 text-sm text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                         @change="reword(branch.id, ($event.target as HTMLInputElement).value)"
                     >
-                    <span class="font-mono text-2xs text-[var(--talos-muted)]">{{ branch.estimate.pages }}p</span>
+                    <span class="font-mono text-2xs text-[var(--talos-muted)]">{{ t('research.planPages', { count: branch.estimate.pages }) }}</span>
                     <Button variant="ghost" :aria-label="t('research.removeBranch')" @click="dropBranch(branch.id)">
                         <Trash2 class="h-4 w-4" aria-hidden="true" />
                     </Button>

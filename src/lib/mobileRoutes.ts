@@ -4,6 +4,8 @@ export type TalosMobileRouteName =
     | 'chat' | 'chats' | 'memory' | 'tasks' | 'notes' | 'doctor'
     // Le pagine di dettaglio: voce → pagina → dettaglio, come la Ricerca.
     | 'memory-item' | 'memory-new' | 'task-item' | 'task-new' | 'note-item' | 'note-new'
+    // U-11 / U-13: correggere è la stessa pagina che crea, precompilata.
+    | 'note-edit' | 'task-edit' | 'memory-edit'
     | 'settings-privilege'
     | 'research' | 'research-new' | 'research-report' | 'research-claim' | 'research-source'
     | 'context' | 'settings'
@@ -99,15 +101,58 @@ export const TALOS_MOBILE_ROUTES: readonly TalosMobileRoute[] = Object.freeze([
     // Prima di `/memory/:id`, o il parametro si mangia «new».
     { name: 'memory-new', path: '/memory/new', desktop_station_id: 'memory', component: loadMemoryNewScreen, parent: 'memory' },
     { name: 'memory-item', path: '/memory/:id', desktop_station_id: 'memory', component: loadMemoryItemScreen, parent: 'memory' },
+    /*
+     * U-19 — «Modifica» apre lo STESSO modulo di «Nuova memoria», precompilato.
+     *
+     * Non un editor a parte: due moduli per la stessa cosa divergono, e chi ha
+     * imparato a scrivere una memoria saprebbe correggerne una solo dopo aver
+     * imparato una seconda schermata. Stesso componente, due modi.
+     *
+     * `parent: 'memory-item'` e non `'memory'`: Indietro dalla correzione deve
+     * riportare alla memoria che si stava leggendo, non all'elenco —
+     * altrimenti si salva, si torna, e quella appena corretta non è quella che
+     * si vede.
+     */
+    { name: 'memory-edit', path: '/memory/:id/edit', desktop_station_id: 'memory', component: loadMemoryNewScreen, parent: 'memory-item' },
     // F5 stations — local-first Tasks / Notes / Doctor.
     { name: 'tasks', path: '/tasks', desktop_station_id: 'tasks', component: loadTasksScreen },
     { name: 'task-new', path: '/tasks/new', desktop_station_id: 'tasks', component: loadTaskNewScreen, parent: 'tasks' },
     { name: 'task-item', path: '/tasks/:id', desktop_station_id: 'tasks', component: loadTaskItemScreen, parent: 'tasks' },
+    /*
+     * U-13 — «Modifica» apre lo STESSO modulo di «Nuova attività», precompilato.
+     *
+     * Prima non esisteva affatto: un refuso nel titolo costava cancellare e
+     * rifare, cioè cambiare identità all'attività e perdere con lei lo storico,
+     * la pianificazione e il legame con l'esecuzione che l'aveva generata.
+     *
+     * Non un editor a parte: due moduli per la stessa cosa divergono, e chi ha
+     * imparato a scrivere un'attività saprebbe correggerne una solo dopo aver
+     * imparato una seconda schermata. Stesso componente, due modi — come per
+     * le note.
+     *
+     * `parent: 'task-item'` e non `'tasks'`: Indietro dalla correzione deve
+     * riportare all'attività che si stava guardando, non all'elenco —
+     * altrimenti si salva, si torna, e quella appena corretta non è quella che
+     * si vede.
+     */
+    { name: 'task-edit', path: '/tasks/:id/edit', desktop_station_id: 'tasks', component: loadTaskNewScreen, parent: 'task-item' },
     { name: 'notes', path: '/notes', desktop_station_id: 'notes', component: loadNotesScreen },
     // Prima di `/notes/:id`, altrimenti il parametro si mangia «new» e la
     // creazione aprirebbe una nota che non esiste.
     { name: 'note-new', path: '/notes/new', desktop_station_id: 'notes', component: loadNoteNewScreen, parent: 'notes' },
     { name: 'note-item', path: '/notes/:id', desktop_station_id: 'notes', component: loadNoteItemScreen, parent: 'notes' },
+    /*
+     * U-11 — «Modifica» apre lo STESSO modulo di «Nuova nota», precompilato.
+     *
+     * Non un editor a parte: due moduli per la stessa cosa divergono, e chi ha
+     * imparato a scrivere una nota saprebbe correggerne una solo dopo aver
+     * imparato una seconda schermata. Stesso componente, due modi.
+     *
+     * `parent: 'note-item'` e non `'notes'`: Indietro dalla correzione deve
+     * riportare alla nota che si stava leggendo, non all'elenco — altrimenti
+     * si salva, si torna, e la nota appena corretta non è quella che si vede.
+     */
+    { name: 'note-edit', path: '/notes/:id/edit', desktop_station_id: 'notes', component: loadNoteNewScreen, parent: 'note-item' },
     { name: 'doctor', path: '/doctor', desktop_station_id: 'doctor', component: loadDoctorScreen },
     /**
      * The research surfaces, from the list inwards.

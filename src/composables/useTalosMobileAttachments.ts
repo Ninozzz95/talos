@@ -32,6 +32,19 @@ export interface TalosMobileAttachmentDraft {
     error: string | null
 }
 
+/**
+ * Where picked files are headed — and therefore what has to be asked.
+ *
+ * 'chat' stages them in the composer, so they leave with the next message: that
+ * is the moment the «this image leaves the phone» consent belongs to. 'library'
+ * only files them in the Vault, which sends nothing to anyone, so nothing is
+ * asked. Android, «App permissions best practices» (read 2026-09-12): «only
+ * prompt when a specific feature is required … only prompt for microphone
+ * access when a user clicks on the microphone button». Here the feature that
+ * leaves the phone is SENDING, not archiving.
+ */
+export type TalosMobileAttachmentDestination = 'chat' | 'library'
+
 export interface TalosMobileAttachmentsOptions {
     picker: TalosNativeFilePicker
     vault: TalosVaultService
@@ -63,7 +76,14 @@ export interface TalosMobileAttachmentsController {
     readonly bindings: ComputedRef<AppendChatAttachmentInput[]>
     initialize(): Promise<void>
     refreshVault(): Promise<void>
-    selectFiles(): Promise<void>
+    /**
+     * Pick files from the system picker.
+     *
+     * The destination is not decoration: it decides whether the files are
+     * staged for the next message and whether the image consent is due. See
+     * `TalosMobileAttachmentDestination`.
+     */
+    selectFiles(destination?: TalosMobileAttachmentDestination): Promise<void>
     takePhoto(): Promise<void>
     pickPhotos(): Promise<void>
     /**
@@ -242,7 +262,10 @@ export function useTalosMobileAttachments(
      * because a second ingestion path is how two surfaces end up validating,
      * naming and failing differently for the same picture.
      */
-    async function addPickedFiles(pick: () => Promise<TalosPickedFile[]>): Promise<void> {
+    async function addPickedFiles(
+        pick: () => Promise<TalosPickedFile[]>,
+        destination: TalosMobileAttachmentDestination = 'chat',
+    ): Promise<void> {
         if (selecting.value) return
         selecting.value = true
         error.value = null
@@ -252,7 +275,15 @@ export function useTalosMobileAttachments(
 
             // Le immagini si chiedono PRIMA di entrare nel Vault: rifiutare
             // dopo l'ingestione vorrebbe dire aver gia' copiato la foto.
-            const images = pickedFiles.filter((file) => (file.declaredMediaType || '').startsWith('image/'))
+            //
+            // ⛔ For the chat only. Filing something in the Library sends it
+            // nowhere, so there is nothing to decide — and a question asked
+            // where there is nothing to decide is the question people learn to
+            // dismiss unread. The consent belongs to the send; see
+            // `TalosMobileAttachmentDestination` for the source.
+            const images = destination === 'chat'
+                ? pickedFiles.filter((file) => (file.declaredMediaType || '').startsWith('image/'))
+                : []
             if (images.length > 0) {
                 const stance = options.imageConsent?.() ?? 'allow'
                 if (stance === 'deny') {
@@ -284,6 +315,7 @@ export function useTalosMobileAttachments(
             for (const job of jobs) {
                 await ingestDraft(job.draft, job.pickedFile)
             }
+            if (destination === 'library') await withdrawLibraryDrafts(jobs.map((job) => job.draft.id))
             await refreshVault()
         } catch (cause) {
             error.value = attachmentErrorMessage(cause, options.translate)
@@ -292,8 +324,32 @@ export function useTalosMobileAttachments(
         }
     }
 
-    function selectFiles(): Promise<void> {
-        return addPickedFiles(() => options.picker.pickFiles())
+    /**
+     * A Library add ends in the Vault, not in the composer.
+     *
+     * The ingestion is shared with the chat on purpose — one validation, one
+     * naming, one failure path — so the drafts have to exist while the bytes are
+     * copied. What the Library does not want is what a draft MEANS afterwards: a
+     * row left in the tray is an attachment on the next message (see
+     * `bindings`), and its grant is a standing permission to read the file.
+     * Both are withdrawn here, and that is what lets the Library skip the
+     * consent honestly — nothing is queued to leave.
+     *
+     * A FAILED draft stays: it is the only account of why a file never arrived.
+     */
+    async function withdrawLibraryDrafts(draftIds: readonly string[]): Promise<void> {
+        for (const id of draftIds) {
+            const index = items.findIndex((item) => item.id === id)
+            if (index < 0) continue
+            const draft = items[index]
+            if (!draft || draft.status === 'failed') continue
+            if (draft.grantId) await options.vault.revokeGrant(draft.grantId).catch(() => undefined)
+            items.splice(index, 1)
+        }
+    }
+
+    function selectFiles(destination: TalosMobileAttachmentDestination = 'chat'): Promise<void> {
+        return addPickedFiles(() => options.picker.pickFiles(), destination)
     }
 
     /** F-6: straight to the camera. */

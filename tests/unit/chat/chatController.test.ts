@@ -104,7 +104,12 @@ const localEngine = vi.hoisted(() => ({
     // P3-1 — mai atteso da `selectModel` (fire-and-forget): un mock che
     // risolve subito basta a non far esplodere il modulo mockato per
     // intero, come già capitato al primo giro di questo file.
-    talosWarmLocalModel: vi.fn(async () => undefined),
+    // ⛔ L'ESITO, non `undefined`: dal 10/09 il riscaldamento DICE com'è
+    // andata, ed è quella risposta che l'avviso a schermo legge. Un mock che
+    // tace qui rimetterebbe in piedi il silenzio che stiamo togliendo.
+    talosWarmLocalModel: vi.fn(async () => ({
+        opened: true as const, ms: 120, withoutMeasuredProfiles: false,
+    })),
 }))
 vi.mock('@/services/localEngine', () => localEngine)
 
@@ -4989,6 +4994,43 @@ describe('il sondaggio GPU della 0.1.17, agganciato alla PRIMA scelta locale', (
 
         expect(controller.pendingLocalEngineProbeConsent.value)
             .toEqual({ path: '/models/local-test/smollm2-135m.gguf' })
+    })
+
+    /**
+     * ⛔⛔⛔ 2026-09-10 — LA PROVA CHE MANCAVA, ed è il motivo per cui la
+     * diagnosi dei 32 secondi è costata una giornata.
+     *
+     * Questo blocco provava il SONDAGGIO alla scelta locale in sette modi
+     * diversi, e non provava in nessun modo il RISCALDAMENTO — che parte dalla
+     * stessa riga, tre righe sotto. `talosWarmLocalModel` era mockato in cima
+     * al file (per non far esplodere il modulo) e **nessuno asseriva mai su di
+     * esso**: il classico mock che tace, esattamente come il cancello semantico
+     * spento da sempre (`il-cancello-semantico-era-spento-da-sempre`).
+     *
+     * ⇒ Con questo test, staccare il riscaldamento da `selectModel` diventa
+     * ROSSO. Senza, sarebbe tornato fra un mese senza che nessuno lo vedesse —
+     * ed è precisamente il difetto che stiamo curando, non un di più.
+     */
+    it('⛔ apre il modello IN ANTICIPO alla scelta esplicita, col percorso vero', async () => {
+        const { controller } = await withLocalModelDiscovered()
+        localEngine.talosWarmLocalModel.mockClear()
+
+        await controller.selectModel('local:/models/local-test/smollm2-135m.gguf')
+
+        await vi.waitFor(() => expect(localEngine.talosWarmLocalModel)
+            .toHaveBeenCalledWith('/models/local-test/smollm2-135m.gguf'))
+    })
+
+    it('AL CONTRARIO — non apre niente in anticipo per un modello di rete', async () => {
+        const { deps, controller } = await withLocalModelDiscovered()
+        await deps.setKey('anthropic', 'sk-ant')
+        await controller.refreshProvider('anthropic')
+        localEngine.talosWarmLocalModel.mockClear()
+
+        await controller.selectModel('anthropic:claude-live')
+        await new Promise((resolve) => setTimeout(resolve, 0))
+
+        expect(localEngine.talosWarmLocalModel).not.toHaveBeenCalled()
     })
 
     it('non la offre affatto per un modello remoto', async () => {

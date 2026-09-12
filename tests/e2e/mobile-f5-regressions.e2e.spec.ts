@@ -115,11 +115,18 @@ test('stations: tasks and notes persist across reload, doctor reports honestly',
     await page.locator(MENU).click()
     await page.locator(SIDEBAR).getByRole('button', { name: 'Open Notes' }).click()
     await expect(page.locator('[data-testid="talos-notes-screen"]')).toBeVisible()
+    // U-9 (11/09/2026): il FAB non c'e' piu'. La creazione comincia dal
+    // pulsante nell'intestazione della pagina, come nel mockup «Talos Calm».
+    await page.locator('[data-testid="talos-notes-new"]').click()
     await page.locator('[data-testid="talos-note-title"]').fill('Osservazione')
     await page.locator('[data-testid="talos-note-content"]').fill('Il recognizer richiede i servizi Google.')
     await page.locator('[data-testid="talos-note-save"]').click()
     await expect(page.locator('[data-testid="talos-note-row"]')).toHaveCount(1)
-    await expect(page.locator('[data-testid="talos-note-row"]').first()).toContainText('untrusted')
+    // ⛔ U-12: l'etichetta «non attendibile» NON e' piu' sulla riga — si dice
+    // una volta sola, nella nota aperta, come «Contenuto fornito dall'utente».
+    // Il dato resta `trust_level: 'untrusted'`: e' cambiata la superficie, non
+    // la disciplina.
+    await expect(page.locator('[data-testid="talos-note-row"]').first()).toContainText('Osservazione')
 
     // Restart: both persist (encrypted local store)
     await page.reload()

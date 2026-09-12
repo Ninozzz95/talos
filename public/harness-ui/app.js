@@ -52,6 +52,12 @@
       'La sessione è ancora in corso: un comando diretto aspetta che concluda.',
     'Command to run on the device': 'Comando da eseguire sul dispositivo',
     'Run command': 'Esegui comando',
+    // Visti sul Pad in inglese dentro l'app italiana (12/09/2026).
+    'No history found for this session right now. Write below to continue: if the server was restarted, your message opens a new session from here.':
+      'Nessuno storico per questa sessione al momento. Scrivi qui sotto per continuare: se il server è stato riavviato, il tuo messaggio apre una nuova sessione da qui.',
+    step: 'passi',
+    ctx: 'contesto',
+    errors: 'errori',
   };
   function t(testoInglese) {
     return (window.__talosHarnessLocale === 'it' && DIZIONARIO_IT[testoInglese]) || testoInglese;
@@ -65,6 +71,8 @@
       inputTerminale.placeholder = t(inputTerminale.placeholder);
       inputTerminale.setAttribute('aria-label', t(inputTerminale.getAttribute('aria-label')));
     }
+    // Le tre etichette della striscia («step · ctx · errors»): il testo dopo il numero.
+    $$('[data-run-kpi]').forEach((kpi) => { const ultimo = kpi.lastChild; if (ultimo && ultimo.nodeType === 3) ultimo.textContent = ' ' + t(ultimo.textContent.trim()); });
     const invioTerminale = $('.terminal-composer-send');
     if (invioTerminale) invioTerminale.setAttribute('aria-label', t(invioTerminale.getAttribute('aria-label')));
   }
@@ -783,7 +791,7 @@
     if (!conversation?.querySelector('.conversation-hero-loading')) return;
     conversation.replaceChildren(costruisciConversationHero(
       titolo || state.session || 'Session',
-      'No history found for this session right now. Write below to continue: if the server was restarted, your message opens a new session from here.',
+      t('No history found for this session right now. Write below to continue: if the server was restarted, your message opens a new session from here.'),
     ));
   }
 

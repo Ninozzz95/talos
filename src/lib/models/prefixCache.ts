@@ -33,8 +33,21 @@
  * - **il modello**: percorso, byte e data. Non l'hash del contenuto — sono 1,1
  *   GB da leggere, cioè si pagherebbe in lettura ciò che si voleva risparmiare
  *   in calcolo. Dimensione e data cambiano a ogni riscaricamento vero.
- * - **il contesto e il tipo di cache**: la KV è allocata su quelle misure. Un
- *   file salvato a `f16` non si può rileggere in un contesto `q8_0`.
+ * - **il tipo di cache**: un file salvato a `f16` non si può rileggere in un
+ *   contesto `q8_0`.
+ *
+ *   ⛔ NON il numero di token di contesto — e fino all'11/09/2026 c'era, ed
+ *   era il motivo per cui un invio ripagava tutto il prefill (§35 del ledger:
+ *   «5 riusati su 2.941», perché la politica del contesto era salita da 4096 a
+ *   7168 e il nome del file era cambiato). Letto alla fonte, sottomodulo
+ *   pinnato `src/llama-context.cpp` `state_seq_load_file`: si controllano
+ *   magic, versione e che i token ci **stiano** (`n_token_count >
+ *   n_token_capacity` → 0); la capienza non deve combaciare, deve bastare.
+ *   Upstream lo conferma (discussione ggml-org/llama.cpp #15569, letta
+ *   l'11/09/2026): i parametri che devono combaciare sono n_embd, n_layer,
+ *   n_head_kv, type_k/type_v, rope_freq_base, n_vocab — `n_ctx` non c'è. Un
+ *   prefisso troppo lungo per il contesto nuovo viene rifiutato dal motore
+ *   stesso, e si torna al prefill intero: nessun rischio silenzioso.
  * - **la build del motore**: il formato dello stato è interno a llama.cpp e non
  *   promette compatibilità fra versioni.
  * - ⭐ **il testo esatto del prefisso**: è il campo che conta di più e il più
@@ -55,8 +68,6 @@ export interface TalosPrefixIdentity {
     modelBytes: number
     /** Data di modifica, in millisecondi. */
     modelModifiedAt: number
-    /** I token di contesto con cui la cache è stata allocata. */
-    contextTokens: number
     /** `f16` o `q8_0` — quello OTTENUTO, mai quello chiesto. */
     kvCacheType: string
     /** La build del motore: il formato dello stato è interno a llama.cpp. */
@@ -84,7 +95,6 @@ export function talosPrefixFingerprint(identity: TalosPrefixIdentity): string {
         identity.modelPath,
         String(identity.modelBytes),
         String(identity.modelModifiedAt),
-        String(identity.contextTokens),
         identity.kvCacheType,
         identity.engineBuild,
         identity.prefixText,
@@ -136,9 +146,116 @@ export function talosPrefixCacheBytes(kvBytesPerToken: number, tokens: number): 
  */
 export interface TalosPrefixFreezeVerdict {
     freeze: boolean
-    /** Perché no, per il doctor e per il registro. Vuoto quando sì. */
+    /** Perché no. Vuoto quando sì. Chi lo LEGGE è `talosPrefixOutcomeOf`. */
     reason: '' | 'too-short' | 'no-space' | 'too-large'
     bytes: number
+}
+
+/**
+ * ⭐⭐⭐ L'ESITO che arriva fino a chi guarda lo schermo.
+ *
+ * ## Perché è nato, e qual era il difetto
+ *
+ * Il `reason` qui sopra portava il commento «per il doctor e per il registro»
+ * dal giorno in cui è stato scritto, e un `grep verdetto.reason` su tutto
+ * `src/` (2026-09-10) trovava **zero lettori**: veniva calcolato e buttato
+ * nello stesso respiro. Nello stesso giorno, sul Pad, `LFM2.5-2.6B-Q4_0`
+ * metteva **31 s** alla prima parola riusando **0 token su 2.847**, contro i
+ * **3,1 s** e **2.933 su 3.257** di gemma3 — e non c'era **nessun posto** dove
+ * accorgersi che l'inizio della richiesta, per LFM2, non veniva mai preparato.
+ * Un motivo calcolato e mai letto è la stessa forma di
+ * `funzione-con-i-test-e-nessun-chiamante`, stavolta sui dati.
+ *
+ * ## ⛔ RICERCA PRIMA (regola zero), fonti lette il 2026-09-10
+ *
+ *   - particula.tech, «Full Prompt Re-Processing: llama.cpp Cache Fixes That
+ *     Work» (https://particula.tech/blog/prompt-reprocessing-swa-hybrid-models-kv-cache):
+ *     quando llama-server non può riusare la cache emette
+ *     *«forcing full prompt re-processing due to lack of cache data (likely due
+ *     to SWA or hybrid/recurrent memory)»* — ma a livello **TRACE**, mentre la
+ *     verbosità predefinita è `info`: **su un avvio normale quella riga non è
+ *     mai stampata**. È l'articolo stesso a dire che è per questo che la gente
+ *     conclude di non essere toccata dal problema.
+ *   - ggml-org/llama.cpp, issue #21831 (https://github.com/ggml-org/llama.cpp/issues/21831):
+ *     sulle memorie ibride/ricorrenti (e con SWA) il rifiuto è strutturale e il
+ *     prompt si rimacina intero **a ogni turno, per sempre**, senza errori e
+ *     senza corrompere l'uscita.
+ *   - lmstudio-ai/lmstudio-bug-tracker, issue #2086
+ *     (https://github.com/lmstudio-ai/lmstudio-bug-tracker/issues/2086): LM
+ *     Studio non ha **nessuna** interfaccia su questa cache, nemmeno per il
+ *     tetto di RAM. ollama/ollama, issue #2023
+ *     (https://github.com/ollama/ollama/issues/2023): Ollama l'ha tenuta
+ *     **spenta** senza spiegarlo a chi usa l'app.
+ *   ⇒ Nessuno dei tre lo dice alla persona. Dirlo è il nostro one-up, e questo
+ *     tipo è il canale.
+ *
+ * ## ⛔ Come si dice, senza allarmare
+ *
+ *   - NN/g, «Error-Message Guidelines»
+ *     (https://www.nngroup.com/articles/error-message-guidelines/) e
+ *     uxtigers.com, «Error Message Usability»
+ *     (https://www.uxtigers.com/post/heuristic-9-error-messages): lingua
+ *     comune, mai codici, il problema detto con precisione; i codici oscuri si
+ *     mostrano **solo** per diagnosi, e il tono resta informativo invece che
+ *     d'allarme.
+ *   ⇒ Qui i codici restano **codici interni**: a schermo ci vanno le frasi di
+ *     `it.ts`/`en.ts`, e la riga vive dietro «Mostra dettagli tecnici» —
+ *     esattamente il «solo per diagnosi» della linea guida. Nessuna delle
+ *     undici frasi chiede alla persona di fare qualcosa: **non c'è niente da
+ *     fare**, e prometterlo sarebbe peggio del silenzio.
+ *
+ * ## ⛔ Undici stati, non «riuscito / non riuscito»
+ *
+ * Una coppia sì/no rifarebbe il difetto: *un guasto sarebbe indistinguibile da
+ * una scelta*. `too-short` è una decisione nostra e giusta; `unknown-shape` è
+ * il muro di LFM2; `save-failed` è un guasto. Confonderli vorrebbe dire non
+ * sapere, di nuovo, quale dei tre si sta guardando.
+ */
+export type TalosPrefixOutcome =
+    /** ✅ C'era, ed è stato riletto in questo turno. */
+    | 'reused'
+    /** Il file c'è, ma in questo turno il motore non l'ha riusato. */
+    | 'not-reused'
+    /** Si sta scrivendo ORA: servirà dal messaggio dopo, e la frase lo dice. */
+    | 'preparing'
+    /** L'ultimo salvataggio non ha prodotto byte: il motore non l'ha scritto. */
+    | 'engine-refused'
+    /** L'ultimo salvataggio si è interrotto. Era il `catch` vuoto. */
+    | 'save-failed'
+    /** Il modello non dichiara la propria forma: è il caso di LFM2. */
+    | 'unknown-shape'
+    | 'too-short'
+    | 'no-space'
+    | 'too-large'
+    /** Non si è potuto nemmeno costruire il testo o l'identità del prefisso. */
+    | 'unavailable'
+    /** Il controllo stesso è fallito. Mai silenzio, nemmeno qui. */
+    | 'check-failed'
+
+/**
+ * Dal verdetto all'esito, e senza una via muta.
+ *
+ * ⛔ Il `case ''` NON si fida del vuoto: guarda `freeze`. Un `reason` vuoto con
+ * `freeze:false` non può nascere da `talosShouldFreezePrefix` — ma se un giorno
+ * nascesse, dire «in preparazione» a una cosa che nessuno prepara sarebbe
+ * precisamente la bugia che questo file esiste per togliere.
+ *
+ * ⛔ E il `default` con `never` è il cancello: aggiungere un `reason` senza
+ * dargli una frase a schermo non compila.
+ */
+export function talosPrefixOutcomeOf(verdict: TalosPrefixFreezeVerdict): TalosPrefixOutcome {
+    switch (verdict.reason) {
+        case 'too-short':
+        case 'no-space':
+        case 'too-large':
+            return verdict.reason
+        case '':
+            return verdict.freeze ? 'preparing' : 'check-failed'
+        default: {
+            const mai: never = verdict.reason
+            return mai
+        }
+    }
 }
 
 /** Sotto questa soglia il calcolo costa meno della scrittura. */

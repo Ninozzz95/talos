@@ -25,6 +25,7 @@ import {
 } from '@/lib/tools/tracciaAzione'
 import { talosTracciaFuori } from '@/lib/device/traccia'
 import { talosComposerBusy } from '@/lib/chat/composerBusy'
+import { talosImageSendDecision } from '@/lib/chat/consensoImmagini'
 import { talosRispostaVuotaDopoStrumenti, talosStrumentiPartiti } from '@/lib/chat/rispostaVuota'
 import {
     talosToolActivityDetail,
@@ -966,8 +967,11 @@ export interface ChatController {
     notes: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalNote[]>
         create(input: { title: string; content: string }): Promise<import('@/repositories/chatRepository').TalosLocalNote>
-        /** Titolo e corpo si cambiano separatamente: assente = non toccare. */
-        update(input: { id: string; title?: string; content?: string }): Promise<import('@/repositories/chatRepository').TalosLocalNote>
+        /**
+         * Titolo, corpo ed evidenza si cambiano separatamente: assente = non
+         * toccare. U-10: la sola `pinned` non muove la data di modifica.
+         */
+        update(input: { id: string; title?: string; content?: string; pinned?: boolean }): Promise<import('@/repositories/chatRepository').TalosLocalNote>
         remove(noteId: string): Promise<void>
     }
     /**
@@ -1004,6 +1008,15 @@ export interface ChatController {
         list(): Promise<readonly import('@/lib/research/researchRun').TalosResearchRun[]>
         /** R-4 — the report read back as structure, verdicts included. Null when it will not parse. */
         report(fileId: string): Promise<import('@/lib/research/researchReport').TalosResearchReportRecord | null>
+        /**
+         * MB-1 — il rapporto come TESTO, prima di provare a capirlo.
+         *
+         * `report` torna `null` sia su un rapporto illeggibile sia su uno che
+         * non c'è, e da un `null` non si distingue «non si rilegge» da
+         * «bloccata da un permesso»: le due frasi che la scheda deve dire
+         * stanno nel testo, non nel record.
+         */
+        reportDocument(fileId: string): Promise<string | null>
         /** R11 — a further question, answered from the sources already paid for. */
         followUp(runId: string, question: string): Promise<string | null>
         /** R12 — are the sources still saying what they said? */
@@ -1046,6 +1059,26 @@ export interface ChatController {
             kind: 'preference' | 'project_fact' | 'procedure' | 'policy_note'
             scope_type: 'global' | 'project' | 'session'
             scope_id: string | null
+        }): Promise<import('@/repositories/chatRepository').TalosLocalMemory>
+        /**
+         * U-19 — correggere il TESTO di una memoria, senza toccare il resto.
+         *
+         * ⛔ Non è `create` con un id: `upsertMemory` rimette `status =
+         * 'active'` a ogni scrittura, quindi una correzione risveglierebbe una
+         * memoria che l'utente aveva spento. Passa da `updateMemory`, che tocca
+         * solo `title`, `content` e `kind` — e in particolare NON tocca
+         * `content_origin`: la provenienza è la storia della riga, e sistemarne
+         * il titolo non la cambia.
+         *
+         * La facciata aveva già questo metodo (lo usa il tool della chat dal
+         * 2026-08-07); mancava qui, cioè mancava alla superficie pubblica del
+         * controller — e la stazione non poteva chiamarlo.
+         */
+        update(input: {
+            id: string
+            title?: string
+            content?: string
+            kind?: 'preference' | 'project_fact' | 'procedure' | 'policy_note'
         }): Promise<import('@/repositories/chatRepository').TalosLocalMemory>
         upsertDisplayName(displayName: string): Promise<import('@/repositories/chatRepository').TalosLocalMemory>
         setStatus(
@@ -1410,6 +1443,20 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      */
     const imageConsentRequest = ref<{ count: number, provider: string } | null>(null)
     let imageConsentResolve: ((answer: 'allow' | 'once' | 'deny') => void) | null = null
+    /**
+     * ⛔ Il «sì» già dato per QUESTA bozza, e per nessun'altra.
+     *
+     * Serve a non chiedere due volte la stessa cosa. Chi ha appena scelto una
+     * foto dalla galleria ha già visto il cartellino e ha già risposto:
+     * richiederglielo un secondo dopo, premendo Invia, è il modo di insegnare a
+     * rispondere «sì» senza leggere — cioè di distruggere il valore della
+     * domanda proprio mentre si crede di rafforzarlo.
+     *
+     * Vale quanto il contenuto del compositore: si azzera quando la bozza parte
+     * (`clearSent`). Non è una preferenza — quella è
+     * `shell.image_attachment_consent`, e la sposta solo «Sempre».
+     */
+    const imageConsentGivenForDraft = ref(false)
 
     async function answerImageConsent(answer: 'allow' | 'once' | 'deny'): Promise<void> {
         imageConsentRequest.value = null
@@ -1418,7 +1465,35 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         // «Sempre» si ricorda; «solo questa volta» e «no» non cambiano niente:
         // una scelta di questo tipo si alza, non si abbassa da sola.
         if (answer === 'allow') await deps.settings.setShell?.({ image_attachment_consent: 'allow' })
+        // Ma «solo questa volta» vale per TUTTA questa bozza: è la risposta a
+        // «queste immagini possono uscire?», e le immagini sono queste.
+        if (answer !== 'deny') imageConsentGivenForDraft.value = true
         resolve?.(answer)
+    }
+
+    /**
+     * La domanda sull'immagine, da una porta sola.
+     *
+     * La chiamano due strade — la scelta di un file nuovo dalla galleria e
+     * l'invio di un file che era GIÀ nel Vault — e devono chiedere la stessa
+     * cosa con le stesse parole. Due formulazioni della stessa domanda sono due
+     * domande diverse per chi le legge.
+     */
+    function askImageConsent(count: number): Promise<'allow' | 'once' | 'deny'> {
+        return new Promise((resolve) => {
+            // Se qualcuno sta gia' rispondendo, la seconda domanda non si
+            // accoda in silenzio: si nega, che e' l'esito prudente.
+            if (imageConsentResolve) { resolve('deny'); return }
+            imageConsentResolve = resolve
+            imageConsentRequest.value = {
+                count,
+                // Il NOME del provider, non il suo identificativo: «anthropic»
+                // in minuscolo e' una chiave interna, e in una frase rivolta
+                // a una persona si legge come un refuso.
+                provider: TALOS_MOBILE_PROVIDERS.find((entry) => entry.id === selectedProfile.value?.provider)?.label
+                    ?? deps.translate('chat.imageConsentProviderUnknown'),
+            }
+        })
     }
 
     /**
@@ -1458,20 +1533,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         translate: deps.translate,
         currentSessionId: () => chat.activeSession.value?.id ?? null,
         imageConsent: () => deps.settings.state.shell?.image_attachment_consent ?? 'ask',
-        askImageConsent: (count) => new Promise((resolve) => {
-            // Se qualcuno sta gia' rispondendo, la seconda domanda non si
-            // accoda in silenzio: si nega, che e' l'esito prudente.
-            if (imageConsentResolve) { resolve('deny'); return }
-            imageConsentResolve = resolve
-            imageConsentRequest.value = {
-                count,
-                // Il NOME del provider, non il suo identificativo: «anthropic»
-                // in minuscolo e' una chiave interna, e in una frase rivolta
-                // a una persona si legge come un refuso.
-                provider: TALOS_MOBILE_PROVIDERS.find((entry) => entry.id === selectedProfile.value?.provider)?.label
-                    ?? deps.translate('chat.imageConsentProviderUnknown'),
-            }
-        }),
+        askImageConsent,
     })
 
     const modelLabPreferences = computed(() =>
@@ -6528,6 +6590,19 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
                     return { spend: collection.spend, resultRef: stored?.file.id ?? null }
                 },
+                /**
+                 * MB-1 · C20 — il cancello della consegna guarda il FILE.
+                 *
+                 * Restituisce il documento grezzo, non il record gia' letto:
+                 * chi decide se «conclusa» si e' guadagnata deve poter
+                 * distinguere «non si rilegge» da «si rilegge ed e' vuoto», e
+                 * un lettore che torna `null` per entrambi i casi cancella
+                 * proprio la differenza che serve.
+                 */
+                readReport: async (resultRef) => {
+                    const file = await deps.chatRepository.getVaultFile(resultRef).catch(() => null)
+                    return file?.extracted_text ?? null
+                },
             })
         }
         async function ready() {
@@ -6985,6 +7060,21 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             },
 
             /**
+             * Il rapporto COM'E' SCRITTO, prima che qualcuno provi a capirlo. (MB-1)
+             *
+             * Accanto a `report` e non al suo posto: quello torna il record
+             * ricostruito ed e' cio' che serve per disegnare i verdetti; questo
+             * torna il testo, ed e' cio' che serve per giudicare se un rapporto
+             * esiste davvero. Un rapporto che non si rilegge sparisce dal primo
+             * e resta intero nel secondo — ed e' esattamente il caso in cui c'e'
+             * qualcosa da dire a chi guarda.
+             */
+            async reportDocument(fileId: string): Promise<string | null> {
+                const file = await deps.chatRepository.getVaultFile(fileId).catch(() => null)
+                return file?.extracted_text ?? null
+            },
+
+            /**
              * Talk about a research in a chat — a REAL one.
              *
              * Owner 2026-08-03: «quando in fondo voglio fare partire un'altra
@@ -7031,6 +7121,66 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         }
     })()
 
+    /**
+     * ⛔⛔ IL CANCELLO STA SULL'INVIO, non sulla scelta del file.
+     *
+     * ## Il buco, e perché nessuno lo vedeva
+     *
+     * Il consenso sulle immagini esisteva da mesi, e stava in una strada sola:
+     * quella che sceglie un file NUOVO dalla galleria
+     * (`useTalosMobileAttachments.pick`). Ma nella chat un'immagine può entrare
+     * anche da un'altra porta — `attachExisting`, cioè un file **già nel
+     * Vault**, archiviato ieri, ripescato dalla Libreria. Quella porta non
+     * chiedeva niente: una foto messa da parte una settimana fa partiva verso
+     * OpenRouter senza che comparisse nessun cartellino.
+     *
+     * ⛔ Il difetto non era «manca una chiamata in `attachExisting`». Era che il
+     * cancello stava sul gesto SBAGLIATO: allegare non fa uscire niente dal
+     * telefono: **inviare** sì. Finché la guardia sta sull'allegare, ogni porta
+     * nuova verso il vassoio è un buco nuovo, e ce ne sarà una domani.
+     *
+     * ⇒ La guardia si sposta dove avviene la cosa di cui si chiede il permesso.
+     * È anche ciò che la piattaforma raccomanda: chiedere il consenso **nel
+     * momento in cui la funzione che ne ha bisogno viene usata**, non prima e
+     * non altrove — Android, *App permissions best practices*, letto
+     * 12/09/2026: https://developer.android.com/training/permissions/usage-notes
+     *
+     * ## Le tre risposte, e perché sono tre
+     *
+     * - **Modello locale** → nessuna domanda. Non esce niente: il modello è un
+     *   file su questo disco. Chiedere il permesso di fare una cosa che non si
+     *   sta facendo è il rumore che insegna a rispondere senza leggere.
+     * - **Consenso già dato per questa bozza** → nessuna domanda. La foto
+     *   appena scelta ha già avuto il suo cartellino un secondo fa.
+     * - **Tutto il resto** → si chiede, e un «no» **ferma l'invio**. Non lo
+     *   manda senza immagini: manderebbe una domanda priva della cosa di cui
+     *   parla, che è il modo peggiore di obbedire.
+     */
+    async function immaginiAutorizzateAUscire(): Promise<boolean> {
+        const immagini = attachments.items.filter((item) =>
+            item.status === 'authorized' && item.mediaType.startsWith('image/'))
+        const decisione = talosImageSendDecision({
+            imageCount: immagini.length,
+            // ⛔ Il provider DOPO l'eventuale passaggio a un modello che vede le
+            // immagini: è quello a cui la foto andrà davvero.
+            provider: selectedProfile.value?.provider ?? null,
+            alreadyAnsweredForDraft: imageConsentGivenForDraft.value,
+            stance: deps.settings.state.shell?.image_attachment_consent ?? 'ask',
+        })
+        if (decisione === 'send') return true
+        if (decisione === 'refuse') {
+            toasts.push({ message: deps.translate('chat.imageConsentDenied'), durationMs: 6000 })
+            return false
+        }
+
+        const answer = await askImageConsent(immagini.length)
+        if (answer === 'deny') {
+            toasts.push({ message: deps.translate('chat.imageConsentDenied'), durationMs: 6000 })
+            return false
+        }
+        return true
+    }
+
     async function send(
         text: string,
         turnPolicy: TalosLibraryTurnOverride | null = null,
@@ -7047,6 +7197,10 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     ): Promise<boolean> {
         clearPromptEnhancement()
         preferVisionProfileForAttachments()
+        // ⛔ DOPO la scelta del modello per le immagini, mai prima: quella riga
+        // può cambiare provider, e il cartellino deve nominare il provider a cui
+        // la foto andrà DAVVERO.
+        if (!await immaginiAutorizzateAUscire()) return false
         const accepted = await chat.send(
             text,
             selectedModelId.value,
@@ -7062,7 +7216,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // Owner 2026-07-24: clear the composer's attachments the instant the
             // user turn is COMMITTED — not after the whole generation, which left
             // the sent file lingering in the composer for the entire response.
-            () => attachments.clearSent(),
+            () => {
+                attachments.clearSent()
+                // La bozza è partita: il «sì» valeva per quelle immagini, non
+                // per le prossime. Un consenso che sopravvive al suo oggetto
+                // non è più un consenso, è un interruttore che nessuno ha
+                // acceso di proposito.
+                imageConsentGivenForDraft.value = false
+            },
             turnPolicy,
         )
         return accepted

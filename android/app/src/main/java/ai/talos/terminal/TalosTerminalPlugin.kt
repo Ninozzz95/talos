@@ -102,7 +102,24 @@ class TalosTerminalPlugin : Plugin() {
         private const val NOME_BINARIO = "node"
         private const val AREA_REMOTA = "/data/local/tmp/talos"
         private const val BINARIO_REMOTO = "$AREA_REMOTA/$NOME_BINARIO"
-        private const val EXEC_JS_REMOTO = "$AREA_REMOTA/talos-exec.js"
+        private const val NOME_EXEC_JS = "talos-exec.js"
+        private const val EXEC_JS_REMOTO = "$AREA_REMOTA/$NOME_EXEC_JS"
+
+        /**
+         * ⛔⛔ 10/9 — GLI ASSET CHE SCRIVIAMO NOI SI RICOPIANO SEMPRE.
+         *
+         * `stagingLocale()` è idempotente per ESISTENZA, e per gli altri
+         * dieci file di `talos-node-lib/` è la scelta giusta: sono il
+         * binario Node e le sue librerie, ~88 MB di artefatti di terze
+         * parti fissati per provenienza (`jniLibs/PROVENIENZA.md`), che
+         * cambiano solo quando cambia la versione di Node. `talos-exec.js`
+         * no: è codice di QUESTO repo, cambia quando lo cambiamo noi, e
+         * `context.filesDir` sopravvive a un `adb install -r` — un file
+         * vecchio sarebbe rimasto lì per sempre. È esattamente il "SESTO
+         * errore" del 28/8, che era stato curato sull'albero harness-ui e
+         * mai su questo. Costa un `copyTo` da 1 KB per avvio del server.
+         */
+        private val ASSET_SEMPRE_RICOPIATI = setOf(NOME_EXEC_JS)
         /**
          * ⛔⛔ SECONDO ERRORE trovato sul device vero (28/8), dopo il crash
          * dell'asset compresso: `TalosPonteAdb.shell()` esegue `adb shell
@@ -237,7 +254,11 @@ class TalosTerminalPlugin : Plugin() {
         val nomi = am.list(ASSET_DIR) ?: emptyArray()
         for (nome in nomi) {
             val out = File(dest, nome)
-            if (out.exists()) continue
+            // ⛔ 10/9 — vedi `ASSET_SEMPRE_RICOPIATI`: l'idempotenza per
+            // esistenza vale per gli 88 MB di runtime, non per il nostro
+            // script, che altrimenti resterebbe alla versione del giorno in
+            // cui questo telefono l'ha visto la prima volta.
+            if (out.exists() && nome !in ASSET_SEMPRE_RICOPIATI) continue
             val tmp = File(dest, "$nome.tmp")
             am.open("$ASSET_DIR/$nome").use { input ->
                 tmp.outputStream().use { output -> input.copyTo(output) }
@@ -346,14 +367,37 @@ class TalosTerminalPlugin : Plugin() {
         // o interrotto) farebbe credere pronto un telefono a cui manca il
         // file che l'esecuzione vera invoca — trovato riprovando dopo
         // averlo aggiunto, il solo binario rispondeva già "pronto".
-        val comandoProva = android.util.Base64.encodeToString(
-            "exit 0".toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP,
-        )
-        val giaPronto = TalosPonteAdb.shell(
-            context, listOf(PREFISSO_LD, BINARIO_REMOTO, EXEC_JS_REMOTO, comandoProva),
-            ammessi = PROGRAMMA_AMMESSO, riagganciaSeStaccato = false,
-        )
-        if (giaPronto.ok) return giaPronto
+        //
+        // ⛔⛔⛔ 10/9 — E NON BASTA CHE RISPONDA: DEVE DIRE QUALE VERSIONE È.
+        // `/data/local/tmp/talos/talos-exec.js` sopravvive a un
+        // `adb install -r`. Un telefono fermo alla v1 riceverebbe il flag
+        // `--ambiente-da-stdin`, lo ignorerebbe come argomento sconosciuto,
+        // e il server partirebbe SENZA CHIAVI — in silenzio, con l'errore
+        // che compare molto più tardi e molto più lontano. Uno script v1
+        // esegue `exit 0` e non stampa niente; uno v2 stampa il proprio
+        // nome. La differenza fra "risponde" e "risponde ciò che mi
+        // aspetto" è tutta qui.
+        val giaPronto = sondaVersioneExec(riaggancia = false)
+        if (versioneGiusta(giaPronto)) return giaPronto
+
+        // ⭐ Node vive, ma lo script è vecchio: si rispinge SOLO quel file
+        // (1 KB), non gli 88 MB di runtime che sono già a posto e giusti.
+        // L'aggiornamento del protocollo non deve costare all'owner due
+        // minuti di push su un telefono che ha già tutto.
+        if (giaPronto.ok) {
+            val script = File(stagingLocale(), NOME_EXEC_JS)
+            val push = TalosPonteAdb.esegui(
+                context, listOf("push", script.absolutePath, EXEC_JS_REMOTO), attesaMs = 60_000,
+            )
+            if (push.ok) {
+                val riprova = sondaVersioneExec(riaggancia = true)
+                if (versioneGiusta(riprova)) return riprova
+                Log.w(TAG, "talos-exec.js rispinto ma la versione resta '${riprova.uscita.trim()}': provisioning completo")
+            }
+            else {
+                Log.w(TAG, "push mirato di $NOME_EXEC_JS fallito (${push.motivo}): provisioning completo")
+            }
+        }
 
         val locale = stagingLocale()
         TalosPonteAdb.esegui(context, listOf("shell", "mkdir", "-p", AREA_REMOTA))
@@ -369,11 +413,43 @@ class TalosTerminalPlugin : Plugin() {
             }
         }
         TalosPonteAdb.esegui(context, listOf("shell", "chmod", "755", BINARIO_REMOTO))
+        val dopoIlPush = sondaVersioneExec(riaggancia = true)
+        // ⛔ Onesto anche quando fallisce: se dopo un provisioning completo la
+        // versione ancora non torna, l'esito NON è `ok` — meglio un errore
+        // subito che un server avviato con un protocollo che nessuno dei due
+        // lati capisce fino in fondo.
+        if (dopoIlPush.ok && !versioneGiusta(dopoIlPush)) {
+            return dopoIlPush.copy(
+                ok = false,
+                motivo = "talos-exec-versione-inattesa",
+                errore = "atteso ${TalosPonteSegreti.VERSIONE_TALOS_EXEC}, ricevuto '${dopoIlPush.uscita.trim()}'",
+            )
+        }
+        return dopoIlPush
+    }
+
+    /**
+     * Chiede a `talos-exec.js` chi è. Il comando in base64 resta `exit 0`
+     * (uno script v1, che il flag non lo conosce, esegue quello e stampa
+     * niente); uno script v2 ignora il comando e scrive il proprio nome.
+     */
+    private fun sondaVersioneExec(riaggancia: Boolean): TalosPonteAdb.Esito {
+        val comandoProva = android.util.Base64.encodeToString(
+            "exit 0".toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP,
+        )
         return TalosPonteAdb.shell(
-            context, listOf(PREFISSO_LD, BINARIO_REMOTO, EXEC_JS_REMOTO, comandoProva),
+            context,
+            listOf(
+                PREFISSO_LD, BINARIO_REMOTO, EXEC_JS_REMOTO, comandoProva,
+                TalosPonteSegreti.FLAG_VERSIONE,
+            ),
             ammessi = PROGRAMMA_AMMESSO,
+            riagganciaSeStaccato = riaggancia,
         )
     }
+
+    private fun versioneGiusta(esito: TalosPonteAdb.Esito): Boolean =
+        esito.ok && esito.uscita.trim() == TalosPonteSegreti.VERSIONE_TALOS_EXEC
 
     private fun Esito.toJs(campoOutput: String = "output"): JSObject {
         val res = JSObject()
@@ -467,6 +543,43 @@ class TalosTerminalPlugin : Plugin() {
      * contiene mai spazi, quindi non blocca l'uso previsto; se in futuro
      * servisse un valore con spazi, la cura è quotare dentro
      * `talos-exec.js`, non qui.
+     *
+     * ⛔⛔⛔ 10/9 — QUEL RAGIONAMENTO ERA CORRETTO E INSUFFICIENTE. LEGGILO,
+     * NON L'HO CANCELLATO: serve a qualcuno, e cancellarlo toglierebbe la
+     * sola cosa che spiega come si sbaglia.
+     *
+     * «Qui (a) non succede — nessun `Log.*` tocca `ambiente` o
+     * `prefissiAmbiente`» è VERO, e resta vero. Ma a stampare la chiave non
+     * eravamo noi: il segreto viaggiava come token `VAR=valore` dentro la
+     * STRINGA DI COMANDO consegnata ad `adb shell`, e chi la registra è
+     * `adbd`. Sul Pad dell'owner, build di rilascio, a ogni avvio:
+     *
+     *     I adbd: adbd service requested 'shell,v2,raw:LD_LIBRARY_PATH=…
+     *             OPENROUTER_API_KEY=sk-or-… node …'
+     *
+     * Non è una ROM ballerina: è AOSP per costruzione — `ForkAndExec()` in
+     * `daemon/shell_service.cpp` chiama
+     * `__android_log_security_bswrite(SEC_TAG_ADB_SHELL_CMD, command_.c_str())`
+     * per OGNI comando non interattivo (letto alla fonte il 2026-09-10).
+     * La chiave è stata ruotata.
+     *
+     * ⇒ Il modello di minaccia del 28/8 aveva tre voci — ARGV/`ps`, essere
+     * loggato, `/proc/<pid>/environ` — e copriva **il nostro processo** e **il
+     * processo remoto**. Non copriva il **TRASPORTO in mezzo**: client adb,
+     * server adb, `adbd`, la `sh` remota. Quattro processi mai nominati, e
+     * ognuno di loro vedeva tutto.
+     *
+     * ⇒ La regola che ne resta, e che vale ovunque: il criterio non è «il mio
+     * codice lo scrive da qualche parte?» ma **«per quali processi passa, e
+     * cosa scrive ognuno di loro?»**. La catena intera, anello per anello, sta
+     * disegnata in `TalosPonteSegreti.kt` — insieme al perché la cura è stdin
+     * e non un file `0600`.
+     *
+     * ⇒ Da oggi `ambiente` NON diventa più un token della riga di comando:
+     * diventa un oggetto JSON scritto sullo stdin di `talos-exec.js`. Il
+     * limite dello SPAZIO qui sopra sparisce con esso — `execSync` riceve una
+     * mappa `env`, non una parola da spezzare — ma il paragrafo resta perché
+     * descrive com'era, ed è la ragione per cui c'era il flag `NO_WRAP`.
      */
     @PluginMethod
     fun eseguiComando(call: PluginCall) {
@@ -475,17 +588,20 @@ class TalosTerminalPlugin : Plugin() {
             call.reject("comando mancante")
             return
         }
+        // ⛔ La validazione dei NOMI resta qui, PRIMA del provisioning: una
+        // richiesta malformata si rifiuta subito, senza aver prima spinto
+        // 88 MB sul telefono per poi dire di no. `TalosPonteSegreti.consegna()`
+        // rivalida per conto suo qualche riga più giù — due controlli, perché
+        // nessuno dei due deve dipendere dal fatto che l'altro sia stato fatto.
         val ambiente = call.getObject("ambiente")
-        val prefissiAmbiente = mutableListOf<String>()
+        val ambienteDalChiamante = mutableMapOf<String, String>()
         if (ambiente != null) {
-            val nomiValidi = Regex("^[A-Z_][A-Z0-9_]*$")
             for (nome in ambiente.keys()) {
-                if (!nomiValidi.matches(nome)) {
+                if (!TalosPonteSegreti.nomeValido(nome)) {
                     call.reject("nome variabile d'ambiente non valido: $nome")
                     return
                 }
-                val valore = ambiente.getString(nome) ?: ""
-                prefissiAmbiente.add("$nome=$valore")
+                ambienteDalChiamante[nome] = ambiente.getString(nome) ?: ""
             }
         }
         val pronto = assicuraRuntimeSulTelefono()
@@ -497,14 +613,29 @@ class TalosTerminalPlugin : Plugin() {
             comando.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP,
         )
         // ⛔ `ammessi` resta ancorato a `PREFISSO_LD`: è SEMPRE il primo
-        // token (`comando[0]`), indipendentemente da quanti altri
-        // `VAR=valore` seguano prima del binario — l'allowlist di
-        // TalosPonteAdb.shell controlla solo il primissimo elemento.
-        val esito = TalosPonteAdb.shell(
-            context,
-            listOf(PREFISSO_LD) + prefissiAmbiente + listOf(BINARIO_REMOTO, EXEC_JS_REMOTO, comandoBase64),
-            ammessi = PROGRAMMA_AMMESSO,
+        // token (`comando[0]`), e ora è anche l'UNICO `VAR=valore` che
+        // precede il binario — l'allowlist di TalosPonteAdb.shell controlla
+        // solo il primissimo elemento, e da oggi non ha più niente dietro cui
+        // qualcosa possa nascondersi.
+        //
+        // ⛔⛔ 10/9 — `consegna()` divide in due ciò che prima era una lista
+        // sola: quello che il mondo può leggere (gli argomenti) e quello che
+        // nessuno deve leggere (i byte su stdin). Vedi `TalosPonteSegreti.kt`
+        // per la catena dei processi che rende la prima metà pubblica.
+        val consegna = TalosPonteSegreti.consegna(
+            listOf(PREFISSO_LD), BINARIO_REMOTO, EXEC_JS_REMOTO, comandoBase64, ambienteDalChiamante,
         )
+        val esito = try {
+            TalosPonteAdb.shell(
+                context,
+                consegna.argomenti,
+                ammessi = PROGRAMMA_AMMESSO,
+                ingresso = consegna.ingresso,
+            )
+        }
+        finally {
+            consegna.cancella()
+        }
         call.resolve(esito.toJs("stdout"))
     }
 
@@ -564,12 +695,20 @@ class TalosTerminalPlugin : Plugin() {
      * (esattamente il caso di un comando lanciato via `adb shell`, senza
      * terminale di controllo fin dall'inizio).
      *
-     * Le variabili d'ambiente (le tre fisse — nomi letti da
-     * `harness-ui/src/config.mjs` il 28/8, non a memoria — più quelle
-     * eventuali del chiamante, es. `OPENROUTER_API_KEY`) arrivano come
-     * prefissi `VAR=valore` PRIMA di `node talos-exec.js`, esattamente
-     * come già fa `eseguiComando`: `execSync` dentro lo script eredita
-     * `process.env`, quindi le vede anche il comando che lancia dentro.
+     * Le variabili d'ambiente si dividono in DUE, e la divisione è il
+     * punto (10/9, vedi `TalosPonteSegreti.kt`):
+     *   · le FISSE — nomi letti da `harness-ui/src/config.mjs` il 28/8,
+     *     non a memoria — restano prefissi `VAR=valore` PRIMA di
+     *     `node talos-exec.js`: sono costanti scritte in questo file,
+     *     percorsi e una porta, niente che qualcuno non possa leggere;
+     *   · quelle del CHIAMANTE (le cinque `*_API_KEY`, `OLLAMA_ENDPOINT`)
+     *     viaggiano invece sullo **stdin** dello script, perché la riga di
+     *     comando finisce nel log di sicurezza che `adbd` scrive per ogni
+     *     `adb shell` — è così che una chiave dell'owner è finita nel
+     *     logcat di una build di rilascio, ed è così che è stata ruotata.
+     * In entrambi i casi il risultato per il server è identico: `execSync`
+     * dentro lo script riceve l'ambiente unito, quindi le vede anche il
+     * comando che lancia dentro.
      *
      * ⛔ `TALOS_HARNESS_UI_HOST` non è passato: resta `127.0.0.1` (il
      * default di `config.mjs`, l'unico valore che passa la sua allowlist
@@ -590,15 +729,14 @@ class TalosTerminalPlugin : Plugin() {
     @PluginMethod
     fun avviaServerHarness(call: PluginCall) {
         val ambiente = call.getObject("ambiente")
-        val nomiValidi = Regex("^[A-Z_][A-Z0-9_]*$")
-        val prefissiChiamante = mutableListOf<String>()
+        val ambienteDalChiamante = mutableMapOf<String, String>()
         if (ambiente != null) {
             for (nome in ambiente.keys()) {
-                if (!nomiValidi.matches(nome)) {
+                if (!TalosPonteSegreti.nomeValido(nome)) {
                     call.reject("nome variabile d'ambiente non valido: $nome")
                     return
                 }
-                prefissiChiamante.add("$nome=${ambiente.getString(nome) ?: ""}")
+                ambienteDalChiamante[nome] = ambiente.getString(nome) ?: ""
             }
         }
 
@@ -738,18 +876,37 @@ class TalosTerminalPlugin : Plugin() {
             // sopravvivono a un `rm -rf` dell'albero server, vedi
             // AREA_STATO_REMOTO sopra.
             "TALOS_HARNESS_UI_STATE_DIR=$AREA_STATO_REMOTO",
-            // ⭐ 29/8 — default onesto: `prefissiChiamante` (sotto, dopo
-            // questa lista) può SOVRASCRIVERLO — un `VAR=valore` successivo
-            // nella stessa riga di comando vince sempre sul precedente,
-            // stesso principio POSIX già sfruttato per LD_LIBRARY_PATH.
+            // ⭐ 29/8 — default onesto: l'ambiente del chiamante può
+            // SOVRASCRIVERLO. ⛔⛔ 10/9 — quella garanzia stava tutta in un
+            // fatto della shell («un `VAR=valore` successivo nella stessa
+            // riga vince sul precedente»), e spostando il chiamante su stdin
+            // sarebbe sparita in silenzio: ora la riscrive esplicita
+            // `ambienteUnito()` in `talos-exec.js` — `process.env` prima,
+            // l'ambiente arrivato da stdin sopra. Stesso esito, ma scritto
+            // dove qualcuno lo può leggere invece che dedotto da POSIX.
             "TALOS_HARNESS_UI_PROJECT_DIRS=$AREA_WORKSPACE_DEFAULT",
         )
-        val esito = TalosPonteAdb.shell(
-            context,
-            listOf(PREFISSO_LD) + prefissiServer + prefissiChiamante +
-                listOf(BINARIO_REMOTO, EXEC_JS_REMOTO, comandoBase64),
-            ammessi = PROGRAMMA_AMMESSO,
+        // ⛔⛔ 10/9 — i `TALOS_*` qui sopra RESTANO nella riga di comando: sono
+        // costanti scritte in questo file, non segreti, e non c'è niente da
+        // nascondere in un percorso di lavoro. Va su stdin **tutto** ciò che
+        // arriva dal chiamante — le cinque `*_API_KEY` e `OLLAMA_ENDPOINT` —
+        // senza distinguere fra «questa è una chiave» e «questo è un
+        // indirizzo»: quella distinzione la sbaglierebbe qualcuno, prima o poi.
+        val consegna = TalosPonteSegreti.consegna(
+            listOf(PREFISSO_LD) + prefissiServer,
+            BINARIO_REMOTO, EXEC_JS_REMOTO, comandoBase64, ambienteDalChiamante,
         )
+        val esito = try {
+            TalosPonteAdb.shell(
+                context,
+                consegna.argomenti,
+                ammessi = PROGRAMMA_AMMESSO,
+                ingresso = consegna.ingresso,
+            )
+        }
+        finally {
+            consegna.cancella()
+        }
         val res = esito.toJs("stdout")
         res.put("giaAttivo", false)
         call.resolve(res)

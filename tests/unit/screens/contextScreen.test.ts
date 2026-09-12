@@ -302,9 +302,28 @@ describe('ContextScreen Library gallery', () => {
         const wrapper = mount(ContextScreen)
         await flushPromises()
         await wrapper.get('[aria-label="Library options"]').trigger('click')
-        const upload = wrapper.findAll('[role="menuitem"]').find((node) => node.text().includes('Upload files'))!
+        const upload = wrapper.findAll('[role="menuitem"]').find((node) => node.text().includes('Add file'))!
         await upload.trigger('click')
         expect(mockState.controller.attachments.selectFiles).toHaveBeenCalledOnce()
+    })
+
+    /**
+     * Owner 12/09/2026: aggiungere un file alla Libreria non manda niente a
+     * nessuno, quindi non deve chiedere «questa immagine esce dal telefono».
+     * La destinazione e’ cio’ che lo decide, e passarla e’ l’unico pezzo che
+     * questa schermata possiede: se sparisce, il cartellino torna.
+     */
+    it('adds to the Library, not to the next message', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-add"]').trigger('click')
+        expect(mockState.controller.attachments.selectFiles).toHaveBeenCalledWith('library')
+
+        await wrapper.get('[aria-label="Library options"]').trigger('click')
+        const fromMenu = wrapper.findAll('[role="menuitem"]').find((node) => node.text().includes('Add file'))!
+        await fromMenu.trigger('click')
+        expect(mockState.controller.attachments.selectFiles).toHaveBeenLastCalledWith('library')
     })
 
     it('LIB-MENU-07 still requires explicit confirmation after selecting Delete from More', async () => {
@@ -803,7 +822,89 @@ describe('ContextScreen Library gallery', () => {
         expect(viewer!.textContent).toContain('Ciao')
     })
 
-    it('shows a compact empty state and a recoverable load error', async () => {
+    /**
+     * ── U-14 · IL MOVIMENTO C'E' DAVVERO, non e' solo dichiarato ──────────────
+     *
+     * ⛔ Queste quattro prove guardano gli AGGANCI, non le durate: i
+     * millisecondi li decide il motore (`--talos-motion-calm-*`) e provarli qui
+     * vorrebbe dire riscrivere il risolutore dentro un test. Quello che un test
+     * puo' garantire e' che l'aggancio esista — ed e' esattamente cio' che si
+     * perde per primo in un refactor, senza che niente diventi rosso.
+     */
+    it('U-14 wires the FLIP, the staggered entry, the sliding thread and the wave', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-library-view-grid"]').trigger('click')
+        await flushPromises()
+
+        // 1. Le schede si RIORDINANO invece di saltare: e' la classe `move` di
+        //    <TransitionGroup>, che il FLIP lo calcola da sola.
+        const griglia = wrapper.get('[data-testid="talos-library-grid"]')
+        expect(griglia.classes().join(' ')).toContain('grid')
+
+        // 2. Una scheda ENTRA, e le successive con un po' di ritardo.
+        const scheda = wrapper.get('[data-vault-file-id="vault-ready"]')
+        expect(scheda.attributes('data-talos-motion-intent')).toBe('message-insert')
+        // ⛔ Il ritardo e' un calc() sul token del motore, non un numero: a
+        // movimento spento il token va a 0ms e il calc() si annulla da se'.
+        expect(scheda.attributes('style') ?? '').toContain('--talos-motion-stagger')
+
+        // 3. Il filo sotto il filtro attivo, che SCIVOLA da dov'era.
+        expect(wrapper.get('[data-testid="talos-library-type-all"] [data-talos-indicator]').exists())
+            .toBe(true)
+        // ⛔ E sotto il filtro NON attivo non c'e': due fili accesi insieme
+        // vorrebbero dire che il gruppo ha due voci scelte.
+        expect(wrapper.find('[data-testid="talos-library-type-links"] [data-talos-indicator]').exists())
+            .toBe(false)
+
+        // 4. L'onda parte dal dito: la classe da sola non basta, serve il punto.
+        expect(scheda.get('button').classes()).toContain('talos-wave-host')
+    })
+
+    /**
+     * ⛔ GRIGLIA ED ELENCO STANNO NELLA BARRA, non solo dentro un menu.
+     * Un interruttore nascosto in un menu non dice mai in quale dei due stati
+     * ci si trova: lo si scopre premendolo.
+     */
+    it('U-20 puts the view switch in the toolbar, as one radiogroup', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        const griglia = wrapper.get('[data-testid="talos-library-view-grid"]')
+        const elenco = wrapper.get('[data-testid="talos-library-view-list"]')
+        expect(griglia.attributes('role')).toBe('radio')
+        expect(elenco.attributes('role')).toBe('radio')
+        // Esattamente uno dei due e' scelto, sempre.
+        const scelti = [griglia, elenco].filter((b) => b.attributes('aria-checked') === 'true')
+        expect(scelti).toHaveLength(1)
+        // ⛔ E il bersaglio resta quello di Android anche col vestito nuovo.
+        expect(griglia.classes()).toEqual(expect.arrayContaining(['min-h-12', 'min-w-12']))
+    })
+
+    /**
+     * ⛔ TRE STATI, e il terzo e' quello che si dimentica. Su questo banco non
+     * c'e' ne' Capacitor ne' un decoder d'immagini, quindi ogni generazione
+     * fallisce: e' proprio il caso che deve finire su `nessuna` e NON restare
+     * su «in caricamento» — un posto vuoto che gira per sempre e' la bugia
+     * peggiore fra le tre, perche' promette qualcosa che non arrivera'.
+     */
+    it('U-20 settles a thumbnail that cannot be made on "none", never on "loading"', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        await wrapper.get('[data-testid="talos-library-view-grid"]').trigger('click')
+        await flushPromises()
+
+        const arte = wrapper.get('[data-vault-file-id="vault-ready"] [data-talos-library-art]')
+        expect(arte.attributes('data-talos-art')).toBe('glyph')
+        expect(wrapper.findAll('[data-talos-art="loading"]')).toHaveLength(0)
+    })
+
+    /**
+     * U-20: l'intro lunga e' sparita dalla pagina (owner). Diceva in tre righe
+     * come funziona la Libreria, ogni volta, a chi la Libreria l'aveva gia'
+     * aperta. Al suo posto c'e' lo stato vuoto del mockup: un titolo, una riga,
+     * e il pulsante che RIPARA la situazione in cui si e'.
+     */
+    it('shows the empty state, its way out, and a recoverable load error', async () => {
         const controller = makeController()
         controller.attachments.vaultFiles.splice(0, controller.attachments.vaultFiles.length)
         controller.attachments.vaultError.value = 'Local Vault is unavailable.'
@@ -811,8 +912,36 @@ describe('ContextScreen Library gallery', () => {
         const wrapper = mount(ContextScreen)
         await flushPromises()
         expect(wrapper.get('[role="alert"]').text()).toContain('Local Vault is unavailable.')
-        expect(wrapper.text()).toContain('No files yet')
+        const empty = wrapper.get('[data-testid="talos-library-empty"]')
+        expect(empty.text()).toContain('Nothing here yet')
+        // Uno stato vuoto e' un invito ad agire: il pulsante e' quello che
+        // aggiunge il primo file, non un secondo modo di dire che non ce ne sono.
+        expect(wrapper.find('[data-testid="talos-library-empty-add"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-library-no-matches"]').exists()).toBe(false)
         await wrapper.get('[aria-label="Retry Library"]').trigger('click')
         expect(controller.attachments.refreshVault).toHaveBeenCalledTimes(2)
+    })
+
+    /**
+     * ⛔ DUE ASSENZE DIVERSE, DUE FRASI DIVERSE — e solo la seconda si annulla.
+     * Prima erano la stessa schermata: chi cercava una parola sbagliata leggeva
+     * l'introduzione della Libreria vuota, cioe' gli veniva detto che i suoi
+     * file non erano mai esistiti.
+     */
+    it('U-20 tells "nothing here" apart from "the filter hides it", and can undo the second', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('zzzz-no-such-file')
+        await flushPromises()
+        const noMatches = wrapper.get('[data-testid="talos-library-no-matches"]')
+        expect(noMatches.text()).toContain('No results')
+        expect(wrapper.find('[data-testid="talos-library-empty"]').exists()).toBe(false)
+
+        // La via d'uscita RIPARA: toglie la ricerca e il filtro, e i file tornano.
+        await wrapper.get('[data-testid="talos-library-clear-filters"]').trigger('click')
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-library-no-matches"]').exists()).toBe(false)
+        expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(true)
     })
 })

@@ -31,13 +31,62 @@ import java.util.List;
 final class TalosBackendEvidenceStore {
 
     private static final String PREFS = "talos_backend_evidence";
-    private static final String KEY = "evidence_v1";
+    /**
+     * ⛔⛔⛔ `v2` DALL'11/09/2026 — il METRO e' cambiato, e le prove vecchie non
+     * sono confrontabili con le nuove.
+     *
+     * ## Perche' una prova registrata puo' diventare inservibile
+     *
+     * Fino a oggi il sondaggio giudicava un backend confrontando i primi 48
+     * caratteri del suo testo con quelli della CPU. Sul Pad, l'11/09:
+     *
+     * <pre>
+     *   cpu:      verdetto=VALID          ttft 62.538 ms
+     *   opencl:   verdetto=WRONG_ANSWER   ttft  7.505 ms
+     *   hexagon:  verdetto=WRONG_ANSWER   ttft  2.505 ms
+     * </pre>
+     *
+     * Entrambi gli acceleratori bocciati, e {@link TalosBackendChoice#choose}
+     * scarta chi non ha risposto correttamente: nessuno dei due poteva piu'
+     * essere scelto. La causa non erano loro — e' la **non associativita' della
+     * virgola mobile** (arXiv 2506.09501, letto l'11/09/2026): a parita' di
+     * prompt e di seed, e anche in greedy, l'uscita cambia fra hardware
+     * diversi. Il metro chiedeva una cosa che l'aritmetica non garantisce.
+     *
+     * ## Perche' la cura non basta senza questa riga
+     *
+     * `TalosLlamaProbe.agreesWithReference` adesso giudica **il compito** (i
+     * numeri in ordine) invece del testo. Ma il sondaggio non rimisura cio' che
+     * risulta gia' misurato: su un telefono che ha gia' le prove vecchie, la
+     * cura **non sarebbe mai entrata in vigore**. Un verdetto porta con se' il
+     * metro che l'ha prodotto, e cambiare il metro invalida i verdetti.
+     *
+     * ⛔ Le righe vecchie NON si cancellano: restano sotto `evidence_v1`, per la
+     * stessa ragione per cui {@link TalosLocalProfileStore} non cancella un
+     * profilo la cui identita' non combacia piu'. Semplicemente non si leggono.
+     */
+    /**
+     * ⛔ La chiave PORTA L'IMPRONTA DEL METRO, e non un numero scritto a mano.
+     *
+     * Vedi {@link TalosLlamaProbe#metroId()} per il perche' esteso: l'11/09 ho
+     * dovuto invalidare le prove **due volte in un'ora** — una per il criterio
+     * di giudizio, una per il prompt — e la seconda me ne ero dimenticato. Una
+     * chiave che dipende dal metro non si puo' dimenticare.
+     *
+     * ⛔ Le righe vecchie NON si cancellano: restano sotto la loro chiave, per
+     * la stessa ragione per cui {@link TalosLocalProfileStore} non cancella un
+     * profilo la cui identita' non combacia piu'. Semplicemente non si leggono,
+     * e se il metro tornasse quello di prima tornerebbero leggibili.
+     */
+    private static String key() {
+        return "evidence_" + TalosLlamaProbe.metroId();
+    }
 
     private TalosBackendEvidenceStore() {}
 
     /** Tutto ciò che è stato provato su questo telefono, sotto qualunque driver. */
     static TalosBackendChoice.Evidence[] load(Context context) {
-        String json = prefs(context).getString(KEY, null);
+        String json = prefs(context).getString(key(), null);
         if (json == null) return new TalosBackendChoice.Evidence[0];
         try {
             JSONArray array = new JSONArray(json);
@@ -50,7 +99,13 @@ final class TalosBackendEvidenceStore {
                         "CORRECT".equals(riga.getString("outcome"))
                                 ? TalosBackendChoice.Outcome.CORRECT
                                 : TalosBackendChoice.Outcome.FAILED,
-                        riga.getLong("ttftMs")));
+                        riga.getLong("ttftMs"),
+                        // ⛔ `opt`, non `get`: le prove scritte prima
+                        // dell'11/09/2026 non hanno questo campo, e una
+                        // JSONException qui butterebbe via TUTTE le righe —
+                        // il `catch` sotto torna un array vuoto. Zero vale
+                        // «non misurato», e chi decide lo sa.
+                        riga.optDouble("tokensPerSecond", 0)));
             }
             return letta.toArray(new TalosBackendChoice.Evidence[0]);
         } catch (JSONException formatoNonRiconosciuto) {
@@ -81,12 +136,13 @@ final class TalosBackendEvidenceStore {
                 o.put("driver", riga.driver);
                 o.put("outcome", riga.outcome == TalosBackendChoice.Outcome.CORRECT ? "CORRECT" : "FAILED");
                 o.put("ttftMs", riga.ttftMs);
+                o.put("tokensPerSecond", riga.tokensPerSecond);
             } catch (JSONException nonPuoAccadereConChiaviCostanti) {
                 continue;
             }
             array.put(o);
         }
-        prefs(context).edit().putString(KEY, array.toString()).apply();
+        prefs(context).edit().putString(key(), array.toString()).apply();
     }
 
     private static SharedPreferences prefs(Context context) {

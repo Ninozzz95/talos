@@ -1,120 +1,202 @@
 <script setup lang="ts">
 /**
- * F5 station — le attività, con la GRAMMATICA del resto dell'app.
+ * Le Attività, nella forma del mockup «Talos Calm Finale» (owner 12/09/2026).
  *
- * ## Cosa c'era, e perché non bastava
+ * La pagina si legge dall'alto in un ordine solo: **che posto è** (titolo e una
+ * riga che dice a cosa serve), **come lo restringo** (ricerca e densità),
+ * **cosa sto guardando** (i filtri col loro conteggio), **quante sono e in che
+ * ordine**, e poi le attività. È lo stesso ordine delle Note, e deve esserlo:
+ * due elenchi della stessa app che rispondono in modo diverso allo stesso dito
+ * sono un difetto, non una varietà.
  *
- * Una lista sola, un campo di ricerca, un FAB. Nessun filtro, nessuna vista a
- * griglia, nessuna selezione multipla, nessun menu di riga — e la **priorità
- * non si vedeva**, benché sia un campo che si può impostare dalla chat e dalla
- * pagina. Visto sul Pad il 2026-08-07: un'attività messa a priorità alta da
- * GPT-5.6 Luna arrivava nella stazione indistinguibile da tutte le altre.
+ * ## Le regole dell'owner che il mockup NON cambia
  *
- * Owner, lo stesso giorno: «linguaggio ui di attività uguale al resto, quindi
- * filtri griglia lista crud visivo hold to select etc».
+ * - La scheda e la riga APRONO l'attività (2026-08-04: «ogni scheda apre una
+ *   pagina dedicata, il pulsante indietro va alla precedente, dev'essere
+ *   lineare»).
+ * - L'anteprima anticipa, non contiene.
+ * - Due assenze diverse, due frasi diverse — «non ce ne sono» e «il filtro le
+ *   nasconde» — e solo la seconda si può annullare. Più un terzo stato, «non lo
+ *   so ancora», finché il deposito non ha risposto.
+ * - Il modulo di creazione NON sta nell'elenco: è una pagina.
+ * - Mai più di due azioni affiancate su un'attività (owner 10/09/2026): la
+ *   casella e i tre puntini.
+ * - Le colonne le decide la LARGHEZZA MINIMA LEGGIBILE, mai un numero (owner
+ *   2026-08-06, dopo due correzioni sul tablet). Il mockup fissa tre colonne;
+ *   qui vince l'owner, e il `clamp()` arriva comunque agli stessi numeri sulle
+ *   due viewport che contano.
+ * - Il tieni-premuto accende la SELEZIONE (500 ms, 10 px), il ⋯ è la via
+ *   primaria per agire su una riga sola. Stesse costanti delle chat e della
+ *   Ricerca: un gesto che dura diversamente da schermata a schermata è un gesto
+ *   che non si impara.
  *
- * ## Perché si copia invece di inventare
+ * ## ⛔ I due punti in cui questa schermata si stacca da com'era
  *
- * Perché due liste della stessa app che rispondono in modo diverso allo stesso
- * dito sono un difetto, non una varietà. Il tieni-premuto accende la SELEZIONE
- * e il ⋮ è la via primaria per agire su una riga sola — è la conclusione della
- * ricerca sulle azioni di riga del 2026-08-03, ed è già così nelle chat e nella
- * Ricerca. Le costanti del gesto sono le stesse: 500 ms, 10 px di tolleranza.
+ * 1. **Il FAB non c'è più.** «Nuova attività» è il pulsante primario del
+ *    titolo, come nel mockup e come nelle Note: un cerchio che galleggia sopra
+ *    l'ultima riga la copre, e su un elenco lungo copre proprio quella che si
+ *    stava per toccare. Sul telefono resta un quadrato «+» con lo stesso nome
+ *    accessibile, perché lì la riga del titolo è tutta la larghezza che c'è.
+ * 2. **La casella non gira più su tre stati.** Faceva da fare → in corso →
+ *    completata → da fare, e un controllo che gira non ha un verso: per tornare
+ *    dov'era si tocca due volte. Adesso completa, e basta (owner 12/09/2026);
+ *    «in corso» vive nel menu e nella pagina, dove vivono le decisioni.
  */
 import { computed, onMounted, ref } from 'vue'
-import { useTalosI18n } from '@/i18n'
-import {
-    CalendarClock, Check, CheckSquare, LayoutGrid, List, Plus, Search, Trash2, X,
-} from '@lucide/vue'
 import { useRouter } from 'vue-router'
+import { useTalosI18n } from '@/i18n'
+import { LayoutGrid, List, Plus, Search, SlidersHorizontal, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
+import TalosMobileTaskCard from '@/components/talos/tasks/TalosMobileTaskCard.vue'
+import TalosMobileTaskRow from '@/components/talos/tasks/TalosMobileTaskRow.vue'
 import { useChatController } from '@/stores/chatController'
 import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
+import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { talosLightImpact } from '@/services/haptics'
-import { talosRelativeTime } from '@/lib/relativeTime'
+import { talosNotify } from '@/stores/notificationCentre'
+import { talosSfasamento } from '@/composables/useTalosCalmMotion'
+import { useTalosSlidingIndicator } from '@/composables/useTalosSlidingIndicator'
+import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
+import { talosTaskRowActions, type TalosTaskActionId } from '@/components/talos/tasks/taskActions'
+import { exportTalosTaskText } from '@/components/talos/tasks/taskExport'
+import {
+    talosTaskChecklist,
+    talosTaskMatchesFilter,
+    talosTaskScheduleSummary,
+    talosTaskSorted,
+    talosTaskState,
+    type TalosTaskFilter,
+    type TalosTaskSort,
+} from '@/components/talos/tasks/taskShape'
 import type { TalosLocalTask } from '@/repositories/chatRepository'
-import { talosNextRunAt, talosParseSchedule } from '@/lib/tasks/schedule'
-
-/**
- * Quando ripartirà, in una riga sola — o `null` se non è pianificata.
- *
- * Senza questo, una pianificazione salvata è INVISIBILE: si accende
- * l'interruttore, si salva, e l'elenco mostra una riga identica a tutte le
- * altre. Chi l'ha scritta non ha modo di sapere se ha funzionato se non
- * aspettando l'ora — cioè scoprendolo nel modo più lento possibile.
- */
-function prossimaEsecuzione(task: TalosLocalTask): string | null {
-    const schedule = talosParseSchedule(task.schedule_json)
-    if (!schedule) return null
-    const quando = talosNextRunAt(
-        schedule,
-        Date.now(),
-        task.last_run_at ? Date.parse(task.last_run_at) : null,
-    )
-    if (quando === null) return null
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'short', timeStyle: 'short' })
-        .format(new Date(quando))
-}
 
 const controller = useChatController()
 const router = useRouter()
-const { t } = useTalosI18n()
+const { t, locale } = useTalosI18n()
+const { isTablet } = useTalosTabletLayout()
 
 const entries = ref<TalosLocalTask[]>([])
 const error = ref<string | null>(null)
 const query = ref('')
 
 /**
- * I filtri sono le linguette che la lista HA, non quelle che potrebbe avere.
+ * ⛔ LO STATO VUOTO LAMPEGGIAVA nelle Note, e qui sarebbe lampeggiato uguale.
  *
- * Tre stati e basta, perché tre sono gli stati di un'attività. Aggiungere
- * «urgenti» o «pianificate» qui sembrerebbe generoso e produrrebbe una fila di
- * pillole che nessuno legge: la priorità si vede sulla riga, e la pianificazione
- * pure.
+ * `entries` parte da un array vuoto, e leggerlo come «non ce n'è nessuna» è
+ * falso finché `controller.tasks.list()` non ha risposto: la verità è **«non
+ * lo so ancora»**, e sono tre stati, non due. Uno schermo che afferma «non ci
+ * sono attività» mentre ce ne sono sei non è un difetto estetico — è una
+ * risposta sbagliata a una domanda appena fatta.
+ *
+ * Il segnale si alza nel `finally`: anche una lista che FALLISCE è una
+ * risposta, e lasciarlo a falso terrebbe la pagina muta per sempre, con
+ * l'errore scritto sopra un vuoto senza via d'uscita.
  */
-const FILTRI = ['all', 'todo', 'doing', 'done'] as const
-type TalosTaskFilter = typeof FILTRI[number]
-const filtro = ref<TalosTaskFilter>('all')
+const caricato = ref(false)
 
 /**
- * Griglia o lista, come la Libreria. La griglia è la predefinita là perché i
- * file sono oggetti da riconoscere a colpo d'occhio; qui la predefinita è la
- * LISTA, perché un'attività si legge — è una frase, non una miniatura.
+ * ⛔ Filtro, ordinamento e densità vivono nella PAGINA, non nelle preferenze.
+ *
+ * Una ricerca lasciata accesa da ieri è il difetto opposto a quello che risolve:
+ * si riapre la stazione e metà delle attività non c'è, senza che niente dica
+ * perché. Il mockup li conserva perché è una demo che vive in un browser solo.
+ *
+ * 🔜 Debito dichiarato: se l'owner li vuole persistenti servono due chiavi in
+ * `settings.shell`, che questo giro di lavoro non poteva toccare — è lo stesso
+ * debito già scritto nelle Note.
  */
-const vista = ref<'list' | 'grid'>('list')
+const filtro = ref<TalosTaskFilter>('all')
+/**
+ * ⛔ «Priorità» è l'ordinamento di SERIE, come nel mockup — ed è la scelta
+ * giusta qui e non altrove: la domanda che si fa a un elenco di attività è «cosa
+ * conta di più», non «cosa ho toccato per ultimo» (che è invece la domanda
+ * giusta per le note).
+ */
+const ordine = ref<TalosTaskSort>('priority')
+/**
+ * ⛔ Le SCHEDE sono la densità di serie, e prima era la lista.
+ *
+ * Il file diceva «un'attività si legge, è una frase, non una miniatura», e per
+ * la riga di prima era vero: titolo, due righe e un `run_id`. La scheda del
+ * mockup non è una miniatura — porta lo stato, la barra dei punti spuntati,
+ * quando riparte e la priorità, cioè tutto quello per cui si apriva la pagina.
+ * Vince il mockup, che è la verità visiva approvata; la lista resta a un tocco.
+ */
+const vista = ref<'grid' | 'list'>('grid')
 
+/** Le cinque linguette, con dentro il conto di quante ne trova ciascuna. */
+const filtri = computed(() => ([
+    { id: 'all' as const, label: t('tasks.filterAll') },
+    { id: 'todo' as const, label: t('tasks.filterTodo') },
+    { id: 'doing' as const, label: t('tasks.filterDoing') },
+    { id: 'scheduled' as const, label: t('tasks.filterScheduled') },
+    { id: 'done' as const, label: t('tasks.filterDone') },
+].map((voce) => ({
+    ...voce,
+    // ⛔ I conteggi guardano TUTTE le attività, non quelle già ristrette dalla
+    // ricerca: servono a decidere se vale la pena cambiare filtro, e un
+    // «In corso 0» calcolato dentro una ricerca direbbe che non ce ne sono
+    // mentre ce ne sono — solo, non per quella parola.
+    count: entries.value.filter((task) => talosTaskMatchesFilter(task, voce.id)).length,
+}))))
+
+/** Filtra su cio' che una persona ricorda: le parole che ha scritto lei. */
 const shown = computed(() => {
-    const termine = query.value.trim().toLowerCase()
-    return entries.value.filter((task) => {
-        if (filtro.value !== 'all' && task.status !== filtro.value) return false
-        if (termine.length === 0) return true
-        return (task.title ?? '').toLowerCase().includes(termine)
-            || (task.description ?? '').toLowerCase().includes(termine)
-    })
+    const needle = query.value.trim().toLocaleLowerCase(locale.value)
+    const tenute = entries.value.filter((task) => (
+        talosTaskMatchesFilter(task, filtro.value)
+        && (needle.length === 0
+            || task.title.toLocaleLowerCase(locale.value).includes(needle)
+            || String(task.description ?? '').toLocaleLowerCase(locale.value).includes(needle))
+    ))
+    return talosTaskSorted(tenute, ordine.value, locale.value)
 })
 
-/** Quante ce ne sono per ogni linguetta: una pillola che non dice quante ne trova costringe a toccarla per scoprirlo. */
-const conteggi = computed(() => ({
-    all: entries.value.length,
-    todo: entries.value.filter((task) => task.status === 'todo').length,
-    doing: entries.value.filter((task) => task.status === 'doing').length,
-    done: entries.value.filter((task) => task.status === 'done').length,
-}))
+/** Il filtro è l'unica assenza che si può annullare: la ricerca conta come filtro. */
+const filtrando = computed(() => query.value.trim().length > 0 || filtro.value !== 'all')
 
 const bulk = useTalosBulkSelection()
 const bulkDeleteOpen = ref(false)
 const visibleIds = computed(() => shown.value.map((task) => task.id))
 
-const relativeTimeLabels = computed(() => ({
-    justNow: t('chat.justNow'),
-    minutesAgo: (count: number) => t('chat.minutesAgo', { count }),
-    hoursAgo: (count: number) => t('chat.hoursAgo', { count }),
-    daysAgo: (count: number) => t('chat.daysAgo', { count }),
+const etichetteRicorrenza = computed(() => ({
+    none: t('tasks.scheduleNone'),
+    paused: t('tasks.state.paused'),
+    everyMinutes: (minutes: number) => t('tasks.scheduleEvery', { minutes }),
+    daily: t('tasks.scheduleDaily'),
+    weekly: t('tasks.scheduleWeekly'),
 }))
-function updatedAt(value: string): string {
-    return talosRelativeTime(value, new Date(), relativeTimeLabels.value)
+
+function ricorrenza(task: TalosLocalTask): string {
+    return talosTaskScheduleSummary(task, etichetteRicorrenza.value, locale.value)
+}
+
+function statoEtichetta(task: TalosLocalTask): string {
+    return t(`tasks.state.${talosTaskState(task)}`)
+}
+
+function avanzamento(task: TalosLocalTask): string {
+    const punti = talosTaskChecklist(task.description)
+    return t('tasks.checkState', {
+        done: punti.filter((punto) => punto.done).length,
+        total: punti.length,
+    })
+}
+
+function azioni(task: TalosLocalTask) {
+    return talosTaskRowActions(task, {
+        open: t('common.open'),
+        edit: t('tasks.edit'),
+        markDoing: t('tasks.markDoing'),
+        markTodo: t('tasks.reopen'),
+        pause: t('tasks.pause'),
+        resume: t('tasks.resume'),
+        exportText: t('tasks.exportText'),
+        select: t('common.select'),
+        remove: t('common.delete'),
+        removeNamed: t('tasks.deleteNamed', { title: task.title }),
+    })
 }
 
 function describeError(cause: unknown): string {
@@ -124,6 +206,7 @@ function describeError(cause: unknown): string {
 async function refresh(): Promise<void> {
     try {
         entries.value = await controller.tasks.list()
+        error.value = null
         /*
          * ⛔ La selezione può solo significare ciò che è sullo schermo.
          *
@@ -135,35 +218,93 @@ async function refresh(): Promise<void> {
         bulk.reconcile(entries.value.map((task) => task.id))
     } catch (cause) {
         error.value = describeError(cause)
+    } finally {
+        caricato.value = true
     }
 }
 
 onMounted(refresh)
 
-const NEXT_STATUS = { todo: 'doing', doing: 'done', done: 'todo' } as const
-
-async function cycleStatus(task: TalosLocalTask): Promise<void> {
+/** La casella COMPLETA, in un tocco, e lo stesso tocco riapre. */
+async function alternaCompletata(task: TalosLocalTask): Promise<void> {
     error.value = null
     try {
-        await controller.tasks.setStatus(task.id, NEXT_STATUS[task.status])
+        await controller.tasks.setStatus(task.id, task.status === 'done' ? 'todo' : 'done')
         await refresh()
     } catch (cause) {
         error.value = describeError(cause)
     }
 }
 
-async function remove(task: TalosLocalTask): Promise<void> {
+/** «In corso» è una decisione, e si prende dal menu o dalla pagina. */
+async function alternaInCorso(task: TalosLocalTask): Promise<void> {
     error.value = null
     try {
-        await controller.tasks.remove(task.id)
+        await controller.tasks.setStatus(task.id, task.status === 'doing' ? 'todo' : 'doing')
         await refresh()
     } catch (cause) {
         error.value = describeError(cause)
+    }
+}
+
+/**
+ * U-17 — fermare la ricorrenza senza cancellarla.
+ *
+ * ⛔ Non tocca `schedule_json`: l'istruzione, i giorni e l'ora restano scritti,
+ * ed è tutta la differenza fra «fermala fino a lunedì» e «non deve più
+ * ripetersi». Chi riprende ritrova esattamente quello che aveva impostato.
+ */
+async function alternaPausa(task: TalosLocalTask): Promise<void> {
+    error.value = null
+    try {
+        await controller.tasks.update(task.id, { paused: !task.paused })
+        await refresh()
+    } catch (cause) {
+        error.value = describeError(cause)
+    }
+}
+
+async function esporta(task: TalosLocalTask): Promise<void> {
+    try {
+        const esito = await exportTalosTaskText(task, t('tasks.exportText'))
+        // Condiviso o annullato, la persona ha appena visto il foglio di
+        // Android: dirle una seconda volta cos'è successo sarebbe rumore. Il
+        // ripiego invece va detto, perché è successo qualcosa di DIVERSO da
+        // quello che il pulsante prometteva.
+        if (esito !== 'copied') return
+        talosNotify({
+            key: `task:exported:${task.id}`,
+            channel: 'jobs',
+            weight: 'notable',
+            title: t('tasks.exportCopied'),
+            body: task.title,
+            at: Date.now(),
+        })
+    } catch {
+        error.value = t('tasks.exportFailed')
+    }
+}
+
+const pendingDelete = ref<TalosLocalTask | null>(null)
+const deleting = ref(false)
+
+async function confermaEliminazione(): Promise<void> {
+    const bersaglio = pendingDelete.value
+    if (!bersaglio || deleting.value) return
+    deleting.value = true
+    try {
+        await controller.tasks.remove(bersaglio.id)
+        pendingDelete.value = null
+        await refresh()
+    } catch (cause) {
+        error.value = describeError(cause)
+    } finally {
+        deleting.value = false
     }
 }
 
 /** Le selezionate, in una passata sola: N cancellazioni in fila sono N ridisegni. */
-async function removeSelected(): Promise<void> {
+async function eliminaSelezionate(): Promise<void> {
     error.value = null
     bulkDeleteOpen.value = false
     const ids = bulk.ids.value
@@ -178,125 +319,182 @@ async function removeSelected(): Promise<void> {
 }
 
 /** Voce → pagina → dettaglio, sempre nello stesso verso. */
-function open(item: TalosLocalTask): void {
-    void router.push({ name: 'task-item', params: { id: item.id } })
+function apri(task: TalosLocalTask): void {
+    void router.push({ name: 'task-item', params: { id: task.id } })
 }
 
-function startNew(): void {
+/** La creazione è una PAGINA, non un modulo qui: vedi la nota nel modello. */
+function nuova(): void {
     void router.push({ name: 'task-new' })
 }
 
-// Tieni-premuto: 500 ms senza muovere il dito. Accende la SELEZIONE — il menu
-// di riga sta sotto il ⋮, che è visibile e non va scoperto. Stesse costanti
-// delle chat e della Ricerca: un gesto che dura diversamente da schermata a
-// schermata è un gesto che non si impara.
+function azzeraFiltri(): void {
+    query.value = ''
+    filtro.value = 'all'
+}
+
+/**
+ * Una sola porta per tutte le azioni, da qualunque densità arrivi.
+ *
+ * Scheda e riga emettono lo stesso identificativo: se ognuna sapesse cosa fare
+ * da sé, prima o poi «Elimina» chiederebbe conferma da una parte e non
+ * dall'altra.
+ */
+function esegui(task: TalosLocalTask, azione: string): void {
+    switch (azione as TalosTaskActionId) {
+        case 'open': apri(task); break
+        case 'edit': void router.push({ name: 'task-edit', params: { id: task.id } }); break
+        case 'doing': void alternaInCorso(task); break
+        case 'pause': void alternaPausa(task); break
+        case 'export': void esporta(task); break
+        case 'select': bulk.enter(task.id); break
+        // ⛔ Mai senza conferma da un ELENCO: qui l'attività è un titolo e due
+        // righe, e decidere di cancellarla è decidere su un testo che non si è
+        // riletto. Nella pagina, dove c'è tutta, la conferma è in linea.
+        case 'delete': pendingDelete.value = task; break
+    }
+}
+
+/* ═══ Tieni-premuto: 500 ms senza muovere il dito ═════════════════════════════
+ * Accende la SELEZIONE — il menu di riga sta sotto il ⋯, che è visibile e non
+ * va scoperto. Sono i due ruoli decisi dalla ricerca sulle azioni di riga, ed è
+ * così anche nelle chat e nella Ricerca.
+ */
 const HOLD_MS = 500
 const HOLD_SLOP_PX = 10
 let holdTimer: ReturnType<typeof setTimeout> | null = null
 let holdOrigin: { x: number, y: number } | null = null
-let suppressNextClick = false
+let sopprimiProssimoClick = false
 
-function clearHold(): void {
+function fermaHold(): void {
     if (holdTimer !== null) clearTimeout(holdTimer)
     holdTimer = null
     holdOrigin = null
 }
 
-function onRowPointerDown(task: TalosLocalTask, event: PointerEvent): void {
+function premuta(task: TalosLocalTask, event: PointerEvent): void {
     // Un gesto nuovo azzera la soppressione del precedente: la bandiera alzata
     // dal tieni-premuto aspetta un click che a volte non arriva mai, e senza
     // questa riga se lo mangia il tocco dopo.
-    suppressNextClick = false
+    sopprimiProssimoClick = false
     if (bulk.active.value) return
-    clearHold()
+    fermaHold()
     holdOrigin = { x: event.clientX, y: event.clientY }
     holdTimer = setTimeout(() => {
         void talosLightImpact()
-        suppressNextClick = true
+        sopprimiProssimoClick = true
         // La riga tenuta parte già spuntata: il dito era lì sopra, e un secondo
         // tocco per riprenderla sarebbe un passo per niente.
         bulk.enter(task.id)
-        clearHold()
+        fermaHold()
     }, HOLD_MS)
 }
 
-function onRowPointerMove(event: PointerEvent): void {
+function mossa(event: PointerEvent): void {
     if (!holdOrigin) return
     if (Math.abs(event.clientX - holdOrigin.x) > HOLD_SLOP_PX
-        || Math.abs(event.clientY - holdOrigin.y) > HOLD_SLOP_PX) clearHold()
+        || Math.abs(event.clientY - holdOrigin.y) > HOLD_SLOP_PX) fermaHold()
 }
 
-function onRowPointerEnd(): void {
-    clearHold()
-}
-
-function onRowClickCapture(event: MouseEvent): void {
+function clickInCattura(event: MouseEvent): void {
     // Il click che chiude il tieni-premuto fa parte del gesto.
-    if (suppressNextClick) {
-        suppressNextClick = false
+    if (sopprimiProssimoClick) {
+        sopprimiProssimoClick = false
         event.preventDefault()
         event.stopPropagation()
     }
 }
 
 /** In selezione un tocco SCEGLIE. Aprire da qui porterebbe via a metà scelta. */
-function onRowClick(task: TalosLocalTask): void {
+function tocco(task: TalosLocalTask): void {
     if (bulk.active.value) bulk.toggle(task.id)
-    else open(task)
+    else apri(task)
 }
 
-function menuFor(task: TalosLocalTask): TalosRowAction[] {
-    return [
-        { id: 'open', label: t('common.open'), testId: 'talos-tasks-action-open' },
-        {
-            id: 'cycle',
-            label: task.status === 'done' ? t('tasks.reopen') : t('tasks.markDone'),
-            testId: 'talos-tasks-action-cycle',
-        },
-        { id: 'select', label: t('common.select'), testId: 'talos-tasks-action-select' },
-        { id: 'delete', label: t('common.delete'), danger: true, testId: 'talos-tasks-action-delete' },
-    ]
-}
+/* ═══ U-14 — il movimento del mockup, in questa stazione ══════════════════════
+ *
+ * Cinque cose, e nessuna è decorativa: ognuna risponde a una domanda che senza
+ * movimento resta senza risposta.
+ *
+ *   1. il filo sotto la scelta attiva SCIVOLA     -> da dove sono arrivato
+ *   2. le schede si riordinano invece di saltare  -> dov'è finita quella che
+ *      stavo guardando quando ho cambiato ordine o filtro
+ *   3. un'attività nuova ENTRA, a scaglioni       -> quale è comparsa adesso
+ *   4. l'onda parte dal dito                      -> ti ho sentito
+ *   5. la casella rimbalza e il segno si disegna  -> l'ho appena spuntata io
+ *
+ * Tutte passano dai token del motore e dalle sue categorie: nessuna durata è
+ * scritta qui dentro. Inventario e numeri misurati in
+ * `.claude/MOTION-MOCKUP-2026-09-11.md`.
+ */
+const gruppoVista = ref<HTMLElement | null>(null)
+const gruppoFiltri = ref<HTMLElement | null>(null)
+useTalosSlidingIndicator(gruppoVista, vista)
+useTalosSlidingIndicator(gruppoFiltri, filtro)
 
-function act(task: TalosLocalTask, action: string): void {
-    if (action === 'open') open(task)
-    else if (action === 'cycle') void cycleStatus(task)
-    else if (action === 'select') bulk.enter(task.id)
-    else void remove(task)
-}
-
-function shortId(value: string | null): string {
-    return value ? value.slice(0, 12) : t('tasks.noRun')
-}
+/** L'onda al tocco, condivisa da filtri, selettore di vista, schede e righe. */
+const onda = useTalosTouchWave()
 
 /**
- * ⛔ La priorità si VEDE, ed è il buco che ha aperto questo lavoro.
+ * L'entrata di un'attività, come attributi da applicare alla scheda o alla riga.
  *
- * È un campo che si imposta dalla pagina e dalla chat — MISURATO sul Pad il
- * 2026-08-07, con GPT-5.6 Luna che mette un'attività a «alta» — e nella
- * stazione non compariva da nessuna parte. Un campo che si può scrivere e non
- * si può leggere è peggio di un campo che non esiste: chi lo imposta crede di
- * aver fatto qualcosa.
+ * Torna un oggetto vuoto oltre il tetto (16 voci, il numero del mockup): senza
+ * l'attributo d'intento l'elemento non ha nessuna animazione addosso, che è
+ * esattamente ciò che serve dalla diciassettesima in poi.
  *
- * `normal` NON si mostra: è il valore che hanno quasi tutte, e una pillola su
- * ogni riga sarebbe rumore che insegna a non guardare le pillole.
+ * ⛔ Il ritardo è un `calc()` sul token del motore, non un numero: quando
+ * l'utente spegne «Movimento interfaccia» il token va a `0ms` e il `calc()` si
+ * annulla da sé. Un numero scritto qui resterebbe lì anche a movimento spento,
+ * e la lista comparirebbe a scaglioni senza animarsi — il peggiore dei due
+ * mondi.
  */
-function priorityClass(priority: string): string {
-    if (priority === 'high') return 'bg-[var(--talos-danger,#dc5b5b)]/15 text-[var(--talos-danger,#dc5b5b)]'
-    return 'bg-[var(--talos-active)] text-[var(--talos-muted)]'
+function entrata(indice: number): Record<string, unknown> {
+    const stile = talosSfasamento(indice)
+    if (!stile) return {}
+    return { 'data-talos-motion-intent': 'message-insert', style: stile }
 }
 </script>
 
 <template>
     <div
-        class="flex min-h-full flex-col gap-3 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3"
+        class="flex min-h-full flex-col px-[var(--talos-space-page)] pb-[max(var(--talos-space-page),env(safe-area-inset-bottom))] pt-[var(--talos-space-section)]"
         data-testid="talos-tasks-screen"
-        @click.capture="onRowClickCapture"
+        @click.capture="clickInCattura"
     >
-        <!-- Ricerca e vista sulla stessa riga: sono i due modi di restringere
-             ciò che si guarda, e separarli farebbe scorrere per trovarne uno. -->
-        <div class="flex items-center gap-2">
-            <label class="relative block min-w-0 flex-1">
+        <!-- Che posto è questo. Il titolo, una riga che dice a cosa serve, e il
+             pulsante che comincia: è il primo pezzo del mockup, e serve perché
+             una stazione aperta dal menu deve dire da sola dove si è finiti. -->
+        <header class="flex items-start justify-between gap-[var(--talos-space-section)]">
+            <div class="min-w-0">
+                <h1 class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">
+                    {{ t('navigation.tasks') }}
+                </h1>
+                <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
+                    {{ t('tasks.subtitle') }}
+                </p>
+            </div>
+            <Button
+                type="button"
+                data-testid="talos-tasks-new"
+                :aria-label="t('tasks.add')"
+                :class="[
+                    'talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)]',
+                    isTablet ? 'min-h-touch gap-2 px-5 text-sm font-medium' : 'size-14 p-0',
+                ]"
+                @click="nuova"
+                @pointerdown="onda.onPointerDown"
+            >
+                <Plus :class="isTablet ? 'size-4' : 'size-6'" aria-hidden="true" />
+                <span v-if="isTablet">{{ t('tasks.add') }}</span>
+            </Button>
+        </header>
+
+        <!-- Ricerca e densità sulla stessa riga: sono le due cose che si fanno
+             prima di guardare. Il campo sta FUORI da ogni catena `v-if` — deve
+             restare visibile anche quando la lista è vuota, perché è con la
+             lista vuota che si cancella il filtro. -->
+        <div class="mt-[var(--talos-space-section)] flex items-stretch gap-[var(--talos-space-card)]">
+            <label class="relative min-w-0 flex-1">
                 <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
                 <input
                     v-model="query"
@@ -305,46 +503,94 @@ function priorityClass(priority: string): string {
                     data-testid="talos-tasks-search"
                     :placeholder="t('tasks.searchPlaceholder')"
                     :aria-label="t('tasks.searchPlaceholder')"
-                    class="min-h-12 w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+                    class="min-h-touch w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                 >
             </label>
-            <button
-                type="button"
-                data-testid="talos-tasks-view-toggle"
-                :aria-label="vista === 'list' ? t('tasks.viewGrid') : t('tasks.viewList')"
-                class="talos-pressable flex min-h-12 min-w-12 items-center justify-center rounded-full border border-[var(--talos-border)] text-[var(--talos-muted)]"
-                @click="vista = vista === 'list' ? 'grid' : 'list'"
+
+            <!-- Un radiogroup e non due bottoni indipendenti: sono alternative,
+                 e dirlo è ciò che le rende comprensibili a chi naviga con lo
+                 screen reader. -->
+            <div
+                ref="gruppoVista"
+                role="radiogroup"
+                :aria-label="t('tasks.viewLabel')"
+                class="flex shrink-0 items-center gap-[2px] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[3px]"
             >
-                <LayoutGrid v-if="vista === 'list'" class="size-4" aria-hidden="true" />
-                <List v-else class="size-4" aria-hidden="true" />
+                <button
+                    v-for="modo in ([['list', t('tasks.viewList'), List], ['grid', t('tasks.viewGrid'), LayoutGrid]] as const)"
+                    :key="modo[0]"
+                    type="button"
+                    role="radio"
+                    :aria-checked="vista === modo[0]"
+                    :aria-label="modo[1]"
+                    :data-testid="`talos-tasks-view-${modo[0]}`"
+                    :class="[
+                        'talos-pressable talos-wave-host relative flex min-h-touch min-w-touch items-center justify-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-xs',
+                        vista === modo[0]
+                            ? 'bg-[var(--talos-secondary)] text-[var(--talos-text)]'
+                            : 'text-[var(--talos-muted)]',
+                    ]"
+                    @click="vista = modo[0]"
+                    @pointerdown="onda.onPointerDown"
+                >
+                    <component :is="modo[2]" class="size-4" aria-hidden="true" />
+                    <span v-if="isTablet">{{ modo[1] }}</span>
+                    <span
+                        v-if="vista === modo[0]"
+                        data-talos-indicator
+                        aria-hidden="true"
+                        class="talos-calm-indicator absolute bottom-[5px] left-1/2 h-[2px] w-4 -translate-x-1/2 rounded-full bg-[var(--talos-accent)]"
+                    />
+                </button>
+            </div>
+        </div>
+
+        <!-- Cosa sto guardando, col conto di quante ce ne sono in ciascun
+             gruppo: il numero è ciò che fa decidere se cambiare filtro.
+             ⛔ I cinque gruppi sono una PARTIZIONE — i numeri fanno il totale,
+             e quattro numeri che non tornano sono quattro numeri di cui non ci
+             si fida più. «In pausa» non è un sesto gruppo: un'attività in pausa
+             resta pianificata, ed è lì che una persona la cerca. -->
+        <div
+            ref="gruppoFiltri"
+            role="radiogroup"
+            :aria-label="t('tasks.filterLabel')"
+            data-testid="talos-tasks-filters"
+            class="mt-[var(--talos-space-card)] flex min-h-touch items-center gap-[var(--talos-space-inline)] overflow-x-auto border-b border-[var(--talos-border)] [scrollbar-width:none]"
+        >
+            <button
+                v-for="voce in filtri"
+                :key="voce.id"
+                type="button"
+                role="radio"
+                :aria-checked="filtro === voce.id"
+                :tabindex="filtro === voce.id ? 0 : -1"
+                :data-testid="`talos-tasks-filter-${voce.id}`"
+                :class="[
+                    'talos-pressable talos-wave-host relative inline-flex min-h-touch shrink-0 items-center gap-[var(--talos-space-inline)] whitespace-nowrap rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-xs',
+                    filtro === voce.id ? 'text-[var(--talos-text)]' : 'text-[var(--talos-muted)]',
+                ]"
+                @click="filtro = voce.id"
+                @pointerdown="onda.onPointerDown"
+            >
+                <span>{{ voce.label }}</span>
+                <small class="text-2xs tabular-nums">{{ voce.count }}</small>
+                <span
+                    v-if="filtro === voce.id"
+                    data-talos-indicator
+                    aria-hidden="true"
+                    class="talos-calm-indicator absolute bottom-0 left-[var(--talos-space-control)] right-[var(--talos-space-control)] h-[2px] rounded-full bg-[var(--talos-accent)]"
+                />
             </button>
         </div>
 
-        <!-- Le linguette, col numero. Restano vive durante la selezione: la
-             selezione può solo significare ciò che è sullo schermo, e
-             `reconcile` la tiene onesta a ogni ricarica. -->
-        <div class="flex flex-wrap gap-2" data-testid="talos-tasks-filters">
-            <button
-                v-for="voce in FILTRI"
-                :key="voce"
-                type="button"
-                :data-testid="`talos-tasks-filter-${voce}`"
-                :aria-pressed="filtro === voce"
-                class="talos-pressable min-h-12 rounded-full px-3 text-sm transition-colors"
-                :class="filtro === voce
-                    ? 'bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))]'
-                    : 'border border-[var(--talos-border)] text-[var(--talos-muted)]'"
-                @click="filtro = voce"
-            >
-                {{ voce === 'all' ? t('tasks.filterAll') : t(`tasks.status.${voce}`) }}
-                <span class="ml-1 opacity-70">{{ conteggi[voce] }}</span>
-            </button>
-        </div>
-
+        <!-- Quante ne sto guardando, e in che ordine. In selezione questa riga
+             cede il posto alla barra delle selezionate: sono due domande
+             diverse, e la seconda è quella che si sta facendo adesso. -->
         <div
             v-if="bulk.active.value"
             data-testid="talos-tasks-selection-bar"
-            class="flex items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
+            class="mt-[var(--talos-space-inline)] flex min-h-touch items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
         >
             <Button type="button" size="icon" variant="ghost" class="min-h-touch min-w-touch rounded-full" :aria-label="t('tasks.cancelSelection')" @click="bulk.exit()">
                 <X class="size-4" aria-hidden="true" />
@@ -359,7 +605,7 @@ function priorityClass(priority: string): string {
                 type="button"
                 size="icon"
                 variant="ghost"
-                class="min-h-touch min-w-touch rounded-full text-[var(--talos-danger,#dc5b5b)]"
+                class="min-h-touch min-w-touch rounded-full text-[var(--talos-danger)]"
                 data-testid="talos-tasks-bulk-delete"
                 :aria-label="t('tasks.deleteSelected')"
                 :disabled="bulk.count.value === 0"
@@ -367,128 +613,171 @@ function priorityClass(priority: string): string {
             ><Trash2 class="size-4" aria-hidden="true" /></Button>
         </div>
 
-        <p v-else class="text-xs leading-5 text-[var(--talos-muted)]">
-            {{ t('tasks.intro') }}
+        <div v-else class="flex min-h-touch items-center justify-between gap-[var(--talos-space-inline)] text-xs text-[var(--talos-muted)]">
+            <span role="status" aria-live="polite" data-testid="talos-tasks-count">
+                {{ caricato ? t('tasks.count', { count: shown.length }) : '' }}
+            </span>
+            <label class="flex shrink-0 items-center gap-1">
+                <SlidersHorizontal class="size-4" aria-hidden="true" />
+                <span class="sr-only">{{ t('tasks.sortLabel') }}</span>
+                <!-- Un `select` nativo: sul telefono apre la ruota di Android,
+                     che è il controllo che la persona conosce già, e non ha
+                     bisogno di un pannello nostro per tre voci. -->
+                <select
+                    v-model="ordine"
+                    data-testid="talos-tasks-sort"
+                    :aria-label="t('tasks.sortLabel')"
+                    class="min-h-touch max-w-36 cursor-pointer border-0 bg-transparent px-1 text-xs text-[var(--talos-muted)] outline-none"
+                >
+                    <option value="priority">{{ t('tasks.sortPriority') }}</option>
+                    <option value="recent">{{ t('tasks.sortRecent') }}</option>
+                    <option value="title">{{ t('tasks.sortTitle') }}</option>
+                </select>
+            </label>
+        </div>
+
+        <p v-if="error" role="alert" data-testid="talos-tasks-error" class="py-[var(--talos-space-inline)] text-xs text-[var(--talos-danger)]">
+            {{ error }}
         </p>
 
-        <p v-if="error" role="alert" class="text-xs text-[var(--talos-danger,#dc5b5b)]">{{ error }}</p>
-
-        <!-- «Nessuna» e «nessuna di quel tipo» sono frasi diverse, e dire la
-             prima quando vale la seconda manda a creare un'attività che c'è già,
-             solo in un'altra linguetta. -->
-        <p v-if="!shown.length" class="py-6 text-center text-sm text-[var(--talos-muted)]">
-            {{ entries.length === 0 ? t('tasks.empty') : t('tasks.emptyFiltered') }}
-        </p>
-
-        <ul
-            v-else
-            data-testid="talos-tasks-list"
-            :data-view="vista"
-            :class="vista === 'grid' ? 'grid grid-cols-2 gap-2' : 'flex flex-col gap-2'"
+        <!-- Due assenze diverse, due frasi diverse: «non ce ne sono» manda a
+             crearne una, «il filtro le nasconde» manda a togliere il filtro. -->
+        <div
+            v-if="caricato && shown.length === 0"
+            :data-testid="filtrando ? 'talos-tasks-no-matches' : 'talos-tasks-empty'"
+            role="status"
+            class="flex flex-1 flex-col items-center justify-center gap-[var(--talos-space-inline)] py-[calc(var(--talos-space-page)*2)] text-center"
         >
-            <li
-                v-for="task in shown"
-                :key="task.id"
-                data-testid="talos-task-row"
-                :data-task-status="task.status"
-                :data-task-priority="task.priority"
-                :data-selected="bulk.isSelected(task.id) ? 'true' : 'false'"
-                class="rounded-2xl border bg-[var(--talos-panel)]/70 p-3 transition-colors"
-                :class="bulk.isSelected(task.id)
-                    ? 'border-[var(--talos-accent)]'
-                    : 'border-[var(--talos-border)]'"
+            <!-- Il disegno del mockup per questa sezione (`pEmptyArt`, chiave
+                 `tasks`), e SI TRACCIA: uno spazio bianco fermo si legge come un
+                 guasto, un tratto che si disegna dice «qui non c'è ancora
+                 niente». Una volta sola, all'arrivo della pagina. -->
+            <svg
+                class="talos-calm-line-art mb-[var(--talos-space-section)] h-[132px] w-[140px] text-[var(--talos-border-strong)]"
+                viewBox="0 0 150 140"
+                aria-hidden="true"
             >
-                <div class="flex items-start gap-2">
-                    <span
-                        v-if="bulk.active.value"
-                        class="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border-2"
-                        :class="bulk.isSelected(task.id)
-                            ? 'border-[var(--talos-accent)] bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,#000)]'
-                            : 'border-[var(--talos-border)]'"
-                        aria-hidden="true"
-                    >
-                        <Check v-if="bulk.isSelected(task.id)" class="size-3.5" />
-                    </span>
-                    <CheckSquare v-else class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <rect data-talos-draw x="39" y="26" width="70" height="88" rx="10" />
+                    <path data-talos-draw d="M61 21h27v13H61Z" />
+                    <path data-talos-draw class="stroke-[var(--talos-accent-border)]" d="m54 59 6 6 13-15M81 58h14" />
+                    <path data-talos-draw d="M54 84h13M81 84h14" />
+                </g>
+            </svg>
+            <h2 class="max-w-[27ch] text-xl font-medium leading-[1.5] tracking-[-0.02em] text-[var(--talos-text)]">
+                {{ filtrando ? t('tasks.noMatches') : t('tasks.empty') }}
+            </h2>
+            <p class="max-w-[38ch] text-sm leading-[1.7] text-[var(--talos-muted)]">
+                {{ filtrando ? t('tasks.noMatchesBody') : t('tasks.emptyBody') }}
+            </p>
+            <!-- Uno stato vuoto è un invito ad agire, e la via d'uscita è
+                 quella che RIPARA la situazione in cui si è. -->
+            <Button
+                type="button"
+                :data-testid="filtrando ? 'talos-tasks-clear-filters' : 'talos-tasks-empty-new'"
+                class="talos-pressable mt-[var(--talos-space-section)] min-h-touch rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-5 text-xs text-[var(--talos-accent-text)]"
+                @click="filtrando ? azzeraFiltri() : nuova()"
+            >
+                {{ filtrando ? t('tasks.clearFilters') : t('tasks.add') }}
+            </Button>
+        </div>
 
-                    <!-- Il blocco di testo apre la pagina (o sceglie, in
-                         selezione). Non tutta la riga: accanto ci sono dei
-                         bottoni, e un bottone dentro un bottone non è HTML
-                         valido — il tocco finirebbe a quello sbagliato. -->
-                    <button
-                        type="button"
-                        data-testid="talos-task-open"
-                        class="talos-pressable talos-holdable min-w-0 flex-1 text-left"
-                        @pointerdown="onRowPointerDown(task, $event)"
-                        @pointermove="onRowPointerMove"
-                        @pointerup="onRowPointerEnd"
-                        @pointercancel="onRowPointerEnd"
-                        @click="onRowClick(task)"
-                    >
-                        <div class="text-sm font-semibold text-[var(--talos-text)]" :class="task.status === 'done' ? 'line-through opacity-60' : ''">
-                            {{ task.title }}
-                        </div>
-                        <p v-if="task.description" class="mt-0.5 line-clamp-2 text-xs leading-5 text-[var(--talos-muted)]">{{ task.description }}</p>
+        <!-- A schede: le colonne le decide la LARGHEZZA MINIMA LEGGIBILE, non un
+             numero (owner 2026-08-06). `clamp(10.5rem, 45%, 17rem)` è lo stesso
+             delle Note — due elenchi vicini che si impaginano diversamente si
+             leggono come due app.
+             U-14: `<TransitionGroup>` fa il FLIP da sé quando l'ordine cambia,
+             e chi esce va in `position: absolute` o i conti di chi resta
+             sbagliano (documentazione Vue, 12/09/2026). -->
+        <TransitionGroup
+            v-else-if="caricato && vista === 'grid'"
+            tag="div"
+            role="list"
+            data-testid="talos-tasks-list"
+            data-view="grid"
+            class="mt-[var(--talos-space-card)] grid grid-cols-[repeat(auto-fill,minmax(clamp(10.5rem,45%,17rem),1fr))] items-start gap-[calc(var(--talos-space-section)*1.25)]"
+            move-class="talos-calm-move"
+            leave-active-class="talos-calm-leave-active"
+            leave-to-class="talos-calm-leave-to"
+        >
+            <TalosMobileTaskCard
+                v-for="(task, indice) in shown"
+                :key="task.id"
+                v-bind="entrata(indice)"
+                :task="task"
+                :state-label="statoEtichetta(task)"
+                :schedule-label="ricorrenza(task)"
+                :progress-label="avanzamento(task)"
+                :priority-label="t('tasks.priorityHigh')"
+                :check-label="t('tasks.completeNamed', { title: task.title })"
+                :actions-label="t('tasks.actionsNamed', { title: task.title })"
+                :actions="azioni(task)"
+                :selecting="bulk.active.value"
+                :selected="bulk.isSelected(task.id)"
+                @open="tocco(task)"
+                @toggle="alternaCompletata(task)"
+                @action="(id) => esegui(task, id)"
+                @press="(event) => premuta(task, event)"
+                @move="mossa"
+                @release="fermaHold"
+                @wave="onda.onPointerDown"
+            />
+        </TransitionGroup>
 
-                        <div class="mt-1 flex flex-wrap items-center gap-1">
-                            <!-- `normal` non si mostra: è il valore che hanno
-                                 quasi tutte, e una pillola su ogni riga sarebbe
-                                 rumore che insegna a non guardare le pillole. -->
-                            <span
-                                v-if="task.priority !== 'normal'"
-                                data-testid="talos-task-priority"
-                                class="rounded-full px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide"
-                                :class="priorityClass(task.priority)"
-                            >{{ t(`tasks.priority.${task.priority}`) }}</span>
+        <TransitionGroup
+            v-else-if="caricato"
+            tag="div"
+            role="list"
+            data-testid="talos-tasks-list"
+            data-view="list"
+            class="mt-[var(--talos-space-card)] flex flex-col"
+            move-class="talos-calm-move"
+            leave-active-class="talos-calm-leave-active"
+            leave-to-class="talos-calm-leave-to"
+        >
+            <TalosMobileTaskRow
+                v-for="(task, indice) in shown"
+                :key="task.id"
+                v-bind="entrata(indice)"
+                :task="task"
+                :state-label="statoEtichetta(task)"
+                :schedule-label="ricorrenza(task)"
+                :check-label="t('tasks.completeNamed', { title: task.title })"
+                :actions-label="t('tasks.actionsNamed', { title: task.title })"
+                :actions="azioni(task)"
+                :selecting="bulk.active.value"
+                :selected="bulk.isSelected(task.id)"
+                @open="tocco(task)"
+                @toggle="alternaCompletata(task)"
+                @action="(id) => esegui(task, id)"
+                @press="(event) => premuta(task, event)"
+                @move="mossa"
+                @release="fermaHold"
+                @wave="onda.onPointerDown"
+            />
+        </TransitionGroup>
 
-                            <template v-for="quando in [prossimaEsecuzione(task)]" :key="quando ?? 'mai'">
-                                <span
-                                    v-if="quando"
-                                    data-testid="talos-task-next-run"
-                                    class="inline-flex items-center gap-1 rounded-full bg-[var(--talos-active)] px-2 py-0.5 text-2xs text-[var(--talos-muted)]"
-                                >
-                                    <CalendarClock class="size-3 shrink-0" aria-hidden="true" />
-                                    <!--
-                                        L'etichetta passa da `t()`, la data NO.
-                                        `escapeParameter` è acceso su tutta l'app —
-                                        ed è giusto — ma riscrive anche le barre di
-                                        una data `07/08/26`, che sul tablet si
-                                        leggeva `07&#x2F;08&#x2F;26`.
-                                    -->
-                                    {{ t('tasks.schedule.nextRunLabel') }} {{ quando }}
-                                </span>
-                            </template>
-                        </div>
-
-                        <p v-if="vista === 'list'" class="mt-1 font-mono text-2xs text-[var(--talos-muted)]">
-                            {{ t('tasks.runIdLabel') }} {{ shortId(task.run_id) }} · {{ updatedAt(task.updated_at) }}
-                        </p>
-                    </button>
-
-                    <button
-                        v-if="!bulk.active.value"
-                        type="button"
-                        :aria-label="t('tasks.cycleNamed', { title: task.title })"
-                        class="talos-pressable min-h-touch shrink-0 rounded-full bg-[var(--talos-active)] px-3 text-xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]"
-                        @click="cycleStatus(task)"
-                    >
-                        {{ t(`tasks.status.${task.status}`) }}
-                    </button>
-
-                    <!-- ⋮ è la via PRIMARIA per agire su una riga sola; il
-                         tieni-premuto è la selezione. Sono i due ruoli decisi
-                         dalla ricerca sulle azioni di riga, ed è così anche
-                         nelle chat e nella Ricerca. -->
-                    <TalosRowActions
-                        v-if="!bulk.active.value"
-                        :items="menuFor(task)"
-                        :label="t('tasks.actionsNamed', { title: task.title })"
-                        test-id="talos-tasks-row-actions"
-                        @select="act(task, $event)"
-                    />
-                </div>
-            </li>
-        </ul>
+        <TalosMobileConfirmDialog
+            v-if="pendingDelete"
+            :title="t('tasks.deleteTitle')"
+            :description="t('tasks.deleteDescription', { title: pendingDelete.title })"
+            @close="deleting ? undefined : pendingDelete = null"
+        >
+            <template #footer>
+                <Button type="button" variant="outline" :disabled="deleting" class="min-h-12" @click="pendingDelete = null">
+                    {{ t('common.cancel') }}
+                </Button>
+                <Button
+                    type="button"
+                    data-testid="talos-tasks-delete-confirm"
+                    :disabled="deleting"
+                    class="min-h-12 bg-[var(--talos-danger)] text-white"
+                    @click="confermaEliminazione"
+                >
+                    {{ t('common.delete') }}
+                </Button>
+            </template>
+        </TalosMobileConfirmDialog>
 
         <TalosMobileConfirmDialog
             v-if="bulkDeleteOpen"
@@ -503,32 +792,10 @@ function priorityClass(priority: string): string {
                 <Button
                     type="button"
                     data-testid="talos-tasks-bulk-delete-confirm"
-                    class="bg-[var(--talos-danger,#dc5b5b)] text-white"
-                    @click="removeSelected"
+                    class="bg-[var(--talos-danger)] text-white"
+                    @click="eliminaSelezionate"
                 >{{ t('common.delete') }}</Button>
             </div>
         </TalosMobileConfirmDialog>
-
-        <!--
-            Il FAB al posto del modulo sempre aperto.
-
-            Visto sul tablet il 2026-08-06: il modulo occupava un terzo dello
-            schermo sopra l'elenco, e sapeva creare MENO della pagina — non
-            conosceva la pianificazione. Due porte per la stessa cosa, con
-            poteri diversi.
-
-            Una porta sola, e va dove ci sono tutti i campi. È la stessa
-            grammatica delle Note e della Ricerca: FAB → pagina.
-        -->
-        <button
-            v-if="!bulk.active.value"
-            type="button"
-            data-testid="talos-tasks-new-fab"
-            :aria-label="t('tasks.add')"
-            class="talos-pressable fixed bottom-[max(1.5rem,env(safe-area-inset-bottom))] right-5 z-20 inline-flex size-14 items-center justify-center rounded-full bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))] shadow-lg"
-            @click="startNew"
-        >
-            <Plus class="size-6" aria-hidden="true" />
-        </button>
     </div>
 </template>

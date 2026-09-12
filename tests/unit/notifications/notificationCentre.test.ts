@@ -239,3 +239,69 @@ describe('un evento non interrompe chi sta già guardando la cosa di cui parla',
     })
 })
 
+
+/**
+ * ⛔ Il campanello non suona per quello che hai appena fatto tu.
+ *
+ * Owner 2026-09-11 dal Pad: tre note create a mano, e il campanello diceva
+ * «3». Il peso `log` non bastava — non interrompeva, ma la riga restava «non
+ * letta» e il numero conta proprio quelle.
+ *
+ * La ricerca separa le due cose: un *activity feed* è la traccia, una
+ * *notification* è il richiamo, e le proprie azioni non generano mai
+ * notifiche (GetStream, *Notification Feeds*, letto 12/09/2026).
+ *
+ * Si prova nei DUE versi: la nota della persona non alza il numero, quella
+ * dell'attrezzo del modello sì. Un verso solo lascerebbe passare sia il
+ * campanello che suona sempre sia quello che non suona mai.
+ */
+describe("l'origine di un evento decide se il campanello suona", () => {
+    const nota = (origin?: 'person' | 'model'): TalosNotificationEvent => ({
+        key: 'note:created:Spesa',
+        channel: 'jobs',
+        weight: 'log',
+        title: 'Nuova nota',
+        body: 'Spesa',
+        at: 10,
+        ...(origin ? { origin } : {}),
+    })
+
+    it('la nota scritta dalla persona nasce già letta: traccia sì, numero no', () => {
+        const feed = talosAppendNotification([], nota('person'))
+        expect(feed).toHaveLength(1)
+        expect(feed[0].read).toBe(true)
+        expect(talosUnreadCount(feed)).toBe(0)
+    })
+
+    it('tre note a mano lasciano il campanello a zero', () => {
+        let feed: TalosNotificationEntry[] = []
+        for (const titolo of ['Spesa', 'Medico', 'Regali']) {
+            feed = talosAppendNotification(feed, { ...nota('person'), key: `note:created:${titolo}`, body: titolo })
+        }
+        expect(feed).toHaveLength(3)
+        expect(talosUnreadCount(feed)).toBe(0)
+    })
+
+    it('AL CONTRARIO: la nota creata dall’attrezzo del modello resta da leggere', () => {
+        for (const evento of [nota('model'), nota()]) {
+            const feed = talosAppendNotification([], evento)
+            expect(feed[0].read).toBe(false)
+            expect(talosUnreadCount(feed)).toBe(1)
+        }
+    })
+
+    it('nessuna delle due superfici che interrompono viene toccata dalla persona', () => {
+        const esito = talosRouteNotification(nota('person'), { appVisible: false, surface: null })
+        expect(esito.feed).toBe(true)
+        expect(esito.toast).toBe(false)
+        expect(esito.android).toBe(false)
+    })
+
+    it('AL CONTRARIO: un evento del modello che pesa resta capace di uscire', () => {
+        const esito = talosRouteNotification(
+            { ...nota('model'), weight: 'notable' },
+            { appVisible: false, surface: null },
+        )
+        expect(esito.android).toBe(true)
+    })
+})

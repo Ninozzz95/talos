@@ -311,6 +311,21 @@ export interface TalosLocalTask {
     instruction: string | null
     /** Quando è partita l'ultima volta. Serve a NON rieseguire dopo un riavvio. */
     last_run_at: string | null
+    /**
+     * U-17 — la pianificazione c'è, e per ora non deve partire.
+     *
+     * ⛔ Non è `schedule_json: null`. Spegnere la pianificazione la CANCELLA —
+     * istruzione, giorni e ora compresi — e chi la riaccende ricomincia da
+     * zero; la pausa lascia tutto scritto e toglie solo il permesso di
+     * partire. «Fermala fino a lunedì» e «non deve più ripetersi» sono due
+     * richieste diverse, e finché ce n'era una sola la prima costava la
+     * seconda.
+     *
+     * Su un'attività senza pianificazione è vera ma senza effetto: non c'è
+     * niente da fermare. La stazione infatti offre «Metti in pausa» solo dove
+     * una ricorrenza esiste.
+     */
+    paused: boolean
     created_at: string
     updated_at: string
 }
@@ -322,6 +337,15 @@ export interface UpdateTaskPatch {
     priority?: TalosTaskPriority
     schedule_json?: string | null
     instruction?: string | null
+    /**
+     * U-17 — fermare o riprendere la ricorrenza. Assente = non toccarla.
+     *
+     * Sta qui e non in un `setTaskPaused()` suo perché è una correzione come le
+     * altre, fatta da chi ha l'attività davanti: il chiamante distratto che ha
+     * giustificato `setTaskStatus` separato — la chat che spunta cento volte al
+     * giorno — non mette mai niente in pausa.
+     */
+    paused?: boolean
 }
 
 export interface CreateTaskInput {
@@ -357,6 +381,15 @@ export interface TalosLocalNote {
     trust_level: 'untrusted'
     /** A8 — la provenienza registrata quando la riga e' nata. */
     content_origin: TalosContentOrigin
+    /**
+     * U-10 — «In evidenza»: la nota resta in cima all'elenco.
+     *
+     * È una decisione della persona sulla nota, non una proprietà del testo:
+     * per questo è un campo e non una convenzione dentro il titolo. L'elenco
+     * ordina per `pinned` PRIMA che per data, quindi un pin è l'unico modo per
+     * tenere ferma una nota mentre le altre si muovono.
+     */
+    pinned: boolean
     created_at: string
     updated_at: string
 }
@@ -366,6 +399,16 @@ export interface CreateNoteInput {
     title: string
     content: string
     created_at: string
+    /**
+     * Assente = non in evidenza, che è come nasce ogni nota scritta a mano.
+     *
+     * Esiste per un chiamante solo, e serve: il RIPRISTINO da backup
+     * (`backupWiring.ts`) rimette le righe passando a `createNote` la riga
+     * esportata per intero. Senza questo campo il ripristino riportava
+     * indietro le note e buttava via quali erano in evidenza — una perdita
+     * silenziosa, perché una nota tornata senza pin sembra una nota sana.
+     */
+    pinned?: boolean
     /**
      * ⛔ A8 — da dove viene il testo di questa riga.
      *
@@ -400,6 +443,21 @@ export interface UpdateNoteInput {
     id: string
     title?: string
     content?: string
+    /**
+     * U-10 — mettere o togliere l'evidenza, senza toccare il testo.
+     *
+     * Sta qui e non in un `setNotePinned()` suo perché è la stessa regola dei
+     * due campi sopra — assente vuol dire «non toccarlo» — e perché il gesto
+     * arriva sempre da una persona che ha la nota davanti: non c'è il
+     * chiamante distratto che ha giustificato `setTaskStatus` separato per le
+     * attività (là lo stato cambia cento volte più spesso di tutto il resto,
+     * qui no).
+     *
+     * ⛔ Cambiare solo il pin NON sposta `updated_at`: l'elenco si ordina su
+     * quella data, e mettere in evidenza una nota di marzo la farebbe
+     * apparire scritta oggi. Si veda l'implementazione.
+     */
+    pinned?: boolean
 }
 
 

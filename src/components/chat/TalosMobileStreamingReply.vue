@@ -131,6 +131,98 @@ const sending = computed(() => state.sending
  * cosmetic — it changes whether TALOS holds text back.
  */
 const settings = useSettingsStore()
+
+/**
+ * ⭐⭐⭐ I CINQUANTA SECONDI IN CUI NON DICEVAMO NIENTE.
+ *
+ * Misurato sul Pad il 10/09 (ledger §44): il primo messaggio di una chat nuova
+ * con `gemma-4-E2B-it-Q4_0` sulla GPU costa **76 secondi** alla prima parola, e
+ * **50** sono i soli pesi che si spostano dal file alla scheda grafica. Per
+ * tutti e 50 lo schermo mostrava questa animazione e nient'altro — e la riga
+ * dei numeri, dopo, ne dichiarava 24,2: il suo orologio parte a modello gia'
+ * aperto.
+ *
+ * ⛔ NON e' cosmetica. Un'attesa senza fine dichiarata e un'app bloccata si
+ * vedono uguali, e chi aspetta non ha modo di sapere se conviene aspettare
+ * ancora o chiudere tutto. La barra dice **quanto manca**, e il pulsante
+ * restituisce la scelta.
+ *
+ * ⛔ Si INTERROGA il motore invece di ricevere eventi: il nativo tiene un
+ * contatore atomico che il caricamento aggiorna a ogni tensore, e una callback
+ * per tensore attraverserebbe il confine JNI 601 volte per un modello da 2,8
+ * GiB. Il perche' per esteso e' in testa a `talos_llama_jni.cpp`.
+ *
+ * ⛔ La sonda parte **dopo mezzo secondo**, non subito: una risposta che arriva
+ * in fretta non deve far lampeggiare una barra di caricamento per un istante.
+ * E' la stessa soglia con cui gia' oggi si decide se mostrare un'attesa.
+ *
+ * ⛔ `null` NON riporta la barra a zero: vuol dire «non lo so» — o non sta
+ * caricando, o il ponte non ha risposto. Un progresso che torna indietro
+ * sembrerebbe un caricamento ricominciato da capo.
+ */
+const RITARDO_SONDA_MS = 500
+const PASSO_SONDA_MS = 500
+const caricoFrazione = ref<number | null>(null)
+const annullamentoChiesto = ref(false)
+let sondaTimer: ReturnType<typeof setInterval> | null = null
+let sondaRitardo: ReturnType<typeof setTimeout> | null = null
+
+function fermaSonda(): void {
+    if (sondaTimer !== null) { clearInterval(sondaTimer); sondaTimer = null }
+    if (sondaRitardo !== null) { clearTimeout(sondaRitardo); sondaRitardo = null }
+}
+
+async function guardaIlCarico(): Promise<void> {
+    const { talosLocalModelLoadProgress } = await import('@/services/localEngine')
+    const frazione = await talosLocalModelLoadProgress()
+    // ⛔ Solo un valore VERO sovrascrive: vedi il cappello sul `null`.
+    if (frazione !== null) caricoFrazione.value = frazione
+    else if (caricoFrazione.value !== null) caricoFrazione.value = null
+}
+
+watch(sending, (adesso) => {
+    fermaSonda()
+    if (!adesso) {
+        caricoFrazione.value = null
+        annullamentoChiesto.value = false
+        return
+    }
+    sondaRitardo = setTimeout(() => {
+        void guardaIlCarico()
+        sondaTimer = setInterval(() => { void guardaIlCarico() }, PASSO_SONDA_MS)
+    }, RITARDO_SONDA_MS)
+}, { immediate: true })
+
+onBeforeUnmount(fermaSonda)
+
+/** Da 0..1 a una percentuale intera. Mai 100 finche' non ha finito davvero. */
+const caricoPercento = computed(() => (caricoFrazione.value === null
+    ? null
+    : Math.min(99, Math.floor(caricoFrazione.value * 100))))
+
+/**
+ * ⛔⛔ ANNULLA DEVE ANNULLARE — e fermare il caricamento non basta.
+ *
+ * Provato sul Pad il 2026-09-10 (ledger §47): premuto «Annulla» al 56,6%, il
+ * motore ha davvero interrotto — `modello non caricato (annullato da chi usa
+ * l'app)` — e trentacinque secondi dopo **il modello si e' riaperto da solo** e
+ * il turno e' proseguito. Alla persona resta lo stesso cerchio che girava
+ * prima, solo piu' a lungo: un pulsante che sembra non aver fatto niente.
+ *
+ * ⇒ Le due cose si fermano insieme: il caricamento nel motore, e il turno nella
+ * chat — la stessa `stopStreaming` del quadratino nel campo di scrittura, che
+ * quella catena la conosce gia' tutta.
+ *
+ * ⛔ L'ordine conta. Prima si ferma il turno, poi il caricamento: al contrario
+ * ci sarebbe una finestra in cui il caricamento e' morto e il turno e' ancora
+ * vivo, e la chat proverebbe a riaprire proprio in quell'istante.
+ */
+async function annullaIlCarico(): Promise<void> {
+    annullamentoChiesto.value = true
+    controller.chat.stopStreaming()
+    const { talosCancelLocalModelLoad } = await import('@/services/localEngine')
+    await talosCancelLocalModelLoad()
+}
 const fadeMode = computed(() => settings.state.shell.streaming_animation === 'fade')
 
 /**
@@ -436,5 +528,46 @@ onBeforeUnmount(() => {
              empty nodes; each node fills as the line passes through it. -->
         <TalosLineLoader :width="44" />
         <span class="sr-only">{{ $t('chat.processing') }}</span>
+        <!--
+            ⛔ Compare SOLO quando il motore sta davvero caricando: fuori da
+            quel caso `caricoPercento` resta `null` e qui non c'e' niente. Non
+            e' una barra che si accende a ogni attesa.
+
+            ⛔ Una sola azione, quindi un solo pulsante: la regola dell'owner
+            («mai piu' di due azioni affiancate») non chiede un menu qui, chiede
+            di non affiancarne tre.
+        -->
+        <div
+            v-if="caricoPercento !== null"
+            data-testid="talos-local-load-progress"
+            class="mt-1.5 flex items-center gap-2.5"
+        >
+            <!--
+                ⛔ ZERO NON SI SCRIVE. Misurato sul Pad (ledger §46): con i pesi
+                mappati dal file, `size_done/size_data` resta a **0 per dodici
+                secondi** e poi risale di colpo — 0 → 70 → 566 → 951 su
+                millesimi. Un «0%» fermo per dodici secondi si legge come
+                «bloccato», che e' esattamente la cosa che questa riga esiste
+                per smentire. ⇒ finche' non si muove si dice cosa sta
+                succedendo, senza numero; il numero compare quando ha qualcosa
+                da dire.
+            -->
+            <span class="font-mono text-2xs text-[var(--talos-muted)]">
+                {{ caricoPercento === 0
+                    ? $t('chat.localLoadingModelStarting')
+                    : $t('chat.localLoadingModel', { percent: caricoPercento }) }}
+            </span>
+            <button
+                v-if="!annullamentoChiesto"
+                type="button"
+                data-testid="talos-local-load-cancel"
+                class="talos-pressable rounded-lg px-1.5 py-0.5 text-2xs text-[var(--talos-muted)] underline underline-offset-2"
+                @click="annullaIlCarico"
+            >{{ $t('chat.localLoadingCancel') }}</button>
+            <span
+                v-else
+                class="text-2xs text-[var(--talos-muted)]"
+            >{{ $t('chat.localLoadingCancelling') }}</span>
+        </div>
     </div>
 </template>

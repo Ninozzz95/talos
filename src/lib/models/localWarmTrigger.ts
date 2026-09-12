@@ -48,9 +48,43 @@ export interface TalosWarmTriggerSignals {
  * mentre il telefono è già in difficoltà. Prudenza sul dato mancante, non
  * sul dato negativo.
  */
+/**
+ * ⛔⛔ PERCHE' NO — la meta' che mancava, 2026-09-10.
+ *
+ * Il cancello rispondeva `false` e basta. Un `false` non si distingue da un
+ * riscaldamento che non e' mai partito, e infatti il 10/09 nessuno ha potuto
+ * dire quale delle tre spiegazioni fosse quella vera: il cancello, il
+ * sondaggio o un percorso morto. Owner, stesso giorno: «un riscaldamento che
+ * non parte per calore e' una scelta legittima; un riscaldamento che non parte
+ * in silenzio e' un difetto».
+ *
+ * ⇒ Una sola implementazione, due letture. `talosShouldWarmLocalModel` resta
+ * il predicato di prima — stessa firma, stessi esiti — ed e' scritto SOPRA
+ * questa funzione invece che accanto: due copie della stessa regola sono due
+ * copie che un giorno divergono, ed e' il difetto che questo file gia'
+ * dichiara di voler evitare per la decisione.
+ */
+export type TalosLocalWarmRefusal =
+    /** Il dispositivo non ha detto quanto scotta (sotto API 29, o nessun PowerManager). */
+    | 'unknown-heat'
+    /** Ha detto che scotta: `severe` o `critical`. */
+    | 'too-warm'
+    /** Non ha detto quanta memoria e' libera, o qual e' la sua soglia. */
+    | 'unknown-memory'
+    /** L'ha detto, ed e' sotto la soglia con cui il sistema comincia a sfrattare. */
+    | 'low-memory'
+
+export function talosWhyNotWarmLocalModel(
+    signals: TalosWarmTriggerSignals,
+): TalosLocalWarmRefusal | null {
+    if (signals.thermal === null) return 'unknown-heat'
+    if (signals.thermal === 'severe' || signals.thermal === 'critical') return 'too-warm'
+    if (signals.availableRamBytes === null || signals.lowMemoryThresholdBytes === null) {
+        return 'unknown-memory'
+    }
+    return signals.availableRamBytes > signals.lowMemoryThresholdBytes ? null : 'low-memory'
+}
+
 export function talosShouldWarmLocalModel(signals: TalosWarmTriggerSignals): boolean {
-    if (signals.thermal === null) return false
-    if (signals.thermal === 'severe' || signals.thermal === 'critical') return false
-    if (signals.availableRamBytes === null || signals.lowMemoryThresholdBytes === null) return false
-    return signals.availableRamBytes > signals.lowMemoryThresholdBytes
+    return talosWhyNotWarmLocalModel(signals) === null
 }

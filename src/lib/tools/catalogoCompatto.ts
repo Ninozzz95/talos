@@ -79,13 +79,56 @@ import { TALOS_ATTREZZI_SEMPRE_IN_VISTA } from '@/lib/tools/aperturaProgressiva'
  */
 const SVELATI = new Map<string, Set<string>>()
 
+/**
+ * ⛔⛔ QUANTE CONVERSAZIONI SI RICORDANO — e perché un tetto ci vuole.
+ *
+ * MISURATO il 2026-09-10: `SVELATI` non rilasciava **mai**. Una chiave per
+ * ogni `sessionId` che è passato di qui, e nessuna che uscisse: non è solo
+ * memoria che cresce per tutta la vita del processo, è memoria che cresce **su
+ * una chat cancellata**, perché `talosDimenticaSvelati` lo chiama solo chi
+ * cancella davvero — e nessuno lo fa quando l'app si limita a cambiare chat.
+ *
+ * ⇒ Il tetto è una **finestra sulle conversazioni recenti**, non un limite di
+ * funzione: l'ordine di una `Map` in JavaScript è quello di inserimento (è
+ * nella specifica, non un dettaglio di implementazione), quindi rileggere una
+ * chiave e reinserirla la porta in fondo, e chi cade fuori è la conversazione
+ * toccata **meno di recente**.
+ *
+ * ⛔ Cosa costa cadere fuori, detto per intero: una chat vecchissima ripresa
+ * dopo altre 32 ripaga **un giro di `tool_details`** per il primo strumento
+ * che rivuole. Non perde nessuna capacità e non dice il falso — è esattamente
+ * lo stato di una chat nuova, che è lo stato normale del catalogo. Il difetto
+ * del 2026-08-09 («la torcia è stata spegna») nasceva dal dimenticare **dentro
+ * la stessa conversazione**, cioè fra un messaggio e il successivo: qui la
+ * conversazione attiva è sempre l'ultima toccata, e non cade mai.
+ *
+ * Fonte, letta il 2026-09-10: la `Map` itera in ordine di inserimento
+ * (developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map),
+ * ed è il pattern LRU standard — si cancella e si reinserisce per «rinfrescare».
+ */
+const TALOS_SVELATI_MAX_CONVERSAZIONI = 32
+
 /** Gli strumenti gia' svelati in questa conversazione. Vivo, non copiato. */
 export function talosSvelatiIn(sessione: string | null): Set<string> {
     const chiave = sessione ?? '(nessuna)'
     const esistente = SVELATI.get(chiave)
-    if (esistente) return esistente
+    if (esistente) {
+        // Rinfresca: questa conversazione torna in fondo, cioè lontana dallo sfratto.
+        SVELATI.delete(chiave)
+        SVELATI.set(chiave, esistente)
+        return esistente
+    }
     const nuovo = new Set<string>()
     SVELATI.set(chiave, nuovo)
+    /*
+     * ⛔ `while`, non `if`: se un giorno il tetto scendesse, un solo sfratto
+     * lascerebbe la mappa sopra il tetto per sempre senza che nessuno protesti.
+     */
+    while (SVELATI.size > TALOS_SVELATI_MAX_CONVERSAZIONI) {
+        const piuVecchia = SVELATI.keys().next()
+        if (piuVecchia.done) break
+        SVELATI.delete(piuVecchia.value)
+    }
     return nuovo
 }
 
@@ -277,28 +320,148 @@ export function talosTurnoDiretto(
  */
 const SEGNALE_DI_COSTO = /\b(MINUTES?|minuti|credit|credito|seconds?|secondi|costs?|costa|slow|lento)\b/i
 
+/**
+ * ⛔⛔⛔ IL SETACCIO DEL 2026-09-10 — nominare un altro strumento NON basta.
+ *
+ * ## Cosa ha trovato la misura (tokenizer ufficiale Gemma 3, codice vero)
+ *
+ * L'indice pesava **2.036 token su 68 righe**, mediana **23 token a riga**, e
+ * **otto righe da sole ne pesavano 472**. Guardate una per una, le frasi in
+ * eccesso erano di **due specie diverse**, e solo una delle due serve qui:
+ *
+ * | specie | esempio | quando serve al modello |
+ * |---|---|---|
+ * | **SCELTA** | «For a single fact, use `web_search` instead» | **leggendo l'indice**, prima di avere qualunque schema |
+ * | **SEQUENZA** | «Call `tasks_list` first to get the task id» | **dopo** aver scelto, cioè quando lo schema è già arrivato |
+ *
+ * ⇒ Il vecchio filtro teneva **entrambe**, perché guardava una cosa sola: se
+ * la frase conteneva il nome di un altro strumento. Ma una frase di SEQUENZA
+ * nell'indice è pagata due volte e usata una: `talosToolsForLocalEngine`
+ * spedisce la `description` **intera** (`registry.ts:541`), quindi quella riga
+ * il modello la rilegge comunque dentro lo schema che `tool_details` gli
+ * consegna — **prima** di poter chiamare lo strumento. Nell'indice non decide
+ * niente.
+ *
+ * ⇒ Una frase in più entra solo se **fa scegliere**: nomina un altro strumento
+ * *e* porta un marcatore di contrasto. Il costo resta com'era — «costa minuti
+ * e credito vero» decide *se* chiamare, ed è una scelta anche quando non
+ * nomina nessuno.
+ *
+ * ⛔ NON è un allentamento di LOCAL-CATALOGO-DISAMBIGUA-01: quella lezione
+ * chiedeva le frasi che **distinguono due gemelli**, ed è esattamente ciò che
+ * questo setaccio tiene. Restano tutte, e i test che le pretendono mordono.
+ *
+ * ## ⛔ E il tetto vecchio TAGLIAVA PROPRIO QUELLE FRASI
+ *
+ * `slice(0, 260)` era cieco alle parole: misurato lo stesso giorno, **cinque
+ * righe su 68 finivano a metà di una parola** —
+ *
+ * ```
+ *   research_list    → «…cannot say whether a researc»
+ *   device_list_apps → «…(Telegram X is org.th»
+ *   research_start   → «…use web_search instead: it answers in seconds»
+ * ```
+ *
+ * Cioè la frase nata per curare LOCAL-CATALOGO-DISAMBIGUA-01 (`research_start`
+ * → `web_search`) **arrivava mozza**, e nessuno se n'era accorto perché il
+ * test chiedeva solo che il nome `web_search` comparisse. Un'istruzione
+ * troncata è peggio di una assente: «so never decline» (`web_read`) restava lì
+ * appesa senza il suo complemento.
+ *
+ * ⇒ Il taglio ora è **per frasi intere**, mai in mezzo a una parola, e il
+ * tetto sale a {@link TALOS_INDICE_MAX_CARATTERI}: con il setaccio a fare il
+ * lavoro vero, il tetto torna a essere ciò che doveva essere — una guardia
+ * contro una descrizione impazzita, non un budget che decapita le frasi utili.
+ *
+ * ## Ricerca web fatta PRIMA di scrivere (2026-09-10)
+ *
+ * - platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool —
+ *   «Write clear, descriptive tool names and descriptions», «Use keywords in
+ *   descriptions that match how users describe tasks».
+ * - apxml.com/courses/agentic-llm-memory-architectures — «Descriptions should
+ *   be unambiguous but avoid excessive verbosity that consumes valuable
+ *   context window space»: è esattamente il compromesso che questo setaccio
+ *   sposta, e lo sposta togliendo ciò che NON disambigua.
+ * - arXiv 2602.20426, «Learning to Rewrite Tool Descriptions for Reliable
+ *   LLM-Agent Tool Use» — riscrivere la descrizione migliora la scelta. ⛔ Qui
+ *   NON si riscrive: si SCEGLIE quale frase già scritta entra, perché due
+ *   verità sullo stesso strumento un giorno divergono (la ragione sta sopra).
+ */
+const SEGNALE_DI_SCELTA = /\b(?:instead|rather than|prefers?|only for|only when|only to|do not use|don't use|never use)\b/i
+
+/**
+ * Il tetto per riga, in caratteri. ⛔ Si applica solo a **frasi intere**: la
+ * prima frase entra sempre (misurata il 2026-09-10: la più lunga dei 69
+ * strumenti è 166 caratteri, `device_status`), le altre entrano finché ci
+ * stanno. Misurato dopo il setaccio: la riga più lunga è ~290 caratteri, cioè
+ * il tetto **oggi non morde su nessuno** — è la guardia per lo strumento che
+ * qualcuno aggiungerà domani con mezzo kilobyte di descrizione.
+ */
+export const TALOS_INDICE_MAX_CARATTERI = 400
+
+/**
+ * ⛔⛔⛔ I SEMPRE-IN-VISTA NON VANNO NELL'INDICE — erano scritti DUE VOLTE.
+ *
+ * MISURATO il 2026-09-10: `time_now`, `memory_search`, `library_search` e
+ * `web_search` avevano una riga d'indice **e** lo schema intero fra le
+ * `Available functions`, a ogni messaggio di ogni chat: **108 token buttati**,
+ * per sempre.
+ *
+ * ⛔ Non è un taglio di informazione, ed è per questo che è sicuro: quei
+ * quattro sono pre-svelati dal **primo** messaggio da
+ * `talosSvelatiInConSempreVisibili`, quindi il modello ne ha già la
+ * descrizione INTERA sotto gli occhi — che è più di quanto la riga dell'indice
+ * gli dicesse.
+ *
+ * ⇒ E toglie anche una **bugia**: il cappello dell'indice dice «You do not
+ * have their input schemas yet, so you cannot call them directly», che per
+ * quei quattro era falso. Un modello piccolo che legge una regola smentita
+ * dalla pagina stessa impara che le regole si possono ignorare.
+ *
+ * ⛔ L'omissione e la pre-svelatura devono restare **la stessa lista**, o si
+ * apre un buco: un nome fuori dall'indice e non pre-svelato sparirebbe del
+ * tutto. Per questo si chiama `talosPreVelatiSempreVisibili`, la funzione che
+ * usa anche `talosSvelatiInConSempreVisibili`, e non una copia. Il test
+ * «indice ∪ pre-svelati == offerti» è il cancello che tiene ferma l'unione.
+ */
 export function talosIndiceCompatto(
     tools: ReadonlyArray<TalosToolDefinition<never>>,
 ): string {
+    /*
+     * ⛔ I nomi restano quelli di TUTTI gli offerti, non solo di chi finisce
+     * in elenco: un rimando a `web_search` vale anche — anzi, soprattutto —
+     * quando `web_search` è fuori dall'indice perché il modello ne ha già lo
+     * schema. Filtrare anche questi rimetterebbe due gemelli indistinguibili.
+     */
     const nomi = tools.map((tool) => tool.name)
-    return tools.map((tool) => {
+    const giaInVista = new Set(talosPreVelatiSempreVisibili(tools))
+    return tools.filter((tool) => !giaInVista.has(tool.name)).map((tool) => {
         const frasi = tool.description.split(/(?<=\.)\s+/)
         const prima = frasi[0] ?? tool.description
         /*
-         * Una frase entra se rimanda a un altro strumento OFFERTO in questo
-         * turno — un rimando a qualcosa che il modello non ha davanti sarebbe
-         * peggio del silenzio — oppure se dice quanto costa chiamarlo.
+         * Una frase entra se fa SCEGLIERE — nomina un altro strumento offerto
+         * in questo turno e lo contrappone a questo — oppure se dice quanto
+         * costa chiamarlo. Una frase che spiega COME usarlo, una volta scelto,
+         * arriva già con lo schema: qui sarebbe pagata e non deciderebbe nulla.
          */
         const utili = frasi.slice(1).filter((frase) => (
-            nomi.some((nome) => nome !== tool.name && frase.includes(nome))
+            (SEGNALE_DI_SCELTA.test(frase)
+                && nomi.some((nome) => nome !== tool.name && frase.includes(nome)))
             || SEGNALE_DI_COSTO.test(frase)
         ))
-        const testo = [prima, ...utili].join(' ')
-        // Il tetto resta, ma su una riga che ora puo portare la distinzione.
-        return `${tool.name}: ${testo.slice(0, 260)}`
+        /*
+         * ⛔ Si aggiunge una frase INTERA o non la si aggiunge: mai mezza. Una
+         * frase che non ci sta viene saltata e si prova la successiva, perché
+         * la frase che distingue due gemelli può essere l'ultima dell'elenco.
+         */
+        let testo = prima
+        for (const frase of utili) {
+            if (testo.length + 1 + frase.length > TALOS_INDICE_MAX_CARATTERI) continue
+            testo += ` ${frase}`
+        }
+        return `${tool.name}: ${testo}`
     }).join('\n')
 }
-
 /**
  * ⛔⛔ L'ISTRUZIONE CHE FA FARE IL PRIMO PASSO, e prima non lo faceva fare.
  *
@@ -354,6 +517,23 @@ export function talosIstruzioneCatalogo(
     tools: ReadonlyArray<TalosToolDefinition<never>>,
 ): string {
     if (!tools.length) return ''
+    const indice = talosIndiceCompatto(tools)
+    /*
+     * ⛔ Indice vuoto = ogni strumento offerto è già in vista con il suo schema
+     * (succede quando restano solo i sempre-in-vista). Il cappello direbbe
+     * «below» puntando al nulla, e insegnerebbe a chiamare `tool_details` per
+     * strumenti che il modello può già chiamare: costa token e induce un giro
+     * inutile. Si tace, e restano gli schemi — che bastano.
+     */
+    if (!indice) return ''
+    /*
+     * ⛔ L'esempio deve nominare uno strumento CHE STA NELL'ELENCO: dopo che i
+     * sempre-in-vista ne sono usciti, `tools[0]` può essere uno di quelli, e
+     * l'esempio direbbe di chiedere lo schema di uno strumento che il modello
+     * ha già — cioè insegnerebbe con un caso sbagliato. Si prende il primo
+     * nome dell'indice vero, non il primo degli offerti.
+     */
+    const esempio = indice.slice(0, indice.indexOf(':'))
     return [
         '',
         '',
@@ -368,8 +548,8 @@ export function talosIstruzioneCatalogo(
         `To use any of them: FIRST call ${TALOS_DETTAGLI_STRUMENTO}, naming every`,
         'tool you intend to use in this message. THEN call those tools.',
         '',
-        `So for ${tools[0]!.name}: call ${TALOS_DETTAGLI_STRUMENTO} for it, read the`,
-        `schema that comes back, then call ${tools[0]!.name} itself.`,
+        `So for ${esempio}: call ${TALOS_DETTAGLI_STRUMENTO} for it, read the`,
+        `schema that comes back, then call ${esempio} itself.`,
         '',
         '⛔ Never reply that a tool "is not available", or that you "cannot do',
         'this", when the name is in the list below. That is always wrong: call',
@@ -382,7 +562,7 @@ export function talosIstruzioneCatalogo(
         'the language they wrote in, saying what happened. Do not restate the',
         'call, do not show code, do not explain which tools you considered.',
         '',
-        talosIndiceCompatto(tools),
+        indice,
         '',
         '',
     ].join('\n')

@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import type { Component } from 'vue'
+import type { Component, ComponentPublicInstance } from 'vue'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
 import { useTalosI18n } from '@/i18n'
 import { useTalosBulkSelection } from '@/composables/useTalosBulkSelection'
-import { useTalosVaultThumbnails } from '@/composables/useTalosVaultThumbnails'
+import { useTalosLibraryThumbnails } from '@/composables/useTalosLibraryThumbnails'
+import { talosSfasamento } from '@/composables/useTalosCalmMotion'
+import { useTalosSlidingIndicator } from '@/composables/useTalosSlidingIndicator'
+import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
+import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import {
     AlertTriangle, CheckCircle2, Database, FileText, FolderPlus,
-    ArrowDownUp, Download, EllipsisVertical, ExternalLink, LayoutGrid, List, LoaderCircle, Paperclip, RefreshCw, Search, Trash2, Upload, X,
+    ArrowDownUp, Download, ExternalLink, LayoutGrid, List, LoaderCircle, Paperclip, Plus, RefreshCw, Search, SlidersHorizontal, Trash2, Upload, X,
     Check,
     CheckSquare,
     Eye,
@@ -51,6 +55,8 @@ const controller = useChatController()
 const router = useRouter()
 const { t, locale } = useTalosI18n()
 const settings = useSettingsStore()
+/** Sul tablet il pulsante primario dice cosa fa; sul telefono è un quadrato. */
+const { isTablet } = useTalosTabletLayout()
 const toasts = useTalosMobileToasts()
 const attachments = controller.attachments
 const actionBusy = ref(false)
@@ -109,11 +115,24 @@ const typeFilterOptions = computed(() => typeTabs.value.map((tab) => ({
     testId: `talos-library-type-${tab.value}`,
 })))
 
-/** Appearance stays here; the radiogroup grammar belongs to the primitive. */
+/**
+ * Appearance stays here; the radiogroup grammar belongs to the primitive.
+ *
+ * U-20: erano pastiglie, una piena d'accento e tre col bordo. Il mockup «Talos
+ * Calm Finale» disegna invece una striscia di etichette su una linea, con un
+ * filo d'accento sotto quella attiva — la stessa forma delle Note, e questo è il
+ * punto: due strisce di filtri in due stazioni della stessa app devono leggersi
+ * come una grammatica sola.
+ *
+ * ⛔ `relative` c'è perché il filo è in posizione assoluta dentro il bottone;
+ * `min-h-12 min-w-12` perché 48 px è il bersaglio Android, e il vestito non è
+ * una ragione per rimpicciolire un bersaglio.
+ */
 function typeFilterOptionClass(selected: boolean): string {
+    const base = 'talos-pressable relative inline-flex min-h-12 min-w-12 shrink-0 items-center justify-center gap-[var(--talos-space-inline)] whitespace-nowrap rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-sm'
     return selected
-        ? 'talos-pressable min-h-12 min-w-12 rounded-full px-3 text-sm transition-colors bg-[var(--talos-accent)] text-[var(--talos-accent-contrast,var(--primary-foreground))]'
-        : 'talos-pressable min-h-12 min-w-12 rounded-full px-3 text-sm transition-colors border border-[var(--talos-border)] text-[var(--talos-muted)]'
+        ? `${base} text-[var(--talos-text)]`
+        : `${base} text-[var(--talos-muted)]`
 }
 
 function chooseTypeFilter(value: string): void {
@@ -232,10 +251,22 @@ function openSavedCopy(fileId: string): void {
 /** Present while the open document is a page that came from somewhere. */
 const docSourceUrl = computed(() => (docView.value ? parseVaultSourceUrl(docView.value.metadata) : null))
 
-// Thumbnails: one implementation, shared with the per-chat gallery. This screen
-// held the original; leaving a second copy here was how the in-flight leak
-// stayed fixed in one place and open in the other.
-const { thumbs } = useTalosVaultThumbnails(filteredFiles, attachments.previewUrl)
+/**
+ * U-20 — LE ANTEPRIME VERE.
+ *
+ * Prima qui c'erano object URL in memoria, **solo per le immagini**, rifatti a
+ * ogni apertura della stazione. Adesso la miniatura si genera una volta, si
+ * scrive sotto la cache e si ritrova: un PDF mostra la sua **prima pagina**, e
+ * un file di testo un'anteprima tipografica che non costa niente perché è
+ * disegnata in DOM (`TalosMobileLibraryArt.vue`).
+ *
+ * ⛔ `readBytes` è `previewBytes` della Libreria e non una lettura nostra: è
+ * l'unica funzione che sa dove i file vivono davvero, e duplicarla qui avrebbe
+ * significato due idee di «dov'è il file» che prima o poi divergono.
+ */
+const thumbnails = useTalosLibraryThumbnails(filteredFiles, {
+    readBytes: (fileId) => attachments.previewBytes(fileId),
+})
 onBeforeUnmount(closeLightbox)
 
 // Open: images in a lightbox, documents in a text viewer (both in-app).
@@ -297,7 +328,16 @@ async function openFile(file: TalosLocalVaultFile): Promise<void> {
     }
     if (isImage(file)) {
         lightboxFile.value = file
-        lightboxUrl.value = thumbs.value[file.id] ?? await attachments.previewUrl(file.id)
+        /*
+         * ⛔ Il visore riceve l'immagine INTERA, non la miniatura.
+         *
+         * Prima prendeva quella della scheda «se c'era», e finché le miniature
+         * erano object URL della sorgente piena la differenza non si vedeva.
+         * Ora una miniatura è ridotta apposta alla larghezza di una scheda: a
+         * schermo pieno sarebbe sgranata, e per chi guarda sembrerebbe che
+         * TALOS abbia rovinato la sua foto.
+         */
+        lightboxUrl.value = await attachments.previewUrl(file.id)
         return
     }
     docView.value = file
@@ -356,7 +396,14 @@ useTalosOverlayBack(() => {
     || pdfView.value !== null)
 
 function closeLightbox(): void {
-    if (lightboxUrl.value && !Object.values(thumbs.value).includes(lightboxUrl.value)) URL.revokeObjectURL(lightboxUrl.value)
+    /*
+     * ⛔ Ora si revoca SEMPRE, e si può: l'indirizzo del visore è creato qui
+     * ogni volta (vedi `openFile`), non prestato dalla griglia. Prima c'era un
+     * controllo per non revocare la miniatura di una scheda ancora a schermo —
+     * una precauzione giusta finché i due indirizzi potevano essere lo stesso,
+     * e un modo silenzioso di non liberare niente adesso che non lo sono mai.
+     */
+    if (lightboxUrl.value) URL.revokeObjectURL(lightboxUrl.value)
     lightboxUrl.value = null
     lightboxFile.value = null
 }
@@ -389,7 +436,13 @@ async function addFiles(): Promise<void> {
     menuOpen.value = false
     feedback.value = ''
     actionBusy.value = true
-    try { await attachments.selectFiles() } finally { actionBusy.value = false }
+    // ⛔ `library`, not the default: adding a file here files it in the Vault and
+    // stops there — it is not staged for the next message, and it is not asked
+    // «this image leaves the phone», because nothing is leaving. That question
+    // belongs to the send. Android, «App permissions best practices» (read
+    // 2026-09-12): only prompt when the feature that needs it is the one being
+    // used — https://developer.android.com/training/permissions/usage-notes
+    try { await attachments.selectFiles('library') } finally { actionBusy.value = false }
 }
 
 async function attachFile(file: TalosLocalVaultFile): Promise<void> {
@@ -675,6 +728,22 @@ const hasVisibleLibraryItems = computed(() => (
 ))
 
 /**
+ * È il filtro a nascondere, o non c'è proprio niente?
+ *
+ * ⛔ Due assenze diverse, e solo la prima si può annullare. Prima erano la
+ * stessa schermata, e chi aveva appena cercato una parola sbagliata vedeva
+ * l'introduzione della Libreria vuota — cioè gli veniva detto che i suoi file
+ * non erano mai esistiti.
+ */
+const libreriaFiltrata = computed(() => query.value.trim() !== '' || typeFilter.value !== 'all')
+
+/** La via d'uscita dallo stato vuoto quando è il filtro a nascondere. */
+function pulisciFiltri(): void {
+    query.value = ''
+    typeFilter.value = 'all'
+}
+
+/**
  * The selection can only ever mean what is on screen.
  *
  * SF-critic 2026-07-26: the type chips stay live during selection mode. Select
@@ -697,6 +766,93 @@ watch(typeFilter, (value) => {
     if (value === 'links' && bulk.active.value) bulk.exit()
 })
 
+/**
+ * ── U-14: IL MOVIMENTO DELLA LIBRERIA ───────────────────────────────────────
+ *
+ * Quattro cose, le stesse delle Note, e nessuna decorativa: ognuna risponde a
+ * una domanda che senza movimento resta senza risposta.
+ *
+ *   1. il filo sotto il filtro attivo SCIVOLA   → da dove sono arrivato
+ *   2. le schede si riordinano invece di saltare → dov'è finita quella che
+ *      stavo guardando quando ho cambiato vista o filtro
+ *   3. una scheda ENTRA                          → quali sono comparse adesso
+ *   4. l'onda parte dal dito                     → ti ho sentito
+ *
+ * ⛔ Nessuna durata è scritta qui: tutte passano dai token del motore
+ * (`--talos-motion-calm-*`) e dalle sue categorie, quindi le quattro
+ * disattivazioni — riduzione di sistema, interruttore, profilo, categoria —
+ * continuano a decidere. Inventario e numeri misurati in
+ * `.claude/MOTION-MOCKUP-2026-09-11.md`.
+ *
+ * ⛔ Due strisce vicine con lo stesso filo: il selettore di vista e i filtri.
+ * Se una scivolasse e l'altra no, si leggerebbero come due grammatiche diverse
+ * nella stessa schermata — è la ragione per cui il mockup le elenca insieme.
+ */
+const gruppoVista = ref<HTMLElement | null>(null)
+const gruppoFiltri = ref<HTMLElement | null>(null)
+useTalosSlidingIndicator(gruppoVista, viewMode)
+useTalosSlidingIndicator(gruppoFiltri, typeFilter)
+
+/** L'onda al tocco, sui controlli disegnati qui. */
+const onda = useTalosTouchWave()
+
+/**
+ * ── LA GRIGLIA ──────────────────────────────────────────────────────────────
+ *
+ * ⛔ Le colonne le decide la LARGHEZZA MINIMA LEGGIBILE DI UNA MINIATURA, non un
+ * numero. Il mockup ne fissa 3 (2 sotto i 1100 px), ma l'owner ha già deciso il
+ * contrario il 2026-08-06 dopo due correzioni sul tablet: nessuno conosce in
+ * anticipo la larghezza di ogni riquadro di ogni dispositivo.
+ *
+ * ⛔ E qui il numero è PIÙ PICCOLO che nelle Note — è l'eccezione documentata
+ * della Libreria. Una nota è un blocco di testo e vuole larghezza per essere
+ * leggibile; una scheda della Libreria è un'IMMAGINE col nome sotto, e
+ * un'immagine si riconosce anche piccola. Schede più strette vuol dire più
+ * anteprime a colpo d'occhio, che è esattamente il motivo per cui esiste una
+ * vista a griglia.
+ *
+ * `min(100%, …)` avvolge il `clamp` per la ragione che la documentazione
+ * raccomanda: senza, su un riquadro più stretto del minimo la traccia sfonda il
+ * contenitore e la pagina scorre in orizzontale
+ * (https://css-tricks.com/auto-sizing-columns-css-grid-auto-fill-vs-auto-fit/ e
+ * https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/grid-template-columns,
+ * letti il 12/09/2026).
+ *
+ * Il `42%` è ciò che fa arrivare a **due colonne** su telefono e su tablet in
+ * verticale — le stesse del mockup — senza che nessun numero di colonne sia
+ * scritto qui.
+ */
+const CLASSE_GRIGLIA = 'mt-[var(--talos-space-card)] grid grid-cols-[repeat(auto-fill,minmax(min(100%,clamp(8.5rem,42%,13rem)),1fr))] items-start gap-[var(--talos-space-section)]'
+
+/**
+ * La griglia da misurare per sapere quanto dev'essere larga una miniatura.
+ *
+ * ⛔ Una funzione e non un `ref="..."`: le griglie sono una per sezione quando
+ * si raggruppa per chat, e un ref semplice dentro un `v-for` diventa un ARRAY —
+ * cioè non l'elemento che il composable si aspetta. Assegnare ogni volta va
+ * bene: le schede di tutte le sezioni hanno la stessa larghezza, perché è la
+ * stessa regola di griglia a deciderla.
+ */
+function assegnaMisura(el: Element | ComponentPublicInstance | null): void {
+    if (!el) return
+    const nodo = el instanceof Element ? el : (el.$el as unknown)
+    if (nodo instanceof HTMLElement) thumbnails.misura.value = nodo
+}
+
+/**
+ * L'entrata di una scheda, come attributi da applicare alla scheda o alla riga.
+ *
+ * Torna un oggetto vuoto oltre il tetto delle voci animate: dalla
+ * diciassettesima in poi l'elemento non porta l'attributo d'intento, quindi
+ * compare e basta. Una Libreria di duecento file che entrano tutti insieme non
+ * è un'animazione, è un carico di lavoro.
+ */
+function entrata(indice: number): Record<string, unknown> {
+    const stile = talosSfasamento(indice)
+    if (!stile) return {}
+    return { 'data-talos-motion-intent': 'message-insert', style: stile }
+}
+
 function tapFile(file: TalosLocalVaultFile): void {
     // In selection mode a tap PICKS. Opening a file from here would be a
     // different action wearing the same gesture.
@@ -711,15 +867,19 @@ async function confirmBulkDelete(): Promise<void> {
     feedback.value = ''
     try {
         const failed = await attachments.deleteVaultFiles(ids)
-        // Release the previews of everything that actually went; a revoked URL
-        // for a file still on screen would show a broken tile.
-        const next = { ...thumbs.value }
+        /*
+         * ⛔ La miniatura di un file eliminato si cancella DAL DISCO, non solo
+         * dalla memoria. Finché vivevano in un object URL bastava revocarle;
+         * ora stanno sotto la cache, e lasciarle lì vorrebbe dire che
+         * «elimina» lascia dietro di sé un'immagine di ciò che è stato
+         * eliminato — che è esattamente ciò che quel pulsante promette di non
+         * fare. Solo quelle andate davvero: un file che ha resistito alla
+         * cancellazione resta a schermo, e deve restarci con la sua anteprima.
+         */
         for (const id of ids) {
             if (failed.includes(id)) continue
-            const url = next[id]
-            if (url) { URL.revokeObjectURL(url); delete next[id] }
+            await thumbnails.forget(id)
         }
-        thumbs.value = next
         const gone = ids.length - failed.length
         const why = attachments.takeDeleteFailure()
         feedback.value = failed.length
@@ -746,8 +906,7 @@ async function confirmDelete(): Promise<void> {
     feedback.value = ''
     try {
         await attachments.deleteVaultFile(file.id)
-        const url = thumbs.value[file.id]
-        if (url) { URL.revokeObjectURL(url); const next = { ...thumbs.value }; delete next[file.id]; thumbs.value = next }
+        await thumbnails.forget(file.id)
         feedback.value = t('library.fileDeleted', { name: file.display_name })
         deleteOpen.value = false
         deleteTarget.value = null
@@ -772,11 +931,108 @@ onMounted(async () => {
             <Database class="h-4 w-4 text-[var(--talos-accent)]" aria-hidden="true" />
         </template>
 
-        <div class="mb-3 flex items-center justify-between gap-3">
-            <p class="font-mono text-3xs text-[var(--talos-muted)]">{{ t('library.acrossEveryChat', { count: logicalLibraryItemCount }) }}</p>
-            <div class="relative">
-                <Button type="button" size="icon" variant="ghost" :aria-label="t('library.options')" aria-haspopup="menu" :aria-expanded="menuOpen" class="min-h-12 min-w-12 rounded-full" @click="menuOpen = !menuOpen">
-                    <EllipsisVertical class="size-5" aria-hidden="true" />
+        <!-- ⛔ CHE POSTO È QUESTO — la testata del mockup «Talos Calm Finale».
+             Il titolo e una riga che dice cosa ci si mette. Serve perché una
+             stazione aperta dal menu deve dire da sola dove si è finiti, e
+             perché prende il posto dell'intro lunga che stava dentro la pagina
+             (owner U-20: «l'intro lunga sparisce dalla pagina»). -->
+        <header class="flex items-start justify-between gap-[var(--talos-space-section)]">
+            <div class="min-w-0">
+                <h1 class="text-3xl font-semibold leading-[1.15] tracking-[-0.03em] text-[var(--talos-text)]">
+                    {{ t('library.title') }}
+                </h1>
+                <p class="mt-[var(--talos-space-inline)] text-sm leading-6 text-[var(--talos-muted)]">
+                    {{ t('library.subtitle') }}
+                </p>
+            </div>
+            <!-- Sul tablet il pulsante dice cosa fa; sul telefono, dove la riga
+                 del titolo è tutta la larghezza che c'è, resta il quadrato in
+                 accento col nome accessibile intatto. Stesso mockup, due
+                 larghezze. -->
+            <Button
+                type="button"
+                data-testid="talos-library-add"
+                :aria-label="t('library.addFile')"
+                :disabled="actionBusy"
+                :class="[
+                    'talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)] disabled:opacity-60',
+                    isTablet ? 'min-h-touch gap-2 px-5 text-sm font-medium' : 'size-14 p-0',
+                ]"
+                @click="addFiles"
+                @pointerdown="onda.onPointerDown"
+            >
+                <Plus :class="isTablet ? 'size-4' : 'size-6'" aria-hidden="true" />
+                <span v-if="isTablet">{{ t('library.addFile') }}</span>
+            </Button>
+        </header>
+
+        <!-- ⛔ COME LO RESTRINGO — ricerca, densità e opzioni sulla stessa riga.
+             Il campo sta FUORI da ogni catena `v-if` che dipende dai risultati:
+             dev'essere visibile anche quando la lista è vuota, perché è con la
+             lista vuota che si cancella la ricerca. -->
+        <!-- ⛔ `flex-wrap` più una larghezza minima al campo: sotto i ~360 px i
+             tre controlli non entrano su una riga, e senza il ritorno a capo la
+             ricerca si schiaccerebbe a due centimetri. Va a capo, come nel
+             mockup sul telefono — dove i due bottoni stanno sulla riga sotto. -->
+        <div v-if="!bulk.active.value" class="mt-[var(--talos-space-section)] flex flex-wrap items-stretch gap-[var(--talos-space-card)]">
+            <label class="relative min-w-[11rem] flex-1">
+                <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
+                <input
+                    v-model="query"
+                    type="search"
+                    inputmode="search"
+                    data-testid="talos-library-search"
+                    :placeholder="t('library.searchLibrary')"
+                    :aria-label="t('library.searchLibrary')"
+                    class="min-h-12 w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
+                >
+            </label>
+
+            <!-- ⛔ Un radiogroup e non due bottoni indipendenti: griglia ed
+                 elenco sono ALTERNATIVE, e dirlo è ciò che le rende
+                 comprensibili a chi naviga con lo screen reader. Nel mockup è
+                 un bottone solo che si alterna; qui sono due, perché un
+                 interruttore che cambia icona non dice mai in quale dei due
+                 stati si trova — lo si scopre premendolo. -->
+            <div
+                ref="gruppoVista"
+                role="radiogroup"
+                :aria-label="t('library.viewLabel')"
+                class="flex shrink-0 items-center gap-[2px] rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] px-[3px]"
+            >
+                <button
+                    v-for="mode in ([['grid', t('library.grid'), LayoutGrid], ['list', t('library.list'), List]] as const)"
+                    :key="mode[0]"
+                    type="button"
+                    role="radio"
+                    :aria-checked="viewMode === mode[0]"
+                    :aria-label="mode[1]"
+                    :data-testid="`talos-library-view-${mode[0]}`"
+                    :class="[
+                        'talos-pressable talos-wave-host relative flex min-h-12 min-w-12 items-center justify-center rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-xs',
+                        viewMode === mode[0]
+                            ? 'bg-[var(--talos-secondary)] text-[var(--talos-text)]'
+                            : 'text-[var(--talos-muted)]',
+                    ]"
+                    @click="viewMode = mode[0]"
+                    @pointerdown="onda.onPointerDown"
+                >
+                    <component :is="mode[2]" class="size-4" aria-hidden="true" />
+                    <!-- U-14: `data-talos-indicator` è ciò che
+                         `useTalosSlidingIndicator` cerca dentro il gruppo. Il
+                         filo non sparisce e riappare: SCIVOLA da dov'era. -->
+                    <span
+                        v-if="viewMode === mode[0]"
+                        data-talos-indicator
+                        aria-hidden="true"
+                        class="talos-calm-indicator absolute bottom-[5px] left-1/2 h-[2px] w-4 -translate-x-1/2 rounded-full bg-[var(--talos-accent)]"
+                    />
+                </button>
+            </div>
+
+            <div class="relative shrink-0">
+                <Button type="button" size="icon" variant="ghost" :aria-label="t('library.options')" aria-haspopup="menu" :aria-expanded="menuOpen" class="min-h-12 min-w-12 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)]" @click="menuOpen = !menuOpen">
+                    <SlidersHorizontal class="size-5" aria-hidden="true" />
                 </Button>
                 <div v-if="menuOpen" class="fixed inset-0 z-[59]" aria-hidden="true" @click="menuOpen = false" />
                 <!-- Same motion as the chat 3-dot menu (owner 2026-07-25). -->
@@ -789,12 +1045,15 @@ onMounted(async () => {
                     leave-to-class="opacity-0 scale-95"
                 >
                 <div v-if="menuOpen" role="menu" data-testid="talos-library-menu" class="absolute right-0 top-full z-[60] mt-1 min-w-52 origin-top-right overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl">
-                    <button type="button" role="menuitem" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="addFiles"><Upload class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.uploadFiles') }}</button>
+                    <button type="button" role="menuitem" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="addFiles"><Upload class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.addFile') }}</button>
                     <button type="button" role="menuitem" data-testid="talos-library-select" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="menuOpen = false; bulk.enter()"><CheckSquare class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('common.select') }}</button>
                     <button type="button" role="menuitem" disabled class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-muted)] opacity-50"><FolderPlus class="size-4" aria-hidden="true" /> {{ t('library.newFolder') }}</button>
+                    <!-- ⛔ Griglia ed elenco NON sono più qui: stanno nella
+                         barra qui sopra, dove il mockup li mette e dove si
+                         vede in quale dei due si è senza aprire niente. Un
+                         controllo in due posti è un controllo che prima o poi
+                         dice due cose diverse. -->
                     <div class="my-1 border-t border-[var(--talos-border)]" />
-                    <button type="button" role="menuitemradio" :aria-checked="viewMode === 'grid'" data-testid="talos-library-view-grid" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'grid'; menuOpen = false"><LayoutGrid class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.grid') }} <CheckCircle2 v-if="viewMode === 'grid'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
-                    <button type="button" role="menuitemradio" :aria-checked="viewMode === 'list'" data-testid="talos-library-view-list" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="viewMode = 'list'; menuOpen = false"><List class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.list') }} <CheckCircle2 v-if="viewMode === 'list'" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
                     <button type="button" role="menuitemcheckbox" :aria-checked="groupByChat" class="talos-pressable flex min-h-12 w-full items-center gap-3 px-4 text-left text-sm" @click="groupByChat = !groupByChat; menuOpen = false"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('library.groupByChat') }} <CheckCircle2 v-if="groupByChat" class="ml-auto size-4 text-[var(--talos-accent)]" aria-hidden="true" /></button>
                     <!--
                         Owner 2026-07-30 asked for the date beside the chat name
@@ -824,26 +1083,12 @@ onMounted(async () => {
             </div>
         </div>
 
-        <section
-            data-testid="talos-library-global-policy"
-            :data-mode="globalLibraryMode"
-            :data-enabled="globalLibraryEnabled"
-            class="mb-3 rounded-xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-3 py-2"
-        >
-            <p class="text-xs font-semibold text-[var(--talos-text)]">
-                {{ t('library.globalContextMode') }}
-            </p>
-            <p class="mt-0.5 text-xs leading-5 text-[var(--talos-muted)]">
-                {{ globalLibraryModeLabel }}
-            </p>
-        </section>
-
         <!-- Selection bar: replaces the search row while the mode is on, so the
              screen has ONE meaning at a time. -->
         <div
             v-if="bulk.active.value"
             data-testid="talos-library-selection-bar"
-            class="mb-3 flex items-center gap-1 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
+            class="mt-[var(--talos-space-section)] flex items-center gap-1 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] py-1 pl-1 pr-2"
         >
             <Button type="button" size="icon" variant="ghost" class="min-h-12 min-w-12 rounded-full" :aria-label="t('library.cancelSelection')" @click="bulk.exit()"><X class="size-4" aria-hidden="true" /></Button>
             <span class="text-sm font-medium">{{ t('library.selected', { count: bulk.count.value }) }}</span>
@@ -862,23 +1107,92 @@ onMounted(async () => {
             ><Trash2 class="size-4" aria-hidden="true" /></Button>
         </div>
 
-        <label v-else class="relative mb-3 block">
-            <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--talos-muted)]" aria-hidden="true" />
-            <input v-model="query" type="search" inputmode="search" data-testid="talos-library-search" :placeholder="t('library.searchLibrary')" :aria-label="t('library.searchLibrary')" class="min-h-12 w-full rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]" />
-        </label>
+        <!--
+            ⛔ COSA STO GUARDANDO — la striscia dei filtri del mockup: Tutto ·
+            File · Immagini · Link, con un filo d'accento sotto la voce attiva.
 
-        <!-- Narrowing a list without leaving it: a radiogroup, not a row of
-             independent toggles. It used to be `role="group"` plus
-             `aria-pressed`, which announces "button, pressed" and never "1 of 4". -->
-        <TalosThemedFilter
-            class="mb-4"
-            group-class="flex gap-1"
-            :model-value="typeFilter"
-            :options="typeFilterOptions"
-            :group-label="t('library.filterByType')"
-            :option-class="typeFilterOptionClass"
-            @update:model-value="chooseTypeFilter"
-        />
+            Resta `TalosThemedFilter` e non quattro bottoni scritti a mano: è la
+            grammatica condivisa di tutta l'app — un `radiogroup` vero, una sola
+            fermata col Tab, le frecce che scelgono — e riscriverla qui per
+            ottenere un altro aspetto sarebbe la quinta copia sbagliata di un
+            controllo che è stato unificato apposta. Cambia solo il VESTITO,
+            attraverso `optionClass` e lo slot.
+
+            ⛔ Il filo dell'indicatore vive nello slot, e il gruppo che
+            `useTalosSlidingIndicator` misura è il `div` qui intorno: il
+            composable cerca `[data-talos-indicator]` DENTRO l'elemento che gli
+            si dà, non ha bisogno che sia lui il `radiogroup`.
+
+            ⛔ L'onda al tocco qui NON c'è, e va detto perché: `useTalosTouchWave`
+            legge `event.currentTarget`, quindi va legata al bottone stesso —
+            e i bottoni li disegna il primitivo condiviso. Aggiungergli un
+            passaggio per `pointerdown` toccherebbe anche Attività, Memoria e
+            Ricerca, dove in questo momento stanno lavorando altri. L'onda resta
+            sui controlli scritti qui (vista, «Aggiungi file») e sulle schede.
+        -->
+        <div ref="gruppoFiltri" class="mt-[var(--talos-space-card)]">
+            <TalosThemedFilter
+                group-class="flex min-h-12 items-center gap-[var(--talos-space-inline)] overflow-x-auto border-b border-[var(--talos-border)] [scrollbar-width:none]"
+                :model-value="typeFilter"
+                :options="typeFilterOptions"
+                :group-label="t('library.filterByType')"
+                :option-class="typeFilterOptionClass"
+                @update:model-value="chooseTypeFilter"
+            >
+                <template #option="{ option, selected }">
+                    <span>{{ option.label }}</span>
+                    <span
+                        v-if="selected"
+                        data-talos-indicator
+                        aria-hidden="true"
+                        class="talos-calm-indicator absolute bottom-0 left-[var(--talos-space-control)] right-[var(--talos-space-control)] h-[2px] rounded-full bg-[var(--talos-accent)]"
+                    />
+                </template>
+            </TalosThemedFilter>
+        </div>
+
+        <!--
+            ⛔ QUANTI SONO, IN CHE ORDINE, E SE ENTRANO NELLE RISPOSTE.
+
+            Le tre cose stanno su una riga sola perché si leggono insieme prima
+            di guardare la griglia. Lo stato del contesto globale era una scheda
+            di due righe in cima alla pagina: diceva la stessa cosa e occupava il
+            posto della prima fila di schede. Qui è una frase, con i suoi
+            attributi intatti — `data-mode` e `data-enabled` sono ciò che i test
+            interrogano, e sono anche ciò che un domani dirà perché una risposta
+            non ha usato un file.
+        -->
+        <div class="flex min-h-12 flex-wrap items-center justify-between gap-[var(--talos-space-inline)] text-xs text-[var(--talos-muted)]">
+            <span class="flex min-w-0 items-center gap-[var(--talos-space-inline)]">
+                <span role="status" aria-live="polite" data-testid="talos-library-count">
+                    {{ t('library.acrossEveryChat', { count: logicalLibraryItemCount }) }}
+                </span>
+                <span
+                    data-testid="talos-library-global-policy"
+                    :data-mode="globalLibraryMode"
+                    :data-enabled="globalLibraryEnabled"
+                    class="truncate border-l border-[var(--talos-border)] pl-[var(--talos-space-inline)]"
+                >{{ t('library.globalContextMode') }}: {{ globalLibraryModeLabel }}</span>
+            </span>
+            <label class="flex shrink-0 items-center gap-1">
+                <ArrowDownUp class="size-4" aria-hidden="true" />
+                <span class="sr-only">{{ t('library.sortLabel') }}</span>
+                <!-- Un `select` nativo: sul telefono apre la ruota di Android,
+                     che è il controllo che la persona conosce già. Le stesse
+                     tre voci restano anche nel menu, perché è lì che i test e
+                     l'abitudine le cercano. -->
+                <select
+                    v-model="sortOrder"
+                    data-testid="talos-library-sort"
+                    :aria-label="t('library.sortLabel')"
+                    class="min-h-12 max-w-40 cursor-pointer border-0 bg-transparent px-1 text-xs text-[var(--talos-muted)] outline-none"
+                >
+                    <option v-for="option in sortOptions" :key="option.value" :value="option.value">
+                        {{ option.label }}
+                    </option>
+                </select>
+            </label>
+        </div>
 
         <div v-if="attachments.vaultError.value" role="alert" class="mb-3 flex items-center gap-2 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
             <AlertTriangle class="size-4 shrink-0" aria-hidden="true" />
@@ -895,13 +1209,64 @@ onMounted(async () => {
         <div v-if="attachments.vaultLoading.value && attachments.vaultFiles.length === 0" role="status" class="flex items-center gap-2 py-8 text-sm text-[var(--talos-muted)]">
             <LoaderCircle class="size-4 motion-safe:animate-spin" aria-hidden="true" /> {{ t('library.loadingLibrary') }}
         </div>
-        <div v-else-if="attachments.vaultFiles.length === 0" class="rounded-md border border-dashed border-[var(--talos-border)] px-3 py-8 text-center text-sm text-[var(--talos-muted)]">
-            {{ t('library.emptyLong') }}
-        </div>
-        <div v-else-if="!hasVisibleLibraryItems" class="rounded-md border border-dashed border-[var(--talos-border)] px-3 py-8 text-center text-sm text-[var(--talos-muted)]">
-            <template v-if="query.trim()">{{ t('library.noMatchQuery', { query }) }}</template>
-            <template v-else-if="typeFilter === 'links'">{{ t('library.noLinks') }}</template>
-            <template v-else>{{ t('library.noType') }}</template>
+
+        <!--
+            ⛔ DUE ASSENZE DIVERSE, DUE FRASI DIVERSE — e solo la seconda si può
+            annullare. «Non c'è ancora niente» e «il filtro lo nasconde» sono
+            due stati differenti, e mostrare la stessa frase per entrambi
+            significa lasciare chi guarda a chiedersi se i suoi file siano
+            spariti.
+
+            ⛔ L'intro lunga NON è più qui (owner U-20). Diceva in tre righe
+            come funziona la Libreria, ogni volta, a chi la Libreria l'ha già
+            aperta: il posto di una spiegazione è dove si spiega, non nello
+            spazio dove dovrebbero esserci i file. Resta il titolo dello stato
+            vuoto, che è un invito ad agire.
+        -->
+        <div
+            v-else-if="!hasVisibleLibraryItems"
+            :data-testid="libreriaFiltrata ? 'talos-library-no-matches' : 'talos-library-empty'"
+            role="status"
+            class="flex flex-1 flex-col items-center justify-center gap-[var(--talos-space-inline)] py-[calc(var(--talos-space-page)*2)] text-center"
+        >
+            <!-- U-14: il disegno SI TRACCIA, una volta sola. È l'unico
+                 movimento della pagina che non risponde a un dito, ed è
+                 giustificato: uno spazio bianco fermo si legge come un guasto,
+                 un tratto che si disegna dice «qui non c'è ancora niente». -->
+            <svg
+                class="talos-calm-line-art mb-[var(--talos-space-section)] h-[132px] w-[140px] text-[var(--talos-border-strong)]"
+                viewBox="0 0 150 140"
+                aria-hidden="true"
+            >
+                <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <!-- Tre volumi affiancati: è l'icona della Libreria del
+                         mockup (`app.js:21`), non un foglio come nelle Note. -->
+                    <path data-talos-draw d="M26 30h22v84H26zM54 30h22v84H54z" />
+                    <path data-talos-draw class="stroke-[var(--talos-accent-border)]" d="M84 36l20-5 19 81-20 5Z" />
+                    <path data-talos-draw d="M18 122h110" />
+                </g>
+            </svg>
+            <h2 class="max-w-[27ch] text-xl font-medium leading-[1.5] tracking-[-0.02em] text-[var(--talos-text)]">
+                {{ libreriaFiltrata ? t('library.noMatchesTitle') : t('library.emptyTitle') }}
+            </h2>
+            <p class="max-w-[38ch] text-sm leading-[1.7] text-[var(--talos-muted)]">
+                <template v-if="query.trim()">{{ t('library.noMatchQuery', { query }) }}</template>
+                <template v-else-if="typeFilter === 'links'">{{ t('library.noLinks') }}</template>
+                <template v-else-if="typeFilter !== 'all'">{{ t('library.noType') }}</template>
+                <template v-else>{{ t('library.emptyBody') }}</template>
+            </p>
+            <!-- Uno stato vuoto è un invito ad agire, e la via d'uscita è quella
+                 che RIPARA la situazione in cui si è: togliere il filtro se è il
+                 filtro a nascondere, aggiungere il primo file se non ce ne sono. -->
+            <Button
+                type="button"
+                :data-testid="libreriaFiltrata ? 'talos-library-clear-filters' : 'talos-library-empty-add'"
+                :disabled="actionBusy"
+                class="talos-pressable mt-[var(--talos-space-section)] min-h-12 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-5 text-xs text-[var(--talos-accent-text)] disabled:opacity-60"
+                @click="libreriaFiltrata ? pulisciFiltri() : addFiles()"
+            >
+                {{ libreriaFiltrata ? t('library.clearFilters') : t('library.addFile') }}
+            </Button>
         </div>
 
         <!-- LINKS: one row per saved result/page address, its dossier one tap away. -->
@@ -921,22 +1286,40 @@ onMounted(async () => {
                     :date-label="sectionDateLabel(section.latestAt)"
                 />
 
-                <div v-if="viewMode === 'grid'" class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6" role="list">
+                <TransitionGroup
+                    v-if="viewMode === 'grid'"
+                    tag="div"
+                    role="list"
+                    :class="CLASSE_GRIGLIA"
+                    move-class="talos-calm-move"
+                    leave-active-class="talos-calm-leave-active"
+                    leave-to-class="talos-calm-leave-to"
+                >
                     <TalosMobileSavedLinkTile
-                        v-for="row in section.items"
+                        v-for="(row, indice) in section.items"
                         :key="row.url"
+                        v-bind="entrata(indice)"
                         :row="row"
                         :saved-at-label="formatModified(row.savedAt)"
                         :favicon-url="sourceIcons[row.url] ?? null"
                         @open-copy="openSavedCopy(row.fileId)"
                         @open-browser="openLink(row.url)"
                     />
-                </div>
+                </TransitionGroup>
 
-                <div v-else role="list" class="flex flex-col gap-2">
+                <TransitionGroup
+                    v-else
+                    tag="div"
+                    role="list"
+                    class="flex flex-col gap-2"
+                    move-class="talos-calm-move"
+                    leave-active-class="talos-calm-leave-active"
+                    leave-to-class="talos-calm-leave-to"
+                >
                     <TalosMobileSavedLinkRow
-                        v-for="row in section.items"
+                        v-for="(row, indice) in section.items"
                         :key="row.url"
+                        v-bind="entrata(indice)"
                         :row="row"
                         :saved-at-label="formatModified(row.savedAt)"
                         :favicon-url="sourceIcons[row.url] ?? null"
@@ -944,7 +1327,7 @@ onMounted(async () => {
                         @open-copy="openSavedCopy(row.fileId)"
                         @open-browser="openLink(row.url)"
                     />
-                </div>
+                </TransitionGroup>
             </template>
         </div>
 
@@ -966,17 +1349,36 @@ onMounted(async () => {
             />
 
             <!-- GRID: the tile opens; the same explicit More contract as list
-                 carries attach/save/delete without hover-only behavior. -->
-            <div v-if="viewMode === 'grid'" class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6" role="list" :aria-label="t('library.libraryFiles')">
-                <template v-for="entry in section.items" :key="entry.key">
+                 carries attach/save/delete without hover-only behavior.
+
+                 ⛔ U-14 — LE SCHEDE SI RIORDINANO, NON SALTANO. Il FLIP è il
+                 mestiere della classe `move` di `<TransitionGroup>`: si dichiara
+                 la transizione, la geometria la calcola lui. `tag="div"` tiene
+                 il contenitore com'era, col suo ruolo e il suo nome. -->
+            <TransitionGroup
+                v-if="viewMode === 'grid'"
+                :ref="(el) => assegnaMisura(el)"
+                tag="div"
+                role="list"
+                data-testid="talos-library-grid"
+                :class="CLASSE_GRIGLIA"
+                :aria-label="t('library.libraryFiles')"
+                move-class="talos-calm-move"
+                leave-active-class="talos-calm-leave-active"
+                leave-to-class="talos-calm-leave-to"
+            >
+                <template v-for="(entry, indice) in section.items" :key="entry.key">
                     <TalosMobileLibraryFileTile
                         v-if="entry.kind === 'file'"
+                        v-bind="entrata(indice)"
                         :file="entry.file"
-                        :thumbnail-url="thumbs[entry.file.id] ?? null"
-                        :is-image="isImage(entry.file)"
+                        :thumbnail-url="thumbnails.url(entry.file)"
+                        :thumbnail-state="thumbnails.state(entry.file)"
                         :selecting="bulk.active.value"
                         :selected="bulk.isSelected(entry.file.id)"
                         :generated="parseVaultOrigin(entry.file.metadata) === 'generated'"
+                        :generated-label="t('library.generated')"
+                        :origin-label="groupByChat ? null : originChat(entry.file)"
                         :context-label="globalFileContextLabel(entry.file)"
                         :actions-label="t('library.fileActionsFor', { name: entry.file.display_name })"
                         :actions="fileActions(entry.file)"
@@ -986,6 +1388,7 @@ onMounted(async () => {
                     />
                     <TalosMobileSavedLinkTile
                         v-else
+                        v-bind="entrata(indice)"
                         :row="entry.row"
                         :saved-at-label="formatModified(entry.row.savedAt)"
                         :favicon-url="sourceIcons[entry.row.url] ?? null"
@@ -993,13 +1396,25 @@ onMounted(async () => {
                         @open-browser="openLink(entry.row.url)"
                     />
                 </template>
-            </div>
+            </TransitionGroup>
 
-            <!-- LIST -->
-            <div v-else class="space-y-1" role="list" :aria-label="t('library.libraryFiles')">
-                <template v-for="entry in section.items" :key="entry.key">
+            <!-- LIST — stessa entrata scaglionata e stesso FLIP della griglia:
+                 passare da schede a righe deve far VEDERE dove è finita quella
+                 che si stava guardando, non ridisegnare tutto da capo. -->
+            <TransitionGroup
+                v-else
+                tag="div"
+                class="space-y-1"
+                role="list"
+                :aria-label="t('library.libraryFiles')"
+                move-class="talos-calm-move"
+                leave-active-class="talos-calm-leave-active"
+                leave-to-class="talos-calm-leave-to"
+            >
+                <template v-for="(entry, indice) in section.items" :key="entry.key">
                     <TalosMobileSavedLinkRow
                         v-if="entry.kind === 'link'"
+                        v-bind="entrata(indice)"
                         :row="entry.row"
                         :saved-at-label="formatModified(entry.row.savedAt)"
                         :favicon-url="sourceIcons[entry.row.url] ?? null"
@@ -1009,9 +1424,10 @@ onMounted(async () => {
                     />
                     <TalosMobileLibraryFileRow
                         v-else
+                        v-bind="entrata(indice)"
                         :data-vault-file-id="entry.file.id"
                         :file="entry.file"
-                        :thumbnail-url="thumbs[entry.file.id] ?? null"
+                        :thumbnail-url="thumbnails.url(entry.file)"
                         :selection-mode="bulk.active.value"
                         :selected="bulk.isSelected(entry.file.id)"
                         :open-label="t(bulk.active.value ? 'library.selectNamed' : 'library.openNamed', { name: entry.file.display_name })"
@@ -1041,7 +1457,7 @@ onMounted(async () => {
                     </template>
                     </TalosMobileLibraryFileRow>
                 </template>
-            </div>
+            </TransitionGroup>
         </template>
 
         <p class="sr-only" role="status" aria-live="polite">{{ feedback }}</p>

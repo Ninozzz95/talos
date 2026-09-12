@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { BookMarked, CheckCheck, ChevronRight, CircleAlert, FileText, Mic, ShieldQuestion } from '@lucide/vue'
 import { talosShortModelLabel } from '@/lib/models/modelLabel'
@@ -12,6 +12,10 @@ import {
 import { TALOS_TOOL_LABEL_KEYS, talosDynamicToolFallbackLabel } from '@/lib/tools/toolLabels'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
 import TalosMobileMessageActions from '@/components/chat/TalosMobileMessageActions.vue'
+import {
+    talosAggiornaMisureDeiMessaggi,
+    talosMisureDelMessaggio,
+} from '@/components/chat/useTalosLocalMetrics'
 /*
  * La bolla-immagine arriva col primo messaggio che ne ha una, non all'avvio.
  *
@@ -32,6 +36,34 @@ const TalosMobileMessageImage = defineAsyncComponent(
  */
 const TalosMobileSchedaAzione = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileSchedaAzione.vue'),
+)
+/*
+ * ⭐ FASE 2 — la riga della velocità del motore locale, sotto le azioni.
+ *
+ * ⛔ PIGRA, e il commento che stava qui prima diceva il contrario: «un import
+ * dinamico costerebbe più byte di quelli che risparmia». Era una deduzione, non
+ * una misura, ed era sbagliata. Misurato il 2026-09-10 chiedendo a Rollup il
+ * `renderedLength` per modulo (non alla sourcemap — vedi la nota in
+ * `scripts/verify-initial-chunk.mjs`), il componente statico pesava **2.432
+ * byte** nel grafo d'avvio, e con lui il resto della funzione portava il pezzo
+ * a **623.424** contro un tetto di 622.500: `npm run build` rosso per 924 byte.
+ *
+ * La ragione per cui la deduzione sbagliava: il costo non è quello che il
+ * componente ESEGUE (un `<p>` con tre stringhe), è il TESTO del componente —
+ * il suo `<script setup>` compilato, il template reso funzione di render, e i
+ * commenti che spiegano perché ogni pezzo esiste. È la stessa cosa già scritta
+ * in testa a `lib/models/localWarmSelectedModel.ts`.
+ *
+ * E la pigrizia qui è vera pigrizia, non rinviata di un istante: la
+ * documentazione di Vue (vuejs.org/guide/components/async.html, letta il
+ * 2026-09-10) dice che il wrapper «only calls the loader function when it is
+ * actually rendered on the page». Insieme al `v-if` sulle misure — che sotto è
+ * stato stretto da «se il gruppo finisce» a «se ci sono misure» — il chunk
+ * arriva alla PRIMA risposta di un motore locale che ha misurato qualcosa, e
+ * mai in una chat a chiave.
+ */
+const TalosMobileLocalMetricsRow = defineAsyncComponent(
+    () => import('@/components/chat/TalosMobileLocalMetricsRow.vue'),
 )
 import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
@@ -117,6 +149,31 @@ function quanteInAttesa(message: TalosMobileMessageView): number {
 }
 
 const { t } = useTalosI18n()
+
+/**
+ * ⭐⭐⭐ FASE 2 — quando compare una risposta, si ritirano le misure del
+ * motore che l'ha prodotta.
+ *
+ * ⛔ Si guarda «lunghezza + id dell'ultimo» e non l'array: il negozio fa
+ * `messages.push(view)` sullo STESSO array, quindi il riferimento non cambia
+ * mai e un `watch` sull'array non scatterebbe una volta sola. È il genere di
+ * difetto che avrebbe passato build, typecheck e lettura, e si sarebbe visto
+ * solo come una riga che non compare mai.
+ *
+ * `immediate`: il primo giro serve a OSSERVARE gli id già a schermo, non ad
+ * assegnare — aprire una chat piena non deve regalare una misura all'ultimo
+ * messaggio di ieri (la guardia vera è dentro il composabile).
+ */
+watch(
+    () => `${props.messages.length}:${props.messages[props.messages.length - 1]?.id ?? ''}`,
+    () => talosAggiornaMisureDeiMessaggi(props.messages),
+    { immediate: true },
+)
+
+/** Le misure di questa risposta, se sono state prese. Quasi sempre `null`. */
+function misureDi(messaggio: TalosMobileMessageView) {
+    return talosMisureDelMessaggio(messaggio.id)
+}
 
 
 
@@ -721,6 +778,25 @@ function messageStateLabel(state: string): string {
                     @resend="emit('resend', $event.id)"
                     @retry="emit('retry', $event.id)"
                     @save-to-library="emit('saveToLibrary', $event.id)"
+                />
+                <!--
+                    ⛔ SOTTO le azioni, come nello screenshot di PocketPal che
+                    l'owner ha portato il 2026-09-10: prima ciò che si preme,
+                    poi il dato che si legge. Sopra le icone diventerebbe la
+                    prima cosa che l'occhio incontra dopo la risposta, e non è
+                    quello che conta di più in quel punto.
+                -->
+                <!--
+                    ⛔ `misureDi(message) !== null` e non solo `isGroupEnd`: il
+                    componente è pigro, e Vue chiama il suo loader solo quando
+                    l'elemento viene DAVVERO reso. Montarlo a ogni fine gruppo
+                    scaricherebbe il chunk anche in una chat a chiave, dove non
+                    c'è nessuna misura da mostrare — cioè pagherebbe la pigrizia
+                    senza incassarla.
+                -->
+                <TalosMobileLocalMetricsRow
+                    v-if="isGroupEnd(index) && misureDi(message) !== null"
+                    :misure="misureDi(message)"
                 />
             </template>
         </article>

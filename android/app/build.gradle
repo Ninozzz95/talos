@@ -50,7 +50,27 @@ android {
     compileSdk = rootProject.ext.compileSdkVersion
     // Fissato, non lasciato al valore predefinito di AGP: il motore locale è
     // compilato da questo NDK e una versione diversa è un compilatore diverso.
-    ndkVersion = "27.0.12077973"
+    /*
+     * ⛔⛔⛔ 29 E NON 27, E IL MOTIVO STA DENTRO UN CONTAINER — 10/09/2026.
+     *
+     * L'NPU Hexagon si compila SOLO con l'Hexagon SDK, che vive nell'immagine
+     * ufficiale `ghcr.io/snapdragon-toolchain/arm64-android:v0.7`. Quell'immagine
+     * monta **NDK r29 (29.0.14206865)**, ed e' la stessa revisione esatta che
+     * questa riga chiede al nostro build.
+     *
+     * ⛔ Perche' devono coincidere: `libggml-hexagon.so` esce dal container e
+     * si aggancia a `libggml-base.so` che esce da qui. Il confine fra le due
+     * esporta anche simboli C++, e due libc++ diverse su quel confine sono la
+     * classe di guasto che **non da' errore in compilazione** e sbaglia a
+     * runtime. Owner 10/09, scegliendo fra tre strade: allineare l'NDK.
+     *
+     * ⛔ Cosa cambia oltre a Hexagon: da r28 in poi le librerie condivise sono
+     * allineate a **16 KB** invece che a 4 KB su arm64 (NDK changelog r28,
+     * letto il 10/09/2026). E' il requisito che Google impone comunque ai nuovi
+     * APK — quindi non e' un costo di Hexagon, e' un debito che avremmo pagato
+     * lo stesso.
+     */
+    ndkVersion = "29.0.14206865"
     defaultConfig {
         applicationId "ai.talos"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -625,6 +645,23 @@ android {
              * Kotlin da scaricare e compilare con noi.
              */
             assets.srcDirs += ["${buildDir}/parola/assets"]
+            /*
+             * ⛔ SOLO RICERCA — l'NPU Hexagon, e nemmeno questi stanno nella
+             * repo: ce li mette `preparaHexagon` da una cartella indicata con
+             * `-PtalosHexagonDir=<cartella>`. Senza quella proprietà questa
+             * cartella resta VUOTA e l'APK è identico a quello di oggi, byte
+             * per byte: accendere l'NPU è una scelta esplicita, mai un effetto
+             * collaterale di un build di routine.
+             *
+             * ⛔ Perché `jniLibs` e non `assets`, che è dove li mette PocketPal:
+             * `useLegacyPackaging = true` qui sopra fa ESTRARRE le `.so`
+             * all'installazione, e la cartella che ne esce è la STESSA che il
+             * JNI passa già a `ggml_backend_load_all_from_path`. Così i quattro
+             * skel finiscono in una cartella vera su disco senza che nessuno
+             * debba scrivere un estrattore, ed è la cartella a cui
+             * `ADSP_LIBRARY_PATH` deve puntare (vedi il compito sotto).
+             */
+            jniLibs.srcDirs += ["${buildDir}/hexagon/jniLibs"]
         }
     }
     packagingOptions {
@@ -1182,4 +1219,133 @@ tasks.register('preparaOrecchioParola') {
     }
 }
 
-tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'preparaPonteAdb', 'preparaOrecchioParola' }
+/**
+ * ⛔ SOLO RICERCA — l'NPU Hexagon: `-PtalosHexagonDir=<cartella>`.
+ *
+ * Senza la proprietà questo compito non fa NIENTE e l'APK non cambia. Con la
+ * proprietà, i cinque binari dell'NPU entrano fra le librerie native.
+ *
+ * ⛔⛔ QUESTI BINARI NON LI COSTRUISCE GRADLE, E NON PUÒ FARLO SU WINDOWS.
+ *
+ * MISURATO il 2026-09-10. Il backend vuole due compilatori diversi:
+ *
+ *   libggml-hexagon.so   lato CPU, ARM64 Android  → l'NDK, che qui c'è
+ *   libggml-htp-vNN.so   lato DSP, quattro skel   → `hexagon-clang`
+ *
+ * e `hexagon-clang` arriva SOLO dentro l'Hexagon SDK, che Qualcomm pubblica
+ * per Linux x86_64 e per Windows-on-Snapdragon — mai per un PC Windows x86.
+ * Su questa macchina si costruiscono dentro WSL, una volta sola, e da lì in
+ * poi il ciclo di build quotidiano resta qui come sempre. Il procedimento e
+ * le impronte stanno in `.claude/TACCUINO-HEXAGON-2026-09-10.md`.
+ *
+ * ⛔ NON è un `GGML_HEXAGON=ON` mascherato: accendere quell'opzione nel CMake
+ * qui farebbe partire anche gli `ExternalProject` dei quattro skel, che su
+ * Windows cercano `hexagon-clang.exe` e si fermano. Questo compito IMPACCHETTA
+ * binari già costruiti, e il suo nome non promette altro.
+ *
+ * ⛔ E CONTROLLA CHE COSA IMPACCHETTA, non solo che il file ci sia. Un file
+ * col nome giusto ma per la macchina sbagliata è morto esattamente quanto uno
+ * mancante — con la differenza che passa inosservato: il caricamento dei
+ * backend è MUTO nelle build di rilascio (`silent = true` sotto NDEBUG in
+ * `ggml_backend_load_all_from_path`), quindi un errore qui non stampa niente
+ * né a build time né sul telefono. Perciò si legge il byte della macchina
+ * nell'intestazione ELF: 0xB7 (AArch64) per il lato CPU, 0xA4 (EM_QDSP6) per
+ * i quattro skel. È lo stesso controllo che PocketPal ha dovuto aggiungere
+ * dopo aver spedito per settimane release Android SENZA il backend, senza che
+ * niente protestasse.
+ */
+tasks.register('preparaHexagon') {
+    description = 'Impacchetta i binari dell\'NPU Hexagon indicati da -PtalosHexagonDir'
+    def fuori = file("${buildDir}/hexagon/jniLibs/arm64-v8a")
+    def dentro = project.hasProperty('talosHexagonDir')
+            ? project.property('talosHexagonDir').toString()
+            : null
+
+    // Il nome del file -> la macchina ELF che DEVE avere.
+    def attesi = [
+            'libggml-hexagon.so' : [0xB7, 'AArch64 (lato CPU)'],
+            'libggml-htp-v73.so' : [0xA4, 'EM_QDSP6 (skel DSP)'],
+            'libggml-htp-v75.so' : [0xA4, 'EM_QDSP6 (skel DSP)'],
+            'libggml-htp-v79.so' : [0xA4, 'EM_QDSP6 (skel DSP)'],
+            'libggml-htp-v81.so' : [0xA4, 'EM_QDSP6 (skel DSP)'],
+    ]
+
+    inputs.property 'talosHexagonDir', (dentro ?: '')
+    /*
+     * ⛔ ANCHE IL CONTENUTO, non solo il nome della cartella — 10/09/2026,
+     * costato un giro intero sul Pad.
+     *
+     * Con il solo `inputs.property` sopra, ricostruire i cinque `.so` e
+     * rilanciare il build con LO STESSO `-PtalosHexagonDir` lasciava il compito
+     * `UP-TO-DATE`: gradle vedeva la stessa stringa e non guardava i file.
+     * L'APK usciva con i binari VECCHI, il build diceva `BUILD SUCCESSFUL in
+     * 3s`, e sul telefono il backend continuava a essere rifiutato per la
+     * ragione appena corretta. Un carico utile stantio con un build verde.
+     */
+    if (dentro != null) inputs.dir(dentro).withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir fuori
+
+    doLast {
+        fuori.deleteDir()
+        fuori.mkdirs()
+        if (dentro == null) {
+            // Non è un errore: è il caso normale. Ma si dice, perché una
+            // cartella vuota e una cartella non richiesta si somigliano troppo.
+            logger.lifecycle('hexagon: non richiesto (nessun -PtalosHexagonDir), APK invariato')
+            return
+        }
+
+        def sorgente = file(dentro)
+        if (!sorgente.isDirectory()) {
+            throw new GradleException(
+                    "⛔ `-PtalosHexagonDir=${dentro}` non è una cartella.\n" +
+                    "   Dentro servono i cinque `.so` dell'NPU: " + attesi.keySet().join(', '))
+        }
+
+        def mancanti = []
+        def sbagliati = []
+        def entrati = []
+        attesi.each { nome, atteso ->
+            def f = new File(sorgente, nome)
+            if (!f.isFile()) { mancanti << nome; return }
+
+            // Intestazione ELF: byte 0-3 la firma, byte 16-17 il tipo,
+            // byte 18-19 la macchina in little-endian.
+            def testa = new byte[20]
+            f.withInputStream { it.read(testa, 0, 20) }
+            def firma = (testa[0] == 0x7F && testa[1] == (byte) 'E'
+                    && testa[2] == (byte) 'L' && testa[3] == (byte) 'F')
+            def macchina = (testa[18] & 0xFF) | ((testa[19] & 0xFF) << 8)
+            if (!firma) {
+                sbagliati << "${nome}: non è nemmeno un ELF"
+            } else if (macchina != atteso[0]) {
+                sbagliati << "${nome}: macchina ELF 0x${Integer.toHexString(macchina)}, " +
+                        "attesa 0x${Integer.toHexString(atteso[0])} — ${atteso[1]}"
+            } else {
+                def destinazione = new File(fuori, nome)
+                destinazione.bytes = f.bytes
+                entrati << "${nome} ${f.length()} B"
+            }
+        }
+
+        if (!mancanti.isEmpty() || !sbagliati.isEmpty()) {
+            // Si porta via anche quello che era già entrato: un carico utile a
+            // metà è peggio di nessun carico utile, perché sembra funzionante.
+            fuori.deleteDir()
+            def m = new StringBuilder("⛔ I binari dell'NPU in ${dentro} non sono spedibili.\n")
+            mancanti.each { m.append("   MANCA    ${it}\n") }
+            sbagliati.each { m.append("   SBAGLIATO ${it}\n") }
+            m.append("   Nessuno dei cinque è stato impacchettato: vedi " +
+                    ".claude/TACCUINO-HEXAGON-2026-09-10.md per come si costruiscono.")
+            throw new GradleException(m.toString())
+        }
+
+        def totale = entrati.inject(0L) { acc, r -> acc + Long.parseLong(r.split(' ')[1]) }
+        logger.lifecycle("hexagon: ${entrati.size()} binari impacchettati, ${totale} B in totale")
+        entrati.each { logger.lifecycle("hexagon:   ${it}") }
+        logger.lifecycle('hexagon: ⛔ i quattro skel NON bastano da soli — il DSP li cerca in ' +
+                'ADSP_LIBRARY_PATH, che va impostata dal codice Java PRIMA di caricare il nativo')
+    }
+}
+
+tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'preparaPonteAdb', 'preparaOrecchioParola', 'preparaHexagon' }

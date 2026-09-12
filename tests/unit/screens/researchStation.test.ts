@@ -23,6 +23,49 @@ import ResearchScreen from '@/screens/ResearchScreen.vue'
  * Before this, `controller.research` could start, list, resume, re-check and
  * export — and nothing else. The station could be filled and never emptied.
  */
+/**
+ * Un rapporto VERO, col suo record recintato.
+ *
+ * ⛔ Dal 12/09 (MB-1) una ricerca è «conclusa» solo se il suo artefatto si
+ * rilegge: una corsa `done` senza rapporto finisce in uno dei tre secchi nuovi.
+ * Quindi la corsa di riferimento di questi test deve averne uno — altrimenti
+ * non è una ricerca conclusa, è il caso limite.
+ */
+const RAPPORTO_LETTO = [
+    '# Quando è uscito il primo iPhone',
+    '',
+    'Nel 2007.',
+    '',
+    '```talos-research-report',
+    JSON.stringify({
+        version: 1,
+        question: 'Quando è uscito il primo iPhone',
+        summary: 'Nel 2007.',
+        judge: 'giudice-locale',
+        claims: [{
+            text: 'Il primo iPhone è del 2007.',
+            sourceIndex: 1,
+            passage: 'Il primo iPhone è del 2007.',
+            checks: { quoteFound: 'yes', claimSupported: 'yes', supportReason: null, judge: 'giudice-locale' },
+        }],
+        sources: [{ url: 'https://example.org/iphone', title: 'La scheda', publishedAt: null, obtained: 'page' }],
+    }),
+    '```',
+].join('\n')
+
+const PASSO_SINTESI = {
+    id: 'synthesis',
+    branchId: 'synthesis',
+    kind: 'synthesise' as const,
+    state: 'done' as const,
+    attempts: 1,
+    startedAt: '2026-08-03T08:04:00.000Z',
+    finishedAt: '2026-08-03T08:05:00.000Z',
+    spend: { tokens: 900, searches: 0, pages: 0 },
+    resultRef: 'vault:rapporto',
+    error: null,
+}
+
 function run(patch: Partial<TalosResearchRun> = {}): TalosResearchRun {
     return {
         id: 'run-1',
@@ -33,7 +76,7 @@ function run(patch: Partial<TalosResearchRun> = {}): TalosResearchRun {
         status: 'done' as TalosResearchStatus,
         title: null,
         plan: [{ id: 'b1', question: 'b1', estimate: { tokens: 1, searches: 1, pages: 1 } }],
-        steps: [],
+        steps: [PASSO_SINTESI],
         startedAt: '2026-08-03T08:00:00.000Z',
         updatedAt: '2026-08-03T08:05:00.000Z',
         ...patch,
@@ -57,6 +100,7 @@ function controllerWith(runs: readonly TalosResearchRun[], live: readonly string
             list: vi.fn().mockResolvedValue(runs),
             unfinished: vi.fn().mockResolvedValue([]),
             report: vi.fn().mockResolvedValue(null),
+            reportDocument: vi.fn().mockResolvedValue(RAPPORTO_LETTO),
             start: vi.fn(),
             resume: vi.fn().mockResolvedValue({ id: 'run-1' }),
             pause: vi.fn().mockResolvedValue(run({ status: 'paused' })),
@@ -450,7 +494,11 @@ describe('selezionarne piu di una', () => {
         await wrapper.get('[data-testid="talos-research-select-header"]').trigger('click')
         routerCalls.push.mockClear()
 
-        await wrapper.get('[data-research-id="run-1"]').trigger('click')
+        // ⛔ Il corpo della scheda, non il contenitore: dal rifacimento del
+        // 12/09 la scheda è un componente, e ad APRIRE è il suo bottone. Un
+        // click sull'articolo non passerebbe da nessun gestore — e un test che
+        // lo desse per buono proverebbe il contenitore, non il gesto.
+        await wrapper.get('[data-testid="talos-research-open"]').trigger('click')
 
         expect(routerCalls.push).not.toHaveBeenCalled()
         expect(wrapper.get('[data-testid="talos-research-selection-bar"]').text()).toContain('1')
@@ -526,8 +574,55 @@ describe('il tocco dopo il tieni-premuto', () => {
         seconda.element.closest('li')!.dispatchEvent(
             new PointerEvent('pointerdown', { clientX: 10, clientY: 10, bubbles: true }),
         )
-        await seconda.trigger('click')
+        await seconda.get('[data-testid="talos-research-open"]').trigger('click')
 
         expect(wrapper.get('[data-testid="talos-research-selection-bar"]').text()).toContain('2')
+    })
+})
+
+/**
+ * ⛔ IL VERDETTO STANTIO — misurato sul Pad il 12/09/2026 (foto RE5/RE6).
+ *
+ * Una ricerca conclusa col suo rapporto — 26 affermazioni, «Il rapporto è
+ * pronto» — compariva nella stazione come «Senza conclusione», e il filtro la
+ * contava lì. Dopo aver riaperto l'app la stessa scheda diceva «Conclusa».
+ *
+ * La causa era una cache per ID (`if (completions.has(run.id)) continue`): il
+ * verdetto veniva misurato DURANTE la sintesi, quando il rapporto non esisteva
+ * ancora, e l'id non cambia mai — quindi non veniva più guardato. Riaprire
+ * l'app svuotava la mappa, ed è per questo che il secondo sguardo diceva il
+ * vero.
+ */
+describe('una ricerca che finisce mentre la stazione è aperta', () => {
+    function stazioneViva(prima: TalosResearchRun) {
+        const vive: string[] = [prima.id]
+        const ascoltatori: Array<(progress: { run: TalosResearchRun }) => void> = []
+        const controller = controllerWith([prima], vive)
+        controller.research.registry.watch = vi.fn((_id: string, ascolta: (progress: { run: TalosResearchRun }) => void) => {
+            ascoltatori.push(ascolta)
+            return () => {}
+        }) as never
+        mockState.controller = controller as never
+        return { vive, ascoltatori }
+    }
+
+    it('⛔ smette di dire «senza conclusione» appena il rapporto c’è, senza riaprire l’app', async () => {
+        const inSintesi = run({ status: 'synthesising', steps: [] })
+        const { vive, ascoltatori } = stazioneViva(inSintesi)
+        const wrapper = mount(ResearchScreen, { attachTo: document.body })
+        await flushPromises()
+
+        // AL CONTRARIO, primo verso: mentre lavora il verdetto NON si mostra.
+        // La scheda dice «in corso», che è l'unica cosa vera in quel momento.
+        expect(wrapper.get('[data-testid="talos-research-card-status-run-1"]').attributes('data-bucket')).toBe('running')
+
+        // La corsa finisce: stesso id, corsa diversa, rapporto sul disco.
+        vive.length = 0
+        for (const ascolta of ascoltatori) ascolta({ run: run() })
+        await flushPromises()
+        await wrapper.vm.$nextTick()
+
+        expect(wrapper.get('[data-testid="talos-research-card-status-run-1"]').attributes('data-bucket')).toBe('done')
+        wrapper.unmount()
     })
 })

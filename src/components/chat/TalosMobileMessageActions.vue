@@ -31,7 +31,20 @@ function toggleSpeak(): void {
 </script>
 
 <template>
-    <div class="flex min-h-touch items-center gap-0.5" :aria-label="$t('chat.messageActions')">
+    <!--
+        ⛔ `role="group"` e non un `div` nudo.
+
+        Un `<div>` senza ruolo esplicito è `generic`, e **il ruolo generic non
+        supporta il nome**: `aria-label` su di esso è PROIBITO dalla specifica e
+        le tecnologie assistive lo scartano in silenzio — MDN, *ARIA: generic
+        role* e *aria-label*, letto 12/09/2026
+        (https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Reference/Roles/generic_role).
+
+        Cioè: l'etichetta «Azioni messaggio» era scritta e non arrivava a
+        nessuno. Con `role="group"` il contenitore diventa nominabile, e sotto
+        ogni risposta il gruppo di comandi si annuncia per quello che è.
+    -->
+    <div role="group" class="flex min-h-touch items-center gap-0.5" :aria-label="$t('chat.messageActions')">
         <Button type="button" variant="ghost" size="icon" class="min-h-touch min-w-touch" :aria-label="$t('chat.copyMessage')" :title="$t('chat.copyMessage')" @click="emit('copy', message)">
             <Copy class="size-3.5" aria-hidden="true" />
         </Button>
@@ -64,6 +77,7 @@ function toggleSpeak(): void {
             variant="ghost"
             size="icon"
             class="min-h-touch min-w-touch"
+            data-testid="talos-message-speak"
             :aria-label="speech.speakingId.value === message.id ? $t('chat.stopSpeaking') : $t('chat.speakMessage')"
             :title="speech.speakingId.value === message.id ? $t('common.stop') : $t('chat.speak')"
             :aria-pressed="speech.speakingId.value === message.id"

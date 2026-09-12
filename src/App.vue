@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
 import { talosChatDiscardedByModeSwitch } from '@/lib/chat/modeSwitch'
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch, type Component } from 'vue'
+import { BookMarked, BookOpen, CheckSquare, Code2, FlaskConical, MessageSquareText, Settings, StickyNote, Stethoscope } from '@lucide/vue'
 import { useRoute, useRouter, type LocationQueryRaw } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
@@ -25,6 +26,11 @@ import {
 } from '@/services/resumeRelock'
 import { talosDisabledSubsystems } from '@/main'
 import { talosInteractionMotionStyleV6 } from '@/motion-v6/interaction/style'
+// U-14: i token del movimento «Calm» sulla RADICE DEL DOCUMENTO. Qui e non in
+// una superficie perche' devono vedersi anche dentro i `Teleport` e nel top
+// layer di un `<dialog>`, dove i token del motore (che vivono sul div qui
+// sotto) non arrivano. Perche' esistono: `composables/useTalosCalmMotionTokens`.
+import { useTalosCalmMotionTokens } from '@/composables/useTalosCalmMotionTokens'
 import { useChatController } from '@/stores/chatController'
 import { useTalosMobileIntroState } from '@/composables/useTalosMobileIntroState'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
@@ -119,6 +125,8 @@ const TalosLauncherIconDialog = defineAsyncComponent(
     () => import('@/components/talos/settings/TalosLauncherIconDialog.vue'),
 )
 const sidebarEverOpened = ref(false)
+/** U-5: `--mockup-sidebar-width` del mockup «Talos Calm Finale», la sidebar fissa del tablet. */
+const TALOS_MOCKUP_SIDEBAR_WIDTH = '14.5rem'
 const locked = ref(false)
 const settingsHydrated = ref(false)
 const intro = useTalosMobileIntroState({
@@ -148,6 +156,7 @@ function onIntroClose(outcome: 'completed' | 'skipped'): void {
 const reducedMotion = ref(typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+useTalosCalmMotionTokens()
 const interactionMotionStyle = computed(() => talosInteractionMotionStyleV6({
     themeId: themeStore.state.theme,
     preferences: settingsStore.state.motion_v6,
@@ -160,7 +169,11 @@ const interactionMotionStyle = computed(() => talosInteractionMotionStyleV6({
 // station owns the full tablet width while retaining the saved rail dimension.
 const shellStyle = computed(() => ({
     ...interactionMotionStyle.value,
-    '--talos-tablet-rail': tabletChatRailVisible.value ? `${tabletEffectiveRailWidth.value}px` : '0px',
+    // U-5: con la sidebar del mockup il binario e' la SUA larghezza (14,5 rem, in
+    // rem perche' segue la scala dei caratteri), non quella salvata del pannello F6.
+    '--talos-tablet-rail': !tabletChatRailVisible.value ? '0px'
+        : tabletRailVariant.value === 'chat' ? TALOS_MOCKUP_SIDEBAR_WIDTH
+        : `${tabletEffectiveRailWidth.value}px`,
     '--talos-tablet-sidebar-width': `${tabletEffectiveRailWidth.value}px`,
 }))
 
@@ -565,6 +578,16 @@ watch(() => tabletLayout.isTablet.value, (isTablet) => {
 function onTabletActivated(): void {
     if (isStation.value) void navigate('chat')
 }
+// U-5: dalla sidebar fissa, scegliere o creare una chat mentre una stazione e'
+// aperta sopra deve riportare alla chat — la stessa regola del pannello F6.
+function tabletSelect(sessionId: string): void {
+    sidebarSelect(sessionId)
+    onTabletActivated()
+}
+function tabletNewChat(): void {
+    sidebarNewChat()
+    onTabletActivated()
+}
 
 // F2-T3.6 immersive chrome: 3-dot options act on the ACTIVE session.
 const immersiveHeader = computed(() => settingsStore.state.shell.immersive_header)
@@ -687,7 +710,11 @@ async function followNotificationRoute(target: string): Promise<void> {
 function leaveStation(): void {
     const exit = talosStationExit(stationEntry.value)
     void navigate(exit.route as TalosMobileRouteName, {}, exit.params)
-    sidebarOpen.value = exit.sidebar
+    // «Back torna al menu principale» (owner 2026-07-24) vale dove il menu e'
+    // un cassetto. Sul tablet, dopo U-5 (12/09/2026), il menu e' la sidebar
+    // FISSA della stazione chat: riaprire il cassetto sopra di lei — visto sul
+    // Pad il 12/09 — era un secondo menu identico che copriva il primo.
+    sidebarOpen.value = exit.sidebar && !tabletChatRailVisible.value
 }
 /**
  * A page INSIDE a station, which System Back must leave one level at a time.
@@ -792,8 +819,17 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     // stazione: qui la cornice è l'unica cosa che distingue «una nota nuova»
     // dall'elenco delle note che sta dietro.
     'note-new': 'notes.add',
+    // U-11: stesso modulo, altro verbo — la cornice è l'unica cosa che dice
+    // se si sta scrivendo una nota nuova o correggendo quella di dietro.
+    'note-edit': 'notes.editTitle',
     'memory-new': 'memory.newMemory',
+    // U-19: stesso modulo, altro verbo — la cornice è l'unica cosa che dice se
+    // si sta scrivendo una memoria nuova o correggendo quella di dietro.
+    'memory-edit': 'memory.editTitle',
     'task-new': 'tasks.add',
+    // U-13: stesso modulo, altro verbo — la cornice è l'unica cosa che dice se
+    // si sta scrivendo un'attività nuova o correggendo quella di dietro.
+    'task-edit': 'tasks.editTitle',
     'research-report': 'stations.deepResearchTitle',
     // These two DO name themselves: on the device the sheet header wins over
     // the screen's own title, so leaving the station's name there made a claim
@@ -815,6 +851,16 @@ const SHEET_TITLE_KEY: Record<TalosMobileRouteName, string> = {
     'settings-models-local-repo': 'models.localTitle',
 }
 const sheetTitle = computed(() => t(SHEET_TITLE_KEY[activeRoute.value]))
+// U-7: l'icona della stazione accanto al titolo, come `.top-title` del mockup
+// (stessa icona della voce in sidebar). Le stazioni si riconoscono dal loro id.
+const SHEET_ICON: Record<string, Component> = {
+    chat: MessageSquareText, tasks: CheckSquare, memory: BookMarked, notes: StickyNote, context_vault: BookOpen,
+    research: FlaskConical, settings: Settings, doctor: Stethoscope, harness: Code2,
+}
+const sheetIcon = computed<Component | null>(() => {
+    const stazione = talosMobileStationOf(activeRoute.value)
+    return stazione ? (SHEET_ICON[stazione] ?? null) : null
+})
 
 const navItems = computed(() => TALOS_MOBILE_ROUTES.map((entry) => ({
     name: entry.name,
@@ -1334,20 +1380,42 @@ onBeforeUnmount(async () => {
                  On phones the row degenerates to the single content column. -->
             <div class="relative z-10 flex min-h-0 flex-1">
                 <template v-if="tabletChatRailVisible">
-                    <TalosTabletSidebar
-                        :width="tabletEffectiveRailWidth"
-                        :variant="tabletRailVariant"
-                        :collapsed="tabletHarnessRailCollapsed"
-                        @activated="onTabletActivated"
-                        @open-menu="openGlobalSidebar"
-                        @toggle-collapsed="toggleTabletHarnessRail"
+                    <!-- U-5 (owner 11/09): sul tablet la sidebar del mockup e' FISSA
+                         e prende il posto del pannello elenco-chat F6; il ☰ resta
+                         solo sul telefono. Codice (variante harness) tiene il suo
+                         pannello sessioni com'e' (U-4). -->
+                    <TalosMobileSidebar
+                        v-if="tabletRailVariant === 'chat'"
+                        fixed
+                        :open="true"
+                        :sessions="chatController.chat.history"
+                        :active-session-id="chatController.chat.activeSession.value?.id ?? null"
+                        :busy="sessionBusy"
+                        :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
+                        :cleanup-plan-for="cleanupPlanFor"
+                        @new-chat="tabletNewChat"
+                        @select="tabletSelect"
+                        @rename="sidebarRename"
+                        @delete="sidebarDelete"
+                        @navigate="sidebarNavigate"
+                        @open-settings="sidebarNavigate('settings')"
                     />
-                    <TalosTabletDivider
-                        v-if="!tabletHarnessRailCollapsed"
-                        :width="tabletEffectiveRailWidth"
-                        @resize="onTabletResize"
-                        @commit="commitTabletWidth"
-                    />
+                    <template v-else>
+                        <TalosTabletSidebar
+                            :width="tabletEffectiveRailWidth"
+                            :variant="tabletRailVariant"
+                            :collapsed="tabletHarnessRailCollapsed"
+                            @activated="onTabletActivated"
+                            @open-menu="openGlobalSidebar"
+                            @toggle-collapsed="toggleTabletHarnessRail"
+                        />
+                        <TalosTabletDivider
+                            v-if="!tabletHarnessRailCollapsed"
+                            :width="tabletEffectiveRailWidth"
+                            @resize="onTabletResize"
+                            @commit="commitTabletWidth"
+                        />
+                    </template>
                 </template>
 
                 <div
@@ -1428,6 +1496,10 @@ onBeforeUnmount(async () => {
                 <TalosMobileToolSheet
                     v-if="isStation"
                     :title="sheetTitle"
+                    :icon="sheetIcon"
+                    :hide-menu="tabletLayout.isTablet.value"
+                    :root-back="tabletLayout.isTablet.value && !tabletChatRailVisible"
+                    @open-menu="openGlobalSidebar"
                     :hide-app-actions="tabletLayout.isTablet.value && tabletChatRailVisible"
                     :presentation="settingsStore.state.chat_layout.mobile_window_presentation"
                     :parent-back="stationParent ? goToStationParent : null"

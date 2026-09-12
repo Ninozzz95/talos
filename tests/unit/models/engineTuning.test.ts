@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+    talosCoreClusters,
     talosEngineTuning,
     talosPreferFewerThreads,
     talosStrongCores,
+    talosThreadCandidatesFromTopology,
 } from '@/lib/models/engineTuning'
 
 /**
@@ -168,5 +170,72 @@ describe('scegliere fra misure che si somigliano', () => {
     it('una griglia vuota o tutta a zero non produce una scelta inventata', () => {
         expect(talosPreferFewerThreads([], 'prefill')).toBeNull()
         expect(talosPreferFewerThreads([{ threads: 4, prefill: 0, decode: 0 }], 'decode')).toBeNull()
+    })
+})
+
+
+/**
+ * ⛔ La topologia usata qui non è inventata: è quella MISURATA sul OnePlus
+ * Pad 3 il 2026-08-06 e riconfermata dal banco del 2026-09-10 — otto core,
+ * sei a capacità 792 e due a 1024. Un test su numeri di fantasia proverebbe
+ * che la funzione sa contare, non che sa leggere questo chip.
+ */
+const PAD = { cores: 8, capacities: [792, 792, 792, 792, 792, 792, 1024, 1024] }
+
+describe('i gruppi di core si leggono da cpu_capacity', () => {
+    it('sul Pad sono due: due prime e sei uguali fra loro', () => {
+        expect(talosCoreClusters(PAD)).toEqual([
+            { capacity: 1024, cores: 2 },
+            { capacity: 792, cores: 6 },
+        ])
+    })
+
+    it('un chip che non dichiara le capacità è UN gruppo solo, e lo dice con -1', () => {
+        // ⛔ -1, non 0: zero sembrerebbe una misura. È la stessa sentinella del
+        // lato nativo (`talos_core_cpu.capacity`).
+        expect(talosCoreClusters({ cores: 4, capacities: [] }))
+            .toEqual([{ capacity: -1, cores: 4 }])
+    })
+
+    it('un chip omogeneo è un gruppo solo con la sua capacità vera', () => {
+        expect(talosCoreClusters({ cores: 4, capacities: [1024, 1024, 1024, 1024] }))
+            .toEqual([{ capacity: 1024, cores: 4 }])
+    })
+})
+
+describe('i candidati contengono i confini fra i gruppi', () => {
+    it('⭐ sul Pad il SEI è nella griglia — il punto migliore misurato dal banco', () => {
+        // Prima di questa riga la griglia era [2, 4, 7, 8]: il vincitore
+        // misurato (-t 6, +15,4% di generazione, range disgiunti) non poteva
+        // nemmeno essere proposto.
+        expect(talosThreadCandidatesFromTopology(PAD)).toEqual([2, 4, 6, 7, 8])
+        expect(talosEngineTuning(PAD).candidates).toEqual([2, 4, 6, 7, 8])
+    })
+
+    it('su un chip omogeneo non si aggiunge nessuna cella nuova', () => {
+        const omogeneo = { cores: 4, capacities: [1024, 1024, 1024, 1024] }
+        expect(talosThreadCandidatesFromTopology(omogeneo)).toEqual([2, 3, 4])
+    })
+
+    it('su un chip 3+5 la griglia «di due in due» mancherebbe entrambi i confini', () => {
+        // 5 (il gruppo debole da solo) e 3 (i forti) sono i due numeri che
+        // questo chip rende speciali, e nessuno dei due è pari.
+        const tre_piu_cinque = {
+            cores: 8,
+            capacities: [1024, 1024, 1024, 500, 500, 500, 500, 500],
+        }
+        const candidati = talosThreadCandidatesFromTopology(tre_piu_cinque)
+        expect(candidati).toContain(3)
+        expect(candidati).toContain(5)
+    })
+
+    it('nessun candidato esce dai core disponibili, in nessun caso', () => {
+        for (const cores of [1, 2, 3, 5, 8, 12]) {
+            const candidati = talosThreadCandidatesFromTopology({ cores, capacities: [] })
+            for (const n of candidati) {
+                expect(n).toBeGreaterThanOrEqual(2)
+                expect(n).toBeLessThanOrEqual(cores)
+            }
+        }
     })
 })

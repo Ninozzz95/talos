@@ -560,3 +560,315 @@
     .talos-line-loader-sweep { animation: none; stroke-dashoffset: 0; }
     .talos-line-loader-node { animation: none; fill: var(--talos-accent, #c08b3c); opacity: 0.7; }
 }
+
+/* ============================================================================
+   U-14 — IL MOVIMENTO DEL MOCKUP «Talos Calm Finale», PORTATO NELL'APP
+   ============================================================================
+
+   Inventario completo, voce per voce, coi numeri misurati eseguendo il mockup:
+   `.claude/MOTION-MOCKUP-2026-09-11.md`.
+
+   Due regole tengono insieme questo blocco.
+
+   1. NON È UN SECONDO MOTORE. Ogni durata e ogni curva arriva dai token che
+      `motion-v6/interaction/style.ts` pubblica sulla radice della shell: sono
+      quelli a portarsi dietro l'interruttore «Movimento interfaccia», il
+      profilo, la scala di durata, le sei categorie e `prefers-reduced-motion`.
+      Il numero del mockup è il FALLBACK della `var()` — cioè il valore di
+      serie, quello che si vede dove il motore non ha ancora scritto (prove
+      jsdom, superfici fuori dalla shell).
+
+   2. QUI SOTTO STANNO SOLO LE FORME. Un `translateY` di 10px, una scala di
+      pressione di 0,992, l'opacità 0,16 dell'onda: sono numeri del mockup che
+      nel motore NON hanno un token, e allora il token lo aggiungiamo noi, col
+      numero del mockup come valore. Stanno su `:root` perché sono costanti.
+      ⛔ Un token DERIVATO da un token del motore non può stare qui: i token del
+      motore vivono sul `<div>` radice di `App.vue`, che è SOTTO `:root`, e
+      l'ereditarietà non va all'indietro. Le derivazioni si scrivono inline,
+      nella regola che le usa.
+
+   I numeri sono MISURATI, non letti a occhio: mockup eseguito con Playwright e
+   una sonda su `Element.animate` (11/09/2026), viewport 914×1292 e 412×915.
+   Secondo giro con `reducedMotion: 'reduce'`: zero animazioni create e stato
+   finale identico — è la prova al verso contrario.
+
+   Fonti (lette l'11/09/2026):
+   - Element.animate, opzioni di timing e `fill`:
+     https://developer.mozilla.org/en-US/docs/Web/API/Element/animate
+   - Animation.commitStyles, e perché qui NON serve (usiamo `both`, non
+     scriviamo stili permanenti nel DOM):
+     https://developer.mozilla.org/en-US/docs/Web/API/Animation/commitStyles
+   - prefers-reduced-motion, e la raccomandazione di spegnere il movimento
+     decorativo tenendo il riscontro essenziale:
+     https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion
+   - TransitionGroup: la classe `move` fa il FLIP da sola, e chi esce deve
+     stare in `position: absolute` o i conti di chi resta sbagliano:
+     https://vuejs.org/guide/built-ins/transition-group
+   ============================================================================ */
+
+:root {
+    /* Le tre curve del mockup, misurate. L'entrata è una sola per tutto il
+       mockup; l'uscita è più secca (parte veloce e si ferma); l'onda del tocco
+       ha la sua, che finisce quasi piatta. */
+    --talos-motion-calm-ease: cubic-bezier(0.22, 0.8, 0.24, 1);
+    --talos-motion-calm-ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
+    --talos-motion-calm-ease-wave: cubic-bezier(0.2, 0, 0, 1);
+
+    /* Una riga che compare SALE di 10px (mockup, `Personality.after`). */
+    --talos-motion-row-rise: 10px;
+
+    /* La pressione ha due profondità, non una. Una riga larga quanto lo schermo
+       che rientra di 3,5 punti percentuali si legge come un errore di disegno;
+       un bottone piccolo che rientra di 0,8 non si vede affatto.
+       Mockup: `.row-main,.p-card-main,.p-list-main,.nav-row,.quick-row` → 0.992,
+       tutto il resto → 0.965. */
+    --talos-motion-press-row: 0.992;
+    --talos-motion-press-control: 0.965;
+
+    /* L'onda del tocco: parte dal punto del dito, larga 1,7 volte il lato più
+       lungo dell'elemento, e si spegne crescendo. */
+    --talos-motion-wave-duration: 470ms;
+    --talos-motion-wave-opacity: 0.16;
+    --talos-motion-wave-spread: 1.7;
+    --talos-motion-wave-from: 0.06;
+
+    /* Quanto sale un foglio che entra dal basso. Nel mockup è
+       `min(altezza del foglio, 550px)`; la stazione dell'app è alta 88dvh. */
+    --talos-motion-sheet-rise: min(88dvh, 550px);
+}
+
+/* ── Una riga che ENTRA ──────────────────────────────────────────────────────
+   Mockup: `Personality.after` (app.js:281) — 240 ms, `opacity 0→1` e
+   `translateY(10px)→0`, al massimo 16 schede per render.
+   ⛔ `Motion.rowEntrance` (220 ms) NON vale qui: salta esplicitamente tutto ciò
+   che sta dentro `.personality-section` (app.js:1941), e le sezioni come Note
+   sono proprio quelle.
+
+   L'intento è `message-insert`, che il motore già dichiara: è LETTERALMENTE
+   «una voce inserita in un elenco», porta con sé sia la durata sia lo
+   sfasamento (unico intento con `staggerFactor: 1`), e cade sotto la categoria
+   Messaggi.
+
+   Non serve un blocco `prefers-reduced-motion` per questa regola: quello in
+   fondo a `css/talos-interaction-motion-v6.css` copre OGNI
+   `[data-talos-motion-intent]` con `!important`, e quel file si carica dopo. */
+[data-talos-motion-intent="message-insert"] {
+    animation: talos-calm-row-enter
+        var(--talos-motion-calm-row, var(--talos-motion-duration-message-insert, 240ms))
+        var(--talos-motion-ease, var(--talos-motion-calm-ease))
+        both;
+}
+
+@keyframes talos-calm-row-enter {
+    from {
+        opacity: 0;
+        transform: translate3d(0, var(--talos-motion-row-rise, 10px), 0);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+/* ── L'ONDA DAL PUNTO DEL DITO ───────────────────────────────────────────────
+   Mockup: `Motion.ripple` (app.js:2208). Misurato: 470 ms,
+   `cubic-bezier(.2,0,0,1)`, `scale(.06)` opacità 0,16 → `scale(1)` opacità 0.
+   Il cerchio nasce in JS perché la sua POSIZIONE è il punto toccato, una cosa
+   che il CSS da solo non sa. Geometria e cancelli in
+   `composables/useTalosTouchWave.ts`; qui c'è solo il disegno.
+
+   Sta DIETRO al contenuto (`z-index: -1`) e prende `currentColor`, come nel
+   mockup: un'onda in accento diventa una macchia, una in `currentColor` è un
+   velo. */
+.talos-wave-host {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.talos-touch-wave {
+    position: absolute;
+    z-index: -1;
+    border-radius: 50%;
+    background: currentColor;
+    pointer-events: none;
+    /* La durata la decide il motore (categoria Feedback, lo stesso token che
+       fa da cancello in `useTalosTouchWave`): se l'utente allunga le
+       transizioni, si allunga anche l'onda. 470 ms — il numero misurato sul
+       mockup — resta come valore di serie. */
+    animation: talos-calm-wave
+        var(--talos-motion-calm-wave, var(--talos-motion-wave-duration, 470ms))
+        var(--talos-motion-calm-ease-wave)
+        both;
+}
+
+@keyframes talos-calm-wave {
+    from {
+        transform: scale(var(--talos-motion-wave-from, 0.06));
+        opacity: var(--talos-motion-wave-opacity, 0.16);
+    }
+    to {
+        transform: scale(1);
+        opacity: 0;
+    }
+}
+
+/* ── LA PRESSIONE DI UNA RIGA ────────────────────────────────────────────────
+   `.talos-pressable` porta già la pressione dei CONTROLLI (0,97, vicino allo
+   0,965 del mockup). Manca la profondità delle righe larghe: si aggiunge
+   accanto, non si riscrive quella. Sta dopo nel file, quindi a parità di
+   specificità vince — ed è l'unica cosa che cambia. */
+.talos-pressable-row:active {
+    transform: scale(var(--talos-motion-press-row, 0.992));
+}
+
+/* ── UN MENU CHE ARRIVA, ANCHE SE E' TELEPORTATO ───────────────────────
+   Misurato sul Pad il 12/09/2026, con «Movimento interfaccia» ACCESO:
+
+       talos-row-actions-menu | 0ms | linear
+
+   Zero millisecondi e curva `linear`: non e' una preferenza spenta, e' la firma
+   di una `var()` caduta sul proprio ripiego. La regola del motore
+   (`css/talos-interaction-motion-v6.css:74`) scrive
+   `var(--talos-motion-duration-surface-enter, 0ms)`, e quel token vive sul
+   `<div>` radice di `App.vue` — mentre questo pannello e' **teleportato** nel
+   `body` (`TalosRowActions.vue`: dentro un `<dialog>` modale il `body` sta
+   sotto il top layer, quindi il menu deve uscire dal sottoalbero della shell o
+   non si vede). Fuori da quel sottoalbero l'ereditarieta' non arriva.
+
+   ⛔ La lezione, per chiunque aggiunga movimento dopo: un token del motore NON
+   si vede dentro un `Teleport` o nel top layer. I token `--talos-motion-calm-*`
+   stanno sulla radice del DOCUMENTO apposta, e da li' si vedono ovunque.
+
+   Due selettori d'attributo battono per specificita' quello singolo del motore,
+   e questo file si carica prima: senza il secondo attributo la regola perderebbe
+   comunque. */
+[data-talos-motion-intent="menu-open"][data-talos-calm-menu] {
+    animation: talos-surface-rise
+        var(--talos-motion-calm-menu, 440ms)
+        var(--talos-motion-ease, var(--talos-motion-calm-ease))
+        both;
+}
+
+/* ── UN SEGNO CHE CAMBIA FORMA ────────────────────────────────────
+   Mockup: `.p-note::before` (`section-personalities.css:49`) — la linguetta del
+   foglio passa da 30 a 46 px e prende l'accento quando la nota è in evidenza,
+   in **130 ms** (`--motion-fast`); `.p-card` (`:40`) accende il bordo con la
+   stessa durata.
+
+   ⛔ Perché una classe e non una utility Tailwind: prima la linguetta aveva
+   `duration-150` scritto addosso — un numero che nessuna preferenza poteva
+   toccare, e che `prefers-reduced-motion` non spegneva. Un segno che cambia
+   forma è movimento come gli altri, e va dove va il movimento.
+
+   130 ms è il valore di serie; la durata vera la dice `control`, lo stesso
+   token di ogni micro-interazione. */
+.talos-calm-marker {
+    transition:
+        width var(--talos-motion-calm-marker, 130ms) var(--talos-motion-ease, var(--talos-motion-calm-ease)),
+        background-color var(--talos-motion-calm-marker, 130ms) var(--talos-motion-ease, var(--talos-motion-calm-ease)),
+        border-color var(--talos-motion-calm-marker, 130ms) var(--talos-motion-ease, var(--talos-motion-calm-ease));
+}
+
+/* ── IL FILO CHE SCORRE ──────────────────────────────────────────────────────
+   Mockup: `Motion.animateIndicators` (app.js:1908). Misurato: 300 ms, curva
+   d'entrata, `translateX(Δx) scaleX(larghezza vecchia / nuova)` → identità.
+   Il filo NON si dissolve e riappare: si SPOSTA, e questo è il punto — dice da
+   dove si è arrivati.
+
+   La trasformazione di partenza la calcola
+   `composables/useTalosSlidingIndicator.ts`, perché dipende da due rettangoli
+   misurati. Qui c'è solo l'origine, che deve stare a sinistra o lo `scaleX`
+   crescerebbe da metà. */
+.talos-calm-indicator {
+    transform-origin: left center;
+}
+
+/* ── LE SCHEDE CHE SI RIORDINANO ─────────────────────────────────────────────
+   Mockup: `Personality.after` (app.js:283) — un FLIP vero, `translate` +
+   `scale` con origine in alto a sinistra, 290 ms, al massimo 16 schede.
+   Misurato passando da schede a lista: `translate(311px,-133.7px)
+   scale(0.483,1.12)` con `transformOrigin: top left`.
+
+   In Vue questo è il mestiere della classe `move` di `<TransitionGroup>`, che
+   il FLIP lo fa da sola: si dichiara la transizione, non si scrive la
+   geometria. ⛔ Chi ESCE deve andare fuori dal flusso, o i conti dello
+   spostamento di chi resta sbagliano (documentazione Vue, 11/09/2026). */
+.talos-calm-move {
+    transition: transform var(--talos-motion-calm-flip, 290ms)
+        var(--talos-motion-ease-tab-change, var(--talos-motion-calm-ease));
+}
+
+.talos-calm-leave-active {
+    position: absolute;
+    transition:
+        opacity var(--talos-motion-calm-menu-exit, 210ms) var(--talos-motion-ease-exit, var(--talos-motion-calm-ease-exit)),
+        transform var(--talos-motion-calm-menu-exit, 210ms) var(--talos-motion-ease-exit, var(--talos-motion-calm-ease-exit));
+}
+
+.talos-calm-leave-to {
+    opacity: 0;
+    transform: scale(0.97);
+}
+
+/* ── IL DISEGNO DELLO STATO VUOTO CHE SI TRACCIA ─────────────────────────────
+   Mockup: `.empty-line-art .draw` (components.css:285) — `stroke-dasharray:420`
+   e `motion-line-in` 360 ms (`--motion-settle`), `stroke-dashoffset 420 → 0`
+   con `opacity .3 → 1`. Una pagina vuota che non dice niente si legge come un
+   guasto; un disegno che si traccia dice «qui non c'è ancora niente», e lo dice
+   una volta sola.
+
+   Durata dal motore, categoria Finestre: uno stato vuoto arriva con la pagina. */
+.talos-calm-line-art [data-talos-draw] {
+    stroke-dasharray: 420;
+    stroke-dashoffset: 0;
+    animation: talos-calm-line-in
+        var(--talos-motion-calm-empty, 360ms)
+        var(--talos-motion-ease, var(--talos-motion-calm-ease))
+        both;
+}
+
+@keyframes talos-calm-line-in {
+    from {
+        stroke-dashoffset: 420;
+        opacity: 0.3;
+    }
+    to {
+        stroke-dashoffset: 0;
+        opacity: 1;
+    }
+}
+
+/* ── AL VERSO CONTRARIO ──────────────────────────────────────────────────────
+   Con la riduzione attiva lo stato finale dev'essere IDENTICO a quello a
+   riposo: niente entrata, ma nemmeno niente rimasto a metà.
+   Le regole legate a `[data-talos-motion-intent]` sono già coperte dal blocco
+   in fondo a `css/talos-interaction-motion-v6.css`; queste no, perché hanno
+   selettori propri. */
+@media (prefers-reduced-motion: reduce) {
+    .talos-pressable-row:active {
+        transform: none;
+    }
+
+    .talos-touch-wave {
+        display: none;
+    }
+
+    .talos-calm-marker,
+    .talos-calm-move,
+    .talos-calm-leave-active {
+        transition: none;
+    }
+
+    .talos-calm-leave-to {
+        opacity: 0;
+        transform: none;
+    }
+
+    .talos-calm-line-art [data-talos-draw] {
+        animation: none;
+        stroke-dashoffset: 0;
+        opacity: 1;
+    }
+}

@@ -35,6 +35,8 @@ import TalosThemedTabs from '@/components/talos/ui/TalosThemedTabs.vue'
 import ResearchReportScreen from '@/screens/ResearchReportScreen.vue'
 import ResearchNewScreen from '@/screens/ResearchNewScreen.vue'
 import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
+import { TALOS_IT_MESSAGES } from '@/i18n/locales/it'
+import { TALOS_EN_MESSAGES } from '@/i18n/locales/en'
 
 const NOTHING = { searches: 0, pages: 0, tokens: 0 }
 
@@ -135,6 +137,28 @@ const CATALOGS = {
     },
 }
 
+/**
+ * Il rapporto come DOCUMENTO, che e' cio' che le pagine leggono dal 12/09.
+ *
+ * ⛔ MB-1: il record si ricava dal testo e non viceversa, perche' un `null` non
+ * distingue «non c'e'» da «non si rilegge» da «bloccata da un permesso». Qui il
+ * documento si costruisce dal record della fixture, cosi' le prove esistenti
+ * continuano a descrivere la stessa ricerca.
+ */
+function documentOf(record: TalosResearchReportRecord | null): string | null {
+    if (!record) return null
+    return [
+        `# ${record.question}`,
+        '',
+        record.summary,
+        '',
+        '```talos-research-report',
+        JSON.stringify(record),
+        '```',
+        '',
+    ].join('\n')
+}
+
 function controllerWith(report: TalosResearchReportRecord | null, run: TalosResearchRun = RUN) {
     return {
         // The real controller always has these; a double without them is a
@@ -156,6 +180,7 @@ function controllerWith(report: TalosResearchReportRecord | null, run: TalosRese
             start: vi.fn(),
             resume: vi.fn(),
             report: vi.fn().mockResolvedValue(report),
+            reportDocument: vi.fn().mockResolvedValue(documentOf(report)),
             recheck: vi.fn().mockResolvedValue({
                 at: '2027-01-01T00:00:00.000Z',
                 sources: [
@@ -453,7 +478,9 @@ describe('the report a person can actually check', () => {
         await settle(wrapper)
         await settle(wrapper)
         // Nothing to read yet: no synthesis step, so no report reference.
-        expect(controller.research.report).not.toHaveBeenCalled()
+        // ⛔ Dal 12/09 la pagina legge il DOCUMENTO, non il record: e' l'unica
+        // fonte che distingue «non c'e'» da «non si rilegge».
+        expect(controller.research.reportDocument).not.toHaveBeenCalled()
 
         // The run finishes, and the registry says so.
         const watcher = controller.research.registry.watch.mock.calls[0]?.[1] as
@@ -463,7 +490,7 @@ describe('the report a person can actually check', () => {
         await settle(wrapper)
         await settle(wrapper)
 
-        expect(controller.research.report).toHaveBeenCalledWith('file-report')
+        expect(controller.research.reportDocument).toHaveBeenCalledWith('file-report')
         expect(wrapper.text()).toContain('Ha vinto Norris.')
 
         // And it stops looking once it has it. Progress arrives many times a
@@ -472,7 +499,7 @@ describe('the report a person can actually check', () => {
         watcher({ run: RUN, done: 3, total: 3 })
         watcher({ run: RUN, done: 3, total: 3 })
         await settle(wrapper)
-        expect(controller.research.report).toHaveBeenCalledTimes(1)
+        expect(controller.research.reportDocument).toHaveBeenCalledTimes(1)
     })
 
     it('says WHY a branch failed, once per distinct cause', async () => {
@@ -547,13 +574,34 @@ describe('the report a person can actually check', () => {
         expect(wrapper.text()).not.toContain('there was no independent judge')
     })
 
-    it('says so when the report cannot be read back', async () => {
+    /**
+     * ⛔ MB-1 — non piu' una riga sola per tre situazioni diverse.
+     *
+     * «Il rapporto non si rilegge» copriva un file illeggibile, una corsa
+     * bloccata da un permesso e una che al rapporto non e' mai arrivata: tre
+     * riparazioni diverse dette con la stessa frase. Adesso la pagina nomina
+     * quale delle tre e', e — quando la ricerca si puo' davvero riprendere —
+     * dice anche cosa fare.
+     */
+    it('dice QUALE dei tre modi di non avere un rapporto e questo', async () => {
         mockState.controller = controllerWith(null)
         const wrapper = mount(ResearchReportScreen)
         await settle(wrapper)
         await settle(wrapper)
 
-        expect(wrapper.get('[data-testid="talos-research-unreadable"]').text()).toContain('cannot be read back')
+        const blocco = wrapper.get('[data-testid="talos-research-incomplete"]')
+        expect(blocco.attributes('data-completion')).toBe('senza-rapporto')
+        expect(blocco.text()).toContain('cannot be read back')
+    })
+
+    it('AL CONTRARIO: con un rapporto che si rilegge non dice niente del genere', async () => {
+        mockState.controller = controllerWith(REPORT)
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        expect(wrapper.find('[data-testid="talos-research-incomplete"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-research-unreadable"]').exists()).toBe(false)
     })
 })
 
@@ -1175,6 +1223,101 @@ describe('la tenuta nel tempo', () => {
 
         expect(wrapper.find('[data-testid="talos-research-balance"]').exists()).toBe(true)
         expect(wrapper.find('[data-testid="talos-research-tenuta-nel-tempo"]').exists()).toBe(false)
+        wrapper.unmount()
+    })
+})
+
+/**
+ * ⛔ UNA PAGINA, UN TITOLO — e una sola lettura delle fonti.
+ *
+ * Misurato sul Pad il 12/09/2026. Foto RC13: «Come è stato costruito» compariva
+ * DUE volte — la sezione del registro, in alto coi numeri, e un blocco chiuso in
+ * fondo che, essendo chiuso, si leggeva come un titolo senza niente sotto. Due
+ * intestazioni identiche nella stessa pagina confondono la navigazione (W3C WAI,
+ * «Headings», SC 2.4.6, letto 12/09/2026).
+ *
+ * Foto RC12: la pagina diceva «Fonti raccolte» su linee che la scheda del
+ * dossier dichiarava «ancora da raccogliere». Ora la frase esce da una funzione
+ * sola, e dice «raccolte» solo se le fonti sono davvero sul disco.
+ */
+describe('il registro del rapporto', () => {
+    function quante(testo: string, ago: string): number {
+        return testo.split(ago).length - 1
+    }
+
+    it('⛔ «Come è stato costruito» compare UNA volta sola', async () => {
+        mockState.controller = controllerWith(REPORT)
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const testo = wrapper.text()
+        const titoli = quante(testo, TALOS_IT_MESSAGES.research.registroTitolo)
+            + quante(testo, TALOS_EN_MESSAGES.research.registroTitolo)
+        expect(titoli).toBe(1)
+
+        // La seconda sezione non esiste più: era questa.
+        expect(wrapper.find('[data-testid="talos-research-activity"]').exists()).toBe(false)
+        wrapper.unmount()
+    })
+
+    it('⛔ e ciò che quella sezione sapeva dire è dentro il registro', async () => {
+        mockState.controller = controllerWith(REPORT)
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        await wrapper.get('[data-testid="talos-research-registro-apri"]').trigger('click')
+        const passi = wrapper.get('[data-testid="talos-research-registro-passi"]').text()
+
+        // Il nome leggibile del passo, non `b1:search`.
+        expect(passi).toContain('risultato')
+        expect(passi).not.toContain('b1:search')
+        // E il «salvato», che nel 2026-08-03 chiuse una caccia di ore: la
+        // sintesi di questa corsa ha lasciato il suo file.
+        expect(passi).toMatch(/salvato|saved/i)
+        wrapper.unmount()
+    })
+
+    /*
+     * ⛔ Nessun'altra chiave deve portare lo stesso titolo: finché ne esistono
+     * due, la seconda intestazione può tornare senza che nessuno se ne accorga.
+     */
+    it('⛔ nei cataloghi il titolo del registro è una parola sola', () => {
+        for (const catalogo of [TALOS_IT_MESSAGES, TALOS_EN_MESSAGES]) {
+            const research = catalogo.research as unknown as Record<string, unknown>
+            const gemelle = Object.entries(research)
+                .filter(([, valore]) => valore === research.registroTitolo)
+                .map(([chiave]) => chiave)
+
+            expect(gemelle).toEqual(['registroTitolo'])
+        }
+    })
+})
+
+describe('le sezioni attese, prima che il rapporto esista', () => {
+    /** Una corsa ferma dopo la raccolta: una linea ha prodotto, l'altra no. */
+    const MEZZA: TalosResearchRun = {
+        ...RUN,
+        status: 'failed',
+        steps: [
+            step({ id: 'b1:search', branchId: 'b1', resultRef: 'vault:fonti-b1' }),
+            step({ id: 'b2:search', branchId: 'b2', resultRef: null }),
+        ],
+    }
+
+    it('⛔ dice «raccolte» solo sulla linea che ha davvero raccolto', async () => {
+        mockState.controller = controllerWith(null, MEZZA)
+        const wrapper = mount(ResearchReportScreen)
+        await settle(wrapper)
+        await settle(wrapper)
+
+        const stati = wrapper.findAll('[data-testid="talos-research-outline-state"]').map((riga) => riga.text())
+        expect(stati.length).toBe(2)
+        expect(stati[0]).toBe(TALOS_EN_MESSAGES.research.sectionState.done)
+        // AL CONTRARIO, sulla riga accanto: ha girato, non ha prodotto.
+        expect(stati[1]).toBe(TALOS_EN_MESSAGES.research.sectionNothingSaved)
+        expect(stati[1]).not.toContain('research.')
         wrapper.unmount()
     })
 })

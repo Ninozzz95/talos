@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { talosShouldWarmLocalModel, type TalosWarmTriggerSignals } from '@/lib/models/localWarmTrigger'
+import {
+    talosShouldWarmLocalModel,
+    talosWhyNotWarmLocalModel,
+    type TalosWarmTriggerSignals,
+} from '@/lib/models/localWarmTrigger'
 
 function segnali(over: Partial<TalosWarmTriggerSignals>): TalosWarmTriggerSignals {
     return {
@@ -51,5 +55,55 @@ describe('talosShouldWarmLocalModel', () => {
             availableRamBytes: 300_000_000,
             lowMemoryThresholdBytes: 300_000_000,
         }))).toBe(false)
+    })
+})
+
+/**
+ * ⛔⛔ PERCHE' NO — 2026-09-10.
+ *
+ * Il cancello rispondeva `false` e basta, e un `false` e' indistinguibile da un
+ * riscaldamento mai partito: e' per questo che il 10/09 nessuno ha potuto dire
+ * QUALE delle tre spiegazioni fosse quella vera. Owner, stesso giorno: «un
+ * riscaldamento che non parte per calore e' una scelta legittima; un
+ * riscaldamento che non parte in silenzio e' un difetto».
+ */
+describe('il cancello dice PERCHE’, non solo no', () => {
+    it('distingue le quattro ragioni, che si riparano in modi diversi', () => {
+        expect(talosWhyNotWarmLocalModel(segnali({ thermal: null }))).toBe('unknown-heat')
+        expect(talosWhyNotWarmLocalModel(segnali({ thermal: 'severe' }))).toBe('too-warm')
+        expect(talosWhyNotWarmLocalModel(segnali({ thermal: 'critical' }))).toBe('too-warm')
+        expect(talosWhyNotWarmLocalModel(segnali({ availableRamBytes: null }))).toBe('unknown-memory')
+        expect(talosWhyNotWarmLocalModel(segnali({ lowMemoryThresholdBytes: null })))
+            .toBe('unknown-memory')
+        expect(talosWhyNotWarmLocalModel(segnali({ availableRamBytes: 100_000_000 })))
+            .toBe('low-memory')
+    })
+
+    it('AL CONTRARIO — quando si puo’ scaldare non inventa una ragione', () => {
+        expect(talosWhyNotWarmLocalModel(segnali({}))).toBeNull()
+    })
+
+    /**
+     * ⛔ Una sola implementazione, due letture. Se un giorno qualcuno le
+     * scrivesse separate, questo test lo direbbe: sono la stessa regola, e due
+     * copie della stessa regola divergono sempre.
+     */
+    it('il predicato e la ragione non possono divergere', () => {
+        const casi: Partial<TalosWarmTriggerSignals>[] = [
+            {},
+            { thermal: null },
+            { thermal: 'light' },
+            { thermal: 'moderate' },
+            { thermal: 'severe' },
+            { thermal: 'critical' },
+            { availableRamBytes: null },
+            { lowMemoryThresholdBytes: null },
+            { availableRamBytes: 100_000_000 },
+            { availableRamBytes: 300_000_000, lowMemoryThresholdBytes: 300_000_000 },
+        ]
+        for (const caso of casi) {
+            expect(talosShouldWarmLocalModel(segnali(caso)))
+                .toBe(talosWhyNotWarmLocalModel(segnali(caso)) === null)
+        }
     })
 })

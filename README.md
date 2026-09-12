@@ -44,9 +44,11 @@ The harness controls those actions through:
 
 ## See it
 
-<img src="docs/immagini/tablet-1-table.png" alt="TALOS comparing live sources on a tablet">
+<img src="docs/immagini/tablet-11-chat-sources.png" alt="TALOS answering with a comparison table and its sources, on a tablet">
 
-TALOS can research, compare sources and present structured results without turning every task into a wall of chat.
+TALOS can research, compare sources and present structured results without turning every task into a wall of chat. While it works you see the work, not a spinner:
+
+<img src="docs/immagini/tablet-12-chat-working.png" alt="A reply in progress: checking the time, searching the web, reasoning for 14 seconds">
 
 <table>
 <tr>
@@ -357,14 +359,35 @@ A future optional backend/sync architecture is intended as **replication and exe
 
 <table>
 <tr>
-<td width="50%"><img src="docs/immagini/phone-1-memory-write.png" alt="Writing a memory"></td>
-<td width="50%"><img src="docs/immagini/phone-2-memory-screen.png" alt="TALOS memory screen"></td>
+<td width="50%"><img src="docs/immagini/phone-7-memory-consent.png" alt="The consent card before a memory is written: title, content, kind, and Allow / Don't allow"></td>
+<td width="50%"><img src="docs/immagini/phone-8-memory-screen.png" alt="The Memory screen with the memory the model just wrote, typed and scoped"></td>
 </tr>
 <tr>
-<td><b>Teach it in conversation</b><br>Memory writes are agent capabilities, not a hidden side channel.</td>
+<td><b>Teach it in conversation</b><br>Memory writes are agent capabilities, not a hidden side channel: every write is a request you approve.</td>
 <td><b>See and control what remains</b><br>Memories are typed, scoped, editable and deletable.</td>
 </tr>
 </table>
+
+---
+
+## Notes, tasks and a library that show their content
+
+<table>
+<tr>
+<td width="50%"><img src="docs/immagini/tablet-13-notes.png" alt="Notes on a tablet: cards with a checklist you can tick, filters and search"></td>
+<td width="50%"><img src="docs/immagini/tablet-14-tasks.png" alt="Tasks on a tablet: To do, In progress, Scheduled and Done, with a daily task at 09:00"></td>
+</tr>
+<tr>
+<td><b>Notes</b><br>Markdown renders as text, checklists tick inside the card, and every note can be pinned, edited, exported and deleted.</td>
+<td><b>Tasks</b><br>States you can filter by, checklists you tick inside the task, and a real pause for scheduled ones.</td>
+</tr>
+</table>
+
+<img src="docs/immagini/tablet-15-library.png" alt="The Library on a tablet: pages saved from a chat, with real previews, grouped by the chat that produced them">
+
+Everything the agent reads or saves lands in the Library with a real preview, grouped by the conversation that produced it. On a phone the same stations keep their shape:
+
+<img src="docs/immagini/phone-9-notes.png" alt="Notes on a phone, in cards" width="320">
 
 ---
 
@@ -432,7 +455,11 @@ Some operations require Android system permissions, Accessibility or the optiona
 
 # Coming soon: a coding agent, built on the same rules
 
-<img src="docs/immagini/tablet-9-coding-agent.png" alt="The coding agent harness UI on a real session: the tool feed reports nine files read and one command run, and the context rail shows the workspace root, the seven tools available, and an honest “not implemented yet” where project memory would go">
+<img src="docs/immagini/tablet-16-code-running.png" alt="Codice on a real session, seven seconds in: Running, one step, the tool feed says a file was read and a command ran, and the context rail shows the workspace root on the device">
+
+The same session forty seconds later — four steps, zero errors, a script written and executed on the phone, and the answer:
+
+<img src="docs/immagini/tablet-17-code-done.png" alt="Codice at the end of the session: Stopped, four steps, the script top10_download.sh saved and run, and a two-sentence explanation of the result">
 
 TALOS's own coding agent is under active development, on the same principles as the rest of the project: typed tools, explicit authority, and results that are checked instead of assumed.
 

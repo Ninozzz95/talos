@@ -39,7 +39,13 @@ vi.mock('@/components/shell/TalosMobileDownloadCenterTrigger.vue', () => ({
 }))
 
 describe('TalosMobileToolSheet (station sheet over chat)', () => {
-    it('renders a labelled modal dialog with back-to-chat, close, and slot body', () => {
+    /**
+     * U-7 (owner 11/09/2026): sulla RADICE di una stazione niente freccia —
+     * icona + titolo e il ☰ del telefono (`talos-sheet-menu`, apre la
+     * sidebar); la freccia resta solo dentro (pagina figlia, sotto-vista) o
+     * quando il guscio la chiede (`rootBack`: tablet senza sidebar).
+     */
+    it('renders a labelled modal dialog with the phone menu button, no back arrow on a station root, and slot body', () => {
         const w = mount(TalosMobileToolSheet, {
             props: { title: 'Runtime cockpit' },
             slots: { default: '<p data-testid="sheet-content">runs</p>' },
@@ -48,19 +54,32 @@ describe('TalosMobileToolSheet (station sheet over chat)', () => {
         expect(dialog.attributes('role')).toBe('dialog')
         expect(dialog.attributes('aria-modal')).toBe('true')
         expect(dialog.attributes('aria-label')).toBe('Runtime cockpit')
-        expect(w.find('[aria-label="Back to chat"]').exists()).toBe(true)
-        // SF-critic F3 #7: fullscreen keeps ONE honest dismissal (Back);
-        // the X exists only in the drawer presentation.
+        expect(w.find('[aria-label="Back to chat"]').exists()).toBe(false)
+        expect(w.find('[data-testid="talos-sheet-menu"]').exists()).toBe(true)
+        // SF-critic F3 #7: fullscreen keeps ONE honest dismissal (the system
+        // Back); the X exists only in the drawer presentation.
         expect(w.find('[aria-label="Close Runtime cockpit"]').exists()).toBe(false)
         expect(w.get('[data-testid="sheet-content"]').text()).toBe('runs')
         expect(w.text()).toContain('Runtime cockpit')
     })
 
-    it('emits close from back-to-chat, and from X in drawer presentation', async () => {
+    it('emits openMenu from the phone menu button, close from X in drawer presentation, and close from the root back arrow when the shell asks for it', async () => {
         const w = mount(TalosMobileToolSheet, { props: { title: 'Library', presentation: 'drawer' } })
-        await w.get('[aria-label="Back to chat"]').trigger('click')
+        await w.get('[data-testid="talos-sheet-menu"]').trigger('click')
+        expect(w.emitted('openMenu')).toHaveLength(1)
         await w.get('[aria-label="Close Library"]').trigger('click')
-        expect(w.emitted('close')).toHaveLength(2)
+        expect(w.emitted('close')).toHaveLength(1)
+
+        // Tablet dentro Impostazioni: niente sidebar, niente ☰ — la freccia torna.
+        const t = mount(TalosMobileToolSheet, { props: { title: 'Library', hideMenu: true, rootBack: true } })
+        expect(t.find('[data-testid="talos-sheet-menu"]').exists()).toBe(false)
+        await t.get('[aria-label="Back to chat"]').trigger('click')
+        expect(t.emitted('close')).toHaveLength(1)
+
+        // Tablet con la sidebar fissa: ne' ☰ ne' freccia — si torna dalla sidebar.
+        const s = mount(TalosMobileToolSheet, { props: { title: 'Library', hideMenu: true } })
+        expect(s.find('[data-testid="talos-sheet-menu"]').exists()).toBe(false)
+        expect(s.find('[data-testid="talos-sheet-back"]').exists()).toBe(false)
     })
 
     it('emits close when the backdrop is clicked', async () => {
@@ -115,7 +134,7 @@ describe('TalosMobileToolSheet (station sheet over chat)', () => {
         const w = mount(TalosMobileToolSheet, { props: { title: 'Library' } })
 
         expect(w.get('.talos-mobile-tool-sheet-header').text()).toContain('Library')
-        expect(w.get('[data-testid="talos-sheet-back"]').exists()).toBe(true)
+        expect(w.get('[data-testid="talos-sheet-menu"]').exists()).toBe(true)
     })
 
     it('CODE-BG-CONTINUITY-01 lets only an explicitly scene-backed station reveal the shared background', () => {
@@ -180,7 +199,10 @@ describe('presentation modes (F3-T2)', () => {
             props: { title: 'Harness', presentation: 'fullscreen', lockBodyScroll: true } as never,
         })
 
-        expect(wrapper.findAll('[data-testid="talos-sheet-back"]')).toHaveLength(1)
+        // U-7: on a station ROOT the one shell control is the phone menu
+        // button, and there is no back arrow to double it.
+        expect(wrapper.findAll('[data-testid="talos-sheet-menu"]')).toHaveLength(1)
+        expect(wrapper.findAll('[data-testid="talos-sheet-back"]')).toHaveLength(0)
         expect(wrapper.get('[data-testid="talos-mobile-tool-sheet"] header').classes()).toContain('talos-mobile-tool-sheet-header')
         const source = readFileSync(resolve(process.cwd(), 'src', 'components', 'shell', 'TalosMobileToolSheet.vue'), 'utf8')
         expect(source).toContain('body.keyboard-open .talos-mobile-tool-sheet-header')

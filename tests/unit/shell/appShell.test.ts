@@ -507,7 +507,11 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         expect(w.find('[data-testid="talos-empty-brand"] h1').text().trim()).not.toBe('')
         expect(w.find('[data-testid="talos-mobile-composer"]').exists()).toBe(true)
 
-        await w.get('[aria-label="Back to chat"]').trigger('click')
+        // U-7: sulla radice della stazione non c'e' la freccia ma il ☰ (telefono);
+        // alla chat si torna dalla sidebar o col Back di sistema.
+        expect(w.find('[aria-label="Back to chat"]').exists()).toBe(false)
+        expect(w.find('[data-testid="talos-sheet-menu"]').exists()).toBe(true)
+        await router.push({ name: 'chat' })
         await flushPromises()
         expect(w.find('[data-testid="talos-mobile-tool-sheet"]').exists()).toBe(false)
         expect(router.currentRoute.value.name).toBe('chat')

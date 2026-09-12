@@ -10,6 +10,8 @@
  * touched: the strip comes from the register, and the section you left is where
  * the screen opens next time.
  */
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 
@@ -110,6 +112,7 @@ beforeEach(() => {
         toolTransport: 'prompt-json-v1',
         templateCapabilities: {
             supportsTools: false, supportsToolCalls: false, supportsSystemRole: true,
+            grammarForTools: false,
         },
         fingerprint: '0123456789abcdef',
         summary: { passed: 6, failed: 0, skipped: 0 },
@@ -210,6 +213,72 @@ describe('DoctorScreen', () => {
         wrapper.unmount()
     })
 
+    /**
+     * ⛔⛔ LA RIGA CHE DICE SE QUESTO MODELLO SI PUO' TENERE A FRENO.
+     *
+     * Misurato sul Pad l'11/09/2026: alla domanda «Come ti chiami»,
+     * `Llama-3.2-3B-Instruct-Q4_0` ha chiamato `tool_details` e `library_list`,
+     * ha scaricato sei documenti della Libreria e ha chiesto di aprire una
+     * pagina web. Nel log della stessa generazione: `grammatica: no`.
+     *
+     * ⛔ Prima di stasera quella differenza non si vedeva da nessuna parte:
+     * `supportsToolCalls` risponde «si» per quel modello e per gemma-4 allo
+     * stesso modo. Queste due prove esistono perche' la riga deve CAMBIARE fra
+     * i due casi — una riga uguale sempre non informa nessuno.
+     */
+    it('dice quando le richieste del modello NON si possono tenere a freno, in rosso', async () => {
+        harness.controller.selectedProviderModel.value = {
+            id: '/models/llama32.gguf', provider: 'local', displayName: 'Llama 3.2',
+            chatCompatibility: 'unknown', supportedParameters: [],
+            inputModalities: ['text'], outputModalities: ['text'],
+        }
+        const wrapper = await openDoctor()
+        await chooseSection(wrapper, 'advanced')
+        await wrapper.get('[data-testid="talos-doctor-local-parity-run"]').trigger('click')
+        await flushPromises()
+
+        const riga = wrapper.get('[data-testid="talos-doctor-local-parity-grammar"]')
+        expect(riga.text()).toMatch(/NON si possono tenere|CANNOT be held/i)
+        // ⛔ Rossa: un avviso grigio in mezzo ad altre righe grigie non e' un avviso.
+        expect(riga.attributes('class')).toContain('--talos-danger')
+        wrapper.unmount()
+    })
+
+    it('AL CONTRARIO: quando si possono tenere a freno lo dice, e non in rosso', async () => {
+        parityRunner.run.mockResolvedValue({
+            schema: 'talos.local-model-parity/1',
+            verdict: 'compatible',
+            model: { name: 'gemma.gguf', bytes: 123, modifiedAt: 7 },
+            appBuild: 'R-test',
+            engineBuild: 'llama-test',
+            toolTransport: 'native-template',
+            templateCapabilities: {
+                supportsTools: true, supportsToolCalls: true, supportsSystemRole: true,
+                grammarForTools: true,
+            },
+            fingerprint: '0123456789abcdef',
+            summary: { passed: 6, failed: 0, skipped: 0 },
+            checks: [
+                { id: 'plain_text', status: 'pass', durationMs: 10, code: 'TALOS_LOCAL_PARITY_OK' },
+            ],
+        })
+        harness.controller.selectedProviderModel.value = {
+            id: '/models/gemma.gguf', provider: 'local', displayName: 'Gemma',
+            chatCompatibility: 'unknown', supportedParameters: [],
+            inputModalities: ['text'], outputModalities: ['text'],
+        }
+        const wrapper = await openDoctor()
+        await chooseSection(wrapper, 'advanced')
+        await wrapper.get('[data-testid="talos-doctor-local-parity-run"]').trigger('click')
+        await flushPromises()
+
+        const riga = wrapper.get('[data-testid="talos-doctor-local-parity-grammar"]')
+        expect(riga.text()).toMatch(/si possono tenere|can be held/i)
+        expect(riga.text()).not.toMatch(/NON si possono|CANNOT/i)
+        expect(riga.attributes('class')).not.toContain('--talos-danger')
+        wrapper.unmount()
+    })
+
     it('non mostra il banco di parità senza un modello locale selezionato', async () => {
         const wrapper = await openDoctor()
         await chooseSection(wrapper, 'advanced')
@@ -252,5 +321,30 @@ describe('⛔ la Diagnostica non resta MUTA quando la scansione cade', () => {
             .toMatch(/non è riuscita fino in fondo|did not finish/i)
         expect(testo, 'e deve portare il MOTIVO, non solo il fatto')
             .toContain('sonda esplosa')
+    })
+
+    /**
+     * ⭐⭐⭐ IL RAGIONAMENTO CHE NON SI PUO' SPEGNERE E' TEMPO CHE LA PERSONA ASPETTA.
+     *
+     * Misurato sul Pad l'11/09/2026 su `LFM2.5-2.6B-Q4_0`: fra «primo token del
+     * motore» (3,1 s) e «prima parola» (10,7 s) ci sono ~130 token di
+     * ragionamento. La chat chiedeva gia' di spegnerlo — il template lo ignora.
+     *
+     * ⛔ La riga non deve MAI dire «si puo' spegnere» quando non si sa: sarebbe
+     * mandare qualcuno a cercare un interruttore che non esiste.
+     */
+    it('DOCTOR-THINK-01 dice se il ragionamento si puo spegnere, e in dubbio dice di no', () => {
+        const sorgente = readFileSync(resolve(
+            process.cwd(), 'src/screens/DoctorScreen.vue',
+        ), 'utf8')
+        expect(sorgente).toContain('talos-doctor-local-parity-thinking')
+        // ⛔ Il ramo positivo e' quello ESPLICITO: assente o falso cadono
+        // entrambi su «ragiona sempre».
+        expect(sorgente).toContain('templateCapabilities?.thinkingCanBeDisabled')
+        // ⛔ Il ramo POSITIVO e' quello esplicito: assente o falso cadono
+        // entrambi su «ragiona sempre».
+        const riga = sorgente.slice(sorgente.indexOf('talos-doctor-local-parity-thinking'))
+        expect(riga.indexOf('localParityThinkingOptional'))
+            .toBeLessThan(riga.indexOf('localParityThinkingAlways'))
     })
 })

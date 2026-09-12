@@ -55,7 +55,10 @@ describe('personalVoice service', () => {
             ],
         })
         const status = await talosPersonalVoiceStatus()
-        expect(status).toEqual({ supported: true, installed: true, ready: false, active: false, failure: undefined })
+        // ⛔ L'elenco esce VUOTO, non assente: «nessuno e' compatibile» e
+        // «non lo so» sono due risposte diverse, e il router le tratta
+        // diversamente (vedi PVOICE-ROUTER-07).
+        expect(status).toEqual({ supported: true, installed: true, ready: false, active: false, failure: undefined, compatibleProfileIds: [] })
     })
 
     it('PVOICE-STATUS-02 ready when at least one saved profile is compatible', async () => {
@@ -68,6 +71,9 @@ describe('personalVoice service', () => {
         })
         const status = await talosPersonalVoiceStatus()
         expect(status.ready).toBe(true)
+        // ⛔⛔ Owner 11/09: `ready` dice «ce n'e' uno», l'elenco dice QUALE.
+        // Senza il secondo, la preferenza che punta ad 'a' passava lo stesso.
+        expect(status.compatibleProfileIds).toEqual(['b'])
     })
 
     it('PVOICE-STATUS-03 not installed short-circuits without a second bridge call', async () => {
@@ -108,6 +114,7 @@ describe('personalVoice service', () => {
             verifiedFiles: 8,
             cacheHit: false,
             verificationDurationMs: 321.5,
+            compatibleProfileIds: [PROFILE_ID],
         })
     })
 

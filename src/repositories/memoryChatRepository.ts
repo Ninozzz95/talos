@@ -462,6 +462,8 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 schedule_json: input.schedule_json ?? null,
                 instruction: input.instruction ?? null,
                 last_run_at: null,
+                // U-17 — un'attivita' nasce viva, come nel deposito vero.
+                paused: false,
                 created_at: input.created_at,
                 updated_at: input.created_at,
             }
@@ -490,6 +492,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 ...(patch.priority === undefined ? {} : { priority: patch.priority }),
                 ...(patch.schedule_json === undefined ? {} : { schedule_json: patch.schedule_json }),
                 ...(patch.instruction === undefined ? {} : { instruction: patch.instruction }),
+                ...(patch.paused === undefined ? {} : { paused: patch.paused }),
                 updated_at: now(),
             }
             tasks.set(taskId, updated)
@@ -505,6 +508,7 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 content: input.content,
                 trust_level: 'untrusted',
                 content_origin: input.content_origin ?? TALOS_CONTENT_ORIGIN_FALLBACK,
+                pinned: input.pinned === true,
                 created_at: input.created_at,
                 updated_at: input.created_at,
             }
@@ -563,8 +567,14 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 .map((row) => ({ ...row }))
         },
         async listNotes() {
+            // U-10 — le note in evidenza in cima, esattamente come
+            // `ORDER BY pinned DESC, updated_at DESC, id DESC` lato SQLite.
             return [...notes.values()]
-                .sort((left, right) => right.updated_at.localeCompare(left.updated_at) || right.id.localeCompare(left.id))
+                .sort((left, right) => (
+                    Number(right.pinned) - Number(left.pinned)
+                    || right.updated_at.localeCompare(left.updated_at)
+                    || right.id.localeCompare(left.id)
+                ))
                 .map((note) => ({ ...note }))
         },
         async updateNote(input: UpdateNoteInput) {
@@ -573,11 +583,16 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             // Assente vuol dire «non toccarlo», non «svuotalo»: vedi la nota
             // sull'implementazione SQLite, che deve comportarsi allo stesso modo
             // o le prove passerebbero su un deposito e non sull'altro.
+            //
+            // ⛔ E come là, la sola evidenza NON muove `updated_at`: l'elenco si
+            // ordina su quella data, e una puntina non è una riscrittura.
+            const rewrote = input.title !== undefined || input.content !== undefined
             const updated = {
                 ...current,
                 title: input.title ?? current.title,
                 content: input.content ?? current.content,
-                updated_at: now(),
+                pinned: input.pinned ?? current.pinned,
+                updated_at: rewrote ? now() : current.updated_at,
             }
             notes.set(input.id, updated)
             return { ...updated }

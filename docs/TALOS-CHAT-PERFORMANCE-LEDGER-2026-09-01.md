@@ -101,7 +101,7 @@ schema, Fe contract, or generated APK is changed by the source fix itself.
 - Android: `npx cap sync android` and `gradlew assembleDebug -PtalosSideBySide`
   passed (BUILD SUCCESSFUL, 51s). APK SHA-256:
   `3A6C18AE0CA79C4A99EA2A1AD1472060C56A3582376C71809987930A7685E122`.
-- Artifact copied to `C:\Users\Antonino\Downloads\talos-chat-perf-fix-debug-2026-09-01.apk`
+- Artifact copied to the developer's Downloads folder as `talos-chat-perf-fix-debug-2026-09-01.apk`
   (92,527,125 bytes) and installed successfully on Pad serial the owner's tablet as
   `ai.talos.dev`. The activity resumed and native SQLite/llama libraries loaded;
   no `FATAL EXCEPTION` appeared in the post-launch log sample.

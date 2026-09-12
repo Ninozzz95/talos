@@ -138,8 +138,39 @@ object TalosPonteAdb {
      * ⛔ Un ELENCO di parole, mai una riga da interpretare: gli argomenti
      * arrivano dal modello, e un testo con dentro un `;` diventerebbe un secondo
      * comando. `ProcessBuilder` prende già un array e non interpreta nulla.
+     *
+     * ⛔⛔⛔ `ingresso` — 10/9, IL CANALE CHE NON LASCIA TRACCIA.
+     *
+     * Gli `argomenti` sono pubblici, che ci piaccia o no: finiscono nel
+     * `cmdline` di questo processo, in quello del server adb, e — se sono un
+     * `adb shell` — nel log di sicurezza di Android, scritti da `adbd` stesso
+     * (`daemon/shell_service.cpp`, `__android_log_security_bswrite(
+     * SEC_TAG_ADB_SHELL_CMD, command_.c_str())`, letto il 2026-09-10). Un
+     * segreto lì dentro è un segreto pubblicato: è esattamente ciò che è
+     * successo con `OPENROUTER_API_KEY`, vedi `TalosPonteSegreti.kt` per la
+     * catena intera.
+     *
+     * ⇒ Ciò che non deve essere letto passa di qui: i byte vanno sullo stdin
+     * del client `adb`, che li inoltra al comando remoto come pacchetti
+     * `kIdStdin` e chiude con `kIdCloseStdin` a EOF
+     * (`client/commandline.cpp`, `stdin_read_thread_loop()`, stessa data).
+     *
+     * ⛔ `null` è il comportamento di sempre, non un ripiego: stdin si chiude
+     * SUBITO, che è la cura del «girello senza fine» descritta qui sotto.
+     * Anche con dei byte da scrivere, si scrive e poi si chiude — la chiusura
+     * non è mai facoltativa, o `adb pair` tornerebbe ad aspettare per sempre.
+     *
+     * ⛔ Il payload dev'essere PICCOLO (qui: qualche centinaio di byte di JSON).
+     * Sopra i 64 KiB del buffer di una pipe la scrittura si bloccherebbe finché
+     * il client non legge, e non c'è nessuno a garantire che legga presto:
+     * sarebbe lo stesso stallo, dall'altro verso.
      */
-    fun esegui(context: Context, argomenti: List<String>, attesaMs: Long = 20_000): Esito {
+    fun esegui(
+        context: Context,
+        argomenti: List<String>,
+        attesaMs: Long = 20_000,
+        ingresso: ByteArray? = null,
+    ): Esito {
         if (!disponibile(context)) return Esito(false, motivo = "bridge-not-packaged")
 
         val lib = librerie(context)
@@ -215,9 +246,19 @@ object TalosPonteAdb {
 
         return runCatching {
             val processo = costruttore.start()
-            // Nessuno scriverà mai su questo ingresso: dirlo subito trasforma
-            // una domanda interattiva in un errore immediato.
-            runCatching { processo.outputStream.close() }
+            // Senza `ingresso`: nessuno scriverà mai su questa estremità, e
+            // dirlo subito trasforma una domanda interattiva in un errore
+            // immediato. Con `ingresso`: si scrive e POI si chiude — la
+            // chiusura resta obbligatoria, è lei a produrre il `kIdCloseStdin`
+            // che fa vedere un EOF pulito al comando remoto.
+            runCatching {
+                processo.outputStream.use { flusso ->
+                    if (ingresso != null) {
+                        flusso.write(ingresso)
+                        flusso.flush()
+                    }
+                }
+            }
 
             val finito = processo.waitFor(attesaMs, TimeUnit.MILLISECONDS)
             if (!finito) processo.destroyForcibly()
@@ -367,13 +408,26 @@ object TalosPonteAdb {
          * permessi: una domanda non deve avere effetti.
          */
         riagganciaSeStaccato: Boolean = true,
+        /**
+         * ⛔⛔ I byte che il comando remoto leggerà sul proprio stdin — l'unico
+         * canale che non finisce né in `cmdline` né nel log di sicurezza che
+         * `adbd` scrive per OGNI `adb shell` (vedi `esegui()` e
+         * `TalosPonteSegreti.kt`). `null` = comportamento di sempre.
+         *
+         * ⛔ Si passa a ENTRAMBI i tentativi, non solo al primo: dopo un
+         * riaggancio il comando riparte da zero, e un secondo giro senza
+         * ingresso vedrebbe uno stdin vuoto — cioè un ambiente senza chiavi,
+         * proprio nel caso in cui il ponte era già in difficoltà. Difetto da
+         * manuale del «riprova» che non ritenta la stessa cosa.
+         */
+        ingresso: ByteArray? = null,
     ): Esito {
         if (comando.isEmpty()) return Esito(false, motivo = "no-command")
         if (comando[0] !in ammessi) return Esito(false, motivo = "program-not-allowed")
 
-        var esito = esegui(context, listOf("shell") + comando, attesaMs = 30_000)
+        var esito = esegui(context, listOf("shell") + comando, attesaMs = 30_000, ingresso = ingresso)
         if (riagganciaSeStaccato && staccato(esito) && riaggancia(context)) {
-            esito = esegui(context, listOf("shell") + comando, attesaMs = 30_000)
+            esito = esegui(context, listOf("shell") + comando, attesaMs = 30_000, ingresso = ingresso)
         }
         if (staccato(esito)) return esito.copy(motivo = "bridge-not-connected")
         // Stessa trappola del percorso Shizuku: `cmd` e `settings` escono con 0

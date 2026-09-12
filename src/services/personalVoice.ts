@@ -221,10 +221,15 @@ export async function talosPersonalVoiceStatus(): Promise<TalosPersonalVoiceStat
             }
         }
         const profiles = await talosPersonalVoiceProfiles()
+        // ⛔ La lista era gia' qui e veniva ridotta a un booleano: ora esce
+        // anche per id, perche' il router deve poter chiedere «quello
+        // SCELTO e' pronto?» e non solo «ce n'e' uno pronto?».
+        const compatibleProfileIds = profiles.filter((profile) => profile.compatible).map((profile) => profile.id)
         return {
             supported: status.supported,
             installed: true,
-            ready: profiles.some((profile) => profile.compatible),
+            ready: compatibleProfileIds.length > 0,
+            compatibleProfileIds,
             active: false,
             failure: status.failure,
             ...pocketEvidence,

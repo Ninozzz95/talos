@@ -222,7 +222,17 @@ const localEngineProbeRunning = ref(false)
 const localEngineProbeResult = ref<TalosLocalBackendQualification | null>(null)
 /** Vero solo dopo un tentativo reale che non ha trovato NESSUN modello sul disco. */
 const localEngineProbeNoModel = ref(false)
-const BACKEND_LABEL: Record<string, string> = { cpu: 'CPU', opencl: 'GPU' }
+/**
+ * ⛔ I nomi che una persona legge, non quelli del motore.
+ *
+ * `hexagon` mancava, e la mappa ha un ripiego che stampa la chiave grezza: la
+ * frase a schermo sarebbe uscita «più veloce con hexagon», minuscolo, in mezzo
+ * a una frase italiana. `Hexagon` è il nome che la stessa persona vede nella
+ * scelta del motore in Laboratorio modelli — uno solo, dappertutto.
+ */
+const BACKEND_LABEL: Record<string, string> = {
+    cpu: 'CPU', opencl: 'GPU', vulkan: 'GPU (Vulkan)', hexagon: 'Hexagon',
+}
 
 /**
  * Il percorso da sondare: il modello locale scelto ADESSO se c'è, altrimenti
@@ -420,7 +430,9 @@ async function runLocalEngineProbeFromSettings(): Promise<void> {
                         backend: BACKEND_LABEL[localEngineProbeResult.decisionBackend ?? ''] ?? localEngineProbeResult.decisionBackend,
                     }) }}</p>
                     <p
-                        v-if="localEngineProbeResult.cpuInconclusive || localEngineProbeResult.gpuInconclusive"
+                        v-if="localEngineProbeResult.cpuInconclusive
+                            || localEngineProbeResult.gpuInconclusive
+                            || localEngineProbeResult.npuInconclusive"
                         class="mt-1 text-2xs leading-4 text-[var(--talos-muted)]"
                     >{{ t('privacyPermissions.localEngineProbe.resultInconclusive') }}</p>
                 </template>

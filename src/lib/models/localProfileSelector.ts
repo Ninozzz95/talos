@@ -58,6 +58,42 @@ export interface TalosProfileForSelection {
     ttftMs: number
     /** `null` = non misurato. MAI 0: un profilo a velocità zero non è un dato, è un buco. */
     decodeTokPerSec: number | null
+    /**
+     * D-53 — token letti al secondo nel prefill. `null` = non misurato (profili
+     * scritti prima dell'11/09/2026): allora `ttftMs` torna a fare da costo
+     * fisso, com'era.
+     */
+    prefillTokPerSec?: number | null
+    /** D-53 — quanto è costato aprire su questo motore. `null` = non misurato. */
+    openMs?: number | null
+}
+
+/**
+ * ⭐⭐⭐ D-53 — LA FORMA DEL LAVORO, cioè il pezzo senza cui la formula del §21
+ * era giusta a metà.
+ *
+ * Banco sul Pad dell'owner, 11/09/2026, otto modelli da 1 a 4 miliardi: chi
+ * vince la LETTURA del prompt perde la SCRITTURA su sette modelli su otto.
+ *
+ * ```
+ *   LFM2.5 2.6B   lettura  CPU 181  GPU 445  NPU 1621   ← NPU, 3,6×
+ *                 scrittura CPU 24,2 GPU 25,9 NPU 15,4  ← GPU
+ * ```
+ *
+ * ⇒ Non esiste «il motore più veloce»: esiste il motore più veloce PER QUESTA
+ * domanda. Un contesto da tremila token con una risposta di dieci parole vuole
+ * chi legge in fretta; una domanda di dieci parole con una storia di dieci
+ * frasi vuole chi scrive in fretta. Con `ttftMs` solo — misurato su UN prompt
+ * fisso — le due domande erano indistinguibili.
+ *
+ * `promptTokens` è ciò che il motore dovrà leggere davvero (già noto prima di
+ * aprire: `anticipo.promptTokens`), `expectedOutputTokens` è quanto ci si
+ * aspetta che scriva. Nessun nome di modello entra qui: è la stessa formula per
+ * qualunque GGUF, con i numeri di QUEL file su QUESTO telefono.
+ */
+export interface TalosWorkShape {
+    promptTokens: number
+    expectedOutputTokens: number
 }
 
 /** Stessa soglia di `talosPreferFewerThreads` — un solo criterio epistemico in tutto TALOS, non due. */
@@ -73,12 +109,63 @@ export function talosEstimatedLatencyMs(
     profile: TalosProfileForSelection,
     outputTokens: number,
     isActiveNow: boolean,
+    /**
+     * D-53 — quanti token andranno LETTI. Se manca, o se il profilo non ha la
+     * velocità di lettura, `ttftMs` fa da costo fisso come prima: la formula
+     * vecchia resta valida sui profili vecchi, e nessuno viene bocciato per
+     * un campo che non poteva avere.
+     */
+    promptTokens?: number,
 ): number | null {
     if (profile.outcome !== 'CORRECT') return null
     if (profile.decodeTokPerSec === null || profile.decodeTokPerSec <= 0) return null
+    const decodeMs = (outputTokens / profile.decodeTokPerSec) * 1000
+    const pp = profile.prefillTokPerSec ?? null
+    if (promptTokens !== undefined && pp !== null && pp > 0) {
+        /*
+         * T = Open + Prefill(prompt) + Decode(output), design.md §21.1 per
+         * intero. `Open` si paga solo se si cambia motore (CR-12); se non è
+         * stato misurato, l'unico numero onesto che contiene un'apertura è
+         * `ttftMs` del sondaggio — pessimista, perché contiene anche un
+         * prefill da 2.637 token, ma mai ottimista.
+         */
+        const openMs = isActiveNow ? 0 : (profile.openMs ?? profile.ttftMs)
+        return openMs + (promptTokens / pp) * 1000 + decodeMs
+    }
     // CR-12: il costo di transizione è ZERO solo se non c'è transizione.
     const transitionCostMs = isActiveNow ? 0 : profile.ttftMs
-    return transitionCostMs + (outputTokens / profile.decodeTokPerSec) * 1000
+    return transitionCostMs + decodeMs
+}
+
+/**
+ * D-53 — quanti token ci si aspetta che il modello SCRIVA, guardando quanto ha
+ * scritto finora in questa conversazione.
+ *
+ * ⛔ Perché non `MAX_TOKENS`: 1.024 come attesa fissa diceva al selettore che
+ * OGNI risposta è lunga, e un'attesa lunga premia sempre chi scrive veloce —
+ * cioè faceva perdere all'NPU anche la domanda da dieci parole con tremila
+ * token di contesto, dove la lettura è tutto. La mediana delle ultime risposte
+ * dell'assistente è la stima più onesta che si ha prima di generare: una chat
+ * che ha ricevuto tre righe per volta continuerà probabilmente così.
+ *
+ * ⛔ Caratteri / 4 è la stessa approssimazione già in uso in TALOS per il testo
+ * (nessun tokenizer qui: il modello non è ancora aperto). Il pavimento a 32
+ * evita che una chat di «sì» e «no» stimi una risposta da zero token, il tetto
+ * a `massimo` è il limite reale della generazione.
+ */
+export function talosStimaTokenDiRisposta(
+    risposte: readonly string[],
+    fallback: number,
+    massimo: number,
+): number {
+    const stime = risposte
+        .map((testo) => Math.ceil(testo.length / 4))
+        .filter((n) => n > 0)
+        .slice(-5)
+        .sort((a, b) => a - b)
+    if (stime.length === 0) return Math.min(Math.max(fallback, 32), massimo)
+    const mediana = stime[Math.floor(stime.length / 2)]!
+    return Math.min(Math.max(mediana, 32), massimo)
 }
 
 /**
@@ -98,12 +185,14 @@ export function talosSelectBestProfile(
     profiles: readonly TalosProfileForSelection[],
     activeBackendRegistry: string | null,
     outputTokens: number,
+    /** D-53 — i token da leggere. Assente = formula vecchia, costo fisso. */
+    promptTokens?: number,
 ): TalosProfileForSelection | null {
     const stime = profiles
         .map((profile) => ({
             profile,
             estimatedMs: talosEstimatedLatencyMs(
-                profile, outputTokens, profile.backendRegistry === activeBackendRegistry,
+                profile, outputTokens, profile.backendRegistry === activeBackendRegistry, promptTokens,
             ),
         }))
         .filter((s): s is { profile: TalosProfileForSelection, estimatedMs: number } => s.estimatedMs !== null)

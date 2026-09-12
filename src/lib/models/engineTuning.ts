@@ -71,6 +71,42 @@ export function talosStrongCores(topology: TalosCpuTopology): number {
     return capacities.filter((c) => c >= massimo * 0.9).length
 }
 
+/**
+ * ⭐⭐⭐ I GRUPPI DI CORE, come li dichiara il kernel — non come li chiama il
+ * marketing del chip.
+ *
+ * `cpu_capacity` è un numero per core, e core con lo stesso numero sono lo
+ * stesso pezzo di silicio ripetuto. Raggrupparli per valore esatto dà la forma
+ * vera del chip: sul OnePlus Pad 3, misurato il 2026-08-06, esce
+ * `[{capacity: 1024, cores: 2}, {capacity: 792, cores: 6}]` — due prime e sei
+ * uguali fra loro, che NON è il classico quattro-più-quattro.
+ *
+ * ⛔ Serve perché i confini fra un gruppo e l'altro sono gli unici numeri di
+ * thread che questo dispositivo rende speciali, e sono diversi su ogni chip.
+ * Una griglia «di due in due» li manca per costruzione su un chip 3+5.
+ *
+ * ⛔ Capacità illeggibili non si indovinano: un chip che non dichiara niente
+ * torna UN gruppo solo, con `capacity: -1` — la stessa sentinella che usa il
+ * lato nativo (`talos_core_cpu.capacity`), non uno zero che sembrerebbe una
+ * misura.
+ */
+export interface TalosCoreCluster {
+    /** Il valore di `cpu_capacity` condiviso, o `-1` se il kernel tace. */
+    capacity: number
+    cores: number
+}
+
+export function talosCoreClusters(topology: TalosCpuTopology): readonly TalosCoreCluster[] {
+    const core = Math.max(1, Math.floor(topology.cores) || 1)
+    const capacities = topology.capacities.filter((c) => Number.isFinite(c) && c > 0)
+    if (capacities.length === 0) return [{ capacity: -1, cores: core }]
+    const conteggio = new Map<number, number>()
+    for (const capacity of capacities) conteggio.set(capacity, (conteggio.get(capacity) ?? 0) + 1)
+    return [...conteggio.entries()]
+        .map(([capacity, cores]) => ({ capacity, cores }))
+        .sort((a, b) => b.capacity - a.capacity)
+}
+
 const MIN_THREADS = 2
 
 export function talosEngineTuning(topology: TalosCpuTopology): TalosEngineTuning {
@@ -96,8 +132,27 @@ export function talosEngineTuning(topology: TalosCpuTopology): TalosEngineTuning
      *
      * Metà è il PUNTO DI PARTENZA, e la misura sul dispositivo dirà se era
      * generoso o timido.
+     *
+     * ⛔⛔ 2026-09-10 — LA PREMESSA DI QUESTA RIGA È IN DISCUSSIONE, e va detto
+     * qui invece che scoperto due volte.
+     *
+     * «Metà» nasce da due misure che dicevano la generazione PIATTA nei thread:
+     * l'8B (25,9 → 23,9 tok/s fra 2 e 8) e una nota sul Pad («due thread
+     * valgono quanto sei»). Se è piatta, tanto vale prenderne pochi.
+     *
+     * Il banco del 2026-09-10 dice il contrario, con più giri e in alternanza
+     * stretta (`.claude/TACCUINO-VELOCITA-LOCALE-2026-09-10.md`): fra 6 e 8
+     * thread la generazione cambia del **15,4%**, con i range che **non si
+     * sovrappongono** — cioè non è piatta affatto.
+     *
+     * ⛔ Ma quel banco **non ha misurato 4**, che è esattamente il numero che
+     * questa riga produce su un chip a otto core. ⇒ Cambiarlo adesso vorrebbe
+     * dire spostarsi da un punto non misurato a un altro punto scelto a
+     * tavolino, e sarebbe la stessa classe di errore che il banco ha appena
+     * smascherato. Il numero resta; la cella che manca è **`-t 4` contro
+     * `-t 6` sulla generazione, in alternanza stretta**, ed è nel rapporto
+     * come lavoro da fare sul Pad.
      */
-    const forti = talosStrongCores(topology)
     const meta = Math.max(MIN_THREADS, Math.round(core / 2))
     const threads = Math.min(threadsBatch, meta)
 
@@ -164,22 +219,80 @@ export function talosEngineTuning(topology: TalosCpuTopology): TalosEngineTuning
      */
     const microBatch = 512
 
-    /**
-     * I candidati da misurare: pochi e distinti.
-     *
-     * Provarli tutti costerebbe più della differenza che si trova. Questi
-     * quattro coprono le forme che contano — metà, i core forti, quasi tutti,
-     * tutti — e i duplicati spariscono da soli su un chip piccolo.
-     */
-    const candidates = [...new Set([
+    return {
+        threads,
+        threadsBatch,
+        microBatch,
+        candidates: talosThreadCandidatesFromTopology(topology),
+    }
+}
+
+/**
+ * ⭐⭐⭐ I candidati da misurare, e adesso ci sono anche i CONFINI DEI GRUPPI.
+ *
+ * ## Che cosa mancava, e come si è visto
+ *
+ * La lista di prima copriva quattro forme sensate — metà dei core, i core
+ * forti, tutti tranne uno, tutti. Su un chip 6+2 come il OnePlus Pad 3 sono
+ * `[2, 4, 7, 8]`, e **il sei non c'è**.
+ *
+ * Il banco `llama-bench` del 2026-09-10 sullo stesso Pad
+ * (`.claude/TACCUINO-VELOCITA-LOCALE-2026-09-10.md`, sezione «6 THREAD FANNO
+ * +15,4% DI GENERAZIONE»), Q4_0, alternanza stretta, 4 cicli × 2 ripetizioni:
+ *
+ * ```text
+ *   -t 8   generazione 53,33 tok/s   [51,1 - 55,1]
+ *   -t 6   generazione 61,52 tok/s   [59,5 - 65,6]   ⇒ +15,4%, range DISGIUNTI
+ * ```
+ *
+ * ⇒ Il punto migliore misurato su questo dispositivo era **fuori dalla griglia
+ * che questa funzione produce**. Una misura che non può proporre il vincitore
+ * non è una misura: è una cerimonia, lo stesso difetto già corretto una volta
+ * in `talosScegliThread` qui sotto.
+ *
+ * ## ⛔ Perché il rimedio NON è scrivere «6»
+ *
+ * `6` su un Pad a otto core non è una costante: è *il gruppo di core uguali
+ * fra loro*, cioè un fatto che `cpu_capacity` dichiara e che su un altro
+ * telefono vale un altro numero. Owner 2026-08-05: «TALOS è dinamico e
+ * adattabile a ogni modello — una cosa scritta a mano non potrebbe mai
+ * esistere». Quindi si aggiungono i **confini**, calcolati:
+ *
+ *  - la dimensione di ogni gruppo preso da solo (sul Pad: 2 e 6);
+ *  - la somma cumulativa dai più forti in giù (sul Pad: 2 e 8).
+ *
+ * Sul Pad la griglia diventa `[2, 4, 6, 7, 8]` — cinque celle invece di
+ * quattro, e il vincitore misurato è dentro. Su un chip omogeneo i confini
+ * coincidono col totale e non si aggiunge nemmeno una cella.
+ *
+ * ⛔ E non si aggiunge nient'altro: ogni cella costa un prefill vero e azzera
+ * la conversazione in memoria (`talosMeasureThreadTuning`). Una griglia fitta
+ * misurerebbe meglio e la pagherebbe chi voleva solo scrivere un messaggio.
+ */
+export function talosThreadCandidatesFromTopology(
+    topology: TalosCpuTopology,
+): readonly number[] {
+    const core = Math.max(1, Math.floor(topology.cores) || 1)
+    const forti = talosStrongCores(topology)
+    const meta = Math.max(MIN_THREADS, Math.round(core / 2))
+    const threadsBatch = Math.max(MIN_THREADS, core - 1)
+
+    const confini: number[] = []
+    let cumulativo = 0
+    for (const cluster of talosCoreClusters(topology)) {
+        confini.push(cluster.cores)
+        cumulativo += cluster.cores
+        confini.push(cumulativo)
+    }
+
+    return [...new Set([
         MIN_THREADS,
         meta,
         Math.max(MIN_THREADS, forti),
         threadsBatch,
         core,
+        ...confini,
     ])].filter((n) => n >= MIN_THREADS && n <= core).sort((a, b) => a - b)
-
-    return { threads, threadsBatch, microBatch, candidates }
 }
 
 /**

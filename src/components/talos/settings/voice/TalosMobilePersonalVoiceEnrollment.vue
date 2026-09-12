@@ -147,10 +147,34 @@ onMounted(async () => {
             }
         }
         doneSubscription = await talosOnPersonalVoiceDone((readingId) => {
-            if (readingId === previewReadingId) previewing.value = false
+            if (readingId !== previewReadingId) return
+            previewing.value = false
+            buildError.value = null
         })
-        errorSubscription = await talosOnPersonalVoiceError((readingId) => {
-            if (readingId === previewReadingId) previewing.value = false
+        /**
+         * ⛔⛔⛔ Owner 11/09, QUARTA segnalazione dello stesso sintomo
+         * («la codifico, non si sente nulla»): prima di questa riga
+         * `done` ed `error` facevano ESATTAMENTE la stessa cosa —
+         * spegnere lo spinner — e il testo dell'errore nativo veniva
+         * buttato via. Un'anteprima fallita era indistinguibile a
+         * schermo da una riuscita: nessun suono, nessun messaggio,
+         * nessuna traccia. Il nativo ha SEMPRE una ragione da dire
+         * (`enrollment preview did not use Pocket`, `... used a
+         * fallback`, `no verified voice backend`, l'errore della
+         * sintesi): la si mostra, perche' un silenzio spiegato e' un
+         * difetto diagnosticabile e un silenzio muto e' una quarta
+         * segnalazione.
+         *
+         * Il dettaglio grezzo (inglese, dal Kotlin) resta in console e
+         * nel diario che il Doctor legge — a schermo, dentro un dialogo
+         * tutto italiano, va la frase localizzata, stessa regola gia'
+         * scelta il 24/8 per `encodeVoice`.
+         */
+        errorSubscription = await talosOnPersonalVoiceError((readingId, error) => {
+            if (readingId !== previewReadingId) return
+            previewing.value = false
+            console.error('[personalVoice] playPreview failed', error)
+            buildError.value = t('personalVoice.previewFailed')
         })
         // ⛔ Un solo ascolto per tutta la sessione, non uno per frase: il
         // nativo emette SOLO durante una cattura in corso (per costruzione,
@@ -282,6 +306,9 @@ async function encodeVoice(): Promise<void> {
 async function playPreview(): Promise<void> {
     if (previewing.value) return
     previewing.value = true
+    // ⛔ L'errore della PROVA PRECEDENTE non deve restare a schermo mentre
+    // questa e' in volo: sarebbe un alert che accusa la richiesta sbagliata.
+    buildError.value = null
     previewReadingId = `personal-voice-preview-${Date.now()}`
     try {
         // ⛔⛔ Trovato 22/8, testando l'anteprima sul dispositivo:
@@ -294,9 +321,16 @@ async function playPreview(): Promise<void> {
         // un profilo personale (vedi TalosMobileVoiceSettings.vue) - una
         // sola frase, non due da tenere allineate.
         const result = await talosPreviewVoiceEnrollmentProfile(t('voice.previewPhrase'), previewReadingId)
-        if (!result.accepted) previewing.value = false
-    } catch {
+        // ⛔ Un rifiuto SINCRONO (`accepted:false`) non produce mai un
+        // evento `talosNeuralVoiceError`: nessun altro lo direbbe.
+        if (!result.accepted) {
+            previewing.value = false
+            buildError.value = t('personalVoice.previewFailed')
+        }
+    } catch (cause) {
         previewing.value = false
+        console.error('[personalVoice] playPreview rejected', cause)
+        buildError.value = t('personalVoice.previewFailed')
     }
 }
 
