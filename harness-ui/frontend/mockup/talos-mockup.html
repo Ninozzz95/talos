@@ -541,7 +541,11 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
    spostato di 22px, e a colonna destra chiusa si vedeva a occhio nudo. Respiro uguale sui due lati:
    la barra continua a stare nel suo, e la colonna torna al centro vero. */
 .talos-conversation{flex:1 1 auto; min-height:0; overflow-y:auto; padding:8px 44px 12px}
-@media (max-width:1040px){ .talos-conversation{padding-left:0} }
+/* ⛔ 11/9 — qui c'era `@media (max-width:1040px){ .talos-conversation{padding-left:0} }`, e sotto
+   i 1040 lasciava 0 a sinistra contro 44 a destra: il testo incollato alla barra e il composer 44 px
+   più in là. La ragione dei 44 a sinistra è la barra di cronologia, che sotto i 1040 non c'è — ma il
+   modo di toglierne l'ingombro non è azzerare il respiro di UN LATO SOLO. Tolta anche in
+   `src/styles/index.css` (r. 593), con la misura: colonna da 704 a 660 px, i due lati 44 e 44. */
 /* La conversazione sta al CENTRO dell'area (owner 04/09), non appoggiata a sinistra:
    colonna a larghezza massima, e il piede della chat allineato alla stessa colonna. */
 /* Owner 06/09: «la barra con i segmentini verdi portata all'estrema sinistra, non attaccata alla chat»,
@@ -2105,6 +2109,201 @@ a.talos-button{text-decoration:none}
 .talos-context-separator{display:flex;align-items:center;gap:var(--talos-space-sm);color:var(--talos-muted);font-size:var(--talos-font-size-xs);margin-block:var(--talos-space-lg)}
 .talos-context-separator::before{content:"";height:1px;background:var(--talos-border);flex:1}
 @media(max-width:600px){.talos-context__metrics,.talos-context__form-grid{grid-template-columns:1fr}.talos-context-separator{flex-wrap:wrap}}
+
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+ * LA BARRA DEL MOCKUP INTERATTIVO DELL'OWNER (11/09/2026) — copia di `src/styles/mockup-sidebar.css`,
+ * che a sua volta porta il CSS del mockup dell'owner (righe 4106-4119 e 4141-4178). Sta QUI e non
+ * solo in `src/` perché questo file è la fonte del disegno e il riferimento del cancello di parità:
+ * finché le due copie non divergono, il cancello misura la app contro l'ordine dell'owner.
+ * ⛔ Se questo blocco cambia, cambia anche `src/styles/mockup-sidebar.css`, e viceversa.
+ * ══════════════════════════════════════════════════════════════════════════════════════════════ */
+/*
+ * ⭐⭐⭐ LA BARRA DEL MOCKUP — i due gruppi, il cassetto sotto gli 860 px, il menu della riga.
+ *
+ * Porting dei lotti A e D del mockup interattivo dell'owner
+ * (`.claude/refactor-ui-owner-2026-09-11/Talos_Desktop_Final_Mockup_Interattivo.html`:
+ * `initSidebar` riga 6098, `openDrawer`/`closeDrawer` righe 6114-6115, `renderSessions` riga 6103;
+ * il suo CSS sta alle righe 4106-4119 e 4141-4178).
+ *
+ * ⛔ Questo foglio AGGIUNGE, non riscrive: `.talos-sidebar`, `.talos-nav-item`, `.talos-session-item`
+ *   e i loro stati restano quelli di `index.css`. Qui vive solo ciò che prima non esisteva —
+ *   le testate di gruppo, il cassetto, il bottone della riga — e sta in coda a `main.css` perché
+ *   con esbuild un `@import` relativo viene incollato sul posto e l'ordine di valutazione è quello
+ *   che decide chi vince (stessa ragione per cui `temi.css` e `aspetto.css` stanno in fondo).
+ *
+ * ⛔ Nessun colore scritto a mano: solo token. Le due foto (chiaro e scuro) sono la prova, non una
+ *   promessa — TALOS ha già pagato un velo d'avvio bianco su una app scura per aver guardato un
+ *   tema solo.
+ */
+
+/* ───────────────────────── A. I DUE GRUPPI ─────────────────────────
+ * La testata è un `button` con `aria-expanded` + `aria-controls` (pattern «disclosure», ricerca
+ * 11/09/2026 — 216digital «Accessible Navigation Design Patterns: 2026 Best Practices for WCAG
+ * Conformance», The A11Y Collective «Practical Guide on Implementing aria-expanded», Intelligence
+ * Community Design System «Side navigation»). Il chevron RUOTA invece di cambiare glifo: un solo
+ * nodo, nessun salto di layout, e la rotazione dice da sola in che verso si apre.
+ */
+/* ⛔ `max-height:50%` + scorrimento proprio è la regola del mockup (riga 4109), e serve: la barra
+   ha UN solo spazio verticale e le sessioni non devono sparire perché i luoghi sono tanti. Con
+   «Strumenti» chiuso — il default — il tetto non viene nemmeno toccato.
+   ⛔ Le voci qui sono più basse che altrove (36 px invece di `--talos-row`, 44): è l'altezza del
+   mockup per questa colonna (riga 4110), e su 13 voci sono 104 px restituiti alle sessioni. */
+/* ⛔ `flex: 0 0 auto` e NON `0 1 auto`: misurato sul banco a 1440×900 con la prima foto — col
+   restringimento attivo il blocco stava in 310 px contro i 365 che gli servivano, e i 55 px tagliati
+   erano ESATTAMENTE la testata «Strumenti», cioè la porta di cinque luoghi, sparita senza che nulla
+   lo dicesse. Il tetto del 50% resta ed è la vera guardia contro una barra che si mangia le sessioni. */
+.td-sidebar-nav { flex: 0 0 auto; min-height: 0; max-height: 50%; overflow-y: auto; padding: 0 10px 8px; }
+.td-sidebar-nav .talos-nav-item { height: auto; min-height: 36px; font-size: 13px; }
+.td-sidebar-nav .talos-nav-item .i { width: 16px; height: 16px; }
+
+.td-nav-head {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 8px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--talos-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+}
+/* La stessa risposta al passaggio del mouse che hanno le voci sotto: la testata è premibile, e
+   deve dirlo prima che qualcuno ci provi. */
+.td-nav-head:hover { background: var(--talos-card-hover); color: var(--talos-text); }
+.td-nav-head .talos-eyebrow { pointer-events: none; }
+.td-nav-head .i {
+  margin-left: auto;
+  width: 12px;
+  height: 12px;
+  transition: rotate var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.td-nav-head[aria-expanded="true"] .i { rotate: 90deg; }
+/* ⛔ Chi ha chiesto meno movimento non vede ruotare niente: la freccia arriva già girata.
+   `prefers-reduced-motion` è un contratto, non una rifinitura (ricerca 11/09/2026). */
+@media (prefers-reduced-motion: reduce) { .td-nav-head .i { transition: none; } }
+:root.reduce-motion .td-nav-head .i,
+:root.interface-motion-off .td-nav-head .i { transition: none; }
+
+.td-nav-group { display: block; }
+
+/* Barra compressa a icone: le testate di gruppo spariscono (nessuna etichetta da leggere), le
+   voci restano centrate come tutte le altre — la regola delle voci è già in `index.css`. */
+:root[data-sidebar="icone"] .td-nav-head { display: none; }
+:root[data-sidebar="icone"] .td-sidebar-nav { padding: 0 8px; overflow: visible; }
+
+/* ───────────────────────── A-bis. IL CASSETTO SOTTO GLI 860 px ─────────────────────────
+ * Fino all'11/09 `@media (max-width:860px)` faceva `display:none` sulla barra e basta: sessioni,
+ * luoghi, ricerca e «Nuova» sparivano e non c'era NESSUN modo di riaprirli. Il bottone tondo è
+ * l'unica porta, quindi non è decorazione: è la navigazione.
+ */
+.td-floating-menu { display: none; }
+.td-scrim { display: none; }
+
+@media (max-width: 860px) {
+  .td-floating-menu {
+    display: grid;
+    place-items: center;
+    position: fixed;
+    left: 12px;
+    bottom: 12px;
+    width: 48px;   /* il bersaglio tattile del tema (--talos-touch-target), non un numero nuovo */
+    height: 48px;
+    z-index: var(--talos-z-tooltip); /* sopra la app, sotto il cassetto e il suo velo */
+    border: 1px solid var(--talos-border-strong);
+    border-radius: var(--talos-radius-pill); /* tondo: owner, «un bottone tondo in basso» */
+    background: var(--talos-panel);
+    color: var(--talos-text);
+    box-shadow: var(--talos-shadow-card);
+  }
+  .td-floating-menu:hover { background: var(--talos-card-hover); }
+  .td-floating-menu .i { width: 20px; height: 20px; }
+  /* ⛔ Visto nella FOTO a 800×900: il bottone galleggiava sull'angolo del composer. Un bottone che
+     sta SOPRA un campo di testo è un bersaglio che si preme per sbaglio mentre si scrive. Il piede
+     della chat gli lascia il suo posto — 60 px, cioè il bottone (48) più il suo margine. */
+  .talos-chat-foot { padding-left: calc(var(--talos-chat-gutter) + 60px); }
+
+  /* Il velo: chiude toccando fuori, ed è un `button` perché chiudere è un'azione, non uno sfondo. */
+  .td-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: 0;
+    padding: 0;
+    background: var(--talos-overlay);
+    z-index: calc(var(--talos-z-tooltip) + 1);
+  }
+
+  /* ⛔ `display:flex` batte il `display:none` della media query di `index.css` solo perché questo
+     foglio viene DOPO nell'ordine di valutazione: stessa specificità, vince l'ultimo. Niente
+     `!important` — l'ordine è già la risposta. */
+  :root.td-drawer-open .talos-sidebar {
+    display: flex;
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(320px, 88vw);
+    z-index: calc(var(--talos-z-tooltip) + 2);
+    box-shadow: var(--talos-shadow-floating);
+  }
+  /* Dentro il cassetto la barra è INTERA: le sessioni sono la ragione per cui la si apre. */
+  :root.td-drawer-open .talos-sidebar .talos-sidebar__sessions { display: block; }
+  /* La maniglia di ridimensionamento non ha senso su un cassetto che è già largo quanto decide lui. */
+  :root.td-drawer-open .talos-resizer--sidebar { display: none; }
+  /* Col cassetto aperto il bottone che lo apre sparisce: la sua funzione ora ce l'ha il velo. */
+  :root.td-drawer-open .td-floating-menu { display: none; }
+}
+
+/* ───────────────────────── D. LA RIGA DI SESSIONE E IL SUO MENU ─────────────────────────
+ * ⛔ La riga È un `<button>`: un secondo pulsante non può starci DENTRO (nidificare un controllo
+ *   dentro un controllo non è HTML valido e rompe la navigazione da tastiera). Da qui l'involucro
+ *   `.td-session-row`, che è la stessa forma del mockup (riga 6103): la riga e i tre puntini sono
+ *   due controlli FRATELLI, non uno annidato nell'altro.
+ * ⛔ I tre puntini NON compaiono solo al passaggio del mouse: chi naviga da tastiera e chi usa un
+ *   touchscreen non hanno un «hover», e un'azione che esiste solo per il mouse non esiste.
+ *   Restano tenui (`--talos-muted`) e diventano pieni quando li tocchi o li raggiungi con Tab.
+ */
+.td-session-row { position: relative; }
+/* Lo spazio per il bottone si toglie al testo, non alla riga: senza, il titolo ci finisce sotto. */
+.td-session-row > .talos-session-item { padding-right: 38px; }
+
+.td-session-menu {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--talos-muted);
+  cursor: pointer;
+  transition: background-color var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.td-session-menu .i { width: 15px; height: 15px; }
+.td-session-menu:hover,
+.td-session-menu[aria-expanded="true"] { background: var(--talos-card-hover); color: var(--talos-text); }
+.td-session-menu:focus-visible {
+  outline: var(--talos-focus-width) solid var(--talos-ring);
+  outline-offset: var(--talos-focus-offset);
+}
+/* ⛔ Una figlia di delega è alta `--talos-row` (44px) invece di `--talos-row-session` (66px): il
+   bottone centrato su metà altezza va bene per entrambe proprio perché è centrato — è la ragione
+   per cui qui non c'è il `top:17px` scritto a mano del mockup. */
+
+/* Con la selezione multipla accesa la casella prende il posto dei tre puntini: due comandi sulla
+   stessa riga, nello stesso punto, sarebbero un bersaglio ambiguo. */
+.td-session-row.td-session-selection > .td-session-menu { display: none; }
+.td-session-row.td-session-selection > .talos-session-item { padding-right: 10px; }
+
+/* ⛔ La griglia della barra di selezione (`1fr auto`, cornice d'accento) resta quella approvata in
+   `index.css`: qui si aggiunge SOLO il posto dei tre puntini, che prendono la colonna di destra
+   dove prima stava «Elimina». Il bottone è quadrato e non si stira come gli altri della barra. */
+.talos-sidebar__selezione #sessionSelectionMore { justify-self: end; width: 28px; min-width: 0; padding: 0; }
 </style>
 
 <!-- ===================== REGIA DEL MOCKUP (non è prodotto) ===================== -->
@@ -2195,6 +2394,14 @@ a.talos-button{text-decoration:none}
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M10 7V5h4v2M6 7l1 12a2 2 0 0 0 2 1.8h6A2 2 0 0 0 17 19L18 7"/><path d="M10 11v6M14 11v6"/></symbol>
   <symbol id="i-robot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 8V4M9 4h6"/><circle cx="9" cy="14" r="1.2"/><circle cx="15" cy="14" r="1.2"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+  <!-- ⭐ 11/09/2026 BC-15 — le SCINTILLE. Nello sprite non c'era: le uniche vicine erano
+       `i-edit` (la matita, che qui vuol dire «modifica questo oggetto» ed è già presa) e
+       `i-bolt` (già del chip del modello). Ricerca 11/09/2026 — informaticsinc.com «Press for
+       Magic: The Iconography of Sparkles in AI Tools»: la scintilla è il segno stabilito per
+       «lo riscrive il modello», e sta accanto al composer in ChatGPT, Gemini e Claude.
+       Due stelle, non tre: a 18 px la terza diventa sporco. Stesso tratto degli altri
+       (`.i`: 24×24, stroke 1.6, estremi tondi), nessun riempimento. -->
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M10 3.5 11.7 8.3 16.5 10 11.7 11.7 10 16.5 8.3 11.7 3.5 10 8.3 8.3Z"/><path d="M17.5 14.5 18.3 16.7 20.5 17.5 18.3 18.3 17.5 20.5 16.7 18.3 14.5 17.5 16.7 16.7Z"/></symbol>
   <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
   <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5m7 7-7-7 7-7"/></symbol>
   <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
@@ -2248,6 +2455,16 @@ a.talos-button{text-decoration:none}
 
 
   <!-- ===================== SIDEBAR ===================== -->
+<!-- ⛔⛔ 11/09/2026, lotto A/D — LA BARRA VIENE DAL MOCKUP INTERATTIVO DELL'OWNER
+     (`.claude/refactor-ui-owner-2026-09-11/Talos_Desktop_Final_Mockup_Interattivo.html`,
+     `initSidebar` r. 6098, `renderSessions` r. 6103, `openDrawer`/`closeDrawer` r. 6114-6115;
+     il suo CSS alle righe 4106-4119 e 4141-4178, portato in `src/styles/mockup-sidebar.css`
+     e incollato in coda al <style> di questo file).
+     Il mockup dell'owner costruisce questi due gruppi in JavaScript perché deve riscrivere una
+     pagina che non è sua: qui sono markup, com'è giusto per una fonte del disegno.
+     ⛔ Fino al 12/09 questa sostituzione viveva DENTRO `tests/parity/componenti.spec.mjs`
+     (blocco «IL RIFERIMENTO SI AGGIORNA»): il cancello confrontava la app con un riferimento
+     che si correggeva da solo a ogni corsa. Ora il riferimento è questo file. -->
   <nav class="talos-sidebar" data-c="Sidebar" aria-label="Navigazione principale">
     <div class="talos-brand" data-c="Brand">
       <span class="talos-brand__mark" aria-hidden="true"><svg class="glyph"><use href="#glifo"/></svg></span>
@@ -2274,25 +2491,72 @@ a.talos-button{text-decoration:none}
              Le parole dicono cosa succede quando premi, e cambiano con lo stato: «Seleziona tutte»
              diventa «Deseleziona tutte», e l'eliminazione dice QUANTE ne porta via — mai un
              «Elimina» generico davanti a un'azione che non si annulla. -->
+        <!-- ⛔ 11/09 (lotto D) — le AZIONI DI GRUPPO erano una sola, «Elimina», ed era un bottone
+             affiancato. Owner 10/09: più di due azioni su un oggetto vogliono un menu overflow, mai
+             bottoni in fila. Qui restano a schermo il conteggio e la sola cosa che NON agisce sulle
+             sessioni (estendere o annullare la selezione); esportare, copiare gli identificativi ed
+             eliminare vivono dietro i tre puntini (`apriMenuSelezioneSessioni` in app.js), dove
+             l'azione che non si annulla non si preme per sbaglio.
+             ⛔ Il conteggio nasce VUOTO: «Nessuna selezionata» era una frase che parlava solo di sé
+             (owner 07/9, «deve sparire se non è selezionato nulla»). -->
         <div class="talos-sidebar__selezione" id="sessionSelectionToolbar" hidden>
-          <span class="talos-muted" id="sessionSelectionCount" role="status">Nessuna selezionata</span>
+          <span class="talos-muted" id="sessionSelectionCount" role="status"></span>
           <button class="talos-button talos-button--ghost talos-button--sm" id="sessionSelectionSelectAll">Seleziona tutte</button>
-          <button class="talos-button talos-button--ghost talos-button--sm talos-button--danger" id="sessionSelectionDelete">Elimina</button>
+          <button class="talos-button talos-button--ghost talos-icon-button talos-button--sm" id="sessionSelectionMore" aria-haspopup="menu" aria-expanded="false" aria-label="Altre azioni sulle sessioni selezionate" title="Altre azioni"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button>
     </div>
 
-    <div class="talos-sidebar__block" data-c="NavGroup">
-      <div class="talos-sidebar__block-head"><span class="talos-eyebrow" data-t="luoghi">Luoghi</span></div>
-      <button class="talos-nav-item" data-c="NavItem" data-vaia="capability"><svg class="i"><use href="#i-list"/></svg><span class="talos-nav-item__label" data-t="capability">Capability</span><span class="talos-nav-item__count">43</span></button>
-      <button class="talos-nav-item" data-c="NavItem" data-vaia="board"><svg class="i"><use href="#i-grid"/></svg><span class="talos-nav-item__label" data-t="board">Board</span><span class="talos-nav-item__count">69</span></button>
-      <button class="talos-nav-item" data-c="NavItem" data-vaia="libreria"><svg class="i"><use href="#i-files"/></svg><span class="talos-nav-item__label" data-t="libreria">Libreria</span><span class="talos-nav-item__count">18</span></button>
-      <button class="talos-nav-item" data-c="NavItem" data-vaia="memoria"><svg class="i"><use href="#i-brain"/></svg><span class="talos-nav-item__label" data-t="memoria">Memoria</span><span class="talos-nav-item__count">7</span></button>
-      <button class="talos-nav-item" data-c="NavItem" data-vaia="attivita"><svg class="i"><use href="#i-check-sq"/></svg><span class="talos-nav-item__label" data-t="attivita">Attività</span><span class="talos-nav-item__count">4</span></button>
-      <button class="talos-nav-item" data-c="NavItem" id="altroLuoghi" aria-expanded="false" aria-controls="luoghiAltri"><svg class="i"><use href="#i-more"/></svg><span class="talos-nav-item__label" data-t="altro">Altro</span></button>
-      <div id="luoghiAltri" hidden>
-        <button class="talos-nav-item" data-c="NavItem" data-vaia="note" data-conteggio="note"><svg class="i"><use href="#i-doc"/></svg><span class="talos-nav-item__label">Note</span><span class="talos-nav-item__count">11</span></button>
-        <button class="talos-nav-item" data-c="NavItem" data-vaia="ricerca"><svg class="i"><use href="#i-globe"/></svg><span class="talos-nav-item__label">Ricerca approfondita</span><span class="talos-nav-item__count">6</span></button>
-        <button class="talos-nav-item" data-c="NavItem" data-vaia="officina"><svg class="i"><use href="#i-code"/></svg><span class="talos-nav-item__label">Officina attrezzi</span><span class="talos-nav-item__count">2</span></button>
-        <button class="talos-nav-item" data-c="NavItem" data-vaia="automazioni"><svg class="i"><use href="#i-clock"/></svg><span class="talos-nav-item__label">Automazioni</span><span class="talos-nav-item__count">3</span></button>
+    <!-- ===================== I DUE GRUPPI DELLA BARRA (lotto A, 11/09/2026) =====================
+         Il mockup dell'owner (`initSidebar`, riga 6098) sostituisce il blocco «Luoghi» e il
+         disclosure «Altro» con DUE gruppi richiudibili: «Spazi di lavoro» e «Strumenti». Qui sono
+         markup statico invece che generati a runtime — il mockup li costruisce in JS solo perché
+         deve riscrivere una pagina che non è sua.
+
+         ⛔ Perché due gruppi e non un elenco più lungo: le voci passano da 9 a 13, e 13 voci senza
+            gerarchia sono un muro. La divisione dice anche COSA sono: «Spazi di lavoro» è dove vive
+            il lavoro di una sessione, «Strumenti» è ciò con cui si governa la app.
+         ⛔ La testata di gruppo è un `button` con `aria-expanded` + `aria-controls`, cioè il pattern
+            «disclosure»: è quello che la ricerca dell'11/09/2026 indica come standard per una
+            navigazione richiudibile (216digital, «Accessible Navigation Design Patterns: 2026 Best
+            Practices for WCAG Conformance»; The A11Y Collective, «Practical Guide on Implementing
+            aria-expanded»; Intelligence Community Design System, «Side navigation / accessibility»).
+            Niente `role="menu"`: una barra di navigazione non è un menu applicativo, e chi legge con
+            uno screen reader si aspetterebbe frecce che qui non servono.
+         ⛔ Il monolite ha GIÀ l'ascoltatore del disclosure per ogni `[aria-expanded][aria-controls]`
+            (app.js, la «regia del mockup»): qui non serve un ascoltatore nuovo, solo la memoria
+            della scelta (`ricordaGruppoBarra`).
+
+         ⛔ NESSUN CONTEGGIO SCRITTO A MANO. Il mockup ha numeri d'esempio (43 · 69 · 18 · 7 · 4…) e
+            il template li aveva copiati: restavano a schermo finché una rotta non rispondeva, cioè
+            erano una bugia per i primi secondi di ogni avvio. Il badge lo crea `impostaConteggioNav`
+            quando il numero VERO arriva; assente è uno stato onesto (components/nav-item.js). -->
+    <div class="td-sidebar-nav" data-c="NavGroups">
+      <button type="button" class="td-nav-head" id="testataGruppoLavoro" data-gruppo="lavoro" aria-expanded="true" aria-controls="gruppoLavoro"><span class="talos-eyebrow">Spazi di lavoro</span><svg class="i" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <div class="td-nav-group" id="gruppoLavoro">
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="chat"><svg class="i"><use href="#i-list"/></svg><span class="talos-nav-item__label">Conversazioni</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="note" data-conteggio="note"><svg class="i"><use href="#i-doc"/></svg><span class="talos-nav-item__label">Note</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="attivita"><svg class="i"><use href="#i-check-sq"/></svg><span class="talos-nav-item__label">Attività</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="libreria"><svg class="i"><use href="#i-files"/></svg><span class="talos-nav-item__label">Libreria</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="memoria"><svg class="i"><use href="#i-brain"/></svg><span class="talos-nav-item__label">Memoria</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="ricerca"><svg class="i"><use href="#i-globe"/></svg><span class="talos-nav-item__label">Ricerca approfondita</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="progetti"><svg class="i"><use href="#i-folder"/></svg><span class="talos-nav-item__label">Progetti</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="board"><svg class="i"><use href="#i-grid"/></svg><span class="talos-nav-item__label">Board</span></button>
+      </div>
+      <!-- ⛔ «Strumenti» nasce CHIUSO, come nel mockup (`state.groups = {lavoro:true, strumenti:false}`),
+           e la prima foto a 1440×900 ha mostrato perché: con tutti e due aperti le 13 voci più le due
+           testate misurano ~530 px su ~726 disponibili, la barra schiaccia l'elenco delle sessioni e
+           le ultime voci di «Strumenti» finiscono dentro uno scorrimento che nessuno vede. Chiuso, il
+           gruppo occupa 30 px e si apre quando serve — e la scelta si ricorda. -->
+      <button type="button" class="td-nav-head" id="testataGruppoStrumenti" data-gruppo="strumenti" aria-expanded="false" aria-controls="gruppoStrumenti"><span class="talos-eyebrow">Strumenti</span><svg class="i" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <div class="td-nav-group" id="gruppoStrumenti" hidden>
+        <!-- ⛔ «Modelli» è il Model Lab, che nel prodotto vive dentro Impostazioni → sezione
+             «models»: `#schermoModelLab` esiste nel template ma NON è in `VISTA_PER_SCHERMATA`,
+             cioè è una schermata senza porta. Finché quella porta non esiste, la voce apre la
+             sezione VERA invece di una schermata morta — vedi `apriLuogoBarra` in app.js. -->
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="modelli"><svg class="i"><use href="#i-bolt"/></svg><span class="talos-nav-item__label">Modelli</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="capability"><svg class="i"><use href="#i-list"/></svg><span class="talos-nav-item__label">Capability</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="officina"><svg class="i"><use href="#i-code"/></svg><span class="talos-nav-item__label">Officina attrezzi</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="automazioni"><svg class="i"><use href="#i-clock"/></svg><span class="talos-nav-item__label">Automazioni</span></button>
+        <button class="talos-nav-item" data-c="NavItem" data-vaia="doctor"><svg class="i"><use href="#i-shield"/></svg><span class="talos-nav-item__label">Doctor</span></button>
       </div>
     </div>
 
@@ -2339,6 +2603,19 @@ a.talos-button{text-decoration:none}
     </div>
     <button class="talos-resizer talos-resizer--sidebar" data-ridimensiona="sidebar" aria-label="Ridimensiona la barra laterale" title="Trascina per ridimensionare, doppio click per il valore normale"></button>
   </nav>
+
+  <!-- ⛔ IL BOTTONE DEL CASSETTO (lotto A, 11/09/2026) — l'UNICA porta alla barra sotto gli 860 px.
+       Fino a oggi `@media (max-width:860px)` faceva `display:none` sulla barra e basta: sessioni,
+       luoghi, ricerca e «Nuova» sparivano senza nessun modo di riaprirli. Il mockup lo crea in JS
+       (`initSidebar`, riga 6101); qui è markup, perché una porta non deve dipendere dal fatto che
+       uno script sia arrivato in fondo.
+       ⛔ Tondo e in basso a sinistra: è la posizione del mockup, ed è dove sta il pollice.
+       ⛔ `aria-expanded` SENZA `aria-controls`, e non è una dimenticanza: la «regia del mockup» in
+          app.js tratta OGNI `[aria-expanded][aria-controls]` come un disclosure e mette `hidden`
+          sull'elemento controllato. Con `aria-controls="sessionsPanel"` il bottone avrebbe aperto
+          il cassetto e NASCOSTO la barra nello stesso clic. Lo stato aperto/chiuso resta detto —
+          è ciò che serve a chi non vede il pannello scorrere. -->
+  <button type="button" class="td-floating-menu" id="apriCassettoBarra" aria-label="Apri la navigazione" title="Apri la navigazione" aria-expanded="false"><svg class="i" aria-hidden="true"><use href="#i-menu"/></svg></button>
 
   <!-- ===================== CENTRO ===================== -->
   <main class="talos-screen" id="centro">
@@ -2486,9 +2763,16 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
           <textarea class="talos-composer__input" id="composerInput" rows="1" placeholder="Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda" aria-label="Messaggio"></textarea>
           <div class="talos-composer__bar">
             <button class="talos-composer__attach" data-c="AttachButton" aria-label="Aggiungi contesto" id="capabilityBtn" title="Aggiungi contesto: file, immagini, screenshot"><svg class="i"><use href="#i-plus"/></svg></button>
+            <!-- ⭐⭐⭐ BC-15, 11/09/2026 — «Migliora il prompt». Sta QUI, accanto al «+», perché le
+                 due cose che si fanno al messaggio PRIMA di mandarlo — aggiungere contesto e
+                 riscriverlo — stanno insieme, a sinistra; a destra restano i due gesti che lo
+                 mandano via (voce e invio). Stessa classe e stessa misura degli altri due
+                 bottoni-icona della barra: nessuna grammatica nuova. -->
+            <button type="button" class="talos-composer__attach" id="miglioraPromptBtn" aria-label="Migliora il prompt" aria-expanded="false" aria-controls="miglioraPromptPannello" title="Riscrivi il tuo messaggio col modello di questa chat"><svg class="i"><use href="#i-sparkles"/></svg></button>
             <button type="button" class="talos-badge talos-badge--lg" data-c="Chip" data-open-sheet="model" title="Cambia modello"><svg class="i i--sm"><use href="#i-bolt"/></svg><span class="talos-chip__label">claude-opus-5</span> <span class="talos-kbd">Ctrl ⇧ M</span></button>
             <button type="button" class="talos-badge talos-badge--lg talos-badge--warning" data-c="Chip" data-open-sheet="permissions" title="Cambia il permesso"><svg class="i i--sm"><use href="#i-shield"/></svg><span class="talos-chip__label">Scrive nel progetto</span></button>
             <span class="talos-badge talos-badge--lg" data-c="Chip" data-runtime-giri>Giri <span class="talos-mono talos-measure">7</span></span>
+            <button type="button" class="talos-badge talos-badge--lg" data-c="Chip" id="pillTerminale" aria-expanded="false" aria-controls="pannelloTerminale" title="Apri il terminale qui sotto"><svg class="i i--sm"><use href="#i-terminal"/></svg><span class="talos-chip__label">Terminale</span></button>
             <span class="talos-badge talos-badge--lg" data-c="Chip" data-runtime-costo>Sessione <span class="talos-mono talos-measure--estimate">$0,08</span></span>
             <button type="button" class="talos-button talos-button--secondary talos-button--sm" id="redirectRunButton" hidden title="Interrompi al prossimo punto sicuro e applica questa correzione">Reindirizza</button>
             <button type="button" class="talos-composer__attach talos-composer__mic" data-c="IconButton" title="Voce" aria-label="Voce"><svg class="i"><use href="#i-mic"/></svg></button>
@@ -2501,7 +2785,45 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
           <button type="button" class="talos-button talos-button--secondary talos-button--sm" data-bivio="accoda">Accoda <span class="talos-kbd">Ctrl ↵</span></button>
           <button type="button" class="talos-button talos-button--ghost talos-button--sm" data-bivio="annulla" aria-label="Lascia il messaggio nel composer">Annulla</button>
         </div>
-        <div class="talos-statusbar" data-c="StatusBar"><span class="talos-statusbar__connessione" data-runtime-connessione hidden></span><button type="button" class="talos-button talos-button--ghost talos-button--sm" data-runtime-riprova hidden>Riprova</button><span data-statusbar="tema">42 token/s</span><span data-runtime-usage>41,2k token · 7 giri</span><span data-runtime-cache>cache 87%</span><span data-runtime-latenza>primo token 1,4 s</span></div>
+        <!--
+          ⛔⛔ 11/09 — SOTTO IL COMPOSER NON SI LEGGE PIÙ NIENTE. Owner, con la sua schermata e una
+          freccia sulla riga: «la scritta 87,7k token · 3 giri sotto il composer la puoi rimuovere,
+          anzi TUTTE le scritte sotto il composer, sono ridondanti». Token, giri, cache e primo token
+          stanno già tutti nel pannello di destra, dove si leggono in contesto: ripetuti qui erano
+          rumore proprio sotto il punto in cui si scrive.
+
+          ⛔ Il contenitore RESTA, vuoto, e non è un ripensamento: toglierlo rompe l'avvio. Misurato,
+          non temuto — la prima versione lo cancellava e la pagina lanciava
+          «ponte: manca nel mockup «.talos-statusbar»» (bridge/legacy-dom.js r. 171), e da lì in poi
+          non si apriva più niente. Lo usa anche la sorveglianza della connessione (app.js r. 1779).
+          ⇒ Dentro restano solo i due nodi dell'avviso di caduta, che nascono `hidden` e compaiono
+            unicamente quando il server smette di rispondere: in condizioni normali la riga è vuota e
+            invisibile, ed è esattamente ciò che l'owner vede — cioè niente.
+        -->
+        <div class="talos-statusbar" data-c="StatusBar"><span class="talos-statusbar__connessione" data-runtime-connessione hidden></span><button type="button" class="talos-button talos-button--ghost talos-button--sm" data-runtime-riprova hidden>Riprova</button></div>
+        <!--
+          ⭐⭐⭐ PO-09 — IL TERMINALE IN BASSO. Owner, 09/09: «un pulsantino per far aprire il
+          terminale splittato in orizzontale in basso, come fa Hermes, Codex e tanti altri tipo VS
+          Code: resizable, intuitivo»; 11/09: il pulsante è una pill nel composer, accanto a «Giri».
+
+          ⛔ QUESTO PANNELLO È VUOTO APPOSTA: non contiene un secondo terminale, OSPITA quello che
+          esiste già. Aprendolo, `.talos-terminal` viene spostato qui dentro dalla vista Terminale e
+          alla chiusura torna al suo posto. Due ragioni misurate, non estetiche:
+           · xterm.js non sa misurarsi dentro un elemento nascosto (xterm.js #3029, #494) e i
+             browser limitano i contesti WebGL vivi per pagina (#4379): due istanze sarebbero due
+             volte i problemi che questo progetto ha già dovuto risolvere una volta;
+           · e soprattutto sarebbe un ALTRO terminale, con altre PTY. Chi apre il pannello si
+             aspetta le SUE schede, non un secondo posto dove ricominciare.
+
+          Ricerca 11/09/2026 (techinterview «Build a Resizable Panels Layout: VS Code and Linear
+          Style»; docs VS Code «Terminal Basics»): la maniglia è un `separator` ARIA, operabile da
+          tastiera; la misura si salva a fine trascinamento e si ripristina all'apertura; si muove
+          una variabile CSS, non `style.height`, per non rifare il layout a ogni movimento.
+        -->
+        <section class="talos-terminale-basso" id="pannelloTerminale" hidden aria-label="Terminale">
+          <div class="talos-terminale-basso__maniglia" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Altezza del terminale: frecce su e giù per cambiarla" data-maniglia-terminale></div>
+          <div class="talos-terminale-basso__ospite" data-ospite-terminale></div>
+        </section>
       </div>
     </section>
 
@@ -2539,7 +2861,7 @@ tests/session-registry.test.mjs:12  guardiaDiStallo(registro, SOGLIE_STALLO_PRED
             <button class="talos-send" title="Invia"><svg class="i"><use href="#i-send"/></svg></button>
           </div>
         </form>
-        <div class="talos-statusbar"><span>Tema Calm · locale</span><span>0 token · 0 giri</span></div>
+        <!-- ⛔ 11/09 — tolta con l'altra: stessa ridondanza, stesso posto. -->
       </div>
     </section>
 
@@ -2982,11 +3304,12 @@ Una segnalazione di stallo non termina il processo.</pre>
           <div class="talos-tabs talos-tabs--pills" data-c="FilterChips"><div class="talos-tabs__list" role="tablist" aria-label="Provenienza dei file"><button type="button" class="talos-tabs__tab" data-library-origine="tutte" role="tab" aria-selected="true" aria-controls="libreriaRisultati" tabindex="0">Tutti</button><button type="button" class="talos-tabs__tab" data-library-origine="uploaded" role="tab" aria-selected="false" aria-controls="libreriaRisultati" tabindex="-1">Caricati</button><button type="button" class="talos-tabs__tab" data-library-origine="generated" role="tab" aria-selected="false" aria-controls="libreriaRisultati" tabindex="-1">Generati</button><button class="talos-tabs__tab" hidden data-richiede="fase3">Sempre nel contesto</button><button class="talos-tabs__tab" hidden data-richiede="fase3">A richiesta</button></div></div>
           <span class="talos-grow"></span><button type="button" class="talos-button talos-button--secondary talos-button--sm" data-library-refresh>Aggiorna</button><span class="talos-badge" hidden data-richiede="fase3">Nel contesto ora</span>
         </div>
+        <!-- ⛔ 10/09/2026, owner, davanti a cinque bottoni in fila: «non mettere i pulsanti uno accanto all'altro, usa i tre puntini + dropdown… e anche azioni tasto destro mouse». La riga ha ora UN bottone, «⋯», più il modulo di rinomina in linea, la riga del messaggio e la conferma d'eliminazione: tutti nel DOM, tutti nascosti finché non servono (src/components/libreria.js r. 110-233). L'«Apri» morto con `data-richiede="fase3"` non c'è più: adesso «Apri» è una voce del menu, e chiama POST /apri. -->
         <div class="talos-card talos-list" data-c="LibraryList" id="libreriaRisultati" role="tabpanel" aria-label="File filtrati"><div data-library-list role="list" aria-label="File in Libreria">
-          <div class="talos-list-row" data-c="LibraryRow" data-library-id="lib-decisioni" data-aperta="false" role="listitem"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-doc"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title" title="DECISIONI-REDESIGN-TALOS-2026-09-04.md">DECISIONI-REDESIGN-TALOS-2026-09-04.md</span><span class="talos-list-row__sub">Documento · Aggiornato il 04/09/2026</span></span><span class="talos-list-row__aside"><span class="talos-badge">Caricato</span><button type="button" class="talos-button talos-button--ghost talos-button--sm" hidden data-richiede="fase3">Apri</button><button type="button" class="talos-button talos-button--ghost talos-button--sm" aria-expanded="false" aria-label="Dettagli di DECISIONI-REDESIGN-TALOS-2026-09-04.md">Dettagli</button></span></div>
-          <div class="talos-list-row" data-c="LibraryRow" data-library-id="lib-ledger" data-aperta="false" role="listitem"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-doc"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title" title="LEDGER-ROADMAP-DESKTOP-2026-09-03.md">LEDGER-ROADMAP-DESKTOP-2026-09-03.md</span><span class="talos-list-row__sub">Documento · Aggiornato il 03/09/2026</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--accent">Generato</span><button type="button" class="talos-button talos-button--ghost talos-button--sm" hidden data-richiede="fase3">Apri</button><button type="button" class="talos-button talos-button--ghost talos-button--sm" aria-expanded="false" aria-label="Dettagli di LEDGER-ROADMAP-DESKTOP-2026-09-03.md">Dettagli</button></span></div>
-          <div class="talos-list-row" data-c="LibraryRow" data-library-id="lib-eventi" data-aperta="false" role="listitem"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-doc"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title" title="contratto-eventi.json">contratto-eventi.json</span><span class="talos-list-row__sub">Documento · Aggiornato il 02/09/2026</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--accent">Generato</span><button type="button" class="talos-button talos-button--ghost talos-button--sm" hidden data-richiede="fase3">Apri</button><button type="button" class="talos-button talos-button--ghost talos-button--sm" aria-expanded="false" aria-label="Dettagli di contratto-eventi.json">Dettagli</button></span></div>
-          <div class="talos-list-row" data-c="LibraryRow" data-library-id="lib-schermata" data-aperta="false" role="listitem"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title" title="Schermata del contesto e dei documenti selezionati per la conversazione.png">Schermata del contesto e dei documenti selezionati per la conversazione.png</span><span class="talos-list-row__sub">Immagine · Aggiornato il 04/09/2026</span></span><span class="talos-list-row__aside"><span class="talos-badge">Caricato</span><button type="button" class="talos-button talos-button--ghost talos-button--sm" hidden data-richiede="fase3">Apri</button><button type="button" class="talos-button talos-button--ghost talos-button--sm" aria-expanded="false" aria-label="Dettagli di Schermata del contesto e dei documenti selezionati per la conversazione.png">Dettagli</button></span></div>
+          <div class="talos-list-row" data-c="LibraryRow" data-library-id="lib-decisioni" data-aperta="false" data-modo="normale" role="listitem"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-doc"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title" title="DECISIONI-REDESIGN-TALOS-2026-09-04.md">DECISIONI-REDESIGN-TALOS-2026-09-04.md</span><form class="talos-list-row__rinomina" hidden><input class="talos-list-row__nome" type="text" maxlength="255" autocomplete="off" spellcheck="false" aria-label="Nuovo nome per DECISIONI-REDESIGN-TALOS-2026-09-04.md"><button class="talos-button talos-button--primary talos-button--sm" type="submit" data-azione="rinomina-salva" aria-label="Salva il nuovo nome di DECISIONI-REDESIGN-TALOS-2026-09-04.md">Salva</button><button class="talos-button talos-button--ghost talos-button--sm" type="button" data-azione="rinomina-annulla" aria-label="Annulla la rinomina di DECISIONI-REDESIGN-TALOS-2026-09-04.md">Annulla</button></form><span class="talos-list-row__sub">Documento · Aggiornato il 04/09/2026</span><span class="talos-list-row__messaggio" hidden></span></span><span class="talos-list-row__aside"><span class="talos-badge">Caricato</span><span class="talos-list-row__azioni" role="group" aria-label="Azioni su DECISIONI-REDESIGN-TALOS-2026-09-04.md"><button class="talos-button talos-button--ghost talos-button--sm" type="button" data-azione="menu" aria-label="Azioni su DECISIONI-REDESIGN-TALOS-2026-09-04.md" aria-haspopup="menu"><svg class="i" aria-hidden="true"><use href="#i-more"></use></svg></button></span><span class="talos-list-row__conferma" hidden><span class="talos-list-row__conferma-testo">Eliminare definitivamente? Non si torna indietro.</span><button class="talos-button talos-button--ghost talos-button--sm" type="button" data-azione="elimina-annulla" aria-label="Annulla l’eliminazione di DECISIONI-REDESIGN-TALOS-2026-09-04.md">Annulla</button><button class="talos-button talos-button--danger talos-button--sm" type="button" data-azione="elimina-conferma" aria-label="Elimina definitivamente DECISIONI-REDESIGN-TALOS-2026-09-04.md: non si torna indietro">Elimina</button></span><button type="button" class="talos-button talos-button--ghost talos-button--sm" data-azione="dettagli" aria-expanded="false" aria-label="Dettagli di DECISIONI-REDESIGN-TALOS-2026-09-04.md">Dettagli</button></span></div>
+          <div class="talos-list-row" data-c="LibraryRow" data-library-id="lib-ledger" data-aperta="false" data-modo="normale" role="listitem"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-doc"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title" title="LEDGER-ROADMAP-DESKTOP-2026-09-03.md">LEDGER-ROADMAP-DESKTOP-2026-09-03.md</span><form class="talos-list-row__rinomina" hidden><input class="talos-list-row__nome" type="text" maxlength="255" autocomplete="off" spellcheck="false" aria-label="Nuovo nome per LEDGER-ROADMAP-DESKTOP-2026-09-03.md"><button class="talos-button talos-button--primary talos-button--sm" type="submit" data-azione="rinomina-salva" aria-label="Salva il nuovo nome di LEDGER-ROADMAP-DESKTOP-2026-09-03.md">Salva</button><button class="talos-button talos-button--ghost talos-button--sm" type="button" data-azione="rinomina-annulla" aria-label="Annulla la rinomina di LEDGER-ROADMAP-DESKTOP-2026-09-03.md">Annulla</button></form><span class="talos-list-row__sub">Documento · Aggiornato il 03/09/2026</span><span class="talos-list-row__messaggio" hidden></span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--accent">Generato</span><span class="talos-list-row__azioni" role="group" aria-label="Azioni su LEDGER-ROADMAP-DESKTOP-2026-09-03.md"><button class="talos-button talos-button--ghost talos-button--sm" type="button" data-azione="menu" aria-label="Azioni su LEDGER-ROADMAP-DESKTOP-2026-09-03.md" aria-haspopup="menu"><svg class="i" aria-hidden="true"><use href="#i-more"></use></svg></button></span><span class="talos-list-row__conferma" hidden><span class="talos-list-row__conferma-testo">Eliminare definitivamente? Non si torna indietro.</span><button class="talos-button talos-button--ghost talos-button--sm" type="button" data-azione="elimina-annulla" aria-label="Annulla l’eliminazione di LEDGER-ROADMAP-DESKTOP-2026-09-03.md">Annulla</button><button class="talos-button talos-button--danger talos-button--sm" type="button" data-azione="elimina-conferma" aria-label="Elimina definitivamente LEDGER-ROADMAP-DESKTOP-2026-09-03.md: non si torna indietro">Elimina</button></span><button type="button" class="talos-button talos-button--ghost talos-button--sm" data-azione="dettagli" aria-expanded="false" aria-label="Dettagli di LEDGER-ROADMAP-DESKTOP-2026-09-03.md">Dettagli</button></span></div>
+          <div class="talos-list-row" data-c="LibraryRow" data-library-id="lib-eventi" data-aperta="false" data-modo="normale" role="listitem"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-doc"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title" title="contratto-eventi.json">contratto-eventi.json</span><form class="talos-list-row__rinomina" hidden><input class="talos-list-row__nome" type="text" maxlength="255" autocomplete="off" spellcheck="false" aria-label="Nuovo nome per contratto-eventi.json"><button class="talos-button talos-button--primary talos-button--sm" type="submit" data-azione="rinomina-salva" aria-label="Salva il nuovo nome di contratto-eventi.json">Salva</button><button class="talos-button talos-button--ghost talos-button--sm" type="button" data-azione="rinomina-annulla" aria-label="Annulla la rinomina di contratto-eventi.json">Annulla</button></form><span class="talos-list-row__sub">Documento · Aggiornato il 02/09/2026</span><span class="talos-list-row__messaggio" hidden></span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--accent">Generato</span><span class="talos-list-row__azioni" role="group" aria-label="Azioni su contratto-eventi.json"><button class="talos-button talos-button--ghost talos-button--sm" type="button" data-azione="menu" aria-label="Azioni su contratto-eventi.json" aria-haspopup="menu"><svg class="i" aria-hidden="true"><use href="#i-more"></use></svg></button></span><span class="talos-list-row__conferma" hidden><span class="talos-list-row__conferma-testo">Eliminare definitivamente? Non si torna indietro.</span><button class="talos-button talos-button--ghost talos-button--sm" type="button" data-azione="elimina-annulla" aria-label="Annulla l’eliminazione di contratto-eventi.json">Annulla</button><button class="talos-button talos-button--danger talos-button--sm" type="button" data-azione="elimina-conferma" aria-label="Elimina definitivamente contratto-eventi.json: non si torna indietro">Elimina</button></span><button type="button" class="talos-button talos-button--ghost talos-button--sm" data-azione="dettagli" aria-expanded="false" aria-label="Dettagli di contratto-eventi.json">Dettagli</button></span></div>
+          <div class="talos-list-row" data-c="LibraryRow" data-library-id="lib-schermata" data-aperta="false" data-modo="normale" role="listitem"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title" title="Schermata del contesto e dei documenti selezionati per la conversazione.png">Schermata del contesto e dei documenti selezionati per la conversazione.png</span><form class="talos-list-row__rinomina" hidden><input class="talos-list-row__nome" type="text" maxlength="255" autocomplete="off" spellcheck="false" aria-label="Nuovo nome per Schermata del contesto e dei documenti selezionati per la conversazione.png"><button class="talos-button talos-button--primary talos-button--sm" type="submit" data-azione="rinomina-salva" aria-label="Salva il nuovo nome di Schermata del contesto e dei documenti selezionati per la conversazione.png">Salva</button><button class="talos-button talos-button--ghost talos-button--sm" type="button" data-azione="rinomina-annulla" aria-label="Annulla la rinomina di Schermata del contesto e dei documenti selezionati per la conversazione.png">Annulla</button></form><span class="talos-list-row__sub">Immagine · Aggiornato il 04/09/2026</span><span class="talos-list-row__messaggio" hidden></span></span><span class="talos-list-row__aside"><span class="talos-badge">Caricato</span><span class="talos-list-row__azioni" role="group" aria-label="Azioni su Schermata del contesto e dei documenti selezionati per la conversazione.png"><button class="talos-button talos-button--ghost talos-button--sm" type="button" data-azione="menu" aria-label="Azioni su Schermata del contesto e dei documenti selezionati per la conversazione.png" aria-haspopup="menu"><svg class="i" aria-hidden="true"><use href="#i-more"></use></svg></button></span><span class="talos-list-row__conferma" hidden><span class="talos-list-row__conferma-testo">Eliminare definitivamente? Non si torna indietro.</span><button class="talos-button talos-button--ghost talos-button--sm" type="button" data-azione="elimina-annulla" aria-label="Annulla l’eliminazione di Schermata del contesto e dei documenti selezionati per la conversazione.png">Annulla</button><button class="talos-button talos-button--danger talos-button--sm" type="button" data-azione="elimina-conferma" aria-label="Elimina definitivamente Schermata del contesto e dei documenti selezionati per la conversazione.png: non si torna indietro">Elimina</button></span><button type="button" class="talos-button talos-button--ghost talos-button--sm" data-azione="dettagli" aria-expanded="false" aria-label="Dettagli di Schermata del contesto e dei documenti selezionati per la conversazione.png">Dettagli</button></span></div>
         </div></div>
         <div class="talos-where">Libreria di questo progetto. L’elenco non indica quali file sono nel contesto.</div>
       </div>
@@ -2996,7 +3319,7 @@ Una segnalazione di stallo non termina il processo.</pre>
     <section class="talos-screen" id="schermoRicerca" data-c="ResearchScreen" hidden>
       <div class="talos-topbar" data-c="Topbar"><div class="talos-topbar__title"><h1>Ricerca approfondita</h1></div><span class="talos-topbar__path">5 ricerche elencate</span><span class="talos-grow"></span><button class="talos-button talos-button--primary talos-button--sm" hidden data-richiede="fase3"><svg class="i i--sm"><use href="#i-globe"/></svg>Nuova ricerca</button></div>
       <div class="talos-page" data-c="Page">
-        <div class="talos-page__head"><span class="talos-eyebrow">Ricerca</span><h2>Ricerche del progetto</h2><p>Cerca per titolo o stato e consulta la data di avvio. Lo stato «Conclusa» non certifica le fonti del rapporto. I rapporti vivono in <code>.harness-ui-research/</code>, dentro il progetto.</p><p data-research-esito role="status">5 ricerche elencate</p></div>
+        <div class="talos-page__head"><span class="talos-eyebrow">Ricerca</span><h2>Ricerche del progetto</h2><p>Ogni ricerca approfondita di questo progetto, col suo rapporto, le affermazioni verificate e le fonti da cui vengono.</p><p data-research-esito role="status">5 ricerche elencate</p></div>
         <div class="talos-toolbar" data-c="Toolbar">
           <div class="talos-field talos-field--sm"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-search"/></svg><input type="search" class="talos-field__input" data-research-query placeholder="Cerca le ricerche…" aria-label="Cerca per titolo o stato"></div>
           <div class="talos-tabs talos-tabs--pills" data-c="FilterChips"><div class="talos-tabs__list" role="tablist" aria-label="Stato delle ricerche"><button type="button" class="talos-tabs__tab" data-research-stato="tutte" role="tab" aria-selected="true" aria-controls="ricercaRisultati" tabindex="0">Tutte</button><button type="button" class="talos-tabs__tab" data-research-stato="running" role="tab" aria-selected="false" aria-controls="ricercaRisultati" tabindex="-1">In corso</button><button type="button" class="talos-tabs__tab" data-research-stato="paused" role="tab" aria-selected="false" aria-controls="ricercaRisultati" tabindex="-1">In pausa</button><button type="button" class="talos-tabs__tab" data-research-stato="done" role="tab" aria-selected="false" aria-controls="ricercaRisultati" tabindex="-1">Concluse</button><button type="button" class="talos-tabs__tab" data-research-stato="cancelled" role="tab" aria-selected="false" aria-controls="ricercaRisultati" tabindex="-1">Annullate</button><button type="button" class="talos-tabs__tab" data-research-stato="failed" role="tab" aria-selected="false" aria-controls="ricercaRisultati" tabindex="-1">Non riuscite</button></div></div>
@@ -3009,7 +3332,7 @@ Una segnalazione di stallo non termina il processo.</pre>
           <div class="talos-list-row" data-c="ReportRow" data-research-id="research-archivio" data-aperta="false" role="listitem"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title" title="Organizzazione dei rapporti nel progetto">Organizzazione dei rapporti nel progetto</span><span class="talos-list-row__sub">Avviata il 03/09/2026</span></span><span class="talos-list-row__aside"><span class="talos-badge">Annullata</span><button type="button" class="talos-button talos-button--ghost talos-button--sm" hidden data-richiede="fase3">Apri rapporto</button><button type="button" class="talos-button talos-button--ghost talos-button--sm" aria-expanded="false" aria-label="Dettagli di Organizzazione dei rapporti nel progetto">Dettagli</button></span></div>
           <div class="talos-list-row" data-c="ReportRow" data-research-id="research-errore" data-aperta="false" role="listitem"><span class="talos-list-row__icon"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg></span><span class="talos-list-row__text"><span class="talos-list-row__title" title="Verifica della disponibilità dei servizi di ricerca">Verifica della disponibilità dei servizi di ricerca</span><span class="talos-list-row__sub">Avviata il 02/09/2026</span></span><span class="talos-list-row__aside"><span class="talos-badge talos-badge--danger">Non riuscita</span><button type="button" class="talos-button talos-button--ghost talos-button--sm" hidden data-richiede="fase3">Apri rapporto</button><button type="button" class="talos-button talos-button--ghost talos-button--sm" aria-expanded="false" aria-label="Dettagli di Verifica della disponibilità dei servizi di ricerca">Dettagli</button></span></div>
         </div></div>
-        <div class="talos-where">Fino a 20 ricerche recenti di questo progetto. La consultazione del rapporto e delle fonti non è ancora disponibile qui.</div>
+        <div class="talos-where">Fino a 20 ricerche recenti di questo progetto.</div>
       </div>
     </section>
 
@@ -3058,7 +3381,12 @@ Una segnalazione di stallo non termina il processo.</pre>
   <!-- ===================== COLONNA DI DESTRA ===================== -->
   <aside id="inspectorSessione" class="talos-inspector" data-c="Inspector" aria-label="Dettagli della sessione">
     <button class="talos-resizer talos-resizer--inspector" data-ridimensiona="inspector" aria-label="Ridimensiona la colonna dei dettagli" title="Trascina per ridimensionare, doppio click per il valore normale"></button>
-    <div class="talos-inspector__head"><div class="talos-grow"><span class="talos-eyebrow">Sessione</span><h2>W1-02 registro processi</h2></div><button id="chiudiDettagli" class="talos-button talos-button--ghost talos-icon-button talos-inspector-close" aria-label="Chiudi dettagli"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div>
+    <div class="talos-inspector__head"><div class="talos-grow"><span class="talos-eyebrow">Sessione</span><h2>W1-02 registro processi</h2></div><!-- ⛔ 11/9 — `data-close-panel` NON e' decorazione: senza, questo pulsante non aveva NESSUN
+         ascoltatore in tutto il repo (cercato: `chiudiDettagli` compariva solo qui). Sotto i 1240 px
+         la colonna si apre come strato sopra la app e la si chiudeva col velo o con Esc; la X, che
+         e' il gesto che si prova per primo, non faceva niente. Un pulsante di chiusura che non
+         chiude e' peggio di un pulsante assente. `$$('[data-close-panel]')` e' gia' cablato a
+         `closePanels` in `src/legacy/app.js`. --><button id="chiudiDettagli" data-close-panel="inspector" class="talos-button talos-button--ghost talos-icon-button talos-inspector-close" aria-label="Chiudi dettagli"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div>
     <div class="talos-tabs talos-tabs--underline talos-inspector__tabs" data-c="Tabs"><div class="talos-tabs__list" role="tablist" id="railTabs" aria-label="Sezioni della colonna">
       <button class="talos-tabs__tab" role="tab" aria-selected="true" data-rail="contesto" aria-controls="railContesto">Contesto</button>
       <!-- ⛔ 09/09 — i due `title` sono stati TOLTI. Nella foto del giro con delega il fumetto nativo
@@ -3106,7 +3434,7 @@ Una segnalazione di stallo non termina il processo.</pre>
 <div id="alberoCartella" data-c="FileTree"><div class="talos-toolbar talos-file-tools" data-c="Toolbar" aria-label="Comandi file"><button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" id="fileTreeNewFile" aria-label="Nuovo file" title="Nuovo file"><svg class="i" aria-hidden="true"><use href="#i-plus"/></svg></button><button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" id="fileTreeNewFolder" aria-label="Nuova cartella" title="Nuova cartella"><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg></button><button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" id="fileTreeUp" aria-label="Risali fuori dalla sessione (sola lettura)" title="Risali fuori dalla sessione (sola lettura)" aria-pressed="false"><svg class="i" aria-hidden="true"><use href="#i-branch"/></svg></button><button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" id="fileTreeRefresh" aria-label="Aggiorna file" title="Aggiorna file"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg></button><button class="talos-button talos-button--secondary talos-button--sm talos-icon-button" id="fileTreeCollapse" aria-label="Comprimi cartelle" title="Comprimi cartelle"><svg class="i" aria-hidden="true"><use href="#i-chev"/></svg></button></div><div class="talos-field" data-c="Field"><svg class="i talos-field__icon" aria-hidden="true"><use href="#i-search"/></svg><input id="fileTreeFilter" class="talos-field__input" placeholder="Filtra i file caricati…" aria-label="Filtra i file caricati" autocomplete="off"></div><p id="fileTreeFilterHint" class="talos-inspector__hint" role="status">Solo i file già caricati. Mod. = modificato.</p><div id="alberoFuori" class="talos-callout" data-c="Callout" hidden>projects · sola lettura. La radice di scrittura resta AVM-harness-desktop.</div><div class="talos-file-tree" id="alberoFile" role="tree" aria-label="File della cartella"><div role="treeitem" data-path="." aria-label="AVM-harness-desktop" aria-selected="false" tabindex="-1" aria-expanded="true"><div class="talos-file-row" data-c="FileTreeRow"><svg class="i talos-file-chevron" aria-hidden="true"><use href="#i-chev"/></svg><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="talos-file-row__name" title=".">AVM-harness-desktop</span><button class="talos-button talos-button--ghost talos-button--sm talos-icon-button" tabindex="-1" aria-haspopup="menu" aria-controls="menuFile" data-file-menu aria-label="Azioni AVM-harness-desktop"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button></div><div role="group"><div role="treeitem" data-path="src" aria-label="src" aria-selected="false" tabindex="-1" aria-expanded="true"><div class="talos-file-row" data-c="FileTreeRow"><svg class="i talos-file-chevron" aria-hidden="true"><use href="#i-chev"/></svg><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="talos-file-row__name" title="src">src</span><button class="talos-button talos-button--ghost talos-button--sm talos-icon-button" tabindex="-1" aria-haspopup="menu" aria-controls="menuFile" data-file-menu aria-label="Azioni src"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button></div><div role="group"><div role="treeitem" data-path="src/session-registry.mjs" aria-label="session-registry.mjs, mod." aria-selected="true" tabindex="0"><div class="talos-file-row" data-c="FileTreeRow"><svg class="i" aria-hidden="true"><use href="#i-code"/></svg><span class="talos-file-row__name" title="src/session-registry.mjs">session-registry.mjs</span><span class="talos-file-row__state">mod.</span><button class="talos-button talos-button--ghost talos-button--sm talos-icon-button" tabindex="-1" aria-haspopup="menu" aria-controls="menuFile" data-file-menu aria-label="Azioni session-registry.mjs"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button></div></div><div role="treeitem" data-path="src/http-app.mjs" aria-label="http-app.mjs, mod." aria-selected="false" tabindex="-1"><div class="talos-file-row" data-c="FileTreeRow"><svg class="i" aria-hidden="true"><use href="#i-code"/></svg><span class="talos-file-row__name" title="src/http-app.mjs">http-app.mjs</span><span class="talos-file-row__state">mod.</span><button class="talos-button talos-button--ghost talos-button--sm talos-icon-button" tabindex="-1" aria-haspopup="menu" aria-controls="menuFile" data-file-menu aria-label="Azioni http-app.mjs"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button></div></div></div></div><div role="treeitem" data-path="tests" aria-label="tests" aria-selected="false" tabindex="-1" aria-expanded="true"><div class="talos-file-row" data-c="FileTreeRow"><svg class="i talos-file-chevron" aria-hidden="true"><use href="#i-chev"/></svg><svg class="i" aria-hidden="true"><use href="#i-folder"/></svg><span class="talos-file-row__name" title="tests">tests</span><button class="talos-button talos-button--ghost talos-button--sm talos-icon-button" tabindex="-1" aria-haspopup="menu" aria-controls="menuFile" data-file-menu aria-label="Azioni tests"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button></div><div role="group"><div role="treeitem" data-path="tests/session-registry.test.mjs" aria-label="session-registry.test.mjs, nuovo" aria-selected="false" tabindex="-1"><div class="talos-file-row" data-c="FileTreeRow"><svg class="i" aria-hidden="true"><use href="#i-check-sq"/></svg><span class="talos-file-row__name" title="tests/session-registry.test.mjs">session-registry.test.mjs</span><span class="talos-file-row__state">nuovo</span><button class="talos-button talos-button--ghost talos-button--sm talos-icon-button" tabindex="-1" aria-haspopup="menu" aria-controls="menuFile" data-file-menu aria-label="Azioni session-registry.test.mjs"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button></div></div></div></div><div role="treeitem" data-path="package.json" aria-label="package.json" aria-selected="false" tabindex="-1"><div class="talos-file-row" data-c="FileTreeRow"><svg class="i" aria-hidden="true"><use href="#i-code"/></svg><span class="talos-file-row__name" title="package.json">package.json</span><button class="talos-button talos-button--ghost talos-button--sm talos-icon-button" tabindex="-1" aria-haspopup="menu" aria-controls="menuFile" data-file-menu aria-label="Azioni package.json"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button></div></div><div role="treeitem" data-path="README.md" aria-label="README.md" aria-selected="false" tabindex="-1"><div class="talos-file-row" data-c="FileTreeRow"><svg class="i" aria-hidden="true"><use href="#i-doc"/></svg><span class="talos-file-row__name" title="README.md">README.md</span><button class="talos-button talos-button--ghost talos-button--sm talos-icon-button" tabindex="-1" aria-haspopup="menu" aria-controls="menuFile" data-file-menu aria-label="Azioni README.md"><svg class="i" aria-hidden="true"><use href="#i-more"/></svg></button></div></div></div></div></div><p id="alberoVuoto" class="talos-inspector__hint" hidden>Nessun file caricato corrisponde al filtro.</p></div>
     </div>
     <div class="talos-inspector__body" id="railAgenti" role="tabpanel" hidden>
-      <div class="talos-card talos-inspector-card" data-c="EmptyState"><div class="talos-inspector-card__head"><b>Sotto-agenti</b></div><p class="talos-inspector__hint">Nessun sotto-agente in questa sessione. Quando ce ne sarà uno, qui compaiono i suoi giri, le sue richieste di permesso e il pulsante per fermarlo.</p></div>
+      <div class="talos-card talos-inspector-card" data-c="EmptyState"><div class="talos-inspector-card__head"><b>Sotto-agenti</b></div><p class="talos-inspector__hint">Nessun sotto-agente in questa sessione. Quando una delega parte, qui compare con il suo compito, lo stato e quello che ha fatto; da lì si apre la sua conversazione o si ferma.</p></div>
     </div>
     <div class="talos-inspector__body" id="railProcessi" role="tabpanel" hidden>
       <div class="talos-card talos-process" data-c="ProcessRow"><div class="talos-process__cmd">node --test tests/*.test.mjs</div><div class="talos-process__meta"><span class="talos-badge talos-badge--accent talos-badge--sm">In corso</span><span>agente · giro 7</span><span class="talos-grow"></span><span class="talos-mono talos-measure">41 s</span></div></div>
@@ -3228,6 +3556,16 @@ export function registraSessione(sessione) {
         <button class="talos-choice" role="radio" aria-checked="true" data-permission-choice="Workspace write"><span class="talos-choice__title">Scrive nel progetto</span><span class="talos-badge talos-badge--warning talos-badge--sm">rischio medio</span><p>Scrive solo dentro la cartella della sessione. Comandi e test passano dal cancello. <span class="talos-choice__hint">Consigliato</span></p></button>
         <button class="talos-choice" role="radio" aria-checked="false" data-permission-choice="On request"><span class="talos-choice__title">Chiede prima</span><span class="talos-badge talos-badge--warning talos-badge--sm">rischio medio</span><p>Ti chiede conferma prima di ogni azione che lascia traccia: scritture, comandi, rete.</p></button>
         <button class="talos-choice" role="radio" aria-checked="false" data-permission-choice="Full access"><span class="talos-choice__title">Accesso pieno</span><span class="talos-badge talos-badge--danger talos-badge--sm">rischio molto alto</span><p>File e rete senza i cancelli ordinari. Solo se sai gia cosa sta per fare.</p></button>
+      </div>
+      <!--
+        ⛔⛔ 11/09 — QUESTO `</div>` MANCAVA, ed era un errore di annidamento, non di stile: il blocco
+        «Dove girano i comandi» stava DENTRO `#veloPermessiScelte`, cioè dentro la griglia delle
+        quattro politiche, e finiva a schermo come loro QUINTA COLONNA. Owner, con la sua schermata:
+        «metti dove girano i comandi a capo in una riga a se stante». Ora la griglia dei permessi si
+        chiude dove finiscono i permessi, e il blocco qui sotto apre la riga sua.
+        ⛔ 12/09: la app l'aveva corretto l'11/09 in `index.template.html`, questo file no — e
+        nessun componente del cancello guarda questo velo, quindi il verde non lo diceva.
+      -->
       <!--
         ⭐⭐⭐ D-10F — DOVE GIRANO I COMANDI. Misurato il 10/09: `!npm --version` rispondeva con
         l'npm di LINUX, mentre un comando col programma assente in WSL finiva su `cmd`. Due sistemi
@@ -3243,8 +3581,7 @@ export function registraSessione(sessione) {
       <div class="talos-choice-grid" role="radiogroup" aria-label="Dove girano i comandi">
         <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice=""><span class="talos-choice__title">Automatico</span><span class="talos-badge talos-badge--sm">Come prima</span><span class="talos-choice__sub">Sceglie da sé, e può cambiare da un comando all’altro.</span></button>
         <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice="wsl2"><span class="talos-choice__title">Linux (WSL2)</span><span class="talos-badge talos-badge--sm">Consigliato</span><span class="talos-choice__sub">Sempre in Linux. Se WSL non c’è, il comando lo dice invece di ripiegare in silenzio.</span></button>
-        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice="windows"><span class="talos-choice__title">Windows</span><span class="talos-choice__sub">Sempre sul sistema di casa, con i percorsi C: che vedi in Esplora file.</span></button>
-      </div>
+        <button class="talos-choice" role="radio" aria-checked="false" data-dove-choice="windows"><span class="talos-choice__title">Windows</span><span class="talos-choice__sub">Sempre sul sistema di casa, con i percorsi C:\ che vedi in Esplora file.</span></button>
       </div>
       <div class="talos-toolbar talos-toolbar--inset"><span class="talos-eyebrow">Per attrezzo</span><!-- ⛔ 07/9 — qui c'erano due schede, «Tutti e 43» e «Hanno un cancello», e non filtravano niente:
              l'elenco mostra i CINQUE attrezzi che hanno un cancello proprio, mai 43. Una promessa vuota
@@ -3363,7 +3700,7 @@ export function registraSessione(sessione) {
 <div id="passoIntroFine" data-intro-panel="3" class="talos-stack" hidden><span class="talos-badge talos-badge--success">Scelte pronte</span><h3>Pronto per la prima sessione</h3><div class="talos-card talos-card--pad" id="introRiepilogo"></div><p class="talos-muted">Rivedi le scelte con Indietro. Inizia apre la sessione con un compito pronto: potrai modificarlo prima di inviarlo.</p></div>
 <p class="talos-page__note" id="introPrivacy"><b>Con il modello locale.</b> Nessuna telemetria, niente esce da questa macchina.</p><p class="talos-page__note" id="introPrivacyRemoto" hidden>Con un fornitore remoto, le richieste e gli allegati selezionati vengono inviati al fornitore. Le chiavi restano nel portachiavi del computer.</p><p class="talos-muted" id="introMessaggio" role="status"></p></div></div></div><div class="talos-dialog__footer"><button class="talos-button talos-button--ghost" id="introSalta">Salta per ora</button><span class="talos-grow"></span><button class="talos-button talos-button--secondary" id="introIndietro" disabled>Indietro</button><button class="talos-button talos-button--primary" id="introAvanti">Avanti</button></div></div></div>
 
-<div class="overlay-layer overlay-layer--modal" id="veloFornitori" data-c="OverlayLayer" hidden><div class="talos-dialog talos-dialog--medium" data-c="Dialog" role="dialog" aria-modal="true" aria-labelledby="titoloveloFornitori"><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-width" data-c="Resizer" data-dialog-resize="width" aria-label="Ridimensiona larghezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-height" data-c="Resizer" data-dialog-resize="height" aria-label="Ridimensiona altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-both" data-c="Resizer" data-dialog-resize="both" aria-label="Ridimensiona larghezza e altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><div class="talos-dialog__header"><div class="talos-grow"><span class="talos-eyebrow">TALOS</span><h2 class="talos-dialog__title" id="titoloveloFornitori">Fornitori e accessi</h2></div><button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloFornitori" aria-label="Chiudi Fornitori e accessi"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div><div class="talos-dialog__body"><div class="talos-stack"><label class="talos-stack">Fornitore<select class="talos-select" id="providerLab"><option>OpenRouter</option><option>OpenAI</option><option>Anthropic</option><option>DeepSeek</option><option>Gemini</option><option>Ollama</option><option>Hugging Face</option></select></label><article class="talos-card talos-provider" data-c="ProviderCard" data-provider-id="openrouter" aria-busy="false"><button class="talos-provider__head" type="button" data-provider-toggle="openrouter" aria-expanded="true" aria-controls="provider-body-openrouter"><strong class="talos-provider__name">OpenRouter</strong><span class="talos-cluster"><span class="talos-badge talos-badge--sm talos-badge--success" data-c="Badge">Chiave salvata</span><span class="talos-badge talos-badge--sm" data-c="Badge">Indirizzo predefinito</span><span class="talos-badge talos-badge--sm talos-badge--warning" data-c="Badge">Mai provato</span></span></button><div class="talos-provider__body" id="provider-body-openrouter"><label class="talos-stack talos-provider__field"><span class="talos-muted">Sostituisci la chiave</span><input class="talos-field__input" type="password" data-provider-key="openrouter" autocomplete="off" spellcheck="false" placeholder="Incolla una nuova chiave" id="providerChiave"></label><label class="talos-stack talos-provider__field"><span class="talos-muted">Indirizzo del servizio</span><input class="talos-field__input" type="url" data-provider-endpoint="openrouter" autocomplete="off" id="providerIndirizzo" value="https://openrouter.ai/api/v1"></label><label class="talos-stack talos-provider__field"><span class="talos-muted">Tempo massimo (secondi)</span><input class="talos-field__input" type="number" data-provider-timeout="openrouter" autocomplete="off" min="5" max="300" step="1" id="providerTimeout" value="60"></label><div class="talos-cluster"><button class="talos-button talos-button--primary talos-button--sm" type="button" data-c="Button" data-provider-action="salva">Salva chiave</button><button class="talos-button talos-button--secondary talos-button--sm" type="button" data-c="Button" data-provider-action="test">Prova collegamento</button><button class="talos-button talos-button--secondary talos-button--sm" type="button" data-c="Button" data-provider-action="save-runtime">Salva collegamento</button><button class="talos-button talos-button--ghost talos-button--danger talos-button--sm" type="button" data-c="Button" data-provider-action="rimuovi">Rimuovi chiave</button></div><p class="talos-muted" data-provider-feedback="openrouter" role="status" hidden=""></p></div></article><button class="talos-button talos-button--secondary talos-button--sm" data-c="Button" data-provider-action="tutti">Prova tutti</button><p class="talos-muted" role="status" id="providerStato">Seleziona un fornitore per verificare il suo accesso.</p></div></div><div class="talos-dialog__footer"><span class="talos-dialog__footer-note">Le chiavi sono riservate: non vengono mostrate nelle conversazioni.</span></div></div></div>
+<div class="overlay-layer overlay-layer--modal" id="veloFornitori" data-c="OverlayLayer" hidden><div class="talos-dialog talos-dialog--medium" data-c="Dialog" role="dialog" aria-modal="true" aria-labelledby="titoloveloFornitori"><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-width" data-c="Resizer" data-dialog-resize="width" aria-label="Ridimensiona larghezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-height" data-c="Resizer" data-dialog-resize="height" aria-label="Ridimensiona altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-both" data-c="Resizer" data-dialog-resize="both" aria-label="Ridimensiona larghezza e altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><div class="talos-dialog__header"><div class="talos-grow"><span class="talos-eyebrow">TALOS</span><h2 class="talos-dialog__title" id="titoloveloFornitori">Fornitori e accessi</h2></div><button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloFornitori" aria-label="Chiudi Fornitori e accessi"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div><div class="talos-dialog__body"><div class="talos-stack"><label class="talos-stack">Fornitore<select class="talos-select" id="providerLab"><option>OpenRouter</option><option>OpenAI</option><option>Anthropic</option><option>DeepSeek</option><option>Gemini</option><option>Ollama</option><option>Hugging Face</option></select></label><article class="talos-card talos-provider" data-c="ProviderCard" data-provider-id="openrouter" aria-busy="false"><button class="talos-provider__head" type="button" data-provider-toggle="openrouter" aria-expanded="true" aria-controls="provider-body-openrouter"><strong class="talos-provider__name">OpenRouter</strong><span class="talos-cluster"><span class="talos-badge talos-badge--sm talos-badge--success" data-c="Badge">Chiave salvata</span><span class="talos-badge talos-badge--sm" data-c="Badge">Indirizzo predefinito</span><span class="talos-badge talos-badge--sm talos-badge--warning" data-c="Badge">Mai provato</span></span></button><div class="talos-provider__body" id="provider-body-openrouter"><label class="talos-stack talos-provider__field"><span class="talos-muted">Sostituisci la chiave</span><input class="talos-field__input" type="password" data-provider-key="openrouter" autocomplete="off" spellcheck="false" placeholder="Incolla una nuova chiave" id="providerChiave"></label><label class="talos-stack talos-provider__field"><span class="talos-muted">Indirizzo del servizio</span><input class="talos-field__input" type="url" data-provider-endpoint="openrouter" autocomplete="off" id="providerIndirizzo" value="https://openrouter.ai/api/v1"></label><label class="talos-stack talos-provider__field"><span class="talos-muted">Tempo massimo (secondi)</span><input class="talos-field__input" type="number" data-provider-timeout="openrouter" autocomplete="off" min="5" max="300" step="1" id="providerTimeout" value="60"></label><!-- ⛔ 10/09/2026, owner: «non mettere i pulsanti uno accanto all'altro, usa i tre puntini + dropdown… e anche azioni tasto destro mouse, ragiona sempre in questo modo». Qui ne erano allineati QUATTRO: resta a vista solo l'azione che chiude il lavoro, le altre tre vivono nel menu «⋯» (provider-card.js r. 64-80) — nascoste, non cancellate: nel prodotto ci sono. --><div class="talos-cluster"><button class="talos-button talos-button--primary talos-button--sm" type="button" data-c="Button" data-provider-action="salva">Salva chiave</button><button class="talos-button talos-button--secondary talos-button--sm" type="button" data-c="Button" data-provider-action="test" hidden>Prova collegamento</button><button class="talos-button talos-button--secondary talos-button--sm" type="button" data-c="Button" data-provider-action="save-runtime" hidden>Salva collegamento</button><button class="talos-button talos-button--ghost talos-button--danger talos-button--sm" type="button" data-c="Button" data-provider-action="rimuovi" hidden>Rimuovi chiave</button></div><p class="talos-muted" data-provider-feedback="openrouter" role="status" hidden=""></p></div></article><button class="talos-button talos-button--secondary talos-button--sm" data-c="Button" data-provider-action="tutti">Prova tutti</button><p class="talos-muted" role="status" id="providerStato">Seleziona un fornitore per verificare il suo accesso.</p></div></div><div class="talos-dialog__footer"><span class="talos-dialog__footer-note">Le chiavi sono riservate: non vengono mostrate nelle conversazioni.</span></div></div></div>
 <div class="overlay-layer overlay-layer--modal" id="veloRinominaModello" data-c="OverlayLayer" hidden><div class="talos-dialog talos-dialog--medium" data-c="Dialog" role="dialog" aria-modal="true" aria-labelledby="titoloveloRinominaModello"><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-width" data-c="Resizer" data-dialog-resize="width" aria-label="Ridimensiona larghezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-height" data-c="Resizer" data-dialog-resize="height" aria-label="Ridimensiona altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-both" data-c="Resizer" data-dialog-resize="both" aria-label="Ridimensiona larghezza e altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><div class="talos-dialog__header"><div class="talos-grow"><span class="talos-eyebrow">TALOS</span><h2 class="talos-dialog__title" id="titoloveloRinominaModello">Rinomina modello</h2></div><button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloRinominaModello" aria-label="Chiudi Rinomina modello"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div><div class="talos-dialog__body"><label class="talos-stack">Nome modello<input class="talos-field__input" id="nomeModelloLab" type="text" value="Qwen3 8B" autocomplete="off"></label></div><div class="talos-dialog__footer"><button class="talos-button talos-button--ghost" data-chiudi="veloRinominaModello">Annulla</button><button class="talos-button talos-button--primary" data-lab-dialog-action="rinomina">Salva nome</button></div></div></div>
 <div class="overlay-layer overlay-layer--modal" id="veloEliminaModello" data-c="OverlayLayer" hidden><div class="talos-dialog talos-dialog--medium" data-c="Dialog" role="dialog" aria-modal="true" aria-labelledby="titoloveloEliminaModello"><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-width" data-c="Resizer" data-dialog-resize="width" aria-label="Ridimensiona larghezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-height" data-c="Resizer" data-dialog-resize="height" aria-label="Ridimensiona altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-both" data-c="Resizer" data-dialog-resize="both" aria-label="Ridimensiona larghezza e altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><div class="talos-dialog__header"><div class="talos-grow"><span class="talos-eyebrow">TALOS</span><h2 class="talos-dialog__title" id="titoloveloEliminaModello">Elimina modello</h2></div><button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloEliminaModello" aria-label="Chiudi Elimina modello"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div><div class="talos-dialog__body"><p>Rimuove il modello selezionato dal disco. Dovrai scaricarlo di nuovo per usarlo.</p></div><div class="talos-dialog__footer"><button class="talos-button talos-button--secondary" data-chiudi="veloEliminaModello">Annulla</button><button class="talos-button talos-button--danger" data-lab-dialog-action="elimina">Elimina dal disco</button></div></div></div>
 <div class="overlay-layer overlay-layer--modal" id="veloAnnullaDownload" data-c="OverlayLayer" hidden><div class="talos-dialog talos-dialog--medium" data-c="Dialog" role="dialog" aria-modal="true" aria-labelledby="titoloveloAnnullaDownload"><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-width" data-c="Resizer" data-dialog-resize="width" aria-label="Ridimensiona larghezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-height" data-c="Resizer" data-dialog-resize="height" aria-label="Ridimensiona altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><button type="button" class="talos-resizer talos-resizer--dialog talos-resizer--dialog-both" data-c="Resizer" data-dialog-resize="both" aria-label="Ridimensiona larghezza e altezza della finestra" title="Trascina o usa le frecce · doppio clic per la misura normale"></button><div class="talos-dialog__header"><div class="talos-grow"><span class="talos-eyebrow">TALOS</span><h2 class="talos-dialog__title" id="titoloveloAnnullaDownload">Annulla download</h2></div><button class="talos-button talos-button--secondary talos-icon-button" data-chiudi="veloAnnullaDownload" aria-label="Chiudi Annulla download"><svg class="i" aria-hidden="true"><use href="#i-x"/></svg></button></div><div class="talos-dialog__body"><p>Interrompe il download. Le parti ricevute restano disponibili per un nuovo tentativo.</p></div><div class="talos-dialog__footer"><button class="talos-button talos-button--secondary" data-chiudi="veloAnnullaDownload">Continua download</button><button class="talos-button talos-button--danger" data-lab-dialog-action="annulla">Annulla download</button></div></div></div>
