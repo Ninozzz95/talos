@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { creaResearchOrchestrator } from '../src/research-orchestrator.mjs';
 import { talosResearchReportDocument } from '../src/research/report.mjs';
+import { leggiRapporto, statRapporto, percorsoRapporto } from '../src/research-store.mjs';
 
 /*
  * ⭐⭐⭐ FASE N, ottavo sistema (30/8) — Deep Research, piano
@@ -185,6 +186,89 @@ function orchestratoreDiProva(sessioni, extra = {}) {
   });
   return { orch, store };
 }
+
+// BC-51: veri lettori dello store e vero parser, filesystem iniettato e contato.
+function bancoProiezioneGiudice(testoIniziale, formato = 2) {
+  const cartella = '/bc51';
+  const id = '0925407d-1111-4111-8111-111111111111';
+  const store = storeFinto();
+  store.record.set(`${cartella}::${id}`, { id, domanda: 'Prova della proiezione', formato,
+    terminata: 'done', modelloGiudice: 'giudice-designato-diverso', reportLibraryId: null });
+  let testo = testoIniziale;
+  let revisione = 1;
+  const letture = [];
+  const fs = {
+    async readFile(file, codifica) {
+      assert.equal(file, percorsoRapporto(cartella, id));
+      assert.equal(codifica, 'utf8');
+      letture.push(file);
+      if (testo === null) throw Object.assign(new Error('File assente'), { code: 'ENOENT' });
+      return testo;
+    },
+    async stat(file) {
+      assert.equal(file, percorsoRapporto(cartella, id));
+      if (testo === null) throw Object.assign(new Error('File assente'), { code: 'ENOENT' });
+      return { mtimeMs: revisione, size: Buffer.byteLength(testo) };
+    },
+  };
+  const orch = creaResearchOrchestrator({ sessioni: new Map(), ...store,
+    avviaESeguiFn: () => { throw new Error('Il banco non deve avviare modelli'); },
+    leggiRapportoFn: input => leggiRapporto(input, { readFileFn: fs.readFile }),
+    statRapportoFn: input => statRapporto(input, { statFn: fs.stat }),
+  });
+  return { orch, cartella, id, letture, sostituisci: nuovo => { testo = nuovo; revisione += 1; } };
+}
+
+const rapportoConGiudiceBC51 = giudice => talosResearchReportDocument({
+  question: 'Prova della proiezione', summary: 'Rapporto di prova', judge: giudice,
+  claims: [{ claim: { text: 'Affermazione di prova', sourceIndex: 1, quote: 'prova' }, passage: 'prova', checks: { claimSupported: 'supported' } }],
+  sources: [{ url: 'https://esempio.invalid/prova', title: 'Fonte di prova', obtained: 'page' }],
+});
+
+test('BC51-01 — done: giudice effettivo uguale in elenco e dettaglio, una lettura condivisa nei due ordini', async () => {
+  for (const prima of ['elenco', 'dettaglio']) {
+    const b = bancoProiezioneGiudice(rapportoConGiudiceBC51('glm-4.7-flash'));
+    const elenco = async () => (await b.orch.elenca({ cartella: b.cartella })).ricerche[0];
+    const dettaglio = () => b.orch.leggi({ cartella: b.cartella, id: b.id });
+    const a = await (prima === 'elenco' ? elenco() : dettaglio());
+    assert.equal(b.letture.length, 1, 'bilancio e giudice devono usare la stessa readFile');
+    const z = await (prima === 'elenco' ? dettaglio() : elenco());
+    assert.equal(b.letture.length, 1, 'l’altra vista riusa la cache del record');
+    assert.equal(a.stato, 'done');
+    assert.equal(z.stato, 'done');
+    assert.equal(a.giudice, 'glm-4.7-flash');
+    assert.equal(z.giudice, a.giudice);
+    assert.deepEqual(z.bilancio, a.bilancio);
+    assert.equal(a.bilancio.totali, 1);
+    assert.equal(a.modelloGiudice, 'giudice-designato-diverso');
+  }
+});
+
+test('BC51-02 — file assente, prosa legacy e record senza giudice: null nelle due viste', async () => {
+  for (const [testo, formato] of [[null, 2], [RAPPORTO_VERO, 1], [rapportoConGiudiceBC51(null), 2]]) {
+    const b = bancoProiezioneGiudice(testo, formato);
+    const elenco = (await b.orch.elenca({ cartella: b.cartella })).ricerche[0];
+    const dettaglio = await b.orch.leggi({ cartella: b.cartella, id: b.id });
+    assert.equal(elenco.giudice, null, 'il designato non sostituisce il giudice effettivo assente');
+    assert.equal(dettaglio.giudice, null);
+    assert.equal(elenco.stato, dettaglio.stato);
+    assert.equal(b.letture.length, 1, 'anche assenza e ripiego condividono la lettura');
+  }
+});
+
+test('BC51-03 — record cambiato o rimosso: giudice e bilancio si aggiornano con una sola nuova lettura', async () => {
+  const b = bancoProiezioneGiudice(rapportoConGiudiceBC51('glm-4.7-flash'));
+  await b.orch.elenca({ cartella: b.cartella });
+  for (const [testo, giudice, letture] of [[rapportoConGiudiceBC51('secondo-giudice'), 'secondo-giudice', 2], [null, null, 3]]) {
+    b.sostituisci(testo);
+    const elenco = (await b.orch.elenca({ cartella: b.cartella })).ricerche[0];
+    const dettaglio = await b.orch.leggi({ cartella: b.cartella, id: b.id });
+    assert.equal(elenco.giudice, giudice);
+    assert.equal(dettaglio.giudice, giudice);
+    assert.deepEqual(elenco.bilancio, dettaglio.bilancio);
+    assert.equal(b.letture.length, letture);
+  }
+});
 
 test('avvia: crea la metadata PRIMA di chiamare avviaESeguiFn (ordine verificato, non presunto)', async () => {
   const sessioni = new Map();
@@ -716,7 +800,7 @@ test('AL CONTRARIO — conclusione senza NESSUN testo assistente e senza rapport
  *   `deepEqual` sulle chiavi resta, perché la prossima crescita debba passare da qui invece di
  *   scivolare dentro in silenzio.
  */
-test('⭐⭐⭐ CONTRATTO §6.4 — ogni voce di elenca() porta i sedici campi che la sezione legge (dodici di L2 + bilancio, proveDistinte, `modello` da L8, `modelloGiudice` da L9)', async () => {
+test('⭐⭐⭐ CONTRATTO §6.4 — ogni voce di elenca() porta i diciannove campi della sezione, incluso il giudice effettivo BC-51', async () => {
   const sessioni = new Map();
   const { orch, store, conclusione } = conclusioneDiProva(sessioni);
   const { id } = await orch.avvia({ cartella: '/p', question: 'Quanto costa il caching?', depth: 'deep', padreId: 'madre-1', modello: 'z-ai/glm-5.3-flash' });
@@ -727,12 +811,12 @@ test('⭐⭐⭐ CONTRATTO §6.4 — ogni voce di elenca() porta i sedici campi c
   assert.equal(ricerche.length, 1);
   const v = ricerche[0];
   assert.deepEqual(Object.keys(v).sort(), [
-    'avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'id', 'modello', 'modelloGiudice',
+    'avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'giudice', 'id', 'modello', 'modelloGiudice',
     'motivo', 'motivoErrore', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId',
     'riprendibile', 'stato', 'titolo', 'ultimoMessaggio',
   ], 'il contratto è esattamente questo: il frontend ci sta scrivendo sopra');
   /*
-   * ⭐ BC-44 (12/09/2026) — diciotto: i sedici di prima, più `riprendibile` e `motivoErrore`.
+   * BC-51 (12/09/2026) — diciannove: i diciotto di BC-44, più `giudice` effettivo.
    * ⛔ L'elenco si aggiorna A MANO apposta, ed è il motivo per cui questo test esiste in questa
    *   forma: una crescita del contratto deve costare una riga a chi la fa, così si vede. I
    *   sedici di prima non cambiano nome, tipo né significato.
