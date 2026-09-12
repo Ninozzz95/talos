@@ -136,10 +136,11 @@ test('CONTESTO-PROMESSA: quello che la sezione promette e non misura lo DICHIARA
   assert.equal(tutte.occupato, 450);
 });
 
-test('C10-DESCRIZIONI: 43 attrezzi, tutte in italiano, senza markdown a schermo', async () => {
+// 12/09: 44 — è entrato `research_deposit` (la consegna del rapporto della ricerca approfondita, L1).
+test('C10-DESCRIZIONI: 44 attrezzi, tutte in italiano, senza markdown a schermo', async () => {
   const m = await import('../../src/components/nomi-attrezzi.js');
   const ids = Object.keys(m.DESCRIZIONI_ATTREZZI);
-  assert.equal(ids.length, 43);
+  assert.equal(ids.length, 44);
   for (const id of ids) {
     const d = m.descrizioneAttrezzo(id);
     assert.ok(d && d.length > 10, `descrizione troppo corta per ${id}`);
