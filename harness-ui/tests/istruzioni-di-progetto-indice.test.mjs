@@ -1,11 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
-import { testoIstruzioniDiProgetto, trovaIstruzioniDiProgetto } from '../src/istruzioni-di-progetto.mjs';
+import { testoIstruzioniDiProgetto } from '../src/istruzioni-di-progetto.mjs';
 import { analizzaSezioniIstruzioni, rimuoviCommentiHtml, SOGLIA_RIGHE_INDICE } from '../src/sezioni-istruzioni.mjs';
-import { contestoDelProgetto } from '../src/contesto-del-progetto.mjs';
-import { discoNode } from '../src/kernel/talosHarness.mjs';
+import { leggiPrima } from './fixtures/bc48-b-misure.mjs';
 
 const file = (contenuto, etichetta = 'pacchetto/AGENTS.md') => ({ contenuto, etichetta, byte: Buffer.byteLength(contenuto) });
 
@@ -76,15 +73,15 @@ test('BC48-A-TETTO: avviso entro tetto e nessun moncone di sezione', () => {
   assert.throws(() => testoIstruzioniDiProgetto([file(contenuto)], { tetto: 2 }), /tetto/i);
 });
 
-test('BC48-A-VERO: AGENTS.md radice resta 11480 byte, 172 righe, 17 sezioni e indice esatto', async () => {
-  const raw = await readFile(new URL('../../AGENTS.md', import.meta.url), 'utf8');
-  assert.equal(await discoNode({ radice: fileURLToPath(new URL('../', import.meta.url)) }).leggi('../AGENTS.md'), raw);
+test('BC48-A-ORIGINALE: istantanea prima di B, 11480 byte, 172 righe, 17 sezioni e indice esatto', async () => {
+  // B conserva questa caratterizzazione; catena, disco e diagnostica correnti sono provati in istruzioni-di-progetto-cartelle.test.mjs.
+  const { originale: raw, catene } = await leggiPrima();
   assert.equal(Buffer.byteLength(raw), 11480);
   const righe = raw.match(/[^\n]*\n|[^\n]+$/g);
   assert.equal(righe.length, 172);
   const titoli = righe.flatMap((r, i) => r.startsWith('## ') ? [{ titolo: r.slice(3).trim(), da: i + 1 }] : []);
   assert.equal(titoli.length, 17);
-  const trovati = await trovaIstruzioniDiProgetto(fileURLToPath(new URL('../', import.meta.url)));
+  const trovati = [{ contenuto: raw, etichetta: 'AGENTS.md', lettura: '../AGENTS.md' }];
   const esito = testoIstruzioniDiProgetto(trovati);
   for (let i = 1; i < titoli.length; i++) {
     const { titolo, da } = titoli[i];
@@ -93,7 +90,6 @@ test('BC48-A-VERO: AGENTS.md radice resta 11480 byte, 172 righe, 17 sezioni e in
     assert.ok(esito.testo.includes(`## ${titolo} · righe ${da}-${a} · ${byte} byte · `), titolo);
   }
   assert.ok(esito.byte < 11845);
-  const preambolo = await contestoDelProgetto({ cartella: fileURLToPath(new URL('../', import.meta.url)), deps: { eseguiGit: async () => null } });
-  assert.deepEqual(preambolo.blocchi.istruzioni.indicizzati, ['AGENTS.md']);
-  assert.deepEqual(preambolo.blocchi.istruzioni.sezioniSempre, esito.sezioniSempre);
+  assert.equal(esito.testo, catene['harness-ui'].testo);
+  assert.deepEqual(esito.indicizzati, ['AGENTS.md']);
 });
