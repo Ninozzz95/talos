@@ -158,7 +158,7 @@ Ordine consigliato; ogni riga con il suo cancello. Niente ore: si misurano quand
 | R-02 | electron-builder: NSIS per-utente + zip; icona, nome, versione da `package.json`; niente GGUF, niente `.local-runtime` nel pacchetto | pacchetto costruito su `windows-latest`, peso misurato e scritto | Opus 5 High |
 | R-03 | `llama-server` su richiesta: download al primo uso con impronta, scelta CPU/Vulkan dalla macchina | test nei due versi (impronta sbagliata ⇒ rifiuto); foto del primo avvio | Opus 5 High (dopo BC-13) |
 | R-04 | CI: job `windows-latest` che costruisce, installa in silenzio, avvia, chiede `/health`, disinstalla; attestazione di provenienza; SHA256 nelle note | il job verde due volte di fila | Opus 5 High |
-| R-05 | Repo nuovo: albero ripulito (tracce di agenti nei commenti), `VERSION`/`CHANGELOG` desktop, README con requisiti, limiti, avviso SmartScreen, riga sulla mobile compagna, licenza | cancello dei dati personali su tutto l'albero; README letto da un utente nuovo | io + Opus |
+| R-05 | **Monorepo pubblico nuovo** (vedi §4): script di esportazione dell'albero pulito, tracce di agenti nei commenti tolte, `LICENSE` AGPL-3.0 + `NOTICE`, `VERSION`/`CHANGELOG` desktop, README con requisiti, limiti, avviso SmartScreen, riga sulla mobile compagna | cancello dei dati personali su tutto l'albero; README letto da un utente nuovo | io + Opus |
 | R-06 | Misure mai prese: peso installer, RAM a riposo, tempo dal doppio clic alla prima schermata | tre numeri nel ledger, macchina dichiarata | io |
 | R-07 | Pratica Azure Artifact Signing (solo se dici sì): apertura, validazione, `AZURE_*` in electron-builder | primo `.exe` firmato che SmartScreen non ferma | owner (pratica) + Opus |
 | R-08 | Pre-release: ricerca «dell'ultimo mese», dieci passi da utente nuovo in Windows Sandbox, UX pulita/rifinita/fluida | `PIANO-PRE-RELEASE-2026-09-07.md`, riga per riga | io + Opus |
@@ -178,6 +178,47 @@ Ordine consigliato; ogni riga con il suo cancello. Niente ore: si misurano quand
 
 Le decisioni tecniche (D2, D6, D10) e i consigli su D3/D5/D7/D9 li applico così come sono scritti,
 salvo tuo contrordine.
+
+---
+
+## 4 · Le risposte dell'owner e i consigli dati (12/09/2026, ore 13)
+
+Owner, verbatim: «1 cosa consigli? 2 cosa consigli? 3 cosa consigli? 4 mettiamo tutto AGPL 3 · 5 cosa
+consigli? 6 cosa consigli?» e poi: «ATTENZIONE, mettiamo tutto nel repo pubblico o consigli di fare
+un nuovo repo? io avevo pensato un monorepo».
+
+| # | domanda | risposta / consiglio | stato |
+|---|---|---|---|
+| 1 | guscio Electron | **sì**: il lab diventa prodotto, aggiornato a 44.3.0 | consigliato, attende il sì |
+| 2 | pratica di firma | **dopo la v0.1**, e solo se esiste una persona giuridica con cui aprirla (dall'Italia la via individuale non c'è). Senza persona giuridica: «mai per ora», si vive con l'avviso. Aprirla ha senso insieme all'auto-update della v0.2: un aggiornamento automatico non firmato è peggio di un installer non firmato | consigliato, attende il sì |
+| 3 | v0.1 non firmata con avviso scritto | **sì** | consigliato, attende il sì |
+| 4 | licenza | **AGPL-3.0 su tutto** — DECISO dall'owner. Conseguenze: chi offre TALOS come servizio in rete deve pubblicare le modifiche (è il motivo per cui si sceglie AGPL); le dipendenze Apache-2.0/MIT/ISC/BSD entrano in un progetto AGPL senza problemi; da fare: `LICENSE` nuovo, intestazioni/`NOTICE`, `package.json` `"license": "AGPL-3.0-only"`, controllo di `THIRD_PARTY_NOTICES.md` (nessuna licenza SSPL/BUSL/non-commercial trovata al 12/09); l'owner è l'unico autore dei commit (`antoninorizzo`/`Ninozzz95`), quindi il cambio da Apache 2.0 non ha bisogno di consensi di terzi | **deciso** |
+| 5 | telemetria zero, dichiarata | **sì** | consigliato, attende il sì |
+| 6 | via alle righe senza firma appena la coda è chiusa | **sì** | consigliato, attende il sì |
+| repo | «tutto nel repo pubblico o repo nuovo? pensavo un monorepo» | **Monorepo pubblico NUOVO, storia appiattita** — vedi sotto | consigliato, attende il sì |
+
+### Il repo: perché un monorepo nuovo e non «questo reso pubblico»
+
+- Questo repo è **privato** oggi, ed è già un monorepo (`harness-ui/`, `mobile/`, `core/`,
+  `control-plane/`, i worker, `docs/`): la forma che vuoi esiste già, non va creata.
+- Renderlo pubblico così com'è porta in pubblico **tutta la storia**: 122 trailer di agenti AI negli
+  ultimi 400 commit, `.claude/` passata per 540 commit e 1.299 file, `scratchpad/`, percorsi
+  personali nei messaggi, tre sottomoduli (`.gitmodules`). Riscriverla (`filter-repo`) cambia 2.077
+  SHA, obbliga a un force-push che le regole di casa vietano di far eseguire a me, e non garantisce
+  di aver tolto tutto.
+- Un repo **solo desktop** (deciso il 07/09) separerebbe la mobile che vuoi «associata»: contratti
+  condivisi in due posti, due CI da tenere allineate.
+- ⇒ **Consiglio: un monorepo pubblico nuovo** (nome da decidere, es. `talos`), con la stessa
+  struttura di questo, un primo commit «TALOS v0.1.0 — desktop e mobile», licenza AGPL-3.0, senza
+  `.claude/`, `scratchpad/`, `.talos/`, `test-results/`, e con il cancello dei dati personali passato
+  su tutto l'albero. **Questo repo resta privato ed è dove si sviluppa**; a ogni release uno script
+  esporta l'albero pulito nel pubblico (snapshot, non merge). Le release restano per piattaforma:
+  `desktop-v*` e `v*` (mobile) come già in `release.yml`.
+- Costo dichiarato: lo script di esportazione con il cancello dei dati personali (R-05 cambia forma:
+  «monorepo pubblico» invece di «repo desktop»), e il fatto che i contributi esterni arrivano sul
+  pubblico e vanno riportati a mano nel privato finché non si decide di sviluppare in pubblico.
+- Alternativa se preferisci un solo repo: sviluppare direttamente nel pubblico nuovo dopo la v0.1,
+  archiviando questo. Si decide dopo la prima release, non ora.
 
 ---
 
