@@ -130,7 +130,7 @@ test('env-file CLI provisions without rendering either key half', async () => {
  */
 test('⭐⭐⭐ la coppia generata qui e\' quella che talosHarness.mjs si aspetta: round-trip vero con creaRicevutaOperazione/verificaFirmaRicevuta', async () => {
     const { creaRicevutaOperazione, verificaFirmaRicevuta } = await import(
-        '../../../AVM-harness/mobile/scripts/harness-talos/talosHarness.mjs'
+        '../src/kernel/talosHarness.mjs' // R-04: il kernel incluso nel repo, non un percorso fuori dal checkout (la CI parte da un checkout pulito)
     )
     const pair = generateHarnessReceiptKeypair()
     const chiavePrivata = Buffer.from(pair.privateKeyBase64, 'base64').toString('utf8')
