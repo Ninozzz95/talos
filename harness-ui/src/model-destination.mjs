@@ -36,6 +36,9 @@
  */
 
 import { ID_DESTINAZIONE_CHAT, ID_NATIVI_SDK, REGISTRO_FORNITORI, idPerWire } from './provider-registry.mjs';
+// P-K
+import { destinazioneCloud } from './provider-auth-cloud.mjs';
+// P-K — fine
 
 export class ModelDestinationError extends Error {
   constructor(message, code = 'MODEL_DESTINATION_INVALID') {
@@ -165,6 +168,9 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
     throw new ModelDestinationError(`Manca la chiave per ${record.etichetta}: inseriscila in Laboratorio modelli → Provider.`, 'PROVIDER_KEY_MISSING');
   }
 
+  // P-K — lo stesso contratto di autenticazione per chat e sonda.
+  if (record.cloud) return destinazioneCloud(fonte, runtime, chiave, modelloRemoto);
+  // P-K — fine
   if (NATIVI.includes(fonte)) return { fonte, modelloRemoto, native: true, baseURL: base, apiKey: chiave };
   const headers = { 'Content-Type': 'application/json' };
   if (chiave) headers.Authorization = `Bearer ${chiave}`;

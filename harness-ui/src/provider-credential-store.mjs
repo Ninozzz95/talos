@@ -12,6 +12,8 @@ import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 
 import { createHash } from 'node:crypto';
 
 import { ID_CON_CREDENZIALE, REGISTRO_FORNITORI } from './provider-registry.mjs';
+// P-K
+import { normalizzaRuntimeCloud } from './provider-auth-cloud.mjs';
 
 /*
  * ⛔⛔ 12/09 — P-A: QUESTE DUE COSTANTI ERANO IL PRIMO DEI TREDICI ELENCHI PARALLELI.
@@ -139,6 +141,12 @@ export function normalizeProviderEndpoint(provider, rawEndpoint) {
   const definition = definitionFor(provider);
   if (!definition.supportsEndpoint) throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
   if (typeof rawEndpoint !== 'string' || rawEndpoint.trim() === '') throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID');
+  // P-K — il contratto HTTP resta endpoint + timeout, nessuna migrazione.
+  if (REGISTRO_FORNITORI[provider].cloud) {
+    try { return normalizzaRuntimeCloud(provider, { endpoint: rawEndpoint }).endpoint; }
+    catch { throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID'); }
+  }
+  // P-K — fine
   let parsed;
   try { parsed = new URL(rawEndpoint.trim()); } catch { throw new ProviderCredentialError('PROVIDER_RUNTIME_INVALID'); }
   if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password || parsed.hash || !parsed.hostname) {
@@ -375,7 +383,11 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
   function getRuntime(provider) {
     const definition = requireProvider(provider);
     const saved = runtimes.get(provider);
-    return { provider, endpoint: saved?.endpoint ?? definition.defaultEndpoint, endpointConfigured: saved?.endpointConfigured === true, timeoutSeconds: saved?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS };
+    const endpoint = saved?.endpoint ?? definition.defaultEndpoint;
+    // P-K — campi non segreti derivati dalla stessa preferenza anche dopo riavvio.
+    const cloud = REGISTRO_FORNITORI[provider].cloud && endpoint ? normalizzaRuntimeCloud(provider, { endpoint }) : null;
+    return { provider, endpoint, endpointConfigured: saved?.endpointConfigured === true, timeoutSeconds: saved?.timeoutSeconds ?? DEFAULT_TIMEOUT_SECONDS, ...(cloud ?? {}) };
+    // P-K — fine
   }
   function setRuntime(provider, { endpoint, timeoutSeconds = DEFAULT_TIMEOUT_SECONDS } = {}) {
     const definition = requireProvider(provider);
@@ -418,6 +430,11 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
         endpoint: runtime.endpoint,
         endpointConfigured: runtime.endpointConfigured,
         timeoutSeconds: runtime.timeoutSeconds,
+        // P-K — schema e aiuto per i soli campi pubblici del pannello.
+        ...(REGISTRO_FORNITORI[provider].cloud ? { cloud: REGISTRO_FORNITORI[provider].cloud,
+          regione: runtime.regione ?? null, progetto: runtime.progetto ?? null,
+          endpointRisorsa: runtime.endpointRisorsa ?? null, versioneApi: runtime.versioneApi ?? 'v1' } : {}),
+        // P-K — fine
         execution: definition.execution,
         /*
          * ⛔ PO-01 (10/09) — la guardia della UI: il pulsante «Accedi con …» compare solo dove il

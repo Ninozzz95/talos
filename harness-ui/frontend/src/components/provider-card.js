@@ -31,6 +31,55 @@ function button(action,label,tone='secondary'){const b=el('button','talos-button
 /** Il simbolo di un'icona dello sprite. Il file non aveva icone: nasce qui, minimo. */
 function simboloProvider(nome){const NS='http://www.w3.org/2000/svg';const svg=document.createElementNS(NS,'svg');svg.setAttribute('class','i i--sm');svg.setAttribute('aria-hidden','true');const use=document.createElementNS(NS,'use');use.setAttribute('href','#'+nome);svg.append(use);return svg;}
 
+// P-K — soli campi non segreti: il salvataggio esistente continua a leggere l'indirizzo.
+export function componiIndirizzoCloud(provider,{endpoint='',regione='',progetto='',versioneApi='v1'}={}){
+ const invalido=()=>{throw new Error('Controlla i campi del collegamento.');};
+ if(provider==='azure'){
+  let url;try{url=new URL(endpoint);}catch{invalido();}
+  if(!['https:','http:'].includes(url.protocol)||url.username||url.password||url.hash||!['v1','2024-10-21'].includes(versioneApi))invalido();
+  return url.origin+(versioneApi==='v1'?'/openai/v1':'/openai?api-version=2024-10-21');
+ }
+ if(!/^[a-z][a-z0-9-]{1,62}$/u.test(regione))invalido();
+ if(provider==='bedrock'){
+  let mantle=false;try{mantle=new URL(endpoint).hostname.startsWith('bedrock-mantle.');}catch{/* prima configurazione */}
+  return mantle?`https://bedrock-mantle.${regione}.api.aws/v1`:`https://bedrock-runtime.${regione}.amazonaws.com/openai/v1`;
+ }
+ if(provider!=='vertex'||!/^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}$/u.test(progetto))invalido();
+ return `https://${regione==='global'?'':regione+'-'}aiplatform.googleapis.com/v1/projects/${progetto}/locations/${regione}/endpoints/openapi`;
+}
+function aggiungiCampiCloud(body,row){
+ if(!row.cloud)return;
+ if(row.cloud.campi.includes('regione'))body.append(campo('Regione','text','providerRegione',row,row.regione||''));
+ if(row.cloud.campi.includes('progetto'))body.append(campo('Progetto','text','providerProgetto',row,row.progetto||''));
+ if(row.cloud.campi.includes('versioneApi')){
+  const versione=campo('Versione del collegamento','text','providerVersione',row,row.versioneApi||'v1');
+  versione.querySelector('input').placeholder='v1 oppure 2024-10-21';body.append(versione);
+ }
+ const nota=el('p','talos-muted',row.cloud.nota);nota.style.gridColumn='1 / -1';body.append(nota);
+ // Delega sul corpo: gli input delle bozze vengono conservati da aggiornaProviderList.
+ body.addEventListener('input',e=>{
+  const endpoint=body.querySelector('[data-provider-endpoint]');if(!endpoint)return;
+  const regione=body.querySelector('[data-provider-regione]'),progetto=body.querySelector('[data-provider-progetto]'),versione=body.querySelector('[data-provider-versione]');
+  if(e.target===endpoint){
+   try{
+    const url=new URL(endpoint.value),p=/\/projects\/([^/]+)\/locations\/([^/]+)/u.exec(url.pathname);
+    endpoint.dataset.pkUltimoIndirizzo=endpoint.value;
+    if(regione)regione.value=p?.[2]||/^bedrock-(?:runtime|mantle)\.([^.]+)/u.exec(url.hostname)?.[1]||'';
+    if(progetto)progetto.value=p?.[1]||'';
+    if(versione)versione.value=url.searchParams.get('api-version')||'v1';
+   }catch{/* L'indirizzo incompleto resta visibile e sarà respinto dal server. */}
+   return;
+  }
+  if(![regione,progetto,versione].includes(e.target))return;
+  // La digitazione può attraversare un valore incompleto: conserva soltanto la risorsa
+  // pubblica per ricomporre il collegamento, ma lascia invalido ciò che si può salvare.
+  if(endpoint.value)endpoint.dataset.pkUltimoIndirizzo=endpoint.value;
+  try{endpoint.value=componiIndirizzoCloud(row.id,{endpoint:endpoint.value||endpoint.dataset.pkUltimoIndirizzo||row.endpoint,regione:regione?.value.trim(),progetto:progetto?.value.trim(),versioneApi:versione?.value.trim()});}
+  catch{endpoint.value='';}
+ });
+}
+// P-K — fine
+
 export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onMenu=null,onAzionePool=null}={}){
  const d=statoProvider(row,prova),busy=occupato||d.occupato,card=el('article','talos-card talos-provider');card.dataset.c='ProviderCard';card.dataset.providerId=row.id;card.setAttribute('aria-busy',String(busy));if(prova)card.dataset.provaEsito=prova.esito;
  const head=el('button','talos-provider__head');head.type='button';head.dataset.providerToggle=row.id;head.setAttribute('aria-expanded',String(aperta));head.setAttribute('aria-controls','provider-body-'+row.id);
@@ -91,6 +140,9 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
   oppure.append(riassunto,campoChiave);body.append(oppure);
  }else body.append(campoChiave);
  if(row.supportsEndpoint)body.append(campo('Indirizzo del servizio','url','providerEndpoint',row,row.endpoint||''));
+ // P-K — campi collegati all'input salvato dalla regia esistente.
+ aggiungiCampiCloud(body,row);
+ // P-K — fine
  if(d.tempo)body.append(campo('Tempo massimo (secondi)','number','providerTimeout',row,String(row.timeoutSeconds??60)));
  /*
   * ⛔ Una sola azione a vista: salvare la chiave appena incollata. Le altre sono azioni su

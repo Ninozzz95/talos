@@ -570,6 +570,11 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       }
       return dipendenze.chiamaLocale(destinazione.percorso, { ...opzioni, headers: { 'Content-Type': 'application/json' }, body: corpoRiscritto });
     }
+    // P-K — nessun redirect con credenziali cloud, anche senza pool collegato.
+    if (destinazione.cloud) return conCacheDichiarata(await inviaCloudProtetta(fetchDiRete, destinazione.url, {
+      ...opzioni, headers: { ...destinazione.headers }, body: corpoRiscritto, redirect: 'error',
+    }), destinazione.fonte);
+    // P-K — fine
     return conCacheDichiarata(await fetchDiRete(destinazione.url, {
       ...opzioni,
       headers: { ...destinazione.headers },
@@ -577,6 +582,29 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
     }), destinazione.fonte);
   };
 }
+
+// P-K — errori upstream non attendibili: il testo non deve attraversare il confine pubblico.
+async function inviaCloudProtetta(rete, url, opzioni) {
+  let risposta;
+  try { risposta = await rete(url, opzioni); }
+  catch {
+    if (opzioni.signal?.aborted) {
+      const errore = new Error('La richiesta al fornitore è stata interrotta.');
+      errore.name = opzioni.signal.reason?.name === 'TimeoutError' ? 'TimeoutError' : 'AbortError';
+      throw errore;
+    }
+    throw Object.assign(new Error('Non è stato possibile raggiungere il fornitore.'), { code: 'PROVIDER_NETWORK_ERROR' });
+  }
+  if (risposta.ok) return risposta;
+  await risposta.body?.cancel().catch(() => {});
+  const stato = risposta.status;
+  const message = stato === 401 ? 'Credenziale non accettata dal fornitore.'
+    : stato === 403 ? 'Accesso negato: controlla i permessi della credenziale e del modello.'
+    : stato === 404 ? 'Modello o indirizzo non trovato: controlla la configurazione del fornitore.'
+    : `Il fornitore ha risposto HTTP ${stato}.`;
+  return new Response(JSON.stringify({ error: { message } }), { status: stato, headers: { 'Content-Type': 'application/json' } });
+}
+// P-K — fine
 
 function erroreFornitorePubblico(classificazione, stato = null) {
   const messaggi = {
@@ -675,6 +703,11 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     }, onAvviso, instradaOpenRouter: true });
     try { return await instradata(url, opzioni); }
     catch (error) {
+      // P-K — token scaduto o involucro malformato: panchina senza partire in rete.
+      if (record.cloud && scelta && ['PROVIDER_CLOUD_TOKEN_EXPIRED', 'PROVIDER_CLOUD_CREDENTIAL_INVALID'].includes(error?.code)) {
+        providerStore.mettiInPanchina(fonte, scelta.impronta, { classe: 'credenziale' });
+      }
+      // P-K — fine
       // Gli SDK nativi lanciano sugli HTTP non riusciti: ricondurli alla stessa
       // risposta permette al kernel di esaurire il proprio budget anche qui.
       if (contesto.errore?.stato) return new Response(contesto.errore.message, { status: contesto.errore.stato });
