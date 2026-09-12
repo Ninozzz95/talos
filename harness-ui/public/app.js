@@ -7468,6 +7468,189 @@ var init_sezioni_adattatori = __esm({
   }
 });
 
+// src/components/markdown.js
+function elementoTesto(doc, tag2, classe, valore) {
+  const elemento = doc.createElement(tag2);
+  if (classe) elemento.className = classe;
+  elemento.textContent = valore === null || valore === void 0 ? "—" : String(valore);
+  return elemento;
+}
+function bloccoCodiceNudo(doc, testoCodice, linguaggioDichiarato) {
+  const pre = doc.createElement("pre");
+  pre.className = "code-block-nudo";
+  const code = elementoTesto(doc, "code", "", testoCodice);
+  if (linguaggioDichiarato) code.className = `language-${String(linguaggioDichiarato).trim().toLowerCase()}`;
+  pre.appendChild(code);
+  return pre;
+}
+function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
+  const doc = opzioni.document || globalThis.document;
+  const bloccoCodice = typeof opzioni.bloccoCodice === "function" ? opzioni.bloccoCodice : (testo4, linguaggio) => bloccoCodiceNudo(doc, testo4, linguaggio);
+  const frammento = doc.createDocumentFragment();
+  const testo3 = String(testoGrezzo ?? "");
+  const righe = testo3.split("\n");
+  function applicaInline(contenitore, segmento) {
+    const pattern = /\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g;
+    let ultimo = 0;
+    let match;
+    while (match = pattern.exec(segmento)) {
+      if (match.index > ultimo) contenitore.appendChild(doc.createTextNode(segmento.slice(ultimo, match.index)));
+      if (match[1] !== void 0) contenitore.appendChild(elementoTesto(doc, "strong", "", match[1]));
+      else if (match[2] !== void 0) contenitore.appendChild(elementoTesto(doc, "code", "", match[2]));
+      else contenitore.appendChild(elementoTesto(doc, "em", "", match[3] !== void 0 ? match[3] : match[4]));
+      ultimo = pattern.lastIndex;
+    }
+    if (ultimo < segmento.length) contenitore.appendChild(doc.createTextNode(segmento.slice(ultimo)));
+  }
+  let i = 0;
+  let paragrafoCorrente = [];
+  function chiudiParagrafo() {
+    if (paragrafoCorrente.length === 0) return;
+    const p = doc.createElement("p");
+    paragrafoCorrente.forEach((riga, indice2) => {
+      if (indice2 > 0) p.appendChild(doc.createElement("br"));
+      applicaInline(p, riga);
+    });
+    frammento.appendChild(p);
+    paragrafoCorrente = [];
+  }
+  while (i < righe.length) {
+    const riga = righe[i];
+    const fenceMatch = /^```/.test(riga.trim());
+    const hrMatch = /^(-{3,}|\*{3,}|_{3,})\s*$/.test(riga.trim());
+    const listaMatch = /^(\s*)([-*])\s+(.*)$/.exec(riga);
+    const listaNumMatch = /^(\s*)(\d+)\.\s+(.*)$/.exec(riga);
+    const titoloMatch = /^(#{1,6})\s+(.*)$/.exec(riga);
+    const citazioneMatch = /^ {0,3}>/.test(riga);
+    if (fenceMatch) {
+      chiudiParagrafo();
+      const linguaggioDichiarato = riga.trim().slice(3).trim().split(/\s+/)[0] || "";
+      const righeCodice = [];
+      i += 1;
+      while (i < righe.length && !/^```/.test(righe[i].trim())) {
+        righeCodice.push(righe[i]);
+        i += 1;
+      }
+      const chiuso = i < righe.length;
+      frammento.appendChild(bloccoCodice(righeCodice.join("\n"), linguaggioDichiarato, chiuso));
+      i += 1;
+      continue;
+    }
+    if (citazioneMatch) {
+      chiudiParagrafo();
+      const dentro = [];
+      let paragrafoAperto = false;
+      while (i < righe.length) {
+        const corrente = righe[i];
+        if (/^ {0,3}>/.test(corrente)) {
+          const contenuto = corrente.replace(/^ {0,3}> ?/, "");
+          dentro.push(contenuto);
+          paragrafoAperto = contenuto.trim() !== "";
+          i += 1;
+          continue;
+        }
+        if (!paragrafoAperto || corrente.trim() === "") break;
+        const apreUnAltroBlocco = /^```/.test(corrente.trim()) || /^(-{3,}|\*{3,}|_{3,})\s*$/.test(corrente.trim()) || /^(\s*)([-*])\s+/.test(corrente) || /^(\s*)(\d+)\.\s+/.test(corrente) || /^(#{1,6})\s+/.test(corrente);
+        if (apreUnAltroBlocco) break;
+        dentro.push(corrente);
+        i += 1;
+      }
+      const citazione = doc.createElement("blockquote");
+      citazione.className = "md-quote";
+      citazione.appendChild(renderizzaMarkdown(dentro.join("\n"), { document: doc, bloccoCodice }));
+      frammento.appendChild(citazione);
+      continue;
+    }
+    if (hrMatch) {
+      chiudiParagrafo();
+      frammento.appendChild(doc.createElement("hr"));
+      i += 1;
+      continue;
+    }
+    if (titoloMatch) {
+      chiudiParagrafo();
+      const livello = Math.min(titoloMatch[1].length, 6);
+      const h = doc.createElement(`h${livello}`);
+      applicaInline(h, titoloMatch[2]);
+      frammento.appendChild(h);
+      i += 1;
+      continue;
+    }
+    const separatoreTabella = (r) => typeof r === "string" && r.includes("|") && /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(r) && r.includes("-");
+    const celle = (r) => {
+      let t2 = r.trim();
+      if (t2.startsWith("|")) t2 = t2.slice(1);
+      if (t2.endsWith("|")) t2 = t2.slice(0, -1);
+      return t2.split("|").map((c) => c.trim());
+    };
+    if (riga.includes("|") && i + 1 < righe.length && separatoreTabella(righe[i + 1]) && celle(riga).length > 1) {
+      chiudiParagrafo();
+      const intestazioni = celle(riga);
+      const allineamenti = celle(righe[i + 1]).map((c) => c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : c.startsWith(":") ? "left" : "");
+      const involucro = doc.createElement("div");
+      involucro.className = "md-table-wrap";
+      const tabella = doc.createElement("table");
+      tabella.className = "md-table";
+      const thead = doc.createElement("thead");
+      const trTesta = doc.createElement("tr");
+      intestazioni.forEach((testoCella, n) => {
+        const th = doc.createElement("th");
+        if (allineamenti[n]) th.style.textAlign = allineamenti[n];
+        applicaInline(th, testoCella);
+        trTesta.appendChild(th);
+      });
+      thead.appendChild(trTesta);
+      tabella.appendChild(thead);
+      const tbody = doc.createElement("tbody");
+      i += 2;
+      while (i < righe.length && righe[i].includes("|") && righe[i].trim() !== "") {
+        const valori = celle(righe[i]);
+        const tr = doc.createElement("tr");
+        for (let n = 0; n < intestazioni.length; n += 1) {
+          const td = doc.createElement("td");
+          if (allineamenti[n]) td.style.textAlign = allineamenti[n];
+          applicaInline(td, valori[n] ?? "");
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+        i += 1;
+      }
+      tabella.appendChild(tbody);
+      involucro.appendChild(tabella);
+      frammento.appendChild(involucro);
+      continue;
+    }
+    if (listaMatch || listaNumMatch) {
+      chiudiParagrafo();
+      const ordinata = !!listaNumMatch;
+      const lista = doc.createElement(ordinata ? "ol" : "ul");
+      while (i < righe.length) {
+        const m = ordinata ? /^(\s*)(\d+)\.\s+(.*)$/.exec(righe[i]) : /^(\s*)([-*])\s+(.*)$/.exec(righe[i]);
+        if (!m) break;
+        const li = doc.createElement("li");
+        applicaInline(li, m[3]);
+        lista.appendChild(li);
+        i += 1;
+      }
+      frammento.appendChild(lista);
+      continue;
+    }
+    if (riga.trim() === "") {
+      chiudiParagrafo();
+      i += 1;
+      continue;
+    }
+    paragrafoCorrente.push(riga);
+    i += 1;
+  }
+  chiudiParagrafo();
+  return frammento;
+}
+var init_markdown = __esm({
+  "src/components/markdown.js"() {
+  }
+});
+
 // src/components/theme-studio.js
 function nomiTemi(campi = CAMPI_IMPOSTAZIONI) {
   const campo2 = campi.find((c) => c.id === "themePresetSelect");
@@ -15844,6 +16027,7 @@ var init_app = __esm({
     init_attivita();
     init_memoria();
     init_sezioni_adattatori();
+    init_markdown();
     init_modale_td();
     init_theme_studio();
     init_board();
@@ -17368,139 +17552,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         );
       }
       function renderizzaMarkdownSemplice(testoGrezzo) {
-        const frammento = document.createDocumentFragment();
-        const testo3 = String(testoGrezzo ?? "");
-        const righe = testo3.split("\n");
-        function applicaInline(contenitore, segmento) {
-          const pattern = /\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g;
-          let ultimo = 0;
-          let match;
-          while (match = pattern.exec(segmento)) {
-            if (match.index > ultimo) contenitore.appendChild(document.createTextNode(segmento.slice(ultimo, match.index)));
-            if (match[1] !== void 0) contenitore.appendChild(textElement("strong", "", match[1]));
-            else if (match[2] !== void 0) contenitore.appendChild(textElement("code", "", match[2]));
-            else contenitore.appendChild(textElement("em", "", match[3] !== void 0 ? match[3] : match[4]));
-            ultimo = pattern.lastIndex;
-          }
-          if (ultimo < segmento.length) contenitore.appendChild(document.createTextNode(segmento.slice(ultimo)));
-        }
-        let i = 0;
-        let paragrafoCorrente = [];
-        function chiudiParagrafo() {
-          if (paragrafoCorrente.length === 0) return;
-          const p = document.createElement("p");
-          paragrafoCorrente.forEach((riga, indice2) => {
-            if (indice2 > 0) p.appendChild(document.createElement("br"));
-            applicaInline(p, riga);
-          });
-          frammento.appendChild(p);
-          paragrafoCorrente = [];
-        }
-        while (i < righe.length) {
-          const riga = righe[i];
-          const fenceMatch = /^```/.test(riga.trim());
-          const hrMatch = /^(-{3,}|\*{3,}|_{3,})\s*$/.test(riga.trim());
-          const listaMatch = /^(\s*)([-*])\s+(.*)$/.exec(riga);
-          const listaNumMatch = /^(\s*)(\d+)\.\s+(.*)$/.exec(riga);
-          const titoloMatch = /^(#{1,6})\s+(.*)$/.exec(riga);
-          if (fenceMatch) {
-            chiudiParagrafo();
-            const linguaggioDichiarato = riga.trim().slice(3).trim().split(/\s+/)[0] || "";
-            const righeCodice = [];
-            i += 1;
-            while (i < righe.length && !/^```/.test(righe[i].trim())) {
-              righeCodice.push(righe[i]);
-              i += 1;
-            }
-            const chiuso = i < righe.length;
-            frammento.appendChild(costruisciBloccoCodice(righeCodice.join("\n"), linguaggioDichiarato, chiuso));
-            i += 1;
-            continue;
-          }
-          if (hrMatch) {
-            chiudiParagrafo();
-            frammento.appendChild(document.createElement("hr"));
-            i += 1;
-            continue;
-          }
-          if (titoloMatch) {
-            chiudiParagrafo();
-            const livello = Math.min(titoloMatch[1].length, 6);
-            const h = document.createElement(`h${livello}`);
-            applicaInline(h, titoloMatch[2]);
-            frammento.appendChild(h);
-            i += 1;
-            continue;
-          }
-          const separatoreTabella = (r) => typeof r === "string" && r.includes("|") && /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(r) && r.includes("-");
-          const celle = (r) => {
-            let t2 = r.trim();
-            if (t2.startsWith("|")) t2 = t2.slice(1);
-            if (t2.endsWith("|")) t2 = t2.slice(0, -1);
-            return t2.split("|").map((c) => c.trim());
-          };
-          if (riga.includes("|") && i + 1 < righe.length && separatoreTabella(righe[i + 1]) && celle(riga).length > 1) {
-            chiudiParagrafo();
-            const intestazioni = celle(riga);
-            const allineamenti = celle(righe[i + 1]).map((c) => c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : c.startsWith(":") ? "left" : "");
-            const involucro = document.createElement("div");
-            involucro.className = "md-table-wrap";
-            const tabella = document.createElement("table");
-            tabella.className = "md-table";
-            const thead = document.createElement("thead");
-            const trTesta = document.createElement("tr");
-            intestazioni.forEach((testo4, n) => {
-              const th = document.createElement("th");
-              if (allineamenti[n]) th.style.textAlign = allineamenti[n];
-              applicaInline(th, testo4);
-              trTesta.appendChild(th);
-            });
-            thead.appendChild(trTesta);
-            tabella.appendChild(thead);
-            const tbody = document.createElement("tbody");
-            i += 2;
-            while (i < righe.length && righe[i].includes("|") && righe[i].trim() !== "") {
-              const valori = celle(righe[i]);
-              const tr = document.createElement("tr");
-              for (let n = 0; n < intestazioni.length; n += 1) {
-                const td = document.createElement("td");
-                if (allineamenti[n]) td.style.textAlign = allineamenti[n];
-                applicaInline(td, valori[n] ?? "");
-                tr.appendChild(td);
-              }
-              tbody.appendChild(tr);
-              i += 1;
-            }
-            tabella.appendChild(tbody);
-            involucro.appendChild(tabella);
-            frammento.appendChild(involucro);
-            continue;
-          }
-          if (listaMatch || listaNumMatch) {
-            chiudiParagrafo();
-            const ordinata = !!listaNumMatch;
-            const lista = document.createElement(ordinata ? "ol" : "ul");
-            while (i < righe.length) {
-              const m = ordinata ? /^(\s*)(\d+)\.\s+(.*)$/.exec(righe[i]) : /^(\s*)([-*])\s+(.*)$/.exec(righe[i]);
-              if (!m) break;
-              const li = document.createElement("li");
-              applicaInline(li, m[3]);
-              lista.appendChild(li);
-              i += 1;
-            }
-            frammento.appendChild(lista);
-            continue;
-          }
-          if (riga.trim() === "") {
-            chiudiParagrafo();
-            i += 1;
-            continue;
-          }
-          paragrafoCorrente.push(riga);
-          i += 1;
-        }
-        chiudiParagrafo();
-        return frammento;
+        return renderizzaMarkdown(testoGrezzo, { document, bloccoCodice: costruisciBloccoCodice });
       }
       function confineBlocchiStabili(testo3) {
         const righe = testo3.split("\n");
