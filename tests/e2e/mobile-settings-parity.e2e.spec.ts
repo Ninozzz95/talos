@@ -188,7 +188,7 @@ test('Appearance changes theme and Motion V6 preferences without reload and pers
     await expect(page.locator('html')).toHaveAttribute('data-theme-preset', 'aurora')
 
     await page.getByRole('tab', { name: 'Motion', exact: true }).click()
-    await page.getByLabel('Motion renderer mode').click()
+    await page.getByLabel('Background animation').click()
     await page.getByRole('option', { name: 'Complex' }).click()
     await page.getByRole('slider', { name: 'Background speed' }).fill('150')
 
@@ -197,7 +197,7 @@ test('Appearance changes theme and Motion V6 preferences without reload and pers
     await expect(page.locator('[data-testid="talos-mobile-tool-sheet"]')).toBeVisible()
     await openSettingsCategory(page, 'appearance')
     await page.getByRole('tab', { name: 'Motion', exact: true }).click()
-    await expect(page.getByLabel('Motion renderer mode')).toContainText('Complex')
+    await expect(page.getByLabel('Background animation')).toContainText('Complex')
     await expect(page.getByRole('slider', { name: 'Background speed' })).toHaveValue('150')
 })
 

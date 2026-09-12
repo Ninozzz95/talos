@@ -6,6 +6,10 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 import { TALOS_MOBILE_ROUTES } from '@/lib/mobileRoutes'
 import { __resetSettingsStoreForTests, useSettingsStore } from '@/stores/settings'
+
+// This test checks route containment; the phone-control screen's native calls
+// belong to its own tests and must not run during a shell navigation check.
+vi.mock('@/screens/PrivilegeScreen.vue', () => ({ default: { template: '<div data-testid="privilege-screen-stub" />' } }))
 import { __resetPreferencesStoreForTests, usePreferencesStore } from '@/stores/preferences'
 import { createDefaultTalosMotionV6Preferences } from '@/motion-v6/defaults'
 
@@ -50,6 +54,8 @@ vi.mock('@/services/launcherIcon', () => ({
 }))
 
 import App from '@/App.vue'
+import Sidebar from '@/components/shell/TalosMobileSidebar.vue'
+import { __resetToastsForTests, useTalosMobileToasts } from '@/stores/toasts'
 
 function makeController() {
     const attachmentItems = reactive<Array<Record<string, unknown>>>([])
@@ -136,6 +142,7 @@ function makeController() {
             clearError: vi.fn(() => { attachmentError.value = null }),
         },
         chat: {
+            setSessionArchived: vi.fn().mockResolvedValue(undefined),
             messages: reactive([]),
             sessionBrowserActivities: reactive([]),
             sessions: reactive([] as Array<Record<string, unknown>>),
@@ -222,6 +229,7 @@ function makeRouter(initialPath?: string): Router {
 
 describe('App shell (header/sidebar + chat base + station sheets)', () => {
     beforeEach(() => {
+        __resetToastsForTests()
         // Skip the native lifecycle listener in jsdom via the fail-closed switch.
         window.__TALOS_M1_DISABLE__ = ['lifecycle']
         mockState.controller = makeController()
@@ -238,9 +246,56 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         }))
     })
     afterEach(() => {
+        __resetToastsForTests()
         window.__TALOS_M1_DISABLE__ = undefined
         delete (window as unknown as { __talosHarnessUiRuntime?: unknown }).__talosHarnessUiRuntime
         window.localStorage.clear()
+    })
+
+    it('offers undo for a chat archived from the sidebar', async () => {
+        const router = makeRouter('/settings')
+        const wrapper = mount(App, { global: { plugins: [router] } })
+        try {
+            await router.isReady()
+            await flushPromises()
+            await wrapper.get('[aria-label="Open menu"]').trigger('click')
+            await vi.waitFor(() => expect(wrapper.findComponent(Sidebar).exists()).toBe(true))
+            wrapper.findComponent(Sidebar).vm.$emit('archive', 's1')
+            await flushPromises()
+            const controller = mockState.controller as ReturnType<typeof makeController>
+            expect(controller.chat.setSessionArchived).toHaveBeenLastCalledWith('s1', true)
+            const toasts = useTalosMobileToasts()
+            const toast = toasts.items.value.find((item) => item.message === 'Chat archived')!
+            expect(toast.durationMs).toBe(8000)
+            toasts.act(toast.id)
+            await flushPromises()
+            expect(controller.chat.setSessionArchived).toHaveBeenLastCalledWith('s1', false)
+            expect(toasts.items.value.find((item) => item.id === toast.id)).toBeUndefined()
+        } finally { wrapper.unmount() }
+    })
+
+    it('keeps global navigation and its divider beside every tablet Settings route', async () => {
+        const { useTalosTabletLayout, __resetTalosTabletLayoutForTests } = await import('@/composables/useTalosTabletLayout')
+        __resetTalosTabletLayoutForTests()
+        useTalosTabletLayout().isTablet.value = true
+        const router = makeRouter('/settings')
+        const wrapper = mount(App, { global: { plugins: [router] }, attachTo: document.body })
+        try {
+            for (const destination of ['/settings', '/settings?tab=appearance', '/settings/models', '/settings/privilege']) {
+                await router.push(destination)
+                await flushPromises()
+                await vi.waitFor(() => {
+                    expect(wrapper.find('[data-testid="talos-mobile-sidebar"]').exists()).toBe(true)
+                    expect(wrapper.find('[role="separator"]').exists()).toBe(true)
+                })
+                const rail = wrapper.get('[data-testid="talos-mobile-sidebar"]')
+                expect(rail.find('[data-testid="talos-sidebar-settings"]').exists()).toBe(true)
+                expect((wrapper.element as HTMLElement).style.getPropertyValue('--talos-tablet-rail')).toMatch(/^[1-9]\d*px$/)
+            }
+        } finally {
+            wrapper.unmount()
+            __resetTalosTabletLayoutForTests()
+        }
     })
 
     it('renders the header and the persistent chat base at /, with no sheet open', async () => {

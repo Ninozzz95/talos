@@ -362,6 +362,8 @@ interface TalosChatControllerSendRuntime {
     readonly timeoutMs: number | undefined
     readonly effort: TalosMobileEffortLevel
     readonly thinking: boolean
+    /** Assente nei checkpoint precedenti a Calm: equivale ad acceso. */
+    readonly agentToolsEnabled?: boolean
     readonly tone: TalosToneId
     readonly autosaveGenerated: boolean
     readonly debugDiagnostics: boolean
@@ -456,6 +458,7 @@ function isControllerRuntime(value: unknown): value is TalosChatControllerSendRu
             typeof record.effort === 'string' ? record.effort : '',
         )
         && typeof record.thinking === 'boolean'
+        && (record.agentToolsEnabled === undefined || typeof record.agentToolsEnabled === 'boolean')
         && ['balanced', 'engineering', 'friendly', 'concise'].includes(
             typeof record.tone === 'string' ? record.tone : '',
         )
@@ -861,6 +864,7 @@ export interface ChatController {
      */
     readonly composerBusy: ComputedRef<import('@/lib/chat/composerBusy').TalosComposerBusy>
     readonly browseMode: ComputedRef<boolean>
+    readonly agentToolsEnabled: ComputedRef<boolean>
     readonly sendDisabledReason: ComputedRef<string>
     readonly preferenceError: Readonly<Ref<string | null>>
     readonly enhancingPrompt: Readonly<Ref<boolean>>
@@ -921,6 +925,7 @@ export interface ChatController {
     decideLocalEngineProbeConsent(decision: 'granted' | 'declined' | 'dismissed'): Promise<void>
     selectEffort(level: TalosMobileEffortLevel): Promise<void>
     setThinking(enabled: boolean): Promise<void>
+    setAgentToolsEnabled(enabled: boolean): void
     setBrowseMode(enabled: boolean): Promise<void>
     saveKey(provider: TalosMobileProviderId, key: string): Promise<void>
     removeKey(provider: TalosMobileProviderId): Promise<void>
@@ -939,6 +944,8 @@ export interface ChatController {
     clearTraces(): void
     /** R2-7 — single orchestration point for session actions (see impl). */
     sessionLifecycle: TalosSessionLifecycle
+    searchMessages: TalosChatRepository['searchMessages']
+    listSearchFiles: TalosChatRepository['listVaultFileSummaries']
     tasks: {
         list(): Promise<import('@/repositories/chatRepository').TalosLocalTask[]>
         create(input: {
@@ -1088,6 +1095,7 @@ export interface ChatController {
         remove(memoryId: string): Promise<void>
     }
     resendMessage(messageId: string): Promise<void>
+    editUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string): Promise<void>
     retryAssistantMessage(messageId: string): Promise<void>
     /**
      * @param diVoce vero se il turno nasce dalla DETTATURA: marca il messaggio
@@ -1758,6 +1766,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             timeoutMs: timeoutSeconds ? timeoutSeconds * 1000 : undefined,
             effort: effort.value,
             thinking: thinking.value,
+            agentToolsEnabled: captureAgentTools(identity.sessionId),
             tone: deps.settings.state.tone.preset,
             autosaveGenerated: deps.settings.state.shell?.library_autosave_generated === true,
             debugDiagnostics: deps.settings.state.shell?.debug_diagnostics === true,
@@ -2581,7 +2590,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                     ?? profile?.model
                     ?? 'unknown',
             })
-            const autosaveGenerated = sendRuntime.autosaveGenerated
+            const toolsDisabledByPerson = sendRuntime.agentToolsEnabled === false
+            const autosaveGenerated = sendRuntime.autosaveGenerated && !toolsDisabledByPerson
             const baseTonePrompt = buildTalosSystemPrompt(
                 sendRuntime.tone,
                 profile ? { provider: profile.provider, model: providerModel?.displayName ?? profile.model } : null,
@@ -3638,7 +3648,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const modelSupportsTools = providerModel
                 ? talosModelSupportsToolCalling(providerModel)
                 : false
-            const offeredTools = modelSupportsTools
+            const offeredTools = modelSupportsTools && !toolsDisabledByPerson
                 ? toolset.offer(
                     sendRuntime.toolPermissions,
                     sendRuntime.agentTools,
@@ -3796,6 +3806,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             const turnoDiretto = profile?.provider === 'local'
                 ? catalogo?.talosTurnoDiretto(acceptedTurns) ?? null
                 : null
+            const senzaTool = toolsDisabledByPerson || turnoDiretto?.senzaTool === true
             /*
              * ⛔ Vive quanto la CONVERSAZIONE, non quanto l'invio: uno
              * strumento gia' svelato resta chiamabile al messaggio dopo, e i
@@ -3824,7 +3835,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * rende chiamabile ciò che il modello ha appena chiesto.
              */
             const strumentiEsposti = (): typeof offeredTools => (
-                turnoDiretto?.senzaTool
+                senzaTool
                     ? []
                     : dettagliStrumento
                     ? [
@@ -3859,7 +3870,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * scritta accanto alla misura che l'ha corretta — non in mezzo a
              * duemila righe di controller, dove nessuno la rileggerebbe.
              */
-            const indiceNelPrompt = catalogo && !turnoDiretto?.senzaTool
+            const indiceNelPrompt = catalogo && !senzaTool
                 ? catalogo.talosIstruzioneCatalogo(offeredTools as never)
                 : ''
 
@@ -3953,14 +3964,18 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
              * fila. Chiedere di parallelizzare cose che si passano il risultato
              * l'una all'altra farebbe partire la seconda con le mani vuote.
              */
-            const parallelInstruction = modelSupportsTools && !turnoDiretto?.senzaTool
+            const parallelInstruction = modelSupportsTools && !senzaTool
                 ? '\nWhen a request needs several tools that do NOT depend on each other, '
                     + 'call them together in the same turn instead of one at a time: it is faster '
                     + 'for the user and cheaper. Around three at once is a good target. '
                     + 'Call them one after another only when a tool genuinely needs the result of '
                     + 'the previous one.'
                 : ''
-            const directAnswerInstruction = turnoDiretto?.istruzione ?? ''
+            const directAnswerInstruction = toolsDisabledByPerson
+                ? '\nThe person has disabled model tools for this chat. Answer directly without calling tools, '
+                    + 'requesting tool consent, or claiming to have used tools. If the task needs a tool, '
+                    + 'explain that it is disabled by the person. User-provided attachments remain available as context.'
+                : turnoDiretto?.istruzione ?? ''
             const tonePrompt = baseTonePrompt
                 + parallelInstruction
                 + (autosaveGenerated && modelSupportsTools && !documentToolOffered
@@ -4232,9 +4247,12 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                         handlers.onReasoning?.(text)
                     },
                 }
-                const result = await completeOnce(roundTurns, timed ?? handlers, tools)
+                const result = await completeOnce(roundTurns, timed ?? handlers, toolsDisabledByPerson ? [] : tools)
                 round.open?.cache?.(result.usage)
-                return result
+                // Anche una chiamata inattesa dal provider non arriva a preflight/consenso.
+                return toolsDisabledByPerson
+                    ? { ...result, toolCalls: undefined, finishReason: result.toolCalls?.length ? 'stop' : result.finishReason }
+                    : result
             }
             const agentDeps: TalosAgentLoopDeps = {
                 complete: async (turns, opzioni) => {
@@ -5351,6 +5369,25 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         prepareSend: prepareControllerSend,
     })
     const browseMode = computed(() => chat.activeSession.value?.surface === 'browse')
+    // Solo memoria del controller, distinta dalle preferenze globali dei singoli strumenti.
+    const agentToolsBySession = reactive<Record<string, boolean>>({})
+    // All'avvio la home può non avere ancora un sessionId; il primo invio lo assegna.
+    const agentToolsBeforeSession = ref(true)
+    const agentToolsEnabled = computed(() => {
+        const id = chat.activeSession.value?.id
+        return id ? agentToolsBySession[id] ?? agentToolsBeforeSession.value : agentToolsBeforeSession.value
+    })
+    function setAgentToolsEnabled(enabled: boolean): void {
+        const id = chat.activeSession.value?.id
+        if (id) agentToolsBySession[id] = enabled
+        else agentToolsBeforeSession.value = enabled
+    }
+    function captureAgentTools(sessionId: string): boolean {
+        const enabled = agentToolsBySession[sessionId] ?? agentToolsBeforeSession.value
+        agentToolsBySession[sessionId] = enabled
+        agentToolsBeforeSession.value = true
+        return enabled
+    }
     const canSend = computed(() =>
         chat.state.persistenceStatus === 'ready'
         && chat.state.persistenceError === null
@@ -5367,7 +5404,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      * app; nothing asked WHICH conversation it belonged to, though the store
      * knew.
      */
-    const composerBusy = computed(() => talosComposerBusy(
+    const composerBusy = computed(() => chat.state.editingMessage ? 'this-chat' : talosComposerBusy(
         chat.state.sending,
         chat.state.sendingSessionId,
         chat.activeSession.value?.id ?? null,
@@ -5447,7 +5484,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         return true
     }
 
-    function ensureSelection(preferredProvider?: TalosMobileProviderId): void {
+    /**
+     * Torna DA DOVE viene la selezione: `attesa` (il modello che aspettava il
+     * catalogo), `tenuto` (quello già selezionato), `preferenza` (composer_model
+     * dal deposito) o `ripiego` (il primo richiamabile, che NESSUNO ha scelto).
+     * D-M-1 (12/09): chi persiste guarda questo esito, e un ripiego non si scrive.
+     */
+    function ensureSelection(preferredProvider?: TalosMobileProviderId): 'attesa' | 'tenuto' | 'preferenza' | 'ripiego' {
         /*
          * ⛔⛔ PRIMA DI TUTTO: il modello che la persona aveva scelto e che non
          * si era potuto applicare perché il catalogo non si leggeva.
@@ -5460,13 +5503,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         if (modelloInAttesa && applyModelSelection(modelloInAttesa)) {
             talosTracciaFuori(`modello: riavuto=${modelloInAttesa}`)
             modelloInAttesa = null
-            return
+            return 'attesa'
         }
-        if (applyModelSelection(selectedModelId.value)) return
+        if (applyModelSelection(selectedModelId.value)) return 'tenuto'
         // ⛔ PRIMA la scelta della persona, poi qualunque automatismo. È la riga
         // che fa arrivare alla barra il modello scelto nella chat: senza, la
         // finestra nuova parte da `null` e si sceglie il modello da sola.
-        if (applyModelSelection(deps.settings.state.shell?.composer_model ?? null)) return
+        if (applyModelSelection(deps.settings.state.shell?.composer_model ?? null)) return 'preferenza'
         const preferred = preferredProvider
             ? profiles.value.find((profile) =>
                 profile.provider === preferredProvider
@@ -5478,9 +5521,13 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             profile.show_in_composer && talosMobileModelProfileIsCallable(profile),
         )
         const next = preferred ?? callable ?? null
+        // D-M-1 (12/09): il RIPIEGO lascia una riga — è la strada che mette un
+        // modello mai scelto nel compositore.
+        talosTracciaFuori(`modello: ripiego=${next?.id ?? '∅'} prima=${selectedModelId.value ?? '∅'} pref=${deps.settings.state.shell?.composer_model ?? '∅'} attesa=${modelloInAttesa ?? '∅'}`)
         selectedModelId.value = next?.id ?? null
         effort.value = clampMobileEffort(next?.effort_levels, effort.value)
         if (!next?.supports_thinking) thinking.value = false
+        return 'ripiego'
     }
 
     async function refreshSecrets(): Promise<void> {
@@ -5710,8 +5757,22 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
     }
 
     async function persistSelectionAfterProjectionChange(previousModelId: string | null): Promise<void> {
-        ensureSelection()
+        const esito = ensureSelection()
         if (selectedModelId.value === previousModelId) return
+        /*
+         * D-M-1 (12/09, MISURATO sul Pad): la chat «Dimmi in una frase…» risposta da
+         * GLM si riapriva su «Sakana: Fugu Max», e all'avvio il diario diceva
+         * `ripreso=openrouter:sakana/fugu-max da=sessione`. Questa funzione
+         * scriveva nella SESSIONE e nei predefiniti anche un RIPIEGO — la stessa
+         * cosa che il 13/08 faceva `applyModelSelection` con composer_model.
+         * ⇒ Un ripiego resta a schermo (è giusto, lì per lì) ma non si scrive da
+         * nessuna parte; il modello di prima resta in attesa e torna da solo.
+         */
+        if (esito === 'ripiego') {
+            talosTracciaFuori(`modello: ripiego-non-scritto=${selectedModelId.value ?? '∅'} prima=${previousModelId ?? '∅'}`)
+            if (previousModelId && !modelloInAttesa) modelloInAttesa = previousModelId
+            return
+        }
         const operations: Promise<unknown>[] = [persistComposerDefaults()]
         if (chat.activeSession.value) operations.push(chat.setActiveModelProfile(selectedModelId.value))
         await Promise.all(operations)
@@ -7261,6 +7322,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         }
     }
 
+    async function editUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string): Promise<void> {
+        if (composerBusy.value !== 'idle' || pendingToolAuthorizations.value.length || toolAuthorizationRecoveries.value.length) {
+            throw new Error(deps.translate('chat.editMessageUnavailable'))
+        }
+        await chat.editUserMessage(sessionId, messageId, expectedLastMessageId)
+        clearPromptEnhancement()
+    }
+
     async function resendMessage(messageId: string): Promise<void> {
         clearPromptEnhancement()
         const message = chat.messages.find((candidate) => candidate.id === messageId)
@@ -7310,6 +7379,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
      */
     async function newSession(options: { ephemeral?: boolean } = {}): Promise<void> {
         clearPromptEnhancement()
+        agentToolsBeforeSession.value = true
         await chat.createSession(
             options.ephemeral ? deps.translate('chat.temporaryChat') : undefined,
             selectedModelId.value,
@@ -7319,9 +7389,14 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
     async function selectSession(sessionId: string): Promise<void> {
         clearPromptEnhancement()
+        agentToolsBeforeSession.value = true
         await chat.selectSession(sessionId)
         const restoredModel = chat.activeSession.value?.active_model_profile_id
-        if (restoredModel) applyModelSelection(restoredModel)
+        const applicato = restoredModel ? applyModelSelection(restoredModel) : false
+        // D-M-1 (12/09): la sonda che dice DA DOVE viene il modello mostrato
+        // riaprendo una chat — visto sul Pad «Sakana: Fugu Max» su una chat
+        // risposta da GLM. Parla anche quando va bene, come quella dell'avvio.
+        talosTracciaFuori(`modello: sessione=${sessionId.slice(0, 8)} salvato=${restoredModel ?? '∅'} applicato=${applicato} ora=${selectedModelId.value ?? '∅'}`)
     }
 
     async function renameSession(sessionId: string, title: string): Promise<void> {
@@ -7380,6 +7455,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
 
     return {
         sessionLifecycle,
+        searchMessages: (term: string, options?: { limit?: number }) => deps.chatRepository.searchMessages(term, options),
+        listSearchFiles: () => deps.chatRepository.listVaultFileSummaries(),
         catalogs: readonly(catalogs) as Readonly<Record<TalosMobileProviderId, ProviderCatalogState>>,
         endpoints: readonly(endpoints) as Readonly<Record<TalosMobileProviderId, string | null>>,
         modelLabPreferences,
@@ -7424,6 +7501,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         canSend,
         composerBusy,
         browseMode,
+        agentToolsEnabled,
+        setAgentToolsEnabled,
         sendDisabledReason,
         preferenceError: readonly(preferenceError),
         enhancingPrompt: readonly(enhancingPrompt),
@@ -7467,6 +7546,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         notes,
         research,
         resendMessage,
+        editUserMessage,
         retryAssistantMessage,
         send,
         enhancePrompt,

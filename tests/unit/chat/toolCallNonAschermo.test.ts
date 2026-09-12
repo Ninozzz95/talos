@@ -55,3 +55,26 @@ describe('i blocchi <tool_call> si buttano', () => {
         expect(talosSplitFinalThink(grezzo, null).text).toBe('AB')
     })
 })
+
+// D-F1-2 (12/09): il blocco buttato si RACCOGLIE, perché sul cloud nessuno l'aveva eseguito.
+describe('i blocchi <tool_call> buttati si raccolgono in `calls`', () => {
+    it('TOOLCALL-06 il contenuto arriva intero anche se spezzato fra più pezzi, senza i tag', () => {
+        const s = talosCreateThinkSplitter()
+        const pezzi = ['Cerco. <tool_', 'call>library_search\n<arg_key>query</arg_key>\n<arg_val', 'ue>e-ink</arg_value>\n</tool_call> Fatto.']
+        let testo = ''
+        const calls: string[] = []
+        for (const p of pezzi) { const f = s.push(p); testo += f.text; if (f.calls) calls.push(...f.calls) }
+        const fine = s.flush(); testo += fine.text; if (fine.calls) calls.push(...fine.calls)
+        expect(testo).toBe('Cerco.  Fatto.')
+        expect(calls).toEqual(['library_search\n<arg_key>query</arg_key>\n<arg_value>e-ink</arg_value>\n'])
+    })
+
+    it('TOOLCALL-07 anche il risultato finale porta le chiamate; il catalogo <tools> no; il blocco troncato no', () => {
+        const finale = talosSplitFinalThink('A<tool_call>{"name":"x"}</tool_call>B<tools>catalogo</tools>C', null)
+        expect(finale.text).toBe('ABC')
+        expect(finale.calls).toEqual(['{"name":"x"}'])
+        const troncato = talosSplitFinalThink('A<tool_call>{"name":"x"', null)
+        expect(troncato.calls).toBeUndefined()
+        expect(talosSplitFinalThink('niente', null).calls).toBeUndefined()
+    })
+})

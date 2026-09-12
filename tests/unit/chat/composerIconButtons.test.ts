@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 
 /**
  * Owner 2026-07-26: "dal pulsante più e il pulsante microfono venisse eliminato
@@ -31,7 +32,7 @@ describe('composer icon buttons', () => {
         return module.default as unknown as string
     }
 
-    it('the plus button is a bare icon, with no container', async () => {
+    it('il più mantiene icona e bersaglio tattile nella forma tonda', async () => {
         const buttons = buttonsLabelled(await composerSource(), "$t('chat.addToChat')")
         expect(buttons.length).toBeGreaterThan(0)
         for (const button of buttons) {
@@ -42,13 +43,13 @@ describe('composer icon buttons', () => {
 
     it('the microphone is bare, and send KEEPS its container', async () => {
         const source = await composerSource()
-        const mic = /rightAction === 'mic'\s*\?\s*'([^']*)'/.exec(source)?.[1] ?? ''
-        expect(mic, `the mic branch still styles a container: ${mic}`).not.toMatch(/\bborder\b|\bbg-/)
-
-        // Send, stop and dictating are unchanged: those are the states where the
-        // control is either about to be pressed or must be findable in a hurry.
-        const rest = /rightAction === 'mic'[\s\S]*?:\s*'([^']*)'/.exec(source)?.[1] ?? ''
-        expect(rest).toContain('bg-[var(--talos-accent')
+        const mic = buttonsLabelled(source, 'microphoneLabel')[0]
+        expect(mic).toContain('variant="ghost"')
+        expect(mic).not.toContain('talos-send-btn')
+        const send = buttonsLabelled(source, 'rightActionLabel')[0]
+        expect(send).toContain('talos-send-btn')
+        const css = readFileSync('src/style.css', 'utf8')
+        expect(css).toMatch(/\.talos-composer-tools \.talos-send-btn\s*\{[^}]*border-radius: 50%;[^}]*background: var\(--talos-accent\)/s)
     })
 
     it('keeps the 44px touch target on both controls', async () => {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { defineAsyncComponent } from 'vue'
 import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
-import { Menu } from '@lucide/vue'
+import { ChevronLeft, Menu } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 
 const TalosMobileNotificationBell = defineAsyncComponent(
@@ -60,10 +60,19 @@ defineProps<{
     canOpenMedia?: boolean
     /** What the active chat would take from the Library, for the delete dialog. */
     cleanupPlan?: TalosSessionCleanupPlan
+    /**
+     * Fase 5 Calm (owner 12/09): sul tablet, con una conversazione aperta, il
+     * mockup mette «‹ Indietro» in testa alla chat (topbar r. 2455) — senza
+     * pillola del modello e senza tema (U-8/U-9). Sul telefono il posto e'
+     * dell'hamburger: le due cose non convivono.
+     */
+    showBack?: boolean
 }>()
 
 const emit = defineEmits<{
     openMenu: []
+    /** «‹ Indietro» (tablet, chat aperta): la shell decide dove si torna. */
+    back: []
     newChat: []
     temporaryChat: []
     normalMode: []
@@ -146,6 +155,18 @@ const emit = defineEmits<{
                 @click="emit('openMenu')"
             >
                 <Menu aria-hidden="true" />
+            </Button>
+            <Button
+                v-else-if="showBack"
+                type="button"
+                size="icon-lg"
+                variant="ghost"
+                data-testid="talos-chat-back"
+                :aria-label="$t('navigation.goBack')"
+                class="talos-pressable pointer-events-auto min-h-touch min-w-touch rounded-full border border-[var(--talos-border)]/60 bg-[var(--talos-card)]/85 backdrop-blur-sm text-[var(--talos-text)]"
+                @click="emit('back')"
+            >
+                <ChevronLeft aria-hidden="true" />
             </Button>
             <span v-else aria-hidden="true" />
 

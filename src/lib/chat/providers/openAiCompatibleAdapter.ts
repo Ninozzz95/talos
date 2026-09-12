@@ -23,6 +23,24 @@ import {
 } from '@/lib/chat/providers/openAiReasoningTools'
 import { talosToolsForOpenAi } from '@/lib/tools/registry'
 import { createOpenAiToolCallAccumulator, parseOpenAiToolCalls } from '@/lib/tools/wire'
+import { talosCreateThinkSplitter, talosSplitFinalThink } from '@/lib/chat/thinkStream'
+import { talosParseInlineToolCall } from '@/lib/chat/inlineToolCall'
+import type { TalosToolCall } from '@/stores/chat'
+
+/**
+ * D-F1-2 (12/09/2026): i blocchi `<tool_call>` che il modello scrive nel TESTO
+ * (GLM 5.3 Flash via OpenRouter lo fa, nella forma `nome<arg_key>…<arg_value>…`)
+ * non vanno a schermo: diventano chiamate vere, in coda a quelle arrivate nel
+ * campo `tool_calls`. Gli id sono nostri, perché il fornitore non ne ha dati.
+ */
+function chiamateDalTesto(blocchi: readonly string[] | undefined, giaPresenti: number): TalosToolCall[] {
+    const trovate: TalosToolCall[] = []
+    for (const blocco of blocchi ?? []) {
+        const letta = talosParseInlineToolCall(blocco)
+        if (letta) trovate.push({ id: `inline-${giaPresenti + trovate.length}`, name: letta.name, arguments: letta.arguments })
+    }
+    return trovate
+}
 import {
     emptyProviderResponse,
     malformedProviderResponse,
@@ -537,8 +555,11 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
             const parsed = completionSchema.safeParse(response.data)
             if (!parsed.success) throw malformedProviderResponse(config.provider, 'complete', { received: response.data, issues: parsed.error.issues })
             const choice = parsed.data.choices[0]!
-            const text = answerText(choice.message)
-            const toolCalls = parseOpenAiToolCalls(choice.message)
+            // D-F1-2: una chiamata scritta nel testo si legge, non si mostra.
+            const ripulito = talosSplitFinalThink(answerText(choice.message), null)
+            const text = ripulito.text
+            const dalCampo = parseOpenAiToolCalls(choice.message)
+            const toolCalls = [...dalCampo, ...chiamateDalTesto(ripulito.calls, dalCampo.length)]
             // A tool-calling turn legitimately has NO text: refusing it as
             // malformed would break the loop before it started.
             //
@@ -609,6 +630,16 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
             }
 
             const toolCalls = createOpenAiToolCallAccumulator()
+            // D-F1-2: il testo passa dal separatore; i blocchi `<tool_call>`
+            // non scorrono a schermo e si raccolgono per diventare chiamate.
+            const separatore = talosCreateThinkSplitter()
+            let testoPulito = ''
+            const blocchiDalTesto: string[] = []
+            const accogli = (fetta: { text: string, reasoning: string, calls?: string[] }): void => {
+                if (fetta.text) { testoPulito += fetta.text; handlers.onChunk(fetta.text) }
+                if (fetta.reasoning) handlers.onReasoning?.(fetta.reasoning)
+                if (fetta.calls) blocchiDalTesto.push(...fetta.calls)
+            }
             /*
              * ⛔⛔ IL RIFIUTO PER CREDITI SI IMPARA, non si mostra.
              *
@@ -661,13 +692,15 @@ function createOpenAiCompatibleAdapter(config: OpenAiCompatibleConfig): TalosMob
                     // nullish-coalescing would take the empty one.
                     return delta?.reasoning_content || delta?.reasoning || ''
                 },
-                onChunk: handlers.onChunk,
+                onChunk: (pezzo) => accogli(separatore.push(pezzo)),
                 onReasoning: handlers.onReasoning,
             }))
-            const calls = toolCalls.calls()
-            if (!stream.text && calls.length === 0) throw malformedProviderResponse(config.provider, 'complete', { received: { text: stream.text, calls: calls.length }, note: 'stream ended with no text and no tool calls' })
+            accogli(separatore.flush())
+            const dalCampo = toolCalls.calls()
+            const calls = [...dalCampo, ...chiamateDalTesto(blocchiDalTesto, dalCampo.length)]
+            if (!testoPulito && calls.length === 0) throw malformedProviderResponse(config.provider, 'complete', { received: { text: stream.text, calls: calls.length }, note: 'stream ended with no text and no tool calls' })
             return {
-                text: stream.text,
+                text: testoPulito,
                 model: input.model.id,
                 reasoning: stream.reasoning || undefined,
                 ...(calls.length ? { toolCalls: calls, finishReason: 'tool_calls' } : {}),

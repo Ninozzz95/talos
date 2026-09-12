@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
+import { recentChatSessions } from '@/lib/chatListGestures'
 import { talosChatDiscardedByModeSwitch } from '@/lib/chat/modeSwitch'
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch, type Component } from 'vue'
 import { BookMarked, BookOpen, CheckSquare, Code2, FlaskConical, MessageSquareText, Settings, StickyNote, Stethoscope } from '@lucide/vue'
@@ -31,6 +32,7 @@ import { talosInteractionMotionStyleV6 } from '@/motion-v6/interaction/style'
 // layer di un `<dialog>`, dove i token del motore (che vivono sul div qui
 // sotto) non arrivano. Perche' esistono: `composables/useTalosCalmMotionTokens`.
 import { useTalosCalmMotionTokens } from '@/composables/useTalosCalmMotionTokens'
+import { useTalosDialogOriginCapture } from '@/composables/useTalosConfirmMotion'
 import { useChatController } from '@/stores/chatController'
 import { useTalosMobileIntroState } from '@/composables/useTalosMobileIntroState'
 import { TALOS_MOBILE_INTRO_KEY } from '@/lib/introInjection'
@@ -52,7 +54,7 @@ import { applyTalosFontScale } from '@/lib/talosFontScale'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
-import { clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletSidebarEffectiveWidth } from '@/lib/tabletLayout'
+import { TALOS_TABLET_CHAT_SIDEBAR_DEFAULT, TALOS_TABLET_CHAT_SIDEBAR_MIN, TALOS_TABLET_SIDEBAR_MAX, clampTalosTabletChatSidebarWidth, clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletSidebarEffectiveWidth } from '@/lib/tabletLayout'
 import { useLauncherIconController } from '@/services/launcherIcon'
 import { parseTalosSessionLibraryContextPolicy } from '@/lib/chat/libraryPolicy'
 const router = useRouter()
@@ -125,8 +127,7 @@ const TalosLauncherIconDialog = defineAsyncComponent(
     () => import('@/components/talos/settings/TalosLauncherIconDialog.vue'),
 )
 const sidebarEverOpened = ref(false)
-/** U-5: `--mockup-sidebar-width` del mockup «Talos Calm Finale», la sidebar fissa del tablet. */
-const TALOS_MOCKUP_SIDEBAR_WIDTH = '14.5rem'
+/* U-5: i 14,5 rem del mockup per la sidebar fissa del tablet stanno in `TALOS_TABLET_CHAT_SIDEBAR_DEFAULT` (tabletLayout.ts): dal 12/09 la larghezza si trascina. */
 const locked = ref(false)
 const settingsHydrated = ref(false)
 const intro = useTalosMobileIntroState({
@@ -157,6 +158,7 @@ const reducedMotion = ref(typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
 useTalosCalmMotionTokens()
+useTalosDialogOriginCapture()
 const interactionMotionStyle = computed(() => talosInteractionMotionStyleV6({
     themeId: themeStore.state.theme,
     preferences: settingsStore.state.motion_v6,
@@ -164,17 +166,18 @@ const interactionMotionStyle = computed(() => talosInteractionMotionStyleV6({
     paused: false,
 }))
 
-// F6 — fixed overlays read the visible leading rail. Settings is itself a
-// canonical list-detail surface: its categories replace the chat rail, so the
-// station owns the full tablet width while retaining the saved rail dimension.
+// Fixed overlays start after the global sidebar, including Settings details.
 const shellStyle = computed(() => ({
     ...interactionMotionStyle.value,
     // U-5: con la sidebar del mockup il binario e' la SUA larghezza (14,5 rem, in
     // rem perche' segue la scala dei caratteri), non quella salvata del pannello F6.
+    // 12/09: la sidebar Calm si trascina dal bordo — il binario segue la sua
+    // larghezza (232 px = i 14,5 rem del mockup finche' non la si tocca).
     '--talos-tablet-rail': !tabletChatRailVisible.value ? '0px'
-        : tabletRailVariant.value === 'chat' ? TALOS_MOCKUP_SIDEBAR_WIDTH
+        : tabletRailVariant.value === 'chat' ? `${tabletChatSidebarWidth.value}px`
         : `${tabletEffectiveRailWidth.value}px`,
     '--talos-tablet-sidebar-width': `${tabletEffectiveRailWidth.value}px`,
+    '--talos-tablet-chat-sidebar-width': `${tabletChatSidebarWidth.value}px`,
 }))
 
 // F1-T3 (D5/D6): hamburger sidebar state + the ChatScreen exposed session actions
@@ -371,6 +374,20 @@ function sidebarRename(sessionId: string, title: string): void {
  * still there and the user can try again, whereas deleting the chat first and
  * then failing leaves orphans nobody can find their way back to.
  */
+function sidebarArchive(sessionId: string): void {
+    lifecycleAction(t('chats.archive'), async () => {
+        await chatController.chat.setSessionArchived(sessionId, true)
+        toastsStore.push({
+            message: t('chats.archivedToast'),
+            durationMs: 8000,
+            action: {
+                label: t('common.undo'),
+                run: () => lifecycleAction(t('chats.unarchive'), () => chatController.chat.setSessionArchived(sessionId, false)),
+            },
+        })
+    })
+}
+
 function sidebarDelete(sessionId: string, choice?: { deleteMedia: boolean }): void {
     lifecycleAction(t('chat.deleteChat'), async () => {
         const failed = choice?.deleteMedia ? await chatController.deleteSessionMedia(sessionId) : []
@@ -557,6 +574,21 @@ const tabletSidebarWidth = computed(() => tabletDragWidth.value
 function onTabletResize(width: number): void {
     tabletDragWidth.value = width
 }
+/* La sidebar Calm (variante chat): stessa disciplina del pannello F6, preferenza sua. */
+const tabletChatDragWidth = ref<number | null>(null)
+const tabletChatSidebarWidth = computed(() => tabletChatDragWidth.value
+    ?? clampTalosTabletChatSidebarWidth(settingsStore.state.shell.tablet_chat_sidebar_width))
+function onTabletChatResize(width: number): void {
+    tabletChatDragWidth.value = width
+}
+function commitTabletChatWidth(): void {
+    const width = tabletChatSidebarWidth.value
+    void settingsStore.setShell({ tablet_chat_sidebar_width: width })
+        .catch(() => undefined)
+        .finally(() => {
+            if (tabletChatDragWidth.value === width) tabletChatDragWidth.value = null
+        })
+}
 function commitTabletWidth(): void {
     const width = tabletSidebarWidth.value
     void settingsStore.setShell({ tablet_sidebar_width: width })
@@ -570,7 +602,10 @@ function commitTabletWidth(): void {
 // SF6-F9: leaving the tablet layout mid-drag would otherwise leak the
 // in-flight override into the next engage.
 watch(() => tabletLayout.isTablet.value, (isTablet) => {
-    if (!isTablet) tabletDragWidth.value = null
+    if (!isTablet) {
+        tabletDragWidth.value = null
+        tabletChatDragWidth.value = null
+    }
 })
 
 // Picking / creating a chat in the panel while a station sheet is open must
@@ -591,6 +626,17 @@ function tabletNewChat(): void {
 
 // F2-T3.6 immersive chrome: 3-dot options act on the ACTIVE session.
 const immersiveHeader = computed(() => settingsStore.state.shell.immersive_header)
+/**
+ * «‹ Indietro» del tablet (Fase 5 Calm, 12/09): se la persona e' arrivata qui
+ * da un'altra pagina (l'elenco «Chat», una nota…) si torna li'; altrimenti la
+ * conversazione lascia il posto alla home vuota, che nel mockup e' la pagina
+ * «dietro» a ogni chat. `history.state.back` lo scrive vue-router.
+ */
+function immersiveBack(): void {
+    const stato = window.history.state as { back?: string | null } | null
+    if (stato?.back) router.back()
+    else sidebarNewChat()
+}
 function immersiveRename(title: string): void {
     const id = chatController.chat.activeSession.value?.id
     if (id) sidebarRename(id, title)
@@ -729,8 +775,6 @@ const stationParent = computed(() => talosMobileParentRoute(
     activeRoute.value,
     route.params as Record<string, unknown>,
 ))
-// TABLET-SETTINGS-01: Settings categories are the primary pane for that task.
-// Mounting the unrelated chat rail beside them creates a redundant third pane.
 /**
  * Il gradino sopra, per il pulsante in alto a sinistra.
  *
@@ -754,9 +798,8 @@ const stationParentTitle = computed(() => {
     return key ? t(key) : undefined
 })
 
-const tabletChatRailVisible = computed(() => (
-    tabletLayout.isTablet.value && talosMobileStationOf(activeRoute.value) !== 'settings'
-))
+// Settings owns its category menu inside the workspace; global navigation stays visible.
+const tabletChatRailVisible = computed(() => tabletLayout.isTablet.value)
 
 // F6 sidebar refactor (24/8): quale contenuto mostra il rail persistente.
 // Ferma alla stessa domanda già risposta sopra (talosMobileStationOf), non
@@ -1028,8 +1071,9 @@ onMounted(async () => {
     // A remembered station is a convenience only for the neutral launcher
     // address. A copied/deep-linked URL is an explicit user request and must
     // survive cold boot and reload, including Model Lab child pages.
-    if (activeRoute.value === 'chat' && lastRoute
-        && !(tabletLayout.isTablet.value && lastRoute === 'chats')) {
+    // 12/09 (B09): la pagina «Chat» vale anche su tablet — la barra laterale
+    // Calm mostra sei recenti, non l'elenco intero; si ripristina come le altre.
+    if (activeRoute.value === 'chat' && lastRoute) {
         await router.replace(pathFor(lastRoute))
     }
     /**
@@ -1359,7 +1403,7 @@ onBeforeUnmount(async () => {
             <TalosMobileSidebar
                 v-if="sidebarEverOpened"
                 v-model:open="sidebarOpen"
-                :sessions="chatController.chat.history"
+                :sessions="recentChatSessions(chatController.chat.history)"
                 :active-session-id="chatController.chat.activeSession.value?.id ?? null"
                 :busy="sessionBusy"
                 :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
@@ -1372,8 +1416,10 @@ onBeforeUnmount(async () => {
                 @rename="sidebarRename"
                 :cleanup-plan-for="cleanupPlanFor"
                 @delete="sidebarDelete"
+                @archive="sidebarArchive"
                 @navigate="sidebarNavigate"
                 @open-settings="sidebarNavigate('settings')"
+                @open-account="sidebarNavigate('settings', { tab: 'account' })"
             />
 
             <!-- F6 — tablet split view: [chat panel | divider | content column].
@@ -1388,7 +1434,7 @@ onBeforeUnmount(async () => {
                         v-if="tabletRailVariant === 'chat'"
                         fixed
                         :open="true"
-                        :sessions="chatController.chat.history"
+                        :sessions="recentChatSessions(chatController.chat.history)"
                         :active-session-id="chatController.chat.activeSession.value?.id ?? null"
                         :busy="sessionBusy"
                         :creating-session="sessionBusy || chatController.chat.state.persistenceStatus !== 'ready'"
@@ -1397,8 +1443,21 @@ onBeforeUnmount(async () => {
                         @select="tabletSelect"
                         @rename="sidebarRename"
                         @delete="sidebarDelete"
+                @archive="sidebarArchive"
                         @navigate="sidebarNavigate"
                         @open-settings="sidebarNavigate('settings')"
+                @open-account="sidebarNavigate('settings', { tab: 'account' })"
+                    />
+                    <!-- Il bordo si trascina (owner 12/09): stesso divisore del pannello
+                         Codice, limiti della sidebar Calm, doppio tocco = 14,5 rem. -->
+                    <TalosTabletDivider
+                        v-if="tabletRailVariant === 'chat'"
+                        :width="tabletChatSidebarWidth"
+                        :min="TALOS_TABLET_CHAT_SIDEBAR_MIN"
+                        :max="TALOS_TABLET_SIDEBAR_MAX"
+                        :reset="TALOS_TABLET_CHAT_SIDEBAR_DEFAULT"
+                        @resize="onTabletChatResize"
+                        @commit="commitTabletChatWidth"
                     />
                     <template v-else>
                         <TalosTabletSidebar
@@ -1448,7 +1507,9 @@ onBeforeUnmount(async () => {
                         :busy="sessionBusy"
                         :hide-menu="tabletLayout.isTablet.value"
                         :hide-app-actions="tabletLayout.isTablet.value"
+                        :show-back="tabletLayout.isTablet.value && !activeChatIsEmpty"
                         @open-menu="openGlobalSidebar"
+                        @back="immersiveBack"
                         @new-chat="sidebarNewChat"
                 @temporary-chat="sidebarTemporaryChat"
                 @normal-mode="sidebarNormalMode"

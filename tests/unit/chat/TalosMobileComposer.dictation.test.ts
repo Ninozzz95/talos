@@ -26,9 +26,10 @@ function mountComposer(overrides: Record<string, unknown> = {}) {
 }
 
 describe('TalosMobileComposer dictation (F2-T5)', () => {
-    it('hides the mic entirely when dictation is unsupported', async () => {
+    it('mantiene il microfono disabilitato e spiega quando la dettatura non è disponibile', async () => {
         const wrapper = mountComposer()
-        expect(wrapper.find('[aria-label="Dictate"]').exists()).toBe(false)
+        expect(wrapper.get('[aria-label="Dictate"]').attributes('disabled')).toBeDefined()
+        expect(wrapper.get('[data-testid="talos-composer-mic-reason"]').text()).toContain('not available')
         expect(wrapper.find('[aria-label="Stop dictation"]').exists()).toBe(false)
     })
 
@@ -82,9 +83,10 @@ describe('TalosMobileComposer — secondo microfono che accoda (owner 2026-08-27
      * secondo pulsante compare esattamente quando serve, non prima e non
      * sempre, e che parla allo stesso evento del primo.
      */
-    it('con il composer vuoto non esiste — solo un mic, quello principale', async () => {
+    it('a campo vuoto lo stesso microfono avvia e invio resta separato', async () => {
         const wrapper = mountComposer({ dictationSupported: true, prompt: '' })
-        expect(wrapper.find('[data-testid="talos-composer-append-mic"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-composer-append-mic"]').exists()).toBe(true)
+        expect(wrapper.get('[data-testid="talos-composer-action"]').attributes('disabled')).toBeDefined()
         expect(wrapper.find('button[aria-label="Dictate"]').exists()).toBe(true)
     })
 
@@ -107,15 +109,15 @@ describe('TalosMobileComposer — secondo microfono che accoda (owner 2026-08-27
         expect(wrapper.emitted('toggleDictation')).toHaveLength(1)
     })
 
-    it('mentre si sta già dettando non compare — quella riga è già la barra di dettatura', async () => {
+    it('mentre si detta il microfono resta disabilitato e il bottone destro ferma', async () => {
         const wrapper = mountComposer({
             dictationSupported: true, prompt: 'ciao TALOS', dictationListening: true,
         })
-        expect(wrapper.find('[data-testid="talos-composer-append-mic"]').exists()).toBe(false)
+        expect(wrapper.get('[data-testid="talos-composer-append-mic"]').attributes('disabled')).toBeDefined()
     })
 
-    it('senza dettatura disponibile non compare, testo o no', async () => {
+    it('senza dettatura disponibile resta disabilitato, testo o no', async () => {
         const wrapper = mountComposer({ dictationSupported: false, prompt: 'ciao TALOS' })
-        expect(wrapper.find('[data-testid="talos-composer-append-mic"]').exists()).toBe(false)
+        expect(wrapper.get('[data-testid="talos-composer-append-mic"]').attributes('disabled')).toBeDefined()
     })
 })

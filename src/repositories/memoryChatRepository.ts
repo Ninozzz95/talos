@@ -1,4 +1,6 @@
 import { TALOS_CONTENT_ORIGIN_FALLBACK } from '@/lib/tools/security'
+import { normalizeTalosLibrarySearchText } from '@/lib/librarySearchText'
+import { talosMessageSearchExcerpt, talosMessageSearchLimit } from '@/lib/chat/messageSearch'
 import {
     cloneJsonObject,
     normalizeChatTitle,
@@ -207,6 +209,21 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
             }
             return activeSessionId
         },
+        async searchMessages(term, options) {
+            const needle = normalizeTalosLibrarySearchText(term)
+            const limit = talosMessageSearchLimit(options?.limit)
+            if (!needle || limit === 0) return []
+            return [...messages.values()].flat()
+                .filter((message) => (message.role === 'user' || message.role === 'assistant')
+                    && normalizeTalosLibrarySearchText(message.content).includes(needle))
+                // Binary ordering, exactly like SQLite (localeCompare differs on punctuation).
+                .sort((a, b) => a.created_at === b.created_at
+                    ? (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)
+                    : (a.created_at < b.created_at ? 1 : -1))
+                .slice(0, limit)
+                .map((message) => ({ sessionId: message.session_id, messageId: message.id,
+                    excerpt: talosMessageSearchExcerpt(message.content, needle) }))
+        },
         async listMessages(sessionId: string, options?: { limit?: number; before?: { ordinal: number; id: string } }) {
             const all = (messages.get(sessionId) ?? [])
                 .slice()
@@ -222,6 +239,23 @@ export function createMemoryChatRepository(options: ChatRepositoryOptions = {}):
                 : all
             // Same contract as SQLite: the NEWEST `limit` of what remains.
             return older.slice(Math.max(0, older.length - options.limit))
+        },
+        async rewindUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string) {
+            const session = requireSession(sessionId)
+            const rows = messages.get(sessionId) ?? []
+            const index = rows.findIndex(row => row.id === messageId && row.role === 'user')
+            if (index < 0) throw new Error('TALOS_CHAT_MESSAGE_NOT_FOUND')
+            if (rows.at(-1)?.id !== expectedLastMessageId) throw new Error('TALOS_CHAT_EDIT_STALE')
+            const text = normalizeComposerDraft(rows[index]!.content)
+            const removed = new Set(rows.slice(index).map(row => row.id))
+            composerDrafts.set(sessionId, text)
+            messages.set(sessionId, rows.slice(0, index))
+            for (const id of removed) attachmentBindings.delete(id)
+            for (const [id, activity] of toolActivities) {
+                if (activity.message_id && removed.has(activity.message_id)) toolActivities.delete(id)
+            }
+            session.updated_at = now()
+            return text
         },
         async appendMessage(input: AppendChatMessageInput) {
             const session = requireSession(input.session_id)

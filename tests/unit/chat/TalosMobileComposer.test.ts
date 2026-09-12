@@ -74,6 +74,64 @@ function mountComposer(overrides: Record<string, unknown> = {}): VueWrapper {
 }
 
 describe('TalosMobileComposer', () => {
+    it('Calm: Ragiona usa il ragionamento esistente; la chip Agente e il web non ci sono piu\' (owner 12/09 19:30)', async () => {
+        const view = mountComposer({ thinking: false, agentToolsEnabled: true })
+        const thinking = view.get('[data-testid="talos-composer-thinking"]')
+        expect(thinking.attributes('aria-pressed')).toBe('false')
+        await thinking.trigger('click')
+        expect(view.emitted('selectThinking')).toEqual([[true]])
+        await view.setProps({ thinking: true })
+        expect(thinking.classes()).toContain('active')
+        expect(view.find('[data-testid="talos-composer-agent"]').exists()).toBe(false)
+        expect(view.find('[data-testid="talos-composer-browse"]').exists()).toBe(false)
+        // la parola del ragionamento non doppia la chip: resta solo per chi ascolta lo schermo
+        expect(view.get('[data-testid="talos-composer-reasoning-label"]').classes()).toContain('sr-only')
+        expect(view.emitted('send')).toBeUndefined()
+    })
+
+    it('Calm: Agente spento lascia ricerca, file, foto e fotocamera utilizzabili', async () => {
+        const view = mountComposer({ agentToolsEnabled: false })
+        for (const [id, event] of [['attach', 'attach'], ['take-photo', 'takePhoto'], ['pick-photos', 'pickPhotos']]) {
+            await view.get('[data-testid="talos-composer-plus"]').trigger('click')
+            await vi.dynamicImportSettled()
+            const button = view.get('[data-testid="talos-drawer-' + id + '"]')
+            expect(button.attributes('disabled')).toBeUndefined()
+            await button.trigger('click')
+            expect(view.emitted(event!)).toHaveLength(1)
+        }
+    })
+
+    it.each([false, true])('Calm: stop durante dettatura (avvio=%s) conserva il testo, senza inviarlo', async (starting) => {
+        const view = mountComposer({ dictationSupported: true, dictationStarting: starting, dictationListening: !starting })
+        const action = view.get('[data-testid="talos-composer-action"]')
+        expect(action.attributes('aria-label')).toBe('Stop dictation')
+        expect(action.attributes('disabled')).toBeUndefined()
+        await action.trigger('click')
+        expect(view.emitted('toggleDictation')).toEqual([[]])
+        expect(view.emitted('send')).toBeUndefined()
+        expect(view.emitted('discardDictation')).toBeUndefined()
+        expect(view.get('[data-testid="talos-composer-append-mic"]').attributes('disabled')).toBeDefined()
+    })
+
+    it('Calm: focusPrompt può portare il cursore in fondo dopo un accodamento', () => {
+        const view = mountComposer()
+        const field = view.get<HTMLTextAreaElement>('textarea').element
+        field.setSelectionRange(0, 0)
+        ;(view.vm as unknown as { focusPrompt(atEnd: boolean): boolean }).focusPrompt(true)
+        expect(field.selectionStart).toBe(field.value.length)
+        expect(field.selectionEnd).toBe(field.value.length)
+    })
+
+    it('conserva la dettatura accodata durante una risposta, mentre il bottone destro resta stop', async () => {
+        const view = mountComposer({ sending: true, dictationSupported: true, prompt: 'La prossima domanda' })
+        const mic = view.get('[data-testid="talos-composer-append-mic"]')
+        expect(mic.attributes('disabled')).toBeUndefined()
+        await mic.trigger('click')
+        expect(view.emitted('toggleDictation')).toEqual([[]])
+        expect(view.get('[data-testid="talos-composer-action"]').attributes('aria-label')).toBe('Stop response')
+        await view.get('[data-testid="talos-composer-action"]').trigger('click')
+        expect(view.emitted('stop')).toEqual([[]])
+    })
     it('focusPrompt focuses the prompt field, which stays enabled while sending (F2 SF-critic #3)', async () => {
         const view = mountComposer()
         const api = view.vm as unknown as { focusPrompt(): boolean }
@@ -90,48 +148,36 @@ describe('TalosMobileComposer', () => {
         expect(document.activeElement).toBe(field.element)
     })
 
-    it('exposes icon-only 44px controls and no compact composer control', () => {
+    it('espone i controlli Calm con bersagli tattili e nome modello leggibile', async () => {
         const view = mountComposer()
-        const labels = [
-            'Choose model profile',
-            'Choose reasoning effort',
-            'Improve prompt',
-            'Attach a file',
-            'Choose grounding context',
-            'Enable Browse mode',
-            'Open Model Lab',
-            'Send message',
-        ]
-
-        for (const label of labels) {
-            const control = view.get(`[aria-label="${label}"]`)
+        for (const id of ['plus', 'append-mic', 'action']) {
+            const control = view.get('[data-testid="talos-composer-' + id + '"]')
             expect(control.classes()).toContain('min-h-touch')
             expect(control.classes()).toContain('min-w-touch')
             expect(control.attributes('data-mobile-icon-only')).toBe('true')
         }
-        expect(view.find('[aria-label="Minimize composer"]').exists()).toBe(false)
+        expect(view.get('[data-testid="talos-composer-model-chip"]').text()).toContain('DeepSeek Chat')
+        await view.get('[data-testid="talos-composer-plus"]').trigger('click')
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        // 12/09: il foglio «+» ha le categorie del mockup — ogni voce sta nella sua.
+        for (const [tab, id] of [['attach', 'attach'], ['attach', 'context'], ['create', 'enhance'], ['tools', 'model-lab']]) {
+            await view.get('[data-testid="talos-drawer-tab-' + tab + '"]').trigger('click')
+            expect(view.get('[data-testid="talos-drawer-' + id + '"]').exists()).toBe(true)
+        }
         expect(view.find('[aria-label="Compact composer"]').exists()).toBe(false)
-        expect(view.get('textarea').classes()).toContain('max-h-48')
+        expect(view.get('textarea').classes()).toContain('talos-calm-prompt')
     })
 
-    it('BR-09 toggles Browse without navigating and opens the exact detected URL', async () => {
-        const view = mountComposer({
-            browseMode: false,
-            browserSuggestionUrl: 'https://example.com/path',
-        })
-
-        const toggle = view.get('[aria-label="Enable Browse mode"]')
-        expect(toggle.attributes('aria-pressed')).toBe('false')
-        await toggle.trigger('click')
-        expect(view.emitted('toggleBrowse')).toEqual([[true]])
-
-        const suggestion = view.get('[data-testid="talos-mobile-browser-url-suggestion"]')
-        expect(suggestion.text()).toContain('example.com/path')
-        await suggestion.get('button').trigger('click')
-        expect(view.emitted('openBrowserUrl')).toEqual([['https://example.com/path']])
-
-        await view.setProps({ browseMode: true })
-        expect(view.get('[aria-label="Disable Browse mode"]').attributes('aria-pressed')).toBe('true')
+    it('BR-09 (capovolto 12/09 20:10, owner «via ricerca web»): nessuna pillola del link e nessun /browse nel menu slash', async () => {
+        const view = mountComposer({ prompt: 'Apri https://example.com/path' })
+        expect(view.find('[aria-label="Enable Browse mode"]').exists()).toBe(false)
+        expect(view.find('[data-testid="talos-mobile-browser-url-suggestion"]').exists()).toBe(false)
+        await view.setProps({ prompt: '/' })
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        expect(view.find('[data-command-id="open_browse"]').exists()).toBe(false)
+        expect(view.find('[data-command-id="attach_file"]').exists()).toBe(true)
     })
 
     it('sends on Enter and preserves multiline input on Shift Enter', async () => {
@@ -183,7 +229,7 @@ describe('TalosMobileComposer', () => {
         // "Model & reasoning" — a configuration surface, not a menu — and
         // closing on every pick meant opening it twice to set two things.
         const view = mountComposer()
-        const modelTrigger = view.get<HTMLButtonElement>('[aria-label="Choose model profile"]')
+        const modelTrigger = view.get<HTMLButtonElement>('[data-testid="talos-composer-model-chip"]')
 
         await modelTrigger.trigger('click')
         // Dal 2026-08-06 il cassetto è caricato a richiesta — pesava 30 KB nel
@@ -212,10 +258,16 @@ describe('TalosMobileComposer', () => {
     it('opens the native attachment bridge while keeping unavailable Context explicit', async () => {
         const view = mountComposer()
 
+        await view.get('[data-testid="talos-composer-plus"]').trigger('click')
+        await vi.dynamicImportSettled()
+        await flushPromises()
         expect(view.get<HTMLButtonElement>('[aria-label="Attach a file"]').element.disabled).toBe(false)
         expect(view.find('input[type="file"]').exists()).toBe(false)
         await view.get('[aria-label="Attach a file"]').trigger('click')
         expect(view.emitted('attach')).toHaveLength(1)
+        await view.get('[data-testid="talos-composer-plus"]').trigger('click')
+        await vi.dynamicImportSettled()
+        await flushPromises()
         expect(view.get<HTMLButtonElement>('[aria-label="Choose grounding context"]').element.disabled).toBe(true)
         expect(view.get('[aria-label="Choose grounding context"]').attributes('title')).toContain('Context')
     })
@@ -224,8 +276,11 @@ describe('TalosMobileComposer', () => {
         const view = mountComposer({
             contextAvailable: true,
         })
+        await view.get('[data-testid="talos-composer-plus"]').trigger('click')
+        await vi.dynamicImportSettled()
+        await flushPromises()
         await view.get('[aria-label="Choose grounding context"]').trigger('click')
-        await view.get('[aria-label="Choose model profile"]').trigger('click')
+        await view.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         // Il cassetto arriva a richiesta: si aspetta, come chi lo apre.
         await vi.dynamicImportSettled()
         await flushPromises()
@@ -327,10 +382,14 @@ describe('TalosMobileComposer', () => {
             original_prompt: 'Keep this draft',
         }
         const view = mountComposer()
-        const improve = view.get<HTMLButtonElement>('[aria-label="Improve prompt"]')
+        await view.get('[data-testid="talos-composer-plus"]').trigger('click')
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        await view.get('[data-testid="talos-drawer-tab-create"]').trigger('click')
+        const improve = view.get<HTMLButtonElement>('[data-testid="talos-drawer-enhance"]')
 
-        expect(improve.classes()).toContain('min-h-touch')
-        expect(improve.classes()).toContain('min-w-touch')
+        expect(improve.classes()).toContain('min-h-13')
+        expect(improve.classes()).toContain('w-full')
         await improve.trigger('click')
         // Il tocco apre il pannello delle scelte; la chiamata parte da li'.
         // Owner 2026-08-04: modello, ragionamento e livello si decidono PRIMA.
@@ -356,7 +415,14 @@ describe('TalosMobileComposer', () => {
 
         await view.setProps({ enhancingPrompt: true })
         expect(view.get('[data-testid="talos-mobile-enhancer-status"]').text()).toMatch(/improving prompt/i)
-        expect(view.get<HTMLButtonElement>('[aria-label="Improve prompt"]').element.disabled).toBe(true)
+        // Una seconda apertura non avvia un lavoro mentre il primo è in corso.
+        await view.get('[data-testid="talos-composer-plus"]').trigger('click')
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        await view.get('[data-testid="talos-drawer-tab-create"]').trigger('click')
+        expect(view.get<HTMLButtonElement>('[data-testid="talos-drawer-enhance"]').element.disabled).toBe(true)
+        view.getComponent({ name: 'TalosMobileComposerDrawer' }).vm.$emit('close')
+        await flushPromises()
 
         await view.setProps({ enhancingPrompt: false, promptEnhancementError: 'Provider format was invalid.' })
         expect(view.get('[data-testid="talos-mobile-enhancer-error"]').text()).toContain('Provider format was invalid.')

@@ -59,7 +59,9 @@ describe('TalosWelcomeTitle', () => {
         const css = readFileSync(resolve(process.cwd(), 'src/style.css'), 'utf8')
 
         expect(css).toMatch(/\.talos-welcome-title\s*\{[^}]*margin-top:\s*1\.5rem;/s)
-        expect(css).toMatch(/\.talos-welcome-title\s*\{[^}]*font-size:\s*var\(--text-2xl\);/s)
+        // Fase 2 Calm (12/09): i numeri di `.home-hero h1` del mockup.
+        expect(css).toMatch(/\.talos-welcome-title\s*\{[^}]*font-size:\s*clamp\(2rem, 3\.3vw, 2\.75rem\);/s)
+        expect(css).toMatch(/\.talos-welcome-title\s*\{[^}]*font-weight:\s*500;/s)
         expect(css).toMatch(/\[data-composer-expanded="true"\]\s*>\s*\.talos-welcome-title\s*\{[^}]*margin-top:\s*0\.75rem;/s)
         expect(css).toMatch(/\[data-composer-expanded="true"\]\s*>\s*\.talos-welcome-title\s*\{[^}]*font-size:\s*var\(--text-lg\);/s)
     })

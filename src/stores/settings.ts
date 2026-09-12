@@ -47,7 +47,7 @@ import {
     TALOS_MOBILE_EFFORT_ORDER,
     type TalosMobileEffortLevel,
 } from '@/lib/mobileEffort'
-import { TALOS_TABLET_SIDEBAR_DEFAULT, clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
+import { TALOS_TABLET_CHAT_SIDEBAR_DEFAULT, TALOS_TABLET_SIDEBAR_DEFAULT, clampTalosTabletChatSidebarWidth, clampTalosTabletSidebarWidth } from '@/lib/tabletLayout'
 import {
     parseTalosFontScale,
     TALOS_DEFAULT_FONT_SCALE,
@@ -256,6 +256,7 @@ export interface TalosMobileShellPreferences {
      */
     image_attachment_consent: 'allow' | 'ask' | 'deny'
     library_view: 'grid' | 'list'
+    research_view: 'grid' | 'list'
     /**
      * Le note, in lista o a schede.
      *
@@ -342,6 +343,8 @@ export interface TalosMobileShellPreferences {
     debug_diagnostics: boolean
     /** F6 — persisted tablet split-view sidebar width (px, clamped 260–480). */
     tablet_sidebar_width: number
+    /** U-5 — la sidebar Calm del tablet, trascinata dal bordo (px, 232–480; 12/09). */
+    tablet_chat_sidebar_width: number
     /** Harness-only rail state, stored locally with the rest of the shell. */
     tablet_harness_sidebar_collapsed: boolean
 }
@@ -377,6 +380,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     plan_scope: 'turn',
     image_attachment_consent: 'ask',
     library_view: 'list',
+    research_view: 'list',
     notes_view: 'list',
     // Owner 2026-07-25 set grouping on; it just never survived a reopen.
     library_group_by_chat: true,
@@ -396,6 +400,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     streaming_animation: 'typewriter',
     debug_diagnostics: false,
     tablet_sidebar_width: TALOS_TABLET_SIDEBAR_DEFAULT,
+    tablet_chat_sidebar_width: TALOS_TABLET_CHAT_SIDEBAR_DEFAULT,
     tablet_harness_sidebar_collapsed: false,
 }
 
@@ -452,6 +457,7 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
             ? record.library_access
             : (record.library_context_enabled === true ? 'allow' : DEFAULT_SHELL_PREFERENCES.library_access),
         library_view: record.library_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.library_view,
+        research_view: record.research_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.research_view,
         notes_view: record.notes_view === 'grid' ? 'grid' : DEFAULT_SHELL_PREFERENCES.notes_view,
         library_group_by_chat: typeof record.library_group_by_chat === 'boolean'
             ? record.library_group_by_chat
@@ -493,6 +499,7 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         // cannot start showing internals to a user who never asked.
         debug_diagnostics: record.debug_diagnostics === true,
         tablet_sidebar_width: clampTalosTabletSidebarWidth(record.tablet_sidebar_width),
+        tablet_chat_sidebar_width: clampTalosTabletChatSidebarWidth(record.tablet_chat_sidebar_width),
         tablet_harness_sidebar_collapsed: typeof record.tablet_harness_sidebar_collapsed === 'boolean'
             ? record.tablet_harness_sidebar_collapsed
             : DEFAULT_SHELL_PREFERENCES.tablet_harness_sidebar_collapsed,

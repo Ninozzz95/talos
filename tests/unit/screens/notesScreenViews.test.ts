@@ -33,7 +33,11 @@ function nota(patch: Partial<TalosLocalNote> & { id: string; title: string }): T
  */
 let notes: TalosLocalNote[] = []
 
-const update = vi.fn(async () => notes[0]!)
+const update = vi.fn(async (input: { id: string; content?: string; pinned?: boolean }) => {
+    const index = notes.findIndex((note) => note.id === input.id)
+    notes[index] = { ...notes[index]!, ...input }
+    return notes[index]!
+})
 const remove = vi.fn(async () => undefined)
 const push = vi.fn()
 
@@ -222,6 +226,23 @@ describe('U-10 pinning a note', () => {
 })
 
 describe('the checklist filter and the sort', () => {
+    it('saves ticks from a card in both directions without opening the note', async () => {
+        shell.notes_view = 'grid'
+        notes = [nota({ id: 'n1', title: 'Spesa', content: 'Intro\n- [ ] Pane' })]
+        const wrapper = await screen()
+        const box = wrapper.get('button[role="checkbox"]')
+        expect(box.element.parentElement?.closest('button')).toBeNull()
+        expect(box.classes()).toContain('min-h-[44px]')
+        expect(box.classes()).toContain('min-w-[44px]')
+        await box.trigger('click')
+        await flushPromises()
+        expect(update).toHaveBeenLastCalledWith({ id: 'n1', content: 'Intro\n- [x] Pane' })
+        expect(box.attributes('aria-checked')).toBe('true')
+        await box.trigger('click')
+        await flushPromises()
+        expect(update).toHaveBeenLastCalledWith({ id: 'n1', content: 'Intro\n- [ ] Pane' })
+        expect(push).not.toHaveBeenCalled()
+    })
     it('keeps only the notes that carry ticks', async () => {
         notes = [
             nota({ id: 'n1', title: 'Prima di pubblicare', content: '- [x] Rileggere\n- [ ] Provare' }),

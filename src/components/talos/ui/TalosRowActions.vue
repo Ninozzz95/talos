@@ -227,7 +227,14 @@ useTalosOverlayBack(() => close(), () => open.value)
  */
 const onda = useTalosTouchWave()
 
-defineExpose({ close })
+/**
+ * `show` esce insieme a `close` dal 12/09: la pressione lunga e il tasto
+ * destro su una chat recente (owner: «tipo press sulle chat recenti» — e il
+ * mockup, righe 3943 e 4128) aprono QUESTO menu, non un secondo. Il bottone
+ * visibile resta la via principale, per le ragioni scritte in testa al file:
+ * tenere il gesto non toglie niente a chi il gesto non lo puo' fare.
+ */
+defineExpose({ close, show })
 </script>
 
 <template>

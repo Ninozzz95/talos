@@ -115,6 +115,10 @@ describe('CALM-MOCKUP — alle preferenze di SERIE si vede il numero del mockup'
             '--talos-motion-calm-menu': '440ms',
             '--talos-motion-calm-menu-exit': '210ms',
             '--talos-motion-calm-empty': '360ms',
+            '--talos-motion-calm-dialog': '280ms',
+            '--talos-motion-calm-dialog-exit': '210ms',
+            '--talos-motion-calm-message-row': '220ms',
+            '--talos-motion-calm-details': '260ms',
         })
     })
 
@@ -132,7 +136,7 @@ describe('CALM-MOCKUP — alle preferenze di SERIE si vede il numero del mockup'
         // rumorosamente: torna un piano «immediato», cioè zero. Sarebbe
         // l'animazione che sparisce senza che nessuno se ne accorga.
         for (const voce of Object.values(TALOS_CALM_SPECS)) {
-            expect(mockupMs(voce.ms)).toBeLessThanOrEqual(2000)
+            expect(mockupMs(voce.ms / ('segments' in voce ? voce.segments : 1))).toBeLessThanOrEqual(2000)
         }
     })
 
@@ -157,7 +161,7 @@ describe('CALM-MOCKUP — alle preferenze di SERIE si vede il numero del mockup'
             reducedMotion: true,
         })
         for (const [nome, valore] of Object.entries(spento)) {
-            expect(valore, nome).toBe('0ms')
+            expect(valore, nome).toBe(nome.endsWith('orb-state') ? 'paused' : '0ms')
         }
     })
 
@@ -329,6 +333,33 @@ describe('WAVE-GEO — la geometria dell\'onda, il numero del mockup', () => {
 })
 
 describe('WAVE-DOM — il cerchio nasce, e nei due versi', () => {
+    it('M05 keeps the wave through its scaled 940 ms and expires at duration plus margin', () => {
+        vi.useFakeTimers()
+        try {
+            const preferences = structuredClone(TALOS_MOTION_V6_DEFAULTS)
+            preferences.interface.duration_scale = 100
+            const tokens = talosCalmMotionTokens({ preferences, reducedMotion: false })
+            expect(tokens[TALOS_WAVE_GATE_TOKEN]).toBe('940ms')
+            const el = ospite(tokens)
+            const wave = useTalosTouchWave()
+            wave.onPointerDown(tocco(el))
+            vi.advanceTimersByTime(700)
+            expect(el.childNodes).toHaveLength(1)
+            vi.advanceTimersByTime(240)
+            expect(el.childNodes).toHaveLength(1)
+            vi.advanceTimersByTime(229)
+            expect(el.childNodes).toHaveLength(1)
+            vi.advanceTimersByTime(1)
+            expect(el.childNodes).toHaveLength(0)
+            expect(vi.getTimerCount()).toBe(0)
+            wave.onPointerDown(tocco(el))
+            el.firstElementChild!.dispatchEvent(new Event('animationend'))
+            expect(vi.getTimerCount()).toBe(0)
+            wave.onPointerDown(tocco(el))
+            wave.clear()
+            expect(vi.getTimerCount()).toBe(0)
+        } finally { vi.useRealTimers() }
+    })
     function ospite(token: Record<string, string> = {}): HTMLElement {
         const el = conToken(token)
         el.getBoundingClientRect = () => ({

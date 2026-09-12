@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, defineComponent, h, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
+import TalosMobileAssistantHeader from './TalosMobileAssistantHeader.vue'
+import './talosCalmMessages.css'
 import TalosLineLoader from '@/components/brand/TalosLineLoader.vue'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
 import TalosMobileRunningToolRow from '@/components/chat/TalosMobileRunningToolRow.vue'
@@ -342,7 +344,7 @@ function tailTarget(): HTMLElement | null {
     }
 }
 
-function ensureTail(structural = false): HTMLElement | null {
+function ensureTail(): HTMLElement | null {
     const target = tailTarget()
     if (!target) return null
     if (!tailHost) {
@@ -350,18 +352,15 @@ function ensureTail(structural = false): HTMLElement | null {
         tailHost.className = 'talos-stream-tail'
         tailHost.setAttribute('data-testid', 'talos-stream-tail')
     }
-    // Owner 2026-07-26: "l'animazione smooth fade non funziona, c'è ancora il
-    // prompt cursore". It was still there because the caret is painted by the
-    // tail machinery regardless of mode — and a blinking cursor IS the
-    // typewriter. Fade means the text simply appears; nothing points at where
-    // the next letter will land.
-    if (structural && caretEl) {
-        caretEl.remove()
-        caretEl = null
-    }
-    if (!caretEl && !fadeMode.value && !structural) {
+    // Fase 4, owner 12/09: cursore sottile anche in Fade. Il ritmo dei due
+    // modi resta distinto; il cursore indica soltanto il punto di arrivo.
+    // Il bersaglio è sempre esterno agli elementi strutturali rifiutati:
+    // anche dopo una tabella il cursore segue la risposta senza diventare
+    // contenuto di una cella.
+
+    if (!caretEl) {
         caretEl = document.createElement('span')
-        caretEl.className = 'talos-stream-caret'
+        caretEl.className = 'talos-stream-caret live-cursor'
         caretEl.setAttribute('data-testid', 'talos-stream-caret')
         caretEl.setAttribute('aria-hidden', 'true')
     }
@@ -438,12 +437,12 @@ function syncTail(): void {
             break
         }
     }
-    // Tables and their sibling structural blocks own their layout. A caret
-    // painted after one is read as a prompt inside the table, not as answer
-    // progress. Structural fragments use the same fade ink as the selected
-    // fade mode, while the Markdown parser remains the source of truth.
+    // I frammenti strutturali mantengono il Fade; il parser resta la fonte
+    // del layout. tailTarget tiene il cursore fuori da tabelle e celle.
+    // Il cursore Calm è presente in entrambi i modi, mentre il loro ritmo
+    // di rivelazione resta quello scelto nelle preferenze.
     const structural = TAIL_REFUSED.has(lastTag) || /^\s*\|/.test(tail)
-    const host = ensureTail(structural)
+    const host = ensureTail()
     if (!host) return
     if (tail === paintedTail) return
     if (!tail.startsWith(paintedTail)) {
@@ -483,7 +482,7 @@ onBeforeUnmount(() => {
         v-if="sending && (revealed || haRagionamento || runningTools.length)"
         ref="contentHost"
         data-testid="talos-mobile-streaming"
-        class="w-full max-w-full px-1 py-1 leading-6 text-[var(--talos-text,var(--foreground))]"
+        class="chat-message assistant-message w-full max-w-full text-[var(--talos-text)]"
     >
         <!-- The growing text stays OUTSIDE any live region: re-announcing
              the whole reply on every token is screen-reader noise. -->
@@ -491,6 +490,7 @@ onBeforeUnmount(() => {
              reasoning line are the SAME muted row. These used to be bordered
              chips, which sat next to a borderless reasoning row and looked like
              two different features. -->
+        <TalosMobileAssistantHeader working />
         <div v-if="runningTools.length" data-testid="talos-tool-activity" class="mb-0.5">
             <TalosMobileRunningToolRow
                 v-for="entry in runningTools"
@@ -510,7 +510,7 @@ onBeforeUnmount(() => {
              elements — and every block would animate in at once, over text that
              was already on screen. Fading while it arrives is the effect; fading
              again once it has arrived is the bug. -->
-        <div class="talos-streaming-body">
+        <div class="talos-streaming-body assistant-text">
             <TalosMobileMessageContent :content="parsedMarkdown" />
         </div>
         <span class="sr-only" role="status" aria-live="polite">{{ $t('chat.receivingResponse') }}</span>
@@ -526,6 +526,7 @@ onBeforeUnmount(() => {
     >
         <!-- F4-#24 (owner): boot-logo styled loader — a line crossing 3
              empty nodes; each node fills as the line passes through it. -->
+        <TalosMobileAssistantHeader working />
         <TalosLineLoader :width="44" />
         <span class="sr-only">{{ $t('chat.processing') }}</span>
         <!--

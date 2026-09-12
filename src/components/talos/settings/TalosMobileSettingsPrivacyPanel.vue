@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { CircleAlert, CircleCheck, CircleDashed, ShieldCheck } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
+import TalosThemedSelect from '@/components/talos/ui/TalosThemedSelect.vue'
 import {
     talosBackgroundExtraSteps,
     talosPermissionAction,
@@ -214,6 +215,26 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
 const controller = useChatController()
 const settings = useSettingsStore()
 const toasts = useTalosMobileToasts()
+const contentPreferences = ['library_access', 'memory_write_access', 'image_attachment_consent'] as const
+const contentChoices = computed(() => [
+    { value: 'allow', label: t('agentTools.alwaysAllow') },
+    { value: 'ask', label: t('privacyPermissions.askFirst') },
+    { value: 'deny', label: t('agentTools.neverAllow') },
+])
+const contentSaving = ref(false)
+const contentSaveError = ref(false)
+async function setContentPreference(key: typeof contentPreferences[number], value: string): Promise<void> {
+    if (contentSaving.value || !['allow', 'ask', 'deny'].includes(value)) return
+    contentSaving.value = true
+    contentSaveError.value = false
+    try {
+        await settings.setShell({ [key]: value as 'allow' | 'ask' | 'deny' })
+    } catch {
+        contentSaveError.value = true
+    } finally {
+        contentSaving.value = false
+    }
+}
 // `?? 'unset'`: uno store finto in un test che non conosce ancora questo
 // campo non deve far cadere l'intera pagina — la riga tace col suo stato di
 // partenza vero, non con un errore.
@@ -222,16 +243,10 @@ const localEngineProbeRunning = ref(false)
 const localEngineProbeResult = ref<TalosLocalBackendQualification | null>(null)
 /** Vero solo dopo un tentativo reale che non ha trovato NESSUN modello sul disco. */
 const localEngineProbeNoModel = ref(false)
-/**
- * ⛔ I nomi che una persona legge, non quelli del motore.
- *
- * `hexagon` mancava, e la mappa ha un ripiego che stampa la chiave grezza: la
- * frase a schermo sarebbe uscita «più veloce con hexagon», minuscolo, in mezzo
- * a una frase italiana. `Hexagon` è il nome che la stessa persona vede nella
- * scelta del motore in Laboratorio modelli — uno solo, dappertutto.
- */
-const BACKEND_LABEL: Record<string, string> = {
-    cpu: 'CPU', opencl: 'GPU', vulkan: 'GPU (Vulkan)', hexagon: 'Hexagon',
+// Explain the result without leaking internal backend identifiers into the UI.
+function backendLabel(backend: string | null | undefined): string {
+    const key = backend && ['cpu', 'opencl', 'vulkan', 'hexagon'].includes(backend) ? backend : 'unknown'
+    return t(`privacyPermissions.localEngineProbe.backendLabels.${key}`)
 }
 
 /**
@@ -281,6 +296,25 @@ async function runLocalEngineProbeFromSettings(): Promise<void> {
             <ShieldCheck class="mt-0.5 size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
             {{ t('privacyPermissions.intro') }}
         </p>
+
+        <section v-if="!onboarding" data-testid="privacy-content-preferences" class="rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] p-3">
+            <h3 class="text-sm font-semibold">{{ t('privacyPermissions.contentTitle') }}</h3>
+            <label v-for="key in contentPreferences" :key="key" class="mt-3 block">
+                <span class="block text-xs font-medium">{{ t(`privacyPermissions.content.${key}.label`) }}</span>
+                <TalosThemedSelect
+                    :data-testid="`privacy-${key}`"
+                    class="mt-2"
+                    :model-value="settings.state.shell?.[key] ?? 'ask'"
+                    :items="contentChoices"
+                    :aria-label="t(`privacyPermissions.content.${key}.label`)"
+                    :disabled="contentSaving"
+                    @update:model-value="setContentPreference(key, $event)"
+                />
+                <span class="mt-1 block text-xs leading-5 text-[var(--talos-muted)]">{{ t(`privacyPermissions.content.${key}.body`) }}</span>
+            </label>
+            <p v-if="contentSaveError" data-testid="privacy-content-save-error" role="alert" class="mt-2 text-xs text-[var(--talos-danger)]">{{ t('privacyPermissions.contentSaveFailed') }}</p>
+            <RouterLink :to="{ name: 'settings-privilege' }" data-testid="privacy-phone-control" class="talos-pressable mt-3 flex min-h-touch items-center text-sm text-[var(--talos-accent)]">{{ t('privilege.pageTitle') }}</RouterLink>
+        </section>
 
         <div
             v-for="row in rows"
@@ -427,7 +461,7 @@ async function runLocalEngineProbeFromSettings(): Promise<void> {
                         data-testid="talos-local-engine-probe-result"
                         class="mt-2 text-2xs leading-4 text-[var(--talos-muted)]"
                     >{{ t('privacyPermissions.localEngineProbe.resultRan', {
-                        backend: BACKEND_LABEL[localEngineProbeResult.decisionBackend ?? ''] ?? localEngineProbeResult.decisionBackend,
+                        backend: backendLabel(localEngineProbeResult.decisionBackend),
                     }) }}</p>
                     <p
                         v-if="localEngineProbeResult.cpuInconclusive

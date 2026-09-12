@@ -39,12 +39,17 @@ const proto = HTMLDialogElement.prototype as unknown as { showModal?: () => void
 if (typeof proto.showModal !== 'function') proto.showModal = function (this: HTMLDialogElement) { this.setAttribute('open', '') }
 if (typeof proto.close !== 'function') proto.close = function (this: HTMLDialogElement) { this.removeAttribute('open') }
 
+const montate: Array<{ unmount(): void }> = []
 afterEach(() => {
+    // Smontare, non solo svuotare: la sidebar tiene un listener di cattura sul
+    // document (il click inghiottito dopo la pressione lunga) che altrimenti
+    // sopravvive alla prova e ne sporca la successiva.
+    for (const w of montate.splice(0)) w.unmount()
     document.body.innerHTML = ''
 })
 
 function mountSidebar(props: Record<string, unknown> = {}) {
-    return mount(TalosMobileSidebar, {
+    const w = mount(TalosMobileSidebar, {
         attachTo: document.body,
         global: { plugins: [router] },
         props: {
@@ -56,6 +61,8 @@ function mountSidebar(props: Record<string, unknown> = {}) {
             ...props,
         },
     })
+    montate.push(w)
+    return w
 }
 
 describe('TalosMobileSidebar (F1-T3)', () => {
@@ -244,6 +251,11 @@ describe('TalosMobileSidebar (F1-T3)', () => {
         expect(wrapper.emitted('navigate')).toEqual([['research']])
         expect(wrapper.emitted('openModelLab')).toBeUndefined()
         expect(wrapper.emitted('openSettings')).toHaveLength(1)
+        // B17 (12/09): Account apre la SUA scheda, non le Impostazioni generiche.
+        ;(document.querySelector('[data-testid="talos-mobile-sidebar"] [aria-label="Account"]') as HTMLElement).click()
+        await flushPromises()
+        expect(wrapper.emitted('openAccount')).toHaveLength(1)
+        expect(wrapper.emitted('openSettings')).toHaveLength(1)
     })
 
     /**
@@ -344,6 +356,23 @@ describe('TalosMobileSidebar (F1-T3)', () => {
         expect(wrapper.emitted('rename')).toEqual([['chat-2', 'Release retro']])
     })
 
+    it('B08 (12/09): il menu di una recente ha Apri e Archivia, e li emette', async () => {
+        const wrapper = mountSidebar()
+        await flushPromises()
+        ;(document.querySelector('[data-testid="talos-sidebar-chat-menu-chat-2"]') as HTMLElement).click()
+        await flushPromises()
+        const voci = [...document.querySelectorAll('[role="menuitem"]')].map((v) => v.textContent?.trim())
+        expect(voci).toEqual(['Open', 'Rename', 'Archive', 'Delete'])
+        ;(document.querySelector('[data-testid="talos-sidebar-chat-archive"]') as HTMLElement).click()
+        await flushPromises()
+        expect(wrapper.emitted('archive')).toEqual([['chat-2']])
+        ;(document.querySelector('[data-testid="talos-sidebar-chat-menu-chat-2"]') as HTMLElement).click()
+        await flushPromises()
+        ;(document.querySelector('[data-testid="talos-sidebar-chat-open"]') as HTMLElement).click()
+        await flushPromises()
+        expect(wrapper.emitted('select')).toEqual([['chat-2']])
+    })
+
     it('completes the delete confirmation flow and emits delete (session-drawer parity)', async () => {
         const wrapper = mountSidebar()
         await flushPromises()
@@ -364,6 +393,99 @@ describe('TalosMobileSidebar (F1-T3)', () => {
  * was (it never mocks Capacitor, so `talosHarnessUiAvailable()` resolves to
  * the real, unavailable-in-jsdom answer there — matching a release build).
  */
+describe('TalosMobileSidebar — Fase 1 Calm (12/09): Strumenti, Dispositivi, pressione lunga sulle recenti', () => {
+    const attendi = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+    it('rimette la voce Strumenti (Tool Forge) fra le sezioni: sparita nel refactor, era in 95db4c4f', async () => {
+        const wrapper = mountSidebar()
+        await flushPromises()
+        const voce = document.querySelector('[data-testid="talos-mobile-sidebar"] [aria-label="Open Tool Forge"]') as HTMLElement
+        expect(voce).toBeTruthy()
+        voce.click()
+        await flushPromises()
+        expect(wrapper.emitted('navigate')).toEqual([['toolforge']])
+    })
+
+    it('prevede «Dispositivi» ma la tiene spenta finche\' la stazione non esiste', async () => {
+        mountSidebar()
+        await flushPromises()
+        expect(document.querySelector('[data-testid="talos-sidebar-devices-entry"]')).toBeNull()
+        expect(document.querySelector('[aria-label="Open Devices"]')).toBeNull()
+    })
+
+    function pointer(type: string, target: Element, extra: Record<string, unknown> = {}): void {
+        target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, clientX: 40, clientY: 40, button: 0, ...extra }) as PointerEvent)
+    }
+
+    it('una pressione lunga (430 ms, fermo) apre lo stesso menu dei tre puntini e inghiotte il click che segue', async () => {
+        const wrapper = mountSidebar()
+        await flushPromises()
+        const row = document.querySelector('[aria-label="Open chat Release review"]') as HTMLElement
+        pointer('pointerdown', row)
+        await attendi(PRESSIONE_LUNGA_MS - 150)
+        expect(document.querySelector('[data-testid="talos-row-actions-menu"]')).toBeNull()
+        await attendi(200)
+        await flushPromises()
+        expect(document.querySelector('[data-testid="talos-row-actions-menu"]')).toBeTruthy()
+        expect(document.querySelector('[data-testid="talos-sidebar-chat-rename"]')).toBeTruthy()
+        // il rilascio del dito produce un click sulla riga: non deve aprire la chat
+        pointer('pointerup', row)
+        row.click()
+        await flushPromises()
+        expect(wrapper.emitted('select')).toBeUndefined()
+    })
+
+    it('una pressione breve o mossa NON apre il menu: il tocco resta un tocco', async () => {
+        const wrapper = mountSidebar()
+        await flushPromises()
+        const row = document.querySelector('[aria-label="Open chat Release review"]') as HTMLElement
+        pointer('pointerdown', row)
+        await attendi(150)
+        pointer('pointerup', row)
+        await attendi(PRESSIONE_LUNGA_MS)
+        expect(document.querySelector('[data-testid="talos-row-actions-menu"]')).toBeNull()
+        pointer('pointerdown', row)
+        pointer('pointermove', row, { clientX: 40 + PRESSIONE_TOLLERANZA_PX + 1 })
+        await attendi(PRESSIONE_LUNGA_MS + 50)
+        expect(document.querySelector('[data-testid="talos-row-actions-menu"]')).toBeNull()
+        row.click()
+        await flushPromises()
+        expect(wrapper.emitted('select')).toEqual([['chat-2']])
+    })
+
+    it('PVOICE-REG-05 dopo la pressione lunga un click FUORI dalla riga premuta passa (solo quello della riga e\' inghiottito)', async () => {
+        const wrapper = mountSidebar()
+        await flushPromises()
+        const row = document.querySelector('[aria-label="Open chat Release review"]') as HTMLElement
+        pointer('pointerdown', row)
+        await attendi(PRESSIONE_LUNGA_MS + 50)
+        await flushPromises()
+        expect(document.querySelector('[data-testid="talos-row-actions-menu"]')).toBeTruthy()
+        // un controllo qualunque fuori dalla riga, entro i 650 ms: deve rispondere
+        ;(document.querySelector('[aria-label="Open Research"]') as HTMLElement).click()
+        await flushPromises()
+        expect(wrapper.emitted('navigate')).toEqual([['research']])
+        // il click residuo sulla riga premuta resta bloccato
+        row.click()
+        await flushPromises()
+        expect(wrapper.emitted('select')).toBeUndefined()
+    })
+
+    it('il tasto destro apre subito il menu della riga', async () => {
+        mountSidebar()
+        await flushPromises()
+        const line = document.querySelector('[data-chat-id="chat-1"]') as HTMLElement
+        const evento = new MouseEvent('contextmenu', { bubbles: true, cancelable: true })
+        line.dispatchEvent(evento)
+        await flushPromises()
+        expect(evento.defaultPrevented).toBe(true)
+        expect(document.querySelector('[data-testid="talos-row-actions-menu"]')).toBeTruthy()
+    })
+})
+
+const PRESSIONE_LUNGA_MS = 430
+const PRESSIONE_TOLLERANZA_PX = 7
+
 describe('TalosMobileSidebar — Harness UI debug-only entry (24/8)', () => {
     afterEach(() => { vi.restoreAllMocks() })
 

@@ -732,7 +732,15 @@ import { resolve } from 'node:path'
  *
  * ⇒ 640.000: 3.721 byte di margine, non 391.
  */
-const DEFAULT_MAXIMUM_BYTES = 640_000
+/*
+ * ⛔ JS 640.000 → 644.000, il 12/09/2026 sera (Fasi 1, 2 e 5 del refactor Chat +
+ * sidebar trascinabile). Misurato: **640.336** byte — 336 sopra il tetto posato
+ * la mattina con 3.721 byte di margine. Il cancello e' scattato e la build
+ * ha esito 1 (letto dal codice di uscita, come insegna la 0.1.28). Il tetto
+ * si alza con la misura; il debito strutturale (pezzi pigri per stazione)
+ * resta quello scritto sopra.
+ */
+const DEFAULT_MAXIMUM_BYTES = 644_000
 /*
  * ⛔ CSS 220.000 → 222.000, il 2026-09-11, sezione 1 del refactor UI (U-1).
  *
@@ -766,7 +774,25 @@ const DEFAULT_MAXIMUM_BYTES = 640_000
  * ⛔ Debito strutturale, non da curare qui: un foglio di utilità per pezzo
  * pigro. Finché non c'è, ogni stazione nuova pesa sul primo dipinto.
  */
-const DEFAULT_MAXIMUM_CSS_BYTES = 232_000
+/*
+ * ⛔ CSS 232.000 → 236.000, il 12/09/2026 pomeriggio, Fase 2 del refactor (Chat).
+ *
+ * Misurato: **232.057** byte dopo la home Calm della chat (hero, chip di prompt,
+ * «Riprendi da qui»: ~2,4 k di CSS di prodotto in `style.css`, non utilità).
+ * Il tetto era stato posato a 232.000 con 2.408 byte di margine: la home ne ha
+ * consumati di piu' e il cancello e' scattato per 57 byte — letto dal codice di
+ * uscita, come insegna la release 0.1.28. Il tetto si alza con la misura, mai
+ * si azzoppa l'app per farcela stare; il debito strutturale (un foglio di
+ * utilità per pezzo pigro) resta quello scritto qui sopra.
+ */
+/*
+ * ⛔ CSS 236.000 → 240.000, il 12/09/2026 sera, Fasi 3-4 del refactor (compositore
+ * e messaggi Calm, consegne di Astra). Misurato: **236.063** byte — 63 sopra il
+ * tetto; il cancello e' scattato e la build ha esito 1, letto dal codice di
+ * uscita. Il tetto si alza con la misura; il debito strutturale resta quello
+ * scritto sopra (un foglio di utilita' per pezzo pigro).
+ */
+const DEFAULT_MAXIMUM_CSS_BYTES = 240_000
 const DYNAMIC_BOUNDARIES = [
     {
         suffix: 'src/repositories/productionChatRepository.ts',

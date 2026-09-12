@@ -6,6 +6,7 @@ import {
     talosNoteDate,
     talosNoteKind,
     talosNotePlainPreview,
+    talosToggleNoteCheck,
 } from '@/components/talos/notes/noteShape'
 
 /**
@@ -46,6 +47,16 @@ describe('the kind of a note, read from its text', () => {
 })
 
 describe('the ticks of a note', () => {
+    it('changes only the requested marker in both directions, preserving CRLF and prose', () => {
+        const original = 'Intro\r\n  - [ ] Prima\r\n* [X] Seconda\r\n'
+        const checked = talosToggleNoteCheck(original, 1)
+        expect(checked).toBe('Intro\r\n  - [x] Prima\r\n* [X] Seconda\r\n')
+        expect(talosToggleNoteCheck(checked, 1)).toBe(original)
+        expect(talosToggleNoteCheck(original, 2)).toContain('* [ ] Seconda')
+        expect(talosToggleNoteCheck(original, 0)).toBe(original)
+        expect(talosToggleNoteCheck('Solo prosa\n- elenco', 1)).toBe('Solo prosa\n- elenco')
+        expect(talosToggleNoteCheck(original, 99)).toBe(original)
+    })
     it('reads box, text and the line it came from', () => {
         const items = talosNoteChecklist('Intro\n- [x] Rileggere i testi\n- [ ] Provare i gesti')
         expect(items).toEqual([

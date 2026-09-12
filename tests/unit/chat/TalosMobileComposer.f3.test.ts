@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
@@ -17,6 +17,7 @@ function profileWith(effortLevels: string[]): TalosMobileModelProfileView {
 
 function mountComposer(profile: TalosMobileModelProfileView) {
     return mount(TalosMobileComposer, {
+        global: { stubs: { teleport: true } },
         props: {
             prompt: '', modelProfiles: [profile], routingProfiles: [],
             selectedModelProfileId: profile.id, selectedRoutingProfileId: null,
@@ -27,18 +28,23 @@ function mountComposer(profile: TalosMobileModelProfileView) {
 }
 
 describe('TalosMobileComposer effort visibility (F3-T1)', () => {
-    it('shows the effort control when the model has real effort levels', () => {
+    it('shows the effort control when the model has real effort levels', async () => {
         const wrapper = mountComposer(profileWith(['low', 'medium', 'high']))
-        expect(wrapper.find('[aria-label="Choose reasoning effort"]').exists()).toBe(true)
+        await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
+        await vi.dynamicImportSettled()
+        expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(true)
     })
 
-    it('hides the effort control entirely when the model only has off', () => {
+    it('hides the effort control entirely when the model only has off', async () => {
         const wrapper = mountComposer(profileWith(['off']))
-        expect(wrapper.find('[aria-label="Choose reasoning effort"]').exists()).toBe(false)
+        await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
+        await vi.dynamicImportSettled()
+        expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(false)
     })
 
-    it('hides the effort control when no model is selected', () => {
+    it('hides the effort control when no model is selected', async () => {
         const wrapper = mount(TalosMobileComposer, {
+            global: { stubs: { teleport: true } },
             props: {
                 prompt: '', modelProfiles: [], routingProfiles: [],
                 selectedModelProfileId: null, selectedRoutingProfileId: null,
@@ -46,6 +52,8 @@ describe('TalosMobileComposer effort visibility (F3-T1)', () => {
                 sendDisabledReason: '',
             },
         })
-        expect(wrapper.find('[aria-label="Choose reasoning effort"]').exists()).toBe(false)
+        await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
+        await vi.dynamicImportSettled()
+        expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(false)
     })
 })

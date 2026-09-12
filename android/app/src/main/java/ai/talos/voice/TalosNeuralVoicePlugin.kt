@@ -594,7 +594,9 @@ class TalosNeuralVoicePlugin : Plugin() {
         // into TalosMossRuntime - there is no post-synthesis resampling/pitch
         // path on the native side today. Declaring that here rather than
         // silently ignoring the caller's values.
-        val ratePitchApplied = rate == 1f && pitch == 1f
+        // 12/09: la velocita' ora arriva al player (PlaybackParams a intonazione
+        // fissa); resta fuori solo la tonalita'.
+        val ratePitchApplied = pitch == 1f
 
         val completion: (Result<TalosVoiceStreamResult>) -> Unit = { result ->
             val payload = result.fold(
@@ -625,9 +627,12 @@ class TalosNeuralVoicePlugin : Plugin() {
             migrationCommitter = TalosVoiceProfileStoreMigrationCommitter(profileStore),
             diagnosticRoute = diagnosticRoute,
             queueMode = queueMode,
+            rate = rate.coerceIn(0.5f, 2f),
+            onAccepted = { call.resolve(JSObject().put("accepted", true).put("ratePitchApplied", ratePitchApplied)) },
+            // D-V-1: rifiutata PRIMA di accodare — il chiamante ripiega sulla voce Android.
+            onRouteRejected = { reason -> call.resolve(JSObject().put("accepted", false).put("reason", "profileIncompatible:$reason")) },
             onComplete = completion,
         )
-        call.resolve(JSObject().put("accepted", true).put("ratePitchApplied", ratePitchApplied))
     }
 
     @PluginMethod

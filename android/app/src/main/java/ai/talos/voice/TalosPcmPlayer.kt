@@ -15,6 +15,8 @@ internal interface TalosAudioTrackFacade {
 
     fun write(pcm16: ShortArray, offset: Int, size: Int): Int
     fun setStartThresholdFrames(frames: Int): Int
+    /** Velocita' di riproduzione (1 = naturale) a intonazione invariata: time-stretch di AudioFlinger, non ricampionamento. */
+    fun setPlaybackSpeed(speed: Float)
     fun play()
     fun pause()
     fun flush()
@@ -46,7 +48,13 @@ private class TalosAndroidAudioTrackFacade(
 
     override fun setStartThresholdFrames(frames: Int): Int =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) track.setStartThresholdInFrames(frames) else 0
-
+    override fun setPlaybackSpeed(speed: Float) {
+        // Owner 12/09: «regolare la velocita' della voce personale come per le
+        // altre voci, con la stessa slider». Pocket non ha un ricampionatore
+        // post-sintesi (e ricampionare cambierebbe l'intonazione della voce
+        // della persona): AudioTrack fa il time-stretch a intonazione fissa.
+        track.playbackParams = track.playbackParams.setSpeed(speed).setPitch(1f)
+    }
     override fun play() = track.play()
     override fun pause() = track.pause()
     override fun flush() = track.flush()
@@ -238,7 +246,14 @@ internal class TalosPcmPlayer(
     @Volatile private var lastLevelStats: TalosPcmLevelStats? = null
     @Volatile private var terminalBoundary: TalosPcmTerminalBoundary? = null
     private var recreateAttempted = false
+    @Volatile private var playbackSpeed = 1f
 
+    /** Da applicare PRIMA della prima scrittura di una lettura; vale anche per un track ricreato. */
+    fun setPlaybackSpeed(speed: Float) {
+        require(speed.isFinite() && speed in 0.5f..2f) { "playback speed must be within 0.5..2, got $speed" }
+        playbackSpeed = speed
+        track?.let { runCatching { it.setPlaybackSpeed(speed) } }
+    }
     /** True once a write failed twice in a row (recreate already attempted and also failed) - caller must fall back to system TTS. */
     var isDead: Boolean = false
         private set
@@ -446,12 +461,33 @@ internal class TalosPcmPlayer(
         isCancelled: () -> Boolean,
     ): Boolean {
         var offset = initialOffset
+        var startedOnBackpressure = false
         while (offset < pcm16.size) {
             if (isCancelled()) return false
             val remaining = pcm16.size - offset
             val written = runCatching { activeTrack.write(pcm16, offset, remaining) }.getOrElse { -1 }
             when {
                 written < 0 -> return recoverFromWriteError(pcm16, offset, isCancelled)
+                // ⛔ 12/09/2026, misurato sul Pad: un AudioTrack FERMO accetta PCM fino
+                // alla capienza del buffer (28.920 frame, 1,2 s) e poi risponde 0.
+                // Il primo blocco Pocket di una lettura in chat (2,6 s dopo il taglio
+                // dell'attacco) era piu' grande del buffer: «zero progressi» ⇒ player
+                // morto ⇒ lettura annullata senza un suono, mentre l'anteprima (blocco
+                // corto) suonava. Con dati gia' dentro e il track fermo, lo 0 e'
+                // contropressione, non un guasto: si avvia la riproduzione e si
+                // continua a scrivere. Una sola volta: un secondo 0 e' un guasto vero.
+                written == 0 && !startedOnBackpressure && samplesWritten > 0L &&
+                    activeTrack.playState != AudioTrack.PLAYSTATE_PLAYING -> {
+                    val started = runCatching {
+                        activeTrack.play()
+                        activeTrack.playState == AudioTrack.PLAYSTATE_PLAYING
+                    }.getOrDefault(false)
+                    if (!started) {
+                        isDead = true
+                        return false
+                    }
+                    startedOnBackpressure = true
+                }
                 written == 0 || written > remaining -> {
                     isDead = true
                     return false
@@ -501,7 +537,15 @@ internal class TalosPcmPlayer(
         return true
     }
 
-    private fun createTrack(): TalosAudioTrackFacade {
+    private fun createTrack(): TalosAudioTrackFacade = createTrackWithSpeed()
+
+    private fun createTrackWithSpeed(): TalosAudioTrackFacade {
+        val created = createRawTrack()
+        if (playbackSpeed != 1f) runCatching { created.setPlaybackSpeed(playbackSpeed) }
+        return created
+    }
+
+    private fun createRawTrack(): TalosAudioTrackFacade {
         // ⛔⛔ Two real, opposite failures measured on the OnePlus Pad 3, and
         // the buffer size is the one variable that explains both:
         //

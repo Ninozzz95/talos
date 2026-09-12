@@ -298,17 +298,339 @@
  * di viewport vince il minimo (il telefono resta identico a prima, 4,5rem), poi
  * cresce, e a 8rem si ferma per non mangiarsi la domanda di benvenuto.
  */
+/* Fase 2 Calm (12/09): il mockup (`.hero-mark`) lo tiene a 3,75 rem sopra un
+   titolo da 2,75 rem al massimo — con quel titolo il clamp fino a 8 rem
+   (pensato per il vecchio hero «TALOS» enorme) faceva il marchio piu' grande
+   del titolo. Foto testa a testa sul Pad, tablet landscape, 16:16. */
 .talos-short-logo-hero {
-    width: clamp(4.5rem, 11vw, 8rem);
-    height: clamp(4.5rem, 11vw, 8rem);
+    width: 3.75rem;
+    height: 3.75rem;
 }
 
+/* Fase 2 Calm (12/09): i numeri di `.home-hero h1` del mockup — peso 500,
+   clamp(2rem, 3.3vw, 2.75rem), letter-spacing -.045em, interlinea 1.2. */
 .talos-welcome-title {
     margin-top: 1.5rem;
     color: var(--talos-text);
-    font-size: var(--text-2xl);
-    font-weight: 600;
-    line-height: var(--text-2xl--line-height);
+    font-size: clamp(2rem, 3.3vw, 2.75rem);
+    font-weight: 500;
+    letter-spacing: -0.045em;
+    line-height: 1.2;
+}
+
+/* `.home-hero p` del mockup: sottotitolo smorzato, interlinea 1.6. */
+.talos-home-subtitle {
+    margin-top: var(--talos-space-page, 1rem);
+    max-width: 28rem;
+    color: var(--talos-muted);
+    font-size: var(--text-base);
+    line-height: 1.6;
+}
+
+/* `.prompt-chips` / `.prompt-chip`: pillole con bordo, testo smorzato, centrate. */
+.talos-home-composer {
+    width: 100%;
+    max-width: 52rem;
+    margin-top: calc(var(--talos-space-section) * 1.5);
+    text-align: left;
+}
+
+.talos-composer-dock {
+    /* Owner 12/09 19:35: «lo sfondo dietro il composer deve essere lo stesso colore
+       dello sfondo della chat» — niente fascia di un altro colore. */
+    background: var(--talos-background);
+}
+
+.talos-docked-composer {
+    width: 100%;
+    max-width: 52rem;
+    margin: auto;
+    padding: var(--talos-space-inline) calc(var(--talos-space-page) * 2) max(var(--talos-space-page), env(safe-area-inset-bottom));
+    background: var(--talos-background);
+}
+
+.talos-calm-composer {
+    position: relative;
+    padding: var(--talos-space-page);
+    border: 1px solid var(--talos-border-strong);
+    border-radius: var(--talos-radius-card);
+    background: var(--talos-composer-surface, var(--talos-card));
+    color: var(--talos-composer-text, var(--talos-text));
+    box-shadow: 0 8px 28px -20px color-mix(in srgb, var(--talos-text) 24%, transparent);
+}
+
+.talos-calm-composer:focus-within {
+    outline: 1px solid var(--talos-ring);
+    outline-offset: 1px;
+}
+
+.talos-calm-prompt {
+    display: block;
+    width: 100%;
+    min-height: 5rem;
+    max-height: 12rem;
+    resize: none;
+    overflow-y: auto;
+    border: 0;
+    outline: none;
+    background: transparent;
+    padding: var(--talos-space-inline) var(--talos-space-inline) var(--talos-space-page);
+    font-family: var(--talos-font-ui);
+    font-size: var(--text-base);
+    line-height: 1.6;
+    color: inherit;
+}
+
+.talos-calm-prompt::placeholder { color: var(--talos-muted); opacity: 1; }
+.talos-docked-composer .talos-calm-prompt { min-height: 3.5rem; }
+
+.talos-composer-tools {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--talos-space-inline) / 2);
+    flex-wrap: wrap;
+}
+
+.talos-composer-tools .talos-mode-chip,
+.talos-composer-tools .talos-model-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--talos-space-inline);
+    padding: 0 var(--talos-space-inline);
+    min-height: var(--talos-touch-target);
+    max-width: 100%;
+    border-radius: var(--talos-radius-control);
+    font-size: var(--text-xs);
+    color: var(--talos-muted);
+}
+
+.talos-model-chip { flex-wrap: wrap; overflow-wrap: anywhere; text-align: left; }
+.talos-model-chip > span:first-of-type { color: var(--talos-text); font-weight: 500; }
+.talos-mode-chip:disabled { opacity: .5; }
+.talos-composer-tools .talos-mode-chip.active {
+    background: var(--talos-active);
+    color: var(--talos-text);
+    box-shadow: inset 0 -2px var(--talos-ring);
+}
+.talos-composer-tools button:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
+.talos-composer-tools .talos-plus-btn { border-radius: 50%; background: var(--talos-secondary, var(--talos-panel)); }
+.talos-composer-send-controls { display: flex; align-items: center; gap: calc(var(--talos-space-inline) / 2); margin-left: auto; }
+.talos-composer-tools .talos-send-btn {
+    width: var(--talos-touch-target);
+    height: var(--talos-touch-target);
+    flex: none;
+    border-radius: 50%;
+    background: var(--talos-accent);
+    color: var(--talos-accent-text);
+}
+.talos-composer-tools .talos-send-btn:hover:not(:disabled) { background: var(--talos-accent-hover); }
+.talos-composer-tools .talos-send-btn:disabled { background: var(--talos-secondary, var(--talos-panel)); color: var(--talos-muted); opacity: .65; }
+
+@media (max-width: 860px) {
+    .talos-docked-composer { padding: var(--talos-space-inline) var(--talos-space-inline) max(var(--talos-space-card), env(safe-area-inset-bottom)); }
+    .talos-calm-composer { padding: var(--talos-space-card); }
+}
+
+.talos-prompt-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: var(--talos-space-inline, 0.5rem);
+    margin-top: calc(var(--talos-space-section, 1.5rem) * 1.5);
+}
+.talos-prompt-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--talos-space-inline, 0.5rem);
+    min-height: 2.75rem;
+    padding: var(--talos-space-inline, 0.5rem) var(--talos-space-control, 0.875rem);
+    border: 1px solid var(--talos-border);
+    border-radius: 999px;
+    color: var(--talos-muted);
+    font-size: var(--text-xs);
+}
+.talos-prompt-chip:hover,
+.talos-prompt-chip:focus-visible {
+    border-color: var(--talos-border-strong, var(--talos-border));
+    background: var(--talos-active);
+    color: var(--talos-text);
+}
+
+/* Foglio «+» «Cosa vuoi fare?» (mockup `.action-search/.action-categories/.action-category`, 12/09). */
+.talos-action-search {
+    display: flex;
+    align-items: center;
+    gap: var(--talos-space-inline, 0.5rem);
+    min-height: 2.75rem;
+    margin-bottom: var(--talos-space-section, 1.5rem);
+    padding: 0 var(--talos-space-control, 0.875rem);
+    border: 1px solid var(--talos-border);
+    border-radius: var(--talos-radius-control, 0.75rem);
+    background: var(--talos-panel);
+}
+.talos-action-categories {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--talos-space-inline, 0.5rem);
+    margin-bottom: var(--talos-space-section, 1.5rem);
+}
+.talos-action-category {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 4.75rem;
+    padding: 0.7rem;
+    border: 1px solid var(--talos-border);
+    border-radius: var(--talos-radius-card, 1rem);
+    background: var(--talos-panel);
+    color: var(--talos-text);
+    text-align: left;
+}
+.talos-action-category > span { min-width: 0; }
+.talos-action-category strong { display: block; font-size: var(--text-sm); font-weight: 500; }
+.talos-action-category small { display: block; margin-top: 0.2rem; color: var(--talos-muted); font-size: var(--text-2xs); line-height: 1.5; }
+.talos-action-category > svg { color: var(--talos-accent); }
+/* Il riquadro acceso è una pillola che SCIVOLA fra le categorie (mockup `.motion-indicator.pill`): sta sotto testo e icona. */
+.talos-action-category > svg, .talos-action-category > span:not(.talos-action-category-indicator) { position: relative; z-index: 1; }
+.talos-action-category-indicator {
+    position: absolute;
+    inset: -1px;
+    z-index: 0;
+    border: 1px solid var(--talos-accent-border, var(--talos-accent));
+    border-radius: inherit;
+    background: var(--talos-active);
+    transform-origin: 0 50%;
+    pointer-events: none;
+}
+.talos-action-options { display: flex; flex-direction: column; gap: 0.25rem; }
+.talos-action-row {
+    display: flex;
+    align-items: center;
+    gap: var(--talos-space-control, 0.875rem);
+    width: 100%;
+    min-height: 3.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--talos-radius-control, 0.75rem);
+    color: var(--talos-text);
+    text-align: left;
+}
+.talos-action-row:disabled { opacity: 0.55; }
+.talos-action-row:not(:disabled):hover { background: var(--talos-active); }
+.talos-action-row strong { display: block; font-size: var(--text-sm); font-weight: 500; }
+.talos-action-row small { display: block; color: var(--talos-muted); font-size: var(--text-2xs); line-height: 1.4; }
+.talos-action-row-icon {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: var(--talos-radius-control, 0.75rem);
+    background: var(--talos-active);
+    color: var(--talos-accent);
+}
+.talos-action-switch {
+    position: relative;
+    flex: none;
+    width: 2.25rem;
+    height: 1.25rem;
+    border-radius: 999px;
+    background: var(--talos-border-strong, var(--talos-border));
+    transition: background 150ms;
+}
+.talos-action-switch[data-on="true"] { background: var(--talos-accent); }
+.talos-action-switch > span {
+    position: absolute;
+    top: 0.125rem;
+    left: 0.125rem;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background: var(--talos-background);
+    transition: transform 150ms;
+}
+.talos-action-switch[data-on="true"] > span { transform: translateX(1rem); }
+
+/* `.resume-section` / `.resume-card`: due schede, una colonna sul telefono. */
+.talos-resume-section {
+    width: 100%;
+    max-width: 53rem;
+    margin-top: calc(var(--talos-space-section, 1.5rem) * 2.5);
+    text-align: left;
+}
+.talos-resume-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--talos-space-inline, 0.5rem);
+    margin-bottom: var(--talos-space-inline, 0.5rem);
+}
+.talos-resume-head h2 {
+    color: var(--talos-text);
+    font-size: var(--text-base);
+    font-weight: 550;
+}
+.talos-resume-all {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--talos-space-inline, 0.5rem);
+    min-height: 2.75rem;
+    padding-inline: var(--talos-space-inline, 0.5rem);
+    border-radius: var(--talos-radius-control, 0.75rem);
+    color: var(--talos-text);
+    font-size: var(--text-sm);
+}
+.talos-resume-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--talos-space-card, 0.75rem);
+}
+@media (min-width: 640px) {
+    .talos-resume-grid { grid-template-columns: 1fr 1fr; }
+}
+.talos-resume-card {
+    display: flex;
+    align-items: center;
+    gap: var(--talos-space-control, 0.875rem);
+    min-width: 0;
+    padding: var(--talos-space-page, 1rem);
+    border: 1px solid var(--talos-border);
+    border-radius: var(--talos-radius-card, 1rem);
+    background: var(--talos-card, var(--card));
+    color: var(--talos-text);
+    text-align: left;
+}
+.talos-resume-card:hover,
+.talos-resume-card:focus-visible {
+    border-color: var(--talos-accent-border, var(--talos-accent));
+}
+.talos-resume-card strong {
+    display: block;
+    overflow: hidden;
+    font-size: var(--text-sm);
+    font-weight: 550;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+.talos-resume-card small {
+    display: block;
+    margin-top: var(--talos-space-inline, 0.5rem);
+    color: var(--talos-muted);
+    font-size: var(--text-xs);
+}
+.talos-resume-icon {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: var(--talos-radius-control, 0.75rem);
+    background: var(--talos-active);
+    color: var(--talos-accent);
 }
 
 [data-composer-expanded="true"] > .talos-welcome-title {

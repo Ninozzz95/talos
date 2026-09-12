@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { Eye, EyeOff } from '@lucide/vue'
+import { ChevronRight, Eye, EyeOff, FileText, FlaskConical, MessageSquareText, MoreHorizontal, Presentation } from '@lucide/vue'
+import { talosRelativeTime } from '@/lib/relativeTime'
+import { talosDaIntitolare } from '@/stores/chat'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
+import { recentChatSessions } from '@/lib/chatListGestures'
 import { talosChatDiscardedByModeSwitch } from '@/lib/chat/modeSwitch'
 import { talosTemporaryWelcome } from '@/lib/chat/temporaryWelcome'
 import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ArrowDown, AlertTriangle, CheckCircle2, Circle, Globe2, LoaderCircle, X } from '@lucide/vue'
+import { ArrowDown, AlertTriangle, CheckCircle2, Circle, LoaderCircle, X } from '@lucide/vue'
 import { useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
@@ -21,9 +24,9 @@ import {
 import { TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH } from '@/lib/chat/promptEnhancerDepth'
 import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import { talosLightImpact } from '@/services/haptics'
+import { talosHarnessUiAvailable } from '@/services/harnessUi'
 import {
     createTalosManualBrowserActivity,
-    extractTalosBrowserUrls,
 } from '@/lib/browser/browserEvidence'
 import type { TalosMobileCommandId } from '@/lib/mobileCommandRegistry'
 import { newTalosMobileId } from '@/lib/mobileIds'
@@ -106,11 +109,8 @@ const attesePendenti = computed<readonly string[]>(() => [
     ...controller.toolAuthorizationRecoveries.value.map((recovery) => recovery.checkpoint_id),
 ].filter((id): id is string => typeof id === 'string' && id.length > 0))
 const settings = useSettingsStore()
-// Two stored choices — the bar's shape and where the "+" opens — expanded here
-// into the three flags the composer speaks. The mapping lives in one module, so
-// there is exactly one place that decides which arrangements exist: the
-// composer used to have to defend itself against a combination where the "+"
-// opened nothing at all.
+// Le preferenze precedenti restano leggibili. Il compositore Calm accetta
+// questi flag per compatibilità, ma mostra sempre la stessa forma e lo stesso +.
 const composerShape = computed(() => talosComposerFlags(
     settings.state.shell.composer_shape,
     settings.state.shell.composer_plus,
@@ -124,11 +124,11 @@ const {
     selectedModelId,
     effort,
     thinking,
+    agentToolsEnabled,
     canSend,
     // Whose generation this is. The bare `sending` flag is the whole app's, and
     // reading it here put a Stop button on somebody else's answer.
     composerBusy,
-    browseMode,
     sendDisabledReason,
     preferenceError,
     enhancingPrompt,
@@ -139,6 +139,7 @@ const {
     selectModel,
     selectEffort,
     setThinking,
+    setAgentToolsEnabled,
     init,
 } = controller
 
@@ -290,9 +291,19 @@ const sessionActions = createSessionActionRunner(toasts, t)
 const sessionActionBusy = sessionActions.busy
 const messageActionError = ref<string | null>(null)
 const browserError = ref<string | null>(null)
-const browserBusy = ref(false)
 const browserStatus = ref('')
 const activeSessionId = computed(() => chat.activeSession.value?.id ?? null)
+/**
+ * D-F2-1 (12/09, visto sul Pad): l'AMBITO della bozza. Una chat senza messaggi —
+ * appena creata dalla speed dial — usa «new»: se la si lascia prima di inviare,
+ * la sessione vuota sparisce dalla cronologia e una bozza legata al suo id
+ * sparirebbe con lei. Al primo invio la sessione ha messaggi e l'ambito diventa
+ * il suo id (la bozza «new» e' gia' stata svuotata dall'invio).
+ */
+function ambitoBozza(): string {
+    const sessione = chat.activeSession.value
+    return !sessione || sessione.has_messages === false ? 'new' : sessione.id
+}
 
 /**
  * Dichiara QUALE conversazione si sta guardando, e la ritira uscendo.
@@ -444,7 +455,7 @@ const composerExpanded = computed(() => (
 const TalosWelcomeTitleFallback = () => h(
     'h1',
     { class: 'talos-welcome-title' },
-    t('chat.welcomeHeadline'),
+    t('chat.homeTitle'),
 )
 const TalosWelcomeTitle = defineAsyncComponent({
     loader: () => import('@/components/chat/TalosWelcomeTitle.vue'),
@@ -454,11 +465,67 @@ const TalosWelcomeTitle = defineAsyncComponent({
     suspensible: false,
 })
 const draftError = computed(() => draft.error.value)
-const browserSuggestionUrl = computed(() => (
-    settings.state.browser.suggest_for_urls
-        ? extractTalosBrowserUrls(prompt.value, 1)[0] ?? null
-        : null
-))
+
+/*
+ * Home vuota sul mockup «Talos Calm Finale» (`homeView()`, r. 2461) — Fase 2,
+ * 12/09. Decisioni dell'owner (15:45): le chip di prompt PRECOMPILANO il
+ * compositore; «Analizza un file» apre anche l'allegato; «Fai una ricerca»
+ * apre Nuova ricerca; «Altro» apre il foglio «+». Niente qui toglie qualcosa
+ * che la home faceva prima: badge e pillola della chat temporanea, lista di
+ * primo avvio, uovo di Pasqua del titolo restano tutti al loro posto.
+ */
+function chipPrecompila(testo: string): void {
+    const bozza = prompt.value
+    draft.updatePrompt(bozza.trim() ? `${bozza}${/\s$/.test(bozza) ? '' : '\n'}${testo}` : testo)
+    void nextTick(() => composer.value?.focusPrompt(true))
+}
+function chipPresentazione(): void {
+    chipPrecompila(t('chat.promptSlidesText'))
+}
+function chipAnalizza(): void {
+    chipPrecompila(t('chat.promptAnalyzeText'))
+    void nextTick(() => composer.value?.openPlus())
+}
+/** Le voci «Crea …» del foglio «+» (mockup C23): lo stesso testo delle chip della home. */
+function onComposerPreset(id: 'slides' | 'document' | 'analyze'): void {
+    if (id === 'slides') chipPresentazione()
+    else if (id === 'analyze') chipAnalizza()
+    else chipPrecompila(t('chat.promptDocumentText'))
+}
+const harnessAvailable = talosHarnessUiAvailable()
+function chipRicerca(): void {
+    void router.push({ name: 'research-new' })
+}
+function chipAltro(): void {
+    void composer.value?.openPlus()
+}
+
+/**
+ * «Riprendi da qui»: le due chat piu' recenti, non temporanee, non quella aperta.
+ * ⛔ Dalla stessa lista della sidebar (`chat.history`: le chat CON messaggi),
+ * non da `chat.sessions`: sul Pad (16:16) la prima foto mostrava una «Nuova
+ * chat» vuota e una sessione di Codice, che le Recenti non elencano.
+ */
+const RIPRESE_MASSIME = 2
+const relativeTimeLabels = computed(() => ({
+    justNow: t('chat.justNow'),
+    minutesAgo: (count: number) => t('chat.minutesAgo', { count }),
+    hoursAgo: (count: number) => t('chat.hoursAgo', { count }),
+    daysAgo: (count: number) => t('chat.daysAgo', { count }),
+}))
+// B07/C07 (12/09): archiviate e sessioni Codice fuori, come nel mockup (`!archived && !temporary`).
+const chatDaRiprendere = computed(() => recentChatSessions(chat.history ?? [])
+    .filter(session => session.id !== activeSessionId.value && !talosIsEphemeralSessionId(session.id))
+    .slice(0, RIPRESE_MASSIME))
+function titoloRipresa(session: { title: string }): string {
+    return talosDaIntitolare(session.title) ? t('chat.newChat') : session.title
+}
+function quandoRipresa(session: { updated_at?: string }): string {
+    return session.updated_at ? talosRelativeTime(session.updated_at, new Date(), relativeTimeLabels.value) : ''
+}
+function tutteLeChat(): void {
+    void router.push({ name: 'chats' })
+}
 const showUntrustedBrowserEvidence = computed(() => (
     import.meta.env.DEV && settings.state.browser.developer_untrusted_evidence
 ))
@@ -660,8 +727,9 @@ function rejoinLiveEdge(): void {
 }
 
 watch(() => chat.messages.length, async (length) => {
-    if (!length || !liveEdge.canAutoScroll()) return
     await nextTick()
+    publishComposerHeight()
+    if (!length || !liveEdge.canAutoScroll()) return
     scrollChatToBottom('auto')
 })
 
@@ -681,7 +749,7 @@ watch(() => chat.state.streamingText, async (text) => {
     scrollChatToBottom('auto')
 })
 
-watch(() => chat.activeSession.value?.id, async () => {
+watch(() => ambitoBozza(), async () => {
     libraryTurnOverride.value = null
     liveEdge.rejoin()
     await nextTick()
@@ -691,7 +759,7 @@ watch(() => chat.activeSession.value?.id, async () => {
 function publishComposerHeight(): void {
     const el = composerWrap.value
     if (!el) return
-    const height = Math.ceil(el.getBoundingClientRect().height) || 180
+    const height = chat.messages.length ? Math.ceil(el.getBoundingClientRect().height) || 180 : 0
     document.documentElement.style.setProperty('--talos-composer-height', `${height}px`)
 }
 
@@ -729,7 +797,7 @@ async function onSend(): Promise<void> {
     if (libraryTurnOverride.value === turnPolicy) {
         libraryTurnOverride.value = null
     }
-    await draft.activateScope(activeSessionId.value ?? 'new')
+    await draft.activateScope(ambitoBozza())
 }
 
 // Exposed to the app shell: the header/sidebar (F1-T3) drive these orchestrated
@@ -757,14 +825,14 @@ const orchestrator = {
         await draft.flush()
         await attachments.discardAll()
         await controller.newSession(options)
-        await draft.activateScope(activeSessionId.value ?? 'new')
+        await draft.activateScope(ambitoBozza())
     },
     async selectSession(sessionId: string): Promise<void> {
         controller.clearPromptEnhancement()
         await draft.flush()
         if (sessionId !== activeSessionId.value) await attachments.discardAll()
         await controller.selectSession(sessionId)
-        await draft.activateScope(activeSessionId.value ?? 'new')
+        await draft.activateScope(ambitoBozza())
     },
     async renameSession(sessionId: string, title: string): Promise<void> {
         await controller.renameSession(sessionId, title)
@@ -774,7 +842,7 @@ const orchestrator = {
         await draft.flush()
         if (sessionId === activeSessionId.value) await attachments.discardAll()
         await controller.deleteSession(sessionId)
-        await draft.activateScope(activeSessionId.value ?? 'new')
+        await draft.activateScope(ambitoBozza())
     },
 }
 controller.sessionLifecycle.register(orchestrator)
@@ -939,7 +1007,7 @@ function selectSlashCommand(commandId: TalosMobileCommandId): void {
         if (commandId === 'new_session') {
             await attachments.discardAll()
             await controller.newSession()
-                await draft.activateScope(activeSessionId.value ?? 'new')
+                await draft.activateScope(ambitoBozza())
             return
         }
         if (commandId === 'open_browse') {
@@ -976,47 +1044,12 @@ function selectSlashCommand(commandId: TalosMobileCommandId): void {
     })
 }
 
-function toggleBrowseMode(enabled: boolean): void {
-    void sessionActions.run(t('chat.actionToggleBrowsing'), async () => {
-        browserError.value = null
-        await controller.setBrowseMode(enabled)
-        if (!enabled) {
-            await browserService.close()
-            await browserActivityQueue
-            browserOwnerSessionId = null
-            browserSessionId = null
-            browserStatus.value = ''
-        }
-    })
-}
-
-function openBrowserUrl(url: string): void {
-    if (browserBusy.value) return
-    void (async () => {
-        browserBusy.value = true
-        browserError.value = null
-        try {
-            await controller.setBrowseMode(true)
-            const owner = chat.activeSession.value
-            if (!owner) throw new Error(t('chat.browserSessionRequired'))
-            browserOwnerSessionId = owner.id
-            browserSessionId = newTalosMobileId()
-            browserPresentation = settings.state.browser.presentation
-            await browserService.open(url, browserPresentation)
-            await browserActivityQueue
-        } catch (error) {
-            browserError.value = error instanceof Error && error.message
-                ? t('chat.localBrowserOpenFailedDetail', { detail: error.message })
-                : t('chat.localBrowserOpenFailed')
-        } finally {
-            browserBusy.value = false
-        }
-    })()
-}
+// Owner 12/09 20:10: la navigazione MANUALE (interruttore, /browse, pillola del link) non ha
+// piu' una superficie nella chat. Il browser locale resta per gli strumenti del modello.
 
 onMounted(async () => {
     await init()
-    await draft.activateScope(activeSessionId.value ?? 'new')
+    await draft.activateScope(ambitoBozza())
     publishComposerHeight()
     if (typeof ResizeObserver !== 'undefined' && composerWrap.value) {
         /*
@@ -1099,17 +1132,8 @@ onBeforeUnmount(() => {
             @touchend.passive="liveEdge.touchEnd()"
             @touchcancel.passive="liveEdge.touchEnd()"
         >
-            <div class="flex min-h-full flex-col pb-[calc(var(--talos-composer-height,180px)+env(safe-area-inset-bottom)+1.5rem)]">
-                <div
-                    v-if="browseMode"
-                    data-testid="talos-mobile-browse-mode-status"
-                    class="mx-auto mt-3 flex min-h-touch w-[calc(100%-1.5rem)] max-w-[820px] items-center gap-2 rounded-md border border-[var(--talos-accent)]/45 bg-[var(--talos-accent-soft)] px-3 text-xs text-[var(--talos-text)]"
-                    role="status"
-                >
-                    <Globe2 class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                    <span class="min-w-0 flex-1">{{ t('chat.browseModeManual') }}</span>
-                    <span v-if="browserStatus" class="truncate text-[var(--talos-muted)]">{{ browserStatus }}</span>
-                </div>
+            <div class="flex min-h-full flex-col pb-[calc(var(--talos-composer-height,180px)+1.5rem)]">
+                <!-- Owner 12/09 20:10: la fascia «Modalità Naviga» non si mostra piu' — «levi ricerca web dalla chat». -->
 
                 <div
                     v-if="chat.sessionBrowserActivities.length"
@@ -1122,17 +1146,18 @@ onBeforeUnmount(() => {
                 </div>
                 <!-- Empty state: brand hero + welcome -->
                 <div
-                    v-if="chat.messages.length === 0"
-                    class="flex flex-1 flex-col items-center px-4 text-center"
-                    :class="[
+
+                    :class="chat.messages.length ? [] : [
+                        'flex flex-1 flex-col items-center px-4 text-center',
                         composerExpanded ? 'justify-start py-3' : 'justify-center py-10',
                         motionSceneActive && !isTemporaryChat ? 'bg-[radial-gradient(ellipse_at_center,var(--talos-background)_35%,transparent_78%)]' : '',
                         isTemporaryChat ? 'bg-[radial-gradient(ellipse_at_center,color-mix(in_oklab,var(--talos-accent)_10%,transparent)_0%,transparent_70%)]' : '',
                     ]"
                     :data-composer-expanded="String(composerExpanded)"
-                    data-testid="talos-empty-brand"
+                    :data-testid="chat.messages.length ? undefined : 'talos-empty-brand'"
                     :data-temporary="String(isTemporaryChat)"
                 >
+                    <template v-if="chat.messages.length === 0">
                     <!--
                         Owner 2026-07-30: the temporary chat gave no sign of
                         itself. A mode you cannot see is a mode you forget you
@@ -1156,20 +1181,22 @@ onBeforeUnmount(() => {
                     >
                         <span class="talos-short-logo-mark"></span>
                     </span>
-                    <span
-                        class="talos-orbitron-brand font-semibold text-[var(--talos-text)]"
-                        :class="composerExpanded ? 'mt-1 text-2xl' : 'mt-2 text-4xl sm:text-5xl'"
-                    >TALOS</span>
-                    <TalosWelcomeTitle v-if="!isTemporaryChat" />
+                    <!-- Fase 2 Calm (12/09): il hero del mockup — il marchio VERO, poi
+                         «Cosa facciamo oggi?» e il sottotitolo. La parola «TALOS» grande e
+                         la frase a orario escono per scelta dell'owner (piano C1); l'uovo
+                         di Pasqua dei giorni speciali resta dentro il titolo. -->
+                    <TalosWelcomeTitle v-if="!isTemporaryChat" :headline="t('chat.homeTitle')" />
                     <template v-else>
                         <p
                             data-testid="talos-temporary-welcome"
                             class="talos-welcome-title mt-2"
                         >{{ temporaryWelcome }}</p>
-                        <p class="mt-1 max-w-[28rem] text-xs leading-5 text-[var(--talos-muted)]">
-                            {{ t('chat.temporaryWelcomeSub') }}
-                        </p>
                     </template>
+                    <p
+                        v-if="!composerExpanded"
+                        data-testid="talos-home-subtitle"
+                        class="talos-home-subtitle"
+                    >{{ isTemporaryChat ? t('chat.temporaryWelcomeSub') : t('chat.homeSubtitle') }}</p>
 
                     <!--
                         ⛔ L'archivio che si apre e' un'ATTESA, non un motivo per
@@ -1261,6 +1288,192 @@ onBeforeUnmount(() => {
                             <span class="text-sm" :class="setupHasModel ? 'text-[var(--talos-muted)] line-through' : 'text-[var(--talos-text)]'">{{ t('chat.chooseYourModel') }}</span>
                         </button>
                     </section>
+                    </template>
+                    <!-- Una sola istanza: nella home fra hero e chip; durante la chat agganciata al fondo. -->
+                    <div
+                        ref="composerWrap"
+                        data-testid="talos-composer-position"
+                        data-position="docked"
+                        class="talos-composer-dock fixed bottom-0 right-0 z-40"
+                        :style="{ left: 'var(--talos-tablet-rail, 0px)' }"
+                    >
+                        <!-- Owner 12/09 19:28 (sul Pad): il compositore resta in basso anche a chat
+                             vuota, «come era prima»; chip e «Riprendi da qui» stanno sopra, sotto il
+                             titolo. La posizione «dentro la home» del mockup e' stata vista e scartata. -->
+                        <div class="talos-docked-composer">
+                        <!-- F5-#28: back-to-bottom pill — rejoin the live edge explicitly. -->
+                        <Transition
+                            enter-active-class="transition duration-150 ease-out"
+                            enter-from-class="opacity-0 translate-y-2"
+                            enter-to-class="opacity-100 translate-y-0"
+                            leave-active-class="transition duration-100 ease-in"
+                            leave-to-class="opacity-0 translate-y-2"
+                        >
+                            <button
+                                v-if="liveEdge.showPill.value"
+                                type="button"
+                                data-testid="talos-back-to-bottom"
+                                :aria-label="t('chat.backToLatest')"
+                                class="talos-pressable absolute -top-14 left-1/2 z-10 flex min-h-touch min-w-touch -translate-x-1/2 items-center justify-center gap-1.5 rounded-full border border-[var(--talos-border)] bg-[var(--talos-card)]/95 px-3 text-sm text-[var(--talos-text)] shadow-[0_4px_16px_rgba(0,0,0,0.14)] backdrop-blur"
+                                @click="rejoinLiveEdge"
+                            >
+                                <ArrowDown class="size-4" aria-hidden="true" />
+                            </button>
+                        </Transition>
+
+                        <!-- F5-#29: dictation problems speak where the thumb is — right
+                             above the composer, never buried at the top of the thread. -->
+                        <!-- ⛔ IL SILENZIO NON SI VESTE DA GUASTO — owner 2026-08-10, dal
+                             Pad: microfono in una chat nuova, e in rosso «Il riconoscimento
+                             vocale non e' riuscito». In logcat il motore diceva
+                             NO_SPEECH_DETECTED: aveva funzionato, non aveva sentito nulla.
+                             Chi non ha parlato non ha rotto niente — la riga resta e spiega,
+                             ma con i colori di un avviso e senza `role="alert"`, che
+                             interrompe chi legge con lo schermo. -->
+                        <div
+                            v-if="dictation.error.value"
+                            :role="dictation.errorCode.value === 'noSpeech' ? 'status' : 'alert'"
+                            data-testid="talos-dictation-error"
+                            :data-esito="dictation.errorCode.value ?? ''"
+                            class="mx-3 mb-2 rounded-md border p-3 text-sm"
+                            :class="dictation.errorCode.value === 'noSpeech'
+                                ? 'border-[var(--talos-border)] bg-[var(--talos-surface-2)] text-[var(--talos-muted)]'
+                                : 'border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]'"
+                        >
+                            {{ dictation.error.value }}
+                        </div>
+                        <TalosMobileComposer
+                            ref="composer"
+                            :prompt="prompt"
+                            :model-profiles="profiles"
+                            :selected-model-profile-id="selectedModelId"
+                            :selected-effort="effort"
+                            :thinking="thinking"
+                            :agent-tools-enabled="agentToolsEnabled"
+                            :docked="true"
+                            :can-send="canSend"
+                            :sending="composerBusy === 'this-chat'"
+                            :refreshing-models="refreshingModels"
+                            :discovery-problems="discoveryProblems"
+                            :send-disabled-reason="motivoInvioSpento"
+                            :enhancing-prompt="enhancingPrompt"
+                            :enhancer-depth="enhancer.depth"
+                            :enhancer-model="enhancer.model"
+                            :enhancer-effort="enhancer.effort"
+                            :enhancer-models="enhancerModels"
+                            :prompt-enhancement="promptEnhancement"
+                            :prompt-enhancement-error="promptEnhancementError ?? ''"
+                            :attachments="attachments.items"
+                            :attachment-busy="attachmentBusy"
+                            :attachment-error="attachmentError"
+                            :context-available="true"
+                            :dictation-supported="dictation.visible.value"
+                            :dictation-listening="dictation.status.value === 'listening'"
+                            :dictation-starting="dictation.status.value === 'starting'"
+                            :dictation-level="dictation.level.value"
+                            :drawer-mode="composerShape.drawerMode"
+                            :immersive-composer="composerShape.immersiveComposer"
+                            :plus-dropdown="composerShape.plusDropdown"
+                            :library-context-enabled="effectiveLibraryContextEnabled"
+                            :library-context-mode="effectiveLibraryContextPolicy.mode"
+                            :library-source-count="librarySelectedSourceCount"
+                            :library-turn-override="libraryTurnOverride"
+                            :library-files="libraryTurnFiles"
+                            @update:prompt="draft.updatePrompt($event)"
+                            @send="onSend"
+                            @stop="chat.stopStreaming()"
+                            :dictation-transcript="trascrizioneViva"
+                            @toggle-dictation="void toggleDictation()"
+                            @discard-dictation="discardDictation()"
+                            @send-dictation="void onSendDictation()"
+                            @attach="selectAttachments"
+                            @take-photo="attachments.takePhoto"
+                            @pick-photos="attachments.pickPhotos"
+                            @remove-attachment="removeAttachment"
+                            @dismiss-attachment-error="attachments.clearError()"
+                            @select-model-profile="selectModel"
+                            @select-effort="selectEffort"
+                            @select-thinking="setThinking"
+                            @set-agent-tools-enabled="setAgentToolsEnabled"
+                            :harness-available="harnessAvailable"
+                            @preset="onComposerPreset"
+                            @navigate="(route) => router.push({ name: route })"
+                            @refresh-models="controller.refreshConfiguredProviders()"
+                            @open-model-lab="router.push({ name: 'settings-models' })"
+                            @open-context="router.push({ name: 'context' })"
+                            @enhance-prompt="requestPromptEnhancement"
+                            @update-enhancer-depth="(value) => void setEnhancer({ depth: value })"
+                            @update-enhancer-model="(value) => void setEnhancer({ model: value })"
+                            @update-enhancer-effort="(value) => void setEnhancer({ effort: value as TalosMobileEffortLevel })"
+                            @enhance-blocked="onEnhanceBlocked"
+                            @cancel-prompt-enhancement="cancelPromptEnhancement"
+                            @insert-prompt-enhancement="insertPromptEnhancement"
+                            @replace-prompt-enhancement="replacePromptEnhancement"
+                            @select-slash-command="selectSlashCommand"
+                            @update-library-turn-override="libraryTurnOverride = $event"
+                        />
+                        </div>
+                    </div>
+
+                    <template v-if="chat.messages.length === 0">
+                    <!-- Le chip di prompt del mockup (`.prompt-chips`): precompilano, non
+                         inviano. Spariscono quando il compositore e' espanso, come la pillola. -->
+                    <div
+                        v-if="!composerExpanded"
+                        data-testid="talos-prompt-chips"
+                        class="talos-prompt-chips"
+                        role="group"
+                        :aria-label="t('chat.promptChipsLabel')"
+                    >
+                        <button type="button" data-testid="talos-prompt-slides" class="talos-prompt-chip talos-pressable" @click="chipPresentazione">
+                            <Presentation class="size-4" aria-hidden="true" />{{ t('chat.promptSlides') }}
+                        </button>
+                        <button type="button" data-testid="talos-prompt-analyze" class="talos-prompt-chip talos-pressable" @click="chipAnalizza">
+                            <FileText class="size-4" aria-hidden="true" />{{ t('chat.promptAnalyze') }}
+                        </button>
+                        <!-- Owner 12/09 20:05-20:10: «via ricerca web». Questa chip apre la Ricerca
+                             approfondita (decisione 15:45): resta, con l'ampolla della stazione al
+                             posto del mondo, che la faceva sembrare una ricerca sul web. -->
+                        <button type="button" data-testid="talos-prompt-research" class="talos-prompt-chip talos-pressable" @click="chipRicerca">
+                            <FlaskConical class="size-4" aria-hidden="true" />{{ t('chat.promptResearch') }}
+                        </button>
+                        <button type="button" data-testid="talos-prompt-more" class="talos-prompt-chip talos-pressable" @click="chipAltro">
+                            <MoreHorizontal class="size-4" aria-hidden="true" />{{ t('chat.promptMore') }}
+                        </button>
+                    </div>
+                    <!-- «Riprendi da qui» (`.resume-section`): le ultime due chat, e la via
+                         a tutte. Solo quando c'e' qualcosa da riprendere. -->
+                    <section
+                        v-if="!composerExpanded && chatDaRiprendere.length"
+                        data-testid="talos-resume-section"
+                        class="talos-resume-section"
+                        :aria-label="t('chat.resumeTitle')"
+                    >
+                        <div class="talos-resume-head">
+                            <h2>{{ t('chat.resumeTitle') }}</h2>
+                            <button type="button" data-testid="talos-resume-all" class="talos-resume-all talos-pressable" @click="tutteLeChat">
+                                {{ t('chat.allChats') }}<ChevronRight class="size-4" aria-hidden="true" />
+                            </button>
+                        </div>
+                        <div class="talos-resume-grid">
+                            <button
+                                v-for="session in chatDaRiprendere"
+                                :key="session.id"
+                                type="button"
+                                class="talos-resume-card talos-pressable"
+                                :data-testid="`talos-resume-${session.id}`"
+                                :aria-label="t('chat.openNamed', { title: titoloRipresa(session) })"
+                                @click="selectSession(session.id)"
+                            >
+                                <span class="talos-resume-icon" aria-hidden="true"><MessageSquareText class="size-5" /></span>
+                                <span class="min-w-0">
+                                    <strong>{{ titoloRipresa(session) }}</strong>
+                                    <small>{{ quandoRipresa(session) || t('chat.resumeConversation') }}</small>
+                                </span>
+                            </button>
+                        </div>
+                    </section>
+                    </template>
                 </div>
 
                 <!--
@@ -1273,7 +1486,7 @@ onBeforeUnmount(() => {
                     second is the honest half everyone else omits, because for
                     them admitting it would admit the first line is false.
                 -->
-                <template v-else>
+                <template v-if="chat.messages.length > 0">
                 <p
                     v-if="isTemporaryChat"
                     data-testid="talos-temporary-chat-notice"
@@ -1305,119 +1518,7 @@ onBeforeUnmount(() => {
             </div>
         </div>
 
-        <!-- F6: the dock spares the tablet chat panel (--talos-tablet-rail=0 on phones). -->
-        <div ref="composerWrap" class="fixed bottom-0 right-0 z-40" :style="{ left: 'var(--talos-tablet-rail, 0px)' }">
-            <!-- F5-#28: back-to-bottom pill — rejoin the live edge explicitly. -->
-            <Transition
-                enter-active-class="transition duration-150 ease-out"
-                enter-from-class="opacity-0 translate-y-2"
-                enter-to-class="opacity-100 translate-y-0"
-                leave-active-class="transition duration-100 ease-in"
-                leave-to-class="opacity-0 translate-y-2"
-            >
-                <button
-                    v-if="liveEdge.showPill.value"
-                    type="button"
-                    data-testid="talos-back-to-bottom"
-                    :aria-label="t('chat.backToLatest')"
-                    class="talos-pressable absolute -top-14 left-1/2 z-10 flex min-h-touch min-w-touch -translate-x-1/2 items-center justify-center gap-1.5 rounded-full border border-[var(--talos-border)] bg-[var(--talos-card)]/95 px-3 text-sm text-[var(--talos-text)] shadow-[0_4px_16px_rgba(0,0,0,0.14)] backdrop-blur"
-                    @click="rejoinLiveEdge"
-                >
-                    <ArrowDown class="size-4" aria-hidden="true" />
-                </button>
-            </Transition>
 
-            <!-- F5-#29: dictation problems speak where the thumb is — right
-                 above the composer, never buried at the top of the thread. -->
-            <!-- ⛔ IL SILENZIO NON SI VESTE DA GUASTO — owner 2026-08-10, dal
-                 Pad: microfono in una chat nuova, e in rosso «Il riconoscimento
-                 vocale non e' riuscito». In logcat il motore diceva
-                 NO_SPEECH_DETECTED: aveva funzionato, non aveva sentito nulla.
-                 Chi non ha parlato non ha rotto niente — la riga resta e spiega,
-                 ma con i colori di un avviso e senza `role="alert"`, che
-                 interrompe chi legge con lo schermo. -->
-            <div
-                v-if="dictation.error.value"
-                :role="dictation.errorCode.value === 'noSpeech' ? 'status' : 'alert'"
-                data-testid="talos-dictation-error"
-                :data-esito="dictation.errorCode.value ?? ''"
-                class="mx-3 mb-2 rounded-md border p-3 text-sm"
-                :class="dictation.errorCode.value === 'noSpeech'
-                    ? 'border-[var(--talos-border)] bg-[var(--talos-surface-2)] text-[var(--talos-muted)]'
-                    : 'border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]'"
-            >
-                {{ dictation.error.value }}
-            </div>
-            <TalosMobileComposer
-                ref="composer"
-                :prompt="prompt"
-                :model-profiles="profiles"
-                :selected-model-profile-id="selectedModelId"
-                :selected-effort="effort"
-                :thinking="thinking"
-                :can-send="canSend"
-                :sending="composerBusy === 'this-chat'"
-                :refreshing-models="refreshingModels"
-                :discovery-problems="discoveryProblems"
-                :send-disabled-reason="motivoInvioSpento"
-                :enhancing-prompt="enhancingPrompt"
-                :enhancer-depth="enhancer.depth"
-                :enhancer-model="enhancer.model"
-                :enhancer-effort="enhancer.effort"
-                :enhancer-models="enhancerModels"
-                :prompt-enhancement="promptEnhancement"
-                :prompt-enhancement-error="promptEnhancementError ?? ''"
-                :attachments="attachments.items"
-                :attachment-busy="attachmentBusy"
-                :attachment-error="attachmentError"
-                :context-available="true"
-                :browse-mode="browseMode"
-                :browser-suggestion-url="browserSuggestionUrl"
-                :browser-busy="browserBusy"
-                :dictation-supported="dictation.visible.value"
-                :dictation-listening="dictation.status.value === 'listening'"
-                :dictation-starting="dictation.status.value === 'starting'"
-                :dictation-level="dictation.level.value"
-                :drawer-mode="composerShape.drawerMode"
-                :immersive-composer="composerShape.immersiveComposer"
-                :plus-dropdown="composerShape.plusDropdown"
-                :library-context-enabled="effectiveLibraryContextEnabled"
-                :library-context-mode="effectiveLibraryContextPolicy.mode"
-                :library-source-count="librarySelectedSourceCount"
-                :library-turn-override="libraryTurnOverride"
-                :library-files="libraryTurnFiles"
-                @update:prompt="draft.updatePrompt($event)"
-                @send="onSend"
-                @stop="chat.stopStreaming()"
-                :dictation-transcript="trascrizioneViva"
-                @toggle-dictation="void toggleDictation()"
-                @discard-dictation="discardDictation()"
-                @send-dictation="void onSendDictation()"
-                @attach="selectAttachments"
-                @take-photo="attachments.takePhoto"
-                @pick-photos="attachments.pickPhotos"
-                @remove-attachment="removeAttachment"
-                @dismiss-attachment-error="attachments.clearError()"
-                @select-model-profile="selectModel"
-                @select-effort="selectEffort"
-                @select-thinking="setThinking"
-                @refresh-models="controller.refreshConfiguredProviders()"
-                @open-model-lab="router.push({ name: 'settings-models' })"
-                @open-context="router.push({ name: 'context' })"
-                @enhance-prompt="requestPromptEnhancement"
-                @update-enhancer-depth="(value) => void setEnhancer({ depth: value })"
-                @update-enhancer-model="(value) => void setEnhancer({ model: value })"
-                @update-enhancer-effort="(value) => void setEnhancer({ effort: value as TalosMobileEffortLevel })"
-                @enhance-blocked="onEnhanceBlocked"
-                @cancel-prompt-enhancement="cancelPromptEnhancement"
-                @insert-prompt-enhancement="insertPromptEnhancement"
-                @replace-prompt-enhancement="replacePromptEnhancement"
-                @select-slash-command="selectSlashCommand"
-                @toggle-browse="toggleBrowseMode"
-                @open-browser-url="openBrowserUrl"
-                @update-library-turn-override="libraryTurnOverride = $event"
-            />
-        </div>
 
         <!--
             ⭐ IL GIRELLO E' UN OVERLAY, non un paragrafo dentro l'introduzione.

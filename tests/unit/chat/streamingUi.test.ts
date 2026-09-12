@@ -130,14 +130,15 @@ describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
         expect(wrapper.get('.talos-message-content').text().match(/Primo frammento/g)).toHaveLength(1)
     })
 
-    it('P10c: Fade paints the fade modifier and never creates the typewriter caret', async () => {
+    it('Fase 4: Fade conserva il ritmo e mostra il cursore Calm', async () => {
         mockSettings.state.shell.streaming_animation = 'fade'
         try {
             const wrapper = mountStreaming(true, 'Fade pulito senza il cursore da macchina da scrivere.')
             await vi.waitFor(() => {
                 expect(wrapper.find('.talos-stream-char--fade').exists()).toBe(true)
             }, { timeout: 4000 })
-            expect(wrapper.find('[data-testid="talos-stream-caret"]').exists()).toBe(false)
+            expect(wrapper.find('[data-testid="talos-stream-caret"]').exists()).toBe(true)
+        expect(wrapper.find('table [data-testid="talos-stream-caret"]').exists()).toBe(false)
         } finally {
             mockSettings.state.shell.streaming_animation = 'typewriter'
         }
@@ -162,7 +163,7 @@ describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
         }
     })
 
-    it('DEBT-MOBILE-003 RED: a streaming table never gets the prompt caret', async () => {
+    it('Fase 4: il cursore segue la tabella senza entrare nelle sue celle', async () => {
         const table = [
             '| Campo | Valore |',
             '| --- | --- |',
@@ -174,7 +175,8 @@ describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
             expect(wrapper.get('.talos-message-table-scroll').exists()).toBe(true)
         }, { timeout: 4000 })
 
-        expect(wrapper.find('[data-testid="talos-stream-caret"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-stream-caret"]').exists()).toBe(true)
+        expect(wrapper.find('table [data-testid="talos-stream-caret"]').exists()).toBe(false)
     })
 
     it('owner 2026-07-25: waiting shows the mark ALONE — no bubble, no container', () => {

@@ -11,7 +11,13 @@ data class TalosPocketOnsetConfig(
     val leadingSilenceMs: Int = 50,
     val analysisWindowMs: Int = 10,
     val resumeSpeechMs: Int = 20,
-    val maxOnsetMs: Int = 3_000,
+    // ⛔ 12/09/2026, misurato sul Pad con la voce dell'owner (profilo Pocket da
+    // microfono): dopo il prefisso sacrificale la voce taceva per PIU' di 2,5 s
+    // (contorno: dalla finestra 45 in poi da -56 a -86 dBFS fino oltre i 3 s) e
+    // a 3 s la ripresa non era ancora arrivata ⇒ ripiego a 0,83 s ⇒ ~2 s di
+    // silenzio davanti a ogni segmento: 4 s prima della prima parola e una
+    // pausa lunga a ogni virgola. La finestra arriva a 6 s: la ripresa si trova.
+    val maxOnsetMs: Int = 6_000,
 ) {
     val minPrefixSamples: Int = durationSamples(minPrefixMs)
     val maxPrefixSamples: Int = durationSamples(maxPrefixMs)
@@ -70,11 +76,8 @@ class TalosPocketOnsetStabilizer(
     private var buffered = FloatArray(0)
     private var result: TalosPocketOnsetResult? = null
     private var cancelled = false
-    private var boundaryImpossible = false
-
     fun accept(pcmFloatMono: FloatArray): FloatArray {
         check(!cancelled) { "Pocket onset stabilizer is cancelled" }
-        check(!boundaryImpossible) { "Pocket onset boundary was not found" }
         require(pcmFloatMono.all(Float::isFinite)) { "Pocket onset PCM contains non-finite samples" }
         if (pcmFloatMono.isEmpty()) return pcmFloatMono
         if (result != null) return pcmFloatMono
@@ -85,30 +88,98 @@ class TalosPocketOnsetStabilizer(
         buffered.fill(0f)
         buffered = joined
 
-        val boundary = findBoundary(requireCompleteSearchWindow = true) ?: run {
-            if (buffered.size > config.maxOnsetSamples) {
-                boundaryImpossible = true
-                clearBuffer()
-            }
+        val boundary = findMeasuredBoundary(requireCompleteSearchWindow = true) ?: run {
+            // ⛔ 12/09/2026: qui si chiudeva a chiave («fail closed»): dopo 3 s di
+            // audio senza una pausa di 80 ms nel primo secondo, la lettura INTERA
+            // moriva con «Pocket onset boundary was not found». Misurato sul Pad
+            // con una risposta italiana fluente di 145 caratteri: la persona
+            // premeva «Leggi» e non sentiva niente, mentre l'anteprima (una frase
+            // con una pausa dopo «Ecco») suonava. Una pausa non e' garantita da
+            // nessuna frase: si ripiega sul taglio piu' silenzioso del prefisso.
+            if (buffered.size > config.maxOnsetSamples) return release(fallbackBoundary(), BOUNDARY_SOURCE_FALLBACK).pcmFloatMono
             return FloatArray(0)
         }
-        return release(boundary).pcmFloatMono
+        return release(boundary.first, boundary.second).pcmFloatMono
     }
-
+    /**
+     * La pausa misurata, prima al 2 % del picco (la regola pinned), poi — se il
+     * rumore di fondo di una voce registrata al microfono sta sopra quella
+     * soglia e nessuna finestra risulta «quieta» — al 5 % e al 10 %. Owner
+     * 12/09 («troppa pausa fra la virgola e la parola dopo»): con la soglia
+     * rigida il taglio finiva nel ripiego, che lasciava intera la pausa del
+     * modello dopo il prefisso sacrificale; una soglia rilassata trova la
+     * stessa pausa e la taglia come quella misurata, 50 ms prima della parola.
+     */
+    private fun findMeasuredBoundary(requireCompleteSearchWindow: Boolean): Pair<Boundary, String>? {
+        findBoundary(requireCompleteSearchWindow, config.thresholdRatio)?.let { return it to BOUNDARY_SOURCE }
+        for (ratio in RELAXED_THRESHOLD_RATIOS) {
+            findBoundary(requireCompleteSearchWindow, ratio)?.let { return it to "${BOUNDARY_SOURCE_RELAXED}_${(ratio * 100).toInt()}PCT" }
+        }
+        return null
+    }
     fun complete(): TalosPocketOnsetCompletion {
         check(!cancelled) { "Pocket onset stabilizer is cancelled" }
-        check(!boundaryImpossible) { "Pocket onset boundary was not found" }
         result?.let { return TalosPocketOnsetCompletion(FloatArray(0), it) }
-        val boundary = findBoundary(requireCompleteSearchWindow = false)
-            ?: run {
-                boundaryImpossible = true
-                clearBuffer()
-                error("Pocket onset boundary was not found")
-            }
-        return release(boundary)
+        val boundary = findMeasuredBoundary(requireCompleteSearchWindow = false)
+        return if (boundary != null) release(boundary.first, boundary.second) else release(fallbackBoundary(), BOUNDARY_SOURCE_FALLBACK)
     }
-
-    private fun release(boundary: Boundary): TalosPocketOnsetCompletion {
+    /**
+     * Il ripiego quando nessuna pausa qualifica: la finestra di analisi con la
+     * RMS piu' bassa dentro il prefisso [minPrefix, maxPrefix] — il punto piu'
+     * vicino a un silenzio che l'audio offre. Il prefisso sacrificale prima del
+     * taglio non esce; se l'audio e' piu' corto del prefisso minimo, esce tutto.
+     */
+    private fun fallbackBoundary(): Boundary {
+        talosPocketSeamLog("onset fallback, prefix contour (dBFS/10ms): " + talosPocketSeamContour(buffered.copyOfRange(0, minOf(buffered.size, config.maxOnsetSamples)), config.sampleRate))
+        val windowSamples = config.analysisWindowSamples
+        val firstWindow = ceilDiv(config.minPrefixSamples, windowSamples)
+        val lastWindow = minOf(buffered.size, config.maxPrefixSamples) / windowSamples
+        var quietestWindow = -1
+        var quietestEnergy = Double.MAX_VALUE
+        for (window in firstWindow until lastWindow) {
+            val start = window * windowSamples
+            var sumSquares = 0.0
+            for (index in start until start + windowSamples) {
+                val value = buffered[index].toDouble()
+                sumSquares += value * value
+            }
+            if (sumSquares < quietestEnergy) {
+                quietestEnergy = sumSquares
+                quietestWindow = window
+            }
+        }
+        val cut = if (quietestWindow < 0) 0 else quietestWindow * windowSamples
+        var peak = 0f
+        for (index in 0 until minOf(buffered.size, config.maxPrefixSamples)) peak = maxOf(peak, abs(buffered[index]))
+        // Dalla finestra piu' silenziosa si avanza finche' l'audio resta sotto il
+        // 10 % del picco in RMS (-20 dB), fino alla fine del buffer meno la
+        // finestra di ripresa: la pausa che segue il prefisso non resta
+        // nell'uscita. Misurato 12/09: il silenzio dopo il prefisso oscilla fra
+        // -56 e -86 dB (30 dB di escursione), quindi un criterio «entro il doppio
+        // della finestra piu' quieta» si fermava dopo 10 ms. Un audio pieno non
+        // scende sotto il 10 % e non avanza.
+        val peakSquared = peak.toDouble() * peak
+        val extensionLimit = buffered.size / windowSamples - ceilDiv(config.resumeSpeechSamples, windowSamples)
+        var gapEndWindow = if (quietestWindow < 0) 0 else quietestWindow
+        if (quietestWindow >= 0) {
+            var window = quietestWindow
+            while (window + 1 < extensionLimit) {
+                val next = window + 1
+                val start = next * windowSamples
+                var sumSquares = 0.0
+                for (index in start until start + windowSamples) {
+                    val value = buffered[index].toDouble()
+                    sumSquares += value * value
+                }
+                if (sumSquares / windowSamples > peakSquared * 0.01) break
+                window = next
+            }
+            gapEndWindow = window + 1
+        }
+        val resume = if (quietestWindow < 0) cut else gapEndWindow * windowSamples
+        return Boundary(gapStart = cut, gapEnd = resume, resumeStart = resume, threshold = peak * config.thresholdRatio)
+    }
+    private fun release(boundary: Boundary, source: String): TalosPocketOnsetCompletion {
         val outputStart = (boundary.resumeStart - config.leadingSilenceSamples)
             .coerceAtLeast(boundary.gapStart)
         val output = buffered.copyOfRange(outputStart, buffered.size)
@@ -116,7 +187,7 @@ class TalosPocketOnsetStabilizer(
             discardedSamples = outputStart,
             leadingSilenceSamples = boundary.resumeStart - outputStart,
             boundaryThreshold = boundary.threshold,
-            boundarySource = BOUNDARY_SOURCE,
+            boundarySource = source,
             gapStartSamples = boundary.gapStart,
             gapEndSamples = boundary.gapEnd,
             resumeStartSamples = boundary.resumeStart,
@@ -139,7 +210,7 @@ class TalosPocketOnsetStabilizer(
 
     internal fun bufferedSamples(): Int = buffered.size
 
-    private fun findBoundary(requireCompleteSearchWindow: Boolean): Boundary? {
+    private fun findBoundary(requireCompleteSearchWindow: Boolean, thresholdRatio: Float): Boundary? {
         val windowSamples = config.analysisWindowSamples
         val completeWindows = buffered.size / windowSamples
         if (requireCompleteSearchWindow && buffered.size < config.maxPrefixSamples) return null
@@ -153,7 +224,7 @@ class TalosPocketOnsetStabilizer(
             peak = maxOf(peak, abs(buffered[index]))
         }
         if (peak == 0f) return null
-        val threshold = peak * config.thresholdRatio
+        val threshold = peak * thresholdRatio
         val thresholdSquared = threshold.toDouble() * threshold
         val quiet = BooleanArray(completeWindows) { window ->
             val start = window * windowSamples
@@ -208,7 +279,20 @@ class TalosPocketOnsetStabilizer(
     )
 
     companion object {
-        const val SACRIFICIAL_PREFIX = "Quattro. "
+        /**
+         * ⛔ 12/09/2026: era «Quattro. » (punto). Con la voce dell'owner il modello,
+         * dopo un punto, tace per oltre 2,5 s prima della frase vera — misurato
+         * col contorno di energia nel logcat («TalosPocketSeam»). Con la virgola
+         * la pausa e' quella di una virgola: corta. Il prefisso resta sacrificale
+         * (i primi ~150 ms di ogni generazione sono da buttare) e viene tagliato
+         * come prima; cambia solo quanto silenzio il modello mette dopo.
+         */
+        const val SACRIFICIAL_PREFIX = "Quattro, "
         const val BOUNDARY_SOURCE = "MEASURED_ITALIAN_PREFIX_WINDOWED_RMS_LONGEST_GAP"
+        /** Nessuna pausa qualificante nel prefisso: taglio alla finestra piu' silenziosa (12/09/2026). */
+        const val BOUNDARY_SOURCE_FALLBACK = "FALLBACK_ITALIAN_PREFIX_QUIETEST_WINDOW_NO_GAP"
+        /** Pausa misurata con una soglia sopra il 2 % pinned (rumore di fondo di una voce registrata al microfono). */
+        const val BOUNDARY_SOURCE_RELAXED = "MEASURED_ITALIAN_PREFIX_WINDOWED_RMS_LONGEST_GAP_RELAXED"
+        private val RELAXED_THRESHOLD_RATIOS = floatArrayOf(0.05f, 0.10f)
     }
 }

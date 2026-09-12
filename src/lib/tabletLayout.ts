@@ -20,6 +20,18 @@ export type TalosTabletSidebarVariant = 'chat' | 'harness'
 export const TALOS_TABLET_WIDTH_MEDIA_QUERY = '(min-width: 768px)'
 export const TALOS_TABLET_MEDIA_QUERY = `${TALOS_TABLET_WIDTH_MEDIA_QUERY} and (min-height: 500px)`
 
+/**
+ * La sidebar Calm del tablet (U-5) ha la SUA larghezza, separata dal pannello
+ * Codice: parte dai 14,5 rem del mockup (232 px a 16 px) e si allarga
+ * trascinando il bordo fino allo stesso massimo del pannello (owner 12/09).
+ */
+export const TALOS_TABLET_CHAT_SIDEBAR_DEFAULT = 232
+export const TALOS_TABLET_CHAT_SIDEBAR_MIN = 232
+export function clampTalosTabletChatSidebarWidth(value: unknown): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return TALOS_TABLET_CHAT_SIDEBAR_DEFAULT
+    return Math.min(TALOS_TABLET_SIDEBAR_MAX, Math.max(TALOS_TABLET_CHAT_SIDEBAR_MIN, Math.round(value)))
+}
+
 export function clampTalosTabletSidebarWidth(value: unknown): number {
     if (typeof value !== 'number' || !Number.isFinite(value)) return TALOS_TABLET_SIDEBAR_DEFAULT
     return Math.min(TALOS_TABLET_SIDEBAR_MAX, Math.max(TALOS_TABLET_SIDEBAR_MIN, Math.round(value)))
@@ -63,7 +75,15 @@ export function talosTabletLeavesChatsRoute(
     // può ancora non esserci, e una redirezione presa lì porterebbe via da una
     // pagina che la persona non ha nemmeno visto.
     if (!routeName) return false
-    return isTablet && routeName === 'chats'
+    // ⛔ 12/09/2026, owner (B09 dell'inventario Astra): la barra laterale Calm
+    // mostra SEI recenti, non l'elenco intero come il 20/8 — quindi la pagina
+    // «Chat» (elenco completo, ricerca, gruppi, selezione multipla) ha di nuovo
+    // ragione di esistere anche su tablet: «Tutte le chat» e «Cerca in Talos»
+    // ci arrivano. Il reindirizzamento e' spento; la funzione resta perche' la
+    // domanda e' provata qui e non nella shell.
+    void isTablet
+    void routeName
+    return false
 }
 
 /**

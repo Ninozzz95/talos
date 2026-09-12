@@ -75,6 +75,41 @@ describe('U-12 the note page declares whose content this is', () => {
 })
 
 describe('U-10 the pin on the open note', () => {
+    it('saves checkbox edits in both directions and shows the saved state', async () => {
+        notes = [{ ...nota, content: 'Intro\n- [ ] Provare\n- [x] Fatto' }]
+        update.mockImplementation(async (input) => {
+            notes[0] = { ...notes[0]!, ...input }
+            return notes[0]
+        })
+        const wrapper = await detail()
+        const box = wrapper.get('button[role="checkbox"]')
+        expect(box.attributes('aria-checked')).toBe('false')
+        await box.trigger('click')
+        await flushPromises()
+        expect(update).toHaveBeenLastCalledWith({ id: 'n1', content: 'Intro\n- [x] Provare\n- [x] Fatto' })
+        expect(box.attributes('aria-checked')).toBe('true')
+        await box.trigger('click')
+        await flushPromises()
+        expect(update).toHaveBeenLastCalledWith({ id: 'n1', content: 'Intro\n- [ ] Provare\n- [x] Fatto' })
+        wrapper.unmount()
+        expect((await detail()).get('button[role="checkbox"]').attributes('aria-checked')).toBe('false')
+    })
+
+    it('leaves a note without a checklist untouched', async () => {
+        const wrapper = await detail()
+        expect(wrapper.find('[role="checkbox"]').exists()).toBe(false)
+        expect(update).not.toHaveBeenCalled()
+    })
+
+    it('keeps the saved checkbox state and reports a failed write', async () => {
+        notes = [{ ...nota, content: '- [ ] Provare' }]
+        update.mockRejectedValueOnce(new Error('private detail'))
+        const wrapper = await detail()
+        await wrapper.get('[role="checkbox"]').trigger('click')
+        await flushPromises()
+        expect(wrapper.get('[role="checkbox"]').attributes('aria-checked')).toBe('false')
+        expect(wrapper.get('[role="alert"]').text()).toBe('notes.checkSaveFailed')
+    })
     it('sends only `pinned`, and keeps the row the store gives back', async () => {
         const wrapper = await detail()
 

@@ -106,6 +106,14 @@ export interface TalosThinkSlice {
     text: string
     /** Ciò che va nel cassetto «Ragionamento». */
     reasoning: string
+    /**
+     * D-F1-2 (12/09): il CONTENUTO dei blocchi `<tool_call>` buttati, uno per
+     * blocco, senza i tag. Il separatore non decide cosa siano: sul motore
+     * locale la chiamata è già stata eseguita e si ignorano; sul cloud
+     * (`openAiCompatibleAdapter`) si leggono e diventano chiamate vere, perché
+     * lì nessuno le aveva eseguite. Manca (undefined) quando non ce ne sono.
+     */
+    calls?: string[]
 }
 
 export interface TalosThinkSplitter {
@@ -240,10 +248,15 @@ export function talosCreateThinkSplitter(startsInReasoning = false): TalosThinkS
     const filtraToolCodeRagionamento = creaFiltroBloccoToolCode()
     /** Quale chiusura sta aspettando lo stato «chiamata»: le aperture sono due. */
     let chiusuraAttesa: string = TOOL_CHIUSURA
+    /** Il blocco «chiamata» in corso, accumulato fra un pezzo e l'altro. */
+    let bloccoInCorso = ''
+    /** Le chiusure che segnano una chiamata (il catalogo `<tools>` no). */
+    const CHIUSURE_DI_CHIAMATA: readonly string[] = [TOOL_CHIUSURA, '<|tool_call_end|>']
 
     function consuma(chiudendo: boolean): TalosThinkSlice {
         let text = ''
         let reasoning = ''
+        const calls: string[] = []
 
         for (;;) {
             if (stato === 'testo') {
@@ -290,14 +303,21 @@ export function talosCreateThinkSplitter(startsInReasoning = false): TalosThinkS
                 )
                 text += sospeso.slice(0, sospeso.length - trattenuti)
                 sospeso = sospeso.slice(sospeso.length - trattenuti)
-                return { text, reasoning }
+                // Le chiamate raccolte PRIMA di tornare nel testo viaggiano con la fetta.
+                return calls.length ? { text, reasoning, calls } : { text, reasoning }
             }
 
             const chiusura = stato === 'ragionamento' ? CHIUSURA : chiusuraAttesa
             const at = sospeso.indexOf(chiusura)
             if (at >= 0) {
-                // ⛔ Il contenuto della chiamata non va da nessuna parte.
+                // ⛔ Il contenuto della chiamata non va a schermo: si raccoglie
+                // (D-F1-2) e lo decide chi riceve la fetta.
                 if (stato === 'ragionamento') reasoning += sospeso.slice(0, at)
+                else {
+                    bloccoInCorso += sospeso.slice(0, at)
+                    if (CHIUSURE_DI_CHIAMATA.includes(chiusura)) calls.push(bloccoInCorso)
+                    bloccoInCorso = ''
+                }
                 sospeso = sospeso.slice(at + chiusura.length)
                 stato = 'testo'
                 continue
@@ -306,9 +326,13 @@ export function talosCreateThinkSplitter(startsInReasoning = false): TalosThinkS
             const trattenuti = chiudendo ? 0 : codaAmbigua(sospeso, chiusura)
             if (stato === 'ragionamento') {
                 reasoning += sospeso.slice(0, sospeso.length - trattenuti)
+            } else {
+                bloccoInCorso += sospeso.slice(0, sospeso.length - trattenuti)
             }
             sospeso = sospeso.slice(sospeso.length - trattenuti)
-            return { text, reasoning }
+            // Chiusura dello stream a metà chiamata: il blocco troncato si butta.
+            if (chiudendo) bloccoInCorso = ''
+            return calls.length ? { text, reasoning, calls } : { text, reasoning }
         }
     }
 
@@ -321,6 +345,7 @@ export function talosCreateThinkSplitter(startsInReasoning = false): TalosThinkS
                 reasoning: filtraRagionamento(
                     filtraToolCodeRagionamento(fetta.reasoning, false), false,
                 ),
+                ...(fetta.calls ? { calls: fetta.calls } : {}),
             }
         },
         flush(): TalosThinkSlice {
@@ -331,6 +356,7 @@ export function talosCreateThinkSplitter(startsInReasoning = false): TalosThinkS
                 reasoning: filtraRagionamento(
                     filtraToolCodeRagionamento(esito.reasoning, true), true,
                 ),
+                ...(esito.calls ? { calls: esito.calls } : {}),
             }
         },
     }
@@ -373,9 +399,12 @@ export function talosSplitFinalThink(
     const ragionamentoNativo = dalNativo.reasoning + codaNativa.reasoning
         + dalNativo.text + codaNativa.text
 
+    const calls = [...(dallo.calls ?? []), ...(coda.calls ?? [])]
     return {
         text: dallo.text + coda.text,
         reasoning: ragionamentoNativo + dallo.reasoning + coda.reasoning,
+    
+        ...(calls.length ? { calls } : {}),
     }
 }
 

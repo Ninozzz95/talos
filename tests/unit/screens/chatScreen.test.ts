@@ -89,6 +89,8 @@ function makeController(messages: FakeMessage[] = []) {
             metadata: message.metadata ?? {},
         }))),
         sessions,
+        // «Riprendi da qui» legge la stessa lista della sidebar: le chat con messaggi.
+        history: sessions,
         sessionBrowserActivities: reactive([]),
         activeSession: ref<{ id: string; title: string; metadata?: Record<string, unknown> } | null>(null),
         state: reactive({
@@ -259,6 +261,52 @@ afterEach(() => {
 })
 
 describe('ChatScreen (functional, local-first)', () => {
+    it('C04 accoda entrambe le chip alla bozza, senza inviare né perdere il testo', async () => {
+        const wrapper = mount(ChatScreen, { attachTo: document.body, global: { stubs: { teleport: true } } })
+        await flushPromises()
+        const field = wrapper.get<HTMLTextAreaElement>('textarea')
+        await field.setValue('La mia bozza')
+        await wrapper.get('[data-testid="talos-prompt-slides"]').trigger('click')
+        expect(field.element.value).toBe('La mia bozza\nCreate a presentation about ')
+        expect(field.element.selectionStart).toBe(field.element.value.length)
+        await wrapper.get('[data-testid="talos-prompt-analyze"]').trigger('click')
+        await vi.dynamicImportSettled()
+        expect(field.element.value).toContain('La mia bozza\nCreate a presentation about ')
+        expect(field.element.value).toContain('Analyze')
+        expect(field.element.selectionStart).toBe(field.element.value.length)
+        expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true)
+        expect(mockState.controller.send).not.toHaveBeenCalled()
+        wrapper.unmount()
+    })
+
+    it('Calm sposta la stessa istanza home → dock → home e collega Agente al controller', async () => {
+        const agentToolsEnabled = ref(true)
+        const setAgentToolsEnabled = vi.fn((enabled: boolean) => { agentToolsEnabled.value = enabled })
+        Object.assign(mockState.controller, { agentToolsEnabled, setAgentToolsEnabled })
+        const wrapper = mount(ChatScreen)
+        await flushPromises()
+        const instance = wrapper.getComponent(TalosMobileComposer).vm.$
+        const field = wrapper.get('textarea').element
+        // 12/09 19:30: la chip Agente e' stata tolta dall'owner; lo stato resta nel controller.
+        expect(wrapper.find('[data-testid="talos-composer-agent"]').exists()).toBe(false)
+        expect(setAgentToolsEnabled).not.toHaveBeenCalled()
+        mockState.controller.chat.messages.push({ id: 'calm-message', role: 'user', content: 'Ciao', created_at: '2026-09-12', metadata: {}, attachments: [] })
+        await wrapper.vm.$nextTick()
+        const position = wrapper.get('[data-testid="talos-composer-position"]')
+        expect(position.attributes('data-position')).toBe('docked')
+        expect(position.classes()).toContain('fixed')
+        expect(wrapper.getComponent(TalosMobileComposer).props('docked')).toBe(true)
+        expect(wrapper.getComponent(TalosMobileComposer).vm.$).toBe(instance)
+        expect(wrapper.get('textarea').element).toBe(field)
+        mockState.controller.chat.messages.splice(0)
+        await wrapper.vm.$nextTick()
+        // owner 12/09 19:28: anche a chat vuota il compositore resta in basso
+        expect(position.attributes('data-position')).toBe('docked')
+        expect(position.classes()).toContain('fixed')
+        expect(wrapper.getComponent(TalosMobileComposer).vm.$).toBe(instance)
+        expect(wrapper.get('textarea').element).toBe(field)
+        wrapper.unmount()
+    })
     it('BR-09 enables Browse and opens a detected URL without leaving the chat route', async () => {
         const controller = makeController()
         mockState.controller = controller
@@ -267,28 +315,18 @@ describe('ChatScreen (functional, local-first)', () => {
             mockState.browserOnEvent?.({ type: 'loaded', url, source: 'native' })
         })
         const wrapper = mount(ChatScreen)
+        // 12/09 19:30: l'interruttore nel compositore e' stato tolto dall'owner; la
+        // modalita' si accende ancora dal comando slash (e dal controller). Prima
+        // del testo: il comando svuota la bozza.
+        wrapper.getComponent(TalosMobileComposer).vm.$emit('selectSlashCommand', 'open_browse')
+        await vi.waitFor(() => expect(controller.setBrowseMode).toHaveBeenCalledWith(true))
+        expect(mockState.routerPush).not.toHaveBeenCalled()
         const field = wrapper.get('[aria-label="Message TALOS"]')
         await field.setValue('Apri https://example.com/path e dimmi cosa vedi')
-
-        const suggestion = wrapper.get('[data-testid="talos-mobile-browser-url-suggestion"]')
-        await wrapper.get('[aria-label="Enable Browse mode"]').trigger('click')
-        expect(controller.setBrowseMode).toHaveBeenCalledWith(true)
-        expect(mockState.routerPush).not.toHaveBeenCalled()
-
-        await suggestion.get('button').trigger('click')
-        await vi.waitFor(() => expect(mockState.browserOpen).toHaveBeenCalledWith(
-            'https://example.com/path',
-            'isolated_webview',
-        ))
-        await vi.waitFor(() => expect(controller.chat.recordBrowserActivity).toHaveBeenCalledTimes(2))
-        expect(controller.chat.recordBrowserActivity).toHaveBeenCalledWith(
-            'browse-session',
-            expect.objectContaining({ operation: 'session_start', status: 'succeeded' }),
-        )
-        expect(controller.chat.recordBrowserActivity).toHaveBeenCalledWith(
-            'browse-session',
-            expect.objectContaining({ operation: 'navigate', status: 'succeeded' }),
-        )
+        // 12/09 20:10 (owner: «levi ricerca web dalla chat»): niente pillola del link, niente fascia.
+        expect(wrapper.find('[data-testid="talos-mobile-browser-url-suggestion"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-mobile-browse-mode-status"]').exists()).toBe(false)
+        expect(mockState.browserOpen).not.toHaveBeenCalled()
         expect(mockState.routerPush).not.toHaveBeenCalled()
     })
 
@@ -300,17 +338,65 @@ describe('ChatScreen (functional, local-first)', () => {
 
         await vi.waitFor(() => expect(controller.setBrowseMode).toHaveBeenCalledWith(true))
         expect(mockState.routerPush).not.toHaveBeenCalled()
-        expect(wrapper.get('[aria-label="Disable Browse mode"]').exists()).toBe(true)
+        // 12/09 19:30: niente interruttore nel compositore (owner); la modalita' resta nel controller.
+        expect(wrapper.find('[aria-label="Disable Browse mode"]').exists()).toBe(false)
     })
-    it('WELCOME-SCREEN-01/02 shows one title-only TALOS hero and docks the composer when empty', () => {
+    /*
+     * Fase 2 Calm (12/09): il hero e' quello del mockup — il marchio, «Cosa
+     * facciamo oggi?» e un sottotitolo. La parola «TALOS» grande esce per
+     * scelta dell'owner (piano C1): la sidebar la dice gia'.
+     */
+    it('WELCOME-SCREEN-01/02 shows the Calm hero (mark, one title, one subtitle) and places the composer between hero and prompt chips when empty', () => {
         const wrapper = mount(ChatScreen)
         const hero = wrapper.get('[data-testid="talos-empty-brand"]')
         expect(hero.find('.talos-short-logo-mark').exists()).toBe(true)
-        expect(hero.find('.talos-orbitron-brand').text()).toBe('TALOS')
+        expect(hero.find('.talos-orbitron-brand').exists()).toBe(false)
         expect(hero.findAll('h1')).toHaveLength(1)
-        expect(hero.get('h1').text().trim()).not.toBe('')
-        expect(hero.findAll('p')).toHaveLength(0)
-        expect(wrapper.find('[data-testid="talos-mobile-composer"]').exists()).toBe(true)
+        expect(hero.get('h1').text().trim()).toBe('What shall we do today?')
+        expect(hero.get('[data-testid="talos-home-subtitle"]').text()).toBe('An idea, a question, a piece of work to move forward.')
+        expect(hero.find('[data-testid="talos-mobile-composer"]').exists()).toBe(true)
+        const position = hero.get('[data-testid="talos-composer-position"]')
+        expect(position.attributes('data-position')).toBe('docked')
+        expect(position.classes()).toContain('fixed')
+        expect(position.element.compareDocumentPosition(hero.get('[data-testid="talos-prompt-chips"]').element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    })
+
+    it('CALM-HOME-01 the prompt chips prefill the composer, open the research, or open the «+» sheet — they never send', async () => {
+        const wrapper = mount(ChatScreen, { global: { stubs: { teleport: true } } })
+        const chips = wrapper.get('[data-testid="talos-prompt-chips"]')
+        expect(chips.findAll('button').map(b => b.text())).toEqual(['Create a presentation', 'Analyze a file', 'Run a research', 'More'])
+        await chips.get('[data-testid="talos-prompt-slides"]').trigger('click')
+        expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('Create a presentation about ')
+        expect(mockState.controller.send).not.toHaveBeenCalled()
+        await chips.get('[data-testid="talos-prompt-research"]').trigger('click')
+        expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'research-new' })
+        await chips.get('[data-testid="talos-prompt-more"]').trigger('click')
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true)
+    })
+
+    it('CALM-HOME-02 «Riprendi da qui» lists the two most recent other chats and opens one, or all of them', async () => {
+        mockState.controller = makeController()
+        mockState.controller.chat.sessions.push(
+            { id: 's-old', title: 'Older idea', updated_at: '2026-09-10T10:00:00.000Z' } as never,
+            { id: 's-new', title: 'Newest idea', updated_at: '2026-09-12T10:00:00.000Z' } as never,
+            { id: 's-mid', title: 'Middle idea', updated_at: '2026-09-11T10:00:00.000Z' } as never,
+        )
+        const wrapper = mount(ChatScreen)
+        const cards = wrapper.get('[data-testid="talos-resume-section"]').findAll('.talos-resume-card')
+        expect(cards.map(c => c.find('strong').text())).toEqual(['Newest idea', 'Middle idea'])
+        await cards[1]!.trigger('click')
+        await flushPromises()
+        expect(mockState.controller.selectSession).toHaveBeenCalledWith('s-mid')
+        await wrapper.get('[data-testid="talos-resume-all"]').trigger('click')
+        expect(mockState.routerPush).toHaveBeenCalledWith({ name: 'chats' })
+    })
+
+    it('CALM-HOME-03 without other chats there is nothing to resume, and the incognito pill is still there', () => {
+        const wrapper = mount(ChatScreen)
+        expect(wrapper.find('[data-testid="talos-resume-section"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-make-temporary"]').exists()).toBe(true)
     })
 
     it('DEBT-MOBILE-007 RED: chat thread allows vertical scroll but not viewport pinch zoom', () => {
@@ -357,9 +443,11 @@ describe('ChatScreen (functional, local-first)', () => {
             error: null,
         })
         mockState.controller = controller
-        const wrapper = mount(ChatScreen)
+        const wrapper = mount(ChatScreen, { global: { stubs: { teleport: true } } })
 
         expect(wrapper.get('[data-testid="talos-mobile-attachment-tray"]').text()).toContain('brief.txt')
+        await wrapper.get('[data-testid="talos-composer-plus"]').trigger('click')
+        await vi.dynamicImportSettled()
         await wrapper.get('[aria-label="Attach a file"]').trigger('click')
         await wrapper.get('[aria-label="Remove brief.txt"]').trigger('click')
         expect(controller.attachments.selectFiles).toHaveBeenCalledOnce()
@@ -388,14 +476,15 @@ describe('ChatScreen (functional, local-first)', () => {
         expect(hero.attributes('data-composer-expanded')).toBe('true')
         expect(hero.classes()).toContain('justify-start')
         expect(hero.find('h1').exists()).toBe(true)
-        expect(hero.find('p').exists()).toBe(false)
+        expect(hero.find('[data-testid="talos-home-subtitle"]').exists()).toBe(false)
 
         controller.attachments.items.splice(0, controller.attachments.items.length)
         await wrapper.vm.$nextTick()
 
         expect(hero.attributes('data-composer-expanded')).toBe('false')
         expect(hero.classes()).toContain('justify-center')
-        expect(hero.find('p').exists()).toBe(false)
+        // Fase 2 Calm: chiuso il vassoio, il sottotitolo del mockup torna.
+        expect(hero.find('[data-testid="talos-home-subtitle"]').exists()).toBe(true)
     })
 
     it('sends an authorized attachment without text and blocks a failed tray item', async () => {
@@ -1062,5 +1151,32 @@ describe('immersive chrome clearance (F2 capture fix)', () => {
         ;(mockState.settings.state as Record<string, unknown>).shell = { immersive_header: false }
         const wrapper = mount(ChatScreen)
         expect(wrapper.get('[data-testid="talos-chat-scroll"]').classes()).not.toContain('pt-[calc(3.5rem+env(safe-area-inset-top))]')
+    })
+})
+
+// D-F2-1 (12/09, Pad): la bozza scritta in una chat appena creata si perdeva
+// uscendo prima di inviare — la sessione vuota sparisce dalla cronologia e la
+// bozza legata al suo id con lei. Finché non ci sono messaggi, l'ambito è «new».
+describe('D-F2-1 — l’ambito della bozza segue i messaggi, non l’id', () => {
+    it('chat senza messaggi → bozza in «new»; chat con messaggi → bozza sotto il suo id', async () => {
+        const controller = makeController()
+        mockState.controller = controller
+        controller.chat.activeSession.value = { id: 's-vuota', title: 'New chat', surface: 'chat', has_messages: false }
+        const wrapper = mount(ChatScreen, { global: { stubs: { teleport: true } } })
+        await flushPromises()
+        await wrapper.get('textarea').setValue('bozza in attesa')
+        await vi.waitFor(() => expect(controller.__drafts.get('new')).toBe('bozza in attesa'), { timeout: 4000 })
+        expect(controller.__drafts.has('s-vuota')).toBe(false)
+        wrapper.unmount()
+
+        const piena = makeController()
+        mockState.controller = piena
+        piena.chat.activeSession.value = { id: 's-piena', title: 'Chat vera', surface: 'chat', has_messages: true }
+        const w2 = mount(ChatScreen, { global: { stubs: { teleport: true } } })
+        await flushPromises()
+        await w2.get('textarea').setValue('seguito')
+        await vi.waitFor(() => expect(piena.__drafts.get('s-piena')).toBe('seguito'), { timeout: 4000 })
+        expect(piena.__drafts.has('new')).toBe(false)
+        w2.unmount()
     })
 })

@@ -64,6 +64,7 @@ const ROUTES: Readonly<Record<keyof TalosChatRepository, Rule>> = {
     close: 'both',
 
     listSessions: 'durable',
+    searchMessages: 'durable',
     getActiveSessionId: 'durable',
     createSession: 'session-is-input-id',
     selectSession: 'session-arg',
@@ -72,6 +73,7 @@ const ROUTES: Readonly<Record<keyof TalosChatRepository, Rule>> = {
     updateSessionMetadata: 'session-arg',
     deleteSession: 'session-arg',
     listMessages: 'session-arg',
+    rewindUserMessage: 'session-arg',
     listSessionToolActivities: 'session-arg',
     listSessionAttachmentMessageIds: 'session-arg',
     listSessionAttachmentFileIds: 'session-arg',
@@ -96,8 +98,8 @@ const ROUTES: Readonly<Record<keyof TalosChatRepository, Rule>> = {
     deleteVaultFile: 'durable',
     createFileAuthorityGrant: 'durable',
     revokeFileAuthorityGrant: 'durable',
-    loadComposerDraft: 'durable',
-    saveComposerDraft: 'durable',
+    loadComposerDraft: 'session-arg',
+    saveComposerDraft: 'session-arg',
     createTask: 'durable',
     listTasks: 'durable',
     setTaskStatus: 'durable',
@@ -177,6 +179,8 @@ export function createTalosEphemeralRoutingRepository(
     // and a copy that was never written is the silent disk write above.
     return new Proxy({} as TalosChatRepository, {
         get(_target, property) {
+            // Il proxy è un deposito, non una Promise (anche dietro il caricatore pigro).
+            if (property === 'then') return undefined
             const method = String(property)
             return async (...args: unknown[]) => {
                 const target = pick(method, args)

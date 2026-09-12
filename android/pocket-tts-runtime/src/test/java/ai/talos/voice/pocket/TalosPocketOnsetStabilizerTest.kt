@@ -9,7 +9,8 @@ import org.junit.Test
 class TalosPocketOnsetStabilizerTest {
     @Test
     fun `Italian sacrificial prefix is the single measured boundary winner`() {
-        assertEquals("Quattro. ", TalosPocketOnsetStabilizer.SACRIFICIAL_PREFIX)
+        // 12/09: virgola, non punto — dopo un punto la voce dell'owner taceva 2,5 s.
+        assertEquals("Quattro, ", TalosPocketOnsetStabilizer.SACRIFICIAL_PREFIX)
     }
 
     private val config = TalosPocketOnsetConfig(sampleRate = 1_000, maxPrefixMs = 300)
@@ -113,14 +114,65 @@ class TalosPocketOnsetStabilizerTest {
         assertEquals(wholeResult, chunked.finish())
     }
 
+    /*
+     * 12/09/2026: prima «fail closed» — nessuna pausa qualificante ⇒ lettura
+     * intera muta (misurato sul Pad con una risposta italiana fluente). Ora si
+     * ripiega sulla finestra piu' silenziosa del prefisso: il prefisso
+     * sacrificale prima del taglio non esce comunque.
+     */
     @Test
-    fun `missing silence fails closed without leaking sacrificial audio`() {
+    fun `missing silence fails OPEN at EOS - cut at the quietest prefix window, nothing before it leaks`() {
         val stabilizer = TalosPocketOnsetStabilizer(config)
+        val pcm = FloatArray(1_100) { index -> if (index in 200 until 210) 0.05f else 0.5f }
 
-        assertEquals(0, stabilizer.accept(FloatArray(1_100) { 0.5f }).size)
-        val error = assertThrows(IllegalStateException::class.java, stabilizer::finish)
+        assertEquals(0, stabilizer.accept(pcm).size)
+        val completion = stabilizer.complete()
 
-        assertTrue(error.message.orEmpty().contains("boundary", ignoreCase = true))
+        assertEquals(TalosPocketOnsetStabilizer.BOUNDARY_SOURCE_FALLBACK, completion.result.boundarySource)
+        // la finestra quieta (200-210) e' il taglio; la ripresa e' subito dopo,
+        // con i 50 ms di silenzio iniziale conservati (dentro il taglio stesso).
+        assertEquals(200, completion.result.discardedSamples)
+        assertEquals(10, completion.result.leadingSilenceSamples)
+        assertArrayEquals(pcm.copyOfRange(200, pcm.size), completion.pcmFloatMono, 0f)
+        assertEquals(completion.result, stabilizer.finish())
+    }
+
+    /*
+     * Owner 12/09: la pausa dopo la virgola. Una voce registrata al microfono ha
+     * un rumore di fondo sopra il 2 % del picco: la pausa dopo il prefisso c'e'
+     * ma nessuna finestra e' «quieta» alla soglia pinned. Si prova al 5 % e al
+     * 10 % prima di ripiegare, e la pausa viene tagliata come quella misurata.
+     */
+    @Test
+    fun `a noisy floor above two percent still finds the prefix gap with a relaxed threshold`() {
+        val stabilizer = TalosPocketOnsetStabilizer(config)
+        val pcm = FloatArray(1_100) { index -> if (index in 160 until 260) 0.03f else 0.5f }
+
+        // la pausa si vede gia' in streaming (finestra di ricerca completa): esce subito dal taglio in poi
+        val released = stabilizer.accept(pcm)
+        val result = stabilizer.finish()
+
+        assertEquals(1_100 - 210, released.size)
+        assertEquals("${TalosPocketOnsetStabilizer.BOUNDARY_SOURCE_RELAXED}_10PCT", result.boundarySource)
+        assertEquals(160, result.gapStartSamples)
+        assertEquals(260, result.gapEndSamples)
+        assertEquals(260, result.resumeStartSamples)
+        assertEquals(210, result.discardedSamples)
+        assertEquals(50, result.leadingSilenceSamples)
+    }
+
+    @Test
+    fun `missing silence fails OPEN while streaming - after the onset window the audio is released at the quietest prefix window`() {
+        val stabilizer = TalosPocketOnsetStabilizer(config)
+        // la finestra d'attacco e' 6 s (12/09): il ripiego scatta oltre i 6.000 campioni a 1 kHz
+        val pcm = FloatArray(6_100) { 0.5f }
+
+        val released = stabilizer.accept(pcm)
+
+        assertEquals(6_100 - config.minPrefixSamples, released.size)
+        assertEquals(TalosPocketOnsetStabilizer.BOUNDARY_SOURCE_FALLBACK, stabilizer.finish().boundarySource)
+        assertEquals(config.minPrefixSamples, stabilizer.finish().discardedSamples)
+        assertArrayEquals(FloatArray(20) { 0.25f }, stabilizer.accept(FloatArray(20) { 0.25f }), 0f)
     }
 
     @Test

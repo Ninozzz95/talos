@@ -110,9 +110,9 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
  * in place and so never re-runs it. Without that, the streaming block would
  * restart its own fade on every character and strobe.
  *
- * Short and small on purpose. 260ms is long enough to read as motion and short
- * enough not to lag behind the text; a 2px rise gives the sense of settling
- * without moving the layout under a thumb.
+ * Fase 4: durata Calm di 184 ms, risolta dal motore e dalle preferenze;
+ * resta il piccolo ingresso di 2 px dei blocchi progressivi, senza spostare
+ * il layout sotto il dito.
  */
 @keyframes talos-block-in {
     from { opacity: 0; transform: translateY(2px); }
@@ -122,7 +122,7 @@ async function handleContentClick(event: MouseEvent): Promise<void> {
    that has finished must never animate again, or it plays over itself when the
    finished message replaces the streaming one. */
 .talos-streaming-body .talos-message-block {
-    animation: talos-block-in 260ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+    animation: talos-block-in var(--talos-motion-calm-answer, 184ms) cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 @media (prefers-reduced-motion: reduce) {
     .talos-streaming-body .talos-message-block { animation: none; }

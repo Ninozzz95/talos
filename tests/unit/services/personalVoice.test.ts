@@ -29,14 +29,8 @@ const {
     talosSpeakForReading,
     talosPersonalVoiceDiario,
     talosPreviewVoiceEnrollmentProfile,
+    talosPersonalVoiceSpeechAdapter,
 } = await import('@/services/personalVoice')
-
-const PROFILE_ID = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
-const READY_PROFILES = {
-    profiles: [
-        { id: PROFILE_ID, name: 'Antonino', language: 'it-IT', style: 'neutral', engineBuild: 'x'.repeat(64), compatible: true, createdAtEpochMs: 0, enrollmentDurationMs: 0 },
-    ],
-}
 
 describe('personalVoice service', () => {
     beforeEach(() => {
@@ -342,3 +336,44 @@ describe('personalVoice service', () => {
         })
     })
 })
+
+/*
+ * Regressione della voce personale (12/09/2026, rapporto Astra §3): il nativo
+ * rifiuta ogni `speak` senza `locale` — e l'adapter delle anteprime salvate
+ * non lo mandava. Il finto ponte qui rifiuta come quello vero.
+ */
+describe('personalVoice adapter (PVOICE-REG)', () => {
+    beforeEach(() => {
+        bridge.speak.mockReset()
+    })
+
+    it('PVOICE-REG-01 the saved-profile preview sends the locale the native side requires', async () => {
+        bridge.speak.mockImplementation(async (request: { locale?: string }) => {
+            if (!request.locale) throw new Error('text, profileId, readingId and locale are required')
+            return { accepted: true }
+        })
+        const onerror = vi.fn()
+        await talosPersonalVoiceSpeechAdapter(PROFILE_ID, 'it').speak('Ecco come TALOS leggerà le risposte.', { onerror })
+        expect(bridge.speak).toHaveBeenCalledTimes(1)
+        expect(bridge.speak.mock.calls[0]![0]).toMatchObject({ profileId: PROFILE_ID, locale: 'it', rate: 1, pitch: 1 })
+        expect(onerror).not.toHaveBeenCalled()
+    })
+
+    it('PVOICE-REG-02 a rejected bridge call becomes one visible error and leaves no reading pending', async () => {
+        bridge.speak.mockRejectedValue(new Error('text, profileId, readingId and locale are required'))
+        const onerror = vi.fn()
+        const onend = vi.fn()
+        await expect(talosPersonalVoiceSpeechAdapter(PROFILE_ID, 'it').speak('prova', { onerror, onend })).resolves.toBeUndefined()
+        expect(onerror).toHaveBeenCalledTimes(1)
+        expect(onerror).toHaveBeenCalledWith('text, profileId, readingId and locale are required')
+        expect(onend).not.toHaveBeenCalled()
+        expect(talosPersonalVoiceDiario().some(riga => riga.includes('rejected:'))).toBe(true)
+    })
+})
+
+const PROFILE_ID = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
+const READY_PROFILES = {
+    profiles: [
+        { id: PROFILE_ID, name: 'Antonino', language: 'it-IT', style: 'neutral', engineBuild: 'x'.repeat(64), compatible: true, createdAtEpochMs: 0, enrollmentDurationMs: 0 },
+    ],
+}

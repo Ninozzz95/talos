@@ -48,7 +48,7 @@ export type TalosNoteBlock =
     /** Una riga vuota: nella prosa è uno stacco, non un paragrafo vuoto. */
     | { readonly kind: 'gap' }
 
-const CHECK_LINE = /^\s*[-*]\s+\[([ xX])\]\s+(.+)$/
+const CHECK_LINE = /^\s*[-*]\s+\[([ xX])\]\s+(.+?)\r?$/
 const HEADING_LINE = /^#{1,3}\s/
 const QUOTE_LINE = /^>\s?/
 const BULLET_LINE = /^\s*[-*]\s/
@@ -61,6 +61,17 @@ export function talosNoteChecklist(content: string | null | undefined): TalosNot
         // e chi scrive a mano usa quella che gli capita.
         return match ? [{ index, done: match[1] !== ' ', text: match[2]! }] : []
     })
+}
+
+/** Cambia solo il segno della riga originale, preservando testo e terminatori. */
+export function talosToggleNoteCheck(content: string, index: number): string {
+    const lines = content.split('\n')
+    const line = lines[index]
+    if (line === undefined || !CHECK_LINE.test(line)) return content
+    lines[index] = line.replace(/^(\s*[-*]\s+\[)([ xX])(\])/, (_, before, mark, after) => (
+        `${before}${mark === ' ' ? 'x' : ' '}${after}`
+    ))
+    return lines.join('\n')
 }
 
 /**

@@ -54,6 +54,7 @@ import {
     talosNoteBlocks,
     talosNoteChecklist,
     talosNoteDate,
+    talosToggleNoteCheck,
 } from '@/components/talos/notes/noteShape'
 import { exportTalosNoteText } from '@/components/talos/notes/noteExport'
 import type { TalosLocalNote } from '@/repositories/chatRepository'
@@ -67,6 +68,23 @@ const note = ref<TalosLocalNote | null>(null)
 const loading = ref(true)
 const confirming = ref(false)
 const error = ref<string | null>(null)
+const savingCheck = ref(false)
+
+async function toggleCheck(index: number): Promise<void> {
+    if (!note.value || savingCheck.value) return
+    const current = note.value
+    const content = talosToggleNoteCheck(current.content, index)
+    if (content === current.content) return
+    savingCheck.value = true
+    try {
+        note.value = await controller.notes.update({ id: current.id, content })
+        error.value = null
+    } catch {
+        error.value = t('notes.checkSaveFailed')
+    } finally {
+        savingCheck.value = false
+    }
+}
 
 const id = computed(() => String(route.params.id ?? ''))
 
@@ -222,6 +240,8 @@ const onda = useTalosTouchWave()
                     <TalosMobileNoteChecklist
                         v-if="checklist.length > 0"
                         :items="checklist"
+                        :saving="savingCheck"
+                        @toggle="toggleCheck"
                         variant="full"
                         :state-label="t('notes.checkState', { done, total: checklist.length })"
                     />

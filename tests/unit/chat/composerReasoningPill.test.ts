@@ -46,12 +46,12 @@ function mountComposer(overrides: Record<string, unknown> = {}) {
 }
 
 describe('the reasoning state on the model pill', () => {
-    it('shows a themed brain, and keeps the words for a tablet', () => {
+    it('mostra il cervello nella chip Ragiona attiva e mantiene le parole leggibili', () => {
         const wrapper = mountComposer({ thinking: true })
 
         const icon = wrapper.get('[data-testid="talos-composer-reasoning-icon"]')
         // Themed, not a grey glyph: it is the one thing left on a phone.
-        expect(icon.classes().join(' ')).toContain('talos-accent')
+        expect(wrapper.get('[data-testid="talos-composer-thinking"]').classes()).toContain('active')
         /**
          * Owner 2026-07-30: the first cut used BrainCircuit while the reasoning
          * block in the thread had used plain Brain since it was written. One
@@ -61,8 +61,8 @@ describe('the reasoning state on the model pill', () => {
         expect(icon.classes()).toContain('lucide-brain')
 
         const words = wrapper.get('[data-testid="talos-composer-reasoning-label"]')
-        expect(words.classes()).toContain('hidden')
-        expect(words.classes()).toContain('md:inline')
+        expect(words.classes()).not.toContain('hidden')
+        expect(words.isVisible()).toBe(true)
         expect(words.text()).toBe('Thinking')
     })
 

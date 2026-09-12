@@ -107,15 +107,12 @@ const reports = ref(new Map<string, TalosResearchCardReport>())
 const letture = ref(new Map<string, string>())
 
 /**
- * Schede o elenco, ricordato dove la Libreria ricorda il proprio.
- *
- * Stessa impostazione di proposito: le due stazioni sono lo stesso tipo di
- * posto, e chi vuole le schede le vuole in tutti e due. Una seconda preferenza
- * sarebbe una seconda cosa da tenere allineata.
+ * A15: schede o elenco ricordati per questa stazione. La Libreria conserva
+ * la propria scelta; entrambe partono dall'elenco.
  */
-const layout = computed(() => settings.state.shell.library_view)
+const layout = computed(() => settings.state.shell.research_view)
 function chooseLayout(next: 'grid' | 'list'): void {
-    void settings.setShell({ library_view: next })
+    void settings.setShell({ research_view: next })
 }
 
 /**

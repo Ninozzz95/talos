@@ -6,6 +6,107 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.29
+
+The chat is now on the same calm design as the rest of the app, Settings
+keep the sidebar beside them on a tablet, and one search box reaches
+everything you have in TALOS. Your own recorded voice reads replies again.
+
+### The chat, redesigned
+
+- An empty chat opens on "What shall we do today?", three prompt chips
+  (presentation, analyse a file, run a research) and the two most recent
+  conversations to pick up from, with the composer always docked at the
+  bottom.
+- The composer is one shape: a round "+", the model, a "Think" chip that
+  switches reasoning on and off, the microphone and a round send button
+  that becomes a stop button while a reply streams.
+- The "+" opens "What do you want to do?": a search box and four
+  categories (Attach, Create, Tools, Agent). Every entry does something
+  real: attach a file, pick an image, take a photo, use the Library,
+  improve the message, prefill a presentation, document or analysis, a
+  new note or memory, phone control, Tool Forge, Models, the switch for
+  the model's tools, a task, a research, and Code where the phone bridge
+  exists. The sheet springs up, the highlighted category slides, and the
+  entries glide in, with the mockup's timings.
+- Every reply carries a header with the TALOS orb (spinning while it
+  works) and the model and time on the right. Your question is an accent
+  bubble; the reply runs full width, or sits in a bubble if Appearance is
+  set to bubbles. Actions live under each message: copy, edit, more on
+  yours; copy, listen, regenerate, save to Library, more on the reply.
+- Edit a message: reopens your text in the composer and removes the turns
+  after it, after a confirmation.
+- Stopping a reply keeps the text and marks it "Interrupted. The text is
+  kept." Reasoning expands in place.
+- Web browsing left the chat: no link pill, no "Browse mode" banner, no
+  "/browse" command. The local browser stays available to the model's
+  tools. "Run a research" on the home opens Research, not a web search.
+
+### One search for everything
+
+"Search Talos" in the sidebar opens a dialog that searches chats (titles
+and the text of messages), notes, tasks, memories, Library files and
+Settings categories, sixteen results at most, ranked. Arrow keys, Enter
+and Escape work; on a phone it is a sheet. The chats list now finds a
+conversation by a word that appears only in its messages, and shows the
+excerpt.
+
+### Sidebar and chats list
+
+- Tool Forge is back in the sidebar (it had dropped out of the redesign).
+- Press and hold, or right-click, a recent chat in the sidebar or a row
+  in the chats list to get its menu: Open, Rename, Archive, Delete (and
+  Select in the list). The Account button opens the Account page.
+- Recent chats and "Pick up where you left off" no longer list archived
+  chats or Code sessions.
+- On a tablet the sidebar can be resized by dragging its edge, and a
+  conversation shows a back arrow to the chat list.
+
+### Settings on the calm design
+
+- On a tablet the sidebar stays beside Settings; categories sit in a
+  column with the detail next to them. "All settings" lists every
+  category with a subtitle.
+- New controls, each tied to something real: "Approval duration" and
+  "Revoke saved authorizations" under Agent Tools; a grid of the fourteen
+  themes; frame-rate and pixel-ratio caps under Motion; three consents
+  (Library access, memory writing, image attachments) under Privacy;
+  Reminders links to Tasks and System to Doctor. Reading controls come
+  before your personal voices. Two controls that no longer changed
+  anything (composer shape and "+" surface, link suggestions) were
+  removed. "Web search" is now called "Search engine".
+
+### Small things that now move, and a few that now work
+
+- Ticking a checklist item on a note, from the card or the note itself,
+  changes the note.
+- Research keeps its own list-or-cards choice; it no longer follows the
+  Library's.
+- Archiving a chat shows "Chat archived" with an Undo for eight seconds.
+- Confirmation dialogs grow out of the button that opened them (280 ms)
+  and shrink back (210 ms); persisted messages slide in (220 ms); the
+  groups under Agent Tools open and close by height (260 ms); the touch
+  ripple follows the "Transition duration" slider. All of it respects
+  "reduce motion".
+
+### Your recorded voice reads replies again
+
+Recording a voice worked, but playback in a chat was silent. Four causes
+in a row were fixed: the language was not passed, the real error was
+discarded, the start of speech was locked behind a check that never
+passed, and the audio buffer filled up and stopped. The recorded voice
+now follows the same speed slider as the synthetic voices, the first word
+arrives in about 2 seconds, and the long pause after a comma is gone.
+
+### Fixed
+
+- A model the app had fallen back to could be written into a chat as if
+  you had chosen it; reopening that chat then showed the wrong model.
+- The draft of a brand-new chat was lost if you left before sending.
+- A tool call that GLM wrote inside its text showed up as raw tags; it is
+  now executed like any other tool call.
+- The "Improve the message" entry no longer speaks of "prompt".
+
 ## v0.1.28
 
 The interface has been rebuilt on one calm, consistent design across the

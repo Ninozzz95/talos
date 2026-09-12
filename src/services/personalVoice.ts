@@ -292,10 +292,22 @@ export async function talosStopPersonalVoice(): Promise<void> {
     await plugin.stop()
 }
 
+export interface TalosPersonalVoiceDoneEvent {
+    readonly readingId: string
+    readonly cancelled?: boolean
+    readonly elapsedMs?: number
+    readonly resolvedEngine?: string
+    readonly fallbackReason?: string
+    readonly hardwareUnderruns?: number
+}
+
 export async function talosOnPersonalVoiceDone(
-    listener: (readingId: string) => void,
+    listener: (readingId: string, event?: TalosPersonalVoiceDoneEvent) => void,
 ): Promise<{ remove(): Promise<void> }> {
-    return plugin.addListener('talosNeuralVoiceDone', (event) => listener(event.readingId))
+    // 12/09/2026: il nativo manda cancelled/elapsedMs/motore/ripiego e il
+    // diario li perdeva — «done» diceva la stessa cosa per una lettura sentita
+    // e per una annullata dopo 18 ms.
+    return plugin.addListener('talosNeuralVoiceDone', (event) => listener(event.readingId, event as TalosPersonalVoiceDoneEvent))
 }
 
 export async function talosOnPersonalVoiceError(
@@ -424,8 +436,8 @@ let personalVoiceListenersArmed: Promise<void> | null = null
 function armPersonalVoiceListeners(): Promise<void> {
     if (!personalVoiceListenersArmed) {
         personalVoiceListenersArmed = Promise.all([
-            talosOnPersonalVoiceDone((readingId) => {
-                talosVoceDiarioAnnota(`done:${readingId}`)
+            talosOnPersonalVoiceDone((readingId, event) => {
+                talosVoceDiarioAnnota(`done:${readingId}${event ? ` cancelled:${String(event.cancelled)} elapsedMs:${String(event.elapsedMs)} engine:${event.resolvedEngine ?? '?'}${event.fallbackReason ? ` fallback:${event.fallbackReason}` : ''}` : ''}`)
                 pendingPersonalVoiceReadings.get(readingId)?.onend?.()
                 pendingPersonalVoiceReadings.delete(readingId)
             }),
@@ -455,24 +467,45 @@ function armPersonalVoiceListeners(): Promise<void> {
  * not route through this adapter yet; `toggle`'s single-utterance read is
  * the door this closes today, documented, not silently pretended away.
  */
-export function talosPersonalVoiceSpeechAdapter(profileId: string): TalosSpeechService {
+/*
+ * ⛔ Regressione della voce personale, 12/09/2026 (rapporto Astra, sezione 3):
+ * l'anteprima di un profilo SALVATO non partiva mai. Il nativo esige `locale`
+ * dal 23/08 (`01cdf73a7`: «text, profileId, readingId and locale are
+ * required», `TalosNeuralVoicePlugin.kt:538`) e questo adapter, nato il 22/08,
+ * non lo mandava: la promessa veniva RIFIUTATA prima della sintesi, nessuno la
+ * intercettava, la scheda restava «in riproduzione» per sempre e il diario non
+ * annotava niente, perché l'annotazione stava DOPO l'`await`.
+ * ⇒ La lingua entra nella firma (chi chiama la conosce sempre: e' quella
+ * dell'interfaccia), e un rifiuto del ponte e' un errore visibile, una volta.
+ */
+export function talosPersonalVoiceSpeechAdapter(profileId: string, locale: string): TalosSpeechService {
     return {
         supported: () => true,
         voices: () => [],
         async speak(text: string, options: TalosSpeakOptions = {}): Promise<void> {
-            await armPersonalVoiceListeners()
             const readingId = `personal-${Date.now()}-${Math.random().toString(36).slice(2)}`
             if (options.onend || options.onerror) {
                 pendingPersonalVoiceReadings.set(readingId, { onend: options.onend, onerror: options.onerror })
             }
-            const result = await talosSpeakWithPersonalVoice({
-                text,
-                profileId,
-                readingId,
-                rate: options.rate ?? 1,
-                pitch: options.pitch ?? 1,
-                queue: options.queue,
-            })
+            let result: { accepted: boolean, reason?: string }
+            try {
+                await armPersonalVoiceListeners()
+                result = await talosSpeakWithPersonalVoice({
+                    text,
+                    profileId,
+                    readingId,
+                    locale,
+                    rate: options.rate ?? 1,
+                    pitch: options.pitch ?? 1,
+                    queue: options.queue,
+                })
+            } catch (error) {
+                const motivo = error instanceof Error ? error.message : String(error)
+                talosVoceDiarioAnnota(`speak(adapter):${readingId} rejected:${motivo}`)
+                pendingPersonalVoiceReadings.delete(readingId)
+                options.onerror?.(motivo)
+                return
+            }
             talosVoceDiarioAnnota(`speak(adapter):${readingId} accepted:${result.accepted}${result.reason ? ` reason:${result.reason}` : ''}`)
             if (!result.accepted) {
                 pendingPersonalVoiceReadings.delete(readingId)

@@ -35,7 +35,7 @@
  * - https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion
  */
 
-import { talosMotionConsentito, talosTokenGrezzo } from './useTalosCalmMotion'
+import { TALOS_CALM_SPECS, talosDurataMs, talosMotionConsentito, talosTokenGrezzo } from './useTalosCalmMotion'
 
 /**
  * Il token che decide se l'onda esiste, e quanto dura. Categoria Feedback.
@@ -55,9 +55,10 @@ export const TALOS_WAVE_CLASS = 'talos-touch-wave'
 /**
  * Quanto dura il cerchio prima di essere tolto dal DOM, se per qualunque
  * ragione `animationend` non arriva (elemento staccato a metà, animazione
- * annullata da una ricomposizione). È il numero del mockup con un margine.
+ * annullata da una ricomposizione). Si aggiunge alla durata scalata; conserva
+ * il margine operativo precedente (700 - 470), non è un numero del mockup.
  */
-const TALOS_WAVE_FALLBACK_MS = 700
+const TALOS_WAVE_MARGIN_MS = 230
 
 export interface TalosWaveGeometry {
     /** Diametro, in px: il cerchio è quadrato. */
@@ -125,9 +126,13 @@ export interface TalosTouchWaveApi {
  */
 export function useTalosTouchWave(options: TalosTouchWaveOptions = {}): TalosTouchWaveApi {
     const vive = new Set<HTMLElement>()
+    const timers = new Map<HTMLElement, number>()
 
     function rimuovi(cerchio: HTMLElement): void {
         vive.delete(cerchio)
+        const timer = timers.get(cerchio)
+        if (timer !== undefined) window.clearTimeout(timer)
+        timers.delete(cerchio)
         cerchio.remove()
     }
 
@@ -165,7 +170,8 @@ export function useTalosTouchWave(options: TalosTouchWaveOptions = {}): TalosTou
         cerchio.addEventListener('animationend', () => rimuovi(cerchio), { once: true })
         cerchio.addEventListener('animationcancel', () => rimuovi(cerchio), { once: true })
         if (typeof window !== 'undefined') {
-            window.setTimeout(() => rimuovi(cerchio), TALOS_WAVE_FALLBACK_MS)
+            const duration = talosDurataMs(host, TALOS_WAVE_GATE_TOKEN, TALOS_CALM_SPECS.wave.ms)
+            timers.set(cerchio, window.setTimeout(() => rimuovi(cerchio), duration + TALOS_WAVE_MARGIN_MS))
         }
     }
 

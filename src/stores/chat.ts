@@ -264,6 +264,7 @@ export type ChatPersistenceStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 export interface ChatState {
     sending: boolean
+    editingMessage: boolean
     streamingText: string | null
     /**
      * WHICH conversation the in-flight reply belongs to.
@@ -347,6 +348,7 @@ export interface ChatStore<Runtime = undefined> {
     loadOlderMessages(): Promise<number>
     renameSession(sessionId: string, title: string): Promise<TalosLocalChatSession>
     deleteSession(sessionId: string): Promise<void>
+    editUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string): Promise<void>
     setSessionArchived(sessionId: string, archived: boolean): Promise<void>
     setSessionLibraryContextPolicy(
         sessionId: string,
@@ -593,6 +595,7 @@ export function createChatStore<Runtime = undefined>(
     let activeStreamAbort: AbortController | null = null
     const state = reactive<ChatState>({
         sending: false,
+        editingMessage: false,
         streamingText: null,
         streamingSessionId: null,
         sendingSessionId: null,
@@ -1050,6 +1053,33 @@ export function createChatStore<Runtime = undefined>(
         }
     }
 
+    async function editUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string): Promise<void> {
+        requirePersistence()
+        if (state.sending || state.editingMessage || continuationQueue.length || activeSession.value?.id !== sessionId) throw new Error(translate('chat.editMessageUnavailable'))
+        state.editingMessage = true
+        try { await enqueueSessionMutation(sessionId, async () => {
+            if (state.sending || activeSession.value?.id !== sessionId) throw new Error(translate('chat.editMessageUnavailable'))
+            const drafts = await import('@/composables/useTalosMobileComposerDraft')
+            await drafts.flushTalosEditedDraft(sessionId)
+            if (state.sending || activeSession.value?.id !== sessionId) throw new Error(translate('chat.editMessageUnavailable'))
+            const text = await repository.rewindUserMessage(sessionId, messageId, expectedLastMessageId)
+            drafts.restoreTalosEditedDraft(sessionId, text)
+            if (activeSession.value?.id === sessionId) {
+                const index = messages.findIndex(message => message.id === messageId)
+                if (index >= 0) messages.splice(index)
+                const activities = await repository.listSessionToolActivities(sessionId)
+                if (activeSession.value?.id === sessionId) {
+                    sessionBrowserActivities.splice(0, sessionBrowserActivities.length,
+                        ...activities.map(toBrowserActivityView).filter((entry): entry is TalosMobileBrowserActivityView => entry !== null))
+                }
+            }
+            await refreshSessionList()
+        }) } finally {
+            state.editingMessage = false
+            void drainContinuationQueue()
+        }
+    }
+
     function composerDraftScope(scopeId?: string | null): string {
         return scopeId ?? activeSession.value?.id ?? 'new'
     }
@@ -1440,7 +1470,7 @@ export function createChatStore<Runtime = undefined>(
     }
 
     async function drainContinuationQueue(): Promise<void> {
-        if (drainingContinuations || state.sending) return
+        if (drainingContinuations || state.sending || state.editingMessage) return
         drainingContinuations = true
         try {
             while (continuationQueue.length > 0 && !state.sending) {
@@ -1483,7 +1513,7 @@ export function createChatStore<Runtime = undefined>(
         turnPolicy: TalosLibraryTurnOverride | null = null,
     ): Promise<boolean> {
         const trimmed = text.trim()
-        if ((!trimmed && attachments.length === 0) || state.sending) return false
+        if ((!trimmed && attachments.length === 0) || state.sending || state.editingMessage) return false
         if (state.persistenceStatus !== 'ready') {
             state.lastError = state.persistenceError ?? translate('chat.localStorageNotReady')
             return false
@@ -1769,6 +1799,7 @@ export function createChatStore<Runtime = undefined>(
         loadOlderMessages,
         renameSession,
         deleteSession,
+        editUserMessage,
         setSessionArchived,
         setSessionLibraryContextPolicy,
         setSessionOrder,

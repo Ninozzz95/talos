@@ -52,6 +52,12 @@
       'La sessione è ancora in corso: un comando diretto aspetta che concluda.',
     'Command to run on the device': 'Comando da eseguire sul dispositivo',
     'Run command': 'Esegui comando',
+    // Visti sul Pad in inglese dentro l'app italiana (12/09/2026).
+    'No history found for this session right now. Write below to continue: if the server was restarted, your message opens a new session from here.':
+      'Nessuno storico per questa sessione al momento. Scrivi qui sotto per continuare: se il server è stato riavviato, il tuo messaggio apre una nuova sessione da qui.',
+    step: 'passi',
+    ctx: 'contesto',
+    errors: 'errori',
   };
   function t(testoInglese) {
     return (window.__talosHarnessLocale === 'it' && DIZIONARIO_IT[testoInglese]) || testoInglese;
@@ -65,6 +71,8 @@
       inputTerminale.placeholder = t(inputTerminale.placeholder);
       inputTerminale.setAttribute('aria-label', t(inputTerminale.getAttribute('aria-label')));
     }
+    // Le tre etichette della striscia («step · ctx · errors»): il testo dopo il numero.
+    $$('[data-run-kpi]').forEach((kpi) => { const ultimo = kpi.lastChild; if (ultimo && ultimo.nodeType === 3) ultimo.textContent = ' ' + t(ultimo.textContent.trim()); });
     const invioTerminale = $('.terminal-composer-send');
     if (invioTerminale) invioTerminale.setAttribute('aria-label', t(invioTerminale.getAttribute('aria-label')));
   }
@@ -783,7 +791,7 @@
     if (!conversation?.querySelector('.conversation-hero-loading')) return;
     conversation.replaceChildren(costruisciConversationHero(
       titolo || state.session || 'Session',
-      'No history found for this session right now. Write below to continue: if the server was restarted, your message opens a new session from here.',
+      t('No history found for this session right now. Write below to continue: if the server was restarted, your message opens a new session from here.'),
     ));
   }
 
@@ -7271,6 +7279,7 @@
    * (es. PagerDuty: https://www.pagerduty.com/eng/react-embedded-apps/).
    */
   let hostResizeObserver = null;
+  let bootTimerId = null; // il setTimeout(0) del boot, cancellato dal distruttore (12/09/2026)
 
   function syncHostLayout() {
     const host = HOST();
@@ -7353,6 +7362,7 @@
     setView,
   };
   window.__talosHarnessDestroy = () => {
+    if (bootTimerId !== null) { window.clearTimeout(bootTimerId); bootTimerId = null; }
     cancelMotionAnimations();
     setEmbeddedTopbarHidden(false);
     embeddedHeaderScrollers.forEach((scroller) => {
@@ -7491,7 +7501,18 @@
    * anche in embedded ora che mobile ha un backend on-device reale è una
    * decisione separata, non presa di striscio risolvendo questo conflitto.
    */
-  window.setTimeout(() => {
+  /*
+   * ⛔ 12/09/2026 — il timer del boot si CONSERVA e il distruttore lo cancella.
+   * Senza, un runtime smontato lasciava il suo timer a 0 ms in coda: in un
+   * file di test che monta e smonta il runtime a ogni caso, il timer del caso
+   * PRIMA scattava dentro il caso DOPO, che aveva appena installato il suo
+   * fetch finto e pretendeva «zero fetch» (rosso solo sotto carico: in locale
+   * nella suite intera, e nella CI della v0.1.28, run 34694527315). MDN,
+   * Window.clearTimeout(): annulla un timeout stabilito con setTimeout (letto
+   * 12/09/2026).
+   */
+  bootTimerId = window.setTimeout(() => {
+    bootTimerId = null;
     // ⛔ verificato al MOMENTO del fire, non alla schedulazione: un test (o
     // un embed reale) può marcare talos-embedded fra i due istanti.
     if (!HOST().classList.contains('talos-embedded')) {

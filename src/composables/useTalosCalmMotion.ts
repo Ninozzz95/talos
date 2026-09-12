@@ -100,6 +100,10 @@ export function mockupMs(numeroDelMockup: number): number {
  * conversione la fa `mockupMs`.
  */
 export const TALOS_CALM_SPECS = Object.freeze({
+    /** Fase 4: testo assistente e orb durante la risposta. Messaggi. */
+    answer: Object.freeze({ intent: 'message-insert' as TalosInteractionIntent, ms: 184 }),
+    // Due mezzi giri: ogni tratto rispetta il limite del risolutore (2000 ms prima della scala).
+    orb: Object.freeze({ intent: 'message-insert' as TalosInteractionIntent, ms: 1500, segments: 2 }),
     /** Il foglio della stazione che sale da sotto. Finestre. */
     sheet: Object.freeze({ intent: 'window-open' as TalosInteractionIntent, ms: 440 }),
     /** …e che esce scendendo. Finestre. */
@@ -108,6 +112,15 @@ export const TALOS_CALM_SPECS = Object.freeze({
     veil: Object.freeze({ intent: 'window-open' as TalosInteractionIntent, ms: 220 }),
     /** Una riga o una scheda che entra nell'elenco. Messaggi. */
     row: Object.freeze({ intent: 'message-insert' as TalosInteractionIntent, ms: 240 }),
+    /** M14/M13: conferma (mockup r.3586 e 3602). Finestre. */
+    dialog: Object.freeze({ intent: 'window-open' as TalosInteractionIntent, ms: 280 }),
+    'dialog-exit': Object.freeze({ intent: 'window-close' as TalosInteractionIntent, ms: 210 }),
+    /** M10: rowEntrance, mockup r.3457; il flusso dei token resta separato. */
+    'message-row': Object.freeze({ intent: 'message-insert' as TalosInteractionIntent, ms: 220 }),
+    /** M15: detailsClick, mockup r.4064. Navigazione. */
+    details: Object.freeze({ intent: 'disclosure-open' as TalosInteractionIntent, ms: 260 }),
+    /** Le voci del foglio «+» che entrano da destra al cambio di categoria (8 px, mockup r. 3577). Navigazione. */
+    panel: Object.freeze({ intent: 'tab-change' as TalosInteractionIntent, ms: 180 }),
     /** Il filo che scivola sotto la scelta attiva. Navigazione. */
     indicator: Object.freeze({ intent: 'tab-change' as TalosInteractionIntent, ms: 300 }),
     /** Le schede che si riordinano (FLIP). Navigazione. */
@@ -161,13 +174,14 @@ export interface TalosCalmMotionRequest {
  */
 export function talosCalmDurataMs(nome: TalosCalmSpecName, request: TalosCalmMotionRequest): number {
     const voce = TALOS_CALM_SPECS[nome]
+    const segments = 'segments' in voce ? voce.segments : 1
     return resolveTalosInteractionMotion({
         intent: voce.intent,
-        profile: profiloDi(voce.intent, voce.ms),
+        profile: profiloDi(voce.intent, voce.ms / segments),
         interfaceEnabled: request.preferences.interface_enabled && request.paused !== true,
         reducedMotion: request.reducedMotion,
         preferences: request.preferences.interface,
-    }).durationMs
+    }).durationMs * segments
 }
 
 /**
@@ -190,6 +204,7 @@ export function talosCalmMotionTokens(request: TalosCalmMotionRequest): Record<s
     for (const nome of Object.keys(TALOS_CALM_SPECS) as TalosCalmSpecName[]) {
         token[`${TALOS_CALM_TOKEN_PREFIX}${nome}`] = `${talosCalmDurataMs(nome, request)}ms`
     }
+    token[`${TALOS_CALM_TOKEN_PREFIX}orb-state`] = talosCalmDurataMs('orb', request) > 0 ? 'running' : 'paused'
     // Lo sfasamento fra una riga e la successiva. Qui NON si compensa niente: il
     // mockup dichiara il cursore «Sfasamento» e poi non lo legge da nessuna
     // parte (misurate sette righe in entrata, tutte con ritardo zero), quindi

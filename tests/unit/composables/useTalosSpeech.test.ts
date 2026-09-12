@@ -124,7 +124,8 @@ describe('useTalosSpeech', () => {
         it('PVOICE-SPEECH-02 when talosSpeakForReading reports it spoke, the system speech service is never called', async () => {
             voiceState.engine = 'personal'
             voiceState.personal_profile_id = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
-            voiceState.personal_rate = 1
+            // 12/09: la velocita' personale e' la slider comune (`rate`).
+            voiceState.rate = 1
             voiceState.personal_pitch = 1
             personal.speakForReading.mockImplementationOnce(async (_engine, _profileId, _text, opts) => {
                 personal._onend = opts?.onend
@@ -229,7 +230,8 @@ describe('useTalosSpeech', () => {
             const originalProfile = 'a1b2c3d4-e5f6-4789-a012-3456789abcde'
             voiceState.engine = 'personal'
             voiceState.personal_profile_id = originalProfile
-            voiceState.personal_rate = 0.95
+            // 12/09: la velocita' personale e' la slider comune (`rate`).
+            voiceState.rate = 0.95
             voiceState.personal_pitch = 1.05
             i18nState.locale.value = 'it-IT'
             personal.speakForReading.mockResolvedValueOnce(true)
@@ -237,7 +239,7 @@ describe('useTalosSpeech', () => {
             expect(speech.apriLetturaDiVoce('turno', 'chat')).toBe(true)
 
             voiceState.personal_profile_id = 'ffffffff-ffff-4fff-afff-ffffffffffff'
-            voiceState.personal_rate = 1.4
+            voiceState.rate = 1.4
             voiceState.personal_pitch = 0.7
             i18nState.locale.value = 'en-US'
 

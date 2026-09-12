@@ -490,6 +490,12 @@ export interface TalosResearchRunRow {
     updated_at: string
 }
 
+export interface TalosMessageSearchHit {
+    sessionId: string
+    messageId: string
+    excerpt: string
+}
+
 export interface TalosChatRepository {
     initialize(): Promise<void>
     listSessions(): Promise<TalosLocalChatSession[]>
@@ -512,7 +518,14 @@ export interface TalosChatRepository {
         sessionId: string,
         options?: { limit?: number; before?: { ordinal: number; id: string } },
     ): Promise<TalosLocalChatMessage[]>
+    /** Literal substring, using Library normalization. Empty terms return no hits.
+     * Newest first (created_at DESC, id DESC); omitted limit means all matches.
+     * Only user/assistant text: tool payloads and system instructions are not conversation text.
+     */
+    searchMessages(term: string, options?: { limit?: number }): Promise<TalosMessageSearchHit[]>
     appendMessage(input: AppendChatMessageInput): Promise<TalosLocalChatMessage>
+    /** Fase 4: salva la bozza e ritaglia da un messaggio utente, nella stessa transazione. */
+    rewindUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string): Promise<string>
     appendToolActivity(input: CreateToolActivityInput): Promise<TalosLocalToolActivity>
     updateToolActivity(activityId: string, input: UpdateToolActivityInput): Promise<void>
     listMessageToolActivities(messageId: string): Promise<TalosLocalToolActivity[]>

@@ -29,6 +29,9 @@ import { talosChatDateBuckets } from '@/lib/chat/chatDateBuckets'
 import { chatRowBucketTitle, chatRowWhenInBucket } from '@/lib/chat/chatRowTime'
 import { talosLightImpact } from '@/services/haptics'
 import { TALOS_DANGER_ACTION_CLASS } from '@/lib/dangerAction'
+import { matchesTalosLibrarySearchFields, normalizeTalosLibrarySearchText } from '@/lib/librarySearchText'
+import { useTalosMessageSearch } from '@/composables/useTalosMessageSearch'
+import { useTalosMobileToasts } from '@/stores/toasts'
 
 // F6 — embedded mode: the tablet split view mounts this screen as the
 // persistent left panel. Selection then must NOT navigate (the chat already
@@ -40,8 +43,18 @@ const emit = defineEmits<{ activated: [] }>()
 const router = useRouter()
 const { t, locale } = useTalosI18n()
 const controller = useChatController()
+const toasts = useTalosMobileToasts()
 
 const query = ref('')
+const messageSearch = useTalosMessageSearch(query, (term, options) => controller.searchMessages(term, options),
+    () => controller.chat.history.map((session) => `${session.id}:${session.updated_at}`).join('|'))
+function matchesSession(session: { id: string; title: string }): boolean {
+    return matchesTalosLibrarySearchFields(query.value, [{ text: sessionTitle(session) }])
+        || messageSearch.bySession.value.has(session.id)
+}
+function sessionExcerpt(sessionId: string): string | undefined {
+    return messageSearch.bySession.value.get(sessionId)?.[0]
+}
 /**
  * ⛔ Codice sessions live in this SAME table (`metadata.codice === true`,
  * see `chatController.ts`'s `createCodiceSession`) — they have their OWN
@@ -54,15 +67,15 @@ function notCodice<T extends { metadata?: Record<string, unknown> }>(sessions: r
 }
 const ordered = computed(() => orderChatSessions(notCodice(controller.chat.history)))
 const filtered = computed(() => {
-    const needle = query.value.trim().toLowerCase()
+    const needle = normalizeTalosLibrarySearchText(query.value)
     if (!needle) return ordered.value
-    return ordered.value.filter((session) => sessionTitle(session).toLocaleLowerCase().includes(needle))
+    return ordered.value.filter(matchesSession)
 })
 const archived = computed(() => {
-    const needle = query.value.trim().toLowerCase()
+    const needle = normalizeTalosLibrarySearchText(query.value)
     const entries = archivedChatSessions(notCodice(controller.chat.history))
     if (!needle) return entries
-    return entries.filter((session) => sessionTitle(session).toLocaleLowerCase().includes(needle))
+    return entries.filter(matchesSession)
 })
 const showArchived = ref(false)
 const relativeTimeLabels = computed(() => ({
@@ -347,6 +360,22 @@ async function archiveSession(session: { id: string; title: string }, value: boo
     actionBusy.value = true
     try {
         await controller.chat.setSessionArchived(session.id, value)
+        if (value) {
+            toasts.push({
+                message: t('chats.archivedToast'),
+                durationMs: 8000,
+                action: {
+                    label: t('common.undo'),
+                    run: () => {
+                        // La stessa scrittura di «Ripristina», valida anche se
+                        // nel frattempo la lista sta svolgendo un'altra azione.
+                        void controller.chat.setSessionArchived(session.id, false).catch((error: unknown) => {
+                            toasts.push({ message: t('chats.unarchiveFailed', { detail: actionErrorText(error) }), durationMs: 6000 })
+                        })
+                    },
+                },
+            })
+        }
         actionError.value = null
         void talosLightImpact()
     } catch (error) {
@@ -358,10 +387,29 @@ async function archiveSession(session: { id: string; title: string }, value: boo
     }
 }
 
-// Tieni-premuto: 500 ms senza muovere il dito. Accende la SELEZIONE — il menu
-// di riga sta sotto il ⋮, che e' visibile e non va scoperto.
-const HOLD_MS = 500
-const HOLD_SLOP_PX = 10
+/*
+ * Tieni-premuto e tasto destro aprono il MENU della riga (G02/G03 dell'inventario
+ * del mockup, 12/09): i numeri sono quelli del mockup, righe 3943-3958 e 4128 —
+ * 430 ms fermi entro 7 px, un impulso aptico, il click che segue inghiottito.
+ * La stessa cosa che fa la sidebar sulle recenti (owner 12/09: «la pressione
+ * sulle chat recenti»). La decisione del 2026-08-03 (tieni-premuto = selezione)
+ * e' ribaltata dal mockup: la selezione multipla resta, dalla voce «Seleziona»
+ * del menu, che parte gia' con la riga tenuta spuntata.
+ */
+const HOLD_MS = 430
+const HOLD_SLOP_PX = 7
+type MenuDiRiga = { show: (index?: number) => Promise<void>, close: () => void }
+const menuDiRiga = new Map<string, MenuDiRiga>()
+function registraMenu(id: string, istanza: unknown): void {
+    if (istanza && typeof (istanza as MenuDiRiga).show === 'function') menuDiRiga.set(id, istanza as MenuDiRiga)
+    else menuDiRiga.delete(id)
+}
+function apriMenuDiRiga(id: string): void {
+    if (bulk.active.value) return
+    void talosLightImpact()
+    suppressNextClick = true
+    void menuDiRiga.get(id)?.show()
+}
 let holdTimer: ReturnType<typeof setTimeout> | null = null
 let holdOrigin: { x: number; y: number } | null = null
 let suppressNextClick = false
@@ -386,22 +434,8 @@ function onRowPointerDown(session: { id: string; title: string }, _isArchived: b
     clearHold()
     holdOrigin = { x: event.clientX, y: event.clientY }
     holdTimer = setTimeout(() => {
-        void talosLightImpact()
-        suppressNextClick = true
-        /*
-         * Il gesto accende la SELEZIONE, non un secondo menu.
-         *
-         * La ricerca sulle azioni di riga (2026-08-03) dice che ⋮ e' la via
-         * primaria per agire su UNA e il tieni-premuto e' la selezione. Qui era
-         * l'inverso — il gesto apriva il menu e la selezione stava dietro un
-         * bottone in intestazione — quindi le due liste della stessa app
-         * rispondevano in modo opposto allo stesso dito.
-         *
-         * La riga tenuta parte gia' spuntata: il dito era li' sopra, e un
-         * secondo tocco per riprenderla sarebbe un passo per niente.
-         */
-        bulk.enter(session.id)
         clearHold()
+        apriMenuDiRiga(session.id)
     }, HOLD_MS)
 }
 
@@ -527,7 +561,9 @@ function act(
             class="px-5 pt-2 text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]"
         >{{ actionError }}</p>
 
-        <p v-if="!filtered.length && !archived.length" class="px-5 py-6 text-sm text-[var(--talos-muted)]">
+        <p v-if="messageSearch.failed.value" role="alert" class="px-5 py-2 text-sm text-[var(--talos-muted)]">{{ t('globalSearch.messagesFailed') }}</p>
+        <p v-if="messageSearch.pending.value" role="status" class="px-5 py-2 text-sm text-[var(--talos-muted)]">{{ t('globalSearch.searching') }}</p>
+        <p v-if="!filtered.length && !archived.length && !messageSearch.pending.value && !messageSearch.failed.value" class="px-5 py-6 text-sm text-[var(--talos-muted)]">
             {{ query ? t('chats.noMatches') : t('chats.noChats') }}
         </p>
 
@@ -565,12 +601,11 @@ function act(
                     @pointerup="onRowPointerEnd()"
                     @pointercancel="onRowPointerEnd()"
                     @click.capture="onRowClickCapture($event)"
-                    @contextmenu.prevent
+                    @contextmenu.prevent="apriMenuDiRiga(session.id)"
                 >
-                    <!-- ⋮ e' la via primaria: il tieni-premuto ora
-                         seleziona, come nella Ricerca. Sta fuori dal
-                         bottone che apre la chat, perche' due aree di
-                         tocco annidate se ne mangiano una. -->
+                    <!-- ⋮, tieni-premuto e tasto destro aprono lo stesso menu.
+                         Sta fuori dal bottone che apre la chat, perche' due
+                         aree di tocco annidate se ne mangiano una. -->
                     <!--
                         ⛔⛔ IL TITOLO PASSAVA SOTTO I PUNTINI.
 
@@ -592,6 +627,7 @@ function act(
                     -->
                     <div v-if="!bulk.active.value" class="absolute right-1 top-1 z-10">
                         <TalosRowActions
+                            :ref="(istanza) => registraMenu(session.id, istanza)"
                             :test-id="`talos-chats-menu-${session.id}`"
                             :label="t('chats.actionsFor', { title: sessionTitle(session) })"
                             :items="menuFor({ archived: false })"
@@ -615,7 +651,8 @@ function act(
                             due righe «8 h fa» in due fasce diverse si leggono
                             uguali. Vedi la nota accanto a `quandoInFascia`.
                         -->
-                        <span v-if="session.updated_at" class="text-2xs tabular-nums text-[var(--talos-muted)]">{{ quandoInFascia(gruppo.bucket, session.updated_at) }}</span>
+                        <span v-if="sessionExcerpt(session.id)" class="w-full truncate text-2xs text-[var(--talos-muted)]" data-testid="talos-chat-search-excerpt">{{ sessionExcerpt(session.id) }}</span>
+                        <span v-else-if="session.updated_at" class="text-2xs tabular-nums text-[var(--talos-muted)]">{{ quandoInFascia(gruppo.bucket, session.updated_at) }}</span>
                         </span>
                     </button>
                 </li>
@@ -646,14 +683,12 @@ function act(
                         @pointerup="onRowPointerEnd()"
                         @pointercancel="onRowPointerEnd()"
                         @click.capture="onRowClickCapture($event)"
-                        @contextmenu.prevent
+                        @contextmenu.prevent="apriMenuDiRiga(session.id)"
                     >
-                    <!-- ⋮ e' la via primaria: il tieni-premuto ora
-                         seleziona, come nella Ricerca. Sta fuori dal
-                         bottone che apre la chat, perche' due aree di
-                         tocco annidate se ne mangiano una. -->
+                    <!-- ⋮, tieni-premuto e tasto destro: lo stesso menu (vedi sopra). -->
                     <div v-if="!bulk.active.value" class="absolute right-1 top-1 z-10">
                         <TalosRowActions
+                            :ref="(istanza) => registraMenu(session.id, istanza)"
                             :test-id="`talos-chats-menu-${session.id}`"
                             :label="t('chats.actionsFor', { title: sessionTitle(session) })"
                             :items="menuFor({ archived: true })"
@@ -672,7 +707,8 @@ function act(
                             </span>
                             <span class="flex min-w-0 flex-1 flex-col items-start">
                             <span class="w-full truncate text-sm text-[var(--talos-muted)]">{{ sessionTitle(session) }}</span>
-                            <span v-if="session.updated_at" class="text-2xs text-[var(--talos-muted)]">{{ updatedAt(session.updated_at) }}</span>
+                            <span v-if="sessionExcerpt(session.id)" class="w-full truncate text-2xs text-[var(--talos-muted)]" data-testid="talos-chat-search-excerpt">{{ sessionExcerpt(session.id) }}</span>
+                            <span v-else-if="session.updated_at" class="text-2xs text-[var(--talos-muted)]">{{ updatedAt(session.updated_at) }}</span>
                             </span>
                         </button>
                     </li>

@@ -36,6 +36,29 @@ vi.mock('@/components/shell/TalosMobileChatOptionsMenu.vue', () => finto('TalosM
 
 import TalosMobileImmersiveChrome from '@/components/shell/TalosMobileImmersiveChrome.vue'
 
+describe('CALM-TOPBAR-01 «‹ Indietro» sul tablet con una conversazione aperta (Fase 5, 12/09)', () => {
+    it('con showBack e menu nascosto c\'e\' il tasto indietro, che emette back', async () => {
+        const wrapper = mount(TalosMobileImmersiveChrome, {
+            props: { activeTitle: 'Chat', busy: false, canGoIncognito: false, hideMenu: true, hideAppActions: true, showBack: true },
+        })
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-shell-menu"]').exists()).toBe(false)
+        await wrapper.get('[data-testid="talos-chat-back"]').trigger('click')
+        expect(wrapper.emitted('back')).toHaveLength(1)
+    })
+    it('senza showBack (home vuota) e sul telefono (hamburger) il tasto indietro non c\'e\'', async () => {
+        const vuota = mount(TalosMobileImmersiveChrome, {
+            props: { activeTitle: '', busy: false, canGoIncognito: true, hideMenu: true, hideAppActions: true, showBack: false },
+        })
+        expect(vuota.find('[data-testid="talos-chat-back"]').exists()).toBe(false)
+        const telefono = mount(TalosMobileImmersiveChrome, {
+            props: { activeTitle: 'Chat', busy: false, canGoIncognito: false, showBack: true },
+        })
+        expect(telefono.find('[data-testid="talos-shell-menu"]').exists()).toBe(true)
+        expect(telefono.find('[data-testid="talos-chat-back"]').exists()).toBe(false)
+    })
+})
+
 /**
  * ⛔⛔ IL VELO DEVE ARRIVARE DOVE ARRIVANO I COMANDI.
  *

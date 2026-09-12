@@ -44,11 +44,19 @@ The harness controls those actions through:
 
 ## See it
 
+<img src="docs/immagini/tablet-17-home.png" alt="The TALOS home on a tablet: the sidebar with every station, prompt chips, the two most recent chats to pick up, and the composer">
+
+Every station is one tap away, and the last two conversations wait where you left them. Ask something that needs a comparison and you get a table, with the sources under it:
+
 <img src="docs/immagini/tablet-11-chat-sources.png" alt="TALOS answering with a comparison table and its sources, on a tablet">
 
 TALOS can research, compare sources and present structured results without turning every task into a wall of chat. While it works you see the work, not a spinner:
 
-<img src="docs/immagini/tablet-12-chat-working.png" alt="A reply in progress: checking the time, searching the web, reasoning for 14 seconds">
+<img src="docs/immagini/tablet-12-chat-working.png" alt="A reply in progress: two web searches already done, reasoning for 38 seconds, a stop button in the composer">
+
+When it finishes, every claim carries its link and the pages it read are already saved in the Library:
+
+<img src="docs/immagini/tablet-16-chat-answer-sources.png" alt="The finished answer: the time in Tokyo, five Android 16 facts each with its source link, and a Sources pill with sixteen more">
 
 <table>
 <tr>
@@ -106,6 +114,8 @@ TALOS is not tied to one model vendor.
 Provider adapters are lazy-loaded, so a local conversation does not need every cloud-provider implementation in the initial application path.
 
 ## Local really means local
+
+<img src="docs/immagini/tablet-18-settings.png" alt="Settings on a tablet, Account page: no account required, everything stays on the device, an optional PIN that encrypts chats and documents">
 
 With a compatible GGUF loaded, inference happens on-device.
 
@@ -374,8 +384,8 @@ A future optional backend/sync architecture is intended as **replication and exe
 
 <table>
 <tr>
-<td width="50%"><img src="docs/immagini/tablet-13-notes.png" alt="Notes on a tablet: cards with a checklist you can tick, filters and search"></td>
-<td width="50%"><img src="docs/immagini/tablet-14-tasks.png" alt="Tasks on a tablet: To do, In progress, Scheduled and Done, with a daily task at 09:00"></td>
+<td width="50%"><img src="docs/immagini/tablet-13-notes.png" alt="Notes on a tablet: cards with a checklist, filters, search and the list or cards view"></td>
+<td width="50%"><img src="docs/immagini/tablet-14-tasks.png" alt="Tasks on a tablet: To do, In progress, Scheduled and Done, with a daily briefing at 09:00"></td>
 </tr>
 <tr>
 <td><b>Notes</b><br>Markdown renders as text, checklists tick inside the card, and every note can be pinned, edited, exported and deleted.</td>

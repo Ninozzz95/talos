@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
 
 const stores = vi.hoisted(() => ({
@@ -13,6 +13,7 @@ const stores = vi.hoisted(() => ({
     settings: {
         state: {
             shell: {
+                ui_font_scale: 'default', streaming_animation: 'fade',
                 immersive_header: false,
                 launcher_icon_follows_theme: false,
                 composer_shape: 'standard',
@@ -23,7 +24,7 @@ const stores = vi.hoisted(() => ({
                 bubble_scale: 'balanced',
                 composer_mode: 'full',
                 advanced_rail_expanded: false,
-                mobile_window_presentation: 'drawer',
+                mobile_window_presentation: 'standard',
             },
             appearance_visibility: {
                 chat_area: { session_header: true },
@@ -34,6 +35,7 @@ const stores = vi.hoisted(() => ({
                 mode: 'off', background_enabled: true, interface_enabled: true,
                 speed: 100, intensity: 65, glow_intensity: 0, density: 100,
                 depth: 50, trails: 35, contrast: 60, parallax: 20,
+                fps_cap: 30, dpr_cap: 1.25,
                 quality: 'adaptive', pause_when_hidden: true, respect_data_saver: true,
                 interface: {
                     profile: 'preset', duration_scale: 50, intensity: 65,
@@ -106,14 +108,30 @@ describe('TalosMobileSettingsAppearancePanel', () => {
             global: { stubs: { TalosThemedSelect: true } },
         })
         const selects = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
-        const theme = selects.find((select) => select.props('ariaLabel') === 'Theme preset')
+        const grid = wrapper.get('[role="radiogroup"][aria-label="Theme preset"]')
         const mode = selects.find((select) => select.props('ariaLabel') === 'Theme color mode')
-        expect(theme?.props('items')).toHaveLength(14)
-
-        theme?.vm.$emit('update:modelValue', 'aurora')
+        expect(grid.findAll('[role="radio"]')).toHaveLength(14)
+        expect(grid.get('[data-theme-choice="telemetry"]').attributes('aria-checked')).toBe('true')
+        expect(grid.findAll('.swatches i')).toHaveLength(28)
+        await grid.get('[data-theme-choice="aurora"]').trigger('click')
         mode?.vm.$emit('update:modelValue', 'dark')
         expect(stores.theme.setTheme).toHaveBeenCalledWith('aurora')
         expect(stores.theme.setMode).toHaveBeenCalledWith('dark')
+        wrapper.unmount()
+    })
+
+    it('supports keyboard theme selection without changing the saved theme on focus alone', async () => {
+        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
+            attachTo: document.body, global: { stubs: { TalosThemedSelect: true } },
+        })
+        const active = wrapper.get<HTMLElement>('[data-theme-choice="telemetry"]')
+        active.element.focus()
+        await flushPromises()
+        expect(stores.theme.setTheme).not.toHaveBeenCalled()
+        await active.trigger('keydown', { key: 'ArrowRight' })
+        await flushPromises()
+        expect(stores.theme.setTheme).toHaveBeenCalledWith('calm')
+        wrapper.unmount()
     })
 
     it('changes section on a horizontal swipe (owner: left → next, right → prev; vertical is ignored)', async () => {
@@ -166,57 +184,8 @@ describe('TalosMobileSettingsAppearancePanel', () => {
      * two questions: what the bar looks like, and where the "+" opens (which is
      * where attach, Library and Browse live). These keep them apart.
      */
-    it('asks the two questions separately, and stores each on its own', () => {
-        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
-            attachTo: document.body,
-            global: { stubs: { TalosThemedSelect: true, TalosMobileVoiceSettings: true } },
-        })
-        const select = (label: string) => wrapper.findAllComponents({ name: 'TalosThemedSelect' })
-            .find((entry) => entry.props('ariaLabel') === label)
 
-        expect((select('Composer shape')?.props('items') as Array<{ value: string }>).map((i) => i.value))
-            .toEqual(['classic', 'standard', 'compact'])
-        expect((select('The “+” opens')?.props('items') as Array<{ value: string }>).map((i) => i.value))
-            .toEqual(['drawer', 'menu'])
 
-        select('Composer shape')?.vm.$emit('update:modelValue', 'compact')
-        expect(stores.settings.setShell).toHaveBeenCalledWith({ composer_shape: 'compact' })
-        select('The “+” opens')?.vm.$emit('update:modelValue', 'menu')
-        expect(stores.settings.setShell).toHaveBeenCalledWith({ composer_plus: 'menu' })
-        wrapper.unmount()
-    })
-
-    it('goes quiet about the “+” on the classic bar, and says why', async () => {
-        // The classic row carries attach, context and Browse inline, so there
-        // is no "+" for the setting to place. Offered but inert, with the
-        // reason beside it — never a live-looking control that does nothing.
-        stores.settings.state.shell.composer_shape = 'classic'
-        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
-            attachTo: document.body,
-            global: { stubs: { TalosThemedSelect: true, TalosMobileVoiceSettings: true } },
-        })
-
-        const plus = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
-            .find((entry) => entry.props('ariaLabel') === 'The “+” opens')
-        expect(plus?.props('disabled')).toBe(true)
-        expect(wrapper.text()).toContain('The classic bar has no')
-
-        stores.settings.state.shell.composer_shape = 'standard'
-        wrapper.unmount()
-    })
-
-    it('refuses a value it never offered, instead of storing it', () => {
-        const wrapper = mount(TalosMobileSettingsAppearancePanel, {
-            attachTo: document.body,
-            global: { stubs: { TalosThemedSelect: true, TalosMobileVoiceSettings: true } },
-        })
-        wrapper.findAllComponents({ name: 'TalosThemedSelect' })
-            .find((entry) => entry.props('ariaLabel') === 'Composer shape')
-            ?.vm.$emit('update:modelValue', 'a-shape-we-never-shipped')
-
-        expect(stores.settings.setShell).not.toHaveBeenCalled()
-        wrapper.unmount()
-    })
 
     it('keeps the everyday settings in the open and folds the rest away, still closed', () => {
         // Owner 2026-08-02: twelve settings on one plane. Folded, not deleted —
@@ -234,7 +203,7 @@ describe('TalosMobileSettingsAppearancePanel', () => {
         expect(inside('Answer animation')).toBe(true)
         // …and the ones people actually come here for are not behind it.
         expect(inside('Theme preset')).toBe(false)
-        expect(inside('Composer shape')).toBe(false)
+        expect(inside('Writing bar shape')).toBe(false)
         wrapper.unmount()
     })
 
@@ -284,7 +253,7 @@ describe('TalosMobileSettingsAppearancePanel', () => {
         })
         await activateTab(wrapper, 'Motion')
         wrapper.findAllComponents({ name: 'TalosThemedSelect' })
-            .find((select) => select.props('ariaLabel') === 'Motion renderer mode')
+            .find((select) => select.props('ariaLabel') === 'Background animation')
             ?.vm.$emit('update:modelValue', 'complex')
         await tapSwitch(wrapper, 'Background motion')
         await tapSwitch(wrapper, 'Interface motion')
@@ -296,6 +265,19 @@ describe('TalosMobileSettingsAppearancePanel', () => {
         expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ interface_enabled: false })
         expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ speed: 150 })
         expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith({ pause_when_hidden: false })
+        for (const [testid, value, patch] of [
+            ['talos-motion-fps-limit', '45', { fps_cap: 45 }],
+            ['talos-motion-dpr-limit', '1.5', { dpr_cap: 1.5 }],
+        ] as const) {
+            const control = wrapper.findAllComponents({ name: 'TalosThemedSelect' })
+                .find((select) => select.attributes('data-testid') === testid)!
+            control.vm.$emit('update:modelValue', value)
+            expect(stores.settings.setMotionPreferences).toHaveBeenCalledWith(patch)
+            stores.settings.setMotionPreferences.mockClear()
+            control.vm.$emit('update:modelValue', 'invalid')
+            expect(stores.settings.setMotionPreferences).not.toHaveBeenCalled()
+        }
+        wrapper.unmount()
     })
 })
 

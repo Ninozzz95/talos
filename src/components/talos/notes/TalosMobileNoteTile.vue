@@ -51,9 +51,10 @@ const props = defineProps<{
     note: TalosLocalNote
     /** Già formattata: la scheda non sa che ore sono, e non deve saperlo. */
     updatedLabel: string
+    savingCheck?: boolean
 }>()
 
-const emit = defineEmits<{ open: []; action: [TalosNoteActionId] }>()
+const emit = defineEmits<{ open: []; action: [TalosNoteActionId]; toggleCheck: [index: number] }>()
 
 const { t } = useTalosI18n()
 const menu = useTalosNoteRowMenu()
@@ -171,16 +172,21 @@ const onda = useTalosTouchWave()
             <!-- Il riquadro dell'anteprima ha un'altezza sua: è quello che fa
                  allineare le schede della stessa riga invece di farle crescere
                  ognuna quanto il proprio testo. -->
-            <div class="min-h-[4rem] max-h-[11.5rem] overflow-hidden">
-                <TalosMobileNoteChecklist
-                    v-if="checklist.length > 0"
-                    :items="checklist"
-                    :state-label="t('notes.checkState', { done, total: checklist.length })"
-                    :more-label="checklist.length > 4 ? t('notes.checkMore', { count: checklist.length - 4 }) : undefined"
-                />
-                <TalosMobileNoteProse v-else :blocks="blocks" />
+            <div v-if="!checklist.length" class="min-h-[4rem] max-h-[11.5rem] overflow-hidden">
+                <TalosMobileNoteProse :blocks="blocks" />
             </div>
         </button>
+
+        <!-- Caselle sorelle del pulsante di apertura: nessun bottone annidato. -->
+        <TalosMobileNoteChecklist
+            v-if="checklist.length > 0"
+            class="px-[calc(var(--talos-space-card)*1.5)]"
+            :items="checklist"
+            :saving="props.savingCheck"
+            :state-label="t('notes.checkState', { done, total: checklist.length })"
+            :more-label="checklist.length > 4 ? t('notes.checkMore', { count: checklist.length - 4 }) : undefined"
+            @toggle="(index) => emit('toggleCheck', index)"
+        />
 
         <div class="flex min-h-touch items-center justify-between gap-[var(--talos-space-inline)] pl-[calc(var(--talos-space-card)*1.5)] pr-[var(--talos-space-page)] text-2xs text-[var(--talos-muted)]">
             <span class="min-w-0 truncate">{{ metaLabel }}</span>

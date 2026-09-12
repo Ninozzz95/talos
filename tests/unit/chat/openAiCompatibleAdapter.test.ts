@@ -529,3 +529,47 @@ describe('⛔ il rifiuto per crediti insegna il tetto', () => {
         expect(finto).toHaveBeenCalledTimes(1)
     })
 })
+
+// D-F1-2 (12/09): GLM 5.3 Flash via OpenRouter ha scritto la chiamata NEL TESTO
+// (`</arg_key><arg_value>…</tool_call>` a schermo nella chat «Which e-ink tablets»).
+describe('chiamate scritte nel testo (D-F1-2)', () => {
+    const modello = {
+        id: 'z-ai/glm-5.3-flash', provider: 'openrouter' as const, displayName: 'GLM 5.3 Flash',
+        chatCompatibility: 'supported' as const, inputModalities: ['text'], outputModalities: ['text'],
+        supportedParameters: ['tools'],
+    }
+
+    it('nella risposta bufferizzata il blocco GLM diventa una chiamata vera e non resta nel testo', async () => {
+        const { transport } = transportWith({
+            status: 200,
+            data: { model: 'z-ai/glm-5.3-flash', choices: [{
+                message: { content: 'Cerco nella Libreria.\n<tool_call>library_list\n<arg_key>limit</arg_key>\n<arg_value>3</arg_value>\n</tool_call>' },
+                finish_reason: 'stop',
+            }] },
+        })
+        const esito = await openRouterAdapter.complete({
+            model: modello,
+            turns: [{ role: 'user', content: 'Cosa ho in Libreria?' }],
+            tools: [libraryTool],
+        } as never, { apiKey: 'k', endpoint: null } as never, transport)
+        expect(esito.text).toBe('Cerco nella Libreria.\n')
+        expect(esito.toolCalls).toEqual([{ id: 'inline-0', name: 'library_list', arguments: '{"limit":3}' }])
+    })
+
+    it('al contrario: senza blocchi nel testo, il testo e le chiamate del campo restano quelli di prima', async () => {
+        const { transport } = transportWith({
+            status: 200,
+            data: { model: 'z-ai/glm-5.3-flash', choices: [{
+                message: { content: 'Ecco.', tool_calls: [{ id: 'call_1', function: { name: 'library_list', arguments: '{}' } }] },
+                finish_reason: 'tool_calls',
+            }] },
+        })
+        const esito = await openRouterAdapter.complete({
+            model: modello,
+            turns: [{ role: 'user', content: 'Elenca.' }],
+            tools: [libraryTool],
+        } as never, { apiKey: 'k', endpoint: null } as never, transport)
+        expect(esito.text).toBe('Ecco.')
+        expect(esito.toolCalls).toEqual([{ id: 'call_1', name: 'library_list', arguments: '{}' }])
+    })
+})

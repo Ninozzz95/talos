@@ -2,6 +2,17 @@ import { readonly, ref, type Ref } from 'vue'
 import type { TalosTranslate } from '@/i18n/contracts'
 import { normalizeComposerDraft, normalizeComposerDraftScope } from '@/repositories/chatRepository'
 
+// Fase 4: raggiunge la bozza già montata senza nuovi eventi in ChatScreen.
+const liveDrafts = new Set<{ scope: Ref<string>; flush(): Promise<boolean>; restore(text: string): void }>()
+export async function flushTalosEditedDraft(scopeId: string): Promise<void> {
+    for (const draft of liveDrafts) {
+        if (draft.scope.value === scopeId && !await draft.flush()) throw new Error('TALOS_CHAT_DRAFT_SAVE_FAILED')
+    }
+}
+export function restoreTalosEditedDraft(scopeId: string, text: string): void {
+    for (const draft of liveDrafts) if (draft.scope.value === scopeId) draft.restore(text)
+}
+
 export interface TalosMobileComposerDraftPort {
     load(scopeId: string): Promise<string>
     save(scopeId: string, draft: string): Promise<void>
@@ -127,10 +138,24 @@ export function createTalosMobileComposerDraftController(
     }
 
     async function dispose(): Promise<void> {
+        liveDrafts.delete(liveDraft)
         scopeRevision += 1
         await flush()
         clearTimers()
     }
+
+    const liveDraft = {
+        scope,
+        flush,
+        restore(text: string) {
+            clearTimers()
+            editRevision += 1
+            prompt.value = text
+            persistedValue = text
+            volatileDrafts.delete(scope.value)
+        },
+    }
+    liveDrafts.add(liveDraft)
 
     return {
         prompt,

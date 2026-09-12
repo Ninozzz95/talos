@@ -13,7 +13,7 @@ vi.mock('vue-router', () => ({
     useRouter: () => routerCalls,
 }))
 
-import { __resetSettingsStoreForTests } from '@/stores/settings'
+import { __resetSettingsStoreForTests, useSettingsStore } from '@/stores/settings'
 import ResearchScreen from '@/screens/ResearchScreen.vue'
 
 /**
@@ -120,6 +120,28 @@ async function station(runs: readonly TalosResearchRun[], live: readonly string[
     await flushPromises()
     return wrapper
 }
+
+it('remembers the research view independently of the library, with list as default', async () => {
+    const settings = useSettingsStore()
+    expect(settings.state.shell.research_view).toBe('list')
+    const wrapper = await station([])
+    await wrapper.get('[data-testid="talos-research-view-grid"]').trigger('click')
+    await flushPromises()
+    expect(settings.state.shell.research_view).toBe('grid')
+    expect(settings.state.shell.library_view).toBe('list')
+    await settings.setShell({ library_view: 'grid' })
+    await wrapper.get('[data-testid="talos-research-view-list"]').trigger('click')
+    await flushPromises()
+    expect(settings.state.shell.library_view).toBe('grid')
+    expect(settings.state.shell.research_view).toBe('list')
+    await settings.setShell({ research_view: 'grid', library_view: 'list' })
+    wrapper.unmount()
+    __resetSettingsStoreForTests()
+    await useSettingsStore().hydrate()
+    expect(useSettingsStore().state.shell).toMatchObject({ research_view: 'grid', library_view: 'list' })
+    await useSettingsStore().setShell({ research_view: 'invalid' as 'list' })
+    expect(useSettingsStore().state.shell.research_view).toBe('list')
+})
 
 function menuItems(): HTMLElement[] {
     return [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]

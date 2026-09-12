@@ -2,19 +2,12 @@
 import { computed, defineAsyncComponent, nextTick, ref, watch, type ComponentPublicInstance } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { createTalosSendGate } from '@/lib/chat/sendGate'
-import { Loader2, ArrowUp,
+import { ArrowUp,
     Brain,
-    BrainCircuit,
     Database,
-    Gauge,
-    Globe2,
-    ExternalLink,
     Maximize2,
     Mic,
-    Paperclip,
-    SlidersHorizontal,
     Plus,
-    Sparkles,
     Square, } from '@lucide/vue'
 import TalosMobileAttachmentTray from '@/components/chat/TalosMobileAttachmentTray.vue'
 /**
@@ -31,18 +24,21 @@ const TalosMobileModelEffortDrawer = defineAsyncComponent(
 )
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
 import { Button } from '@/components/ui/button'
-import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 import type {
     TalosMobileModelProfileView,
     TalosMobileRoutingProfileView,
 } from '@/components/chat/mobileChatTypes'
 import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
+import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
 import type { TalosMobilePromptEnhancementResult } from '@/lib/chat/promptEnhancement'
 import {
     TALOS_PROMPT_ENHANCER_DEFAULT_DEPTH,
     type TalosPromptEnhancerDepth,
 } from '@/lib/chat/promptEnhancerDepth'
-import type { TalosMobileCommandId } from '@/lib/mobileCommandRegistry'
+import { TALOS_MOBILE_COMMANDS, type TalosMobileCommandId } from '@/lib/mobileCommandRegistry'
+
+/** Owner 12/09 20:10: niente «ricerca web» nella chat — `/browse` non sta nel menu slash. Codice (U-4) resta com'e'. */
+const comandiSlashDellaChat = TALOS_MOBILE_COMMANDS.filter(c => c.id !== 'open_browse')
 import type { TalosMobileAttachmentDraft } from '@/composables/useTalosMobileAttachments'
 import type { TalosLocalVaultFile } from '@/repositories/chatRepository'
 import type {
@@ -54,7 +50,7 @@ import type {
 const TalosMobileSlashCommandMenu = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileSlashCommandMenu.vue'),
 )
-// F3-T4bis: the organized tool drawer loads only when drawer mode opens it.
+// Il foglio «+» resta caricato a richiesta nella forma unica Calm.
 const TalosMobileComposerDrawer = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileComposerDrawer.vue'),
 )
@@ -95,6 +91,8 @@ const props = withDefaults(defineProps<{
     selectedRoutingProfileId?: string | null
     selectedEffort: string
     thinking: boolean
+    agentToolsEnabled?: boolean
+    docked?: boolean
     canSend: boolean
     sending: boolean
     sendDisabledReason?: string
@@ -124,21 +122,18 @@ const props = withDefaults(defineProps<{
     enhancerEffort?: string
     enhancerModels?: readonly { id: string, label: string, provider: string, efforts: readonly string[] }[]
     promptEnhancementError?: string
-    browseMode?: boolean
-    browserSuggestionUrl?: string | null
-    browserBusy?: boolean
-    // F2-T5: mic renders only when dictation is genuinely available (honest).
+    /** Codice nel foglio «+» solo dove il ponte nativo esiste (build di sviluppo). */
+    harnessAvailable?: boolean
+    // Calm: il microfono è sempre visibile; se non disponibile spiega perché.
     dictationSupported?: boolean
     dictationListening?: boolean
     dictationStarting?: boolean
     dictationLevel?: number
     /** ⭐ Le parole mentre le dici: la trascrizione viva, non la bozza. */
     dictationTranscript?: string
-    // F3-T4bis (owner #13): Claude-style minimal bar + organized tool drawer.
+    // Preferenze legacy accettate ma senza effetto sulla forma Calm.
     drawerMode?: boolean
-    // Owner 2026-07-24 (ChatGPT-style): compact bar that expands on focus.
     immersiveComposer?: boolean
-    // Owner 2026-07-24: the "+" opens an anchored dropdown, not the drawer.
     plusDropdown?: boolean
     libraryContextEnabled?: boolean
     libraryContextMode?: TalosLibraryContextMode
@@ -146,6 +141,8 @@ const props = withDefaults(defineProps<{
     libraryTurnOverride?: TalosLibraryTurnOverride | null
     libraryFiles?: readonly TalosLocalVaultFile[]
 }>(), {
+    agentToolsEnabled: true,
+    docked: false,
     routingProfiles: () => [],
     selectedModelProfileId: null,
     selectedRoutingProfileId: null,
@@ -168,9 +165,6 @@ const props = withDefaults(defineProps<{
     enhancerEffort: 'low',
     enhancerModels: () => [],
     promptEnhancementError: '',
-    browseMode: false,
-    browserSuggestionUrl: null,
-    browserBusy: false,
     dictationSupported: false,
     dictationListening: false,
     dictationStarting: false,
@@ -202,6 +196,10 @@ const emit = defineEmits<{
     selectModelRoutingProfile: [profileId: string]
     selectEffort: [level: TalosMobileEffortLevel]
     selectThinking: [enabled: boolean]
+    /** Foglio «+» (12/09): le voci «Crea …» precompilano; le stazioni si aprono dalla schermata. */
+    preset: [id: 'slides' | 'document' | 'analyze']
+    navigate: [route: TalosMobileRouteName]
+    setAgentToolsEnabled: [enabled: boolean]
     attach: []
     takePhoto: []
     pickPhotos: []
@@ -220,47 +218,23 @@ const emit = defineEmits<{
     insertPromptEnhancement: []
     replacePromptEnhancement: []
     selectSlashCommand: [commandId: TalosMobileCommandId]
-    toggleBrowse: [enabled: boolean]
-    openBrowserUrl: [url: string]
     updateLibraryTurnOverride: [override: TalosLibraryTurnOverride | null]
 }>()
 
 const { t } = useTalosI18n()
-const composerRoot = ref<HTMLElement | null>(null)
 const promptField = ref<HTMLTextAreaElement | null>(null)
 const modelTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
-const effortTrigger = ref<ComponentPublicInstance | null>(null)
 // F4-#26: model+effort and the enhancer live in dedicated bottom drawers —
 // the same organized-sheet pattern as the "+" Add-to-chat drawer.
 const modelPickerOpen = ref(false)
 const enhancerDrawerOpen = ref(false)
-let modelDrawerTrigger: 'model' | 'effort' = 'model'
 const slashActiveIndex = ref(0)
 const slashCommandCount = ref(0)
 const slashMenu = ref<{ activateSelected(): void } | null>(null)
 const toolDrawerOpen = ref(false)
-// Owner 2026-07-24 — immersive composer: collapse the bottom controls row when
-// the field is unfocused AND empty (single-line pill), expand on focus/content.
-const composerFocused = ref(false)
-const composerCompact = computed(() =>
-    props.immersiveComposer
-    && !composerFocused.value
-    && !props.prompt.trim()
-    && (props.attachments?.length ?? 0) === 0,
-)
-const composerMotionIntent = ref<'composer-expand' | 'composer-collapse' | null>(null)
-const COMPOSER_LAYOUT_SHIFT = '--talos-composer-layout-shift'
-let composerMotionRevision = 0
-// Owner 2026-07-24 — the "+" opens an anchored dropdown instead of the drawer.
-const plusMenuOpen = ref(false)
 const plusTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
-const plusMenu = ref<HTMLElement | null>(null)
 const libraryChip = ref<HTMLElement | null>(null)
 const librarySheetOpen = ref(false)
-// Re-review 2026-07-25: Back with the menu open used to skip it and eject the user.
-useTalosOverlayBack(() => { void closePlusMenu() }, () => plusMenuOpen.value)
-/** The "+" opens the anchored menu whenever the bottom drawer cannot mount. */
-const plusUsesMenu = computed(() => props.plusDropdown || !props.drawerMode)
 const showLibraryChip = computed(() => (
     props.libraryContextEnabled
     || props.libraryTurnOverride !== null
@@ -287,30 +261,16 @@ async function closeLibrarySheet(): Promise<void> {
 }
 
 async function openPlus(): Promise<void> {
-    // Product review 2026-07-25: the bottom drawer only renders under drawerMode,
-    // so with (immersive on, plusDropdown off, drawerMode off) the "+" opened
-    // NOTHING while announcing aria-expanded=true. The dropdown is always a valid
-    // surface, so fall back to it rather than to a drawer that cannot mount.
-    if (!plusUsesMenu.value) { toolDrawerOpen.value = true; return }
-    if (plusMenuOpen.value) { await closePlusMenu(); return }
-    plusMenuOpen.value = true
-    await nextTick()
-    // Land AT focus inside the menu so Escape/Tab operate on it.
-    plusMenu.value?.focus()
+    toolDrawerOpen.value = true
 }
-async function closePlusMenu(): Promise<void> {
-    plusMenuOpen.value = false
+async function closeToolDrawer(): Promise<void> {
+    toolDrawerOpen.value = false
     await nextTick()
     focusTrigger(plusTrigger.value)
 }
 
 const selectedProfile = computed(() => (
     props.modelProfiles.find((profile) => profile.id === props.selectedModelProfileId) ?? null
-))
-// F3-T1 (owner #2): the effort control exists only when the model exposes
-// real levels beyond 'off' — hidden, never disabled.
-const effortAvailable = computed(() => (
-    (selectedProfile.value?.effort_levels ?? []).some((level) => level !== 'off')
 ))
 const selectedRoute = computed(() => (
     props.routingProfiles.find((profile) => profile.id === props.selectedRoutingProfileId) ?? null
@@ -355,20 +315,22 @@ const statusText = computed(() => {
     return props.sendDisabledReason
 })
 
-// Owner 2026-07-25: ONE morphing right button on EVERY composer style —
-// empty → Mic, typing/attachment → Send, streaming → Stop, dictating → Stop.
-// Content present → ALWAYS the send affordance (disabled with a reason when it
-// cannot be sent); the mic only replaces it on a genuinely empty composer.
+// Calm: microfono separato, invio vuoto disabilitato, stop sempre raggiungibile.
 const composerHasContent = computed(() => (
-    props.prompt.trim().length > 0 || (props.attachments?.length ?? 0) > 0
+    props.prompt.trim().length > 0 || props.attachments.length > 0
 ))
-const rightAction = computed<'stop' | 'dictating' | 'send' | 'mic'>(() => {
+const dictating = computed(() => props.dictationListening || props.dictationStarting)
+const rightAction = computed<'stop' | 'dictating' | 'send'>(() => {
     if (props.sending) return 'stop'
-    if (props.dictationListening || props.dictationStarting) return 'dictating'
-    if (composerHasContent.value) return 'send'
-    // No dictation on this device → keep the send affordance rather than a dead mic.
-    return props.dictationSupported ? 'mic' : 'send'
+    return dictating.value ? 'dictating' : 'send'
 })
+const microphoneLabel = computed(() => t(composerHasContent.value ? 'chat.dictateAppend' : 'chat.dictate'))
+const microphoneReason = computed(() => !props.dictationSupported ? t('chat.dictationUnavailable') : '')
+function onMicrophone(): void {
+    if (!props.dictationSupported || dictating.value) return
+    promptField.value?.blur()
+    emit('toggleDictation')
+}
 /** Stable accessible name; the reason travels in the title. */
 const rightActionLabel = computed(() => {
     switch (rightAction.value) {
@@ -429,47 +391,20 @@ const modelChipLabel = computed(() => {
     const base = `${t('chat.chooseModelProfile')}: ${name}`
     return reasoningWordsActive.value ? `${base} · ${reasoningLabel.value}` : base
 })
-const rightActionDisabled = computed(() => {
-    if (rightAction.value === 'send') return !canSubmit.value
-    if (rightAction.value === 'mic') return !props.dictationSupported
-    return false
-})
-/**
- * Owner 2026-08-27: il mic principale sparisce (diventa Invia) appena il
- * composer ha del testo — `rightAction` sopra, di proposito (owner
- * 2026-07-25: «content present → ALWAYS the send affordance»). Corretto per
- * l'invio, ma senza un secondo mic non c'era più modo di ACCODARE altra
- * dettatura a un testo già scritto: bisognava cancellare tutto per riavere
- * il microfono. La dettatura già accoda da sola
- * (`useTalosMobileDictation`: `capturedBase` + trascrizione, mai una
- * sostituzione) — mancava solo un modo di richiamarla con del testo dentro.
- * Compare SOLO quando serve: composer pieno, dettatura disponibile e non
- * già in corso (mentre si detta la barra dedicata sostituisce l'intera riga).
- */
-const showAppendMic = computed(() => (
-    props.dictationSupported
-    && composerHasContent.value
-    && !(props.dictationListening || props.dictationStarting)
-))
+const rightActionDisabled = computed(() => rightAction.value === 'send' && !canSubmit.value)
 function onRightAction(): void {
     if (rightAction.value === 'stop') { emit('stop'); return }
-    if (rightAction.value === 'send') { requestSend(); return }
-    // Dictation: hand the screen back to the user's voice — keeping the textarea
-    // focused kept the keyboard up over the listening pill.
-    promptField.value?.blur()
-    composerFocused.value = false
-    emit('toggleDictation') // start OR stop
+    if (rightAction.value === 'dictating') { emit('toggleDictation'); return }
+    requestSend()
 }
 
 function resizePrompt(): void {
     const field = promptField.value
     if (!field) return
     field.style.height = 'auto'
-    // One 48px box in both states: 12px padding + a 24px line = 48px, and the
-    // 44px buttons bottom-anchor at 2px, so text and controls share one optical
-    // line and stay correct as the field grows.
-    const floor = 48
-    field.style.height = `${Math.max(floor, Math.min(field.scrollHeight, 192))}px`
+    const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+    const floor = (props.docked ? 3.5 : 5) * rem
+    field.style.height = Math.max(floor, Math.min(field.scrollHeight, 12 * rem)) + 'px'
     measurePromptTall(field)
 }
 
@@ -503,44 +438,6 @@ function closeComposerExpanded(): void {
     // solo tornerebbe sul bottone che ha aperto l'overlay, non sul campo.
     void nextTick(() => promptField.value?.focus())
 }
-/**
- * FLIP only the fixed composer surface: Vue commits the final text layout
- * first, then the old/new top edge is bridged with a compositor transform.
- * Text is never scaled and no intermediate height can re-wrap it.
- */
-async function runComposerLayoutMotion(compact: boolean): Promise<void> {
-    const revision = ++composerMotionRevision
-    const root = composerRoot.value!
-    const beforeHeight = root.offsetHeight
-    composerMotionIntent.value = null
-    root.style.removeProperty(COMPOSER_LAYOUT_SHIFT)
-
-    await nextTick(resizePrompt)
-    if (revision !== composerMotionRevision || composerRoot.value !== root) return
-
-    const shift = root.offsetHeight - beforeHeight
-    const intent = compact ? 'composer-collapse' : 'composer-expand'
-    if (
-        !shift
-        || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-        || !(parseFloat(getComputedStyle(root)
-            .getPropertyValue(`--talos-motion-duration-${intent}`)) > 0)
-    ) return
-
-    root.style.setProperty(COMPOSER_LAYOUT_SHIFT, `${shift}px`)
-    composerMotionIntent.value = intent
-}
-
-function clearComposerLayoutMotion(event: AnimationEvent): void {
-    if (event.target !== composerRoot.value) return
-    composerMotionIntent.value = null
-    composerRoot.value?.style.removeProperty(COMPOSER_LAYOUT_SHIFT)
-}
-
-// Recompute the field height when the pill flips compact↔expanded so the floor
-// (48↔56) and centring track the layout, not just typing.
-watch(composerCompact, (compact) => { void runComposerLayoutMotion(compact) })
-
 function updatePrompt(event: Event): void {
     const field = event.currentTarget as HTMLTextAreaElement
     emit('update:prompt', field.value)
@@ -634,12 +531,6 @@ function updateSlashCommandCount(count: number): void {
 }
 
 async function toggleModelPicker(): Promise<void> {
-    modelDrawerTrigger = 'model'
-    modelPickerOpen.value = !modelPickerOpen.value
-}
-
-async function toggleEffortPicker(): Promise<void> {
-    modelDrawerTrigger = 'effort'
     modelPickerOpen.value = !modelPickerOpen.value
 }
 
@@ -651,7 +542,7 @@ function focusTrigger(trigger: ComponentPublicInstance | HTMLElement | null): vo
 async function closeModelPicker(): Promise<void> {
     modelPickerOpen.value = false
     await nextTick()
-    focusTrigger(modelDrawerTrigger === 'effort' ? effortTrigger.value : modelTrigger.value)
+    focusTrigger(modelTrigger.value)
 }
 
 /**
@@ -682,16 +573,20 @@ watch(
     (active) => { if (!active) enhancerDrawerOpen.value = false },
 )
 
-function focusPrompt(): boolean {
+function focusPrompt(atEnd = false): boolean {
     const field = promptField.value
     if (!field || field.disabled) return false
     field.focus()
+    if (atEnd) field.setSelectionRange(field.value.length, field.value.length)
     return document.activeElement === field
 }
 
-defineExpose({ focusPrompt })
+// `openPlus` esce per le chip di prompt della home (Fase 2 Calm, 12/09):
+// «Analizza un file» e «Altro» aprono il foglio «Aggiungi alla chat» — lo
+// stesso del «+», non un secondo.
+defineExpose({ focusPrompt, openPlus })
 
-watch(() => props.prompt, () => {
+watch(() => [props.prompt, props.docked, dictating.value], () => {
     slashActiveIndex.value = 0
     if (slashMenuOpen.value) modelPickerOpen.value = false
     nextTick(resizePrompt)
@@ -700,12 +595,9 @@ watch(() => props.prompt, () => {
 
 <template>
     <section
-        ref="composerRoot"
         data-testid="talos-mobile-composer"
-        :data-talos-motion-intent="composerMotionIntent ?? undefined"
-        class="relative mx-3 mb-[max(1.125rem,calc(env(safe-area-inset-bottom)+0.375rem))] rounded-2xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-card,var(--card))]/95 p-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.10)] backdrop-blur"
+        class="talos-calm-composer"
         :aria-label="$t('chat.composer')"
-        @animationend="clearComposerLayoutMotion"
     >
         <div
             v-if="slashMenuOpen"
@@ -714,6 +606,7 @@ watch(() => props.prompt, () => {
         >
             <TalosMobileSlashCommandMenu
                 ref="slashMenu"
+                :commands="comandiSlashDellaChat"
                 :query="prompt"
                 :active-index="slashActiveIndex"
                 @selected="selectSlashCommand"
@@ -729,26 +622,8 @@ watch(() => props.prompt, () => {
             @dismiss-error="emit('dismissAttachmentError')"
         />
 
-        <div
-            v-if="browserSuggestionUrl"
-            data-testid="talos-mobile-browser-url-suggestion"
-            class="mb-2 flex min-w-0 items-center gap-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel-soft)] px-2 py-1.5 text-xs text-[var(--talos-text)]"
-        >
-            <Globe2 class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-            <span class="min-w-0 flex-1 truncate">{{ browserSuggestionUrl.replace(/^https?:\/\//, '') }}</span>
-            <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                class="min-h-touch shrink-0 gap-1 px-2"
-                :disabled="browserBusy"
-                :aria-label="$t('chat.openDetectedLink', { url: browserSuggestionUrl })"
-                @click="emit('openBrowserUrl', browserSuggestionUrl)"
-            >
-                <ExternalLink class="size-4" aria-hidden="true" />
-                <span class="sr-only">{{ $t('chat.openDetectedLinkShort') }}</span>
-            </Button>
-        </div>
+        <!-- Owner 12/09 20:10: «levi ricerca web dal drawer e dalla chat in generale» —
+             la pillola del link rilevato (mondo + apri) non c'e' piu'. -->
 
         <!--
             Mentre si detta il compositore ha UNA cosa da mostrare.
@@ -774,418 +649,92 @@ watch(() => props.prompt, () => {
             @invia="emit('sendDictation')"
         />
 
-        <div v-if="!(dictationListening || dictationStarting)" class="relative min-w-0">
-            <!-- Owner 2026-07-24 immersive compact pill: [+] input [mic] [send] on ONE
-                 line; model+effort appear on focus (expanded). @pointerdown.prevent keeps
-                 the field focused / keyboard up when a control is tapped (Android WebView
-                 blurs on pointerdown, before any mousedown handler could run). -->
-            <Button
-                v-if="composerCompact || (plusDropdown && !drawerMode)"
-                ref="plusTrigger"
-                type="button"
-                size="icon"
-                variant="ghost"
-                data-mobile-icon-only="true"
-                :aria-label="$t('chat.addToChat')"
-                :aria-haspopup="plusUsesMenu ? 'menu' : 'dialog'"
-                :aria-expanded="plusUsesMenu ? plusMenuOpen : toolDrawerOpen"
-                class="talos-pressable absolute bottom-0.5 left-0.5 z-10 min-h-touch min-w-touch rounded-2xl"
-                @pointerdown.prevent
-                @click="openPlus"
-            >
-                <Plus class="size-5" aria-hidden="true" />
-            </Button>
-            <textarea
-                ref="promptField"
-                :value="prompt"
-                rows="1"
-                :aria-label="$t('chat.messagePlaceholder')"
-                :placeholder="$t('chat.messagePlaceholderEllipsis')"
-                class="block max-h-48 w-full resize-none overflow-y-auto bg-transparent text-sm leading-6 text-[var(--talos-text,var(--foreground))] outline-none placeholder:text-[var(--talos-muted,var(--muted-foreground))]"
-                :class="[
-                    'min-h-12 py-3',
-                    composerCompact || (plusDropdown && !drawerMode) ? 'pl-12' : 'px-2',
-                    // Owner 2026-08-27: il secondo mic (accoda) occupa lo
-                    // stesso angolo del bottone che invia — il testo gli
-                    // deve lasciare spazio quando c'è, non gli finisce sotto.
-                    showAppendMic ? 'pr-24' : 'pr-14',
-                ]"
-                @input="updatePrompt"
-                @keydown="onPromptKeydown"
-                @focus="composerFocused = true"
-                @blur="composerFocused = false"
-            />
-            <!-- ONE morphing right button on EVERY composer style (owner 2026-07-25):
-                 Mic when empty, Send while typing, Stop while streaming or dictating.
-                 Only the glyph transitions (~150ms); the button never unmounts.
+        <textarea
+            v-if="!dictating"
+            ref="promptField"
+            :value="prompt"
+            rows="1"
+            data-testid="talos-composer-prompt"
+            :aria-label="$t('chat.messagePlaceholder')"
+            :placeholder="$t('chat.messagePlaceholderEllipsis')"
+            class="talos-calm-prompt"
+            @input="updatePrompt"
+            @keydown="onPromptKeydown"
+        />
 
-                 Owner 2026-07-26: bare icon while it is a microphone, matching
-                 the "+", and the filled pill from send onwards. It needed
-                 variant="ghost" as well — the Button's DEFAULT variant brings
-                 its own filled background, so removing the border alone left
-                 the container exactly where it was. -->
+        <div class="talos-composer-tools" data-testid="talos-composer-tools">
             <Button
-                data-testid="talos-composer-action"
-                type="button"
-                size="icon"
-                variant="ghost"
-                data-mobile-icon-only="true"
-                :aria-label="rightActionLabel"
-                :title="rightActionTitle"
-                :aria-pressed="rightAction === 'dictating'"
-                :disabled="rightActionDisabled"
-                @pointerdown.prevent
-                class="talos-pressable absolute right-1.5 min-h-touch min-w-touch rounded-2xl"
-                :class="[
-                    'bottom-0.5',
-                    // Owner 2026-07-26: the microphone is a bare icon at rest.
-                    // Send, stop and dictating keep the filled pill exactly as
-                    // it was — those are the states where the control is either
-                    // about to be pressed or must be findable in a hurry.
-                    rightAction === 'mic'
-                        ? 'text-[var(--talos-text,var(--foreground))]'
-                        : 'bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]',
-                ]"
-                @click="onRightAction"
-            >
-                <Transition
-                    mode="out-in"
-                    enter-active-class="transition duration-150 ease-out"
-                    enter-from-class="opacity-0 scale-75"
-                    enter-to-class="opacity-100 scale-100"
-                    leave-active-class="transition duration-100 ease-in"
-                    leave-from-class="opacity-100 scale-100"
-                    leave-to-class="opacity-0 scale-75"
-                >
-                    <Loader2 v-if="rightAction === 'dictating' && dictationStarting" key="starting" class="size-4 animate-spin" aria-hidden="true" />
-                    <Square v-else-if="rightAction === 'stop' || rightAction === 'dictating'" key="stop" class="size-4" aria-hidden="true" />
-                    <ArrowUp v-else-if="rightAction === 'send'" key="send" class="size-5" aria-hidden="true" />
-                    <Mic v-else key="mic" class="size-5" aria-hidden="true" />
-                </Transition>
-            </Button>
-
-            <!--
-                Owner 2026-08-27: il secondo mic — vedi `showAppendMic` sopra.
-                Nome accessibile DIVERSO da quello del mic principale (che
-                dice solo "chat.dictate"): due controlli con lo stesso nome
-                a schermo insieme sarebbero indistinguibili per chi naviga a
-                voce o con lo screen reader. Stesso evento del mic
-                principale (`toggleDictation`) — la dettatura accoda già da
-                sola (`useTalosMobileDictation`), qui serve solo renderla
-                raggiungibile con del testo già scritto.
-            -->
-            <Button
-                v-if="showAppendMic"
-                data-testid="talos-composer-append-mic"
-                type="button"
-                size="icon"
-                variant="ghost"
-                data-mobile-icon-only="true"
-                :aria-label="$t('chat.dictateAppend')"
-                :title="$t('chat.dictateAppend')"
-                class="talos-pressable absolute bottom-0.5 right-14 min-h-touch min-w-touch rounded-2xl text-[var(--talos-text,var(--foreground))]"
-                @pointerdown.prevent
-                @click="promptField?.blur(); composerFocused = false; emit('toggleDictation')"
-            >
-                <Mic class="size-5" aria-hidden="true" />
-            </Button>
-
-            <!-- Owner 2026-07-24: ChatGPT-style "+" dropdown, anchored above the
-                 composer so it opens whether the pill is compact or expanded. -->
-            <div v-if="plusMenuOpen" class="fixed inset-0 z-[59]" aria-hidden="true" @click="closePlusMenu" />
-            <!-- Owner 2026-07-25: every dropdown inherits the chat 3-dot menu motion. -->
-            <Transition
-                enter-active-class="transition duration-150 ease-out"
-                enter-from-class="opacity-0 scale-95"
-                enter-to-class="opacity-100 scale-100"
-                leave-active-class="transition duration-100 ease-in"
-                leave-from-class="opacity-100 scale-100"
-                leave-to-class="opacity-0 scale-95"
-            >
-            <div
-                v-if="plusMenuOpen"
-                ref="plusMenu"
-                role="menu"
-                tabindex="-1"
-                data-testid="talos-composer-plus-menu"
-                class="absolute bottom-full left-1 z-[60] mb-2 min-w-52 origin-bottom-left overflow-hidden rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-window-bg,var(--talos-card))] py-1 shadow-xl outline-none"
-                @keydown.escape="closePlusMenu"
-            >
-                <button type="button" role="menuitem" data-testid="talos-plus-menu-attach" :disabled="!attachmentsAvailable" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('attach'); closePlusMenu()"><Paperclip class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.attachFile') }}</button>
-                <button type="button" role="menuitem" :disabled="!contextAvailable" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)] disabled:opacity-50" @click="emit('openContext'); closePlusMenu()"><Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('navigation.library') }}</button>
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="emit('openModelLab'); closePlusMenu()"><SlidersHorizontal class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('navigation.modelLab') }}</button>
-                <!-- ⛔⛔⛔ Owner 6/9: "naviga sul web... toglila anche dal
-                     drop-down" — tolta anche qui, non solo dal drawer
-                     organizzato. Non ha più una sede nel menu "+", in
-                     nessuna delle due modalità. -->
-                <button type="button" role="menuitem" class="talos-pressable flex min-h-touch w-full items-center gap-3 px-4 text-left text-sm text-[var(--talos-text)]" @click="closePlusMenu(); requestPromptEnhancement()"><Sparkles class="size-4 text-[var(--talos-accent)]" aria-hidden="true" /> {{ $t('chat.improvePrompt') }}</button>
-            </div>
-            </Transition>
-        </div>
-
-        <!-- F3-T4bis (owner #13): minimal Claude-style bar — "+", model chip, mic.
-             Owner 2026-07-24 immersive: this controls row hides when the field
-             is unfocused+empty (compact pill), and returns on focus/content. -->
-        <!-- @pointerdown.prevent: a control tap must NOT blur the field / dismiss the
-             keyboard in immersive mode (Android WebView blurs on pointerdown, before a
-             mousedown handler could run). This row is not scrollable so cancelling its
-             pointerdown default is safe. The "+" dropdown lives in the field wrapper
-             above so it opens whether the pill is compact or expanded. -->
-        <div v-if="drawerMode && !composerCompact" class="relative mt-1 flex min-w-0 items-center gap-2 border-t border-[var(--talos-border,var(--border))] pt-2" @pointerdown.prevent>
-            <Button
-                ref="plusTrigger"
-                type="button"
-                size="icon"
-                variant="ghost"
-                data-mobile-icon-only="true"
-                :aria-label="$t('chat.addToChat')"
-                :aria-haspopup="plusUsesMenu ? 'menu' : 'dialog'"
-                :aria-expanded="plusUsesMenu ? plusMenuOpen : toolDrawerOpen"
-                class="talos-pressable min-h-touch min-w-touch rounded-2xl"
-                @click="openPlus"
-            >
-                <Plus class="size-5" aria-hidden="true" />
-            </Button>
+                ref="plusTrigger" type="button" size="icon" variant="ghost"
+                data-testid="talos-composer-plus" data-mobile-icon-only="true"
+                :aria-label="$t('chat.addToChat')" aria-haspopup="dialog"
+                :aria-expanded="toolDrawerOpen"
+                class="talos-pressable talos-plus-btn min-h-touch min-w-touch"
+                @pointerdown.prevent @click="openPlus"
+            ><Plus class="size-5" aria-hidden="true" /></Button>
             <button
-                ref="modelTrigger"
-                type="button"
-                data-testid="talos-composer-model-chip"
-                :aria-label="modelChipLabel"
-                :title="modelTitle"
-                aria-haspopup="dialog"
-                :aria-expanded="modelPickerOpen"
-                class="talos-pressable flex min-h-touch min-w-0 items-center gap-2 rounded-2xl border border-[var(--talos-border,var(--border))] bg-[var(--talos-panel,var(--card))]/80 px-3"
-                @click="toggleModelPicker"
+                ref="modelTrigger" type="button" data-testid="talos-composer-model-chip"
+                :aria-label="modelChipLabel" :title="modelTitle"
+                aria-haspopup="dialog" :aria-expanded="modelPickerOpen"
+                class="talos-pressable talos-model-chip min-h-touch"
+                @pointerdown.prevent @click="toggleModelPicker"
             >
-                <TalosMobileProviderIcon
-                    v-if="selectedProfile"
-                    :provider="selectedProfile.provider"
-                    class="size-5 border-0 bg-transparent"
-                />
-                <span class="truncate text-sm font-medium text-[var(--talos-text,var(--foreground))]">
-                    {{ selectedProfile?.display_name ?? $t('chat.chooseModel') }}
-                </span>
-                <template v-if="reasoningWordsActive">
-                    <Brain
-                        v-if="reasoningActive"
-                        data-testid="talos-composer-reasoning-icon"
-                        class="size-3.5 shrink-0 text-[var(--talos-accent)]"
-                        aria-hidden="true"
-                    />
-                    <span
-                        data-testid="talos-composer-reasoning-label"
-                        class="hidden shrink-0 text-xs text-[var(--talos-muted,var(--muted-foreground))] md:inline"
-                    >{{ reasoningLabel }}</span>
-                </template>
+                <TalosMobileProviderIcon v-if="selectedProfile" :provider="selectedProfile.provider" class="size-5 shrink-0 border-0 bg-transparent" />
+                <span>{{ selectedRoute?.name ?? selectedProfile?.display_name ?? $t('chat.chooseModel') }}</span>
+                <!-- Owner 12/09 19:25: la parola del ragionamento accanto al modello
+                     doppiava la chip «Ragiona» accesa. Resta per chi ascolta lo schermo. -->
+                <span v-if="reasoningWordsActive" data-testid="talos-composer-reasoning-label" class="sr-only">{{ reasoningLabel }}</span>
             </button>
+            <button
+                type="button" data-testid="talos-composer-thinking" class="talos-pressable talos-mode-chip min-h-touch"
+                :class="{ active: thinking }" :aria-pressed="thinking"
+                :disabled="!selectedProfile?.supports_thinking"
+                :title="selectedProfile?.supports_thinking ? $t('chat.extendedThinking') : $t('chat.noReasoningSetting')"
+                @pointerdown.prevent @click="emit('selectThinking', !thinking)"
+            >
+                <Brain :data-testid="reasoningActive ? 'talos-composer-reasoning-icon' : undefined" class="size-4" aria-hidden="true" />
+                {{ $t('chat.reasonQuick') }}
+            </button>
+            <!-- Owner 12/09 19:30, dal Pad: «Leva il pulsante agente subito» e «il
+                 pulsante naviga sul web si deve levare completamente». Lo stato
+                 degli attrezzi (agentToolsEnabled) resta nel controller, acceso;
+                 il suggerimento dell'URL rilevato resta sopra il campo. -->
             <slot />
             <button
-                v-if="showLibraryChip"
-                ref="libraryChip"
-                type="button"
-                data-testid="talos-composer-library-chip"
-                :aria-label="$t('library.contextForNextMessage')"
-                aria-haspopup="dialog"
-                :aria-expanded="librarySheetOpen"
-                class="talos-pressable flex min-h-touch max-w-40 shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs text-[var(--talos-muted)]"
-                @click="librarySheetOpen = true"
+                v-if="showLibraryChip" ref="libraryChip" type="button" data-testid="talos-composer-library-chip"
+                :aria-label="$t('library.contextForNextMessage')" aria-haspopup="dialog" :aria-expanded="librarySheetOpen"
+                class="talos-pressable talos-mode-chip min-h-touch"
+                @pointerdown.prevent @click="librarySheetOpen = true"
             >
-                <Database class="size-3.5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                <!--
-                    Owner 2026-07-29: icon only on a phone, words from a tablet up.
-                    This row already holds the plus and the model chip, and three
-                    labels compete for width that is not there — the model name,
-                    the one you actually need to read, is what gets truncated.
-
-                    `md:` is 768px, the same threshold as
-                    TALOS_TABLET_WIDTH_MEDIA_QUERY, so this cannot drift from the
-                    app's own idea of a tablet. The button keeps its aria-label
-                    and title, so nothing is lost to assistive tech or to a
-                    long-press tooltip — only to the eye, and only where there is
-                    no room anyway.
-                -->
-                <span
-                    data-testid="talos-composer-library-chip-label"
-                    class="hidden min-w-0 items-center gap-1.5 md:flex"
-                >
-                    <span class="min-w-0 truncate">{{ libraryModeLabel }}</span>
-                    <span class="shrink-0">· {{ librarySourceCountLabel }}</span>
-                </span>
+                <Database class="size-4 shrink-0" aria-hidden="true" />
+                <span data-testid="talos-composer-library-chip-label">{{ libraryModeLabel }} · {{ librarySourceCountLabel }}</span>
             </button>
-            <span class="flex-1" aria-hidden="true" />
-            <!-- Owner 2026-08-27: compare solo per un testo davvero grande —
-                 vedi `promptTall`. -->
             <Button
-                v-if="promptTall"
-                type="button"
-                size="icon"
-                variant="ghost"
-                data-mobile-icon-only="true"
-                data-testid="talos-composer-expand"
-                :aria-label="$t('chat.expandComposer')"
-                :title="$t('chat.expandComposer')"
-                class="talos-pressable min-h-touch min-w-touch shrink-0 rounded-2xl"
-                @click="openComposerExpanded"
-            >
-                <Maximize2 class="size-4" aria-hidden="true" />
-            </Button>
-            <!-- The mic lives ONLY on the morphing right button (owner 2026-07-25):
-                 a second control with the same accessible name was ambiguous for
-                 assistive tech and gave the user two different mics to tap. The
-                 append mic (owner 2026-08-27) is the one exception, and it lives
-                 on the field itself, not here — see `showAppendMic`. -->
-        </div>
-
-        <div v-else-if="!composerCompact" class="mt-1 flex min-w-0 items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2" @mousedown.prevent>
-            <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-                <!--
-                    Lo STESSO gancio del chip del compositore a cassetto.
-
-                    Owner 2026-08-06: «deve essere messo per tutti i layout, mi
-                    sembra ovvio». Qui il selettore c'era già — cambia la forma,
-                    non la capacità — ma **senza identificativo**: cercandolo per
-                    `talos-composer-model-chip` sul dispositivo non si trovava,
-                    e la conclusione sbagliata è stata che mancasse del tutto.
-                    Un comando che esiste e non si sa nominare è, per chiunque lo
-                    cerchi da fuori, un comando che non c'è.
-                -->
+                v-if="promptTall" type="button" size="icon" variant="ghost"
+                data-testid="talos-composer-expand" data-mobile-icon-only="true"
+                :aria-label="$t('chat.expandComposer')" :title="$t('chat.expandComposer')"
+                class="talos-pressable min-h-touch min-w-touch"
+                @pointerdown.prevent @click="openComposerExpanded"
+            ><Maximize2 class="size-4" aria-hidden="true" /></Button>
+            <div class="talos-composer-send-controls">
                 <Button
-                    ref="modelTrigger"
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    data-mobile-icon-only="true"
-                    data-testid="talos-composer-model-chip"
-                    :aria-label="$t('chat.chooseModelProfile')"
-                    :title="modelTitle"
-                    aria-haspopup="dialog"
-                    :aria-expanded="modelPickerOpen"
-                    class="min-h-touch min-w-touch"
-                    @click="toggleModelPicker"
-                >
-                    <TalosMobileProviderIcon
-                        v-if="selectedProfile"
-                        :provider="selectedProfile.provider"
-                        class="size-5 border-0 bg-transparent"
-                    />
-                    <BrainCircuit v-else class="size-4" aria-hidden="true" />
-                </Button>
-                <slot />
+                    data-testid="talos-composer-append-mic" type="button" size="icon" variant="ghost" data-mobile-icon-only="true"
+                    :aria-label="microphoneLabel" :title="microphoneReason || microphoneLabel"
+                    :aria-pressed="dictating" :disabled="!dictationSupported || dictating"
+                    class="talos-pressable min-h-touch min-w-touch"
+                    @pointerdown.prevent @click="onMicrophone"
+                ><Mic class="size-5" aria-hidden="true" /></Button>
                 <Button
-                    v-if="effortAvailable"
-                    ref="effortTrigger"
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    data-mobile-icon-only="true"
-                    :aria-label="$t('chat.chooseReasoningEffort')"
-                    :title="$t('chat.effortValue', { effort: effortLabel(selectedEffort) })"
-                    aria-haspopup="true"
-                    :aria-expanded="modelPickerOpen"
-                    class="min-h-touch min-w-touch"
-                    @click="toggleEffortPicker"
+                    data-testid="talos-composer-action" type="button" size="icon" variant="ghost" data-mobile-icon-only="true"
+                    :aria-label="rightActionLabel" :title="rightActionTitle" :aria-pressed="rightAction === 'dictating'"
+                    :disabled="rightActionDisabled" class="talos-pressable talos-send-btn min-h-touch min-w-touch"
+                    @pointerdown.prevent @click="onRightAction"
                 >
-                    <Gauge class="size-4" aria-hidden="true" />
-                </Button>
-                <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    data-mobile-icon-only="true"
-                    :aria-label="$t('chat.improvePrompt')"
-                    :title="enhanceUnavailableReason ?? $t('chat.improvePrompt')"
-                    :disabled="sending || enhancingPrompt"
-                    class="min-h-touch min-w-touch"
-                    @click="requestPromptEnhancement"
-                >
-                    <Sparkles class="size-4" aria-hidden="true" />
-                </Button>
-                <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    data-mobile-icon-only="true"
-                    :aria-label="$t('chat.attachFile')"
-                    :title="attachmentsAvailable ? $t('chat.attachFile') : attachmentReason"
-                    :disabled="!attachmentsAvailable || sending || attachmentBusy"
-                    class="min-h-touch min-w-touch"
-                    @click="emit('attach')"
-                >
-                    <Paperclip class="size-4" aria-hidden="true" />
-                </Button>
-                <!-- The mic lives ONLY on the morphing right button (owner 2026-07-25). -->
-                <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    data-mobile-icon-only="true"
-                    :aria-label="$t('chat.chooseGroundingContext')"
-                    :title="contextAvailable ? $t('chat.chooseGroundingContext') : contextReason"
-                    :disabled="!contextAvailable"
-                    class="min-h-touch min-w-touch"
-                    @click="emit('openContext')"
-                >
-                    <Database class="size-4" aria-hidden="true" />
-                </Button>
-                <button
-                    v-if="showLibraryChip"
-                    ref="libraryChip"
-                    type="button"
-                    data-testid="talos-composer-library-chip"
-                    :aria-label="$t('library.contextForNextMessage')"
-                    aria-haspopup="dialog"
-                    :aria-expanded="librarySheetOpen"
-                    class="talos-pressable flex min-h-touch shrink-0 items-center gap-1.5 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 text-xs text-[var(--talos-muted)]"
-                    @click="librarySheetOpen = true"
-                >
-                    <Database class="size-3.5 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
-                    <span>{{ libraryModeLabel }} · {{ librarySourceCountLabel }}</span>
-                </button>
-                <Button
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    data-mobile-icon-only="true"
-                    :aria-label="browseMode ? $t('chat.disableBrowse') : $t('chat.enableBrowse')"
-                    :title="browseMode ? $t('chat.disableBrowse') : $t('chat.enableBrowse')"
-                    :aria-pressed="browseMode"
-                    :disabled="browserBusy"
-                    class="min-h-touch min-w-touch"
-                    :class="browseMode ? 'border-[var(--talos-accent)] bg-[var(--talos-accent-soft)] text-[var(--talos-accent)]' : ''"
-                    @click="emit('toggleBrowse', !browseMode)"
-                >
-                    <Globe2 class="size-4" aria-hidden="true" />
-                </Button>
-                <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    data-mobile-icon-only="true"
-                    :aria-label="$t('chat.openModelLab')"
-                    :title="$t('chat.openModelLab')"
-                    class="min-h-touch min-w-touch"
-                    @click="emit('openModelLab')"
-                >
-                    <SlidersHorizontal class="size-4" aria-hidden="true" />
-                </Button>
-                <!-- Owner 2026-08-27: compare solo per un testo davvero
-                     grande — vedi `promptTall`. -->
-                <Button
-                    v-if="promptTall"
-                    type="button"
-                    size="icon"
-                    variant="outline"
-                    data-mobile-icon-only="true"
-                    data-testid="talos-composer-expand"
-                    :aria-label="$t('chat.expandComposer')"
-                    :title="$t('chat.expandComposer')"
-                    class="min-h-touch min-w-touch"
-                    @click="openComposerExpanded"
-                >
-                    <Maximize2 class="size-4" aria-hidden="true" />
+                    <Square v-if="rightAction !== 'send'" class="size-4" fill="currentColor" aria-hidden="true" />
+                    <ArrowUp v-else class="size-5" aria-hidden="true" />
                 </Button>
             </div>
         </div>
+        <p v-if="microphoneReason" data-testid="talos-composer-mic-reason" class="text-xs text-[var(--talos-muted)]">{{ microphoneReason }}</p>
 
         <!--
             The reason the composer will not send, where eyes can find it.
@@ -1212,25 +761,31 @@ watch(() => props.prompt, () => {
 
         <span class="sr-only" role="status" aria-live="polite">{{ statusText }}</span>
 
-        <!-- F3-T4bis: organized tool drawer (drawer mode only). -->
+        <!-- Lo stesso foglio «Aggiungi alla chat» per tutte le preferenze legacy. -->
         <TalosMobileComposerDrawer
-            v-if="drawerMode && toolDrawerOpen"
+            v-if="toolDrawerOpen"
             :can-enhance="canRequestEnhancement"
             :enhance-reason="enhanceUnavailableReason"
-            :browse-mode="browseMode"
             :thinking="thinking"
             :supports-thinking="selectedProfile?.supports_thinking ?? false"
             :effort-levels="selectedProfile?.effort_levels ?? []"
             :selected-effort="selectedEffort"
+            :attachment-disabled-reason="attachmentReason"
+            :context-disabled-reason="contextReason"
+            :enhancing="enhancingPrompt || sending"
             :attachments-available="attachmentsAvailable"
             :context-available="contextAvailable"
-            @close="toolDrawerOpen = false"
+            :agent-tools-enabled="agentToolsEnabled"
+            :harness-available="harnessAvailable"
+            @close="closeToolDrawer"
+            @preset="emit('preset', $event)"
+            @navigate="emit('navigate', $event)"
+            @set-agent-tools-enabled="emit('setAgentToolsEnabled', $event)"
             @attach="emit('attach')"
             @take-photo="emit('takePhoto')"
             @pick-photos="emit('pickPhotos')"
             @open-context="emit('openContext')"
             @open-model-lab="emit('openModelLab')"
-            @toggle-browse="emit('toggleBrowse', $event)"
             @select-thinking="emit('selectThinking', $event)"
             @select-effort="emit('selectEffort', $event)"
             @enhance-prompt="requestPromptEnhancement"
@@ -1307,49 +862,15 @@ watch(() => props.prompt, () => {
 </template>
 
 <style>
-/*
- * Gboard leaves 144px to the WebView on a phone-shaped landscape viewport,
- * while the normal focused composer is 148px before the Android top inset.
- * Keep the exact shared component and its real controls; only reflow its
- * existing model row into the single-line grammar while the viewport is that
- * short. The :has anchor is the small composer surface and its direct child.
- */
+/* Il compositore resta scorrevole anche quando la tastiera lascia solo 180 px. */
 @media (orientation: landscape) and (max-height: 180px) {
     [data-testid="talos-mobile-composer"] {
         max-height: calc(100dvh - env(safe-area-inset-top));
-        margin-bottom: 0;
         overflow-y: auto;
-        scrollbar-width: none;
-        -ms-overflow-style: none;
     }
-
-    [data-testid="talos-mobile-composer"]::-webkit-scrollbar {
-        display: none;
-        width: 0;
-        height: 0;
-    }
-
     [data-testid="talos-mobile-composer"] textarea {
         height: 48px !important;
-        min-height: 48px;
-        max-height: 48px;
-        padding-left: 48px;
-    }
-
-    [data-testid="talos-mobile-composer"] > div:has(> [data-testid="talos-composer-model-chip"]) {
-        position: absolute;
-        z-index: 10;
-        top: 10px;
-        left: 10px;
-        height: 48px;
-        margin: 0;
-        padding: 0;
-        border: 0;
-    }
-
-    [data-testid="talos-mobile-composer"] > div:has(> [data-testid="talos-composer-model-chip"])
-        > :not(:first-child) {
-        display: none;
+        min-height: 48px !important;
     }
 }
 </style>

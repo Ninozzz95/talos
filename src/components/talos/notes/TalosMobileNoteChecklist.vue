@@ -1,21 +1,7 @@
 <script setup lang="ts">
 /**
- * Le spunte di una nota, come si vedono.
- *
- * ## ⛔ Perché NON si possono spuntare da qui
- *
- * Nel mockup le caselle sono bottoni: si tocca e la spunta cambia. Farlo qui
- * vorrebbe dire RISCRIVERE il contenuto della nota a ogni tocco — un
- * `updateNote` che rimonta il testo riga per riga — ed è una funzione a sé, con
- * le sue domande (cosa succede se due schermate scrivono insieme? la data di
- * modifica si muove?). La sezione 2 chiedeva tre cose, e questa non è nessuna
- * delle tre.
- *
- * Quindi la casella qui **non è un bottone**: è un segno. Un controllo che
- * sembra premibile e non fa niente è peggio di un testo onesto — la persona
- * tocca, non succede nulla, e conclude che l'app è rotta. Quando le spunte
- * diventeranno vive, questo componente diventa la loro casa e il markup cambia
- * in `role="checkbox"` senza che il resto si accorga di niente.
+ * Le spunte modificano la riga markdown tramite la schermata e lo store.
+ * Lo stato mostrato è sempre quello salvato, anche nell'anteprima.
  *
  * ## Perché quattro, nell'anteprima
  *
@@ -35,7 +21,10 @@ const props = withDefaults(defineProps<{
     /** «Altri 3 punti», già composta. Serve solo all'anteprima. */
     moreLabel?: string
     previewLimit?: number
+    saving?: boolean
 }>(), { variant: 'preview', previewLimit: 4 })
+
+const emit = defineEmits<{ toggle: [index: number] }>()
 
 const shown = computed(() => (
     props.variant === 'full' ? props.items : props.items.slice(0, props.previewLimit)
@@ -66,21 +55,33 @@ const hidden = computed(() => props.items.length - shown.value.length)
         >
             <!-- Il quadrato: pieno d'accento quando è fatto, contornato quando
                  no. Il segno di spunta DENTRO, non solo il colore. -->
-            <span
-                aria-hidden="true"
-                :class="[
-                    'grid shrink-0 place-items-center rounded-[5px] border-[1.5px]',
-                    props.variant === 'full' ? 'size-5 mt-0' : 'size-4 mt-[0.15em]',
-                    item.done
-                        ? 'border-[var(--talos-accent)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)]'
-                        : 'border-[var(--talos-border-strong)] text-transparent',
-                ]"
+            <button
+                type="button"
+                role="checkbox"
+                :aria-checked="item.done"
+                :aria-label="item.text"
+                :disabled="props.saving"
+                class="grid min-h-[44px] min-w-[44px] shrink-0 place-items-center rounded-[var(--talos-radius-control)] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                @pointerdown.stop
+                @click.stop="emit('toggle', item.index)"
             >
-                <Check v-if="item.done" :class="props.variant === 'full' ? 'size-4' : 'size-3'" aria-hidden="true" />
-            </span>
+                <span
+                    aria-hidden="true"
+                    :class="[
+                        'grid shrink-0 place-items-center rounded-[5px] border-[1.5px]',
+                        props.variant === 'full' ? 'size-5 mt-0' : 'size-4 mt-[0.15em]',
+                        item.done
+                            ? 'border-[var(--talos-accent)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)]'
+                            : 'border-[var(--talos-border-strong)] text-transparent',
+                    ]"
+                >
+                    <Check v-if="item.done" :class="props.variant === 'full' ? 'size-4' : 'size-3'" aria-hidden="true" />
+                </span>
+            </button>
             <!-- Barrato E smorzato: due segnali, perché il barrato da solo su
                  un titolo corto si legge male e il colore da solo non basta. -->
             <span
+                class="self-center"
                 :class="item.done
                     ? 'line-through decoration-[var(--talos-border-strong)] text-[var(--talos-muted)]'
                     : 'text-[var(--talos-text)]'"

@@ -4503,6 +4503,23 @@ describe('chatController', () => {
         expect(controller.promptEnhancement.value?.enhanced_prompt).toBe('current result')
     })
 
+    it('Fase 4: Modifica ritaglia e salva la bozza senza invocare il provider; rifiuta una chat diversa', async () => {
+        const { deps, chatRepository, request } = makeDeps()
+        const controller = createChatController(deps)
+        await controller.chat.initialize()
+        const session = await controller.chat.createSession('Modifica')
+        for (let i = 0; i < 4; i++) await chatRepository.appendMessage({
+            id: `edit-${i}`, session_id: session.id, role: i % 2 ? 'assistant' : 'user', content: `testo ${i}`,
+            state: 'persisted', created_at: new Date().toISOString(),
+        })
+        await controller.chat.selectSession(session.id)
+        await expect(controller.editUserMessage('altra-chat', 'edit-2', 'edit-3')).rejects.toThrow()
+        await controller.editUserMessage(session.id, 'edit-2', 'edit-3')
+        expect(controller.chat.messages.map(message => message.id)).toEqual(['edit-0', 'edit-1'])
+        expect(await controller.chat.loadComposerDraft()).toBe('testo 2')
+        expect(request).not.toHaveBeenCalled()
+    })
+
     it('resends and retries messages as append-only contextual turns with provenance', async () => {
         const { deps, store, request } = makeDeps()
         store.set('anthropic', 'sk-ant')
@@ -5121,4 +5138,35 @@ describe('il sondaggio GPU della 0.1.17, agganciato alla PRIMA scelta locale', (
     // `talosRunLocalEngineProbeAndEnsureGranted`, provato per conto suo in
     // `tests/unit/lib/localEngineProbeRun.test.ts`. Vedi il commento su
     // `decideLocalEngineProbeConsent` in `chatController.ts`.
+})
+
+/*
+ * D-M-1 (12/09, MISURATO sul Pad): una chat risposta da GLM si riapriva su
+ * «Sakana: Fugu Max» — `persistSelectionAfterProjectionChange` scriveva nella
+ * sessione e nei predefiniti anche un RIPIEGO. Stessa forma del difetto del
+ * 13/08 su composer_model, un'altra porta.
+ */
+describe('D-M-1 — un ripiego non si scrive nella sessione né nei predefiniti', () => {
+    it('nascosto il modello scelto, il ripiego resta a schermo ma la sessione tiene la scelta; riapparso, torna da solo', async () => {
+        const { deps, store, settings } = makeDeps()
+        store.set('anthropic', 'sk-ant')
+        store.set('gemini', 'gemini-key')
+        const controller = createChatController(deps)
+        await controller.init()
+        await controller.newSession()
+        await controller.selectModel('anthropic:claude-live')
+        expect(controller.chat.activeSession.value?.active_model_profile_id).toBe('anthropic:claude-live')
+        expect(settings.state.composer_defaults.model_profile_id).toBe('anthropic:claude-live')
+
+        await controller.setModelVisibility('anthropic:claude-live', false)
+        // Il ripiego c'è, ed è giusto che ci sia.
+        expect(controller.selectedModelId.value).toBe('gemini:gemini-live')
+        // ⛔ Ma non è finito né nella sessione né nei predefiniti.
+        expect(controller.chat.activeSession.value?.active_model_profile_id).toBe('anthropic:claude-live')
+        expect(settings.state.composer_defaults.model_profile_id).toBe('anthropic:claude-live')
+
+        // Al contrario: riapparso il modello scelto, torna da solo.
+        await controller.setModelVisibility('anthropic:claude-live', true)
+        expect(controller.selectedModelId.value).toBe('anthropic:claude-live')
+    })
 })

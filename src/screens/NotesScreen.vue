@@ -49,7 +49,7 @@ import { useSettingsStore } from '@/stores/settings'
 import { useChatController } from '@/stores/chatController'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { talosNotify } from '@/stores/notificationCentre'
-import { talosNoteChecklist, talosNoteDate } from '@/components/talos/notes/noteShape'
+import { talosNoteChecklist, talosNoteDate, talosToggleNoteCheck } from '@/components/talos/notes/noteShape'
 import { exportTalosNoteText } from '@/components/talos/notes/noteExport'
 import type { TalosNoteActionId } from '@/components/talos/notes/noteActions'
 import { talosSfasamento } from '@/composables/useTalosCalmMotion'
@@ -223,6 +223,23 @@ async function togglePin(note: TalosLocalNote): Promise<void> {
         await refresh()
     } catch (cause) {
         error.value = describeError(cause)
+    }
+}
+
+const savingChecks = ref(new Set<string>())
+async function toggleCheck(note: TalosLocalNote, index: number): Promise<void> {
+    if (savingChecks.value.has(note.id)) return
+    const content = talosToggleNoteCheck(note.content, index)
+    if (content === note.content) return
+    savingChecks.value.add(note.id)
+    try {
+        const saved = await controller.notes.update({ id: note.id, content })
+        entries.value = entries.value.map((entry) => entry.id === saved.id ? saved : entry)
+        error.value = null
+    } catch {
+        error.value = t('notes.checkSaveFailed')
+    } finally {
+        savingChecks.value.delete(note.id)
     }
 }
 
@@ -578,6 +595,8 @@ function entrata(indice: number): Record<string, unknown> {
                 :key="note.id"
                 v-bind="entrata(indice)"
                 :note="note"
+                :saving-check="savingChecks.has(note.id)"
+                @toggle-check="(index) => toggleCheck(note, index)"
                 :updated-label="updatedAt(note)"
                 @open="open(note)"
                 @action="(id) => runAction(note, id)"

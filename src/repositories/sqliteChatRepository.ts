@@ -1,4 +1,7 @@
 import { TALOS_CONTENT_ORIGIN_FALLBACK, talosContentOrigin } from '@/lib/tools/security'
+import { normalizeTalosLibrarySearchText } from '@/lib/librarySearchText'
+import { talosMessageSearchExcerpt, talosMessageSearchLimit } from '@/lib/chat/messageSearch'
+import type { TalosMessageSearchHit } from '@/repositories/chatRepository'
 import type {
     TalosSqlConnection,
     TalosSqlRow,
@@ -532,6 +535,40 @@ export function createSqliteChatRepository(
                 return next
             })
         },
+        async searchMessages(term, options) {
+            const needle = normalizeTalosLibrarySearchText(term)
+            const limit = talosMessageSearchLimit(options?.limit)
+            if (!needle || limit === 0) return []
+            const pattern = `%${needle.replace(/[\\%_]/g, '\\$&')}%`
+            const hits: TalosMessageSearchHit[] = []
+            let cursor: { at: string; id: string } | null = null
+            const database = await db()
+            // SQLite LIKE folds ASCII only. Also inspect normalization candidates
+            // (Unicode/control characters or repeated spaces), in bounded pages,
+            // then apply the very same Library comparison as the memory repository.
+            do {
+                const rows: TalosSqlRow[] = await database.query(
+                    `SELECT id, session_id, content, created_at FROM talos_chat_messages
+                     WHERE role IN ('user', 'assistant')
+                       AND (content LIKE ? ESCAPE '\\' COLLATE NOCASE
+                            OR content GLOB ? OR content LIKE '%  %')
+                       ${cursor ? 'AND (created_at < ? OR (created_at = ? AND id < ?))' : ''}
+                     ORDER BY created_at DESC, id DESC LIMIT 128`,
+                    [pattern, '*[^ -~]*', ...(cursor ? [cursor.at, cursor.at, cursor.id] : [])],
+                )
+                for (const row of rows) {
+                    const content = requiredString(row, 'content')
+                    if (!normalizeTalosLibrarySearchText(content).includes(needle)) continue
+                    hits.push({ sessionId: requiredString(row, 'session_id'), messageId: requiredString(row, 'id'),
+                        excerpt: talosMessageSearchExcerpt(content, needle) })
+                    if (hits.length >= limit) return hits
+                }
+                if (rows.length < 128) break
+                const last = rows[rows.length - 1]!
+                cursor = { at: requiredString(last, 'created_at'), id: requiredString(last, 'id') }
+            } while (true)
+            return hits
+        },
         async listMessages(sessionId, options) {
             const limit = options?.limit
             if (limit === undefined) {
@@ -559,6 +596,34 @@ export function createSqliteChatRepository(
                 cursor ? [sessionId, cursor.ordinal, cursor.ordinal, cursor.id, limit] : [sessionId, limit],
             )
             return rows.map(parseMessage).reverse()
+        },
+        async rewindUserMessage(sessionId: string, messageId: string, expectedLastMessageId: string) {
+            return transaction(async (database) => {
+                await findSession(sessionId, database)
+                const rows = await database.query(
+                    'SELECT id, role, content, ordinal FROM talos_chat_messages WHERE session_id = ? ORDER BY ordinal ASC, id ASC',
+                    [sessionId],
+                )
+                const target = rows.find(row => row.id === messageId && row.role === 'user')
+                if (!target) throw new Error('TALOS_CHAT_MESSAGE_NOT_FOUND')
+                if (rows.at(-1)?.id !== expectedLastMessageId) throw new Error('TALOS_CHAT_EDIT_STALE')
+                const text = normalizeComposerDraft(requiredString(target, 'content'))
+                await database.run(
+                    `INSERT INTO talos_chat_state (key, value_json, updated_at) VALUES (?, ?, ?)
+                     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at`,
+                    [composerDraftKey(sessionId), JSON.stringify(text), now()],
+                )
+                // Le FK rimuovono legami e attività dei messaggi, mai i file della Libreria.
+                await database.run('DELETE FROM talos_chat_messages WHERE session_id = ? AND ordinal >= ?',
+                    [sessionId, boundedInteger(target, 'ordinal')])
+                const remaining = await database.query(
+                    'SELECT id FROM talos_chat_messages WHERE session_id = ? AND ordinal >= ?',
+                    [sessionId, boundedInteger(target, 'ordinal')],
+                )
+                if (remaining.length) throw new Error('TALOS_CHAT_DELETE_UNVERIFIED')
+                await database.run('UPDATE talos_chat_sessions SET updated_at = ? WHERE id = ?', [now(), sessionId])
+                return text
+            })
         },
         async appendMessage(input: AppendChatMessageInput) {
             const metadata = encodeObject(input.metadata)

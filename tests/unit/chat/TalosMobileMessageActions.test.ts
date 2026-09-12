@@ -16,23 +16,30 @@ function message(role: 'user' | 'assistant'): TalosMobileMessageView {
 afterEach(() => { document.body.innerHTML = '' })
 
 describe('TalosMobileMessageActions', () => {
-    it('exposes direct copy/resend plus a Reka overflow reuse action for user messages', async () => {
+    it('mostra copia/modifica e conserva Reinvia/Riutilizza nel menu', async () => {
         const wrapper = mount(TalosMobileMessageActions, {
             attachTo: document.body,
             props: { message: message('user'), busy: false, canRetry: false },
         })
 
         expect(wrapper.find('[aria-label="Copy message"]').exists()).toBe(true)
-        expect(wrapper.find('[aria-label="Resend message"]').exists()).toBe(true)
+        expect(wrapper.find('[aria-label="Edit message"]').exists()).toBe(true)
         expect(wrapper.find('[aria-label="Retry assistant response"]').exists()).toBe(false)
         await wrapper.get('[aria-label="Copy message"]').trigger('click')
-        await wrapper.get('[aria-label="Resend message"]').trigger('click')
+        await wrapper.get('[aria-label="Edit message"]').trigger('click')
         expect(wrapper.emitted('copy')).toEqual([[expect.objectContaining({ id: 'user-1' })]])
-        expect(wrapper.emitted('resend')).toEqual([[expect.objectContaining({ id: 'user-1' })]])
+        expect(wrapper.emitted('edit')).toEqual([[expect.objectContaining({ id: 'user-1' })]])
 
         await vi.waitFor(() => {
             expect(wrapper.find('[aria-label="More message actions"]').exists()).toBe(true)
         })
+        await wrapper.get('[aria-label="More message actions"]').trigger('click')
+        await flushPromises()
+        const resend = document.body.querySelector<HTMLElement>('[data-testid="talos-message-resend"]')
+        expect(resend).not.toBeNull()
+        resend!.click()
+        await flushPromises()
+        expect(wrapper.emitted('resend')).toEqual([[expect.objectContaining({ id: 'user-1' })]])
         await wrapper.get('[aria-label="More message actions"]').trigger('click')
         await flushPromises()
         const reuse = document.body.querySelector<HTMLElement>('[role="menuitem"][aria-label="Reuse prompt"]')
@@ -42,14 +49,16 @@ describe('TalosMobileMessageActions', () => {
         expect(wrapper.emitted('reuse')).toEqual([[expect.objectContaining({ id: 'user-1' })]])
     })
 
-    it('exposes copy and retry only for assistant messages and honours busy state', () => {
+    it('conserva azioni e menu assistente e rispetta lo stato occupato', async () => {
         const wrapper = mount(TalosMobileMessageActions, {
             props: { message: message('assistant'), busy: true, canRetry: true },
         })
         expect(wrapper.find('[aria-label="Copy message"]').exists()).toBe(true)
         expect(wrapper.get('[aria-label="Retry assistant response"]').attributes('disabled')).toBeDefined()
         expect(wrapper.find('[aria-label="Resend message"]').exists()).toBe(false)
-        expect(wrapper.find('[aria-label="More message actions"]').exists()).toBe(false)
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        expect(wrapper.find('[aria-label="More message actions"]').exists()).toBe(true)
     })
 })
 

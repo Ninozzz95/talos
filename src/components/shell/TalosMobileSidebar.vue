@@ -4,7 +4,7 @@ import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
 import { useTalosI18n } from '@/i18n'
 import {
     BookMarked, BookOpen, CheckSquare, FlaskConical, MessageSquareText,
-    Check, Cpu, Search, Settings, StickyNote, Stethoscope, X,
+    Check, Cpu, MonitorSmartphone, Search, Settings, StickyNote, Stethoscope, Wrench, X,
 } from '@lucide/vue'
 import { useRoute } from 'vue-router'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,7 @@ import { TALOS_MOTION_V6_DEFAULTS } from '@/motion-v6/defaults'
 import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import type { TalosMobileRouteName } from '@/lib/mobileRoutes'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
+import { talosLightImpact } from '@/services/haptics'
 import {
     talosDrawerGestureMove,
     talosDrawerGestureStart,
@@ -37,6 +38,9 @@ const TalosMobileNotificationBell = defineAsyncComponent(
 const TalosMobileDownloadCenterTrigger = defineAsyncComponent(
     () => import('@/components/shell/TalosMobileDownloadCenterTrigger.vue'),
 )
+const TalosGlobalSearchDialog = defineAsyncComponent(() => import('@/components/shell/TalosGlobalSearchDialog.vue'))
+const searchOpen = ref(false)
+const searchButton = ref<HTMLButtonElement | null>(null)
 
 /**
  * ⭐⭐⭐ LA SIDEBAR DEL MOCKUP «TALOS CALM FINALE», portata così com'è — U-1.
@@ -95,8 +99,12 @@ const emit = defineEmits<{
     select: [sessionId: string]
     rename: [sessionId: string, title: string]
     delete: [sessionId: string, choice: { deleteMedia: boolean }]
+    /** B08: «Archivia» dal menu di una recente; il guscio la mette via e la lista la esclude. */
+    archive: [sessionId: string]
     navigate: [route: TalosMobileRouteName]
     openSettings: []
+    /** B17 (inventario Astra 12/09): il pulsante Account apre la scheda Account, non le Impostazioni generiche. */
+    openAccount: []
 }>()
 
 const account = useTalosAccountStore()
@@ -125,8 +133,21 @@ const sezioni = computed<Array<{ route: TalosMobileRouteName, key: string, icon:
     { route: 'research', key: 'navigation.research', icon: FlaskConical },
     { route: 'memory', key: 'navigation.memory', icon: BookMarked },
     { route: 'notes', key: 'navigation.notes', icon: StickyNote },
+    // ⛔ REGRESSIONE del refactor (11/09): copiando le voci del mockup questa
+    // era sparita — c'era prima (commit 95db4c4f) e il mockup stesso la tiene
+    // (`['/toolforge','wrench','Strumenti']`). Owner 12/09: «come te lo sei
+    // potuto dimenticare?». La UI nuova non nasconde funzioni che ci sono.
+    { route: 'toolforge', key: 'navigation.toolForge', icon: Wrench },
     ...(harnessAvailable ? [{ route: 'harness' as TalosMobileRouteName, key: 'navigation.harness', icon: Settings }] : []),
 ])
+
+/**
+ * «Dispositivi» — owner 12/09: «nascosta ma prevedila, perche' poi dovremo
+ * crearla effettivamente (remote control su PC, tipo Claude Code)». La voce
+ * e' qui, con la sua icona e il suo testo, e si accende quando la stazione
+ * esistera' davvero: finche' non ha una rotta resta spenta, non "in arrivo".
+ */
+const DISPOSITIVI_PRONTA = false
 
 /* ------------------------------------------------------------------ pannello */
 /** `<dialog>` nel cassetto, `<div>` nella forma fissa: i metodi del dialog si usano solo se ci sono. */
@@ -367,18 +388,112 @@ const recenti = computed(() => props.sessions.slice(0, RECENTI_MASSIME))
  * («piu' di due azioni ⇒ menu overflow»), e la riga del mockup e' pulita —
  * icona e titolo, nient'altro.
  */
+/*
+ * B08 (inventario del mockup, 12/09): il menu di una recente ha le voci del
+ * mockup (r. 2991) che hanno una funzione VERA: Apri · Rinomina · Archivia ·
+ * Elimina. «Esporta» (per singola chat non esiste: `export_report` e' della
+ * Ricerca) e «Preferiti» (nessuno stato) restano fuori — niente voci finte.
+ */
 const azioniDiRiga = computed<TalosRowAction[]>(() => [
+    { id: 'open', label: t('common.open'), testId: 'talos-sidebar-chat-open' },
     { id: 'rename', label: t('common.rename'), testId: 'talos-sidebar-chat-rename' },
+    { id: 'archive', label: t('chats.archive'), testId: 'talos-sidebar-chat-archive' },
     { id: 'delete', label: t('common.delete'), danger: true, testId: 'talos-sidebar-chat-delete' },
 ])
 function azioneDiRiga(session: TalosLocalChatSession, id: string): void {
-    if (id === 'rename') void openRename(session)
+    if (id === 'open') emit('select', session.id)
+    else if (id === 'rename') void openRename(session)
+    else if (id === 'archive') emit('archive', session.id)
     else if (id === 'delete') openDelete(session)
 }
+
+/*
+ * Pressione lunga e tasto destro su una chat recente aprono LO STESSO menu
+ * del bottone «⋯» (owner 12/09: «alcune cose non funzionano, tipo press
+ * sulle chat recenti»). I numeri sono quelli del mockup, righe 3943-3958 e
+ * 4128: il menu scatta a 430 ms se il dito non si e' mosso piu' di 7 px, un
+ * impulso aptico dice che e' scattato, e il click che segue il rilascio
+ * viene inghiottito per 650 ms — altrimenti aprirebbe la chat sotto il
+ * menu appena aperto. Il tasto destro (mouse sul tablet, harness sul PC)
+ * apre subito, senza timer.
+ */
+const PRESSIONE_LUNGA_MS = 430
+const PRESSIONE_TOLLERANZA_PX = 7
+const CLICK_INGHIOTTITO_MS = 650
+type MenuDiRiga = { show: (index?: number) => Promise<void>, close: () => void }
+const menuDelleRecenti = new Map<string, MenuDiRiga>()
+function registraMenu(id: string, istanza: unknown): void {
+    if (istanza && typeof (istanza as MenuDiRiga).show === 'function') menuDelleRecenti.set(id, istanza as MenuDiRiga)
+    else menuDelleRecenti.delete(id)
+}
+let pressione: { id: string, x: number, y: number, timer: ReturnType<typeof setTimeout> } | null = null
+let clickInghiottitoFinoA = 0
+/** La riga il cui click va inghiottito: SOLO quella premuta (rapporto Astra 12/09, cura C). */
+let rigaInghiottita: string | null = null
+function apriMenuDellaRecente(id: string): void {
+    clickInghiottitoFinoA = performance.now() + CLICK_INGHIOTTITO_MS
+    rigaInghiottita = id
+    void talosLightImpact()
+    void menuDelleRecenti.get(id)?.show()
+}
+function onPressioneInizio(id: string, event: PointerEvent): void {
+    onda.onPointerDown(event)
+    if (event.isPrimary === false || event.button !== 0) return
+    annullaPressione()
+    pressione = {
+        id, x: event.clientX, y: event.clientY,
+        timer: setTimeout(() => { pressione = null; apriMenuDellaRecente(id) }, PRESSIONE_LUNGA_MS),
+    }
+}
+function onPressioneMossa(event: PointerEvent): void {
+    if (!pressione) return
+    if (Math.abs(event.clientX - pressione.x) > PRESSIONE_TOLLERANZA_PX || Math.abs(event.clientY - pressione.y) > PRESSIONE_TOLLERANZA_PX) annullaPressione()
+}
+function annullaPressione(): void {
+    if (!pressione) return
+    clearTimeout(pressione.timer)
+    pressione = null
+}
+function onTastoDestro(id: string): void {
+    annullaPressione()
+    apriMenuDellaRecente(id)
+}
+function inghiottiClickDopoPressione(event: MouseEvent): void {
+    if (performance.now() >= clickInghiottitoFinoA) return
+    // Solo il click nato dal dito che ha tenuto premuto QUELLA riga: la voce
+    // del menu appena aperto, un'altra riga, un controllo fuori dalla sidebar
+    // (p.es. «Ascolta» sotto un messaggio) devono rispondere.
+    const riga = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-chat-id]') : null
+    if (!riga || riga.dataset.chatId !== rigaInghiottita) return
+    if (event.target instanceof Element && event.target.closest('[data-testid="talos-row-actions-menu"]')) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    clickInghiottitoFinoA = 0
+    rigaInghiottita = null
+}
+onMounted(() => document.addEventListener('click', inghiottiClickDopoPressione, true))
+onBeforeUnmount(() => { document.removeEventListener('click', inghiottiClickDopoPressione, true); annullaPressione() })
 
 /* ----------------------------------------------------------- voci e dialoghi */
 function suppressSidebarFocusRestore(): void {
     restoreSidebarFocusOnClose.value = false
+}
+async function openSearch(): Promise<void> {
+    // A body-teleported sheet cannot sit above a native modal dialog's top layer.
+    // Close that layer first, then let the shared sheet establish its own modality.
+    molla?.cancel()
+    molla = null
+    nascondi()
+    emit('update:open', false)
+    await nextTick()
+    searchOpen.value = true
+}
+async function closeSearch(opened = false): Promise<void> {
+    searchOpen.value = false
+    if (opened) return
+    if (!props.fixed) emit('update:open', true)
+    await nextTick()
+    searchButton.value?.focus({ preventScroll: true })
 }
 function vaiA(route: TalosMobileRouteName): void {
     suppressSidebarFocusRestore()
@@ -489,7 +604,7 @@ const onda = useTalosTouchWave()
                     </Button>
                 </div>
 
-                <button type="button" class="nav-search" @click="vaiA('chats')">
+                <button ref="searchButton" type="button" class="nav-search" aria-haspopup="dialog" :aria-expanded="searchOpen" @click="openSearch">
                     <Search class="icon" aria-hidden="true" />
                     <span>{{ $t('shell.searchTalos') }}</span>
                 </button>
@@ -521,19 +636,41 @@ const onda = useTalosTouchWave()
                             <component :is="voce.icon" class="icon" aria-hidden="true" />
                             <span>{{ $t(voce.key) }}</span>
                         </button>
+                        <!-- «Dispositivi»: prevista, spenta finche' la stazione non esiste (owner 12/09). -->
+                        <button
+                            v-if="DISPOSITIVI_PRONTA"
+                            type="button"
+                            data-testid="talos-sidebar-devices-entry"
+                            class="nav-row talos-pressable talos-pressable-row talos-wave-host"
+                            :aria-label="$t('shell.openItem', { item: $t('navigation.devices') })"
+                            @pointerdown="onda.onPointerDown"
+                        >
+                            <MonitorSmartphone class="icon" aria-hidden="true" />
+                            <span>{{ $t('navigation.devices') }}</span>
+                        </button>
                     </nav>
 
                     <section data-testid="talos-sidebar-recents" class="nav-section" :aria-label="$t('shell.recentChats')">
                         <div class="nav-section-head">{{ $t('shell.recents') }}<span>{{ props.sessions.length }}</span></div>
                         <p v-if="!props.sessions.length" class="nav-empty">{{ $t('shell.noChats') }}</p>
                         <ul v-else :aria-label="$t('shell.chatHistory')">
-                            <li v-for="session in recenti" :key="session.id" class="recent-line">
+                            <li
+                                v-for="session in recenti"
+                                :key="session.id"
+                                class="recent-line"
+                                :data-chat-id="session.id"
+                                @contextmenu.prevent="onTastoDestro(session.id)"
+                            >
                                 <button
                                     type="button"
                                     class="recent-row talos-pressable talos-pressable-row talos-wave-host"
                                     :aria-label="$t('chat.openNamed', { title: sessionTitle(session) })"
                                     :aria-current="session.id === props.activeSessionId ? 'page' : undefined"
-                                    @pointerdown="onda.onPointerDown"
+                                    @pointerdown="onPressioneInizio(session.id, $event)"
+                                    @pointermove="onPressioneMossa"
+                                    @pointerup="annullaPressione"
+                                    @pointercancel="annullaPressione"
+                                    @pointerleave="annullaPressione"
                                     @click="emit('select', session.id)"
                                 >
                                     <MessageSquareText class="icon" aria-hidden="true" />
@@ -541,6 +678,7 @@ const onda = useTalosTouchWave()
                                 </button>
                                 <div class="recent-menu">
                                     <TalosRowActions
+                                        :ref="(istanza) => registraMenu(session.id, istanza)"
                                         :teleport-to="dialogo ?? 'body'"
                                         :test-id="`talos-sidebar-chat-menu-${session.id}`"
                                         :label="$t('chats.actionsFor', { title: sessionTitle(session) })"
@@ -551,9 +689,10 @@ const onda = useTalosTouchWave()
                             </li>
                         </ul>
                     </section>
-                </div>
 
-                <div class="nav-fixed">
+                    <!-- D-F1-1 (owner 12/09): Diagnostica e Impostazioni scorrono col
+                         resto — fisse in fondo lasciavano UNA recente visibile su tre. -->
+                    <div class="nav-fixed">
                     <button type="button" class="nav-row" :aria-label="$t('shell.openItem', { item: $t('navigation.doctor') })" :aria-current="attiva('doctor')" @click="vaiA('doctor')">
                         <Stethoscope class="icon" aria-hidden="true" />
                         <span>{{ $t('navigation.doctor') }}</span>
@@ -562,10 +701,11 @@ const onda = useTalosTouchWave()
                         <Settings class="icon" aria-hidden="true" />
                         <span>{{ $t('navigation.settings') }}</span>
                     </button>
+                    </div>
                 </div>
 
                 <div data-testid="talos-sidebar-settings" class="sidebar-foot">
-                    <button type="button" class="account-button" :aria-label="$t('navigation.account')" @click="suppressSidebarFocusRestore(); emit('openSettings')">
+                    <button type="button" class="account-button" :aria-label="$t('navigation.account')" @click="suppressSidebarFocusRestore(); emit('openAccount')">
                         <TalosAccountAvatar size="sm" />
                         <span class="account-copy">
                             <span class="account-name">{{ account.state.display_name || $t('navigation.account') }}</span>
@@ -601,6 +741,7 @@ const onda = useTalosTouchWave()
         </template>
     </TalosMobileConfirmDialog>
 
+    <TalosGlobalSearchDialog v-if="searchOpen" @close="closeSearch" />
     <TalosMobileDeleteChatDialog
         v-if="deleteTarget !== null"
         :title="deleteTarget ? sessionTitle(deleteTarget) : ''"
@@ -685,8 +826,9 @@ const onda = useTalosTouchWave()
 .talos-drawer.sidebar-fixed {
     position: relative;
     inset: auto;
-    width: 14.5rem;
-    max-width: 14.5rem;
+    /* 12/09: la larghezza la decide la shell (trascinamento del bordo), 14,5 rem finche' non la si tocca. */
+    width: var(--talos-tablet-chat-sidebar-width, 14.5rem);
+    max-width: var(--talos-tablet-chat-sidebar-width, 14.5rem);
     flex: none;
     height: 100%;
     max-height: none;
@@ -706,6 +848,9 @@ const onda = useTalosTouchWave()
     /* L'ultima riga visibile sfuma invece di tagliarsi a meta' sotto le voci
        fisse: sul Pad (11/09) si vedeva un pezzo d'icona e un puntino del menu. */
     mask-image: linear-gradient(to bottom, #000 calc(100% - 1.75rem), transparent);
+    /* Con Diagnostica/Impostazioni dentro lo scorrimento, la sfumatura copre
+       questo margine, non l'ultima voce. */
+    padding-bottom: 1.75rem;
     -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1.75rem), transparent);
 }
 .nav { display: flex; flex-direction: column; gap: 0; }
@@ -761,7 +906,7 @@ const onda = useTalosTouchWave()
 .recent-row .icon { color: var(--talos-muted); }
 .recent-row[aria-current="page"] { background: var(--talos-active); box-shadow: inset 0 0 0 1px var(--talos-accent-soft); }
 .recent-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nav-fixed { border-top: 1px solid var(--talos-border); padding-top: var(--talos-space-inline); }
+.nav-fixed { margin-top: var(--talos-space-inline); border-top: 1px solid var(--talos-border); padding-top: var(--talos-space-inline); }
 .sidebar-foot {
     display: flex;
     align-items: center;
