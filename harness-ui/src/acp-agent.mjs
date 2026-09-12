@@ -72,9 +72,11 @@ export function validaRuntimeAgenteEsterno(runtime, { env = process.env } = {}) 
 
 /** Il runtime applicativo prevale; la variabile contiene JSON non segreto, mai valori di chiavi. */
 export function leggiRuntimeAgenteEsterno(runtime, { env = process.env } = {}) {
-  if (runtime?.comando) return runtime;
+  // P-L-bis: una preferenza presente ma invalida non ripiega su un altro agente.
+  if (runtime?.agente != null) return validaRuntimeAgenteEsterno(runtime.agente, { env });
+  if (runtime?.comando) return validaRuntimeAgenteEsterno(runtime, { env });
   if (!env[ENV_AGENTE_ESTERNO]) throw errore('ACP_NOT_CONFIGURED');
-  try { return JSON.parse(env[ENV_AGENTE_ESTERNO]); }
+  try { return validaRuntimeAgenteEsterno(JSON.parse(env[ENV_AGENTE_ESTERNO]), { env }); }
   catch { throw errore('ACP_RUNTIME_INVALID'); }
 }
 
@@ -101,7 +103,7 @@ async function entro(promessa, ms, scaduta) {
 }
 
 /** Connessione singola, prompt seriali. Callback in ordine; niente filesystem/terminali/MCP. */
-export async function connettiAgenteAcp(runtime, { signal, env = process.env, onEvento = () => {} } = {}) {
+export async function connettiAgenteAcp(runtime, { signal, env = process.env, onEvento = () => {}, soloInizializzazione = false } = {}) {
   const config = validaRuntimeAgenteEsterno(runtime, { env });
   if (signal?.aborted) throw errore('ACP_CANCELLED');
   const ambiente = { ...getDefaultEnvironment() };
@@ -217,6 +219,10 @@ export async function connettiAgenteAcp(runtime, { signal, env = process.env, on
     }));
     if (init.protocolVersion !== VERSIONE_PROTOCOLLO_ACP) throw errore('ACP_VERSION_UNSUPPORTED');
     nome = (init.agentInfo?.title || init.agentInfo?.name || nome).slice(0,120);
+    // P-L-bis: il nome remoto è testo pubblico, non un canale per valori d'ambiente.
+    for (const [k, v] of Object.entries(env)) if ((eUnaCredenziale(k) || config.variabiliAmbiente.includes(k)) && v) nome = nome.replaceAll(v, '[omesso]');
+    nome = nome.replace(/[\p{Cc}\p{Cf}]/gu, '').trim() || 'Agente esterno';
+    if (soloInizializzazione) return Object.freeze({ pid, nome, chiudi });
     sessionId = leggi(z.object({ sessionId: z.string().min(1).max(4096) }), await richiesta('session/new', { cwd: config.cwd, mcpServers: [] })).sessionId;
     return Object.freeze({ pid, sessionId, nome, cancel, chiudi,
       async prompt(contenuti) {

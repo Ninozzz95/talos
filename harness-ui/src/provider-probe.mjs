@@ -35,6 +35,7 @@
 import { ID_CON_CREDENZIALE, REGISTRO_FORNITORI, catalogoDiRiservaPer } from './provider-registry.mjs';
 // P-K
 import { destinazioneCloud } from './provider-auth-cloud.mjs';
+import { leggiRuntimeAgenteEsterno, connettiAgenteAcp } from './acp-agent.mjs'; // P-L-bis
 
 /**
  * Come si chiede l'elenco dei modelli a ciascuno.
@@ -129,12 +130,41 @@ function paginaDashScope(corpo, numero = 1) {
  *   fornitore che lo dichiara — una guardia che nessuno sa far scattare è una guardia che nessuno
  *   sa se funziona. In produzione resta sempre quella del registro.
  */
-export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fetch, orologio = () => performance.now(), sonde = SONDE_PROVIDER } = {}) {
+export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fetch, orologio = () => performance.now(), sonde = SONDE_PROVIDER, env = process.env } = {}) {
   if (typeof leggiChiave !== 'function' || typeof leggiRuntime !== 'function') {
     throw new ProviderProbeError('probe dependencies are invalid', 'PROVIDER_PROBE_MISCONFIGURED');
   }
 
+  let identitaAgente = null;
+  function runtimeAgente() {
+    try { return leggiRuntimeAgenteEsterno(leggiRuntime('esterno'), { env }); }
+    catch (e) {
+      if (e.code === 'ACP_NOT_CONFIGURED') throw new ProviderProbeError("Configura l'agente esterno in Fornitori e accessi", 'CATALOG_CONFIGURATION_REQUIRED');
+      throw e;
+    }
+  }
+  const modelliConfigurati = (provider, runtime) => (runtime?.modelli ?? []).map(m => ({
+    id: `${provider}:${m.id}`, modelId: m.id, nome: m.nome || m.id, provider,
+    fonte: 'configurazione', credenzialeVerificata: false, toolCalling: 'ignoto',
+    capacita: { toolCall: null, reasoning: null }, contextLength: null,
+  }));
+
   async function prova(provider, { consentiGenerazione = false } = {}) { // P-J: opzione solo esplicita.
+    // P-L-bis: il catalogo non avvia il processo; solo questa azione negozia e chiude.
+    if (provider === 'esterno') {
+      let runtime;
+      try { runtime = runtimeAgente(); }
+      catch (e) { return { provider, esito: 'non-provabile', motivo: e.message, codice: e.code, modelli: null, millisecondi: null }; }
+      const partito = orologio();
+      identitaAgente = null;
+      try {
+        const agente = await connettiAgenteAcp(runtime, { env, soloInizializzazione: true });
+        await agente.chiudi();
+        identitaAgente = { runtime: JSON.stringify(runtime), nome: agente.nome };
+        return { provider, esito: 'collegato', motivo: 'Agente inizializzato e chiuso. Nessun messaggio inviato.',
+          modelli: 1, millisecondi: Math.round(orologio() - partito), credenzialeVerificata: false };
+      } catch (e) { return { provider, esito: 'errore', motivo: e.message, codice: e.code, modelli: null, millisecondi: Math.round(orologio() - partito) }; }
+    }
     const sonda = sonde[provider];
     if (!sonda) throw new ProviderProbeError(`unknown provider ${provider}`, 'PROVIDER_INVALID');
     const record = REGISTRO_FORNITORI[provider];
@@ -262,9 +292,24 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
   }
 
   async function elencaModelli(provider) {
+    if (provider === 'esterno') {
+      const runtime = runtimeAgente();
+      const nome = identitaAgente?.runtime === JSON.stringify(runtime) ? identitaAgente.nome : 'Agente esterno';
+      return { provider, fonte: 'configurazione', credenzialeVerificata: false,
+        modelli: [{ id: 'esterno:predefinito', nome, provider, toolCalling: 'ignoto', capacita: { toolCall: null, reasoning: null } }] };
+    }
     if (!CATALOGHI_DIRETTI.includes(provider)) throw new ProviderProbeError('Catalogo diretto non disponibile.', 'PROVIDER_INVALID');
     const record = REGISTRO_FORNITORI[provider];
     const etichetta = record.etichetta;
+    const runtime = leggiRuntime(provider);
+    const configurati = record.cloud ? modelliConfigurati(provider, runtime) : [];
+    // P-K-bis: la preferenza non verifica credenziali né disponibilità remota.
+    if (record.cloud && provider !== 'bedrock') {
+      if (configurati.length) return { provider, fonte: 'configurazione', credenzialeVerificata: false, modelli: configurati };
+      throw new ProviderProbeError(provider === 'azure'
+        ? 'Azure AI Foundry: indica il nome della distribuzione in Modelli configurati, nella pagina Fornitori e accessi.'
+        : 'Google Vertex AI: indica un modello abilitato nel progetto in Modelli configurati, nella pagina Fornitori e accessi.', 'CATALOG_CONFIGURATION_REQUIRED');
+    }
     const key = leggiChiave(provider);
     if (!key) throw new ProviderProbeError(`Inserisci la chiave ${etichetta} nel pannello Provider.`, 'PROVIDER_KEY_MISSING');
     // P-J — nessun catalogo remoto documentato: nessuna generazione o GET sostitutivo.
@@ -274,14 +319,8 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
         avviso: `${etichetta}: elenco dalla documentazione del ${record.data}; accesso ai modelli non verificato.`,
         modelli: riserva.modelli };
     }
-    const runtime = leggiRuntime(provider);
     // P-J — il wire governa auth/paginazione anche quando il nome non è «anthropic».
     const catalogoAnthropic = record.wire === 'anthropic-messages';
-    // P-K — il catalogo Azure elenca modelli base, non i nomi delle distribuzioni dell'owner.
-    // Vertex non documenta GET /models sul percorso compatibile: non si inventa una sonda.
-    if (record.cloud && provider !== 'bedrock') throw new ProviderProbeError(provider === 'azure'
-      ? 'Azure AI Foundry: indica il nome della distribuzione configurata nella tua risorsa; il catalogo dei modelli non elenca le tue distribuzioni.'
-      : 'Google Vertex AI: indica un modello abilitato nel progetto; il catalogo non è disponibile da questo collegamento.', 'CATALOG_CONFIGURATION_REQUIRED');
     const cloud = record.cloud ? destinazioneCloud(provider, runtime, key, null, { catalogo: true }) : null;
     // P-K — fine
     const headers = { Accept: 'application/json' };
@@ -345,6 +384,9 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
         ...(row.capabilities?.image_input ? { inputModalities: row.capabilities.image_input.supported ? ['text','image'] : ['text'] } : {}),
       };
     });
+    // P-K-bis: conserva i dati letti dal catalogo, aggiunge soltanto gli id mancanti.
+    const presenti = new Set(modelli.map(m => m.id));
+    modelli.push(...configurati.filter(m => !presenti.has(m.id)));
     return { provider, modelli };
   }
   return Object.freeze({ prova, elencaModelli });

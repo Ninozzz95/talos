@@ -13,6 +13,18 @@ import {
 
 const modelli = (provider, n) => Array.from({ length: n }, (_, i) => ({ id: `${provider}:m${i}`, nome: `m${i}`, provider }));
 
+test('PKLB-SELETTORE: agente senza chiave compare soltanto con la destinazione restituita da models', () => {
+  const voce = PROVIDER_DIRETTI.find(p => p.id === 'esterno');
+  assert.equal(voce?.etichetta, 'Agente esterno'); assert.equal(voce?.senzaChiave, true);
+  for (const diretti of [null, {}, { esterno: null }, { esterno: [] }, { esterno: [{ id: 'inventato' }] }]) {
+    assert.equal(fontiDelSelettore({ diretti }).some(f => f.id === 'esterno'), false);
+  }
+  const diretti = { esterno: [{ id: 'esterno:predefinito', nome: 'Agente di prova' }] };
+  assert.equal(fontiDelSelettore({ diretti }).find(f => f.id === 'esterno').conto, 1);
+  assert.equal(modelliDellaFonte('esterno', { diretti }), diretti.esterno);
+  assert.match(fraseVuotoDiretto('esterno', { diretti: {} }), /Configura.*Fornitori e accessi/);
+});
+
 test('PI-UI-01 — Kimi, MiniMax e Qwen: nomi umani, conteggi e visibilità solo dopo collegamento', () => {
   const attesi = { kimi: 'Kimi', minimax: 'MiniMax', qwen: 'Qwen' };
   const vuote = fontiDelSelettore({});

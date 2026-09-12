@@ -16,7 +16,7 @@ test('PL-REG-01 — agente esterno nel registro, wire valido e mutazione respint
   assert.equal(r.etichetta, 'Agente esterno');
   assert.equal(r.wire, 'acp');
   assert.equal(r.credenziale, false);
-  assert.equal(r.catalogo.inUI, false, 'nessun catalogo simulato');
+  assert.equal(r.catalogo.inUI, true, 'P-L-bis: destinazione selezionabile quando configurata');
   assert.equal(r.runtime.variabile, 'TALOS_AGENTE_ESTERNO');
   assert.equal(verificaRegistro({ esterno: r }), true);
   assert.throws(() => verificaRegistro({ esterno: { ...r, wire: 'acp-inventato' } }));

@@ -145,6 +145,7 @@ export const PROVIDER_DIRETTI = Object.freeze([
   Object.freeze({ id: 'bedrock', etichetta: 'Amazon Bedrock', soloSeCollegato: true }),
   Object.freeze({ id: 'vertex', etichetta: 'Google Vertex AI', soloSeCollegato: true }),
   // P-K — fine
+  Object.freeze({ id: 'esterno', etichetta: 'Agente esterno', senzaChiave: true, soloSeCollegato: true }), // P-L-bis
 ]);
 
 /** Vero se quel fornitore si legge senza collegare nessuna chiave (i motori locali). */
@@ -186,6 +187,8 @@ export function fontiDelSelettore({ openrouter = null, locali = null, diretti = 
   ];
   for (const provider of PROVIDER_DIRETTI) {
     const elenco = diretti ? diretti[provider.id] : null;
+    // P-L-bis: app.js rappresenta anche gli errori HTTP con []; serve la destinazione reale.
+    if (provider.id === 'esterno' && !elenco?.some(m => m.id === 'esterno:predefinito')) continue;
     // P-D: Z.AI diventa disponibile dopo il caricamento con una chiave presente.
     if (provider.soloSeCollegato && !Array.isArray(elenco)) continue;
     fonti.push({
@@ -222,6 +225,7 @@ export function modelliDellaFonte(fonte, { openrouter = null, locali = null, dir
 export function fraseVuotoDiretto(fonte, { diretti = null, errori = {} } = {}) {
   const etichetta = PROVIDER_DIRETTI.find((p) => p.id === fonte)?.etichetta || fonte;
   if (errori && errori[fonte]) return `Catalogo ${etichetta} non disponibile: ${errori[fonte]}`;
+  if (fonte === 'esterno') return "Configura l'agente esterno in Fornitori e accessi";
   if (!diretti) return `Leggo il catalogo ${etichetta}…`;
   if (!Array.isArray(diretti[fonte])) {
     /* ⛔ Un motore locale non ha una chiave da collegare: dirgli di collegarla manderebbe la
