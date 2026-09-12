@@ -15,11 +15,11 @@ test('INSP-FINESTRA: le parole del mockup dai token; senza finestra niente perce
   const f = righeFinestra(INSPECTOR.usage, INSPECTOR.finestra, INSPECTOR.ripartizione);
   assert.equal(f.titoloDestra, '200k');
   // le cifre del mockup: parti troncate al decimo, «Libera» = finestra meno tutto, percentuale che chiude a 100
-  assert.deepEqual(f.righe.map((r) => r.slice(0, 2)), [['Attrezzi', '7,5k · 3,7%'], ['Istruzioni', '4,1k · 2,0%'], ['Memoria', '1,8k · 0,9%'], ['Conversazione', '41,2k · 20,6%'], ['Libera', '145,4k · 72,8%']]);
+  assert.deepEqual(f.righe.map((r) => r.slice(0, 2)), [['Attrezzi', '7,5k · 3,7%'], ['Istruzioni', '4,1k · 2,0%'], ['Memoria', '1,8k · 0,9%'], ['Conversazione', '41,2k · 20,6%'], ['Libera', '145,4k · 72,8%'], ['Riusato dalla cache', 'non misurato']]);
   const senza = righeFinestra({ prompt_tokens: 1000, completion_tokens: 200 }, null, null);
   assert.equal(senza.titoloDestra, 'finestra non dichiarata');
-  assert.deepEqual(senza.righe.map((r) => r.slice(0, 2)), [['Conversazione', '1,2k'], ['Libera', '—']]);
-  assert.deepEqual(righeFinestra(null, null, null).righe.map((r) => r.slice(0, 2)), [['Conversazione', '—'], ['Libera', '—']]);
+  assert.deepEqual(senza.righe.map((r) => r.slice(0, 2)), [['Conversazione', '1,2k'], ['Libera', '—'], ['Riusato dalla cache', 'non misurato']]);
+  assert.deepEqual(righeFinestra(null, null, null).righe.map((r) => r.slice(0, 2)), [['Conversazione', '—'], ['Libera', '—'], ['Riusato dalla cache', 'non misurato']]);
   assert.equal(kilo(145_400), '145,4k');
   assert.equal(kilo(400), '0,4k');
 });

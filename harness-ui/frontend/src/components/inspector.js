@@ -23,6 +23,8 @@
  * restano Conversazione e Libera, che sono misure vere.
  */
 
+import { testoRiusoCache } from './consumo-sessione.js';
+
 const num = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
 /** «41,2k», «200k», «0,4k» come nel mockup. */
 export function kilo(n) {
@@ -53,7 +55,7 @@ export function righeAmbiente(contesto = null) {
  * Le righe di «Finestra del contesto». `usage` = ultimo StateDelta /usage; `finestra` =
  * contextLength del modello (o null); `ripartizione` = { attrezzi, istruzioni, memoria } in token, se il kernel la dichiara.
  */
-export function righeFinestra(usage = null, finestra = null, ripartizione = null) {
+export function righeFinestra(usage = null, finestra = null, ripartizione = null, cacheSessione = null) {
   const u = usage || {};
   const usati = Number.isFinite(u.prompt_tokens) ? u.prompt_tokens + (Number.isFinite(u.completion_tokens) ? u.completion_tokens : 0) : null;
   const righe = [];
@@ -71,6 +73,8 @@ export function righeFinestra(usage = null, finestra = null, ripartizione = null
   if (usati === null) righe.push(['Conversazione', '—']); else aggiungi('Conversazione', usati, '');
   // «Libera» = la finestra meno TUTTO ciò che la occupa; la sua percentuale chiude a 100 con le altre
   righe.push(['Libera', finestra && usati !== null ? `${kilo(Math.max(0, finestra - occupati))} · ${numPercento.format(Math.max(0, Math.round((100 - percentoOccupato) * 10) / 10))}%` : '—']);
+  // Quota dell'intera sessione: non è un'altra parte dell'occupazione della finestra.
+  righe.push(['Riusato dalla cache', testoRiusoCache(cacheSessione)]);
   return { titoloDestra: finestra ? kilo(finestra) : 'finestra non dichiarata', righe };
 }
 
@@ -455,7 +459,7 @@ export function aggiornaInspector(inspector, dati = {}, { document: d = globalTh
   const cards = inspector.querySelectorAll('#railContesto [data-c="InspectorCard"], #railContesto [data-c="TurnIndex"]');
   const [ambiente, finestra, indice] = cards;
   riempiCard(d, ambiente, righeAmbiente(dati.contesto));
-  const f = righeFinestra(dati.usage, dati.finestra, dati.ripartizione);
+  const f = righeFinestra(dati.usage, dati.finestra, dati.ripartizione, dati.cacheSessione);
   if (finestra) { const testa = finestra.querySelector('.talos-inspector-card__head span'); if (testa) testa.textContent = f.titoloDestra; }
   riempiCard(d, finestra, f.righe, { classiValore: (r) => (r[2] === 'stima' ? 'talos-measure--estimate' : '') });
   const giri = righeGiri(dati.giri);

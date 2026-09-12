@@ -5417,7 +5417,7 @@ export function createHttpApp({
            * sessione indistinguibile da una viva. Un difetto dello stesso tipo era già stato
            * trovato e curato in `elencaFigli` (06/9). Il campo si dichiara, non si deduce.
            */
-          data = { registrato: esito.registrato, motivo: esito.motivo, giri: esito.giri, cache: esito.cache, primoToken: esito.primoToken, chiusura: esito.chiusura, interrotta: esito.interrotta === true };
+          data = { registrato: esito.registrato, motivo: esito.motivo, giri: esito.giri, cache: esito.cache, cacheSessione: esito.cacheSessione ?? null, primoToken: esito.primoToken, chiusura: esito.chiusura, interrotta: esito.interrotta === true };
         } else if (skillsMatch) {
           requireNoQuery(url);
           let sessionId;

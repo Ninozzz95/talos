@@ -102,12 +102,12 @@ test('⛔ DOPPIO CONTEGGIO — sopra una misura del motore la ripartizione per c
   assert.equal(unica.perInspector.ripartizione, null, 'attrezzi, istruzioni e ricordi sono GIÀ dentro inputTokens');
   assert.equal(unica.perInspector.usage.completion_tokens, 0, 'inputTokens è già tutto cio che occupa la finestra al prossimo invio');
   const colonna = perColonna(unica);
-  assert.deepEqual(colonna.righe.map((r) => r[0]), ['Conversazione', 'Libera'], 'nessuna riga stimata a fianco di una misura esatta');
+  assert.deepEqual(colonna.righe.map((r) => r[0]), ['Conversazione', 'Libera', 'Riusato dalla cache'], 'la cache di sessione non aggiunge categorie stimate alla finestra');
 
   // ⛔ AL CONTRARIO — senza misura la ripartizione è l'unica cosa che sappiamo: passa, e si vede
   const senza = finestraDiContesto({ misura: null, revisione: 7, finestraCatalogo: CATALOGO, usage: USAGE, ripartizione: RIPARTIZIONE });
   assert.deepEqual(senza.perInspector.ripartizione, RIPARTIZIONE);
-  assert.deepEqual(perColonna(senza).righe.map((r) => r[0]), ['Attrezzi', 'Istruzioni', 'Memoria', 'Conversazione', 'Libera']);
+  assert.deepEqual(perColonna(senza).righe.map((r) => r[0]), ['Attrezzi', 'Istruzioni', 'Memoria', 'Conversazione', 'Libera', 'Riusato dalla cache']);
 });
 
 test('⛔ FORMA PIATTA — una misura senza revisione (fixture pre-09/09) vale come numero, non come freschezza', () => {

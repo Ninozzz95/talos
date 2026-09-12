@@ -370,6 +370,7 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
        * riportato consumo — mai uno zero fabbricato.
        */
       usageSessione: null,
+      cacheSessione: null,
       eventiUsageContesto: new Map(),
       cachePromptPrecedenti: 0,
       /** La somma dei totali degli invii GIÀ CHIUSI (fino all'ultimo `RunStarted`). */
@@ -4267,7 +4268,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!pannello) return;
     try {
       const sessioni = (await apiGet('/api/v1/sessions'))?.items || [];
-      aggiornaCosti(pannello, sessioni);
+      aggiornaCosti(pannello, sessioni, { sessioneId: state.realSession.id });
     } catch {
       const nota = $('#costiNota');
       if (nota) nota.textContent = 'Le sessioni non si leggono adesso: il server locale non risponde.';
@@ -9180,6 +9181,33 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     apriMenuAzioniLibreria(voci, dove?.ancora ? { ancoraEl: dove.ancora } : { x: dove?.x ?? 0, y: dove?.y ?? 0 });
   }
 
+  // BC-48 C: il rapporto arriva dal registro, anche dopo replay o riapertura.
+  let richiestaCacheSessione = null;
+  function caricaCacheSessioneDalRegistro() {
+    const sessionId = state.realSession.id;
+    const generation = state.realSession.generation;
+    if (!sessionId) { state.realSession.cacheSessione = null; return; }
+    if (richiestaCacheSessione?.sessionId === sessionId && richiestaCacheSessione.generation === generation) {
+      richiestaCacheSessione.ancora = true;
+      return;
+    }
+    const richiesta = { sessionId, generation, ancora: true };
+    richiestaCacheSessione = richiesta;
+    void (async () => {
+      do {
+        richiesta.ancora = false;
+        let misura = null;
+        try {
+          const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/metrics`);
+          misura = dati?.cacheSessione ?? null;
+        } catch { /* La lettura fallita lascia una misura assente, mai quella di un'altra chat. */ }
+        if (richiestaCacheSessione !== richiesta || state.realSession.id !== sessionId || state.realSession.generation !== generation) return;
+        state.realSession.cacheSessione = misura;
+        aggiornaInspectorDaStato();
+      } while (richiesta.ancora);
+    })().finally(() => { if (richiestaCacheSessione === richiesta) richiestaCacheSessione = null; });
+  }
+
   function aggiornaInspectorDaStato() {
     const inspector = $('#inspectorSessione') || $('.talos-inspector');
     if (!inspector) return;
@@ -9206,6 +9234,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       titolo: state.realSession.id ? (state.session || 'Sessione') : 'Nessuna sessione aperta',
       contesto: state.realSession.contesto || null,
       usage: finestra.perInspector.usage,
+      cacheSessione: state.realSession.id ? state.realSession.cacheSessione : null,
       /*
        * ⛔ Il NUMERO, non il descrittore: `righeFinestra` fa aritmetica su questo valore
        * (`finestra - occupati`), e un oggetto le fa produrre NaN — a schermo «Libera — · 100,0%»,
@@ -14302,6 +14331,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (state.realSession.sequenzeViste.has(evento._sequenza)) return;
       state.realSession.sequenzeViste.add(evento._sequenza);
     }
+    if ((evento.type === 'CUSTOM' && evento.name === 'consumo-fornitore') || ['RunStarted', 'RunFinished', 'RunError'].includes(evento.type)) caricaCacheSessioneDalRegistro();
     /*
      * ⭐⭐⭐ O-02 (04/9) — il registro degli attrezzi si riempie QUI, in un
      * punto solo e DOPO il dedup `_sequenza`: sotto, i tre `case` hanno già
@@ -15253,6 +15283,8 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.attesaBubble = null; // il nodo è già sparito con replaceChildren() qui sopra
       state.realSession.usage = null; // Fase 3 — un resume (continua:true) TIENE il conto, una sessione nuova riparte da IGNOTO
       state.realSession.usageSessione = null; // 06/9 CB-04 — idem per il totale della conversazione
+      state.realSession.cacheSessione = null;
+      richiestaCacheSessione = null;
       state.realSession.eventiUsageContesto = new Map();
       state.realSession.cachePromptPrecedenti = 0;
       state.realSession.usageEsecuzioniPrecedenti = null;

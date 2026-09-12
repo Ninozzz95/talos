@@ -39,7 +39,7 @@ import { nomeModello } from './session-item.js';
  * avuto — quindi «0 giri» su ogni riga. Il totale di sessione ora ha un nome
  * suo, `usageSessione`, e un posto solo che lo sa leggere.
  */
-import { usageDellaSessione } from './consumo-sessione.js';
+import { usageDellaSessione, testoRiusoCache } from './consumo-sessione.js';
 
 const NUM = new Intl.NumberFormat('it-IT');
 
@@ -166,7 +166,7 @@ function riempiTabella(tabella, righe, etichettaDi, { document: d = globalThis.d
 }
 
 /** Disegna la sezione intera. `sessioni` è la lista grezza di `/api/v1/sessions`. */
-export function aggiornaCosti(pannello, sessioni = [], { document: d = globalThis.document, oggi = new Date() } = {}) {
+export function aggiornaCosti(pannello, sessioni = [], { document: d = globalThis.document, oggi = new Date(), sessioneId = null } = {}) {
   if (!pannello) return null;
   const tot = riepilogoConsumo(sessioni);
   const riepilogo = pannello.querySelector('#costiRiepilogo');
@@ -184,6 +184,11 @@ export function aggiornaCosti(pannello, sessioni = [], { document: d = globalThi
     if (tot.senzaToken) voci.push(badge(d, `${NUM.format(tot.senzaToken)} senza token registrati`, 'warning'));
     if (tot.senzaModello) voci.push(badge(d, `${NUM.format(tot.senzaModello)} senza modello`, 'warning'));
     if (tot.senzaData) voci.push(badge(d, `${NUM.format(tot.senzaData)} senza data`, 'warning'));
+    // La sessione è scelta dalla chat, mai indovinata dalla data o dall'ordine dell'elenco.
+    const aperta = sessioneId ? sessioni.find(s => s.sessionId === sessioneId) : null;
+    const cache = el(d, 'p', 'talos-muted', `Sessione aperta · Riusato dalla cache · ${testoRiusoCache(aperta?.cacheSessione)}`);
+    cache.dataset.cacheSessione = '';
+    voci.push(cache);
     riepilogo.replaceChildren(...voci);
   }
   riempiTabella(pannello.querySelector('#costiPerGiorno'), consumoPerGiorno(sessioni), (r) => giornoUmano(r.chiave, oggi), { document: d });
