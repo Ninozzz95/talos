@@ -114,7 +114,17 @@ test('⭐⭐⭐ sotto `ricerca`, `research_deposit` SCRIVE il rapporto nella car
   });
   const risposta = rispostaTool(rete);
   assert.match(risposta, /^deposited:/);
-  assert.match(risposta, /Do not deposit it again/, 'il messaggio scoraggia la ripetizione, che è il modo in cui i giri si esauriscono');
+  assert.match(risposta, /Do not deposit the same thing again/, 'il messaggio scoraggia la ripetizione IDENTICA, che è il modo in cui i giri si esauriscono');
+  /*
+   * ⭐⭐⭐ L8 (12/09/2026) — la frase è cambiata da «Do not deposit it again» a «Do not deposit
+   *   the SAME THING again», e non è stile: da oggi un deposito senza record verificabile deve
+   *   poter essere RIFATTO con gli argomenti strutturati. Un «non farlo più» secco chiuderebbe
+   *   l'unica via di rimedio — il 12/09 il modello ha depositato prosa senza record, ha letto
+   *   «non ripeterlo», e la ricerca è finita `senza-rapporto` con cinque minuti di lavoro perso.
+   *   Questo rapporto è la fixture del MODO VECCHIO (prosa senza recinto): il messaggio deve
+   *   dirlo, e qui si prova che lo dice.
+   */
+  assert.match(risposta, /It carries NO verifiable record/, 'L8 — il deposito senza record lo dichiara, invece di far credere che sia andato tutto bene');
   const percorso = percorsoRapporto(cartella, 'ric-1');
   assert.equal(existsSync(percorso), true, 'il rapporto è un artefatto su disco, non una frase in chat');
   assert.equal(readFileSync(percorso, 'utf8'), RAPPORTO_VERO);

@@ -1200,3 +1200,41 @@ Un attrezzo nuovo del kernel senza nome umano: regola del 04/09 violata. Curato 
 ogni attrezzo dichiarato dal kernel deve avere il suo nome umano, altrimenti rosso il test e non lo
 schermo. ⛔ Debito trovato per strada: la mappa dei nomi vive in DUE posti (`nomi-attrezzi.js` e una
 copia in `legacy/app.js` ~2514) — «mappa in UN posto solo» era la regola; da unificare.
+
+### PO-14 — inventario dei provider di Hermes e quanti aggiungerne ai nostri (owner, 12/09/2026)
+«Inventario di lista provider/api key di Hermes; valutiamo quanti nuovi provider inserire nella
+nostra app, ne abbiamo troppo pochi; inventario completo con grammatica e mappa API completissima.»
+Delegato (Opus 5 high, solo documento prima del codice): tabella dei provider di Hermes (letti nel
+codice del clone: nome, base URL, auth, forma dell'id modello, endpoint, streaming, tool calling,
+cache, usage/prezzi, OAuth/keyless), la GRAMMATICA con cui Hermes li dichiara, i nostri di oggi
+(`native-provider-adapter.mjs`, `openai-compatible-runtime.mjs`, `openrouter-oauth.mjs`,
+`model-catalog.mjs`, il Catalogo dei fornitori nelle Impostazioni), il divario, e la proposta
+ordinata di quali aggiungere e con quale grammatica unica. Codice dopo il sì dell'owner.
+
+### BC-32 — la ricerca approfondita deve avere una suite di esportazioni COMPLETA (owner, 12/09/2026)
+«Fai in modo che la ricerca approfondita abbia una suite di esportazioni completa.» Oggi: Markdown,
+BibTeX, RIS dal menu (L7), copia. Mancano: PDF nei tre toni del mobile (`researchPdf.ts`: report ·
+brief · dossier), DOCX, HTML autonomo, JSON del record verificabile, e l'esportazione delle fonti
+come elenco. Backend: rotta `GET …/research/:id/esporta?formato=…` su `document-generator.mjs` e sul
+porto di `researchPdf.ts`; frontend: sottomenu «Esporta» nel menu ⋯ della ricerca con tutti i
+formati, nome del file dalla domanda, toast. Delegato in due lotti (backend + UI).
+
+### L8, CURE (12/09) — i punti 1 e 2 sono CHIUSI; il 3 resta aperto
+Rapporto: `.claude/RAPPORTO-RICERCA-L8-CURE-2026-09-12.md`. Ricerca web prima di scrivere: «The
+Constraint Tax» (arXiv:2605.26128v1, 20/05/2026), «Constraint Tax in Open-Weight LLMs»
+(arXiv:2606.25605v1, 24/06/2026), «PHREEQC-MCQ-200» (arXiv:2607.00436v1, 01/07/2026), OpenRouter
+«Prompt Caching» (letto 12/09/2026).
+1. ✅ **La figlia eredita modello e reasoning della madre** (`session-registry.mjs` `onRicercaAvvia`
+   → `research-orchestrator.avvia`), il modello finisce sulla metadata della ricerca ed esce nel
+   contratto della voce (quindicesimo campo). ⛔ Eccezione dichiarata e provata: da una madre su
+   runtime LOCALE non si eredita niente (la figlia gira in cloud: un id di GGUF sarebbe un 400).
+2. ✅ **`research_deposit` è strutturato**: `{testo, affermazioni[{testo,fonte,passaggio}],
+   fonti[{url,titolo,dataDichiarata?,letta?}]}`, e il record recintato lo scrive il SERVER con
+   `src/research/report.mjs` (`judge:null`, `claimSupported:'unchecked'` fissi — un modello non
+   timbra sé stesso, e adesso non ha nemmeno il campo). Il modo vecchio resta accettato; argomenti
+   mal formati ⇒ risposta a parole e nessun file; un `{testo}` senza record viene depositato lo
+   stesso e la risposta DICE che non conterà come consegnato. La consegna non chiede più il recinto.
+3. 🔜 **APERTO**: la sezione non si aggiorna da sola alla fine della figlia (è `frontend/`, fuori
+   dal perimetro di questo lotto).
+⛔ Il giro vero di conferma lo lancia l'OWNER: nessun test dimostra che glm-5.3-flash riempia
+davvero `affermazioni` e `fonti`. Cosa guardare è elencato nel §7 del rapporto.

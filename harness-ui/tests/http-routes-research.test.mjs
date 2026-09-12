@@ -267,7 +267,7 @@ test('⛔⛔ L5 — corpo con una chiave non ammessa: 400, e la chiave viene NOM
 
 /* ─────────────────────── 3. ELENCO E DETTAGLIO — IL CONTRATTO ─────────────────────── */
 
-test('⭐⭐⭐⭐ L5 — ELENCO: i quattordici campi c\'erano già, quello che mancava era `totale`', async (t) => {
+test('⭐⭐⭐⭐ L5 — ELENCO: i campi del contratto c\'erano già, quello che mancava era `totale` (e da L8 sono quindici: c\'è anche `modello`)', async (t) => {
   const b = await banco(t);
   const { sessionId, ricercaId } = await conRicercaViva(b);
 
@@ -279,8 +279,13 @@ test('⭐⭐⭐⭐ L5 — ELENCO: i quattordici campi c\'erano già, quello che 
   assert.equal(dati.ricerche.length, 1);
   assert.deepEqual(
     Object.keys(dati.ricerche[0]).sort(),
-    ['avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'id', 'motivo', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'stato', 'titolo', 'ultimoMessaggio'],
-    '⛔ il contratto a QUATTORDICI campi di L4, verificato e non duplicato: se cresce, questo test diventa rosso invece di divergere in silenzio',
+    ['avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'id', 'modello', 'motivo', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'stato', 'titolo', 'ultimoMessaggio'],
+    /*
+     * ⛔ Il contratto a QUINDICI campi: quattordici di L4 più `modello` (L8, 12/09/2026).
+     *   Il test è diventato ROSSO quando è cresciuto, che è esattamente il suo mestiere — una
+     *   crescita che scivola dentro in silenzio è un frontend che si rompe più tardi, altrove.
+     */
+    '⛔ il contratto della rotta, verificato e non duplicato: se cresce, questo test diventa rosso invece di divergere in silenzio',
   );
   assert.equal(dati.ricerche[0].id, ricercaId);
   assert.equal(dati.ricerche[0].padreId, sessionId, '§6.6 — la ricerca è figlia della chat che l\'ha ordinata');
