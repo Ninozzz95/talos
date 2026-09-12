@@ -1,5 +1,5 @@
 /** ReportRow del mockup: metadati GET /research. WAI Tabs/Disclosure, 05/09/2026. */
-import {statoRicercaApprofondita,articoloData} from './ricerca-dettaglio.js';
+import {statoRicercaApprofondita,statoDellaVoce,articoloData} from './ricerca-dettaglio.js';
 /*
  * ⛔ 11/09, lotto L7 — QUI NON C'E' PIU' UNA SECONDA TABELLA DI STATI.
  *   Ne esisteva una di cinque voci; la rotta adesso ne manda otto (i tre del cancello di consegna:
@@ -7,7 +7,19 @@ import {statoRicercaApprofondita,articoloData} from './ricerca-dettaglio.js';
  *   avrebbe detto «Stato non registrato» proprio sui tre stati nati per dire la verità — e nessun
  *   test sarebbe diventato rosso. Le parole stanno in un posto solo, `ricerca-dettaglio.js`.
  */
-export function statoRicerca(stato){const s=statoRicercaApprofondita(stato);return {testo:s.parola,tono:s.tono};}
+/*
+ * ⭐ BC-44 (12/09) — accetta la VOCE oltre alla stringa, e continua ad accettare la stringa.
+ *   Motivo: «Interrotta dal fornitore» non si può dedurre da `stato` da solo — vuole
+ *   `motivoErrore.transitorio`, che sta sulla voce. Con la sola stringa la riga dell'elenco
+ *   direbbe «Non riuscita» e la scheda «Interrotta dal fornitore»: due parole per lo stesso
+ *   oggetto sulla stessa schermata, cioè la crepa che la nota qui sopra esiste per impedire.
+ * ⛔ La tabella resta UNA e resta in `ricerca-dettaglio.js`: qui si sceglie solo quale domanda
+ *   porle.
+ */
+export function statoRicerca(voceOStato){
+ const s=(voceOStato&&typeof voceOStato==='object')?statoDellaVoce(voceOStato):statoRicercaApprofondita(voceOStato);
+ return {testo:s.parola,tono:s.tono};
+}
 export function testiRicerca(ricerca){
  /* ⛔ 11/09: la rotta manda `domanda`; fino a ieri mandava `titolo`. Si leggono ENTRAMBI, o il
     giorno del cambio tutta la cronologia diventa «Ricerca senza titolo» e nessun test se ne accorge. */
@@ -21,11 +33,11 @@ export function testiRicerca(ricerca){
 export function riepilogoRicerche(ricerche){return ricerche.length+(ricerche.length===1?' ricerca elencata':' ricerche elencate');}
 export function filtraRicerche(ricerche,{query='',stato='tutte'}={}){
  const q=String(query).trim().toLocaleLowerCase('it');
- return ricerche.filter(r=>(stato==='tutte'||r?.stato===stato)&&(!q||[testiRicerca(r).titolo,statoRicerca(r?.stato).testo].join(' ').toLocaleLowerCase('it').includes(q)));
+ return ricerche.filter(r=>(stato==='tutte'||r?.stato===stato)&&(!q||[testiRicerca(r).titolo,statoRicerca(r).testo].join(' ').toLocaleLowerCase('it').includes(q)));
 }
 function el(doc,tag,classe,testo){const n=doc.createElement(tag);if(classe)n.className=classe;if(testo!==undefined)n.textContent=testo;return n;}
 export function creaReportRow(ricerca,{document:doc=globalThis.document,aperta=false,onEspandi,onApriRapporto}={}){
- const t=testiRicerca(ricerca),stato=statoRicerca(ricerca?.stato);
+ const t=testiRicerca(ricerca),stato=statoRicerca(ricerca);
  const riga=el(doc,'div','talos-list-row');riga.dataset.c='ReportRow';riga.dataset.researchId=ricerca?.id||'';riga.setAttribute('role','listitem');
  const icona=el(doc,'span','talos-list-row__icon'),svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),use=doc.createElementNS('http://www.w3.org/2000/svg','use');svg.setAttribute('class','i');svg.setAttribute('aria-hidden','true');use.setAttribute('href','#i-globe');svg.append(use);icona.append(svg);
  const testo=el(doc,'span','talos-list-row__text'),titolo=el(doc,'span','talos-list-row__title',t.titolo),sotto=el(doc,'span','talos-list-row__sub');titolo.title=t.titolo;testo.append(titolo,sotto);

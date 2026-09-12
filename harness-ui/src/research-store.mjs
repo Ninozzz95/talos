@@ -485,6 +485,11 @@ export async function creaRicerca({ cartella, id, domanda, profondita, padreId =
     titolo: null, avviataAlle: adesso, aggiornataAlle: adesso,
     terminata: null, reportLibraryId: null,
     /*
+     * ⭐ BC-44 (12/09/2026) — nasce `null`, e resta `null` su ogni voce nata prima di oggi: il
+     * lettore lo normalizza, nessuna migrazione, nessuna riga già pagata riscritta.
+     */
+    motivoErrore: null,
+    /*
      * ⭐ L4 — il numero di formato. `2` = nata nella cartella, col giornale. Una voce senza
      * questo campo è nata prima dell'11/09 e il suo rapporto non può contenere il record
      * recintato: è l'unico caso in cui il cancello accetta il ripiego sulla forma minima.
@@ -600,7 +605,7 @@ export async function migraRicerca({ cartella, id }, deps = {}) {
  * stesso principio già in uso per `titolo`: lo store scrive ciò che il chiamante decide, e
  * la macchina degli stati vive tutta in `research-orchestrator.mjs`, in un posto solo.
  */
-export async function aggiornaRicerca({ cartella, id, titolo, terminata, reportLibraryId, conclusaAlle, ultimoMessaggio, motivoDettaglio }, deps = {}) {
+export async function aggiornaRicerca({ cartella, id, titolo, terminata, reportLibraryId, conclusaAlle, ultimoMessaggio, motivoDettaglio, motivoErrore }, deps = {}) {
   /*
    * ⭐⭐⭐ L4 — QUESTO È «IL PRIMO TOCCO». Un aggiornamento è una scrittura: se la voce è ancora
    * nella forma vecchia, qui si migra — una volta, per quella ricerca, e solo perché stavamo
@@ -627,6 +632,21 @@ export async function aggiornaRicerca({ cartella, id, titolo, terminata, reportL
     conclusaAlle: conclusaAlle !== undefined ? conclusaAlle : (voce.conclusaAlle ?? null),
     ultimoMessaggio: ultimoMessaggio !== undefined ? ultimoMessaggio : (voce.ultimoMessaggio ?? null),
     motivoDettaglio: motivoDettaglio !== undefined ? motivoDettaglio : (voce.motivoDettaglio ?? null),
+    /*
+     * ⭐⭐⭐ BC-44 (12/09/2026) — PERCHÉ LA CORSA È CADUTA, e non solo CHE è caduta.
+     *
+     * `{classe, transitorio, codice, messaggio}` oppure `null`. Stessa disciplina degli altri:
+     * `undefined` = non toccarlo, `null` = azzeralo (lo fa la ripresa, che riapre la corsa).
+     *
+     * ⛔ Questo file NON classifica e non valida: scrive ciò che il chiamante decide, come per
+     *   `terminata`. La tabella transitorio/non transitorio vive in un posto solo
+     *   (`research-orchestrator.mjs`, `classificaErroreDiCorsa`) — due classificatori che
+     *   divergono sarebbero due verità sullo stesso guasto.
+     * ⛔ `messaggio` è la frase GREZZA del fornitore (es. «Upstream idle timeout exceeded»):
+     *   resta qui, sul disco, per la diagnosi, e NON esce dalla voce esposta — a schermo va la
+     *   frase italiana che compone `motivoDelloStato`.
+     */
+    motivoErrore: motivoErrore !== undefined ? motivoErrore : (voce.motivoErrore ?? null),
     aggiornataAlle: new Date().toISOString(),
   };
   await scriviAtomico(percorsoMeta(cartella, id), JSON.stringify(aggiornata, null, 2), deps);

@@ -728,9 +728,17 @@ test('⭐⭐⭐ CONTRATTO §6.4 — ogni voce di elenca() porta i sedici campi c
   const v = ricerche[0];
   assert.deepEqual(Object.keys(v).sort(), [
     'avviataAlle', 'bilancio', 'conclusaAlle', 'domanda', 'id', 'modello', 'modelloGiudice',
-    'motivo', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId', 'stato',
-    'titolo', 'ultimoMessaggio',
+    'motivo', 'motivoErrore', 'nome', 'padreId', 'proveDistinte', 'question', 'reportLibraryId',
+    'riprendibile', 'stato', 'titolo', 'ultimoMessaggio',
   ], 'il contratto è esattamente questo: il frontend ci sta scrivendo sopra');
+  /*
+   * ⭐ BC-44 (12/09/2026) — diciotto: i sedici di prima, più `riprendibile` e `motivoErrore`.
+   * ⛔ L'elenco si aggiorna A MANO apposta, ed è il motivo per cui questo test esiste in questa
+   *   forma: una crescita del contratto deve costare una riga a chi la fa, così si vede. I
+   *   sedici di prima non cambiano nome, tipo né significato.
+   */
+  assert.equal(v.riprendibile, false, 'una ricerca conclusa non si riprende: il pulsante non deve nemmeno esistere');
+  assert.equal(v.motivoErrore, null, '⛔ `null`, mai un oggetto vuoto: «non è caduta» e «è caduta per un motivo che non sappiamo» sono due fatti diversi');
   assert.equal(v.modello, 'z-ai/glm-5.3-flash', 'la riga dice con che cosa la ricerca è stata fatta — il 12/09 non lo diceva, e la figlia girava su un altro modello');
   assert.deepEqual(v.bilancio, { totali: 2, sostenute: 0, inParte: 0, nonSostenute: 0, contese: 0, nonVerificate: 2 },
     'il bilancio dice la verità di oggi: due affermazioni, nessun giudice, due non verificate — mai due spunte verdi che nessuno ha guadagnato');

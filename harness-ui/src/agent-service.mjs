@@ -1792,7 +1792,18 @@ export async function avviaSessione({
       ? codiceGrezzo
       : 'internal-error';
     onEvento(runError({ message: messaggio, code }));
-    return { threadId, runId, ok: false, esito: null, erroreInterno: messaggio };
+    /*
+     * ⭐⭐⭐ BC-44 (12/09/2026) — IL CODICE VIAGGIAVA SOLO NELL'EVENTO, e chi conclude legge il
+     * VALORE DI RITORNO. Questo ramo tornava `erroreInterno` (la frase) e buttava `code`: chi
+     * riceve la conclusione (`onConclusioneFn` — la ricerca approfondita, la delega) vedeva un
+     * guasto senza nome, e per distinguere «la rete è caduta» da «il codice ha un bug» doveva
+     * andarsi a rileggere il `.jsonl` della sessione. Due file, nessun ponte: la ricerca
+     * `dec896c0` è finita `failed` con la causa scritta solo nel registro degli eventi.
+     * ⛔ ADDITIVO, e la riga sopra non cambia: l'evento `RunError` porta esattamente quello che
+     *   portava, stesso `message` e stesso `code`. Qui si aggiunge un campo al ritorno, e chi
+     *   non lo legge non se ne accorge.
+     */
+    return { threadId, runId, ok: false, esito: null, erroreInterno: messaggio, codiceErrore: code };
   } finally {
     /*
      * ⭐⭐⭐ 29/8 — FASE E: un server MCP è un processo figlio VERO

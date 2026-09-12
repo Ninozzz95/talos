@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   puoMettereInPausa, puoRiprendere, puoRicontrollareLeFonti, paroleErroreRicerca, AZIONI_RICERCA,
+  statoDellaVoce, INTERROTTA_DAL_FORNITORE,
   vociMenuRicerca, montaDettaglioRicerca, magazzinoRicerche, montaEsitoRiverifica, frasiRiverifica,
   statoFonteRiverifica, governoRicercheVive, ricercheInCorso, INTERVALLO_RICERCHE_VIVE, frasiSpesa,
   frasePassaggi, esportazioniRicerca, montaPannelloEsportazioni, indirizzoEsportazione, FORMATI_ESPORTAZIONE,
   testoDepositato, haQualcosaDaEsportare, recordDisponibile,
 } from '../../src/components/ricerca-dettaglio.js';
+import { statoRicerca } from '../../src/components/ricerca.js';
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -539,4 +541,42 @@ test('L5-ESPORTA: nel menu «⋯» le tre uscite del browser lasciano il posto a
      md/html/pdf li da' comunque. Adesso compare, e con le uscite giuste. */
   const respinta = { id: 'r', domanda: 'D', stato: 'senza-rapporto', reportLibraryId: 'lib-scusa' };
   assert.deepEqual(chiavi(vociMenuRicerca(respinta, { lettura, onEsportazioni: () => {} })), ['copia', 'esporta-suite']);
+});
+
+/* ══════════ BC-44 (12/09/2026) — «Interrotta dal fornitore» ══════════ */
+
+test('⭐⭐⭐⭐ BC-44 — una caduta del fornitore ha una PAROLA sua, e il consiglio cambia con lei', () => {
+  /*
+   * ⛔ Il caso vero: ricerca `dec896c0`, sedici giri, 67 testi tenuti, e il fornitore che chiude.
+   *   La tabella la timbrava «Non riuscita · Si è fermata su un errore. Riavviala dalla chat con
+   *   la stessa domanda» — cioè consigliava di RIPAGARE venti minuti di lavoro intatti sul disco.
+   */
+  const caduta = { stato: 'failed', motivoErrore: { classe: 'timeout-fornitore', transitorio: true }, riprendibile: true, domanda: 'Una domanda' };
+  assert.equal(statoDellaVoce(caduta), INTERROTTA_DAL_FORNITORE);
+  assert.equal(statoDellaVoce(caduta).parola, 'Interrotta dal fornitore');
+  assert.match(INTERROTTA_DAL_FORNITORE.cosaFare, /riprendila dal menu ⋯/i, '⛔ il consiglio dice il gesto GIUSTO: riprendere, non rifare');
+  assert.doesNotMatch(INTERROTTA_DAL_FORNITORE.cosaFare, /Upstream|timeout|internal-error/i, '⛔ niente nomi tecnici a schermo');
+  assert.deepEqual(statoRicerca(caduta), { testo: 'Interrotta dal fornitore', tono: 'warning' },
+    '⛔ la RIGA dell\'elenco e la SCHEDA dicono la stessa parola: due sinonimi sulla stessa schermata sono la prima crepa');
+
+  // ⛔ VERSO CONTRARIO: un `failed` che NON è del fornitore resta «Non riuscita», col consiglio di sempre.
+  const vera = { stato: 'failed', motivoErrore: { classe: 'credenziale', transitorio: false }, riprendibile: false };
+  assert.equal(statoDellaVoce(vera).parola, 'Non riuscita');
+  assert.equal(statoDellaVoce({ stato: 'failed' }).parola, 'Non riuscita', 'e una voce di ieri, senza i campi nuovi, non cambia di una virgola');
+  assert.equal(statoRicerca('failed').testo, 'Non riuscita', 'la vecchia firma a stringa continua a funzionare');
+});
+
+test('⭐⭐⭐⭐ BC-44 — «Riprendi» esiste quando il SERVER dice che si può, non quando lo indovina il frontend', () => {
+  /*
+   * ⛔ Fino a ieri la voce compariva su OGNI `failed`, e su metà di quei casi la rotta rispondeva
+   *   409: un pulsante che promette ciò che nessuna rotta può mantenere. Adesso la condizione è
+   *   la STESSA che fa rispettare `riprendi()` lato server, e viaggia nella voce.
+   */
+  assert.equal(puoRiprendere({ stato: 'failed', riprendibile: true }), true);
+  assert.equal(puoRiprendere({ stato: 'failed', riprendibile: false }), false, '⛔ una causa che si ripeterebbe identica non merita un pulsante');
+  assert.equal(puoRiprendere({ stato: 'done', riprendibile: false }), false);
+  assert.equal(puoRiprendere({ stato: 'paused', riprendibile: true }), true);
+  // ⛔ E senza il campo (una risposta di ieri, o una pagina aperta durante l'aggiornamento del server) vale la regola di prima.
+  assert.equal(puoRiprendere({ stato: 'failed' }), true, 'un menu in meno sarebbe peggio di un 409 raro');
+  assert.equal(puoRiprendere({ stato: 'running' }), false);
 });
