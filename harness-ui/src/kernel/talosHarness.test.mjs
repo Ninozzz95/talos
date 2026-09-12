@@ -119,7 +119,7 @@ import {
     forgeRisolviEspressione, forgeValutaCondizione, validaManifestForge, eseguiFlowForge, formattaEsitoForge,
     CAPACITA_FORGE,
     ATTREZZI_OPENAI, ATTREZZI_ESTESI_OPENAI,
-    ambienteSenzaCredenziali, CHIAVI_CREDENZIALI_DA_NASCONDERE,
+    ambienteSenzaCredenziali, eUnaCredenziale, CHIAVI_CREDENZIALI_DA_NASCONDERE,
     comandoSenzaRecupero, creaRicevutaOperazione, postcondizioneDiScrivi,
     serializzaCanonica, generaChiaviFirmaRicevute, verificaFirmaRicevuta,
     avanzaCatena, verdettoTrifecta, rischioEffettivo, SICUREZZA_PER_ATTREZZO, CATENA_VUOTA,
@@ -437,8 +437,11 @@ describe('LEVA 4 — l uscita del giudice, dove sta la diagnosi', () => {
         const r = uscitaUtile(t, 4_000)
         assert.ok(r.startsWith('A'), 'la testa resta: dice QUALI test sono rossi')
         assert.ok(r.endsWith('Z'), 'la coda resta: dice PERCHE')
-        assert.match(r, /caratteri tolti nel mezzo/,
-            'un taglio silenzioso si legge come «era tutto qui»')
+        // 10/09 (677672a6, «tre bugie del kernel»): il marcatore dichiara QUANTI caratteri ha
+        // tolto, non solo che ha tagliato. 10.000 caratteri con budget 4.000 ⇒ 6.000 tolti.
+        const marcatore = r.match(/tolti (\d+) caratteri dal mezzo/)
+        assert.ok(marcatore, 'un taglio silenzioso si legge come «era tutto qui»')
+        assert.equal(Number(marcatore[1]), 6_000, 'il numero dichiarato è quello vero')
     })
 
     /*
@@ -1020,30 +1023,60 @@ describe('talosLavora — il ciclo intero, con una rete finta', () => {
  * conta per davvero — un comando VERO non vede la chiave — è live sotto,
  * un vero `node -e` spawnato con `spawn` reale, stesso principio "si
  * strumenta sempre" per un fix di sicurezza.
+ *
+ * ⛔ 11/09 (97992536, D-10E): lo scrub non toglie più UNA chiave per nome ma ogni variabile
+ * dalla FORMA di credenziale (`TOKEN`, `SECRET`, `*_KEY`, `API_KEY`, `AUTH`…), salvo la lista
+ * dichiarata dei non-segreti (`SSH_AUTH_SOCK`, `KEYBOARD_LAYOUT`…). I due test qui sotto
+ * contavano ancora «una sola chiave tolta» e diventavano rossi su ogni macchina con altre
+ * credenziali in ambiente (13/09: cinque sulla macchina dell'owner). Ora l'atteso si calcola
+ * con `eUnaCredenziale`, la stessa regola del prodotto, e si prova nei due versi.
  */
 describe('ambienteSenzaCredenziali — lo scrub delle credenziali passate ai sottoprocessi', () => {
-    it('⭐⭐⭐ toglie OPENROUTER_API_KEY, preserva tutto il resto', () => {
-        const originale = { ...process.env, OPENROUTER_API_KEY: 'sk-vera-non-deve-uscire', ALTRA_VARIABILE: 'resta' }
+    it('⭐⭐⭐ toglie OPENROUTER_API_KEY e ogni altra credenziale per forma, preserva tutto il resto', () => {
         const vecchioValore = process.env.OPENROUTER_API_KEY
         process.env.OPENROUTER_API_KEY = 'sk-vera-non-deve-uscire'
         process.env.ALTRA_VARIABILE = 'resta'
+        process.env.TALOS_PROVA_TOKEN = 'anche-questa-non-deve-uscire'
         try {
             const pulito = ambienteSenzaCredenziali()
             assert.equal(pulito.OPENROUTER_API_KEY, undefined)
+            assert.equal(pulito.TALOS_PROVA_TOKEN, undefined, 'una credenziale riconosciuta dalla forma, non dal nome')
             assert.equal(pulito.ALTRA_VARIABILE, 'resta')
-            assert.equal(Object.keys(pulito).length, Object.keys(originale).length - 1,
-                'solo la credenziale è tolta, nessuna altra chiave sparisce per errore')
+            const tolte = Object.keys(process.env).filter((k) => !(k in pulito))
+            const attese = Object.keys(process.env).filter((k) => eUnaCredenziale(k))
+            assert.deepEqual(tolte.sort(), attese.sort(),
+                'spariscono ESATTAMENTE le variabili che il prodotto dichiara credenziali, nessuna altra')
+            for (const k of Object.keys(pulito)) assert.equal(pulito[k], process.env[k], `${k} arriva intatta`)
         } finally {
             if (vecchioValore === undefined) delete process.env.OPENROUTER_API_KEY
             else process.env.OPENROUTER_API_KEY = vecchioValore
             delete process.env.ALTRA_VARIABILE
+            delete process.env.TALOS_PROVA_TOKEN
         }
     })
 
-    it('⛔⛔ AL CONTRARIO — senza la credenziale mai impostata, il risultato è identico a process.env (nessuna chiave inventata, nessuna altra tolta)', () => {
+    it('⛔⛔ AL CONTRARIO — senza credenziali in ambiente il risultato è identico a process.env (nessuna chiave inventata, nessuna tolta)', () => {
+        // Le credenziali vere della macchina restano sotto chiave nel test: si guardano solo le
+        // variabili che NON hanno forma di credenziale, e per quelle non deve cambiare niente.
+        const vecchioValore = process.env.OPENROUTER_API_KEY
         delete process.env.OPENROUTER_API_KEY
-        const pulito = ambienteSenzaCredenziali()
-        assert.deepEqual(Object.keys(pulito).sort(), Object.keys(process.env).sort())
+        try {
+            const pulito = ambienteSenzaCredenziali()
+            const nonSegrete = Object.keys(process.env).filter((k) => !eUnaCredenziale(k))
+            assert.deepEqual(Object.keys(pulito).sort(), nonSegrete.sort())
+            assert.equal(Object.keys(pulito).some((k) => eUnaCredenziale(k)), false, 'nessuna credenziale passa')
+        } finally {
+            if (vecchioValore !== undefined) process.env.OPENROUTER_API_KEY = vecchioValore
+        }
+    })
+
+    it('⭐ la forma decide, e i falsi positivi dichiarati restano fuori dallo scrub', () => {
+        for (const k of ['DEEPSEEK_API_KEY', 'GITHUB_TOKEN', 'AWS_SECRET_ACCESS_KEY', 'DB_PASSWORD', 'NPM_AUTH']) {
+            assert.equal(eUnaCredenziale(k), true, `${k} è una credenziale`)
+        }
+        for (const k of ['PATH', 'HOME', 'SSH_AUTH_SOCK', 'KEYBOARD_LAYOUT', 'AUTHORITY', 'TALOS_HARNESS_UI_PORT']) {
+            assert.equal(eUnaCredenziale(k), false, `${k} non è una credenziale`)
+        }
     })
 
     it('⭐ CHIAVI_CREDENZIALI_DA_NASCONDERE contiene esattamente il nome vero usato altrove in questo ecosistema (provaTalos.mjs, harness-ui/src/config.mjs)', () => {
