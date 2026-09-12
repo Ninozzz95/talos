@@ -101,8 +101,10 @@ export function eFonteDiretta(fonte) {
  * @returns {Array<{id:string, etichetta:string, conto:number|null, collegato:boolean}>}
  */
 export function fontiDelSelettore({ openrouter = null, locali = null, diretti = null } = {}) {
+  const etichetta = (nome, modelli) => modelli?.some(m => m.catalogo?.fonte === 'riserva')
+    ? `${nome} · elenco di riserva` : nome;
   const fonti = [
-    { id: 'openrouter', etichetta: 'OpenRouter', conto: contaOppureNull(openrouter), collegato: true },
+    { id: 'openrouter', etichetta: etichetta('OpenRouter', openrouter), conto: contaOppureNull(openrouter), collegato: true },
     { id: 'locali', etichetta: 'Locali', conto: contaOppureNull(locali), collegato: true },
   ];
   for (const provider of PROVIDER_DIRETTI) {
@@ -111,7 +113,7 @@ export function fontiDelSelettore({ openrouter = null, locali = null, diretti = 
     if (provider.soloSeCollegato && !Array.isArray(elenco)) continue;
     fonti.push({
       id: provider.id,
-      etichetta: provider.etichetta,
+      etichetta: etichetta(provider.etichetta, elenco),
       conto: contaOppureNull(elenco),
       // `collegato` è falso solo quando SAPPIAMO che la chiave manca: prima di leggere non si accusa.
       collegato: !diretti || Array.isArray(elenco),
@@ -177,6 +179,13 @@ export function descrizioneModelloSelettore(modello = {}) {
   ];
   if (modello.alias) dettagli.unshift('Ultima versione');
   if (modello.prezziPerMilione?.tiers?.length || modello.prezziPerMilione?.context_over_200k) dettagli.push('Prezzi variabili con il contesto');
+  if (modello.catalogo?.fonte === 'riserva') {
+    const data = modello.catalogo.dataRiserva;
+    const parti = typeof data === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/u.exec(data);
+    dettagli.unshift(`Catalogo non raggiungibile: elenco di riserva${parti ? ` del ${parti[3]}/${parti[2]}/${parti[1]}` : ''}`);
+    if (modello.catalogo.avvisi?.some(a => a.codice === 'CATALOG_CACHE_CORRUPT')) dettagli.push('Copia danneggiata rifiutata');
+    return dettagli.join(' · ');
+  }
   const data = modello.catalogo?.aggiornatoAlle;
   dettagli.push(typeof data === 'string' && Number.isFinite(Date.parse(data))
     ? `Dati del ${new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome' }).format(new Date(data))}`

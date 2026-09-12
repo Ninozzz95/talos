@@ -14,6 +14,8 @@
  * `vendor/nome-modello` che talosHarness.mjs instrada.
  */
 
+import { catalogoDiRiservaPer } from './provider-registry.mjs';
+
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const TTL_PREDEFINITO_MS = 10 * 60 * 1000; // 10 minuti — non richiamare OpenRouter a ogni apertura del foglio.
 
@@ -77,7 +79,7 @@ export function createModelCatalog({
 
   /**
    * @param {{forzaAggiornamento?: boolean}} [opts]
-   * @returns {Promise<{modelli: Array, daCache: boolean, aggiornatoAlle: string}>}
+   * @returns {Promise<{modelli: Array, daCache: boolean, aggiornatoAlle: string|null}>}
    */
   async function ottieni({ forzaAggiornamento = false } = {}) {
     const ora = clock().getTime();
@@ -85,33 +87,42 @@ export function createModelCatalog({
       return { modelli: cache.modelli, daCache: true, aggiornatoAlle: new Date(cache.creatoAlle).toISOString() };
     }
 
-    let risposta;
     try {
-      risposta = await fetchFn(url, { headers: { Accept: 'application/json' } });
-    } catch (error) {
-      // ⛔ un errore di rete non è "zero modelli": la UI deve poterli distinguere (stesso principio di discoveryProblems nel mobile).
-      throw new ModelCatalogError(`Catalogo OpenRouter non raggiungibile: ${error.message}`, 'CATALOG_UNREACHABLE');
-    }
-    if (!risposta.ok) {
-      throw new ModelCatalogError(`Catalogo OpenRouter ha risposto ${risposta.status}`, 'CATALOG_UPSTREAM_ERROR');
-    }
-    let corpo;
-    try {
-      corpo = await risposta.json();
+      let risposta;
+      try {
+        risposta = await fetchFn(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+      } catch {
+        // ⛔ un errore di rete non è "zero modelli": la UI deve poterli distinguere (stesso principio di discoveryProblems nel mobile).
+        throw new ModelCatalogError('Catalogo OpenRouter non raggiungibile.', 'CATALOG_UNREACHABLE');
+      }
+      if (!risposta.ok) {
+        throw new ModelCatalogError(`Catalogo OpenRouter ha risposto ${risposta.status}`, 'CATALOG_UPSTREAM_ERROR');
+      }
+      let corpo;
+      try {
+        corpo = await risposta.json();
+      } catch {
+        throw new ModelCatalogError('Catalogo OpenRouter: risposta non valida', 'CATALOG_UPSTREAM_ERROR');
+      }
+      if (!Array.isArray(corpo?.data)) {
+        throw new ModelCatalogError('Catalogo OpenRouter: formato inatteso', 'CATALOG_UPSTREAM_ERROR');
+      }
+
+      const modelli = corpo.data
+        .map(normalizza)
+        .filter((modello) => modello.id !== '')
+        .sort((a, b) => a.provider.localeCompare(b.provider) || a.nome.localeCompare(b.nome));
+
+      cache = { creatoAlle: ora, modelli };
+      return { modelli, daCache: false, aggiornatoAlle: new Date(ora).toISOString() };
     } catch {
-      throw new ModelCatalogError('Catalogo OpenRouter: risposta non valida', 'CATALOG_UPSTREAM_ERROR');
+      // P-F: la copia reale ha precedenza; la riserva non entra mai nella cache del catalogo.
+      if (cache) return { modelli: structuredClone(cache.modelli), daCache: true, fonte: 'openrouter',
+        aggiornatoAlle: new Date(cache.creatoAlle).toISOString(),
+        etaCacheMs: Math.max(0, clock().getTime() - cache.creatoAlle), fallbackRete: true,
+        motivo: 'Catalogo non raggiungibile: viene usata la copia salvata.' };
+      return catalogoDiRiservaPer('openrouter');
     }
-    if (!Array.isArray(corpo?.data)) {
-      throw new ModelCatalogError('Catalogo OpenRouter: formato inatteso', 'CATALOG_UPSTREAM_ERROR');
-    }
-
-    const modelli = corpo.data
-      .map(normalizza)
-      .filter((modello) => modello.id !== '')
-      .sort((a, b) => a.provider.localeCompare(b.provider) || a.nome.localeCompare(b.nome));
-
-    cache = { creatoAlle: ora, modelli };
-    return { modelli, daCache: false, aggiornatoAlle: new Date(ora).toISOString() };
   }
 
   return Object.freeze({ ottieni });

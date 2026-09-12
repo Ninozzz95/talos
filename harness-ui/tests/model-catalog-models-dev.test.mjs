@@ -29,6 +29,98 @@ const ORA = Date.parse('2026-09-12T10:00:00Z');
 const risposta = (data = FIXTURE, etag = 'W/"prima"') => Response.json(data, { headers: etag ? { ETag: etag } : {} });
 const senzaRete = async () => { throw new Error('rete assente con informazioni riservate'); };
 
+test('PF-MD-01 — ogni diretto remoto: rete giù senza copia restituisce riserva datata senza segreti', async t => {
+  const { catalogo } = await banco(t, { fetchFn: senzaRete });
+  const rotta = createProviderModelCatalog({ catalogo, chiaveConfigurata: () => true });
+  for (const id of ['openai', 'deepseek', 'zai', 'anthropic', 'gemini']) {
+    const r = await rotta.ottieni(id);
+    assert.equal(r.fonte, 'riserva');
+    assert.equal(r.motivo, 'catalogo non raggiungibile: elenco di riserva del 12/09/2026');
+    assert.ok(r.modelli.length > 0);
+    assert.deepEqual(r.modelliDiRiserva, r.modelli);
+    assert.equal(r.daCache, false);
+    assert.equal(r.aggiornatoAlle, null);
+    assert.equal(r.etaCacheMs, null);
+    assert.equal(r.credenzialeVerificata, false);
+    for (const m of r.modelli) {
+      assert.equal(m.catalogo.fonte, 'riserva');
+      assert.equal(m.catalogo.motivo, r.motivo);
+      assert.equal(m.capacita.toolCall, true);
+      assert.equal(m.prezzoPrompt, null);
+      assert.equal(m.contextLength, null);
+      assert.equal(modelloRichiestaValido(m.id), true);
+      assert.ok(m.id.startsWith(`${id}:`));
+    }
+    assert.doesNotMatch(JSON.stringify(r), /informazioni riservate/);
+  }
+});
+
+test('PF-MD-02 — recupero dopo rinvio: torna al catalogo senza riserva, anche dopo riavvio', async t => {
+  let disponibile = false, ora = ORA;
+  const { catalogo, opts } = await banco(t, { clock: () => new Date(ora), retryMs: 1,
+    fetchFn: async () => disponibile ? risposta() : senzaRete() });
+  const rotta = createProviderModelCatalog({ catalogo, chiaveConfigurata: () => true });
+  assert.equal((await rotta.ottieni('deepseek')).fonte, 'riserva');
+  disponibile = true; ora += 2;
+  const r = await rotta.ottieni('deepseek');
+  assert.equal(r.fonte, 'models.dev');
+  assert.equal(r.motivo, null);
+  assert.equal(r.modelliDiRiserva, undefined);
+  assert.equal(r.modelli[0].modelId, 'modello-prova');
+  const nuovo = createProviderModelCatalog({ catalogo: createModelsDevCatalog({ ...opts, fetchFn: senzaRete }), chiaveConfigurata: () => true });
+  assert.equal((await nuovo.ottieni('deepseek')).fonte, 'models.dev');
+});
+
+test('PF-MD-03 — copia valida prioritaria; copia corrotta rifiutata con riserva e avviso', async t => {
+  const { catalogo, opts } = await banco(t);
+  await catalogo.ottieni('deepseek');
+  const crea = () => createProviderModelCatalog({ catalogo: createModelsDevCatalog({ ...opts,
+    ttlMs: 1, clock: () => new Date(ORA + 100), fetchFn: senzaRete }), chiaveConfigurata: () => true });
+  const copia = await crea().ottieni('deepseek');
+  assert.equal(copia.fonte, 'models.dev');
+  assert.equal(copia.fallbackRete, true);
+  assert.equal(copia.modelliDiRiserva, undefined);
+  await writeFile(catalogo.percorsoCache, '{rotto');
+  const riserva = await crea().ottieni('deepseek');
+  assert.equal(riserva.fonte, 'riserva');
+  assert.ok(riserva.avvisi.some(a => a.codice === 'CATALOG_CACHE_CORRUPT'));
+});
+
+test('PF-MD-04 — rotta HTTP senza server: 200 con riserva, poi catalogo; senza chiave resta 422', async t => {
+  let collegato = true, disponibile = false;
+  const { catalogo } = await banco(t, { retryMs: 0, fetchFn: async () => disponibile ? risposta() : senzaRete() });
+  const rotta = createProviderModelCatalog({ catalogo, chiaveConfigurata: () => collegato });
+  const app = createHttpApp({ staticHandler: async () => null, catalogoFornitoriFn: rotta.ottieni });
+  const richiesta = () => new Promise(resolve => {
+    let status;
+    app({ method: 'GET', url: '/api/v1/providers/deepseek/models', headers: {} }, {
+      writeHead(codice) { status = codice; }, end(corpo) { resolve({ status, corpo: JSON.parse(corpo.toString()) }); },
+    });
+  });
+  const giu = await richiesta();
+  assert.equal(giu.status, 200);
+  assert.equal(giu.corpo.data.fonte, 'riserva');
+  disponibile = true;
+  const su = await richiesta();
+  assert.equal(su.status, 200);
+  assert.equal(su.corpo.data.fonte, 'models.dev');
+  collegato = false;
+  assert.equal((await richiesta()).status, 422);
+});
+
+test('PF-MD-05 — HTTP/JSON invalidi senza copia: riserva; catalogo valido vuoto resta fatto esplicito', async t => {
+  const { opts } = await banco(t);
+  for (const fetchFn of [async () => new Response(null, { status: 503 }), async () => new Response('{rotto')]) {
+    const rotta = createProviderModelCatalog({ catalogo: createModelsDevCatalog({ ...opts, fetchFn }), chiaveConfigurata: () => true });
+    assert.equal((await rotta.ottieni('deepseek')).fonte, 'riserva');
+  }
+  const rotta = createProviderModelCatalog({ catalogo: createModelsDevCatalog({ ...opts,
+    fetchFn: async () => risposta({ deepseek: provider('deepseek', []) }) }), chiaveConfigurata: () => true });
+  const r = await rotta.ottieni('deepseek');
+  assert.equal(r.fonte, 'models.dev');
+  assert.deepEqual(r.modelli, []);
+});
+
 async function banco(t, extra = {}) {
   const cartellaStore = await mkdtemp(join(tmpdir(), 'talos-pe-test-'));
   t.after(() => rm(cartellaStore, { recursive: true, force: true }));

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import * as APIRegistro from '../src/provider-registry.mjs';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -49,6 +50,112 @@ import { PROVIDER_DIRETTI } from '../frontend/src/components/fonti-modelli.js';
 
 const RADICE = new URL('../', import.meta.url);
 const leggi = (relativo) => readFileSync(fileURLToPath(new URL(relativo, RADICE)), 'utf8');
+
+// Proiezione indipendente di https://models.dev/api.json, GET 12/09/2026.
+// SHA-256 completo: f8c50427f9a7e5bd44ec1079a3db1899781b486e2b4e4da5f462ac6789ce19ee.
+// Solo fatti id/tool_call; non si costruisce la fixture a partire dal registro sotto prova.
+const RISERVE_PUBBLICHE = {
+  openai: { 'gpt-5-nano': true, 'gpt-5-mini': true },
+  deepseek: { 'deepseek-flash': true, 'deepseek-v4-pro': true },
+  zai: { 'glm-4.7-flash': true, 'glm-4.7': true },
+  anthropic: { 'claude-haiku-4-5-20251001': true, 'claude-sonnet-5': true },
+  google: { 'gemini-2.5-flash-lite': true, 'gemini-3.1-flash-lite': true },
+  openrouter: { 'liquid/lfm-2.5-2.6b:free': true, 'openai/gpt-5-nano': true },
+};
+
+function verificaRiservePubbliche(registro, catalogo) {
+  for (const r of Object.values(registro)) {
+    if (!r.destinazioneChat || r.catalogo.fonte !== 'fornitore') continue;
+    for (const m of r.modelliDiRiserva) {
+      assert.ok(Object.hasOwn(catalogo[r.modelsDevId] ?? {}, m.id), `${r.id}/${m.id}: assente dal catalogo pubblico`);
+      assert.equal(catalogo[r.modelsDevId][m.id], true, `${r.id}/${m.id}: strumenti non dichiarati dal catalogo pubblico`);
+    }
+  }
+}
+
+test('PF-PAR-01 — riserve non vuote per ogni chat remota; locali e download dichiarano null', () => {
+  for (const r of Object.values(REGISTRO_FORNITORI)) {
+    if (r.destinazioneChat && r.catalogo.fonte === 'fornitore') {
+      assert.ok(r.modelliDiRiserva?.length > 0, r.id);
+      assert.ok(Object.isFrozen(r.modelliDiRiserva));
+      for (const m of r.modelliDiRiserva) {
+        assert.ok(Object.isFrozen(m));
+        assert.equal(m.toolCalling, true);
+        assert.match(m.fonte, /^https:\/\//u);
+        assert.equal(m.data, '2026-09-12');
+      }
+    } else {
+      assert.equal(r.modelliDiRiserva, null, r.id);
+      assert.equal(r.modelloAusiliario, null, r.id);
+    }
+  }
+});
+
+test('PF-PAR-02 — campi obbligatori: assenza, vuoto, duplicati e ausiliario fuori lista vengono respinti', () => {
+  const base = REGISTRO_FORNITORI.deepseek;
+  for (const campo of ['modelliDiRiserva', 'modelloAusiliario']) {
+    const r = { ...base }; delete r[campo];
+    assert.throws(() => verificaRegistro({ deepseek: r }), ProviderRegistryError);
+  }
+  for (const modifica of [
+    { modelliDiRiserva: [] }, { modelliDiRiserva: null }, { modelloAusiliario: 'inventato' },
+    { modelliDiRiserva: [base.modelliDiRiserva?.[0], base.modelliDiRiserva?.[0]] },
+    { modelliDiRiserva: [{ ...base.modelliDiRiserva?.[0], toolCalling: false }] },
+    { modelliDiRiserva: [{ ...base.modelliDiRiserva?.[0], fonte: '' }] },
+  ]) assert.throws(() => verificaRegistro({ deepseek: { ...base, ...modifica } }), ProviderRegistryError);
+  assert.equal(verificaRegistro({ deepseek: { ...base, modelloAusiliario: null } }), true, 'null esplicito ammesso');
+});
+
+test('PF-PAR-03 — lettore ausiliario puro: id upstream esatti, null dichiarati e id sconosciuti', () => {
+  assert.equal(typeof APIRegistro.modelloAusiliarioPer, 'function');
+  const attesi = {
+    openai: 'gpt-5-nano', deepseek: 'deepseek-flash', zai: 'glm-4.7-flash',
+    anthropic: 'claude-haiku-4-5-20251001', gemini: 'gemini-2.5-flash-lite',
+    openrouter: 'liquid/lfm-2.5-2.6b:free', ollama: null, lmstudio: null, local: null, huggingface: null,
+  };
+  for (const [id, modello] of Object.entries(attesi)) assert.equal(APIRegistro.modelloAusiliarioPer(id), modello, id);
+  for (const id of ['inesistente', '__proto__', 'constructor', null, undefined]) assert.equal(APIRegistro.modelloAusiliarioPer(id), null);
+});
+
+test('PF-PAR-04 — parità pubblica nei due versi: nome inventato e modello senza strumenti falliscono', () => {
+  verificaRiservePubbliche(REGISTRO_FORNITORI, RISERVE_PUBBLICHE);
+  const base = REGISTRO_FORNITORI.deepseek;
+  assert.throws(() => verificaRiservePubbliche({ deepseek: { ...base,
+    modelliDiRiserva: [{ ...base.modelliDiRiserva?.[0], id: 'modello-inventato-pf' }],
+  } }, RISERVE_PUBBLICHE), /assente dal catalogo pubblico/);
+  assert.throws(() => verificaRiservePubbliche(REGISTRO_FORNITORI, {
+    ...RISERVE_PUBBLICHE, deepseek: { ...RISERVE_PUBBLICHE.deepseek, 'deepseek-flash': false },
+  }), /strumenti non dichiarati/);
+});
+
+test('PF-PAR-05 — cancello sul JSON pubblico completo acquisito senza chiavi', {
+  skip: !process.env.TALOS_PF_CATALOGO_PUBBLICO,
+}, () => {
+  const pubblico = JSON.parse(readFileSync(process.env.TALOS_PF_CATALOGO_PUBBLICO, 'utf8'));
+  const capacita = Object.fromEntries(Object.entries(pubblico).map(([id, p]) => [id,
+    Object.fromEntries(Object.entries(p.models).map(([id, m]) => [id, m.tool_call])),
+  ]));
+  verificaRiservePubbliche(REGISTRO_FORNITORI, capacita);
+  const openrouter = JSON.parse(readFileSync(process.env.TALOS_PF_OPENROUTER_PUBBLICO, 'utf8'));
+  for (const m of REGISTRO_FORNITORI.openrouter.modelliDiRiserva) {
+    const pubblico = openrouter.data.find(p => p.id === m.id);
+    assert.ok(pubblico?.supported_parameters?.includes('tools'), `${m.id}: strumenti assenti da OpenRouter`);
+  }
+  const ausiliario = openrouter.data.find(m => m.id === APIRegistro.modelloAusiliarioPer('openrouter'));
+  assert.equal(ausiliario.pricing.prompt, '0');
+  assert.equal(ausiliario.pricing.completion, '0');
+});
+
+test('PF-PAR-06 — la riserva restituita non modifica il registro; locali e ignoti restano null', () => {
+  const r = APIRegistro.catalogoDiRiservaPer('deepseek');
+  r.modelli[0].nome = 'Alterato';
+  r.modelli[0].catalogo.fonte = 'inventata';
+  const nuovo = APIRegistro.catalogoDiRiservaPer('deepseek');
+  assert.equal(nuovo.modelli[0].nome, 'DeepSeek V4.1 Flash');
+  assert.equal(nuovo.modelli[0].catalogo.fonte, 'riserva');
+  assert.ok(REGISTRO_FORNITORI.deepseek.modelliDiRiserva.every(m => Object.isFrozen(m)));
+  for (const id of ['ollama', 'lmstudio', 'local', 'huggingface', '__proto__']) assert.equal(APIRegistro.catalogoDiRiservaPer(id), null);
+});
 
 /** Gli insiemi, confrontati come insiemi e non come array: l'ordine è una scelta visiva. */
 function stessiId(effettivi, attesi, dove) {
