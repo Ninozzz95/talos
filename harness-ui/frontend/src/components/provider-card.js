@@ -1,4 +1,6 @@
 // ProviderCard: credenziale presente, configurazione e sonda restano tre fatti distinti.
+/** 12/09 (review P-K): il badge dell'indirizzo. Senza un predefinito (Azure, Vertex, Bedrock) non si dice «predefinito» di un campo vuoto. */
+export function etichettaIndirizzo(row={}){if(!row.supportsEndpoint)return null;if(row.endpointConfigured)return 'Indirizzo personalizzato';return row.endpoint?'Indirizzo predefinito':'Indirizzo da impostare';}
 export function statoProvider(row={},prova=null){
  const esito=prova?.esito,labels={'in-corso':'Prova in corso…','non-autorizzato':'Credenziale rifiutata',irraggiungibile:'Non raggiungibile','non-provabile':'Da configurare',errore:'Prova non riuscita'};
  const conteggio=Number.isInteger(prova?.modelli)&&prova.modelli>=0?' · '+prova.modelli+' modelli':'';
@@ -84,7 +86,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  const d=statoProvider(row,prova),busy=occupato||d.occupato,card=el('article','talos-card talos-provider');card.dataset.c='ProviderCard';card.dataset.providerId=row.id;card.setAttribute('aria-busy',String(busy));if(prova)card.dataset.provaEsito=prova.esito;
  const head=el('button','talos-provider__head');head.type='button';head.dataset.providerToggle=row.id;head.setAttribute('aria-expanded',String(aperta));head.setAttribute('aria-controls','provider-body-'+row.id);
  const title=el('strong','talos-provider__name',row.label||row.id),marks=el('span','talos-cluster');head.append(title,marks);
- for(const [txt,tone]of [[d.chiave,row.keyConfigured?'success':''],[row.supportsEndpoint?(row.endpointConfigured?'Indirizzo personalizzato':'Indirizzo predefinito'):null,''],[d.prova,d.tono]])if(txt){const badge=el('span','talos-badge talos-badge--sm'+(tone?' talos-badge--'+tone:''),txt);badge.dataset.c='Badge';marks.append(badge);}card.append(head);
+ for(const [txt,tone]of [[d.chiave,row.keyConfigured?'success':''],[etichettaIndirizzo(row),row.supportsEndpoint&&!row.endpointConfigured&&!row.endpoint?'warning':''],[d.prova,d.tono]])if(txt){const badge=el('span','talos-badge talos-badge--sm'+(tone?' talos-badge--'+tone:''),txt);badge.dataset.c='Badge';marks.append(badge);}card.append(head);
  const body=el('div','talos-provider__body');body.id='provider-body-'+row.id;body.hidden=!aperta;
  {
  /*
