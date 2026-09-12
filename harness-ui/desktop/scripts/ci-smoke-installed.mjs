@@ -42,6 +42,19 @@ export async function provaInstallato({ executablePath, dataDir }) {
     await pagina.reload();
     misure.healthDopoReload = await pagina.evaluate(async () => (await fetch('/api/v1/health', { signal: AbortSignal.timeout(5000) })).status);
     assert.equal(misure.healthDopoReload, 200);
+    // R-06: RAM a riposo del prodotto installato, 10 s dopo la pagina pronta, senza interazione.
+    // Guscio: app.getAppMetrics() (docs/api/app.md, memory.workingSetSize in KB per ogni processo
+    // di Electron: Browser, GPU, renderer, utility). Figlio: WorkingSet64 del pid via PowerShell,
+    // come in R-01 (tests/guscio.spec.mjs). Fonte Electron docs consultata il 13/09/2026.
+    const RIPOSO_MS = 10000;
+    await attendi(RIPOSO_MS);
+    const processiGuscio = await app.evaluate(({ app }) => app.getAppMetrics().map(m => ({ tipo: m.type, pid: m.pid, workingSetKB: m.memory.workingSetSize })));
+    const { spawnSync } = await import('node:child_process');
+    const ws = spawnSync('powershell.exe', ['-NoProfile', '-Command', `(Get-Process -Id ${Number(pidFiglio)}).WorkingSet64`], { encoding: 'utf8', windowsHide: true, timeout: 15000 });
+    const figlioByte = Number(String(ws.stdout).trim());
+    assert.ok(Number.isFinite(figlioByte) && figlioByte > 0, 'WorkingSet del backend non letto: ' + String(ws.stderr).slice(0, 200));
+    const guscioByte = processiGuscio.reduce((s, p) => s + p.workingSetKB * 1024, 0);
+    misure.memoriaRiposo = { riposoMs: RIPOSO_MS, guscioByte, processiGuscio, figlioByte, totaleByte: guscioByte + figlioByte };
   } finally {
     if (app) {
       const chiusura = performance.now();
