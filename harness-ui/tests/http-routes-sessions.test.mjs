@@ -182,9 +182,13 @@ function registroFinto() {
     ultimeOpzioniAvvioLibero: null,
     avviaLibero(opzioni = {}) {
       this.ultimeOpzioniAvvioLibero = opzioni;
-      if (opzioni.cartellaLibera && opzioni.permessi !== 'Full access') {
-        return { erroreAvvio: 'cartellaLibera richiede il permesso "Full access"', code: 'QUERY_INVALID' };
-      }
+      /*
+       * ⛔ 12/09 — BC-14: qui la finta replicava il cancello «cartellaLibera richiede
+       * "Full access"» del registro vero. Quel cancello non esiste più (vedi la doc di
+       * `avviaLibero` in session-registry.mjs): l'ambito lo tiene `cartellaGiaScelta`, non
+       * il permesso. Tolto anche dalla finta — una finta che continua a rifiutare farebbe
+       * passare per verde una rotta che nella realtà accetta.
+       */
       contatore += 1;
       const sessionId = `sess-${contatore}`;
       sessioni.set(sessionId, { eventi: [], ascoltatori: new Set(), taskId: `libero:${opzioni.cartellaId ?? 'full-access'}`, avviataAlle: '2026-08-24T18:00:00.000Z', conclusa: false });
@@ -649,15 +653,33 @@ test('⭐⭐⭐ POST /api/v1/sessions/custom con cartellaLibera+permessi:"Full a
   assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero.cartellaId, undefined);
 });
 
-test('⛔⛔⛔ AL CONTRARIO — POST /api/v1/sessions/custom con cartellaLibera ma SENZA "Full access": il registro rifiuta, non l\'HTTP — verificato che raggiunga comunque il cancello vero', async (t) => {
+/*
+ * ⛔⛔⛔ 12/09 — BC-14. Questa prova si aspettava un 400: `cartellaLibera` senza "Full access"
+ * era rifiutata dal registro. Invertita insieme al cancello (vedi session-registry.test.mjs).
+ * Il pezzo che resta e che conta: la rotta HTTP non ha MAI avuto un cancello proprio sui
+ * permessi — valida la FORMA (i quattro nomi ammessi, cartellaId XOR cartellaLibera) e inoltra.
+ * Verificato nel sorgente di http-app.mjs, che questo lotto non tocca.
+ */
+test('⭐⭐⭐ BC-14 — POST /api/v1/sessions/custom con cartellaLibera e "Scrive nel progetto" PARTE, e il permesso arriva al registro intatto', async (t) => {
   const { base, sessionRegistry } = await listen(t);
   const risposta = await fetch(`${base}/api/v1/sessions/custom`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ cartellaLibera: 'C:/qualunque/percorso', consegna: 'fai qualcosa', permessi: 'Workspace write' }),
   });
+  assert.equal(risposta.status, 200, 'una cartella scelta a mano non richiede più il permesso più alto');
+  assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero.cartellaLibera, 'C:/qualunque/percorso');
+  assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero.permessi, 'Workspace write', 'il permesso scelto viaggia verbatim: la rotta non lo promuove a "Full access"');
+});
+
+test('⛔⛔ AL CONTRARIO — un permesso INVENTATO resta rifiutato dalla FORMA, prima del registro', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const risposta = await fetch(`${base}/api/v1/sessions/custom`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cartellaLibera: 'C:/qualunque/percorso', consegna: 'fai qualcosa', permessi: 'Tutto quanto' }),
+  });
   assert.equal(risposta.status, 400);
   assert.equal((await risposta.json()).error.code, 'QUERY_INVALID');
-  assert.ok(sessionRegistry.ultimeOpzioniAvvioLibero, 'la richiesta HA raggiunto avviaLibero (la FORMA del corpo era valida) — è il registro a dire no, stesso cancello di session-registry.test.mjs');
+  assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero, null, 'togliere il cancello sul permesso NON ha aperto la grammatica dei permessi: restano quattro nomi');
 });
 
 test('⛔⛔ AL CONTRARIO — POST /api/v1/sessions/custom con SIA cartellaId CHE cartellaLibera: 400 PRIMA di raggiungere il registro', async (t) => {

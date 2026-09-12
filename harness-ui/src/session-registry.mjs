@@ -3495,15 +3495,50 @@ export function createSessionRegistry({
      * corpus benchmark — scrive DIRETTAMENTE sul progetto vero, nessuna
      * copia usa-e-getta (vedi la doc di `custom-task.mjs` sul perché).
      *
-     * ⭐⭐⭐ 28/8 — `cartellaLibera` (piano elegant-spinning-dongarra.md,
-     * permesso "Full access") sostituisce `cartellaId` — MUTUAMENTE
-     * ESCLUSIVI, verificato QUI, non solo in `custom-task.mjs`, perché il
-     * confine che conta è "questa richiesta HTTP ha dichiarato Full
-     * access?", non "il percorso è valido?" (quello è già garantito da
-     * `custom-task.mjs`, questo è un secondo cancello: mai un percorso
-     * a piacere accettato con un permesso diverso da Full access, ANCHE
-     * SE il frontend non dovesse mai offrire quella combinazione — un
-     * client HTTP diretto non passa dal frontend).
+     * ⭐⭐⭐ 28/8 — `cartellaLibera` (piano elegant-spinning-dongarra.md)
+     * sostituisce `cartellaId` — MUTUAMENTE ESCLUSIVI, verificato QUI e
+     * non solo in `custom-task.mjs`.
+     *
+     * ⛔⛔⛔ 12/09 — BC-14, owner: "il pulsante dice serve accesso pieno".
+     * Fino a oggi qui c'era un SECONDO cancello: `cartellaLibera` con un
+     * permesso diverso da "Full access" veniva rifiutata (QUERY_INVALID).
+     * Nasceva il 28/8 (commit 6c37f8d5) non da un requisito di sicurezza
+     * ma dalla FORMA di allora della UI: il campo "percorso a piacere"
+     * compariva SOLO scegliendo "Full access", quindi il permesso era il
+     * modo con cui la richiesta dichiarava "so che sto uscendo
+     * dall'allowlist". Da lì la frase del commento originale ("il confine
+     * che conta è: questa richiesta ha dichiarato Full access?").
+     *
+     * ⛔ Quel cancello NON restringeva niente — allargava. L'ambito vero
+     * di una `cartellaLibera` non dipende dal permesso: è `cartellaGiaScelta:true`
+     * (vedi `cartellaEffettivaPerPermessi` più sopra) a tenerlo inchiodato
+     * ALLA CARTELLA SCELTA, "Full access" compreso. Quindi l'unico effetto
+     * del cancello era: chi voleva lavorare in una cartella scelta a mano
+     * era OBBLIGATO al livello di accesso più alto — cioè al permesso che
+     * toglie ogni approvazione e ogni limite di scrittura dentro quella
+     * cartella. Un cancello che, per proteggere, imponeva il massimo dei
+     * poteri.
+     *
+     * ⭐ Ricerca prima di scrivere (12/09/2026, fonti nel rapporto
+     * `.claude/RAPPORTO-BC14-CARTELLA-LIBERA-2026-09-12.md`): lo stato
+     * dell'arte tiene i DUE ASSI SEPARATI — "di questa cartella mi fido"
+     * (VS Code Workspace Trust; il trust dialog di Claude Code, che
+     * `--add-dir` richiede per cartella) e "quanto può fare l'agente"
+     * (permission mode di Claude Code; `sandbox_mode` di Codex, dove
+     * `workspace-write` si applica alla cwd QUALUNQUE essa sia, scelta con
+     * `--cd`, senza obbligare a `danger-full-access`). `custom-task.mjs`
+     * dichiarava già Workspace Trust come suo modello: qui non era
+     * applicato fino in fondo.
+     *
+     * ⇒ La scelta esplicita resta, e resta provata: il campo
+     * `cartellaLibera` è già di per sé una dichiarazione ("questo percorso
+     * esatto"), `custom-task.mjs` lo valida a runtime (assoluto, esiste, è
+     * una cartella, leggibile e scrivibile) e `cartellaGiaScelta` gli
+     * impedisce di crescere. Il permesso torna a essere quello che dice il
+     * suo nome: cosa TALOS può fare DENTRO quella cartella — "Read only"
+     * non scrive, "On request" chiede, "Workspace write" scrive solo lì,
+     * "Full access" come prima. Nessun percorso nuovo diventa
+     * raggiungibile: la stessa cartella, con meno poteri.
      */
     avviaLibero({
       cartellaId, cartellaLibera, workspaceLaunchId, consegna, comandoProva, immagini = [],
@@ -3515,9 +3550,10 @@ export function createSessionRegistry({
       if (scelteWorkspace.length !== 1) {
         return { erroreAvvio: 'Serve una sola cartella per questa sessione', code: 'QUERY_INVALID' };
       }
-      if (cartellaLibera && permessiScelto !== 'Full access') {
-        return { erroreAvvio: 'cartellaLibera richiede il permesso "Full access" per questa sessione', code: 'QUERY_INVALID' };
-      }
+      // ⛔ 12/09 — BC-14: qui NON c'è più il cancello "cartellaLibera richiede Full access".
+      // Il perché, con le fonti, è nella doc di questo metodo: l'ambito lo tiene
+      // `cartellaGiaScelta`, non il permesso. Se un giorno tornasse un cancello, deve
+      // restringere qualcosa di misurabile — non imporre il livello di accesso più alto.
       let cartellaRisolta = cartellaLibera;
       if (workspaceLaunchId) {
         if (typeof resolveWorkspaceLaunchFn !== 'function') {
@@ -3541,10 +3577,15 @@ export function createSessionRegistry({
       }
       if (immagini.length) preparato.task = { ...preparato.task, immagini };
       const risultato = avviaESegui({
+        // ⛔ 12/09 — `libero:full-access` è un NOME STORICO, non un permesso: dal 12/09 una
+        // cartella scelta a mano parte con qualunque permesso (vedi la doc di questo metodo).
+        // Non si rinomina perché è scritto nei .jsonl già su disco e la mappa dei nomi umani
+        // lo traduce già in «Compito libero · cartella scelta a mano» (componenti-sidebar).
         taskId: workspaceLaunchId ? 'libero:workspace-launch' : (cartellaLibera ? 'libero:full-access' : `libero:${cartellaId}`), cartella: preparato.cartella, task: preparato.task,
         comandoProva: preparato.comandoProva, modelloRichiesta: modelloScelto, modelloPlannerRichiesta: modelloPlannerScelto, reasoningRichiesto: reasoningScelto, mobile,
         permessiRichiesti: permessiScelto, permessiPerAttrezzoRichiesti: permessiPerAttrezzoScelto,
-        // ⭐⭐⭐ 03/9 — cartellaLibera/workspaceLaunchId: la persona ha scelto ESATTAMENTE questa cartella, "Full access" qui è solo il cancello obbligato per poterla scegliere (vedi il gate poco sopra), mai un invito ad allargarla oltre — cartellaId (allowlist) resta l'unico caso che allarga.
+        // ⭐⭐⭐ 03/9 — cartellaLibera/workspaceLaunchId: la persona ha scelto ESATTAMENTE questa cartella, mai un invito ad allargarla oltre — cartellaId (allowlist) resta l'unico caso che allarga.
+        // ⭐ 12/09 (BC-14): questa riga è ORA l'unico confine dell'ambito, e vale per tutti e quattro i permessi — prima la frase qui sopra diceva «"Full access" è il cancello obbligato per poterla scegliere», cancello che non esiste più.
         cartellaGiaScelta: Boolean(cartellaLibera) || Boolean(workspaceLaunchId),
         origineRichiesta, // ⭐ D-11
       });

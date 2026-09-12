@@ -1263,12 +1263,13 @@ function requireTaskIdBody(body) {
  * riconciliazione `avviaLibero` non era raggiungibile dal mobile).
  */
 /*
- * ⭐⭐⭐ 28/8 — `cartellaId`/`cartellaLibera` MUTUAMENTE ESCLUSIVI (permesso
- * "Full access", vedi custom-task.mjs/session-registry.avviaLibero per il
- * perché): qui SOLO la forma cambia — `cartellaId` non è più sempre
- * obbligatoria, esattamente uno fra i due lo è. La validazione FINE
- * (il permesso è davvero "Full access"? il percorso esiste davvero?)
- * resta nel registro/custom-task.mjs, stesso principio di sempre.
+ * ⭐⭐⭐ 28/8 — `cartellaId`/`cartellaLibera` MUTUAMENTE ESCLUSIVI (vedi
+ * custom-task.mjs/session-registry.avviaLibero per il perché): qui SOLO la
+ * forma cambia — `cartellaId` non è più sempre obbligatoria, esattamente uno
+ * fra i due lo è. La validazione FINE (il percorso esiste davvero?) resta nel
+ * registro/custom-task.mjs, stesso principio di sempre.
+ * ⛔ 12/09 BC-14: una cartella scelta a mano parte con QUALUNQUE permesso; il
+ * cancello «solo Full access» del 28/8 non c'è più (owner 12/09).
  */
 /*
  * ⛔⛔⛔ 08/9, BH-07 — UN CORPO VUOTO USCIVA 500 «Errore interno». `POST
@@ -4886,7 +4887,7 @@ export function createHttpApp({
         /*
          * ⭐⭐⭐ 28/8 — QUI, a differenza di /projects, il percorso ASSOLUTO
          * viene mandato per davvero: sono solo SUGGERIMENTI per il campo
-         * "Full access" (cartellaLibera), che già accetta un percorso a
+         * della cartella scelta a mano (cartellaLibera), che già accetta un percorso a
          * piacere — non una seconda allowlist, quindi nasconderlo non
          * proteggerebbe niente che avviaLibero non protegga già.
          * ⭐⭐⭐ 30/8 — `sessionRegistry` passato per davvero: è la fonte
