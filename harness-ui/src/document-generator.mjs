@@ -32,6 +32,10 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
 import { talosSafeFileStem } from './document-filename.mjs';
+import {
+  analizzaInline, analizzaMarkdown, hrefSicuro, inlineInTestoSemplice,
+  PROFONDITA_MASSIMA_ELENCHI,
+} from './research/markdown-server.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -197,6 +201,86 @@ async function pdfMakeConSuoiFont() {
   return pdfmake;
 }
 
+/** BC35: un solo adattatore DOCX per document_create e ricerca, con docx@9.5.1. */
+async function generaDocx(spec) {
+  const { Document, Packer, Paragraph, TextRun, ExternalHyperlink, HeadingLevel, LevelFormat } = await import('docx');
+  const numerazioni = [];
+  const paragrafi = [new Paragraph({ text: spec.title, heading: HeadingLevel.HEADING_1 })];
+  const runs = testo => analizzaInline(testo).map(f => {
+    const run = new TextRun({ text: f.v, bold: f.forte, italics: f.corsivo,
+      ...(f.k === 'codice' ? { font: 'Consolas' } : {}) });
+    const link = f.k === 'link' ? hrefSicuro(f.href) : null;
+    return link ? new ExternalHyperlink({ link, children: [run] }) : run;
+  });
+  const elenco = (blocco, livello = 0) => {
+    const reference = `elenco-${numerazioni.length + 1}`;
+    numerazioni.push({ reference, levels: Array.from({ length: PROFONDITA_MASSIMA_ELENCHI }, (_, i) => ({
+      level: i, format: blocco.ordinata ? LevelFormat.DECIMAL : LevelFormat.BULLET,
+      text: blocco.ordinata ? `%${i + 1}.` : '•', start: blocco.inizio ?? 1,
+      style: { paragraph: { indent: { left: 720 * (i + 1), hanging: 360 } } },
+    })) });
+    for (const voce of blocco.voci) {
+      paragrafi.push(new Paragraph({
+        children: runs(typeof voce === 'string' ? voce : voce.x),
+        numbering: { reference, level: livello },
+      }));
+      if (typeof voce !== 'string') for (const figlio of voce.figli) {
+        if (figlio.t === 'lista') elenco(figlio, livello + 1);
+        else paragrafi.push(new Paragraph({ children: runs(figlio.x), indent: { left: 720 * (livello + 1) } }));
+      }
+    }
+  };
+  for (const blocco of analizzaMarkdown(spec.body ?? '')) {
+    switch (blocco.t) {
+      case 'h': paragrafi.push(new Paragraph({ children: runs(blocco.x), heading: HeadingLevel[`HEADING_${blocco.lvl}`] })); break;
+      case 'lista': elenco(blocco); break;
+      case 'codice':
+        for (const riga of blocco.x.split('\n')) paragrafi.push(new Paragraph({ children: [new TextRun({ text: riga, font: 'Consolas' })] }));
+        break;
+      case 'riga': paragrafi.push(new Paragraph({ text: '———' })); break;
+      case 'tabella':
+        for (const riga of [blocco.intestazione, ...blocco.righe]) {
+          paragrafi.push(new Paragraph({ text: riga.map(inlineInTestoSemplice).join(' · ') }));
+        }
+        break;
+      case 'citazione': paragrafi.push(new Paragraph({ children: [new TextRun('« '), ...runs(blocco.x), new TextRun(' »')] })); break;
+      case 'p': paragrafi.push(new Paragraph({ children: runs(blocco.x) })); break;
+      default: break;
+    }
+  }
+  // docx unisce gli stili superficialmente: il colore da solo cancellerebbe la dimensione.
+  // Il livello esplicito rende la struttura leggibile anche senza inferenze sui nomi Word.
+  const document = new Document({
+    styles: { default: Object.fromEntries([32, 26, 24, 22, 22, 22].map((size, i) => [`heading${i + 1}`, {
+      run: { color: '000000', size, bold: true },
+      paragraph: { outlineLevel: i, keepNext: true, spacing: { before: 240, after: 120 } },
+    }])) },
+    numbering: { config: numerazioni }, sections: [{ children: paragrafi }],
+  });
+  return new Uint8Array(await Packer.toBuffer(document));
+}
+
+/**
+ * document-report avvolge ogni voce in `text`. Promuove SOLO le voci composte del
+ * parser a stack/liste native pdfmake; stringhe e array di run restano identici.
+ */
+function adattaElenchiPdf(definition) {
+  const vocePdf = voce => {
+    if (!voce || typeof voce !== 'object' || !Array.isArray(voce.figli)) return { text: voce, style: 'body' };
+    return { stack: [{ text: voce.x, style: 'body' }, ...voce.figli.map(figlio => figlio.t === 'list'
+      ? { [figlio.ordered ? 'ol' : 'ul']: figlio.items.map(vocePdf), ...(figlio.start !== undefined ? { start: figlio.start } : {}) }
+      : { text: figlio.x, style: 'body' })] };
+  };
+  for (const blocco of definition.content) {
+    const voci = blocco.ul ?? blocco.ol;
+    if (!Array.isArray(voci)) continue;
+    for (let i = 0; i < voci.length; i++) {
+      if (Array.isArray(voci[i].text?.figli)) voci[i] = vocePdf(voci[i].text);
+    }
+  }
+  return definition;
+}
+
 export async function generateTalosDocument(spec) {
   if (spec.report && spec.format !== 'pdf') {
     throw new Error(
@@ -284,17 +368,7 @@ export async function generateTalosDocument(spec) {
     }
 
     case 'docx': {
-      const { Document, Packer, Paragraph, HeadingLevel } = await import('docx');
-      const paragraphs = [
-        new Paragraph({ text: spec.title, heading: HeadingLevel.HEADING_1 }),
-        ...(spec.body ?? '').split('\n').map((line) => new Paragraph({ text: line })),
-      ];
-      const document = new Document({ sections: [{ children: paragraphs }] });
-      // ⭐ Node: Packer.toBuffer torna un Buffer (già un Uint8Array),
-      // niente giro Blob→arrayBuffer (quello serve solo in browser —
-      // ctx7 confermato 28/8).
-      const buffer = await Packer.toBuffer(document);
-      return { ...common, bytes: new Uint8Array(buffer) };
+      return { ...common, bytes: await generaDocx(spec) };
     }
 
     case 'xlsx': {
@@ -331,9 +405,9 @@ export async function generateTalosDocument(spec) {
         pdfMakeConSuoiFont(),
         import('./document-report.mjs'),
       ]);
-      const definition = buildTalosReportDefinition(
+      const definition = adattaElenchiPdf(buildTalosReportDefinition(
         spec.report ? { ...spec.report, meta: { title: spec.title } } : specToReport(spec),
-      );
+      ));
       const buffer = await pdfmake.createPdf(definition).getBuffer();
       return { ...common, bytes: new Uint8Array(buffer) };
     }

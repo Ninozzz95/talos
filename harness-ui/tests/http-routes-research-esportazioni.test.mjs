@@ -712,12 +712,14 @@ test('⭐⭐⭐ 12/09 — il DOCX porta prosa, non marcatori', async (t) => {
 
   const risposta = await esporta(b, sessionId, ricercaId, 'formato=docx');
   const { default: JSZip } = await import('jszip');
-  const xml = await (await JSZip.loadAsync(new Uint8Array(await risposta.arrayBuffer()))).file('word/document.xml').async('string');
+  const archivio = await JSZip.loadAsync(new Uint8Array(await risposta.arrayBuffer()));
+  const xml = await archivio.file('word/document.xml').async('string');
 
   assert.equal(xml.includes('## '), false, '⛔ un `.docx` con «## Executive Summary» dentro è lo stesso difetto, scritto in Word');
   assert.equal(xml.includes('**'), false);
   assert.match(xml, /Executive Summary/);
-  assert.match(xml, /•/, 'e gli elenchi hanno un punto vero');
+  assert.match(xml, /<w:numPr>/, 'gli elenchi sono nativi di Word');
+  assert.match(await archivio.file('word/numbering.xml').async('string'), /•/, 'il punto vero è nella definizione della lista');
   assert.equal(xml.includes('talos-research-report'), false);
 });
 
