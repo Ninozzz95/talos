@@ -171,11 +171,18 @@ describe('TalosMobileStreamingReply (F2-T4 / R1-5)', () => {
         ].join(LF)
         const wrapper = mountStreaming(true, table)
 
+        /*
+         * ⛔ Il cursore arriva UN FOTOGRAMMA DOPO la tabella: il markdown si
+         * analizza con un timer, poi `syncTail` lo appende in un rAF + nextTick.
+         * Aspettare solo la tabella lasciava una finestra che sotto carico si
+         * apriva (rosso in CI il 13/09 sul tag v0.1.29, verde da solo 3 volte).
+         * Si aspetta cio' che si vuole leggere: tabella E cursore.
+         */
         await vi.waitFor(() => {
             expect(wrapper.get('.talos-message-table-scroll').exists()).toBe(true)
+            expect(wrapper.find('[data-testid="talos-stream-caret"]').exists()).toBe(true)
         }, { timeout: 4000 })
 
-        expect(wrapper.find('[data-testid="talos-stream-caret"]').exists()).toBe(true)
         expect(wrapper.find('table [data-testid="talos-stream-caret"]').exists()).toBe(false)
     })
 

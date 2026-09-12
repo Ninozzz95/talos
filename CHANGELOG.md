@@ -6,7 +6,11 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
-## v0.1.29
+## v0.1.30
+
+(Tagged as v0.1.30. A v0.1.29 tag exists on the repository but never
+produced a build: its CI run failed on a timing-dependent unit test, fixed
+here. There is no v0.1.29 release.)
 
 The chat is now on the same calm design as the rest of the app, Settings
 keep the sidebar beside them on a tablet, and one search box reaches
