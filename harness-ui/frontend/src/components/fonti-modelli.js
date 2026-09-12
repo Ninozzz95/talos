@@ -68,6 +68,17 @@ export const PROVIDER_DIRETTI = Object.freeze([
   Object.freeze({ id: 'lmstudio', etichetta: 'LM Studio', senzaChiave: true }),
   Object.freeze({ id: 'zai', etichetta: 'Z.AI', soloSeCollegato: true }),
   Object.freeze({ id: 'deepseek', etichetta: 'DeepSeek', soloSeCollegato: true }),
+  Object.freeze({ id: 'groq', etichetta: 'Groq', soloSeCollegato: true }),
+  Object.freeze({ id: 'cerebras', etichetta: 'Cerebras', soloSeCollegato: true }),
+  Object.freeze({ id: 'mistral', etichetta: 'Mistral', soloSeCollegato: true }),
+  Object.freeze({ id: 'together', etichetta: 'Together', soloSeCollegato: true }),
+  Object.freeze({ id: 'fireworks', etichetta: 'Fireworks', soloSeCollegato: true }),
+  Object.freeze({ id: 'deepinfra', etichetta: 'DeepInfra', soloSeCollegato: true }),
+  Object.freeze({ id: 'novita', etichetta: 'Novita', soloSeCollegato: true }),
+  Object.freeze({ id: 'nebius', etichetta: 'Nebius', soloSeCollegato: true }),
+  Object.freeze({ id: 'xai', etichetta: 'xAI', soloSeCollegato: true }),
+  Object.freeze({ id: 'ollama-cloud', etichetta: 'Ollama Cloud', soloSeCollegato: true }),
+  Object.freeze({ id: 'huggingface', etichetta: 'Hugging Face', soloSeCollegato: true }),
 ]);
 
 /** Vero se quel fornitore si legge senza collegare nessuna chiave (i motori locali). */

@@ -30,6 +30,7 @@ function fail(message, code = 'RUNTIME_INVALID') {
  */
 export function preparaRichiestaCompatibile(provider, corpo) {
   const record = REGISTRO_FORNITORI[provider];
+  if (record?.richiestaCompatibile) return preparaProfiloCompatibile(record, corpo);
   if (record?.ragionamento?.formato !== 'thinking') return { corpo, avvisi: [] };
   const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
   if (!oggetto(corpo) || typeof corpo.model !== 'string') fail(`Richiesta ${record.etichetta} non valida.`);
@@ -64,6 +65,52 @@ export function preparaRichiestaCompatibile(provider, corpo) {
     } else {
       avvisi.push(`${record.etichetta}: livello di ragionamento non inviato perché il ragionamento è disattivato.`);
     }
+  }
+  return { corpo: risultato, avvisi };
+}
+
+/** P-G, 12/09/2026: sole differenze documentate nel record, senza confronti sui fornitori. */
+function preparaProfiloCompatibile(record, corpo) {
+  const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  if (!oggetto(corpo) || typeof corpo.model !== 'string' || !corpo.model.trim()) fail(`Richiesta ${record.etichetta} non valida.`);
+  const profilo = record.richiestaCompatibile;
+  const id = corpo.model.startsWith(`${record.id}:`) ? corpo.model.slice(record.id.length + 1) : corpo.model;
+  const modello = Object.hasOwn(profilo.modelli, id) ? profilo.modelli[id] : null;
+  const risultato = { ...corpo };
+  const avvisi = [];
+
+  if (modello?.strumentiConFormato === false && corpo.tools != null && corpo.response_format != null) {
+    fail(`${record.etichetta}: questo modello non consente strumenti e formato di risposta vincolato nella stessa richiesta.`);
+  }
+  if (profilo.limiteUscita === 'max_completion_tokens' && Object.hasOwn(corpo, 'max_tokens')) {
+    if (corpo.max_tokens != null && corpo.max_completion_tokens != null && corpo.max_completion_tokens !== corpo.max_tokens) {
+      fail(`${record.etichetta}: sono stati indicati due limiti di uscita diversi.`);
+    }
+    risultato.max_completion_tokens = corpo.max_completion_tokens ?? corpo.max_tokens;
+    delete risultato.max_tokens;
+  }
+
+  if (profilo.ragionamento === 'effort' && corpo.reasoning != null) {
+    if (!oggetto(corpo.reasoning)) fail(`Opzioni di ragionamento ${record.etichetta} non valide.`);
+    const { effort, enabled, ...altre } = corpo.reasoning;
+    if (effort != null && typeof effort !== 'string') fail(`Livello di ragionamento ${record.etichetta} non valido.`);
+    if (enabled !== undefined && typeof enabled !== 'boolean') fail(`Controllo del ragionamento ${record.etichetta} non valido.`);
+    const richiesto = enabled === false ? 'none' : effort;
+    if ((enabled === false && effort != null && effort !== 'none')
+      || (richiesto != null && corpo.reasoning_effort != null && corpo.reasoning_effort !== richiesto)) {
+      fail(`${record.etichetta}: sono state indicate preferenze di ragionamento discordanti.`);
+    }
+    delete risultato.reasoning;
+    if (richiesto != null) risultato.reasoning_effort = richiesto;
+    if (Object.keys(altre).length || (enabled === true && richiesto == null && corpo.reasoning_effort == null)) {
+      avvisi.push(`${record.etichetta}: alcune opzioni di ragionamento non hanno una traduzione documentata; non inviate.`);
+    }
+  }
+  // Un modello futuro o non documentato conserva i parametri: nessuna incompatibilità dedotta.
+  if (risultato.reasoning_effort != null && modello?.livelliRagionamento
+    && !modello.livelliRagionamento.includes(risultato.reasoning_effort)) {
+    delete risultato.reasoning_effort;
+    avvisi.push(`${record.etichetta}: il livello di ragionamento richiesto non è documentato per questo modello; non inviato.`);
   }
   return { corpo: risultato, avvisi };
 }
