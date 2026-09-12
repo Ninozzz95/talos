@@ -49,7 +49,7 @@ Parole sue, in ordine, e cosa cambia nella coda:
 | id | cosa | stato |
 |---|---|---|
 | BC-13 | motore locale rapido: ricerca, misura di base, cure nel supervisore | 🏃 |
-| BC-12/14 #2 | cartella libera con qualunque permesso | 🏃 |
+| BC-12/14 #2 | cartella libera con qualunque permesso | ✅ codice `952c8d55` (server + modale + composer + «Usa come radice»), 471/471 + 10/10, dal vivo su banco con kernel vero; modale vista sul 4174 nei due temi (Desktop + «Scrive nel progetto» ⇒ pulsante vivo, frase onesta). ⏳ la parte server arriva al 4174 col prossimo riavvio (dopo BC-13). Aperto: giro completo con modello vero; tasto destro di Windows dal vivo |
 | BC-08 + BC-10 | barra della conversazione a due lati, margine a tutta larghezza | 🏃 |
 | RELEASE | ricerca sullo stato dell'arte per la prima release desktop (Windows, guscio come Hermes, browser anche) → piano decisionale | 🏃 |
 
