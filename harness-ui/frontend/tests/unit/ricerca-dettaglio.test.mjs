@@ -506,7 +506,16 @@ test('L7-DEPOSITATO: il pannello «Rapporto» dice che un rapporto non c’è e 
   lista.scatta('click', { target: { closest: () => bottone } });
   const pannello = pannelloDi(pezzi);
   const testo = testoDi([pannello]);
-  assert.ok(testo.includes('non ha depositato un rapporto'), 'il pannello dice che il rapporto non c’è');
+  /*
+   * ⛔ FRASE CAMBIATA IL 12/09, e il test lo registra invece di inseguirla. Qui si pretendeva
+   *   «non ha depositato un rapporto» stampato SOPRA il testo depositato: vero alla lettera e
+   *   falso a leggerlo, perché nella stessa schermata c'è il contrario (trovato nella foto
+   *   `respinta_menu-dark-1440`). Adesso la frase dice che il deposito c'è stato e non ha passato
+   *   il controllo — che è la stessa cosa senza la parte che si contraddice da sola.
+   *   ⛔ E si pretende ANCHE il verso contrario: che non dica più «non ha depositato».
+   */
+  assert.ok(testo.includes('non ha superato il controllo di consegna'), 'il pannello dice che quel testo non è un rapporto');
+  assert.ok(!testo.includes('non ha depositato'), 'e non nega un deposito che sta stampando due righe sotto');
   assert.ok(testo.includes('Ciò che è stato depositato'), 'e il file ha il suo nome vero');
   /* ⛔ La didascalia del file, non una frase qualunque che contenga «rapporto»: prima questa riga
      passava grazie alla frase sull'ultimo messaggio, cioè per la ragione sbagliata. */

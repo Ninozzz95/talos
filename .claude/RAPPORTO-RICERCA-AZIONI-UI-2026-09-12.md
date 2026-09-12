@@ -398,3 +398,120 @@ macchina: ne sono morti **tre**, e solo uno era il mio (4179). **Ho spento anche
 catena», violata esattamente come il 23/8. Danno: due server di sviluppo da riavviare
 (`node scripts/serve-lab.mjs` dentro `harness-ui/frontend/`); nessun dato perso, nessuna sessione
 toccata. ⛔ **Il 4174 e il 4177 sono vivi e intatti**, verificato dopo.
+
+---
+
+## 8. Coda del 12/09 — LA SECONDA FOTO SUL 4174: il testo c'era, e il menu diceva di no
+
+> Segnalazione del coordinatore, foto `scratchpad/l8/dark-ricerca-menu.png`. Sulla ricerca L8
+> `3029dea2` (`senza-rapporto`) il menu «⋯» aveva **due voci sole** — apri ed elimina — e sul disco
+> c'erano **8.953 byte** di rapporto in prosa, depositati e respinti dal cancello di consegna.
+
+### 8.1 La causa, e non è «una condizione troppo stretta»
+
+Questo frontend conosceva **una sola strada** per arrivare al testo di una ricerca: il file di
+Libreria, indirizzato da `reportLibraryId`. Quando il cancello respinge, **in Libreria non finisce
+niente**: il testo vive nella cartella della ricerca e la rotta del dettaglio lo espone come
+`contenutoRespinto` (L5 §4.2). Il menu guardava la porta sbagliata e concludeva che la stanza fosse
+vuota. Lo stesso errore aveva **tre sintomi**, non uno:
+
+1. niente «Esporta…» (`suite` chiedeva `haRapportoLeggibile`);
+2. niente «Copia» (`if (pronto && lettura.prosa)`, cioè «solo dal file di Libreria»);
+3. il pannello «Rapporto» diceva «Questa ricerca non ha depositato un rapporto» e **non mostrava
+   nulla**, con ottomila byte di lavoro pagato invisibili.
+
+### 8.2 La cura: le strade sono TRE, e stanno in una funzione sola
+
+`testoDepositato(voce, lettura, dettaglio)` (`ricerca-dettaglio.js`) le mette in fila una volta per
+tutte, in un **ordine di verità**: rapporto accettato › testo respinto › ultima frase detta in chat.
+Mai il contrario — è il guasto dell'11/09 (290 byte di scusa mostrati come rapporto) preso
+dall'altro lato. Torna anche `suDisco`, che separa «il server ha un testo da impaginare» da «resta
+solo una frase di chat»: della prima si fa un PDF, della seconda solo una copia.
+
+Accanto, due funzioni che rispondono a domande **diverse** e che era facile confondere:
+
+- `serverHaTestoDaImpaginare` — ⛔ un rapporto accettato che questa schermata **non ha ancora letto**
+  si esporta benissimo: il file è sul disco del server, e spegnere il PDF perché il browser non ha
+  fatto una GET sarebbe decidere al posto di chi ha i dati;
+- `recordDisponibile` — tre risposte, mai due: `affermazioni: null` è «non c'è un record», `[]` è
+  «record presente, nessuna affermazione», e **nessuna delle due fonti che parla** è «non lo
+  sappiamo», che non spegne niente.
+
+Il pannello delle esportazioni ora accende **Markdown · PDF×3 · Word · HTML · Copia** su una
+consegna respinta e spegne **JSON · BibTeX · RIS · Elenco fonti** col motivo — cioè **la stessa riga
+di taglio della rotta**. E «Copia il file depositato» è tornata nel menu, col suo nome vero.
+
+⛔ **Il pannello legge la scheda PRIMA di aprirsi.** Dal tasto destro su una scheda dell'elenco il
+dettaglio non è mai stato chiesto: senza quella lettura il pannello giudicherebbe undici uscite su
+ciò che l'**elenco** sa — e l'elenco non porta né `contenutoRespinto` né le affermazioni, cioè
+rifarebbe il difetto un livello più in basso. Il menu può permettersi di essere approssimativo (dice
+solo «c'è qualcosa»); un elenco di undici righe coi motivi accanto no.
+
+### 8.3 Due frasi che erano diventate false, trovate nella foto della cura
+
+- «Questa ricerca non ha depositato un rapporto» stampato **sopra** ottomila byte depositati: vero
+  alla lettera, falso a leggerlo. Ora: «Quello che questa ricerca ha depositato non ha superato il
+  controllo di consegna: qui sotto c'è per intero».
+- «Il file che questa ricerca ha lasciato **in Libreria**» — su una consegna respinta in Libreria non
+  è finito niente. Dire dov'è una cosa è utile solo se è dove si dice: due strade, due frasi.
+
+⛔ Un test di L7 pretendeva la vecchia frase: **aggiornato spiegando perché**, e reso più forte —
+adesso pretende anche il verso contrario, cioè che il pannello **non neghi** un deposito che sta
+stampando due righe sotto.
+
+### 8.4 ⭐⭐⭐ IL «NON VERIFICATO» N. 10 È CHIUSO: la rotta è atterrata e la giunzione è provata
+
+Mentre scrivevo, l'altro agente ha committato la rotta (`1b248870`). I formati che il frontend
+conosce e quelli che la rotta accetta si sono rivelati **identici** — `md · html · pdf · docx · json
+· bib · ris · fonti`, toni `report · brief · dossier` — ma questo l'ho **misurato**, non dedotto:
+due test nuovi sul banco con server e registro veri.
+
+- **gli otto formati e i tre toni**, chiamati con l'indirizzo che compone `indirizzoEsportazione`:
+  200 su tutti, `Content-Disposition: attachment` su tutti, `filename*=UTF-8''…` su tutti (è la riga
+  che **giustifica** `download` senza valore nel prodotto), e nessun file vuoto. ⛔ I tre toni del
+  PDF danno **tre file di taglia diversa**: se il `tono` non arrivasse alla rotta risponderebbero
+  200 tutti e tre, identici, e nessuno se ne accorgerebbe;
+- **senza record**: ciò che la sezione **accende** il server lo dà (200) e ciò che la sezione
+  **spegne** il server lo rifiuta (409) — le due righe di taglio sono la stessa, provata nei due
+  versi. Se divergessero avremmo o una promessa vuota o un comando tolto senza ragione, e nessuna
+  delle due si vedrebbe provando le due metà separatamente.
+
+⛔ **Due difetti trovati facendo girare i test, non leggendoli:** la copia è un'uscita **senza rotta**
+(chiederla al server è un 400), e su un `done` la copia **non** è spenta — la scheda porta
+`contenutoRapporto`, cioè la seconda delle tre strade. Le due aspettative sbagliate erano mie.
+
+⛔ **E un difetto del BANCO, non del prodotto:** la prima stesura falliva su Windows con `EPERM` sul
+rename di `meta.json`. La conclusione scrive quel file in modo atomico (temporaneo + rename) mentre
+la mia attesa lo **leggeva** dalla rotta ogni 10 ms, e su Windows un rename sopra un file aperto in
+lettura non passa: **era il banco a rompere l'oggetto che misurava**. Cura: si guarda comunque una
+*condizione* (mai un numero di millisecondi sperando che basti), ma con un passo di 60 ms e una
+posa dopo la scrittura finale. Verificato con **tre corse di fila**, 5/5 ognuna.
+
+### 8.5 I numeri, e cosa resta aperto dopo questa coda
+
+```
+npm run test:unit                                  →  tests 920   pass 920   fail 0
+node --test tests/integration/ricerca-vivo-*.mjs   →  tests 5     pass 5     fail 0   (×3 corse)
+npm run build                                      →  32 asset verificati
+```
+
+Foto: **68 file** in `.claude/foto-ricerca-azioni-2026-09-12/`, dodici pagine × due temi × due
+viewport più i ritagli, zero errori JavaScript. Le due nuove sono `SezioneRicerca_respinta_menu`
+(il menu a quattro voci che prima ne aveva due) e `SezioneRicerca_respinta_esporta` (il pannello coi
+documenti accesi e i dati spenti). La fixture `ric-respinta-lunga` riproduce `3029dea2` coi suoi
+dati veri: `reportLibraryId: null`, `contenutoRespinto` valorizzato, `affermazioni: null`.
+
+**Resta aperto, dopo la coda:**
+
+1. ⛔ **Nessun file scaricato da un browser vero**: i test leggono le risposte, non salvano niente.
+   Non so come si comporti la barra dei download di Chrome con un PDF generato al volo, né quanto
+   pesi un dossier vero.
+2. ⛔ **Il caso di corsa del §7.11 resta scoperto**: se il record sparisse fra l'apertura del
+   pannello e il clic, il browser aprirebbe la busta JSON invece di scaricare.
+3. ⛔ **Il menu aperto dal tasto destro su una scheda mai aperta** giudica su meno dati del pannello:
+   può dire «Copia l'ultimo messaggio» dove, aperto il dettaglio, direbbe «Copia il file
+   depositato». L'etichetta è sempre **vera** (dice esattamente cosa copierà), ma le due schermate
+   non coincidono. Curarlo vuol dire chiedere la scheda per ogni riga dell'elenco: **registrato, non
+   fatto**.
+4. ⛔ **Nessun giro col modello e nessuna verifica sul 4174**: tutto è laboratorio e banco.
+

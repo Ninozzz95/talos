@@ -471,6 +471,10 @@ const LABORATORI = {
      col riepilogo delle verifiche (tutte accese) e senza (le quattro di dati SPENTE col motivo). */
   SezioneRicerca_esporta: () => montaRicerca({ apri: 'ric-conclusa', vista: 'rapporto', azioni: true, premi: 'Esporta' }),
   SezioneRicerca_esporta_spente: () => montaRicerca({ apri: 'ric-senza-record', vista: 'rapporto', azioni: true, premi: 'Esporta' }),
+  /* ⭐⭐ 12/09, la foto del 4174: la ricerca L8 col rapporto RESPINTO. Il menu deve mostrare Copia
+     ed Esporta…, e il pannello deve accendere i documenti e spegnere i quattro di dati. */
+  SezioneRicerca_respinta_menu: () => montaRicerca({ apri: 'ric-respinta-lunga', vista: 'rapporto', menu: true, azioni: true }),
+  SezioneRicerca_respinta_esporta: () => montaRicerca({ apri: 'ric-respinta-lunga', vista: 'rapporto', azioni: true, premi: 'Esporta' }),
   SezioneRicerca_piano_pieno: () => montaRicerca({ apri: 'ric-conclusa', vista: 'piano', azioni: true }),
   SezioneRicerca_andata_speso: () => montaRicerca({ apri: 'ric-in-pausa', vista: 'andata', azioni: true }),
   SezioneProgetti() {

@@ -727,13 +727,24 @@ export function barraBilancio(doc, bilancio) {
 
 /* ----------------------------------------------------------------------------- le cinque viste */
 
-function vistaRapporto(doc, voce, lettura, ctx) {
+function vistaRapporto(doc, voce, lettura, ctx, dettaglio) {
   const pezzi = [];
   const frasi = frasiVoce(voce);
+  const deposito = testoDepositato(voce, lettura, dettaglio);
   if (!haRapportoLeggibile(voce)) {
-    pezzi.push(nodo(doc, 'p', 'td-prose', conclusaDavvero(voce?.stato)
-      ? 'Questa ricerca risulta conclusa, ma non ha depositato nessun rapporto.'
-      : 'Questa ricerca non ha depositato un rapporto.'));
+    /*
+     * ⛔ VISTO NELLA FOTO (`respinta_menu-dark-1440`, 12/09): «Questa ricerca non ha depositato un
+     *   rapporto» stampato sopra ottomila byte di testo depositato. Vero alla lettera — quel testo
+     *   un rapporto non è — e falso a leggerlo, perché nella stessa schermata c'è il contrario.
+     *   ⇒ quando qualcosa è stato depositato si dice quello: ha depositato, e non ha passato il
+     *   controllo. È la stessa frase, senza la parte che si contraddice da sola.
+     */
+    const respinto = deposito.genere === 'respinto';
+    pezzi.push(nodo(doc, 'p', 'td-prose', respinto
+      ? 'Quello che questa ricerca ha depositato non ha superato il controllo di consegna: qui sotto c’è per intero.'
+      : (conclusaDavvero(voce?.stato)
+        ? 'Questa ricerca risulta conclusa, ma non ha depositato nessun rapporto.'
+        : 'Questa ricerca non ha depositato un rapporto.')));
     /* ⛔ La spiegazione sta già sotto il titolo quando la ricerca NON è conclusa: ripeterla qui la
        fa leggere due volte nella stessa schermata (visto nella foto a 1024 px). */
     if (conclusaDavvero(voce?.stato)) pezzi.push(nodo(doc, 'p', 'td-subtle', frasi.spiegazione));
@@ -747,17 +758,28 @@ function vistaRapporto(doc, voce, lettura, ctx) {
      *   sotto il suo nome vero, «Ciò che è stato depositato», e come ALLEGATO: lo stesso trattamento
      *   che l'ultimo messaggio ha in «Come è andata».
      */
-    if (frasi.haRapporto) {
+    /*
+     * ⛔⛔ 12/09, LA FOTO DEL 4174 — la condizione era `frasi.haRapporto`, cioè «c'è una voce di
+     *   LIBRERIA». Su una consegna respinta in Libreria non finisce niente: il testo sta nella
+     *   cartella della ricerca e arriva come `contenutoRespinto` dalla rotta del dettaglio. ⇒ 8.953
+     *   byte di lavoro pagato non comparivano da nessuna parte, e questo pannello diceva soltanto
+     *   «non ha depositato un rapporto» — vero a metà, e la metà taciuta era tutto il lavoro.
+     */
+    if (frasi.haRapporto || deposito.genere === 'respinto') {
       pezzi.push(nodo(doc, 'h3', '', 'Ciò che è stato depositato'));
       /* ⛔ VISTO NELLA FOTO (ric-scusa, chiaro, 1440): questa riga ripeteva parola per parola il
          motivo che il server manda e che sta già due righe sopra, sotto il titolo. Qui si dice
          solo CHE COS'È il file; il perché lo dice il motivo, una volta sola. */
-      pezzi.push(nodo(doc, 'p', 'td-subtle', 'Il file che questa ricerca ha lasciato in Libreria. Non è il suo rapporto.'));
-      if (lettura?.stato === 'pronto') {
-        const deposto = (lettura.prosa || lettura.testo || '').trim();
-        pezzi.push(deposto
-          ? nodo(doc, 'blockquote', 'td-allegato', deposto)
-          : nodo(doc, 'p', 'td-subtle', 'Il file depositato è vuoto.'));
+      /* ⛔ E NEMMENO QUESTA RIGA PUÒ DIRE «in Libreria» SEMPRE: su una consegna respinta in
+         Libreria non è finito niente — il testo vive nella cartella della ricerca. Dire dov'è una
+         cosa è utile solo se è dove si dice. Due strade, due frasi. */
+      pezzi.push(nodo(doc, 'p', 'td-subtle', frasi.haRapporto
+        ? 'Il file che questa ricerca ha lasciato in Libreria. Non è il suo rapporto.'
+        : 'Il testo che questa ricerca ha scritto, tenuto nella sua cartella. Non è il suo rapporto.'));
+      if (deposito.genere === 'respinto') {
+        pezzi.push(nodo(doc, 'blockquote', 'td-allegato', deposito.testo));
+      } else if (lettura?.stato === 'pronto') {
+        pezzi.push(nodo(doc, 'p', 'td-subtle', 'Il file depositato è vuoto.'));
       } else if (lettura?.stato === 'errore') {
         const p = nodo(doc, 'p', 'td-subtle', `Il file depositato non si apre: ${lettura.errore}`);
         p.setAttribute('role', 'alert');
@@ -907,9 +929,12 @@ export const GRUPPI_ESPORTAZIONE = [
 
 /** Il motivo per cui un'uscita non c'è. ⛔ Detto, non nascosto: sparire non insegna niente. */
 export const MOTIVI_ESPORTAZIONE = {
-  senzaRapporto: 'Questa ricerca non ha depositato un rapporto: non c’è niente da esportare.',
-  senzaRecord: 'Il rapporto non porta con sé il riepilogo delle verifiche: senza quello non ci sono affermazioni né fonti da estrarre.',
+  senzaRapporto: 'Questa ricerca non ha depositato nessun testo: non c’è niente da esportare.',
+  senzaRecord: 'Il testo non porta con sé il riepilogo delle verifiche: senza quello non ci sono affermazioni né fonti da estrarre.',
   senzaTesto: 'Il testo del rapporto non è ancora stato letto da questa schermata.',
+  /* ⛔ L'ultima frase detta in chat non è un documento, e un PDF che la impagina sarebbe un
+     documento che finge di essere un rapporto. Si può copiare: è quello che vale. */
+  soloUltimoMessaggio: 'Di questa ricerca resta solo l’ultima frase detta in chat: si può copiare, ma non è un documento da impaginare.',
 };
 
 /**
@@ -926,19 +951,100 @@ export const MOTIVI_ESPORTAZIONE = {
  * ⛔ E quando il testo non è ancora stato letto NON si dichiara niente: `record` ignoto non è
  *   `record` assente. Le uscite di dati restano accese e decide il server.
  */
-export function esportazioniRicerca(voce, lettura = null) {
-  const haRapporto = haRapportoLeggibile(voce);
+/**
+ * ⛔⛔⛔ 12/09/2026, SECONDA FOTO SUL 4174 (`scratchpad/l8/dark-ricerca-menu.png`) — IL TESTO
+ *   C'ERA, E IL MENU DICEVA DI NO.
+ *
+ * Sulla ricerca L8 `3029dea2` (`senza-rapporto`) il menu «⋯» aveva **due voci sole**: apri ed
+ * elimina. Niente «Esporta…», niente «Copia». E sul disco c'erano **8.953 byte** di rapporto in
+ * prosa, depositati e respinti dal cancello di consegna — cioè lavoro pagato che nessun comando
+ * poteva tirare fuori.
+ *
+ * ⛔ LA CAUSA, e non è «una condizione troppo stretta»: questo file conosceva **una sola strada**
+ *   per arrivare al testo di una ricerca — il file di Libreria, indirizzato da `reportLibraryId`.
+ *   Quando il cancello respinge, in Libreria non finisce niente: il testo vive nella cartella della
+ *   ricerca e la rotta del dettaglio lo espone come **`contenutoRespinto`** (L5 §4.2). Il menu
+ *   guardava la porta sbagliata e concludeva che la stanza fosse vuota.
+ *
+ * ⇒ Le strade sono **tre**, e questa funzione le mette in fila una volta per tutte. Chi vuole il
+ *   testo di una ricerca chiede QUI, e non deve più sapere da dove arriva.
+ * ⛔ L'ordine conta ed è un ordine di VERITÀ, non di comodità: un rapporto accettato batte un testo
+ *   respinto, e un testo respinto batte l'ultima frase detta in chat. Mai il contrario — è il
+ *   guasto dell'11/09 (290 byte di scusa mostrati come rapporto) preso dall'altro lato.
+ * ⛔ `suDisco` separa «il server ha un testo da impaginare» da «l'unica cosa che resta è una frase
+ *   di chat»: la prima si può esportare in PDF, la seconda si può solo copiare. Un PDF dell'ultimo
+ *   messaggio sarebbe un documento che finge di essere un rapporto.
+ */
+export function testoDepositato(voce, lettura = null, dettaglio = null) {
+  const ricerca = dettaglio?.stato === 'pronto' ? dettaglio.ricerca : null;
   const letto = lettura?.stato === 'pronto';
-  const senzaRecord = letto && !lettura.record;
+  const daLibreria = letto ? String(lettura.prosa || lettura.testo || '').trim() : '';
+  const accettato = String(ricerca?.contenutoRapporto ?? '').trim();
+  const respinto = String(ricerca?.contenutoRespinto ?? '').trim();
+  const ultimo = String(voce?.ultimoMessaggio ?? '').trim();
+  if (haRapportoLeggibile(voce) && (daLibreria || accettato)) {
+    return { testo: daLibreria || accettato, genere: 'rapporto', nome: 'il rapporto', suDisco: true };
+  }
+  if (respinto || daLibreria) {
+    return { testo: respinto || daLibreria, genere: 'respinto', nome: 'il file depositato', suDisco: true };
+  }
+  if (ultimo) return { testo: ultimo, genere: 'ultimo', nome: 'l’ultimo messaggio', suDisco: false };
+  return { testo: '', genere: null, nome: null, suDisco: false };
+}
+
+/**
+ * IL SERVER HA UN TESTO DA IMPAGINARE? — domanda diversa da «noi ce l'abbiamo in mano».
+ *
+ * ⛔ Le due si confondono facilmente e sbagliano in due versi opposti. Un rapporto accettato che
+ *   questa schermata non ha ancora letto **si esporta benissimo**: il file è sul disco del server,
+ *   e spegnere il PDF perché il browser non ha ancora fatto una GET sarebbe decidere al posto di
+ *   chi ha i dati. All'opposto, l'ultima frase detta in chat **ce l'abbiamo** e il server non ha
+ *   nessun file da renderle attorno.
+ */
+export function serverHaTestoDaImpaginare(voce, lettura = null, dettaglio = null) {
+  return haRapportoLeggibile(voce) || testoDepositato(voce, lettura, dettaglio).genere === 'respinto';
+}
+
+/** C'è qualcosa da tirare fuori da questa ricerca? ⛔ Una domanda sola, in un posto solo. */
+export function haQualcosaDaEsportare(voce, lettura = null, dettaglio = null) {
+  return serverHaTestoDaImpaginare(voce, lettura, dettaglio) || Boolean(testoDepositato(voce, lettura, dettaglio).testo);
+}
+
+/**
+ * IL RECORD C'È, NON C'È, O NON LO SAPPIAMO — tre risposte, mai due.
+ *
+ * ⛔ `affermazioni: null` (non `[]`) è il modo in cui la rotta del dettaglio dice «non c'è un
+ *   record»: L5 §4.2 lo scrive a lettere. `[]` sarebbe «record presente, nessuna affermazione».
+ *   Confonderli spegnerebbe le esportazioni di dati su una ricerca che le ha.
+ * ⛔ E quando nessuna delle due fonti ha parlato si torna `null`: «non lo sappiamo» non spegne
+ *   niente, e decide il server col suo 409.
+ */
+export function recordDisponibile(lettura = null, dettaglio = null) {
+  const ricerca = dettaglio?.stato === 'pronto' ? dettaglio.ricerca : null;
+  if (lettura?.stato === 'pronto') return Boolean(lettura.record);
+  if (ricerca) return Array.isArray(ricerca.affermazioni);
+  return null;
+}
+
+export function esportazioniRicerca(voce, lettura = null, dettaglio = null) {
+  const deposito = testoDepositato(voce, lettura, dettaglio);
+  const impaginabile = serverHaTestoDaImpaginare(voce, lettura, dettaglio);
+  const senzaRecord = recordDisponibile(lettura, dettaglio) === false;
   return FORMATI_ESPORTAZIONE.map((uscita) => {
+    /* La copia è l'unica che non passa dal server: vive o muore col testo che abbiamo in mano. */
     if (uscita.chiave === 'copia') {
-      const testo = letto ? (lettura.prosa || lettura.testo || '') : '';
-      return { ...uscita, disponibile: Boolean(testo), motivo: testo ? null : MOTIVI_ESPORTAZIONE.senzaTesto, testo };
+      return { ...uscita, disponibile: Boolean(deposito.testo), motivo: deposito.testo ? null : MOTIVI_ESPORTAZIONE.senzaTesto, testo: deposito.testo };
     }
-    if (!haRapporto) return { ...uscita, disponibile: false, motivo: MOTIVI_ESPORTAZIONE.senzaRapporto };
+    if (!impaginabile) {
+      /* Due assenze diverse, due frasi diverse: «non c'è niente» e «c'è solo una frase di chat». */
+      return { ...uscita, disponibile: false, motivo: deposito.testo ? MOTIVI_ESPORTAZIONE.soloUltimoMessaggio : MOTIVI_ESPORTAZIONE.senzaRapporto };
+    }
+    /*
+     * ⛔ Un documento su un rapporto RESPINTO esce lo stesso — è il contratto della rotta
+     *   (md/html/pdf comunque, 409 solo per i quattro di dati) ed è la cura della foto del 12/09.
+     *   Ma non esce muto: «esce senza le verifiche» è la differenza fra un rapporto e un testo.
+     */
     if (uscita.vuoleRecord && senzaRecord) return { ...uscita, disponibile: false, motivo: MOTIVI_ESPORTAZIONE.senzaRecord };
-    /* ⛔ Un documento su un rapporto senza riepilogo esce lo stesso, ma lo dice: «senza verifiche»
-       non è un dettaglio tipografico, è la differenza fra un rapporto e un testo. */
     const avvertenza = senzaRecord ? 'esce senza le verifiche' : null;
     return { ...uscita, disponibile: true, motivo: null, avvertenza };
   });
@@ -1292,7 +1398,7 @@ function contenutoVista(doc, id, voce, lettura, ctx, dettaglio) {
     case 'fonti': return vistaFonti(doc, voce, lettura, ctx);
     case 'piano': return vistaPiano(doc, dettaglio);
     case 'andata': return vistaAndata(doc, voce, ctx, dettaglio);
-    default: return vistaRapporto(doc, voce, lettura, ctx);
+    default: return vistaRapporto(doc, voce, lettura, ctx, dettaglio);
   }
 }
 
@@ -1329,12 +1435,19 @@ export function vociMenuRicerca(voce, ctx = {}) {
    *   laboratorio, i test e ogni chiamante senza sessione devono continuare a poter tirare fuori il
    *   testo che hanno già letto senza chiedere niente a nessuno.
    */
-  const suite = typeof ctx.onEsportazioni === 'function' && haRapportoLeggibile(voce);
-  if (pronto && lettura.prosa) {
-    const rapporto = haRapportoLeggibile(voce);
-    const cosa = rapporto ? 'il rapporto' : 'il file depositato';
-    voci.push({ chiave: 'copia', etichetta: `Copia ${cosa}`, icona: 'i-copy', aziona: () => ctx.onCopia?.(lettura.prosa, voce) });
-    if (!suite) voci.push({ chiave: 'esporta', etichetta: `Esporta ${cosa}`, icona: 'i-download', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'md'), lettura.testo || lettura.prosa, 'text/markdown') });
+  /*
+   * ⛔⛔ 12/09, LA FOTO DEL 4174: qui c'era `if (pronto && lettura.prosa)`, cioè «solo se il file di
+   *   LIBRERIA è stato letto» — e su una ricerca respinta in Libreria non c'è niente. Risultato:
+   *   8.953 byte sul disco e due voci di menu. Adesso si chiede a `testoDepositato`, che le tre
+   *   strade le conosce tutte.
+   */
+  const deposito = testoDepositato(voce, lettura, ctx.dettaglio);
+  const suite = typeof ctx.onEsportazioni === 'function' && haQualcosaDaEsportare(voce, lettura, ctx.dettaglio);
+  if (deposito.testo) {
+    voci.push({ chiave: 'copia', etichetta: `Copia ${deposito.nome}`, icona: 'i-copy', aziona: () => ctx.onCopia?.(deposito.testo, voce) });
+    /* ⛔ L'esportazione scritta nel browser resta solo dove la suite non c'è, e solo su un testo
+       che il server saprebbe impaginare: dell'ultimo messaggio si fa una copia, non un file. */
+    if (!suite && deposito.suDisco) voci.push({ chiave: 'esporta', etichetta: `Esporta ${deposito.nome}`, icona: 'i-download', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'md'), deposito.testo, 'text/markdown') });
   }
   if (suite) {
     voci.push({ chiave: 'esporta-suite', etichetta: 'Esporta…', icona: 'i-download', aziona: () => ctx.onEsportazioni(voce) });
