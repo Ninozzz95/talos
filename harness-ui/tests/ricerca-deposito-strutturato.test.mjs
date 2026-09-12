@@ -408,7 +408,7 @@ test('⭐⭐⭐ L8 — lo SCHEMA nomina i tre campi: «uno strumento che non nom
   const attrezzo = ATTREZZI_ESTESI_OPENAI.find((a) => a.function.name === 'research_deposit');
   assert.ok(attrezzo, 'research_deposit deve restare un attrezzo ESTESO');
   const schema = attrezzo.function.parameters;
-  assert.deepEqual(Object.keys(schema.properties).sort(), ['affermazioni', 'fonti', 'testo']);
+  assert.deepEqual(Object.keys(schema.properties).sort(), ['affermazioni', 'fonti', 'parte', 'testo']);
   assert.deepEqual([...schema.required].sort(), ['affermazioni', 'fonti', 'testo']);
   assert.deepEqual(Object.keys(schema.properties.affermazioni.items.properties).sort(), ['fonte', 'passaggio', 'testo']);
   assert.deepEqual(Object.keys(schema.properties.fonti.items.properties).sort(), ['dataDichiarata', 'letta', 'titolo', 'url']);
