@@ -2411,8 +2411,8 @@ const ATTREZZI_ESTESI = [
      */
     {
         name: 'research_deposit',
-        description: 'Deposit the final report of THIS deep research. Call it once, when the '
-            + 'investigation is over: what you pass here is the permanent report — the one the '
+        description: 'Deposita il rapporto di questa ricerca. Con parte, invia una sezione per chiamata e attendi la conferma; ultima:true chiude il deposito. Senza parte resta il deposito unico. '
+            + 'What you pass here is the permanent report — the one the '
             + 'user will read and the one that gets saved. Your chat message is not the report and '
             + 'is never saved as one. Pass three things: `testo` (the report as Markdown prose), '
             + '`affermazioni` (one entry per factual claim, each carrying the source URL it rests '
@@ -2424,6 +2424,13 @@ const ATTREZZI_ESTESI = [
         input_schema: {
             type: 'object',
             properties: {
+                parte: {
+                    type: 'object',
+                    description: 'Deposito incrementale: indice da 1, ultima:true solo alla chiusura. Ogni chiamata contiene solo questa parte di testo, affermazioni e fonti (elenchi anche vuoti); prevale sulle descrizioni del deposito unico. Attendi la conferma prima della parte seguente.',
+                    properties: { indice: { type: 'integer', minimum: 1, maximum: 512 }, ultima: { type: 'boolean' } },
+                    required: ['indice', 'ultima'],
+                    additionalProperties: false,
+                },
                 testo: { type: 'string', description: 'The complete report, as Markdown: a "# " title, the findings as prose, and a "## Sources" section. Self-contained: do not refer to earlier messages.' },
                 affermazioni: {
                     type: 'array',
@@ -7993,8 +8000,10 @@ export async function talosLavora({
                      *   file di `src/research/` entra in questo kernel, che è condiviso col mobile.
                      */
                     const strutturato = argomenti.affermazioni !== undefined || argomenti.fonti !== undefined
-                    let composto = null
-                    if (strutturato && typeof componiRapportoRicercaFn === 'function') {
+                    const aParti = argomenti.parte !== undefined
+                    let composto = aParti ? { ok: false, motivo: 'Il deposito a parti richiede il compositore della ricerca; nessuna parte è stata scritta.' } : null
+                    // BC-49: il compositore ora può registrare checkpoint; il permesso precede ogni effetto.
+                    if ((strutturato || aParti) && permesso.consentito && idBuono && typeof componiRapportoRicercaFn === 'function') {
                         /*
                          * ⭐⭐⭐⭐ L9 (12/09/2026) — DUE CAMBIAMENTI MINIMI, e nessuno dei due è
                          * cosmetico.
@@ -8019,6 +8028,7 @@ export async function talosLavora({
                                 testo: testoRapporto,
                                 affermazioni: argomenti.affermazioni,
                                 fonti: argomenti.fonti,
+                                ...(aParti ? { parte: argomenti.parte, byteArgomenti: Buffer.byteLength(typeof c.function.arguments === 'string' ? c.function.arguments : JSON.stringify(argomenti), 'utf8') } : {}),
                             })
                         }
                         catch {
@@ -8029,8 +8039,11 @@ export async function talosLavora({
                              *   `testo` com'è), che è il comportamento di prima di L8. `null` è proprio
                              *   ciò che quella strada legge.
                              */
-                            composto = null
+                            composto = aParti ? { ok: false, motivo: 'La parte non è stata confermata sul disco. Riprova lo stesso indice con gli stessi contenuti.' } : null
                         }
+                    }
+                    if (aParti && composto?.ok && composto.parziale !== true && composto.giaScritto !== true) {
+                        composto = { ok: false, motivo: 'Questo compositore non supporta ancora il deposito a parti; nessuna sezione è stata pubblicata.' }
                     }
                     const testoDaScrivere = composto?.ok ? composto.documento : testoRapporto
                     let rapportoScritto = null
@@ -8041,7 +8054,7 @@ export async function talosLavora({
                     else if (!idBuono) {
                         esito = 'research_deposit is only available inside a deep research session: this session is not one, so there is no research folder to deposit into.'
                     }
-                    else if (!testoRapporto.trim()) {
+                    else if (!aParti && !testoRapporto.trim()) {
                         esito = 'REFUSED. Empty report: nothing was deposited. Write the full report text in `testo`.'
                     }
                     /*
@@ -8055,9 +8068,13 @@ export async function talosLavora({
                     else if (composto && composto.ok === false) {
                         esito = `REFUSED. ${composto.motivo} Nothing was written: call research_deposit again with that fixed — everything you already found is still valid.`
                     }
+                    else if (aParti && composto?.parziale) {
+                        esito = composto.messaggio
+                        rapportoScritto = composto.contenutoRegistrato
+                    }
                     else {
                         try {
-                            await disco.scrivi(percorsoRelativo, testoDaScrivere)
+                            if (!composto?.giaScritto) await disco.scrivi(percorsoRelativo, testoDaScrivere)
                             rapportoScritto = testoDaScrivere
                             /*
                              * ⛔ Il messaggio dice DOVE e QUANTO, non «fatto»: il modello deve poter
@@ -8120,7 +8137,7 @@ export async function talosLavora({
                     {
                         const ricevuta = creaRicevutaOperazione({
                             // ⭐ `contenutoScritto` VERO, a differenza di document_create/generate_image: qui il contenuto lo abbiamo in mano, quindi l'hash di integrità della ricevuta è reale invece che `null`.
-                            azione: { tipo: 'research_deposit', percorso: percorsoAssoluto }, toolCallId: c.id,
+                            azione: { tipo: 'research_deposit', percorso: composto?.parziale ? composto.percorsoRegistrato : percorsoAssoluto }, toolCallId: c.id,
                             esitoPermesso: permesso, contenutoScritto: rapportoScritto,
                             /*
                              * ⛔ L8 — un rifiuto degli ARGOMENTI non è un'esecuzione fallita.
@@ -8129,7 +8146,7 @@ export async function talosLavora({
                              *   deposito che non doveva avvenire, e marcarlo come guasto
                              *   sporcherebbe la catena delle ricevute con un allarme falso.
                              */
-                            esecuzioneFallita: permesso.consentito && idBuono && testoRapporto.trim().length > 0
+                            esecuzioneFallita: permesso.consentito && idBuono && (aParti || testoRapporto.trim().length > 0)
                                 && !(composto && composto.ok === false) && rapportoScritto === null,
                             firma, catena,
                         })

@@ -891,7 +891,7 @@ const codeDelGiornale = new Map();
  *
  * @returns {Promise<void>}
  */
-export async function accodaEvento({ cartella, id, evento, durevole = true }, deps = {}) {
+export async function accodaEvento({ cartella, id, evento, durevole = true, separaRiga = false }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const appendFileFn = deps.appendFileFn ?? fsp.appendFile;
   if (!idRicercaValido(id)) throw new ResearchStoreError(`id di ricerca non valido: ${String(id)}`, 'RESEARCH_INVALID');
@@ -900,7 +900,8 @@ export async function accodaEvento({ cartella, id, evento, durevole = true }, de
   }
   const percorso = percorsoGiornale(cartella, id);
   // ⛔ Serializzato SUBITO, non dentro la coda: `evento` potrebbe cambiare mentre aspetta il turno.
-  const riga = `${JSON.stringify(evento)}\n`;
+  // BC-49: una riga mozzata dal crash non deve assorbire il checkpoint successivo.
+  const riga = `${separaRiga ? '\n' : ''}${JSON.stringify(evento)}\n`;
   const precedente = codeDelGiornale.get(percorso) ?? Promise.resolve();
   const corrente = precedente.catch(() => {}).then(async () => {
     await mkdirFn(dirname(percorso), { recursive: true });
@@ -927,14 +928,15 @@ export async function accodaEvento({ cartella, id, evento, durevole = true }, de
  *
  * @returns {Promise<{eventi: object[], righeSaltate: number, byte: number}>}
  */
-export async function leggiGiornale({ cartella, id }, deps = {}) {
+export async function leggiGiornale({ cartella, id, rigoroso = false }, deps = {}) {
   const readFileFn = deps.readFileFn ?? fsp.readFile;
   const vuoto = { eventi: [], righeSaltate: 0, byte: 0 };
   if (!idRicercaValido(id)) return vuoto;
   let testo;
   try {
     testo = await readFileFn(percorsoGiornale(cartella, id), 'utf8');
-  } catch {
+  } catch (errore) {
+    if (rigoroso && errore?.code !== 'ENOENT') throw errore;
     return vuoto; // nessun giornale è uno stato onesto: una ricerca vecchia non ne ha mai avuto uno.
   }
   const eventi = [];

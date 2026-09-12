@@ -66,6 +66,7 @@ import {
   scriviIstantaneaCache, scriviPiano, statRapporto,
 } from './research-store.mjs';
 import { talosResearchFetchCache } from './research/fetch-cache.mjs';
+import { consegnaPartiRapporto, depositaParteRapporto } from './research/deposito-a-pezzi.mjs';
 /*
  * ⭐⭐⭐⭐ L9 (12/09/2026) — IL MOTORE PORTATO COMINCIA A LAVORARE DENTRO LA CORSA.
  *
@@ -522,7 +523,7 @@ function promptRicerca(question, depth, piano = []) {
      *   è dichiarata qui e controllata da `rileggiRapportoMinimo` — mai un cancello che chiede
      *   una forma che nessuno ha detto.
      */
-    'When you are done investigating, call the tool `research_deposit` ONCE, with three arguments.',
+    'Deposita il rapporto con research_deposit seguendo le istruzioni sulle parti qui sotto.',
     /*
      * ⭐⭐⭐⭐ L8 (12/09/2026) — LA CONSEGNA NON CHIEDE PIÙ UN RECINTO, CHIEDE TRE ARGOMENTI.
      *
@@ -540,13 +541,14 @@ function promptRicerca(question, depth, piano = []) {
      *   scrive. ⛔ `judge` e `claimSupported` non sono nemmeno più argomenti: non c'è più nulla
      *   da raccomandare, perché non c'è più nulla che il modello possa timbrare.
      */
-    '`testo`: the full report as Markdown prose — a "# " title, your findings, and a "## Sources" section. This is what the person reads, and it is never rewritten.',
+    '`testo`: prosa Markdown della parte corrente; il rapporto assemblato porta titolo, risultati e fonti, senza riscrivere la prosa.',
     '`affermazioni`: one entry per factual claim that matters, each with `testo` (the claim), `fonte` (the exact http(s) URL it rests on, spelled as in `fonti`) and `passaggio` (the sentence you actually read in that source, copied VERBATIM — never reworded, never invented; "" is the honest answer if you cannot find it, and it is counted as such).',
     '`fonti`: one entry per source, with `url` (full http(s)), `titolo`, `dataDichiarata` (the date the source itself declares, or omit it) and `letta`: true only if you opened the page, false if you only saw a search-result snippet.',
     'The server builds the verifiable record from those three and saves it with your text: you do not have to write any JSON, and you cannot mark your own claims as verified — an independent check happens later.',
     'That deposited document IS the permanent report. Your chat message is not the report and is never saved as one — after depositing, just tell the user in one or two lines that the report is ready.',
     'Note any real uncertainty instead of guessing, and never deposit a report without sources.',
     'You cannot write files, run shell commands or create documents in this project: `research_deposit` is the one and only thing you are allowed to write, and it is all you need.',
+    consegnaPartiRapporto(),
   ].join(' ');
 }
 
@@ -601,7 +603,7 @@ const PROMPT_RIPRESA = 'Continue the research from where you left off, using web
  *   deposito e sulla forma del record: senza, una ricerca ripresa consegnerebbe qualcosa che il
  *   cancello respinge — un guasto introdotto dalla cura, cioè il peggiore.
  */
-function consegnaDiRipresa({ giro, prossimo, rimasti, speso, fonti, task }) {
+function consegnaDiRipresa({ giro, prossimo, rimasti, speso, fonti, task, deposito }) {
   const righe = [
     'This research was interrupted (the app or the server restarted). Its conversation is gone, but its journal is not — here is exactly where it stood.',
     `Question: "${giro.question}"`,
@@ -630,6 +632,7 @@ function consegnaDiRipresa({ giro, prossimo, rimasti, speso, fonti, task }) {
     righe.push('The journal records the run itself but not individual collection steps, so restart the investigation for this question from the beginning of the evidence you can still see, and do not assume anything was already concluded.');
   }
   righe.push(typeof task?.consegna === 'string' && task.consegna.trim() ? task.consegna.trim() : PROMPT_RIPRESA);
+  righe.push(deposito);
   return righe.join('\n');
 }
 
@@ -1171,7 +1174,7 @@ export function creaResearchOrchestrator({
 
   async function registra(cartella, id, evento) {
     try {
-      await accodaEventoFn({ cartella, id, evento: { at: clock().toISOString(), ...evento } });
+      await accodaEventoFn({ cartella, id, evento: { at: clock().toISOString(), ...evento }, ...(evento.kind === 'run_resumed' ? { separaRiga: true } : {}) });
     } catch { /* vedi sopra: un giornale che non si scrive non deve fermare una corsa già pagata. */ }
   }
 
@@ -1391,7 +1394,18 @@ export function creaResearchOrchestrator({
    * @returns {Promise<object>} lo stesso contratto di `componiRapportoRicerca`, più `bilancio`,
    *   `giudice`, `proveDistinte` e `fedelta` quando la verifica è girata.
    */
-  async function componiRapporto({ cartella, id, domanda, testo, affermazioni, fonti }) {
+  async function componiRapporto(argomenti) {
+    if (argomenti.parte !== undefined) {
+      return depositaParteRapporto(argomenti, {
+        leggiGiornaleFn, accodaEventoFn, leggiRapportoFn, clock,
+        valida: unito => componiRapportoRicerca({ domanda: argomenti.domanda, ...unito }),
+        finalizza: unito => verificaEComponiRapporto({ ...argomenti, ...unito }),
+      });
+    }
+    return verificaEComponiRapporto(argomenti);
+  }
+
+  async function verificaEComponiRapporto({ cartella, id, domanda, testo, affermazioni, fonti }) {
     /*
      * ⛔ Il testo tenuto si cerca solo se abbiamo un id di ricerca: `research_deposit` fuori da
      *   una ricerca non esiste (il kernel lo rifiuta a monte), ma questa funzione è anche il
@@ -1754,7 +1768,7 @@ export function creaResearchOrchestrator({
     if (!ripresaAutomatica) return false;
     let eventi = [];
     try { ({ eventi } = await leggiGiornaleFn({ cartella, id })); } catch { return false; }
-    if (!eventi.some((e) => e?.kind === 'step_finished')) return false;
+    if (!eventi.some((e) => e?.kind === 'step_finished' || e?.kind === 'deposit_part')) return false;
     if (eventi.some((e) => e?.kind === 'run_resumed' && e.auto === true)) return false;
     try { await dormiFn(ATTESA_RIPRESA_AUTOMATICA_MS); } catch { return false; }
     const adesso = await leggiRicercaFn({ cartella, id });
@@ -2093,12 +2107,17 @@ export function creaResearchOrchestrator({
       return { ok: false, esito: `That research is ${record.terminata} and will not be resumed: start a new one if you need more.` };
     }
 
+    // BC-49: anche la ripresa con conversazione deve riconciliare le conferme dal disco.
+    const { eventi, righeSaltate } = await leggiGiornaleFn({ cartella, id, rigoroso: true });
+    let deposito;
+    try { deposito = consegnaPartiRapporto(eventi); }
+    catch { return { ok: false, esito: 'Le parti conservate non superano il controllo di integrità. Ripristina il giornale prima di riprendere.' }; }
     if (voce.messaggiFinali) {
       await riapriLaMetadata(cartella, id);
       await registra(cartella, id, rigaDiRipresa);
       avviaESeguiFn({
         sessionId: id, taskId: voce.taskId, cartella, task: voce.task, comandoProva: voce.comandoProva,
-        messaggiIniziali: [...voce.messaggiFinali, { role: 'user', content: PROMPT_RIPRESA }],
+        messaggiIniziali: [...voce.messaggiFinali, { role: 'user', content: `${PROMPT_RIPRESA}\n${deposito}` }],
         forkDa: voce.forkDa, voceEsistente: voce,
         onConclusioneFn: (risultato) => onConclusioneRicerca({ cartella, id, risultato }),
       });
@@ -2142,7 +2161,6 @@ export function creaResearchOrchestrator({
      *   ripresa perché il giro non ha fatto in tempo a scrivere la seconda riga sarebbe punirla
      *   per un crash.
      */
-    const { eventi, righeSaltate } = await leggiGiornaleFn({ cartella, id });
     const giro = talosResearchReplay(eventi);
     const inPausa = Boolean(giro) && (giro.status === 'paused' || giro.status === 'pause_requested');
     if (giro && talosResearchIsTerminal(giro.status)) {
@@ -2188,7 +2206,7 @@ export function creaResearchOrchestrator({
     }
     avviaESeguiFn({
       sessionId: id, taskId: voce.taskId, cartella, task: voce.task, comandoProva: voce.comandoProva,
-      messaggiIniziali: [{ role: 'user', content: consegnaDiRipresa({ giro: recuperato, prossimo, rimasti, speso, fonti, task: voce.task }) }],
+      messaggiIniziali: [{ role: 'user', content: consegnaDiRipresa({ giro: recuperato, prossimo, rimasti, speso, fonti, task: voce.task, deposito }) }],
       forkDa: voce.forkDa, voceEsistente: voce,
       onConclusioneFn: (risultato) => onConclusioneRicerca({ cartella, id, risultato }),
     });
