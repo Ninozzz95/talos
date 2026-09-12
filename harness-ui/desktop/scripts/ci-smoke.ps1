@@ -113,14 +113,19 @@ finally {
             if (-not (Test-Path -LiteralPath $uninstaller -PathType Leaf)) { throw 'Disinstallatore assente dopo il tentativo di installazione.' }
             $fase = [Diagnostics.Stopwatch]::StartNew()
             Esegui-Installer $uninstaller '/S'
+            # Il disinstallatore NSIS si copia in %TEMP% e prosegue da lì: il processo lanciato esce
+            # subito, prima che file, collegamenti e voce di registro siano tolti (NSIS, Chapter 3.2.1,
+            # opzione `_?=`, consultato il 13/09/2026). 13/09: con TALOS.exe già sparito dopo 4 s i
+            # collegamenti erano ancora lì un istante — controllati subito, falso rosso. Si aspetta la
+            # fine di TUTTA la pulizia, con una sola scadenza.
             Attendi-Condizione { -not (Test-Path -LiteralPath (Join-Path $InstallDir 'TALOS.exe')) } 60 'Disinstallazione incompleta: TALOS.exe presente.'
             Attendi-Condizione { @(Processi-Installati $InstallDir).Count -eq 0 } 20 'R04-PROCESSI: processi rimasti dopo la disinstallazione.'
+            Attendi-Condizione { @($collegamenti | Where-Object { Test-Path -LiteralPath $_ }).Count -eq 0 } 30 'Collegamenti residui dopo la disinstallazione.'
+            Attendi-Condizione { @(Registrazioni-Talos).Count -eq 0 } 30 'Voce di disinstallazione rimasta nel registro.'
             $misure.disinstallazioneMs = $fase.ElapsedMilliseconds
             $misure.processiResidui = @(Processi-Installati $InstallDir | Select-Object ProcessId, Name)
             $misure.collegamentiResidui = @($collegamenti | Where-Object { Test-Path -LiteralPath $_ })
-            if ($misure.collegamentiResidui.Count -gt 0) { throw 'Collegamenti residui dopo la disinstallazione.' }
-            $rimasti = @(Registrazioni-Talos)
-            if ($rimasti.Count -gt 0) { throw 'Voce di disinstallazione rimasta nel registro.' }
+            $misure.registroRimosso = (@(Registrazioni-Talos).Count -eq 0)
             $misure.datiConservati = Test-Path -LiteralPath (Join-Path $dati 'da-conservare.txt')
             if (-not $misure.datiConservati) { throw 'La disinstallazione ha rimosso i dati utente della prova.' }
             $misure.disinstallato = $true
@@ -134,6 +139,10 @@ finally {
         $riepilogo = "`n### Smoke dell'installer`n`nEsito: $($misure.completato). Durata totale: $($misure.durataMs) ms.`n"
         foreach ($voce in @('installazioneMs', 'disinstallazioneMs')) { if ($misure.Contains($voce)) { $riepilogo += "`n- ${voce}: $($misure[$voce]) ms" } }
         if ($misure.Contains('app') -and $misure.app.completato) { $riepilogo += "`n- Avvio e pagina pronta: $($misure.app.avvioMs) ms; chiusura: $($misure.app.chiusuraMs) ms; health con cookie: $($misure.app.healthConCookie)." }
+        if ($misure.Contains('app') -and $misure.app.completato -and $misure.app.PSObject.Properties['memoriaRiposo']) {
+            $m = $misure.app.memoriaRiposo
+            $riepilogo += "`n- RAM a riposo ($($m.riposoMs) ms dopo la pagina pronta): guscio $([math]::Round($m.guscioByte / 1MB)) MiB su $(@($m.processiGuscio).Count) processi, backend $([math]::Round($m.figlioByte / 1MB)) MiB, totale $([math]::Round($m.totaleByte / 1MB)) MiB."
+        }
         Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value $riepilogo -Encoding utf8
     }
 }
