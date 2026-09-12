@@ -1253,7 +1253,8 @@ Foto dell'owner: lo studio (lotto F) ha un'anteprima statica (pallino e barre, s
 Paper) mentre nel mockup è viva. Ordini: (1) anteprima disegnata coi token del preset scelto, con la
 mini-conversazione del mockup e la scena animata del tema (renderer del pacchetto), che cambia al
 cambio di preset; (2) «i diversi slider TUTTI nella modale anziché nelle impostazioni, più semplice e
-UX friendly»: sfondo acceso/spento, scena, intensità, contrasto, velocità/densità, modo colore,
-densità, dimensione, testo chat, forma del composer, animazioni — nello studio, con le stesse chiavi
-di salvataggio; in Impostazioni un rimando, non un doppione. Delegato (in corso, con confronto testa
+UX friendly» — precisato: «gli slider relativi dell'animazione e del tema, ovviamente»: preset, modo
+colore, sfondo acceso/spento, scena, intensità, contrasto, velocità/densità e gli altri cursori della
+scena — nello studio, con le stesse chiavi di salvataggio; densità liste, dimensione, testo chat,
+composer restano in Impostazioni; per ciò che passa nello studio, in Impostazioni un rimando. Delegato (in corso, con confronto testa
 a testa e i 14 temi provati uno per uno).
