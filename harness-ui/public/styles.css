@@ -118,6 +118,7 @@
   --talos-cronologia-w:36px;
   --talos-cronologia-ingombro:calc(var(--talos-cronologia-x) + var(--talos-cronologia-w));
   --talos-chat-gutter:44px;
+  --talos-turno-coda:46px;
   --talos-row-session:66px;
   --talos-row:44px;
   --talos-row-pad:12px;
@@ -1532,12 +1533,16 @@ select:focus-visible,
     opacity var(--talos-motion-duration-control) var(--talos-motion-ease),
     background-color var(--talos-motion-duration-control) var(--talos-motion-ease);
 }
-.talos-cronologia__voce--attiva .talos-cronologia__linea {
+.talos-cronologia__voce[data-lato=utente] .talos-cronologia__segno {
+  justify-content: flex-end;
+}
+.talos-cronologia__voce[data-lato=utente] .talos-cronologia__linea {
+  background: var(--talos-accent);
+  opacity: .5;
+}
+.talos-cronologia__voce.talos-cronologia__voce--attiva .talos-cronologia__linea {
   background: var(--talos-accent);
   opacity: 1;
-}
-.talos-cronologia__voce[data-tono=utente] .talos-cronologia__linea {
-  background: var(--talos-success);
 }
 .talos-cronologia__voce[data-tono=info] .talos-cronologia__linea {
   background: var(--talos-info);
@@ -1645,7 +1650,7 @@ select:focus-visible,
 }
 .talos-chat-foot > * {
   --talos-colonna-chat:min(calc(92px + var(--talos-measure-w)), 100%);
-  --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - 46px));
+  --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - var(--talos-turno-coda)));
   --talos-larghezza-piede:min(var(--composer-max-w, var(--talos-testo-chat)), 100%);
   width: var(--talos-larghezza-piede);
   max-width: none;
@@ -1715,7 +1720,7 @@ select:focus-visible,
 }
 .talos-turn {
   display: grid;
-  grid-template-columns: 0 minmax(0, 1fr) 46px;
+  grid-template-columns: 0 minmax(0, 1fr) var(--talos-turno-coda);
   align-items: stretch;
 }
 .talos-turn > *:not(.talos-turn-spine) {
@@ -2150,11 +2155,11 @@ button.talos-turn-spine__tick:focus-visible {
   min-height: 32px;
 }
 :root.chat-full-width {
-  --talos-respiro-pieno:clamp(0px, calc((100% - var(--talos-cronologia-ingombro) - min(calc(92px + var(--talos-measure-w)), calc(100% - 2 * var(--talos-chat-gutter)))) / 2), var(--talos-chat-gutter));
+  --talos-respiro-pieno:clamp(0px, calc((100% - var(--talos-cronologia-ingombro) - var(--talos-turno-coda) - min(calc(92px + var(--talos-measure-w)), calc(100% - 2 * var(--talos-chat-gutter)))) / 2), var(--talos-chat-gutter));
 }
 :root.chat-full-width .talos-conversation,
 :root.chat-full-width .talos-chat-foot {
-  padding-left: calc(var(--talos-cronologia-ingombro) + var(--talos-respiro-pieno));
+  padding-left: calc(var(--talos-cronologia-ingombro) + var(--talos-turno-coda) + var(--talos-respiro-pieno));
   padding-right: var(--talos-respiro-pieno);
 }
 :root.chat-full-width .talos-conversation__column {
@@ -2162,7 +2167,7 @@ button.talos-turn-spine__tick:focus-visible {
 }
 :root.chat-full-width .talos-chat-foot > * {
   --talos-colonna-chat:100%;
-  width: calc(100% - 46px);
+  width: calc(100% - var(--talos-turno-coda));
   max-width: none;
   margin-left: 0;
 }
