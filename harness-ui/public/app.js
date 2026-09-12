@@ -363,7 +363,15 @@ var init_fonti_modelli = __esm({
       Object.freeze({ id: "huggingface", etichetta: "Hugging Face", soloSeCollegato: true }),
       Object.freeze({ id: "kimi", etichetta: "Kimi", soloSeCollegato: true }),
       Object.freeze({ id: "minimax", etichetta: "MiniMax", soloSeCollegato: true }),
-      Object.freeze({ id: "qwen", etichetta: "Qwen", soloSeCollegato: true })
+      Object.freeze({ id: "qwen", etichetta: "Qwen", soloSeCollegato: true }),
+      // P-J — porte distinte, nomi umani; nessuna disponibilità senza collegamento.
+      Object.freeze({ id: "zai-anthropic", etichetta: "Z.AI (porta Anthropic)", soloSeCollegato: true }),
+      Object.freeze({ id: "minimax-anthropic", etichetta: "MiniMax (porta Anthropic)", soloSeCollegato: true }),
+      // P-K — inizio
+      Object.freeze({ id: "azure", etichetta: "Azure AI Foundry", soloSeCollegato: true }),
+      Object.freeze({ id: "bedrock", etichetta: "Amazon Bedrock", soloSeCollegato: true }),
+      Object.freeze({ id: "vertex", etichetta: "Google Vertex AI", soloSeCollegato: true })
+      // P-K — fine
     ]);
     ID_DIRETTI = new Set(PROVIDER_DIRETTI.map((p) => p.id));
   }
@@ -1068,6 +1076,68 @@ function simboloProvider(nome) {
   svg.append(use);
   return svg;
 }
+function componiIndirizzoCloud(provider, { endpoint = "", regione = "", progetto = "", versioneApi = "v1" } = {}) {
+  const invalido = () => {
+    throw new Error("Controlla i campi del collegamento.");
+  };
+  if (provider === "azure") {
+    let url;
+    try {
+      url = new URL(endpoint);
+    } catch {
+      invalido();
+    }
+    if (!["https:", "http:"].includes(url.protocol) || url.username || url.password || url.hash || !["v1", "2024-10-21"].includes(versioneApi)) invalido();
+    return url.origin + (versioneApi === "v1" ? "/openai/v1" : "/openai?api-version=2024-10-21");
+  }
+  if (!/^[a-z][a-z0-9-]{1,62}$/u.test(regione)) invalido();
+  if (provider === "bedrock") {
+    let mantle = false;
+    try {
+      mantle = new URL(endpoint).hostname.startsWith("bedrock-mantle.");
+    } catch {
+    }
+    return mantle ? `https://bedrock-mantle.${regione}.api.aws/v1` : `https://bedrock-runtime.${regione}.amazonaws.com/openai/v1`;
+  }
+  if (provider !== "vertex" || !/^[a-zA-Z0-9][a-zA-Z0-9-]{0,62}$/u.test(progetto)) invalido();
+  return `https://${regione === "global" ? "" : regione + "-"}aiplatform.googleapis.com/v1/projects/${progetto}/locations/${regione}/endpoints/openapi`;
+}
+function aggiungiCampiCloud(body, row) {
+  if (!row.cloud) return;
+  if (row.cloud.campi.includes("regione")) body.append(campo("Regione", "text", "providerRegione", row, row.regione || ""));
+  if (row.cloud.campi.includes("progetto")) body.append(campo("Progetto", "text", "providerProgetto", row, row.progetto || ""));
+  if (row.cloud.campi.includes("versioneApi")) {
+    const versione = campo("Versione del collegamento", "text", "providerVersione", row, row.versioneApi || "v1");
+    versione.querySelector("input").placeholder = "v1 oppure 2024-10-21";
+    body.append(versione);
+  }
+  const nota = el3("p", "talos-muted", row.cloud.nota);
+  nota.style.gridColumn = "1 / -1";
+  body.append(nota);
+  body.addEventListener("input", (e) => {
+    const endpoint = body.querySelector("[data-provider-endpoint]");
+    if (!endpoint) return;
+    const regione = body.querySelector("[data-provider-regione]"), progetto = body.querySelector("[data-provider-progetto]"), versione = body.querySelector("[data-provider-versione]");
+    if (e.target === endpoint) {
+      try {
+        const url = new URL(endpoint.value), p = /\/projects\/([^/]+)\/locations\/([^/]+)/u.exec(url.pathname);
+        endpoint.dataset.pkUltimoIndirizzo = endpoint.value;
+        if (regione) regione.value = p?.[2] || /^bedrock-(?:runtime|mantle)\.([^.]+)/u.exec(url.hostname)?.[1] || "";
+        if (progetto) progetto.value = p?.[1] || "";
+        if (versione) versione.value = url.searchParams.get("api-version") || "v1";
+      } catch {
+      }
+      return;
+    }
+    if (![regione, progetto, versione].includes(e.target)) return;
+    if (endpoint.value) endpoint.dataset.pkUltimoIndirizzo = endpoint.value;
+    try {
+      endpoint.value = componiIndirizzoCloud(row.id, { endpoint: endpoint.value || endpoint.dataset.pkUltimoIndirizzo || row.endpoint, regione: regione?.value.trim(), progetto: progetto?.value.trim(), versioneApi: versione?.value.trim() });
+    } catch {
+      endpoint.value = "";
+    }
+  });
+}
 function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato = false, onMenu = null, onAzionePool = null } = {}) {
   const d = statoProvider(row, prova), busy = occupato || d.occupato, card = el3("article", "talos-card talos-provider");
   card.dataset.c = "ProviderCard";
@@ -1151,6 +1221,7 @@ function creaProviderCard(row, { aperta: aperta2 = false, prova = null, occupato
       body.append(oppure);
     } else body.append(campoChiave);
     if (row.supportsEndpoint) body.append(campo("Indirizzo del servizio", "url", "providerEndpoint", row, row.endpoint || ""));
+    aggiungiCampiCloud(body, row);
     if (d.tempo) body.append(campo("Tempo massimo (secondi)", "number", "providerTimeout", row, String(row.timeoutSeconds ?? 60)));
     const actions = el3("div", "talos-cluster");
     const salva = button("save-key", poolCollegato ? "Aggiungi chiave" : "Salva chiave", "primary");

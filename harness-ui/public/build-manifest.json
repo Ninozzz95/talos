@@ -8,8 +8,8 @@
   "files": [
     {
       "path": "app.js",
-      "bytes": 1774125,
-      "sha256": "5f8ece4be6e94e77c22e0b5db3298d71511cb691ee1b3086eea2071fc2c171d9"
+      "bytes": 1777975,
+      "sha256": "168a38911c198d30bbe375dda7db61322f7ec5910a4b226451fc5e37684a96b8"
     },
     {
       "path": "asset-manifest.json",
@@ -73,8 +73,8 @@
     },
     {
       "path": "index.html",
-      "bytes": 358978,
-      "sha256": "78a1e8975b2f825da1efdc6acdf64255698e2e032881788970f22fa4eb1c1a6d"
+      "bytes": 359249,
+      "sha256": "10fadbe03dc52cc8034512de11b3eb359f01965124cc42085dce57d55aa63b8f"
     },
     {
       "path": "styles.css",
