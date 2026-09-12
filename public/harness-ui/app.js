@@ -7279,6 +7279,7 @@
    * (es. PagerDuty: https://www.pagerduty.com/eng/react-embedded-apps/).
    */
   let hostResizeObserver = null;
+  let bootTimerId = null; // il setTimeout(0) del boot, cancellato dal distruttore (12/09/2026)
 
   function syncHostLayout() {
     const host = HOST();
@@ -7361,6 +7362,7 @@
     setView,
   };
   window.__talosHarnessDestroy = () => {
+    if (bootTimerId !== null) { window.clearTimeout(bootTimerId); bootTimerId = null; }
     cancelMotionAnimations();
     setEmbeddedTopbarHidden(false);
     embeddedHeaderScrollers.forEach((scroller) => {
@@ -7499,7 +7501,18 @@
    * anche in embedded ora che mobile ha un backend on-device reale è una
    * decisione separata, non presa di striscio risolvendo questo conflitto.
    */
-  window.setTimeout(() => {
+  /*
+   * ⛔ 12/09/2026 — il timer del boot si CONSERVA e il distruttore lo cancella.
+   * Senza, un runtime smontato lasciava il suo timer a 0 ms in coda: in un
+   * file di test che monta e smonta il runtime a ogni caso, il timer del caso
+   * PRIMA scattava dentro il caso DOPO, che aveva appena installato il suo
+   * fetch finto e pretendeva «zero fetch» (rosso solo sotto carico: in locale
+   * nella suite intera, e nella CI della v0.1.28, run 34694527315). MDN,
+   * Window.clearTimeout(): annulla un timeout stabilito con setTimeout (letto
+   * 12/09/2026).
+   */
+  bootTimerId = window.setTimeout(() => {
+    bootTimerId = null;
     // ⛔ verificato al MOMENTO del fire, non alla schedulazione: un test (o
     // un embed reale) può marcare talos-embedded fra i due istanti.
     if (!HOST().classList.contains('talos-embedded')) {
