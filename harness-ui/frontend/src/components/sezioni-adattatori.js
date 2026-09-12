@@ -173,7 +173,7 @@ const SCRITTURE = new WeakMap();
 export function magazzinoScrittura(schermo) {
   let m = SCRITTURE.get(schermo);
   if (!m) {
-    m = { modulo: null, bozza: null, voci: new Map(), modi: new Map(), selezionaDopo: null };
+    m = { modulo: null, bozza: null, voci: new Map(), modi: new Map(), selezionaDopo: null, contesto: null };
     SCRITTURE.set(schermo, m);
   }
   return m;
@@ -408,7 +408,20 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
        della Libreria e della Ricerca: qui si sa QUALI azioni ha una voce, non come si apre un menu. */
     if (typeof opzioni.onMenu === 'function' && voci.length) opzioni.onMenu(voci, dove);
   }
-  collegaTastoDestro(schermo, { trovaVoce: (id) => lista.find((v) => String(v?.id) === String(id)) || null, apriMenu });
+  /*
+   * ⛔ IL TASTO DESTRO SI LEGA UNA VOLTA SOLA, e le sue funzioni invecchiano.
+   *   `collegaTastoDestro` si aggancia al PRIMO disegno e non più (ha la sua guardia `collegato`):
+   *   passargli direttamente `trovaVoce` e `apriMenu` vorrebbe dire congelare l'elenco e le
+   *   iniezioni di quel momento — dopo un ricarico, il tasto destro su una nota NUOVA non
+   *   troverebbe niente e il menu non si aprirebbe, in silenzio. Quindi l'aggancio legge dal
+   *   magazzino, che ogni disegno aggiorna. È lo stesso difetto della `const` letta in anticipo:
+   *   funziona finché nessuno ricarica.
+   */
+  m.contesto = { trovaVoce: (id) => lista.find((v) => String(v?.id) === String(id)) || null, apriMenu };
+  collegaTastoDestro(schermo, {
+    trovaVoce: (id) => m.contesto.trovaVoce(id),
+    apriMenu: (voce, dove) => m.contesto.apriMenu(voce, dove),
+  });
 
   /* ------------------------------ i pezzi che la config usa ------------------------------ */
 
