@@ -997,6 +997,29 @@ export function createOwnerRuntimeAdapter({
         onAvviso: input?.onAvviso, onCambioFornitore: input?.onCambioFornitore, onConsumoFornitore: input?.onConsumoFornitore,
       });
       const fetchConImmagini = async (url, init = {}, successiva = fetchInstradata) => {
+        // BC-48 C-bis: GLM via OpenRouter usa cache implicita (fonti nel rapporto
+        // del 12/09/2026). Il kernel sposta il marcatore all'ultimo sistema:
+        // alla ripresa il preambolo diventava stringa dopo essere stato array.
+        // Normalizziamo solo la forma esatta prodotta dal kernel; testo, immagini
+        // e forme estese restano integri. Nessuna mutazione della storia salvata.
+        if (String(url).includes('/chat/completions') && typeof init.body === 'string') {
+          let corpo;
+          try { corpo = JSON.parse(init.body); } catch { /* Il trasporto gestisce il JSON malformato. */ }
+          if (typeof corpo?.model === 'string' && separaFonteModello(corpo.model).fonte === 'openrouter'
+              && /^z-ai\/glm-/.test(separaFonteModello(corpo.model).modelloRemoto) && Array.isArray(corpo.messages)) {
+            let cambiato = false;
+            const messages = corpo.messages.map(m => {
+              const p = Array.isArray(m?.content) && m.content.length === 1 ? m.content[0] : null;
+              if (m?.role !== 'system' || p?.type !== 'text' || typeof p.text !== 'string'
+                  || Object.keys(p).length !== 3 || p.cache_control?.type !== 'ephemeral'
+                  || p.cache_control.ttl !== '1h' || Object.keys(p.cache_control).length !== 2) return m;
+              cambiato = true;
+              return { ...m, content: p.text };
+            });
+            if (cambiato) init = { ...init, body: JSON.stringify({ ...corpo, messages }) };
+          }
+        }
+        // BC-48 C-bis: fine della normalizzazione per la cache implicita GLM.
         if (input?.contextHooks && String(url).includes('/chat/completions') && typeof init.body === 'string') {
           let body;
           try { body = JSON.parse(init.body); } catch { /* Preserve the existing malformed-body path. */ }
