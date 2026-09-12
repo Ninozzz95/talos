@@ -1264,3 +1264,16 @@ Prova degli otto formati sul 4174 riavviato: md/html/pdf/docx 200 con intestazio
 json/bib/ris/fonti 409 onesto senza record — ma l'HTML mostra «# », «## », «**…**», «- » letterali e
 gli elenchi schiacciati. In cura nel modulo delle esportazioni (renderer server-side riusato da
 document-generator o minimo senza dipendenze; il record recintato non si stampa come prosa).
+
+### L8 #2 ✅ CHIUDE (12/09, 09:32-09:46) — la ricerca approfondita è «Conclusa» per davvero
+Stessa domanda, madre `efc9559d` (glm-5.3-flash), figlia `2a8ab83b` **con lo stesso modello della
+madre** (cura 1), 19 giri, 13 min 53 s, 323.454 token dentro di cui **172.032 dalla cache (53 %)**,
+44.141 fuori. `research_deposit` strutturato (cura 2) → `rapporto.md` di 102 KB col record scritto
+dal server → cancello di consegna → **`done`**, in Libreria (`lib-08e01b5f`). Bilancio: **38
+affermazioni** (tutte «non verificate»: giudice nullo per costruzione, un modello non timbra sé
+stesso), **28 fonti, 17 prove distinte** su 28 indirizzi. La sezione la mostra «Conclusa» col
+bilancio, le affermazioni coi passaggi verbatim, le fonti; la card si è aggiornata da sola durante
+la corsa (cura 3, foto `scratchpad/l8b/durante-*.png`). Restano vuoti «Piano» e «Speso» (`passi 0`,
+`spesa 0`): il collettore e la verifica del motore portato NON sono ancora agganciati alla corsa —
+è il prossimo lotto (**L9**: `collector.mjs`/`verification.mjs` nella figlia, giudice ≠ autore con
+un secondo modello, passi nel giornale, spesa vera).
