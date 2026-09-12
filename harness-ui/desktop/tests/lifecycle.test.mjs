@@ -1,7 +1,35 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { BACKOFF_MS_DEFAULT, creaCicloDiVita } from './lifecycle.mjs';
+import { BACKOFF_MS_DEFAULT, creaCicloDiVita } from '../lifecycle.mjs';
+
+test('R01-CICLO-ORFANO — salute fallita elimina il figlio prima di ripartire', async () => {
+  const { ciclo, chiamate } = armatura({ saluteSeq: [false] });
+  await ciclo.avvia();
+  assert.deepEqual(chiamate.uccisioni, [101]);
+});
+
+test('R01-CICLO-CHIUSURA-AVVIO — anche il figlio consegnato dopo chiudi viene ucciso', async () => {
+  let consegna; const morti = [];
+  const ciclo = creaCicloDiVita({ avviaFiglio: () => new Promise(r => { consegna = r; }), uccidiFiglio: h => morti.push(h.pid), attendiSalute: async () => true });
+  const avvio = ciclo.avvia(); ciclo.chiudi(); consegna({ pid: 99, exitCode: null }); await avvio;
+  assert.deepEqual(morti, [99]); assert.equal(ciclo.stato(), 'chiuso');
+});
+
+test('R01-CICLO-RIPROVA — dopo arreso il tentativo esplicito può guarire', async () => {
+  let sano = false;
+  const ciclo = creaCicloDiVita({ avviaFiglio: () => ({ exitCode: null }), uccidiFiglio: () => {}, attendiSalute: async () => sano, tentativiMassimi: 0 });
+  await ciclo.avvia(); assert.equal(ciclo.stato(), 'arreso');
+  sano = true; assert.equal(await ciclo.riprova(), 'pronto');
+});
+
+test('R01-CICLO-RISVEGLIO-TARDIVO — una salute tardiva non riapre dopo la chiusura', async () => {
+  let consegna; let risveglio = false;
+  const ciclo = creaCicloDiVita({ avviaFiglio: () => ({ exitCode: null }), uccidiFiglio: () => {}, attendiSalute: () => risveglio ? new Promise(r => { consegna = r; }) : Promise.resolve(true) });
+  await ciclo.avvia(); ciclo.sospendi(); risveglio = true;
+  const p = ciclo.riprendi(); ciclo.chiudi(); ciclo.figlioUscito(0); consegna(true); await p;
+  assert.equal(ciclo.stato(), 'chiuso');
+});
 
 /*
  * ⭐⭐⭐ 04/9 — W2-13, la macchina a stati del figlio Node, provata senza

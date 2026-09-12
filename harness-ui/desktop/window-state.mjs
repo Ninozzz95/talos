@@ -1,17 +1,8 @@
-/**
- * ⭐ 04/9 — W2-13: posizione e dimensione della finestra, salvate da noi.
- * `windowStatePersistence` NON esiste in Electron 44 (documentazione
- * ufficiale, letta il 04/09): la guida del 03/09 lo dava per buono.
- *
- * Puro: legge/scrive un JSON e valida i limiti contro gli schermi che gli
- * vengono passati — una finestra salvata su un monitor staccato non deve
- * riaprirsi fuori dallo schermo. Lo store è quello del lab
- * (`labs/stores/electron-shell/window-state.json`), mai uno store stabile.
- */
+/** R-01 — Geometria e scelta del vassoio, salvate nel profilo desktop. */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
-export const STATO_FINESTRA_DEFAULT = Object.freeze({ width: 1440, height: 900, x: undefined, y: undefined, massimizzata: false });
+export const STATO_FINESTRA_DEFAULT = Object.freeze({ width: 1440, height: 900, x: undefined, y: undefined, massimizzata: false, restaNelVassoio: false });
 const MIN_W = 900;
 const MIN_H = 600;
 
@@ -34,12 +25,12 @@ export function leggiStatoFinestra(file, schermi = []) {
     const bounds = { x: salvato.x, y: salvato.y, width, height };
     if (schermi.length === 0 || schermi.some((s) => interseca(bounds, s))) { x = salvato.x; y = salvato.y; }
   }
-  return { width, height, x, y, massimizzata };
+  return { width, height, x, y, massimizzata, restaNelVassoio: salvato.restaNelVassoio === true };
 }
 
-export function salvaStatoFinestra(file, { x, y, width, height, massimizzata = false } = {}) {
+export function salvaStatoFinestra(file, { x, y, width, height, massimizzata = false, restaNelVassoio = false } = {}) {
   if (!file) return;
-  const dati = { x, y, width, height, massimizzata: massimizzata === true, salvatoIl: new Date().toISOString() };
+  const dati = { x, y, width, height, massimizzata: massimizzata === true, restaNelVassoio: restaNelVassoio === true, salvatoIl: new Date().toISOString() };
   mkdirSync(dirname(file), { recursive: true });
   const tmp = `${file}.tmp-${process.pid}`;
   writeFileSync(tmp, `${JSON.stringify(dati, null, 2)}\n`);

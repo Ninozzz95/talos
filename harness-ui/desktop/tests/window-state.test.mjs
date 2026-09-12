@@ -4,16 +4,25 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { STATO_FINESTRA_DEFAULT, leggiStatoFinestra, salvaStatoFinestra } from './window-state.mjs';
+import { STATO_FINESTRA_DEFAULT, leggiStatoFinestra, salvaStatoFinestra } from '../window-state.mjs';
 
 function file(t) { const dir = mkdtempSync(join(tmpdir(), 'talos-window-state-')); t.after(() => rmSync(dir, { recursive: true, force: true })); return join(dir, 'window-state.json'); }
 const SCHERMO = { x: 0, y: 0, width: 2560, height: 1440 };
+
+test('R01-VASSOIO — spento di serie, scelta esplicita persistente; stringhe non accettate', (t) => {
+  const f = file(t);
+  assert.equal(leggiStatoFinestra(f).restaNelVassoio, false);
+  salvaStatoFinestra(f, { width: 1024, height: 800, restaNelVassoio: true });
+  assert.equal(leggiStatoFinestra(f).restaNelVassoio, true);
+  salvaStatoFinestra(f, { width: 1024, height: 800, restaNelVassoio: 'true' });
+  assert.equal(leggiStatoFinestra(f).restaNelVassoio, false);
+});
 
 test('FINESTRA-01 — senza file: i default; salva → rileggi: gli stessi valori, e la chiave non contiene altro che geometria', (t) => {
   const f = file(t);
   assert.deepEqual(leggiStatoFinestra(f, [SCHERMO]), { ...STATO_FINESTRA_DEFAULT });
   salvaStatoFinestra(f, { x: 100, y: 50, width: 1200, height: 800, massimizzata: false });
-  assert.deepEqual(leggiStatoFinestra(f, [SCHERMO]), { x: 100, y: 50, width: 1200, height: 800, massimizzata: false });
+  assert.deepEqual(leggiStatoFinestra(f, [SCHERMO]), { x: 100, y: 50, width: 1200, height: 800, massimizzata: false, restaNelVassoio: false });
   assert.doesNotMatch(readFileSync(f, 'utf8'), /token|chiave/i);
 });
 
