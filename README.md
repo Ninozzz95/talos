@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="AGPL-3.0-only"></a>
   <a href="https://github.com/Ninozzz95/agent-virtual-machine/actions/workflows/ci.yml"><img src="https://github.com/Ninozzz95/agent-virtual-machine/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/local--first-no%20backend%20required-blueviolet.svg" alt="Local first">
 </p>
@@ -81,4 +81,8 @@ Then open `http://127.0.0.1:4174/`. Set `OPENROUTER_API_KEY` to start sessions; 
 
 ## License
 
-Apache 2.0. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+TALOS è distribuito sotto **AGPL-3.0-only**, su tutto il monorepo, desktop e mobile: chi offre una versione modificata come servizio in rete deve rendere disponibile gratuitamente agli utenti il codice sorgente corrispondente, comprese le modifiche.
+
+Il testo integrale è in [LICENSE](LICENSE); copyright e avvisi sono in [NOTICE](NOTICE). I componenti di terze parti mantengono le proprie licenze: [avvisi del monorepo](THIRD_PARTY_NOTICES.md), [del desktop](harness-ui/THIRD_PARTY_NOTICES.md) e [del motore di contesto](context-engine/THIRD_PARTY_NOTICES.md).
+
+Telemetria: nessuna.

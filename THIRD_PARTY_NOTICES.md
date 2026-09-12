@@ -594,3 +594,69 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## Attribuzioni APK conservate dal NOTICE precedente — R-05A, 13/09/2026
+
+Gli avvisi qui sotto sono conservati integralmente come inventario storico delle
+terze parti. Il classificatore del progetto, talos.onnx, segue ora
+AGPL-3.0-only per decisione del titolare; la sua precedente dichiarazione Apache
+resta riferita alle copie già concesse con quella licenza. Le licenze delle
+altre opere e dei font restano quelle indicate. Gli avvisi desktop sono in
+[harness-ui/THIRD_PARTY_NOTICES.md](harness-ui/THIRD_PARTY_NOTICES.md).
+
+═══════════════════════════════════════════════════════════════════════════════
+  THIRD-PARTY COMPONENTS SHIPPED INSIDE THE APK
+═══════════════════════════════════════════════════════════════════════════════
+
+Every binary below is verified at build time — size and SHA-256 — against
+`mobile/android/app/src/main/jniLibs/PROVENIENZA.md` and `PROVENIENZA-PAROLA.md`.
+A binary that changes under our feet stops the build. Those two files carry the
+exact version, the origin and the checksum of each one.
+
+── Wake word ────────────────────────────────────────────────────────────────
+
+  openWakeWord — David Scripka (dscripka)
+  Apache License 2.0
+  https://github.com/dscripka/openWakeWord
+  The mel-spectrogram frontend and the speech-embedding pipeline.
+
+  speech_embedding — Google
+  Apache License 2.0
+  https://tfhub.dev/google/speech_embedding/1
+  The frozen 96-dimension embedding model.
+
+  talos.onnx — this project
+  Apache License 2.0
+  The wake-word classifier, trained by us on top of the two components above.
+  It is not downloaded from anywhere: it is trained here and it lives in this
+  repository, because the binary IS the feature.
+
+── Native libraries ─────────────────────────────────────────────────────────
+
+  libadb.so — Android Open Source Project (android-tools)
+  Apache License 2.0
+
+  libc++_shared.so — LLVM libc++
+  Apache License 2.0 with LLVM Exception
+
+  libprotobuf.so — Protocol Buffers, Google
+  BSD 3-Clause
+
+  libzstd.so — Zstandard, Meta
+  BSD 3-Clause
+
+  libbrotlienc.so — Brotli, Google
+  MIT License
+
+  liblz4.so — LZ4, Yann Collet
+  BSD 2-Clause
+
+── Fonts ────────────────────────────────────────────────────────────────────
+
+  Instrument Sans, JetBrains Mono, Manrope, Orbitron, Sora, Source Serif 4
+  SIL Open Font License 1.1
+
+═══════════════════════════════════════════════════════════════════════════════
+
+The complete list of JavaScript dependencies and their licences is in
+THIRD_PARTY_NOTICES.md.

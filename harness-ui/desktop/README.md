@@ -13,8 +13,9 @@ silenziosa, avvio dell'exe installato, salute 401 senza cookie e 200 con cookie,
 senza orfani, disinstallazione senza residui, dati utente conservati (numeri in
 `LEDGER-R02.md`, sezione «Integrazione», e nel [rapporto R-04](../../.claude/RAPPORTO-R04-CI-WINDOWS-2026-09-13.md)).
 Nella sandbox di Codex lo stesso smoke era rosso per il crash del processo GPU: era
-l'ambiente, non il pacchetto. Il job resta bloccato dai cancelli di regressione elencati nel
-rapporto (test del kernel rossi preesistenti) finché i loro proprietari non li chiudono.
+l'ambiente, non il pacchetto. I tre test del kernel rossi citati nel rapporto sono stati
+allineati il 13/09 (559/559); il job resta da eseguire sui runner GitHub, e le attestazioni
+richiedono il repo pubblico.
 Non distribuire questa copia come release conclusa.
 
 ## Requisiti e installazione prevista
@@ -137,6 +138,8 @@ In alternativa avviare `Uninstall TALOS.exe` nella cartella del programma.
 solo se si vogliono eliminare anche registro, impostazioni e sessioni.
 
 ## Come nasce una release
+
+La versione del desktop vive in [package.json](package.json) (`harness-ui/desktop/package.json`) e nel tag `desktop-vX.Y.Z`; non esiste un file `VERSION` separato.
 
 L'owner crea e pubblica il tag **`desktop-vX.Y.Z`** sul commit verificato:
 `X.Y.Z` deve coincidere con `version` in `package.json` e `package-lock.json`
