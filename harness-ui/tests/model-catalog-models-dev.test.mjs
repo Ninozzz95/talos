@@ -279,6 +279,7 @@ test('PE-10 — mappa completa; non esiste non è un registro rotto né un model
     kimi: 'moonshotai', minimax: 'minimax', qwen: 'alibaba',
     'zai-anthropic': 'zai-coding-plan', 'minimax-anthropic': 'minimax', // P-J: le porte Anthropic (12/09)
     azure: null, bedrock: null, vertex: null, // P-K: i cataloghi cloud dipendono dal collegamento dell'owner, non da models.dev
+    esterno: null, // P-L: l'agente esterno non ha un catalogo remoto
   });
   const { catalogo } = await banco(t, { fetchFn: async () => assert.fail('nessun fetch senza mappa') });
   for (const id of ['ollama', 'local', 'inesistente', '__proto__']) {

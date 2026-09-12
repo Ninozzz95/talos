@@ -20,6 +20,9 @@ import { classificaErroreDiCorsa } from './research-orchestrator.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
 import { preparaRichiestaCompatibile, OpenAiCompatibleRuntimeError } from './openai-compatible-runtime.mjs'; // P-D (12/09): Z.AI accetta solo alcuni livelli di ragionamento
+// P-L · ponte locale senza listener, sessione esterna posseduta dalla Response.
+import { rispostaAgenteAcp } from './acp-agent.mjs';
+// P-L · fine import instradamento.
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
 const RICHIESTA_DI_RIASSUNTO = 'Riassumi la conversazione mantenendo decisioni, file e risultati utili al lavoro.';
@@ -535,6 +538,9 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       await dipendenze.avviaLocale(modelloRemoto); // ⛔ se l'avvio stesso fallisce, il SUO errore (non quello generico "non acceso") arriva a chi ha chiamato
       destinazione = risolvi(corpo.model, dipendenze); // dopo un avvio riuscito questo non deve più lanciare: se lancia ancora, è un errore vero da mostrare, non da inghiottire
     }
+    // P-L · il corpo del kernel incontra ACP solo qui; stop e chiusura seguono la risposta.
+    if (destinazione.esterno) return rispostaAgenteAcp({ runtime: destinazione.runtime, body: corpo, signal: opzioni.signal });
+    // P-L · fine instradamento agente esterno.
     if (destinazione.native) return nativeProviderResponse({ provider: destinazione.fonte, model: destinazione.modelloRemoto, apiKey: destinazione.apiKey, baseURL: destinazione.baseURL, body: corpo, fetchFn: fetchDiRete, signal: opzioni.signal });
     if (corpo.messages?.some(m => m.talos_provider_state)) {
       corpo = { ...corpo, messages: stripNativeMetadata(corpo.messages) };

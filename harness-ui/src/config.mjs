@@ -11,6 +11,10 @@ import { fileURLToPath } from 'node:url';
 
 import { ID_DESTINAZIONE_CHAT } from './provider-registry.mjs';
 
+// P-L · JSON del runtime non segreto dell'agente esterno, letto solo alla richiesta.
+export const ENV_AGENTE_ESTERNO = 'TALOS_AGENTE_ESTERNO';
+// P-L · fine variabili.
+
 export const DEFAULT_HOST = '127.0.0.1';
 export const DEFAULT_PORT = 4174;
 

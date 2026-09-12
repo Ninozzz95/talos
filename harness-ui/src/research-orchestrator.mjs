@@ -817,6 +817,10 @@ export function classificaErroreDiCorsa({ codice = null, messaggio = null } = {}
   // 1. Il codice, quando dice davvero qualcosa. `internal-error` NON dice niente: è il default.
   if (CODICI_ESITO_DEL_TASK.has(c)) return esito(CODICI_ESITO_DEL_TASK.get(c));
   if (c.startsWith('CTX_')) return esito('contesto');
+  // P-L (12/09): i guasti dell'agente esterno ACP hanno la loro classe, così una ricerca ricostruita dal codice salvato non torna «ignoto».
+  if (c === 'ACP_PROCESS_EXITED') return esito('flusso-interrotto');
+  if (c === 'ACP_TIMEOUT') return esito('timeout-fornitore');
+  if (c === 'ACP_CANCELLED') return esito('fermato');
   /*
    * ⛔ `fermatoSuRichiesta` arriva come messaggio, non come codice: il kernel lancia «⛔ fermato
    *   su richiesta …» e `agent-service` lo marca `internal-error` come tutto il resto. Uno stop
