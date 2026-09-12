@@ -65,7 +65,7 @@ export default Object.freeze({
     'elenco della Libreria': 'listing the Library', 'elenco della cartella': 'listing the folder', 'elenco delle attività': 'listing the tasks',
     'elenco delle note': 'listing the notes', 'elenco delle ricerche': 'listing the researches',
     'eliminazione di un file di Libreria': 'deleting a Library file', 'eliminazione di una memoria': 'deleting a memory',
-    'eliminazione di una nota': 'deleting a note', 'eliminazione di una ricerca': 'deleting a research', 'eliminazione di un’attività': 'deleting a task',
+    'eliminazione di una nota': 'deleting a note', 'eliminazione di una ricerca': 'deleting a research', 'consegna del rapporto di ricerca': 'delivering the research report', 'eliminazione di un’attività': 'deleting a task',
     'esecuzione dei test': 'running the tests', 'generazione di un’immagine': 'generating an image',
     'lettura del rapporto di ricerca': 'reading the research report', 'lettura di un file': 'reading a file',
     'lettura di un file di Libreria': 'reading a Library file', 'modifica di una nota': 'editing a note', 'modifica di un’attività': 'editing a task',
