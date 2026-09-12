@@ -288,6 +288,7 @@ function fontiDelSelettore({ openrouter = null, locali = null, diretti = null } 
   ];
   for (const provider of PROVIDER_DIRETTI) {
     const elenco2 = diretti ? diretti[provider.id] : null;
+    if (provider.soloSeCollegato && !Array.isArray(elenco2)) continue;
     fonti.push({
       id: provider.id,
       etichetta: provider.etichetta,
@@ -325,7 +326,8 @@ var init_fonti_modelli = __esm({
       Object.freeze({ id: "anthropic", etichetta: "Anthropic" }),
       Object.freeze({ id: "gemini", etichetta: "Gemini" }),
       Object.freeze({ id: "openai", etichetta: "OpenAI" }),
-      Object.freeze({ id: "lmstudio", etichetta: "LM Studio", senzaChiave: true })
+      Object.freeze({ id: "lmstudio", etichetta: "LM Studio", senzaChiave: true }),
+      Object.freeze({ id: "zai", etichetta: "Z.AI", soloSeCollegato: true })
     ]);
     ID_DIRETTI = new Set(PROVIDER_DIRETTI.map((p) => p.id));
   }
@@ -479,6 +481,21 @@ function nomeLeggibileSessione(taskId) {
   }
   if (grezzo.startsWith("delega:")) return "Sotto-agente";
   return grezzo;
+}
+function identitaSessione({ nome = null, impostazioni = null, dallElenco = null, taskId = null } = {}) {
+  const pulito = (v) => typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+  const contratto = impostazioni || dallElenco || null;
+  const esplicito = pulito(nome);
+  if (esplicito) return { nome: esplicito, fonte: "esplicito", contratto };
+  const salvato = pulito(impostazioni?.nome) || pulito(dallElenco?.nome);
+  if (salvato) return { nome: salvato, fonte: "nome-salvato", contratto };
+  const delega = pulito(impostazioni?.taskDelega) || pulito(dallElenco?.taskDelega);
+  if (delega) return { nome: delega, fonte: "compito-delega", contratto };
+  return {
+    nome: nomeLeggibileSessione(pulito(taskId) || pulito(impostazioni?.taskId) || pulito(dallElenco?.taskId)),
+    fonte: "ripiego",
+    contratto
+  };
 }
 function prefissoComuneDiParole(nomi2) {
   const righe = (Array.isArray(nomi2) ? nomi2 : []).map((n) => String(n ?? ""));
@@ -3565,6 +3582,10 @@ function statoRicercaApprofondita(stato) {
     cosaFare: "Il server non dice a che punto è. Aggiorna la sezione, o riapri la conversazione della ricerca."
   };
 }
+function statoDellaVoce(voce) {
+  if (voce?.stato === "failed" && voce?.motivoErrore?.transitorio === true) return INTERROTTA_DAL_FORNITORE;
+  return statoRicercaApprofondita(voce?.stato);
+}
 function conclusaDavvero(stato) {
   return stato === "done";
 }
@@ -3575,6 +3596,7 @@ function puoMettereInPausa(voce) {
   return voce?.stato === "running";
 }
 function puoRiprendere(voce) {
+  if (typeof voce?.riprendibile === "boolean") return voce.riprendibile;
   return voce?.stato === "paused" || voce?.stato === "failed";
 }
 function puoRicontrollareLeFonti(voce) {
@@ -3612,7 +3634,7 @@ function durataUmana(daISO, aISO) {
   return minutiResto ? `${ore} h ${minutiResto} min` : `${ore} h`;
 }
 function frasiVoce(voce) {
-  const stato = statoRicercaApprofondita(voce?.stato);
+  const stato = statoDellaVoce(voce);
   const grezza = typeof voce?.domanda === "string" && voce.domanda.trim() ? voce.domanda.trim() : typeof voce?.titolo === "string" && voce.titolo.trim() ? voce.titolo.trim() : "";
   const motivo = typeof voce?.motivo === "string" && voce.motivo.trim() ? voce.motivo.trim() : null;
   return {
@@ -4459,7 +4481,7 @@ function scaricaTesto(doc, nome, testo3, mime = "text/markdown") {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 5e3);
 }
-var STATI_RICERCA, AZIONI_RICERCA, APERTURA_RECORD, CHIUSURA_RECORD, PERCHE_SENZA_RECORD, PEZZI_BILANCIO, SUFFISSI_DI_SECONDO_LIVELLO, MAGAZZINI, INTERVALLO_RICERCHE_VIVE, STATI_FONTE_RIVERIFICA, VISTE, FORMATI_ESPORTAZIONE, GRUPPI_ESPORTAZIONE, MOTIVI_ESPORTAZIONE, PASSI_RICERCA, ESITI_PASSO, contatoreIdentificativi;
+var STATI_RICERCA, INTERROTTA_DAL_FORNITORE, AZIONI_RICERCA, APERTURA_RECORD, CHIUSURA_RECORD, PERCHE_SENZA_RECORD, PEZZI_BILANCIO, SUFFISSI_DI_SECONDO_LIVELLO, MAGAZZINI, INTERVALLO_RICERCHE_VIVE, STATI_FONTE_RIVERIFICA, VISTE, FORMATI_ESPORTAZIONE, GRUPPI_ESPORTAZIONE, MOTIVI_ESPORTAZIONE, PASSI_RICERCA, ESITI_PASSO, contatoreIdentificativi;
 var init_ricerca_dettaglio = __esm({
   "src/components/ricerca-dettaglio.js"() {
     STATI_RICERCA = /* @__PURE__ */ new Map([
@@ -4478,6 +4500,11 @@ var init_ricerca_dettaglio = __esm({
       ["bloccata-dal-permesso", { parola: "Bloccata", tono: "danger", cosaFare: "La sessione era in sola lettura e non ha potuto consegnare. Riprendila con il permesso giusto." }],
       ["giri-esauriti", { parola: "Giri esauriti", tono: "warning", cosaFare: "Ha finito i giri a disposizione prima di concludere. Riavviala con una domanda più stretta." }]
     ]);
+    INTERROTTA_DAL_FORNITORE = Object.freeze({
+      parola: "Interrotta dal fornitore",
+      tono: "warning",
+      cosaFare: "Si è fermata a metà per un problema passeggero, non per un suo errore. Quello che aveva già raccolto è conservato: riprendila dal menu ⋯."
+    });
     AZIONI_RICERCA = /* @__PURE__ */ new Map([
       ["pausa", { verbo: "mettere in pausa", conflitto: "Non sta girando in questo momento: si può mettere in pausa solo una ricerca in corso." }],
       ["ripresa", { verbo: "riprendere", conflitto: "Non c’è niente da riprendere: o sta ancora girando, o è già arrivata alla fine." }],
@@ -4605,8 +4632,8 @@ var init_ricerca_dettaglio = __esm({
 });
 
 // src/components/ricerca.js
-function statoRicerca(stato) {
-  const s = statoRicercaApprofondita(stato);
+function statoRicerca(voceOStato) {
+  const s = voceOStato && typeof voceOStato === "object" ? statoDellaVoce(voceOStato) : statoRicercaApprofondita(voceOStato);
   return { testo: s.parola, tono: s.tono };
 }
 function testiRicerca(ricerca) {
@@ -4625,7 +4652,7 @@ function el9(doc, tag2, classe, testo3) {
   return n;
 }
 function creaReportRow(ricerca, { document: doc = globalThis.document, aperta: aperta2 = false, onEspandi, onApriRapporto } = {}) {
-  const t2 = testiRicerca(ricerca), stato = statoRicerca(ricerca?.stato);
+  const t2 = testiRicerca(ricerca), stato = statoRicerca(ricerca);
   const riga = el9(doc, "div", "talos-list-row");
   riga.dataset.c = "ReportRow";
   riga.dataset.researchId = ricerca?.id || "";
@@ -5009,10 +5036,11 @@ function creaLibraryRow(voce, { document: doc = globalThis.document, aperta: ape
     copiaPercorsoBtn = nuovoBottone("Copia percorso", "Copia il percorso di " + t2.nome, "copia-percorso");
     copiaPercorsoBtn.addEventListener("click", async () => {
       try {
-        const scrivi2 = typeof copia === "function" ? copia : globalThis.navigator?.clipboard?.writeText?.bind(globalThis.navigator.clipboard);
+        const iniettata = typeof copia === "function";
+        const scrivi2 = iniettata ? copia : globalThis.navigator?.clipboard?.writeText?.bind(globalThis.navigator.clipboard);
         if (!scrivi2) throw new Error("appunti non disponibili");
         await scrivi2(prov.percorso);
-        avviso = { tono: "stato", testo: "Percorso copiato." };
+        if (!iniettata) avviso = { tono: "stato", testo: "Percorso copiato." };
       } catch {
         avviso = { tono: "errore", testo: "Gli appunti non sono disponibili: il percorso è scritto nel dettaglio, selezionalo e premi Ctrl+C." };
       }
@@ -7852,8 +7880,13 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
         righe.append(nodo9(doc, "dt", "", etichettaTesto), dd);
       };
       if (p.percorso) {
-        const codice = nodo9(doc, "code", "td-percorso", p.percorso);
+        const codice = nodo9(doc, "code", "td-percorso");
         codice.dataset.percorso = p.percorso;
+        const segmenti = p.percorso.split(/(?<=[\\/])/u);
+        segmenti.forEach((segmento, i) => {
+          codice.append(doc.createTextNode(segmento));
+          if (i < segmenti.length - 1) codice.append(doc.createElement("wbr"));
+        });
         rigaKV("Percorso", codice);
       } else {
         rigaKV("Percorso", "Non registrato. Il file vive in .harness-ui-library/, dentro il progetto.");
@@ -7862,11 +7895,11 @@ function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       if (p.sessione) {
         const nome = p.sessione.nome || nomeLeggibileSessione(p.sessione.id);
         if (typeof opzioni.onApriSessione === "function") {
-          const vai = nodo9(doc, "button", "talos-button talos-button--ghost talos-button--sm", nome);
+          const vai = nodo9(doc, "button", "talos-button talos-button--ghost talos-button--sm td-vai-sessione", nome);
           vai.type = "button";
           vai.dataset.azione = "apri-sessione";
           vai.setAttribute("aria-label", `Apri la conversazione ${nome}`);
-          vai.addEventListener("click", () => opzioni.onApriSessione(p.sessione.id, p.sessione));
+          vai.addEventListener("click", () => opzioni.onApriSessione({ id: p.sessione.id, nome }));
           rigaKV("Sessione", vai);
         } else {
           rigaKV("Sessione", nome);
@@ -18929,6 +18962,7 @@ var init_app = __esm({
       let treeRenderTimer = null;
       let treeRenderInFlight = null;
       let treeRenderNeedsRerun = false;
+      let alberoDaRidisegnare = false;
       let sessionListRefreshTimer = null;
       if (HOST().classList.contains("talos-embedded")) {
         embeddedSessionBack?.setAttribute("aria-label", "Torna alle sessioni Codice");
@@ -19134,7 +19168,16 @@ var init_app = __esm({
         if (treeRenderTimer !== null) window.clearTimeout(treeRenderTimer);
         treeRenderTimer = null;
       }
+      function schedaFileAVista() {
+        const sezione = $2('[data-inspector-section="files"]');
+        return Boolean(sezione) && !sezione.hidden;
+      }
       function programmaRenderAlberoReale() {
+        if (!schedaFileAVista()) {
+          alberoDaRidisegnare = true;
+          cancellaRenderAlberoDifferito();
+          return;
+        }
         const generation = state.realSession.generation;
         cancellaRenderAlberoDifferito();
         treeRenderTimer = window.setTimeout(() => {
@@ -22369,6 +22412,15 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
                 void aggiornaContatoriLuoghi(state.sessionSelection.available?.size ?? 0);
               },
               onMenu: apriMenuAzioniLibreria,
+              /* ⭐ BC-38 (12/09) — «da quale sessione»: il nome VIVO, non quello congelato nel meta.
+                 `available` è la stessa mappa che disegna la barra, riscritta a ogni giro dell'elenco.
+                 Stessa precedenza della riga nella barra: nome scelto → compito della delega → ripiego. */
+              nomeSessione: (id) => {
+                const s = state.sessionSelection.available?.get?.(id);
+                return s ? s.nome || s.taskDelega || nomeLeggibileSessione(s.taskId) : null;
+              },
+              onApriSessione: ({ id }) => passaASessione(id),
+              copia: (testo3) => copyText(testo3, "Percorso copiato"),
               /* 11/09 — il contenuto del file nel dettaglio: la stessa iniezione che la Ricerca ha già
                  (:5343). Senza, il pannello cade sulla lettura strutturale minima e gli elenchi e i
                  blocchi di codice di un .md si leggono come paragrafi. */
@@ -25666,7 +25718,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           section.hidden = !active;
           if (active) markMotionEnter(section);
         });
-        if (button2.dataset.inspectorTab === "files" && (state.realSession.id || state.realSession.previewProjectId) && !state.realSession.treeCache.has("")) {
+        if (button2.dataset.inspectorTab === "files" && (state.realSession.id || state.realSession.previewProjectId) && (alberoDaRidisegnare || !state.realSession.treeCache.has(""))) {
           renderizzaAlberoReale();
         }
       }
@@ -25757,6 +25809,12 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (!tick) return;
         if (Number.isFinite(attrezzi)) tick.dataset.tick = String(Math.min(5, Math.max(1, attrezzi)));
         if (tono !== void 0) impostaTonoUltimoTick(ultimo.querySelector(".talos-turn-spine"), tono);
+      }
+      function spegniGiriInCorso(conversation) {
+        if (!conversation) return 0;
+        const correnti = conversation.querySelectorAll(".talos-turn-spine__tick--current");
+        for (const tick of correnti) tick.classList.remove("talos-turn-spine__tick--current");
+        return correnti.length;
       }
       function appendRealTaskStart(task, contesto2 = null) {
         const conversation = $2("#conversation");
@@ -28923,6 +28981,7 @@ ${testo3}` : testo3;
         }
       }
       async function renderizzaAlberoReale() {
+        alberoDaRidisegnare = false;
         cancellaRenderAlberoDifferito();
         if (treeRenderInFlight) {
           treeRenderNeedsRerun = true;
@@ -29049,8 +29108,10 @@ ${testo3}` : testo3;
         let voci;
         try {
           voci = await caricaLivelloAlbero("");
-        } catch {
-          ul.appendChild(textElement("li", "ft-loading", "Albero non disponibile."));
+        } catch (errore) {
+          const sparita = errore?.code === "QUERY_INVALID";
+          const dove = state.realSession.cartellaAssoluta;
+          ul.appendChild(textElement("li", "ft-loading", sparita ? `Questa cartella non si legge più${dove ? ` (${dove})` : ""}: è stata spostata o cancellata. Apri una sessione nuova sulla cartella giusta.` : "I file non si sono caricati. Premi «Aggiorna» per riprovare."));
           return;
         }
         if (generation !== state.realSession.generation) return;
@@ -29709,6 +29770,7 @@ ${testo3}` : testo3;
             else nascondiAttesaRisposta();
             chiudiBatchTool();
             aggiornaTickGiro({ tono: null });
+            spegniGiriInCorso($2("#conversation"));
             state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
             syncRunComposerState();
             mostraSuggerimentoComposer(suggerimentoDaUltimoAttrezzo());
@@ -29747,6 +29809,7 @@ ${testo3}` : testo3;
             const spiegazione = spiegaErrore(evento.message, evento.code);
             if (guida) spiegazione.rimedi = [guida.replace(/^\s*—\s*/, ""), ...spiegazione.rimedi];
             appendStatusNote("", true, { spiegazione });
+            spegniGiriInCorso($2("#conversation"));
             state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
             syncRunComposerState();
             break;
@@ -30339,7 +30402,8 @@ ${testo3}` : testo3;
           toggleSessionSelection(sessionId, !state.sessionSelection.selected.has(sessionId));
           return;
         }
-        const contrattoSessione = impostazioniSessione || { modello };
+        const dallElencoSubito = state.sessionSelection.available?.get?.(sessionId) ?? null;
+        const contrattoSessione = impostazioniSessione || dallElencoSubito || { modello };
         if (sessionId === state.realSession.id) {
           applicaImpostazioniSessione(contrattoSessione);
           setView("chat");
@@ -30361,8 +30425,9 @@ ${testo3}` : testo3;
         $2("#conversation")?.classList.toggle("is-restoring", state.realSession.deferHistoricalRendering);
         state.realSession.taskId = taskId;
         state.realSession.treeWorkspaceKey = `session:${sessionId}`;
-        const dallElenco = state.sessionSelection.available?.get?.(sessionId) ?? null;
-        state.session = nome || impostazioniSessione?.taskDelega || dallElenco?.nome || dallElenco?.taskDelega || nomeLeggibileSessione(taskId || dallElenco?.taskId);
+        const dallElenco = dallElencoSubito;
+        const identita = identitaSessione({ nome, impostazioni: impostazioniSessione, dallElenco, taskId });
+        state.session = identita.nome;
         applicaImpostazioniSessione(contrattoSessione);
         sessionTitle.textContent = state.session;
         aggiornaTestataSessione();
@@ -30375,7 +30440,26 @@ ${testo3}` : testo3;
         void caricaFigliSessione();
         if (state.realSession.deferHistoricalRendering) mantieniFondoDuranteRipristino(generation);
         aggiornaSottotitoloSessione();
-        aggiornaElencoSessioniReali();
+        const identitaDaConfermare = identita.fonte === "ripiego" || identita.contratto === null;
+        const giroElenco = aggiornaElencoSessioniReali();
+        if (identitaDaConfermare) {
+          void Promise.resolve(giroElenco).then(() => {
+            if (generation !== state.realSession.generation || sessionId !== state.realSession.id) return;
+            const riga = state.sessionSelection.available?.get?.(sessionId) ?? null;
+            if (!riga) return;
+            const confermata = identitaSessione({ nome, impostazioni: impostazioniSessione, dallElenco: riga, taskId });
+            if (confermata.nome !== state.session) {
+              state.session = confermata.nome;
+              sessionTitle.textContent = state.session;
+              $$("[data-current-session-title]").forEach((label) => {
+                label.textContent = state.session;
+              });
+            }
+            if (identita.contratto === null) applicaImpostazioniSessione(riga);
+            aggiornaSottotitoloSessione();
+          }).catch(() => {
+          });
+        }
         void aggiornaSchedaCapability();
       }
       function testiPiedeSidebar() {
