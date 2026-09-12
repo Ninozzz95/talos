@@ -25,6 +25,7 @@ import {
   aggiornaPaginaRicerca, aggiornaPaginaLibreria, aggiornaPaginaAttivita,
   aggiornaPaginaMemoria, montaNote, montaProgetti,
 } from '../components/sezioni-adattatori.js';
+import { renderizzaMarkdown } from '../components/markdown.js'; // BC-29 (12/09): il render Markdown della chat, uno solo per chat, note, libreria e ricerca
 import { confermaModale } from '../components/modale-td.js'; // 11/09 lotto G: al posto di window.confirm()
 import { montaScorciatoiaTemi } from '../components/theme-studio.js'; // 11/09 lotto F
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport } from '../components/board.js'; // 05/9 Fase 2: Board
@@ -2283,158 +2284,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     );
   }
 
+  /*
+   * ⛔ 12/09 (BC-29) — IL RENDERER NON VIVE PIÙ QUI. Le 153 righe che stavano in questo punto sono
+   * in `components/markdown.js`, esportate e collaudabili: dentro l'IIFE non erano raggiungibili da
+   * `tests/unit/` se non leggendone il sorgente come testo, e la citazione `>` — che non c'è mai
+   * stata, nemmeno in chat — andava provata davvero. È la stessa migrazione del 09/09 per
+   * `creaBloccoCodice`. Il NOME resta, e resta il montaggio del blocco di codice di TALOS (che
+   * mostra anche la conferma in pagina, cosa che il componente da solo non conosce).
+   */
   function renderizzaMarkdownSemplice(testoGrezzo) {
-    const frammento = document.createDocumentFragment();
-    const testo = String(testoGrezzo ?? '');
-    const righe = testo.split('\n');
-
-    function applicaInline(contenitore, segmento) {
-      // grassetto **x**, corsivo *x*/_x_, codice inline `x` — un solo giro,
-      // nessuna combinazione annidata (le "basi", non un parser a stati).
-      const pattern = /\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*|_([^_]+)_/g;
-      let ultimo = 0;
-      let match;
-      while ((match = pattern.exec(segmento))) {
-        if (match.index > ultimo) contenitore.appendChild(document.createTextNode(segmento.slice(ultimo, match.index)));
-        if (match[1] !== undefined) contenitore.appendChild(textElement('strong', '', match[1]));
-        else if (match[2] !== undefined) contenitore.appendChild(textElement('code', '', match[2]));
-        else contenitore.appendChild(textElement('em', '', match[3] !== undefined ? match[3] : match[4]));
-        ultimo = pattern.lastIndex;
-      }
-      if (ultimo < segmento.length) contenitore.appendChild(document.createTextNode(segmento.slice(ultimo)));
-    }
-
-    let i = 0;
-    let paragrafoCorrente = [];
-    function chiudiParagrafo() {
-      if (paragrafoCorrente.length === 0) return;
-      const p = document.createElement('p');
-      paragrafoCorrente.forEach((riga, indice) => {
-        if (indice > 0) p.appendChild(document.createElement('br'));
-        applicaInline(p, riga);
-      });
-      frammento.appendChild(p);
-      paragrafoCorrente = [];
-    }
-
-    while (i < righe.length) {
-      const riga = righe[i];
-      const fenceMatch = /^```/.test(riga.trim());
-      // ⭐ 28/8, owner: "l'output della chat ha --- come separatore, formatta anche quello" — riga isolata di 3+ trattini/asterischi/underscore, nessun altro carattere: la sintassi Markdown per un separatore orizzontale. "---" non ha lo spazio dopo il primo trattino richiesto da listaMatch sotto, quindi le due regex non collidono su questa sintassi.
-      const hrMatch = /^(-{3,}|\*{3,}|_{3,})\s*$/.test(riga.trim());
-      const listaMatch = /^(\s*)([-*])\s+(.*)$/.exec(riga);
-      const listaNumMatch = /^(\s*)(\d+)\.\s+(.*)$/.exec(riga);
-      const titoloMatch = /^(#{1,6})\s+(.*)$/.exec(riga);
-
-      if (fenceMatch) {
-        chiudiParagrafo();
-        // ⭐ 02/9 — l'identificatore di linguaggio dopo i backtick di apertura
-        // (```python) veniva SCARTATO: era l'unico posto dove il modello ci dice
-        // di che linguaggio si tratta, e lo buttavamo via.
-        const linguaggioDichiarato = riga.trim().slice(3).trim().split(/\s+/)[0] || '';
-        const righeCodice = [];
-        i += 1;
-        while (i < righe.length && !/^```/.test(righe[i].trim())) { righeCodice.push(righe[i]); i += 1; }
-        const chiuso = i < righe.length; // il fence ha trovato la sua riga di chiusura
-        frammento.appendChild(costruisciBloccoCodice(righeCodice.join('\n'), linguaggioDichiarato, chiuso));
-        i += 1; // salta la riga di chiusura ```
-        continue;
-      }
-      if (hrMatch) {
-        chiudiParagrafo();
-        frammento.appendChild(document.createElement('hr'));
-        i += 1;
-        continue;
-      }
-      if (titoloMatch) {
-        chiudiParagrafo();
-        const livello = Math.min(titoloMatch[1].length, 6);
-        const h = document.createElement(`h${livello}`);
-        applicaInline(h, titoloMatch[2]);
-        frammento.appendChild(h);
-        i += 1;
-        continue;
-      }
-      /*
-       * ⛔ 06/9 — trovato guardando uno screenshot di una risposta vera: una tabella markdown
-       * arrivava a schermo come testo grezzo, «| Funzione | Input atteso |» e «|---|---|» in fila.
-       * Il modello le usa spesso (riepiloghi, confronti, casi limite) e qui non esistevano.
-       * Forma GFM: una riga di celle, poi una riga di separatori (con l'allineamento opzionale
-       * `:---`, `---:`, `:---:`), poi le righe di dati. Durante lo streaming una tabella ancora
-       * aperta si rende con le righe già arrivate invece di lampeggiare come testo grezzo
-       * (ricerca 06/09/2026: ant-design/x PR #1322 «cache incomplete table tokens», streamdown.ai
-       * — si bufferizza il markdown incompleto, non lo si mostra crudo).
-       */
-      // il `|` \u00e8 obbligatorio: senza, una riga di soli trattini \u00e8 un separatore orizzontale, non una tabella
-      const separatoreTabella = (r) => typeof r === 'string' && r.includes('|') && /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(r) && r.includes('-');
-      const celle = (r) => {
-        let t = r.trim();
-        if (t.startsWith('|')) t = t.slice(1);
-        if (t.endsWith('|')) t = t.slice(0, -1);
-        return t.split('|').map((c) => c.trim());
-      };
-      if (riga.includes('|') && i + 1 < righe.length && separatoreTabella(righe[i + 1]) && celle(riga).length > 1) {
-        chiudiParagrafo();
-        const intestazioni = celle(riga);
-        const allineamenti = celle(righe[i + 1]).map((c) => (c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : c.startsWith(':') ? 'left' : ''));
-        const involucro = document.createElement('div');
-        involucro.className = 'md-table-wrap'; // la tabella scorre dentro il suo contenitore, non allarga la chat
-        const tabella = document.createElement('table');
-        tabella.className = 'md-table';
-        const thead = document.createElement('thead');
-        const trTesta = document.createElement('tr');
-        intestazioni.forEach((testo, n) => {
-          const th = document.createElement('th');
-          if (allineamenti[n]) th.style.textAlign = allineamenti[n];
-          applicaInline(th, testo);
-          trTesta.appendChild(th);
-        });
-        thead.appendChild(trTesta);
-        tabella.appendChild(thead);
-        const tbody = document.createElement('tbody');
-        i += 2;
-        while (i < righe.length && righe[i].includes('|') && righe[i].trim() !== '') {
-          const valori = celle(righe[i]);
-          const tr = document.createElement('tr');
-          for (let n = 0; n < intestazioni.length; n += 1) {
-            const td = document.createElement('td');
-            if (allineamenti[n]) td.style.textAlign = allineamenti[n];
-            applicaInline(td, valori[n] ?? '');
-            tr.appendChild(td);
-          }
-          tbody.appendChild(tr);
-          i += 1;
-        }
-        tabella.appendChild(tbody);
-        involucro.appendChild(tabella);
-        frammento.appendChild(involucro);
-        continue;
-      }
-      if (listaMatch || listaNumMatch) {
-        chiudiParagrafo();
-        const ordinata = !!listaNumMatch;
-        const lista = document.createElement(ordinata ? 'ol' : 'ul');
-        while (i < righe.length) {
-          const m = ordinata ? /^(\s*)(\d+)\.\s+(.*)$/.exec(righe[i]) : /^(\s*)([-*])\s+(.*)$/.exec(righe[i]);
-          if (!m) break;
-          const li = document.createElement('li');
-          applicaInline(li, m[3]);
-          lista.appendChild(li);
-          i += 1;
-        }
-        frammento.appendChild(lista);
-        continue;
-      }
-      if (riga.trim() === '') {
-        chiudiParagrafo();
-        i += 1;
-        continue;
-      }
-      paragrafoCorrente.push(riga);
-      i += 1;
-    }
-    chiudiParagrafo();
-    return frammento;
+    return renderizzaMarkdown(testoGrezzo, { document, bloccoCodice: costruisciBloccoCodice });
   }
 
   /**

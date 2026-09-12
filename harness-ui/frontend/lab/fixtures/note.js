@@ -12,14 +12,15 @@ export const NOTE = [
    * ⭐ 12/09 — LA NOTA IN MARKDOWN. Le altre quattro sono testo semplice, e con quelle sole
    *   l'interruttore «Anteprima · Testo» del dettaglio non si sarebbe mai visto in una foto: un
    *   modo solo non è un interruttore, quindi la striscia giustamente non compare. Questa ha i
-   *   marcatori veri della specifica CommonMark — titolo ATX, elenco, recinto — e serve a
+   *   marcatori veri della specifica CommonMark — titolo ATX, elenco, recinto e
+   *   citazione annidata (le ultime due aggiunte il 12/09, BC-29) — e serve a
    *   fotografare la resa che l'owner ha chiesto («le note, se sono markdown, devono essere
    *   renderizzate in markdown»).
    */
   {
     id: 'nota-markdown',
     titolo: 'Come si legge una nota in Markdown',
-    contenuto: "# Come si legge una nota\n\nUna nota scritta con i marcatori si legge **resa**, e il testo com’è scritto resta a un clic di distanza.\n\n## I marcatori che contano\n\n- il cancelletto seguito da uno spazio apre un titolo\n- il trattino seguito da uno spazio apre un elenco\n- tre apici aprono un blocco di codice\n\n```bash\nnpm run test:unit\n```\n\nLo spazio dopo il trattino è ciò che evita di chiamare «markdown» una lista della spesa.",
+    contenuto: "# Come si legge una nota\n\nUna nota scritta con i marcatori si legge **resa**, e il testo com’è scritto resta a un clic di distanza.\n\n## I marcatori che contano\n\n- il cancelletto seguito da uno spazio apre un titolo\n- il trattino seguito da uno spazio apre un elenco\n- tre apici aprono un blocco di codice\n- il maggiore seguito da uno spazio apre una citazione\n\n```bash\nnpm run test:unit\n```\n\n> Una citazione occupa tutte le righe che portano il marcatore,\n> e la riga vuota la chiude.\n>\n> > Un secondo maggiore la annida: cambia il tono del filetto, non il rientro.\n\nLo spazio dopo il trattino è ciò che evita di chiamare «markdown» una lista della spesa.",
     creataAlle: '2026-09-11T18:00:00.000Z',
     aggiornataAlle: '2026-09-11T18:20:00.000Z',
   },

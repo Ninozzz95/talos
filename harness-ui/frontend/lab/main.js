@@ -47,7 +47,8 @@ import { reteDiProva } from './fixtures/crud.js';
 import { PROGETTI } from './fixtures/progetti.js';
 /* 11/09 lotto L7 — la Ricerca approfondita col suo dentro: rapporto, affermazioni, fonti. */
 import { RICERCHE as RICERCHE_L7, leggiRapportoFinto, apriMenuDiProva } from './fixtures/ricerche.js';
-import { creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaFallimentoAttrezzo, creaFileToccati, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRicevuta, creaRigaAttrezzo, creaTurno } from '../src/components/conversazione.js';
+import { creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFallimentoAttrezzo, creaFileToccati, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRicevuta, creaRigaAttrezzo, creaTurno } from '../src/components/conversazione.js';
+import { renderizzaMarkdown } from '../src/components/markdown.js'; // BC-29 (12/09): il render vero, lo stesso della chat
 import { aggiornaPiedeChat } from '../src/components/chat-foot.js';
 import { aggiornaDiffReview, creaRigaFileReview, riassuntoReview } from '../src/components/review.js';
 import { creaStatoVuoto } from '../src/components/stato-vuoto.js';
@@ -121,6 +122,25 @@ document.documentElement.setAttribute('data-schermo', 'chat');
  */
 document.getElementById('talosAvvio')?.remove();
 
+/*
+ * BC-29 — il testo che le due foto (nota e chat) devono rendere IDENTICO: un recinto con lingua e
+ * una citazione, i due difetti della foto dell'owner del 12/09.
+ */
+const MARKDOWN_DI_PROVA = [
+  'Ho lasciato il comando pronto:',
+  '',
+  '```bash',
+  'npm run test:unit',
+  '```',
+  '',
+  '> Una citazione occupa tutte le righe che portano il marcatore,',
+  '> e la riga vuota la chiude.',
+  '>',
+  '> > Un secondo maggiore la annida: cambia il tono del filetto, non il rientro.',
+  '',
+  'Il resto della nota resta `testo` normale.',
+].join('\n');
+
 const componente = new URLSearchParams(location.search).get('componente') || '';
 
 /*
@@ -179,7 +199,15 @@ async function montaCrud(quale, { apri = null, nuova = false, modifica = false, 
     notifica: notificaDiProva,
     onMenu: apriMenuDiProva,
     onCopia: () => notificaDiProva('Copiata', 'La voce è negli appunti.'),
-    rendiMarkdown: null, // il laboratorio non carica il monolite: resta la lettura strutturale di `prosaInNodi`
+    /*
+     * ⭐ 12/09 (BC-29) — QUI C'ERA `null`, e il laboratorio mostrava il RIPIEGO.
+     *   `prosaInNodi` senza `rendiMarkdown` fa la lettura strutturale minima (titoli, citazioni,
+     *   paragrafi): una foto di questa sezione provava che il ripiego funziona, non che la nota si
+     *   legge come nella app — dove `legacy/app.js` inietta il render della chat. Il motivo era che
+     *   il laboratorio non carica il monolite; da oggi non serve più, perché il render è un
+     *   componente (`components/markdown.js`), e il recinto passa dallo stesso blocco della chat.
+     */
+    rendiMarkdown: rendiMarkdownDiProva,
     onAggiorna: () => def.monta(schermo, elenco(def.risorsa), opzioni),
     onCambiata: () => def.monta(schermo, elenco(def.risorsa), opzioni),
   };
@@ -246,10 +274,23 @@ async function montaRicerca({ apri = null, vista = 'rapporto', menu = false, rig
  * ⛔ Il modo si sceglie CLICCANDO la scheda «Testo», non impostando uno stato: così la foto prova
  *   anche che l'interruttore funziona, non solo che il pannello sa disegnarsi.
  */
+/*
+ * Il render Markdown del laboratorio: lo STESSO della chat e della app (`components/markdown.js`),
+ * col blocco di codice della conversazione. ⛔ Un secondo render qui renderebbe le foto inutili —
+ * proverebbero il laboratorio, non il prodotto.
+ */
+const rendiMarkdownDiProva = (testo) => renderizzaMarkdown(testo, {
+  bloccoCodice: (codice, linguaggio, chiuso) => creaBloccoCodice({ testo: codice, linguaggio, chiuso }),
+});
+
 async function montaLibreriaFile({ apri = 'lib-md', modo = 'anteprima' } = {}) {
   const schermo = mostraSchermo('schermoLibreria', 'libreria');
   libreriaTd(schermo, LIBRERIA_ANTEPRIMA, {
     sessionId: 'fx-lab', notifica: notificaDiProva, onMenu: () => {}, leggiFile: leggiFileDiProva,
+    /* ⭐ 12/09 (BC-29) — come per le Note: qui non si passava niente e il laboratorio mostrava il
+       RIPIEGO strutturale di `prosaInNodi`, mentre la app inietta il render della chat
+       (`legacy/app.js:5083` e `:5295`). Il recinto e la citazione della fixture si vedono solo così. */
+    rendiMarkdown: rendiMarkdownDiProva,
   });
   schermo.querySelector(`.td-card[data-item="${apri}"] .td-card-open`).click();
   /* Due giri di microtask: uno per la lettura del file, uno per il ridisegno che ne segue. */
@@ -497,6 +538,30 @@ const LABORATORI = {
       turno.append(messaggio);
       colonna.append(turno);
     }
+  },
+  /*
+   * ⭐ 12/09 (BC-29) — LO STESSO MARKDOWN, DENTRO LA BOLLA DELLA CHAT.
+   *   Serve a provare che la cura delle note non ha toccato la conversazione: qui il render è lo
+   *   stesso (`components/markdown.js`) e la struttura è quella che `legacy/app.js` costruisce a
+   *   ogni risposta — `.talos-message > .talos-message__copy > .assistant-copy`. Una foto di questa
+   *   pagina accanto a quella della nota dice se le due superfici sono d'accordo.
+   */
+  Conversazione_markdown() {
+    const colonna = document.querySelector('#schermoChat .talos-conversation__column');
+    for (const finto of colonna.querySelectorAll(':scope > .talos-turn')) finto.remove();
+    const turno = creaTurno({ numeri: '1 / 1' });
+    const messaggio = creaMessaggioTalos({ modello: 'glm-5.3-flash', ora: '18:42' });
+    const article = document.createElement('div');
+    article.className = 'talos-message__copy';
+    const copia = document.createElement('div');
+    copia.className = 'assistant-copy';
+    copia.append(renderizzaMarkdown(MARKDOWN_DI_PROVA, {
+      bloccoCodice: (codice, linguaggio, chiuso) => creaBloccoCodice({ testo: codice, linguaggio, chiuso }),
+    }));
+    article.append(copia);
+    messaggio.append(article);
+    turno.append(messaggio);
+    colonna.append(turno);
   },
   Topbar() {
     /* Prima si svuota ciò che il mockup scrive a mano, poi il componente lo riscrive dai dati. */
