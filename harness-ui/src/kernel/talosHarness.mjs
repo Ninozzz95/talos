@@ -1351,11 +1351,44 @@ export function uscitaUtile(testo, tetto = 4_000, quotaInTesta = 0.25) {
  * produzione.
  */
 const ATTREZZI = [
+    /*
+     * ⛔⛔⛔ BC-40, 12/09/2026 — `percorso` È IL PEZZO CHE MANCAVA, e mancava da sempre.
+     *
+     * Fino a oggi `elenca` aveva `properties: {}`: nessun argomento, e il ramo che lo esegue
+     * partiva SEMPRE dalla radice (`disco.elenca('')` + un livello sotto). Cioè l'attrezzo
+     * arrivava a profondità 2 **dalla radice**, e non c'era nessun modo di aprire una cartella
+     * precisa: un modello che voleva vedere `src/kernel` non aveva niente da chiamare.
+     * ⛔ E il preambolo gli diceva già il contrario: `mappa-cartelle.mjs` scriveva, in chiaro,
+     *   *«usa `elenca` per vedere cosa c'è in una cartella precisa»*. Una promessa che l'attrezzo
+     *   non poteva mantenere — la stessa forma di difetto di [[la-sonda-non-poteva-rispondere-per-costruzione]].
+     * ⛔ Da BC-40 la mappa si ferma ai primi 2 livelli: senza questo argomento la riduzione
+     *   sarebbe un taglio secco, non una *progressive disclosure* (Anthropic, «Equipping agents
+     *   for the real world with Agent Skills», 16/10/2025: *«Like a well-organized manual that
+     *   starts with a table of contents, then specific chapters»*). La mappa è l'indice, questo
+     *   è il capitolo.
+     *
+     * ⭐ ADDITIVO PER COSTRUZIONE, e serve al banco: senza `percorso` l'uscita è byte per byte
+     *   quella di prima (stessa radice, stesso ordine, stesso separatore), perché il ramo nuovo
+     *   con base `''` è letteralmente il ramo vecchio. TALOS-BANCO confronta le uscite degli
+     *   attrezzi carattere per carattere: una riga in più avrebbe invalidato le campagne.
+     * ⛔ Il costo: ~30 token sulla descrizione degli attrezzi (la scommessa dichiarata è 505
+     *   contro i 42.272 di claude-code). Si pagano una volta per sessione; la mappa ne restituisce
+     *   2.766 sul repo intero (3.689 → 923, misurato 12/09).
+     */
     {
         name: 'elenca',
-        description: 'Lists the files of the workspace, with their sizes. '
-            + 'Only the top levels: use "cerca" to find files deeper down.',
-        input_schema: { type: 'object', properties: {}, required: [] },
+        description: 'Lists the files of a folder of the workspace, with their sizes. '
+            + 'With no arguments: the workspace root and one level below it. '
+            + 'Give "percorso" to open ONE folder you saw in the project map (e.g. "src" or "src/kernel") '
+            + 'and see what is inside it, one level below included. '
+            + 'The project map only shows the top levels: use this to go down, and "cerca" to find files at any depth.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                percorso: { type: 'string', description: 'folder to open, relative to the workspace root; omit it for the root' },
+            },
+            required: [],
+        },
     },
     {
         name: 'cerca',
@@ -2854,6 +2887,52 @@ function estensioneDiPercorso(percorso) {
     const punto = percorso.lastIndexOf('.')
     const barra = percorso.lastIndexOf('/')
     return punto > barra + 1 ? percorso.slice(punto).toLowerCase() : ''
+}
+
+/** Un segmento `..` in qualunque punto del percorso: e' l'unica forma che porta FUORI. */
+const RISALITA = /(^|[\\/])\.\.([\\/]|$)/
+
+/**
+ * `elenca`, da una cartella qualunque — la cartella stessa e UN livello sotto.
+ *
+ * ⛔⛔ L'USCITA E' QUELLA DI SEMPRE, e non per pigrizia: TALOS-BANCO confronta le uscite degli
+ *   attrezzi **byte per byte** fra le campagne. Con `base === ''` questa funzione produce
+ *   esattamente la stringa che il ramo `elenca` produceva prima di BC-40 — prima i file della
+ *   radice, poi i figli delle sue cartelle, stesso `/` come separatore, stesso a-capo. Cambiare
+ *   la forma avrebbe reso incomparabili le righe gia' pagate.
+ *
+ * ⛔ I PERCORSI SONO SEMPRE RELATIVI ALLA RADICE, mai alla cartella aperta: `elenca` di `src`
+ *   risponde `src/kernel/talosHarness.mjs`, non `kernel/talosHarness.mjs`. E' l'unica forma che
+ *   il modello puo' girare a `leggi` senza ricostruire niente — e ricostruire un prefisso a mano
+ *   e' il genere di passaggio in cui un modello sbaglia in silenzio.
+ *
+ * ⛔ E SE LA CARTELLA NON C'E', il messaggio NON porta il percorso assoluto. Il catch generico
+ *   degli attrezzi risponde `error: ENOENT ... scandir <percorso assoluto>`: finche' `elenca` non
+ *   prendeva argomenti quel ramo era irraggiungibile, da oggi lo raggiunge il modello, e il nome
+ *   della persona finirebbe dentro il prompt — [[cancello-4-non-guardava-tutto-mobile]].
+ *
+ * @param {{elenca:(percorso?:string)=>Promise<Array<{nome:string, cartella:boolean}>>}} disco
+ * @param {string} base '' = la radice del workspace
+ */
+export async function elencaDaCartella(disco, base) {
+    const prefisso = base ? `${base.replace(/[\\/]+$/, '')}/` : ''
+    let voci
+    try {
+        voci = await disco.elenca(base)
+    }
+    catch {
+        return `"${base}" is not a readable folder of this workspace. `
+            + 'Check the project map you received at the start, or use `cerca` to find where it is. '
+            + 'Note: `elenca` opens FOLDERS — to read a file use `leggi`.'
+    }
+    const dentro = await Promise.all(voci
+        .filter((v) => v.cartella)
+        /* ⛔ Una sottocartella illeggibile (permessi, link rotto) non fa cadere l'elenco INTERO:
+           sparisce lei, non tutto il resto. Alla radice il caso non capitava mai; aprendo una
+           cartella a scelta del modello capita. */
+        .map(async (v) => (await disco.elenca(`${prefisso}${v.nome}`).catch(() => []))
+            .map((f) => `${prefisso}${v.nome}/${f.nome}`)))
+    return [...voci.filter((v) => !v.cartella).map((v) => `${prefisso}${v.nome}`), ...dentro.flat()].join('\n')
 }
 
 /**
@@ -6668,11 +6747,19 @@ export async function talosLavora({
             let esitoPermessoPerRicevuta = null
             try {
                 if (nome === 'elenca') {
-                    const voci = await disco.elenca('')
-                    const dentro = await Promise.all(voci
-                        .filter((v) => v.cartella)
-                        .map(async (v) => (await disco.elenca(v.nome)).map((f) => `${v.nome}/${f.nome}`)))
-                    esito = [...voci.filter((v) => !v.cartella).map((v) => v.nome), ...dentro.flat()].join('\n')
+                    /*
+                     * ⛔ BC-40 — `percorsoDiFile` e non `argomenti.percorso`: un modello che scrive
+                     *   `path` (Hermes, deepseek, Anthropic) o `filePath` (opencode) deve trovare la
+                     *   STESSA grammatica che `leggi` e `scrivi` gli concedono gia'. Due vocabolari
+                     *   diversi per lo stesso campo sono due verita' da tenere allineate a mano.
+                     * ⭐ `''` = la radice: e' il ramo di prima, invariato byte per byte.
+                     */
+                    const base = percorsoDiFile(argomenti)
+                    /* Un percorso che risale (`..`) non e' una cartella del progetto: l'attrezzo si
+                       chiama «elenca», non «gira per il disco», e chi vuole leggere fuori ha `leggi`. */
+                    esito = RISALITA.test(base)
+                        ? `REFUSED. "" climbs out of the workspace with "..". \`elenca\` takes a path INSIDE the workspace, e.g. "src" or "src/kernel".`
+                        : await elencaDaCartella(disco, base)
                 }
                 else if (nome === 'cerca') {
                     /*

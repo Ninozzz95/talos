@@ -384,7 +384,12 @@ test('BC-07: la mappa entra nel tetto di TOKEN togliendo profondita, e lo DICHIA
   }
   const base = await progettoFinto(albero);
   try {
-    const mappa = await costruisciMappaCartelle({ radice: base });
+    /* ⛔ BC-40 (12/09) — `profonditaMax: 8` ESPLICITO, e non e' un aggiustamento per far
+       passare il test: questa prova parla del TETTO DI TOKEN, che per mordere ha bisogno di un
+       albero profondo. Dal 12/09 la profondita' predefinita e' 2 (BC-40), quindi il default
+       non produrrebbe piu' i tre livelli di cui questa prova ha bisogno. Cio' che si prova qui
+       resta identico; cambia solo che la profondita' si CHIEDE invece di ereditarla. */
+    const mappa = await costruisciMappaCartelle({ radice: base, profonditaMax: 8 });
     assert.equal(mappa.profonditaRaggiunta, 3);
     const piena = mappaEntroIlTetto(mappa, { radice: base, tettoToken: 100_000 });
     assert.equal(piena.profonditaUsata, 3);
