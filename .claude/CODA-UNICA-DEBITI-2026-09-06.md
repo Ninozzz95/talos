@@ -61,7 +61,7 @@ Proposta dell'owner registrata («magari mettere il preambolo come tool»): la f
 | 3 | BC-44 ripresa di una ricerca fermata dal fornitore (+ giudice L9 dal vivo) | agente già lanciato (ripreso) | 🏃 |
 | 4 | consegna `public/`, riavvio 4174, foto due temi, push del blocco | io | dopo 1-3 |
 | 5 | L10 modalità piano della ricerca con ricerca strategica (approvazione del piano dalla sezione) | Astra via `codex exec`, review mia | 🔜 |
-| 6 | BC-35 DOCX con titoli di Word + elenchi annidati nel Markdown server | Astra | 🔜 |
+| 6 | BC-35 DOCX con titoli di Word + elenchi annidati nel Markdown server | Astra via `codex exec` (primo lotto: 188k token, ~1 h) | ✅ committata, 47/47 rilanciati da me; manca solo l'apertura in Word e il riavvio del 4174 |
 | 7 | BC-43 chiamanti di `$('#conversation')` che si aspettano lo scorrevole | Astra | 🔜 |
 | 8 | PO-14 P-D…P-L fornitori (Z.AI due porte, models.dev, fallback, wire OpenAI «una riga», pool chiavi, Kimi/MiniMax/Qwen, wire Anthropic, Azure/Bedrock/Vertex, provider esterno) | Astra, uno per volta | 🔜 |
 | 9 | PO-15 TALOS delega a un agente esterno da CLI | Astra + kernel (io) | 🔜 nuovo |
