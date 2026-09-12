@@ -12584,8 +12584,16 @@ body.background-motion-paused #schermoChat::after {
 .td-percorso {
   font-family: var(--talos-font-mono);
   font-size: 12px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   color: var(--talos-text);
+}
+.td-andata dd > .td-vai-sessione {
+  margin-inline-start: calc(var(--talos-space-control) * -1);
+  margin-block: -6px;
+  max-width: 100%;
+  justify-content: flex-start;
+  white-space: normal;
+  text-align: left;
 }
 .td-code {
   white-space: pre-wrap;
