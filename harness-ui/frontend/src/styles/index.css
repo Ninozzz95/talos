@@ -112,6 +112,13 @@
   --talos-cronologia-w:36px;      /* quanto e' larga, bersaglio del clic compreso */
   --talos-cronologia-ingombro:calc(var(--talos-cronologia-x) + var(--talos-cronologia-w));
   --talos-chat-gutter:44px;       /* il respiro della chat: era 44 scritto in tre punti diversi */
+  /* ⛔⛔ 12/09, BC-10 — LA TERZA MISURA CHE MANCAVA AL CONTO. `.talos-turn` e' una griglia
+     `0 minmax(0,1fr) 46px`: a destra di OGNI messaggio c'e' una colonna vuota di 46 px (era il posto
+     della spina dei giri, oggi nascosta). Il piede ci si allinea sopra (`- 46px`, due volte).
+     Quel numero stava scritto a mano in tre punti e non entrava nel conto dei margini: e' il motivo
+     per cui la cura dell'11/09 pareggiava la COLONNA e lasciava il TESTO storto. Ora e' un token,
+     e chi calcola i margini lo legge da qui. */
+  --talos-turno-coda:46px;
   --talos-row-session:66px; --talos-row:44px; --talos-row-pad:12px; --talos-gap:10px;
 }
 :root[data-densita="compatta"]{ --talos-row-session:52px; --talos-row:36px; --talos-row-pad:8px; --talos-gap:6px; }
@@ -562,9 +569,25 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
 .talos-contesto__fetta--p4{width:4%}
 .talos-contesto__fetta--p2{width:2%}
 .talos-cronologia__linea{display:block; width:var(--lente,6px); height:2px; border-radius:1px; background:var(--talos-muted); opacity:.5; transition:width var(--talos-motion-duration-control) var(--talos-motion-ease), opacity var(--talos-motion-duration-control) var(--talos-motion-ease), background-color var(--talos-motion-duration-control) var(--talos-motion-ease)}
-.talos-cronologia__voce--attiva .talos-cronologia__linea{background:var(--talos-accent); opacity:1}
+/* ⛔⛔ BC-08, owner 11/09 — LE DUE VOCI DI UNO SCAMBIO, e come si distinguono senza una parola.
+   Da oggi la barra elenca il tuo messaggio E la risposta. Il lato si legge in due modi, perche' a
+   6 px uno solo puo' non bastare:
+   · la GEOMETRIA — il tuo segno sta a DESTRA della pista, la risposta a SINISTRA: e' la stessa
+     posizione che i due messaggi hanno nella chat (`.talos-message--user` e' `align-items:flex-end`).
+     La barra diventa una treccia, e si capisce chi parla senza leggere niente;
+   · il COLORE — il tuo segno prende l'accento, che nella chat e' gia' il colore della TUA bolla
+     (`--talos-accent-soft` + `--talos-accent-border`); la risposta resta neutra, come il suo testo.
+   ⛔ Niente verde: fino a ieri il segno della persona era `--talos-success`, cioe' «riuscito», su un
+   messaggio che non ha nessun esito. Il tono (errore/avviso/in corso) resta, ma solo dove significa
+   qualcosa — sui giri di TALOS — e vince sul neutro. */
+.talos-cronologia__voce[data-lato="utente"] .talos-cronologia__segno{justify-content:flex-end}
+.talos-cronologia__voce[data-lato="utente"] .talos-cronologia__linea{background:var(--talos-accent); opacity:.5}
+/* ⛔ doppia classe, non una: `[data-lato="utente"]` qui sopra pesa quanto DUE classi, e con
+   `.talos-cronologia__voce--attiva` da sola la voce attiva della persona sarebbe rimasta al 50% —
+   cioe' il segnavia sparisce proprio sulla meta' delle voci. Misurato leggendo la specificita', e
+   provato a schermo nelle foto del 12/09. */
+.talos-cronologia__voce.talos-cronologia__voce--attiva .talos-cronologia__linea{background:var(--talos-accent); opacity:1}
 /* il tono del giro, che prima stava nei tick verdi della spina: si e' fuso qui */
-.talos-cronologia__voce[data-tono="utente"] .talos-cronologia__linea{background:var(--talos-success)}
 .talos-cronologia__voce[data-tono="info"] .talos-cronologia__linea{background:var(--talos-info)}
 .talos-cronologia__voce[data-tono="warning"] .talos-cronologia__linea{background:var(--talos-warning)}
 .talos-cronologia__voce[data-tono="danger"] .talos-cronologia__linea{background:var(--talos-danger); opacity:1}
@@ -623,7 +646,7 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
    massima, e il contenuto allineato al bordo SINISTRO come il testo, largo quanto il testo — cioè
    la colonna meno la spina. Così i due bordi coincidono a qualunque larghezza, e non c'è un numero
    magico da tenere aggiornato a mano: le misure vengono dalle stesse variabili. */
-.talos-chat-foot > *{--talos-colonna-chat:min(calc(92px + var(--talos-measure-w)), 100%); --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - 46px)); --talos-larghezza-piede:min(var(--composer-max-w, var(--talos-testo-chat)), 100%); width:var(--talos-larghezza-piede); max-width:none; margin-left:max(calc(-1 * var(--talos-chat-gutter)), calc((100% - var(--talos-colonna-chat)) / 2 + (var(--talos-testo-chat) - var(--talos-larghezza-piede)) / 2)); margin-right:auto}
+.talos-chat-foot > *{--talos-colonna-chat:min(calc(92px + var(--talos-measure-w)), 100%); --talos-testo-chat:min(var(--talos-measure-w), calc(var(--talos-colonna-chat) - var(--talos-turno-coda))); --talos-larghezza-piede:min(var(--composer-max-w, var(--talos-testo-chat)), 100%); width:var(--talos-larghezza-piede); max-width:none; margin-left:max(calc(-1 * var(--talos-chat-gutter)), calc((100% - var(--talos-colonna-chat)) / 2 + (var(--talos-testo-chat) - var(--talos-larghezza-piede)) / 2)); margin-right:auto}
 /* ⛔ 07/9, owner, precisazione: «il chat composer deve rimanere estensibile oltre la larghezza della
    chat, ma i lati devono essere equidistanti da un bordo rispetto all'altro della chat». Cioè: la
    larghezza resta quella che gli dà il ridimensionamento (`--composer-max-w`), e il CENTRO è quello
@@ -655,7 +678,7 @@ select:focus-visible,.talos-select:focus-visible{outline:2px solid var(--talos-a
    history: il meglio dei due mondi». La spina resta nel DOM come DATO (numero del giro, tono dell'esito,
    quanti attrezzi) — la barra della cronologia a sinistra la legge e la disegna — ma non occupa piu'
    spazio nella conversazione. */
-.talos-turn{display:grid; grid-template-columns:0 minmax(0,1fr) 46px; align-items:stretch}
+.talos-turn{display:grid; grid-template-columns:0 minmax(0,1fr) var(--talos-turno-coda); align-items:stretch}
 /* ⛔ con la spina a display:none il messaggio scivolava nella prima colonna (larga 0) e il testo andava
    a capo a ogni parola: la posizione si dichiara, non si lascia decidere all'ordine dei figli. */
 .talos-turn > *:not(.talos-turn-spine){grid-column:2}
@@ -769,10 +792,29 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
  * 44); 1440-dettagli-aperti -> 18 px per lato con la colonna ancora a 736 px, cioe' simmetrica
  * SENZA aver tolto un pixel di testo; 1024 (barra assente, ingombro 0) -> 44 e 44.
  */
-:root.chat-full-width{--talos-respiro-pieno:clamp(0px, calc((100% - var(--talos-cronologia-ingombro) - min(calc(92px + var(--talos-measure-w)), calc(100% - 2 * var(--talos-chat-gutter)))) / 2), var(--talos-chat-gutter))}
-:root.chat-full-width .talos-conversation, :root.chat-full-width .talos-chat-foot{padding-left:calc(var(--talos-cronologia-ingombro) + var(--talos-respiro-pieno)); padding-right:var(--talos-respiro-pieno)}
+/* ⛔⛔⛔ 12/09, BC-10 — LA CURA DELL'11/09 PAREGGIAVA LA COLONNA, NON IL TESTO.
+ * Owner, 11/09 e di nuovo il 12/09: «la chat a tutta larghezza collide troppo vicina al navigator
+ * della conversazione di sinistra, rendi lo spazio uguale a quello di destra».
+ * MISURATO sul banco (porta 4186, store sintetico, mai il 4174), 1440x900, tutta larghezza, prima
+ * di questa riga: fra il bordo destro della barra e la prima lettera **18 px**, fra l'ultima lettera
+ * e il bordo **64 px**. La cura precedente diceva «18 e 18» — e diceva il vero sulla COLONNA. Ma il
+ * testo non arriva al bordo della colonna: `.talos-turn` gli tiene a destra una coda vuota di
+ * `--talos-turno-coda` (46 px). Il conto giusto ha tre termini, non due.
+ *   spazio a sinistra = padding-left − ingombro della barra
+ *   spazio a destra   = padding-right + coda del turno
+ *   uguali  ⟺  padding-left = ingombro + coda + padding-right
+ * ⛔ E il respiro non puo' essere sempre 44: resta quel che AVANZA dopo aver garantito al TESTO la
+ * sua misura normale (`min(92px + misura, 100% − 2·respiro) − coda`), diviso in due, col tetto a 44
+ * e il pavimento a 0 — altrimenti «tutta larghezza» RESTRINGE, la regressione gia' pagata il 06/9.
+ * Misurato DOPO, sullo stesso banco: 1440 tutta larghezza → 46 e 46 (prima 18 e 64); 1024 (barra
+ * assente, ingombro 0) → 67 e 67 col testo invariato a 614 px; fuori da «tutta larghezza» nessuna
+ * misura cambia. I numeri per esteso stanno nel rapporto del 12/09.
+ * ⛔ `0px` e non `0` quando l'ingombro si annulla: uno zero senza unita' rende invalido tutto il
+ * `calc()` che lo contiene, in silenzio (MDN «calc()», riletto il 12/09/2026). */
+:root.chat-full-width{--talos-respiro-pieno:clamp(0px, calc((100% - var(--talos-cronologia-ingombro) - var(--talos-turno-coda) - min(calc(92px + var(--talos-measure-w)), calc(100% - 2 * var(--talos-chat-gutter)))) / 2), var(--talos-chat-gutter))}
+:root.chat-full-width .talos-conversation, :root.chat-full-width .talos-chat-foot{padding-left:calc(var(--talos-cronologia-ingombro) + var(--talos-turno-coda) + var(--talos-respiro-pieno)); padding-right:var(--talos-respiro-pieno)}
 :root.chat-full-width .talos-conversation__column{max-width:none}
-:root.chat-full-width .talos-chat-foot > *{--talos-colonna-chat:100%; width:calc(100% - 46px); max-width:none; margin-left:0}
+:root.chat-full-width .talos-chat-foot > *{--talos-colonna-chat:100%; width:calc(100% - var(--talos-turno-coda)); max-width:none; margin-left:0}
 /* ⛔ 07/9, misurato a 1920 px: «a tutta larghezza» allargava la colonna e il composer (1216 e
    1212) ma i MESSAGGI restavano a 768 — il tetto di `.talos-message` non veniva sciolto, e la
    modalita manteneva solo meta della sua promessa. Si vedeva poco finche la misura era `78ch`
