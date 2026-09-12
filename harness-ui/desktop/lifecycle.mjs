@@ -1,29 +1,4 @@
-/**
- * ⭐⭐⭐ 04/9 — W2-13, LAB: il ciclo di vita del figlio Node (piano 57.2).
- *
- * Una macchina a stati PURA: non conosce Electron, non conosce
- * child_process. Riceve funzioni iniettate (avviare, uccidere, sondare la
- * salute, orologio) e decide SOLO le transizioni — così si prova per intero
- * in `node --test`, anche al verso contrario, senza aprire una finestra.
- *
- *   fermo ──avvia()──▶ avvio ──(salute ok)──▶ pronto ──chiudi()──▶ in-chiusura ──▶ chiuso
- *                        │                       │
- *                        └──(uscita inattesa)────┴──▶ crash ──(backoff)──▶ avvio   (× tentativiMassimi)
- *                                                                          └──▶ arreso
- *   pronto ──sospendi()──▶ sospeso ──riprendi()──▶ (salute ok ? pronto : crash)
- *
- * Regole che i test fissano:
- * - un'uscita del figlio DURANTE `in-chiusura` non è un crash (l'abbiamo chiesta noi);
- * - dopo `tentativiMassimi` riavvii consecutivi falliti si passa ad `arreso` e si
- *   avvisa: mai un ciclo infinito silenzioso di riavvii;
- * - un riavvio riuscito azzera il contatore;
- * - al `riprendi()` dopo una sospensione si SONDA la salute invece di darla
- *   per scontata (la macchina può aver ucciso il figlio nel sonno).
- *
- * ⛔ `windowStatePersistence` NON esiste in Electron 44 (verificato sulla
- * documentazione ufficiale il 04/09: la guida del 03/09 lo dava per buono).
- * Lo stato della finestra si salva in `window-state.mjs`, a mano.
- */
+/** R-01 — Ciclo di vita del servizio locale, derivato dal laboratorio W2-13. */
 
 export const STATI = Object.freeze(['fermo', 'avvio', 'pronto', 'in-chiusura', 'chiuso', 'crash', 'sospeso', 'arreso']);
 export const BACKOFF_MS_DEFAULT = Object.freeze([500, 1000, 2000, 4000, 8000]);
@@ -60,23 +35,25 @@ export function creaCicloDiVita({
     const mia = generazione;
     vaiA('avvio', { generazione: mia, tentativo: riavviiConsecutivi });
     try {
-      handle = await avviaFiglio();
+      const avviato = await avviaFiglio();
+      if (mia !== generazione) { if (avviato) await uccidiFiglio(avviato); return stato; }
+      handle = avviato;
       const sano = await attendiSalute(handle);
       if (mia !== generazione) return stato; // superato da un altro avvio o da una chiusura
-      if (!sano) { return figlioUscito(handle?.exitCode ?? null, { motivo: 'salute-non-raggiunta' }); }
+      if (!sano) { return guasto(handle?.exitCode ?? null, { motivo: 'salute-non-raggiunta' }); }
       riavviiConsecutivi = 0;
       vaiA('pronto', { generazione: mia });
       return stato;
     } catch (errore) {
       if (mia !== generazione) return stato;
-      return figlioUscito(null, { motivo: 'avvio-fallito', errore: errore?.message ?? String(errore) });
+      return guasto(null, { motivo: 'avvio-fallito', errore: errore?.message ?? String(errore) });
     }
   }
 
   /** Il figlio è uscito (evento 'exit') o non è mai diventato sano. Decide se è un crash e se riavviare. */
   function figlioUscito(codice, dettaglio = {}) {
     if (stato === 'in-chiusura') { vaiA('chiuso', { codice }); handle = null; return stato; }
-    if (stato === 'chiuso' || stato === 'fermo' || stato === 'arreso') return stato;
+    if (stato === 'chiuso' || stato === 'fermo' || stato === 'arreso' || stato === 'crash') return stato;
     handle = null;
     generazione += 1; // invalida esiti tardivi del figlio morto
     vaiA('crash', { codice, ...dettaglio, riavviiConsecutivi });
@@ -88,8 +65,25 @@ export function creaCicloDiVita({
     const attesa = backoffMs[Math.min(riavviiConsecutivi, backoffMs.length - 1)];
     riavviiConsecutivi += 1;
     onAvviso(`Il server locale si è fermato (codice ${codice ?? 'n/d'}): lo riavvio fra ${attesa} ms (tentativo ${riavviiConsecutivi} di ${tentativiMassimi}).`);
-    pianifica(() => { if (stato === 'crash') void avvia(); }, attesa);
+    const prevista = generazione;
+    pianifica(() => { if (stato === 'crash' && generazione === prevista) void avvia(); }, attesa);
     return stato;
+  }
+
+  async function guasto(codice, dettaglio) {
+    const precedente = handle;
+    // Passa a crash prima di terminare: l'exit della vecchia generazione non
+    // deve pianificare un secondo riavvio. Il main attende tutti i figli in uscita.
+    figlioUscito(codice, dettaglio);
+    if (precedente) await uccidiFiglio(precedente);
+    return stato;
+  }
+
+  async function riprova() {
+    if (stato !== 'arreso') return stato;
+    generazione += 1; riavviiConsecutivi = 0;
+    vaiA('fermo');
+    return avvia();
   }
 
   function chiudi() {
@@ -111,14 +105,17 @@ export function creaCicloDiVita({
 
   async function riprendi() {
     if (stato !== 'sospeso') return stato;
-    const sano = handle ? await attendiSalute(handle) : false;
+    const mia = generazione;
+    let sano = false;
+    try { sano = handle ? await attendiSalute(handle) : false; } catch { /* risveglio fallito */ }
+    if (mia !== generazione || stato !== 'sospeso') return stato;
     if (sano) { vaiA('pronto', { daSospensione: true }); return stato; }
     vaiA('pronto', { daSospensione: true, figlioMorto: true }); // torna pronto per far scattare le regole del crash
-    return figlioUscito(handle?.exitCode ?? null, { motivo: 'morto-durante-sospensione' });
+    return guasto(handle?.exitCode ?? null, { motivo: 'morto-durante-sospensione' });
   }
 
   return Object.freeze({
-    avvia, chiudi, sospendi, riprendi, figlioUscito,
+    avvia, chiudi, sospendi, riprendi, figlioUscito, riprova,
     stato: () => stato,
     handle: () => handle,
     transizioni: () => transizioni.slice(),
