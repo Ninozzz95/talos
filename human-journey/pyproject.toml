@@ -3,6 +3,7 @@ requires = ["hatchling==1.31.0"]
 build-backend = "hatchling.build"
 
 [project]
+license = "AGPL-3.0-only"
 name = "talos-human-journey"
 version = "0.1.0"
 description = "Isolated adaptive and release evaluation sidecar for TALOS"

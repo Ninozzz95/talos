@@ -1,0 +1,4624 @@
+{
+  "data": "2026-09-12T22:25:34.048Z",
+  "metodo": "Occorrenze packages per lock; radici/link esclusi; dev e piattaforme opzionali inclusi; espressioni non spezzate.",
+  "lock": [
+    {
+      "percorso": "harness-ui/package-lock.json",
+      "sha256": "9916a46d4f712a52296b1a5da202d951e4746f0bc67db838e16abe02980bbc4c",
+      "versioneLock": 3,
+      "totale": 106,
+      "conteggi": {
+        "Apache-2.0": 14,
+        "MIT": 80,
+        "0BSD": 2,
+        "ISC": 5,
+        "(AFL-2.1 OR BSD-3-Clause)": 1,
+        "(MIT OR GPL-3.0-or-later)": 1,
+        "(MIT AND Zlib)": 1,
+        "ASSENTE": 1,
+        "BlueOak-1.0.0": 1
+      }
+    },
+    {
+      "percorso": "harness-ui/frontend/package-lock.json",
+      "sha256": "1f06b3ee719fda69249cd9cb0a1be79104c9d0cf7c1ef152dfed2c4aeffc6366",
+      "versioneLock": 3,
+      "totale": 38,
+      "conteggi": {
+        "MIT": 33,
+        "Apache-2.0": 3,
+        "MPL-2.0": 1,
+        "ISC": 1
+      }
+    },
+    {
+      "percorso": "harness-ui/desktop/package-lock.json",
+      "sha256": "3d10d02f7c3364a11363b80da9452b08ef6289c8fc94cd94ee297651b9b3f38d",
+      "versioneLock": 3,
+      "totale": 297,
+      "conteggi": {
+        "BSD-2-Clause": 6,
+        "MIT": 213,
+        "ISC": 36,
+        "Apache-2.0": 6,
+        "MPL-2.0": 13,
+        "Python-2.0": 1,
+        "BSD-3-Clause": 9,
+        "BlueOak-1.0.0": 8,
+        "WTFPL OR ISC": 1,
+        "WTFPL": 1,
+        "0BSD": 1,
+        "(MIT OR CC0-1.0)": 1,
+        "(WTFPL OR MIT)": 1
+      }
+    },
+    {
+      "percorso": "context-engine/package-lock.json",
+      "sha256": "9070e21a3af9a6c91d5b6c5ace1fe8df27ebf4f140cb3a475ba9406d7bf60ab6",
+      "versioneLock": 3,
+      "totale": 7,
+      "conteggi": {
+        "MIT OR Apache": 6,
+        "MIT": 1
+      }
+    }
+  ],
+  "totale": 448,
+  "totali": {
+    "Apache-2.0": 23,
+    "MIT": 327,
+    "0BSD": 3,
+    "ISC": 42,
+    "(AFL-2.1 OR BSD-3-Clause)": 1,
+    "(MIT OR GPL-3.0-or-later)": 1,
+    "(MIT AND Zlib)": 1,
+    "ASSENTE": 1,
+    "BlueOak-1.0.0": 9,
+    "MPL-2.0": 14,
+    "BSD-2-Clause": 6,
+    "Python-2.0": 1,
+    "BSD-3-Clause": 9,
+    "WTFPL OR ISC": 1,
+    "WTFPL": 1,
+    "(MIT OR CC0-1.0)": 1,
+    "(WTFPL OR MIT)": 1,
+    "MIT OR Apache": 6
+  },
+  "decisioni": {
+    "MIT": "Compatibile; conservare copyright e licenza.",
+    "Apache-2.0": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili.",
+    "ISC": "Compatibile; conservare avvisi.",
+    "0BSD": "Compatibile; licenza permissiva.",
+    "BSD-2-Clause": "Compatibile; conservare avvisi.",
+    "BSD-3-Clause": "Compatibile; conservare avvisi e clausola di non approvazione.",
+    "BlueOak-1.0.0": "Compatibile secondo la lettura del testo permissivo; includere testo o link della licenza.",
+    "Python-2.0": "Compatibile; conservare testo e attribuzioni.",
+    "WTFPL": "Compatibile; licenza permissiva.",
+    "MPL-2.0": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo.",
+    "(AFL-2.1 OR BSD-3-Clause)": "Scegliere BSD-3-Clause per json-schema; non affidarsi alla compatibilità di AFL-2.1.",
+    "(MIT OR GPL-3.0-or-later)": "Scegliere MIT per jszip; conservare avvisi.",
+    "(MIT AND Zlib)": "Rispettare insieme MIT e Zlib per pako; entrambi compatibili.",
+    "(MIT OR CC0-1.0)": "Scegliere MIT; conservare avvisi.",
+    "(WTFPL OR MIT)": "Scegliere MIT; conservare avvisi.",
+    "WTFPL OR ISC": "Scegliere ISC; conservare avvisi.",
+    "MIT OR Apache": "Metadato non SPDX: scegliere MIT per sqlite-vec 0.1.9 e varianti, verificato LICENSE-MIT upstream.",
+    "ASSENTE": "png-js 1.1.0: MIT verificata nel LICENSE incluso nel pacchetto installato."
+  },
+  "restrittive": [],
+  "daVerificare": [],
+  "campioni": [
+    {
+      "percorso": "harness-ui/node_modules/png-js/LICENSE",
+      "byte": 1069,
+      "sha256": "bdb26a2ec815931ed6a38f3416362566204ee85ecdef96702b636402da4c75c3"
+    },
+    {
+      "percorso": "harness-ui/node_modules/node-pty/LICENSE",
+      "byte": 3326,
+      "sha256": "a3d60eaf32d2fb09c9d82ef39f14bd6e2c0f3ca7de30daa827486c0d6f8b6e9f"
+    },
+    {
+      "percorso": "harness-ui/desktop/node_modules/electron/LICENSE",
+      "byte": 1096,
+      "sha256": "5154e165bd6c2cc0cfbcd8916498c7abab0497923bafcd5cb07673fe8480087d"
+    },
+    {
+      "percorso": "harness-ui/desktop/assets/llama-LICENSE.txt",
+      "byte": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    {
+      "percorso": "harness-ui/frontend/node_modules/axe-core/LICENSE",
+      "byte": 15921,
+      "sha256": "af175b9d96ee93c21a036152e1b905b0b95304d4ae8c2c921c7609100ba8df7e"
+    },
+    {
+      "percorso": "harness-ui/desktop/node_modules/@resvg/resvg-js/LICENSE",
+      "byte": 16724,
+      "sha256": "4b89d4518bd135ab4ee154a7bce722246b57a98c3d7efc1a09409898160c2bd1"
+    }
+  ],
+  "dettagli": [
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@ai-sdk/anthropic",
+      "versione": "4.0.49",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-fzy2sLrs3vNsliIgx65fuovsa6a7OTXd6DllKUgLuVmPyqLnvoZCv9NlKgq+krzDzSxLb9d0zTaJJpsjBVLNyA==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@ai-sdk/gateway",
+      "versione": "4.0.75",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-HOnhw3oXtBnboBF7kAKipjToCN6+5w6EuukiUKiULcxBitS+vbHRRv9IUBcq+Z1wkXcJjfywKrt5r++I6OYyXg==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@ai-sdk/google",
+      "versione": "4.0.64",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-D8+74xfXkzPi5qCe7iRzQRH/1WW805gBrXfwz7KKEBa0SMY2TENdsTrJnVqFZaT7UYow1Ls6qroaklLd9veU9w==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@ai-sdk/openai",
+      "versione": "4.0.61",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-f3P4h/VGoz2POKDrpb34hrxBG4Wy/GtE1m3am1y1eijqy7rQNZUT+yYStqzp7gkwzbmUtTij/McNoRCnvpRV+w==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@ai-sdk/openai/node_modules/@ai-sdk/provider",
+      "versione": "4.0.11",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-A/Cyjma9RLTLsF9xv/2OSaw9eyFhOIBqzoeOVZhp+xKZD8wv5opN+qyIa83NE4Jug2SjQ/Kaf08w1JX6CESR/w==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@ai-sdk/openai/node_modules/@ai-sdk/provider-utils",
+      "versione": "5.0.37",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-WzLQPWtpLpunKBanq/TX8+rbBz7JdKpl8Io4nl/g+bLvePbxMlMuxLrxT8JzquxJmgWKbW4nfFrQ5mnX4A8mpw==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@ai-sdk/openai/node_modules/eventsource-parser",
+      "versione": "3.1.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-EKN1vKAMcZ8MlYMpaNuxN6R9yakzH6uajHcHVTqWJzvu5pWw9DyhbP35HH8MVBQ+dZjAfDxk+A8NiR9KWaXiyQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@ai-sdk/provider",
+      "versione": "4.0.10",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-fX2ENAc7iDpZ+Wp4+Rk06Usn/Ys7dI9uAkGv0jlF6XVrW13NkRWx5Ou+U6lIM2E1fTLkCs16GGrUAaVvroag7A==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@ai-sdk/provider-utils",
+      "versione": "5.0.36",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-MFXBn6XDyf37PNQAge/HTatPJE8Vmg/g/w4WPtjSV53jq8FKAzoaN5+43hsdQa9bqgN+/13jxug9ChvsG+godQ==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@ai-sdk/provider-utils/node_modules/eventsource-parser",
+      "versione": "3.1.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-EKN1vKAMcZ8MlYMpaNuxN6R9yakzH6uajHcHVTqWJzvu5pWw9DyhbP35HH8MVBQ+dZjAfDxk+A8NiR9KWaXiyQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@modelcontextprotocol/client",
+      "versione": "2.0.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-8f1OghQ2rjzIOfqgUCP+8GiUWqRs89njoWLNqAe8kWmDePv3s1fZXseej+QXemssEuuOvLLmLO/kqM3IQHtISw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@modelcontextprotocol/client/node_modules/eventsource-parser",
+      "versione": "3.1.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-EKN1vKAMcZ8MlYMpaNuxN6R9yakzH6uajHcHVTqWJzvu5pWw9DyhbP35HH8MVBQ+dZjAfDxk+A8NiR9KWaXiyQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@modelcontextprotocol/core",
+      "versione": "2.0.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-WrOw/bcXm0f9qHkumlT1QlArXSTWqaY9sunsDpOk+yCCorCKMxvWT/a3xko4EYHVdeZoh00yI2TydXn6eyICDA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring-darwin-arm64",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-pl76hJvdYUBn6I24bXiOBMA9nbDapo3I5B+f3OorjDU4dUMSypXeKbOVehJe8fhgTiH24flMyTS3aAIy43xegQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring-darwin-x64",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-YcJtEV5LA3cvA4z3BurgxH5IhTsW1JfIvcAAcqcecwk06Si9F9NqkxbZVIfDwQ8oRHgaBmT3zZJnLAotCrVahw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring-freebsd-x64",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-vlLf31TGhfRAaxLDBhg8b89ss0HHD/lyNmL5F3UjSaz5CUXElsJmKYq9fqA/B+cZKUEUcLHHGhF0I/CqcFdaVw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring-linux-arm-gnueabihf",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-KiWdMMu/Inz/bHHIAGrnF7r54FZDYXuHO6UFF/rhIrshUsxbMG1Rl9lEymNtqqsVo927G0VYcb02FzWQ3iBQRQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring-linux-arm64-gnu",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-eyKGpY40lm9Jvs1aD294XRH4y7+TlJM0YVAryZeXA6TX0mb4gMkxVXwSQv7MCwgah7raeUd0dKUb4BPAYIgcMg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring-linux-arm64-musl",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-iIK6JWHXAJqDrEyLY3TmswwloVyt2vj+04TZnew+uSJ9gnDO8EwRbp3/iw3LpWaXiDO7VomGO6y8I0Id8uBZSw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring-linux-riscv64-gnu",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-/PGqrwn6EwgtK6vccASSXJRfOSP4vN1F4ASsIQ+7MdrK6hNvAJ1FZPrIuD5gGGdxezo3F++To2Wq7DbuGIeuNQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring-linux-x64-gnu",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-2PDK1WKWTu9lBGq9VvNEkSlQD3O7YwVpmnyN2M3cy4v7NJ/8gDMd9GXv3G+FVXN13uhp4gnnPBS+ScefmEeD2A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring-linux-x64-musl",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-oJ2HkX8YUo46QBkn0pG+HuIKQNqr523q6vBobCn+P95s4C4K6/kLBqHY/1bg5J4ap31DzsznhnFKcfBNBsjCnw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring-win32-arm64-msvc",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-tOd3c/uAaeoE4ycVlmAdSvygz0Zt3zdca6Y7gokBeIbaRDWpjDIUOpU3MvML59XAaqyuKGsVVu0F/DZb1lHPmw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring-win32-ia32-msvc",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-sPSqeAFZMGqP1R++M2JTza7GQJJ/TpCo6JU6Vcd4jnebvOaEDs9b7eipakU1PJdSvhpC2yXMCNRk9gXfrhuwHQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@napi-rs/keyring-win32-x64-msvc",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-4DnCWXwDc0HRKwyRlG5y0VhKZW2tNRQfKKfyj6IX/KWfDNyq9hn4n+GL1auyDcOO/v8PwnhmYo2+rOOqCkvvOg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@noble/ciphers",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@noble/hashes",
+      "versione": "1.8.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@pdf-lib/standard-fonts",
+      "versione": "1.0.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-hU30BK9IUN/su0Mn9VdlVKsWBS6GyhVfqjwl1FjZN4TxP6cCw0jP2w7V3Hf5uX7M0AZJ16vey9yE0ny7Sa59ZA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@pdf-lib/upng",
+      "versione": "1.0.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-dQK2FUMQtowVP00mtIksrlZhdFXQZPC+taih1q4CvPZ5vqdxR/LKBaFg0oAfzd1GlHZXXSPdQfzQnt+ViGvEIQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@standard-schema/spec",
+      "versione": "1.1.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@swc/helpers",
+      "versione": "0.5.23",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@swc/helpers/node_modules/tslib",
+      "versione": "2.8.1",
+      "licenza": "0BSD",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==",
+      "valutazione": "Compatibile; licenza permissiva."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@types/node",
+      "versione": "24.13.3",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@vercel/oidc",
+      "versione": "3.2.0",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-UycprH3T6n3jH0k44NHMa7pnFHGu/N05MjojYr+Mc6I7obkoLIJujSWwin1pCvdy/eOxrI/l3uDLQsmcrOb4ug==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/@workflow/serde",
+      "versione": "4.1.0",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-pav4F2BoirECWR7Nf1TKt+2eETcBj7jj4cBefQ8VXQCA6NPkaKeLfj/zMgi+3zYV5ZIBT4GuUiphsj0/b9hPQQ==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/ai",
+      "versione": "7.0.93",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-CJss6zb9mlltk/mCr8qom20NBnqEQxVawkqwtT62tCwsxilZpXfHNRMRwcS3XRpzdP1kEluVuDBUayYWEEd95g==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/base64-js",
+      "versione": "0.0.8",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-3XSA2cR/h/73EzlXXdU6YNycmYI7+kicTxks4eJg2g39biHR84slg2+des+p7iHYhbRg/udIS4TD53WabcOUkw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/brotli",
+      "versione": "1.3.3",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-oTKjJdShmDuGW94SyyaoQvAjf30dZaHnjJ8uAF+u2/vGJkJbJPJAT1gDiOJP5v1Zb6f9KEyW/1HpuaWIXtGHPg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/brotli/node_modules/base64-js",
+      "versione": "1.5.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/browserify-zlib",
+      "versione": "0.2.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-Z942RysHXmJrhqk88FmKBVq/v5tqmSkDz7p54G/MGyjMnCFFnC79XWNbg+Vta8W6Wb2qtSZTSxIGkJrRpCFEiA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/clone",
+      "versione": "2.1.2",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-3Pe/CF1Nn94hyhIYpjtiLhdCoEoz0DqQ+988E9gmeEdQZlojxnOb74wctFyuwWQHzqyf9X7C7MG8juUpqBJT8w==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/core-util-is",
+      "versione": "1.0.3",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/cross-spawn",
+      "versione": "7.0.6",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/dfa",
+      "versione": "1.2.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-ED3jP8saaweFTjeGX8HQPjeC1YYyZs98jGNZx6IiBvxW7JG5v492kamAQB3m2wop07CvU/RQmzcKr6bgcC5D/Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/docx",
+      "versione": "9.5.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-ABDI7JEirFD2+bHhOBlsGZxaG1UgZb2M/QMKhLSDGgVNhxDesTCDcP+qoDnDGjZ4EOXTRfUjUgwHVuZ6VSTfWQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/eventsource",
+      "versione": "3.0.7",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/eventsource-parser",
+      "versione": "4.1.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-+DHvQ1wLO//MK+1OZgcuXCbZFKgu3YjKPJt7n98rxX8vezL0ni+7s3ZQiM8bJkUEOk7MsuCycrPLj0FzUNf7Og==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/eventsource/node_modules/eventsource-parser",
+      "versione": "3.1.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-EKN1vKAMcZ8MlYMpaNuxN6R9yakzH6uajHcHVTqWJzvu5pWw9DyhbP35HH8MVBQ+dZjAfDxk+A8NiR9KWaXiyQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/fast-deep-equal",
+      "versione": "3.1.3",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/fontkit",
+      "versione": "2.0.4",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-syetQadaUEDNdxdugga9CpEYVaQIxOwk7GlwZWWZ19//qW4zE5bknOKeMBDYAASwnpaSHKJITRLMF9m1fp3s6g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/hash.js",
+      "versione": "1.1.7",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-taOaskGt4z4SOANNseOviYDvjEJinIkRgmp7LbKP2YTTmVxWBl87s/uzK9r+44BclBSp2X7K1hqeNfz9JbBeXA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/https",
+      "versione": "1.0.0",
+      "licenza": "ISC",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-4EC57ddXrkaF0x83Oj8sM6SLQHAWXw90Skqu2M4AEWENZ3F02dFJE/GARA8igO79tcgYqGrD7ae4f5L3um2lgg==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/image-size",
+      "versione": "1.2.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-rH+46sQJ2dlwfjfhCyNx5thzrv+dtmBIhPHk0zgRUukHzZ/kRueTJXoYYsclBaKcSMBWuGbOFXtioLpzTb5euw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/immediate",
+      "versione": "3.0.6",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/inherits",
+      "versione": "2.0.4",
+      "licenza": "ISC",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/isarray",
+      "versione": "1.0.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-VLghIWNM6ELQzo7zwmcg0NmTVyWKYjvIeM83yjp0wRDTmUnrM678fQbcKBo6n2CJEF0szoG//ytg+TKla89ALQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/isexe",
+      "versione": "2.0.0",
+      "licenza": "ISC",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/jose",
+      "versione": "6.2.10",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-iiW7J9qRFlGxvCOIBDBDxFePQSn7ZMAnrYGhrrOo6siO/MIqwfyilLR27pkfDgUk+raLuzADS8A3S/KLBisc0g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/js-md5",
+      "versione": "0.8.3",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-qR0HB5uP6wCuRMrWPTrkMaev7MJZwJuuw4fnwAzRgP4J4/F8RwtodOKpGp4XpqsLBFzzgqIO42efFAyz2Et6KQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/json-schema",
+      "versione": "0.4.0",
+      "licenza": "(AFL-2.1 OR BSD-3-Clause)",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-es94M3nTIfsEPisRafak+HDLfHXnKBhV3vU5eqPcS3flIWqcxJWgXHXiey3YrpaNsanY5ei1VoYEbOzijuq9BA==",
+      "valutazione": "Scegliere BSD-3-Clause per json-schema; non affidarsi alla compatibilità di AFL-2.1."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/jszip",
+      "versione": "3.10.1",
+      "licenza": "(MIT OR GPL-3.0-or-later)",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-xXDvecyTpGLrqFrvkrUSoxxfJI5AH7U8zxxtVclpsUtMCq4JQ290LY8AW5c7Ggnr/Y/oK+bQMbqK2qmtk3pN4g==",
+      "valutazione": "Scegliere MIT per jszip; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/lie",
+      "versione": "3.3.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/linebreak",
+      "versione": "1.1.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-MHp03UImeVhB7XZtjd0E4n6+3xr5Dq/9xI/5FptGk5FrbDR3zagPa2DS6U8ks/3HjbKWG9Q1M2ufOzxV2qLYSQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/minimalistic-assert",
+      "versione": "1.0.1",
+      "licenza": "ISC",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-UtJcAD4yEaGtjPezWuO9wC4nwUnVH/8/Im3yEHQP4b67cXlD/Qr9hdITCU1xDbSEXg2XKNaP8jsReV7vQd00/A==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/nanoid",
+      "versione": "5.1.16",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/node-addon-api",
+      "versione": "7.1.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/node-pty",
+      "versione": "1.1.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-20JqtutY6JPXTUnL0ij1uad7Qe1baT46lyolh2sSENDd4sTzKZ4nmAFkeAARDKwmlLjPx6XKRlwRUxwjOy+lUg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/pako",
+      "versione": "1.0.11",
+      "licenza": "(MIT AND Zlib)",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==",
+      "valutazione": "Rispettare insieme MIT e Zlib per pako; entrambi compatibili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/path-key",
+      "versione": "3.1.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/pdf-lib",
+      "versione": "1.17.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-V/mpyJAoTsN4cnP31vc0wfNA1+p20evqqnap0KLoRUN0Yk/p3wN52DOEsL4oBFcLdb76hlpKPtzJIgo67j/XLw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/pdfkit",
+      "versione": "0.19.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-6Gzk+wDwTs4VSxsR5rCMTnIl5nlmkye1oWB0l2hDB1EX6ZNSIBroKQEv+2+fPPn+stVjyqzmsqRJVDfB9fo5DA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/pdfmake",
+      "versione": "0.3.11",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-Uc49J9hUMyuqJk+U+PxlpBpPr96A4HOOfesGx609EPr2ue82+5/Smq/KTAkEqh0/jUGSi1fumvqZ5yAWijJTJg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/pkce-challenge",
+      "versione": "5.0.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/png-js",
+      "versione": "1.1.0",
+      "licenza": "ASSENTE",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-PM/uYGzGdNSzqeOgly68+6wKQDL1SY0a/N+OEa/+br6LnHWOAJB0Npiamnodfq3jd2LS/i2fMeOKSAILjA+m5Q==",
+      "valutazione": "png-js 1.1.0: MIT verificata nel LICENSE incluso nel pacchetto installato."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/pptxgenjs",
+      "versione": "4.0.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-TeJISr8wouAuXw4C1F/mC33xbZs/FuEG6nH9FG1Zj+nuPcGMP5YRHl6X+j3HSUnS1f3at6k75ZZXPMZlA5Lj9A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/pptxgenjs/node_modules/@types/node",
+      "versione": "22.20.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/pptxgenjs/node_modules/undici-types",
+      "versione": "6.21.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/process-nextick-args",
+      "versione": "2.0.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/queue",
+      "versione": "6.0.2",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-iHZWu+q3IdFZFX36ro/lKBkSvfkztY5Y7HMiPlOUjhupPcG2JMfst2KKEpu5XndviX/3UhFbRngUPNKtgvtZiA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/readable-stream",
+      "versione": "2.3.8",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/restructure",
+      "versione": "3.0.2",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-gSfoiOEA0VPE6Tukkrr7I0RBdE0s7H1eFCDBk05l1KIQT1UIKNc5JZy6jdyW6eYH3aR3g5b3PuL77rq0hvwtAw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/safe-buffer",
+      "versione": "5.1.2",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/sax",
+      "versione": "1.6.1",
+      "licenza": "BlueOak-1.0.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-42tBVwLWnaQvW5zc4HbZrTuWccECCZfBi92FDuwtqxasH+JbPB3/FOKb1m222K42R4WxuxzzMsTswfzgtSu64Q==",
+      "valutazione": "Compatibile secondo la lettura del testo permissivo; includere testo o link della licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/setimmediate",
+      "versione": "1.0.5",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-MATJdZp8sLqDl/68LfQmbP8zKPLQNV6BIZoIgrscFDQ+RsvK/BxeDQOgyxKKoh0y/8h3BqVFnCqQ/gd+reiIXA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/shebang-command",
+      "versione": "2.0.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/shebang-regex",
+      "versione": "3.0.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/string_decoder",
+      "versione": "1.1.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/tiny-inflate",
+      "versione": "1.0.3",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-pkY1fj1cKHb2seWDy0B16HeWyczlJA9/WW3u3c4z/NiWDsO3DOU5D7nhTLE9CF0yXv/QZFY7sEJmj24dK+Rrqw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/tslib",
+      "versione": "1.14.1",
+      "licenza": "0BSD",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-Xni35NKzjgMrwevysHTCArtLDpPvye8zV/0E4EyYn43P7/7qvQwPh9BGkHewbMulVntbigmcT7rdX3BNo9wRJg==",
+      "valutazione": "Compatibile; licenza permissiva."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/typescript",
+      "versione": "5.9.2",
+      "licenza": "Apache-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-CWBzXQrc/qOkhidw1OzBTQuYRbfyxDXJMVJ1XNwUHGROVmuaeiEm3OslpZ1RV96d7SKKjZKrSJu3+t/xlw3R9A==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/undici",
+      "versione": "7.29.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/undici-types",
+      "versione": "7.18.2",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/unicode-properties",
+      "versione": "1.4.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-CLjCCLQ6UuMxWnbIylkisbRj31qxHPAurvena/0iwSVbQ2G1VY5/HjV0IRabOEbDHlzZlRdCrD4NhB0JtU40Pg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/unicode-properties/node_modules/base64-js",
+      "versione": "1.5.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/unicode-segmenter",
+      "versione": "0.15.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-Xmvwqx4F8nGuCv2eGPJVJq73NMTfpqx2Xe9/v5hQoyAUnERVhX+sRkyYVdYoBUbnTok2FTBOlstUeQ5sRleXSA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/unicode-trie",
+      "versione": "2.0.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-x7bc76x0bm4prf1VLg79uhAzKw8DVboClSN5VxJuQ+LKDOVEW9CdH+VY7SP+vX7xCYQqzzgQpFqz15zeLvAtZQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/unicode-trie/node_modules/pako",
+      "versione": "0.2.9",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-NUcwaKxUxWrZLpDG+z/xZaCgQITkA/Dv4V/T6bw7VON6l1Xz/VnrBqrYjZQ12TamKHzITTfOEIYUj48y2KXImA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/util-deprecate",
+      "versione": "1.0.2",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/which",
+      "versione": "2.0.2",
+      "licenza": "ISC",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/ws",
+      "versione": "8.21.3",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/xlsx",
+      "versione": "0.20.3",
+      "licenza": "Apache-2.0",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-oLDq3jw7AcLqKWH2AhCpVTZl8mf6X2YReP+Neh0SJUzV/BdZYjth94tG5toiMB1PPrYtxOCfaoUCkvtuH+3AJA==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/xml",
+      "versione": "1.0.1",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-huCv9IH9Tcf95zuYCsQraZtWnJvBtLVE0QHMOs8bWyZAFZNDcYjsPq1nEx8jKA9y+Beo9v+7OBPRisQTjinQMw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/xml-js",
+      "versione": "1.6.11",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-7rVi2KMfwfWFl+GpPg6m80IVMWXLRjO+PxTq7V2CDhoGak0wzYzFgUY2m4XJ47OGdXd8eLE8EmwfAmdjw7lC1g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/xmldoc",
+      "versione": "2.0.3",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-6gRk4NY/Jvg67xn7OzJuxLRsGgiXBaPUQplVJ/9l99uIugxh4FTOewYz5ic8WScj7Xx/2WvhENiQKwkK9RpE4w==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/package-lock.json",
+      "posizione": "node_modules/zod",
+      "versione": "4.5.4",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/aix-ppc64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/android-arm",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-kXXoiPVVGQcnIYGOeaovwOURpniDBpSq4A03qkQ+BMQqtGG6HYap3xne9C1O1yo4TR3qxlCX5IqqmX6fFo2Lqg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/android-arm64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-5YfKeeI8qWfBZIX+u2xZC3Zlb3Os/gLS2sbEKM+I4ZOcsWmHS2WLysCcQZDAFRslDUU5Oiq44gf6PYN1vGwG5A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/android-x64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-O387ite7SzUyCcy3JQX4P4bLtEA7bLLkx+esve5JHnyYfNTxcVpXZo9jhdB0lTKN44gztELTdU7nS8Nr16Fs1Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/darwin-arm64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-n4KqkOQrraxHJcgjM1RvwbigfQKIKJVpM7xp+KsxiyUSrRdIXnt73VhrPAx0fV44hgfmIVKjxMN9J1t5jySVkw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/darwin-x64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-uq6suIWYP37qzGddBKPw5QEQPi6HiLGsO7UmkpfyaYNQ3D+rN6w6WfwH+nuqcGXWvawGwxOEroO4YGnFh95azw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/freebsd-arm64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-n+I0BTSRIoy+d6RPKnEVwql5UwBJolytvY4mAOIEJorKlqgPII8ix6slVVrfZ5Tnj7glIZvloylbB/EJPMWEXw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/freebsd-x64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-78XJTJkvPs0kz2w61301PJjXl4g7q3JqiYMZ/M/yVI73EHBrCRTgkhu9oqG7vPqq+a/yadEW8aD+agKlk5xrmg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/linux-arm",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-XlDnu2q5yoqems+xay6wSAcg9DDD7K9RLKZEBOMZm3ckNpJBvOX20tSfby8KfrrhINDyv9V2YVZKY/SpoGJI8w==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/linux-arm64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-pW4AC0P3it8c7do9MVM4p51FzHzdM/TZrerurgRcHJ2WTa1VQ1CIq18xncfpBJw4ojkiZZrKW2yIBWBP92j6Ug==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/linux-ia32",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-CYbnj78HsIeA+DhgUKgFCfvNsTHFhMMrinUrMZpDXJXKN8T3XViTZ/+wtHeVxEWY8ewSzTFN+nRmSwO2tZaLUQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/linux-loong64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-buwkd8nsph4R+ajRvw0qM5Hja/TXQow3ptzWO2EbG/cqcIkHloRrdlBtQlshyYGTNFvfkfJ5tpPLVkY4DtsPfQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/linux-mips64el",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-ZVykbDyk7519VwiNb9Lcj9m8XM6v5V9uKPvrEMkkEedVewf+0itkhahp4HDpgERXhwLRpWFypsGbG/J8s0QjJA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/linux-ppc64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-CAXl+Dtd9UUuJd8pKKdwh6MLm3MUMiqMPmhZ3tTSXPqfyQ3vDl6R5hZdZ/kYojK4ofXtdfSv1tFq8XzWx3heNQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/linux-riscv64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-GeXCej4IQtU1B+QlDV8W/RRvbzI3O/Stss+/bCXv4lZls5WGRtu2a+3JkA3i4qIUlMXpcHebWpF8AkJhATowuA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/linux-s390x",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-3H1weTYZPxt/WOhByszQZybS9w5lKzUn1FDMsgEChbHWQwHYQQRfBxgCcZvPhjHfKyJjIievvMmEUawJrdY9Dg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/linux-x64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-4xTZr1FUmSoQW4XIWmit3tzQrUTZM+N3P0XV8xROKYF50XfI7xeO90+1bZvNwxIufQ9hDQVRJH5YhgPVF8A/HQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/netbsd-arm64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-sSATRjPeDBg3pdgHoQfoYBob11Kk1FGa9lui5RIHZCoCkJa9QKlvl3/vKz2usCmYYjs7ymJR/2Nnsqe+Hjt5nw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/netbsd-x64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-lqnzCV+mM0gIADaKihiCg6ifgfU2L3h5E33rNQBN1Y4MaVGnzryzmvvf7UHxprpQdE8hpqLolJ9Rl+SkIRDpyw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/openbsd-arm64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-AL2qJILH7lNjrDmCQDvdxMfAUIv8KMNZOvrwAQ8i8//ntL9FflhOyMJ8OZSMBb8/AWXe3/5v5S20y3zCoZWKoQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/openbsd-x64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-QtiuPytchRyC4rwUKhexJdQKvDuZ6hWloi3igqPQNUJCS1/v9EiO3UTOXR6A3FoMo4fnAKbWJdqaIwhOzh8qEw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/openharmony-arm64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-WkhYDmpTjLvGlScA1rwjRUmhl4k8oXR3cIbtqWmELgU/dFeHHlEllxDvdWcNJV9rbzCexB5vz8gtNewWLgCT7Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/sunos-x64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-GPMSkTOtMnv2U2F8gxe4Io6qmVs+YKyp832Etqqxr0hFngmXQ3rzwytelm3GIn7T4VviRUlf3sOgBOiTdvaf7g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/win32-arm64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-PIhhEkE9uPBleRBrQEJpUn7MBnibZzbGzYWPmY3x+YoVg/95zbjB4CxPPOQ8l5tYYM4mMaCthF8/1DIfBQQyWQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/win32-ia32",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-YmJbfTlvU7Sdn9BB+4PRES4oB6pxgS37MAONj+hBr/cpXS1aBPKXxNnDbu+QCWPj0o9dgyxeq79g6c5P8KeuYA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@esbuild/win32-x64",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-5ebpxr3nWMzrL/rnUI755Jkuee0bHL/Gq0WTF9lvcpv73wAp5eu8MfBUgWK9bhWvZjj7yX8etf/8tI8Ney695g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@floating-ui/core",
+      "versione": "1.8.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-0CIZ5itps/8x7BG8dEIhs53BvCUH2PCoogtakwRTut+Arm58sJooJ0AuZhLw2HJYIR5cMLNPBSS728sPho2khQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@floating-ui/dom",
+      "versione": "1.8.0",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-yXSrzeHZBTZadLOlfyhCkJHNeLJnHRnRInwdZ40L7ZiaAtrBwoYlsDrX3v5zB1Utk7CLfzcOVnVVWoXEky7Ceg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@floating-ui/utils",
+      "versione": "0.2.12",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@playwright/test",
+      "versione": "1.62.1",
+      "licenza": "Apache-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-DTcUc8qii+cpHvtOwggMtBRMjKZHXYWdw8syRYu2vtzuq4Wxphqq4NfCs5Zt44L6mA8rfDfj+PHnxFc/FeK6mQ==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/@tanstack/virtual-core",
+      "versione": "3.17.8",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-BfEvehNpOT75r5Ksc5xW6NZuXujTfb7nlSEyVu4XHG3gdxNg1KqXruWbDewXOUaUYIo4oRbSfkjIajz4MAT8tA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/axe-core",
+      "versione": "4.13.0",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-UzGt8zg7Ny8djbYMhxl2zuEevVa7r2gJjYY5Lwr1xM7+XU2nd6CkIWFTVcCIbAP63vSz71NaVyyuSk9lHKcy0A==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/esbuild",
+      "versione": "0.28.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-HKVLS8dvII+xoKW9kmqxbRKrnWEXfJJr/FZhhJmiqIB0e053QNYFqOBouTMO/k5sID4MvCiUCvv8b9M4h32wIA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/fsevents",
+      "versione": "2.3.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/pixelmatch",
+      "versione": "7.2.0",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-xhcb4yHu9sM/G7foGzoLtXYcC0zHEaOXXjRKhGup0fw78Nf2Tkiapv4EQyMzrbcmQPsllAI7DbFY2UT7PlI9Pg==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/playwright",
+      "versione": "1.62.1",
+      "licenza": "Apache-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-0M+L3LAD8/nm554LOla9Ayx0j0tmFZ0FBcoQ7F1VuVHpM/XpiC8RcDzBQB8W5+hA8L22THxELzeF+2WcUzvcLg==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/playwright-core",
+      "versione": "1.62.1",
+      "licenza": "Apache-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-wPYSwEBJY9GHraISXqyqtx0na0LpO3XEX7jNDhntbex7tzUS7kLnZsOlFruFJB4Hi/rhDMjXGqHewDZ68nYZVw==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/frontend/package-lock.json",
+      "posizione": "node_modules/pngjs",
+      "versione": "7.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-LKWqWJRhstyYo9pGvgor/ivk2w94eSjE3RGVuzLGlr3NmD8bf7RcYGze1mNdEHRP6TRP6rMuDHk5t44hnTRyow==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron-internal/extract-zip",
+      "versione": "1.0.5",
+      "licenza": "BSD-2-Clause",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/asar",
+      "versione": "3.4.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/asar/node_modules/balanced-match",
+      "versione": "1.0.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/asar/node_modules/brace-expansion",
+      "versione": "1.1.18",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/asar/node_modules/minimatch",
+      "versione": "3.1.5",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-VgjWUsnnT6n+NUk6eZq77zeFdpW2LWDzP6zFGrCbHXiYNul5Dzqk2HHQ5uFH2DNW5Xbp8+jVzaeNt94ssEEl4w==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/fuses",
+      "versione": "1.8.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-zx0EIq78WlY/lBb1uXlziZmDZI4ubcCXIMJ4uGjXzZW0nS19TjSPeXPAjzzTmKQlJUZm0SbmZhPKP7tuQ1SsEw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/fuses/node_modules/fs-extra",
+      "versione": "9.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-hcg3ZmepS30/7BSFqRvoo3DOMQu7IjqxO5nCDt+zM9XWjb33Wg7ziNT+Qvqbuc3+gWpzO02JubVyk2G4Zvo1OQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/get",
+      "versione": "5.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-3kSBtG8ObcTVfXanm5vVJ6UnBLEVmVsRk1M+vGqCuMBV+XLCbJYuWQful+yIy0GQDsSlK0kHEriEHn7SPk4EnA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/notarize",
+      "versione": "2.5.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-jNT8nwH1f9X5GEITXaQ8IF/KdskvIkOFfB2CvwumsveVidzpSc+mvhhTMdAGSYF3O+Nq49lJ7y+ssODRXu06+A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/notarize/node_modules/fs-extra",
+      "versione": "9.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-hcg3ZmepS30/7BSFqRvoo3DOMQu7IjqxO5nCDt+zM9XWjb33Wg7ziNT+Qvqbuc3+gWpzO02JubVyk2G4Zvo1OQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/osx-sign",
+      "versione": "1.3.3",
+      "licenza": "BSD-2-Clause",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-KZ8mhXvWv2rIEgMbWZ4y33bDHyUKMXnx4M0sTyPNK/vcB81ImdeY9Ggdqy0SWbMDgmbqyQ+phgejh6V3R2QuSg==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/osx-sign/node_modules/isbinaryfile",
+      "versione": "4.0.10",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-iHrqe5shvBUcFbmZq9zOQHBoeOhZJu6RQGrDpBgenUm/Am+F3JM2MgQj+rK3Z601fzrL5gLZWtAPH2OBaSVcyw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/rebuild",
+      "versione": "4.2.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-RKL/O+jGoXJMxrx/5771y1n0xTKmFuOYGO3gMmwypBM6rsH0kou0mswwdXA2JrhIkE4xyC7v9vGk0n6NPzgOxQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/universal",
+      "versione": "2.0.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Wn9sPYIVFRFl5HmwMJkARCCf7rqK/EurkfQ/rJZ14mHP3iYTjZSIOSVonEAnhWeAXwtw7zOekGRlc6yTtZ0t+g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/universal/node_modules/balanced-match",
+      "versione": "1.0.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/universal/node_modules/brace-expansion",
+      "versione": "2.1.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/universal/node_modules/fs-extra",
+      "versione": "11.4.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-EQsFzMUJkCKGr1ePqlYADkIUmHW1s3ZXr5Yqy6wbGrfUCphpl2maM/kyOIRA2HpP3AaFQTZXD4ldjek+nccddA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/universal/node_modules/minimatch",
+      "versione": "9.0.9",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-OBwBN9AL4dqmETlpS2zasx+vTeWclWzkblfZk7KTA5j3jeOONz/tRCnZomUyvNg83wL5Zv9Ss6HMJXAgL8R2Yg==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/windows-sign",
+      "versione": "1.2.2",
+      "licenza": "BSD-2-Clause",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-dfZeox66AvdPtb2lD8OsIIQh12Tp0GNCRUDfBHIKGpbmopZto2/A8nSpYYLoedPIHpqkeblZ/k8OV0Gy7PYuyQ==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@electron/windows-sign/node_modules/fs-extra",
+      "versione": "11.4.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-EQsFzMUJkCKGr1ePqlYADkIUmHW1s3ZXr5Yqy6wbGrfUCphpl2maM/kyOIRA2HpP3AaFQTZXD4ldjek+nccddA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@isaacs/fs-minipass",
+      "versione": "4.0.1",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@malept/cross-spawn-promise",
+      "versione": "2.0.0",
+      "licenza": "Apache-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@malept/flatpak-bundler",
+      "versione": "0.4.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-9QOtNffcOF/c1seMCDnjckb3R9WHcG34tky+FHpNKKCW0wc/scYLwMtO+ptyGUfMW0/b/n4qRiALlaFHc9Oj7Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@malept/flatpak-bundler/node_modules/fs-extra",
+      "versione": "9.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-hcg3ZmepS30/7BSFqRvoo3DOMQu7IjqxO5nCDt+zM9XWjb33Wg7ziNT+Qvqbuc3+gWpzO02JubVyk2G4Zvo1OQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@noble/hashes",
+      "versione": "1.8.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@peculiar/asn1-schema",
+      "versione": "2.9.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-GjzePcT9Iw8NzeOPf73iNS9xM+TBhd/FilAfP+RQGkTMQJTVWtytN3JHJACCjf/ABNau5S7mS3g+DcuxmRgYEg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@peculiar/json-schema",
+      "versione": "1.1.12",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-coUfuoMeIB7B8/NMekxaDzLhaYmp0HZNPEjYRm9goRou8UZIC3z21s0sL9AWoCw4EG876QyO3kYrc61WNF9B/w==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@peculiar/utils",
+      "versione": "2.0.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-+oL3HPFRIZ1St2K50lWCXiioIgSoxzz7R1J3uF6neO2yl1sgmpgY6XXJH4BdpoDkMWznQTeYF6oWNDZLCdQ4eQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@peculiar/webcrypto",
+      "versione": "1.7.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-ODOov0sGMJMf3jPonOkgGqPknTsu+DdQ7kD++gz8aI+aFMOMHFbWAA2taqXXVTdP+OTOQR/znGvSpmkeI0WTYQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-xBaJish5OeGmniDj9cW5PRa/PtmuVU3ziqrbr5xJj901ZDN4TosrVaNZpEiLZAxdfnhAe7uQ7QFWfjPe9d9K2Q==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js-android-arm-eabi",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-FrJibrAk6v29eabIPgcTUMPXiEz8ssrAk7TXxsiZzww9UTQ1Z5KAbFJs+Z0Ez+VZTYgnE5IQJqBcoSiMebtPHA==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js-android-arm64",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-VcOKezEhm2VqzXpcIJoITuvUS/fcjIw5NA/w3tjzWyzmvoCdd+QXIqy3FBGulWdClvp4g+IfUemigrkLThSjAQ==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js-darwin-arm64",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-nmok2LnAd6nLUKI16aEB9ydMC6Lidiiq2m1nEBDR1LaaP7FGs4AJ90qDraxX+CWlVuRlvNjyYJTNv8qFjtL9+A==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js-darwin-x64",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-GInyZLjgWDfsVT6+SHxQVRwNzV0AuA1uqGsOAW+0th56J7Nh6bHHKXHBWzUrihxMetcFDmQMAX1tZ1fZDYSRsw==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js-linux-arm-gnueabihf",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-YIV3u/R9zJbpqTTNwTZM5/ocWetDKGsro0SWp70eGEM9eV2MerWyBRZnQIgzU3YBnSBQ1RcxRZvY/UxwESfZIw==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js-linux-arm64-gnu",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-zc2BlJSim7YR4FZDQ8OUoJg5holYzdiYMeobb9pJuGDidGL9KZUv7SbiD4E8oZogtYY42UZEap7dqkkYuA91pg==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js-linux-arm64-musl",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-3h3dLPWNgSsD4lQBJPb4f+kvdOSJHa5PjTYVsWHxLUzH4IFTJUAnmuWpw4KqyQ3NA5QCyhw4TWgxk3jRkQxEKg==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js-linux-x64-gnu",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-IVUe+ckIerA7xMZ50duAZzwf1U7khQe2E0QpUxu5MBJNao5RqC0zwV/Zm965vw6D3gGFUl7j4m+oJjubBVoftw==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js-linux-x64-musl",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-UOf83vqTzoYQO9SZ0fPl2ZIFtNIz/Rr/y+7X8XRX1ZnBYsQ/tTb+cj9TE+KHOdmlTFBxhYzVkP2lRByCzqi4jQ==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js-win32-arm64-msvc",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-7C/RSgCa+7vqZ7qAbItfiaAWhyRSoD4l4BQAbVDqRRsRgY+S+hgS3in0Rxr7IorKUpGE69X48q6/nOAuTJQxeQ==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js-win32-ia32-msvc",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-har4aPAlvjnLcil40AC77YDIk6loMawuJwFINEM7n0pZviwMkMvjb2W5ZirsNOZY4aDbo5tLx0wNMREp5Brk+w==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@resvg/resvg-js-win32-x64-msvc",
+      "versione": "2.6.2",
+      "licenza": "MPL-2.0",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-ZXtYhtUr5SSaBrUDq7DiyjOFJqBVL/dOBN7N/qmi/pO0IgiWW/f/ue3nbvu9joWE5aAKDoIzy/CxsY0suwGosQ==",
+      "valutazione": "Compatibile condizionatamente: obblighi sui file e assenza di opt-out delle licenze secondarie. Componenti osservati: axe-core e resvg-js, di sviluppo."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@sindresorhus/is",
+      "versione": "4.6.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-t09vSN3MdfsyCHoFcTRCH/iUtG7OJ0CsjzB8cjAmKc/va/kIgeDI/TxsigdncE/4be734m0cvIYwNaV4i2XqAw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@szmarczak/http-timer",
+      "versione": "4.0.6",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-4BAffykYOgO+5nzBWYwE3W90sBgLJoUPRWWcL8wlyiM8IB8ipJz3UMJ9KXQd1RKQXpKp8Tutn80HZtWsu2u76w==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@types/cacheable-request",
+      "versione": "6.0.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-IQ3EbTzGxIigb1I3qPZc1rWJnH0BmSKv5QYTalEwweFvyBDLSAe24zP0le/hyi7ecGfZVlIVAg4BZqb8WBwKqw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@types/debug",
+      "versione": "4.1.13",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-KSVgmQmzMwPlmtljOomayoR89W4FynCAi3E8PPs7vmDVPe84hT+vGPKkJfThkmXs0x0jAaa9U8uW8bbfyS2fWw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@types/fs-extra",
+      "versione": "9.0.13",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-nEnwB++1u5lVDM2UI4c1+5R+FYaKfaAzS4OococimjVm3nQw3TuzH5UNsocrcTBbhnerblyHj4A49qXbIiZdpA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@types/http-cache-semantics",
+      "versione": "4.2.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-L3LgimLHXtGkWikKnsPg0/VFx9OGZaC+eN1u4r+OB1XRqH3meBIAVC2zr1WdMH+RHmnRkqliQAOHNJ/E0j/e0Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@types/keyv",
+      "versione": "3.1.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-BQ5aZNSCpj7D6K2ksrRCTmKRLEpnPvWDiLPfoGyhZ++8YtiK9d/3DBKPJgry359X/P1PfruyYwvnvwFjuEiEIg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@types/ms",
+      "versione": "2.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@types/node",
+      "versione": "24.13.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-YJ7EqCstVTzIr0fMr7qul/977en+pQHrfmuKIo6Zr9i75Be21dr3MovcfvGtyvi2HAUrRerWps5sMO9I7WaxDw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@types/responselike",
+      "versione": "1.0.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-H/+L+UkTV33uf49PH5pCAUBVPNj2nDBXTN+qS1dOwyyg24l3CcicicCA7ca+HMvJBZcFgl5r8e+RR6elsb4Lyw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/@xmldom/xmldom",
+      "versione": "0.8.15",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-/5NV/vDALVFDXgLmfsy9TRCBlKwO2LNBFzpzvb9iIj+jR+eSc6DLYYvVOdivT/jm7MtU6TebYuRmzEOI7w40UA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/abbrev",
+      "versione": "4.0.0",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-a1wflyaL0tHtJSmLSOVybYhy22vRih4eduhhrkcjgrWGnRfrZtovJ2FRjxuTtkkj47O/baf0R86QU5OuYpz8fA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/agent-base",
+      "versione": "7.1.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/ajv",
+      "versione": "8.20.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/ansi-regex",
+      "versione": "5.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-quJQXlTSUGL2LH9SUXo8VwsY4soanhgo6LNSm84E1LBcE8s3O0wpdiRzyR9z/ZZJMlMWv37qOOb9pdJlMUEKFQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/ansi-styles",
+      "versione": "4.3.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/app-builder-lib",
+      "versione": "26.16.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-FhaO6YOup01ZfQW0Z6gt3AyukJjv1gW4uFK47jTgwcHZKqyN/fSlK2LqPf9tAeZYLP2bRJLDzeOkRImsw2X4Pg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/app-builder-lib/node_modules/@electron/get",
+      "versione": "3.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-F+nKc0xW+kVbBRhFzaMgPy3KwmuNTYX1fx6+FxxoSnNgwYX6LD7AKBTWkU0MQ6IBoe7dz069CNkR673sPAgkCQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/app-builder-lib/node_modules/@electron/get/node_modules/fs-extra",
+      "versione": "8.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-yhlQgA6mnOJUKOsRUFsgJdQCvkKhcz8tlZG5HBQfReYZy46OwLcY+Zia0mtdHsOo9y/hP+CxMN0TU9QxoOtG4g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/app-builder-lib/node_modules/@electron/get/node_modules/semver",
+      "versione": "6.3.1",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/app-builder-lib/node_modules/ci-info",
+      "versione": "4.3.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Wdy2Igu8OcBpI2pZePZ5oWjPC38tmDVx5WKUXKwlLYkA0ozo85sLsLvkBbBn/sZaSCMFOGZJ14fvW9t5/d7kdA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/app-builder-lib/node_modules/env-paths",
+      "versione": "2.2.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-+h1lkLKhZMTYjog1VEpJNG7NZJWcuc2DDk/qsqSTRRCOXiLjeQ1d1/udrUGhqMxUgAlwKNZ0cf2uqan5GLuS2A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/app-builder-lib/node_modules/jsonfile",
+      "versione": "4.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-m6F1R3z8jjlf2imQHS2Qez5sjKWQzbuuhuJ/FKYFRZvPE3PuHcSMVZzfsLhGVOkfd20obL5SWEBew5ShlquNxg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/app-builder-lib/node_modules/semver",
+      "versione": "7.7.4",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/app-builder-lib/node_modules/universalify",
+      "versione": "0.1.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/argparse",
+      "versione": "2.0.1",
+      "licenza": "Python-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==",
+      "valutazione": "Compatibile; conservare testo e attribuzioni."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/asn1js",
+      "versione": "3.0.10",
+      "licenza": "BSD-3-Clause",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-S2s3aOytiKdFRdulw2qPE51MzjzVOisppcVv7jVFR+Kw0kxwvFrDcYA0h7Ndqbmj0HkMIXYWaoj7fli8kgx1eg==",
+      "valutazione": "Compatibile; conservare avvisi e clausola di non approvazione."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/async",
+      "versione": "3.2.6",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-htCUDlxyyCLMgaM3xXg0C0LW2xqfuQ6p05pCEIsXuyQ+a1koYKTuBMzRNwmybfLgvJDMd0r1LTn4+E0Ti6C2AA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/async-exit-hook",
+      "versione": "2.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-NW2cX8m1Q7KPA7a5M2ULQeZ2wR5qI5PAbw5L0UOMxdioVk9PMZ0h1TmyZEkPYrCvYjDlFICusOu1dlEKAAeXBw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/asynckit",
+      "versione": "0.4.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/at-least-node",
+      "versione": "1.0.0",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-+q/t7Ekv1EDY2l6Gda6LLiX14rU9TV20Wa3ofeQmwPFZbOMo9DXrLbOjFaaclkXKWidIaopwAObQDqwWtGUjqg==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/aws4",
+      "versione": "1.13.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-lHe62zvbTB5eEABUVi/AwVh0ZKY9rMMDhmm+eeyuuUQbQ3+J+fONVQOZyj+DdrvD4BY33uYniyRJ4UJIaSKAfw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/balanced-match",
+      "versione": "4.0.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/base64-js",
+      "versione": "1.5.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/bluebird",
+      "versione": "3.7.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-XpNj6GDQzdfW+r2Wnn7xiSAd7TM3jzkxGXBGTtWKuSXv1xUV+azxAm8jdWZN06QTQk+2N2XB9jRDkvbmQmcRtg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/boolean",
+      "versione": "3.2.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-d0II/GO9uf9lfUHH2BQsjxzRJZBdsjgsBiW4BvhWk/3qoKwQFjIDVN19PfX8F2D/r9PCMTtLWjYVCFrpeYUzsw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/brace-expansion",
+      "versione": "5.0.9",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-ScQ4IuvIEF1TMlP7Zt+vjJ//9zlPb2SDcxWxM3bk8s6t6GGdJ7KO1dCcTidOPJKePW30LE/2cT7wCyPho9/Wxg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/buffer-from",
+      "versione": "1.1.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-E+XQCRwSbaaiChtv6k6Dwgc+bx+Bs6vuKJHHl5kox/BaKbhiXzqQOwK4cO22yElGp2OCmjwVhT3HmxgyPGnJfQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/builder-util",
+      "versione": "26.16.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-RLyJhB7Si3YkzKR9ubQslWuXW3Vhs3CGe1i+SeixBZ0qTd1mk3XBmssvY22TlB6CS5blyko8Gu1JzpYk8UkYAg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/builder-util-runtime",
+      "versione": "9.7.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-g/kR520giAFYkSXTzcmF3kqQq7wi8F6N6SzeDgZrqTBN+VHdmgWOyTdD1yD7AATDId/yXLvuP34CxW46/BwCdw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/bytestreamjs",
+      "versione": "2.0.1",
+      "licenza": "BSD-3-Clause",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-U1Z/ob71V/bXfVABvNr/Kumf5VyeQRBEm6Txb0PQ6S7V5GpBM3w4Cbqz/xPDicR5tN0uvDifng8C+5qECeGwyQ==",
+      "valutazione": "Compatibile; conservare avvisi e clausola di non approvazione."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/cacheable-lookup",
+      "versione": "5.0.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-2/kNscPhpcxrOigMZzbiWF7dz8ilhb/nIHU3EyZiXWXpeq/au8qJ8VhdftMkty3n7Gj6HIGalQG8oiBNB3AJgA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/cacheable-request",
+      "versione": "7.0.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-v+p6ongsrp0yTGbJXjgxPow2+DL93DASP4kXCDKb8/bwRtt9OEF3whggkkDkGNzgcWy2XaF4a8nZglC7uElscg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/call-bind-apply-helpers",
+      "versione": "1.0.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/chalk",
+      "versione": "4.1.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/chownr",
+      "versione": "3.0.0",
+      "licenza": "BlueOak-1.0.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-+IxzY9BZOQd/XuYPRmrvEVjF/nqj5kgT4kEq7VofrDoM1MxoRjEWkrCC3EtLi59TVawxTAn+orJwFQcrqEN1+g==",
+      "valutazione": "Compatibile secondo la lettura del testo permissivo; includere testo o link della licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/chromium-pickle-js",
+      "versione": "0.2.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-1R5Fho+jBq0DDydt+/vHWj5KJNJCKdARKOCwZUen84I5BreWoLqRLANH1U87eJy1tiASPtMnGqJJq0ZsLoRPOw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/ci-info",
+      "versione": "4.4.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-77PSwercCZU2Fc4sX94eF8k8Pxte6JAwL4/ICZLFjJLqegs7kCuAsqqj/70NQF6TvDpgFjkubQB2FW2ZZddvQg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/cliui",
+      "versione": "8.0.1",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-BSeNnyus75C4//NQ9gQt1/csTXyo/8Sb+afLAkzAptFuMsod9HFokGNudZpi/oQV73hnVK+sR+5PVRMd+Dr7YQ==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/clone-response",
+      "versione": "1.0.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-ROoL94jJH2dUVML2Y/5PEDNaSHgeOdSDicUyS7izcF63G6sTc/FTjLub4b8Il9S8S0beOfYt0TaA5qvFK+w0wA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/color-convert",
+      "versione": "2.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/color-name",
+      "versione": "1.1.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/combined-stream",
+      "versione": "1.0.8",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/commander",
+      "versione": "5.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-P0CysNDQ7rtVw4QIQtm+MRxV66vKFSvlsQvGYXZWR3qFU0jlMKHZZZgw8e+8DSah4UDKMqnknRDQz+xuQXQ/Zg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/compare-version",
+      "versione": "0.1.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-pJDh5/4wrEnXX/VWRZvruAGHkzKdr46z11OlTPN+VrATlWWhSKewNCJ1futCO5C7eJB3nPMFZA1LeYtcFboZ2A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/concat-map",
+      "versione": "0.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/core-util-is",
+      "versione": "1.0.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/cross-dirname",
+      "versione": "0.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-+R08/oI0nl3vfPcqftZRpytksBXDzOUveBq/NBVx0sUp1axwzPQrKinNx5yd5sxPu8j1wIy8AfnVQ+5eFdha6Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/cross-spawn",
+      "versione": "7.0.6",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/cross-spawn/node_modules/isexe",
+      "versione": "2.0.0",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/cross-spawn/node_modules/which",
+      "versione": "2.0.2",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/debug",
+      "versione": "4.4.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/decompress-response",
+      "versione": "6.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-aW35yZM6Bb/4oJlZncMH2LCoZtJXTRxES17vE3hoRiowU2kWHaJKFkSBDnDR+cm9J+9QhXmREyIfv0pji9ejCQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/decompress-response/node_modules/mimic-response",
+      "versione": "3.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-z0yWI+4FDrrweS8Zmt4Ej5HdJmky15+L2e6Wgn3+iK5fWzb6T3fhNFq2+MeTRb064c6Wr4N/wv0DzQTjNzHNGQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/defer-to-connect",
+      "versione": "2.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-4tvttepXG1VaYGrRibk5EwJd1t4udunSOVMdLSAL6mId1ix438oPwPZMALY41FCijukO1L0twNcGsdzS7dHgDg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/define-data-property",
+      "versione": "1.1.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-rBMvIzlpA8v6E+SJZoo++HAYqsLrkg7MSfIinMPFhmkorw7X+dOXVJQs+QT69zGkzMyfDnIMN2Wid1+NbL3T+A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/define-properties",
+      "versione": "1.2.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-8QmQKqEASLd5nx0U1B1okLElbUuuttJ/AnYmRXbbbGDWh6uS208EjD4Xqq/I9wK7u0v6O08XhTWnt5XtEbR6Dg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/delayed-stream",
+      "versione": "1.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/detect-node",
+      "versione": "2.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-T0NIuQpnTvFDATNuHN5roPwSBG83rFsuO+MXXH9/3N1eFbn4wcPjttvjMLEPWJ0RGUYgQE7cGgS3tNxbqCGM7g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/dir-compare",
+      "versione": "4.2.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-2xMCmOoMrdQIPHdsTawECdNPwlVFB9zGcz3kuhmBO6U3oU+UQjsue0i8ayLKpgBcm+hcXPMVSGUN9d+pvJ6+VQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/dir-compare/node_modules/balanced-match",
+      "versione": "1.0.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/dir-compare/node_modules/brace-expansion",
+      "versione": "1.1.18",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/dir-compare/node_modules/minimatch",
+      "versione": "3.1.5",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-VgjWUsnnT6n+NUk6eZq77zeFdpW2LWDzP6zFGrCbHXiYNul5Dzqk2HHQ5uFH2DNW5Xbp8+jVzaeNt94ssEEl4w==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/dmg-builder",
+      "versione": "26.16.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-pnI/3Qb24Uk+rMTgIUrsVUKosVgwmBUdF8Zeb8TexOSbpq8MWc7v6l+n+FrEqVkjNZwzBN+XpDS9ENgZ/rkWAw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/dotenv",
+      "versione": "16.6.1",
+      "licenza": "BSD-2-Clause",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-uBq4egWHTcTt33a72vpSG0z3HnPuIl6NqYcTrKEg2azoEyl2hpW0zqlxysq2pK9HlDIHyHyakeYaYnSAwd8bow==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/dotenv-expand",
+      "versione": "11.0.7",
+      "licenza": "BSD-2-Clause",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-zIHwmZPRshsCdpMDyVsqGmgyP0yT8GAgXUnkdAoJisxvf33k7yO6OuoKmcTGuXPWSsm8Oh88nZicRLA9Y0rUeA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/dunder-proto",
+      "versione": "1.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/duplexer2",
+      "versione": "0.1.4",
+      "licenza": "BSD-3-Clause",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-asLFVfWWtJ90ZyOUHMqk7/S2w2guQKxUI2itj3d92ADHhxUSbCMGi1f1cBcJ7xM1To+pE/Khbwo1yuNbMEPKeA==",
+      "valutazione": "Compatibile; conservare avvisi e clausola di non approvazione."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/ejs",
+      "versione": "3.1.10",
+      "licenza": "Apache-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-UeJmFfOrAQS8OJWPZ4qtgHyWExa088/MtK5UEyoJGFH67cDEXkZSviOiKRCZ4Xij0zxI3JECgYs3oKx+AizQBA==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/electron",
+      "versione": "44.3.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-St9EV7F2VtYaYWD2qaAjBwUgKxx39eJOUsUJ5+/1113sqbVfNqv4Dbm/W1rN7qmYSPa+mWwR6yr+b7MfgjgVfQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/electron-builder",
+      "versione": "26.16.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-LrLK65QX5PUYYODXqp23FKrV7CILTtVY7mrJckNknO9jLNSMiqFkKbSMiDRw4CjOADMPVDdWLxY4mezOZWswxg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/electron-builder-squirrel-windows",
+      "versione": "26.16.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-w0y44wSaT1l6R7CAGmeHn4nHPfvzDyCAU1xJyi1w9SbPYJpYn76SmHDzqHf8Y7l91cPWTdPYBpGQtB2T5mJ08A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/electron-publish",
+      "versione": "26.16.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Vt3KzQIiw9BImvNOYtndg9Mjki+tl4+1sQiC/+G5j8khWaENOJFWodiB+sUl6yyHwtd37avehskdtPw7f8y/+Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/electron-winstaller",
+      "versione": "5.4.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/electron-winstaller/node_modules/fs-extra",
+      "versione": "7.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-YJDaCJZEnBmcbw13fvdAM9AwNOJwOzrE4pqMqBq5nFiEqXUqHwlK4B+3pUw6JNvfSPtX05xFHtYy/1ni01eGCw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/electron-winstaller/node_modules/jsonfile",
+      "versione": "4.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-m6F1R3z8jjlf2imQHS2Qez5sjKWQzbuuhuJ/FKYFRZvPE3PuHcSMVZzfsLhGVOkfd20obL5SWEBew5ShlquNxg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/electron-winstaller/node_modules/universalify",
+      "versione": "0.1.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/emoji-regex",
+      "versione": "8.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/end-of-stream",
+      "versione": "1.4.5",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-ooEGc6HP26xXq/N+GCGOT0JKCLDGrq2bQUZrQ7gyrJiZANJ/8YDTxTpQBXGMn+WbIQXNVpyWymm7KYVICQnyOg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/env-paths",
+      "versione": "3.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-dtJUTepzMW3Lm/NPxRf3wP4642UWhjL2sQxc+ym2YMj1m/H2zDNQOlezafzkHwn6sMstjHTwG6iQQsctDW/b1A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/err-code",
+      "versione": "2.0.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-2bmlRpNKBxT/CRmPOlyISQpNj+qSeYvcym/uT0Jx2bMOlKLtSy1ZmLuVxSEKKyor/N5yhvp/ZiG1oE3DEYMSFA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/es-define-property",
+      "versione": "1.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/es-errors",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/es-object-atoms",
+      "versione": "1.1.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-HWcBoN6NileqtSydK2FqHbS/LoDd2pqrnQHLyJzBj4kOp/ky2MWMN694xOfkK8/SnUsW2DH7EfyVlydKCsm1Zw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/es-set-tostringtag",
+      "versione": "2.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-j6vWzfrGVfyXxge+O0x5sh6cvxAog0a/4Rdd2K36zCMV5eJ+/+tOAngRO8cODMNWbVRdVlmGZQL2YS3yR8bIUA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/es6-error",
+      "versione": "4.1.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-Um/+FxMr9CISWh0bi5Zv0iOD+4cFh5qLeks1qhAopKVAJw3drgKbKySikp7wGhDL0HPeaja0P5ULZrxLkniUVg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/escalade",
+      "versione": "3.2.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/escape-string-regexp",
+      "versione": "4.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/exponential-backoff",
+      "versione": "3.1.3",
+      "licenza": "Apache-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-ZgEeZXj30q+I0EN+CbSSpIyPaJ5HVQD18Z1m+u1FXbAeT94mr1zw50q4q6jiiC447Nl/YTcIYSAftiGqetwXCA==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/fast-deep-equal",
+      "versione": "3.1.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/fast-uri",
+      "versione": "3.1.7",
+      "licenza": "BSD-3-Clause",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-dOvZVzjdZdz7phd9v6jCbwxrBW3fK6n8Rc0CtdmM4bumzMnxywBYhuph6J819RRw/ku+rLbelwfMunktuzVVHg==",
+      "valutazione": "Compatibile; conservare avvisi e clausola di non approvazione."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/fdir",
+      "versione": "6.5.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/filelist",
+      "versione": "1.0.6",
+      "licenza": "Apache-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-5giy2PkLYY1cP39p17Ech+2xlpTRL9HLspOfEgm0L6CwBXBTgsK5ou0JtzYuepxkaQ/tvhCFIJ5uXo0OrM2DxA==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/filelist/node_modules/balanced-match",
+      "versione": "1.0.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/filelist/node_modules/brace-expansion",
+      "versione": "2.1.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-hGfVzPxthbf3+2yjg/RBs60cB0FhqBS/zvdV/4wn4/BmN0bNMMHPc4V/BbFieqf1TKAGGAHnY4eSjajCl0f2Xg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/filelist/node_modules/minimatch",
+      "versione": "5.1.9",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-7o1wEA2RyMP7Iu7GNba9vc0RWWGACJOCZBJX2GJWip0ikV+wcOsgVuY9uE8CPiyQhkGFSlhuSkZPavN7u1c2Fw==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/form-data",
+      "versione": "4.0.6",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-vKatAh4SlVfgbv+YtmhiRjhEMJsYpsG1Y2rMQtR+SVSbytsSD1YGzDIcrAJmdFec88u/+VoGmxnl+80gL1tRCQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/fs-extra",
+      "versione": "10.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-oRXApq54ETRj4eMiFzGnHWGy+zo5raudjuxN0b8H7s/RU2oW0Wvsx9O0ACRN/kRq9E8Vu/ReskGB5o3ji+FzHQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/fs.realpath",
+      "versione": "1.0.0",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/function-bind",
+      "versione": "1.1.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/get-caller-file",
+      "versione": "2.0.5",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-DyFP3BM/3YHTQOCUL/w0OZHR0lpKeGrxotcHWcqNEdnltqFwXVfhEBQ94eIo34AfQpo0rGki4cyIiftY06h2Fg==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/get-intrinsic",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/get-proto",
+      "versione": "1.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/get-stream",
+      "versione": "5.2.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-nBF+F1rAZVCu/p7rjzgA+Yb4lfYXrpl7a6VmJrU8wF9I1CKvP/QwPNZHnOlwbTkY6dvtFIzFMSyQXbLoTQPRpA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/glob",
+      "versione": "7.2.3",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-nFR0zLpU2YCaRxwoCJvL6UvCH2JFyFVIvwTLsIf21AuHlMskA1hhTdk+LlYJtOlYt9v6dvszD2BGRqBL+iQK9Q==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/glob/node_modules/balanced-match",
+      "versione": "1.0.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/glob/node_modules/brace-expansion",
+      "versione": "1.1.18",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Edep/X9fGqVNmzKBVsDYIOtD+z1tuezV70LBjdCst9Tqu76lsnvRiZ6oTic1n+/BIwX6QDGAO94PN4N2SADvtw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/glob/node_modules/minimatch",
+      "versione": "3.1.5",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-VgjWUsnnT6n+NUk6eZq77zeFdpW2LWDzP6zFGrCbHXiYNul5Dzqk2HHQ5uFH2DNW5Xbp8+jVzaeNt94ssEEl4w==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/global-agent",
+      "versione": "3.0.0",
+      "licenza": "BSD-3-Clause",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-PT6XReJ+D07JvGoxQMkT6qji/jVNfX/h364XHZOWeRzy64sSFr+xJ5OX7LI3b4MPQzdL4H8Y8M0xzPpsVMwA8Q==",
+      "valutazione": "Compatibile; conservare avvisi e clausola di non approvazione."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/globalthis",
+      "versione": "1.0.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-DpLKbNU4WylpxJykQujfCcwYWiV/Jhm50Goo0wrVILAv5jOr9d+H+UR3PhSCD2rCCEIg0uc+G+muBTwD54JhDQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/gopd",
+      "versione": "1.2.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/got",
+      "versione": "11.8.6",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-6tfZ91bOr7bOXnK7PRDCGBLa1H4U080YHNaAQ2KsMGlLEzRbk44nsZF2E1IeRc3vtJHPVbKCYgdFbaGO2ljd8g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/graceful-fs",
+      "versione": "4.2.11",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/has-flag",
+      "versione": "4.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/has-property-descriptors",
+      "versione": "1.0.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-55JNKuIW+vq4Ke1BjOTjM2YctQIvCT7GFzHwmfZPGo5wnrgkid0YQtnAleFSqumZm4az3n2BS+erby5ipJdgrg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/has-symbols",
+      "versione": "1.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/has-tostringtag",
+      "versione": "1.0.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-NqADB8VjPFLM2V0VvHUewwwsw0ZWBaIdgo+ieHtK3hasLz4qeCRjYcqfB6AQrBggRKppKF8L52/VqdVsO47Dlw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/hasown",
+      "versione": "2.0.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/hosted-git-info",
+      "versione": "4.1.0",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-kyCuEOWjJqZuDbRHzL8V93NzQhwIB71oFWSyzVo+KPZI+pnQPPxucdkrOZvkLRnrf5URsQM+IJ09Dw29cRALIA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/http-cache-semantics",
+      "versione": "4.2.0",
+      "licenza": "BSD-2-Clause",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-dTxcvPXqPvXBQpq5dUr6mEMJX4oIEFv6bwom3FDwKRDsuIjjJGANqhBuoAn9c1RQJIdAKav33ED65E2ys+87QQ==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/http-proxy-agent",
+      "versione": "7.0.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-T1gkAiYYDWYx3V5Bmyu7HcfcvL7mUrTWiM6yOfa3PIphViJ/gFPbvidQ+veqSOHci/PxBcDabeUNCzpOODJZig==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/http2-wrapper",
+      "versione": "1.0.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-V+23sDMr12Wnz7iTcDeJr3O6AIxlnvT/bmaAAAP/Xda35C90p9599p0F1eHR/N1KILWSoWVAiOMFjBBXaXSMxg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/https-proxy-agent",
+      "versione": "7.0.6",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/inflight",
+      "versione": "1.0.6",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-k92I/b08q4wvFscXCLvqfsHCrjrF7yiXsQuIVvVE7N82W3+aqpzuUdBbfhWcy/FZR3/4IgflMgKLOsvPDrGCJA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/inherits",
+      "versione": "2.0.4",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/is-fullwidth-code-point",
+      "versione": "3.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/isarray",
+      "versione": "1.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-VLghIWNM6ELQzo7zwmcg0NmTVyWKYjvIeM83yjp0wRDTmUnrM678fQbcKBo6n2CJEF0szoG//ytg+TKla89ALQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/isbinaryfile",
+      "versione": "5.0.7",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-gnWD14Jh3FzS3CPhF0AxNOJ8CxqeblPTADzI38r0wt8ZyQl5edpy75myt08EG2oKvpyiqSqsx+Wkz9vtkbTqYQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/isexe",
+      "versione": "3.1.5",
+      "licenza": "BlueOak-1.0.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-6B3tLtFqtQS4ekarvLVMZ+X+VlvQekbe4taUkf/rhVO3d/h0M2rfARm/pXLcPEsjjMsFgrFgSrhQIxcSVrBz8w==",
+      "valutazione": "Compatibile secondo la lettura del testo permissivo; includere testo o link della licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/jake",
+      "versione": "10.9.4",
+      "licenza": "Apache-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-wpHYzhxiVQL+IV05BLE2Xn34zW1S223hvjtqk0+gsPrwd/8JNLXJgZZM/iPFsYc1xyphF+6M6EvdE5E9MBGkDA==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/jiti",
+      "versione": "2.7.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/js-yaml",
+      "versione": "4.3.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/json-buffer",
+      "versione": "3.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/json-schema-traverse",
+      "versione": "1.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/json-stringify-safe",
+      "versione": "5.0.1",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-ZClg6AaYvamvYEE82d3Iyd3vSSIjQ+odgjaTzRuO3s7toCdFKczob2i0zCh7JE8kWn17yvAWhUVxvqGwUalsRA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/json5",
+      "versione": "2.2.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/jsonfile",
+      "versione": "6.2.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-zwOTdL3rFQ/lRdBnntKVOX6k5cKJwEc1HdilT71BWEu7J41gXIB2MRp+vxduPSwZJPWBxEzv4yH1wYLJGUHX4Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/keyv",
+      "versione": "4.5.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/lazy-val",
+      "versione": "1.0.5",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-0/BnGCCfyUMkBpeDgWihanIAF9JmZhHBgUhEqzvf+adhNGLoP6TaiI5oF8oyb3I45P+PcnrqihSf01M0l0G5+Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/lodash",
+      "versione": "4.18.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/lowercase-keys",
+      "versione": "2.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-tqNXrS78oMOE73NMxK4EMLQsQowWf8jKooH9g7xPavRT706R6bkQJ6DY2Te7QukaZsulxa30wQ7bk0pm4XiHmA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/lru-cache",
+      "versione": "6.0.0",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/matcher",
+      "versione": "3.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-OkeDaAZ/bQCxeFAozM55PKcKU0yJMPGifLwV4Qgjitu+5MoAfSQN4lsLJeXZ1b8w0x+/Emda6MZgXS1jvsapng==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/math-intrinsics",
+      "versione": "1.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/mime",
+      "versione": "2.6.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-USPkMeET31rOMiarsBNIHZKLGgvKc/LrjofAnBlOttf5ajRvqiRA8QsenbcooctK6d6Ts6aqZXBA+XbkKthiQg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/mime-db",
+      "versione": "1.52.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/mime-types",
+      "versione": "2.1.35",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/mimic-response",
+      "versione": "1.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-j5EctnkH7amfV/q5Hgmoal1g2QHFJRraOtmx0JpIqkxhBhI/lJSl1nMpQ45hVarwNETOoWEimndZ4QK0RHxuxQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/minimatch",
+      "versione": "10.2.6",
+      "licenza": "BlueOak-1.0.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-vpLQEs+VLCr1nU0BXS07maYoFwlDAH0gngQuuttxIwutDFEMHq2blX+8vpgxDdK3J1PwjCJiep77OitTZ4Ll1A==",
+      "valutazione": "Compatibile secondo la lettura del testo permissivo; includere testo o link della licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/minimist",
+      "versione": "1.2.8",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/minipass",
+      "versione": "7.1.3",
+      "licenza": "BlueOak-1.0.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==",
+      "valutazione": "Compatibile secondo la lettura del testo permissivo; includere testo o link della licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/minizlib",
+      "versione": "3.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-KZxYo1BUkWD2TVFLr0MQoM8vUUigWD3LlD83a/75BqC+4qE0Hb1Vo5v1FgcfaNXvfXzr+5EhQ6ing/CaBijTlw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/mkdirp",
+      "versione": "0.5.6",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-FP+p8RB8OWpF3YZBCrP5gtADmtXApB5AMLn+vdyA+PyxCjrCs00mjyUozssO33cwDeT3wNGdLxJ5M//YqtHAJw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/ms",
+      "versione": "2.1.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/node-abi",
+      "versione": "4.35.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-ymk4aIzxdPopw2giv8Fs1Ec6vybGkjmyxUwVqhkI4MCy2tVfXdkOGGWieWVjL0THgH+7a8lRdevyupoYj3Js/Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/node-api-version",
+      "versione": "0.2.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-2xP/IGGMmmSQpI1+O/k72jF/ykvZ89JeuKX3TLJAYPDVLUalrshrLHkeVcCCZqG/eEa635cr8IBYzgnDvM2O8Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/node-gyp",
+      "versione": "12.4.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-OMcPNvqTCFUnNaBlmdgq+lfNqY7gTiSmNRDjY3uAXRyudeKZEZxu3CLtjMQrx4zZxCX2b/mpNqTtwuCJgXhHkw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/node-gyp/node_modules/env-paths",
+      "versione": "2.2.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-+h1lkLKhZMTYjog1VEpJNG7NZJWcuc2DDk/qsqSTRRCOXiLjeQ1d1/udrUGhqMxUgAlwKNZ0cf2uqan5GLuS2A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/node-gyp/node_modules/isexe",
+      "versione": "4.0.0",
+      "licenza": "BlueOak-1.0.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-FFUtZMpoZ8RqHS3XeXEmHWLA4thH+ZxCv2lOiPIn1Xc7CxrqhWzNSDzD+/chS/zbYezmiwWLdQC09JdQKmthOw==",
+      "valutazione": "Compatibile secondo la lettura del testo permissivo; includere testo o link della licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/node-gyp/node_modules/undici",
+      "versione": "6.28.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-zWpdTVD54H48CIybL0rWQ3ukpb9d23wM7eH5RtfdmeP70cWHNjtfo7P4vZX+5CoDcO53J4Pu5uXp7lNfjc6DRA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/node-gyp/node_modules/which",
+      "versione": "6.0.1",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-oGLe46MIrCRqX7ytPUf66EAYvdeMIZYn3WaocqqKZAxrBpkqHfL/qvTyJ/bTk5+AqHCjXmrv3CEWgy368zhRUg==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/node-int64",
+      "versione": "0.4.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-O5lz91xSOeoXP6DulyHfllpq+Eg00MWitZIbtPfoSEvqIHdl5gfcY6hYzDWnj0qD5tz52PI08u9qUvSVeUBeHw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/nopt",
+      "versione": "9.0.0",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Zhq3a+yFKrYwSBluL4H9XP3m3y5uvQkB/09CwDruCiRmR/UJYnn9W4R48ry0uGC70aeTPKLynBtscP9efFFcPw==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/normalize-url",
+      "versione": "6.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-DlL+XwOy3NxAQ8xuC0okPgK46iuVNAK01YN7RueYBqqFeGsBjV9XmCAzAdgt+667bCl5kPh9EqKKDwnaPG1I7A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/object-keys",
+      "versione": "1.1.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-NuAESUOUMrlIXOfHKzD6bpPu3tYt3xvjNdRIQ+FeT0lNb4K8WR70CaDxhuNguS2XG+GjkyMwOzsN5ZktImfhLA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/once",
+      "versione": "1.4.0",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/p-cancelable",
+      "versione": "2.1.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-BZOr3nRQHOntUjTrH8+Lh54smKHoHyur8We1V8DSMVrl5A2malOOwuJRnKRDjSnkoeBh4at6BwEnb5I7Jl31wg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/p-limit",
+      "versione": "3.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-TYOanM3wGwNGsZN2cVTYPArw454xnXj5qmWF1bEoAc4+cU/ol7GVh7odevjp1FNHduHc3KZMcFduxU5Xc6uJRQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/path-is-absolute",
+      "versione": "1.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-AVbw3UJ2e9bq64vSaS9Am0fje1Pa8pbGqTTsmXfaIiMpnr5DlDhfJOuLj9Sf95ZPVDAUerDfEk88MPmPe7UCQg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/path-key",
+      "versione": "3.1.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/pe-library",
+      "versione": "0.4.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-eRWB5LBz7PpDu4PUlwT0PhnQfTQJlDDdPa35urV4Osrm0t0AqQFGn+UIkU3klZvwJ8KPO3VbBFsXquA6p6kqZw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/picocolors",
+      "versione": "1.1.1",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/picomatch",
+      "versione": "4.0.7",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/pkijs",
+      "versione": "3.4.0",
+      "licenza": "BSD-3-Clause",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-emEcLuomt2j03vxD54giVB4SxTjnsqkU692xZOZXHDVoYyypEm+b3jpiTcc+Cf+myooc+/Ly0z01jqeNHVgJGw==",
+      "valutazione": "Compatibile; conservare avvisi e clausola di non approvazione."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/pkijs/node_modules/@noble/hashes",
+      "versione": "1.4.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-V1JJ1WTRUqHHrOSh597hURcMqVKVGL/ea3kv0gSnEdsEZ0/+VyPghM1lMNGc00z7CIQorSvbKpuJkxvuHbvdbg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/plist",
+      "versione": "3.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-uysumyrvkUX0rX/dEVqt8gC3sTBzd4zoWfLeS29nb53imdaXVvLINYXTI2GNqzaMuvacNx4uJQ8+b3zXR0pkgQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/postject",
+      "versione": "1.0.0-alpha.6",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-b9Eb8h2eVqNE8edvKdwqkrY6O7kAwmI8kcnBv1NScolYJbo59XUF0noFq+lxbC1yN20bmC0WBEbDC5H/7ASb0A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/postject/node_modules/commander",
+      "versione": "9.5.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-KRs7WVDKg86PWiuAqhDrAQnTXZKraVcCc6vFdL14qrZ/DcWwuRo7VoiYXalXO7S5GKpqYiVEwCbgFDfxNHKJBQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/proc-log",
+      "versione": "6.1.0",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-iG+GYldRf2BQ0UDUAd6JQ/RwzaQy6mXmsk/IzlYyal4A4SNFw54MeH4/tLkF4I5WoWG9SQwuqWzS99jaFQHBuQ==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/process-nextick-args",
+      "versione": "2.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/progress",
+      "versione": "2.0.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-7PiHtLll5LdnKIMw100I+8xJXR5gW2QwWYkT6iJva0bXitZKa/XMrSbdmg3r2Xnaidz9Qumd0VPaMrZlF9V9sA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/promise-retry",
+      "versione": "2.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-y+WKFlBR8BGXnsNlIHFGPZmyDf3DFMoLhaflAnyZgV6rG6xu+JwesTo2Q9R6XwYmtmwAFCkAk3e35jEdoeh/3g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/proper-lockfile",
+      "versione": "4.1.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-TjNPblN4BwAWMXU8s9AEz4JmQxnD1NNL7bNOY/AKUzyamc379FWASUhc/K1pL2noVb+XmZKLL68cjzLsiOAMaA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/pump",
+      "versione": "3.0.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-VS7sjc6KR7e1ukRFhQSY5LM2uBWAUPiOPa/A3mkKmiMwSmRFUITt0xuj+/lesgnCv+dPIEYlkzrcyXgquIHMcA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/pvtsutils",
+      "versione": "1.3.6",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-PLgQXQ6H2FWCaeRak8vvk1GW462lMxB5s3Jm673N82zI4vqtVUPuZdffdZbPDFRoU8kAhItWFtPCWiPpp4/EDg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/pvutils",
+      "versione": "1.2.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-BbubeCEyTuQjVMakvJQ/Sxbc93F2pwmbsxONT/ZRrwU7Ua38d8unYTwXpTVLAKJ4BDuH9IGztCjQcd/N/39Dvg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/quick-lru",
+      "versione": "5.1.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-WuyALRjWPDGtt/wzJiadO5AXY+8hZ80hVpe6MyivgraREW751X3SbhRvG3eLKOYN+8VEvqLcf3wdnt44Z4S4SA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/read-binary-file-arch",
+      "versione": "1.0.6",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-BNg9EN3DD3GsDXX7Aa8O4p92sryjkmzYYgmgTAc6CA4uGLEDzFfxOxugu21akOxpcXHiEgsYkC6nPsQvLLLmEg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/readable-stream",
+      "versione": "2.3.8",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/require-directory",
+      "versione": "2.1.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/require-from-string",
+      "versione": "2.0.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/resedit",
+      "versione": "1.7.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-vHjcY2MlAITJhC0eRD/Vv8Vlgmu9Sd3LX9zZvtGzU5ZImdTN3+d6e/4mnTyV8vEbyf1sgNIrWxhWlrys52OkEA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/resolve-alpn",
+      "versione": "1.2.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-0a1F4l73/ZFZOakJnQ3FvkJ2+gSTQWz/r2KE5OdDY0TxPm5h4GkqkWWfM47T7HsbnOtcJVEF4epCVy6u7Q3K+g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/responselike",
+      "versione": "2.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-4gl03wn3hj1HP3yzgdI7d3lCkF95F21Pz4BPGvKHinyQzALR5CapwC8yIi0Rh58DEMQ/SguC03wFj2k0M/mHhw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/retry",
+      "versione": "0.12.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-9LkiTwjUh6rT555DtE9rTX+BKByPfrMzEAtnlEtdEwr3Nkffwiihqe2bWADg+OQRjt9gl6ICdmB/ZFDCGAtSow==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/rimraf",
+      "versione": "2.6.3",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-mwqeW5XsA2qAejG46gYdENaxXjx9onRNCfn7L0duuP4hCuTIi/QO7PDK07KJfp1d+izWPrzEJDcSqBa0OZQriA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/roarr",
+      "versione": "2.15.4",
+      "licenza": "BSD-3-Clause",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-CHhPh+UNHD2GTXNYhPWLnU8ONHdI+5DI+4EYIAOaiD63rHeYlZvyh8P+in5999TTSFgUYuKUAjzRI4mdh/p+2A==",
+      "valutazione": "Compatibile; conservare avvisi e clausola di non approvazione."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/safe-buffer",
+      "versione": "5.1.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/sanitize-filename",
+      "versione": "1.6.4",
+      "licenza": "WTFPL OR ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-9ZyI08PsvdQl2r/bBIGubpVdR3RR9sY6RDiWFPreA21C/EFlQhmgo20UZlNjZMMZNubusLhAQozkA0Od5J21Eg==",
+      "valutazione": "Scegliere ISC; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/sax",
+      "versione": "1.6.1",
+      "licenza": "BlueOak-1.0.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-42tBVwLWnaQvW5zc4HbZrTuWccECCZfBi92FDuwtqxasH+JbPB3/FOKb1m222K42R4WxuxzzMsTswfzgtSu64Q==",
+      "valutazione": "Compatibile secondo la lettura del testo permissivo; includere testo o link della licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/semver",
+      "versione": "7.8.5",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/semver-compare",
+      "versione": "1.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-YM3/ITh2MJ5MtzaM429anh+x2jiLVjqILF4m4oyQB18W7Ggea7BfqdH/wGMK7dDiMghv/6WG7znWMwUDzJiXow==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/serialize-error",
+      "versione": "7.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-8I8TjW5KMOKsZQTvoxjuSIa7foAwPWGOts+6o7sgjz41/qMD9VQHEDxi6PBvK2l0MXUmqZyNpUK+T2tQaaElvw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/shebang-command",
+      "versione": "2.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/shebang-regex",
+      "versione": "3.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/signal-exit",
+      "versione": "3.0.7",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-wnD2ZE+l+SPC/uoS0vXeE9L1+0wuaMqKlfz9AMUo38JsyLSBWSFcHR1Rri62LZc12vLr1gb3jl7iwQhgwpAbGQ==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/simple-update-notifier",
+      "versione": "2.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-a2B9Y0KlNXl9u/vsW6sTIu9vGEpfKu2wRV6l1H3XEas/0gUIzGzBoP/IouTcUQbm9JWZLH3COxyn03TYlFax6w==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/source-map",
+      "versione": "0.6.1",
+      "licenza": "BSD-3-Clause",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g==",
+      "valutazione": "Compatibile; conservare avvisi e clausola di non approvazione."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/source-map-support",
+      "versione": "0.5.21",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-uBHU3L3czsIyYXKX88fdrGovxdSCoTGDRZ6SYXtSRxLZUzHg5P/66Ht6uoUlHu9EZod+inXhKo3qQgwXUT/y1w==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/sprintf-js",
+      "versione": "1.1.3",
+      "licenza": "BSD-3-Clause",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-Oo+0REFV59/rz3gfJNKQiBlwfHaSESl1pcGyABQsnnIfWOFt6JNj5gCog2U6MLZ//IGYD+nA8nI+mTShREReaA==",
+      "valutazione": "Compatibile; conservare avvisi e clausola di non approvazione."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/stat-mode",
+      "versione": "1.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-jH9EhtKIjuXZ2cWxmXS8ZP80XyC3iasQxMDV8jzhNJpfDb7VbQLVW4Wvsxz9QZvzV+G4YoSfBUVKDOyxLzi/sg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/string_decoder",
+      "versione": "1.1.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/string-width",
+      "versione": "4.2.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/strip-ansi",
+      "versione": "6.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/sumchecker",
+      "versione": "3.0.1",
+      "licenza": "Apache-2.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-MvjXzkz/BOfyVDkG0oFOtBxHX2u3gKbMHIF/dXblZsgD3BWOFLmHovIpZY7BykJdAjcqRCBi1WYBNdEC9yI7vg==",
+      "valutazione": "Compatibile con GPLv3/AGPLv3; conservare licenza, attribuzioni e NOTICE applicabili."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/supports-color",
+      "versione": "7.2.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/tar",
+      "versione": "7.5.22",
+      "licenza": "BlueOak-1.0.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-MFO/QzvtAOmJbkhOaCTvbGcFN9L9b+JunIsDwaKljSOdcLMea3NJ1k9Usz/rjdfSXTq4dfzfeS7W4p4YOAAHeA==",
+      "valutazione": "Compatibile secondo la lettura del testo permissivo; includere testo o link della licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/tar/node_modules/yallist",
+      "versione": "5.0.0",
+      "licenza": "BlueOak-1.0.0",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==",
+      "valutazione": "Compatibile secondo la lettura del testo permissivo; includere testo o link della licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/temp",
+      "versione": "0.9.4",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-yYrrsWnrXMcdsnu/7YMYAofM1ktpL5By7vZhf15CrXijWWrEYZks5AXBudalfSWJLlnen/QUJUB5aoB0kqZUGA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/temp-file",
+      "versione": "3.4.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-C5tjlC/HCtVUOi3KWVokd4vHVViOmGjtLwIh4MuzPo/nMYTV/p1urt3RnMz2IWXDdKEGJH3k5+KPxtqRsUYGtg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/tiny-async-pool",
+      "versione": "1.3.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-01EAw5EDrcVrdgyCLgoSPvqznC0sVxDSVeiOz09FUpjh71G79VCqneOr+xvt7T1r76CF6ZZfPjHorN2+d+3mqA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/tiny-async-pool/node_modules/semver",
+      "versione": "5.7.2",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-cBznnQ9KjJqU67B52RMC65CMarK2600WFnbkcaiwWq3xy/5haFJlshgnpjovMVJ+Hff49d8GEn0b87C5pDQ10g==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/tinyglobby",
+      "versione": "0.2.17",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/tmp",
+      "versione": "0.2.7",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-e0votIpp4Uo2AJYSzVHV6xCcawuiez3DzqDAbrTc3YxBkplN6e+dM13ZeIcZnDg/QpSuU2zfZ3rzwY8ukEnaXw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/tmp-promise",
+      "versione": "3.0.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-RwM7MoPojPxsOBYnyd2hy0bxtIlVrihNs9pj5SUvY8Zz1sQcQG2tG1hSr8PDxfgEB8RNKDhqbIlroIarSNDNsQ==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/truncate-utf8-bytes",
+      "versione": "1.0.2",
+      "licenza": "WTFPL",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-95Pu1QXQvruGEhv62XCMO3Mm90GscOCClvrIUwCM0PYOXK3kaF3l3sIHxx71ThJfcbM2O5Au6SO3AWCSEfW4mQ==",
+      "valutazione": "Compatibile; licenza permissiva."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/tslib",
+      "versione": "2.8.1",
+      "licenza": "0BSD",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==",
+      "valutazione": "Compatibile; licenza permissiva."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/type-fest",
+      "versione": "0.13.1",
+      "licenza": "(MIT OR CC0-1.0)",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-34R7HTnG0XIJcBSn5XhDd7nNFPRcXYRZrBB2O2jdKqYODldSzBAqzsWoZYYvduky73toYS/ESqxPvkDf/F0XMg==",
+      "valutazione": "Scegliere MIT; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/undici",
+      "versione": "7.29.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": true,
+      "integrita": "sha512-RYONW2MeafgYlkVOKYKkA/Ag7BmXqgIWCa8t1m0JcxrQg9pI9lEqRhAOruOBCbAohOa/gkCF+iPi9hrgvTzu6Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/undici-types",
+      "versione": "7.18.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/universalify",
+      "versione": "2.0.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-gptHNQghINnc/vTGIk0SOFGFNXw7JVrlRUtConJRlvaw6DuX0wO5Jeko9sWrMBhh+PsYAZ7oXAiOnf/UKogyiw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/unzipper",
+      "versione": "0.12.5",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-tXYOi9R57Uj/2Z25SOs5RRSzq886MBQj2gY8dPL+xl/kv6s6SvByoKfAtvfVeEuhntWDgjd2o9p2lb4TVPAz0A==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/unzipper/node_modules/fs-extra",
+      "versione": "11.3.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-eXvGGwZ5CL17ZSwHWd3bbgk7UUpF6IFHtP57NYYakPvHOs8GDgDe5KJI36jIJzDkJ6eJjuzRA8eBQb6SkKue0g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/utf8-byte-length",
+      "versione": "1.0.5",
+      "licenza": "(WTFPL OR MIT)",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-Xn0w3MtiQ6zoz2vFyUVruaCL53O/DwUvkEeOvj+uulMm0BkUGYWmBYVyElqZaSLhY6ZD0ulfU3aBra2aVT4xfA==",
+      "valutazione": "Scegliere MIT; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/util-deprecate",
+      "versione": "1.0.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/webcrypto-core",
+      "versione": "1.9.2",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-gsXecm82UQNlTBURJGuqOWy1Ww08S3kZUcr3aOJS02Pk0xLtkfeUAVC0u0xhgdonFme80edSJUIJyuvL/7250Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/which",
+      "versione": "5.0.0",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-JEdGzHwwkrbWoGOlIHqQ5gtprKGOenpDHpxE9zVR1bWbOtYRyPPHMe9FaP6x61CmNaTThSkb0DAJte5jD+DmzQ==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/wrap-ansi",
+      "versione": "7.0.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-YVGIj2kamLSTxw6NsZjoBxfSwsn0ycdesmc4p+Q21c5zPuZ1pl+NfxVdxPtdHvmNVOQ6XSYG4AUtyt/Fi7D16Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/wrappy",
+      "versione": "1.0.2",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/xmlbuilder",
+      "versione": "15.1.1",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-yMqGBqtXyeN1e3TGYvgNgDVZ3j84W4cwkOXQswghol6APgZWaff9lnbvN7MHYJOiXsvGPXtjTYJEiC9J2wv9Eg==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/y18n",
+      "versione": "5.0.8",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/yallist",
+      "versione": "4.0.0",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-3wdGidZyq5PB084XLES5TpOSRA3wjXAlIWMhum2kRcv/41Sn2emQ0dycQW4uZXLejwKvg6EsvbdlVL+FYEct7A==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/yargs",
+      "versione": "17.7.3",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-GZtjxm/J/4TSxuL3FNYjCmLktBTnIw/rVmKSIyKeYAZpmJB2ig9VauCC5xsa82GNKVKDAqpOn3KVzNt0zmrU0g==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/yargs-parser",
+      "versione": "21.1.1",
+      "licenza": "ISC",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-tVpsJW7DdjecAiFpbIB1e3qxIQsE6NoPc5/eTdrbbIC4h0LVsWhnoa3g+m2HclBIujHzsxZ4VJVA+GUuc2/LBw==",
+      "valutazione": "Compatibile; conservare avvisi."
+    },
+    {
+      "lock": "harness-ui/desktop/package-lock.json",
+      "posizione": "node_modules/yocto-queue",
+      "versione": "0.1.0",
+      "licenza": "MIT",
+      "sviluppo": true,
+      "opzionale": false,
+      "integrita": "sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    },
+    {
+      "lock": "context-engine/package-lock.json",
+      "posizione": "node_modules/sqlite-vec",
+      "versione": "0.1.9",
+      "licenza": "MIT OR Apache",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-L7XJWRIBNvR9O5+vh1FQ+IGkh/3D2AzVksW5gdtk28m78Hy8skFD0pqReKH1Yp0/BUKRGcffgKvyO/EON5JXpA==",
+      "valutazione": "Metadato non SPDX: scegliere MIT per sqlite-vec 0.1.9 e varianti, verificato LICENSE-MIT upstream."
+    },
+    {
+      "lock": "context-engine/package-lock.json",
+      "posizione": "node_modules/sqlite-vec-darwin-arm64",
+      "versione": "0.1.9",
+      "licenza": "MIT OR Apache",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-jSsZpE42OfBkGL/ItyJTVCUwl6o6Ka3U5rc4j+UBDIQzC1ulSSKMEhQLthsOnF/MdAf1MuAkYhkdKmmcjaIZQg==",
+      "valutazione": "Metadato non SPDX: scegliere MIT per sqlite-vec 0.1.9 e varianti, verificato LICENSE-MIT upstream."
+    },
+    {
+      "lock": "context-engine/package-lock.json",
+      "posizione": "node_modules/sqlite-vec-darwin-x64",
+      "versione": "0.1.9",
+      "licenza": "MIT OR Apache",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-KDlVyqQT7pnOhU1ymB9gs7dMbSoVmKHitT+k1/xkjarcX8bBqPxWrGlK/R+C5WmWkfvWwyq5FfXfiBYCBs6PlA==",
+      "valutazione": "Metadato non SPDX: scegliere MIT per sqlite-vec 0.1.9 e varianti, verificato LICENSE-MIT upstream."
+    },
+    {
+      "lock": "context-engine/package-lock.json",
+      "posizione": "node_modules/sqlite-vec-linux-arm64",
+      "versione": "0.1.9",
+      "licenza": "MIT OR Apache",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-5wXVJ9c9kR4CHm/wVqXb/R+XUHTdpZ4nWbPHlS+gc9qQFVHs92Km4bPnCKX4rtcPMzvNis+SIzMJR1SCEwpuUw==",
+      "valutazione": "Metadato non SPDX: scegliere MIT per sqlite-vec 0.1.9 e varianti, verificato LICENSE-MIT upstream."
+    },
+    {
+      "lock": "context-engine/package-lock.json",
+      "posizione": "node_modules/sqlite-vec-linux-x64",
+      "versione": "0.1.9",
+      "licenza": "MIT OR Apache",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-w3tCH8xK2finW8fQJ/m8uqKodXUZ9KAuAar2UIhz4BHILfpE0WM/MTGCRfa7RjYbrYim5Luk3guvMOGI7T7JQA==",
+      "valutazione": "Metadato non SPDX: scegliere MIT per sqlite-vec 0.1.9 e varianti, verificato LICENSE-MIT upstream."
+    },
+    {
+      "lock": "context-engine/package-lock.json",
+      "posizione": "node_modules/sqlite-vec-windows-x64",
+      "versione": "0.1.9",
+      "licenza": "MIT OR Apache",
+      "sviluppo": false,
+      "opzionale": true,
+      "integrita": "sha512-y3gEIyy/17bq2QFPQOWLE68TYWcRZkBQVA2XLrTPHNTOp55xJi/BBBmOm40tVMDMjtP+Elpk6UBUXdaq+46b0Q==",
+      "valutazione": "Metadato non SPDX: scegliere MIT per sqlite-vec 0.1.9 e varianti, verificato LICENSE-MIT upstream."
+    },
+    {
+      "lock": "context-engine/package-lock.json",
+      "posizione": "node_modules/zod",
+      "versione": "4.5.4",
+      "licenza": "MIT",
+      "sviluppo": false,
+      "opzionale": false,
+      "integrita": "sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==",
+      "valutazione": "Compatibile; conservare copyright e licenza."
+    }
+  ],
+  "limiti": "Inventario dei quattro lock npm richiesti e campioni legali locali; non SBOM completa di Electron/Chromium, DLL, container, pip, Composer o mobile. Le condizioni MPL e i termini dei componenti separati restano applicabili."
+}

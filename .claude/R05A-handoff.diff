@@ -1,0 +1,119 @@
+--- a/mobile/README.md
++++ b/mobile/README.md
+@@ -17,1 +17,1 @@
+-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0"></a>
++  <a href="../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="AGPL-3.0-only"></a>
+
+--- a/mobile/README.md
++++ b/mobile/README.md
+@@ -259,1 +259,5 @@
+-[Apache License 2.0](LICENSE). Third-party components and shipped-binary provenance are documented in [NOTICE](NOTICE).
++**AGPL-3.0-only**, come tutto il monorepo TALOS: chi offre una versione modificata in rete deve rendere disponibile gratuitamente agli utenti il codice sorgente corrispondente, comprese le modifiche.
++
++Testo integrale: [LICENSE](../LICENSE). Copyright e terze parti: [NOTICE](../NOTICE) e [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
++
++Telemetria: nessuna.
+
+--- a/artifact-worker/package.json
++++ b/artifact-worker/package.json
+@@ -6,1 +6,1 @@
+-  "license": "UNLICENSED",
++  "license": "AGPL-3.0-only",
+
+--- a/browser-worker/package.json
++++ b/browser-worker/package.json
+@@ -2,1 +2,2 @@
+-  "name": "talos-browser-worker",
++  "name": "talos-browser-worker",
++  "license": "AGPL-3.0-only",
+
+--- a/validator/package.json
++++ b/validator/package.json
+@@ -14,1 +14,1 @@
+-  "license": "ISC",
++  "license": "AGPL-3.0-only",
+
+--- a/harness-ui/benchmarks/autocompact/package.json
++++ b/harness-ui/benchmarks/autocompact/package.json
+@@ -2,1 +2,2 @@
+-  "name": "talos-autocompact-qualification",
++  "name": "talos-autocompact-qualification",
++  "license": "AGPL-3.0-only",
+
+--- a/harness-ui/frontend/package.json
++++ b/harness-ui/frontend/package.json
+@@ -2,1 +2,2 @@
+-  "name": "talos-harness-ui-frontend",
++  "name": "talos-harness-ui-frontend",
++  "license": "AGPL-3.0-only",
+
+--- a/control-plane/package.json
++++ b/control-plane/package.json
+@@ -3,1 +3,2 @@
+-    "private": true,
++    "private": true,
++    "license": "AGPL-3.0-only",
+
+--- a/core/composer.json
++++ b/core/composer.json
+@@ -5,1 +5,1 @@
+-    "license": "proprietary",
++    "license": "AGPL-3.0-only",
+
+--- a/control-plane/composer.json
++++ b/control-plane/composer.json
+@@ -7,1 +7,1 @@
+-    "license": "MIT",
++    "license": "AGPL-3.0-only",
+
+--- a/control-plane/vendor-clean/kadmos/core/composer.json
++++ b/control-plane/vendor-clean/kadmos/core/composer.json
+@@ -5,1 +5,1 @@
+-    "license": "proprietary",
++    "license": "AGPL-3.0-only",
+
+--- a/mobile/package.json
++++ b/mobile/package.json
+@@ -115,1 +115,1 @@
+-  "license": "Apache-2.0"
++  "license": "AGPL-3.0-only"
+
+--- a/mobile/packages/contracts/package.json
++++ b/mobile/packages/contracts/package.json
+@@ -2,1 +2,2 @@
+-    "name": "@talos-mobile/contracts",
++    "name": "@talos-mobile/contracts",
++    "license": "AGPL-3.0-only",
+
+--- a/mobile/packages/design-tokens/package.json
++++ b/mobile/packages/design-tokens/package.json
+@@ -2,1 +2,2 @@
+-    "name": "@talos-mobile/design-tokens",
++    "name": "@talos-mobile/design-tokens",
++    "license": "AGPL-3.0-only",
+
+--- a/mobile/tools/android-assets/package.json
++++ b/mobile/tools/android-assets/package.json
+@@ -6,1 +6,1 @@
+-    "license": "UNLICENSED",
++    "license": "AGPL-3.0-only",
+
+--- a/mobile/tools/git-bash-launcher/package.json
++++ b/mobile/tools/git-bash-launcher/package.json
+@@ -6,1 +6,1 @@
+-    "license": "UNLICENSED",
++    "license": "AGPL-3.0-only",
+
+--- a/human-journey/pyproject.toml
++++ b/human-journey/pyproject.toml
+@@ -5,1 +5,2 @@
+-[project]
++[project]
++license = "AGPL-3.0-only"
+
+--- a/ocr-worker/pyproject.toml
++++ b/ocr-worker/pyproject.toml
+@@ -1,1 +1,2 @@
+-[project]
++[project]
++license = "AGPL-3.0-only"
