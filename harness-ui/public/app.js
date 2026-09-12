@@ -374,7 +374,7 @@ function nomeCartellaScelta(cartella) {
 }
 function motivoQuandoSiPuoPartire({ nome, autorizzata, daEsploraFile, permesso }) {
   const umano = nomeUmanoPolitica(permesso);
-  const coda = autorizzata ? "" : daEsploraFile ? ` ${nome} arriva da Esplora file.` : ` ${nome} non è fra i progetti già autorizzati: la cartella viene verificata all’avvio.`;
+  const coda = autorizzata ? "" : daEsploraFile ? " Arriva da Esplora file." : " Non è fra i progetti già autorizzati: viene verificata all’avvio.";
   return `${cosaFaraDentro(permesso, nome, umano)}${coda}`;
 }
 function cosaFaraDentro(permesso, nome, umano) {
@@ -15925,55 +15925,86 @@ function anteprima2(testo3, massimo = 140) {
   if (!s) return "Messaggio senza testo";
   return s.length > massimo ? `${s.slice(0, massimo - 1)}…` : s;
 }
-function vociDaConversazione(conversazione) {
-  if (!conversazione) return [];
+function testoDelTurno(turno, diUtente) {
+  if (!turno || typeof turno.querySelector !== "function") return "";
+  const selettore = diUtente ? SELETTORE_TESTO_UTENTE : SELETTORE_RISPOSTA_TURNO;
+  const testo3 = turno.querySelector(selettore)?.textContent;
+  return typeof testo3 === "string" ? testo3 : "";
+}
+function tonoPeggiore(toni = []) {
+  for (const t2 of TONI3) if (toni.includes(t2)) return t2;
+  return null;
+}
+function vociDaTurni(turni = []) {
   const voci = [];
-  let ultimoDetto = "";
-  for (const turno of conversazione.querySelectorAll(".talos-turn")) {
-    const numeri = [...turno.querySelectorAll(".talos-turn-spine__n")];
-    const segni = [...turno.querySelectorAll(".talos-turn-spine__tick")];
-    const diUtente = turno.dataset.turno === "utente" || Boolean(turno.querySelector(".talos-message--user"));
-    if (diUtente) {
-      const suo = turno.querySelector(".talos-message--user .talos-message__body")?.textContent;
-      if (suo && suo.trim()) ultimoDetto = suo;
-    }
-    const rispostaVisibile = [...turno.querySelectorAll(".talos-message__body p, .talos-message__copy p")].find((p) => !p.closest(".real-reasoning-note") && p.textContent.trim())?.textContent;
-    const testoTurno = anteprima2(ultimoDetto || rispostaVisibile || "Risposta di TALOS");
-    if (!numeri.length) {
-      voci.push({ indice: voci.length, elemento: turno, numero: null, tono: null, attrezzi: 0, testo: testoTurno, diUtente });
-      continue;
-    }
-    numeri.forEach((n, i) => {
-      const segno = segni[i];
-      const tono = TONI3.find((t2) => segno?.classList.contains(`talos-turn-spine__tick--${t2}`)) || null;
-      voci.push({
-        indice: voci.length,
-        elemento: turno,
-        numero: Number(n.textContent) || null,
-        tono,
-        attrezzi: Number(segno?.dataset.tick || 1),
-        testo: testoTurno,
-        diUtente
-      });
+  for (const t2 of turni) {
+    if (!t2) continue;
+    const numeri = (t2.numeri || []).filter(Number.isFinite);
+    const tono = tonoPeggiore(t2.toni || []);
+    const diUtente = Boolean(t2.diUtente);
+    const vuoto = diUtente ? "Messaggio senza testo" : tono === "current" ? "Sta rispondendo…" : "Risposta senza testo";
+    voci.push({
+      indice: 0,
+      elemento: t2.elemento,
+      diUtente,
+      lato: diUtente ? "utente" : "talos",
+      numero: numeri.length ? numeri[0] : null,
+      numeroUltimo: numeri.length ? numeri[numeri.length - 1] : null,
+      tono,
+      attrezzi: Number.isFinite(t2.attrezzi) ? t2.attrezzi : 0,
+      testo: String(t2.testo || "").trim() ? anteprima2(t2.testo) : vuoto
     });
   }
-  return voci.slice(0, VOCI_MASSIME);
+  const tenute = voci.length > VOCI_MASSIME ? voci.slice(voci.length - VOCI_MASSIME) : voci;
+  tenute.forEach((v, i) => {
+    v.indice = i;
+  });
+  return tenute;
+}
+function vociDaConversazione(conversazione) {
+  if (!conversazione) return [];
+  const turni = [...conversazione.querySelectorAll(".talos-turn")].map((turno) => {
+    const diUtente = turno.dataset.turno === "utente" || Boolean(turno.querySelector(".talos-message--user"));
+    const segni = [...turno.querySelectorAll(".talos-turn-spine__tick")];
+    return {
+      elemento: turno,
+      diUtente,
+      numeri: [...turno.querySelectorAll(".talos-turn-spine__n")].map((n) => Number(n.textContent)).filter(Number.isFinite),
+      toni: segni.map((s) => TONI3.find((t2) => s.classList.contains(`talos-turn-spine__tick--${t2}`))).filter(Boolean),
+      // gli attrezzi di un turno sono quelli di tutti i suoi giri messi insieme, non quelli dell'ultimo
+      attrezzi: diUtente ? 0 : segni.reduce((somma, s) => somma + (Number(s.dataset.tick) || 1), 0),
+      testo: testoDelTurno(turno, diUtente)
+    };
+  });
+  return vociDaTurni(turni);
+}
+function capoFumetto(voce) {
+  if (!voce) return "";
+  if (voce.diUtente) return "Tu";
+  const parti = ["TALOS"];
+  if (Number.isFinite(voce.numero)) {
+    parti.push(Number.isFinite(voce.numeroUltimo) && voce.numeroUltimo !== voce.numero ? `giri ${voce.numero}-${voce.numeroUltimo}` : `giro ${voce.numero}`);
+  }
+  if (voce.tono === "danger") parti.push("errore");
+  else if (voce.tono === "warning") parti.push("avviso");
+  else if (voce.tono === "current") parti.push("in corso");
+  if (voce.attrezzi > 1) parti.push(`${voce.attrezzi} attrezzi`);
+  return parti.join(" · ");
+}
+function etichettaVoce(voce, posizione) {
+  if (!voce) return "";
+  return voce.diUtente ? `Vai al tuo messaggio ${posizione}` : `Vai alla risposta di TALOS ${posizione}`;
 }
 function riempiFumetto(fumetto, voce) {
   if (!fumetto) return;
   fumetto.replaceChildren();
   if (!voce) return;
   const d = fumetto.ownerDocument;
-  const capo = [];
-  if (Number.isFinite(voce.numero)) capo.push(`Giro ${voce.numero}`);
-  if (voce.tono === "danger") capo.push("errore");
-  else if (voce.tono === "warning") capo.push("avviso");
-  else if (voce.tono === "current") capo.push("in corso");
-  if (voce.attrezzi > 1) capo.push(`${voce.attrezzi} attrezzi`);
-  if (capo.length) {
+  const capo = capoFumetto(voce);
+  if (capo) {
     const testa = d.createElement("b");
     testa.className = "talos-cronologia__fumetto-capo";
-    testa.textContent = capo.join(" · ");
+    testa.textContent = capo;
     fumetto.append(testa);
   }
   const corpo = d.createElement("span");
@@ -15981,14 +16012,26 @@ function riempiFumetto(fumetto, voce) {
   corpo.textContent = voce.testo;
   fumetto.append(corpo);
 }
-function aggiornaCronologia(nav, conversazione, { fuoco = null } = {}) {
+function scorrimentoPerVedere({ indice: indice2, altezzaVoce, scrollTop, clientHeight, scrollHeight, sfumatura = 40 }) {
+  if (![indice2, altezzaVoce, scrollTop, clientHeight, scrollHeight].every(Number.isFinite)) return scrollTop;
+  if (altezzaVoce <= 0 || scrollHeight <= clientHeight) return scrollTop;
+  const massimo = scrollHeight - clientHeight;
+  const margine = clientHeight > sfumatura * 2 + altezzaVoce ? sfumatura : 0;
+  const alto = indice2 * altezzaVoce;
+  const basso = alto + altezzaVoce;
+  let nuovo = scrollTop;
+  if (alto - margine < scrollTop) nuovo = alto - margine;
+  else if (basso + margine > scrollTop + clientHeight) nuovo = basso + margine - clientHeight;
+  return Math.min(massimo, Math.max(0, nuovo));
+}
+function aggiornaCronologia(nav, conversazione, { fuoco = null, voci = null, segui = false } = {}) {
   if (!nav || !conversazione) return 0;
   const d = nav.ownerDocument;
-  const voci = vociDaConversazione(conversazione);
+  const elenco2 = voci || vociDaConversazione(conversazione);
   const lista = nav.querySelector(".talos-cronologia__lista") || nav;
-  nav.hidden = voci.length < 2;
+  nav.hidden = elenco2.length < 2;
   const esistenti = [...lista.querySelectorAll(".talos-cronologia__voce")];
-  for (let i = esistenti.length; i < voci.length; i += 1) {
+  for (let i = esistenti.length; i < elenco2.length; i += 1) {
     const b = d.createElement("button");
     b.type = "button";
     b.className = "talos-cronologia__voce";
@@ -16000,19 +16043,42 @@ function aggiornaCronologia(nav, conversazione, { fuoco = null } = {}) {
     b.append(segno);
     lista.append(b);
   }
-  for (let i = voci.length; i < esistenti.length; i += 1) esistenti[i].remove();
+  for (let i = elenco2.length; i < esistenti.length; i += 1) esistenti[i].remove();
   const attivo = Number.isFinite(fuoco) ? fuoco : Number(nav.dataset.attiva || 0);
-  [...lista.querySelectorAll(".talos-cronologia__voce")].forEach((b, i) => {
-    const v = voci[i];
+  const attivaVera = Number(nav.dataset.attivaVera || nav.dataset.attiva || 0);
+  let contaTuoi = 0;
+  let contaSue = 0;
+  const bottoni = [...lista.querySelectorAll(".talos-cronologia__voce")];
+  bottoni.forEach((b, i) => {
+    const v = elenco2[i];
+    const posizione = v.diUtente ? contaTuoi += 1 : contaSue += 1;
     b.dataset.indice = String(i);
-    b.dataset.tono = v.tono || (v.diUtente ? "utente" : "");
-    b.setAttribute("aria-label", Number.isFinite(v.numero) ? `Vai al giro ${v.numero}` : `Vai al messaggio ${i + 1}`);
+    b.dataset.lato = v.lato;
+    b.dataset.tono = v.tono || "";
+    b.setAttribute("aria-label", etichettaVoce(v, posizione));
     b.removeAttribute("title");
-    b.classList.toggle("talos-cronologia__voce--attiva", i === attivo);
+    const eAttiva = i === attivo;
+    b.classList.toggle("talos-cronologia__voce--attiva", eAttiva);
+    if (i === attivaVera) b.setAttribute("aria-current", "location");
+    else b.removeAttribute("aria-current");
+    b.tabIndex = i === attivaVera ? 0 : -1;
     b.querySelector(".talos-cronologia__linea").style.setProperty("--lente", `${larghezzaLente(i, attivo)}px`);
   });
   nav.dataset.attiva = String(attivo);
-  return voci.length;
+  if (segui) {
+    const b = bottoni[attivaVera];
+    if (b && lista !== nav) {
+      const nuovo = scorrimentoPerVedere({
+        indice: attivaVera,
+        altezzaVoce: b.offsetHeight,
+        scrollTop: lista.scrollTop,
+        clientHeight: lista.clientHeight,
+        scrollHeight: lista.scrollHeight
+      });
+      if (nuovo !== lista.scrollTop) lista.scrollTop = nuovo;
+    }
+  }
+  return elenco2.length;
 }
 function collegaCronologia(nav, conversazione, { finestra = globalThis } = {}) {
   if (!nav || !conversazione || nav.dataset.collegata === "si") return () => {
@@ -16026,33 +16092,52 @@ function collegaCronologia(nav, conversazione, { finestra = globalThis } = {}) {
   nav.append(fumetto);
   const voceDa = (evento) => evento.target?.closest?.(".talos-cronologia__voce") || null;
   const indiceDi = (b) => Number(b?.dataset.indice ?? -1);
-  nav.addEventListener("pointerover", (e) => {
-    const b = voceDa(e);
-    if (!b) return;
+  const bottoni = () => [...nav.querySelectorAll(".talos-cronologia__voce")];
+  const inMano = () => nav.dataset.inMano === "si";
+  const mostraFumetto = (b) => {
     const i = indiceDi(b);
-    aggiornaCronologia(nav, conversazione, { fuoco: i });
     riempiFumetto(fumetto, vociDaConversazione(conversazione)[i]);
     fumetto.hidden = !fumetto.textContent;
     const r = b.getBoundingClientRect();
     const rn = nav.getBoundingClientRect();
     fumetto.style.top = `${Math.round(r.top - rn.top + r.height / 2)}px`;
+  };
+  nav.addEventListener("pointerover", (e) => {
+    const b = voceDa(e);
+    if (!b) return;
+    nav.dataset.inMano = "si";
+    aggiornaCronologia(nav, conversazione, { fuoco: indiceDi(b) });
+    mostraFumetto(b);
   });
   nav.addEventListener("pointerleave", () => {
+    delete nav.dataset.inMano;
     fumetto.hidden = true;
-    aggiornaCronologia(nav, conversazione, { fuoco: Number(nav.dataset.attivaVera || nav.dataset.attiva || 0) });
+    aggiornaCronologia(nav, conversazione, { fuoco: Number(nav.dataset.attivaVera || nav.dataset.attiva || 0), segui: true });
   });
   nav.addEventListener("focusin", (e) => {
     const b = voceDa(e);
     if (b) {
-      riempiFumetto(fumetto, vociDaConversazione(conversazione)[indiceDi(b)]);
-      fumetto.hidden = false;
-      const r = b.getBoundingClientRect();
-      const rn = nav.getBoundingClientRect();
-      fumetto.style.top = `${Math.round(r.top - rn.top + r.height / 2)}px`;
+      nav.dataset.inMano = "si";
+      mostraFumetto(b);
     }
   });
   nav.addEventListener("focusout", () => {
+    delete nav.dataset.inMano;
     fumetto.hidden = true;
+  });
+  nav.addEventListener("keydown", (e) => {
+    const elenco2 = bottoni();
+    if (!elenco2.length) return;
+    const qui = elenco2.indexOf(d.activeElement);
+    let dove = null;
+    if (e.key === "ArrowDown") dove = Math.min(elenco2.length - 1, (qui < 0 ? -1 : qui) + 1);
+    else if (e.key === "ArrowUp") dove = Math.max(0, (qui < 0 ? 1 : qui) - 1);
+    else if (e.key === "Home") dove = 0;
+    else if (e.key === "End") dove = elenco2.length - 1;
+    if (dove === null) return;
+    e.preventDefault();
+    aggiornaCronologia(nav, conversazione, { fuoco: dove });
+    elenco2[dove]?.focus();
   });
   nav.addEventListener("click", (e) => {
     const b = voceDa(e);
@@ -16067,7 +16152,7 @@ function collegaCronologia(nav, conversazione, { finestra = globalThis } = {}) {
     v.elemento.classList.add("talos-turn--raggiunto");
     finestra.setTimeout(() => v.elemento.classList.remove("talos-turn--raggiunto"), 1600);
     nav.dataset.attivaVera = String(indiceDi(b));
-    aggiornaCronologia(nav, conversazione, { fuoco: indiceDi(b) });
+    aggiornaCronologia(nav, conversazione, { fuoco: indiceDi(b), voci });
   });
   let inCoda = false;
   const seguiScorrimento = () => {
@@ -16083,12 +16168,12 @@ function collegaCronologia(nav, conversazione, { finestra = globalThis } = {}) {
         if (v.elemento.getBoundingClientRect().top <= meta2) attiva = i;
       });
       nav.dataset.attivaVera = String(attiva);
-      if (fumetto.hidden) aggiornaCronologia(nav, conversazione, { fuoco: attiva });
+      if (fumetto.hidden && !inMano()) aggiornaCronologia(nav, conversazione, { fuoco: attiva, voci, segui: true });
     });
   };
   conversazione.addEventListener("scroll", seguiScorrimento, { passive: true });
   const osservatore = new finestra.MutationObserver(() => {
-    aggiornaCronologia(nav, conversazione);
+    aggiornaCronologia(nav, conversazione, { segui: !inMano() });
   });
   osservatore.observe(conversazione, { childList: true, subtree: true });
   aggiornaCronologia(nav, conversazione);
@@ -16101,9 +16186,10 @@ function collegaCronologia(nav, conversazione, { finestra = globalThis } = {}) {
 var LENTE, VOCI_MASSIME, TONI3;
 var init_cronologia = __esm({
   "src/components/cronologia.js"() {
+    init_inspector();
     LENTE = Object.freeze([26, 20, 14, 10, 6]);
-    VOCI_MASSIME = 200;
-    TONI3 = ["current", "info", "warning", "danger"];
+    VOCI_MASSIME = 400;
+    TONI3 = ["danger", "warning", "current", "info"];
   }
 });
 
@@ -27770,8 +27856,8 @@ ${testo3}` : testo3;
         const bottone5 = document.createElement("button");
         bottone5.type = "button";
         bottone5.className = "ft-outside-row-adopt";
-        bottone5.setAttribute("aria-label", `Usa "${nome}" come radice — apre una sessione nuova con Full access`);
-        bottone5.title = "Usa come radice (sessione nuova, Full access)";
+        bottone5.setAttribute("aria-label", `Usa "${nome}" come radice — apre una sessione nuova su questa cartella`);
+        bottone5.title = "Usa come radice (sessione nuova)";
         bottone5.append(iconaSvgAlbero("i-check"));
         bottone5.addEventListener("click", (evento) => {
           evento.stopPropagation();
@@ -28713,8 +28799,7 @@ ${testo3}` : testo3;
         sheetTitle.textContent = tipo === "cartella" ? "Nuova cartella" : "Nuovo file";
       }
       function avviaComeNuovaRadice(percorsoAssoluto, nome) {
-        impostaPermesso("Full access", `Full access · nuova radice: ${nome}`);
-        avviaSessionePendente({ cartellaLibera: percorsoAssoluto, nomeCartella: nome, modello: state.model, effort: state.effort, permessi: "Full access", permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
+        avviaSessionePendente({ cartellaLibera: percorsoAssoluto, nomeCartella: nome, modello: state.model, effort: state.effort, permessi: state.permissions, permessiPerAttrezzo: { ...state.permessiPerAttrezzo } });
       }
       function impostaComeRadice(percorsoRelativo, nome) {
         const radice2 = state.realSession.cartellaAssoluta;
@@ -31151,10 +31236,7 @@ ${testo3}` : testo3;
           if (local.busy) return;
           const allowlisted = Boolean(local.selected?.projectId);
           if (!local.puoAvviare) {
-            if (local.rimedioSu === "permesso") {
-              permissionSection.scrollIntoView({ block: "nearest" });
-              permissionButtons.find((b) => b.dataset.workspacePermission === "Full access")?.focus();
-            } else {
+            {
               treeFrame.scrollIntoView({ block: "nearest" });
               focusRow(local.focusedPath || local.current?.path);
             }
@@ -32027,10 +32109,6 @@ ${blocchi.join("\n\n")}` : testa;
         }
         if (state.pendingCustomSession) {
           const { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella: nomeCartella2, modelloPlanner } = state.pendingCustomSession;
-          if (cartellaLibera && state.permissions !== "Full access") {
-            toast("Serve Full access", `${nomeCartella2} è fuori dall'elenco delle cartelle: per avviarla serve Full access. Cambia il permesso dalla pillola e invia di nuovo.`);
-            return false;
-          }
           state.pendingCustomSession = null;
           startCustomSession({
             cartellaId,
