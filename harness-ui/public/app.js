@@ -360,7 +360,10 @@ var init_fonti_modelli = __esm({
       Object.freeze({ id: "nebius", etichetta: "Nebius", soloSeCollegato: true }),
       Object.freeze({ id: "xai", etichetta: "xAI", soloSeCollegato: true }),
       Object.freeze({ id: "ollama-cloud", etichetta: "Ollama Cloud", soloSeCollegato: true }),
-      Object.freeze({ id: "huggingface", etichetta: "Hugging Face", soloSeCollegato: true })
+      Object.freeze({ id: "huggingface", etichetta: "Hugging Face", soloSeCollegato: true }),
+      Object.freeze({ id: "kimi", etichetta: "Kimi", soloSeCollegato: true }),
+      Object.freeze({ id: "minimax", etichetta: "MiniMax", soloSeCollegato: true }),
+      Object.freeze({ id: "qwen", etichetta: "Qwen", soloSeCollegato: true })
     ]);
     ID_DIRETTI = new Set(PROVIDER_DIRETTI.map((p) => p.id));
   }
