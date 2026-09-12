@@ -1961,6 +1961,7 @@ export function createHttpApp({
   providerStore = null,
   /** ⭐ 03/9 — la sonda che chiede al provider se accetta la credenziale. Facoltativa: senza, la rotta di prova risponde «non configurata» invece di fingere un esito. */
   providerProbe = null,
+  catalogoFornitoriFn = null, // P-E (12/09, Astra): catalogo pubblico models.dev dei diretti, con il solo controllo della presenza della chiave
   // ⛔⛔⛔ 28/8 — iniettabili SOLO per il test del battito SSE sotto: mai un setInterval reale nei test unitari, stesso principio di ogni altra dipendenza di questo file.
   impostaIntervalloFn = setInterval, cancellaIntervalloFn = clearInterval,
   /*
@@ -2338,7 +2339,7 @@ export function createHttpApp({
     }
 
     const nativeModelsMatch = url.pathname.match(ROTTA_MODELLI_FORNITORE);
-    if (method === 'GET' && nativeModelsMatch && (providerProbe || localRuntimes)) {
+    if (method === 'GET' && nativeModelsMatch && (providerProbe || localRuntimes || catalogoFornitoriFn)) {
       const fornitoreId = nativeModelsMatch[1];
       try {
         requireNoQuery(url);
@@ -2373,6 +2374,10 @@ export function createHttpApp({
             osservatoAlle: m.observedAt ?? null,
           }));
           sendJson(res, 200, successEnvelope({ provider: fornitoreId, modelli }, clock), method);
+          return;
+        }
+        if (catalogoFornitoriFn) {
+          sendJson(res, 200, successEnvelope(await catalogoFornitoriFn(fornitoreId), clock), method);
           return;
         }
         if (!providerProbe) { const errore = new Error('Sonda provider non configurata.'); errore.code = 'REPORT_UNAVAILABLE'; throw errore; }

@@ -15,6 +15,7 @@ import { statoPrimoAvvio } from './src/setup-stato.mjs';
 import { createSearchSourceStore } from './src/search-source-store.mjs';
 import { ENDPOINT_SENTINELLA_DUCKDUCKGO, creaTrasportoSenzaChiave } from './src/duckduckgo-search.mjs';
 import { createModelCatalog } from './src/model-catalog.mjs';
+import { createModelsDevCatalog, createProviderModelCatalog } from './src/model-catalog-models-dev.mjs'; // P-E (12/09)
 import { creaRegistroTerminali, MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA } from './src/pty-terminal.mjs';
 import { creaRegistroSchedeTerminale } from './src/terminal-registry.mjs'; // ⭐ 05/9, W1-01
 import { creaServizioGit } from './src/git-service.mjs'; // ⭐ 05/9, W1-05
@@ -114,6 +115,10 @@ async function startServer() {
     leggiRuntime: (provider) => providerStore.getRuntime(provider),
   });
   const modelCatalog = createModelCatalog();
+  /* P-E (12/09, Astra): i fornitori DIRETTI prendono modelli e prezzi da models.dev (cache su disco con ETag,
+     copia servita se la rete manca); OpenRouter resta sul suo catalogo. La chiave non viaggia: si guarda solo se c'è. */
+  const modelsDevCatalog = createModelsDevCatalog({ cartellaStore: config.cartellaStore, url: config.modelsDevUrl });
+  const providerModelCatalog = createProviderModelCatalog({ catalogo: modelsDevCatalog, chiaveConfigurata: (id) => providerStore.hasKey(id) });
   /*
    * ⛔ 03/9 — LEGAME TARDIVO, e non per eleganza: il supervisore di
    * llama-server viene creato più in basso in questo file (serve il catalogo
@@ -638,6 +643,7 @@ async function startServer() {
     provaRicercaWebFn,
     token: config.token, // ⭐ 04/9, W1-10 — cancello a token per la shell Electron
     catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
+    catalogoFornitoriFn: (id, opts) => providerModelCatalog.ottieni(id, opts),
     capacitaMacchinaFn: () => misuraCapacitaMacchina({ storagePath: config.publicDir }),
     localRuntimes,
     runtimeBootstrapFn: async () => {

@@ -59,12 +59,15 @@
  *   lavoro gia' fatto, e finalmente ha una scheda dove i suoi modelli si scelgono. ⛔ Non chiede
  *   una chiave: `caricaDiretti` non deve pretenderla, o la scheda resterebbe vuota per sempre.
  */
+import { prezzoPerMilione } from './catalogo-modelli.js';
+
 export const PROVIDER_DIRETTI = Object.freeze([
   Object.freeze({ id: 'anthropic', etichetta: 'Anthropic' }),
   Object.freeze({ id: 'gemini', etichetta: 'Gemini' }),
   Object.freeze({ id: 'openai', etichetta: 'OpenAI' }),
   Object.freeze({ id: 'lmstudio', etichetta: 'LM Studio', senzaChiave: true }),
   Object.freeze({ id: 'zai', etichetta: 'Z.AI', soloSeCollegato: true }),
+  Object.freeze({ id: 'deepseek', etichetta: 'DeepSeek', soloSeCollegato: true }),
 ]);
 
 /** Vero se quel fornitore si legge senza collegare nessuna chiave (i motori locali). */
@@ -153,4 +156,45 @@ export function fraseVuotoDiretto(fonte, { diretti = null, errori = {} } = {}) {
 
 function contaOppureNull(elenco) {
   return Array.isArray(elenco) ? elenco.length : null;
+}
+
+/** Dettagli per la scelta, non spesa del giro. Riusa il formato monetario italiano del catalogo. */
+export function descrizioneModelloSelettore(modello = {}) {
+  const numero = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0, useGrouping: true });
+  const prezzo = valore => {
+    const testo = prezzoPerMilione(valore);
+    return testo === 'Non dichiarato' ? 'non disponibile' : `${testo}/M token`;
+  };
+  const capacita = valore => valore === true ? 'sì' : valore === false ? 'no' : 'non disponibile';
+  const dettagli = [
+    `Contesto: ${Number.isFinite(modello.contextLength) && modello.contextLength > 0 ? `${numero.format(modello.contextLength)} token` : 'non disponibile'}`,
+    `Ingresso: ${prezzo(modello.prezzoPrompt)}`,
+    `Uscita: ${prezzo(modello.prezzoCompletion)}`,
+    `Rilettura: ${prezzo(modello.prezzoCacheRead)}`,
+    `Memorizzazione: ${prezzo(modello.prezzoCacheWrite)}`,
+    `Strumenti: ${capacita(modello.capacita?.toolCall)}`,
+    `Ragionamento: ${capacita(modello.capacita?.reasoning)}`,
+  ];
+  if (modello.alias) dettagli.unshift('Ultima versione');
+  if (modello.prezziPerMilione?.tiers?.length || modello.prezziPerMilione?.context_over_200k) dettagli.push('Prezzi variabili con il contesto');
+  const data = modello.catalogo?.aggiornatoAlle;
+  dettagli.push(typeof data === 'string' && Number.isFinite(Date.parse(data))
+    ? `Dati del ${new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome' }).format(new Date(data))}`
+    : 'Data del catalogo non disponibile');
+  if (modello.catalogo?.fallbackRete) {
+    const etaMs = modello.catalogo.etaCacheMs;
+    dettagli.push(`Copia salvata: ${Number.isFinite(etaMs) && etaMs >= 0 ? `${numero.format(Math.floor(etaMs / 1000))} secondi al caricamento` : 'età non disponibile'}`);
+  }
+  if (modello.catalogo?.avvisi?.some(a => a.codice === 'CATALOG_CACHE_CORRUPT')) dettagli.push('Copia danneggiata rifiutata');
+  if (modello.catalogo?.avvisi?.some(a => a.codice === 'CATALOG_CACHE_WRITE_FAILED')) dettagli.push('Salvataggio del catalogo non disponibile');
+  return dettagli.join(' · ');
+}
+
+/** Il chiamante conserva il pulsante e i gesti: questo frammento scrive soltanto testo sicuro. */
+export function aggiornaTestoModelloSelettore(contenitore, modello) {
+  const nome = contenitore.ownerDocument.createElement('strong');
+  nome.textContent = modello.nome || 'Nome non disponibile';
+  const dettagli = contenitore.ownerDocument.createElement('small');
+  dettagli.textContent = descrizioneModelloSelettore(modello);
+  contenitore.replaceChildren(nome, dettagli);
 }
