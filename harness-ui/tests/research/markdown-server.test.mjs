@@ -13,6 +13,82 @@ import {
     runsDiMarkdown,
 } from '../../src/research/markdown-server.mjs'
 
+const ANNIDATO_BC35 = '- Padre **forte**\n  1. Primo\n     + Nipote\n  2. Secondo\n- Fratello'
+
+test('BC35 — tre livelli misti restano dentro la voce padre in HTML', () => {
+    assert.equal(markdownInHtml(ANNIDATO_BC35), '<ul><li>Padre <strong>forte</strong><ol><li>Primo<ul><li>Nipote</li></ul></li><li>Secondo</li></ol></li><li>Fratello</li></ul>')
+})
+
+test('BC35 — i blocchi del rapporto conservano figli, ordine e run', () => {
+    assert.deepEqual(markdownInBlocchiReport(ANNIDATO_BC35), [{ t: 'list', ordered: false, items: [
+        { x: [{ text: 'Padre ' }, { text: 'forte', bold: true }], figli: [
+            { t: 'list', ordered: true, items: [
+                { x: 'Primo', figli: [{ t: 'list', ordered: false, items: ['Nipote'] }] }, 'Secondo',
+            ] },
+        ] }, 'Fratello',
+    ] }])
+})
+
+test('BC35 — il testo semplice mostra rientri e riavvia i numeri per lista', () => {
+    assert.equal(markdownInTestoSemplice(ANNIDATO_BC35), '• Padre forte\n  1. Primo\n    • Nipote\n  2. Secondo\n• Fratello')
+})
+
+test('BC35 — elenchi piatti identici byte per byte alle uscite precedenti', () => {
+    const testo = '- uno\n- **due**\nseguito pigro\n\n1. primo\n2. secondo'
+    assert.equal(markdownInHtml(testo), '<ul><li>uno</li><li><strong>due</strong> seguito pigro</li></ul>\n<ol><li>primo</li><li>secondo</li></ol>')
+    assert.equal(JSON.stringify(markdownInBlocchiReport(testo)), '[{"t":"list","ordered":false,"items":["uno",[{"text":"due","bold":true},{"text":" seguito pigro"}]]},{"t":"list","ordered":true,"items":["primo","secondo"]}]')
+    assert.equal(markdownInTestoSemplice(testo), '• uno\n• due seguito pigro\n\n1. primo\n2. secondo')
+    for (const [input, html, voci] of [
+        ['+ uno\n* due\n- tre', '<ul><li>uno</li><li>due</li><li>tre</li></ul>', ['uno', 'due', 'tre']],
+        ['  - uno\n   - due', '<ul><li>uno</li><li>due</li></ul>', ['uno', 'due']],
+        ['-\n- pieno', '<ul><li>pieno</li></ul>', ['pieno']],
+    ]) {
+        assert.equal(markdownInHtml(input), html)
+        assert.equal(JSON.stringify(markdownInBlocchiReport(input)), JSON.stringify([{ t: 'list', ordered: false, items: voci }]))
+        assert.equal(markdownInTestoSemplice(input), voci.map(x => `• ${x}`).join('\n'))
+    }
+    assert.equal(markdownInHtml('- uno\n\n- due'), '<ul><li>uno</li></ul>\n<ul><li>due</li></ul>')
+    assert.equal(markdownInHtml('3) tre\n4) quattro'), '<ol><li>tre</li><li>quattro</li></ol>')
+})
+
+test('BC35 — il rientro dipende dalla larghezza del marcatore e dagli spazi', () => {
+    assert.equal(markdownInHtml('10. Padre\n    - Figlio\n11. Altro'), '<ol><li>Padre<ul><li>Figlio</li></ul></li><li>Altro</li></ol>')
+    assert.equal(markdownInHtml('-   Padre\n    - Figlio'), '<ul><li>Padre<ul><li>Figlio</li></ul></li></ul>')
+    assert.equal(markdownInHtml('10. Padre\n   - Vicino'), '<ol><li>Padre</li></ol>\n<ul><li>Vicino</li></ul>')
+    assert.equal(markdownInHtml('- Padre\n - Vicino'), '<ul><li>Padre</li><li>Vicino</li></ul>')
+})
+
+test('BC35 — tabulazioni e righe vuote prima dei figli conservano la gerarchia', () => {
+    assert.equal(markdownInHtml('-\tPadre\n\t- Figlio'), '<ul><li>Padre<ul><li>Figlio</li></ul></li></ul>')
+    assert.equal(markdownInHtml('- Padre\n\n  - Figlio\n\n  - Secondo\n- Altro'), '<ul><li>Padre<ul><li>Figlio</li><li>Secondo</li></ul></li><li>Altro</li></ul>')
+})
+
+test('BC35 — un cambio di marcatore tra figli apre una lista sorella con il suo numero', () => {
+    assert.equal(markdownInHtml('- Padre\n  - A\n  + B\n  3) C\n  4) D'), '<ul><li>Padre<ul><li>A</li></ul><ul><li>B</li></ul><ol start="3"><li>C</li><li>D</li></ol></li></ul>')
+    assert.equal(markdownInTestoSemplice('- Padre\n  3) C\n  4) D'), '• Padre\n  3. C\n  4. D')
+})
+
+test('BC35 — il testo dopo un figlio torna al padre senza cambiare ordine', () => {
+    const testo = '- Padre\n  - Figlio\n    seguito del figlio\n  coda del padre\n- Altro'
+    assert.equal(markdownInHtml(testo), '<ul><li>Padre<ul><li>Figlio seguito del figlio</li></ul><p>coda del padre</p></li><li>Altro</li></ul>')
+    assert.equal(markdownInTestoSemplice(testo), '• Padre\n  • Figlio seguito del figlio\n  coda del padre\n• Altro')
+})
+
+test('BC35 — nove livelli al massimo, il contenuto oltre il limite non scompare', () => {
+    const testo = Array.from({ length: 32 }, (_, i) => `${'  '.repeat(i)}- livello${i}`).join('\n')
+    assert.equal((markdownInHtml(testo).match(/<ul>/g) ?? []).length, 9)
+    for (const uscita of [markdownInHtml(testo), markdownInTestoSemplice(testo), JSON.stringify(markdownInBlocchiReport(testo))]) {
+        for (let i = 0; i < 32; i++) assert.ok(uscita.includes(`livello${i}`))
+    }
+})
+
+test('BC35 — anche i figli applicano protezioni e formattazione in linea', () => {
+    const testo = '- Padre\n  - <script>male</script> **forte** [clicca](javascript:male)'
+    assert.doesNotMatch(markdownInHtml(testo), /<script>|href=/)
+    assert.match(markdownInHtml(testo), /&lt;script&gt;male&lt;\/script&gt; <strong>forte<\/strong>/)
+    assert.doesNotMatch(JSON.stringify(markdownInBlocchiReport(testo)), /"link":/)
+})
+
 /*
  * ═══════════════════════════════════════════════════════════════════════════════════════════
  * ⛔⛔⛔ 12/09/2026 — IL MARKDOWN DEL RAPPORTO SI RENDE

@@ -33,8 +33,8 @@
  *     `**Key Components:**` dentro.
  *
  * ⇒ Un parser **solo**, qui, con TRE uscite: HTML (stringa), blocchi per `document-report.mjs`
- *   (il PDF), testo semplice (il DOCX). Un parser per uscita sarebbero tre rese diverse dello
- *   stesso rapporto, cioè tre documenti che si contraddicono.
+ *   (il PDF), testo semplice. Anche il DOCX legge questi blocchi. Parser separati darebbero
+ *   rese diverse dello stesso rapporto, cioè documenti che si contraddicono.
  * ⛔ Zero dipendenze nuove: `package.json` non ha un motore Markdown e non ne prende uno per
  *   questo.
  * ⛔ **NON è un motore CommonMark**, e non deve diventarlo — stessa dichiarazione del renderer
@@ -73,7 +73,7 @@
 /**
  * @typedef {{t:'h', lvl:number, x:string}
  *   | {t:'p', x:string}
- *   | {t:'lista', ordinata:boolean, voci:string[]}
+ *   | {t:'lista', ordinata:boolean, inizio?:number, voci:Array<string|{x:string, figli:BloccoMarkdown[]}>}
  *   | {t:'citazione', x:string}
  *   | {t:'codice', lingua:string|null, x:string}
  *   | {t:'riga'}
@@ -89,9 +89,88 @@ const RE_TITOLO = /^ {0,3}(#{1,6})(?:\s+(.*?))?\s*#*\s*$/;
 const RE_RECINTO = /^ {0,3}(`{3,}|~{3,})\s*([^\s`]*)\s*$/;
 const RE_CITAZIONE = /^ {0,3}>(?: ?)(.*)$/;
 const RE_PUNTO = /^ {0,3}([-+*])(?:\s+(.*))?$/;
-const RE_NUMERO = /^ {0,3}(\d{1,9})[.)](?:\s+(.*))?$/;
 const RE_SEPARATORE = /^ {0,3}(?:(?:-[ \t]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})$/;
 const RE_DELIMITATORE_TABELLA = /^ {0,3}\|?(?:\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?\s*$/;
+
+// BC35, CommonMark 0.31.2 §5.2; docx 9.5.1 ammette livelli 0–8.
+// Oltre il limite il testo resta nella voce più profonda, senza ulteriore ricorsione.
+export const PROFONDITA_MASSIMA_ELENCHI = 9;
+
+function colonneRientro(spazi, colonna = 0) {
+    for (const c of spazi) colonna += c === '\t' ? 4 - colonna % 4 : 1;
+    return colonna;
+}
+
+function marcatoreElenco(riga) {
+    const m = /^([ \t]*)([-+*]|(\d{1,9})[.)])(?:([ \t]+)(.*)|$)/.exec(riga);
+    if (!m) return null;
+    const rientro = colonneRientro(m[1]);
+    const fine = rientro + m[2].length;
+    const spazi = colonneRientro(m[4] ?? '', fine) - fine;
+    return {
+        rientro, contenuto: fine + (spazi >= 1 && spazi <= 4 && m[5] ? spazi : 1),
+        ordinata: m[3] !== undefined, numero: Number(m[3] ?? 1),
+        tipo: m[3] === undefined ? m[2] : m[2].at(-1), x: m[5] ?? '',
+    };
+}
+
+/** Estende le sole liste: le voci senza figli mantengono la precedente forma stringa. */
+function analizzaElenco(righe, inizio, base = 0, profondita = 0) {
+    const primo = marcatoreElenco(righe[inizio]);
+    const lista = { t: 'lista', ordinata: primo.ordinata, voci: [primo.x] };
+    // Compatibilità storica: i numeri iniziali delle liste piatte restano normalizzati a 1.
+    if (profondita > 0 && primo.ordinata && primo.numero !== 1) lista.inizio = primo.numero;
+    let corrente = primo;
+    let i = inizio + 1;
+    const voceConFigli = () => {
+        if (typeof lista.voci.at(-1) === 'string') lista.voci[lista.voci.length - 1] = { x: lista.voci.at(-1), figli: [] };
+        return lista.voci.at(-1);
+    };
+    const continua = (testo) => {
+        const voce = lista.voci.at(-1);
+        if (typeof voce === 'string') lista.voci[lista.voci.length - 1] = `${voce} ${testo}`.trim();
+        else if (voce.figli.at(-1)?.t === 'p') voce.figli.at(-1).x += ` ${testo}`;
+        else voce.figli.push({ t: 'p', x: testo });
+    };
+    for (; i < righe.length;) {
+        const riga = righe[i];
+        if (!riga.trim()) {
+            let j = i + 1;
+            while (j < righe.length && !righe[j].trim()) j++;
+            const prossimo = j < righe.length ? marcatoreElenco(righe[j]) : null;
+            // Righe vuote interne ai figli: una lista piatta invece si separa come prima.
+            if (prossimo && (prossimo.rientro >= corrente.contenuto
+                || (profondita > 0 && prossimo.rientro >= base))) { i = j; continue; }
+            break;
+        }
+        const altro = marcatoreElenco(riga);
+        const rientro = colonneRientro(/^[ \t]*/.exec(riga)[0]);
+        if (rientro < base) break;
+        if (altro && altro.rientro >= corrente.contenuto) {
+            if (profondita + 1 >= PROFONDITA_MASSIMA_ELENCHI) { continua(riga.trim()); i++; continue; }
+            if (altro.rientro <= corrente.contenuto + 3) {
+                const figlio = analizzaElenco(righe, i, corrente.contenuto, profondita + 1);
+                voceConFigli().figli.push(figlio.lista);
+                i = figlio.fine;
+                continue;
+            }
+        }
+        if (altro && altro.rientro <= base + 3) {
+            if (altro.ordinata !== lista.ordinata || (profondita > 0 && altro.tipo !== primo.tipo)) break;
+            lista.voci.push(altro.x);
+            corrente = altro;
+            i++;
+            continue;
+        }
+        // Il testo meno rientrato del contenuto di un figlio appartiene alla voce padre.
+        if (profondita > 0 && rientro < corrente.contenuto) break;
+        if (RE_TITOLO.test(riga) || RE_RECINTO.test(riga)) break;
+        continua(riga.trim());
+        i++;
+    }
+    lista.voci = lista.voci.filter(v => v !== '');
+    return { lista, fine: i };
+}
 
 /** Le celle di una riga di tabella. ⛔ Un `\|` è una barra DENTRO la cella, non un separatore. */
 function celleDiRiga(riga) {
@@ -206,27 +285,12 @@ export function analizzaMarkdown(testo) {
             continue;
         }
 
-        const punto = RE_PUNTO.exec(riga);
-        const numero = RE_NUMERO.exec(riga);
-        if (punto || numero) {
+        const marcatore = marcatoreElenco(riga);
+        if (marcatore && marcatore.rientro <= 3) {
             chiudiParagrafo();
-            const ordinata = Boolean(numero);
-            const voci = [(punto ? punto[2] : numero[2]) ?? ''];
-            let j = i + 1;
-            for (; j < righe.length; j += 1) {
-                if (righe[j].trim() === '') break;
-                const altroPunto = RE_PUNTO.exec(righe[j]);
-                const altroNumero = RE_NUMERO.exec(righe[j]);
-                if (ordinata ? altroNumero : altroPunto) {
-                    voci.push(((ordinata ? altroNumero[2] : altroPunto[2]) ?? ''));
-                    continue;
-                }
-                if (altroPunto || altroNumero || RE_TITOLO.test(righe[j]) || RE_RECINTO.test(righe[j])) break;
-                // Continuazione della voce precedente (una riga rientrata, o pigra).
-                voci[voci.length - 1] = `${voci[voci.length - 1]} ${righe[j].trim()}`.trim();
-            }
-            blocchi.push({ t: 'lista', ordinata, voci: voci.filter((v) => v !== '') });
-            i = j - 1;
+            const risultato = analizzaElenco(righe, i);
+            blocchi.push(risultato.lista);
+            i = risultato.fine - 1;
             continue;
         }
 
@@ -342,6 +406,16 @@ export function inlineInHtml(testo) {
     return htmlDiFrammenti(analizzaInline(testo));
 }
 
+function elencoInHtml(blocco) {
+    const tag = blocco.ordinata ? 'ol' : 'ul';
+    const inizio = blocco.inizio !== undefined ? ` start="${blocco.inizio}"` : '';
+    return `<${tag}${inizio}>${blocco.voci.map(voce => {
+        if (typeof voce === 'string') return `<li>${inlineInHtml(voce)}</li>`;
+        const figli = voce.figli.map(b => b.t === 'lista' ? elencoInHtml(b) : `<p>${inlineInHtml(b.x)}</p>`).join('');
+        return `<li>${inlineInHtml(voce.x)}${figli}</li>`;
+    }).join('')}</${tag}>`;
+}
+
 /**
  * Il Markdown reso in HTML. ⛔ Ogni valore passa da `escapeHtml`: un `<script>` nel rapporto
  * resta testo a schermo, sempre.
@@ -369,8 +443,7 @@ export function markdownInHtml(testo, opzioni = {}) {
                 break;
             }
             case 'lista': {
-                const tag = blocco.ordinata ? 'ol' : 'ul';
-                fuori.push(`<${tag}>${blocco.voci.map((voce) => `<li>${inlineInHtml(voce)}</li>`).join('')}</${tag}>`);
+                fuori.push(elencoInHtml(blocco));
                 break;
             }
             case 'tabella': {
@@ -411,8 +484,20 @@ export function runsDiMarkdown(testo) {
     return runs.length === 1 && !runs[0].bold && !runs[0].italics && !runs[0].link ? runs[0].text : runs;
 }
 
+function elencoInReport(blocco) {
+    return {
+        t: 'list', ordered: blocco.ordinata,
+        ...(blocco.inizio !== undefined ? { start: blocco.inizio } : {}),
+        items: blocco.voci.map(voce => typeof voce === 'string' ? runsDiMarkdown(voce) : {
+            x: runsDiMarkdown(voce.x),
+            figli: voce.figli.map(b => b.t === 'lista' ? elencoInReport(b) : { t: 'p', x: runsDiMarkdown(b.x) }),
+        }),
+    };
+}
+
 /**
- * Il Markdown in blocchi che `document-report.mjs` sa impaginare.
+ * Il Markdown in blocchi del rapporto. Per le voci con figli, `document-generator.mjs`
+ * adatta l'uscita di `document-report.mjs` alle liste native di pdfmake.
  * ⛔ Non esiste un blocco «citazione» in quello schema: si usa `note`, che è il riquadro tenue —
  *   la stessa forma con cui il PDF della ricerca mostra già i passaggi citati.
  * @returns {object[]}
@@ -428,7 +513,7 @@ export function markdownInBlocchiReport(testo, opzioni = {}) {
             case 'riga': fuori.push({ t: 'spacer' }); break;
             // Un recinto resta monospazio-che-non-abbiamo: almeno non si spezza in paragrafi.
             case 'codice': fuori.push({ t: 'note', x: blocco.x }); break;
-            case 'lista': fuori.push({ t: 'list', ordered: blocco.ordinata, items: blocco.voci.map(runsDiMarkdown) }); break;
+            case 'lista': fuori.push(elencoInReport(blocco)); break;
             case 'tabella': fuori.push({
                 t: 'table',
                 head: blocco.intestazione.map(runsDiMarkdown),
@@ -442,17 +527,23 @@ export function markdownInBlocchiReport(testo, opzioni = {}) {
     return fuori;
 }
 
-/* ──────────────────────────── uscita 3: testo semplice (il DOCX) ──────────────────────────── */
+/* ──────────────────────────── uscita 3: testo semplice ──────────────────────────── */
+
+function elencoInTesto(blocco, profondita = 0) {
+    return blocco.voci.map((voce, i) => {
+        const x = typeof voce === 'string' ? voce : voce.x;
+        const prefisso = blocco.ordinata ? `${(blocco.inizio ?? 1) + i}. ` : '• ';
+        const riga = `${'  '.repeat(profondita)}${prefisso}${inlineInTestoSemplice(x)}`;
+        if (typeof voce === 'string') return riga;
+        return [riga, ...voce.figli.map(b => b.t === 'lista' ? elencoInTesto(b, profondita + 1)
+            : `${'  '.repeat(profondita + 1)}${inlineInTestoSemplice(b.x)}`)].join('\n');
+    }).join('\n');
+}
 
 /**
  * Il Markdown ridotto a prosa leggibile: niente marcatori, elenchi con un punto vero, una riga
  * vuota fra i blocchi.
- *
- * ⛔ Perché il DOCX si accontenta di questo, e va detto: `generateTalosDocument` costruisce il
- *   `.docx` da `body` facendo **un paragrafo per riga**, e accetta i blocchi impaginati solo per
- *   il `pdf` (`TALOS_DOCUMENT_REPORT_PDF_ONLY`). Dare al DOCX veri titoli di Word vorrebbe dire
- *   cambiare quel generatore, che è condiviso con `document_create` e non è di questo lotto. ⇒ qui
- *   i titoli restano paragrafi — ma **senza cancelletti**, che era il difetto.
+ * Il DOCX ora usa direttamente `analizzaMarkdown`: questa uscita conserva la prosa leggibile.
  */
 export function markdownInTestoSemplice(testo) {
     const fuori = [];
@@ -464,7 +555,7 @@ export function markdownInTestoSemplice(testo) {
             case 'citazione': fuori.push(`« ${piatto(blocco.x)} »`); break;
             case 'riga': fuori.push('———'); break;
             case 'codice': fuori.push(blocco.x); break;
-            case 'lista': fuori.push(blocco.voci.map((voce, i) => (blocco.ordinata ? `${i + 1}. ${piatto(voce)}` : `• ${piatto(voce)}`)).join('\n')); break;
+            case 'lista': fuori.push(elencoInTesto(blocco)); break;
             case 'tabella': fuori.push([blocco.intestazione, ...blocco.righe].map((riga) => riga.map(piatto).join(' · ')).join('\n')); break;
             /* c8 ignore next 2 */
             default: break;

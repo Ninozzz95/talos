@@ -6,7 +6,6 @@ import {
     inlineInHtml,
     markdownInBlocchiReport,
     markdownInHtml,
-    markdownInTestoSemplice,
 } from './markdown-server.mjs'
 import {
     TALOS_RESEARCH_PDF_DEFAULT_TONE,
@@ -544,9 +543,9 @@ export async function costruisciEsportazione({ ricerca, formato, tono }, deps = 
         }
         case 'docx': {
             const genera = deps.generaDocumentoFn ?? (await import('../document-generator.mjs')).generateTalosDocument
-            /* ⛔ 12/09: `markdownInTestoSemplice` e non il Markdown grezzo. Un `.docx` con
-               `## Executive Summary` dentro e' lo stesso difetto dell'HTML, scritto in Word. */
-            const prosa = markdownInTestoSemplice(senzaIlRecinto(prosaDisponibile(ricerca) ?? ''))
+            // BC35: il generatore condiviso interpreta titoli e liste. Appiattire qui
+            // cancellerebbe la struttura prima che Word possa riceverla.
+            const prosa = senzaIlRecinto(prosaDisponibile(ricerca) ?? '')
             const documento = await genera({
                 format: 'docx',
                 title: ricerca.domanda ?? 'Ricerca approfondita',
