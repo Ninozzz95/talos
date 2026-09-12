@@ -1,6 +1,6 @@
 import {aggiornaProviderList,montaProviderPanel} from '../components/provider-card.js';
 import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica, valoriPolitiche } from '../components/politiche.js';
-import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore
+import { PROVIDER_DIRETTI, eFonteDiretta, fontiDelSelettore, modelliDellaFonte, fraseVuotoDiretto, senzaChiave } from '../components/fonti-modelli.js'; // BC-12 (11/09): «Diretti» si spezza in una scheda per fornitore // P-C (12/09): un motore locale non ha chiave da collegare
 import { statoAvvioSessione } from '../components/avvio-sessione.js'; // BC-14 (11/09): «Avvia» non mente più sul perché è fermo
 import { nomeLeggibileSessione, aggiornaSessionItem } from '../components/session-item.js'; // N1 (10/09): la riga della sessione viva cambia sul posto
 import { collegaScia, aggiornaTutteLeScie } from '../components/range-scia.js';
@@ -6133,7 +6133,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       try {
         const dati = await apiGet('/api/v1/providers');
         const elenco = dati.items || dati.providers || [];
-        const conChiave = new Set(elenco.filter((p) => p.keyConfigured).map((p) => p.id));
+        /* ⛔ 12/09, P-C: «ha la chiave» non e piu la sola condizione per avere un catalogo. LM
+           Studio gira su questo computer e non ne chiede nessuna: con il filtro di prima la sua
+           scheda sarebbe rimasta vuota per sempre, cioe il difetto che P-C esiste per togliere. */
+        const conChiave = new Set(elenco.filter((p) => p.keyConfigured || senzaChiave(p.id)).map((p) => p.id));
         const perFornitore = {};
         await Promise.all(PROVIDER_DIRETTI.map(async ({ id, etichetta }) => {
           if (!conChiave.has(id)) { perFornitore[id] = null; return; } // niente chiave ≠ zero modelli
