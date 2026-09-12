@@ -2966,6 +2966,23 @@ export function createSessionRegistry({
         : undefined,
       // ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge, GLOBALE come cartellaMemoria: agent-service.mjs costruisce onForgeCrea/toolForge/eseguiToolForgeFn da qui.
       cartellaForge,
+      /*
+       * ⭐⭐⭐ BC-38 (12/09/2026) — DA QUALE SESSIONE nasce un file di Libreria.
+       *
+       * ⛔ Misurato prima di scriverlo, non presunto: `avviaSessione` non riceve NESSUNA identità
+       *   di sessione (nessun `sessionId`, nessun `nome`, nessun `taskId` fra i suoi parametri —
+       *   `agent-service.mjs:209`), quindi i tre punti che salvano in Libreria da dentro il giro
+       *   (artefatto, `document_create`, `generate_image`) non potevano scriverlo nemmeno
+       *   volendo. Qui invece `sessionId` e `voce` sono in ambito: il legame si aggiunge nel solo
+       *   posto che lo conosce, avvolgendo la funzione che il kernel già riceve.
+       * ⛔ `...voceLib` DOPO i due campi: se un chiamante passasse un suo `sessionId` vince il suo.
+       *   E il nome viaggia com'è ADESSO, congelato nel meta: una sessione rinominata domani non
+       *   riscrive la storia dei file che ha prodotto ieri.
+       */
+      salvaVoceLibreriaFn: (voceLib, depsLib) => salvaVoceLibreriaFn(
+        { sessionId, sessionNome: voce.nome ?? null, ...voceLib },
+        depsLib,
+      ),
       onEvento: (evento) => broadcast(voce, evento),
     };
     const esecuzione = providerEffettivo === 'local'
@@ -4232,14 +4249,28 @@ export function createSessionRegistry({
       if (!voce) return { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' };
       let voci;
       try {
-        voci = await elencaVociRegistroFn({ cartella: voce.cartella });
+        voci = await elencaVociRegistroFn({ cartella: voce.cartella, conProvenienza: true });
       } catch (errore) {
         if (errore instanceof LibraryStoreError) return { ok: true, voci: null, errore: errore.message };
         throw errore;
       }
       return {
         ok: true,
-        voci: voci.map((v) => ({ id: v.id, nome: v.nome, fileType: v.fileType, origine: v.origine, aggiornatoIl: v.aggiornatoIl })),
+        /*
+         * ⭐⭐⭐ BC-38 (12/09/2026), owner: «mettere il percorso dei file nella Libreria… nel
+         *   dettaglio anche da chi sono stati creati e da quale sessione».
+         * ⛔ ADDITIVO: i cinque campi di ieri escono identici, nello stesso ordine. I quattro nuovi
+         *   arrivano da `conProvenienza` (library-store.mjs) e sono per la PERSONA soltanto —
+         *   l'attrezzo `library_list` del modello NON passa di qui e non vede un byte diverso.
+         * ⛔ `?? null` su tutti e quattro: un magazzino iniettato dai test che torna le voci di
+         *   ieri non deve far uscire `undefined` (che sparirebbe dal JSON), ma un «non registrato»
+         *   esplicito che chi disegna sa leggere.
+         */
+        voci: voci.map((v) => ({
+          id: v.id, nome: v.nome, fileType: v.fileType, origine: v.origine, aggiornatoIl: v.aggiornatoIl,
+          cartella: v.cartella ?? null, percorso: v.percorso ?? null,
+          creatoDa: v.creatoDa ?? null, sessione: v.sessione ?? null,
+        })),
         errore: null,
       };
     },

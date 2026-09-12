@@ -17,6 +17,7 @@ import {
   leggiBytesVoce,
   leggiVoce,
   origineVoce,
+  percorsoAssolutoVoce,
   percorsoContenutoVoce,
   rinominaVoce,
   salvaVoce,
@@ -559,6 +560,120 @@ test('⛔⛔⛔ AL CONTRARIO — un id con "../" non legge, non rinomina e non c
     assert.deepEqual(JSON.parse(readFileSync(join(cartella, 'meta.json'), 'utf8')), { nome: 'esca.md' });
     assert.deepEqual((await elencaVoci({ cartella })).map((v) => v.id), [idVero]);
     assert.equal((await leggiVoce({ cartella, id: idVero })).testo, 'contenuto vero');
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+/* ============================================================================================
+ * BC-38 (12/09/2026), owner: «mettere il percorso dei file nella Libreria… nel dettaglio anche
+ * da chi sono stati creati e da quale sessione».
+ *
+ * ⛔ Provati nei DUE VERSI, come vuole la regola: una voce NUOVA (sessione registrata) e una
+ *   VECCHIA (meta.json senza sessionId, cioè ogni voce scritta prima di oggi). E il caso che
+ *   rompe tutto se nessuno lo prova: un meta.json malformato non deve far cadere l'elenco in un
+ *   modo diverso da ieri.
+ * ============================================================================================ */
+
+test('⭐⭐⭐ BC-38 percorsoAssolutoVoce: il percorso che si incolla in Esplora file, e null per un id che non è un nome', () => {
+  const dentro = percorsoAssolutoVoce('C:/progetto', 'lib-abc');
+  assert.ok(dentro.endsWith(join(CARTELLA_LIBRERIA, 'lib-abc', 'contenuto')), dentro);
+  assert.ok(dentro.startsWith('C:'), dentro);
+  // ⛔ AL CONTRARIO: la stessa grammatica di percorsoContenutoVoce, mai un percorso inventato.
+  assert.equal(percorsoAssolutoVoce('C:/progetto', '../fuga'), null);
+  assert.equal(percorsoAssolutoVoce('C:/progetto', ''), null);
+  assert.equal(percorsoAssolutoVoce('', 'lib-abc'), null);
+});
+
+test('⭐⭐⭐ BC-38 salvaVoce + elencaVoci({conProvenienza}): percorso, cartella, creatoDa e sessione di una voce NUOVA', async () => {
+  const cartella = cartellaVera();
+  try {
+    const id = await salvaVoce({
+      cartella, nome: 'rapporto.md', mediaType: 'text/markdown', origine: 'generated',
+      testo: '# vero', modello: 'z-ai/glm-5.3-flash', provider: 'openrouter',
+      sessionId: 'c8e9b07b', sessionNome: 'Ricerca sugli harness',
+    });
+    // Il legame è sul DISCO, non solo in memoria: chi riapre domani lo ritrova.
+    const meta = JSON.parse(readFileSync(join(cartella, CARTELLA_LIBRERIA, id, 'meta.json'), 'utf8'));
+    assert.equal(meta.sessionId, 'c8e9b07b');
+    assert.equal(meta.sessionNome, 'Ricerca sugli harness');
+
+    const [voce] = await elencaVoci({ cartella, conProvenienza: true });
+    assert.equal(voce.percorso, join(cartella, CARTELLA_LIBRERIA, id, 'contenuto'));
+    assert.equal(voce.cartella, cartella);
+    assert.deepEqual(voce.creatoDa, { tipo: 'modello', modello: 'z-ai/glm-5.3-flash', provider: 'openrouter' });
+    assert.deepEqual(voce.sessione, { id: 'c8e9b07b', nome: 'Ricerca sugli harness' });
+    // ⛔ ADDITIVO: i cinque campi di ieri sono ancora lì, identici.
+    assert.equal(voce.nome, 'rapporto.md');
+    assert.equal(voce.fileType, 'document');
+    assert.equal(voce.origine, 'generated');
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ BC-38 AL CONTRARIO — una voce VECCHIA (nessun sessionId nel meta) resta leggibile con sessione null', async () => {
+  const cartella = cartellaVera();
+  try {
+    // Esattamente la forma che oggi c'è sul disco dell'owner: nessun modello, nessuna sessione.
+    const dove = join(cartella, CARTELLA_LIBRERIA, 'lib-vecchia');
+    mkdirSync(dove, { recursive: true });
+    writeFileSync(join(dove, 'meta.json'), JSON.stringify({
+      nome: 'File di prova - Word.docx',
+      mediaType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      origine: 'generated',
+      creatoIl: '2026-09-11T18:08:49.041Z',
+      aggiornatoIl: '2026-09-11T18:08:49.041Z',
+    }), 'utf8');
+    writeFileSync(join(dove, 'contenuto'), 'x', 'utf8');
+
+    const [voce] = await elencaVoci({ cartella, conProvenienza: true });
+    assert.equal(voce.sessione, null, 'una sessione non registrata NON si inventa');
+    assert.deepEqual(voce.creatoDa, { tipo: 'modello', modello: null, provider: null });
+    assert.equal(voce.percorso, join(cartella, CARTELLA_LIBRERIA, 'lib-vecchia', 'contenuto'));
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⭐⭐ BC-38: un file CARICATO è creato da una persona, e un sessionId vuoto non conta come sessione', async () => {
+  const cartella = cartellaVera();
+  try {
+    await salvaVoce({ cartella, nome: 'caricato.txt', mediaType: 'text/plain', origine: 'uploaded', testo: 'x', sessionId: '   ' });
+    const [voce] = await elencaVoci({ cartella, conProvenienza: true });
+    assert.deepEqual(voce.creatoDa, { tipo: 'persona' });
+    assert.equal(voce.sessione, null, 'uno spazio non è un id di sessione');
+    // ⛔ E il meta non porta chiavi vuote: un campo assente è più onesto di un campo vuoto.
+    const meta = JSON.parse(readFileSync(join(cartella, CARTELLA_LIBRERIA, voce.id, 'meta.json'), 'utf8'));
+    assert.equal('sessionId' in meta, false);
+    assert.equal('sessionNome' in meta, false);
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔⛔ BC-38: SENZA conProvenienza l’elenco del MODELLO è identico a ieri, campo per campo', async () => {
+  const cartella = cartellaVera();
+  try {
+    await salvaVoce({
+      cartella, nome: 'gen.md', mediaType: 'text/markdown', origine: 'generated', testo: 'x',
+      modello: 'm', provider: 'p', sessionId: 's1', sessionNome: 'nome',
+    });
+    const [voce] = await elencaVoci({ cartella });
+    assert.deepEqual(Object.keys(voce).sort(), ['aggiornatoIl', 'creatoIl', 'fileType', 'id', 'mediaType', 'modello', 'nome', 'origine', 'provider']);
+  } finally {
+    rmSync(cartella, { recursive: true, force: true });
+  }
+});
+
+test('⛔⛔ BC-38 AL CONTRARIO — un meta.json malformato ferma l’elenco allo STESSO modo con e senza provenienza', async () => {
+  const cartella = cartellaVera();
+  try {
+    const dove = join(cartella, CARTELLA_LIBRERIA, 'lib-rotta');
+    mkdirSync(dove, { recursive: true });
+    writeFileSync(join(dove, 'meta.json'), '{ non json', 'utf8');
+    await assert.rejects(() => elencaVoci({ cartella }), LibraryStoreError);
+    await assert.rejects(() => elencaVoci({ cartella, conProvenienza: true }), LibraryStoreError);
   } finally {
     rmSync(cartella, { recursive: true, force: true });
   }

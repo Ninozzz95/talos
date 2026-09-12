@@ -48,7 +48,8 @@
 import { titoloNota, quandoNota, sommarioNote } from './note.js';
 import { genereMemoria, testiMemoria } from './memoria.js';
 import { statoAttivita, prioritaAttivita, testiAttivita, riepilogoAttivita } from './attivita.js';
-import { tipoVoceLibreria, origineVoceLibreria, testiVoceLibreria, azioniLibreria, indirizzoFileLibreria, creaLibraryRow } from './libreria.js';
+import { provenienzaVoceLibreria, tipoVoceLibreria, origineVoceLibreria, testiVoceLibreria, azioniLibreria, indirizzoFileLibreria, creaLibraryRow } from './libreria.js';
+import { nomeLeggibileSessione } from './session-item.js'; // BC-38: il nome umano di una sessione è scritto una volta sola
 import { magazzinoFileLibreria, montaAnteprimaFile, lettoreFileLibreria } from './libreria-anteprima.js';
 import { riepilogoRicerche } from './ricerca.js';
 /* 11/09 lotto L7 — la Ricerca approfondita ha un dentro: parole degli stati, bilancio, cinque
@@ -833,6 +834,14 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
    *   `libreria-anteprima.js`. Qui resta la sola COLLA fra i dati e l'impianto, come per le altre.
    */
   const magazzinoFile = magazzinoFileLibreria(schermo);
+  /*
+   * ⭐⭐⭐ BC-38 — DOVE VIVE e CHI L'HA FATTO. La lettura è PURA e vive in `libreria.js` accanto
+   *   alla riga: qui resta la sola colla, come per ogni altra sezione.
+   * ⛔ `nomeSessione` è iniettato da chi ha l'elenco vivo delle sessioni (la app). Assente ⇒ si
+   *   usa il nome congelato nel `meta.json` al momento della scrittura, e se manca anche quello
+   *   il nome leggibile ricavato dall'id: mai un identificatore grezzo come testo principale.
+   */
+  const prov = (v) => provenienzaVoceLibreria(v, { nomeSessione: opzioni.nomeSessione });
   const ridisegna = () => aggiornaPaginaLibreria(schermo, voci, opzioni);
   const leggiFile = typeof opzioni.leggiFile === 'function' ? opzioni.leggiFile : lettoreFileLibreria(sessionId);
   const servizio = servizioVero && {
@@ -888,7 +897,13 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       return {
         alto: [icona(tipo.icona), nodo(doc, 'span', '', tipo.testo), etichetta(origineVoceLibreria(v?.origine), v?.origine === 'generated' ? 'accent' : '')],
         corpo: [copertina],
-        basso: [nodo(doc, 'span', '', t.dataBreve)],
+        /* ⭐ BC-38, owner: «nella card/riga SOLO la cartella». Nel piede della scheda sta accanto
+           alla data, come la seconda voce del piede di Note e Attività — stessa griglia, nessuna
+           decorazione nuova. Vuota su una voce che non porta la provenienza: niente riga. */
+        basso: [
+          nodo(doc, 'span', '', t.dataBreve),
+          ...(prov(v).cartellaBreve ? [nodo(doc, 'span', '', `in ${prov(v).cartellaBreve}`)] : []),
+        ],
       };
     },
     dettaglio: (v, { doc, etichetta }) => {
@@ -929,6 +944,10 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
         azioni: servizio,
         onCambiata: opzioni.onCambiata,
         onMenu: opzioni.onMenu,
+        /* ⭐ BC-38: la riga ospitata qui porta le stesse due iniezioni dell'elenco — il menu «⸨»
+           che il dettaglio riusa è lo STESSO, quindi «Copia percorso» c'è in tutti e due i posti. */
+        nomeSessione: opzioni.nomeSessione,
+        copia: opzioni.copia,
       });
       /*
        * ⛔ VISTO NELLA FOTO: nel riquadro «Azioni sul file» si vedeva solo un riquadro vuoto. Il
@@ -940,8 +959,76 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       riga.querySelector('[data-azione="menu"]')?.prepend(doc.createTextNode('Tutte le azioni'));
       ospite.append(riga);
       pezzi.push(ospite);
-      const dove = indirizzoFileLibreria(sessionId, v?.id);
-      if (dove) pezzi.push(nodo(doc, 'p', 'td-subtle', 'Il file vive in .harness-ui-library/, dentro il progetto.'));
+      /*
+       * ⭐⭐⭐ BC-38 (12/09/2026), owner: «nel dettaglio sidebar anche da chi sono stati creati e da
+       *   quale sessione». Qui c'era una frase segnaposto — «Il file vive in .harness-ui-library/,
+       *   dentro il progetto» — che diceva la stessa cosa per TUTTI i file e non serviva a nessuno:
+       *   è la cartella interna, uguale per ogni voce, e non si può né incollare né riconoscere.
+       *   La stessa frase sta già due volte nella pagina (introduzione e stato vuoto).
+       * ⛔ `dl.td-andata` e non tre paragrafi: è la griglia etichetta/valore che la Ricerca
+       *   approfondita usa già (`ricerca-dettaglio.js`, `vistaAndata`), e il suo `dd` ha già
+       *   `overflow-wrap: anywhere` — cioè esattamente ciò che serve a un percorso lungo.
+       * ⛔ Il percorso NON si accorcia: si manda a capo. Un percorso con i puntini non si incolla,
+       *   e questo valore esiste per essere copiato (VS Code, «Copy Breadcrumbs Path»).
+       */
+      const p = prov(v);
+      pezzi.push(nodo(doc, 'h3', '', 'Dove vive'));
+      const righe = nodo(doc, 'dl', 'td-andata');
+      const rigaKV = (etichettaTesto, valore) => {
+        if (!valore) return;
+        const dd = nodo(doc, 'dd', '');
+        dd.append(typeof valore === 'string' ? doc.createTextNode(valore) : valore);
+        righe.append(nodo(doc, 'dt', '', etichettaTesto), dd);
+      };
+      if (p.percorso) {
+        /*
+         * ⛔ VISTO NELLA FOTO (01/… dark, 12/09): il percorso andava a capo in mezzo a una parola
+         *   — «…Desktop.harnes / s-ui-library…» — perché `overflow-wrap: anywhere` spezza dove
+         *   capita. Spezzare DOPO un separatore è l'unico punto in cui un percorso resta leggibile.
+         * ⛔ `<wbr>` e non un carattere invisibile infilato nel testo: `<wbr>` è a larghezza zero e
+         *   NON entra in ciò che si copia, quindi il valore resta incollabile carattere per
+         *   carattere in Esplora file. `overflow-wrap: anywhere` resta nel CSS come rete: un
+         *   segmento più largo della colonna (una cartella con un nome lunghissimo) deve comunque
+         *   stare dentro, non sfondare il pannello.
+         */
+        const codice = nodo(doc, 'code', 'td-percorso');
+        codice.dataset.percorso = p.percorso;
+        const segmenti = p.percorso.split(/(?<=[\\/])/u);
+        segmenti.forEach((segmento, i) => {
+          codice.append(doc.createTextNode(segmento));
+          if (i < segmenti.length - 1) codice.append(doc.createElement('wbr'));
+        });
+        rigaKV('Percorso', codice);
+      } else {
+        /* ⛔ Stato onesto: la rotta non lo manda (server più vecchio del pannello). Si dice dov'è
+           la cartella, che resta vero, invece di mostrare un percorso inventato. */
+        rigaKV('Percorso', 'Non registrato. Il file vive in .harness-ui-library/, dentro il progetto.');
+      }
+      rigaKV('Creato da', `${p.creatoDa.chi}, ${p.creatoDa.dettaglio}`);
+      if (p.sessione) {
+        const nome = p.sessione.nome || nomeLeggibileSessione(p.sessione.id);
+        if (typeof opzioni.onApriSessione === 'function') {
+          /* ⛔ VISTO NELLA FOTO: l'incavo del bottone spingeva il nome 10px più a destra di
+             «Percorso» e «Creato da», e una colonna di valori fuori squadra si legge come un
+             errore. `td-vai-sessione` lo riporta in riga (mockup-td.css). */
+          const vai = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm td-vai-sessione', nome);
+          vai.type = 'button';
+          vai.dataset.azione = 'apri-sessione';
+          vai.setAttribute('aria-label', `Apri la conversazione ${nome}`);
+          /* ⛔ `({id, nome})` e non due argomenti: è la STESSA forma che la Ricerca approfondita
+             già riceve (`legacy/app.js:5295`, `onApriSessione: ({ id }) => passaASessione(id)`).
+             Due firme diverse per la stessa iniezione sarebbero due cose da tenere allineate. */
+          vai.addEventListener('click', () => opzioni.onApriSessione({ id: p.sessione.id, nome }));
+          rigaKV('Sessione', vai);
+        } else {
+          /* ⛔ Senza chi la sappia aprire NON si disegna un bottone: sarebbe una promessa vuota
+             (stessa regola della riga, che non disegna le azioni senza sessione). */
+          rigaKV('Sessione', nome);
+        }
+      } else {
+        rigaKV('Sessione', 'Non registrata: il file è stato salvato prima che TALOS annotasse la conversazione d’origine.');
+      }
+      pezzi.push(righe);
       return pezzi;
     },
     vuoto: { titolo: 'Nessun file', testo: 'I file caricati o generati dall’agente compaiono qui. Vivono in .harness-ui-library/, dentro il progetto.' },

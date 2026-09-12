@@ -3038,7 +3038,14 @@ test('⛔ AL CONTRARIO — elencaSkill su un id inesistente: NOT_FOUND', async (
  * chiama — stesso schema di `elencaSkill`, senza il concetto di
  * fiducia (una voce di Libreria non ce l'ha, vedi library-store.mjs).
  */
-test('⭐⭐⭐ elencaLibreria: torna le voci dichiarate, id/nome/fileType/origine/aggiornatoIl soltanto', async () => {
+/*
+ * ⭐⭐⭐ BC-38 (12/09/2026), owner: «mettere il percorso dei file nella Libreria… nel dettaglio
+ *   anche da chi sono stati creati e da quale sessione». Il contratto passa da cinque campi a
+ *   NOVE, e la prova resta la stessa: escono quelli DICHIARATI e nient'altro.
+ * ⛔ Ciò che questo test difendeva prima vale ancora: `creatoIl`, `modello` e `provider` NON
+ *   escono dalla rotta — il pannello non li usa, e un campo che esce è un campo da mantenere.
+ */
+test('⭐⭐⭐ elencaLibreria: torna le voci dichiarate — i cinque di ieri PIÙ i quattro della provenienza, e nient altro', async () => {
   const finta = sessioneControllabile();
   const vocePronta = { id: 'lib-1', nome: 'report.md', fileType: 'document', origine: 'uploaded', creatoIl: 'x', aggiornatoIl: '2026-08-29T10:00:00.000Z', modello: null, provider: null };
   const registro = createSessionRegistry({
@@ -3051,7 +3058,15 @@ test('⭐⭐⭐ elencaLibreria: torna le voci dichiarate, id/nome/fileType/origi
 
   assert.equal(esito.ok, true);
   assert.equal(esito.errore, null);
-  assert.deepEqual(esito.voci, [{ id: 'lib-1', nome: 'report.md', fileType: 'document', origine: 'uploaded', aggiornatoIl: '2026-08-29T10:00:00.000Z' }]);
+  assert.deepEqual(esito.voci, [{
+    id: 'lib-1', nome: 'report.md', fileType: 'document', origine: 'uploaded', aggiornatoIl: '2026-08-29T10:00:00.000Z',
+    /* ⛔ Un magazzino che NON porta la provenienza (questo finto, e ogni chiamante di ieri) esce
+       con quattro `null` espliciti, mai con `undefined`: `undefined` sparisce dal JSON e a schermo
+       «non registrato» e «campo assente» diventerebbero indistinguibili. */
+    cartella: null, percorso: null, creatoDa: null, sessione: null,
+  }]);
+  assert.equal('creatoIl' in esito.voci[0], false, 'creatoIl non esce: il pannello non lo usa');
+  assert.equal('modello' in esito.voci[0], false, 'il modello esce dentro creatoDa, non sciolto');
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
@@ -6449,4 +6464,49 @@ test('D3: tre figlie sullo stesso file \u2192 ogni arrivo successivo trova chi c
   assert.equal(seconda.prima, 'f1');
   assert.equal(terza.poi, 'f3');
   assert.ok(['f1', 'f2'].includes(terza.prima), 'la terza trova una sorella che c\u2019era gi\u00e0');
+});
+
+/*
+ * ⭐⭐⭐ BC-38 (12/09/2026) — DA QUALE SESSIONE nasce un file di Libreria.
+ *
+ * ⛔ Misurato prima di scrivere il codice: `avviaSessione` non riceve NESSUNA identità di sessione
+ *   (nessun `sessionId`, nessun `nome`, nessun `taskId` fra i suoi parametri — agent-service.mjs
+ *   riga 209), quindi i tre punti che salvano in Libreria da dentro il giro (artefatto,
+ *   document_create, generate_image) NON POTEVANO scriverlo. Il legame si aggiunge qui, nel solo
+ *   posto che lo conosce. Questa prova è l'unica che può vederlo: dal magazzino non si distingue
+ *   un file di una sessione da quello di un'altra, perché la Libreria è per CARTELLA di progetto.
+ */
+test('⭐⭐⭐ BC-38: il kernel salva in Libreria e la voce nasce già sapendo sessionId e nome', async () => {
+  const finta = sessioneControllabile();
+  const salvate = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    salvaVoceLibreriaFn: async (voce) => { salvate.push(voce); return 'lib-1'; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  await registro.rinomina(sessionId, 'Relazione trimestrale');
+
+  // Il kernel salva un artefatto: quello che arriva al magazzino porta già il legame.
+  await finta.ultimoInput.salvaVoceLibreriaFn({ cartella: 'C:/p', nome: 'a.html', mediaType: 'text/html', origine: 'generated', testo: 'x' });
+  assert.equal(salvate.length, 1);
+  assert.equal(salvate[0].sessionId, sessionId);
+  assert.equal(salvate[0].sessionNome, 'Relazione trimestrale');
+  // ⛔ E nient'altro cambia: il resto della voce arriva identico a come il kernel l'ha scritta.
+  assert.equal(salvate[0].nome, 'a.html');
+  assert.equal(salvate[0].origine, 'generated');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('⛔ BC-38 AL CONTRARIO: una sessione SENZA nome passa l id e nessun nome inventato', async () => {
+  const finta = sessioneControllabile();
+  const salvate = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    salvaVoceLibreriaFn: async (voce) => { salvate.push(voce); return 'lib-2'; },
+  });
+  const { sessionId } = registro.avvia('task-vero');
+  await finta.ultimoInput.salvaVoceLibreriaFn({ cartella: 'C:/p', nome: 'b.md', mediaType: 'text/markdown', origine: 'generated', testo: 'y' });
+  assert.equal(salvate[0].sessionId, sessionId);
+  assert.equal(salvate[0].sessionNome, null, 'un nome che non c e resta null, mai il taskId travestito da nome');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });

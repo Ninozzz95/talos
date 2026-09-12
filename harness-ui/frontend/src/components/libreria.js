@@ -1,4 +1,5 @@
 import { plurale } from './plurale.js'; // BH-12: «1 ricordi» — il plurale vive in un posto solo
+import { nomeModelloUmano } from './chat-foot.js'; // BC-38: un id di modello non è un nome, e la traduzione esiste già
 /** LibraryRow del mockup, metadati GET /library. WAI Tabs/Disclosure, 05/09/2026. */
 /*
  * ⛔⛔ 10/09/2026, owner: «ogni artefatto va salvato in libreria, con CRUD COMPLETO e azioni Windows».
@@ -54,6 +55,93 @@ export function testiVoceLibreria(voce){
  const data=typeof voce?.aggiornatoIl==='string'?new Date(voce.aggiornatoIl):null,valida=data&&Number.isFinite(data.getTime());
  return {nome,aggiornata:valida?data.toLocaleString('it-IT'):null,dataBreve:valida?'Aggiornato il '+data.toLocaleDateString('it-IT'):'Data non registrata'};
 }
+
+/*
+ * ⭐⭐⭐ BC-38 — DOVE VIVE UN FILE, E CHI L'HA FATTO (12/09/2026)
+ *
+ * Owner: «mettere il percorso dei file nella Libreria. Nel dettaglio (sidebar) e nella card/riga
+ * SOLO la cartella; nel dettaglio sidebar anche da chi sono stati creati e da quale sessione».
+ *
+ * ## Ricerca PRIMA di scrivere (12/09/2026) — fonti primarie, non blog
+ *
+ * ⛔ Il budget di ricerca web della sessione era esaurito (200/200): le fonti qui sotto sono state
+ *   lette con WebFetch sulle pagine ufficiali, e la data è quella della lettura.
+ *
+ * ⭐ Hermes Agent (NousResearch, l'obiettivo da battere) — README del repo `hermes-agent` e
+ *   `hermes-agent.nousresearch.com/docs`: NON esiste un pannello Libreria/File/Artefatti
+ *   documentato; c'è solo «Context Files — project context files that shape every conversation».
+ *   Dove scrive un percorso lo scrive relativo alla home (`~/.hermes/skills/…`).
+ *   ⇒ Sulla provenienza di un file non hanno niente da copiare: qui il +1 è tutto nostro.
+ * ⭐ VS Code — «Breadcrumbs always show the FILE PATH», sempre visibile sopra l'editor; il
+ *   percorso INTERO non sta in un tooltip ma dietro un COMANDO («Copy Breadcrumbs Path» dal menu
+ *   della scheda), e la cartella si raggiunge con «Reveal in File Explorer». Nelle etichette di
+ *   scheda personalizzate la forma consigliata è `${dirname}/${filename}` — cioè SOLO la cartella
+ *   che contiene, accanto al nome. ⇒ è esattamente ciò che l'owner chiede per riga e card.
+ * ⭐ Microsoft, BreadcrumbBar (Windows App SDK, agg. 14/07/2026): quando lo spazio non basta,
+ *   «an ellipsis replaces the LEFTMOST nodes» e la posizione corrente resta l'ultima voce.
+ *   ⇒ se un percorso si deve accorciare, si taglia dalla TESTA e si tiene la coda. Qui non si
+ *   taglia affatto nel dettaglio (un percorso tagliato non si incolla): si manda a capo.
+ *
+ * ## Le tre decisioni che ne escono, e perché non sono quelle ovvie
+ *
+ * ⛔ «LA CARTELLA» NON È LA CARTELLA PADRE DEL FILE. Il padre vero è
+ *   `.harness-ui-library/lib-<uuid>/`, uguale per ogni voce e illeggibile: metterlo in riga
+ *   sarebbe rumore identico su tutte le righe. La cartella che una persona riconosce è quella del
+ *   PROGETTO — `cartella` — e in riga se ne mostra l'ultimo segmento.
+ * ⛔ NIENTE `title` NATIVO col percorso intero. Il 10/09 il `title` è stato tolto da questa riga
+ *   perché il fumetto COPRIVA i filtri della pagina, e MDN lo sconsiglia (tocco, tastiera, screen
+ *   reader). Rimetterlo col percorso, che è tre volte più lungo del nome, rifarebbe quel difetto
+ *   in peggio. ⇒ il percorso intero vive nel DETTAGLIO e dietro il comando «Copia percorso»,
+ *   come in VS Code.
+ * ⛔ NIENTE `~` AL POSTO DELLA HOME nel dettaglio. Un percorso abbreviato non si incolla in
+ *   Esplora file, e su Windows la forma breve sarebbe `%USERPROFILE%`, non `~`. Il valore serve
+ *   per essere copiato: si mostra intero e si manda a capo.
+ */
+
+/** L'ultimo segmento di un percorso di cartella — quello che una persona riconosce a colpo d'occhio. */
+export function ultimaCartella(cartella) {
+  const grezzo = String(cartella ?? '').trim().replace(/[\\/]+$/u, '');
+  if (!grezzo) return '';
+  const pezzi = grezzo.split(/[\\/]/u).filter(Boolean);
+  const ultimo = pezzi.at(-1) || '';
+  /* ⛔ `C:` non è una cartella con un nome: è la radice del disco, e l'ultimo segmento sarebbe
+     `C:` da solo, che si legge come un errore. Una radice si dice per intero. */
+  if (!ultimo || /^[A-Za-z]:$/u.test(ultimo)) return grezzo;
+  return ultimo;
+}
+
+/**
+ * DOVE vive una voce e CHI l'ha fatta, in parole — PURA, nessun DOM.
+ *
+ * ⛔ Regge una voce che NON porta i campi nuovi (la rotta di ieri, una fixture, il mockup): in
+ *   quel caso `creatoDa` si ricava da `origine`, che c'è sempre, e percorso e cartella restano
+ *   vuoti — chi disegna non scrive la riga invece di scrivere «sconosciuto».
+ * ⛔ Il nome della sessione si chiede PRIMA all'elenco vivo (`nomeSessione`) e solo dopo si usa
+ *   quello congelato nel meta: una sessione rinominata deve leggersi col nome di oggi.
+ */
+export function provenienzaVoceLibreria(voce, { nomeSessione } = {}) {
+  const cartella = typeof voce?.cartella === 'string' ? voce.cartella.trim() : '';
+  const percorso = typeof voce?.percorso === 'string' ? voce.percorso.trim() : '';
+  const creato = voce?.creatoDa && typeof voce.creatoDa === 'object' ? voce.creatoDa : null;
+  const daPersona = creato ? creato.tipo === 'persona' : voce?.origine !== 'generated';
+  const modello = creato && typeof creato.modello === 'string' && creato.modello.trim() ? creato.modello.trim() : '';
+  const umano = modello ? (nomeModelloUmano(modello) || modello) : '';
+  const creatoDa = daPersona
+    ? { chi: 'Tu', dettaglio: 'caricato in Libreria' }
+    : { chi: 'TALOS', dettaglio: umano ? `generato con ${umano}` : 'modello non registrato', modello };
+  const sess = voce?.sessione && typeof voce.sessione === 'object' && typeof voce.sessione.id === 'string' && voce.sessione.id.trim()
+    ? voce.sessione
+    : null;
+  let sessione = null;
+  if (sess) {
+    const id = sess.id.trim();
+    const vivo = typeof nomeSessione === 'function' ? nomeSessione(id) : null;
+    const congelato = typeof sess.nome === 'string' && sess.nome.trim() ? sess.nome.trim() : '';
+    sessione = { id, nome: (typeof vivo === 'string' && vivo.trim() ? vivo.trim() : congelato) || '' };
+  }
+  return { cartella, cartellaBreve: ultimaCartella(cartella), percorso, creatoDa, sessione };
+}
+
 export function filtraLibreria(voci,{query='',origine='tutte'}={}){
  const q=String(query).trim().toLocaleLowerCase('it');
  return voci.filter(v=>(origine==='tutte'||v?.origine===origine)&&(!q||[testiVoceLibreria(v).nome,tipoVoceLibreria(v?.fileType).testo,origineVoceLibreria(v?.origine)].join(' ').toLocaleLowerCase('it').includes(q)));
@@ -105,8 +193,10 @@ function el(doc,tag,classe,testo){const n=doc.createElement(tag);if(classe)n.cla
    può posizionare, ed è lo stesso difetto tolto ieri dai tab della colonna destra (MDN, attributo
    `title`, agg. 17/04/2026: problematico per tocco, tastiera, screen reader e difficoltà
    cognitive). Il nome per intero sta già in «Dettagli» e negli `aria-label` delle cinque azioni. */
-export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=false,onEspandi,sessionId='',azioni=null,modo='normale',bozza=null,onModo,onCambiata,onMenu}={}){
+export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=false,onEspandi,sessionId='',azioni=null,modo='normale',bozza=null,onModo,onCambiata,onMenu,nomeSessione,copia}={}){
  const t=testiVoceLibreria(voce),tipo=tipoVoceLibreria(voce?.fileType),origine=origineVoceLibreria(voce?.origine),id=voce?.id||'';
+ /* ⭐ BC-38: la provenienza si calcola UNA volta per riga — `mostra()` gira a ogni gesto. */
+ const prov=provenienzaVoceLibreria(voce,{nomeSessione});
  const riga=el(doc,'div','talos-list-row');riga.dataset.c='LibraryRow';riga.dataset.libraryId=id;riga.setAttribute('role','listitem');
  const icona=el(doc,'span','talos-list-row__icon'),svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),use=doc.createElementNS('http://www.w3.org/2000/svg','use');svg.setAttribute('class','i');svg.setAttribute('aria-hidden','true');use.setAttribute('href','#i-'+tipo.icona);svg.append(use);icona.append(svg);
  const testo=el(doc,'span','talos-list-row__text'),titolo=el(doc,'span','talos-list-row__title',t.nome),sotto=el(doc,'span','talos-list-row__sub');
@@ -141,6 +231,34 @@ export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=fal
   rivelaBtn=nuovoBottone('Mostra nella cartella','Mostra '+t.nome+' nella cartella','rivela');
   eliminaBtn=nuovoBottone('Elimina','Elimina '+t.nome,'elimina',' talos-button--danger');
  }
+ /*
+  * ⭐⭐ BC-38 — «Copia percorso» sta nel MENU, non affiancato: la regola dell'owner del 10/09
+  *   («più di due azioni ⇒ tre puntini + dropdown») vale anche per la sesta. Ed è la stessa
+  *   scelta di VS Code, dove il percorso intero è un COMANDO («Copy Breadcrumbs Path») e non un
+  *   fumetto — letto il 12/09/2026.
+  * ⛔ Esiste solo se il percorso c'è davvero: un comando che copierebbe una stringa vuota non si
+  *   disegna. Le voci salvate prima di oggi non lo portano, e per loro il menu ha cinque voci.
+  */
+ let copiaPercorsoBtn=null;
+ if(prov.percorso){
+  copiaPercorsoBtn=nuovoBottone('Copia percorso','Copia il percorso di '+t.nome,'copia-percorso');
+  copiaPercorsoBtn.addEventListener('click',async()=>{
+   try{
+    /* ⛔ Chi inietta `copia` ha GIÀ il suo messaggio d'esito (`copyText` della app mostra il suo
+       toast da solo): aggiungerne un secondo darebbe due verità per un gesto solo — stessa regola
+       già scritta in `sezioni-adattatori.js`. Il messaggio nella riga serve solo al ripiego. */
+    const iniettata=typeof copia==='function';
+    const scrivi=iniettata?copia:globalThis.navigator?.clipboard?.writeText?.bind(globalThis.navigator.clipboard);
+    if(!scrivi)throw new Error('appunti non disponibili');
+    await scrivi(prov.percorso);
+    if(!iniettata)avviso={tono:'stato',testo:'Percorso copiato.'};
+   }catch{
+    /* ⛔ Il ripiego NON è «non riuscito»: il percorso è scritto nel dettaglio e si seleziona a mano. */
+    avviso={tono:'errore',testo:'Gli appunti non sono disponibili: il percorso è scritto nel dettaglio, selezionalo e premi Ctrl+C.'};
+   }
+   mostra();
+  });
+ }
  /* ⛔ Scarica resta un'ANCORA anche dentro il menu: i byte li porta il browser, e vale anche per un
     file da 50 MB, che in pagina non ci starebbe. */
  const scaricaEl=indirizzo?nuovaAncora('Scarica','Scarica '+t.nome,'scarica'):null;
@@ -152,6 +270,7 @@ export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=fal
   scaricaEl&&{chiave:'scarica',etichetta:'Scarica',icona:'i-download',elemento:scaricaEl},
   rinominaBtn&&{chiave:'rinomina',etichetta:'Rinomina',icona:'i-edit',elemento:rinominaBtn},
   rivelaBtn&&{chiave:'rivela',etichetta:'Mostra nella cartella',icona:'i-folder',elemento:rivelaBtn},
+  copiaPercorsoBtn&&{chiave:'copia-percorso',etichetta:'Copia percorso',icona:'i-copy',elemento:copiaPercorsoBtn},
   eliminaBtn&&{chiave:'elimina',etichetta:'Elimina',icona:'i-trash',elemento:eliminaBtn,pericolo:true,separaPrima:true},
  ].filter(Boolean);
  riga.vociMenu=()=>vociMenu.map(v=>({...v,aziona:()=>v.elemento.click()}));
@@ -182,7 +301,10 @@ export function creaLibraryRow(voce,{document:doc=globalThis.document,aperta=fal
  let stato=servizio&&id?String(modo||'normale'):'normale',occupata=false,avviso=null;
  function mostra(){
   riga.dataset.aperta=String(aperta);riga.dataset.modo=stato;
-  sotto.textContent=tipo.testo+' · '+(aperta&&t.aggiornata?'Aggiornato il '+t.aggiornata:t.dataBreve);
+  /* ⭐ BC-38, owner: «nella card/riga SOLO la cartella» — l'ultimo segmento della cartella del
+     PROGETTO, non il padre vero del file (`.harness-ui-library/lib-<uuid>/`, uguale su ogni riga).
+     Il percorso intero sta nel dettaglio e in «Copia percorso»: niente fumetto nativo (10/09). */
+  sotto.textContent=tipo.testo+' · '+(aperta&&t.aggiornata?'Aggiornato il '+t.aggiornata:t.dataBreve)+(prov.cartellaBreve?' · in '+prov.cartellaBreve:'');
   dettagli.textContent=aperta?'Chiudi':'Dettagli';dettagli.setAttribute('aria-expanded',String(aperta));dettagli.setAttribute('aria-label',(aperta?'Chiudi i dettagli di ':'Dettagli di ')+t.nome);
   titolo.hidden=stato==='rinomina';forma.hidden=stato!=='rinomina';gruppo.hidden=stato!=='normale';conferma.hidden=stato!=='conferma';
   riga.classList.toggle('talos-list-row--muted',stato==='eliminata');

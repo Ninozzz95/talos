@@ -1038,6 +1038,10 @@ export async function avviaSessione({
         nome: `${(titolo || 'artefatto').replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)}.html`,
         mediaType: 'text/html',
         origine: 'generated',
+        /* ⭐ BC-38 (12/09/2026) — «da chi è stato creato» a schermo: `salvaVoce` tiene
+           `modello` solo per le voci generate, e questa lo è. Senza, il dettaglio poteva dire
+           soltanto «il modello» — misurato: 14 voci su 14 sul disco dell'owner erano senza. */
+        modello,
         testo: html,
       });
     } catch (errore) {
@@ -1243,6 +1247,7 @@ export async function avviaSessione({
           nome: documento.fileName,
           mediaType: documento.mediaType,
           origine: 'generated',
+          modello, // ⭐ BC-38: chi ha scritto il documento, letto dal meta e mai dedotto dal nome
           ...(testuale
             ? { testo: new TextDecoder('utf-8').decode(documento.bytes) }
             : { base64: Buffer.from(documento.bytes).toString('base64') }),
@@ -1355,6 +1360,10 @@ export async function avviaSessione({
         nome: `${immagineGenerata.fileStem}.${estensione}`,
         mediaType: immagineGenerata.mediaType,
         origine: 'generated',
+        /* ⭐ BC-38: qui l'autore è il modello di IMMAGINE, non quello della conversazione — sono
+           due cose diverse (`immagine.modello`, riga 1303) e scriverne uno per l'altro sarebbe una
+           provenienza falsa. Ripiego sul modello della sessione solo se il primo manca. */
+        modello: immagine?.modello || modello,
         base64: Buffer.from(immagineGenerata.bytes).toString('base64'),
       });
     } catch (errore) {
