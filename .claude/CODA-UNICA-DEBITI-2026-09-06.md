@@ -63,13 +63,13 @@ Proposta dell'owner registrata («magari mettere il preambolo come tool»): la f
 | 5 | L10 modalità piano della ricerca con ricerca strategica (approvazione del piano dalla sezione) | Astra via `codex exec`, review mia | 🔜 |
 | 6 | BC-35 DOCX con titoli di Word + elenchi annidati nel Markdown server | Astra via `codex exec` (primo lotto: 188k token, ~1 h) | ✅ committata, 47/47 rilanciati da me; manca solo l'apertura in Word e il riavvio del 4174 |
 | 7 | BC-43 chiamanti dello scorrevole della chat | Astra | ✅ committata `81b5177a`: 33 risoluzioni censite, modulo `bridge/conversazione-dom.js`, ritorno in fondo e scroll sullo scorrevole (0 → 2161), spina 12/12 → 2/12 visibili, reduced-motion rispettato; 997/997; VISTO sul 4174 nei due temi (ritorno in fondo: scorrevole 0 → 8186, colonna 0) |
-| 8 | PO-14 P-D…P-L fornitori | Astra, uno per volta | **P-D ✅ · P-E ✅** (Z.AI diretto; catalogo models.dev con cache ETag, rotta e selettore agganciati `8c205dcd`; da vedere sul 4174 con una chiave). Prossimi: P-F fallback, P-G wire «una riga», P-H pool chiavi, P-I Kimi/MiniMax/Qwen, P-J wire Anthropic, P-K Azure/Bedrock/Vertex, P-L provider esterno |
+| 8 | PO-14 P-D…P-L fornitori | Astra, uno per volta | **P-D ✅ · P-E ✅ · P-F ✅** (`0ccdfb1f`: 12 modelli di riserva per 6 fornitori con fonti, ausiliario pronto e non collegato). Prossimi: P-G wire «una riga», P-H pool chiavi, P-I Kimi/MiniMax/Qwen, P-J wire Anthropic, P-K Azure/Bedrock/Vertex, P-L provider esterno |
 | 9 | PO-15 TALOS delega a un agente esterno da CLI | Astra + kernel (io) | 🔜 nuovo |
 | 10 | PO-13 proposta GPT-Live-1 | — | ⏸ «in seguito» |
 | 11 | Release desktop: righe R-01…R-06 del piano (guscio, installer, CI Windows, monorepo pubblico AGPL-3.0, misure) | Astra + io | 🔜 al tuo sì sulle sei domande |
 | 12 | Pre-release: tabella di marcia con ricerca dell'ultimo mese, prove da utente nuovo, UX | io + Astra | al trigger (coda chiusa) |
 | 13 | A/B del banco sul preambolo (~$5, 210 giri) | io | ⏸ «alla fine» |
-| — | **BC-49** deposito del rapporto a pezzi | Astra | 🔧 codice committato (parti ≤ 4.096 byte, idempotenti, ripresa dall'ultima confermata; 197/197 + 580/580 dall'agente). **Manca la corsa vera sul 4174** (Astra ha avuto 401: niente chiave sul suo banco): da fare dopo il riavvio, con la stessa domanda della ricerca di stamattina |
+| — | **BC-49** deposito del rapporto a pezzi | Astra | 🔧 codice committato (parti ≤ 4.096 byte, idempotenti, ripresa dall'ultima confermata; 197/197 + 580/580 dall'agente). **Corsa vera sul 4174 IN CORSO** dalle 14:59 (madre `b9f06099`, 4174 riavviato con pid 34604): stessa domanda di stamattina, si guarda il giornale per i `deposit_part` |
 | — | Aperti minori senza data: BC-12 foto sul 4174, 27B da misurare a VRAM libera, `.non-rinominato`, mockup-to-template distruttivo, `<br>` nei .md, HEAD 404, fase3 Review, easing freccia, h2 25ch, «Rivela»→«Mostra», icona Browser, campi elenco note/attività/memoria, nome/timbro sovrapposti nelle righe Libreria | decidi tu | ⏸ |
 | — | Fine lavoro: eliminare `.harness-ui-research`, `.harness-ui-library` sul Desktop e `harness-ui/scratch-l9/` | io, al tuo sì | promemoria |
 
