@@ -69,7 +69,7 @@ Proposta dell'owner registrata («magari mettere il preambolo come tool»): la f
 | 11 | Release desktop: righe R-01…R-06 del piano (guscio, installer, CI Windows, monorepo pubblico AGPL-3.0, misure) | Astra + io | 🔜 al tuo sì sulle sei domande |
 | 12 | Pre-release: tabella di marcia con ricerca dell'ultimo mese, prove da utente nuovo, UX | io + Astra | al trigger (coda chiusa) |
 | 13 | A/B del banco sul preambolo (~$5, 210 giri) | io | ⏸ «alla fine» |
-| — | **BC-49** (owner 12/09: «sì, ad Astra quando finisce») il deposito del rapporto della ricerca in una sola generazione cade sul fornitore: spezzarlo (a pezzi o via file) | Astra, dopo BC-44 | 🔜 |
+| — | **BC-49** deposito del rapporto a pezzi | Astra | 🔧 codice committato (parti ≤ 4.096 byte, idempotenti, ripresa dall'ultima confermata; 197/197 + 580/580 dall'agente). **Manca la corsa vera sul 4174** (Astra ha avuto 401: niente chiave sul suo banco): da fare dopo il riavvio, con la stessa domanda della ricerca di stamattina |
 | — | Aperti minori senza data: BC-12 foto sul 4174, 27B da misurare a VRAM libera, `.non-rinominato`, mockup-to-template distruttivo, `<br>` nei .md, HEAD 404, fase3 Review, easing freccia, h2 25ch, «Rivela»→«Mostra», icona Browser, campi elenco note/attività/memoria, nome/timbro sovrapposti nelle righe Libreria | decidi tu | ⏸ |
 | — | Fine lavoro: eliminare `.harness-ui-research`, `.harness-ui-library` sul Desktop e `harness-ui/scratch-l9/` | io, al tuo sì | promemoria |
 
