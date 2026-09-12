@@ -1069,8 +1069,9 @@ function eFonteDiretta(fonte) {
   return ID_DIRETTI.has(String(fonte || ""));
 }
 function fontiDelSelettore({ openrouter = null, locali = null, diretti = null } = {}) {
+  const etichetta2 = (nome, modelli) => modelli?.some((m) => m.catalogo?.fonte === "riserva") ? `${nome} · elenco di riserva` : nome;
   const fonti = [
-    { id: "openrouter", etichetta: "OpenRouter", conto: contaOppureNull(openrouter), collegato: true },
+    { id: "openrouter", etichetta: etichetta2("OpenRouter", openrouter), conto: contaOppureNull(openrouter), collegato: true },
     { id: "locali", etichetta: "Locali", conto: contaOppureNull(locali), collegato: true }
   ];
   for (const provider of PROVIDER_DIRETTI) {
@@ -1078,7 +1079,7 @@ function fontiDelSelettore({ openrouter = null, locali = null, diretti = null } 
     if (provider.soloSeCollegato && !Array.isArray(elenco2)) continue;
     fonti.push({
       id: provider.id,
-      etichetta: provider.etichetta,
+      etichetta: etichetta2(provider.etichetta, elenco2),
       conto: contaOppureNull(elenco2),
       // `collegato` è falso solo quando SAPPIAMO che la chiave manca: prima di leggere non si accusa.
       collegato: !diretti || Array.isArray(elenco2)
@@ -1124,6 +1125,13 @@ function descrizioneModelloSelettore(modello = {}) {
   ];
   if (modello.alias) dettagli.unshift("Ultima versione");
   if (modello.prezziPerMilione?.tiers?.length || modello.prezziPerMilione?.context_over_200k) dettagli.push("Prezzi variabili con il contesto");
+  if (modello.catalogo?.fonte === "riserva") {
+    const data2 = modello.catalogo.dataRiserva;
+    const parti = typeof data2 === "string" && /^(\d{4})-(\d{2})-(\d{2})$/u.exec(data2);
+    dettagli.unshift(`Catalogo non raggiungibile: elenco di riserva${parti ? ` del ${parti[3]}/${parti[2]}/${parti[1]}` : ""}`);
+    if (modello.catalogo.avvisi?.some((a) => a.codice === "CATALOG_CACHE_CORRUPT")) dettagli.push("Copia danneggiata rifiutata");
+    return dettagli.join(" · ");
+  }
   const data = modello.catalogo?.aggiornatoAlle;
   dettagli.push(typeof data === "string" && Number.isFinite(Date.parse(data)) ? `Dati del ${new Intl.DateTimeFormat("it-IT", { timeZone: "Europe/Rome" }).format(new Date(data))}` : "Data del catalogo non disponibile");
   if (modello.catalogo?.fallbackRete) {
@@ -23145,7 +23153,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           iconWrap.className = "sheet-icon";
           iconWrap.innerHTML = icon("i-brain");
           const textWrap = document.createElement("span");
-          if (modello.catalogo?.fonte === "models.dev") {
+          if (["models.dev", "riserva"].includes(modello.catalogo?.fonte)) {
             aggiornaTestoModelloSelettore(textWrap, modello);
           } else {
             const dettagli = [];
