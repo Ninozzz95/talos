@@ -25,7 +25,8 @@
  *   modello dentro OpenRouter, che è un asse diverso (51 famiglie: quelle non sono schede).
  * ⭐ Il tetto delle schede (Apple HIG via eleken.co, già citato in `app.js` il 03/9): oltre sei
  *   l'utente si perde. Dal 12/09 (P-C) sono SEI — OpenRouter · Locali · Anthropic · Gemini ·
- *   OpenAI · LM Studio: siamo AL limite, e la settima non si aggiunge senza ripensare la striscia.
+ *   OpenAI · LM Studio. P-D aggiunge Z.AI su richiesta esplicita, solo quando collegato;
+ *   il layout con sette fonti resta da verificare nella UI completa.
  *
  * ## I tre stati di un fornitore diretto, che prima erano uno solo
  *
@@ -63,6 +64,7 @@ export const PROVIDER_DIRETTI = Object.freeze([
   Object.freeze({ id: 'gemini', etichetta: 'Gemini' }),
   Object.freeze({ id: 'openai', etichetta: 'OpenAI' }),
   Object.freeze({ id: 'lmstudio', etichetta: 'LM Studio', senzaChiave: true }),
+  Object.freeze({ id: 'zai', etichetta: 'Z.AI', soloSeCollegato: true }),
 ]);
 
 /** Vero se quel fornitore si legge senza collegare nessuna chiave (i motori locali). */
@@ -102,6 +104,8 @@ export function fontiDelSelettore({ openrouter = null, locali = null, diretti = 
   ];
   for (const provider of PROVIDER_DIRETTI) {
     const elenco = diretti ? diretti[provider.id] : null;
+    // P-D: Z.AI diventa disponibile dopo il caricamento con una chiave presente.
+    if (provider.soloSeCollegato && !Array.isArray(elenco)) continue;
     fonti.push({
       id: provider.id,
       etichetta: provider.etichetta,

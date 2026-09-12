@@ -116,6 +116,8 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
   async function prova(provider) {
     const sonda = sonde[provider];
     if (!sonda) throw new ProviderProbeError(`unknown provider ${provider}`, 'PROVIDER_INVALID');
+    const record = REGISTRO_FORNITORI[provider];
+    const etichetta = record?.etichetta ?? 'Il fornitore';
 
     /*
      * ⛔ Chi dichiara di non essere sondabile NON viene chiamato: zero richieste, e lo si dice.
@@ -134,7 +136,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
      * sbagliata invece di inserirne una.
      */
     if (sonda.auth !== 'nessuna' && sonda.auth !== 'bearer-facoltativo' && !chiave) {
-      return { provider, esito: 'non-provabile', motivo: 'Nessuna chiave salvata per questo provider.', modelli: null, millisecondi: null };
+      return { provider, esito: 'non-provabile', motivo: `Nessuna chiave salvata per ${etichetta}.`, modelli: null, millisecondi: null };
     }
 
     const runtime = leggiRuntime(provider) || {};
@@ -142,7 +144,7 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     try {
       url = urlDellaSonda(sonda, runtime.endpoint);
     } catch (errore) {
-      return { provider, esito: 'non-provabile', motivo: 'Manca l\'indirizzo del provider.', modelli: null, millisecondi: null, codice: errore.code };
+      return { provider, esito: 'non-provabile', motivo: `Manca l'indirizzo di ${etichetta}.`, modelli: null, millisecondi: null, codice: errore.code };
     }
 
     const intestazioni = { Accept: 'application/json' };
@@ -158,41 +160,50 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     const partito = orologio();
     let risposta;
     try {
-      risposta = await fetchImpl(url, { method: 'GET', headers: intestazioni, signal: stop });
+      risposta = await fetchImpl(url, { method: 'GET', headers: intestazioni, signal: stop, redirect: 'error' });
     } catch (errore) {
       return {
         provider,
         esito: 'irraggiungibile',
-        motivo: errore?.name === 'TimeoutError' ? `Nessuna risposta entro ${Math.min(secondi, 30)} secondi.` : 'Non è stato possibile raggiungere il provider.',
+        motivo: errore?.name === 'TimeoutError' ? `${etichetta}: nessuna risposta entro ${Math.min(secondi, 30)} secondi.` : `Non è stato possibile raggiungere ${etichetta}.`,
         modelli: null,
         millisecondi: Math.round(orologio() - partito),
       };
     }
     const millisecondi = Math.round(orologio() - partito);
     if (risposta.status === 401 || risposta.status === 403) {
-      return { provider, esito: 'non-autorizzato', motivo: `Il provider ha rifiutato la credenziale (HTTP ${risposta.status}).`, modelli: null, millisecondi };
+      return { provider, esito: 'non-autorizzato', motivo: `${etichetta} ha rifiutato la credenziale (HTTP ${risposta.status}).`, modelli: null, millisecondi, httpStatus: risposta.status };
     }
     if (!risposta.ok) {
-      return { provider, esito: 'errore', motivo: `Il provider ha risposto HTTP ${risposta.status}.`, modelli: null, millisecondi };
+      const motivo = risposta.status === 404
+        ? `${etichetta}: elenco modelli non trovato (HTTP 404). La validità della chiave non è verificata da questa risposta.`
+        : `${etichetta} ha risposto HTTP ${risposta.status}.`;
+      return { provider, esito: 'errore', motivo, modelli: null, millisecondi, httpStatus: risposta.status };
     }
     let corpo = null;
     try { corpo = await risposta.json(); } catch { corpo = null; }
+    if (record?.sonda.richiedeCatalogoValido && (!Array.isArray(corpo?.data) || corpo.data.some(m => !m || typeof m.id !== 'string' || !m.id.trim()))) {
+      return { provider, esito: 'errore', motivo: `${etichetta}: risposta HTTP ${risposta.status} senza un elenco modelli valido; credenziale non verificata.`, modelli: null, millisecondi, httpStatus: risposta.status };
+    }
     const modelli = Number(sonda.conta(corpo));
     return {
       provider,
       esito: 'collegato',
       motivo: Number.isFinite(modelli) && modelli >= 0
-        ? `Credenziale accettata: ${modelli} modelli visibili.`
-        : 'Credenziale accettata.',
+        ? `${etichetta}: catalogo raggiunto, ${modelli} modelli visibili. La generazione non è stata provata.`
+        : `${etichetta}: credenziale accettata.`,
       modelli: Number.isFinite(modelli) ? modelli : null,
       millisecondi,
+      httpStatus: risposta.status,
     };
   }
 
   async function elencaModelli(provider) {
     if (!CATALOGHI_DIRETTI.includes(provider)) throw new ProviderProbeError('Catalogo diretto non disponibile.', 'PROVIDER_INVALID');
+    const record = REGISTRO_FORNITORI[provider];
+    const etichetta = record.etichetta;
     const key = leggiChiave(provider);
-    if (!key) throw new ProviderProbeError('Inserisci la chiave nel pannello Provider.', 'PROVIDER_KEY_MISSING');
+    if (!key) throw new ProviderProbeError(`Inserisci la chiave ${etichetta} nel pannello Provider.`, 'PROVIDER_KEY_MISSING');
     const runtime = leggiRuntime(provider);
     const headers = { Accept: 'application/json' };
     if (provider === 'anthropic') { headers['x-api-key'] = key; headers['anthropic-version'] = '2023-06-01'; }
@@ -206,13 +217,19 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
       if (provider === 'anthropic') { url.searchParams.set('limit', '1000'); if (cursor) url.searchParams.set('after_id', cursor); }
       let response;
       try { response = await fetchImpl(url.toString(), { headers, signal, redirect: 'error' }); }
-      catch { throw new ProviderProbeError('Catalogo del provider non raggiungibile.', 'CATALOG_UNREACHABLE'); }
-      if (!response.ok) throw new ProviderProbeError(`Catalogo ${provider}: HTTP ${response.status}.`, 'CATALOG_UPSTREAM_ERROR');
+      catch { throw new ProviderProbeError(`Catalogo ${etichetta} non raggiungibile.`, 'CATALOG_UNREACHABLE'); }
+      if (response.status === 404 && record.catalogo.ripiegoSu404 === 'documentazione') {
+        return { provider, fonte: 'documentazione', credenzialeVerificata: false,
+          avviso: `${etichetta}: catalogo remoto HTTP 404; elenco dalla documentazione del ${record.prezzi.data}, accesso ai modelli non verificato.`,
+          modelli: record.modelliNoti.map(m => ({ ...metadatiNoti(record, m.id), id: `${provider}:${m.id}`, provider, nome: `${m.nome} · catalogo documentato`, fonte: 'documentazione' })),
+        };
+      }
+      if (!response.ok) throw new ProviderProbeError(`Catalogo ${etichetta}: HTTP ${response.status}.`, 'CATALOG_UPSTREAM_ERROR');
       let data;
       try { data = await response.json(); }
-      catch { throw new ProviderProbeError('Catalogo del provider non valido.', 'CATALOG_UPSTREAM_ERROR'); }
+      catch { throw new ProviderProbeError(`Catalogo ${etichetta} non valido.`, 'CATALOG_UPSTREAM_ERROR'); }
       const page = provider === 'gemini' ? data?.models : data?.data;
-      if (!Array.isArray(page) || page.some(row => !row || typeof (provider === 'gemini' ? row.name : row.id) !== 'string')) throw new ProviderProbeError('Catalogo del provider non valido.', 'CATALOG_UPSTREAM_ERROR');
+      if (!Array.isArray(page) || page.some(row => !row || typeof (provider === 'gemini' ? row.name : row.id) !== 'string')) throw new ProviderProbeError(`Catalogo ${etichetta} non valido.`, 'CATALOG_UPSTREAM_ERROR');
       if (provider === 'anthropic' && data.has_more === true && (typeof data.last_id !== 'string' || !data.last_id)) throw new ProviderProbeError('Paginazione del catalogo incompleta.', 'CATALOG_UPSTREAM_ERROR');
       rows.push(...page);
       cursor = provider === 'gemini' ? data.nextPageToken : provider === 'anthropic' && data.has_more ? data.last_id : null;
@@ -221,12 +238,26 @@ export function createProviderProbe({ leggiChiave, leggiRuntime, fetchImpl = fet
     } while (cursor);
     const modelli = rows.filter(row => provider === 'gemini' ? row.supportedGenerationMethods?.includes('generateContent') && !/(tts|image)/u.test(row.name) : provider === 'openai' ? /^(gpt-|chatgpt-|o[1-9])/u.test(row.id) && !/(audio|realtime|transcribe|tts|image|codex|instruct)/u.test(row.id) : typeof row.id === 'string').map(row => {
       const id = provider === 'gemini' ? row.name.replace(/^models\//u, '') : row.id;
-      return { id: `${provider}:${id}`, nome: row.display_name || row.displayName || id, provider,
-        contextLength: row.max_input_tokens ?? row.inputTokenLimit ?? null,
+      const noti = metadatiNoti(record, id);
+      return { ...noti, id: `${provider}:${id}`, nome: row.display_name || row.displayName || noti.nome || id, provider,
+        contextLength: row.max_input_tokens ?? row.inputTokenLimit ?? noti.contextLength ?? null,
         ...(row.capabilities?.image_input ? { inputModalities: row.capabilities.image_input.supported ? ['text','image'] : ['text'] } : {}),
       };
     });
     return { provider, modelli };
   }
   return Object.freeze({ prova, elencaModelli });
+}
+
+/** Metadati dichiarati, mai trasformati in misure della chiamata o prezzi osservati. */
+function metadatiNoti(record, id) {
+  const modello = record.modelliNoti?.find(m => m.id === id);
+  if (!modello) return {};
+  return { nome: modello.nome, contextLength: modello.contextLength, contestoDichiarato: modello.contestoDichiarato,
+    fonteMetadati: modello.fonte, dataMetadati: modello.data, maxOutputTokens: modello.maxOutputTokens,
+    prezzi: { ...record.prezzi, ...modello.prezzi }, ragionamento: modello.ragionamento, cache: record.cache.etichetta,
+    reasoning: { supportedEfforts: modello.ragionamento.livelli,
+      defaultEffort: modello.ragionamento.livelli.includes('max') ? 'max' : null,
+      defaultEnabled: true, mandatory: !modello.ragionamento.thinking.includes('disabled') },
+  };
 }

@@ -128,8 +128,9 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
   }
 
   const runtime = leggiRuntime(fonte) || {};
+  const record = REGISTRO_FORNITORI[fonte];
   const base = typeof runtime.endpoint === 'string' && runtime.endpoint.trim() !== '' ? runtime.endpoint.replace(/\/+$/u, '') : null;
-  if (!base) throw new ModelDestinationError(`Manca l'indirizzo del provider ${fonte}.`, 'PROVIDER_RUNTIME_INVALID');
+  if (!base) throw new ModelDestinationError(`Manca l'indirizzo di ${record.etichetta}.`, 'PROVIDER_RUNTIME_INVALID');
 
   const chiave = leggiChiave(fonte);
   /*
@@ -140,9 +141,8 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
    *   verità diverse (`requiresKey` nel portachiavi diceva già `false` per Ollama, e qui c'era un
    *   confronto per nome), e ora è una sola.
    */
-  const record = REGISTRO_FORNITORI[fonte];
   if (record.chiaveObbligatoria === true && (typeof chiave !== 'string' || chiave.trim() === '')) {
-    throw new ModelDestinationError(`Manca la chiave per ${fonte}: inseriscila in Laboratorio modelli → Provider.`, 'PROVIDER_KEY_MISSING');
+    throw new ModelDestinationError(`Manca la chiave per ${record.etichetta}: inseriscila in Laboratorio modelli → Provider.`, 'PROVIDER_KEY_MISSING');
   }
 
   if (NATIVI.includes(fonte)) return { fonte, modelloRemoto, native: true, baseURL: base, apiKey: chiave };

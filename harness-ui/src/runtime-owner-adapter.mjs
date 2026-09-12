@@ -17,6 +17,7 @@ import { parseRuntimeOwnerSnapshot } from './runtime-owner-contract.mjs';
 import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO } from './model-destination.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
+import { preparaRichiestaCompatibile, OpenAiCompatibleRuntimeError } from './openai-compatible-runtime.mjs'; // P-D (12/09): Z.AI accetta solo alcuni livelli di ragionamento
 
 const ENDPOINT_OPENROUTER = 'https://openrouter.ai/api/v1/chat/completions';
 const RICHIESTA_DI_RIASSUNTO = 'Riassumi la conversazione mantenendo decisioni, file e risultati utili al lavoro.';
@@ -486,7 +487,7 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
  * solleva l'errore con il motivo vero. Partire e prendersi un 404 farebbe
  * sembrare rotta una credenziale che è buona.
  */
-export function creaFetchMultiProvider(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null } = {}) {
+export function creaFetchMultiProvider(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null } = {}) {
   if (!dipendenze) return fetchDiRete;
   return async function fetchMultiProvider(url, opzioni = {}) {
     let corpo = null;
@@ -542,7 +543,16 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, { risolvi = risolviD
       const { reasoning, ...resto } = corpo;
       corpo = { ...resto, ...(typeof reasoning.effort === 'string' ? { reasoning_effort: reasoning.effort } : {}) };
     }
-    const corpoRiscritto = JSON.stringify({ ...corpo, model: destinazione.modelloRemoto });
+    /* P-D (12/09, Astra): il traduttore del fornitore toglie ciò che il fornitore non accetta (es.
+       `reasoning_effort: low` per Z.AI, che ammette solo high e max) e lo DICE. Senza un canale per
+       dirlo (`onAvviso`) si preferisce fermarsi prima della rete con una frase in italiano, invece di
+       spedire in silenzio una richiesta diversa da quella chiesta (fail-closed, come nel rapporto). */
+    const adattata = preparaRichiestaCompatibile(destinazione.fonte, { ...corpo, model: destinazione.modelloRemoto });
+    for (const avviso of adattata.avvisi) {
+      if (typeof onAvviso !== 'function') throw new OpenAiCompatibleRuntimeError(avviso, 'PROVIDER_REASONING_UNSUPPORTED');
+      await onAvviso(avviso);
+    }
+    const corpoRiscritto = JSON.stringify(adattata.corpo);
     /*
      * ⛔ Il motore locale si chiama attraverso il SUO supervisore, non con una
      * fetch nuda: llama-server parte con `--api-key randomBytes(32)` e quella

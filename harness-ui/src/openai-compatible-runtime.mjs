@@ -21,6 +21,53 @@ function fail(message, code = 'RUNTIME_INVALID') {
   throw new OpenAiCompatibleRuntimeError(message, code);
 }
 
+/**
+ * P-D, 12/09/2026: adatta il corpo HTTP secondo il profilo del registro.
+ * `extra_body` appartiene agli SDK Python: sul wire i campi sono al primo livello.
+ * Gli avvisi sono dati locali da rendere al chiamante, mai campi inviati al modello.
+ * Il chiamante di produzione richiede l'aggancio in runtime-owner-adapter.mjs:
+ * diff non applicato nel rapporto P-D, perché fuori dal perimetro assegnato.
+ */
+export function preparaRichiestaCompatibile(provider, corpo) {
+  const record = REGISTRO_FORNITORI[provider];
+  if (record?.ragionamento?.formato !== 'thinking') return { corpo, avvisi: [] };
+  const oggetto = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  if (!oggetto(corpo) || typeof corpo.model !== 'string') fail(`Richiesta ${record.etichetta} non valida.`);
+  if (corpo.extra_body !== undefined && !oggetto(corpo.extra_body)) fail(`Opzioni ${record.etichetta} non valide.`);
+  const unito = { ...corpo, ...(corpo.extra_body ?? {}) };
+  const { extra_body, reasoning, reasoning_effort, thinking, ...resto } = unito;
+  if (thinking !== undefined && (!oggetto(thinking) || !['enabled', 'disabled'].includes(thinking.type))) fail(`Controllo del ragionamento ${record.etichetta} non valido.`);
+  const id = corpo.model.startsWith(`${provider}:`) ? corpo.model.slice(provider.length + 1) : corpo.model;
+  const modello = record.modelliNoti.find(m => m.id === id);
+  const opzioni = modello?.ragionamento;
+  const avvisi = [];
+  const effort = reasoning_effort ?? reasoning?.effort;
+  const richiesto = typeof effort === 'string' ? effort.trim().toLowerCase() : effort;
+  const preferenza = thinking?.type ?? (reasoning?.enabled === false || richiesto === 'none' ? 'disabled' : reasoning?.enabled === true || richiesto != null ? 'enabled' : undefined);
+  // L'involucro extra non può cambiare la destinazione o il contenuto dell'utente.
+  const risultato = { ...resto, model: corpo.model, ...(corpo.messages !== undefined ? { messages: corpo.messages } : {}) };
+  if (preferenza !== undefined && opzioni?.thinking?.length) {
+    let tipo = preferenza;
+    if (!opzioni.thinking.includes(tipo)) {
+      tipo = 'enabled';
+      avvisi.push(`${record.etichetta} · ${modello.nome}: il modello non consente di disattivare il ragionamento; resta attivo.`);
+    }
+    risultato.thinking = { type: tipo, ...(typeof thinking?.clear_thinking === 'boolean' ? { clear_thinking: thinking.clear_thinking } : {}) };
+  } else if (preferenza !== undefined && richiesto == null) {
+    avvisi.push(`${record.etichetta}: controllo del ragionamento non documentato per questo modello; non inviato.`);
+  }
+  if (richiesto != null) {
+    if (!opzioni?.livelli.includes(richiesto)) {
+      avvisi.push(`${record.etichetta}: livello di ragionamento richiesto non previsto dal profilo P-D per questo modello; non inviato.`);
+    } else if (risultato.thinking?.type !== 'disabled') {
+      risultato.reasoning_effort = richiesto;
+    } else {
+      avvisi.push(`${record.etichetta}: livello di ragionamento non inviato perché il ragionamento è disattivato.`);
+    }
+  }
+  return { corpo: risultato, avvisi };
+}
+
 function capability(value) {
   return typeof value === 'boolean' ? { state: 'observed', value } : { state: 'unknown', value: null };
 }

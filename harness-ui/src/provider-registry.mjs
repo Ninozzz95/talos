@@ -170,6 +170,73 @@ export const REGISTRO_FORNITORI = congela({
     esecuzione: 'collegato',
   }),
 
+  // P-D — API diretta, contratto v4. Fonti ufficiali e snapshot: 12/09/2026.
+  // docs.z.ai/api-reference/llm/chat-completion e guides/overview/pricing.
+  zai: congela({
+    id: 'zai',
+    etichetta: 'Z.AI',
+    descrizione: 'Modelli GLM tramite API diretta Z.AI.',
+    paginaChiavi: 'https://z.ai/manage-apikey/apikey-list',
+    wire: 'openai-chat',
+    baseUrl: 'https://api.z.ai/api/paas/v4',
+    indirizzoModificabile: true,
+    envIndirizzo: congela([]),
+    auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['GLM_API_KEY', 'ZAI_API_KEY', 'Z_AI_API_KEY']) }),
+    chiaveObbligatoria: true,
+    formaIdModello: 'nome',
+    oauth: null,
+    endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
+    profili: congela({
+      'openai-chat': congela({ stato: 'dichiarato', versione: 'v4' }),
+      'anthropic-messages': congela({ stato: 'in preparazione', baseUrl: 'https://api.z.ai/api/anthropic', lotto: 'P-J' }),
+    }),
+    streaming: 'dichiarato',
+    toolCalling: 'dichiarato',
+    cache: congela({
+      marcatore: null,
+      letturaUsage: congela(['prompt_tokens_details.cached_tokens']),
+      scritturaUsage: congela([]),
+      inclusiNelTotale: true,
+      scontoDichiarato: null,
+      etichetta: 'Cache automatica; senza conteggio: non misurato.',
+      fonte: 'https://docs.z.ai/guides/capabilities/cache',
+      data: '2026-09-12',
+    }),
+    // GET /models non è documentato nell'indice ufficiale: il 404 resta esplicito.
+    catalogo: congela({ fonte: 'fornitore', forma: 'openai-data', percorso: '/models', inUI: true, ripiegoSu404: 'documentazione' }),
+    prezzi: congela({ fonte: 'https://docs.z.ai/guides/overview/pricing', data: '2026-09-12', valuta: 'USD', unita: 'milione di token', archiviazioneCache: 'Gratuita temporaneamente; durata non dichiarata.' }),
+    // Vincolo esplicito P-D. La fonte oggi ammette anche low su 5.3/Flash:
+    // non lo inviamo, e il traduttore dichiara che è una scelta del profilo AVM.
+    ragionamento: congela({ formato: 'thinking', livelli: congela(['high', 'max']), fonte: 'https://docs.z.ai/api-reference/llm/chat-completion', data: '2026-09-12' }),
+    modelliNoti: congela([
+      congela({ id: 'glm-5.3-flash', nome: 'GLM-5.3-Flash', contextLength: 1_000_000, contestoDichiarato: '1M', maxOutputTokens: 131_072,
+        fonte: 'https://docs.z.ai/guides/vlm/glm-5.3-flash', data: '2026-09-12',
+        prezzi: congela({ ingresso: 0.15, cache: 0.03, uscita: 0.50 }),
+        ragionamento: congela({ livelli: congela(['high', 'max']), thinking: congela(['enabled']) }) }),
+      congela({ id: 'glm-5.3', nome: 'GLM-5.3', contextLength: 1_000_000, contestoDichiarato: '1M', maxOutputTokens: 131_072,
+        fonte: 'https://docs.z.ai/guides/llm/glm-5.3', data: '2026-09-12',
+        prezzi: congela({ ingresso: 1.40, cache: 0.26, uscita: 4.40 }),
+        ragionamento: congela({ livelli: congela(['high', 'max']), thinking: congela(['enabled']) }) }),
+      congela({ id: 'glm-5.2', nome: 'GLM-5.2', contextLength: 1_000_000, contestoDichiarato: '1M', maxOutputTokens: 131_072,
+        fonte: 'https://docs.z.ai/guides/llm/glm-5.2', data: '2026-09-12',
+        prezzi: congela({ ingresso: 1.40, cache: 0.26, uscita: 4.40 }),
+        ragionamento: congela({ livelli: congela(['high', 'max']), thinking: congela(['enabled', 'disabled']) }) }),
+      congela({ id: 'glm-5', nome: 'GLM-5', contextLength: 200_000, contestoDichiarato: '200K', maxOutputTokens: 131_072,
+        fonte: 'https://docs.z.ai/guides/llm/glm-5', data: '2026-09-12',
+        prezzi: congela({ ingresso: 1, cache: 0.20, uscita: 3.20 }),
+        ragionamento: congela({ livelli: congela([]), thinking: congela(['enabled', 'disabled']) }) }),
+      congela({ id: 'glm-4.6', nome: 'GLM-4.6', contextLength: 200_000, contestoDichiarato: '200K', maxOutputTokens: 131_072,
+        fonte: 'https://docs.z.ai/guides/llm/glm-4.6', data: '2026-09-12',
+        prezzi: congela({ ingresso: 0.60, cache: 0.11, uscita: 2.20 }),
+        ragionamento: congela({ livelli: congela([]), thinking: congela(['enabled', 'disabled']) }) }),
+    ]),
+    limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true, frequenza: null, fonte: 'https://docs.z.ai/api-reference/rate-limit' }),
+    sonda: congela({ attiva: true, auth: 'bearer', percorso: '/models', urlAssoluto: null, conta: (c) => c?.data?.length, richiedeCatalogoValido: true }),
+    destinazioneChat: true,
+    credenziale: true,
+    esecuzione: 'collegato',
+  }),
+
   // ── Anthropic ──────────────────────────────────────────────────────────────────────────────
   anthropic: congela({
     id: 'anthropic',
@@ -461,6 +528,17 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
     }
     if (record.sonda?.attiva === true && !record.sonda.percorso && !record.sonda.urlAssoluto) {
       throw new ProviderRegistryError(`${dove}: sonda attiva senza un indirizzo da chiamare`);
+    }
+    if (record.modelliNoti !== undefined) {
+      if (!Array.isArray(record.modelliNoti)) throw new ProviderRegistryError(`${dove}: modelliNoti deve essere una lista`);
+      const modelliVisti = new Set();
+      for (const modello of record.modelliNoti) {
+        if (!modello?.id || modelliVisti.has(modello.id) || !modello.nome || !modello.fonte || !/^\d{4}-\d{2}-\d{2}$/u.test(modello.data ?? '')) throw new ProviderRegistryError(`${dove}: modello senza identità o fonte datata`);
+        modelliVisti.add(modello.id);
+        if (!Number.isSafeInteger(modello.contextLength) || modello.contextLength <= 0 || !Number.isSafeInteger(modello.maxOutputTokens) || modello.maxOutputTokens <= 0) throw new ProviderRegistryError(`${dove}: limiti del modello non validi`);
+        if (['ingresso', 'cache', 'uscita'].some(k => typeof modello.prezzi?.[k] !== 'number' || !Number.isFinite(modello.prezzi[k]) || modello.prezzi[k] < 0)) throw new ProviderRegistryError(`${dove}: prezzi del modello non validi`);
+        if (!Array.isArray(modello.ragionamento?.livelli) || modello.ragionamento.livelli.some(l => !record.ragionamento?.livelli?.includes(l)) || !Array.isArray(modello.ragionamento.thinking) || modello.ragionamento.thinking.some(t => !['enabled', 'disabled'].includes(t))) throw new ProviderRegistryError(`${dove}: opzioni di ragionamento non valide`);
+      }
     }
   }
   return true;

@@ -11,6 +11,19 @@ import {
 } from '../src/usage-cache.mjs';
 import { creaFetchMultiProvider } from '../src/runtime-owner-adapter.mjs';
 
+test('PD-CACHE — Z.AI: assente o null significa non misurato, zero solo se esplicito', () => {
+  for (const value of [undefined, null, '', ' ', false, true, [], {}, -1]) {
+    const usage = { prompt_tokens: 1200, prompt_tokens_details: { cached_tokens: value } };
+    assert.equal(tokenDaCache(usage, 'openai-chat'), null);
+    assert.equal(tokenDaCache(usage, 'zai'), null);
+    assert.equal(normalizzaUsage(usage, 'zai'), usage);
+  }
+  // Fonte: https://docs.z.ai/guides/capabilities/cache, letta 12/09/2026.
+  assert.equal(tokenDaCache({ prompt_tokens: 1200, prompt_tokens_details: { cached_tokens: 800 } }, 'zai'), 800);
+  assert.equal(tokenDaCache({ prompt_tokens_details: { cached_tokens: 0 } }, 'zai'), 0);
+  assert.equal(tokenDaCache({ prompt_tokens: 1200 }, 'zai'), null);
+});
+
 /*
  * ⛔⛔⛔ P-B — «QUANTI TOKEN VENGONO DALLA CACHE?», CHIESTO A CHI RISPONDE IN SEI MODI DIVERSI.
  *
