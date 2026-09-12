@@ -56,7 +56,7 @@ Proposta dell'owner registrata («magari mettere il preambolo come tool»): la f
 
 | # | voce | chi | stato |
 |---|---|---|---|
-| 1 | BC-40 mappa minima nel preambolo + attrezzi | agente già lanciato (ripreso 13:01) | 🏃 |
+| 1 | BC-40 mappa minima nel preambolo, resto agli attrezzi | agente | ✅ committata `752a764e`: profondità 2, tetto 1.200 token, `elenca` con `percorso`; preambolo del repo intero −38 %; giri veri 3/3 giusti (prima 2/3). Nuovo bersaglio misurato **BC-48**: il blocco `AGENTS.md` pesa 3.400 token, l'87 % del preambolo su `harness-ui/` |
 | 2 | BC-36/37/41/42 chip permesso · nome doppio · giri «in corso» nel replay · albero chiesto a pannello nascosto (la diagnosi «percorso vuoto → 400» è smentita: il 400 è una cartella cancellata, 3 sessioni su 27) + aggancio BC-38 | agente | ✅ codice committato, 980/980; consegna e foto sul 4174 dopo BC-44 (i suoi file della ricerca sono a metà nell'albero). Nuovi aperti: **BC-45** iframe verso arxiv che tiene rosso RUNTIME-01 (`browser.js:464`); **BC-46** il server chiama «query non valida» una cartella cancellata (ENOENT → QUERY_INVALID in `workspace-tree.mjs`); **BC-47** «local:unsloth-…» a schermo nella barra delle sessioni |
 | 3 | BC-44 ripresa di una ricerca fermata dal fornitore (+ giudice L9 dal vivo) | agente già lanciato (ripreso) | 🏃 |
 | 4 | consegna `public/`, riavvio 4174, foto due temi, push del blocco | io | dopo 1-3 |
