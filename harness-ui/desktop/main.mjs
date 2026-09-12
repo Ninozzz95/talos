@@ -5,10 +5,11 @@ import { join, isAbsolute } from 'node:path';
 import { app, BrowserWindow, dialog, Menu, powerMonitor, screen, shell, Tray } from 'electron';
 import { creaCicloDiVita } from './lifecycle.mjs';
 import { leggiStatoFinestra, salvaStatoFinestra } from './window-state.mjs';
-import { creaAvvioFiglio, risolviPercorsi, scegliPortaEffimera, urlIngresso, validaHandshake } from './runtime.mjs';
+import { creaAvvioFiglio, risolviPercorsi, scegliMotoreLocale, scegliPortaEffimera, urlIngresso, validaHandshake } from './runtime.mjs';
 import { creaRegistro } from './log.mjs';
 
 app.setName('TALOS');
+if (process.platform === 'win32') app.setAppUserModelId('it.talos.desktop');
 if (process.env.TALOS_DESKTOP_DATA_DIR) {
   if (!isAbsolute(process.env.TALOS_DESKTOP_DATA_DIR)) throw new Error('La cartella dati deve essere assoluta.');
   app.setPath('userData', process.env.TALOS_DESKTOP_DATA_DIR);
@@ -103,6 +104,8 @@ function avviaGuscio() {
       await Promise.all([...figli].filter(h => h.chiusura).map(h => h.chiusura));
       if (staUscendo) throw new Error('Chiusura in corso.');
       const percorsi = risolviPercorsi({ appPath: app.getAppPath(), isPackaged: app.isPackaged, resourcesPath: process.resourcesPath, harnessDir: process.env.TALOS_DESKTOP_HARNESS_DIR });
+      const motoreLocale = scegliMotoreLocale({ percorsi });
+      if (motoreLocale) process.env.TALOS_LLAMA_SERVER_PATH = motoreLocale;
       if (!existsSync(percorsi.server)) throw new Error('Il servizio locale manca dal pacchetto.');
       const port = await scegliPortaEffimera();
       if (staUscendo) throw new Error('Chiusura in corso.');

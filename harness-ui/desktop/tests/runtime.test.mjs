@@ -38,3 +38,20 @@ test('R01-HANDSHAKE — ammette soltanto la porta richiesta sul loopback canonic
   assert.equal(new URL(urlIngresso(`http://127.0.0.1:${port}`, 'b'.repeat(64))).pathname, '/');
   assert.throws(() => urlIngresso('https://example.com', 'b'.repeat(64)));
 });
+
+test('R02-PERCORSI — binari inclusi nelle risorse e scoperta sorgente conservata', () => {
+  const appPath = resolve('risorse/app');
+  const p = risolviPercorsi({ appPath, isPackaged: true, resourcesPath: resolve('risorse') });
+  assert.deepEqual(p.localRuntime, { cpu: resolve('risorse/local-runtime/cpu/llama-server.exe'), vulkan: resolve('risorse/local-runtime/vulkan/llama-server.exe') });
+  assert.equal(risolviPercorsi({ appPath }).localRuntime, undefined);
+});
+
+test('R02-MOTORE — Vulkan verificato, ripiego CPU e override esplicito', async () => {
+  const { scegliMotoreLocale } = await import('../runtime.mjs');
+  const percorsi = { localRuntime: { cpu: resolve('cpu/llama-server.exe'), vulkan: resolve('vulkan/llama-server.exe') } };
+  assert.equal(scegliMotoreLocale({ percorsi, env: {}, sonda: () => ({ status: 0 }) }), percorsi.localRuntime.vulkan);
+  assert.equal(scegliMotoreLocale({ percorsi, env: {}, sonda: p => ({ status: p === percorsi.localRuntime.cpu ? 0 : 1 }) }), percorsi.localRuntime.cpu);
+  assert.throws(() => scegliMotoreLocale({ percorsi, env: {}, sonda: () => ({ status: 1 }) }), /motore/i);
+  assert.equal(scegliMotoreLocale({ percorsi, env: { TALOS_LLAMA_SERVER_PATH: resolve('manuale.exe') }, sonda: () => { throw Error('Non deve sondare override.'); } }), resolve('manuale.exe'));
+  assert.equal(scegliMotoreLocale({ percorsi: {}, env: {} }), undefined);
+});
