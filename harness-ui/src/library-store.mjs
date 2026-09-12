@@ -125,6 +125,59 @@ export function percorsoContenutoVoce(id) {
   return `${CARTELLA_LIBRERIA}/${id}/${NOME_FILE_CONTENUTO}`;
 }
 
+/**
+ * ⭐⭐⭐ BC-38 (12/09/2026), owner: «mettere il percorso dei file nella Libreria… nel dettaglio
+ * anche da chi sono stati creati e da quale sessione».
+ *
+ * Il percorso ASSOLUTO del file di contenuto — la sola forma che si può mettere davanti a una
+ * persona, perché è quella che si incolla in Esplora file o in un terminale. Gemello di
+ * `percorsoContenutoVoce` (che resta relativo perché è ciò che vuole `rivelaInEsploraFile`), e
+ * come lui vive QUI: la disposizione della cartella di Libreria ha un solo proprietario.
+ * `null` se l'id non è in grammatica — «questa voce non c'è», mai un percorso inventato.
+ */
+export function percorsoAssolutoVoce(cartella, id) {
+  const relativo = percorsoContenutoVoce(id);
+  if (!relativo || typeof cartella !== 'string' || cartella.length === 0) return null;
+  return join(cartella, relativo);
+}
+
+/**
+ * CHI ha prodotto una voce, letto dal `meta.json` e mai dedotto dal NOME del file.
+ *
+ * ⛔ Due valori, non tre: `persona` (un file caricato) e `modello` (un file generato). La terza
+ *   categoria che si potrebbe volere — «l'ha scritto una ricerca approfondita» — NON è
+ *   distinguibile oggi: `research-orchestrator.mjs` chiama `salvaVoce` con lo stesso
+ *   `origine:'generated'` di un artefatto o di un `document_create`, e l'unico segno che resta
+ *   sul disco sarebbe il prefisso «Research - » nel nome. Un prefisso nel nome NON è un dato:
+ *   è una stringa che chiunque rinomina. ⇒ si dice «il modello», che è vero, invece di indovinare.
+ * ⛔ `modello`/`provider` restano `null` per tutte le voci scritte prima di oggi: nessuna li
+ *   portava (misurato il 12/09/2026 sulla Libreria del Desktop dell owner: 14 voci su 14
+ *   senza `modello`). Un `null` qui vuol dire «non registrato», e a schermo si legge così.
+ */
+function creatoDaDiMeta(meta, origineEffettiva) {
+  if (origineEffettiva !== 'generated') return { tipo: 'persona' };
+  return {
+    tipo: 'modello',
+    modello: typeof meta.modello === 'string' && meta.modello.trim() ? meta.modello.trim() : null,
+    provider: typeof meta.provider === 'string' && meta.provider.trim() ? meta.provider.trim() : null,
+  };
+}
+
+/**
+ * DA QUALE sessione arriva una voce. `null` quando il `meta.json` non lo dice — ed è il caso di
+ * ogni voce scritta prima del 12/09/2026, perché `salvaVoce` non lo salvava.
+ * ⛔ `null` NON si riempie con un ripiego: «sessione non registrata» è la verità, un id inventato
+ *   o l'id del progetto al posto suo sarebbero una bugia che porta a cliccare su una chat che non
+ *   esiste. Il `nome` è quello congelato al momento della scrittura: può essere `null` da solo
+ *   (l'id c'è, il nome no) e chi disegna lo risolve con l'elenco vivo delle sessioni.
+ */
+function sessioneDiMeta(meta) {
+  const id = typeof meta.sessionId === 'string' && meta.sessionId.trim() ? meta.sessionId.trim() : null;
+  if (!id) return null;
+  const nome = typeof meta.sessionNome === 'string' && meta.sessionNome.trim() ? meta.sessionNome.trim() : null;
+  return { id, nome };
+}
+
 /** La cartella di UNA voce, o `null` se l'id non è un nome piatto (vedi `idVoceLibreriaValido`). */
 function cartellaDellaVoce(cartella, id) {
   if (!idVoceLibreriaValido(id)) return null;
@@ -176,7 +229,16 @@ async function leggiMeta(percorsoMeta, readFileFn, id) {
  * errore); un `meta.json` malformato FERMA il caricamento con un
  * errore dichiarato — mai una voce fantasma letta a metà.
  */
-export async function elencaVoci({ cartella }, deps = {}) {
+/*
+ * ⭐ BC-38 — `conProvenienza` è SPENTO di default, e non è una cautela generica: `elencaVoci` è
+ *   anche l'attrezzo `library_list` del MODELLO (`agent-service.mjs:1398` → `impaginaVoci`, che
+ *   restituisce le voci intere). Accendere sempre i quattro campi nuovi vorrebbe dire mettere un
+ *   percorso assoluto e una provenienza dentro il contesto di OGNI giro, cioè cambiare in silenzio
+ *   il contratto verso il modello e il conto dei token. ⇒ li chiede solo chi disegna per la
+ *   PERSONA (`session-registry.elencaLibreria`); per il modello questa funzione resta identica
+ *   bit per bit.
+ */
+export async function elencaVoci({ cartella, conProvenienza = false }, deps = {}) {
   const readdirFn = deps.readdirFn ?? fsp.readdir;
   const readFileFn = deps.readFileFn ?? fsp.readFile;
   const cartellaLibreria = join(cartella, CARTELLA_LIBRERIA);
@@ -192,7 +254,16 @@ export async function elencaVoci({ cartella }, deps = {}) {
     if (!voce.isDirectory()) continue; // un file sciolto dentro .harness-ui-library/ non è una voce
     const meta = await leggiMeta(join(cartellaLibreria, voce.name, NOME_FILE_META), readFileFn, voce.name);
     if (meta === undefined) continue;
-    entries.push(meta2voce(voce.name, meta));
+    const base = meta2voce(voce.name, meta);
+    entries.push(conProvenienza
+      ? {
+        ...base,
+        cartella,
+        percorso: percorsoAssolutoVoce(cartella, voce.name),
+        creatoDa: creatoDaDiMeta(meta, base.origine),
+        sessione: sessioneDiMeta(meta),
+      }
+      : base);
   }
   return entries;
 }
@@ -498,7 +569,21 @@ export async function eliminaVoce({ cartella, id }, deps = {}) {
  * chiamante: è sempre generato qui, stesso principio di ogni id in
  * questo progetto.
  */
-export async function salvaVoce({ cartella, nome, mediaType, origine = 'uploaded', testo, base64, modello, provider }, deps = {}) {
+/*
+ * ⭐⭐⭐ BC-38 (12/09/2026) — `sessionId`/`sessionNome`: DA QUALE conversazione nasce un file.
+ *
+ * ⛔ Si SCRIVONO, non si deducono. Fino a stamattina il `meta.json` non portava nessun legame con
+ *   la sessione, e non c'era modo di ricostruirlo dopo: la Libreria è per CARTELLA di progetto,
+ *   quindi la stessa voce compare in TUTTE le sessioni che lavorano lì (verificato il 12/09/2026:
+ *   `c8e9b07b` ed `efc9559d` mostrano le stesse 14 voci) — l'elenco in cui una voce compare non
+ *   dice chi l'ha prodotta.
+ * ⛔ Il NOME viaggia congelato accanto all'id e non al posto suo: una sessione si rinomina, e una
+ *   voce scritta ieri deve continuare a nominare la sessione giusta anche se oggi si chiama in un
+ *   altro modo. Chi disegna preferisce il nome VIVO quando l'elenco delle sessioni ce l'ha.
+ * ⛔ Assenti ⇒ il `meta.json` esce identico a ieri, campo per campo: nessun chiamante che non li
+ *   passa cambia di un byte, e le voci vecchie restano leggibili con `sessione: null`.
+ */
+export async function salvaVoce({ cartella, nome, mediaType, origine = 'uploaded', testo, base64, modello, provider, sessionId, sessionNome }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   const randomUUIDFn = deps.randomUUIDFn ?? randomUUID;
@@ -521,6 +606,10 @@ export async function salvaVoce({ cartella, nome, mediaType, origine = 'uploaded
     aggiornatoIl: adesso,
     ...(origineEffettiva === 'generated' && modello ? { modello } : {}),
     ...(origineEffettiva === 'generated' && provider ? { provider } : {}),
+    ...(typeof sessionId === 'string' && sessionId.trim() ? { sessionId: sessionId.trim() } : {}),
+    ...(typeof sessionId === 'string' && sessionId.trim() && typeof sessionNome === 'string' && sessionNome.trim()
+      ? { sessionNome: sessionNome.trim() }
+      : {}),
   };
   await writeFileFn(join(cartellaVoce, NOME_FILE_META), JSON.stringify(meta, null, 2), 'utf8');
   if (typeof base64 === 'string') {

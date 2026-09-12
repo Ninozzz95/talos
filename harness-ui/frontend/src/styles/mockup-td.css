@@ -153,6 +153,23 @@
 .td-detail-body h3 { margin: 24px 0 10px; font-size: 14px; }
 .td-detail-meta { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; color: var(--talos-muted); font-size: 11px; margin: 0 0 20px; }
 .td-prose { white-space: pre-wrap; line-height: 1.85; font-size: 14px; color: var(--talos-assistant-text); overflow-wrap: anywhere; }
+/* ⭐ BC-38 (12/09/2026) — il percorso di un file di Libreria, nel dettaglio. Mono perché è un
+   valore da leggere carattere per carattere e da incollare altrove; `anywhere` perché un percorso
+   di Windows non ha spazi dove andare a capo e senza questa riga allargherebbe la colonna.
+   ⛔ NON si tronca con i puntini: un percorso tagliato non si incolla (VS Code mette il percorso
+   intero dietro il comando «Copy Breadcrumbs Path», non dentro un fumetto). */
+/* ⛔ `break-word` e NON `anywhere`: con `anywhere` ogni carattere e un punto di rottura buono
+   quanto gli altri, quindi i `<wbr>` messi dopo ogni separatore non contano niente e il percorso
+   si spezza in mezzo a una parola (visto nella foto del 12/09: «…Desktop.harnes / s-ui-library…»).
+   Con `break-word` il browser usa PRIMA i punti dichiarati, e spezza dentro un segmento solo se
+   quel segmento da solo non ci sta — cioe tiene la rete senza rovinare il caso normale. */
+.td-percorso { font-family: var(--talos-font-mono); font-size: 12px; overflow-wrap: break-word; color: var(--talos-text); }
+/* ⭐ BC-38 — il nome della sessione nel dettaglio è un COMANDO (apre quella conversazione) ma sta
+   in una colonna di VALORI: senza questa riga l'incavo del bottone lo spinge più a destra degli
+   altri due, e una colonna fuori squadra si legge come un errore — visto nella foto del 12/09.
+   ⛔ Il testo va a capo: il nome di una conversazione può essere lungo, e un bottone che non
+   manda a capo lo farebbe uscire dalla colonna. */
+.td-andata dd > .td-vai-sessione { margin-inline-start: calc(var(--talos-space-control) * -1); margin-block: -6px; max-width: 100%; justify-content: flex-start; white-space: normal; text-align: left; }
 .td-code { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; font-size: 12px; padding: 16px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-window-bg); font-family: var(--talos-font-mono); }
 .td-source { display: block; padding: 14px 0; border-bottom: 1px solid var(--talos-border); color: var(--talos-text); font-size: 13px; }
 .td-source span { display: block; color: var(--talos-muted); font-size: 12px; margin-top: 5px; line-height: 1.5; }

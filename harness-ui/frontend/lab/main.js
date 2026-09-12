@@ -537,6 +537,23 @@ const LABORATORI = {
   SezioneLibreria_pdf_testo: () => montaLibreriaFile({ apri: 'lib-pdf', modo: 'testo' }),
   SezioneLibreria_docx: () => montaLibreriaFile({ apri: 'lib-docx', modo: 'anteprima' }),
   SezioneLibreria_docx_testo: () => montaLibreriaFile({ apri: 'lib-docx', modo: 'testo' }),
+  /*
+   * ⭐⭐⭐ BC-38 (12/09/2026) — DOVE VIVE UN FILE, nelle due forme. Schede e righe con la
+   *   provenienza: le prime due voci hanno percorso e sessione, la terza il percorso e nessuna
+   *   sessione, la quarta niente (è la forma delle 14 voci che oggi stanno sul disco dell'owner).
+   *   Una foto con le sole voci NUOVE non direbbe se il pannello regge quelle di ieri.
+   */
+  SezioneLibreria_provenienza() {
+    const schermo = mostraSchermo('schermoLibreria', 'libreria');
+    libreriaTd(schermo, LIBRERIA_ANTEPRIMA, { sessionId: 'fx-lab', notifica: notificaDiProva, onMenu: () => {}, onApriSessione: () => {}, leggiFile: leggiFileDiProva, rendiMarkdown: rendiMarkdownDiProva });
+    return schermo;
+  },
+  SezioneLibreria_provenienza_righe() {
+    const schermo = mostraSchermo('schermoLibreria', 'libreria');
+    libreriaTd(schermo, LIBRERIA_ANTEPRIMA, { sessionId: 'fx-lab', notifica: notificaDiProva, onMenu: () => {}, onApriSessione: () => {}, leggiFile: leggiFileDiProva, rendiMarkdown: rendiMarkdownDiProva });
+    schermo.querySelector('[data-vista="elenco"]').click();
+    return schermo;
+  },
   SezioneLibreria_elenco() {
     /* C-bis: la stessa Libreria in vista RIGHE — la copertina del file sparisce, resta la riga. */
     const schermo = mostraSchermo('schermoLibreria', 'libreria');

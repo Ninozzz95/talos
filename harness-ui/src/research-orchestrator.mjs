@@ -1417,7 +1417,15 @@ export function creaResearchOrchestrator({
          */
         let reportLibraryId;
         try {
-          reportLibraryId = await salvaVoceLibreriaFn({ cartella, nome: nomeRapporto(letto.intestazione || domanda), mediaType: 'text/markdown', origine: 'generated', testo: testoRapporto });
+          /*
+           * ⭐ BC-38 (12/09/2026) — da QUALE sessione nasce questo rapporto. `id` È il sessionId
+           *   della sessione che esegue la ricerca (doc di testa di questo file, riga 21): non c'è
+           *   niente da dedurre, si passa quello che già si ha. Senza, il dettaglio della Libreria
+           *   direbbe «sessione non registrata» sul file che più di tutti ha una sessione sua.
+           * ⛔ Solo l'id: il NOME leggibile della sessione lo risolve chi disegna, con l'elenco
+           *   vivo delle sessioni — una ricerca rinominata domani deve leggersi col nome di domani.
+           */
+          reportLibraryId = await salvaVoceLibreriaFn({ cartella, sessionId: id, nome: nomeRapporto(letto.intestazione || domanda), mediaType: 'text/markdown', origine: 'generated', testo: testoRapporto });
         } catch {
           /*
            * ⛔ Il rapporto ESISTE su disco: non è «senza rapporto». È solo la copia di Libreria
