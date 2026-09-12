@@ -63,12 +63,13 @@ Proposta dell'owner registrata («magari mettere il preambolo come tool»): la f
 | 5 | L10 modalità piano della ricerca con ricerca strategica (approvazione del piano dalla sezione) | Astra via `codex exec`, review mia | 🔜 |
 | 6 | BC-35 DOCX con titoli di Word + elenchi annidati nel Markdown server | Astra via `codex exec` (primo lotto: 188k token, ~1 h) | ✅ committata, 47/47 rilanciati da me; manca solo l'apertura in Word e il riavvio del 4174 |
 | 7 | BC-43 chiamanti di `$('#conversation')` che si aspettano lo scorrevole | Astra | 🔜 |
-| 8 | PO-14 P-D…P-L fornitori (Z.AI due porte, models.dev, fallback, wire OpenAI «una riga», pool chiavi, Kimi/MiniMax/Qwen, wire Anthropic, Azure/Bedrock/Vertex, provider esterno) | Astra, uno per volta | 🔜 |
+| 8 | PO-14 P-D…P-L fornitori | Astra, uno per volta | **P-D ✅** committata (Z.AI diretto, porta OpenAI; senza chiave nell'ambiente: prova su server finto; il composer con Z.AI da vedere sul 4174 dopo il riavvio). Prossimi: P-E models.dev, P-F fallback, P-G wire «una riga», P-H pool chiavi, P-I Kimi/MiniMax/Qwen, P-J wire Anthropic (seconda porta Z.AI), P-K Azure/Bedrock/Vertex, P-L provider esterno |
 | 9 | PO-15 TALOS delega a un agente esterno da CLI | Astra + kernel (io) | 🔜 nuovo |
 | 10 | PO-13 proposta GPT-Live-1 | — | ⏸ «in seguito» |
 | 11 | Release desktop: righe R-01…R-06 del piano (guscio, installer, CI Windows, monorepo pubblico AGPL-3.0, misure) | Astra + io | 🔜 al tuo sì sulle sei domande |
 | 12 | Pre-release: tabella di marcia con ricerca dell'ultimo mese, prove da utente nuovo, UX | io + Astra | al trigger (coda chiusa) |
 | 13 | A/B del banco sul preambolo (~$5, 210 giri) | io | ⏸ «alla fine» |
+| — | **BC-49** (owner 12/09: «sì, ad Astra quando finisce») il deposito del rapporto della ricerca in una sola generazione cade sul fornitore: spezzarlo (a pezzi o via file) | Astra, dopo BC-44 | 🔜 |
 | — | Aperti minori senza data: BC-12 foto sul 4174, 27B da misurare a VRAM libera, `.non-rinominato`, mockup-to-template distruttivo, `<br>` nei .md, HEAD 404, fase3 Review, easing freccia, h2 25ch, «Rivela»→«Mostra», icona Browser, campi elenco note/attività/memoria, nome/timbro sovrapposti nelle righe Libreria | decidi tu | ⏸ |
 | — | Fine lavoro: eliminare `.harness-ui-research`, `.harness-ui-library` sul Desktop e `harness-ui/scratch-l9/` | io, al tuo sì | promemoria |
 
