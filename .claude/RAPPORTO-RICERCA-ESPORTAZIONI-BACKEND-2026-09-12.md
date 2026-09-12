@@ -12,6 +12,10 @@ tre punti in `src/http-app.mjs`.
 difetto §6.2 (`src/research-store.mjs` + il suo test), che bloccava il secondo giro vero di L8.
 Sta in **§8**, e §6.2 resta com'era scritto — la diagnosi non si riscrive a posteriori.
 
+⭐⭐ **E il 12/09, terza consegna**: il difetto «integro ≠ bello» che §7 aveva **dichiarato** e
+nessuno aveva guardato — il Markdown del rapporto stampato invece che reso. Trovato da una FOTO
+del coordinatore, non da un test. Sta in **§9**, con le foto prima/dopo.
+
 ---
 
 ## 1. Cosa c'era, prima
@@ -278,6 +282,9 @@ di test.
   guardarlo: le prove dicono che i file sono **integri e rileggibili**, non che siano **belli** o
   che l'impaginazione dei tre toni regga su una ricerca vera da trenta affermazioni. Il `brief` su
   una pagina è misurato (`getPageCount() === 1`), ma su una fixture da 4 affermazioni.
+  > ⛔⛔⛔ **E infatti era rotto.** Questa riga ha retto meno di un giorno: il coordinatore ha
+  > guardato l'HTML di una ricerca vera e il rapporto usciva come **testo grezzo**. Curato in
+  > **§9**. ⇒ Una riga in «cosa NON ho verificato» non è una assoluzione: è un difetto con la data.
 - ⛔ **Nessun giro col modello e nessuna richiesta alla 4174**: tutte le ricerche di prova sono
   concluse da un `avviaSessioneFn` finto. Una ricerca **vera** — con affermazioni lunghe, url
   lunghi, titoli con emoji, fonti irraggiungibili — non è passata da qui.
@@ -410,3 +417,157 @@ rompeva. Il workaround è diventato la prova.
 - ⛔ **`.non-rinominato` non lo raccoglie nessuno**: se il rename fallisce davvero, il file resta lì
   e nessuna schermata lo mostra. Oggi è un file che salva i byte per chi va a guardare la cartella,
   non una funzione di ripristino.
+
+---
+
+## 9. IL MARKDOWN SI RENDE — il difetto trovato da una foto (12/09/2026, terza consegna)
+
+> Coordinatore: «il corpo del rapporto esce come testo grezzo … è il difetto "integro ≠ bello"
+> che avevi dichiarato». Foto: `scratchpad/esporta/l8-html-light.png`, copiata in
+> `.claude/foto-esporta-2026-09-12/PRIMA-l8-html-light.png`.
+
+### 9.1 Cosa si vedeva, e perché nessuna delle mie prove l'aveva visto
+
+Nell'esportazione HTML di una ricerca vera (L8, dal 4174) il corpo usciva così:
+
+```
+# Agentic Desktop Harness Evolution, Computer Control, and Mobile Integration Research Report
+## Executive Summary
+### Market Growth Trajectory - Current market size: $7.8B - Projected market size by 2030: $52B…
+**Key Components:** - Hierarchical multi-agent system - Two-tier agent hierarchy: HostAgent…
+```
+
+Cancelletti e asterischi **letterali**, ogni elenco schiacciato dentro un paragrafo solo.
+
+**La causa era una riga**, in `esportazioni.mjs`:
+
+```js
+for (const blocco of senzaIlRecinto(prosa).split(/\n{2,}/)) corpo.push(`<p>${escapeHtml(blocco)}</p>`)
+```
+
+Spezzare sulle righe **vuote** e passare tutto da `escapeHtml`. Un elenco Markdown è separato da
+**un** a capo, non da due ⇒ dieci punti elenco diventavano un paragrafo unico.
+
+⛔ **E le mie prove di ieri passavano tutte**: dicevano «200, `Content-Type` giusto, il corpo si
+rilegge». Tutto vero, e tutto insufficiente. È esattamente la riga che avevo scritto in §7
+(«nessuno ha **aperto** i file… non che siano **belli**»): l'avevo vista e l'avevo lasciata lì.
+**Una riga in "cosa non ho verificato" non è un'assoluzione: è un difetto con la data.**
+
+### 9.2 Ricerca web PRIMA di scrivere — fonte + data
+
+| # | fonte | cosa ha cambiato |
+|---|---|---|
+| **S8** | **GitHub Flavored Markdown Spec** — <https://github.github.com/gfm/>, letta il 12/09/2026 | Le regole sono scritte nel codice alla lettera: titolo ATX «1–6 unescaped # characters» con 0-3 spazi di rientro; recinto «at least three consecutive backtick characters or tildes», e «if the end of the containing block is reached and no closing code fence has been found, the code block contains all of the lines after the opening fence»; citazione «0-3 spaces … plus `>` with or without a following space», con la *laziness*; elenco numerato «1–9 arabic digits, followed by either a `.` or a `)`»; separatore «three or more matching -, _, or *». ⛔ **E i due vincoli che non conoscevo, sulle TABELLE**: «the header row must match the delimiter row in the number of cells. **If not, a table will not be recognized**»; per le righe di dati «if there are fewer … **empty cells are inserted**. If there are greater, **the excess is ignored**». Sono **tre** comportamenti diversi per tre casi che a occhio sembrano lo stesso — ne avrei scritto uno solo |
+| **S9** | **OWASP, XSS Prevention Cheat Sheet** — <https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html>, letto il 12/09/2026 | Contenuto di un elemento: entità per `& < > " '` (il mio `escapeHtml` ne aveva quattro su cinque, e usava `&#39;` invece di `&#x27;`). ⛔ E il vincolo che ha prodotto `hrefSicuro`: «**Allow-list http and HTTPS URLs only** (Avoid the JavaScript Protocol…)» e «never place untrusted data into `javascript:` protocol handlers». Il testo che passa di lì lo scrive un modello leggendo pagine del web, e il file si apre con `file://` da un browser vero: un `[clicca](javascript:…)` è una cosa che si può scrivere |
+
+⭐ **E prima, dentro il proprio codebase** — cercati i renderer che c'erano già, e **nessuno dei
+due serviva**, il che è un fatto da scrivere e non da saltare:
+- `frontend/src/components/markdown.js` (BC-29, 12/09, di un altro agente) è **il** renderer di
+  TALOS e copre le stesse cose. ⛔ Ma costruisce **nodi DOM** apposta («MAI innerHTML con testo non
+  fidato»): qui serve una **stringa** da mettere in un file, e sul server non c'è un DOM.
+- `document-generator.mjs`, `specToReport`: titoli `#`/`##`/`###`, elenchi `-`/`*`, paragrafi — e
+  basta. Niente grassetto, corsivo, codice, citazioni, elenchi numerati, tabelle, link. **È il
+  motivo per cui anche il PDF usciva con `**Key Components:**` dentro.**
+
+### 9.3 La cura
+
+**`src/research/markdown-server.mjs`** (nuovo, 474 righe) — **un parser, tre uscite**. Un parser
+per uscita sarebbero tre rese diverse dello stesso rapporto, cioè tre documenti che si
+contraddicono. Zero dipendenze nuove.
+
+| dove | cosa |
+|---|---|
+| `:88-94` | le sette espressioni di blocco, una per costrutto GFM |
+| `:125` | **`analizzaMarkdown`** → blocchi (`h`/`p`/`lista`/`citazione`/`codice`/`riga`/`tabella`). Pura |
+| `:252` / `:260` | `RE_INLINE` e **`analizzaInline`**: codice in linea **per primo** (così un `` `**a**` `` resta due asterischi), poi link, grassetto, corsivo. `_` solo fuori da una parola — senza la guardia, ogni `snake_case` di un rapporto tecnico diventerebbe obliquo a metà |
+| `:288` | `escapeHtml` — le **cinque** entità di OWASP |
+| `:303` | **`hrefSicuro`** — allowlist `http`/`https`/`mailto`, niente caratteri di controllo. Un indirizzo rifiutato **non fa sparire il testo**: perde solo il link |
+| `:353` | **`markdownInHtml`** — uscita 1, stringa HTML |
+| `:400` / `:420` | **`runsDiMarkdown`** e **`markdownInBlocchiReport`** — uscita 2, per `document-report.mjs`. ⭐ `text` di pdfmake accetta un **array di run** con `bold`/`italics`/`link`: è il motivo per cui il grassetto arriva nel PDF **senza toccare** il costruttore condiviso di `document_create` |
+| `:457` | **`markdownInTestoSemplice`** — uscita 3, per il DOCX |
+
+**`src/research/esportazioni.mjs`** — `:325` la prosa resa (era il `split(/\n{2,}/)`), `:328` la
+**sintesi** di un record vero (la scrive lo stesso modello: è Markdown anche lei), `:349` il testo
+di un'affermazione (solo inline), `:460` i blocchi del PDF, `:549` il DOCX. Più ~15 regole CSS
+nuove (`ul/ol/li`, `hr`, `code`, `pre`, `a`, `table`) per gli elementi che **prima non potevano
+esistere**.
+
+**`src/research/pdf.mjs`** — seconda divergenza dichiarata dal porto mobile (`:44-56`): la sintesi
+passa da `markdownInBlocchiReport` (`:162`, `:210`, `:276`), il testo delle affermazioni da
+`runsDiMarkdown`/`inlineInTestoSemplice` (`:169`, `:217`, `:223`, `:247`).
+
+⛔⛔ **Il PASSAGGIO non si rende mai, in nessun formato.** È la **prova**: il testo com'è nella
+fonte. Un asterisco dentro una citazione è un asterisco che c'era davvero, e trasformarlo in
+corsivo vorrebbe dire modificare l'unica cosa che il rapporto conserva **perché non sia
+modificabile**. Escapato, mai reso — e c'è un test che lo morde.
+
+⛔ **Il recinto ```` ```talos-research-report ```` non si stampa** in HTML/PDF/DOCX: si **usa**
+(bilancio, affermazioni) e si omette dalla prosa. Nel `md` resta, ed è voluto: è ciò che rende quel
+file ri-verificabile da chi lo riceve.
+
+### 9.4 Le prove — 15 nuove, **2858 verdi in tutto**
+
+**`tests/research/markdown-server.test.mjs` — 15 test.** ⛔ Le prove che contano sono **negative**:
+cercare `<h2>` non basterebbe, perché la pagina rotta poteva contenere **entrambi**.
+Blocchi riconosciuti nell'ordine · i tag veri (titoli, `ul`/`ol`, `blockquote`, `table`, `pre`,
+`a`) · **nessun marcatore sopravvive** (`#`, `**`, `- `, `|---`, `&gt; `) · il testo semplice del
+DOCX · i tipi di blocco che `document-report.mjs` sa davvero impaginare · i run di pdfmake · **al
+contrario**: `<script>` escapato (anche dentro un recinto), `javascript:`/`data:`/`vbscript:`/
+`file:`/relativo mai un `href` (e il testo resta), href bloccato anche nei run del PDF, le **tre**
+regole GFM sulle tabelle, recinto mai chiuso, `snake_case`, `**` senza chiusura, stringhe vuote.
+
+**`tests/http-routes-research-esportazioni.test.mjs` — 6 test nuovi, dalla rotta vera**, su una
+ricerca che ha depositato prosa Markdown e che il cancello respinge (è il caso della foto):
+HTML reso · **nessun marcatore** nel corpo · `<script>` escapato · **il PDF**: più pagine, e nel
+**testo estratto** nessun `## ` e nessun `**` · il DOCX · e la sintesi di un rapporto **vero**
+resa, col passaggio **verbatim**.
+
+⭐⭐ **Il testo di un PDF, davvero — e non era gratis.** `pdf-lib` non ha un estrattore, e pdfmake
+incorpora i font in **sottoinsieme**: nel flusso di contenuto non ci sono lettere ma **ID di
+glifo** (`[<00010002…>] TJ`). Un controllo sui byte grezzi non troverebbe `## ` né quando c'è né
+quando non c'è — cioè sarebbe **un test che passa per costruzione**, la cosa che questo repo ha già
+pagato più volte. ⇒ il test legge la CMap **`ToUnicode`** del font e traduce i glifi.
+⛔ **Provato al contrario su un artefatto vero**: sul PDF **rotto** del 12/09 questo lettore trova
+`## ` (verificato *prima* di scrivere la cura); su quello curato no. E il test asserisce anche che
+il testo estratto non sia vuoto, altrimenti le due righe sotto passerebbero per costruzione.
+⛔ Una trappola pagata per strada: le forme ad **array** della CMap (`<lo> <hi> [<a> <b> <c>]`) si
+devono togliere **prima** di cercare quelle a **intervallo**, perché tre voci consecutive dentro un
+array sembrano un intervallo — la rilettura sbagliata riscriveva tutta la mappa e il testo usciva
+cifrato. Trovato provando.
+
+### 9.5 Le foto — nei due temi, e un difetto che hanno trovato loro
+
+`.claude/foto-esporta-2026-09-12/` (Playwright headless su `file://`, 1000×1400, `colorScheme`
+chiaro e scuro):
+
+| file | cosa mostra |
+|---|---|
+| `PRIMA-l8-html-light.png` | il difetto: `# Agentic…`, `## Executive Summary`, `**Key Components:**` letterali, elenchi schiacciati |
+| `esporta-html-reso-light.png` | dopo: titoli veri, elenco puntato e numerato, grassetto, codice in linea, citazione, tabella con allineamento a destra, link, e `<script>alert(1)</script>` come **testo** |
+| `esporta-html-reso-dark.png` | lo stesso, tema scuro (owner 11/09: «GUARDA SEMPRE LA APP CON TEMA CHIARO E SCURO SEMPRE») |
+
+⭐ **E le foto hanno trovato un difetto che i test non potevano vedere**: nella prima stesura gli
+`h4` uscivano **grigio tenue e più piccoli del testo**, quindi un titolo di sezione pesava **meno**
+di un `**grassetto**` di paragrafo che stava sotto di lui — gerarchia invertita. Corretto nello
+stesso giro (`font-weight:600`, colore inchiostro) e rifotografato in entrambi i temi.
+
+### 9.6 Cosa NON ho verificato, di questa cura
+
+- ⛔ **Non è un motore CommonMark**, e non lo sarà: niente elenchi **annidati**, niente citazioni
+  annidate, niente link di riferimento `[a][b]`, niente HTML in linea, niente note a piè di pagina,
+  nessuna delle regole fini di precedenza dell'enfasi. Sono «le basi» — la stessa dichiarazione che
+  fa il renderer del frontend. Un rapporto che usasse un elenco annidato lo mostrerebbe **piatto**.
+- ⛔ **Il DOCX non ha titoli di Word.** `generateTalosDocument` costruisce il `.docx` con **un
+  paragrafo per riga** e accetta i blocchi impaginati solo per il `pdf`
+  (`TALOS_DOCUMENT_REPORT_PDF_ONLY`). Dare a Word dei veri `Heading 1/2/3` vuol dire cambiare
+  quel generatore, che è **condiviso con `document_create`** e non è di questo lotto. Oggi i titoli
+  del DOCX sono paragrafi — ma **senza cancelletti**, che era il difetto.
+- ⛔ **Il PDF non ha un font monospazio**: un recinto di codice esce nel riquadro `note`, leggibile
+  ma non a spaziatura fissa. Spedire un quarto font per questo non è una decisione mia.
+- ⛔ **Le foto sono di una ricerca `senza-rapporto`** (il caso della foto del coordinatore). Il ramo
+  col **record** è provato dai test ma **non fotografato**: non ho una ricerca vera con record
+  sotto mano che non passi dal 4174.
+- ⛔ **Nessun giro col modello**: la prosa delle prove l'ho scritta io copiandola dalla foto, non
+  l'ha prodotta un modello in una corsa vera.
+- ⛔ **Nessuna misura di prestazione**: il parser è lineare sulle righe, ma su un rapporto da
+  centomila parole non l'ho cronometrato.
