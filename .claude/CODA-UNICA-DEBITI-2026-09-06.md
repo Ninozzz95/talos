@@ -13,6 +13,69 @@
 >
 > Lo stato accertato oggi di tutte le righe è in **`.claude/STATO-VERO-DELLE-RIGHE-2026-09-11.md`**.
 
+## 📌 STATO DELLA CODA al 12/09/2026, 10:45 — aggiornato per l'owner («dammela tutta»)
+
+> Una riga per voce, stato VERO alla data. ✅ chiuso e verificato sul 4174 · 🔧 codice fatto, manca la
+> verifica dal vivo o un aggancio · 🏃 in corso (agente) · 🔜 approvato, non iniziato · ⏸ aperto, in
+> attesa di una decisione · ❌ non iniziato.
+
+### In corso adesso (2 agenti)
+| id | cosa | stato |
+|---|---|---|
+| **L9** | il motore della ricerca DENTRO la corsa: piano a rami, collettore con cache/budget nel giornale, spesa vera, verifica a tre livelli con giudice ≠ autore, contraria, prove distinte, bilancio vero | 🏃 |
+| **BC-33** | Temi e atmosfere: anteprima VIVA (token del preset + scena animata), tutti i cursori di tema/animazione nella modale, confronto testa a testa, 14 temi | 🏃 |
+
+### Chiusi l'11-12/09, verificati sul 4174 (chiaro e scuro)
+| id | cosa | prova |
+|---|---|---|
+| BC-07 | latenza API: `cerca` senza allowlist (5 % → 71 % file cercabili), preambolo a 4 blocchi (−45/−64 % token), cache per blocco, regola del banco `pass^3` | giro vero: 29.148 → 11.074 token al primo giro |
+| BC-09/BC-20 | sfondo animato rientrato col pacchetto dell'owner, porting del mockup (barra, cassetto, sessioni, sezioni elenco+dettaglio, toast, modali, temi) | 7 lotti, 147/147 nel cancello dei componenti |
+| BC-11 | giro assurdo per file grandi: alias argomenti, risposta a parole, `mode:append`, html verbatim | giro vero: 2.238 righe in 4 scrivi, 39 giri, zero errori |
+| BC-16 | punto 1 cache approvato | A/B: 0 hit su GLM 4.7 → su 5.3 la cache prende (53-88 %) |
+| BC-17 | `shell` col comando vuoto (alias `command`) | test + giro BC-11 |
+| BC-18 | scheda Agenti vuota con delega viva | foto |
+| BC-19 | logo del velo d'avvio sui token del tema | foto chiaro/scuro |
+| BC-21 | ricerca approfondita: permesso `Research`, cancello di consegna, giornale su disco, ripresa dopo riavvio, sezione consultabile a 5 viste, azioni (pausa/riprendi/ri-verifica/elimina), figlia col modello della madre, deposito strutturato | **L8 #2: `done`, 38 affermazioni, 28 fonti, cache 53 %** |
+| BC-22 | cancello dei componenti rosso: riferimento indietro rispetto agli ordini | 37/37 · 111/111 · mockup di riferimento rigenerato |
+| BC-23 | sfondo tagliato / da metà schermo (velo radiale) + chat trasparente | foto Terminal/Calm |
+| BC-24 | albero: cartelle che si chiudono, «Apri in Esplora file» sulla radice, Esc che non apre il velo | Windows vero + foto |
+| BC-25 | Libreria: file reso e testuale nel dettaglio, pari al mockup al pixel | foto affiancate |
+| BC-26 | CRUD completo Note/Attività/Memoria (rotte + UI), note markdown rese | foto + banco |
+| BC-27 | Board «undefined is not iterable» | test che passa ogni classe |
+| BC-28 | animazioni del mockup: 17 su 19 portate, scarto 0 % | `getAnimations()` |
+| BC-29 | markdown: recinti vestiti fuori dalla chat, citazioni GFM | foto |
+| BC-30 | testata Review a 1280: menu ⋯ sotto i 760 px di contenitore | RIP-V01 9/9 |
+| BC-31 | «research_deposit…» a schermo: nome umano + cancello sui nomi | 35/35 |
+| BC-32 | suite di esportazioni (md/html/pdf×3/docx/json/bib/ris/fonti) | provata sul 4174 su L8 #2 |
+| BC-34 | esportazioni col Markdown reso | foto HTML chiaro/scuro |
+| PO-14 (P-A/B/C) | record unico di fornitore + cancello di parità, cache DeepSeek/Kimi/OpenRouter da una funzione, LM Studio in chat | 2501/2501 · 🔧 non ancora visto nella app |
+
+### Codice fatto, manca l'aggancio o la verifica dal vivo (🔧)
+| id | cosa | cosa manca |
+|---|---|---|
+| BC-13 | modelli locali istantanei (cura dal mobile) | l'aggancio in `app.js` (diff nel rapporto LOCALI-E-ENHANCER) |
+| BC-15 | prompt enhancer (rotta + componente) | il pulsante nel composer (`index.template.html` + `app.js`, diff nel rapporto) e un giro vero |
+| BC-12 · BC-14 | Diretti per provider; modale Nuova sessione che blocca Avvia | fatti dal lotto SELETTORE-E-MODALE: **da rivedere sul 4174** (mai fotografati da me) |
+| BC-10 | spazio chat/navigator uguale a destra | lotto CSS-SPAZI: **da rivedere sul 4174** |
+
+### Aperti (⏸ decisione tua · ❌ non iniziati)
+| id | cosa | stato |
+|---|---|---|
+| BC-08 | barra di navigazione della conversazione: anche le risposte del modello, cliccabili | ❌ |
+| PO-13 | proposta GPT-Live-1 | ⏸ |
+| C-bis | switch righe/card nelle sezioni | ✅ (lotto C-bis) |
+| PO-14 P-D…P-L | Z.AI diretto a due porte · models.dev catalogo · fallback_models · undici «una riga» su wire OpenAI · pool di chiavi + fallback · Kimi/MiniMax/Qwen · wire Anthropic verso terzi · Azure/Bedrock/Vertex · provider come processo esterno | 🔜 approvati, in quest'ordine, dopo L9/BC-33 |
+| L10 (nuovo) | pulsante di approvazione del piano della ricerca nella sezione (dopo L9) | 🔜 |
+| BC-35 (nuovo) | DOCX con titoli di Word (generatore condiviso con `document_create`) ed elenchi annidati nel Markdown server | 🔜 |
+| A/B del banco | preambolo prima/dopo, 210 giri, ~$5,03, ~19,8 h | ⏸ «dopo» |
+| decisioni | easing della freccia del gruppo; `max-width:25ch` sull'h2 del dettaglio; «Rivela in Esplora File» → «Mostra nella cartella»; icona della scheda Browser (mappamondo/foglio); campi di elenco per note/attività/memoria; HEAD 404 su /file,/anteprima,/tree/file; ripresa di una `cancelled` senza cancello; `<br>` fra righe nei file .md; fase3 della Review; PDF del mobile con l'indice della fonte sbagliato (non nostra lane); `.non-rinominato` che nessuno raccoglie; `mockup-to-template.mjs` distruttivo per `#talosAvvio` | ⏸ |
+| incidente | le cartelle `.harness-ui-research` e `.harness-ui-library` sul Desktop (ripristinate dal Cestino) | 🔜 **da eliminare quando abbiamo finito — te lo ricordo io** |
+
+### Fuori da questa lane (segnalati, non nostri)
+mobile: PDF della ricerca con `sources[sourceIndex]` senza −1 (`researchPdf.ts:137,217`); MB-1/2/3 nel piano per la lane mobile (`PROMPT-ASTRA-2026-09-11-ricerca-approfondita-mobile.md`).
+
+---
+
 ## ✅ CHIUSE — spostate qui l'11/09/2026, con la prova rimisurata
 
 > Ogni riga è stata riletta **nel codice di oggi**, non copiata da un commit. Le misure fra parentesi
