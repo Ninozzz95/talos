@@ -21,8 +21,11 @@
  *      FARE, non solo cosa è successo.
  *   3. Se il record recintato del rapporto non si rilegge, il bilancio **non si stima**: si dice
  *      che non c'è e si mostra la prosa così com'è.
- *   4. Nessun pulsante promette una rotta che non esiste: pausa, ripresa, ri-verifica ed
- *      eliminazione non sono qui (arrivano con L5, se l'owner approva le rotte).
+ *   4. Nessun pulsante promette una rotta che non esiste. ⭐ AGGIORNATO IL 12/09: le rotte di
+ *      pausa, ripresa, ri-verifica ed eliminazione ci sono e l'owner le ha approvate
+ *      (`.claude/RAPPORTO-RICERCA-L5-2026-09-12.md` §3), quindi le quattro azioni sono nel menu —
+ *      ma la regola non cambia: ognuna compare solo negli stati in cui può davvero fare qualcosa,
+ *      e solo se il chiamante ha passato la sua porta di rete.
  *
  * ⛔ COSA SI LEGGE DAL MOBILE, E PERCHÉ È RISCRITTO QUI.
  *   Il formato del rapporto è quello di `mobile/src/lib/research/researchReport.ts:79-152`
@@ -105,6 +108,74 @@ export function conclusaDavvero(stato) { return stato === 'done'; }
  */
 export function haRapportoLeggibile(voce) {
   return conclusaDavvero(voce?.stato) && Boolean(voce?.reportLibraryId);
+}
+
+/* ------------------------------------------------ L5 (12/09): QUANDO un'azione può esistere */
+
+/*
+ * ⛔⛔⛔ 12/09/2026 — LE AZIONI DI SCRITTURA ARRIVANO, E LA REGOLA DI QUESTO FILE NON CAMBIA:
+ *   «una voce del menu esiste solo se può davvero fare qualcosa». Fino a ieri qui c'era scritto
+ *   «pausa, ripresa, ri-verifica ed eliminazione non sono qui (arrivano con L5, se l'owner approva
+ *   le rotte)»: le rotte ci sono (`.claude/RAPPORTO-RICERCA-L5-2026-09-12.md` §3), l'owner le ha
+ *   approvate, e la premessa che teneva fuori i pulsanti è caduta. Si riapre, e si scrive perché.
+ *
+ * ⛔ NASCOSTA o SPENTA? W3C APG «Menu and Menubar Pattern» (letta il 12/09/2026) dice che si può
+ *   tenere una voce e marcarla `aria-disabled="true"` — «Disabled menu items are focusable but
+ *   cannot be activated» — e MDN `aria-disabled` (stesso giorno) aggiunge la ragione per cui a
+ *   volte conviene: una voce spenta resta SCOPRIBILE col Tab. ⇒ È una scelta vera, non una
+ *   dimenticanza, e qui si sceglie di TOGLIERE. Il motivo è che «Metti in pausa» e «Riprendi» sono
+ *   l'una l'inverso dell'altra sullo stesso oggetto: tenerle tutte e due, una sempre spenta,
+ *   riempirebbe il menu di righe morte su OGNI ricerca — e lo stato è già scritto due centimetri
+ *   più in alto, nel timbro. Un menu di quattro voci che cambia con lo stato non fa perdere
+ *   nessuno; un menu di sei con due sempre grigie sì.
+ *
+ * ⛔⛔ «RIPRENDI» NON VALE SOLO SU `paused`, e NON È UNA LIBERTÀ CHE MI PRENDO: nel contratto lo
+ *   stato `interrupted` **non esiste**. `statoVivo` (`research-orchestrator.mjs:393-397`) lo
+ *   scrive così: se la sessione non c'è più o è `interrotta` ⇒ **`failed`**. Cioè una ricerca
+ *   uccisa a metà da un riavvio del server si presenta come `failed`, ed è ESATTAMENTE il caso
+ *   per cui il giornale di L4 e la cura di L5 §7 esistono. Offrire «Riprendi» solo su `paused`
+ *   nasconderebbe l'azione proprio dove serve.
+ * ⛔ E quando non si può davvero (giornale terminale: `done`/`cancelled`/`failed`), il server
+ *   risponde **409** e la frase lo dice. Meglio un no onesto e raro che un'assenza muta.
+ */
+export function puoMettereInPausa(voce) { return voce?.stato === 'running'; }
+export function puoRiprendere(voce) { return voce?.stato === 'paused' || voce?.stato === 'failed'; }
+
+/*
+ * ⛔ La ri-verifica vuole un rapporto CON i passaggi citati: senza, non c'è niente da ritrovare
+ *   nella pagina di oggi e la rotta risponde 409 col motivo (§3.4 del rapporto L5). Qui si guarda
+ *   il solo segnale che l'elenco porta — «questa ricerca ha un rapporto leggibile» — e il resto lo
+ *   dice il server. ⛔ Non si indovina la presenza dei passaggi da `bilancio`: una ricerca vecchia
+ *   passata col ripiego in prosa ha un rapporto VERO e pagato e non ha i passaggi, e togliere la
+ *   voce di menu a chi vuole provarci sarebbe decidere al posto suo su un dato che non abbiamo.
+ */
+export function puoRicontrollareLeFonti(voce) { return haRapportoLeggibile(voce); }
+
+/**
+ * L'ERRORE DEL SERVER, DETTO A UNA PERSONA — e detto per l'azione che ha premuto.
+ *
+ * ⛔ Il codice è l'unica parte VERA che esce da un 400/404/409: `public-problem.mjs` sostituisce il
+ *   messaggio, e il motivo preciso (in inglese, perché scritto per il modello) resta nel registro
+ *   diagnostico — non arriva qui. ⇒ La frase la scrive questo file, e la scrive DIVERSA per ogni
+ *   azione, perché «non è nello stato giusto» non dice niente a chi ha appena premuto «Riprendi».
+ * ⛔ Le due frasi del conflitto non sono inventate: sono i due soli rifiuti che il codice del
+ *   server può produrre — `mettiInPausa` rifiuta ciò che non sta girando, `riprendi` rifiuta ciò
+ *   che sta ancora girando oppure ha un giornale terminale (`research-orchestrator.mjs:989-1032`).
+ */
+export const AZIONI_RICERCA = new Map([
+  ['pausa', { verbo: 'mettere in pausa', conflitto: 'Non sta girando in questo momento: si può mettere in pausa solo una ricerca in corso.' }],
+  ['ripresa', { verbo: 'riprendere', conflitto: 'Non c’è niente da riprendere: o sta ancora girando, o è già arrivata alla fine.' }],
+  ['riverifica', { verbo: 'ricontrollare le fonti', conflitto: 'Non si può ancora ricontrollare: per rileggere le pagine servono i passaggi citati, e il rapporto di questa ricerca non li porta.' }],
+  ['elimina', { verbo: 'eliminare', conflitto: 'Non si può eliminare adesso.' }],
+]);
+
+export function paroleErroreRicerca(codice, azione) {
+  const quale = AZIONI_RICERCA.get(azione) || { verbo: 'fare questo', conflitto: 'Questa ricerca non è nello stato giusto per questa azione.' };
+  if (codice === 'RESEARCH_NOT_FOUND') return 'Questa ricerca non c’è più: qualcuno l’ha eliminata mentre era aperta. Aggiorna l’elenco.';
+  if (codice === 'RESEARCH_CONFLICT' || codice === 'RESEARCH_RECHECK_UNAVAILABLE') return quale.conflitto;
+  if (codice === 'NOT_FOUND') return 'La sessione non è più aperta: riapri una conversazione e riprova.';
+  if (codice === 'RESEARCH_INVALID' || codice === 'QUERY_INVALID') return 'Il server ha rifiutato la richiesta. Riapri la ricerca dall’elenco e riprova.';
+  return `Non sono riuscito a ${quale.verbo}: riprova fra un momento.`;
 }
 
 /*
@@ -438,10 +509,108 @@ const MAGAZZINI = new WeakMap();
 export function magazzinoRicerche(schermo) {
   let magazzino = MAGAZZINI.get(schermo);
   if (!magazzino) {
-    magazzino = { rapporti: new Map(), viste: new Map(), collegato: false };
+    magazzino = {
+      rapporti: new Map(), viste: new Map(), collegato: false,
+      /* L5 (12/09): la scheda intera letta da `GET …/research/:id` (piano, passi, spesa, giornale)
+         e l'esito dell'ultima ri-verifica, che il server NON persiste (rapporto L5 §6.2). */
+      dettagli: new Map(), riverifiche: new Map(), orologio: null,
+    };
     MAGAZZINI.set(schermo, magazzino);
   }
+  /* Un magazzino nato prima di L5 (una sezione già montata) non ha le tre chiavi nuove. */
+  if (!magazzino.dettagli) magazzino.dettagli = new Map();
+  if (!magazzino.riverifiche) magazzino.riverifiche = new Map();
   return magazzino;
+}
+
+/* --------------------------------------- L5: la sezione che si aggiorna mentre la ricerca lavora */
+
+/**
+ * ⭐⭐⭐ 12/09/2026 — LA CARD CHE RESTAVA «IN CORSO» PER SEMPRE.
+ *
+ * Trovato nel giro vero L8 (foto `scratchpad/l8/fine-Rapporto.png`): la sessione figlia era
+ * conclusa, il server rispondeva già `senza-rapporto`, e la scheda diceva ancora «In corso» finché
+ * qualcuno non premeva «Aggiorna». Una schermata che mostra uno stato vecchio e non lo sa è la
+ * stessa famiglia di guasto dell'elenco che diceva «Conclusa» sul dettaglio «bloccata».
+ *
+ * ⛔⛔ PERCHÉ UN OROLOGIO E NON UN EVENTO — misurato, non preferito. Gli eventi della sessione
+ *   FIGLIA non arrivano al browser: ogni sessione ha il suo buffer e i suoi iscritti, e in
+ *   `session-registry.mjs` non c'è una sola riga che inoltri gli eventi di una figlia al flusso
+ *   della madre (cercato: nessun rinvio, e `elencaFigli` è del sotto-agente, non della ricerca).
+ *   ⇒ Oggi, da questa pagina, l'unico modo VERO di sapere che una ricerca è finita è richiedere
+ *   l'elenco. Dirlo qui, perché il giorno in cui la figlia inoltrerà la sua fine questa funzione
+ *   diventi un ripiego invece di restare l'unica via.
+ * ⛔ Si accende SOLO se c'è almeno una ricerca `running`, e si spegne da sé quando non ce n'è più:
+ *   una pagina ferma non deve bussare al server per sempre. Una `paused` non cambia da sola —
+ *   aspetta una persona — quindi non tiene acceso niente.
+ * ⛔ Un solo orologio per schermo, riarmato a ogni disegno: `montaSezione` ridisegna a ogni lettera
+ *   digitata nel campo di ricerca, e senza la cancellazione qui sopra una ricerca di otto lettere
+ *   lascerebbe otto timer che bussano insieme.
+ * ⛔ `avvia`/`ferma` iniettabili: un test che aspetta trenta secondi veri misura la macchina.
+ */
+export const INTERVALLO_RICERCHE_VIVE = 30_000;
+
+/** Le ricerche che possono cambiare stato DA SOLE. Solo `running`: le altre aspettano una persona. */
+export function ricercheInCorso(elenco) {
+  return (Array.isArray(elenco) ? elenco : []).filter((r) => r?.stato === 'running');
+}
+
+export function governoRicercheVive(schermo, {
+  elenco, aggiorna, intervallo = INTERVALLO_RICERCHE_VIVE,
+  avvia = setTimeout, ferma = clearTimeout,
+} = {}) {
+  const magazzino = magazzinoRicerche(schermo);
+  if (magazzino.orologio) { ferma(magazzino.orologio); magazzino.orologio = null; }
+  const vive = ricercheInCorso(elenco).length;
+  /* ⛔ `hidden` è la pagina non guardata: chi ha cambiato schermata non deve pagare richieste. */
+  if (!vive || typeof aggiorna !== 'function' || schermo?.hidden === true) return { vive, acceso: false };
+  magazzino.orologio = avvia(() => { magazzino.orologio = null; aggiorna(); }, intervallo);
+  return { vive, acceso: true };
+}
+
+/* ------------------------------------------- L5: «le fonti dicono ancora questo?», detto onesto */
+
+/*
+ * ⛔⛔⛔ I QUATTRO STATI DI UNA FONTE RI-LETTA, e il quarto è il motivo per cui questa vista
+ *   esiste. `non-misurabile` NON è «a posto»: vuol dire che il testo tenuto non era attribuibile a
+ *   quell'indirizzo (`fonti/<sha256>.txt` prende il nome dal CONTENUTO, non dall'url) e che
+ *   «intatta»/«cambiata» oggi non si possono dire — rapporto L5 §3.4. Il modulo che misura,
+ *   chiamato senza quella mappa, risponderebbe `intact` su tutto: un timbro di verifica su una
+ *   pagina che nessuno ha confrontato, cioè esattamente il falso che tutto il disegno esiste per
+ *   togliere. ⇒ qui `non-misurabile` ha un tono NEUTRO e una frase che dice cosa manca.
+ * ⛔ Nessun tono `success` su `irraggiungibile` per via dei `passaggiPersi: 0`: zero passaggi persi
+ *   su una pagina che non si è aperta non è una buona notizia, è una non-notizia.
+ */
+export const STATI_FONTE_RIVERIFICA = new Map([
+  ['intatta', { parola: 'intatta', tono: 'success', spiega: 'Il testo su cui il rapporto si appoggia è ancora lì.' }],
+  ['cambiata', { parola: 'cambiata', tono: 'warning', spiega: 'La pagina risponde, ma non dice più quello su cui il rapporto si appoggiava.' }],
+  ['irraggiungibile', { parola: 'non si apre', tono: 'danger', spiega: 'La pagina non si è potuta leggere adesso: non vuol dire che sia cambiata, vuol dire che non lo sappiamo.' }],
+  ['non-misurabile', { parola: 'non confrontabile', tono: '', spiega: 'Di questa fonte non era stato tenuto il testo: quanta parte sia sopravvissuta non si può dire.' }],
+]);
+
+export function statoFonteRiverifica(stato) {
+  return STATI_FONTE_RIVERIFICA.get(stato) || { parola: 'esito non registrato', tono: '', spiega: 'Il server non dice com’è andata su questa fonte.' };
+}
+
+/**
+ * Il bilancio della ri-verifica in una frase.
+ *
+ * ⛔ Il numero che conta e che è VERO oggi è `passaggiPersi`: una citazione che non risolve più
+ *   alle parole che citava. Va per primo quando c'è, perché è l'unica cosa che una persona deve
+ *   fare qualcosa per sapere. ⛔ E non si dice «tutto a posto» quando il misurabile è zero.
+ */
+export function frasiRiverifica(riverifica) {
+  const b = riverifica?.bilancio || {};
+  const fonti = Number(b.fonti) || 0;
+  if (!fonti) return 'Nessuna fonte da ricontrollare in questo rapporto.';
+  const pezzi = [];
+  if (b.passaggiPersi > 0) pezzi.push(`${b.passaggiPersi} ${b.passaggiPersi === 1 ? 'passaggio non si ritrova più' : 'passaggi non si ritrovano più'}`);
+  if (b.passaggiRitrovati > 0) pezzi.push(`${b.passaggiRitrovati} ancora al loro posto`);
+  if (b.cambiate > 0) pezzi.push(`${b.cambiate} ${b.cambiate === 1 ? 'pagina cambiata' : 'pagine cambiate'}`);
+  if (b.irraggiungibili > 0) pezzi.push(`${b.irraggiungibili} ${b.irraggiungibili === 1 ? 'non si apre' : 'non si aprono'}`);
+  if (b.nonMisurabili > 0) pezzi.push(`${b.nonMisurabili} non confrontabili`);
+  const testa = `${fonti} ${fonti === 1 ? 'fonte riletta' : 'fonti rilette'}`;
+  return pezzi.length ? `${testa}: ${pezzi.join(' · ')}` : testa;
 }
 
 export const VISTE = [
@@ -694,16 +863,248 @@ function vistaAffermazioni(doc, voce, lettura) {
   });
 }
 
-function vistaFonti(doc, voce, lettura) {
+/* ════════════════════════════ L5-bis (12/09): LA SUITE DI ESPORTAZIONI ═══════════════════════ */
+
+/*
+ * ⛔⛔⛔ ORDINE DELL'OWNER, 12/09/2026: «la ricerca approfondita deve avere una suite di
+ *   esportazioni COMPLETA». Nove uscite invece di tre, dietro UNA voce di menu.
+ *
+ * ⛔ PERCHÉ UN PANNELLO E NON UN SOTTOMENU. Il menu «⋯» di questo prodotto è uno solo — lo stesso
+ *   dell'albero dei file, della Libreria e delle sezioni scrivibili (`apriMenuAzioniLibreria`) — e
+ *   non ha i sottomenu: darglieli vorrebbe dire aggiungere a un componente CONDIVISO una regia di
+ *   tastiera nuova (frecce che entrano ed escono, `aria-haspopup` annidato) per una sola famiglia
+ *   di voci. E nove righe con tre toni di PDF in un menu a comparsa non si leggono. ⇒ una voce
+ *   sola, «Esporta…», che apre il pannello di scelta — la seconda forma che l'ordine ammette.
+ *
+ * ⛔ IL NOME DEL FILE LO DECIDE IL SERVER, e non è un dettaglio: MDN «Content-Disposition» e
+ *   «<a download>» (lette il 12/09/2026) dicono che, quando l'intestazione porta un `filename`,
+ *   quello **vince** sull'attributo `download`. ⇒ qui `download` si mette SENZA valore (il browser
+ *   prende il nome dall'intestazione) e il messaggio d'esito NON inventa un nome di file: dire «è
+ *   in Ricerca.pdf» mentre sul disco è finito `rapporto-2026-09-12.pdf` è una bugia piccola e
+ *   gratuita. Il messaggio nomina il FORMATO — che è anche il nome della voce premuta.
+ */
+
+/** Le nove uscite, nell'ordine dell'owner. `vuoleRecord` = senza il riepilogo non esiste. */
+export const FORMATI_ESPORTAZIONE = [
+  { chiave: 'md', formato: 'md', gruppo: 'documenti', etichetta: 'Markdown', spiega: 'Il rapporto come testo, con i titoli e le citazioni.' },
+  { chiave: 'pdf-report', formato: 'pdf', tono: 'report', gruppo: 'documenti', etichetta: 'PDF — rapporto', spiega: 'Tutto: risposta, affermazioni verificate e fonti.' },
+  { chiave: 'pdf-brief', formato: 'pdf', tono: 'brief', gruppo: 'documenti', etichetta: 'PDF — sintesi', spiega: 'Solo la risposta e il bilancio delle verifiche, per chi ha due minuti.' },
+  { chiave: 'pdf-dossier', formato: 'pdf', tono: 'dossier', gruppo: 'documenti', etichetta: 'PDF — dossier', spiega: 'Il rapporto più i passaggi citati per esteso, fonte per fonte.' },
+  { chiave: 'docx', formato: 'docx', gruppo: 'documenti', etichetta: 'Word', spiega: 'Un documento .docx da riaprire e modificare.' },
+  { chiave: 'html', formato: 'html', gruppo: 'documenti', etichetta: 'Pagina HTML', spiega: 'Una pagina sola, da aprire in un browser o allegare a una mail.' },
+  { chiave: 'json', formato: 'json', gruppo: 'dati', vuoleRecord: true, etichetta: 'Record JSON', spiega: 'Affermazioni, verdetti e fonti come dati, per un altro programma.' },
+  { chiave: 'bib', formato: 'bib', gruppo: 'dati', vuoleRecord: true, etichetta: 'BibTeX', spiega: 'Le fonti per un gestore di bibliografia.' },
+  { chiave: 'ris', formato: 'ris', gruppo: 'dati', vuoleRecord: true, etichetta: 'RIS', spiega: 'Le fonti per Zotero, Mendeley, EndNote.' },
+  { chiave: 'fonti', formato: 'fonti', gruppo: 'dati', vuoleRecord: true, etichetta: 'Elenco delle fonti', spiega: 'Solo indirizzi, titoli e date dichiarate.' },
+  { chiave: 'copia', gruppo: 'appunti', etichetta: 'Copia il testo negli appunti', spiega: 'Senza scrivere nessun file.' },
+];
+
+export const GRUPPI_ESPORTAZIONE = [
+  { id: 'documenti', parola: 'Da leggere' },
+  { id: 'dati', parola: 'Dati e citazioni' },
+  { id: 'appunti', parola: 'Senza file' },
+];
+
+/** Il motivo per cui un'uscita non c'è. ⛔ Detto, non nascosto: sparire non insegna niente. */
+export const MOTIVI_ESPORTAZIONE = {
+  senzaRapporto: 'Questa ricerca non ha depositato un rapporto: non c’è niente da esportare.',
+  senzaRecord: 'Il rapporto non porta con sé il riepilogo delle verifiche: senza quello non ci sono affermazioni né fonti da estrarre.',
+  senzaTesto: 'Il testo del rapporto non è ancora stato letto da questa schermata.',
+};
+
+/**
+ * Le nove uscite per QUESTA ricerca: quali si possono fare, e perché no.
+ *
+ * ⛔⛔ VOCI SPENTE, NON TOLTE — ed è l'opposto della scelta fatta per pausa/ripresa vent'righe più
+ *   su, di proposito. Lì due voci alternative si scambiavano il posto e lo stato stava già nel
+ *   timbro; qui l'elenco è un CATALOGO, e un catalogo da cui spariscono quattro righe fa credere
+ *   che quelle uscite non esistano. W3C APG «Menu and Menubar Pattern» e MDN `aria-disabled`
+ *   (lette il 12/09/2026): una voce spenta resta scopribile col Tab, e la funzionalità va
+ *   soppressa a mano — che è quello che fa `montaPannelloEsportazioni`.
+ * ⛔ Le quattro uscite di DATI muoiono col record, non col rapporto: è la stessa distinzione della
+ *   rotta (409 per json/bib/ris/fonti, mentre md/html/pdf escono comunque «senza verifiche»).
+ * ⛔ E quando il testo non è ancora stato letto NON si dichiara niente: `record` ignoto non è
+ *   `record` assente. Le uscite di dati restano accese e decide il server.
+ */
+export function esportazioniRicerca(voce, lettura = null) {
+  const haRapporto = haRapportoLeggibile(voce);
+  const letto = lettura?.stato === 'pronto';
+  const senzaRecord = letto && !lettura.record;
+  return FORMATI_ESPORTAZIONE.map((uscita) => {
+    if (uscita.chiave === 'copia') {
+      const testo = letto ? (lettura.prosa || lettura.testo || '') : '';
+      return { ...uscita, disponibile: Boolean(testo), motivo: testo ? null : MOTIVI_ESPORTAZIONE.senzaTesto, testo };
+    }
+    if (!haRapporto) return { ...uscita, disponibile: false, motivo: MOTIVI_ESPORTAZIONE.senzaRapporto };
+    if (uscita.vuoleRecord && senzaRecord) return { ...uscita, disponibile: false, motivo: MOTIVI_ESPORTAZIONE.senzaRecord };
+    /* ⛔ Un documento su un rapporto senza riepilogo esce lo stesso, ma lo dice: «senza verifiche»
+       non è un dettaglio tipografico, è la differenza fra un rapporto e un testo. */
+    const avvertenza = senzaRecord ? 'esce senza le verifiche' : null;
+    return { ...uscita, disponibile: true, motivo: null, avvertenza };
+  });
+}
+
+/**
+ * L'indirizzo della rotta di esportazione. ⛔ Scritto UNA volta, qui: un indirizzo ricomposto
+ *   dentro un gestore di clic è un indirizzo che diverge al primo cambiamento del contratto.
+ */
+export function indirizzoEsportazione(sessionId, ricercaId, formato, tono = null) {
+  const base = `/api/v1/sessions/${encodeURIComponent(String(sessionId ?? ''))}/research/${encodeURIComponent(String(ricercaId ?? ''))}/esporta`;
+  const query = new URLSearchParams({ formato: String(formato) });
+  if (tono) query.set('tono', tono);
+  return `${base}?${query.toString()}`;
+}
+
+/**
+ * Il pannello di scelta: tre gruppi, una riga per uscita, il motivo sotto quelle spente.
+ *
+ * ⛔ `aria-disabled` e non `disabled`: MDN dice che il secondo toglie l'elemento dall'ordine del
+ *   Tab, e una riga che sparisce dalla tastiera porta via anche il suo MOTIVO — cioè proprio
+ *   l'informazione per cui la riga è rimasta. ⇒ resta raggiungibile, e il clic lo sopprime questa
+ *   funzione (MDN: «Web developers must manually ensure such elements have their functionality
+ *   suppressed»).
+ */
+export function montaPannelloEsportazioni(doc, elenco, { onScegli } = {}) {
+  const pezzi = [];
+  for (const gruppo of GRUPPI_ESPORTAZIONE) {
+    const dentro = elenco.filter((u) => u.gruppo === gruppo.id);
+    if (!dentro.length) continue;
+    pezzi.push(nodo(doc, 'h3', 'td-esporta-gruppo', gruppo.parola));
+    /*
+     * ⛔ VISTO NELLA FOTO (`esporta_spente-dark-1440-modale`, 12/09): lo stesso motivo, lungo due
+     *   righe, ripetuto QUATTRO volte di fila — un muro che si smette di leggere alla seconda, e
+     *   che rubava alla riga lo spazio per dire che cos'è un BibTeX. ⇒ quando tutte le uscite
+     *   spente di un gruppo hanno lo stesso motivo, si scrive UNA volta sotto il titolo del
+     *   gruppo, e ogni riga tiene la sua descrizione: si impara lo stesso cosa si sta perdendo.
+     */
+    const motiviDistinti = [...new Set(dentro.filter((u) => !u.disponibile).map((u) => u.motivo))];
+    const motivoDiGruppo = motiviDistinti.length === 1 ? motiviDistinti[0] : null;
+    if (motivoDiGruppo) pezzi.push(nodo(doc, 'p', 'td-esporta-motivo', motivoDiGruppo));
+    /* ⛔ Stessa cosa per l'avvertenza, e per lo stesso difetto visto nella stessa foto: «esce senza
+       le verifiche» sei volte di fila è un motivo decorativo. Se vale per TUTTE le uscite accese
+       del gruppo, si scrive una volta e i timbri sulle righe spariscono. */
+    const avvertenzeDistinte = [...new Set(dentro.filter((u) => u.disponibile).map((u) => u.avvertenza ?? null))];
+    const avvertenzaDiGruppo = avvertenzeDistinte.length === 1 && avvertenzeDistinte[0] ? avvertenzeDistinte[0] : null;
+    if (avvertenzaDiGruppo) pezzi.push(nodo(doc, 'p', 'td-esporta-motivo', `Il rapporto non porta il riepilogo delle verifiche: questi file ${avvertenzaDiGruppo === 'esce senza le verifiche' ? 'escono senza di esse' : avvertenzaDiGruppo}.`));
+    for (const uscita of dentro) {
+      const riga = nodo(doc, 'button', 'td-esporta-voce');
+      riga.type = 'button';
+      riga.dataset.uscita = uscita.chiave;
+      riga.append(iconaSvg(doc, uscita.gruppo === 'appunti' ? 'copy' : 'download'));
+      const testi = nodo(doc, 'span', 'td-esporta-testi');
+      const titolo = nodo(doc, 'span', 'td-esporta-nome', uscita.etichetta);
+      if (uscita.avvertenza && !avvertenzaDiGruppo) titolo.append(tag(doc, uscita.avvertenza, 'warning'));
+      testi.append(titolo, nodo(doc, 'span', 'td-esporta-nota', uscita.disponibile || motivoDiGruppo ? uscita.spiega : uscita.motivo));
+      riga.append(testi);
+      if (uscita.disponibile) {
+        riga.addEventListener('click', () => onScegli?.(uscita));
+      } else {
+        riga.setAttribute('aria-disabled', 'true');
+        riga.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); });
+      }
+      pezzi.push(riga);
+    }
+  }
+  return pezzi;
+}
+
+/**
+ * I passaggi di UNA fonte, in italiano vero.
+ *
+ * ⛔ VISTO NELLA FOTO (`riverifica-light-1440-pannello`, 12/09): qui c'era «Tutti i 2 passaggi
+ *   citati sono ancora in questa pagina» e «1 su 1 passaggi citati non si ritrovano più» — cioè
+ *   due frasi generate, non scritte. Con un passaggio solo la prima sarebbe diventata «Tutti i 1
+ *   passaggi». È lo stesso difetto che `articoloData` cura sulle date: la differenza fra una
+ *   frase che ha scritto qualcuno e una che ha montato una macchina.
+ * ⛔ Quando TUTTI si sono persi non si dice «N su N»: si dice che non ne resta nessuno. Un
+ *   rapporto le cui citazioni sono sparite tutte è una notizia diversa da «due su cinque».
+ */
+export function frasePassaggi(ritrovati, persi) {
+  const ok = Number(ritrovati) || 0;
+  const persiN = Number(persi) || 0;
+  const totale = ok + persiN;
+  if (!totale) return null;
+  if (!persiN) {
+    return ok === 1
+      ? 'Il passaggio citato è ancora in questa pagina.'
+      : `Tutti i ${ok} passaggi citati sono ancora in questa pagina.`;
+  }
+  if (!ok) {
+    return totale === 1
+      ? 'Il passaggio citato non si ritrova più in questa pagina.'
+      : `Nessuno dei ${totale} passaggi citati si ritrova più in questa pagina.`;
+  }
+  return persiN === 1
+    ? `1 dei ${totale} passaggi citati non si ritrova più in questa pagina.`
+    : `${persiN} dei ${totale} passaggi citati non si ritrovano più in questa pagina.`;
+}
+
+/**
+ * L'esito della ri-verifica, dentro la vista Fonti.
+ *
+ * ⛔ `role="status"` e non un toast e basta: WCAG 2.2 SC 4.1.3 «Status Messages» (letta il
+ *   12/09/2026) chiede che il risultato di un'azione sia annunciabile **senza spostare il fuoco**,
+ *   e distingue `status` (esito) da `alert` (guasto). Qui si fa così: l'esito è uno `status`, il
+ *   guasto della rilettura un `alert`. Il fuoco resta dove la persona l'ha lasciato.
+ * ⛔ L'avvertenza del server si stampa PER INTERO e sopra la tabella: è la riga che dice che metà
+ *   della misura oggi non si può fare, e nasconderla in fondo la renderebbe decorativa.
+ */
+export function montaEsitoRiverifica(doc, stato) {
+  const blocco = nodo(doc, 'div', 'td-riverifica');
+  if (stato?.stato === 'in-corso') {
+    blocco.setAttribute('role', 'status');
+    blocco.append(nodo(doc, 'p', 'td-subtle', 'Sto rileggendo le pagine citate, una alla volta…'));
+    return blocco;
+  }
+  if (stato?.stato === 'errore') {
+    blocco.setAttribute('role', 'alert');
+    blocco.append(nodo(doc, 'p', 'td-subtle', stato.errore));
+    return blocco;
+  }
+  const esito = stato?.esito;
+  if (!esito) return null;
+  blocco.setAttribute('role', 'status');
+  const testa = nodo(doc, 'div', 'td-riverifica-testa');
+  testa.append(nodo(doc, 'strong', '', 'Le fonti, rilette adesso'));
+  const quando = dataOra(esito.fattaAlle);
+  if (quando) testa.append(nodo(doc, 'span', 'td-subtle', `controllate ${articoloData(esito.fattaAlle)}${quando}`));
+  blocco.append(testa, nodo(doc, 'p', 'td-prose', frasiRiverifica(esito)));
+  /* ⛔ L'avvertenza esiste solo quando `misurabile` è falso: stamparla sempre la farebbe ignorare. */
+  if (esito.avvertenza) blocco.append(nodo(doc, 'p', 'td-subtle', esito.avvertenza));
+  if (esito.troncata) blocco.append(nodo(doc, 'p', 'td-subtle', `Rilette le prime ${esito.fonti?.length ?? 0} fonti su ${esito.fontiTotali}: le altre non sono state guardate.`));
+  for (const fonte of Array.isArray(esito.fonti) ? esito.fonti : []) {
+    const parole = statoFonteRiverifica(fonte?.stato);
+    const riga = nodo(doc, 'div', 'td-riverifica-fonte');
+    const alto = nodo(doc, 'div', 'td-riverifica-riga');
+    alto.append(tag(doc, parole.parola, parole.tono));
+    const link = nodo(doc, 'a', '', fonte?.titolo || fonte?.url || 'fonte senza titolo');
+    link.href = fonte?.url || '#';
+    link.target = '_blank';
+    link.rel = 'noreferrer noopener';
+    alto.append(link);
+    riga.append(alto, nodo(doc, 'span', 'td-subtle', parole.spiega));
+    /* ⛔ I passaggi si contano SOLO dove sono stati davvero guardati: su una pagina che non si apre
+       «0 persi» sarebbe una rassicurazione ricavata da un'assenza di misura. */
+    if (fonte?.stato !== 'irraggiungibile') {
+      const frase = frasePassaggi(fonte?.passaggiRitrovati, fonte?.passaggiPersi);
+      if (frase) riga.append(nodo(doc, 'span', 'td-subtle', frase));
+    }
+    blocco.append(riga);
+  }
+  return blocco;
+}
+
+function vistaFonti(doc, voce, lettura, ctx) {
+  const esito = ctx?.riverifica ? montaEsitoRiverifica(doc, ctx.riverifica) : null;
   if (!lettura?.record) {
-    return [nodo(doc, 'p', 'td-prose', 'Le fonti compaiono quando il rapporto porta con sé il riepilogo delle verifiche: indirizzo, data dichiarata, se la pagina è stata letta per intero, e a quale gruppo di prove appartiene.')];
+    return [esito, nodo(doc, 'p', 'td-prose', 'Le fonti compaiono quando il rapporto porta con sé il riepilogo delle verifiche: indirizzo, data dichiarata, se la pagina è stata letta per intero, e a quale gruppo di prove appartiene.')];
   }
   const fonti = Array.isArray(lettura.record.sources) ? lettura.record.sources : [];
-  if (!fonti.length) return [nodo(doc, 'p', 'td-prose', 'Il rapporto non registra nessuna fonte.')];
+  if (!fonti.length) return [esito, nodo(doc, 'p', 'td-prose', 'Il rapporto non registra nessuna fonte.')];
   const prove = proveDistinte(fonti);
   /* ⛔ La regola si spiega solo quando MORDE: se ogni fonte è un gruppo a sé, dire «due pagine dello
      stesso dominio non fanno due prove» suona come un'accusa a un elenco che non ha quel difetto. */
-  const pezzi = [nodo(doc, 'p', 'td-subtle', prove.gruppi < prove.indirizzi
+  const pezzi = [esito, nodo(doc, 'p', 'td-subtle', prove.gruppi < prove.indirizzi
     ? `${prove.frase}: due pagine dello stesso dominio non fanno due prove.`
     : `${prove.frase}: ogni fonte viene da un dominio diverso.`)];
   for (const fonte of fonti) {
@@ -725,21 +1126,104 @@ function vistaFonti(doc, voce, lettura) {
   return pezzi;
 }
 
-function vistaPiano(doc) {
-  /*
-   * ⛔ Uno stato vuoto ONESTO, non un pannello finto. Il piano (linee di indagine, quanto ognuna
-   *   ha portato, l'approvazione prima che parta) esiste sul mobile
-   *   (`researchPlan.ts`) e arriva qui col porto del motore — lotto L3 del disegno, non fatto.
-   *   Disegnarlo adesso con dati inventati sarebbe la stessa bugia che questo lotto sta togliendo.
-   */
-  return [
-    nodo(doc, 'p', 'td-prose', 'Il piano arriva con il motore nuovo.'),
-    nodo(doc, 'p', 'td-subtle', 'Quando una ricerca dichiarerà le sue linee di indagine, le troverai qui con quanto ognuna ha portato — e su una ricerca in corso sarà il posto dove approvarle o cambiarle prima che parta.'),
-  ];
+/** «12,4k token · 3 ricerche · 7 pagine» — solo le voci che il server ha davvero contato. */
+export function frasiSpesa(spesa) {
+  if (!spesa) return null;
+  const pezzi = [];
+  const token = Number(spesa.tokens) || 0;
+  if (token) pezzi.push(`${token >= 1000 ? `${(token / 1000).toFixed(1).replace('.', ',')}k` : token} token`);
+  if (spesa.searches) pezzi.push(`${spesa.searches} ${spesa.searches === 1 ? 'ricerca sul web' : 'ricerche sul web'}`);
+  if (spesa.pages) pezzi.push(`${spesa.pages} ${spesa.pages === 1 ? 'pagina aperta' : 'pagine aperte'}`);
+  return pezzi.length ? pezzi.join(' · ') : null;
 }
 
-function vistaAndata(doc, voce, ctx) {
+/*
+ * Un passo del giornale, in parole. ⛔ Mai la sigla: `search`/`read`/`synthesise`/`verify` sono i
+ *   quattro `TalosResearchStepKind` di `src/research/run.mjs:100` — nomi del contratto, non nomi
+ *   per uno schermo (owner 04/09: niente nomi tecnici a schermo).
+ * ⛔ I nomi NON sono stati indovinati: le due mappe qui sotto ricalcano, valore per valore, i
+ *   `kind` e gli `state` dichiarati nel typedef di `run.mjs` (righe 100 e 111). Su questa vista
+ *   oggi non arriva niente — `piano`/`passi` sono `[]` su tutti i dati veri — ed è proprio per
+ *   questo che si copia dalla fonte invece di inventare: una vista che nessuno può ancora
+ *   guardare è una vista che nessuno correggerà.
+ */
+export const PASSI_RICERCA = new Map([
+  ['search', 'Ricerca sul web'],
+  ['read', 'Lettura di una pagina'],
+  ['synthesise', 'Scrittura della sintesi'],
+  ['verify', 'Verifica delle affermazioni'],
+]);
+
+/* ⛔ `interrupted` non è `failed`: «il processo è morto a metà» e «il passo ha sbagliato» sono due
+   cose diverse, e la seconda accusa la ricerca di un guasto che non ha commesso. */
+const ESITI_PASSO = new Map([
+  ['pending', { parola: 'da fare', tono: '' }],
+  ['running', { parola: 'in corso', tono: 'info' }],
+  ['done', { parola: 'fatto', tono: 'success' }],
+  ['failed', { parola: 'non riuscito', tono: 'danger' }],
+  ['interrupted', { parola: 'interrotto a metà', tono: 'warning' }],
+]);
+
+function vistaPiano(doc, dettaglio) {
+  const ricerca = dettaglio?.stato === 'pronto' ? dettaglio.ricerca : null;
+  const piano = Array.isArray(ricerca?.piano) ? ricerca.piano : [];
+  const passi = Array.isArray(ricerca?.passi) ? ricerca.passi : [];
+  /*
+   * ⛔⛔ LO STATO VUOTO RESTA, E RESTA ONESTO. Le due liste arrivano davvero dalla rotta del
+   *   dettaglio (L5 §4.2), ma sui dati veri di oggi sono `[]` su ogni ricerca: i passi di raccolta
+   *   li apre il kernel con `naviga`/`web_search`, che non passano dall'orchestratore. `[]` è un
+   *   fatto, non un pannello mancante ⇒ qui si dice cosa manca e perché, mai un piano finto.
+   * ⛔ E si distingue «non l'abbiamo chiesto» da «l'abbiamo chiesto e non c'è»: senza il dettaglio
+   *   letto, la frase non può promettere che il piano non esista.
+   */
+  if (!piano.length && !passi.length) {
+    return [
+      nodo(doc, 'p', 'td-prose', ricerca
+        ? 'Questa ricerca non ha dichiarato nessuna linea di indagine.'
+        : 'Il piano arriva con il motore nuovo.'),
+      nodo(doc, 'p', 'td-subtle', 'Quando una ricerca dichiarerà le sue linee di indagine, le troverai qui con quanto ognuna ha portato — e su una ricerca in corso sarà il posto dove approvarle o cambiarle prima che parta.'),
+    ];
+  }
+  const pezzi = [];
+  if (piano.length) {
+    pezzi.push(nodo(doc, 'h3', '', 'Linee di indagine'));
+    for (const linea of piano) {
+      const riga = nodo(doc, 'div', 'td-source');
+      riga.append(nodo(doc, 'strong', '', linea?.question || linea?.domanda || 'linea senza domanda'));
+      /*
+       * ⛔ `estimate` è quello che il pianificatore ha INDOVINATO, e `run.mjs:134` lo dice con
+       *   queste parole: «Mai confuso con quello che è stato speso». Quindi l'etichetta dice
+       *   «previsti», e lo speso vero sta in «Come è andata». Due numeri simili con un'etichetta
+       *   sola sarebbero il modo più veloce di far leggere una stima come una misura.
+       */
+      const previsto = frasiSpesa(linea?.estimate);
+      if (previsto) riga.append(nodo(doc, 'span', '', `previsti ${previsto}`));
+      pezzi.push(riga);
+    }
+  }
+  if (passi.length) {
+    pezzi.push(nodo(doc, 'h3', '', 'Passi compiuti'));
+    for (const passo of passi) {
+      const riga = nodo(doc, 'div', 'td-source');
+      const alto = nodo(doc, 'div', 'td-riverifica-riga');
+      const esito = ESITI_PASSO.get(passo?.state) || { parola: 'stato non registrato', tono: '' };
+      alto.append(tag(doc, esito.parola, esito.tono));
+      alto.append(nodo(doc, 'strong', '', PASSI_RICERCA.get(passo?.kind) || 'Passo della ricerca'));
+      riga.append(alto);
+      const dettagli = [frasiSpesa(passo?.spend), passo?.error ? `si è fermato: ${passo.error}` : null].filter(Boolean);
+      /* ⛔ `attempts` si scrive solo quando è più di uno: «1 tentativo» è rumore, «3 tentativi» è
+         la ragione per cui quel passo è costato tre volte tanto. */
+      if (passo?.attempts > 1) dettagli.push(`${passo.attempts} tentativi`);
+      if (dettagli.length) riga.append(nodo(doc, 'span', '', dettagli.join(' · ')));
+      pezzi.push(riga);
+    }
+  }
+  return pezzi;
+}
+
+function vistaAndata(doc, voce, ctx, dettaglio) {
   const frasi = frasiVoce(voce);
+  const ricerca = dettaglio?.stato === 'pronto' ? dettaglio.ricerca : null;
   const pezzi = [];
   const righe = nodo(doc, 'dl', 'td-andata');
   const riga = (etichetta, valore) => {
@@ -757,6 +1241,27 @@ function vistaAndata(doc, voce, ctx) {
   riga('Finita', frasi.conclusa || (voce?.stato === 'running' ? 'non ancora' : 'non registrata'));
   riga('Durata', frasi.durata || null);
   riga('Nome della conversazione', frasi.nome);
+  /*
+   * ⭐ L5 (12/09) — LO SPESO E IL GIORNALE, dalla rotta del dettaglio. Non c'erano: la sezione
+   *   leggeva solo l'elenco, che queste due cose non le manda.
+   * ⛔ `giornale: null` è «questa ricerca non ha un giornale» (è nata prima dell'11/09), e va detto
+   *   così: senza la riga, una ricerca senza giornale e una con un giornale vuoto si leggerebbero
+   *   uguali — e sono la differenza fra «non si può riprendere» e «si può».
+   * ⛔ `righeSaltate` si scrive SOLO quando c'è: «si è caricato» e «si è caricato per intero» non
+   *   sono la stessa frase, ma stampare «0 righe saltate» su ogni ricerca sana è rumore.
+   */
+  if (ricerca) {
+    riga('Speso', frasiSpesa(ricerca.spesa) || 'niente di misurato');
+    if (ricerca.giornale) {
+      const eventi = Number(ricerca.giornale.eventi) || 0;
+      riga('Giornale di bordo', `${eventi} ${eventi === 1 ? 'passaggio registrato' : 'passaggi registrati'}`);
+      if (ricerca.giornale.righeSaltate > 0) {
+        riga('Attenzione', `${ricerca.giornale.righeSaltate} righe del giornale non si rileggono: quello che segue è parziale.`);
+      }
+    } else {
+      riga('Giornale di bordo', 'non ne ha uno: è stata avviata prima che le ricerche lo tenessero, e non si può riprendere da dove si era fermata');
+    }
+  }
   pezzi.push(righe);
 
   /*
@@ -781,12 +1286,12 @@ function vistaAndata(doc, voce, ctx) {
   return pezzi;
 }
 
-function contenutoVista(doc, id, voce, lettura, ctx) {
+function contenutoVista(doc, id, voce, lettura, ctx, dettaglio) {
   switch (id) {
     case 'affermazioni': return vistaAffermazioni(doc, voce, lettura);
-    case 'fonti': return vistaFonti(doc, voce, lettura);
-    case 'piano': return vistaPiano(doc);
-    case 'andata': return vistaAndata(doc, voce, ctx);
+    case 'fonti': return vistaFonti(doc, voce, lettura, ctx);
+    case 'piano': return vistaPiano(doc, dettaglio);
+    case 'andata': return vistaAndata(doc, voce, ctx, dettaglio);
     default: return vistaRapporto(doc, voce, lettura, ctx);
   }
 }
@@ -816,15 +1321,53 @@ export function vociMenuRicerca(voce, ctx = {}) {
    *   che il pannello aveva appena smesso di chiamare così. Su una ricerca che un rapporto non ce
    *   l'ha, le due voci restano — il file esiste e si copia — ma col suo nome vero.
    */
+  /*
+   * ⭐ 12/09 — LA SUITE. Quando il chiamante passa `onEsportazioni` (cioè quando c'è una sessione e
+   *   quindi la rotta di esportazione esiste) le tre uscite scritte nel browser — Markdown, BibTeX,
+   *   RIS — non stanno più nel menu: stanno nel pannello, insieme alle altre sei. Una famiglia in
+   *   un posto solo. ⛔ Senza l'iniezione resta ESATTAMENTE il menu di ieri, e non è pigrizia: il
+   *   laboratorio, i test e ogni chiamante senza sessione devono continuare a poter tirare fuori il
+   *   testo che hanno già letto senza chiedere niente a nessuno.
+   */
+  const suite = typeof ctx.onEsportazioni === 'function' && haRapportoLeggibile(voce);
   if (pronto && lettura.prosa) {
     const rapporto = haRapportoLeggibile(voce);
     const cosa = rapporto ? 'il rapporto' : 'il file depositato';
     voci.push({ chiave: 'copia', etichetta: `Copia ${cosa}`, icona: 'i-copy', aziona: () => ctx.onCopia?.(lettura.prosa, voce) });
-    voci.push({ chiave: 'esporta', etichetta: `Esporta ${cosa}`, icona: 'i-download', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'md'), lettura.testo || lettura.prosa, 'text/markdown') });
+    if (!suite) voci.push({ chiave: 'esporta', etichetta: `Esporta ${cosa}`, icona: 'i-download', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'md'), lettura.testo || lettura.prosa, 'text/markdown') });
   }
-  if (citazioni.length) {
+  if (suite) {
+    voci.push({ chiave: 'esporta-suite', etichetta: 'Esporta…', icona: 'i-download', aziona: () => ctx.onEsportazioni(voce) });
+  } else if (citazioni.length) {
     voci.push({ chiave: 'bibtex', etichetta: 'Esporta le citazioni (BibTeX)', icona: 'i-doc', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'bib'), bibtexDaCitazioni(citazioni), 'application/x-bibtex') });
     voci.push({ chiave: 'ris', etichetta: 'Esporta le citazioni (RIS)', icona: 'i-doc', aziona: () => ctx.onEsporta?.(nomeFileRapporto(frasiVoce(voce).domanda, 'ris'), risDaCitazioni(citazioni), 'application/x-research-info-systems') });
+  }
+  /*
+   * ⭐⭐⭐ L5 (12/09) — LE QUATTRO AZIONI DI SCRITTURA. Stanno in fondo e dopo un separatore
+   *   perché cambiano qualcosa: sopra c'è quello che si può fare senza conseguenze.
+   * ⛔ Ognuna vuole DUE sì: la sua iniezione (senza rete non si disegna un comando che non può
+   *   funzionare — la regola della riga di Libreria del 10/09) e lo stato giusto.
+   * ⛔ Le etichette sono verbi, e sono gli stessi che compaiono nell'esito: si preme «Metti in
+   *   pausa» e il messaggio dice «In pausa». Un'azione che cambia nome per strada fa perdere.
+   * ⛔ «Controlla se le fonti dicono ancora questo» è lunga apposta: «Ri-verifica» non dice a
+   *   nessuno che cosa succede, e questa azione ESCE IN RETE — chi la preme deve saperlo prima.
+   */
+  const scrivibili = [];
+  if (typeof ctx.onPausa === 'function' && puoMettereInPausa(voce)) {
+    scrivibili.push({ chiave: 'pausa', etichetta: 'Metti in pausa', icona: 'i-stop', aziona: () => ctx.onPausa(voce) });
+  }
+  if (typeof ctx.onRiprendi === 'function' && puoRiprendere(voce)) {
+    scrivibili.push({ chiave: 'ripresa', etichetta: 'Riprendi', icona: 'i-play', aziona: () => ctx.onRiprendi(voce) });
+  }
+  if (typeof ctx.onRiverifica === 'function' && puoRicontrollareLeFonti(voce)) {
+    scrivibili.push({ chiave: 'riverifica', etichetta: 'Controlla se le fonti dicono ancora questo', icona: 'i-history', aziona: () => ctx.onRiverifica(voce) });
+  }
+  if (scrivibili.length) {
+    scrivibili[0].separaPrima = true;
+    voci.push(...scrivibili);
+  }
+  if (typeof ctx.onElimina === 'function' && voce?.id) {
+    voci.push({ chiave: 'elimina', etichetta: 'Elimina la ricerca', icona: 'i-trash', pericolo: true, separaPrima: true, aziona: () => ctx.onElimina(voce) });
   }
   return voci;
 }
@@ -845,6 +1388,10 @@ export function montaDettaglioRicerca(voce, ctx) {
   const magazzino = ctx.magazzino;
   const chiave = String(voce?.reportLibraryId ?? '');
   const lettura = chiave ? magazzino.rapporti.get(chiave) || null : null;
+  /* L5: la scheda intera e l'esito dell'ultima ri-verifica, indicizzati per id della RICERCA (non
+     per voce di Libreria: una ricerca senza rapporto ha comunque un piano e un giornale). */
+  const dettaglio = magazzino.dettagli.get(String(voce?.id)) || null;
+  const riverifica = magazzino.riverifiche.get(String(voce?.id)) || null;
   const pezzi = [];
 
   /* ---- testa: stato, quando, durata, e il menu ---- */
@@ -925,7 +1472,9 @@ export function montaDettaglioRicerca(voce, ctx) {
       if (attiva && muoviIlFuoco) b.focus({ preventScroll: true });
     }
     pannello.setAttribute('aria-labelledby', `${radice}-${idVista}`);
-    pannello.replaceChildren(...contenutoVista(doc, idVista, voce, lettura, { ...ctx.opzioni, puoLeggere: typeof ctx.opzioni?.leggiRapporto === 'function' }).filter(Boolean));
+    pannello.replaceChildren(...contenutoVista(doc, idVista, voce, lettura, {
+      ...ctx.opzioni, riverifica, puoLeggere: typeof ctx.opzioni?.leggiRapporto === 'function',
+    }, dettaglio).filter(Boolean));
   }
 
   lista.addEventListener('click', (e) => {
@@ -957,6 +1506,25 @@ export function montaDettaglioRicerca(voce, ctx) {
       .catch((errore) => {
         magazzino.rapporti.set(chiave, { stato: 'errore', errore: errore?.message || 'motivo non registrato' });
       })
+      .then(() => ctx.ridisegna?.());
+  }
+
+  /*
+   * ⭐ L5 — LA SCHEDA INTERA, una volta sola per ricerca aperta. Porta piano, passi, speso e
+   *   giornale, che l'elenco non manda.
+   * ⛔ Si chiede solo QUI, cioè solo quando una ricerca è stata aperta: chiederla per tutte
+   *   all'apertura della sezione sarebbe una richiesta per riga, ed è la stessa ragione per cui
+   *   l'elenco non porta i bilanci.
+   * ⛔ Un fallimento NON diventa un'attesa infinita né un pannello vuoto: resta registrato, e le
+   *   due viste che lo usano cadono sul loro stato onesto (che è quello di prima di L5).
+   */
+  const idRicerca = String(voce?.id ?? '');
+  if (idRicerca && !dettaglio && typeof ctx.opzioni?.leggiDettaglio === 'function') {
+    magazzino.dettagli.set(idRicerca, { stato: 'caricando' });
+    Promise.resolve()
+      .then(() => ctx.opzioni.leggiDettaglio(voce))
+      .then((ricerca) => { magazzino.dettagli.set(idRicerca, ricerca ? { stato: 'pronto', ricerca } : { stato: 'errore', errore: 'scheda non disponibile' }); })
+      .catch((errore) => { magazzino.dettagli.set(idRicerca, { stato: 'errore', errore: errore?.message || 'motivo non registrato' }); })
       .then(() => ctx.ridisegna?.());
   }
   return pezzi;

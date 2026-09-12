@@ -5294,6 +5294,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           onMenu: apriMenuAzioniLibreria,
           onApriSessione: ({ id }) => passaASessione(id),
           rendiMarkdown: renderizzaMarkdownSemplice,
+          /* ⭐ 12/09 L5 — le rotte di scrittura della Ricerca approfondita esistono (voce singola,
+             pausa, ripresa, ri-verifica, eliminazione): la sezione riceve le STESSE funzioni di rete
+             delle tre sezioni scrivibili, e la forma degli indirizzi la conosce solo l'adattatore
+             (`servizioRicerche`). Senza questa riga il menu resta quello di ieri — consultazione
+             soltanto — e niente si rompe. */
+          rete: reteVociDellaPersona(),
         });
       } else {
         mount.setAttribute('role', ricerche.length ? 'list' : 'group');
@@ -5313,6 +5319,26 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     } catch (error) {
       if (attuale()) mostra([], { errore: 'Ricerche non disponibili: ' + error.message });
     }
+  }
+
+  /**
+   * ⭐ 12/09 L5 — LA SEZIONE RICERCA SI RILEGGE QUANDO UN GIRO FINISCE.
+   *
+   * Il guasto (giro vero L8, `scratchpad/l8/fine-Rapporto.png`): la scheda restava «In corso»
+   * dopo che la sessione figlia era conclusa e il server diceva già `senza-rapporto`.
+   *
+   * ⛔⛔ ONESTÀ SU COSA COPRE QUESTO AGGANCIO: qui arriva la fine del giro della sessione MADRE,
+   *   non della figlia. Gli eventi di una figlia NON raggiungono questo browser — ogni sessione
+   *   ha il suo buffer e i suoi iscritti, e in `session-registry.mjs` non c'è nessun inoltro al
+   *   flusso del padre (verificato, non supposto). ⇒ questa riga prende il caso frequente (la
+   *   ricerca finisce mentre la conversazione che l'ha ordinata sta finendo il suo giro), e la
+   *   garanzia vera la dà l'orologio dei trenta secondi dentro la sezione
+   *   (`governoRicercheVive`), acceso solo finché almeno una ricerca è in corso.
+   * ⛔ Solo se la pagina è APERTA: chi è in chat non deve pagare una richiesta a ogni giro.
+   */
+  function rileggiRicercheSeAperte() {
+    if (state.view !== 'ricerca') return;
+    void caricaPannelloRicerca({ pagina: true });
   }
 
   function rigaRicerca(ricerca) {
@@ -14883,6 +14909,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         syncRunComposerState();
         mostraSuggerimentoComposer(suggerimentoDaUltimoAttrezzo()); // ⭐ 3/9 — item 10: dopo syncRunComposerState, cosi' se c'e' un redirect pendente runRealeAttivo() lo vede ancora attivo e non propone niente
         programmaAggiornamentoElencoSessioniReali(); // il replay di più giri produce un solo refresh visibile della sidebar
+        rileggiRicercheSeAperte(); // ⭐ 12/09 L5 — vedi la funzione: una ricerca può essere finita mentre il giro andava
         break;
       }
       case 'ApprovalRequested': {

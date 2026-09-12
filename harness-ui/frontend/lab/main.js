@@ -46,7 +46,7 @@ import { NOTE, ADESSO_NOTE } from './fixtures/note.js';
 import { reteDiProva } from './fixtures/crud.js';
 import { PROGETTI } from './fixtures/progetti.js';
 /* 11/09 lotto L7 — la Ricerca approfondita col suo dentro: rapporto, affermazioni, fonti. */
-import { RICERCHE as RICERCHE_L7, leggiRapportoFinto, apriMenuDiProva } from './fixtures/ricerche.js';
+import { RICERCHE as RICERCHE_L7, leggiRapportoFinto, apriMenuDiProva, reteRicercheDiProva } from './fixtures/ricerche.js';
 import { creaApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, creaFallimentoAttrezzo, creaFileToccati, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRicevuta, creaRigaAttrezzo, creaTurno } from '../src/components/conversazione.js';
 import { renderizzaMarkdown } from '../src/components/markdown.js'; // BC-29 (12/09): il render vero, lo stesso della chat
 import { aggiornaPiedeChat } from '../src/components/chat-foot.js';
@@ -245,16 +245,25 @@ async function montaCrud(quale, { apri = null, nuova = false, modifica = false, 
   return schermo;
 }
 
-/* Il banco della Ricerca approfondita: monta, aspetta il rapporto, apre la scheda chiesta. */
-async function montaRicerca({ apri = null, vista = 'rapporto', menu = false, righe = false } = {}) {
+/* Il banco della Ricerca approfondita: monta, aspetta il rapporto, apre la scheda chiesta.
+ *
+ * ⭐ 12/09 L5 — `azioni: true` accende la rete: senza, la sezione non disegna nemmeno una voce di
+ *   menu di scrittura (un comando che non può funzionare non si mostra), quindi le foto del menu
+ *   nuovo, dell'esito della ri-verifica e della conferma di eliminazione non esisterebbero.
+ * ⛔ L'elenco si COPIA prima di darlo alla rete finta: `elimina` toglie davvero una riga, e una
+ *   pagina del laboratorio non deve poter cambiare quello che vede la pagina dopo.
+ */
+async function montaRicerca({ apri = null, vista = 'rapporto', menu = false, righe = false, azioni = false, premi = null } = {}) {
   const schermo = mostraSchermo('schermoRicerca', 'ricerca');
+  const elenco = azioni ? RICERCHE_L7.map((r) => ({ ...r })) : RICERCHE_L7;
   const opzioni = {
     leggiRapporto: leggiRapportoFinto,
     onMenu: apriMenuDiProva,
     onApriSessione: () => {},
     notifica: notificaDiProva,
+    ...(azioni ? { sessionId: 'fx-lab', rete: reteRicercheDiProva(elenco) } : {}),
   };
-  ricercaTd(schermo, RICERCHE_L7, opzioni);
+  ricercaTd(schermo, elenco, opzioni);
   if (righe) schermo.querySelector('[data-vista="elenco"]').click();
   if (!apri) return schermo;
   schermo.querySelector(`.td-card[data-item="${apri}"] .td-card-open`).click();
@@ -263,7 +272,14 @@ async function montaRicerca({ apri = null, vista = 'rapporto', menu = false, rig
   await Promise.resolve();
   await new Promise((fatto) => setTimeout(fatto, 0));
   if (vista) schermo.querySelector(`.td-viste [data-vista="${vista}"]`)?.click();
-  if (menu) schermo.querySelector('.td-detail-meta .td-tools button').click();
+  if (menu || premi) schermo.querySelector('.td-detail-meta .td-tools button').click();
+  if (premi) {
+    /* ⛔ Si preme la voce VERA del menu, non si chiama la funzione: così la foto prova anche che
+       l'etichetta e l'azione sono legate, che è metà di quello che c'è da guardare. */
+    [...document.querySelectorAll('.ft-actions-menu-item')].find((b) => b.textContent.includes(premi))?.click();
+    await new Promise((fatto) => setTimeout(fatto, 0));
+    await new Promise((fatto) => setTimeout(fatto, 0));
+  }
   return schermo;
 }
 
@@ -439,6 +455,24 @@ const LABORATORI = {
   SezioneRicerca_scusa: () => montaRicerca({ apri: 'ric-scusa', vista: 'rapporto' }),
   SezioneRicerca_scusa_menu: () => montaRicerca({ apri: 'ric-scusa', vista: 'rapporto', menu: true }),
   SezioneRicerca_elenco: () => montaRicerca({ vista: null, righe: true }),
+  /*
+   * ⭐⭐⭐ 12/09 L5 — LE AZIONI DI SCRITTURA. Quattro pagine, e ognuna guarda uno stato diverso:
+   *   il menu di una ricerca VIVA (pausa), di una IN PAUSA (ripresa) e di una CONCLUSA
+   *   (ri-verifica), più l'esito della ri-verifica e la conferma dell'eliminazione.
+   * ⛔ Le foto si fanno in chiaro E in scuro, a 1440 e a 1024 (regola dell'owner dell'11/09).
+   */
+  SezioneRicerca_menu_viva: () => montaRicerca({ apri: 'ric-viva', vista: 'andata', menu: true, azioni: true }),
+  SezioneRicerca_menu_pausa: () => montaRicerca({ apri: 'ric-in-pausa', vista: 'andata', menu: true, azioni: true }),
+  SezioneRicerca_menu_conclusa: () => montaRicerca({ apri: 'ric-conclusa', vista: 'rapporto', menu: true, azioni: true }),
+  SezioneRicerca_riverifica: () => montaRicerca({ apri: 'ric-conclusa', vista: 'fonti', azioni: true, premi: 'Controlla se le fonti' }),
+  SezioneRicerca_riverifica_no: () => montaRicerca({ apri: 'ric-senza-record', vista: 'fonti', azioni: true, premi: 'Controlla se le fonti' }),
+  SezioneRicerca_elimina: () => montaRicerca({ apri: 'ric-conclusa', vista: 'rapporto', azioni: true, premi: 'Elimina la ricerca' }),
+  /* ⭐ 12/09 L5-bis — la suite di esportazioni (owner: «completa»), nei due stati che contano:
+     col riepilogo delle verifiche (tutte accese) e senza (le quattro di dati SPENTE col motivo). */
+  SezioneRicerca_esporta: () => montaRicerca({ apri: 'ric-conclusa', vista: 'rapporto', azioni: true, premi: 'Esporta' }),
+  SezioneRicerca_esporta_spente: () => montaRicerca({ apri: 'ric-senza-record', vista: 'rapporto', azioni: true, premi: 'Esporta' }),
+  SezioneRicerca_piano_pieno: () => montaRicerca({ apri: 'ric-conclusa', vista: 'piano', azioni: true }),
+  SezioneRicerca_andata_speso: () => montaRicerca({ apri: 'ric-in-pausa', vista: 'andata', azioni: true }),
   SezioneProgetti() {
     const schermo = mostraSchermo('schermoProgetti', 'progetti');
     progettiTd(schermo, PROGETTI, { onApriSessione: () => {} });

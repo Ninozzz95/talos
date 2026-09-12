@@ -370,3 +370,123 @@ export function apriMenuDiProva(voci, dove = {}) {
   menu.querySelector('.ft-actions-menu-item')?.focus();
   return menu;
 }
+
+/* ═══════════════════════════════════ L5, 12/09/2026 — le azioni di scrittura ═══════════════ */
+
+/**
+ * La scheda intera di una ricerca, com'è nel contratto `GET …/research/:id` (L5 §4.2).
+ *
+ * ⛔ `piano` e `passi` hanno i nomi VERI dei campi (`question`/`estimate`, `kind`/`state`/
+ *   `attempts`/`spend`): sono quelli del typedef di `src/research/run.mjs`, non nomi comodi. Sui
+ *   dati veri di oggi quelle due liste sono vuote su OGNI ricerca — la vista esiste per il giorno
+ *   in cui non lo saranno, e una fixture col nome sbagliato la farebbe nascere già rotta.
+ */
+export const DETTAGLI_RICERCA = new Map([
+  /* ⛔ VISTO NELLA FOTO (`menu_viva-light-1440`): senza questa voce la scheda di una ricerca IN
+     CORSO diceva «Giornale di bordo: non ne ha uno», che per una ricerca viva è falso — era una
+     lacuna della fixture, e una foto con dentro una frase falsa non prova niente. */
+  ['ric-viva', {
+    piano: [{ id: 'b1', question: 'Quali interfacce di approvazione usano gli agenti desktop?', estimate: { tokens: 3600, searches: 2, pages: 4 } }],
+    passi: [
+      { id: 's1', branchId: 'b1', kind: 'search', state: 'done', attempts: 1, spend: { tokens: 700, searches: 2, pages: 0 }, error: null },
+      { id: 's2', branchId: 'b1', kind: 'read', state: 'running', attempts: 1, spend: { tokens: 1900, searches: 0, pages: 4 }, error: null },
+    ],
+    spesa: { tokens: 2600, searches: 2, pages: 4 },
+    giornale: { eventi: 8, righeSaltate: 0, stato: 'collecting' },
+  }],
+  ['ric-conclusa', {
+    piano: [
+      { id: 'b1', question: 'Quali capacità separano gli harness desktop nel 2026?', estimate: { tokens: 4200, searches: 2, pages: 4 } },
+      { id: 'b2', question: 'Chi espone il controllo del computer e con quali permessi?', estimate: { tokens: 3100, searches: 1, pages: 3 } },
+    ],
+    passi: [
+      { id: 's1', branchId: 'b1', kind: 'search', state: 'done', attempts: 1, spend: { tokens: 1200, searches: 2, pages: 0 }, error: null },
+      { id: 's2', branchId: 'b1', kind: 'read', state: 'done', attempts: 1, spend: { tokens: 3600, searches: 0, pages: 4 }, error: null },
+      { id: 's3', branchId: 'b2', kind: 'read', state: 'failed', attempts: 3, spend: { tokens: 400, searches: 0, pages: 1 }, error: 'la pagina non risponde' },
+      { id: 's4', branchId: 'b2', kind: 'verify', state: 'done', attempts: 1, spend: { tokens: 2900, searches: 0, pages: 0 }, error: null },
+      { id: 's5', branchId: 'b2', kind: 'synthesise', state: 'done', attempts: 1, spend: { tokens: 4700, searches: 0, pages: 0 }, error: null },
+    ],
+    spesa: { tokens: 12800, searches: 2, pages: 5 },
+    giornale: { eventi: 23, righeSaltate: 0, stato: 'done' },
+  }],
+  ['ric-in-pausa', {
+    piano: [{ id: 'b1', question: 'Come recuperano gli agenti dopo un servizio indisponibile?', estimate: { tokens: 2800, searches: 1, pages: 3 } }],
+    passi: [
+      { id: 's1', branchId: 'b1', kind: 'search', state: 'done', attempts: 1, spend: { tokens: 800, searches: 1, pages: 0 }, error: null },
+      { id: 's2', branchId: 'b1', kind: 'read', state: 'interrupted', attempts: 2, spend: { tokens: 0, searches: 0, pages: 0 }, error: null },
+    ],
+    spesa: { tokens: 3400, searches: 1, pages: 2 },
+    giornale: { eventi: 11, righeSaltate: 1, stato: 'paused' },
+  }],
+]);
+
+/**
+ * L'esito della ri-verifica com'è OGGI sui dati veri: `misurabile: false`, nessuna fonte «intatta».
+ *
+ * ⛔ Non è pessimismo da fixture: `intatta`/`cambiata` non escono mai finché il collettore non
+ *   tiene il testo con il suo url (rapporto L5 §3.4), e il modulo che misura, chiamato senza quella
+ *   mappa, risponderebbe «intatta» su tutto. Una fixture ottimista farebbe fotografare una
+ *   schermata che nessuno vedrà, e nasconderebbe proprio il caso che si deve saper disegnare.
+ */
+export const RIVERIFICA_DI_PROVA = {
+  id: 'ric-conclusa',
+  fattaAlle: '2026-09-12T09:41:00.000Z',
+  misurabile: false,
+  avvertenza: 'Il testo delle pagine non era stato tenuto per questa ricerca: «intatta» o «cambiata» non si possono dire. Ciò che si misura è se i passaggi citati sono ancora nella pagina di oggi.',
+  fonti: [
+    { url: 'https://esempio.it/uno', titolo: 'Il primo studio sugli harness desktop', stato: 'non-misurabile', sopravvissuto: null, motivoLettura: null, passaggiRitrovati: 2, passaggiPersi: 0 },
+    { url: 'https://esempio.it/due', titolo: 'Permessi per attrezzo: la rassegna', stato: 'non-misurabile', sopravvissuto: null, motivoLettura: null, passaggiRitrovati: 0, passaggiPersi: 1 },
+    { url: 'https://news.bbc.co.uk/tre', titolo: 'Cronaca dell’automazione desktop', stato: 'irraggiungibile', sopravvissuto: null, motivoLettura: 'unreadable', passaggiRitrovati: 0, passaggiPersi: 0 },
+  ],
+  bilancio: { fonti: 3, intatte: 0, cambiate: 0, irraggiungibili: 1, nonMisurabili: 2, passaggiCitati: 3, passaggiRitrovati: 2, passaggiPersi: 1 },
+  troncata: false, fontiTotali: 3, testiTenuti: 0,
+};
+
+/**
+ * La rete del laboratorio per le cinque rotte di L5.
+ *
+ * ⛔ Non è un secondo backend: è la stessa busta già aperta (`apiPost` torna `data`) e gli stessi
+ *   codici d'errore del contratto, in memoria. Senza una rete la sezione — giustamente — non
+ *   disegna nemmeno una voce di menu, quindi senza questo non ci sarebbe niente da fotografare.
+ * ⛔ La PAUSA risponde ancora `running`, ed è voluto: il contratto §4.3 dice che il passaggio a
+ *   «in pausa» avviene al punto sicuro, e la sezione non deve promettere ciò che non è ancora
+ *   successo. Il laboratorio deve poter far vedere anche QUELLA frase.
+ */
+export function reteRicercheDiProva(elenco) {
+  const parti = (pathname) => {
+    const m = /^\/api\/v1\/sessions\/[^/]+\/research\/([^/]+)(?:\/(pausa|ripresa|riverifica))?$/.exec(pathname);
+    if (!m) throw Object.assign(new Error('Indirizzo sconosciuto nel laboratorio'), { code: 'NOT_FOUND' });
+    return { id: decodeURIComponent(m[1]), azione: m[2] || null };
+  };
+  const trova = (id) => {
+    const voce = elenco.find((r) => String(r.id) === String(id));
+    if (!voce) throw Object.assign(new Error('Non c’è più'), { code: 'RESEARCH_NOT_FOUND' });
+    return voce;
+  };
+  const scheda = (voce) => ({ ...voce, ...(DETTAGLI_RICERCA.get(voce.id) || { piano: [], passi: [], spesa: null, giornale: null }) });
+  return {
+    leggi: async (pathname) => ({ ricerca: scheda(trova(parti(pathname).id)), errore: null }),
+    post: async (pathname) => {
+      const { id, azione } = parti(pathname);
+      const voce = trova(id);
+      if (azione === 'pausa') {
+        if (voce.stato !== 'running') throw Object.assign(new Error('no'), { code: 'RESEARCH_CONFLICT' });
+        return { ricerca: scheda(voce) }; // ⛔ ancora `running`: la pausa è una richiesta
+      }
+      if (azione === 'ripresa') {
+        if (voce.stato !== 'paused' && voce.stato !== 'failed') throw Object.assign(new Error('no'), { code: 'RESEARCH_CONFLICT' });
+        voce.stato = 'running';
+        voce.motivo = null;
+        return { ricerca: scheda(voce) };
+      }
+      if (voce.id !== 'ric-conclusa') throw Object.assign(new Error('no'), { code: 'RESEARCH_RECHECK_UNAVAILABLE' });
+      return { riverifica: RIVERIFICA_DI_PROVA };
+    },
+    elimina: async (pathname) => {
+      const { id } = parti(pathname);
+      const voce = trova(id);
+      elenco.splice(elenco.indexOf(voce), 1);
+      return { eliminata: true, id, titolo: voce.nome };
+    },
+  };
+}

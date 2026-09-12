@@ -362,6 +362,56 @@ dialog.td-modal:has(.td-theme-studio) { width: min(1120px, calc(100vw - 40px)); 
 /* ⛔ L'ultimo messaggio è un ALLEGATO: sfondo diverso dalla prosa, perché non è il rapporto. */
 .td-allegato { margin: 10px 0 0; padding: 13px 15px; border: 1px dashed var(--talos-border-strong); border-radius: var(--talos-radius-control); background: var(--talos-window-bg); color: var(--talos-assistant-text); font-size: 13px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
 
+/* ---------------------------------------------------------------------------------------------
+ * L5, 12/09/2026 — «le fonti dicono ancora questo?»: l'esito, dentro la vista Fonti.
+ *
+ * ⛔ NIENTE DI NUOVO dove esiste già: il riquadro prende i pesi di `.td-contraria` (una seconda
+ *   voce accanto al testo, mai una correzione), i timbri sono i `.td-tag` che le affermazioni
+ *   usano da ieri, e le righe sono i `.td-source` dell'elenco delle fonti. Nessun colore nuovo:
+ *   i toni sono i quattro semantici dei temi, e `non-misurabile` non ne ha nessuno — **apposta**,
+ *   perché un colore su «non lo sappiamo» diventa un verdetto.
+ * ⛔ NESSUNA ANIMAZIONE: due regole universali con `!important` le spengono comunque a valle
+ *   (lezione del 10/09), quindi scriverne una qui sarebbe scrivere codice morto.
+ * ------------------------------------------------------------------------------------------- */
+.td-riverifica { margin: 0 0 16px; padding: 13px 15px; border: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: var(--talos-card-subtle, var(--talos-card)); }
+.td-riverifica > :first-child { margin-top: 0; }
+.td-riverifica > p { margin: 0 0 8px; }
+.td-riverifica-testa { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 8px; font-size: 13px; }
+.td-riverifica-testa .td-subtle { font-size: 12px; }
+.td-riverifica-fonte { padding: 11px 0; border-top: 1px solid var(--talos-border); font-size: 13px; }
+/* ⛔ `>` e non un discendente qualunque: dentro `.td-riverifica-riga` ci sono il timbro e il link,
+   e un `display:block` su tutti gli span li metterebbe uno sotto l'altro. */
+.td-riverifica-fonte > span { display: block; margin-top: 4px; color: var(--talos-muted); font-size: 12px; line-height: 1.5; }
+.td-riverifica-riga { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 9px; }
+.td-riverifica-riga a { color: var(--talos-accent-text); overflow-wrap: anywhere; }
+
+/* ---------------------------------------------------------------------------------------------
+ * L5-bis, 12/09/2026 — il pannello delle esportazioni (owner: «una suite COMPLETA»).
+ *
+ * ⛔ È una LISTA DI SCELTE, non una griglia di schede: undici uscite in schede affiancate
+ *   diventano un muro che si guarda invece di leggersi, e l'ordine conta (prima ciò che si legge,
+ *   poi i dati). Stessi pesi di `.td-source`, che è la lista di questo prodotto.
+ * ⛔ La voce SPENTA non si nasconde e non sparisce dal Tab (`aria-disabled`, non `disabled`):
+ *   perde il colore e tiene il suo motivo. `forced-colors` compreso, come chiede MDN.
+ * ⛔ Nessun colore nuovo, nessuna animazione.
+ * ------------------------------------------------------------------------------------------- */
+.td-esporta-gruppo { margin: 18px 0 2px; font-size: 12px; color: var(--talos-muted); font-weight: 600; }
+.td-esporta-gruppo:first-child { margin-top: 0; }
+.td-esporta-motivo { margin: 4px 0 6px; padding: 8px 10px; border-left: 2px solid var(--talos-warning-border, var(--talos-border-strong)); color: var(--talos-muted); font-size: 12px; line-height: 1.5; }
+.td-esporta-voce { display: flex; align-items: flex-start; gap: 11px; width: 100%; padding: 11px 10px; border: 0; border-bottom: 1px solid var(--talos-border); border-radius: var(--talos-radius-control); background: none; color: var(--talos-text); font: inherit; text-align: left; cursor: pointer; }
+.td-esporta-voce:last-child { border-bottom: 0; }
+.td-esporta-voce:hover { background: var(--talos-card-subtle, var(--talos-card)); }
+.td-esporta-voce:focus-visible { outline: var(--talos-focus-width, 2px) solid var(--talos-ring); outline-offset: 2px; }
+.td-esporta-voce .i { flex: none; margin-top: 2px; color: var(--talos-muted); }
+.td-esporta-testi { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.td-esporta-nome { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; }
+.td-esporta-nota { color: var(--talos-muted); font-size: 12px; line-height: 1.5; }
+.td-esporta-voce[aria-disabled="true"] { cursor: default; color: var(--talos-muted); }
+.td-esporta-voce[aria-disabled="true"]:hover { background: none; }
+@media (forced-colors: active) {
+  .td-esporta-voce[aria-disabled="true"] { color: GrayText; }
+}
+
 /*
  * ⛔ La soglia e' sul DETTAGLIO, non sulla finestra: il pannello puo' stare a 320 px dentro uno
  *   schermo da 1440, e una `@media` non lo vedrebbe mai stretto. `container-name` per dire quale
