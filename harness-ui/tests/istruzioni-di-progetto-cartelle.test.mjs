@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test as testNode } from 'node:test';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -8,6 +9,17 @@ import { analizzaSezioniIstruzioni, creaIniettoreSezioni, rimuoviCommentiHtml } 
 import { contestoDelProgetto } from '../src/contesto-del-progetto.mjs';
 import { discoNode } from '../src/kernel/talosHarness.mjs';
 import { RADICE, FILE_ISTRUZIONI, leggiPrima, misuraCatene } from './fixtures/bc48-b-misure.mjs';
+
+/*
+ * 13/09, primo giro del job di release sui runner: questi test MISURANO gli AGENTS.md del repo di
+ * sviluppo (radice e per cartella), che nel monorepo pubblico non escono per scelta (istruzioni
+ * per gli agenti). Lì si dichiarano saltati col motivo, mai rossi e mai tolti: nel privato
+ * restano un cancello.
+ */
+const SALTA = existsSync(join(RADICE, 'AGENTS.md')) ? false : 'AGENTS.md del repo di sviluppo assente: albero pubblico, la misura BC48-B vive nel privato';
+const test = (nome, opzioni, fn) => (typeof opzioni === 'function'
+  ? testNode(nome, { skip: SALTA }, opzioni)
+  : testNode(nome, { ...(opzioni ?? {}), skip: opzioni?.skip || SALTA }, fn));
 
 const righe = testo => testo.match(/[^\n]*\n|[^\n]+$/g) ?? [];
 const nonVuote = testo => new Set(testo.split(/\r?\n/).map(r => r.trim()).filter(Boolean));

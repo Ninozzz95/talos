@@ -274,6 +274,13 @@ jobs:
         run: npm ci
         working-directory: harness-ui/frontend
 
+      # 13/09, prima corsa sul monorepo pubblico: il server importa `context-engine/src` (zod); senza
+      # le sue dipendenze 14 file di test morivano con ERR_MODULE_NOT_FOUND prima di partire.
+      - if: steps.dove.outputs.ci == 'si'
+        name: dipendenze del motore di contesto
+        run: npm ci
+        working-directory: context-engine
+
       - if: steps.dove.outputs.ci == 'si'
         name: server
         run: node --test tests/*.test.mjs

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -7,7 +7,9 @@ import test from 'node:test';
 import { createWorkspaceBrowser, WorkspaceBrowserError } from '../src/workspace-browser.mjs';
 
 async function fixture(t) {
-  const root = await mkdtemp(join(tmpdir(), 'talos-workspace-browser-'));
+  // 13/09: sui runner GitHub `tmpdir()` è nella forma corta 8.3 (`RUNNER~1`); il browser dei
+  // workspace risponde coi percorsi veri, quindi la radice della prova si risolve subito.
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'talos-workspace-browser-')));
   const project = join(root, 'Users', 'Antonino', 'AVM');
   await mkdir(project, { recursive: true });
   await mkdir(join(root, 'Windows'));
