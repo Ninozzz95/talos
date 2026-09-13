@@ -28,10 +28,11 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 import {
   ALIAS_CONTENUTO,
@@ -153,7 +154,7 @@ test('⛔ ogni messaggio porta la MOSSA SUCCESSIVA, non solo la diagnosi', () =>
 
 function cartellaVuota(t) {
   const radice = mkdtempSync(join(tmpdir(), 'talos-bc11-'));
-  t.after(() => rmSync(radice, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(radice));
   return radice;
 }
 

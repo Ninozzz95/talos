@@ -17,7 +17,7 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -31,6 +31,7 @@ import {
 } from '../src/mappa-cartelle.mjs';
 import { contestoDelProgetto } from '../src/contesto-del-progetto.mjs';
 import { elencaDaCartella } from '../src/kernel/talosHarness.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /** Un progetto vero su disco: `costruisciMappaCartelle` cammina il filesystem, non un doppio. */
 async function progettoFinto(file) {
@@ -76,7 +77,7 @@ test('BC-40: una mappa che si ferma in profondità lo DICHIARA, e non si dice co
     assert.ok(!testo.includes('albero COMPLETO'),
       '⛔ una mappa che si ferma a 2 su un albero profondo 4 NON è completa');
     assert.match(testo, /primi 2 livelli/, '⛔ deve dire FIN DOVE è vera, non solo che è tagliata');
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-40: il testo nomina gli attrezzi con cui si scende, e la forma esatta di `elenca`', async () => {
@@ -93,7 +94,7 @@ test('BC-40: il testo nomina gli attrezzi con cui si scende, e la forma esatta d
     const coda = testo.slice(testo.lastIndexOf('\n', testo.length - 2));
     assert.match(coda, /non vuol dire che non esista/i,
       '⛔ la riga che impedisce «la cartella non esiste» deve essere l’ULTIMA, non la prima');
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -109,7 +110,7 @@ test('BC-40, AL CONTRARIO: un albero che finisce entro i 2 livelli si dichiara C
     const testo = testoMappaCartelle(mappa, { radice: base });
     assert.match(testo, /albero COMPLETO/);
     assert.ok(!testo.includes('INCOMPLETA'));
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-40, AL CONTRARIO: una cartella vuota al secondo livello NON conta come «c’è altro sotto»', async () => {
@@ -122,7 +123,7 @@ test('BC-40, AL CONTRARIO: una cartella vuota al secondo livello NON conta come 
     assert.deepEqual(mappa.cartelle.map((c) => c.percorso), ['src', 'src/vuota']);
     assert.equal(mappa.fermatoInProfondita, false);
     assert.match(testoMappaCartelle(mappa, { radice: base }), /albero COMPLETO/);
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -140,7 +141,7 @@ test('BC-40: la profondità piena resta disponibile via parametro, e allora non 
       piena.cartelle.map((c) => c.percorso),
       ['src', 'src/kernel', 'src/kernel/motore', 'src/kernel/motore/giu', 'tests'],
     );
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-40: il tetto di TOKEN che taglia in profondità finisce nello stesso campo, non in `troncato`', async () => {
@@ -156,7 +157,7 @@ test('BC-40: il tetto di TOKEN che taglia in profondità finisce nello stesso ca
     assert.match(stretta.testo, /MAPPA INCOMPLETA PER SCELTA/,
       '⛔ per chi legge, «ho scelto di fermarmi» e «il tetto mi ha fermato» sono la stessa cosa: sotto c’è altro');
     assert.ok(!stretta.testo.includes('albero COMPLETO'));
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-40: il tetto predefinito è 1.200 token, e la mappa dei tre spazi veri ci sta sotto', () => {
@@ -182,7 +183,7 @@ test('BC-40: `blocchi.mappa` dice che è ridotta SENZA togliere niente a chi leg
     assert.equal(m.profonditaPiena, 2);
     assert.equal(typeof m.token, 'number');
     assert.ok(!preambolo.testo.includes(base), '⛔ mai il percorso assoluto della persona nel prompt');
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────

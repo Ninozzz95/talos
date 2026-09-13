@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,7 @@ import { createHttpApp } from '../../../src/http-app.mjs';
 import { elencaNote } from '../../../src/notes-store.mjs';
 import { elencaAttivita } from '../../../src/tasks-store.mjs';
 import { elencaMemorie } from '../../../src/memory-store.mjs';
+import { rimuoviCartellaDiProva } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 import {
   SCHEMI, SCELTA_AUTOMATICA, servizioVoci,
   valoriIniziali, validaValori, corpoCreazione, corpoModifica, paroleErroreRete,
@@ -70,7 +71,7 @@ function reteSu(base) {
 
 async function banco(t) {
   const radice = mkdtempSync(join(tmpdir(), 'talos-crud-fe-'));
-  t.after(() => rmSync(radice, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(radice));
   const cartelle = {
     cartellaNote: join(radice, 'note'),
     cartellaAttivita: join(radice, 'attivita'),

@@ -4,10 +4,11 @@ import { readFile } from 'node:fs/promises';
 import { resolve, relative, extname, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
+import { cartellaRapporti } from './aiuto/cartella-foto.mjs';
 
 // Verifica autonoma di fixture: nessuna sessione reale, nessuna chiamata a un modello.
 const radice = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const rapporto = resolve(radice, '../.claude');
+const rapporto = cartellaRapporti();
 const html = `<!doctype html><html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,"><link rel="stylesheet" href="/src/styles/main.css"><title>BC48 · prova di fixture</title>
 <body><main style="max-width:920px;margin:32px auto;padding:16px">

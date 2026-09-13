@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { createSessionRegistry } from '../src/session-registry.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /*
  * ⛔⛔⛔ BC-03 (segnalato dall'owner l'08/09/2026, chiuso l'11/09) — «la delega in sub agenti fa
@@ -103,7 +104,7 @@ function registro(cartellaStore) {
 
 test('BC-03 · IL CASO DEL BUG: una madre RIPRISTINATA dal disco porta ancora le sue due figlie', async (t) => {
   const { cartellaStore, cartella } = famigliaSuDisco();
-  t.after(() => { rmSync(cartellaStore, { recursive: true, force: true }); rmSync(cartella, { recursive: true, force: true }); });
+  t.after(() => { rimuoviCartellaDiProva(cartellaStore); rimuoviCartellaDiProva(cartella); });
   const reg = registro(cartellaStore);
   const { ripristinate, totali } = await reg.ripristina();
   assert.equal(totali, 5);
@@ -125,7 +126,7 @@ test('BC-03 · IL CASO DEL BUG: una madre RIPRISTINATA dal disco porta ancora le
 
 test('BC-03, AL CONTRARIO: una sessione SENZA deleghe non ne inventa nemmeno una', async (t) => {
   const { cartellaStore, cartella } = famigliaSuDisco();
-  t.after(() => { rmSync(cartellaStore, { recursive: true, force: true }); rmSync(cartella, { recursive: true, force: true }); });
+  t.after(() => { rimuoviCartellaDiProva(cartellaStore); rimuoviCartellaDiProva(cartella); });
   const reg = registro(cartellaStore);
   await reg.ripristina();
   assert.deepEqual(reg.elencaFigli(SOLITARIA).figli, [], 'lo stato vuoto della scheda è la risposta GIUSTA, qui');
@@ -137,7 +138,7 @@ test('BC-03, AL CONTRARIO: una sessione SENZA deleghe non ne inventa nemmeno una
 
 test('BC-03, AL CONTRARIO: la profondità 2 non confonde i piani — la nipote è figlia della FIGLIA, non della madre', async (t) => {
   const { cartellaStore, cartella } = famigliaSuDisco();
-  t.after(() => { rmSync(cartellaStore, { recursive: true, force: true }); rmSync(cartella, { recursive: true, force: true }); });
+  t.after(() => { rimuoviCartellaDiProva(cartellaStore); rimuoviCartellaDiProva(cartella); });
   const reg = registro(cartellaStore);
   await reg.ripristina();
   assert.deepEqual(reg.elencaFigli(MADRE).figli.map((f) => f.sessionId), [FIGLIA_A, FIGLIA_B], 'la nipote NON compare fra le figlie della madre');
@@ -147,7 +148,7 @@ test('BC-03, AL CONTRARIO: la profondità 2 non confonde i piani — la nipote �
 
 test('BC-03 · D3 SOPRAVVIVE AL RIAVVIO: due figlie sullo stesso file, e la scheda lo dice anche il giorno dopo', async (t) => {
   const { cartellaStore, cartella } = famigliaSuDisco({ fileCondiviso: true });
-  t.after(() => { rmSync(cartellaStore, { recursive: true, force: true }); rmSync(cartella, { recursive: true, force: true }); });
+  t.after(() => { rimuoviCartellaDiProva(cartellaStore); rimuoviCartellaDiProva(cartella); });
   const reg = registro(cartellaStore);
   await reg.ripristina();
 
@@ -168,7 +169,7 @@ test('BC-03 · D3 SOPRAVVIVE AL RIAVVIO: due figlie sullo stesso file, e la sche
 test('BC-03, AL CONTRARIO: una figlia che riscrive tre volte un file SUO non è una collisione', async (t) => {
   const cartellaStore = mkdtempSync(join(tmpdir(), 'bc03-store-'));
   const cartella = mkdtempSync(join(tmpdir(), 'bc03-lavoro-'));
-  t.after(() => { rmSync(cartellaStore, { recursive: true, force: true }); rmSync(cartella, { recursive: true, force: true }); });
+  t.after(() => { rimuoviCartellaDiProva(cartellaStore); rimuoviCartellaDiProva(cartella); });
   scriviSessione(cartellaStore, MADRE, { consegnaCorta: 'Una delega sola', avviataAlle: '2026-09-11T09:00:00.000Z', cartella });
   scriviSessione(cartellaStore, FIGLIA_A, {
     padreId: MADRE, profonditaDelega: 1, consegnaCorta: 'Scrivi e rileggi', avviataAlle: '2026-09-11T09:01:00.000Z',
@@ -181,7 +182,7 @@ test('BC-03, AL CONTRARIO: una figlia che riscrive tre volte un file SUO non è 
 
 test('BC-03, AL CONTRARIO: due `ripristina()` di fila non raddoppiano la stessa collisione', async (t) => {
   const { cartellaStore, cartella } = famigliaSuDisco({ fileCondiviso: true });
-  t.after(() => { rmSync(cartellaStore, { recursive: true, force: true }); rmSync(cartella, { recursive: true, force: true }); });
+  t.after(() => { rimuoviCartellaDiProva(cartellaStore); rimuoviCartellaDiProva(cartella); });
   const reg = registro(cartellaStore);
   await reg.ripristina();
   await reg.ripristina();

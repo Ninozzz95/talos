@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 import {
   caricaPlugin,
@@ -35,7 +36,7 @@ test('⭐⭐⭐ caricaPlugin: nessuna cartella .harness-ui-plugins — {plugin:[
     const { plugin } = await caricaPlugin({ cartella });
     assert.deepEqual(plugin, []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -55,7 +56,7 @@ test('⭐⭐⭐ caricaPlugin: un plugin valido con hook+tool, hash calcolato dal
     assert.equal(typeof plugin[0].hash, 'string');
     assert.equal(plugin[0].hash.length, 64);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -67,7 +68,7 @@ test('⭐⭐ caricaPlugin: "hooks"/"tools" assenti diventano array vuoti — un 
     assert.deepEqual(plugin[0].hooks, []);
     assert.deepEqual(plugin[0].tools, []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -84,7 +85,7 @@ test('⭐⭐ caricaPlugin: due plugin con contenuto DIVERSO hanno hash diversi �
     assert.notEqual(uno.hash, due.hash);
     assert.equal(uno.hash, tre.hash, 'stesso JSON scritto ⇒ stesso hash, indipendentemente dall\'id della cartella');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -96,7 +97,7 @@ test('⛔ AL CONTRARIO — una sottocartella SENZA plugin.json non è un plugin,
     const { plugin } = await caricaPlugin({ cartella });
     assert.deepEqual(plugin.map((p) => p.id), ['vera']);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -111,7 +112,7 @@ test('⛔⛔⛔ AL CONTRARIO — plugin.json malformato (non JSON) è un PluginR
       (e) => { assert.ok(e instanceof PluginRegistryError); assert.equal(e.code, 'PLUGIN_MALFORMED'); return true; },
     );
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -121,7 +122,7 @@ test('⛔ AL CONTRARIO — manca "nome": rifiutato', async () => {
     scriviManifesto(cartella, 'rotto', { descrizione: 'solo descrizione' });
     await assert.rejects(caricaPlugin({ cartella }), (e) => e.code === 'PLUGIN_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -131,7 +132,7 @@ test('⛔ AL CONTRARIO — manca "descrizione": rifiutato', async () => {
     scriviManifesto(cartella, 'rotto', { nome: 'x' });
     await assert.rejects(caricaPlugin({ cartella }), (e) => e.code === 'PLUGIN_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -141,7 +142,7 @@ test('⛔⛔ AL CONTRARIO — un hook del plugin con "eventi" non valido è rifi
     scriviManifesto(cartella, 'rotto', { nome: 'x', descrizione: 'd', hooks: [{ id: 'h', eventi: ['evento_inventato'], comando: 'echo' }] });
     await assert.rejects(caricaPlugin({ cartella }), (e) => e.code === 'PLUGIN_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -151,7 +152,7 @@ test('⛔⛔ AL CONTRARIO — un hook del plugin senza "comando" è rifiutato', 
     scriviManifesto(cartella, 'rotto', { nome: 'x', descrizione: 'd', hooks: [{ id: 'h', eventi: ['pre_tool_call'] }] });
     await assert.rejects(caricaPlugin({ cartella }), (e) => e.code === 'PLUGIN_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -161,7 +162,7 @@ test('⛔⛔ AL CONTRARIO — un tool del plugin senza "descrizione" è rifiutat
     scriviManifesto(cartella, 'rotto', { nome: 'x', descrizione: 'd', tools: [{ nome: 't', comando: 'echo' }] });
     await assert.rejects(caricaPlugin({ cartella }), (e) => e.code === 'PLUGIN_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -171,7 +172,7 @@ test('⛔⛔ AL CONTRARIO — un tool del plugin senza "comando" è rifiutato', 
     scriviManifesto(cartella, 'rotto', { nome: 'x', descrizione: 'd', tools: [{ nome: 't', descrizione: 'd' }] });
     await assert.rejects(caricaPlugin({ cartella }), (e) => e.code === 'PLUGIN_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -184,7 +185,7 @@ test('⛔⛔⛔ AL CONTRARIO — un carattere in più nel manifesto cambia l\'ha
     const secondo = (await caricaPlugin({ cartella })).plugin[0].hash;
     assert.notEqual(primo, secondo);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -194,7 +195,7 @@ test('⭐⭐⭐ verificaTrustPlugin: nessun trust registrato — false, mai fida
     const fidato = await verificaTrustPlugin({ cartellaTrust, pluginId: 'esempio', hash: 'abc' });
     assert.equal(fidato, false);
   } finally {
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -205,7 +206,7 @@ test('⭐⭐⭐ fidaPlugin poi verificaTrustPlugin: lo stesso hash torna VERAMEN
     assert.equal(existsSync(join(cartellaTrust, 'esempio.json')), true);
     assert.equal(await verificaTrustPlugin({ cartellaTrust, pluginId: 'esempio', hash: 'abc' }), true);
   } finally {
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -215,7 +216,7 @@ test('⛔⛔⛔ AL CONTRARIO — un plugin fidato il cui CONTENUTO cambia (hash 
     await fidaPlugin({ cartellaTrust, pluginId: 'esempio', hash: 'hash-vecchio' });
     assert.equal(await verificaTrustPlugin({ cartellaTrust, pluginId: 'esempio', hash: 'hash-nuovo' }), false);
   } finally {
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -227,7 +228,7 @@ test('⛔⛔ AL CONTRARIO — un pluginId con traversal ("..") è rifiutato', as
       (e) => e instanceof PluginRegistryError,
     );
   } finally {
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 

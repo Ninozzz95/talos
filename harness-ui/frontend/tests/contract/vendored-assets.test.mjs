@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
 import { buildProduction } from '../../scripts/build.mjs';
+import { rimuoviCartellaDiProvaAttesa } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 
 test('PHASE1-ASSET-ALLOWLIST-01 copia esattamente font, licenze upstream e marchio', async () => {
   const output = await mkdtemp(path.join(tmpdir(), 'talos-phase1-assets-'));
@@ -27,6 +28,6 @@ test('PHASE1-ASSET-ALLOWLIST-01 copia esattamente font, licenze upstream e march
       assert.ok(manifest.files.some((item) => item.path === `vendor/floating-ui/${license}`));
     }
   } finally {
-    await rm(output, { recursive: true, force: true });
+    await rimuoviCartellaDiProvaAttesa(output);
   }
 });

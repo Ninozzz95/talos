@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 import {
   caricaHooks,
@@ -24,7 +25,7 @@ test('⭐⭐⭐ caricaHooks: nessun file hooks.json — {hooks:[]}, mai un error
     const { hooks } = await caricaHooks({ cartella });
     assert.deepEqual(hooks, []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -42,7 +43,7 @@ test('⭐⭐⭐ caricaHooks: un file valido, hash calcolato dal comando VERO', a
     assert.equal(typeof hooks[0].hash, 'string');
     assert.equal(hooks[0].hash.length, 64, 'sha256 esadecimale');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -60,7 +61,7 @@ test('⭐⭐ caricaHooks: due hook diversi (comandi diversi) hanno hash DIVERSI 
     assert.notEqual(hooks[0].hash, hooks[1].hash);
     assert.equal(hooks[0].hash, hooks[2].hash, 'stesso comando testuale ⇒ stesso hash, indipendentemente dall\'id');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -73,7 +74,7 @@ test('⛔⛔⛔ caricaHooks: AL CONTRARIO, un JSON malformato è un HookRegistry
       (e) => { assert.ok(e instanceof HookRegistryError); assert.equal(e.code, 'HOOK_MALFORMED'); return true; },
     );
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -86,7 +87,7 @@ test('⛔⛔ caricaHooks: AL CONTRARIO, "hooks" mancante o non-array è rifiutat
       (e) => { assert.equal(e.code, 'HOOK_MALFORMED'); return true; },
     );
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -101,7 +102,7 @@ test('⛔⛔ caricaHooks: AL CONTRARIO, un hook senza "eventi" validi è rifiuta
       (e) => { assert.equal(e.code, 'HOOK_MALFORMED'); assert.match(e.message, /"x"/); return true; },
     );
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -113,7 +114,7 @@ test('⛔ caricaHooks: AL CONTRARIO, un hook senza "comando" è rifiutato', asyn
     }));
     await assert.rejects(caricaHooks({ cartella }), (e) => e.code === 'HOOK_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -123,7 +124,7 @@ test('⭐⭐⭐ verificaTrust: nessun trust registrato — false, mai fidato per
     const fidato = await verificaTrust({ cartellaTrust, hookId: 'audit', hash: 'abc123' });
     assert.equal(fidato, false);
   } finally {
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -135,7 +136,7 @@ test('⭐⭐⭐ fidaHook poi verificaTrust: lo stesso hash torna VERAMENTE fidat
     const fidato = await verificaTrust({ cartellaTrust, hookId: 'audit', hash: 'abc123' });
     assert.equal(fidato, true);
   } finally {
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -146,7 +147,7 @@ test('⛔⛔⛔ AL CONTRARIO — un hook fidato il cui CONTENUTO cambia (hash di
     const fidatoConHashNuovo = await verificaTrust({ cartellaTrust, hookId: 'audit', hash: 'hash-nuovo-diverso' });
     assert.equal(fidatoConHashNuovo, false, 'il trust è legato al CONTENUTO, non al nome — un hook modificato deve essere ri-fidato');
   } finally {
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -158,7 +159,7 @@ test('⛔⛔ AL CONTRARIO — un hookId con traversal ("..") è rifiutato, mai u
       (e) => { assert.ok(e instanceof HookRegistryError); return true; },
     );
   } finally {
-    rmSync(cartellaTrust, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaTrust);
   }
 });
 
@@ -170,7 +171,7 @@ test('⭐⭐⭐ eseguiHook: stdout JSON {consentito:false,motivo} — l\'esito d
     assert.equal(esito.consentito, false);
     assert.equal(esito.motivo, 'bloccato dal test');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -181,7 +182,7 @@ test('⭐⭐ eseguiHook: exit 0 senza output JSON — consentito:true per defaul
     const esito = await eseguiHook({ hook, evento: { tipo: 'post_tool_call' }, cartella });
     assert.equal(esito.consentito, true);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -193,7 +194,7 @@ test('⛔⛔ AL CONTRARIO — exit diverso da zero senza JSON — consentito:fal
     assert.equal(esito.consentito, false);
     assert.match(esito.motivo, /motivo reale/);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -204,6 +205,6 @@ test('⛔ eseguiHook: TALOS_HOOK_EVENT porta l\'evento VERO come JSON nell\'ambi
     const esito = await eseguiHook({ hook, evento: { tipo: 'pre_tool_call', azione: 'scrivi' }, cartella });
     assert.equal(esito.motivo, 'scrivi', 'il processo hook ha davvero ricevuto l\'evento, non un valore a caso');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });

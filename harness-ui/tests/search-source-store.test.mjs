@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { FONTI_RICERCA_IDS, SearchSourceError, createSearchSourceStore } from '../src/search-source-store.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 function keyringFinto() {
   const m = new Map();
@@ -12,7 +13,7 @@ function keyringFinto() {
 }
 function cartellaProva(t) {
   const dir = mkdtempSync(join(tmpdir(), 'talos-search-store-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(dir));
   return join(dir, 'search-source.json');
 }
 

@@ -35,7 +35,7 @@
  *   senza record NON deve essere perso.
  */
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -44,12 +44,13 @@ import { talosLavora, ATTREZZI_ESTESI_OPENAI, ATTREZZI_OPENAI } from '../src/ker
 import { componiRapportoRicerca, creaResearchOrchestrator, rileggiRapportoRecintato } from '../src/research-orchestrator.mjs';
 import { talosResearchParseReport, talosResearchReportDocument } from '../src/research/report.mjs';
 import { percorsoRapporto } from '../src/research-store.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /* ─────────────────────────── impalcatura ─────────────────────────── */
 
 function cartellaVuota(t) {
   const dir = mkdtempSync(join(tmpdir(), 'talos-deposito-'));
-  t.after(() => { try { rmSync(dir, { recursive: true, force: true }); } catch { /* già sparita */ } });
+  t.after(() => { try { rimuoviCartellaDiProva(dir); } catch { /* già sparita */ } });
   return dir;
 }
 

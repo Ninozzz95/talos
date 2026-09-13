@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { MemoryStoreError, aggiornaMemoria, cercaMemorie, creaMemoria, elencaMemorie, eliminaMemoria, leggiMemoria, trovaMemoriaPerTitolo } from '../src/memory-store.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 function cartellaVera() {
   return mkdtempSync(join(tmpdir(), 'talos-memory-store-'));
@@ -22,7 +23,7 @@ test('⭐⭐⭐ creaMemoria + leggiMemoria: torna un id (a differenza di mobile 
     const riletta = await leggiMemoria({ cartella, id: voce.id });
     assert.deepEqual(riletta, voce);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -32,7 +33,7 @@ test('⭐⭐ creaMemoria: kind esplicito', async () => {
     const { voce } = await creaMemoria({ cartella, title: 'x', content: 'y', kind: 'policy_note' });
     assert.equal(voce.genere, 'policy_note');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -48,7 +49,7 @@ test('⭐⭐⭐⭐⭐ creaMemoria: DEDUPLICA per titolo — una seconda chiamata
     const elenco = await elencaMemorie({ cartella });
     assert.equal(elenco.length, 1, 'una sola voce sul disco, mai due');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -59,7 +60,7 @@ test('⭐⭐ trovaMemoriaPerTitolo: case/spazi-insensitive, null se non trovata'
     assert.ok(await trovaMemoriaPerTitolo({ cartella, title: 'preferenze RISPOSTA' }));
     assert.equal(await trovaMemoriaPerTitolo({ cartella, title: 'mai scritta' }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -68,7 +69,7 @@ test('⛔ leggiMemoria: un id inesistente torna null, mai un\'eccezione', async 
   try {
     assert.equal(await leggiMemoria({ cartella, id: 'mai-esistita' }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -77,7 +78,7 @@ test('⛔ elencaMemorie: cartella assente (primo avvio) torna [], mai un errore'
   try {
     assert.deepEqual(await elencaMemorie({ cartella: join(radice, 'non-esiste') }), []);
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -91,7 +92,7 @@ test('⛔⛔ AL CONTRARIO — elencaMemorie: un file .json corrotto non nasconde
     assert.equal(elenco.length, 1);
     assert.equal(elenco[0].titolo, 'Buona');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -114,7 +115,7 @@ for (const [campo, valoreCorto, valoreLungo, tetto] of [
       });
       assert.deepEqual(await elencaMemorie({ cartella }), []);
     } finally {
-      rmSync(cartella, { recursive: true, force: true });
+      rimuoviCartellaDiProva(cartella);
     }
   });
 }
@@ -128,7 +129,7 @@ test('⛔⛔ AL CONTRARIO — creaMemoria: kind fuori dal vocabolario è MEMORY_
       return true;
     });
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -141,7 +142,7 @@ test('⭐⭐⭐ aggiornaMemoria: solo i campi mandati cambiano', async () => {
     assert.equal(aggiornata.contenuto, 'nuovo contenuto');
     assert.equal(aggiornata.genere, 'preference', 'kind non mandato: resta quello di prima');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -154,7 +155,7 @@ test('⛔⛔ AL CONTRARIO — aggiornaMemoria: un id inesistente è MEMORY_NOT_F
       return true;
     });
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -166,7 +167,7 @@ test('⭐⭐ eliminaMemoria: la memoria sparisce davvero dal disco (cancellazion
     assert.equal(await leggiMemoria({ cartella, id: creata.id }), null);
     assert.deepEqual(await elencaMemorie({ cartella }), []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -176,7 +177,7 @@ test('⛔ AL CONTRARIO — eliminaMemoria: un id già assente non lancia, è ide
     await eliminaMemoria({ cartella, id: 'mai-esistita' }); // non deve lanciare
     assert.deepEqual(await elencaMemorie({ cartella }), []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 

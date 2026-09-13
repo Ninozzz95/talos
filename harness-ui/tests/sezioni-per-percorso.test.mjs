@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, relative } from 'node:path';
 import { creaIniettoreSezioni } from '../src/sezioni-istruzioni.mjs';
 import { collegaSezioniAiContextHooks, prepareProviderContext } from '../src/context-provider-adapter.mjs';
 import { createOwnerRuntimeAdapter } from '../src/runtime-owner-adapter.mjs';
 import { ALIAS_PERCORSO, talosLavora } from '../src/kernel/talosHarness.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const contenuto = '## Non-Negotiable User Rule\nMai commit.\n## Una\n<!-- talos: paths: harness-ui/**, mobile/** -->\nPrima regola. Dettaglio uno.\n## Due\n<!-- talos: paths: harness-ui/** -->\nSeconda regola. Dettaglio due.\n';
 const file = [{ etichetta: 'AGENTS.md', contenuto }];
@@ -147,7 +148,7 @@ test('BC48-A-HOOK: accoda prima di archivio e misura, non modifica gli hook orig
 test('BC48-A-RUNTIME: istruzioni su disco raggiungono la richiesta e messaggiFinali senza rete', async t => {
   const base = await mkdtemp(join(tmpdir(), 'bc48-a-'));
   assert.ok(relative(tmpdir(), base).startsWith('bc48-a-'));
-  t.after(() => rm(base, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(base));
   await mkdir(join(base, 'harness-ui'));
   await writeFile(join(base, '.git'), '');
   await writeFile(join(base, 'AGENTS.md'), contenuto);
@@ -167,7 +168,7 @@ test('BC48-A-RUNTIME: istruzioni su disco raggiungono la richiesta e messaggiFin
 test('BC48-A-KERNEL-REALE: lettura vera, due turni, storico accodato e nessuna rete', async t => {
   const base = await mkdtemp(join(tmpdir(), 'bc48-a-kernel-'));
   assert.ok(relative(tmpdir(), base).startsWith('bc48-a-kernel-'));
-  t.after(() => rm(base, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(base));
   const cwd = join(base, 'harness-ui');
   await mkdir(join(cwd, 'src'), { recursive: true });
   await writeFile(join(base, '.git'), '');

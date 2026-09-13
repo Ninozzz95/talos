@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { MAX_TOOL_INSTALLATI, ToolForgeStoreError, abilitaToolForgiato, elencaToolForgiati, eliminaToolForgiato, installaToolForgiato, leggiToolForgiato } from '../src/tool-forge-store.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 function cartellaVera() {
   return mkdtempSync(join(tmpdir(), 'talos-forge-store-'));
@@ -25,7 +26,7 @@ test('⭐⭐⭐ installaToolForgiato + leggiToolForgiato: nasce SEMPRE abilitato
     const riletta = await leggiToolForgiato({ cartella, id: 'log-water-intake' });
     assert.deepEqual(riletta, voce);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -44,7 +45,7 @@ test('⛔⛔⛔ AL CONTRARIO — installaToolForgiato: un id già esistente è r
     );
     assert.equal((await elencaToolForgiati({ cartella })).length, 1, 'un solo tool sul disco, mai due');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -59,7 +60,7 @@ test('⛔⛔ AL CONTRARIO — installaToolForgiato: registro pieno (MAX_TOOL_INS
       (errore) => { assert.equal(errore.code, 'FORGE_REGISTRY_FULL'); return true; },
     );
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -68,7 +69,7 @@ test('⛔ installaToolForgiato: un manifest senza id valido è rifiutato', async
   try {
     await assert.rejects(() => installaToolForgiato({ cartella, manifest: {}, capacita: [], azioni: [], rischio: 'R1' }), ToolForgeStoreError);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -77,7 +78,7 @@ test('⛔ leggiToolForgiato: un id inesistente torna null, mai un\'eccezione', a
   try {
     assert.equal(await leggiToolForgiato({ cartella, id: 'mai-esistito' }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -93,7 +94,7 @@ test('⭐⭐⭐ elencaToolForgiati: cartella assente torna [] (mai un errore), p
     assert.equal(elenco[0].id, 'secondo');
     assert.equal(elenco[1].id, 'primo');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -106,7 +107,7 @@ test('⛔ elencaToolForgiati AL CONTRARIO: una voce corrotta è saltata, le altr
     assert.equal(elenco.length, 1);
     assert.equal(elenco[0].id, 'buono');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -118,7 +119,7 @@ test('⛔⛔⛔ AL CONTRARIO — cartella è il bersaglio DIRETTO, mai un genito
     const { readdirSync } = await import('node:fs');
     assert.deepEqual(readdirSync(cartella), ['diretto.json']);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -133,7 +134,7 @@ test('⭐⭐⭐ abilitaToolForgiato: cambia DAVVERO lo stato, riletto dal disco'
     const disabilitata = await abilitaToolForgiato({ cartella, id: 'log-water-intake', abilitato: false });
     assert.equal(disabilitata.abilitato, false);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -142,7 +143,7 @@ test('⛔ abilitaToolForgiato: un id inesistente torna null, mai un\'eccezione',
   try {
     assert.equal(await abilitaToolForgiato({ cartella, id: 'mai-esistito', abilitato: true }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -154,7 +155,7 @@ test('⭐⭐⭐ eliminaToolForgiato: cancella davvero (elencaToolForgiati non lo
     assert.deepEqual(esito, { id: 'log-water-intake' });
     assert.equal(await leggiToolForgiato({ cartella, id: 'log-water-intake' }), null);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -166,6 +167,6 @@ test('⛔⛔ eliminaToolForgiato AL CONTRARIO: idempotente — un id già assent
     await eliminaToolForgiato({ cartella, id: 'log-water-intake' });
     assert.equal(await eliminaToolForgiato({ cartella, id: 'log-water-intake' }), null, 'una seconda eliminazione sullo stesso id non lancia');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });

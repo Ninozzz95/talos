@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { caricaSkill, SkillRegistryError } from '../src/skill-registry.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 // ⭐ Stesso principio di hook-registry.test.mjs: cartelle VERE su
 // disco, nessun mock del filesystem per la logica base.
@@ -24,7 +25,7 @@ test('⭐⭐⭐ caricaSkill: nessuna cartella .harness-ui-skills — {skills:[]}
     const { skills } = await caricaSkill({ cartella });
     assert.deepEqual(skills, []);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -40,7 +41,7 @@ test('⭐⭐⭐ caricaSkill: una skill valida, i campi arrivano dal frontmatter 
     assert.match(skills[0].corpo, /^# Code review/);
     assert.match(skills[0].corpo, /Il processo vero, riga per riga\./);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -53,7 +54,7 @@ test('⭐⭐ caricaSkill: più skill, ordine deterministico (alfabetico per id, 
     const { skills } = await caricaSkill({ cartella });
     assert.deepEqual(skills.map((s) => s.id), ['alfa', 'medio', 'zeta']);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -65,7 +66,7 @@ test('⛔ AL CONTRARIO — una sottocartella SENZA SKILL.md non è una skill, no
     const { skills } = await caricaSkill({ cartella });
     assert.deepEqual(skills.map((s) => s.id), ['vera']);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -78,7 +79,7 @@ test('⛔ AL CONTRARIO — un file sciolto dentro .harness-ui-skills/ (non una d
     const { skills } = await caricaSkill({ cartella });
     assert.deepEqual(skills.map((s) => s.id), ['vera']);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -91,7 +92,7 @@ test('⛔⛔⛔ AL CONTRARIO — SKILL.md senza il delimitatore "---" iniziale �
       (e) => { assert.ok(e instanceof SkillRegistryError); assert.equal(e.code, 'SKILL_MALFORMED'); return true; },
     );
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -101,7 +102,7 @@ test('⛔⛔ AL CONTRARIO — SKILL.md con un frontmatter mai chiuso è rifiutat
     scriviSkill(cartella, 'rotta', '---\nname: rotta\ndescription: manca il secondo delimitatore.\ncorpo senza chiusura\n');
     await assert.rejects(caricaSkill({ cartella }), (e) => e.code === 'SKILL_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -111,7 +112,7 @@ test('⛔⛔ AL CONTRARIO — una riga di frontmatter senza ":" è rifiutata', a
     scriviSkill(cartella, 'rotta', '---\nname: rotta\nquesta riga non ha i due punti\n---\ncorpo\n');
     await assert.rejects(caricaSkill({ cartella }), (e) => e.code === 'SKILL_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -121,7 +122,7 @@ test('⛔ AL CONTRARIO — manca "name" nel frontmatter: rifiutata', async () =>
     scriviSkill(cartella, 'rotta', '---\ndescription: solo la descrizione.\n---\ncorpo\n');
     await assert.rejects(caricaSkill({ cartella }), (e) => e.code === 'SKILL_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -131,7 +132,7 @@ test('⛔ AL CONTRARIO — manca "description" nel frontmatter: rifiutata', asyn
     scriviSkill(cartella, 'rotta', '---\nname: rotta\n---\ncorpo\n');
     await assert.rejects(caricaSkill({ cartella }), (e) => e.code === 'SKILL_MALFORMED');
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -144,7 +145,7 @@ test('⛔⛔ AL CONTRARIO — un file con terminatori CRLF non lascia un "\\r" i
     assert.ok(!skills[0].corpo.startsWith('\r'), `il corpo inizia con un "\\r" isolato: ${JSON.stringify(skills[0].corpo.slice(0, 10))}`);
     assert.match(skills[0].corpo, /^corpo vero/);
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });
 
@@ -158,6 +159,6 @@ test('⛔⛔⛔ AL CONTRARIO — una singola skill malformata FERMA l\'intero ca
       (e) => { assert.ok(e instanceof SkillRegistryError); assert.match(e.message, /rotta/); return true; },
     );
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });

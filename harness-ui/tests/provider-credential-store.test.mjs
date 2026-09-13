@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { ID_CON_CREDENZIALE } from '../src/provider-registry.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 import {
   PROVIDER_IDS,
@@ -96,7 +97,7 @@ test('PROVIDER-STORE-06 le variabili ambiente non sono loggate e le righe pubbli
 
 test('PROVIDER-RUNTIME-RESTART-01 endpoint e timeout sopravvivono al riavvio senza salvare chiavi', (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'talos-provider-runtime-'));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(directory));
   const runtimeFile = join(directory, 'provider-runtime.json');
   const first = createProviderCredentialStore({
     env: { OPENAI_API_KEY: 'secret-never-on-disk' },
@@ -118,7 +119,7 @@ test('PROVIDER-RUNTIME-RESTART-01 endpoint e timeout sopravvivono al riavvio sen
 
 test('PROVIDER-RUNTIME-RESTART-02 file corrotto o valori non validi sono ignorati senza interrompere il server', (t) => {
   const directory = mkdtempSync(join(tmpdir(), 'talos-provider-runtime-corrupt-'));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(directory));
   const runtimeFile = join(directory, 'provider-runtime.json');
   const entries = [];
   writeFileSync(runtimeFile, '{broken', 'utf8');
