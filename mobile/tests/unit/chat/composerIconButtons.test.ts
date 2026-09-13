@@ -186,7 +186,13 @@ describe('composer icon buttons', () => {
     it('il campo vale sempre un numero intero di righe, mai mezza', async () => {
         const source = await composerSource()
         expect(source).toContain('const tetto = aRighe(12 * rem, Math.floor)')
-        expect(source).toContain('const contenuto = aRighe(field.scrollHeight, Math.ceil)')
+        // ⛔ Il contenuto sale di riga solo OLTRE l'errore di misura del browser:
+        //    scrollHeight e' un intero, quindi una riga da 25,6 px viene
+        //    dichiarata 26 e senza tolleranza diventa due righe (misurato sul Pad).
+        expect(source).toContain('const contenuto = aRighe(field.scrollHeight, Math.ceil, TOLLERANZA_RIGA)')
+        // ⛔ E il verso contrario: il TETTO non deve avere tolleranza, o si
+        //    abbasserebbe di una riga quando e' gia' un multiplo esatto.
+        expect(source).not.toContain('aRighe(12 * rem, Math.floor, TOLLERANZA_RIGA)')
         expect(source).toContain("Number.parseFloat(stile.paddingTop)")
         // ⛔ Il verso contrario: l'altezza NON si prende piu' grezza dal
         //    contenuto, o l'arrotondamento sarebbe scritto e scavalcato.
@@ -200,11 +206,23 @@ describe('composer icon buttons', () => {
      */
     it('a riposo il campo vale una riga, non il pavimento del campo che cresce', async () => {
         const source = await composerSource()
-        // a riposo il pavimento E' la riga: una riga, non un blocco di 3,5rem
-        expect(source).toContain('const floor = composerCompact.value ? riga :')
+        // ⛔ Il pavimento della barra agganciata e' UNA riga, sempre: a riposo e
+        //    mentre si scrive. Non dipende piu' dallo stato compatto — owner
+        //    13/09, «il composer espanso e' troppo alto».
+        expect(source).toContain('const floor = props.docked ? riga : 3 * riga')
         expect(source).toContain("const riga = Number.parseFloat(stile.lineHeight)")
-        // il pavimento alto resta per lo stato in cui si scrive davvero
-        expect(source).toContain('(props.docked ? 3.5 : 5) * rem')
+        // ⛔ Il pavimento si conta in RIGHE, non in rem: a riposo una, a fuoco
+        //    due. In rem non era un multiplo della riga, e il campo vuoto finiva
+        //    a tre righe (76,8 px misurati sul Pad) — «troppo alto», owner 13/09.
+        expect(source).toContain('const floor = props.docked ? riga : 3 * riga')
+        expect(source).not.toContain('(props.docked ? 3.5 : 5) * rem')
+        expect(source).not.toContain('(props.docked ? 2 : 3) * riga')
+        // ⛔ E il pavimento CSS va tolto PRIMA di misurare: scrollHeight lo
+        //    include, quindi un campo vuoto dichiarava 56 px di contenuto che non
+        //    c'e', e arrotondati in su diventavano tre righe. Senza questa riga
+        //    la cura dell'altezza si annulla da sola.
+        expect(source).toContain("field.style.minHeight = '0px'")
+        expect(source).toContain('field.style.minHeight = minimoScritto')
     })
 
     /**
