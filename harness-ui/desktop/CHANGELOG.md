@@ -6,7 +6,24 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
-## desktop-v0.1.4 — 2026-09-13
+## desktop-v0.1.5 — 2026-09-13
+
+Carries everything below. The five tags before it published nothing, and not once was the product
+at fault: every time a test or a build script described the developer's machine instead of the
+software.
+
+### Fixed
+- The release smoke test could not start on a clean CI machine. It asked the system for the Node
+  executable and passed the answer straight to the process launcher, but a machine with more than
+  one Node on its path answers with a list, not a single path. The developer's machine has exactly
+  one, so the fault was invisible here. It now takes the first match, the one the path would pick,
+  and refuses to continue if there is none.
+
+  Worth recording: the run that found this had already installed the application in 81 seconds,
+  started it, closed it and uninstalled it, leaving no stray processes, no shortcuts and the user
+  data intact. The product passed. Only the script that watches it did not.
+
+## desktop-v0.1.4 — 2026-09-13 (tag only, no release published)
 
 Carries everything below. The four tags before it published nothing: their release jobs stopped at
 the gates, and a published tag is never rewritten, so each attempt gets a new number. Not once was
