@@ -21,6 +21,7 @@
 
 /** Fonte: ricerca su un progetto open source dello stesso spazio, letto il 28/8. */
 import { existsSync, statSync } from 'node:fs';
+import { parse as parsePath } from 'node:path';
 
 export const LIMITE_FIGLI_CONCORRENTI = 10;
 
@@ -140,11 +141,85 @@ export function esitoDelegaDaEventi(eventi, contesto = {}) {
  * @param {Map<string, object>} sessioni — la STESSA Map di session-registry.mjs.
  * @param {Function} avviaESeguiFn — la funzione interna avviaESegui di session-registry.mjs, non una sua copia.
  */
-/** L'unico controllo sul percorso che il kernel non può fare: esiste, ed è una cartella. */
+/** Uno dei due controlli sul percorso che il kernel non può fare: esiste, ed è una cartella. */
 export function esisteCartella(percorso, { esiste = existsSync, stato = statSync } = {}) {
   const p = String(percorso || '');
   if (!p.trim()) return false;
   try { return esiste(p) && stato(p).isDirectory(); } catch { return false; }
+}
+
+/**
+ * La FORMA di un percorso: come è ancorato, non dove porta. È la sola cosa che distingue
+ * «C:\progetto» da «/mnt/c/progetto» PRIMA di toccare il disco.
+ *
+ * ⛔⛔⛔ 13/09/2026 — MISURATO SU QUESTA MACCHINA (Windows 11, Node v24.18.0), non dedotto.
+ *   `esisteCartella` da sola NON ferma un percorso di un altro sistema operativo, perché su
+ *   Windows un percorso che comincia con `/` è ANCORATO ALL'UNITÀ CORRENTE, non rifiutato:
+ *     esisteCartella('/tmp')   → true   (il disco risponde per C:\tmp)
+ *     esisteCartella('/Users') → true   (il disco risponde per C:\Users)
+ *     esisteCartella('src')    → true   (relativo: risolto sulla cartella del SERVER, non su
+ *                                        quella della madre — la figlia finirebbe in harness-ui)
+ *   Cioè: tre forme storte ACCETTATE IN SILENZIO, e la figlia parte in una cartella che nessuno
+ *   ha scelto. Le due che il difetto dell'08/09 nominava (`/mnt/c/…`, `/home/user/app`) venivano
+ *   fermate solo per caso — perché `C:\mnt` e `C:\home` non esistono su QUESTA macchina.
+ *
+ * Fonte (documentazione ufficiale Node v24, modulo `path` e modulo `fs`, letta il 13/09/2026 via
+ * ctx7): `path.isAbsolute('//server')` e `path.isAbsolute('\\\\server')` sono `true` su Windows, e
+ * «On Windows, Node.js follows the concept of per-drive working directory» — cioè `isAbsolute` da
+ * solo NON distingue le due forme, mentre `path.parse().root` sì: `'/'` per un percorso ancorato
+ * alla sola radice, `'C:\'` per un'unità, `'\\server\share\'` per la rete, `''` per un relativo.
+ * ⛔ Ricerca web NON disponibile in questa sessione (budget esaurito, 200/200): la citazione è la
+ *   documentazione ufficiale del runtime, che per questa domanda è la fonte primaria.
+ *
+ * @returns {'assente'|'relativo'|'radice-sola'|'unita'|'unita-senza-radice'|'rete'}
+ */
+export function formaDelPercorso(percorso) {
+  const p = String(percorso ?? '');
+  if (!p.trim()) return 'assente';
+  const radice = parsePath(p).root;
+  if (radice === '') return 'relativo';
+  if (/^[A-Za-z]:$/u.test(radice)) return 'unita-senza-radice'; // «C:progetto»: relativo alla cartella corrente DI QUELL'UNITÀ
+  if (/^[A-Za-z]:[\\/]$/u.test(radice)) return 'unita';
+  if (radice === '/' || radice === '\\') return 'radice-sola';
+  return 'rete';
+}
+
+/**
+ * Il percorso che il MODELLO ha proposto per la figlia è utilizzabile su questo computer?
+ *
+ * ⛔ La misura NON è «assomiglia a Windows»: è «ha la STESSA FORMA della cartella in cui la madre
+ *   sta già lavorando». Quella cartella l'ha scelta una persona ed è vera per costruzione, quindi
+ *   è il metro giusto — e si tara da sé, senza una riga che nomini un sistema operativo. Il kernel
+ *   non può farlo: non sa in che forma è il disco (`talosHarness.mjs`, `delega_sottotask`, che per
+ *   questo delega il no a `onDelega`).
+ *
+ * ⛔ Percorso assente ⇒ nessun giudizio: si lavora dove lavora la madre, ed è il caso NORMALE
+ *   (stato dell'arte letto il 06/09/2026: i sotto-agenti condividono la cartella del padre).
+ *
+ * @returns {{ok:true}|{ok:false, motivo:string}} mai un'eccezione: un rifiuto è un esito.
+ */
+export function percorsoDellaFigliaUsabile(proposto, cartellaMadre) {
+  const forma = formaDelPercorso(proposto);
+  if (forma === 'assente') return { ok: true };
+  const formaMadre = formaDelPercorso(cartellaMadre);
+  if (forma === formaMadre) return { ok: true };
+  /*
+   * ⛔ Il motivo PORTA la cartella giusta, scritta per esteso. Un rifiuto che dice solo «no»
+   *   lascia il modello a indovinare, ed è esattamente così che sono morte tre deleghe di fila:
+   *   vedeva un REFUSED, inventava un'altra forma, ne vedeva un altro. Chi rifiuta e conosce la
+   *   risposta la dice.
+   */
+  const spiegazione = forma === 'relativo' || forma === 'unita-senza-radice'
+    ? `la cartella «${proposto}» non è un percorso assoluto`
+    : `la cartella «${proposto}» è scritta nella forma di un altro sistema operativo`;
+  if (formaMadre === 'assente') {
+    return { ok: false, motivo: `${spiegazione}. Ometti la cartella per lavorare dove lavora chi ti ha delegato.` };
+  }
+  return {
+    ok: false,
+    motivo: `${spiegazione}: su questo computer i percorsi si scrivono come «${cartellaMadre}». `
+      + `Ometti la cartella per lavorare dove lavora chi ti ha delegato, oppure usa esattamente «${cartellaMadre}».`,
+  };
 }
 
 /*
@@ -244,11 +319,36 @@ export function creaSubagentOrchestrator({ sessioni, avviaESeguiFn, cartellaEsis
        * Stato dell'arte (letto 06/09/2026): per difetto i
        * sotto-agenti CONDIVIDONO la cartella del padre; l'isolamento vero, quando serve, si fa con
        * un worktree, non con una cartella diversa a caso.
-       * ⇒ Resta un solo controllo, quello che il kernel non può fare: la cartella deve ESISTERE.
+       * ⇒ Restano DUE controlli, quelli che il kernel non può fare: la FORMA del percorso e la sua
+       *   ESISTENZA.
+       * ⛔⛔ 13/09/2026 — la seconda metà di questa cura MANCAVA, e il difetto è misurato nella doc
+       *   di `formaDelPercorso`: su Windows `/tmp`, `/Users` e `src` passavano `esisteCartella`
+       *   (rispettivamente `C:\tmp`, `C:\Users` e la cartella del SERVER) e la figlia partiva in
+       *   una cartella che nessuno aveva scelto. `/mnt/c/…` veniva fermato solo perché `C:\mnt`
+       *   non esiste QUI: una guardia che dipende da quali cartelle ha la macchina non è una
+       *   guardia. La forma si controlla PRIMA del disco, e il rifiuto dice quale sia la giusta.
        */
-      const dove = typeof cartella === 'string' && cartella.trim() !== '' ? cartella : padre.cartella;
+      const proposta = typeof cartella === 'string' && cartella.trim() !== '' ? cartella : null;
+      const dove = proposta ?? padre.cartella;
+      const forma = percorsoDellaFigliaUsabile(proposta, padre.cartella);
+      if (!forma.ok) {
+        resolve({ esito: 'rifiutato', motivo: forma.motivo });
+        return;
+      }
       if (!cartellaEsisteFn(dove)) {
-        resolve({ esito: 'rifiutato', motivo: `la cartella ${dove} non esiste su questo computer: usa un percorso di Windows, non uno in forma WSL` });
+        /* ⛔ Anche qui il motivo porta la cartella della madre — tranne quando è LEI a non esistere:
+           consigliare la cartella che ha appena fallito sarebbe un consiglio falso. */
+        /* ⛔⛔ 13/09/2026, revisione avversariale: il commento qui sopra prometteva questo, il
+           codice NON lo faceva. `dove === padre.cartella` riconosce solo il caso in cui il modello
+           RIPETE la cartella della madre; se ne propone un'altra e la cartella della madre nel
+           frattempo è sparita (cancellata a sessione viva), il rifiuto consigliava una cartella
+           inesistente — il consiglio falso che la riga sopra dice di evitare. Ora la condizione è
+           quella dichiarata: si consiglia solo una cartella che il disco conferma. */
+        const madreConsigliabile = dove !== padre.cartella && cartellaEsisteFn(padre.cartella);
+        const invece = madreConsigliabile
+          ? ` Ometti la cartella per lavorare dove lavora chi ti ha delegato, oppure usa esattamente «${padre.cartella}».`
+          : '';
+        resolve({ esito: 'rifiutato', motivo: `la cartella ${dove} non esiste su questo computer.${invece}` });
         return;
       }
       const profonditaVoluta = (padre.profonditaDelega ?? 0) + 1;
