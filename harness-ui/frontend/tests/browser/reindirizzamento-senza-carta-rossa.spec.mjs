@@ -162,5 +162,58 @@ for (const modo of ['dark', 'light']) {
       expect(p.attesa, `l’attesa sta sopra la domanda accodata: ${JSON.stringify(p)}`).toBeGreaterThan(p.domanda);
       expect(await conta(page, '.talos-waiting'), 'una sola attesa, non due').toBe(1);
     });
+
+    /* I numeri della spine, turno per turno, come li legge l'Indice dei giri. */
+    const spine = (page) => page.evaluate(() => [...document.querySelectorAll('#conversation > .talos-turn')]
+      .map((t) => `${t.dataset.turno}:${[...t.querySelectorAll('.talos-turn-spine__n')].map((n) => n.textContent).join('+')}`));
+
+    test(`SPINE-01 — dopo un reindirizzamento il giro nuovo ha UN numero, non due (${modo})`, async ({ page }, testInfo) => {
+      /*
+       * ⛔⛔ 13/09 notte, GIRO VERO (glm-5.3-flash, banco 5471): l'Indice dei giri diceva «4 · Risposta 0 attrezzi» e
+       *   «5 · Risposta in corso» con UNA risposta sola in chat; nel DOM `talos:4+5`. `RunRedirectApplied` apre il turno
+       *   dell'attesa col suo numero, e `RunStarted` ne aggiungeva un secondo.
+       */
+      await apri(page, `spine-redirect-${modo}`);
+      await eventi(page, [
+        { type: 'RunStarted', input: { consegna: 'Controlla i test del progetto' }, _sequenza: 1 },
+        { type: 'ReasoningMessageStart', messageId: 'g1', _sequenza: 2 },
+        { type: 'ReasoningMessageContent', messageId: 'g1', delta: 'Devo capire dove stanno i test. ', _sequenza: 3 },
+        { type: 'RunRedirectRequested', redirectId: 'r-s', testo: 'Cambio di programma: guarda il README', _sequenza: 4 },
+        { type: 'RunError', code: 'fermato', message: MESSAGGIO_FERMO_REALE, _sequenza: 5 },
+        { type: 'RunRedirectApplied', redirectId: 'r-s', testo: 'Cambio di programma: guarda il README', _sequenza: 6 },
+        { type: 'RunStarted', input: { consegna: 'Cambio di programma: guarda il README', seguito: true }, _sequenza: 7 },
+      ]);
+      await page.screenshot({ path: testInfo.outputPath(`7-spine-dopo-il-reindirizzamento-${modo}.png`) });
+      expect(await spine(page)).toEqual(['utente:1', 'talos:2', 'utente:3', 'talos:4']);
+    });
+
+    test(`SPINE-02 AL CONTRARIO — un secondo giro nello STESSO turno prende davvero il suo numero (${modo})`, async ({ page }) => {
+      /* La guardia non deve spegnere la numerazione vera: un giro che riparte dopo aver già scritto è un giro nuovo. */
+      await apri(page, `spine-secondo-giro-${modo}`);
+      await eventi(page, [
+        { type: 'RunStarted', input: { consegna: 'Controlla i test del progetto' }, _sequenza: 1 },
+        { type: 'TextMessageStart', messageId: 'm1', _sequenza: 2 },
+        { type: 'TextMessageContent', messageId: 'm1', delta: 'Leggo la cartella.', _sequenza: 3 },
+        { type: 'TextMessageEnd', messageId: 'm1', _sequenza: 4 },
+        { type: 'RunStarted', input: { consegna: 'Controlla i test del progetto' }, _sequenza: 5 },
+      ]);
+      expect(await spine(page)).toEqual(['utente:1', 'talos:2+3']);
+    });
+
+    test(`SPINE-03 — rigiocare un seguito non aggiunge un numero al turno di PRIMA (${modo})`, async ({ page }) => {
+      /* ⛔ La forma della rigiocata: il `RunStarted` del seguito arriva quando in fondo c'è ancora la risposta vecchia. */
+      await apri(page, `spine-seguito-${modo}`);
+      await eventi(page, [
+        { type: 'RunStarted', input: { consegna: 'Controlla i test del progetto' }, _sequenza: 1 },
+        { type: 'TextMessageStart', messageId: 'm1', _sequenza: 2 },
+        { type: 'TextMessageContent', messageId: 'm1', delta: 'Ho letto la cartella.', _sequenza: 3 },
+        { type: 'TextMessageEnd', messageId: 'm1', _sequenza: 4 },
+        { type: 'RunFinished', outcome: { type: 'success' }, _sequenza: 5 },
+        { type: 'RunStarted', input: { consegna: 'e poi guarda il README', seguito: true }, _sequenza: 6 },
+        { type: 'TextMessageStart', messageId: 'm2', _sequenza: 7 },
+        { type: 'TextMessageContent', messageId: 'm2', delta: 'Il README dice come si lancia.', _sequenza: 8 },
+      ]);
+      expect(await spine(page)).toEqual(['utente:1', 'talos:2', 'utente:3', 'talos:4']);
+    });
   });
 }

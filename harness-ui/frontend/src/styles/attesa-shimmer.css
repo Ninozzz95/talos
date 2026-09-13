@@ -54,6 +54,14 @@
  */
 .real-reasoning-note[data-ragionamento="vivo"] > .talos-activity__head > .tool-note-summary-text{ flex: none; }
 .talos-ragionamento__argomento{ flex: 1 1 auto; min-width: 0; font-weight: 400; }
+/*
+ * ⛔⛔ 13/09 notte, GIRO VERO con glm-5.3-flash (foto `04-in-coda-scuro`): con un argomento lungo i secondi
+ *   andavano A CAPO — «4» sopra, «s» sotto. L'argomento cede spazio (`min-width: 0`), ma anche i secondi
+ *   erano un figlio flex restringibile, e «2 min 22 s» ha tre spazi dove spezzarsi. Le prove a schermo
+ *   usavano frasi corte e contatori a una cifra: non potevano vederlo.
+ * ⇒ I secondi non si stringono e non vanno a capo: cede solo l'argomento, coi suoi puntini.
+ */
+.real-reasoning-note[data-ragionamento="vivo"] > .talos-activity__head > .talos-measure{ flex: none; white-space: nowrap; }
 
 @keyframes talosAttesaShimmer{
   from { background-position: 120% 0; }

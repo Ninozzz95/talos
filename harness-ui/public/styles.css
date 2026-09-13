@@ -10788,6 +10788,10 @@ dialog.command-dialog .tool-chips .status-chip,
   min-width: 0;
   font-weight: 400;
 }
+.real-reasoning-note[data-ragionamento=vivo] > .talos-activity__head > .talos-measure {
+  flex: none;
+  white-space: nowrap;
+}
 @keyframes talosAttesaShimmer {
   from {
     background-position: 120% 0;

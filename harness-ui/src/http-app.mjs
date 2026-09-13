@@ -5629,7 +5629,7 @@ export function createHttpApp({
            * sessione indistinguibile da una viva. Un difetto dello stesso tipo era già stato
            * trovato e curato in `elencaFigli` (06/9). Il campo si dichiara, non si deduce.
            */
-          data = { registrato: esito.registrato, motivo: esito.motivo, giri: esito.giri, cache: esito.cache, cacheSessione: esito.cacheSessione ?? null, primoToken: esito.primoToken, chiusura: esito.chiusura, interrotta: esito.interrotta === true, ragionamentiMs: esito.ragionamentiMs ?? {} }; // ⭐ 13/09 sera: quanto ha ragionato, anche dopo un riavvio
+          data = { registrato: esito.registrato, motivo: esito.motivo, giri: esito.giri, cache: esito.cache, cacheSessione: esito.cacheSessione ?? null, primoToken: esito.primoToken, chiusura: esito.chiusura, interrotta: esito.interrotta === true, ragionamentiMs: esito.ragionamentiMs ?? {}, ragionamentiInCorsoDaMs: esito.ragionamentiInCorsoDaMs ?? {} }; // ⭐ 13/09 sera: quanto ha ragionato, anche dopo un riavvio
         } else if (skillsMatch) {
           requireNoQuery(url);
           let sessionId;
@@ -5903,6 +5903,20 @@ export function createHttpApp({
             const replay = creaReplayCoalescente((evento) => { sseSession.send(evento); });
             const disiscrivi = sessionRegistry.iscriviti(sessionId, replay.ascoltatore, daSequenza);
             replay.fineReplay();
+            /*
+             * ⭐⭐ 13/09 notte — LA STORIA È FINITA, e il browser adesso lo sa. Trovato col GIRO VERO
+             *   (glm-5.3-flash, banco 5471): riaperta una sessione ANCORA VIVA, la chat trattava ogni evento
+             *   rigiocato come appena arrivato. Un ragionamento di 8 s rigiocato in pochi millisecondi diceva
+             *   «Ha ragionato poco», e quello in corso da tredici minuti ripartiva da «0 s». Per una sessione
+             *   conclusa il browser lo sa già (`conclusa` → differimento); per una viva no.
+             * ⇒ Qui, e solo qui, si sa dove passa il confine: `iscriviti()` rigioca la storia in modo SINCRONO
+             *   prima di registrare l'ascoltatore. Un evento `CUSTOM` di SOLO TRASPORTO lo dice: senza
+             *   `_sequenza`, quindi senza id SSE, mai deduplicato, mai in `voce.eventi` né sul disco (BC-07).
+             *   AG-UI: «The Custom event provides an extension mechanism for implementing features not covered
+             *   by the standard event types» (docs.ag-ui.com/concepts/events, letto il 13/09/2026). Chi non lo
+             *   conosce lo ignora.
+             */
+            sseSession.send({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null });
             /*
              * ⛔⛔⛔ 28/8 — SECONDA metà della stessa cura (setNoDelay sopra
              * è la prima): senza scritture nuove, una connessione può

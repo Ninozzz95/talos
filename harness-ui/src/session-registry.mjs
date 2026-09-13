@@ -1151,6 +1151,31 @@ export function durateRagionamentoDaEventi(eventi, { istanti = null, soloUltimoG
   const inizi = new Map();
   const durate = {};
   for (const evento of ordinati.slice(da)) {
+    /*
+     * ⛔⛔ 13/09 notte, GIRO VERO (glm-5.3-flash, banco 5471): un reindirizzamento chiude il giro mentre il
+     *   modello RAGIONA, e `ReasoningMessageEnd` non arriva mai — nello store: Start, 688 pezzi, poi
+     *   `RunError fermato`. Dal vivo la riga diceva «Ha ragionato per 8 s» (il browser chiude i ragionamenti
+     *   aperti alla fine del giro); riaperta, diceva solo «Ha ragionato». Due racconti dello stesso fatto.
+     * ⇒ La fine del GIRO chiude i ragionamenti rimasti aperti, come fa lo schermo. Senza un evento di fine
+     *   giro (giro ancora vivo) resta vero quello di prima: nessuna durata.
+     */
+    /*
+     * ⛔⛔ 13/09 notte, stesso GIRO VERO, letto nello store: `ReasoningMessageEnd` arriva DOPO `TextMessageEnd`
+     *   (Start, 41.426 pezzi di ragionamento, TextMessageStart, 2.204 pezzi di risposta, TextMessageEnd, e solo lì
+     *   ReasoningMessageEnd). Dopo il primo testo non arriva più un solo pezzo di ragionamento: il modello ha smesso
+     *   di ragionare lì, e la fine viene solo annunciata tardi. Contata fino all'End, la durata comprendeva la
+     *   risposta intera. ⇒ Il ragionamento finisce quando il modello PASSA OLTRE — primo testo o primo attrezzo —
+     *   «a plain collapsed row once the model moves on» (assistant-ui, Reasoning).
+     */
+    if ((evento?.type === 'TextMessageStart' || evento?.type === 'ToolCallStart' || evento?.type === 'RunFinished' || evento?.type === 'RunError') && Number.isSafeInteger(evento._sequenza) && inizi.size) {
+      const fine = leggiIstante(evento._sequenza);
+      for (const [messageId, inizio] of inizi) {
+        const ms = fine === null ? null : fine - inizio;
+        if (Number.isFinite(ms) && ms >= 0) durate[messageId] = ms;
+      }
+      inizi.clear();
+      continue;
+    }
     if (typeof evento?.messageId !== 'string' || !Number.isSafeInteger(evento._sequenza)) continue;
     if (evento.type === 'ReasoningMessageStart') {
       const istante = leggiIstante(evento._sequenza);
@@ -1159,9 +1184,42 @@ export function durateRagionamentoDaEventi(eventi, { istanti = null, soloUltimoG
       const fine = leggiIstante(evento._sequenza);
       const ms = fine === null ? null : fine - inizi.get(evento.messageId);
       if (Number.isFinite(ms) && ms >= 0) durate[evento.messageId] = ms;
+      inizi.delete(evento.messageId); // ⛔ chiuso dalla sua fine: la fine del giro non lo deve richiudere più tardi
     }
   }
   return durate;
+}
+
+/**
+ * ⭐⭐ 13/09 notte — I RAGIONAMENTI ANCORA APERTI, e da quanto. Trovato col GIRO VERO (glm-5.3-flash, banco
+ * 5471): riaperta a metà giro, la riga diceva «Sta ragionando… 35 s» su un ragionamento partito TREDICI minuti
+ * prima (852.858 ms, poi scritti nel record). Il browser non ha l'istante d'inizio: gli eventi non portano un
+ * orario. Il registro sì, in memoria.
+ * ⛔ Un giro finito chiude tutto ciò che era aperto (stessa regola di `durateRagionamentoDaEventi`); senza
+ *   istanti — una sessione ripresa da disco — non si dice niente, mai uno zero.
+ * @returns {Record<string, number>} messageId → millisecondi trascorsi dall'inizio
+ */
+export function ragionamentiInCorsoDaEventi(eventi, { istanti = null, adesso = null } = {}) {
+  if (!Number.isFinite(adesso)) return {};
+  const leggiIstante = creaLettoreIstanti(istanti);
+  const aperti = new Map();
+  for (const evento of eventiInOrdine(eventi)) {
+    /* ⛔ Stessa regola delle durate: primo testo o primo attrezzo, e il ragionamento non è più «in corso». */
+    if (['TextMessageStart', 'ToolCallStart', 'RunFinished', 'RunError'].includes(evento?.type)) { aperti.clear(); continue; }
+    if (typeof evento?.messageId !== 'string' || !Number.isSafeInteger(evento._sequenza)) continue;
+    if (evento.type === 'ReasoningMessageStart') {
+      const inizio = leggiIstante(evento._sequenza);
+      if (inizio !== null) aperti.set(evento.messageId, inizio);
+    } else if (evento.type === 'ReasoningMessageEnd') {
+      aperti.delete(evento.messageId);
+    }
+  }
+  const trascorsi = {};
+  for (const [messageId, inizio] of aperti) {
+    const ms = adesso - inizio;
+    if (Number.isFinite(ms) && ms >= 0) trascorsi[messageId] = ms;
+  }
+  return trascorsi;
 }
 
 /** Le durate già scritte nei record `tempi-giro` di una sessione: servono a una sessione ripresa da disco. */
@@ -4273,7 +4331,9 @@ export function createSessionRegistry({
         : metriche.chiusura;
       /* ⭐ 13/09 sera: le durate salvate (sessione ripresa) si completano con quelle vive di questo processo. */
       const ragionamentiMs = { ...(voce.durateRagionamentoSalvate ?? {}), ...durateRagionamentoDaEventi(voce.eventi, { istanti: voce.istantiEvento ?? null }) };
-      return { ok: true, ...metriche, chiusura, interrotta, cacheSessione: cacheSessioneDaEventi(voce.eventi), ragionamentiMs };
+      /* ⭐ 13/09 notte: e quelli ancora aperti, da quanto — per chi riapre la chat a metà ragionamento. */
+      const ragionamentiInCorsoDaMs = interrotta ? {} : ragionamentiInCorsoDaEventi(voce.eventi, { istanti: voce.istantiEvento ?? null, adesso: clock().getTime() });
+      return { ok: true, ...metriche, chiusura, interrotta, cacheSessione: cacheSessioneDaEventi(voce.eventi), ragionamentiMs, ragionamentiInCorsoDaMs };
     },
 
     async elencaServerMcp(sessionId) {
