@@ -195,6 +195,79 @@ nessuna parte. E serve anche all'installatore e alla finestra nuova, che devono 
 
 ---
 
+
+## ⚖️ ESITO DELLA REVIEW — 13/09/2026, misurato da me contro il metro fissato PRIMA
+
+**Quattro corsie su cinque accettabili. Zero premesse false. Tutti e cinque i controllori hanno
+rotto il codice davvero** — contro il giro precedente, dove tre su quattro avevano giudicato
+leggendo perche' gli avevo tolto il permesso di scrivere senza accorgermene.
+
+**I cancelli rifatti da me**, coi codici d'uscita catturati senza pipe e i conteggi veri:
+
+| suite | prove | rosse |
+|---|---:|---:|
+| kernel | 597 | 0 |
+| principale | 2947 | 0 |
+| frontend | 1035 | 0 |
+
+### ⭐ La scoperta che vale la fase, e smentisce il mio stesso brief
+
+La causa del difetto che l'owner ha segnalato **due volte** non era quella che avevo scritto io.
+Il bivio si apriva col fuoco su «Indirizza ora», e **un pulsante che ha il fuoco si attiva con
+Invio**: chi premeva Invio una seconda volta — il gesto piu'naturale dopo aver mandato — reindirizzava
+il giro senza averlo mai scelto. ⇒ La cura non e' spostare un pulsante: il fuoco **e'** il
+default, e il default dev'essere il gesto che non toglie niente a nessuno.
+
+⭐ E una trappola disinnescata prima che scattasse: la cronologia salvava le voci **senza** il
+loro prefisso e lo rimetteva a ognuna ripescata. Il giorno che in quella lista fosse entrato un
+messaggio normale, il primo tasto su l'avrebbe riportato travestito da **comando di shell**.
+
+### ⛔ Cosa NON accetto, e perche'
+
+**① La corsia dell'attrezzo di modifica e' bocciata, e il motivo l'ho verificato io.** L'insieme
+degli attrezzi che ammettono un permesso per attrezzo ne contiene cinque e **non contiene la
+modifica**. Due conseguenze misurate: chi ha una regola sulla scrittura **non ha nessun controllo
+equivalente** sulla modifica, e chi provasse a configurarla verrebbe **rifiutato**, perche' la
+validazione accetta solo le chiavi di quell'insieme. ⇒ Un attrezzo che scrive senza il cancello
+che governa chi scrive.
+
+⭐ La parte gia' riparata dal controllore, per onesta': la protezione sui **file di controllo**
+e' agganciata al **percorso** e non al nome dell'attrezzo, ed e' invocata dal punto che tratta
+insieme scrittura e modifica. Quella accusa era vera ed e' chiusa.
+
+**② La cura sugli errori non arriva all'utente.** Misurato: il chiamante passa ancora **due**
+argomenti a chi spiega l'errore, mentre la funzione ne accetta un terzo per la provenienza che
+**nessuno passa**; e il campo che dovrebbe rendere la nota silenziosa e' dichiarato in un punto
+solo e **nessun codice che disegna lo legge**. ⇒ La carta esce lo stesso: il criterio di chiusura
+di quella corsia non e' raggiunto. Verde nell'unita', assente nel prodotto.
+
+### ⛔ Il vincolo che mi impedisce di committare a meta'
+
+Gli insiemi di file delle cinque corsie sono **disgiunti** (verificato riga per riga: un file
+conteso apparteneva tutto a una corsia sola). ⇒ Tecnicamente potrei committare le quattro buone e
+tenere fuori la quinta.
+
+⛔ **Ma le tre suite le ho fatte girare con dentro ANCHE il lavoro della quinta.** Committare le
+quattro sole significherebbe committare uno stato che **non ho mai provato**. E' la stessa classe
+di errore che oggi ci e' costata piu' volte: un verde che si riferisce a una cosa diversa da
+quella che si sta dichiarando.
+
+⇒ Quindi: **niente commit finche' la quinta non e' sistemata**, poi una corsa sola su tutto e un
+commit per area. La decisione su come sistemarla e' dell'owner.
+
+### Residui dichiarati dai controllori, che restano aperti
+
+- ⛔ Circa **duecento prove dei cancelli** esistono e **nessuno script ne' passo di CI le fa
+  girare** sulla app: cancelli che ci sono e non girano mai.
+- La guardia sui percorsi della delega e' ora **piu' stretta** anche per casi legittimi, e nessuna
+  prova lo copre.
+- Nessuno ha verificato che il **modello** legga il rifiuto e ritenti: la catena e' provata fino
+  all'aggancio, il resto e' una previsione.
+- ⛔ E il limite che vale su tutta la fase: **nessuno ha aperto la app**. Sappiamo che il codice fa
+  quelle cose, non che a schermo si vedano.
+
+---
+
 # FASE 2 · Scrivere mentre il modello lavora
 
 **A cosa serve:** e' il momento in cui la persona e TALOS si parlano sopra. Tu scrivi mentre lui sta
@@ -663,10 +736,20 @@ giorni fa: la coda dice cosa qualcuno credeva, il codice dice cosa c'e'.
 Non c'e' nessuna azione sul proprio messaggio, e non lo si puo' modificare. In ogni altro
 prodotto della categoria si puo'.
 
-**⭐ Misurato il 13/09 nel codice, non piu' in forma generica.** Il tasto destro esiste su **SEI
-superfici del desktop** — righe della board, schede degli agenti, righe della Libreria, schede dei
-fornitori, dettaglio della ricerca, voci di sessione — e **sulla bolla della chat non esiste**.
-Cercando per nome le azioni sul proprio messaggio (modifica, elimina, riusa, rimanda): **nessuna**.
+**⭐ Misurato il 13/09 nel codice — e CORRETTO poche ore dopo, perche' la prima misura era
+sbagliata.** Il tasto destro esiste su **sei superfici del desktop** (righe della board, schede degli
+agenti, righe della Libreria, schede dei fornitori, dettaglio della ricerca, voci di sessione) e
+**non sulla bolla della chat**.
+
+⛔ **Ma dire «zero azioni sulla bolla» era FALSO, ed era mio.** Cercavo **nomi di funzioni**: la
+stessa ricerca per parentela che alla lane mobile aveva risposto «nessuna azione» su tre pulsanti che
+la fotografia mostrava. Riaccertato guardando la **struttura**: una barra di azioni esiste, ha tre
+pulsanti — copia, ascolta, chiedi di nuovo — ed e' costruita da una funzione con **un solo punto di
+chiamata**, dentro quella che prepara il messaggio dell'**assistente**.
+
+⇒ Il fatto vero, piu' stretto e piu' utile: **TRE azioni sulla risposta del modello, ZERO sul
+messaggio della persona.** Niente modifica, niente elimina, nemmeno una copia del proprio testo. Non
+e' una superficie dimenticata: e' una superficie **pensata per una meta' sola** della conversazione.
 
 ⛔ **E qui siamo DIETRO al mobile, non alla pari.** Loro, con una pressione lunga sulla bolla,
 almeno due voci le hanno. Noi zero, pur avendo menu contestuali dappertutto.
