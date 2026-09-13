@@ -6,10 +6,25 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
-## desktop-v0.1.1 — 2026-09-13
+## desktop-v0.1.2 — 2026-09-13
 
-First published release. Compared with the `desktop-v0.1.0` tag (whose release job failed on its
-first run on GitHub runners and published nothing):
+Carries everything below. The two tags before it published nothing: their release jobs stopped at
+the gates, and a published tag is never rewritten, so each attempt gets a new number.
+
+### Fixed
+- A test wrote into the drive root and, on a machine where that succeeds (a CI runner running as
+  administrator), reached a cleanup path that used a function it had never imported. It now
+  imports it, and says out loud that the premise about drive-root permissions does not hold there.
+- The folder watcher tests no longer build their fixture inside the system temp folder. On GitHub
+  runners that folder has a short 8.3 name, and libuv then fails an internal assertion and
+  **aborts the process** instead of failing a test, taking the whole suite down with it. The first
+  attempted cure was wrong and is documented as such in the test: resolving the real path does not
+  expand short names on Windows. The fixture now lives inside the repository, under a folder git
+  already ignores, which always has a long name.
+
+## desktop-v0.1.1 — 2026-09-13 (tag only, no release published)
+
+Compared with the `desktop-v0.1.0` tag:
 
 ### Fixed
 - Release pipeline: tests that measure the development repository (per-folder agent
