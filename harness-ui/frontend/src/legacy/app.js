@@ -67,7 +67,7 @@ import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nom
 import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
-import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
+import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, tonoDelTick, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
 // 06/9 C24: la pagina delle Note — la monta `sezioni-adattatori.js`, che riusa `note.js`
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
@@ -10723,9 +10723,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       })
       : creaNotaSistema({ tipo: isError ? 'danger' : 'info', badge: isError ? 'Errore' : 'Nota', titolo: etichettaMeta || (isError ? 'TALOS · errore' : 'TALOS · concluso'), testo: text });
     article.classList.add('real-session-status');
-    if (isError) article.classList.add('real-session-error');
+    /*
+     * ⛔⛔ 13/09 sera — il tick e la classe «errore» seguono la CARTA, non il solo `isError`. Misurato
+     *   dal DOM: uno stop chiesto dalla persona aveva la carta «Fermato» e il tick rosso, e la nota
+     *   portava `real-session-error`. Un guasto vero resta rosso in tutti e due i posti.
+     */
+    if (isError && vestizione.tono === 'danger') article.classList.add('real-session-error');
     nellaChat(article);
-    if (isError) aggiornaTickGiro({ tono: 'danger' });
+    if (isError) aggiornaTickGiro({ tono: tonoDelTick(vestizione) });
     markMotionEnter(article);
     scorriAllaBollaAppesa(article);
   }
@@ -15011,6 +15016,14 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * niente si assume) lascerebbe comunque la lista locale corretta
          * alla lunghezza, solo con l'etichetta sbagliata nel banner.
          */
+        /*
+         * ⛔⛔ 13/09 sera — stessa cura del reindirizzamento applicato, e qui pesa di piu': accodare
+         *   mentre il modello lavora e' il gesto dell'owner. Misurato: consegnato DOPO il primo testo
+         *   l'attesa era gia' andata via e tutto era giusto; consegnato mentre il modello RAGIONA,
+         *   l'attesa restava nel turno vecchio sopra la domanda accodata. Uno stato su due, e il test
+         *   provava solo l'altro.
+         */
+        nascondiAttesaRisposta();
         appendUserFollowUp(evento.testo, null, evento.immagini);
         state.realSession.codaMessaggi.shift();
         renderizzaBannerCoda();
@@ -15029,6 +15042,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         state.realSession.redirectInvalidatedIds.delete(evento.redirectId);
         state.realSession.redirectPendingId = null;
         state.realSession.eventoTerminaleVisto = false;
+        /*
+         * ⛔⛔ 13/09 sera — L'ATTESA VA SOTTO LA DOMANDA A CUI RISPONDE. Misurato dal DOM: la bolla
+         *   «Reindirizzamento al prossimo punto sicuro…» restava nel turno VECCHIO, `mostraAttesaRisposta`
+         *   ne cambiava solo l'etichetta, e la correzione finiva SOTTO lo spinner che le rispondeva.
+         *   Si toglie quella vecchia PRIMA della bolla nuova: `nellaChat` apre allora un turno TALOS dopo
+         *   quello della persona — ed e' proprio li' che il ramo `RunStarted` del seguito la cerca
+         *   (`attesaBubble.closest('[data-turno="talos"]')`) per scriverci modello e ora.
+         *   Stessa forma di Codex, letto nel codice: l'indicatore vive sotto l'ultimo messaggio
+         *   (`codex-rs/tui/src/bottom_pane/mod.rs:252`), mai dentro un blocco vecchio.
+         */
+        nascondiAttesaRisposta();
         appendUserFollowUp(evento.testo, null, evento.immagini);
         state.realSession.followUpBubbleInAttesa = true;
         mostraAttesaRisposta();
