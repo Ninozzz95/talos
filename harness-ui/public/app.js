@@ -18053,6 +18053,12 @@ function spiegaErrore(messaggio, codice = "", contesto2 = {}) {
 function vestizioneErrore(spiegazione) {
   return { ...VESTIZIONI[spiegazione?.famiglia] ?? VESTIZIONE_ERRORE };
 }
+function tonoDelTick(vestizione) {
+  const tono = vestizione?.tono;
+  if (tono === "accent") return null;
+  if (tono === "danger" || tono === "warning" || tono === "info") return tono;
+  return "danger";
+}
 var COSA_CONTESTO, ORIGINALI_INTATTI, APRI_CONTEXT_MANAGER, COMPATTA_A_MANO, rimediContesto, CODICE_CONTESTO, ORIGINI3, FERMO_SU_RICHIESTA, REGOLE, RIFIUTI, VESTIZIONI, VESTIZIONE_ERRORE;
 var init_errori = __esm({
   "src/components/errori.js"() {
@@ -27165,9 +27171,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           spiegazione
         }) : creaNotaSistema({ tipo: isError ? "danger" : "info", badge: isError ? "Errore" : "Nota", titolo: etichettaMeta || (isError ? "TALOS · errore" : "TALOS · concluso"), testo: text });
         article.classList.add("real-session-status");
-        if (isError) article.classList.add("real-session-error");
+        if (isError && vestizione.tono === "danger") article.classList.add("real-session-error");
         nellaChat(article);
-        if (isError) aggiornaTickGiro({ tono: "danger" });
+        if (isError) aggiornaTickGiro({ tono: tonoDelTick(vestizione) });
         markMotionEnter(article);
         scorriAllaBollaAppesa(article);
       }
@@ -30399,6 +30405,7 @@ ${testo3}` : testo3;
             break;
           }
           case "QueuedMessageDelivered": {
+            nascondiAttesaRisposta();
             appendUserFollowUp(evento.testo, null, evento.immagini);
             state.realSession.codaMessaggi.shift();
             renderizzaBannerCoda();
@@ -30417,6 +30424,7 @@ ${testo3}` : testo3;
             state.realSession.redirectInvalidatedIds.delete(evento.redirectId);
             state.realSession.redirectPendingId = null;
             state.realSession.eventoTerminaleVisto = false;
+            nascondiAttesaRisposta();
             appendUserFollowUp(evento.testo, null, evento.immagini);
             state.realSession.followUpBubbleInAttesa = true;
             mostraAttesaRisposta();
