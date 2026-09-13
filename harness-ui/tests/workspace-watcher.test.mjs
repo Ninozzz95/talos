@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -61,7 +61,11 @@ test('WATCHER-NATIVE-NULL-FILENAME-26 — un evento senza nome forza un refresh 
 // intenzionalmente generosi: un timer di test troppo stretto sarebbe
 // più fragile del codice che prova.
 function radiceVera() {
-  const radice = mkdtempSync(join(tmpdir(), 'talos-watch-test-'));
+  // 13/09: la cartella temporanea dei runner GitHub ha un nome CORTO 8.3 (RUNNER~1). libuv
+  // riceve da ReadDirectoryChangesW il nome LUNGO e in uv__relative_path (src/win/fs-event.c)
+  // non riconosce piu il prefisso della cartella osservata: asserzione fallita e processo
+  // ABORTITO, non un test rosso. Si osserva sempre la forma lunga, risolta prima.
+  const radice = realpathSync(mkdtempSync(join(tmpdir(), 'talos-watch-test-')));
   mkdirSync(join(radice, '.git'));
   mkdirSync(join(radice, 'node_modules'));
   return radice;

@@ -51,9 +51,11 @@ test('IL COMPORTAMENTO VERO di readdir, sulla macchina che esegue', async (t) =>
   const drivNudo = await readdir('C:', { withFileTypes: true });
   const nomiRadice = new Set(radiceVera.map((v) => v.name));
   const nomiNudo = drivNudo.map((v) => v.name);
-  // ⛔ è il fatto che rende necessaria la cura: i due elenchi NON coincidono
-  assert.ok(
-    nomiNudo.some((n) => !nomiRadice.has(n)) || nomiNudo.length !== radiceVera.length,
-    '«C:» e «C:\\» danno lo stesso elenco su questa macchina: la premessa della cura andrebbe rivista',
-  );
+  // ⛔ è il fatto che rende necessaria la cura: i due elenchi NON coincidono.
+  // 13/09: sui runner GitHub la cartella corrente del processo È la radice del drive di lavoro,
+  // quindi «C:» e «C:\» coincidono per costruzione: lì la premessa non si può osservare, si
+  // dichiara (skip col motivo), non si finge di averla misurata.
+  const coincidono = !nomiNudo.some((n) => !nomiRadice.has(n)) && nomiNudo.length === radiceVera.length;
+  if (coincidono) return t.skip('«C:» e «C:\\» danno lo stesso elenco su questa macchina (cwd sulla radice del drive, tipico di un runner CI): la premessa non è osservabile qui');
+  assert.ok(!coincidono);
 });

@@ -66,7 +66,9 @@ test('OPEN-WITH-TALOS-WINDOWS-02 — un file non viene presentato a TALOS come w
   const root = mkdtempSync(join(tmpdir(), 'talos-open-with-file-'));
   const result = await runPowerShell(join(scriptsDir, 'open-with-talos.ps1'), ['-WorkspacePath', join(root, 'assente'), '-NoBrowser']);
   assert.notEqual(result.code, 0);
-  assert.match(`${result.stdout} ${result.stderr}`, /cartella|esiste/i);
+  // 13/09: su un Windows in inglese (runner GitHub) PowerShell dice «Cannot find path … because it
+  // does not exist»: il rifiuto si riconosce in entrambe le lingue, il punto è che rifiuti.
+  assert.match(`${result.stdout} ${result.stderr}`, /cartella|esiste|does not exist|cannot find path/i);
 });
 
 test('OPEN-WITH-TALOS-WINDOWS-03 — la registrazione HKCU isolata crea entrambi i contesti e li rimuove', { skip: !WINDOWS }, async (t) => {

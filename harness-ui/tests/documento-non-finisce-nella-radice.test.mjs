@@ -170,15 +170,23 @@ test('⭐⭐⭐ il registro consegna `cartellaBase` come cartella di deposito, a
  * diventasse verde (radice scrivibile), la cura sarebbe ancora giusta ma la sua urgenza sarebbe
  * un'altra cosa — e si vorrebbe saperlo.
  */
-test('⛔⛔⛔ AL CONTRARIO — scrivere davvero nella radice del disco FALLISCE, e nessun nome diverso può salvarlo', { skip: process.platform !== 'win32' ? 'la prova riguarda le ACL della radice su Windows' : false }, async () => {
+test('⛔⛔⛔ AL CONTRARIO — scrivere davvero nella radice del disco FALLISCE, e nessun nome diverso può salvarlo', { skip: process.platform !== 'win32' ? 'la prova riguarda le ACL della radice su Windows' : false }, async (t) => {
   const radice = parsePath(process.cwd()).root;
+  const nome = `talos-cancello-${process.pid}.txt`;
   let codice = null;
   let messaggio = '';
   try {
-    await creaFileWorkspace({ cartella: radice, nome: `talos-cancello-${process.pid}.txt`, bytes: Buffer.from('x') });
+    await creaFileWorkspace({ cartella: radice, nome, bytes: Buffer.from('x') });
   } catch (errore) {
     codice = errore?.code ?? null;
     messaggio = errore instanceof Error ? errore.message : String(errore);
+  }
+  if (codice === null) {
+    // 13/09: sui runner GitHub il processo è amministratore e la radice del drive di lavoro
+    // ACCETTA il file: la premessa (ACL del gruppo Users) non vale lì. Si pulisce e si dichiara.
+    const { rm } = await import('node:fs/promises');
+    await rm(join(radice, nome), { force: true });
+    return t.skip('la radice del disco è scrivibile per questo utente (amministratore, es. runner CI): la premessa sulle ACL non è osservabile qui');
   }
   assert.equal(codice, 'EPERM', `la radice del disco deve rifiutare un file nuovo — ricevuto invece: ${codice} ${messaggio}`);
 });

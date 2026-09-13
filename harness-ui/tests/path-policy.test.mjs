@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, open, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, open, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
@@ -54,7 +54,9 @@ test('PathPolicyError: un codice esplicito sovrascrive il default', () => {
 });
 
 test('resolveContainedRealPath: risolve un file reale dentro la radice e rifiuta traversal', async (t) => {
-  const root = await mkdtemp(join(tmpdir(), 'talos-path-policy-'));
+  // 13/09: sui runner GitHub `tmpdir()` è nella forma corta 8.3 (`C:\Users\RUNNER~1\…`) e la
+  // funzione risponde col percorso vero (`runneradmin`): la radice si confronta già risolta.
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'talos-path-policy-')));
   t.after(() => rm(root, { recursive: true, force: true }));
   await writeFile(join(root, 'ok.txt'), 'ok');
   assert.equal(await resolveContainedRealPath(root, 'ok.txt'), resolve(root, 'ok.txt'));

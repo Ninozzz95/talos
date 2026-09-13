@@ -25,7 +25,11 @@ $script:inclusioni = @(
     'harness-ui/frontend', 'harness-ui/desktop', 'harness-ui/scripts',
     'harness-ui/tests', 'harness-ui/contracts', 'harness-ui/package.json',
     'harness-ui/package-lock.json', 'harness-ui/README.md',
-    'harness-ui/THIRD_PARTY_NOTICES.md', 'context-engine'
+    'harness-ui/THIRD_PARTY_NOTICES.md', 'context-engine',
+    # 13/09, primo giro del job sui runner: `labs/feature-flags.json` è CONFIGURAZIONE del prodotto
+    # (config.mjs lo legge per TALOS_LABS); senza, il server dice «(nessuno: file assente)» e il
+    # test W0-04 è rosso. Esce SOLO quel file, non la cartella labs/.
+    'harness-ui/labs/feature-flags.json'
 )
 $script:radice = @('LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', '.gitattributes',
     '.github', '.gitmodules', 'CHANGELOG.md', 'CODE_OF_CONDUCT.md')
@@ -33,7 +37,7 @@ $script:gestiti = @('LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', '.gitattribut
 # 13/09, review: l'unico `dist` che DEVE uscire. Non e' un artefatto: e' «il codice vero
 # dell'app, compilato», importato da harness-ui/src/kernel/talosHarness.mjs:76 (spostarlo
 # rompe tre file di test al caricamento). Ogni altro segmento `dist` resta vietato.
-$script:ammessi = @('harness-ui/src/kernel/dist/kernelPerIlBanco.js')
+$script:ammessi = @('harness-ui/src/kernel/dist/kernelPerIlBanco.js', 'harness-ui/labs/feature-flags.json')
 $script:vietati = '(^|/)(\.claude|\.agents|\.codex|scratchpad|AGENTS\.md|\.chat-images|mockup-originale|labs|benchmarks|node_modules|\.prove|\.staging|dist|test-results|test-results-context)(/|$)'
 # 13/09, review: senza «tre/gli/sugli harness» — nel desktop «harness» e' il nome del prodotto
 # (harness-ui, sessioni dell'harness) e quelle tre forme fermavano 44 righe di commenti nostri

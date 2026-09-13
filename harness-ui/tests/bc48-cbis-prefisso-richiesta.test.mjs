@@ -1,9 +1,31 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import { test as testNode, after as afterNode } from 'node:test';
 import { writeFileSync } from 'node:fs';
-import './fixtures/bc48-cbis-dipendenze.mjs';
-const { eseguiBanco, confrontaCorpi } = await import('./fixtures/bc48-cbis-banco.mjs');
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+/*
+ * 13/09, primo giro del job di release sui runner: il banco confronta il codice di oggi con il
+ * commit 4cd01f80 «pre-C» via `git show`, che esiste solo nella storia del repo di sviluppo. Nel
+ * monorepo pubblico (storia appiattita) i test si dichiarano saltati col motivo, mai rossi.
+ */
+let SALTA = false;
+try {
+  execFileSync('git', ['cat-file', '-e', '4cd01f803af46b70dff0f7445af9ca66962382c4^{commit}'], { cwd: fileURLToPath(new URL('../../', import.meta.url)), stdio: 'ignore', windowsHide: true });
+} catch { SALTA = 'il banco confronta col commit 4cd01f80 del repo di sviluppo, assente in questo clone (albero pubblico)'; }
+let banco = {};
+if (!SALTA) {
+  try {
+    await import('./fixtures/bc48-cbis-dipendenze.mjs');
+    banco = await import('./fixtures/bc48-cbis-banco.mjs');
+  } catch (errore) { SALTA = 'banco BC48-C-bis non caricabile qui: ' + String(errore?.message || errore).slice(0, 160); }
+}
+const { eseguiBanco, confrontaCorpi } = banco;
 const { createOwnerRuntimeAdapter } = await import('../src/runtime-owner-adapter.mjs');
+const test = (nome, opzioni, fn) => (typeof opzioni === 'function'
+  ? testNode(nome, { skip: SALTA }, opzioni)
+  : testNode(nome, { ...(opzioni ?? {}), skip: opzioni?.skip || SALTA }, fn));
+// L'involucro copre il solo `test`: i ganci del runner si riportano a mano.
+test.after = afterNode;
 
 // Misure HTTP del 12/09/2026, Node 24.18.0, fixture AGENTS.md di 11.776/18.000
 // byte. Questi sono byte UTF-8 del JSON, non token GLM. Offset contati da zero.
