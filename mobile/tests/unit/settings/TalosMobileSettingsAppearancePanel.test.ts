@@ -126,11 +126,25 @@ describe('TalosMobileSettingsAppearancePanel', () => {
         })
         const active = wrapper.get<HTMLElement>('[data-theme-choice="telemetry"]')
         active.element.focus()
-        await flushPromises()
+        // reka-ui rimanda la selezione-al-fuoco a un setTimeout(0) (RadioGroupItem r. 74-82)
+        // mentre flushPromises attende con setImmediate (@vue/test-utils r. 8371): sono due
+        // FASI diverse del ciclo di eventi e non c'e' nessun ordine garantito fra loro.
+        // Per il caso NEGATIVO - "il fuoco da solo non seleziona" - si deve aspettare un
+        // macrotask VERO, perche' per dimostrare che una cosa NON succede bisogna aspettare
+        // abbastanza: una condizione che per definizione non arriva non si puo' attendere.
+        await new Promise((resolve) => { setTimeout(resolve, 0) })
         expect(stores.theme.setTheme).not.toHaveBeenCalled()
         await active.trigger('keydown', { key: 'ArrowRight' })
-        await flushPromises()
-        expect(stores.theme.setTheme).toHaveBeenCalledWith('calm')
+        // Per il caso POSITIVO si attende invece la CONDIZIONE, non un tick e non una fase:
+        // il timer della tessera di ARRIVO puo' non essere ancora scattato quando flushPromises
+        // ritorna, e in quello stato l'unica chiamata registrata e' quella sbagliata.
+        await vi.waitFor(() => { expect(stores.theme.setTheme).toHaveBeenCalledWith('calm') })
+        // L'asserzione vecchia si accontentava di trovare 'calm' in mezzo alle chiamate, e
+        // cosi' nascondeva un clic spurio sulla tessera che aveva il fuoco, presente a ogni giro.
+        expect(stores.theme.setTheme).not.toHaveBeenCalledWith('telemetry')
+        // isArrowKeyPressed lo abbassa SOLO il keyup: senza questo la freccia resta "premuta"
+        // per chiunque venga dopo. Nove file ne premono una, nessuno la rilasciava.
+        await active.trigger('keyup', { key: 'ArrowRight' })
         wrapper.unmount()
     })
 

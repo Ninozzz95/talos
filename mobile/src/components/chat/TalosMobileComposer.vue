@@ -253,6 +253,10 @@ const librarySourceCountLabel = computed(() => t(
     props.librarySourceCount === 1 ? 'library.sourceCountOne' : 'library.sourceCountMany',
     { count: props.librarySourceCount },
 ))
+/** Sola icona a schermo: modo e numero di fonti vivono nel nome accessibile. */
+const libraryChipLabel = computed(() => (
+    `${t('library.contextForNextMessage')}: ${libraryModeLabel.value} · ${librarySourceCountLabel.value}`
+))
 
 async function closeLibrarySheet(): Promise<void> {
     librarySheetOpen.value = false
@@ -320,11 +324,19 @@ const composerHasContent = computed(() => (
     props.prompt.trim().length > 0 || props.attachments.length > 0
 ))
 const dictating = computed(() => props.dictationListening || props.dictationStarting)
-const rightAction = computed<'stop' | 'dictating' | 'send'>(() => {
+/**
+ * Owner 2026-09-13: microfono a campo vuoto, invio col testo, stop mentre
+ * risponde o mentre si detta.
+ *
+ * Dove la dettatura non c'e' il microfono resta al suo posto, spento, con la
+ * riga che dice perche' (talos-composer-mic-reason): un comando che sparisce
+ * non spiega niente, uno spento con la sua ragione si'.
+ */
+const rightAction = computed<'stop' | 'dictating' | 'mic' | 'send'>(() => {
     if (props.sending) return 'stop'
-    return dictating.value ? 'dictating' : 'send'
+    if (dictating.value) return 'dictating'
+    return composerHasContent.value ? 'send' : 'mic'
 })
-const microphoneLabel = computed(() => t(composerHasContent.value ? 'chat.dictateAppend' : 'chat.dictate'))
 const microphoneReason = computed(() => !props.dictationSupported ? t('chat.dictationUnavailable') : '')
 function onMicrophone(): void {
     if (!props.dictationSupported || dictating.value) return
@@ -343,6 +355,7 @@ const rightActionLabel = computed(() => {
 const rightActionTitle = computed(() => {
     if (rightAction.value === 'dictating' && props.dictationStarting) return t('chat.startingDictation')
     if (rightAction.value === 'send') return statusText.value || t('chat.sendMessage')
+    if (rightAction.value === 'mic') return microphoneReason.value || rightActionLabel.value
     return rightActionLabel.value
 })
 const attachmentReason = computed(() => props.attachmentDisabledReason || t('chat.attachmentUnavailable'))
@@ -391,10 +404,15 @@ const modelChipLabel = computed(() => {
     const base = `${t('chat.chooseModelProfile')}: ${name}`
     return reasoningWordsActive.value ? `${base} · ${reasoningLabel.value}` : base
 })
-const rightActionDisabled = computed(() => rightAction.value === 'send' && !canSubmit.value)
+const rightActionDisabled = computed(() => {
+    if (rightAction.value === 'send') return !canSubmit.value
+    if (rightAction.value === 'mic') return !props.dictationSupported
+    return false
+})
 function onRightAction(): void {
     if (rightAction.value === 'stop') { emit('stop'); return }
     if (rightAction.value === 'dictating') { emit('toggleDictation'); return }
+    if (rightAction.value === 'mic') { onMicrophone(); return }
     requestSend()
 }
 
@@ -649,18 +667,65 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
             @invia="emit('sendDictation')"
         />
 
-        <textarea
-            v-if="!dictating"
-            ref="promptField"
-            :value="prompt"
-            rows="1"
-            data-testid="talos-composer-prompt"
-            :aria-label="$t('chat.messagePlaceholder')"
-            :placeholder="$t('chat.messagePlaceholderEllipsis')"
-            class="talos-calm-prompt"
-            @input="updatePrompt"
-            @keydown="onPromptKeydown"
-        />
+        <!--
+            Owner 2026-09-13, dal Pad: invio dinamico, solo microfono o invio a
+            seconda del testo immesso, come il vecchio compositore, e accanto al
+            campo.
+
+            UN solo comando, alla destra del campo: microfono finche' il campo
+            e' vuoto, invio appena c'e' del testo, stop mentre TALOS risponde o
+            mentre si detta. Il secondo microfono che accodava (2026-08-27) non
+            c'e' piu': con del testo scritto il comando e' Invia, come nel
+            vecchio compositore che l'owner ha chiesto di riavere.
+        -->
+        <!--
+            ⛔⛔ 2026-09-13, owner dal Pad con foto: MENTRE SI DETTA IL COMANDO
+            NON C'E'. La barra di registrazione ha gia' i suoi tre comandi
+            (annulla, ferma, invia); lasciare qui il tondo accento significava
+            DUE pulsanti di stop uno sotto l'altro, il secondo da solo su una
+            riga vuota perche' il campo sparisce.
+
+            E' la stessa regola dell'owner del 2026-08-04 sul campo di testo:
+            mentre si registra il compositore ha UNA cosa da mostrare. Il campo
+            spariva gia'; il comando no, e l'ho visto solo quando me l'ha
+            mostrato lui.
+        -->
+        <div v-if="!dictating" class="talos-composer-field-row">
+            <textarea
+                v-if="!dictating"
+                ref="promptField"
+                :value="prompt"
+                rows="1"
+                data-testid="talos-composer-prompt"
+                :aria-label="$t('chat.messagePlaceholder')"
+                :placeholder="$t('chat.messagePlaceholderEllipsis')"
+                class="talos-calm-prompt"
+                @input="updatePrompt"
+                @keydown="onPromptKeydown"
+            />
+            <!-- ⛔⛔ 2026-09-13, misurato sul Pad con uiautomator: con
+                 `aria-pressed` questo pulsante arrivava nell'albero di
+                 accessibilita' come ToggleButton SENZA NOME — desc vuota,
+                 testo vuoto — perche' dentro ha solo un'icona. Chi usa il
+                 lettore di schermo sentiva «pulsante di attivazione» e
+                 nient'altro. Il «+» accanto, che non ha aria-pressed, il
+                 nome ce l'ha; «Ragiona», che e' un toggle vero, si salva
+                 perche' ha del testo visibile.
+                 ⇒ E l'attributo era comunque MORTO: lo stato 'dictating' in
+                 questa riga non si disegna piu' (la riga sparisce mentre si
+                 detta), quindi non c'era piu' niente da «premere». -->
+            <Button
+                data-testid="talos-composer-action" type="button" size="icon" variant="ghost" data-mobile-icon-only="true"
+                :aria-label="rightActionLabel" :title="rightActionTitle"
+                :data-talos-action="rightAction"
+                :disabled="rightActionDisabled" class="talos-pressable talos-send-btn min-h-touch min-w-touch"
+                @pointerdown.prevent @click="onRightAction"
+            >
+                <Square v-if="rightAction === 'stop' || rightAction === 'dictating'" class="size-4" fill="currentColor" aria-hidden="true" />
+                <Mic v-else-if="rightAction === 'mic'" class="size-5" aria-hidden="true" />
+                <ArrowUp v-else class="size-5" aria-hidden="true" />
+            </Button>
+        </div>
 
         <div class="talos-composer-tools" data-testid="talos-composer-tools">
             <Button
@@ -684,6 +749,20 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
                      doppiava la chip «Ragiona» accesa. Resta per chi ascolta lo schermo. -->
                 <span v-if="reasoningWordsActive" data-testid="talos-composer-reasoning-label" class="sr-only">{{ reasoningLabel }}</span>
             </button>
+            <!-- Owner 2026-09-13, dal Pad: la pillola del contesto e' sola
+                 icona, accanto a quella del modello. Le parole restano nel nome
+                 accessibile e in sr-only: chi ascolta lo schermo sente modo e
+                 numero di fonti, l'occhio vede un'icona e il nome del modello
+                 ha di nuovo spazio per respirare. -->
+            <button
+                v-if="showLibraryChip" ref="libraryChip" type="button" data-testid="talos-composer-library-chip"
+                :aria-label="libraryChipLabel" aria-haspopup="dialog" :aria-expanded="librarySheetOpen"
+                class="talos-pressable talos-mode-chip talos-icon-chip min-h-touch min-w-touch"
+                @pointerdown.prevent @click="librarySheetOpen = true"
+            >
+                <Database class="size-4 shrink-0" aria-hidden="true" />
+                <span data-testid="talos-composer-library-chip-label" class="sr-only">{{ libraryModeLabel }} · {{ librarySourceCountLabel }}</span>
+            </button>
             <button
                 type="button" data-testid="talos-composer-thinking" class="talos-pressable talos-mode-chip min-h-touch"
                 :class="{ active: thinking }" :aria-pressed="thinking"
@@ -699,15 +778,6 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
                  degli attrezzi (agentToolsEnabled) resta nel controller, acceso;
                  il suggerimento dell'URL rilevato resta sopra il campo. -->
             <slot />
-            <button
-                v-if="showLibraryChip" ref="libraryChip" type="button" data-testid="talos-composer-library-chip"
-                :aria-label="$t('library.contextForNextMessage')" aria-haspopup="dialog" :aria-expanded="librarySheetOpen"
-                class="talos-pressable talos-mode-chip min-h-touch"
-                @pointerdown.prevent @click="librarySheetOpen = true"
-            >
-                <Database class="size-4 shrink-0" aria-hidden="true" />
-                <span data-testid="talos-composer-library-chip-label">{{ libraryModeLabel }} · {{ librarySourceCountLabel }}</span>
-            </button>
             <Button
                 v-if="promptTall" type="button" size="icon" variant="ghost"
                 data-testid="talos-composer-expand" data-mobile-icon-only="true"
@@ -715,24 +785,6 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
                 class="talos-pressable min-h-touch min-w-touch"
                 @pointerdown.prevent @click="openComposerExpanded"
             ><Maximize2 class="size-4" aria-hidden="true" /></Button>
-            <div class="talos-composer-send-controls">
-                <Button
-                    data-testid="talos-composer-append-mic" type="button" size="icon" variant="ghost" data-mobile-icon-only="true"
-                    :aria-label="microphoneLabel" :title="microphoneReason || microphoneLabel"
-                    :aria-pressed="dictating" :disabled="!dictationSupported || dictating"
-                    class="talos-pressable min-h-touch min-w-touch"
-                    @pointerdown.prevent @click="onMicrophone"
-                ><Mic class="size-5" aria-hidden="true" /></Button>
-                <Button
-                    data-testid="talos-composer-action" type="button" size="icon" variant="ghost" data-mobile-icon-only="true"
-                    :aria-label="rightActionLabel" :title="rightActionTitle" :aria-pressed="rightAction === 'dictating'"
-                    :disabled="rightActionDisabled" class="talos-pressable talos-send-btn min-h-touch min-w-touch"
-                    @pointerdown.prevent @click="onRightAction"
-                >
-                    <Square v-if="rightAction !== 'send'" class="size-4" fill="currentColor" aria-hidden="true" />
-                    <ArrowUp v-else class="size-5" aria-hidden="true" />
-                </Button>
-            </div>
         </div>
         <p v-if="microphoneReason" data-testid="talos-composer-mic-reason" class="text-xs text-[var(--talos-muted)]">{{ microphoneReason }}</p>
 

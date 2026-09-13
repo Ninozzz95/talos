@@ -101,16 +101,27 @@ describe('TalosMobileComposer', () => {
         }
     })
 
-    it.each([false, true])('Calm: stop durante dettatura (avvio=%s) conserva il testo, senza inviarlo', async (starting) => {
+    /**
+     * ⛔⛔ Owner 2026-09-13, dal Pad con foto: mentre si detta c'erano DUE
+     * comandi di stop, quello dentro la barra di registrazione e il tondo
+     * accento del compositore, quest'ultimo da solo su una riga vuota perche'
+     * il campo sparisce.
+     *
+     * Regola sua del 2026-08-04, la stessa: mentre si registra il compositore
+     * ha UNA cosa da mostrare. Quindi durante la dettatura la riga del campo
+     * non c'e' affatto — ne' il campo ne' il suo comando — e i tre comandi
+     * (annulla, ferma, invia) vivono dove la persona sta guardando, cioe'
+     * nella barra: si provano in `tests/unit/chat/barraDettatura.test.ts`.
+     */
+    it.each([false, true])('Calm: mentre si detta (avvio=%s) il compositore non mostra un secondo stop', async (starting) => {
         const view = mountComposer({ dictationSupported: true, dictationStarting: starting, dictationListening: !starting })
-        const action = view.get('[data-testid="talos-composer-action"]')
-        expect(action.attributes('aria-label')).toBe('Stop dictation')
-        expect(action.attributes('disabled')).toBeUndefined()
-        await action.trigger('click')
-        expect(view.emitted('toggleDictation')).toEqual([[]])
+        expect(view.find('[data-testid="talos-composer-action"]').exists()).toBe(false)
+        expect(view.find('[data-testid="talos-composer-prompt"]').exists()).toBe(false)
+        expect(view.find('.talos-composer-field-row').exists()).toBe(false)
+        // La riga strumenti resta: modello e Ragiona non sono comandi di stop.
+        expect(view.find('[data-testid="talos-composer-tools"]').exists()).toBe(true)
         expect(view.emitted('send')).toBeUndefined()
         expect(view.emitted('discardDictation')).toBeUndefined()
-        expect(view.get('[data-testid="talos-composer-append-mic"]').attributes('disabled')).toBeDefined()
     })
 
     it('Calm: focusPrompt può portare il cursore in fondo dopo un accodamento', () => {
@@ -122,12 +133,9 @@ describe('TalosMobileComposer', () => {
         expect(field.selectionEnd).toBe(field.value.length)
     })
 
-    it('conserva la dettatura accodata durante una risposta, mentre il bottone destro resta stop', async () => {
+    it('durante una risposta il comando resta stop, e non esiste un secondo microfono', async () => {
         const view = mountComposer({ sending: true, dictationSupported: true, prompt: 'La prossima domanda' })
-        const mic = view.get('[data-testid="talos-composer-append-mic"]')
-        expect(mic.attributes('disabled')).toBeUndefined()
-        await mic.trigger('click')
-        expect(view.emitted('toggleDictation')).toEqual([[]])
+        expect(view.find('[data-testid="talos-composer-append-mic"]').exists()).toBe(false)
         expect(view.get('[data-testid="talos-composer-action"]').attributes('aria-label')).toBe('Stop response')
         await view.get('[data-testid="talos-composer-action"]').trigger('click')
         expect(view.emitted('stop')).toEqual([[]])
@@ -150,7 +158,7 @@ describe('TalosMobileComposer', () => {
 
     it('espone i controlli Calm con bersagli tattili e nome modello leggibile', async () => {
         const view = mountComposer()
-        for (const id of ['plus', 'append-mic', 'action']) {
+        for (const id of ['plus', 'action']) {
             const control = view.get('[data-testid="talos-composer-' + id + '"]')
             expect(control.classes()).toContain('min-h-touch')
             expect(control.classes()).toContain('min-w-touch')

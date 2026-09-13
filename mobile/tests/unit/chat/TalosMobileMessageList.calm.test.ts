@@ -107,13 +107,14 @@ describe('TalosMobileMessageList calm thread (F2-T2)', () => {
         wrapper.unmount()
     })
 
-    it('renders the boot-logo line loader (F4-#24): a sweep crossing 3 filling nodes', async () => {
+    it('owner 2026-09-13: in attesa c e SOLO l orb con l anello, niente tre pallini', async () => {
         const wrapper = mount(TalosMobileMessageList, { props: { messages: [], sending: true } })
         await vi.dynamicImportSettled()
         await flushPromises()
         const typing = wrapper.get('[data-testid="talos-mobile-typing"]')
-        expect(typing.find('.talos-line-loader-sweep').exists()).toBe(true)
-        expect(typing.findAll('.talos-line-loader-node')).toHaveLength(3)
+        expect(typing.get('[data-testid="talos-assistant-orb"]').classes()).toContain('working')
+        expect(typing.find('.talos-line-loader-sweep').exists()).toBe(false)
+        expect(typing.findAll('.talos-line-loader-node')).toHaveLength(0)
         expect(typing.findAll('.talos-typing-dot')).toHaveLength(0)
         expect(typing.attributes('role')).toBe('status')
         expect(typing.text()).toContain('Processing')

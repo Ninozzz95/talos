@@ -6,6 +6,33 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.31
+
+The composer has one button again, and it changes with what you are doing. The
+waiting mark is a single quiet orb.
+
+### The composer
+
+- The button beside the message field is the microphone while the field is
+  empty, and becomes Send the moment you type. While TALOS is answering, or
+  while you are dictating, it is Stop.
+- That button now sits next to the field itself, not in the row of tools
+  underneath it.
+- The Library-context pill is a single icon, next to the model pill. Its mode
+  and the number of sources it will use are still read out by screen readers,
+  and tapping it still opens the sheet where you choose them.
+- Where dictation is unavailable the microphone stays where it is, switched
+  off, with the line underneath that says why. A control that disappears
+  explains nothing.
+- One thing is gone on purpose: the second microphone that appended dictation
+  to text you had already written. With text in the field the button is Send.
+  Dictation started on an empty field still appends to itself as before.
+
+### While TALOS is thinking
+
+- The three animated dots are gone. The wait shows only the TALOS orb with its
+  turning ring, and it disappears at the first letter of the answer.
+
 ## v0.1.30
 
 (Tagged as v0.1.30. A v0.1.29 tag exists on the repository but never
