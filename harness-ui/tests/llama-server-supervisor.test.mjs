@@ -49,6 +49,8 @@ test('starts llama-server on loopback without shell and reaches ready after heal
    * dichiarazioni devono dire «no» — ed è l'esatto comportamento di prima.
    */
   assert.deepEqual(logs.map((riga) => riga.text), [
+    // R-03 (13/09): il supervisore dichiara QUALE motore accende, prima delle leve.
+    '[talos] motore cpu: C:\\talos\\llama-server.exe\n',
     '[talos] KV cache q8_0 — nessun offload sul dispositivo: la KV cache non entra nella scelta\n',
     '[talos] decodifica speculativa a n-grammi: non offerta da questo binario\n',
     'ready\n',

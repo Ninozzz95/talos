@@ -6,6 +6,7 @@ import {
   statSync,
 } from 'node:fs';
 import { createPrivateKey } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -362,7 +363,7 @@ function parsePort(raw) {
   return port;
 }
 
-function parseLlamaServerPath(raw, moduleUrl) {
+function parseLlamaServerPath(raw, moduleUrl, sondaMotore) {
   if (typeof raw === 'string' && raw.trim() !== '') return resolve(raw.trim());
   /*
    * ⭐⭐⭐ 03/9 — SI PREFERISCE LA BUILD CON LA GPU, se c'è.
@@ -384,7 +385,12 @@ function parseLlamaServerPath(raw, moduleUrl) {
   for (const cartella of ['.local-runtime/b10517-vulkan/', '.local-runtime/b10517/']) {
     try {
       const candidate = fileURLToPath(new URL(`${cartella}llama-server.exe`, moduleUrl));
-      if (statSync(candidate).isFile()) return candidate;
+      if (!statSync(candidate).isFile()) continue;
+      if (cartella.includes('-vulkan')) {
+        const esito = sondaMotore(candidate, ['--list-devices'], { shell: false, windowsHide: true, timeout: 15000, encoding: 'utf8', maxBuffer: 256 * 1024 });
+        if (esito.error || esito.status !== 0 || !/^\s*Vulkan\d+:\s*\S.+$/m.test(`${esito.stdout ?? ''}\n${esito.stderr ?? ''}`)) continue;
+      }
+      return candidate;
     } catch {
       // The official runtime is optional during development and in clean clones.
     }
@@ -492,6 +498,7 @@ function parseContextTrial(env) {
 export function loadConfig(
   env,
   moduleUrl = new URL('../server.mjs', import.meta.url),
+  { sondaMotore = spawnSync } = {},
 ) {
   if (!env || typeof env !== 'object') fail('Configurazione ambiente non valida');
 
@@ -565,7 +572,10 @@ export function loadConfig(
     hfToken: typeof env.HF_TOKEN === 'string' && env.HF_TOKEN.trim() ? env.HF_TOKEN.trim() : undefined,
     cartellaStore: parseCartellaStore(env.TALOS_HARNESS_UI_SESSIONS_DIR, moduleUrl),
     modelsDevUrl: parseModelsDevUrl(env.TALOS_HARNESS_UI_MODELS_DEV_URL),
-    llamaServerPath: parseLlamaServerPath(env.TALOS_LLAMA_SERVER_PATH, moduleUrl),
+    llamaServerPath: parseLlamaServerPath(env.TALOS_LLAMA_SERVER_PATH, moduleUrl, sondaMotore),
+    llamaServerFallbackPath: typeof env.TALOS_LLAMA_SERVER_FALLBACK_PATH === 'string' && env.TALOS_LLAMA_SERVER_FALLBACK_PATH.trim()
+      ? resolve(env.TALOS_LLAMA_SERVER_FALLBACK_PATH.trim())
+      : (!env.TALOS_LLAMA_SERVER_PATH?.trim() ? parseLlamaServerPath(undefined, moduleUrl, () => ({ status: 1 })) : undefined),
     ownerRuntimeModule: parseOwnerRuntimeModule(env.TALOS_OWNER_RUNTIME_MODULE, moduleUrl),
     ricercaWeb: parseRicercaWeb(env),
     labs: parseLabs(env.TALOS_LABS, moduleUrl), // ⭐ 04/9, W0-04

@@ -87,6 +87,7 @@ export function creaCicloDiVita({
   }
 
   function chiudi() {
+    if (stato === 'in-chiusura') { generazione += 1; return stato; }
     if (stato === 'chiuso' || stato === 'fermo') return stato;
     if (stato === 'crash' || stato === 'arreso') { generazione += 1; vaiA('chiuso', { daStato: 'crash' }); return stato; }
     const daChiudere = handle;
@@ -103,6 +104,19 @@ export function creaCicloDiVita({
     return stato;
   }
 
+  /** Cambio esplicito del motore dal menu, abilitato a servizio pronto/fermo. */
+  async function riavvia() {
+    if (['avvio', 'in-chiusura'].includes(stato)) return stato;
+    const mia = ++generazione;
+    const precedente = handle;
+    vaiA('in-chiusura', { motivo: 'cambio-motore' });
+    if (precedente) await uccidiFiglio(precedente);
+    if (mia !== generazione) return stato;
+    handle = null; riavviiConsecutivi = 0;
+    vaiA('chiuso');
+    return avvia();
+  }
+
   async function riprendi() {
     if (stato !== 'sospeso') return stato;
     const mia = generazione;
@@ -115,7 +129,7 @@ export function creaCicloDiVita({
   }
 
   return Object.freeze({
-    avvia, chiudi, sospendi, riprendi, figlioUscito, riprova,
+    avvia, chiudi, sospendi, riprendi, figlioUscito, riprova, riavvia,
     stato: () => stato,
     handle: () => handle,
     transizioni: () => transizioni.slice(),

@@ -207,6 +207,9 @@ function wait(ms) {
 
 export function createLlamaServerSupervisor({
   binaryPath,
+  // R-03: il binario CPU di riserva e la descrizione del motore scelto dal guscio.
+  fallbackBinaryPath = null,
+  motore: motoreDichiarato = null,
   modelStore = null,
   spawnImpl,
   fetchImpl = fetch,
@@ -242,19 +245,26 @@ export function createLlamaServerSupervisor({
   speculativaNgram = 'auto',
 } = {}) {
   if (typeof binaryPath !== 'string' || binaryPath.trim() === '') throw new LlamaServerSupervisorError('binaryPath is required', 'RUNTIME_MISCONFIGURED');
-  const processPolicy = createProcessPolicy({ allowedExecutables: [binaryPath], spawnFn: spawnImpl });
+  if (fallbackBinaryPath !== null && (typeof fallbackBinaryPath !== 'string' || fallbackBinaryPath.trim() === '')) throw new LlamaServerSupervisorError('fallbackBinaryPath must be a non-empty string', 'RUNTIME_MISCONFIGURED');
+  const processPolicy = createProcessPolicy({ allowedExecutables: [binaryPath, ...(fallbackBinaryPath ? [fallbackBinaryPath] : [])], spawnFn: spawnImpl });
   let current = null;
   let state = 'unavailable';
   const listeners = new Set();
   /* Le risposte del binario non cambiano fra un avvio e l'altro: si pagano
-   * una volta sola. Il fitter dipende anche dal modello e dal contesto. */
-  let aiutoDelBinario;
+   * una volta sola. Il fitter dipende anche dal modello e dal contesto.
+   * R-03: si ricordano PER BINARIO — la riserva CPU non offre le stesse cose. */
+  const aiutoPerBinario = new Map();
   const leveMemorizzate = new Map();
+  const motoreIniziale = Object.freeze({
+    variante: motoreDichiarato?.variante ?? (/vulkan/iu.test(basename(binaryPath)) ? 'vulkan' : 'cpu'),
+    dispositivi: Array.isArray(motoreDichiarato?.dispositivi) ? [...motoreDichiarato.dispositivi] : [],
+  });
+  let motore = { variante: motoreIniziale.variante, dispositivi: [...motoreIniziale.dispositivi], ripiego: null, proposta: null };
 
-  function speculativaDisponibile() {
+  function speculativaDisponibile(binario = binaryPath) {
     if (speculativaNgram === 'off') return false;
-    if (aiutoDelBinario === undefined) aiutoDelBinario = sondaBinario(binaryPath, ['--help'], 10_000);
-    return supportaSpeculativaNgram(aiutoDelBinario ?? '');
+    if (!aiutoPerBinario.has(binario)) aiutoPerBinario.set(binario, sondaBinario(binario, ['--help'], 10_000));
+    return supportaSpeculativaNgram(aiutoPerBinario.get(binario) ?? '');
   }
 
   /**
@@ -262,10 +272,10 @@ export function createLlamaServerSupervisor({
    * build senza backend la domanda «ci sta nella scheda?» non ha oggetto, e
    * nessuno dei due argomenti verrebbe passato comunque.
    */
-  function leveVelocita(modelPath, contextLength) {
-    const chiave = `${modelPath}|${contextLength ?? ''}`;
+  function leveVelocita(binario, modelPath, contextLength) {
+    const chiave = `${binario}|${modelPath}|${contextLength ?? ''}`;
     if (leveMemorizzate.has(chiave)) return leveMemorizzate.get(chiave);
-    const fitter = percorsoFitter(binaryPath);
+    const fitter = percorsoFitter(binario);
     const contesto = Number.isInteger(contextLength) && contextLength > 0 ? ['-c', String(contextLength)] : [];
     let kv = { tipo: 'q8_0', perche: 'il fitter del binario non è stato trovato: si resta sulla KV quantizzata di prima' };
     if (fitter) {
@@ -275,16 +285,20 @@ export function createLlamaServerSupervisor({
         : leggiNglDalFitter(sondaBinario(fitter, ['-m', modelPath, ...contesto, '-fa', '1', '-ctk', 'q8_0', '-ctv', 'q8_0']) ?? '');
       kv = decidiTipoKvCache({ nglConF16: conF16, nglConQ8: conQ8 });
     }
-    const leve = { kv, speculativa: speculativaDisponibile() };
+    const leve = { kv, speculativa: speculativaDisponibile(binario) };
     leveMemorizzate.set(chiave, leve);
     return leve;
   }
 
   function status() {
-    if (!current) return { state, runtimeId: 'llama.cpp', observedAt: now().toISOString() };
+    // R-03: `motore` esce sempre (anche a riposo o dopo un guasto): variante, dispositivi,
+    // l'eventuale ripiego avvenuto in questo caricamento e la proposta per la persona.
+    const fotoMotore = { variante: motore.variante, dispositivi: [...motore.dispositivi], ripiego: motore.ripiego ? { ...motore.ripiego } : null, proposta: motore.proposta ? { ...motore.proposta } : null };
+    if (!current) return { state, runtimeId: 'llama.cpp', motore: fotoMotore, observedAt: now().toISOString() };
     return {
       state: current.state,
       runtimeId: 'llama.cpp',
+      motore: fotoMotore,
       port: current.port,
       baseUrl: current.baseUrl,
       /*
@@ -309,6 +323,12 @@ export function createLlamaServerSupervisor({
 
   function attachProcess(entry) {
     const onClose = () => {
+      // R-03: l'ultima riga senza a-capo (il motore muore a metà frase) si tiene lo stesso.
+      if (entry.residuoStderr && entry.residuoStderr.trim() !== '') {
+        entry.ultimeRighe.push(entry.residuoStderr.trim());
+        if (entry.ultimeRighe.length > 12) entry.ultimeRighe.shift();
+      }
+      entry.residuoStderr = '';
       entry.closed = true;
       if (current === entry && entry.state !== 'stopping') {
         entry.state = 'failed';
@@ -332,7 +352,16 @@ export function createLlamaServerSupervisor({
        * c'era.
        */
       const testo = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
-      for (const riga of testo.split('\n')) {
+      /*
+       * ⛔ R-03, 13/09 — i pezzi arrivano SPEZZATI («No d» + «evices found.»): una
+       * riga si chiude solo all'a-capo, altrimenti la firma del guasto non si
+       * riconosce. Il residuo senza a-capo si tiene fino al prossimo pezzo o alla
+       * chiusura del processo (vedi onClose).
+       */
+      entry.residuoStderr = (entry.residuoStderr ?? '') + testo;
+      const parti = entry.residuoStderr.split('\n');
+      entry.residuoStderr = parti.pop();
+      for (const riga of parti) {
         if (riga.trim() === '') continue;
         entry.ultimeRighe.push(riga.trim());
         if (entry.ultimeRighe.length > 12) entry.ultimeRighe.shift();
@@ -372,17 +401,47 @@ export function createLlamaServerSupervisor({
    *   sopra `-c` più sotto: senza, llama.cpp prova ad allocare il contesto
    *   ADDESTRATO, e su un modello grande non ci sta in nessuna macchina.
    */
-  async function start({ modelId, modelPath, port, contextLength } = {}) {
-    if (current && ['loading', 'ready', 'stopping'].includes(current.state)) throw new LlamaServerSupervisorError('runtime is already active', 'RUNTIME_ALREADY_RUNNING');
-    if (typeof modelPath !== 'string' || !isAbsolute(modelPath)) throw invalid('modelPath must be absolute');
-    const selectedPort = port ?? await portAllocator();
-    if (!Number.isInteger(selectedPort) || selectedPort < 1024 || selectedPort > 65535) throw invalid('port is invalid');
-    let locked = false;
-    if (modelStore && modelId) {
-      await modelStore.lock(modelId);
-      locked = true;
-    }
-    const apiKey = randomBytes(32).toString('hex');
+  /*
+   * ⭐⭐⭐ R-03, 13/09/2026 — IL MOTORE SI SCEGLIE DALLA MACCHINA, E SE LA SCHEDA
+   * NON C'È SI RIPIEGA SUL PROCESSORE.
+   *
+   * Il guscio sceglie la build Vulkan solo se `--list-devices` elenca un
+   * dispositivo (`desktop/runtime.mjs`), ma una scheda può mancare o sparire
+   * DOPO: driver assente («ggml_vulkan: No devices found», «ErrorIncompatibleDriver»)
+   * o dispositivo perso («vk::DeviceLostError», «ErrorDeviceLost»). In quei due
+   * casi, e solo in quelli, il caricamento riparte UNA volta sul binario CPU di
+   * riserva (`fallbackBinaryPath`, `-ngl 0 --device none`, senza KV quantizzata né
+   * speculativa se quel binario non la offre), e lo stato lo dice:
+   * `motore.ripiego = { da, a, motivo }`.
+   *
+   * ⛔ NON si ripiega su «ErrorOutOfDeviceMemory»: la scheda c'è, è il modello che
+   * non entra (llama.cpp #15054, #5848, #9271, letti il 13/09/2026); sul
+   * processore girerebbe ma lentissimo, e la scelta spetta alla persona:
+   * `motore.proposta = { a: 'cpu', motivo }`. Né su un errore generico (file GGUF
+   * rotto, argomento sconosciuto): cambiare binario non lo curerebbe.
+   * ⛔ Un processo morto DOPO essere diventato pronto non riparte da solo (come
+   * prima); il prossimo `start()` ritenta sempre dal binario scelto dal guscio.
+   * Firme prese da ggml-vulkan.cpp al pin b10517 (elenco chiuso: un regex largo
+   * scambierebbe un avviso per un guasto). Fonti nel rapporto R-03.
+   */
+  const FIRME_RIPIEGO = Object.freeze([
+    { classe: 'driver', motivo: 'la scheda grafica non è disponibile (driver Vulkan assente o incompatibile)', firme: ['ggml_vulkan: No devices found', 'ErrorIncompatibleDriver', 'ErrorInitializationFailed', 'ErrorLayerNotPresent'] },
+    { classe: 'perso', motivo: 'la scheda grafica non risponde più (dispositivo perso)', firme: ['DeviceLostError', 'ErrorDeviceLost', 'device lost'] },
+  ]);
+  const FIRME_MEMORIA = Object.freeze(['ErrorOutOfDeviceMemory', 'ErrorOutOfHostMemory']);
+
+  function classificaGuastoVulkan(righe) {
+    const testo = righe.join('\n');
+    for (const f of FIRME_RIPIEGO) if (f.firme.some(s => testo.includes(s))) return { classe: f.classe, motivo: f.motivo };
+    if (FIRME_MEMORIA.some(s => testo.includes(s))) return { classe: 'memoria', motivo: 'la memoria della scheda grafica non basta per questo modello con questo contesto' };
+    return null;
+  }
+
+  function nuovoMotore(variante) {
+    return { variante, dispositivi: variante === motoreIniziale.variante ? [...motoreIniziale.dispositivi] : [], ripiego: null, proposta: null };
+  }
+
+  async function lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario, ngl, apiKey }) {
     const entry = {
       child: null,
       apiKey,
@@ -395,221 +454,153 @@ export function createLlamaServerSupervisor({
       failure: null,
       closed: false,
       ultimeRighe: [],
+      residuoStderr: '',
+      binario,
     };
     current = entry;
     state = 'loading';
+    const conOffload = Number.isInteger(ngl) && ngl > 0;
     /*
      * ⛔ Le domande al binario si fanno PRIMA di accenderlo, e il loro esito
      * si dice ad alta voce: una leva che si accende in silenzio è una leva
      * che nessuno può smentire. Misurato 12/09: il fitter risponde in 0,34 s
      * su un modello da 2,3 GB e in 3,9 s su uno da 15,3 GB; `--help` in
-     * meno di 0,3 s; e si pagano una volta sola per (modello, contesto).
+     * meno di 0,3 s; e si pagano una volta sola per (binario, modello, contesto).
      */
-    const leve = Number.isInteger(gpuLayers) && gpuLayers > 0
-      ? leveVelocita(modelPath, contextLength)
-      : { kv: { tipo: 'q8_0', perche: 'nessun offload sul dispositivo: la KV cache non entra nella scelta' }, speculativa: speculativaDisponibile() };
+    const leve = conOffload
+      ? leveVelocita(binario, modelPath, contextLength)
+      : { kv: { tipo: 'q8_0', perche: 'nessun offload sul dispositivo: la KV cache non entra nella scelta' }, speculativa: speculativaDisponibile(binario) };
+    emitLog('stderr', `[talos] motore ${motore.variante}${motore.ripiego ? ` (ripiego da ${motore.ripiego.da})` : ''}: ${binario}\n`);
     emitLog('stderr', `[talos] KV cache ${leve.kv.tipo} — ${leve.kv.perche}\n`);
     emitLog('stderr', `[talos] decodifica speculativa a n-grammi: ${leve.speculativa ? 'accesa (--spec-type ngram-mod)' : 'non offerta da questo binario'}\n`);
-    try {
-      entry.child = processPolicy.spawn(binaryPath, [
-        '-m', modelPath,
-        ...(modelId ? ['--alias', modelId] : []),
-        '--host', LOOPBACK,
-        '--port', String(selectedPort),
-        '--api-key', apiKey,
-        /*
-         * ⛔⛔⛔ 03/9 — QUI NON PASSAVAMO MAI `-c`, e il 27B dell'owner non
-         * partiva. Owner: «ne ho scaricato uno da 27 b, perché cazzo ne devi
-         * usare uno da 600 milioni?».
-         *
-         * MISURATO, non dedotto: lanciato a mano lo STESSO file con `-c 2048`
-         * il motore dice «model loaded / listening» in 13 secondi. Lanciato
-         * come lo lanciavamo noi, muore. Senza `-c` llama.cpp alloca il
-         * contesto ADDESTRATO — 262.144 token per quel modello — e la cache
-         * che ne esce non sta in nessuna memoria di questo computer.
-         *
-         * ⛔ Non era «il modello è troppo grande»: il file da 15,7 GB entra.
-         * Era la CACHE di un contesto che nessuno aveva chiesto. Ci avevo
-         * creduto due volte — prima incolpando la memoria, poi l'attesa — e
-         * ogni volta senza guardare cosa diceva il motore.
-         */
-        ...(Number.isInteger(contextLength) && contextLength > 0 ? ['-c', String(contextLength)] : []),
-        /*
-         * ⭐⭐⭐ 03/9 — LA GPU. Owner: «bisogna usare tecniche all'avanguardia
-         * (per esempio uso della gpu)».
-         *
-         * MISURATO, non supposto: la build che stavamo usando è
-         * `llama-b10517-bin-win-CPU-x64` e risponde «Available devices:
-         * (none)». La stessa versione in variante Vulkan, sulla stessa
-         * macchina, risponde «Vulkan0: AMD Radeon RX 9070 XT (16304 MiB,
-         * 15416 MiB free)» — sedici gigabyte di VRAM che stavamo ignorando,
-         * mentre un 27B macinava sul processore.
-         * ⛔ Windows riportava 4 GB di VRAM (`Win32_VideoController` tronca a
-         * 32 bit): un altro numero da non credere senza chiedere al motore.
-         *
-         * ⭐ Ricerca 03/9 (ggml-org/llama.cpp discussions #21043;
-         * digtvbg.com, «Vulkan vs ROCm su RX 9070 XT»): su questa scheda
-         * llama-server con Vulkan fa **62 token/s** e batte vLLM su ROCm
-         * (48), e Vulkan è nelle release Windows ufficiali senza driver
-         * speciali. `-ngl 99` scarica TUTTI i livelli sulla GPU: il 99 è la
-         * convenzione affermata per «tutti», qualunque sia il numero vero.
-         *
-         * ⛔ Solo se il binario ha davvero un backend: con la build CPU
-         * `-ngl` verrebbe accettato e ignorato, e crederemmo di usare una
-         * GPU che non tocchiamo. Lo decide chi costruisce il supervisore,
-         * che il binario lo ha scelto.
-         *
-         * ⛔⛔⛔ 03/9 — BUG REALE trovato benchmarkando un modello VERO (27B
-         * Q4_K_M, 16,46 GB) invece del giocattolo 0,6B su cui il 99 sopra era
-         * stato misurato: `-ngl 99` forza SEMPRE tutti i layer in VRAM, ma
-         * questo modello supera i 16,3 GB totali della scheda. Il log del
-         * binario stesso lo dice: «common_fit_params: failed to fit params to
-         * free device memory: n_gpu_layers already set by user to 99, abort»
-         * — llama.cpp SA che non entra, ma l'auto-fit si disattiva appena
-         * l'utente fissa `-ngl` a un numero esplicito. Risultato misurato:
-         * generazione a **13,28 tok/s**, un decimo di quello che la scheda fa
-         * su un modello che ci sta (62 tok/s, ricerca sopra) — overflow
-         * silenzioso verso la memoria condivisa di Windows (WDDM), niente
-         * errore, nessun avviso, solo lento.
-         *
-         * ⭐ Owner: "bisogna usare la RAM e la VRAM come fa LM Studio".
-         * Verificato COME: LM Studio stima l'ingombro PRIMA di caricare e
-         * riduce i layer se non entrano (guardrail, con avviso — mai un
-         * overflow muto) — lmstudio-bug-tracker #1673/#1631. `--help` sul
-         * BINARIO VERO conferma che llama-server ha già la stessa cosa
-         * incorporata: `-ngl` accetta un numero, `auto` o `all` (default:
-         * **auto**), e `-fit on` (default) «adjusts UNSET arguments to fit in
-         * device memory» — si disattiva SOLO se l'argomento è impostato
-         * esplicitamente, esattamente il nostro caso.
-         *
-         * ⛔⛔⛔ 03/9, STESSO GIORNO — provato `'auto'` qui, poi MISURATO contro
-         * `99` esplicito con un banco A/B pulito (stesso modello 27B, stesso
-         * prompt, `benchmark-gpu-reale.mjs`): `auto` è PEGGIO, non meglio —
-         * 11,12 tok/s contro 13,28 (-16%), 191,3 contro 262,3 in prompt
-         * processing (-27%), e in più un avviso «GDN mismatch» che con `99`
-         * non compare. Il fitter del binario, su QUESTA architettura ibrida
-         * Gated Delta Net, sceglie un piazzamento peggiore di quello ingenuo
-         * — l'ipotesi «auto = mai peggio di un overflow muto» era ragionevole
-         * e si è misurata falsa qui. Confermato anche da una ricerca esterna
-         * commissionata lo stesso giorno (custodita in TALOS-RICERCHE,
-         * 2026-09-03-ottimizzazioni-llama-server-rx9070xt.md): i profili che
-         * raccomanda per QUESTA scheda usano `-ngl 99` esplicito, mai `auto`.
-         * ⇒ Si torna al numero esplicito. Il caso reale che aveva motivato
-         * `auto` (un modello che eccede la VRAM totale, non solo quella
-         * libera) resta scomodo — genera comunque overflow verso la memoria
-         * condivisa di Windows — ma fra i due, `99` vince anche lì: non è
-         * stato trovato NESSUN caso, su questo binario e questa scheda, dove
-         * `auto` batta il numero esplicito. Se un caso simile ricomparirà, si
-         * ri-misura da capo prima di ripetere questo cambio, non si presume.
-         */
-        ...(Number.isInteger(gpuLayers) && gpuLayers > 0 ? ['-ngl', String(gpuLayers)] : []),
-        /*
-         * ⭐⭐⭐ 3/9 — owner: "dobbiamo battere tutti i competitor... dobbiamo
-         * fare il massimo". Ricerca tecnica (ggml-org/llama.cpp discussions
-         * #22411, ottobre 2026; Medium, "Tune llama.cpp on Apple Silicon: 7
-         * flags") + MISURATO su questa scheda vera (RX 9070 XT, Vulkan),
-         * non solo letto: stesso modello, stesso prompt, `-fa 1
-         * --cache-type-k q8_0 --cache-type-v q8_0` contro la riga di prima
-         * — **+15% token/s in generazione, +408% in elaborazione del
-         * prompt**. Zero differenza di correttezza: l'output incoerente
-         * del modello 0,6B Q2_K era IDENTICO con e senza questi flag —
-         * verificato prima di fidarsi del numero, è il modello stesso
-         * (quello che l'owner ha già bocciato), non un difetto di questi
-         * due flag.
-         *
-         * ⛔ K e V devono avere lo STESSO tipo di quantizzazione (qui
-         * entrambi q8_0): la ricerca è precisa su questo punto — solo la
-         * coppia SIMMETRICA usa il kernel fuso veloce, una coppia
-         * asimmetrica ripiega su un percorso lento che vanificherebbe il
-         * guadagno. La quantizzazione della KV cache RICHIEDE `-fa 1` per
-         * definizione: senza, llama.cpp dequantizza ad ogni passo — più
-         * lento che non quantizzare affatto. Stessa condizione di `-ngl`
-         * sopra: solo se c'è davvero un backend GPU, mai su una build
-         * CPU-only dove l'offload è zero.
-         */
-        /*
-         * ⭐⭐⭐ BC-13, 12/09/2026 — il TIPO della KV cache non è più fisso.
-         * Fino a ieri qui c'era sempre `q8_0`; misurato sul banco, su un
-         * modello vero costa il 39% del tempo al primo token. Ora lo decide
-         * `decidiTipoKvCache` chiedendo al fitter del binario se con la
-         * cache piena (f16) i livelli entrano ancora tutti nel dispositivo.
-         * Vedi il commento della funzione per i numeri.
-         *
-         * ⛔ `-fa 1` resta SEMPRE: la quantizzazione della KV cache lo
-         * richiede per definizione (senza, llama.cpp dequantizza a ogni
-         * passo), e con f16 non fa danno — il binario ha comunque `-fa auto`
-         * come predefinito, quindi lo stiamo solo dichiarando.
-         * ⛔ K e V restano SIMMETRICI: una coppia asimmetrica ripiega su un
-         * percorso lento (ggml-org/llama.cpp discussions #22411).
-         */
-        ...(Number.isInteger(gpuLayers) && gpuLayers > 0
-          ? ['-fa', '1', '--cache-type-k', leve.kv.tipo, '--cache-type-v', leve.kv.tipo]
-          : []),
-        /*
-         * ⭐⭐⭐ BC-13 — decodifica speculativa a n-grammi, SENZA modello draft.
-         * Misure e verso contrario nel commento di `supportaSpeculativaNgram`.
-         * Si accende solo se questo binario la offre: un binario più vecchio
-         * morirebbe all'avvio con «unknown argument», e un motore che non
-         * parte è infinitamente più lento di uno lento.
-         */
-        ...(leve.speculativa ? ['--spec-type', 'ngram-mod'] : []),
-        '--jinja',
-        '--metrics',
-        '--props',
-      ], { cwd: isAbsolute(binaryPath) ? dirname(binaryPath) : process.cwd(), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-      if (!entry.child || typeof entry.child.once !== 'function') throw new LlamaServerSupervisorError('spawn did not return a child process', 'RUNTIME_PROCESS_FAILED');
-      attachProcess(entry);
+    entry.child = processPolicy.spawn(binario, [
+      '-m', modelPath,
+      ...(modelId ? ['--alias', modelId] : []),
+      '--host', LOOPBACK,
+      '--port', String(selectedPort),
+      '--api-key', apiKey,
       /*
-       * ⛔ L'attesa la decide la DIMENSIONE del file, letta adesso dal disco:
-       * un modello che il sistema deve ancora leggere non e' un modello che
-       * non parte. Se la misura non riesce si resta sull'attesa di base.
+       * ⛔⛔⛔ 03/9 — QUI NON PASSAVAMO MAI `-c`, e il 27B dell'owner non
+       * partiva: senza `-c` llama.cpp alloca il contesto ADDESTRATO del modello
+       * (262.144 token per quel file). Misurato: lo stesso file con `-c 2048`
+       * dice «model loaded / listening» in 13 secondi. Storia intera nel
+       * commit c89dc763 e seguenti.
        */
-      let byteModello = 0;
-      try { byteModello = statSync(modelPath).size; } catch { byteModello = 0; }
-      const attesa = attesaSaluteMs(byteModello, healthTimeoutMs);
-      const deadline = Date.now() + attesa;
-      while (Date.now() < deadline) {
-        if (entry.failure) throw new LlamaServerSupervisorError(`llama-server failed: ${entry.failure.message}`, 'RUNTIME_PROCESS_FAILED');
-        /*
-         * ⛔⛔⛔ BC-13, 12/09/2026 — UN PROCESSO GIÀ MORTO NON DIVENTA PRONTO,
-         * e aspettarlo è tempo rubato alla persona.
-         *
-         * MISURATO, non dedotto: il 27B dell'owner (15,3 GB) su questa
-         * macchina muore in **4,9 secondi** con «ggml_vulkan:
-         * vk::Device::allocateMemory: ErrorOutOfDeviceMemory». Il ciclo qui
-         * sotto guardava solo `entry.failure` — che si popola solo se lo
-         * SPAWN fallisce, non se il processo esce da solo — e continuava a
-         * bussare a una porta chiusa per `15 s + 15 s/GB`, cioè **245
-         * secondi**, per poi dire «non è diventato pronto entro 245 s».
-         *
-         * ⇒ Quattro minuti di attesa e un messaggio che manda a cercare un
-         * modello «troppo grande» o un'attesa «troppo corta», mentre il
-         * motore aveva già detto esattamente cosa non andava. Ora si guarda
-         * anche `closed`, e l'errore PORTA le ultime righe del motore.
-         */
-        if (entry.closed) {
-          const detto = entry.ultimeRighe.slice(-4).join(' | ');
-          throw new LlamaServerSupervisorError(
-            `llama-server si è chiuso dopo ${Math.round((Date.now() - (deadline - attesa)) / 1000)} s senza mai diventare pronto${detto ? `: ${detto}` : ''}`,
-            'RUNTIME_PROCESS_FAILED',
-          );
-        }
-        const result = await health();
-        if (result.ok) {
-          entry.state = 'ready';
-          state = 'ready';
-          return status();
-        }
-        await wait(pollIntervalMs);
+      ...(Number.isInteger(contextLength) && contextLength > 0 ? ['-c', String(contextLength)] : []),
+      /*
+       * ⭐⭐⭐ 03/9 — LA GPU: `-ngl 99` esplicito (misurato meglio di `auto` su
+       * RX 9070 XT, banco A/B del 03/9: 13,28 contro 11,12 tok/s). Solo se il
+       * binario ha davvero un backend. R-03: sul binario di RISERVA si dichiara
+       * `-ngl 0 --device none` (llama.cpp b10517, common/arg.cpp: «none = don't
+       * use»), così un ripiego non tenta mai un offload silenzioso.
+       */
+      ...(conOffload ? ['-ngl', String(ngl)] : (motore.ripiego ? ['-ngl', '0', '--device', 'none'] : [])),
+      /*
+       * ⭐⭐⭐ 3/9 + BC-13 12/09 — KV cache quantizzata SIMMETRICA con `-fa 1`
+       * solo con offload (+15 % generazione, +408 % prompt, misurati); il tipo
+       * lo decide il fitter del binario (vedi `decidiTipoKvCache`).
+       */
+      ...(conOffload
+        ? ['-fa', '1', '--cache-type-k', leve.kv.tipo, '--cache-type-v', leve.kv.tipo]
+        : []),
+      /*
+       * ⭐⭐⭐ BC-13 — decodifica speculativa a n-grammi, SENZA modello draft,
+       * solo se QUESTO binario la offre (un binario più vecchio morirebbe con
+       * «unknown argument»). Misure nel commento di `supportaSpeculativaNgram`.
+       */
+      ...(leve.speculativa ? ['--spec-type', 'ngram-mod'] : []),
+      '--jinja',
+      '--metrics',
+      '--props',
+    ], { cwd: isAbsolute(binario) ? dirname(binario) : process.cwd(), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    if (!entry.child || typeof entry.child.once !== 'function') throw new LlamaServerSupervisorError('spawn did not return a child process', 'RUNTIME_PROCESS_FAILED');
+    attachProcess(entry);
+    /*
+     * ⛔ L'attesa la decide la DIMENSIONE del file, letta adesso dal disco:
+     * un modello che il sistema deve ancora leggere non e' un modello che
+     * non parte. Se la misura non riesce si resta sull'attesa di base.
+     */
+    let byteModello = 0;
+    try { byteModello = statSync(modelPath).size; } catch { byteModello = 0; }
+    const attesa = attesaSaluteMs(byteModello, healthTimeoutMs);
+    const deadline = Date.now() + attesa;
+    while (Date.now() < deadline) {
+      if (entry.failure) throw new LlamaServerSupervisorError(`llama-server failed: ${entry.failure.message}`, 'RUNTIME_PROCESS_FAILED');
+      /*
+       * ⛔⛔⛔ BC-13, 12/09/2026 — UN PROCESSO GIÀ MORTO NON DIVENTA PRONTO:
+       * il 27B dell'owner muore in 4,9 s con «ErrorOutOfDeviceMemory» e prima
+       * si aspettava 245 s bussando a una porta chiusa. Si guarda `closed`, e
+       * l'errore PORTA le ultime righe del motore.
+       */
+      if (entry.closed) {
+        const detto = entry.ultimeRighe.slice(-4).join(' | ');
+        const errore = new LlamaServerSupervisorError(
+          `llama-server si è chiuso dopo ${Math.round((Date.now() - (deadline - attesa)) / 1000)} s senza mai diventare pronto${detto ? `: ${detto}` : ''}`,
+          'RUNTIME_PROCESS_FAILED',
+        );
+        errore.righeMotore = [...entry.ultimeRighe];
+        throw errore;
       }
-      entry.state = 'failed';
-      state = 'failed';
-      // ⛔ Il messaggio dice QUANTO si e' aspettato e quanto pesa il modello:
-      // «timeout» da solo manda a cercare un guasto che non c'e'.
-      throw new LlamaServerSupervisorError(`llama-server non è diventato pronto entro ${Math.round(attesa / 1000)} s (modello di ${(byteModello / 1_000_000_000).toFixed(1)} GB)`, 'RUNTIME_HEALTH_TIMEOUT');
+      const result = await health();
+      if (result.ok) {
+        entry.state = 'ready';
+        state = 'ready';
+        return status();
+      }
+      await wait(pollIntervalMs);
+    }
+    entry.state = 'failed';
+    state = 'failed';
+    // ⛔ Il messaggio dice QUANTO si e' aspettato e quanto pesa il modello:
+    // «timeout» da solo manda a cercare un guasto che non c'e'.
+    throw new LlamaServerSupervisorError(`llama-server non è diventato pronto entro ${Math.round(attesa / 1000)} s (modello di ${(byteModello / 1_000_000_000).toFixed(1)} GB)`, 'RUNTIME_HEALTH_TIMEOUT');
+  }
+
+  async function start({ modelId, modelPath, port, contextLength } = {}) {
+    if (current && ['loading', 'ready', 'stopping'].includes(current.state)) throw new LlamaServerSupervisorError('runtime is already active', 'RUNTIME_ALREADY_RUNNING');
+    if (typeof modelPath !== 'string' || !isAbsolute(modelPath)) throw invalid('modelPath must be absolute');
+    const selectedPort = port ?? await portAllocator();
+    if (!Number.isInteger(selectedPort) || selectedPort < 1024 || selectedPort > 65535) throw invalid('port is invalid');
+    let locked = false;
+    if (modelStore && modelId) {
+      await modelStore.lock(modelId);
+      locked = true;
+    }
+    const apiKey = randomBytes(32).toString('hex');
+    // Ogni caricamento riparte dal binario scelto dal guscio: il ripiego vale per un giro solo.
+    motore = nuovoMotore(motoreIniziale.variante);
+    const chiudi = (entry) => { if (entry?.child && !entry.closed) entry.child.kill('SIGTERM'); };
+    try {
+      try {
+        return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario: binaryPath, ngl: gpuLayers, apiKey });
+      } catch (primo) {
+        const guasto = motore.variante === 'vulkan' && primo.code === 'RUNTIME_PROCESS_FAILED' ? classificaGuastoVulkan(primo.righeMotore ?? []) : null;
+        if (guasto?.classe === 'memoria') {
+          motore.proposta = { a: 'cpu', motivo: `${guasto.motivo}; sul processore il modello può girare, più lento: la scelta è della persona` };
+          throw primo;
+        }
+        if (!guasto || !fallbackBinaryPath) throw primo;
+        const primaEntry = current;
+        chiudi(primaEntry);
+        if (current === primaEntry) current = null;
+        const ripiego = { da: motore.variante, a: 'cpu', motivo: guasto.motivo, classe: guasto.classe, righe: (primo.righeMotore ?? []).slice(-4) };
+        motore = { ...nuovoMotore('cpu'), ripiego };
+        for (const listener of listeners) {
+          try { listener({ stream: 'stderr', text: `[talos] ${guasto.motivo}: il modello viene caricato sul processore.\n`, ripiego }); } catch { /* observer failure must not affect the process */ }
+        }
+        try {
+          return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, binario: fallbackBinaryPath, ngl: 0, apiKey });
+        } catch (secondo) {
+          // ⛔ Le DUE code restano leggibili: chi legge deve sapere che sono morti entrambi, e come.
+          const codaGpu = ripiego.righe.join(' | ');
+          const errore = new LlamaServerSupervisorError(`${secondo.message}${codaGpu ? ` [prima, sulla scheda grafica: ${codaGpu}]` : ''}`, secondo.code === 'RUNTIME_HEALTH_TIMEOUT' ? 'RUNTIME_HEALTH_TIMEOUT' : 'RUNTIME_PROCESS_FAILED');
+          errore.righeMotore = secondo.righeMotore;
+          throw errore;
+        }
+      }
     } catch (error) {
-      if (entry.child && !entry.closed) entry.child.kill('SIGTERM');
-      if (current === entry) current = null;
+      chiudi(current);
+      current = null;
       state = 'failed';
       if (locked) await modelStore.unlock(modelId).catch(() => {});
       throw error instanceof LlamaServerSupervisorError ? error : new LlamaServerSupervisorError(error.message, 'RUNTIME_PROCESS_FAILED');

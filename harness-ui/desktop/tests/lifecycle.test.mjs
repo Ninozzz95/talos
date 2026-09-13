@@ -2,6 +2,19 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { BACKOFF_MS_DEFAULT, creaCicloDiVita } from '../lifecycle.mjs';
+test('R03-RIAVVIO — attende arresto, riavvia una volta e non interpreta il cambio come crash', async () => {
+  let fine; let avvii = 0;
+  const ciclo = creaCicloDiVita({ avviaFiglio: () => ({ pid: ++avvii }), attendiSalute: async () => true, uccidiFiglio: () => new Promise(r => { fine = r; }) });
+  await ciclo.avvia(); const riavvio = ciclo.riavvia();
+  assert.equal(avvii, 1); ciclo.figlioUscito(0); fine(); await riavvio;
+  assert.equal(avvii, 2); assert.equal(ciclo.stato(), 'pronto'); assert.equal(ciclo.riavviiConsecutivi(), 0);
+});
+test('R03-RIAVVIO-CHIUSURA — chiudi durante arresto annulla il nuovo avvio', async () => {
+  let fine; let avvii = 0;
+  const ciclo = creaCicloDiVita({ avviaFiglio: () => ({ pid: ++avvii }), attendiSalute: async () => true, uccidiFiglio: () => new Promise(r => { fine = r; }) });
+  await ciclo.avvia(); const riavvio = ciclo.riavvia(); ciclo.chiudi(); fine(); await riavvio;
+  assert.equal(avvii, 1);
+});
 
 test('R01-CICLO-ORFANO — salute fallita elimina il figlio prima di ripartire', async () => {
   const { ciclo, chiamate } = armatura({ saluteSeq: [false] });

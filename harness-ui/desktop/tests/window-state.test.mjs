@@ -8,6 +8,13 @@ import { STATO_FINESTRA_DEFAULT, leggiStatoFinestra, salvaStatoFinestra } from '
 
 function file(t) { const dir = mkdtempSync(join(tmpdir(), 'talos-window-state-')); t.after(() => rmSync(dir, { recursive: true, force: true })); return join(dir, 'window-state.json'); }
 const SCHERMO = { x: 0, y: 0, width: 2560, height: 1440 };
+test('R03-PREFERENZA — automatica di serie, persistente e resistente a valori corrotti', t => {
+  const f = file(t); assert.equal(leggiStatoFinestra(f).motoreLocale, 'auto');
+  for (const motoreLocale of ['auto', 'vulkan', 'cpu', 'errore', null]) {
+    salvaStatoFinestra(f, { width: 1024, height: 800, motoreLocale });
+    assert.equal(leggiStatoFinestra(f).motoreLocale, ['auto','vulkan','cpu'].includes(motoreLocale) ? motoreLocale : 'auto');
+  }
+});
 
 test('R01-VASSOIO — spento di serie, scelta esplicita persistente; stringhe non accettate', (t) => {
   const f = file(t);
@@ -22,7 +29,7 @@ test('FINESTRA-01 — senza file: i default; salva → rileggi: gli stessi valor
   const f = file(t);
   assert.deepEqual(leggiStatoFinestra(f, [SCHERMO]), { ...STATO_FINESTRA_DEFAULT });
   salvaStatoFinestra(f, { x: 100, y: 50, width: 1200, height: 800, massimizzata: false });
-  assert.deepEqual(leggiStatoFinestra(f, [SCHERMO]), { x: 100, y: 50, width: 1200, height: 800, massimizzata: false, restaNelVassoio: false });
+  assert.deepEqual(leggiStatoFinestra(f, [SCHERMO]), { x: 100, y: 50, width: 1200, height: 800, massimizzata: false, restaNelVassoio: false, motoreLocale: 'auto' });
   assert.doesNotMatch(readFileSync(f, 'utf8'), /token|chiave/i);
 });
 
