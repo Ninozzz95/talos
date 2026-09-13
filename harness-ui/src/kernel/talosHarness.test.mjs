@@ -7035,3 +7035,385 @@ describe('⛔⛔⛔ BC-10 — un saluto NON sfoglia tutta la Libreria: il tetto 
         assert.match(messaggiRicerca[1].content, /all 1 entry\b/, 'una voce sola si dice al singolare: è testo che legge il modello')
     })
 })
+
+/* ═════════════════ PO-12 (13/09/2026) — L'ATTREZZO DI MODIFICA, `file_edit` ═════════════════
+ *
+ * ⛔ La premessa, riaccertata nel codice prima di curare: nessun `name:` del kernel conteneva
+ *   modifica/patch/replace/edit, e il commento di `scrivi` (BC-11) lo diceva per iscritto —
+ *   «TALOS un attrezzo di modifica non ce l'ha». Per cambiare una riga il modello rimandava il
+ *   file INTERO.
+ *
+ * ⛔ Ogni prova qui sotto esiste in DUE VERSI: che la cura morda, e che il verso contrario
+ *   (nessuna corrispondenza, corrispondenza ambigua, permesso negato, cancello semantico) NON
+ *   scriva niente sul disco. Una sostituzione che non combacia deve fallire a voce alta: e' la
+ *   differenza fra una cura e una bugia.
+ */
+import {
+    applicaSostituzione, messaggioSostituzioneRifiutata, messaggioArgomentiAssenti,
+    testoDaSostituire, testoSostitutivo, sostituzioneSuTutteRichiesta, attrezziNegatiDalLivello,
+} from './talosHarness.mjs'
+
+describe('PO-12 — il modello puo\' MODIFICARE un file invece di riscriverlo', () => {
+    const cartellaDiProva = () => {
+        const cartella = mkdtempSync(join(tmpdir(), 'po12-'))
+        return cartella
+    }
+    const pulisci = (cartella) => rmSync(cartella, { recursive: true, force: true })
+
+    /** Uno sportello finto: una risposta per chiamata, l'ultima si ripete. */
+    function sportello(...risposte) {
+        let indice = 0
+        return async () => {
+            const scelta = risposte[Math.min(indice, risposte.length - 1)]
+            indice += 1
+            return {
+                ok: true, status: 200,
+                json: async () => ({ choices: [{ message: scelta }], usage: { prompt_tokens: 1, completion_tokens: 1 } }),
+                text: async () => '',
+            }
+        }
+    }
+    const FINE = { role: 'assistant', content: 'fatto', tool_calls: [] }
+    const chiamata = (argomenti, id = 'call_1', nome = 'file_edit') => ({
+        role: 'assistant', content: '',
+        tool_calls: [{ id, function: { name: nome, arguments: typeof argomenti === 'string' ? argomenti : JSON.stringify(argomenti) } }],
+    })
+    const dettoAlModello = (esito) => esito.messaggiFinali.filter((m) => m.role === 'tool').map((m) => m.content)
+    const TASK = { consegna: 'una prova di PO-12' }
+    const giro = (cartella, argomenti, extra = {}) => talosLavora({
+        cartella, task: TASK, modello: 'x', chiave: 'y', strumentiEstesi: ['file_edit'],
+        fetchDiRete: sportello(...(Array.isArray(argomenti) ? argomenti : [chiamata(argomenti)]), FINE),
+        ...extra,
+    })
+
+    /* ─────────────────────────── la sostituzione, pura, nei due versi ─────────────────────── */
+
+    it('⭐⭐⭐ sostituisce SOLO il pezzo indicato: il resto del file resta identico', () => {
+        const prima = 'const a = 1\nconst b = 2\nconst c = 3\n'
+        const esito = applicaSostituzione(prima, 'const b = 2', 'const b = 99')
+        assert.equal(esito.ok, true)
+        assert.equal(esito.testo, 'const a = 1\nconst b = 99\nconst c = 3\n')
+        assert.equal(esito.occorrenze, 1)
+    })
+
+    it('⛔⛔ AL CONTRARIO — un testo che NON c\'e\' non viene avvicinato: rifiuto, e nessun testo nuovo', () => {
+        const esito = applicaSostituzione('const a = 1\n', 'const z = 9', 'const z = 10')
+        assert.equal(esito.ok, false)
+        assert.equal(esito.motivo, 'assente')
+        assert.equal(esito.testo, undefined, '⛔ un rifiuto non produce MAI un contenuto da scrivere')
+    })
+
+    it('⛔⛔⛔ due occorrenze sono un RIFIUTO, non la prima a caso — e dice su quali RIGHE', () => {
+        const prima = 'x = 1\nqualcosa\nx = 1\n'
+        const ambigua = applicaSostituzione(prima, 'x = 1', 'x = 2')
+        assert.equal(ambigua.ok, false)
+        assert.equal(ambigua.motivo, 'ambigua')
+        assert.equal(ambigua.occorrenze, 2)
+        assert.deepEqual(ambigua.righe, [1, 3])
+        // ...e con replace_all diventa legittimo, e le cambia TUTTE
+        const tutte = applicaSostituzione(prima, 'x = 1', 'x = 2', { tutte: true })
+        assert.equal(tutte.ok, true)
+        assert.equal(tutte.testo, 'x = 2\nqualcosa\nx = 2\n')
+        assert.equal(tutte.occorrenze, 2)
+    })
+
+    it('⛔ vecchio vuoto e vecchio === nuovo sono due guasti diversi, e nessuno dei due scrive', () => {
+        assert.equal(applicaSostituzione('a', '', 'b').motivo, 'vuoto')
+        assert.equal(applicaSostituzione('a', 'a', 'a').motivo, 'identici')
+        assert.equal(applicaSostituzione(null, 'a', 'b').motivo, 'illeggibile')
+    })
+
+    it('⭐⭐ i DOLLARI del testo nuovo arrivano interi: `split/join`, mai `String.replace`', () => {
+        // [[string-replace-mangia-i-dollari]] — con `replace` qui `$&` diventerebbe il testo trovato
+        const esito = applicaSostituzione('prezzo = X\n', 'X', 'costo("$&") + "$1" + "$$"')
+        assert.equal(esito.testo, 'prezzo = costo("$&") + "$1" + "$$"\n')
+    })
+
+    it('⭐ cancellare e\' una sostituzione con nuovo vuoto — legittima, come in Hermes', () => {
+        assert.equal(applicaSostituzione('a\nDA TOGLIERE\nb\n', 'DA TOGLIERE\n', '').testo, 'a\nb\n')
+    })
+
+    it('⛔ gli alias inglesi arrivano; e senza nessun nome riconoscibile NON si indovina', () => {
+        for (const nome of ['old_string', 'old_str', 'oldString', 'vecchio']) {
+            assert.equal(testoDaSostituire({ [nome]: 'q' }), 'q', `alias perso: ${nome}`)
+        }
+        for (const nome of ['new_string', 'new_str', 'newString', 'nuovo']) {
+            assert.equal(testoSostitutivo({ [nome]: 'r' }), 'r', `alias perso: ${nome}`)
+        }
+        assert.equal(testoSostitutivo({ new_string: '' }), '', '⛔ cancellare e\' una richiesta, non un\'assenza')
+        assert.equal(testoDaSostituire({}), undefined)
+        assert.equal(testoSostitutivo({}), undefined)
+        assert.equal(sostituzioneSuTutteRichiesta({}), false, '⛔ il default e\' il match UNICO')
+        assert.equal(sostituzioneSuTutteRichiesta({ replace_all: true }), true)
+        assert.equal(sostituzioneSuTutteRichiesta({ replaceAll: 'true' }), true)
+        assert.equal(sostituzioneSuTutteRichiesta({ replace_all: 'forse' }), false, '⛔ un valore che non si capisce non e\' un si\'')
+    })
+
+    it('⛔ ogni rifiuto porta la MOSSA SUCCESSIVA, e i due guasti non si confondono', () => {
+        const assente = messaggioSostituzioneRifiutata('src/a.mjs', applicaSostituzione('a', 'z', 'y'))
+        const ambigua = messaggioSostituzioneRifiutata('src/a.mjs', applicaSostituzione('z\nz', 'z', 'y'))
+        assert.match(assente, /does not appear in src\/a\.mjs/)
+        assert.match(assente, /`leggi`/, 'la mossa successiva e\' rileggere il file, e gliela si dice')
+        assert.doesNotMatch(assente, /ambiguous/, '⛔ dire «ambiguo» a chi non ha trovato niente lo manda a cercare un errore che non ha fatto')
+        assert.match(ambigua, /appears 2 times/)
+        assert.match(ambigua, /lines 1, 2/)
+        assert.match(ambigua, /replace_all:true/)
+        assert.notEqual(assente, ambigua)
+    })
+
+    it('⛔ i tre campi mancanti hanno tre frasi diverse, e nessuna parla di leggere o di accodare', () => {
+        const senzaPercorso = messaggioArgomentiAssenti('file_edit')
+        const senzaVecchio = messaggioArgomentiAssenti('file_edit', { campo: 'old_string' })
+        const senzaNuovo = messaggioArgomentiAssenti('file_edit', { campo: 'new_string' })
+        assert.match(senzaPercorso, /no file path was given/)
+        assert.match(senzaPercorso, /`old_string`/)
+        assert.doesNotMatch(senzaPercorso, /Nothing was read/, '⛔ `file_edit` non legge: cambia')
+        assert.match(senzaVecchio, /no text to replace/)
+        assert.match(senzaNuovo, /no replacement text/)
+        assert.equal(new Set([senzaPercorso, senzaVecchio, senzaNuovo]).size, 3)
+        // ⛔ AL CONTRARIO — i messaggi degli altri due attrezzi non si sono spostati di una virgola
+        assert.match(messaggioArgomentiAssenti('scrivi'), /^Nothing was written: no file path was given\./)
+        assert.match(messaggioArgomentiAssenti('leggi'), /^Nothing was read: no file path was given\./)
+    })
+
+    /* ──────────────────────────── il giro vero, col dispatcher ────────────────────────────── */
+
+    it('⭐⭐⭐ IL GIRO VERO: il modello cambia UNA riga e il file NON viene riscritto', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            const prima = 'riga uno\nriga due\nriga tre\n'
+            writeFileSync(join(cartella, 'f.txt'), prima)
+            const esito = await giro(cartella, { percorso: 'f.txt', old_string: 'riga due', new_string: 'riga DUE cambiata' })
+            assert.equal(readFileSync(join(cartella, 'f.txt'), 'utf8'), 'riga uno\nriga DUE cambiata\nriga tre\n')
+            const [detto] = dettoAlModello(esito)
+            assert.match(detto, /^edited: f\.txt \(1 occurrence replaced/)
+            assert.match(detto, /The rest of the file is untouched\./)
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔⛔⛔ una sostituzione che NON combacia e\' RIFIUTATA con un motivo, e il file resta byte per byte quello di prima', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            const prima = 'lavoro di ore\n'
+            writeFileSync(join(cartella, 'prezioso.txt'), prima)
+            const ricevute = []
+            const esito = await giro(cartella, { percorso: 'prezioso.txt', old_string: 'non c\'e\' mai stato', new_string: 'x' },
+                { onGiro: (e) => { if (e.tipo === 'ricevuta') ricevute.push(e.ricevuta) } })
+            const [detto] = dettoAlModello(esito)
+            assert.match(detto, /^REFUSED\. Nothing was changed/)
+            assert.match(detto, /not even once/)
+            assert.equal(readFileSync(join(cartella, 'prezioso.txt'), 'utf8'), prima)
+            assert.equal(ricevute.length, 0, '⛔ nessun permesso chiesto, niente tentato: una ricevuta sarebbe il record di un\'operazione mai avvenuta')
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔⛔ ambiguo: RIFIUTATO con le righe; poi con replace_all lo stesso file cambia in tutte e due i punti', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, 'due.txt'), 'val = 1\nmezzo\nval = 1\n')
+            const esito = await giro(cartella, [
+                chiamata({ percorso: 'due.txt', old_string: 'val = 1', new_string: 'val = 2' }),
+                chiamata({ percorso: 'due.txt', old_string: 'val = 1', new_string: 'val = 2', replace_all: true }, 'call_2'),
+            ])
+            const detti = dettoAlModello(esito)
+            assert.match(detti[0], /appears 2 times in due\.txt \(lines 1, 3\)/)
+            assert.match(detti[1], /^edited: due\.txt \(2 occurrences replaced/)
+            assert.equal(readFileSync(join(cartella, 'due.txt'), 'utf8'), 'val = 2\nmezzo\nval = 2\n')
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔ un file che non esiste lo dice, e non ne crea uno nuovo di nascosto', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            const esito = await giro(cartella, { percorso: 'mai-visto.txt', old_string: 'a', new_string: 'b' })
+            assert.match(dettoAlModello(esito)[0], /does not exist/)
+            assert.equal(existsSync(join(cartella, 'mai-visto.txt')), false, '⛔ una modifica non e\' una creazione')
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔ i tre campi mancanti non toccano il disco, nemmeno per leggerlo', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, 'f.txt'), 'intatto\n')
+            const esito = await giro(cartella, [
+                chiamata({ old_string: 'a', new_string: 'b' }),
+                chiamata({ percorso: 'f.txt', new_string: 'b' }, 'call_2'),
+                chiamata({ percorso: 'f.txt', old_string: 'intatto' }, 'call_3'),
+            ])
+            const detti = dettoAlModello(esito)
+            assert.match(detti[0], /no file path was given/)
+            assert.match(detti[1], /no text to replace/)
+            assert.match(detti[2], /no replacement text/)
+            assert.equal(readFileSync(join(cartella, 'f.txt'), 'utf8'), 'intatto\n')
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔⛔⛔ IL PERMESSO: in sola lettura la modifica e\' negata e il file non cambia', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, 'f.txt'), 'originale\n')
+            const esito = await giro(cartella, { percorso: 'f.txt', old_string: 'originale', new_string: 'manomesso' },
+                { livelloAccesso: 'lettura' })
+            assert.match(dettoAlModello(esito)[0], /^REFUSED\./)
+            assert.match(dettoAlModello(esito)[0], /sola lettura/)
+            assert.equal(readFileSync(join(cartella, 'f.txt'), 'utf8'), 'originale\n')
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⭐⭐⭐ «scrittura nel workspace» AMMETTE la modifica — e RIFIUTA un percorso che esce dal workspace', async () => {
+        /*
+         * ⛔ La trappola trovata leggendo il cancello: `livello scrittura-area` elencava UN SOLO
+         *   attrezzo (`scrivi`). Senza questa riga il livello piu' usato dall'owner avrebbe avuto
+         *   un attrezzo di modifica offerto e sempre negato — peggio del non averlo.
+         */
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, 'f.txt'), 'dentro\n')
+            const dentro = await giro(cartella, { percorso: 'f.txt', old_string: 'dentro', new_string: 'cambiato' },
+                { livelloAccesso: 'scrittura-area' })
+            assert.match(dettoAlModello(dentro)[0], /^edited: f\.txt/)
+            assert.equal(readFileSync(join(cartella, 'f.txt'), 'utf8'), 'cambiato\n')
+
+            const fuori = join(cartella, '..', `po12-fuori-${Date.now()}.txt`)
+            writeFileSync(fuori, 'roba di fuori\n')
+            try {
+                const negato = await giro(cartella, { percorso: `../${fuori.split(/[\\/]/).pop()}`, old_string: 'roba', new_string: 'manomessa' },
+                    { livelloAccesso: 'scrittura-area' })
+                assert.match(dettoAlModello(negato)[0], /^REFUSED\./)
+                assert.equal(readFileSync(fuori, 'utf8'), 'roba di fuori\n', '⛔ il cancello del percorso vale anche per la modifica')
+            }
+            finally { rmSync(fuori, { force: true }) }
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔⛔ IL CANCELLO SEMANTICO morde anche qui: una funzione inventata non entra nel file', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            const prima = 'export const uno = 1\nexport const due = 2\n'
+            writeFileSync(join(cartella, 'uso.ts'), prima)
+            const esito = await giro(cartella, { percorso: 'uso.ts', old_string: 'export const due = 2', new_string: 'export const due = funzioneCheNonEsisteDavvero(2)' })
+            assert.equal(esito.premesseNegate, 1)
+            assert.equal(readFileSync(join(cartella, 'uso.ts'), 'utf8'), prima, '⛔ un rifiuto non lascia mezza modifica sul disco')
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⭐⭐ una modifica LEGITTIMA che usa un simbolo gia\' nel file passa il cancello semantico', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, 'ok.ts'), 'export const raddoppia = (n: number) => n * 2\nexport const x = 1\n')
+            const esito = await giro(cartella, { percorso: 'ok.ts', old_string: 'export const x = 1', new_string: 'export const x = raddoppia(2)' })
+            assert.equal(esito.premesseNegate, 0, '⛔ il cancello giudica il file INTERO, non il pezzo')
+            assert.match(readFileSync(join(cartella, 'ok.ts'), 'utf8'), /x = raddoppia\(2\)/)
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⭐⭐ la RICEVUTA c\'e\', dice `file_edit`, e il pannello Review riceve il file intero', async () => {
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, 'r.md'), 'prima\nseconda\n')
+            const ricevute = []
+            const scritture = []
+            await giro(cartella, { percorso: 'r.md', old_string: 'seconda', new_string: 'SECONDA' }, {
+                onGiro: (e) => { if (e.tipo === 'ricevuta') ricevute.push(e.ricevuta) },
+                onScrittura: (percorso, contenuto, esisteva, contenutoPrima) => scritture.push({ percorso, contenuto, esisteva, contenutoPrima }),
+            })
+            assert.equal(ricevute.length, 1)
+            assert.equal(ricevute[0].action, 'write')
+            assert.equal(ricevute[0].status, 'succeeded')
+            assert.equal(ricevute[0].risk, 'R1', 'stessa portata di `scrivi`: un file del workspace')
+            assert.equal(ricevute[0].postcondizione, 'retta', '⛔ la rilettura dal disco e\' un CANCELLO, non un\'eco')
+            assert.equal(ricevute[0].verified, true, '⛔ «verificato» dev\'essere un fatto controllato, non l\'eco di `disco.scrivi`')
+            assert.deepEqual(scritture, [{ percorso: 'r.md', contenuto: 'prima\nSECONDA\n', esisteva: true, contenutoPrima: 'prima\nseconda\n' }])
+        }
+        finally { pulisci(cartella) }
+    })
+
+    /* ────────────────────── l'inventario: il metro del banco non si muove ─────────────────── */
+
+    it('⛔⛔⛔ LA REGRESSIONE CHE TEMO — la lista BASE resta i sette nomi di sempre, e senza `strumentiEstesi` il modello non vede `file_edit`', async () => {
+        assert.deepEqual(
+            ATTREZZI_OPENAI.map((a) => a.function.name),
+            ['elenca', 'cerca', 'leggi', 'scrivi', 'prova', 'shell', 'naviga'],
+            '⛔ la lista base e\' il METRO del banco: un attrezzo nuovo non la allunga',
+        )
+        const cartella = cartellaDiProva()
+        try {
+            let corpo = null
+            await talosLavora({
+                cartella, task: TASK, modello: 'x', chiave: 'y',
+                fetchDiRete: async (_url, opzioni) => {
+                    corpo ??= JSON.parse(opzioni.body)
+                    return { ok: true, status: 200, json: async () => ({ choices: [{ message: FINE }] }), text: async () => '' }
+                },
+            })
+            assert.deepEqual(corpo.tools.map((t) => t.function.name), ['elenca', 'cerca', 'leggi', 'scrivi', 'prova', 'shell', 'naviga'])
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it('⛔ `file_edit` e\' una scrittura: il filtro del livello lo toglie dalla lista in lettura e in ricerca', () => {
+        assert.equal(attrezziNegatiDalLivello({ livelloAccesso: 'lettura' }).has('file_edit'), true)
+        assert.equal(attrezziNegatiDalLivello({ livelloAccesso: 'ricerca' }).has('file_edit'), true)
+        assert.equal(attrezziNegatiDalLivello({}).size, 0, '⛔ TALOS-BANCO non passa il livello: per lui non cambia niente')
+    })
+
+    it('⭐ lo SCHEMA nomina i quattro campi: «uno strumento che non nomina un campo, per il modello, non ce l\'ha»', () => {
+        const attrezzo = ATTREZZI_ESTESI_OPENAI.find((a) => a.function.name === 'file_edit')
+        assert.ok(attrezzo)
+        assert.deepEqual(Object.keys(attrezzo.function.parameters.properties).sort(), ['new_string', 'old_string', 'percorso', 'replace_all'])
+        assert.match(attrezzo.function.description, /must appear ONCE/)
+        assert.match(attrezzo.function.description, /instead of rewriting a whole file/)
+    })
+
+    /*
+     * ⛔⛔⛔ REVIEW PO-12 (13/09/2026) — LA GUARDIA CHE NON MORDEVA.
+     * `file_edit` era stato messo in `AZIONI_MUTANTI_PER_HOOK`, ma NESSUNA prova lo
+     * chiedeva: tolto di li', la suite restava interamente verde (misurato). Una riga che
+     * nessuna prova difende non e' una guardia, e' una buona intenzione — ed e' la riga da
+     * cui dipende il cancello dei FILE DI CONTROLLO del desktop (`session-registry.mjs`),
+     * che vive su `pre_tool_call`.
+     * ⇒ Qui si prova che un rifiuto sul `pre_tool_call` di una modifica la FERMA e che il
+     *   file resta quello di prima; e nel verso contrario, che senza quel rifiuto la
+     *   stessa identica chiamata il file lo cambia davvero.
+     */
+    it("⛔⛔⛔ un pre_tool_call che rifiuta `file_edit` la FERMA, e il file resta byte per byte quello di prima", async () => {
+        const cartella = cartellaDiProva()
+        try {
+            const prima = "REGOLA ORIGINALE\n"
+            writeFileSync(join(cartella, "CLAUDE.md"), prima)
+            const visti = []
+            const esito = await giro(cartella, { percorso: "CLAUDE.md", old_string: "ORIGINALE", new_string: "MANOMESSA" }, {
+                hookFn: async (evento) => {
+                    if (evento.tipo === "pre_tool_call") visti.push(evento.azione)
+                    return evento.tipo === "pre_tool_call" && evento.azione === "file_edit"
+                        ? { consentito: false, motivo: "bloccato da un hook di prova." }
+                        : undefined
+                },
+            })
+            assert.ok(visti.includes("file_edit"), "⛔ il pre_tool_call deve VEDERE file_edit: se non lo vede, nessun cancello del desktop puo' fermarlo")
+            assert.match(dettoAlModello(esito)[0], /REFUSED/)
+            assert.equal(readFileSync(join(cartella, "CLAUDE.md"), "utf8"), prima, "⛔ un rifiuto dell'hook non lascia mezza modifica sul disco")
+        }
+        finally { pulisci(cartella) }
+    })
+
+    it("⭐⭐ AL CONTRARIO — senza quel rifiuto la stessa chiamata cambia il file: la prova sopra misura l'hook, non un guasto qualunque", async () => {
+        const cartella = cartellaDiProva()
+        try {
+            writeFileSync(join(cartella, "CLAUDE.md"), "REGOLA ORIGINALE\n")
+            await giro(cartella, { percorso: "CLAUDE.md", old_string: "ORIGINALE", new_string: "MANOMESSA" },
+                { hookFn: async () => ({ consentito: true }) })
+            assert.equal(readFileSync(join(cartella, "CLAUDE.md"), "utf8"), "REGOLA MANOMESSA\n")
+        }
+        finally { pulisci(cartella) }
+    })
+})

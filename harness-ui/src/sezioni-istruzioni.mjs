@@ -128,7 +128,8 @@ function percorsiToccati(messages, cartella, radice) {
     pendenti.delete(messaggio.tool_call_id);
     const chiamata = chiamate.get(messaggio.tool_call_id);
     const nome = chiamata?.function?.name;
-    if (!['leggi', 'scrivi', 'cerca', 'elenca'].includes(nome)) continue;
+    // ⭐ PO-12 (13/09/2026) — `file_edit` tocca un file per `percorso` esattamente come `scrivi`: senza questo nome le istruzioni di progetto della cartella toccata non si accendono su una MODIFICA, cioe' proprio sull'attrezzo con cui il modello lavora su codice che gia' esiste.
+    if (!['leggi', 'scrivi', 'file_edit', 'cerca', 'elenca'].includes(nome)) continue;
     let argomenti;
     try { argomenti = JSON.parse(chiamata.function.arguments); } catch { continue; }
     if (!argomenti || typeof argomenti !== 'object' || Array.isArray(argomenti)) continue;

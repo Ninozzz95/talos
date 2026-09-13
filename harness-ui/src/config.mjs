@@ -284,8 +284,27 @@ export function permessiRichiestaValido(raw) {
  * il secondo.
  */
 // ⭐ 29/8 — FASE H: `generate_image` aggiunto, quinto attrezzo con ricevuta nel kernel (talosHarness.mjs, ATTREZZI_CON_RICEVUTA) — stesso trattamento degli altri quattro.
+/*
+ * ⛔⛔⛔ REVIEW PO-12, 13/09/2026 — `file_edit` MANCAVA, ed era un buco travestito da voce assente.
+ *
+ * Nato oggi, l'attrezzo di modifica scrive su un file per percorso esattamente come `scrivi`, e il
+ * cancello lo VEDE: `verificaPermessoScrittura` cerca l'eccezione con `permessiPerAttrezzo[azione.tipo]`
+ * (talosHarness.mjs r. 5727) e per la modifica il tipo dell'azione e' gia' `file_edit` (r. 9218).
+ *
+ * ⇒ Il cancello avrebbe onorato un'eccezione su `file_edit`. L'unica cosa che lo impediva era QUESTO
+ * insieme: `permessiPerAttrezzoRichiestaValido` rifiuta ogni chiave che non sia qui dentro, quindi la
+ * regola non era nemmeno CONFIGURABILE. Due conseguenze misurate in review:
+ *   · chi aveva messo «chiedi» o «nega» su `scrivi` non aveva NESSUN controllo equivalente sulla
+ *     modifica — cioe' l'attrezzo con cui il modello lavora sul codice che gia' esiste;
+ *   · e chi provava a metterlo si vedeva rifiutare la richiesta come invalida.
+ *
+ * ⭐ Per la regola scritta qui sopra ci appartiene di diritto: le chiavi ammesse sono i nomi che
+ * CHIAMANO DAVVERO il cancello di scrittura, e questo lo chiama. Non e' un'aggiunta di comodo.
+ * ⛔ E il Capability hub legge da qui: senza questa riga mostrava «nessun cancello» su un attrezzo
+ * che scrive.
+ */
 /** ⭐ O-01 (04/9) — esportato: il Capability hub mostra su OGNI attrezzo se ha un cancello per-attrezzo, e deve leggerlo da QUI, mai da un secondo elenco. */
-export const ATTREZZI_CON_PERMESSO_PER_ATTREZZO = new Set(['scrivi', 'prova', 'shell', 'document_create', 'generate_image']);
+export const ATTREZZI_CON_PERMESSO_PER_ATTREZZO = new Set(['scrivi', 'file_edit', 'prova', 'shell', 'document_create', 'generate_image']);
 const VALORI_PERMESSO_PER_ATTREZZO = new Set(['sempre', 'chiedi', 'nega']);
 
 /** Stesso principio di reasoningRichiestaValido: pura, nessun throw. */

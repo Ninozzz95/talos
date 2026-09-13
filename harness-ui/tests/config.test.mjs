@@ -276,7 +276,7 @@ test('permessiRichiestaValido accetta le QUATTRO stringhe esatte e assente/null,
  * `leggi`) va rifiutato allo stesso modo di uno INVENTATO: entrambi
  * sarebbero un override che il gate ignora sempre in silenzio.
  */
-test('permessiPerAttrezzoRichiestaValido accetta assente/null e mappe valide sui 5 attrezzi reali', () => {
+test('permessiPerAttrezzoRichiestaValido accetta assente/null e mappe valide sui 6 attrezzi reali', () => {
   assert.equal(permessiPerAttrezzoRichiestaValido(undefined), true);
   assert.equal(permessiPerAttrezzoRichiestaValido(null), true);
   assert.equal(permessiPerAttrezzoRichiestaValido({ scrivi: 'nega' }), true);
@@ -284,14 +284,25 @@ test('permessiPerAttrezzoRichiestaValido accetta assente/null e mappe valide sui
   assert.equal(permessiPerAttrezzoRichiestaValido({ prova: 'sempre' }), true);
   assert.equal(permessiPerAttrezzoRichiestaValido({ document_create: 'nega' }), true);
   assert.equal(permessiPerAttrezzoRichiestaValido({ generate_image: 'chiedi' }), true, 'FASE H, 29/8 — quinto attrezzo con ricevuta');
+  /*
+   * ⛔⛔⛔ REVIEW PO-12, 13/09/2026 — il sesto, e mancava.
+   * L'attrezzo di modifica scrive per percorso come `scrivi`, e il cancello lo vede gia'
+   * (`verificaPermessoScrittura` cerca per `azione.tipo`, che per la modifica e' `file_edit`).
+   * Senza questa chiave la regola non era CONFIGURABILE: chi aveva «nega» su `scrivi` non aveva
+   * nessun controllo equivalente sulla modifica, e chi provava a metterlo veniva rifiutato qui.
+   * ⇒ Questa asserzione e' il cancello di quel buco: se qualcuno toglie `file_edit` dall'insieme,
+   * diventa rossa.
+   */
+  assert.equal(permessiPerAttrezzoRichiestaValido({ file_edit: 'chiedi' }), true, 'PO-12, 13/9 — la modifica e\' configurabile come la scrittura');
+  assert.equal(permessiPerAttrezzoRichiestaValido({ file_edit: 'nega' }), true, 'PO-12 — e si puo\' anche NEGARE, non solo chiedere');
   assert.equal(
-    permessiPerAttrezzoRichiestaValido({ scrivi: 'nega', shell: 'chiedi', prova: 'sempre', document_create: 'nega', generate_image: 'chiedi' }),
+    permessiPerAttrezzoRichiestaValido({ scrivi: 'nega', file_edit: 'nega', shell: 'chiedi', prova: 'sempre', document_create: 'nega', generate_image: 'chiedi' }),
     true,
-    'tutti e 5 insieme restano validi',
+    'tutti e 6 insieme restano validi',
   );
 });
 
-test('⛔ AL CONTRARIO — permessiPerAttrezzoRichiestaValido rifiuta nomi attrezzo fuori dai 5 reali (inventati O reali-ma-fuori-gate)', () => {
+test('⛔ AL CONTRARIO — permessiPerAttrezzoRichiestaValido rifiuta nomi attrezzo fuori dai 6 reali (inventati O reali-ma-fuori-gate)', () => {
   assert.equal(permessiPerAttrezzoRichiestaValido({ strumento_inventato: 'nega' }), false, 'un nome inventato non deve mai passare');
   assert.equal(permessiPerAttrezzoRichiestaValido({ leggi: 'nega' }), false, 'leggi è un attrezzo REALE ma non passa mai dal gate: stesso rifiuto di un nome inventato');
   assert.equal(permessiPerAttrezzoRichiestaValido({ elenca: 'sempre' }), false);
