@@ -259,8 +259,16 @@ commit per area. La decisione su come sistemarla e' dell'owner.
 
 ### Residui dichiarati dai controllori, che restano aperti
 
-- ⛔ Circa **duecento prove dei cancelli** esistono e **nessuno script ne' passo di CI le fa
-  girare** sulla app: cancelli che ci sono e non girano mai.
+- ✅ ~~Circa **duecento prove dei cancelli** esistono e **nessuno script ne' passo di CI le fa
+  girare** sulla app: cancelli che ci sono e non girano mai.~~ → **MISURATO IL 13/09 SERA: le prove
+  dei cancelli GIRANO, il residuo era falso.** Lanciate davvero: **126 prove, 126 passate, 0 rosse**,
+  e `frontend/scripts/run-node-tests.mjs` legge `tests/` **ricorsivamente** filtrando `*.test.mjs`
+  — quindi `npm run test:unit` raccoglie tutte e nove le suite `cancello-*` insieme alle altre 124
+  (133 file in totale). Nessuno le aveva **lanciate per vedere**: la premessa veniva dal fatto che
+  non comparivano per nome in uno script, e un nome che manca non e' una prova che non girino.
+  ⭐ E cercando la conferma e' saltato fuori il buco **vero**, piu' piccolo, che quello grosso
+  copriva: dei tre controlli in `harness-ui/scripts/cancello/`, **`prima-del-commit` non e' nominato
+  da nessuna prova** (gli altri due sì). ⇒ Un residuo sbagliato aveva nascosto quello giusto.
 - La guardia sui percorsi della delega e' ora **piu' stretta** anche per casi legittimi, e nessuna
   prova lo copre.
 - Nessuno ha verificato che il **modello** legga il rifiuto e ritenti: la catena e' provata fino
