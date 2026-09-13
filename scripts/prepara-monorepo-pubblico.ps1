@@ -35,7 +35,10 @@ $script:gestiti = @('LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', '.gitattribut
 # rompe tre file di test al caricamento). Ogni altro segmento `dist` resta vietato.
 $script:ammessi = @('harness-ui/src/kernel/dist/kernelPerIlBanco.js')
 $script:vietati = '(^|/)(\.claude|\.agents|\.codex|scratchpad|AGENTS\.md|\.chat-images|mockup-originale|labs|benchmarks|node_modules|\.prove|\.staging|dist|test-results|test-results-context)(/|$)'
-$script:ricerca = 'aider|prime-agent|TALOS-BANCO|corsaCoding|sconto-fedelta|scorta-minima|tre harness|gli harness|sugli harness|banco di coding|corsaDiCoding|falsifica\.mjs'
+# 13/09, review: senza «tre/gli/sugli harness» — nel desktop «harness» e' il nome del prodotto
+# (harness-ui, sessioni dell'harness) e quelle tre forme fermavano 44 righe di commenti nostri
+# che parlano del prodotto, non della ricerca. Restano i nomi del banco e dei concorrenti.
+$script:ricerca = 'aider|prime-agent|TALOS-BANCO|corsaCoding|sconto-fedelta|scorta-minima|banco di coding|corsaDiCoding|falsifica\.mjs'
 
 function Scrivi([string]$Testo) { Write-Host $Testo }
 function Git([string]$Dove, [string[]]$Argomenti, [switch]$VuotoOK) {
@@ -107,7 +110,11 @@ function Spie([string]$Dove) {
     $blocchi = 0
     foreach ($s in @(
         @{ Id = 'SERIAL'; Regex = '\b2ea6573c\b' },
-        @{ Id = 'PERCORSO'; Regex = 'C:\\+Users\\+[A-Za-z]' },
+        # 13/09, review: si cerca il percorso DELL'OWNER, non la forma «C:\Users\qualcuno»:
+        # 19 file di test e fixture usano esempi (`C:\Users\esempio`) e la forma generica li
+        # fermava tutti — stessa lezione dell'email in rilascia.ps1 («cercare la forma prende
+        # le finte insieme alle vere, e chi legge impara a ignorarlo»). grep e' gia' -i.
+        @{ Id = 'PERCORSO'; Regex = 'C:\\+Users\\+Antonino' },
         @{ Id = 'EMAIL'; Regex = 'ninozz[0-9]*@' }
     )) {
         # -a include anche file classificati binari; -l evita di stampare i dati.
@@ -234,7 +241,15 @@ function Cancelli([string]$Dove, [string]$Base) {
     $errori = Spie $Dove
     $tree = Git $Dove @('write-tree'); $files = @(Leggi-Albero $Dove $tree); $tracciati = @{}
     foreach ($f in $files) { $tracciati[$f.Nome] = $true }
-    foreach ($f in $files | Where-Object { ($_.Nome -match $script:vietati -and $_.Nome -notin $script:ammessi) -or $_.Mode -eq '120000' }) {
+    # 13/09, review: i blob GIA' pubblici in origin/main (la mobile rilasciata, anche dopo la
+    # rinomina in mobile/: stesso blob) non si giudicano di nuovo qui — i cancelli di percorso e
+    # di parole valgono per cio' che ENTRA. Misurato: il primo giro bloccava
+    # mobile/android/app/src/main/assets/talos-harness-ui/kernel/dist/kernelPerIlBanco.js,
+    # pubblico da settimane. Le spie (serial, percorsi, email) restano su tutto l'albero.
+    $esistenti = @{}; $oidDi = @{}
+    foreach ($f in @(Leggi-Albero $Dove $Base)) { $esistenti[$f.Oid] = $true }
+    foreach ($f in $files) { $oidDi[$f.Nome] = $f.Oid }
+    foreach ($f in $files | Where-Object { -not $esistenti.ContainsKey($_.Oid) -and (($_.Nome -match $script:vietati -and $_.Nome -notin $script:ammessi) -or $_.Mode -eq '120000') }) {
         Scrivi "BLOCCO PERCORSI: $($f.Nome) (mode $($f.Mode))"; $errori++
     }
     Scrivi "PERCORSI: tutti i $($files.Count) elementi dell'indice della copia (ammessi esplicitamente: $($script:ammessi -join ', '))."
@@ -244,18 +259,29 @@ function Cancelli([string]$Dove, [string]$Base) {
     $porte = @((Git $Dove @('grep', '--cached', '-a', '-l', '-z', '4174', '--', 'harness-ui') -VuotoOK).Split([char]0, [StringSplitOptions]::RemoveEmptyEntries))
     $testPorta = @($porte | Where-Object { $_ -match '^harness-ui/(tests/|frontend/tests/)' })
     Scrivi "PORTA: 4174 citata in $($porte.Count) file di harness-ui ($($testPorta.Count) nei test), porta predefinita del prodotto: conteggio non bloccante."
-    $parole = @((Git $Dove @('grep', '--cached', '-a', '-l', '-z', '-i', '-E', $script:ricerca, '--') -VuotoOK).Split([char]0, [StringSplitOptions]::RemoveEmptyEntries) |
+    # 13/09, review: una parola che origin/main contiene GIA' non puo' «trapelare» — misurato:
+    # `TALOS-BANCO` sta in 13 file pubblici e `aider` in 6 (il kernel e i sorgenti harness-ui
+    # dentro gli asset dell'APK rilasciato). Quelle si contano e si dichiarano; bloccano solo le
+    # parole che il pubblico non ha mai visto. L'elenco si ricalcola a ogni giro sul Base vero.
+    $giaPubbliche = @(); $ancoraSegrete = @()
+    foreach ($parola in ($script:ricerca -split '\|')) {
+        $hit = Git $Dove @('grep', '-a', '-l', '-i', '-E', $parola, $Base, '--') -VuotoOK
+        if ($hit) { $giaPubbliche += $parola } else { $ancoraSegrete += $parola }
+    }
+    Scrivi "RICERCA: parole gia' in origin/main, non bloccanti: $(if ($giaPubbliche) { $giaPubbliche -join ', ' } else { 'nessuna' }); parole mai pubblicate, bloccanti: $($ancoraSegrete -join ', ')."
+    $regexRicerca = $ancoraSegrete -join '|'
+    if (-not $regexRicerca) { $regexRicerca = '(?!x)x' }
+    $parole = @((Git $Dove @('grep', '--cached', '-a', '-l', '-z', '-i', '-E', $regexRicerca, '--') -VuotoOK).Split([char]0, [StringSplitOptions]::RemoveEmptyEntries) |
         Where-Object { $_ -match '\.(ts|tsx|js|mjs|kt|java|md)$' -and
             ($_ -match '^(mobile/(src|tests|docs|android/app/src/main/java)/|harness-ui/(src|frontend/src|desktop|tests)/|context-engine/src/)' -or $_ -match '(^|/)(README|CHANGELOG)\.md$') -and
             $_ -notmatch '(^|/)(vendor|third_party|upstream|node_modules)/' })
+    $parole = @($parole | Where-Object { -not ($oidDi.ContainsKey($_) -and $esistenti.ContainsKey($oidDi[$_])) })
     foreach ($p in $parole) { Scrivi "BLOCCO RICERCA: $p"; $errori++ }
     Scrivi "RICERCA: file nostri mobile src/tests/docs/Java, README/CHANGELOG, desktop src/frontend/src/desktop/tests e context-engine/src: $($parole.Count) file."
     $owner = Git $Dove @('grep', '--cached', '-a', '-i', '-c', '-E', 'Antonino|Ninozzz95', '--') -VuotoOK
     $righeOwner = 0
     foreach ($r in ($owner -split "`n")) { if ($r -match ':(\d+)$') { $righeOwner += [int]$Matches[1] } }
     Scrivi "OWNER: $righeOwner righe con Antonino o Ninozzz95 nel tracciato completo, conteggio non bloccante."
-    $esistenti = @{}
-    foreach ($f in @(Leggi-Albero $Dove $Base)) { $esistenti[$f.Oid] = $true }
     foreach ($f in $files | Where-Object { $_.Byte -gt 5MB }) {
         if ($esistenti.ContainsKey($f.Oid)) { Scrivi "PESO ESISTENTE: $($f.Nome), $($f.Byte) byte (blob gia' in origin/main)." }
         else { Scrivi "BLOCCO PESO: $($f.Nome), $($f.Byte) byte, nuovo blob sopra 5 MiB."; $errori++ }

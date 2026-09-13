@@ -65,11 +65,12 @@ test('R05B: contratto completo sul clone locale pubblico', { skip: !existsSync(s
     assert.ok(cambi.length > 2000); assert.ok(cambi.every(x => x.startsWith('R100\t')), cambi.filter(x => !x.startsWith('R100\t')).join('\n'));
     assert.equal(git(copia, 'rev-parse', 'HEAD:mobile/README.md'), originaleReadme);
     assert.equal(git(copia, 'rev-list', '--count', 'origin/main..HEAD'), '1');
-    assert.equal(git(copia, 'diff', '--numstat', '-M100%', 'HEAD~1', 'HEAD').split('\n').filter(x => !x.startsWith('0\t0\t')).length, 0);
+    assert.equal(git(copia, 'diff', '--numstat', '-M100%', 'HEAD~1', 'HEAD').split('\n').filter(x => !x.startsWith('0\t0\t') && !x.startsWith('-\t-\t')).length, 0); // 13/09: per i binari (so, png) numstat scrive «-\t-», non «0\t0»
     const mod = readFileSync(join(copia, '.gitmodules'), 'utf8');
     assert.equal((mod.match(/path = mobile\/third_party\//g) ?? []).length, 3);
     assert.ok(git(copia, 'log', '--follow', '--format=%H', '--', 'mobile/README.md').split('\n').length > 1);
-    assert.ok(!git(copia, 'ls-files').split('\n').some(p => /(^|\/)(?:AGENTS.md|scratchpad|node_modules|dist|\.claude)(\/|$)/.test(p)));
+    // 13/09: la mobile gia' pubblica porta un suo `kernel/dist/` negli asset dell'APK; il controllo vale per cio' che esporta il desktop.
+    assert.ok(!git(copia, 'ls-files').split('\n').filter(p => !p.startsWith('mobile/')).some(p => /(^|\/)(?:AGENTS.md|scratchpad|node_modules|dist|\.claude)(\/|$)/.test(p) && p !== 'harness-ui/src/kernel/dist/kernelPerIlBanco.js'));
   });
   assert.ok(existsSync(join(copia, 'mobile/package.json')), 'migrazione iniziale fallita: interrompo i test dipendenti');
   await t.test('R05B-IDEMPOTENZA: secondo giro con desktop staged identico', () => {

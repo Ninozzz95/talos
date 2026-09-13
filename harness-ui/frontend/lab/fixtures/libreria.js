@@ -53,15 +53,15 @@ export const LIBRERIA=[
  */
 export const LIBRERIA_ANTEPRIMA = [
   { id: 'lib-md', nome: 'File di prova – Markdown.md', fileType: 'document', origine: 'generated', aggiornatoIl: '2026-09-11T09:20:00.000Z',
-    cartella: "C:\\Users\\Antonino\\Desktop", percorso: "C:\\Users\\Antonino\\Desktop\\.harness-ui-library\\lib-md\\contenuto",
+    cartella: "C:\\Users\\esempio\\Desktop", percorso: "C:\\Users\\esempio\\Desktop\\.harness-ui-library\\lib-md\\contenuto",
     creatoDa: { tipo: 'modello', modello: 'z-ai/glm-5.3-flash', provider: 'openrouter' },
     sessione: { id: 'c8e9b07b-1f2a-4c6d-9b10-55aa77cc1234', nome: 'Nota di rilascio 0.1.20' } },
   { id: 'lib-csv', nome: 'Consumi per sessione.csv', fileType: 'document', origine: 'generated', aggiornatoIl: '2026-09-11T08:05:00.000Z',
-    cartella: "C:\\Users\\Antonino\\Desktop", percorso: "C:\\Users\\Antonino\\Desktop\\.harness-ui-library\\lib-csv\\contenuto",
+    cartella: "C:\\Users\\esempio\\Desktop", percorso: "C:\\Users\\esempio\\Desktop\\.harness-ui-library\\lib-csv\\contenuto",
     creatoDa: { tipo: 'modello', modello: 'anthropic/claude-opus-5', provider: 'anthropic' },
     sessione: { id: 'efc9559d-7b31-4e02-8d44-90ab12cd5678', nome: 'Consumi di settembre' } },
   { id: 'lib-pdf', nome: 'Relazione trimestrale.pdf', fileType: 'document', origine: 'generated', aggiornatoIl: '2026-09-10T17:40:00.000Z',
-    cartella: "C:\\Users\\Antonino\\Desktop", percorso: "C:\\Users\\Antonino\\Desktop\\.harness-ui-library\\lib-pdf\\contenuto",
+    cartella: "C:\\Users\\esempio\\Desktop", percorso: "C:\\Users\\esempio\\Desktop\\.harness-ui-library\\lib-pdf\\contenuto",
     creatoDa: { tipo: 'modello', modello: null, provider: null }, sessione: null },
   { id: 'lib-docx', nome: 'Verbale della riunione.docx', fileType: 'document', origine: 'uploaded', aggiornatoIl: '2026-09-09T11:15:00.000Z',
     cartella: null, percorso: null, creatoDa: null, sessione: null },

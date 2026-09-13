@@ -5,7 +5,7 @@
  */
 export const INSPECTOR = Object.freeze({
   titolo: 'W1-02 registro processi',
-  contesto: { progetto: 'AVM-harness-desktop', cartella: 'C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop', branch: 'lane/harness-desktop', worktree: 'AVM-harness-desktop', nonSalvate: 2, repoAnnidati: ['harness-ui/frontend/artifacts/repo-prova'] },
+  contesto: { progetto: 'AVM-harness-desktop', cartella: 'C:\\Users\\esempio\\Desktop\\projects\\AVM-harness-desktop', branch: 'lane/harness-desktop', worktree: 'AVM-harness-desktop', nonSalvate: 2, repoAnnidati: ['harness-ui/frontend/artifacts/repo-prova'] },
   usage: { prompt_tokens: 38_400, completion_tokens: 2_800, cached_tokens: 30_000, giri: 7 },
   finestra: 200_000,
   ripartizione: { attrezzi: 7_500, istruzioni: 4_100, memoria: 1_800 },

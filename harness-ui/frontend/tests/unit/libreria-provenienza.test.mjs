@@ -52,8 +52,8 @@ const tuttiIDataset=(n,fuori=[])=>{if(n?.dataset?.azione)fuori.push(n.dataset.az
 
 const NUOVA={
  id:'lib-1',nome:'Relazione.md',fileType:'document',origine:'generated',aggiornatoIl:'2026-09-11T10:00:00.000Z',
- cartella:'C:\\Users\\Antonino\\Desktop',
- percorso:'C:\\Users\\Antonino\\Desktop\\.harness-ui-library\\lib-1\\contenuto',
+ cartella:'C:\\Users\\esempio\\Desktop',
+ percorso:'C:\\Users\\esempio\\Desktop\\.harness-ui-library\\lib-1\\contenuto',
  creatoDa:{tipo:'modello',modello:'z-ai/glm-5.3-flash',provider:'openrouter'},
  sessione:{id:'c8e9b07b-1111-2222-3333-444455556666',nome:'Relazione trimestrale'},
 };
@@ -61,7 +61,7 @@ const NUOVA={
 const VECCHIA={id:'lib-0',nome:'File di prova - Word.docx',fileType:'document',origine:'generated',aggiornatoIl:'2026-09-11T18:08:49.041Z'};
 
 test('BC-38 ultimaCartella: l’ultimo segmento, e una radice di disco si dice per intero',()=>{
- assert.equal(ultimaCartella('C:\\Users\\Antonino\\Desktop'),'Desktop');
+ assert.equal(ultimaCartella('C:\\Users\\esempio\\Desktop'),'Desktop');
  assert.equal(ultimaCartella('C:/progetti/talos/'),'talos');
  /* ⛔ AL CONTRARIO: la radice non ha un nome di cartella — «C:» da solo si leggerebbe come un errore. */
  assert.equal(ultimaCartella('C:\\'),'C:');

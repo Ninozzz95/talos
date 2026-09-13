@@ -61,7 +61,7 @@ test('JSON: le firme del grezzo, anche troncato', () => {
 test('JSON AL CONTRARIO: la prosa italiana con virgolette e due punti non è JSON', () => {
   assert.equal(sembraJson('Ha risposto: "sì", poi "no": tutto qui'), false, 'il falso positivo che ha cambiato la firma');
   assert.equal(sembraJson('Sessione «Piano di rilascio»: conclusa alle 14:32'), false);
-  assert.equal(sembraJson('Percorso: C:\\Users\\Antonino\\progetti'), false);
+  assert.equal(sembraJson('Percorso: C:\\Users\\esempio\\progetti'), false);
   assert.equal(sembraJson('La nullità dell\'atto e il numero di Nan'), false, '«null» e «nan» dentro una parola non sono valori crudi');
   assert.equal(sembraJson(''), false);
   assert.equal(sembraJson(null), false);
