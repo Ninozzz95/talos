@@ -171,9 +171,31 @@ test('BC49: deposito unico del banco resta byte per byte, anche senza adattatore
   assert.match(r.risposta, /^deposited:/);
 });
 
-test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni DICHIARATE qui sotto (deposito e i due attrezzi della Libreria)', () => {
+test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni DICHIARATE qui sotto (deposito, i due attrezzi della Libreria e l\'attrezzo di modifica)', () => {
   for (const [attrezzi, impronta] of [[ATTREZZI_OPENAI, '38d65a3f445bf470c5f79ace0b662ae1eaf619b22cbfabbe885676ee5c5bfd4b'], [ATTREZZI_ESTESI_OPENAI, 'eba3456fe9a1bcb97528f6790bf6019cf8a32193d491fac32cd8a431e87e661c']]) {
-    const copia = structuredClone(attrezzi);
+    /* ⛔ PO-12 (13/09/2026) — TERZA esenzione, e la piu' forte delle tre: l'attrezzo NUOVO
+     * (`file_edit`) si toglie INTERO dalla copia prima di misurare. Cosi' le due impronte qui
+     * sopra NON sono state ristampate — sono le stesse identiche di ieri, e il fatto che
+     * combacino ancora e' la prova misurata che dei 43 attrezzi precedenti non e' cambiato un
+     * byte: ne' un nome, ne' una descrizione, ne' un campo.
+     * ⛔ Prima di toglierlo si asserisce CHE COSA e': se un domani cambiassero i suoi campi o
+     *   diventasse obbligatorio `replace_all`, questa prova cade invece di tacere — che e'
+     *   esattamente il motivo per cui il cancello esiste.
+     * ⛔ E si asserisce che sia ESTESO e non BASE: la lista base e' il metro del banco (sette
+     *   nomi, ~505 token), e spostarlo li' dentro cambierebbe il preambolo di ogni campagna.
+     *   Anche questo e' un modo in cui il cancello puo' diventare rosso, ed e' voluto. */
+    const modifica = attrezzi.map((t) => t.function ?? t).find((f) => f.name === 'file_edit');
+    if (attrezzi === ATTREZZI_OPENAI) {
+      assert.equal(modifica, undefined, 'file_edit deve restare un attrezzo ESTESO: la lista base del banco non si allunga');
+    }
+    else {
+      assert.ok(modifica, 'file_edit e\' sparito dagli attrezzi estesi: il modello non ha piu\' un attrezzo di modifica');
+      const schemaModifica = modifica.parameters ?? modifica.input_schema;
+      assert.deepEqual(Object.keys(schemaModifica.properties).sort(), ['new_string', 'old_string', 'percorso', 'replace_all']);
+      assert.deepEqual([...schemaModifica.required].sort(), ['new_string', 'old_string', 'percorso']);
+      assert.equal(schemaModifica.required.includes('replace_all'), false, 'replace_all deve restare OPZIONALE: il default e\' il match unico');
+    }
+    const copia = structuredClone(attrezzi).filter((t) => (t.function ?? t).name !== 'file_edit');
     for (const t of copia) {
       const f = t.function ?? t;
       if (f.name === 'research_deposit') {

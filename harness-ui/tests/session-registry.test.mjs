@@ -1543,6 +1543,57 @@ test('⭐⭐ ...e un DINIEGO torna {consentito:false} con un motivo che nomina i
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
 });
 
+/*
+ * ⛔⛔⛔ REVIEW PO-12 (13/09/2026) — LA PORTA DI SERVIZIO.
+ *
+ * Le due prove qui sopra provavano il cancello dei file di controllo con UN nome scritto a
+ * mano: `azione: 'scrivi'`. Sono rimaste verdi il giorno in cui e' nato un SECONDO attrezzo
+ * capace di riscrivere un file per percorso — e infatti erano verdi mentre `file_edit`
+ * riscriveva `CLAUDE.md` senza card, in Full access (misurato con una sonda sul kernel vero:
+ * `scrivi` REFUSED e file intatto, `file_edit` "edited:" e file riscritto).
+ * ⇒ Una prova che nomina UN attrezzo misura UN attrezzo. Queste due lo chiedono all'INSIEME,
+ *   cosi' il prossimo attrezzo che scrive per percorso non puo' nascere gia' esente.
+ */
+test("⛔⛔⛔ PO-12 — file_edit NON e' una porta di servizio: anche una MODIFICA di un file di controllo chiede approvazione", async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+
+  const esitoPromessa = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'file_edit', argomenti: { percorso: 'CLAUDE.md' }, giro: 0 });
+  await Promise.resolve();
+
+  const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+  assert.ok(richiesta, "⛔ una MODIFICA di CLAUDE.md deve chiedere quanto una riscrittura: mezza regola riscritta e' una regola riscritta");
+  // ⛔ la card nomina l'attrezzo VERO: chiedere «scrivi» per una modifica e' chiedere il consenso per un'altra cosa
+  assert.deepEqual(richiesta.azione, { tipo: 'file_edit', percorso: 'CLAUDE.md', fileDiControllo: true });
+
+  registro.rispondiApprovazione(sessionId, richiesta.requestId, false);
+  const esito = await esitoPromessa;
+  assert.equal(esito.consentito, false, '⛔ negata, la modifica non passa: mai un bypass silenzioso');
+  assert.match(esito.motivo, /file di controllo/);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test("⭐⭐ AL CONTRARIO — chi NON scrive per percorso resta fuori dal cancello, e un file normale passa", async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  registro.avvia('task-vero', { permessiScelto: 'Full access' });
+
+  // una LETTURA di CLAUDE.md non e' una scrittura: il cancello non deve inventarsi una card
+  assert.deepEqual(await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'leggi', argomenti: { percorso: 'CLAUDE.md' }, giro: 0 }), { consentito: true });
+  // ...e una MODIFICA di un file qualunque del progetto non chiede niente
+  assert.deepEqual(await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'file_edit', argomenti: { percorso: 'src/prezzo.mjs' }, giro: 0 }), { consentito: true });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
 test('⭐⭐⭐ W1-13 — il cancello chiede ANCHE con permessiPerAttrezzo:{scrivi:\'sempre\'}: l\'override per-attrezzo non lo scavalca', async () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({

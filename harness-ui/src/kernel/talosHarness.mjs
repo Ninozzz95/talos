@@ -992,6 +992,143 @@ export function modalitaDiScrittura(argomenti) {
     return MODALITA_DI_SCRITTURA[String(grezza).trim().toLowerCase()] ?? null
 }
 
+/*
+ * ⛔⛔⛔ PO-12, 13/09/2026 — NON C'ERA NESSUN ATTREZZO DI MODIFICA, e la prova sta poche righe
+ * sopra, scritta da chi ha curato BC-11: «TALOS un attrezzo di modifica non ce l'ha — e' PO-12
+ * in coda, non questa riga», e `mode:"append"` e' «la meta' di quella funzione».
+ * Riaccertato NEL CODICE prima di curare (13/09): in tutto il kernel nessun `name:` contiene
+ * modifica/patch/replace/edit ⇒ per cambiare UNA riga il modello deve rimandare il file INTERO
+ * con `scrivi`. Su un file lungo e' esattamente la strada che genera i `_p2.html`.
+ *
+ * ⇒ La forma NON e' una mia idea: sono quattro implementazioni lette ALLA FONTE il 13/09/2026
+ *   (cloni a commit fissato in `%LOCALAPPDATA%\Temp\talos-competitor`, piu' la doc del
+ *   fornitore):
+ *   · Hermes v0.21, `tools/file_tools.py:2747-2789` (PATCH_SCHEMA) — `old_string` «Must be
+ *     unique in the file unless replace_all=true. Include surrounding context lines to ensure
+ *     uniqueness»; `new_string` «must differ from old_string. Pass empty string '' to delete the
+ *     matched text»; `replace_all` opzionale, default false.
+ *   · opencode, `packages/opencode/src/tool/edit.txt` + `edit.ts:76,687,728` — «oldString not
+ *     found in content», «Found multiple matches for oldString. Provide more surrounding context
+ *     to make the match unique», e il rifiuto di `old === new` («No changes to apply»).
+ *   · deepseek-harness, `packages/fs/tool-str-replace-editor/src/index.ts:300,307` — «No
+ *     replacement was performed, old_str `…` did not appear verbatim in <file>» e «Multiple
+ *     occurrences of old_str `…` in lines [1, 3]. Please ensure it is unique»: le RIGHE, non solo
+ *     quante — e' l'informazione con cui il modello sceglie quanto contesto aggiungere.
+ *   · Anthropic, «Text editor tool» (platform.claude.com, letto 13/09/2026): `old_str` «must
+ *     match exactly, including whitespace and indentation».
+ *
+ * ⛔ NIENTE corrispondenza fuzzy, al contrario di Hermes («9 strategies»): una sostituzione che
+ *   indovina cosa intendevi e' una scrittura sbagliata dichiarata riuscita — lo stesso danno che
+ *   `modalitaDiScrittura` qui sopra rifiuta di fare con un `mode` incomprensibile. Un testo che
+ *   non combacia NON viene corretto: viene RIFIUTATO, dicendo quale dei due guasti e' accaduto.
+ * ⛔ E la sostituzione si fa con `split`/`join`, MAI con `String.replace`: `$&`/`$1` dentro il
+ *   testo nuovo verrebbero espansi in silenzio ([[string-replace-mangia-i-dollari]], 02/09).
+ */
+
+/** Gli alias del testo da cercare (`old_string` Hermes/opencode, `old_str` deepseek/Anthropic). */
+export const ALIAS_TESTO_DA_SOSTITUIRE = Object.freeze(['old_string', 'old_str', 'oldString', 'vecchio'])
+
+/** Gli alias del testo che prende il suo posto. `''` = cancella il testo trovato (Hermes). */
+export const ALIAS_TESTO_NUOVO = Object.freeze(['new_string', 'new_str', 'newString', 'nuovo'])
+
+/**
+ * Il testo da cercare, comunque il modello l'abbia chiamato. `undefined` = il campo non c'e'.
+ * ⛔ Come `contenutoDiScrivi`, e per la stessa ragione: `''` va distinto da «assente». Qui pero'
+ *   `''` resta un ERRORE (non si cerca il vuoto) — lo dice `applicaSostituzione`, non questa.
+ */
+export function testoDaSostituire(argomenti) {
+    if (!argomenti || typeof argomenti !== 'object') return undefined
+    for (const nome of ALIAS_TESTO_DA_SOSTITUIRE) {
+        if (typeof argomenti[nome] === 'string') return argomenti[nome]
+    }
+    return undefined
+}
+
+/** Il testo sostitutivo, comunque il modello l'abbia chiamato. `''` e' legittimo: cancella. */
+export function testoSostitutivo(argomenti) {
+    if (!argomenti || typeof argomenti !== 'object') return undefined
+    for (const nome of ALIAS_TESTO_NUOVO) {
+        if (typeof argomenti[nome] === 'string') return argomenti[nome]
+    }
+    return undefined
+}
+
+/** `replace_all:true` (Hermes) e i modi in cui un modello lo scrive davvero. Default: false. */
+export function sostituzioneSuTutteRichiesta(argomenti) {
+    for (const nome of ['replace_all', 'replaceAll', 'tutte', 'all']) {
+        const valore = argomenti?.[nome]
+        if (valore === true) return true
+        if (typeof valore === 'string' && valore.trim().toLowerCase() === 'true') return true
+    }
+    return false
+}
+
+/** Le righe (1-based) dove ogni occorrenza COMINCIA — il numero che serve a scegliere contesto. */
+function righeDelleOccorrenze(contenuto, vecchio) {
+    const righe = []
+    let da = 0
+    for (;;) {
+        const dove = contenuto.indexOf(vecchio, da)
+        if (dove === -1) break
+        righe.push(contenuto.slice(0, dove).split('\n').length)
+        da = dove + vecchio.length
+    }
+    return righe
+}
+
+/**
+ * La sostituzione, PURA: nessun disco, nessun messaggio. Torna il file come sarebbe DOPO, oppure
+ * il motivo per cui non si tocca niente.
+ *
+ * `{ok:true, testo, occorrenze, righe}` · `{ok:false, motivo, occorrenze, righe}` con
+ * `motivo` in `'illeggibile' | 'vuoto' | 'identici' | 'assente' | 'ambigua'`.
+ *
+ * ⛔ `'ambigua'` e' un RIFIUTO, non una scelta della prima occorrenza: cambiare la riga sbagliata
+ *   e dichiararlo riuscito e' il danno peggiore possibile qui (opencode fa lo stesso,
+ *   `edit.ts:728`). Con `tutte:true` diventa legittimo, e allora si cambiano TUTTE.
+ */
+export function applicaSostituzione(contenuto, vecchio, nuovo, { tutte = false } = {}) {
+    if (typeof contenuto !== 'string') return { ok: false, motivo: 'illeggibile', occorrenze: 0, righe: [] }
+    if (typeof vecchio !== 'string' || typeof nuovo !== 'string') return { ok: false, motivo: 'illeggibile', occorrenze: 0, righe: [] }
+    if (vecchio === '') return { ok: false, motivo: 'vuoto', occorrenze: 0, righe: [] }
+    if (vecchio === nuovo) return { ok: false, motivo: 'identici', occorrenze: 0, righe: [] }
+    const pezzi = contenuto.split(vecchio)
+    const occorrenze = pezzi.length - 1
+    if (occorrenze === 0) return { ok: false, motivo: 'assente', occorrenze: 0, righe: [] }
+    const righe = righeDelleOccorrenze(contenuto, vecchio)
+    if (occorrenze > 1 && !tutte) return { ok: false, motivo: 'ambigua', occorrenze, righe }
+    const testo = tutte ? pezzi.join(nuovo) : pezzi[0] + nuovo + pezzi.slice(1).join(vecchio)
+    return { ok: true, testo, occorrenze: tutte ? occorrenze : 1, righe }
+}
+
+/**
+ * ⛔ Ogni rifiuto porta la MOSSA SUCCESSIVA, non solo la diagnosi — stessa ragione misurata di
+ *   `messaggioArgomentiAssenti` (arXiv:2608.26130): un agente legge l'esito che ha davanti, non
+ *   va a cercare un'istruzione altrove. E i due guasti («non c'e'» / «ce ne sono tanti») restano
+ *   due frasi DIVERSE: dire «non trovato» a chi ha scritto un testo ambiguo lo manda a cercare un
+ *   errore che non ha fatto.
+ */
+export function messaggioSostituzioneRifiutata(percorso, esito) {
+    const testa = 'REFUSED. Nothing was changed'
+    if (esito.motivo === 'vuoto') {
+        return `${testa}: \`old_string\` is empty, so there is nothing to look for. `
+            + 'Give the exact text you want replaced. To create a file use `scrivi`; to add at the end use `scrivi` with mode:"append".'
+    }
+    if (esito.motivo === 'identici') {
+        return `${testa}: \`old_string\` and \`new_string\` are identical, so this edit would do nothing. `
+            + 'Send the text you actually want in its place.'
+    }
+    if (esito.motivo === 'assente') {
+        return `${testa}: \`old_string\` does not appear in ${percorso}, not even once. `
+            + 'It must match the file EXACTLY, whitespace and indentation included — read the file with `leggi` and copy the text from it instead of retyping it.'
+    }
+    if (esito.motivo === 'ambigua') {
+        return `${testa}: \`old_string\` appears ${esito.occorrenze} times in ${percorso} (lines ${esito.righe.join(', ')}), so it is ambiguous. `
+            + 'Add the surrounding lines until it is unique, or pass replace_all:true to change every occurrence.'
+    }
+    return `${testa}: ${percorso} could not be read as text.`
+}
+
 /**
  * ⛔⛔ BC-11 — QUELLO CHE IL MODELLO LEGGE QUANDO GLI ARGOMENTI NON SONO ARRIVATI.
  *
@@ -1017,7 +1154,26 @@ export function messaggioArgomentiAssenti(attrezzo, { troncati = false, campo = 
             + 'Send the call again. '
             + (attrezzo === 'scrivi'
                 ? 'If the content is long, send a first part now and add each next part with mode:"append" on the SAME `percorso` — never a second, numbered file.'
-                : 'Nothing was read and nothing changed.')
+                : attrezzo === 'file_edit'
+                    ? 'Send `percorso`, `old_string` and `new_string` again. Nothing was changed.'
+                    : 'Nothing was read and nothing changed.')
+    }
+    /*
+     * ⛔ PO-12 — i campi di `file_edit` hanno le LORO frasi, e non riusano quelle di `scrivi`:
+     *   «Nothing was read» sarebbe falso (qui non si legge, si cambia) e «manca contenuto»
+     *   nominerebbe un campo che questo attrezzo non ha.
+     */
+    if (campo === 'old_string') {
+        return 'Nothing was changed: no text to replace was given. `file_edit` needs `old_string`, '
+            + 'the exact text as it appears in the file (whitespace and indentation included), and `new_string`, what goes in its place.'
+    }
+    if (campo === 'new_string') {
+        return 'Nothing was changed: no replacement text was given. `file_edit` needs `new_string`, the text that takes the place of `old_string` '
+            + '(pass new_string:"" to delete the matched text on purpose).'
+    }
+    if (attrezzo === 'file_edit') {
+        return 'Nothing was changed: no file path was given. `file_edit` needs `percorso` (the path of the file, relative to the workspace, '
+            + 'e.g. "src/prezzo.mjs"), `old_string` (the exact text to replace) and `new_string` (what goes in its place).'
     }
     if (campo === 'contenuto') {
         return 'Nothing was written: no content was given. `scrivi` needs `contenuto`, the text to write '
@@ -2564,6 +2720,50 @@ const ATTREZZI_ESTESI = [
                 },
             },
             required: ['id', 'title', 'description', 'flow'],
+        },
+    },
+    /*
+     * ⭐⭐⭐ PO-12 (13/09/2026) — L'ATTREZZO DI MODIFICA. Vedi il blocco sopra
+     * `ALIAS_TESTO_DA_SOSTITUIRE` per le quattro fonti lette alla fonte e per il perche' del
+     * rifiuto secco su «non trovato» e «trovato piu' volte».
+     *
+     * ⛔⛔ PERCHE' QUI E NON FRA GLI ATTREZZI BASE, ed e' una scelta MISURATA, non una comodita':
+     *   la lista base e' il METRO del banco. Due prove fuori da questa corsia la fissano ai sette
+     *   nomi di sempre — `tests/ricerca-deposito-strutturato.test.mjs:430` («la lista del banco e'
+     *   la stessa di sempre: un lotto sulla ricerca non deve poter spostare il metro di misura») e
+     *   `tests/ricerca-permesso-e-consegna.test.mjs:206` (i 505 token di attrezzi su cui la parita'
+     *   e' costruita). Un ottavo attrezzo base cambierebbe il preambolo di OGNI campagna in corso,
+     *   e l'owner l'11/09 ha detto che il banco non si riavvia finche' non gira alla perfezione.
+     *   ⇒ Qui la lista base resta IDENTICA byte per byte, e la sua impronta non si tocca.
+     *   ⛔ Il prezzo, dichiarato: un attrezzo esteso arriva al modello solo se chi apre la sessione
+     *   lo nomina in `strumentiEstesi` (`session-registry.mjs`, fuori da questa corsia) — senza
+     *   quella riga TALOS continua a non avere un attrezzo di modifica nelle chat vere.
+     *
+     * ⛔ Il campo `percorso` si chiama come negli altri attrezzi di file (contratto di casa), i
+     *   campi del testo portano i nomi di Hermes/Anthropic perche' sono quelli su cui i modelli
+     *   sono addestrati; il gestore accetta comunque ENTRAMBE le grammatiche (`percorsoDiFile`,
+     *   `testoDaSostituire`) — «lo schema pubblicizza UNA forma, il gestore ne accetta piu' d'una»
+     *   (Hermes, `file_tools.py:2754`), cosi' non si paga un token in piu' a chiamata.
+     */
+    {
+        name: 'file_edit',
+        description: 'Changes PART of a file that already exists: finds `old_string` and puts `new_string` in its place, '
+            + 'leaving the rest of the file untouched. Use this instead of rewriting a whole file with `scrivi` when only some '
+            + 'lines change — send just those lines, not the file. '
+            + '`old_string` must match the file EXACTLY, whitespace and indentation included, and must appear ONCE: include the '
+            + 'surrounding lines until it is unique, or set replace_all:true to change every occurrence. '
+            + 'If it is not found, or found more than once, NOTHING is written and you are told which of the two happened — '
+            + 'read the file with `leggi` and copy the text from it rather than retyping it. '
+            + 'Pass new_string:"" to delete the matched text.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                percorso: { type: 'string', description: 'the file to change, relative to the workspace, e.g. "src/prezzo.mjs"' },
+                old_string: { type: 'string', description: 'the exact text to replace, copied from the file as it is' },
+                new_string: { type: 'string', description: 'the text that takes its place; "" deletes the matched text' },
+                replace_all: { type: 'boolean', description: 'replace every occurrence instead of requiring a unique match (default false)' },
+            },
+            required: ['percorso', 'old_string', 'new_string'],
         },
     },
 ]
@@ -4791,6 +4991,8 @@ export function verificaFirmaRicevuta(ricevuta, chiavePubblica) {
  */
 const AZIONI_MOBILE_PER_ATTREZZO = {
     scrivi: { action: 'write', requiredActions: ['write'] },
+    // ⭐ PO-12 (13/09/2026) — stessa azione di `scrivi`: e' una scrittura sul workspace. Essendo qui dentro, `attrezziNegatiDalLivello` lo toglie dalla lista sotto 'lettura' e 'ricerca', come tutte le altre scritture.
+    file_edit: { action: 'write', requiredActions: ['write'] },
     prova: { action: 'execute', requiredActions: ['execute'] },
     shell: { action: 'execute', requiredActions: ['execute', 'outbound', 'write'] },
     document_create: { action: 'write', requiredActions: ['write'] },
@@ -4927,6 +5129,12 @@ const AZIONI_MOBILE_PER_ATTREZZO = {
  */
 export const SICUREZZA_PER_ATTREZZO = {
     scrivi: { risk: 'R1', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    /*
+     * ⭐ PO-12 (13/09/2026) — `file_edit` ha ESATTAMENTE la sicurezza di `scrivi`, e non per
+     * analogia: tocca un file del workspace, reversibile, portata di un file solo. Cambia solo
+     * QUANTO del file riscrive — e «quanto» non e' un asse di questo catalogo.
+     */
+    file_edit: { risk: 'R1', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     prova: { risk: 'R1', readsPrivateData: false, readsUntrustedContent: false, canTransmit: false },
     shell: { risk: 'R2', readsPrivateData: true, readsUntrustedContent: true, canTransmit: true },
     document_create: { risk: 'R1', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
@@ -5599,8 +5807,18 @@ async function verificaPermessoScrittura(azione, { livelloAccesso, chiediApprova
         }
     }
     if (!haOverride && livelloAccesso === 'scrittura-area') {
-        if (azione.tipo !== 'scrivi') {
-            return { consentito: false, via: 'livello-scrittura-area', motivo: `la sessione è limitata alla scrittura nel workspace: "${azione.tipo}" resta negato (solo "scrivi" con un percorso verificabile è ammesso a questo livello).` }
+        /*
+         * ⛔⛔⛔ PO-12, 13/09/2026 — LA TRAPPOLA TROVATA LEGGENDO QUESTO CANCELLO, non provandolo.
+         * Questa riga elencava UN SOLO attrezzo (`scrivi`): un attrezzo di modifica appena nato
+         * sarebbe stato OFFERTO al livello piu' usato («scrittura nel workspace») e NEGATO ogni
+         * volta — peggio del non averlo, perche' il modello ci avrebbe speso un giro per scoprirlo.
+         * ⇒ La condizione non e' «si chiama scrivi»: e' «porta un percorso verificabile», e
+         *   `file_edit` lo porta esattamente come `scrivi` (stesso campo, stesso controllo qui
+         *   sotto sulla radice risolta). Provato nei due versi: dentro il workspace passa, un
+         *   `../` fuori resta negato.
+         */
+        if (azione.tipo !== 'scrivi' && azione.tipo !== 'file_edit') {
+            return { consentito: false, via: 'livello-scrittura-area', motivo: `la sessione è limitata alla scrittura nel workspace: "${azione.tipo}" resta negato (solo "scrivi" e "file_edit", che portano un percorso verificabile, sono ammessi a questo livello).` }
         }
         // ⛔ cartella assente non è un "vince tutto": senza una radice da
         // controllare, un percorso non verificabile è negato, non permesso.
@@ -5734,7 +5952,8 @@ const SOGLIA_SCRITTURE_SENZA_PROVA = 3
 // ⭐ FASE N, quarto sistema (30/8) — le 3 mutazioni Notes si aggiungono, stesso trattamento.
 // ⭐ FASE N, quinto sistema (30/8) — le 4 mutazioni Tasks si aggiungono, stesso trattamento.
 // ⭐ FASE N, sesto sistema (30/8) — le 3 mutazioni Memory si aggiungono, stesso trattamento.
-const AZIONI_MUTANTI_PER_HOOK = ['scrivi', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'research_deposit', 'tool_create']
+// ⭐ PO-12 (13/09/2026) — `file_edit` muta un file quanto `scrivi`: un hook che puo' bloccare l'una deve poter bloccare l'altra, altrimenti la modifica mirata sarebbe la porta di servizio della scrittura.
+const AZIONI_MUTANTI_PER_HOOK = ['scrivi', 'file_edit', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'research_deposit', 'tool_create']
 
 /*
  * ⭐⭐⭐ 29/8 — un asse DIVERSO da `AZIONI_MUTANTI_PER_HOOK` qui sopra, non lo
@@ -5750,7 +5969,8 @@ const AZIONI_MUTANTI_PER_HOOK = ['scrivi', 'shell', 'document_create', 'generate
 // ⭐ FASE N, quarto sistema (30/8) — le 3 mutazioni Notes si aggiungono.
 // ⭐ FASE N, quinto sistema (30/8) — le 4 mutazioni Tasks si aggiungono.
 // ⭐ FASE N, sesto sistema (30/8) — le 3 mutazioni Memory si aggiungono.
-const ATTREZZI_CON_RICEVUTA = ['scrivi', 'prova', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'research_deposit', 'tool_create']
+// ⭐ PO-12 (13/09/2026) — `file_edit` emette ricevuta nel suo percorso normale: sta qui perche' il catch del dispatch sappia costruirne una di 'failed' se il disco esplode a meta'.
+const ATTREZZI_CON_RICEVUTA = ['scrivi', 'file_edit', 'prova', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'research_deposit', 'tool_create']
 
 /*
  * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge, "fetta onesta"
@@ -7349,6 +7569,132 @@ export async function talosLavora({
                     }
                     }
                 }
+                else if (nome === 'file_edit') {
+                    /*
+                     * ⭐⭐⭐ PO-12, 13/09/2026 — LA MODIFICA MIRATA. Stessa catena di `scrivi` sopra,
+                     * nello stesso ordine e per le stesse ragioni: argomenti → lettura → permesso →
+                     * cancello semantico → disco → rilettura → ricevuta.
+                     *
+                     * ⛔ I cancelli sugli ARGOMENTI e sulla SOSTITUZIONE stanno PRIMA del permesso, e
+                     *   non emettono ricevuta: e' la stessa scelta gia' presa per i tre rami monchi di
+                     *   `scrivi` — nessun permesso e' stato chiesto e niente e' stato tentato sul
+                     *   disco, quindi una ricevuta sarebbe il record di un'operazione che non c'e'
+                     *   stata. ⛔ E non si disturba la persona con una domanda di approvazione per una
+                     *   modifica che non puo' comunque applicarsi.
+                     *
+                     * ⛔ Il permesso e il cancello semantico vedono il file COME SARA', non il pezzo:
+                     *   e' l'identica ragione gia' scritta per `mode:"append"` — un cancello che
+                     *   giudicasse il solo frammento respingerebbe ogni simbolo definito altrove nel
+                     *   file, cioe' proprio l'uso per cui questo attrezzo esiste.
+                     * ⛔ Sul disco va il file INTERO ricomposto (`disco.scrivi` senza modalita'): la
+                     *   sostituzione e' avvenuta in memoria, e questa e' una riscrittura piena — la
+                     *   postcondizione puo' quindi chiedere l'uguaglianza stretta, la piu' severa
+                     *   delle due forme.
+                     */
+                    const percorso = percorsoDiFile(argomenti)
+                    const vecchio = testoDaSostituire(argomenti)
+                    const nuovo = testoSostitutivo(argomenti)
+                    const troncati = argomentiTroncati.has(c.id)
+                    if (percorso === '') {
+                        esito = messaggioArgomentiAssenti('file_edit', { troncati })
+                    }
+                    else if (vecchio === undefined) {
+                        esito = messaggioArgomentiAssenti('file_edit', { troncati, campo: 'old_string' })
+                    }
+                    else if (nuovo === undefined) {
+                        esito = messaggioArgomentiAssenti('file_edit', { troncati, campo: 'new_string' })
+                    }
+                    else {
+                        const contenutoPrima = await disco.leggi(percorso).then((t) => t, () => null)
+                        if (contenutoPrima === null) {
+                            /*
+                             * ⛔ «Non esiste» e' un guasto DIVERSO da «il testo non c'e'», e si dice
+                             *   diverso: mandare a rileggere un file che non esiste brucerebbe un giro.
+                             */
+                            esito = `REFUSED. Nothing was changed: ${percorso} does not exist, or it cannot be read as text. `
+                                + 'Check the path with `elenca` or `cerca`; to create a new file use `scrivi`.'
+                        }
+                        else {
+                            const sostituzione = applicaSostituzione(contenutoPrima, vecchio, nuovo, { tutte: sostituzioneSuTutteRichiesta(argomenti) })
+                            if (!sostituzione.ok) {
+                                esito = messaggioSostituzioneRifiutata(percorso, sostituzione)
+                            }
+                            else {
+                                const permesso = await verificaPermessoScrittura(
+                                    {
+                                        tipo: 'file_edit', percorso,
+                                        contenutoPrima,
+                                        contenutoProposto: sostituzione.testo,
+                                    },
+                                    { livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
+                                )
+                                esitoPermessoPerRicevuta = permesso
+                                let contenutoRealmenteScritto = null
+                                let premessaFuAssente = false
+                                let postcondizioneModifica = 'nessuna'
+                                let erroreModifica = null
+                                if (!permesso.consentito) {
+                                    esito = `REFUSED. ${permesso.motivo} Nothing was changed.`
+                                }
+                                else {
+                                    const premessa = await premessaDellaScrittura(cartella, percorso, sostituzione.testo)
+                                    if (premessa.stato === 'assente') {
+                                        premesseNegate++
+                                        premessaFuAssente = true
+                                        esito = `REFUSED. ${premessa.perche} Nothing was changed. `
+                                            + `Do not invent it: say plainly that it does not exist.`
+                                    }
+                                    else {
+                                        await disco.scrivi(percorso, sostituzione.testo)
+                                        const verdetto = await postcondizioneDiScrivi(disco, percorso, sostituzione.testo)
+                                        onScrittura?.(percorso, sostituzione.testo, premessa.esisteva, premessa.contenutoPrima)
+                                        contenutoRealmenteScritto = sostituzione.testo
+                                        scrittureSenzaProva++
+                                        postcondizioneModifica = verdetto.esito
+                                        if (verdetto.esito === 'smentita') {
+                                            erroreModifica = verdetto.perche
+                                            esito = `"edited: ${percorso}" was reported, but re-reading the file right after shows DIFFERENT content (${verdetto.perche}). `
+                                                + `Treat this as a FAILED edit: read the file directly before doing anything else with it.`
+                                        }
+                                        else if (verdetto.esito === 'ignota') {
+                                            erroreModifica = verdetto.perche
+                                            esito = `edited: ${percorso} (the verification re-read could not confirm it: ${verdetto.perche}. `
+                                                + `The edit may or may not have landed — read the current content before repeating this call.)`
+                                        }
+                                        else {
+                                            /*
+                                             * ⛔ L'esito dice QUANTE occorrenze sono cambiate e quanto e'
+                                             *   lungo il file ORA: gli evita di rileggerlo per scoprirlo
+                                             *   (stessa leva di Hermes, `file_tools.py:2729`), e con
+                                             *   replace_all e' l'unico numero con cui puo' accorgersi di
+                                             *   averne cambiate piu' di quante credeva.
+                                             */
+                                            esito = `edited: ${percorso} (${sostituzione.occorrenze} occurrence${sostituzione.occorrenze === 1 ? '' : 's'} replaced; `
+                                                + `the file is now ${sostituzione.testo.length} characters). The rest of the file is untouched.`
+                                            if (scrittureSenzaProva >= SOGLIA_SCRITTURE_SENZA_PROVA) {
+                                                esito += ` (⚠ ${scrittureSenzaProva} scritture senza chiamare "prova":`
+                                                    + ' i test potrebbero essere gia rossi.)'
+                                            }
+                                        }
+                                    }
+                                }
+                                ricevutaEmessa = true
+                                {
+                                    const ricevuta = creaRicevutaOperazione({
+                                        azione: { tipo: 'file_edit', percorso },
+                                        toolCallId: c.id, esitoPermesso: permesso, contenutoScritto: contenutoRealmenteScritto,
+                                        premessaAssente: premessaFuAssente,
+                                        postcondizione: postcondizioneModifica,
+                                        error: erroreModifica,
+                                        firma, catena,
+                                    })
+                                    if (ricevuta.status === 'succeeded') catena = avanzaCatena(catena, SICUREZZA_PER_ATTREZZO.file_edit)
+                                    onGiro?.({ giro, tipo: 'ricevuta', ricevuta })
+                                }
+                            }
+                        }
+                    }
+                }
                 else if (nome === 'prova') {
                     /*
                      * ⛔⛔⛔ 28/8, trovato in una review ingegneristica del ledger
@@ -8870,6 +9216,8 @@ export async function talosLavora({
                             // fallimento che dice `percorso: undefined` perche' il modello aveva
                             // scritto `path` nasconde proprio il caso che la ricevuta serve a spiegare.
                             azione: nome === 'scrivi' ? { tipo: 'scrivi', percorso: percorsoDiFile(argomenti) }
+                                // ⭐ PO-12 — stesso trattamento di `scrivi`: una ricevuta di fallimento che non nomina il file non spiega niente.
+                                : nome === 'file_edit' ? { tipo: 'file_edit', percorso: percorsoDiFile(argomenti) }
                                 : nome === 'document_create' ? { tipo: 'document_create' }
                                     : { tipo: nome, comando: comandoDiShell(argomenti) },
                             toolCallId: c.id, esitoPermesso: esitoPermessoPerRicevuta, contenutoScritto: null,

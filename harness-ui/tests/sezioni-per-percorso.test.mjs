@@ -19,7 +19,7 @@ const scambio = (nome, argomenti, risultato = 'contenuto', id = 'uno') => [
 ];
 const crea = (extra = {}) => creaIniettoreSezioni({ file, cartella, radice, ...extra });
 
-for (const [nome, args, risultato] of [['leggi', { percorso: 'src/a.mjs' }, 'dato'], ['scrivi', { path: 'src/a.mjs' }, 'scritto'], ['cerca', { nome: 'a' }, 'src/a.mjs'], ['elenca', { percorso: 'src' }, 'src/a.mjs']]) {
+for (const [nome, args, risultato] of [['leggi', { percorso: 'src/a.mjs' }, 'dato'], ['scrivi', { path: 'src/a.mjs' }, 'scritto'], ['file_edit', { percorso: 'src/a.mjs' }, 'edited: src/a.mjs (1 occurrence replaced)'], ['cerca', { nome: 'a' }, 'src/a.mjs'], ['elenca', { percorso: 'src' }, 'src/a.mjs']]) {
   test(`BC48-A-PATH-${nome}: due sezioni stesso glob, una volta sola, in coda e ordine del file`, () => {
     const inietta = crea();
     const messages = [{ role: 'system', content: 'Prefisso stabile.' }, ...scambio(nome, args, risultato)];

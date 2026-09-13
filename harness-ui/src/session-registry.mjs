@@ -1530,6 +1530,13 @@ export function createSessionRegistry({
      */
     'research_deposit',
     'tool_create',
+    /*
+     * ⭐⭐⭐ PO-12 (13/09/2026) — `file_edit`. Senza questo nome l'attrezzo
+     * esiste nel kernel, e' provato, ed e' invisibile: `ATTREZZI_ESTESI`
+     * dichiara, questa lista ACCENDE. La corsia PO-12 non e' consegnata
+     * finche' non e' qui.
+     */
+    'file_edit',
   ],
   ricercaWeb,
   // ⭐ 04/9, R-03 — se presente vince su `ricercaWeb`: letta a OGNI giro (come `chiaveFn`), così una fonte cambiata dalle Impostazioni vale dal giro successivo senza riavvio. Restituisce { ricercaWeb, richiediRicercaFn }.
@@ -2203,10 +2210,23 @@ export function createSessionRegistry({
    * attrezzo, indipendentemente da `livelloAccesso`/`permessiPerAttrezzo`
    * (vedi la doc di `AZIONI_MUTANTI_PER_HOOK` nel kernel) — un `pre_tool_call`
    * è l'UNICO punto che il desktop controlla per intero, prima che
-   * `verificaPermessoScrittura` veda la chiamata. Un rifiuto qui blocca
-   * SOLO 'scrivi' (l'unico attrezzo mutante con un `argomenti.percorso`
-   * verificabile — `shell`/`document_create` non lo hanno, vedi il
-   * resoconto W1-13: restano un buco dichiarato, non silenzioso).
+   * `verificaPermessoScrittura` veda la chiamata.
+   *
+   * ⛔⛔⛔ REVIEW PO-12, 13/09/2026 — QUESTA RIGA ERA UNA PORTA DI SERVIZIO.
+   * Fino a oggi diceva «blocca SOLO 'scrivi' (l'unico attrezzo mutante con
+   * un `argomenti.percorso` verificabile)»: era vero quando fu scritta, ed
+   * è diventato FALSO nel momento in cui `file_edit` è nato con lo stesso
+   * campo `percorso` e lo stesso potere di riscrivere un file. Misurato,
+   * non dedotto: `scrivi` su `CLAUDE.md` tornava REFUSED col file intatto,
+   * `file_edit` sullo stesso file rispondeva «edited:» e lo riscriveva —
+   * nessuna card di approvazione, in Full access.
+   * ⇒ Il cancello non si tiene per NOME di un attrezzo, ma per l'insieme
+   *   degli attrezzi mutanti che portano un `percorso` verificabile: chi
+   *   aggiunge il prossimo lo aggiunge QUI, e la prova qui sotto
+   *   («ogni attrezzo che scrive per percorso passa da questo cancello»)
+   *   diventa rossa se se ne dimentica.
+   * ⛔ Restano fuori `shell`/`document_create`, che un percorso non lo
+   *   hanno: buco dichiarato, non silenzioso (resoconto W1-13).
    *
    * ⛔ Fallisce chiuso, mai un bypass silenzioso: un percorso che
    * `ePercorsoDiControllo` non riesce a risolvere torna già `true` (sua
@@ -2222,9 +2242,18 @@ export function createSessionRegistry({
    * indipendente dalla policy scelta per il resto della sessione, non un
    * uso più aggressivo dello stesso.
    */
+  /**
+   * ⛔ Gli attrezzi che MUTANO un file indicandolo per percorso. `scrivi`
+   * riscrive tutto, `file_edit` (PO-12, 13/09) ne cambia un pezzo: per un
+   * file di controllo la differenza non esiste — una regola riscritta a
+   * meta' e' riscritta. Chi aggiunge un attrezzo con un `percorso` che
+   * muta lo aggiunge qui.
+   */
+  const ATTREZZI_CHE_SCRIVONO_PER_PERCORSO = Object.freeze(['scrivi', 'file_edit']);
+
   function costruisciCancelloFileDiControllo(voce) {
     return async (evento) => {
-      if (evento?.tipo !== 'pre_tool_call' || evento.azione !== 'scrivi') return { consentito: true };
+      if (evento?.tipo !== 'pre_tool_call' || !ATTREZZI_CHE_SCRIVONO_PER_PERCORSO.includes(evento.azione)) return { consentito: true };
       const percorso = evento.argomenti?.percorso;
       if (typeof percorso !== 'string' || percorso.length === 0) return { consentito: true };
       let controllo;
@@ -2253,7 +2282,8 @@ export function createSessionRegistry({
       }
       let approvato = false;
       try {
-        approvato = await richiediApprovazione(voce, { tipo: 'scrivi', percorso, fileDiControllo: true });
+        // ⛔ `evento.azione`, non 'scrivi' scritto a mano: una card che nomina l'attrezzo sbagliato chiede il consenso per un'altra cosa.
+        approvato = await richiediApprovazione(voce, { tipo: evento.azione, percorso, fileDiControllo: true });
       } catch {
         approvato = false; // un cancello che lancia non autorizza in silenzio — stessa disciplina di chiediApprovazioneFn/hookFn
       }
