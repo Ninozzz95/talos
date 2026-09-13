@@ -18373,7 +18373,7 @@ function accorciaArgomento(testo3, massimo) {
 function argomentoDelRagionamento(testo3, { massimo = 90 } = {}) {
   const grezzo = String(testo3 ?? "");
   if (!grezzo.trim()) return null;
-  const titoli = [...grezzo.matchAll(/\*\*([^*\n]{3,80})\*\*/g)];
+  const titoli = [...grezzo.matchAll(/^[ \t]*\*\*([^*\n]{3,80})\*\*[ \t]*$/gm)];
   if (titoli.length) {
     const titolo2 = pulisciArgomento(titoli[titoli.length - 1][1]);
     if (titolo2) return accorciaArgomento(titolo2, massimo);
@@ -18384,11 +18384,23 @@ function argomentoDelRagionamento(testo3, { massimo = 90 } = {}) {
   const frasi = grezzo.slice(0, fine).split(/(?<=[.!?])\s+|\n+/).map(pulisciArgomento).filter((frase) => frase.split(" ").filter(Boolean).length >= MINIMO_PAROLE_ARGOMENTO);
   return frasi.length ? accorciaArgomento(frasi[frasi.length - 1], massimo) : null;
 }
-var ETICHETTA_INTERRUTTORE_RAGIONAMENTO, MINIMO_PAROLE_ARGOMENTO;
+function permanenzaArgomentoMs(testo3) {
+  const parole = String(testo3 ?? "").split(/\s+/).filter(Boolean).length;
+  const lettura = parole / PAROLE_AL_SECONDO_LETTORE_VELOCE * 1e3;
+  return Math.min(PERMANENZA_MASSIMA_ARGOMENTO_MS, Math.round(PERMANENZA_MINIMA_ARGOMENTO_MS + lettura));
+}
+function argomentoPuoCambiare({ attuale = "", mostratoAlle = 0, adesso = 0 } = {}) {
+  if (!String(attuale ?? "").trim()) return true;
+  return adesso - mostratoAlle >= permanenzaArgomentoMs(attuale);
+}
+var ETICHETTA_INTERRUTTORE_RAGIONAMENTO, MINIMO_PAROLE_ARGOMENTO, PERMANENZA_MINIMA_ARGOMENTO_MS, PERMANENZA_MASSIMA_ARGOMENTO_MS, PAROLE_AL_SECONDO_LETTORE_VELOCE;
 var init_ragionamento = __esm({
   "src/components/ragionamento.js"() {
     ETICHETTA_INTERRUTTORE_RAGIONAMENTO = "Apri il ragionamento mentre scrive";
     MINIMO_PAROLE_ARGOMENTO = 3;
+    PERMANENZA_MINIMA_ARGOMENTO_MS = 2e3;
+    PERMANENZA_MASSIMA_ARGOMENTO_MS = 4e3;
+    PAROLE_AL_SECONDO_LETTORE_VELOCE = 5.91;
   }
 });
 
@@ -19436,6 +19448,10 @@ var init_app = __esm({
           browserErroriPagina: {},
           /** ⭐⭐⭐ 27/8, R1 — messageId(ragionamento) -> {summaryText, detail, grezzo}, la bolla collassabile che ospita il ragionamento in streaming (riusa la stessa forma di appendToolNote, non un componente nuovo). Il testo grezzo si accumula qui per lo stesso motivo di testoGrezzoMessaggi: renderizzaMarkdownSemplice lavora sul totale, non sul delta. */
           ragionamentoBubble: /* @__PURE__ */ new Map(),
+          inRigiocata: false,
+          // ⭐ 13/09 notte: vero fra l'apertura del flusso e `talos.fine-rigiocata`
+          ragionamentiInCorso: null,
+          // ⭐ 13/09 notte: { sessionId, inizi } — l'inizio vero dei ragionamenti aperti, dal registro
           /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
           sequenzeViste: /* @__PURE__ */ new Set(),
           /** ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il refresh" — vero SOLO fra l'appendUserFollowUp ottimista di resumeSession() e il RunStarted (seguito:true) che arriva davvero: consumato una volta, evita che handleRealEvent mostri lo stesso follow-up due volte dal vivo. Vedi il case RunStarted per il perché non è sempre così. */
@@ -26280,15 +26296,21 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             richiesta.ancora = false;
             let misura = null;
             let durate = null;
+            let inCorso = null;
+            let giroInCorsoDaMs = null;
             try {
               const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/metrics`);
               misura = dati?.cacheSessione ?? null;
               durate = dati?.ragionamentiMs ?? null;
+              inCorso = dati?.ragionamentiInCorsoDaMs ?? null;
+              giroInCorsoDaMs = Number.isFinite(dati?.primoToken?.inCorsoDaMs) ? dati.primoToken.inCorsoDaMs : null;
             } catch {
             }
             if (richiestaCacheSessione !== richiesta || state.realSession.id !== sessionId || state.realSession.generation !== generation) return;
             state.realSession.cacheSessione = misura;
             if (durate) applicaDurateRagionamento(sessionId, durate);
+            if (inCorso) applicaRagionamentiInCorso(sessionId, inCorso);
+            if (giroInCorsoDaMs !== null && runRealeAttivo()) giroAvviatoA = performance.now() - giroInCorsoDaMs;
             aggiornaInspectorDaStato();
           } while (richiesta.ancora);
         })().finally(() => {
@@ -26543,6 +26565,9 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const conversation = $2("#conversation");
         const ultimo = conversation?.lastElementChild;
         if (!ultimo?.classList.contains("talos-turn") || ultimo.dataset.turno !== "talos") return;
+        const messaggio = ultimo.querySelector(":scope > .talos-message");
+        const haGiaUnGiro = [...messaggio?.children || []].some((figlio) => !figlio.hidden && !figlio.matches(".talos-message__head, .talos-waiting"));
+        if (!haGiaUnGiro) return;
         const spine = ultimo.querySelector(".talos-turn-spine");
         impostaTonoUltimoTick(spine, null);
         const n = spine.querySelectorAll(".talos-turn-spine__n").length + Number(ultimo.dataset.spineBase || 1);
@@ -26992,12 +27017,20 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       function mostraRagionamento(voce) {
         chiudiBatchTool();
         voce.article.hidden = false;
-        const inCorso = voce.inizio !== null;
+        const inCorso = !voce.chiuso && (voce.inizio !== null || !state.realSession.deferHistoricalRendering && !state.realSession.inRigiocata);
         etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso }));
         if (inCorso) accendiRagionamentoVivo(voce);
         if (inCorso && state.showReasoning) {
           impostaAperturaRagionamento(voce.article, true);
           voce.apertaDaSola = true;
+        }
+      }
+      function accendiRagionamentiApertiDopoLaStoria() {
+        if (state.realSession.deferHistoricalRendering || state.realSession.chiusaDalServer) return;
+        for (const voce of state.realSession.ragionamentoBubble.values()) {
+          if (voce.vivo || voce.chiuso || voce.article.hidden) continue;
+          etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso: true }));
+          accendiRagionamentoVivo(voce);
         }
       }
       const INTERVALLO_ARGOMENTO_RAGIONAMENTO_MS = 300;
@@ -27010,19 +27043,19 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         const secondi = document.createElement("span");
         secondi.className = "talos-mono talos-measure";
         secondi.setAttribute("aria-hidden", "true");
-        secondi.textContent = formattaDurataRagionamento(0);
+        secondi.textContent = voce.inizio === null ? "" : formattaDurataRagionamento((adessoRagionamentoMs() - voce.inizio) / 1e3);
         const pallino = document.createElement("span");
         pallino.className = "talos-dot talos-dot--live";
         pallino.setAttribute("aria-hidden", "true");
         testa.append(argomento, secondi, pallino);
         voce.article.dataset.ragionamento = "vivo";
-        voce.vivo = { argomento, secondi, pallino, ultimoArgomentoAlle: 0, timer: null };
+        voce.vivo = { argomento, secondi, pallino, ultimoArgomentoAlle: 0, argomentoMostratoAlle: 0, timer: null };
         voce.vivo.timer = window.setInterval(() => {
           if (!voce.vivo || !voce.article.isConnected) {
             spegniRagionamentoVivo(voce);
             return;
           }
-          const testo3 = formattaDurataRagionamento((adessoRagionamentoMs() - voce.inizio) / 1e3);
+          const testo3 = voce.inizio === null ? "" : formattaDurataRagionamento((adessoRagionamentoMs() - voce.inizio) / 1e3);
           if (secondi.textContent !== testo3) secondi.textContent = testo3;
           aggiornaArgomentoRagionamento(voce);
         }, 1e3);
@@ -27033,9 +27066,13 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         if (!vivo) return;
         const adesso = adessoRagionamentoMs();
         if (!subito && adesso - vivo.ultimoArgomentoAlle < INTERVALLO_ARGOMENTO_RAGIONAMENTO_MS) return;
+        if (!argomentoPuoCambiare({ attuale: vivo.argomento.textContent, mostratoAlle: vivo.argomentoMostratoAlle, adesso })) return;
         vivo.ultimoArgomentoAlle = adesso;
-        const testo3 = argomentoDelRagionamento(voce.grezzo) ?? "";
-        if (vivo.argomento.textContent !== testo3) vivo.argomento.textContent = testo3;
+        const testo3 = argomentoDelRagionamento(voce.grezzo);
+        if (testo3 && vivo.argomento.textContent !== testo3) {
+          vivo.argomento.textContent = testo3;
+          vivo.argomentoMostratoAlle = adesso;
+        }
       }
       function spegniRagionamentoVivo(voce) {
         const vivo = voce.vivo;
@@ -27048,6 +27085,8 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         voce.vivo = null;
       }
       function chiudiRagionamento(voce) {
+        if (voce.chiuso) return;
+        voce.chiuso = true;
         spegniRagionamentoVivo(voce);
         const salvata = state.realSession.durateRagionamento?.sessionId === state.realSession.id ? state.realSession.durateRagionamento.durate?.[voce.article.dataset.ragionamentoId] : void 0;
         const secondi = voce.inizio !== null ? (adessoRagionamentoMs() - voce.inizio) / 1e3 : Number.isFinite(salvata) ? salvata / 1e3 : null;
@@ -27067,6 +27106,29 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           if (etichetta2 !== senzaDurata) continue;
           etichettaSchedaRagionamento(card, etichettaRagionamento({ inCorso: false, secondi: ms / 1e3 }));
         }
+      }
+      function inizioRagionamentoDaRegistrare(messageId) {
+        if (state.realSession.deferHistoricalRendering) return null;
+        if (!state.realSession.inRigiocata) return adessoRagionamentoMs();
+        const noti = state.realSession.ragionamentiInCorso;
+        const inizio = noti?.sessionId === state.realSession.id ? noti.inizi.get(messageId) : void 0;
+        return Number.isFinite(inizio) ? inizio : null;
+      }
+      function applicaRagionamentiInCorso(sessionId, trascorsi) {
+        if (!trascorsi || typeof trascorsi !== "object") return;
+        const adesso = adessoRagionamentoMs();
+        const inizi = /* @__PURE__ */ new Map();
+        for (const [messageId, ms] of Object.entries(trascorsi)) if (Number.isFinite(ms) && ms >= 0) inizi.set(messageId, adesso - ms);
+        state.realSession.ragionamentiInCorso = { sessionId, inizi };
+        if (state.realSession.id !== sessionId) return;
+        for (const [messageId, voce] of state.realSession.ragionamentoBubble) {
+          if (voce.inizio !== null || !inizi.has(messageId)) continue;
+          voce.inizio = inizi.get(messageId);
+          if (voce.vivo) voce.vivo.secondi.textContent = formattaDurataRagionamento((adesso - voce.inizio) / 1e3);
+        }
+      }
+      function concludiRagionamentiPassatiOltre() {
+        for (const voce of state.realSession.ragionamentoBubble.values()) if (!voce.chiuso) chiudiRagionamento(voce);
       }
       function chiudiRagionamentiInCorso() {
         for (const voce of state.realSession.ragionamentoBubble.values()) chiudiRagionamento(voce);
@@ -30170,6 +30232,11 @@ ${testo3}` : testo3;
       }
       function handleRealEvent(evento, generation) {
         if (generation !== state.realSession.generation) return;
+        if (evento.type === "CUSTOM" && evento.name === "talos.fine-rigiocata") {
+          state.realSession.inRigiocata = false;
+          accendiRagionamentiApertiDopoLaStoria();
+          return;
+        }
         if (evento.type === "CUSTOM" && evento.name === "talos.context") {
           const value = evento.value;
           if (value?.schema !== "talos.context.event.v1" || value.sessionId !== state.realSession.id) return;
@@ -30253,7 +30320,6 @@ ${testo3}` : testo3;
             svuotaSuggerimentoComposer();
             syncRunComposerState();
             state.realSession.runCount = (state.realSession.runCount || 0) + 1;
-            segnaGiroNellaSpine();
             segnaTappaLatenza("runStarted");
             if (!state.realSession.taskBubbleMostrata && evento.input) {
               appendRealTaskStart(evento.input, evento.contesto);
@@ -30268,6 +30334,7 @@ ${testo3}` : testo3;
                 appendUserFollowUp(evento.input.consegna, evento.contesto, evento.input.immagini);
               }
             }
+            segnaGiroNellaSpine();
             if (!state.realSession.chiusaDalServer) mostraAttesaRisposta();
             if (evento.contesto) {
               aggiornaPannelloAmbiente(evento.contesto);
@@ -30277,6 +30344,7 @@ ${testo3}` : testo3;
             break;
           }
           case "TextMessageContent": {
+            concludiRagionamentiPassatiOltre();
             logStreaming("delta", { messageId: evento.messageId, len: typeof evento.delta === "string" ? evento.delta.length : 0 });
             segnaTappaLatenza("primoDelta");
             chiudiBatchTool();
@@ -30331,7 +30399,7 @@ ${testo3}` : testo3;
               ...bubble,
               grezzo: "",
               renderStato: { prefisso: null, nodiCoda: [] },
-              inizio: state.realSession.deferHistoricalRendering ? null : adessoRagionamentoMs(),
+              inizio: inizioRagionamentoDaRegistrare(evento.messageId),
               apertaDaSola: false
             });
             break;
@@ -30353,12 +30421,14 @@ ${testo3}` : testo3;
             if (voce && state.realSession.deferHistoricalRendering) {
               renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
             }
+            const eraAperto = Boolean(voce && !voce.chiuso);
             if (voce) chiudiRagionamento(voce);
             state.realSession.ragionamentoBubble.delete(evento.messageId);
-            if (!state.realSession.chiusaDalServer) mostraAttesaRisposta("preparing");
+            if (eraAperto && !state.realSession.chiusaDalServer) mostraAttesaRisposta("preparing");
             break;
           }
           case "ToolCallStart": {
+            concludiRagionamentiPassatiOltre();
             nascondiAttesaRisposta();
             if (evento.toolCallName === "delega_sottotask") void caricaFigliSessione();
             const batch = apriBatchSeServe();
@@ -30692,8 +30762,12 @@ ${testo3}` : testo3;
         syncRunComposerState();
         const demoBadgeChat = $$(".demo-surface-badge", $2(".chat-view")).find((badge5) => badge5.closest("[data-demo-surface]")?.dataset.demoSurface === "chat");
         if (demoBadgeChat) demoBadgeChat.hidden = true;
+        state.realSession.inRigiocata = true;
         const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
         segnaTappaLatenza("sseCollegato");
+        source.onopen = () => {
+          if (generation === state.realSession.generation) state.realSession.inRigiocata = true;
+        };
         state.realSession.eventSource = source;
         source.onmessage = (message) => {
           sorveglianza?.segnalaEventoVivo();

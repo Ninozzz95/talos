@@ -24,7 +24,13 @@ for (const modo of ['dark', 'light']) {
         localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' }));
         localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode } }));
       }, modo);
-      await page.route('**/api/v1/sessions/ragionamento-*/events', (route) => route.fulfill({ contentType: 'text/event-stream', body: '' }));
+      /*
+       * ⛔⛔ 13/09 notte — il flusso finto dice quello che dice il server vero a una sessione senza storia: il confine
+       *   `talos.fine-rigiocata` e basta. Senza, la chat resterebbe «nella storia» e non cronometrerebbe niente (è la
+       *   cura del GIRO VERO: vedi `handleRealEvent`). `retry` lungo: un flusso finito si riaprirebbe da solo, e ogni
+       *   riapertura rimette la chat nella storia.
+       */
+      await page.route('**/api/v1/sessions/ragionamento-*/events', (route) => route.fulfill({ contentType: 'text/event-stream', body: CONFINE_SSE }));
       await page.goto('/');
       await page.waitForFunction(() => window.__talosHarnessUiRuntime);
       await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
@@ -34,6 +40,7 @@ for (const modo of ['dark', 'light']) {
       await page.evaluate((id) => {
         window.__talosHarnessUiRuntime.passaASessione(`ragionamento-${id}`, 'workspace', 'Prova del ragionamento', 'z-ai/glm-5.3-flash', { conclusa: false, modello: 'z-ai/glm-5.3-flash' });
       }, id);
+      await page.waitForFunction(() => window.__talosHarnessUiRuntime.realSessionState.inRigiocata === false);
     }
     async function eventi(page, lista) {
       await page.evaluate((lista) => {
@@ -206,5 +213,136 @@ for (const modo of ['dark', 'light']) {
         await page.screenshot({ path: testInfo.outputPath(`6-sessione-riaperta-${Object.keys(durate).length ? 'con' : 'senza'}-durata-${modo}.png`) });
       });
     }
+
+    /*
+     * ⛔⛔ 13/09 notte — LA SESSIONE VIVA RIAPERTA. Trovato col GIRO VERO (glm-5.3-flash, banco 5471): ricaricata la
+     *   pagina a metà giro, la chat trattava la storia come diretta. Un ragionamento di 8 s rigiocato in pochi
+     *   millisecondi diceva «Ha ragionato poco»; quello aperto da tredici minuti diceva «35 s»; e con un argomento lungo
+     *   i secondi andavano a capo. Le prove di stasera avevano una sessione conclusa (differita) o una diretta pura:
+     *   la sessione viva riaperta non c'era.
+     * Qui il flusso finto NON manda il confine da solo: lo manda la prova, dopo la storia, com'è l'ordine del server.
+     */
+    async function riapriViva(page, sessione, metriche) {
+      await page.route(`**/api/v1/sessions/${sessione}/metrics`, (route) => route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, data: { registrato: true, cacheSessione: null, ...metriche }, meta: { schema: 'talos.harness-ui.api.v1' } }),
+      }));
+      await page.route(`**/api/v1/sessions/${sessione}/events`, (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
+      await page.evaluate((id) => {
+        window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'Sessione viva riaperta', 'z-ai/glm-5.3-flash', { conclusa: false, modello: 'z-ai/glm-5.3-flash' });
+      }, sessione);
+      await page.waitForFunction(() => window.__talosHarnessUiRuntime.realSessionState.inRigiocata === true);
+    }
+    const confine = { type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null };
+    const fraseLunga = 'Now check four digit numbers one by one and verify that each sum of fourth powers matches the number itself exactly. ';
+
+    test(`RAGIONAMENTO-SCHERMO-07 — riaperta a metà ragionamento: il contatore riparte dall'inizio VERO, e non va a capo (${modo})`, async ({ page }, testInfo) => {
+      const sessione = `ragionamento-viva-aperta-${modo}`;
+      await riapriViva(page, sessione, { ragionamentiMs: {}, ragionamentiInCorsoDaMs: { r1: 754_000 } });
+      await eventi(page, [
+        avvio,
+        { type: 'ReasoningMessageStart', messageId: 'r1', _sequenza: 2 },
+        { type: 'ReasoningMessageContent', messageId: 'r1', delta: fraseLunga, _sequenza: 3 },
+        confine,
+      ]);
+      const testa = page.locator('#conversation .real-reasoning-note > .talos-activity__head');
+      const secondi = testa.locator('.talos-measure');
+      /* ⛔ Trovato con una sonda: la riga aperta nella storia restava «Ha ragionato», con l'attesa «Ragionamento in corso…» sotto. */
+      await expect(testa, 'un ragionamento ancora aperto al confine sta ragionando adesso').toContainText('Sta ragionando');
+      await expect(testa.locator('.talos-dot--live')).toHaveCount(1);
+      await expect(page.locator('#conversation .talos-waiting'), 'la riga viva è l’indicatore: l’attesa sotto la smentirebbe').toHaveCount(0);
+      await expect(secondi, 'il contatore dice da quanto ragiona davvero, non da quando si è riaperta la pagina').toHaveText(/^12 min 3\d s$/);
+      await expect(testa.locator('.talos-ragionamento__argomento')).toHaveText(/…$/);
+      const forma = await secondi.evaluate((el) => ({ righe: el.getClientRects().length, alto: el.getBoundingClientRect().height, carattere: parseFloat(getComputedStyle(el).fontSize) }));
+      expect(forma.righe, `i secondi su più righe: ${JSON.stringify(forma)}`).toBe(1);
+      expect(forma.alto, `i secondi vanno a capo: ${JSON.stringify(forma)}`).toBeLessThan(forma.carattere * 2);
+      await page.screenshot({ path: testInfo.outputPath(`7-viva-riaperta-a-meta-${modo}.png`) });
+    });
+
+    for (const [caso, durate, attesa] of [
+      ['con la durata sul registro', { r0: 8_000 }, 'Ha ragionato per 8 s'],
+      ['AL CONTRARIO senza durata sul registro', {}, 'Ha ragionato'],
+    ]) {
+      test(`RAGIONAMENTO-SCHERMO-08 — riaperta: un ragionamento della STORIA non dice «poco», ${caso} (${modo})`, async ({ page }, testInfo) => {
+        const sessione = `ragionamento-viva-storia-${modo}-${Object.keys(durate).length}`;
+        await riapriViva(page, sessione, { ragionamentiMs: durate, ragionamentiInCorsoDaMs: {} });
+        await eventi(page, [
+          avvio,
+          { type: 'ReasoningMessageStart', messageId: 'r0', _sequenza: 2 },
+          { type: 'ReasoningMessageContent', messageId: 'r0', delta: pensiero, _sequenza: 3 },
+          { type: 'ReasoningMessageEnd', messageId: 'r0', _sequenza: 4 },
+          { type: 'TextMessageStart', messageId: 'm1', _sequenza: 5 },
+          { type: 'TextMessageContent', messageId: 'm1', delta: 'Ho trovato 40 file di test.', _sequenza: 6 },
+          { type: 'TextMessageEnd', messageId: 'm1', _sequenza: 7 },
+          confine,
+        ]);
+        const testa = page.locator('#conversation .real-reasoning-note > .talos-activity__head');
+        await expect(testa).toHaveText(new RegExp(`^\\s*${attesa}\\s*$`));
+        await expect(testa, '⛔ una durata di millisecondi misurata sulla rigiocata').not.toContainText('poco');
+        await page.screenshot({ path: testInfo.outputPath(`8-viva-riaperta-storia-${Object.keys(durate).length ? 'con' : 'senza'}-durata-${modo}.png`) });
+      });
+    }
+
+    test(`RAGIONAMENTO-SCHERMO-11 — quando il modello comincia a scrivere, la riga smette di ragionare (${modo})`, async ({ page }, testInfo) => {
+      /*
+       * ⛔⛔ 13/09 notte, l'ordine VERO dello store del giro: la fine del ragionamento arriva DOPO la risposta intera.
+       *   Nella foto della finestra riaperta: «Sta ragionando… 35 s» col pallino acceso, la risposta che scorre sotto e
+       *   la striscia «TALOS sta scrivendo · 36 s» — due indicatori vivi insieme.
+       */
+      await apri(page, `passa-oltre-${modo}`);
+      await eventi(page, [
+        avvio,
+        { type: 'ReasoningMessageStart', messageId: 'r1', _sequenza: 2 },
+        { type: 'ReasoningMessageContent', messageId: 'r1', delta: pensiero, _sequenza: 3 },
+        { type: 'TextMessageStart', messageId: 'm1', _sequenza: 4 },
+        { type: 'TextMessageContent', messageId: 'm1', delta: 'Ho trovato 40 file di test; quelli della chat sono 6.', _sequenza: 5 },
+      ]);
+      const testa = page.locator('#conversation .real-reasoning-note > .talos-activity__head');
+      await expect(testa, 'mentre scrive la risposta il modello non sta più ragionando').toHaveText(/^\s*Ha ragionato/);
+      await expect(testa.locator('.talos-dot--live, .talos-measure, .talos-ragionamento__argomento')).toHaveCount(0);
+      const etichettaAlTesto = await testa.textContent();
+      await page.screenshot({ path: testInfo.outputPath(`11-scrive-la-risposta-${modo}.png`) });
+
+      await page.waitForTimeout(1200);
+      await eventi(page, [
+        { type: 'TextMessageEnd', messageId: 'm1', _sequenza: 6 },
+        { type: 'ReasoningMessageEnd', messageId: 'r1', _sequenza: 7 },
+      ]);
+      await expect(testa, '⛔ la fine annunciata tardi non allunga la durata').toHaveText(etichettaAlTesto);
+      await expect(page.locator('#conversation .talos-waiting'), '⛔ nessuna «preparazione della risposta» sotto una risposta già scritta').toHaveCount(0);
+    });
+
+    /*
+     * ⛔ La prima versione di questa prova NON MORDEVA (rottura della cura, prova verde): il registro dava l'inizio vero
+     *   prima del primo testo, e con un inizio noto la riga si accende comunque. Il caso della cura è l'altro — inizio
+     *   ancora ignoto quando arriva il primo testo in diretta — e sta nella variante «senza inizio».
+     */
+    for (const [caso, inCorso, secondi] of [
+      ['senza inizio dal registro: si accende, e i secondi non si inventano', {}, /^$/],
+      ['con l’inizio dal registro: i secondi veri', { r2: 65_000 }, /^1 min [5-9] s$/],
+    ]) {
+      test(`RAGIONAMENTO-SCHERMO-10 — cominciato nella storia, primo testo dopo il confine, ${caso} (${modo})`, async ({ page }) => {
+        const sessione = `ragionamento-viva-muta-${modo}-${Object.keys(inCorso).length}`;
+        await riapriViva(page, sessione, { ragionamentiMs: {}, ragionamentiInCorsoDaMs: inCorso });
+        await eventi(page, [avvio, { type: 'ReasoningMessageStart', messageId: 'r2', _sequenza: 2 }, confine]);
+        await expect(page.locator('#conversation .real-reasoning-note'), 'senza testo non c’è riga').toBeHidden();
+        await eventi(page, [{ type: 'ReasoningMessageContent', messageId: 'r2', delta: pensiero, _sequenza: 3 }]);
+        const testa = page.locator('#conversation .real-reasoning-note > .talos-activity__head');
+        await expect(testa, 'un ragionamento vivo non dice «Ha ragionato» solo perché il suo inizio non si sa').toContainText('Sta ragionando');
+        await expect(testa.locator('.talos-dot--live')).toHaveCount(1);
+        await expect(testa.locator('.talos-measure')).toHaveText(secondi);
+      });
+    }
+
+    test(`RAGIONAMENTO-SCHERMO-09 AL CONTRARIO — dopo il confine si cronometra di nuovo dal vivo (${modo})`, async ({ page }) => {
+      const sessione = `ragionamento-viva-dopo-${modo}`;
+      await riapriViva(page, sessione, { ragionamentiMs: {}, ragionamentiInCorsoDaMs: {} });
+      await eventi(page, [avvio, confine, { type: 'ReasoningMessageStart', messageId: 'r9', _sequenza: 2 }, { type: 'ReasoningMessageContent', messageId: 'r9', delta: pensiero, _sequenza: 3 }]);
+      const secondi = page.locator('#conversation .real-reasoning-note > .talos-activity__head .talos-measure');
+      await expect(secondi, 'un ragionamento nato dopo il confine ha il suo orologio').toHaveText(/^\d+ s$/);
+    });
   });
 }
+
+/** Il flusso di una sessione senza storia, come lo manda il server: solo il confine, e niente riconnessioni. */
+const CONFINE_SSE = `retry: 3600000\ndata: ${JSON.stringify({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null })}\n\n`;

@@ -68,7 +68,7 @@ import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voc
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
 import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, tonoDelTick, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
-import { ETICHETTA_INTERRUTTORE_RAGIONAMENTO, argomentoDelRagionamento, etichettaRagionamento, formattaDurataRagionamento } from '../components/ragionamento.js'; // 13/09 sera: il ragionamento si comprime invece di sparire, e mentre ragiona dice su cosa
+import { ETICHETTA_INTERRUTTORE_RAGIONAMENTO, argomentoDelRagionamento, etichettaRagionamento, formattaDurataRagionamento, argomentoPuoCambiare } from '../components/ragionamento.js'; // 13/09 sera: il ragionamento si comprime invece di sparire, e mentre ragiona dice su cosa
 // 06/9 C24: la pagina delle Note — la monta `sezioni-adattatori.js`, che riusa `note.js`
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
@@ -337,6 +337,8 @@ import { aggiornaWorkspaceFooter, testiPiede as testiPiedeWorkspace } from '../c
       browserErroriPagina: {},
       /** ⭐⭐⭐ 27/8, R1 — messageId(ragionamento) -> {summaryText, detail, grezzo}, la bolla collassabile che ospita il ragionamento in streaming (riusa la stessa forma di appendToolNote, non un componente nuovo). Il testo grezzo si accumula qui per lo stesso motivo di testoGrezzoMessaggi: renderizzaMarkdownSemplice lavora sul totale, non sul delta. */
       ragionamentoBubble: new Map(),
+      inRigiocata: false, // ⭐ 13/09 notte: vero fra l'apertura del flusso e `talos.fine-rigiocata`
+      ragionamentiInCorso: null, // ⭐ 13/09 notte: { sessionId, inizi } — l'inizio vero dei ragionamenti aperti, dal registro
       /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
       sequenzeViste: new Set(),
       /** ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il refresh" — vero SOLO fra l'appendUserFollowUp ottimista di resumeSession() e il RunStarted (seguito:true) che arriva davvero: consumato una volta, evita che handleRealEvent mostri lo stesso follow-up due volte dal vivo. Vedi il case RunStarted per il perché non è sempre così. */
@@ -9220,14 +9222,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         richiesta.ancora = false;
         let misura = null;
         let durate = null;
+        let inCorso = null;
+        let giroInCorsoDaMs = null;
         try {
           const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/metrics`);
           misura = dati?.cacheSessione ?? null;
           durate = dati?.ragionamentiMs ?? null; // ⭐ 13/09 sera: la stessa lettura porta anche quanto ha ragionato
+          inCorso = dati?.ragionamentiInCorsoDaMs ?? null; // ⭐ 13/09 notte: e da quanto ragiona quello ancora aperto
+          giroInCorsoDaMs = Number.isFinite(dati?.primoToken?.inCorsoDaMs) ? dati.primoToken.inCorsoDaMs : null; // e da quanto è partito il giro
         } catch { /* La lettura fallita lascia una misura assente, mai quella di un'altra chat. */ }
         if (richiestaCacheSessione !== richiesta || state.realSession.id !== sessionId || state.realSession.generation !== generation) return;
         state.realSession.cacheSessione = misura;
         if (durate) applicaDurateRagionamento(sessionId, durate);
+        if (inCorso) applicaRagionamentiInCorso(sessionId, inCorso);
+        /* ⛔ 13/09 notte, foto del GIRO VERO: riaperta a metà, la striscia diceva «TALOS sta scrivendo · 36 s» su un giro
+           partito un quarto d'ora prima — l'orologio partiva dal `RunStarted` RIGIOCATO. Il registro sa da quando. */
+        if (giroInCorsoDaMs !== null && runRealeAttivo()) giroAvviatoA = performance.now() - giroInCorsoDaMs;
         aggiornaInspectorDaStato();
       } while (richiesta.ancora);
     })().finally(() => { if (richiestaCacheSessione === richiesta) richiestaCacheSessione = null; });
@@ -9632,6 +9642,20 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const conversation = $('#conversation');
     const ultimo = conversation?.lastElementChild;
     if (!ultimo?.classList.contains('talos-turn') || ultimo.dataset.turno !== 'talos') return;
+    /*
+     * ⛔⛔ 13/09 notte — IL GIRO FANTASMA, trovato col GIRO VERO (glm-5.3-flash, banco 5471). Dopo un
+     *   reindirizzamento l'Indice dei giri diceva «3 · Cambio di programma», «4 · Risposta 0 attrezzi»,
+     *   «5 · Risposta in corso», e in chat c'era UNA risposta sola. Cinque tick per quattro blocchi.
+     *   La causa è la cura di stasera: `RunRedirectApplied` (come `QueuedMessageDelivered` e il seguito
+     *   di `resumeSession`) mette l'attesa SOTTO la domanda, e per farlo `nellaChat` apre un turno TALOS
+     *   che nasce GIÀ col suo numero. Poi arriva `RunStarted`, trova quel turno in fondo e ne aggiunge un
+     *   secondo. Le prove guardavano dove stava l'attesa, non quanti numeri aveva il turno.
+     * ⇒ Un turno che contiene solo la sua testata e l'attesa non ha ancora speso il numero con cui è
+     *   nato: quel numero È questo giro.
+     */
+    const messaggio = ultimo.querySelector(':scope > .talos-message');
+    const haGiaUnGiro = [...(messaggio?.children || [])].some((figlio) => !figlio.hidden && !figlio.matches('.talos-message__head, .talos-waiting'));
+    if (!haGiaUnGiro) return;
     const spine = ultimo.querySelector('.talos-turn-spine');
     impostaTonoUltimoTick(spine, null);
     const n = spine.querySelectorAll('.talos-turn-spine__n').length + Number(ultimo.dataset.spineBase || 1);
@@ -10459,12 +10483,34 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     chiudiBatchTool();
     voce.article.hidden = false;
     // ⛔ niente `aria-hidden` da togliere: la riga non l'ha mai avuto (vedi ReasoningMessageStart), `hidden` basta.
-    const inCorso = voce.inizio !== null;
+    /*
+     * ⛔⛔ 13/09 notte — «l'inizio non si sa» NON vuol dire «è storia». Qui c'era `inCorso = voce.inizio !== null`, e
+     *   finché l'unica rigiocata era quella di una sessione conclusa le due cose coincidevano. Con la sessione VIVA
+     *   riaperta no: un ragionamento cominciato nella storia e ancora aperto ha l'inizio ignoto (lo dirà `/metrics`),
+     *   ma sta ragionando adesso. Misurato con una sonda: la riga diceva «Ha ragionato» subito, e sotto restava
+     *   l'attesa «Ragionamento in corso…» — due frasi che si smentiscono.
+     */
+    const inCorso = !voce.chiuso && (voce.inizio !== null || (!state.realSession.deferHistoricalRendering && !state.realSession.inRigiocata));
     etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso }));
     if (inCorso) accendiRagionamentoVivo(voce);
     if (inCorso && state.showReasoning) {
       impostaAperturaRagionamento(voce.article, true);
       voce.apertaDaSola = true;
+    }
+  }
+
+  /*
+   * ⭐⭐ 13/09 notte — AL CONFINE si accende quello che è ancora aperto. Durante la storia di una sessione viva nessuna
+   *   riga si muove (non si sa ancora quali finiranno lì dentro); `ReasoningMessageEnd` toglie la voce dalla mappa,
+   *   quindi quelle rimaste quando la storia finisce sono i ragionamenti in corso ADESSO.
+   * ⛔ Una riga ancora senza testo resta nascosta: si accenderà al primo testo, dal vivo, come sempre.
+   */
+  function accendiRagionamentiApertiDopoLaStoria() {
+    if (state.realSession.deferHistoricalRendering || state.realSession.chiusaDalServer) return;
+    for (const voce of state.realSession.ragionamentoBubble.values()) {
+      if (voce.vivo || voce.chiuso || voce.article.hidden) continue;
+      etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso: true }));
+      accendiRagionamentoVivo(voce);
     }
   }
 
@@ -10494,16 +10540,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const secondi = document.createElement('span');
     secondi.className = 'talos-mono talos-measure';
     secondi.setAttribute('aria-hidden', 'true'); // i secondi non si annunciano uno per uno
-    secondi.textContent = formattaDurataRagionamento(0);
+    secondi.textContent = voce.inizio === null ? '' : formattaDurataRagionamento((adessoRagionamentoMs() - voce.inizio) / 1000); // ⭐ 13/09 notte: un inizio che non si sa non diventa «0 s»
     const pallino = document.createElement('span');
     pallino.className = 'talos-dot talos-dot--live';
     pallino.setAttribute('aria-hidden', 'true');
     testa.append(argomento, secondi, pallino);
     voce.article.dataset.ragionamento = 'vivo';
-    voce.vivo = { argomento, secondi, pallino, ultimoArgomentoAlle: 0, timer: null };
+    voce.vivo = { argomento, secondi, pallino, ultimoArgomentoAlle: 0, argomentoMostratoAlle: 0, timer: null };
     voce.vivo.timer = window.setInterval(() => {
       if (!voce.vivo || !voce.article.isConnected) { spegniRagionamentoVivo(voce); return; }
-      const testo = formattaDurataRagionamento((adessoRagionamentoMs() - voce.inizio) / 1000);
+      const testo = voce.inizio === null ? '' : formattaDurataRagionamento((adessoRagionamentoMs() - voce.inizio) / 1000);
       if (secondi.textContent !== testo) secondi.textContent = testo;
       aggiornaArgomentoRagionamento(voce);
     }, 1000);
@@ -10515,9 +10561,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     if (!vivo) return;
     const adesso = adessoRagionamentoMs();
     if (!subito && adesso - vivo.ultimoArgomentoAlle < INTERVALLO_ARGOMENTO_RAGIONAMENTO_MS) return;
+    /*
+     * ⛔⛔ 13/09 notte, GIRO VERO: senza titoli in grassetto l'argomento cambiava ogni ~400 ms, e non si leggeva.
+     *   Resta a schermo il tempo di leggerlo (`argomentoPuoCambiare`, fonti in `ragionamento.js`), e finché resta
+     *   non si ricalcola nemmeno: su un ragionamento di minuti è anche lavoro risparmiato.
+     * ⛔ Un argomento mostrato non torna vuoto: `null` vuol dire «niente di finito da dire», non «cancella».
+     */
+    if (!argomentoPuoCambiare({ attuale: vivo.argomento.textContent, mostratoAlle: vivo.argomentoMostratoAlle, adesso })) return;
     vivo.ultimoArgomentoAlle = adesso;
-    const testo = argomentoDelRagionamento(voce.grezzo) ?? '';
-    if (vivo.argomento.textContent !== testo) vivo.argomento.textContent = testo;
+    const testo = argomentoDelRagionamento(voce.grezzo);
+    if (testo && vivo.argomento.textContent !== testo) {
+      vivo.argomento.textContent = testo;
+      vivo.argomentoMostratoAlle = adesso;
+    }
   }
 
   function spegniRagionamentoVivo(voce) {
@@ -10533,6 +10589,10 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   /** La fine: l'etichetta dice quanto è durato, e una scheda aperta da sola (non a mano) si richiude. */
   function chiudiRagionamento(voce) {
+    /* ⛔ 13/09 notte: si chiude UNA volta. Al primo testo (vedi `concludiRagionamentiPassatiOltre`) e poi di nuovo alla
+       sua fine, che il kernel annuncia a risposta scritta: la seconda chiusura ricalcolerebbe la durata fino a lì. */
+    if (voce.chiuso) return;
+    voce.chiuso = true;
     spegniRagionamentoVivo(voce);
     const salvata = state.realSession.durateRagionamento?.sessionId === state.realSession.id
       ? state.realSession.durateRagionamento.durate?.[voce.article.dataset.ragionamentoId]
@@ -10569,6 +10629,50 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       if (etichetta !== senzaDurata) continue;
       etichettaSchedaRagionamento(card, etichettaRagionamento({ inCorso: false, secondi: ms / 1000 }));
     }
+  }
+
+  /*
+   * ⭐⭐ 13/09 notte — DA QUANDO RAGIONA: lo si è visto cominciare, o lo sa il registro. Trovato col GIRO VERO:
+   *   riaperta a metà giro, «Sta ragionando… 35 s» su un ragionamento partito tredici minuti prima.
+   * ⇒ Dal vivo l'orologio parte adesso. In una rigiocata (sessione conclusa, o storia di una viva prima di
+   *   `talos.fine-rigiocata`) l'inizio non si inventa: o lo dice `/metrics` (`ragionamentiInCorsoDaMs`), o resta
+   *   ignoto — e un ignoto non si scrive «0 s» né «Ha ragionato poco».
+   */
+  function inizioRagionamentoDaRegistrare(messageId) {
+    if (state.realSession.deferHistoricalRendering) return null;
+    if (!state.realSession.inRigiocata) return adessoRagionamentoMs();
+    const noti = state.realSession.ragionamentiInCorso;
+    const inizio = noti?.sessionId === state.realSession.id ? noti.inizi.get(messageId) : undefined;
+    return Number.isFinite(inizio) ? inizio : null;
+  }
+
+  function applicaRagionamentiInCorso(sessionId, trascorsi) {
+    if (!trascorsi || typeof trascorsi !== 'object') return;
+    const adesso = adessoRagionamentoMs();
+    const inizi = new Map();
+    for (const [messageId, ms] of Object.entries(trascorsi)) if (Number.isFinite(ms) && ms >= 0) inizi.set(messageId, adesso - ms);
+    state.realSession.ragionamentiInCorso = { sessionId, inizi };
+    if (state.realSession.id !== sessionId) return;
+    for (const [messageId, voce] of state.realSession.ragionamentoBubble) {
+      if (voce.inizio !== null || !inizi.has(messageId)) continue;
+      voce.inizio = inizi.get(messageId);
+      if (voce.vivo) voce.vivo.secondi.textContent = formattaDurataRagionamento((adesso - voce.inizio) / 1000);
+    }
+  }
+
+  /*
+   * ⛔⛔ 13/09 notte — IL RAGIONAMENTO FINISCE QUANDO IL MODELLO PASSA OLTRE. Letto nello store del GIRO VERO: il kernel
+   *   annuncia `ReasoningMessageEnd` DOPO `TextMessageEnd` (41.426 pezzi di ragionamento, poi 2.204 di risposta, poi la
+   *   fine del ragionamento). Dopo il primo testo non arriva più un solo pezzo di ragionamento, ma la riga restava
+   *   «Sta ragionando…» col pallino acceso per tutta la risposta — e sopra la striscia «TALOS sta scrivendo»: due
+   *   indicatori vivi, cioè proprio quello che la riga unica doveva togliere.
+   *   «a plain collapsed row once the model moves on» (assistant-ui, Reasoning); Hermes: «a turn that ended must not
+   *   go on saying Thinking». La durata sul server segue la stessa regola (`durateRagionamentoDaEventi`).
+   * ⛔ La voce resta nella mappa: se il modello riprendesse a ragionare sullo stesso id, il testo andrebbe ancora nel
+   *   dettaglio; solo la riga non si riaccende.
+   */
+  function concludiRagionamentiPassatiOltre() {
+    for (const voce of state.realSession.ragionamentoBubble.values()) if (!voce.chiuso) chiudiRagionamento(voce);
   }
 
   function chiudiRagionamentiInCorso() {
@@ -14506,6 +14610,17 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function handleRealEvent(evento, generation) {
     if (generation !== state.realSession.generation) return; // sessione più vecchia: scartato, non renderizzato
+    /*
+     * ⭐⭐ 13/09 notte — IL CONFINE FRA LA STORIA E LA DIRETTA, detto dal server (`http-app.mjs`, subito dopo
+     *   `replay.fineReplay()`). Trovato col GIRO VERO: riaperta una sessione viva, un ragionamento di 8 s
+     *   rigiocato in pochi millisecondi diceva «Ha ragionato poco», e quello aperto da tredici minuti «35 s».
+     *   Prima di questo evento ciò che arriva è PASSATO, e non si cronometra da qui.
+     */
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.fine-rigiocata') {
+      state.realSession.inRigiocata = false;
+      accendiRagionamentiApertiDopoLaStoria();
+      return;
+    }
     if (evento.type === 'CUSTOM' && evento.name === 'talos.context') {
       const value = evento.value;
       if (value?.schema !== 'talos.context.event.v1' || value.sessionId !== state.realSession.id) return;
@@ -14672,7 +14787,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * impostato da resumeSession subito prima della POST).
          */
         state.realSession.runCount = (state.realSession.runCount || 0) + 1;
-        segnaGiroNellaSpine(); // 05/9 Fase 2: Conversazione - un numero in piu' nella spine del turno
+        /* ⛔ 13/09 notte: `segnaGiroNellaSpine()` stava QUI e si è spostato più sotto, DOPO la bolla del seguito — vedi lì. */
         /*
          * ⛔⛔⛔ 02/9 — disarma il "sopprimi lo scroll" armato da
          * resumeSession() (vedi il commento lì): confronta col NUMERO di
@@ -14727,6 +14842,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
             appendUserFollowUp(evento.input.consegna, evento.contesto, evento.input.immagini); // replay con allegati persistiti
           }
         }
+        /*
+         * 05/9 Fase 2: Conversazione - un numero in piu' nella spine del turno.
+         * ⛔⛔ 13/09 notte — SPOSTATO QUI, dopo la bolla del seguito. Stava in cima al caso, e rigiocando un seguito
+         *   il numero del giro nuovo finiva sul turno di PRIMA: in fondo c'era ancora la risposta vecchia, perché la
+         *   domanda si appende qualche riga sotto. Misurato (SPINE-03): `talos:2+3, utente:4, talos:5` al posto di
+         *   `talos:2, utente:3, talos:4` — un «3 · Risposta» fantasma nell'Indice dei giri di ogni sessione riaperta
+         *   con un seguito. Adesso, se c'è una domanda nuova, in fondo c'è lei e la spine non si tocca; se non c'è,
+         *   il giro riparte nello stesso turno e prende il suo numero (SPINE-02).
+         */
+        segnaGiroNellaSpine();
         // Anche il replay di una sessione attiva deve ricostruire l'attesa
         // prima del primo token. Una sessione dichiarata chiusa resta chiusa.
         if (!state.realSession.chiusaDalServer) mostraAttesaRisposta();
@@ -14735,6 +14860,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         break;
       }
       case 'TextMessageContent': {
+        concludiRagionamentiPassatiOltre(); // ⛔ 13/09 notte: il modello scrive, quindi non sta più ragionando — vedi la funzione
         // ⭐ 02/09 — arrivo del frammento dal server, PRIMA di qualunque render: nel log di streaming un buco fra due 'delta' è rete/provider, un buco fra 'delta' e 'render' è nostro. Misurato dal vivo il 02/09: render ≤1,1 ms, buchi fra delta di 2-12 s — il collo era a monte.
         logStreaming('delta', { messageId: evento.messageId, len: typeof evento.delta === 'string' ? evento.delta.length : 0 });
         segnaTappaLatenza('primoDelta');
@@ -14818,7 +14944,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
           ...bubble,
           grezzo: '',
           renderStato: { prefisso: null, nodiCoda: [] },
-          inizio: state.realSession.deferHistoricalRendering ? null : adessoRagionamentoMs(),
+          inizio: inizioRagionamentoDaRegistrare(evento.messageId),
           apertaDaSola: false,
         });
         break;
@@ -14840,12 +14966,16 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (voce && state.realSession.deferHistoricalRendering) {
           renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
         }
+        /* ⛔ 13/09 notte: se era già concluso al primo testo, questa fine arriva a risposta SCRITTA — e un'attesa
+           «TALOS sta preparando la risposta…» sotto una risposta finita direbbe il falso. */
+        const eraAperto = Boolean(voce && !voce.chiuso);
         if (voce) chiudiRagionamento(voce);
         state.realSession.ragionamentoBubble.delete(evento.messageId); // la bolla resta a schermo, solo non si aggiorna più
-        if (!state.realSession.chiusaDalServer) mostraAttesaRisposta('preparing');
+        if (eraAperto && !state.realSession.chiusaDalServer) mostraAttesaRisposta('preparing');
         break;
       }
       case 'ToolCallStart': {
+        concludiRagionamentiPassatiOltre(); // ⛔ 13/09 notte: come per il testo, un attrezzo chiude il ragionamento che lo precede
         nascondiAttesaRisposta(); // il primo attrezzo chiamato: sappiamo già cosa sta facendo, la ruota non serve più
         /*
          * ⛔⛔ 06/9 — owner: «ho provato a spawnare un sottoagente ma non si vede nulla in tab
@@ -15459,8 +15589,13 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const demoBadgeChat = $$('.demo-surface-badge', $('.chat-view'))
       .find((badge) => badge.closest('[data-demo-surface]')?.dataset.demoSurface === 'chat');
     if (demoBadgeChat) demoBadgeChat.hidden = true;
+    /* ⭐⭐ 13/09 notte — ogni connessione comincia con la storia: finché il server non dice `talos.fine-rigiocata`
+       quello che arriva è passato (vedi `handleRealEvent`). Anche una riconnessione fatta da sola rigioca, da
+       `Last-Event-ID`: per questo lo stesso segno si rimette all'apertura. */
+    state.realSession.inRigiocata = true;
     const source = new EventSource(API(`/api/v1/sessions/${encodeURIComponent(sessionId)}/events`));
     segnaTappaLatenza('sseCollegato');
+    source.onopen = () => { if (generation === state.realSession.generation) state.realSession.inRigiocata = true; };
     state.realSession.eventSource = source;
     source.onmessage = (message) => {
       sorveglianza?.segnalaEventoVivo(); // T-15: il canale è vivo

@@ -96,7 +96,14 @@ function accorciaArgomento(testo, massimo) {
 export function argomentoDelRagionamento(testo, { massimo = 90 } = {}) {
   const grezzo = String(testo ?? '');
   if (!grezzo.trim()) return null;
-  const titoli = [...grezzo.matchAll(/\*\*([^*\n]{3,80})\*\*/g)];
+  /*
+   * ⛔⛔ 13/09 notte, GIRO DI VERIFICA (glm-5.3-flash, banco 5473): la riga diceva «Sta ragionando… 407». Nello store il
+   *   modello scriveva `**153**: 1³ + 5³ + 3³ = …`, `**407**: …` — grassetto come ENFASI dentro la riga, non come titolo.
+   *   Un titolo di sezione è un grassetto che occupa la riga INTERA: così li scrive il formato che Codex legge, nelle sue
+   *   prove `"**Plan**\n\ndone"`, `"**Checking tests**\n\n…"` (`tui/src/chatwidget/tests/history_replay.rs:1141`,
+   *   letto nel clone il 13/09/2026). Ogni altro grassetto resta testo della frase.
+   */
+  const titoli = [...grezzo.matchAll(/^[ \t]*\*\*([^*\n]{3,80})\*\*[ \t]*$/gm)];
   if (titoli.length) {
     const titolo = pulisciArgomento(titoli[titoli.length - 1][1]);
     if (titolo) return accorciaArgomento(titolo, massimo);
@@ -109,4 +116,48 @@ export function argomentoDelRagionamento(testo, { massimo = 90 } = {}) {
     .map(pulisciArgomento)
     .filter((frase) => frase.split(' ').filter(Boolean).length >= MINIMO_PAROLE_ARGOMENTO);
   return frasi.length ? accorciaArgomento(frasi[frasi.length - 1], massimo) : null;
+}
+
+/*
+ * ⛔⛔ 13/09 notte — L'ARGOMENTO NON DEVE LAMPEGGIARE. Trovato col GIRO VERO (glm-5.3-flash, banco 5471): il
+ *   modello non scrive titoli in grassetto, quindi vale il ripiego, e l'ultima frase finita cambiava ogni
+ *   ~400 ms — dal registro della prova: «Consider mod 9…», «Hmm, that gives a constraint…», «We need a³+b³+c³…»,
+ *   «Alternative approach…» in un secondo e mezzo. Una riga che nessuno riesce a leggere non dice su cosa ragiona.
+ *   Le prove usavano una frase o due: non potevano vederlo.
+ * Chi l'ha già pensato, letto nel codice:
+ *   · Hermes desktop, `thread/status.tsx`: «Long enough that a tool whose arguments arrive in a few frames never
+ *     gets to strobe a label»; `turn-activity.ts`, `TURN_QUIET_S = 2`, «or a run of quick calls would strobe a
+ *     row between each one».
+ *   · Codex cambia la riga solo quando arriva un titolo nuovo (`extract_first_bold`), cioè a ogni sezione.
+ *   · WCAG 2.2.2, Understanding (letto il 13/09/2026): «Content that moves or auto-updates can be a barrier to
+ *     anyone who has trouble reading stationary text quickly».
+ * ⇒ Un argomento resta a schermo almeno 2 s (la stessa soglia di Hermes contro il lampeggio) più il tempo che
+ *   serve a leggerlo anche a un lettore veloce — 5,91 parole al secondo, «the average silent reading speed, using
+ *   Huey's standardized method» riportata da Wikipedia, «Words per minute» (letta il 13/09/2026; la fonte
+ *   moderna, Brysbaert 2019, ha risposto 403 e NON è stata letta) — e al massimo 4 s, perché su un
+ *   ragionamento di minuti la riga deve continuare a muoversi.
+ */
+const PERMANENZA_MINIMA_ARGOMENTO_MS = 2000;
+const PERMANENZA_MASSIMA_ARGOMENTO_MS = 4000;
+const PAROLE_AL_SECONDO_LETTORE_VELOCE = 5.91;
+
+/**
+ * Quanto deve restare a schermo un argomento prima di poter essere sostituito.
+ * @param {string} testo l'argomento a schermo
+ * @returns {number} millisecondi
+ */
+export function permanenzaArgomentoMs(testo) {
+  const parole = String(testo ?? '').split(/\s+/).filter(Boolean).length;
+  const lettura = (parole / PAROLE_AL_SECONDO_LETTORE_VELOCE) * 1000;
+  return Math.min(PERMANENZA_MASSIMA_ARGOMENTO_MS, Math.round(PERMANENZA_MINIMA_ARGOMENTO_MS + lettura));
+}
+
+/**
+ * Se l'argomento a schermo può lasciare il posto a uno nuovo. Una riga vuota si riempie subito.
+ * @param {{attuale?:string, mostratoAlle?:number, adesso?:number}} stato
+ * @returns {boolean}
+ */
+export function argomentoPuoCambiare({ attuale = '', mostratoAlle = 0, adesso = 0 } = {}) {
+  if (!String(attuale ?? '').trim()) return true;
+  return adesso - mostratoAlle >= permanenzaArgomentoMs(attuale);
 }
