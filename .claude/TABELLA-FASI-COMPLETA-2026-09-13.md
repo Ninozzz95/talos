@@ -441,6 +441,37 @@ senza reindirizzamento lascia la sua nota.
   - Suite: frontend 1043 su 1043 (0 rosse); principale di harness-ui 2961 su 2964 (0 rosse); a schermo 27 su 27.
   - ⛔ **Non coperto**: la lettura della durata alla CHIUSURA della riga durante una rigiocata (nelle prove la
     risposta di `/metrics` arriva sempre dopo) — esercitato solo l'aggiornamento a posteriori.
+  ⛔⛔ **GIRI VERI DELLA FASE 2 (13/09 notte)** — owner: «Ok vai coi giri veri». `z-ai/glm-5.3-flash`, banchi 5471 e 5473 con store isolati.
+  - Primo giro (pacchetto di HEAD): coda e reindirizzamento dal composer mentre il modello ragiona. Niente carta rossa, niente
+    tick rosso, coda consegnata dentro il giro. **Otto difetti** che le prove non vedevano: argomento che lampeggia ogni ~400 ms;
+    secondi a capo; giro fantasma dopo il reindirizzamento (mio) e nella rigiocata di ogni seguito (vecchio); durata del
+    ragionamento interrotto persa; ragionamento contato fino alla fine ANNUNCIATA (dopo la risposta); sessione VIVA riaperta
+    che diceva «Ha ragionato poco» e «35 s» su 14 minuti; striscia del giro che ripartiva dalla riapertura.
+  - Cure nel commit `5e4f7d8a`. Prove al contrario, ogni ripristino con impronta identica: server 6 rotture, 6 rosse; regola
+    del primo testo 2 su 2; schermo 8 rotture, 7 rosse al primo passaggio — la rottura «inizio ignoto = storia» NON mordeva
+    (SCHERMO-10 riceveva l'inizio dal registro prima del primo testo), prova riscritta con la variante «senza inizio»,
+    rottura rifatta: rossa. `dist` identica dopo ogni giro di rotture.
+  - Suite: rotte 144/144; frontend 1046/1046; principale di harness-ui 2968 su 2971 (0 rosse, 3 saltate); a schermo sul
+    pacchetto FINALE ragionamento-compresso 28/28, reindirizzamento 14/14.
+  - A/B `baseline-shell` nello stesso momento: HEAD 16 verdi / 49 rossi, pacchetto nuovo 16 / 49, insiemi identici — debito VECCHIO.
+  - Giro di verifica (pacchetto nuovo, fermato al tetto di 420 s): 116 intervalli fra argomenti, 115 fra 2.521 e più ms
+    (mediana 3.288); l'unico da 758 ms cade sulla foto della finestra aperta a metà, mentre lo script non guardava la
+    finestra A — artefatto del campionamento, non della permanenza. Finestra aperta a metà: 17 s contro i 17 s di chi
+    c'era, nessun «poco», spine identica nelle tre finestre.
+  - ⛔ Il giro di verifica ne ha trovato un NONO: «Sta ragionando… 407» — glm scrive `**407**: …` come enfasi, e il grassetto
+    valeva come titolo. Ora un titolo è un grassetto che occupa la riga intera (il formato delle prove di Codex,
+    `history_replay.rs:1141`), provato sul testo vero dello store; contrario: 1 rottura, 1 rossa. ⛔ Non rifatto un giro
+    vero apposta per questa cura.
+  - Riaperta a giro finito sullo stesso server e poi DOPO UN RIAVVIO (durate solo dal disco): spine senza fantasmi, «per 8 s» e
+    «per 6 min 47 s» nei due temi (record: 7642, 406634 ms).
+  - ⛔ **Da decidere (owner)**: un messaggio accodato non si vede in un’altra finestra né dopo una ricarica (il server non lo espone);
+    e fermato il giro, nella finestra che l’ha accodato il banner dice ancora «parte alla fine di questo giro» (foto 05-fine-A).
+    Il messaggio NON si perde: `codaMessaggi` sopravvive alla fine del giro e parte col prossimo (session-registry, FASE D);
+    si perde solo a un riavvio del server, debito già dichiarato lì. Sbagliate le parole, non il dato.
+  - 🔜 Da verificare, non dichiarato: la finestra aperta a metà mostrava ancora «in corso» nella barra, pochi secondi dopo lo stop;
+    e sul 4174 il chip del composer dice «Giri 1» mentre la barra dice «2 giri» (due significati della stessa parola?).
+  - 4174 aggiornato e guardato in sola lettura (ogni richiesta non GET bloccata: zero): una sessione vera con un seguito
+    rigiocata ha l’indice 1 · 2 · 3 · 4 senza il «3 · Risposta» fantasma, nei due temi.
 - 🔜 **DUBBIO REGISTRATO, non difetto dichiarato**: 26 file di prova scattano foto e nessuno aspetta
   il velo esplicitamente. Molti aspettano elementi per piu' di 4 s, quindi le loro foto possono essere
   buone: va verificato guardandone una per suite, non dedotto dal conteggio.

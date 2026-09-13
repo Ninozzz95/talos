@@ -300,3 +300,35 @@
   33 s prima — lo script di pubblicazione impiega quello), 3 commit
   cherry-pickati sopra (`5b40c235`, `0a71d707`, `20b6bc80`), zero conflitti,
   diff finale contro quella base: **esattamente 8 file**, nessuno di Fase 4/5.
+
+## 2026-09-13 notte — giro vero sulla chat (glm-5.3-flash, banco 5471), e due strumenti che mentono
+
+- **Ordine vero degli eventi del ragionamento nel kernel**: `ReasoningMessageEnd` arriva DOPO `TextMessageEnd`.
+  Sessione `75cdb501`: Start, 41.426 pezzi di ragionamento, TextMessageStart, 2.204 pezzi di risposta,
+  TextMessageEnd, e solo lì ReasoningMessageEnd. Dopo il primo testo, zero pezzi di ragionamento. Stessa
+  forma sul secondo ragionamento (173 pezzi, poi 149 di risposta).
+- **glm-5.3-flash reindirizzato ha ragionato 852.858 ms** (14 min 13 s, misurati fino all'End tardivo) su
+  «numeri di quattro cifre uguali alla somma delle quarte potenze»: il costo di un giro può esplodere
+  anche su un compito piccolo.
+- **Un reindirizzamento mentre il modello ragiona**: RunRedirectRequested → RunError `fermato` →
+  RunRedirectApplied → RunStarted `seguito:true`, nessun ReasoningMessageEnd per il ragionamento interrotto.
+  Applicato in meno di un secondo dalla richiesta; il giro nuovo ragiona dopo ~5 s.
+- **Un messaggio accodato è consegnato DENTRO il giro in corso** (QueuedMessageDelivered senza un
+  RunStarted nuovo): 2 RunStarted in tutta la sessione, non 3.
+- ⛔ **`grep -c $'\r$'` di Git Bash conta male i CRLF**: diceva «20.973 righe CRLF su 20.973» su un
+  `app.js` che in byte ha **0** CRLF e 21.035 LF. Contati in Python (`b.count(b'\r\n')`): LF in tutti i
+  file toccati, CRLF solo `http-app.mjs` (6.037). Un fine riga si misura sui BYTE, mai con grep da bash.
+- ⛔ **Un heredoc di bash toglie un livello di backslash**, anche fra apici: `'\\r\\n'` in un Python
+  scritto con `<<'PYFINE'` è arrivato come un a capo vero. Gli script con escape si scrivono su FILE.
+- ⛔ **Lo strumento di modifica può scrivere un'emoji fuori dal piano base come TESTO di escape**: in
+  `tabella-giro-vero.py` l'emoji «soon» (U+1F51C) è arrivata come testo di escape — barra rovescia, `ud83d`, barra
+  rovescia, `udd1c` — con 0 occorrenze dei byte UTF-8 veri `F0 9F 94 9C` e 1 del testo di escape. Nello stesso turno,
+  in questo file Markdown, la stessa emoji è arrivata con i byte veri: il comportamento NON è costante. Python la legge come due surrogati e `write` cade con «surrogates not allowed». La scrittura
+  su un temporaneo ha salvato la tabella; la cura è `t.encode('utf-16', 'surrogatepass').decode('utf-16')`.
+- ⛔ **`subprocess.run(..., shell=True)` su Windows passa da cmd.exe**: un filtro Playwright
+  `-g "A|B"` diventa una pipe e il comando esce 255 senza esito. Niente `|` negli argomenti.
+- ⛔ **L'init script di Playwright gira anche nei frame in sandbox**: `localStorage` lancia
+  «The document is sandboxed and lacks the 'allow-same-origin' flag» da `<anonymous>:2:107`, cioè dal MIO
+  script. Non è la pagina: si avvolge in try/catch, come fa già `nessun-errore-a-runtime.spec.mjs`.
+- **`baseline-shell.spec.mjs` sul pacchetto di HEAD: 49 rossi su 65**, e sul pacchetto nuovo gli stessi 49
+  (insiemi identici, A/B nello stesso momento su 4186/4187). Debito vecchio, non di stasera.
