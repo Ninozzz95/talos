@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 
 const radice = new URL('../../../', import.meta.url);
@@ -19,17 +19,29 @@ test('R05A-TESTO-UFFICIALE — LICENSE contiene il documento GNU integrale senza
   );
 });
 
-for (const percorso of [
+// 13/09 (R-05b): il test gira anche nel monorepo PUBBLICO, dove escono solo harness-ui e
+// context-engine. I manifesti del solo repo privato (banco, worker, validatore) si controllano
+// se ci sono, e si dichiarano saltati se mancano: mai un rosso per un file che non deve uscire.
+const manifestiEsportati = [
   'harness-ui/package.json',
   'harness-ui/frontend/package.json',
+  'harness-ui/desktop/package.json',
+  'context-engine/package.json',
+];
+const manifestiSoloPrivati = [
   'harness-ui/benchmarks/autocompact/package.json',
   'artifact-worker/package.json',
   'browser-worker/package.json',
   'validator/package.json',
-  'context-engine/package.json',
-  'harness-ui/desktop/package.json',
-]) {
+];
+for (const percorso of manifestiEsportati) {
   test(`R05A-MANIFESTI — ${percorso} dichiara solo AGPL v3`, () => {
+    assert.equal(JSON.parse(leggi(percorso)).license, 'AGPL-3.0-only');
+  });
+}
+for (const percorso of manifestiSoloPrivati) {
+  const presente = existsSync(new URL(percorso, radice));
+  test(`R05A-MANIFESTI (privato) — ${percorso} dichiara solo AGPL v3`, { skip: presente ? false : 'assente: albero pubblico' }, () => {
     assert.equal(JSON.parse(leggi(percorso)).license, 'AGPL-3.0-only');
   });
 }
@@ -46,9 +58,11 @@ test('R05A-README — licenza coerente e assenza di telemetria dichiarata', () =
     return livelloTerzeParti === null;
   }).join('\n');
   assert.doesNotMatch(righeProgetto, /\bApache\b/i);
-  assert.match(testo, /<a href="LICENSE"><img src="https:\/\/img\.shields\.io\/badge\/license-AGPL--3\.0-blue\.svg"/);
+  // Vale per il README privato (italiano, badge in <a href>) e per quello del monorepo pubblico
+  // (inglese, badge markdown «license-AGPL--3.0--only»): stessa licenza, stessa dichiarazione.
+  assert.match(testo, /img\.shields\.io\/badge\/license-AGPL--3\.0(--only)?-blue\.svg/);
   assert.match(testo, /AGPL-3\.0-only/);
-  assert.match(testo, /Telemetria: nessuna/);
+  assert.match(testo, /Telemetria: nessuna|no telemetry/i);
 });
 
 test('R05A-CHANGELOG — la prima versione desktop è dichiarata non rilasciata', () => {

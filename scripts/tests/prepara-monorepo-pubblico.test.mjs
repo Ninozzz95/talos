@@ -90,7 +90,8 @@ test('R05B: contratto completo sul clone locale pubblico', { skip: !existsSync(s
   for (const [id, file, body] of [
     ['PERCORSI', 'context-engine/dist/prova.js', 'fixture'],
     // 13/09: 4174 e' la porta predefinita del prodotto, non blocca (si conta): nessun caso PORTA.
-    ['RICERCA', 'harness-ui/src/prova.mjs', '// TALOS-BANCO'],
+    // 13/09: TALOS-BANCO e' gia' pubblico (asset dell'APK) e non blocca piu'; si pianta una parola mai uscita.
+    ['RICERCA', 'harness-ui/src/prova.mjs', '// prime-agent'],
     ['PESO', 'context-engine/grande.bin', Buffer.alloc(5 * 1024 * 1024 + 1, 1)],
     ['IMMAGINI', 'README-MONOREPO.md', '# TALOS\n![logo](mobile/docs/immagini/non-esiste.png)\n'],
   ]) {
