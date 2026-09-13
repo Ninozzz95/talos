@@ -168,5 +168,43 @@ for (const modo of ['dark', 'light']) {
       await expect(page.locator('#conversation .talos-waiting')).toHaveCount(1);
       await expect(page.locator('#conversation .talos-waiting')).toContainText('Reindirizzamento al prossimo punto sicuro');
     });
+
+    for (const [caso, durate, attesa] of [
+      ['con la durata salvata', { r1: 12_000 }, 'Ha ragionato per 12 s'],
+      ['AL CONTRARIO senza durata salvata', {}, 'Ha ragionato'],
+    ]) {
+      test(`RAGIONAMENTO-SCHERMO-06 — una sessione RIAPERTA sa quanto ha ragionato, ${caso} (${modo})`, async ({ page }, testInfo) => {
+        /*
+         * ⭐⭐ Punto 3 di «fare meglio di Hermes»: Hermes desktop perde la durata a ogni ricarica e lo dichiara
+         *   (`activity-timer.ts`). Qui la rigiocata non ha orari (in memoria non c'è niente da misurare), e la
+         *   durata vera arriva dalla rotta `/metrics`, che la legge dal record `tempi-giro` sul disco.
+         * ⛔ La risposta arriva DOPO la rigiocata: la riga va aggiornata a posteriori, ed è quello che si prova.
+         */
+        const sessione = `ragionamento-rigiocata-${modo}-${Object.keys(durate).length}`;
+        await page.route(`**/api/v1/sessions/${sessione}/metrics`, (route) => route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ ok: true, data: { registrato: true, cacheSessione: null, ragionamentiMs: durate }, meta: { schema: 'talos.harness-ui.api.v1' } }),
+        }));
+        await page.route(`**/api/v1/sessions/${sessione}/events`, (route) => route.fulfill({ contentType: 'text/event-stream', body: '' }));
+        await page.evaluate((id) => {
+          const r = window.__talosHarnessUiRuntime;
+          r.passaASessione(id, 'workspace', 'Sessione riaperta', 'z-ai/glm-5.3-flash', { conclusa: true, modello: 'z-ai/glm-5.3-flash' });
+          r.realSessionState.deferHistoricalRendering = true;
+        }, sessione);
+        await eventi(page, [
+          avvio,
+          { type: 'ReasoningMessageStart', messageId: 'r1', _sequenza: 2 },
+          { type: 'ReasoningMessageContent', messageId: 'r1', delta: pensiero, _sequenza: 3 },
+          { type: 'ReasoningMessageEnd', messageId: 'r1', _sequenza: 4 },
+          { type: 'TextMessageStart', messageId: 'm1', _sequenza: 5 },
+          { type: 'TextMessageContent', messageId: 'm1', delta: 'Ho trovato 40 file di test.', _sequenza: 6 },
+          { type: 'TextMessageEnd', messageId: 'm1', _sequenza: 7 },
+          { type: 'RunFinished', outcome: { type: 'success' }, _sequenza: 8 },
+        ]);
+        const testa = page.locator('#conversation .real-reasoning-note > .talos-activity__head');
+        await expect(testa).toHaveText(new RegExp(`^\\s*${attesa}\\s*$`));
+        await page.screenshot({ path: testInfo.outputPath(`6-sessione-riaperta-${Object.keys(durate).length ? 'con' : 'senza'}-durata-${modo}.png`) });
+      });
+    }
   });
 }

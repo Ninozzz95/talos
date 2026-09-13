@@ -2286,6 +2286,30 @@ test('⭐⭐⭐ W1-03 — GET /api/v1/sessions/:id/metrics torna cache, tempo al
 
   assert.equal(corpo.data.chiusura.motivo, null, 'il giro è ancora aperto: nessun motivo di chiusura inventato');
   assert.ok(corpo.data.chiusura.motivoAssente.includes('ancora in corso'));
+  /* ⛔ 13/09 sera: il ragionamento `g1` è partito ma non è finito — non ha una durata, e la rotta non ne inventa una. */
+  assert.deepEqual(corpo.data.ragionamentiMs, {}, 'un ragionamento senza la sua fine non ha durata: oggetto vuoto, mai uno zero');
+});
+
+test('⭐⭐ 13/09 sera — GET .../metrics dice quanto ha ragionato il modello, per ragionamento (registro VERO)', async (t) => {
+  let ora = 1_000;
+  const registro = registroVeroConEventi(t, {
+    clock: () => new Date(ora),
+    emetti: (onEvento) => {
+      onEvento({ type: 'RunStarted', threadId: 't', runId: 'r1', input: { consegna: 'c' } });
+      ora = 1_450;
+      onEvento({ type: 'ReasoningMessageStart', messageId: 'g1', role: 'reasoning' });
+      ora = 4_450;
+      onEvento({ type: 'ReasoningMessageEnd', messageId: 'g1' });
+      ora = 4_500;
+      onEvento({ type: 'TextMessageStart', messageId: 'm1', role: 'assistant' });
+    },
+  });
+  const { base } = await listen(t, { sessionRegistry: registro });
+  const { sessionId } = registro.avvia('sconto-a-scaglioni');
+  await Promise.resolve();
+  const corpo = await (await fetch(`${base}/api/v1/sessions/${sessionId}/metrics`)).json();
+  assert.equal(corpo.ok, true);
+  assert.deepEqual(corpo.data.ragionamentiMs, { g1: 3_000 }, 'la durata vera arriva fino all’HTTP: è quella che la riga «Ha ragionato per…» mostra');
 });
 
 test('⛔⛔ AL CONTRARIO — GET .../metrics su una sessione VIVA ma senza un solo evento dice «non registrato», mai uno 0% di cache', async (t) => {

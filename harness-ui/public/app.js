@@ -26279,13 +26279,16 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           do {
             richiesta.ancora = false;
             let misura = null;
+            let durate = null;
             try {
               const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/metrics`);
               misura = dati?.cacheSessione ?? null;
+              durate = dati?.ragionamentiMs ?? null;
             } catch {
             }
             if (richiestaCacheSessione !== richiesta || state.realSession.id !== sessionId || state.realSession.generation !== generation) return;
             state.realSession.cacheSessione = misura;
+            if (durate) applicaDurateRagionamento(sessionId, durate);
             aggiornaInspectorDaStato();
           } while (richiesta.ancora);
         })().finally(() => {
@@ -27046,11 +27049,24 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       function chiudiRagionamento(voce) {
         spegniRagionamentoVivo(voce);
-        const secondi = voce.inizio === null ? null : (adessoRagionamentoMs() - voce.inizio) / 1e3;
+        const salvata = state.realSession.durateRagionamento?.sessionId === state.realSession.id ? state.realSession.durateRagionamento.durate?.[voce.article.dataset.ragionamentoId] : void 0;
+        const secondi = voce.inizio !== null ? (adessoRagionamentoMs() - voce.inizio) / 1e3 : Number.isFinite(salvata) ? salvata / 1e3 : null;
         etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso: false, secondi }));
         const toccata = voce.article.querySelector(":scope > .talos-activity__head")?.dataset.toccatoDaUtente === "si";
         if (voce.apertaDaSola && !toccata) impostaAperturaRagionamento(voce.article, false);
         voce.apertaDaSola = false;
+      }
+      function applicaDurateRagionamento(sessionId, durate) {
+        if (!durate || typeof durate !== "object") return;
+        state.realSession.durateRagionamento = { sessionId, durate };
+        const senzaDurata = etichettaRagionamento({ inCorso: false });
+        for (const card of $$("#conversation .real-reasoning-note[data-ragionamento-id]")) {
+          const ms = durate[card.dataset.ragionamentoId];
+          if (!Number.isFinite(ms) || card.dataset.ragionamento === "vivo") continue;
+          const etichetta2 = card.querySelector(":scope > .talos-activity__head .tool-note-summary-text")?.textContent;
+          if (etichetta2 !== senzaDurata) continue;
+          etichettaSchedaRagionamento(card, etichettaRagionamento({ inCorso: false, secondi: ms / 1e3 }));
+        }
       }
       function chiudiRagionamentiInCorso() {
         for (const voce of state.realSession.ragionamentoBubble.values()) chiudiRagionamento(voce);
@@ -30306,6 +30322,7 @@ ${testo3}` : testo3;
             if (!state.realSession.chiusaDalServer) mostraAttesaRisposta("reasoning");
             const bubble = appendToolNote("Ragionamento", { classeExtra: "real-reasoning-note", glifo: "💭", aperto: true });
             bubble.article.hidden = true;
+            bubble.article.dataset.ragionamentoId = evento.messageId;
             const testaRagionamento = bubble.article.querySelector(":scope > .talos-activity__head");
             testaRagionamento?.addEventListener("click", () => {
               testaRagionamento.dataset.toccatoDaUtente = "si";
@@ -30740,6 +30757,7 @@ ${testo3}` : testo3;
           state.realSession.browserPagine = [];
           state.realSession.browserIndice = -1;
           state.realSession.ragionamentoBubble = /* @__PURE__ */ new Map();
+          state.realSession.durateRagionamento = null;
           state.realSession.followUpBubbleInAttesa = false;
           state.realSession.redirectPendingId = null;
           state.realSession.redirectInvalidatedIds = /* @__PURE__ */ new Set();
