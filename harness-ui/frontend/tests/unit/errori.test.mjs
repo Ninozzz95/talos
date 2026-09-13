@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spiegaErrore, erroreInUnaRiga, spiegaRifiutoAttrezzo, vestizioneErrore } from '../../src/components/errori.js';
+import { spiegaErrore, erroreInUnaRiga, spiegaRifiutoAttrezzo, vestizioneErrore, ORIGINI } from '../../src/components/errori.js';
 
 // 06/09 — i due errori che l'owner ha visto a schermo con un modello locale, e il verso contrario.
 
@@ -220,4 +220,164 @@ test('VESTIZIONE: la carta del contesto si distingue a colpo d’occhio da quell
 
 test('ERRORI-UNA-RIGA: anche nei posti stretti si legge che è il contesto', () => {
   assert.match(erroreInUnaRiga('La sintesi non dichiara testo e stato finale.', 'internal-error'), /compattazione del contesto/i);
+});
+
+/*
+ * ⛔⛔⛔ 13/09 — CORSIA 2, dalla sessione dell'owner: REINDIRIZZARE produceva una carta ROSSA
+ * («Il giro si è interrotto per un errore… apri Doctor»). MISURATO prima di curare, con una sonda
+ * sulle frasi che il kernel scrive davvero — `⛔ interrotto su richiesta[: <punto>].` con
+ * `code: 'fermato'` (talosHarness.mjs ≈8986 → agent-service.mjs ≈169 → RunError):
+ *
+ *     id: 'sconosciuto' · tono: 'danger' · rimedio: «apri Doctor e allega il testo qui sotto»
+ *
+ * su TUTTE e tre, mentre l'inglese `This operation was aborted` era già riconosciuto. Il
+ * riconoscitore cercava parole inglesi; il motore parla italiano.
+ *
+ * ⛔ E un reindirizzamento non è nemmeno un fermo — ma il kernel produce la STESSA frase nei due
+ * casi (`voce.controller.abort()` senza argomenti in `ferma()` e in `reindirizza()`): la differenza
+ * non sta nel testo, sta in QUALE COMANDO l'ha generato. Perciò `spiegaErrore` accetta la
+ * provenienza, e senza provenienza non la indovina.
+ */
+
+/**
+ * Le frasi vere del kernel per un fermo su richiesta, col punto di fermata che ci si deve leggere.
+ * ⛔ Sono QUATTRO casi, non «tutti», e sono presi dal codice riga per riga: `talosHarness.mjs` ≈9334
+ * compone DUE forme sole — nuda (`puntoDiFermata` nullo) e col punto dopo i due punti — e il punto
+ * ha cinque sagome note (≈7078, ≈7158, ≈9248, ≈9249, ≈9270). Qui ce ne sono due diverse; la quarta
+ * è la stessa frase col testo del modello attaccato sotto, che è come `esito.detto` arriva davvero
+ * (≈9358: `${comeFinita.detto}
+${ultimoTesto}`) quando il modello aveva già scritto qualcosa.
+ * ⛔ 13/09, in revisione: una quinta riga «⛔ interrotto su richiesta prima di completare il giro
+ * successivo.» stava qui spacciata per frase del kernel, e il kernel non la scrive in nessun punto
+ * (`grep` su tutto `harness-ui/src`: zero). Sostituita con una forma vera.
+ */
+const FERMI_VERI_DEL_KERNEL = [
+  ['⛔ interrotto su richiesta.', null],
+  ['⛔ interrotto su richiesta: mentre aspettavo la tua approvazione per "scrivi".', 'mentre aspettavo la tua approvazione per "scrivi"'],
+  ['⛔ interrotto su richiesta: prima del giro 3.', 'prima del giro 3'],
+  ['⛔ interrotto su richiesta: mentre "scrivi" era in corso.\nStavo aggiornando il file di configurazione.', 'mentre "scrivi" era in corso'],
+];
+
+/** I guasti VERI, per il verso che deve continuare a fallire: nessuno di questi è un fermo. */
+const GUASTI_VERI = [
+  ['fetch failed: ECONNREFUSED 127.0.0.1:8080', 'internal-error', 'rete'],
+  ['HTTP 429 rate limit exceeded', 'internal-error', 'quota'],
+  ['qualcosa di mai visto', 'internal-error', 'sconosciuto'],
+];
+
+test('ERRORI-FERMATO-ITALIANO: i QUATTRO fermi veri del kernel non finiscono più nel sacco degli errori', () => {
+  for (const [messaggio, punto] of FERMI_VERI_DEL_KERNEL) {
+    const s = spiegaErrore(messaggio, 'fermato');
+    assert.equal(s.id, 'fermato-da-te', `«${messaggio.split('\n')[0]}» finiva ancora nella carta generica`);
+    assert.equal(s.riconosciuto, true);
+    assert.equal(s.cosa, 'Hai fermato il giro.');
+    assert.ok(!s.rimedi.some((r) => /Doctor/i.test(r)), 'non si manda in Doctor chi ha solo premuto «Ferma»');
+    const vestizione = vestizioneErrore(s);
+    assert.notEqual(vestizione.tono, 'danger', 'fermare un giro non è un guasto: niente rosso');
+    assert.equal(vestizione.badge, 'Fermato');
+    // il motore dice DOVE si è fermato: si usa, non si butta
+    if (punto) assert.ok(s.perche.includes(punto), `il punto di fermata non arriva alla carta: ${s.perche}`);
+    else assert.doesNotMatch(s.perche, /\(\)|\(\s*\)|undefined|null/, 'senza punto non spunta una parentesi vuota');
+  }
+  // ⛔ AL CONTRARIO: un guasto vero resta un guasto, e resta rosso
+  for (const [messaggio, codice, atteso] of GUASTI_VERI) {
+    const s = spiegaErrore(messaggio, codice);
+    assert.equal(s.id, atteso);
+    assert.equal(vestizioneErrore(s).tono, 'danger');
+  }
+});
+
+test('REINDIRIZZAMENTO: con la provenienza, i QUATTRO stessi fermi diventano un cambio di direzione', () => {
+  for (const [messaggio, punto] of FERMI_VERI_DEL_KERNEL) {
+    const s = spiegaErrore(messaggio, 'fermato', { origine: ORIGINI.REINDIRIZZAMENTO });
+    assert.equal(s.id, 'reindirizzato');
+    assert.equal(s.famiglia, 'reindirizzato');
+    assert.equal(s.cosa, 'Hai cambiato direzione.');
+    assert.doesNotMatch(s.cosa, /errore|guasto|interrott/i, 'non è un errore, e non lo si dice');
+    assert.doesNotMatch(s.perche, /errore|guasto/i);
+    assert.equal(s.rimedi.length, 0, 'non c’è niente da rimediare: il giro riparte da solo');
+    assert.equal(s.tecnico, messaggio, 'il testo del server non sparisce mai');
+    if (punto) assert.ok(s.perche.includes(punto));
+    // ⛔ la prima riga, non tutta la coda del modello
+    assert.doesNotMatch(s.perche, /file di configurazione/);
+    const vestizione = vestizioneErrore(s);
+    assert.equal(vestizione.badge, 'Reindirizzato');
+    assert.notEqual(vestizione.tono, 'danger', 'nessuna carta rossa per chi ha solo cambiato strada');
+    assert.equal(vestizione.silenziosa, true, 'la famiglia dichiara che la nota non va nemmeno disegnata');
+  }
+});
+
+test('REINDIRIZZAMENTO AL CONTRARIO: i TRE guasti veri restano rossi anche mentre un reindirizzamento è in attesa', () => {
+  /*
+   * ⛔ Il trabocchetto che questa prova chiude: chi chiama sa che un reindirizzamento è pendente,
+   * ma il giro può essersi chiuso per un guasto VERO nello stesso istante. La provenienza da sola
+   * non basta — la regola chiede anche che l'esito sia davvero un fermo su richiesta.
+   */
+  for (const [messaggio, codice, atteso] of GUASTI_VERI) {
+    const s = spiegaErrore(messaggio, codice, { origine: ORIGINI.REINDIRIZZAMENTO });
+    assert.equal(s.id, atteso, `un ${atteso} si travestiva da cambio di direzione`);
+    assert.notEqual(s.famiglia, 'reindirizzato');
+    assert.equal(vestizioneErrore(s).tono, 'danger');
+  }
+});
+
+test('PROVENIENZA: la carta dice da quale comando viene, e quando non lo sa non lo inventa', () => {
+  // dal registro si legge quale comando ha generato l'evento — quando l'evento lo porta
+  assert.equal(spiegaErrore('⛔ interrotto su richiesta.', 'fermato', { origine: ORIGINI.REINDIRIZZAMENTO }).origine, 'reindirizzamento');
+  assert.equal(spiegaErrore('⛔ interrotto su richiesta.', 'fermato', { origine: ORIGINI.STOP }).origine, 'stop');
+  // ⛔ senza provenienza resta null, e il fermo resta un fermo: non si indovina chi l'ha chiesto
+  const senza = spiegaErrore('⛔ interrotto su richiesta.', 'fermato');
+  assert.equal(senza.origine, null);
+  assert.equal(senza.id, 'fermato-da-te');
+  // anche la carta generica la riporta: chi legge il registro sa comunque da dove veniva
+  assert.equal(spiegaErrore('qualcosa di mai visto', 'internal-error', { origine: ORIGINI.STOP }).origine, 'stop');
+  // ⛔ AL CONTRARIO: una provenienza NON trasforma un guasto in un fermo
+  assert.equal(spiegaErrore('qualcosa di mai visto', 'internal-error', { origine: ORIGINI.STOP }).id, 'sconosciuto');
+  // e una provenienza vuota o storta vale come nessuna provenienza
+  for (const contesto of [{}, { origine: '' }, { origine: null }, { origine: 42 }, null, undefined]) {
+    assert.equal(spiegaErrore('⛔ interrotto su richiesta.', 'fermato', contesto).id, 'fermato-da-te');
+  }
+});
+
+test('ERRORI-UNA-RIGA: anche nei posti stretti un cambio di direzione non si legge come un errore', () => {
+  assert.equal(erroreInUnaRiga('⛔ interrotto su richiesta.', 'fermato'), 'Hai fermato il giro.');
+});
+
+/*
+ * ⛔⛔⛔ 13/09, IN REVISIONE — IL VERSO CHE MANCAVA: `code: 'fermato'` NON VUOL DIRE «L'HAI CHIESTO TU».
+ *
+ * La cura di questa corsia leggeva il solo codice, e il kernel lo produce in DUE punti: il fermo su
+ * richiesta (`talosHarness.mjs` ≈9334) e `comeSonoFinitiIGiri` ≈1443, che chiude con lo stesso
+ * codice quando il modello ha smesso di rispondere da solo. MISURATO sul file curato prima di
+ * stringere: quel guasto usciva «Hai fermato il giro.» e, con un reindirizzamento in attesa,
+ * «Hai cambiato direzione.» — la colpa spostata su chi legge, che è il difetto di partenza al
+ * contrario. Le frasi qui sotto sono copiate dal kernel, non inventate.
+ */
+const FERMATO_CHE_NESSUNO_HA_CHIESTO = '⛔ la generazione si e fermata senza risposta e senza esaurire i giri.';
+
+test('FERMATO-NON-CHIESTO: il «fermato» che nessuno ha chiesto non diventa né un fermo né un cambio di direzione', () => {
+  const s = spiegaErrore(FERMATO_CHE_NESSUNO_HA_CHIESTO, 'fermato');
+  assert.notEqual(s.id, 'fermato-da-te', 'la carta dava alla persona la colpa di un guasto del modello');
+  assert.equal(s.id, 'risposta-vuota', 'e non finisce nemmeno nel sacco generico: ha la sua diagnosi');
+  assert.doesNotMatch(s.cosa, /Hai fermato|Hai cambiato/, s.cosa);
+  // ⛔ e nemmeno con un reindirizzamento in attesa: la provenienza non trasforma un guasto
+  const r = spiegaErrore(FERMATO_CHE_NESSUNO_HA_CHIESTO, 'fermato', { origine: ORIGINI.REINDIRIZZAMENTO });
+  assert.notEqual(r.id, 'reindirizzato');
+  assert.notEqual(r.famiglia, 'reindirizzato');
+  assert.equal(r.origine, 'reindirizzamento', 'la provenienza si riporta comunque, anche quando non decide niente');
+});
+
+test('FERMATO-SENZA-PAROLE: il fermo del runtime locale, che arriva col solo codice, resta un fermo', () => {
+  /*
+   * ⛔ Il falso negativo speculare, cioè il rischio di questa stretta: `session-registry.mjs`
+   * ≈2312/2322 chiude il runtime locale con `comeFinita: 'fermato'` e NESSUN `detto`, perché il
+   * controller è stato annullato. Lì il codice da solo è tutto quello che c'è, e deve bastare.
+   */
+  for (const messaggio of ['', undefined, null, '   ']) {
+    const s = spiegaErrore(messaggio, 'fermato');
+    assert.equal(s.id, 'fermato-da-te', `un fermo senza parole letto come guasto: ${JSON.stringify(messaggio)}`);
+    assert.notEqual(vestizioneErrore(s).tono, 'danger');
+  }
+  // e con la provenienza resta il cambio di direzione, parole o non parole
+  assert.equal(spiegaErrore('', 'fermato', { origine: ORIGINI.REINDIRIZZAMENTO }).id, 'reindirizzato');
 });
