@@ -226,6 +226,50 @@ di 50 voci vada bene.
 
 *File: `legacy/app.js` · Finita quando: si accoda un messaggio dal vivo e NON parte un reindirizzamento; la freccia su ripesca i messaggi.*
 
+#### ⭐ IL METRO DELLA REVIEW — dalla ricerca del 13/09, 22 fonti e otto basi di codice
+
+La ricerca e' rientrata **dopo** che le corsie erano partite, e le corsie di un flusso non si
+possono raggiungere mentre lavorano. ⇒ Questi risultati non cambiano il loro lavoro: cambiano il
+modo in cui lo giudico. Scritti **prima** di leggere le consegne, cosi' il metro non si adatta a
+cio' che e' arrivato. Documento completo: `RICERCA-FASE-2-REINDIRIZZAMENTO-2026-09-13.md`.
+
+⛔ **La prima cosa e' una smentita di una MIA premessa.** Avevo scritto nel brief che il nostro
+vantaggio sarebbe stata la ricevuta di consegna, dando per scontato che nessuno la dia. **Meta' e'
+gia' nostra**, verificata nel codice con file e riga: la coda emette gia' un evento **dentro**
+l’estrazione riuscita, il reindirizzamento ne emette uno all’applicazione vera, e il ciclo
+`Richiesto/Applicato/Annullato/Fallito` e' gia' correlato da un identificativo. ⇒ Sull’agente
+principale **siamo avanti a Hermes**, che al modello risponde soltanto «accodato».
+
+**Il vantaggio vero si sposta piu' in la', in tre pezzi.** ① La ricevuta dice **in quale giro** il
+testo e' stato letto — nessuno dei nove prodotti lo fa. ② Lo stesso contratto vale per i **figli**,
+ed e' li' che Hermes e' scoperto. ③ «Non consegnato» diventa un esito **dichiarato con un motivo**,
+non un silenzio.
+
+⛔ **Il confine dell’interruzione, e su questo i sette prodotti sono unanimi:** non si uccide mai un
+attrezzo a meta' per recapitare un messaggio. Il confine sicuro e' **fra un giro e l’altro** o alla
+**fine di un gruppo di attrezzi**; durante la generazione si puo', ma solo buttando il ragionamento
+parziale.
+
+⛔ **Due mine gia' pagate da altri, da non ripetere.** Rigiocare nella trascrizione un ragionamento
+interrotto a meta' ha reso **quattro sessioni inservibili in modo permanente**, e il difetto si
+rigioca a ogni chiamata perche' il punto di ripresa e' avvelenato. E scrivere «sei stato
+interrotto» dentro una riga dell’assistente fa si' che il modello la ripeta come sua, replicando
+righe fantasma.
+
+⭐ **Una cosa piccola che pero' decide se la funzione serve a qualcosa:** senza un marcatore che si
+**autodescrive**, il modello scambia il testo inserito per un’iniezione e **lo rifiuta**. Misurato
+da loro, non ipotizzato. Se una consegna non ce l’ha, la funzione sembra fatta e non funziona.
+
+⛔ **Cosa non accetto in una consegna**, perche' la ricerca dimostra che fa danno: una coda
+ottimistica del solo lato interfaccia che mostra una promessa come fatto; due messaggi della
+persona fusi in uno; un piano di controllo appeso a un riferimento in memoria invece che
+all’identificativo durevole della sessione — e' esattamente cosi' che a loro i figli sono diventati
+invisibili.
+
+⛔ **Quello che NON sappiamo, e non va riempito:** nessuna delle 22 fonti pubblica una misura in
+millisecondi fra il clic e il segno a schermo. Qualunque numero sulla «fluidita'» sarebbe
+inventato finche' non lo misuriamo noi.
+
 ### Corsia 2 · Reindirizzare produce una carta rossa che da' la colpa a te
 **Oggi:** reindirizzi e ricevi «si e' interrotto per un errore… apri Doctor». Non e' successo niente
 di male: hai solo cambiato direzione.
