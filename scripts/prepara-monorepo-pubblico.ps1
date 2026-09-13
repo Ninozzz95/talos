@@ -29,7 +29,11 @@ $script:inclusioni = @(
     # 13/09, primo giro del job sui runner: `labs/feature-flags.json` è CONFIGURAZIONE del prodotto
     # (config.mjs lo legge per TALOS_LABS); senza, il server dice «(nessuno: file assente)» e il
     # test W0-04 è rosso. Esce SOLO quel file, non la cartella labs/.
-    'harness-ui/labs/feature-flags.json'
+    'harness-ui/labs/feature-flags.json',
+    # 13/09: la foto del README dell'harness. Prima puntava a mobile/docs/immagini, cioe' a uno
+    # screenshot del TABLET presentato come se fosse il desktop; l'owner l'ha visto sul repo
+    # pubblico e ha chiesto la foto vera. Esce solo la cartella delle immagini.
+    'harness-ui/docs/immagini'
 )
 $script:radice = @('LICENSE', 'NOTICE', 'THIRD_PARTY_NOTICES.md', '.gitattributes',
     '.github', '.gitmodules', 'CHANGELOG.md', 'CODE_OF_CONDUCT.md')
