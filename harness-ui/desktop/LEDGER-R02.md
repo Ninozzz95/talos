@@ -15,7 +15,7 @@ Fonti ufficiali consultate il 12/09/2026:
 
 Decisione: adottare direttamente electron-builder **26.16.1**, Electron **44.3.0** già presente, NSIS upstream con include minimo; nessuna ricostruzione di un installer proprietario. Guscio fuori da asar per conservare il bootstrap ESM `--import` del figlio; backend e addon in `extraResources`. Adottare llama.cpp **b10517**, licenza MIT, archivi CPU e Vulkan completi con DLL e avvisi upstream. SHA256 CPU `f3fed0673c934ade45663a8e29220a0903b58ad7eff91eeeef606a37061cd031`; Vulkan `afa3b2d38b2b461e45a3df7783009b22b2b7e4bb92b40bcb910d0c8924925c88`.
 
-NSIS oneClick permette icona della finestra, del file e sopra il progresso; l'include personalizza testi e colori del controllo nativo. Non ospita il frontend Calm HTML. Non si promette un wizard HTML né una firma inesistente. `signAndEditExecutable:false` impedisce anche la modifica delle risorse dell'EXE Electron: limite da rendere esplicito.
+NSIS oneClick permette icona della finestra, del file e sopra il progresso; l'include personalizza testi e colori del controllo nativo. Non ospita il frontend Calm HTML. Non si promette un wizard HTML né una firma inesistente. `signAndEditExecutable:false` impediva anche la modifica delle risorse dell'EXE Electron, cioe' l'icona: il collegamento sul Desktop mostrava l'atomo di Electron. **Chiuso il 13/09/2026** passando a `signExecutable:false`, che salta la sola firma e lascia `resedit` scrivere icona e metadati (schema di app-builder-lib, letto in node_modules il 13/09). Verificato estraendo l'icona dall'EXE costruito e guardandola.
 
 ## File e simboli previsti
 
