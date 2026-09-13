@@ -352,6 +352,37 @@ sul 4174 non si punta: e' girato contro un **banco sulla 4196** con una **copia*
   lo script e' rimasto **fermo** dopo l'avvio, e il cancello l'ho lanciato a mano invece di
   aspettarlo.
 
+✅ **PROVATO A SCHERMO SUL PACCHETTO SERVITO, nei due temi** — dopo il push dei 12 commit, stessa sera.
+
+Prova browser `frontend/tests/browser/reindirizzamento-senza-carta-rossa.spec.mjs`: il gestore VERO
+riceve la sequenza che il server produce davvero (misurata nel codice: `Requested → RunError fermato
+→ Applied → RunStarted`, col messaggio reale letto dallo store), sul pacchetto servito, con foto.
+**8 prove, 8 verdi**, tema scuro e chiaro. Due versi contrari: un guasto vero resta rosso, uno stop
+senza reindirizzamento lascia la sua nota.
+
+- ⛔ **La prima corsa ha fotografato il VELO D'AVVIO cinque volte**: `#talosAvvio` resta 650 ms-4 s
+  e le prove duravano 500-800 ms. DOM vero, foto inutili. Ora si aspetta che il velo sia rimosso.
+  ⛔ E nel tema scuro la prova principale non arrivava alle sue asserzioni (pretendevo `data-theme`,
+  che `avvio.js` stampa solo per il chiaro).
+- ✅ **D1 — uno stop colorava il tick di rosso** (carta «Fermato» d'accento, tick `--danger`, nota
+  `real-session-error`). Il tick ora segue la carta. Commit `b1bedf00`.
+- ✅ **D2 — l'attesa restava SOPRA la domanda a cui rispondeva**, dopo un reindirizzamento applicato
+  e dopo un messaggio **accodato** consegnato mentre il modello ragiona. Si toglie l'attesa vecchia
+  prima della bolla nuova. Commit `b1bedf00`; 4 rotture, 4 rossi.
+- ⭐ **Classificato, non curato — il vuoto sotto un turno vecchio**: e' la riga delle azioni (30 px),
+  come in ogni risposta; fra un turno e l'altro il vuoto misura 0.
+- 🔜 **APERTO, decisione di disegno — un turno TALOS con la sola intestazione**: succede quando il suo
+  unico contenuto e' un ragionamento che l'utente ha scelto di nascondere (`showReasoning` spento), e
+  una domanda accodata arriva prima di qualunque testo. Prima lo copriva l'attesa messa nel posto
+  sbagliato. Si puo' mostrare una riga discreta o comprimere il turno: non lo decido io.
+- 🔜 **DUBBIO REGISTRATO, non difetto dichiarato**: 26 file di prova scattano foto e nessuno aspetta
+  il velo esplicitamente. Molti aspettano elementi per piu' di 4 s, quindi le loro foto possono essere
+  buone: va verificato guardandone una per suite, non dedotto dal conteggio.
+- ⛔ Resta fuori il **giro col modello vero**: la sequenza e' quella del codice e dello store, non
+  una registrata da un reindirizzamento vero (nello store ce ne sono zero).
+
+⛔ **Il paragrafo qui sotto e' superato da questo blocco** (resta per la storia):
+
 ⛔ **Resta NON VERIFICATO, e lo dichiaro invece di chiuderlo:** la prova **dal vivo** del
 reindirizzamento — far partire un giro, premere «Reindirizza» e guardare con gli occhi che la carta
 rossa non esca, nei **due temi**. Il codice ora e' servito e la sua catena e' provata in ogni anello,
