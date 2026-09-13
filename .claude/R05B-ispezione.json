@@ -1,0 +1,836 @@
+{
+  "files": 913,
+  "forbidden": [
+    "harness-ui/src/kernel/dist/kernelPerIlBanco.js"
+  ],
+  "hits": {
+    "serial": [],
+    "percorso": [
+      {
+        "p": "harness-ui/frontend/lab/fixtures/inspector.js",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/lab/fixtures/libreria.js",
+        "n": 6
+      },
+      {
+        "p": "harness-ui/frontend/lab/fixtures/terminale.js",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/src/components/terminale.js",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/browser/baseline-shell.spec.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/browser/workspace-chooser.spec.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/cancello-stati.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/cancello-testo.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/componenti-sidebar.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/intro.test.mjs",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/libreria-provenienza.test.mjs",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/terminale.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/kernel/talosHarness.test.mjs",
+        "n": 5
+      },
+      {
+        "p": "harness-ui/tests/browser-vivo.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/delega-parallelo-sequenza-cartella.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/documento-non-finisce-nella-radice.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/elenco-profondo.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/http-routes-workspace-browser.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/workspace-context.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/workspace-info.test.mjs",
+        "n": 4
+      }
+    ],
+    "email": [],
+    "porta": [
+      {
+        "p": "harness-ui/README.md",
+        "n": 4
+      },
+      {
+        "p": "harness-ui/desktop/LEDGER-R02.md",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/desktop/README.md",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/desktop/runtime.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/desktop/scripts/ci-smoke-installed.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/desktop/tests/guscio.spec.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/desktop/tests/installer.spec.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/desktop/tests/runtime.test.mjs",
+        "n": 5
+      },
+      {
+        "p": "harness-ui/desktop/tests/workflow.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/index.template.html",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/lab/fixtures/ricerche.js",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/lab/main.js",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/mockup/talos-mockup.html",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/frontend/playwright.bc3642.config.mjs",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/frontend/playwright.componenti.config.mjs",
+        "n": 4
+      },
+      {
+        "p": "harness-ui/frontend/playwright.config.mjs",
+        "n": 5
+      },
+      {
+        "p": "harness-ui/frontend/scripts/cancello/cancello.mjs",
+        "n": 6
+      },
+      {
+        "p": "harness-ui/frontend/scripts/cancello/superfici-scollegate.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/scripts/cancello/veli-sani.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/scripts/confronto/guida.mjs",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/frontend/scripts/diagnose-interaction-lag.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/scripts/mockup-to-template.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/src/components/avvio-sessione.js",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/src/components/browser-gesti.js",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/src/components/conversazione.js",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/src/components/cronologia.js",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/src/components/inspector.js",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/src/components/libreria-anteprima.js",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/src/components/ricerca-dettaglio.js",
+        "n": 5
+      },
+      {
+        "p": "harness-ui/frontend/src/components/sezioni-adattatori.js",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/frontend/src/components/theme-studio.js",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/src/contracts/session-events.js",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/src/legacy/app.js",
+        "n": 13
+      },
+      {
+        "p": "harness-ui/frontend/src/motion/desktop-background.js",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/src/styles/aspetto.css",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/src/styles/desktop-final.css",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/src/styles/diff-in-chat.css",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/src/styles/index.css",
+        "n": 4
+      },
+      {
+        "p": "harness-ui/frontend/src/styles/main.css",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/src/styles/mockup-td.css",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/bc43/banco.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/bc43/playwright.config.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/bc48-cache-sessione.visual.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/contract/session-events.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/integration/crud-vivo-frontend.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/integration/ricerca-vivo-frontend.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/tests/parity/aspetto-non-rende-illeggibile.spec.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/tests/parity/componenti.spec.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/parity/nessun-errore-a-runtime.spec.mjs",
+        "n": 5
+      },
+      {
+        "p": "harness-ui/frontend/tests/parity/selettore-modelli-non-sfonda.spec.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/bc13-locali-non-aspettano-la-rete.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/bc15-aggancio-enhancer.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/bc18-scheda-agenti-non-diverge.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/bc36-bc37-identita-sessione.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/bc41-giri-in-corso.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/bc42-albero-pigro.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/browser-altezza.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/browser-apertura-non-tace.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/browser-gesti.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/browser-torna-alla-pagina.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/cancello-superfici.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/cronologia.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/inspector.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/libreria-anteprima.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/provider-pk-browser.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/provider-pkl-bis-dom.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/regole-vincolanti.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/replay-non-tocca-il-layout-a-ogni-evento.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/ricerca-azioni.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/ricerca-dettaglio.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/risultati-ricerca.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/theme-studio.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/topbar-forma.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/package.json",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/public/app.js",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/public/index.html",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/scripts/aggiorna-4174.ps1",
+        "n": 15
+      },
+      {
+        "p": "harness-ui/scripts/avvia-talos.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/scripts/cancello/prima-del-commit.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/scripts/cancello/regole-vincolanti.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/scripts/qa-visual-pipeline.mjs",
+        "n": 8
+      },
+      {
+        "p": "harness-ui/scripts/windows/open-with-talos.ps1",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/scripts/windows/register-open-with-talos.ps1",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/browser-frame.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/browser-proxy-universale.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/src/browser-sessione-viva.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/src/browser-stream.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/config.mjs",
+        "n": 4
+      },
+      {
+        "p": "harness-ui/src/duckduckgo-search.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/http-app.mjs",
+        "n": 6
+      },
+      {
+        "p": "harness-ui/src/kernel/talosHarness.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/openrouter-oauth.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/research-orchestrator.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/research-store.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/research/fetch-cache.mjs",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/src/research/markdown-server.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/runtime-owner-adapter.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/session-registry.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/src/sse-replay-coalescente.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/subagent-orchestrator.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/workspace-files.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/browser-frame.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/tests/browser-proxy-universale.test.mjs",
+        "n": 4
+      },
+      {
+        "p": "harness-ui/tests/browser-proxy.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/tests/browser-vivo.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/cache-del-prompt-si-chiede.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/cerca-kernel.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/code-block-formatter.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/config.test.mjs",
+        "n": 7
+      },
+      {
+        "p": "harness-ui/tests/context-runtime.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/delega-parallelo-sequenza-cartella.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/document-filename.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/duckduckgo-search.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/tests/fixtures/bc48-b-dopo.json",
+        "n": 4
+      },
+      {
+        "p": "harness-ui/tests/fixtures/bc48-b-prima.json",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/tests/fixtures/bc48-cbis-banco.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/http-routes-library-anteprima.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/http-routes-note-attivita-memoria.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/http-routes-research-esportazioni.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/tests/http-routes-research.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/model-fit-ui.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/openrouter-oauth.test.mjs",
+        "n": 13
+      },
+      {
+        "p": "harness-ui/tests/origine-della-richiesta.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/provider-credential-pool.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/provider-pg.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/provider-pi.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/provider-pj.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/tests/provider-pk.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/provider-pkl-bis.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/provider-zai.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/research/collector-cache.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/tests/research/fetch-cache.test.mjs",
+        "n": 6
+      },
+      {
+        "p": "harness-ui/tests/ricerca-giornale-e-ripresa.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/ricerca-motore-nella-corsa.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/ricerca-permesso-e-consegna.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/runtime-owner-adapter-fallback.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/session-registry.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/subagent-orchestrator.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/terminal-ws.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/tests/viewport-desktop.test.mjs",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/tests/windows-open-with-talos.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/workspace-context.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/workspace-files.test.mjs",
+        "n": 1
+      }
+    ],
+    "ricerca": [
+      {
+        "p": "harness-ui/README.md",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/lab/fixtures/progetti.js",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/frontend/lab/fixtures/ricerche.js",
+        "n": 11
+      },
+      {
+        "p": "harness-ui/frontend/playwright.componenti.config.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/src/legacy/app.js",
+        "n": 5
+      },
+      {
+        "p": "harness-ui/frontend/tests/integration/ricerca-vivo-frontend.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/frontend/tests/unit/ricerca-dettaglio.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/public/app.js",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/scripts/audit-harness-findings.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/scripts/qa-visual-pipeline.mjs",
+        "n": 14
+      },
+      {
+        "p": "harness-ui/src/agent-service.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/src/automation-store.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/config.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/contesto-del-progetto.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/src/custom-task.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/kernel/talosHarness.mjs",
+        "n": 51
+      },
+      {
+        "p": "harness-ui/src/kernel/talosHarness.test.mjs",
+        "n": 8
+      },
+      {
+        "p": "harness-ui/src/mappa-cartelle.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/src/mcp-client.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/path-policy.mjs",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/src/research-orchestrator.mjs",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/src/research/raccolta-viva.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/session-registry.mjs",
+        "n": 6
+      },
+      {
+        "p": "harness-ui/src/workspace-context.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/src/workspace-files.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/config.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/tests/fixtures/bc48-b-dopo.json",
+        "n": 5
+      },
+      {
+        "p": "harness-ui/tests/fixtures/bc48-b-prima.json",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/http-app.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/http-routes-research-esportazioni.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/http-routes-research.test.mjs",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/tests/kernel-loop-locale-e-stop.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/library-store.test.mjs",
+        "n": 3
+      },
+      {
+        "p": "harness-ui/tests/mcp-client.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/path-policy.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/tests/research-orchestrator.test.mjs",
+        "n": 6
+      },
+      {
+        "p": "harness-ui/tests/ricerca-deposito-a-pezzi.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/tests/ricerca-deposito-strutturato.test.mjs",
+        "n": 2
+      },
+      {
+        "p": "harness-ui/tests/ricerca-giornale-e-ripresa.test.mjs",
+        "n": 10
+      },
+      {
+        "p": "harness-ui/tests/ricerca-motore-nella-corsa.test.mjs",
+        "n": 13
+      },
+      {
+        "p": "harness-ui/tests/ricerca-permesso-e-consegna.test.mjs",
+        "n": 1
+      },
+      {
+        "p": "harness-ui/tests/session-registry.test.mjs",
+        "n": 4
+      }
+    ]
+  }
+}
