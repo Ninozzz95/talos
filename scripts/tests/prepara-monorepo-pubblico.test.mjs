@@ -51,6 +51,12 @@ test('R05B: contratto completo sul clone locale pubblico', { skip: !existsSync(s
     'harness-ui/tests/contratto.test.mjs', 'harness-ui/contracts/README.md', 'harness-ui/README.md',
     'harness-ui/THIRD_PARTY_NOTICES.md', 'context-engine/src/contratto.mjs', 'context-engine/THIRD_PARTY_NOTICES.md']) scrivi(sorgente, p, '// Fixture minima R05b\n');
   for (const p of ['harness-ui/package.json', 'harness-ui/package-lock.json', 'context-engine/package.json', 'context-engine/package-lock.json']) scrivi(sorgente, p, '{"license":"AGPL-3.0-only"}\n');
+  // 13/09: due inclusioni nuove, e il cancello SORGENTE pretende che ogni inclusione esista in
+  // HEAD. `labs/feature-flags.json` e' configurazione di prodotto letta per TALOS_LABS; la cartella
+  // `docs/immagini` porta la foto del README dell'harness, che prima mostrava il TABLET. Il banco le
+  // dichiara qui: senza, l'export si rifiuta di partire, ed e' giusto che si rifiuti.
+  scrivi(sorgente, 'harness-ui/labs/feature-flags.json', '{"esempio": false}');
+  scrivi(sorgente, 'harness-ui/docs/immagini/harness-desktop.png', 'PNG di prova R05b');
   salva(sorgente, 'test: sorgente minima R05b, non prodotto');
   clone(copia);
   const iniziale = stato(copia);
