@@ -58,10 +58,29 @@ for (const modo of ['dark', 'light']) {
       await expect(nota).toBeVisible();
       await expect(testa).toHaveAttribute('aria-expanded', 'false');
       await expect(testa).toContainText('Sta ragionando…');
+      /*
+       * ⭐⭐ 13/09 sera — UN SOLO SEGNALE, «fare meglio di Hermes». Hermes desktop mostra la riga «Thinking…»
+       *   e una riga di stato in fondo; noi avevamo «Sta ragionando…» e «Ragionamento in corso…» insieme.
+       *   Ora la riga è l'indicatore: l'argomento corrente (l'ultima frase COMPLETA: quella dopo «test.» è
+       *   ancora senza lo spazio che la chiude), i secondi, il pallino delle righe in corso.
+       */
+      await expect(page.locator('#conversation .talos-waiting'), 'l’attesa sotto ripete quello che dice la riga').toHaveCount(0);
+      await expect(testa.locator('.talos-dot--live')).toHaveCount(1);
+      await expect(testa.locator('.talos-measure')).toHaveText(/^\d+ s$/);
+      await expect(testa.locator('.talos-ragionamento__argomento')).toHaveText('Devo prima capire dove stanno i test.');
+      /* il movimento è quello dell'attesa: lo stesso shimmer nelle lettere dell'etichetta */
+      await expect(testa.locator('.tool-note-summary-text')).toHaveCSS('animation-name', 'talosAttesaShimmer');
       await page.screenshot({ path: testInfo.outputPath(`1-sta-ragionando-${modo}.png`) });
 
+      await eventi(page, [{ type: 'ReasoningMessageEnd', messageId: 'r1', _sequenza: 4 }]);
+      /* ⭐ Finito il ragionamento l'attesa torna: adesso sullo schermo non si muove nient'altro. */
+      await expect(page.locator('#conversation .talos-waiting')).toHaveCount(1);
+      await expect(page.locator('#conversation .talos-waiting')).toContainText('preparando la risposta');
+      await expect(testa.locator('.talos-dot--live, .talos-measure, .talos-ragionamento__argomento'), 'i pezzi vivi restano su una riga finita').toHaveCount(0);
+      await expect(testa.locator('.tool-note-summary-text'), 'una riga finita non scintilla più').toHaveCSS('animation-name', 'none');
+      await page.screenshot({ path: testInfo.outputPath(`1b-ragionamento-finito-${modo}.png`) });
+
       await eventi(page, [
-        { type: 'ReasoningMessageEnd', messageId: 'r1', _sequenza: 4 },
         { type: 'TextMessageStart', messageId: 'm1', _sequenza: 5 },
         { type: 'TextMessageContent', messageId: 'm1', delta: 'Ho trovato 40 file di test; quelli della chat sono 6.', _sequenza: 6 },
         { type: 'TextMessageEnd', messageId: 'm1', _sequenza: 7 },
@@ -128,6 +147,26 @@ for (const modo of ['dark', 'light']) {
       const testa = page.locator('#conversation .real-reasoning-note > .talos-activity__head');
       await expect(testa).toContainText(/^\s*Ha ragionato/);
       await expect(testa).not.toContainText('Sta ragionando');
+      await expect(testa.locator('.talos-dot--live, .talos-measure, .talos-ragionamento__argomento'), 'un giro fermato lascia i pezzi vivi').toHaveCount(0);
+    });
+
+    test(`RAGIONAMENTO-SCHERMO-05 AL CONTRARIO — con un reindirizzamento in attesa, il suo avviso non lo prende la riga (${modo})`, async ({ page }) => {
+      /*
+       * ⛔ Il caso che la guardia copre, ed è una sequenza vera: il ragionamento è partito, la persona chiede
+       *   di reindirizzare, e il primo testo arriva DOPO la richiesta. L'attesa in quel momento dice
+       *   «Reindirizzamento al prossimo punto sicuro…»: è l'unico avviso che la correzione è in viaggio, e
+       *   la riga viva non deve portarselo via.
+       */
+      await apri(page, `redirect-${modo}`);
+      await eventi(page, [
+        avvio,
+        { type: 'ReasoningMessageStart', messageId: 'r1', _sequenza: 2 },
+        { type: 'RunRedirectRequested', redirectId: 'rr-1', testo: 'guarda il README', _sequenza: 3 },
+        { type: 'ReasoningMessageContent', messageId: 'r1', delta: pensiero, _sequenza: 4 },
+      ]);
+      await expect(page.locator('#conversation .real-reasoning-note')).toBeVisible();
+      await expect(page.locator('#conversation .talos-waiting')).toHaveCount(1);
+      await expect(page.locator('#conversation .talos-waiting')).toContainText('Reindirizzamento al prossimo punto sicuro');
     });
   });
 }

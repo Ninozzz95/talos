@@ -67,8 +67,8 @@ import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nom
 import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
-import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, tonoDelTick, vestizioneErrore } from '../components/errori.js';
-import { ETICHETTA_INTERRUTTORE_RAGIONAMENTO, etichettaRagionamento } from '../components/ragionamento.js'; // 13/09 sera: il ragionamento si comprime invece di sparire // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
+import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, tonoDelTick, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
+import { ETICHETTA_INTERRUTTORE_RAGIONAMENTO, argomentoDelRagionamento, etichettaRagionamento, formattaDurataRagionamento } from '../components/ragionamento.js'; // 13/09 sera: il ragionamento si comprime invece di sparire, e mentre ragiona dice su cosa
 // 06/9 C24: la pagina delle Note — la monta `sezioni-adattatori.js`, che riusa `note.js`
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
@@ -10458,14 +10458,79 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     // ⛔ niente `aria-hidden` da togliere: la riga non l'ha mai avuto (vedi ReasoningMessageStart), `hidden` basta.
     const inCorso = voce.inizio !== null;
     etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso }));
+    if (inCorso) accendiRagionamentoVivo(voce);
     if (inCorso && state.showReasoning) {
       impostaAperturaRagionamento(voce.article, true);
       voce.apertaDaSola = true;
     }
   }
 
+  /*
+   * ⭐⭐ 13/09 sera — UN SOLO INDICATORE VIVO MENTRE RAGIONA. Owner: «dobbiamo fare meglio di Hermes».
+   *   Hermes desktop mostra due segnali insieme: la riga «Thinking…» e una riga di stato in fondo
+   *   (`thread/status.tsx`). Noi li avevamo uguali: «Sta ragionando…» sulla riga e «Ragionamento in
+   *   corso…» nell'attesa sotto.
+   * ⇒ Al primo testo l'attesa se ne va e la riga diventa l'indicatore: l'etichetta, l'argomento corrente
+   *   (come Codex, vedi `components/ragionamento.js`), i secondi, il pallino delle righe in corso.
+   *   L'attesa torna da sola a fine ragionamento («TALOS sta preparando la risposta…», ReasoningMessageEnd).
+   * ⛔ Con un reindirizzamento in attesa l'attesa RESTA: dice «Reindirizzamento al prossimo punto sicuro…»,
+   *   e toglierla per un ragionamento nasconderebbe l'unico avviso che la tua correzione è in viaggio.
+   * ⛔ Solo dal vivo: in una rigiocata non si muove niente, e ogni scrittura in più è una modifica del DOM
+   *   che LAG-REPLAY-REASONING-36 conta.
+   * ⛔ L'argomento si ricalcola al massimo ogni 300 ms e a ogni secondo: a ogni token sarebbe un testo che
+   *   trema sotto gli occhi, e un ricalcolo su un ragionamento lungo per ogni pezzo che arriva.
+   */
+  const INTERVALLO_ARGOMENTO_RAGIONAMENTO_MS = 300;
+
+  function accendiRagionamentoVivo(voce) {
+    const testa = voce.article.querySelector(':scope > .talos-activity__head');
+    if (!testa || voce.vivo) return;
+    if (!state.realSession.redirectPendingId) nascondiAttesaRisposta();
+    const argomento = document.createElement('span');
+    argomento.className = 'talos-muted talos-truncate talos-ragionamento__argomento';
+    const secondi = document.createElement('span');
+    secondi.className = 'talos-mono talos-measure';
+    secondi.setAttribute('aria-hidden', 'true'); // i secondi non si annunciano uno per uno
+    secondi.textContent = formattaDurataRagionamento(0);
+    const pallino = document.createElement('span');
+    pallino.className = 'talos-dot talos-dot--live';
+    pallino.setAttribute('aria-hidden', 'true');
+    testa.append(argomento, secondi, pallino);
+    voce.article.dataset.ragionamento = 'vivo';
+    voce.vivo = { argomento, secondi, pallino, ultimoArgomentoAlle: 0, timer: null };
+    voce.vivo.timer = window.setInterval(() => {
+      if (!voce.vivo || !voce.article.isConnected) { spegniRagionamentoVivo(voce); return; }
+      const testo = formattaDurataRagionamento((adessoRagionamentoMs() - voce.inizio) / 1000);
+      if (secondi.textContent !== testo) secondi.textContent = testo;
+      aggiornaArgomentoRagionamento(voce);
+    }, 1000);
+    aggiornaArgomentoRagionamento(voce, { subito: true });
+  }
+
+  function aggiornaArgomentoRagionamento(voce, { subito = false } = {}) {
+    const vivo = voce.vivo;
+    if (!vivo) return;
+    const adesso = adessoRagionamentoMs();
+    if (!subito && adesso - vivo.ultimoArgomentoAlle < INTERVALLO_ARGOMENTO_RAGIONAMENTO_MS) return;
+    vivo.ultimoArgomentoAlle = adesso;
+    const testo = argomentoDelRagionamento(voce.grezzo) ?? '';
+    if (vivo.argomento.textContent !== testo) vivo.argomento.textContent = testo;
+  }
+
+  function spegniRagionamentoVivo(voce) {
+    const vivo = voce.vivo;
+    if (!vivo) return;
+    window.clearInterval(vivo.timer);
+    vivo.argomento.remove();
+    vivo.secondi.remove();
+    vivo.pallino.remove();
+    delete voce.article.dataset.ragionamento;
+    voce.vivo = null;
+  }
+
   /** La fine: l'etichetta dice quanto è durato, e una scheda aperta da sola (non a mano) si richiude. */
   function chiudiRagionamento(voce) {
+    spegniRagionamentoVivo(voce);
     const secondi = voce.inizio === null ? null : (adessoRagionamentoMs() - voce.inizio) / 1000;
     etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso: false, secondi }));
     const toccata = voce.article.querySelector(':scope > .talos-activity__head')?.dataset.toccatoDaUtente === 'si';
@@ -14733,6 +14798,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
         if (!voce) break; // difensivo: un Content senza il suo Start non deve far crashare la sessione
         voce.grezzo += evento.delta;
         if (voce.article.hidden && voce.grezzo.trim() !== '') mostraRagionamento(voce);
+        else if (voce.vivo) aggiornaArgomentoRagionamento(voce); // l'argomento corrente, a passo lento: vedi `accendiRagionamentoVivo`
         if (!state.realSession.deferHistoricalRendering) {
           renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
           if (ragionamentoAperto(voce.article)) scrollStreamingOutput(voce.article);

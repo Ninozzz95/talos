@@ -18363,10 +18363,32 @@ function etichettaRagionamento({ inCorso = false, secondi = null } = {}) {
   if (Number(secondi) < 1) return "Ha ragionato poco";
   return `Ha ragionato per ${formattaDurataRagionamento(secondi)}`;
 }
-var ETICHETTA_INTERRUTTORE_RAGIONAMENTO;
+function pulisciArgomento(testo3) {
+  return String(testo3).replace(/\*\*|__|`/g, "").replace(/^\s*(?:#{1,6}\s+|[-*+]\s+|\d+[.)]\s+)/, "").replace(/\s+/g, " ").trim();
+}
+function accorciaArgomento(testo3, massimo) {
+  if (testo3.length <= massimo) return testo3;
+  return `${testo3.slice(0, massimo - 1).trimEnd()}…`;
+}
+function argomentoDelRagionamento(testo3, { massimo = 90 } = {}) {
+  const grezzo = String(testo3 ?? "");
+  if (!grezzo.trim()) return null;
+  const titoli = [...grezzo.matchAll(/\*\*([^*\n]{3,80})\*\*/g)];
+  if (titoli.length) {
+    const titolo2 = pulisciArgomento(titoli[titoli.length - 1][1]);
+    if (titolo2) return accorciaArgomento(titolo2, massimo);
+  }
+  let fine = -1;
+  for (const m of grezzo.matchAll(/[.!?](?=\s)|\n/g)) fine = m.index + 1;
+  if (fine <= 0) return null;
+  const frasi = grezzo.slice(0, fine).split(/(?<=[.!?])\s+|\n+/).map(pulisciArgomento).filter((frase) => frase.split(" ").filter(Boolean).length >= MINIMO_PAROLE_ARGOMENTO);
+  return frasi.length ? accorciaArgomento(frasi[frasi.length - 1], massimo) : null;
+}
+var ETICHETTA_INTERRUTTORE_RAGIONAMENTO, MINIMO_PAROLE_ARGOMENTO;
 var init_ragionamento = __esm({
   "src/components/ragionamento.js"() {
     ETICHETTA_INTERRUTTORE_RAGIONAMENTO = "Apri il ragionamento mentre scrive";
+    MINIMO_PAROLE_ARGOMENTO = 3;
   }
 });
 
@@ -26969,12 +26991,61 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         voce.article.hidden = false;
         const inCorso = voce.inizio !== null;
         etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso }));
+        if (inCorso) accendiRagionamentoVivo(voce);
         if (inCorso && state.showReasoning) {
           impostaAperturaRagionamento(voce.article, true);
           voce.apertaDaSola = true;
         }
       }
+      const INTERVALLO_ARGOMENTO_RAGIONAMENTO_MS = 300;
+      function accendiRagionamentoVivo(voce) {
+        const testa = voce.article.querySelector(":scope > .talos-activity__head");
+        if (!testa || voce.vivo) return;
+        if (!state.realSession.redirectPendingId) nascondiAttesaRisposta();
+        const argomento = document.createElement("span");
+        argomento.className = "talos-muted talos-truncate talos-ragionamento__argomento";
+        const secondi = document.createElement("span");
+        secondi.className = "talos-mono talos-measure";
+        secondi.setAttribute("aria-hidden", "true");
+        secondi.textContent = formattaDurataRagionamento(0);
+        const pallino = document.createElement("span");
+        pallino.className = "talos-dot talos-dot--live";
+        pallino.setAttribute("aria-hidden", "true");
+        testa.append(argomento, secondi, pallino);
+        voce.article.dataset.ragionamento = "vivo";
+        voce.vivo = { argomento, secondi, pallino, ultimoArgomentoAlle: 0, timer: null };
+        voce.vivo.timer = window.setInterval(() => {
+          if (!voce.vivo || !voce.article.isConnected) {
+            spegniRagionamentoVivo(voce);
+            return;
+          }
+          const testo3 = formattaDurataRagionamento((adessoRagionamentoMs() - voce.inizio) / 1e3);
+          if (secondi.textContent !== testo3) secondi.textContent = testo3;
+          aggiornaArgomentoRagionamento(voce);
+        }, 1e3);
+        aggiornaArgomentoRagionamento(voce, { subito: true });
+      }
+      function aggiornaArgomentoRagionamento(voce, { subito = false } = {}) {
+        const vivo = voce.vivo;
+        if (!vivo) return;
+        const adesso = adessoRagionamentoMs();
+        if (!subito && adesso - vivo.ultimoArgomentoAlle < INTERVALLO_ARGOMENTO_RAGIONAMENTO_MS) return;
+        vivo.ultimoArgomentoAlle = adesso;
+        const testo3 = argomentoDelRagionamento(voce.grezzo) ?? "";
+        if (vivo.argomento.textContent !== testo3) vivo.argomento.textContent = testo3;
+      }
+      function spegniRagionamentoVivo(voce) {
+        const vivo = voce.vivo;
+        if (!vivo) return;
+        window.clearInterval(vivo.timer);
+        vivo.argomento.remove();
+        vivo.secondi.remove();
+        vivo.pallino.remove();
+        delete voce.article.dataset.ragionamento;
+        voce.vivo = null;
+      }
       function chiudiRagionamento(voce) {
+        spegniRagionamentoVivo(voce);
         const secondi = voce.inizio === null ? null : (adessoRagionamentoMs() - voce.inizio) / 1e3;
         etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso: false, secondi }));
         const toccata = voce.article.querySelector(":scope > .talos-activity__head")?.dataset.toccatoDaUtente === "si";
@@ -30253,6 +30324,7 @@ ${testo3}` : testo3;
             if (!voce) break;
             voce.grezzo += evento.delta;
             if (voce.article.hidden && voce.grezzo.trim() !== "") mostraRagionamento(voce);
+            else if (voce.vivo) aggiornaArgomentoRagionamento(voce);
             if (!state.realSession.deferHistoricalRendering) {
               renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
               if (ragionamentoAperto(voce.article)) scrollStreamingOutput(voce.article);
