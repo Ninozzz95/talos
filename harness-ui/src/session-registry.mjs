@@ -1126,6 +1126,57 @@ function cacheDaEventi(ordinati) {
 }
 
 /**
+ * ⭐⭐ 13/09 sera — QUANTO HA RAGIONATO IL MODELLO, per ogni ragionamento. «Fare meglio di Hermes».
+ *
+ * Hermes desktop perde la durata a ogni ricarica, e lo dichiara nel suo codice
+ * (`apps/desktop/src/components/chat/activity-timer.ts`: «the persisted turn records the text the model
+ * thought, never how long it spent thinking it»): una conversazione riaperta dice solo «Thought».
+ * Qui gli istanti di ogni evento stanno già in memoria mentre il giro passa (`voce.istantiEvento`): la
+ * durata si calcola da lì e finisce nel record `tempi-giro` — una riga per giro, nessun campo sugli
+ * eventi, la stessa regola di BC-07 (vedi `persistiTempiDelGiro`).
+ *
+ * ⛔ Solo coppie inizio/fine con ENTRAMBI gli istanti: un ragionamento fermato a metà non ha una durata,
+ *   e una sessione ripresa da disco non ha istanti. «Non misurato» non diventa mai uno zero.
+ * ⛔ `soloUltimoGiro`: il record è per giro, e riscriverci le durate di tutta la sessione a ogni giro le
+ *   duplicherebbe.
+ * @returns {Record<string, number>} messageId → millisecondi
+ */
+export function durateRagionamentoDaEventi(eventi, { istanti = null, soloUltimoGiro = false } = {}) {
+  const ordinati = eventiInOrdine(eventi);
+  const leggiIstante = creaLettoreIstanti(istanti);
+  let da = 0;
+  if (soloUltimoGiro) {
+    for (let i = ordinati.length - 1; i >= 0; i -= 1) if (ordinati[i]?.type === 'RunStarted') { da = i; break; }
+  }
+  const inizi = new Map();
+  const durate = {};
+  for (const evento of ordinati.slice(da)) {
+    if (typeof evento?.messageId !== 'string' || !Number.isSafeInteger(evento._sequenza)) continue;
+    if (evento.type === 'ReasoningMessageStart') {
+      const istante = leggiIstante(evento._sequenza);
+      if (istante !== null) inizi.set(evento.messageId, istante);
+    } else if (evento.type === 'ReasoningMessageEnd' && inizi.has(evento.messageId)) {
+      const fine = leggiIstante(evento._sequenza);
+      const ms = fine === null ? null : fine - inizi.get(evento.messageId);
+      if (Number.isFinite(ms) && ms >= 0) durate[evento.messageId] = ms;
+    }
+  }
+  return durate;
+}
+
+/** Le durate già scritte nei record `tempi-giro` di una sessione: servono a una sessione ripresa da disco. */
+export function durateRagionamentoDaRecord(record) {
+  const durate = {};
+  for (const riga of Array.isArray(record) ? record : []) {
+    if (riga?.tipo !== 'tempi-giro' || !riga.ragionamentiMs || typeof riga.ragionamentiMs !== 'object') continue;
+    for (const [messageId, ms] of Object.entries(riga.ragionamentiMs)) {
+      if (Number.isFinite(ms) && ms >= 0) durate[messageId] = ms;
+    }
+  }
+  return durate;
+}
+
+/**
  * ⭐⭐⭐ LE METRICHE DI UNA SESSIONE, derivate dai SOLI eventi persistiti.
  *
  * Stessa firma e stesso contratto di `processiDaEventi` qui sopra:
@@ -1882,6 +1933,7 @@ export function createSessionRegistry({
        *   vale zero» sono fatti diversi, ed è la stessa disciplina di `usage` e del ledger.
        */
       if (!metriche?.registrato || metriche.primoToken?.ms === null) return;
+      const durateRagionamento = durateRagionamentoDaEventi(voce.eventi, { istanti: voce.istantiEvento ?? null, soloUltimoGiro: true });
       registraRigaSyncFn({
         cartellaStore,
         sessionId: voce.sessionId,
@@ -1896,6 +1948,8 @@ export function createSessionRegistry({
           tokenDentro: usage?.prompt_tokens ?? null,
           tokenFuori: usage?.completion_tokens ?? null,
           tokenDaCache: usage?.cached_tokens ?? null,
+          // ⭐ 13/09 sera: quanto ha ragionato, per ragionamento — la durata che Hermes perde alla ricarica. Assente = nessuno misurato, mai un oggetto di zeri.
+          ...(Object.keys(durateRagionamento).length ? { ragionamentiMs: durateRagionamento } : {}),
         },
       });
     } catch (errore) {
@@ -3405,6 +3459,7 @@ export function createSessionRegistry({
           codaMessaggi: [], sessionId, controller: new AbortController(),
           conclusa, ripristinata: true, interrotta: !conclusa,
           prossimaSequenza: ultimaSequenza, versioneGiro,
+          durateRagionamentoSalvate: durateRagionamentoDaRecord(record), // ⭐ 13/09 sera: la durata del ragionamento sopravvive al riavvio
         };
         // SESSION-RESTORE-LAZY-WATCHER-24 — nessun watcher durante il boot:
         // la cronologia resta leggibile e il primo vero resume lo attiverà.
@@ -4216,7 +4271,9 @@ export function createSessionRegistry({
       const chiusura = interrotta && metriche.chiusura && metriche.chiusura.motivo === null
         ? { ...metriche.chiusura, motivoAssente: MOTIVO_CHIUSURA_INTERROTTA }
         : metriche.chiusura;
-      return { ok: true, ...metriche, chiusura, interrotta, cacheSessione: cacheSessioneDaEventi(voce.eventi) };
+      /* ⭐ 13/09 sera: le durate salvate (sessione ripresa) si completano con quelle vive di questo processo. */
+      const ragionamentiMs = { ...(voce.durateRagionamentoSalvate ?? {}), ...durateRagionamentoDaEventi(voce.eventi, { istanti: voce.istantiEvento ?? null }) };
+      return { ok: true, ...metriche, chiusura, interrotta, cacheSessione: cacheSessioneDaEventi(voce.eventi), ragionamentiMs };
     },
 
     async elencaServerMcp(sessionId) {

@@ -24,7 +24,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { createSessionRegistry } from '../src/session-registry.mjs';
+import { createSessionRegistry, durateRagionamentoDaEventi, durateRagionamentoDaRecord } from '../src/session-registry.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /** Legge i record `tipo:'tempi-giro'` scritti per una sessione. */
@@ -96,6 +96,117 @@ test('⭐⭐⭐ alla fine di un giro il tempo al primo token finisce sul DISCO, 
   assert.equal(riga.tokenDentro, 29_148, '⛔ senza i token in ingresso il tempo non è interpretabile: è il vincolo della ricerca');
   assert.equal(riga.tokenDaCache, 0);
   assert.equal(riga.modello, 'z-ai/glm-5.3-flash', 'il modello sta nella riga: due modelli non si confrontano fra loro senza saperlo');
+});
+
+/* ───────────── ⭐⭐ 13/09 sera — QUANTO HA RAGIONATO, sul disco («fare meglio di Hermes», punto 3) ─────────────
+ * Hermes desktop perde la durata del ragionamento a ogni ricarica e lo dichiara nel suo codice
+ * (`activity-timer.ts`). Qui finisce nel record `tempi-giro`, una riga per giro, senza toccare gli eventi. */
+
+/** Aspetta che l'evento di fine giro sia arrivato sul disco: le righe degli eventi si scrivono senza attesa. */
+async function aspettaFineGiroSulDisco(cartellaStore, sessionId) {
+  for (let i = 0; i < 200; i += 1) {
+    try {
+      if (readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8').includes('"type":"RunFinished"')) return;
+    } catch { /* il file può non esistere ancora */ }
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error('la fine del giro non è mai arrivata sul disco: il ripristino misurerebbe un file a metà');
+}
+
+test('⭐⭐ la durata di OGNI ragionamento finisce nel record del giro, col suo valore vero', async (t) => {
+  const banco = bancoDiProva();
+  t.after(() => banco.pulisci());
+  const { sessionId } = banco.registro.avviaLibero({ cartellaId: '0', consegna: 'ragiona e poi rispondi' });
+  await new Promise((r) => setImmediate(r));
+
+  banco.avanza(300);
+  banco.emetti({ type: 'ReasoningMessageStart', messageId: 'r1', role: 'reasoning' });
+  banco.emetti({ type: 'ReasoningMessageContent', messageId: 'r1', delta: 'Devo leggere i test.' });
+  banco.avanza(4_200);
+  banco.emetti({ type: 'ReasoningMessageEnd', messageId: 'r1' });
+  banco.avanza(100);
+  banco.emetti({ type: 'TextMessageStart', messageId: 'm1', role: 'assistant' });
+  banco.emetti({ type: 'TextMessageEnd', messageId: 'm1' });
+  banco.finisci();
+  await new Promise((r) => setImmediate(r));
+
+  const [riga] = tempiScritti(banco.cartellaStore, sessionId);
+  assert.deepEqual(riga.ragionamentiMs, { r1: 4_200 }, '⛔ la durata VERA del ragionamento, non uno zero e non il tempo del giro intero');
+});
+
+test('⛔⛔ AL CONTRARIO — un ragionamento senza la sua fine non ha durata, e un giro senza ragionamenti non scrive il campo', async (t) => {
+  const banco = bancoDiProva();
+  t.after(() => banco.pulisci());
+  const { sessionId } = banco.registro.avviaLibero({ cartellaId: '0', consegna: 'fermato a metà' });
+  await new Promise((r) => setImmediate(r));
+  banco.avanza(500);
+  banco.emetti({ type: 'ReasoningMessageStart', messageId: 'r-fermo', role: 'reasoning' });
+  banco.avanza(2_000);
+  banco.emetti({ type: 'TextMessageStart', messageId: 'm1', role: 'assistant' });
+  banco.emetti({ type: 'TextMessageEnd', messageId: 'm1' });
+  banco.finisci();
+  await new Promise((r) => setImmediate(r));
+  const [riga] = tempiScritti(banco.cartellaStore, sessionId);
+  assert.ok(riga, 'il giro ha comunque la sua riga dei tempi');
+  assert.equal(Object.hasOwn(riga, 'ragionamentiMs'), false, '«non misurato» non diventa un oggetto vuoto né uno zero');
+});
+
+test('⭐⭐ UNA SESSIONE RIAPERTA DAL DISCO sa ancora quanto ha ragionato — senza un solo istante in memoria', async (t) => {
+  const banco = bancoDiProva();
+  t.after(() => banco.pulisci());
+  const { sessionId } = banco.registro.avviaLibero({ cartellaId: '0', consegna: 'riaprimi dopo' });
+  await new Promise((r) => setImmediate(r));
+  banco.avanza(200);
+  banco.emetti({ type: 'ReasoningMessageStart', messageId: 'r1', role: 'reasoning' });
+  banco.avanza(12_000);
+  banco.emetti({ type: 'ReasoningMessageEnd', messageId: 'r1' });
+  banco.emetti({ type: 'TextMessageStart', messageId: 'm1', role: 'assistant' });
+  banco.emetti({ type: 'TextMessageEnd', messageId: 'm1' });
+  banco.finisci();
+  await aspettaFineGiroSulDisco(banco.cartellaStore, sessionId);
+
+  /* Un registro NUOVO sullo stesso disco: è il riavvio del server, e gli istanti in memoria non ci sono più. */
+  const riaperto = createSessionRegistry({
+    cartellaStore: banco.cartellaStore,
+    avviaSessioneFn: async () => ({ ok: true }),
+    guardaWorkspaceFn: () => () => {},
+    modello: 'z-ai/glm-5.3-flash',
+    chiave: 'k',
+  });
+  const { ripristinate } = await riaperto.ripristina();
+  assert.equal(ripristinate, 1, 'se la sessione non si riapre, il resto misura il caso sbagliato');
+  const metriche = riaperto.elencaMetriche(sessionId);
+  assert.equal(metriche.primoToken.ms, null, 'premessa: dopo il riavvio gli istanti non ci sono, il tempo al primo token non si sa più');
+  assert.deepEqual(metriche.ragionamentiMs, { r1: 12_000 }, '⛔ e la durata del ragionamento invece sì: è quella che Hermes perde');
+});
+
+test('durateRagionamentoDaEventi — coppie complete, solo l’ultimo giro se chiesto, niente durate inventate', () => {
+  const eventi = [
+    { type: 'RunStarted', _sequenza: 1 },
+    { type: 'ReasoningMessageStart', messageId: 'a', _sequenza: 2 },
+    { type: 'ReasoningMessageEnd', messageId: 'a', _sequenza: 3 },
+    { type: 'RunStarted', _sequenza: 4 },
+    { type: 'ReasoningMessageStart', messageId: 'b', _sequenza: 5 },
+    { type: 'ReasoningMessageEnd', messageId: 'b', _sequenza: 6 },
+    { type: 'ReasoningMessageStart', messageId: 'senza-fine', _sequenza: 7 },
+  ];
+  const istanti = new Map([[1, 0], [2, 100], [3, 1_100], [4, 2_000], [5, 2_050], [6, 5_050], [7, 6_000]]);
+  assert.deepEqual(durateRagionamentoDaEventi(eventi, { istanti }), { a: 1_000, b: 3_000 });
+  assert.deepEqual(durateRagionamentoDaEventi(eventi, { istanti, soloUltimoGiro: true }), { b: 3_000 }, 'il record è per giro: niente durate del giro prima');
+  assert.deepEqual(durateRagionamentoDaEventi(eventi, { istanti: null }), {}, 'senza istanti non si misura niente');
+  assert.deepEqual(durateRagionamentoDaEventi(eventi, { istanti: new Map([[2, 900], [3, 100]]) }), {}, 'una durata negativa non esiste');
+});
+
+test('durateRagionamentoDaRecord — legge solo i tempi del giro, e scarta i valori che non sono durate', () => {
+  const record = [
+    { tipo: 'intestazione' },
+    { tipo: 'tempi-giro', ragionamentiMs: { a: 1_000 } },
+    { tipo: 'messaggi-finali', ragionamentiMs: { finto: 5 } },
+    { tipo: 'tempi-giro', ragionamentiMs: { b: 3_000, rotto: 'dieci', negativo: -4, infinito: Number.POSITIVE_INFINITY } },
+    { tipo: 'tempi-giro' },
+  ];
+  assert.deepEqual(durateRagionamentoDaRecord(record), { a: 1_000, b: 3_000 });
+  assert.deepEqual(durateRagionamentoDaRecord(null), {});
 });
 
 /*

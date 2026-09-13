@@ -9219,12 +9219,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       do {
         richiesta.ancora = false;
         let misura = null;
+        let durate = null;
         try {
           const dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/metrics`);
           misura = dati?.cacheSessione ?? null;
+          durate = dati?.ragionamentiMs ?? null; // ⭐ 13/09 sera: la stessa lettura porta anche quanto ha ragionato
         } catch { /* La lettura fallita lascia una misura assente, mai quella di un'altra chat. */ }
         if (richiestaCacheSessione !== richiesta || state.realSession.id !== sessionId || state.realSession.generation !== generation) return;
         state.realSession.cacheSessione = misura;
+        if (durate) applicaDurateRagionamento(sessionId, durate);
         aggiornaInspectorDaStato();
       } while (richiesta.ancora);
     })().finally(() => { if (richiestaCacheSessione === richiesta) richiestaCacheSessione = null; });
@@ -10531,7 +10534,12 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
   /** La fine: l'etichetta dice quanto è durato, e una scheda aperta da sola (non a mano) si richiude. */
   function chiudiRagionamento(voce) {
     spegniRagionamentoVivo(voce);
-    const secondi = voce.inizio === null ? null : (adessoRagionamentoMs() - voce.inizio) / 1000;
+    const salvata = state.realSession.durateRagionamento?.sessionId === state.realSession.id
+      ? state.realSession.durateRagionamento.durate?.[voce.article.dataset.ragionamentoId]
+      : undefined;
+    const secondi = voce.inizio !== null
+      ? (adessoRagionamentoMs() - voce.inizio) / 1000
+      : (Number.isFinite(salvata) ? salvata / 1000 : null); // ⭐ rigiocata: la durata vera, se il server l'ha salvata
     etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso: false, secondi }));
     const toccata = voce.article.querySelector(':scope > .talos-activity__head')?.dataset.toccatoDaUtente === 'si';
     if (voce.apertaDaSola && !toccata) impostaAperturaRagionamento(voce.article, false);
@@ -10542,6 +10550,27 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    * ⛔ Un giro che finisce o si ferma a metà ragionamento non manda la fine del ragionamento: senza
    *   questa chiusura l'etichetta resterebbe «Sta ragionando…» per sempre su un lavoro finito.
    */
+  /*
+   * ⭐⭐ 13/09 sera — LA DURATA SOPRAVVIVE ALLA RICARICA, punto 3 di «fare meglio di Hermes». Hermes desktop
+   *   la perde e lo dichiara (`activity-timer.ts`). Il server la scrive nel record `tempi-giro` e la rotta
+   *   `/metrics` la restituisce: qui si mette sulle righe che, rigiocate, sapevano dire solo «Ha ragionato».
+   * ⛔ Si applica anche A POSTERIORI: la lettura è asincrona e arriva quando la rigiocata ha già chiuso le righe.
+   * ⛔ Non riscrive una durata misurata dal vivo, e non tocca una riga ancora viva: parla l'orologio che la
+   *   sta misurando.
+   */
+  function applicaDurateRagionamento(sessionId, durate) {
+    if (!durate || typeof durate !== 'object') return;
+    state.realSession.durateRagionamento = { sessionId, durate };
+    const senzaDurata = etichettaRagionamento({ inCorso: false });
+    for (const card of $$('#conversation .real-reasoning-note[data-ragionamento-id]')) {
+      const ms = durate[card.dataset.ragionamentoId];
+      if (!Number.isFinite(ms) || card.dataset.ragionamento === 'vivo') continue;
+      const etichetta = card.querySelector(':scope > .talos-activity__head .tool-note-summary-text')?.textContent;
+      if (etichetta !== senzaDurata) continue;
+      etichettaSchedaRagionamento(card, etichettaRagionamento({ inCorso: false, secondi: ms / 1000 }));
+    }
+  }
+
   function chiudiRagionamentiInCorso() {
     for (const voce of state.realSession.ragionamentoBubble.values()) chiudiRagionamento(voce);
     state.realSession.ragionamentoBubble.clear();
@@ -14781,6 +14810,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          */
         const bubble = appendToolNote('Ragionamento', { classeExtra: 'real-reasoning-note', glifo: '💭', aperto: true });
         bubble.article.hidden = true;
+        bubble.article.dataset.ragionamentoId = evento.messageId; // ⭐ 13/09 sera: per darle la sua durata quando la sessione si riapre
         // ⛔ Solo `hidden`, non anche `aria-hidden`: toglie già la riga dall'albero dell'accessibilità, e ogni attributo in più è una modifica del DOM che LAG-REPLAY-REASONING-36 conta — misurato 22 contro un tetto di 20, mentre il pacchetto di prima passava.
         const testaRagionamento = bubble.article.querySelector(':scope > .talos-activity__head');
         testaRagionamento?.addEventListener('click', () => { testaRagionamento.dataset.toccatoDaUtente = 'si'; });
@@ -15508,6 +15538,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       state.realSession.browserPagine = [];
       state.realSession.browserIndice = -1;
       state.realSession.ragionamentoBubble = new Map();
+      state.realSession.durateRagionamento = null; // le durate di una chat non finiscono su un'altra
       state.realSession.followUpBubbleInAttesa = false;
       state.realSession.redirectPendingId = null;
       state.realSession.redirectInvalidatedIds = new Set();
