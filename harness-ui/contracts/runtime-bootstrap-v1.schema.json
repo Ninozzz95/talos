@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://talos.local/contracts/runtime-bootstrap-v1.schema.json",
+  "title": "TALOS Harness Desktop runtime bootstrap",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "authoritative", "runtime", "observedAt"],
+  "properties": {
+    "schema": { "const": "talos.harness-ui.runtime-bootstrap.v1" },
+    "authoritative": { "const": "backend" },
+    "runtime": {
+      "anyOf": [
+        { "type": "null" },
+        { "$ref": "runtime-event-v1.schema.json#/$defs/resource" }
+      ]
+    },
+    "observedAt": { "type": "string", "format": "date-time" }
+  }
+}

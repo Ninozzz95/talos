@@ -1,0 +1,66 @@
+{
+  "name": "talos-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Il guscio desktop di TALOS, con il runtime Node incluso in Electron.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "main.mjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "npm run test:puri && npm run test:guscio",
+    "test:puri": "node --test tests/*.test.mjs",
+    "test:guscio": "node --test --test-concurrency=1 tests/backend.spec.mjs tests/guscio.spec.mjs",
+    "icone": "node scripts/genera-icone.mjs",
+    "prova:pty": "node scripts/prova-pty.mjs",
+    "prepara": "node scripts/prepara-pacchetto.mjs",
+    "dist": "npm run prepara && node scripts/distribuisci.mjs",
+    "test:installer": "node --test --test-concurrency=1 tests/installer.spec.mjs"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "2.6.2",
+    "electron": "44.3.0",
+    "electron-builder": "26.16.1",
+    "resedit": "1.7.2"
+  },
+  "build": {
+    "appId": "it.talos.desktop",
+    "productName": "TALOS",
+    "electronVersion": "44.3.0",
+    "electronDist": "node_modules/electron/dist",
+    "directories": { "output": "dist", "buildResources": "assets" },
+    "asar": false,
+    "npmRebuild": false,
+    "publish": null,
+    "toolsets": { "nsis": "1.2.1" },
+    "artifactName": "TALOS-Setup-${version}.${ext}",
+    "files": ["main.mjs", "runtime.mjs", "child-bootstrap.mjs", "lifecycle.mjs", "log.mjs", "window-state.mjs", "package.json", "assets/talos.png", "assets/talos-tray.png"],
+    "extraResources": [
+      { "from": ".staging/harness-ui", "to": "harness-ui" },
+      { "from": ".staging/harness-ui/node_modules", "to": "harness-ui/node_modules" },
+      { "from": ".staging/context-engine", "to": "context-engine" },
+      { "from": ".staging/context-engine/node_modules", "to": "context-engine/node_modules" },
+      { "from": ".staging/local-runtime", "to": "local-runtime" },
+      { "from": ".staging/MANIFEST.json", "to": "MANIFEST.json" },
+      { "from": ".staging/AVVISI.txt", "to": "AVVISI.txt" },
+      { "from": ".staging/LICENZA-REPOSITORY.txt", "to": "LICENZA-REPOSITORY.txt" }
+    ],
+    "win": { "target": ["nsis", "zip"], "icon": "assets/talos.ico", "signAndEditExecutable": false, "artifactName": "TALOS-${version}-win.${ext}" },
+    "nsis": {
+      "artifactName": "TALOS-Setup-${version}.${ext}",
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": false,
+      "installerIcon": "assets/talos.ico",
+      "uninstallerIcon": "assets/talos.ico",
+      "installerHeaderIcon": "assets/talos.ico",
+      "include": "assets/installer.nsh",
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "TALOS",
+      "packElevateHelper": false,
+      "differentialPackage": false,
+      "runAfterFinish": true
+    }
+  }
+}

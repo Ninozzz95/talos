@@ -1,0 +1,29 @@
+{
+  "name": "talos-harness-ui-frontend",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.18.0 <27"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:lab": "node scripts/build-lab.mjs",
+    "test:unit": "node scripts/run-node-tests.mjs",
+    "test": "npm run test:unit && npm run test:componenti",
+    "verify": "node scripts/verify.mjs",
+    "package": "node scripts/package-frontend.mjs",
+    "test:componenti": "node scripts/run-browser-tests.mjs --config=playwright.componenti.config.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "axe-core": "4.13.0",
+    "esbuild": "0.28.2",
+    "pixelmatch": "7.2.0",
+    "pngjs": "7.0.0"
+  },
+  "dependencies": {
+    "@floating-ui/dom": "1.8.0",
+    "@tanstack/virtual-core": "3.17.8"
+  }
+}

@@ -1,0 +1,122 @@
+/*
+ * mockup-animazioni.css — le animazioni del mockup approvato che la app non aveva.
+ *
+ * Fonte: `.claude/refactor-ui-owner-2026-09-11/Talos_Desktop_Final_Mockup_Interattivo.html`.
+ * Ordine dell'owner (11/09/2026 sera): «le animazioni del mockup siano riportate alla perfezione
+ * nella app». L'inventario completo, il confronto testa a testa e le misure stanno in
+ * `.claude/RAPPORTO-ANIMAZIONI-MOCKUP-2026-09-11.md`.
+ *
+ * ⛔ QUI DENTRO STA SOLO CIÒ CHE IL CSS SA FARE DA SOLO, cioè le superfici che nascono
+ *   ESISTENDO — un toast che viene appeso, una barra di avanzamento che cambia larghezza. Tutto il
+ *   resto (pressione dei pulsanti, gruppi della barra, schede, pannelli, collasso della barra,
+ *   elenco che si riordina, dettaglio, modale) è in `components/motion-mockup.js` e nei suoi
+ *   chiamanti, e NON è una preferenza: è una MISURA.
+ *   Una `animation` CSS su un selettore come `.td-detail:not([hidden])` riparte ogni volta che
+ *   l'elemento torna da `display:none` — compreso il momento in cui si NAVIGA verso una sezione
+ *   che aveva già il dettaglio aperto. Il mockup lì non anima niente (`selectItem` anima solo
+ *   quando la selezione cambia davvero, `if(!already)`): la via CSS avrebbe aggiunto movimento che
+ *   il mockup non ha, cioè il contrario dell'ordine ricevuto.
+ *
+ * ⛔ I CANCELLI NON SONO UNA REGOLA UNIVERSALE. La notte del 10-11/09 due regole universali con
+ *   `!important` (`body.reduce-motion *` e `@media (prefers-reduced-motion){ * }`) hanno spento
+ *   OGNI animazione della app e sono costate sei cure su un componente sano
+ *   ([[misura-loggetto-mai-lambiente]]). Da valle non si battono e non si vedono.
+ *   ⇒ Qui i cancelli passano da DUE variabili private di questo foglio (`--tam-*`), che valgono
+ *     zero quando il movimento è spento. Niente `!important`, niente selettore universale, e chi
+ *     non legge queste variabili non se ne accorge nemmeno.
+ * ⛔ Il primo cancello è GRATIS e sta già nel prodotto: `legacy/app.js` (`applicaMovimento`,
+ *   ~riga 12896) azzera i token `--talos-motion-duration-*` quando «Animazioni dell'interfaccia» è
+ *   spento, quando il profilo è `off` o quando «Riduci il movimento» è acceso
+ *   («azzerare la scala spegne chi legge i token e lascia in pace chi non li legge»). Le `--tam-*`
+ *   leggono quei token, quindi eredita tutto senza una riga in più.
+ *   Restano da coprire qui: il `prefers-reduced-motion` DI SISTEMA (che i token non guardano) e le
+ *   tre leve fini di `aspetto.css` (`motion-feedback-off`, `motion-surfaces-off`,
+ *   `motion-navigation-off`), più la classe `reduce-motion` che il monolite mette sul body.
+ */
+
+:root {
+  --tam-entrata: var(--talos-motion-duration-surface-enter, 180ms);
+  --tam-uscita: var(--talos-motion-duration-surface-exit, 150ms);
+  --tam-controllo: var(--talos-motion-duration-control, 160ms);
+  --tam-ease: var(--talos-motion-ease, cubic-bezier(.2, .7, .2, 1));
+}
+
+/* Il sistema: `prefers-reduced-motion` è un contratto, non una rifinitura (MDN, W3C WAI). */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --tam-entrata: 0s;
+    --tam-uscita: 0s;
+    --tam-controllo: 0s;
+  }
+}
+
+/* L'interruttore grosso, nelle due forme in cui la app lo esprime. */
+:root.interface-motion-off,
+:root.reduce-motion {
+  --tam-entrata: 0s;
+  --tam-uscita: 0s;
+  --tam-controllo: 0s;
+}
+body.reduce-motion {
+  --tam-entrata: 0s;
+  --tam-uscita: 0s;
+  --tam-controllo: 0s;
+}
+
+/* ─────────────────────────────── 1. IL TOAST CHE ARRIVA ───────────────────────────────
+ * Mockup riga 6038 (`toast()`): `motion(el,[{opacity:0,transform:'translateY(8px)'},
+ * {opacity:1,transform:'none'}])` con il token `surface-enter`.
+ * ⛔ Qui è CSS e non JS perché un toast non torna da `display:none`: viene COSTRUITO e appeso, e
+ *   un'animazione CSS su un elemento appena inserito parte una volta sola, quando deve. Nessun
+ *   rischio di movimento all'avvio: a pagina ferma la regione dei toast è vuota.
+ * ⛔ `both` e non `forwards`: con durata 0 (movimento spento) l'elemento deve trovarsi comunque
+ *   allo stato finale, non al primo fotogramma. */
+@keyframes tam-toast-entra {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.talos-toast-region > .talos-toast {
+  animation: tam-toast-entra var(--tam-entrata) var(--tam-ease) both;
+}
+/* La leva fine: chi ha spento il «movimento dei riscontri» ha chiesto proprio questo. */
+:root.motion-feedback-off .talos-toast-region > .talos-toast { animation: none; }
+
+/* ──────────────────────── 2. LA BARRA DI AVANZAMENTO DI UNA SCHEDA ────────────────────────
+ * Mockup riga 4049: `.td-progress > i { transition: width var(--talos-motion-duration-surface-enter)
+ * var(--talos-motion-ease) }`. Nella app `.td-progress > i` esiste (mockup-td.css:113) ma la
+ * larghezza saltava da un valore all'altro: un passo completato compariva senza dire che era
+ * appena cambiato. */
+.td-progress > i {
+  transition: width var(--tam-entrata) var(--tam-ease);
+}
+:root.motion-surfaces-off .td-progress > i { transition: none; }
+
+/* ─────────────────── 3. MENTRE SI TRASCINA IL DIVISORIO, NIENTE SI ANIMA ───────────────────
+ * Mockup righe 4153-4154: `:root.td-dragging * { transition:none }` e la gemella sulla shell.
+ * La app aveva già `:root.td-dragging *` per il CURSORE (mockup-td.css:257) ma non per le
+ * transizioni: trascinando il divisorio ogni bordo animava il proprio colore a ogni pixel, cioè
+ * la maniglia rispondeva in ritardo a un gesto che è continuo per definizione.
+ * ⛔ È l'unico selettore universale di questo foglio, ed è quello del mockup: vive solo per la
+ *   durata di un trascinamento (la classe la mettono e la tolgono `sezione-elenco-dettaglio.js`
+ *   righe 349/353), quindi non può spegnere niente a insaputa di nessuno. */
+:root.td-dragging *,
+:root.td-dragging .talos-shell { transition: none !important; }
+
+/* ──────────────────────────── 4. LA RIGA CHE CARICA (`td-track`) ────────────────────────────
+ * Mockup righe 4150-4151: l'unico `@keyframes` che nella app mancava del tutto.
+ * ⛔ Onestà: `.td-loading-line` oggi NON è disegnata da nessuna superficie — né nella app né nel
+ *   mockup (misurato: zero nodi in entrambi, 11/09). Entra lo stesso perché il foglio del mockup
+ *   è la fonte e la regola costa due righe; il giorno che qualcuno disegna quella riga, si muove
+ *   come nel mockup invece che restare ferma. */
+@keyframes td-track {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(340%); }
+}
+.td-loading-line::before {
+  animation: td-track 1.2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .td-loading-line::before { animation: none; }
+}
+:root.interface-motion-off .td-loading-line::before,
+:root.reduce-motion .td-loading-line::before { animation: none; }

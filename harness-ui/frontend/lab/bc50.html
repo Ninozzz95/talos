@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="it" data-talos-theme="calm">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banco BC-50 — schede dei fornitori</title>
+<link rel="stylesheet" href="/src/styles/main.css">
+<style>
+  body { margin: 0; padding: 24px; overflow: auto; }
+  .banco-intestazione { color: var(--talos-text); font: 14px var(--talos-font-ui); margin: 0 auto 20px; max-width: 880px; }
+  .banco-intestazione p { color: var(--talos-muted); }
+  #composer { margin: 24px auto; }
+  #nuova { position: relative; margin: 24px auto; height: auto; }
+  #nuova .workspace-chooser-columns { min-height: 520px; }
+  #esito { display: block; margin-top: 12px; }
+</style>
+<header class="banco-intestazione">
+  <h1>BC-50 · Fornitori nel selettore dei modelli</h1>
+  <p id="scenario"></p>
+  <p>Laboratorio con cataloghi dimostrativi. Picker e fogli di stile letti dai sorgenti di produzione.</p>
+  <output id="esito" aria-live="polite">Nessun modello scelto nel banco.</output>
+</header>
+<div id="composer" class="talos-dialog talos-dialog--medium" role="dialog" aria-label="Modello e ragionamento">
+  <div class="talos-dialog__header"><h2 class="talos-dialog__title">Modello e ragionamento</h2></div>
+  <div class="talos-dialog__body"><div class="talos-stack" id="mount-composer"></div></div>
+  <div class="talos-dialog__footer">La scelta vale dal prossimo invio.</div>
+</div>
+<dialog id="nuova" class="sheet-dialog sheet-dialog--new-session" aria-label="Nuova sessione">
+  <div class="workspace-chooser-columns">
+    <div class="workspace-chooser-browser"><h2>Nuova sessione</h2><p>Cartella dimostrativa · nessun dato dell'owner</p></div>
+    <div class="workspace-chooser-settings"><h2>Configura il lavoro</h2><div class="workspace-chooser-setting-group" id="mount-nuova"><span class="sheet-label">Modello</span></div></div>
+  </div>
+</dialog>
+<script type="module">
+  import { creaModelPicker } from '/lab/picker-reale.js';
+  import { numeroFonti } from '/lab/fixtures/bc50.js';
+  const q = new URLSearchParams(location.search);
+  const sede = q.get('sede') === 'nuova' ? 'nuova' : 'composer';
+  document.documentElement.dataset.theme = q.get('tema') === 'chiaro' ? 'light' : 'dark';
+  document.querySelector('#scenario').textContent = `${numeroFonti} schede · ${sede === 'nuova' ? 'Nuova sessione' : 'composer'} · ${q.get('tema') || 'scuro'} · ${q.get('fase') || 'prova'}`;
+  document.querySelector(sede === 'nuova' ? '#composer' : '#nuova').remove();
+  if (sede === 'nuova') document.querySelector('#nuova').show();
+  const picker = creaModelPicker({ apriSubito: sede === 'composer', aggiornaModelloPrincipale: false,
+    alSelezionato: id => { document.querySelector('#esito').textContent = `Scelto nel banco: ${id}`; },
+  });
+  document.querySelector(`#mount-${sede}`).append(picker.elemento);
+  if (sede === 'nuova') picker.elemento.querySelector('.model-picker-trigger').click();
+</script>
+</html>
