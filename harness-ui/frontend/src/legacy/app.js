@@ -67,7 +67,7 @@ import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nom
 import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
-import { spiegaErrore, spiegaRifiutoAttrezzo, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
+import { provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
 // 06/9 C24: la pagina delle Note — la monta `sezioni-adattatori.js`, che riusa `note.js`
 import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 06/9 O-28/O-31: il sorgente di una pagina non si legge
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
@@ -10701,6 +10701,19 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
      *   qui ad aggiungere un ramo — che è esattamente il modo in cui questo ramo era rimasto solo.
      */
     const vestizione = vestizioneErrore(spiegazione);
+    /*
+     * ⛔⛔ 13/09 — UNA FAMIGLIA PUO' CHIEDERE DI NON ESSERE DISEGNATA AFFATTO, e fin qui nessuno
+     *   glielo chiedeva: `silenziosa` compariva solo nella propria definizione e in un test.
+     *   Un cambio di direzione non e' un guasto E non e' nemmeno una notizia — il giro riparte da
+     *   solo e la persona lo vede ripartire; una nota qui direbbe soltanto che e' andato storto
+     *   qualcosa che invece ha funzionato.
+     * ⛔ Si esce PRIMA di `aggiornaTickGiro({tono:'danger'})`, non dopo: il rosso ha due
+     *   manifestazioni — la carta e il tick del giro — e zittire solo la prima avrebbe lasciato
+     *   l'altra a dire la stessa bugia, piu' piccola.
+     * ⛔ Non tocca gli altri nove chiamanti: senza `spiegazione` la vestizione e' quella d'errore,
+     *   che non ha questo campo, e un guasto vero resta rosso.
+     */
+    if (vestizione.silenziosa) return;
     const article = spiegazione
       ? creaNotaErrore({
         titolo: etichettaMeta || vestizione.titolo,
@@ -15167,7 +15180,21 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
          * La diagnosi dei giri esauriti, che questa sessione sa costruire dai suoi eventi, si
          * aggiunge ai rimedi invece di essere appiccicata in coda alla frase.
          */
-        const spiegazione = spiegaErrore(evento.message, evento.code);
+        /*
+         * ⛔⛔ 13/09 — IL TERZO ARGOMENTO, che mancava. Reindirizzare chiudeva il giro vecchio con
+         *   un `RunError` («⛔ interrotto su richiesta») e la chat mostrava una CARTA ROSSA che dava
+         *   la colpa a chi legge: «il giro si e' interrotto per un errore, apri Doctor». Non era
+         *   successo niente di male — aveva solo cambiato direzione.
+         * ⛔ Il messaggio del motore e' IDENTICO per «Ferma» e per «Reindirizza»: dal testo non si
+         *   distinguono, e l'unico che lo sa e' chi tiene lo stato della sessione. Qui lo sappiamo:
+         *   `redirectPendingId` e' vivo fra `RunRedirectRequested` (r. 15009, lo imposta) e
+         *   `RunRedirectApplied` (r. 15017, lo azzera), e questo `RunError` cade in mezzo ai due.
+         * ⛔ Letto PRIMA della riga che lo consuma qui sotto: dopo sarebbe sempre stato nullo, e la
+         *   cura sarebbe risultata verde restando inerte.
+         */
+        const spiegazione = spiegaErrore(evento.message, evento.code, provenienzaDelGiroFinito({
+          reindirizzamentoInVolo: Boolean(state.realSession.redirectPendingId),
+        }));
         if (guida) spiegazione.rimedi = [guida.replace(/^\s*—\s*/, ''), ...spiegazione.rimedi];
         appendStatusNote('', true, { spiegazione });
         spegniGiriInCorso($('#conversation')); // ⛔ BC-41: anche un giro FALLITO e' un giro finito — `appendStatusNote` segna `danger` solo sull'ultimo turno

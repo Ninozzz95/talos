@@ -95,8 +95,10 @@ const CODICE_CONTESTO = /\bCTX_[A-Z0-9_]+/;
  * l'evento e chi lo legge devono usare le stesse, quindi vivono qui, esportate, e non scritte a
  * mano in due posti diversi.
  *
- * ⛔ Oggi nessuno le passa ancora: il campo va aggiunto dove l'evento NASCE, e quei file non sono
- * di questa corsia. Dipendenza dichiarata per nome nel rapporto.
+ * ⛔ 13/09, sera — LA DIPENDENZA E' CHIUSA: `legacy/app.js` le passa, sul `RunError` del giro
+ * vecchio, ricavandole da `provenienzaDelGiroFinito` qui sotto. Finche' non lo faceva, la famiglia
+ * `reindirizzato` era IRRAGGIUNGIBILE per costruzione — la sua regola pretende l'origine (r. 332) —
+ * e la prova verde su questo modulo non poteva accorgersene: misurava la funzione, non la catena.
  */
 export const ORIGINI = Object.freeze({
   /** «Ferma» — la persona ha chiesto di fermare il giro, e basta. */
@@ -104,6 +106,27 @@ export const ORIGINI = Object.freeze({
   /** «Reindirizza» — la persona ha cambiato direzione: il giro vecchio si chiude per lasciare il posto al nuovo. */
   REINDIRIZZAMENTO: 'reindirizzamento',
 });
+
+/**
+ * La provenienza di un giro che si e' appena chiuso, per chi tiene lo stato della sessione.
+ *
+ * ⛔ TORNA `null` QUANDO NON SA, e non e' una pigrizia: e' il contratto. Cercate sette forme di
+ *   uno stop esplicito nel monolite (`stopRequest`, `stopPending`, `richiestaStop`, `RunStopped`…)
+ *   il 13/09: nessuna esiste. Quindi «non c'e' un reindirizzamento in volo» NON significa «la
+ *   persona ha premuto Ferma» — puo' benissimo essere un guasto vero che nessuno ha chiesto.
+ *   Restituire `ORIGINI.STOP` qui sarebbe stato INVENTARE una provenienza, ed e' esattamente cio'
+ *   che `spiegaErrore` vieta: «assente = provenienza ignota, e si dice cosi' invece di indovinarla».
+ *
+ * ⛔ E la provenienza da sola non basta a dichiarare un cambio di direzione: la regola pretende
+ *   ANCHE che l'esito sia davvero un fermo su richiesta. Un guasto vero capitato mentre un
+ *   reindirizzamento e' in volo resta rosso — c'e' una prova apposta, al contrario.
+ *
+ * @param {{reindirizzamentoInVolo?:boolean}} stato
+ * @returns {{origine:string}|{}} il contesto da passare a `spiegaErrore`, vuoto se non si sa
+ */
+export function provenienzaDelGiroFinito({ reindirizzamentoInVolo = false } = {}) {
+  return reindirizzamentoInVolo ? { origine: ORIGINI.REINDIRIZZAMENTO } : {};
+}
 
 /**
  * Le parole con cui un fermo su richiesta arriva DAVVERO qui: l'italiano del motore
@@ -516,8 +539,10 @@ const VESTIZIONI = {
    * da solo, e la persona lo vede ripartire. `silenziosa` dice a chi disegna che questa nota non
    * va mostrata affatto — la famiglia decide anche QUESTO, accanto alle frasi, invece di lasciare
    * un ramo `if` nel disegnatore (è così che «fermato-da-te» era rimasto l'unica eccezione).
-   * ⛔ Chi disegna deve ancora imparare a leggerlo: finché non lo fa la carta esce lo stesso — ma
-   * col tono di un cambio di direzione, non col rosso di un guasto. Dipendenza dichiarata.
+   * ⛔ 13/09, sera — CHI DISEGNA HA IMPARATO A LEGGERLO: `appendStatusNote` esce prima di creare
+   * la nota, e non colora il tick. Serviva anche quello: con `isError` il disegnatore chiamava
+   * `aggiornaTickGiro({tono:'danger'})`, quindi il rosso aveva DUE manifestazioni e zittirne una
+   * sola avrebbe lasciato l'altra — la stessa meta'-cura che questa famiglia esiste per evitare.
    */
   reindirizzato: { badge: 'Reindirizzato', titolo: 'TALOS · nuova direzione', tono: 'accent', silenziosa: true },
   contesto: { badge: 'Contesto', titolo: 'TALOS · contesto non compattato', tono: 'warning' },
