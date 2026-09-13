@@ -86,3 +86,33 @@
 > sono in `CATALOGO.md`, sezione «Mobile, 04/09». Restano vere; semplicemente non le implemento
 > io (ownership mobile revocata dall'owner il 04/09) e non devono consumare un indice che si
 > carica a ogni sessione desktop.
+
+## ⭐ Le tredici forme del 13/09/2026 — spostate qui da MEMORY.md la sera stessa
+
+> ⛔ **Non e' stato buttato: e' stato spostato.** `MEMORY.md` era a **18.684 byte** e gliene
+> restavano **1.216** prima del tetto d'allarme di 19.900 — oltre i **25.000** compilati dentro
+> l'eseguibile il contenuto si taglia **in silenzio**. Una lezione in piu' e sfondava.
+>
+> ⛔ **E la misura ha fermato la mossa sbagliata.** La destinazione che avevo in mente,
+> `MEMORIA-SETTEMBRE-2026.md`, aveva **4.450 byte** di margine e il blocco ne pesa **4.622**:
+> spostarlo li' avrebbe portato QUELL'indice sopra l'allarme. ⇒ Avrei risolto un file
+> rompendone un altro, e sembrava la mossa giusta. Questo file era a 9.083 con quasi undici KB
+> liberi, ed e' il posto tematico esatto.
+>
+> ⭐ **Perche' vale la pena rileggerle insieme:** sono tutte la stessa malattia vista da tredici
+> lati in un giorno solo, su due lane. Una guardia che esplode invece di valutare; un elenco vuoto
+> che allarga invece di restringere; un `git add` che scarta in silenzio; un avviso che non ferma
+> niente; una cura scritta la mattina e non applicata allo strumento del pomeriggio; una misura
+> che non puo' smentirti; un numero letto oltre la sua risoluzione. ⇒ In tutti, **il risultato
+> sbagliato coincide con quello giusto**: un verde, uno zero, un successo. Per questo nessuno li
+> guarda, e per questo si trovano solo **contando** e confrontando due misure fra loro.
+
+- ⛔⛔⛔ [UNA MISURA RISTRETTA NON VEDE CIO CHE NON TI ASPETTI](una-misura-ristretta-non-vede-cio-che-non-ti-aspetti.md) — 13/09: 290.000 righe cancellate e tre controlli che dicevano «sano», perche' guardavano solo dove si aspettavano il cambiamento. Le misure che decidono se pubblicare si prendono sull ALBERO INTERO
+- ⛔⛔ [UNA CURA CHE PERDE GLI ESCAPE ARRIVA INERTE](una-cura-che-perde-gli-escape-arriva-inerte.md) — 13/09, tre volte in un giorno su due lane: una regex senza `\s` non protesta, TACE. Si rilegge dal disco e si prova nel verso che deve fallire
+- ⛔⛔⛔ [UN ESITO STAMPATO DOPO UN ERRORE NON VALE](un-esito-stampato-dopo-un-errore-non-vale.md) — 13/09, **TREDICI** forme dello stesso difetto in un giorno su due lane. ⛔ La tredicesima: **un numero letto oltre la sua RISOLUZIONE** — un intero che non puo' dire 25,6 dichiara 26, e mezzo pixel di arrotondamento del browser diventa una riga intera di interfaccia. ⭐ E la correzione ha un **verso**: la tolleranza vale solo in salita, mai sul tetto. ⛔ La dodicesima e' la piu' generale e non riguarda le guardie ma **qualunque numero si riporti**: «una misura che non puo' mai smentirti non sta misurando» — prima di fidarsi, chiedersi **quale risultato mi smentirebbe**. Se uno strumento stampa un errore E un esito, l'esito non vale finche' non sai che l'errore non lo riguardava. ⛔ La nona: una guardia **MANCANTE** dove tutti credevano ci fosse. ⛔ La decima: una guardia che **funziona**, trova l'assenza, la dice — e il flusso prosegue lo stesso uscendo 0; un avviso che non puo' fermare e' un commento a schermo. ⛔ L'undicesima, addosso a me: **avevo la cura scritta da stamattina e non l'ho applicata** allo strumento che ho scritto dieci minuti dopo — una lezione imparata su un cancello non si trasferisce da sola. ⭐ L'ho presa solo perche' **due misure non tornavano** fra loro
+- ⛔⛔ [UNA GUARDIA CHE ESPLODE E ASSENTE](una-guardia-che-esplode-e-assente.md) — 13/09: lanciare invece di valutare e' peggio che essere deboli, perche' il colpo parte lo stesso e l'errore finisce a schermo invece che nel flusso di controllo. Chi non riesce a valutare deve NEGARE
+- ⛔⛔ [PROVARE A DISFARE LEGGE IL PRODOTTO](provare-a-disfare-legge-il-prodotto.md) — 13/09: il buco piu' grosso della chat l'ha trovato chi doveva **riparare un proprio pasticcio**, non una revisione. Guardare risponde a «c'e' tutto?», disfare risponde a «e se sbaglio?». ⛔ Un menu di azioni si giudica da cio' che MANCA. ⛔ E la mia prima misura era sbagliata allo stesso modo (cercavo **nomi di funzioni**): il numero vero e' **tre azioni sulla risposta del modello, zero sul messaggio della persona** — una conversazione pensata per una meta' sola
+- ⛔⛔⛔ [IL BUDGET DI RICERCA WEB E' DELLA SESSIONE](il-budget-di-ricerca-web-e-della-sessione.md) — 13/09: esaurito a 200 su 200, e **delegare non lo aggira**: l'agente lanciato riceve lo STESSO rifiuto, misurato facendogli incollare la risposta vera. Come si alzi **non e' documentato**. ⭐ Restano il recupero per indirizzo diretto e — vale di piu' — i cloni dei concorrenti gia' su disco in `%LOCALAPPDATA%\Temp\talos-competitor`
+- ⛔⛔⛔ [GIT ADD SU UNA CARTELLA SCARTA IN SILENZIO](git-add-su-una-cartella-scarta-in-silenzio.md) — 13/09: custodito un kit dell'owner, il commit e' **riuscito** e mancavano **tre file** mangiati da una regola `*.log`; due erano i **tentativi falliti** conservati apposta, cioe' cio' che rendeva onesto quel kit. ⛔ Una custodia si verifica **contando** i file contro un atteso, e il manifesto si controlla contro il contenuto **committato**, non contro il disco
+- ⛔⛔⛔ [UN ELENCO VUOTO NON LIMITA, ALLARGA](un-elenco-vuoto-non-limita-allarga.md) — 13/09: uno script che vietava «aggiungi tutto» stava per committare tutto, perche' l'elenco dei percorsi era **vuoto** e un elenco vuoto si legge come «nessun filtro», non come «nessun elemento». ⭐ Preso **rileggendo lo script prima di lanciarlo**: le azioni consequenziali si leggono per intero cercando il caso in cui gli argomenti sono vuoti
+- ⛔⛔⛔⛔ [OGNI CORSIA HA IL SUO CONTROLLORE](ogni-corsia-ha-il-suo-controllore.md) — **owner 13/09, regola permanente**: dietro ogni lavorazione delegata c'e' un revisore avversariale. Il giorno in cui e' nata ha bocciato **4 corsie su 5**. ⛔ Tre condizioni o non serve a niente: deve poter **rompere il codice** e vedere la prova diventare rossa; deve chiedersi **se il difetto esisteva** (una volta ha approvato la cura di una malattia che non c'era); deve **dichiarare** se ha verificato davvero
