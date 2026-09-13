@@ -235,6 +235,8 @@ che governa chi scrive.
 e' agganciata al **percorso** e non al nome dell'attrezzo, ed e' invocata dal punto che tratta
 insieme scrittura e modifica. Quella accusa era vera ed e' chiusa.
 
+**② ✅ CHIUSA la sera del 13/09 — la prova e' in fondo a questa sezione. Il testo originale della bocciatura resta qui sotto, parola per parola.**
+
 **② La cura sugli errori non arriva all'utente.** Misurato: il chiamante passa ancora **due**
 argomenti a chi spiega l'errore, mentre la funzione ne accetta un terzo per la provenienza che
 **nessuno passa**; e il campo che dovrebbe rendere la nota silenziosa e' dichiarato in un punto
@@ -265,6 +267,68 @@ commit per area. La decisione su come sistemarla e' dell'owner.
   all'aggancio, il resto e' una previsione.
 - ⛔ E il limite che vale su tutta la fase: **nessuno ha aperto la app**. Sappiamo che il codice fa
   quelle cose, non che a schermo si vedano.
+
+---
+
+### ✅ CHIUSO IL 13/09 SERA — il punto ②, e il fatto piu' grosso che nessuno aveva visto
+
+**La catena aveva TRE anelli, e in bocciatura ne erano dichiarati DUE.** Curarne uno solo non
+avrebbe tolto niente dallo schermo:
+
+1. il chiamante passava **due argomenti su tre**: senza il terzo la famiglia «reindirizzato» era
+   **irraggiungibile per costruzione**, perche' la regola che la riconosce pretende la provenienza;
+2. il campo che dichiara una nota **non disegnabile** non lo leggeva nessuno — compariva solo nella
+   propria definizione e in un test;
+3. ⭐ **il terzo, che non era dichiarato**: il rosso aveva **due manifestazioni**, la carta *e* il
+   tick del giro. Zittire solo la prima avrebbe lasciato l'altra a dire la stessa bugia, piu'
+   piccola. Si esce **prima** di colorare il tick, e c'e' una prova sull'**ordine**: spostando la
+   guardia dopo il tick la suite diventa rossa.
+
+⛔ **La provenienza non si indovina.** Cercate sette forme di uno stop esplicito nel monolite
+(`stopRequest`, `stopPending`, `richiestaStop`, `RunStopped`…): **nessuna esiste**. Quindi «nessun
+reindirizzamento in volo» non significa «la persona ha premuto Ferma» — puo' essere un guasto vero
+che nessuno ha chiesto. La funzione torna un contesto **vuoto** quando non sa: e' il contratto
+scritto nel modulo, «assente = provenienza ignota, e si dice cosi' invece di indovinarla».
+
+**Prova:** 7 prove nuove (5 ingressi della provenienza, 4 messaggi di fermo nei due versi, 3 guasti
+veri mentre un reindirizzamento e' in volo, 5 asserzioni sul cablaggio lette dal testo del monolite,
+ordine compreso). **Quattro rotture del codice di produzione, quattro rossi**, impronta identica dopo
+ogni ripristino, verde finale. Suite vicine intatte: 24/24 errori, 25/25 corsia 1, 7/7 la nuova.
+Commit `dbc15998`.
+
+⛔ Perche' una prova NUOVA, con la suite del modulo gia' verde: quella provava la **funzione**, non
+la catena — ed era verde stamattina **mentre la carta rossa usciva davvero**. E' la dodicesima forma
+del 13/09: una misura che non puo' smentirti non sta misurando.
+
+---
+
+### ⛔⛔⛔ IL PACCHETTO SERVITO ERA FERMO ALLE 05:14, E LA FASE 2 NON CI ERA MAI ARRIVATA
+
+Il residuo qui sopra diceva «nessuno ha aperto la app». Andando ad aprirla e' venuto fuori qualcosa
+di piu' grande, **che nessun controllore poteva vedere perche' nessuno guardava li'**.
+
+**Misurato:** `harness-ui/public/app.js` — il pacchetto che il 4174 serve davvero — portava la data
+delle **05:14** e conteneva **zero** marcatori della Fase 2: 0 su 5 della corsia 1 (il bivio
+dell'Invio), 0 su 4 della corsia 2 (gli errori), con i sorgenti delle **18:05**. ⇒ Cinque commit
+verdi, e l'owner **non aveva mai avuto sotto le dita una sola riga** di quel lavoro.
+
+⛔ **Il difetto non era nel codice: mancava un passo di consegna.** La build c'e' e funziona
+(`scripts/aggiorna-4174.ps1` costruisce, consegna in `public/` e riavvia); nessuno l'aveva lanciata
+dopo le consegne delle corsie. ⇒ «Consegnato ≠ visto ≠ provato» vale **anche quando cio' che manca
+e' un passo della catena e non una riga sbagliata**: una corsia chiusa non e' arrivata da nessuna
+parte finche' non e' stata consegnata.
+
+**Dopo:** 32 asset costruiti, kernel quello del repo, il 4174 risponde, **9 marcatori su 9** nel
+pacchetto. ⭐ Otto in forma letterale; il nono (`data-bivio="accoda"`) non compare perche' il
+selettore e' **costruito per interpolazione** — nel pacchetto c'e' `SCELTA_PREDEFINITA_BIVIO =
+"accoda"` e il markup coi tre valori sta in `public/index.html`. Verificato invece che dato per
+scontato: **uno zero e' una risposta plausibile, ed e' per questo che nessuno lo guarda.** Commit
+`231ab6bd`.
+
+⛔ **Resta NON VERIFICATO, e lo dichiaro invece di chiuderlo:** la prova **dal vivo** del
+reindirizzamento — far partire un giro, premere «Reindirizza» e guardare con gli occhi che la carta
+rossa non esca, nei **due temi**. Il codice ora e' servito e la sua catena e' provata in ogni anello,
+ma «il codice fa quelle cose» non e' «a schermo si vede cosi'».
 
 ---
 
