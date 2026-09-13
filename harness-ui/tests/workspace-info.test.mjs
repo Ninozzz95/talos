@@ -11,12 +11,12 @@ import { eUnaRadice, contaFile, repoAnnidati, istruzioniPresenti, ritrattoCartel
 test('RITRATTO-RADICE: un disco, una home, una scrivania sono radici; un progetto no', () => {
   assert.equal(eUnaRadice('C:\\'), true);
   assert.equal(eUnaRadice('/'), true);
-  assert.equal(eUnaRadice('C:\\Users\\Antonino'), true);
-  assert.equal(eUnaRadice('C:\\Users\\Antonino\\Desktop'), true);
+  assert.equal(eUnaRadice('C:\\Users\\esempio'), true);
+  assert.equal(eUnaRadice('C:\\Users\\esempio\\Desktop'), true);
   assert.equal(eUnaRadice('/home/antonino'), true);
-  assert.equal(eUnaRadice('C:\\Users\\Antonino\\Documenti'), true);
+  assert.equal(eUnaRadice('C:\\Users\\esempio\\Documenti'), true);
   // AL CONTRARIO: un progetto vero non è una radice, e non deve essere avvisato per niente
-  assert.equal(eUnaRadice('C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop'), false);
+  assert.equal(eUnaRadice('C:\\Users\\esempio\\Desktop\\projects\\AVM-harness-desktop'), false);
   assert.equal(eUnaRadice('/home/antonino/progetti/app'), false);
   assert.equal(eUnaRadice(''), false);
   assert.equal(eUnaRadice(null), false);

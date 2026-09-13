@@ -474,7 +474,7 @@ test('model chip never exposes the server-default label', async ({ page }) => {
 });
 
 test('Nuova sessione usa la workspace desktop senza configurazione manuale', async ({ page }) => {
-  const project = 'C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop';
+  const project = 'C:\\Users\\esempio\\Desktop\\projects\\AVM-harness-desktop';
   await page.route('**/api/v1/workspace-browser**', async (route) => route.fulfill({
     status: 200,
     contentType: 'application/json',

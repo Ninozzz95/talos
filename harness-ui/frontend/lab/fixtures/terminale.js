@@ -4,8 +4,8 @@
  * una PTY): il componente le sa disegnare, l'app oggi produce solo schede «tu».
  */
 export const SCHEDE_TERMINALE = Object.freeze([
-  { terminalId: 'agente-7', origine: 'agente', giro: 7, stato: 'live', cartella: 'C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\harness-ui' },
-  { terminalId: 'tu-1', origine: 'tu', titolo: 'tu · PowerShell', stato: 'connesso', cartella: 'C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\harness-ui' },
+  { terminalId: 'agente-7', origine: 'agente', giro: 7, stato: 'live', cartella: 'C:\\Users\\esempio\\Desktop\\projects\\AVM-harness-desktop\\harness-ui' },
+  { terminalId: 'tu-1', origine: 'tu', titolo: 'tu · PowerShell', stato: 'connesso', cartella: 'C:\\Users\\esempio\\Desktop\\projects\\AVM-harness-desktop\\harness-ui' },
 ]);
 export const CORNICE_TERMINALE = Object.freeze({
   attiva: 'agente-7',

@@ -331,7 +331,7 @@ test('ELENCO-FILTRO-08: il filtro iniettato pota un sottoalbero intero senza cam
 
 test('ELENCO-TESTO-09: l\'intestazione dice il nome della cartella, mai il percorso della persona', async () => {
   const testo = testoElenco(['src/a.mjs', 'src/b.mjs'], {
-    radice: 'C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop\\harness-ui',
+    radice: 'C:\\Users\\esempio\\Desktop\\projects\\AVM-harness-desktop\\harness-ui',
     troncato: false,
     fileEsclusi: 12,
   });

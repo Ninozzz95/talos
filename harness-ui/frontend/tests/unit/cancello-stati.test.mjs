@@ -26,7 +26,7 @@ function scenaSana() {
       sessioneAperta: 'C',
       barra: { giri: 7, token: 16811, contesto: 42, costo: 0.0014 },
       cartella: {
-        percorso: 'C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop',
+        percorso: 'C:\\Users\\esempio\\Desktop\\projects\\AVM-harness-desktop',
         ritratto: { leggibile: true, radice: true, oltreIlTetto: false, tetto: 20000 },
       },
       luoghi: { note: { esiste: true, quanti: 3 } },
@@ -41,7 +41,7 @@ function scenaSana() {
       ],
       barra: { sessionId: 'C', giri: 7, token: 16811, contesto: 42, costo: 0.0014 },
       cartella: {
-        percorsoDescritto: 'C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop',
+        percorsoDescritto: 'C:\\Users\\esempio\\Desktop\\projects\\AVM-harness-desktop',
         avviso: 'Questa è una cartella radice: l’agente vedrebbe tutto quello che c’è sotto.',
       },
       contatori: [{ nome: 'Note', luogo: 'note', quanti: 3 }],
@@ -157,7 +157,7 @@ test('S07: il ritratto sotto «Cartella scelta» descriveva un’altra cartella'
   // AL CONTRARIO: la stessa cartella scritta con l’altra barra, in minuscolo e con la barra finale
   // NON è un’altra cartella — accusarla riempirebbe il rapporto di rumore
   const sana = scenaSana();
-  sana.schermo.cartella.percorsoDescritto = 'c:/users/antonino/desktop/projects/AVM-harness-desktop/';
+  sana.schermo.cartella.percorsoDescritto = 'c:/users/esempio/desktop/projects/AVM-harness-desktop/';
   assert.deepEqual(statiBugiardi(sana.datiApi, sana.schermo).bugie, []);
 });
 

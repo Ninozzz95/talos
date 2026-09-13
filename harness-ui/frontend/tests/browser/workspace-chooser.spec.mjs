@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 
 const root = 'C:\\';
-const project = 'C:\\Users\\Antonino\\Desktop\\projects\\AVM-harness-desktop';
-const desktop = 'C:\\Users\\Antonino\\Desktop';
+const project = 'C:\\Users\\esempio\\Desktop\\projects\\AVM-harness-desktop';
+const desktop = 'C:\\Users\\esempio\\Desktop';
 
 function envelope(data) {
   return { ok: true, data, meta: { schema: 'talos.harness-ui.api.v1' } };

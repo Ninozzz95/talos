@@ -5,7 +5,7 @@ import { SPAZI_DI_LAVORO, STRUMENTI } from '../../src/components/nav-item.js';
 import { fornitoreDelModello, nomeDaPercorso, testiPiede } from '../../src/components/workspace-footer.js';
 
 test('WorkspaceFooter: cartella, tema e fornitore dai dati del monolite — e niente inventato', () => {
-  assert.equal(nomeDaPercorso('C:\\Users\\Antonino\\Desktop\\projects\\AVM\\'), 'AVM');
+  assert.equal(nomeDaPercorso('C:\\Users\\esempio\\Desktop\\projects\\AVM\\'), 'AVM');
   assert.equal(nomeDaPercorso('/home/nino/talos'), 'talos');
   assert.equal(nomeDaPercorso(null), null);
   assert.equal(nomeDaPercorso('C:\\'), 'C:\\'); // la radice del disco non ha un nome: si mostra com'è
