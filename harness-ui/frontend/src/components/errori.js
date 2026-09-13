@@ -558,6 +558,28 @@ export function vestizioneErrore(spiegazione) {
   return { ...(VESTIZIONI[spiegazione?.famiglia] ?? VESTIZIONE_ERRORE) };
 }
 
+/**
+ * Il tono del tick del giro, preso dalla STESSA vestizione della carta.
+ *
+ * ⛔⛔ 13/09 sera — misurato dal DOM sul pacchetto servito: dopo uno stop chiesto dalla persona la
+ *   carta diceva «Fermato» col tono d'accento, e il tick del giro era `--danger`. Il disegnatore
+ *   colorava di rosso OGNI nota con `isError`, qualunque cosa dicesse la carta: la stessa bugia
+ *   doppia curata la sera stessa per il reindirizzamento, rimasta sulla famiglia «fermato».
+ * ⇒ Il tick segue la carta. Conosce quattro toni (`current`, `info`, `warning`, `danger`); l'accento
+ *   non c'e' perche' un tick SENZA tono e' gia' l'accento (`--visibile` usa `--talos-accent`), cioe'
+ *   lo stesso colore del badge «Fermato».
+ * ⛔ Chi non riconosce la vestizione torna ROSSO, non muto: un guasto non si zittisce perche' manca
+ *   un oggetto. Una guardia che non sa valutare deve negare, non tacere.
+ * @param {{tono?:string}|null|undefined} vestizione l'esito di `vestizioneErrore`
+ * @returns {'danger'|'warning'|'info'|null}
+ */
+export function tonoDelTick(vestizione) {
+  const tono = vestizione?.tono;
+  if (tono === 'accent') return null;
+  if (tono === 'danger' || tono === 'warning' || tono === 'info') return tono;
+  return 'danger';
+}
+
 /** La stessa spiegazione in una riga sola, per i posti stretti (elenco sessioni, riepiloghi). */
 export function erroreInUnaRiga(messaggio, codice = '') {
   const s = spiegaErrore(messaggio, codice);

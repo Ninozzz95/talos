@@ -40,7 +40,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  ORIGINI, provenienzaDelGiroFinito, spiegaErrore, vestizioneErrore,
+  ORIGINI, provenienzaDelGiroFinito, spiegaErrore, tonoDelTick, vestizioneErrore,
 } from '../frontend/src/components/errori.js';
 
 const QUI = dirname(fileURLToPath(import.meta.url));
@@ -168,7 +168,7 @@ test('CORSIA2-CABLAGGIO — i tre anelli sono attaccati nel monolite, e nell’O
    */
   assert.ok(
     MONOLITE.indexOf('if (vestizione.silenziosa) return;')
-      < MONOLITE.indexOf("if (isError) aggiornaTickGiro({ tono: 'danger' });"),
+      < MONOLITE.indexOf('if (isError) aggiornaTickGiro({ tono: tonoDelTick(vestizione) });'),
     'la nota tace ma il tick del giro diventa rosso lo stesso: mezza cura',
   );
 });
@@ -178,4 +178,51 @@ test('CORSIA2-NIENTE-STOP-INVENTATO — il monolite non deduce uno stop da un’
     !MONOLITE.includes('ORIGINI.STOP'),
     'qualcuno ha dedotto «la persona ha premuto Ferma» dall’assenza di un reindirizzamento: è una provenienza inventata',
   );
+});
+
+/* ───────────────── 4. D1, 13/09 sera — il tick segue la carta ─────────────────
+ * Misurato dal DOM sul pacchetto servito: dopo uno stop chiesto dalla persona la carta diceva
+ * «Fermato» con l'accento, e il tick del giro era `--danger`. Visto prima in una foto, poi contato.
+ */
+
+test('CORSIA2-TICK — il tick prende il tono della carta, e uno stop chiesto dalla persona non è rosso', () => {
+  const stop = vestizioneErrore(spiegaErrore('⛔ interrotto su richiesta.', 'fermato'));
+  assert.equal(stop.tono, 'accent', 'premessa: la carta dello stop ha il tono d’accento');
+  assert.equal(tonoDelTick(stop), null, 'uno stop chiesto dalla persona non colora il tick di rosso');
+  const guasto = vestizioneErrore(spiegaErrore('fetch failed: ECONNREFUSED 127.0.0.1:8080', 'internal-error'));
+  assert.equal(tonoDelTick(guasto), 'danger', 'un guasto vero resta rosso anche nel tick');
+  const contesto = vestizioneErrore(spiegaErrore('La sintesi non è stata completata.', 'CTX_TRUNCATED_SUMMARY'));
+  assert.equal(tonoDelTick(contesto), 'warning', 'il contesto non compattato resta un avviso');
+  assert.equal(tonoDelTick({ tono: 'info' }), 'info');
+});
+
+test('CORSIA2-TICK AL CONTRARIO — una vestizione che non si riconosce lascia il tick ROSSO, mai muto', () => {
+  for (const ingresso of [undefined, null, {}, { tono: 'inventato' }]) {
+    assert.equal(tonoDelTick(ingresso), 'danger', `${JSON.stringify(ingresso)}: un guasto non si zittisce perché manca un oggetto`);
+  }
+});
+
+test('CORSIA2-TICK-CABLAGGIO — il disegnatore usa il tono della carta e marca «errore» solo i guasti', () => {
+  assert.ok(MONOLITE.includes('if (isError) aggiornaTickGiro({ tono: tonoDelTick(vestizione) });'), 'il tick non segue la carta');
+  assert.ok(!MONOLITE.includes("if (isError) aggiornaTickGiro({ tono: 'danger' });"), 'il tick rosso fisso per ogni nota è ancora lì');
+  assert.ok(
+    MONOLITE.includes("if (isError && vestizione.tono === 'danger') article.classList.add('real-session-error');"),
+    'la classe «errore» finisce anche su una nota che non è un guasto',
+  );
+});
+
+/* ───────────────── 5. D2, 13/09 sera — l'attesa va sotto la domanda a cui risponde ─────────────────
+ * Misurato dal DOM: dopo un reindirizzamento applicato, e dopo una coda consegnata mentre il modello
+ * ragiona, la bolla d'attesa restava nel turno VECCHIO e la domanda nuova finiva sotto di lei.
+ */
+
+test('CORSIA2-ATTESA-CABLAGGIO — coda consegnata e reindirizzamento applicato tolgono l’attesa vecchia PRIMA della bolla nuova', () => {
+  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  for (const [nome, riga] of [
+    ['coda consegnata', 'state.realSession.codaMessaggi.shift();'],
+    ['reindirizzamento applicato', 'state.realSession.followUpBubbleInAttesa = true;'],
+  ]) {
+    const forma = new RegExp(`nascondiAttesaRisposta\\(\\);\\s*appendUserFollowUp\\(evento\\.testo, null, evento\\.immagini\\);\\s*${escape(riga)}`);
+    assert.ok(forma.test(MONOLITE), `${nome}: l’attesa vecchia non viene tolta prima della bolla nuova, e resta sopra la domanda`);
+  }
 });
