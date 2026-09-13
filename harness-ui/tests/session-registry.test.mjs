@@ -46,7 +46,7 @@ test('IMAGE-05 — resume conserva riferimento immagine nel checkpoint e nel rep
     assert.ok(stored.includes(image.url));
   } finally {
     if (finta.chiamate) { finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali } }); await attendiRegistroSuDisco(cartellaStore, sessionId, r => r.some(x => x.tipo === 'messaggi-finali' && x.versioneGiro === 2)); }
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 import { WorkspaceTreeError } from '../src/workspace-tree.mjs';
@@ -154,7 +154,7 @@ test('LOCAL-RESUME-JSON-01 — recupera nella stessa sessione senza riscrivere c
       finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali } });
       await attendiRegistroSuDisco(cartellaStore, sessionId, r => r.some(x => x.tipo === 'messaggi-finali' && x.versioneGiro === 2));
     }
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -196,7 +196,7 @@ test('LOCAL-RESUME-JSON-02 — riavvio dopo checkpoint, stesso storico e recuper
       finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali } });
       await attendiRegistroSuDisco(cartellaStore, sessionId, r => r.some(x => x.tipo === 'messaggi-finali' && x.versioneGiro === 3));
     }
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -213,7 +213,7 @@ test('LOCAL-RESUME-JSON-03 — disco non scrivibile, nessun runtime e nessuna mu
     assert.equal(readFileSync(join(cartellaStore, `${sessionId}.jsonl`), 'utf8'), originale);
     assert.equal(registro.resume(sessionId, 'riprova').code, 'SESSION_STORE_WRITE_FAILED');
     assert.equal(finta.chiamate, 0);
-  } finally { rmSync(cartellaStore, { recursive: true, force: true }); }
+  } finally { rimuoviCartellaDiProva(cartellaStore); }
 });
 
 for (const caso of ['id assente', 'id duplicato', 'risultato duplicato']) {
@@ -230,7 +230,7 @@ for (const caso of ['id assente', 'id duplicato', 'risultato duplicato']) {
       await registro.ripristina();
       assert.equal(registro.resume(sessionId, 'continua').code, 'HISTORY_RECOVERY_AMBIGUOUS');
       assert.equal(finta.chiamate, 0);
-    } finally { rmSync(cartellaStore, { recursive: true, force: true }); }
+    } finally { rimuoviCartellaDiProva(cartellaStore); }
   });
 }
 
@@ -255,7 +255,7 @@ test('LOCAL-RESUME-JSON-05 — contenuti multimodali e chiamate valide conservat
       finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { messaggiFinali: finta.ultimoInput.messaggiIniziali } });
       await attendiRegistroSuDisco(cartellaStore, sessionId, r => r.some(x => x.tipo === 'messaggi-finali' && x.versioneGiro === 2));
     }
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -3563,6 +3563,19 @@ function cartellaStoreVera() {
   return mkdtempSync(join(tmpdir(), 'talos-session-store-registry-'));
 }
 
+/*
+ * 13/09: su Windows una rimozione ricorsiva puo' uscire con ENOTEMPTY anche a test finito, perche'
+ * un handle sul JSONL si chiude qualche millisecondo dopo e la cartella risulta ancora non vuota.
+ * Misurato sul runner del tag desktop-v0.1.2, morto esattamente qui, in LOCAL-RESUME-JSON-02: il
+ * test passava in locale e al giro prima, quindi e' una CORSA nel teardown, non un difetto del
+ * prodotto. `maxRetries` e `retryDelay` sono le opzioni ufficiali di rm/rmSync per questo caso
+ * (documentazione Node, modulo fs, letta il 13/09/2026: `maxRetries` vale 0 di serie).
+ * ⛔ Non nasconde niente: se dopo i ritentativi la cartella resta piena, lancia ancora.
+ */
+function rimuoviCartellaDiProva(cartella) {
+  rmSync(cartella, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
+}
+
 test('SESSION-SETTINGS-DURABILITY-01 — impostazioni aggiornate guidano elenco, resume e ripristino JSONL', async () => {
   const cartellaStore = cartellaStoreVera();
   try {
@@ -3608,7 +3621,7 @@ test('SESSION-SETTINGS-DURABILITY-01 — impostazioni aggiornate guidano elenco,
     assert.deepEqual(ripristinata.permessiPerAttrezzo, { scrivi: 'nega', shell: 'chiedi' });
     assert.equal(ripristinata.nome, 'Rispondi solo con la parola: pong', 'il nome sopravvive al riavvio');
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -3640,7 +3653,7 @@ test('SESSION-SETTINGS-DURABILITY-01 contrario — una scrittura JSONL fallita n
     assert.equal(registro.elenca()[0].permessi, 'Workspace write');
     finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -3829,7 +3842,7 @@ test('⭐⭐⭐ Full access sopravvive a un riavvio del server: ripristina() ria
     assert.equal(finta.ultimoInput.cartella, parsePath('C:\\workspace-storico').root, 'dopo un riavvio, una sessione già a Full access resta allargata — mai ricastrata alla cartella di partenza');
     finta.concludi({ type: 'RunFinished', threadId: 't', runId: 'r2' });
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -3886,7 +3899,7 @@ test('⛔⛔⛔ AL CONTRARIO — l\'intestazione è GIÀ sul disco appena avvia(
     assert.equal(record.tipo, 'intestazione');
     assert.equal(record.sessionId, sessionId);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -3901,7 +3914,7 @@ test('⭐⭐⭐ CON cartellaStore: intestazione + eventi + messaggiFinali finisc
     const file = readdirSync(cartellaStore);
     assert.deepEqual(file, [`${sessionId}.jsonl`]);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -3926,7 +3939,7 @@ test('⭐⭐⭐⭐⭐ ripristina(): una sessione CONCLUSA prima del riavvio torn
     assert.equal(elenco[0].conclusa, true);
     assert.equal(elenco[0].interrotta, false);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -3995,7 +4008,7 @@ test('SESSION-RESTORE-LAZY-WATCHER-24 — boot e intervallo fra turni restano pa
     assert.equal(massimoWatcherVivi, 1, 'mai due watcher contemporanei per la stessa cronologia');
     finta.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4034,7 +4047,7 @@ test('REGISTRY-RESTORE-LATEST-HISTORY-18 — dopo più turni il riavvio eredita 
     );
     await attendiRegistroSuDisco(cartellaStore, fork.sessionId, (record) => record.some((r) => r.tipo === 'messaggi-finali'));
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4056,7 +4069,7 @@ test('⭐⭐ J — ripristina() conserva il verdetto fallito di una delega di mo
     assert.equal(figli.figli[0].esitoDelega, 'fallito');
     assert.deepEqual(figli.figli[0].evidenzaDelega, { scritture: 0, artefatti: 0, toolCalls: 1, toolCallsOk: 1, toolCallsFalliti: 0, verificabile: true });
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4078,7 +4091,7 @@ test('SESSION-RECOVERY-VERSIONED-FINAL-21 — uno snapshot finale correlato al g
     assert.equal(elenco[0].conclusa, true, 'solo uno snapshot correlato al giro corrente può sostituire l’evento terminale mancante');
     assert.equal(elenco[0].interrotta, false);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4100,7 +4113,7 @@ test('SESSION-RECOVERY-TRAILING-WORKSPACE-09 — WorkspaceChanged dopo RunError 
     assert.equal(voce.conclusa, true);
     assert.equal(voce.interrotta, false);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4124,7 +4137,7 @@ test('SESSION-RECOVERY-STALE-HISTORY-10 — una vecchia storia finale non conclu
     assert.equal(voce.conclusa, false);
     assert.equal(voce.interrotta, true);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4165,7 +4178,7 @@ test('SESSION-RECOVERY-LATE-FINAL-18 — una storia del giro precedente scritta 
       && record.some((item) => item.tipo === 'messaggi-finali' && item.versioneGiro === 3)
     ));
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4185,7 +4198,7 @@ test('⛔⛔⛔ AL CONTRARIO — ripristina(): una sessione MAI conclusa (crash 
     assert.equal(elenco[0].conclusa, false);
     assert.equal(elenco[0].interrotta, true);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4246,7 +4259,7 @@ test('SESSION-RECOVERY-RESTART-02 — RunError ripristinato dal JSONL accetta un
       && record.some((item) => item.type === 'RunFinished')
     ));
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4274,7 +4287,7 @@ test('SESSION-RECOVERY-INTERRUPTED-05 — una sessione interrotta dal riavvio ac
       && record.some((item) => item.type === 'RunFinished')
     ));
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4361,7 +4374,7 @@ test('SESSION-RECOVERY-DURABLE-BEFORE-RUNTIME-11 — il checkpoint è sul disco 
     secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
     await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.filter((item) => item.type === 'RunFinished').length === 2);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4430,7 +4443,7 @@ test('SESSION-RECOVERY-FOLLOWUP-FAILURE-12 — un follow-up fallito resta nella 
       && record.filter((item) => item.tipo === 'messaggi-finali').at(-1)?.messaggiFinali?.at(-1)?.content === 'riprova ora'
     ));
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4507,7 +4520,7 @@ test('SESSION-RECOVERY-CHECKPOINT-CRASH-13 — un checkpoint senza terminale res
       && record.filter((item) => item.tipo === 'messaggi-finali').at(-1)?.messaggiFinali?.at(-1)?.content === 'riprova dopo crash'
     ));
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4524,7 +4537,7 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta fork
     const esito = secondo.forka(sessionId);
     assert.deepEqual(esito, { erroreAvvio: 'La sessione origine è stata interrotta da un riavvio del server e non ha una conversazione da ereditare: avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4541,7 +4554,7 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta comp
     const esito = await secondo.compatta(sessionId);
     assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server e non ha una conversazione da compattare: avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4573,7 +4586,7 @@ test('SESSION-RECOVERY-CHECKPOINT-BEFORE-START-22 — un checkpoint più nuovo d
     giroRetry.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
     await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.filter((item) => item.type === 'RunFinished').length === 2);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4613,7 +4626,7 @@ test('SESSION-RECOVERY-REDIRECT-CRASH-23 — un redirect applicato sopravvive al
     giroRetry.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
     await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.filter((item) => item.type === 'RunFinished').length === 2);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4735,7 +4748,7 @@ test('REDIRECT-REPLAY-15 — dopo un riavvio un redirect rimasto a metà viene c
     assert.equal(secondo.reindirizza(sessionId, 'riprova').code, 'SESSION_NOT_READY');
     await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.type === 'RunRedirectFailed' && r.redirectId === redirect.redirectId));
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4762,7 +4775,7 @@ test('REDIRECT-REPLAY-OUT-OF-ORDER-19 — il replay riordina per sequenza e chiu
     assert.equal(eventi.at(-1).redirectId, 'd-fuori-ordine');
     await attendiRegistroSuDisco(cartellaStore, sessionId, (record) => record.some((r) => r.type === 'RunRedirectFailed' && r._sequenza === 4));
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4872,7 +4885,7 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta shel
     const esito = secondo.shell(sessionId, 'echo ciao');
     assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un comando diretto qui richiederebbe scrivere sopra una cronologia che non concluderà mai. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4889,7 +4902,7 @@ test('⛔⛔⛔ AL CONTRARIO — ripristina(): una sessione interrotta rifiuta a
     const esito = secondo.accodaMessaggio(sessionId, 'un messaggio che nessuno leggerà mai');
     assert.deepEqual(esito, { erroreAvvio: 'Questa sessione è stata interrotta da un riavvio del server: un messaggio in coda qui non verrebbe mai consegnato. Avvia una sessione nuova.', code: 'SESSION_NOT_READY' });
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4913,7 +4926,7 @@ test('⛔⛔ AL CONTRARIO — ripristina(): una sessione già VIVA in memoria (s
     assert.equal(dopo.interrotta, false, 'una sessione viva non è mai "interrotta" solo perché ripristina() è stata chiamata di nuovo');
     assert.deepEqual(prima, dopo);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -4930,7 +4943,7 @@ test('Doctor può leggere il riepilogo delle sessioni corrotte senza cancellarle
     assert.equal(stato.scartate[0].motivo, 'corrotta');
     assert.ok(existsSync(join(cartellaStore, 'sess-corrotto.jsonl')));
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -5358,7 +5371,7 @@ test('WORKSPACE-CHANGED-EPHEMERAL-01 — WorkspaceChanged arriva agli iscritti v
     assert.ok(righe.some((r) => r.type === 'RunStarted'), 'AL CONTRARIO: gli eventi del giro si persistono ancora');
     assert.equal(righe.filter((r) => r.type === 'WorkspaceChanged').length, 0, 'nessun WorkspaceChanged finisce nel log della sessione');
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -5383,7 +5396,7 @@ test('WORKSPACE-CHANGED-EPHEMERAL-02 — al ripristino i WorkspaceChanged già s
     const [voce] = registro.elenca();
     assert.equal(voce.conclusa, true, 'AL CONTRARIO: il filtro non cambia il verdetto di chiusura');
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -5455,7 +5468,7 @@ test('W0-01 — ogni file scartato al ripristino ha un motivo: vuota, senza-inte
     // ⛔ Nessun file è stato toccato: il Doctor legge, non cancella.
     for (const nome of ['sess-vuota', 'sess-senza-testa', 'sess-corrotta', 'sess-illeggibile']) assert.ok(existsSync(join(cartellaStore, `${nome}.jsonl`)));
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -5471,7 +5484,7 @@ test('W0-01 — AL CONTRARIO: una sessione ripristinata bene non compare fra le 
     assert.equal(esito.ripristinate, 1);
     assert.deepEqual(secondo.statoPersistenza().scartate, []);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
   const senza = createSessionRegistry({ modello: 'm', chiave: 'k' });
   await senza.ripristina();
@@ -5500,7 +5513,7 @@ test('W0-02 — intestazione senza schema (file di prima) e con schema corrente 
     assert.match(stato.scartate[0].dettaglio, new RegExp(`schema ${SCHEMA_SESSIONE + 98}`));
     assert.ok(existsSync(join(cartellaStore, 'sess-futura.jsonl')), 'il file futuro non viene toccato');
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -5515,7 +5528,7 @@ test('W0-02 — ogni intestazione NUOVA porta schema: SCHEMA_SESSIONE (= 1)', as
     assert.equal(SCHEMA_SESSIONE, 1);
     assert.equal(intestazione.schema, SCHEMA_SESSIONE);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -6382,7 +6395,7 @@ test('⛔⛔⛔ processes/metrics/export DICHIARANO interrotta:true su una sessi
     }
     assert.equal(secondo.esporta(sessionId).interrotta, true);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
