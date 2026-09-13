@@ -395,6 +395,19 @@ senza reindirizzamento lascia la sua nota.
     e' la card attivita' della nota), con la durata nell'etichetta; un ragionamento senza testo non ha
     riga; l'interruttore cambia significato da «mostra/nascondi» a «aperto mentre scrive / sempre
     compresso». 🔜 Decide l'owner, e decide anche il valore di serie.
+  ✅ **FATTO LA SERA STESSA: IL RAGIONAMENTO SI COMPRIME** — decisione dell'owner: «Sì alla raccomandazione, A» (sempre compresso).
+  - La riga compare al primo testo, senza testo niente riga; etichetta «Sta ragionando…» → «Ha ragionato per
+    12 s» / «poco»; in una rigiocata solo «Ha ragionato» (gli eventi non portano un orario: 0 su 105.853).
+  - Interruttore «Apri il ragionamento mentre scrive», spento di serie; acceso apre e richiude da solo.
+  - ⛔ **Regressione mia trovata con un confronto nello stesso momento**: modifiche al DOM della rigiocata
+    17 prima, 22 con la cura, **19** dopo averla asciugata (tetto 20).
+  - ⛔ **Tre guardie non guardavano niente**, rosse anche prima per selettori morti (`.tool-batch`,
+    `.real-tool-note`, `.real-waiting-note`): riparate. REDUCED-MOTION-02 resta rossa per una seconda
+    ragione estranea (controlla un segnavia che l'attesa non usa più) — scritto nella prova.
+  - Prove: modulo 4/4 con due rotture; 8 a schermo nei due temi, **6 rosse su 8 contro il pacchetto senza
+    la cura**; 21 su 22 sulla corsa a schermo; suite unitaria completa del frontend: 1039 prove, 1039 passate, 0 fallite.
+  - 🔜 **Domanda per l'owner**: mentre ragiona compaiono insieme la riga «Sta ragionando…» e l'attesa
+    «Ragionamento in corso…» — due segnali uguali. Hermes fa lo stesso.
 - 🔜 **DUBBIO REGISTRATO, non difetto dichiarato**: 26 file di prova scattano foto e nessuno aspetta
   il velo esplicitamente. Molti aspettano elementi per piu' di 4 s, quindi le loro foto possono essere
   buone: va verificato guardandone una per suite, non dedotto dal conteggio.
