@@ -40,12 +40,16 @@ async function listFiles(root, current = root) {
   return files.sort()
 }
 
-test('source manifest contains exactly the 18 approved files', async () => {
+// 13/09: `mockup-originale/` è il pacchetto dell'owner e NON esce nel monorepo pubblico: lì i due
+// test si dichiarano saltati, non rossi (la fedeltà al mockup è una misura del repo di sviluppo).
+const SALTA_SENZA_MOCKUP = await stat(copyRoot).then(() => false, () => 'mockup-originale assente: albero pubblico, la fedeltà al mockup si misura nel repo di sviluppo')
+
+test('source manifest contains exactly the 18 approved files', { skip: SALTA_SENZA_MOCKUP }, async () => {
   assert.equal((await stat(copyRoot)).isDirectory(), true)
   assert.deepEqual(await listFiles(copyRoot), Object.keys(EXPECTED).sort())
 })
 
-test('every copied byte matches the recorded SHA-256', async () => {
+test('every copied byte matches the recorded SHA-256', { skip: SALTA_SENZA_MOCKUP }, async () => {
   for (const [relative, [expectedHash, expectedBytes]] of Object.entries(EXPECTED)) {
     const content = await readFile(path.join(copyRoot, ...relative.split('/')))
     assert.equal(content.byteLength, expectedBytes, `${relative} byte count`)

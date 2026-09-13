@@ -66,7 +66,10 @@ test('R05A-README — licenza coerente e assenza di telemetria dichiarata', () =
 });
 
 test('R05A-CHANGELOG — la prima versione desktop è dichiarata non rilasciata', () => {
-  assert.match(leggi('harness-ui/desktop/CHANGELOG.md'), /^## desktop-v0\.1\.0 — non rilasciata\s*$/m);
+  // 13/09: il changelog del desktop è passato all'inglese per ordine dell'owner (è la
+  // documentazione pubblica del monorepo). Il cancello resta lo stesso: la 0.1.0 deve dichiarare
+  // per iscritto che non ha pubblicato niente. Si accettano entrambe le lingue.
+  assert.match(leggi('harness-ui/desktop/CHANGELOG.md'), /^## desktop-v0\.1\.0 — (non rilasciata|.*no release published.*)$/m);
 });
 
 test('R05A-RIFERIMENTI-CHANGELOG — le fonti locali sono raggiungibili dal documento', () => {
