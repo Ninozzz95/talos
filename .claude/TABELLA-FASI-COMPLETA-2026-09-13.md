@@ -659,10 +659,34 @@ giorni fa: la coda dice cosa qualcuno credeva, il codice dice cosa c'e'.
 *File: `legacy/app.js` e le sezioni · Finita quando: ogni sezione mostra il numero vero e l'autore vero.*
 
 ### Corsia 2 · Sul tuo messaggio non puoi fare niente
-Non c'e' nessuna azione sul proprio messaggio, e non lo si puo' modificare. In ogni altro prodotto
-della categoria si puo'.
 
-*Finita quando: si modifica un proprio messaggio e la sessione lo conserva.*
+Non c'e' nessuna azione sul proprio messaggio, e non lo si puo' modificare. In ogni altro
+prodotto della categoria si puo'.
+
+**⭐ Misurato il 13/09 nel codice, non piu' in forma generica.** Il tasto destro esiste su **SEI
+superfici del desktop** — righe della board, schede degli agenti, righe della Libreria, schede dei
+fornitori, dettaglio della ricerca, voci di sessione — e **sulla bolla della chat non esiste**.
+Cercando per nome le azioni sul proprio messaggio (modifica, elimina, riusa, rimanda): **nessuna**.
+
+⛔ **E qui siamo DIETRO al mobile, non alla pari.** Loro, con una pressione lunga sulla bolla,
+almeno due voci le hanno. Noi zero, pur avendo menu contestuali dappertutto.
+
+⭐ **Come e' saltato fuori, e vale come metodo.** Non da una revisione dell'interfaccia: dalla
+lane mobile che doveva **togliere un proprio messaggio di prova** dalla chat dell'owner e ha
+scoperto che non si puo'. Guardare una schermata risponde a «c'e' tutto?»; provare a **disfare**
+risponde a «e se sbaglio?», che e' la domanda di una persona vera, in fretta e in imbarazzo.
+
+⛔ **La conseguenza, dichiarata e non nascosta:** quel messaggio di prova e' rimasto nella chat
+dell'owner, perche' l'unica via per toglierlo sarebbe cancellare l'intera conversazione — che e'
+sua e contiene lavoro vero. Il danno residuo si dichiara, non si «risolve» distruggendo altro.
+
+⇒ Due osservazioni indipendenti sulla stessa assenza, su due prodotti diversi: non e' una
+dimenticanza di chi ha scritto quella schermata, e' che **nessuno ha mai provato a disfare un
+invio**.
+
+*File: componenti della chat · Finita quando: si modifica e si elimina un proprio messaggio dal
+menu della bolla, e la sessione conserva la modifica. Provato anche al contrario: l'eliminazione
+di un messaggio altrui, o di uno gia' usato dal modello, deve essere rifiutata con un motivo.*
 
 ### Corsia 3 · Il rapporto e le fonti della ricerca non si aprono
 La ricerca approfondita produce un rapporto e un elenco di fonti, e dall'interfaccia non si
