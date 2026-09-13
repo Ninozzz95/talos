@@ -6,10 +6,22 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ## Unreleased
 
-## desktop-v0.1.2 — 2026-09-13
+## desktop-v0.1.3 — 2026-09-13
 
-Carries everything below. The two tags before it published nothing: their release jobs stopped at
+Carries everything below. The three tags before it published nothing: their release jobs stopped at
 the gates, and a published tag is never rewritten, so each attempt gets a new number.
+
+### Fixed
+- Test teardown on Windows. A test deleted its temporary folder and the deletion failed with
+  "directory not empty", because a file handle closes a few milliseconds after the test ends. The
+  same test passed locally and had passed on the previous CI run, which is what a race looks like.
+  The deletions in that file now retry briefly, using the options the runtime provides for exactly
+  this case, and still fail loudly if the folder never empties. The rest of the suite does the same
+  unretried deletion in many other files and is recorded as open work.
+
+## desktop-v0.1.2 — 2026-09-13 (tag only, no release published)
+
+Carried everything below it at the time:
 
 ### Fixed
 - A test wrote into the drive root and, on a machine where that succeeds (a CI runner running as
