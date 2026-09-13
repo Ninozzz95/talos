@@ -45,7 +45,7 @@
       { "from": ".staging/AVVISI.txt", "to": "AVVISI.txt" },
       { "from": ".staging/LICENZA-REPOSITORY.txt", "to": "LICENZA-REPOSITORY.txt" }
     ],
-    "win": { "target": ["nsis", "zip"], "icon": "assets/talos.ico", "signAndEditExecutable": false, "artifactName": "TALOS-${version}-win.${ext}" },
+    "win": { "target": ["nsis", "zip"], "icon": "assets/talos.ico", "signExecutable": false, "artifactName": "TALOS-${version}-win.${ext}" },
     "nsis": {
       "artifactName": "TALOS-Setup-${version}.${ext}",
       "oneClick": true,
