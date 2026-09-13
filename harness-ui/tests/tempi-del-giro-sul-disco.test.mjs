@@ -19,12 +19,13 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { createSessionRegistry } from '../src/session-registry.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /** Legge i record `tipo:'tempi-giro'` scritti per una sessione. */
 function tempiScritti(cartellaStore, sessionId) {
@@ -67,7 +68,7 @@ function bancoDiProva() {
       onEvento({ type: 'RunFinished' });
       concludi({ ok: true, esito: { messaggiFinali } });
     },
-    pulisci() { rmSync(cartellaStore, { recursive: true, force: true }); },
+    pulisci() { rimuoviCartellaDiProva(cartellaStore); },
   };
 }
 

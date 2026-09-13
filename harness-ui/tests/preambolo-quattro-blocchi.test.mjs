@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -23,6 +23,7 @@ import {
 import { creaFiltroGitignore } from '../src/gitignore-elenco.mjs';
 import { fattiDelProgetto, testoSchedaDiLavoro } from '../src/scheda-di-lavoro.mjs';
 import { conMarcatoreDiCache, CARATTERI_MINIMI_PER_CACHE } from '../src/kernel/talosHarness.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /*
  * ⛔⛔⛔ BC-07 — IL PREAMBOLO A QUATTRO BLOCCHI.
@@ -83,7 +84,7 @@ test('BC-07: due messaggi consecutivi della stessa sessione ricevono il preambol
       0,
       '⛔ un solo byte di differenza azzera la cache del fornitore da lì in poi',
     );
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07: il preambolo cambia quando cambia il PERMESSO, e solo per quello', async () => {
@@ -100,7 +101,7 @@ test('BC-07: il preambolo cambia quando cambia il PERMESSO, e solo per quello', 
     const ancoraLettura = await contestoDelProgetto({ ...comuni, permesso: 'sola lettura' });
     assert.equal(ancoraLettura.testo, lettura.testo);
     assert.equal(ancoraLettura.riusato, true);
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07: il preambolo cambia quando cambia il MODELLO', async () => {
@@ -112,7 +113,7 @@ test('BC-07: il preambolo cambia quando cambia il MODELLO', async () => {
     assert.notEqual(a.testo, b.testo);
     assert.ok(a.testo.includes('glm-5.3-flash'));
     assert.ok(b.testo.includes('qwen3.7-flash'));
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07: due CARTELLE diverse hanno due preamboli diversi, e non si scambiano', async () => {
@@ -125,7 +126,7 @@ test('BC-07: due CARTELLE diverse hanno due preamboli diversi, e non si scambian
     assert.ok(b.testo.includes('lib/'));
     const ancoraA = await contestoDelProgetto({ cartella: uno, deps: { eseguiGit: gitFinto } });
     assert.equal(ancoraA.testo, a.testo);
-  } finally { await rm(uno, { recursive: true, force: true }); await rm(due, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(uno); await rimuoviCartellaDiProvaAttesa(due); }
 });
 
 test('BC-07: quando i file cambiano davvero, il preambolo si rifà — per TUTTI i permessi', async () => {
@@ -136,7 +137,7 @@ test('BC-07: quando i file cambiano davvero, il preambolo si rifà — per TUTTI
     assert.equal(segnalaFileCambiati(base), true);
     const dopo = await contestoDelProgetto({ cartella: base, permesso: 'lettura', deps: { eseguiGit: gitFinto } });
     assert.equal(dopo.riusato, false, '⛔ una sola chiave invalidata lascerebbe l’altro permesso con una mappa vecchia');
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -158,7 +159,7 @@ test('BC48-A-BC07: un AGENTS.md da 200 KB senza sezioni è omesso intero e dichi
     assert.match(esito.testo, /leggile con `leggi`/);
     assert.ok(!esito.testo.includes('# Inizio riconoscibile'), 'nessuna testa isolata');
     assert.ok(!esito.testo.includes('# Fine riconoscibile'), 'nessuna coda isolata');
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07, AL CONTRARIO: una cartella SENZA AGENTS.md/CLAUDE.md non ha il blocco 3, e nessun errore', async () => {
@@ -171,7 +172,7 @@ test('BC-07, AL CONTRARIO: una cartella SENZA AGENTS.md/CLAUDE.md non ha il bloc
     assert.ok(preambolo, 'il preambolo esiste lo stesso: scheda + mappa');
     assert.equal(preambolo.blocchi.istruzioni, null);
     assert.ok(!preambolo.testo.includes('Istruzioni di questo progetto'));
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07: la catena va dal PIÙ GENERICO al PIÙ SPECIFICO, e un solo file per cartella', async () => {
@@ -188,7 +189,7 @@ test('BC-07: la catena va dal PIÙ GENERICO al PIÙ SPECIFICO, e un solo file pe
     const esito = testoIstruzioniDiProgetto(trovati);
     assert.ok(esito.testo.indexOf('REGOLA DELLA RADICE') < esito.testo.indexOf('REGOLA DEL PACCHETTO'), 'l’ultimo è quello che comanda');
     assert.ok(!esito.testo.includes('QUESTA NON DEVE ENTRARE'));
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07, AL CONTRARIO: quando il tetto morde si tolgono INTERI i file generici, e si dice QUALI', async () => {
@@ -206,7 +207,7 @@ test('BC-07, AL CONTRARIO: quando il tetto morde si tolgono INTERI i file generi
     assert.deepEqual(esito.omessi, ['AGENTS.md']);
     assert.match(esito.testo, /NON ti ho mostrato `AGENTS\.md`/, '⛔ un avviso che non dice CHE COSA manca non è azionabile');
     assert.ok(esito.byte <= 10_000);
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07: `tagliaIstruzioni` non tocca un file che sta sotto il tetto', () => {
@@ -238,7 +239,7 @@ test('BC-07: la mappa RISPETTA il .gitignore — sull\'albero vero, non su una f
     /* ⛔ Il conteggio dei file passa dallo STESSO filtro: `rumore.log` non deve contare, o il
        numero fra parentesi non combacerebbe con quello che il modello trova cercando. */
     assert.equal(mappa.radiceFile, 1, 'solo .gitignore; rumore.log è ignorato');
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07, AL CONTRARIO: senza filtro il .gitignore NON morde — la prova che il filtro serve davvero', async () => {
@@ -248,7 +249,7 @@ test('BC-07, AL CONTRARIO: senza filtro il .gitignore NON morde — la prova che
     assert.ok(senza.cartelle.map((c) => c.percorso).includes('esiti'), 'senza filtro si vede tutto');
     const con = await costruisciMappaCartelle({ radice: base, filtro: await filtroDa(base) });
     assert.ok(!con.cartelle.map((c) => c.percorso).includes('esiti'));
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07: l\'ordine della mappa è deterministico, e un genitore precede sempre i suoi figli', async () => {
@@ -258,7 +259,7 @@ test('BC-07: l\'ordine della mappa è deterministico, e un genitore precede semp
     const secondo = await costruisciMappaCartelle({ radice: base });
     assert.deepEqual(primo.cartelle.map((c) => c.percorso), secondo.cartelle.map((c) => c.percorso));
     assert.deepEqual(primo.cartelle.map((c) => c.percorso), ['a', 'a/z', 'b', 'b/x']);
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07, AL CONTRARIO: se il tetto sulle cartelle morde, il testo lo DICHIARA in testa e in coda', async () => {
@@ -272,7 +273,7 @@ test('BC-07, AL CONTRARIO: se il tetto sulle cartelle morde, il testo lo DICHIAR
     assert.match(testo, /MAPPA INCOMPLETA/);
     assert.match(testo, /Fine di una mappa INCOMPLETA/);
     assert.ok(!testo.includes('albero COMPLETO'), '⛔ una mappa tagliata non può dirsi completa');
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07: una mappa completa lo dichiara, e non porta nessun avviso', async () => {
@@ -282,7 +283,7 @@ test('BC-07: una mappa completa lo dichiara, e non porta nessun avviso', async (
     const testo = testoMappaCartelle(mappa, { radice: base });
     assert.match(testo, /albero COMPLETO/);
     assert.ok(!testo.includes('INCOMPLETA'));
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07: nel testo non finisce MAI il percorso assoluto della persona', async () => {
@@ -291,7 +292,7 @@ test('BC-07: nel testo non finisce MAI il percorso assoluto della persona', asyn
     const preambolo = await contestoDelProgetto({ cartella: base, deps: { eseguiGit: gitFinto } });
     assert.ok(!preambolo.testo.includes(base), `⛔ [[cancello-4-non-guardava-tutto-mobile]]: un percorso assoluto porta fuori il nome della persona`);
     assert.ok(!preambolo.testo.includes(tmpdir()));
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -404,7 +405,7 @@ test('BC-07: la mappa entra nel tetto di TOKEN togliendo profondita, e lo DICHIA
     const attese = mappa.cartelle.filter((c) => c.livello <= stretta.profonditaUsata).length;
     const righe = stretta.testo.split(String.fromCharCode(10)).filter((r) => /^\s+\S+\/ \(\d+\)$/.test(r)).length;
     assert.equal(righe, attese, 'ogni cartella fino alla profondita dichiarata compare');
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07, AL CONTRARIO: una mappa che sta gia nel tetto non viene toccata ne dichiarata incompleta', async () => {
@@ -415,7 +416,7 @@ test('BC-07, AL CONTRARIO: una mappa che sta gia nel tetto non viene toccata ne 
     assert.equal(resa.tagliataInProfondita, false);
     assert.equal(resa.testo, testoMappaCartelle(mappa, { radice: base }), '⛔ nessuna differenza di un byte: il prefisso deve restare stabile');
     assert.match(resa.testo, /albero COMPLETO/);
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07: il preambolo dichiara i DUE modi di essere incompleta, separati', async () => {
@@ -429,7 +430,7 @@ test('BC-07: il preambolo dichiara i DUE modi di essere incompleta, separati', a
     assert.equal(m.tagliataInProfondita, true, 'ma il tetto di token ha morso');
     assert.ok(m.profondita < m.profonditaPiena);
     assert.ok(m.cartelle < m.cartelleTotali, 'e si sa quante ne sono rimaste fuori');
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 // -------------------------------------------------------------------------------------------
@@ -451,7 +452,7 @@ test('BC-07: i comandi di verifica si trovano anche quando lo script ha un PREFI
     assert.ok(!fatti.comandi.includes('npm run aggiorna'), 'uno script che non e verifica non entra');
     const testo = testoSchedaDiLavoro({ cartella: base, fatti });
     assert.match(testo, /Verifica: npm run test:kernel/);
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07, AL CONTRARIO: senza script di verifica la riga NON esce, e non si inventa un comando', async () => {
@@ -462,7 +463,7 @@ test('BC-07, AL CONTRARIO: senza script di verifica la riga NON esce, e non si i
     const testo = testoSchedaDiLavoro({ cartella: base, fatti });
     assert.ok(!testo.includes('Verifica:'), 'meglio tacere che suggerire un comando che non esiste');
     assert.match(testo, /Progetto: package\.json/);
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07, AL CONTRARIO: un package.json ROTTO non fa cadere la scheda', async () => {
@@ -471,7 +472,7 @@ test('BC-07, AL CONTRARIO: un package.json ROTTO non fa cadere la scheda', async
     const fatti = await fattiDelProgetto(base);
     assert.deepEqual(fatti.manifesti, ['package.json'], 'il manifesto resta riconosciuto');
     assert.deepEqual(fatti.comandi, [], 'ma nessun comando inventato');
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('BC-07: statoVolatile:false toglie git dalla scheda - la leva per A/B sulla cache', async () => {
@@ -484,5 +485,5 @@ test('BC-07: statoVolatile:false toglie git dalla scheda - la leva per A/B sulla
     assert.ok(!senza.testo.includes('ramo-di-prova'), 'senza stato volatile il ramo sparisce');
     assert.ok(!senza.testo.includes('abc1234'), 'e nemmeno i commit');
     assert.ok(Buffer.byteLength(senza.testo) < Buffer.byteLength(con.testo));
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });

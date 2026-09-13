@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import {appendFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -15,6 +15,7 @@ import {
 import { classificaErroreDiCorsa, creaResearchOrchestrator, rileggiRapportoRecintato } from '../src/research-orchestrator.mjs';
 import { talosResearchReportDocument } from '../src/research/report.mjs';
 import { talosResearchReplay, talosResearchSpent } from '../src/research/run.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /*
  * ═══════════════════════════════════════════════════════════════════════════════════════════
@@ -59,7 +60,7 @@ const SCUSA_DEL_11_SETTEMBRE = 'La sessione è in sola lettura, quindi non posso
 
 test('⭐⭐⭐ L4 — una ricerca nuova nasce come CARTELLA: meta.json dentro `<id>/`, mai più `<id>.json`', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const voce = await creaRicerca({ cartella, id: 'ric-1', domanda: 'Una domanda' });
   assert.equal(voce.formato, 2, 'il formato viaggia sulla voce: è ciò che dice al cancello se il ripiego è lecito');
   assert.ok(existsSync(percorsoMeta(cartella, 'ric-1')), 'la voce sta in `<id>/meta.json`');
@@ -69,7 +70,7 @@ test('⭐⭐⭐ L4 — una ricerca nuova nasce come CARTELLA: meta.json dentro `
 
 test('⛔⛔⛔ L4, VERSO CONTRARIO — un id che può attraversare una cartella è respinto ALLA NASCITA (adesso l\'id è un nome di cartella)', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   for (const ostile of ['..', '../fuori', 'a/b', 'a\\b', 'C:\\Windows', '', '.']) {
     await assert.rejects(() => creaRicerca({ cartella, id: ostile, domanda: 'x' }), ResearchStoreError, `${ostile} non deve diventare una cartella`);
   }
@@ -78,7 +79,7 @@ test('⛔⛔⛔ L4, VERSO CONTRARIO — un id che può attraversare una cartella
 
 test('⭐⭐⭐ L4 — LA MIGRAZIONE È AL PRIMO TOCCO CHE SCRIVE: leggere ed elencare NON migrano', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   mkdirSync(join(cartella, CARTELLA_RICERCA), { recursive: true });
   const vecchia = { id: 'antica', domanda: 'Una domanda di ieri', profondita: 'deep', titolo: null, avviataAlle: '2026-09-01T10:00:00.000Z', terminata: 'done', reportLibraryId: 'lib-9' };
   writeFileSync(percorsoVoceLegacy(cartella, 'antica'), JSON.stringify(vecchia, null, 2), 'utf8');
@@ -103,7 +104,7 @@ test('⭐⭐⭐ L4 — LA MIGRAZIONE È AL PRIMO TOCCO CHE SCRIVE: leggere ed el
 
 test('⛔⛔ L4, VERSO CONTRARIO — migrazione interrotta a metà (entrambe le copie sul disco): l\'elenco ne mostra UNA, quella NUOVA', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   mkdirSync(cartellaDellaRicerca(cartella, 'doppia'), { recursive: true });
   writeFileSync(percorsoVoceLegacy(cartella, 'doppia'), JSON.stringify({ id: 'doppia', domanda: 'vecchia', titolo: 'VECCHIO', avviataAlle: '2026-09-01T10:00:00.000Z' }), 'utf8');
   writeFileSync(percorsoMeta(cartella, 'doppia'), JSON.stringify({ id: 'doppia', domanda: 'vecchia', titolo: 'NUOVO', avviataAlle: '2026-09-01T10:00:00.000Z' }), 'utf8');
@@ -115,7 +116,7 @@ test('⛔⛔ L4, VERSO CONTRARIO — migrazione interrotta a metà (entrambe le 
 
 test('⛔⛔ L4, VERSO CONTRARIO — un `<id>.json` ILLEGGIBILE non si migra e non si cancella: si dice, e si lascia dov\'è', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   mkdirSync(join(cartella, CARTELLA_RICERCA), { recursive: true });
   writeFileSync(percorsoVoceLegacy(cartella, 'rotta'), '{ questo non e json', 'utf8');
   await assert.rejects(() => migraRicerca({ cartella, id: 'rotta' }), /illeggibile/);
@@ -124,7 +125,7 @@ test('⛔⛔ L4, VERSO CONTRARIO — un `<id>.json` ILLEGGIBILE non si migra e n
 
 test('⭐⭐ L4 — eliminaRicerca toglie la CARTELLA intera (giornale, piano, fonti, rapporto) e anche il `<id>.json` mai migrato', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   await creaRicerca({ cartella, id: 'ric-x', domanda: 'x' });
   await accodaEvento({ cartella, id: 'ric-x', evento: { kind: 'run_started', at: 'ora', id: 'ric-x', sessionId: 'ric-x', question: 'x', depth: 'deep', engine: 'device' } });
   await scriviFonte({ cartella, id: 'ric-x', testo: 'il testo di una pagina' });
@@ -141,7 +142,7 @@ test('⭐⭐ L4 — eliminaRicerca toglie la CARTELLA intera (giornale, piano, f
 
 test('⭐⭐⭐ L4 — scriviAtomico: temporaneo nella STESSA cartella, poi rename. Il contenuto arriva intero', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const percorso = join(cartella, 'sotto', 'cosa.txt');
   await scriviAtomico(percorso, 'contenuto nuovo');
   assert.equal(readFileSync(percorso, 'utf8'), 'contenuto nuovo');
@@ -153,7 +154,7 @@ test('⭐⭐⭐ L4 — scriviAtomico: temporaneo nella STESSA cartella, poi rena
 
 test('⛔⛔⛔ L4, IL VINCOLO — un crash FRA il temporaneo e il rename lascia il file VECCHIO intatto, e non lascia scorie', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const percorso = join(cartella, 'pagato.txt');
   await scriviAtomico(percorso, 'IL LAVORO GIÀ PAGATO');
 
@@ -187,7 +188,7 @@ test('⛔⛔⛔ L4, IL VINCOLO — un crash FRA il temporaneo e il rename lascia
 
 test('⛔⛔⛔ L4 — lo stesso vincolo sulla VOCE: se il rename fallisce, `meta.json` resta quello di prima', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   await creaRicerca({ cartella, id: 'ric-1', domanda: 'x' });
   await aggiornaRicerca({ cartella, id: 'ric-1', terminata: 'done', reportLibraryId: 'lib-1' });
   await assert.rejects(() => aggiornaRicerca({ cartella, id: 'ric-1', terminata: 'cancelled' }, { renameFn: async () => { throw new Error('disco morto'); } }));
@@ -220,7 +221,7 @@ test('⛔⛔⛔ L4 — lo stesso vincolo sulla VOCE: se il rename fallisce, `met
 
 test('⭐⭐⭐⭐ 12/09 — un LETTORE con l\'handle aperto fa fallire il rename: si ritenta, e passa', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const percorso = join(cartella, 'meta.json');
   await scriviAtomico(percorso, '{"stato":"running"}');
 
@@ -243,7 +244,7 @@ test('⭐⭐⭐⭐ 12/09 — un LETTORE con l\'handle aperto fa fallire il renam
 
 test('⛔⛔ AL CONTRARIO — la contesa che NON passa: si rilancia, e il contenuto nuovo resta accanto', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const percorso = join(cartella, 'meta.json');
   await scriviAtomico(percorso, '{"stato":"running"}');
 
@@ -268,7 +269,7 @@ test('⛔⛔ AL CONTRARIO — la contesa che NON passa: si rilancia, e il conten
 
 test('⛔⛔ AL CONTRARIO — un rename IMPOSSIBILE (destinazione = una cartella) rilancia dopo i tentativi', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   // Una CARTELLA al posto del file: su Windows il rename ci sbatte con EPERM, cioè con lo stesso
   // codice della contesa — è il caso in cui ritentare non serve a niente e deve finire.
   const percorso = join(cartella, 'occupato');
@@ -328,7 +329,7 @@ test('⭐⭐⭐⭐ 12/09, IL DIFETTO VERO — una ricerca che conclude MENTRE qu
    * ricerca conclusa e pagata restava `running` **per sempre**.
    */
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   await creaRicerca({ cartella, id: 'ric-contesa', domanda: 'chi tiene aperto il file' });
   assert.equal((await leggiRicerca({ cartella, id: 'ric-contesa' })).terminata, null, 'parte «in corso»');
 
@@ -353,7 +354,7 @@ test('⭐⭐⭐⭐ 12/09, IL DIFETTO VERO — una ricerca che conclude MENTRE qu
 
 test('⭐⭐⭐ L4 — il giornale è SOLO APPEND: dieci eventi, dieci righe, nessuna riscrittura', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   for (let i = 0; i < 10; i += 1) {
     await accodaEvento({ cartella, id: 'ric-1', evento: { kind: 'step_started', at: `2026-09-11T00:00:0${i}.000Z`, stepId: `s${i}`, branchId: 'b1', stepKind: 'search' } });
   }
@@ -368,7 +369,7 @@ test('⭐⭐⭐ L4 — il giornale è SOLO APPEND: dieci eventi, dieci righe, ne
 
 test('⭐⭐⭐ L4 — SCRITTURE CONCORRENTI sullo stesso giornale: 50 righe, tutte leggibili, nessuna intrecciata', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   /*
    * ⛔ Il caso vero da cui nasce la coda (W0-07, 04/09): un record grande viene spezzato in più
    *   chiamate di scrittura, e un secondo scrittore si infila in mezzo. Qui il carico è grande
@@ -386,7 +387,7 @@ test('⭐⭐⭐ L4 — SCRITTURE CONCORRENTI sullo stesso giornale: 50 righe, tu
 
 test('⭐⭐⭐ L4, DAL DISCO — un giornale TRONCATO A METÀ RIGA si carica lo stesso: la riga mozzata si salta e si CONTA', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   for (const e of [
     { kind: 'run_started', at: 'a', id: 'ric-1', sessionId: 'ric-1', question: 'q', depth: 'deep', engine: 'device' },
     { kind: 'plan_approved', at: 'b', branches: [{ id: 'b1', question: 'r1', estimate: { tokens: 10, searches: 1, pages: 1 } }] },
@@ -407,7 +408,7 @@ test('⭐⭐⭐ L4, DAL DISCO — un giornale TRONCATO A METÀ RIGA si carica lo
 
 test('⛔⛔ L4, DAL DISCO — una riga rotta IN MEZZO (non solo l\'ultima) non fa fallire la lettura', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   mkdirSync(cartellaDellaRicerca(cartella, 'ric-1'), { recursive: true });
   writeFileSync(percorsoGiornale(cartella, 'ric-1'), [
     JSON.stringify({ kind: 'run_started', at: 'a', id: 'ric-1', sessionId: 'ric-1', question: 'q', depth: 'deep', engine: 'device' }),
@@ -430,7 +431,7 @@ test('⛔⛔ L4, DAL DISCO — una riga rotta IN MEZZO (non solo l\'ultima) non 
 
 test('⭐⭐⭐ L4, DAL DISCO — UN EVENTO DUPLICATO NON CONTA DUE VOLTE LA SPESA', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   /*
    * ⛔ Il caso normale, non il caso limite: un'aggiunta scritta due volte perché il processo è
    *   morto fra la scrittura e la conferma. `run.mjs` lo prevede; qui si prova che ci arrivi
@@ -452,7 +453,7 @@ test('⭐⭐⭐ L4, DAL DISCO — UN EVENTO DUPLICATO NON CONTA DUE VOLTE LA SPE
 
 test('⭐⭐⭐ L4 — UNA CORSA REGISTRATA E RIGIOCATA DÀ LO STESSO STATO, letta due volte dallo stesso file', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const corsa = [
     { kind: 'run_started', at: 'a', id: 'ric-1', sessionId: 'ric-1', question: 'q', depth: 'deep', engine: 'device' },
     { kind: 'plan_proposed', at: 'b', branches: [{ id: 'b1', question: 'r1', estimate: { tokens: 10, searches: 1, pages: 1 } }, { id: 'b2', question: 'r2', estimate: { tokens: 10, searches: 1, pages: 1 } }] },
@@ -475,7 +476,7 @@ test('⭐⭐⭐ L4 — UNA CORSA REGISTRATA E RIGIOCATA DÀ LO STESSO STATO, let
 
 test('⛔ L4, VERSO CONTRARIO — un evento senza `kind` è respinto alla scrittura, e un id ostile pure', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   await assert.rejects(() => accodaEvento({ cartella, id: 'ric-1', evento: { at: 'ora' } }), /vuole un .kind./);
   await assert.rejects(() => accodaEvento({ cartella, id: '../fuori', evento: { kind: 'run_paused' } }), /id di ricerca non valido/);
   assert.deepEqual(await leggiGiornale({ cartella, id: 'ric-1' }), { eventi: [], righeSaltate: 0, byte: 0 });
@@ -485,7 +486,7 @@ test('⛔ L4, VERSO CONTRARIO — un evento senza `kind` è respinto alla scritt
 
 test('⭐⭐ L4 — il piano si scrive e si rilegge; un piano assente è `null`, mai un errore', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   assert.equal(await leggiPiano({ cartella, id: 'ric-1' }), null);
   const piano = [{ id: 'b1', question: 'Quanto costa?', estimate: { tokens: 100, searches: 2, pages: 3 } }];
   await scriviPiano({ cartella, id: 'ric-1', piano });
@@ -494,7 +495,7 @@ test('⭐⭐ L4 — il piano si scrive e si rilegge; un piano assente è `null`,
 
 test('⭐⭐⭐ L4 — una fonte tenuta è INDIRIZZATA DAL CONTENUTO: stesso testo ⇒ stesso file, mai riscritto', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const testo = 'Il testo integrale di una pagina che abbiamo pagato per leggere.';
   const primo = await scriviFonte({ cartella, id: 'ric-1', testo });
   assert.match(primo.ref, /^fonti\/[0-9a-f]{64}\.txt$/);
@@ -508,7 +509,7 @@ test('⭐⭐⭐ L4 — una fonte tenuta è INDIRIZZATA DAL CONTENUTO: stesso tes
 
 test('⛔⛔⛔ L4, VERSO CONTRARIO — un `ref` ostile o inventato non legge niente fuori dalla cartella della ricerca', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   writeFileSync(join(cartella, 'segreto.txt'), 'roba di qualcun altro', 'utf8');
   for (const ostile of ['fonti/../../segreto.txt', '../segreto.txt', 'fonti/ABC.txt', 'fonti/x.txt', 'segreto.txt', '', null, 42]) {
     assert.equal(await leggiFonte({ cartella, id: 'ric-1', ref: ostile }), null, `${String(ostile)} non deve leggere niente`);
@@ -585,7 +586,7 @@ function orchestratoreSuDisco(cartella, sessioni, extra = {}) {
 
 test('⭐⭐⭐⭐ L4 §6.6 — LA RIPRESA DOPO UN RIAVVIO: un registro NUOVO, sullo stesso disco, riparte dal giornale', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
 
   /* ── Vita 1: la ricerca parte e scrive il suo giornale. ── */
   const sessioniPrima = new Map();
@@ -641,7 +642,7 @@ test('⭐⭐⭐⭐ L4 §6.6 — LA RIPRESA DOPO UN RIAVVIO: un registro NUOVO, s
 
 test('⛔⛔⛔ L4, VERSO CONTRARIO — una ricerca ANNULLATA non si riprende dal giornale: cancellato vuol dire cancellato', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   await creaRicerca({ cartella, id: 'ric-morta', domanda: 'x' });
   await accodaEvento({ cartella, id: 'ric-morta', evento: { kind: 'run_started', at: 'a', id: 'ric-morta', sessionId: 'ric-morta', question: 'x', depth: 'deep', engine: 'device' } });
   await accodaEvento({ cartella, id: 'ric-morta', evento: { kind: 'run_cancelled', at: 'b' } });
@@ -655,7 +656,7 @@ test('⛔⛔⛔ L4, VERSO CONTRARIO — una ricerca ANNULLATA non si riprende da
 
 test('⛔⛔ L4, VERSO CONTRARIO — senza giornale (ricerca nata prima dell\'11/09) la ripresa rifiuta ONESTAMENTE, e non inventa un `run_started`', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const sessioni = new Map([['antica', { cartella, conclusa: true, interrotta: true, messaggiFinali: null, taskId: 'ricerca', task: {}, forkDa: null, controller: { abort() {} } }]]);
   const { orch, avviati } = orchestratoreSuDisco(cartella, sessioni);
   const esito = await orch.riprendi({ id: 'antica' });
@@ -667,7 +668,7 @@ test('⛔⛔ L4, VERSO CONTRARIO — senza giornale (ricerca nata prima dell\'11
 
 test('⭐⭐ L4 — con la conversazione ANCORA in memoria vince quella (contesto esatto), e la ripresa si registra lo stesso', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const voce = {
     cartella, conclusa: true, interrotta: false, messaggiFinali: [{ role: 'assistant', content: 'trovato A' }],
     taskId: 'ricerca', task: { consegna: 'x' }, forkDa: null, controller: { abort() {} },
@@ -685,7 +686,7 @@ test('⭐⭐ L4 — con la conversazione ANCORA in memoria vince quella (contest
 
 test('⭐⭐⭐⭐ L4 — L\'ELENCO NON MENTE PIÙ: una `done` col rapporto valido resta `done`, una senza esce `senza-rapporto` — e il file NON si riscrive', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const sessioni = new Map();
   const { orch } = orchestratoreSuDisco(cartella, sessioni);
 
@@ -712,7 +713,7 @@ test('⭐⭐⭐⭐ L4 — L\'ELENCO NON MENTE PIÙ: una `done` col rapporto vali
 
 test('⭐⭐⭐ L4 — LA CACHE DELL\'ELENCO è su `mtime`+`size`: non rilegge due volte lo stesso file, ma rilegge SEMPRE uno cambiato', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   await creaRicerca({ cartella, id: 'ric-1', domanda: 'A' });
   await scriviRapporto({ cartella, id: 'ric-1', testo: rapportoRecintato() });
   await aggiornaRicerca({ cartella, id: 'ric-1', terminata: 'done' });
@@ -740,7 +741,7 @@ test('⭐⭐⭐ L4 — LA CACHE DELL\'ELENCO è su `mtime`+`size`: non rilegge d
 
 test('⭐⭐⭐ L4+L6 — l\'istantanea della cache del fetch si salva accanto al giornale e RIENTRA alla ripresa', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   await creaRicerca({ cartella, id: 'ric-c', domanda: 'x' });
   await accodaEvento({ cartella, id: 'ric-c', evento: { kind: 'run_started', at: 'a', id: 'ric-c', sessionId: 'ric-c', question: 'x', depth: 'deep', engine: 'device' } });
 
@@ -776,14 +777,14 @@ test('⛔⛔ L4+L6, VERSO CONTRARIO — un\'istantanea di versione IGNOTA o malf
       assert.doesNotMatch(esito.esito, /cached pages restored/, 'e non deve vantare un risparmio che non c\'è');
       assert.equal(avviati.length, 1);
     } finally {
-      rmSync(cartella, { recursive: true, force: true });
+      rimuoviCartellaDiProva(cartella);
     }
   }
 });
 
 test('⭐⭐ L4 — leggiIstantaneaCache: assente o illeggibile ⇒ `null`, mai un\'eccezione', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   assert.equal(await leggiIstantaneaCache({ cartella, id: 'mai-esistita' }), null);
   assert.equal(await leggiIstantaneaCache({ cartella, id: '../fuori' }), null);
 });
@@ -792,7 +793,7 @@ test('⭐⭐ L4 — leggiIstantaneaCache: assente o illeggibile ⇒ `null`, mai 
 
 test('⭐⭐⭐⭐ L4 — IL GIRO INTERO SU DISCO: avvio → deposito → conclusione ⇒ `done`, giornale coerente, niente scorie', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   let conclusione = null;
   const sessioni = new Map();
   const { orch } = orchestratoreSuDisco(cartella, sessioni, {
@@ -908,7 +909,7 @@ test('⭐⭐⭐⭐ BC-44 — LA TABELLA: cosa si riprende e cosa no, e l ordine 
 
 test('⭐⭐⭐⭐ BC-44 — una corsa caduta sul FORNITORE registra la causa, lo dice in italiano, e si dichiara riprendibile', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const sessioni = new Map();
   const { orch, avviati } = orchestratoreSuDisco(cartella, sessioni, { ripresaAutomatica: false });
   const { id } = await orch.avvia({ cartella, question: 'Come stanno evolvendo gli harness?', depth: 'deep' });
@@ -933,7 +934,7 @@ test('⭐⭐⭐⭐ BC-44 — una corsa caduta sul FORNITORE registra la causa, l
 
 test('⭐⭐⭐⭐ BC-44 — LA RIPRESA ACCETTA quella caduta, riparte dal giornale e NON ripaga i passi già fatti', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const sessioni = new Map();
   const { orch, avviati } = orchestratoreSuDisco(cartella, sessioni, { ripresaAutomatica: false });
   const { id } = await orch.avvia({ cartella, question: 'Come stanno evolvendo gli harness?', depth: 'deep' });
@@ -965,7 +966,7 @@ test('⭐⭐⭐⭐ BC-44 — LA RIPRESA ACCETTA quella caduta, riparte dal giorn
 
 test('⛔⛔⛔ BC-44, VERSO CONTRARIO — una caduta NON transitoria resta ferma, e lo dice', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const sessioni = new Map();
   const { orch, avviati } = orchestratoreSuDisco(cartella, sessioni, { ripresaAutomatica: false });
   const { id } = await orch.avvia({ cartella, question: 'Come stanno evolvendo gli harness?', depth: 'deep' });
@@ -986,7 +987,7 @@ test('⛔⛔⛔ BC-44, VERSO CONTRARIO — una caduta NON transitoria resta ferm
 
 test('⛔⛔ BC-44, VERSO CONTRARIO — una ricerca caduta PRIMA di oggi (nessun `motivoErrore`) si comporta come ieri', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   await creaRicerca({ cartella, id: 'ric-viva', domanda: 'x' });
   await accodaEvento({ cartella, id: 'ric-viva', evento: { kind: 'run_started', at: 'a', id: 'ric-viva', sessionId: 'ric-viva', question: 'x', depth: 'deep', engine: 'device' } });
   await aggiornaRicerca({ cartella, id: 'ric-viva', terminata: 'failed' });
@@ -1000,7 +1001,7 @@ test('⛔⛔ BC-44, VERSO CONTRARIO — una ricerca caduta PRIMA di oggi (nessun
 
 test('⛔⛔⛔ BC-44, VERSO CONTRARIO — una ricerca CONSEGNATA non riparte, nemmeno con la conversazione ancora in memoria', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   await creaRicerca({ cartella, id: 'ric-viva', domanda: 'x' });
   await aggiornaRicerca({ cartella, id: 'ric-viva', terminata: 'done', reportLibraryId: 'lib-1' });
   const voce = { ...voceDopoLaCaduta(cartella, 'ric-viva'), messaggiFinali: [{ role: 'assistant', content: 'fatto' }] };
@@ -1013,7 +1014,7 @@ test('⛔⛔⛔ BC-44, VERSO CONTRARIO — una ricerca CONSEGNATA non riparte, n
 
 test('⭐⭐⭐⭐ BC-44 — LA RIPRESA AUTOMATICA: una volta sola, dichiarata nel giornale, e mai due', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const sessioni = new Map();
   let attese = 0;
   const { orch, avviati } = orchestratoreSuDisco(cartella, sessioni, { dormiFn: async () => { attese += 1; } });
@@ -1040,7 +1041,7 @@ test('⭐⭐⭐⭐ BC-44 — LA RIPRESA AUTOMATICA: una volta sola, dichiarata n
 
 test('⛔⛔⛔ BC-44, VERSO CONTRARIO — la ripresa automatica NON scatta senza lavoro da salvare, né su una causa non transitoria', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const sessioni = new Map();
   const { orch, avviati } = orchestratoreSuDisco(cartella, sessioni, { dormiFn: async () => {} });
   const { id } = await orch.avvia({ cartella, question: 'Come stanno evolvendo gli harness?', depth: 'deep' });
@@ -1059,7 +1060,7 @@ test('⛔⛔⛔ BC-44, VERSO CONTRARIO — la ripresa automatica NON scatta senz
 
 test('⭐⭐⭐⭐ BC-44 — LA CAUSA DEDOTTA: una ricerca caduta PRIMA della cura si riprende lo stesso, perché il `RunError` è negli eventi della sessione', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
 
   /*
    * ⛔ È esattamente la forma su disco della ricerca `dec896c0` del 12/09: `terminata:'failed'`,
@@ -1095,7 +1096,7 @@ test('⭐⭐⭐⭐ BC-44 — LA CAUSA DEDOTTA: una ricerca caduta PRIMA della cu
 
 test('⛔⛔⛔ BC-44, VERSO CONTRARIO — il `RunError` di un giro PRECEDENTE non conta: si legge solo l\'ultimo giro', async (t) => {
   const cartella = cartellaVera();
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   await creaRicerca({ cartella, id: 'ric-viva', domanda: 'x' });
   await accodaEvento({ cartella, id: 'ric-viva', evento: { kind: 'run_started', at: 'a', id: 'ric-viva', sessionId: 'ric-viva', question: 'x', depth: 'deep', engine: 'device' } });
   await ricercaAMetaStrada(cartella, 'ric-viva');

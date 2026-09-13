@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -9,6 +9,7 @@ import { creaRicerca, leggiRicerca, aggiornaRicerca, elencaRicerche, leggiGiorna
 import { talosResearchParseReport } from '../src/research/report.mjs';
 import { LIMITE_PARTE_RAPPORTO_BYTE, rileggiPartiRapporto } from '../src/research/deposito-a-pezzi.mjs';
 import { talosLavora, ATTREZZI_OPENAI, ATTREZZI_ESTESI_OPENAI } from '../src/kernel/talosHarness.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const id = 'bc49';
 const domanda = 'Come evolvono gli harness?';
@@ -22,7 +23,7 @@ async function banco(t, extra = {}) {
   const cartella = await mkdtemp(join(tmpdir(), 'bc49-test-'));
   t.after(async () => {
     assert.ok(resolve(cartella).startsWith(resolve(tmpdir()) + '\\') || resolve(cartella).startsWith(resolve(tmpdir()) + '/'));
-    await rm(cartella, { recursive: true, force: true });
+    await rimuoviCartellaDiProvaAttesa(cartella);
   });
   const avviati = [], sessioni = new Map();
   const opzioni = {
@@ -170,8 +171,8 @@ test('BC49: deposito unico del banco resta byte per byte, anche senza adattatore
   assert.match(r.risposta, /^deposited:/);
 });
 
-test('BC49: inventario e campi TALOS-BANCO invariati eccetto proprietà opzionale e descrizione del deposito', () => {
-  for (const [attrezzi, impronta] of [[ATTREZZI_OPENAI, '38d65a3f445bf470c5f79ace0b662ae1eaf619b22cbfabbe885676ee5c5bfd4b'], [ATTREZZI_ESTESI_OPENAI, 'ae860d8840a2400d64414804f0fe63074f8b1901836912d9544ad7b716a61124']]) {
+test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni DICHIARATE qui sotto (deposito e i due attrezzi della Libreria)', () => {
+  for (const [attrezzi, impronta] of [[ATTREZZI_OPENAI, '38d65a3f445bf470c5f79ace0b662ae1eaf619b22cbfabbe885676ee5c5bfd4b'], [ATTREZZI_ESTESI_OPENAI, 'eba3456fe9a1bcb97528f6790bf6019cf8a32193d491fac32cd8a431e87e661c']]) {
     const copia = structuredClone(attrezzi);
     for (const t of copia) {
       const f = t.function ?? t;
@@ -180,6 +181,23 @@ test('BC49: inventario e campi TALOS-BANCO invariati eccetto proprietà opzional
         assert.ok(schema.properties.parte);
         assert.equal(schema.required.includes('parte'), false);
         delete schema.properties.parte;
+        delete f.description;
+      }
+      /* ⛔ BC-10 (13/09/2026) — esenzione AGGIUNTA, e il motivo conta piu' del codice.
+       * La cura di BC-10 ha dato ai due attrezzi della Libreria un campo OPZIONALE di sblocco e ha
+       * riscritto le loro descrizioni, quindi l'impronta dell'inventario e' cambiata per davvero.
+       * Ristampare l'impronta e basta avrebbe SPENTO questa guardia: da quel momento avrebbe detto
+       * «tutto invariato» qualunque cosa cambiasse.
+       * ⇒ Si esenta solo cio' che e' cambiato APPOSTA, asserendo prima che il campo esista e che sia
+       * opzionale: se un domani diventasse obbligatorio, o sparisse, questa prova cade.
+       * ⇒ L'impronta nuova non e' indovinata: applicando questa stessa esenzione all'inventario del
+       * commit precedente e a quello di oggi, le due impronte COINCIDONO — prova misurata che
+       * nient'altro e' cambiato. La descrizione e' prosa per il modello, non il contratto del banco. */
+      if (f.name === 'library_list' || f.name === 'library_search') {
+        const schema = f.parameters ?? f.input_schema;
+        assert.ok(schema.properties.browse_every_page, `${f.name}: manca il campo di sblocco`);
+        assert.equal((schema.required ?? []).includes('browse_every_page'), false, `${f.name}: il campo di sblocco NON deve essere obbligatorio`);
+        delete schema.properties.browse_every_page;
         delete f.description;
       }
     }

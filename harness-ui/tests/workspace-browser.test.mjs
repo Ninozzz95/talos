@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 
 import { createWorkspaceBrowser, WorkspaceBrowserError } from '../src/workspace-browser.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 async function fixture(t) {
   // 13/09: sui runner GitHub `tmpdir()` è nella forma corta 8.3 (`RUNNER~1`); il browser dei
@@ -14,7 +15,7 @@ async function fixture(t) {
   await mkdir(project, { recursive: true });
   await mkdir(join(root, 'Windows'));
   await writeFile(join(root, 'leggimi.txt'), 'non deve entrare nel chooser');
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
   return { root, project };
 }
 

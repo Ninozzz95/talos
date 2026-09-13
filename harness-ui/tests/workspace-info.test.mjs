@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { eUnaRadice, contaFile, repoAnnidati, istruzioniPresenti, ritrattoCartella, frasiRitratto, avvisoRitratto, statoGit, TETTO_FILE } from '../src/workspace-info.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 // 06/09 — decisioni F9, F10, F19, F20, F21: la modale «Nuova sessione» deve dire cosa c'è dentro
 // la cartella PRIMA di darla a un agente. Erano tutte ❌ nell'audit.
@@ -40,7 +41,7 @@ test('RITRATTO-CONTA: conta i file veri, salta ciò che non è lavoro, e si ferm
     const conTetto = await contaFile(base, { tetto: 2 });
     assert.equal(conTetto.oltre, true);
     assert.ok(conTetto.file <= 3);
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('RITRATTO-ANNIDATI: trova i repo dentro, e dentro un repo annidato non scende oltre', async () => {
@@ -55,7 +56,7 @@ test('RITRATTO-ANNIDATI: trova i repo dentro, e dentro un repo annidato non scen
     assert.deepEqual(nomi.sort(), ['mobile', 'packages/uno']);
     // AL CONTRARIO: una cartella senza repo dentro non ne inventa
     assert.deepEqual(await repoAnnidati(join(base, 'src')), []);
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('RITRATTO-ISTRUZIONI: le istruzioni dell’agente già presenti si dichiarano', async () => {
@@ -65,7 +66,7 @@ test('RITRATTO-ISTRUZIONI: le istruzioni dell’agente già presenti si dichiara
     assert.deepEqual(await istruzioniPresenti(base), ['CLAUDE.md']);
     await writeFile(join(base, 'AGENTS.md'), '# altre');
     assert.deepEqual(await istruzioniPresenti(base), ['CLAUDE.md', 'AGENTS.md']);
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('RITRATTO-GIT: senza git non si inventa niente, con git si legge ramo e modifiche', async () => {
@@ -85,7 +86,7 @@ test('RITRATTO-GIT: senza git non si inventa niente, con git si legge ramo e mod
     // AL CONTRARIO: fuori da un repo si torna null, senza rumore e senza campi finti
     const fuori = await statoGit(base, { eseguiGit: async () => null });
     assert.equal(fuori, null);
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });
 
 test('RITRATTO-FRASI: la riga della modale e l’avviso, coi numeri veri', () => {
@@ -118,5 +119,5 @@ test('RITRATTO-INTERO: una cartella vera, e una che non esiste', async () => {
     const no = await ritrattoCartella(join(base, 'non-esiste'));
     assert.equal(no.leggibile, false);
     assert.equal((await ritrattoCartella('')).leggibile, false);
-  } finally { await rm(base, { recursive: true, force: true }); }
+  } finally { await rimuoviCartellaDiProvaAttesa(base); }
 });

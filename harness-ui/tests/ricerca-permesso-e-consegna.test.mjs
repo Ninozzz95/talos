@@ -22,10 +22,11 @@
  *     REFUSED). ⇒ togliere l'attrezzo più largo dalla lista è una cura misurata, non un gusto.
  */
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 import {
   ATTREZZI_ESTESI_OPENAI, ATTREZZI_OPENAI, attrezziNegatiDalLivello, talosLavora,
@@ -39,7 +40,7 @@ import {
 
 function cartellaVuota(t) {
   const dir = mkdtempSync(join(tmpdir(), 'talos-ricerca-'));
-  t.after(() => { try { rmSync(dir, { recursive: true, force: true }); } catch { /* già sparita */ } });
+  t.after(() => { try { rimuoviCartellaDiProva(dir); } catch { /* già sparita */ } });
   return dir;
 }
 

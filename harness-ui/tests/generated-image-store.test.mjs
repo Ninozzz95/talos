@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 import { createGeneratedImageStore, GeneratedImageStoreError } from '../src/generated-image-store.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 test('P0.4 image persistence writes bytes and a verifiable sidecar, then reopens after a fresh store instance', async () => {
   const rootDir = await mkdtemp(join(tmpdir(), 'talos-generated-image-'));
@@ -22,7 +23,7 @@ test('P0.4 image persistence writes bytes and a verifiable sidecar, then reopens
     assert.equal(reopened.mimeType, 'image/png');
     assert.equal(reopened.promptHash, promptHash);
   } finally {
-    await rm(rootDir, { recursive: true, force: true });
+    await rimuoviCartellaDiProvaAttesa(rootDir);
   }
 });
 
@@ -35,7 +36,7 @@ test('P0.4 image persistence rejects unsupported or empty content before touchin
     await assert.rejects(() => store.persistGeneratedImage({ bytes: Buffer.from([1]), mimeType: 'image/png', source: '' }), (error) => error instanceof GeneratedImageStoreError && error.code === 'TALOS_IMAGE_PERSIST_INVALID');
     await assert.rejects(() => readFile(join(rootDir, 'anything')), /ENOENT/);
   } finally {
-    await rm(rootDir, { recursive: true, force: true });
+    await rimuoviCartellaDiProvaAttesa(rootDir);
   }
 });
 
@@ -47,6 +48,6 @@ test('P0.4 image persistence fails closed when the stored bytes are tampered wit
     await (await import('node:fs/promises')).writeFile(saved.path, Buffer.from([9]));
     await assert.rejects(() => store.readGeneratedImage(saved.id), (error) => error instanceof GeneratedImageStoreError && error.code === 'TALOS_IMAGE_PERSIST_CORRUPT');
   } finally {
-    await rm(rootDir, { recursive: true, force: true });
+    await rimuoviCartellaDiProvaAttesa(rootDir);
   }
 });

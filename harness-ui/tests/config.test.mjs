@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { accessSync, mkdtempSync, rmSync } from 'node:fs';
+import { accessSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -17,6 +17,7 @@ import {
   trovaPortaLibera,
 } from '../src/config.mjs';
 import { generateHarnessReceiptKeypair } from '../src/harness-receipt-keypair.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 test('R03-CONFIG — fallback esplicito normalizzato, assente resta assente', () => {
   const config = loadConfig({ TALOS_LLAMA_SERVER_PATH: 'gpu.exe', TALOS_LLAMA_SERVER_FALLBACK_PATH: 'cpu.exe' }, import.meta.url);
   assert.equal(config.llamaServerFallbackPath, resolve('cpu.exe'));
@@ -183,7 +184,7 @@ test('CTX-CONFIG-WORKTREE config zero-config dal server punta alla radice deskto
 test('config accetta un elenco di cartelle progetto VERE, separate da ";", con id stabili e nomi derivati', (t) => {
   const uno = mkdtempSync(join(tmpdir(), 'talos-progetto-uno-'));
   const due = mkdtempSync(join(tmpdir(), 'talos-progetto-due-'));
-  t.after(() => { rmSync(uno, { recursive: true, force: true }); rmSync(due, { recursive: true, force: true }); });
+  t.after(() => { rimuoviCartellaDiProva(uno); rimuoviCartellaDiProva(due); });
 
   const config = loadConfig({
     TALOS_HARNESS_UI_PROJECT_DIRS: `${uno};${due}`,
@@ -197,7 +198,7 @@ test('config accetta un elenco di cartelle progetto VERE, separate da ";", con i
 
 test('⛔ config rifiuta una cartella progetto relativa, inesistente, o ripetuta due volte', (t) => {
   const vera = mkdtempSync(join(tmpdir(), 'talos-progetto-vera-'));
-  t.after(() => rmSync(vera, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(vera));
 
   assert.throws(
     () => loadConfig({ TALOS_HARNESS_UI_PROJECT_DIRS: 'relative/progetto' }, import.meta.url),
@@ -434,6 +435,6 @@ test('CONFIG-STORE-02 — TALOS_HARNESS_UI_SESSIONS_DIR sposta la cartella, riso
     const vuota = loadConfig({ TALOS_HARNESS_UI_SESSIONS_DIR: '   ' }, new URL('../server.mjs', import.meta.url));
     assert.equal(vuota.cartellaStore, fileURLToPath(new URL('../.sessions-store/', import.meta.url)));
   } finally {
-    rmSync(cartella, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartella);
   }
 });

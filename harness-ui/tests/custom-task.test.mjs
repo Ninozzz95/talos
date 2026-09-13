@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { CustomTaskError, elencaCartelleProgetto, preparaEsecuzioneLibera } from '../src/custom-task.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 // ⛔ Stesso principio di task-catalog.test.mjs: nessun mock del filesystem,
 // una cartella temporanea VERA. Diverso da task-catalog: qui NON c'è
@@ -13,7 +14,7 @@ import { CustomTaskError, elencaCartelleProgetto, preparaEsecuzioneLibera } from
 
 function cartellaProgettoFinta(t, indice = 0, nome = 'progetto-libero') {
   const percorso = mkdtempSync(join(tmpdir(), `talos-${nome}-`));
-  t.after(() => rmSync(percorso, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(percorso));
   return { id: String(indice), percorso, nome: percorso.split(/[\\/]/).pop() };
 }
 
@@ -90,7 +91,7 @@ test('⛔⛔⛔ una consegna oltre il tetto di byte è rifiutata — non un prom
  */
 test('⭐⭐⭐ cartellaLibera VERA (esiste, è una cartella, leggibile/scrivibile) è accettata: nessuna allowlist coinvolta', (t) => {
   const percorso = mkdtempSync(join(tmpdir(), 'talos-full-access-'));
-  t.after(() => rmSync(percorso, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(percorso));
   const { cartella, task } = preparaEsecuzioneLibera([], { cartellaLibera: percorso, consegna: 'fai qualcosa' });
   assert.equal(cartella, percorso);
   assert.equal(task.progetto, percorso.split(/[\\/]/).pop());
@@ -99,7 +100,7 @@ test('⭐⭐⭐ cartellaLibera VERA (esiste, è una cartella, leggibile/scrivibi
 test('⛔⛔⛔ AL CONTRARIO — cartellaId E cartellaLibera insieme sono rifiutati: mai un percorso scelto a caso fra i due', (t) => {
   const cartelle = [cartellaProgettoFinta(t)];
   const percorso = mkdtempSync(join(tmpdir(), 'talos-full-access-'));
-  t.after(() => rmSync(percorso, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(percorso));
   assert.throws(
     () => preparaEsecuzioneLibera(cartelle, { cartellaId: '0', cartellaLibera: percorso, consegna: 'fai qualcosa' }),
     (errore) => errore instanceof CustomTaskError && errore.code === 'QUERY_INVALID',
@@ -122,7 +123,7 @@ test('⛔ AL CONTRARIO — cartellaLibera relativa è rifiutata, mai risolta con
 
 test('⛔⛔ AL CONTRARIO — cartellaLibera che punta a un FILE, non una cartella, è rifiutata', (t) => {
   const cartella = mkdtempSync(join(tmpdir(), 'talos-full-access-file-'));
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   const file = join(cartella, 'non-una-cartella.txt');
   writeFileSync(file, 'x');
   assert.throws(

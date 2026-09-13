@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir } from 'node:fs/promises';
 import test from 'node:test';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createLocalModelStore, LocalModelStoreError } from '../src/local-model-store.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const valid = {
   id: 'lfm2-6b-q6',
@@ -23,7 +24,7 @@ async function withStore(run, options = {}) {
   try {
     await run(createLocalModelStore({ rootDir, ...options }), rootDir);
   } finally {
-    await rm(rootDir, { recursive: true, force: true });
+    await rimuoviCartellaDiProvaAttesa(rootDir);
   }
 }
 

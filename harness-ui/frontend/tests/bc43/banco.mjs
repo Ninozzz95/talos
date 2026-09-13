@@ -6,13 +6,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as esbuild from 'esbuild';
 import { copyVendoredAssets } from '../../scripts/copy-vendored-assets.mjs';
+import { cartellaRapporti } from '../aiuto/cartella-foto.mjs';
 import { createHttpApp } from '../../../src/http-app.mjs';
 import { createSessionRegistry } from '../../../src/session-registry.mjs';
 import { createStaticHandler } from '../../../src/static-files.mjs';
 import { createModelCatalog } from '../../../src/model-catalog.mjs';
 
 const frontend = fileURLToPath(new URL('../../', import.meta.url));
-const prove = path.resolve(frontend, '../.claude/foto-bc43-2026-09-12');
+const prove = cartellaRapporti('foto-bc43-2026-09-12');
 const fase = process.env.BC43_FASE || 'dopo';
 if (!['prima', 'dopo'].includes(fase)) throw new Error('Fase BC43 non valida');
 

@@ -5,10 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { resolve, dirname, extname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
 import { chromium } from '@playwright/test';
+import { cartellaFoto } from '../aiuto/cartella-foto.mjs';
 import { build } from 'esbuild';
 
 const frontend = fileURLToPath(new URL('../..', import.meta.url));
-const prove = resolve(frontend, '../.claude');
+const prove = cartellaFoto('bc12-provider-pool');
 
 test('PH-UI-BROWSER componenti reali: menu, azioni, tastiera, desktop, mobile e moto ridotto', async t => {
   const browser = await chromium.launch({ channel:'chrome', headless:true });

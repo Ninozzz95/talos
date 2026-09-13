@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -9,6 +9,7 @@ import { loadConfig, ConfigurationError, modelloRichiestaValido } from '../src/c
 import { REGISTRO_FORNITORI, verificaRegistro } from '../src/provider-registry.mjs';
 import { createModelCatalog } from '../src/model-catalog.mjs';
 import { createHttpApp } from '../src/http-app.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 // Fixture sintetica conforme al contratto models.dev esaminato il 12/09/2026.
 // I suoi numeri sono dati di prova, non quotazioni da mostrare nel prodotto.
@@ -123,7 +124,7 @@ test('PF-MD-05 — HTTP/JSON invalidi senza copia: riserva; catalogo valido vuot
 
 async function banco(t, extra = {}) {
   const cartellaStore = await mkdtemp(join(tmpdir(), 'talos-pe-test-'));
-  t.after(() => rm(cartellaStore, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(cartellaStore));
   const opts = { cartellaStore, clock: () => new Date(ORA), fetchFn: async () => risposta(), ...extra };
   return { opts, catalogo: createModelsDevCatalog(opts) };
 }

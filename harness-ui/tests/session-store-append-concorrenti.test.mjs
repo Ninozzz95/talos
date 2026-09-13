@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { registraRiga } from '../src/session-store.mjs';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 /*
  * ⭐⭐⭐ 04/9 — W0-07. LA PERSISTENZA SI CORROMPE DA SOLA.
@@ -28,7 +29,7 @@ import { registraRiga } from '../src/session-store.mjs';
 
 function cartellaTemporanea(t) {
   const cartella = mkdtempSync(join(tmpdir(), 'talos-store-append-'));
-  t.after(() => rmSync(cartella, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProva(cartella));
   return cartella;
 }
 

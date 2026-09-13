@@ -15,6 +15,8 @@ import {
   SOGLIE_STALLO_PREDEFINITE,
 } from '../src/session-registry.mjs';
 import { CustomTaskError } from '../src/custom-task.mjs';
+// BC-09 (13/09/2026): la copia locale dei ritentativi e diventata l'aiuto condiviso, uno solo per tutta la suite.
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { imageMessageContent } from '../src/chat-image-attachments.mjs';
 // ⭐ L4 (11/09) — lo scrittore VERO del record recintato, per le fixture di ricerca.
@@ -3563,18 +3565,6 @@ function cartellaStoreVera() {
   return mkdtempSync(join(tmpdir(), 'talos-session-store-registry-'));
 }
 
-/*
- * 13/09: su Windows una rimozione ricorsiva puo' uscire con ENOTEMPTY anche a test finito, perche'
- * un handle sul JSONL si chiude qualche millisecondo dopo e la cartella risulta ancora non vuota.
- * Misurato sul runner del tag desktop-v0.1.2, morto esattamente qui, in LOCAL-RESUME-JSON-02: il
- * test passava in locale e al giro prima, quindi e' una CORSA nel teardown, non un difetto del
- * prodotto. `maxRetries` e `retryDelay` sono le opzioni ufficiali di rm/rmSync per questo caso
- * (documentazione Node, modulo fs, letta il 13/09/2026: `maxRetries` vale 0 di serie).
- * ⛔ Non nasconde niente: se dopo i ritentativi la cartella resta piena, lancia ancora.
- */
-function rimuoviCartellaDiProva(cartella) {
-  rmSync(cartella, { recursive: true, force: true, maxRetries: 10, retryDelay: 50 });
-}
 
 test('SESSION-SETTINGS-DURABILITY-01 — impostazioni aggiornate guidano elenco, resume e ripristino JSONL', async () => {
   const cartellaStore = cartellaStoreVera();

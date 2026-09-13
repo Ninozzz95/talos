@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { resolve, dirname, extname, relative, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
+import { preparaCartellaFoto } from '../aiuto/cartella-foto.mjs';
 import { chromium } from '@playwright/test';
 import { build } from 'esbuild';
 import { createProviderCredentialStore } from '../../../src/provider-credential-store.mjs';
@@ -105,8 +106,8 @@ test('PK-UI-02/03 — campi cloud reali, salvataggio HTTP, ricarica, errore e di
     await bedrock.getByLabel('Regione', { exact: true }).focus(); await page.keyboard.press('Tab');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
     assert.equal(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches), true);
-    await mkdir(resolve(frontend, '../.claude'), { recursive: true });
-    await page.screenshot({ path: resolve(frontend, `../.claude/PK-UI-${width}.png`), fullPage: true });
+    const foto = await preparaCartellaFoto('bc12-provider-pk');
+    await page.screenshot({ path: resolve(foto, `PK-UI-${width}.png`), fullPage: true });
     assert.deepEqual(errors, []);
   }
 });

@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { buildProduction } from '../../scripts/build.mjs';
+import { rimuoviCartellaDiProvaAttesa } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '../../../..');
@@ -37,6 +38,6 @@ test('PHASE1-BUILD-PARALLEL-01 produce un bundle ESM deterministico fuori da pub
     const html = await readFile(path.join(output, 'index.html'), 'utf8');
     assert.match(html, /<script type="module" src="\.\/app\.js"><\/script>/u);
   } finally {
-    await rm(output, { recursive: true, force: true });
+    await rimuoviCartellaDiProvaAttesa(output);
   }
 });

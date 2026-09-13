@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 import {
   SessionStoreError,
@@ -25,7 +26,7 @@ test('⭐⭐⭐ registraRiga + leggiRegistro: le righe tornano nell\'ordine in c
     const record = await leggiRegistro({ cartellaStore, sessionId: 'sess-1' });
     assert.deepEqual(record.map((r) => r.type), ['RunStarted', 'TextMessageContent', 'RunFinished']);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -37,7 +38,7 @@ test('⭐⭐ registraRiga: crea la cartella da sola se non esiste ancora', async
     const record = await leggiRegistro({ cartellaStore, sessionId: 'sess-1' });
     assert.equal(record.length, 1);
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -52,7 +53,7 @@ test('⭐⭐ registraRiga: MAI una riscrittura — due sessioni diverse restano 
     assert.equal(a.length, 2);
     assert.equal(b.length, 1);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -61,7 +62,7 @@ test('⭐⭐⭐ leggiRegistro: un id senza file torna null, mai un\'eccezione', 
   try {
     assert.equal(await leggiRegistro({ cartellaStore, sessionId: 'mai-esistita' }), null);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -77,7 +78,7 @@ test('⛔⛔⛔ AL CONTRARIO — leggiRegistro: l\'ULTIMA riga corrotta (crash a
     const record = await leggiRegistro({ cartellaStore, sessionId: 'sess-1' });
     assert.deepEqual(record, [{ type: 'RunStarted' }]);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -92,7 +93,7 @@ test('⛔⛔ AL CONTRARIO — leggiRegistro: una riga corrotta che NON è l\'ult
       return true;
     });
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -104,7 +105,7 @@ test('⭐⭐⭐ elencaSessioniPersistite: torna gli id VERI (nome file senza est
     const id = (await elencaSessioniPersistite({ cartellaStore })).sort();
     assert.deepEqual(id, ['sess-a', 'sess-b']);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -114,7 +115,7 @@ test('⛔ AL CONTRARIO — elencaSessioniPersistite: una cartella assente (primo
     const id = await elencaSessioniPersistite({ cartellaStore: join(radice, 'non-esiste') });
     assert.deepEqual(id, []);
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -127,7 +128,7 @@ test('⛔⛔ AL CONTRARIO — elencaSessioniPersistite: un file NON .jsonl nella
     const id = await elencaSessioniPersistite({ cartellaStore });
     assert.deepEqual(id, ['sess-vera']);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -150,7 +151,7 @@ test('⭐⭐⭐ registraRigaSync: la riga è leggibile SUBITO, zero await fra la
     const contenuto = readFileSync(join(cartellaStore, 'sess-sync.jsonl'), 'utf8');
     assert.deepEqual(JSON.parse(contenuto.trim()), { tipo: 'intestazione', sessionId: 'sess-sync' });
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -162,7 +163,7 @@ test('⭐⭐ registraRigaSync: crea la cartella da sola se non esiste ancora (st
     const record = JSON.parse(readFileSync(join(cartellaStore, 'sess-1.jsonl'), 'utf8').trim());
     assert.deepEqual(record, { tipo: 'intestazione' });
   } finally {
-    rmSync(radice, { recursive: true, force: true });
+    rimuoviCartellaDiProva(radice);
   }
 });
 
@@ -176,7 +177,7 @@ test('⭐⭐ registraRigaSync: due chiamate sulla stessa sessione ACCODANO, mai 
     assert.equal(righe[0].v, 1);
     assert.equal(righe[1].v, 2);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
@@ -190,6 +191,6 @@ test('⛔⛔ AL CONTRARIO — registraRigaSync: un errore fs (mkdir che fallisce
       );
     }, /disco pieno, finto/);
   } finally {
-    rmSync(cartellaStore, { recursive: true, force: true });
+    rimuoviCartellaDiProva(cartellaStore);
   }
 });

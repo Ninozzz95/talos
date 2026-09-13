@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,7 @@ import { creaFetchMultiProvider } from '../src/runtime-owner-adapter.mjs';
 import { createProviderCredentialStore } from '../src/provider-credential-store.mjs';
 import { rispostaAgenteAcp } from '../src/acp-agent.mjs';
 import { chiamaConRitenta, consumaFlussoSSE } from '../src/kernel/talosHarness.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 test('PL-REG-01 — agente esterno nel registro, wire valido e mutazione respinta', () => {
   const r = REGISTRO_FORNITORI.esterno;
@@ -24,7 +25,7 @@ test('PL-REG-01 — agente esterno nel registro, wire valido e mutazione respint
 
 async function prepara(t, modo = 'normale') {
   const cwd = await mkdtemp(join(tmpdir(), 'talos-pl-fornitore-'));
-  t.after(() => rm(cwd, { recursive: true, force: true }));
+  t.after(() => rimuoviCartellaDiProvaAttesa(cwd));
   const diario = join(cwd, 'diario.jsonl');
   return { runtime: { comando: process.execPath,
     argomenti: [fileURLToPath(new URL('./fixtures/acp-agent-finto.mjs', import.meta.url)), modo, diario], cwd, variabiliAmbiente: [] },
