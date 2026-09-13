@@ -428,6 +428,19 @@ senza reindirizzamento lascia la sua nota.
     compressa diventa l'indicatore, l'attesa sotto sparisce e torna solo quando non c'e' altro che si muove;
     (2) dire su cosa sta ragionando — titolo in grassetto se c'e', altrimenti l'ultima frase completa, su una
     riga; (3) la durata che sopravvive alla ricarica, salvata nel record `tempi-giro`.
+  ✅ **FATTI I TRE PUNTI DI «FARE MEGLIO DI HERMES»** — owner: «Si ai tre punti e all'ordine».
+  - **(1) Un solo indicatore** (commit `7c30c2e4`): al primo testo l'attesa se ne va e la riga compressa diventa
+    l'indicatore — etichetta con lo shimmer dell'attesa, argomento, secondi, pallino. Torna l'attesa a fine
+    ragionamento. ⛔ Con un reindirizzamento in attesa l'attesa resta (guardia provata rompendola: rossa).
+  - **(2) Su cosa ragiona** (stesso commit): titolo in grassetto se c'è (5% dei nostri ragionamenti), altrimenti
+    l'ultima frase COMPLETA; mai una frase a metà. Rigiocata: niente movimento, LAG-REPLAY resta a 19 su 20.
+  - **(3) La durata sopravvive alla ricarica** (commit `2109f02c`): durate nel record `tempi-giro` (regola BC-07, nessun
+    campo sugli eventi), rilette al ripristino, restituite da `/metrics`, applicate anche a posteriori.
+    Dati veri su una copia dello store: 38 sessioni su 38 ripristinate col codice nuovo; il 4174 dopo il riavvio
+    ne espone 38. Tre rotture lato server e una lato browser, tutte rosse.
+  - Suite: frontend 1043 su 1043 (0 rosse); principale di harness-ui 2961 su 2964 (0 rosse); a schermo 27 su 27.
+  - ⛔ **Non coperto**: la lettura della durata alla CHIUSURA della riga durante una rigiocata (nelle prove la
+    risposta di `/metrics` arriva sempre dopo) — esercitato solo l'aggiornamento a posteriori.
 - 🔜 **DUBBIO REGISTRATO, non difetto dichiarato**: 26 file di prova scattano foto e nessuno aspetta
   il velo esplicitamente. Molti aspettano elementi per piu' di 4 s, quindi le loro foto possono essere
   buone: va verificato guardandone una per suite, non dedotto dal conteggio.
