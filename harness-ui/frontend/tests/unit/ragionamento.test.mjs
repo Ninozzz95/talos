@@ -2,8 +2,39 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
-  ETICHETTA_INTERRUTTORE_RAGIONAMENTO, etichettaRagionamento, formattaDurataRagionamento,
+  ETICHETTA_INTERRUTTORE_RAGIONAMENTO, argomentoDelRagionamento, etichettaRagionamento, formattaDurataRagionamento,
 } from '../../src/components/ragionamento.js';
+
+/* ───────────── L'argomento corrente (13/09 sera, «fare meglio di Hermes») ───────────── */
+
+test('ARGOMENTO — un titolo in grassetto vince, e vale il PIÙ RECENTE', () => {
+  const testo = '**Leggo la cartella**\nCi sono 40 file.\n\n**Scelgo i test della chat**\nComincio da';
+  assert.equal(argomentoDelRagionamento(testo), 'Scelgo i test della chat');
+});
+
+test('ARGOMENTO — senza titoli: l’ultima frase COMPLETA, non il pezzo che sta arrivando', () => {
+  /* ⭐ Un inizio vero preso dallo store (qwen3.8-flash), tagliato dove l'aveva tagliato il flusso. */
+  const reale = 'Good results. Let me open the most promising pages for line 1 (facts and numbers):\n1. agentmarketcap.ai blog —';
+  assert.equal(argomentoDelRagionamento(reale), 'Let me open the most promising pages for line 1 (facts and numbers):');
+  assert.equal(argomentoDelRagionamento('Devo capire dove stanno i test. Poi apro il primo file e'), 'Devo capire dove stanno i test.');
+});
+
+test('ARGOMENTO — pulisce il markdown e sta su una riga', () => {
+  assert.equal(argomentoDelRagionamento('- Apro `tests/chat.test.mjs` per primo.\n'), 'Apro tests/chat.test.mjs per primo.');
+  const lunga = `${'Controllo ogni file della cartella dei test uno per uno '.repeat(3)}fino in fondo.\n`;
+  const breve = argomentoDelRagionamento(lunga);
+  assert.equal(breve.length, 90);
+  assert.ok(breve.endsWith('…'));
+});
+
+test('ARGOMENTO AL CONTRARIO — niente frasi a metà, niente frammenti, niente punti che non chiudono', () => {
+  assert.equal(argomentoDelRagionamento(''), null);
+  assert.equal(argomentoDelRagionamento('   '), null);
+  assert.equal(argomentoDelRagionamento('Sto leggendo la cartella dei'), null, 'una frase senza fine non si mostra');
+  assert.equal(argomentoDelRagionamento('Ok.\nBene. '), null, 'meno di tre parole non è un argomento');
+  assert.equal(argomentoDelRagionamento('Aggiorno alla v0.1.33 e poi'), null, 'il punto di un numero di versione non chiude una frase');
+  assert.equal(argomentoDelRagionamento('**Plann'), null, 'un grassetto non chiuso non è un titolo');
+});
 
 /*
  * ⛔ Le parole della riga del ragionamento compresso (decisione owner 13/09/2026, vedi il modulo).
