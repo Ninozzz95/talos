@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import { creaGestoreWorkspaceWatcher } from '../src/workspace-watcher.mjs';
@@ -61,11 +61,23 @@ test('WATCHER-NATIVE-NULL-FILENAME-26 — un evento senza nome forza un refresh 
 // intenzionalmente generosi: un timer di test troppo stretto sarebbe
 // più fragile del codice che prova.
 function radiceVera() {
-  // 13/09: la cartella temporanea dei runner GitHub ha un nome CORTO 8.3 (RUNNER~1). libuv
-  // riceve da ReadDirectoryChangesW il nome LUNGO e in uv__relative_path (src/win/fs-event.c)
-  // non riconosce piu il prefisso della cartella osservata: asserzione fallita e processo
-  // ABORTITO, non un test rosso. Si osserva sempre la forma lunga, risolta prima.
-  const radice = realpathSync(mkdtempSync(join(tmpdir(), 'talos-watch-test-')));
+  // 13/09: la radice di prova NON nasce nella cartella temporanea del sistema.
+  // Sui runner GitHub TEMP ha un nome CORTO 8.3 (RUNNER~1): libuv riceve da
+  // ReadDirectoryChangesW il nome LUNGO, in uv__relative_path (src/win/fs-event.c, riga 72)
+  // non riconosce piu il prefisso della cartella osservata, e ABORTISCE il processo. Non un
+  // test rosso: un processo morto, che porta giu' tutta la suite.
+  // 
+  // La prima cura provata era sbagliata: realpathSync NON espande le forme 8.3 su Windows.
+  // Misurato il 13/09 su questa macchina: realpathSync di 'C:/PROGRA~1' restituisce
+  // 'C:/PROGRA~1' identico. Risolveva i collegamenti, lasciava il nome corto, e il processo
+  // moriva uguale.
+  // 
+  // ⇒ La radice nasce dentro il repo, sotto `.talos/` (gia' ignorata da git a ogni
+  // profondita'), che ha sempre un nome lungo. Ancorata al FILE e non alla cwd, perche' la
+  // suite gira sia da harness-ui sia dalla radice del repo.
+  const casa = fileURLToPath(new URL('../.talos/', import.meta.url));
+  mkdirSync(casa, { recursive: true });
+  const radice = mkdtempSync(join(casa, 'watch-test-'));
   mkdirSync(join(radice, '.git'));
   mkdirSync(join(radice, 'node_modules'));
   return radice;
