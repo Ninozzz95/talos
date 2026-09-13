@@ -74,17 +74,26 @@ function mountComposer(overrides: Record<string, unknown> = {}): VueWrapper {
 }
 
 describe('TalosMobileComposer', () => {
-    it('Calm: Ragiona usa il ragionamento esistente; la chip Agente e il web non ci sono piu\' (owner 12/09 19:30)', async () => {
+    /**
+     * ⛔ Owner 2026-09-13: la chip «Ragiona» e' stata tolta perche' doppiava il
+     * drawer del modello. La regola dell'owner del 12/09 pero' e' che una UI
+     * nuova NON nasconde funzioni esistenti: quindi questo caso non verifica
+     * piu' la chip, verifica che il ragionamento sia ancora RAGGIUNGIBILE —
+     * che e' la sola cosa che rendeva utile la chip.
+     */
+    it('Calm: niente chip Ragiona, ma il ragionamento resta raggiungibile dal foglio del modello', async () => {
         const view = mountComposer({ thinking: false, agentToolsEnabled: true })
-        const thinking = view.get('[data-testid="talos-composer-thinking"]')
-        expect(thinking.attributes('aria-pressed')).toBe('false')
-        await thinking.trigger('click')
-        expect(view.emitted('selectThinking')).toEqual([[true]])
-        await view.setProps({ thinking: true })
-        expect(thinking.classes()).toContain('active')
+
+        expect(view.find('[data-testid="talos-composer-thinking"]').exists()).toBe(false)
         expect(view.find('[data-testid="talos-composer-agent"]').exists()).toBe(false)
         expect(view.find('[data-testid="talos-composer-browse"]').exists()).toBe(false)
-        // la parola del ragionamento non doppia la chip: resta solo per chi ascolta lo schermo
+
+        await view.get('[data-testid="talos-composer-model-chip"]').trigger('click')
+        await vi.dynamicImportSettled()
+        await view.get('[data-testid="talos-mobile-thinking-toggle"]').trigger('click')
+        expect(view.emitted('selectThinking')).toEqual([[true]])
+
+        // la parola del ragionamento resta per chi ascolta lo schermo
         expect(view.get('[data-testid="talos-composer-reasoning-label"]').classes()).toContain('sr-only')
         expect(view.emitted('send')).toBeUndefined()
     })

@@ -359,9 +359,13 @@
     box-shadow: 0 8px 28px -20px color-mix(in srgb, var(--talos-text) 24%, transparent);
 }
 
+/* ⛔ Owner 13/09, dalla foto: al fuoco il compositore aveva un anello ambra
+   spesso e acceso — bordo della scheda PIU' outline, dello stesso colore, uno
+   sopra l'altro. Un campo a fuoco deve dirsi, non gridare: resta un anello
+   solo, e prende il colore dal bordo forte invece che dall'accento pieno. */
 .talos-calm-composer:focus-within {
-    outline: 1px solid var(--talos-ring);
-    outline-offset: 1px;
+    outline: 1px solid color-mix(in srgb, var(--talos-ring) 55%, transparent);
+    outline-offset: 0;
 }
 
 .talos-calm-prompt {
@@ -390,16 +394,87 @@
 .talos-calm-prompt::placeholder { color: var(--talos-muted); opacity: 1; }
 
 /* Owner 2026-09-13: il comando sta ACCANTO al campo, non nella riga sotto. */
+/* Owner 2026-09-13: «centrato e allineato bene col placeholder». A riposo il
+   campo e' UNA riga: centrando, le due icone stanno sulla linea del testo invece
+   che appese al fondo del riquadro. */
+/* ⛔ Misurato sulla foto del Pad, 13/09: a riposo il testo e' sulla linea delle
+   icone, ma col FUOCO no — perche' li' il campo e' alto 5rem e la riga si
+   appoggia IN CIMA alla sua scatola, mentre le icone si centrano sulla scatola
+   intera. Centrare funziona solo finche' la scatola vale una riga.
+   ⇒ I comandi si ancorano alla PRIMA RIGA di testo: si allineano in alto e
+   scendono di mezza differenza fra il bersaglio tattile e l'interlinea. Cosi'
+   restano sulla riga scritta sia con una riga sia con cinque. */
+/* ⛔ Owner 13/09, seconda correzione: «i bottoni centrati anche in modalita non
+   compatta quando ci sto scrivendo dentro». La regola si capovolge — centrato e'
+   il caso NORMALE, e l'ancora alla prima riga diventa l'eccezione per il testo
+   alto (oltre 2,5 righe: la soglia che il compositore misura gia' per il
+   pulsante «espandi»). Li' centrare porterebbe «+» e microfono a meta' di un
+   campo da dodici righe, lontani dalla riga che si sta scrivendo. */
 .talos-composer-field-row {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: calc(var(--talos-space-inline) / 2);
-    padding-inline-end: var(--talos-space-inline);
 }
-.talos-composer-field-row .talos-calm-prompt { flex: 1 1 auto; min-width: 0; }
-.talos-composer-field-row .talos-send-btn { margin-bottom: var(--talos-space-inline); }
+/* ⛔ 13/09, TERZA e ultima stesura. L'eccezione per il testo alto e' stata
+   tolta dopo che l'owner ha guardato il Pad mentre scriveva quattro righe: i
+   comandi erano appesi in cima, cioe' esattamente cio' che aveva chiesto di
+   correggere. Una ricetta sola, centrata, per ogni stato del campo. */
+/* ⛔ 13/09, PRIMA STESURA: qui c'era un'eccezione che centrava i comandi a
+   riposo, nella convinzione che la scatola valesse una riga. Non era vero — il
+   campo teneva il pavimento di 3,5rem anche da fermo — e l'eccezione e' stata
+   tolta.
+   ⛔ 13/09, SECONDA: la premessa ora e' VERA, perche' a riposo il pavimento e'
+   una riga (resizePrompt). Misure col Pad in verticale, prima della cura:
+   contenitore 828,8-902,3, centro 865,5; «+» e microfono centro 848,7, cioe'
+   16,8 px piu' in alto e 4 px FUORI dal riquadro. Con la scatola che vale
+   davvero una riga, centrare e' la regola giusta — e il margine negativo, che
+   serviva ad appendere i comandi alla prima riga di un campo alto, qui va tolto
+   o li rimanderebbe fuori. Lo stato NON compatto resta com'era: li' il campo
+   cresce davvero e l'ancora alla prima riga e' quella corretta. */
+/* (La regola generale qui sopra copre anche lo stato compatto: una ricetta
+   sola, invece di un'eccezione che ripete la stessa cosa.) */
+/* Owner 2026-09-13: il «+» sta a SINISTRA del campo, come nel vecchio compositore.
+   Il campo ha gia' il suo passo interno: qui glielo tolgo, o si sommerebbero. */
+.talos-composer-field-row .talos-calm-prompt { flex: 1 1 auto; min-width: 0; padding: 0; }
+/* Owner 2026-09-13: «centrato e allineato bene col placeholder». Il campo aveva
+   un mezzo passo di padding SOTTO, nato quando la riga strumenti gli stava
+   attaccata: con le icone centrate sulla scatola, quel padding alza il testo e
+   il disallineamento si vede. A riposo non c'e' piu' niente da distanziare. */
+.talos-calm-composer.is-compact .talos-calm-prompt { padding-block: 0; }
+
+/* ⛔ «senza bordo rotondo»: niente cerchio e niente fondo pieno — e' un comando
+   di servizio accanto al testo, non un pulsante d'azione. Il raggio e' quello dei
+   controlli del preset, non un valore scritto a mano. */
+.talos-composer-field-row .talos-plus-btn {
+    width: var(--talos-touch-target);
+    height: var(--talos-touch-target);
+    flex: none;
+    border-radius: var(--talos-radius-control);
+    background: transparent;
+    color: var(--talos-muted);
+}
+@media (hover: hover) and (pointer: fine) {
+    .talos-composer-field-row .talos-plus-btn:hover { background: var(--talos-secondary, var(--talos-panel)); color: var(--talos-text); }
+}
 .talos-composer-field-row button:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
 .talos-docked-composer .talos-calm-prompt { min-height: 3.5rem; }
+/* ⛔ «Barra su una riga a riposo, si espande quando scrivi» — e' la descrizione
+   che l'impostazione mostra alla persona, e fino a oggi non era vera: il campo
+   aveva 5rem di minimo (3,5 agganciato), cioe' tre righe di altezza a vuoto. */
+/* ⛔ Misurato sul Pad in layout telefono, 13/09: il RIQUADRO del campo era
+   centrato con le icone (stesso centro, 2271,5) ma il TESTO no — «Scrivi a
+   TALOS…» stava ~10 px CSS piu' in alto del «+» e del microfono. Un'area di
+   testo alta 35 px con una riga da 22 appoggia la riga IN CIMA: centrare il
+   contenitore non centra il contenuto.
+   ⇒ A riposo la riga riempie esattamente la sua scatola (altezza = interlinea),
+   cosi' centrare la scatola centra anche il glifo. */
+.talos-calm-composer.is-compact .talos-calm-prompt,
+.talos-docked-composer .talos-calm-composer.is-compact .talos-calm-prompt {
+    min-height: 1.75rem;
+    height: 1.75rem;
+    line-height: 1.75rem;
+}
+.talos-calm-composer.is-compact { padding-block: var(--talos-space-inline); }
 
 /* ⛔ Owner 2026-09-13, dal Pad: «sono troppo attaccati i due container».
    La riga del campo (o, mentre si detta, la barra di registrazione) e la riga
@@ -428,6 +503,10 @@
 }
 
 .talos-model-chip { flex-wrap: wrap; overflow-wrap: anywhere; text-align: left; }
+/* Owner 2026-09-13: «la pillola del modello la fai come adesso sotto, ma spostata
+   piu' a sinistra». Ora e' la prima della riga (il «+» se n'e' andato accanto al
+   campo): senza il passo iniziale si allinea al bordo del compositore. */
+.talos-composer-tools > .talos-model-chip:first-child { padding-inline-start: 0; }
 .talos-model-chip > span:first-of-type { color: var(--talos-text); font-weight: 500; }
 .talos-mode-chip:disabled { opacity: .5; }
 .talos-composer-tools .talos-icon-chip {
@@ -444,16 +523,37 @@
 }
 .talos-composer-tools button:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
 .talos-composer-tools .talos-plus-btn { border-radius: 50%; background: var(--talos-secondary, var(--talos-panel)); }
+/* Owner 2026-09-13, dal Pad: «il pulsante microfono deve avere lo stesso border
+   radius del container del composer». Quindi la variabile del contenitore, non un
+   cerchio: se un preset cambia il raggio delle schede, questo lo segue da solo. */
+/* ⛔ Owner 2026-09-13, secondo giro dal Pad: «il pulsante microfono fallo SENZA
+   container, solo icona come il tasto +, centrato e allineato bene col
+   placeholder». Il contenitore pieno accento se ne va: i due comandi ai lati del
+   campo pesano uguale, e a riposo il compositore e' una riga di testo con due
+   icone, non una riga con un bottone che grida. Il raggio resta quello della
+   scheda per il fuoco e la pressione, non per disegnare una pastiglia. */
 .talos-calm-composer .talos-send-btn {
     width: var(--talos-touch-target);
     height: var(--talos-touch-target);
     flex: none;
-    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    /* Owner 13/09: il comando di destra — microfono o invio — torna dentro il
+       suo contenitore ACCENTO, col raggio del contenitore del compositore (lo
+       stesso token, non un valore scritto a mano: misurati 12px su entrambi). */
+    border-radius: var(--talos-radius-card);
     background: var(--talos-accent);
     color: var(--talos-accent-text);
 }
-.talos-calm-composer .talos-send-btn:hover:not(:disabled) { background: var(--talos-accent-hover); }
-.talos-calm-composer .talos-send-btn:disabled { background: var(--talos-secondary, var(--talos-panel)); color: var(--talos-muted); opacity: .65; }
+@media (hover: hover) and (pointer: fine) {
+    .talos-calm-composer .talos-send-btn:hover:not(:disabled) { background: var(--talos-accent-hover); color: var(--talos-accent-text); }
+}
+/* ⛔ Disabilitato: niente accento pieno, o «non si puo' premere» resterebbe
+   affidato alla sola opacita' su un pulsante che sembra acceso. WCAG 1.4.11
+   esenta l'inattivo dal 3:1, ma chiede che si distingua per qualcosa in piu'
+   del colore — qui cambia il fondo E l'opacita'. */
+.talos-calm-composer .talos-send-btn:disabled { background: transparent; color: var(--talos-muted); opacity: .5; }
 
 @media (max-width: 860px) {
     .talos-docked-composer { padding: var(--talos-space-inline) var(--talos-space-inline) max(var(--talos-space-card), env(safe-area-inset-bottom)); }
@@ -497,11 +597,20 @@
     border-radius: var(--talos-radius-control, 0.75rem);
     background: var(--talos-panel);
 }
+/* Come il mockup, alla lettera: .action-categories{display:grid;grid-template-columns:1fr 1fr}.
+   ⛔ Avevo trasformato questa griglia in una fila scorrevole: era una mia
+   invenzione, e il mockup dice il contrario. Al cambio scheda si muove il
+   PANNELLO sotto, non le card. */
 .talos-action-categories {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--talos-space-inline, 0.5rem);
     margin-bottom: var(--talos-space-section, 1.5rem);
+    /* ⛔ Senza questa riga il browser si prende il trascinamento orizzontale e
+       chiude la sequenza con pointercancel: il gesto delle schede non scattava
+       mai, misurato sul Pad tre volte con la mira dentro il bersaglio. Il
+       verticale resta suo, cosi' il foglio continua a trascinarsi. */
+    touch-action: pan-y;
 }
 .talos-action-category {
     position: relative;

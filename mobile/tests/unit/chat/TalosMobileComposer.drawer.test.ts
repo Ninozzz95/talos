@@ -272,28 +272,43 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
             () => wrapper.find('[data-testid="talos-composer-model-chip"]').exists() ? 100 : 50,
         )
 
-        field.element.focus()
+        await wrapper.get('textarea').trigger('focus')
         await nextTick()
-        field.element.blur()
+        await wrapper.get('textarea').trigger('blur')
         await flushPromises()
 
         expect(surface.attributes('data-talos-motion-intent')).not.toBe('composer-expand')
-        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
+        // ⛔ 13/09: i comandi che NON devono sparire sono il «+» e il microfono —
+        // stanno accanto al campo e restano. La pillola del modello invece torna
+        // al fuoco: e' il senso della forma compatta, «una riga a riposo».
+        expect(wrapper.find('[aria-label="Add to chat"]').exists()).toBe(true)
+        expect(wrapper.find('[aria-label="Dictate"]').exists()).toBe(true)
+        expect(field.element).toBeTruthy()
 
         wrapper.unmount()
         document.body.replaceChildren()
     })
-
-    it('legacy immersive: i comandi rimangono visibili prima e dopo focus e blur', async () => {
+    /**
+     * ⛔⛔ RADDRIZZATA il 13/09. Questa guardia portava il commento «compact: no
+     * model chip row» e poi PRETENDEVA che la pillola del modello esistesse a
+     * campo vuoto. Commento e asserzione dicevano il contrario, e cosi' la
+     * sparizione della forma compatta (12/09) e' passata inosservata per un
+     * giorno: il test era verde MENTRE il difetto era a schermo.
+     */
+    it('legacy immersive: a riposo una riga sola, e al fuoco tornano gli strumenti', async () => {
         const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
-        // compact: no model chip row
-        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
+        // a riposo: niente riga strumenti
+        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
+        // ma i due comandi accanto al campo restano SEMPRE
+        expect(wrapper.find('[aria-label="Add to chat"]').exists()).toBe(true)
+        expect(wrapper.find('[aria-label="Dictate"]').exists()).toBe(true)
+
         await wrapper.get('textarea').trigger('focus')
         expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
-        await wrapper.get('textarea').trigger('blur')
-        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
-    })
 
+        await wrapper.get('textarea').trigger('blur')
+        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
+    })
     it('CODE-COMPOSER-LANDSCAPE-IME-SAFE-01 reflows the same component below the status bar without runtime branching', async () => {
         const source = (await import('@/components/chat/TalosMobileComposer.vue?raw')).default
 
@@ -338,14 +353,20 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
 
     // Owner device feedback: the compact immersive pill must be [+] input [mic]
     // [send] on one line — + and mic must NOT disappear in the compact state.
-    it('legacy compact: più, microfono e modello restano visibili a campo vuoto', async () => {
+    // Owner device feedback: the compact immersive pill must be [+] input [mic]
+    // on one line — + and mic must NOT disappear in the compact state.
+    // ⛔ 13/09: la terza asserzione era CAPOVOLTA rispetto al proprio commento
+    // («the model chip only appears once expanded») e pretendeva il contrario.
+    it('legacy compact: più e microfono restano, il modello no, a campo vuoto', async () => {
         const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
         expect(wrapper.find('[aria-label="Add to chat"]').exists()).toBe(true)
         expect(wrapper.find('[aria-label="Dictate"]').exists()).toBe(true)
         // the model chip only appears once expanded (on focus/content)
-        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
+        // …e con del testo la riga torna, senza bisogno del fuoco
+        const conTesto = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: 'ciao' })
+        expect(conTesto.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
     })
-
     // Owner device bug: tapping "+" blurred the field and dismissed the keyboard.
     // The tap must cancel the pointerdown (Android WebView blurs on pointerdown,
     // before any mousedown handler could run).

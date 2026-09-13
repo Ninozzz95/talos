@@ -359,7 +359,13 @@ function sidebarTemporaryChat(): void {
 function sidebarSelect(sessionId: string): void {
     sidebarOpen.value = false
     void talosLightImpact()
-    lifecycleAction(t('chat.openNamed', { title: '' }).trim(), () => chatController.sessionLifecycle.selectSession(sessionId))
+    lifecycleAction(t('chat.openNamed', { title: '' }).trim(), async () => {
+        chatController.sessionLifecycle.selectSession(sessionId)
+        // Scegliere una chat recente LANDS in the chat, come sidebarNewChat:
+        // chi la tocca dalla Libreria o da un'altra stazione vuole leggerla,
+        // non restare dov'era con una chat diversa selezionata sotto.
+        if (isStation.value) await navigate('chat')
+    })
 }
 
 function sidebarRename(sessionId: string, title: string): void {
@@ -616,8 +622,9 @@ function onTabletActivated(): void {
 // U-5: dalla sidebar fissa, scegliere o creare una chat mentre una stazione e'
 // aperta sopra deve riportare alla chat — la stessa regola del pannello F6.
 function tabletSelect(sessionId: string): void {
+    // Il ritorno alla chat vive dentro sidebarSelect: qui sarebbe un doppione,
+    // ed e' proprio la duplicazione che aveva lasciato il telefono scoperto.
     sidebarSelect(sessionId)
-    onTabletActivated()
 }
 function tabletNewChat(): void {
     sidebarNewChat()

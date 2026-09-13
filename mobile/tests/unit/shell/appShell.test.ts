@@ -252,6 +252,70 @@ describe('App shell (header/sidebar + chat base + station sheets)', () => {
         window.localStorage.clear()
     })
 
+    /**
+     * ⛔⛔ OWNER 13/09, DAL PAD: «quando sono in Libreria e premo su una chat
+     * della sidebar in "Chat recenti", non mi cambia e non mi fa redirect:
+     * rimane nella pagina libreria. Questo è importante.»
+     *
+     * La regola esisteva già, scritta in inglese dentro `sidebarNewChat`
+     * («New Chat always LANDS in the chat — never leaves you on a station») e
+     * applicata in tre punti. In `sidebarSelect` mancava.
+     *
+     * ⛔ E sul tablet funzionava per un motivo che era esso stesso il difetto:
+     * `tabletSelect` chiamava `sidebarSelect()` e POI `onTabletActivated()` —
+     * la regola scritta ACCANTO alla funzione invece che DENTRO. Una regola in
+     * due posti è una regola che prima o poi si dimentica in uno dei due, ed è
+     * successo: il telefono è rimasto scoperto.
+     *
+     * ⛔ E nessuno se n'era accorto perché NESSUN test nominava `sidebarSelect`:
+     * i 196 test della shell erano verdi prima e dopo la cura. Un verde che non
+     * copre la cosa non dice «funziona», dice «non ho guardato lì».
+     */
+    it('una chat recente scelta da una stazione PORTA in chat', async () => {
+        const router = makeRouter('/context')
+        const wrapper = mount(App, { global: { plugins: [router] } })
+        try {
+            await router.isReady()
+            await flushPromises()
+            expect(router.currentRoute.value.name).toBe('context')
+            await wrapper.get('[aria-label="Open menu"]').trigger('click')
+            await vi.waitFor(() => expect(wrapper.findComponent(Sidebar).exists()).toBe(true))
+            wrapper.findComponent(Sidebar).vm.$emit('select', 's1')
+            await flushPromises()
+            const controller = mockState.controller as ReturnType<typeof makeController>
+            expect(controller.selectSession).toHaveBeenCalledWith('s1')
+            await vi.waitFor(() => expect(router.currentRoute.value.name).toBe('chat'))
+        } finally {
+            wrapper.unmount()
+        }
+    })
+
+    /**
+     * ⛔ Il verso contrario, e serve quanto l'altro: stando GIÀ in chat non si
+     * deve navigare. Senza questa guardia avrei aggiunto una navigazione a ogni
+     * tocco — inutile, e invisibile finché qualcuno non nota la cronologia che
+     * si riempie o una transizione che sfarfalla.
+     */
+    it('stando già in chat, scegliere una recente non naviga', async () => {
+        const router = makeRouter('/')
+        const wrapper = mount(App, { global: { plugins: [router] } })
+        try {
+            await router.isReady()
+            await flushPromises()
+            expect(router.currentRoute.value.name).toBe('chat')
+            const prima = router.currentRoute.value.fullPath
+            await wrapper.get('[aria-label="Open menu"]').trigger('click')
+            await vi.waitFor(() => expect(wrapper.findComponent(Sidebar).exists()).toBe(true))
+            wrapper.findComponent(Sidebar).vm.$emit('select', 's1')
+            await flushPromises()
+            const controller = mockState.controller as ReturnType<typeof makeController>
+            expect(controller.selectSession).toHaveBeenCalledWith('s1')
+            expect(router.currentRoute.value.fullPath).toBe(prima)
+        } finally {
+            wrapper.unmount()
+        }
+    })
+
     it('offers undo for a chat archived from the sidebar', async () => {
         const router = makeRouter('/settings')
         const wrapper = mount(App, { global: { plugins: [router] } })
