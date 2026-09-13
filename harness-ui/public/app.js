@@ -381,6 +381,91 @@ var init_fonti_modelli = __esm({
   }
 });
 
+// src/legacy/invio-durante-il-giro.js
+function decidiInvio({ testo: testo3 = "", giroAttivo = false, conCtrl = false } = {}) {
+  const pulito = String(testo3 ?? "");
+  if (pulito.startsWith("!")) return AZIONE_COMANDO;
+  const durante = Boolean(pulito) && Boolean(giroAttivo);
+  if (conCtrl) return durante ? AZIONE_ACCODA : AZIONE_INVIA;
+  if (durante) return AZIONE_BIVIO;
+  return AZIONE_INVIA;
+}
+function reindirizzoConsentito(origine) {
+  return origine === ORIGINE_SCELTA_ESPLICITA;
+}
+function mostraPulsanteReindirizzo({
+  giroAttivo = false,
+  haTesto = false,
+  scorciatoiaAbilitata = SCORCIATOIA_REINDIRIZZO_ABILITATA
+} = {}) {
+  if (!scorciatoiaAbilitata) return false;
+  return Boolean(giroAttivo && haTesto);
+}
+function creaCronologiaComposer({ leggi, scrivi: scrivi2, tetto = TETTO_CRONOLOGIA } = {}) {
+  let voci = null;
+  let indice2 = -1;
+  function carica() {
+    if (voci) return voci;
+    voci = [];
+    try {
+      const v2 = JSON.parse(leggi(CHIAVE_CRONOLOGIA_V2) || "[]");
+      if (Array.isArray(v2) && v2.length) voci = v2.filter(usabile);
+      else {
+        const v1 = JSON.parse(leggi(CHIAVE_CRONOLOGIA_V1) || "[]");
+        if (Array.isArray(v1)) voci = v1.filter(usabile).map((c) => `!${c}`);
+      }
+    } catch {
+      voci = [];
+    }
+    return voci;
+  }
+  function ricorda(testo3) {
+    const pulito = String(testo3 ?? "").trim();
+    if (!pulito) return;
+    const lista = carica();
+    if (lista[0] !== pulito) lista.unshift(pulito);
+    voci = lista.slice(0, tetto);
+    indice2 = -1;
+    try {
+      scrivi2(CHIAVE_CRONOLOGIA_V2, JSON.stringify(voci));
+    } catch {
+    }
+  }
+  function scorri(direzione, { campoVuoto = false } = {}) {
+    const inScorrimento = indice2 >= 0;
+    if (!campoVuoto && !inScorrimento) return null;
+    const lista = carica();
+    if (!lista.length) return null;
+    const prossimo = indice2 + (direzione < 0 ? 1 : -1);
+    if (prossimo < -1 || prossimo >= lista.length) return null;
+    indice2 = prossimo;
+    return prossimo === -1 ? "" : lista[prossimo];
+  }
+  return {
+    ricorda,
+    scorri,
+    voci: () => [...carica()]
+  };
+}
+var AZIONE_COMANDO, AZIONE_ACCODA, AZIONE_BIVIO, AZIONE_INVIA, SCELTE_BIVIO, SCELTA_PREDEFINITA_BIVIO, SELETTORE_SCELTA_PREDEFINITA, ORIGINE_SCELTA_ESPLICITA, SCORCIATOIA_REINDIRIZZO_ABILITATA, CHIAVE_CRONOLOGIA_V1, CHIAVE_CRONOLOGIA_V2, TETTO_CRONOLOGIA, usabile;
+var init_invio_durante_il_giro = __esm({
+  "src/legacy/invio-durante-il-giro.js"() {
+    AZIONE_COMANDO = "comando";
+    AZIONE_ACCODA = "accoda";
+    AZIONE_BIVIO = "bivio";
+    AZIONE_INVIA = "invia";
+    SCELTE_BIVIO = Object.freeze(["indirizza", "accoda", "annulla"]);
+    SCELTA_PREDEFINITA_BIVIO = "accoda";
+    SELETTORE_SCELTA_PREDEFINITA = `[data-bivio="${SCELTA_PREDEFINITA_BIVIO}"]`;
+    ORIGINE_SCELTA_ESPLICITA = "scelta-esplicita";
+    SCORCIATOIA_REINDIRIZZO_ABILITATA = true;
+    CHIAVE_CRONOLOGIA_V1 = "talos.harness.desktop.comandi.v1";
+    CHIAVE_CRONOLOGIA_V2 = "talos.harness.desktop.composer.v2";
+    TETTO_CRONOLOGIA = 50;
+    usabile = (v) => typeof v === "string" && v.trim().length > 0;
+  }
+});
+
 // src/components/consumo-sessione.js
 function sommaUsage(a, b) {
   if (!a || typeof a !== "object") return b && typeof b === "object" ? { ...b } : null;
@@ -17915,6 +18000,20 @@ var init_permessi = __esm({
 });
 
 // src/components/errori.js
+function provenienzaDelGiroFinito({ reindirizzamentoInVolo = false } = {}) {
+  return reindirizzamentoInVolo ? { origine: ORIGINI3.REINDIRIZZAMENTO } : {};
+}
+function eFermoSuRichiesta(testo3, codice) {
+  const intero2 = String(testo3 ?? "").trim();
+  const cod = String(codice ?? "");
+  const parole = cod && intero2.startsWith(cod) ? intero2.slice(cod.length).trim() : intero2;
+  return FERMO_SU_RICHIESTA.test(parole) || codice === "fermato" && parole === "";
+}
+function puntoDiFermata(testo3) {
+  const primaRiga = String(testo3 ?? "").split("\n")[0];
+  const punto = /interrotto su richiesta:\s*(.+?)\s*\.?\s*$/.exec(primaRiga)?.[1]?.trim();
+  return punto || null;
+}
 function grezzoContesto(tecnico, codice) {
   const trovato = CODICE_CONTESTO.exec(String(codice ?? ""))?.[0];
   if (!trovato || tecnico.includes(trovato)) return tecnico;
@@ -17931,17 +18030,19 @@ function spiegaRifiutoAttrezzo(esito) {
     tecnico: testo3
   };
 }
-function spiegaErrore(messaggio, codice = "") {
+function spiegaErrore(messaggio, codice = "", contesto2 = {}) {
   const tecnico = String(messaggio ?? "").trim();
   const testo3 = `${codice} ${tecnico}`;
+  const origine = typeof contesto2?.origine === "string" && contesto2.origine ? contesto2.origine : null;
   for (const regola of REGOLE) {
-    if (!regola.riconosce(testo3, codice)) continue;
+    if (!regola.riconosce(testo3, codice, origine)) continue;
     const s = regola.spiega(tecnico, codice);
-    return { id: regola.id, famiglia: regola.famiglia ?? null, ...s, tecnico: s.tecnico ?? tecnico, riconosciuto: true };
+    return { id: regola.id, famiglia: regola.famiglia ?? null, origine, ...s, tecnico: s.tecnico ?? tecnico, riconosciuto: true };
   }
   return {
     id: "sconosciuto",
     famiglia: null,
+    origine,
     cosa: "Il giro si è interrotto per un errore.",
     perche: "Questa forma di errore non è ancora tradotta: qui sotto c’è il testo che ha mandato il server, così com’è.",
     rimedi: ["Riprova il giro.", "Se si ripete, apri Doctor e allega il testo qui sotto."],
@@ -17952,7 +18053,7 @@ function spiegaErrore(messaggio, codice = "") {
 function vestizioneErrore(spiegazione) {
   return { ...VESTIZIONI[spiegazione?.famiglia] ?? VESTIZIONE_ERRORE };
 }
-var COSA_CONTESTO, ORIGINALI_INTATTI, APRI_CONTEXT_MANAGER, COMPATTA_A_MANO, rimediContesto, CODICE_CONTESTO, REGOLE, RIFIUTI, VESTIZIONI, VESTIZIONE_ERRORE;
+var COSA_CONTESTO, ORIGINALI_INTATTI, APRI_CONTEXT_MANAGER, COMPATTA_A_MANO, rimediContesto, CODICE_CONTESTO, ORIGINI3, FERMO_SU_RICHIESTA, REGOLE, RIFIUTI, VESTIZIONI, VESTIZIONE_ERRORE;
 var init_errori = __esm({
   "src/components/errori.js"() {
     COSA_CONTESTO = "La compattazione del contesto non è riuscita, e il giro si è fermato lì.";
@@ -17961,6 +18062,13 @@ var init_errori = __esm({
     COMPATTA_A_MANO = "Da lì «Compatta ora» rifà il tentativo da capo, sugli stessi messaggi.";
     rimediContesto = (proprio) => [APRI_CONTEXT_MANAGER, ...proprio ? [proprio] : [], COMPATTA_A_MANO];
     CODICE_CONTESTO = /\bCTX_[A-Z0-9_]+/;
+    ORIGINI3 = Object.freeze({
+      /** «Ferma» — la persona ha chiesto di fermare il giro, e basta. */
+      STOP: "stop",
+      /** «Reindirizza» — la persona ha cambiato direzione: il giro vecchio si chiude per lasciare il posto al nuovo. */
+      REINDIRIZZAMENTO: "reindirizzamento"
+    });
+    FERMO_SU_RICHIESTA = /interrotto su richiesta|operation was aborted|AbortError|aborted by user|fermato dall'utente/i;
     REGOLE = [
       {
         /*
@@ -18081,6 +18189,53 @@ var init_errori = __esm({
       },
       {
         /*
+         * ⛔⛔⛔ 13/09, con la sessione dell'owner in mano: REINDIRIZZARE produceva una carta ROSSA —
+         * «Il giro si è interrotto per un errore… apri Doctor». Non era successo niente di male: aveva
+         * solo cambiato direzione. Sotto ci sono DUE difetti distinti, non uno.
+         *
+         *  1. Il riconoscitore cercava SOLO parole INGLESI («operation was aborted»), mentre il motore
+         *     scrive in ITALIANO: `talosHarness.mjs` (≈8986) chiude con `⛔ interrotto su richiesta:
+         *     <punto>.` e `agent-service.mjs` (≈169) lo manda come `RunError` con `code: 'fermato'`.
+         *     Le due stringhe non si incontravano ⇒ MISURATO prima di curare, sulle tre frasi vere del
+         *     kernel: `id: 'sconosciuto'`, tono `danger`, rimedio «apri Doctor». La colpa a chi legge.
+         *
+         *  2. Un reindirizzamento non è NEMMENO un fermo. Ma il kernel produce la stessa identica frase
+         *     nei due casi, perché `session-registry.mjs` chiama `voce.controller.abort()` SENZA
+         *     argomenti sia in `ferma()` (≈5188) sia in `reindirizza()` (≈4952): dal messaggio i due
+         *     comandi non si distinguono, e nessuno sforzo su questo file può inventare la differenza.
+         *     ⇒ Serve la PROVENIENZA, e la porta chi il comando lo conosce (vedi `spiegaErrore`).
+         *
+         * ⛔ Questa regola chiede DUE cose INSIEME — provenienza «reindirizzamento» E un esito che sia
+         * davvero un fermo su richiesta. Un `fetch failed` capitato mentre un reindirizzamento era in
+         * attesa resta un errore di rete, rosso: un guasto vero non si traveste da cambio di direzione.
+         *
+         * Ricerca 13/09/2026, prima di scrivere:
+         * - MDN, «AbortSignal: reason property» (letto 13/09/2026): il motivo dell'annullamento è un
+         *   valore qualunque che si passa ad `abort()`, e «if not explicitly set in those methods, it
+         *   defaults to "AbortError" DOMException» ⇒ la provenienza ESISTE alla sorgente ed è gratis;
+         *   oggi viene buttata, e i due comandi arrivano qui indistinguibili.
+         * - AG-UI, «Events» (docs.ag-ui.com/concepts/events, letto 13/09/2026): `RunError` «signals
+         *   failure during execution» e porta SOLO `message` e `code` — mentre un giro interrotto ha
+         *   il suo posto in `RunFinished` con `outcome: { type: "interrupt" }`. Far uscire un cambio
+         *   di direzione come `RunError` è fuori contratto, non solo brutto da vedere. ⛔ Quella cura
+         *   sta nel kernel e nel registro: non è questo file, ed è dichiarata come dipendenza.
+         */
+        id: "reindirizzato",
+        famiglia: "reindirizzato",
+        riconosce: (t2, codice, origine) => origine === ORIGINI3.REINDIRIZZAMENTO && eFermoSuRichiesta(t2, codice),
+        spiega: (t2) => {
+          const punto = puntoDiFermata(t2);
+          return {
+            cosa: "Hai cambiato direzione.",
+            perche: `Non è andato storto niente: la tua nuova richiesta ha la precedenza, e il giro di prima si è chiuso al primo punto sicuro${punto ? ` (${punto})` : ""} per lasciarle il posto. Quello che era già fatto resta: i file scritti restano scritti.`,
+            /* ⛔ Nessun rimedio, perché non c'è niente da rimediare: il lavoro riparte da solo sulla nuova direzione. Suggerire qualcosa qui direbbe che è andata storta. */
+            rimedi: [],
+            tecnico: t2
+          };
+        }
+      },
+      {
+        /*
          * ⛔⛔ 06/9, prova T05-D2: premi «Ferma», ed esce una carta ROSSA con «[internal-error] This
          * operation was aborted». Fermare un giro non è un guasto: è una cosa che hai chiesto tu, e
          * l'unica notizia è che è successa. La carta resta (serve a dire che il giro è finito lì), ma
@@ -18088,16 +18243,27 @@ var init_errori = __esm({
          */
         id: "fermato-da-te",
         famiglia: "fermato",
-        riconosce: (t2) => /operation was aborted|AbortError|aborted by user|fermato dall'utente/i.test(t2),
-        spiega: () => ({
-          cosa: "Hai fermato il giro.",
-          perche: "Il lavoro si è chiuso al primo punto sicuro, come chiesto. Quello che era già fatto resta: i file scritti restano scritti.",
-          rimedi: ["Scrivi un altro messaggio per continuare da qui, nella stessa sessione."]
-        })
+        /* ⛔ 13/09: qui c'erano SOLO le parole inglesi — vedi la regola sopra. Il codice `fermato` e l'italiano del motore valgono quanto l'`AbortError` del browser. */
+        riconosce: (t2, codice) => eFermoSuRichiesta(t2, codice),
+        spiega: (t2) => {
+          const punto = puntoDiFermata(t2);
+          return {
+            cosa: "Hai fermato il giro.",
+            perche: `Il lavoro si è chiuso al primo punto sicuro${punto ? ` (${punto})` : ""}, come chiesto. Quello che era già fatto resta: i file scritti restano scritti.`,
+            rimedi: ["Scrivi un altro messaggio per continuare da qui, nella stessa sessione."]
+          };
+        }
       },
       {
         id: "risposta-vuota",
-        riconosce: (t2) => /flusso SSE senza contenuto|senza contenuto ne tool_calls|empty (?:response|stream)/i.test(t2),
+        /*
+         * ⛔ 13/09, in revisione: qui finisce ANCHE «⛔ la generazione si e fermata senza risposta e
+         *   senza esaurire i giri.» (`comeSonoFinitiIGiri`), che viaggia con `code: 'fermato'` e che
+         *   la stretta qui sopra ha tolto dalla famiglia dei fermi. È esattamente questo caso — il
+         *   turno chiuso senza una parola — quindi ha già la sua carta, con la sua diagnosi: senza
+         *   questa riga sarebbe caduto nel sacco generico, col rimedio «apri Doctor».
+         */
+        riconosce: (t2) => /flusso SSE senza contenuto|senza contenuto ne tool_calls|empty (?:response|stream)|la generazione si (?:e|è) fermata senza risposta/i.test(t2),
         spiega: () => ({
           cosa: "Il modello ha chiuso il turno senza dire niente e senza chiamare nessun attrezzo.",
           perche: "Capita soprattutto con i modelli locali: la generazione finisce subito, per un modello di chat servito senza il suo formato di conversazione, per una finestra già piena, o per un campionamento che tronca al primo token.",
@@ -18160,6 +18326,17 @@ var init_errori = __esm({
     ];
     VESTIZIONI = {
       fermato: { badge: "Fermato", titolo: "TALOS · fermato", tono: "accent" },
+      /*
+       * ⛔ 13/09 — un cambio di direzione non è un guasto E non è nemmeno una notizia: il giro riparte
+       * da solo, e la persona lo vede ripartire. `silenziosa` dice a chi disegna che questa nota non
+       * va mostrata affatto — la famiglia decide anche QUESTO, accanto alle frasi, invece di lasciare
+       * un ramo `if` nel disegnatore (è così che «fermato-da-te» era rimasto l'unica eccezione).
+       * ⛔ 13/09, sera — CHI DISEGNA HA IMPARATO A LEGGERLO: `appendStatusNote` esce prima di creare
+       * la nota, e non colora il tick. Serviva anche quello: con `isError` il disegnatore chiamava
+       * `aggiornaTickGiro({tono:'danger'})`, quindi il rosso aveva DUE manifestazioni e zittirne una
+       * sola avrebbe lasciato l'altra — la stessa meta'-cura che questa famiglia esiste per evitare.
+       */
+      reindirizzato: { badge: "Reindirizzato", titolo: "TALOS · nuova direzione", tono: "accent", silenziosa: true },
       contesto: { badge: "Contesto", titolo: "TALOS · contesto non compattato", tono: "warning" }
     };
     VESTIZIONE_ERRORE = { badge: "Errore", titolo: "TALOS · errore", tono: "danger" };
@@ -18891,6 +19068,7 @@ var app_exports = {};
 var init_app = __esm({
   "src/legacy/app.js"() {
     init_fonti_modelli();
+    init_invio_durante_il_giro();
     init_conversazione_dom();
     init_provider_card();
     init_politiche();
@@ -26129,11 +26307,11 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         sendButton.setAttribute("aria-label", senzaContatto ? "Il server non risponde" : attivo ? "Interrompi risposta" : "Invia");
         sendButton.title = senzaContatto ? "Il server non risponde: la richiesta di fermare non arriverebbe." : attivo ? "Interrompi adesso" : "Invia";
         if (use) use.setAttribute("href", attivo ? "#i-stop" : "#i-send");
-        redirectRunButton.hidden = !(attivo && haTesto);
+        redirectRunButton.hidden = !mostraPulsanteReindirizzo({ giroAttivo: attivo, haTesto });
         redirectRunButton.disabled = redirectOccupato || uploadImmaginiInCorso();
         redirectRunButton.setAttribute("aria-label", "Reindirizza con il testo scritto");
         if (suggerimentoComposerAttivo && (attivo || haTesto)) svuotaSuggerimentoComposer();
-        composerInput.placeholder = attivo ? "Scrivi un follow-up… Invio per scegliere, Ctrl+Invio accoda" : suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? "Scrivi il primo messaggio…" : "Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda");
+        composerInput.placeholder = attivo ? "Scrivi un follow-up… Invio per scegliere, Ctrl+Invio accoda" : suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? "Scrivi il primo messaggio…" : "Scrivi… Invio manda, Maiusc+Invio va a capo");
       }
       function mostraSuggerimentoComposer(testo3) {
         if (!testo3 || runRealeAttivo() || composerInput.value.trim() !== "") return;
@@ -26415,39 +26593,17 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         scorriAllaBollaAppesa(article);
         return article;
       }
-      const CHIAVE_CRONOLOGIA_COMANDI = "talos.harness.desktop.comandi.v1";
-      const TETTO_CRONOLOGIA_COMANDI = 50;
-      let cronologiaComandi = null;
-      let indiceCronologiaComandi = -1;
-      function leggiCronologiaComandi() {
-        if (cronologiaComandi) return cronologiaComandi;
-        try {
-          const grezzo = JSON.parse(localStorage.getItem(CHIAVE_CRONOLOGIA_COMANDI) || "[]");
-          cronologiaComandi = Array.isArray(grezzo) ? grezzo.filter((v) => typeof v === "string" && v.trim()) : [];
-        } catch {
-          cronologiaComandi = [];
-        }
-        return cronologiaComandi;
+      const cronologiaComposer = creaCronologiaComposer({
+        leggi: (chiave) => localStorage.getItem(chiave),
+        scrivi: (chiave, valore) => localStorage.setItem(chiave, valore)
+      });
+      function ricordaTestoInviato(testo3) {
+        cronologiaComposer.ricorda(testo3);
       }
-      function ricordaComandoDiretto(comando) {
-        const testo3 = String(comando || "").trim();
-        if (!testo3) return;
-        const lista = leggiCronologiaComandi();
-        if (lista[0] !== testo3) lista.unshift(testo3);
-        cronologiaComandi = lista.slice(0, TETTO_CRONOLOGIA_COMANDI);
-        indiceCronologiaComandi = -1;
-        try {
-          localStorage.setItem(CHIAVE_CRONOLOGIA_COMANDI, JSON.stringify(cronologiaComandi));
-        } catch {
-        }
-      }
-      function scorriCronologiaComandi(direzione) {
-        const lista = leggiCronologiaComandi();
-        if (!lista.length) return false;
-        const prossimo = indiceCronologiaComandi + (direzione < 0 ? 1 : -1);
-        if (prossimo < -1 || prossimo >= lista.length) return false;
-        indiceCronologiaComandi = prossimo;
-        composerInput.value = prossimo === -1 ? "" : `!${lista[prossimo]}`;
+      function scorriCronologiaComposer(direzione) {
+        const valore = cronologiaComposer.scorri(direzione, { campoVuoto: composerInput.value === "" });
+        if (valore === null) return false;
+        composerInput.value = valore;
         autoGrowTextarea();
         syncRunComposerState();
         composerInput.setSelectionRange(composerInput.value.length, composerInput.value.length);
@@ -26491,7 +26647,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           bivioInvio.hidden = false;
           markMotionEnter(bivioInvio);
         }
-        $2('[data-bivio="indirizza"]', bivioInvio)?.focus();
+        $2(SELETTORE_SCELTA_PREDEFINITA, bivioInvio)?.focus();
       }
       function chiudiBivioInvio({ tornaAlComposer = false } = {}) {
         if (!bivioInvio || bivioInvio.hidden) return;
@@ -26507,6 +26663,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       function accodaDalComposer(testo3) {
         if (attendiUploadImmagini()) return;
+        ricordaTestoInviato(testo3);
         const immagini = allegatiComposer.filter((a) => a.tipo === "immagine");
         const completo = testoConAllegati(testo3);
         svuotaComposerDopoScelta();
@@ -27000,6 +27157,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
       }
       function appendStatusNote(text, isError = false, { meta: etichettaMeta = null, spiegazione = null } = {}) {
         const vestizione = vestizioneErrore(spiegazione);
+        if (vestizione.silenziosa) return;
         const article = spiegazione ? creaNotaErrore({
           titolo: etichettaMeta || vestizione.titolo,
           badge: vestizione.badge,
@@ -30327,7 +30485,9 @@ ${testo3}` : testo3;
               const riassunto = riassuntoAttrezziDaEventi(state.realSession.eventiAttrezzi);
               guida = ` — ${testoDiagnosiGiri(riassunto)}. ${consiglioDaRiassunto(riassunto)} Il prossimo messaggio continuerà questo task nella stessa sessione. Premi «Nuova» per iniziare un task separato.`;
             }
-            const spiegazione = spiegaErrore(evento.message, evento.code);
+            const spiegazione = spiegaErrore(evento.message, evento.code, provenienzaDelGiroFinito({
+              reindirizzamentoInVolo: Boolean(state.realSession.redirectPendingId)
+            }));
             if (guida) spiegazione.rimedi = [guida.replace(/^\s*—\s*/, ""), ...spiegazione.rimedi];
             appendStatusNote("", true, { spiegazione });
             spegniGiriInCorso($2("#conversation"));
@@ -30507,6 +30667,11 @@ ${testo3}` : testo3;
           sendButton.removeAttribute("aria-busy");
           syncRunComposerState();
         }
+      }
+      function chiediReindirizzamento(testo3, origine) {
+        if (!reindirizzoConsentito(origine)) return false;
+        ricordaTestoInviato(testo3);
+        return reindirizzaSessioneReale(testo3);
       }
       async function reindirizzaSessioneReale(testo3) {
         if (attendiUploadImmagini()) return false;
@@ -32802,6 +32967,7 @@ ${blocchi.join("\n\n")}` : testa;
         const immagini = allegati.filter((a) => a.tipo === "immagine");
         const value = String(text || "").trim();
         if (!value) return false;
+        ricordaTestoInviato(mostra ?? value);
         state.realSession.chiusaDalServer = false;
         if (mostra !== null && mostra !== value) {
           state.realSession.bollaDaMostrare = { testo: mostra, allegati: Array.isArray(allegati) ? allegati : [] };
@@ -32818,7 +32984,6 @@ ${blocchi.join("\n\n")}` : testa;
             toast("Comando vuoto", 'Scrivi qualcosa dopo "!".');
             return true;
           }
-          ricordaComandoDiretto(comando);
           runDirectShell(comando, hidden);
           return true;
         }
@@ -33713,30 +33878,25 @@ ${testo3}`;
           event.preventDefault();
           if (attendiUploadImmagini()) return;
           const testo3 = composerInput.value.trim() || (allegatiComposer.some((a) => a.tipo === "immagine") ? "Descrivi l’immagine allegata." : "");
-          const durante = Boolean(testo3) && runRealeAttivo();
-          if (testo3.startsWith("!")) {
+          const azione = decidiInvio({ testo: testo3, giroAttivo: runRealeAttivo(), conCtrl: event.ctrlKey || event.metaKey });
+          if (azione === AZIONE_COMANDO) {
             chiudiBivioInvio();
             composerForm.requestSubmit();
             return;
           }
-          if (event.ctrlKey || event.metaKey) {
-            if (durante) {
-              chiudiBivioInvio();
-              accodaDalComposer(testo3);
-              return;
-            }
-            composerForm.requestSubmit();
+          if (azione === AZIONE_ACCODA) {
+            chiudiBivioInvio();
+            accodaDalComposer(testo3);
             return;
           }
-          if (durante) {
+          if (azione === AZIONE_BIVIO) {
             apriBivioInvio(testo3);
             return;
           }
           composerForm.requestSubmit();
         }
         if ((event.key === "ArrowUp" || event.key === "ArrowDown") && !event.ctrlKey && !event.metaKey && !event.altKey) {
-          const inScorrimento = indiceCronologiaComandi >= 0;
-          if ((composerInput.value === "" || inScorrimento) && scorriCronologiaComandi(event.key === "ArrowUp" ? -1 : 1)) {
+          if (scorriCronologiaComposer(event.key === "ArrowUp" ? -1 : 1)) {
             event.preventDefault();
             return;
           }
@@ -33759,7 +33919,7 @@ ${testo3}`;
         composerForm.requestSubmit();
       });
       redirectRunButton.addEventListener("click", () => {
-        reindirizzaSessioneReale(composerInput.value);
+        chiediReindirizzamento(composerInput.value, ORIGINE_SCELTA_ESPLICITA);
       });
       if (composerMic) {
         if (riconoscimentoVocale) {
@@ -33803,7 +33963,7 @@ ${testo3}`;
         }
         chiudiBivioInvio();
         if (scelta === "indirizza") {
-          reindirizzaSessioneReale(testo3);
+          chiediReindirizzamento(testo3, ORIGINE_SCELTA_ESPLICITA);
           return;
         }
         accodaDalComposer(testo3);
