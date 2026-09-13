@@ -1,4 +1,5 @@
 import {creaSceltaFallback} from '../components/fonti-modelli.js';
+import { AZIONE_ACCODA, AZIONE_BIVIO, AZIONE_COMANDO, ORIGINE_SCELTA_ESPLICITA, SELETTORE_SCELTA_PREDEFINITA, creaCronologiaComposer, decidiInvio, mostraPulsanteReindirizzo, reindirizzoConsentito } from './invio-durante-il-giro.js'; // Corsia 1 (13/09): il bivio accoda/reindirizza, e la freccia su
 import { colonnaConversazione, scorrevoleConversazione } from '../bridge/conversazione-dom.js';
 import {aggiornaProviderList,montaProviderPanel} from '../components/provider-card.js';
 import { POLITICHE, nomeUmanoPolitica, descrizionePolitica, notaPolitica, valoriPolitiche } from '../components/politiche.js';
@@ -9308,12 +9309,23 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     sendButton.setAttribute('aria-label', senzaContatto ? 'Il server non risponde' : attivo ? 'Interrompi risposta' : 'Invia');
     sendButton.title = senzaContatto ? 'Il server non risponde: la richiesta di fermare non arriverebbe.' : attivo ? 'Interrompi adesso' : 'Invia';
     if (use) use.setAttribute('href', attivo ? '#i-stop' : '#i-send');
-    redirectRunButton.hidden = !(attivo && haTesto);
+    redirectRunButton.hidden = !mostraPulsanteReindirizzo({ giroAttivo: attivo, haTesto });
     redirectRunButton.disabled = redirectOccupato || uploadImmaginiInCorso();
     redirectRunButton.setAttribute('aria-label', 'Reindirizza con il testo scritto');
     // ⭐ 3/9 — item 10: un suggerimento vale solo a riposo, campo vuoto, niente in coda.
     if (suggerimentoComposerAttivo && (attivo || haTesto)) svuotaSuggerimentoComposer();
-    composerInput.placeholder = attivo ? 'Scrivi un follow-up… Invio per scegliere, Ctrl+Invio accoda' : (suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? 'Scrivi il primo messaggio…' : 'Scrivi… Invio indirizza il giro in corso, Ctrl+Invio accoda')); // 05/9 Fase 2: le parole del mockup
+    composerInput.placeholder = attivo ? 'Scrivi un follow-up… Invio per scegliere, Ctrl+Invio accoda' : (suggerimentoComposerAttivo || (state.pendingCustomSession && !state.realSession.id ? 'Scrivi il primo messaggio…' : 'Scrivi… Invio manda, Maiusc+Invio va a capo')); // 05/9 Fase 2: le parole del mockup
+    /*
+     * ⛔⛔ 13/09, review della corsia 1 — QUI c'era «Scrivi… Invio indirizza il giro in corso».
+     *   È il ramo a giro SPENTO: non c'è nessun giro in corso da indirizzare, e `decidiInvio` non
+     *   restituisce un reindirizzamento in nessuno dei suoi 24 ingressi. Le parole sullo schermo
+     *   smentivano la regola appena estratta, una riga sotto la cura — ed erano esattamente il
+     *   modello mentale sbagliato dietro il difetto che l'owner ha segnalato due volte («vuole
+     *   accodare, parte un reindirizzamento»). A riposo l'Invio manda e basta; Maiusc+Invio va a
+     *   capo, perché il gestore intercetta l'Invio solo con `!event.shiftKey`.
+     * ⛔ Il segnaposto STATICO di `index.template.html` porta ancora la vecchia frase: quel file è
+     *   di un'altra corsia. A schermo vince questo, perché `syncRunComposerState()` gira all'avvio.
+     */
   }
 
   function mostraSuggerimentoComposer(testo) {
@@ -9835,42 +9847,34 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
    *   di sito bloccati `localStorage` LANCIA invece di restituire vuoto, e una cronologia assente
    *   non deve mai impedire di mandare un comando.
    */
-  const CHIAVE_CRONOLOGIA_COMANDI = 'talos.harness.desktop.comandi.v1';
-  const TETTO_CRONOLOGIA_COMANDI = 50;
-  let cronologiaComandi = null;
-  let indiceCronologiaComandi = -1;
+  /*
+   * ⭐⭐⭐ PO-21 (13/09) — la cronologia non e piu dei soli comandi `!`: ci entrano i MESSAGGI.
+   *
+   * ⛔⛔ La trappola che l'estensione ingenua avrebbe fatto scattare, e che ha deciso la forma di
+   *   questa cura: prima le voci si salvavano SENZA il loro `!` e lo scorrimento lo rimetteva a
+   *   OGNI voce ripescata. Il giorno che in quella lista fosse entrato un messaggio normale, il
+   *   primo ↑ l'avrebbe riportato su travestito da comando di shell.
+   * ⇒ Ora si salva VERBATIM, e la regola sta in `invio-durante-il-giro.js`, dove una prova la
+   *   interroga senza browser. Qui resta il solo gesto sullo schermo.
+   */
+  const cronologiaComposer = creaCronologiaComposer({
+    leggi: (chiave) => localStorage.getItem(chiave),
+    scrivi: (chiave, valore) => localStorage.setItem(chiave, valore),
+  });
 
-  function leggiCronologiaComandi() {
-    if (cronologiaComandi) return cronologiaComandi;
-    try {
-      const grezzo = JSON.parse(localStorage.getItem(CHIAVE_CRONOLOGIA_COMANDI) || '[]');
-      cronologiaComandi = Array.isArray(grezzo) ? grezzo.filter((v) => typeof v === 'string' && v.trim()) : [];
-    } catch { cronologiaComandi = []; }
-    return cronologiaComandi;
-  }
-
-  function ricordaComandoDiretto(comando) {
-    const testo = String(comando || '').trim();
-    if (!testo) return;
-    const lista = leggiCronologiaComandi();
-    if (lista[0] !== testo) lista.unshift(testo);
-    cronologiaComandi = lista.slice(0, TETTO_CRONOLOGIA_COMANDI);
-    indiceCronologiaComandi = -1;
-    try { localStorage.setItem(CHIAVE_CRONOLOGIA_COMANDI, JSON.stringify(cronologiaComandi)); } catch { /* niente cronologia, il comando parte lo stesso */ }
+  /** Ricorda il testo appena partito, COSI COM'E STATO SCRITTO (un comando col suo `!`). */
+  function ricordaTestoInviato(testo) {
+    cronologiaComposer.ricorda(testo);
   }
 
   /**
    * ↑/↓ scorrono la cronologia. `direzione` = -1 (più indietro) o +1 (più avanti).
    * @returns {boolean} true se ha scritto qualcosa nel composer (e allora il tasto è stato consumato).
    */
-  function scorriCronologiaComandi(direzione) {
-    const lista = leggiCronologiaComandi();
-    if (!lista.length) return false;
-    const prossimo = indiceCronologiaComandi + (direzione < 0 ? 1 : -1);
-    if (prossimo < -1 || prossimo >= lista.length) return false;
-    indiceCronologiaComandi = prossimo;
-    /* Tornati oltre il più recente si torna al foglio bianco, non all'ultimo comando ripetuto. */
-    composerInput.value = prossimo === -1 ? '' : `!${lista[prossimo]}`;
+  function scorriCronologiaComposer(direzione) {
+    const valore = cronologiaComposer.scorri(direzione, { campoVuoto: composerInput.value === '' });
+    if (valore === null) return false;
+    composerInput.value = valore;
     autoGrowTextarea();
     syncRunComposerState();
     composerInput.setSelectionRange(composerInput.value.length, composerInput.value.length);
@@ -9942,7 +9946,15 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const etichetta = $('[data-bivio-testo]', bivioInvio);
     if (etichetta) etichetta.textContent = `«${tronca(testo, 46)}» — il giro è in corso: lo indirizzo adesso o lo metto in coda?`;
     if (bivioInvio.hidden) { bivioInvio.hidden = false; markMotionEnter(bivioInvio); }
-    $('[data-bivio="indirizza"]', bivioInvio)?.focus();
+    /*
+     * ⛔⛔ 13/09, corsia 1 — QUI partiva il reindirizzamento che nessuno aveva scelto. Il fuoco
+     *   andava su «Indirizza ora», e un <button> che ha il fuoco si attiva con Invio e con Spazio:
+     *   chi premeva Invio per mandare il messaggio, e lo premeva una seconda volta — il gesto piu
+     *   naturale dopo il primo — reindirizzava il giro senza averlo mai scelto.
+     * ⇒ Il fuoco E il default, e il default dev'essere il gesto che non toglie niente a nessuno:
+     *   «Accoda». Chi vuole indirizzare lo sceglie, ed e una scelta in piu, non una in meno.
+     */
+    $(SELETTORE_SCELTA_PREDEFINITA, bivioInvio)?.focus();
   }
   function chiudiBivioInvio({ tornaAlComposer = false } = {}) {
     if (!bivioInvio || bivioInvio.hidden) return;
@@ -9959,6 +9971,7 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
 
   function accodaDalComposer(testo) {
     if (attendiUploadImmagini()) return;
+    ricordaTestoInviato(testo);
     const immagini = allegatiComposer.filter(a => a.tipo === 'immagine');
     const completo = testoConAllegati(testo);
     svuotaComposerDopoScelta();
@@ -15395,6 +15408,22 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     }
   }
 
+  /*
+   * ⛔⛔⛔ 13/09, corsia 1 — IL CANCELLO DEL REINDIRIZZAMENTO.
+   *
+   * L'owner l'ha segnalato due volte (11/09 «funziona malissimo», 13/09 «adesso quasi
+   * inutilizzabile»): vuole accodare, e parte un reindirizzamento. Le due cause stavano nei gesti
+   * — il fuoco del bivio e il pulsante che si scopre da solo — ma la forma generale del difetto e
+   * che una POST /redirect poteva partire senza che nessuno sapesse dire DA DOVE veniva.
+   * ⇒ Da qui in poi la provenienza si dichiara, e chi non sa dirla non parte. Cosi non e la
+   *   singola istanza a essere curata: e la classe di difetto a diventare impossibile.
+   */
+  function chiediReindirizzamento(testo, origine) {
+    if (!reindirizzoConsentito(origine)) return false;
+    ricordaTestoInviato(testo);
+    return reindirizzaSessioneReale(testo);
+  }
+
   async function reindirizzaSessioneReale(testo) {
     if (attendiUploadImmagini()) return false;
     const immagini = allegatiComposer.filter(a => a.tipo === 'immagine');
@@ -18373,6 +18402,9 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
     const immagini = allegati.filter(a => a.tipo === 'immagine');
     const value = String(text || '').trim();
     if (!value) return false;
+    /* ⭐ PO-21 (13/09) — ↑ ripesca cio che la PERSONA ha scritto: `mostra` e la sua frase, `value`
+       e il testo arricchito con gli allegati che va al modello. */
+    ricordaTestoInviato(mostra ?? value);
     /*
      * ⛔ O-48: `chiusaDalServer` si azzera QUI, dove parte un invio vero, e non sul `RunStarted`.
      *    Rigiocando la storia di una sessione interrotta arriva un `RunStarted` vecchio, e
@@ -18424,7 +18456,6 @@ ${nota?.contenuto || ''}`.trim(), 'Nota copiata'),
       const comando = value.replace(/^!!?/, '').trim();
       setView('chat');
       if (!comando) { toast('Comando vuoto', 'Scrivi qualcosa dopo "!".'); return true; }
-      ricordaComandoDiretto(comando);
       runDirectShell(comando, hidden);
       return true;
     }
@@ -19784,7 +19815,6 @@ ${testo}`;
       event.preventDefault();
       if (attendiUploadImmagini()) return;
       const testo = composerInput.value.trim() || (allegatiComposer.some(a => a.tipo === 'immagine') ? 'Descrivi l’immagine allegata.' : '');
-      const durante = Boolean(testo) && runRealeAttivo();
       /*
        * ⛔⛔⛔ D-10D — UN COMANDO NON E' NE' UN INDIRIZZO NE' UNA CODA.
        *
@@ -19800,15 +19830,16 @@ ${testo}`;
        *   macchina, subito. Chiedere quale delle due sarebbe una domanda senza risposta giusta.
        *   ⭐  (silenzioso) passa di qui come : e' lo stesso gesto.
        */
-      if (testo.startsWith('!')) { chiudiBivioInvio(); composerForm.requestSubmit(); return; }
-      // B15: Ctrl+Invio (⌘+Invio su Apple) accoda diretto, senza passare dal bivio.
-      if (event.ctrlKey || event.metaKey) {
-        if (durante) { chiudiBivioInvio(); accodaDalComposer(testo); return; }
-        composerForm.requestSubmit();
-        return;
-      }
-      // B14: durante un giro l'Invio non sceglie per te.
-      if (durante) { apriBivioInvio(testo); return; }
+      /*
+       * ⛔ 13/09, corsia 1 — le quattro uscite dell'Invio le decide `decidiInvio`, e fra quelle
+       *   NON c'e il reindirizzamento: nessun ingresso di questo campo puo farne partire uno.
+       *   B15 (Ctrl+Invio accoda diretto) e B14 (a giro acceso l'Invio non sceglie per te) sono
+       *   dentro quella regola, provata su tutte e 24 le combinazioni possibili.
+       */
+      const azione = decidiInvio({ testo, giroAttivo: runRealeAttivo(), conCtrl: event.ctrlKey || event.metaKey });
+      if (azione === AZIONE_COMANDO) { chiudiBivioInvio(); composerForm.requestSubmit(); return; }
+      if (azione === AZIONE_ACCODA) { chiudiBivioInvio(); accodaDalComposer(testo); return; }
+      if (azione === AZIONE_BIVIO) { apriBivioInvio(testo); return; }
       composerForm.requestSubmit();
     }
     /*
@@ -19820,8 +19851,7 @@ ${testo}`;
      *   prende il tasto solo quando non c'è nient'altro che possa farci.
      */
     if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      const inScorrimento = indiceCronologiaComandi >= 0;
-      if ((composerInput.value === '' || inScorrimento) && scorriCronologiaComandi(event.key === 'ArrowUp' ? -1 : 1)) {
+      if (scorriCronologiaComposer(event.key === 'ArrowUp' ? -1 : 1)) {
         event.preventDefault();
         return;
       }
@@ -19851,7 +19881,7 @@ ${testo}`;
     composerForm.requestSubmit();
   });
   redirectRunButton.addEventListener('click', () => {
-    reindirizzaSessioneReale(composerInput.value);
+    chiediReindirizzamento(composerInput.value, ORIGINE_SCELTA_ESPLICITA);
   });
   /*
    * ⭐⭐⭐ 29/8 — FASE J: push-to-talk vero, non più un annuncio "non
@@ -19910,7 +19940,7 @@ ${testo}`;
     if (scelta === 'annulla') { chiudiBivioInvio({ tornaAlComposer: true }); return; }
     if (!testo) { chiudiBivioInvio({ tornaAlComposer: true }); return; }
     chiudiBivioInvio();
-    if (scelta === 'indirizza') { reindirizzaSessioneReale(testo); return; }
+    if (scelta === 'indirizza') { chiediReindirizzamento(testo, ORIGINE_SCELTA_ESPLICITA); return; }
     accodaDalComposer(testo);
   });
   $('#fermaGiroConferma')?.addEventListener('click', async () => {
