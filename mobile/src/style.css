@@ -351,7 +351,10 @@
 
 .talos-calm-composer {
     position: relative;
-    padding: var(--talos-space-page);
+    /* Owner 13/09: «meno alto e piu' compatto». A fuoco il contenitore aveva 16
+       px di passo sopra e sotto — il doppio dello stato a riposo, che ne ha 8.
+       Dodici sta in mezzo e non stringe i comandi da 48. */
+    padding: var(--talos-space-card, 0.75rem);
     border: 1px solid var(--talos-border-strong);
     border-radius: var(--talos-radius-card);
     background: var(--talos-composer-surface, var(--talos-card));
@@ -457,7 +460,10 @@
     .talos-composer-field-row .talos-plus-btn:hover { background: var(--talos-secondary, var(--talos-panel)); color: var(--talos-text); }
 }
 .talos-composer-field-row button:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 2px; }
-.talos-docked-composer .talos-calm-prompt { min-height: 3.5rem; }
+/* ⛔ UNA riga, come il pavimento in resizePrompt. I due devono coincidere: se
+   non coincidono vince il piu' alto, e la scatola torna alta mentre il campo e'
+   vuoto. Misurato tre volte oggi, tre altezze diverse per questa stessa riga. */
+.talos-docked-composer .talos-calm-prompt { min-height: 1.75rem; }
 /* ⛔ «Barra su una riga a riposo, si espande quando scrivi» — e' la descrizione
    che l'impostazione mostra alla persona, e fino a oggi non era vera: il campo
    aveva 5rem di minimo (3,5 agganciato), cioe' tre righe di altezza a vuoto. */

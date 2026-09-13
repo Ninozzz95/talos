@@ -6,6 +6,24 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.33
+
+The composer no longer keeps an empty line under what you type.
+
+### The composer
+
+- With the field focused and empty, the box is one line tall instead of two.
+  The placeholder used to sit half a line above the "+" and the send button;
+  now it sits on the same line as they do.
+- Behind that was an arithmetic fault worth naming: the browser reports the
+  field's content height as a whole number, so a single 25.6 px line was
+  reported as 26 — and rounding that up produced two lines. A line now has to
+  be exceeded by more than a twentieth before the box grows, which is enough to
+  absorb the rounding and never enough to hide text.
+- The box stops shrinking at about 128 px: two rows of 48 px — the controls and
+  the tools beneath them — plus its padding. The field is no longer what
+  decides the height.
+
 ## v0.1.32
 
 The composer lines up with what you type, and the sheet behind "+" follows your

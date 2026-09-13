@@ -443,6 +443,15 @@ function resizePrompt(): void {
     const field = promptField.value
     if (!field) return
     field.style.height = 'auto'
+    /*
+     * ⛔ Anche il pavimento CSS va tolto PRIMA di misurare: `scrollHeight` lo
+     *    include, quindi un campo vuoto riportava 56 px di contenuto che non
+     *    esiste — e arrotondati in su diventavano 76,8, cioe' TRE righe per un
+     *    campo in cui non c'e' scritto niente. Misurato sul Pad il 13/09, ed e'
+     *    l'altezza che l'owner ha visto come «troppo alto».
+     */
+    const minimoScritto = field.style.minHeight
+    field.style.minHeight = '0px'
     const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
     /*
      * ⛔ Owner 2026-09-13: «i pulsanti e il testo non sono centrati bene nel
@@ -458,7 +467,21 @@ function resizePrompt(): void {
      */
     const stile = getComputedStyle(field)
     const riga = Number.parseFloat(stile.lineHeight) || rem * 1.75
-    const floor = composerCompact.value ? riga : (props.docked ? 3.5 : 5) * rem
+    /*
+     * Owner 13/09: «il composer espanso e' troppo alto». Il pavimento e' UNA
+     * RIGA anche a fuoco, nella barra agganciata.
+     *
+     * Il pavimento di due righe l'avevo messo per «dare peso» alla scatola, e
+     * misurandolo si e' visto che non paga: a campo vuoto il placeholder sta
+     * sulla prima riga e sotto resta una riga vuota, cioe' il testo finisce
+     * 12,8 px sopra i comandi — che sono centrati, come l'owner ha chiesto.
+     * Una riga e' insieme piu' bassa e allineata, e il campo cresce da solo
+     * appena si scrive: e' cio' che fa un campo che cresce.
+     *
+     * La home resta piu' generosa: li' il compositore e' l'elemento principale
+     * della pagina vuota, non una barra in fondo.
+     */
+    const floor = props.docked ? riga : 3 * riga
     /*
      * ⛔ Owner 2026-09-13, terzo difetto della stessa superficie: l'ultima riga
      *    si vedeva TAGLIATA A META'. Misurato sul Pad: campo 192 px, riga 25,6
@@ -474,11 +497,23 @@ function resizePrompt(): void {
      *   dipendere da un valore che qualcuno potrebbe cambiare domani.
      */
     const passo = (Number.parseFloat(stile.paddingTop) || 0) + (Number.parseFloat(stile.paddingBottom) || 0)
-    const aRighe = (px: number, verso: (n: number) => number): number =>
-        Math.max(riga, verso((px - passo) / riga) * riga) + passo
+    /*
+     * ⛔ La tolleranza non e' una comodita': e' l'errore di misura del browser.
+     *    `scrollHeight` e' un INTERO, quindi una riga da 25,6 px viene
+     *    dichiarata 26 — e 26/25,6 = 1,0156, che arrotondato in su fa DUE righe.
+     *    Misurato sul Pad: un campo vuoto risultava alto 51,2 px per mezzo pixel
+     *    di arrotondamento altrui. Si concede il 5% di una riga (1,28 px), che
+     *    copre l'intero senza mai nascondere del testo vero.
+     * ⛔ E vale SOLO quando si sale: applicata al tetto lo abbasserebbe di una
+     *    riga proprio quando il tetto e' un multiplo esatto.
+     */
+    const TOLLERANZA_RIGA = 0.05
+    const aRighe = (px: number, verso: (n: number) => number, tolleranza = 0): number =>
+        Math.max(riga, verso((px - passo) / riga - tolleranza) * riga) + passo
     const tetto = aRighe(12 * rem, Math.floor)
-    const contenuto = aRighe(field.scrollHeight, Math.ceil)
+    const contenuto = aRighe(field.scrollHeight, Math.ceil, TOLLERANZA_RIGA)
     field.style.height = Math.max(floor, Math.min(contenuto, tetto)) + 'px'
+    field.style.minHeight = minimoScritto
     measurePromptTall(field)
 }
 
