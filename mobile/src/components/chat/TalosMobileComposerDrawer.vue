@@ -109,6 +109,8 @@ useTalosSlidingIndicator(gruppoSchede, categoria)
 const PANNELLO_TOKEN = '--talos-motion-calm-panel'
 const PANNELLO_SERIE_MS = 180
 let entrata: Animation | null = null
+/** ±18 px quando il cambio arriva dal dito, null quando arriva da tastiera. */
+let entrataDalGesto: number | null = null
 watch(categoria, async () => {
     // Il mockup non lascia RESTRINGERE il foglio al cambio di categoria (r. 3579):
     // il pannello tiene l'altezza più grande vista, così le schede non saltano.
@@ -120,9 +122,16 @@ watch(categoria, async () => {
     if (prima > tenuta) el.style.minHeight = `${prima}px`
     if (typeof el.animate !== 'function' || !talosMotionConsentito(el, PANNELLO_TOKEN)) return
     if (entrata && entrata.playState !== 'finished') entrata.cancel()
+    const daGesto = entrataDalGesto
+    entrataDalGesto = null
     entrata = el.animate(
-        [{ opacity: 0.25, transform: 'translateX(8px)' }, { opacity: 1, transform: 'translateX(0)' }],
-        { duration: talosDurataMs(el, PANNELLO_TOKEN, PANNELLO_SERIE_MS), easing: talosCurva(el, '--talos-motion-ease-tab-change'), fill: 'none' },
+        daGesto === null
+            ? [{ opacity: 0.25, transform: 'translateX(8px)' }, { opacity: 1, transform: 'translateX(0)' }]
+            : [{ opacity: 0.4, transform: `translateX(${daGesto}px)` }, { opacity: 1, transform: 'translateX(0)' }],
+        {
+            duration: daGesto === null ? talosDurataMs(el, PANNELLO_TOKEN, PANNELLO_SERIE_MS) : SCHEDA_ENTRATA_MS,
+            easing: talosCurva(el, '--talos-motion-ease-tab-change'), fill: 'none',
+        },
     )
     entrata.finished.then(() => { entrata = null }, () => { entrata = null })
 })
@@ -135,14 +144,195 @@ const categorie = computed<Array<{ id: Categoria, icon: unknown, title: string, 
 ])
 
 /** Frecce sinistra/destra: fuoco E attivazione, come nell'APG (scheda attivata al fuoco). */
-function onTabKeydown(event: KeyboardEvent): void {
-    const passo = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
-    if (!passo) return
-    event.preventDefault()
+/**
+ * Una sola strada per cambiare scheda, usata dalla tastiera E dal dito.
+ * ⛔ Se il gesto ne avesse una sua, le due potrebbero divergere in silenzio: il
+ * giro circolare, il fuoco sulla scheda e la scheda attivata al fuoco (APG)
+ * resterebbero in una sola delle due. Qui la funzione è una.
+ */
+function vaiAllaScheda(passo: number): void {
     const indice = (ORDINE.indexOf(categoria.value) + passo + ORDINE.length) % ORDINE.length
     categoria.value = ORDINE[indice]!
     schede.value[indice]?.focus()
 }
+
+function onTabKeydown(event: KeyboardEvent): void {
+    const passo = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
+    if (!passo) return
+    event.preventDefault()
+    vaiAllaScheda(passo)
+}
+
+/**
+ * ⛔ Owner 2026-09-13, dal Pad: «non c'è lo slide nel drawer. Nel mockup se io
+ * facevo slide a destra e sinistra, le schede Strumenti, Crea eccetera
+ * cambiavano dinamicamente».
+ *
+ * Il gesto conta solo se è ORIZZONTALE per davvero: si esige che lo spostamento
+ * laterale superi la soglia E sia maggiore di quello verticale. Senza questa
+ * seconda condizione uno scorrimento in giù con un filo di deriva cambierebbe
+ * scheda mentre la persona sta solo leggendo l'elenco — e il foglio sotto ha il
+ * proprio trascinamento verticale, quindi i due gesti devono restare distinti.
+ *
+ * Trascinare a SINISTRA porta alla scheda successiva, come sfogliare.
+ */
+/**
+ * ⛔ Visto sul Pad il 13/09 con un tocco reale, e NON dai test: lo swipe
+ * orizzontale partiva sopra l'elenco delle voci, e al rilascio la voce sotto il
+ * dito riceveva il CLIC — eseguiva un'azione e chiudeva il foglio. Cioè il
+ * gesto nuovo rompeva quello vecchio.
+ *
+ * ⛔ La guardia che avevo scritto non poteva vederlo: montava il pannello e
+ * mandava i due eventi del puntatore, ma non c'era nessun bottone sotto il dito
+ * a raccogliere il clic. Una prova più debole della realtà — la famiglia di
+ * difetti di oggi, vista un'altra volta.
+ *
+ * ⇒ Quando il dito ha percorso più della soglia, il clic che segue viene
+ * soffocato in fase di cattura, prima che arrivi alla voce. Il flag si spegne
+ * subito dopo: soffoca UN clic, quello del gesto, non i tocchi successivi.
+ */
+const scorrimentoAppenaFatto = ref(false)
+
+function soffocaIlClicDelloScorrimento(e: MouseEvent): void {
+    if (!scorrimentoAppenaFatto.value) return
+    scorrimentoAppenaFatto.value = false
+    e.preventDefault()
+    e.stopPropagation()
+}
+
+/**
+ * ⛔ I NUMERI SONO DEL MOCKUP, NON MIEI. Owner 13/09: «lo scroll orizzontale
+ * c'era nel mockup, non devi inventare nulla, fai riferimento ad esso».
+ * Letto alla fonte (`Talos_Calm_Finale_Interattivo.html`, ramo `quick-swipe`):
+ *
+ *   const ids = ['attach','create','tools','agent'], at = ids.indexOf(startTab)
+ *   const next = at + (dx < 0 ? 1 : -1)
+ *   if ((|dx| > 52 || (|dx| > 24 && |vx| > .5)) && next >= 0 && next < ids.length)
+ *
+ * Tre cose che avevo sbagliato inventando:
+ *  1. la soglia: 52 px, oppure 24 px se il dito va veloce (oltre 0,5 px/ms);
+ *  2. NESSUN giro circolare — il mockup si ferma ai bordi; io ruotavo;
+ *  3. al cambio il PANNELLO si anima (230 ms, translateX ±18px, opacità da .4):
+ *     è quello che rende il gesto visibile. Senza, la scheda cambiava in
+ *     silenzio e sembrava che non fosse successo niente.
+ */
+
+// Numeri del mockup, presi uno per uno (vedi il commento del gesto).
+const SCHEDA_SEGUE = 0.42
+const SCHEDA_SEGUE_AL_BORDO = 0.12
+const SCHEDA_OPACITA_CORSA = 400
+const SCHEDA_OPACITA_MINIMA = 0.6
+const SCHEDA_RITORNO_MS = 250
+const SCHEDA_ENTRATA_MS = 230
+const SCHEDA_ENTRATA_PX = 18
+const SCHEDA_SOGLIA_PX = 52
+const SCHEDA_SOGLIA_VELOCE_PX = 24
+const SCHEDA_VELOCITA = 0.5
+let presaScheda: { x: number; y: number; t: number; id: number } | null = null
+/** Quanto il pannello e' spostato adesso. Lo so perche' l'ho applicato io: non
+ *  si richiede al browser (DOMMatrixReadOnly non esiste ovunque, e una prova
+ *  che cade sull'ambiente non dice niente sul prodotto). */
+let scostamentoScheda = 0
+
+function iniziaScorrimentoSchede(e: PointerEvent): void {
+    if (e.button !== 0) return
+    presaScheda = { x: e.clientX, y: e.clientY, t: e.timeStamp, id: e.pointerId }
+    /*
+     * ⛔ Misurato sul Pad con una sonda: il pointerdown arriva, il pointerup
+     * finisce ALTROVE — nella WebView la cattura del puntatore non tiene. Invece
+     * di inseguire il bersaglio si ascolta dove il rilascio arriva sempre: il
+     * documento. Gli ascoltatori vivono quanto il gesto e si tolgono da soli.
+     */
+    // ⛔ Niente { once: true }: si consumerebbe al primo pointerup che passa dal
+    //    documento, anche di un altro gesto. Si tolgono a mano, alla fine.
+    staccaAscolti()
+    document.addEventListener('pointermove', segueIlDito)
+    document.addEventListener('pointerup', finisceScorrimentoSchede)
+    document.addEventListener('pointercancel', annullaScorrimentoSchede)
+}
+
+/**
+ * Il pannello segue il dito, come nel mockup: si sposta di una FRAZIONE dello
+ * spostamento — 0,42 — cosi' il movimento si vede senza che la scheda esca di
+ * scena prima di essere stata scelta. All'ultima scheda la frazione scende a
+ * 0,12: si muove quel tanto che dice «di qua non si va oltre».
+ */
+function segueIlDito(e: PointerEvent): void {
+    if (!presaScheda) return
+    const el = pannello.value
+    if (!el) return
+    const dx = e.clientX - presaScheda.x
+    const dy = e.clientY - presaScheda.y
+    // Finche' il gesto e' piu' verticale che orizzontale non e' il nostro: il
+    // foglio sotto deve poter scorrere senza che il pannello si sposti.
+    if (Math.abs(dx) <= Math.abs(dy)) return
+    const indice = ORDINE.indexOf(categoria.value)
+    const alBordo = (indice === 0 && dx > 0) || (indice === ORDINE.length - 1 && dx < 0)
+    const x = dx * (alBordo ? SCHEDA_SEGUE_AL_BORDO : SCHEDA_SEGUE)
+    scostamentoScheda = x
+    el.style.transform = `translateX(${x}px)`
+    el.style.opacity = String(Math.min(1, Math.max(SCHEDA_OPACITA_MINIMA, 1 - Math.abs(x) / SCHEDA_OPACITA_CORSA)))
+}
+
+/** Il pannello torna dov'era, a molla, senza cambiare scheda (mockup: 250 ms). */
+function riportaIlPannello(): void {
+    const el = pannello.value
+    if (!el) return
+    const da = scostamentoScheda
+    scostamentoScheda = 0
+    el.style.transform = ''
+    el.style.opacity = ''
+    if (!da || typeof el.animate !== 'function' || !talosMotionConsentito(el, PANNELLO_TOKEN)) return
+    el.animate([{ transform: `translateX(${da}px)` }, { transform: 'translateX(0)' }],
+        { duration: SCHEDA_RITORNO_MS, easing: talosCurva(el, '--talos-motion-ease-tab-change'), fill: 'none' })
+}
+
+/** Gli ascoltatori del gesto in corso, tolti in un punto solo. */
+function staccaAscolti(): void {
+    document.removeEventListener('pointermove', segueIlDito)
+    document.removeEventListener('pointerup', finisceScorrimentoSchede)
+    document.removeEventListener('pointercancel', annullaScorrimentoSchede)
+}
+
+/** Il browser si e' preso il gesto: si dimentica la presa, senza cambiare scheda. */
+function annullaScorrimentoSchede(): void {
+    presaScheda = null
+    staccaAscolti()
+    riportaIlPannello()
+}
+
+function finisceScorrimentoSchede(e: PointerEvent): void {
+    staccaAscolti()
+    // ⛔ L'identificatore si confronta solo se c'e' da entrambe le parti: un
+    //    evento sintetico non lo porta, e pretenderlo escluderebbe il gesto vero.
+    if (!presaScheda) return
+    if (e.pointerId !== undefined && presaScheda.id !== undefined && e.pointerId !== presaScheda.id) return
+    const dx = e.clientX - presaScheda.x
+    const dy = e.clientY - presaScheda.y
+    const durata = Math.max(1, e.timeStamp - presaScheda.t)
+    const vx = Math.abs(dx) / durata
+    presaScheda = null
+    if (Math.abs(dx) <= Math.abs(dy)) { riportaIlPannello(); return }
+    const abbastanza = Math.abs(dx) > SCHEDA_SOGLIA_PX
+        || (Math.abs(dx) > SCHEDA_SOGLIA_VELOCE_PX && vx > SCHEDA_VELOCITA)
+    if (!abbastanza) { riportaIlPannello(); return }
+    const passo = dx < 0 ? 1 : -1
+    const prossima = ORDINE.indexOf(categoria.value) + passo
+    // ⛔ Il mockup si ferma ai bordi: niente giro circolare.
+    if (prossima < 0 || prossima >= ORDINE.length) { riportaIlPannello(); return }
+    // La scheda cambia: il pannello lascia la posizione del dito e rientra con
+    // l'animazione del mockup (0,4 -> 1, ±18 px, 230 ms), curata dal watch.
+    pannello.value?.style.removeProperty('transform')
+    pannello.value?.style.removeProperty('opacity')
+    entrataDalGesto = dx < 0 ? SCHEDA_ENTRATA_PX : -SCHEDA_ENTRATA_PX
+    scostamentoScheda = 0
+    scorrimentoAppenaFatto.value = true
+    categoria.value = ORDINE[prossima]!
+    // Il pannello lo anima il watch(categoria) che c'e' gia': guarda il VALORE,
+    // quindi vale per tastiera, tocco e gesto senza doverlo richiamare qui.
+    schede.value[prossima]?.focus()
+}
+
 
 function chiudi(action: () => void): () => void {
     return () => { action(); emit('close') }
@@ -198,6 +388,8 @@ const vociVisibili = computed(() => {
             v-if="!ricerca.trim()"
             ref="gruppoSchede"
             class="talos-action-categories"
+            @pointerdown="iniziaScorrimentoSchede"
+            @click.capture="soffocaIlClicDelloScorrimento"
             role="tablist"
             aria-orientation="horizontal"
             :aria-label="$t('chat.drawerCategories')"
@@ -229,6 +421,9 @@ const vociVisibili = computed(() => {
             id="talos-drawer-options"
             ref="pannello"
             class="talos-action-options"
+            data-testid-gesture="talos-drawer-swipe"
+            @pointerdown="iniziaScorrimentoSchede"
+            @click.capture="soffocaIlClicDelloScorrimento"
             role="tabpanel"
             :aria-labelledby="ricerca.trim() ? undefined : `talos-drawer-tab-${categoria}`"
             data-testid="talos-drawer-options"

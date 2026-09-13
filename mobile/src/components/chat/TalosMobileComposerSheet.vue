@@ -81,6 +81,63 @@ onMounted(() => {
         { reduced: talosPrefersReducedMotion(), timeScale: Math.max(0.25, durata / SALITA_SERIE_MS) },
     )
 })
+/**
+ * ⛔ Owner 2026-09-13, dal Pad: «i drawer, TUTTI i drawer, devono reagire al
+ * tocco. Se io trascino il drawer, anche il drawer si deve trascinare».
+ *
+ * Prima di oggi nei fogli non c'era UN SOLO gestore di puntatore: le frecce da
+ * tastiera sì (tablist secondo l'APG), il dito no. Il foglio si apriva e si
+ * chiudeva a scatto e basta.
+ *
+ * Sta QUI e non negli otto fogli che lo importano: una presa sola, un
+ * comportamento solo. E si aggancia all'INTESTAZIONE, non a tutta la
+ * superficie, perché il contenuto scorre: prendere il gesto ovunque
+ * significherebbe chiudere il foglio mentre la persona legge.
+ *
+ * Al rilascio decide la distanza, non la velocità del dito: oltre la soglia
+ * chiude con l'uscita che c'era già, sotto torna al suo posto con la STESSA
+ * molla dell'entrata, così il movimento è uno e non due.
+ */
+const CHIUSURA_SOGLIA_PX = 96
+const trascinamento = ref(0)
+let presa: { y: number; id: number } | null = null
+
+function iniziaTrascinamento(e: PointerEvent): void {
+    if (closing.value || e.button !== 0) return
+    const corpo = (e.target as HTMLElement | null)?.closest?.('[data-talos-sheet-body]') as HTMLElement | null
+    if (corpo && corpo.scrollTop > 0) return
+    molla?.cancel()
+    molla = null
+    presa = { y: e.clientY, id: e.pointerId }
+    ;(e.currentTarget as HTMLElement | null)?.setPointerCapture?.(e.pointerId)
+}
+
+function muoviTrascinamento(e: PointerEvent): void {
+    if (!presa || e.pointerId !== presa.id) return
+    // Solo verso il basso: tirare verso l'alto un foglio già in alto non vuol dire niente.
+    trascinamento.value = Math.max(0, e.clientY - presa.y)
+    const d = root.value
+    if (d) d.style.transform = trascinamento.value === 0 ? '' : `translateY(${trascinamento.value}px)`
+}
+
+function finisciTrascinamento(e: PointerEvent): void {
+    if (!presa || e.pointerId !== presa.id) return
+    const percorso = trascinamento.value
+    presa = null
+    trascinamento.value = 0
+    const d = root.value
+    if (percorso >= CHIUSURA_SOGLIA_PX) { requestClose(); return }
+    if (!d) return
+    const durata = talosDurataMs(d, '--talos-motion-calm-sheet', SALITA_SERIE_MS)
+    molla = talosScalarSpring(
+        percorso,
+        0,
+        (y) => { d.style.transform = y === 0 ? '' : `translateY(${y}px)` },
+        () => { molla = null; d.style.transform = '' },
+        { reduced: talosPrefersReducedMotion(), timeScale: Math.max(0.25, durata / SALITA_SERIE_MS) },
+    )
+}
+
 onBeforeUnmount(() => { molla?.cancel(); molla = null })
 </script>
 
@@ -100,12 +157,23 @@ onBeforeUnmount(() => { molla?.cancel(); molla = null })
             :aria-label="title"
             tabindex="-1"
             :data-testid="testid"
-            class="relative z-10 flex max-h-[85dvh] flex-col overflow-hidden rounded-t-2xl border-t border-[var(--talos-border)] bg-[var(--talos-window-bg)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-[var(--talos-text)] outline-none md:mx-auto md:w-[clamp(480px,50vw,600px)] md:border-x"
+            class="relative z-10 flex max-h-[85dvh] touch-none flex-col overflow-hidden rounded-t-2xl border-t border-[var(--talos-border)] bg-[var(--talos-window-bg)] pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-[var(--talos-text)] outline-none md:mx-auto md:w-[clamp(480px,50vw,600px)] md:border-x"
             :class="closing ? 'translate-y-full transition-transform duration-[210ms] ease-in-out' : ''"
             @keydown.escape="requestClose"
             @keydown="trapTab"
+            @pointerdown="iniziaTrascinamento"
+            @pointermove="muoviTrascinamento"
+            @pointerup="finisciTrascinamento"
+            @pointercancel="finisciTrascinamento"
         >
-            <header class="flex shrink-0 items-center gap-2 px-3 py-2">
+            <header
+                class="flex shrink-0 cursor-grab select-none items-center gap-2 px-3 py-2 active:cursor-grabbing"
+                data-testid="talos-sheet-grab"
+            >
+                <span
+                    class="absolute left-1/2 top-1.5 h-1 w-10 -translate-x-1/2 rounded-full bg-[var(--talos-border-strong)]"
+                    aria-hidden="true"
+                />
                 <button
                     type="button"
                     :aria-label="$t('common.close')"
@@ -118,7 +186,7 @@ onBeforeUnmount(() => { molla?.cancel(); molla = null })
                 <span class="min-w-touch" aria-hidden="true" />
             </header>
 
-            <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pt-1">
+            <div data-talos-sheet-body class="min-h-0 flex-1 touch-pan-y space-y-3 overflow-y-auto px-4 pt-1">
                 <slot />
             </div>
         </section>

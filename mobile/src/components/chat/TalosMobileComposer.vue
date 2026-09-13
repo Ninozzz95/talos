@@ -3,7 +3,6 @@ import { computed, defineAsyncComponent, nextTick, ref, watch, type ComponentPub
 import { useTalosI18n } from '@/i18n'
 import { createTalosSendGate } from '@/lib/chat/sendGate'
 import { ArrowUp,
-    Brain,
     Database,
     Maximize2,
     Mic,
@@ -233,6 +232,29 @@ const slashCommandCount = ref(0)
 const slashMenu = ref<{ activateSelected(): void } | null>(null)
 const toolDrawerOpen = ref(false)
 const plusTrigger = ref<ComponentPublicInstance | HTMLElement | null>(null)
+/**
+ * ⛔⛔ REGRESSIONE RIPARATA il 2026-09-13. Owner, dal Pad, guardando la foto:
+ * «ECCO COSA MANCA LA MODALITA COMPATTA — REGRESSIONE».
+ *
+ * La forma compatta esisteva ed era il PREDEFINITO (`TALOS_DEFAULT_COMPOSER_SHAPE`,
+ * scelto dall'owner il 2026-08-17). Il compositore Calm del 12/09 ha smesso di
+ * guardare i tre flag di forma — lo dichiarava lui stesso in testa a
+ * composerStyle.ts: «la forma Calm ignora i tre flag restituiti qui» — quindi
+ * «Forma della barra di scrittura» in Impostazioni era diventato un controllo
+ * con tre voci e nessun effetto.
+ *
+ * Ripreso dal compositore precedente, non reinventato: compatto = immersivo E
+ * campo non a fuoco E testo vuoto E nessun allegato. In quello stato la riga
+ * degli strumenti non si disegna: una riga a riposo, si espande quando scrivi —
+ * che e' parola per parola cio' che l'impostazione promette.
+ */
+const composerFocused = ref(false)
+const composerCompact = computed(() => (
+    props.immersiveComposer
+    && !composerFocused.value
+    && !props.prompt.trim()
+    && (props.attachments?.length ?? 0) === 0
+))
 const libraryChip = ref<HTMLElement | null>(null)
 const librarySheetOpen = ref(false)
 const showLibraryChip = computed(() => (
@@ -392,7 +414,6 @@ function effortLabel(level: string): string {
  * still report the effort, because that dial is real too — but a light that
  * never goes out is not an indicator, it is decoration.
  */
-const reasoningActive = computed(() => Boolean(selectedProfile.value && props.thinking))
 const reasoningWordsActive = computed(() => Boolean(
     selectedProfile.value && (props.thinking || props.selectedEffort !== 'off'),
 ))
@@ -416,13 +437,48 @@ function onRightAction(): void {
     requestSend()
 }
 
+watch(composerCompact, () => { void nextTick().then(resizePrompt) })
+
 function resizePrompt(): void {
     const field = promptField.value
     if (!field) return
     field.style.height = 'auto'
     const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
-    const floor = (props.docked ? 3.5 : 5) * rem
-    field.style.height = Math.max(floor, Math.min(field.scrollHeight, 12 * rem)) + 'px'
+    /*
+     * ⛔ Owner 2026-09-13: «i pulsanti e il testo non sono centrati bene nel
+     *    container composer». MISURATO col Pad in verticale (CDP): contenitore
+     *    alto 73,5 px per un campo di 56, con dentro UNA riga da 28 — e i
+     *    comandi 16,8 px sopra il centro, 4 px fuori dal riquadro in cima.
+     *
+     * Il pavimento di 3,5rem serve al campo che CRESCE, per non farlo sobbalzare
+     * mentre si scrive. A riposo — campo vuoto, nessun fuoco, nessun allegato —
+     * non c'e' niente da stabilizzare: quel pavimento aggiunge solo aria sotto
+     * il testo, e la riga dei comandi galleggia in alto dentro di essa.
+     * ⇒ A riposo la scatola vale UNA RIGA, e il CSS (.is-compact) la centra.
+     */
+    const stile = getComputedStyle(field)
+    const riga = Number.parseFloat(stile.lineHeight) || rem * 1.75
+    const floor = composerCompact.value ? riga : (props.docked ? 3.5 : 5) * rem
+    /*
+     * ⛔ Owner 2026-09-13, terzo difetto della stessa superficie: l'ultima riga
+     *    si vedeva TAGLIATA A META'. Misurato sul Pad: campo 192 px, riga 25,6
+     *    → 7,5 righe, resto 12,8 px. Il tetto di 12rem non e' un multiplo della
+     *    riga, e mezza riga di testo resta appesa sotto il bordo.
+     *
+     * ⇒ La scatola vale sempre un numero INTERO di righe: il tetto si arrotonda
+     *   in GIU' (una riga mozzata non si mostra), il contenuto in SU (se no
+     *   taglierebbe proprio la riga che si sta scrivendo).
+     *
+     * ⛔ scrollHeight include il padding verticale: si sottrae prima di contare
+     *   le righe e si riaggiunge dopo. Oggi vale 0, ma la cura non deve
+     *   dipendere da un valore che qualcuno potrebbe cambiare domani.
+     */
+    const passo = (Number.parseFloat(stile.paddingTop) || 0) + (Number.parseFloat(stile.paddingBottom) || 0)
+    const aRighe = (px: number, verso: (n: number) => number): number =>
+        Math.max(riga, verso((px - passo) / riga) * riga) + passo
+    const tetto = aRighe(12 * rem, Math.floor)
+    const contenuto = aRighe(field.scrollHeight, Math.ceil)
+    field.style.height = Math.max(floor, Math.min(contenuto, tetto)) + 'px'
     measurePromptTall(field)
 }
 
@@ -615,6 +671,8 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
     <section
         data-testid="talos-mobile-composer"
         class="talos-calm-composer"
+        :class="{ 'is-compact': composerCompact }"
+        :data-talos-composer-compact="composerCompact ? 'true' : 'false'"
         :aria-label="$t('chat.composer')"
     >
         <div
@@ -691,6 +749,17 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
             mostrato lui.
         -->
         <div v-if="!dictating" class="talos-composer-field-row">
+            <!-- Owner 2026-09-13, dal Pad: «il tasto piu' senza bordo rotondo lo devi
+                 mettere alla sinistra del campo di input», come il vecchio compositore.
+                 Sta nella riga del campo, non piu' in quella degli strumenti. -->
+            <Button
+                ref="plusTrigger" type="button" size="icon" variant="ghost"
+                data-testid="talos-composer-plus" data-mobile-icon-only="true"
+                :aria-label="$t('chat.addToChat')" aria-haspopup="dialog"
+                :aria-expanded="toolDrawerOpen"
+                class="talos-pressable talos-plus-btn min-h-touch min-w-touch"
+                @pointerdown.prevent @click="openPlus"
+            ><Plus class="size-5" aria-hidden="true" /></Button>
             <textarea
                 v-if="!dictating"
                 ref="promptField"
@@ -702,6 +771,8 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
                 class="talos-calm-prompt"
                 @input="updatePrompt"
                 @keydown="onPromptKeydown"
+                @focus="composerFocused = true"
+                @blur="composerFocused = false"
             />
             <!-- ⛔⛔ 2026-09-13, misurato sul Pad con uiautomator: con
                  `aria-pressed` questo pulsante arrivava nell'albero di
@@ -727,15 +798,7 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
             </Button>
         </div>
 
-        <div class="talos-composer-tools" data-testid="talos-composer-tools">
-            <Button
-                ref="plusTrigger" type="button" size="icon" variant="ghost"
-                data-testid="talos-composer-plus" data-mobile-icon-only="true"
-                :aria-label="$t('chat.addToChat')" aria-haspopup="dialog"
-                :aria-expanded="toolDrawerOpen"
-                class="talos-pressable talos-plus-btn min-h-touch min-w-touch"
-                @pointerdown.prevent @click="openPlus"
-            ><Plus class="size-5" aria-hidden="true" /></Button>
+        <div v-if="!composerCompact" class="talos-composer-tools" data-testid="talos-composer-tools">
             <button
                 ref="modelTrigger" type="button" data-testid="talos-composer-model-chip"
                 :aria-label="modelChipLabel" :title="modelTitle"
@@ -763,16 +826,10 @@ watch(() => [props.prompt, props.docked, dictating.value], () => {
                 <Database class="size-4 shrink-0" aria-hidden="true" />
                 <span data-testid="talos-composer-library-chip-label" class="sr-only">{{ libraryModeLabel }} · {{ librarySourceCountLabel }}</span>
             </button>
-            <button
-                type="button" data-testid="talos-composer-thinking" class="talos-pressable talos-mode-chip min-h-touch"
-                :class="{ active: thinking }" :aria-pressed="thinking"
-                :disabled="!selectedProfile?.supports_thinking"
-                :title="selectedProfile?.supports_thinking ? $t('chat.extendedThinking') : $t('chat.noReasoningSetting')"
-                @pointerdown.prevent @click="emit('selectThinking', !thinking)"
-            >
-                <Brain :data-testid="reasoningActive ? 'talos-composer-reasoning-icon' : undefined" class="size-4" aria-hidden="true" />
-                {{ $t('chat.reasonQuick') }}
-            </button>
+            <!-- Owner 2026-09-13, dal Pad: «devi eliminare il pulsante ragiona
+                 completamente, tanto ce l'abbiamo nel drawer del modello». La
+                 SCELTA del ragionamento non sparisce: vive nel foglio del modello
+                 (profilo + sforzo). Qui spariva solo il doppione. -->
             <!-- Owner 12/09 19:30, dal Pad: «Leva il pulsante agente subito» e «il
                  pulsante naviga sul web si deve levare completamente». Lo stato
                  degli attrezzi (agentToolsEnabled) resta nel controller, acceso;

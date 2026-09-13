@@ -6,6 +6,37 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## v0.1.32
+
+The composer lines up with what you type, and the sheet behind "+" follows your
+finger instead of jumping.
+
+### The composer
+
+- The "+" and the button on the right sit on the middle line of the message
+  field, whether the field holds one line or eight. They used to hang from the
+  first line: 16.8 px above centre with the field empty, 39.7 px above it once
+  a few lines were written, and at rest they overhung the top edge by 4 px.
+- The field is always a whole number of lines. It used to stop at 192 px with
+  lines of 25.6 px — seven and a half — so the last line you could see was cut
+  in half. It now holds seven whole lines and scrolls past them.
+- With the field empty the box is one line tall instead of three and a half.
+  The taller floor is there to keep the box steady while it grows, and nothing
+  grows when there is nothing in it.
+- The microphone and Send share a filled accent container again, with the same
+  corner radius as the composer around them.
+
+### The "+" sheet
+
+- Dragging right to left across the list of actions moves between Attach,
+  Create, Tools and Agent, and the actions underneath change with it.
+- The panel follows your finger as you drag, moving a little under half as far
+  as your thumb and fading slightly on the way. Let go past the threshold and
+  the new tab settles in over 230 ms; let go short of it and the panel springs
+  back over 250 ms. At the first and last tab it gives only a little, and stays.
+- A drag up or down still scrolls the sheet and changes nothing, and a drag too
+  short to be meant as one changes nothing either.
+
 ## v0.1.31
 
 The composer has one button again, and it changes with what you are doing. The

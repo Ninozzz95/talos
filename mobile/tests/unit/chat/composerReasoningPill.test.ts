@@ -46,31 +46,31 @@ function mountComposer(overrides: Record<string, unknown> = {}) {
 }
 
 describe('the reasoning state on the model pill', () => {
-    it('mostra il cervello nella chip Ragiona attiva e mantiene le parole leggibili', () => {
+    /**
+     * ⛔ Owner 2026-09-13, dal Pad: «devi eliminare il pulsante ragiona
+     * completamente, tanto ce l'abbiamo nel drawer del modello». Questo caso
+     * proteggeva il cervello DENTRO quella chip; la chip non c'e' piu', e con
+     * lei il testid dell'icona. Non l'ho cancellato: il significato da
+     * proteggere e' rimasto lo stesso e si e' spostato — lo stato del
+     * ragionamento si legge sulla PILLOLA DEL MODELLO, e la chip non deve
+     * tornare a doppiarlo.
+     */
+    it('lo stato del ragionamento vive sulla pillola del modello, e la chip non torna', () => {
         const wrapper = mountComposer({ thinking: true })
 
-        const icon = wrapper.get('[data-testid="talos-composer-reasoning-icon"]')
-        // Themed, not a grey glyph: it is the one thing left on a phone.
-        expect(wrapper.get('[data-testid="talos-composer-thinking"]').classes()).toContain('active')
-        /**
-         * Owner 2026-07-30: the first cut used BrainCircuit while the reasoning
-         * block in the thread had used plain Brain since it was written. One
-         * meaning wearing two icons is how a product stops looking designed —
-         * and at 14px the circuit version is a smudge, not a brain.
-         */
-        expect(icon.classes()).toContain('lucide-brain')
+        expect(wrapper.find('[data-testid="talos-composer-thinking"]').exists()).toBe(false)
 
         const words = wrapper.get('[data-testid="talos-composer-reasoning-label"]')
         expect(words.classes()).not.toContain('hidden')
-        expect(words.isVisible()).toBe(true)
         expect(words.text()).toBe('Thinking')
+        // ⛔ Resta per chi ascolta lo schermo: l'occhio lo legge nel foglio del modello.
+        expect(words.classes()).toContain('sr-only')
     })
 
     it('says "thinking" rather than an effort level when thinking is on', () => {
         const wrapper = mountComposer({ thinking: true })
 
         expect(wrapper.get('[data-testid="talos-composer-reasoning-label"]').text()).toBe('Thinking')
-        expect(wrapper.find('[data-testid="talos-composer-reasoning-icon"]').exists()).toBe(true)
     })
 
     /**
@@ -101,20 +101,25 @@ describe('the reasoning state on the model pill', () => {
      * is not an indicator. The icon follows the switch the user flips; the
      * words still report the effort, which is a real dial of its own.
      */
-    it('puts the brain out when extended thinking is switched off', () => {
+    /**
+     * ⛔ 2026-09-13: il cervello non c'e' piu' — la chip che lo conteneva e'
+     * stata tolta su ordine dell'owner perche' doppiava il drawer del modello.
+     * Il difetto che questo caso previene NON e' sparito con l'icona: era «un
+     * indicatore che non si spegne non e' un indicatore». Adesso l'indicatore
+     * e' la riga leggibile sulla pillola, e deve cambiare con l'interruttore.
+     */
+    it('la riga del ragionamento CAMBIA quando il pensiero esteso si spegne', () => {
         const on = mountComposer({ thinking: true, selectedEffort: 'high' })
-        expect(on.find('[data-testid="talos-composer-reasoning-icon"]').exists()).toBe(true)
+        expect(on.get('[data-testid="talos-composer-reasoning-label"]').text()).toBe('Thinking')
 
         const off = mountComposer({ thinking: false, selectedEffort: 'high' })
-        expect(off.find('[data-testid="talos-composer-reasoning-icon"]').exists()).toBe(false)
-        // The effort is still worth reading on a tablet — it just is not a brain.
+        // Lo sforzo resta una manopola sua e vale la pena leggerlo: non e' un cervello.
         expect(off.get('[data-testid="talos-composer-reasoning-label"]').text()).toBe('High')
     })
 
     it('shows nothing at all when reasoning is off', () => {
         const wrapper = mountComposer({ selectedEffort: 'off', thinking: false })
 
-        expect(wrapper.find('[data-testid="talos-composer-reasoning-icon"]').exists()).toBe(false)
         expect(wrapper.find('[data-testid="talos-composer-reasoning-label"]').exists()).toBe(false)
     })
 })
