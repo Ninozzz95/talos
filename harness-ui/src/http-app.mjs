@@ -700,6 +700,190 @@ meta: { schema: API_SCHEMA, generatedAt: generatedAt(clock) },
 }
 
 /*
+ * ⛔⛔⛔ BC-07 (13/09/2026) — LE ROTTE DEL CONTESTO RISPONDEVANO IN UNA FORMA CHE NESSUNO SA LEGGERE.
+ *
+ * Misurato su una porta effimera, mai sul 4174: `GET /api/v1/sessions/<id>/context` col motore del
+ * contesto spento — cioè SEMPRE, perché `contextService` esiste solo quando `TALOS_CONTEXT_TRIAL` è
+ * configurato — rispondeva `{"error":{"code":"CTX_NOT_ENABLED","message":"…"}}` e basta: niente
+ * `ok:false`, niente `meta`, niente `title/explanation/action`. Ogni ALTRA rotta di questo file
+ * risponde con la busta standard, ed è quella che le superfici sanno leggere.
+ * ⇒ Il pannello non riceveva nessuna frase da mostrare, e al posto del vuoto disegnava i propri
+ *   valori di comodo: numeri che il server non ha mai mandato. Un pannello che inventa quando non
+ *   sa è peggio di un pannello vuoto, perché toglie fiducia anche al resto.
+ *
+ * ⛔ NESSUNO status cambia: 404/405/400/409/503 restano quelli di prima. La semantica «501 contro
+ *   503 per una funzione non abilitata» andava verificata alla fonte e la ricerca web non è stata
+ *   possibile (budget della sessione esaurito): uno status si sposta con una fonte in mano, non a
+ *   intuito, e cambiarlo qui avrebbe spostato un contratto che non ho potuto verificare.
+ * ⛔ E NON si passa da `errorEnvelope`: `toPublicProblem` non conosce i codici `CTX_`, quindi li
+ *   farebbe cadere sulla copia di INTERNAL_ERROR — «Si è verificato un problema imprevisto · Apri
+ *   Doctor» — falso due volte, ed è esattamente la voragine che O-49 e L5 hanno già pagato qui.
+ *
+ * ⭐ `riprovabile` è la distinzione che mancava. `CTX_NOT_ENABLED` è uno stato PERMANENTE di questa
+ *   installazione (riprovare non cambia niente); `CTX_SERVICE_CLOSED` e i `*_FAILED` sono
+ *   transitori. Fino a oggi finivano tutti e tre sullo stesso 503 e da fuori erano indistinguibili:
+ *   un nome più largo della cosa misurata. Ora la differenza è nel corpo, non nello status.
+ */
+export const COPIA_CONTESTO = Object.freeze({
+  CTX_NOT_ENABLED: Object.freeze({
+    title: 'Contesto non attivo qui',
+    explanation: 'La gestione del contesto non è attiva su questa installazione: di questa conversazione non c’è nessuna misura da mostrare.',
+    action: 'Non serve fare niente: i messaggi restano interi e la conversazione funziona lo stesso.',
+    riprovabile: false,
+  }),
+  CTX_ROUTE_NOT_FOUND: Object.freeze({
+    title: 'Operazione del contesto non trovata',
+    explanation: 'Questa operazione sul contesto non esiste su questo server.',
+    action: 'Ricarica la pagina: le azioni disponibili sono quelle che vedi a schermo.',
+    riprovabile: false,
+  }),
+  METHOD_NOT_ALLOWED: Object.freeze({
+    title: 'Operazione non consentita',
+    explanation: 'Questa operazione sul contesto esiste, ma non si chiede in questo modo.',
+    action: 'Ricarica la pagina e usa i comandi del pannello.',
+    riprovabile: false,
+  }),
+  CTX_INVALID_INPUT: Object.freeze({
+    title: 'Richiesta del contesto non valida',
+    explanation: 'La richiesta sul contesto non ha una forma ammessa, quindi non è stata eseguita. Nessun messaggio è stato modificato.',
+    action: 'Ricarica la pagina e ripeti l’azione dal pannello invece di comporre la richiesta a mano.',
+    riprovabile: false,
+  }),
+  CTX_STALE_REVISION: Object.freeze({
+    title: 'Il contesto è cambiato',
+    explanation: 'Il contesto si è mosso dopo che avevi letto questi dati, quindi la modifica non è stata applicata.',
+    action: 'Usa Aggiorna: i dati tornano freschi, poi ripeti la modifica.',
+    riprovabile: true,
+  }),
+  CTX_SERVICE_CLOSED: Object.freeze({
+    title: 'Contesto non raggiungibile adesso',
+    explanation: 'Il servizio del contesto si sta chiudendo, quindi in questo momento non risponde.',
+    action: 'Riprova fra poco con Aggiorna.',
+    riprovabile: true,
+  }),
+  /*
+   * ⛔⛔⛔ 13/09, RIFACIMENTO — LE COPIE CHE MANCAVANO ERANO QUELLE CHE IL SERVIZIO VERO LANCIA.
+   *
+   * La prima cura ne copriva sei, scelte a mano. L'inventario fatto ORA sul prodotto —
+   * `context-desktop-service.mjs`, che è il servizio davvero cablato in `server.mjs`, più
+   * `engine.mjs` e `node/sqlite-worker.mjs` — dice che il servizio cablato ne lancia DIECI, e
+   * quattro di quelli non avevano una riga qui: `CTX_SESSION_NOT_FOUND`, `CTX_JOB_NOT_FOUND`,
+   * `CTX_FACT_CONFLICT_NOT_FOUND`, `CTX_HISTORY_DIVERGED`. Il quinto, `CTX_NOTHING_TO_COMPACT`,
+   * arriva dal motore ed è la risposta che una persona vede più spesso premendo «Compatta».
+   * ⛔ `CTX_PORT_MISSING` resta fuori APPOSTA: lo lancia il COSTRUTTORE del servizio (riga 13 di
+   *   `context-desktop-service.mjs`), quindi non passa mai dal `catch` di una richiesta. Una copia
+   *   per un codice irraggiungibile è una rassicurazione su una porta che non esiste.
+   * ⛔ I 128 codici `CTX_` del prodotto non stanno qui e non devono: chi non ha una riga cade sul
+   *   ripiego, che parla comunque del contesto. Il ripiego è provato su un codice VERO senza copia.
+   */
+  CTX_SESSION_NOT_FOUND: Object.freeze({
+    title: 'Conversazione non trovata',
+    explanation: 'Questa conversazione non è più nel progetto, quindi del suo contesto non c’è niente da mostrare.',
+    action: 'Torna all’elenco delle conversazioni: mostra quelle che ci sono adesso.',
+    riprovabile: false,
+  }),
+  CTX_JOB_NOT_FOUND: Object.freeze({
+    title: 'Preparazione del contesto non trovata',
+    explanation: 'Questa preparazione del contesto non esiste più: può essere già finita, o essere stata annullata.',
+    action: 'Usa Aggiorna: il pannello mostra le preparazioni in corso adesso.',
+    riprovabile: false,
+  }),
+  CTX_FACT_CONFLICT_NOT_FOUND: Object.freeze({
+    title: 'Nessun conflitto da risolvere',
+    explanation: 'Questa informazione protetta non ha un conflitto aperto: può essere già stata risolta.',
+    action: 'Usa Aggiorna: il pannello mostra i conflitti aperti adesso.',
+    riprovabile: false,
+  }),
+  CTX_HISTORY_DIVERGED: Object.freeze({
+    title: 'La conversazione non combacia con l’archivio',
+    explanation: 'La cronologia attiva è diversa da quella archiviata, quindi il contesto non è stato toccato. Gli originali sono conservati.',
+    action: 'Usa Aggiorna; se la differenza resta, riapri la conversazione per rileggerla intera.',
+    riprovabile: false,
+  }),
+  CTX_NOTHING_TO_COMPACT: Object.freeze({
+    title: 'Niente da compattare',
+    explanation: 'Non ci sono scambi precedenti da compattare mantenendo intero l’ultimo scambio. Nessun messaggio è stato modificato.',
+    action: 'Non serve fare niente: la conversazione è già alla sua misura minima.',
+    riprovabile: false,
+  }),
+  /*
+   * ⛔⛔⛔ 13/09, RIFACIMENTO — LA VORAGINE ERA ANCORA APERTA SULLA STESSA FAMIGLIA DI ROTTE.
+   *
+   * Misurato su porta effimera prima di scrivere queste righe, non dedotto. Col motore del
+   * contesto ACCESO — l'unico stato in cui queste porte si raggiungono, perché col motore spento
+   * risponde prima il 503:
+   *   GET   /api/v1/sessions/s/context?x=1               -> 400 «Si è verificato un problema
+   *                                                            imprevisto · Apri Doctor»
+   *   GET   /api/v1/sessions/s/context/facts?x=1         -> 400 la stessa copia
+   *   PATCH /api/v1/sessions/s/context/settings?x=1      -> 400 la stessa copia
+   *   POST  /api/v1/sessions/s/context/jobs   {malformato} -> 400 la stessa copia
+   *   POST  /api/v1/sessions/s/context/facts  {malformato} -> 400 la stessa copia
+   *   e un guasto del servizio SENZA codice `CTX_`         -> 500, ancora quella copia.
+   * ⇒ La prima cura copriva le tre uscite PRIMA del servizio e quelle CON codice `CTX_`, e lasciava
+   *   fuori le due che nascono DENTRO il `try`: `requireNoQuery` e `leggiCorpoJson` lanciano
+   *   `QUERY_INVALID`, e un errore senza codice diventa `INTERNAL_ERROR`. Stessa famiglia di rotte,
+   *   stessa promessa: o vale per tutte, o non vale.
+   * ⛔ `PAYLOAD_LIMIT` ha la sua riga ma NON è raggiungibile dall'esterno: `leggiCorpoJson` fa
+   *   `req.destroy()` appena il corpo supera i 4096 byte, e la misura col socket grezzo (corpo da
+   *   5.000 byte, `Content-Length` onesto, `Connection: close`) torna ZERO byte — la connessione
+   *   muore prima che una risposta parta. La copia c'è per il giorno in cui quel ramo imparerà a
+   *   rispondere; la prova lo DICHIARA invece di fingere di averlo visto.
+   */
+  QUERY_INVALID: Object.freeze({
+    title: 'Richiesta del contesto malformata',
+    explanation: 'L’indirizzo o il corpo di questa richiesta sul contesto non ha una forma ammessa, quindi non è stato eseguito niente. Nessun messaggio è stato modificato.',
+    action: 'Ricarica la pagina e ripeti l’azione dal pannello invece di comporre la richiesta a mano.',
+    riprovabile: false,
+  }),
+  PAYLOAD_LIMIT: Object.freeze({
+    title: 'Richiesta del contesto troppo grande',
+    explanation: 'Questa richiesta supera la misura che il server accetta, quindi non è stata eseguita. Nessun messaggio è stato modificato.',
+    action: 'Ripeti l’azione dal pannello con meno dati per volta.',
+    riprovabile: false,
+  }),
+  INTERNAL_ERROR: Object.freeze({
+    title: 'Contesto non riuscito',
+    explanation: 'L’operazione sul contesto si è interrotta per un guasto del servizio. Nessun messaggio è stato modificato.',
+    action: 'Usa Aggiorna per rileggere lo stato, poi riprova.',
+    riprovabile: true,
+  }),
+});
+/* ⛔ Il ripiego NON dice «problema imprevisto»: dice che il contesto non è aggiornato, che è la sola
+   cosa vera per chi guarda il pannello, e che nessun messaggio è stato toccato. */
+export const COPIA_CONTESTO_PREDEFINITA = Object.freeze({
+  title: 'Contesto non disponibile',
+  explanation: 'L’operazione sul contesto non è riuscita, quindi quello che vedi potrebbe non essere aggiornato. Nessun messaggio è stato modificato.',
+  action: 'Usa Aggiorna per rileggere lo stato prima di riprovare.',
+  riprovabile: true,
+});
+
+/**
+ * La busta delle rotte del contesto: la stessa forma di tutte le altre, più `riprovabile`.
+ * ⛔ `errore` non entra MAI nel testo che legge una persona: serve solo a registrare la diagnosi.
+ *   Un codice senza copia sua, e il guasto interno, lasciano comunque un `doctorReference` —
+ *   buttarlo renderebbe muto il registro proprio sui casi che non sappiamo spiegare — ma le frasi
+ *   restano quelle del contesto: il riferimento è un dato per chi legge i log, non un consiglio.
+ */
+export function bustaContesto(code, message, clock, errore = null) {
+  const copia = COPIA_CONTESTO[code] ?? COPIA_CONTESTO_PREDEFINITA;
+  const vuoleDiagnosi = !COPIA_CONTESTO[code] || code === 'INTERNAL_ERROR';
+  const riferimento = vuoleDiagnosi ? toPublicProblem(errore ?? { code }, { operation: 'contesto' }).doctorReference : null;
+  return {
+    ok: false,
+    error: {
+      code,
+      message,
+      title: copia.title,
+      explanation: copia.explanation,
+      action: copia.action,
+      riprovabile: copia.riprovabile,
+      ...(riferimento ? { doctorReference: riferimento } : {}),
+    },
+    meta: { schema: API_SCHEMA, generatedAt: generatedAt(clock) },
+  };
+}
+
+/*
  * ⭐⭐⭐ PO-01 (10/9) — LA PAGINA CHE VEDE UNA PERSONA quando il browser rientra da OpenRouter.
  *
  * ⛔ Non è una risposta d'API e non deve esserlo: qui non arriva del codice nostro, arriva un
@@ -2328,9 +2512,9 @@ export function createHttpApp({
     const contextMatch = /^\/api\/v1\/sessions\/([^/]+)\/context(\/.*)?$/u.exec(url.pathname);
     if (contextMatch) {
       const allowed = metodiAmmessiPerRotta(url.pathname);
-      if (!allowed) { sendJson(res, 404, { error: { code: 'CTX_ROUTE_NOT_FOUND', message: 'Operazione del contesto non trovata.' } }, method); return; }
-      if (!allowed.includes(method)) { sendJson(res, 405, { error: { code: 'METHOD_NOT_ALLOWED', message: 'Metodo non consentito.' } }, method, { Allow: allowed.join(', ') }); return; }
-      if (!contextService) { sendJson(res, 503, { error: { code: 'CTX_NOT_ENABLED', message: 'Il motore del contesto non è attivo in questa istanza.' } }, method); return; }
+      if (!allowed) { sendJson(res, 404, bustaContesto('CTX_ROUTE_NOT_FOUND', 'Operazione del contesto non trovata.', clock), method); return; }
+      if (!allowed.includes(method)) { sendJson(res, 405, bustaContesto('METHOD_NOT_ALLOWED', 'Metodo non consentito.', clock), method, { Allow: allowed.join(', ') }); return; }
+      if (!contextService) { sendJson(res, 503, bustaContesto('CTX_NOT_ENABLED', 'Il motore del contesto non è attivo in questa istanza.', clock), method); return; }
       try {
         requireNoQuery(url);
         const sessionId = decodeURIComponent(contextMatch[1]);
@@ -2348,10 +2532,21 @@ export function createHttpApp({
       } catch (error) {
         if (error?.code?.startsWith('CTX_')) {
           const status = /NOT_FOUND$/u.test(error.code) ? 404 : /INVALID/u.test(error.code) ? 400 : /NOT_ENABLED|CLOSED|FAILED$/u.test(error.code) ? 503 : 409;
-          sendJson(res, status, { error: { code: error.code, message: error.message } }, method);
+          sendJson(res, status, bustaContesto(error.code, error.message, clock, error), method);
         } else {
+          /*
+           * ⛔⛔⛔ 13/09 — QUI restava aperta la voragine, ed era METÀ della famiglia.
+           * `requireNoQuery` e `leggiCorpoJson` lanciano `QUERY_INVALID`; un guasto qualunque del
+           * servizio non ha codice e diventa `INTERNAL_ERROR`. Nessuno dei due comincia per `CTX_`,
+           * quindi cadevano su `errorEnvelope`, cioè sulla copia di INTERNAL_ERROR — «Si è
+           * verificato un problema imprevisto · Apri Doctor». Falsa due volte su una richiesta
+           * storta, che è previstissima e non ha niente da spiegare a Doctor.
+           * ⛔ Lo STATUS non cambia: continua a deciderlo `normalizeError` (400, 413, 500 come
+           *   prima). Cambia solo la busta, che ora è quella del contesto per TUTTA la famiglia.
+           */
           const normalized = normalizeError(error);
-          sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+          const messaggio = typeof error?.message === 'string' && error.message.trim() ? error.message : (MESSAGE_BY_CODE[normalized.code] ?? normalized.code);
+          sendJson(res, normalized.statusCode, bustaContesto(normalized.code, messaggio, clock, error), method);
         }
       }
       return;
