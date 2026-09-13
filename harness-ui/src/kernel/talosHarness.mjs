@@ -1857,10 +1857,42 @@ const ATTREZZI_ESTESI = [
      */
     {
         name: 'library_list',
-        description: 'List, browse, count or filter every file in this project\'s Library. Use this when '
+        /*
+         * ⛔⛔⛔ BC-10 (13/09/2026) — QUESTA DESCRIZIONE ERA LA CAUSA PRIMA, e non un dettaglio.
+         * Diceva «Follow next_page_token until it is null when asked for all files»: la guardia
+         * era quel «when asked for all», troppo debole perché un saluto non è una richiesta di
+         * elencare tutto e niente qui dentro distingueva i due casi. L'owner ha scritto «ciao» e
+         * TALOS ha sfogliato 216 file in 11 pagine, narrando ogni passo.
+         * ⭐ Che la colpa sia del CONTRATTO e non del modello lo dice la misura altrui:
+         * arXiv:2608.26130, Petrova/Mazniak/State, «Agents Don't Paginate: First-Chunk Selection
+         * for LLM Tool Responses» — abstract riletto ALLA FONTE il 13/09/2026
+         * (arxiv.org/abs/2608.26130): sui log di sessione di un middleware MCP pubblico gli autori
+         * osservano «no agent-initiated requests for a second chunk», verbatim. Cioè: da solo un
+         * agente la seconda pagina non la chiede MAI. Il nostro la chiedeva perché gliel'avevamo
+         * ordinato qui dentro.
+         * ⛔ E i numeri di quel paper NON parlano di questo: le 500 task SWE-bench Verified sono il
+         * confronto fra sei funzioni di valore, le 4.800 chiamate sono una sonda di localizzazione a
+         * turno singolo su cinque modelli, e il «nessuna richiesta del secondo pezzo» viene dai log
+         * del middleware. Sono TRE misure diverse, e appiccicare le une all'altra sarebbe la
+         * citazione gonfiata che questo file vieta altrove.
+         * ⛔ La citazione gemella sopra `messaggioArgomentiAssenti` («trova ZERO richieste del
+         * secondo pezzo») è stata riaperta alla stessa fonte lo stesso giorno ed è FEDELE: non si
+         * tocca. Ammorbidirla in «raramente» era una correzione che peggiorava la fonte.
+         * ⛔ Non si vieta di sfogliare: chi ha CHIESTO di agire su tutto deve ancora poterlo fare
+         * (è la seconda parte di BC-10, dove sfogliare era la cosa giusta) — ma lo chiede con
+         * `browse_every_page`, e si vede. Si toglie il dovere di farlo per conto proprio, e si
+         * dice che il totale è già arrivato con la prima pagina.
+         * ⛔ Il tetto vero NON vive in questa frase: vive in `decisioneDiSfogliamento`, che rifiuta
+         * la pagina di troppo. Una descrizione è un consiglio; la pagina undici la ferma il codice.
+         */
+        description: 'List, count or filter the files in this project\'s Library. Use this when '
             + 'asked what/all files are in the Library without a keyword; use library_search only for '
-            + 'filename or content matching. Follow next_page_token until it is null when asked for all '
-            + 'files, repeating the same origin and file_type filters.',
+            + 'filename or content matching. The first page already reports the TOTAL, so answer '
+            + '"how many" or "what is in there" from it alone, without paging. Paging past the first '
+            + 'couple of pages of one listing is REFUSED unless you set browse_every_page, which you '
+            + 'may do only when the person explicitly asked to see or act on EVERY entry, repeating '
+            + 'the same origin and file_type filters; never page through the whole Library just to '
+            + 'look around, and never because the conversation merely mentioned files.',
         input_schema: {
             type: 'object',
             properties: {
@@ -1868,20 +1900,33 @@ const ATTREZZI_ESTESI = [
                 file_type: { type: 'string', enum: ['all', 'image', 'document', 'link'], description: 'Filter images, ordinary documents, or archived web links. Default all.' },
                 page_size: { type: 'number', description: 'Maximum entries in this page (1-20, default 10).' },
                 page_token: { type: 'string', description: 'Opaque next_page_token from the preceding library_list result. Repeat the same filters.' },
+                /* ⛔ Il nome è quello di `CAMPO_SFOGLIA_TUTTO`: scritto a mano perché i tetti sono dichiarati più in basso in questo file e leggerli da qui, dentro un letterale valutato all'import, sarebbe un uso prima della dichiarazione. Una prova li tiene allineati. */
+                browse_every_page: { type: 'boolean', description: 'Set true ONLY when the person explicitly asked to see or act on EVERY entry in the Library. It unlocks further pages of the same listing, up to a hard ceiling. Never set it to look around, to count files, or because the listing looked interesting.' },
             },
         },
     },
     {
         name: 'library_search',
+        /*
+         * ⛔ BC-10 (13/09/2026) — stesso tetto del fratello `library_list`, e per lo stesso motivo:
+         * qui il cursore si chiama `offset`, quindi anche qui ogni pagina ha argomenti DIVERSI e la
+         * guardia della valanga non la vede. Una ricerca che sfoglia all'infinito è la stessa
+         * valanga con un altro nome.
+         */
         description: 'Search this project\'s Library files and return a bounded page of genuine matches '
             + 'with their id, name, origin and a short excerpt. Use it before answering questions about the '
-            + 'project\'s own Library files, and follow next_offset when more matches are needed.',
+            + 'project\'s own Library files. The first page reports the TOTAL number of matches: answer from '
+            + 'it rather than walking the results. Paging past the first couple of pages of the same search is '
+            + 'REFUSED unless you set browse_every_page, which you may do only when the person explicitly asked '
+            + 'to see or act on EVERY match; a different query counts as a new search and starts over.',
         input_schema: {
             type: 'object',
             properties: {
                 query: { type: 'string', description: 'What to look for, in natural language.' },
                 limit: { type: 'number', description: 'How many matching files to return in this page (1-20, default 5).' },
                 offset: { type: 'number', description: 'Zero-based result offset. Use next_offset from the previous page.' },
+                /* ⛔ Stesso nome e stesso motivo di library_list: vedi il commento là sopra. */
+                browse_every_page: { type: 'boolean', description: 'Set true ONLY when the person explicitly asked to see or act on EVERY match. It unlocks further pages of the same search, up to a hard ceiling. Never set it to look around.' },
             },
             required: ['query'],
         },
@@ -2605,6 +2650,274 @@ export function formattaListaLibreria(risultato) {
     const intestazione = `Library list: showing ${vistiPrima + 1}-${vistiDopo} of ${totale} current files.`
         + (nextPageToken ? ` Next page token: ${nextPageToken}. Repeat the same origin and file_type filters.` : ' End of Library list.')
     return uscitaUtile([intestazione, ...righe].join('\n\n'), 4_000, 0.25)
+}
+
+/*
+ * ⛔⛔⛔ BC-10, prima parte (13/09/2026) — SFOGLIARE NON È RIPETERE, e la guardia della valanga
+ * non può vederlo PER COSTRUZIONE.
+ *
+ * `fermatoPerRipetizione` confronta l'hash di (attrezzo, argomenti), ed è la guardia che ha
+ * portato una valanga da 398 chiamate a 2. Nella paginazione però ogni chiamata porta un
+ * `page_token` DIVERSO: undici chiamate a sfogliare lo stesso elenco sono, per quella guardia,
+ * undici chiamate legittime e distinte. È la stessa forma di difetto già imparata qui — *un
+ * controllo che guarda solo dove si aspetta il problema*.
+ *
+ * ⇒ La firma giusta per uno SFOGLIAMENTO è l'attrezzo PIÙ I SUOI FILTRI, **senza** il cursore:
+ *   cambiare `origin` è un'altra domanda, cambiare `page_token` è la stessa domanda più avanti.
+ *
+ * ⛔⛔⛔ E UN AVVISO NON FERMA NIENTE — il blocco che sta qui sotto è stato RIFATTO oggi, non
+ *   finito com'era. La prima stesura (stessa giornata, lavoro lasciato a metà) contava le pagine
+ *   e ATTACCAVA UNA RIGA all'esito: «sei alla pagina 3, fermati se puoi». Cioè misurava il
+ *   difetto e poi lo lasciava succedere, sperando che il modello ubbidisse — esattamente la
+ *   forma di guasto che questo progetto ha imparato a riconoscere: *una guardia che stampa una
+ *   risposta plausibile dopo aver fallito*. Il difetto dell'owner non è che le undici pagine non
+ *   fossero annotate: è che ci sono state. Un avviso è una guardia che passa sia col difetto sia
+ *   senza, quindi non è una guardia.
+ *
+ * ⇒ Qui si FERMA, con un tetto DICHIARATO (`PAGINE_SENZA_RICHIESTA`), e la pagina oltre il tetto
+ *   non arriva nemmeno allo store: si risponde a parole, come fa `messaggioArgomentiAssenti`.
+ *
+ * ⛔⛔ Ma sfogliare fino in fondo resta POSSIBILE, perché è legittimo quando qualcuno l'ha
+ *   chiesto: è ciò che TALOS ha fatto BENE nella seconda parte di BC-10 — contare 216 file per
+ *   cancellarne 214, coi conti dichiarati. Un cancello che rifiuta la pagina N e basta
+ *   spegnerebbe quel lavoro insieme a questo. ⇒ Il modo di chiedere altre pagine esiste, ma è
+ *   ESPLICITO e si vede nella trascrizione: `browse_every_page: true`. Non è una porta di
+ *   servizio — è la differenza fra «l'agente ha sfogliato da solo» e «gli era stato chiesto», che
+ *   prima non si poteva leggere da nessuna parte.
+ *
+ * ⛔ E anche la porta esplicita ha un fondo (`PAGINE_MASSIME_PER_ELENCO`): un modello che, preso
+ *   il rifiuto, rimette il flag e riparte è la stessa valanga con una parola in più. Il flag
+ *   sposta il tetto, non lo toglie. Questo è il rischio residuo dichiarato, non risolto: nessuno
+ *   qui dentro può verificare che la persona abbia davvero chiesto «tutti».
+ *
+ * ⭐ E il testo sta nell'ESITO, non nelle istruzioni di sistema, per la stessa ragione di
+ *   `messaggioArgomentiAssenti`: un agente non va a cercare una regola, legge quella che ha
+ *   davanti nell'esito che sta già leggendo.
+ */
+/*
+ * ⛔⛔⛔ BC-10, RIFACIMENTO (13/09/2026) — LA FIRMA SI COSTRUISCE PER INCLUSIONE.
+ *
+ * La prima stesura elencava i CURSORI e trattava come filtro tutto il resto. Un elenco di
+ * esclusioni è una guardia che fallisce APERTA: basta un campo legittimo che nessuno ha pensato
+ * di escludere e il conteggio riparte da zero. Non era teoria — misurato prima di riscrivere,
+ * sugli schemi veri di questo file:
+ *   · `library_list` accetta `page_size` e `library_search` accetta `limit`. Nessuno dei due era
+ *     nell'elenco ⇒ variandoli fra 1 e 20, le UNDICI pagine dell'incidente passavano TUTTE E
+ *     UNDICI (undici firme distinte). Il tetto non esisteva.
+ *   · e c'era un terzo varco che nessuno aveva nominato: `origin` ASSENTE e `origin: 'all'` sono
+ *     la stessa domanda (lo schema dichiara 'all' come default), ma davano due firme ⇒
+ *     alternandoli il conto RADDOPPIAVA — quattro pagine servite invece di due.
+ *
+ * ⇒ Qui si elencano i campi che IDENTIFICANO LA DOMANDA, uno per attrezzo, col loro default. Un
+ *   campo che non è in questo elenco non entra nella firma: quindi un campo NUOVO, ignoto,
+ *   inventato o storto NON può azzerare il conto — al massimo fa contare insieme due domande che
+ *   erano diverse. Fallisce STRETTA invece che aperta, ed è tutta la differenza.
+ *
+ * ⛔ Il prezzo di un elenco di inclusioni è che va tenuto allineato allo schema, e una deriva
+ *   silenziosa qui punirebbe una domanda legittima. Non si affida alla memoria: il cancello
+ *   «nessun campo dello schema resta fuori dalla classificazione» in `talosHarness.test.mjs` legge
+ *   gli ATTREZZI VERI e diventa rosso il giorno che qualcuno aggiunge un filtro qui sopra.
+ *
+ * ⛔ I valori si normalizzano (spazi via, minuscole) per la stessa ragione: `query: ' Fatture '` e
+ *   `query: 'fatture'` sono la stessa ricerca, e senza normalizzare sarebbero due firme — cioè
+ *   l'ennesimo modo di ripartire da capo cambiando una maiuscola.
+ */
+export const CAMPI_CHE_IDENTIFICANO_LA_DOMANDA = Object.freeze({
+    library_list: Object.freeze({ origin: 'all', file_type: 'all' }),
+    library_search: Object.freeze({ query: '' }),
+})
+
+/**
+ * I campi che dicono soltanto *dove* si è arrivati, o *quanti* prenderne.
+ * ⛔ NON servono più a costruire la firma (la firma è per inclusione, vedi il blocco qui sopra).
+ * Restano perché il cancello anti-deriva li usa per classificare i campi dello schema: filtro
+ * dichiarato, cursore noto, o flag di sblocco — e nient'altro è ammesso senza una decisione.
+ */
+export const CAMPI_DI_PAGINAZIONE = ['page_token', 'pageToken', 'cursor', 'offset', 'next_offset', 'nextOffset', 'page', 'page_size', 'pageSize', 'limit']
+
+/** Il campo con cui il modello chiede ESPLICITAMENTE di andare oltre il tetto. Nome nel contratto col kernel: non si traduce e non si mostra a schermo. */
+export const CAMPO_SFOGLIA_TUTTO = 'browse_every_page'
+
+/**
+ * La firma di uno sfogliamento: l'attrezzo più i campi che identificano la sua domanda, in ordine
+ * stabile, ognuno col suo default quando il modello non lo scrive. Cambiare `origin` è un'altra
+ * domanda; cambiare `page_token`, `page_size` o il flag di sblocco è la stessa domanda — e il flag
+ * resta fuori apposta, altrimenti accenderlo farebbe ripartire il conteggio da capo.
+ * Pura: nessun I/O.
+ *
+ * ⛔ Un attrezzo che non dichiara i suoi campi LANCIA, e non ricade su «nessun filtro»: una firma
+ * costruita al buio conterebbe insieme domande diverse senza dirlo a nessuno. Chi aggancia un
+ * terzo attrezzo al tetto se ne accorge alla prima chiamata, non fra sei mesi leggendo un log.
+ */
+export function firmaDiSfogliamento(nome, argomenti) {
+    const dichiarati = Object.prototype.hasOwnProperty.call(CAMPI_CHE_IDENTIFICANO_LA_DOMANDA, nome)
+        ? CAMPI_CHE_IDENTIFICANO_LA_DOMANDA[nome]
+        : null
+    if (!dichiarati) {
+        throw new TypeError(`firmaDiSfogliamento: l'attrezzo "${nome}" non dichiara in CAMPI_CHE_IDENTIFICANO_LA_DOMANDA quali campi identificano la sua domanda, e senza quelli la firma non misurerebbe niente`)
+    }
+    const dati = argomenti && typeof argomenti === 'object' ? argomenti : {}
+    const filtri = Object.keys(dichiarati).sort().map((campo) => {
+        const grezzo = dati[campo] ?? dichiarati[campo]
+        const valore = typeof grezzo === 'string' ? grezzo.trim().toLowerCase() : grezzo
+        return `${campo}=${JSON.stringify(valore ?? null)}`
+    })
+    return `${nome}\x00${filtri.join('\x1f')}`
+}
+
+/**
+ * ⭐ Il tetto di iniziativa è DICHIARATO, non misurato — e detto, invece di spacciarlo per tarato.
+ * Due pagine bastano a ogni domanda che non sia «agisci su tutti»: la prima porta già il TOTALE.
+ */
+export const PAGINE_SENZA_RICHIESTA = 2
+
+/*
+ * ⛔⛔ IL FONDO ASSOLUTO È UN CONTO, NON UNA PREFERENZA — e la prima stesura lo metteva a DODICI,
+ * cioè UNA PAGINA PIÙ DELL'INCIDENTE che questa riga esiste per impedire. Sembrava un numero
+ * scelto bene, e non lo era.
+ *
+ * ⛔ Ma abbassarlo «sotto le undici» sarebbe stato peggio, e il conto lo dimostra: la SECONDA
+ *   metà di BC-10 — quella in cui TALOS ha fatto la cosa GIUSTA — è contare i 216 file della
+ *   Libreria dell'owner per cancellarne 214. Con `page_size` al suo massimo vero
+ *   (`MAX_VOCI_PAGINA = 20` in `library-store.mjs`, letto alla fonte il 13/09/2026) quei 216 file
+ *   stanno in ceil(216/20) = **11 pagine**. Un fondo a 10 spegnerebbe il lavoro legittimo insieme
+ *   alla valanga. ⇒ Non esiste un numero di PAGINE sotto l'incidente che salvi il caso legittimo,
+ *   perché il caso legittimo È lo stesso traffico dell'incidente: a separarli non è la quantità,
+ *   è il flag — e su propria iniziativa il modello si ferma a DUE, mai a undici.
+ *
+ * ⇒ Quindi il fondo è esattamente il minimo che lascia finire il caso legittimo dichiarato, e non
+ *   una pagina di più. È scritto come il conto che è, così chi cambia i numeri vede che cosa sta
+ *   cambiando, e la prova rifà l'aritmetica invece di ricopiare l'undici.
+ *
+ * ⛔ E il fondo VERO non è questo numero: è il TOTALE che l'elenco stesso dichiara (vedi
+ *   `registraEsitoDiSfogliamento`). Servite tutte le voci che esistono, la pagina dopo è rifiutata
+ *   qualunque pagina sia — un tetto MISURATO sul dato, non sulla nostra idea di quanto sia troppo.
+ *   Il conto in pagine resta come rete per l'elenco che il totale non lo dichiara, e per il modello
+ *   che chiede `page_size: 1` e trasformerebbe 216 voci in 216 giri.
+ */
+export const VOCI_PER_PAGINA_MASSIME = 20
+export const VOCI_DELL_INCIDENTE = 216
+export const PAGINE_MASSIME_PER_ELENCO = Math.ceil(VOCI_DELL_INCIDENTE / VOCI_PER_PAGINA_MASSIME)
+
+/** Il flag di sblocco vale solo se è `true` davvero: la stringa "false" e lo zero non aprono niente. */
+export function sfogliaTuttoRichiesto(argomenti) {
+    const valore = argomenti && typeof argomenti === 'object' ? argomenti[CAMPO_SFOGLIA_TUTTO] : undefined
+    return valore === true || valore === 'true'
+}
+
+/**
+ * Decide se questa pagina dello stesso elenco si serve o si rifiuta, e conta quelle servite.
+ *
+ * Torna `{ permesso: true, pagina, coda }` — `coda` è la riga da attaccare all'esito, vuota
+ * finché non serve — oppure `{ permesso: false, pagina, messaggio }`, e allora lo store NON va
+ * chiamato: il messaggio è già la risposta per il modello.
+ *
+ * ⛔ `registro` che non è una Map LANCIA, e non è pignoleria: è la lezione del `catch` giusto che
+ * nasconde il bug sbagliato. Una guardia che, sbagliato l'aggancio, ricade in silenzio su
+ * «permesso» sarebbe di nuovo una guardia che passa sia col difetto sia senza. ⇒ Chi chiama la
+ * invoca FUORI dal proprio `try`, così un errore di contratto non si traveste da
+ * «library_list failed».
+ *
+ * ⛔ Una pagina conta come servita nel momento in cui è permessa, anche se poi lo store fallisce:
+ * il tetto protegge dal numero di GIRI, e un giro speso male è speso lo stesso.
+ * Pura a parte la Map che il chiamante possiede: nessun I/O.
+ */
+export function decisioneDiSfogliamento({
+    nome, argomenti, registro,
+    tetto = PAGINE_SENZA_RICHIESTA,
+    tettoAssoluto = PAGINE_MASSIME_PER_ELENCO,
+} = {}) {
+    if (!(registro instanceof Map)) {
+        throw new TypeError('decisioneDiSfogliamento: serve il registro degli sfogliamenti (Map), altrimenti il tetto non esiste')
+    }
+    const firma = firmaDiSfogliamento(nome, argomenti)
+    const stato = registro.get(firma) ?? { pagine: 0, voci: 0, totale: null }
+    const servite = stato.pagine
+    const pagina = servite + 1
+    const chiesto = sfogliaTuttoRichiesto(argomenti)
+
+    if (pagina > tettoAssoluto) {
+        return {
+            permesso: false,
+            pagina,
+            messaggio: `REFUSED: ${servite} pages of this same Library listing have already been served in this run`
+                + ` (same tool, same filters — only the page cursor changed), and ${tettoAssoluto} is the hard ceiling.`
+                + ` \`${CAMPO_SFOGLIA_TUTTO}\` does not raise it. Answer with what you already have, narrow the listing with`
+                + ' the origin/file_type filters, or use library_search with a keyword to find one specific file.',
+        }
+    }
+    /*
+     * ⛔⛔ IL FONDO MISURATO SUL DATO. La pagina 1 ha già detto quante voci esistono; quando ne
+     * abbiamo servite almeno altrettante, dopo l'ultima non c'è niente, e chiederla è un giro
+     * speso per farsi dire «fine elenco». Vale anche col flag acceso: chi ha chiesto TUTTO ha
+     * avuto tutto. ⛔ Sta PRIMA del tetto di iniziativa apposta, così una Libreria piccola ferma
+     * già la pagina 2 con la ragione giusta invece che con quella generica.
+     */
+    if (Number.isFinite(stato.totale) && servite > 0 && stato.voci >= stato.totale) {
+        return {
+            permesso: false,
+            pagina,
+            messaggio: `REFUSED: this listing is finished — you have already received all ${stato.totale}`
+                + ` ${stato.totale === 1 ? 'entry' : 'entries'} in this run, across ${servite} page(s).`
+                + ' There is nothing after the last one: answer from what you have.',
+        }
+    }
+    if (pagina > tetto && !chiesto) {
+        return {
+            permesso: false,
+            pagina,
+            messaggio: `REFUSED: this would be page ${pagina} of the same Library listing`
+                + ` (same tool, same filters — only the page cursor changed), and one listing is served at most ${tetto} pages`
+                + ' on your own initiative. Page 1 already reported the TOTAL, so "how many files" and "what is in the Library"'
+                + ' are answerable without paging at all. To find one specific file, use library_search with a keyword.'
+                + ` If — and only if — the person explicitly asked to see or act on EVERY entry, call ${nome} again with`
+                + ` \`${CAMPO_SFOGLIA_TUTTO}: true\` and the same filters (at most ${tettoAssoluto} pages of one listing).`,
+        }
+    }
+
+    registro.set(firma, { ...stato, pagine: pagina })
+    if (pagina === tetto) {
+        return {
+            permesso: true,
+            pagina,
+            coda: `⛔ That was page ${pagina} of ${tetto}: this listing gets no further pages on your own initiative.`
+                + ' The total reported above is already the full count, so answer from it.'
+                + ` If — and only if — the person explicitly asked to see or act on EVERY entry, call ${nome} again with`
+                + ` \`${CAMPO_SFOGLIA_TUTTO}: true\` and the same filters.`,
+        }
+    }
+    if (pagina > tetto) {
+        return {
+            permesso: true,
+            pagina,
+            coda: `⛔ Page ${pagina} of at most ${tettoAssoluto} for this listing (\`${CAMPO_SFOGLIA_TUTTO}\` is on).`
+                + ' Stop as soon as you have what the person actually asked for.',
+        }
+    }
+    return { permesso: true, pagina, coda: '' }
+}
+
+/**
+ * Annota che cosa quell'elenco ha davvero servito: quante voci, e quante ne dichiara in tutto.
+ * Va chiamata SUBITO DOPO lo store, col risultato ancora GREZZO — il totale vive lì dentro, e
+ * dopo `formattaListaLibreria` sarebbe solo una parola in mezzo a un testo.
+ *
+ * ⛔ Non inventa niente quando il risultato non porta un totale (cursore scaduto, deriva dei
+ * filtri, uno store che non lo dichiara): tiene quello di prima e lascia lavorare il conto in
+ * pagine. Un fondo dedotto da un totale assente sarebbe un numero che sembra misurato e non lo è.
+ *
+ * ⛔ Una firma mai permessa non si annota: se lo stato non c'è, è perché quella pagina non è
+ * passata dal cancello, e scrivere qui la creerebbe dal nulla.
+ */
+export function registraEsitoDiSfogliamento({ registro, nome, argomenti, risultato } = {}) {
+    if (!(registro instanceof Map)) {
+        throw new TypeError('registraEsitoDiSfogliamento: serve il registro degli sfogliamenti (Map)')
+    }
+    const stato = registro.get(firmaDiSfogliamento(nome, argomenti))
+    if (!stato) return
+    const voci = Array.isArray(risultato && risultato.pagina) ? risultato.pagina.length : 0
+    const totale = risultato && Number.isFinite(risultato.totale) ? risultato.totale : stato.totale
+    registro.set(firmaDiSfogliamento(nome, argomenti), { ...stato, voci: stato.voci + voci, totale })
 }
 
 export function formattaRicercaLibreria(risultato) {
@@ -6456,6 +6769,25 @@ export async function talosLavora({
     let puntoDiFermata = null
     /** ⭐ 08/09/2026 — la valanga di chiamate identiche ha un esito SUO: né 'concluso', né 'fermato' su richiesta di una persona. Vedi comeFinita. */
     let fermatoPerRipetizione = null
+    /*
+     * ⭐⭐⭐ BC-10 (13/09/2026) — quante pagine dello STESSO elenco sono già state chieste in
+     * QUESTO GIRO, e quante voci ne sono uscite.
+     *
+     * ⛔⛔ L'AMBITO È IL GIRO, NON LA SESSIONE, e i messaggi di rifiuto lo dicono con quella
+     * parola. La prima stesura scriveva al modello «in this session»: questa Map nasce e muore
+     * dentro una chiamata di `talosLavora`, cioè un turno (`agent-service.mjs` ne apre una nuova a
+     * ogni messaggio, passando la storia in `messaggiIniziali`), quindi il turno dopo riparte da
+     * zero. Un nome più largo della cosa misurata è il difetto che questo progetto ha imparato a
+     * riconoscere, e valeva anche qui. ⇒ Rischio residuo DICHIARATO, non risolto: N turni possono
+     * servire due pagine ciascuno. Alzare l'ambito vorrebbe dire far vivere il registro nell'host
+     * e passarlo qui dentro — fuori da questo file, e non si finge di averlo fatto.
+     *
+     * Vive qui, accanto agli altri stati del task, e non dentro una risposta:
+     * la paginazione attraversa i GIRI (una pagina per giro), quindi un conteggio interno a una
+     * sola risposta non la vedrebbe mai — è esattamente il motivo per cui la guardia della
+     * valanga, che conta dentro una risposta, non poteva accorgersene.
+     */
+    const sfogliamenti = new Map()
     /** ⭐ Stadio A: quante volte questo task ha compattato la conversazione. */
     let compattazioni = 0
     /*
@@ -8214,11 +8546,28 @@ export async function talosLavora({
                         esito = 'the project Library is not configured on this harness: no store was set.'
                     }
                     else {
-                        try {
-                            esito = formattaListaLibreria(await onLibreriaLista(argomenti))
+                        /*
+                         * ⛔⛔ BC-10: il tetto sulle pagine si decide PRIMA e FUORI dal `try`, per due
+                         * ragioni distinte. Prima: la pagina di troppo non deve arrivare allo store —
+                         * si risponde a parole, come per gli argomenti assenti. Seconda: se
+                         * `decisioneDiSfogliamento` lancia (registro sbagliato), quell'errore di
+                         * contratto deve uscire allo scoperto e non travestirsi da «library_list failed».
+                         */
+                        const sfoglia = decisioneDiSfogliamento({ nome, argomenti, registro: sfogliamenti })
+                        if (!sfoglia.permesso) {
+                            esito = sfoglia.messaggio
                         }
-                        catch (rotto) {
-                            esito = `library_list failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                        else {
+                            try {
+                                const grezzo = await onLibreriaLista(argomenti)
+                                /* ⛔ BC-10: il TOTALE dichiarato dall'elenco è il fondo vero — annotato qui, dove il risultato è ancora grezzo. */
+                                registraEsitoDiSfogliamento({ registro: sfogliamenti, nome, argomenti, risultato: grezzo })
+                                const testo = formattaListaLibreria(grezzo)
+                                esito = sfoglia.coda ? `${testo}\n\n${sfoglia.coda}` : testo
+                            }
+                            catch (rotto) {
+                                esito = `library_list failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            }
                         }
                     }
                 }
@@ -8227,11 +8576,22 @@ export async function talosLavora({
                         esito = 'the project Library is not configured on this harness: no store was set.'
                     }
                     else {
-                        try {
-                            esito = formattaRicercaLibreria(await onLibreriaCerca(argomenti))
+                        /* ⛔ BC-10: stesso tetto del fratello `library_list` — qui il cursore si chiama `offset`, ed è dentro CAMPI_DI_PAGINAZIONE per lo stesso motivo. Una `query` diversa è un'altra domanda e riparte da pagina 1: è nella firma. */
+                        const sfoglia = decisioneDiSfogliamento({ nome, argomenti, registro: sfogliamenti })
+                        if (!sfoglia.permesso) {
+                            esito = sfoglia.messaggio
                         }
-                        catch (rotto) {
-                            esito = `library_search failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                        else {
+                            try {
+                                const grezzo = await onLibreriaCerca(argomenti)
+                                /* ⛔ BC-10: come il fratello `library_list` — il totale dei risultati è il fondo vero di questa ricerca. */
+                                registraEsitoDiSfogliamento({ registro: sfogliamenti, nome, argomenti, risultato: grezzo })
+                                const testo = formattaRicercaLibreria(grezzo)
+                                esito = sfoglia.coda ? `${testo}\n\n${sfoglia.coda}` : testo
+                            }
+                            catch (rotto) {
+                                esito = `library_search failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                            }
                         }
                     }
                 }
