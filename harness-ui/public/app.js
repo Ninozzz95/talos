@@ -18349,6 +18349,27 @@ var init_errori = __esm({
   }
 });
 
+// src/components/ragionamento.js
+function formattaDurataRagionamento(secondi) {
+  const totale2 = Math.max(0, Math.round(Number(secondi) || 0));
+  if (totale2 < 60) return `${totale2} s`;
+  const minuti = Math.floor(totale2 / 60);
+  const resto = totale2 % 60;
+  return resto ? `${minuti} min ${resto} s` : `${minuti} min`;
+}
+function etichettaRagionamento({ inCorso = false, secondi = null } = {}) {
+  if (inCorso) return "Sta ragionando…";
+  if (secondi === null || secondi === void 0 || !Number.isFinite(Number(secondi))) return "Ha ragionato";
+  if (Number(secondi) < 1) return "Ha ragionato poco";
+  return `Ha ragionato per ${formattaDurataRagionamento(secondi)}`;
+}
+var ETICHETTA_INTERRUTTORE_RAGIONAMENTO;
+var init_ragionamento = __esm({
+  "src/components/ragionamento.js"() {
+    ETICHETTA_INTERRUTTORE_RAGIONAMENTO = "Apri il ragionamento mentre scrive";
+  }
+});
+
 // src/components/cartella-ritratto.js
 function numeroItaliano(n) {
   const v = Number(n);
@@ -19138,6 +19159,7 @@ var init_app = __esm({
     init_tooltip();
     init_permessi();
     init_errori();
+    init_ragionamento();
     init_testo_pagina();
     init_cartella_ritratto();
     init_consumo_sessione();
@@ -22095,7 +22117,7 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
           ["Animazione risposta", etichetta2("streamingAnimation", a.streamingAnimation)],
           ["Forma del composer", etichetta2("composerShape", a.composerShape)],
           ["Chat a tutta larghezza", a.chatFullWidth ? "Sì" : "No"],
-          ["Ragionamento mostrato", state.showReasoning ? "Sì" : "No"]
+          ["Ragionamento aperto mentre scrive", state.showReasoning ? "Sì" : "No"]
         ]);
         const regole = Object.keys(state.permessiPerAttrezzo || impostazioni.chat.permessiPerAttrezzo || {}).length;
         riempiFatti("settingsToolsFacts", [
@@ -24981,14 +25003,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
             const reasoningRow = document.createElement("label");
             reasoningRow.className = "sheet-toggle-row";
             const reasoningLabel = document.createElement("span");
-            reasoningLabel.textContent = "Mostra ragionamento";
+            reasoningLabel.textContent = ETICHETTA_INTERRUTTORE_RAGIONAMENTO;
             const reasoningToggle = document.createElement("input");
             reasoningToggle.type = "checkbox";
             reasoningToggle.className = "talos-switch";
             reasoningToggle.setAttribute("role", "switch");
             reasoningToggle.id = "showReasoningToggle";
             reasoningToggle.checked = state.showReasoning;
-            reasoningToggle.setAttribute("aria-label", "Mostra ragionamento");
+            reasoningToggle.setAttribute("aria-label", ETICHETTA_INTERRUTTORE_RAGIONAMENTO);
             reasoningToggle.addEventListener("change", () => {
               state.showReasoning = reasoningToggle.checked;
               salvaPreferenzeChatDesktop();
@@ -25770,14 +25792,14 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         riga.className = "talos-setting";
         const etichetta2 = document.createElement("span");
         etichetta2.className = "talos-setting__label";
-        etichetta2.textContent = "Mostra ragionamento";
+        etichetta2.textContent = ETICHETTA_INTERRUTTORE_RAGIONAMENTO;
         const interruttore = document.createElement("input");
         interruttore.type = "checkbox";
         interruttore.className = "talos-switch";
         interruttore.setAttribute("role", "switch");
         interruttore.id = "showReasoningToggle";
         interruttore.checked = state.showReasoning;
-        interruttore.setAttribute("aria-label", "Mostra ragionamento");
+        interruttore.setAttribute("aria-label", ETICHETTA_INTERRUTTORE_RAGIONAMENTO);
         interruttore.addEventListener("change", () => {
           state.showReasoning = interruttore.checked;
           salvaPreferenzeChatDesktop();
@@ -26915,12 +26937,53 @@ ${nota?.contenuto || ""}`.trim(), "Nota copiata"),
         return { article, summaryText, detail, dettaglio: riga.dettaglio };
       }
       function aggiornaVisibilitaRagionamento() {
-        $$(".real-reasoning-note").forEach((article) => {
-          article.hidden = !state.showReasoning;
-          article.setAttribute("aria-hidden", String(!state.showReasoning));
-        });
+        for (const voce of state.realSession.ragionamentoBubble.values()) {
+          if (voce.article.hidden || voce.inizio === null) continue;
+          if (voce.article.querySelector(":scope > .talos-activity__head")?.dataset.toccatoDaUtente === "si") continue;
+          impostaAperturaRagionamento(voce.article, state.showReasoning);
+          voce.apertaDaSola = state.showReasoning;
+        }
         const toggle = $2("#showReasoningToggle");
         if (toggle) toggle.checked = state.showReasoning;
+      }
+      function adessoRagionamentoMs() {
+        return typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+      }
+      function impostaAperturaRagionamento(card, aperto) {
+        const testa = card?.querySelector(":scope > .talos-activity__head");
+        const corpo = card?.querySelector(":scope > .talos-activity__body");
+        if (!testa || !corpo) return;
+        testa.setAttribute("aria-expanded", String(aperto));
+        corpo.hidden = !aperto;
+      }
+      function ragionamentoAperto(card) {
+        return card?.querySelector(":scope > .talos-activity__head")?.getAttribute("aria-expanded") === "true";
+      }
+      function etichettaSchedaRagionamento(card, testo3) {
+        const etichetta2 = card?.querySelector(":scope > .talos-activity__head .tool-note-summary-text");
+        if (etichetta2?.textContent === testo3) return;
+        if (etichetta2) etichetta2.textContent = testo3;
+      }
+      function mostraRagionamento(voce) {
+        chiudiBatchTool();
+        voce.article.hidden = false;
+        const inCorso = voce.inizio !== null;
+        etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso }));
+        if (inCorso && state.showReasoning) {
+          impostaAperturaRagionamento(voce.article, true);
+          voce.apertaDaSola = true;
+        }
+      }
+      function chiudiRagionamento(voce) {
+        const secondi = voce.inizio === null ? null : (adessoRagionamentoMs() - voce.inizio) / 1e3;
+        etichettaSchedaRagionamento(voce.article, etichettaRagionamento({ inCorso: false, secondi }));
+        const toccata = voce.article.querySelector(":scope > .talos-activity__head")?.dataset.toccatoDaUtente === "si";
+        if (voce.apertaDaSola && !toccata) impostaAperturaRagionamento(voce.article, false);
+        voce.apertaDaSola = false;
+      }
+      function chiudiRagionamentiInCorso() {
+        for (const voce of state.realSession.ragionamentoBubble.values()) chiudiRagionamento(voce);
+        state.realSession.ragionamentoBubble.clear();
       }
       function appendArtifactCard(titolo2, id) {
         const src = API(`/api/v1/artifacts/${encodeURIComponent(id)}`);
@@ -30170,20 +30233,29 @@ ${testo3}` : testo3;
            */
           case "ReasoningMessageStart": {
             if (!state.realSession.chiusaDalServer) mostraAttesaRisposta("reasoning");
-            if (state.showReasoning) chiudiBatchTool();
-            const bubble = appendToolNote("Ragionamento", { classeExtra: "real-reasoning-note", glifo: "💭" });
-            bubble.article.hidden = !state.showReasoning;
-            bubble.article.setAttribute("aria-hidden", String(!state.showReasoning));
-            state.realSession.ragionamentoBubble.set(evento.messageId, { ...bubble, grezzo: "", renderStato: { prefisso: null, nodiCoda: [] } });
+            const bubble = appendToolNote("Ragionamento", { classeExtra: "real-reasoning-note", glifo: "💭", aperto: true });
+            bubble.article.hidden = true;
+            const testaRagionamento = bubble.article.querySelector(":scope > .talos-activity__head");
+            testaRagionamento?.addEventListener("click", () => {
+              testaRagionamento.dataset.toccatoDaUtente = "si";
+            });
+            state.realSession.ragionamentoBubble.set(evento.messageId, {
+              ...bubble,
+              grezzo: "",
+              renderStato: { prefisso: null, nodiCoda: [] },
+              inizio: state.realSession.deferHistoricalRendering ? null : adessoRagionamentoMs(),
+              apertaDaSola: false
+            });
             break;
           }
           case "ReasoningMessageContent": {
             const voce = state.realSession.ragionamentoBubble.get(evento.messageId);
             if (!voce) break;
             voce.grezzo += evento.delta;
+            if (voce.article.hidden && voce.grezzo.trim() !== "") mostraRagionamento(voce);
             if (!state.realSession.deferHistoricalRendering) {
               renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
-              if (state.showReasoning) scrollStreamingOutput(voce.article);
+              if (ragionamentoAperto(voce.article)) scrollStreamingOutput(voce.article);
             }
             break;
           }
@@ -30192,6 +30264,7 @@ ${testo3}` : testo3;
             if (voce && state.realSession.deferHistoricalRendering) {
               renderizzaMarkdownIncrementale(voce.detail, voce.renderStato, voce.grezzo);
             }
+            if (voce) chiudiRagionamento(voce);
             state.realSession.ragionamentoBubble.delete(evento.messageId);
             if (!state.realSession.chiusaDalServer) mostraAttesaRisposta("preparing");
             break;
@@ -30458,6 +30531,7 @@ ${testo3}` : testo3;
             chiudiBatchTool();
             aggiornaTickGiro({ tono: null });
             spegniGiriInCorso($2("#conversation"));
+            chiudiRagionamentiInCorso();
             state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
             syncRunComposerState();
             mostraSuggerimentoComposer(suggerimentoDaUltimoAttrezzo());
@@ -30499,6 +30573,7 @@ ${testo3}` : testo3;
             if (guida) spiegazione.rimedi = [guida.replace(/^\s*—\s*/, ""), ...spiegazione.rimedi];
             appendStatusNote("", true, { spiegazione });
             spegniGiriInCorso($2("#conversation"));
+            chiudiRagionamentiInCorso();
             state.realSession.eventoTerminaleVisto = !state.realSession.redirectPendingId;
             syncRunComposerState();
             break;
@@ -31700,13 +31775,13 @@ ${testo3}` : testo3;
         reasoningSection.append(effortPicker.elemento);
         const reasoningToggle = document.createElement("label");
         reasoningToggle.className = "workspace-chooser-inline-toggle";
-        reasoningToggle.innerHTML = "<span><strong>Mostra ragionamento</strong><small>Visualizza il processo solo quando ti serve.</small></span>";
+        reasoningToggle.innerHTML = `<span><strong>${ETICHETTA_INTERRUTTORE_RAGIONAMENTO}</strong><small>Spento, resta una riga chiusa che apri quando ti serve.</small></span>`;
         const reasoningInput = document.createElement("input");
         reasoningInput.type = "checkbox";
         reasoningInput.className = "talos-switch";
         reasoningInput.setAttribute("role", "switch");
         reasoningInput.checked = local.showReasoning;
-        reasoningInput.setAttribute("aria-label", "Mostra ragionamento");
+        reasoningInput.setAttribute("aria-label", ETICHETTA_INTERRUTTORE_RAGIONAMENTO);
         reasoningInput.addEventListener("change", () => {
           local.showReasoning = reasoningInput.checked;
         });

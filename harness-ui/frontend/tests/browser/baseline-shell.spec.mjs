@@ -916,26 +916,60 @@ test('long response content owns overflow locally without widening the page', as
   expect(metrics.codeScrollWidth).toBeGreaterThan(metrics.codeWidth);
 });
 
-test('il ragionamento resta nascosto finché l’utente non attiva Mostra ragionamento', async ({ page }) => {
+/*
+ * ⛔⛔ 13/09 sera — QUESTA PROVA FISSAVA IL COMPORTAMENTO VECCHIO, e l'owner l'ha cambiato apposta.
+ *   Si chiamava «il ragionamento resta nascosto finché l'utente non attiva Mostra ragionamento». Dopo
+ *   una ricerca (Hermes desktop, assistant-ui, AI SDK Elements, NN/g) la decisione è: il ragionamento
+ *   non sparisce, si COMPRIME; di serie resta sempre compresso; l'interruttore dice se aprirlo mentre il
+ *   modello scrive. Riscritta per dire la regola nuova, non allentata per far passare quella vecchia.
+ */
+test('RAGIONAMENTO-COMPRESSO — si comprime invece di sparire: riga chiusa di serie, aperta mentre scrive solo se lo chiedi', async ({ page }) => {
+  /* ⛔ Il clic sul foglio «Modello» veniva intercettato prima dal velo d'avvio e poi dalla finestra del primo avvio: si salta l'introduzione e si aspetta che il velo sia rimosso. */
+  await page.addInitScript(() => localStorage.setItem('talos.harness.desktop.intro.v1', JSON.stringify({ esito: 'saltata' })));
   await page.goto('/');
-  await page.evaluate(() => {
-    const runtime = window.__talosHarnessUiRuntime;
-    const session = runtime.realSessionState;
+  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
+  const pulisci = () => page.evaluate(() => {
+    const session = window.__talosHarnessUiRuntime.realSessionState;
     document.querySelector('#conversation')?.replaceChildren();
     session.sequenzeViste.clear();
     session.ragionamentoBubble.clear();
-    runtime.handleRealEvent({ type: 'ReasoningMessageStart', messageId: 'reasoning-toggle', _sequenza: 90001 }, session.generation);
-    runtime.handleRealEvent({ type: 'ReasoningMessageContent', messageId: 'reasoning-toggle', delta: 'Dettaglio interno', _sequenza: 90002 }, session.generation);
   });
-  await expect(page.locator('.real-reasoning-note')).toBeHidden();
+  const eventi = (lista) => page.evaluate((lista) => {
+    const runtime = window.__talosHarnessUiRuntime;
+    for (const evento of lista) runtime.handleRealEvent(evento, runtime.realSessionState.generation);
+  }, lista);
+  const nota = page.locator('.real-reasoning-note');
+  const testa = nota.locator(':scope > .talos-activity__head');
+
+  await pulisci();
+  await eventi([{ type: 'ReasoningMessageStart', messageId: 'reasoning-toggle', _sequenza: 90001 }]);
+  await expect(nota, 'un ragionamento senza testo non ha riga').toBeHidden();
+  await eventi([{ type: 'ReasoningMessageContent', messageId: 'reasoning-toggle', delta: 'Dettaglio interno', _sequenza: 90002 }]);
+  await expect(nota, 'al primo testo la riga compare, anche con l’interruttore spento').toBeVisible();
+  await expect(testa, 'di serie resta compressa').toHaveAttribute('aria-expanded', 'false');
+  await expect(testa).toContainText('Sta ragionando…');
+  await eventi([{ type: 'ReasoningMessageEnd', messageId: 'reasoning-toggle', _sequenza: 90003 }]);
+  await expect(testa).toContainText('Ha ragionato');
+  await expect(testa, 'un ragionamento finito non dice più che sta ragionando').not.toContainText('Sta ragionando');
+
   await page.locator('[data-open-sheet="model"]').click();
   const toggle = page.locator('#showReasoningToggle');
   await expect(toggle).toBeVisible();
   await expect(toggle).not.toBeChecked();
+  await expect(toggle).toHaveAttribute('aria-label', 'Apri il ragionamento mentre scrive');
   await toggle.check();
-  await expect(page.locator('.real-reasoning-note')).toBeVisible();
-  await toggle.uncheck();
-  await expect(page.locator('.real-reasoning-note')).toBeHidden();
+  await expect(nota, 'accendere l’interruttore non fa sparire né riaprire un ragionamento già finito').toBeVisible();
+  await expect(testa).toHaveAttribute('aria-expanded', 'false');
+
+  await pulisci();
+  await eventi([
+    { type: 'ReasoningMessageStart', messageId: 'reasoning-live', _sequenza: 90011 },
+    { type: 'ReasoningMessageContent', messageId: 'reasoning-live', delta: 'Leggo i file', _sequenza: 90012 },
+  ]);
+  await expect(testa, 'con l’interruttore acceso si apre mentre scrive').toHaveAttribute('aria-expanded', 'true');
+  await eventi([{ type: 'ReasoningMessageEnd', messageId: 'reasoning-live', _sequenza: 90013 }]);
+  await expect(testa, 'e si richiude da sola quando ha finito').toHaveAttribute('aria-expanded', 'false');
 });
 
 test('REASONING-INDICATOR-01 — il ragionamento nascosto mantiene un indicatore visibile e annunciato', async ({ page }) => {
@@ -949,7 +983,8 @@ test('REASONING-INDICATOR-01 — il ragionamento nascosto mantiene un indicatore
     session.ragionamentoBubble.clear();
     runtime.handleRealEvent({ type: 'ReasoningMessageStart', messageId: 'reasoning-live', _sequenza: 90011 }, session.generation);
   });
-  const indicator = page.locator('.real-waiting-note');
+  /* ⛔ 13/09 sera — `.real-waiting-note` non esiste più (zero occorrenze nel monolite): questa prova era rossa anche col pacchetto di prima. L'attesa è `.talos-waiting`, con `role="status"` (`creaAttesa`). */
+  const indicator = page.locator('.talos-waiting');
   await expect(indicator).toBeVisible();
   await expect(indicator).toHaveAttribute('role', 'status');
   await expect(indicator).toContainText('Ragionamento in corso');
@@ -977,7 +1012,14 @@ test('REDUCED-MOTION-02 — l’indicatore resta leggibile e CALMO con movimento
     const runtime = window.__talosHarnessUiRuntime;
     runtime.handleRealEvent({ type: 'ReasoningMessageStart', messageId: 'reasoning-reduced', _sequenza: 90021 }, runtime.realSessionState.generation);
   });
-  await expect(page.locator('.real-waiting-note')).toContainText('Ragionamento in corso');
+  await expect(page.locator('.talos-waiting')).toContainText('Ragionamento in corso'); // ⛔ 13/09 sera: era `.real-waiting-note`, selettore morto, rossa anche col pacchetto di prima
+  /*
+   * ⛔ 13/09 sera — RESTA ROSSA, per una seconda ragione che non è del ragionamento, e la si scrive invece di
+   *   inseguirla. Riparato il selettore, la prova arriva qui e trova 0 nodi `.talos-line-loader-node`: il
+   *   segnavia a linee esiste ancora nel codice, ma l'attesa non lo usa più — `creaAttesa` disegna l'orb
+   *   (`talos-assistant-orb`). Queste righe controllano l'animazione di un componente che in questo punto non
+   *   c'è: vanno riscritte sull'orb da chi tocca l'attesa, non spente.
+   */
   const punti = page.locator('.talos-line-loader-node');
   await expect(punti).toHaveCount(3);
   await expect(page.locator('.talos-line-loader-head, .run-activity-shimmer')).toHaveCount(0);
@@ -1213,12 +1255,53 @@ test('TOOL-BATCH-HIDDEN-REASONING-01 — il ragionamento nascosto non spezza il 
     runtime.handleRealEvent({ type: 'ReasoningMessageStart', messageId: 'reasoning-between', _sequenza: 90102 }, generation);
     runtime.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'tool-after', toolCallName: 'cerca', _sequenza: 90103 }, generation);
     return {
-      batches: document.querySelectorAll('.tool-batch').length,
-      rows: document.querySelectorAll('.tool-batch .real-tool-note').length,
+      /*
+       * ⛔⛔ 13/09 sera — QUESTA GUARDIA NON GUARDAVA NIENTE. `.tool-batch` e `.real-tool-note` non esistono
+       *   più nel monolite (zero occorrenze): era rossa col pacchetto di prima E con quello nuovo, con
+       *   0 gruppi e 0 righe, cioè per un selettore morto e non per il difetto che nomina. Il gruppo oggi è
+       *   la card `[data-c="ActivityBundle"]` (la nota del ragionamento è un bundle anche lei, e si esclude)
+       *   e la riga è `.talos-tool-row`. Morde perché la prova sotto, VISIBILE-02, pretende 2 gruppi sugli
+       *   stessi selettori: un selettore che non conta niente non passerebbe entrambe.
+       */
+      batches: document.querySelectorAll('#conversation [data-c="ActivityBundle"]:not(.real-reasoning-note)').length,
+      rows: document.querySelectorAll('#conversation [data-c="ActivityBundle"]:not(.real-reasoning-note) .talos-tool-row').length,
       reasoningHidden: document.querySelector('.real-reasoning-note')?.hidden ?? false,
     };
   });
   expect(batches).toEqual({ batches: 1, rows: 2, reasoningHidden: true });
+});
+
+test('TOOL-BATCH-REASONING-VISIBILE-02 — un ragionamento CON testo fra due comandi è un confine: due gruppi, in ordine', async ({ page }) => {
+  /*
+   * ⛔ Il verso contrario della prova qui sopra, nata col ragionamento compresso (13/09 sera): senza testo
+   *   il ragionamento non ha riga e non spezza il gruppo; con testo la riga c'è, e il comando che viene
+   *   dopo deve stare SOTTO di lei, non risalire nel gruppo di prima.
+   */
+  await page.goto('/');
+  const esito = await page.evaluate(() => {
+    const runtime = window.__talosHarnessUiRuntime;
+    const session = runtime.realSessionState;
+    document.querySelector('#conversation')?.replaceChildren();
+    session.sequenzeViste.clear();
+    session.batchAttivo = null;
+    session.ultimoBatchChiuso = null;
+    session.toolCallNomi.clear();
+    session.ragionamentoBubble.clear();
+    const generation = session.generation;
+    runtime.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'tool-before-v', toolCallName: 'leggi', _sequenza: 90151 }, generation);
+    runtime.handleRealEvent({ type: 'ReasoningMessageStart', messageId: 'reasoning-visible', _sequenza: 90152 }, generation);
+    runtime.handleRealEvent({ type: 'ReasoningMessageContent', messageId: 'reasoning-visible', delta: 'Prima guardo il README.', _sequenza: 90153 }, generation);
+    runtime.handleRealEvent({ type: 'ToolCallStart', toolCallId: 'tool-after-v', toolCallName: 'cerca', _sequenza: 90154 }, generation);
+    const gruppi = [...document.querySelectorAll('#conversation [data-c="ActivityBundle"]:not(.real-reasoning-note)')];
+    const nota = document.querySelector('.real-reasoning-note');
+    const segue = (a, b) => Boolean(a && b && (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING));
+    return {
+      batches: gruppi.length,
+      reasoningHidden: nota?.hidden ?? true,
+      ordine: segue(gruppi[0], nota) && segue(nota, gruppi[1]),
+    };
+  });
+  expect(esito).toEqual({ batches: 2, reasoningHidden: false, ordine: true });
 });
 
 test('TOOL-LIFECYCLE-SAME-ROW-01 — start, argomenti ed esito aggiornano la stessa riga', async ({ page }) => {
