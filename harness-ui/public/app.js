@@ -1643,6 +1643,196 @@ var init_avvio_sessione = __esm({
   }
 });
 
+// src/components/chat-foot.js
+function etichettaPermesso(permesso) {
+  return NOME_PERMESSO[permesso] || (typeof permesso === "string" && permesso.trim() ? permesso : "Permesso non scelto");
+}
+function etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo) {
+  const base = etichettaPermesso(permesso);
+  const regole = permessiPerAttrezzo && typeof permessiPerAttrezzo === "object" ? Object.values(permessiPerAttrezzo).filter(Boolean) : [];
+  if (regole.length === 0) return base;
+  return `${base} · ${regole.length} eccezion${regole.length === 1 ? "e" : "i"}`;
+}
+function nomeModelloUmano(id) {
+  if (typeof id !== "string" || !id.trim()) return "";
+  const grezzo = id.trim();
+  if (!/^local:/i.test(grezzo)) return grezzo.replace(/^~/u, "").split("/").pop();
+  let resto = grezzo.replace(/^local:/i, "").replace(/[-_.]gguf$/i, "");
+  const quant = /[-_](IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_]|$)/i.exec(resto);
+  const parametri = /(?:^|[-_])(\d+(?:[.,]\d+)?B)(?:[-_]A(\d+(?:[.,]\d+)?B))?(?=[-_]|$)/i.exec(resto);
+  let nome = resto;
+  if (parametri) nome = resto.slice(0, parametri.index);
+  nome = nome.replace(/[-_](GGUF|MLX|AWQ|GPTQ)$/i, "");
+  const pezzi = nome.split(/[-_]/).filter(Boolean);
+  if (pezzi.length > 1) pezzi.shift();
+  const pulito = pezzi.join(" ").replace(/\s+/g, " ").trim();
+  const parti = [pulito || resto];
+  if (parametri) parti.push(parametri[2] ? `${parametri[1]} (${parametri[2].replace(/^A/i, "")} attivi)` : parametri[1]);
+  if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, "_"));
+  return parti.filter(Boolean).join(" · ");
+}
+function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda = 0, soglia = 4 } = {}) {
+  if (Number(scrollHeight) <= Number(clientHeight)) return true;
+  const distanza = Number(scrollHeight) - Number(scrollTop) - Number(clientHeight);
+  if (!Number.isFinite(distanza)) return true;
+  return distanza <= Math.max(0, Number(coda) || 0) + soglia;
+}
+function dettaglioUtile(cosa, dettaglio) {
+  const pulisci = (t2) => String(t2 ?? "").replace(/[…\.]+$/u, "").trim().toLowerCase();
+  const a = pulisci(cosa);
+  const b = pulisci(dettaglio);
+  if (!b || !a) return String(dettaglio ?? "").trim();
+  if (a === b || a.startsWith(b) || b.startsWith(a)) return "";
+  return String(dettaglio).trim();
+}
+function tonoPermesso(permesso) {
+  if (permesso === "Full access") return "danger";
+  if (permesso === "Workspace write") return "warning";
+  return null;
+}
+function kilo2(n) {
+  const v = Number(n) || 0;
+  if (v < 1e3) return String(Math.round(v));
+  return `${(v / 1e3).toFixed(1).replace(".", ",")}k`;
+}
+function testoVelocitaLocale(modelloId, velocita) {
+  const id = String(modelloId || "");
+  if (!/^local:/i.test(id)) return "";
+  return String(velocita || "").trim();
+}
+function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {}) {
+  const sessione = usageSessione && typeof usageSessione === "object" ? usageSessione : usage;
+  if ((!usage || typeof usage !== "object") && (!sessione || typeof sessione !== "object")) return { tokenGiri: "", cache: "", giri: null, velocita: "" };
+  const prompt = Number(sessione?.prompt_tokens ?? 0) || 0;
+  const completion = Number(sessione?.completion_tokens ?? 0) || 0;
+  const cache = Number(sessione?.cached_tokens ?? 0) || 0;
+  const baseCache = Number.isFinite(sessione?.prompt_tokens_con_cache) ? sessione.prompt_tokens_con_cache : prompt;
+  const giriSessione = Number.isFinite(Number(sessione?.giri)) ? Number(sessione.giri) : null;
+  const giri = Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null;
+  const totale2 = prompt + completion;
+  const parti = [];
+  if (totale2 > 0) parti.push(`${kilo2(totale2)} token`);
+  if (giriSessione !== null) parti.push(`${giriSessione} gir${giriSessione === 1 ? "o" : "i"}${Number.isFinite(tettoGiri) && tettoGiri > 0 && sessione === usage ? ` su ${tettoGiri}` : ""}`);
+  const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond ?? sessione?.tokens_per_second ?? sessione?.tokensPerSecond);
+  return {
+    tokenGiri: parti.join(" · "),
+    cache: cache > 0 && baseCache > 0 ? `cache ${Math.round(cache / baseCache * 100)}%` : "",
+    giri,
+    velocita: Number.isFinite(throughput) && throughput > 0 ? `${Math.round(throughput)} token/s` : ""
+  };
+}
+function testoLatenza(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return "";
+  return ms >= 1e3 ? `primo token ${(ms / 1e3).toFixed(1).replace(".", ",")} s` : `primo token ${Math.round(ms)} ms`;
+}
+function scrivi(el25, testo3) {
+  if (!el25) return;
+  const t2 = testo3 || "";
+  if (el25.textContent !== t2) el25.textContent = t2;
+  el25.hidden = t2 === "";
+}
+function statoGiri(giri, tettoGiri) {
+  if (!Number.isFinite(Number(giri))) return null;
+  const n = Number(giri);
+  const tetto = Number(tettoGiri);
+  if (!Number.isFinite(tetto) || tetto <= 0) return n > 0 ? "quieto" : null;
+  const quota = n / tetto;
+  if (quota < 0.5) return null;
+  return quota >= 0.8 ? "vicino" : "quieto";
+}
+function aggiornaPiedeChat(piede, dati = {}) {
+  if (!piede) return;
+  const documentObj = piede.ownerDocument;
+  const tornaInFondo = piede.querySelector("#chatTornaInFondo");
+  if (tornaInFondo) {
+    tornaInFondo.hidden = dati.inFondo !== false;
+    if (!tornaInFondo.dataset.portaInFondo) {
+      tornaInFondo.dataset.portaInFondo = "1";
+      tornaInFondo.addEventListener("click", () => {
+        tornaInFondo.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
+      });
+    }
+  }
+  const striscia = piede.querySelector(".talos-status-strip");
+  if (striscia) {
+    const contattoPerso = dati.attivo === true && dati.contatto === "perso";
+    striscia.hidden = !dati.attivo || dati.inFondo === true && !contattoPerso;
+    striscia.classList.toggle("talos-status-strip--senza-contatto", contattoPerso);
+    if (!striscia.dataset.portaInFondo) {
+      striscia.dataset.portaInFondo = "1";
+      striscia.style.cursor = "pointer";
+      striscia.setAttribute("title", "Torna dove sta scrivendo");
+      striscia.addEventListener("click", (evento) => {
+        if (evento.target.closest("button")) return;
+        striscia.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
+      });
+    }
+    const cosa = striscia.querySelector("[data-run-what]");
+    if (cosa) {
+      cosa.replaceChildren();
+      cosa.append(documentObj.createTextNode(contattoPerso ? "Contatto col server perso" : dati.cosa || "TALOS sta lavorando"));
+      if (dati.dettaglio && !contattoPerso) {
+        cosa.append(documentObj.createTextNode(" · "));
+        const mono = documentObj.createElement("span");
+        mono.className = "talos-mono talos-measure";
+        mono.textContent = dati.dettaglio;
+        cosa.append(mono);
+      }
+    }
+    const meta2 = striscia.querySelector("[data-run-meta]");
+    const pezzi = [];
+    if (Number.isFinite(dati.giro)) pezzi.push(`giro ${dati.giro}`);
+    if (Number.isFinite(dati.secondi)) pezzi.push(`${Math.max(0, Math.round(dati.secondi))} s`);
+    scrivi(meta2, contattoPerso ? "non so se il giro sta ancora andando" : pezzi.join(" · "));
+    const ferma = striscia.querySelector(".stop-run");
+    if (ferma) {
+      ferma.disabled = contattoPerso;
+      ferma.title = contattoPerso ? "Il server non risponde: la richiesta di fermare non arriverebbe." : "";
+    }
+  }
+  const modello = piede.querySelector('[data-open-sheet="model"] .talos-chip__label');
+  if (modello) modello.textContent = dati.modello || "Scegli il modello";
+  const pillolaModello = piede.querySelector('[data-open-sheet="model"]');
+  if (pillolaModello) pillolaModello.title = dati.modelloId ? `Cambia modello · ${dati.modelloId}` : "Cambia modello";
+  const permesso = piede.querySelector('[data-open-sheet="permissions"]');
+  if (permesso) {
+    const label = permesso.querySelector(".talos-chip__label");
+    if (label) label.textContent = etichettaPermessoConEccezioni(dati.permesso, dati.permessiPerAttrezzo);
+    const regole = dati.permessiPerAttrezzo && typeof dati.permessiPerAttrezzo === "object" ? Object.entries(dati.permessiPerAttrezzo).filter(([, v]) => v) : [];
+    permesso.title = regole.length ? `Cambia il permesso · eccezioni per attrezzo: ${regole.map(([k, v]) => `${k} → ${v}`).join(", ")}` : "Cambia il permesso";
+    permesso.classList.remove("talos-badge--warning", "talos-badge--danger");
+    const tono = tonoPermesso(dati.permesso);
+    if (tono) permesso.classList.add(`talos-badge--${tono}`);
+  }
+  const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri, usageSessione: dati.usageSessione });
+  const giriChip = piede.querySelector("[data-runtime-giri]");
+  if (giriChip) {
+    const stato = statoGiri(u.giri, dati.tettoGiri);
+    giriChip.hidden = stato === null;
+    giriChip.classList.toggle("talos-badge--warning", stato === "vicino");
+    const n = giriChip.querySelector(".talos-mono");
+    if (n && u.giri !== null) n.textContent = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `${u.giri}/${dati.tettoGiri}` : String(u.giri);
+    giriChip.title = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `Giri del modello in questo invio, sul tetto di ${dati.tettoGiri} dichiarato dal kernel. Il numero accanto ai token conta invece tutta la sessione.` : "Giri del modello in questo invio. Il numero accanto ai token conta invece tutta la sessione.";
+  }
+  const costoChip = piede.querySelector("[data-runtime-costo]");
+  if (costoChip) {
+    costoChip.hidden = !dati.costo;
+    const n = costoChip.querySelector(".talos-mono");
+    if (n && dati.costo) n.textContent = dati.costo;
+  }
+  scrivi(piede.querySelector('[data-statusbar="tema"]'), testoVelocitaLocale(dati.modelloId, u.velocita));
+  scrivi(piede.querySelector("[data-runtime-usage]"), u.tokenGiri);
+  scrivi(piede.querySelector("[data-runtime-cache]"), u.cache);
+  scrivi(piede.querySelector("[data-runtime-latenza]"), testoLatenza(dati.latenzaMs) || u.velocita);
+}
+var NOME_PERMESSO;
+var init_chat_foot = __esm({
+  "src/components/chat-foot.js"() {
+    init_politiche();
+    NOME_PERMESSO = Object.freeze(Object.fromEntries(POLITICHE.map((p) => [p.valore, p.nome])));
+  }
+});
+
 // src/components/session-item.js
 function statoSessione(sessione) {
   let classe;
@@ -1671,6 +1861,7 @@ function oraCompatta(iso, adesso = /* @__PURE__ */ new Date()) {
 }
 function nomeModello(modello) {
   if (typeof modello !== "string" || modello.trim() === "") return null;
+  if (/^local:/i.test(modello.trim())) return nomeModelloUmano(modello) || modello.replace(/^local:/i, "");
   return modello.split("/").pop();
 }
 function el4(documentObj, tag2, className, testo3) {
@@ -1893,6 +2084,7 @@ var SEGNALE_NOVITA_MS, TONI2, ETICHETTE;
 var init_session_item = __esm({
   "src/components/session-item.js"() {
     init_consumo_sessione();
+    init_chat_foot();
     SEGNALE_NOVITA_MS = 6e4;
     TONI2 = Object.freeze({
       attesa: "warning",
@@ -5750,196 +5942,6 @@ function creaReportRow(ricerca, { document: doc = globalThis.document, aperta: a
 var init_ricerca = __esm({
   "src/components/ricerca.js"() {
     init_ricerca_dettaglio();
-  }
-});
-
-// src/components/chat-foot.js
-function etichettaPermesso(permesso) {
-  return NOME_PERMESSO[permesso] || (typeof permesso === "string" && permesso.trim() ? permesso : "Permesso non scelto");
-}
-function etichettaPermessoConEccezioni(permesso, permessiPerAttrezzo) {
-  const base = etichettaPermesso(permesso);
-  const regole = permessiPerAttrezzo && typeof permessiPerAttrezzo === "object" ? Object.values(permessiPerAttrezzo).filter(Boolean) : [];
-  if (regole.length === 0) return base;
-  return `${base} · ${regole.length} eccezion${regole.length === 1 ? "e" : "i"}`;
-}
-function nomeModelloUmano(id) {
-  if (typeof id !== "string" || !id.trim()) return "";
-  const grezzo = id.trim();
-  if (!/^local:/i.test(grezzo)) return grezzo.replace(/^~/u, "").split("/").pop();
-  let resto = grezzo.replace(/^local:/i, "").replace(/[-_.]gguf$/i, "");
-  const quant = /[-_](IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_]|$)/i.exec(resto);
-  const parametri = /(?:^|[-_])(\d+(?:[.,]\d+)?B)(?:[-_]A(\d+(?:[.,]\d+)?B))?(?=[-_]|$)/i.exec(resto);
-  let nome = resto;
-  if (parametri) nome = resto.slice(0, parametri.index);
-  nome = nome.replace(/[-_](GGUF|MLX|AWQ|GPTQ)$/i, "");
-  const pezzi = nome.split(/[-_]/).filter(Boolean);
-  if (pezzi.length > 1) pezzi.shift();
-  const pulito = pezzi.join(" ").replace(/\s+/g, " ").trim();
-  const parti = [pulito || resto];
-  if (parametri) parti.push(parametri[2] ? `${parametri[1]} (${parametri[2].replace(/^A/i, "")} attivi)` : parametri[1]);
-  if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, "_"));
-  return parti.filter(Boolean).join(" · ");
-}
-function fondoInVista({ scrollHeight = 0, scrollTop = 0, clientHeight = 0, coda = 0, soglia = 4 } = {}) {
-  if (Number(scrollHeight) <= Number(clientHeight)) return true;
-  const distanza = Number(scrollHeight) - Number(scrollTop) - Number(clientHeight);
-  if (!Number.isFinite(distanza)) return true;
-  return distanza <= Math.max(0, Number(coda) || 0) + soglia;
-}
-function dettaglioUtile(cosa, dettaglio) {
-  const pulisci = (t2) => String(t2 ?? "").replace(/[…\.]+$/u, "").trim().toLowerCase();
-  const a = pulisci(cosa);
-  const b = pulisci(dettaglio);
-  if (!b || !a) return String(dettaglio ?? "").trim();
-  if (a === b || a.startsWith(b) || b.startsWith(a)) return "";
-  return String(dettaglio).trim();
-}
-function tonoPermesso(permesso) {
-  if (permesso === "Full access") return "danger";
-  if (permesso === "Workspace write") return "warning";
-  return null;
-}
-function kilo2(n) {
-  const v = Number(n) || 0;
-  if (v < 1e3) return String(Math.round(v));
-  return `${(v / 1e3).toFixed(1).replace(".", ",")}k`;
-}
-function testoVelocitaLocale(modelloId, velocita) {
-  const id = String(modelloId || "");
-  if (!/^local:/i.test(id)) return "";
-  return String(velocita || "").trim();
-}
-function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {}) {
-  const sessione = usageSessione && typeof usageSessione === "object" ? usageSessione : usage;
-  if ((!usage || typeof usage !== "object") && (!sessione || typeof sessione !== "object")) return { tokenGiri: "", cache: "", giri: null, velocita: "" };
-  const prompt = Number(sessione?.prompt_tokens ?? 0) || 0;
-  const completion = Number(sessione?.completion_tokens ?? 0) || 0;
-  const cache = Number(sessione?.cached_tokens ?? 0) || 0;
-  const baseCache = Number.isFinite(sessione?.prompt_tokens_con_cache) ? sessione.prompt_tokens_con_cache : prompt;
-  const giriSessione = Number.isFinite(Number(sessione?.giri)) ? Number(sessione.giri) : null;
-  const giri = Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null;
-  const totale2 = prompt + completion;
-  const parti = [];
-  if (totale2 > 0) parti.push(`${kilo2(totale2)} token`);
-  if (giriSessione !== null) parti.push(`${giriSessione} gir${giriSessione === 1 ? "o" : "i"}${Number.isFinite(tettoGiri) && tettoGiri > 0 && sessione === usage ? ` su ${tettoGiri}` : ""}`);
-  const throughput = Number(usage?.tokens_per_second ?? usage?.tokensPerSecond ?? sessione?.tokens_per_second ?? sessione?.tokensPerSecond);
-  return {
-    tokenGiri: parti.join(" · "),
-    cache: cache > 0 && baseCache > 0 ? `cache ${Math.round(cache / baseCache * 100)}%` : "",
-    giri,
-    velocita: Number.isFinite(throughput) && throughput > 0 ? `${Math.round(throughput)} token/s` : ""
-  };
-}
-function testoLatenza(ms) {
-  if (!Number.isFinite(ms) || ms <= 0) return "";
-  return ms >= 1e3 ? `primo token ${(ms / 1e3).toFixed(1).replace(".", ",")} s` : `primo token ${Math.round(ms)} ms`;
-}
-function scrivi(el25, testo3) {
-  if (!el25) return;
-  const t2 = testo3 || "";
-  if (el25.textContent !== t2) el25.textContent = t2;
-  el25.hidden = t2 === "";
-}
-function statoGiri(giri, tettoGiri) {
-  if (!Number.isFinite(Number(giri))) return null;
-  const n = Number(giri);
-  const tetto = Number(tettoGiri);
-  if (!Number.isFinite(tetto) || tetto <= 0) return n > 0 ? "quieto" : null;
-  const quota = n / tetto;
-  if (quota < 0.5) return null;
-  return quota >= 0.8 ? "vicino" : "quieto";
-}
-function aggiornaPiedeChat(piede, dati = {}) {
-  if (!piede) return;
-  const documentObj = piede.ownerDocument;
-  const tornaInFondo = piede.querySelector("#chatTornaInFondo");
-  if (tornaInFondo) {
-    tornaInFondo.hidden = dati.inFondo !== false;
-    if (!tornaInFondo.dataset.portaInFondo) {
-      tornaInFondo.dataset.portaInFondo = "1";
-      tornaInFondo.addEventListener("click", () => {
-        tornaInFondo.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
-      });
-    }
-  }
-  const striscia = piede.querySelector(".talos-status-strip");
-  if (striscia) {
-    const contattoPerso = dati.attivo === true && dati.contatto === "perso";
-    striscia.hidden = !dati.attivo || dati.inFondo === true && !contattoPerso;
-    striscia.classList.toggle("talos-status-strip--senza-contatto", contattoPerso);
-    if (!striscia.dataset.portaInFondo) {
-      striscia.dataset.portaInFondo = "1";
-      striscia.style.cursor = "pointer";
-      striscia.setAttribute("title", "Torna dove sta scrivendo");
-      striscia.addEventListener("click", (evento) => {
-        if (evento.target.closest("button")) return;
-        striscia.dispatchEvent(new CustomEvent("talos-vai-in-fondo", { bubbles: true }));
-      });
-    }
-    const cosa = striscia.querySelector("[data-run-what]");
-    if (cosa) {
-      cosa.replaceChildren();
-      cosa.append(documentObj.createTextNode(contattoPerso ? "Contatto col server perso" : dati.cosa || "TALOS sta lavorando"));
-      if (dati.dettaglio && !contattoPerso) {
-        cosa.append(documentObj.createTextNode(" · "));
-        const mono = documentObj.createElement("span");
-        mono.className = "talos-mono talos-measure";
-        mono.textContent = dati.dettaglio;
-        cosa.append(mono);
-      }
-    }
-    const meta2 = striscia.querySelector("[data-run-meta]");
-    const pezzi = [];
-    if (Number.isFinite(dati.giro)) pezzi.push(`giro ${dati.giro}`);
-    if (Number.isFinite(dati.secondi)) pezzi.push(`${Math.max(0, Math.round(dati.secondi))} s`);
-    scrivi(meta2, contattoPerso ? "non so se il giro sta ancora andando" : pezzi.join(" · "));
-    const ferma = striscia.querySelector(".stop-run");
-    if (ferma) {
-      ferma.disabled = contattoPerso;
-      ferma.title = contattoPerso ? "Il server non risponde: la richiesta di fermare non arriverebbe." : "";
-    }
-  }
-  const modello = piede.querySelector('[data-open-sheet="model"] .talos-chip__label');
-  if (modello) modello.textContent = dati.modello || "Scegli il modello";
-  const pillolaModello = piede.querySelector('[data-open-sheet="model"]');
-  if (pillolaModello) pillolaModello.title = dati.modelloId ? `Cambia modello · ${dati.modelloId}` : "Cambia modello";
-  const permesso = piede.querySelector('[data-open-sheet="permissions"]');
-  if (permesso) {
-    const label = permesso.querySelector(".talos-chip__label");
-    if (label) label.textContent = etichettaPermessoConEccezioni(dati.permesso, dati.permessiPerAttrezzo);
-    const regole = dati.permessiPerAttrezzo && typeof dati.permessiPerAttrezzo === "object" ? Object.entries(dati.permessiPerAttrezzo).filter(([, v]) => v) : [];
-    permesso.title = regole.length ? `Cambia il permesso · eccezioni per attrezzo: ${regole.map(([k, v]) => `${k} → ${v}`).join(", ")}` : "Cambia il permesso";
-    permesso.classList.remove("talos-badge--warning", "talos-badge--danger");
-    const tono = tonoPermesso(dati.permesso);
-    if (tono) permesso.classList.add(`talos-badge--${tono}`);
-  }
-  const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri, usageSessione: dati.usageSessione });
-  const giriChip = piede.querySelector("[data-runtime-giri]");
-  if (giriChip) {
-    const stato = statoGiri(u.giri, dati.tettoGiri);
-    giriChip.hidden = stato === null;
-    giriChip.classList.toggle("talos-badge--warning", stato === "vicino");
-    const n = giriChip.querySelector(".talos-mono");
-    if (n && u.giri !== null) n.textContent = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `${u.giri}/${dati.tettoGiri}` : String(u.giri);
-    giriChip.title = Number.isFinite(Number(dati.tettoGiri)) && Number(dati.tettoGiri) > 0 ? `Giri del modello in questo invio, sul tetto di ${dati.tettoGiri} dichiarato dal kernel. Il numero accanto ai token conta invece tutta la sessione.` : "Giri del modello in questo invio. Il numero accanto ai token conta invece tutta la sessione.";
-  }
-  const costoChip = piede.querySelector("[data-runtime-costo]");
-  if (costoChip) {
-    costoChip.hidden = !dati.costo;
-    const n = costoChip.querySelector(".talos-mono");
-    if (n && dati.costo) n.textContent = dati.costo;
-  }
-  scrivi(piede.querySelector('[data-statusbar="tema"]'), testoVelocitaLocale(dati.modelloId, u.velocita));
-  scrivi(piede.querySelector("[data-runtime-usage]"), u.tokenGiri);
-  scrivi(piede.querySelector("[data-runtime-cache]"), u.cache);
-  scrivi(piede.querySelector("[data-runtime-latenza]"), testoLatenza(dati.latenzaMs) || u.velocita);
-}
-var NOME_PERMESSO;
-var init_chat_foot = __esm({
-  "src/components/chat-foot.js"() {
-    init_politiche();
-    NOME_PERMESSO = Object.freeze(Object.fromEntries(POLITICHE.map((p) => [p.valore, p.nome])));
   }
 });
 
@@ -14178,9 +14180,11 @@ function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d = global
     const sel = $2("introModello");
     if (!sel) return;
     const id = $2("introFornitore")?.value;
-    const lista = st.modelli.filter((m) => !id || fornitoreLocale() ? m.locale === true : m.provider === id || (m.id || "").startsWith(`${id}/`));
-    const scelti = lista.length ? lista : st.modelli.filter((m) => !m.locale);
-    sel.replaceChildren(new Option("Scegli un modello…", ""), ...scelti.slice(0, 200).map((m) => new Option(m.nome || m.id, m.id)));
+    const locale = fornitoreLocale();
+    const lista = st.modelli.filter((m) => !id || locale ? m.locale === true : m.provider === id || (m.id || "").startsWith(`${id}/`));
+    const scelti = lista.length ? lista : locale ? [] : st.modelli.filter((m) => !m.locale);
+    const vuota = locale && !scelti.length;
+    sel.replaceChildren(new Option(vuota ? "Nessun modello sul disco: aprilo da «Apri Model Lab» e scaricane uno" : "Scegli un modello…", ""), ...scelti.slice(0, 200).map((m) => new Option(m.nome || m.id, m.id)));
     if (st.modello && [...sel.options].some((o) => o.value === st.modello)) sel.value = st.modello;
   }
   async function provaAccesso() {

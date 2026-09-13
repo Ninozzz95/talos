@@ -170,9 +170,18 @@ export function creaIntro(velo, { api, azioni = {}, iniziale = {}, document: d =
   function disegnaModelli() {
     const sel = $('introModello'); if (!sel) return;
     const id = $('introFornitore')?.value;
-    const lista = st.modelli.filter((m) => !id || fornitoreLocale() ? m.locale === true : (m.provider === id || (m.id || '').startsWith(`${id}/`)));
-    const scelti = lista.length ? lista : st.modelli.filter((m) => !m.locale);
-    sel.replaceChildren(new Option('Scegli un modello…', ''), ...scelti.slice(0, 200).map((m) => new Option(m.nome || m.id, m.id)));
+    const locale = fornitoreLocale();
+    const lista = st.modelli.filter((m) => !id || locale ? m.locale === true : (m.provider === id || (m.id || '').startsWith(`${id}/`)));
+    /*
+     * ⛔ R-08, 13/09 (giro da utente nuovo sull'app installata): con «Motore locale» scelto e
+     * NESSUN modello sul disco, la lista ripiegava su tutti i modelli cloud — 200 voci
+     * «AionLabs…», «Amazon Nova…» sotto la scritta «i modelli sul disco si scelgono qui sotto».
+     * Chi arriva senza chiave sceglierebbe un modello che non può usare. Ora, col motore
+     * locale, la lista è SOLO quella del disco; se è vuota lo dice e rimanda a Model Lab.
+     */
+    const scelti = lista.length ? lista : (locale ? [] : st.modelli.filter((m) => !m.locale));
+    const vuota = locale && !scelti.length;
+    sel.replaceChildren(new Option(vuota ? 'Nessun modello sul disco: aprilo da «Apri Model Lab» e scaricane uno' : 'Scegli un modello…', ''), ...scelti.slice(0, 200).map((m) => new Option(m.nome || m.id, m.id)));
     if (st.modello && [...sel.options].some((o) => o.value === st.modello)) sel.value = st.modello;
   }
   async function provaAccesso() {
