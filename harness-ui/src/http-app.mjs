@@ -1316,9 +1316,12 @@ function requireHuggingFaceDownloadBody(body) {
     && typeof body.revision === 'string' && REVISIONE_HF.test(body.revision)
     && Array.isArray(body.files) && body.files.length > 0 && body.files.every(fileValido)
     && interoPositivo(body.bytes)
-    && nonVuota(body.path);
+    && nonVuota(body.path)
+    // R-08, 13/09: senza `license` il negozio dei modelli rifiuta il manifesto DOPO l'accettazione
+    // della richiesta e la risposta era un 500 «Errore interno» (giro da utente nuovo). Si chiede qui.
+    && nonVuota(body.license);
   if (!valido) {
-    const errore = new Error('Corpo non valido: atteso {id, repo, revision (hash 40-64 esa), files: [{path, bytes, sha256}], bytes, path}');
+    const errore = new Error('Corpo non valido: atteso {id, repo, revision (hash 40-64 esa), files: [{path, bytes, sha256}], bytes, path, license}');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }

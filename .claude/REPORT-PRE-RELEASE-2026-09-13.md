@@ -27,29 +27,44 @@ lette per intero (WebFetch), non risultati di ricerca. Data della pagina dove di
 
 ## 2 · Le dieci prove da utente appena installato
 
-Regola del piano: valgono solo su una macchina che non ha mai visto TALOS. Qui ogni passo dice
-**cosa è misurato su questa macchina** (con profilo dati nuovo, chiavi tolte dall'ambiente) e
-**cosa resta alla macchina pulita**.
+Fatte il 13/09 sull'app INSTALLATA dal pacchetto R-03 (Windows 11, RX 9070 XT), profilo dati
+vergine (`TALOS_DESKTOP_DATA_DIR` nuovo), chiavi e token tolti dall'ambiente, con
+`scratchpad/giro-utente-nuovo.mjs`; taccuino `.claude/foto-r08-2026-09-13/R08-giro-utente-nuovo.json`,
+foto nella stessa cartella. Ciò che vale solo su una macchina che non ha mai visto TALOS è
+segnato «macchina pulita».
 
-| # | passo | qui | resta |
-|---|---|---|---|
-| 1 | scarico | exe 145,0 MiB / zip 244,0 MiB, nomi `TALOS-Setup-0.1.0.exe`, `TALOS-0.1.0-win.zip` (R-06) | download vero dalla pagina Releases (dopo il tag) |
-| 2 | leggo il README | README del monorepo (inglese, R-05b) e del guscio: requisiti, SmartScreen, dati, disinstallazione | lettura da parte di una persona che non conosce TALOS |
-| 3 | installo e avvio | 39–48 s silenziosa, prima finestra 3,8 s (R-06); doppio clic vero non misurabile da script | SmartScreen al doppio clic sull'exe scaricato |
-| 4–9 | prima schermata, chiave assente, prima sessione con modello locale, cinque superfici, chiudi/riapri, ferma/riprendi | **da fare adesso** con la app installata e un profilo dati vergine (§2-bis, in corso) | stessa cosa su macchina pulita |
-| 10 | disinstallo | zero residui, dati conservati (R-02/R-04 smoke); ⛔ lezione del 13/09: l'installer silenzioso avvia l'app e un'installazione sopra un'app viva non sovrascrive i file bloccati | — |
+| # | passo | misurato qui | attrito / difetto | resta |
+|---|---|---|---|---|
+| 1 | scarico | exe 145,0 MiB, zip 244,0 MiB (R-06) | — | download dalla pagina Releases dopo il tag |
+| 2 | README | README del monorepo (inglese) e del guscio: requisiti, SmartScreen, dati, disinstallazione | — | lettura da una persona nuova |
+| 3 | installo e avvio | silenziosa 39–48 s; prima finestra 1,4 s dal lancio (profilo vergine) | ⛔ l'installer silenzioso AVVIA l'app a fine installazione; un'installazione sopra un'app viva non sovrascrive i file bloccati (visto due volte) | SmartScreen al doppio clic |
+| 4 | prima schermata | intro «Primo avvio · 2 di 4» (Cartella · Modello · Permessi · Fine), parole piane, «Salta per ora» | apre direttamente sul passo Modello (la cartella è già proposta): da guardare a occhio se è chiaro | macchina pulita |
+| 5 | chiave assente | ogni fornitore è etichettato «· serve una chiave»; il riquadro «Chiave del fornitore» dice dove finisce la chiave; «Usa il modello locale» esiste | **D1 curato**: con «Motore locale» e zero modelli sul disco la lista proponeva 200 modelli cloud | — |
+| 6a | scarico un modello | dall'app (rotta del catalogo): Qwen3-0.6B-Q8_0, 639 MB in **15 s**, impronta verificata, stato «pronto»; carica su Vulkan in **2,1 s** | **D2 curato**: senza `license` la rotta rispondeva 500 «Errore interno» invece di 400 col campo mancante | — |
+| 6b | prima sessione | senza attrezzi: primo pezzo in **125 ms**, giro finito in 135 ms («ciao») | **DR1 aperto**: «Leggi README.md e dimmi cosa contiene» → attrezzo `leggi` eseguito, poi al secondo turno «La risposta del fornitore si è interrotta» dopo 421 pezzi di ragionamento; la stessa conversazione mandata direttamente al motore risponde bene (`finish_reason: stop`, 132 token). Il kernel non legge `finish_reason`: serve il flusso grezzo. Modello da 0,6B: da riprovare con uno più grande | macchina pulita |
+| 7 | cinque superfici | chat, terminale (PTY vera, `Git Bash`), impostazioni fotografate; review e browser non catturate (la sonda ha cliccato la voce sbagliata) | **D3 curato**: la riga della sessione stampava «local:Qwen-Qwen3-0-6B-GGUF-…-gguf»; il suggerimento «Impostazioni (Ctrl ,)» resta a schermo dopo il clic (minore, aperto); al primo ingresso nel Terminale ci sono già due schede «Git Bash» e «Git Bash 2» (da capire, aperto) | review e browser a occhio |
+| 8 | chiudo e riapro | riaperta in ~4 s; la sessione è nell'elenco (1) | — | — |
+| 9 | fermo e riprendo | secondo giro avviato, «ferma» risponde 200 (`rimosso:false` perché il giro era già finito in errore), ripresa 200 | da rifare con un giro lungo su un modello che non si interrompe (dipende da DR1) | macchina pulita |
+| 10 | disinstallo | zero processi/collegamenti/registro residui, dati conservati (R-02/R-04) | la cartella `Programs\talos-desktop` resta vuota finché un handle non si chiude (visto 3 volte oggi) | — |
+
+Sul banco (server su porta effimera, mai il 4174) la catena «download → carica → prima risposta» misura: 15 s + 2,1 s + 0,13 s.
 
 ## 3 · UX: pulita, rifinita, fluida
 
-- **Pulita**: cancelli esistenti — `nessun-errore-a-runtime.spec.mjs` (errori JS a schermo), il
-  test dei testi (`cancello-testo.test.mjs`: nomi tecnici), `veli:sani`. Da rilanciare sul
-  candidato di release e riportare i conteggi qui.
-- **Rifinita**: spazzata A-bis (testate, padding, gap, azioni uguali) a 1024×800 e 1440×900, due
-  temi: da fare sul candidato.
-- **Fluida**: si misura nel browser dell'owner con la GPU accesa (lezione del 02/09): apertura
-  schermate, dialoghi, primo pezzo di risposta, scorrimento della chat lunga. Serve l'owner
-  davanti al suo Chrome: non misurabile da qui.
+- **Pulita** (misurato il 13/09 sull'albero di release): `veli:sani` ⇒ 6 veli su 13 «hanno qualcosa che non si vede o non si raggiunge» e 10 veli senza una via dichiarata per aprirli (`VIE_PER_APRIRE` incompleta: il cancello stesso dice che è un difetto suo); test dei testi (nomi tecnici) e degli errori a runtime dentro le suite unit (999 verdi); nomi tecnici a schermo trovati dal giro: 1 (D3, curato).
+- **Rifinita**: spazzata A-bis a due viewport e due temi non fatta oggi: le foto del giro (1440×900, chiaro e scuro) non mostrano disallineamenti evidenti nelle tre superfici viste; le altre due vanno guardate a occhio.
+- **Fluida**: va misurata nel browser dell'owner con la GPU accesa; qui solo tempi di rete/API (prima finestra 1,4 s, prima risposta 125 ms col modello locale).
 
 ## Cosa resta aperto e perché si rilascia lo stesso
 
-Da compilare alla chiusura, dopo §2-bis e dopo il primo giro del job sui runner.
+Aperti, dichiarati nelle note di rilascio: (1) il job di release non è mai girato sui runner
+GitHub (il tag lo prova); (2) Windows 10 1809, macchina senza Vulkan, SmartScreen da download
+reale: non provati (serve un'altra macchina); (3) DR1: con un modello da 0,6B un giro con
+attrezzo può interrompersi al secondo turno; (4) `veli:sani` con 6 veli non raggiunti dal
+cancello; (5) due schede del Terminale al primo ingresso e suggerimento delle Impostazioni che
+resta a schermo; (6) intestazioni SPDX nei sorgenti (R-05c, Astra dal 19/09); (7) UX «fluida»
+non misurata nel browser dell'owner.
+Si rilascia lo stesso perché la v0.1 è dichiarata sviluppo iniziale (SemVer 0.y), il pacchetto
+si installa, si avvia, scarica e carica un modello e risponde in locale senza chiave, si
+disinstalla pulito, la licenza e la provenienza sono a posto, e ognuno dei sette punti è
+scritto nel changelog e nelle note come limite noto, non nascosto.

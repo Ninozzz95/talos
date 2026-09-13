@@ -24,6 +24,7 @@
  * 05/09/2026). Nessuno shadow DOM.
  */
 import { usageDellaSessione } from './consumo-sessione.js'; // 06/9 CB-04: i giri della sessione, non dell'ultimo invio
+import { nomeModelloUmano } from './chat-foot.js'; // 13/09 R-08: la targa di un GGUF locale diventa un nome
 
 /**
  * Per quanto tempo una riga dice «ha appena risposto». Un minuto: abbastanza da vederlo tornando
@@ -124,9 +125,15 @@ export function oraCompatta(iso, adesso = new Date()) {
   return data.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' });
 }
 
-/** Solo il nome del modello, senza il fornitore davanti. */
+/**
+ * Solo il nome del modello, senza il fornitore davanti.
+ * ⛔ R-08, 13/09 (giro da utente nuovo): per un modello locale la riga stampava la targa intera
+ * «local:Qwen-Qwen3-0-6B-GGUF-23749fef-Qwen3-0-6B-Q8-0-gguf» — un nome tecnico a schermo.
+ * Ora passa dallo stesso lettore di targhe del piede della chat (`nomeModelloUmano`).
+ */
 export function nomeModello(modello) {
   if (typeof modello !== 'string' || modello.trim() === '') return null;
+  if (/^local:/i.test(modello.trim())) return nomeModelloUmano(modello) || modello.replace(/^local:/i, '');
   return modello.split('/').pop();
 }
 
