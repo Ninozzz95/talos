@@ -1133,8 +1133,8 @@ describe('primoProgramma — il primo token di un comando', () => {
 describe('convertiPercorsoWsl — il percorso Windows nel mount WSL2', () => {
     it('⭐ il caso reale, misurato il 27/8 su questa macchina', () => {
         assert.equal(
-            convertiPercorsoWsl('C:\\Users\\Antonino\\AppData\\Local\\Temp\\banco-iva-XTnAO2'),
-            '/mnt/c/Users/Antonino/AppData/Local/Temp/banco-iva-XTnAO2',
+            convertiPercorsoWsl('C:\\Users\\esempio\\AppData\\Local\\Temp\\banco-iva-XTnAO2'),
+            '/mnt/c/Users/esempio/AppData/Local/Temp/banco-iva-XTnAO2',
         )
     })
 
@@ -1143,8 +1143,8 @@ describe('convertiPercorsoWsl — il percorso Windows nel mount WSL2', () => {
     })
 
     it('⛔ e AL CONTRARIO: il resto del percorso NON perde le maiuscole — solo la lettera di unità cambia', () => {
-        const risultato = convertiPercorsoWsl('C:\\Users\\Antonino\\Progetti')
-        assert.equal(risultato, '/mnt/c/Users/Antonino/Progetti',
+        const risultato = convertiPercorsoWsl('C:\\Users\\esempio\\Progetti')
+        assert.equal(risultato, '/mnt/c/Users/esempio/Progetti',
             'un percorso minuscolizzato per intero punterebbe a una cartella che non esiste su un filesystem case-sensitive')
     })
 })
@@ -1159,14 +1159,14 @@ describe('convertiPercorsoWsl — il percorso Windows nel mount WSL2', () => {
 describe('percorsoMirrorDevice — dove il mirror del task finisce sul telefono', () => {
     it('⭐ un caso reale, lo stesso pattern usato da preparaCopia in TALOS-BANCO', () => {
         assert.equal(
-            percorsoMirrorDevice('C:\\Users\\Antonino\\AppData\\Local\\Temp\\banco-iva-XTnAO2'),
+            percorsoMirrorDevice('C:\\Users\\esempio\\AppData\\Local\\Temp\\banco-iva-XTnAO2'),
             '/data/local/tmp/talos-mobile/banco-iva-XTnAO2',
         )
     })
 
     it('⛔ e AL CONTRARIO: due cartelle con nome diverso NON collidono sullo stesso mirror', () => {
-        const a = percorsoMirrorDevice('C:\\Users\\Antonino\\AppData\\Local\\Temp\\banco-iva-AAAA')
-        const b = percorsoMirrorDevice('C:\\Users\\Antonino\\AppData\\Local\\Temp\\banco-iva-BBBB')
+        const a = percorsoMirrorDevice('C:\\Users\\esempio\\AppData\\Local\\Temp\\banco-iva-AAAA')
+        const b = percorsoMirrorDevice('C:\\Users\\esempio\\AppData\\Local\\Temp\\banco-iva-BBBB')
         assert.notEqual(a, b, 'due task in corso nello stesso momento finirebbero a scriversi addosso sul device')
     })
 })

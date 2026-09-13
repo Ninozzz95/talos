@@ -442,7 +442,7 @@ export function limitaRipetizioniIdentiche(chiamate, ripetizioniMassime = RIPETI
     let ripetizione = null
     for (const c of Array.isArray(chiamate) ? chiamate : []) {
         if (!c || !c.function) continue
-        const firma = `${c.function.name ?? ''} ${c.function.arguments ?? ''}`
+        const firma = `${c.function.name ?? ''}\x00${c.function.arguments ?? ''}`
         const quante = (conteggio.get(firma) ?? 0) + 1
         conteggio.set(firma, quante)
         if (quante >= ripetizioniMassime) {
@@ -592,7 +592,7 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
         for (let j = 0; j < toolCalls.length; j += 1) {
             if (j === escludi || !toolCalls[j] || finalizzate.has(j)) continue
             finalizzate.add(j)
-            const firma = `${toolCalls[j].function.name} ${toolCalls[j].function.arguments}`
+            const firma = `${toolCalls[j].function.name}\x00${toolCalls[j].function.arguments}`
             const quante = (conteggioFirme.get(firma) ?? 0) + 1
             conteggioFirme.set(firma, quante)
             if (quante >= ripetizioniMassime && !ripetizione) {

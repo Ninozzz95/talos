@@ -59,7 +59,7 @@ test('D-10E: l’ambiente costruito non contiene NESSUNA chiave che somigli a un
 
 /*
  * ⛔⛔⛔ 11/09 — CONVERTIRE DUE VOLTE PRODUCEVA `/mnt/nt/c/…`, e l'owner l'ha visto a schermo:
- * «bash: line 1: cd: /mnt/nt/c/Users/Antonino/Desktop/projects/AVM-harness-desktop/».
+ * «bash: line 1: cd: /mnt/nt/c/Users/esempio/Desktop/projects/AVM-harness-desktop/».
  *
  * Nato poche ore prima, insieme alla cartella che RESTA fra un comando e l'altro: `cartellaFinale`
  * torna già in formato WSL (`/mnt/c/…`), viene tenuta sulla sessione, e al comando dopo ripassava

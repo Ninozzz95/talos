@@ -7,7 +7,7 @@
  *
  * Il PDF si generava bene e passava la verifica: falliva SOLO la scrittura, e sempre alla radice
  * del disco. La catena, ricostruita sul `.jsonl` della sessione riga per riga:
- *  1. la sessione nasce su `C:\Users\Antonino\Desktop\projects\AVM-harness-desktop`, «Read only»,
+ *  1. la sessione nasce su `C:\Users\esempio\Desktop\projects\AVM-harness-desktop`, «Read only»,
  *     `cartellaGiaScelta:false` (intestazione, riga 1);
  *  2. l'owner alza il permesso a «Full access» (riga 2242, `tipo:"impostazioni-sessione"`);
  *  3. `aggiornaImpostazioni` ricalcola la cartella effettiva con `cartellaEffettivaPerPermessi`,
@@ -72,7 +72,7 @@ test('⭐⭐⭐ il documento si deposita in `cartellaCreazioni`, non nella radic
   const eventi = [];
   const risultato = await avviaSessione({
     cartella: 'C:/',
-    cartellaCreazioni: 'C:/Users/Antonino/Desktop/projects/AVM-harness-desktop',
+    cartellaCreazioni: 'C:/Users/esempio/Desktop/projects/AVM-harness-desktop',
     task: TASK, modello: 'm', chiave: 'k',
     onEvento: (e) => eventi.push(e),
     talosLavoraFn: kernelCheChiedeUnDocumento(),
@@ -83,7 +83,7 @@ test('⭐⭐⭐ il documento si deposita in `cartellaCreazioni`, non nella radic
   assert.equal(risultato.ok, true);
   assert.equal(
     cartellaRicevuta,
-    'C:/Users/Antonino/Desktop/projects/AVM-harness-desktop',
+    'C:/Users/esempio/Desktop/projects/AVM-harness-desktop',
     'il file deve essere scritto nella cartella di PARTENZA della sessione, mai nella radice del disco',
   );
 });
@@ -92,7 +92,7 @@ test('⛔ e il percorso mostrato nell’albero resta relativo al WORKSPACE — a
   const eventi = [];
   await avviaSessione({
     cartella: 'C:/',
-    cartellaCreazioni: 'C:/Users/Antonino/Desktop/progetto',
+    cartellaCreazioni: 'C:/Users/esempio/Desktop/progetto',
     task: TASK, modello: 'm', chiave: 'k',
     onEvento: (e) => eventi.push(e),
     talosLavoraFn: kernelCheChiedeUnDocumento(),
@@ -104,7 +104,7 @@ test('⛔ e il percorso mostrato nell’albero resta relativo al WORKSPACE — a
   assert.ok(scrittura, 'la scrittura deve comunque essere annunciata');
   assert.equal(
     scrittura.delta[0].path,
-    '/file/Users/Antonino/Desktop/progetto/Relazione.pdf',
+    '/file/Users/esempio/Desktop/progetto/Relazione.pdf',
     'il pannello File mostra percorsi relativi al workspace: col solo nome punterebbe alla radice, dove il file non esiste',
   );
 });
