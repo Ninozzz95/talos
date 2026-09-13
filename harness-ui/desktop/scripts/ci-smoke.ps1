@@ -93,7 +93,13 @@ try {
     $exe = Join-Path $InstallDir 'TALOS.exe'
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'EXE installato assente nel percorso atteso; verificare InstallLocation NSIS.' }
     $helper = Join-Path $PSScriptRoot 'ci-smoke-installed.mjs'
-    $node = (Get-Command node.exe -CommandType Application).Source
+    # 13/09: sul runner GitHub ci sono PIU' node.exe nel PATH (quello di setup-node e quello
+    # preinstallato). `Get-Command` li restituisce TUTTI, quindi `.Source` e' un array e
+    # `Start-Process -FilePath` lo rifiuta con «Cannot convert System.Object[] to System.String».
+    # Il prodotto non c'entrava: l'installazione e la disinstallazione erano gia' riuscite.
+    # Si prende il primo, che e' quello che vince nel PATH, e si pretende una stringa non vuota.
+    $node = Get-Command node.exe -CommandType Application | Select-Object -First 1 -ExpandProperty Source
+    if ([string]::IsNullOrWhiteSpace($node)) { throw 'node.exe non trovato nel PATH del runner.' }
     $argomentiNode = '"' + $helper + '" "' + $exe + '" "' + $dati + '" "' + $reportApp + '"'
     $p = Start-Process -FilePath $node -ArgumentList $argomentiNode -WindowStyle Hidden -PassThru
     if (-not $p.WaitForExit(180000)) { $p.Kill($true); throw 'Smoke Electron oltre il limite di 180 secondi.' }
