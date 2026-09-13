@@ -116,18 +116,98 @@ test('⭐⭐⭐ 06/9 — delegaSottoTask: cartella UGUALE al padre, o assente, P
   assert.equal(viste[0].permessiRichiesti, 'Full access');
 });
 
-test('⛔⛔⛔ AL CONTRARIO — delegaSottoTask: cartella che NON esiste sul disco (il percorso in forma WSL) — rifiutata, avviaESeguiFn MAI chiamata', async () => {
-  const sessioni = new Map([['padre-1', vocePadre({ cartella: 'C:\progetto' })]]);
+/*
+ * ⛔ 13/09/2026 — questa prova è stata SDOPPIATA, e la ragione va detta perché cambia cosa misura.
+ *   Prima era una sola e diceva «la forma WSL è rifiutata perché non esiste sul disco»: due cose
+ *   diverse sotto un nome solo, e la seconda faceva passare la prima. Ora la forma ha il suo
+ *   controllo (`percorsoDellaFigliaUsabile`) e l'esistenza il suo, quindi servono due prove.
+ * ⛔ E la madre di prova era scritta `'C:\progetto'`: in JavaScript `\p` NON è un escape, quindi
+ *   quella stringa valeva `C:progetto` — una forma «unità senza radice», non un percorso Windows.
+ *   La prova girava su una premessa che non era quella che dichiarava. Corretta a `'C:\\progetto'`.
+ */
+test('⛔⛔⛔ AL CONTRARIO — delegaSottoTask: il percorso in forma WSL è rifiutato PER LA FORMA, prima del disco, e avviaESeguiFn MAI chiamata', async () => {
+  const sessioni = new Map([['padre-1', vocePadre({ cartella: 'C:\\progetto' })]]);
   let chiamata = false;
   const orch = creaSubagentOrchestrator({
     sessioni,
-    cartellaEsisteFn: (p) => p === 'C:\progetto',
-    avviaESeguiFn: () => { chiamata = true; return { sessionId: 'mai' }; },
+    // ⛔ Il disco dice SÌ a tutto: se la prova resta verde, il no viene dalla forma e da niente altro.
+    cartellaEsisteFn: () => true,
+    /*
+     * ⛔⛔⛔ 13/09/2026, revisione avversariale: questo finto NON concludeva. Se la guardia
+     *   salta, la delega non viene piu' rifiutata, la Promise resta PENDENTE PER SEMPRE e
+     *   `node --test` (che di serie non ha alcun timeout) resta appeso invece di stampare un
+     *   rosso. MISURATO: spegnendo `percorsoDellaFigliaUsabile` questa prova non falliva, si
+     *   impiccava - dieci minuti senza una riga. Una prova che si impicca non protegge: blocca
+     *   la pipeline, e chi la guarda non sa nemmeno quale guardia sia caduta. Ora conclude,
+     *   quindi l'assert qui sotto arriva e diventa ROSSO.
+     */
+    avviaESeguiFn: (opzioni) => {
+      chiamata = true;
+      opzioni?.onConclusioneFn?.({ ok: true, esito: { detto: 'mai', comeFinita: 'concluso' } });
+      return { sessionId: 'mai' };
+    },
   });
   const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: '/mnt/c/progetto' });
   assert.equal(esito.esito, 'rifiutato');
+  assert.match(esito.motivo, /forma di un altro sistema operativo/);
+  assert.match(esito.motivo, /C:\\progetto/, 'il rifiuto deve DIRE quale sia il percorso giusto, o il modello indovina');
+  assert.equal(chiamata, false, 'una cartella di un altro sistema non deve MAI far partire un figlio destinato a morire');
+});
+
+test('⛔⛔⛔ AL CONTRARIO — delegaSottoTask: cartella della forma GIUSTA ma che non esiste sul disco — rifiutata, avviaESeguiFn MAI chiamata', async () => {
+  const sessioni = new Map([['padre-1', vocePadre({ cartella: 'C:\\progetto' })]]);
+  let chiamata = false;
+  const orch = creaSubagentOrchestrator({
+    sessioni,
+    cartellaEsisteFn: (p) => p === 'C:\\progetto',
+    /*
+     * ⛔⛔⛔ 13/09/2026, revisione avversariale: questo finto NON concludeva. Se la guardia
+     *   salta, la delega non viene piu' rifiutata, la Promise resta PENDENTE PER SEMPRE e
+     *   `node --test` (che di serie non ha alcun timeout) resta appeso invece di stampare un
+     *   rosso. MISURATO: spegnendo `percorsoDellaFigliaUsabile` questa prova non falliva, si
+     *   impiccava - dieci minuti senza una riga. Una prova che si impicca non protegge: blocca
+     *   la pipeline, e chi la guarda non sa nemmeno quale guardia sia caduta. Ora conclude,
+     *   quindi l'assert qui sotto arriva e diventa ROSSO.
+     */
+    avviaESeguiFn: (opzioni) => {
+      chiamata = true;
+      opzioni?.onConclusioneFn?.({ ok: true, esito: { detto: 'mai', comeFinita: 'concluso' } });
+      return { sessionId: 'mai' };
+    },
+  });
+  const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: 'C:\\non-esiste' });
+  assert.equal(esito.esito, 'rifiutato');
   assert.match(esito.motivo, /non esiste su questo computer/);
+  assert.match(esito.motivo, /C:\\progetto/, 'anche qui il rifiuto porta la cartella buona');
   assert.equal(chiamata, false, 'una cartella inesistente non deve MAI far partire un figlio destinato a morire');
+});
+
+/*
+ * ⛔⛔⛔ 13/09/2026 - aggiunta dalla REVISIONE AVVERSARIALE.
+ *   Il commento accanto a questo rifiuto prometteva "non consiglio la cartella della madre quando
+ *   e' LEI a non esistere: sarebbe un consiglio falso", ma la condizione scritta era
+ *   `dove === padre.cartella`, che copre solo il caso in cui il modello RIPETE la cartella della
+ *   madre. Qui il disco nega ENTRAMBE: il motivo deve nominare quella proposta e NON consigliare
+ *   l'altra.
+ */
+test('⛔⛔⛔ AL CONTRARIO - se anche la cartella della MADRE e sparita, il rifiuto NON la consiglia: un consiglio falso e peggio di nessun consiglio', async () => {
+  const sessioni = new Map([['padre-1', vocePadre({ cartella: 'C:\\progetto' })]]);
+  let chiamata = false;
+  const orch = creaSubagentOrchestrator({
+    sessioni,
+    cartellaEsisteFn: () => false, // il disco ha perso tutte e due
+    avviaESeguiFn: (opzioni) => {
+      chiamata = true;
+      opzioni?.onConclusioneFn?.({ ok: true, esito: { detto: 'mai', comeFinita: 'concluso' } });
+      return { sessionId: 'mai' };
+    },
+  });
+  const esito = await orch.delegaSottoTask({ sessionPadreId: 'padre-1', task: 'x', cartella: 'C:\\progetto\\sotto' });
+  assert.equal(esito.esito, 'rifiutato');
+  assert.match(esito.motivo, /non esiste su questo computer/);
+  assert.ok(!esito.motivo.includes('usa esattamente'),
+    `il rifiuto consiglia una cartella che il disco ha appena negato: ${esito.motivo}`);
+  assert.equal(chiamata, false);
 });
 
 test(`⛔⛔⛔ delegaSottoTask: profondità oltre il limite (${LIMITE_PROFONDITA_DELEGA}) — rifiutato col numero VERO nel motivo`, async () => {
