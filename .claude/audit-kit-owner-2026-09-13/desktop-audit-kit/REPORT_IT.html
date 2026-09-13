@@ -1,0 +1,576 @@
+<!doctype html><html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>TALOS desktop: audit tecnico e confronto ingegneristico</title><style>body{margin:0;background:#fff;color:#202020;font-family:Arial,Helvetica,sans-serif;line-height:1.65;font-size:16px}main{max-width:1100px;margin:0 auto;padding:56px 40px 88px}h1{font-size:36px;line-height:1.2;margin:0 0 32px;font-weight:700}h2{font-size:25px;line-height:1.3;margin:48px 0 20px;border-bottom:1px solid #c8c8c8;padding-bottom:10px}h3{font-size:20px;margin:32px 0 12px}p{margin:0 0 18px}table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.45;margin:24px 0 30px}th,td{text-align:left;vertical-align:top;border:1px solid #d5d5d5;padding:11px 13px}th{background:#efefef;font-weight:700}tbody tr:nth-child(even){background:#fafafa}a{color:#303030;text-underline-offset:3px}sup{font-size:10px;white-space:nowrap}pre{padding:20px;background:#f2f2f2;white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.6}code{font-size:.88em;overflow-wrap:anywhere}li{margin:0 0 10px}@media(max-width:700px){main{padding:24px 14px}h1{font-size:28px}table{font-size:12px}th,td{padding:7px}h2{font-size:23px}}@media print{main{max-width:none;padding:0}body{font-size:10pt}h1{font-size:24pt}h2{font-size:17pt;break-after:avoid}h3{break-after:avoid}table{font-size:8pt}tr{break-inside:avoid}a{color:#111}pre{font-size:8pt}}</style></head><body><main><h1>TALOS desktop: audit tecnico e confronto ingegneristico</h1>
+<h2>Esito e perimetro della verifica</h2>
+<p><strong>Questo documento contiene un audit documentale parziale e un kit di osservabilità testato separatamente. Non contiene un benchmark empirico di TALOS, una classifica prestazionale o patch di ottimizzazione integrate nella sua codebase.</strong> Non sarebbe corretto presentarlo come completamento dei quattro criteri richiesti.</p>
+<p>Il confine comprende esclusivamente il client desktop e i componenti che questo utilizza: shell, interfaccia, processi locali, tool e runtime di inferenza. Un backend condiviso resta pertinente quando opera per il desktop; eseguirlo da solo non equivale a collaudare l'applicazione. Versioni mobili, servizi autonomi, orchestrazioni cloud e interfacce web indipendenti sono esclusi. Le estensioni di IDE locali sono ammesse come concorrenti desktop, ma non assimilate a un'app autonoma.</p>
+<p>La data di riferimento è il 13 settembre 2026. Per «ultimo mese» si considera la finestra <strong>13 agosto-13 settembre 2026</strong>. Una documentazione consultata oggi non dimostra che una funzione sia stata introdotta in quella finestra. La disponibilità di una funzione, inoltre, non ne dimostra la superiorità prestazionale.</p>
+<table>
+<thead>
+<tr>
+  <th>Criterio di accettazione</th>
+  <th>Esito effettivo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Almeno 10 competitor espliciti</td>
+  <td>Sì, confronto documentale di 10 superfici desktop/IDE</td>
+</tr>
+<tr>
+  <td>Performance reali e riproducibili dei prodotti</td>
+  <td>Non eseguite: nessuna sessione di prodotto</td>
+</tr>
+<tr>
+  <td>Ispezione di ogni componente della codebase desktop</td>
+  <td>Non soddisfatto: sorgente completo e SHA non acquisiti</td>
+</tr>
+<tr>
+  <td>Miglioramenti plug-and-play verificati contro TALOS</td>
+  <td>Non soddisfatto: consegnato un kit indipendente, non patch del prodotto</td>
+</tr>
+</tbody>
+</table>
+<p>La conclusione verificabile non è che TALOS sia lento, veloce, sicuro o meno completo dei concorrenti. È che <strong>le evidenze raccolte non consentono ancora di assegnargli quei giudizi</strong>.</p>
+<h2>1. Evidenze disponibili e impedimenti riproducibili</h2>
+<p>Sono stati accessibili la pagina principale del repository, il manifest <code>harness-ui/package.json</code> e la documentazione desktop. Non sono stati acquisiti un checkout completo, un commit immutabile, il codice del main process, il grafo delle importazioni del renderer o un artefatto Windows. Alcuni recuperi successivi dei documenti già letti non sono riusciti. I riferimenti a <code>main</code> restano perciò documentazione mutabile, non una baseline di compatibilità. <sup><a href="#s1">[1]</a></sup><sup><a href="#s2">[2]</a></sup><sup><a href="#s3">[3]</a></sup></p>
+<p>Gli undici tentativi registrati di clonazione riguardano TALOS e dieci repository di riferimento: Hermes, Codex CLI, Aider, Goose, OpenCode, Cline, Kilo, Zed, Roo Code e Continue. Tutti hanno restituito errore Git 128 con mancata risoluzione DNS di <code>github.com</code>. I tempi presenti nel log misurano quei tentativi falliti, <strong>non l'avvio o la velocità dei prodotti</strong>. Il log contiene comandi, errori, esiti e classificazione della prova: <code>evidence/clone-attempts.json</code>.</p>
+<p>L'ambiente osservato è Linux x86_64, Node 22.16.0, Python 3.13.5, cinque CPU logiche visibili, quota cgroup equivalente a quattro CPU e limite di memoria di 4 GiB. Non sono disponibili runtime Windows/PowerShell/Wine/Electron; Chromium è presente. Non sono state fornite credenziali di inferenza per la campagna. Questi vincoli sono registrati in <code>evidence/environment.json</code>; non descrivono requisiti o difetti di TALOS.</p>
+<table>
+<thead>
+<tr>
+  <th>Misura o conteggio</th>
+  <th style="text-align:right">Risultato</th>
+  <th>Interpretazione corretta</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Clonazioni registrate</td>
+  <td style="text-align:right">11</td>
+  <td>Tentativi di acquisizione</td>
+</tr>
+<tr>
+  <td>Clonazioni riuscite</td>
+  <td style="text-align:right">0</td>
+  <td>Nessuna baseline sorgente</td>
+</tr>
+<tr>
+  <td>Esecuzioni TALOS desktop</td>
+  <td style="text-align:right">0</td>
+  <td>Performance non misurate</td>
+</tr>
+<tr>
+  <td>Esecuzioni desktop concorrenti</td>
+  <td style="text-align:right">0</td>
+  <td>Nessun confronto empirico</td>
+</tr>
+<tr>
+  <td>Task agentici lunghi completati</td>
+  <td style="text-align:right">0</td>
+  <td>Nessuna misura di qualità o autonomia</td>
+</tr>
+<tr>
+  <td>Test Node del kit superati</td>
+  <td style="text-align:right">68/68</td>
+  <td>Correttezza del software consegnato, su fixture</td>
+</tr>
+<tr>
+  <td>Smoke test Chromium del kit</td>
+  <td style="text-align:right">1 superato</td>
+  <td>Sonda in pagina controllata, non in Electron/TALOS</td>
+</tr>
+</tbody>
+</table>
+<p>I risultati assenti non vengono convertiti in zeri: zero è il numero di esecuzioni, mentre latenza, throughput e consumo di TALOS sono <strong>non misurati</strong>. I log precedenti di tentativi di smoke test non riusciti sono conservati e spiegati nel README; il risultato finale non li cancella.</p>
+<h2>2. Architettura desktop: fatti e confini di inferenza</h2>
+<p>Il repository presenta TALOS come workspace locale per coding, con terminale, revisione dei file e sessioni persistenti. Le cartelle desktop e quelle condivise richiedono una successiva verifica di raggiungibilità dal client: un semplice elenco di directory non stabilisce quali moduli siano realmente caricati. <sup><a href="#s1">[1]</a></sup></p>
+<p>Il README desktop descrive Windows, Electron 44.3.0, Node incluso, kernel agentico, context engine e llama.cpp b10517 CPU/Vulkan; i modelli GGUF non sono inclusi. Documenta renderer isolato, backend loopback autenticato e distribuzione NSIS/ZIP. Indica che Windows 10 e una macchina senza driver Vulkan non sono ancora stati testati; distingue il fallback per perdita GPU dall'OOM, che richiede una scelta dell'utente. Sono dichiarazioni del progetto, non verifiche eseguite qui. <sup><a href="#s2">[2]</a></sup></p>
+<p>Il manifest consultato dichiara <code>node-pty</code>, <code>ws</code>, <code>eventsource-parser</code>, SDK provider, client MCP, keyring e librerie per documenti/archivi. Ciò giustifica verifiche mirate su terminale, trasporto, provider, strumenti e generazione di artefatti; <strong>non dimostra</strong> che un percorso sia attivo, sincrono, lento o correttamente isolato. Non sono attribuiti a TALOS framework UI, database, editor o algoritmi di indicizzazione non verificati. <sup><a href="#s3">[3]</a></sup></p>
+<p>La decomposizione da utilizzare nell'audit esecutivo è la seguente. È una <strong>mappa di osservazione</strong>, non un diagramma degli import reali:</p>
+<pre><code class="language-text">Interazione utente nel desktop
+  -&gt; osservatore renderer
+  -&gt; trasporto e backend utilizzati dal desktop
+  -&gt; ciclo agentico / contesto / richieste al provider
+  -&gt; strumenti locali, processi figli e runtime del modello
+  -&gt; risultati e verifica indipendente
+  -&gt; aggiornamento visibile nell'interfaccia
+</code></pre>
+<p>Tre separazioni sono decisive. Il tempo al primo token include un percorso diverso dal tempo alla prima visualizzazione. L'isolamento del renderer non certifica la sicurezza di shell e tool. La persistenza di una conversazione non dimostra il recupero corretto di una chiamata a tool interrotta. Sono distinzioni di metodo; non costituiscono segnalazioni di bug. Le raccomandazioni Electron sull'isolamento riguardano il relativo confine di sicurezza, non un'automatica protezione di ogni azione agentica. <sup><a href="#s24">[24]</a></sup></p>
+<h2>3. Confronto con dieci alternative desktop</h2>
+<p>Nella tabella, «documentato» significa che una fonte primaria descrive la funzione. Non significa verificato in questa campagna. Tutte le celle prestazionali rimangono non misurate. Per ciascun prodotto occorre poi fissare build, modello, sistema operativo, impostazioni e driver del test.</p>
+<table>
+<thead>
+<tr>
+  <th>Prodotto e superficie ammessa</th>
+  <th>Riferimento funzionale documentato</th>
+  <th>Confronto utile con TALOS</th>
+  <th>Limite del confronto</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>1. Hermes Desktop</strong>, backend locale</td>
+  <td>File browser, terminali persistenti, revisione Git/worktree, plugin desktop</td>
+  <td>Continuità delle sessioni, navigazione e isolamento dei lavori</td>
+  <td>Documentazione, non esecuzione; gateway remoto escluso <sup><a href="#s4">[4]</a></sup></td>
+</tr>
+<tr>
+  <td><strong>2. Codex nell'app desktop ChatGPT</strong></td>
+  <td>Workspace desktop e sessioni locali Codex</td>
+  <td>Supervisione, revisione, browser e ripresa delle attività</td>
+  <td>Il repository CLI non equivale al sorgente dell'intero desktop <sup><a href="#s5">[5]</a></sup><sup><a href="#s26">[26]</a></sup></td>
+</tr>
+<tr>
+  <td><strong>3. Claude Code Desktop</strong>, sessioni locali</td>
+  <td>Terminale, diff, preview, file, piani e task; worktree Git</td>
+  <td>Percorso modifica-verifica-revisione e isolamento delle sessioni</td>
+  <td>Non trasferire al desktop funzioni solo CLI/SDK; cloud/SSH esclusi <sup><a href="#s6">[6]</a></sup></td>
+</tr>
+<tr>
+  <td><strong>4. Goose Desktop</strong></td>
+  <td>Interfaccia desktop, strumenti estendibili e ricette</td>
+  <td>Configurazione dei tool e ripetibilità dei workflow</td>
+  <td>Nessuna prestazione dedotta dal linguaggio del core <sup><a href="#s7">[7]</a></sup><sup><a href="#s31">[31]</a></sup></td>
+</tr>
+<tr>
+  <td><strong>5. OpenCode Desktop</strong>, beta</td>
+  <td>Client desktop e agenti build/plan</td>
+  <td>Separazione pianificazione/esecuzione e streaming</td>
+  <td>Desktop beta non significa equivalente alla TUI <sup><a href="#s8">[8]</a></sup></td>
+</tr>
+<tr>
+  <td><strong>6. Cline in VS Code</strong></td>
+  <td>Modifiche con approvazione, terminale, checkpoint, MCP</td>
+  <td>Costo delle approvazioni e verificabilità del lavoro</td>
+  <td>L'IDE host fa parte del consumo desktop; CLI/cloud esclusi <sup><a href="#s9">[9]</a></sup></td>
+</tr>
+<tr>
+  <td><strong>7. Kilo in VS Code</strong></td>
+  <td>Modalità di lavoro, strumenti locali e MCP</td>
+  <td>Passaggi tra analisi, modifica, debug e revisione</td>
+  <td>Superficie dell'estensione; non il servizio cloud <sup><a href="#s10">[10]</a></sup></td>
+</tr>
+<tr>
+  <td><strong>8. Cursor Desktop</strong>, agente locale</td>
+  <td>Agente integrato nell'editor e operazioni sul progetto</td>
+  <td>Continuità del controllo durante operazioni lunghe</td>
+  <td>Non assimilare Cloud Agents all'agente sul computer <sup><a href="#s11">[11]</a></sup><sup><a href="#s16">[16]</a></sup></td>
+</tr>
+<tr>
+  <td><strong>9. Devin Desktop</strong>, già Windsurf, <strong>Devin Local</strong></td>
+  <td>Sessioni locali e integrazione editor/agent</td>
+  <td>Worktree, terminale, permessi e contesto dei file</td>
+  <td>Un solo concorrente, non due nomi contati separatamente <sup><a href="#s12">[12]</a></sup></td>
+</tr>
+<tr>
+  <td><strong>10. Zed</strong>, agente nativo</td>
+  <td>Ricerca, modifica, terminale, revisione e MCP</td>
+  <td>Interazione editor-agent e confini dei processi</td>
+  <td>Un agente esterno ACP va dichiarato come combinazione distinta <sup><a href="#s13">[13]</a></sup><sup><a href="#s14">[14]</a></sup><sup><a href="#s30">[30]</a></sup></td>
+</tr>
+</tbody>
+</table>
+<h3>3.1 Cosa confrontare, senza inventare una graduatoria</h3>
+<p><strong>Hermes e Claude Code Desktop</strong> offrono riferimenti concreti per verificare se navigare tra sessioni, chiudere un pannello o creare un lavoro isolato preservi correttamente lo stato. La domanda per TALOS non è quante schede possieda, ma se il medesimo compito mantenga risultati, processi e controllo utente nelle transizioni. Il confronto rimane da eseguire; le funzioni dei concorrenti provengono dalle rispettive guide. <sup><a href="#s4">[4]</a></sup><sup><a href="#s6">[6]</a></sup></p>
+<p><strong>Goose, Cline e Kilo</strong> sono riferimenti per la superficie dei tool. Il numero di integrazioni non è una misura di efficienza: una campagna deve identificare i tool effettivamente abilitati, separare scoperta e invocazione, conservare esiti e autorizzazioni e contabilizzare gli errori. Confrontare un sistema con conferme attive e un altro con approvazioni disabilitate non isola l'overhead dell'harness. <sup><a href="#s7">[7]</a></sup><sup><a href="#s9">[9]</a></sup><sup><a href="#s10">[10]</a></sup></p>
+<p><strong>Zed e gli agenti ACP</strong> richiedono particolare attenzione alla composizione: l'editor può ospitare un agente esterno con processo, configurazione e autenticazione propri. Un risultato ottenuto con tale combinazione non è automaticamente una misura dell'agente nativo di Zed. Analogamente, avviare Codex CLI da un terminale non misura l'app desktop Codex. <sup><a href="#s13">[13]</a></sup><sup><a href="#s30">[30]</a></sup><sup><a href="#s26">[26]</a></sup></p>
+<h3>3.2 Aider, DeepSeek e riferimenti storici</h3>
+<p>Aider è pertinente come riferimento locale <strong>CLI</strong>, in particolare per la repository map; non viene usato per completare artificialmente il numero di desktop confrontati. La sua mappa dei simboli offre un criterio progettuale da discutere soltanto dopo avere misurato la selezione del contesto di TALOS. Il codice di Aider non è stato acquisito o eseguito. <sup><a href="#s18">[18]</a></sup><sup><a href="#s28">[28]</a></sup></p>
+<p>DeepSeek-V3 è un riferimento di modello e implementazione relativa, non un client desktop equivalente. Un eventuale modello DeepSeek potrebbe essere una variabile controllata della campagna, ma non un undicesimo harness: servirebbero identità dei pesi, quantizzazione, runtime e configurazione esatta. Nessun modello è stato scaricato o usato qui. <sup><a href="#s19">[19]</a></sup></p>
+<p>Roo Code risulta archiviato dal proprietario il <strong>15 maggio 2026</strong>. Il README di Continue dichiara che il progetto non è più mantenuto attivamente e che il repository è in sola lettura. Sono utili riferimenti storici, non prova di leadership attiva nell'ultimo mese. I loro tentativi di clonazione sono documentati separatamente. <sup><a href="#s20">[20]</a></sup><sup><a href="#s21">[21]</a></sup></p>
+<h2>4. Stato dell'arte nell'ultimo mese: evidenza realmente datata</h2>
+<table>
+<thead>
+<tr>
+  <th>Data della voce ufficiale</th>
+  <th>Cambiamento rilevante</th>
+  <th>Ambito e cautela</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><strong>19 agosto 2026</strong>, Cursor</td>
+  <td>Steering che attende il successivo tool call invece di interrompere l'azione; descrizione di <code>/goal</code></td>
+  <td>La voce mescola harness e cloud: il comportamento e la disponibilità nella specifica build locale restano da verificare <sup><a href="#s16">[16]</a></sup></td>
+</tr>
+<tr>
+  <td><strong>20 agosto 2026</strong>, Codex</td>
+  <td>Snapshot in sola lettura di thread locali condivisibili dall'app macOS</td>
+  <td>Funzione di supervisione, non dato di velocità; non generalizzare a Windows <sup><a href="#s15">[15]</a></sup></td>
+</tr>
+<tr>
+  <td><strong>25 agosto 2026</strong>, Codex nell'app desktop</td>
+  <td>Site tools/WebMCP nel browser integrato, con condizioni di modello/workspace</td>
+  <td>Riferimento per il confine browser-tool; non un benchmark del browser <sup><a href="#s15">[15]</a></sup></td>
+</tr>
+</tbody>
+</table>
+<p>Le novità cloud di Cursor e quelle web/mobile della documentazione OpenAI sono escluse dall'inferenza sulle capacità locali. Questo limita deliberatamente l'ampiezza delle affermazioni sull'ultimo mese.</p>
+<p>Il changelog OpenCode consultato descrive a inizio agosto lo spostamento del parsing Markdown fuori dal main thread e correzioni del composer. Il <strong>4 agosto 2026</strong> è però fuori dalla finestra richiesta: è un precedente progettuale, non una novità dell'ultimo mese, e non contiene una misura trasferibile a TALOS. Per gli altri concorrenti la documentazione funzionale non basta a certificare una release recente; la copertura temporale resta incompleta. <sup><a href="#s17">[17]</a></sup></p>
+<p>La rinomina Windsurf in Devin Desktop è datata <strong>2 giugno 2026</strong>; la ricostruzione di Kilo per VS Code su core OpenCode è documentata il <strong>2 aprile 2026</strong>. Entrambe servono a evitare confronti nominalmente obsoleti o doppi conteggi, non a simulare novità di settembre. <sup><a href="#s12">[12]</a></sup><sup><a href="#s29">[29]</a></sup></p>
+<h2>5. Copertura componente per componente</h2>
+<p><strong>Questa è una matrice di verifica funzionale, non l'inventario esaustivo dei moduli reali.</strong> «Non verificato» non significa assente o difettoso. Le righe ripartiscono anche funzioni potenziali richieste dall'ambito, senza affermare che esistano come moduli separati.</p>
+<table>
+<thead>
+<tr>
+  <th>Componente / confine</th>
+  <th>Evidenza TALOS disponibile</th>
+  <th>Verifica necessaria e metrica</th>
+  <th>Riferimento comparativo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Packaging, avvio, chiusura</td>
+  <td>Documentazione desktop, non build eseguita <sup><a href="#s2">[2]</a></sup></td>
+  <td>Artefatto fissato, avvio freddo/caldo, arresto dei processi figli</td>
+  <td>Hermes, Goose</td>
+</tr>
+<tr>
+  <td>Shell e renderer</td>
+  <td>Isolamento dichiarato, codice non verificato <sup><a href="#s2">[2]</a></sup></td>
+  <td>Processi, listener, focus, sospensione; gap rAF e Long Tasks</td>
+  <td>Codex, Claude Desktop</td>
+</tr>
+<tr>
+  <td>Trasporto backend</td>
+  <td><code>ws</code> e parser eventi dichiarati <sup><a href="#s3">[3]</a></sup></td>
+  <td>Richieste correlate, buffering, disconnessioni, byte e ritardi</td>
+  <td>OpenCode</td>
+</tr>
+<tr>
+  <td>Ciclo agentico</td>
+  <td>Kernel citato nella documentazione <sup><a href="#s2">[2]</a></sup></td>
+  <td>Stato di ogni task, retry, step conclusi, risultati verificati</td>
+  <td>Cursor, Claude Desktop</td>
+</tr>
+<tr>
+  <td>Streaming e decoding visibile</td>
+  <td>Implementazione non ispezionata</td>
+  <td>Richiesta, primo token ricevuto, primo token mostrato, interruzione</td>
+  <td>OpenCode, Cursor</td>
+</tr>
+<tr>
+  <td>Provider e autenticazione</td>
+  <td>SDK provider dichiarati <sup><a href="#s3">[3]</a></sup></td>
+  <td>Configurazione fissata, errori, timeout, cambio provider</td>
+  <td>Kilo, Cline</td>
+</tr>
+<tr>
+  <td>Inferenza locale</td>
+  <td>Runtime descritto, non eseguito <sup><a href="#s2">[2]</a></sup></td>
+  <td>Identità modello, contatori nativi, CPU/GPU, errori</td>
+  <td>Goose, Hermes</td>
+</tr>
+<tr>
+  <td>Contesto e compattazione</td>
+  <td>Context engine citato <sup><a href="#s2">[2]</a></sup></td>
+  <td>Evidenze recuperate, budget, ripresa dopo compattazione</td>
+  <td>Zed; Aider solo progettuale</td>
+</tr>
+<tr>
+  <td>Sessioni persistenti</td>
+  <td>Descritte dal progetto <sup><a href="#s1">[1]</a></sup></td>
+  <td>Ripartenza dopo chiusura/crash, perdita o duplicazione di stato</td>
+  <td>Hermes, Codex</td>
+</tr>
+<tr>
+  <td>Terminale e PTY</td>
+  <td><code>node-pty</code> dichiarato <sup><a href="#s3">[3]</a></sup></td>
+  <td>Input-output, resize, Unicode, EOF, cancellazione, processi orfani</td>
+  <td>Hermes, Claude Desktop</td>
+</tr>
+<tr>
+  <td>File explorer</td>
+  <td>UI e percorsi non verificati</td>
+  <td>Albero ampio, rename, esclusioni, selezione, latenza osservata</td>
+  <td>Hermes, Cline</td>
+</tr>
+<tr>
+  <td>Watcher del filesystem</td>
+  <td>Strategia menzionata nel manifest, non misurata <sup><a href="#s3">[3]</a></sup></td>
+  <td>Sequenze create/rename/delete, coerenza finale, lavoro ripetuto</td>
+  <td>Editor locali concorrenti</td>
+</tr>
+<tr>
+  <td>Editor, diff e Git</td>
+  <td>File review descritta, componenti ignoti <sup><a href="#s1">[1]</a></sup></td>
+  <td>Diff fedele, checkpoint, modifiche concorrenti e worktree</td>
+  <td>Cline, Hermes, Zed</td>
+</tr>
+<tr>
+  <td>Browser integrato / preview</td>
+  <td>Presenza e implementazione non stabilite</td>
+  <td>Distinguere preview, browser esterno, browser automatizzato; fixture localhost</td>
+  <td>Claude Desktop, Codex</td>
+</tr>
+<tr>
+  <td>Note</td>
+  <td>Modulo, formato e persistenza non verificati</td>
+  <td>Salvataggio, isolamento progetto, ricerca, export, riavvio</td>
+  <td>Confronto solo dopo equivalenza funzionale</td>
+</tr>
+<tr>
+  <td>Libreria di conoscenza</td>
+  <td>Indicizzazione e retrieval non verificati</td>
+  <td>Provenienza, aggiornamento, rimozione, risultati obsoleti</td>
+  <td>Memoria/skills Hermes, con semantiche distinte</td>
+</tr>
+<tr>
+  <td>Librerie per artefatti</td>
+  <td>Dipendenze documentali/archivi dichiarate <sup><a href="#s3">[3]</a></sup></td>
+  <td>Percorsi raggiungibili, output valido, carico su thread e memoria</td>
+  <td>Preview/artefatti desktop, non mero conteggio formati</td>
+</tr>
+<tr>
+  <td>MCP e tool esterni</td>
+  <td>Client MCP dichiarato <sup><a href="#s3">[3]</a></sup></td>
+  <td>Discovery, esecuzione, timeout, retry, permessi, output voluminosi</td>
+  <td>Goose, Cline, Kilo, Zed</td>
+</tr>
+<tr>
+  <td>Permessi ed effetti esterni</td>
+  <td>Policy dei tool non ispezionata</td>
+  <td>Coerenza conferme, revoca, cancellazione, azioni non reversibili</td>
+  <td>Claude Desktop, Cline</td>
+</tr>
+<tr>
+  <td>Segreti e profili</td>
+  <td>Keyring dichiarato <sup><a href="#s3">[3]</a></sup></td>
+  <td>Propagazione ai figli, redazione log, isolamento e revoca</td>
+  <td>Hermes, Devin Local</td>
+</tr>
+<tr>
+  <td>Download e fallback runtime</td>
+  <td>Procedure documentate, non provate <sup><a href="#s2">[2]</a></sup></td>
+  <td>Interruzione/ripresa, integrità, rollback, errore esplicito</td>
+  <td>Onboarding desktop concorrenti</td>
+</tr>
+<tr>
+  <td>Test, CI e release</td>
+  <td>Script/guide disponibili, esiti non acquisiti <sup><a href="#s2">[2]</a></sup><sup><a href="#s3">[3]</a></sup></td>
+  <td>Test su Windows, installer, log, hash, regressioni</td>
+  <td>Qualsiasi confronto con build riproducibile</td>
+</tr>
+</tbody>
+</table>
+<h3>5.1 Terminale, file explorer e browser</h3>
+<p>Il terminale deve essere osservato sia come processo/PTY sia come pannello grafico: vedere rapidamente il testo non dimostra che la cancellazione abbia terminato il processo. Il risultato corretto di un task richiede il codice di uscita e la verifica degli artefatti, non soltanto la comparsa di una risposta in chat.</p>
+<p>Per il file explorer va fissato un manifest della fixture: numero e struttura dei file, contenuti, directory escluse e sequenza di mutazioni. Dopo ogni operazione serve un confronto con lo stato effettivo del filesystem. Un albero visivamente aggiornato ma incompleto è un errore funzionale, non una vittoria di velocità.</p>
+<p>Per il browser non si attribuisce a TALOS una funzione non letta nel codice. Un collegamento che apre un browser esterno, una preview HTML e un browser controllabile dal modello sono tre oggetti diversi. La prova utile, quando la funzione è confermata, utilizza un'applicazione locale controllata, operazioni note e un verificatore DOM indipendente; evita account e dati reali.</p>
+<h3>5.2 Note, librerie e persistenza</h3>
+<p>Il termine «librerie» va distinto tra dipendenze software, raccolta di documenti e memoria utilizzata dall'agente. Una lista di pacchetti non prova la presenza di una libreria di conoscenza. Una nota persistita non prova che venga recuperata correttamente nel contesto del modello.</p>
+<p>La verifica deve includere aggiornamento, cancellazione e riapertura del progetto, non solo l'inserimento iniziale. Le risposte dell'agente vanno confrontate con fatti presenti o rimossi dalla fixture. Senza accesso ai moduli reali non vengono inventati schemi SQLite, endpoint, tabelle o callback da modificare.</p>
+<h3>5.3 Task lunghi e intervento umano</h3>
+<p>Un task lungo non coincide con un timeout alto. Il protocollo deve verificare obiettivi intermedi, cambiamenti su più file, ripresa dopo compattazione, gestione degli errori, eventuale riavvio e accettazione di istruzioni correttive. Le azioni non idempotenti non possono essere considerate sicure soltanto perché la conversazione è stata salvata.</p>
+<p>Per misurare il costo dell'intervento umano occorrono istanti separati: richiesta di approvazione, risposta dell'operatore, ripartenza dell'agente. Senza queste osservazioni, attribuire tutto il tempo trascorso al backend sarebbe scorretto. Nessuna campagna di questo tipo è stata eseguita nel presente audit.</p>
+<h2>6. Protocollo empirico pronto da completare, non risultati simulati</h2>
+<h3>6.1 Identità della prova</h3>
+<p>Ogni run deve fissare SHA del sorgente o hash del binario desktop, identità del modello/provider, impostazioni di generazione, fixture con commit, comando di verifica, hardware/driver, policy dei tool e stato iniziale del profilo. Il manifesto <code>protocol/campaign.json</code> lascia volutamente vuoti i dati mancanti e indica <code>NOT_EXECUTED</code>. Non contiene driver UI fittizi o comandi di lancio presunti.</p>
+<p>Servono due campagne distinte: una a <strong>modello e condizioni comuni</strong>, quando i prodotti lo consentono, per isolare l'harness; l'altra con la <strong>configurazione nativa di ciascun prodotto</strong>, che confronta l'esperienza complessiva. I risultati non sono intercambiabili. Un prodotto che non accetta il modello comune va marcato non confrontabile in quella campagna, non sostituito dalla propria CLI.</p>
+<p>Le prove vanno eseguite sul medesimo host Windows per TALOS e le alternative compatibili. Il benchmark deve specificare se include il runtime del modello e i processi dell'IDE. Warm-up, cache e ordine dei run devono essere documentati prima di raccogliere risultati. Fallimenti, cancellazioni e timeout restano nel dataset.</p>
+<h3>6.2 Metriche e punti di osservazione</h3>
+<table>
+<thead>
+<tr>
+  <th>Metrica</th>
+  <th>Definizione operativa</th>
+  <th>Cosa non dimostra</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Primo token ricevuto</td>
+  <td>Primo token osservato meno partenza della richiesta, sullo stesso clock</td>
+  <td>Non separa da sola rete, provider e inferenza</td>
+</tr>
+<tr>
+  <td>Prima visualizzazione</td>
+  <td>Primo token mostrato meno invio utente</td>
+  <td>Non equivale al tempo del backend</td>
+</tr>
+<tr>
+  <td>Ritardo ingest-render</td>
+  <td>Visualizzazione meno ingest dello stesso token/richiesta</td>
+  <td>Richiede correlazione e osservazione affidabili</td>
+</tr>
+<tr>
+  <td>Durata tool</td>
+  <td>Fine meno inizio per <code>tool_call_id</code>, con esito</td>
+  <td>Non isola dispatcher da lavoro esterno</td>
+</tr>
+<tr>
+  <td>Cancellazione effettiva</td>
+  <td>Quiescenza verificata meno richiesta di stop</td>
+  <td>Non basta l'aggiornamento del pulsante</td>
+</tr>
+<tr>
+  <td>Task completato</td>
+  <td>Verificatore indipendente superato meno invio</td>
+  <td>La frase «finito» dell'agente non vale come prova</td>
+</tr>
+<tr>
+  <td>RSS / CPU di processo</td>
+  <td>Contatori per PID e istante</td>
+  <td>Un singolo Node non è l'intero desktop <sup><a href="#s23">[23]</a></sup></td>
+</tr>
+<tr>
+  <td>Event loop</td>
+  <td>Distribuzione del ritardo del loop Node</td>
+  <td>Non è latenza HTTP o durata del modello <sup><a href="#s22">[22]</a></sup></td>
+</tr>
+<tr>
+  <td>Fluidità osservata</td>
+  <td>Gap fra callback rAF e Long Tasks visibili</td>
+  <td>Non è un contatore diretto di FPS o frame persi <sup><a href="#s25">[25]</a></sup></td>
+</tr>
+<tr>
+  <td>Token/s</td>
+  <td>Token effettivi da contatori affidabili e durata definita</td>
+  <td>Byte, chunk SSE e caratteri non sono token</td>
+</tr>
+</tbody>
+</table>
+<p>Clock monotoni distinti non si sottraggono direttamente. Il formato consegnato usa un singolo clock di osservazione per traccia; rifiuta ID diversi. La cattura su più processi deve convergere a un osservatore comune oppure introdurre una calibrazione esplicita, non presente nel kit. Le marcature manuali sono esplorative e includono ritardo umano; non sono una base adeguata per graduatorie di latenza.</p>
+<p>La sonda Node misura il suo processo. Per l'intero desktop occorre acquisire l'albero dei processi e una definizione coerente di memoria condivisa/privata: sommare indiscriminatamente RSS non produce automaticamente memoria fisica univoca. La memoria del modello locale deve essere dichiarata separatamente o inclusa in modo identico per tutti i prodotti. <sup><a href="#s23">[23]</a></sup></p>
+<h3>6.3 Famiglie di task e verificatori</h3>
+<p>Le fixture devono essere versionate prima dei run. Una famiglia copre un refactoring multi-file con test e migrazione di API; un'altra una regressione che richiede diagnosi, modifica e test; una terza la continuità del contesto con requisiti introdotti all'inizio e verificati dopo molti passaggi. Una quarta riguarda stop, riavvio e ricostruzione dello stato senza ripetere effetti esterni. Una quinta esercita terminale, file explorer e preview locale.</p>
+<p>Per ogni fixture servono test nascosti o comunque indipendenti dalle dichiarazioni dell'agente, verifica del diff finale, conteggio degli interventi e registrazione delle condizioni di termine. Il pacchetto <strong>non include fixture agentiche complete né un runner comparativo end-to-end</strong>: include il contratto da completare quando saranno disponibili le build. I task fittizi dei test unitari non devono mai essere riutilizzati come evidenza di qualità del coding.</p>
+<p>Le distribuzioni devono conservare campioni grezzi, numero di osservazioni e fallimenti. I percentili del kit sono descrittivi con interpolazione lineare; non costituiscono test di significatività. Nessun miglioramento percentuale può essere dichiarato senza coppie prima/dopo sulla stessa baseline e controllo delle regressioni funzionali.</p>
+<h2>7. Software effettivamente consegnato</h2>
+<p>Il pacchetto <code>desktop-audit-kit</code> è autonomo e non sovrascrive file TALOS. Le API seguenti sono <strong>API nuove del kit</strong>, non punti di estensione attribuiti al repository.</p>
+<table>
+<thead>
+<tr>
+  <th>File / API</th>
+  <th>Funzione concreta</th>
+  <th>Limite esplicito</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td><code>lib/inventory.mjs</code>: <code>inventory</code>, <code>assertPinnedClean</code></td>
+  <td>Hash SHA-256, identità Git, stato dei percorsi selezionati; rifiuto di SHA non completo, mismatch e inventario incompleto</td>
+  <td>Non dimostra build o raggiungibilità runtime</td>
+</tr>
+<tr>
+  <td><code>lib/trace.mjs</code>: <code>analyseTrace</code></td>
+  <td>Controlla clock, run, richieste, tool, esiti e causalità delle coppie misurate</td>
+  <td>Analizza dati forniti; non avvia l'agente e non certifica l'origine</td>
+</tr>
+<tr>
+  <td><code>lib/statistics.mjs</code>: <code>summarize</code></td>
+  <td>Campioni validati, mediana, p95/p99 e null su dati assenti</td>
+  <td>Nessuna inferenza statistica o graduatoria</td>
+</tr>
+<tr>
+  <td><code>probes/node-probe.mjs</code>: <code>startNodeProbe</code></td>
+  <td>CPU/RSS/event loop, output NDJSON e coda limitata con perdite contabilizzate</td>
+  <td>Un processo; overhead della sonda non quantificato</td>
+</tr>
+<tr>
+  <td><code>probes/node-preload.mjs</code></td>
+  <td>Attivazione esplicita in un processo Node verificato, senza cambiare signal handler o policy</td>
+  <td>Entrypoint Electron/TALOS non certificato</td>
+</tr>
+<tr>
+  <td><code>probes/renderer-probe.js</code></td>
+  <td>Buffer limitati, rAF, Long Tasks, marker manuali e cleanup</td>
+  <td>Solo DevTools già consentiti; nessuna cattura automatica del token</td>
+</tr>
+<tr>
+  <td><code>tools/*.mjs</code></td>
+  <td>CLI per inventario e analisi; output esclusivo senza sovrascrittura</td>
+  <td>Non sono driver del desktop</td>
+</tr>
+<tr>
+  <td><code>tests/</code></td>
+  <td>68 test Node e smoke test Chromium indipendente</td>
+  <td>Non eseguono modelli, TALOS o competitor</td>
+</tr>
+</tbody>
+</table>
+<p>La sonda renderer mantiene un numero limitato di osservazioni e rende visibili quelle sovrascritte. La sonda Node limita la coda di scrittura e contabilizza i campioni persi. Queste sono proprietà implementate e testate del <strong>kit</strong>, non ottimizzazioni misurate della UI di TALOS.</p>
+<p>Il validatore non fabbrica throughput, RAM complessiva o qualità: quei campi restano <code>null</code>. Le fixture sono etichettate come tali e non possono essere riclassificate come tracce desktop attraverso le combinazioni di metadati accettate. Questo protegge da errori di classificazione accidentali, non da un operatore che falsifichi deliberatamente i dati. La verifica del task resta un'asserzione dell'osservatore: occorre archiviare anche il log del verificatore.</p>
+<h3>7.1 Risultati dei test del kit</h3>
+<p>L'esecuzione finale <code>node --test tests/*.test.mjs</code> ha prodotto <strong>68 test superati, zero falliti, zero saltati</strong>. Il test browser finale ha eseguito la sonda in Chromium 144.0.7559.96 su una pagina controllata e ha superato i controlli di lifecycle, marker e osservazioni rAF. I relativi file sono <code>evidence/node-tests.tap</code> e <code>evidence/browser-smoke.json</code>.</p>
+<p>Durante il collaudo, la mancanza di <code>crypto.randomUUID</code> in un contesto browser non sicuro ha fatto fallire una prova. La sonda ora usa anche identificatori casuali tramite <code>getRandomValues</code>, e un test di regressione copre quel ramo. Tentativi iniziali con <code>--dump-dom</code> non hanno prodotto una pagina; una navigazione <code>file:</code> è stata bloccata dalla policy del browser. La prova finale usa una pagina vuota controllata, senza leggere risorse bloccate. Nessuna policy amministrativa è stata disattivata.</p>
+<p>Solo il Chromium temporaneo della fixture, eseguito come root nel container isolato, utilizza <code>--no-sandbox</code>. <strong>Questo flag non deve essere trasferito a TALOS o a una sessione di navigazione reale.</strong> Lo smoke test non valida la sandbox Electron o l'integrazione del renderer del prodotto.</p>
+<h3>7.2 Integrazione e rollback</h3>
+<p>Il kit può essere estratto fuori dal repository e i test Node non richiedono dipendenze npm aggiuntive. L'inventario opera in lettura sul repository indicato. Il backend e il renderer del prodotto rimangono invariati fino a un'esplicita integrazione, che non è stata eseguita.</p>
+<p>Per usare la sonda sul backend del desktop occorre prima verificare l'entrypoint, il runtime Node effettivo e il lifecycle. Non viene fornito un comando che avvii arbitrariamente <code>server.mjs</code> e lo presenti come benchmark desktop. Non viene suggerito di impostare globalmente <code>NODE_OPTIONS</code> o aprire porte di remote debugging. La sonda renderer richiede DevTools già consentiti: non modifica sandbox, preload, navigazione o autenticazione.</p>
+<p>Il rollback della sola osservabilità consiste nell'interrompere la sonda/rimuovere l'import aggiunto e riavviare il processo o renderer interessato. I log restano nella cartella esplicita scelta dall'operatore. Non sono richieste migrazioni dati, ma non viene promessa compatibilità con una build TALOS mai acquisita.</p>
+<h2>8. Ottimizzazioni: decisioni ammissibili e condizioni di accettazione</h2>
+<p>Non è possibile indicare responsabilmente un collo di bottiglia specifico senza profilo e codice. Non si prescrivono cache, parallelismo, worker Markdown o sostituzioni del terminale come rimedi a problemi non osservati. La sola presenza di un'implementazione simile in un concorrente non dimostra che la stessa modifica migliori TALOS.</p>
+<p>La sequenza tecnica applicabile è: fissare la baseline; riprodurre un carico desktop; raccogliere tracce corrette; identificare il percorso responsabile; applicare una modifica minima; ripetere le stesse prove con verificatore invariato. I risultati devono mostrare sia la metrica migliorata sia assenza di regressioni su integrità del testo, ordinamento degli eventi, cancellazione, memoria e output finale.</p>
+<p>Per eventuali modifiche al renderer servono prove su UTF-8 spezzato fra chunk, blocchi di codice incompleti, scroll e fine streaming. Per eventuali modifiche ai tool servono errori, timeout, retry e operazioni non idempotenti. Per eventuali modifiche al retrieval serve confrontare la qualità dei risultati, non soltanto ridurre il tempo di ricerca. Sono <strong>condizioni di verifica</strong>, non ipotesi di guadagno o patch già pronte.</p>
+<p>Un pacchetto di ottimizzazione realmente accettabile dovrà indicare SHA base, file modificati, diff applicabile, build Windows, esiti dei test desktop, metriche prima/dopo, istruzioni di rollback e hash degli artefatti. In assenza di questi elementi, apporre la dicitura «plug-and-play» nasconderebbe proprio il rischio di incompatibilità che il criterio di accettazione intende evitare.</p>
+<h2>9. Conclusione operativa</h2>
+<p>Sono disponibili un confronto documentale con dieci alternative desktop, una matrice di copertura di 22 aree, un protocollo di misura, sorgenti di osservabilità e prove riproducibili del kit. Non sono disponibili una baseline TALOS eseguibile, risultati comparativi agentici o patch integrate e misurate.</p>
+<p>Le condizioni mancanti per soddisfare il mandato originale sono concrete: sorgente desktop completo a SHA fissato, build/ambiente Windows compatibile, modelli e autorizzazioni di prova, fixture agentiche versionate e driver verificati per ciascun client. Il pacchetto non sostituisce tali condizioni e non afferma che siano già soddisfatte.</p>
+<h2>Fonti</h2>
+<p>Le fonti seguenti sono primarie. La data di consultazione è il 13 settembre 2026; per i documenti senza data di pubblicazione non viene inventata una data di rilascio. Le evidenze locali sono nei file <code>evidence/</code> e descrivono esclusivamente le operazioni realmente eseguite.</p>
+<ol>
+<li><p><a id="s1"></a><strong>Ninozzz95</strong>. <a href="https://github.com/Ninozzz95/talos">TALOS: repository e README principale</a>. main non fissato; descrizione del workspace.</p>
+</li>
+<li><p><a id="s2"></a><strong>Ninozzz95</strong>. <a href="https://raw.githubusercontent.com/Ninozzz95/talos/main/harness-ui/desktop/README.md">TALOS: documentazione desktop</a>. main non fissato; documento letto, recuperi successivi non riusciti.</p>
+</li>
+<li><p><a id="s3"></a><strong>Ninozzz95</strong>. <a href="https://raw.githubusercontent.com/Ninozzz95/talos/main/harness-ui/package.json">TALOS: manifest harness-ui</a>. main non fissato; dipendenze dichiarate, non grafo runtime.</p>
+</li>
+<li><p><a id="s4"></a><strong>Nous Research</strong>. <a href="https://hermes-agent.nousresearch.com/docs/user-guide/desktop/">Hermes: Desktop App</a>. documentazione corrente; data di introduzione delle singole funzioni non stabilita.</p>
+</li>
+<li><p><a id="s5"></a><strong>OpenAI</strong>. <a href="https://learn.chatgpt.com/docs/app">Codex: applicazione desktop</a>. documentazione corrente; accesso dal precedente percorso developers.openai.com/codex/app.</p>
+</li>
+<li><p><a id="s6"></a><strong>Anthropic</strong>. <a href="https://code.claude.com/docs/en/desktop">Claude Code: Desktop application</a>. solo sessioni locali; cloud e SSH esclusi.</p>
+</li>
+<li><p><a id="s7"></a><strong>Goose / AAIF</strong>. <a href="https://block.github.io/goose/index.html">Goose: sito ufficiale</a>. superficie desktop; non eseguita.</p>
+</li>
+<li><p><a id="s8"></a><strong>Anomaly</strong>. <a href="https://github.com/anomalyco/opencode">OpenCode: repository</a>. desktop beta; sorgente non acquisito nel container.</p>
+</li>
+<li><p><a id="s9"></a><strong>Cline</strong>. <a href="https://github.com/cline/cline">Cline: repository</a>. estensione VS Code; non CLI, cloud o altri prodotti.</p>
+</li>
+<li><p><a id="s10"></a><strong>Kilo</strong>. <a href="https://github.com/Kilo-Org/kilocode">Kilo: repository</a>. estensione VS Code locale.</p>
+</li>
+<li><p><a id="s11"></a><strong>Cursor</strong>. <a href="https://cursor.com/docs/agent/overview">Cursor: Agent overview</a>. agente locale nel client desktop.</p>
+</li>
+<li><p><a id="s12"></a><strong>Cognition</strong>. <a href="https://docs.devin.ai/desktop/changelog">Devin Desktop: changelog</a>. rinomina Windsurf del 2 giugno 2026; solo Devin Local.</p>
+</li>
+<li><p><a id="s13"></a><strong>Zed Industries</strong>. <a href="https://zed.dev/docs/ai/agents">Zed: agenti</a>. agente nativo, agenti ACP e terminal threads sono distinti.</p>
+</li>
+<li><p><a id="s14"></a><strong>Zed Industries</strong>. <a href="https://zed.dev/docs/ai/zed-agent">Zed Agent</a>. funzioni documentate dell'agente nativo.</p>
+</li>
+<li><p><a id="s15"></a><strong>OpenAI</strong>. <a href="https://learn.chatgpt.com/docs/changelog">ChatGPT &amp; Codex changelog</a>. voci desktop del 20 e 25 agosto 2026; non trasferire novita CLI/mobile al desktop.</p>
+</li>
+<li><p><a id="s16"></a><strong>Cursor</strong>. <a href="https://cursor.com/changelog">Cursor changelog</a>. 19 agosto 2026: harness e cloud descritti insieme; distinguere le superfici.</p>
+</li>
+<li><p><a id="s17"></a><strong>Anomaly</strong>. <a href="https://opencode.ai/changelog">OpenCode changelog</a>. snapshot consultato con voci di inizio agosto: fuori finestra 13 agosto-13 settembre.</p>
+</li>
+<li><p><a id="s18"></a><strong>Aider</strong>. <a href="https://aider.chat/docs/repomap.html">Aider: repository map</a>. riferimento progettuale CLI, non decimo client desktop.</p>
+</li>
+<li><p><a id="s19"></a><strong>DeepSeek</strong>. <a href="https://github.com/deepseek-ai/DeepSeek-V3">DeepSeek-V3: repository</a>. modello e codice relativo; non un harness desktop equivalente.</p>
+</li>
+<li><p><a id="s20"></a><strong>Roo Code</strong>. <a href="https://github.com/RooCodeInc/Roo-Code">Roo Code: repository</a>. archiviato dal proprietario il 15 maggio 2026.</p>
+</li>
+<li><p><a id="s21"></a><strong>Continue</strong>. <a href="https://github.com/continuedev/continue">Continue: repository</a>. README: non piu mantenuto attivamente, repository in sola lettura.</p>
+</li>
+<li><p><a id="s22"></a><strong>Node.js</strong>. <a href="https://nodejs.org/api/perf_hooks.html">Node.js: Performance measurement APIs</a>. semantica di event-loop monitoring; kit eseguito con Node 22.16.0.</p>
+</li>
+<li><p><a id="s23"></a><strong>Node.js</strong>. <a href="https://nodejs.org/api/process.html">Node.js: Process</a>. RSS e CPU di processo; non intero albero Electron.</p>
+</li>
+<li><p><a id="s24"></a><strong>Electron</strong>. <a href="https://www.electronjs.org/docs/latest/tutorial/security">Electron: Security</a>. isolamento renderer e sandbox.</p>
+</li>
+<li><p><a id="s25"></a><strong>W3C</strong>. <a href="https://www.w3.org/TR/longtasks-1/">Long Tasks API</a>. Long Tasks non equivale a misurare FPS.</p>
+</li>
+<li><p><a id="s26"></a><strong>OpenAI</strong>. <a href="https://github.com/openai/codex">Codex: repository open source</a>. codice CLI; non prova di disponibilita dell'intera app desktop.</p>
+</li>
+<li><p><a id="s27"></a><strong>Nous Research</strong>. <a href="https://github.com/NousResearch/hermes-agent">Hermes Agent: repository</a>. tentata clonazione del repository ufficiale.</p>
+</li>
+<li><p><a id="s28"></a><strong>Aider</strong>. <a href="https://github.com/Aider-AI/aider">Aider: repository</a>. tentata clonazione; strumento locale a terminale.</p>
+</li>
+<li><p><a id="s29"></a><strong>Kilo</strong>. <a href="https://blog.kilo.ai/p/new-kilo-for-vs-code-is-live">The new Kilo for VS Code is live</a>. 2 aprile 2026; riferimento architetturale storico.</p>
+</li>
+<li><p><a id="s30"></a><strong>Zed Industries</strong>. <a href="https://zed.dev/docs/ai/external-agents">Zed: external agents</a>. agenti esterni con processi e configurazioni separati.</p>
+</li>
+<li><p><a id="s31"></a><strong>Goose / AAIF</strong>. <a href="https://github.com/aaif-goose/goose">Goose: repository ufficiale corrente</a>. tentata clonazione; nessuna esecuzione desktop.</p>
+</li>
+</ol>
+</main></body></html>

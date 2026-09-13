@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "test_scope": "independent_browser_fixture_not_talos",
+  "observed_at_utc": "2026-09-13T14:49:30.894449+00:00",
+  "passed": false,
+  "fixture_only_no_sandbox": true,
+  "chromium_version": "144.0.7559.96",
+  "error_type": "Error",
+  "error": "Page.goto: net::ERR_BLOCKED_BY_ADMINISTRATOR at file:///tmp/browser-probe-fixture-rjwwgxx0/fixture.html\nCall log:\n  - navigating to \"file:///tmp/browser-probe-fixture-rjwwgxx0/fixture.html\", waiting until \"load\"\n"
+}

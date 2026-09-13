@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "status": "PARTIAL_DOCUMENTARY_AUDIT_NO_PRODUCT_BENCHMARKS",
+  "desktop_competitors_documented": 10,
+  "functional_areas_for_verification": 22,
+  "talos_commit": null,
+  "talos_binary_sha256": null,
+  "talos_desktop_runs": 0,
+  "competitor_desktop_runs": 0,
+  "long_horizon_agent_tasks_executed": 0,
+  "clone_attempts": 11,
+  "successful_clones": 0,
+  "talos_performance": {
+    "ttft_ms": null,
+    "tokens_per_second": null,
+    "task_wall_ms": null,
+    "total_desktop_memory_bytes": null,
+    "speedup_vs_competitors": null
+  },
+  "kit_verification": {
+    "node_tests": 68,
+    "passed": 68,
+    "failed": 0,
+    "skipped": 0,
+    "chromium_smoke_passed": true,
+    "talos_integration_tested": false,
+    "windows_tested": false
+  },
+  "talos_core_optimization_patches": 0,
+  "acceptance": {
+    "at_least_ten_competitors": "documentary_only",
+    "empirical_comparative_benchmarks": "not_met",
+    "every_real_desktop_module_inspected": "not_met",
+    "tested_plug_and_play_core_optimizations": "not_met"
+  },
+  "evidence": [
+    "clone-attempts.json",
+    "environment.json",
+    "node-tests.tap",
+    "browser-smoke.json"
+  ],
+  "not_a_claim": [
+    "No product was executed",
+    "No relative performance ranking exists",
+    "Fixture timings are not product timings"
+  ]
+}

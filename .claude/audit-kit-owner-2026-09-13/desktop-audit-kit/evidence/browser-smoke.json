@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "test_scope": "independent_browser_fixture_not_talos",
+  "observed_at_utc": "2026-09-13T14:54:37.821869+00:00",
+  "passed": true,
+  "fixture_only_no_sandbox": true,
+  "chromium_version": "144.0.7559.96",
+  "observation": {
+    "schema_version": 1,
+    "scope": "renderer_observer_not_whole_desktop",
+    "run_id": "e9e046c9fd5d1af4808e6eb6f5981eb3",
+    "clock_id": "737cae728d6fa84e0bd1a490de8a026e",
+    "start_mono_ms": 33.20000000006985,
+    "end_mono_ms": 187.30000000004657,
+    "capacity": 16,
+    "raf_callback_gaps_ms": {
+      "n": 7,
+      "min": 16.599999999999994,
+      "median": 16.700000000000003,
+      "p95": 16.700000000000003,
+      "max": 16.700000000000003,
+      "total_observed": 7,
+      "overwritten": 0
+    },
+    "longtask_durations_ms": {
+      "n": 0,
+      "min": null,
+      "median": null,
+      "p95": null,
+      "max": null,
+      "total_observed": 0,
+      "overwritten": 0
+    },
+    "longtask_total_duration_ms": 0,
+    "marks": [
+      {
+        "event": "task_submitted",
+        "run_id": "e9e046c9fd5d1af4808e6eb6f5981eb3",
+        "clock_id": "737cae728d6fa84e0bd1a490de8a026e",
+        "mono_ms": 33.40000000002328,
+        "origin": "manual"
+      },
+      {
+        "event": "provider_request_started",
+        "run_id": "e9e046c9fd5d1af4808e6eb6f5981eb3",
+        "clock_id": "737cae728d6fa84e0bd1a490de8a026e",
+        "mono_ms": 33.40000000002328,
+        "origin": "manual",
+        "request_id": "fixture-request"
+      },
+      {
+        "event": "provider_first_token",
+        "run_id": "e9e046c9fd5d1af4808e6eb6f5981eb3",
+        "clock_id": "737cae728d6fa84e0bd1a490de8a026e",
+        "mono_ms": 33.40000000002328,
+        "origin": "manual",
+        "request_id": "fixture-request"
+      },
+      {
+        "event": "renderer_first_token",
+        "run_id": "e9e046c9fd5d1af4808e6eb6f5981eb3",
+        "clock_id": "737cae728d6fa84e0bd1a490de8a026e",
+        "mono_ms": 33.40000000002328,
+        "origin": "manual",
+        "request_id": "fixture-request"
+      },
+      {
+        "event": "task_verified",
+        "run_id": "e9e046c9fd5d1af4808e6eb6f5981eb3",
+        "clock_id": "737cae728d6fa84e0bd1a490de8a026e",
+        "mono_ms": 33.40000000002328,
+        "origin": "manual",
+        "verifier_exit_code": 0
+      }
+    ],
+    "dropped_marks": 0,
+    "notes": [
+      "rAF callback gaps are not a direct FPS or dropped-frame measurement.",
+      "Percentiles cover the last capacity observations, not the complete session.",
+      "Marks are manually supplied; no automatic first-token or task-completion detection."
+    ]
+  },
+  "disclaimer": "Fixture timings are NOT TALOS, model or desktop product measurements."
+}

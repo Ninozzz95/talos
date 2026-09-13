@@ -1,0 +1,418 @@
+TAP version 13
+# Subtest: empty statistics retain null, never zero
+ok 1 - empty statistics retain null, never zero
+  ---
+  duration_ms: 0.906845
+  type: 'test'
+  ...
+# Subtest: statistics interpolate exact sample quantiles
+ok 2 - statistics interpolate exact sample quantiles
+  ---
+  duration_ms: 0.591841
+  type: 'test'
+  ...
+# Subtest: statistics do not mutate input
+ok 3 - statistics do not mutate input
+  ---
+  duration_ms: 0.149456
+  type: 'test'
+  ...
+# Subtest: statistics reject non-finite or coerced data
+ok 4 - statistics reject non-finite or coerced data
+  ---
+  duration_ms: 0.257558
+  type: 'test'
+  ...
+# Subtest: single sample is descriptive, not an estimate
+ok 5 - single sample is descriptive, not an estimate
+  ---
+  duration_ms: 0.103256
+  type: 'test'
+  ...
+# Subtest: trace keeps layers separate
+ok 6 - trace keeps layers separate
+  ---
+  duration_ms: 0.516257
+  type: 'test'
+  ...
+# Subtest: trace never infers throughput or desktop RAM
+ok 7 - trace never infers throughput or desktop RAM
+  ---
+  duration_ms: 0.209306
+  type: 'test'
+  ...
+# Subtest: empty trace is incomplete, not a successful zero
+ok 8 - empty trace is incomplete, not a successful zero
+  ---
+  duration_ms: 0.673044
+  type: 'test'
+  ...
+# Subtest: missing pair stays null
+ok 9 - missing pair stays null
+  ---
+  duration_ms: 0.364559
+  type: 'test'
+  ...
+# Subtest: fixtures cannot be relabelled desktop
+ok 10 - fixtures cannot be relabelled desktop
+  ---
+  duration_ms: 0.481324
+  type: 'test'
+  ...
+# Subtest: unknown markers are rejected
+ok 11 - unknown markers are rejected
+  ---
+  duration_ms: 0.163075
+  type: 'test'
+  ...
+# Subtest: mixed clocks are rejected
+ok 12 - mixed clocks are rejected
+  ---
+  duration_ms: 0.109735
+  type: 'test'
+  ...
+# Subtest: mixed runs are rejected
+ok 13 - mixed runs are rejected
+  ---
+  duration_ms: 0.090727
+  type: 'test'
+  ...
+# Subtest: mixed event origins are rejected
+ok 14 - mixed event origins are rejected
+  ---
+  duration_ms: 0.093821
+  type: 'test'
+  ...
+# Subtest: nonmonotonic time is rejected
+ok 15 - nonmonotonic time is rejected
+  ---
+  duration_ms: 0.100161
+  type: 'test'
+  ...
+# Subtest: NaN and negative time are rejected
+ok 16 - NaN and negative time are rejected
+  ---
+  duration_ms: 0.176306
+  type: 'test'
+  ...
+# Subtest: duplicate singleton is rejected
+ok 17 - duplicate singleton is rejected
+  ---
+  duration_ms: 0.093801
+  type: 'test'
+  ...
+# Subtest: conflicting terminal outcomes are rejected
+ok 18 - conflicting terminal outcomes are rejected
+  ---
+  duration_ms: 0.09317
+  type: 'test'
+  ...
+# Subtest: verified task needs an independent verifier exit status
+ok 19 - verified task needs an independent verifier exit status
+  ---
+  duration_ms: 0.090566
+  type: 'test'
+  ...
+# Subtest: tool end must have start and outcome
+ok 20 - tool end must have start and outcome
+  ---
+  duration_ms: 0.135624
+  type: 'test'
+  ...
+# Subtest: incomplete tools are not erased
+ok 21 - incomplete tools are not erased
+  ---
+  duration_ms: 0.095033
+  type: 'test'
+  ...
+# Subtest: parallel tools retain durations and failures independently
+ok 22 - parallel tools retain durations and failures independently
+  ---
+  duration_ms: 0.133291
+  type: 'test'
+  ...
+# Subtest: duplicate tool starts are rejected
+ok 23 - duplicate tool starts are rejected
+  ---
+  duration_ms: 0.094582
+  type: 'test'
+  ...
+# Subtest: multiple requests in a long task do not overwrite each other
+ok 24 - multiple requests in a long task do not overwrite each other
+  ---
+  duration_ms: 0.151979
+  type: 'test'
+  ...
+# Subtest: unfinished provider requests remain visible
+ok 25 - unfinished provider requests remain visible
+  ---
+  duration_ms: 0.420734
+  type: 'test'
+  ...
+# Subtest: token without request start is rejected
+ok 26 - token without request start is rejected
+  ---
+  duration_ms: 0.111017
+  type: 'test'
+  ...
+# Subtest: rendered token without ingest is rejected
+ok 27 - rendered token without ingest is rejected
+  ---
+  duration_ms: 0.083916
+  type: 'test'
+  ...
+# Subtest: request ID is required
+ok 28 - request ID is required
+  ---
+  duration_ms: 0.075985
+  type: 'test'
+  ...
+# Subtest: cancellation measures quiescence, never success
+ok 29 - cancellation measures quiescence, never success
+  ---
+  duration_ms: 0.072489
+  type: 'test'
+  ...
+# Subtest: clock-sorted but causally reversed task is rejected
+ok 30 - clock-sorted but causally reversed task is rejected
+  ---
+  duration_ms: 0.15891
+  type: 'test'
+  ...
+# Subtest: arbitrary metadata fields are not copied to the output
+ok 31 - arbitrary metadata fields are not copied to the output
+  ---
+  duration_ms: 0.105508
+  type: 'test'
+  ...
+# Subtest: placeholder manifest cannot masquerade as measured trace
+ok 32 - placeholder manifest cannot masquerade as measured trace
+  ---
+  duration_ms: 0.093421
+  type: 'test'
+  ...
+# Subtest: directory-scoped inventory excludes mobile source
+ok 33 - directory-scoped inventory excludes mobile source
+  ---
+  duration_ms: 43.63611
+  type: 'test'
+  ...
+# Subtest: full commit and clean required files pass identity gate only
+ok 34 - full commit and clean required files pass identity gate only
+  ---
+  duration_ms: 29.301484
+  type: 'test'
+  ...
+# Subtest: missing required desktop source blocks gate
+ok 35 - missing required desktop source blocks gate
+  ---
+  duration_ms: 29.931598
+  type: 'test'
+  ...
+# Subtest: changes to desktop files are captured
+ok 36 - changes to desktop files are captured
+  ---
+  duration_ms: 28.245514
+  type: 'test'
+  ...
+# Subtest: untracked desktop files prevent a clean claim
+ok 37 - untracked desktop files prevent a clean claim
+  ---
+  duration_ms: 25.422408
+  type: 'test'
+  ...
+# Subtest: unrelated mobile modifications do not enter desktop inventory
+ok 38 - unrelated mobile modifications do not enter desktop inventory
+  ---
+  duration_ms: 31.723085
+  type: 'test'
+  ...
+# Subtest: commit mismatch blocks gate
+ok 39 - commit mismatch blocks gate
+  ---
+  duration_ms: 25.222727
+  type: 'test'
+  ...
+# Subtest: short hash cannot pin a campaign
+ok 40 - short hash cannot pin a campaign
+  ---
+  duration_ms: 37.967644
+  type: 'test'
+  ...
+# Subtest: repository subdirectory is rejected
+ok 41 - repository subdirectory is rejected
+  ---
+  duration_ms: 18.110462
+  type: 'test'
+  ...
+# Subtest: tracked symlink is not followed
+ok 42 - tracked symlink is not followed
+  ---
+  duration_ms: 25.524597
+  type: 'test'
+  ...
+# Subtest: preload is opt-in and exits without config
+ok 43 - preload is opt-in and exits without config
+  ---
+  duration_ms: 121.593654
+  type: 'test'
+  ...
+# Subtest: preload invalid config fails open with generic warning
+ok 44 - preload invalid config fails open with generic warning
+  ---
+  duration_ms: 116.365671
+  type: 'test'
+  ...
+# Subtest: preload child process exits and flushes final probe record
+ok 45 - preload child process exits and flushes final probe record
+  ---
+  duration_ms: 121.537209
+  type: 'test'
+  ...
+# Subtest: probe requires an explicit absolute output path
+ok 46 - probe requires an explicit absolute output path
+  ---
+  duration_ms: 1.304615
+  type: 'test'
+  ...
+# Subtest: probe rejects invalid sampling configuration
+ok 47 - probe rejects invalid sampling configuration
+  ---
+  duration_ms: 5.515135
+  type: 'test'
+  ...
+# Subtest: real Node probe writes complete process-local trace
+ok 48 - real Node probe writes complete process-local trace
+  ---
+  duration_ms: 89.945196
+  type: 'test'
+  ...
+# Subtest: bounded queue accounts for discarded probe samples
+ok 49 - bounded queue accounts for discarded probe samples
+  ---
+  duration_ms: 3.567332
+  type: 'test'
+  ...
+# Subtest: stop is idempotent and sampling stops
+ok 50 - stop is idempotent and sampling stops
+  ---
+  duration_ms: 3.676196
+  type: 'test'
+  ...
+# Subtest: parallel probes cannot overwrite each other
+ok 51 - parallel probes cannot overwrite each other
+  ---
+  duration_ms: 3.384446
+  type: 'test'
+  ...
+# Subtest: probe does not record environment values or process arguments
+ok 52 - probe does not record environment values or process arguments
+  ---
+  duration_ms: 2.240594
+  type: 'test'
+  ...
+# Subtest: renderer probe has explicit start/stop lifecycle
+ok 53 - renderer probe has explicit start/stop lifecycle
+  ---
+  duration_ms: 2.416288
+  type: 'test'
+  ...
+# Subtest: renderer capacity rejects invalid bounds
+ok 54 - renderer capacity rejects invalid bounds
+  ---
+  duration_ms: 0.592201
+  type: 'test'
+  ...
+# Subtest: renderer records rAF callback gaps, not fabricated FPS
+ok 55 - renderer records rAF callback gaps, not fabricated FPS
+  ---
+  duration_ms: 0.736128
+  type: 'test'
+  ...
+# Subtest: renderer ring buffer bounds memory and declares overwritten samples
+ok 56 - renderer ring buffer bounds memory and declares overwritten samples
+  ---
+  duration_ms: 0.652733
+  type: 'test'
+  ...
+# Subtest: renderer hidden intervals are not counted as visible jank
+ok 57 - renderer hidden intervals are not counted as visible jank
+  ---
+  duration_ms: 0.671651
+  type: 'test'
+  ...
+# Subtest: renderer reports unsupported long tasks as null
+ok 58 - renderer reports unsupported long tasks as null
+  ---
+  duration_ms: 0.526733
+  type: 'test'
+  ...
+# Subtest: renderer observer failure does not leak lifecycle listeners
+ok 59 - renderer observer failure does not leak lifecycle listeners
+  ---
+  duration_ms: 0.561035
+  type: 'test'
+  ...
+# Subtest: renderer collects pending long task entries before disconnect
+ok 60 - renderer collects pending long task entries before disconnect
+  ---
+  duration_ms: 0.580874
+  type: 'test'
+  ...
+# Subtest: renderer stop removes listener and cancels frame callback
+ok 61 - renderer stop removes listener and cancels frame callback
+  ---
+  duration_ms: 1.667261
+  type: 'test'
+  ...
+# Subtest: renderer unknown markers and invalid causal IDs are rejected
+ok 62 - renderer unknown markers and invalid causal IDs are rejected
+  ---
+  duration_ms: 0.919705
+  type: 'test'
+  ...
+# Subtest: renderer tool outcome is required
+ok 63 - renderer tool outcome is required
+  ---
+  duration_ms: 0.608196
+  type: 'test'
+  ...
+# Subtest: renderer manual markers are bounded and explicitly not automatic measurements
+ok 64 - renderer manual markers are bounded and explicitly not automatic measurements
+  ---
+  duration_ms: 0.673143
+  type: 'test'
+  ...
+# Subtest: renderer does not copy arbitrary secret marker options
+ok 65 - renderer does not copy arbitrary secret marker options
+  ---
+  duration_ms: 0.566944
+  type: 'test'
+  ...
+# Subtest: renderer snapshot does not expose mutable internal marks
+ok 66 - renderer snapshot does not expose mutable internal marks
+  ---
+  duration_ms: 0.498981
+  type: 'test'
+  ...
+# Subtest: renderer reinjection does not replace or reset active probe
+ok 67 - renderer reinjection does not replace or reset active probe
+  ---
+  duration_ms: 0.483779
+  type: 'test'
+  ...
+# Subtest: renderer can generate correlation IDs without secure-context randomUUID
+ok 68 - renderer can generate correlation IDs without secure-context randomUUID
+  ---
+  duration_ms: 0.691421
+  type: 'test'
+  ...
+1..68
+# tests 68
+# suites 0
+# pass 68
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 408.243454

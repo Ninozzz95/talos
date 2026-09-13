@@ -1,0 +1,54 @@
+{
+  "observed_at_utc": "2026-09-13T14:42:37.142466+00:00",
+  "system": "Linux",
+  "kernel": "6.18.44",
+  "machine": "x86_64",
+  "python": "3.13.5 (main, Jul 15 2026, 20:25:40) [GCC 14.2.0]",
+  "node": {
+    "argv": [
+      "node",
+      "--version"
+    ],
+    "exit_code": 0,
+    "stdout": "v22.16.0\n",
+    "stderr": "",
+    "elapsed_ms": 4.127086000011104
+  },
+  "npm": {
+    "argv": [
+      "npm",
+      "--version"
+    ],
+    "exit_code": 0,
+    "stdout": "10.9.2\n",
+    "stderr": "",
+    "elapsed_ms": 63.689807999992354
+  },
+  "git": {
+    "argv": [
+      "git",
+      "--version"
+    ],
+    "exit_code": 0,
+    "stdout": "git version 2.47.3\n",
+    "stderr": "",
+    "elapsed_ms": 1.5990480000027674
+  },
+  "logical_cpus_visible": 5,
+  "desktop_product_runs": 0,
+  "successful_clones": 0,
+  "clone_attempts": 11,
+  "api_credentials_supplied_for_benchmark": false,
+  "runtime_checks": {
+    "pwsh": null,
+    "powershell": null,
+    "wine": null,
+    "electron": null,
+    "chromium": "/usr/bin/chromium"
+  },
+  "/sys/fs/cgroup/cpu.max": "400000 100000",
+  "/sys/fs/cgroup/memory.max": "4294967296",
+  "github_dns": {
+    "error": "[Errno -3] Temporary failure in name resolution"
+  }
+}
